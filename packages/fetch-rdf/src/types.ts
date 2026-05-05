@@ -4,7 +4,7 @@
  * @packageDocumentation
  */
 
-import type { DatasetCore } from '@rdfjs/types';
+import type { Store } from 'n3';
 
 /** Options for {@link parseRdf}. */
 export interface ParseRdfOptions {
@@ -26,15 +26,9 @@ export interface FetchRdfOptions {
    */
   fetch?: typeof fetch;
   /**
-   * The `Accept` header value to send. Defaults to
-   * `"text/turtle, application/ld+json;q=0.9"` — Turtle preferred,
-   * JSON-LD fallback, mirroring real-world Solid server content
-   * negotiation (Solid Protocol §5.2 only mandates these two).
-   */
-  accept?: string;
-  /**
-   * Additional request headers to merge in. `Accept` is set via
-   * {@link FetchRdfOptions.accept}; any `accept` here is overridden.
+   * Additional request headers to merge in. The `Accept` header is
+   * always overridden with the Solid-default
+   * `"text/turtle, application/ld+json;q=0.9"`.
    */
   headers?: HeadersInit;
   /**
@@ -43,23 +37,15 @@ export interface FetchRdfOptions {
   signal?: AbortSignal;
 }
 
-/** Result of a successful {@link fetchRdf} call. */
+/**
+ * Result of a successful {@link fetchRdf} call. Everything else the
+ * caller might want — ETag, Content-Type, Link headers — is on
+ * {@link FetchedRdf.headers}, so we don't surface a parallel set of
+ * named fields that can drift out of sync.
+ */
 export interface FetchedRdf {
-  /** Parsed RDF as an in-memory dataset. */
-  dataset: DatasetCore;
-  /**
-   * Strong validator from the response, if the server provided one.
-   * Useful for `If-Match` / `If-None-Match` on subsequent writes.
-   */
-  etag: string | null;
-  /**
-   * The media type extracted from the response `Content-Type` header
-   * (parameters stripped, lowercased). `null` only if the response had
-   * no Content-Type (in which case parsing assumed `text/turtle`).
-   */
-  contentType: string | null;
-  /** The raw `Response` for callers that want to read further headers. */
-  response: Response;
-  /** The final URL the request resolved to (after redirects). */
-  url: string;
+  /** Parsed RDF as an in-memory N3 {@link Store}. */
+  dataset: Store;
+  /** Response headers for callers that need ETag, Link, etc. */
+  headers: Headers;
 }

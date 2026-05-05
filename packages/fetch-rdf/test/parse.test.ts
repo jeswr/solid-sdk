@@ -97,6 +97,47 @@ describe('parseRdf', () => {
       ]),
     );
   });
+
+  it('parses a ReadableStream body, decoding multi-byte UTF-8 split across chunks', async () => {
+    // The literal "café" — `é` is two bytes in UTF-8 (0xC3 0xA9). We
+    // split the stream right between those two bytes to make sure the
+    // streaming `TextDecoder` carries the partial sequence across the
+    // chunk boundary instead of emitting a replacement character.
+    const turtle = `<http://example.org/s> <http://example.org/p> "café" .\n`;
+    const bytes = new TextEncoder().encode(turtle);
+    const split = turtle.indexOf('é') + 1; // sits between the two bytes of `é`
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(bytes.slice(0, split));
+        controller.enqueue(bytes.slice(split));
+        controller.close();
+      },
+    });
+
+    const ds = await parseRdf(stream, 'application/n-triples');
+    expect(ds.size).toBe(1);
+    const [quad] = [...ds];
+    expect(quad?.object.value).toBe('café');
+  });
+
+  it('parses a ReadableStream body byte-by-byte without losing data', async () => {
+    // Pathological chunking: one byte per enqueue. Exercises the
+    // streaming pump's backpressure / many-iterations path and
+    // confirms `TextDecoder({ stream: true })` reassembles the
+    // document correctly.
+    const bytes = new TextEncoder().encode(TURTLE_SAMPLE);
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const b of bytes) controller.enqueue(new Uint8Array([b]));
+        controller.close();
+      },
+    });
+
+    const ds = await parseRdf(stream, 'text/turtle', {
+      baseIRI: 'http://example.org/',
+    });
+    expect(ds.size).toBe(5);
+  });
 });
 
 describe('extractMediaType', () => {

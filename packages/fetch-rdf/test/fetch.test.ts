@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
-import { fetchRdf, RdfFetchError, DEFAULT_ACCEPT } from '../src/index.js';
+import { fetchRdf, RdfFetchError } from '../src/index.js';
 import { JSON_LD_SAMPLE, TURTLE_SAMPLE, makeResponse } from './helpers.js';
 
+const DEFAULT_ACCEPT = 'text/turtle, application/ld+json;q=0.9';
+
 describe('fetchRdf', () => {
-  it('GETs the URL with the default Accept header and parses Turtle', async () => {
+  it('GETs the URL with the canonical Accept header and parses Turtle', async () => {
     const fetchMock = vi.fn(async () =>
       makeResponse(TURTLE_SAMPLE, {
         contentType: 'text/turtle',
@@ -21,10 +23,8 @@ describe('fetchRdf', () => {
     expect(new Headers(init.headers).get('accept')).toBe(DEFAULT_ACCEPT);
 
     expect(result.dataset.size).toBe(5);
-    expect(result.etag).toBe('"abc123"');
-    expect(result.contentType).toBe('text/turtle');
-    expect(result.url).toBe('http://example.org/resource');
-    expect(result.response.status).toBe(200);
+    expect(result.headers.get('etag')).toBe('"abc123"');
+    expect(result.headers.get('content-type')).toBe('text/turtle');
   });
 
   it('parses JSON-LD when the server returns it', async () => {
@@ -40,11 +40,11 @@ describe('fetchRdf', () => {
     });
 
     expect(result.dataset.size).toBe(3);
-    expect(result.contentType).toBe('application/ld+json');
-    expect(result.etag).toBeNull();
+    expect(result.headers.get('content-type')).toBe('application/ld+json');
+    expect(result.headers.get('etag')).toBeNull();
   });
 
-  it('strips Content-Type parameters in the returned `contentType` field', async () => {
+  it('exposes the raw Content-Type on headers (parameters preserved)', async () => {
     const fetchMock = vi.fn(async () =>
       makeResponse(TURTLE_SAMPLE, {
         contentType: 'text/turtle; charset=utf-8',
@@ -56,22 +56,8 @@ describe('fetchRdf', () => {
       fetch: fetchMock as unknown as typeof fetch,
     });
 
-    expect(result.contentType).toBe('text/turtle');
+    expect(result.headers.get('content-type')).toBe('text/turtle; charset=utf-8');
     expect(result.dataset.size).toBe(5);
-  });
-
-  it('honours a custom accept header', async () => {
-    const fetchMock = vi.fn(async () =>
-      makeResponse(TURTLE_SAMPLE, { contentType: 'text/turtle' }),
-    );
-
-    await fetchRdf('http://example.org/resource', {
-      fetch: fetchMock as unknown as typeof fetch,
-      accept: 'application/ld+json',
-    });
-
-    const init = fetchMock.mock.calls[0]![1] as RequestInit;
-    expect(new Headers(init.headers).get('accept')).toBe('application/ld+json');
   });
 
   it('overrides any caller-supplied accept in `headers`', async () => {
@@ -150,7 +136,7 @@ describe('fetchRdf', () => {
     });
 
     expect(result.dataset.size).toBe(5);
-    expect(result.contentType).toBeNull();
+    expect(result.headers.get('content-type')).toBeNull();
   });
 
   it('throws RdfFetchError on an unsupported response Content-Type', async () => {

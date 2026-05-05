@@ -2,10 +2,11 @@
 
 Canonical fetch + parse helpers for Solid RDF resources.
 
-Two functions, one error class. `parseRdf` dispatches a string body on
-its `Content-Type`; `fetchRdf` orchestrates an HTTP GET + parse and
-returns a parsed dataset alongside the strong-validator `ETag` and the
-raw `Response`.
+Two functions, one error class. `parseRdf` dispatches a body
+(string or `ReadableStream<Uint8Array>`) on its `Content-Type`,
+streaming chunks straight into an `N3.Store`. `fetchRdf` orchestrates
+an HTTP GET + parse and returns the dataset alongside the response
+headers.
 
 This package is the single home for these helpers in Jesse Wright's
 Solid workspace. Other packages (`@jeswr/solid-patch`,
@@ -35,10 +36,12 @@ a git dep:
 import { parseRdf, fetchRdf, RdfFetchError } from '@jeswr/fetch-rdf';
 
 // Fetch + parse — the common case.
-const { dataset, etag, contentType, response, url } = await fetchRdf(
+const { dataset, headers } = await fetchRdf(
   'https://alice.example/profile/card',
   { fetch: authFetch }, // optional; defaults to globalThis.fetch
 );
+const etag = headers.get('etag');
+const contentType = headers.get('content-type');
 
 // Pure parse — when you already have a body in hand.
 const ds = await parseRdf(turtleBody, 'text/turtle', {
@@ -46,17 +49,20 @@ const ds = await parseRdf(turtleBody, 'text/turtle', {
 });
 ```
 
-### Default `Accept`
+`dataset` is an [`N3.Store`](https://github.com/rdfjs/N3.js#storing),
+which implements `RDF.DatasetCore`/`RDF.Dataset`/`RDF.Store`.
 
-`fetchRdf` defaults to:
+### `Accept`
+
+`fetchRdf` always sends:
 
 ```
 text/turtle, application/ld+json;q=0.9
 ```
 
 Solid Protocol §5.2 only requires servers to support these two RDF
-media types, and Turtle is the dominant choice in the wild. Override
-with `accept` if you need something else.
+media types, and they are the only formats we know how to parse — so
+the header is fixed rather than tunable.
 
 ### Errors
 
