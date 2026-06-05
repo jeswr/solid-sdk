@@ -9,9 +9,7 @@ an HTTP GET + parse and returns the dataset alongside the response
 headers.
 
 This package is the single home for these helpers in Jesse Wright's
-Solid workspace. Other packages (`@jeswr/solid-patch`,
-`@jeswr/solid-reactive-fetch`, future apps) consume it instead of
-re-implementing the same dispatch.
+Solid workspace.
 
 ## Install
 
