@@ -76,6 +76,13 @@ export function SolidSessionProvider({ children }: { children: ReactNode }) {
       const ui = flowRef.current;
       if (cancelled || !ui || managerReady.current) return;
 
+      // Static client-id only when deployed (HTTPS): a remote IdP can't dereference
+      // a localhost client-id document, so localhost falls back to dynamic
+      // registration — which works against both local CSS and live servers.
+      const host = location.hostname;
+      const isLoopback = host === "localhost" || host === "127.0.0.1" || host === "[::1]";
+      const clientId = isLoopback ? undefined : new URL("/clientid.jsonld", location.href).toString();
+
       const provider = new WebIdDPoPTokenProvider(
         new URL("/callback.html", location.href).toString(),
         ui.getCode.bind(ui),
@@ -84,7 +91,7 @@ export function SolidSessionProvider({ children }: { children: ReactNode }) {
           if (!webIdRef.current) throw new Error("No WebID provided.");
           return webIdRef.current;
         },
-        { allowInsecureLoopback: true }, // loopback-only; remote issuers stay HTTPS-strict
+        { allowInsecureLoopback: true, ...(clientId ? { clientId } : {}) },
       );
       // 0.1.3: the constructor does NOT patch globalThis.fetch — registerGlobally() does.
       const manager = new ReactiveFetchManager([provider]);
