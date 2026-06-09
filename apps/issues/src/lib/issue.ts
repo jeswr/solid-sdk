@@ -7,26 +7,71 @@ import {
   LiteralFrom,
   NamedNodeAs,
   NamedNodeFrom,
+  TermAs,
+  TermFrom,
 } from "@rdfjs/wrapper";
-import { WF, DCT, RDF, STATE, wf, dct, rdf } from "./vocab";
+import { WF, DCT, RDF, STATE, wf, dct, rdf, rdfs, sioc, foaf, vcard } from "./vocab";
 
 export type IssueState = "open" | "closed";
+export type Priority = "high" | "medium" | "low";
+export const PRIORITIES: readonly Priority[] = ["high", "medium", "low"];
+
+/** Strip the fragment from an IRI to get its document URL. */
+function docOf(iri: string): string {
+  const u = new URL(iri);
+  u.hash = "";
+  return u.toString();
+}
+
+/** A comment on an issue: a `wf:Message` linked via `wf:message`. */
+export class Comment extends TermWrapper {
+  get id(): string {
+    return this.value;
+  }
+  private get types(): Set<string> {
+    return SetFrom.subjectPredicate(this, rdf("type"), NamedNodeAs.string, NamedNodeFrom.string);
+  }
+  markMessage(): void {
+    this.types.add(wf("Message"));
+  }
+  get content(): string | undefined {
+    return OptionalFrom.subjectPredicate(this, sioc("content"), LiteralAs.string);
+  }
+  set content(value: string | undefined) {
+    OptionalAs.object(this, sioc("content"), value, LiteralFrom.string);
+  }
+  get author(): string | undefined {
+    return OptionalFrom.subjectPredicate(this, foaf("maker"), NamedNodeAs.string);
+  }
+  set author(value: string | undefined) {
+    OptionalAs.object(this, foaf("maker"), value, NamedNodeFrom.string);
+  }
+  get created(): Date | undefined {
+    return OptionalFrom.subjectPredicate(this, dct("created"), LiteralAs.date);
+  }
+  set created(value: Date | undefined) {
+    OptionalAs.object(this, dct("created"), value, LiteralFrom.dateTime);
+  }
+}
 
 /**
- * A single issue, mapped onto `wf:Task` data. State is carried by `rdf:type`
- * (the SolidOS model — there is no `wf:state` predicate): an open issue is typed
- * `wf:Open`, a closed one `wf:Closed`. All access goes through typed accessors;
- * never assemble quads inline (AGENTS.md §Writing data).
+ * A single issue, mapped onto `wf:Task` data (one resource per issue). State,
+ * priority, and labels are all carried by `rdf:type` — the SolidOS model. Priority
+ * and label classes are fragments of the tracker document (resolvable); the issue
+ * derives their IRIs from its own `wf:tracker` link.
  */
 export class Issue extends TermWrapper {
-  /** The issue's IRI (a fragment of its document). */
   get id(): string {
     return this.value;
   }
 
-  /** rdf:type values as a live set — mutate to retype. */
   private get types(): Set<string> {
     return SetFrom.subjectPredicate(this, rdf("type"), NamedNodeAs.string, NamedNodeFrom.string);
+  }
+
+  /** The tracker *document* URL (for deriving priority/label class IRIs). */
+  private trackerDoc(): string | undefined {
+    return this.tracker ? docOf(this.tracker) : undefined;
   }
 
   get title(): string | undefined {
@@ -43,7 +88,6 @@ export class Issue extends TermWrapper {
     OptionalAs.object(this, wf("description"), value, LiteralFrom.string);
   }
 
-  /** Back-link to the owning `wf:Tracker` (an IRI). */
   get tracker(): string | undefined {
     return OptionalFrom.subjectPredicate(this, wf("tracker"), NamedNodeAs.string);
   }
@@ -65,7 +109,6 @@ export class Issue extends TermWrapper {
     OptionalAs.object(this, dct("modified"), value, LiteralFrom.dateTime);
   }
 
-  /** WebID of whoever filed the issue. */
   get creator(): string | undefined {
     return OptionalFrom.subjectPredicate(this, dct("creator"), NamedNodeAs.string);
   }
@@ -73,7 +116,7 @@ export class Issue extends TermWrapper {
     OptionalAs.object(this, dct("creator"), value, NamedNodeFrom.string);
   }
 
-  /** WebID of the assigned agent (optional). */
+  /** WebID of the assigned agent or group (optional). */
   get assignee(): string | undefined {
     return OptionalFrom.subjectPredicate(this, wf("assignee"), NamedNodeAs.string);
   }
@@ -81,12 +124,13 @@ export class Issue extends TermWrapper {
     OptionalAs.object(this, wf("assignee"), value, NamedNodeFrom.string);
   }
 
-  /** Due date (date only, no time). */
   get dateDue(): Date | undefined {
     return OptionalFrom.subjectPredicate(this, wf("dateDue"), LiteralAs.date);
   }
   set dateDue(value: Date | undefined) {
-    OptionalAs.object(this, wf("dateDue"), value, LiteralFrom.date);
+    // LiteralFrom.date emits an xsd:date with a full dateTime lexical (a wrapper
+    // quirk that fails SHACL); store dateTime, which is well-formed and round-trips.
+    OptionalAs.object(this, wf("dateDue"), value, LiteralFrom.dateTime);
   }
 
   get state(): IssueState {
@@ -101,22 +145,76 @@ export class Issue extends TermWrapper {
       types.add(STATE.Open);
       types.delete(STATE.Closed);
     }
-    // Every issue is always a wf:Task as well.
     types.add(wf("Task"));
   }
-
   get isOpen(): boolean {
     return this.state === "open";
   }
+
+  private priorityClass(level: Priority, doc = this.trackerDoc()): string | undefined {
+    return doc ? `${doc}#priority-${level}` : undefined;
+  }
+  get priority(): Priority | undefined {
+    const doc = this.trackerDoc();
+    if (!doc) return undefined;
+    const types = this.types;
+    return PRIORITIES.find((level) => types.has(this.priorityClass(level, doc)!));
+  }
+  set priority(level: Priority | undefined) {
+    const doc = this.trackerDoc();
+    if (!doc) return;
+    const types = this.types;
+    for (const l of PRIORITIES) types.delete(this.priorityClass(l, doc)!);
+    if (level) types.add(this.priorityClass(level, doc)!);
+  }
+
+  private labelPrefix(doc = this.trackerDoc()): string | undefined {
+    return doc ? `${doc}#label-` : undefined;
+  }
+  /** Label slugs applied to this issue (the class fragment after `#label-`). */
+  get labels(): string[] {
+    const prefix = this.labelPrefix();
+    if (!prefix) return [];
+    return [...this.types].filter((t) => t.startsWith(prefix)).map((t) => t.slice(prefix.length));
+  }
+  set labels(slugs: string[]) {
+    const prefix = this.labelPrefix();
+    if (!prefix) return;
+    const types = this.types;
+    for (const t of [...types]) if (t.startsWith(prefix)) types.delete(t);
+    for (const s of slugs) types.add(`${prefix}${s}`);
+  }
+
+  /** Live set of comment objects linked via `wf:message`. */
+  get messages(): Set<Comment> {
+    return SetFrom.subjectPredicate(this, wf("message"), TermAs.instance(Comment), TermFrom.instance);
+  }
+  /** Comments, oldest first. */
+  get comments(): Comment[] {
+    return [...this.messages].sort((a, b) => (a.created?.getTime() ?? 0) - (b.created?.getTime() ?? 0));
+  }
+}
+
+/** A label definition on the tracker: slug + human label. */
+export interface LabelDef {
+  slug: string;
+  label: string;
 }
 
 /**
- * The tracker configuration node (`wf:Tracker`). One per document; issues
- * back-link to it via `wf:tracker`.
+ * The tracker configuration node (`wf:Tracker`). Holds the title, the priority and
+ * label category classes (declared via `wf:issueCategory`, defined as fragments of
+ * the tracker document), and the assignee group (`wf:assigneeGroup` → `vcard:Group`).
  */
 export class Tracker extends TermWrapper {
   private get types(): Set<string> {
     return SetFrom.subjectPredicate(this, rdf("type"), NamedNodeAs.string, NamedNodeFrom.string);
+  }
+  private get doc(): string {
+    return docOf(this.value);
+  }
+  private get categories(): Set<string> {
+    return SetFrom.subjectPredicate(this, wf("issueCategory"), NamedNodeAs.string, NamedNodeFrom.string);
   }
 
   get title(): string | undefined {
@@ -126,12 +224,81 @@ export class Tracker extends TermWrapper {
     OptionalAs.object(this, dct("title"), value, LiteralFrom.string);
   }
 
-  /** Write the fixed tracker configuration (type, issue class, initial state). */
+  /** Define a category class (e.g. a priority or label) as a fragment of the doc. */
+  private defineClass(fragment: string, label: string, parentFragment?: string): string {
+    const iri = `${this.doc}#${fragment}`;
+    const klass = new TermWrapper(iri, this.dataset, this.factory);
+    SetFrom.subjectPredicate(klass, rdf("type"), NamedNodeAs.string, NamedNodeFrom.string).add(rdfs("Class"));
+    OptionalAs.object(klass, rdfs("label"), label, LiteralFrom.string);
+    if (parentFragment) {
+      OptionalAs.object(klass, rdfs("subClassOf"), `${this.doc}#${parentFragment}`, NamedNodeFrom.string);
+    }
+    this.categories.add(iri);
+    return iri;
+  }
+
+  /** Write the fixed tracker configuration (type, issue class, initial state, priorities). */
   configure(title: string): void {
     this.types.add(wf("Tracker"));
     this.title = title;
     OptionalAs.object(this, wf("issueClass"), wf("Task"), NamedNodeFrom.string);
     OptionalAs.object(this, wf("initialState"), STATE.Open, NamedNodeFrom.string);
+    // Priority dimension (#Priority parent + the three ordered priorities).
+    this.defineClass("Priority", "Priority");
+    this.defineClass("priority-high", "High", "Priority");
+    this.defineClass("priority-medium", "Medium", "Priority");
+    this.defineClass("priority-low", "Low", "Priority");
+    this.defineClass("Label", "Label");
+  }
+
+  /** Label definitions (subclasses of `#Label`), as slug + human label. */
+  get labelDefs(): LabelDef[] {
+    const out: LabelDef[] = [];
+    const prefix = `${this.doc}#label-`;
+    for (const iri of this.categories) {
+      if (iri.startsWith(prefix)) {
+        const klass = new TermWrapper(iri, this.dataset, this.factory);
+        out.push({
+          slug: iri.slice(prefix.length),
+          label: OptionalFrom.subjectPredicate(klass, rdfs("label"), LiteralAs.string) ?? iri.slice(prefix.length),
+        });
+      }
+    }
+    return out;
+  }
+
+  /** Define (or relabel) a label, returning its slug. */
+  defineLabel(label: string): string {
+    const slug = label
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+    this.defineClass(`label-${slug}`, label, "Label");
+    return slug;
+  }
+
+  private get groupIri(): string {
+    return `${this.doc}#team`;
+  }
+  /** The assignee group's members (WebIDs). */
+  get groupMembers(): string[] {
+    const group = OptionalFrom.subjectPredicate(this, wf("assigneeGroup"), NamedNodeAs.string);
+    if (!group) return [];
+    const wrapper = new TermWrapper(group, this.dataset, this.factory);
+    return [...SetFrom.subjectPredicate(wrapper, vcard("hasMember"), NamedNodeAs.string, NamedNodeFrom.string)];
+  }
+  /** The assignee group IRI, or undefined if no members are set. */
+  get assigneeGroup(): string | undefined {
+    return OptionalFrom.subjectPredicate(this, wf("assigneeGroup"), NamedNodeAs.string);
+  }
+  setGroupMembers(webIds: string[]): void {
+    OptionalAs.object(this, wf("assigneeGroup"), this.groupIri, NamedNodeFrom.string);
+    const group = new TermWrapper(this.groupIri, this.dataset, this.factory);
+    SetFrom.subjectPredicate(group, rdf("type"), NamedNodeAs.string, NamedNodeFrom.string).add(vcard("Group"));
+    const members = SetFrom.subjectPredicate(group, vcard("hasMember"), NamedNodeAs.string, NamedNodeFrom.string);
+    for (const m of [...members]) members.delete(m);
+    for (const w of webIds) members.add(w);
   }
 }
 

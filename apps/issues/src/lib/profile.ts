@@ -35,14 +35,15 @@ export async function loadProfile(webId: string, fetchImpl?: typeof fetch): Prom
  * pod root. One-document layout is the default (solid-scale-and-sharding);
  * milestone 2 may split to per-issue resources for per-issue access control.
  */
-export function issuesDocumentUrl(storageUrl: string): string {
-  return new URL("issue-tracker/issues.ttl", storageUrl).toString();
+export function trackerDocumentUrl(storageUrl: string): string {
+  return new URL("issue-tracker/tracker.ttl", storageUrl).toString();
 }
 
-/** Where a person's tracker lives, and whose pod it is. */
+/** Where a person's tracker config lives, and whose pod it is. */
 export interface TrackerLocation {
   ownerWebId: string;
-  issuesUrl: string;
+  /** URL of the tracker config document (the `issues/` container sits beside it). */
+  trackerUrl: string;
 }
 
 /**
@@ -53,10 +54,10 @@ export interface TrackerLocation {
  */
 export async function resolveTracker(webId: string, fetchImpl?: typeof fetch): Promise<TrackerLocation> {
   const registered = await resolveTrackerFromTypeIndex(webId, fetchImpl);
-  if (registered) return { ownerWebId: webId, issuesUrl: registered };
+  if (registered) return { ownerWebId: webId, trackerUrl: registered };
 
   const profile = await loadProfile(webId, fetchImpl);
   const storage = profile.storageUrls[0];
   if (!storage) throw new NoStorageError(webId);
-  return { ownerWebId: webId, issuesUrl: issuesDocumentUrl(storage) };
+  return { ownerWebId: webId, trackerUrl: trackerDocumentUrl(storage) };
 }

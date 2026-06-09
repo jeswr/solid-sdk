@@ -1,0 +1,53 @@
+/**
+ * Milestone-3 e2e: priority + labels on an issue, and the comments thread — all
+ * persisted to per-issue documents in a real local CSS pod.
+ */
+import { test, expect } from "@playwright/test";
+import { createCssAccount, type CssAccount } from "./css-account";
+import { CSS_BASE, handleLoginPopups, signIn } from "./helpers";
+
+test.describe("Advanced issue features", () => {
+  let account: CssAccount;
+
+  test.beforeEach(async ({ context, page }, testInfo) => {
+    account = await createCssAccount({ base: CSS_BASE, pod: `m3-${testInfo.workerIndex}-${Date.now()}` });
+    handleLoginPopups(context, account.email, account.password);
+    await signIn(page, account.webId);
+  });
+
+  test("creates an issue with a priority and a label", async ({ page }) => {
+    const title = `Priority issue ${Math.random().toString(36).slice(2, 8)}`;
+    await page.getByRole("button", { name: /new issue/i }).first().click();
+
+    await page.getByLabel(/^title$/i).fill(title);
+    await page.locator("#priority").click();
+    await page.getByRole("option", { name: "High" }).click();
+    await page.getByLabel(/labels/i).fill("bug");
+    await page.getByRole("button", { name: /create issue/i }).click();
+
+    await expect(page.getByRole("heading", { name: title })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText("high", { exact: true })).toBeVisible();
+    await expect(page.getByText("bug", { exact: true })).toBeVisible();
+  });
+
+  test("adds a comment to an issue and it persists", async ({ page }) => {
+    const title = `Discuss ${Math.random().toString(36).slice(2, 8)}`;
+    await page.getByRole("button", { name: /new issue/i }).first().click();
+    await page.getByLabel(/^title$/i).fill(title);
+    await page.getByRole("button", { name: /create issue/i }).click();
+    await expect(page.getByRole("heading", { name: title })).toBeVisible({ timeout: 15_000 });
+
+    await page.getByRole("button", { name: new RegExp(`actions for ${title}`, "i") }).click();
+    await page.getByRole("menuitem", { name: /comments/i }).click();
+
+    const comment = `Looking into it ${Math.random().toString(36).slice(2, 6)}`;
+    const dialog = page.getByRole("dialog");
+    await dialog.getByLabel(/add a comment/i).fill(comment);
+    await dialog.getByRole("button", { name: /^comment$/i }).click();
+
+    // The thread re-renders from a fresh pod read after posting (the hook re-fetches
+    // CSS), so seeing the comment here proves it persisted to the issue document.
+    await expect(dialog.getByText(comment)).toBeVisible({ timeout: 15_000 });
+    await expect(dialog.getByText(/1 comment/i)).toBeVisible();
+  });
+});

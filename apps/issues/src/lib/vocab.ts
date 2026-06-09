@@ -13,10 +13,22 @@ export const DCT = "http://purl.org/dc/terms/";
 export const RDF = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
 /** XSD datatypes (referenced indirectly via the wrapper value mappers). */
 export const XSD = "http://www.w3.org/2001/XMLSchema#";
+/** RDF Schema — `rdfs:Class`, `rdfs:label`, `rdfs:subClassOf` (priority/label classes). */
+export const RDFS = "http://www.w3.org/2000/01/rdf-schema#";
+/** SIOC — `sioc:content` for comment bodies. */
+export const SIOC = "http://rdfs.org/sioc/ns#";
+/** FOAF — `foaf:maker` (comment author), `foaf:Agent`. */
+export const FOAF = "http://xmlns.com/foaf/0.1/";
+/** vCard — `vcard:Group`, `vcard:hasMember` (assignee groups). */
+export const VCARD = "http://www.w3.org/2006/vcard/ns#";
 
 export const wf = (local: string) => `${WF}${local}`;
 export const dct = (local: string) => `${DCT}${local}`;
 export const rdf = (local: string) => `${RDF}${local}`;
+export const rdfs = (local: string) => `${RDFS}${local}`;
+export const sioc = (local: string) => `${SIOC}${local}`;
+export const foaf = (local: string) => `${FOAF}${local}`;
+export const vcard = (local: string) => `${VCARD}${local}`;
 
 /** The two terminal/non-terminal state classes an issue is typed with. */
 export const STATE = {

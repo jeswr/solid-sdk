@@ -9,8 +9,8 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { loadProfile, issuesDocumentUrl, type SolidProfile } from "@/lib/profile";
-import { IssuesDocument } from "@/lib/issues-document";
+import { loadProfile, trackerDocumentUrl, type SolidProfile } from "@/lib/profile";
+import { Repository } from "@/lib/repository";
 import { registerTracker } from "@/lib/type-index";
 import { RecentAccounts, type RecentAccount } from "@/lib/login-ux";
 import { NoStorageError } from "@/lib/errors";
@@ -25,10 +25,10 @@ export type SessionStatus =
 export interface SolidSession {
   status: SessionStatus;
   profile: SolidProfile | null;
-  /** Pod root chosen for this session (where the issue document lives). */
+  /** Pod root chosen for this session (where the tracker lives). */
   storageUrl: string | null;
-  /** URL of the single issues document in the pod. */
-  issuesUrl: string | null;
+  /** URL of this user's own tracker config document. */
+  trackerUrl: string | null;
   error: string | null;
   recentAccounts: RecentAccount[];
   login: (webId: string) => Promise<void>;
@@ -113,16 +113,16 @@ export function SolidSessionProvider({ children }: { children: ReactNode }) {
 
       // 2. First authenticated fetch: a private resource in the pod returns 401,
       //    which transparently drives the login popup, then retries. A 404 (the
-      //    document doesn't exist yet) is success — the pod is reachable + authed.
-      const issuesUrl = issuesDocumentUrl(storage);
-      await IssuesDocument.open(issuesUrl);
+      //    tracker doesn't exist yet) is success — the pod is reachable + authed.
+      const trackerUrl = trackerDocumentUrl(storage);
+      await new Repository(trackerUrl).loadTracker();
 
       setProfile(loaded);
       setStorageUrl(storage);
       setStatus("logged-in");
 
       // Make the tracker discoverable by other apps/people (best-effort, non-blocking).
-      void registerTracker(webId, storage, issuesUrl);
+      void registerTracker(webId, storage, trackerUrl);
 
       recentRef.current?.remember({
         webId,
@@ -157,7 +157,7 @@ export function SolidSessionProvider({ children }: { children: ReactNode }) {
     status,
     profile,
     storageUrl,
-    issuesUrl: storageUrl ? issuesDocumentUrl(storageUrl) : null,
+    trackerUrl: storageUrl ? trackerDocumentUrl(storageUrl) : null,
     error,
     recentAccounts,
     login,

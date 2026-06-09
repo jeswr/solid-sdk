@@ -142,7 +142,7 @@ export async function resolveTrackerFromTypeIndex(
 export async function registerTracker(
   webId: string,
   storageUrl: string,
-  issuesUrl: string,
+  trackerUrl: string,
   fetchImpl?: typeof fetch,
 ): Promise<boolean> {
   const doFetch = fetchImpl ?? fetch;
@@ -174,8 +174,8 @@ export async function registerTracker(
     }
     const index = new TypeIndexDataset(indexDataset, DataFactory);
     index.markPublicIndex(indexUrl);
-    if (!index.locate(wf("Tracker")).includes(issuesUrl)) {
-      index.register(indexUrl, "#tracker", wf("Tracker"), issuesUrl);
+    if (!index.locate(wf("Tracker")).includes(trackerUrl)) {
+      index.register(indexUrl, "#tracker", wf("Tracker"), trackerUrl);
     }
     await conditionalPut(indexUrl, indexDataset, indexEtag, doFetch);
     // The public index must be world-readable for others to discover the tracker

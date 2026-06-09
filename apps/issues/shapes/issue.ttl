@@ -1,0 +1,72 @@
+# SHACL shapes for the Solid Issues data model.
+#
+# Authored against reused, dereferenceable IRIs only (W3C workflow ontology `wf:`
+# + Dublin Core Terms + SIOC + FOAF) — see docs/data-modelling.md §5 and
+# decisions/0001-issue-tracker-vocabulary.md. The shapes are anonymous (blank
+# nodes), so nothing is minted at a non-resolving domain.
+#
+# Validate an issue document's object-mapper output before write, and on read of
+# untrusted data (rdf-validate-shacl in CI; see src/lib/shacl.test.ts).
+
+@prefix sh:    <http://www.w3.org/ns/shacl#> .
+@prefix wf:    <http://www.w3.org/2005/01/wf/flow#> .
+@prefix dct:   <http://purl.org/dc/terms/> .
+@prefix sioc:  <http://rdfs.org/sioc/ns#> .
+@prefix foaf:  <http://xmlns.com/foaf/0.1/> .
+@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
+
+# --- An issue (wf:Task) ---
+[] a sh:NodeShape ;
+  sh:targetClass wf:Task ;
+  sh:property [
+    sh:path dct:title ; sh:name "title" ;
+    sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path wf:description ; sh:name "description" ;
+    sh:datatype xsd:string ; sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path wf:tracker ; sh:name "tracker" ;
+    sh:nodeKind sh:IRI ; sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path dct:created ; sh:name "created" ;
+    sh:datatype xsd:dateTime ; sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path dct:modified ; sh:name "modified" ;
+    sh:datatype xsd:dateTime ; sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path dct:creator ; sh:name "creator" ;
+    sh:nodeKind sh:IRI ; sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path wf:assignee ; sh:name "assignee" ;
+    sh:nodeKind sh:IRI ; sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path wf:dateDue ; sh:name "due date" ;
+    sh:datatype xsd:dateTime ; sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path wf:message ; sh:name "comments" ;
+    sh:nodeKind sh:IRI ;
+  ] .
+
+# --- A comment (wf:Message) ---
+[] a sh:NodeShape ;
+  sh:targetClass wf:Message ;
+  sh:property [
+    sh:path sioc:content ; sh:name "content" ;
+    sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path foaf:maker ; sh:name "author" ;
+    sh:nodeKind sh:IRI ; sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path dct:created ; sh:name "created" ;
+    sh:datatype xsd:dateTime ; sh:maxCount 1 ;
+  ] .

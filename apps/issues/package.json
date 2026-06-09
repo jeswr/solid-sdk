@@ -43,9 +43,11 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@zazuko/env-node": "^3.0.0",
     "eslint": "^9",
     "eslint-config-next": "16.2.7",
     "jose": "^6.2.3",
+    "rdf-validate-shacl": "^0.6.5",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^4.1.8"

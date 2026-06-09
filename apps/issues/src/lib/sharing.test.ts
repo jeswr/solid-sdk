@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { listCollaborators, setAccess, removeAccess, grantPublicRead } from "./sharing";
+import { listCollaborators, listGrants, setAccess, setGroupAccess, removeAccess, grantPublicRead } from "./sharing";
 
 const RES = "http://localhost:3000/alice/issue-tracker/issues.ttl";
 const ACL_URL = "http://localhost:3000/alice/issue-tracker/issues.ttl.acl";
@@ -69,6 +69,27 @@ describe("sharing (WAC)", () => {
     expect(put.body).toContain(carol); // existing collaborator kept
     expect(put.body).toContain(BOB); // new one added
     expect(put.body).toContain(OWNER);
+  });
+
+  it("grants and lists access for a group (acl:agentGroup), preserving the owner", async () => {
+    const groupIri = "http://localhost:3000/alice/issue-tracker/tracker.ttl#team";
+    const { impl, calls } = router(undefined);
+    await setGroupAccess(RES, OWNER, groupIri, { read: true, write: true, control: false }, impl);
+
+    const put = calls.find((c) => c.method === "PUT")!;
+    expect(put.body).toContain("agentGroup");
+    expect(put.body).toContain(groupIri);
+    expect(put.body).toContain(OWNER);
+    expect(put.body).toContain("acl#Control");
+
+    // And reading it back surfaces the group grant.
+    const { impl: impl2 } = router(
+      aclWith(
+        `<#g0> a acl:Authorization; acl:agentGroup <${groupIri}>; acl:accessTo <${RES}>; acl:mode acl:Read, acl:Write.`,
+      ),
+    );
+    const grants = await listGrants(RES, OWNER, impl2);
+    expect(grants.groups).toEqual([{ groupIri, access: { read: true, write: true, control: false } }]);
   });
 
   it("grants public read while keeping the owner in control", async () => {

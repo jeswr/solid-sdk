@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import {
@@ -16,8 +16,18 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Loader2 } from "lucide-react";
-import type { IssueView } from "@/lib/use-issues";
+import type { IssueRecord } from "@/lib/use-issues";
+import type { Priority } from "@/lib/issue";
+
+const PRIORITY_NONE = "none";
 
 const schema = z.object({
   title: z.string().trim().min(1, "A title is required").max(200, "Keep the title under 200 characters"),
@@ -28,6 +38,8 @@ const schema = z.object({
     .trim()
     .refine((v) => v === "" || /^https?:\/\//.test(v), "Assignee must be a WebID (http(s) URL)")
     .optional(),
+  priority: z.enum(["none", "high", "medium", "low"]),
+  labels: z.string().optional(),
 });
 type FormValues = z.infer<typeof schema>;
 
@@ -36,11 +48,16 @@ export interface IssueFormSubmit {
   description?: string;
   dateDue?: Date;
   assignee?: string;
+  priority?: Priority;
+  labels: string[];
 }
 
-function toDateInput(d?: Date): string {
-  return d ? d.toISOString().slice(0, 10) : "";
-}
+const toDateInput = (d?: Date) => (d ? d.toISOString().slice(0, 10) : "");
+const parseLabels = (s?: string) =>
+  (s ?? "")
+    .split(",")
+    .map((l) => l.trim())
+    .filter(Boolean);
 
 export function IssueFormDialog({
   open,
@@ -51,18 +68,18 @@ export function IssueFormDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  initial?: IssueView;
+  initial?: IssueRecord;
   onSubmit: (values: IssueFormSubmit) => Promise<void>;
-  /** WebIDs offered as assignee autocomplete (e.g. the tracker's collaborators). */
+  /** WebIDs (and the assignee group IRI) offered as assignee autocomplete. */
   assigneeSuggestions?: string[];
 }) {
   const editing = !!initial;
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { title: "", description: "", dateDue: "", assignee: "" },
+    defaultValues: { title: "", description: "", dateDue: "", assignee: "", priority: "none", labels: "" },
   });
+  const priority = useWatch({ control: form.control, name: "priority" });
 
-  // Reset the form whenever the dialog opens (with the issue being edited, if any).
   useEffect(() => {
     if (open) {
       form.reset({
@@ -70,6 +87,8 @@ export function IssueFormDialog({
         description: initial?.description ?? "",
         dateDue: toDateInput(initial?.dateDue),
         assignee: initial?.assignee ?? "",
+        priority: initial?.priority ?? "none",
+        labels: (initial?.labels ?? []).join(", "),
       });
     }
   }, [open, initial, form]);
@@ -80,6 +99,8 @@ export function IssueFormDialog({
       description: values.description?.trim() || undefined,
       dateDue: values.dateDue ? new Date(values.dateDue) : undefined,
       assignee: values.assignee?.trim() || undefined,
+      priority: values.priority === PRIORITY_NONE ? undefined : (values.priority as Priority),
+      labels: parseLabels(values.labels),
     });
     onOpenChange(false);
   };
@@ -115,38 +136,62 @@ export function IssueFormDialog({
 
           <div className="space-y-1.5">
             <Label htmlFor="description">Description</Label>
-            <Textarea id="description" rows={4} {...form.register("description")} />
+            <Textarea id="description" rows={3} {...form.register("description")} />
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
+              <Label htmlFor="priority">Priority</Label>
+              <Select
+                value={priority}
+                onValueChange={(v) => form.setValue("priority", v as FormValues["priority"])}
+              >
+                <SelectTrigger id="priority">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None</SelectItem>
+                  <SelectItem value="high">High</SelectItem>
+                  <SelectItem value="medium">Medium</SelectItem>
+                  <SelectItem value="low">Low</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
               <Label htmlFor="dateDue">Due date</Label>
               <Input id="dateDue" type="date" {...form.register("dateDue")} />
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="assignee">Assignee (WebID)</Label>
-              <Input
-                id="assignee"
-                type="url"
-                list="assignee-suggestions"
-                placeholder="https://…/profile/card#me"
-                aria-invalid={!!form.formState.errors.assignee}
-                aria-describedby={form.formState.errors.assignee ? "assignee-error" : undefined}
-                {...form.register("assignee")}
-              />
-              {assigneeSuggestions.length > 0 && (
-                <datalist id="assignee-suggestions">
-                  {assigneeSuggestions.map((webId) => (
-                    <option key={webId} value={webId} />
-                  ))}
-                </datalist>
-              )}
-              {form.formState.errors.assignee && (
-                <p id="assignee-error" className="text-sm text-destructive">
-                  {form.formState.errors.assignee.message}
-                </p>
-              )}
-            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="labels">Labels</Label>
+            <Input id="labels" placeholder="bug, ui, urgent" {...form.register("labels")} />
+            <p className="text-xs text-muted-foreground">Comma-separated.</p>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="assignee">Assignee (WebID or group)</Label>
+            <Input
+              id="assignee"
+              type="url"
+              list="assignee-suggestions"
+              placeholder="https://…/profile/card#me"
+              aria-invalid={!!form.formState.errors.assignee}
+              aria-describedby={form.formState.errors.assignee ? "assignee-error" : undefined}
+              {...form.register("assignee")}
+            />
+            {assigneeSuggestions.length > 0 && (
+              <datalist id="assignee-suggestions">
+                {assigneeSuggestions.map((webId) => (
+                  <option key={webId} value={webId} />
+                ))}
+              </datalist>
+            )}
+            {form.formState.errors.assignee && (
+              <p id="assignee-error" className="text-sm text-destructive">
+                {form.formState.errors.assignee.message}
+              </p>
+            )}
           </div>
 
           <DialogFooter>

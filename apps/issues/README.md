@@ -26,9 +26,12 @@ issue-pane model, so the data interoperates with the wider ecosystem. State is
 carried by `rdf:type` (`wf:Open` / `wf:Closed`). Rationale and the full mapping:
 [`decisions/0001-issue-tracker-vocabulary.md`](./decisions/0001-issue-tracker-vocabulary.md).
 
-One document per pod holds the tracker config + all issues
-(`<pod>/issue-tracker/issues.ttl`); writes are conditional `PUT`s (`If-Match`) so
-a concurrent edit surfaces as a recoverable conflict rather than silent data loss.
+Storage is **one document per issue** in an `issues/` container, beside a
+`tracker.ttl` config document — so each issue can carry its own ACL. Priority and
+labels are `wf:issueCategory` classes; comments are `wf:Message` (`sioc:content`)
+fragments; the assignee group is a `vcard:Group`. Writes are conditional `PUT`s
+(`If-Match`) per issue, so a concurrent edit surfaces as a recoverable conflict.
+A SHACL shape (`shapes/issue.ttl`) validates the model in CI.
 
 ## Sharing & cross-pod (milestone 2)
 
@@ -40,6 +43,17 @@ a concurrent edit surfaces as a recoverable conflict rather than silent data los
 - **Open another pod's tracker** by WebID; read-only access is detected from the
   `WAC-Allow` header and the UI adapts.
 - See [`decisions/0002-sharing-and-discovery.md`](./decisions/0002-sharing-and-discovery.md).
+
+## Priority, labels, comments, per-issue sharing & teams (milestone 3)
+
+- **Priority** (high/medium/low) and **labels** on issues, shown as badges/chips
+  and filterable.
+- **Comments** thread per issue (`wf:Message`).
+- **Per-issue access control**: share a single issue, or the whole tracker
+  (the container cascades via `acl:default`), with named WebIDs.
+- **Teams**: define a `vcard:Group` of members; assign issues to the team and
+  grant the team access (`acl:agentGroup`).
+- See [`decisions/0003-per-issue-documents-and-advanced-features.md`](./decisions/0003-per-issue-documents-and-advanced-features.md).
 
 ## Develop
 
@@ -68,5 +82,5 @@ npm run build       # next build
 
 ## Roadmap (future)
 
-Priority/labels (`wf:issueCategory`), comments (`wf:message`), per-issue ACLs,
-assignee groups (`vcard:Group`), and a published SHACL shape.
+Label management UI (rename/delete), saved filters, notification-driven live sync,
+and a pod SPARQL endpoint to avoid N+1 listing fetches.

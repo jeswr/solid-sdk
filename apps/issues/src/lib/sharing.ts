@@ -1,4 +1,4 @@
-import { AclResource, Authorization, AcrDataset, wacToAcp, acpToWac } from "@solid/object";
+import { AclResource, Authorization, Group, AcrDataset, wacToAcp, acpToWac } from "@solid/object";
 import { fetchRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 import { Store, DataFactory } from "n3";
 import type { DatasetCore } from "@rdfjs/types";
@@ -21,9 +21,22 @@ export interface Collaborator {
   webId: string;
   access: Access;
 }
+export interface GroupGrant {
+  groupIri: string;
+  access: Access;
+}
+export interface Grants {
+  agents: Collaborator[];
+  groups: GroupGrant[];
+}
 
 const empty = (): Access => ({ read: false, write: false, control: false });
 const some = (a: Access) => a.read || a.write || a.control;
+const merge = (a: Access, b: Access): Access => ({
+  read: a.read || b.read,
+  write: a.write || b.write,
+  control: a.control || b.control,
+});
 const opts = (fetchImpl?: typeof fetch) => (fetchImpl ? { fetch: fetchImpl } : undefined);
 
 function serialize(dataset: DatasetCore): Promise<string> {
@@ -43,7 +56,6 @@ function aclLinkFrom(linkHeader: string | null, base: string): string | undefine
   return undefined;
 }
 
-/** Find a resource's access-control document URL from its `Link: rel="acl"` header. */
 async function discoverAclUrl(resourceUrl: string, doFetch: typeof fetch): Promise<string> {
   for (const method of ["HEAD", "GET"] as const) {
     const res = await doFetch(resourceUrl, { method });
@@ -54,15 +66,12 @@ async function discoverAclUrl(resourceUrl: string, doFetch: typeof fetch): Promi
 }
 
 function datasetHasType(ds: DatasetCore, typeIri: string): boolean {
-  for (const _ of ds.match(null, DataFactory.namedNode(RDF_TYPE), DataFactory.namedNode(typeIri))) {
-    return true;
-  }
+  for (const _ of ds.match(null, DataFactory.namedNode(RDF_TYPE), DataFactory.namedNode(typeIri))) return true;
   return false;
 }
 
 interface LoadedAcl {
   aclUrl: string;
-  /** The access rules as a WAC dataset (ACP is translated in via acpToWac). */
   wac: DatasetCore;
   etag: string | null;
   kind: "wac" | "acp";
@@ -79,7 +88,6 @@ async function loadAcl(resourceUrl: string, doFetch: typeof fetch, fetchImpl?: t
     }
     return { aclUrl, wac: dataset, etag, kind: "wac" };
   } catch (e) {
-    // No resource-specific ACL yet (access is inherited) — we'll create one.
     if (e instanceof RdfFetchError && e.status === 404) {
       return { aclUrl, wac: new Store(), etag: null, kind: "wac" };
     }
@@ -87,40 +95,49 @@ async function loadAcl(resourceUrl: string, doFetch: typeof fetch, fetchImpl?: t
   }
 }
 
-/** Read named-agent collaborators (the owner is excluded) and their merged modes. */
-function readCollaborators(wac: DatasetCore, ownerWebId: string): Collaborator[] {
+/** Read named-agent and group grants (the owner is excluded). */
+function readGrants(wac: DatasetCore, ownerWebId: string): Grants {
   const byAgent = new Map<string, Access>();
+  const byGroup = new Map<string, Access>();
   for (const auth of new AclResource(wac, DataFactory).authorizations) {
+    const access = { read: auth.canRead, write: auth.canWrite, control: auth.canReadWriteAcl };
     for (const agent of auth.agent) {
       if (agent === ownerWebId) continue;
-      const prev = byAgent.get(agent) ?? empty();
-      byAgent.set(agent, {
-        read: prev.read || auth.canRead,
-        write: prev.write || auth.canWrite,
-        control: prev.control || auth.canReadWriteAcl,
-      });
+      byAgent.set(agent, merge(byAgent.get(agent) ?? empty(), access));
     }
+    const group = auth.agentGroup?.value;
+    if (group) byGroup.set(group, merge(byGroup.get(group) ?? empty(), access));
   }
-  return [...byAgent].map(([webId, access]) => ({ webId, access }));
+  return {
+    agents: [...byAgent].map(([webId, access]) => ({ webId, access })),
+    groups: [...byGroup].map(([groupIri, access]) => ({ groupIri, access })),
+  };
 }
 
 /**
- * Build a canonical WAC ACL granting the owner full control plus each collaborator
- * their modes. Rebuilding (rather than mutating an unknown structure) guarantees
- * the owner never loses control — fail-closed (AGENTS.md §Access control).
+ * Build a canonical WAC ACL granting the owner full control plus each agent and
+ * group their modes. Rebuilding guarantees the owner never loses control
+ * (fail-closed; AGENTS.md §Access control).
  */
 function buildAcl(
   aclUrl: string,
   resourceUrl: string,
   ownerWebId: string,
-  collaborators: Collaborator[],
+  grants: Grants,
   publicRead = false,
 ): Store {
   const ds = new Store();
+  // On a container, also grant acl:default so the rule cascades to members
+  // (sharing the whole tracker shares its issues); on a file, accessTo only.
+  const isContainer = resourceUrl.endsWith("/");
+  const aim = (auth: Authorization) => {
+    auth.type.add(`${ACL}Authorization`);
+    auth.accessTo = resourceUrl;
+    if (isContainer) auth.default = resourceUrl;
+  };
 
   const owner = new Authorization(`${aclUrl}#owner`, ds, DataFactory);
-  owner.type.add(`${ACL}Authorization`);
-  owner.accessTo = resourceUrl;
+  aim(owner);
   owner.agent.add(ownerWebId);
   owner.canRead = true;
   owner.canWrite = true;
@@ -128,34 +145,34 @@ function buildAcl(
 
   if (publicRead) {
     const anyone = new Authorization(`${aclUrl}#public`, ds, DataFactory);
-    anyone.type.add(`${ACL}Authorization`);
-    anyone.accessTo = resourceUrl;
+    aim(anyone);
     anyone.accessibleToAny = true; // acl:agentClass foaf:Agent
     anyone.canRead = true;
   }
 
-  collaborators.filter((c) => some(c.access)).forEach((c, i) => {
+  grants.agents.filter((c) => some(c.access)).forEach((c, i) => {
     const auth = new Authorization(`${aclUrl}#c${i}`, ds, DataFactory);
-    auth.type.add(`${ACL}Authorization`);
-    auth.accessTo = resourceUrl;
+    aim(auth);
     auth.agent.add(c.webId);
     auth.canRead = c.access.read;
     auth.canWrite = c.access.write;
     auth.canReadWriteAcl = c.access.control;
   });
 
+  grants.groups.filter((g) => some(g.access)).forEach((g, i) => {
+    const auth = new Authorization(`${aclUrl}#g${i}`, ds, DataFactory);
+    aim(auth);
+    auth.agentGroup = new Group(g.groupIri, ds, DataFactory);
+    auth.canRead = g.access.read;
+    auth.canWrite = g.access.write;
+    auth.canReadWriteAcl = g.access.control;
+  });
+
   return ds;
 }
 
-async function writeAcl(
-  loaded: LoadedAcl,
-  resourceUrl: string,
-  ownerWebId: string,
-  collaborators: Collaborator[],
-  doFetch: typeof fetch,
-  publicRead = false,
-): Promise<void> {
-  const wac = buildAcl(loaded.aclUrl, resourceUrl, ownerWebId, collaborators, publicRead);
+async function writeAcl(loaded: LoadedAcl, resourceUrl: string, ownerWebId: string, grants: Grants, doFetch: typeof fetch, publicRead = false): Promise<void> {
+  const wac = buildAcl(loaded.aclUrl, resourceUrl, ownerWebId, grants, publicRead);
   let target: DatasetCore = wac;
   if (loaded.kind === "acp") {
     const acr = new Store();
@@ -168,57 +185,46 @@ async function writeAcl(
   if (!res.ok && res.status !== 205) throw new WriteError(loaded.aclUrl, res.status);
 }
 
+/** List all grants (named agents + groups) on a resource, excluding the owner. */
+export async function listGrants(resourceUrl: string, ownerWebId: string, fetchImpl?: typeof fetch): Promise<Grants> {
+  const doFetch = fetchImpl ?? fetch;
+  const loaded = await loadAcl(resourceUrl, doFetch, fetchImpl);
+  return readGrants(loaded.wac, ownerWebId);
+}
+
 /** List the named agents a resource is shared with (excluding the owner). */
-export async function listCollaborators(
-  resourceUrl: string,
-  ownerWebId: string,
-  fetchImpl?: typeof fetch,
-): Promise<Collaborator[]> {
-  const doFetch = fetchImpl ?? fetch;
-  const loaded = await loadAcl(resourceUrl, doFetch, fetchImpl);
-  return readCollaborators(loaded.wac, ownerWebId);
+export async function listCollaborators(resourceUrl: string, ownerWebId: string, fetchImpl?: typeof fetch): Promise<Collaborator[]> {
+  return (await listGrants(resourceUrl, ownerWebId, fetchImpl)).agents;
 }
 
-/**
- * Grant `webId` the given access on `resourceUrl`, preserving the owner's control
- * and everyone else's existing access. Works on WAC (.acl) and ACP (.acr) servers.
- */
-export async function setAccess(
-  resourceUrl: string,
-  ownerWebId: string,
-  webId: string,
-  access: Access,
-  fetchImpl?: typeof fetch,
-): Promise<void> {
+/** Grant `webId` the given access, preserving the owner, other agents, and groups. */
+export async function setAccess(resourceUrl: string, ownerWebId: string, webId: string, access: Access, fetchImpl?: typeof fetch): Promise<void> {
   const doFetch = fetchImpl ?? fetch;
   const loaded = await loadAcl(resourceUrl, doFetch, fetchImpl);
-  const collaborators = readCollaborators(loaded.wac, ownerWebId).filter((c) => c.webId !== webId);
-  if (some(access)) collaborators.push({ webId, access });
-  await writeAcl(loaded, resourceUrl, ownerWebId, collaborators, doFetch);
+  const grants = readGrants(loaded.wac, ownerWebId);
+  grants.agents = grants.agents.filter((c) => c.webId !== webId);
+  if (some(access)) grants.agents.push({ webId, access });
+  await writeAcl(loaded, resourceUrl, ownerWebId, grants, doFetch);
 }
 
-/**
- * Make a resource publicly readable while keeping the owner in control and
- * preserving existing named collaborators. Used for the public type index, which
- * other people must be able to read to discover the owner's tracker.
- */
-export async function grantPublicRead(
-  resourceUrl: string,
-  ownerWebId: string,
-  fetchImpl?: typeof fetch,
-): Promise<void> {
+/** Grant a group the given access, preserving the owner, agents, and other groups. */
+export async function setGroupAccess(resourceUrl: string, ownerWebId: string, groupIri: string, access: Access, fetchImpl?: typeof fetch): Promise<void> {
   const doFetch = fetchImpl ?? fetch;
   const loaded = await loadAcl(resourceUrl, doFetch, fetchImpl);
-  const collaborators = readCollaborators(loaded.wac, ownerWebId);
-  await writeAcl(loaded, resourceUrl, ownerWebId, collaborators, doFetch, true);
+  const grants = readGrants(loaded.wac, ownerWebId);
+  grants.groups = grants.groups.filter((g) => g.groupIri !== groupIri);
+  if (some(access)) grants.groups.push({ groupIri, access });
+  await writeAcl(loaded, resourceUrl, ownerWebId, grants, doFetch);
+}
+
+/** Make a resource publicly readable while keeping the owner in control and preserving grants. */
+export async function grantPublicRead(resourceUrl: string, ownerWebId: string, fetchImpl?: typeof fetch): Promise<void> {
+  const doFetch = fetchImpl ?? fetch;
+  const loaded = await loadAcl(resourceUrl, doFetch, fetchImpl);
+  await writeAcl(loaded, resourceUrl, ownerWebId, readGrants(loaded.wac, ownerWebId), doFetch, true);
 }
 
 /** Revoke all of `webId`'s access on `resourceUrl`. */
-export function removeAccess(
-  resourceUrl: string,
-  ownerWebId: string,
-  webId: string,
-  fetchImpl?: typeof fetch,
-): Promise<void> {
+export function removeAccess(resourceUrl: string, ownerWebId: string, webId: string, fetchImpl?: typeof fetch): Promise<void> {
   return setAccess(resourceUrl, ownerWebId, webId, empty(), fetchImpl);
 }

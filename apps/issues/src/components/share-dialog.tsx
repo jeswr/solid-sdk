@@ -44,12 +44,16 @@ export function ShareDialog({
   onOpenChange,
   resourceUrl,
   ownerWebId,
+  title = "Share access",
+  description = "Grant another person access by their WebID.",
   onChanged,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   resourceUrl: string;
   ownerWebId: string;
+  title?: string;
+  description?: string;
   /** Called after access changes so the parent can refresh assignee suggestions. */
   onChanged?: () => void;
 }) {
@@ -111,10 +115,8 @@ export function ShareDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Share this tracker</DialogTitle>
-          <DialogDescription>
-            Grant another person access by their WebID. They can open your tracker from their own app.
-          </DialogDescription>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
 
         <form onSubmit={form.handleSubmit(grant)} className="flex flex-col gap-2 sm:flex-row sm:items-start" noValidate>

@@ -3,13 +3,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useSolidSession } from "@/lib/session-context";
-import { useIssues, type IssueView } from "@/lib/use-issues";
+import { useIssues, type IssueRecord } from "@/lib/use-issues";
+import { Repository } from "@/lib/repository";
+import { setGroupAccess } from "@/lib/sharing";
 import { type TrackerLocation } from "@/lib/profile";
-import { listCollaborators } from "@/lib/sharing";
 import { ConflictError } from "@/lib/errors";
 import { IssueFormDialog, type IssueFormSubmit } from "@/components/issue-form-dialog";
 import { ShareDialog } from "@/components/share-dialog";
 import { OpenTrackerDialog } from "@/components/open-tracker-dialog";
+import { CommentsDialog } from "@/components/comments-dialog";
+import { TeamDialog } from "@/components/team-dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -38,12 +41,15 @@ import {
   Eye,
   FolderOpen,
   LogOut,
+  MessageSquare,
   MoreHorizontal,
   Pencil,
   Plus,
   RotateCcw,
   Share2,
+  Tag,
   Trash2,
+  Users,
   UserRound,
 } from "lucide-react";
 
@@ -58,41 +64,49 @@ const shortWebId = (webId: string) => {
     return webId;
   }
 };
+const priorityVariant = (p?: string): "destructive" | "default" | "secondary" =>
+  p === "high" ? "destructive" : p === "medium" ? "default" : "secondary";
 
 export function IssuesView() {
-  const { profile, issuesUrl, logout } = useSolidSession();
-  const ownTracker: TrackerLocation = { ownerWebId: profile!.webId, issuesUrl: issuesUrl! };
+  const { profile, trackerUrl, logout } = useSolidSession();
+  const ownTracker: TrackerLocation = { ownerWebId: profile!.webId, trackerUrl: trackerUrl! };
 
   const [tracker, setTracker] = useState<TrackerLocation>(ownTracker);
   const isOwn = tracker.ownerWebId === profile?.webId;
-  const issues = useIssues(tracker.issuesUrl, profile?.webId ?? null);
+  const issues = useIssues(tracker.trackerUrl, profile?.webId ?? null);
 
   const [filter, setFilter] = useState<Filter>("open");
   const [formOpen, setFormOpen] = useState(false);
-  const [editing, setEditing] = useState<IssueView | undefined>(undefined);
-  const [deleteTarget, setDeleteTarget] = useState<IssueView | undefined>(undefined);
-  const [shareOpen, setShareOpen] = useState(false);
+  const [editing, setEditing] = useState<IssueRecord | undefined>(undefined);
+  const [deleteTarget, setDeleteTarget] = useState<IssueRecord | undefined>(undefined);
+  const [commentsUrl, setCommentsUrl] = useState<string | undefined>(undefined);
+  const [shareResource, setShareResource] = useState<{ url: string; label: string } | undefined>(undefined);
   const [openTrackerOpen, setOpenTrackerOpen] = useState(false);
-  const [collaborators, setCollaborators] = useState<string[]>([]);
+  const [teamOpen, setTeamOpen] = useState(false);
+  const [group, setGroup] = useState<{ iri?: string; members: string[] }>({ members: [] });
 
-  // Collaborators of the owner's tracker → assignee autocomplete (owner view only).
-  // No synchronous setState before the await keeps this effect-safe; non-owner
-  // views simply ignore the list (see assigneeSuggestions below).
-  const refreshCollaborators = useCallback(async () => {
-    if (!isOwn || !profile) return;
+  const repo = useMemo(() => new Repository(tracker.trackerUrl), [tracker.trackerUrl]);
+
+  const loadTrackerInfo = useCallback(async () => {
+    if (!isOwn) return;
     try {
-      const list = await listCollaborators(tracker.issuesUrl, profile.webId);
-      setCollaborators(list.map((c) => c.webId));
+      const info = await repo.info();
+      setGroup({ iri: info.assigneeGroup, members: info.groupMembers });
     } catch {
-      /* sharing info is optional UI sugar */
+      /* tracker config is optional UI sugar */
     }
-  }, [isOwn, profile, tracker.issuesUrl]);
+  }, [isOwn, repo]);
 
   useEffect(() => {
-    // Mount fetch; setState only runs after the await inside refreshCollaborators.
+    // Mount fetch; setState only runs after the await inside loadTrackerInfo.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    void refreshCollaborators();
-  }, [refreshCollaborators]);
+    void loadTrackerInfo();
+  }, [loadTrackerInfo]);
+
+  const assigneeSuggestions = useMemo(
+    () => (group.iri ? [group.iri, ...group.members] : group.members),
+    [group],
+  );
 
   const counts = useMemo(
     () => ({
@@ -106,7 +120,10 @@ export function IssuesView() {
     () => (filter === "all" ? issues.issues : issues.issues.filter((i) => i.state === filter)),
     [issues.issues, filter],
   );
-  const readOnly = !issues.canWrite;
+  const commentsIssue = useMemo(
+    () => issues.issues.find((i) => i.url === commentsUrl),
+    [issues.issues, commentsUrl],
+  );
 
   async function run(action: () => Promise<void>, success: string) {
     try {
@@ -126,14 +143,15 @@ export function IssuesView() {
     setEditing(undefined);
     setFormOpen(true);
   };
-  const onEdit = (issue: IssueView) => {
-    setEditing(issue);
-    setFormOpen(true);
-  };
   const onSubmitForm = async (values: IssueFormSubmit) => {
-    if (editing) await run(() => issues.update(editing.id, values), "Issue updated");
+    if (editing) await run(() => issues.update(editing.url, values), "Issue updated");
     else await run(() => issues.create(values), "Issue created");
   };
+  const shareWithTeam = (issue: IssueRecord) =>
+    run(
+      () => setGroupAccess(issue.url, profile!.webId, group.iri!, { read: true, write: true, control: false }),
+      "Shared with the team",
+    );
 
   return (
     <div className="flex flex-1 flex-col">
@@ -144,6 +162,12 @@ export function IssuesView() {
             <span className="text-lg font-semibold tracking-tight">Solid Issues</span>
           </div>
           <div className="flex items-center gap-1">
+            {isOwn && (
+              <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => setTeamOpen(true)}>
+                <Users className="size-4" aria-hidden />
+                <span className="hidden sm:inline">Team</span>
+              </Button>
+            )}
             <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => setOpenTrackerOpen(true)}>
               <FolderOpen className="size-4" aria-hidden />
               <span className="hidden sm:inline">Open tracker</span>
@@ -209,17 +233,21 @@ export function IssuesView() {
             ))}
           </div>
           <div className="flex items-center gap-2">
-            {readOnly && (
+            {!issues.canCreate && (
               <Badge variant="secondary" className="gap-1">
                 <Eye className="size-3" aria-hidden /> Read-only
               </Badge>
             )}
             {isOwn && (
-              <Button variant="outline" onClick={() => setShareOpen(true)} className="gap-1.5">
+              <Button
+                variant="outline"
+                className="gap-1.5"
+                onClick={() => setShareResource({ url: repo.containerUrl, label: "this tracker" })}
+              >
                 <Share2 className="size-4" aria-hidden /> Share
               </Button>
             )}
-            {!readOnly && (
+            {issues.canCreate && (
               <Button onClick={onCreate} className="gap-1.5">
                 <Plus className="size-4" aria-hidden /> New issue
               </Button>
@@ -257,14 +285,14 @@ export function IssuesView() {
             <div>
               <p className="font-medium">No {filter === "all" ? "" : filter} issues</p>
               <p className="text-sm text-muted-foreground">
-                {readOnly
+                {!issues.canCreate
                   ? "This tracker has no issues to show."
                   : filter === "closed"
                     ? "Closed issues will show up here."
                     : "Create your first issue to get started."}
               </p>
             </div>
-            {!readOnly && filter !== "closed" && (
+            {issues.canCreate && filter !== "closed" && (
               <Button onClick={onCreate} variant="outline" className="gap-1.5">
                 <Plus className="size-4" aria-hidden /> New issue
               </Button>
@@ -273,14 +301,21 @@ export function IssuesView() {
         ) : (
           <ul className="space-y-3">
             {visible.map((issue) => (
-              <li key={issue.id}>
+              <li key={issue.url}>
                 <IssueCard
                   issue={issue}
-                  readOnly={readOnly}
-                  onEdit={() => onEdit(issue)}
+                  isOwner={isOwn}
+                  groupIri={group.iri}
+                  onEdit={() => {
+                    setEditing(issue);
+                    setFormOpen(true);
+                  }}
+                  onComments={() => setCommentsUrl(issue.url)}
+                  onShare={() => setShareResource({ url: issue.url, label: "this issue" })}
+                  onShareTeam={() => shareWithTeam(issue)}
                   onToggle={() =>
                     run(
-                      () => issues.setState(issue.id, issue.state === "open" ? "closed" : "open"),
+                      () => issues.setState(issue.url, issue.state === "open" ? "closed" : "open"),
                       issue.state === "open" ? "Issue closed" : "Issue reopened",
                     )
                   }
@@ -297,23 +332,42 @@ export function IssuesView() {
         onOpenChange={setFormOpen}
         initial={editing}
         onSubmit={onSubmitForm}
-        assigneeSuggestions={isOwn ? collaborators : []}
+        assigneeSuggestions={assigneeSuggestions}
       />
 
-      {isOwn && profile && (
+      <CommentsDialog
+        open={!!commentsUrl}
+        onOpenChange={(o) => !o && setCommentsUrl(undefined)}
+        issue={commentsIssue}
+        canComment={!!commentsIssue?.canWrite}
+        onAdd={(content) => issues.addComment(commentsUrl!, content)}
+      />
+
+      {profile && shareResource && (
         <ShareDialog
-          open={shareOpen}
-          onOpenChange={setShareOpen}
-          resourceUrl={tracker.issuesUrl}
+          open={!!shareResource}
+          onOpenChange={(o) => !o && setShareResource(undefined)}
+          resourceUrl={shareResource.url}
           ownerWebId={profile.webId}
-          onChanged={refreshCollaborators}
+          title={`Share ${shareResource.label}`}
+          description="Grant another person access by their WebID. They can open it from their own app."
+          onChanged={loadTrackerInfo}
+        />
+      )}
+
+      {isOwn && (
+        <TeamDialog
+          open={teamOpen}
+          onOpenChange={setTeamOpen}
+          trackerUrl={tracker.trackerUrl}
+          onSaved={loadTrackerInfo}
         />
       )}
 
       <OpenTrackerDialog
         open={openTrackerOpen}
         onOpenChange={setOpenTrackerOpen}
-        onOpen={async (t) => {
+        onOpen={(t) => {
           setTracker(t);
           setFilter("open");
           if (t.ownerWebId === profile?.webId) toast.info("That's your own tracker.");
@@ -337,7 +391,7 @@ export function IssuesView() {
               onClick={async () => {
                 const target = deleteTarget;
                 setDeleteTarget(undefined);
-                if (target) await run(() => issues.remove(target.id), "Issue deleted");
+                if (target) await run(() => issues.remove(target.url), "Issue deleted");
               }}
             >
               Delete
@@ -351,41 +405,75 @@ export function IssuesView() {
 
 function IssueCard({
   issue,
-  readOnly,
+  isOwner,
+  groupIri,
   onEdit,
+  onComments,
+  onShare,
+  onShareTeam,
   onToggle,
   onDelete,
 }: {
-  issue: IssueView;
-  readOnly: boolean;
+  issue: IssueRecord;
+  isOwner: boolean;
+  groupIri?: string;
   onEdit: () => void;
+  onComments: () => void;
+  onShare: () => void;
+  onShareTeam: () => void;
   onToggle: () => void;
   onDelete: () => void;
 }) {
   const closed = issue.state === "closed";
+  const canWrite = issue.canWrite;
+  const assigneeLabel = issue.assignee
+    ? issue.assignee === groupIri
+      ? "Team"
+      : shortWebId(issue.assignee)
+    : null;
+
   return (
     <Card className={closed ? "opacity-75" : undefined}>
       <CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
-        <div className="min-w-0 space-y-1">
-          <div className="flex items-center gap-2">
+        <div className="min-w-0 space-y-1.5">
+          <div className="flex flex-wrap items-center gap-2">
             <Badge variant={closed ? "secondary" : "default"} className="gap-1">
               {closed ? <CheckCircle2 className="size-3" aria-hidden /> : <CircleDot className="size-3" aria-hidden />}
               {closed ? "Closed" : "Open"}
             </Badge>
+            {issue.priority && (
+              <Badge variant={priorityVariant(issue.priority)} className="capitalize">
+                {issue.priority}
+              </Badge>
+            )}
             <h3 className={`truncate font-medium ${closed ? "line-through" : ""}`}>{issue.title}</h3>
           </div>
+          {issue.labels.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {issue.labels.map((l) => (
+                <Badge key={l} variant="outline" className="gap-1 text-xs">
+                  <Tag className="size-3" aria-hidden /> {l}
+                </Badge>
+              ))}
+            </div>
+          )}
         </div>
-        {!readOnly && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" aria-label={`Actions for ${issue.title}`}>
-                <MoreHorizontal className="size-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" aria-label={`Actions for ${issue.title}`}>
+              <MoreHorizontal className="size-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={onComments}>
+              <MessageSquare className="size-4" aria-hidden /> Comments
+            </DropdownMenuItem>
+            {canWrite && (
               <DropdownMenuItem onClick={onEdit}>
                 <Pencil className="size-4" aria-hidden /> Edit
               </DropdownMenuItem>
+            )}
+            {canWrite && (
               <DropdownMenuItem onClick={onToggle}>
                 {closed ? (
                   <>
@@ -397,15 +485,32 @@ function IssueCard({
                   </>
                 )}
               </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem variant="destructive" onClick={onDelete}>
-                <Trash2 className="size-4" aria-hidden /> Delete
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
+            )}
+            {isOwner && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={onShare}>
+                  <Share2 className="size-4" aria-hidden /> Share…
+                </DropdownMenuItem>
+                {groupIri && (
+                  <DropdownMenuItem onClick={onShareTeam}>
+                    <Users className="size-4" aria-hidden /> Share with team
+                  </DropdownMenuItem>
+                )}
+              </>
+            )}
+            {canWrite && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem variant="destructive" onClick={onDelete}>
+                  <Trash2 className="size-4" aria-hidden /> Delete
+                </DropdownMenuItem>
+              </>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </CardHeader>
-      {(issue.description || issue.dateDue || issue.assignee) && (
+      {(issue.description || issue.dateDue || assigneeLabel || issue.comments.length > 0) && (
         <CardContent className="space-y-2">
           {issue.description && (
             <p className="line-clamp-3 text-sm text-muted-foreground whitespace-pre-wrap">{issue.description}</p>
@@ -416,12 +521,18 @@ function IssueCard({
                 <CalendarClock className="size-3.5" aria-hidden /> Due {fmtDate(issue.dateDue)}
               </span>
             )}
-            {issue.assignee && (
+            {assigneeLabel && (
               <span className="flex items-center gap-1">
-                <UserRound className="size-3.5" aria-hidden />
-                <span className="max-w-[16rem] truncate">{issue.assignee}</span>
+                <UserRound className="size-3.5" aria-hidden /> {assigneeLabel}
               </span>
             )}
+            <button
+              type="button"
+              onClick={onComments}
+              className="flex items-center gap-1 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            >
+              <MessageSquare className="size-3.5" aria-hidden /> {issue.comments.length}
+            </button>
           </div>
         </CardContent>
       )}
