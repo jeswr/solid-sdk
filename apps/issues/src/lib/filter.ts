@@ -1,0 +1,94 @@
+import type { IssueRecord } from "@/lib/repository";
+import type { Priority } from "@/lib/issue";
+
+export type StateFilter = "open" | "closed" | "all";
+export type SortKey = "created" | "updated" | "due" | "priority" | "title";
+export type SortDir = "asc" | "desc";
+
+/** A view query over the loaded issues — all client-side. */
+export interface IssueQuery {
+  text: string;
+  state: StateFilter;
+  priorities: Priority[]; // empty ⇒ any
+  labels: string[]; // empty ⇒ any (issue must carry at least one of these)
+  assignees: string[]; // empty ⇒ any
+  sort: SortKey;
+  sortDir: SortDir;
+}
+
+export const DEFAULT_QUERY: IssueQuery = {
+  text: "",
+  state: "open",
+  priorities: [],
+  labels: [],
+  assignees: [],
+  sort: "created",
+  sortDir: "desc",
+};
+
+const PRIORITY_RANK: Record<Priority | "none", number> = { high: 3, medium: 2, low: 1, none: 0 };
+const time = (d?: Date) => d?.getTime() ?? 0;
+
+function matchesText(issue: IssueRecord, q: string): boolean {
+  if (!q) return true;
+  const needle = q.toLowerCase();
+  return (
+    issue.title.toLowerCase().includes(needle) ||
+    (issue.description?.toLowerCase().includes(needle) ?? false) ||
+    issue.labels.some((l) => l.toLowerCase().includes(needle)) ||
+    (issue.assignee?.toLowerCase().includes(needle) ?? false) ||
+    issue.comments.some((c) => c.content.toLowerCase().includes(needle))
+  );
+}
+
+function matches(issue: IssueRecord, q: IssueQuery): boolean {
+  if (q.state !== "all" && issue.state !== q.state) return false;
+  if (q.priorities.length && !(issue.priority && q.priorities.includes(issue.priority))) return false;
+  if (q.labels.length && !issue.labels.some((l) => q.labels.includes(l))) return false;
+  if (q.assignees.length && !(issue.assignee && q.assignees.includes(issue.assignee))) return false;
+  return matchesText(issue, q.text);
+}
+
+function compare(a: IssueRecord, b: IssueRecord, sort: SortKey): number {
+  switch (sort) {
+    case "created":
+      return time(a.created) - time(b.created);
+    case "updated":
+      return time(a.modified) - time(b.modified);
+    case "due":
+      // issues with no due date sort last regardless of direction
+      return (time(a.dateDue) || Infinity) - (time(b.dateDue) || Infinity);
+    case "priority":
+      return PRIORITY_RANK[a.priority ?? "none"] - PRIORITY_RANK[b.priority ?? "none"];
+    case "title":
+      return a.title.localeCompare(b.title);
+  }
+}
+
+/** Filter then sort a list of issues by the given query (pure). */
+export function filterAndSort(issues: IssueRecord[], q: IssueQuery): IssueRecord[] {
+  const filtered = issues.filter((i) => matches(i, q));
+  const dir = q.sortDir === "asc" ? 1 : -1;
+  // "due" with no date always trails; otherwise honour direction.
+  return filtered.sort((a, b) => {
+    const c = compare(a, b, q.sort);
+    if (q.sort === "due") {
+      const aHas = !!a.dateDue;
+      const bHas = !!b.dateDue;
+      if (aHas !== bHas) return aHas ? -1 : 1; // dated first, both directions
+      return c * (q.sortDir === "asc" ? 1 : -1);
+    }
+    return c * dir;
+  });
+}
+
+/** Distinct labels / assignees present across the issues, for filter menus. */
+export function facets(issues: IssueRecord[]): { labels: string[]; assignees: string[] } {
+  const labels = new Set<string>();
+  const assignees = new Set<string>();
+  for (const i of issues) {
+    i.labels.forEach((l) => labels.add(l));
+    if (i.assignee) assignees.add(i.assignee);
+  }
+  return { labels: [...labels].sort(), assignees: [...assignees].sort() };
+}

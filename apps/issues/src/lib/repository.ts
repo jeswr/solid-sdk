@@ -27,6 +27,7 @@ export interface IssueRecord {
   assignee?: string;
   dateDue?: Date;
   created?: Date;
+  modified?: Date;
   comments: CommentRecord[];
   /** Whether the signed-in user may write this issue (from WAC-Allow). */
   canWrite: boolean;
@@ -84,6 +85,7 @@ function toRecord(issue: Issue, url: string, canWrite: boolean): IssueRecord {
     assignee: issue.assignee,
     dateDue: issue.dateDue,
     created: issue.created,
+    modified: issue.modified,
     comments: issue.comments.map((c) => ({ author: c.author, content: c.content ?? "", created: c.created })),
     canWrite,
   };

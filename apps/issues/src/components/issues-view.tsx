@@ -8,14 +8,19 @@ import { Repository } from "@/lib/repository";
 import { setGroupAccess } from "@/lib/sharing";
 import { type TrackerLocation } from "@/lib/profile";
 import { ConflictError } from "@/lib/errors";
+import { filterAndSort, facets, DEFAULT_QUERY, type IssueQuery, type SortKey } from "@/lib/filter";
+import type { Priority } from "@/lib/issue";
 import { IssueFormDialog, type IssueFormSubmit } from "@/components/issue-form-dialog";
 import { ShareDialog } from "@/components/share-dialog";
 import { OpenTrackerDialog } from "@/components/open-tracker-dialog";
 import { CommentsDialog } from "@/components/comments-dialog";
 import { TeamDialog } from "@/components/team-dialog";
+import { IssueBoard } from "@/components/issue-board";
+import { IssueCard, shortWebId, type IssueCardActions } from "@/components/issue-card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Card, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
@@ -27,45 +32,41 @@ import {
 } from "@/components/ui/dialog";
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   AlertCircle,
+  ArrowDownUp,
   ArrowLeft,
-  CalendarClock,
-  CheckCircle2,
   CircleDot,
   Eye,
   FolderOpen,
+  LayoutGrid,
+  List as ListIcon,
   LogOut,
-  MessageSquare,
-  MoreHorizontal,
-  Pencil,
   Plus,
-  RotateCcw,
+  Search,
   Share2,
-  Tag,
-  Trash2,
+  SlidersHorizontal,
   Users,
   UserRound,
 } from "lucide-react";
 
-type Filter = "open" | "closed" | "all";
-
-const dateFmt = new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short", year: "numeric" });
-const fmtDate = (d?: Date) => (d ? dateFmt.format(d) : null);
-const shortWebId = (webId: string) => {
-  try {
-    return new URL(webId).host;
-  } catch {
-    return webId;
-  }
-};
-const priorityVariant = (p?: string): "destructive" | "default" | "secondary" =>
-  p === "high" ? "destructive" : p === "medium" ? "default" : "secondary";
+type View = "list" | "board";
+const SORTS: { key: SortKey; label: string }[] = [
+  { key: "created", label: "Created" },
+  { key: "updated", label: "Updated" },
+  { key: "due", label: "Due date" },
+  { key: "priority", label: "Priority" },
+  { key: "title", label: "Title" },
+];
+const PRIORITIES: Priority[] = ["high", "medium", "low"];
 
 export function IssuesView() {
   const { profile, trackerUrl, logout } = useSolidSession();
@@ -75,7 +76,8 @@ export function IssuesView() {
   const isOwn = tracker.ownerWebId === profile?.webId;
   const issues = useIssues(tracker.trackerUrl, profile?.webId ?? null);
 
-  const [filter, setFilter] = useState<Filter>("open");
+  const [query, setQuery] = useState<IssueQuery>(DEFAULT_QUERY);
+  const [view, setView] = useState<View>("list");
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<IssueRecord | undefined>(undefined);
   const [deleteTarget, setDeleteTarget] = useState<IssueRecord | undefined>(undefined);
@@ -84,6 +86,9 @@ export function IssuesView() {
   const [openTrackerOpen, setOpenTrackerOpen] = useState(false);
   const [teamOpen, setTeamOpen] = useState(false);
   const [group, setGroup] = useState<{ iri?: string; members: string[] }>({ members: [] });
+
+  const patchQuery = (p: Partial<IssueQuery>) => setQuery((q) => ({ ...q, ...p }));
+  const toggleIn = (arr: string[], v: string) => (arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v]);
 
   const repo = useMemo(() => new Repository(tracker.trackerUrl), [tracker.trackerUrl]);
 
@@ -116,14 +121,13 @@ export function IssuesView() {
     }),
     [issues.issues],
   );
-  const visible = useMemo(
-    () => (filter === "all" ? issues.issues : issues.issues.filter((i) => i.state === filter)),
-    [issues.issues, filter],
-  );
+  const fac = useMemo(() => facets(issues.issues), [issues.issues]);
+  const visible = useMemo(() => filterAndSort(issues.issues, query), [issues.issues, query]);
   const commentsIssue = useMemo(
     () => issues.issues.find((i) => i.url === commentsUrl),
     [issues.issues, commentsUrl],
   );
+  const activeFilters = query.priorities.length + query.labels.length + query.assignees.length;
 
   async function run(action: () => Promise<void>, success: string) {
     try {
@@ -147,16 +151,33 @@ export function IssuesView() {
     if (editing) await run(() => issues.update(editing.url, values), "Issue updated");
     else await run(() => issues.create(values), "Issue created");
   };
-  const shareWithTeam = (issue: IssueRecord) =>
-    run(
-      () => setGroupAccess(issue.url, profile!.webId, group.iri!, { read: true, write: true, control: false }),
-      "Shared with the team",
-    );
+
+  const cardActions = (issue: IssueRecord): IssueCardActions => ({
+    isOwner: isOwn,
+    groupIri: group.iri,
+    onEdit: () => {
+      setEditing(issue);
+      setFormOpen(true);
+    },
+    onComments: () => setCommentsUrl(issue.url),
+    onShare: () => setShareResource({ url: issue.url, label: "this issue" }),
+    onShareTeam: () =>
+      run(
+        () => setGroupAccess(issue.url, profile!.webId, group.iri!, { read: true, write: true, control: false }),
+        "Shared with the team",
+      ),
+    onToggle: () =>
+      run(
+        () => issues.setState(issue.url, issue.state === "open" ? "closed" : "open"),
+        issue.state === "open" ? "Issue closed" : "Issue reopened",
+      ),
+    onDelete: () => setDeleteTarget(issue),
+  });
 
   return (
     <div className="flex flex-1 flex-col">
       <header className="border-b bg-card">
-        <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-4 px-4 py-3">
+        <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-4 px-4 py-3">
           <div className="flex min-w-0 items-center gap-2">
             <CircleDot className="size-5 shrink-0 text-primary" aria-hidden />
             <span className="text-lg font-semibold tracking-tight">Solid Issues</span>
@@ -202,7 +223,7 @@ export function IssuesView() {
 
         {!isOwn && (
           <div className="border-t bg-muted/40">
-            <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-3 px-4 py-2">
+            <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-3 px-4 py-2">
               <p className="min-w-0 truncate text-sm text-muted-foreground">
                 Viewing <span className="font-medium text-foreground">{shortWebId(tracker.ownerWebId)}</span>&apos;s
                 tracker
@@ -215,43 +236,158 @@ export function IssuesView() {
         )}
       </header>
 
-      <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-6">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <div role="tablist" aria-label="Filter issues" className="flex gap-1 rounded-lg bg-muted p-1">
-            {(["open", "closed", "all"] as const).map((f) => (
+      <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-6">
+        {/* Toolbar */}
+        <div className="mb-4 space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative min-w-48 flex-1">
+              <Search className="absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+              <Input
+                type="search"
+                aria-label="Search issues"
+                placeholder="Search issues…"
+                value={query.text}
+                onChange={(e) => patchQuery({ text: e.target.value })}
+                className="pl-8"
+              />
+            </div>
+
+            {/* Filters */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="gap-1.5">
+                  <SlidersHorizontal className="size-4" aria-hidden /> Filter
+                  {activeFilters > 0 && <Badge variant="secondary">{activeFilters}</Badge>}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="max-h-96 w-56 overflow-y-auto">
+                <DropdownMenuLabel>Priority</DropdownMenuLabel>
+                {PRIORITIES.map((p) => (
+                  <DropdownMenuCheckboxItem
+                    key={p}
+                    className="capitalize"
+                    checked={query.priorities.includes(p)}
+                    onCheckedChange={() => patchQuery({ priorities: toggleIn(query.priorities, p) as Priority[] })}
+                    onSelect={(e) => e.preventDefault()}
+                  >
+                    {p}
+                  </DropdownMenuCheckboxItem>
+                ))}
+                {fac.labels.length > 0 && <DropdownMenuLabel>Labels</DropdownMenuLabel>}
+                {fac.labels.map((l) => (
+                  <DropdownMenuCheckboxItem
+                    key={l}
+                    checked={query.labels.includes(l)}
+                    onCheckedChange={() => patchQuery({ labels: toggleIn(query.labels, l) })}
+                    onSelect={(e) => e.preventDefault()}
+                  >
+                    {l}
+                  </DropdownMenuCheckboxItem>
+                ))}
+                {fac.assignees.length > 0 && <DropdownMenuLabel>Assignee</DropdownMenuLabel>}
+                {fac.assignees.map((a) => (
+                  <DropdownMenuCheckboxItem
+                    key={a}
+                    checked={query.assignees.includes(a)}
+                    onCheckedChange={() => patchQuery({ assignees: toggleIn(query.assignees, a) })}
+                    onSelect={(e) => e.preventDefault()}
+                  >
+                    {a === group.iri ? "Team" : shortWebId(a)}
+                  </DropdownMenuCheckboxItem>
+                ))}
+                {activeFilters > 0 && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => patchQuery({ priorities: [], labels: [], assignees: [] })}>
+                      Clear filters
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {/* Sort */}
+            <Select value={query.sort} onValueChange={(v) => patchQuery({ sort: v as SortKey })}>
+              <SelectTrigger className="w-36" aria-label="Sort by">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {SORTS.map((s) => (
+                  <SelectItem key={s.key} value={s.key}>
+                    {s.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
+              variant="outline"
+              size="icon"
+              aria-label={`Sort ${query.sortDir === "asc" ? "ascending" : "descending"}`}
+              onClick={() => patchQuery({ sortDir: query.sortDir === "asc" ? "desc" : "asc" })}
+            >
+              <ArrowDownUp className="size-4" aria-hidden />
+            </Button>
+
+            {/* View toggle */}
+            <div role="tablist" aria-label="View" className="flex gap-1 rounded-lg bg-muted p-1">
               <button
-                key={f}
                 role="tab"
-                aria-selected={filter === f}
-                onClick={() => setFilter(f)}
-                className={`rounded-md px-3 py-1.5 text-sm font-medium capitalize transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none ${
-                  filter === f ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"
-                }`}
+                aria-selected={view === "list"}
+                aria-label="List view"
+                onClick={() => setView("list")}
+                className={`rounded-md p-1.5 transition-colors ${view === "list" ? "bg-background shadow-sm" : "text-muted-foreground"}`}
               >
-                {f} <span className="text-muted-foreground">{counts[f]}</span>
+                <ListIcon className="size-4" aria-hidden />
               </button>
-            ))}
-          </div>
-          <div className="flex items-center gap-2">
-            {!issues.canCreate && (
-              <Badge variant="secondary" className="gap-1">
-                <Eye className="size-3" aria-hidden /> Read-only
-              </Badge>
-            )}
-            {isOwn && (
-              <Button
-                variant="outline"
-                className="gap-1.5"
-                onClick={() => setShareResource({ url: repo.containerUrl, label: "this tracker" })}
+              <button
+                role="tab"
+                aria-selected={view === "board"}
+                aria-label="Board view"
+                onClick={() => setView("board")}
+                className={`rounded-md p-1.5 transition-colors ${view === "board" ? "bg-background shadow-sm" : "text-muted-foreground"}`}
               >
-                <Share2 className="size-4" aria-hidden /> Share
-              </Button>
-            )}
-            {issues.canCreate && (
-              <Button onClick={onCreate} className="gap-1.5">
-                <Plus className="size-4" aria-hidden /> New issue
-              </Button>
-            )}
+                <LayoutGrid className="size-4" aria-hidden />
+              </button>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div role="tablist" aria-label="Filter by state" className="flex gap-1 rounded-lg bg-muted p-1">
+              {(["open", "closed", "all"] as const).map((f) => (
+                <button
+                  key={f}
+                  role="tab"
+                  aria-selected={query.state === f}
+                  onClick={() => patchQuery({ state: f })}
+                  className={`rounded-md px-3 py-1.5 text-sm font-medium capitalize transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none ${
+                    query.state === f ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {f} <span className="text-muted-foreground">{counts[f]}</span>
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-2">
+              {!issues.canCreate && (
+                <Badge variant="secondary" className="gap-1">
+                  <Eye className="size-3" aria-hidden /> Read-only
+                </Badge>
+              )}
+              {isOwn && (
+                <Button
+                  variant="outline"
+                  className="gap-1.5"
+                  onClick={() => setShareResource({ url: repo.containerUrl, label: "this tracker" })}
+                >
+                  <Share2 className="size-4" aria-hidden /> Share
+                </Button>
+              )}
+              {issues.canCreate && (
+                <Button onClick={onCreate} className="gap-1.5">
+                  <Plus className="size-4" aria-hidden /> New issue
+                </Button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -283,44 +419,35 @@ export function IssuesView() {
           <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed p-12 text-center">
             <CircleDot className="size-8 text-muted-foreground" aria-hidden />
             <div>
-              <p className="font-medium">No {filter === "all" ? "" : filter} issues</p>
+              <p className="font-medium">No issues match</p>
               <p className="text-sm text-muted-foreground">
-                {!issues.canCreate
-                  ? "This tracker has no issues to show."
-                  : filter === "closed"
-                    ? "Closed issues will show up here."
+                {query.text || activeFilters > 0
+                  ? "Try clearing the search or filters."
+                  : !issues.canCreate
+                    ? "This tracker has no issues to show."
                     : "Create your first issue to get started."}
               </p>
             </div>
-            {issues.canCreate && filter !== "closed" && (
+            {issues.canCreate && !query.text && activeFilters === 0 && query.state !== "closed" && (
               <Button onClick={onCreate} variant="outline" className="gap-1.5">
                 <Plus className="size-4" aria-hidden /> New issue
               </Button>
             )}
           </div>
+        ) : view === "board" ? (
+          <IssueBoard
+            issues={visible}
+            cardActions={cardActions}
+            canWrite={issues.canCreate}
+            onMovePriority={(url, priority) =>
+              run(() => issues.update(url, { priority }), priority ? `Priority set to ${priority}` : "Priority cleared")
+            }
+          />
         ) : (
           <ul className="space-y-3">
             {visible.map((issue) => (
               <li key={issue.url}>
-                <IssueCard
-                  issue={issue}
-                  isOwner={isOwn}
-                  groupIri={group.iri}
-                  onEdit={() => {
-                    setEditing(issue);
-                    setFormOpen(true);
-                  }}
-                  onComments={() => setCommentsUrl(issue.url)}
-                  onShare={() => setShareResource({ url: issue.url, label: "this issue" })}
-                  onShareTeam={() => shareWithTeam(issue)}
-                  onToggle={() =>
-                    run(
-                      () => issues.setState(issue.url, issue.state === "open" ? "closed" : "open"),
-                      issue.state === "open" ? "Issue closed" : "Issue reopened",
-                    )
-                  }
-                  onDelete={() => setDeleteTarget(issue)}
-                />
+                <IssueCard issue={issue} {...cardActions(issue)} />
               </li>
             ))}
           </ul>
@@ -356,12 +483,7 @@ export function IssuesView() {
       )}
 
       {isOwn && (
-        <TeamDialog
-          open={teamOpen}
-          onOpenChange={setTeamOpen}
-          trackerUrl={tracker.trackerUrl}
-          onSaved={loadTrackerInfo}
-        />
+        <TeamDialog open={teamOpen} onOpenChange={setTeamOpen} trackerUrl={tracker.trackerUrl} onSaved={loadTrackerInfo} />
       )}
 
       <OpenTrackerDialog
@@ -369,7 +491,7 @@ export function IssuesView() {
         onOpenChange={setOpenTrackerOpen}
         onOpen={(t) => {
           setTracker(t);
-          setFilter("open");
+          patchQuery({ state: "open" });
           if (t.ownerWebId === profile?.webId) toast.info("That's your own tracker.");
         }}
       />
@@ -400,142 +522,5 @@ export function IssuesView() {
         </DialogContent>
       </Dialog>
     </div>
-  );
-}
-
-function IssueCard({
-  issue,
-  isOwner,
-  groupIri,
-  onEdit,
-  onComments,
-  onShare,
-  onShareTeam,
-  onToggle,
-  onDelete,
-}: {
-  issue: IssueRecord;
-  isOwner: boolean;
-  groupIri?: string;
-  onEdit: () => void;
-  onComments: () => void;
-  onShare: () => void;
-  onShareTeam: () => void;
-  onToggle: () => void;
-  onDelete: () => void;
-}) {
-  const closed = issue.state === "closed";
-  const canWrite = issue.canWrite;
-  const assigneeLabel = issue.assignee
-    ? issue.assignee === groupIri
-      ? "Team"
-      : shortWebId(issue.assignee)
-    : null;
-
-  return (
-    <Card className={closed ? "opacity-75" : undefined}>
-      <CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
-        <div className="min-w-0 space-y-1.5">
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant={closed ? "secondary" : "default"} className="gap-1">
-              {closed ? <CheckCircle2 className="size-3" aria-hidden /> : <CircleDot className="size-3" aria-hidden />}
-              {closed ? "Closed" : "Open"}
-            </Badge>
-            {issue.priority && (
-              <Badge variant={priorityVariant(issue.priority)} className="capitalize">
-                {issue.priority}
-              </Badge>
-            )}
-            <h3 className={`truncate font-medium ${closed ? "line-through" : ""}`}>{issue.title}</h3>
-          </div>
-          {issue.labels.length > 0 && (
-            <div className="flex flex-wrap gap-1">
-              {issue.labels.map((l) => (
-                <Badge key={l} variant="outline" className="gap-1 text-xs">
-                  <Tag className="size-3" aria-hidden /> {l}
-                </Badge>
-              ))}
-            </div>
-          )}
-        </div>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" aria-label={`Actions for ${issue.title}`}>
-              <MoreHorizontal className="size-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={onComments}>
-              <MessageSquare className="size-4" aria-hidden /> Comments
-            </DropdownMenuItem>
-            {canWrite && (
-              <DropdownMenuItem onClick={onEdit}>
-                <Pencil className="size-4" aria-hidden /> Edit
-              </DropdownMenuItem>
-            )}
-            {canWrite && (
-              <DropdownMenuItem onClick={onToggle}>
-                {closed ? (
-                  <>
-                    <RotateCcw className="size-4" aria-hidden /> Reopen
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle2 className="size-4" aria-hidden /> Close
-                  </>
-                )}
-              </DropdownMenuItem>
-            )}
-            {isOwner && (
-              <>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={onShare}>
-                  <Share2 className="size-4" aria-hidden /> Share…
-                </DropdownMenuItem>
-                {groupIri && (
-                  <DropdownMenuItem onClick={onShareTeam}>
-                    <Users className="size-4" aria-hidden /> Share with team
-                  </DropdownMenuItem>
-                )}
-              </>
-            )}
-            {canWrite && (
-              <>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem variant="destructive" onClick={onDelete}>
-                  <Trash2 className="size-4" aria-hidden /> Delete
-                </DropdownMenuItem>
-              </>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </CardHeader>
-      {(issue.description || issue.dateDue || assigneeLabel || issue.comments.length > 0) && (
-        <CardContent className="space-y-2">
-          {issue.description && (
-            <p className="line-clamp-3 text-sm text-muted-foreground whitespace-pre-wrap">{issue.description}</p>
-          )}
-          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-            {issue.dateDue && (
-              <span className="flex items-center gap-1">
-                <CalendarClock className="size-3.5" aria-hidden /> Due {fmtDate(issue.dateDue)}
-              </span>
-            )}
-            {assigneeLabel && (
-              <span className="flex items-center gap-1">
-                <UserRound className="size-3.5" aria-hidden /> {assigneeLabel}
-              </span>
-            )}
-            <button
-              type="button"
-              onClick={onComments}
-              className="flex items-center gap-1 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-            >
-              <MessageSquare className="size-3.5" aria-hidden /> {issue.comments.length}
-            </button>
-          </div>
-        </CardContent>
-      )}
-    </Card>
   );
 }

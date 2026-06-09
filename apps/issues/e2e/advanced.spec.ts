@@ -30,6 +30,26 @@ test.describe("Advanced issue features", () => {
     await expect(page.getByText("bug", { exact: true })).toBeVisible();
   });
 
+  test("searches issues and switches to the board view", async ({ page }) => {
+    for (const title of ["Alpha login bug", "Beta dark mode"]) {
+      await page.getByRole("button", { name: /new issue/i }).first().click();
+      await page.getByLabel(/^title$/i).fill(title);
+      await page.getByRole("button", { name: /create issue/i }).click();
+      await expect(page.getByRole("heading", { name: title })).toBeVisible({ timeout: 15_000 });
+    }
+
+    // Search narrows the list.
+    await page.getByLabel(/search issues/i).fill("Alpha");
+    await expect(page.getByRole("heading", { name: "Alpha login bug" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Beta dark mode" })).toBeHidden();
+
+    // Clear, switch to the board view — priority columns render.
+    await page.getByLabel(/search issues/i).fill("");
+    await page.getByRole("tab", { name: /board view/i }).click();
+    await expect(page.getByRole("region", { name: /no priority/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Alpha login bug" })).toBeVisible();
+  });
+
   test("adds a comment to an issue and it persists", async ({ page }) => {
     const title = `Discuss ${Math.random().toString(36).slice(2, 8)}`;
     await page.getByRole("button", { name: /new issue/i }).first().click();
