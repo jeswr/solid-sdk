@@ -29,7 +29,7 @@ export interface UseIssues {
   update: (url: string, patch: IssuePatch) => Promise<void>;
   setState: (url: string, state: IssueState) => Promise<void>;
   setStatus: (url: string, status: StatusSlug) => Promise<void>;
-  addComment: (url: string, content: string) => Promise<void>;
+  addComment: (url: string, content: string, mentions?: string[]) => Promise<void>;
   uploadAttachment: (url: string, file: { name: string; type: string; data: ArrayBuffer }) => Promise<void>;
   removeAttachment: (url: string, fileUrl: string) => Promise<void>;
   remove: (url: string) => Promise<void>;
@@ -92,7 +92,7 @@ export function useIssues(trackerUrl: string | null, creator: string | null): Us
     update: (url, patch) => mutate((r) => r.update(url, patch)),
     setState: (url, state) => mutate((r) => r.setState(url, state)),
     setStatus: (url, status) => mutate((r) => r.setStatus(url, status)),
-    addComment: (url, content) => mutate((r) => r.addComment(url, content, creator ?? undefined)),
+    addComment: (url, content, mentions) => mutate((r) => r.addComment(url, content, creator ?? undefined, mentions)),
     uploadAttachment: (url, file) => mutate(async (r) => void (await r.uploadAttachment(url, file))),
     removeAttachment: (url, fileUrl) => mutate((r) => r.removeAttachment(url, fileUrl)),
     remove: (url) => mutate((r) => r.remove(url)),

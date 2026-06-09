@@ -14,6 +14,7 @@ export interface CommentRecord {
   author?: string;
   content: string;
   created?: Date;
+  mentions: string[];
 }
 
 /** A render-friendly snapshot of one issue (decoupled from the RDF wrapper). */
@@ -102,7 +103,12 @@ function toRecord(issue: Issue, url: string, canWrite: boolean): IssueRecord {
     attachments: [...issue.attachments],
     created: issue.created,
     modified: issue.modified,
-    comments: issue.comments.map((c) => ({ author: c.author, content: c.content ?? "", created: c.created })),
+    comments: issue.comments.map((c) => ({
+      author: c.author,
+      content: c.content ?? "",
+      created: c.created,
+      mentions: [...c.mentions],
+    })),
     canWrite,
   };
 }
@@ -302,13 +308,14 @@ export class Repository {
     await this.put(url, dataset, etag);
   }
 
-  async addComment(url: string, content: string, author?: string): Promise<void> {
+  async addComment(url: string, content: string, author?: string, mentions: string[] = []): Promise<void> {
     const { dataset, etag, issue } = await this.openIssue(url);
     const comment = new Comment(`${url}#msg-${crypto.randomUUID()}`, dataset, DataFactory);
     comment.markMessage();
     comment.content = content;
     comment.author = author;
     comment.created = new Date();
+    for (const m of mentions) comment.mentions.add(m);
     issue.messages.add(comment);
     issue.modified = new Date();
     await this.put(url, dataset, etag);

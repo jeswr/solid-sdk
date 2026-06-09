@@ -23,6 +23,18 @@ const fileName = (url: string) => {
     return noUuid;
   }
 };
+
+/** Render comment text with @mentions highlighted. */
+const renderBody = (text: string) =>
+  text.split(/(@\S+)/g).map((part, i) =>
+    part.startsWith("@") ? (
+      <span key={i} className="font-medium text-primary">
+        {part}
+      </span>
+    ) : (
+      <span key={i}>{part}</span>
+    ),
+  );
 import type { IssueRecord } from "@/lib/use-issues";
 import { STATUSES } from "@/lib/issue";
 import { priorityVariant, shortWebId } from "@/components/issue-card";
@@ -39,6 +51,7 @@ export function IssueDetailDialog({
   onOpenChange,
   issue,
   allIssues,
+  people,
   groupIri,
   canComment,
   onEdit,
@@ -51,10 +64,11 @@ export function IssueDetailDialog({
   onOpenChange: (open: boolean) => void;
   issue?: IssueRecord;
   allIssues: IssueRecord[];
+  people: string[];
   groupIri?: string;
   canComment: boolean;
   onEdit: () => void;
-  onAddComment: (content: string) => Promise<void>;
+  onAddComment: (content: string, mentions: string[]) => Promise<void>;
   onUpdate: (patch: { parent?: string; blockedBy?: string[] }) => Promise<void>;
   onUpload: (file: { name: string; type: string; data: ArrayBuffer }) => Promise<void>;
   onRemoveAttachment: (fileUrl: string) => Promise<void>;
@@ -77,7 +91,8 @@ export function IssueDetailDialog({
     if (!content) return;
     setBusy(true);
     try {
-      await onAddComment(content);
+      const mentions = people.filter((p) => content.includes(`@${shortWebId(p)}`));
+      await onAddComment(content, mentions);
       setText("");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not post the comment.");
@@ -333,7 +348,9 @@ export function IssueDetailDialog({
                     <span>{a.text}</span>
                     <span>· {timeFmt.format(a.at)}</span>
                   </div>
-                  {a.body && <p className="mt-1 rounded-md border bg-muted/30 p-2 whitespace-pre-wrap">{a.body}</p>}
+                  {a.body && (
+                    <p className="mt-1 rounded-md border bg-muted/30 p-2 whitespace-pre-wrap">{renderBody(a.body)}</p>
+                  )}
                 </li>
               ))}
             </ul>
@@ -342,7 +359,23 @@ export function IssueDetailDialog({
 
         {canComment && (
           <div className="space-y-2 border-t pt-3">
-            <Textarea aria-label="Add a comment" rows={3} placeholder="Add a comment…" value={text} onChange={(e) => setText(e.target.value)} />
+            {people.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1">
+                <span className="text-xs text-muted-foreground">Mention:</span>
+                {people.map((p) => (
+                  <Button
+                    key={p}
+                    variant="outline"
+                    size="sm"
+                    className="h-6 px-2 text-xs"
+                    onClick={() => setText((t) => `${t}${t && !t.endsWith(" ") ? " " : ""}@${shortWebId(p)} `)}
+                  >
+                    @{shortWebId(p)}
+                  </Button>
+                ))}
+              </div>
+            )}
+            <Textarea aria-label="Add a comment" rows={3} placeholder="Add a comment…  (@ to mention)" value={text} onChange={(e) => setText(e.target.value)} />
             <div className="flex justify-end">
               <Button onClick={submit} disabled={busy || !text.trim()}>
                 {busy && <Loader2 className="size-4 animate-spin" aria-hidden />} Comment

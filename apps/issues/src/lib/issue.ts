@@ -10,7 +10,7 @@ import {
   TermAs,
   TermFrom,
 } from "@rdfjs/wrapper";
-import { WF, DCT, RDF, STATE, wf, dct, rdf, rdfs, sioc, foaf, vcard } from "./vocab";
+import { WF, DCT, RDF, STATE, wf, dct, rdf, rdfs, sioc, foaf, vcard, schema } from "./vocab";
 
 export type IssueState = "open" | "closed";
 export type Priority = "high" | "medium" | "low";
@@ -59,6 +59,10 @@ export class Comment extends TermWrapper {
   }
   set created(value: Date | undefined) {
     OptionalAs.object(this, dct("created"), value, LiteralFrom.dateTime);
+  }
+  /** WebIDs mentioned in this comment, via `schema:mentions` — live set. */
+  get mentions(): Set<string> {
+    return SetFrom.subjectPredicate(this, schema("mentions"), NamedNodeAs.string, NamedNodeFrom.string);
   }
 }
 

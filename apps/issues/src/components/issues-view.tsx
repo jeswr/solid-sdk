@@ -178,6 +178,12 @@ export function IssuesView() {
     () => (group.iri ? [group.iri, ...group.members] : group.members),
     [group],
   );
+  // People who can be @mentioned: team members + anyone currently assigned.
+  const people = useMemo(() => {
+    const set = new Set<string>(group.members);
+    for (const i of issues.issues) if (i.assignee && i.assignee !== group.iri) set.add(i.assignee);
+    return [...set];
+  }, [group, issues.issues]);
 
   const counts = useMemo(
     () => ({
@@ -701,6 +707,7 @@ export function IssuesView() {
         onOpenChange={(o) => !o && setCommentsUrl(undefined)}
         issue={commentsIssue}
         allIssues={issues.issues}
+        people={people}
         groupIri={group.iri}
         canComment={!!commentsIssue?.canWrite}
         onUpdate={(patch) => run(() => issues.update(commentsUrl!, patch), "Issue updated")}
@@ -713,7 +720,7 @@ export function IssuesView() {
             setFormOpen(true);
           }
         }}
-        onAddComment={(content) => issues.addComment(commentsUrl!, content)}
+        onAddComment={(content, mentions) => issues.addComment(commentsUrl!, content, mentions)}
       />
 
       {profile && shareResource && (

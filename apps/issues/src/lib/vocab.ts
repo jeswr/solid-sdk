@@ -21,6 +21,8 @@ export const SIOC = "http://rdfs.org/sioc/ns#";
 export const FOAF = "http://xmlns.com/foaf/0.1/";
 /** vCard — `vcard:Group`, `vcard:hasMember` (assignee groups). */
 export const VCARD = "http://www.w3.org/2006/vcard/ns#";
+/** Schema.org (canonical http scheme) — `schema:mentions` for @mentions. */
+export const SCHEMA = "http://schema.org/";
 
 export const wf = (local: string) => `${WF}${local}`;
 export const dct = (local: string) => `${DCT}${local}`;
@@ -29,6 +31,7 @@ export const rdfs = (local: string) => `${RDFS}${local}`;
 export const sioc = (local: string) => `${SIOC}${local}`;
 export const foaf = (local: string) => `${FOAF}${local}`;
 export const vcard = (local: string) => `${VCARD}${local}`;
+export const schema = (local: string) => `${SCHEMA}${local}`;
 
 /** The two terminal/non-terminal state classes an issue is typed with. */
 export const STATE = {
