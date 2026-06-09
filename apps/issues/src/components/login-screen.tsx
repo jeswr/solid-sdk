@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { AlertCircle, ArrowRight, Loader2, UserRound, X } from "lucide-react";
+import { AlertCircle, ArrowRight, CircleDot, Loader2, UserRound, X } from "lucide-react";
 
 const schema = z.object({
   webId: z
@@ -40,9 +40,15 @@ export function LoginScreen() {
   const onSubmit = (values: FormValues) => login(values.webId);
 
   return (
-    <main className="flex flex-1 items-center justify-center p-4">
+    <main className="flex flex-1 items-center justify-center bg-gradient-to-b from-primary/5 via-background to-background p-4">
       <Card className="w-full max-w-md shadow-lg">
-        <CardHeader className="space-y-2 text-center">
+        <CardHeader className="space-y-3 text-center">
+          <div
+            aria-hidden
+            className="mx-auto flex size-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-sm"
+          >
+            <CircleDot className="size-6" />
+          </div>
           <CardTitle className="text-2xl font-semibold tracking-tight">Solid Issues</CardTitle>
           <CardDescription className="text-balance">
             Track issues in your own Solid Pod. Your data stays with you.

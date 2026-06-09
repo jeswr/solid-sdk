@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTheme } from "next-themes";
 import { toast } from "sonner";
 import { useSolidSession } from "@/lib/session-context";
 import { useIssues, type IssueRecord } from "@/lib/use-issues";
@@ -57,9 +58,12 @@ import {
   LayoutGrid,
   List as ListIcon,
   LogOut,
+  Monitor,
+  Moon,
   Plus,
   RotateCcw,
   Search,
+  Sun,
   Share2,
   SlidersHorizontal,
   Trash2,
@@ -80,6 +84,7 @@ const PRIORITIES: Priority[] = ["high", "medium", "low"];
 
 export function IssuesView() {
   const { profile, trackerUrl, logout } = useSolidSession();
+  const { theme, setTheme } = useTheme();
   const ownTracker: TrackerLocation = { ownerWebId: profile!.webId, trackerUrl: trackerUrl! };
 
   const [tracker, setTracker] = useState<TrackerLocation>(ownTracker);
@@ -305,7 +310,12 @@ export function IssuesView() {
       <header className="border-b bg-card">
         <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-4 px-4 py-3">
           <div className="flex min-w-0 items-center gap-2">
-            <CircleDot className="size-5 shrink-0 text-primary" aria-hidden />
+            <span
+              aria-hidden
+              className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground"
+            >
+              <CircleDot className="size-4" />
+            </span>
             <span className="text-lg font-semibold tracking-tight">Solid Issues</span>
           </div>
           <div className="flex items-center gap-1">
@@ -347,6 +357,27 @@ export function IssuesView() {
                 <div className="px-2 py-1.5">
                   <p className="truncate text-sm font-medium">{profile?.name ?? "Signed in"}</p>
                   <p className="truncate text-xs text-muted-foreground">{profile?.webId}</p>
+                </div>
+                <DropdownMenuSeparator />
+                <div className="flex items-center gap-1 px-2 py-1.5">
+                  <span className="mr-auto text-xs text-muted-foreground">Theme</span>
+                  {([
+                    { k: "light", I: Sun, label: "Light" },
+                    { k: "dark", I: Moon, label: "Dark" },
+                    { k: "system", I: Monitor, label: "System" },
+                  ] as const).map(({ k, I, label }) => (
+                    <Button
+                      key={k}
+                      variant={theme === k ? "secondary" : "ghost"}
+                      size="icon"
+                      className="size-7"
+                      aria-label={`${label} theme`}
+                      aria-pressed={theme === k}
+                      onClick={() => setTheme(k)}
+                    >
+                      <I className="size-4" aria-hidden />
+                    </Button>
+                  ))}
                 </div>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={logout}>
