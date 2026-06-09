@@ -8,6 +8,20 @@ import { ConflictError, WriteError } from "./errors";
 const TRACKER_FRAGMENT = "#tracker";
 const DEFAULT_TRACKER_TITLE = "Issues";
 
+/**
+ * Parse the `WAC-Allow` header to learn the signed-in user's effective access,
+ * e.g. `user="read write append control",public="read"`. Absent header → assume
+ * writable (servers without WAC-Allow, or the owner's own pod).
+ */
+function wacAllowsWrite(response: Response): boolean {
+  const header = response.headers.get("wac-allow");
+  if (!header) return true;
+  const user = /user\s*=\s*"([^"]*)"/i.exec(header);
+  if (!user) return true;
+  const modes = user[1].toLowerCase().split(/\s+/);
+  return modes.includes("write") || modes.includes("append");
+}
+
 export interface NewIssueInput {
   title: string;
   description?: string;
@@ -32,17 +46,20 @@ export class IssuesDocument {
     readonly url: string,
     private readonly dataset: DatasetCore,
     private etag: string | null,
+    /** Whether the signed-in user may write here (from the WAC-Allow header). */
+    readonly canWrite: boolean,
     private readonly fetchImpl?: typeof fetch,
   ) {}
 
   /** Load the document; a 404 yields an empty, ready-to-write document. */
   static async open(url: string, fetchImpl?: typeof fetch): Promise<IssuesDocument> {
     try {
-      const { dataset, etag } = await fetchRdf(url, fetchImpl ? { fetch: fetchImpl } : undefined);
-      return new IssuesDocument(url, dataset, etag, fetchImpl);
+      const { dataset, etag, response } = await fetchRdf(url, fetchImpl ? { fetch: fetchImpl } : undefined);
+      return new IssuesDocument(url, dataset, etag, wacAllowsWrite(response), fetchImpl);
     } catch (e) {
+      // 404 → the document doesn't exist yet; the user can create it (owner path).
       if (e instanceof RdfFetchError && e.status === 404) {
-        return new IssuesDocument(url, new Store(), null, fetchImpl);
+        return new IssuesDocument(url, new Store(), null, true, fetchImpl);
       }
       throw e;
     }

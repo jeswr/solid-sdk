@@ -30,6 +30,17 @@ One document per pod holds the tracker config + all issues
 (`<pod>/issue-tracker/issues.ttl`); writes are conditional `PUT`s (`If-Match`) so
 a concurrent edit surfaces as a recoverable conflict rather than silent data loss.
 
+## Sharing & cross-pod (milestone 2)
+
+- **Share** a tracker with another person by WebID (view or edit) — managed via
+  Web Access Control, with ACP (Inrupt ESS) supported through the access-control
+  converters. The owner always keeps control (fail-closed).
+- **Discovery**: the tracker is registered in your **public type index** so others
+  can find it; `resolveTracker(webId)` falls back to the conventional pod path.
+- **Open another pod's tracker** by WebID; read-only access is detected from the
+  `WAC-Allow` header and the UI adapts.
+- See [`decisions/0002-sharing-and-discovery.md`](./decisions/0002-sharing-and-discovery.md).
+
 ## Develop
 
 ```sh
@@ -55,7 +66,7 @@ npm run test:e2e    # Playwright — golden path against a real local CSS (popup
 npm run build       # next build
 ```
 
-## Roadmap (milestone 2)
+## Roadmap (future)
 
-Priority/labels (`wf:issueCategory`), comments (`wf:message`), cross-pod
-assignment and sharing (WAC/ACP + the type index), and a published SHACL shape.
+Priority/labels (`wf:issueCategory`), comments (`wf:message`), per-issue ACLs,
+assignee groups (`vcard:Group`), and a published SHACL shape.

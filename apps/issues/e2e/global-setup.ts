@@ -106,6 +106,5 @@ export default async function globalSetup() {
   if (pod.status >= 400) throw new Error(`pod create failed: ${JSON.stringify(pod.json)}`);
   const cc = await jsonPost(c.account.clientCredentials, { name: "seed", webId: WEBID }, jar);
   await seedProfile(cc.json.id, cc.json.secret);
-  // eslint-disable-next-line no-console
   console.log(`[global-setup] seeded pod for ${WEBID}`);
 }

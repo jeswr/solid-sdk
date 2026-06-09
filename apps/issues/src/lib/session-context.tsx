@@ -11,6 +11,7 @@ import {
 } from "react";
 import { loadProfile, issuesDocumentUrl, type SolidProfile } from "@/lib/profile";
 import { IssuesDocument } from "@/lib/issues-document";
+import { registerTracker } from "@/lib/type-index";
 import { RecentAccounts, type RecentAccount } from "@/lib/login-ux";
 import { NoStorageError } from "@/lib/errors";
 
@@ -119,6 +120,9 @@ export function SolidSessionProvider({ children }: { children: ReactNode }) {
       setProfile(loaded);
       setStorageUrl(storage);
       setStatus("logged-in");
+
+      // Make the tracker discoverable by other apps/people (best-effort, non-blocking).
+      void registerTracker(webId, storage, issuesUrl);
 
       recentRef.current?.remember({
         webId,

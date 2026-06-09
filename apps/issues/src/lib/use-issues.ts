@@ -45,6 +45,8 @@ export interface UseIssues {
   issues: IssueView[];
   loading: boolean;
   error: string | null;
+  /** Whether the signed-in user may write to this tracker (false ⇒ read-only). */
+  canWrite: boolean;
   refresh: () => Promise<void>;
   create: (input: Omit<NewIssueInput, "creator">) => Promise<void>;
   update: (id: string, patch: IssuePatch) => Promise<void>;
@@ -61,14 +63,17 @@ export function useIssues(issuesUrl: string | null, creator: string | null): Use
   const [issues, setIssues] = useState<IssueView[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [canWrite, setCanWrite] = useState(true);
 
-  const refresh = useCallback(async () => {
+  // No synchronous setState before the first await — keeps this safe to call from
+  // an effect (react-hooks/set-state-in-effect). Manual refresh adds the spinner.
+  const fetchInto = useCallback(async () => {
     if (!issuesUrl) return;
-    setLoading(true);
-    setError(null);
     try {
       const doc = await IssuesDocument.open(issuesUrl);
       setIssues(doc.list().map(toView));
+      setCanWrite(doc.canWrite);
+      setError(null);
     } catch (e) {
       setError(describe(e));
     } finally {
@@ -76,9 +81,17 @@ export function useIssues(issuesUrl: string | null, creator: string | null): Use
     }
   }, [issuesUrl]);
 
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    await fetchInto();
+  }, [fetchInto]);
+
   useEffect(() => {
-    void refresh();
-  }, [refresh]);
+    // Client-side mount fetch: all setState happens after the first await inside
+    // fetchInto, so no synchronous cascade — the rule can't see across the await.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void fetchInto();
+  }, [fetchInto]);
 
   const mutate = useCallback(
     async (apply: (doc: IssuesDocument) => void) => {
@@ -95,6 +108,7 @@ export function useIssues(issuesUrl: string | null, creator: string | null): Use
     issues,
     loading,
     error,
+    canWrite,
     refresh,
     create: (input) => mutate((d) => d.create({ ...input, creator: creator ?? undefined })),
     update: (id, patch) => mutate((d) => d.update(id, patch)),

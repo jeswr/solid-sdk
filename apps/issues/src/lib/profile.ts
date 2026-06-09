@@ -1,6 +1,8 @@
 import { fetchRdf } from "@jeswr/fetch-rdf";
 import { WebIdDataset } from "@solid/object";
 import { DataFactory } from "n3";
+import { resolveTrackerFromTypeIndex } from "./type-index";
+import { NoStorageError } from "./errors";
 
 /**
  * A user's Solid profile, reduced to what the app needs. Discovery follows
@@ -35,4 +37,26 @@ export async function loadProfile(webId: string, fetchImpl?: typeof fetch): Prom
  */
 export function issuesDocumentUrl(storageUrl: string): string {
   return new URL("issue-tracker/issues.ttl", storageUrl).toString();
+}
+
+/** Where a person's tracker lives, and whose pod it is. */
+export interface TrackerLocation {
+  ownerWebId: string;
+  issuesUrl: string;
+}
+
+/**
+ * Locate a person's tracker: prefer their public type-index registration (the
+ * interop path — works even if they moved it), else fall back to the conventional
+ * path under their `pim:storage`. Used both for the signed-in user's own tracker
+ * and to open one shared from another pod.
+ */
+export async function resolveTracker(webId: string, fetchImpl?: typeof fetch): Promise<TrackerLocation> {
+  const registered = await resolveTrackerFromTypeIndex(webId, fetchImpl);
+  if (registered) return { ownerWebId: webId, issuesUrl: registered };
+
+  const profile = await loadProfile(webId, fetchImpl);
+  const storage = profile.storageUrls[0];
+  if (!storage) throw new NoStorageError(webId);
+  return { ownerWebId: webId, issuesUrl: issuesDocumentUrl(storage) };
 }

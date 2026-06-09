@@ -47,11 +47,14 @@ export function IssueFormDialog({
   onOpenChange,
   initial,
   onSubmit,
+  assigneeSuggestions = [],
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initial?: IssueView;
   onSubmit: (values: IssueFormSubmit) => Promise<void>;
+  /** WebIDs offered as assignee autocomplete (e.g. the tracker's collaborators). */
+  assigneeSuggestions?: string[];
 }) {
   const editing = !!initial;
   const form = useForm<FormValues>({
@@ -125,11 +128,19 @@ export function IssueFormDialog({
               <Input
                 id="assignee"
                 type="url"
+                list="assignee-suggestions"
                 placeholder="https://…/profile/card#me"
                 aria-invalid={!!form.formState.errors.assignee}
                 aria-describedby={form.formState.errors.assignee ? "assignee-error" : undefined}
                 {...form.register("assignee")}
               />
+              {assigneeSuggestions.length > 0 && (
+                <datalist id="assignee-suggestions">
+                  {assigneeSuggestions.map((webId) => (
+                    <option key={webId} value={webId} />
+                  ))}
+                </datalist>
+              )}
               {form.formState.errors.assignee && (
                 <p id="assignee-error" className="text-sm text-destructive">
                   {form.formState.errors.assignee.message}
