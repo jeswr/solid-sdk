@@ -9,6 +9,7 @@ const base: IssueRecord = {
   status: "todo",
   labels: [],
   blockedBy: [],
+  attachments: [],
   comments: [],
   canWrite: true,
 };

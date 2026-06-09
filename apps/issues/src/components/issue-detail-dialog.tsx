@@ -12,7 +12,17 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Ban, CalendarClock, CheckCircle2, CircleDot, GitBranch, Link2, Loader2, MessageSquare, Pencil, Plus, Tag, UserRound, X } from "lucide-react";
+import { Ban, CalendarClock, CheckCircle2, CircleDot, Download, GitBranch, Link2, Loader2, MessageSquare, Paperclip, Pencil, Plus, Tag, Upload, UserRound, X } from "lucide-react";
+
+const fileName = (url: string) => {
+  const last = url.split("/").pop() ?? url;
+  const noUuid = last.replace(/^[0-9a-f-]{36}-/i, "");
+  try {
+    return decodeURIComponent(noUuid);
+  } catch {
+    return noUuid;
+  }
+};
 import type { IssueRecord } from "@/lib/use-issues";
 import { STATUSES } from "@/lib/issue";
 import { priorityVariant, shortWebId } from "@/components/issue-card";
@@ -34,6 +44,8 @@ export function IssueDetailDialog({
   onEdit,
   onAddComment,
   onUpdate,
+  onUpload,
+  onRemoveAttachment,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -44,7 +56,10 @@ export function IssueDetailDialog({
   onEdit: () => void;
   onAddComment: (content: string) => Promise<void>;
   onUpdate: (patch: { parent?: string; blockedBy?: string[] }) => Promise<void>;
+  onUpload: (file: { name: string; type: string; data: ArrayBuffer }) => Promise<void>;
+  onRemoveAttachment: (fileUrl: string) => Promise<void>;
 }) {
+  const [uploading, setUploading] = useState(false);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -238,6 +253,67 @@ export function IssueDetailDialog({
                 ))}
               </ul>
             </div>
+          )}
+        </div>
+
+        {/* Attachments */}
+        <div className="space-y-2 border-b py-3">
+          <h3 className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+            <Paperclip className="size-3.5" aria-hidden /> Attachments
+          </h3>
+          {issue.attachments.length === 0 ? (
+            !canComment && <p className="text-sm text-muted-foreground">None.</p>
+          ) : (
+            <ul className="space-y-1">
+              {issue.attachments.map((a) => (
+                <li key={a} className="flex items-center gap-2 text-sm">
+                  <a
+                    href={a}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex min-w-0 items-center gap-1 text-primary underline-offset-4 hover:underline"
+                  >
+                    <Download className="size-3.5 shrink-0" aria-hidden />
+                    <span className="truncate">{fileName(a)}</span>
+                  </a>
+                  {canComment && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-6"
+                      aria-label={`Remove attachment ${fileName(a)}`}
+                      onClick={() => onRemoveAttachment(a)}
+                    >
+                      <X className="size-3.5" aria-hidden />
+                    </Button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+          {canComment && (
+            <label className="inline-flex cursor-pointer items-center gap-1.5 text-sm text-primary underline-offset-4 hover:underline">
+              {uploading ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <Upload className="size-3.5" aria-hidden />}
+              {uploading ? "Uploading…" : "Upload a file"}
+              <input
+                type="file"
+                className="sr-only"
+                disabled={uploading}
+                onChange={async (e) => {
+                  const f = e.target.files?.[0];
+                  if (!f) return;
+                  setUploading(true);
+                  try {
+                    await onUpload({ name: f.name, type: f.type, data: await f.arrayBuffer() });
+                  } catch (err) {
+                    toast.error(err instanceof Error ? err.message : "Upload failed.");
+                  } finally {
+                    setUploading(false);
+                    e.target.value = "";
+                  }
+                }}
+              />
+            </label>
           )}
         </div>
 

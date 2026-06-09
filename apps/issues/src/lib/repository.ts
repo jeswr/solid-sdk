@@ -32,6 +32,8 @@ export interface IssueRecord {
   parent?: string;
   /** Issue URLs that block this one. */
   blockedBy: string[];
+  /** Attached file URLs in the pod. */
+  attachments: string[];
   created?: Date;
   modified?: Date;
   comments: CommentRecord[];
@@ -97,6 +99,7 @@ function toRecord(issue: Issue, url: string, canWrite: boolean): IssueRecord {
     dateDue: issue.dateDue,
     parent: issue.parent,
     blockedBy: [...issue.blockedBy],
+    attachments: [...issue.attachments],
     created: issue.created,
     modified: issue.modified,
     comments: issue.comments.map((c) => ({ author: c.author, content: c.content ?? "", created: c.created })),
@@ -309,6 +312,41 @@ export class Repository {
     issue.messages.add(comment);
     issue.modified = new Date();
     await this.put(url, dataset, etag);
+  }
+
+  get attachmentsContainerUrl(): string {
+    return new URL("attachments/", dirOf(this.trackerUrl)).toString();
+  }
+
+  /** Upload a file into the pod and link it from the issue (`wf:attachment`). */
+  async uploadAttachment(
+    issueUrl: string,
+    file: { name: string; type: string; data: ArrayBuffer | Uint8Array },
+  ): Promise<string> {
+    const doFetch = this.fetchImpl ?? fetch;
+    const safe = encodeURIComponent(file.name).replace(/[()'!*]/g, "_");
+    const fileUrl = `${this.attachmentsContainerUrl}${crypto.randomUUID()}-${safe}`;
+    const put = await doFetch(fileUrl, {
+      method: "PUT",
+      headers: { "content-type": file.type || "application/octet-stream" },
+      body: file.data as BodyInit,
+    });
+    if (!put.ok && put.status !== 205) throw new WriteError(fileUrl, put.status);
+
+    const { dataset, etag, issue } = await this.openIssue(issueUrl);
+    issue.attachments.add(fileUrl);
+    issue.modified = new Date();
+    await this.put(issueUrl, dataset, etag);
+    return fileUrl;
+  }
+
+  /** Unlink an attachment from the issue and delete the file (best-effort). */
+  async removeAttachment(issueUrl: string, fileUrl: string): Promise<void> {
+    const { dataset, etag, issue } = await this.openIssue(issueUrl);
+    issue.attachments.delete(fileUrl);
+    issue.modified = new Date();
+    await this.put(issueUrl, dataset, etag);
+    await (this.fetchImpl ?? fetch)(fileUrl, { method: "DELETE" }).catch(() => undefined);
   }
 
   async remove(url: string): Promise<void> {

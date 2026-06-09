@@ -140,6 +140,22 @@ test.describe("Advanced issue features", () => {
     await expect(dialog.getByRole("button", { name: /remove blocker/i })).toBeVisible({ timeout: 15_000 });
   });
 
+  test("attaches a file to an issue", async ({ page }) => {
+    await page.getByRole("button", { name: /new issue/i }).first().click();
+    await page.getByLabel(/^title$/i).fill("Has attachment");
+    await page.getByRole("button", { name: /create issue/i }).click();
+    await expect(page.getByRole("heading", { name: "Has attachment" })).toBeVisible({ timeout: 15_000 });
+
+    await page.getByRole("button", { name: "Has attachment", exact: true }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog.locator('input[type="file"]').setInputFiles({
+      name: "notes.txt",
+      mimeType: "text/plain",
+      buffer: Buffer.from("hello pod"),
+    });
+    await expect(dialog.getByText("notes.txt")).toBeVisible({ timeout: 20_000 });
+  });
+
   test("adds a comment to an issue and it persists", async ({ page }) => {
     const title = `Discuss ${Math.random().toString(36).slice(2, 8)}`;
     await page.getByRole("button", { name: /new issue/i }).first().click();

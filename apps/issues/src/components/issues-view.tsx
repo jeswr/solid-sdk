@@ -704,6 +704,8 @@ export function IssuesView() {
         groupIri={group.iri}
         canComment={!!commentsIssue?.canWrite}
         onUpdate={(patch) => run(() => issues.update(commentsUrl!, patch), "Issue updated")}
+        onUpload={(file) => run(() => issues.uploadAttachment(commentsUrl!, file), "File attached")}
+        onRemoveAttachment={(fileUrl) => run(() => issues.removeAttachment(commentsUrl!, fileUrl), "Attachment removed")}
         onEdit={() => {
           if (commentsIssue) {
             setEditing(commentsIssue);

@@ -145,6 +145,11 @@ export class Issue extends TermWrapper {
     return SetFrom.subjectPredicate(this, dct("requires"), NamedNodeAs.string, NamedNodeFrom.string);
   }
 
+  /** Attached file URLs (in the pod), via `wf:attachment` — live set. */
+  get attachments(): Set<string> {
+    return SetFrom.subjectPredicate(this, wf("attachment"), NamedNodeAs.string, NamedNodeFrom.string);
+  }
+
   get dateDue(): Date | undefined {
     return OptionalFrom.subjectPredicate(this, wf("dateDue"), LiteralAs.date);
   }

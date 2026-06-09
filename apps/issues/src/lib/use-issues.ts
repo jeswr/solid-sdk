@@ -30,6 +30,8 @@ export interface UseIssues {
   setState: (url: string, state: IssueState) => Promise<void>;
   setStatus: (url: string, status: StatusSlug) => Promise<void>;
   addComment: (url: string, content: string) => Promise<void>;
+  uploadAttachment: (url: string, file: { name: string; type: string; data: ArrayBuffer }) => Promise<void>;
+  removeAttachment: (url: string, fileUrl: string) => Promise<void>;
   remove: (url: string) => Promise<void>;
   /** Apply several operations against one Repository, then refresh once (bulk actions). */
   batch: (fn: (repo: Repository) => Promise<void>) => Promise<void>;
@@ -91,6 +93,8 @@ export function useIssues(trackerUrl: string | null, creator: string | null): Us
     setState: (url, state) => mutate((r) => r.setState(url, state)),
     setStatus: (url, status) => mutate((r) => r.setStatus(url, status)),
     addComment: (url, content) => mutate((r) => r.addComment(url, content, creator ?? undefined)),
+    uploadAttachment: (url, file) => mutate(async (r) => void (await r.uploadAttachment(url, file))),
+    removeAttachment: (url, fileUrl) => mutate((r) => r.removeAttachment(url, fileUrl)),
     remove: (url) => mutate((r) => r.remove(url)),
     batch: (fn) => mutate(fn),
   };
