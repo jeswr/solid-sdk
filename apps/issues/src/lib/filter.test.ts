@@ -6,6 +6,7 @@ const base: IssueRecord = {
   url: "",
   title: "",
   state: "open",
+  status: "todo",
   labels: [],
   comments: [],
   canWrite: true,

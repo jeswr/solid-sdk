@@ -43,11 +43,34 @@ test.describe("Advanced issue features", () => {
     await expect(page.getByRole("heading", { name: "Alpha login bug" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Beta dark mode" })).toBeHidden();
 
-    // Clear, switch to the board view — priority columns render.
+    // Clear, switch to the board view — status columns render (To Do / In Progress / Done).
     await page.getByLabel(/search issues/i).fill("");
     await page.getByRole("tab", { name: /board view/i }).click();
-    await expect(page.getByRole("region", { name: /no priority/i })).toBeVisible();
+    await expect(page.getByRole("region", { name: /to do/i })).toBeVisible();
+    await expect(page.getByRole("region", { name: /in progress/i })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Alpha login bug" })).toBeVisible();
+
+    // Switch grouping to priority.
+    await page.getByLabel(/group by/i).click();
+    await page.getByRole("option", { name: /priority/i }).click();
+    await expect(page.getByRole("region", { name: /no priority/i })).toBeVisible();
+  });
+
+  test("changes an issue's status via the edit form", async ({ page }) => {
+    const title = `Status flow ${Math.random().toString(36).slice(2, 6)}`;
+    await page.getByRole("button", { name: /new issue/i }).first().click();
+    await page.getByLabel(/^title$/i).fill(title);
+    await page.getByRole("button", { name: /create issue/i }).click();
+    await expect(page.getByRole("heading", { name: title })).toBeVisible({ timeout: 15_000 });
+
+    // Edit → set status In Progress.
+    await page.getByRole("button", { name: new RegExp(`actions for ${title}`, "i") }).click();
+    await page.getByRole("menuitem", { name: /edit/i }).click();
+    await page.locator("#status").click();
+    await page.getByRole("option", { name: /in progress/i }).click();
+    await page.getByRole("button", { name: /save changes/i }).click();
+
+    await expect(page.getByText(/in progress/i).first()).toBeVisible({ timeout: 15_000 });
   });
 
   test("bulk-closes selected issues", async ({ page }) => {

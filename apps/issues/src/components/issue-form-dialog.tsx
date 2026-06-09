@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/select";
 import { Loader2 } from "lucide-react";
 import type { IssueRecord } from "@/lib/use-issues";
-import type { Priority } from "@/lib/issue";
+import { STATUSES, type Priority, type StatusSlug } from "@/lib/issue";
 
 const PRIORITY_NONE = "none";
 
@@ -39,6 +39,7 @@ const schema = z.object({
     .refine((v) => v === "" || /^https?:\/\//.test(v), "Assignee must be a WebID (http(s) URL)")
     .optional(),
   priority: z.enum(["none", "high", "medium", "low"]),
+  status: z.enum(["todo", "in-progress", "done"]),
   labels: z.string().optional(),
 });
 type FormValues = z.infer<typeof schema>;
@@ -49,6 +50,7 @@ export interface IssueFormSubmit {
   dateDue?: Date;
   assignee?: string;
   priority?: Priority;
+  status: StatusSlug;
   labels: string[];
 }
 
@@ -76,9 +78,10 @@ export function IssueFormDialog({
   const editing = !!initial;
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { title: "", description: "", dateDue: "", assignee: "", priority: "none", labels: "" },
+    defaultValues: { title: "", description: "", dateDue: "", assignee: "", priority: "none", status: "todo", labels: "" },
   });
   const priority = useWatch({ control: form.control, name: "priority" });
+  const status = useWatch({ control: form.control, name: "status" });
 
   useEffect(() => {
     if (open) {
@@ -88,6 +91,7 @@ export function IssueFormDialog({
         dateDue: toDateInput(initial?.dateDue),
         assignee: initial?.assignee ?? "",
         priority: initial?.priority ?? "none",
+        status: initial?.status ?? "todo",
         labels: (initial?.labels ?? []).join(", "),
       });
     }
@@ -100,6 +104,7 @@ export function IssueFormDialog({
       dateDue: values.dateDue ? new Date(values.dateDue) : undefined,
       assignee: values.assignee?.trim() || undefined,
       priority: values.priority === PRIORITY_NONE ? undefined : (values.priority as Priority),
+      status: values.status,
       labels: parseLabels(values.labels),
     });
     onOpenChange(false);
@@ -139,7 +144,22 @@ export function IssueFormDialog({
             <Textarea id="description" rows={3} {...form.register("description")} />
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="status">Status</Label>
+              <Select value={status} onValueChange={(v) => form.setValue("status", v as FormValues["status"])}>
+                <SelectTrigger id="status">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {STATUSES.map((s) => (
+                    <SelectItem key={s.slug} value={s.slug}>
+                      {s.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="space-y-1.5">
               <Label htmlFor="priority">Priority</Label>
               <Select

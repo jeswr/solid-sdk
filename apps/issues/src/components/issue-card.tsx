@@ -26,6 +26,11 @@ import {
   UserRound,
 } from "lucide-react";
 import type { IssueRecord } from "@/lib/use-issues";
+import { STATUSES } from "@/lib/issue";
+
+const statusLabel = (slug: string) => STATUSES.find((s) => s.slug === slug)?.label ?? slug;
+const statusVariant = (slug: string): "default" | "secondary" | "outline" =>
+  slug === "in-progress" ? "default" : slug === "done" ? "secondary" : "outline";
 
 const dateFmt = new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short", year: "numeric" });
 export const fmtDate = (d?: Date) => (d ? dateFmt.format(d) : null);
@@ -87,9 +92,13 @@ export function IssueCard({
       <CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
         <div className="min-w-0 space-y-1.5">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge variant={closed ? "secondary" : "default"} className="gap-1">
-              {closed ? <CheckCircle2 className="size-3" aria-hidden /> : <CircleDot className="size-3" aria-hidden />}
-              {closed ? "Closed" : "Open"}
+            <Badge variant={statusVariant(issue.status)} className="gap-1">
+              {issue.status === "done" ? (
+                <CheckCircle2 className="size-3" aria-hidden />
+              ) : (
+                <CircleDot className="size-3" aria-hidden />
+              )}
+              {statusLabel(issue.status)}
             </Badge>
             {issue.priority && (
               <Badge variant={priorityVariant(issue.priority)} className="capitalize">

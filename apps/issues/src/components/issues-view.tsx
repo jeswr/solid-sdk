@@ -9,7 +9,7 @@ import { setGroupAccess } from "@/lib/sharing";
 import { type TrackerLocation } from "@/lib/profile";
 import { ConflictError } from "@/lib/errors";
 import { filterAndSort, facets, DEFAULT_QUERY, type IssueQuery, type SortKey } from "@/lib/filter";
-import type { Priority } from "@/lib/issue";
+import { STATUSES, type Priority, type StatusSlug } from "@/lib/issue";
 import { IssueFormDialog, type IssueFormSubmit } from "@/components/issue-form-dialog";
 import { ShareDialog } from "@/components/share-dialog";
 import { OpenTrackerDialog } from "@/components/open-tracker-dialog";
@@ -83,6 +83,7 @@ export function IssuesView() {
 
   const [query, setQuery] = useState<IssueQuery>(DEFAULT_QUERY);
   const [view, setView] = useState<View>("list");
+  const [groupBy, setGroupBy] = useState<"status" | "priority">("status");
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<IssueRecord | undefined>(undefined);
   const [deleteTarget, setDeleteTarget] = useState<IssueRecord | undefined>(undefined);
@@ -355,6 +356,19 @@ export function IssuesView() {
               <ArrowDownUp className="size-4" aria-hidden />
             </Button>
 
+            {/* Group-by (board only) */}
+            {view === "board" && (
+              <Select value={groupBy} onValueChange={(v) => setGroupBy(v as "status" | "priority")}>
+                <SelectTrigger className="w-36" aria-label="Group by">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="status">Group: Status</SelectItem>
+                  <SelectItem value="priority">Group: Priority</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
+
             {/* View toggle */}
             <div role="tablist" aria-label="View" className="flex gap-1 rounded-lg bg-muted p-1">
               <button
@@ -466,8 +480,24 @@ export function IssuesView() {
             issues={visible}
             cardActions={cardActions}
             canWrite={issues.canCreate}
-            onMovePriority={(url, priority) =>
-              run(() => issues.update(url, { priority }), priority ? `Priority set to ${priority}` : "Priority cleared")
+            columns={
+              groupBy === "status"
+                ? STATUSES.map((s) => ({ key: s.slug, label: s.label }))
+                : [
+                    { key: "high", label: "High" },
+                    { key: "medium", label: "Medium" },
+                    { key: "low", label: "Low" },
+                    { key: "none", label: "No priority" },
+                  ]
+            }
+            groupOf={(i) => (groupBy === "status" ? i.status : (i.priority ?? "none"))}
+            onMove={(url, key) =>
+              groupBy === "status"
+                ? run(() => issues.setStatus(url, key as StatusSlug), "Status updated")
+                : run(
+                    () => issues.update(url, { priority: key === "none" ? undefined : (key as Priority) }),
+                    key === "none" ? "Priority cleared" : `Priority set to ${key}`,
+                  )
             }
           />
         ) : (

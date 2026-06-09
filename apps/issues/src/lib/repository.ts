@@ -2,7 +2,7 @@ import { fetchRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 import { Store, DataFactory, Writer } from "n3";
 import type { DatasetCore } from "@rdfjs/types";
 import { ContainerDataset } from "@solid/object";
-import { Issue, Tracker, Comment, type IssueState, type Priority } from "./issue";
+import { Issue, Tracker, Comment, type IssueState, type Priority, type StatusSlug } from "./issue";
 import { wf, rdf } from "./vocab";
 import { ConflictError, WriteError } from "./errors";
 
@@ -22,6 +22,7 @@ export interface IssueRecord {
   title: string;
   description?: string;
   state: IssueState;
+  status: StatusSlug;
   priority?: Priority;
   labels: string[];
   assignee?: string;
@@ -39,6 +40,7 @@ export interface NewIssueInput {
   assignee?: string;
   dateDue?: Date;
   priority?: Priority;
+  status?: StatusSlug;
   labels?: string[];
   creator?: string;
 }
@@ -80,6 +82,7 @@ function toRecord(issue: Issue, url: string, canWrite: boolean): IssueRecord {
     title: issue.title ?? "(untitled)",
     description: issue.description,
     state: issue.state,
+    status: issue.status,
     priority: issue.priority,
     labels: issue.labels,
     assignee: issue.assignee,
@@ -238,9 +241,9 @@ export class Repository {
     const url = `${this.containerUrl}${crypto.randomUUID()}.ttl`;
     const dataset: DatasetCore = new Store();
     const issue = new Issue(`${url}${ISSUE_FRAGMENT}`, dataset, DataFactory);
-    issue.tracker = this.trackerIri; // set first so priority/label IRIs resolve
+    issue.tracker = this.trackerIri; // set first so status/priority/label IRIs resolve
     const now = new Date();
-    issue.state = "open";
+    issue.status = input.status ?? "todo"; // sets the status (and wf:Open/Closed) + wf:Task
     issue.title = input.title;
     issue.description = input.description;
     issue.assignee = input.assignee;
@@ -262,14 +265,20 @@ export class Repository {
     if ("assignee" in patch) issue.assignee = patch.assignee;
     if ("dateDue" in patch) issue.dateDue = patch.dateDue;
     if ("priority" in patch) issue.priority = patch.priority;
+    if ("status" in patch && patch.status) issue.status = patch.status;
     if (labelSlugs) issue.labels = labelSlugs;
     issue.modified = new Date();
     await this.put(url, dataset, etag);
   }
 
   async setState(url: string, state: IssueState): Promise<void> {
+    // Closing/reopening maps onto the workflow: closed ⇒ Done, open ⇒ To Do.
+    await this.setStatus(url, state === "closed" ? "done" : "todo");
+  }
+
+  async setStatus(url: string, status: StatusSlug): Promise<void> {
     const { dataset, etag, issue } = await this.openIssue(url);
-    issue.state = state;
+    issue.status = status;
     issue.modified = new Date();
     await this.put(url, dataset, etag);
   }

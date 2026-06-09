@@ -3,47 +3,45 @@
 import { useState } from "react";
 import { IssueCard, type IssueCardActions } from "@/components/issue-card";
 import type { IssueRecord } from "@/lib/use-issues";
-import type { Priority } from "@/lib/issue";
 
-type ColumnKey = Priority | "none";
-const COLUMNS: { key: ColumnKey; label: string }[] = [
-  { key: "high", label: "High" },
-  { key: "medium", label: "Medium" },
-  { key: "low", label: "Low" },
-  { key: "none", label: "No priority" },
-];
+export interface BoardColumn {
+  key: string;
+  label: string;
+}
 
 /**
- * Kanban board grouped by priority. Cards drag between columns to change priority
- * (HTML5 drag-and-drop); the card's actions menu also offers an accessible
- * keyboard path for every operation including priority via Edit.
+ * Generic Kanban board: columns + a grouping function + a move handler. Cards drag
+ * between columns (HTML5 DnD) to change the grouping field (status or priority);
+ * the card's actions menu remains the keyboard-accessible path.
  */
 export function IssueBoard({
   issues,
+  columns,
+  groupOf,
+  onMove,
   cardActions,
-  onMovePriority,
   canWrite,
 }: {
   issues: IssueRecord[];
+  columns: BoardColumn[];
+  groupOf: (issue: IssueRecord) => string;
+  onMove: (url: string, columnKey: string) => void;
   cardActions: (issue: IssueRecord) => IssueCardActions;
-  onMovePriority: (url: string, priority: Priority | undefined) => void;
   canWrite: boolean;
 }) {
-  const [dragOver, setDragOver] = useState<ColumnKey | null>(null);
-  const grouped = (key: ColumnKey) =>
-    issues.filter((i) => (i.priority ?? "none") === key);
+  const [dragOver, setDragOver] = useState<string | null>(null);
 
-  const drop = (key: ColumnKey) => (e: React.DragEvent) => {
+  const drop = (key: string) => (e: React.DragEvent) => {
     e.preventDefault();
     setDragOver(null);
     const url = e.dataTransfer.getData("text/plain");
-    if (url) onMovePriority(url, key === "none" ? undefined : key);
+    if (url) onMove(url, key);
   };
 
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-      {COLUMNS.map((col) => {
-        const items = grouped(col.key);
+    <div className="flex gap-4 overflow-x-auto pb-2">
+      {columns.map((col) => {
+        const items = issues.filter((i) => groupOf(i) === col.key);
         return (
           <section
             key={col.key}
@@ -51,7 +49,7 @@ export function IssueBoard({
             onDragOver={canWrite ? (e) => { e.preventDefault(); setDragOver(col.key); } : undefined}
             onDragLeave={() => setDragOver((c) => (c === col.key ? null : c))}
             onDrop={canWrite ? drop(col.key) : undefined}
-            className={`flex flex-col gap-2 rounded-lg border bg-muted/30 p-2 transition-colors ${
+            className={`flex w-72 shrink-0 flex-col gap-2 rounded-lg border bg-muted/30 p-2 transition-colors ${
               dragOver === col.key ? "ring-2 ring-primary" : ""
             }`}
           >

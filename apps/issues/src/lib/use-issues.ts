@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Repository, type IssueRecord, type NewIssueInput, type IssuePatch } from "@/lib/repository";
 import { ConflictError } from "@/lib/errors";
 import { RdfFetchError } from "@jeswr/fetch-rdf";
-import type { IssueState } from "@/lib/issue";
+import type { IssueState, StatusSlug } from "@/lib/issue";
 
 export type { IssueRecord } from "@/lib/repository";
 
@@ -28,6 +28,7 @@ export interface UseIssues {
   create: (input: Omit<NewIssueInput, "creator">) => Promise<void>;
   update: (url: string, patch: IssuePatch) => Promise<void>;
   setState: (url: string, state: IssueState) => Promise<void>;
+  setStatus: (url: string, status: StatusSlug) => Promise<void>;
   addComment: (url: string, content: string) => Promise<void>;
   remove: (url: string) => Promise<void>;
   /** Apply several operations against one Repository, then refresh once (bulk actions). */
@@ -88,6 +89,7 @@ export function useIssues(trackerUrl: string | null, creator: string | null): Us
     create: (input) => mutate((r) => r.create({ ...input, creator: creator ?? undefined })),
     update: (url, patch) => mutate((r) => r.update(url, patch)),
     setState: (url, state) => mutate((r) => r.setState(url, state)),
+    setStatus: (url, status) => mutate((r) => r.setStatus(url, status)),
     addComment: (url, content) => mutate((r) => r.addComment(url, content, creator ?? undefined)),
     remove: (url) => mutate((r) => r.remove(url)),
     batch: (fn) => mutate(fn),

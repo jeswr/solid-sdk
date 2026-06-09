@@ -16,6 +16,14 @@ export type IssueState = "open" | "closed";
 export type Priority = "high" | "medium" | "low";
 export const PRIORITIES: readonly Priority[] = ["high", "medium", "low"];
 
+export type StatusSlug = "todo" | "in-progress" | "done";
+/** The fixed workflow: ordered columns; `done` is terminal (⇒ state "closed"). */
+export const STATUSES: { slug: StatusSlug; label: string; terminal: boolean }[] = [
+  { slug: "todo", label: "To Do", terminal: false },
+  { slug: "in-progress", label: "In Progress", terminal: false },
+  { slug: "done", label: "Done", terminal: true },
+];
+
 /** Strip the fragment from an IRI to get its document URL. */
 function docOf(iri: string): string {
   const u = new URL(iri);
@@ -151,6 +159,30 @@ export class Issue extends TermWrapper {
     return this.state === "open";
   }
 
+  private statusClass(slug: StatusSlug, doc = this.trackerDoc()): string | undefined {
+    return doc ? `${doc}#status-${slug}` : undefined;
+  }
+  /** Workflow status (carried by rdf:type). Falls back to state for unstatused issues. */
+  get status(): StatusSlug {
+    const doc = this.trackerDoc();
+    if (doc) {
+      const types = this.types;
+      const found = STATUSES.find((s) => types.has(this.statusClass(s.slug, doc)!));
+      if (found) return found.slug;
+    }
+    return this.state === "closed" ? "done" : "todo";
+  }
+  set status(slug: StatusSlug) {
+    const doc = this.trackerDoc();
+    if (doc) {
+      const types = this.types;
+      for (const s of STATUSES) types.delete(this.statusClass(s.slug, doc)!);
+      types.add(this.statusClass(slug, doc)!);
+    }
+    // Keep wf:Open/wf:Closed (and the open/closed filter) in sync with the status.
+    this.state = STATUSES.find((s) => s.slug === slug)?.terminal ? "closed" : "open";
+  }
+
   private priorityClass(level: Priority, doc = this.trackerDoc()): string | undefined {
     return doc ? `${doc}#priority-${level}` : undefined;
   }
@@ -237,12 +269,23 @@ export class Tracker extends TermWrapper {
     return iri;
   }
 
-  /** Write the fixed tracker configuration (type, issue class, initial state, priorities). */
+  /** Define a workflow status class as a subclass of an external wf state (Open/Closed). */
+  private defineStatus(slug: string, label: string, terminal: boolean): void {
+    const iri = `${this.doc}#status-${slug}`;
+    const klass = new TermWrapper(iri, this.dataset, this.factory);
+    SetFrom.subjectPredicate(klass, rdf("type"), NamedNodeAs.string, NamedNodeFrom.string).add(rdfs("Class"));
+    OptionalAs.object(klass, rdfs("label"), label, LiteralFrom.string);
+    OptionalAs.object(klass, rdfs("subClassOf"), terminal ? STATE.Closed : STATE.Open, NamedNodeFrom.string);
+  }
+
+  /** Write the fixed tracker configuration (type, issue class, statuses, priorities). */
   configure(title: string): void {
     this.types.add(wf("Tracker"));
     this.title = title;
     OptionalAs.object(this, wf("issueClass"), wf("Task"), NamedNodeFrom.string);
-    OptionalAs.object(this, wf("initialState"), STATE.Open, NamedNodeFrom.string);
+    // Workflow statuses (subclasses of wf:Open / wf:Closed); To Do is the initial state.
+    for (const s of STATUSES) this.defineStatus(s.slug, s.label, s.terminal);
+    OptionalAs.object(this, wf("initialState"), `${this.doc}#status-todo`, NamedNodeFrom.string);
     // Priority dimension (#Priority parent + the three ordered priorities).
     this.defineClass("Priority", "Priority");
     this.defineClass("priority-high", "High", "Priority");
