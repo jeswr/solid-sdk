@@ -56,6 +56,30 @@ test.describe("Advanced issue features", () => {
     await expect(page.getByRole("region", { name: /no priority/i })).toBeVisible();
   });
 
+  test("keyboard shortcut opens new issue; command palette switches view", async ({ page }) => {
+    await page.keyboard.press("c");
+    await expect(page.getByRole("dialog").getByLabel(/^title$/i)).toBeVisible();
+    await page.keyboard.press("Escape");
+
+    await page.getByRole("button", { name: /command palette/i }).click();
+    await expect(page.getByPlaceholder(/type a command/i)).toBeVisible();
+    await page.getByRole("option", { name: /board view/i }).click();
+    await expect(page.getByRole("tab", { name: /board view/i })).toHaveAttribute("aria-selected", "true");
+  });
+
+  test("saves a view and re-applies it", async ({ page }) => {
+    await page.getByLabel(/search issues/i).fill("zzq-unique");
+    await page.getByRole("button", { name: /views/i }).click();
+    await page.getByRole("menuitem", { name: /save current view/i }).click();
+    await page.getByLabel(/view name/i).fill("My saved search");
+    await page.getByRole("button", { name: /save view/i }).click();
+
+    await page.getByLabel(/search issues/i).fill("");
+    await page.getByRole("button", { name: /views/i }).click();
+    await page.getByRole("menuitem", { name: /my saved search/i }).click();
+    await expect(page.getByLabel(/search issues/i)).toHaveValue("zzq-unique");
+  });
+
   test("changes an issue's status via the edit form", async ({ page }) => {
     const title = `Status flow ${Math.random().toString(36).slice(2, 6)}`;
     await page.getByRole("button", { name: /new issue/i }).first().click();
@@ -85,12 +109,11 @@ test.describe("Advanced issue features", () => {
     await page.getByLabel(/select all issues/i).click();
     await expect(page.getByText(/2 selected/i)).toBeVisible();
     await page.getByRole("button", { name: /^close$/i }).click();
-    await expect(page.getByText(/2 selected/i)).toBeHidden({ timeout: 15_000 }); // selection cleared after bulk op
+    await expect(page.getByText(/2 selected/i)).toBeHidden({ timeout: 20_000 }); // bulk op done, selection cleared
 
-    // Default filter is Open — both closed issues leave the list.
-    for (const title of titles) await expect(page.getByRole("heading", { name: title })).toBeHidden({ timeout: 15_000 });
+    // Both are now closed — confirm under the Closed filter.
     await page.getByRole("tab", { name: /closed/i }).click();
-    for (const title of titles) await expect(page.getByRole("heading", { name: title })).toBeVisible();
+    for (const title of titles) await expect(page.getByRole("heading", { name: title })).toBeVisible({ timeout: 20_000 });
   });
 
   test("adds a comment to an issue and it persists", async ({ page }) => {

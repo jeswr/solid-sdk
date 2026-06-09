@@ -9,11 +9,13 @@ import { setGroupAccess } from "@/lib/sharing";
 import { type TrackerLocation } from "@/lib/profile";
 import { ConflictError } from "@/lib/errors";
 import { filterAndSort, facets, DEFAULT_QUERY, type IssueQuery, type SortKey } from "@/lib/filter";
+import { SavedViews, type SavedView } from "@/lib/saved-views";
 import { STATUSES, type Priority, type StatusSlug } from "@/lib/issue";
 import { IssueFormDialog, type IssueFormSubmit } from "@/components/issue-form-dialog";
 import { ShareDialog } from "@/components/share-dialog";
 import { OpenTrackerDialog } from "@/components/open-tracker-dialog";
 import { IssueDetailDialog } from "@/components/issue-detail-dialog";
+import { CommandPalette, type PaletteGroup } from "@/components/command-palette";
 import { TeamDialog } from "@/components/team-dialog";
 import { IssueBoard } from "@/components/issue-board";
 import { IssueCard, shortWebId, type IssueCardActions } from "@/components/issue-card";
@@ -45,8 +47,11 @@ import {
   AlertCircle,
   ArrowDownUp,
   ArrowLeft,
+  Bookmark,
+  BookmarkPlus,
   CheckCircle2,
   CircleDot,
+  Command as CommandIcon,
   Eye,
   FolderOpen,
   LayoutGrid,
@@ -94,6 +99,11 @@ export function IssuesView() {
   const [group, setGroup] = useState<{ iri?: string; members: string[] }>({ members: [] });
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const savedViewsStore = useMemo(() => new SavedViews(), []);
+  const [views, setViews] = useState<SavedView[]>([]);
+  const [saveViewOpen, setSaveViewOpen] = useState(false);
+  const [viewName, setViewName] = useState("");
+  const [paletteOpen, setPaletteOpen] = useState(false);
 
   const patchQuery = (p: Partial<IssueQuery>) => setQuery((q) => ({ ...q, ...p }));
   const toggleIn = (arr: string[], v: string) => (arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v]);
@@ -115,6 +125,54 @@ export function IssuesView() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadTrackerInfo();
   }, [loadTrackerInfo]);
+
+  useEffect(() => {
+    // localStorage is client-only, so views are read after mount.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setViews(savedViewsStore.list());
+  }, [savedViewsStore]);
+
+  // Keyboard shortcuts: c = new, / = search, b/l = board/list (ignored while typing).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setPaletteOpen((o) => !o);
+        return;
+      }
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const t = e.target as HTMLElement | null;
+      const typing = t?.tagName === "INPUT" || t?.tagName === "TEXTAREA" || t?.isContentEditable;
+      if (e.key === "/" && !typing) {
+        e.preventDefault();
+        document.getElementById("issue-search")?.focus();
+        return;
+      }
+      if (typing) return;
+      if (e.key === "c" && issues.canCreate) {
+        e.preventDefault();
+        setEditing(undefined);
+        setFormOpen(true);
+      } else if (e.key === "b") setView("board");
+      else if (e.key === "l") setView("list");
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [issues.canCreate]);
+
+  const saveCurrentView = () => {
+    const name = viewName.trim();
+    if (!name) return;
+    savedViewsStore.save(name, query);
+    setViews(savedViewsStore.list());
+    setViewName("");
+    setSaveViewOpen(false);
+    toast.success("View saved");
+  };
+  const deleteView = (id: string) => {
+    savedViewsStore.remove(id);
+    setViews(savedViewsStore.list());
+  };
 
   const assigneeSuggestions = useMemo(
     () => (group.iri ? [group.iri, ...group.members] : group.members),
@@ -202,6 +260,40 @@ export function IssuesView() {
       clearSelection();
     }, success);
 
+  const paletteGroups: PaletteGroup[] = [
+    {
+      heading: "Create",
+      items: issues.canCreate
+        ? [{ id: "new", label: "New issue", hint: "c", run: () => { setEditing(undefined); setFormOpen(true); } }]
+        : [],
+    },
+    {
+      heading: "View",
+      items: [
+        { id: "list", label: "List view", hint: "l", run: () => setView("list") },
+        { id: "board", label: "Board view", hint: "b", run: () => setView("board") },
+        { id: "search", label: "Search issues", hint: "/", run: () => document.getElementById("issue-search")?.focus() },
+        { id: "f-open", label: "Show open", run: () => patchQuery({ state: "open" }) },
+        { id: "f-closed", label: "Show closed", run: () => patchQuery({ state: "closed" }) },
+        { id: "f-all", label: "Show all", run: () => patchQuery({ state: "all" }) },
+      ],
+    },
+    {
+      heading: "Tracker",
+      items: [
+        { id: "open-tracker", label: "Open another tracker…", run: () => setOpenTrackerOpen(true) },
+        ...(isOwn
+          ? [
+              { id: "share", label: "Share tracker…", run: () => setShareResource({ url: repo.containerUrl, label: "this tracker" }) },
+              { id: "team", label: "Manage team…", run: () => setTeamOpen(true) },
+            ]
+          : []),
+        { id: "signout", label: "Sign out", run: logout },
+      ],
+    },
+    { heading: "Saved views", items: views.map((v) => ({ id: `v-${v.id}`, label: v.name, run: () => setQuery(v.query) })) },
+  ];
+
   return (
     <div className="flex flex-1 flex-col">
       <header className="border-b bg-card">
@@ -220,6 +312,16 @@ export function IssuesView() {
             <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => setOpenTrackerOpen(true)}>
               <FolderOpen className="size-4" aria-hidden />
               <span className="hidden sm:inline">Open tracker</span>
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="gap-1.5"
+              aria-label="Command palette"
+              onClick={() => setPaletteOpen(true)}
+            >
+              <CommandIcon className="size-4" aria-hidden />
+              <span className="hidden text-xs text-muted-foreground lg:inline">⌘K</span>
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -271,9 +373,10 @@ export function IssuesView() {
             <div className="relative min-w-48 flex-1">
               <Search className="absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
               <Input
+                id="issue-search"
                 type="search"
                 aria-label="Search issues"
-                placeholder="Search issues…"
+                placeholder="Search issues…  ( / )"
                 value={query.text}
                 onChange={(e) => patchQuery({ text: e.target.value })}
                 className="pl-8"
@@ -331,6 +434,41 @@ export function IssuesView() {
                     </DropdownMenuItem>
                   </>
                 )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {/* Saved views */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="gap-1.5">
+                  <Bookmark className="size-4" aria-hidden /> Views
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                {views.length === 0 ? (
+                  <DropdownMenuLabel className="font-normal text-muted-foreground">No saved views</DropdownMenuLabel>
+                ) : (
+                  views.map((v) => (
+                    <div key={v.id} className="flex items-center">
+                      <DropdownMenuItem className="flex-1" onClick={() => setQuery(v.query)}>
+                        {v.name}
+                      </DropdownMenuItem>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="mr-1 size-7"
+                        aria-label={`Delete view ${v.name}`}
+                        onClick={() => deleteView(v.id)}
+                      >
+                        <Trash2 className="size-3.5" aria-hidden />
+                      </Button>
+                    </div>
+                  ))
+                )}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => setSaveViewOpen(true)}>
+                  <BookmarkPlus className="size-4" aria-hidden /> Save current view…
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
 
@@ -590,6 +728,8 @@ export function IssuesView() {
         <TeamDialog open={teamOpen} onOpenChange={setTeamOpen} trackerUrl={tracker.trackerUrl} onSaved={loadTrackerInfo} />
       )}
 
+      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} groups={paletteGroups} />
+
       <OpenTrackerDialog
         open={openTrackerOpen}
         onOpenChange={setOpenTrackerOpen}
@@ -621,6 +761,31 @@ export function IssuesView() {
               }}
             >
               Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={saveViewOpen} onOpenChange={setSaveViewOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Save current view</DialogTitle>
+            <DialogDescription>Remember the current search, filters, and sort under a name.</DialogDescription>
+          </DialogHeader>
+          <Input
+            aria-label="View name"
+            placeholder="e.g. My open high-priority"
+            value={viewName}
+            onChange={(e) => setViewName(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && saveCurrentView()}
+            autoFocus
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSaveViewOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={saveCurrentView} disabled={!viewName.trim()}>
+              Save view
             </Button>
           </DialogFooter>
         </DialogContent>
