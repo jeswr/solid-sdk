@@ -50,6 +50,26 @@ test.describe("Advanced issue features", () => {
     await expect(page.getByRole("heading", { name: "Alpha login bug" })).toBeVisible();
   });
 
+  test("bulk-closes selected issues", async ({ page }) => {
+    const titles = [`Bulk one ${Math.random().toString(36).slice(2, 6)}`, `Bulk two ${Math.random().toString(36).slice(2, 6)}`];
+    for (const title of titles) {
+      await page.getByRole("button", { name: /new issue/i }).first().click();
+      await page.getByLabel(/^title$/i).fill(title);
+      await page.getByRole("button", { name: /create issue/i }).click();
+      await expect(page.getByRole("heading", { name: title })).toBeVisible({ timeout: 15_000 });
+    }
+
+    await page.getByLabel(/select all issues/i).click();
+    await expect(page.getByText(/2 selected/i)).toBeVisible();
+    await page.getByRole("button", { name: /^close$/i }).click();
+    await expect(page.getByText(/2 selected/i)).toBeHidden({ timeout: 15_000 }); // selection cleared after bulk op
+
+    // Default filter is Open — both closed issues leave the list.
+    for (const title of titles) await expect(page.getByRole("heading", { name: title })).toBeHidden({ timeout: 15_000 });
+    await page.getByRole("tab", { name: /closed/i }).click();
+    for (const title of titles) await expect(page.getByRole("heading", { name: title })).toBeVisible();
+  });
+
   test("adds a comment to an issue and it persists", async ({ page }) => {
     const title = `Discuss ${Math.random().toString(36).slice(2, 8)}`;
     await page.getByRole("button", { name: /new issue/i }).first().click();

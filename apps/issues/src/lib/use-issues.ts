@@ -30,6 +30,8 @@ export interface UseIssues {
   setState: (url: string, state: IssueState) => Promise<void>;
   addComment: (url: string, content: string) => Promise<void>;
   remove: (url: string) => Promise<void>;
+  /** Apply several operations against one Repository, then refresh once (bulk actions). */
+  batch: (fn: (repo: Repository) => Promise<void>) => Promise<void>;
 }
 
 /**
@@ -88,5 +90,6 @@ export function useIssues(trackerUrl: string | null, creator: string | null): Us
     setState: (url, state) => mutate((r) => r.setState(url, state)),
     addComment: (url, content) => mutate((r) => r.addComment(url, content, creator ?? undefined)),
     remove: (url) => mutate((r) => r.remove(url)),
+    batch: (fn) => mutate(fn),
   };
 }

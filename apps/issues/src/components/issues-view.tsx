@@ -20,6 +20,7 @@ import { IssueCard, shortWebId, type IssueCardActions } from "@/components/issue
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -44,6 +45,7 @@ import {
   AlertCircle,
   ArrowDownUp,
   ArrowLeft,
+  CheckCircle2,
   CircleDot,
   Eye,
   FolderOpen,
@@ -51,11 +53,14 @@ import {
   List as ListIcon,
   LogOut,
   Plus,
+  RotateCcw,
   Search,
   Share2,
   SlidersHorizontal,
+  Trash2,
   Users,
   UserRound,
+  X,
 } from "lucide-react";
 
 type View = "list" | "board";
@@ -86,6 +91,8 @@ export function IssuesView() {
   const [openTrackerOpen, setOpenTrackerOpen] = useState(false);
   const [teamOpen, setTeamOpen] = useState(false);
   const [group, setGroup] = useState<{ iri?: string; members: string[] }>({ members: [] });
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
 
   const patchQuery = (p: Partial<IssueQuery>) => setQuery((q) => ({ ...q, ...p }));
   const toggleIn = (arr: string[], v: string) => (arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v]);
@@ -173,6 +180,26 @@ export function IssuesView() {
       ),
     onDelete: () => setDeleteTarget(issue),
   });
+
+  // --- Bulk selection (list view) ---
+  const selectedVisible = useMemo(() => visible.filter((i) => selected.has(i.url)), [visible, selected]);
+  const allSelected = visible.length > 0 && selectedVisible.length === visible.length;
+  const toggleAll = () => setSelected(allSelected ? new Set() : new Set(visible.map((i) => i.url)));
+  const toggleSelect = (url: string) =>
+    setSelected((s) => {
+      const n = new Set(s);
+      if (n.has(url)) n.delete(url);
+      else n.add(url);
+      return n;
+    });
+  const clearSelection = () => setSelected(new Set());
+  const bulk = (fn: (r: Repository, url: string) => Promise<void>, success: string) =>
+    run(async () => {
+      await issues.batch(async (r) => {
+        for (const i of selectedVisible) await fn(r, i.url);
+      });
+      clearSelection();
+    }, success);
 
   return (
     <div className="flex flex-1 flex-col">
@@ -444,13 +471,52 @@ export function IssuesView() {
             }
           />
         ) : (
-          <ul className="space-y-3">
-            {visible.map((issue) => (
-              <li key={issue.url}>
-                <IssueCard issue={issue} {...cardActions(issue)} />
-              </li>
-            ))}
-          </ul>
+          <div className="space-y-3">
+            {issues.canCreate && (
+              <>
+                {selectedVisible.length > 0 && (
+                  <div className="sticky top-2 z-10 flex flex-wrap items-center gap-2 rounded-lg border bg-card p-2 shadow-sm">
+                    <span className="px-1 text-sm font-medium">{selectedVisible.length} selected</span>
+                    <Button variant="outline" size="sm" className="gap-1.5" onClick={() => bulk((r, u) => r.setState(u, "closed"), "Issues closed")}>
+                      <CheckCircle2 className="size-4" aria-hidden /> Close
+                    </Button>
+                    <Button variant="outline" size="sm" className="gap-1.5" onClick={() => bulk((r, u) => r.setState(u, "open"), "Issues reopened")}>
+                      <RotateCcw className="size-4" aria-hidden /> Reopen
+                    </Button>
+                    <Button variant="outline" size="sm" className="gap-1.5 text-destructive" onClick={() => setBulkDeleteOpen(true)}>
+                      <Trash2 className="size-4" aria-hidden /> Delete
+                    </Button>
+                    <Button variant="ghost" size="sm" className="ml-auto gap-1.5" onClick={clearSelection}>
+                      <X className="size-4" aria-hidden /> Clear
+                    </Button>
+                  </div>
+                )}
+                <div className="flex items-center gap-2 px-1">
+                  <Checkbox id="select-all" checked={allSelected} onCheckedChange={toggleAll} aria-label="Select all issues" />
+                  <label htmlFor="select-all" className="cursor-pointer text-xs text-muted-foreground">
+                    Select all ({visible.length})
+                  </label>
+                </div>
+              </>
+            )}
+            <ul className="space-y-3">
+              {visible.map((issue) => (
+                <li key={issue.url} className="flex items-start gap-2">
+                  {issues.canCreate && (
+                    <Checkbox
+                      className="mt-4"
+                      checked={selected.has(issue.url)}
+                      onCheckedChange={() => toggleSelect(issue.url)}
+                      aria-label={`Select ${issue.title}`}
+                    />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <IssueCard issue={issue} {...cardActions(issue)} />
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
       </main>
 
@@ -514,6 +580,31 @@ export function IssuesView() {
                 const target = deleteTarget;
                 setDeleteTarget(undefined);
                 if (target) await run(() => issues.remove(target.url), "Issue deleted");
+              }}
+            >
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete {selectedVisible.length} issues?</DialogTitle>
+            <DialogDescription>
+              The selected issues will be permanently removed from the pod. This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBulkDeleteOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={async () => {
+                setBulkDeleteOpen(false);
+                await bulk((r, u) => r.remove(u), "Issues deleted");
               }}
             >
               Delete
