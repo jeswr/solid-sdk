@@ -11,7 +11,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
-import { CalendarClock, CheckCircle2, CircleDot, Loader2, MessageSquare, Pencil, Tag, UserRound } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Ban, CalendarClock, CheckCircle2, CircleDot, GitBranch, Link2, Loader2, MessageSquare, Pencil, Plus, Tag, UserRound, X } from "lucide-react";
 import type { IssueRecord } from "@/lib/use-issues";
 import { STATUSES } from "@/lib/issue";
 import { priorityVariant, shortWebId } from "@/components/issue-card";
@@ -27,18 +28,22 @@ export function IssueDetailDialog({
   open,
   onOpenChange,
   issue,
+  allIssues,
   groupIri,
   canComment,
   onEdit,
   onAddComment,
+  onUpdate,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   issue?: IssueRecord;
+  allIssues: IssueRecord[];
   groupIri?: string;
   canComment: boolean;
   onEdit: () => void;
   onAddComment: (content: string) => Promise<void>;
+  onUpdate: (patch: { parent?: string; blockedBy?: string[] }) => Promise<void>;
 }) {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -68,6 +73,13 @@ export function IssueDetailDialog({
 
   if (!issue) return null;
   const assignee = issue.assignee ? (issue.assignee === groupIri ? "Team" : shortWebId(issue.assignee)) : null;
+
+  const self = issue;
+  const titleOf = (url: string) => allIssues.find((i) => i.url === url)?.title ?? "(unknown issue)";
+  const candidates = allIssues.filter((i) => i.url !== self.url);
+  const subTasks = allIssues.filter((i) => i.parent === self.url);
+  const blocking = allIssues.filter((i) => i.blockedBy.includes(self.url));
+  const addableBlockers = candidates.filter((i) => !self.blockedBy.includes(i.url) && i.url !== self.parent);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -132,6 +144,102 @@ export function IssueDetailDialog({
             <p className="text-sm whitespace-pre-wrap">{issue.description}</p>
           </div>
         )}
+
+        {/* Relationships */}
+        <div className="space-y-3 border-b py-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+              <GitBranch className="size-3.5" aria-hidden /> Parent
+            </h3>
+            {canComment ? (
+              <Select
+                value={issue.parent ?? "none"}
+                onValueChange={(v) => onUpdate({ parent: v === "none" ? undefined : v })}
+              >
+                <SelectTrigger className="h-7 w-56 text-sm" aria-label="Parent issue">
+                  <SelectValue placeholder="None" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None</SelectItem>
+                  {candidates.map((c) => (
+                    <SelectItem key={c.url} value={c.url}>
+                      {c.title}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <span className="text-sm">{issue.parent ? titleOf(issue.parent) : "None"}</span>
+            )}
+          </div>
+
+          <div className="space-y-1">
+            <h3 className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+              <Ban className="size-3.5" aria-hidden /> Blocked by
+            </h3>
+            {issue.blockedBy.length === 0 && !canComment && <p className="text-sm text-muted-foreground">Nothing.</p>}
+            <ul className="space-y-1">
+              {issue.blockedBy.map((b) => (
+                <li key={b} className="flex items-center gap-2 text-sm">
+                  <span className="truncate">{titleOf(b)}</span>
+                  {canComment && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-6"
+                      aria-label={`Remove blocker ${titleOf(b)}`}
+                      onClick={() => onUpdate({ blockedBy: issue.blockedBy.filter((x) => x !== b) })}
+                    >
+                      <X className="size-3.5" aria-hidden />
+                    </Button>
+                  )}
+                </li>
+              ))}
+            </ul>
+            {canComment && addableBlockers.length > 0 && (
+              <Select value="" onValueChange={(v) => onUpdate({ blockedBy: [...issue.blockedBy, v] })}>
+                <SelectTrigger className="h-7 w-56 text-sm" aria-label="Add blocker">
+                  <span className="flex items-center gap-1 text-muted-foreground">
+                    <Plus className="size-3.5" aria-hidden /> Add blocker
+                  </span>
+                </SelectTrigger>
+                <SelectContent>
+                  {addableBlockers.map((c) => (
+                    <SelectItem key={c.url} value={c.url}>
+                      {c.title}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+
+          {subTasks.length > 0 && (
+            <div className="space-y-1">
+              <h3 className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                <Link2 className="size-3.5" aria-hidden /> Sub-tasks
+              </h3>
+              <ul className="space-y-0.5 text-sm">
+                {subTasks.map((s) => (
+                  <li key={s.url} className={s.state === "closed" ? "text-muted-foreground line-through" : ""}>
+                    {s.title}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {blocking.length > 0 && (
+            <div className="space-y-1">
+              <h3 className="text-xs font-medium text-muted-foreground">Blocking</h3>
+              <ul className="space-y-0.5 text-sm">
+                {blocking.map((s) => (
+                  <li key={s.url}>{s.title}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
 
         {/* Activity timeline */}
         <div className="py-3">

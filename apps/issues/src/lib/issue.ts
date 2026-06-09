@@ -132,6 +132,19 @@ export class Issue extends TermWrapper {
     OptionalAs.object(this, wf("assignee"), value, NamedNodeFrom.string);
   }
 
+  /** Parent issue (this is a sub-task of it), via `dct:isPartOf`. */
+  get parent(): string | undefined {
+    return OptionalFrom.subjectPredicate(this, dct("isPartOf"), NamedNodeAs.string);
+  }
+  set parent(value: string | undefined) {
+    OptionalAs.object(this, dct("isPartOf"), value, NamedNodeFrom.string);
+  }
+
+  /** Issues this one is blocked by (must be done first), via `dct:requires` — live set. */
+  get blockedBy(): Set<string> {
+    return SetFrom.subjectPredicate(this, dct("requires"), NamedNodeAs.string, NamedNodeFrom.string);
+  }
+
   get dateDue(): Date | undefined {
     return OptionalFrom.subjectPredicate(this, wf("dateDue"), LiteralAs.date);
   }

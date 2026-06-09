@@ -116,6 +116,30 @@ test.describe("Advanced issue features", () => {
     for (const title of titles) await expect(page.getByRole("heading", { name: title })).toBeVisible({ timeout: 20_000 });
   });
 
+  test("links a parent and a blocker between issues", async ({ page }) => {
+    for (const title of ["Parent task", "Child task"]) {
+      await page.getByRole("button", { name: /new issue/i }).first().click();
+      await page.getByLabel(/^title$/i).fill(title);
+      await page.getByRole("button", { name: /create issue/i }).click();
+      await expect(page.getByRole("heading", { name: title })).toBeVisible({ timeout: 15_000 });
+    }
+
+    // Open the child's detail via its card title.
+    await page.getByRole("button", { name: "Child task", exact: true }).click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toBeVisible();
+
+    // Set parent.
+    await dialog.getByLabel(/parent issue/i).click();
+    await page.getByRole("option", { name: "Parent task" }).click();
+    // Add a blocker.
+    await dialog.getByLabel(/add blocker/i).click();
+    await page.getByRole("option", { name: "Parent task" }).click();
+
+    // Blocked-by list now shows the blocker (and the parent select reflects it).
+    await expect(dialog.getByRole("button", { name: /remove blocker/i })).toBeVisible({ timeout: 15_000 });
+  });
+
   test("adds a comment to an issue and it persists", async ({ page }) => {
     const title = `Discuss ${Math.random().toString(36).slice(2, 8)}`;
     await page.getByRole("button", { name: /new issue/i }).first().click();

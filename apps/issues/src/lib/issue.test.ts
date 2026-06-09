@@ -71,6 +71,24 @@ describe("Issue wrapper", () => {
     expect(newIssue().id).toBe(IRI);
   });
 
+  it("links a parent (sub-task) and blockers", () => {
+    const issue = newIssue();
+    const parent = "http://localhost:3000/alice/issue-tracker/issues/parent.ttl#this";
+    const b1 = "http://localhost:3000/alice/issue-tracker/issues/b1.ttl#this";
+    const b2 = "http://localhost:3000/alice/issue-tracker/issues/b2.ttl#this";
+    issue.parent = parent;
+    issue.blockedBy.add(b1);
+    issue.blockedBy.add(b2);
+
+    expect(issue.parent).toBe(parent);
+    expect([...issue.blockedBy].sort()).toEqual([b1, b2].sort());
+
+    issue.blockedBy.delete(b1);
+    issue.parent = undefined;
+    expect(issue.parent).toBeUndefined();
+    expect([...issue.blockedBy]).toEqual([b2]);
+  });
+
   it("is readable from data parsed independently", () => {
     const store = new Store();
     store.addQuad(

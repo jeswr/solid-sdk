@@ -700,8 +700,10 @@ export function IssuesView() {
         open={!!commentsUrl}
         onOpenChange={(o) => !o && setCommentsUrl(undefined)}
         issue={commentsIssue}
+        allIssues={issues.issues}
         groupIri={group.iri}
         canComment={!!commentsIssue?.canWrite}
+        onUpdate={(patch) => run(() => issues.update(commentsUrl!, patch), "Issue updated")}
         onEdit={() => {
           if (commentsIssue) {
             setEditing(commentsIssue);

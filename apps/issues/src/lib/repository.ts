@@ -28,6 +28,10 @@ export interface IssueRecord {
   assignee?: string;
   creator?: string;
   dateDue?: Date;
+  /** Parent issue URL (this is a sub-task), if any. */
+  parent?: string;
+  /** Issue URLs that block this one. */
+  blockedBy: string[];
   created?: Date;
   modified?: Date;
   comments: CommentRecord[];
@@ -43,6 +47,8 @@ export interface NewIssueInput {
   priority?: Priority;
   status?: StatusSlug;
   labels?: string[];
+  parent?: string;
+  blockedBy?: string[];
   creator?: string;
 }
 export type IssuePatch = Partial<Omit<NewIssueInput, "creator">>;
@@ -89,6 +95,8 @@ function toRecord(issue: Issue, url: string, canWrite: boolean): IssueRecord {
     assignee: issue.assignee,
     creator: issue.creator,
     dateDue: issue.dateDue,
+    parent: issue.parent,
+    blockedBy: [...issue.blockedBy],
     created: issue.created,
     modified: issue.modified,
     comments: issue.comments.map((c) => ({ author: c.author, content: c.content ?? "", created: c.created })),
@@ -269,6 +277,12 @@ export class Repository {
     if ("priority" in patch) issue.priority = patch.priority;
     if ("status" in patch && patch.status) issue.status = patch.status;
     if (labelSlugs) issue.labels = labelSlugs;
+    if ("parent" in patch) issue.parent = patch.parent;
+    if ("blockedBy" in patch && patch.blockedBy) {
+      const set = issue.blockedBy;
+      for (const b of [...set]) set.delete(b);
+      for (const b of patch.blockedBy) set.add(b);
+    }
     issue.modified = new Date();
     await this.put(url, dataset, etag);
   }

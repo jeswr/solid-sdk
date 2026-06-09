@@ -8,6 +8,7 @@ const base: IssueRecord = {
   state: "open",
   status: "todo",
   labels: [],
+  blockedBy: [],
   comments: [],
   canWrite: true,
 };
