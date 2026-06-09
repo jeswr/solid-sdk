@@ -80,7 +80,19 @@ npm run test:e2e    # Playwright — golden path against a real local CSS (popup
 npm run build       # next build
 ```
 
+## Views & productivity (milestones 4–6)
+
+- **List and Kanban board** views; the board groups by **status** (To Do / In
+  Progress / Done) or **priority**, with drag-and-drop between columns.
+- **Workflow statuses** in addition to open/closed; status badges on every card.
+- **Search** + **multi-facet filters** (priority / label / assignee / state) +
+  **sort** (created / updated / due / priority / title).
+- **Bulk actions** — multi-select to close / reopen / delete many at once.
+- **Issue detail view** with metadata, description, and an activity timeline.
+- Overdue due-dates highlighted.
+
 ## Roadmap (future)
 
-Label management UI (rename/delete), saved filters, notification-driven live sync,
-and a pod SPARQL endpoint to avoid N+1 listing fetches.
+Real-time live-sync (notifications), @mentions, sub-tasks / dependencies,
+attachments, saved views, command palette, and a pod SPARQL endpoint to avoid
+N+1 listing fetches.

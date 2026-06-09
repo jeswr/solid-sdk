@@ -13,7 +13,7 @@ import { STATUSES, type Priority, type StatusSlug } from "@/lib/issue";
 import { IssueFormDialog, type IssueFormSubmit } from "@/components/issue-form-dialog";
 import { ShareDialog } from "@/components/share-dialog";
 import { OpenTrackerDialog } from "@/components/open-tracker-dialog";
-import { CommentsDialog } from "@/components/comments-dialog";
+import { IssueDetailDialog } from "@/components/issue-detail-dialog";
 import { TeamDialog } from "@/components/team-dialog";
 import { IssueBoard } from "@/components/issue-board";
 import { IssueCard, shortWebId, type IssueCardActions } from "@/components/issue-card";
@@ -558,12 +558,20 @@ export function IssuesView() {
         assigneeSuggestions={assigneeSuggestions}
       />
 
-      <CommentsDialog
+      <IssueDetailDialog
         open={!!commentsUrl}
         onOpenChange={(o) => !o && setCommentsUrl(undefined)}
         issue={commentsIssue}
+        groupIri={group.iri}
         canComment={!!commentsIssue?.canWrite}
-        onAdd={(content) => issues.addComment(commentsUrl!, content)}
+        onEdit={() => {
+          if (commentsIssue) {
+            setEditing(commentsIssue);
+            setCommentsUrl(undefined);
+            setFormOpen(true);
+          }
+        }}
+        onAddComment={(content) => issues.addComment(commentsUrl!, content)}
       />
 
       {profile && shareResource && (

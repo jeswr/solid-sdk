@@ -105,7 +105,15 @@ export function IssueCard({
                 {issue.priority}
               </Badge>
             )}
-            <h3 className={`truncate font-medium ${closed ? "line-through" : ""}`}>{issue.title}</h3>
+            <h3 className={`truncate font-medium ${closed ? "line-through" : ""}`}>
+              <button
+                type="button"
+                onClick={onComments}
+                className="truncate text-left hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+              >
+                {issue.title}
+              </button>
+            </h3>
           </div>
           {issue.labels.length > 0 && (
             <div className="flex flex-wrap gap-1">

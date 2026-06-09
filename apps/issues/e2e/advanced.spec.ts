@@ -111,6 +111,5 @@ test.describe("Advanced issue features", () => {
     // The thread re-renders from a fresh pod read after posting (the hook re-fetches
     // CSS), so seeing the comment here proves it persisted to the issue document.
     await expect(dialog.getByText(comment)).toBeVisible({ timeout: 15_000 });
-    await expect(dialog.getByText(/1 comment/i)).toBeVisible();
   });
 });

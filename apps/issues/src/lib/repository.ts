@@ -26,6 +26,7 @@ export interface IssueRecord {
   priority?: Priority;
   labels: string[];
   assignee?: string;
+  creator?: string;
   dateDue?: Date;
   created?: Date;
   modified?: Date;
@@ -86,6 +87,7 @@ function toRecord(issue: Issue, url: string, canWrite: boolean): IssueRecord {
     priority: issue.priority,
     labels: issue.labels,
     assignee: issue.assignee,
+    creator: issue.creator,
     dateDue: issue.dateDue,
     created: issue.created,
     modified: issue.modified,
