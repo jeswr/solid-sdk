@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Repository, type IssueRecord, type NewIssueInput, type IssuePatch } from "@/lib/repository";
+import { watchContainer } from "@/lib/notifications";
 import { ConflictError } from "@/lib/errors";
 import { RdfFetchError } from "@jeswr/fetch-rdf";
 import type { IssueState, StatusSlug } from "@/lib/issue";
@@ -72,6 +73,21 @@ export function useIssues(trackerUrl: string | null, creator: string | null): Us
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void fetchInto();
   }, [fetchInto]);
+
+  // Live-sync: refresh (debounced) when the tracker's container changes in the pod.
+  useEffect(() => {
+    if (!trackerUrl) return;
+    const containerUrl = new Repository(trackerUrl).containerUrl;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const sync = watchContainer(containerUrl, () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => void fetchInto(), 800);
+    });
+    return () => {
+      sync.close();
+      if (timer) clearTimeout(timer);
+    };
+  }, [trackerUrl, fetchInto]);
 
   const mutate = useCallback(
     async (apply: (r: Repository) => Promise<unknown>) => {

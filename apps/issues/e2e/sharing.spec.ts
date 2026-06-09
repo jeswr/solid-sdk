@@ -8,6 +8,33 @@ import { test, expect } from "@playwright/test";
 import { createCssAccount } from "./css-account";
 import { CSS_BASE, handleLoginPopups, signIn } from "./helpers";
 
+test("live-sync: a new issue appears in another open session", async ({ browser }) => {
+  test.setTimeout(120_000);
+  const alice = await createCssAccount({ base: CSS_BASE, pod: `ls${Date.now()}` });
+
+  const ctxA = await browser.newContext();
+  handleLoginPopups(ctxA, alice.email, alice.password);
+  const a = await ctxA.newPage();
+  await signIn(a, alice.webId);
+
+  const ctxB = await browser.newContext();
+  handleLoginPopups(ctxB, alice.email, alice.password);
+  const b = await ctxB.newPage();
+  await signIn(b, alice.webId);
+
+  const title = `Live ${Math.random().toString(36).slice(2, 6)}`;
+  await a.getByRole("button", { name: /new issue/i }).first().click();
+  await a.getByLabel(/^title$/i).fill(title);
+  await a.getByRole("button", { name: /create issue/i }).click();
+  await expect(a.getByRole("heading", { name: title })).toBeVisible({ timeout: 15_000 });
+
+  // B did nothing — live-sync (WebSocket, or the polling fallback) should surface it.
+  await expect(b.getByRole("heading", { name: title })).toBeVisible({ timeout: 30_000 });
+
+  await ctxA.close();
+  await ctxB.close();
+});
+
 test("Alice shares with Bob; Bob opens Alice's tracker and sees the issue", async ({ browser }) => {
   test.setTimeout(180_000);
   const stamp = `${Date.now()}`;
