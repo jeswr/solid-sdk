@@ -173,6 +173,27 @@ test.describe("Advanced issue features", () => {
     await expect(page.getByText(/completed sprints \(1\)/i)).toBeVisible({ timeout: 15_000 });
   });
 
+  test("timeline and calendar place a dated issue", async ({ page }) => {
+    // Issue due on the 15th of next month (always in a navigable future month).
+    const due = new Date();
+    due.setMonth(due.getMonth() + 1, 15);
+    const iso = due.toISOString().slice(0, 10);
+    await page.getByRole("button", { name: /new issue/i }).first().click();
+    await page.getByLabel(/^title$/i).fill("Dated work");
+    await page.getByLabel(/due date/i).fill(iso);
+    await page.getByRole("button", { name: /create issue/i }).click();
+    await expect(page.getByRole("heading", { name: "Dated work" })).toBeVisible({ timeout: 15_000 });
+
+    // Timeline shows a bar for it.
+    await page.getByRole("tab", { name: /timeline view/i }).click();
+    await expect(page.getByRole("img", { name: /dated work/i })).toBeVisible({ timeout: 15_000 });
+
+    // Calendar: navigate to next month, the issue sits on the 15th.
+    await page.getByRole("tab", { name: /calendar view/i }).click();
+    await page.getByRole("button", { name: /next month/i }).click();
+    await expect(page.getByRole("button", { name: /dated work/i })).toBeVisible({ timeout: 15_000 });
+  });
+
   test("dashboard shows stat cards and charts", async ({ page }) => {
     await page.getByRole("button", { name: /new issue/i }).first().click();
     await page.getByLabel(/^title$/i).fill("Chart fodder");

@@ -22,6 +22,8 @@ import { IssueBoard } from "@/components/issue-board";
 import { EpicView } from "@/components/epic-view";
 import { DashboardView } from "@/components/dashboard-view";
 import { BacklogView } from "@/components/backlog-view";
+import { TimelineView } from "@/components/timeline-view";
+import { CalendarView } from "@/components/calendar-view";
 import { IssueCard, shortWebId, type IssueCardActions } from "@/components/issue-card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -75,10 +77,13 @@ import {
   X,
   Zap,
   BarChart3,
+  CalendarDays,
+  ChartNoAxesGantt,
   ListTodo,
 } from "lucide-react";
 
-type View = "list" | "board" | "epics" | "dashboard" | "backlog";
+type View = "list" | "board" | "epics" | "dashboard" | "backlog" | "timeline" | "calendar";
+const VIEWS: View[] = ["list", "board", "epics", "backlog", "timeline", "calendar", "dashboard"];
 const VIEW_KEY = "solid-issues:view";
 const SORTS: { key: SortKey; label: string }[] = [
   { key: "created", label: "Created" },
@@ -101,7 +106,7 @@ export function IssuesView() {
   const [query, setQuery] = useState<IssueQuery>(DEFAULT_QUERY);
   const [view, setViewState] = useState<View>(() => {
     const saved = typeof localStorage !== "undefined" ? localStorage.getItem(VIEW_KEY) : null;
-    return saved === "board" || saved === "epics" || saved === "dashboard" || saved === "backlog" ? saved : "list";
+    return VIEWS.includes(saved as View) && saved !== null ? (saved as View) : "list";
   });
   const setView = (v: View) => {
     setViewState(v);
@@ -180,6 +185,7 @@ export function IssuesView() {
       else if (e.key === "l") setView("list");
       else if (e.key === "e") setView("epics");
       else if (e.key === "d") setView("dashboard");
+      else if (e.key === "t") setView("timeline");
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -319,6 +325,8 @@ export function IssuesView() {
         { id: "epics", label: "Epics view", hint: "e", run: () => setView("epics") },
         { id: "dashboard", label: "Dashboard", hint: "d", run: () => setView("dashboard") },
         { id: "backlog", label: "Backlog view", run: () => setView("backlog") },
+        { id: "timeline", label: "Timeline view", hint: "t", run: () => setView("timeline") },
+        { id: "calendar", label: "Calendar view", run: () => setView("calendar") },
         { id: "search", label: "Search issues", hint: "/", run: () => document.getElementById("issue-search")?.focus() },
         { id: "f-open", label: "Show open", run: () => patchQuery({ state: "open" }) },
         { id: "f-closed", label: "Show closed", run: () => patchQuery({ state: "closed" }) },
@@ -587,6 +595,8 @@ export function IssuesView() {
                 { key: "board", label: "Board", Icon: LayoutGrid },
                 { key: "epics", label: "Epics", Icon: Zap },
                 { key: "backlog", label: "Backlog", Icon: ListTodo },
+                { key: "timeline", label: "Timeline", Icon: ChartNoAxesGantt },
+                { key: "calendar", label: "Calendar", Icon: CalendarDays },
                 { key: "dashboard", label: "Dashboard", Icon: BarChart3 },
               ] as const).map(({ key, label, Icon }) => (
                 <button
@@ -701,6 +711,10 @@ export function IssuesView() {
             }
             onAddToSprint={(sprintIri) => onCreate(sprintIri ? { sprint: sprintIri } : {})}
           />
+        ) : view === "timeline" ? (
+          <TimelineView issues={visible} onOpenIssue={(i) => setCommentsUrl(i.url)} />
+        ) : view === "calendar" ? (
+          <CalendarView issues={visible} onOpenIssue={(i) => setCommentsUrl(i.url)} />
         ) : view === "dashboard" ? (
           // The dashboard aggregates over ALL issues, unfiltered.
           <DashboardView issues={issues.issues} />
