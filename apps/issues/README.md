@@ -99,6 +99,9 @@ npm run build       # next build
   per-assignee workload, velocity, created-per-week.
 - **Automations** — built-in "when X then Y" rules (auto-complete parents,
   escalate overdue issues), applied client-side — pods have no server compute.
+- **Custom fields** — per-project typed fields (text, number, date, link,
+  select) on every issue; modelled as RDF properties with SKOS option sets, so
+  the data stays self-describing for other apps.
 - **People as contact cards** — assignees, authors, team members and
   collaborators render with profile names + avatars resolved from their WebID,
   never raw IRIs.

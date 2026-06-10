@@ -11,7 +11,7 @@ import {
   TermAs,
   TermFrom,
 } from "@rdfjs/wrapper";
-import { WF, DCT, RDF, STATE, wf, dct, rdf, rdfs, sioc, foaf, vcard, schema } from "./vocab";
+import { WF, DCT, RDF, STATE, wf, dct, rdf, rdfs, sioc, foaf, vcard, schema, xsd, skos } from "./vocab";
 
 export type IssueState = "open" | "closed";
 export type Priority = "high" | "medium" | "low";
@@ -286,6 +286,40 @@ export class Issue extends TermWrapper {
     for (const s of slugs) types.add(`${prefix}${s}`);
   }
 
+  /** Read a custom-field value (select fields yield the option IRI). */
+  getField(def: FieldDef): FieldValue | undefined {
+    switch (def.type) {
+      case "number":
+        return OptionalFrom.subjectPredicate(this, def.iri, LiteralAs.number);
+      case "date":
+        return OptionalFrom.subjectPredicate(this, def.iri, LiteralAs.date);
+      case "select":
+        return OptionalFrom.subjectPredicate(this, def.iri, NamedNodeAs.string);
+      default: // text, url — both read as strings
+        return OptionalFrom.subjectPredicate(this, def.iri, LiteralAs.string);
+    }
+  }
+
+  /** Write (or clear, with undefined) a custom-field value. */
+  setField(def: FieldDef, value: FieldValue | undefined): void {
+    switch (def.type) {
+      case "number":
+        OptionalAs.object(this, def.iri, value as number | undefined, LiteralFrom.double);
+        break;
+      case "date":
+        OptionalAs.object(this, def.iri, value as Date | undefined, LiteralFrom.dateTime);
+        break;
+      case "select":
+        OptionalAs.object(this, def.iri, value as string | undefined, NamedNodeFrom.string);
+        break;
+      case "url":
+        OptionalAs.object(this, def.iri, value as string | undefined, LiteralFrom.anyUriString);
+        break;
+      default:
+        OptionalAs.object(this, def.iri, value as string | undefined, LiteralFrom.string);
+    }
+  }
+
   /** Live set of comment objects linked via `wf:message`. */
   get messages(): Set<Comment> {
     return SetFrom.subjectPredicate(this, wf("message"), TermAs.instance(Comment), TermFrom.instance);
@@ -301,6 +335,58 @@ export interface LabelDef {
   slug: string;
   label: string;
 }
+
+/** Custom-field value types (Jira/Monday column types). */
+export type FieldType = "text" | "number" | "date" | "url" | "select";
+export const FIELD_TYPES: { slug: FieldType; label: string }[] = [
+  { slug: "text", label: "Text" },
+  { slug: "number", label: "Number" },
+  { slug: "date", label: "Date" },
+  { slug: "url", label: "Link" },
+  { slug: "select", label: "Select" },
+];
+
+/** One choice of a select field — a `skos:Concept` in the field's scheme. */
+export interface FieldOption {
+  iri: string;
+  label: string;
+}
+
+/**
+ * A custom field: an `rdf:Property` minted as a fragment of the tracker doc
+ * (so the IRI dereferences), typed by its `rdfs:range`. Select fields double
+ * as a `skos:ConceptScheme` whose options are `skos:Concept`s.
+ */
+export interface FieldDef {
+  iri: string;
+  slug: string;
+  label: string;
+  type: FieldType;
+  options: FieldOption[];
+}
+
+/** A custom-field value; select fields hold the chosen option's IRI. */
+export type FieldValue = string | number | Date;
+
+/** `rdfs:range` per field type (xsd datatypes; selects range over concepts). */
+const FIELD_RANGES: Record<FieldType, string> = {
+  text: xsd("string"),
+  number: xsd("double"),
+  date: xsd("dateTime"),
+  url: xsd("anyURI"),
+  select: skos("Concept"),
+};
+
+const fieldTypeOfRange = (range: string | undefined): FieldType =>
+  (Object.keys(FIELD_RANGES) as FieldType[]).find((t) => FIELD_RANGES[t] === range) ?? "text";
+
+/** Shared slug rule for fragment identifiers minted from display names. */
+const fragmentSlug = (label: string): string =>
+  label
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 
 /**
  * The tracker configuration node (`wf:Tracker`). Holds the title, the priority and
@@ -384,13 +470,79 @@ export class Tracker extends TermWrapper {
 
   /** Define (or relabel) a label, returning its slug. */
   defineLabel(label: string): string {
-    const slug = label
-      .toLowerCase()
-      .trim()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "");
+    const slug = fragmentSlug(label);
     this.defineClass(`label-${slug}`, label, "Label");
     return slug;
+  }
+
+  /**
+   * Define (or redefine) a custom field. Select options get `-opt-` in their
+   * fragment so an option IRI can never collide with another field's IRI.
+   */
+  defineField(label: string, type: FieldType, optionLabels: string[] = []): FieldDef {
+    const slug = fragmentSlug(label);
+    const iri = `${this.doc}#field-${slug}`;
+    const prop = new TermWrapper(iri, this.dataset, this.factory);
+    SetFrom.subjectPredicate(prop, rdf("type"), NamedNodeAs.string, NamedNodeFrom.string).add(rdf("Property"));
+    OptionalAs.object(prop, rdfs("label"), label, LiteralFrom.string);
+    OptionalAs.object(prop, rdfs("domain"), wf("Task"), NamedNodeFrom.string);
+    OptionalAs.object(prop, rdfs("range"), FIELD_RANGES[type], NamedNodeFrom.string);
+
+    const options: FieldOption[] = [];
+    if (type === "select") {
+      SetFrom.subjectPredicate(prop, rdf("type"), NamedNodeAs.string, NamedNodeFrom.string).add(skos("ConceptScheme"));
+      for (const optionLabel of optionLabels) {
+        const optionIri = `${iri}-opt-${fragmentSlug(optionLabel)}`;
+        const concept = new TermWrapper(optionIri, this.dataset, this.factory);
+        SetFrom.subjectPredicate(concept, rdf("type"), NamedNodeAs.string, NamedNodeFrom.string).add(skos("Concept"));
+        OptionalAs.object(concept, skos("prefLabel"), optionLabel, LiteralFrom.string);
+        OptionalAs.object(concept, skos("inScheme"), iri, NamedNodeFrom.string);
+        options.push({ iri: optionIri, label: optionLabel });
+      }
+    }
+    return { iri, slug, label, type, options };
+  }
+
+  /** All custom-field definitions (properties under `#field-`), label order. */
+  get fieldDefs(): FieldDef[] {
+    const prefix = `${this.doc}#field-`;
+    const nn = this.factory.namedNode.bind(this.factory);
+    const out: FieldDef[] = [];
+    for (const quad of this.dataset.match(null, nn(rdf("type")), nn(rdf("Property")))) {
+      const iri = quad.subject.value;
+      if (!iri.startsWith(prefix)) continue;
+      const prop = new TermWrapper(iri, this.dataset, this.factory);
+      const type = fieldTypeOfRange(OptionalFrom.subjectPredicate(prop, rdfs("range"), NamedNodeAs.string));
+      const options: FieldOption[] = [];
+      if (type === "select") {
+        for (const oq of this.dataset.match(null, nn(skos("inScheme")), nn(iri))) {
+          const concept = new TermWrapper(oq.subject.value, this.dataset, this.factory);
+          options.push({
+            iri: oq.subject.value,
+            label: OptionalFrom.subjectPredicate(concept, skos("prefLabel"), LiteralAs.string) ?? oq.subject.value,
+          });
+        }
+        options.sort((a, b) => a.label.localeCompare(b.label));
+      }
+      out.push({
+        iri,
+        slug: iri.slice(prefix.length),
+        label: OptionalFrom.subjectPredicate(prop, rdfs("label"), LiteralAs.string) ?? iri.slice(prefix.length),
+        type,
+        options,
+      });
+    }
+    return out.sort((a, b) => a.label.localeCompare(b.label));
+  }
+
+  /** Remove a field definition and its options (issue values are untouched). */
+  removeField(slug: string): void {
+    const iri = `${this.doc}#field-${slug}`;
+    const nn = this.factory.namedNode.bind(this.factory);
+    for (const oq of [...this.dataset.match(null, nn(skos("inScheme")), nn(iri))]) {
+      for (const q of [...this.dataset.match(oq.subject)]) this.dataset.delete(q);
+    }
+    for (const q of [...this.dataset.match(nn(iri))]) this.dataset.delete(q);
   }
 
   private get groupIri(): string {

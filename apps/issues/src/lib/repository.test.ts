@@ -117,6 +117,33 @@ describe("Repository (per-issue documents)", () => {
     expect(done.committedPoints).toBe(8); // 3 + 5, snapshotted before the release
   });
 
+  it("round-trips custom-field values through create, update, and list", async () => {
+    const { impl } = fakePod();
+    const repo = new Repository(TRACKER, impl);
+    await repo.ensureTracker();
+    const stage = await repo.defineField("Stage", "select", ["Alpha", "Beta"]);
+    await repo.defineField("Team", "text");
+
+    const url = await repo.create({
+      title: "Field-bearing",
+      creator: ME,
+      fields: { stage: stage.options[0].iri, team: "Platform" },
+    });
+    let { issues } = await repo.list();
+    expect(issues[0].fields).toEqual({ stage: stage.options[0].iri, team: "Platform" });
+
+    // Update one field, clear the other; unknown slugs are ignored.
+    await repo.update(url, { fields: { stage: stage.options[1].iri, team: undefined, ghost: "x" } });
+    ({ issues } = await repo.list());
+    expect(issues[0].fields).toEqual({ stage: stage.options[1].iri });
+
+    // Removing the definition hides values from records (data stays put).
+    await repo.removeField("stage");
+    expect((await repo.info()).fields.map((f) => f.slug)).toEqual(["team"]);
+    ({ issues } = await repo.list());
+    expect(issues[0].fields).toEqual({});
+  });
+
   it("persists backlog rank for ordering", async () => {
     const { impl } = fakePod();
     const repo = new Repository(TRACKER, impl);

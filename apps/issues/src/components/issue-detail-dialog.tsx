@@ -37,7 +37,7 @@ const renderBody = (text: string) =>
     ),
   );
 import type { IssueRecord } from "@/lib/use-issues";
-import { STATUSES } from "@/lib/issue";
+import { STATUSES, type FieldDef } from "@/lib/issue";
 import { priorityVariant, shortWebId } from "@/components/issue-card";
 import { PersonChip } from "@/components/person";
 import { TypeBadge, typeLabel } from "@/components/type-badge";
@@ -56,6 +56,7 @@ export function IssueDetailDialog({
   allIssues,
   people,
   groupIri,
+  fieldDefs = [],
   canComment,
   onEdit,
   onAddComment,
@@ -69,6 +70,8 @@ export function IssueDetailDialog({
   allIssues: IssueRecord[];
   people: string[];
   groupIri?: string;
+  /** Custom-field definitions, used to label and format `issue.fields`. */
+  fieldDefs?: FieldDef[];
   canComment: boolean;
   onEdit: () => void;
   onAddComment: (content: string, mentions: string[]) => Promise<void>;
@@ -175,6 +178,34 @@ export function IssueDetailDialog({
               <dd>{dateFmt.format(issue.created)}</dd>
             </div>
           )}
+          {fieldDefs
+            .filter((def) => issue.fields[def.slug] !== undefined)
+            .map((def) => {
+              const value = issue.fields[def.slug]!;
+              return (
+                <div key={def.iri}>
+                  <dt className="text-xs text-muted-foreground">{def.label}</dt>
+                  <dd className="truncate">
+                    {def.type === "date" ? (
+                      dateFmt.format(value as Date)
+                    ) : def.type === "select" ? (
+                      (def.options.find((o) => o.iri === value)?.label ?? String(value))
+                    ) : def.type === "url" ? (
+                      <a
+                        href={String(value)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-primary underline-offset-2 hover:underline"
+                      >
+                        {String(value)}
+                      </a>
+                    ) : (
+                      String(value)
+                    )}
+                  </dd>
+                </div>
+              );
+            })}
         </dl>
 
         {issue.description && (

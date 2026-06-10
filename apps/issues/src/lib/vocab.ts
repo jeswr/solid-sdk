@@ -23,6 +23,8 @@ export const FOAF = "http://xmlns.com/foaf/0.1/";
 export const VCARD = "http://www.w3.org/2006/vcard/ns#";
 /** Schema.org (canonical http scheme) — `schema:mentions` for @mentions. */
 export const SCHEMA = "http://schema.org/";
+/** SKOS — `skos:Concept` / `skos:prefLabel` / `skos:inScheme` (select-field options). */
+export const SKOS = "http://www.w3.org/2004/02/skos/core#";
 
 export const wf = (local: string) => `${WF}${local}`;
 export const dct = (local: string) => `${DCT}${local}`;
@@ -32,6 +34,8 @@ export const sioc = (local: string) => `${SIOC}${local}`;
 export const foaf = (local: string) => `${FOAF}${local}`;
 export const vcard = (local: string) => `${VCARD}${local}`;
 export const schema = (local: string) => `${SCHEMA}${local}`;
+export const xsd = (local: string) => `${XSD}${local}`;
+export const skos = (local: string) => `${SKOS}${local}`;
 
 /** The two terminal/non-terminal state classes an issue is typed with. */
 export const STATE = {

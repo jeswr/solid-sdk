@@ -48,7 +48,7 @@ Status: ✅ shipped · 🔶 partial · ⏳ queued (priority order) · ◻ later/
 | Reports: velocity | ✅ | done vs committed points per completed sprint (commitment snapshotted at completion) |
 | Reports: burndown, cumulative flow | ◻ | needs per-day status history the pod doesn't record yet |
 | Automation rules (when X then Y) | ✅ | built-in client-side rules with toggles (close-parent, escalate-overdue); per-device |
-| Custom fields / column types (Monday's 30+) | ◻ | RDF makes this natural; UI is the work |
+| Custom fields / column types | ✅ | text / number / date / link / select; fields are `rdf:Property` fragments of the tracker config, select options are SKOS concepts; typed inputs in the form, formatted in detail view |
 | Workload view (Monday) | ◻ | per-assignee capacity |
 | JQL-style query language | ◻ | SPARQL-backed, eventually |
 | Workspaces / multiple boards per project | ✅ | project switcher; each project a self-contained tracker (`issue-tracker/<slug>/`), type-index discovered, per-project sharing |

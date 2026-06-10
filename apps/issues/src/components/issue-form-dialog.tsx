@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/select";
 import { Loader2 } from "lucide-react";
 import type { IssueRecord } from "@/lib/use-issues";
-import { ISSUE_TYPES, STATUSES, type IssueType, type Priority, type StatusSlug } from "@/lib/issue";
+import { ISSUE_TYPES, STATUSES, type FieldDef, type FieldValue, type IssueType, type Priority, type StatusSlug } from "@/lib/issue";
 
 const PRIORITY_NONE = "none";
 
@@ -60,7 +60,28 @@ export interface IssueFormSubmit {
   issueType: IssueType;
   estimate?: number;
   labels: string[];
+  /** Custom-field values keyed by slug; undefined clears a value. */
+  fields?: Record<string, FieldValue | undefined>;
 }
+
+/** Input string per field slug ⇄ typed FieldValue, by field type. */
+const fieldToInput = (def: FieldDef, value: FieldValue | undefined): string => {
+  if (value === undefined) return "";
+  if (def.type === "date") return toDateInput(value as Date);
+  return String(value);
+};
+const inputToField = (def: FieldDef, raw: string): FieldValue | undefined => {
+  const v = raw.trim();
+  if (!v) return undefined;
+  switch (def.type) {
+    case "number":
+      return Number.isNaN(Number(v)) ? undefined : Number(v);
+    case "date":
+      return new Date(v);
+    default:
+      return v; // text, url, select (option IRI)
+  }
+};
 
 const toDateInput = (d?: Date) => (d ? d.toISOString().slice(0, 10) : "");
 const parseLabels = (s?: string) =>
@@ -76,6 +97,7 @@ export function IssueFormDialog({
   defaultStatus,
   onSubmit,
   assigneeSuggestions = [],
+  fieldDefs = [],
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -85,8 +107,12 @@ export function IssueFormDialog({
   onSubmit: (values: IssueFormSubmit) => Promise<void>;
   /** WebIDs (and the assignee group IRI) offered as assignee autocomplete. */
   assigneeSuggestions?: string[];
+  /** The tracker's custom fields, rendered as typed inputs. */
+  fieldDefs?: FieldDef[];
 }) {
   const editing = !!initial;
+  // Custom fields are dynamic, so they live beside the zod-validated form.
+  const [fieldInputs, setFieldInputs] = useState<Record<string, string>>({});
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: { title: "", description: "", dateDue: "", assignee: "", priority: "none", status: "todo", issueType: "task", estimate: "", labels: "" },
@@ -108,8 +134,13 @@ export function IssueFormDialog({
         estimate: initial?.estimate !== undefined ? String(initial.estimate) : "",
         labels: (initial?.labels ?? []).join(", "),
       });
+      // Dialog-open reset, same as form.reset above (custom fields live outside RHF).
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setFieldInputs(
+        Object.fromEntries(fieldDefs.map((d) => [d.slug, fieldToInput(d, initial?.fields[d.slug])])),
+      );
     }
-  }, [open, initial, defaultStatus, form]);
+  }, [open, initial, defaultStatus, form, fieldDefs]);
 
   const submit = async (values: FormValues) => {
     await onSubmit({
@@ -122,6 +153,10 @@ export function IssueFormDialog({
       issueType: values.issueType,
       estimate: values.estimate?.trim() ? Number(values.estimate) : undefined,
       labels: parseLabels(values.labels),
+      fields:
+        fieldDefs.length > 0
+          ? Object.fromEntries(fieldDefs.map((d) => [d.slug, inputToField(d, fieldInputs[d.slug] ?? "")]))
+          : undefined,
     });
     onOpenChange(false);
   };
@@ -220,6 +255,43 @@ export function IssueFormDialog({
               )}
             </div>
           </div>
+
+          {fieldDefs.length > 0 && (
+            <div className="grid gap-4 sm:grid-cols-2">
+              {fieldDefs.map((def) => {
+                const id = `field-${def.slug}`;
+                const value = fieldInputs[def.slug] ?? "";
+                const set = (v: string) => setFieldInputs((s) => ({ ...s, [def.slug]: v }));
+                return (
+                  <div key={def.iri} className="space-y-1.5">
+                    <Label htmlFor={id}>{def.label}</Label>
+                    {def.type === "select" ? (
+                      <Select value={value || "none"} onValueChange={(v) => set(v === "none" ? "" : v)}>
+                        <SelectTrigger id={id}>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">—</SelectItem>
+                          {def.options.map((o) => (
+                            <SelectItem key={o.iri} value={o.iri}>
+                              {o.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <Input
+                        id={id}
+                        type={def.type === "number" ? "number" : def.type === "date" ? "date" : def.type === "url" ? "url" : "text"}
+                        value={value}
+                        onChange={(e) => set(e.target.value)}
+                      />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
           <div className="space-y-1.5">
             <Label htmlFor="labels">Labels</Label>

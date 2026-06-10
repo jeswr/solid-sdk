@@ -13,6 +13,7 @@ const base: IssueRecord = {
   attachments: [],
   comments: [],
   canWrite: true,
+  fields: {},
 };
 const mk = (p: Partial<IssueRecord>): IssueRecord => ({ ...base, ...p });
 

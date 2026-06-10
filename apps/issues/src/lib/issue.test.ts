@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { Store, DataFactory } from "n3";
-import { Issue, STATE } from "./issue";
+import { Issue, Tracker, STATE } from "./issue";
 import { rdf, wf, dct } from "./vocab";
 
 const IRI = "http://localhost:3000/alice/issue-tracker/issues.ttl#issue-1";
@@ -114,5 +114,64 @@ describe("Issue wrapper", () => {
     const issue = new Issue(IRI, store, DataFactory);
     expect(issue.title).toBe("Parsed issue");
     expect(issue.state).toBe("closed");
+  });
+});
+
+describe("Custom fields", () => {
+  const DOC = "http://localhost:3000/alice/issue-tracker/tracker.ttl";
+
+  function newTracker() {
+    const store = new Store();
+    const tracker = new Tracker(`${DOC}#this`, store, DataFactory);
+    tracker.configure("Issues");
+    return { tracker, store };
+  }
+
+  it("defines fields of each type as resolvable fragments of the tracker doc", () => {
+    const { tracker } = newTracker();
+    const team = tracker.defineField("Team", "text");
+    expect(team.iri).toBe(`${DOC}#field-team`);
+
+    const stage = tracker.defineField("Stage", "select", ["Alpha", "Beta"]);
+    expect(stage.type).toBe("select");
+    expect(stage.options.map((o) => o.label)).toEqual(["Alpha", "Beta"]);
+    expect(stage.options[0].iri).toBe(`${DOC}#field-stage-opt-alpha`);
+
+    const defs = tracker.fieldDefs;
+    expect(defs.map((f) => f.slug).sort()).toEqual(["stage", "team"]);
+    expect(defs.find((f) => f.slug === "stage")?.options.map((o) => o.label)).toEqual(["Alpha", "Beta"]);
+  });
+
+  it("round-trips a value of every field type on an issue", () => {
+    const { tracker, store } = newTracker();
+    const text = tracker.defineField("Team", "text");
+    const num = tracker.defineField("Story value", "number");
+    const date = tracker.defineField("Launch", "date");
+    const url = tracker.defineField("Design doc", "url");
+    const select = tracker.defineField("Stage", "select", ["Alpha", "Beta"]);
+
+    const issue = new Issue(IRI, store, DataFactory);
+    issue.setField(text, "Platform");
+    issue.setField(num, 13);
+    issue.setField(date, new Date("2026-07-01T00:00:00.000Z"));
+    issue.setField(url, "https://example.org/spec");
+    issue.setField(select, select.options[1].iri);
+
+    expect(issue.getField(text)).toBe("Platform");
+    expect(issue.getField(num)).toBe(13);
+    expect((issue.getField(date) as Date).toISOString()).toBe("2026-07-01T00:00:00.000Z");
+    expect(issue.getField(url)).toBe("https://example.org/spec");
+    expect(issue.getField(select)).toBe(`${DOC}#field-stage-opt-beta`);
+
+    issue.setField(text, undefined);
+    expect(issue.getField(text)).toBeUndefined();
+  });
+
+  it("removes a field definition together with its options", () => {
+    const { tracker } = newTracker();
+    tracker.defineField("Stage", "select", ["Alpha"]);
+    tracker.defineField("Team", "text");
+    tracker.removeField("stage");
+    expect(tracker.fieldDefs.map((f) => f.slug)).toEqual(["team"]);
   });
 });

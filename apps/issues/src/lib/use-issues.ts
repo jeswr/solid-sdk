@@ -43,72 +43,77 @@ export interface UseIssues {
   batch: (fn: (repo: Repository) => Promise<void>) => Promise<void>;
 }
 
+/** One fetched view of a tracker, tagged with the tracker it came from. */
+interface TrackerSnapshot {
+  tracker: string | null;
+  issues: IssueRecord[];
+  sprints: SprintRecord[];
+  canCreate: boolean;
+  error: string | null;
+}
+
+const EMPTY_SNAPSHOT: Omit<TrackerSnapshot, "tracker"> = {
+  issues: [],
+  sprints: [],
+  canCreate: true,
+  error: null,
+};
+
 /**
  * Loads and mutates the issues in a tracker (one document per issue). Mutations
  * conditionally PUT the individual issue and refresh the list; a {@link ConflictError}
  * (412) is rethrown for the caller to surface and retry.
  */
 export function useIssues(trackerUrl: string | null, creator: string | null): UseIssues {
-  const [issues, setIssues] = useState<IssueRecord[]>([]);
-  const [sprints, setSprints] = useState<SprintRecord[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [canCreate, setCanCreate] = useState(true);
+  // All fetched data lives in ONE snapshot tagged with its tracker, and the
+  // render derives from it only when the tag matches the current tracker. A
+  // read from a previously-open project can therefore never be rendered — or
+  // acted on — under the new one, no matter when it lands (no effect-ordering
+  // races, unlike a ref-based "is this stale?" check).
+  const [snapshot, setSnapshot] = useState<TrackerSnapshot>({ tracker: null, ...EMPTY_SNAPSHOT });
+  const [refreshing, setRefreshing] = useState(false);
+
+  const current = snapshot.tracker === trackerUrl;
+  const issues = current ? snapshot.issues : [];
+  const sprints = current ? snapshot.sprints : [];
+  const canCreate = current ? snapshot.canCreate : true;
+  const error = current ? snapshot.error : null;
+  const loading = !current || refreshing;
 
   // Monotonic fetch sequence: a slow, older read (e.g. a live-sync refresh that
   // started before a mutation's PUT) must never clobber state written by a newer
   // one — only the latest in-flight fetch may apply its result.
   const fetchSeq = useRef(0);
 
-  // Switching tracker (project) must drop the previous project's data in the
-  // same render — stale issues left interactive would mutate the old project
-  // through the new repository. (React's "state from previous renders" idiom.)
-  const [prevTracker, setPrevTracker] = useState(trackerUrl);
-  if (trackerUrl !== prevTracker) {
-    setPrevTracker(trackerUrl);
-    setIssues([]);
-    setSprints([]);
-    setCanCreate(true);
-    setError(null);
-    setLoading(true);
-  }
-
-  // The tracker a fetch was started for must still be current when it lands —
-  // an in-flight read from the previous project may not repopulate the new one.
-  const trackerRef = useRef(trackerUrl);
-  useEffect(() => {
-    trackerRef.current = trackerUrl;
-  }, [trackerUrl]);
-
   const fetchInto = useCallback(async () => {
     if (!trackerUrl) return;
     const seq = ++fetchSeq.current;
-    // superseded by a newer fetch, or the app switched project meanwhile
-    const stale = () => seq !== fetchSeq.current || trackerRef.current !== trackerUrl;
     try {
       const repo = new Repository(trackerUrl);
       const [{ issues: list, canCreate: cc }, sprintList] = await Promise.all([repo.list(), repo.listSprints()]);
-      if (stale()) return;
-      setIssues(list);
-      setSprints(sprintList);
-      setCanCreate(cc);
-      setError(null);
+      if (seq !== fetchSeq.current) return; // a newer fetch superseded this one
+      setSnapshot({ tracker: trackerUrl, issues: list, sprints: sprintList, canCreate: cc, error: null });
     } catch (e) {
-      if (stale()) return;
-      setError(describe(e));
+      if (seq !== fetchSeq.current) return;
+      // Keep the last good data for THIS tracker; never carry another's over.
+      setSnapshot((prev) =>
+        prev.tracker === trackerUrl
+          ? { ...prev, error: describe(e) }
+          : { tracker: trackerUrl, ...EMPTY_SNAPSHOT, error: describe(e) },
+      );
     } finally {
-      if (!stale()) setLoading(false);
+      if (seq === fetchSeq.current) setRefreshing(false);
     }
   }, [trackerUrl]);
 
   const refresh = useCallback(async () => {
-    setLoading(true);
+    if (trackerUrl) setRefreshing(true); // fetchInto no-ops without a tracker
     await fetchInto();
-  }, [fetchInto]);
+  }, [trackerUrl, fetchInto]);
 
   useEffect(() => {
     // Client-side mount fetch; setState only runs after the await inside fetchInto.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+     
     void fetchInto();
   }, [fetchInto]);
 

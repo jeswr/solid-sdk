@@ -2,7 +2,7 @@ import { fetchRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 import { Store, DataFactory, Writer } from "n3";
 import type { DatasetCore } from "@rdfjs/types";
 import { ContainerDataset } from "@solid/object";
-import { Issue, Tracker, Comment, Sprint, SprintsDataset, type IssueState, type IssueType, type Priority, type StatusSlug } from "./issue";
+import { Issue, Tracker, Comment, Sprint, SprintsDataset, type FieldDef, type FieldValue, type FieldType, type IssueState, type IssueType, type Priority, type StatusSlug } from "./issue";
 import { wf, rdf } from "./vocab";
 import { ConflictError, WriteError } from "./errors";
 
@@ -43,6 +43,8 @@ export interface IssueRecord {
   created?: Date;
   modified?: Date;
   comments: CommentRecord[];
+  /** Custom-field values keyed by field slug (selects hold the option IRI). */
+  fields: Record<string, FieldValue>;
   /** Whether the signed-in user may write this issue (from WAC-Allow). */
   canWrite: boolean;
 }
@@ -72,6 +74,8 @@ export interface NewIssueInput {
   estimate?: number;
   rank?: number;
   creator?: string;
+  /** Custom-field values keyed by field slug (undefined clears a value). */
+  fields?: Record<string, FieldValue | undefined>;
 }
 export type IssuePatch = Partial<Omit<NewIssueInput, "creator">>;
 
@@ -111,8 +115,14 @@ function issueSubject(dataset: DatasetCore, docUrl: string): string {
   return `${docUrl}${ISSUE_FRAGMENT}`;
 }
 
-function toRecord(issue: Issue, url: string, canWrite: boolean): IssueRecord {
+function toRecord(issue: Issue, url: string, canWrite: boolean, fieldDefs: FieldDef[] = []): IssueRecord {
+  const fields: Record<string, FieldValue> = {};
+  for (const def of fieldDefs) {
+    const value = issue.getField(def);
+    if (value !== undefined) fields[def.slug] = value;
+  }
   return {
+    fields,
     url,
     title: issue.title ?? "(untitled)",
     description: issue.description,
@@ -213,14 +223,37 @@ export class Repository {
   }
 
   /** A snapshot of tracker-level config for the UI. */
-  async info(): Promise<{ title?: string; labels: { slug: string; label: string }[]; groupMembers: string[]; assigneeGroup?: string }> {
+  async info(): Promise<{ title?: string; labels: { slug: string; label: string }[]; fields: FieldDef[]; groupMembers: string[]; assigneeGroup?: string }> {
     const { tracker } = await this.loadTracker();
     return {
       title: tracker.title,
       labels: tracker.labelDefs,
+      fields: tracker.fieldDefs,
       groupMembers: tracker.groupMembers,
       assigneeGroup: tracker.assigneeGroup,
     };
+  }
+
+  /** The tracker's custom-field definitions. */
+  async fieldDefs(): Promise<FieldDef[]> {
+    const { tracker } = await this.loadTracker();
+    return tracker.fieldDefs;
+  }
+
+  /** Define (or redefine) a custom field on the tracker. */
+  async defineField(label: string, type: FieldType, optionLabels: string[] = []): Promise<FieldDef> {
+    let def: FieldDef | undefined;
+    await this.mutateTracker((dataset) => {
+      def = new Tracker(this.trackerIri, dataset, DataFactory).defineField(label, type, optionLabels);
+    });
+    return def!;
+  }
+
+  /** Remove a custom field's definition (values on issues are left in place). */
+  async removeField(slug: string): Promise<void> {
+    await this.mutateTracker((dataset) => {
+      new Tracker(this.trackerIri, dataset, DataFactory).removeField(slug);
+    });
   }
 
   /** Set the assignee group's members (WebIDs) on the tracker. */
@@ -257,6 +290,10 @@ export class Repository {
       throw e;
     }
 
+    // Custom-field definitions live in the tracker config; a collaborator
+    // without config access still sees the issues, just without field values.
+    const fieldDefs = await this.fieldDefs().catch(() => [] as FieldDef[]);
+
     const records = await Promise.all(
       memberUrls.map(async (url) => {
         try {
@@ -264,7 +301,7 @@ export class Repository {
           const subject = issueSubject(dataset, url);
           const issue = new Issue(subject, dataset, DataFactory);
           if (!issue.title && issue.state === "open" && issue.comments.length === 0 && !issue.tracker) return null;
-          return toRecord(issue, url, wacAllowsWrite(response));
+          return toRecord(issue, url, wacAllowsWrite(response), fieldDefs);
         } catch {
           return null; // a member we can't read is simply omitted
         }
@@ -281,9 +318,18 @@ export class Repository {
     return { dataset, etag, issue: new Issue(issueSubject(dataset, url), dataset, DataFactory), canWrite: wacAllowsWrite(response) };
   }
 
+  /** Resolve field slugs to definitions and apply the values to an issue. */
+  private applyFields(issue: Issue, defs: FieldDef[], values: Record<string, FieldValue | undefined>): void {
+    for (const [slug, value] of Object.entries(values)) {
+      const def = defs.find((d) => d.slug === slug);
+      if (def) issue.setField(def, value);
+    }
+  }
+
   /** Create a new issue document and return its URL. `input.labels` are display names. */
   async create(input: NewIssueInput): Promise<string> {
-    await this.ensureTracker();
+    const tracker = await this.ensureTracker();
+    const fieldDefs = tracker.fieldDefs;
     const labelSlugs = await this.declareLabels(input.labels ?? []);
     const url = `${this.containerUrl}${crypto.randomUUID()}.ttl`;
     const dataset: DatasetCore = new Store();
@@ -303,6 +349,7 @@ export class Repository {
     issue.estimate = input.estimate;
     issue.rank = input.rank;
     for (const b of input.blockedBy ?? []) issue.blockedBy.add(b);
+    if (input.fields) this.applyFields(issue, fieldDefs, input.fields);
     issue.created = now;
     issue.modified = now;
     await this.put(url, dataset, null);
@@ -327,6 +374,10 @@ export class Repository {
       const set = issue.blockedBy;
       for (const b of [...set]) set.delete(b);
       for (const b of patch.blockedBy) set.add(b);
+    }
+    if (patch.fields) {
+      const defs = await this.fieldDefs().catch(() => [] as FieldDef[]);
+      this.applyFields(issue, defs, patch.fields);
     }
     issue.modified = new Date();
     await this.put(url, dataset, etag);

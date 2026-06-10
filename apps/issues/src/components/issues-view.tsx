@@ -11,7 +11,7 @@ import { type TrackerLocation } from "@/lib/profile";
 import { ConflictError } from "@/lib/errors";
 import { filterAndSort, facets, DEFAULT_QUERY, type IssueQuery, type SortKey } from "@/lib/filter";
 import { SavedViews, type SavedView } from "@/lib/saved-views";
-import { STATUSES, type Priority, type StatusSlug } from "@/lib/issue";
+import { STATUSES, type FieldDef, type Priority, type StatusSlug } from "@/lib/issue";
 import { IssueFormDialog, type IssueFormSubmit } from "@/components/issue-form-dialog";
 import { ShareDialog } from "@/components/share-dialog";
 import { OpenTrackerDialog } from "@/components/open-tracker-dialog";
@@ -19,6 +19,7 @@ import { ProjectSwitcher } from "@/components/project-switcher";
 import { IssueDetailDialog } from "@/components/issue-detail-dialog";
 import { CommandPalette, type PaletteGroup } from "@/components/command-palette";
 import { TeamDialog } from "@/components/team-dialog";
+import { FieldsDialog } from "@/components/fields-dialog";
 import { IssueBoard } from "@/components/issue-board";
 import { EpicView } from "@/components/epic-view";
 import { DashboardView } from "@/components/dashboard-view";
@@ -158,6 +159,8 @@ export function IssuesView() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [automationsOpen, setAutomationsOpen] = useState(false);
   const [automations, setAutomations] = useState<AutomationSettings | null>(null);
+  const [fieldsOpen, setFieldsOpen] = useState(false);
+  const [fieldDefs, setFieldDefs] = useState<FieldDef[]>([]);
   // Actions applied this session (url+kind) — belt-and-braces against re-firing.
   const appliedAutomations = useRef(new Set<string>());
 
@@ -167,10 +170,11 @@ export function IssuesView() {
   const repo = useMemo(() => new Repository(tracker.trackerUrl), [tracker.trackerUrl]);
 
   const loadTrackerInfo = useCallback(async () => {
-    if (!isOwn) return;
     try {
       const info = await repo.info();
-      setGroup({ iri: info.assigneeGroup, members: info.groupMembers });
+      // Field defs matter on shared trackers too; the team only on your own.
+      setFieldDefs(info.fields);
+      if (isOwn) setGroup({ iri: info.assigneeGroup, members: info.groupMembers });
     } catch {
       /* tracker config is optional UI sugar */
     }
@@ -405,6 +409,7 @@ export function IssuesView() {
           ? [
               { id: "share", label: "Share tracker…", run: () => setShareResource({ url: repo.containerUrl, extraUrls: [tracker.trackerUrl], label: "this tracker" }) },
               { id: "team", label: "Manage team…", run: () => setTeamOpen(true) },
+              { id: "fields", label: "Custom fields…", run: () => setFieldsOpen(true) },
               { id: "automations", label: "Automations…", run: () => setAutomationsOpen(true) },
             ]
           : []),
@@ -444,6 +449,12 @@ export function IssuesView() {
               <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => setTeamOpen(true)}>
                 <Users className="size-4" aria-hidden />
                 <span className="hidden sm:inline">Team</span>
+              </Button>
+            )}
+            {isOwn && (
+              <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => setFieldsOpen(true)}>
+                <SlidersHorizontal className="size-4" aria-hidden />
+                <span className="hidden lg:inline">Fields</span>
               </Button>
             )}
             {isOwn && (
@@ -917,6 +928,7 @@ export function IssuesView() {
         defaultStatus={createDefaults.status}
         onSubmit={onSubmitForm}
         assigneeSuggestions={assigneeSuggestions}
+        fieldDefs={fieldDefs}
       />
 
       <IssueDetailDialog
@@ -926,6 +938,7 @@ export function IssuesView() {
         allIssues={issues.issues}
         people={people}
         groupIri={group.iri}
+        fieldDefs={fieldDefs}
         canComment={!!commentsIssue?.canWrite}
         onUpdate={(patch) => run(() => issues.update(commentsUrl!, patch), "Issue updated")}
         onUpload={(file) => run(() => issues.uploadAttachment(commentsUrl!, file), "File attached")}
@@ -955,6 +968,10 @@ export function IssuesView() {
 
       {isOwn && (
         <TeamDialog open={teamOpen} onOpenChange={setTeamOpen} trackerUrl={tracker.trackerUrl} onSaved={loadTrackerInfo} />
+      )}
+
+      {isOwn && (
+        <FieldsDialog open={fieldsOpen} onOpenChange={setFieldsOpen} trackerUrl={tracker.trackerUrl} onSaved={loadTrackerInfo} />
       )}
 
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} groups={paletteGroups} />
