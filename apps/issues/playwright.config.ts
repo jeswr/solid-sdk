@@ -4,7 +4,8 @@ import { defineConfig, devices } from "@playwright/test";
 // next dev ALSO defaults to :3000, so the app moves to :3200 (AGENTS.md §Servers).
 
 
-const APP_PORT = 3200;
+// App port is also overridable (other projects on this machine grab :3200).
+const APP_PORT = Number(process.env.IT_APP_PORT ?? 3200);
 // CSS normally owns :3000 (AGENTS.md §Servers). Overridable via CSS_PORT when
 // :3000 is taken — safe here because the app uses the issuer-from-profile
 // WebIdDPoPTokenProvider (not the published provider's hardcoded :3000 map).

@@ -71,6 +71,16 @@ describe("Issue wrapper", () => {
     expect(newIssue().id).toBe(IRI);
   });
 
+  it("round-trips the issue type (defaults to task)", () => {
+    const issue = newIssue();
+    issue.tracker = "http://localhost:3000/alice/issue-tracker/tracker.ttl#this";
+    expect(issue.issueType).toBe("task"); // default when untyped
+    issue.issueType = "epic";
+    expect(issue.issueType).toBe("epic");
+    issue.issueType = "bug";
+    expect(issue.issueType).toBe("bug"); // replaces, never stacks
+  });
+
   it("links a parent (sub-task) and blockers", () => {
     const issue = newIssue();
     const parent = "http://localhost:3000/alice/issue-tracker/issues/parent.ttl#this";

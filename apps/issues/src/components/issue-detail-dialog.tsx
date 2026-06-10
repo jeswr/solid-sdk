@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Ban, CalendarClock, CheckCircle2, CircleDot, Download, GitBranch, Link2, Loader2, MessageSquare, Paperclip, Pencil, Plus, Tag, Upload, UserRound, X } from "lucide-react";
+import { Ban, CalendarClock, CheckCircle2, CircleDot, Download, GitBranch, Link2, Loader2, MessageSquare, Paperclip, Pencil, Plus, Tag, Upload, X } from "lucide-react";
 
 const fileName = (url: string) => {
   const last = url.split("/").pop() ?? url;
@@ -38,6 +38,8 @@ const renderBody = (text: string) =>
 import type { IssueRecord } from "@/lib/use-issues";
 import { STATUSES } from "@/lib/issue";
 import { priorityVariant, shortWebId } from "@/components/issue-card";
+import { PersonChip } from "@/components/person";
+import { TypeBadge, typeLabel } from "@/components/type-badge";
 
 const dateFmt = new Intl.DateTimeFormat(undefined, { dateStyle: "medium" });
 const timeFmt = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
@@ -102,7 +104,7 @@ export function IssueDetailDialog({
   };
 
   if (!issue) return null;
-  const assignee = issue.assignee ? (issue.assignee === groupIri ? "Team" : shortWebId(issue.assignee)) : null;
+
 
   const self = issue;
   const titleOf = (url: string) => allIssues.find((i) => i.url === url)?.title ?? "(unknown issue)";
@@ -127,6 +129,9 @@ export function IssueDetailDialog({
 
         {/* Metadata */}
         <div className="flex flex-wrap items-center gap-2 py-3">
+          <Badge variant="outline" className="gap-1" title={typeLabel(issue.issueType)}>
+            <TypeBadge type={issue.issueType} withLabel />
+          </Badge>
           <Badge variant={issue.status === "done" ? "secondary" : issue.status === "in-progress" ? "default" : "outline"} className="gap-1">
             {issue.status === "done" ? <CheckCircle2 className="size-3" aria-hidden /> : <CircleDot className="size-3" aria-hidden />}
             {statusLabel(issue.status)}
@@ -144,11 +149,11 @@ export function IssueDetailDialog({
         </div>
 
         <dl className="grid grid-cols-2 gap-x-4 gap-y-2 border-y py-3 text-sm sm:grid-cols-3">
-          {assignee && (
+          {issue.assignee && (
             <div>
               <dt className="text-xs text-muted-foreground">Assignee</dt>
-              <dd className="flex items-center gap-1 truncate">
-                <UserRound className="size-3.5" aria-hidden /> {assignee}
+              <dd className="truncate">
+                <PersonChip webId={issue.assignee} isTeam={issue.assignee === groupIri} />
               </dd>
             </div>
           )}
@@ -344,7 +349,11 @@ export function IssueDetailDialog({
               {timeline.map((a, i) => (
                 <li key={i} className="text-sm">
                   <div className="flex items-baseline gap-2 text-xs text-muted-foreground">
-                    <span className="font-medium text-foreground">{a.author ? shortWebId(a.author) : "Someone"}</span>
+                    {a.author ? (
+                      <PersonChip webId={a.author} className="font-medium text-foreground" />
+                    ) : (
+                      <span className="font-medium text-foreground">Someone</span>
+                    )}
                     <span>{a.text}</span>
                     <span>· {timeFmt.format(a.at)}</span>
                   </div>

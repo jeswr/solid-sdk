@@ -24,6 +24,15 @@ export const STATUSES: { slug: StatusSlug; label: string; terminal: boolean }[] 
   { slug: "done", label: "Done", terminal: true },
 ];
 
+export type IssueType = "epic" | "story" | "task" | "bug";
+/** Jira-style issue types; carried by rdf:type via per-tracker `#type-*` classes. */
+export const ISSUE_TYPES: { slug: IssueType; label: string }[] = [
+  { slug: "epic", label: "Epic" },
+  { slug: "story", label: "Story" },
+  { slug: "task", label: "Task" },
+  { slug: "bug", label: "Bug" },
+];
+
 /** Strip the fragment from an IRI to get its document URL. */
 function docOf(iri: string): string {
   const u = new URL(iri);
@@ -222,6 +231,27 @@ export class Issue extends TermWrapper {
     if (level) types.add(this.priorityClass(level, doc)!);
   }
 
+  private typeClass(slug: IssueType, doc = this.trackerDoc()): string | undefined {
+    return doc ? `${doc}#type-${slug}` : undefined;
+  }
+  /** Issue type (epic/story/task/bug), carried by rdf:type. Defaults to "task". */
+  get issueType(): IssueType {
+    const doc = this.trackerDoc();
+    if (doc) {
+      const types = this.types;
+      const found = ISSUE_TYPES.find((t) => types.has(this.typeClass(t.slug, doc)!));
+      if (found) return found.slug;
+    }
+    return "task";
+  }
+  set issueType(slug: IssueType) {
+    const doc = this.trackerDoc();
+    if (!doc) return;
+    const types = this.types;
+    for (const t of ISSUE_TYPES) types.delete(this.typeClass(t.slug, doc)!);
+    types.add(this.typeClass(slug, doc)!);
+  }
+
   private labelPrefix(doc = this.trackerDoc()): string | undefined {
     return doc ? `${doc}#label-` : undefined;
   }
@@ -314,6 +344,9 @@ export class Tracker extends TermWrapper {
     this.defineClass("priority-medium", "Medium", "Priority");
     this.defineClass("priority-low", "Low", "Priority");
     this.defineClass("Label", "Label");
+    // Issue-type dimension (#Type parent + epic/story/task/bug).
+    this.defineClass("Type", "Type");
+    for (const t of ISSUE_TYPES) this.defineClass(`type-${t.slug}`, t.label, "Type");
   }
 
   /** Label definitions (subclasses of `#Label`), as slug + human label. */

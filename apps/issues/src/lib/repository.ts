@@ -2,7 +2,7 @@ import { fetchRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 import { Store, DataFactory, Writer } from "n3";
 import type { DatasetCore } from "@rdfjs/types";
 import { ContainerDataset } from "@solid/object";
-import { Issue, Tracker, Comment, type IssueState, type Priority, type StatusSlug } from "./issue";
+import { Issue, Tracker, Comment, type IssueState, type IssueType, type Priority, type StatusSlug } from "./issue";
 import { wf, rdf } from "./vocab";
 import { ConflictError, WriteError } from "./errors";
 
@@ -24,6 +24,7 @@ export interface IssueRecord {
   description?: string;
   state: IssueState;
   status: StatusSlug;
+  issueType: IssueType;
   priority?: Priority;
   labels: string[];
   assignee?: string;
@@ -49,6 +50,7 @@ export interface NewIssueInput {
   dateDue?: Date;
   priority?: Priority;
   status?: StatusSlug;
+  issueType?: IssueType;
   labels?: string[];
   parent?: string;
   blockedBy?: string[];
@@ -93,6 +95,7 @@ function toRecord(issue: Issue, url: string, canWrite: boolean): IssueRecord {
     description: issue.description,
     state: issue.state,
     status: issue.status,
+    issueType: issue.issueType,
     priority: issue.priority,
     labels: issue.labels,
     assignee: issue.assignee,
@@ -263,6 +266,7 @@ export class Repository {
     issue.tracker = this.trackerIri; // set first so status/priority/label IRIs resolve
     const now = new Date();
     issue.status = input.status ?? "todo"; // sets the status (and wf:Open/Closed) + wf:Task
+    issue.issueType = input.issueType ?? "task";
     issue.title = input.title;
     issue.description = input.description;
     issue.assignee = input.assignee;
@@ -270,6 +274,8 @@ export class Repository {
     issue.creator = input.creator;
     issue.priority = input.priority;
     issue.labels = labelSlugs;
+    issue.parent = input.parent;
+    for (const b of input.blockedBy ?? []) issue.blockedBy.add(b);
     issue.created = now;
     issue.modified = now;
     await this.put(url, dataset, null);
@@ -285,6 +291,7 @@ export class Repository {
     if ("dateDue" in patch) issue.dateDue = patch.dateDue;
     if ("priority" in patch) issue.priority = patch.priority;
     if ("status" in patch && patch.status) issue.status = patch.status;
+    if ("issueType" in patch && patch.issueType) issue.issueType = patch.issueType;
     if (labelSlugs) issue.labels = labelSlugs;
     if ("parent" in patch) issue.parent = patch.parent;
     if ("blockedBy" in patch && patch.blockedBy) {

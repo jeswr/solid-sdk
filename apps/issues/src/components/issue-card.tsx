@@ -23,10 +23,11 @@ import {
   Tag,
   Trash2,
   Users,
-  UserRound,
 } from "lucide-react";
 import type { IssueRecord } from "@/lib/use-issues";
 import { STATUSES } from "@/lib/issue";
+import { TypeBadge } from "@/components/type-badge";
+import { PersonChip } from "@/components/person";
 
 const statusLabel = (slug: string) => STATUSES.find((s) => s.slug === slug)?.label ?? slug;
 const statusVariant = (slug: string): "default" | "secondary" | "outline" =>
@@ -76,11 +77,6 @@ export function IssueCard({
   }) {
   const closed = issue.state === "closed";
   const canWrite = issue.canWrite;
-  const assigneeLabel = issue.assignee
-    ? issue.assignee === groupIri
-      ? "Team"
-      : shortWebId(issue.assignee)
-    : null;
   const isOverdue = overdue(issue);
 
   return (
@@ -92,6 +88,7 @@ export function IssueCard({
       <CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
         <div className="min-w-0 space-y-1.5">
           <div className="flex flex-wrap items-center gap-2">
+            <TypeBadge type={issue.issueType} />
             <Badge variant={statusVariant(issue.status)} className="gap-1">
               {issue.status === "done" ? (
                 <CheckCircle2 className="size-3" aria-hidden />
@@ -177,7 +174,7 @@ export function IssueCard({
           </DropdownMenuContent>
         </DropdownMenu>
       </CardHeader>
-      {(issue.description || issue.dateDue || assigneeLabel || issue.comments.length > 0) && (
+      {(issue.description || issue.dateDue || issue.assignee || issue.comments.length > 0) && (
         <CardContent className="space-y-2">
           {issue.description && (
             <p className="line-clamp-3 text-sm text-muted-foreground whitespace-pre-wrap">{issue.description}</p>
@@ -188,10 +185,8 @@ export function IssueCard({
                 <CalendarClock className="size-3.5" aria-hidden /> Due {fmtDate(issue.dateDue)}
               </span>
             )}
-            {assigneeLabel && (
-              <span className="flex items-center gap-1">
-                <UserRound className="size-3.5" aria-hidden /> {assigneeLabel}
-              </span>
+            {issue.assignee && (
+              <PersonChip webId={issue.assignee} isTeam={issue.assignee === groupIri} className="max-w-48" />
             )}
             <button
               type="button"

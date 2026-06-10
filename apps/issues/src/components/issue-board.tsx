@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Plus as PlusIcon } from "lucide-react";
 import { IssueCard, type IssueCardActions } from "@/components/issue-card";
 import type { IssueRecord } from "@/lib/use-issues";
 
@@ -19,6 +20,7 @@ export function IssueBoard({
   columns,
   groupOf,
   onMove,
+  onAddToColumn,
   cardActions,
   canWrite,
 }: {
@@ -26,6 +28,8 @@ export function IssueBoard({
   columns: BoardColumn[];
   groupOf: (issue: IssueRecord) => string;
   onMove: (url: string, columnKey: string) => void;
+  /** Render a "+" in each column header that creates an issue pre-set to it. */
+  onAddToColumn?: (columnKey: string) => void;
   cardActions: (issue: IssueRecord) => IssueCardActions;
   canWrite: boolean;
 }) {
@@ -53,9 +57,19 @@ export function IssueBoard({
               dragOver === col.key ? "ring-2 ring-primary" : ""
             }`}
           >
-            <h3 className="flex items-center justify-between px-1 text-sm font-medium">
+            <h3 className="flex items-center gap-2 px-1 text-sm font-medium">
               <span>{col.label}</span>
               <span className="text-muted-foreground">{items.length}</span>
+              {onAddToColumn && (
+                <button
+                  type="button"
+                  aria-label={`New issue in ${col.label}`}
+                  onClick={() => onAddToColumn(col.key)}
+                  className="ml-auto rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                >
+                  <PlusIcon className="size-4" aria-hidden />
+                </button>
+              )}
             </h3>
             <div className="flex flex-col gap-2">
               {items.map((issue) => (

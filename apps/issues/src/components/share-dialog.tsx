@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { AlertCircle, Loader2, Trash2, UserPlus } from "lucide-react";
+import { PersonAvatar, PersonName } from "@/components/person";
 
 type Level = "view" | "edit";
 const levelToAccess = (l: Level) => ({ read: true, write: l === "edit", control: false });
@@ -172,11 +173,14 @@ export function ShareDialog({
           ) : (
             <ul className="space-y-2">
               {collaborators.map((c) => (
-                <li key={c.webId} className="flex items-center gap-2 rounded-md border p-2">
+                <li key={c.webId} className="flex items-center gap-3 rounded-md border p-2">
+                  <PersonAvatar webId={c.webId} className="size-8" />
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm">{c.webId}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {accessToLevel(c.access) === "edit" ? "Can edit" : "Can view"}
+                    <span className="block truncate text-sm font-medium">
+                      <PersonName webId={c.webId} />
+                    </span>
+                    <span className="block truncate text-xs text-muted-foreground" title={c.webId}>
+                      {accessToLevel(c.access) === "edit" ? "Can edit" : "Can view"} · {c.webId}
                     </span>
                   </span>
                   <Button

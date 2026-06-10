@@ -19,6 +19,7 @@ import { IssueDetailDialog } from "@/components/issue-detail-dialog";
 import { CommandPalette, type PaletteGroup } from "@/components/command-palette";
 import { TeamDialog } from "@/components/team-dialog";
 import { IssueBoard } from "@/components/issue-board";
+import { EpicView } from "@/components/epic-view";
 import { IssueCard, shortWebId, type IssueCardActions } from "@/components/issue-card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -70,9 +71,11 @@ import {
   Users,
   UserRound,
   X,
+  Zap,
 } from "lucide-react";
 
-type View = "list" | "board";
+type View = "list" | "board" | "epics";
+const VIEW_KEY = "solid-issues:view";
 const SORTS: { key: SortKey; label: string }[] = [
   { key: "created", label: "Created" },
   { key: "updated", label: "Updated" },
@@ -92,7 +95,18 @@ export function IssuesView() {
   const issues = useIssues(tracker.trackerUrl, profile?.webId ?? null);
 
   const [query, setQuery] = useState<IssueQuery>(DEFAULT_QUERY);
-  const [view, setView] = useState<View>("list");
+  const [view, setViewState] = useState<View>(() => {
+    const saved = typeof localStorage !== "undefined" ? localStorage.getItem(VIEW_KEY) : null;
+    return saved === "board" || saved === "epics" ? saved : "list";
+  });
+  const setView = (v: View) => {
+    setViewState(v);
+    try {
+      localStorage.setItem(VIEW_KEY, v);
+    } catch {
+      /* private mode */
+    }
+  };
   const [groupBy, setGroupBy] = useState<"status" | "priority">("status");
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<IssueRecord | undefined>(undefined);
@@ -160,6 +174,7 @@ export function IssuesView() {
         setFormOpen(true);
       } else if (e.key === "b") setView("board");
       else if (e.key === "l") setView("list");
+      else if (e.key === "e") setView("epics");
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -220,13 +235,15 @@ export function IssuesView() {
     }
   }
 
-  const onCreate = () => {
+  const [createDefaults, setCreateDefaults] = useState<{ parent?: string; status?: StatusSlug }>({});
+  const onCreate = (defaults: { parent?: string; status?: StatusSlug } = {}) => {
     setEditing(undefined);
+    setCreateDefaults(defaults);
     setFormOpen(true);
   };
   const onSubmitForm = async (values: IssueFormSubmit) => {
     if (editing) await run(() => issues.update(editing.url, values), "Issue updated");
-    else await run(() => issues.create(values), "Issue created");
+    else await run(() => issues.create({ ...values, parent: createDefaults.parent }), "Issue created");
   };
 
   const cardActions = (issue: IssueRecord): IssueCardActions => ({
@@ -275,7 +292,7 @@ export function IssuesView() {
     {
       heading: "Create",
       items: issues.canCreate
-        ? [{ id: "new", label: "New issue", hint: "c", run: () => { setEditing(undefined); setFormOpen(true); } }]
+        ? [{ id: "new", label: "New issue", hint: "c", run: () => onCreate() }]
         : [],
     },
     {
@@ -283,6 +300,7 @@ export function IssuesView() {
       items: [
         { id: "list", label: "List view", hint: "l", run: () => setView("list") },
         { id: "board", label: "Board view", hint: "b", run: () => setView("board") },
+        { id: "epics", label: "Epics view", hint: "e", run: () => setView("epics") },
         { id: "search", label: "Search issues", hint: "/", run: () => document.getElementById("issue-search")?.focus() },
         { id: "f-open", label: "Show open", run: () => patchQuery({ state: "open" }) },
         { id: "f-closed", label: "Show closed", run: () => patchQuery({ state: "closed" }) },
@@ -546,24 +564,25 @@ export function IssuesView() {
 
             {/* View toggle */}
             <div role="tablist" aria-label="View" className="flex gap-1 rounded-lg bg-muted p-1">
-              <button
-                role="tab"
-                aria-selected={view === "list"}
-                aria-label="List view"
-                onClick={() => setView("list")}
-                className={`rounded-md p-1.5 transition-colors ${view === "list" ? "bg-background shadow-sm" : "text-muted-foreground"}`}
-              >
-                <ListIcon className="size-4" aria-hidden />
-              </button>
-              <button
-                role="tab"
-                aria-selected={view === "board"}
-                aria-label="Board view"
-                onClick={() => setView("board")}
-                className={`rounded-md p-1.5 transition-colors ${view === "board" ? "bg-background shadow-sm" : "text-muted-foreground"}`}
-              >
-                <LayoutGrid className="size-4" aria-hidden />
-              </button>
+              {([
+                { key: "list", label: "List", Icon: ListIcon },
+                { key: "board", label: "Board", Icon: LayoutGrid },
+                { key: "epics", label: "Epics", Icon: Zap },
+              ] as const).map(({ key, label, Icon }) => (
+                <button
+                  key={key}
+                  role="tab"
+                  aria-selected={view === key}
+                  aria-label={`${label} view`}
+                  onClick={() => setView(key)}
+                  className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none ${
+                    view === key ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <Icon className="size-4" aria-hidden />
+                  <span className="hidden sm:inline">{label}</span>
+                </button>
+              ))}
             </div>
           </div>
 
@@ -599,7 +618,7 @@ export function IssuesView() {
                 </Button>
               )}
               {issues.canCreate && (
-                <Button onClick={onCreate} className="gap-1.5">
+                <Button onClick={() => onCreate()} className="gap-1.5">
                   <Plus className="size-4" aria-hidden /> New issue
                 </Button>
               )}
@@ -631,6 +650,16 @@ export function IssuesView() {
               Try again
             </Button>
           </div>
+        ) : view === "epics" ? (
+          // Epics roll up over ALL issues — done children must count toward
+          // progress, so the open/closed state filter (and its empty state)
+          // doesn't apply here.
+          <EpicView
+            issues={issues.issues}
+            canCreate={issues.canCreate}
+            onOpenIssue={(i) => setCommentsUrl(i.url)}
+            onAddToEpic={(epicUrl) => onCreate({ parent: epicUrl })}
+          />
         ) : visible.length === 0 ? (
           <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed p-12 text-center">
             <CircleDot className="size-8 text-muted-foreground" aria-hidden />
@@ -645,7 +674,7 @@ export function IssuesView() {
               </p>
             </div>
             {issues.canCreate && !query.text && activeFilters === 0 && query.state !== "closed" && (
-              <Button onClick={onCreate} variant="outline" className="gap-1.5">
+              <Button onClick={() => onCreate()} variant="outline" className="gap-1.5">
                 <Plus className="size-4" aria-hidden /> New issue
               </Button>
             )}
@@ -673,6 +702,11 @@ export function IssuesView() {
                     () => issues.update(url, { priority: key === "none" ? undefined : (key as Priority) }),
                     key === "none" ? "Priority cleared" : `Priority set to ${key}`,
                   )
+            }
+            onAddToColumn={
+              issues.canCreate && groupBy === "status"
+                ? (key) => onCreate({ status: key as StatusSlug })
+                : undefined
             }
           />
         ) : (
@@ -729,6 +763,7 @@ export function IssuesView() {
         open={formOpen}
         onOpenChange={setFormOpen}
         initial={editing}
+        defaultStatus={createDefaults.status}
         onSubmit={onSubmitForm}
         assigneeSuggestions={assigneeSuggestions}
       />

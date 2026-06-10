@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/select";
 import { Loader2 } from "lucide-react";
 import type { IssueRecord } from "@/lib/use-issues";
-import { STATUSES, type Priority, type StatusSlug } from "@/lib/issue";
+import { ISSUE_TYPES, STATUSES, type IssueType, type Priority, type StatusSlug } from "@/lib/issue";
 
 const PRIORITY_NONE = "none";
 
@@ -40,6 +40,7 @@ const schema = z.object({
     .optional(),
   priority: z.enum(["none", "high", "medium", "low"]),
   status: z.enum(["todo", "in-progress", "done"]),
+  issueType: z.enum(["epic", "story", "task", "bug"]),
   labels: z.string().optional(),
 });
 type FormValues = z.infer<typeof schema>;
@@ -51,6 +52,7 @@ export interface IssueFormSubmit {
   assignee?: string;
   priority?: Priority;
   status: StatusSlug;
+  issueType: IssueType;
   labels: string[];
 }
 
@@ -65,12 +67,15 @@ export function IssueFormDialog({
   open,
   onOpenChange,
   initial,
+  defaultStatus,
   onSubmit,
   assigneeSuggestions = [],
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initial?: IssueRecord;
+  /** Status preset for NEW issues (e.g. created from a board column). */
+  defaultStatus?: StatusSlug;
   onSubmit: (values: IssueFormSubmit) => Promise<void>;
   /** WebIDs (and the assignee group IRI) offered as assignee autocomplete. */
   assigneeSuggestions?: string[];
@@ -78,10 +83,11 @@ export function IssueFormDialog({
   const editing = !!initial;
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { title: "", description: "", dateDue: "", assignee: "", priority: "none", status: "todo", labels: "" },
+    defaultValues: { title: "", description: "", dateDue: "", assignee: "", priority: "none", status: "todo", issueType: "task", labels: "" },
   });
   const priority = useWatch({ control: form.control, name: "priority" });
   const status = useWatch({ control: form.control, name: "status" });
+  const issueType = useWatch({ control: form.control, name: "issueType" });
 
   useEffect(() => {
     if (open) {
@@ -91,11 +97,12 @@ export function IssueFormDialog({
         dateDue: toDateInput(initial?.dateDue),
         assignee: initial?.assignee ?? "",
         priority: initial?.priority ?? "none",
-        status: initial?.status ?? "todo",
+        status: initial?.status ?? defaultStatus ?? "todo",
+        issueType: initial?.issueType ?? "task",
         labels: (initial?.labels ?? []).join(", "),
       });
     }
-  }, [open, initial, form]);
+  }, [open, initial, defaultStatus, form]);
 
   const submit = async (values: FormValues) => {
     await onSubmit({
@@ -105,6 +112,7 @@ export function IssueFormDialog({
       assignee: values.assignee?.trim() || undefined,
       priority: values.priority === PRIORITY_NONE ? undefined : (values.priority as Priority),
       status: values.status,
+      issueType: values.issueType,
       labels: parseLabels(values.labels),
     });
     onOpenChange(false);
@@ -144,7 +152,22 @@ export function IssueFormDialog({
             <Textarea id="description" rows={3} {...form.register("description")} />
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="issueType">Type</Label>
+              <Select value={issueType} onValueChange={(v) => form.setValue("issueType", v as FormValues["issueType"])}>
+                <SelectTrigger id="issueType">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {ISSUE_TYPES.map((t) => (
+                    <SelectItem key={t.slug} value={t.slug}>
+                      {t.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="space-y-1.5">
               <Label htmlFor="status">Status</Label>
               <Select value={status} onValueChange={(v) => form.setValue("status", v as FormValues["status"])}>

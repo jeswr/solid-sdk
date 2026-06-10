@@ -7,6 +7,7 @@ const base: IssueRecord = {
   title: "",
   state: "open",
   status: "todo",
+  issueType: "task",
   labels: [],
   blockedBy: [],
   attachments: [],

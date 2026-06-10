@@ -116,6 +116,44 @@ test.describe("Advanced issue features", () => {
     for (const title of titles) await expect(page.getByRole("heading", { name: title })).toBeVisible({ timeout: 20_000 });
   });
 
+  test("epics: create an epic, add a child from the epic view, see progress roll up", async ({ page }) => {
+    // Create an epic via the form's Type select.
+    await page.getByRole("button", { name: /new issue/i }).first().click();
+    await page.getByLabel(/^title$/i).fill("Login overhaul");
+    await page.locator("#issueType").click();
+    await page.getByRole("option", { name: /^epic$/i }).click();
+    await page.getByRole("button", { name: /create issue/i }).click();
+    await expect(page.getByRole("heading", { name: "Login overhaul" })).toBeVisible({ timeout: 15_000 });
+
+    // Switch to the Epics view and add a child issue to the epic.
+    await page.getByRole("tab", { name: /epics view/i }).click();
+    await expect(page.getByText(/0\/0 done/)).toBeVisible();
+    await page.getByRole("button", { name: /add issue/i }).click();
+    await page.getByLabel(/^title$/i).fill("Fix popup flow");
+    await page.getByRole("button", { name: /create issue/i }).click();
+
+    // Child appears under the epic; progress shows 0/1.
+    await expect(page.getByText(/0\/1 done/)).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole("button", { name: "Fix popup flow" })).toBeVisible();
+
+    // Complete the child via its detail → Edit → status Done; progress hits 100%.
+    await page.getByRole("button", { name: "Fix popup flow" }).click();
+    await page.getByRole("dialog").getByRole("button", { name: /edit/i }).click();
+    await page.locator("#status").click();
+    await page.getByRole("option", { name: /done/i }).click();
+    await page.getByRole("button", { name: /save changes/i }).click();
+    await expect(page.getByText(/1\/1 done · 100%/)).toBeVisible({ timeout: 15_000 });
+  });
+
+  test("team members render as contact cards with profile names", async ({ page }) => {
+    await page.getByRole("button", { name: /^team$/i }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByLabel(/member webid/i).fill(account.webId);
+    await dialog.getByRole("button", { name: /^add$/i }).click();
+    // The member card shows the profile's display name (seeded by css-account), not just the IRI.
+    await expect(dialog.getByText(/^Test /)).toBeVisible({ timeout: 15_000 });
+  });
+
   test("links a parent and a blocker between issues", async ({ page }) => {
     for (const title of ["Parent task", "Child task"]) {
       await page.getByRole("button", { name: /new issue/i }).first().click();
