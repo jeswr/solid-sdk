@@ -85,7 +85,7 @@ class TypeIndexDataset extends DatasetWrapper {
   }
 }
 
-const opts = (fetchImpl?: typeof fetch) => (fetchImpl ? { fetch: fetchImpl } : undefined);
+const opts = (fetchImpl?: typeof fetch) => ({ headers: { "cache-control": "no-cache" }, ...(fetchImpl ? { fetch: fetchImpl } : {}) });
 
 function serialize(dataset: DatasetCore): Promise<string> {
   const writer = new Writer({ format: "text/turtle" });
@@ -147,12 +147,14 @@ export async function registerTracker(
 ): Promise<boolean> {
   const doFetch = fetchImpl ?? fetch;
   try {
-    const indexUrl = new URL("settings/publicTypeIndex.ttl", storageUrl).toString();
-
-    // 1. Ensure the profile links to the index (read-modify-write, preserve content).
+    // 1. Reuse the profile's EXISTING public type index when one is advertised —
+    //    overwriting the link would break discovery for the user's other apps.
+    //    Only create-and-link the conventional path when none exists.
     const { dataset: profile, etag: profileEtag } = await fetchRdf(webId, opts(fetchImpl));
     const links = new ProfileLinks(webId, profile, DataFactory);
-    if (links.publicTypeIndex !== indexUrl) {
+    let indexUrl = links.publicTypeIndex;
+    if (!indexUrl) {
+      indexUrl = new URL("settings/publicTypeIndex.ttl", storageUrl).toString();
       links.publicTypeIndex = indexUrl;
       await conditionalPut(profileDocUrl(webId), profile, profileEtag, doFetch);
     }

@@ -116,7 +116,7 @@ export function IssuesView() {
   const [editing, setEditing] = useState<IssueRecord | undefined>(undefined);
   const [deleteTarget, setDeleteTarget] = useState<IssueRecord | undefined>(undefined);
   const [commentsUrl, setCommentsUrl] = useState<string | undefined>(undefined);
-  const [shareResource, setShareResource] = useState<{ url: string; label: string } | undefined>(undefined);
+  const [shareResource, setShareResource] = useState<{ url: string; extraUrls?: string[]; label: string } | undefined>(undefined);
   const [openTrackerOpen, setOpenTrackerOpen] = useState(false);
   const [teamOpen, setTeamOpen] = useState(false);
   const [group, setGroup] = useState<{ iri?: string; members: string[] }>({ members: [] });
@@ -331,7 +331,7 @@ export function IssuesView() {
         { id: "open-tracker", label: "Open another tracker…", run: () => setOpenTrackerOpen(true) },
         ...(isOwn
           ? [
-              { id: "share", label: "Share tracker…", run: () => setShareResource({ url: repo.containerUrl, label: "this tracker" }) },
+              { id: "share", label: "Share tracker…", run: () => setShareResource({ url: repo.containerUrl, extraUrls: [tracker.trackerUrl], label: "this tracker" }) },
               { id: "team", label: "Manage team…", run: () => setTeamOpen(true) },
             ]
           : []),
@@ -632,7 +632,7 @@ export function IssuesView() {
                 <Button
                   variant="outline"
                   className="gap-1.5"
-                  onClick={() => setShareResource({ url: repo.containerUrl, label: "this tracker" })}
+                  onClick={() => setShareResource({ url: repo.containerUrl, extraUrls: [tracker.trackerUrl], label: "this tracker" })}
                 >
                   <Share2 className="size-4" aria-hidden /> Share
                 </Button>
@@ -841,6 +841,7 @@ export function IssuesView() {
           open={!!shareResource}
           onOpenChange={(o) => !o && setShareResource(undefined)}
           resourceUrl={shareResource.url}
+          extraResourceUrls={shareResource.extraUrls}
           ownerWebId={profile.webId}
           title={`Share ${shareResource.label}`}
           description="Grant another person access by their WebID. They can open it from their own app."

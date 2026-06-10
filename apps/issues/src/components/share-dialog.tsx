@@ -44,6 +44,7 @@ export function ShareDialog({
   open,
   onOpenChange,
   resourceUrl,
+  extraResourceUrls = [],
   ownerWebId,
   title = "Share access",
   description = "Grant another person access by their WebID.",
@@ -52,6 +53,8 @@ export function ShareDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   resourceUrl: string;
+  /** Additional resources that must carry the same grants (e.g. the tracker config). */
+  extraResourceUrls?: string[];
   ownerWebId: string;
   title?: string;
   description?: string;
@@ -88,7 +91,13 @@ export function ShareDialog({
 
   const grant = async (values: FormValues) => {
     try {
-      await setAccess(resourceUrl, ownerWebId, values.webId.trim(), levelToAccess(values.level));
+      const webId = values.webId.trim();
+      const access = levelToAccess(values.level);
+      await setAccess(resourceUrl, ownerWebId, webId, access);
+      // Collaborators also need the side resources (read suffices for config).
+      for (const extra of extraResourceUrls) {
+        await setAccess(extra, ownerWebId, webId, { ...access, write: false, control: false });
+      }
       toast.success("Access granted");
       form.reset({ webId: "", level: values.level });
       await refresh();
@@ -102,6 +111,7 @@ export function ShareDialog({
     setBusyId(webId);
     try {
       await removeAccess(resourceUrl, ownerWebId, webId);
+      for (const extra of extraResourceUrls) await removeAccess(extra, ownerWebId, webId);
       toast.success("Access removed");
       await refresh();
       onChanged?.();

@@ -21,7 +21,7 @@ export interface SolidProfile {
  * §Reading data); passing a fetch bypasses the 401→login upgrade.
  */
 export async function loadProfile(webId: string, fetchImpl?: typeof fetch): Promise<SolidProfile> {
-  const { dataset } = await fetchRdf(webId, fetchImpl ? { fetch: fetchImpl } : undefined);
+  const { dataset } = await fetchRdf(webId, { headers: { "cache-control": "no-cache" }, ...(fetchImpl ? { fetch: fetchImpl } : {}) });
   const agent = new WebIdDataset(dataset, DataFactory).mainSubject;
   return {
     webId,

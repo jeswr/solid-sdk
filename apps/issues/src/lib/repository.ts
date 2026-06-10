@@ -73,7 +73,13 @@ export interface NewIssueInput {
 }
 export type IssuePatch = Partial<Omit<NewIssueInput, "creator">>;
 
-const opts = (fetchImpl?: typeof fetch) => (fetchImpl ? { fetch: fetchImpl } : undefined);
+// Force revalidation on every pod read. CSS serves ETag/Last-Modified with no
+// Cache-Control, so browsers heuristically cache GETs; with `Vary: Accept` the
+// cache variant written by our GETs is not invalidated by PUTs (different vary
+// key), so an immediate read-after-write can return the PRE-write body. The
+// request directive makes the browser revalidate (304/200) against the server.
+const NO_CACHE = { "cache-control": "no-cache" } as const;
+const opts = (fetchImpl?: typeof fetch) => ({ headers: NO_CACHE, ...(fetchImpl ? { fetch: fetchImpl } : {}) });
 
 function dirOf(url: string): string {
   return url.slice(0, url.lastIndexOf("/") + 1);
@@ -352,7 +358,14 @@ export class Repository {
   // ---- Sprints (schema:Event fragments in tracker.ttl; membership via wf:task) ----
 
   async listSprints(now = new Date()): Promise<SprintRecord[]> {
-    const { dataset } = await this.loadTracker();
+    let dataset: DatasetCore;
+    try {
+      ({ dataset } = await this.loadTracker());
+    } catch {
+      // A collaborator may have container access but no tracker-config access —
+      // sprint metadata is then simply unavailable; issue listing must not break.
+      return [];
+    }
     const out: SprintRecord[] = [];
     for (const sp of new SprintsDataset(dataset, DataFactory).sprints) {
       out.push({

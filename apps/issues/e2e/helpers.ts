@@ -35,3 +35,11 @@ export async function signIn(page: Page, webId: string) {
   await page.getByRole("button", { name: /sign in/i }).click();
   await expect(page.getByRole("button", { name: /open tracker/i })).toBeVisible({ timeout: 30_000 });
 }
+
+/** Dismiss any visible sonner toasts — they overlay bottom-right controls. */
+export async function dismissToasts(page: Page) {
+  for (const btn of await page.getByLabel(/close toast/i).all()) {
+    await btn.click().catch(() => {});
+  }
+  await page.waitForTimeout(150);
+}

@@ -4,7 +4,7 @@
  */
 import { test, expect } from "@playwright/test";
 import { createCssAccount, type CssAccount } from "./css-account";
-import { CSS_BASE, handleLoginPopups, signIn } from "./helpers";
+import { CSS_BASE, dismissToasts, handleLoginPopups, signIn } from "./helpers";
 
 test.describe("Advanced issue features", () => {
   let account: CssAccount;
@@ -161,6 +161,7 @@ test.describe("Advanced issue features", () => {
     await page.getByRole("button", { name: /create sprint/i }).click();
     await expect(page.getByRole("heading", { name: "Sprint 1" })).toBeVisible({ timeout: 15_000 });
 
+    await dismissToasts(page); // the "Sprint created" toast overlays the row menus
     await page.getByRole("button", { name: /move estimated story/i }).click();
     await page.getByRole("menuitem", { name: "Sprint 1" }).click();
     await expect(page.getByText(/0\/1 done · 3 pts/)).toBeVisible({ timeout: 15_000 });

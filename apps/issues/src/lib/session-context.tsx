@@ -19,6 +19,7 @@ export type SessionStatus =
   | "initialising"
   | "logged-out"
   | "authenticating"
+  | "choose-storage"
   | "logged-in"
   | "error";
 
@@ -31,7 +32,11 @@ export interface SolidSession {
   trackerUrl: string | null;
   error: string | null;
   recentAccounts: RecentAccount[];
+  /** When status is "choose-storage": the storages the WebID advertises. */
+  storageChoices: string[];
   login: (webId: string) => Promise<void>;
+  /** Continue login with the chosen storage (multi-pod WebIDs). */
+  chooseStorage: (storageUrl: string) => Promise<void>;
   logout: () => void;
   /** Forget a remembered account (does not affect the active session). */
   forgetAccount: (webId: string) => void;
@@ -59,6 +64,8 @@ export function SolidSessionProvider({ children }: { children: ReactNode }) {
   const [storageUrl, setStorageUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [recentAccounts, setRecentAccounts] = useState<RecentAccount[]>([]);
+  const [storageChoices, setStorageChoices] = useState<string[]>([]);
+  const pendingProfile = useRef<SolidProfile | null>(null);
 
   const flowRef = useRef<AuthCodeFlowElement | null>(null);
   const managerReady = useRef(false);
@@ -107,6 +114,29 @@ export function SolidSessionProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  const completeLogin = useCallback(async (loaded: SolidProfile, storage: string) => {
+    // First authenticated fetch: a private resource in the pod returns 401,
+    // which transparently drives the login popup, then retries. A 404 (the
+    // tracker doesn't exist yet) is success — the pod is reachable + authed.
+    const trackerUrl = trackerDocumentUrl(storage);
+    await new Repository(trackerUrl).loadTracker();
+
+    setProfile(loaded);
+    setStorageUrl(storage);
+    setStatus("logged-in");
+
+    // Make the tracker discoverable by other apps/people (best-effort, non-blocking).
+    void registerTracker(loaded.webId, storage, trackerUrl);
+
+    recentRef.current?.remember({
+      webId: loaded.webId,
+      displayName: loaded.name ?? loaded.webId,
+      avatarUrl: undefined,
+      storage,
+    });
+    if (recentRef.current) setRecentAccounts(recentRef.current.list());
+  }, []);
+
   const login = useCallback(async (webIdInput: string) => {
     setError(null);
     setStatus("authenticating");
@@ -115,35 +145,42 @@ export function SolidSessionProvider({ children }: { children: ReactNode }) {
     try {
       // 1. Public profile read (no auth) → display name, avatar, storage.
       const loaded = await loadProfile(webId);
-      const storage = loaded.storageUrls[0];
-      if (!storage) throw new NoStorageError(webId);
+      if (loaded.storageUrls.length === 0) throw new NoStorageError(webId);
 
-      // 2. First authenticated fetch: a private resource in the pod returns 401,
-      //    which transparently drives the login popup, then retries. A 404 (the
-      //    tracker doesn't exist yet) is success — the pod is reachable + authed.
-      const trackerUrl = trackerDocumentUrl(storage);
-      await new Repository(trackerUrl).loadTracker();
-
-      setProfile(loaded);
-      setStorageUrl(storage);
-      setStatus("logged-in");
-
-      // Make the tracker discoverable by other apps/people (best-effort, non-blocking).
-      void registerTracker(webId, storage, trackerUrl);
-
-      recentRef.current?.remember({
-        webId,
-        displayName: loaded.name ?? webId,
-        avatarUrl: undefined,
-        storage,
-      });
-      if (recentRef.current) setRecentAccounts(recentRef.current.list());
+      // Multiple pim:storage values: never pick silently (AGENTS.md §discovery).
+      // A previously remembered choice for this account is honoured; otherwise ask.
+      if (loaded.storageUrls.length > 1) {
+        const remembered = recentRef.current?.list().find((a) => a.webId === webId)?.storage;
+        if (!remembered || !loaded.storageUrls.includes(remembered)) {
+          pendingProfile.current = loaded;
+          setStorageChoices(loaded.storageUrls);
+          setStatus("choose-storage");
+          return;
+        }
+        await completeLogin(loaded, remembered);
+        return;
+      }
+      await completeLogin(loaded, loaded.storageUrls[0]);
     } catch (e) {
       webIdRef.current = null;
       setError(describeError(e));
       setStatus("error");
     }
-  }, []);
+  }, [completeLogin]);
+
+  const chooseStorage = useCallback(async (storage: string) => {
+    const loaded = pendingProfile.current;
+    if (!loaded) return;
+    setStatus("authenticating");
+    try {
+      await completeLogin(loaded, storage);
+      pendingProfile.current = null;
+      setStorageChoices([]);
+    } catch (e) {
+      setError(describeError(e));
+      setStatus("error");
+    }
+  }, [completeLogin]);
 
   const logout = useCallback(() => {
     // Tokens live in memory in the fetch manager; a reload is the clean way to
@@ -167,7 +204,9 @@ export function SolidSessionProvider({ children }: { children: ReactNode }) {
     trackerUrl: storageUrl ? trackerDocumentUrl(storageUrl) : null,
     error,
     recentAccounts,
+    storageChoices,
     login,
+    chooseStorage,
     logout,
     forgetAccount,
   };

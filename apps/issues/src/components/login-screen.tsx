@@ -29,7 +29,7 @@ function initials(name: string): string {
 }
 
 export function LoginScreen() {
-  const { login, status, error, recentAccounts, forgetAccount } = useSolidSession();
+  const { login, status, error, recentAccounts, forgetAccount, storageChoices, chooseStorage } = useSolidSession();
   const busy = status === "authenticating";
 
   const form = useForm<FormValues>({
@@ -56,7 +56,28 @@ export function LoginScreen() {
         </CardHeader>
 
         <CardContent className="space-y-6">
-          {recentAccounts.length > 0 && (
+          {status === "choose-storage" && (
+            <section aria-labelledby="storage-heading" className="space-y-2">
+              <h2 id="storage-heading" className="text-sm font-medium">
+                This WebID has several storages — where should your issues live?
+              </h2>
+              <ul className="space-y-2">
+                {storageChoices.map((url) => (
+                  <li key={url}>
+                    <button
+                      type="button"
+                      onClick={() => chooseStorage(url)}
+                      className="w-full truncate rounded-lg border bg-card px-3 py-2 text-left text-sm transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                    >
+                      {url}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          {status !== "choose-storage" && recentAccounts.length > 0 && (
             <section aria-labelledby="recent-heading" className="space-y-2">
               <h2 id="recent-heading" className="text-sm font-medium text-muted-foreground">
                 Continue as
@@ -100,6 +121,7 @@ export function LoginScreen() {
             </section>
           )}
 
+          {status !== "choose-storage" && (
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3" noValidate>
             <div className="space-y-1.5">
               <Label htmlFor="webId">Your WebID</Label>
@@ -143,6 +165,7 @@ export function LoginScreen() {
               )}
             </Button>
           </form>
+          )}
 
           <p className="text-center text-sm text-muted-foreground">
             New to Solid?{" "}
