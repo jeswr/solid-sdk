@@ -1,4 +1,4 @@
-import type { IssueRecord } from "./repository";
+import type { IssueRecord, SprintRecord } from "./repository";
 import { ISSUE_TYPES, STATUSES, type IssueType, type StatusSlug } from "./issue";
 
 export interface TrackerStats {
@@ -67,4 +67,25 @@ export function computeStats(issues: IssueRecord[], now = new Date()): TrackerSt
     .map(([week, count]) => ({ week, count }));
 
   return { total: issues.length, byStatus, byType, byPriority, byAssignee, overdue, createdPerWeek };
+}
+
+export interface VelocityPoint {
+  sprint: string;
+  /** Story points completed (done members) in the sprint. */
+  done: number;
+  /** Total points committed to the sprint. */
+  committed: number;
+}
+
+/** Velocity per completed sprint (oldest first, by end date). */
+export function computeVelocity(sprints: SprintRecord[], issues: IssueRecord[]): VelocityPoint[] {
+  const byUrl = new Map(issues.map((i) => [i.url, i]));
+  return sprints
+    .filter((s) => s.state === "done")
+    .sort((a, b) => (a.endDate?.getTime() ?? 0) - (b.endDate?.getTime() ?? 0))
+    .map((s) => {
+      const members = s.taskUrls.map((u) => byUrl.get(u)).filter((i): i is IssueRecord => !!i);
+      const pts = (list: IssueRecord[]) => list.reduce((sum, i) => sum + (i.estimate ?? 0), 0);
+      return { sprint: s.title, done: pts(members.filter((i) => i.status === "done")), committed: pts(members) };
+    });
 }

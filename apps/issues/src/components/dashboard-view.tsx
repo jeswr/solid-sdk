@@ -2,8 +2,8 @@
 
 import { useMemo } from "react";
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, XAxis, YAxis } from "recharts";
-import { computeStats } from "@/lib/stats";
-import type { IssueRecord } from "@/lib/use-issues";
+import { computeStats, computeVelocity } from "@/lib/stats";
+import type { IssueRecord, SprintRecord } from "@/lib/use-issues";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import { PersonChip } from "@/components/person";
@@ -49,7 +49,8 @@ function StatCard({ label, value, icon, accent }: { label: string; value: number
 }
 
 /** Jira/Monday-style dashboard: stat cards + distribution charts + workload. */
-export function DashboardView({ issues }: { issues: IssueRecord[] }) {
+export function DashboardView({ issues, sprints = [] }: { issues: IssueRecord[]; sprints?: SprintRecord[] }) {
+  const velocity = useMemo(() => computeVelocity(sprints, issues), [sprints, issues]);
   const stats = useMemo(() => computeStats(issues), [issues]);
   const open = stats.byStatus.find((s) => s.status === "todo")?.count ?? 0;
   const inProgress = stats.byStatus.find((s) => s.status === "in-progress")?.count ?? 0;
@@ -172,6 +173,27 @@ export function DashboardView({ issues }: { issues: IssueRecord[] }) {
           </CardContent>
         </Card>
       </div>
+
+      {velocity.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Velocity (points per completed sprint)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ChartContainer config={chartConfig} className="max-h-48 w-full">
+              <BarChart data={velocity}>
+                <CartesianGrid vertical={false} strokeDasharray="3 3" />
+                <XAxis dataKey="sprint" tickLine={false} axisLine={false} fontSize={11} />
+                <YAxis allowDecimals={false} width={24} tickLine={false} axisLine={false} fontSize={12} />
+                <ChartTooltip content={<ChartTooltipContent hideLabel />} />
+                <Bar dataKey="committed" fill="var(--muted-foreground)" opacity={0.35} radius={[4, 4, 0, 0]} />
+                <Bar dataKey="done" fill="var(--primary)" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ChartContainer>
+            <p className="mt-1 text-center text-xs text-muted-foreground">Done vs committed</p>
+          </CardContent>
+        </Card>
+      )}
 
       {stats.createdPerWeek.length > 1 && (
         <Card>

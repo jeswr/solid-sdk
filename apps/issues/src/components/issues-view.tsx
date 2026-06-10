@@ -764,7 +764,7 @@ export function IssuesView() {
           <CalendarView issues={visible} onOpenIssue={(i) => setCommentsUrl(i.url)} />
         ) : view === "dashboard" ? (
           // The dashboard aggregates over ALL issues, unfiltered.
-          <DashboardView issues={issues.issues} />
+          <DashboardView issues={issues.issues} sprints={issues.sprints} />
         ) : view === "epics" ? (
           // Epics roll up over ALL issues — done children must count toward
           // progress, so the open/closed state filter (and its empty state)

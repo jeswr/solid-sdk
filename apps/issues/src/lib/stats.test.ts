@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { computeStats } from "./stats";
-import type { IssueRecord } from "./repository";
+import { computeStats, computeVelocity } from "./stats";
+import type { IssueRecord, SprintRecord } from "./repository";
 
 const base: IssueRecord = {
   url: "",
@@ -49,6 +49,25 @@ describe("computeStats", () => {
     expect(s.createdPerWeek).toEqual([
       { week: "2026-W23", count: 2 },
       { week: "2026-W24", count: 1 },
+    ]);
+  });
+});
+
+describe("computeVelocity", () => {
+  it("sums done vs committed points per completed sprint, oldest first", () => {
+    const issues = [
+      mk({ url: "a", estimate: 3, status: "done", state: "closed" }),
+      mk({ url: "b", estimate: 5 }),
+      mk({ url: "c", estimate: 2, status: "done", state: "closed" }),
+    ];
+    const sprints: SprintRecord[] = [
+      { iri: "s2", title: "Sprint 2", state: "done", endDate: new Date("2026-06-08"), taskUrls: ["c"] },
+      { iri: "s1", title: "Sprint 1", state: "done", endDate: new Date("2026-06-01"), taskUrls: ["a", "b"] },
+      { iri: "s3", title: "Active", state: "active", taskUrls: [] },
+    ];
+    expect(computeVelocity(sprints, issues)).toEqual([
+      { sprint: "Sprint 1", done: 3, committed: 8 },
+      { sprint: "Sprint 2", done: 2, committed: 2 },
     ]);
   });
 });
