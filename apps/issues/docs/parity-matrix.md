@@ -17,14 +17,14 @@ Status: ✅ shipped · 🔶 partial · ⏳ queued (priority order) · ◻ later/
 | Feature (Jira/Monday) | Status | Notes |
 |---|---|---|
 | Issues with status workflow (To Do/In Progress/Done) | ✅ | per-tracker status classes |
-| Kanban board, drag-and-drop | ✅→🔶 | exists; this iteration: discoverability + per-column add + drop polish |
+| Kanban board, drag-and-drop | ✅ | labeled view tabs (persisted), per-column add, drop highlight |
 | List/table view | ✅ | |
 | Priorities, labels/tags, due dates | ✅ | |
-| **Issue types (Epic / Story / Task / Bug)** | ⏳ **this iteration** | type dimension via `wf:issueCategory` |
-| **Epics + progress roll-up (epic view)** | ⏳ **this iteration** | children via `dct:isPartOf`; progress bars |
+| **Issue types (Epic / Story / Task / Bug)** | ✅ | type dimension via `wf:issueCategory`; colored type badges |
+| **Epics + progress roll-up (epic view)** | ✅ | Epics tab: per-epic progress bars, expandable children, add-to-epic |
 | Sub-tasks & dependencies (blocked-by) | ✅ | |
 | Comments, @mentions, attachments, activity log | ✅ | |
-| **People as profiles (name/avatar), not raw IDs** | ⏳ **this iteration** | WebID profile fetch + contact cards |
+| **People as profiles (name/avatar), not raw IDs** | ✅ | profile cache + PersonChip/Avatar across cards, detail, team, sharing |
 | Search, filters, saved views | ✅ | |
 | Bulk edit | ✅ | close/reopen/delete; extend to assign/label later |
 | Real-time collaboration | ✅ | notifications + polling fallback |
@@ -44,7 +44,7 @@ Status: ✅ shipped · 🔶 partial · ⏳ queued (priority order) · ◻ later/
 
 | Feature | Status | Notes |
 |---|---|---|
-| Dashboards (charts: status/assignee/priority distribution) | ⏳ | client-side aggregates first |
+| Dashboards (charts: status/assignee/priority distribution) | ✅ | Dashboard tab: stat cards, status donut, type/priority bars, workload, created-per-week |
 | Reports: burndown, velocity, cumulative flow | ◻ | needs sprint + history data |
 | Automation rules (when X then Y) | ◻ | e.g. "when all sub-tasks done → close parent" |
 | Custom fields / column types (Monday's 30+) | ◻ | RDF makes this natural; UI is the work |

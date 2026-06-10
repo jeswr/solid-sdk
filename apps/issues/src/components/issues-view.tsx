@@ -20,6 +20,7 @@ import { CommandPalette, type PaletteGroup } from "@/components/command-palette"
 import { TeamDialog } from "@/components/team-dialog";
 import { IssueBoard } from "@/components/issue-board";
 import { EpicView } from "@/components/epic-view";
+import { DashboardView } from "@/components/dashboard-view";
 import { IssueCard, shortWebId, type IssueCardActions } from "@/components/issue-card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -72,9 +73,10 @@ import {
   UserRound,
   X,
   Zap,
+  BarChart3,
 } from "lucide-react";
 
-type View = "list" | "board" | "epics";
+type View = "list" | "board" | "epics" | "dashboard";
 const VIEW_KEY = "solid-issues:view";
 const SORTS: { key: SortKey; label: string }[] = [
   { key: "created", label: "Created" },
@@ -97,7 +99,7 @@ export function IssuesView() {
   const [query, setQuery] = useState<IssueQuery>(DEFAULT_QUERY);
   const [view, setViewState] = useState<View>(() => {
     const saved = typeof localStorage !== "undefined" ? localStorage.getItem(VIEW_KEY) : null;
-    return saved === "board" || saved === "epics" ? saved : "list";
+    return saved === "board" || saved === "epics" || saved === "dashboard" ? saved : "list";
   });
   const setView = (v: View) => {
     setViewState(v);
@@ -175,6 +177,7 @@ export function IssuesView() {
       } else if (e.key === "b") setView("board");
       else if (e.key === "l") setView("list");
       else if (e.key === "e") setView("epics");
+      else if (e.key === "d") setView("dashboard");
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -301,6 +304,7 @@ export function IssuesView() {
         { id: "list", label: "List view", hint: "l", run: () => setView("list") },
         { id: "board", label: "Board view", hint: "b", run: () => setView("board") },
         { id: "epics", label: "Epics view", hint: "e", run: () => setView("epics") },
+        { id: "dashboard", label: "Dashboard", hint: "d", run: () => setView("dashboard") },
         { id: "search", label: "Search issues", hint: "/", run: () => document.getElementById("issue-search")?.focus() },
         { id: "f-open", label: "Show open", run: () => patchQuery({ state: "open" }) },
         { id: "f-closed", label: "Show closed", run: () => patchQuery({ state: "closed" }) },
@@ -568,6 +572,7 @@ export function IssuesView() {
                 { key: "list", label: "List", Icon: ListIcon },
                 { key: "board", label: "Board", Icon: LayoutGrid },
                 { key: "epics", label: "Epics", Icon: Zap },
+                { key: "dashboard", label: "Dashboard", Icon: BarChart3 },
               ] as const).map(({ key, label, Icon }) => (
                 <button
                   key={key}
@@ -650,6 +655,9 @@ export function IssuesView() {
               Try again
             </Button>
           </div>
+        ) : view === "dashboard" ? (
+          // The dashboard aggregates over ALL issues, unfiltered.
+          <DashboardView issues={issues.issues} />
         ) : view === "epics" ? (
           // Epics roll up over ALL issues — done children must count toward
           // progress, so the open/closed state filter (and its empty state)

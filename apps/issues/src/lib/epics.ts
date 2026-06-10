@@ -1,4 +1,4 @@
-import type { IssueRecord } from "@/lib/repository";
+import type { IssueRecord } from "./repository";
 
 export interface EpicGroup {
   epic: IssueRecord;

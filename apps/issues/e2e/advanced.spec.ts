@@ -45,7 +45,7 @@ test.describe("Advanced issue features", () => {
 
     // Clear, switch to the board view — status columns render (To Do / In Progress / Done).
     await page.getByLabel(/search issues/i).fill("");
-    await page.getByRole("tab", { name: /board view/i }).click();
+    await page.getByRole("tab", { name: "Board view", exact: true }).click();
     await expect(page.getByRole("region", { name: /to do/i })).toBeVisible();
     await expect(page.getByRole("region", { name: /in progress/i })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Alpha login bug" })).toBeVisible();
@@ -64,7 +64,7 @@ test.describe("Advanced issue features", () => {
     await page.getByRole("button", { name: /command palette/i }).click();
     await expect(page.getByPlaceholder(/type a command/i)).toBeVisible();
     await page.getByRole("option", { name: /board view/i }).click();
-    await expect(page.getByRole("tab", { name: /board view/i })).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByRole("tab", { name: "Board view", exact: true })).toHaveAttribute("aria-selected", "true");
   });
 
   test("saves a view and re-applies it", async ({ page }) => {
@@ -145,6 +145,22 @@ test.describe("Advanced issue features", () => {
     await expect(page.getByText(/1\/1 done · 100%/)).toBeVisible({ timeout: 15_000 });
   });
 
+  test("dashboard shows stat cards and charts", async ({ page }) => {
+    await page.getByRole("button", { name: /new issue/i }).first().click();
+    await page.getByLabel(/^title$/i).fill("Chart fodder");
+    await page.locator("#priority").click();
+    await page.getByRole("option", { name: "High" }).click();
+    await page.getByRole("button", { name: /create issue/i }).click();
+    await expect(page.getByRole("heading", { name: "Chart fodder" })).toBeVisible({ timeout: 15_000 });
+
+    await page.getByRole("tab", { name: /dashboard view/i }).click();
+    const dash = page.getByTestId("dashboard");
+    await expect(dash.getByText("To Do", { exact: true })).toBeVisible();
+    await expect(dash.getByText("Overdue", { exact: true })).toBeVisible();
+    await expect(dash.getByText(/status distribution/i)).toBeVisible();
+    await expect(dash.getByText(/open workload/i)).toBeVisible();
+  });
+
   test("team members render as contact cards with profile names", async ({ page }) => {
     await page.getByRole("button", { name: /^team$/i }).click();
     const dialog = page.getByRole("dialog");
@@ -155,7 +171,7 @@ test.describe("Advanced issue features", () => {
   });
 
   test("links a parent and a blocker between issues", async ({ page }) => {
-    for (const title of ["Parent task", "Child task"]) {
+    for (const title of ["Parent task", "Blocker task", "Child task"]) {
       await page.getByRole("button", { name: /new issue/i }).first().click();
       await page.getByLabel(/^title$/i).fill(title);
       await page.getByRole("button", { name: /create issue/i }).click();
@@ -170,9 +186,9 @@ test.describe("Advanced issue features", () => {
     // Set parent.
     await dialog.getByLabel(/parent issue/i).click();
     await page.getByRole("option", { name: "Parent task" }).click();
-    // Add a blocker.
+    // Add a blocker (the parent itself is correctly excluded from candidates).
     await dialog.getByLabel(/add blocker/i).click();
-    await page.getByRole("option", { name: "Parent task" }).click();
+    await page.getByRole("option", { name: "Blocker task" }).click();
 
     // Blocked-by list now shows the blocker (and the parent select reflects it).
     await expect(dialog.getByRole("button", { name: /remove blocker/i })).toBeVisible({ timeout: 15_000 });

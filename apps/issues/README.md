@@ -82,8 +82,16 @@ npm run build       # next build
 
 ## Views & productivity
 
-- **List and Kanban board** views; the board groups by **status** (To Do / In
-  Progress / Done) or **priority**, with drag-and-drop between columns.
+- **List, Kanban board, Epics, and Dashboard** views (persisted choice; keyboard
+  l/b/e/d); the board groups by **status** (To Do / In Progress / Done) or
+  **priority**, with drag-and-drop between columns and per-column quick-add.
+- **Issue types** — Epic / Story / Task / Bug with Jira-style colored badges;
+  the **Epics view** rolls up child progress per epic with add-to-epic.
+- **Dashboard** — stat cards (incl. overdue), status/type/priority charts,
+  per-assignee workload, created-per-week.
+- **People as contact cards** — assignees, authors, team members and
+  collaborators render with profile names + avatars resolved from their WebID,
+  never raw IRIs.
 - **Workflow statuses** in addition to open/closed; status badges on every card.
 - **Search** + **multi-facet filters** (priority / label / assignee / state) +
   **sort**; **saved views** to remember filter presets.
