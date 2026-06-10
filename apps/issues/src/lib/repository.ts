@@ -434,21 +434,21 @@ export class Repository {
    * the release the task set no longer reflects what the team committed to.
    */
   async completeSprint(sprintIri: string, releaseUrls: string[] = []): Promise<void> {
+    // Snapshot and write against the SAME dataset/ETag: a concurrent membership
+    // change between load and PUT then surfaces as a 412 instead of silently
+    // pairing a stale commitment with newer tasks.
+    const { dataset, etag, tracker, exists } = await this.loadTracker();
+    if (!exists || !tracker.title) tracker.configure(DEFAULT_TITLE);
+    const sp = new Sprint(sprintIri, dataset, DataFactory);
     // Sum the members' estimates before anything is released. Unreadable or
     // deleted members count 0 — the snapshot is reporting data, not a ledger.
-    const { dataset: pre } = await this.loadTracker();
-    const taskUrls = [...new Sprint(sprintIri, pre, DataFactory).tasks];
     const estimates = await Promise.all(
-      taskUrls.map((url) => this.openIssue(url).then((o) => o.issue.estimate ?? 0).catch(() => 0)),
+      [...sp.tasks].map((url) => this.openIssue(url).then((o) => o.issue.estimate ?? 0).catch(() => 0)),
     );
-    const committed = estimates.reduce((sum, e) => sum + e, 0);
-
-    await this.mutateTracker((dataset) => {
-      const sp = new Sprint(sprintIri, dataset, DataFactory);
-      sp.endDate = new Date();
-      sp.committedPoints = committed;
-      for (const url of releaseUrls) sp.tasks.delete(url);
-    });
+    sp.committedPoints = estimates.reduce((sum, e) => sum + e, 0);
+    sp.endDate = new Date();
+    for (const url of releaseUrls) sp.tasks.delete(url);
+    await this.put(this.trackerUrl, dataset, etag);
   }
 
   get attachmentsContainerUrl(): string {

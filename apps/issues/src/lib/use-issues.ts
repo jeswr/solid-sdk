@@ -60,22 +60,44 @@ export function useIssues(trackerUrl: string | null, creator: string | null): Us
   // one — only the latest in-flight fetch may apply its result.
   const fetchSeq = useRef(0);
 
+  // Switching tracker (project) must drop the previous project's data in the
+  // same render — stale issues left interactive would mutate the old project
+  // through the new repository. (React's "state from previous renders" idiom.)
+  const [prevTracker, setPrevTracker] = useState(trackerUrl);
+  if (trackerUrl !== prevTracker) {
+    setPrevTracker(trackerUrl);
+    setIssues([]);
+    setSprints([]);
+    setCanCreate(true);
+    setError(null);
+    setLoading(true);
+  }
+
+  // The tracker a fetch was started for must still be current when it lands —
+  // an in-flight read from the previous project may not repopulate the new one.
+  const trackerRef = useRef(trackerUrl);
+  useEffect(() => {
+    trackerRef.current = trackerUrl;
+  }, [trackerUrl]);
+
   const fetchInto = useCallback(async () => {
     if (!trackerUrl) return;
     const seq = ++fetchSeq.current;
+    // superseded by a newer fetch, or the app switched project meanwhile
+    const stale = () => seq !== fetchSeq.current || trackerRef.current !== trackerUrl;
     try {
       const repo = new Repository(trackerUrl);
       const [{ issues: list, canCreate: cc }, sprintList] = await Promise.all([repo.list(), repo.listSprints()]);
-      if (seq !== fetchSeq.current) return; // a newer fetch superseded this one
+      if (stale()) return;
       setIssues(list);
       setSprints(sprintList);
       setCanCreate(cc);
       setError(null);
     } catch (e) {
-      if (seq !== fetchSeq.current) return;
+      if (stale()) return;
       setError(describe(e));
     } finally {
-      if (seq === fetchSeq.current) setLoading(false);
+      if (!stale()) setLoading(false);
     }
   }, [trackerUrl]);
 

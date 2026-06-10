@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -125,6 +126,9 @@ export function IssueDetailDialog({
               </Button>
             )}
           </div>
+          <DialogDescription className="sr-only">
+            Issue details: status, relationships, attachments, and activity.
+          </DialogDescription>
         </DialogHeader>
 
         {/* Metadata */}
