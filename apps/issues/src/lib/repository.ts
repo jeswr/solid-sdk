@@ -423,11 +423,16 @@ export class Repository {
     });
   }
 
-  /** Complete the sprint now (its end date becomes the current moment). */
-  async completeSprint(sprintIri: string): Promise<void> {
+  /**
+   * Complete the sprint now. Unfinished issues (`releaseUrls`) are released back
+   * to the backlog (Jira behaviour) so open work never hides inside a completed
+   * sprint.
+   */
+  async completeSprint(sprintIri: string, releaseUrls: string[] = []): Promise<void> {
     await this.mutateTracker((dataset) => {
       const sp = new Sprint(sprintIri, dataset, DataFactory);
       sp.endDate = new Date();
+      for (const url of releaseUrls) sp.tasks.delete(url);
     });
   }
 

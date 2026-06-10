@@ -38,7 +38,7 @@ export interface UseIssues {
   createSprint: (title: string) => Promise<void>;
   setSprintMembership: (sprintIri: string, issueUrl: string, member: boolean) => Promise<void>;
   startSprint: (sprintIri: string) => Promise<void>;
-  completeSprint: (sprintIri: string) => Promise<void>;
+  completeSprint: (sprintIri: string, releaseUrls?: string[]) => Promise<void>;
   /** Apply several operations against one Repository, then refresh once (bulk actions). */
   batch: (fn: (repo: Repository) => Promise<void>) => Promise<void>;
 }
@@ -132,7 +132,7 @@ export function useIssues(trackerUrl: string | null, creator: string | null): Us
     createSprint: (title) => mutate((r) => r.createSprint(title).then(() => undefined)),
     setSprintMembership: (sprintIri, issueUrl, member) => mutate((r) => r.setSprintMembership(sprintIri, issueUrl, member)),
     startSprint: (sprintIri) => mutate((r) => r.startSprint(sprintIri)),
-    completeSprint: (sprintIri) => mutate((r) => r.completeSprint(sprintIri)),
+    completeSprint: (sprintIri, releaseUrls) => mutate((r) => r.completeSprint(sprintIri, releaseUrls)),
     batch: (fn) => mutate(fn),
   };
 }

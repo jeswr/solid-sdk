@@ -149,6 +149,25 @@ describe("Repository (per-issue documents)", () => {
     expect(issues.find((i) => i.url === a)?.estimate).toBe(3);
   });
 
+  it("releases unfinished issues back to the backlog when a sprint completes", async () => {
+    const { impl } = fakePod();
+    const repo = new Repository(TRACKER, impl);
+    const doneIssue = await repo.create({ title: "Done one", creator: ME });
+    const openIssue = await repo.create({ title: "Still open", creator: ME });
+    await repo.setStatus(doneIssue, "done");
+
+    const sprint = await repo.createSprint("Sprint X");
+    await repo.setSprintMembership(sprint, doneIssue, true);
+    await repo.setSprintMembership(sprint, openIssue, true);
+    await repo.startSprint(sprint);
+    await repo.completeSprint(sprint, [openIssue]); // caller passes unfinished work
+
+    const sprints = await repo.listSprints();
+    const done = sprints.find((s) => s.iri === sprint)!;
+    expect(done.state).toBe("done");
+    expect(done.taskUrls).toEqual([doneIssue]); // open issue released to backlog
+  });
+
   it("persists backlog rank for ordering", async () => {
     const { impl } = fakePod();
     const repo = new Repository(TRACKER, impl);

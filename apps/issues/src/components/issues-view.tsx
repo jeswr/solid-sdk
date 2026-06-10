@@ -679,7 +679,14 @@ export function IssuesView() {
             onOpenIssue={(i) => setCommentsUrl(i.url)}
             onCreateSprint={(title) => run(() => issues.createSprint(title), "Sprint created")}
             onStartSprint={(iri) => run(() => issues.startSprint(iri), "Sprint started")}
-            onCompleteSprint={(iri) => run(() => issues.completeSprint(iri), "Sprint completed")}
+            onCompleteSprint={(iri) => {
+              // Release unfinished issues back to the backlog (Jira behaviour).
+              const sprint = issues.sprints.find((s) => s.iri === iri);
+              const open = (sprint?.taskUrls ?? []).filter(
+                (u) => issues.issues.find((i) => i.url === u)?.status !== "done",
+              );
+              return run(() => issues.completeSprint(iri, open), "Sprint completed");
+            }}
             onMove={(url, sprintIri) =>
               run(
                 async () => {
