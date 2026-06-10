@@ -132,15 +132,7 @@ export function useIssues(trackerUrl: string | null, creator: string | null): Us
     createSprint: (title) => mutate((r) => r.createSprint(title).then(() => undefined)),
     setSprintMembership: (sprintIri, issueUrl, member) => mutate((r) => r.setSprintMembership(sprintIri, issueUrl, member)),
     startSprint: (sprintIri) => mutate((r) => r.startSprint(sprintIri)),
-    completeSprint: (sprintIri, releaseUrls) =>
-      mutate((r) => {
-        // Snapshot the commitment from current membership before unfinished
-        // tasks are released — velocity reads it once the task set shrinks.
-        const sprint = sprints.find((s) => s.iri === sprintIri);
-        const byUrl = new Map(issues.map((i) => [i.url, i]));
-        const committed = sprint?.taskUrls.reduce((sum, u) => sum + (byUrl.get(u)?.estimate ?? 0), 0);
-        return r.completeSprint(sprintIri, releaseUrls, committed);
-      }),
+    completeSprint: (sprintIri, releaseUrls) => mutate((r) => r.completeSprint(sprintIri, releaseUrls)),
     batch: (fn) => mutate(fn),
   };
 }

@@ -15,6 +15,7 @@ import { STATUSES, type Priority, type StatusSlug } from "@/lib/issue";
 import { IssueFormDialog, type IssueFormSubmit } from "@/components/issue-form-dialog";
 import { ShareDialog } from "@/components/share-dialog";
 import { OpenTrackerDialog } from "@/components/open-tracker-dialog";
+import { ProjectSwitcher } from "@/components/project-switcher";
 import { IssueDetailDialog } from "@/components/issue-detail-dialog";
 import { CommandPalette, type PaletteGroup } from "@/components/command-palette";
 import { TeamDialog } from "@/components/team-dialog";
@@ -87,6 +88,7 @@ import {
 type View = "list" | "board" | "epics" | "dashboard" | "backlog" | "timeline" | "calendar";
 const VIEWS: View[] = ["list", "board", "epics", "backlog", "timeline", "calendar", "dashboard"];
 const VIEW_KEY = "solid-issues:view";
+const PROJECT_KEY = "solid-issues:project";
 const SORTS: { key: SortKey; label: string }[] = [
   { key: "created", label: "Created" },
   { key: "updated", label: "Updated" },
@@ -97,11 +99,31 @@ const SORTS: { key: SortKey; label: string }[] = [
 const PRIORITIES: Priority[] = ["high", "medium", "low"];
 
 export function IssuesView() {
-  const { profile, trackerUrl, logout } = useSolidSession();
+  const { profile, trackerUrl, storageUrl, logout } = useSolidSession();
   const { theme, setTheme } = useTheme();
   const ownTracker: TrackerLocation = { ownerWebId: profile!.webId, trackerUrl: trackerUrl! };
 
-  const [tracker, setTracker] = useState<TrackerLocation>(ownTracker);
+  const [tracker, setTracker] = useState<TrackerLocation>(() => {
+    // Re-open the project/tracker this account had open last time.
+    try {
+      const saved = localStorage.getItem(`${PROJECT_KEY}:${profile!.webId}`);
+      if (saved) return JSON.parse(saved) as TrackerLocation;
+    } catch {
+      /* private mode / corrupt entry */
+    }
+    return ownTracker;
+  });
+  const switchTracker = useCallback(
+    (t: TrackerLocation) => {
+      setTracker(t);
+      try {
+        localStorage.setItem(`${PROJECT_KEY}:${profile!.webId}`, JSON.stringify(t));
+      } catch {
+        /* private mode */
+      }
+    },
+    [profile],
+  );
   const isOwn = tracker.ownerWebId === profile?.webId;
   const issues = useIssues(tracker.trackerUrl, profile?.webId ?? null);
 
@@ -404,6 +426,18 @@ export function IssuesView() {
               <CircleDot className="size-4" />
             </span>
             <span className="text-lg font-semibold tracking-tight">Solid Issues</span>
+            <span aria-hidden className="text-muted-foreground/50">/</span>
+            {profile && storageUrl && (
+              <ProjectSwitcher
+                webId={profile.webId}
+                storageUrl={storageUrl}
+                active={tracker}
+                onSwitch={(t) => {
+                  switchTracker(t);
+                  setSelected(new Set());
+                }}
+              />
+            )}
           </div>
           <div className="flex items-center gap-1">
             {isOwn && (
@@ -488,7 +522,7 @@ export function IssuesView() {
                 Viewing <span className="font-medium text-foreground">{shortWebId(tracker.ownerWebId)}</span>&apos;s
                 tracker
               </p>
-              <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => setTracker(ownTracker)}>
+              <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => switchTracker(ownTracker)}>
                 <ArrowLeft className="size-4" aria-hidden /> My issues
               </Button>
             </div>
@@ -931,7 +965,7 @@ export function IssuesView() {
         open={openTrackerOpen}
         onOpenChange={setOpenTrackerOpen}
         onOpen={(t) => {
-          setTracker(t);
+          switchTracker(t);
           patchQuery({ state: "open" });
           if (t.ownerWebId === profile?.webId) toast.info("That's your own tracker.");
         }}

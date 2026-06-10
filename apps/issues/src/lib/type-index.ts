@@ -109,28 +109,37 @@ async function conditionalPut(
 }
 
 /**
- * Resolve the issues document a WebID has registered for `wf:Tracker` via their
- * public type index. Returns undefined when no index or no registration exists —
- * discovery is a hint, not a guarantee of access (solid-type-index skill).
+ * All tracker documents a WebID has registered for `wf:Tracker` via their
+ * public type index (one per project/workspace). Empty when no index or no
+ * registration exists — discovery is a hint, not a guarantee of access
+ * (solid-type-index skill).
  */
-export async function resolveTrackerFromTypeIndex(
+export async function resolveTrackersFromTypeIndex(
   webId: string,
   fetchImpl?: typeof fetch,
-): Promise<string | undefined> {
+): Promise<string[]> {
   let profile: DatasetCore;
   try {
     profile = (await fetchRdf(webId, opts(fetchImpl))).dataset;
   } catch {
-    return undefined;
+    return [];
   }
   const indexUrl = new ProfileLinks(webId, profile, DataFactory).publicTypeIndex;
-  if (!indexUrl) return undefined;
+  if (!indexUrl) return [];
   try {
     const { dataset } = await fetchRdf(indexUrl, opts(fetchImpl));
-    return new TypeIndexDataset(dataset, DataFactory).locate(wf("Tracker"))[0];
+    return new TypeIndexDataset(dataset, DataFactory).locate(wf("Tracker"));
   } catch {
-    return undefined;
+    return [];
   }
+}
+
+/** The first registered tracker, for single-tracker call sites. */
+export async function resolveTrackerFromTypeIndex(
+  webId: string,
+  fetchImpl?: typeof fetch,
+): Promise<string | undefined> {
+  return (await resolveTrackersFromTypeIndex(webId, fetchImpl))[0];
 }
 
 /**

@@ -82,13 +82,23 @@ npm run build       # next build
 
 ## Views & productivity
 
-- **List, Kanban board, Epics, and Dashboard** views (persisted choice; keyboard
-  l/b/e/d); the board groups by **status** (To Do / In Progress / Done) or
-  **priority**, with drag-and-drop between columns and per-column quick-add.
+- **Seven views** — List, Kanban board, Epics, Backlog, Timeline (Gantt),
+  Calendar, and Dashboard (persisted choice; keyboard l/b/e/d/t); the board
+  groups by **status** (To Do / In Progress / Done) or **priority**, with
+  drag-and-drop between columns and per-column quick-add.
+- **Projects (workspaces)** — several trackers per pod, each a self-contained
+  container with its own issues, sprints, and sharing; switch or create from
+  the header, discovered via the public type index.
+- **Sprints & backlog** — story-point **estimates**, drag-free ranked ordering,
+  sprint planning, start/complete with unfinished work released back to the
+  backlog, and a **velocity** report (done vs committed, snapshotted at
+  completion).
 - **Issue types** — Epic / Story / Task / Bug with Jira-style colored badges;
   the **Epics view** rolls up child progress per epic with add-to-epic.
 - **Dashboard** — stat cards (incl. overdue), status/type/priority charts,
-  per-assignee workload, created-per-week.
+  per-assignee workload, velocity, created-per-week.
+- **Automations** — built-in "when X then Y" rules (auto-complete parents,
+  escalate overdue issues), applied client-side — pods have no server compute.
 - **People as contact cards** — assignees, authors, team members and
   collaborators render with profile names + avatars resolved from their WebID,
   never raw IRIs.

@@ -45,12 +45,13 @@ Status: ✅ shipped · 🔶 partial · ⏳ queued (priority order) · ◻ later/
 | Feature | Status | Notes |
 |---|---|---|
 | Dashboards (charts: status/assignee/priority distribution) | ✅ | Dashboard tab: stat cards, status donut, type/priority bars, workload, created-per-week |
-| Reports: burndown, velocity, cumulative flow | ◻ | needs sprint + history data |
+| Reports: velocity | ✅ | done vs committed points per completed sprint (commitment snapshotted at completion) |
+| Reports: burndown, cumulative flow | ◻ | needs per-day status history the pod doesn't record yet |
 | Automation rules (when X then Y) | ✅ | built-in client-side rules with toggles (close-parent, escalate-overdue); per-device |
 | Custom fields / column types (Monday's 30+) | ◻ | RDF makes this natural; UI is the work |
 | Workload view (Monday) | ◻ | per-assignee capacity |
 | JQL-style query language | ◻ | SPARQL-backed, eventually |
-| Workspaces / multiple boards per project | 🔶 | one tracker per pod today; multi-tracker later |
+| Workspaces / multiple boards per project | ✅ | project switcher; each project a self-contained tracker (`issue-tracker/<slug>/`), type-index discovered, per-project sharing |
 | Integrations / marketplace, mobile apps | ◻ | out of scope for now |
 
 ## Explicitly not parity goals

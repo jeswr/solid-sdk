@@ -183,10 +183,10 @@ export class Repository {
   }
 
   /** Create the tracker config (with priority/label classes) if it doesn't exist. */
-  async ensureTracker(): Promise<Tracker> {
+  async ensureTracker(title: string = DEFAULT_TITLE): Promise<Tracker> {
     const { dataset, etag, tracker, exists } = await this.loadTracker();
     if (!exists || !tracker.title) {
-      tracker.configure(DEFAULT_TITLE);
+      tracker.configure(title);
       await this.put(this.trackerUrl, dataset, etag);
     }
     return tracker;
@@ -430,14 +430,23 @@ export class Repository {
   /**
    * Complete the sprint now. Unfinished issues (`releaseUrls`) are released back
    * to the backlog (Jira behaviour) so open work never hides inside a completed
-   * sprint. `committedPoints` is snapshotted first — after the release the task
-   * set no longer reflects what the team committed to.
+   * sprint. The committed points are snapshotted onto the sprint first — after
+   * the release the task set no longer reflects what the team committed to.
    */
-  async completeSprint(sprintIri: string, releaseUrls: string[] = [], committedPoints?: number): Promise<void> {
+  async completeSprint(sprintIri: string, releaseUrls: string[] = []): Promise<void> {
+    // Sum the members' estimates before anything is released. Unreadable or
+    // deleted members count 0 — the snapshot is reporting data, not a ledger.
+    const { dataset: pre } = await this.loadTracker();
+    const taskUrls = [...new Sprint(sprintIri, pre, DataFactory).tasks];
+    const estimates = await Promise.all(
+      taskUrls.map((url) => this.openIssue(url).then((o) => o.issue.estimate ?? 0).catch(() => 0)),
+    );
+    const committed = estimates.reduce((sum, e) => sum + e, 0);
+
     await this.mutateTracker((dataset) => {
       const sp = new Sprint(sprintIri, dataset, DataFactory);
       sp.endDate = new Date();
-      if (committedPoints !== undefined) sp.committedPoints = committedPoints;
+      sp.committedPoints = committed;
       for (const url of releaseUrls) sp.tasks.delete(url);
     });
   }

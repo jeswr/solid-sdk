@@ -1,63 +1,11 @@
 import { describe, it, expect } from "vitest";
 import { Repository } from "./repository";
+import { fakePod } from "./testing/fake-pod";
 
 const POD = "http://localhost:3000/alice/";
 const TRACKER = `${POD}issue-tracker/tracker.ttl`;
 const CONTAINER = `${POD}issue-tracker/issues/`;
 const ME = `${POD}profile/card#me`;
-
-/** A tiny stateful in-memory CSS: GET/PUT/DELETE/HEAD with synthesized containers. */
-function fakePod() {
-  const store = new Map<string, string>();
-  const etags = new Map<string, number>();
-  const bump = (url: string) => {
-    etags.set(url, (etags.get(url) ?? 0) + 1);
-    return `"${etags.get(url)}"`;
-  };
-
-  const containerListing = (container: string): string => {
-    const members = [...store.keys()].filter(
-      (k) => k.startsWith(container) && k !== container && !k.slice(container.length).includes("/"),
-    );
-    const triples = members.map((m) => `<${m}> a ldp:Resource.`).join("\n");
-    return `@prefix ldp: <http://www.w3.org/ns/ldp#>.
-<${container}> a ldp:Container, ldp:BasicContainer.
-${members.map((m) => `<${container}> ldp:contains <${m}>.`).join("\n")}
-${triples}`;
-  };
-
-  const impl = async (url: string, init?: RequestInit) => {
-    const u = String(url);
-    const method = (init?.method ?? "GET").toUpperCase();
-    const ttl = { "content-type": "text/turtle", "wac-allow": 'user="read write append control"' };
-
-    if (method === "PUT") {
-      if (init?.headers) {
-        const ifMatch = new Headers(init.headers).get("if-match");
-        if (ifMatch && ifMatch !== `"${etags.get(u)}"`) return new Response(null, { status: 412 });
-      }
-      store.set(u, init?.body as string);
-      return new Response(null, { status: 201, headers: { etag: bump(u) } });
-    }
-    if (method === "DELETE") {
-      store.delete(u);
-      return new Response(null, { status: 205 });
-    }
-    if (method === "HEAD") {
-      return new Response(null, { status: store.has(u) ? 200 : 404, headers: ttl });
-    }
-    // GET
-    if (u.endsWith("/")) {
-      // a container (always "exists" once anything is under it, else 404)
-      const hasMembers = [...store.keys()].some((k) => k.startsWith(u) && k !== u);
-      if (!hasMembers) return new Response("Not found", { status: 404 });
-      return new Response(containerListing(u), { status: 200, headers: { ...ttl, etag: bump(u) } });
-    }
-    if (!store.has(u)) return new Response("Not found", { status: 404 });
-    return new Response(store.get(u)!, { status: 200, headers: { ...ttl, etag: `"${etags.get(u)}"` } });
-  };
-  return { impl: impl as unknown as typeof fetch, store };
-}
 
 describe("Repository (per-issue documents)", () => {
   it("creates each issue as its own document and lists them newest-first", async () => {
@@ -152,21 +100,21 @@ describe("Repository (per-issue documents)", () => {
   it("releases unfinished issues back to the backlog when a sprint completes", async () => {
     const { impl } = fakePod();
     const repo = new Repository(TRACKER, impl);
-    const doneIssue = await repo.create({ title: "Done one", creator: ME });
-    const openIssue = await repo.create({ title: "Still open", creator: ME });
+    const doneIssue = await repo.create({ title: "Done one", creator: ME, estimate: 3 });
+    const openIssue = await repo.create({ title: "Still open", creator: ME, estimate: 5 });
     await repo.setStatus(doneIssue, "done");
 
     const sprint = await repo.createSprint("Sprint X");
     await repo.setSprintMembership(sprint, doneIssue, true);
     await repo.setSprintMembership(sprint, openIssue, true);
     await repo.startSprint(sprint);
-    await repo.completeSprint(sprint, [openIssue], 8); // caller passes unfinished work + commitment
+    await repo.completeSprint(sprint, [openIssue]); // caller passes unfinished work
 
     const sprints = await repo.listSprints();
     const done = sprints.find((s) => s.iri === sprint)!;
     expect(done.state).toBe("done");
     expect(done.taskUrls).toEqual([doneIssue]); // open issue released to backlog
-    expect(done.committedPoints).toBe(8); // snapshot survives the release
+    expect(done.committedPoints).toBe(8); // 3 + 5, snapshotted before the release
   });
 
   it("persists backlog rank for ordering", async () => {
