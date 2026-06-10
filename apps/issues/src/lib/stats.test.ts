@@ -70,4 +70,14 @@ describe("computeVelocity", () => {
       { sprint: "Sprint 2", done: 2, committed: 2 },
     ]);
   });
+
+  it("prefers the committed-points snapshot over current membership", () => {
+    // Completing a sprint releases unfinished tasks, so current taskUrls only
+    // hold the finished ones — the snapshot must carry the original commitment.
+    const issues = [mk({ url: "a", estimate: 3, status: "done", state: "closed" })];
+    const sprints: SprintRecord[] = [
+      { iri: "s1", title: "Sprint 1", state: "done", endDate: new Date("2026-06-01"), taskUrls: ["a"], committedPoints: 8 },
+    ];
+    expect(computeVelocity(sprints, issues)).toEqual([{ sprint: "Sprint 1", done: 3, committed: 8 }]);
+  });
 });

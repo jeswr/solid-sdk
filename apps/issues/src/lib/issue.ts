@@ -454,6 +454,17 @@ export class Sprint extends TermWrapper {
   get tasks(): Set<string> {
     return SetFrom.subjectPredicate(this, wf("task"), NamedNodeAs.string, NamedNodeFrom.string);
   }
+  /**
+   * Story points committed to the sprint (`dct:extent`, as on issues),
+   * snapshotted at completion — completing releases unfinished tasks, so the
+   * live task set alone can no longer reconstruct the commitment.
+   */
+  get committedPoints(): number | undefined {
+    return OptionalFrom.subjectPredicate(this, dct("extent"), LiteralAs.number);
+  }
+  set committedPoints(value: number | undefined) {
+    OptionalAs.object(this, dct("extent"), value, LiteralFrom.double);
+  }
   state(now = new Date()): "planned" | "active" | "done" {
     if (this.endDate && this.endDate.getTime() <= now.getTime()) return "done";
     if (this.startDate && this.startDate.getTime() <= now.getTime()) return "active";

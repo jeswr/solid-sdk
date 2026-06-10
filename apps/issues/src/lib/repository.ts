@@ -54,6 +54,8 @@ export interface SprintRecord {
   endDate?: Date;
   state: "planned" | "active" | "done";
   taskUrls: string[];
+  /** Points committed to the sprint, snapshotted when it completes. */
+  committedPoints?: number;
 }
 
 export interface NewIssueInput {
@@ -376,6 +378,7 @@ export class Repository {
         endDate: sp.endDate,
         state: sp.state(now),
         taskUrls: [...sp.tasks],
+        committedPoints: sp.committedPoints,
       });
     }
     // planned → active → done, then by title for stability.
@@ -427,12 +430,14 @@ export class Repository {
   /**
    * Complete the sprint now. Unfinished issues (`releaseUrls`) are released back
    * to the backlog (Jira behaviour) so open work never hides inside a completed
-   * sprint.
+   * sprint. `committedPoints` is snapshotted first — after the release the task
+   * set no longer reflects what the team committed to.
    */
-  async completeSprint(sprintIri: string, releaseUrls: string[] = []): Promise<void> {
+  async completeSprint(sprintIri: string, releaseUrls: string[] = [], committedPoints?: number): Promise<void> {
     await this.mutateTracker((dataset) => {
       const sp = new Sprint(sprintIri, dataset, DataFactory);
       sp.endDate = new Date();
+      if (committedPoints !== undefined) sp.committedPoints = committedPoints;
       for (const url of releaseUrls) sp.tasks.delete(url);
     });
   }

@@ -86,6 +86,8 @@ export function computeVelocity(sprints: SprintRecord[], issues: IssueRecord[]):
     .map((s) => {
       const members = s.taskUrls.map((u) => byUrl.get(u)).filter((i): i is IssueRecord => !!i);
       const pts = (list: IssueRecord[]) => list.reduce((sum, i) => sum + (i.estimate ?? 0), 0);
-      return { sprint: s.title, done: pts(members.filter((i) => i.status === "done")), committed: pts(members) };
+      // Completing a sprint releases unfinished tasks, so current membership
+      // underreports the commitment — prefer the snapshot taken at completion.
+      return { sprint: s.title, done: pts(members.filter((i) => i.status === "done")), committed: s.committedPoints ?? pts(members) };
     });
 }

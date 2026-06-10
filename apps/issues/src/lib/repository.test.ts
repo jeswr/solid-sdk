@@ -160,12 +160,13 @@ describe("Repository (per-issue documents)", () => {
     await repo.setSprintMembership(sprint, doneIssue, true);
     await repo.setSprintMembership(sprint, openIssue, true);
     await repo.startSprint(sprint);
-    await repo.completeSprint(sprint, [openIssue]); // caller passes unfinished work
+    await repo.completeSprint(sprint, [openIssue], 8); // caller passes unfinished work + commitment
 
     const sprints = await repo.listSprints();
     const done = sprints.find((s) => s.iri === sprint)!;
     expect(done.state).toBe("done");
     expect(done.taskUrls).toEqual([doneIssue]); // open issue released to backlog
+    expect(done.committedPoints).toBe(8); // snapshot survives the release
   });
 
   it("persists backlog rank for ordering", async () => {
