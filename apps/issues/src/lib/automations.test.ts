@@ -52,6 +52,17 @@ describe("evaluateAutomations", () => {
     expect(evaluateAutomations(issues, ALL_ON, NOW)).toEqual([]);
   });
 
+  it("does not escalate an issue being auto-completed in the same pass", () => {
+    const issues = [
+      mk({ url: "p", title: "Overdue parent", dateDue: new Date("2026-06-01") }),
+      mk({ url: "c", parent: "p", status: "done", state: "closed" }),
+    ];
+    const actions = evaluateAutomations(issues, ALL_ON, NOW);
+    expect(actions).toEqual([
+      { kind: "set-status-done", url: "p", title: "Overdue parent", reason: "all sub-tasks are done" },
+    ]);
+  });
+
   it("raises open overdue issues to high (skipping done/high/no-date)", () => {
     const issues = [
       mk({ url: "late", title: "Late", dateDue: new Date("2026-06-01") }),

@@ -194,8 +194,10 @@ export function IssuesView() {
           );
         }
       })
-      .catch(() => {
+      .catch((e) => {
         for (const a of actions) appliedAutomations.current.delete(`${a.kind}:${a.url}`);
+        toast.error(e instanceof Error ? `Automation failed: ${e.message}` : "An automation failed.");
+        void issues.refresh(); // partial writes may have landed — show real state
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [issues.issues, issues.loading, automations, isOwn]);

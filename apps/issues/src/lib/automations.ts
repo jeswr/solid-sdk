@@ -58,8 +58,11 @@ export function evaluateAutomations(
   }
 
   if (settings.raiseOverdueToHigh) {
+    // Issues being completed in this same evaluation are no longer "open work".
+    const completing = new Set(actions.filter((a) => a.kind === "set-status-done").map((a) => a.url));
     for (const issue of issues) {
       if (issue.state !== "open" || !issue.canWrite || issue.priority === "high") continue;
+      if (completing.has(issue.url)) continue;
       if (issue.dateDue && issue.dateDue.getTime() < now.getTime()) {
         actions.push({
           kind: "set-priority-high",
