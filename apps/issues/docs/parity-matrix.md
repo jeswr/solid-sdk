@@ -37,8 +37,8 @@ Status: ✅ shipped · 🔶 partial · ⏳ queued (priority order) · ◻ later/
 | Backlog view (ranked) | ✅ | Backlog tab; rank via `schema:position` (fractional re-rank); sprint sections + points totals |
 | Sprints (create, scope, start/complete) | ✅ | `schema:Event` fragments in tracker.ttl, membership via `wf:task`; lifecycle from dates |
 | Story points / estimates | ✅ | `dct:extent`; form field, badges, per-sprint/backlog totals |
-| Timeline / Gantt view | ⏳ | from created/due dates + epics |
-| Calendar view | ⏳ | due-date month grid |
+| Timeline / Gantt view | ✅ | epics-first Gantt rows, month axis, status-colored bars |
+| Calendar view | ✅ | month grid with navigation; due issues as chips |
 
 ## Tier 3 — insights & automation
 

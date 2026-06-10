@@ -194,6 +194,39 @@ test.describe("Advanced issue features", () => {
     await expect(page.getByRole("button", { name: /dated work/i })).toBeVisible({ timeout: 15_000 });
   });
 
+  test("automation completes the parent when all sub-tasks are done", async ({ page }) => {
+    // Enable the rule.
+    await page.getByRole("button", { name: /automations/i }).click();
+    await page.getByLabel(/complete parents automatically/i).click();
+    await page.keyboard.press("Escape");
+
+    // Parent with one child.
+    await page.getByRole("button", { name: /new issue/i }).first().click();
+    await page.getByLabel(/^title$/i).fill("Auto parent");
+    await page.getByRole("button", { name: /create issue/i }).click();
+    await expect(page.getByRole("heading", { name: "Auto parent" })).toBeVisible({ timeout: 15_000 });
+
+    await page.getByRole("button", { name: /new issue/i }).first().click();
+    await page.getByLabel(/^title$/i).fill("Auto child");
+    await page.getByRole("button", { name: /create issue/i }).click();
+    await expect(page.getByRole("heading", { name: "Auto child" })).toBeVisible({ timeout: 15_000 });
+
+    // Link child → parent via the detail view.
+    await page.getByRole("button", { name: "Auto child", exact: true }).click();
+    await page.getByRole("dialog").getByLabel(/parent issue/i).click();
+    await page.getByRole("option", { name: "Auto parent" }).click();
+    await page.keyboard.press("Escape");
+
+    // Complete the child; the automation should complete the parent.
+    await dismissToasts(page);
+    await page.getByRole("button", { name: /actions for auto child/i }).click();
+    await page.getByRole("menuitem", { name: /^close$/i }).click();
+
+    await expect(page.getByText(/automation: completed “auto parent”/i)).toBeVisible({ timeout: 30_000 });
+    await page.getByRole("tab", { name: /closed/i }).click();
+    await expect(page.getByRole("heading", { name: "Auto parent" })).toBeVisible({ timeout: 15_000 });
+  });
+
   test("dashboard shows stat cards and charts", async ({ page }) => {
     await page.getByRole("button", { name: /new issue/i }).first().click();
     await page.getByLabel(/^title$/i).fill("Chart fodder");

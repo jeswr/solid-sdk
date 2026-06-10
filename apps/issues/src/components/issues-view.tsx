@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTheme } from "next-themes";
 import { toast } from "sonner";
 import { useSolidSession } from "@/lib/session-context";
@@ -24,6 +24,8 @@ import { DashboardView } from "@/components/dashboard-view";
 import { BacklogView } from "@/components/backlog-view";
 import { TimelineView } from "@/components/timeline-view";
 import { CalendarView } from "@/components/calendar-view";
+import { AutomationsDialog } from "@/components/automations-dialog";
+import { evaluateAutomations, loadAutomationSettings, type AutomationSettings } from "@/lib/automations";
 import { IssueCard, shortWebId, type IssueCardActions } from "@/components/issue-card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -132,6 +134,10 @@ export function IssuesView() {
   const [saveViewOpen, setSaveViewOpen] = useState(false);
   const [viewName, setViewName] = useState("");
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [automationsOpen, setAutomationsOpen] = useState(false);
+  const [automations, setAutomations] = useState<AutomationSettings | null>(null);
+  // Actions applied this session (url+kind) — belt-and-braces against re-firing.
+  const appliedAutomations = useRef(new Set<string>());
 
   const patchQuery = (p: Partial<IssueQuery>) => setQuery((q) => ({ ...q, ...p }));
   const toggleIn = (arr: string[], v: string) => (arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v]);
@@ -158,7 +164,41 @@ export function IssuesView() {
     // localStorage is client-only, so views are read after mount.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setViews(savedViewsStore.list());
+     
+    setAutomations(loadAutomationSettings());
   }, [savedViewsStore]);
+
+  // Built-in automations: evaluate whenever fresh issue state arrives; apply in
+  // one batch. State changes remove the trigger conditions, and the applied-set
+  // prevents re-firing on the same issue within a session.
+  useEffect(() => {
+    if (!automations || issues.loading || !isOwn) return;
+    const actions = evaluateAutomations(issues.issues, automations).filter(
+      (a) => !appliedAutomations.current.has(`${a.kind}:${a.url}`),
+    );
+    if (actions.length === 0) return;
+    for (const a of actions) appliedAutomations.current.add(`${a.kind}:${a.url}`);
+    void issues
+      .batch(async (r) => {
+        for (const a of actions) {
+          if (a.kind === "set-status-done") await r.setStatus(a.url, "done");
+          else if (a.kind === "set-priority-high") await r.update(a.url, { priority: "high" });
+        }
+      })
+      .then(() => {
+        for (const a of actions) {
+          toast.info(
+            a.kind === "set-status-done"
+              ? `Automation: completed “${a.title}” — ${a.reason}`
+              : `Automation: raised “${a.title}” to high priority — ${a.reason}`,
+          );
+        }
+      })
+      .catch(() => {
+        for (const a of actions) appliedAutomations.current.delete(`${a.kind}:${a.url}`);
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [issues.issues, issues.loading, automations, isOwn]);
 
   // Keyboard shortcuts: c = new, / = search, b/l = board/list (ignored while typing).
   useEffect(() => {
@@ -341,6 +381,7 @@ export function IssuesView() {
           ? [
               { id: "share", label: "Share tracker…", run: () => setShareResource({ url: repo.containerUrl, extraUrls: [tracker.trackerUrl], label: "this tracker" }) },
               { id: "team", label: "Manage team…", run: () => setTeamOpen(true) },
+              { id: "automations", label: "Automations…", run: () => setAutomationsOpen(true) },
             ]
           : []),
         { id: "signout", label: "Sign out", run: logout },
@@ -367,6 +408,12 @@ export function IssuesView() {
               <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => setTeamOpen(true)}>
                 <Users className="size-4" aria-hidden />
                 <span className="hidden sm:inline">Team</span>
+              </Button>
+            )}
+            {isOwn && (
+              <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => setAutomationsOpen(true)}>
+                <Zap className="size-4" aria-hidden />
+                <span className="hidden sm:inline">Automations</span>
               </Button>
             )}
             <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => setOpenTrackerOpen(true)}>
@@ -875,6 +922,8 @@ export function IssuesView() {
       )}
 
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} groups={paletteGroups} />
+
+      <AutomationsDialog open={automationsOpen} onOpenChange={setAutomationsOpen} onChanged={setAutomations} />
 
       <OpenTrackerDialog
         open={openTrackerOpen}
