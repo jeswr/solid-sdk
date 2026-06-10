@@ -361,10 +361,11 @@ export class Repository {
     let dataset: DatasetCore;
     try {
       ({ dataset } = await this.loadTracker());
-    } catch {
+    } catch (e) {
       // A collaborator may have container access but no tracker-config access —
-      // sprint metadata is then simply unavailable; issue listing must not break.
-      return [];
+      // sprint metadata is then simply unavailable. Anything else is a real error.
+      if (e instanceof RdfFetchError && (e.status === 401 || e.status === 403)) return [];
+      throw e;
     }
     const out: SprintRecord[] = [];
     for (const sp of new SprintsDataset(dataset, DataFactory).sprints) {

@@ -94,9 +94,10 @@ export function ShareDialog({
       const webId = values.webId.trim();
       const access = levelToAccess(values.level);
       await setAccess(resourceUrl, ownerWebId, webId, access);
-      // Collaborators also need the side resources (read suffices for config).
+      // Collaborators need the side resources too: read always; write when they
+      // can edit (sprint membership and label declaration write the config doc).
       for (const extra of extraResourceUrls) {
-        await setAccess(extra, ownerWebId, webId, { ...access, write: false, control: false });
+        await setAccess(extra, ownerWebId, webId, { ...access, control: false });
       }
       toast.success("Access granted");
       form.reset({ webId: "", level: values.level });

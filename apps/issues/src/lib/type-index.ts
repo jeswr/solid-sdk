@@ -177,7 +177,8 @@ export async function registerTracker(
     const index = new TypeIndexDataset(indexDataset, DataFactory);
     index.markPublicIndex(indexUrl);
     if (!index.locate(wf("Tracker")).includes(trackerUrl)) {
-      index.register(indexUrl, "#tracker", wf("Tracker"), trackerUrl);
+      // Unique fragment: a shared index may already carry other apps' entries.
+      index.register(indexUrl, `#registration-${crypto.randomUUID()}`, wf("Tracker"), trackerUrl);
     }
     await conditionalPut(indexUrl, indexDataset, indexEtag, doFetch);
     // The public index must be world-readable for others to discover the tracker
