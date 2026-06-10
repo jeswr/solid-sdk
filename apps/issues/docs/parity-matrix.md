@@ -46,7 +46,7 @@ Status: ✅ shipped · 🔶 partial · ⏳ queued (priority order) · ◻ later/
 |---|---|---|
 | Dashboards (charts: status/assignee/priority distribution) | ✅ | Dashboard tab: stat cards, status donut, type/priority bars, workload, created-per-week |
 | Reports: burndown, velocity, cumulative flow | ◻ | needs sprint + history data |
-| Automation rules (when X then Y) | ◻ | e.g. "when all sub-tasks done → close parent" |
+| Automation rules (when X then Y) | ✅ | built-in client-side rules with toggles (close-parent, escalate-overdue); per-device |
 | Custom fields / column types (Monday's 30+) | ◻ | RDF makes this natural; UI is the work |
 | Workload view (Monday) | ◻ | per-assignee capacity |
 | JQL-style query language | ◻ | SPARQL-backed, eventually |
