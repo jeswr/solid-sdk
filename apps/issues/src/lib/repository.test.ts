@@ -115,6 +115,51 @@ describe("Repository (per-issue documents)", () => {
     expect(comments[0].author).toBe(ME);
   });
 
+  it("creates sprints, moves issues between them, and runs the lifecycle", async () => {
+    const { impl } = fakePod();
+    const repo = new Repository(TRACKER, impl);
+    const a = await repo.create({ title: "Story A", creator: ME, estimate: 3 });
+    const b = await repo.create({ title: "Story B", creator: ME, estimate: 5 });
+
+    const s1 = await repo.createSprint("Sprint 1");
+    const s2 = await repo.createSprint("Sprint 2");
+    await repo.setSprintMembership(s1, a, true);
+    await repo.setSprintMembership(s1, b, true);
+    // Moving B into sprint 2 removes it from sprint 1 (one sprint per issue).
+    await repo.setSprintMembership(s2, b, true);
+
+    let sprints = await repo.listSprints();
+    expect(sprints.map((s) => s.title)).toEqual(["Sprint 1", "Sprint 2"]);
+    expect(sprints.find((s) => s.title === "Sprint 1")?.taskUrls).toEqual([a]);
+    expect(sprints.find((s) => s.title === "Sprint 2")?.taskUrls).toEqual([b]);
+    expect(sprints.every((s) => s.state === "planned")).toBe(true);
+
+    await repo.startSprint(s1);
+    sprints = await repo.listSprints();
+    expect(sprints.find((s) => s.title === "Sprint 1")?.state).toBe("active");
+    // active sorts before planned
+    expect(sprints[0].title).toBe("Sprint 1");
+
+    await repo.completeSprint(s1);
+    sprints = await repo.listSprints();
+    expect(sprints.find((s) => s.title === "Sprint 1")?.state).toBe("done");
+
+    // Estimates round-trip onto records.
+    const { issues } = await repo.list();
+    expect(issues.find((i) => i.url === a)?.estimate).toBe(3);
+  });
+
+  it("persists backlog rank for ordering", async () => {
+    const { impl } = fakePod();
+    const repo = new Repository(TRACKER, impl);
+    const a = await repo.create({ title: "First", creator: ME, rank: 1 });
+    const b = await repo.create({ title: "Second", creator: ME, rank: 2 });
+    await repo.update(b, { rank: 0.5 }); // fractional re-rank above a
+    const { issues } = await repo.list();
+    const ranked = issues.sort((x, y) => (x.rank ?? 0) - (y.rank ?? 0)).map((i) => i.url);
+    expect(ranked).toEqual([b, a]);
+  });
+
   it("returns an empty list when the container does not exist yet", async () => {
     const { impl } = fakePod();
     const repo = new Repository(TRACKER, impl);

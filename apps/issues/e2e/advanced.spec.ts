@@ -145,6 +145,33 @@ test.describe("Advanced issue features", () => {
     await expect(page.getByText(/1\/1 done · 100%/)).toBeVisible({ timeout: 15_000 });
   });
 
+  test("backlog: create sprint, move an issue in, start and complete it", async ({ page }) => {
+    // An estimated story for the backlog.
+    await page.getByRole("button", { name: /new issue/i }).first().click();
+    await page.getByLabel(/^title$/i).fill("Estimated story");
+    await page.getByLabel(/story points/i).fill("3");
+    await page.getByRole("button", { name: /create issue/i }).click();
+    await expect(page.getByRole("heading", { name: "Estimated story" })).toBeVisible({ timeout: 15_000 });
+
+    await page.getByRole("tab", { name: "Backlog view" }).click();
+    await expect(page.getByText(/1 issues · 3 pts/)).toBeVisible({ timeout: 15_000 });
+
+    // Create a sprint and move the story into it via the row menu.
+    await page.getByLabel(/new sprint name/i).fill("Sprint 1");
+    await page.getByRole("button", { name: /create sprint/i }).click();
+    await expect(page.getByRole("heading", { name: "Sprint 1" })).toBeVisible({ timeout: 15_000 });
+
+    await page.getByRole("button", { name: /move estimated story/i }).click();
+    await page.getByRole("menuitem", { name: "Sprint 1" }).click();
+    await expect(page.getByText(/0\/1 done · 3 pts/)).toBeVisible({ timeout: 15_000 });
+
+    // Start, then complete the sprint.
+    await page.getByRole("button", { name: /start sprint/i }).click();
+    await expect(page.getByText("Active", { exact: true })).toBeVisible({ timeout: 15_000 });
+    await page.getByRole("button", { name: /^complete$/i }).click();
+    await expect(page.getByText(/completed sprints \(1\)/i)).toBeVisible({ timeout: 15_000 });
+  });
+
   test("dashboard shows stat cards and charts", async ({ page }) => {
     await page.getByRole("button", { name: /new issue/i }).first().click();
     await page.getByLabel(/^title$/i).fill("Chart fodder");

@@ -1,13 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { Repository, type IssueRecord, type NewIssueInput, type IssuePatch } from "@/lib/repository";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Repository, type IssueRecord, type NewIssueInput, type IssuePatch, type SprintRecord } from "@/lib/repository";
 import { watchContainer } from "@/lib/notifications";
 import { ConflictError } from "@/lib/errors";
 import { RdfFetchError } from "@jeswr/fetch-rdf";
 import type { IssueState, StatusSlug } from "@/lib/issue";
 
-export type { IssueRecord } from "@/lib/repository";
+export type { IssueRecord, SprintRecord } from "@/lib/repository";
 
 function describe(e: unknown): string {
   if (e instanceof ConflictError) return e.message;
@@ -21,6 +21,7 @@ function describe(e: unknown): string {
 
 export interface UseIssues {
   issues: IssueRecord[];
+  sprints: SprintRecord[];
   loading: boolean;
   error: string | null;
   /** Whether the signed-in user may create new issues in this tracker. */
@@ -34,6 +35,10 @@ export interface UseIssues {
   uploadAttachment: (url: string, file: { name: string; type: string; data: ArrayBuffer }) => Promise<void>;
   removeAttachment: (url: string, fileUrl: string) => Promise<void>;
   remove: (url: string) => Promise<void>;
+  createSprint: (title: string) => Promise<void>;
+  setSprintMembership: (sprintIri: string, issueUrl: string, member: boolean) => Promise<void>;
+  startSprint: (sprintIri: string) => Promise<void>;
+  completeSprint: (sprintIri: string) => Promise<void>;
   /** Apply several operations against one Repository, then refresh once (bulk actions). */
   batch: (fn: (repo: Repository) => Promise<void>) => Promise<void>;
 }
@@ -45,21 +50,32 @@ export interface UseIssues {
  */
 export function useIssues(trackerUrl: string | null, creator: string | null): UseIssues {
   const [issues, setIssues] = useState<IssueRecord[]>([]);
+  const [sprints, setSprints] = useState<SprintRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [canCreate, setCanCreate] = useState(true);
 
+  // Monotonic fetch sequence: a slow, older read (e.g. a live-sync refresh that
+  // started before a mutation's PUT) must never clobber state written by a newer
+  // one — only the latest in-flight fetch may apply its result.
+  const fetchSeq = useRef(0);
+
   const fetchInto = useCallback(async () => {
     if (!trackerUrl) return;
+    const seq = ++fetchSeq.current;
     try {
-      const { issues: list, canCreate: cc } = await new Repository(trackerUrl).list();
+      const repo = new Repository(trackerUrl);
+      const [{ issues: list, canCreate: cc }, sprintList] = await Promise.all([repo.list(), repo.listSprints()]);
+      if (seq !== fetchSeq.current) return; // a newer fetch superseded this one
       setIssues(list);
+      setSprints(sprintList);
       setCanCreate(cc);
       setError(null);
     } catch (e) {
+      if (seq !== fetchSeq.current) return;
       setError(describe(e));
     } finally {
-      setLoading(false);
+      if (seq === fetchSeq.current) setLoading(false);
     }
   }, [trackerUrl]);
 
@@ -100,6 +116,7 @@ export function useIssues(trackerUrl: string | null, creator: string | null): Us
 
   return {
     issues,
+    sprints,
     loading,
     error,
     canCreate,
@@ -112,6 +129,10 @@ export function useIssues(trackerUrl: string | null, creator: string | null): Us
     uploadAttachment: (url, file) => mutate(async (r) => void (await r.uploadAttachment(url, file))),
     removeAttachment: (url, fileUrl) => mutate((r) => r.removeAttachment(url, fileUrl)),
     remove: (url) => mutate((r) => r.remove(url)),
+    createSprint: (title) => mutate((r) => r.createSprint(title).then(() => undefined)),
+    setSprintMembership: (sprintIri, issueUrl, member) => mutate((r) => r.setSprintMembership(sprintIri, issueUrl, member)),
+    startSprint: (sprintIri) => mutate((r) => r.startSprint(sprintIri)),
+    completeSprint: (sprintIri) => mutate((r) => r.completeSprint(sprintIri)),
     batch: (fn) => mutate(fn),
   };
 }

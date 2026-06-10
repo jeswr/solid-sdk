@@ -41,6 +41,11 @@ const schema = z.object({
   priority: z.enum(["none", "high", "medium", "low"]),
   status: z.enum(["todo", "in-progress", "done"]),
   issueType: z.enum(["epic", "story", "task", "bug"]),
+  estimate: z
+    .string()
+    .trim()
+    .refine((v) => v === "" || (!Number.isNaN(Number(v)) && Number(v) >= 0), "Points must be a non-negative number")
+    .optional(),
   labels: z.string().optional(),
 });
 type FormValues = z.infer<typeof schema>;
@@ -53,6 +58,7 @@ export interface IssueFormSubmit {
   priority?: Priority;
   status: StatusSlug;
   issueType: IssueType;
+  estimate?: number;
   labels: string[];
 }
 
@@ -83,7 +89,7 @@ export function IssueFormDialog({
   const editing = !!initial;
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { title: "", description: "", dateDue: "", assignee: "", priority: "none", status: "todo", issueType: "task", labels: "" },
+    defaultValues: { title: "", description: "", dateDue: "", assignee: "", priority: "none", status: "todo", issueType: "task", estimate: "", labels: "" },
   });
   const priority = useWatch({ control: form.control, name: "priority" });
   const status = useWatch({ control: form.control, name: "status" });
@@ -99,6 +105,7 @@ export function IssueFormDialog({
         priority: initial?.priority ?? "none",
         status: initial?.status ?? defaultStatus ?? "todo",
         issueType: initial?.issueType ?? "task",
+        estimate: initial?.estimate !== undefined ? String(initial.estimate) : "",
         labels: (initial?.labels ?? []).join(", "),
       });
     }
@@ -113,6 +120,7 @@ export function IssueFormDialog({
       priority: values.priority === PRIORITY_NONE ? undefined : (values.priority as Priority),
       status: values.status,
       issueType: values.issueType,
+      estimate: values.estimate?.trim() ? Number(values.estimate) : undefined,
       labels: parseLabels(values.labels),
     });
     onOpenChange(false);
@@ -203,6 +211,13 @@ export function IssueFormDialog({
             <div className="space-y-1.5">
               <Label htmlFor="dateDue">Due date</Label>
               <Input id="dateDue" type="date" {...form.register("dateDue")} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="estimate">Story points</Label>
+              <Input id="estimate" type="number" min="0" step="0.5" placeholder="e.g. 3" {...form.register("estimate")} />
+              {form.formState.errors.estimate && (
+                <p className="text-sm text-destructive">{form.formState.errors.estimate.message}</p>
+              )}
             </div>
           </div>
 

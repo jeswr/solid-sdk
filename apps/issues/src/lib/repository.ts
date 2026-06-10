@@ -2,7 +2,7 @@ import { fetchRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 import { Store, DataFactory, Writer } from "n3";
 import type { DatasetCore } from "@rdfjs/types";
 import { ContainerDataset } from "@solid/object";
-import { Issue, Tracker, Comment, type IssueState, type IssueType, type Priority, type StatusSlug } from "./issue";
+import { Issue, Tracker, Comment, Sprint, SprintsDataset, type IssueState, type IssueType, type Priority, type StatusSlug } from "./issue";
 import { wf, rdf } from "./vocab";
 import { ConflictError, WriteError } from "./errors";
 
@@ -36,11 +36,24 @@ export interface IssueRecord {
   blockedBy: string[];
   /** Attached file URLs in the pod. */
   attachments: string[];
+  /** Story-point estimate. */
+  estimate?: number;
+  /** Backlog rank (lower first). */
+  rank?: number;
   created?: Date;
   modified?: Date;
   comments: CommentRecord[];
   /** Whether the signed-in user may write this issue (from WAC-Allow). */
   canWrite: boolean;
+}
+
+export interface SprintRecord {
+  iri: string;
+  title: string;
+  startDate?: Date;
+  endDate?: Date;
+  state: "planned" | "active" | "done";
+  taskUrls: string[];
 }
 
 export interface NewIssueInput {
@@ -54,6 +67,8 @@ export interface NewIssueInput {
   labels?: string[];
   parent?: string;
   blockedBy?: string[];
+  estimate?: number;
+  rank?: number;
   creator?: string;
 }
 export type IssuePatch = Partial<Omit<NewIssueInput, "creator">>;
@@ -104,6 +119,8 @@ function toRecord(issue: Issue, url: string, canWrite: boolean): IssueRecord {
     parent: issue.parent,
     blockedBy: [...issue.blockedBy],
     attachments: [...issue.attachments],
+    estimate: issue.estimate,
+    rank: issue.rank,
     created: issue.created,
     modified: issue.modified,
     comments: issue.comments.map((c) => ({
@@ -275,6 +292,8 @@ export class Repository {
     issue.priority = input.priority;
     issue.labels = labelSlugs;
     issue.parent = input.parent;
+    issue.estimate = input.estimate;
+    issue.rank = input.rank;
     for (const b of input.blockedBy ?? []) issue.blockedBy.add(b);
     issue.created = now;
     issue.modified = now;
@@ -294,6 +313,8 @@ export class Repository {
     if ("issueType" in patch && patch.issueType) issue.issueType = patch.issueType;
     if (labelSlugs) issue.labels = labelSlugs;
     if ("parent" in patch) issue.parent = patch.parent;
+    if ("estimate" in patch) issue.estimate = patch.estimate;
+    if ("rank" in patch) issue.rank = patch.rank;
     if ("blockedBy" in patch && patch.blockedBy) {
       const set = issue.blockedBy;
       for (const b of [...set]) set.delete(b);
@@ -326,6 +347,75 @@ export class Repository {
     issue.messages.add(comment);
     issue.modified = new Date();
     await this.put(url, dataset, etag);
+  }
+
+  // ---- Sprints (schema:Event fragments in tracker.ttl; membership via wf:task) ----
+
+  async listSprints(now = new Date()): Promise<SprintRecord[]> {
+    const { dataset } = await this.loadTracker();
+    const out: SprintRecord[] = [];
+    for (const sp of new SprintsDataset(dataset, DataFactory).sprints) {
+      out.push({
+        iri: sp.iri,
+        title: sp.title ?? "(unnamed sprint)",
+        startDate: sp.startDate,
+        endDate: sp.endDate,
+        state: sp.state(now),
+        taskUrls: [...sp.tasks],
+      });
+    }
+    // planned → active → done, then by title for stability.
+    const order = { active: 0, planned: 1, done: 2 } as const;
+    return out.sort((a, b) => order[a.state] - order[b.state] || a.title.localeCompare(b.title));
+  }
+
+  private async mutateTracker(applyFn: (dataset: DatasetCore) => void): Promise<void> {
+    const { dataset, etag, tracker, exists } = await this.loadTracker();
+    if (!exists || !tracker.title) tracker.configure(DEFAULT_TITLE);
+    applyFn(dataset);
+    await this.put(this.trackerUrl, dataset, etag);
+  }
+
+  async createSprint(title: string): Promise<string> {
+    const iri = `${this.trackerUrl}#sprint-${crypto.randomUUID()}`;
+    await this.mutateTracker((dataset) => {
+      const sp = new Sprint(iri, dataset, DataFactory);
+      sp.markSprint();
+      sp.title = title;
+    });
+    return iri;
+  }
+
+  async setSprintMembership(sprintIri: string, issueUrl: string, member: boolean): Promise<void> {
+    await this.mutateTracker((dataset) => {
+      const sp = new Sprint(sprintIri, dataset, DataFactory);
+      if (member) {
+        // an issue lives in at most one sprint — drop it from the others
+        for (const other of new SprintsDataset(dataset, DataFactory).sprints) {
+          if (other.iri !== sprintIri) other.tasks.delete(issueUrl);
+        }
+        sp.tasks.add(issueUrl);
+      } else {
+        sp.tasks.delete(issueUrl);
+      }
+    });
+  }
+
+  /** Start the sprint now, ending at `endDate` (default: two weeks out). */
+  async startSprint(sprintIri: string, endDate?: Date): Promise<void> {
+    await this.mutateTracker((dataset) => {
+      const sp = new Sprint(sprintIri, dataset, DataFactory);
+      sp.startDate = new Date();
+      sp.endDate = endDate ?? new Date(Date.now() + 14 * 24 * 3600 * 1000);
+    });
+  }
+
+  /** Complete the sprint now (its end date becomes the current moment). */
+  async completeSprint(sprintIri: string): Promise<void> {
+    await this.mutateTracker((dataset) => {
+      const sp = new Sprint(sprintIri, dataset, DataFactory);
+      sp.endDate = new Date();
+    });
   }
 
   get attachmentsContainerUrl(): string {

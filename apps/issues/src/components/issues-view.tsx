@@ -21,6 +21,7 @@ import { TeamDialog } from "@/components/team-dialog";
 import { IssueBoard } from "@/components/issue-board";
 import { EpicView } from "@/components/epic-view";
 import { DashboardView } from "@/components/dashboard-view";
+import { BacklogView } from "@/components/backlog-view";
 import { IssueCard, shortWebId, type IssueCardActions } from "@/components/issue-card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -74,9 +75,10 @@ import {
   X,
   Zap,
   BarChart3,
+  ListTodo,
 } from "lucide-react";
 
-type View = "list" | "board" | "epics" | "dashboard";
+type View = "list" | "board" | "epics" | "dashboard" | "backlog";
 const VIEW_KEY = "solid-issues:view";
 const SORTS: { key: SortKey; label: string }[] = [
   { key: "created", label: "Created" },
@@ -99,7 +101,7 @@ export function IssuesView() {
   const [query, setQuery] = useState<IssueQuery>(DEFAULT_QUERY);
   const [view, setViewState] = useState<View>(() => {
     const saved = typeof localStorage !== "undefined" ? localStorage.getItem(VIEW_KEY) : null;
-    return saved === "board" || saved === "epics" || saved === "dashboard" ? saved : "list";
+    return saved === "board" || saved === "epics" || saved === "dashboard" || saved === "backlog" ? saved : "list";
   });
   const setView = (v: View) => {
     setViewState(v);
@@ -238,15 +240,26 @@ export function IssuesView() {
     }
   }
 
-  const [createDefaults, setCreateDefaults] = useState<{ parent?: string; status?: StatusSlug }>({});
-  const onCreate = (defaults: { parent?: string; status?: StatusSlug } = {}) => {
+  const [createDefaults, setCreateDefaults] = useState<{ parent?: string; status?: StatusSlug; sprint?: string }>({});
+  const onCreate = (defaults: { parent?: string; status?: StatusSlug; sprint?: string } = {}) => {
     setEditing(undefined);
     setCreateDefaults(defaults);
     setFormOpen(true);
   };
   const onSubmitForm = async (values: IssueFormSubmit) => {
-    if (editing) await run(() => issues.update(editing.url, values), "Issue updated");
-    else await run(() => issues.create({ ...values, parent: createDefaults.parent }), "Issue created");
+    if (editing) {
+      await run(() => issues.update(editing.url, values), "Issue updated");
+    } else {
+      const { parent, sprint } = createDefaults;
+      await run(
+        () =>
+          issues.batch(async (r) => {
+            const url = await r.create({ ...values, parent, creator: profile?.webId });
+            if (sprint) await r.setSprintMembership(sprint, url, true);
+          }),
+        "Issue created",
+      );
+    }
   };
 
   const cardActions = (issue: IssueRecord): IssueCardActions => ({
@@ -305,6 +318,7 @@ export function IssuesView() {
         { id: "board", label: "Board view", hint: "b", run: () => setView("board") },
         { id: "epics", label: "Epics view", hint: "e", run: () => setView("epics") },
         { id: "dashboard", label: "Dashboard", hint: "d", run: () => setView("dashboard") },
+        { id: "backlog", label: "Backlog view", run: () => setView("backlog") },
         { id: "search", label: "Search issues", hint: "/", run: () => document.getElementById("issue-search")?.focus() },
         { id: "f-open", label: "Show open", run: () => patchQuery({ state: "open" }) },
         { id: "f-closed", label: "Show closed", run: () => patchQuery({ state: "closed" }) },
@@ -572,6 +586,7 @@ export function IssuesView() {
                 { key: "list", label: "List", Icon: ListIcon },
                 { key: "board", label: "Board", Icon: LayoutGrid },
                 { key: "epics", label: "Epics", Icon: Zap },
+                { key: "backlog", label: "Backlog", Icon: ListTodo },
                 { key: "dashboard", label: "Dashboard", Icon: BarChart3 },
               ] as const).map(({ key, label, Icon }) => (
                 <button
@@ -655,6 +670,30 @@ export function IssuesView() {
               Try again
             </Button>
           </div>
+        ) : view === "backlog" ? (
+          // The backlog plans over all open work; sprint sections show their own done counts.
+          <BacklogView
+            issues={issues.issues}
+            sprints={issues.sprints}
+            canWrite={issues.canCreate}
+            onOpenIssue={(i) => setCommentsUrl(i.url)}
+            onCreateSprint={(title) => run(() => issues.createSprint(title), "Sprint created")}
+            onStartSprint={(iri) => run(() => issues.startSprint(iri), "Sprint started")}
+            onCompleteSprint={(iri) => run(() => issues.completeSprint(iri), "Sprint completed")}
+            onMove={(url, sprintIri) =>
+              run(
+                async () => {
+                  if (sprintIri) await issues.setSprintMembership(sprintIri, url, true);
+                  else {
+                    const current = issues.sprints.find((s) => s.taskUrls.includes(url));
+                    if (current) await issues.setSprintMembership(current.iri, url, false);
+                  }
+                },
+                sprintIri ? "Moved to sprint" : "Moved to backlog",
+              )
+            }
+            onAddToSprint={(sprintIri) => onCreate(sprintIri ? { sprint: sprintIri } : {})}
+          />
         ) : view === "dashboard" ? (
           // The dashboard aggregates over ALL issues, unfiltered.
           <DashboardView issues={issues.issues} />

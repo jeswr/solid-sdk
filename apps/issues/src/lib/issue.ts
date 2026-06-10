@@ -1,5 +1,6 @@
 import {
   TermWrapper,
+  DatasetWrapper,
   OptionalFrom,
   OptionalAs,
   SetFrom,
@@ -170,6 +171,22 @@ export class Issue extends TermWrapper {
     // LiteralFrom.date emits an xsd:date with a full dateTime lexical (a wrapper
     // quirk that fails SHACL); store dateTime, which is well-formed and round-trips.
     OptionalAs.object(this, wf("dateDue"), value, LiteralFrom.dateTime);
+  }
+
+  /** Story-point estimate (`dct:extent` — "size of the resource"). */
+  get estimate(): number | undefined {
+    return OptionalFrom.subjectPredicate(this, dct("extent"), LiteralAs.number);
+  }
+  set estimate(value: number | undefined) {
+    OptionalAs.object(this, dct("extent"), value, LiteralFrom.double);
+  }
+
+  /** Backlog rank (`schema:position`); lower sorts first. Fractional for cheap reorder. */
+  get rank(): number | undefined {
+    return OptionalFrom.subjectPredicate(this, schema("position"), LiteralAs.number);
+  }
+  set rank(value: number | undefined) {
+    OptionalAs.object(this, schema("position"), value, LiteralFrom.double);
   }
 
   get state(): IssueState {
@@ -397,6 +414,57 @@ export class Tracker extends TermWrapper {
     const members = SetFrom.subjectPredicate(group, vcard("hasMember"), NamedNodeAs.string, NamedNodeFrom.string);
     for (const m of [...members]) members.delete(m);
     for (const w of webIds) members.add(w);
+  }
+}
+
+/**
+ * A sprint: a `schema:Event` fragment in the tracker document with start/end
+ * dates and `wf:task` links to its issues. Lifecycle derives from the dates:
+ * no start ⇒ planned; started & no/unreached end ⇒ active; end passed ⇒ done.
+ */
+export class Sprint extends TermWrapper {
+  get iri(): string {
+    return this.value;
+  }
+  private get types(): Set<string> {
+    return SetFrom.subjectPredicate(this, rdf("type"), NamedNodeAs.string, NamedNodeFrom.string);
+  }
+  markSprint(): void {
+    this.types.add(schema("Event"));
+  }
+  get title(): string | undefined {
+    return OptionalFrom.subjectPredicate(this, dct("title"), LiteralAs.string);
+  }
+  set title(value: string | undefined) {
+    OptionalAs.object(this, dct("title"), value, LiteralFrom.string);
+  }
+  get startDate(): Date | undefined {
+    return OptionalFrom.subjectPredicate(this, schema("startDate"), LiteralAs.date);
+  }
+  set startDate(value: Date | undefined) {
+    OptionalAs.object(this, schema("startDate"), value, LiteralFrom.dateTime);
+  }
+  get endDate(): Date | undefined {
+    return OptionalFrom.subjectPredicate(this, schema("endDate"), LiteralAs.date);
+  }
+  set endDate(value: Date | undefined) {
+    OptionalAs.object(this, schema("endDate"), value, LiteralFrom.dateTime);
+  }
+  /** Issue URLs in this sprint (live set), via `wf:task`. */
+  get tasks(): Set<string> {
+    return SetFrom.subjectPredicate(this, wf("task"), NamedNodeAs.string, NamedNodeFrom.string);
+  }
+  state(now = new Date()): "planned" | "active" | "done" {
+    if (this.endDate && this.endDate.getTime() <= now.getTime()) return "done";
+    if (this.startDate && this.startDate.getTime() <= now.getTime()) return "active";
+    return "planned";
+  }
+}
+
+/** Enumerates the sprints declared in a tracker document. */
+export class SprintsDataset extends DatasetWrapper {
+  get sprints(): Iterable<Sprint> {
+    return this.instancesOf(schema("Event"), Sprint);
   }
 }
 
