@@ -107,7 +107,9 @@ npm run build       # next build
   never raw IRIs.
 - **Workflow statuses** in addition to open/closed; status badges on every card.
 - **Search** + **multi-facet filters** (priority / label / assignee / state) +
-  **sort**; **saved views** to remember filter presets.
+  **sort**; **saved views** to remember filter presets; a **JQL-style query
+  syntax** in the search box (`status:done p:high label:auth due:overdue
+  sort:-due` + free text).
 - **Bulk actions** — multi-select to close / reopen / delete many at once.
 - **Command palette** (⌘K) and keyboard shortcuts (c, /, b, l).
 - **Issue detail view**: metadata, description, activity timeline, **comments**

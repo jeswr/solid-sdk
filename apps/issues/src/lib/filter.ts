@@ -1,5 +1,6 @@
 import type { IssueRecord } from "@/lib/repository";
 import type { Priority } from "@/lib/issue";
+import { hasStructuredTokens, matchesFreeText, matchesQuery, parseQuery, type StructuredQuery } from "./query";
 
 export type StateFilter = "open" | "closed" | "all";
 export type SortKey = "created" | "updated" | "due" | "priority" | "title";
@@ -29,24 +30,15 @@ export const DEFAULT_QUERY: IssueQuery = {
 const PRIORITY_RANK: Record<Priority | "none", number> = { high: 3, medium: 2, low: 1, none: 0 };
 const time = (d?: Date) => d?.getTime() ?? 0;
 
-function matchesText(issue: IssueRecord, q: string): boolean {
-  if (!q) return true;
-  const needle = q.toLowerCase();
-  return (
-    issue.title.toLowerCase().includes(needle) ||
-    (issue.description?.toLowerCase().includes(needle) ?? false) ||
-    issue.labels.some((l) => l.toLowerCase().includes(needle)) ||
-    (issue.assignee?.toLowerCase().includes(needle) ?? false) ||
-    issue.comments.some((c) => c.content.toLowerCase().includes(needle))
-  );
-}
-
-function matches(issue: IssueRecord, q: IssueQuery): boolean {
-  if (q.state !== "all" && issue.state !== q.state) return false;
+function matches(issue: IssueRecord, q: IssueQuery, structured?: StructuredQuery): boolean {
+  // The structured query's own is:/state: token overrides the state tab.
+  const state = structured?.state ?? q.state;
+  if (state !== "all" && issue.state !== state) return false;
   if (q.priorities.length && !(issue.priority && q.priorities.includes(issue.priority))) return false;
   if (q.labels.length && !issue.labels.some((l) => q.labels.includes(l))) return false;
   if (q.assignees.length && !(issue.assignee && q.assignees.includes(issue.assignee))) return false;
-  return matchesText(issue, q.text);
+  if (structured) return matchesQuery(issue, { ...structured, state: undefined });
+  return q.text ? matchesFreeText(issue, q.text.toLowerCase()) : true;
 }
 
 function compare(a: IssueRecord, b: IssueRecord, sort: SortKey): number {
@@ -65,18 +57,25 @@ function compare(a: IssueRecord, b: IssueRecord, sort: SortKey): number {
   }
 }
 
-/** Filter then sort a list of issues by the given query (pure). */
+/**
+ * Filter then sort a list of issues by the given query (pure). When the text
+ * contains `key:value` tokens (JQL-style) they are parsed and ANDed with the
+ * menu filters; a `sort:` token overrides the sort dropdown.
+ */
 export function filterAndSort(issues: IssueRecord[], q: IssueQuery): IssueRecord[] {
-  const filtered = issues.filter((i) => matches(i, q));
-  const dir = q.sortDir === "asc" ? 1 : -1;
+  const structured = hasStructuredTokens(q.text) ? parseQuery(q.text) : undefined;
+  const filtered = issues.filter((i) => matches(i, q, structured));
+  const sort = structured?.sort?.key ?? q.sort;
+  const sortDir = structured?.sort?.dir ?? q.sortDir;
+  const dir = sortDir === "asc" ? 1 : -1;
   // "due" with no date always trails; otherwise honour direction.
   return filtered.sort((a, b) => {
-    const c = compare(a, b, q.sort);
-    if (q.sort === "due") {
+    const c = compare(a, b, sort);
+    if (sort === "due") {
       const aHas = !!a.dateDue;
       const bHas = !!b.dateDue;
       if (aHas !== bHas) return aHas ? -1 : 1; // dated first, both directions
-      return c * (q.sortDir === "asc" ? 1 : -1);
+      return c * (sortDir === "asc" ? 1 : -1);
     }
     return c * dir;
   });

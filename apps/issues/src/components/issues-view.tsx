@@ -185,10 +185,16 @@ export function IssuesView() {
 
   const repo = useMemo(() => new Repository(tracker.trackerUrl), [tracker.trackerUrl]);
 
+  // Monotonic sequence: the tracker tag stops cross-project leaks, but two
+  // same-tracker loads can still resolve out of order (e.g. the mount load
+  // landing after a refresh that followed a save) — only the latest applies.
+  const infoSeq = useRef(0);
   const loadTrackerInfo = useCallback(async () => {
     const url = tracker.trackerUrl;
+    const seq = ++infoSeq.current;
     try {
       const info = await new Repository(url).info();
+      if (seq !== infoSeq.current) return;
       // Field defs matter on shared trackers too; the team only on your own.
       setTrackerInfo({
         tracker: url,
@@ -196,6 +202,7 @@ export function IssuesView() {
         group: isOwn ? { iri: info.assigneeGroup, members: info.groupMembers } : EMPTY_GROUP,
       });
     } catch {
+      if (seq !== infoSeq.current) return;
       // Config is optional sugar, but a failed load must still clear whatever
       // the previous project left behind.
       setTrackerInfo({ tracker: url, fields: [], group: EMPTY_GROUP });
@@ -573,7 +580,8 @@ export function IssuesView() {
                 id="issue-search"
                 type="search"
                 aria-label="Search issues"
-                placeholder="Search issues…  ( / )"
+                placeholder="Search — or query: status:done p:high label:auth  ( / )"
+                title="Query keys: is:open|closed · status: · p[riority]: · type: · label: · assignee: · due:<date|none|overdue · points:>n · has:comments|attachments|blockers · sort:[-]key"
                 value={query.text}
                 onChange={(e) => patchQuery({ text: e.target.value })}
                 className="pl-8"
