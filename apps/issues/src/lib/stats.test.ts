@@ -82,6 +82,13 @@ describe("computeWorkload", () => {
     expect(w.rows[0].assignee).toBe("http://b");
   });
 
+  it("an issue due today is current-week load, not overdue", () => {
+    // NOW is mid-day Jun 10; the date-only due value parses to midnight.
+    const w = computeWorkload([mk({ url: "1", estimate: 4, dateDue: new Date("2026-06-10") })], NOW, 2);
+    expect(w.rows[0].buckets.map((b) => b.points)).toEqual([0, 4, 0, 0, 0]);
+    expect(computeStats([mk({ url: "1", dateDue: new Date("2026-06-10") })], NOW).overdue).toBe(0);
+  });
+
   it("buckets unassigned open work under assignee undefined", () => {
     const w = computeWorkload([mk({ url: "1", estimate: 4 })], NOW, 4);
     expect(w.rows).toHaveLength(1);

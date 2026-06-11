@@ -1,4 +1,5 @@
 import type { IssueRecord } from "./repository";
+import { startOfUtcDay } from "./dates";
 
 /**
  * Built-in automations ("when X then Y", Monday/Jira-style). Pods have no
@@ -63,7 +64,7 @@ export function evaluateAutomations(
     for (const issue of issues) {
       if (issue.state !== "open" || !issue.canWrite || issue.priority === "high") continue;
       if (completing.has(issue.url)) continue;
-      if (issue.dateDue && issue.dateDue.getTime() < now.getTime()) {
+      if (issue.dateDue && issue.dateDue.getTime() < startOfUtcDay(now).getTime()) {
         actions.push({
           kind: "set-priority-high",
           url: issue.url,

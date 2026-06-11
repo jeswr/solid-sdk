@@ -70,6 +70,8 @@ describe("evaluateAutomations", () => {
       mk({ url: "late-high", priority: "high", dateDue: new Date("2026-06-01") }),
       mk({ url: "late-done", status: "done", state: "closed", dateDue: new Date("2026-06-01") }),
       mk({ url: "future", dateDue: new Date("2026-07-01") }),
+      // Due today (date-only → midnight): not yet overdue, must not escalate.
+      mk({ url: "today", dateDue: new Date(NOW.toISOString().slice(0, 10)) }),
     ];
     const actions = evaluateAutomations(issues, ALL_ON, NOW);
     expect(actions).toEqual([

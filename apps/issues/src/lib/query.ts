@@ -2,6 +2,7 @@ import type { IssueRecord } from "./repository";
 import type { IssueType, Priority, StatusSlug } from "./issue";
 import { ISSUE_TYPES, STATUSES } from "./issue";
 import type { SortDir, SortKey, StateFilter } from "./filter";
+import { startOfUtcDay } from "./dates";
 
 /**
  * A JQL-style structured query parsed from the search box. Tokens are
@@ -166,7 +167,7 @@ const hasFacet = (issue: IssueRecord, facet: string): boolean => {
   }
 };
 
-export function matchesQuery(issue: IssueRecord, q: StructuredQuery): boolean {
+export function matchesQuery(issue: IssueRecord, q: StructuredQuery, now = new Date()): boolean {
   if (q.state && q.state !== "all" && issue.state !== q.state) return false;
   if (q.statuses.length && !q.statuses.includes(issue.status)) return false;
   if (q.priorities.length && !q.priorities.includes(issue.priority ?? "none")) return false;
@@ -185,7 +186,8 @@ export function matchesQuery(issue: IssueRecord, q: StructuredQuery): boolean {
   if (q.due) {
     const t = issue.dateDue?.getTime();
     if (q.due.op === "none" && t !== undefined) return false;
-    if (q.due.op === "overdue" && !(t !== undefined && t < Date.now() && issue.state === "open")) return false;
+    if (q.due.op === "overdue" && !(t !== undefined && t < startOfUtcDay(now).getTime() && issue.state === "open"))
+      return false;
     if (q.due.op === "<" && !(t !== undefined && t < q.due.date!.getTime())) return false;
     if (q.due.op === ">" && !(t !== undefined && t > q.due.date!.getTime())) return false;
   }

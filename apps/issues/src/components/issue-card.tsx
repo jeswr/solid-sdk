@@ -1,6 +1,7 @@
 "use client";
 
 import type React from "react";
+import { startOfUtcDay } from "@/lib/dates";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -57,7 +58,7 @@ export interface IssueCardActions {
 }
 
 const overdue = (issue: IssueRecord) =>
-  issue.state === "open" && issue.dateDue !== undefined && issue.dateDue.getTime() < Date.now();
+  issue.state === "open" && issue.dateDue !== undefined && issue.dateDue.getTime() < startOfUtcDay(new Date()).getTime();
 
 export function IssueCard({
   issue,

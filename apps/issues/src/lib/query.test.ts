@@ -99,6 +99,12 @@ describe("matchesQuery", () => {
     expect(matchesQuery(due, parseQuery("due:none"))).toBe(false);
   });
 
+  it("due:overdue excludes issues due today (date-only dates parse to midnight)", () => {
+    const now = new Date("2026-06-10T12:00:00Z");
+    expect(matchesQuery(issue({ dateDue: new Date("2026-06-10") }), parseQuery("due:overdue"), now)).toBe(false);
+    expect(matchesQuery(issue({ dateDue: new Date("2026-06-09") }), parseQuery("due:overdue"), now)).toBe(true);
+  });
+
   it("matches points comparators and has: facets", () => {
     const pointed = issue({ estimate: 5, parent: "x", attachments: ["f"], blockedBy: ["b"] });
     expect(matchesQuery(pointed, parseQuery("points:>3"))).toBe(true);

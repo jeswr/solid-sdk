@@ -1,5 +1,6 @@
 import type { IssueRecord, SprintRecord } from "./repository";
 import { ISSUE_TYPES, STATUSES, type IssueType, type StatusSlug } from "./issue";
+import { startOfUtcDay } from "./dates";
 
 export interface TrackerStats {
   total: number;
@@ -51,8 +52,9 @@ export function computeStats(issues: IssueRecord[], now = new Date()): TrackerSt
     .map(([assignee, count]) => ({ assignee, count }))
     .sort((a, b) => b.count - a.count);
 
+  const today = startOfUtcDay(now).getTime();
   const overdue = issues.filter(
-    (i) => i.state === "open" && i.dateDue !== undefined && i.dateDue.getTime() < now.getTime(),
+    (i) => i.state === "open" && i.dateDue !== undefined && i.dateDue.getTime() < today,
   ).length;
 
   const weeks = new Map<string, number>();
@@ -95,21 +97,22 @@ export interface Workload {
  * Unestimated issues weigh 1 point so they still register as load.
  */
 export function computeWorkload(issues: IssueRecord[], now = new Date(), weeks = 4): Workload {
-  const monday = new Date(now);
-  monday.setHours(0, 0, 0, 0);
-  monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+  // Everything in UTC days: due dates are date-only values at UTC midnight.
+  const today = startOfUtcDay(now);
+  const monday = new Date(today);
+  monday.setUTCDate(monday.getUTCDate() - ((monday.getUTCDay() + 6) % 7));
   const weekStarts = Array.from({ length: weeks + 1 }, (_, k) => {
     const d = new Date(monday);
-    d.setDate(d.getDate() + 7 * k);
+    d.setUTCDate(d.getUTCDate() + 7 * k);
     return d;
   });
-  const fmt = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" });
+  const fmt = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", timeZone: "UTC" });
   const bucketLabels = ["Overdue", ...weekStarts.slice(0, weeks).map((d) => fmt.format(d)), "Later", "No date"];
 
   const bucketOf = (i: IssueRecord): number => {
     const t = i.dateDue?.getTime();
     if (t === undefined) return bucketLabels.length - 1;
-    if (t < now.getTime()) return 0;
+    if (t < today.getTime()) return 0;
     for (let k = 0; k < weeks; k++) if (t < weekStarts[k + 1].getTime()) return k + 1;
     return bucketLabels.length - 2;
   };
