@@ -23,6 +23,7 @@ import { FieldsDialog } from "@/components/fields-dialog";
 import { IssueBoard } from "@/components/issue-board";
 import { EpicView } from "@/components/epic-view";
 import { DashboardView } from "@/components/dashboard-view";
+import { WorkloadView } from "@/components/workload-view";
 import { BacklogView } from "@/components/backlog-view";
 import { TimelineView } from "@/components/timeline-view";
 import { CalendarView } from "@/components/calendar-view";
@@ -78,6 +79,7 @@ import {
   Trash2,
   Users,
   UserRound,
+  UsersRound,
   X,
   Zap,
   BarChart3,
@@ -86,8 +88,8 @@ import {
   ListTodo,
 } from "lucide-react";
 
-type View = "list" | "board" | "epics" | "dashboard" | "backlog" | "timeline" | "calendar";
-const VIEWS: View[] = ["list", "board", "epics", "backlog", "timeline", "calendar", "dashboard"];
+type View = "list" | "board" | "epics" | "dashboard" | "backlog" | "timeline" | "calendar" | "workload";
+const VIEWS: View[] = ["list", "board", "epics", "backlog", "timeline", "calendar", "dashboard", "workload"];
 const VIEW_KEY = "solid-issues:view";
 const PROJECT_KEY = "solid-issues:project";
 const SORTS: { key: SortKey; label: string }[] = [
@@ -427,6 +429,7 @@ export function IssuesView() {
         { id: "backlog", label: "Backlog view", run: () => setView("backlog") },
         { id: "timeline", label: "Timeline view", hint: "t", run: () => setView("timeline") },
         { id: "calendar", label: "Calendar view", run: () => setView("calendar") },
+        { id: "workload", label: "Workload view", run: () => setView("workload") },
         { id: "search", label: "Search issues", hint: "/", run: () => document.getElementById("issue-search")?.focus() },
         { id: "f-open", label: "Show open", run: () => patchQuery({ state: "open" }) },
         { id: "f-closed", label: "Show closed", run: () => patchQuery({ state: "closed" }) },
@@ -759,6 +762,7 @@ export function IssuesView() {
                 { key: "timeline", label: "Timeline", Icon: ChartNoAxesGantt },
                 { key: "calendar", label: "Calendar", Icon: CalendarDays },
                 { key: "dashboard", label: "Dashboard", Icon: BarChart3 },
+                { key: "workload", label: "Workload", Icon: UsersRound },
               ] as const).map(({ key, label, Icon }) => (
                 <button
                   key={key}
@@ -857,6 +861,9 @@ export function IssuesView() {
         ) : view === "dashboard" ? (
           // The dashboard aggregates over ALL issues, unfiltered.
           <DashboardView issues={issues.issues} sprints={issues.sprints} />
+        ) : view === "workload" ? (
+          // Workload balances ALL open work, unfiltered.
+          <WorkloadView issues={issues.issues} groupIri={group.iri} />
         ) : view === "epics" ? (
           // Epics roll up over ALL issues — done children must count toward
           // progress, so the open/closed state filter (and its empty state)

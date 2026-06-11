@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeStats, computeVelocity } from "./stats";
+import { computeStats, computeVelocity, computeWorkload } from "./stats";
 import type { IssueRecord, SprintRecord } from "./repository";
 
 const base: IssueRecord = {
@@ -51,6 +51,42 @@ describe("computeStats", () => {
       { week: "2026-W23", count: 2 },
       { week: "2026-W24", count: 1 },
     ]);
+  });
+});
+
+describe("computeWorkload", () => {
+  // NOW is Wed 2026-06-10; the current ISO week runs Mon 08 – Sun 14.
+  it("buckets open work per assignee into overdue / weeks / later / unscheduled", () => {
+    const issues = [
+      mk({ url: "1", assignee: "http://a", estimate: 3, dateDue: new Date("2026-06-01") }), // overdue
+      mk({ url: "2", assignee: "http://a", estimate: 5, dateDue: new Date("2026-06-12") }), // this week
+      mk({ url: "3", assignee: "http://a", dateDue: new Date("2026-06-17") }), // next week, unestimated → 1pt
+      mk({ url: "4", assignee: "http://b", estimate: 8, dateDue: new Date("2026-09-01") }), // later
+      mk({ url: "5", assignee: "http://b", estimate: 2 }), // unscheduled
+      mk({ url: "6", assignee: "http://a", estimate: 13, state: "closed", status: "done" }), // closed: excluded
+    ];
+    const w = computeWorkload(issues, NOW, 2);
+    expect(w.bucketLabels).toHaveLength(2 + 3); // overdue + 2 weeks + later + no date
+    expect(w.bucketLabels[0]).toBe("Overdue");
+    expect(w.bucketLabels.at(-2)).toBe("Later");
+    expect(w.bucketLabels.at(-1)).toBe("No date");
+
+    const a = w.rows.find((r) => r.assignee === "http://a")!;
+    expect(a.count).toBe(3);
+    expect(a.points).toBe(9);
+    expect(a.buckets.map((b) => b.points)).toEqual([3, 5, 1, 0, 0]);
+
+    const b = w.rows.find((r) => r.assignee === "http://b")!;
+    expect(b.buckets.map((b2) => b2.points)).toEqual([0, 0, 0, 8, 2]);
+    // heaviest row first
+    expect(w.rows[0].assignee).toBe("http://b");
+  });
+
+  it("buckets unassigned open work under assignee undefined", () => {
+    const w = computeWorkload([mk({ url: "1", estimate: 4 })], NOW, 4);
+    expect(w.rows).toHaveLength(1);
+    expect(w.rows[0].assignee).toBeUndefined();
+    expect(w.rows[0].points).toBe(4);
   });
 });
 

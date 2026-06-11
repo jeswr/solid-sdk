@@ -82,10 +82,12 @@ npm run build       # next build
 
 ## Views & productivity
 
-- **Seven views** — List, Kanban board, Epics, Backlog, Timeline (Gantt),
-  Calendar, and Dashboard (persisted choice; keyboard l/b/e/d/t); the board
-  groups by **status** (To Do / In Progress / Done) or **priority**, with
-  drag-and-drop between columns and per-column quick-add.
+- **Eight views** — List, Kanban board, Epics, Backlog, Timeline (Gantt),
+  Calendar, Dashboard, and Workload (persisted choice; keyboard l/b/e/d/t);
+  the board groups by **status** (To Do / In Progress / Done) or **priority**,
+  with drag-and-drop between columns and per-column quick-add; the workload
+  view buckets each assignee's open points by due week against an adjustable
+  weekly capacity, flagging overload and overdue work.
 - **Projects (workspaces)** — several trackers per pod, each a self-contained
   container with its own issues, sprints, and sharing; switch or create from
   the header, discovered via the public type index.

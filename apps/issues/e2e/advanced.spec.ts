@@ -243,6 +243,24 @@ test.describe("Advanced issue features", () => {
     await expect(dash.getByText(/open workload/i)).toBeVisible();
   });
 
+  test("workload view buckets open points by assignee and due week", async ({ page }) => {
+    await page.getByRole("button", { name: /new issue/i }).first().click();
+    await page.getByLabel(/^title$/i).fill("Capacity check");
+    await page.getByLabel(/story points/i).fill("5");
+    await page.getByLabel(/due date/i).fill("2099-01-01");
+    await page.getByRole("button", { name: /create issue/i }).click();
+    await expect(page.getByRole("heading", { name: "Capacity check" })).toBeVisible({ timeout: 15_000 });
+    await dismissToasts(page);
+
+    await page.getByRole("tab", { name: /workload view/i }).click();
+    const workload = page.getByTestId("workload");
+    await expect(workload.getByText("Unassigned")).toBeVisible();
+    await expect(workload.getByText(/5 pts · 1/)).toBeVisible();
+    // The far-future due date lands in the "Later" bucket.
+    await expect(workload.getByRole("columnheader", { name: "Later" })).toBeVisible();
+    await expect(workload.getByLabel(/capacity/i)).toBeVisible();
+  });
+
   test("team members render as contact cards with profile names", async ({ page }) => {
     await page.getByRole("button", { name: /^team$/i }).click();
     const dialog = page.getByRole("dialog");

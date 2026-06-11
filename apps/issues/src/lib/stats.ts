@@ -69,6 +69,69 @@ export function computeStats(issues: IssueRecord[], now = new Date()): TrackerSt
   return { total: issues.length, byStatus, byType, byPriority, byAssignee, overdue, createdPerWeek };
 }
 
+export interface WorkloadBucket {
+  label: string;
+  points: number;
+  count: number;
+}
+
+export interface WorkloadRow {
+  /** Assignee WebID; undefined = unassigned. */
+  assignee?: string;
+  count: number;
+  points: number;
+  buckets: WorkloadBucket[];
+}
+
+export interface Workload {
+  /** Overdue · one per week (labelled by its Monday) · Later · No date. */
+  bucketLabels: string[];
+  /** Heaviest row (most points) first. */
+  rows: WorkloadRow[];
+}
+
+/**
+ * Monday-style workload: open work per assignee, bucketed by due week.
+ * Unestimated issues weigh 1 point so they still register as load.
+ */
+export function computeWorkload(issues: IssueRecord[], now = new Date(), weeks = 4): Workload {
+  const monday = new Date(now);
+  monday.setHours(0, 0, 0, 0);
+  monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+  const weekStarts = Array.from({ length: weeks + 1 }, (_, k) => {
+    const d = new Date(monday);
+    d.setDate(d.getDate() + 7 * k);
+    return d;
+  });
+  const fmt = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" });
+  const bucketLabels = ["Overdue", ...weekStarts.slice(0, weeks).map((d) => fmt.format(d)), "Later", "No date"];
+
+  const bucketOf = (i: IssueRecord): number => {
+    const t = i.dateDue?.getTime();
+    if (t === undefined) return bucketLabels.length - 1;
+    if (t < now.getTime()) return 0;
+    for (let k = 0; k < weeks; k++) if (t < weekStarts[k + 1].getTime()) return k + 1;
+    return bucketLabels.length - 2;
+  };
+
+  const rows = new Map<string | undefined, WorkloadRow>();
+  for (const i of issues) {
+    if (i.state === "closed") continue;
+    let row = rows.get(i.assignee);
+    if (!row) {
+      row = { assignee: i.assignee, count: 0, points: 0, buckets: bucketLabels.map((label) => ({ label, points: 0, count: 0 })) };
+      rows.set(i.assignee, row);
+    }
+    const pts = i.estimate ?? 1;
+    const bucket = row.buckets[bucketOf(i)];
+    bucket.points += pts;
+    bucket.count += 1;
+    row.count += 1;
+    row.points += pts;
+  }
+  return { bucketLabels, rows: [...rows.values()].sort((a, b) => b.points - a.points) };
+}
+
 export interface VelocityPoint {
   sprint: string;
   /** Story points completed (done members) in the sprint. */
