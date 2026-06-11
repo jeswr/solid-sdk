@@ -99,9 +99,10 @@ const SORTS: { key: SortKey; label: string }[] = [
 ];
 const PRIORITIES: Priority[] = ["high", "medium", "low"];
 
-/** Tracker config (custom fields + team), tagged with the tracker it came from. */
+/** Tracker config (title, custom fields, team), tagged with its tracker. */
 interface TrackerInfo {
   tracker: string;
+  title?: string;
   fields: FieldDef[];
   group: { iri?: string; members: string[] };
 }
@@ -167,6 +168,7 @@ export function IssuesView() {
   const infoCurrent = trackerInfo !== null && trackerInfo.tracker === tracker.trackerUrl;
   const fieldDefs = infoCurrent ? trackerInfo.fields : EMPTY_FIELDS;
   const group = infoCurrent ? trackerInfo.group : EMPTY_GROUP;
+  const trackerTitle = infoCurrent ? trackerInfo.title : undefined;
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const savedViewsStore = useMemo(() => new SavedViews(), []);
@@ -198,6 +200,7 @@ export function IssuesView() {
       // Field defs matter on shared trackers too; the team only on your own.
       setTrackerInfo({
         tracker: url,
+        title: info.title,
         fields: info.fields,
         group: isOwn ? { iri: info.assigneeGroup, members: info.groupMembers } : EMPTY_GROUP,
       });
@@ -571,6 +574,40 @@ export function IssuesView() {
       </header>
 
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">
+        {/* Page header */}
+        <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold tracking-[0.08em] text-muted-foreground uppercase">Tracker</p>
+            <h1 className="mt-0.5 truncate text-2xl font-bold tracking-tight text-balance">
+              {trackerTitle ?? "Issues"}
+            </h1>
+            <p className="mt-1 text-sm text-muted-foreground tabular-nums">
+              {counts.open} open · {counts.closed} closed
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            {!issues.canCreate && (
+              <Badge variant="secondary" className="gap-1">
+                <Eye className="size-3" aria-hidden /> Read-only
+              </Badge>
+            )}
+            {isOwn && (
+              <Button
+                variant="outline"
+                className="gap-1.5"
+                onClick={() => setShareResource({ url: repo.containerUrl, extraUrls: [tracker.trackerUrl], label: "this tracker" })}
+              >
+                <Share2 className="size-4" aria-hidden /> Share
+              </Button>
+            )}
+            {issues.canCreate && (
+              <Button onClick={() => onCreate()} className="gap-1.5">
+                <Plus className="size-4" aria-hidden /> New issue
+              </Button>
+            )}
+          </div>
+        </div>
+
         {/* Toolbar */}
         <div className="mb-4 space-y-3">
           <div className="flex flex-wrap items-center gap-2">
@@ -740,46 +777,24 @@ export function IssuesView() {
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div role="tablist" aria-label="Filter by state" className="flex gap-1 rounded-lg bg-muted p-1">
-              {(["open", "closed", "all"] as const).map((f) => (
-                <button
-                  key={f}
-                  role="tab"
-                  aria-selected={query.state === f}
-                  onClick={() => patchQuery({ state: f })}
-                  className={`rounded-md px-3 py-1.5 text-sm font-medium capitalize transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none ${
-                    query.state === f ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  {f} <span className="text-muted-foreground">{counts[f]}</span>
-                </button>
-              ))}
-            </div>
-            <div className="flex items-center gap-2">
-              {!issues.canCreate && (
-                <Badge variant="secondary" className="gap-1">
-                  <Eye className="size-3" aria-hidden /> Read-only
-                </Badge>
-              )}
-              {isOwn && (
-                <Button
-                  variant="outline"
-                  className="gap-1.5"
-                  onClick={() => setShareResource({ url: repo.containerUrl, extraUrls: [tracker.trackerUrl], label: "this tracker" })}
-                >
-                  <Share2 className="size-4" aria-hidden /> Share
-                </Button>
-              )}
-              {issues.canCreate && (
-                <Button onClick={() => onCreate()} className="gap-1.5">
-                  <Plus className="size-4" aria-hidden /> New issue
-                </Button>
-              )}
-            </div>
+          <div role="tablist" aria-label="Filter by state" className="flex w-fit gap-1 rounded-lg bg-muted p-1">
+            {(["open", "closed", "all"] as const).map((f) => (
+              <button
+                key={f}
+                role="tab"
+                aria-selected={query.state === f}
+                onClick={() => patchQuery({ state: f })}
+                className={`rounded-md px-3 py-1.5 text-sm font-medium capitalize transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none ${
+                  query.state === f ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {f} <span className="text-muted-foreground tabular-nums">{counts[f]}</span>
+              </button>
+            ))}
           </div>
         </div>
 
+        <div key={view} className="animate-view-in">
         {issues.loading ? (
           <ul className="space-y-3" aria-busy="true" aria-label="Loading issues">
             {[0, 1, 2].map((i) => (
@@ -951,6 +966,7 @@ export function IssuesView() {
             </ul>
           </div>
         )}
+        </div>
       </main>
 
       <IssueFormDialog

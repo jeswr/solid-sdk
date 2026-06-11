@@ -10,7 +10,10 @@
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
   --font-heading: var(--font-geist-sans);
-  --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-out-strong: cubic-bezier(0.22, 1, 0.36, 1);
+  /* Content-entry motion (view switches, dialogs): fast, ease-out, subtle. */
+  --animate-view-in: view-in var(--ui-duration-slow) var(--ease-out-strong) both;
+  --animate-fade-in: fade-in var(--ui-duration) var(--ease-out-strong) both;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -50,31 +53,32 @@
 }
 
 :root {
-  /* Cool, violet-tinted neutrals: the page sits slightly off-white so white
-     cards lift from it without heavy shadows. */
-  --background: oklch(0.984 0.003 264);
-  --foreground: oklch(0.17 0.012 264);
+  /* Ink on warm paper: a deep indigo-ink voice on warm neutrals, with real
+     (not hairline-washed) borders so surfaces read as crafted. Shares the
+     visual language of the wider pod app ecosystem. */
+  --background: oklch(0.979 0.004 85);
+  --foreground: oklch(0.23 0.015 280);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.17 0.012 264);
+  --card-foreground: oklch(0.23 0.015 280);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.17 0.012 264);
-  --primary: oklch(0.55 0.22 264);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.961 0.006 264);
-  --secondary-foreground: oklch(0.24 0.02 264);
-  --muted: oklch(0.961 0.006 264);
-  --muted-foreground: oklch(0.5 0.022 264);
-  --accent: oklch(0.955 0.022 264);
-  --accent-foreground: oklch(0.32 0.09 264);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.912 0.009 264);
-  --input: oklch(0.912 0.009 264);
-  --ring: oklch(0.55 0.22 264);
-  --chart-1: oklch(0.55 0.2 264);
-  --chart-2: oklch(0.62 0.15 155);
-  --chart-3: oklch(0.76 0.15 70);
-  --chart-4: oklch(0.6 0.2 25);
-  --chart-5: oklch(0.62 0.13 225);
+  --popover-foreground: oklch(0.23 0.015 280);
+  --primary: oklch(0.33 0.08 277);
+  --primary-foreground: oklch(0.985 0.002 85);
+  --secondary: oklch(0.93 0.008 85);
+  --secondary-foreground: oklch(0.28 0.02 280);
+  --muted: oklch(0.945 0.007 85);
+  --muted-foreground: oklch(0.47 0.022 280);
+  --accent: oklch(0.93 0.045 85);
+  --accent-foreground: oklch(0.43 0.09 75);
+  --destructive: oklch(0.55 0.22 27);
+  --border: oklch(0.875 0.012 85);
+  --input: oklch(0.875 0.012 85);
+  --ring: oklch(0.33 0.08 277);
+  --chart-1: oklch(0.45 0.13 277);
+  --chart-2: oklch(0.58 0.12 155);
+  --chart-3: oklch(0.72 0.13 80);
+  --chart-4: oklch(0.55 0.19 25);
+  --chart-5: oklch(0.6 0.1 245);
   --radius: 0.625rem;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
@@ -87,31 +91,31 @@
 }
 
 .dark {
-  /* Deep blue-violet surfaces (never pure black); hierarchy comes from
-     lightness steps — base, card (+1), popover (+2). */
-  --background: oklch(0.158 0.012 270);
-  --foreground: oklch(0.95 0.006 264);
-  --card: oklch(0.205 0.014 270);
-  --card-foreground: oklch(0.95 0.006 264);
-  --popover: oklch(0.232 0.016 270);
-  --popover-foreground: oklch(0.95 0.006 264);
-  --primary: oklch(0.7 0.17 264);
-  --primary-foreground: oklch(0.15 0.03 264);
-  --secondary: oklch(0.265 0.016 270);
-  --secondary-foreground: oklch(0.95 0.006 264);
-  --muted: oklch(0.265 0.016 270);
-  --muted-foreground: oklch(0.72 0.018 264);
-  --accent: oklch(0.3 0.05 268);
-  --accent-foreground: oklch(0.94 0.025 264);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(0.93 0.02 264 / 12%);
-  --input: oklch(0.93 0.02 264 / 16%);
-  --ring: oklch(0.7 0.17 264);
-  --chart-1: oklch(0.7 0.17 264);
-  --chart-2: oklch(0.7 0.14 155);
-  --chart-3: oklch(0.8 0.14 75);
-  --chart-4: oklch(0.66 0.18 25);
-  --chart-5: oklch(0.7 0.12 225);
+  /* Ink surfaces (never pure black), hierarchy by lightness steps — base,
+     card (+1), popover (+2) — with a periwinkle voice and solid borders. */
+  --background: oklch(0.2 0.018 275);
+  --foreground: oklch(0.94 0.012 275);
+  --card: oklch(0.235 0.02 275);
+  --card-foreground: oklch(0.94 0.012 275);
+  --popover: oklch(0.268 0.022 275);
+  --popover-foreground: oklch(0.94 0.012 275);
+  --primary: oklch(0.79 0.09 275);
+  --primary-foreground: oklch(0.21 0.06 275);
+  --secondary: oklch(0.27 0.022 275);
+  --secondary-foreground: oklch(0.9 0.02 275);
+  --muted: oklch(0.27 0.022 275);
+  --muted-foreground: oklch(0.74 0.028 275);
+  --accent: oklch(0.3 0.045 80);
+  --accent-foreground: oklch(0.85 0.1 85);
+  --destructive: oklch(0.7 0.18 22);
+  --border: oklch(0.38 0.03 275);
+  --input: oklch(0.42 0.032 275);
+  --ring: oklch(0.79 0.09 275);
+  --chart-1: oklch(0.75 0.1 275);
+  --chart-2: oklch(0.72 0.13 155);
+  --chart-3: oklch(0.8 0.13 80);
+  --chart-4: oklch(0.68 0.17 25);
+  --chart-5: oklch(0.7 0.1 245);
   --sidebar: oklch(0.205 0 0);
   --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: oklch(0.488 0.243 264.376);
@@ -120,6 +124,33 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+}
+
+:root {
+  /* Motion durations — tokenised so reduced-motion can zero them. */
+  --ui-duration-fast: 120ms;
+  --ui-duration: 200ms;
+  --ui-duration-slow: 320ms;
+}
+
+@keyframes view-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.4rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 @layer base {
@@ -140,5 +171,22 @@
   [data-slot="badge"],
   table {
     font-variant-numeric: tabular-nums;
+  }
+
+  /* Honest motion: nothing moves for reduced-motion users. */
+  @media (prefers-reduced-motion: reduce) {
+    :root {
+      --ui-duration-fast: 0ms;
+      --ui-duration: 0ms;
+      --ui-duration-slow: 0ms;
+    }
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
   }
 }
