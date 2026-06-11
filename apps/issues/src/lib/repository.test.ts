@@ -144,6 +144,22 @@ describe("Repository (per-issue documents)", () => {
     expect(issues[0].fields).toEqual({});
   });
 
+  it("rejects unsafe URL custom-field values at the data layer", async () => {
+    const { impl } = fakePod();
+    const repo = new Repository(TRACKER, impl);
+    await repo.ensureTracker();
+    await repo.defineField("Doc", "url");
+
+    const url = await repo.create({ title: "X", creator: ME, fields: { doc: "javascript:alert(1)" } });
+    let { issues } = await repo.list();
+    expect(issues[0].fields).toEqual({}); // never persisted
+
+    await repo.update(url, { fields: { doc: "https://example.org/spec" } });
+    await repo.update(url, { fields: { doc: "data:text/html,hi" } }); // overwrite attempt drops the value
+    ({ issues } = await repo.list());
+    expect(issues[0].fields).toEqual({});
+  });
+
   it("persists backlog rank for ordering", async () => {
     const { impl } = fakePod();
     const repo = new Repository(TRACKER, impl);

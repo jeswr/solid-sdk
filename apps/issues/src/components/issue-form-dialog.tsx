@@ -150,6 +150,23 @@ export function IssueFormDialog({
     }
   }, [open, initial, defaultStatus, form, fieldDefs]);
 
+  // Field definitions can arrive AFTER the dialog opened (slow tracker-info
+  // load). Backfill those inputs from the stored values so submitting doesn't
+  // clear them — but never overwrite a slug the reset already initialised
+  // (the user may be typing in it).
+  useEffect(() => {
+    if (!open) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- pure backfill of newly-arrived defs; no-op render otherwise
+    setFieldInputs((prev) => {
+      const missing = fieldDefs.filter((d) => !(d.slug in prev));
+      if (missing.length === 0) return prev;
+      return {
+        ...prev,
+        ...Object.fromEntries(missing.map((d) => [d.slug, fieldToInput(d, initial?.fields[d.slug])])),
+      };
+    });
+  }, [open, fieldDefs, initial]);
+
   const submit = async (values: FormValues) => {
     await onSubmit({
       title: values.title.trim(),

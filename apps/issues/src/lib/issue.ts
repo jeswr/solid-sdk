@@ -313,7 +313,14 @@ export class Issue extends TermWrapper {
         OptionalAs.object(this, def.iri, value as string | undefined, NamedNodeFrom.string);
         break;
       case "url":
-        OptionalAs.object(this, def.iri, value as string | undefined, LiteralFrom.anyUriString);
+        // Enforced at the data layer, not just the form: an unsafe scheme
+        // (javascript:, data:, …) is never serialised into the pod.
+        OptionalAs.object(
+          this,
+          def.iri,
+          value === undefined ? undefined : safeHttpUrl(String(value)),
+          LiteralFrom.anyUriString,
+        );
         break;
       default:
         OptionalAs.object(this, def.iri, value as string | undefined, LiteralFrom.string);

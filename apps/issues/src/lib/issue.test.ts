@@ -167,6 +167,15 @@ describe("Custom fields", () => {
     expect(issue.getField(text)).toBeUndefined();
   });
 
+  it("never serialises an unsafe URL scheme, even when set directly", () => {
+    const { tracker, store } = newTracker();
+    const url = tracker.defineField("Design doc", "url");
+    const issue = new Issue(IRI, store, DataFactory);
+    issue.setField(url, "https://example.org/ok");
+    issue.setField(url, "javascript:alert(1)"); // overwrite attempt is dropped
+    expect(issue.getField(url)).toBeUndefined();
+  });
+
   it("removes a field definition together with its options", () => {
     const { tracker } = newTracker();
     tracker.defineField("Stage", "select", ["Alpha"]);
