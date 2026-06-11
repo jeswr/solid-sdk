@@ -134,7 +134,7 @@ export function BacklogView({
     const doneCount = members.filter((i) => i.status === "done").length;
     return (
       <Card key={sprint.iri}>
-        <CardHeader className="flex-row flex-wrap items-center gap-2 space-y-0">
+        <CardHeader className="flex flex-row flex-wrap items-center gap-2 space-y-0">
           <CalendarRange className="size-4 text-primary" aria-hidden />
           <h3 className="font-medium">{sprint.title}</h3>
           {sprint.state === "active" && <Badge className="gap-1">Active</Badge>}
@@ -222,7 +222,7 @@ export function BacklogView({
       )}
 
       <Card>
-        <CardHeader className="flex-row items-center gap-2 space-y-0">
+        <CardHeader className="flex flex-row items-center gap-2 space-y-0">
           <Flag className="size-4 text-muted-foreground" aria-hidden />
           <h3 className="font-medium">Backlog</h3>
           <span className="ml-auto text-xs text-muted-foreground">

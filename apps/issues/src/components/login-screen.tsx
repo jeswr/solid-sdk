@@ -40,8 +40,12 @@ export function LoginScreen() {
   const onSubmit = (values: FormValues) => login(values.webId);
 
   return (
-    <main className="flex flex-1 items-center justify-center bg-gradient-to-b from-primary/5 via-background to-background p-4">
-      <Card className="w-full max-w-md shadow-lg">
+    <main className="relative flex flex-1 items-center justify-center overflow-hidden p-4">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -top-48 left-1/2 size-[40rem] -translate-x-1/2 rounded-full bg-primary/10 blur-3xl"
+      />
+      <Card className="relative w-full max-w-md shadow-xl shadow-primary/5">
         <CardHeader className="space-y-3 text-center">
           <div
             aria-hidden

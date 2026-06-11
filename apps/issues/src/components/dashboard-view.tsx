@@ -9,22 +9,23 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } f
 import { PersonChip } from "@/components/person";
 import { AlertTriangle, CheckCircle2, CircleDot, Loader2 } from "lucide-react";
 
+// Theme chart tokens (dark-mode aware): 1 violet · 2 green · 3 amber · 4 red · 5 blue.
 const STATUS_COLORS: Record<string, string> = {
-  todo: "var(--chart-1, #94a3b8)",
-  "in-progress": "var(--primary)",
-  done: "#22c55e",
+  todo: "var(--chart-5)",
+  "in-progress": "var(--chart-1)",
+  done: "var(--chart-2)",
 };
 const TYPE_COLORS: Record<string, string> = {
-  epic: "#9333ea",
-  story: "#16a34a",
-  task: "#2563eb",
-  bug: "#dc2626",
+  epic: "var(--chart-1)",
+  story: "var(--chart-2)",
+  task: "var(--chart-5)",
+  bug: "var(--chart-4)",
 };
 const PRIORITY_COLORS: Record<string, string> = {
-  high: "#dc2626",
-  medium: "#f59e0b",
-  low: "#64748b",
-  none: "#cbd5e1",
+  high: "var(--chart-4)",
+  medium: "var(--chart-3)",
+  low: "var(--chart-5)",
+  none: "var(--muted-foreground)",
 };
 
 const chartConfig: ChartConfig = { count: { label: "Issues" } };
@@ -40,7 +41,7 @@ function StatCard({ label, value, icon, accent }: { label: string; value: number
           {icon}
         </span>
         <span>
-          <span className="block text-2xl leading-none font-semibold">{value}</span>
+          <span className="block text-2xl leading-none font-semibold tracking-tight tabular-nums">{value}</span>
           <span className="text-xs text-muted-foreground">{label}</span>
         </span>
       </CardContent>

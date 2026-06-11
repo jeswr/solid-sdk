@@ -99,6 +99,17 @@ const SORTS: { key: SortKey; label: string }[] = [
 ];
 const PRIORITIES: Priority[] = ["high", "medium", "low"];
 
+/** Tracker config (custom fields + team), tagged with the tracker it came from. */
+interface TrackerInfo {
+  tracker: string;
+  fields: FieldDef[];
+  group: { iri?: string; members: string[] };
+}
+const EMPTY_GROUP: TrackerInfo["group"] = { members: [] };
+// Module-level so the derived fallbacks keep a stable identity across renders
+// (effects and memos downstream depend on them).
+const EMPTY_FIELDS: FieldDef[] = [];
+
 export function IssuesView() {
   const { profile, trackerUrl, storageUrl, logout } = useSolidSession();
   const { theme, setTheme } = useTheme();
@@ -149,7 +160,13 @@ export function IssuesView() {
   const [shareResource, setShareResource] = useState<{ url: string; extraUrls?: string[]; label: string } | undefined>(undefined);
   const [openTrackerOpen, setOpenTrackerOpen] = useState(false);
   const [teamOpen, setTeamOpen] = useState(false);
-  const [group, setGroup] = useState<{ iri?: string; members: string[] }>({ members: [] });
+  // Derived only when the tag matches the open tracker — a slow info read from
+  // a previously-open project can never leak its fields/team into this one
+  // (same pattern as useIssues' tagged snapshot).
+  const [trackerInfo, setTrackerInfo] = useState<TrackerInfo | null>(null);
+  const infoCurrent = trackerInfo !== null && trackerInfo.tracker === tracker.trackerUrl;
+  const fieldDefs = infoCurrent ? trackerInfo.fields : EMPTY_FIELDS;
+  const group = infoCurrent ? trackerInfo.group : EMPTY_GROUP;
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const savedViewsStore = useMemo(() => new SavedViews(), []);
@@ -160,7 +177,6 @@ export function IssuesView() {
   const [automationsOpen, setAutomationsOpen] = useState(false);
   const [automations, setAutomations] = useState<AutomationSettings | null>(null);
   const [fieldsOpen, setFieldsOpen] = useState(false);
-  const [fieldDefs, setFieldDefs] = useState<FieldDef[]>([]);
   // Actions applied this session (url+kind) — belt-and-braces against re-firing.
   const appliedAutomations = useRef(new Set<string>());
 
@@ -170,15 +186,21 @@ export function IssuesView() {
   const repo = useMemo(() => new Repository(tracker.trackerUrl), [tracker.trackerUrl]);
 
   const loadTrackerInfo = useCallback(async () => {
+    const url = tracker.trackerUrl;
     try {
-      const info = await repo.info();
+      const info = await new Repository(url).info();
       // Field defs matter on shared trackers too; the team only on your own.
-      setFieldDefs(info.fields);
-      if (isOwn) setGroup({ iri: info.assigneeGroup, members: info.groupMembers });
+      setTrackerInfo({
+        tracker: url,
+        fields: info.fields,
+        group: isOwn ? { iri: info.assigneeGroup, members: info.groupMembers } : EMPTY_GROUP,
+      });
     } catch {
-      /* tracker config is optional UI sugar */
+      // Config is optional sugar, but a failed load must still clear whatever
+      // the previous project left behind.
+      setTrackerInfo({ tracker: url, fields: [], group: EMPTY_GROUP });
     }
-  }, [isOwn, repo]);
+  }, [isOwn, tracker.trackerUrl]);
 
   useEffect(() => {
     // Mount fetch; setState only runs after the await inside loadTrackerInfo.
@@ -421,8 +443,8 @@ export function IssuesView() {
 
   return (
     <div className="flex flex-1 flex-col">
-      <header className="border-b bg-card">
-        <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-4 px-4 py-3">
+      <header className="sticky top-0 z-30 border-b bg-background/85 backdrop-blur supports-[backdrop-filter]:bg-background/70">
+        <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-4 py-2.5">
           <div className="flex min-w-0 items-center gap-2">
             <span
               aria-hidden
@@ -528,7 +550,7 @@ export function IssuesView() {
 
         {!isOwn && (
           <div className="border-t bg-muted/40">
-            <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-3 px-4 py-2">
+            <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-3 px-4 py-2">
               <p className="min-w-0 truncate text-sm text-muted-foreground">
                 Viewing <span className="font-medium text-foreground">{shortWebId(tracker.ownerWebId)}</span>&apos;s
                 tracker
@@ -541,7 +563,7 @@ export function IssuesView() {
         )}
       </header>
 
-      <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-6">
+      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">
         {/* Toolbar */}
         <div className="mb-4 space-y-3">
           <div className="flex flex-wrap items-center gap-2">
@@ -823,8 +845,10 @@ export function IssuesView() {
             onAddToEpic={(epicUrl) => onCreate({ parent: epicUrl })}
           />
         ) : visible.length === 0 ? (
-          <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed p-12 text-center">
-            <CircleDot className="size-8 text-muted-foreground" aria-hidden />
+          <div className="flex flex-col items-center gap-4 rounded-xl border border-dashed p-12 text-center">
+            <span aria-hidden className="flex size-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+              <CircleDot className="size-6" />
+            </span>
             <div>
               <p className="font-medium">No issues match</p>
               <p className="text-sm text-muted-foreground">
@@ -876,7 +900,7 @@ export function IssuesView() {
             {issues.canCreate && (
               <>
                 {selectedVisible.length > 0 && (
-                  <div className="sticky top-2 z-10 flex flex-wrap items-center gap-2 rounded-lg border bg-card p-2 shadow-sm">
+                  <div className="sticky top-14 z-10 flex flex-wrap items-center gap-2 rounded-lg border bg-card p-2 shadow-sm">
                     <span className="px-1 text-sm font-medium">{selectedVisible.length} selected</span>
                     <Button variant="outline" size="sm" className="gap-1.5" onClick={() => bulk((r, u) => r.setState(u, "closed"), "Issues closed")}>
                       <CheckCircle2 className="size-4" aria-hidden /> Close

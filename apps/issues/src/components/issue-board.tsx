@@ -53,13 +53,15 @@ export function IssueBoard({
             onDragOver={canWrite ? (e) => { e.preventDefault(); setDragOver(col.key); } : undefined}
             onDragLeave={() => setDragOver((c) => (c === col.key ? null : c))}
             onDrop={canWrite ? drop(col.key) : undefined}
-            className={`flex w-72 shrink-0 flex-col gap-2 rounded-lg border bg-muted/30 p-2 transition-colors ${
-              dragOver === col.key ? "ring-2 ring-primary" : ""
+            className={`flex w-72 shrink-0 flex-col gap-2 rounded-xl bg-muted/50 p-2 transition-[box-shadow,background-color] duration-150 ${
+              dragOver === col.key ? "bg-primary/5 ring-2 ring-primary/60" : ""
             }`}
           >
-            <h3 className="flex items-center gap-2 px-1 text-sm font-medium">
+            <h3 className="flex items-center gap-2 px-1.5 py-1 text-[0.8rem] font-semibold tracking-wide">
               <span>{col.label}</span>
-              <span className="text-muted-foreground">{items.length}</span>
+              <span className="rounded-full bg-background px-1.5 py-px text-xs font-medium text-muted-foreground tabular-nums ring-1 ring-border">
+                {items.length}
+              </span>
               {onAddToColumn && (
                 <button
                   type="button"

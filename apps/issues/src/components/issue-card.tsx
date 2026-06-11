@@ -81,14 +81,26 @@ export function IssueCard({
 
   return (
     <Card
-      className={closed ? "opacity-75" : undefined}
+      size="sm"
+      className={`transition-shadow duration-200 hover:ring-foreground/20 ${closed ? "opacity-70" : ""}`}
       draggable={draggable}
       onDragStart={onDragStart}
     >
-      <CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
-        <div className="min-w-0 space-y-1.5">
-          <div className="flex flex-wrap items-center gap-2">
+      <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
+        <div className="min-w-0 flex-1 space-y-1.5">
+          <div className="flex min-w-0 items-center gap-2">
             <TypeBadge type={issue.issueType} />
+            <h3 className={`min-w-0 truncate text-[0.95rem] font-medium ${closed ? "line-through" : ""}`}>
+              <button
+                type="button"
+                onClick={onComments}
+                className="max-w-full truncate text-left hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+              >
+                {issue.title}
+              </button>
+            </h3>
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5">
             <Badge variant={statusVariant(issue.status)} className="gap-1">
               {issue.status === "done" ? (
                 <CheckCircle2 className="size-3" aria-hidden />
@@ -102,29 +114,21 @@ export function IssueCard({
                 {issue.priority}
               </Badge>
             )}
-            <h3 className={`truncate font-medium ${closed ? "line-through" : ""}`}>
-              <button
-                type="button"
-                onClick={onComments}
-                className="truncate text-left hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-              >
-                {issue.title}
-              </button>
-            </h3>
+            {issue.labels.map((l) => (
+              <Badge key={l} variant="outline" className="gap-1 text-xs">
+                <Tag className="size-3" aria-hidden /> {l}
+              </Badge>
+            ))}
           </div>
-          {issue.labels.length > 0 && (
-            <div className="flex flex-wrap gap-1">
-              {issue.labels.map((l) => (
-                <Badge key={l} variant="outline" className="gap-1 text-xs">
-                  <Tag className="size-3" aria-hidden /> {l}
-                </Badge>
-              ))}
-            </div>
-          )}
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" aria-label={`Actions for ${issue.title}`}>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="-mt-0.5 text-muted-foreground"
+              aria-label={`Actions for ${issue.title}`}
+            >
               <MoreHorizontal className="size-4" />
             </Button>
           </DropdownMenuTrigger>

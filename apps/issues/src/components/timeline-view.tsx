@@ -13,7 +13,7 @@ const barColor = (issue: IssueRecord) =>
   issue.status === "done"
     ? "bg-muted-foreground/40"
     : issue.issueType === "epic"
-      ? "bg-purple-500"
+      ? "bg-(--chart-1)"
       : issue.status === "in-progress"
         ? "bg-primary"
         : "bg-primary/50";
