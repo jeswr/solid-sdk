@@ -59,7 +59,8 @@ export function parseQuery(input: string): StructuredQuery {
   for (const token of tokenize(input)) {
     const m = KEY_TOKEN.exec(token);
     const key = m?.[1].toLowerCase();
-    const value = m ? unquote(m[2]) : "";
+    // The whole query language is case-insensitive: p:High === p:high.
+    const value = m ? unquote(m[2]).toLowerCase() : "";
     // Unknown keys (including pasted URLs, where "https" looks like a key)
     // and malformed values fall through to free text.
     const asText = () => q.text.push(token.toLowerCase());
@@ -85,7 +86,7 @@ export function parseQuery(input: string): StructuredQuery {
         break;
       case "label":
       case "tag":
-        q.labels.push(value.toLowerCase());
+        q.labels.push(value);
         break;
       case "type":
         if (TYPE_SLUGS.has(value)) q.types.push(value as IssueType);
@@ -93,7 +94,7 @@ export function parseQuery(input: string): StructuredQuery {
         break;
       case "assignee":
       case "a":
-        q.assignees.push(value.toLowerCase());
+        q.assignees.push(value);
         break;
       case "due": {
         if (value === "none" || value === "overdue") {

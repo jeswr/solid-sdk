@@ -109,7 +109,9 @@ npm run build       # next build
 - **Search** + **multi-facet filters** (priority / label / assignee / state) +
   **sort**; **saved views** to remember filter presets; a **JQL-style query
   syntax** in the search box (`status:done p:high label:auth due:overdue
-  sort:-due` + free text).
+  sort:-due` + free text). Tokens are case-insensitive and AND with the menu
+  filters, except `is:`/`state:` and `sort:`, which override the state tab and
+  sort dropdown so a pasted query is self-contained.
 - **Bulk actions** — multi-select to close / reopen / delete many at once.
 - **Command palette** (⌘K) and keyboard shortcuts (c, /, b, l).
 - **Issue detail view**: metadata, description, activity timeline, **comments**

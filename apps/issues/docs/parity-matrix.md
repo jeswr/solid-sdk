@@ -50,7 +50,7 @@ Status: ✅ shipped · 🔶 partial · ⏳ queued (priority order) · ◻ later/
 | Automation rules (when X then Y) | ✅ | built-in client-side rules with toggles (close-parent, escalate-overdue); per-device |
 | Custom fields / column types | ✅ | text / number / date / link / select; fields are `rdf:Property` fragments of the tracker config, select options are SKOS concepts; typed inputs in the form, formatted in detail view |
 | Workload view (Monday) | ◻ | per-assignee capacity |
-| JQL-style query language | ✅ | `key:value` tokens in the search box (`status:` `p:` `type:` `label:` `assignee:` `due:` `points:` `has:` `sort:` + free text), ANDed with the menu filters; client-side over the loaded issues (pod SPARQL later) |
+| JQL-style query language | ✅ | `key:value` tokens in the search box (`status:` `p:` `type:` `label:` `assignee:` `due:` `points:` `has:` `sort:` + free text), case-insensitive, ANDed with the menu filters (`is:`/`state:` and `sort:` override the state tab / sort dropdown); client-side over the loaded issues (pod SPARQL later) |
 | Workspaces / multiple boards per project | ✅ | project switcher; each project a self-contained tracker (`issue-tracker/<slug>/`), type-index discovered, per-project sharing |
 | Integrations / marketplace, mobile apps | ◻ | out of scope for now |
 

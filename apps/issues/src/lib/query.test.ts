@@ -50,6 +50,17 @@ describe("parseQuery", () => {
     expect(q.sort).toEqual({ key: "due", dir: "desc" });
   });
 
+  it("normalises value case before validating (p:High is still a token)", () => {
+    const q = parseQuery("is:Closed status:Done p:High type:Bug has:Comments sort:-Due");
+    expect(q.text).toEqual([]);
+    expect(q.state).toBe("closed");
+    expect(q.statuses).toEqual(["done"]);
+    expect(q.priorities).toEqual(["high"]);
+    expect(q.types).toEqual(["bug"]);
+    expect(q.has).toEqual(["comments"]);
+    expect(q.sort).toEqual({ key: "due", dir: "desc" });
+  });
+
   it("treats unknown keys and malformed values as free text", () => {
     const q = parseQuery("nonsense:thing due:whenever");
     expect(q.text).toEqual(["nonsense:thing", "due:whenever"]);
