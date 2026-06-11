@@ -37,7 +37,7 @@ const renderBody = (text: string) =>
     ),
   );
 import type { IssueRecord } from "@/lib/use-issues";
-import { STATUSES, type FieldDef } from "@/lib/issue";
+import { STATUSES, safeHttpUrl, type FieldDef } from "@/lib/issue";
 import { priorityVariant, shortWebId } from "@/components/issue-card";
 import { PersonChip } from "@/components/person";
 import { TypeBadge, typeLabel } from "@/components/type-badge";
@@ -182,6 +182,8 @@ export function IssueDetailDialog({
             .filter((def) => issue.fields[def.slug] !== undefined)
             .map((def) => {
               const value = issue.fields[def.slug]!;
+              // Pod data is untrusted — only http(s) values become links.
+              const href = def.type === "url" ? safeHttpUrl(String(value)) : undefined;
               return (
                 <div key={def.iri}>
                   <dt className="text-xs text-muted-foreground">{def.label}</dt>
@@ -190,9 +192,9 @@ export function IssueDetailDialog({
                       dateFmt.format(value as Date)
                     ) : def.type === "select" ? (
                       (def.options.find((o) => o.iri === value)?.label ?? String(value))
-                    ) : def.type === "url" ? (
+                    ) : href ? (
                       <a
-                        href={String(value)}
+                        href={href}
                         target="_blank"
                         rel="noreferrer"
                         className="text-primary underline-offset-2 hover:underline"

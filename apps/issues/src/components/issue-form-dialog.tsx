@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/select";
 import { Loader2 } from "lucide-react";
 import type { IssueRecord } from "@/lib/use-issues";
-import { ISSUE_TYPES, STATUSES, type FieldDef, type FieldValue, type IssueType, type Priority, type StatusSlug } from "@/lib/issue";
+import { ISSUE_TYPES, STATUSES, safeHttpUrl, type FieldDef, type FieldValue, type IssueType, type Priority, type StatusSlug } from "@/lib/issue";
 
 const PRIORITY_NONE = "none";
 
@@ -78,8 +78,10 @@ const inputToField = (def: FieldDef, raw: string): FieldValue | undefined => {
       return Number.isNaN(Number(v)) ? undefined : Number(v);
     case "date":
       return new Date(v);
+    case "url":
+      return safeHttpUrl(v); // only http(s) is ever stored
     default:
-      return v; // text, url, select (option IRI)
+      return v; // text, select (option IRI)
   }
 };
 
@@ -121,8 +123,14 @@ export function IssueFormDialog({
   const status = useWatch({ control: form.control, name: "status" });
   const issueType = useWatch({ control: form.control, name: "issueType" });
 
+  // Reset ONLY when the dialog transitions closed -> open. Dep changes while
+  // it is open (e.g. a slow tracker-info load updating fieldDefs) must never
+  // wipe what the user is typing.
+  const wasOpen = useRef(false);
   useEffect(() => {
-    if (open) {
+    const opening = open && !wasOpen.current;
+    wasOpen.current = open;
+    if (opening) {
       form.reset({
         title: initial?.title ?? "",
         description: initial?.description ?? "",
@@ -135,7 +143,7 @@ export function IssueFormDialog({
         labels: (initial?.labels ?? []).join(", "),
       });
       // Dialog-open reset, same as form.reset above (custom fields live outside RHF).
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+       
       setFieldInputs(
         Object.fromEntries(fieldDefs.map((d) => [d.slug, fieldToInput(d, initial?.fields[d.slug])])),
       );

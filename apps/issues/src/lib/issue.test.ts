@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { Store, DataFactory } from "n3";
-import { Issue, Tracker, STATE } from "./issue";
+import { Issue, Tracker, STATE, safeHttpUrl } from "./issue";
 import { rdf, wf, dct } from "./vocab";
 
 const IRI = "http://localhost:3000/alice/issue-tracker/issues.ttl#issue-1";
@@ -173,5 +173,32 @@ describe("Custom fields", () => {
     tracker.defineField("Team", "text");
     tracker.removeField("stage");
     expect(tracker.fieldDefs.map((f) => f.slug)).toEqual(["team"]);
+  });
+
+  it("redefining a slug replaces it cleanly — no stale options or scheme typing", () => {
+    const { tracker, store } = newTracker();
+    tracker.defineField("Stage", "select", ["Alpha", "Beta"]);
+    tracker.defineField("Stage", "select", ["Live"]);
+    expect(tracker.fieldDefs.find((f) => f.slug === "stage")?.options.map((o) => o.label)).toEqual(["Live"]);
+
+    // Changing the type drops the SKOS metadata entirely.
+    tracker.defineField("Stage", "text");
+    const def = tracker.fieldDefs.find((f) => f.slug === "stage");
+    expect(def?.type).toBe("text");
+    expect(def?.options).toEqual([]);
+    const skosQuads = [...store].filter((q) => q.predicate.value.includes("skos") || q.object.value.includes("skos"));
+    expect(skosQuads).toEqual([]);
+  });
+});
+
+describe("safeHttpUrl", () => {
+  it("accepts http(s) and rejects everything else", () => {
+    expect(safeHttpUrl("https://example.org/spec")).toBe("https://example.org/spec");
+    expect(safeHttpUrl("http://localhost:3000/x")).toBe("http://localhost:3000/x");
+     
+    expect(safeHttpUrl("javascript:alert(1)")).toBeUndefined();
+    expect(safeHttpUrl("data:text/html,hi")).toBeUndefined();
+    expect(safeHttpUrl("not a url")).toBeUndefined();
+    expect(safeHttpUrl("")).toBeUndefined();
   });
 });

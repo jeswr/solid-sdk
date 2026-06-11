@@ -368,6 +368,20 @@ export interface FieldDef {
 /** A custom-field value; select fields hold the chosen option's IRI. */
 export type FieldValue = string | number | Date;
 
+/**
+ * The URL if it parses with an http(s) scheme, else undefined. Pod data is
+ * untrusted input: a stored `javascript:` URL must never become a clickable
+ * link, and we reject it on write too.
+ */
+export function safeHttpUrl(raw: string): string | undefined {
+  try {
+    const url = new URL(raw);
+    return url.protocol === "http:" || url.protocol === "https:" ? url.href : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** `rdfs:range` per field type (xsd datatypes; selects range over concepts). */
 const FIELD_RANGES: Record<FieldType, string> = {
   text: xsd("string"),
@@ -482,6 +496,9 @@ export class Tracker extends TermWrapper {
   defineField(label: string, type: FieldType, optionLabels: string[] = []): FieldDef {
     const slug = fragmentSlug(label);
     const iri = `${this.doc}#field-${slug}`;
+    // Redefinition must not leave stale triples behind (old options, an old
+    // range, a leftover ConceptScheme type) — clear the slug and start fresh.
+    this.removeField(slug);
     const prop = new TermWrapper(iri, this.dataset, this.factory);
     SetFrom.subjectPredicate(prop, rdf("type"), NamedNodeAs.string, NamedNodeFrom.string).add(rdf("Property"));
     OptionalAs.object(prop, rdfs("label"), label, LiteralFrom.string);
