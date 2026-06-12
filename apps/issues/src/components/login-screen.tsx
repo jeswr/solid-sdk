@@ -40,7 +40,7 @@ export function LoginScreen() {
   const onSubmit = (values: FormValues) => login(values.webId);
 
   return (
-    <main className="relative flex flex-1 items-center justify-center overflow-hidden p-4">
+    <main id="main" className="relative flex flex-1 items-center justify-center overflow-hidden p-4">
       <div
         aria-hidden
         className="pointer-events-none absolute -top-48 left-1/2 size-[40rem] -translate-x-1/2 rounded-full bg-primary/10 blur-3xl"

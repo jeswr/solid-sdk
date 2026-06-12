@@ -576,7 +576,7 @@ export function IssuesView() {
         )}
       </header>
 
-      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">
+      <main id="main" className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">
         {/* Page header */}
         <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
           <div className="min-w-0">

@@ -163,6 +163,19 @@
   html {
     @apply font-sans;
     -webkit-font-smoothing: antialiased;
+    /* Native scrollbars, form controls and UA chrome follow the app theme. */
+    color-scheme: light;
+  }
+  html.dark {
+    color-scheme: dark;
+  }
+  /* No 300ms double-tap-zoom delay on interactive elements (touch). */
+  a,
+  button,
+  summary,
+  [role="tab"],
+  [role="menuitem"] {
+    touch-action: manipulation;
   }
   ::selection {
     @apply bg-primary/20;
