@@ -146,8 +146,9 @@ export interface BurndownPoint {
 
 /**
  * Sprint burndown from completion stamps (`endedAt`): remaining points per
- * sprint day vs the ideal line. Unestimated issues weigh 1 point, matching
- * the workload view. Returns [] when the sprint has no date range.
+ * sprint day vs the ideal line. Estimated points only (`estimate ?? 0`),
+ * matching velocity and the committed-points snapshot. Returns [] when the
+ * sprint has no date range.
  */
 export function computeBurndown(sprint: SprintRecord, issues: IssueRecord[], now = new Date()): BurndownPoint[] {
   if (!sprint.startDate || !sprint.endDate) return [];
@@ -157,8 +158,10 @@ export function computeBurndown(sprint: SprintRecord, issues: IssueRecord[], now
 
   const byUrl = new Map(issues.map((i) => [i.url, i]));
   const members = sprint.taskUrls.map((u) => byUrl.get(u)).filter((i): i is IssueRecord => !!i);
-  const pts = (i: IssueRecord) => i.estimate ?? 1;
-  const scope = members.reduce((sum, i) => sum + pts(i), 0);
+  const pts = (i: IssueRecord) => i.estimate ?? 0;
+  // Completing a sprint releases unfinished tasks from taskUrls, so a live
+  // member sum would understate a done sprint's scope — prefer the snapshot.
+  const scope = sprint.committedPoints ?? members.reduce((sum, i) => sum + pts(i), 0);
 
   const today = startOfUtcDay(now).getTime();
   const days = Math.round((end.getTime() - start.getTime()) / 86_400_000) + 1;
@@ -175,6 +178,43 @@ export function computeBurndown(sprint: SprintRecord, issues: IssueRecord[], now
       remaining: day.getTime() <= today ? scope - doneBy : undefined,
       ideal: days === 1 ? 0 : Math.round(((scope * (days - 1 - k)) / (days - 1)) * 10) / 10,
     };
+  });
+}
+
+export interface FlowPoint {
+  /** UTC day label, e.g. "Jun 8". */
+  day: string;
+  /** Issues existing and still open at that day's close. */
+  open: number;
+  /** Issues completed by that day's close. */
+  done: number;
+}
+
+/**
+ * Two-band cumulative flow from creation and completion stamps: per day, how
+ * many issues existed (split open vs done). The pod records no per-status
+ * transition history, so there is no in-progress band — the open/done gap is
+ * the WIP. Spans first creation → today, clamped to `maxDays`.
+ */
+export function computeCumulativeFlow(issues: IssueRecord[], now = new Date(), maxDays = 56): FlowPoint[] {
+  const dated = issues.filter((i) => i.created !== undefined);
+  if (dated.length === 0) return [];
+
+  const today = startOfUtcDay(now);
+  const first = startOfUtcDay(new Date(Math.min(...dated.map((i) => i.created!.getTime()))));
+  const span = Math.round((today.getTime() - first.getTime()) / 86_400_000) + 1;
+  const days = Math.max(1, Math.min(span, maxDays));
+  const start = new Date(today);
+  start.setUTCDate(start.getUTCDate() - (days - 1));
+  const fmt = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", timeZone: "UTC" });
+
+  return Array.from({ length: days }, (_, k) => {
+    const day = new Date(start);
+    day.setUTCDate(day.getUTCDate() + k);
+    const end = day.getTime() + 86_400_000;
+    const existing = dated.filter((i) => i.created!.getTime() < end);
+    const done = existing.filter((i) => i.endedAt !== undefined && i.endedAt.getTime() < end).length;
+    return { day: fmt.format(day), open: existing.length - done, done };
   });
 }
 

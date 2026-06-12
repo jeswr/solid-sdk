@@ -1,8 +1,8 @@
 "use client";
 
 import { useMemo } from "react";
-import { Bar, BarChart, CartesianGrid, Cell, Line, LineChart, Pie, PieChart, XAxis, YAxis } from "recharts";
-import { computeBurndown, computeStats, computeVelocity } from "@/lib/stats";
+import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Line, LineChart, Pie, PieChart, XAxis, YAxis } from "recharts";
+import { computeBurndown, computeCumulativeFlow, computeStats, computeVelocity } from "@/lib/stats";
 import type { IssueRecord, SprintRecord } from "@/lib/use-issues";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
@@ -66,6 +66,7 @@ export function DashboardView({ issues, sprints = [] }: { issues: IssueRecord[];
     () => (burnSprint ? computeBurndown(burnSprint, issues) : []),
     [burnSprint, issues],
   );
+  const flow = useMemo(() => computeCumulativeFlow(issues), [issues]);
   const open = stats.byStatus.find((s) => s.status === "todo")?.count ?? 0;
   const inProgress = stats.byStatus.find((s) => s.status === "in-progress")?.count ?? 0;
   const done = stats.byStatus.find((s) => s.status === "done")?.count ?? 0;
@@ -204,7 +205,7 @@ export function DashboardView({ issues, sprints = [] }: { issues: IssueRecord[];
                 <Line type="monotone" dataKey="remaining" stroke="var(--primary)" strokeWidth={2} dot={{ r: 3 }} />
               </LineChart>
             </ChartContainer>
-            <p className="mt-1 text-center text-xs text-muted-foreground">Points remaining vs ideal; unestimated issues weigh 1 point</p>
+            <p className="mt-1 text-center text-xs text-muted-foreground">Estimated points remaining vs ideal</p>
           </CardContent>
         </Card>
       )}
@@ -226,6 +227,27 @@ export function DashboardView({ issues, sprints = [] }: { issues: IssueRecord[];
               </BarChart>
             </ChartContainer>
             <p className="mt-1 text-center text-xs text-muted-foreground">Done vs committed</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {flow.length > 1 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Cumulative flow</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ChartContainer config={chartConfig} className="max-h-56 w-full">
+              <AreaChart data={flow}>
+                <CartesianGrid vertical={false} strokeDasharray="3 3" />
+                <XAxis dataKey="day" tickLine={false} axisLine={false} fontSize={11} />
+                <YAxis allowDecimals={false} width={28} tickLine={false} axisLine={false} fontSize={12} />
+                <ChartTooltip content={<ChartTooltipContent />} />
+                <Area type="monotone" dataKey="done" stackId="1" stroke="var(--chart-2)" fill="var(--chart-2)" fillOpacity={0.5} />
+                <Area type="monotone" dataKey="open" stackId="1" stroke="var(--chart-1)" fill="var(--chart-1)" fillOpacity={0.35} />
+              </AreaChart>
+            </ChartContainer>
+            <p className="mt-1 text-center text-xs text-muted-foreground">Issues open vs done per day; the open band is the work in progress</p>
           </CardContent>
         </Card>
       )}

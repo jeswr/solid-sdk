@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeBurndown, computeStats, computeVelocity, computeWorkload } from "./stats";
+import { computeBurndown, computeCumulativeFlow, computeStats, computeVelocity, computeWorkload } from "./stats";
 import type { IssueRecord, SprintRecord } from "./repository";
 
 const base: IssueRecord = {
@@ -111,20 +111,61 @@ describe("computeBurndown", () => {
     const issues = [
       mk({ url: "a", estimate: 5, status: "done", state: "closed", endedAt: new Date("2026-06-09T15:00:00Z") }),
       mk({ url: "b", estimate: 3 }),
-      mk({ url: "c" }), // unestimated → 1 point
+      mk({ url: "c" }), // unestimated: not in the points scope (like velocity)
     ];
     // NOW is Jun 10: remaining is known for Jun 8–10, ideal spans all 5 days.
     const points = computeBurndown(sprint, issues, NOW);
     expect(points).toHaveLength(5);
-    expect(points[0]).toMatchObject({ remaining: 9, ideal: 9 });
-    expect(points[1].remaining).toBe(4); // a (5pts) done on Jun 9
-    expect(points[2].remaining).toBe(4);
+    expect(points[0]).toMatchObject({ remaining: 8, ideal: 8 });
+    expect(points[1].remaining).toBe(3); // a (5pts) done on Jun 9
+    expect(points[2].remaining).toBe(3);
     expect(points[3].remaining).toBeUndefined(); // the future has no data
     expect(points[4].ideal).toBe(0);
   });
 
+  it("uses the committed-points snapshot for completed sprints (released work stays remaining)", () => {
+    // Completing the sprint released b (3pts unfinished) — taskUrls keep only a.
+    const done: SprintRecord = { ...sprint, state: "done", taskUrls: ["a"], committedPoints: 8 };
+    const issues = [mk({ url: "a", estimate: 5, status: "done", state: "closed", endedAt: new Date("2026-06-09T15:00:00Z") })];
+    const points = computeBurndown(done, issues, NOW);
+    expect(points[0].remaining).toBe(8);
+    expect(points[1].remaining).toBe(3); // released work never burns down
+    expect(points[2].remaining).toBe(3);
+  });
+
   it("returns no points without sprint dates", () => {
     expect(computeBurndown({ ...sprint, startDate: undefined }, [], NOW)).toEqual([]);
+  });
+});
+
+describe("computeCumulativeFlow", () => {
+  it("accumulates created vs done counts per day", () => {
+    const issues = [
+      mk({ url: "1", created: new Date("2026-06-08T09:00:00Z") }),
+      mk({ url: "2", created: new Date("2026-06-08T15:00:00Z"), state: "closed", status: "done", endedAt: new Date("2026-06-09T11:00:00Z") }),
+      mk({ url: "3", created: new Date("2026-06-10T08:00:00Z") }),
+      mk({ url: "4" }), // no created date: excluded
+    ];
+    const flow = computeCumulativeFlow(issues, NOW);
+    expect(flow).toHaveLength(3); // Jun 8 → Jun 10
+    expect(flow[0]).toMatchObject({ open: 2, done: 0 });
+    expect(flow[1]).toMatchObject({ open: 1, done: 1 });
+    expect(flow[2]).toMatchObject({ open: 2, done: 1 });
+  });
+
+  it("clamps the window to the most recent days", () => {
+    const issues = [
+      mk({ url: "1", created: new Date("2026-01-01") }),
+      mk({ url: "2", created: new Date("2026-06-09") }),
+    ];
+    const flow = computeCumulativeFlow(issues, NOW, 7);
+    expect(flow).toHaveLength(7);
+    expect(flow[0].open).toBe(1); // the January issue is already in the baseline
+    expect(flow.at(-1)!.open).toBe(2);
+  });
+
+  it("is empty when no issue has a created date", () => {
+    expect(computeCumulativeFlow([mk({ url: "1" })], NOW)).toEqual([]);
   });
 });
 
