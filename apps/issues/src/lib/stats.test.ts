@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeStats, computeVelocity, computeWorkload } from "./stats";
+import { computeBurndown, computeStats, computeVelocity, computeWorkload } from "./stats";
 import type { IssueRecord, SprintRecord } from "./repository";
 
 const base: IssueRecord = {
@@ -94,6 +94,37 @@ describe("computeWorkload", () => {
     expect(w.rows).toHaveLength(1);
     expect(w.rows[0].assignee).toBeUndefined();
     expect(w.rows[0].points).toBe(4);
+  });
+});
+
+describe("computeBurndown", () => {
+  const sprint: SprintRecord = {
+    iri: "s1",
+    title: "Sprint 1",
+    state: "active",
+    startDate: new Date("2026-06-08"),
+    endDate: new Date("2026-06-12"),
+    taskUrls: ["a", "b", "c"],
+  };
+
+  it("burns points down by completion day against an ideal line", () => {
+    const issues = [
+      mk({ url: "a", estimate: 5, status: "done", state: "closed", endedAt: new Date("2026-06-09T15:00:00Z") }),
+      mk({ url: "b", estimate: 3 }),
+      mk({ url: "c" }), // unestimated → 1 point
+    ];
+    // NOW is Jun 10: remaining is known for Jun 8–10, ideal spans all 5 days.
+    const points = computeBurndown(sprint, issues, NOW);
+    expect(points).toHaveLength(5);
+    expect(points[0]).toMatchObject({ remaining: 9, ideal: 9 });
+    expect(points[1].remaining).toBe(4); // a (5pts) done on Jun 9
+    expect(points[2].remaining).toBe(4);
+    expect(points[3].remaining).toBeUndefined(); // the future has no data
+    expect(points[4].ideal).toBe(0);
+  });
+
+  it("returns no points without sprint dates", () => {
+    expect(computeBurndown({ ...sprint, startDate: undefined }, [], NOW)).toEqual([]);
   });
 });
 

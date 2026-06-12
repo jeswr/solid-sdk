@@ -1,8 +1,8 @@
 "use client";
 
 import { useMemo } from "react";
-import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, XAxis, YAxis } from "recharts";
-import { computeStats, computeVelocity } from "@/lib/stats";
+import { Bar, BarChart, CartesianGrid, Cell, Line, LineChart, Pie, PieChart, XAxis, YAxis } from "recharts";
+import { computeBurndown, computeStats, computeVelocity } from "@/lib/stats";
 import type { IssueRecord, SprintRecord } from "@/lib/use-issues";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
@@ -53,6 +53,19 @@ function StatCard({ label, value, icon, accent }: { label: string; value: number
 export function DashboardView({ issues, sprints = [] }: { issues: IssueRecord[]; sprints?: SprintRecord[] }) {
   const velocity = useMemo(() => computeVelocity(sprints, issues), [sprints, issues]);
   const stats = useMemo(() => computeStats(issues), [issues]);
+  // Burn down the active sprint; fall back to the most recently completed one.
+  const burnSprint = useMemo(
+    () =>
+      sprints.find((s) => s.state === "active" && s.startDate && s.endDate) ??
+      [...sprints]
+        .filter((s) => s.state === "done" && s.startDate && s.endDate)
+        .sort((a, b) => (b.endDate?.getTime() ?? 0) - (a.endDate?.getTime() ?? 0))[0],
+    [sprints],
+  );
+  const burndown = useMemo(
+    () => (burnSprint ? computeBurndown(burnSprint, issues) : []),
+    [burnSprint, issues],
+  );
   const open = stats.byStatus.find((s) => s.status === "todo")?.count ?? 0;
   const inProgress = stats.byStatus.find((s) => s.status === "in-progress")?.count ?? 0;
   const done = stats.byStatus.find((s) => s.status === "done")?.count ?? 0;
@@ -174,6 +187,27 @@ export function DashboardView({ issues, sprints = [] }: { issues: IssueRecord[];
           </CardContent>
         </Card>
       </div>
+
+      {burndown.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Burndown — {burnSprint!.title}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ChartContainer config={chartConfig} className="max-h-56 w-full">
+              <LineChart data={burndown}>
+                <CartesianGrid vertical={false} strokeDasharray="3 3" />
+                <XAxis dataKey="day" tickLine={false} axisLine={false} fontSize={11} />
+                <YAxis allowDecimals={false} width={28} tickLine={false} axisLine={false} fontSize={12} />
+                <ChartTooltip content={<ChartTooltipContent hideLabel />} />
+                <Line type="monotone" dataKey="ideal" stroke="var(--muted-foreground)" strokeDasharray="5 5" strokeWidth={1.5} dot={false} />
+                <Line type="monotone" dataKey="remaining" stroke="var(--primary)" strokeWidth={2} dot={{ r: 3 }} />
+              </LineChart>
+            </ChartContainer>
+            <p className="mt-1 text-center text-xs text-muted-foreground">Points remaining vs ideal; unestimated issues weigh 1 point</p>
+          </CardContent>
+        </Card>
+      )}
 
       {velocity.length > 0 && (
         <Card>

@@ -46,8 +46,13 @@ Choosing this makes our issues readable/writable by SolidOS and any `wf:`-aware 
 | `dct:creator` | IRI → WebID | who filed it |
 | `wf:assignee` | IRI → Agent | assigned agent (optional) |
 | `wf:dateDue` | xsd:date | due date (optional) |
+| `prov:endedAtTime` | xsd:dateTime | completion time — stamped on close, cleared on reopen (feeds the burndown) |
 
-State change = retype between `wf:Open` and `wf:Closed`.
+State change = retype between `wf:Open` and `wf:Closed`. The `wf:` ontology
+defines no completion-time property (its own `created`/`modified` are commented
+out — hence `dct:` for those), so completion provenance reuses **PROV-O**
+(`http://www.w3.org/ns/prov#`), the W3C REC `docs/data-modelling.md` lists for
+provenance.
 
 ## Deferred to milestone 2
 

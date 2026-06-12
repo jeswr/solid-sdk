@@ -60,6 +60,20 @@ describe("Issue wrapper", () => {
     expect(issue.state).toBe("open");
   });
 
+  it("stamps prov:endedAtTime when closed and clears it on reopen", () => {
+    const issue = newIssue();
+    issue.status = "done";
+    const ended = issue.endedAt;
+    expect(ended).toBeInstanceOf(Date);
+
+    // Re-asserting a terminal status keeps the original completion time.
+    issue.status = "done";
+    expect(issue.endedAt?.toISOString()).toBe(ended!.toISOString());
+
+    issue.status = "todo";
+    expect(issue.endedAt).toBeUndefined();
+  });
+
   it("clearing an optional property removes the quad", () => {
     const issue = newIssue();
     issue.assignee = "http://localhost:3000/bob/profile/card#me";

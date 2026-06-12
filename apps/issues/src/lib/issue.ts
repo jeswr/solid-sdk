@@ -11,7 +11,7 @@ import {
   TermAs,
   TermFrom,
 } from "@rdfjs/wrapper";
-import { WF, DCT, RDF, STATE, wf, dct, rdf, rdfs, sioc, foaf, vcard, schema, xsd, skos } from "./vocab";
+import { WF, DCT, RDF, STATE, wf, dct, rdf, rdfs, sioc, foaf, vcard, schema, xsd, skos, prov } from "./vocab";
 
 export type IssueState = "open" | "closed";
 export type Priority = "high" | "medium" | "low";
@@ -197,11 +197,22 @@ export class Issue extends TermWrapper {
     if (value === "closed") {
       types.add(STATE.Closed);
       types.delete(STATE.Open);
+      // Completion is provenance: stamp once, keep the original on re-close.
+      this.endedAt ??= new Date();
     } else {
       types.add(STATE.Open);
       types.delete(STATE.Closed);
+      this.endedAt = undefined;
     }
     types.add(wf("Task"));
+  }
+
+  /** When the task was completed (`prov:endedAtTime`); cleared on reopen. */
+  get endedAt(): Date | undefined {
+    return OptionalFrom.subjectPredicate(this, prov("endedAtTime"), LiteralAs.date);
+  }
+  set endedAt(value: Date | undefined) {
+    OptionalAs.object(this, prov("endedAtTime"), value, LiteralFrom.dateTime);
   }
   get isOpen(): boolean {
     return this.state === "open";

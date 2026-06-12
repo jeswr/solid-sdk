@@ -46,7 +46,7 @@ Status: ✅ shipped · 🔶 partial · ⏳ queued (priority order) · ◻ later/
 |---|---|---|
 | Dashboards (charts: status/assignee/priority distribution) | ✅ | Dashboard tab: stat cards, status donut, type/priority bars, workload, created-per-week |
 | Reports: velocity | ✅ | done vs committed points per completed sprint (commitment snapshotted at completion) |
-| Reports: burndown, cumulative flow | ◻ | needs per-day status history the pod doesn't record yet |
+| Reports: burndown, cumulative flow | 🔶 | burndown ✅ — issues stamp `prov:endedAtTime` on completion, charted per sprint day vs the ideal line on the dashboard; CFD still needs per-status transition history the pod doesn't record |
 | Automation rules (when X then Y) | ✅ | built-in client-side rules with toggles (close-parent, escalate-overdue); per-device |
 | Custom fields / column types | ✅ | text / number / date / link / select; fields are `rdf:Property` fragments of the tracker config, select options are SKOS concepts; typed inputs in the form, formatted in detail view |
 | Workload view (Monday) | ✅ | per-assignee open points bucketed by due week (Overdue / weeks / Later / No date), adjustable points-per-week capacity with overload flags; unestimated issues weigh 1 point |

@@ -39,7 +39,9 @@ export async function signIn(page: Page, webId: string) {
 /** Dismiss any visible sonner toasts — they overlay bottom-right controls. */
 export async function dismissToasts(page: Page) {
   for (const btn of await page.getByLabel(/close toast/i).all()) {
-    await btn.click().catch(() => {});
+    // Bounded click: dismissing one toast can remove the rest of the stack,
+    // and an unbounded click on a vanished element waits out the whole test.
+    await btn.click({ timeout: 1500 }).catch(() => {});
   }
   await page.waitForTimeout(150);
 }

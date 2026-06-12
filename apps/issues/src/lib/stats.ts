@@ -135,6 +135,49 @@ export function computeWorkload(issues: IssueRecord[], now = new Date(), weeks =
   return { bucketLabels, rows: [...rows.values()].sort((a, b) => b.points - a.points) };
 }
 
+export interface BurndownPoint {
+  /** UTC day label, e.g. "Jun 8". */
+  day: string;
+  /** Points still open at that day's close; undefined for future days. */
+  remaining?: number;
+  /** Linear reference from full scope to zero across the sprint. */
+  ideal: number;
+}
+
+/**
+ * Sprint burndown from completion stamps (`endedAt`): remaining points per
+ * sprint day vs the ideal line. Unestimated issues weigh 1 point, matching
+ * the workload view. Returns [] when the sprint has no date range.
+ */
+export function computeBurndown(sprint: SprintRecord, issues: IssueRecord[], now = new Date()): BurndownPoint[] {
+  if (!sprint.startDate || !sprint.endDate) return [];
+  const start = startOfUtcDay(sprint.startDate);
+  const end = startOfUtcDay(sprint.endDate);
+  if (end.getTime() < start.getTime()) return [];
+
+  const byUrl = new Map(issues.map((i) => [i.url, i]));
+  const members = sprint.taskUrls.map((u) => byUrl.get(u)).filter((i): i is IssueRecord => !!i);
+  const pts = (i: IssueRecord) => i.estimate ?? 1;
+  const scope = members.reduce((sum, i) => sum + pts(i), 0);
+
+  const today = startOfUtcDay(now).getTime();
+  const days = Math.round((end.getTime() - start.getTime()) / 86_400_000) + 1;
+  const fmt = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", timeZone: "UTC" });
+
+  return Array.from({ length: days }, (_, k) => {
+    const day = new Date(start);
+    day.setUTCDate(day.getUTCDate() + k);
+    const doneBy = members
+      .filter((i) => i.endedAt !== undefined && startOfUtcDay(i.endedAt).getTime() <= day.getTime())
+      .reduce((sum, i) => sum + pts(i), 0);
+    return {
+      day: fmt.format(day),
+      remaining: day.getTime() <= today ? scope - doneBy : undefined,
+      ideal: days === 1 ? 0 : Math.round(((scope * (days - 1 - k)) / (days - 1)) * 10) / 10,
+    };
+  });
+}
+
 export interface VelocityPoint {
   sprint: string;
   /** Story points completed (done members) in the sprint. */

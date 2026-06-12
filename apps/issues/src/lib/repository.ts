@@ -42,6 +42,8 @@ export interface IssueRecord {
   rank?: number;
   created?: Date;
   modified?: Date;
+  /** When the issue was completed (cleared on reopen). */
+  endedAt?: Date;
   comments: CommentRecord[];
   /** Custom-field values keyed by field slug (selects hold the option IRI). */
   fields: Record<string, FieldValue>;
@@ -141,6 +143,7 @@ function toRecord(issue: Issue, url: string, canWrite: boolean, fieldDefs: Field
     rank: issue.rank,
     created: issue.created,
     modified: issue.modified,
+    endedAt: issue.endedAt,
     comments: issue.comments.map((c) => ({
       author: c.author,
       content: c.content ?? "",

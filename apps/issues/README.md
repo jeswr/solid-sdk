@@ -93,8 +93,9 @@ npm run build       # next build
   the header, discovered via the public type index.
 - **Sprints & backlog** — story-point **estimates**, drag-free ranked ordering,
   sprint planning, start/complete with unfinished work released back to the
-  backlog, and a **velocity** report (done vs committed, snapshotted at
-  completion).
+  backlog, a **velocity** report (done vs committed, snapshotted at
+  completion), and a **sprint burndown** (issues stamp their completion time,
+  charted against the ideal line).
 - **Issue types** — Epic / Story / Task / Bug with Jira-style colored badges;
   the **Epics view** rolls up child progress per epic with add-to-epic.
 - **Dashboard** — stat cards (incl. overdue), status/type/priority charts,

@@ -25,6 +25,8 @@ export const VCARD = "http://www.w3.org/2006/vcard/ns#";
 export const SCHEMA = "http://schema.org/";
 /** SKOS — `skos:Concept` / `skos:prefLabel` / `skos:inScheme` (select-field options). */
 export const SKOS = "http://www.w3.org/2004/02/skos/core#";
+/** PROV-O — `prov:endedAtTime` (when a task was completed). */
+export const PROV = "http://www.w3.org/ns/prov#";
 
 export const wf = (local: string) => `${WF}${local}`;
 export const dct = (local: string) => `${DCT}${local}`;
@@ -36,6 +38,7 @@ export const vcard = (local: string) => `${VCARD}${local}`;
 export const schema = (local: string) => `${SCHEMA}${local}`;
 export const xsd = (local: string) => `${XSD}${local}`;
 export const skos = (local: string) => `${SKOS}${local}`;
+export const prov = (local: string) => `${PROV}${local}`;
 
 /** The two terminal/non-terminal state classes an issue is typed with. */
 export const STATE = {
