@@ -465,8 +465,8 @@ export function IssuesView() {
             >
               <CircleDot className="size-4" />
             </span>
-            <span className="text-lg font-semibold tracking-tight">Solid Issues</span>
-            <span aria-hidden className="text-muted-foreground/50">/</span>
+            <span className="hidden text-lg font-semibold tracking-tight whitespace-nowrap lg:inline">Solid Issues</span>
+            <span aria-hidden className="hidden text-muted-foreground/50 lg:inline">/</span>
             {profile && storageUrl && (
               <ProjectSwitcher
                 webId={profile.webId}
@@ -479,28 +479,28 @@ export function IssuesView() {
               />
             )}
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex shrink-0 items-center gap-1">
             {isOwn && (
-              <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => setTeamOpen(true)}>
+              <Button variant="ghost" size="sm" className="gap-1.5" aria-label="Team" onClick={() => setTeamOpen(true)}>
                 <Users className="size-4" aria-hidden />
-                <span className="hidden sm:inline">Team</span>
+                <span className="hidden lg:inline">Team</span>
               </Button>
             )}
             {isOwn && (
-              <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => setFieldsOpen(true)}>
+              <Button variant="ghost" size="sm" className="gap-1.5" aria-label="Fields" onClick={() => setFieldsOpen(true)}>
                 <SlidersHorizontal className="size-4" aria-hidden />
                 <span className="hidden lg:inline">Fields</span>
               </Button>
             )}
             {isOwn && (
-              <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => setAutomationsOpen(true)}>
+              <Button variant="ghost" size="sm" className="gap-1.5" aria-label="Automations" onClick={() => setAutomationsOpen(true)}>
                 <Zap className="size-4" aria-hidden />
-                <span className="hidden sm:inline">Automations</span>
+                <span className="hidden lg:inline">Automations</span>
               </Button>
             )}
-            <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => setOpenTrackerOpen(true)}>
+            <Button variant="ghost" size="sm" className="gap-1.5" aria-label="Open tracker" onClick={() => setOpenTrackerOpen(true)}>
               <FolderOpen className="size-4" aria-hidden />
-              <span className="hidden sm:inline">Open tracker</span>
+              <span className="hidden lg:inline">Open tracker</span>
             </Button>
             <Button
               variant="ghost"
@@ -753,7 +753,7 @@ export function IssuesView() {
             )}
 
             {/* View toggle */}
-            <div role="tablist" aria-label="View" className="flex gap-1 rounded-lg bg-muted p-1">
+            <div role="tablist" aria-label="View" className="flex max-w-full gap-1 overflow-x-auto rounded-lg bg-muted p-1">
               {([
                 { key: "list", label: "List", Icon: ListIcon },
                 { key: "board", label: "Board", Icon: LayoutGrid },
@@ -775,7 +775,7 @@ export function IssuesView() {
                   }`}
                 >
                   <Icon className="size-4" aria-hidden />
-                  <span className="hidden sm:inline">{label}</span>
+                  <span className="hidden lg:inline">{label}</span>
                 </button>
               ))}
             </div>
