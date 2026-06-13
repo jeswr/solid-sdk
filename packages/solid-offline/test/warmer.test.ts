@@ -240,7 +240,10 @@ describe('warmer: budget enforcement', () => {
     const result = await warm(WEBID, { fetch }, resolveBudget({ maxBytes: 500_000 }));
     expect(result.bytes).toBeLessThanOrEqual(500_000 + 200_000); // last over-budget read counted then stop
     expect(result.budgetHit).toBe(true);
-  });
+    // This case crawls 50 × 200 KB bodies; under full-suite CPU contention (now
+    // incl. the jsdom React tests) it can brush the 5 s default. Give it headroom
+    // so the gate is deterministic — it is bounded work, not a hang.
+  }, 20_000);
 
   it('respects maxDepth (does not descend past the limit)', async () => {
     // /a/ -> /a/b/ -> /a/b/c/ -> /a/b/c/d ; depth 1 should not reach c.

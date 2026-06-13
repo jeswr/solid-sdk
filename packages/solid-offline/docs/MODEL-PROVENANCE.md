@@ -111,3 +111,74 @@ Files modified for P3 (not newly authored, so no top-of-file marker):
 - **Real-socket integration is deferred**: discovery/subscribe/socket lifecycle
   are exercised against a fake WebSocket + fake fetch only, not a live
   prod-solid-server WebSocketChannel2023 endpoint.
+
+### P5 — DX hooks + status surface + WebID-scoping + logout-purge (§7)
+
+New files:
+
+- `src/scope.ts` — the single source of truth for §7 cache scoping: `scopeHash`
+  (FNV-1a 32-bit), `scopeFor`, `dbNameForWebId` (`solid-offline:<hash>`) and
+  `cacheNameForWebId` (`solid-offline-cache:<hash>`), plus the prefixes and the
+  anonymous defaults. Both the page client and the SW import this so they agree
+  on exactly which DB/Cache a WebID maps to.
+- `src/status.ts` — the framework-agnostic offline/stale/pending status surface
+  (`createStatusSurface`). A plain `subscribe`/`getSnapshot` store with
+  referentially-stable snapshots (so it drives `useSyncExternalStore` without
+  looping); bridges the `updated` BroadcastChannel + `online`/`offline` events;
+  `markPending`/`markStale`/`markFresh`/`forget`. Injectable channel/connectivity/
+  isOnline for headless tests.
+- `src/logout.ts` — the **mandatory logout-purge** (`purgeForWebId`): deletes the
+  WebID-scoped Cache API cache + IndexedDB DB. Best-effort but total (a missing
+  store is success; one half failing does not stop the other); injectable
+  `caches`/`indexedDB`; reports the outcome.
+- `src/react.ts` — `@solid/offline/react`: the thin hooks `useOfflineStatus`
+  (wraps the status surface with `useSyncExternalStore`; can own or borrow a
+  surface) and `useOfflineResource` (reads a URL through the page fetch, tracks
+  pending/stale/outdated, re-reads on an `updated` broadcast for that URL). React
+  is an **optional peer dependency** — the core imports nothing from here, and
+  tsup externalizes `react`.
+- `test/scope.test.ts`, `test/status.test.ts`, `test/logout.test.ts`,
+  `test/react.test.ts` — unit tests (vitest + fake-indexeddb; the React tests run
+  in `jsdom` with real React 18 + `@testing-library/react`). They pin: WebID
+  scoping isolates two identities; logout purges BOTH stores (and leaves the other
+  identity intact); the status surface + hooks subscribe and re-render on
+  `updated`.
+
+Files modified for P5 (not newly authored, so no top-of-file marker):
+
+- `src/metadata-store.ts` — now imports + re-exports `dbNameForWebId` /
+  `DEFAULT_DB_NAME` from `scope.ts` (the hash/name logic moved there; no behaviour
+  change).
+- `src/worker.ts` — the Cache API name is now WebID-scoped via `cacheNameForWebId`
+  (was a fixed `solid-offline-v1`), matching the metadata DB scope so logout-purge
+  drops exactly one identity's bytes.
+- `src/types.ts` — `OfflineClient.logout()`.
+- `src/index.ts` — wires `offline.logout()` (page-side purge → `close()`), a lazily
+  created `offline.status` surface, and re-exports the scope/logout/status surface.
+- `package.json` — `./react` export, `react` optional peer dep, and the
+  React/testing dev deps (`react`, `react-dom`, `@types/react`,
+  `@testing-library/react`, `jsdom`).
+- `tsup.config.ts` — `react` entry + `external: ['react']`.
+- `test/warmer.test.ts` — the CPU-bound `stops at maxBytes` case now sets a 20 s
+  timeout (it brushed the 5 s default under full-suite contention once the jsdom
+  React tests were added); bounded work, not a hang.
+- `README.md` — P5 documentation.
+
+### P5 re-review focus areas
+
+- **No encryption at rest** (decision 3): purge is the control on shared devices,
+  but anything read while logged in is plaintext in IDB/Cache until `logout()` (or
+  quota eviction). An ephemeral memory-only mode and the v2 passphrase-key hook are
+  not built.
+- `onblocked` during DB deletion resolves rather than waiting: if another tab holds
+  the DB open at logout, the deletion is *queued* (completes when that tab closes)
+  but `purgeForWebId` reports `dbDeleted: true` optimistically. A stricter
+  cross-tab logout (broadcast a "close your DB handle" message first) is deferred.
+- The status surface only flips a resource to `updated` for URLs the consumer is
+  already tracking (it does not grow the map for every pod change); consumers must
+  `markFresh`/read a URL to begin tracking it.
+- `useOfflineResource` is intentionally minimal (no request dedup/caching of its
+  own, no Suspense): caching is the SW's job. A Suspense-friendly variant and
+  request coalescing across components are candidates for a later pass.
+- React hooks are tested in `jsdom` with `@testing-library/react`, not against a
+  real browser SW + a live pod.

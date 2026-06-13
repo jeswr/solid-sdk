@@ -4,38 +4,20 @@
  * by the composite (url, varyKey). Response *bytes* live in the Cache API, not
  * here.
  *
- * The store is scoped per identity (`solid-offline:<webId-hash>`, §7) so logout
- * purge can drop exactly one DB. P0/P1 build the read/write path; logout-purge
- * wiring is P5.
+ * The store is scoped per identity (`solid-offline:<webId-hash>`, §7) via the
+ * shared {@link dbNameForWebId} (see `scope.ts`) so logout-purge (P5) can drop
+ * exactly one identity's DB.
  */
 
+import { DEFAULT_DB_NAME, dbNameForWebId } from './scope.js';
 import type { CacheMetadata } from './types.js';
+
+// Re-export the scoping helpers from their canonical home so existing importers
+// (and the public API surface) keep working unchanged.
+export { DEFAULT_DB_NAME, dbNameForWebId };
 
 const STORE = 'metadata';
 const DB_VERSION = 1;
-
-/** Default (un-scoped) DB name when no WebID is supplied (e.g. anonymous reads). */
-export const DEFAULT_DB_NAME = 'solid-offline:anonymous';
-
-/**
- * Derive the per-identity DB name. Uses a short, stable, NON-cryptographic hash
- * of the WebID — this is only a namespacing discriminator, not a security
- * boundary (origin-scoping is the real boundary per §7).
- */
-export function dbNameForWebId(webId: string | undefined): string {
-  if (!webId) return DEFAULT_DB_NAME;
-  return `solid-offline:${shortHash(webId)}`;
-}
-
-function shortHash(input: string): string {
-  // FNV-1a 32-bit — deterministic, dependency-free, collision-tolerant for this use.
-  let h = 0x811c9dc5;
-  for (let i = 0; i < input.length; i++) {
-    h ^= input.charCodeAt(i);
-    h = Math.imul(h, 0x01000193);
-  }
-  return (h >>> 0).toString(16).padStart(8, '0');
-}
 
 function promisifyRequest<T>(req: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {

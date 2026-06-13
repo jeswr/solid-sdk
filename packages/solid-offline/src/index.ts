@@ -15,7 +15,9 @@
  * NO React. (The `@solid/offline/react` entry is P5.)
  */
 
+import { type PurgeResult, purgeForWebId } from './logout.js';
 import { type NotificationsClient, createNotificationsClient } from './notifications.js';
+import { type OfflineStatusSurface, createStatusSurface } from './status.js';
 import type {
   NotificationFrame,
   OfflineClient,
@@ -82,6 +84,28 @@ export type {
 } from './types.js';
 export { handleNotification, resyncSweep } from './invalidation.js';
 export type { InvalidateDeps, InvalidateOutcome, SweepResult } from './invalidation.js';
+// P5 — WebID cache scoping (§7), logout-purge, and the status surface.
+export {
+  scopeHash,
+  scopeFor,
+  dbNameForWebId,
+  cacheNameForWebId,
+  DEFAULT_DB_NAME,
+  DEFAULT_CACHE_NAME,
+  DB_PREFIX,
+  CACHE_PREFIX,
+  ANONYMOUS_SCOPE,
+} from './scope.js';
+export { purgeForWebId } from './logout.js';
+export type { PurgeResult, PurgeDeps, CacheStorageLike } from './logout.js';
+export { createStatusSurface } from './status.js';
+export type {
+  OfflineStatusSurface,
+  OfflineStatusSnapshot,
+  ResourceFreshness,
+  StatusSurfaceOptions,
+  StatusListener,
+} from './status.js';
 
 const DEFAULTS = {
   workerUrl: '/solid-offline-worker.js',
@@ -98,6 +122,8 @@ export type UpdatedListener = (event: UpdatedEvent) => void;
  */
 export function createOfflineClient(config: OfflineClientConfig = {}): OfflineClient & {
   onUpdated(listener: UpdatedListener): () => void;
+  /** The offline/stale/pending status surface for this client (lazily created). */
+  readonly status: OfflineStatusSurface;
 } {
   const resolved = {
     ...config,
@@ -110,6 +136,7 @@ export function createOfflineClient(config: OfflineClientConfig = {}): OfflineCl
   let registration: ServiceWorkerRegistration | undefined;
   let warmer: WarmController | undefined;
   let notifications: NotificationsClient | undefined;
+  let status: OfflineStatusSurface | undefined;
   const listeners = new Set<UpdatedListener>();
 
   /** Post a control message to the active service worker (P3 invalidation path). */
@@ -281,6 +308,30 @@ export function createOfflineClient(config: OfflineClientConfig = {}): OfflineCl
     return () => listeners.delete(listener);
   }
 
+  /**
+   * The offline status surface (offline/stale/pending) for this client. Lazily
+   * created on first access; shares the client's `channelName` so it reflects
+   * `updated` broadcasts. A vanilla app renders `status.getSnapshot()`; a React
+   * app passes this to `useOfflineStatus` (`@solid/offline/react`).
+   */
+  function getStatus(): OfflineStatusSurface {
+    if (!status) {
+      status = createStatusSurface({ channelName: resolved.channelName });
+    }
+    return status;
+  }
+
+  /**
+   * MANDATORY logout-purge (§7): drop this WebID's Cache API cache + IndexedDB
+   * metadata store, then tear the client down. Runs page-side (the `caches` /
+   * `indexedDB` globals are same-origin) — no SW round-trip needed.
+   */
+  async function logout(): Promise<PurgeResult> {
+    const result = await purgeForWebId(config.webId);
+    close();
+    return result;
+  }
+
   function close(): void {
     listeners.clear();
     channel?.close();
@@ -289,13 +340,19 @@ export function createOfflineClient(config: OfflineClientConfig = {}): OfflineCl
     warmer = undefined;
     notifications?.stop();
     notifications = undefined;
+    status?.close();
+    status = undefined;
   }
 
   return {
     register,
     warm,
     close,
+    logout,
     onUpdated,
+    get status(): OfflineStatusSurface {
+      return getStatus();
+    },
     config: resolved,
   };
 }

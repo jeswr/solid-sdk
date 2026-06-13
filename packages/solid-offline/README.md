@@ -8,9 +8,10 @@ usually hit the pre-fetched cache.
 Built strictly to the canonical design
 (`prod-solid-server/docs/offline-first-architecture.md`). **This package
 currently implements P0 (scaffold + SW registration), P1 (read cache), P2
-(page-driven proactive warmer), and P3 (notification-driven invalidation).**
-In-place viewer (P4), DX hooks + logout-purge (P5), and offline writes (v2) are
-**not** built yet.
+(page-driven proactive warmer), P3 (notification-driven invalidation), and P5
+(React/vanilla DX hooks + status surface + WebID-scoped cache + mandatory
+logout-purge).** In-place viewer (P4) and offline writes (v2) are **not** built
+yet.
 
 ## Install
 
@@ -18,7 +19,7 @@ In-place viewer (P4), DX hooks + logout-purge (P5), and offline writes (v2) are
 npm install @solid/offline n3
 ```
 
-## Use (page client — P0–P2)
+## Use (page client)
 
 ```ts
 import { createOfflineClient } from '@solid/offline';
@@ -46,6 +47,9 @@ const result = await offline.warm();
 offline.onUpdated(({ url, etag }) => {
   // re-render the view of `url` — it changed on the server
 });
+
+// P5 (§7): MANDATORY on sign-out — purge this WebID's Cache API + IndexedDB.
+await offline.logout();
 ```
 
 ## What P3 does (notification invalidation, §5 of the design)
@@ -83,6 +87,77 @@ The page client (`createNotificationsClient`, `discoverSubscriptionUrl`,
 `subscribe`, `parseFrame`, `backoffDelay`) and the SW pipeline
 (`handleNotification`, `resyncSweep`) are exported and unit-tested with a fake
 WebSocket + fake fetch + the real `fake-indexeddb` metadata store.
+
+## What P5 does (DX hooks + status + WebID-scoping + logout-purge, §7)
+
+DX surface for app code, plus the §7 privacy controls.
+
+### WebID-scoped cache (a different identity never reads another's cache)
+
+Both persistent stores are namespaced by a short, stable hash of the WebID:
+
+- the IndexedDB metadata DB → `solid-offline:<webId-hash>`
+- the Cache API bytes cache → `solid-offline-cache:<webId-hash>`
+
+(See `scope.ts`; `dbNameForWebId` / `cacheNameForWebId` are exported.) The hash is
+a *namespacing discriminator*, not a security boundary — origin isolation is the
+real boundary. Scoping by identity on top of that lets two identities share a
+device/origin without observing each other's bytes or metadata, and lets purge
+target exactly one identity.
+
+### Mandatory logout-purge
+
+On sign-out you **must** drop everything the offline layer cached for that
+identity (parallels the credential wipe):
+
+```ts
+await offline.logout(); // deletes the Cache API cache + IndexedDB DB for this WebID, then close()s
+```
+
+Or call the primitive directly: `purgeForWebId(webId, { caches, indexedDB })`.
+It is best-effort but total: a missing store is a success, and a failure on one
+half does not stop the other (the outcome is reported back).
+
+### Status surface (offline / stale / pending) — framework-agnostic
+
+```ts
+const status = offline.status; // or createStatusSurface({ channelName })
+status.subscribe(() => render(status.getSnapshot()));
+// snapshot: { online, pending, stale, updated, resources: { [url]: 'fresh'|'stale'|'pending'|'updated' } }
+status.markPending(url); status.markStale(url); status.markFresh(url);
+```
+
+It listens to the same `BroadcastChannel` the SW broadcasts `updated` on, so any
+tab's revalidation flips status in every tab. It is a plain `subscribe`/
+`getSnapshot` store (referentially stable snapshots) so it drives
+`useSyncExternalStore` directly.
+
+### React hooks (`@solid/offline/react`) — optional
+
+`react` is an **optional peer dependency**; the core imports nothing from React.
+
+```tsx
+import { useOfflineStatus, useOfflineResource } from '@solid/offline/react';
+
+function Connectivity() {
+  const { online, pending, stale } = useOfflineStatus(offline.status);
+  return <span>{online ? 'online' : 'offline'} · {pending} pending · {stale} stale</span>;
+}
+
+function Doc({ url }: { url: string }) {
+  // Reads THROUGH your fetch (so the SW caches it), re-reads on an `updated`
+  // broadcast for `url`, and surfaces stale/pending/outdated.
+  const { data, pending, stale, outdated, reload } = useOfflineResource(url, {
+    fetch: session.fetch,
+    select: (r) => r.text(),
+  });
+  // ...
+}
+```
+
+Both hooks are THIN (`useSyncExternalStore` over the BroadcastChannel — tear-free
+under React 18 concurrency); they own no caching/fetch policy — that stays the
+SW's job. Unit-tested in `jsdom` with real React + `@testing-library/react`.
 
 ## What P2 does (page-driven warmer, §3 of the design)
 

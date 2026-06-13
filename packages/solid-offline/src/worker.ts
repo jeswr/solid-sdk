@@ -15,12 +15,12 @@
 
 import { type InvalidateDeps, handleNotification, resyncSweep } from './invalidation.js';
 import { MetadataStore } from './metadata-store.js';
+import { cacheNameForWebId } from './scope.js';
 import { type Broadcaster, type ByteCache, type SwrDeps, handleFetch } from './swr.js';
 import type { PageToWorkerMessage } from './types.js';
 
 declare const self: ServiceWorkerGlobalScope;
 
-const CACHE_NAME = 'solid-offline-v1';
 const CHANNEL_NAME = 'solid-offline';
 
 /** Lazily-opened singletons (the SW may be terminated + revived between events). */
@@ -33,6 +33,15 @@ function getMeta(): Promise<MetadataStore> {
     metaPromise = MetadataStore.open(configuredWebId);
   }
   return metaPromise;
+}
+
+/**
+ * The WebID-scoped Cache API name (§7). Derived from `configuredWebId` so the
+ * bytes cache matches the metadata DB scope and logout-purge can drop exactly
+ * one identity's cache. Falls back to the anonymous scope before config arrives.
+ */
+function cacheName(): string {
+  return cacheNameForWebId(configuredWebId);
 }
 
 function getChannel(): BroadcastChannel {
@@ -95,7 +104,7 @@ function keepAlive(event: ExtendableMessageEvent, task: () => Promise<void>): vo
 
 /** Build the invalidation deps (the SW's OWN, unauthenticated fetch — see invalidation.ts). */
 async function invalidateDeps(): Promise<InvalidateDeps> {
-  const cache = await self.caches.open(CACHE_NAME);
+  const cache = await self.caches.open(cacheName());
   const meta = await getMeta();
   return {
     cache: cache as unknown as ByteCache,
@@ -120,7 +129,7 @@ self.addEventListener('fetch', (event: FetchEvent) => {
 });
 
 async function respond(event: FetchEvent): Promise<Response> {
-  const cache = await self.caches.open(CACHE_NAME);
+  const cache = await self.caches.open(cacheName());
   const meta = await getMeta();
   const deps: SwrDeps = {
     cache: cache as unknown as ByteCache,
