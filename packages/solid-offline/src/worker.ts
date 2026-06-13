@@ -13,6 +13,7 @@
  * coverage — it cannot be exercised without a real SW lifecycle.
  */
 
+import { type InvalidateDeps, handleNotification, resyncSweep } from './invalidation.js';
 import { MetadataStore } from './metadata-store.js';
 import { type Broadcaster, type ByteCache, type SwrDeps, handleFetch } from './swr.js';
 import type { PageToWorkerMessage } from './types.js';
@@ -63,8 +64,47 @@ self.addEventListener('message', (event: ExtendableMessageEvent) => {
     event.source?.postMessage({ type: 'ready' });
   } else if (data.type === 'ping') {
     event.source?.postMessage({ type: 'pong' });
+  } else if (data.type === 'notification') {
+    // P3: the page forwarded a change frame from its WebSocket. Run the
+    // (unauthenticated) invalidation pipeline; keep it alive past the handler.
+    const frame = data.frame;
+    keepAlive(event, async () => {
+      const deps = await invalidateDeps();
+      await handleNotification(frame, deps);
+    });
+  } else if (data.type === 'resync') {
+    // P3: reconnect ETag-resync sweep over the whole warmed set.
+    keepAlive(event, async () => {
+      const deps = await invalidateDeps();
+      await resyncSweep(deps);
+    });
+  } else if (data.type === 'poll') {
+    // P3: disconnected slow-poll — one conditional pass over the warmed set.
+    keepAlive(event, async () => {
+      const deps = await invalidateDeps();
+      await resyncSweep(deps);
+    });
   }
 });
+
+/** Keep the SW alive for an async task triggered by a message (best-effort). */
+function keepAlive(event: ExtendableMessageEvent, task: () => Promise<void>): void {
+  const p = task().catch(() => undefined);
+  if (typeof event.waitUntil === 'function') event.waitUntil(p);
+}
+
+/** Build the invalidation deps (the SW's OWN, unauthenticated fetch — see invalidation.ts). */
+async function invalidateDeps(): Promise<InvalidateDeps> {
+  const cache = await self.caches.open(CACHE_NAME);
+  const meta = await getMeta();
+  return {
+    cache: cache as unknown as ByteCache,
+    meta,
+    fetch: (input, init) => self.fetch(input as RequestInfo, init),
+    broadcast: getChannel() as unknown as Broadcaster,
+    now: () => Date.now(),
+  };
+}
 
 self.addEventListener('fetch', (event: FetchEvent) => {
   const { request } = event;

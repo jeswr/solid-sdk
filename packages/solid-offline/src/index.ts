@@ -15,7 +15,9 @@
  * NO React. (The `@solid/offline/react` entry is P5.)
  */
 
+import { type NotificationsClient, createNotificationsClient } from './notifications.js';
 import type {
+  NotificationFrame,
   OfflineClient,
   OfflineClientConfig,
   PageToWorkerMessage,
@@ -57,6 +59,29 @@ export {
   parseWacAllow,
   userCanRead,
 } from './warmer-rdf.js';
+export {
+  createNotificationsClient,
+  discoverSubscriptionUrl,
+  subscribe,
+  parseFrame,
+  backoffDelay,
+  storageDescriptionFromLink,
+} from './notifications.js';
+export type {
+  NotificationsClient,
+  NotificationsConfig,
+  NotificationsDeps,
+  SocketLike,
+  SocketFactory,
+} from './notifications.js';
+export type {
+  NotificationFrame,
+  NotificationActivityType,
+  NotificationsClientConfig,
+  PageToWorkerMessage,
+} from './types.js';
+export { handleNotification, resyncSweep } from './invalidation.js';
+export type { InvalidateDeps, InvalidateOutcome, SweepResult } from './invalidation.js';
 
 const DEFAULTS = {
   workerUrl: '/solid-offline-worker.js',
@@ -84,7 +109,54 @@ export function createOfflineClient(config: OfflineClientConfig = {}): OfflineCl
   let channel: BroadcastChannel | undefined;
   let registration: ServiceWorkerRegistration | undefined;
   let warmer: WarmController | undefined;
+  let notifications: NotificationsClient | undefined;
   const listeners = new Set<UpdatedListener>();
+
+  /** Post a control message to the active service worker (P3 invalidation path). */
+  function postToWorker(message: PageToWorkerMessage): void {
+    if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
+    const target = registration?.active ?? navigator.serviceWorker.controller;
+    target?.postMessage(message);
+  }
+
+  /**
+   * Start the page-side notifications client (P3, decision 5: the socket lives in
+   * the PAGE). Discovers + subscribes per-container (capped by the warm budget),
+   * opens sockets, and forwards each change frame to the SW for invalidation.
+   * Reconnect/backoff/poll/resync are all driven from here via `postToWorker`.
+   */
+  function startNotifications(containers: string[]): NotificationsClient | undefined {
+    if (notifications) return notifications;
+    if (!config.notifications) return undefined;
+    if (typeof WebSocket === 'undefined') return undefined; // non-browser context
+    const pageFetch =
+      config.fetch ?? (typeof fetch !== 'undefined' ? fetch.bind(globalThis) : undefined);
+    if (!pageFetch) return undefined;
+    const nCfg = config.notifications === true ? {} : config.notifications;
+    const topics = nCfg.containers ?? containers;
+    if (topics.length === 0 && !nCfg.resources?.length) return undefined;
+    notifications = createNotificationsClient(
+      {
+        fetch: pageFetch,
+        socketFactory: (url) =>
+          new WebSocket(url) as unknown as import('./notifications.js').SocketLike,
+        postToWorker: (frame: NotificationFrame) => postToWorker({ type: 'notification', frame }),
+        requestResync: () => postToWorker({ type: 'resync' }),
+        requestPoll: () => postToWorker({ type: 'poll' }),
+        isOnline: () => (typeof navigator === 'undefined' ? true : navigator.onLine),
+      },
+      {
+        containers: topics,
+        ...(nCfg.resources ? { resources: nCfg.resources } : {}),
+        ...(nCfg.maxChannels !== undefined ? { maxChannels: nCfg.maxChannels } : {}),
+        ...(nCfg.backoffBaseMs !== undefined ? { backoffBaseMs: nCfg.backoffBaseMs } : {}),
+        ...(nCfg.backoffMaxMs !== undefined ? { backoffMaxMs: nCfg.backoffMaxMs } : {}),
+        ...(nCfg.pollIntervalMs !== undefined ? { pollIntervalMs: nCfg.pollIntervalMs } : {}),
+      },
+    );
+    void notifications.start();
+    return notifications;
+  }
 
   /**
    * Start the page-driven warmer (P2). Uses the page's own fetch (config.fetch
@@ -105,6 +177,10 @@ export function createOfflineClient(config: OfflineClientConfig = {}): OfflineCl
       budget: resolveBudget(warmCfg.budget),
       warmOnLogin: warmCfg.warmOnLogin,
       rewarmOnReconnect: warmCfg.rewarmOnReconnect,
+      // P3 (P2-gap refactor): on reconnect, run the dedicated ETag-resync sweep in
+      // the SW instead of re-issuing the full BFS. Only wired when notifications
+      // are enabled (otherwise the warmer keeps its P2 full re-warm fallback).
+      ...(config.notifications ? { onReconnect: () => postToWorker({ type: 'resync' }) } : {}),
     });
     return warmer;
   }
@@ -161,7 +237,35 @@ export function createOfflineClient(config: OfflineClientConfig = {}): OfflineCl
     // P2: kick off the page-driven warmer (it self-schedules on idle).
     startWarmer();
 
+    // P3: start the page-side notifications client (decision 5: socket in the page).
+    // If explicit containers are configured, start immediately; otherwise derive
+    // the container set from a warm pass (the warmed containers) and start then.
+    if (config.notifications) {
+      const nCfg = config.notifications === true ? {} : config.notifications;
+      if (nCfg.containers && nCfg.containers.length > 0) {
+        startNotifications(nCfg.containers);
+      } else {
+        void warm().then((result) => {
+          if (!result) return;
+          startNotifications(containersFromWarm(result));
+        });
+      }
+    }
+
     return registration;
+  }
+
+  /** The container URLs a warm pass visited — the natural per-container subscription set. */
+  function containersFromWarm(result: WarmResult): string[] {
+    const seen = new Set<string>();
+    for (const visit of result.visits) {
+      try {
+        if (new URL(visit.url).pathname.endsWith('/')) seen.add(visit.url);
+      } catch {
+        /* skip unparseable */
+      }
+    }
+    return [...seen];
   }
 
   /** Run (or re-run) the warmer now. See {@link OfflineClient.warm}. */
@@ -183,6 +287,8 @@ export function createOfflineClient(config: OfflineClientConfig = {}): OfflineCl
     channel = undefined;
     warmer?.stop();
     warmer = undefined;
+    notifications?.stop();
+    notifications = undefined;
   }
 
   return {

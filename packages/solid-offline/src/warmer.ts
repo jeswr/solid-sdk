@@ -532,15 +532,18 @@ export function onIdle(task: () => void, timeoutMs = 2000): () => void {
 }
 
 /**
- * A re-warm controller: runs an initial warm post-login (on idle) and a lighter
- * ETag-revalidation sweep on reconnect. Page-driven; uses the page fetch only.
+ * A warm controller: runs the initial warm post-login (on idle), and on
+ * reconnect runs a dedicated ETag-RESYNC SWEEP (NOT a full re-warm).
  *
- * On reconnect we re-issue the same warm (the SW's P1 SWR layer turns each GET
- * into a conditional revalidation — mostly cheap 304s), so we don't duplicate
- * the conditional logic here.
+ * P3 REFACTOR (the gap P2 flagged): P2 re-issued the entire BFS on `online` and
+ * relied on the SWR layer to make it cheap. That re-did discovery/traversal for
+ * no new information. P3 replaces it: on reconnect we invoke `onReconnect` — a
+ * dedicated flat ETag-resync sweep of the already-warmed set (`invalidation.resyncSweep`,
+ * driven through the SW by the notifications client) — and do NOT re-crawl. A
+ * full re-warm only happens on an explicit `run()`.
  */
 export interface WarmController {
-  /** Run (or re-run) the warm now. Resolves with the result. */
+  /** Run (or re-run) the FULL warm now (BFS). Resolves with the result. */
   run(): Promise<WarmResult>;
   /** Stop listening for reconnect events and cancel any pending idle task. */
   stop(): void;
@@ -554,8 +557,16 @@ export interface WarmControllerOptions {
   profileTurtle?: string;
   /** Run the first warm on idle after construction (default true). */
   warmOnLogin?: boolean;
-  /** Re-warm (ETag sweep) when the browser comes back online (default true). */
+  /** React to reconnect (default true). */
   rewarmOnReconnect?: boolean;
+  /**
+   * P3: the reconnect handler. When supplied, reconnect invokes THIS dedicated
+   * ETag-resync sweep instead of re-running the full BFS — the P2-gap refactor.
+   * `index.ts` wires this to the SW's `resyncSweep` via the notifications client.
+   * When omitted (back-compat / no notifications), reconnect falls back to a
+   * full `run()` as in P2.
+   */
+  onReconnect?: () => void;
 }
 
 export function createWarmController(opts: WarmControllerOptions): WarmController {
@@ -580,9 +591,13 @@ export function createWarmController(opts: WarmControllerOptions): WarmControlle
   }
 
   if (opts.rewarmOnReconnect !== false && typeof globalThis.addEventListener === 'function') {
-    onlineHandler = () => {
-      void run();
-    };
+    // P3: prefer the dedicated ETag-resync sweep; only fall back to a full BFS
+    // re-warm when no sweep was wired (no notifications path).
+    onlineHandler = opts.onReconnect
+      ? () => opts.onReconnect?.()
+      : () => {
+          void run();
+        };
     globalThis.addEventListener('online', onlineHandler);
   }
 

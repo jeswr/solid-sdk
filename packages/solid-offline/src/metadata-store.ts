@@ -111,6 +111,29 @@ export class MetadataStore {
     return promisifyRequest<CacheMetadata[]>(index.getAll(url));
   }
 
+  /**
+   * All metadata entries (every (url, varyKey)). Used by P3's reconnect
+   * ETag-resync sweep and disconnected `If-None-Match` polling to enumerate the
+   * warmed set. Cheap relative to the network it saves; the warm budget bounds it.
+   */
+  async getAll(): Promise<CacheMetadata[]> {
+    const tx = this.db.transaction(STORE, 'readonly');
+    return promisifyRequest<CacheMetadata[]>(tx.objectStore(STORE).getAll());
+  }
+
+  /**
+   * Record the last notification `state` (ETag carried in a change frame) for a
+   * resource, across every cached variant of that URL. Lets the SW short-circuit
+   * a self-caused change (`frame.state === lastState`) without a network round-trip.
+   */
+  async setLastState(url: string, state: string): Promise<void> {
+    const records = await this.getByUrl(url);
+    for (const record of records) {
+      record.lastState = state;
+      await this.put(record);
+    }
+  }
+
   /** Touch fetchedAt (used on a 304 — confirms provisional bytes are still fresh). */
   async touch(key: string, at: number = Date.now()): Promise<void> {
     const existing = await this.get(key);

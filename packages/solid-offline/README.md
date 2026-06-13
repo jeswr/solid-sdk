@@ -7,9 +7,10 @@ usually hit the pre-fetched cache.
 
 Built strictly to the canonical design
 (`prod-solid-server/docs/offline-first-architecture.md`). **This package
-currently implements P0 (scaffold + SW registration), P1 (read cache), and P2
-(page-driven proactive warmer).** Notification invalidation (P3), in-place viewer
-(P4), DX hooks + logout-purge (P5), and offline writes (v2) are **not** built yet.
+currently implements P0 (scaffold + SW registration), P1 (read cache), P2
+(page-driven proactive warmer), and P3 (notification-driven invalidation).**
+In-place viewer (P4), DX hooks + logout-purge (P5), and offline writes (v2) are
+**not** built yet.
 
 ## Install
 
@@ -29,11 +30,13 @@ const offline = createOfflineClient({
   // Pass your DPoP-decorated fetch so the warmed reads are authenticated.
   // The service worker itself NEVER authenticates (design decision 1).
   fetch: session.fetch,
-  notifications: true, // stored; used in P3
+  // P3: page-side WebSocketChannel2023 client. `true` derives topics from the
+  // warmed containers; pass an object to set explicit containers/resources/caps.
+  notifications: true,
   workerUrl: '/solid-offline-worker.js',
 });
 
-await offline.register(); // also schedules the first warm on idle
+await offline.register(); // also schedules the first warm on idle + starts notifications
 
 // Or trigger / await a warm explicitly:
 const result = await offline.warm();
@@ -45,8 +48,41 @@ offline.onUpdated(({ url, etag }) => {
 });
 ```
 
-The `notifications` config is **accepted, validated, and forwarded to the service
-worker now** so the wire is ready, but notification behaviour lands in P3.
+## What P3 does (notification invalidation, §5 of the design)
+
+Live correctness without polling, joined to the server via the change frame's
+ETag (`state`).
+
+- **The WebSocket lives in the PAGE, never the SW** (decision 5: the SW is
+  event-driven and terminated, so it can't hold a socket). The page discovers the
+  subscription service (the `storageDescription` Link rel → `notify:subscription`,
+  with a `/.well-known/solid` fallback), subscribes **per-container** (capped by
+  `maxChannels`) + **per-resource** for hot resources, opens the `receiveFrom`
+  socket, and `postMessage`s each change frame to the SW. The page holds the auth;
+  the SW only invalidates.
+- **Invalidation pipeline (in the SW).** On a frame, the SW looks the resource up
+  in the P1 metadata store and:
+  - **ETag short-circuit** — if `frame.state` equals the ETag we already hold, the
+    change is one *we* caused; it's a free no-op (no fetch, no broadcast).
+  - else **revalidate** with `If-None-Match` (`Create`/`Update`) or **re-fetch the
+    container listing** (`Add`/`Remove`, where membership can't be confirmed by a
+    bare ETag), or **purge** (`Delete`/403/404), then update Cache + metadata and
+    `BroadcastChannel` `{url, event:'updated'}` to every tab.
+- **Reconnect = exponential backoff + re-subscribe** (channels are one-shot). While
+  disconnected the SW slow-polls the warmed set with `If-None-Match`; on every
+  (re)connect the page asks the SW to run **one ETag-resync sweep** — a flat
+  conditional-GET pass over the whole warmed set (mostly cheap `304`s) that catches
+  up on frames missed while down.
+
+The SW's invalidation/resync GETs are **unauthenticated** (the SW holds no key).
+For a private resource a resync GET may `401`/`403` and purge the entry; the
+page's own authenticated read/warm then re-populates it. A SharedWorker token
+authority (v2 / P6) removes this asymmetry.
+
+The page client (`createNotificationsClient`, `discoverSubscriptionUrl`,
+`subscribe`, `parseFrame`, `backoffDelay`) and the SW pipeline
+(`handleNotification`, `resyncSweep`) are exported and unit-tested with a fake
+WebSocket + fake fetch + the real `fake-indexeddb` metadata store.
 
 ## What P2 does (page-driven warmer, §3 of the design)
 
@@ -68,8 +104,10 @@ authenticated reads to flow through it.
 - **Large binaries** (`image/*`, `video/*`, …, or `Content-Length` over ~5 MB)
   are **listing/metadata-warmed only** — their bytes are fetched lazily on first
   real read.
-- **Re-warm on reconnect.** An `online` event re-runs the warm; because the P1
-  layer turns each GET into a conditional revalidation, it's mostly cheap `304`s.
+- **Reconnect (refactored in P3).** When notifications are enabled, an `online`
+  event runs the dedicated **ETag-resync sweep** (a flat conditional-GET pass over
+  the warmed set) instead of re-issuing the full BFS — the gap P2 flagged. Without
+  notifications it falls back to the P2 full re-warm.
 
 The warmer's pure logic (seed derivation, BFS + dedup, budget enforcement, ACL
 pruning + negative-cache, Type-Index-first ordering, concurrency cap) is
@@ -124,24 +162,28 @@ cache cannot back.
 
 ## Verified vs assumed
 
-- **Verified headlessly** (`npm test`, 77 unit tests via `vitest` +
-  `fake-indexeddb` + Cache/fetch mocks): the cacheable/never-cache classifier,
-  cache-key/varyKey computation, the full SWR decision tree (hit→serve+
-  revalidate, 304 vs 200, offline→stale, miss→network+store, never-cache
-  passthrough), negative-cache TTL for 403/404, opaque-response skip, the
-  IndexedDB metadata store, and **the P2 warmer**: seed derivation +
-  Type-Index-first ordering, BFS traversal + dedup, budget enforcement
-  (resources/bytes/depth), ACL 403 pruning + negative-cache, WAC-Allow pruning,
-  large-binary skip, the concurrency cap, ACL Link-header derivation, and the
-  idle/reconnect triggers.
+- **Verified headlessly** (`npm test`, 103 unit tests via `vitest` +
+  `fake-indexeddb` + Cache/fetch/WebSocket mocks): the cacheable/never-cache
+  classifier, cache-key/varyKey computation, the full SWR decision tree
+  (hit→serve+revalidate, 304 vs 200, offline→stale, miss→network+store,
+  never-cache passthrough), negative-cache TTL for 403/404, opaque-response skip,
+  the IndexedDB metadata store, **the P2 warmer** (seed derivation +
+  Type-Index-first ordering, BFS + dedup, budget enforcement, ACL/WAC pruning +
+  negative-cache, large-binary skip, concurrency cap, ACL Link-header derivation,
+  idle/reconnect triggers), and **the P3 notifications + invalidation**: endpoint
+  discovery (Link rel + `/.well-known/solid` fallback), the subscribe POST →
+  `receiveFrom`, frame parsing, message→SW forwarding, the **ETag short-circuit**
+  no-op, Update→revalidate→broadcast (200 vs 304), Add/Remove→listing re-fetch,
+  Delete/403/404 purge, reconnect backoff + re-subscribe, disconnected slow-poll,
+  and the reconnect ETag-resync sweep (incl. URL dedup + negative-entry skip).
 - **Assumed / not verified headlessly:** the real ServiceWorker lifecycle
-  (`install`/`activate`/`claim`/`fetch` events), the Cache API against a real
-  browser, and `navigator.serviceWorker.register`. `src/worker.ts` and
-  `src/index.ts` are thin adapters over the tested decision logic; they need a
-  real browser (or Playwright) to exercise end-to-end. The warmer's *browser
-  triggers* (`requestIdleCallback`, the `online` event) are unit-tested with
-  injected globals, but a full post-login warm against a live pod is integration
-  work for the later phases.
+  (`install`/`activate`/`claim`/`fetch`/`message` events), the Cache API against a
+  real browser, `navigator.serviceWorker.register`, and a **live
+  WebSocketChannel2023 socket** against a real prod-solid-server (discovery /
+  subscribe / frame delivery are exercised against a fake socket + fake fetch
+  only). `src/worker.ts` and `src/index.ts` are thin adapters over the tested
+  decision logic; a full end-to-end run needs a real browser (or Playwright) and a
+  live pod — integration work deferred to the later phases.
 
 ## Scripts
 
