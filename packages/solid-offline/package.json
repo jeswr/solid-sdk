@@ -1,0 +1,50 @@
+{
+  "name": "@solid/offline",
+  "version": "0.0.0",
+  "description": "Offline-first drop-in layer for Solid apps: a service worker that intercepts fetch and caches documents never-authoritatively (P0 scaffold + P1 read cache).",
+  "type": "module",
+  "license": "MIT",
+  "author": "Jesse Wright",
+  "engines": {
+    "node": ">=22"
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./worker": {
+      "types": "./dist/worker.d.ts",
+      "import": "./dist/worker.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsup",
+    "lint": "biome check src test",
+    "lint:fix": "biome check --write src test",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "n3": "^1.21.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@types/n3": "^1.21.0",
+    "@types/node": "^22.10.0",
+    "@vitest/coverage-v8": "^3.2.6",
+    "fake-indexeddb": "^6.0.0",
+    "tsup": "^8.3.5",
+    "typescript": "^5.7.2",
+    "vitest": "^3.2.6"
+  }
+}
