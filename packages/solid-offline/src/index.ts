@@ -1,14 +1,16 @@
 /**
- * `@solid/offline` — framework-agnostic page client (P0).
+ * `@solid/offline` — framework-agnostic page client (P0–P2).
  *
  * `createOfflineClient(config)` returns a handle whose `register()`:
  *   1. registers the service worker (`navigator.serviceWorker.register`),
  *   2. opens a `BroadcastChannel` for `{url, event:'updated'}` invalidation events,
- *   3. sets up page↔SW `postMessage` and hands the SW its config.
+ *   3. sets up page↔SW `postMessage` and hands the SW its config,
+ *   4. (P2) starts the PAGE-DRIVEN warmer if `warm` is configured.
  *
- * The warmer (P2) and notifications (P3) are NOT implemented here — their config
- * is accepted, validated, and forwarded to the SW so the wire is ready. In P0/P1
- * the SW is a network-only passthrough + never-authoritative read cache.
+ * PAGE-DRIVEN WARMER (P2, decision 1): the warmer runs in the page and issues its
+ * fetches through the page's own (DPoP-decorated) `fetch`, so the SW merely
+ * intercepts + caches them. The SW is NEVER authenticated. Notifications (P3) are
+ * still config-only.
  *
  * NO React. (The `@solid/offline/react` entry is P5.)
  */
@@ -19,6 +21,12 @@ import type {
   PageToWorkerMessage,
   UpdatedEvent,
 } from './types.js';
+import {
+  type WarmController,
+  type WarmResult,
+  createWarmController,
+  resolveBudget,
+} from './warmer.js';
 
 export type {
   OfflineClient,
@@ -28,6 +36,27 @@ export type {
   WarmConfig,
   WarmBudget,
 } from './types.js';
+export {
+  warm,
+  createWarmController,
+  resolveBudget,
+  DEFAULT_WARM_BUDGET,
+  onIdle,
+} from './warmer.js';
+export type {
+  WarmDeps,
+  WarmVisit,
+  WarmController,
+  WarmResult,
+  ResolvedWarmBudget,
+} from './warmer.js';
+export {
+  deriveSeeds,
+  containerChildren,
+  typeIndexTargets,
+  parseWacAllow,
+  userCanRead,
+} from './warmer-rdf.js';
 
 const DEFAULTS = {
   workerUrl: '/solid-offline-worker.js',
@@ -54,7 +83,31 @@ export function createOfflineClient(config: OfflineClientConfig = {}): OfflineCl
 
   let channel: BroadcastChannel | undefined;
   let registration: ServiceWorkerRegistration | undefined;
+  let warmer: WarmController | undefined;
   const listeners = new Set<UpdatedListener>();
+
+  /**
+   * Start the page-driven warmer (P2). Uses the page's own fetch (config.fetch
+   * if supplied — typically the app's DPoP-decorated fetch — else the global
+   * `fetch`), so the SW intercepts + caches; the SW is never authenticated.
+   */
+  function startWarmer(): WarmController | undefined {
+    if (warmer) return warmer;
+    if (config.warm === false || config.warm === undefined) return undefined;
+    if (!config.webId) return undefined; // no identity → nothing to warm
+    const pageFetch =
+      config.fetch ?? (typeof fetch !== 'undefined' ? fetch.bind(globalThis) : undefined);
+    if (!pageFetch) return undefined;
+    const warmCfg = config.warm === true ? {} : config.warm;
+    warmer = createWarmController({
+      webId: config.webId,
+      deps: { fetch: pageFetch },
+      budget: resolveBudget(warmCfg.budget),
+      warmOnLogin: warmCfg.warmOnLogin,
+      rewarmOnReconnect: warmCfg.rewarmOnReconnect,
+    });
+    return warmer;
+  }
 
   function ensureChannel(): BroadcastChannel | undefined {
     if (channel) return channel;
@@ -105,7 +158,17 @@ export function createOfflineClient(config: OfflineClientConfig = {}): OfflineCl
       postConfig(navigator.serviceWorker.controller);
     });
 
+    // P2: kick off the page-driven warmer (it self-schedules on idle).
+    startWarmer();
+
     return registration;
+  }
+
+  /** Run (or re-run) the warmer now. See {@link OfflineClient.warm}. */
+  async function warm(): Promise<WarmResult | undefined> {
+    const w = startWarmer();
+    if (!w) return undefined;
+    return w.run();
   }
 
   function onUpdated(listener: UpdatedListener): () => void {
@@ -118,10 +181,13 @@ export function createOfflineClient(config: OfflineClientConfig = {}): OfflineCl
     listeners.clear();
     channel?.close();
     channel = undefined;
+    warmer?.stop();
+    warmer = undefined;
   }
 
   return {
     register,
+    warm,
     close,
     onUpdated,
     config: resolved,

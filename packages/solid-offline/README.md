@@ -7,9 +7,9 @@ usually hit the pre-fetched cache.
 
 Built strictly to the canonical design
 (`prod-solid-server/docs/offline-first-architecture.md`). **This package
-currently implements P0 (scaffold + SW registration) and P1 (read cache).** The
-warmer (P2), notification invalidation (P3), in-place viewer (P4), DX hooks +
-logout-purge (P5), and offline writes (v2) are **not** built yet.
+currently implements P0 (scaffold + SW registration), P1 (read cache), and P2
+(page-driven proactive warmer).** Notification invalidation (P3), in-place viewer
+(P4), DX hooks + logout-purge (P5), and offline writes (v2) are **not** built yet.
 
 ## Install
 
@@ -17,19 +17,27 @@ logout-purge (P5), and offline writes (v2) are **not** built yet.
 npm install @solid/offline n3
 ```
 
-## Use (page client — P0)
+## Use (page client — P0–P2)
 
 ```ts
 import { createOfflineClient } from '@solid/offline';
 
 const offline = createOfflineClient({
   webId: 'https://alice.example/profile/card#me',
-  warm: { seeds: 'auto', budget: { resources: 500, bytes: 50_000_000 } }, // stored; used in P2
+  // P2: page-driven warmer. Defaults: 500 resources / 50 MB / depth 6 / concurrency 4.
+  warm: { seeds: 'auto', budget: { maxResources: 500, maxBytes: 50_000_000 } },
+  // Pass your DPoP-decorated fetch so the warmed reads are authenticated.
+  // The service worker itself NEVER authenticates (design decision 1).
+  fetch: session.fetch,
   notifications: true, // stored; used in P3
   workerUrl: '/solid-offline-worker.js',
 });
 
-await offline.register();
+await offline.register(); // also schedules the first warm on idle
+
+// Or trigger / await a warm explicitly:
+const result = await offline.warm();
+// → { warmed, visited, bytes, pruned, budgetHit, visits }
 
 // React to background cache updates (the SW broadcasts these after revalidation):
 offline.onUpdated(({ url, etag }) => {
@@ -37,9 +45,36 @@ offline.onUpdated(({ url, etag }) => {
 });
 ```
 
-The `warm` and `notifications` config is **accepted, validated, and forwarded to
-the service worker now** so the wire is ready, but the warmer/notification
-behaviour lands in P2/P3.
+The `notifications` config is **accepted, validated, and forwarded to the service
+worker now** so the wire is ready, but notification behaviour lands in P3.
+
+## What P2 does (page-driven warmer, §3 of the design)
+
+After login, on idle (`requestIdleCallback`, with a `setTimeout` fallback), the
+**page** crawls the user's documents and pulls them through its own
+(DPoP-decorated) `fetch`, so the P1 service worker intercepts and caches them.
+**The SW never authenticates** (decision 1) — the warmer just *causes* the right
+authenticated reads to flow through it.
+
+- **Seeds, in priority order:** WebID profile → `pim:storage` root →
+  **Type Index** (public + private) → ACLs → inbox. **Type-Index-first**
+  (decision 6) so the index-named resources warm before generic BFS expansion.
+- **Bounded BFS over `ldp:contains`** with dedup (cycles can't loop).
+- **ACL-aware.** It reads `WAC-Allow` on listings; a subtree the user can't read
+  is pruned without wasted fetches, and a `403`/`404` on a child is **caught,
+  negative-cached, and its subtree pruned — never surfaced as an error**.
+- **Budget (decision 6 defaults):** `maxResources: 500`, `maxBytes: 50_000_000`,
+  `maxDepth: 6`, `concurrency: 4`. The crawl stops cleanly at any limit.
+- **Large binaries** (`image/*`, `video/*`, …, or `Content-Length` over ~5 MB)
+  are **listing/metadata-warmed only** — their bytes are fetched lazily on first
+  real read.
+- **Re-warm on reconnect.** An `online` event re-runs the warm; because the P1
+  layer turns each GET into a conditional revalidation, it's mostly cheap `304`s.
+
+The warmer's pure logic (seed derivation, BFS + dedup, budget enforcement, ACL
+pruning + negative-cache, Type-Index-first ordering, concurrency cap) is
+exported (`warm`, `createWarmController`, `deriveSeeds`, …) and exhaustively unit
+tested with a URL-routed mock fetch + Turtle fixtures.
 
 ## Use (service worker — P0/P1)
 
@@ -89,18 +124,24 @@ cache cannot back.
 
 ## Verified vs assumed
 
-- **Verified headlessly** (`npm test`, 49 unit tests via `vitest` +
+- **Verified headlessly** (`npm test`, 77 unit tests via `vitest` +
   `fake-indexeddb` + Cache/fetch mocks): the cacheable/never-cache classifier,
   cache-key/varyKey computation, the full SWR decision tree (hit→serve+
   revalidate, 304 vs 200, offline→stale, miss→network+store, never-cache
-  passthrough), negative-cache TTL for 403/404, opaque-response skip, and the
-  IndexedDB metadata store.
+  passthrough), negative-cache TTL for 403/404, opaque-response skip, the
+  IndexedDB metadata store, and **the P2 warmer**: seed derivation +
+  Type-Index-first ordering, BFS traversal + dedup, budget enforcement
+  (resources/bytes/depth), ACL 403 pruning + negative-cache, WAC-Allow pruning,
+  large-binary skip, the concurrency cap, ACL Link-header derivation, and the
+  idle/reconnect triggers.
 - **Assumed / not verified headlessly:** the real ServiceWorker lifecycle
   (`install`/`activate`/`claim`/`fetch` events), the Cache API against a real
   browser, and `navigator.serviceWorker.register`. `src/worker.ts` and
   `src/index.ts` are thin adapters over the tested decision logic; they need a
-  real browser (or Playwright) to exercise end-to-end. That is expected at P0/P1
-  and is covered by the later phases' integration work.
+  real browser (or Playwright) to exercise end-to-end. The warmer's *browser
+  triggers* (`requestIdleCallback`, the `online` event) are unit-tested with
+  injected globals, but a full post-login warm against a live pod is integration
+  work for the later phases.
 
 ## Scripts
 
