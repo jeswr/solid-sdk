@@ -144,6 +144,26 @@ describe('logout-purge — drops BOTH stores for one WebID', () => {
     expect(await dbExists(dbNameForWebId(ALICE))).toBe(false);
   });
 
+  it('#5 reports a BLOCKED deletion distinctly (open handle) without claiming success', async () => {
+    // Keep Alice's DB OPEN so the deletion is blocked by a live connection.
+    const alice = await openFor(ALICE);
+    await alice.put(record('https://alice.example/doc'));
+    // Do NOT close it — this is exactly the "another tab/SW still holds the DB" case.
+
+    const caches = new MockCacheStorage();
+    caches.add(cacheNameForWebId(ALICE));
+    const result = await purgeForWebId(ALICE, { caches, indexedDB });
+
+    // The cache half still succeeds.
+    expect(result.cacheDeleted).toBe(true);
+    // The DB deletion is BLOCKED — reported distinctly, NOT as dbDeleted.
+    expect(result.dbBlocked).toBe(true);
+    expect(result.dbDeleted).toBe(false);
+    expect(result.errors).toHaveLength(0);
+    // The DB is NOT yet gone (the blocker still holds it open).
+    expect(await dbExists(dbNameForWebId(ALICE))).toBe(true);
+  });
+
   it('purges the anonymous scope when no WebID is given', async () => {
     const s = await MetadataStore.open(undefined);
     await s.put(record('https://pod.example/doc'));

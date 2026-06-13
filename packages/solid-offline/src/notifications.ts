@@ -317,9 +317,13 @@ export function createNotificationsClient(
   async function connectChannel(channel: Channel, attempt: number): Promise<void> {
     if (stopped || channel.closed) return;
     if (!isOnline()) {
-      // Offline: don't hammer; the `online` reconnect path (caller) restarts us,
-      // and the SW slow-polls the warmed set meanwhile.
+      // Offline: don't hammer the socket, but DO keep a reconnect scheduled (#12).
+      // Previously we only armed the slow-poll and returned with no future
+      // reconnect, so if the caller's `online` listener never fired (or wasn't
+      // wired) notifications would never resume after coming back online. Arm the
+      // slow-poll AND schedule a backoff reconnect that re-checks `isOnline()`.
       schedulePoll();
+      scheduleReconnect(channel, attempt + 1);
       return;
     }
     const subscriptionUrl = await discover();

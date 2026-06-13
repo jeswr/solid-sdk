@@ -4,6 +4,7 @@
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import { DEFAULT_DB_NAME, MetadataStore, dbNameForWebId } from '../src/metadata-store.js';
+import { DB_PREFIX } from '../src/scope.js';
 import type { CacheMetadata } from '../src/types.js';
 
 function record(over: Partial<CacheMetadata> = {}): CacheMetadata {
@@ -45,7 +46,7 @@ describe('dbNameForWebId — §7 per-identity scoping', () => {
     const b = dbNameForWebId('https://bob.example/profile/card#me');
     expect(a).toBe(dbNameForWebId('https://alice.example/profile/card#me'));
     expect(a).not.toBe(b);
-    expect(a.startsWith('solid-offline:')).toBe(true);
+    expect(a.startsWith(DB_PREFIX)).toBe(true);
   });
 });
 

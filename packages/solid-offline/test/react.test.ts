@@ -157,7 +157,7 @@ describe('useOfflineResource', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it('does not fetch when skip is set, and reload() triggers a read', async () => {
+  it('does not fetch when skip is set, and reload() triggers a read (#14)', async () => {
     const fetchMock = vi.fn(
       async () => new Response('x', { status: 200, headers: { etag: '"v1"' } }),
     );
@@ -169,6 +169,93 @@ describe('useOfflineResource', () => {
     );
     expect(result.current.state).toBe('idle');
     expect(fetchMock).not.toHaveBeenCalled();
+
+    // #14: a manual reload() must still load even though skip suppressed the
+    // initial read (previously reload() bumped the nonce but the effect returned
+    // early on skip, so a skipped resource could never be loaded manually).
+    await act(async () => {
+      result.current.reload();
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    await waitFor(() => expect(result.current.state).toBe('success'));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // #14 (re-review): reload is ONE-SHOT. With skip still true, an `updated`
+    // broadcast for this url must NOT auto-fetch (skip wasn't lifted permanently).
+    await broadcast({ url: 'https://pod/doc', event: 'updated' });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    // But an explicit reload() still loads again.
+    await act(async () => {
+      result.current.reload();
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+  });
+
+  it('a manual reload while skip is true is NOT dropped by a mid-flight broadcast (#14)', async () => {
+    // A controllable fetch: resolves only when we release it, so we can fire an
+    // `updated` broadcast WHILE the manual load is in flight.
+    let release: ((r: Response) => void) | undefined;
+    const fetchMock = vi.fn(
+      () =>
+        new Promise<Response>((res) => {
+          release = res;
+        }),
+    );
+    const { result } = renderHook(() =>
+      useOfflineResource<string>('https://pod/doc', {
+        fetch: fetchMock as unknown as typeof fetch,
+        select: (r) => r.text(),
+        skip: true,
+      }),
+    );
+    expect(result.current.state).toBe('idle');
+
+    // Manual reload → starts the (pending) fetch.
+    await act(async () => {
+      result.current.reload();
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // An `updated` broadcast arrives mid-flight (would re-trigger the effect).
+    await broadcast({ url: 'https://pod/doc', event: 'updated' });
+
+    // Now release the fetch — the manual load must still complete to success,
+    // not have been dropped back to idle by the mid-flight re-trigger.
+    await act(async () => {
+      release?.(new Response('LOADED', { status: 200, headers: { etag: '"v1"' } }));
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    await waitFor(() => expect(result.current.state).toBe('success'));
+    expect(result.current.data).toBe('LOADED');
+  });
+
+  it('a reload bypass does NOT leak across a url change (#14)', async () => {
+    const fetchMock = vi.fn(
+      async () => new Response('x', { status: 200, headers: { etag: '"v1"' } }),
+    );
+    const { result, rerender } = renderHook(
+      ({ url }: { url: string }) =>
+        useOfflineResource(url, { fetch: fetchMock as unknown as typeof fetch, skip: true }),
+      { initialProps: { url: 'https://pod/a' } },
+    );
+    expect(result.current.state).toBe('idle');
+
+    // Manual reload for url A → loads.
+    await act(async () => {
+      result.current.reload();
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+
+    // Switch to url B WITHOUT a new reload(): skip must suppress it (no fetch).
+    await act(async () => {
+      rerender({ url: 'https://pod/b' });
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(result.current.state).toBe('idle');
+    expect(fetchMock).toHaveBeenCalledTimes(1); // url B did NOT auto-fetch
   });
 
   it('surfaces a fetch error', async () => {

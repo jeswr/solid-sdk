@@ -14,6 +14,7 @@ import {
   computeVaryKey,
   isCacheableMethod,
   isNeverCacheEndpoint,
+  keyRequest,
 } from '../src/cache-policy.js';
 
 function req(url: string, method = 'GET', headers: Record<string, string> = {}): RequestLike {
@@ -155,6 +156,23 @@ describe('classifyResponse — Never-cache rules (§2)', () => {
     expect(d).toMatchObject({ cacheable: false, reason: 'opaque-cross-origin' });
   });
 
+  it('refuses Vary: * (not shareable; matches Cache API rejection)', () => {
+    const d = classifyResponse(req('https://pod/a'), res(200, { vary: '*', etag: '"1"' }));
+    expect(d).toMatchObject({ cacheable: false, reason: 'vary-star' });
+    // Even a 403/404 with Vary:* is not cacheable.
+    expect(classifyResponse(req('https://pod/a'), res(404, { vary: '*' }))).toMatchObject({
+      cacheable: false,
+      reason: 'vary-star',
+    });
+    // A COALESCED header like `Vary: *, Accept` must also be rejected (any `*` token).
+    expect(
+      classifyResponse(req('https://pod/a'), res(200, { vary: '*, Accept', etag: '"1"' })),
+    ).toMatchObject({ cacheable: false, reason: 'vary-star' });
+    expect(
+      classifyResponse(req('https://pod/a'), res(200, { vary: 'Accept, *', etag: '"1"' })),
+    ).toMatchObject({ cacheable: false, reason: 'vary-star' });
+  });
+
   it('refuses generic 4xx/5xx but NEGATIVE-caches 403 and 404', () => {
     expect(classifyResponse(req('https://pod/a'), res(401))).toMatchObject({
       cacheable: false,
@@ -183,5 +201,32 @@ describe('aclStatusFor + negative TTL constant', () => {
   it('negative TTL is a short positive duration', () => {
     expect(NEGATIVE_CACHE_TTL_MS).toBeGreaterThan(0);
     expect(NEGATIVE_CACHE_TTL_MS).toBeLessThanOrEqual(60_000);
+  });
+});
+
+describe('keyRequest — collision-free canonical Cache key', () => {
+  it('maps distinct (url, varyKey) pairs to distinct keys', () => {
+    const a = keyRequest('https://pod/doc', 'accept=text/turtle').url;
+    const b = keyRequest('https://pod/doc', 'accept=application/ld+json').url;
+    const c = keyRequest('https://pod/other', 'accept=text/turtle').url;
+    expect(new Set([a, b, c]).size).toBe(3);
+  });
+
+  it('does NOT collide when the resource URL already carries the reserved param', () => {
+    // The roborev HIGH finding: folding the varyKey into a query param on the
+    // live URL collided when the resource itself had that param. The sentinel-
+    // origin composite key must keep them distinct.
+    const plain = keyRequest('https://pod/doc', 'accept=text/turtle').url;
+    const sneaky = keyRequest(
+      'https://pod/doc?__solid_offline_key=accept=text/turtle',
+      'accept=text/turtle',
+    ).url;
+    expect(plain).not.toBe(sneaky);
+  });
+
+  it('is deterministic for the same inputs', () => {
+    expect(keyRequest('https://pod/x', 'accept=text/turtle').url).toBe(
+      keyRequest('https://pod/x', 'accept=text/turtle').url,
+    );
   });
 });

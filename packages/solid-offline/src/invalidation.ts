@@ -34,10 +34,18 @@ import {
   classifyResponse,
   computeCacheKey,
   computeVaryKey,
+  keyRequest,
 } from './cache-policy.js';
 import type { MetadataStore } from './metadata-store.js';
 import type { Broadcaster, ByteCache } from './swr.js';
 import type { CacheMetadata, NotificationFrame } from './types.js';
+
+/**
+ * We key the byte cache on our synthetic canonical Request, so reads/deletes pass
+ * `ignoreVary` to stop the stored response's own `Vary` re-applying header matching
+ * (mirrors `swr.ts`). This lets us keep the response UN-mutated (metadata preserved).
+ */
+const IGNORE_VARY: CacheQueryOptions = { ignoreVary: true };
 
 /** Dependencies for the invalidation pipeline (all mockable). */
 export interface InvalidateDeps {
@@ -157,12 +165,60 @@ async function purge(
   records: CacheMetadata[],
   deps: InvalidateDeps,
 ): Promise<InvalidateOutcome> {
-  await deps.cache.delete(rdfRequest(url)).catch(() => false);
+  // Delete EVERY cached variant for this URL (the #3 fix). Bytes are keyed on the
+  // canonical `(url, varyKey)` Request, one per metadata record, so we must drop
+  // each — deleting only a single synthetic `Accept: text/turtle` key would leave
+  // other variants' bytes behind with no metadata (a no-leak hole).
+  const seenKeys = new Set<string>();
+  for (const record of records) {
+    seenKeys.add(record.varyKey);
+    await deps.cache.delete(keyRequest(url, record.varyKey), IGNORE_VARY).catch(() => false);
+  }
+  // Belt-and-braces: also drop the canonical Turtle variant in case a byte entry
+  // exists with no metadata row (orphan from a partial write).
+  if (!seenKeys.has('accept=text/turtle')) {
+    await deps.cache.delete(keyRequest(url, 'accept=text/turtle'), IGNORE_VARY).catch(() => false);
+  }
   for (const record of records) {
     await deps.meta.delete(record.key);
   }
   deps.broadcast.postMessage({ url, event: 'updated' });
   return { kind: 'deleted' };
+}
+
+/**
+ * Store bytes under the canonical key WITHOUT mutating the response (mirrors
+ * `swr.ts#store`): reads pass `ignoreVary` so the stored `Vary` can't re-apply
+ * header matching, while the response's metadata (`url`/`type`/…) is preserved.
+ */
+async function putCanonical(
+  rl: RequestLike,
+  response: Response,
+  deps: InvalidateDeps,
+): Promise<void> {
+  const varyKey = computeVaryKey(rl, resLike(response));
+  await deps.cache.put(keyRequest(rl.url, varyKey), response.clone());
+}
+
+/**
+ * A cacheable update REPLACES the whole resource: drop every existing variant
+ * (byte entry + metadata row) for the URL EXCEPT the canonical one we're about to
+ * (re)write, so `lookupRecord` can't keep matching a stale `Vary` row or a legacy
+ * pre-canonical row after the update (the re-review corrective).
+ */
+async function purgeStaleVariants(
+  url: string,
+  records: CacheMetadata[],
+  keepVaryKey: string,
+  deps: InvalidateDeps,
+): Promise<void> {
+  for (const record of records) {
+    // Keep the variant we're about to (re)write; it is overwritten by the
+    // subsequent canonical put + meta.put.
+    if (record.varyKey === keepVaryKey) continue;
+    await deps.cache.delete(keyRequest(url, record.varyKey), IGNORE_VARY).catch(() => false);
+    await deps.meta.delete(record.key);
+  }
 }
 
 /**
@@ -202,13 +258,21 @@ async function revalidateResource(
     const decision = classifyResponse(rl, resLike(fresh));
     const newEtag = fresh.headers.get('etag') ?? undefined;
     if (decision.cacheable) {
-      await deps.cache.put(condRequest, fresh.clone());
+      // Replace the whole resource: drop stale OTHER variants before writing the
+      // new canonical one (so lookup can't keep matching an old Vary row).
+      await purgeStaleVariants(url, records, computeVaryKey(rl, resLike(fresh)), deps);
+      await putCanonical(rl, fresh, deps);
       await deps.meta.put(
         metadataFromResponse(rl, resLike(fresh), deps.now(), decision.negative, state ?? newEtag),
       );
+      deps.broadcast.postMessage({ url, event: 'updated', etag: newEtag });
+      return { kind: 'updated', etag: newEtag };
     }
-    deps.broadcast.postMessage({ url, event: 'updated', etag: newEtag });
-    return { kind: 'updated', etag: newEtag };
+    // 2xx but NOT cacheable (Cache-Control: no-store / private). The resource is
+    // now uncacheable, so leaving the OLD bytes + metadata in place would keep
+    // serving a stale entry (the re-review corrective). Purge everything for this
+    // URL and broadcast so views re-read live.
+    return purge(url, records, deps);
   }
 
   if (fresh.status === 403 || fresh.status === 404) {
@@ -242,18 +306,24 @@ async function refreshListing(
 
   if (fresh.status >= 200 && fresh.status < 300) {
     const decision = classifyResponse(rl, resLike(fresh));
-    if (decision.cacheable) {
-      await deps.cache.put(req, fresh.clone());
-      await deps.meta.put(
-        metadataFromResponse(
-          rl,
-          resLike(fresh),
-          deps.now(),
-          decision.negative,
-          fresh.headers.get('etag') ?? undefined,
-        ),
-      );
+    if (!decision.cacheable) {
+      // 2xx but uncacheable (no-store/private): purge the stale listing rather
+      // than leaving the old bytes/metadata in place (re-review corrective).
+      return purge(container, records, deps);
     }
+    // Replace the whole listing: drop stale OTHER variants before writing the new
+    // canonical one.
+    await purgeStaleVariants(container, records, computeVaryKey(rl, resLike(fresh)), deps);
+    await putCanonical(rl, fresh, deps);
+    await deps.meta.put(
+      metadataFromResponse(
+        rl,
+        resLike(fresh),
+        deps.now(),
+        decision.negative,
+        fresh.headers.get('etag') ?? undefined,
+      ),
+    );
     deps.broadcast.postMessage({
       url: container,
       event: 'updated',

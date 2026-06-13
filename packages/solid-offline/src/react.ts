@@ -226,11 +226,37 @@ export function useOfflineResource<T = Response>(
   const inputsRef = useRef({ init, select, customFetch });
   inputsRef.current = { init, select, customFetch };
 
+  // #14 (re-review corrective): `reload()` bypasses `skip`, and the bypass stays
+  // active UNTIL THE LOAD SETTLES — not just for the single render where the nonce
+  // increased. Otherwise an `updated` broadcast (or url-stable re-render) arriving
+  // mid-flight would re-run the effect with no new nonce, see `skip`, and drop the
+  // in-flight manual load back to `idle`. We track a pending-manual-load flag that
+  // is set when the nonce increases and cleared only once the fetch finishes.
+  const actedNonceRef = useRef(0);
+  const manualPendingRef = useRef(false);
+  // The URL a pending manual load applies to. If `url` changes (or is removed), a
+  // manual bypass for the OLD url must NOT leak into the new one (the re-review
+  // corrective) — we only honour the pending flag for the same URL.
+  const manualUrlRef = useRef<string | undefined>(undefined);
+
   // `reloadNonce` + `updatedVersion` are the RE-READ TRIGGERS (read in the body);
   // the read INPUTS (init/select/fetch) come from `inputsRef`, so a fresh
   // `init`/`select`/`fetch` reference does not, by itself, re-fetch.
   useEffect(() => {
-    if (skip || !url) {
+    if (reloadNonce > actedNonceRef.current) {
+      actedNonceRef.current = reloadNonce;
+      manualPendingRef.current = true; // a fresh manual load was requested
+      manualUrlRef.current = url; // …for THIS url
+    }
+    // A pending manual bypass only applies to the URL it was requested for. If the
+    // url changed/was removed, drop the stale bypass so `skip` governs the new url.
+    if (manualPendingRef.current && manualUrlRef.current !== url) {
+      manualPendingRef.current = false;
+      manualUrlRef.current = undefined;
+    }
+    // The skip guard is bypassed while a manual load is pending (set by reload()
+    // and not yet settled) FOR THIS url, so a mid-flight re-trigger keeps loading.
+    if ((skip && !manualPendingRef.current) || !url) {
       setState('idle');
       return;
     }
@@ -265,10 +291,15 @@ export function useOfflineResource<T = Response>(
         // Mark the broadcast version we've now caught up to, so `outdated`
         // becomes false until the NEXT `updated` for this url.
         readVersionRef.current = versionAtRead;
+        // A manual-load bypass is now fulfilled (settled, not cancelled).
+        manualPendingRef.current = false;
+        manualUrlRef.current = undefined;
       } catch (err) {
         if (cancelled) return;
         setError(err);
         setState('error');
+        manualPendingRef.current = false;
+        manualUrlRef.current = undefined;
       }
     })();
 

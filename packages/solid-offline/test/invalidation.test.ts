@@ -15,7 +15,7 @@
  *   - resync sweep: confirms/replaces/purges across the warmed set; dedups by URL
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import { computeCacheKey } from '../src/cache-policy.js';
+import { computeCacheKey, keyRequest } from '../src/cache-policy.js';
 import { type InvalidateDeps, handleNotification, resyncSweep } from '../src/invalidation.js';
 import { MetadataStore } from '../src/metadata-store.js';
 import type { NotificationFrame } from '../src/types.js';
@@ -73,7 +73,9 @@ async function seed(
 ): Promise<void> {
   const req = makeGet(url);
   const res = turtleResponse(body, { etag, status });
-  h.cache.seed(req, res);
+  // Seed bytes under the CANONICAL (url, varyKey) key — the same key the engine
+  // now uses for put/match/delete — so the mock cache mirrors production.
+  h.cache.seed(keyRequest(url, 'accept=text/turtle'), res);
   const rl = { url, method: 'GET', headers: req.headers };
   const resLike = { status, headers: res.headers };
   await h.meta.put({
@@ -150,7 +152,7 @@ describe('Delete + forbidden', () => {
     expect(h.calls).toHaveLength(0); // a Delete needs no revalidation
     expect(h.broadcast.messages).toEqual([{ url: DOC, event: 'updated' }]);
     expect(await h.meta.getByUrl(DOC)).toHaveLength(0);
-    expect(await h.cache.match(makeGet(DOC))).toBeUndefined();
+    expect(await h.cache.match(keyRequest(DOC, 'accept=text/turtle'))).toBeUndefined();
   });
 
   it('Update whose revalidation 404s purges (no-leak parity)', async () => {
@@ -196,6 +198,88 @@ describe('Add/Remove → container listing re-fetch', () => {
     );
     expect(outcome.kind).toBe('not-cached');
     expect(h.calls).toHaveLength(0);
+  });
+});
+
+describe('#3 purge removes EVERY cached variant for the URL', () => {
+  it('deletes bytes for all varyKeys, not just a synthetic text/turtle key', async () => {
+    const h = await harness([]);
+    // Two variants of the same resource: turtle + ld+json (distinct varyKeys, but
+    // both canonicalize to accept=text/turtle in production; seed them explicitly
+    // under DIFFERENT varyKeys to prove purge sweeps all metadata rows' keys).
+    const turtleKey = keyRequest(DOC, 'accept=text/turtle');
+    const jsonKey = keyRequest(DOC, 'accept=application/ld+json');
+    h.cache.seed(turtleKey, turtleResponse('turtle-body', { etag: '"v1"' }));
+    h.cache.seed(jsonKey, turtleResponse('json-body', { etag: '"v1"' }));
+    for (const varyKey of ['accept=text/turtle', 'accept=application/ld+json']) {
+      await h.meta.put({
+        key: `${DOC} ${varyKey}`,
+        url: DOC,
+        varyKey,
+        etag: '"v1"',
+        contentType: 'text/turtle',
+        fetchedAt: 1_000,
+        aclStatus: 'ok',
+        status: 200,
+      });
+    }
+
+    const outcome = await handleNotification({ type: 'Delete', object: DOC }, h.deps);
+    expect(outcome.kind).toBe('deleted');
+    // BOTH variants' bytes are gone (no stale variant left behind with no metadata).
+    expect(await h.cache.match(turtleKey)).toBeUndefined();
+    expect(await h.cache.match(jsonKey)).toBeUndefined();
+    expect(await h.meta.getByUrl(DOC)).toHaveLength(0);
+  });
+});
+
+describe('a cacheable update replaces ALL variants (no stale Vary row survives)', () => {
+  it('removes a stale other-variant when storing the new canonical row', async () => {
+    const h = await harness([() => turtleResponse('<#x> <#y> <#z> .', { etag: '"v2"' })]);
+    // Two variants for DOC: the canonical turtle one (seeded) + a stale legacy one.
+    await seed(h, DOC, 'old-turtle', '"v1"');
+    const staleVary = 'accept=image/png';
+    h.cache.seed(keyRequest(DOC, staleVary), turtleResponse('STALE', { etag: '"old"' }));
+    await h.meta.put({
+      key: `${DOC} ${staleVary}`,
+      url: DOC,
+      varyKey: staleVary,
+      etag: '"old"',
+      contentType: 'image/png',
+      fetchedAt: 1,
+      aclStatus: 'ok',
+      status: 200,
+    });
+
+    const outcome = await handleNotification(
+      { type: 'Update', object: DOC, state: '"v2"' },
+      h.deps,
+    );
+    expect(outcome.kind).toBe('updated');
+    // The stale legacy variant is gone; only the freshly-written canonical remains.
+    expect(await h.cache.match(keyRequest(DOC, staleVary))).toBeUndefined();
+    const rows = await h.meta.getByUrl(DOC);
+    expect(rows.every((r) => r.varyKey !== staleVary)).toBe(true);
+    expect(rows.some((r) => r.etag === '"v2"')).toBe(true);
+  });
+});
+
+describe('revalidation 2xx but non-cacheable (no-store/private) purges the stale entry', () => {
+  it('drops old bytes + metadata instead of leaving a stale entry', async () => {
+    const h = await harness([
+      () => turtleResponse('NOW-PRIVATE', { etag: '"v2"', cacheControl: 'no-store' }),
+    ]);
+    await seed(h, DOC, 'old', '"v1"');
+
+    const outcome = await handleNotification(
+      { type: 'Update', object: DOC, state: '"v2"' },
+      h.deps,
+    );
+    // The resource is now uncacheable → purge, don't keep serving 'old'.
+    expect(outcome.kind).toBe('deleted');
+    expect(await h.meta.getByUrl(DOC)).toHaveLength(0);
+    expect(await h.cache.match(keyRequest(DOC, 'accept=text/turtle'))).toBeUndefined();
+    expect(h.broadcast.messages).toEqual([{ url: DOC, event: 'updated' }]);
   });
 });
 

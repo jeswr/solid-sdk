@@ -13,6 +13,7 @@ import {
   DEFAULT_DB_NAME,
   cacheNameForWebId,
   dbNameForWebId,
+  isScopeChange,
   scopeFor,
   scopeHash,
 } from '../src/scope.js';
@@ -33,6 +34,15 @@ describe('scope — §7 per-identity namespacing', () => {
     expect(cacheNameForWebId(undefined)).toBe(DEFAULT_CACHE_NAME);
   });
 
+  it('names carry the cache-format generation (coherent across an upgrade)', () => {
+    // Both stores are generation-scoped, so an old-format cache is abandoned
+    // together (no mixed-generation reads / offline misses).
+    expect(DB_PREFIX).toContain('-v2:');
+    expect(CACHE_PREFIX).toContain('-v2:');
+    expect(dbNameForWebId(ALICE)).toContain('-v2:');
+    expect(cacheNameForWebId(ALICE)).toContain('-v2:');
+  });
+
   it('DB name and Cache name share the WebID scope but use distinct prefixes', () => {
     const db = dbNameForWebId(ALICE);
     const cache = cacheNameForWebId(ALICE);
@@ -49,5 +59,24 @@ describe('scope — §7 per-identity namespacing', () => {
     // And anonymous is distinct from both identities.
     expect(dbNameForWebId(ALICE)).not.toBe(DEFAULT_DB_NAME);
     expect(cacheNameForWebId(BOB)).not.toBe(DEFAULT_CACHE_NAME);
+  });
+});
+
+describe('#4 isScopeChange — anonymous-after-login clears the previous identity', () => {
+  it('the FIRST config message is always a scope change (even undefined)', () => {
+    expect(isScopeChange(false, undefined, undefined)).toBe(true);
+    expect(isScopeChange(false, undefined, ALICE)).toBe(true);
+  });
+
+  it('logged-in → anonymous (undefined) IS a change (the core bug)', () => {
+    // Previously the worker only reacted to a truthy webId, so this returned no
+    // change and the SW kept serving Alice's scoped cache to the anonymous client.
+    expect(isScopeChange(true, ALICE, undefined)).toBe(true);
+  });
+
+  it('switching identities is a change; the same identity is not', () => {
+    expect(isScopeChange(true, ALICE, BOB)).toBe(true);
+    expect(isScopeChange(true, ALICE, ALICE)).toBe(false);
+    expect(isScopeChange(true, undefined, undefined)).toBe(false);
   });
 });

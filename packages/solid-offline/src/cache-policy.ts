@@ -68,6 +68,7 @@ export type CacheDecisionReason =
   | 'private'
   | 'never-cache-endpoint'
   | 'opaque-cross-origin'
+  | 'vary-star'
   | 'error-status';
 
 export interface CacheDecision {
@@ -75,6 +76,15 @@ export interface CacheDecision {
   reason: CacheDecisionReason;
   /** True when this is the short-TTL negative cache of a 403/404. */
   negative: boolean;
+}
+
+/** True if a `Vary` header contains a `*` token (making the response non-shareable). */
+export function varyHasStar(vary: string | null): boolean {
+  if (!vary) return false;
+  return vary
+    .split(',')
+    .map((t) => t.trim())
+    .some((t) => t === '*');
 }
 
 /** Is the request method one we ever cache? (GET/HEAD only, per §2.) */
@@ -142,6 +152,16 @@ export function classifyResponse(req: RequestLike, res: ResponseLike): CacheDeci
     return { cacheable: false, reason: 'private', negative: false };
   }
 
+  // A `*` ANYWHERE in `Vary` means the response is not shareable across requests
+  // (every request is potentially distinct). The Cache API itself refuses to store
+  // such a response under a normal key; because we store under our own synthetic
+  // canonical key we must enforce the same rule here, or a later request with the
+  // same synthetic key would wrongly receive it. Parse comma-separated tokens so
+  // coalesced headers like `Vary: *, Accept` are caught too (not just exact `*`).
+  if (varyHasStar(res.headers.get('vary'))) {
+    return { cacheable: false, reason: 'vary-star', negative: false };
+  }
+
   if (res.status === 403 || res.status === 404) {
     // Short-TTL negative cache: enables crawl pruning + uniform no-leak offline.
     return { cacheable: true, reason: 'cacheable-negative', negative: true };
@@ -192,9 +212,9 @@ export function computeVaryKey(req: RequestLike, res: ResponseLike): string {
     // No Vary → still normalize Accept so RDF variants collapse to one entry.
     return `accept=${canonicalAccept(req.headers.get('accept'))}`;
   }
-  if (vary.trim() === '*') {
-    // Vary:* means uncacheable-as-shared; force a unique, never-matching key by
-    // including the raw Accept. (classifyResponse still governs whether we store.)
+  if (varyHasStar(vary)) {
+    // A `*` token means uncacheable-as-shared; force a unique, never-matching key
+    // by including the raw Accept. (classifyResponse still governs whether we store.)
     return `vary*=${req.headers.get('accept') ?? ''}`;
   }
   const fields = vary
@@ -228,6 +248,50 @@ export function computeCacheKey(req: RequestLike, res: ResponseLike): string {
 /** Build the composite key from already-known url + varyKey (for lookups). */
 export function makeKey(url: string, varyKey: string): string {
   return `${url} ${varyKey}`;
+}
+
+/**
+ * The CANONICAL internal Cache-API key for a `(url, varyKey)` pair.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * WHY A SYNTHETIC KEY (resolves the #1/#3/#7 family coherently):
+ *   The Cache API matches by Request, and honours the response's `Vary: Accept`
+ *   header itself. That means:
+ *     - `application/ld+json` and `text/turtle` reads of the SAME RDF resource do
+ *       NOT share a cache entry, even though our metadata collapses them to one
+ *       canonical key (`#7`);
+ *     - purge / invalidation only ever deletes the one header-shaped Request it
+ *       happened to synthesize, leaving other stored variants behind (`#3`);
+ *     - a stored variant can later be served by `match()` with NO matching
+ *       metadata record, which is the cross-user leak vector (`#1`).
+ *   By keying every Cache `put`/`match`/`delete` on a single synthetic Request
+ *   whose URL embeds the SAME `(url, varyKey)` the metadata uses — and stripping
+ *   `Vary` before storing — the byte cache and the metadata store stay in exact
+ *   1:1 correspondence. One canonical key, no header-driven divergence.
+ * ────────────────────────────────────────────────────────────────────────────
+ *
+ * The key is a SENTINEL-ORIGIN URL that encodes the FULL `(url, varyKey)`
+ * composite in its path. It deliberately does NOT reuse the live resource URL:
+ * folding the varyKey into a query param on the real URL would collide if the
+ * resource URL already carried that param (e.g. `…/doc?__solid_offline_key=…`),
+ * so a request with valid metadata could receive another resource's bytes. A
+ * fresh sentinel origin + a single percent-encoded composite path segment is
+ * injective: distinct `(url, varyKey)` pairs always produce distinct keys, and
+ * nothing the server ever sees can collide with it. `Vary` is dropped on store
+ * (see `swr.ts#stripVary`) so the Cache API never re-applies header matching on
+ * top of our canonical key.
+ */
+export const CACHE_KEY_ORIGIN = 'https://solid-offline.invalid/';
+
+export function keyRequest(url: string, varyKey: string): Request {
+  // Encode the WHOLE composite as one opaque, collision-free path segment.
+  const keyUrl = `${CACHE_KEY_ORIGIN}${encodeURIComponent(makeKey(url, varyKey))}`;
+  return new Request(keyUrl, { method: 'GET' });
+}
+
+/** Build the canonical Cache key Request directly from a (request, response) pair. */
+export function keyRequestFor(req: RequestLike, res: ResponseLike): Request {
+  return keyRequest(req.url, computeVaryKey(req, res));
 }
 
 /** Map an HTTP status to the AclStatus marker stored in metadata. */

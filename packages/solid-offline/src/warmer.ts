@@ -128,6 +128,14 @@ interface CrawlState {
   pruned: string[];
   budgetHit: boolean;
   visits: WarmVisit[];
+  /**
+   * #10: SYNCHRONOUS reservation counter. `warmed`/`bytes` are only incremented
+   * after the async fetch, so several concurrent workers could each pass the
+   * budget check before any of them increments — overshooting maxResources by up
+   * to `concurrency - 1`. We reserve a slot synchronously BEFORE each fetch, so
+   * the in-flight count is accounted for at admission time, not completion time.
+   */
+  reserved: number;
 }
 
 function isBinaryType(contentType: string | null): boolean {
@@ -150,12 +158,18 @@ function bodyBytes(buf: ArrayBuffer | null, contentLength: string | null): numbe
  *                      profile once; we reuse it to derive seeds). If omitted,
  *                      the warmer fetches the WebID itself first.
  * @param budget       resolved budget (defaults applied by the caller or here).
+ * @param opts.seeds   explicit seed URLs (#16). When provided, these are crawled
+ *                     IN ADDITION to the auto-derived profile seeds (treated as
+ *                     storage-kind roots → enumerated as container listings).
+ *                     Lets a caller warm specific subtrees `WarmConfig.seeds`
+ *                     names without relying solely on profile derivation.
  */
 export async function warm(
   webId: string,
   deps: WarmDeps,
   budget: ResolvedWarmBudget = DEFAULT_WARM_BUDGET,
   profileTurtle?: string,
+  opts?: { seeds?: string[] },
 ): Promise<WarmResult> {
   const state: CrawlState = {
     enqueued: new Set(),
@@ -166,7 +180,14 @@ export async function warm(
     pruned: [],
     budgetHit: false,
     visits: [],
+    reserved: 0,
   };
+
+  // #16 (re-review corrective): explicit custom seeds are INDEPENDENT of profile
+  // discovery. Build them up front so they are crawled even if the profile fetch
+  // fails — a caller who named seeds explicitly should not lose them just because
+  // the WebID document was unreadable.
+  const customSeeds: Seed[] = (opts?.seeds ?? []).map((url) => ({ url, kind: 'storage' }));
 
   // 1. Get the profile (seed root). Fetch it through the page fetch so it's cached too.
   let profile = profileTurtle;
@@ -182,22 +203,26 @@ export async function warm(
           status: res.status,
           bytes: byteLen(profile),
         });
-      } else {
-        // Can't read the profile → nothing to warm.
-        return finalize(state);
       }
+      // else: profile unreadable → no DERIVED seeds, but still crawl custom seeds.
     } catch {
-      return finalize(state);
+      // Network error fetching the profile → same: derived seeds unavailable, but
+      // explicit custom seeds are still crawled below.
     }
   }
 
-  // 2. Derive seeds (Type-Index-first ordering baked into deriveSeeds).
-  const seeds = deriveSeeds(webId, profile);
+  // 2. Derive seeds from the profile if we got one (Type-Index-first ordering).
+  const seeds: Seed[] = profile !== undefined ? deriveSeeds(webId, profile) : [];
+  // If there is nothing to crawl at all (no profile-derived seeds and no explicit
+  // custom seeds), finish early.
+  if (seeds.length === 0 && customSeeds.length === 0) {
+    return finalize(state);
+  }
 
   // 3. Build the initial frontier. Seeds are ordered: typeIndex → storage → inbox.
   //    We push them onto a depth-0 frontier preserving that priority order.
   const frontier: FrontierItem[] = [];
-  for (const seed of orderSeeds(seeds)) {
+  for (const seed of orderSeeds([...seeds, ...customSeeds])) {
     enqueue(state, frontier, seed.url, seed.kind, 0);
   }
 
@@ -266,6 +291,56 @@ async function visit(
 ): Promise<FrontierItem[]> {
   const discovered: FrontierItem[] = [];
 
+  // #9: PROBE with a HEAD first. A large binary fetched with a normal GET makes the
+  // SW download AND byte-cache the full response before we ever reach the "metadata
+  // only" skip decision. A HEAD lets us learn content-type/length cheaply; if the
+  // resource is a binary / declared-large, we record metadata from the HEAD and
+  // NEVER issue the byte-pulling GET. RDF / small resources fall through to a GET.
+  let head: Response | undefined;
+  try {
+    head = await deps.fetch(headRequest(item.url));
+  } catch {
+    head = undefined; // HEAD unsupported / errored → fall back to the GET path.
+  }
+
+  // A HEAD 403/404 is INCONCLUSIVE here (re-review corrective): the warmer builds
+  // a bare HEAD request, and a server / auth layer that only honours credentials on
+  // the GET path may 403 the probe even when the authenticated GET would succeed.
+  // So we DON'T prune on a HEAD 403/404 — we fall through to the real GET, which is
+  // the authoritative ACL signal (`pruneForbidden` runs there on a genuine 403/404).
+  if (head?.ok) {
+    const ct = head.headers.get('content-type');
+    const cl = head.headers.get('content-length');
+    const probedLarge = bodyBytes(null, cl) > LARGE_RESOURCE_BYTES;
+    const probedBinary = isBinaryType(ct);
+    if (probedBinary || probedLarge) {
+      // Metadata-only: record what the HEAD told us; do NOT GET the bytes.
+      state.visited += 1;
+      recordVisit(state, deps, {
+        url: item.url,
+        kind: item.kind,
+        depth: item.depth,
+        status: head.status,
+        bytes: bodyBytes(null, cl),
+        skipped: probedBinary ? 'large-binary' : 'large-resource',
+      });
+      return discovered;
+    }
+  }
+
+  // #10 (re-review corrective): RESERVE the resource slot SYNCHRONOUSLY here —
+  // AFTER the HEAD probe ruled out binary/large, and BEFORE the byte-warming GET.
+  // The GET is what flows through the SW and downloads/caches bytes, so the budget
+  // must be committed before it is issued; reserving only after the GET (as the
+  // first pass did) let concurrent workers all fire GETs and overshoot the cache.
+  // `reserved` is a conservative upper bound (a GET that later 403s or busts the
+  // byte budget still consumed a slot — the safe direction for a cap).
+  if (state.reserved >= budget.maxResources) {
+    state.budgetHit = true;
+    return discovered;
+  }
+  state.reserved += 1;
+
   let res: Response;
   try {
     res = await deps.fetch(rdfRequest(item.url));
@@ -287,18 +362,7 @@ async function visit(
   // surfaced as an error (§3). The SW also negative-caches what it sees; we mark
   // it here so re-warm skips the subtree and tests can assert it.
   if (res.status === 403 || res.status === 404) {
-    state.negative.add(item.url);
-    state.pruned.push(item.url);
-    deps.negativeCache?.(item.url, res.status);
-    recordVisit(state, deps, {
-      url: item.url,
-      kind: item.kind,
-      depth: item.depth,
-      status: res.status,
-      bytes: 0,
-      skipped: res.status === 403 ? 'forbidden' : 'not-found',
-    });
-    return discovered; // prune: do not enumerate children of a forbidden/missing node
+    return pruneForbidden(item, res.status, state, deps, discovered);
   }
 
   if (!res.ok) {
@@ -338,7 +402,8 @@ async function visit(
     skipped = 'large-resource';
     bytes = bodyBytes(null, contentLength);
   } else {
-    // Pull bytes (RDF / small resources). This is what populates the SW cache.
+    // The resource slot was already reserved before the GET (#10). Pull bytes
+    // (RDF / small resources). This is what populates the SW cache.
     const buf = await safeArrayBuffer(res);
     bytes = bodyBytes(buf, contentLength);
     if (state.bytes + bytes > budget.maxBytes) {
@@ -404,6 +469,33 @@ async function visit(
   return discovered;
 }
 
+/** Record a 403/404 as negative-cached + pruned, and stop descent. */
+function pruneForbidden(
+  item: FrontierItem,
+  status: number,
+  state: CrawlState,
+  deps: WarmDeps,
+  discovered: FrontierItem[],
+): FrontierItem[] {
+  state.negative.add(item.url);
+  state.pruned.push(item.url);
+  deps.negativeCache?.(item.url, status);
+  recordVisit(state, deps, {
+    url: item.url,
+    kind: item.kind,
+    depth: item.depth,
+    status,
+    bytes: 0,
+    skipped: status === 403 ? 'forbidden' : 'not-found',
+  });
+  return discovered; // prune: do not enumerate children of a forbidden/missing node
+}
+
+/** Build a HEAD probe request (metadata only — no byte body to cache). */
+function headRequest(url: string): Request {
+  return new Request(url, { method: 'HEAD', headers: { accept: 'text/turtle' } });
+}
+
 /** Enumerate ldp:contains members of a container listing into the frontier. */
 function enumerateContainer(item: FrontierItem, body: string, discovered: FrontierItem[]): void {
   for (const child of containerChildren(item.url, body)) {
@@ -417,7 +509,11 @@ function wantsContainerEnumeration(kind: SeedKind | 'child'): boolean {
 }
 
 function budgetExceeded(state: CrawlState, budget: ResolvedWarmBudget): boolean {
-  if (state.warmed >= budget.maxResources) {
+  // Check RESERVATIONS, not just completed `warmed` (the #10 LOW corrective): once
+  // `reserved` hits the cap, admitting more frontier items would only generate
+  // more HEAD probes for resources we'll never warm. `reserved >= warmed` always,
+  // so this is the tighter (correct) gate.
+  if (state.reserved >= budget.maxResources || state.warmed >= budget.maxResources) {
     state.budgetHit = true;
     return true;
   }
@@ -545,6 +641,14 @@ export function onIdle(task: () => void, timeoutMs = 2000): () => void {
 export interface WarmController {
   /** Run (or re-run) the FULL warm now (BFS). Resolves with the result. */
   run(): Promise<WarmResult>;
+  /**
+   * Resolve with the result of the next warm to COMPLETE — without forcing a new
+   * crawl. If a warm is already in flight (e.g. the post-login idle warm),
+   * resolves with that; if one is scheduled (idle) it resolves once it runs.
+   * Used by notification topic-derivation so it reuses the scheduled warm rather
+   * than triggering a duplicate full crawl (#13).
+   */
+  result(): Promise<WarmResult>;
   /** Stop listening for reconnect events and cancel any pending idle task. */
   stop(): void;
 }
@@ -555,6 +659,8 @@ export interface WarmControllerOptions {
   budget?: ResolvedWarmBudget;
   /** Reuse an already-fetched profile body (avoids a refetch on first run). */
   profileTurtle?: string;
+  /** Explicit custom seed URLs (#16, `WarmConfig.seeds`), crawled alongside derived seeds. */
+  seeds?: string[];
   /** Run the first warm on idle after construction (default true). */
   warmOnLogin?: boolean;
   /** React to reconnect (default true). */
@@ -574,14 +680,50 @@ export function createWarmController(opts: WarmControllerOptions): WarmControlle
   let cancelIdle: (() => void) | undefined;
   let onlineHandler: (() => void) | undefined;
   let running: Promise<WarmResult> | undefined;
+  // Waiters on the next completed warm (see `result()`), so topic derivation can
+  // reuse the scheduled warm instead of forcing a new crawl (#13). We track BOTH
+  // resolve and reject so a FAILED warm settles waiters rather than hanging them
+  // forever (and never leaves an unhandled rejection on the coalescing branch).
+  let pendingResultWaiters: Array<{
+    resolve: (r: WarmResult) => void;
+    reject: (e: unknown) => void;
+  }> = [];
 
   function run(): Promise<WarmResult> {
     // Coalesce concurrent runs (e.g. login + reconnect racing).
     if (running) return running;
-    running = warm(opts.webId, opts.deps, budget, opts.profileTurtle).finally(() => {
+    running = warm(opts.webId, opts.deps, budget, opts.profileTurtle, {
+      ...(opts.seeds ? { seeds: opts.seeds } : {}),
+    }).finally(() => {
       running = undefined;
     });
+    // Settle pending `result()` waiters on BOTH success and failure. We attach a
+    // dedicated handler (not the returned promise) so a `result()` consumer's
+    // failure handling can't reject the caller of `run()`, and a missing waiter
+    // can't surface as an unhandled rejection here.
+    running.then(
+      (r) => {
+        const waiters = pendingResultWaiters;
+        pendingResultWaiters = [];
+        for (const w of waiters) w.resolve(r);
+      },
+      (e) => {
+        const waiters = pendingResultWaiters;
+        pendingResultWaiters = [];
+        for (const w of waiters) w.reject(e);
+      },
+    );
     return running;
+  }
+
+  function result(): Promise<WarmResult> {
+    // A warm is in flight → reuse it.
+    if (running) return running;
+    // Otherwise wait for the NEXT warm to settle (e.g. the scheduled idle warm) —
+    // resolves on success, rejects on failure (never hangs).
+    return new Promise<WarmResult>((resolve, reject) => {
+      pendingResultWaiters.push({ resolve, reject });
+    });
   }
 
   if (opts.warmOnLogin !== false) {
@@ -603,11 +745,16 @@ export function createWarmController(opts: WarmControllerOptions): WarmControlle
 
   return {
     run,
+    result,
     stop(): void {
       cancelIdle?.();
       if (onlineHandler && typeof globalThis.removeEventListener === 'function') {
         globalThis.removeEventListener('online', onlineHandler);
       }
+      // Reject any outstanding waiters so callers don't hang after teardown.
+      const waiters = pendingResultWaiters;
+      pendingResultWaiters = [];
+      for (const w of waiters) w.reject(new Error('[solid-offline] warm controller stopped'));
     },
   };
 }

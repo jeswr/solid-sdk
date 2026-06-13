@@ -21,10 +21,21 @@
  * makes the WebID-scoped read path and the logout-purge align.
  */
 
-/** Prefix for the IndexedDB metadata DB name. */
-export const DB_PREFIX = 'solid-offline:';
-/** Prefix for the Cache API cache name. */
-export const CACHE_PREFIX = 'solid-offline-cache:';
+/**
+ * Cache-format generation. The byte cache + metadata are keyed TOGETHER on a
+ * canonical synthetic `(url, varyKey)` Request (see `cache-policy.ts#keyRequest`).
+ * An earlier format keyed the Cache API on the live request, so its byte entries
+ * are unreadable under the canonical keys. Bumping this generation namespaces both
+ * stores so an old-format cache is abandoned COHERENTLY (no mixed-generation reads
+ * → no offline miss with bytes-but-wrong-key); the orphaned old DB/Cache is
+ * reclaimed by the browser (or an explicit logout-purge of the old name).
+ */
+export const CACHE_FORMAT = 'v2';
+
+/** Prefix for the IndexedDB metadata DB name (generation-scoped). */
+export const DB_PREFIX = `solid-offline-${CACHE_FORMAT}:`;
+/** Prefix for the Cache API cache name (generation-scoped). */
+export const CACHE_PREFIX = `solid-offline-cache-${CACHE_FORMAT}:`;
 
 /** The discriminator used for anonymous (no-WebID) reads. */
 export const ANONYMOUS_SCOPE = 'anonymous';
@@ -61,4 +72,25 @@ export function dbNameForWebId(webId: string | undefined): string {
 /** The per-identity Cache API cache name (`solid-offline-cache:<hash>`). */
 export function cacheNameForWebId(webId: string | undefined): string {
   return `${CACHE_PREFIX}${scopeFor(webId)}`;
+}
+
+/**
+ * Decide whether an incoming config webId is a SCOPE CHANGE the SW must act on
+ * (#4). Crucially, `undefined` is a VALID scope (the anonymous scope): after a
+ * logged-in user, an anonymous client (`webId === undefined`) MUST be able to
+ * clear the previous identity. So the very first config message is always a
+ * change, and thereafter ANY difference — including a transition TO `undefined` —
+ * is a change. (The old worker only reacted to a truthy webId, so an anonymous
+ * client kept reading/writing the departed user's scoped cache.)
+ *
+ * @param configured  whether a config message has been applied before.
+ * @param current     the currently-configured webId (meaningful only if `configured`).
+ * @param next        the webId from the new config (may be undefined).
+ */
+export function isScopeChange(
+  configured: boolean,
+  current: string | undefined,
+  next: string | undefined,
+): boolean {
+  return !configured || next !== current;
 }

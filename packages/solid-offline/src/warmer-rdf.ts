@@ -104,15 +104,54 @@ export function deriveSeeds(webId: string, profileTurtle: string): Seed[] {
     seeds.push({ url: abs, kind });
   };
 
+  // ────────────────────────────────────────────────────────────────────────────
+  // #11: derive seeds ONLY from the logged-in WebID subject.
+  //   Reading these predicates from ANY subject let a profile (or a malicious /
+  //   confused document fragment) name pim:storage / type-index / inbox URLs that
+  //   are NOT the user's own — so the warmer could be steered to crawl arbitrary
+  //   storage roots. We anchor on the WebID subject. Profiles commonly use the
+  //   hash WebID (`…/card#me`) as the subject; we also accept the profile
+  //   DOCUMENT IRI (the WebID with the fragment stripped) as a narrow, explicit
+  //   fallback (some profiles assert pim:storage on the document, not `#me`).
+  // ────────────────────────────────────────────────────────────────────────────
+  const subjects = profileSubjects(webId);
+  const objectsForSelf = (predicate: string): string[] => {
+    for (const subject of subjects) {
+      const hits = objectsOfSubject(quads, subject, predicate);
+      if (hits.length > 0) return hits;
+    }
+    return [];
+  };
+
   // Type Index FIRST (decision 6).
-  for (const t of objectsOf(quads, NS.solidPublicTypeIndex)) add(t, 'typeIndex');
-  for (const t of objectsOf(quads, NS.solidPrivateTypeIndex)) add(t, 'typeIndex');
+  for (const t of objectsForSelf(NS.solidPublicTypeIndex)) add(t, 'typeIndex');
+  for (const t of objectsForSelf(NS.solidPrivateTypeIndex)) add(t, 'typeIndex');
   // Storage root(s).
-  for (const s of objectsOf(quads, NS.pimStorage)) add(s, 'storage');
+  for (const s of objectsForSelf(NS.pimStorage)) add(s, 'storage');
   // Inbox.
-  for (const i of objectsOf(quads, NS.ldpInbox)) add(i, 'inbox');
+  for (const i of objectsForSelf(NS.ldpInbox)) add(i, 'inbox');
 
   return seeds;
+}
+
+/**
+ * The subject IRIs we accept seed predicates from (#11): the WebID itself and,
+ * as a narrow fallback, its document IRI (fragment stripped). Ordered so the
+ * exact WebID wins.
+ */
+function profileSubjects(webId: string): string[] {
+  const subjects = [webId];
+  try {
+    const u = new URL(webId);
+    if (u.hash) {
+      u.hash = '';
+      const doc = u.toString();
+      if (doc !== webId) subjects.push(doc);
+    }
+  } catch {
+    /* unparseable WebID → just the raw string */
+  }
+  return subjects;
 }
 
 /**

@@ -18,7 +18,9 @@ export class MockByteCache implements ByteCache {
     return `${request.url}::${request.headers.get('accept') ?? ''}`;
   }
 
-  async match(request: Request): Promise<Response | undefined> {
+  // The optional `_options` (e.g. `{ ignoreVary: true }`) is accepted to match the
+  // production `ByteCache` signature; the mock keys on the synthetic URL only.
+  async match(request: Request, _options?: CacheQueryOptions): Promise<Response | undefined> {
     const hit = this.store.get(this.keyOf(request));
     return hit ? hit.clone() : undefined;
   }
@@ -27,7 +29,7 @@ export class MockByteCache implements ByteCache {
     this.store.set(this.keyOf(request), response.clone());
   }
 
-  async delete(request: Request): Promise<boolean> {
+  async delete(request: Request, _options?: CacheQueryOptions): Promise<boolean> {
     return this.store.delete(this.keyOf(request));
   }
 

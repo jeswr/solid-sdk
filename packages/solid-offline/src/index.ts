@@ -24,6 +24,7 @@ import type {
   OfflineClientConfig,
   PageToWorkerMessage,
   UpdatedEvent,
+  WarmConfig,
 } from './types.js';
 import {
   type WarmController,
@@ -90,6 +91,7 @@ export {
   scopeFor,
   dbNameForWebId,
   cacheNameForWebId,
+  isScopeChange,
   DEFAULT_DB_NAME,
   DEFAULT_CACHE_NAME,
   DB_PREFIX,
@@ -204,6 +206,9 @@ export function createOfflineClient(config: OfflineClientConfig = {}): OfflineCl
       budget: resolveBudget(warmCfg.budget),
       warmOnLogin: warmCfg.warmOnLogin,
       rewarmOnReconnect: warmCfg.rewarmOnReconnect,
+      // #16: pass through custom seeds (WarmConfig.seeds) when an explicit array
+      // is supplied ('auto' / undefined keep pure profile derivation).
+      ...(Array.isArray(warmCfg.seeds) ? { seeds: warmCfg.seeds } : {}),
       // P3 (P2-gap refactor): on reconnect, run the dedicated ETag-resync sweep in
       // the SW instead of re-issuing the full BFS. Only wired when notifications
       // are enabled (otherwise the warmer keeps its P2 full re-warm fallback).
@@ -227,7 +232,13 @@ export function createOfflineClient(config: OfflineClientConfig = {}): OfflineCl
 
   function postConfig(target: ServiceWorker | null | undefined): void {
     if (!target) return;
-    const message: PageToWorkerMessage = { type: 'config', config };
+    // Send the RESOLVED channelName (#15) so the worker's update + invalidation
+    // BroadcastChannel matches the one the page client/status surface listens on —
+    // a custom `channelName` otherwise never receives the SW's events.
+    const message: PageToWorkerMessage = {
+      type: 'config',
+      config: { ...config, channelName: resolved.channelName },
+    };
     target.postMessage(message);
   }
 
@@ -266,16 +277,44 @@ export function createOfflineClient(config: OfflineClientConfig = {}): OfflineCl
 
     // P3: start the page-side notifications client (decision 5: socket in the page).
     // If explicit containers are configured, start immediately; otherwise derive
-    // the container set from a warm pass (the warmed containers) and start then.
+    // the container set from a warm pass.
     if (config.notifications) {
       const nCfg = config.notifications === true ? {} : config.notifications;
-      if (nCfg.containers && nCfg.containers.length > 0) {
-        startNotifications(nCfg.containers);
+      const hasExplicitTopics =
+        (nCfg.containers && nCfg.containers.length > 0) ||
+        (nCfg.resources && nCfg.resources.length > 0);
+      if (hasExplicitTopics) {
+        // Explicit topics (containers AND/OR resources) → start immediately. Pass
+        // whatever containers were configured (possibly none — `startNotifications`
+        // + the client still subscribe the explicit `resources`). This is the fix
+        // for a resources-only config, which previously never started when
+        // auto-warm was off/unavailable.
+        startNotifications(nCfg.containers ?? []);
       } else {
-        void warm().then((result) => {
-          if (!result) return;
-          startNotifications(containersFromWarm(result));
-        });
+        // #13: do NOT force a fresh full crawl here. `startWarmer()` already
+        // scheduled the post-login idle warm; REUSE its result via `result()` so
+        // we don't trigger a duplicate crawl. And if auto-warm is OFF
+        // (`warm.warmOnLogin === false`), there is no scheduled warm to ride on —
+        // forcing one would be a surprise full crawl, so we require explicit
+        // `notifications.containers` instead of crawling.
+        const w = startWarmer();
+        const autoWarmOff =
+          config.warm !== undefined &&
+          config.warm !== true &&
+          config.warm !== false &&
+          (config.warm as WarmConfig).warmOnLogin === false;
+        if (w && !autoWarmOff) {
+          void w
+            .result()
+            .then((result) => {
+              startNotifications(containersFromWarm(result));
+            })
+            .catch(() => {
+              // The scheduled warm failed/was stopped before producing topics.
+              // Notifications simply don't auto-start; an explicit `containers`
+              // config or a later manual `warm()` still wires them.
+            });
+        }
       }
     }
 
@@ -299,7 +338,21 @@ export function createOfflineClient(config: OfflineClientConfig = {}): OfflineCl
   async function warm(): Promise<WarmResult | undefined> {
     const w = startWarmer();
     if (!w) return undefined;
-    return w.run();
+    const result = await w.run();
+    // If notifications are enabled with AUTO-derived topics and aren't already
+    // running, start them from this warm's result (the re-review corrective for
+    // manual-warm users: `register()` doesn't auto-warm when `warmOnLogin: false`,
+    // so the only signal to derive topics is this manual `warm()`).
+    if (config.notifications && !notifications) {
+      const nCfg = config.notifications === true ? {} : config.notifications;
+      const hasExplicitTopics =
+        (nCfg.containers && nCfg.containers.length > 0) ||
+        (nCfg.resources && nCfg.resources.length > 0);
+      if (!hasExplicitTopics) {
+        startNotifications(containersFromWarm(result));
+      }
+    }
+    return result;
   }
 
   function onUpdated(listener: UpdatedListener): () => void {

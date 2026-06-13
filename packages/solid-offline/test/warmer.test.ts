@@ -40,14 +40,21 @@ const PROFILE_DOC = `${BASE}/profile/card`;
 function routedFetch(routes: Record<string, (url: string) => Response>): {
   fetch: typeof fetch;
   calls: string[];
+  /** Calls recorded with their HTTP method (the warmer HEAD-probes then GETs). */
+  methodCalls: Array<{ url: string; method: string }>;
   inFlight: { max: number };
 } {
   const calls: string[] = [];
+  const methodCalls: Array<{ url: string; method: string }> = [];
   let active = 0;
   const inFlight = { max: 0 };
-  const impl = vi.fn(async (input: RequestInfo | URL) => {
+  const impl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = input instanceof Request ? input.url : String(input);
+    const method = (
+      input instanceof Request ? input.method : (init?.method ?? 'GET')
+    ).toUpperCase();
     calls.push(url);
+    methodCalls.push({ url, method });
     active += 1;
     inFlight.max = Math.max(inFlight.max, active);
     // Yield so concurrent fetches actually overlap (observe the cap).
@@ -58,7 +65,7 @@ function routedFetch(routes: Record<string, (url: string) => Response>): {
     if (!responder) return new Response(null, { status: 404 });
     return responder(url);
   });
-  return { fetch: impl as unknown as typeof fetch, calls, inFlight };
+  return { fetch: impl as unknown as typeof fetch, calls, methodCalls, inFlight };
 }
 
 function turtle(
@@ -109,6 +116,28 @@ describe('warmer-rdf: seed derivation', () => {
   it('resolves relative IRIs against the WebID base', () => {
     const seeds = deriveSeeds(WEBID, `<${WEBID}> <http://www.w3.org/ns/pim/space#storage> </> .`);
     expect(seeds[0]?.url).toBe(`${BASE}/`);
+  });
+
+  it('#11 derives seeds ONLY from the logged-in WebID subject', () => {
+    // A profile that ALSO names storage on a DIFFERENT (attacker-controlled)
+    // subject. The warmer must ignore the foreign subject and only seed the
+    // user's own storage.
+    const profile = `
+      @prefix pim: <http://www.w3.org/ns/pim/space#> .
+      <${WEBID}> pim:storage <${BASE}/me/> .
+      <https://evil.example/card#me> pim:storage <https://evil.example/storage/> .`;
+    const seeds = deriveSeeds(WEBID, profile);
+    expect(seeds.map((s) => s.url)).toEqual([`${BASE}/me/`]);
+    expect(seeds.some((s) => s.url.includes('evil.example'))).toBe(false);
+  });
+
+  it('#11 accepts the profile DOCUMENT IRI (fragment stripped) as a narrow fallback', () => {
+    // Some profiles assert pim:storage on the document, not on `#me`.
+    const profile = `
+      @prefix pim: <http://www.w3.org/ns/pim/space#> .
+      <${PROFILE_DOC}> pim:storage <${BASE}/store/> .`;
+    const seeds = deriveSeeds(WEBID, profile);
+    expect(seeds.map((s) => s.url)).toEqual([`${BASE}/store/`]);
   });
 });
 
@@ -194,13 +223,16 @@ describe('warmer: BFS traversal', () => {
     };
     const passthrough = (url: string) =>
       url.endsWith('.acl') ? new Response(null, { status: 404 }) : turtle('');
-    const { fetch, calls } = routedFetch(
+    const { fetch, methodCalls } = routedFetch(
       new Proxy(routes, { get: (t, p: string) => t[p] ?? passthrough }),
     );
     const result = await warm(WEBID, { fetch }, resolveBudget({ maxDepth: 6 }));
-    // Storage fetched exactly once despite the cycle.
-    const storageHits = calls.filter((c) => c.split('#')[0] === `${BASE}/`).length;
-    expect(storageHits).toBe(1);
+    // Storage GET'd exactly once despite the cycle (the warmer also HEAD-probes,
+    // but a byte-warming GET happens once per resource — dedup holds, #9 + dedup).
+    const storageGets = methodCalls.filter(
+      (c) => c.method === 'GET' && c.url.split('#')[0] === `${BASE}/`,
+    ).length;
+    expect(storageGets).toBe(1);
     expect(result.budgetHit).toBe(false);
   });
 });
@@ -220,6 +252,26 @@ describe('warmer: budget enforcement', () => {
       new Proxy(routes, { get: (t, p: string) => t[p] ?? passthrough }),
     );
     const result = await warm(WEBID, { fetch }, resolveBudget({ maxResources: 5 }));
+    expect(result.warmed).toBeLessThanOrEqual(5);
+    expect(result.budgetHit).toBe(true);
+  });
+
+  it('#10 does NOT overshoot maxResources under high concurrency', async () => {
+    // 50 small docs, cap 5, concurrency 8 — without synchronous reservation the
+    // in-flight workers would overshoot the cap by up to concurrency-1.
+    const members = Array.from({ length: 50 }, (_, i) => `${BASE}/d${i}`);
+    const routes: Record<string, (url: string) => Response> = {
+      [PROFILE_DOC]: () =>
+        turtle(`<${WEBID}> <http://www.w3.org/ns/pim/space#storage> <${BASE}/> .`),
+      [`${BASE}/`]: () => container(members),
+    };
+    const passthrough = (url: string) =>
+      url.endsWith('.acl') ? new Response(null, { status: 404 }) : turtle('<> a <#X> .');
+    const { fetch } = routedFetch(
+      new Proxy(routes, { get: (t, p: string) => t[p] ?? passthrough }),
+    );
+    const result = await warm(WEBID, { fetch }, resolveBudget({ maxResources: 5, concurrency: 8 }));
+    // The reservation caps warmed at exactly maxResources even with 8 in flight.
     expect(result.warmed).toBeLessThanOrEqual(5);
     expect(result.budgetHit).toBe(true);
   });
@@ -340,6 +392,112 @@ describe('warmer: large-binary handling', () => {
     expect(photoVisit?.skipped).toBe('large-binary');
     // Bytes for the binary were NOT added to the warmed byte budget.
     expect(result.visits.find((v) => v.url === `${BASE}/photo.jpg`)?.skipped).toBe('large-binary');
+  });
+});
+
+describe('#9 large binaries are HEAD-probed, not GET-downloaded', () => {
+  it('does not issue a byte-warming GET for a binary resource', async () => {
+    const routes: Record<string, (url: string) => Response> = {
+      [PROFILE_DOC]: () =>
+        turtle(`<${WEBID}> <http://www.w3.org/ns/pim/space#storage> <${BASE}/> .`),
+      [`${BASE}/`]: () => container([`${BASE}/photo.jpg`]),
+      [`${BASE}/photo.jpg`]: () =>
+        new Response('JPEGBYTES', {
+          status: 200,
+          headers: { 'content-type': 'image/jpeg', 'content-length': '9000000' },
+        }),
+    };
+    const passthrough = (url: string) =>
+      url.endsWith('.acl') ? new Response(null, { status: 404 }) : turtle('');
+    const { fetch, methodCalls } = routedFetch(
+      new Proxy(routes, { get: (t, p: string) => t[p] ?? passthrough }),
+    );
+    const result = await warm(WEBID, { fetch });
+    const photoVisit = result.visits.find((v) => v.url === `${BASE}/photo.jpg`);
+    expect(photoVisit?.skipped).toBe('large-binary');
+    // The binary was probed with HEAD but NEVER GET'd (so the SW never downloads
+    // + byte-caches the full 9 MB response).
+    const photoGets = methodCalls.filter(
+      (c) => c.url === `${BASE}/photo.jpg` && c.method === 'GET',
+    );
+    expect(photoGets).toHaveLength(0);
+    const photoHeads = methodCalls.filter(
+      (c) => c.url === `${BASE}/photo.jpg` && c.method === 'HEAD',
+    );
+    expect(photoHeads.length).toBeGreaterThan(0);
+  });
+});
+
+describe('#9 a HEAD 403 probe is inconclusive — the authenticated GET decides', () => {
+  it('does not prune when only the HEAD 403s but the GET succeeds', async () => {
+    // Method-aware fetch: HEAD → 403 (probe blocked), GET → 200 (authenticated).
+    const calls: Array<{ url: string; method: string }> = [];
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const req = input instanceof Request ? input : new Request(String(input), init);
+      calls.push({ url: req.url, method: req.method.toUpperCase() });
+      if (req.url.split('#')[0] === PROFILE_DOC) {
+        return turtle(`<${WEBID}> <http://www.w3.org/ns/pim/space#storage> <${BASE}/doc> .`);
+      }
+      if (req.url === `${BASE}/doc`) {
+        return req.method.toUpperCase() === 'HEAD'
+          ? new Response(null, { status: 403 }) // probe blocked
+          : turtle('<> a <#Doc> .'); // authenticated GET succeeds
+      }
+      return req.url.endsWith('.acl') ? new Response(null, { status: 404 }) : turtle('');
+    });
+    const result = await warm(WEBID, { fetch: fetchImpl as unknown as typeof fetch });
+    // The resource was NOT pruned on the HEAD 403; the GET warmed it.
+    expect(result.pruned).not.toContain(`${BASE}/doc`);
+    expect(result.visits.some((v) => v.url === `${BASE}/doc` && !v.skipped)).toBe(true);
+    // Both a HEAD and a GET were issued for it.
+    expect(calls.some((c) => c.url === `${BASE}/doc` && c.method === 'HEAD')).toBe(true);
+    expect(calls.some((c) => c.url === `${BASE}/doc` && c.method === 'GET')).toBe(true);
+  });
+});
+
+describe('#16 custom seeds are crawled alongside derived seeds', () => {
+  it('warms an explicit seed URL not named in the profile', async () => {
+    const routes: Record<string, (url: string) => Response> = {
+      [PROFILE_DOC]: () =>
+        turtle(`<${WEBID}> <http://www.w3.org/ns/pim/space#storage> <${BASE}/> .`),
+      [`${BASE}/`]: () => container([]),
+      [`${BASE}/extra/`]: () => container([`${BASE}/extra/doc`]),
+      [`${BASE}/extra/doc`]: () => turtle('<> a <#X> .'),
+    };
+    const passthrough = (url: string) =>
+      url.endsWith('.acl') ? new Response(null, { status: 404 }) : turtle('');
+    const { fetch, calls } = routedFetch(
+      new Proxy(routes, { get: (t, p: string) => t[p] ?? passthrough }),
+    );
+    const result = await warm(WEBID, { fetch }, DEFAULT_WARM_BUDGET, undefined, {
+      seeds: [`${BASE}/extra/`],
+    });
+    // The custom seed (and its child) were reached even though the profile never
+    // named them.
+    const fetched = new Set(calls.map((c) => c.split('#')[0]));
+    expect(fetched.has(`${BASE}/extra/`)).toBe(true);
+    expect(fetched.has(`${BASE}/extra/doc`)).toBe(true);
+    expect(result.warmed).toBeGreaterThan(0);
+  });
+
+  it('crawls explicit seeds even when the PROFILE fetch fails (independent of discovery)', async () => {
+    const routes: Record<string, (url: string) => Response> = {
+      [PROFILE_DOC]: () => new Response(null, { status: 403 }), // profile unreadable
+      [`${BASE}/extra/`]: () => container([`${BASE}/extra/doc`]),
+      [`${BASE}/extra/doc`]: () => turtle('<> a <#X> .'),
+    };
+    const passthrough = (url: string) =>
+      url.endsWith('.acl') ? new Response(null, { status: 404 }) : turtle('');
+    const { fetch, calls } = routedFetch(
+      new Proxy(routes, { get: (t, p: string) => t[p] ?? passthrough }),
+    );
+    const result = await warm(WEBID, { fetch }, DEFAULT_WARM_BUDGET, undefined, {
+      seeds: [`${BASE}/extra/`],
+    });
+    // Even with the profile 403, the explicit seed was crawled.
+    const fetched = new Set(calls.map((c) => c.split('#')[0]));
+    expect(fetched.has(`${BASE}/extra/`)).toBe(true);
+    expect(result.warmed).toBeGreaterThan(0);
   });
 });
 
@@ -544,5 +702,51 @@ describe('warmer triggers: onIdle + createWarmController', () => {
     expect(r.calls.some((c) => c.split('#')[0] === PROFILE_DOC)).toBe(true);
     ctl.stop();
     expect(g.removeEventListener).toHaveBeenCalledWith('online', expect.any(Function));
+  });
+
+  it('result() reuses an in-flight warm rather than forcing a new crawl (#13)', async () => {
+    savedRic = g.requestIdleCallback;
+    savedCic = g.cancelIdleCallback;
+    g.requestIdleCallback = undefined;
+    const routes: Record<string, (url: string) => Response> = {
+      [PROFILE_DOC]: () =>
+        turtle(`<${WEBID}> <http://www.w3.org/ns/pim/space#storage> <${BASE}/> .`),
+      [`${BASE}/`]: () => container([]),
+    };
+    const passthrough = (url: string) =>
+      url.endsWith('.acl') ? new Response(null, { status: 404 }) : turtle('');
+    const r = routedFetch(new Proxy(routes, { get: (t, p: string) => t[p] ?? passthrough }));
+    const ctl = createWarmController({
+      webId: WEBID,
+      deps: { fetch: r.fetch },
+      warmOnLogin: false,
+      rewarmOnReconnect: false,
+    });
+    const running = ctl.run();
+    const reused = ctl.result(); // in-flight → same promise
+    expect(reused).toBe(running);
+    await running;
+    // Exactly one profile GET — result() did NOT trigger a second crawl.
+    const profileGets = r.methodCalls.filter(
+      (c) => c.method === 'GET' && c.url.split('#')[0] === PROFILE_DOC,
+    );
+    expect(profileGets).toHaveLength(1);
+    ctl.stop();
+  });
+
+  it('result() REJECTS (does not hang) when the controller is stopped before a warm runs (#13/finding3)', async () => {
+    savedRic = g.requestIdleCallback;
+    savedCic = g.cancelIdleCallback;
+    g.requestIdleCallback = undefined; // no idle warm scheduled
+    const r = routedFetch({});
+    const ctl = createWarmController({
+      webId: WEBID,
+      deps: { fetch: r.fetch },
+      warmOnLogin: false, // nothing scheduled → result() waits for a future warm
+      rewarmOnReconnect: false,
+    });
+    const pending = ctl.result();
+    ctl.stop(); // must settle the waiter (reject), not leave it hanging forever
+    await expect(pending).rejects.toThrow(/stopped/);
   });
 });

@@ -15,24 +15,36 @@
 
 import { type InvalidateDeps, handleNotification, resyncSweep } from './invalidation.js';
 import { MetadataStore } from './metadata-store.js';
-import { cacheNameForWebId } from './scope.js';
+import { cacheNameForWebId, isScopeChange } from './scope.js';
 import { type Broadcaster, type ByteCache, type SwrDeps, handleFetch } from './swr.js';
 import type { PageToWorkerMessage } from './types.js';
 
 declare const self: ServiceWorkerGlobalScope;
 
-const CHANNEL_NAME = 'solid-offline';
+const DEFAULT_CHANNEL_NAME = 'solid-offline';
 
 /** Lazily-opened singletons (the SW may be terminated + revived between events). */
 let metaPromise: Promise<MetadataStore> | undefined;
 let channel: BroadcastChannel | undefined;
 let configuredWebId: string | undefined;
+/** Tracks whether `configuredWebId` has ever been set by a config message. */
+let webIdConfigured = false;
+/** Resolved BroadcastChannel name (#15): the page sends the channel it uses. */
+let channelName: string = DEFAULT_CHANNEL_NAME;
 
 function getMeta(): Promise<MetadataStore> {
   if (!metaPromise) {
     metaPromise = MetadataStore.open(configuredWebId);
   }
   return metaPromise;
+}
+
+/** Close + drop the cached metadata handle so the next access re-opens the scoped DB. */
+function resetMeta(): void {
+  const prev = metaPromise;
+  metaPromise = undefined;
+  // Close the previous handle once it resolves (best-effort; never throws).
+  void prev?.then((store) => store.close()).catch(() => undefined);
 }
 
 /**
@@ -46,9 +58,18 @@ function cacheName(): string {
 
 function getChannel(): BroadcastChannel {
   if (!channel) {
-    channel = new BroadcastChannel(CHANNEL_NAME);
+    channel = new BroadcastChannel(channelName);
   }
   return channel;
+}
+
+/** Re-open the channel under a new name (#15) if it changed. */
+function setChannelName(name: string | undefined): void {
+  const resolved = name ?? DEFAULT_CHANNEL_NAME;
+  if (resolved === channelName) return;
+  channelName = resolved;
+  channel?.close();
+  channel = undefined;
 }
 
 self.addEventListener('install', (event: ExtendableEvent) => {
@@ -65,10 +86,21 @@ self.addEventListener('message', (event: ExtendableMessageEvent) => {
   const data = event.data as PageToWorkerMessage | undefined;
   if (!data || typeof data !== 'object') return;
   if (data.type === 'config') {
-    if (data.config.webId && data.config.webId !== configuredWebId) {
-      configuredWebId = data.config.webId;
-      // WebId changed → drop the cached store handle so we re-open the scoped DB.
-      metaPromise = undefined;
+    // #15: adopt the page's resolved channel name (custom channels must work).
+    setChannelName(data.config.channelName);
+    // #4: treat `undefined` as a VALID scope change. After a logged-in user, an
+    // anonymous client (webId === undefined) MUST be able to clear the previous
+    // identity scope; the old code only updated on a truthy webId, so the SW kept
+    // reading/writing the departed user's scoped cache. Compare-and-assign even
+    // when undefined, and reset (close) the metadata handle on ANY change.
+    const nextWebId = data.config.webId;
+    const changed = isScopeChange(webIdConfigured, configuredWebId, nextWebId);
+    if (changed) {
+      configuredWebId = nextWebId;
+      webIdConfigured = true;
+      // WebId scope changed → close + drop the store handle so we re-open the
+      // newly-scoped DB, and drop the channel so a renamed channel is re-opened.
+      resetMeta();
     }
     event.source?.postMessage({ type: 'ready' });
   } else if (data.type === 'ping') {

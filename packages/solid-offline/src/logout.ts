@@ -40,8 +40,19 @@ export interface PurgeResult {
   dbName: string;
   /** True if the Cache API cache existed and was deleted. */
   cacheDeleted: boolean;
-  /** True if the IndexedDB database deletion completed (whether or not it existed). */
+  /**
+   * True ONLY once the IndexedDB `deleteDatabase` request fired `onsuccess` (#5).
+   * A `blocked` deletion does NOT set this — see {@link dbBlocked}.
+   */
   dbDeleted: boolean;
+  /**
+   * True if the IndexedDB deletion was BLOCKED by another open connection
+   * (another tab / a live SW handle still holds the DB open). The deletion is
+   * queued and will complete once those connections close, but at the moment
+   * logout returns the metadata is NOT yet gone — callers MUST surface this and
+   * coordinate closing other handles rather than assume the purge is complete.
+   */
+  dbBlocked: boolean;
   /** Any error encountered (purge is best-effort; this surfaces the cause). */
   errors: unknown[];
 }
@@ -63,8 +74,20 @@ function resolveIdb(deps: PurgeDeps): IDBFactory | undefined {
   return deps.indexedDB ?? (typeof indexedDB !== 'undefined' ? indexedDB : undefined);
 }
 
-/** Delete an IndexedDB database, resolving even if it does not exist. */
-function deleteDatabase(factory: IDBFactory, name: string): Promise<void> {
+/** Outcome of an IndexedDB `deleteDatabase` request. */
+type DeleteDbOutcome = 'deleted' | 'blocked';
+
+/**
+ * Delete an IndexedDB database.
+ *
+ * Resolves `'deleted'` ONLY on `onsuccess` (the DB is actually gone, whether or
+ * not it existed). Resolves `'blocked'` when `onblocked` fires — another open
+ * connection (a second tab, or a live SW metadata handle) is preventing the
+ * deletion. We do NOT hang on `blocked` (logout must stay responsive and the
+ * deletion is queued to complete once connections close), but we report it
+ * distinctly (#5) so the caller does not falsely claim the metadata was purged.
+ */
+function deleteDatabase(factory: IDBFactory, name: string): Promise<DeleteDbOutcome> {
   return new Promise((resolve, reject) => {
     let req: IDBOpenDBRequest;
     try {
@@ -73,13 +96,25 @@ function deleteDatabase(factory: IDBFactory, name: string): Promise<void> {
       reject(error);
       return;
     }
-    req.onsuccess = () => resolve();
-    req.onerror = () => reject(req.error);
-    // `onblocked` fires when another open connection prevents deletion. We do not
-    // hang on it: the deletion is queued and will complete once connections close;
-    // resolving here keeps logout responsive (the bytes are unreachable to a new
-    // identity regardless, since the scoped name will differ).
-    req.onblocked = () => resolve();
+    let settled = false;
+    req.onsuccess = () => {
+      if (settled) return;
+      settled = true;
+      resolve('deleted');
+    };
+    req.onerror = () => {
+      if (settled) return;
+      settled = true;
+      reject(req.error);
+    };
+    req.onblocked = () => {
+      // The deletion is queued; report blocked WITHOUT claiming success. If the
+      // blocker later closes, `onsuccess` may still fire, but `settled` guards
+      // against a double-resolve.
+      if (settled) return;
+      settled = true;
+      resolve('blocked');
+    };
   });
 }
 
@@ -99,6 +134,7 @@ export async function purgeForWebId(
     dbName,
     cacheDeleted: false,
     dbDeleted: false,
+    dbBlocked: false,
     errors: [],
   };
 
@@ -114,8 +150,13 @@ export async function purgeForWebId(
   const idb = resolveIdb(deps);
   if (idb) {
     try {
-      await deleteDatabase(idb, dbName);
-      result.dbDeleted = true;
+      const outcome = await deleteDatabase(idb, dbName);
+      if (outcome === 'deleted') {
+        result.dbDeleted = true;
+      } else {
+        // 'blocked' — queued but NOT yet purged. Surface it; don't claim success.
+        result.dbBlocked = true;
+      }
     } catch (error) {
       result.errors.push(error);
     }

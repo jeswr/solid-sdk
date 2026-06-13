@@ -182,3 +182,132 @@ Files modified for P5 (not newly authored, so no top-of-file marker):
   request coalescing across components are candidates for a later pass.
 - React hooks are tested in `jsdom` with `@testing-library/react`, not against a
   real browser SW + a live pod.
+
+## roborev security/correctness fixes (codex/gpt-5.5 findings) — Opus 4.8
+
+Branch `fix/roborev-security-findings`. roborev (codex/gpt-5.5) reviewed the P0–P5
+commits and flagged a set of HIGH/MEDIUM/LOW findings; all were fixed by **Claude
+Opus 4.8** (Fable unavailable) and are **re-review / upgrade candidates**.
+
+### Canonical internal cache key (resolves #1/#3/#7 coherently)
+
+The byte cache (Cache API) is now keyed on a single CANONICAL `(url, varyKey)`
+synthetic `Request` (`cache-policy.ts#keyRequest`) — the SAME `(url, varyKey)` the
+metadata store uses — instead of the live request. Reads/deletes pass
+`{ ignoreVary: true }` so the stored response's own `Vary` can't re-apply header
+matching on top of our canonical key, WITHOUT mutating the stored response (its
+`url`/`redirected`/`type` are preserved). `Vary: *` responses are classified
+uncacheable up front (`varyHasStar`). This keeps the byte cache and the metadata
+store in exact 1:1 correspondence, which:
+
+- **#1 (HIGH, cross-user leak):** `handleFetch` is now METADATA-FIRST — it looks up
+  the metadata record first and treats a byte-cache hit with NO matching metadata
+  as a miss (deleting the orphan bytes). A previous user's stray cached bytes can
+  no longer be served.
+- **#3 (HIGH):** `invalidation.purge` deletes EVERY cached variant (one per
+  metadata `varyKey`), not just a synthetic `Accept: text/turtle` key.
+- **#7 (MEDIUM):** RDF `application/ld+json` and `text/turtle` reads now share one
+  cached entry (canonical Accept folds them onto one key).
+
+### Other findings
+
+- **#2 (HIGH):** `swr.revalidate` builds the conditional request from the ORIGINAL
+  request (`new Request(request, { method:'GET', headers })`) so credentials / mode
+  / referrer are preserved; cross-origin authenticated reads no longer revalidate
+  unauthenticated.
+- **#4 (HIGH):** the worker treats `undefined` as a valid scope change
+  (`scope.isScopeChange`); an anonymous client after a logged-in user now clears
+  the previous identity scope and closes the old metadata handle.
+- **#5 (HIGH):** `logout.deleteDatabase` resolves `'deleted'` only on `onsuccess`
+  and reports `'blocked'` distinctly; `PurgeResult` gains `dbBlocked` and only sets
+  `dbDeleted` after a real success. (Supersedes the P5 re-review caveat above.)
+- **#6 (MEDIUM):** HEAD is never byte-cached (`Cache.put` is GET-only). HEAD is a
+  network passthrough that only reconciles existing GET state on definitive signals
+  (see the focus-areas note below); it never serves or wrongly clobbers GET bytes.
+- **#8 (MEDIUM):** 403/404 negative responses' bytes are byte-cached so
+  within-TTL / offline reads serve the same bytes the server returned.
+- **#9 (MEDIUM):** the warmer HEAD-probes before the skip decision; large binaries
+  are never GET-downloaded / byte-cached.
+- **#10 (MEDIUM):** the warmer reserves a warmed slot SYNCHRONOUSLY before the
+  byte-pull await (`CrawlState.reserved`), so concurrent workers cannot overshoot
+  `maxResources`.
+- **#11 (MEDIUM):** `deriveSeeds` derives seeds ONLY from the logged-in WebID
+  subject (with a narrow, tested fallback to the profile document IRI); a profile
+  can no longer steer the crawl to a foreign subject's storage.
+- **#12 (MEDIUM):** the notifications client schedules a reconnect even while
+  offline, so notifications resume after coming back online.
+- **#13 (MEDIUM):** notification topic derivation reuses the scheduled warm
+  (`WarmController.result()`) instead of forcing a duplicate full crawl, and does
+  not crawl at all when auto-warm is off.
+- **#14 (MEDIUM):** `useOfflineResource({ skip: true })` can now be loaded manually
+  via `reload()` (skip only gates the initial read, `reloadNonce === 0`).
+- **#15 (LOW):** the resolved `channelName` is sent to the worker and used for both
+  update + invalidation BroadcastChannels.
+- **#16 (LOW):** `WarmConfig.seeds` (a custom URL array) is now honoured — threaded
+  through `createWarmController` → `warm(..., { seeds })`.
+
+### Re-review focus areas (new)
+
+- `keyRequest` builds a SENTINEL-ORIGIN key (`https://solid-offline.invalid/<enc>`)
+  encoding the full `(url, varyKey)` composite in one percent-encoded path segment.
+  (An earlier draft folded the varyKey into a query param on the live URL; the
+  roborev re-review flagged it as a HIGH collision risk when the resource URL
+  already carried that param, so it was replaced with this collision-free key.)
+- Cache lookups are now METADATA-DRIVEN (`swr.lookupRecord`): for each row of a
+  URL we recompute the request's varyKey UNDER that row's STORED `vary` and match.
+  So a resource varying on any header (Accept, Accept-Language, …) is looked up
+  under exactly the key it was stored under — no permanent miss / orphan bytes.
+  (An earlier draft assumed `Vary: Accept` at lookup time, which the roborev
+  re-review flagged as a desync against the actual stored `vary`.)
+- HEAD is a NON-DESTRUCTIVE network passthrough: it never serves cached GET bytes,
+  never fabricates metadata, and NEVER PURGES. A HEAD (especially the warmer's
+  probe, which the SW forwards and which may be unauthenticated relative to the
+  GET) is not authoritative enough to evict GET bytes — a 403/404 or ETag mismatch
+  there is ambiguous. The only thing a HEAD does is CONFIRM freshness when its
+  explicit ETag matches the stored variant. Revocation/change is handled
+  authoritatively by GET revalidation + notification invalidation. (The HEAD path
+  was tightened across several roborev re-review passes — from metadata-only-store,
+  to definitive-signal eviction, to fully non-destructive.)
+- `client.warm()` (manual) starts auto-derived notifications from its result when
+  notifications are enabled with non-explicit topics and aren't already running —
+  so manual-warm users (`warmOnLogin: false`) still get notifications wired.
+- Non-cacheable revalidation responses (a 2xx/403/404 carrying `no-store`/
+  `private`) now PURGE the stale entry in both `swr.revalidate` and
+  `invalidation.{revalidateResource,refreshListing}` rather than leaving old bytes.
+- The warmer reserves the resource slot SYNCHRONOUSLY after the HEAD probe and
+  BEFORE the byte-warming GET, so concurrent workers can't fire GETs that overshoot
+  the cache budget through the SW. A warmer HEAD 403/404 is treated as INCONCLUSIVE
+  (the bare probe may lack the auth the GET carries) → it never prunes; the GET is
+  the authoritative ACL signal. Explicit `WarmConfig.seeds` are crawled even when
+  the WebID profile fetch fails (independent of discovery).
+- `Vary: *` is classified UNCACHEABLE (`classifyResponse` → `vary-star`): because
+  we store under our own synthetic canonical key with `Vary` stripped, we must
+  reproduce the Cache API's own refusal to store a non-shareable response.
+- Revocation/change is RESOURCE-WIDE: `swr.revalidate`, the HEAD reconciler, and
+  `invalidation.{revalidateResource,refreshListing}` purge EVERY variant for the
+  URL (via `purgeAllVariants` / `purgeStaleVariants`), not just the matched one.
+- `WarmController.result()` settles (resolve OR reject) on warm completion/failure
+  and on `stop()`, so notification topic derivation can never hang on it.
+- The byte cache + metadata DB names carry a CACHE-FORMAT GENERATION
+  (`scope.CACHE_FORMAT = 'v2'`): the canonical-key format is incompatible with the
+  old live-request-keyed bytes, so the generation abandons an old-format cache
+  COHERENTLY (both stores together) rather than reading bytes under a key they were
+  never stored under. (The package is unpublished `0.0.0`, so there is no real
+  deployed cache to migrate; the generation is the forward-safe mechanism.)
+- The warmer's `budgetExceeded` checks `reserved` (not just completed `warmed`), so
+  once the resource budget is reserved the BFS stops admitting items / HEAD probes.
+- `useOfflineResource`'s manual-load (`reload()`) bypass of `skip` stays active
+  until the load SETTLES, so a mid-flight `updated` broadcast can't drop it to idle.
+- #4 is verified via the pure `isScopeChange` helper (the SW message handler itself
+  is excluded from coverage — it needs a real SW lifecycle).
+
+### API / behavioural changes (for the caller)
+
+- `PurgeResult` gained a `dbBlocked: boolean` field (additive).
+- `WarmController` gained a `result()` method (additive).
+- `isScopeChange` is newly exported from the package root.
+- HEAD no longer populates the byte cache at all (it reconciles existing GET state
+  on definitive signals; metadata is not fabricated from a bare HEAD) — a
+  behavioural change for any consumer that relied on a HEAD warming the cache.
+- The warmer now issues a HEAD probe per resource before the GET (one extra request
+  per resource), trading a cheap HEAD for never downloading large binaries.
