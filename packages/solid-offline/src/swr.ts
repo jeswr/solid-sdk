@@ -26,6 +26,7 @@ import {
   computeCacheKey,
   computeVaryKey,
   keyRequest,
+  requestCacheDirective,
 } from './cache-policy.js';
 import type { MetadataStore } from './metadata-store.js';
 import type { CacheMetadata, UpdatedEvent } from './types.js';
@@ -70,6 +71,8 @@ export type ServeSource =
   | 'network-miss-store' // cache miss → network → stored
   | 'network-miss-nostore' // cache miss → network → not cacheable
   | 'network-no-cache' // request was never-cache; straight passthrough
+  | 'request-no-store' // request sent `Cache-Control: no-store`; pure network bypass
+  | 'request-no-cache-revalidated' // request sent `Cache-Control: no-cache`; forced synchronous revalidation
   | 'offline-miss'; // cache miss while offline → network error surfaces
 
 export interface HandleResult {
@@ -166,6 +169,33 @@ export async function handleFetch(request: Request, deps: SwrDeps): Promise<Hand
     return { response, source: 'network-no-cache' };
   }
 
+  // REQUEST-DIRECTED FRESHNESS (security-critical, no-stale-ACL-for-mutations).
+  // A caller can opt a single GET out of the stale-while-revalidate fast path:
+  //   - `Cache-Control: no-store`  → pure network bypass: never read OR write the
+  //     cache for this request (the caller wants nothing to do with the cache).
+  //   - `Cache-Control: no-cache`  → forced SYNCHRONOUS revalidation: if we hold a
+  //     record with an ETag, conditionally GET and only serve once confirmed; a
+  //     200 replaces + broadcasts, a 304 serves the (now-confirmed) cached bytes.
+  //     Never hand back a provisional/stale body. This is exactly how Solid
+  //     clients defeat heuristic HTTP caching before a read-modify-write on a
+  //     security-sensitive doc (e.g. an `.acl` ahead of a grant/revoke), so the SW
+  //     must not undercut it by serving a stale ACL.
+  // Online only — offline these directives can't be satisfied, so fall through to
+  // the normal path (which serves stale-with-`X-Offline` or surfaces the error).
+  const directive = requestCacheDirective(rl);
+  if (deps.isOnline() && directive !== 'default') {
+    if (directive === 'no-store') {
+      // Forward with `cache: 'no-store'` so the SW's own fetch cannot satisfy the
+      // read from the browser/intermediary HTTP cache either (roborev Medium): the
+      // caller wants nothing cache-derived. We never read or write OUR cache here.
+      const passthrough = new Request(request, { method: 'GET', cache: 'no-store' });
+      const response = await deps.fetch(passthrough);
+      return { response, source: 'request-no-store' };
+    }
+    // no-cache: forced synchronous revalidation before serving.
+    return forcedRevalidate(request, rl, deps);
+  }
+
   // METADATA-FIRST (the #1 fix). The metadata store — not the byte cache — is the
   // authority on what we hold and for whom: it is opened against the WebID-scoped
   // DB, and the byte cache is opened against the WebID-scoped Cache (`scope.ts`).
@@ -228,6 +258,123 @@ export async function handleFetch(request: Request, deps: SwrDeps): Promise<Hand
 
   // HIT + OFFLINE: serve provisional bytes, mark them stale/unconfirmed.
   return { response: withOfflineStale(cached.clone()), source: 'cache-hit-offline' };
+}
+
+/**
+ * FORCED SYNCHRONOUS REVALIDATION for a `Cache-Control: no-cache` request
+ * (security-critical, no-stale-ACL-for-mutations).
+ *
+ * Unlike the SWR hit path, this NEVER returns a provisional body: it goes to the
+ * network and only serves once the answer is confirmed. If we hold a record with
+ * an ETag we send a conditional GET (`If-None-Match`) so a `304` is cheap and the
+ * confirmed cached bytes are served; a `200` replaces every variant + broadcasts;
+ * a `403`/`404` purges + broadcasts. With no usable record we just fetch and store
+ * iff cacheable. The cached entry is kept coherent the same way the background
+ * revalidation does, but the caller is guaranteed a server-confirmed response.
+ */
+async function forcedRevalidate(
+  request: Request,
+  rl: RequestLike,
+  deps: SwrDeps,
+): Promise<HandleResult> {
+  const record = await lookupRecord(rl, deps);
+
+  // KEEP the caller's `Cache-Control: no-cache` on the wire (roborev High): the
+  // SW's `self.fetch` can itself hit the browser HTTP cache / an intermediary, so
+  // dropping the directive would let the conditional request be confirmed against
+  // STALE intermediary state — defeating the very guarantee this path exists for.
+  // When we hold an ETag we add `If-None-Match` so a fresh origin answer is a
+  // cheap 304; the `no-cache` directive (and `cache: 'no-cache'` request mode)
+  // forces the revalidation all the way to the origin either way.
+  const condHeaders = new Headers(request.headers);
+  if (!condHeaders.has('cache-control')) condHeaders.set('cache-control', 'no-cache');
+  if (record?.etag) condHeaders.set('If-None-Match', record.etag);
+  const condRequest = new Request(request, {
+    method: 'GET',
+    headers: condHeaders,
+    cache: 'no-cache',
+  });
+  const fresh = await deps.fetch(condRequest);
+
+  // A `304` only CONFIRMS our cached bytes when WE sent the validator that earned
+  // it — i.e. only when the stored record had an ETag we put in `If-None-Match`
+  // (roborev High). If the record had no ETag we sent no validator, so a `304`
+  // (e.g. earned by an `If-Modified-Since` the caller's request happened to carry,
+  // or a misbehaving server) does NOT validate OUR bytes — never serve them. We
+  // re-fetch unconditionally (purging first) so the caller gets a confirmed body.
+  if (fresh.status === 304 && record?.etag) {
+    // Confirmed: serve the cached bytes (now proven fresh), touch fetchedAt.
+    const keyReq = keyRequest(rl.url, record.varyKey);
+    const cached = await deps.cache.match(keyReq, IGNORE_VARY);
+    await deps.meta.touch(record.key, deps.now());
+    if (cached) {
+      return { response: cached.clone(), source: 'request-no-cache-revalidated' };
+    }
+    // Bytes evicted under us → fall through to a fresh unconditional read below
+    // (purge first so no stale variant can survive). Re-fetch without the
+    // conditional so we get a body.
+  }
+
+  // Either a `304` we did NOT validate (no stored ETag), or a `304` whose bytes
+  // were evicted: re-fetch UNCONDITIONALLY (strip any `If-None-Match`) so the
+  // caller is guaranteed a real body, and purge any stale variant first.
+  if (fresh.status === 304) {
+    await purgeAllVariants(rl.url, deps);
+    const unconditional = new Headers(request.headers);
+    // Strip EVERY conditional validator (roborev Medium) — not just If-None-Match
+    // but also If-Modified-Since (and the other precondition headers) — or the
+    // caller's own validators could earn ANOTHER bodyless 304 and we'd hand back a
+    // 304 instead of the promised confirmed body.
+    unconditional.delete('if-none-match');
+    unconditional.delete('if-modified-since');
+    unconditional.delete('if-match');
+    unconditional.delete('if-unmodified-since');
+    unconditional.delete('if-range');
+    if (!unconditional.has('cache-control')) unconditional.set('cache-control', 'no-cache');
+    const refetch = await deps.fetch(
+      new Request(request, { method: 'GET', headers: unconditional, cache: 'no-cache' }),
+    );
+    return finalizeForced(rl, refetch, deps);
+  }
+
+  // Authoritative answer (200/403/404/etc.): purge every stale variant and store
+  // the new one iff cacheable, regardless of whether we previously held an ETag
+  // (roborev High: the no-ETag path must ALSO purge a stale positive entry when
+  // the fresh answer is non-cacheable — no-store/private or 403/404 — so an old
+  // positive ACL can never survive to be served later).
+  return finalizeForced(rl, fresh, deps);
+}
+
+/**
+ * Make a freshly-fetched authoritative response the cache's new truth for this
+ * URL: drop EVERY existing variant, store the new one iff cacheable, broadcast.
+ * Always returns the network answer (never a provisional body). Used by the
+ * forced (`no-cache`) revalidation path for every non-304 authoritative status.
+ */
+async function finalizeForced(
+  rl: RequestLike,
+  fresh: Response,
+  deps: SwrDeps,
+): Promise<HandleResult> {
+  // 1xx/3xx (or any non-authoritative blip): don't touch the cache; hand the
+  // network answer back as-is. Only 2xx/403/404 are authoritative about content.
+  const authoritative =
+    (fresh.status >= 200 && fresh.status < 300) || fresh.status === 403 || fresh.status === 404;
+  if (!authoritative) {
+    return { response: fresh, source: 'request-no-cache-revalidated' };
+  }
+  const decision = classifyResponse(rl, resLike(fresh));
+  // A change/revoke affects the whole resource → purge ALL variants first, so a
+  // stale positive entry can never survive a non-cacheable (no-store/403/404)
+  // answer.
+  await purgeAllVariants(rl.url, deps);
+  if (decision.cacheable) await store(rl, fresh, deps, decision.negative);
+  deps.broadcast.postMessage({
+    url: rl.url,
+    event: 'updated',
+    etag: fresh.headers.get('etag') ?? undefined,
+  });
+  return { response: fresh.clone(), source: 'request-no-cache-revalidated' };
 }
 
 /** True if the request *could* be cached (GET/HEAD + not a never-cache endpoint). */

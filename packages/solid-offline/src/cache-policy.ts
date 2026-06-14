@@ -123,6 +123,34 @@ function parseCacheControl(value: string | null): { noStore: boolean; private: b
 }
 
 /**
+ * Does the REQUEST demand a forced revalidation (no stale serve)?
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * SECURITY-CRITICAL (no-stale-ACL-for-mutations): a caller can opt a single read
+ * OUT of the stale-while-revalidate fast path by sending `Cache-Control:
+ * no-cache` (revalidate before serving) or `no-store` (don't touch the cache at
+ * all). Solid clients send `Cache-Control: no-cache` precisely to defeat
+ * heuristic HTTP caching when they are about to read-modify-write a
+ * security-sensitive document (e.g. an `.acl` before a grant/revoke). The SWR
+ * engine MUST NOT hand such a read a provisional cached body, or a mutation could
+ * decide on a stale ACL. We therefore honour the request directive: `no-cache`
+ * forces a synchronous conditional revalidation before serving; `no-store`
+ * bypasses the cache entirely (network passthrough, no read, no write).
+ * ────────────────────────────────────────────────────────────────────────────
+ */
+export function requestCacheDirective(req: RequestLike): 'no-store' | 'no-cache' | 'default' {
+  const cc = req.headers.get('cache-control');
+  if (!cc) return 'default';
+  const directives = cc
+    .toLowerCase()
+    .split(',')
+    .map((d) => d.trim());
+  if (directives.includes('no-store')) return 'no-store';
+  if (directives.includes('no-cache')) return 'no-cache';
+  return 'default';
+}
+
+/**
  * Classify whether a (request, response) pair may be written to the cache.
  *
  * Per §2 "Never cache": no-store/private; non-GET/HEAD; 4xx/5xx EXCEPT a

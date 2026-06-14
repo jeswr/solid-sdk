@@ -139,6 +139,17 @@ export function createOfflineClient(config: OfflineClientConfig = {}): OfflineCl
   let warmer: WarmController | undefined;
   let notifications: NotificationsClient | undefined;
   let status: OfflineStatusSurface | undefined;
+  // The `controllerchange` listener `register()` adds. Kept so `close()` can
+  // remove it — otherwise a delayed controllerchange after logout/account-switch
+  // would re-post this (departed) identity's config and re-scope the SW to it.
+  let onControllerChange: (() => void) | undefined;
+  // CLOSED GUARD: every async registration callback (statechange on an installing
+  // worker, controllerchange) checks this before posting config. After close()
+  // (logout / account-switch) a delayed lifecycle event must NOT re-post this
+  // departed identity's config — removing the controllerchange listener isn't
+  // enough on its own because the `statechange` listener on an installing worker
+  // can still fire on activation. The guard covers every such path.
+  let closed = false;
   const listeners = new Set<UpdatedListener>();
 
   /** Post a control message to the active service worker (P3 invalidation path). */
@@ -155,6 +166,7 @@ export function createOfflineClient(config: OfflineClientConfig = {}): OfflineCl
    * Reconnect/backoff/poll/resync are all driven from here via `postToWorker`.
    */
   function startNotifications(containers: string[]): NotificationsClient | undefined {
+    if (closed) return undefined; // closed during a delayed warm .then() — don't start
     if (notifications) return notifications;
     if (!config.notifications) return undefined;
     if (typeof WebSocket === 'undefined') return undefined; // non-browser context
@@ -193,6 +205,7 @@ export function createOfflineClient(config: OfflineClientConfig = {}): OfflineCl
    * `fetch`), so the SW intercepts + caches; the SW is never authenticated.
    */
   function startWarmer(): WarmController | undefined {
+    if (closed) return undefined; // closed during/after register() — don't start a crawl
     if (warmer) return warmer;
     if (config.warm === false || config.warm === undefined) return undefined;
     if (!config.webId) return undefined; // no identity → nothing to warm
@@ -232,12 +245,23 @@ export function createOfflineClient(config: OfflineClientConfig = {}): OfflineCl
 
   function postConfig(target: ServiceWorker | null | undefined): void {
     if (!target) return;
+    // Closed guard (roborev): after close() a delayed registration callback
+    // (statechange/controllerchange) must NOT re-post the departed config.
+    if (closed) return;
     // Send the RESOLVED channelName (#15) so the worker's update + invalidation
     // BroadcastChannel matches the one the page client/status surface listens on —
     // a custom `channelName` otherwise never receives the SW's events.
+    //
+    // STRIP PAGE-ONLY, NON-CLONEABLE fields before posting: `config.fetch` is a
+    // function and `postMessage` structured-clones its argument, so leaving it in
+    // throws `DataCloneError` and the SW is never configured. The SW never uses
+    // the page's fetch anyway (decision 1: it authenticates nothing) — only the
+    // page-side warmer/notifications do. We drop `fetch` (and any other function
+    // value, defensively) so the config is always cloneable.
+    const { fetch: _pageFetch, ...cloneableConfig } = config;
     const message: PageToWorkerMessage = {
       type: 'config',
-      config: { ...config, channelName: resolved.channelName },
+      config: { ...cloneableConfig, channelName: resolved.channelName },
     };
     target.postMessage(message);
   }
@@ -248,11 +272,21 @@ export function createOfflineClient(config: OfflineClientConfig = {}): OfflineCl
       return undefined;
     }
 
+    // A (re-)register after a previous close() re-opens the client for posting.
+    closed = false;
+
     ensureChannel();
 
     registration = await navigator.serviceWorker.register(resolved.workerUrl, {
       scope: resolved.scope,
     });
+
+    // CLOSE-VS-REGISTER RACE (roborev High): if close() ran while we were awaiting
+    // register(), bail NOW — before adding any listeners or starting the warmer/
+    // notifications. Otherwise the continuation would attach listeners close()
+    // already ran past (a leak it can't undo) and start departed-identity
+    // background fetches. The `postConfig` closed-guard alone is not enough.
+    if (closed) return registration;
 
     // Hand the SW its config (webId for cache scoping; warm/notifications for
     // later phases). Cover both "already active" and "installing" cases.
@@ -268,9 +302,12 @@ export function createOfflineClient(config: OfflineClientConfig = {}): OfflineCl
     }
 
     // Re-send config whenever a new SW takes control (e.g. after an update).
-    navigator.serviceWorker.addEventListener('controllerchange', () => {
-      postConfig(navigator.serviceWorker.controller);
-    });
+    // Stored + de-duplicated so `close()` can remove it (a delayed controllerchange
+    // after logout must NOT re-post the departed identity's config).
+    if (!onControllerChange) {
+      onControllerChange = () => postConfig(navigator.serviceWorker.controller);
+      navigator.serviceWorker.addEventListener('controllerchange', onControllerChange);
+    }
 
     // P2: kick off the page-driven warmer (it self-schedules on idle).
     startWarmer();
@@ -386,6 +423,10 @@ export function createOfflineClient(config: OfflineClientConfig = {}): OfflineCl
   }
 
   function close(): void {
+    // Mark closed FIRST so any in-flight registration callback (statechange/
+    // controllerchange) that fires during/after teardown short-circuits in
+    // postConfig and cannot re-scope the SW to this departed identity.
+    closed = true;
     listeners.clear();
     channel?.close();
     channel = undefined;
@@ -395,6 +436,13 @@ export function createOfflineClient(config: OfflineClientConfig = {}): OfflineCl
     notifications = undefined;
     status?.close();
     status = undefined;
+    // Remove the `controllerchange` listener so a SW lifecycle event arriving
+    // AFTER close (logout / account-switch before the new SW activated) can't
+    // re-post this (now departed) identity's config and re-scope the worker to it.
+    if (onControllerChange && typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+      navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange);
+    }
+    onControllerChange = undefined;
   }
 
   return {
