@@ -11,7 +11,7 @@ import {
   TermAs,
   TermFrom,
 } from "@rdfjs/wrapper";
-import { WF, DCT, RDF, STATE, wf, dct, rdf, rdfs, sioc, foaf, vcard, schema, xsd, skos, prov } from "./vocab";
+import { WF, DCT, RDF, STATE, wf, dct, rdf, rdfs, sioc, foaf, vcard, schema, xsd, skos, prov, time, TIME_UNIT_SECOND } from "./vocab";
 
 export type IssueState = "open" | "closed";
 export type Priority = "high" | "medium" | "low";
@@ -172,6 +172,94 @@ export class Comment extends TermWrapper {
   /** WebIDs mentioned in this comment, via `schema:mentions` — live set. */
   get mentions(): Set<string> {
     return SetFrom.subjectPredicate(this, schema("mentions"), NamedNodeAs.string, NamedNodeFrom.string);
+  }
+}
+
+/** The xsd:decimal datatype IRI — the range of `time:numericDuration` (OWL-Time). */
+const XSD_DECIMAL = xsd("decimal");
+
+/**
+ * A logged-work entry (F4 time tracking): a `prov:Activity` of `dct:type "worklog"`
+ * recording who logged effort against an issue, when, how long, and (optionally) a
+ * note. The effort is an OWL-Time `time:Duration` linked via `time:hasDuration`,
+ * carrying a `time:numericDuration` (xsd:decimal **seconds**) and a fixed
+ * `time:unitType time:unitSecond` — one canonical unit so figures sum without
+ * conversion. The entry `prov:used`s the issue it pertains to (the same back-link
+ * the F3 activity log uses), so an issue's worklog is "every worklog Activity in
+ * its document". Entries are append-only — a fresh node per log, never mutated.
+ */
+export class Worklog extends TermWrapper {
+  get id(): string {
+    return this.value;
+  }
+  private get types(): Set<string> {
+    return SetFrom.subjectPredicate(this, rdf("type"), NamedNodeAs.string, NamedNodeFrom.string);
+  }
+
+  /** The OWL-Time duration node IRI for this entry (a fragment of the entry). */
+  private get durationIri(): string {
+    return `${this.value}-dur`;
+  }
+
+  /**
+   * Stamp this node as a worklog entry against `issueIri`, by `actor`, at `at`,
+   * for `seconds` of effort, with an optional `note`. Idempotent for a node minted
+   * fresh per log; not a mutator of an existing entry's effort.
+   */
+  record(opts: { issueIri: string; actor?: string; at: Date; seconds: number; note?: string }): void {
+    this.types.add(prov("Activity"));
+    OptionalAs.object(this, dct("type"), "worklog", LiteralFrom.string);
+    OptionalAs.object(this, prov("used"), opts.issueIri, NamedNodeFrom.string);
+    if (opts.actor) OptionalAs.object(this, prov("wasAssociatedWith"), opts.actor, NamedNodeFrom.string);
+    OptionalAs.object(this, prov("startedAtTime"), opts.at, LiteralFrom.dateTime);
+    if (opts.note) OptionalAs.object(this, dct("description"), opts.note, LiteralFrom.string);
+
+    // The effort is a time:Duration in canonical seconds (xsd:decimal), so all
+    // worklog figures across a subtree sum directly with no unit conversion.
+    OptionalAs.object(this, time("hasDuration"), this.durationIri, NamedNodeFrom.string);
+    const duration = new TermWrapper(this.durationIri, this.dataset, this.factory);
+    SetFrom.subjectPredicate(duration, rdf("type"), NamedNodeAs.string, NamedNodeFrom.string).add(time("Duration"));
+    OptionalAs.object(duration, time("numericDuration"), [XSD_DECIMAL, String(opts.seconds)], LiteralFrom.datatypeTuple);
+    OptionalAs.object(duration, time("unitType"), TIME_UNIT_SECOND, NamedNodeFrom.string);
+  }
+
+  /** The issue this entry logs work against (`prov:used`). */
+  get issue(): string | undefined {
+    return OptionalFrom.subjectPredicate(this, prov("used"), NamedNodeAs.string);
+  }
+  /** Who logged the work (`prov:wasAssociatedWith`). */
+  get actor(): string | undefined {
+    return OptionalFrom.subjectPredicate(this, prov("wasAssociatedWith"), NamedNodeAs.string);
+  }
+  /** When the work was logged (`prov:startedAtTime`). */
+  get at(): Date | undefined {
+    return OptionalFrom.subjectPredicate(this, prov("startedAtTime"), LiteralAs.date);
+  }
+  /** Free-text note for the entry (`dct:description`). */
+  get note(): string | undefined {
+    return OptionalFrom.subjectPredicate(this, dct("description"), LiteralAs.string);
+  }
+  /** Logged effort in seconds (the `time:Duration`'s `time:numericDuration`), or 0 if absent. */
+  get seconds(): number {
+    const durationIri = OptionalFrom.subjectPredicate(this, time("hasDuration"), NamedNodeAs.string);
+    if (!durationIri) return 0;
+    const duration = new TermWrapper(durationIri, this.dataset, this.factory);
+    return OptionalFrom.subjectPredicate(duration, time("numericDuration"), LiteralAs.number) ?? 0;
+  }
+}
+
+/** Reads the worklog entries (`prov:Activity` of `dct:type "worklog"`) out of a document. */
+export class WorklogSet extends DatasetWrapper {
+  /**
+   * All worklog entries (`prov:Activity` of `dct:type "worklog"`), newest first
+   * (descending time); ties broken by IRI for a stable order. Non-worklog
+   * activities sharing the document (F3 status/assignment/link entries) are
+   * excluded by the `dct:type "worklog"` gate.
+   */
+  get entries(): Worklog[] {
+    return [...this.instancesOf(prov("Activity"), Worklog)]
+      .filter((w) => OptionalFrom.subjectPredicate(w, dct("type"), LiteralAs.string) === "worklog")
+      .sort((a, b) => (b.at?.getTime() ?? 0) - (a.at?.getTime() ?? 0) || a.id.localeCompare(b.id));
   }
 }
 
@@ -571,6 +659,31 @@ export class Issue extends TermWrapper {
   /** Comments, oldest first. */
   get comments(): Comment[] {
     return [...this.messages].sort((a, b) => (a.created?.getTime() ?? 0) - (b.created?.getTime() ?? 0));
+  }
+
+  /**
+   * F4 time tracking: the worklog entries stored in this issue's own document
+   * (every `prov:Activity` typed `dct:type "worklog"`), newest first. Append a
+   * fresh entry with {@link logWork}; entries are immutable thereafter.
+   */
+  get worklog(): Worklog[] {
+    return new WorklogSet(this.dataset, this.factory).entries.filter((w) => !w.issue || w.issue === this.value);
+  }
+
+  /** Total logged effort on THIS issue (own worklog only), in seconds. */
+  get loggedSeconds(): number {
+    return this.worklog.reduce((sum, w) => sum + w.seconds, 0);
+  }
+
+  /**
+   * Append a worklog entry (F4) to this issue's document. The entry is a new
+   * `prov:Activity` node — existing entries are never touched (append-only). The
+   * caller supplies a unique fragment IRI (e.g. `${url}#work-<uuid>`).
+   */
+  logWork(entryIri: string, opts: { actor?: string; at: Date; seconds: number; note?: string }): Worklog {
+    const entry = new Worklog(entryIri, this.dataset, this.factory);
+    entry.record({ issueIri: this.value, actor: opts.actor, at: opts.at, seconds: opts.seconds, note: opts.note });
+    return entry;
   }
 }
 

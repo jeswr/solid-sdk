@@ -16,6 +16,7 @@
 @prefix foaf:  <http://xmlns.com/foaf/0.1/> .
 @prefix as:    <https://www.w3.org/ns/activitystreams#> .
 @prefix prov:  <http://www.w3.org/ns/prov#> .
+@prefix time:  <http://www.w3.org/2006/time#> .
 @prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
@@ -204,4 +205,33 @@
   sh:property [
     sh:path dct:type ; sh:name "change kind" ;
     sh:datatype xsd:string ; sh:maxCount 1 ;
+  ] ;
+  # F4 worklog: a worklog-kind prov:Activity additionally carries an OWL-Time
+  # duration (`time:hasDuration`, one duration node IRI) and an optional free-text
+  # note (`dct:description`). These constraints are inert for non-worklog activities
+  # (status/assignment/link entries simply omit them — maxCount, not minCount).
+  sh:property [
+    sh:path time:hasDuration ; sh:name "logged duration" ;
+    sh:nodeKind sh:IRI ; sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path dct:description ; sh:name "worklog note" ;
+    sh:datatype xsd:string ; sh:maxCount 1 ;
+  ] .
+
+# --- A logged-work duration (time:Duration) — F4 ---
+# The effort of a worklog entry, linked from its prov:Activity via time:hasDuration.
+# A well-formed duration carries exactly one `time:numericDuration` (xsd:decimal —
+# the OWL-Time range) in exactly one `time:unitType` (an IRI; the writer always uses
+# time:unitSecond, so figures sum without conversion). Both are required: a duration
+# with no magnitude or no unit is meaningless.
+[] a sh:NodeShape ;
+  sh:targetClass time:Duration ;
+  sh:property [
+    sh:path time:numericDuration ; sh:name "magnitude" ;
+    sh:datatype xsd:decimal ; sh:minCount 1 ; sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path time:unitType ; sh:name "unit" ;
+    sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ;
   ] .

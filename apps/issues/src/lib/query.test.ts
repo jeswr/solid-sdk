@@ -14,6 +14,8 @@ const base: IssueRecord = {
   relatesTo: [],
   attachments: [],
   comments: [],
+  worklog: [],
+  loggedSeconds: 0,
   fields: {},
   canWrite: true,
 };
