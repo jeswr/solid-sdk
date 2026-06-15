@@ -28,6 +28,7 @@
 
 import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ResourceWriteError } from "../errors.js";
 import { type ChatStore, createChatStore, nameFromUrl } from "../store.js";
 import { errorMessage } from "./format.js";
 import { listRoomsOrAccessError, RoomsAccessError } from "./rooms.js";
@@ -77,7 +78,23 @@ export interface MessageView {
         assignee: string | undefined;
       }
     | undefined;
+  /**
+   * True for an OPTIMISTIC message shown before its pod write has confirmed — the
+   * view dims it / shows a "Saving…" cue. Absent/false for a persisted message.
+   * A failed optimistic message is REMOVED (reverted), never left pending.
+   */
+  pending?: boolean;
 }
+
+/**
+ * The composer's persistence state for the most recent send:
+ *   - `idle` — nothing in flight (the initial + post-success-settled state);
+ *   - `saving` — the optimistic message is shown and the pod write is in flight;
+ *   - `saved` — the write confirmed (a brief success cue);
+ *   - `failed` — the write failed; the optimistic message was reverted and
+ *     `sendError` carries the reason.
+ */
+export type SendStatus = "idle" | "saving" | "saved" | "failed";
 
 /** What the view needs to render the room list + the open room's thread + states. */
 export interface ChatState {
@@ -103,6 +120,13 @@ export interface ChatState {
   /** True when the thread error is an authentication/authorization failure. */
   messagesAccessError: boolean;
 
+  /** The persistence state of the most recent composer send. */
+  sendStatus: SendStatus;
+  /** A user-facing error for a failed send, or `null`. */
+  sendError: string | null;
+  /** True when the failed send was an authentication/authorization failure. */
+  sendAccessError: boolean;
+
   /** Open a room by URL — loads its message thread. */
   open: (url: string) => void;
   /** Return from the open room to the room list. */
@@ -111,6 +135,14 @@ export interface ChatState {
   refreshRooms: () => void;
   /** Re-fetch the open room's thread (e.g. a manual "retry"). */
   refreshMessages: () => void;
+  /**
+   * Post a message body to the OPEN room (author = `webId`, `dateSent` = now).
+   * Optimistic: the message shows immediately, then the pod write runs; on
+   * failure the optimistic message is reverted and `sendError` is set. An empty
+   * or whitespace-only body is a no-op. Resolves `true` on a confirmed write,
+   * `false` on a no-op or a failure.
+   */
+  send: (content: string) => Promise<boolean>;
 }
 
 /** Options for {@link useChat}. */
@@ -132,10 +164,14 @@ export interface UseChatOptions {
  * generically. Exported so its branches are directly unit-testable.
  */
 export function describeError(err: unknown): { message: string; isAccess: boolean } {
+  // An access wall can surface on the READ path (RdfFetchError / RoomsAccessError)
+  // OR on the WRITE path (a ResourceWriteError from a PUT the pod refused with a
+  // 401/403 — e.g. posting a message into a room you may read but not append to).
   const accessStatus =
     err instanceof RoomsAccessError
       ? err.status
-      : err instanceof RdfFetchError && (err.status === 401 || err.status === 403)
+      : (err instanceof RdfFetchError || err instanceof ResourceWriteError) &&
+          (err.status === 401 || err.status === 403)
         ? err.status
         : undefined;
   if (accessStatus !== undefined) {
@@ -258,9 +294,44 @@ export function useChat(podRoot: string, webId: string, options: UseChatOptions 
   const [messagesAccessError, setMessagesAccessError] = useState(false);
   const [messagesReloadToken, setMessagesReloadToken] = useState(0);
 
+  const [sendStatus, setSendStatus] = useState<SendStatus>("idle");
+  const [sendError, setSendError] = useState<string | null>(null);
+  const [sendAccessError, setSendAccessError] = useState(false);
+
   // Staleness guards: a bumped id marks any older in-flight response as stale.
   const roomsRequestIdRef = useRef(0);
   const messagesRequestIdRef = useRef(0);
+  // The currently-open room, mirrored into a ref so an async send can tell
+  // whether the user has since switched/closed the room (and skip mutating a
+  // thread that no longer belongs to that room).
+  const openRoomUrlRef = useRef<string | null>(openRoomUrl);
+  openRoomUrlRef.current = openRoomUrl;
+  // A bumped id marks any in-flight send as stale (e.g. the room changed), so a
+  // late resolve/reject can't write a status/thread for a room left behind.
+  const sendRequestIdRef = useRef(0);
+  // SINGLE-FLIGHT guard, SCOPED PER ROOM. The set of room URLs that currently have
+  // a send saving. A room's URL is added SYNCHRONOUSLY at the top of a send and
+  // removed in a `finally`, so a second send() to the SAME room while one is still
+  // saving is a no-op (returns false) — it never adds a second optimistic row.
+  // This closes a race the requestId guard alone could not: starting send #2 bumps
+  // the id, so when send #1 resolved it took the superseded early-return and NEVER
+  // reconciled its optimistic row, stranding a permanent "Saving…" message in the
+  // thread. The Send button is disabled while saving, but a programmatic/fast
+  // double-call can still race the async state update; this synchronous ref
+  // forecloses it.
+  //
+  // SCOPING the latch per room (a Set, not a global boolean) fixes a second bug: a
+  // global latch wedged the composer of a DIFFERENT room. With a global boolean,
+  // if room A's send was in flight and the user switched to room B, the
+  // room-change effect reset `sendStatus` to "idle" (composer looks enabled) but a
+  // send() in room B silently returned false because the global latch was still
+  // held by room A. Keying the latch on the room URL means room B's send is only
+  // blocked by an in-flight send TO ROOM B — switching rooms never wedges the new
+  // room's composer, while a rapid double-send within ONE room is still
+  // single-flighted. A Set (rather than a single slot) tracks every concurrently-
+  // sending room independently, so no room's in-flight marker can clobber
+  // another's.
+  const sendingRoomsRef = useRef<Set<string>>(new Set());
 
   // Tracks the (podRoot, webId, fetch) the current state belongs to, kept in
   // STATE (not a ref) so the input-change reset is concurrent-rendering safe: a
@@ -290,6 +361,9 @@ export function useChat(podRoot: string, webId: string, options: UseChatOptions 
     setLoadingMessages(false);
     setMessagesError(null);
     setMessagesAccessError(false);
+    setSendStatus("idle");
+    setSendError(null);
+    setSendAccessError(false);
   }
 
   // --- Room list load --------------------------------------------------------
@@ -354,6 +428,14 @@ export function useChat(podRoot: string, webId: string, options: UseChatOptions 
   // refreshMessages()).
   // biome-ignore lint/correctness/useExhaustiveDependencies: messagesReloadToken is an intentional refetch trigger
   useEffect(() => {
+    // Opening / switching / closing a room clears any leftover composer cue from
+    // the previous room so a "Saved"/"failed" indicator never bleeds across rooms,
+    // and marks any in-flight send for the previous room as stale.
+    sendRequestIdRef.current++;
+    setSendStatus("idle");
+    setSendError(null);
+    setSendAccessError(false);
+
     // No open room → nothing to load; clear the thread + its loading flag.
     if (openRoomUrl === null) {
       messagesRequestIdRef.current++;
@@ -422,6 +504,119 @@ export function useChat(podRoot: string, webId: string, options: UseChatOptions 
     setMessagesReloadToken((n) => n + 1);
   }, []);
 
+  // Post a message to the open room with the OPTIMISTIC-MUTATION pattern: the new
+  // message appears immediately (a `pending` MessageView), the pod write runs
+  // async with a Saving→Saved cue, and on failure the optimistic message is
+  // REMOVED (reverted) and the error surfaced. The body is stored as a PLAIN
+  // literal (the data layer's typed `as:content` accessor — no markup execution),
+  // and the write is scoped to the room's own message container by ChatStore.
+  const send = useCallback(
+    async (content: string): Promise<boolean> => {
+      const roomUrl = openRoomUrlRef.current;
+      // No open room, or an empty / whitespace-only body → a no-op (no write, no
+      // optimistic row, no status change). Checked BEFORE the single-flight latch
+      // so a no-op send never blocks a subsequent real one.
+      if (roomUrl === null || content.trim().length === 0) return false;
+
+      // SINGLE-FLIGHT (per room): if a send to THIS SAME room is already saving,
+      // this overlapping call is a no-op — return false WITHOUT adding a second
+      // optimistic row. (See sendingRoomsRef.) The latch is synchronous, so it
+      // wins the race even when the `saving` status / disabled button hasn't
+      // propagated to the DOM yet. A send to a DIFFERENT room is NOT blocked: the
+      // latch is keyed by room URL, so switching rooms never wedges the new room's
+      // composer (the prior room's send has its own staleness guard).
+      if (sendingRoomsRef.current.has(roomUrl)) return false;
+      sendingRoomsRef.current.add(roomUrl);
+
+      const requestId = ++sendRequestIdRef.current;
+      // A client-only key for the optimistic row, replaced by the real URL on
+      // success and removed on failure. The `pod-chat:pending:` scheme is never a
+      // real resource URL, so it can't collide with a persisted message key.
+      const optimisticUrl = `pod-chat:pending:${requestId}`;
+      const now = new Date();
+      const optimistic: MessageView = {
+        url: optimisticUrl,
+        content,
+        author: webId,
+        published: now,
+        task: undefined,
+        pending: true,
+      };
+
+      // Show it immediately + flag "Saving…".
+      setMessages((prev) => chronological([...prev, optimistic]));
+      setSendStatus("saving");
+      setSendError(null);
+      setSendAccessError(false);
+
+      const store = createChatStore(
+        authedFetch ? { podRoot, webId, fetchImpl: authedFetch } : { podRoot, webId },
+      );
+
+      try {
+        // 1) Create the message resource (well-formed AS2 as:Note; author + room
+        //    link + dateSent), then 2) append its ref to the room's as:items
+        //    index. The room is RE-READ first for a fresh ETag + its current
+        //    refs, so the append is conditional and never clobbers a concurrent
+        //    edit. Both writes go through the scope-guarded ChatStore.
+        const { url } = await store.postMessage({
+          content,
+          author: webId,
+          room: roomUrl,
+          published: now,
+        });
+        const room = await store.readRoom(roomUrl);
+        if (room === undefined) {
+          throw new ResourceWriteError(roomUrl, 404);
+        }
+        await store.saveRoom(
+          roomUrl,
+          {
+            name: room.data.name,
+            creator: room.data.creator,
+            participants: room.data.participants,
+            messages: [...room.data.messages, url],
+          },
+          room.etag,
+        );
+
+        // The user switched/closed the room while the write was in flight (which
+        // bumps sendRequestIdRef via the thread effect) — discard this stale
+        // result rather than mutating a thread that no longer belongs to the room
+        // we wrote to. (Overlapping sends can't reach here: the single-flight
+        // latch makes a second send a no-op while this one is saving.)
+        if (requestId !== sendRequestIdRef.current) return true;
+        // Swap the optimistic row for the confirmed, persisted one (real URL, no
+        // longer pending).
+        setMessages((prev) =>
+          chronological(
+            prev.map((m) => (m.url === optimisticUrl ? { ...m, url, pending: false } : m)),
+          ),
+        );
+        setSendStatus("saved");
+        return true;
+      } catch (err) {
+        if (requestId !== sendRequestIdRef.current) return false;
+        // REVERT: pull the optimistic message back out so the thread reflects the
+        // true (un-persisted) state, then surface the failure.
+        setMessages((prev) => prev.filter((m) => m.url !== optimisticUrl));
+        const { message, isAccess } = describeError(err);
+        setSendStatus("failed");
+        setSendError(message);
+        setSendAccessError(isAccess);
+        return false;
+      } finally {
+        // Release this room's single-flight latch once its send has settled
+        // (resolved or rejected), regardless of staleness, so the next send to
+        // this room can proceed. Other rooms' latches in the Set are untouched.
+        sendingRoomsRef.current.delete(roomUrl);
+      }
+    },
+    // openRoomUrlRef is a stable ref (read via `.current` for the live value), so
+    // it is intentionally NOT a dependency — only the pod inputs rebind `send`.
+    [podRoot, webId, authedFetch],
+  );
+
   // The open room resolved from the current url against the current list. A url
   // no longer present (e.g. removed after a refresh) resolves to null, so the
   // view falls back to the list rather than a blank pane. Derived, not stored,
@@ -442,10 +637,14 @@ export function useChat(podRoot: string, webId: string, options: UseChatOptions 
     loadingMessages,
     messagesError,
     messagesAccessError,
+    sendStatus,
+    sendError,
+    sendAccessError,
     open,
     back,
     refreshRooms,
     refreshMessages,
+    send,
   };
 }
 

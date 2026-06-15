@@ -4,28 +4,38 @@
 // a list of rooms (name, creator, created, counts), click a room to open its
 // message thread (each message's author, time, body, and the actionable-task
 // badge for messages that double as cross-app tasks), a "Back to rooms" control
-// to return. RENDER-ONLY: there is no send/compose box (composing needs an
-// authenticated, interactive session — a deliberate follow-up; see useChat.ts).
+// to return, and a COMPOSER (a text input + Send) to post a new message to the
+// open room.
+//
+// Posting uses the OPTIMISTIC-MUTATION pattern: the new message is shown
+// immediately, the pod write runs async with a Saving→Saved cue, and on failure
+// the optimistic message is reverted (removed) and the error surfaced. The auth
+// for the write rides the same injected `fetch` seam as the reads (no hard-wired
+// login flow — #18-gated; see useChat.ts).
 //
 // This component is FRAMEWORK-AGNOSTIC React (no Next.js import, no "use client"
 // pragma): it drops straight into the create-solid-app Next.js shell's
-// `components/` or any React app. It renders only — it never touches RDF or
-// fetch directly; all data flows through `useChat`, which calls the data layer.
-// Styling is plain class names (`pod-chat-*`) so the host app's CSS owns the
-// look; the component ships no styles of its own.
+// `components/` or any React app. It never touches RDF or fetch directly; all
+// data flows through `useChat`, which calls the data layer. Styling is plain
+// class names (`pod-chat-*`) so the host app's CSS owns the look; the component
+// ships no styles of its own.
 //
 // SECURITY: chat content (room names, message bodies, author + assignee IRIs,
 // task titles) is UNTRUSTED — a room/message can be authored by ANY participant
 // and the task overlay can be set by a remote app. It is rendered ONLY as text
 // (React escapes by default; there is NO dangerouslySetInnerHTML), and the sole
 // attributes a value reaches — an author/assignee `href` — are gated by
-// `safeHref` so a `javascript:`/`data:` IRI can never become an active link.
+// `safeHref` so a `javascript:`/`data:` IRI can never become an active link. On
+// the WRITE side, a composed body is stored as a PLAIN literal via the data
+// layer's typed `as:content` accessor (no markup execution), and the write is
+// scoped to the room's own message container by ChatStore.
 //
 // AUTH SEAM: the `fetch` prop is the injected authenticated fetch, threaded to
 // `useChat` → the data layer. See useChat.ts for the full note.
 
+import { useState } from "react";
 import { formatAuthor, formatBody, formatDate, formatRoomName, safeHref } from "./format.js";
-import { type MessageView, type RoomView, useChat } from "./useChat.js";
+import { type MessageView, type RoomView, type SendStatus, useChat } from "./useChat.js";
 
 /** Props for {@link ChatRooms}. */
 export interface ChatRoomsProps {
@@ -77,11 +87,16 @@ function TaskBadge({ task }: { task: NonNullable<MessageView["task"]> }) {
 /** A single message in the open room's thread. */
 function Message({ message }: { message: MessageView }) {
   return (
-    <li className="pod-chat-message">
+    <li
+      className={message.pending ? "pod-chat-message pod-chat-message-pending" : "pod-chat-message"}
+      aria-busy={message.pending ? "true" : undefined}
+      data-pending={message.pending ? "true" : undefined}
+    >
       <div className="pod-chat-message-meta">
         <AgentRef className="pod-chat-author" value={message.author} />
         <time className="pod-chat-time">{formatDate(message.published)}</time>
         {message.task !== undefined ? <TaskBadge task={message.task} /> : null}
+        {message.pending ? <span className="pod-chat-message-sending">Sending…</span> : null}
       </div>
       {message.task?.assignee !== undefined ? (
         <p className="pod-chat-assignee">
@@ -96,23 +111,117 @@ function Message({ message }: { message: MessageView }) {
   );
 }
 
-/** The read-only message thread for a single open room. */
+/** The persistence cue shown next to the composer for the most recent send. */
+function SendIndicator({ status }: { status: SendStatus }) {
+  if (status === "saving") {
+    return (
+      <span className="pod-chat-send-status" data-send-status="saving" role="status">
+        Saving…
+      </span>
+    );
+  }
+  if (status === "saved") {
+    return (
+      <span className="pod-chat-send-status" data-send-status="saved" role="status">
+        Saved
+      </span>
+    );
+  }
+  if (status === "failed") {
+    return (
+      <span className="pod-chat-send-status" data-send-status="failed">
+        Couldn't send
+      </span>
+    );
+  }
+  return null;
+}
+
+/**
+ * The message composer for the open room: a text input + Send. Submitting posts
+ * the body to the room (author = the session WebID, dateSent = now) via the
+ * hook's optimistic `send`. The input is cleared on a successful send and kept
+ * (so the text isn't lost) when the send fails. An empty/whitespace body is a
+ * no-op — the Send button is disabled until there is something to send and while
+ * a send is in flight.
+ */
+function Composer({
+  status,
+  error,
+  onSend,
+}: {
+  status: SendStatus;
+  error: string | null;
+  onSend: (content: string) => Promise<boolean>;
+}) {
+  const [text, setText] = useState("");
+  const saving = status === "saving";
+  const canSend = text.trim().length > 0 && !saving;
+
+  const submit = async () => {
+    if (!canSend) return;
+    const ok = await onSend(text);
+    // Clear on success; KEEP the text on failure so the user can retry without
+    // retyping. The optimistic message has already been reverted by the hook.
+    if (ok) setText("");
+  };
+
+  return (
+    <form
+      className="pod-chat-composer"
+      aria-label="Send a message"
+      onSubmit={(e) => {
+        e.preventDefault();
+        void submit();
+      }}
+    >
+      <label className="pod-chat-composer-label" htmlFor="pod-chat-composer-input">
+        Message
+      </label>
+      <input
+        id="pod-chat-composer-input"
+        className="pod-chat-composer-input"
+        type="text"
+        value={text}
+        placeholder="Write a message…"
+        onChange={(e) => setText(e.target.value)}
+      />
+      <button type="submit" className="pod-chat-send" disabled={!canSend}>
+        Send
+      </button>
+      <SendIndicator status={status} />
+      {status === "failed" && error !== null ? (
+        <p className="pod-chat-send-error" role="alert">
+          {error}
+        </p>
+      ) : null}
+    </form>
+  );
+}
+
+/** The message thread + composer for a single open room. */
 function RoomThread({
   room,
   messages,
   loading,
   error,
   isAccessError,
+  sendStatus,
+  sendError,
   onBack,
   onRetry,
+  onSend,
 }: {
   room: RoomView | null;
   messages: MessageView[];
   loading: boolean;
   error: string | null;
   isAccessError: boolean;
+  sendStatus: SendStatus;
+  sendError: string | null;
   onBack: () => void;
   onRetry: () => void;
+  onSend: (content: string) => Promise<boolean>;
 }) {
   // `room` is the open room resolved against the list; it is non-null whenever a
   // row was clicked (the row only exists for a listed room). The `null` arm is a
@@ -156,6 +265,11 @@ function RoomThread({
           ))}
         </ol>
       ) : null}
+
+      {/* The composer is shown unless the thread is access-walled (can't read →
+          composing is moot). A generic (retryable) thread error still allows
+          composing — the body posts to its own resource independently. */}
+      {!isAccessError ? <Composer status={sendStatus} error={sendError} onSend={onSend} /> : null}
     </section>
   );
 }
@@ -193,10 +307,13 @@ export function ChatRooms({ podRoot, webId, fetch, title }: ChatRoomsProps) {
     loadingMessages,
     messagesError,
     messagesAccessError,
+    sendStatus,
+    sendError,
     open,
     back,
     refreshRooms,
     refreshMessages,
+    send,
   } = useChat(podRoot, webId, fetch ? { fetch } : {});
 
   return (
@@ -210,8 +327,11 @@ export function ChatRooms({ podRoot, webId, fetch, title }: ChatRoomsProps) {
           loading={loadingMessages}
           error={messagesError}
           isAccessError={messagesAccessError}
+          sendStatus={sendStatus}
+          sendError={sendError}
           onBack={back}
           onRetry={refreshMessages}
+          onSend={send}
         />
       ) : (
         <div className="pod-chat-rooms">

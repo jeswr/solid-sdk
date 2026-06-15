@@ -8,7 +8,7 @@
 // and — critically — renders UNTRUSTED chat content defensively (no HTML
 // injection, no unsafe author link). All with NO real pod and NO login flow.
 
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { act } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ChatRooms } from "./index.js";
@@ -375,6 +375,164 @@ describe("ChatRooms", () => {
     expect(thread).toHaveTextContent("<script>alert('xss')</script>");
     expect(thread.querySelector("script")).toBeNull();
     expect(thread.querySelector("img")).toBeNull();
+  });
+
+  it("composes a message: optimistic render, persisted, Saved, input cleared", async () => {
+    // A writable one-room pod (ROOM_A starts empty). Container PUTs answer 412;
+    // a message PUT under MESSAGES is accepted + recorded; the room PUT (append)
+    // succeeds. Reads reflect the appended message.
+    const refs: string[] = [];
+    let postedUrl: string | null = null;
+    const fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.toString();
+      const method = (init?.method ?? "GET").toUpperCase();
+      if (method === "PUT") {
+        if (url === ROOMS || url === MESSAGES || url === "https://pod.example/pod-chat/") {
+          return new Response(null, { status: 412 });
+        }
+        if (url.startsWith(MESSAGES)) {
+          postedUrl = url;
+          refs.push(url);
+          return new Response(null, { status: 201, headers: { etag: '"w1"' } });
+        }
+        if (url === ROOM_A) return new Response(null, { status: 200, headers: { etag: '"r2"' } });
+        return new Response(null, { status: 404 });
+      }
+      if (url === ROOMS) return ttl(containerTtl(ROOMS, [ROOM_A]));
+      if (url === ROOM_A) return ttl(roomTtl(ROOM_A, "General", WEBID, refs));
+      if (postedUrl !== null && url === postedUrl) {
+        return ttl(`
+@prefix as: <https://www.w3.org/ns/activitystreams#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+<${postedUrl}#it> a as:Note ;
+  as:content "Hello team" ;
+  as:attributedTo <${WEBID}> ;
+  as:published "2026-06-12T12:00:00Z"^^xsd:dateTime .
+`);
+      }
+      return new Response(null, { status: 404 });
+    }) as unknown as typeof globalThis.fetch;
+
+    render(<ChatRooms podRoot={POD} webId={WEBID} fetch={fetch} />);
+    const open = await screen.findByRole("button", { name: "General" });
+    await act(async () => {
+      open.click();
+    });
+    await screen.findByRole("region", { name: "Room" });
+    expect(screen.getByText("No messages.")).toBeInTheDocument();
+
+    const input = screen.getByLabelText("Message");
+    const sendBtn = screen.getByRole("button", { name: "Send" });
+    // Empty input → Send disabled.
+    expect(sendBtn).toBeDisabled();
+
+    fireEvent.change(input, { target: { value: "Hello team" } });
+    expect(sendBtn).not.toBeDisabled();
+    await act(async () => {
+      sendBtn.click();
+    });
+
+    // The message persisted, the Saved cue shows, and the input was cleared.
+    await waitFor(() => expect(screen.getByText("Saved")).toBeInTheDocument());
+    const thread = screen.getByRole("region", { name: "Room" });
+    expect(thread).toHaveTextContent("Hello team");
+    expect((input as HTMLInputElement).value).toBe("");
+    expect(refs).toHaveLength(1);
+  });
+
+  it("reverts the optimistic message and shows an error when the send fails", async () => {
+    // The message-resource PUT 500s → the optimistic message is removed and a
+    // send error is surfaced; the input text is KEPT for a retry.
+    const fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.toString();
+      const method = (init?.method ?? "GET").toUpperCase();
+      if (method === "PUT") {
+        if (url === ROOMS || url === MESSAGES || url === "https://pod.example/pod-chat/") {
+          return new Response(null, { status: 412 });
+        }
+        if (url.startsWith(MESSAGES)) return new Response(null, { status: 500 });
+        return new Response(null, { status: 404 });
+      }
+      if (url === ROOMS) return ttl(containerTtl(ROOMS, [ROOM_A]));
+      if (url === ROOM_A) return ttl(roomTtl(ROOM_A, "General", WEBID, []));
+      return new Response(null, { status: 404 });
+    }) as unknown as typeof globalThis.fetch;
+
+    render(<ChatRooms podRoot={POD} webId={WEBID} fetch={fetch} />);
+    const open = await screen.findByRole("button", { name: "General" });
+    await act(async () => {
+      open.click();
+    });
+    await screen.findByRole("region", { name: "Room" });
+
+    const input = screen.getByLabelText("Message") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "will fail" } });
+    await act(async () => {
+      screen.getByRole("button", { name: "Send" }).click();
+    });
+
+    // The send-error alert shows and the optimistic message was reverted (the
+    // thread is back to empty — "No messages.").
+    const alerts = await screen.findAllByRole("alert");
+    expect(alerts.some((a) => a.className.includes("pod-chat-send-error"))).toBe(true);
+    expect(screen.getByText("No messages.")).toBeInTheDocument();
+    // The text is kept so the user can retry without retyping.
+    expect(input.value).toBe("will fail");
+  });
+
+  it("does not send an empty / whitespace body (Send stays disabled)", async () => {
+    const fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.toString();
+      const method = (init?.method ?? "GET").toUpperCase();
+      if (method === "PUT") return new Response(null, { status: 500 }); // any write is a failure we must NOT trigger
+      if (url === ROOMS) return ttl(containerTtl(ROOMS, [ROOM_A]));
+      if (url === ROOM_A) return ttl(roomTtl(ROOM_A, "General", WEBID, []));
+      return new Response(null, { status: 404 });
+    }) as unknown as typeof globalThis.fetch;
+
+    render(<ChatRooms podRoot={POD} webId={WEBID} fetch={fetch} />);
+    const open = await screen.findByRole("button", { name: "General" });
+    await act(async () => {
+      open.click();
+    });
+    await screen.findByRole("region", { name: "Room" });
+    const input = screen.getByLabelText("Message");
+    const sendBtn = screen.getByRole("button", { name: "Send" });
+    expect(sendBtn).toBeDisabled();
+    // Whitespace-only is still "nothing to send".
+    fireEvent.change(input, { target: { value: "   " } });
+    expect(sendBtn).toBeDisabled();
+    // Submitting the form anyway (e.g. Enter) is a no-op — the composer's own
+    // `!canSend` guard short-circuits before any write fires.
+    const form = screen.getByRole("form", { name: "Send a message" });
+    await act(async () => {
+      fireEvent.submit(form);
+    });
+    // No status cue ever appears and no write was attempted.
+    expect(screen.queryByText("Saving…")).not.toBeInTheDocument();
+    expect(screen.queryByText("Saved")).not.toBeInTheDocument();
+    expect(screen.queryByText("Couldn't send")).not.toBeInTheDocument();
+  });
+
+  it("does NOT render the composer when the thread is access-walled (403 thread)", async () => {
+    const Evil = `${MESSAGES}forbidden.ttl`;
+    const fetch = (async (input: string | URL | Request) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url === ROOMS) return ttl(containerTtl(ROOMS, [ROOM_A]));
+      if (url === ROOM_A) return ttl(roomTtl(ROOM_A, "General", WEBID, [Evil]));
+      if (url === Evil) return new Response(null, { status: 403 });
+      return new Response(null, { status: 404 });
+    }) as unknown as typeof globalThis.fetch;
+
+    render(<ChatRooms podRoot={POD} webId={WEBID} fetch={fetch} />);
+    const open = await screen.findByRole("button", { name: "General" });
+    await act(async () => {
+      open.click();
+    });
+    expect(await screen.findByRole("alert")).toHaveTextContent("permission");
+    // No composer form when the thread can't be read.
+    expect(screen.queryByRole("form", { name: "Send a message" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Send" })).not.toBeInTheDocument();
   });
 
   it("opens a contentless / authorless message without crashing (fallbacks render)", async () => {
