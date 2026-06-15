@@ -8,6 +8,7 @@
 
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { breadcrumbFor } from "../../src/ui/breadcrumb.js";
 import { useDriveListing } from "../../src/ui/useDriveListing.js";
 
 afterEach(() => {
@@ -121,5 +122,106 @@ describe("useDriveListing", () => {
     const { result } = renderHook(() => useDriveListing("https://pod.example/x/", { fetch }));
     await waitFor(() => expect(result.current.error).not.toBeNull());
     expect(result.current.isAccessError).toBe(false);
+  });
+
+  it("normalises a slashless rootUrl: GETs the slash-terminated container and a correct breadcrumb", async () => {
+    // A slashless root prop (".../drive") must still drive a slash-terminated
+    // container GET and a "Drive"-rooted breadcrumb — not a single stray crumb
+    // from the defensive "outside the root" branch.
+    const fetched: string[] = [];
+    const fetch = (async (input: string | URL | Request) => {
+      const url = typeof input === "string" ? input : input.toString();
+      fetched.push(url);
+      return okFor(url);
+    }) as unknown as typeof globalThis.fetch;
+
+    const { result } = renderHook(() => useDriveListing("https://pod.example/drive", { fetch }));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    // currentUrl is normalised, the GET hit the slash-terminated container, and
+    // the listing resolved against it.
+    expect(result.current.currentUrl).toBe("https://pod.example/drive/");
+    expect(fetched).toContain("https://pod.example/drive/");
+    expect(result.current.listing?.url).toBe("https://pod.example/drive/");
+
+    // The breadcrumb (derived from the normalised currentUrl) is the single
+    // "Drive" root crumb — NOT a degenerate one from the slashless-mismatch path.
+    const crumbs = breadcrumbFor(result.current.currentUrl, "https://pod.example/drive");
+    expect(crumbs).toEqual([{ url: "https://pod.example/drive/", label: "Drive" }]);
+  });
+
+  it("resets navigation to the new container when the rootUrl prop changes", async () => {
+    const fetch = (async (input: string | URL | Request) =>
+      okFor(
+        typeof input === "string" ? input : input.toString(),
+      )) as unknown as typeof globalThis.fetch;
+
+    const { result, rerender } = renderHook(
+      ({ root }: { root: string }) => useDriveListing(root, { fetch }),
+      { initialProps: { root: "https://pod.example/drive/" } },
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    // Navigate down into the first root's tree.
+    act(() => result.current.navigate("https://pod.example/drive/sub"));
+    await waitFor(() => expect(result.current.currentUrl).toBe("https://pod.example/drive/sub/"));
+    await waitFor(() => expect(result.current.listing?.url).toBe("https://pod.example/drive/sub/"));
+
+    // Parent re-renders with a DIFFERENT root: navigation must reset to it, not
+    // stay stranded on the previous container's sub-folder.
+    rerender({ root: "https://pod.example/other/" });
+    await waitFor(() => expect(result.current.currentUrl).toBe("https://pod.example/other/"));
+    await waitFor(() => expect(result.current.listing?.url).toBe("https://pod.example/other/"));
+    expect(result.current.error).toBeNull();
+
+    // Breadcrumb now roots at the NEW container.
+    const crumbs = breadcrumbFor(result.current.currentUrl, "https://pod.example/other/");
+    expect(crumbs).toEqual([{ url: "https://pod.example/other/", label: "Drive" }]);
+  });
+
+  it("resets to the new root even when the changed rootUrl prop is slashless", async () => {
+    // The reset keys off the NORMALISED root, so a slashless new prop that
+    // normalises to the same container is still detected as a change and resets.
+    const fetch = (async (input: string | URL | Request) =>
+      okFor(
+        typeof input === "string" ? input : input.toString(),
+      )) as unknown as typeof globalThis.fetch;
+
+    const { result, rerender } = renderHook(
+      ({ root }: { root: string }) => useDriveListing(root, { fetch }),
+      { initialProps: { root: "https://pod.example/drive/" } },
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    act(() => result.current.navigate("https://pod.example/drive/sub"));
+    await waitFor(() => expect(result.current.currentUrl).toBe("https://pod.example/drive/sub/"));
+
+    rerender({ root: "https://pod.example/other" });
+    await waitFor(() => expect(result.current.currentUrl).toBe("https://pod.example/other/"));
+    await waitFor(() => expect(result.current.listing?.url).toBe("https://pod.example/other/"));
+  });
+
+  it("does NOT reset navigation when the rootUrl prop is unchanged across a re-render", async () => {
+    // A parent re-render that passes the SAME (normalised) root must leave the
+    // current navigation intact — the reset is gated on an actual root change.
+    const fetch = (async (input: string | URL | Request) =>
+      okFor(
+        typeof input === "string" ? input : input.toString(),
+      )) as unknown as typeof globalThis.fetch;
+
+    const { result, rerender } = renderHook(
+      ({ root }: { root: string }) => useDriveListing(root, { fetch }),
+      { initialProps: { root: "https://pod.example/drive/" } },
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    act(() => result.current.navigate("https://pod.example/drive/sub"));
+    await waitFor(() => expect(result.current.currentUrl).toBe("https://pod.example/drive/sub/"));
+
+    // Re-render with an unchanged root (and a slashless spelling of the same
+    // root — both normalise identically, so neither is treated as a change).
+    rerender({ root: "https://pod.example/drive/" });
+    rerender({ root: "https://pod.example/drive" });
+    expect(result.current.currentUrl).toBe("https://pod.example/drive/sub/");
   });
 });

@@ -22,6 +22,16 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { type ContainerListing, DriveAccessError, listContainer } from "../drive.js";
 import { errorMessage } from "./format.js";
 
+/**
+ * Ensure a single trailing slash. LDP containers are slash-terminated, so the
+ * root and every navigated container URL are normalised here before they reach
+ * state — keeping `currentUrl` (and therefore the breadcrumb derivation in
+ * {@link breadcrumbFor}) consistent with the URL the data layer actually GETs.
+ */
+function ensureTrailingSlash(url: string): string {
+  return url.endsWith("/") ? url : `${url}/`;
+}
+
 /** What the view needs to render a folder + its breadcrumb + states. */
 export interface DriveListingState {
   /** The container currently being viewed; `null` until the first load resolves. */
@@ -55,18 +65,26 @@ export interface UseDriveListingOptions {
 }
 
 /**
- * React state for browsing a Solid container tree. Loads `rootUrl` on mount and
- * whenever the caller navigates; cancels an in-flight load on navigation/unmount
- * so a slow earlier request can never overwrite a newer one (the classic stale
- * race). All reads go through `listContainer`, so WAC handling, slash
- * normalisation, and the typed model come for free.
+ * React state for browsing a Solid container tree. `rootUrl` is normalised to a
+ * single trailing slash; the hook loads it on mount, whenever the caller
+ * navigates, and again whenever the (normalised) `rootUrl` prop changes — a new
+ * root prop resets navigation to that container rather than stranding the view
+ * on the previous one. It cancels an in-flight load on navigation/unmount so a
+ * slow earlier request can never overwrite a newer one (the classic stale race).
+ * All reads go through `listContainer`, so WAC handling, slash normalisation,
+ * and the typed model come for free.
  */
 export function useDriveListing(
   rootUrl: string,
   options: UseDriveListingOptions = {},
 ): DriveListingState {
   const { fetch: authedFetch } = options;
-  const [currentUrl, setCurrentUrl] = useState(rootUrl);
+  // Normalise the root to a single trailing slash BEFORE it seeds any state, so
+  // a slashless `rootUrl` (e.g. ".../drive") still drives a slash-terminated
+  // container GET and a correct ("Drive" → …) breadcrumb. The raw prop is never
+  // used directly.
+  const normalizedRoot = ensureTrailingSlash(rootUrl);
+  const [currentUrl, setCurrentUrl] = useState(normalizedRoot);
   const [listing, setListing] = useState<ContainerListing | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -75,6 +93,23 @@ export function useDriveListing(
   const [reloadToken, setReloadToken] = useState(0);
   // Guards against a resolved-but-stale response overwriting newer state.
   const requestIdRef = useRef(0);
+  // Tracks the normalised root the navigation state currently belongs to, so a
+  // changed `rootUrl` PROP (parent re-render with a new root) resets navigation
+  // to the new container instead of stranding the view on the previous one.
+  const rootRef = useRef(normalizedRoot);
+
+  // Reset navigation + listing state DURING render when the normalised root
+  // prop changes (React's "adjusting state on prop change" pattern — applies in
+  // the same commit, so the view never flashes the previous container or its
+  // stale breadcrumb). The load effect below then GETs the new root. The raw
+  // mount case is excluded because `rootRef` is seeded with the initial root.
+  if (rootRef.current !== normalizedRoot) {
+    rootRef.current = normalizedRoot;
+    setCurrentUrl(normalizedRoot);
+    setListing(null);
+    setError(null);
+    setIsAccessError(false);
+  }
 
   // `reloadToken` is a deliberate re-fetch TRIGGER (bumped by refresh()): it is
   // not read in the body, but its change must re-run the effect to GET the same
@@ -127,7 +162,7 @@ export function useDriveListing(
   }, [currentUrl, authedFetch, reloadToken]);
 
   const navigate = useCallback((url: string) => {
-    setCurrentUrl(url.endsWith("/") ? url : `${url}/`);
+    setCurrentUrl(ensureTrailingSlash(url));
   }, []);
 
   const refresh = useCallback(() => {
