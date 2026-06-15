@@ -114,14 +114,15 @@ export default async function globalSetup() {
   // not fail setup).
   const appPort = process.env.IT_APP_PORT ?? "3200";
   const appUrl = `http://localhost:${appPort}/`;
+  const ac = new AbortController();
+  const t = setTimeout(() => ac.abort(), 60_000);
   try {
-    const ac = new AbortController();
-    const t = setTimeout(() => ac.abort(), 60_000);
     const res = await fetch(appUrl, { signal: ac.signal });
     await res.text(); // drain the streamed body so compilation completes
-    clearTimeout(t);
     console.log(`[global-setup] warmed Next app at ${appUrl} (${res.status})`);
   } catch {
     console.log(`[global-setup] app warmup skipped (${appUrl} not ready yet)`);
+  } finally {
+    clearTimeout(t); // best-effort warmup: never leave the abort timer live
   }
 }
