@@ -57,6 +57,10 @@ test.describe("Advanced issue features", () => {
   });
 
   test("keyboard shortcut opens new issue; command palette switches view", async ({ page }) => {
+    // Wait until the tracker view is interactive before driving the keyboard:
+    // the "c" shortcut is wired in the IssuesView effect, so press only once a
+    // creatable view is mounted (avoids a press landing on a still-hydrating page).
+    await expect(page.getByRole("button", { name: /new issue/i }).first()).toBeEnabled();
     await page.keyboard.press("c");
     await expect(page.getByRole("dialog").getByLabel(/^title$/i)).toBeVisible();
     await page.keyboard.press("Escape");
@@ -200,9 +204,13 @@ test.describe("Advanced issue features", () => {
     await page.getByLabel(/complete parents automatically/i).click();
     await page.keyboard.press("Escape");
 
-    // Parent with one child.
+    // Parent with one child. F5's type-nesting rule requires a parent to be a
+    // strictly coarser type than its child (a Task is a leaf — it can never
+    // parent another Task), so the parent is a Story and the child a default Task.
     await page.getByRole("button", { name: /new issue/i }).first().click();
     await page.getByLabel(/^title$/i).fill("Auto parent");
+    await page.locator("#issueType").click();
+    await page.getByRole("option", { name: /^story$/i }).click();
     await page.getByRole("button", { name: /create issue/i }).click();
     await expect(page.getByRole("heading", { name: "Auto parent" })).toBeVisible({ timeout: 15_000 });
 
@@ -271,7 +279,17 @@ test.describe("Advanced issue features", () => {
   });
 
   test("links a parent and a blocker between issues", async ({ page }) => {
-    for (const title of ["Parent task", "Blocker task", "Child task"]) {
+    // F5 type-nesting: a parent must be a strictly coarser type than its child
+    // (a Task is a leaf), so the parent is a Story; the blocker/child are Tasks
+    // (dependency links are not constrained by the type hierarchy).
+    await page.getByRole("button", { name: /new issue/i }).first().click();
+    await page.getByLabel(/^title$/i).fill("Parent story");
+    await page.locator("#issueType").click();
+    await page.getByRole("option", { name: /^story$/i }).click();
+    await page.getByRole("button", { name: /create issue/i }).click();
+    await expect(page.getByRole("heading", { name: "Parent story" })).toBeVisible({ timeout: 15_000 });
+
+    for (const title of ["Blocker task", "Child task"]) {
       await page.getByRole("button", { name: /new issue/i }).first().click();
       await page.getByLabel(/^title$/i).fill(title);
       await page.getByRole("button", { name: /create issue/i }).click();
@@ -285,7 +303,12 @@ test.describe("Advanced issue features", () => {
 
     // Set parent.
     await dialog.getByLabel(/parent issue/i).click();
-    await page.getByRole("option", { name: "Parent task" }).click();
+    await page.getByRole("option", { name: "Parent story" }).click();
+    // The parent write triggers a background list refresh that re-renders the
+    // dialog; wait for the parent select to settle on the chosen value before
+    // opening the next select, so its option portal isn't torn down mid-click.
+    await expect(dialog.getByLabel(/parent issue/i)).toContainText("Parent story", { timeout: 15_000 });
+
     // Add a blocker (the parent itself is correctly excluded from candidates).
     await dialog.getByLabel(/add blocker/i).click();
     await page.getByRole("option", { name: "Blocker task" }).click();
