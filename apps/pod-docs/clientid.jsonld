@@ -1,0 +1,21 @@
+{
+  "@context": [
+    "https://www.w3.org/ns/solid/oidc-context.jsonld",
+    "https://w3id.org/jeswr/fed"
+  ],
+
+  "client_id": "https://pod-docs.jeswr.org/clientid.jsonld",
+  "client_name": "Pod Docs",
+  "client_uri": "https://pod-docs.jeswr.org/",
+  "redirect_uris": ["https://pod-docs.jeswr.org/callback"],
+  "scope": "openid webid offline_access",
+  "grant_types": ["authorization_code", "refresh_token"],
+  "response_types": ["code"],
+  "token_endpoint_auth_method": "none",
+
+  "type": "App",
+  "sector": "https://w3id.org/jeswr/sectors/documents#sector",
+  "access": ["Read", "Write", "Append"],
+  "produces": ["https://w3id.org/jeswr/pod-docs#Document"],
+  "consumes": ["https://w3id.org/jeswr/pod-docs#Document"]
+}

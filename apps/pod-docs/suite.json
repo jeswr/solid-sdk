@@ -1,0 +1,25 @@
+{
+  "$schema": "https://solid.example/suite-tracking/suite.schema.json",
+  "id": "pod-docs",
+  "kind": "app",
+  "name": "Pod Docs",
+  "repo": "https://github.com/jeswr/pod-docs",
+  "category": "documents",
+  "maturity": "prototype",
+  "visibility": "public",
+  "stack": {
+    "language": "typescript",
+    "bundler": "tsup",
+    "test": "vitest",
+    "rdf": "n3"
+  },
+  "dependsOn": ["solid-federation-vocab"],
+  "federation": {
+    "clientIdUrl": "https://pod-docs.jeswr.org/clientid.jsonld",
+    "sectors": ["documents"],
+    "accessModes": ["Read", "Write", "Append"],
+    "produces": ["documents"],
+    "consumes": ["documents"],
+    "membershipTodo": "fedapp: block published in clientid.jsonld (fedapp:App over the documents sector, produces/consumes the Pod-Docs document class). Federation membership is asserted by the registry after a signed challenge, not here."
+  }
+}
