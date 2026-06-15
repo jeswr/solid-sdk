@@ -212,4 +212,31 @@ describe("revertMoveIfCurrent — a stale failure never clobbers a newer move", 
     const reverted = revertMoveIfCurrent(stillHigh, original, optimisticHigh, { kind: "priority", priority: "high" });
     expect(reverted[0].priority).toBe("low");
   });
+
+  it("reverts ONLY the status dimension — a concurrent title edit is preserved", () => {
+    // Move A: todo → in-progress, save in flight.
+    const original = mk({ url: "a", title: "Old title", status: "todo", state: "open" });
+    const optimistic = applyMove(original, move("in-progress"), wf); // status in-progress, title unchanged
+    // While the move's write was pending, the user renamed the SAME card. The
+    // current local record has the new title but still the optimistic status.
+    const edited = { ...optimistic, title: "New title" };
+    const list = [edited, mk({ url: "b", status: "todo", state: "open" })];
+    const reverted = revertMoveIfCurrent(list, original, optimistic, move("in-progress"));
+    const card = reverted.find((i) => i.url === "a");
+    expect(card?.status).toBe("todo"); // status rolled back to original
+    expect(card?.state).toBe("open"); // state rolled back too
+    expect(card?.title).toBe("New title"); // the concurrent edit survives
+  });
+
+  it("reverts ONLY the priority dimension — a concurrent assignee edit is preserved", () => {
+    const original = mk({ url: "p", priority: "low", status: "todo", assignee: "alice" });
+    const optimisticHigh = applyMove(original, { kind: "priority", priority: "high" }, wf);
+    // Concurrent edit: reassigned while the priority write was pending.
+    const edited = { ...optimisticHigh, assignee: "bob" };
+    const list = [edited];
+    const reverted = revertMoveIfCurrent(list, original, optimisticHigh, { kind: "priority", priority: "high" });
+    expect(reverted[0].priority).toBe("low"); // priority rolled back
+    expect(reverted[0].status).toBe("todo"); // status untouched by a priority revert
+    expect(reverted[0].assignee).toBe("bob"); // the concurrent reassignment survives
+  });
 });

@@ -83,16 +83,26 @@ export interface UseIssues {
   statusHistory: (urls: string[]) => Promise<Map<string, { to: StatusSlug; at: Date }[]>>;
 }
 
-/** One fetched view of a tracker, tagged with the tracker it came from. */
+/**
+ * One fetched view of a tracker, tagged with BOTH the tracker it came from AND
+ * the authenticated WebID (`creator`) that fetched it. The render derives from a
+ * snapshot only when BOTH match the current (trackerUrl, creator) — so a view
+ * fetched by a previous user can never be shown to, or preserved for, a different
+ * later user on the same browser, even when the tracker URL is unchanged. This
+ * mirrors the WebID scoping of the durable cache (issue-cache.ts) in the live
+ * in-memory layer.
+ */
 interface TrackerSnapshot {
   tracker: string | null;
+  /** The WebID that fetched this snapshot (null only for the empty snapshot). */
+  creator: string | null;
   issues: IssueRecord[];
   sprints: SprintRecord[];
   canCreate: boolean;
   error: string | null;
 }
 
-const EMPTY_SNAPSHOT: Omit<TrackerSnapshot, "tracker"> = {
+const EMPTY_SNAPSHOT: Omit<TrackerSnapshot, "tracker" | "creator"> = {
   issues: [],
   sprints: [],
   canCreate: true,
@@ -111,12 +121,13 @@ const EMPTY_SNAPSHOT: Omit<TrackerSnapshot, "tracker"> = {
  * never paint for the current one before authorization revalidates.
  */
 function hydrate(webId: string | null, trackerUrl: string | null): TrackerSnapshot {
-  if (!trackerUrl || !webId) return { tracker: null, ...EMPTY_SNAPSHOT };
+  if (!trackerUrl || !webId) return { tracker: null, creator: null, ...EMPTY_SNAPSHOT };
   const cached = readIssueCache(webId, trackerUrl);
-  if (!cached) return { tracker: null, ...EMPTY_SNAPSHOT };
-  // Tag with the tracker so the render shows the cached issues immediately; a
-  // background fetch reconciles. Sprints aren't cached (small, config-derived).
-  return { tracker: trackerUrl, issues: cached, sprints: [], canCreate: true, error: null };
+  if (!cached) return { tracker: null, creator: null, ...EMPTY_SNAPSHOT };
+  // Tag with BOTH the tracker and the WebID so the render shows the cached issues
+  // immediately (and only for this same identity); a background fetch reconciles.
+  // Sprints aren't cached (small, config-derived).
+  return { tracker: trackerUrl, creator: webId, issues: cached, sprints: [], canCreate: true, error: null };
 }
 
 export function useIssues(trackerUrl: string | null, creator: string | null): UseIssues {
@@ -136,7 +147,12 @@ export function useIssues(trackerUrl: string | null, creator: string | null): Us
   // to distinguish "we have nothing yet" from "we have cached/loaded data".
   const [fetched, setFetched] = useState(false);
 
-  const current = snapshot.tracker === trackerUrl;
+  // A snapshot is the CURRENT view only when BOTH its tracker AND the WebID that
+  // fetched it match the active (trackerUrl, creator). If the identity changed
+  // while the tracker URL stayed the same, the previous user's snapshot is stale
+  // and is neither rendered nor preserved — it falls through to the empty view
+  // until an authorized fetch for the new identity lands.
+  const current = snapshot.tracker === trackerUrl && snapshot.creator === creator;
   const issues = current ? snapshot.issues : [];
   const sprints = current ? snapshot.sprints : [];
   const canCreate = current ? snapshot.canCreate : true;
@@ -156,22 +172,27 @@ export function useIssues(trackerUrl: string | null, creator: string | null): Us
   const fetchInto = useCallback(async () => {
     if (!trackerUrl) return;
     const seq = ++fetchSeq.current;
+    // The identity this fetch is for — stamped onto the snapshot so the result
+    // can never be rendered for a different later identity.
+    const forCreator = creator;
     try {
-      const repo = new Repository(trackerUrl, undefined, creator ?? undefined);
+      const repo = new Repository(trackerUrl, undefined, forCreator ?? undefined);
       const [{ issues: list, canCreate: cc }, sprintList] = await Promise.all([repo.list(), repo.listSprints()]);
       if (seq !== fetchSeq.current) return; // a newer fetch superseded this one
-      setSnapshot({ tracker: trackerUrl, issues: list, sprints: sprintList, canCreate: cc, error: null });
+      setSnapshot({ tracker: trackerUrl, creator: forCreator, issues: list, sprints: sprintList, canCreate: cc, error: null });
       setFetched(true);
       // Persist the fresh list so the next reopen paints from it — scoped to the
       // active WebID so it only ever rehydrates for this same identity.
-      writeIssueCache(creator, trackerUrl, list);
+      writeIssueCache(forCreator, trackerUrl, list);
     } catch (e) {
       if (seq !== fetchSeq.current) return;
-      // Keep the last good data for THIS tracker; never carry another's over.
+      // Keep the last good data for THIS (tracker, identity) only; never carry
+      // another tracker's OR another user's data over. A creator mismatch starts
+      // a fresh error snapshot rather than annotating the previous user's view.
       setSnapshot((prev) =>
-        prev.tracker === trackerUrl
+        prev.tracker === trackerUrl && prev.creator === forCreator
           ? { ...prev, error: describe(e) }
-          : { tracker: trackerUrl, ...EMPTY_SNAPSHOT, error: describe(e) },
+          : { tracker: trackerUrl, creator: forCreator, ...EMPTY_SNAPSHOT, error: describe(e) },
       );
     } finally {
       if (seq === fetchSeq.current) setRefreshing(false);
@@ -183,15 +204,15 @@ export function useIssues(trackerUrl: string | null, creator: string | null): Us
     await fetchInto();
   }, [trackerUrl, fetchInto]);
 
-  // When the tracker changes, re-hydrate from that tracker's cache (instant
-  // paint) and reset the first-load flag so the new board doesn't inherit the
-  // old one's "loaded" status.
+  // When the tracker OR the active identity changes, re-hydrate from that
+  // (WebID, tracker)'s cache (instant paint) and reset the first-load flag so the
+  // new board doesn't inherit the old one's "loaded" status. On a cache MISS
+  // (no entry for this identity/tracker, or no authenticated WebID) we install
+  // the EMPTY snapshot — never leave the previous identity's in-memory data
+  // standing for the new one to render before an authorized fetch lands.
   useEffect(() => {
     setFetched(false);
-    const hydrated = hydrate(creator, trackerUrl);
-    if (hydrated.tracker === trackerUrl) {
-      setSnapshot(hydrated);
-    }
+    setSnapshot(hydrate(creator, trackerUrl));
   }, [creator, trackerUrl]);
 
   useEffect(() => {
@@ -228,7 +249,8 @@ export function useIssues(trackerUrl: string | null, creator: string | null): Us
   const setIssuesLocal = useCallback(
     (updater: (issues: IssueRecord[]) => IssueRecord[]) => {
       setSnapshot((prev) => {
-        if (prev.tracker !== trackerUrl) return prev; // never edit another tracker's snapshot
+        // Never edit another tracker's OR another user's snapshot.
+        if (prev.tracker !== trackerUrl || prev.creator !== creator) return prev;
         const next = updater(prev.issues);
         // Keep the cache in lock-step so a reopen mid-write paints the optimistic
         // state — scoped to the active WebID (writeIssueCache no-ops without one).

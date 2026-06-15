@@ -156,6 +156,13 @@ export function revertMove(issues: IssueRecord[], original: IssueRecord): IssueR
  * The relevant grouped value is what a move changes, so we compare on the move's
  * dimension (status vs priority) — a later, unrelated re-render that produced a
  * fresh object reference must not look like a "newer move".
+ *
+ * Crucially, the revert restores ONLY the field(s) the failed move changed
+ * (`status`/`state` for a status move, `priority` for a priority move) onto the
+ * CURRENT record — it does NOT replace the whole record with the stale
+ * `original`. Any UNRELATED edit that landed while the write was pending (a
+ * title/assignee change, a new comment) is preserved; only the failed move's own
+ * dimension rolls back.
  */
 export function revertMoveIfCurrent(
   issues: IssueRecord[],
@@ -171,5 +178,11 @@ export function revertMoveIfCurrent(
       : current.priority === optimistic.priority;
   // A newer move of the same card already changed it — drop the stale failure.
   if (!stillThisMove) return issues;
-  return revertMove(issues, original);
+  // Roll back ONLY the move's own dimension onto the CURRENT record, so any
+  // concurrent edit to other fields (title, assignee, …) is kept.
+  const reverted: IssueRecord =
+    move.kind === "status"
+      ? { ...current, status: original.status, state: original.state }
+      : { ...current, priority: original.priority };
+  return issues.map((i) => (i.url === original.url ? reverted : i));
 }
