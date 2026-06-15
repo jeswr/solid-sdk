@@ -100,6 +100,10 @@ export interface DocsListingState {
    * runs async under the document's `If-Match` etag. On success the open
    * document is refreshed with the new etag/revision; on failure the body is
    * reverted and `saveStatus` becomes `failed`. A no-op when no document is open.
+   * SINGLE-FLIGHT: calling this while a save is already in flight is a no-op
+   * (the second call returns immediately, no second write) — so saves to the
+   * same open document never overlap and a save always resolves against the
+   * etag/body it started from (no lost update / etag desync).
    */
   saveOpenDocument: (body: string) => Promise<void>;
 }
@@ -168,16 +172,23 @@ export function useDocsListing(
   // Monotonic seed for the temporary URL of an optimistic create placeholder —
   // kept separate from the request guard so the two concerns don't conflate.
   const tempIdRef = useRef(0);
-  // Monotonic id for the in-flight SAVE op. Bumped on every saveOpenDocument()
-  // call; a save's result (commit etag / revert body / set error) is applied
-  // only if its captured id is still the latest — so when the user edits+saves
-  // twice in quick succession, an older save resolving LATE cannot clobber the
-  // newer save's body or etag (lost update / etag desync). This is the write-
-  // path analogue of `requestRef` for reads/opens: the navigation guard
-  // (`live.url === current.url`) covers navigate-away; this covers overlapping
-  // saves to the SAME open resource. Imperative bookkeeping — a ref is the
-  // right home (read/written only in event handlers, never during render).
-  const saveRef = useRef(0);
+  // SINGLE-FLIGHT guard for saveOpenDocument(). Set SYNCHRONOUSLY at the top of a
+  // save and cleared in a `finally`, so a second saveOpenDocument() called while
+  // one is still in flight is a no-op (returns early) — overlapping saves to the
+  // same open document CANNOT occur. This is the robust fix for the lost-update /
+  // etag-desync class of races (two were surfaced in the prior id-reconcile
+  // approach): with at most one save in flight, every save resolves against the
+  // etag/body it STARTED from — there is no "older vs newer save" ordering to
+  // reconcile, no late-resolving older save to discard, no inconsistent persisted
+  // state. The Save button is also disabled while `saveStatus === "saving"`
+  // (defense-in-depth), but a fast / programmatic double-call can still race the
+  // async state update, so the synchronous ref — not the disabled button — is
+  // what actually closes the race. Imperative bookkeeping — a ref is the right
+  // home (read/written only in event handlers, never during render). The
+  // navigate-away guard below (`live.url === current.url`) is STILL required: a
+  // single in-flight save can resolve after the user has navigated to a different
+  // open document, and its result must not apply to that other doc.
+  const saveInFlightRef = useRef(false);
   // Tracks the store the navigation state currently belongs to, kept in STATE
   // (not a ref) so the store-change reset is concurrent-rendering safe.
   const [prevStore, setPrevStore] = useState(store);
@@ -404,13 +415,14 @@ export function useDocsListing(
       const current = openDocument;
       if (current === null) return; // nothing open to save
 
-      // Stamp this save with the latest id. Any save already in flight on this
-      // (or any) resource is now SUPERSEDED — when it resolves later, its
-      // captured `saveId` will no longer equal `saveRef.current`, so its result
-      // is discarded (no lost update / stale-etag write). Mirrors the read/open
-      // staleness guard (`requestRef`).
-      const saveId = ++saveRef.current;
-      const isLatestSave = () => saveId === saveRef.current;
+      // SINGLE-FLIGHT: if a save is already in flight, this overlapping call is a
+      // no-op — return WITHOUT a second optimistic update or pod write. (See
+      // saveInFlightRef.) The latch is synchronous, so it wins the race even when
+      // the `saving` status / disabled Save button hasn't propagated to the DOM
+      // yet. With at most one save in flight, the in-flight save always resolves
+      // against the etag/body it started from — no lost update, no etag desync.
+      if (saveInFlightRef.current) return;
+      saveInFlightRef.current = true;
 
       // Optimistic body update: reflect the edit in the open view immediately.
       const previous = current;
@@ -436,25 +448,24 @@ export function useDocsListing(
           },
           current.etag,
         );
-        // Discard a superseded save's result entirely: a newer save has already
-        // stamped a higher id, so committing THIS (older) save's etag/body would
-        // overwrite the newer body and desync the etag for the next If-Match.
-        if (!isLatestSave()) return;
         // Commit the new etag so a subsequent save sends the right If-Match. We
         // only mutate the open document if the user hasn't navigated away from
         // THIS resource in the meantime (a store change / close / open-of-another
-        // would have replaced it).
+        // would have replaced it). This navigate-away guard is independent of the
+        // single-flight latch: the one in-flight save can resolve after a
+        // navigation, and its etag/body must not apply to a different open doc.
         setOpenDocument((live) =>
           live && live.url === current.url ? { ...live, etag, data: { ...live.data, body } } : live,
         );
         setSaveStatus("saved");
       } catch (err) {
-        // A superseded save's failure must not revert the newer optimistic body
-        // nor flip the indicator to "failed" — the newer save owns the state.
-        if (!isLatestSave()) return;
         // Revert the body to the pre-edit state (only if still on this resource).
         setOpenDocument((live) => (live && live.url === current.url ? previous : live));
         reportSaveFailure(err);
+      } finally {
+        // Release the single-flight latch once this save has settled (resolved or
+        // rejected) so the next save can proceed.
+        saveInFlightRef.current = false;
       }
     },
     [store, openDocument, reportSaveFailure],

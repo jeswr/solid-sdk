@@ -620,12 +620,14 @@ describe("useDocsListing — saveOpenDocument (optimistic)", () => {
     expect(result.current.openDocument).toBeNull();
   });
 
-  it("discards a superseded save's result when an older save resolves last (no lost update)", async () => {
-    // Overlapping saves to the SAME open document. The user edits + saves
-    // ("first body"), then edits + saves again ("second body") before the
-    // first save resolves. The FIRST (older) save resolves LAST: its result
-    // (body + etag) must be discarded — the newer save's body and etag win, so
-    // there is no lost update and the next If-Match is not desync'd.
+  it("SINGLE-FLIGHT: a 2nd save while the 1st is in flight is rejected (no overlap)", async () => {
+    // The robust fix for the lost-update / etag-desync race: saves are
+    // serialized. A second saveOpenDocument() called while the first is still in
+    // flight is a synchronous no-op — no second optimistic body update, no second
+    // pod write. So the previously-flagged overlapping-save sequence (older save
+    // resolving last and clobbering the newer save's body/etag) CANNOT occur:
+    // there is never more than one save in flight to reconcile. After the first
+    // save settles, the latch releases and a fresh save proceeds normally.
     const resolvers: Array<(v: { etag: string | null }) => void> = [];
     const save = vi.fn(
       () =>
@@ -635,21 +637,46 @@ describe("useDocsListing — saveOpenDocument (optimistic)", () => {
     );
     const result = await withOpenDoc(openedStore(save));
 
-    // First save (in flight).
+    // First save (in flight): the optimistic body is the first body.
     act(() => {
       void result.current.saveOpenDocument("<p>first</p>");
     });
     expect(result.current.openDocument?.data.body).toBe("<p>first</p>");
+    expect(result.current.saveStatus).toBe("saving");
+    expect(save).toHaveBeenCalledTimes(1);
 
-    // Second save before the first resolves — newer body becomes optimistic.
+    // Second save WHILE the first is in flight: a no-op. The optimistic body must
+    // stay the FIRST body (the 2nd write never happened) and `save` is still
+    // called only once — no overlap, nothing to reconcile.
+    act(() => {
+      void result.current.saveOpenDocument("<p>second</p>");
+    });
+    expect(result.current.openDocument?.data.body).toBe("<p>first</p>");
+    expect(save).toHaveBeenCalledTimes(1);
+
+    // The (only) in-flight save resolves → its etag commits against the body it
+    // started from. No older/newer save ordering exists, so the etag/body are
+    // consistent.
+    await act(async () => {
+      resolvers[0]?.({ etag: '"v-first"' });
+      await Promise.resolve();
+    });
+    expect(result.current.saveStatus).toBe("saved");
+    expect(result.current.openDocument?.etag).toBe('"v-first"');
+    expect(result.current.openDocument?.data.body).toBe("<p>first</p>");
+
+    // After the first save settled, the latch is released → a NEW save now
+    // proceeds (writes against the freshly-committed etag, commits its result).
     act(() => {
       void result.current.saveOpenDocument("<p>second</p>");
     });
     expect(result.current.openDocument?.data.body).toBe("<p>second</p>");
     expect(save).toHaveBeenCalledTimes(2);
-
-    // The SECOND (latest) save resolves first → its etag commits and the body
-    // is the newer body.
+    expect(save).toHaveBeenLastCalledWith(
+      DOC_URL,
+      expect.objectContaining({ body: "<p>second</p>" }),
+      '"v-first"', // the If-Match etag committed by the first save — not stale
+    );
     await act(async () => {
       resolvers[1]?.({ etag: '"v-second"' });
       await Promise.resolve();
@@ -657,23 +684,12 @@ describe("useDocsListing — saveOpenDocument (optimistic)", () => {
     expect(result.current.saveStatus).toBe("saved");
     expect(result.current.openDocument?.etag).toBe('"v-second"');
     expect(result.current.openDocument?.data.body).toBe("<p>second</p>");
-
-    // Now the FIRST (older, superseded) save resolves LAST — its result must be
-    // discarded: the etag must NOT regress to the stale value and the body must
-    // stay the newer body (no lost update / etag desync).
-    await act(async () => {
-      resolvers[0]?.({ etag: '"v-first"' });
-      await Promise.resolve();
-    });
-    expect(result.current.openDocument?.etag).toBe('"v-second"');
-    expect(result.current.openDocument?.data.body).toBe("<p>second</p>");
-    expect(result.current.saveStatus).toBe("saved");
   });
 
-  it("ignores a superseded save's late FAILURE (the newer save's body stands)", async () => {
-    // Same overlap, but the older save REJECTS late. Its failure must not flip
-    // the indicator to "failed" nor revert the newer optimistic body — the
-    // latest save owns the state.
+  it("SINGLE-FLIGHT: the latch is released after a FAILED save so the next save proceeds", async () => {
+    // The latch is released in a `finally`, so even when a save REJECTS, a
+    // subsequent save can still run. (Otherwise a single failure would wedge the
+    // save path closed.)
     const calls: Array<{
       resolve: (v: { etag: string | null }) => void;
       reject: (e: unknown) => void;
@@ -686,29 +702,31 @@ describe("useDocsListing — saveOpenDocument (optimistic)", () => {
     );
     const result = await withOpenDoc(openedStore(save));
 
+    // First save fails.
     act(() => {
       void result.current.saveOpenDocument("<p>first</p>");
     });
-    act(() => {
-      void result.current.saveOpenDocument("<p>second</p>");
-    });
-
-    // Latest save succeeds.
-    await act(async () => {
-      calls[1]?.resolve({ etag: '"v-second"' });
-      await Promise.resolve();
-    });
-    expect(result.current.saveStatus).toBe("saved");
-
-    // Superseded older save fails LATE — must be swallowed.
     await act(async () => {
       calls[0]?.reject(httpError(412));
       await Promise.resolve();
     });
+    expect(result.current.saveStatus).toBe("failed");
+    // The body reverted to the pre-edit persisted body.
+    expect(result.current.openDocument?.data.body).toBe("<p>hello</p>");
+
+    // The latch released on failure → a second save proceeds (not wedged).
+    act(() => {
+      void result.current.saveOpenDocument("<p>retry</p>");
+    });
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(result.current.openDocument?.data.body).toBe("<p>retry</p>");
+    expect(result.current.saveStatus).toBe("saving");
+    await act(async () => {
+      calls[1]?.resolve({ etag: '"v2"' });
+      await Promise.resolve();
+    });
     expect(result.current.saveStatus).toBe("saved");
-    expect(result.current.saveError).toBeNull();
-    expect(result.current.openDocument?.data.body).toBe("<p>second</p>");
-    expect(result.current.openDocument?.etag).toBe('"v-second"');
+    expect(result.current.openDocument?.etag).toBe('"v2"');
   });
 
   it("does not revert another open document when a stale save REJECTS", async () => {
