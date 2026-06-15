@@ -30,8 +30,11 @@ ${triples}`;
 
     if (method === "PUT") {
       if (init?.headers) {
-        const ifMatch = new Headers(init.headers).get("if-match");
+        const headers = new Headers(init.headers);
+        const ifMatch = headers.get("if-match");
         if (ifMatch && ifMatch !== `"${etags.get(u)}"`) return new Response(null, { status: 412 });
+        // If-None-Match: * — a create-only write; fails if the resource exists.
+        if (headers.get("if-none-match") === "*" && store.has(u)) return new Response(null, { status: 412 });
       }
       store.set(u, init?.body as string);
       return new Response(null, { status: 201, headers: { etag: bump(u) } });

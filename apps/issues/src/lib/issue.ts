@@ -240,10 +240,14 @@ export class Activity extends TermWrapper {
 
 /** Reads the activity entries (`prov:Activity`) out of a parsed log document. */
 export class ActivityLog extends DatasetWrapper {
-  /** All entries, newest first (descending `prov:startedAtTime`). */
+  /**
+   * All entries, newest first (descending `prov:startedAtTime`). Ties broken by
+   * the entry IRI so the order is STABLE when two entries share a timestamp
+   * (rapid changes can collide at millisecond resolution).
+   */
   get entries(): Activity[] {
     return [...this.instancesOf(prov("Activity"), Activity)].sort(
-      (a, b) => (b.at?.getTime() ?? 0) - (a.at?.getTime() ?? 0),
+      (a, b) => (b.at?.getTime() ?? 0) - (a.at?.getTime() ?? 0) || a.id.localeCompare(b.id),
     );
   }
 }

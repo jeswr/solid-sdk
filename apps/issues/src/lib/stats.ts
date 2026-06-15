@@ -241,6 +241,8 @@ export function computeVelocity(sprints: SprintRecord[], issues: IssueRecord[]):
       const pts = (list: IssueRecord[]) => list.reduce((sum, i) => sum + (i.estimate ?? 0), 0);
       // Completing a sprint releases unfinished tasks, so current membership
       // underreports the commitment — prefer the snapshot taken at completion.
-      return { sprint: s.title, done: pts(members.filter((i) => i.status === "done")), committed: s.committedPoints ?? pts(members) };
+      // Completion is the open/closed state (custom terminal statuses count), not
+      // the literal "done" slug.
+      return { sprint: s.title, done: pts(members.filter((i) => i.state === "closed")), committed: s.committedPoints ?? pts(members) };
     });
 }

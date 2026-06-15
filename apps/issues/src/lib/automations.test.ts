@@ -38,7 +38,21 @@ describe("evaluateAutomations", () => {
     ];
     const actions = evaluateAutomations(issues, ALL_ON, NOW);
     expect(actions).toEqual([
-      { kind: "set-status-done", url: "p", title: "Parent", reason: "all sub-tasks are done" },
+      { kind: "close", url: "p", title: "Parent", reason: "all sub-tasks are done" },
+    ]);
+  });
+
+  it("counts a custom terminal status (state=closed) as complete when closing a parent", () => {
+    // A custom workflow's terminal status ("shipped") is written with state="closed"
+    // but status="shipped" — completion must key off state, not the "done" slug.
+    const issues = [
+      mk({ url: "p", title: "Custom parent" }),
+      mk({ url: "c1", parent: "p", status: "shipped", state: "closed" }),
+      mk({ url: "c2", parent: "p", status: "shipped", state: "closed" }),
+    ];
+    const actions = evaluateAutomations(issues, ALL_ON, NOW);
+    expect(actions).toEqual([
+      { kind: "close", url: "p", title: "Custom parent", reason: "all sub-tasks are done" },
     ]);
   });
 
@@ -61,7 +75,7 @@ describe("evaluateAutomations", () => {
     ];
     const actions = evaluateAutomations(issues, ALL_ON, NOW);
     expect(actions).toEqual([
-      { kind: "set-status-done", url: "p", title: "Overdue parent", reason: "all sub-tasks are done" },
+      { kind: "close", url: "p", title: "Overdue parent", reason: "all sub-tasks are done" },
     ]);
   });
 

@@ -32,7 +32,7 @@ export const AUTOMATION_DEFS: { key: keyof AutomationSettings; label: string; de
 ];
 
 export type AutomationAction =
-  | { kind: "set-status-done"; url: string; title: string; reason: string }
+  | { kind: "close"; url: string; title: string; reason: string }
   | { kind: "set-priority-high"; url: string; title: string; reason: string };
 
 /** Evaluate the enabled rules against current state (pure; no side effects). */
@@ -45,11 +45,14 @@ export function evaluateAutomations(
 
   if (settings.closeParentWhenChildrenDone) {
     for (const parent of issues) {
-      if (parent.status === "done" || !parent.canWrite) continue;
+      // Completion is the open/closed resolution, not the literal "done" slug,
+      // so custom terminal statuses count and we close via state, not a slug
+      // ("done" may not exist in a custom workflow).
+      if (parent.state === "closed" || !parent.canWrite) continue;
       const children = issues.filter((i) => i.parent === parent.url);
-      if (children.length > 0 && children.every((c) => c.status === "done")) {
+      if (children.length > 0 && children.every((c) => c.state === "closed")) {
         actions.push({
-          kind: "set-status-done",
+          kind: "close",
           url: parent.url,
           title: parent.title,
           reason: "all sub-tasks are done",
@@ -60,7 +63,7 @@ export function evaluateAutomations(
 
   if (settings.raiseOverdueToHigh) {
     // Issues being completed in this same evaluation are no longer "open work".
-    const completing = new Set(actions.filter((a) => a.kind === "set-status-done").map((a) => a.url));
+    const completing = new Set(actions.filter((a) => a.kind === "close").map((a) => a.url));
     for (const issue of issues) {
       if (issue.state !== "open" || !issue.canWrite || issue.priority === "high") continue;
       if (completing.has(issue.url)) continue;

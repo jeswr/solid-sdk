@@ -307,6 +307,44 @@ describe("F1: configurable workflow (repository)", () => {
     expect(issues[0].status).toBe("shipped");
     expect(issues[0].state).toBe("closed"); // terminal resolves to closed
   });
+
+  it("create defaults to the workflow's initial state (not the built-in 'todo')", async () => {
+    const { impl } = fakePod();
+    const repo = new Repository(TRACKER, impl, ME);
+    await repo.ensureTracker();
+    await repo.defineWorkflow(CUSTOM);
+
+    // No status supplied → uses the workflow's first declared status (backlog).
+    const url = await repo.create({ title: "Fresh", creator: ME });
+    const rec = (await repo.list()).issues.find((i) => i.url === url)!;
+    expect(rec.status).toBe("backlog");
+    expect(rec.state).toBe("open");
+    // It is NOT typed with the built-in #status-todo class.
+    expect(rec.status).not.toBe("todo");
+  });
+
+  it("create with a terminal status records state=closed via the workflow resolution", async () => {
+    const { impl } = fakePod();
+    const repo = new Repository(TRACKER, impl, ME);
+    await repo.ensureTracker();
+    await repo.defineWorkflow(CUSTOM);
+
+    // "shipped" is terminal in CUSTOM → the new issue must be closed, not open.
+    const url = await repo.create({ title: "Born shipped", creator: ME, status: "shipped" });
+    const rec = (await repo.list()).issues.find((i) => i.url === url)!;
+    expect(rec.status).toBe("shipped");
+    expect(rec.state).toBe("closed");
+  });
+
+  it("create rejects a status not declared in the workflow", async () => {
+    const { impl } = fakePod();
+    const repo = new Repository(TRACKER, impl, ME);
+    await repo.ensureTracker();
+    await repo.defineWorkflow(CUSTOM);
+
+    // "todo" is the built-in default but is NOT a status in CUSTOM.
+    await expect(repo.create({ title: "Bad", creator: ME, status: "todo" })).rejects.toBeInstanceOf(TransitionError);
+  });
 });
 
 describe("F3: provenance activity log (repository)", () => {
@@ -370,5 +408,48 @@ describe("F3: provenance activity log (repository)", () => {
     await repo.setStatus(url, "todo"); // no-op transition
     const log = await repo.activityLog(url);
     expect(log.filter((e) => e.kind === "status")).toHaveLength(0);
+  });
+
+  it("two concurrent appends to a new page both survive (If-None-Match retry)", async () => {
+    // Simulate a lost-update race on the FIRST (create-only) write of a fresh log
+    // page: a competing writer slips its own entry into the same page document
+    // between our read and our write. The create-only PUT (If-None-Match: *) then
+    // 412s, and the retry re-reads + appends under If-Match — so neither entry is
+    // lost. Without the conditional create, our write would clobber the competitor.
+    const { impl, store } = fakePod();
+    const url = await new Repository(TRACKER, impl, ME).create({ title: "Race me", creator: ME });
+
+    let injected = false;
+    const racing: typeof fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const u = String(input).split("#")[0];
+      const method = (init?.method ?? "GET").toUpperCase();
+      // On our first create-only PUT to the activity page, let a competing writer
+      // win the create first, so our write loses the race and must retry.
+      if (
+        !injected &&
+        method === "PUT" &&
+        u.includes("/activity/") &&
+        new Headers(init?.headers).get("if-none-match") === "*"
+      ) {
+        injected = true;
+        const rival = new Repository(TRACKER, impl, `${POD}bob/profile/card#me`);
+        await rival.appendActivity(url, { kind: "assignment", at: new Date() });
+      }
+      return impl(input as never, init);
+    }) as typeof fetch;
+
+    const repo = new Repository(TRACKER, racing, ME);
+    await repo.appendActivity(url, { kind: "status", at: new Date(), generated: TRACKER_STATUS("done") });
+
+    // BOTH entries must be present — the rival's assignment and our status change.
+    const log = await new Repository(TRACKER, impl).activityLog(url);
+    expect(log.filter((e) => e.kind === "assignment")).toHaveLength(1);
+    expect(log.filter((e) => e.kind === "status")).toHaveLength(1);
+    // Append-only: distinct IRIs, both stored in the single (page-0) log document.
+    expect(new Set(log.map((e) => e.id)).size).toBe(2);
+    const activityDocs = [...store.keys()].filter((k) => k.includes("/activity/"));
+    expect(activityDocs).toHaveLength(1); // both landed on the same page, not split
+    const page = store.get(activityDocs[0])!;
+    for (const e of log) expect(page).toContain(e.id);
   });
 });

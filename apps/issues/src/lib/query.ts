@@ -1,6 +1,6 @@
 import type { IssueRecord } from "./repository";
 import type { IssueType, Priority, StatusSlug } from "./issue";
-import { ISSUE_TYPES, STATUSES } from "./issue";
+import { ISSUE_TYPES } from "./issue";
 import type { SortDir, SortKey, StateFilter } from "./filter";
 import { startOfUtcDay } from "./dates";
 
@@ -25,7 +25,6 @@ export interface StructuredQuery {
   sort?: { key: SortKey; dir: SortDir };
 }
 
-const STATUS_SLUGS = new Set<string>(STATUSES.map((s) => s.slug));
 const TYPE_SLUGS = new Set<string>(ISSUE_TYPES.map((t) => t.slug));
 const PRIORITY_VALUES = new Set(["high", "medium", "low", "none"]);
 const STATE_VALUES = new Set(["open", "closed", "all"]);
@@ -77,7 +76,10 @@ export function parseQuery(input: string): StructuredQuery {
         else asText();
         break;
       case "status":
-        if (STATUS_SLUGS.has(value)) q.statuses.push(value as StatusSlug);
+        // Accept any non-empty slug, not just the built-in set — a custom
+        // workflow declares its own statuses (e.g. status:review). An empty
+        // value (bare "status:") is meaningless, so it falls through to text.
+        if (value) q.statuses.push(value as StatusSlug);
         else asText();
         break;
       case "priority":

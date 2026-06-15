@@ -244,14 +244,16 @@ export function IssuesView() {
     void issues
       .batch(async (r) => {
         for (const a of actions) {
-          if (a.kind === "set-status-done") await r.setStatus(a.url, "done");
+          // Close via state (resolves the workflow's terminal status), not a
+          // literal "done" slug — that need not exist in a custom workflow.
+          if (a.kind === "close") await r.setState(a.url, "closed");
           else if (a.kind === "set-priority-high") await r.update(a.url, { priority: "high" });
         }
       })
       .then(() => {
         for (const a of actions) {
           toast.info(
-            a.kind === "set-status-done"
+            a.kind === "close"
               ? `Automation: completed “${a.title}” — ${a.reason}`
               : `Automation: raised “${a.title}” to high priority — ${a.reason}`,
           );
@@ -807,9 +809,11 @@ export function IssuesView() {
             onStartSprint={(iri) => run(() => issues.startSprint(iri), "Sprint started")}
             onCompleteSprint={(iri) => {
               // Release unfinished issues back to the backlog (Jira behaviour).
+              // Completion is the open/closed resolution, not the literal "done"
+              // slug — a custom workflow's terminal status still counts as done.
               const sprint = issues.sprints.find((s) => s.iri === iri);
               const open = (sprint?.taskUrls ?? []).filter(
-                (u) => issues.issues.find((i) => i.url === u)?.status !== "done",
+                (u) => issues.issues.find((i) => i.url === u)?.state !== "closed",
               );
               return run(() => issues.completeSprint(iri, open), "Sprint completed");
             }}

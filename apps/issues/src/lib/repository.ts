@@ -226,6 +226,15 @@ export class Repository {
     private readonly actor?: string,
   ) {}
 
+  /**
+   * The last activity timestamp this instance stamped (epoch ms). Two appends
+   * triggered by back-to-back mutations can land in the same millisecond; the
+   * timeline orders by `prov:startedAtTime`, so a collision makes their order
+   * non-deterministic. Clamping each append to be strictly after the previous
+   * one keeps the recorded order faithful to the append order.
+   */
+  private lastActivityAt = 0;
+
   get trackerIri(): string {
     return `${this.trackerUrl}${TRACKER_FRAGMENT}`;
   }
@@ -324,10 +333,17 @@ export class Repository {
     await this.put(this.trackerUrl, dataset, etag);
   }
 
-  private async put(url: string, dataset: DatasetCore, etag: string | null): Promise<void> {
+  /**
+   * Conditional PUT. With a known `etag`, sends `If-Match` (lost-update guard).
+   * With `etag === null` and `createOnly`, sends `If-None-Match: *` so the write
+   * only succeeds if the resource does NOT yet exist — two concurrent creators of
+   * the same URL then both can't win, and the loser gets a 412 to retry against.
+   */
+  private async put(url: string, dataset: DatasetCore, etag: string | null, createOnly = false): Promise<void> {
     const doFetch = this.fetchImpl ?? fetch;
     const headers: Record<string, string> = { "content-type": "text/turtle" };
     if (etag) headers["if-match"] = etag;
+    else if (createOnly) headers["if-none-match"] = "*";
     const res = await doFetch(url, { method: "PUT", headers, body: await serialize(dataset) });
     if (res.status === 412) throw new ConflictError(url);
     if (!res.ok && res.status !== 205) throw new WriteError(url, res.status);
@@ -390,13 +406,23 @@ export class Repository {
   async create(input: NewIssueInput): Promise<string> {
     const tracker = await this.ensureTracker();
     const fieldDefs = tracker.fieldDefs;
+    const workflow = tracker.workflow;
     const labelSlugs = await this.declareLabels(input.labels ?? []);
     const url = `${this.containerUrl}${crypto.randomUUID()}.ttl`;
     const dataset: DatasetCore = new Store();
     const issue = new Issue(`${url}${ISSUE_FRAGMENT}`, dataset, DataFactory);
     issue.tracker = this.trackerIri; // set first so status/priority/label IRIs resolve
     const now = new Date();
-    issue.status = input.status ?? "todo"; // sets the status (and wf:Open/Closed) + wf:Task
+    // Default to the workflow's declared initial state (statuses[0]) — NOT the
+    // built-in "todo", which need not exist in a custom workflow. A supplied
+    // status is validated against the workflow, and its open/closed resolution
+    // is applied so a terminal initial status (e.g. "shipped") records as closed.
+    const initial = workflow.statuses[0].slug;
+    const status = input.status ?? initial;
+    if (!workflow.statuses.some((s) => s.slug === status)) {
+      throw new TransitionError(initial, status, `"${status}" is not a status in this tracker's workflow.`);
+    }
+    issue.setStatus(status, statusState(workflow, status) === "closed"); // status (+ wf:Open/Closed) + wf:Task
     issue.issueType = input.issueType ?? "task";
     issue.title = input.title;
     issue.description = input.description;
@@ -566,49 +592,85 @@ export class Repository {
     return page === 0 ? `${stem}.ttl` : `${stem}.${page}.ttl`;
   }
 
+  /** How many times to retry an append that loses a conditional-write race. */
+  private static readonly ACTIVITY_APPEND_RETRIES = 4;
+
   /**
    * Append one provenance entry for `issueUrl` (F3). Strictly append-only: it
    * reads the current page, adds a NEW `prov:Activity` node (never touching the
    * existing ones), and conditionally PUTs. When the page is full it rolls over
    * to a fresh page so no single document grows without bound. Best-effort — a
    * failure to log never fails the user's primary mutation.
+   *
+   * Concurrency-safe: a write to an EXISTING page is guarded by `If-Match`, and a
+   * write that CREATES a page (page 0 of a fresh log, or a rolled-over page) is
+   * guarded by `If-None-Match: *`. Either guard surfaces a concurrent writer as a
+   * 412 ({@link ConflictError}); on conflict we re-read, re-roll, and re-append so
+   * neither writer can silently overwrite the other's entry.
    */
   async appendActivity(
     issueUrl: string,
     entry: { kind: ActivityKind; at: Date; used?: string; generated?: string },
   ): Promise<void> {
     const stem = this.activityStem(issueUrl);
+    // Keep timestamps strictly increasing across this instance's appends so the
+    // recorded order matches the append order even at millisecond collisions.
+    const at = new Date(Math.max(entry.at.getTime(), this.lastActivityAt + 1));
+    this.lastActivityAt = at.getTime();
+    const stamped = { ...entry, at };
     try {
-      // Walk to the highest existing page (cheap: stops at the first 404).
-      let page = 0;
-      let current: { dataset: DatasetCore; etag: string | null } | undefined;
-      for (;;) {
-        const pageUrl = this.activityPageUrl(stem, page);
+      for (let attempt = 0; ; attempt++) {
         try {
-          const { dataset, etag } = await fetchRdf(pageUrl, opts(this.fetchImpl));
-          current = { dataset, etag };
-          page += 1;
+          await this.appendActivityOnce(stem, stamped);
+          return;
         } catch (e) {
-          if (e instanceof RdfFetchError && e.status === 404) break;
+          // A conflict means another writer created/extended the same page first.
+          // Re-read from scratch (a fresh walk picks up the new page/entries) and
+          // retry, so a concurrent create can never replace an existing entry.
+          if (e instanceof ConflictError && attempt < Repository.ACTIVITY_APPEND_RETRIES) continue;
           throw e;
         }
       }
-      page = Math.max(0, page - 1); // the last page that exists (or 0 if none)
-
-      const count = current ? [...current.dataset.match(null, DataFactory.namedNode(rdf("type")), DataFactory.namedNode(prov("Activity")))].length : 0;
-      // Roll over to a new page when the current one is full.
-      const full = current !== undefined && count >= Repository.ACTIVITY_PAGE_SIZE;
-      const targetPage = current === undefined ? 0 : full ? page + 1 : page;
-      const targetUrl = this.activityPageUrl(stem, targetPage);
-      const dataset: DatasetCore = full || current === undefined ? new Store() : current.dataset;
-      const etag = full || current === undefined ? null : current.etag;
-
-      const activity = new Activity(`${targetUrl}#act-${crypto.randomUUID()}`, dataset, DataFactory);
-      activity.record({ kind: entry.kind, actor: this.actor, at: entry.at, used: entry.used, generated: entry.generated });
-      await this.put(targetUrl, dataset, etag);
     } catch {
       // Logging is non-critical; swallow so a primary mutation still succeeds.
     }
+  }
+
+  /** One append attempt (walk → roll → conditional PUT). Throws {@link ConflictError} on a race. */
+  private async appendActivityOnce(
+    stem: string,
+    entry: { kind: ActivityKind; at: Date; used?: string; generated?: string },
+  ): Promise<void> {
+    // Walk to the highest existing page (cheap: stops at the first 404).
+    let page = 0;
+    let current: { dataset: DatasetCore; etag: string | null } | undefined;
+    for (;;) {
+      const pageUrl = this.activityPageUrl(stem, page);
+      try {
+        const { dataset, etag } = await fetchRdf(pageUrl, opts(this.fetchImpl));
+        current = { dataset, etag };
+        page += 1;
+      } catch (e) {
+        if (e instanceof RdfFetchError && e.status === 404) break;
+        throw e;
+      }
+    }
+    page = Math.max(0, page - 1); // the last page that exists (or 0 if none)
+
+    const count = current ? [...current.dataset.match(null, DataFactory.namedNode(rdf("type")), DataFactory.namedNode(prov("Activity")))].length : 0;
+    // Roll over to a new page when the current one is full.
+    const full = current !== undefined && count >= Repository.ACTIVITY_PAGE_SIZE;
+    const creating = full || current === undefined; // a brand-new page document
+    const targetPage = current === undefined ? 0 : full ? page + 1 : page;
+    const targetUrl = this.activityPageUrl(stem, targetPage);
+    const dataset: DatasetCore = creating ? new Store() : current!.dataset;
+    const etag = creating ? null : current!.etag;
+
+    const activity = new Activity(`${targetUrl}#act-${crypto.randomUUID()}`, dataset, DataFactory);
+    activity.record({ kind: entry.kind, actor: this.actor, at: entry.at, used: entry.used, generated: entry.generated });
+    // A new page is created with If-None-Match: * so a concurrent creator can't be
+    // clobbered; an existing page is extended under its If-Match etag.
+    await this.put(targetUrl, dataset, etag, creating);
   }
 
   /**
@@ -638,7 +700,9 @@ export class Repository {
         break;
       }
     }
-    return out.sort((a, b) => (b.at?.getTime() ?? 0) - (a.at?.getTime() ?? 0));
+    // Newest first; ties broken by entry IRI so the order is STABLE when entries
+    // from different writers share a timestamp.
+    return out.sort((a, b) => (b.at?.getTime() ?? 0) - (a.at?.getTime() ?? 0) || a.id.localeCompare(b.id));
   }
 
   // ---- Sprints (schema:Event fragments in tracker.ttl; membership via wf:task) ----
