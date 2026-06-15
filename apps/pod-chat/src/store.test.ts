@@ -169,10 +169,10 @@ describe("createRoom", () => {
         body: "@prefix solid: <http://www.w3.org/ns/solid/terms#> . <> a solid:TypeIndex .",
         etag: 'W/"i"',
       },
-      // container-ensure PUTs (idempotent; the server says "already exists")
-      [`PUT ${CHAT}`]: { status: 409 },
-      [`PUT ${ROOMS}`]: { status: 409 },
-      [`PUT ${MESSAGES}`]: { status: 409 },
+      // container-ensure PUTs (idempotent; the conditional create says "exists")
+      [`PUT ${CHAT}`]: { status: 412 },
+      [`PUT ${ROOMS}`]: { status: 412 },
+      [`PUT ${MESSAGES}`]: { status: 412 },
     });
     // The room PUT URL is dynamic (random); intercept the room resource PUT only.
     const baseFetch = fetch;

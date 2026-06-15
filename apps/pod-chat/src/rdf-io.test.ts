@@ -178,11 +178,16 @@ describe("ensureContainer", () => {
     expect(calls[0]?.headers["if-none-match"]).toBe("*");
   });
 
-  it("treats 409 and 412 (already exists) as success", async () => {
-    const { fetch: f409 } = mockFetch({ [`PUT ${C}`]: { status: 409 } });
-    await expect(ensureContainer(C, f409)).resolves.toBeUndefined();
+  it("treats 412 (the conditional 'already exists') as success", async () => {
     const { fetch: f412 } = mockFetch({ [`PUT ${C}`]: { status: 412 } });
     await expect(ensureContainer(C, f412)).resolves.toBeUndefined();
+  });
+
+  it("propagates a 409 Conflict (LDP 'cannot create here' — e.g. missing parent)", async () => {
+    const { fetch } = mockFetch({ [`PUT ${C}`]: { status: 409 } });
+    const err = await ensureContainer(C, fetch).catch((e) => e);
+    expect(err).toBeInstanceOf(ResourceWriteError);
+    expect(err.status).toBe(409);
   });
 
   it("throws ResourceWriteError on a 5xx", async () => {
