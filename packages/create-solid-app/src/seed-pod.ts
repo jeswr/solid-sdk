@@ -16,11 +16,9 @@
  */
 import { type ChildProcess, spawn } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-
-const require = createRequire(import.meta.url);
+import { ensureSeedDeps, type SeedDeps } from "./seed-deps.ts";
 
 export const SEED_POD_PORT = 3088;
 
@@ -34,35 +32,18 @@ export interface SeededPod {
   /** Client-credentials for minting a DPoP-bound token (login proof). */
   clientId?: string;
   clientSecret?: string;
+  /**
+   * The on-demand-resolved `jose` module (used to mint the DPoP proof). Carried on
+   * the pod so `requestClientCredentialsToken` reuses the already-resolved copy
+   * instead of re-resolving — the deps were obtained once in `seedPod`.
+   */
+  jose?: SeedDeps["jose"];
   /** Stop the CSS process this module started (no-op if it was reused). */
   stop: () => Promise<void>;
 }
 
 const EMAIL = "alice@example.com";
 const PASSWORD = "alice-secret";
-
-function resolveCssBin(): string {
-  // Resolvable from the CLI package's own node_modules (devDependency) OR from
-  // any sibling integration that installed CSS (workspace fallback).
-  const candidates = [
-    "@solid/community-server/bin/server.js",
-    join(
-      process.cwd(),
-      "integrations/wix-solid/node_modules/@solid/community-server/bin/server.js",
-    ),
-  ];
-  for (const c of candidates) {
-    try {
-      return require.resolve(c);
-    } catch {
-      // try next
-    }
-  }
-  throw new Error(
-    "@solid/community-server is not installed. Add it as a devDependency of the " +
-      "CLI (`npm install` in dx/create-solid-app) before using --seed-pod.",
-  );
-}
 
 /**
  * Stop a child gracefully: SIGTERM, then await its real `exit` (or already-exited state) up to
@@ -172,6 +153,12 @@ export async function seedPod(opts: SeedPodOptions = {}): Promise<SeededPod> {
   const base = `http://localhost:${port}/`;
   const podUrl = `${base}alice/`;
 
+  // Resolve (auto-installing on demand) the --seed-pod runtime deps up front:
+  // `@solid/community-server` (to boot/own the pod) and `jose` (to mint the proof).
+  // These are intentionally NOT default dependencies of create-solid-app — see
+  // seed-deps.ts — so a plain scaffold never pays for the heavy CSS dep graph.
+  const { cssBin, jose } = await ensureSeedDeps();
+
   let reused = false;
   try {
     const res = await fetch(base, { signal: AbortSignal.timeout(1000) });
@@ -184,7 +171,6 @@ export async function seedPod(opts: SeedPodOptions = {}): Promise<SeededPod> {
   let seedDir: string | undefined;
 
   if (!reused) {
-    const cssBin = resolveCssBin();
     seedDir = await mkdtemp(join(tmpdir(), "create-solid-app-css-"));
     const seedPath = join(seedDir, "seed.json");
     await writeFile(
@@ -238,6 +224,7 @@ export async function seedPod(opts: SeedPodOptions = {}): Promise<SeededPod> {
     password: PASSWORD,
     clientId: cc?.id,
     clientSecret: cc?.secret,
+    jose,
     stop,
   };
 }
@@ -254,7 +241,9 @@ export async function requestClientCredentialsToken(pod: SeededPod): Promise<{
   if (!pod.clientId || !pod.clientSecret) {
     return { ok: false, status: 0 };
   }
-  const { generateKeyPair, exportJWK, SignJWT } = await import("jose");
+  // Reuse the `jose` resolved by seedPod (on-demand-installed if needed); fall back
+  // to resolving it here so a standalone caller still works.
+  const { generateKeyPair, exportJWK, SignJWT } = pod.jose ?? (await ensureSeedDeps()).jose;
   const { randomUUID } = await import("node:crypto");
 
   const tokenEndpoint = new URL(".oidc/token", pod.baseUrl).toString();
