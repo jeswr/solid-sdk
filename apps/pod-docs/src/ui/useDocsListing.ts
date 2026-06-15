@@ -168,6 +168,16 @@ export function useDocsListing(
   // Monotonic seed for the temporary URL of an optimistic create placeholder —
   // kept separate from the request guard so the two concerns don't conflate.
   const tempIdRef = useRef(0);
+  // Monotonic id for the in-flight SAVE op. Bumped on every saveOpenDocument()
+  // call; a save's result (commit etag / revert body / set error) is applied
+  // only if its captured id is still the latest — so when the user edits+saves
+  // twice in quick succession, an older save resolving LATE cannot clobber the
+  // newer save's body or etag (lost update / etag desync). This is the write-
+  // path analogue of `requestRef` for reads/opens: the navigation guard
+  // (`live.url === current.url`) covers navigate-away; this covers overlapping
+  // saves to the SAME open resource. Imperative bookkeeping — a ref is the
+  // right home (read/written only in event handlers, never during render).
+  const saveRef = useRef(0);
   // Tracks the store the navigation state currently belongs to, kept in STATE
   // (not a ref) so the store-change reset is concurrent-rendering safe.
   const [prevStore, setPrevStore] = useState(store);
@@ -394,6 +404,14 @@ export function useDocsListing(
       const current = openDocument;
       if (current === null) return; // nothing open to save
 
+      // Stamp this save with the latest id. Any save already in flight on this
+      // (or any) resource is now SUPERSEDED — when it resolves later, its
+      // captured `saveId` will no longer equal `saveRef.current`, so its result
+      // is discarded (no lost update / stale-etag write). Mirrors the read/open
+      // staleness guard (`requestRef`).
+      const saveId = ++saveRef.current;
+      const isLatestSave = () => saveId === saveRef.current;
+
       // Optimistic body update: reflect the edit in the open view immediately.
       const previous = current;
       const optimistic: StoredDocument = {
@@ -418,6 +436,10 @@ export function useDocsListing(
           },
           current.etag,
         );
+        // Discard a superseded save's result entirely: a newer save has already
+        // stamped a higher id, so committing THIS (older) save's etag/body would
+        // overwrite the newer body and desync the etag for the next If-Match.
+        if (!isLatestSave()) return;
         // Commit the new etag so a subsequent save sends the right If-Match. We
         // only mutate the open document if the user hasn't navigated away from
         // THIS resource in the meantime (a store change / close / open-of-another
@@ -427,6 +449,9 @@ export function useDocsListing(
         );
         setSaveStatus("saved");
       } catch (err) {
+        // A superseded save's failure must not revert the newer optimistic body
+        // nor flip the indicator to "failed" — the newer save owns the state.
+        if (!isLatestSave()) return;
         // Revert the body to the pre-edit state (only if still on this resource).
         setOpenDocument((live) => (live && live.url === current.url ? previous : live));
         reportSaveFailure(err);

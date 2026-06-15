@@ -620,6 +620,97 @@ describe("useDocsListing — saveOpenDocument (optimistic)", () => {
     expect(result.current.openDocument).toBeNull();
   });
 
+  it("discards a superseded save's result when an older save resolves last (no lost update)", async () => {
+    // Overlapping saves to the SAME open document. The user edits + saves
+    // ("first body"), then edits + saves again ("second body") before the
+    // first save resolves. The FIRST (older) save resolves LAST: its result
+    // (body + etag) must be discarded — the newer save's body and etag win, so
+    // there is no lost update and the next If-Match is not desync'd.
+    const resolvers: Array<(v: { etag: string | null }) => void> = [];
+    const save = vi.fn(
+      () =>
+        new Promise<{ etag: string | null }>((r) => {
+          resolvers.push(r);
+        }),
+    );
+    const result = await withOpenDoc(openedStore(save));
+
+    // First save (in flight).
+    act(() => {
+      void result.current.saveOpenDocument("<p>first</p>");
+    });
+    expect(result.current.openDocument?.data.body).toBe("<p>first</p>");
+
+    // Second save before the first resolves — newer body becomes optimistic.
+    act(() => {
+      void result.current.saveOpenDocument("<p>second</p>");
+    });
+    expect(result.current.openDocument?.data.body).toBe("<p>second</p>");
+    expect(save).toHaveBeenCalledTimes(2);
+
+    // The SECOND (latest) save resolves first → its etag commits and the body
+    // is the newer body.
+    await act(async () => {
+      resolvers[1]?.({ etag: '"v-second"' });
+      await Promise.resolve();
+    });
+    expect(result.current.saveStatus).toBe("saved");
+    expect(result.current.openDocument?.etag).toBe('"v-second"');
+    expect(result.current.openDocument?.data.body).toBe("<p>second</p>");
+
+    // Now the FIRST (older, superseded) save resolves LAST — its result must be
+    // discarded: the etag must NOT regress to the stale value and the body must
+    // stay the newer body (no lost update / etag desync).
+    await act(async () => {
+      resolvers[0]?.({ etag: '"v-first"' });
+      await Promise.resolve();
+    });
+    expect(result.current.openDocument?.etag).toBe('"v-second"');
+    expect(result.current.openDocument?.data.body).toBe("<p>second</p>");
+    expect(result.current.saveStatus).toBe("saved");
+  });
+
+  it("ignores a superseded save's late FAILURE (the newer save's body stands)", async () => {
+    // Same overlap, but the older save REJECTS late. Its failure must not flip
+    // the indicator to "failed" nor revert the newer optimistic body — the
+    // latest save owns the state.
+    const calls: Array<{
+      resolve: (v: { etag: string | null }) => void;
+      reject: (e: unknown) => void;
+    }> = [];
+    const save = vi.fn(
+      () =>
+        new Promise<{ etag: string | null }>((resolve, reject) => {
+          calls.push({ resolve, reject });
+        }),
+    );
+    const result = await withOpenDoc(openedStore(save));
+
+    act(() => {
+      void result.current.saveOpenDocument("<p>first</p>");
+    });
+    act(() => {
+      void result.current.saveOpenDocument("<p>second</p>");
+    });
+
+    // Latest save succeeds.
+    await act(async () => {
+      calls[1]?.resolve({ etag: '"v-second"' });
+      await Promise.resolve();
+    });
+    expect(result.current.saveStatus).toBe("saved");
+
+    // Superseded older save fails LATE — must be swallowed.
+    await act(async () => {
+      calls[0]?.reject(httpError(412));
+      await Promise.resolve();
+    });
+    expect(result.current.saveStatus).toBe("saved");
+    expect(result.current.saveError).toBeNull();
+    expect(result.current.openDocument?.data.body).toBe("<p>second</p>");
+    expect(result.current.openDocument?.etag).toBe('"v-second"');
+  });
+
   it("does not revert another open document when a stale save REJECTS", async () => {
     // Save the first doc, then open a SECOND doc before the save rejects: the
     // late failure's revert must target only the original resource (now not
