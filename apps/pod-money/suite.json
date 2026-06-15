@@ -1,0 +1,26 @@
+{
+  "$schema": "https://solid.example/suite-tracking/suite.schema.json",
+  "id": "pod-money",
+  "kind": "app",
+  "name": "Pod Money",
+  "repo": "https://github.com/jeswr/pod-money",
+  "category": "finance",
+  "maturity": "prototype",
+  "visibility": "public",
+  "stack": {
+    "language": "typescript",
+    "runtime": "node>=20",
+    "rdf": "@jeswr/fetch-rdf + @solid/object + @rdfjs/wrapper + n3",
+    "test": "vitest",
+    "lint": "biome"
+  },
+  "dependsOn": ["full-solid-ecosystem"],
+  "federation": {
+    "clientIdUrl": "https://money.solid.example/clientid.jsonld",
+    "sectors": ["finance"],
+    "accessModes": ["Read", "Write", "Append"],
+    "produces": ["finance"],
+    "consumes": ["finance"],
+    "membershipTodo": "TODO(O1-gated): Pod Money consumes and produces fin:FinancialAccount / fin:Transaction / fin:Balance / fin:Holding on the finance sector. The fedapp: namespace and the finance sector namespace (currently https://TBD.example/solid/finance#, pending fse namespace decision #2) must be frozen before membership is asserted; membership remains the registry's job after a signed challenge."
+  }
+}

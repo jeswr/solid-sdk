@@ -1,0 +1,57 @@
+{
+  "@context": [
+    "https://www.w3.org/ns/solid/oidc-context.jsonld",
+    {
+      "fedapp": "https://w3id.org/jeswr/fed#",
+      "acl": "http://www.w3.org/ns/auth/acl#",
+      "sectors": "https://w3id.org/jeswr/sectors/",
+      "fedapp:sector": {
+        "@type": "@id"
+      },
+      "fedapp:access": {
+        "@type": "@id"
+      },
+      "fedapp:consumes": {
+        "@type": "@id"
+      },
+      "fedapp:produces": {
+        "@type": "@id"
+      }
+    }
+  ],
+  "client_id": "https://money.solid.example/clientid.jsonld",
+  "client_name": "Pod Money",
+  "redirect_uris": [
+    "https://money.solid.example/",
+    "https://money.solid.example/callback"
+  ],
+  "grant_types": [
+    "authorization_code",
+    "refresh_token"
+  ],
+  "response_types": [
+    "code"
+  ],
+  "scope": "openid profile offline_access webid",
+  "token_endpoint_auth_method": "none",
+  "@type": [
+    "fedapp:App"
+  ],
+  "fedapp:sector": "https://w3id.org/jeswr/sectors/finance#sector",
+  "fedapp:access": [
+    "http://www.w3.org/ns/auth/acl#Read",
+    "http://www.w3.org/ns/auth/acl#Write",
+    "http://www.w3.org/ns/auth/acl#Append"
+  ],
+  "fedapp:consumes": [
+    "https://TBD.example/solid/finance#Transaction",
+    "https://TBD.example/solid/finance#FinancialAccount"
+  ],
+  "fedapp:produces": [
+    "https://TBD.example/solid/finance#Transaction",
+    "https://TBD.example/solid/finance#FinancialAccount",
+    "https://TBD.example/solid/finance#Balance"
+  ],
+  "client_uri": "https://money.solid.example/",
+  "logo_uri": "https://money.solid.example/logo.svg"
+}

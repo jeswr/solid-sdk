@@ -1,0 +1,49 @@
+{
+  "name": "pod-money",
+  "version": "0.0.1",
+  "private": false,
+  "description": "Personal-finance data layer over a Solid pod — typed RDF accessors for accounts, transactions, balances, holdings and categories on the fse finance sector (FIBO-slim) vocabulary.",
+  "license": "MIT",
+  "author": "Claude Opus 4.8 (@jeswr PSS agent)",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "public"
+  ],
+  "scripts": {
+    "lint": "biome check src test",
+    "lint:fix": "biome check --write src test",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "coverage": "vitest run --coverage",
+    "build": "tsc -p tsconfig.build.json",
+    "gen:clientid": "npm run build && node scripts/gen-clientid.mjs",
+    "gate": "npm run lint && npm run typecheck && npm run coverage && npm run build"
+  },
+  "dependencies": {
+    "@jeswr/fetch-rdf": "0.1.0",
+    "@rdfjs/wrapper": "0.34.0",
+    "@solid/object": "0.6.0",
+    "n3": "2.0.3"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.0",
+    "@rdfjs/types": "2.0.1",
+    "@types/node": "22.10.5",
+    "@vitest/coverage-v8": "4.1.9",
+    "typescript": "5.7.3",
+    "vitest": "4.1.9"
+  }
+}
