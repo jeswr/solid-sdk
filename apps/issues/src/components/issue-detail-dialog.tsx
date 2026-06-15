@@ -213,7 +213,10 @@ export function IssueDetailDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[85vh] gap-0 overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
-          <div className="flex items-start justify-between gap-3">
+          {/* The DialogContent renders its own close (X) button absolutely at
+              top-2 right-2; reserve that corner (pr-10) so the Edit button never
+              sits underneath / overlaps it (pss-w29w). */}
+          <div className="flex items-start justify-between gap-3 pr-10">
             <DialogTitle className="text-lg">{issue.title}</DialogTitle>
             {canComment && (
               <Button variant="outline" size="sm" className="gap-1.5" onClick={onEdit}>

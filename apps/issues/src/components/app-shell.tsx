@@ -28,12 +28,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { status } = useSolidSession();
   const [drawerOpen, setDrawerOpen] = useState(false);
 
-  if (status === "initialising") {
+  // "initialising" = booting the auth manager; "restoring" = a silent
+  // refresh-grant restore of a prior session (pss-203m) — both show a brief
+  // spinner rather than flashing the login screen, so a returning user who only
+  // closed the tab lands back on their page without re-authenticating.
+  if (status === "initialising" || status === "restoring") {
     return (
       <div className="grid min-h-dvh place-items-center" role="status" aria-live="polite">
         <span className="flex items-center gap-2 text-muted-foreground">
           <Loader2 className="size-5 animate-spin" aria-hidden="true" />
-          Loading…
+          {status === "restoring" ? "Restoring your session…" : "Loading…"}
         </span>
       </div>
     );

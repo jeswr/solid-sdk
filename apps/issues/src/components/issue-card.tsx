@@ -13,6 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
+  Archive,
   CalendarClock,
   CheckCircle2,
   CircleDot,
@@ -55,6 +56,11 @@ export interface IssueCardActions {
   onShareTeam: () => void;
   onToggle: () => void;
   onDelete: () => void;
+  /**
+   * Board-only: archive a completed card off the board (it stays closed in the
+   * pod, just leaves the Done column). Present only in board contexts (pss-w29w).
+   */
+  onArchive?: () => void;
 }
 
 const overdue = (issue: IssueRecord) =>
@@ -70,6 +76,7 @@ export function IssueCard({
   onShareTeam,
   onToggle,
   onDelete,
+  onArchive,
   draggable,
   onDragStart,
 }: { issue: IssueRecord } & IssueCardActions & {
@@ -153,6 +160,12 @@ export function IssueCard({
                     <CheckCircle2 className="size-4" aria-hidden /> Close
                   </>
                 )}
+              </DropdownMenuItem>
+            )}
+            {/* Board-only: clear a finished (closed) card off the Done column. */}
+            {onArchive && closed && (
+              <DropdownMenuItem onClick={onArchive}>
+                <Archive className="size-4" aria-hidden /> Archive (hide from board)
               </DropdownMenuItem>
             )}
             {isOwner && (
