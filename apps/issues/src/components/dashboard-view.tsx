@@ -84,14 +84,38 @@ export function DashboardView({
   // done bands per day. Until the history loads, the bands are empty (the chart
   // hides itself when there is <2 days of data).
   const [statusHistory, setStatusHistory] = useState<ReadonlyMap<string, StatusTransition[]>>(new Map());
-  // Stable key so the effect only refetches when the SET of issue URLs changes.
-  const issueUrlsKey = useMemo(() => issues.map((i) => i.url).sort().join("\n"), [issues]);
+  // Revision key: re-fetch history whenever the set of issue URLs changes OR
+  // any issue's status/modification time changes. A URL-only key would leave
+  // statusHistory stale after a status mutation (URL set unchanged, but
+  // statusHistory reflects the old state). Including status + modified + endedAt
+  // ensures the effect re-runs on every issue state change, not just adds/removes.
+  const issueRevisionKey = useMemo(
+    () =>
+      issues
+        .map((i) => `${i.url}\x01${i.status}\x01${i.modified?.toISOString() ?? ""}\x01${i.endedAt?.toISOString() ?? ""}`)
+        .sort()
+        .join("\n"),
+    [issues],
+  );
+  // The URL list is stable for the same issueRevisionKey (URLs are embedded as
+  // the first segment of each row). Derived here so the effect has a stable
+  // reference without listing `issues` (which changes on every render cycle)
+  // as a raw effect dependency.
+  const issueUrls = useMemo(
+    () =>
+      issueRevisionKey === ""
+        ? []
+        : issueRevisionKey.split("\n").map((row) => row.split("\x01")[0]).filter(Boolean),
+    [issueRevisionKey],
+  );
   useEffect(() => {
     let cancelled = false;
-    const urls = issueUrlsKey === "" ? [] : issueUrlsKey.split("\n");
     // Resolve through a promise (even the empty/no-loader case) so the state
     // update is always asynchronous, never a synchronous cascade in the effect.
-    const load = !loadStatusHistory || urls.length === 0 ? Promise.resolve(new Map<string, StatusTransition[]>()) : loadStatusHistory(urls);
+    const load =
+      !loadStatusHistory || issueUrls.length === 0
+        ? Promise.resolve(new Map<string, StatusTransition[]>())
+        : loadStatusHistory(issueUrls);
     load
       .then((history) => {
         if (!cancelled) setStatusHistory(history);
@@ -102,7 +126,7 @@ export function DashboardView({
     return () => {
       cancelled = true;
     };
-  }, [loadStatusHistory, issueUrlsKey]);
+  }, [loadStatusHistory, issueRevisionKey, issueUrls]);
   const flow = useMemo(
     () => computeCumulativeFlowBands(issues, statusHistory, workflow),
     [issues, statusHistory, workflow],

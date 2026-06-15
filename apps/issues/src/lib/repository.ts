@@ -714,9 +714,12 @@ export class Repository {
    * One issue's recorded status transitions for CFD replay (F3): the `{ to, at }`
    * of every `status`-kind `prov:Activity`, ascending by time. `to` is the slug
    * the issue moved into (`prov:generated`, the part after `#status-`). Reads at
-   * most `maxPages` log pages so the fan-out stays bounded — the early pages hold
-   * the oldest transitions, which is exactly the history the window needs; a very
-   * long-lived issue past the cap simply contributes its capped early history.
+   * most `maxPages` log pages so the fan-out stays bounded. Pages are numbered
+   * oldest-first (page 0 = oldest; highest page = current), so reading up to
+   * `maxPages` pages from the front captures the oldest transitions. For issues
+   * with more pages than the cap, the most recent transitions are on the pages
+   * not read — callers should reconcile with the issue's current record to keep
+   * the present-day CFD band correct (see {@link computeCumulativeFlowBands}).
    * Returns [] for an issue with no log (or an inaccessible one).
    */
   async statusHistory(

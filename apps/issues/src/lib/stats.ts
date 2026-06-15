@@ -280,6 +280,13 @@ export function statusSlugFromClass(iri: string | undefined): StatusSlug | undef
  *   (each `{ to, at }`), keyed by issue URL. Read via the typed store layer
  *   ({@link Repository.statusHistory}); a missing/empty entry means no recorded
  *   transitions, in which case the issue's current record drives its banding.
+ *   When the log is read with a page cap (see `Repository.statusHistory`), only
+ *   early pages are fetched and recent transitions can be missing. To keep the
+ *   present-day band always correct, the issue's current record (`status`,
+ *   `modified`, `endedAt`) is injected as a synthetic anchor transition: it is
+ *   appended after the log entries and participates in the ascending sort, so
+ *   it dominates for every day at or after its timestamp while the older log
+ *   entries still drive the historical bands correctly.
  */
 export function computeCumulativeFlowBands(
   issues: IssueRecord[],
@@ -296,8 +303,20 @@ export function computeCumulativeFlowBands(
   // Per issue, an ascending status timeline to replay: the initial status, then
   // every recorded transition in time order. The slug "at time T" is the last
   // segment whose timestamp is strictly before the day's close.
+  //
+  // When recorded history exists (even partially), we also inject the current
+  // record's status as a synthetic anchor transition so that days at or after
+  // the issue's last modification always reflect the correct current state,
+  // regardless of whether the log was read with a page cap. The anchor
+  // timestamp is issue.modified (most precise), falling back to issue.endedAt
+  // for closed issues, then to `now` as a last resort.
   const timelines = dated.map((issue) => {
-    const transitions = [...(statusHistory.get(issue.url) ?? [])]
+    const logged = statusHistory.get(issue.url);
+    if (!logged) return { issue, transitions: [] as StatusTransition[] };
+
+    const anchorAt = issue.modified ?? (statusState(workflow, issue.status) === "closed" ? issue.endedAt : undefined) ?? now;
+    const anchor: StatusTransition = { to: issue.status, at: anchorAt };
+    const transitions = [...logged, anchor]
       .filter((t) => t.at !== undefined)
       .sort((a, b) => a.at.getTime() - b.at.getTime());
     return { issue, transitions };

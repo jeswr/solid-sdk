@@ -309,4 +309,95 @@ describe("computeCumulativeFlowBands", () => {
     expect(flow[0].notStarted).toBe(1); // the January issue is already in the baseline
     expect(flow.at(-1)!.notStarted).toBe(2);
   });
+
+  it("reconciles partial log with current record so recent done/reopen past the page cap shows correctly", () => {
+    // Simulates an issue with many activity pages where only the OLDEST pages
+    // were read (pages 0..3, the default cap). The read pages show it going
+    // in-progress on Jun 8 — but the issue's current record shows it was marked
+    // done on Jun 10 (a transition that lived on a later page that was not read).
+    // Without reconciliation the CFD would wrongly show it as in-progress on
+    // Jun 10 (the replayed log's last known state). With reconciliation the
+    // current record is injected as an anchor, so Jun 10 correctly shows as done.
+    const issues = [
+      mk({
+        url: "1",
+        created: new Date("2026-06-08T09:00:00Z"),
+        state: "closed",
+        status: "done",
+        // modified reflects the time of the latest status change (Jun 10)
+        modified: new Date("2026-06-10T08:00:00Z"),
+        endedAt: new Date("2026-06-10T08:00:00Z"),
+      }),
+    ];
+    // The truncated log only has the in-progress transition (oldest page).
+    // The done transition lives on a later page that was NOT read.
+    const truncatedHistory = new Map<string, StatusTransition[]>([
+      ["1", [tx("in-progress", "2026-06-08T10:00:00Z")]],
+    ]);
+    const flow = computeCumulativeFlowBands(issues, truncatedHistory, DEFAULT_WORKFLOW, NOW);
+    // Jun 8: only created today; moved to in-progress (log replay).
+    expect(flow[0]).toMatchObject({ notStarted: 0, inProgress: 1, done: 0 });
+    // Jun 9: still in-progress per log; anchor not yet (anchor is Jun 10).
+    expect(flow[1]).toMatchObject({ notStarted: 0, inProgress: 1, done: 0 });
+    // Jun 10: anchor transition (current record: done, Jun 10) fires → done.
+    // Without the anchor this would wrongly remain in-progress.
+    expect(flow[2]).toMatchObject({ notStarted: 0, inProgress: 0, done: 1 });
+  });
+
+  it("does not corrupt historical bands when the anchor is in the past", () => {
+    // An issue that was closed months ago, with a full transition log available.
+    // The anchor (current record: done, modified=Jun 8) must not affect days
+    // before Jun 8; the log replay drives those.
+    const issues = [
+      mk({
+        url: "1",
+        created: new Date("2026-06-08T09:00:00Z"),
+        state: "closed",
+        status: "done",
+        modified: new Date("2026-06-09T10:00:00Z"),
+        endedAt: new Date("2026-06-09T10:00:00Z"),
+      }),
+    ];
+    // Full log: in-progress Jun 8, done Jun 9.
+    const fullHistory = new Map<string, StatusTransition[]>([
+      ["1", [tx("in-progress", "2026-06-08T10:00:00Z"), tx("done", "2026-06-09T10:00:00Z")]],
+    ]);
+    const flow = computeCumulativeFlowBands(issues, fullHistory, DEFAULT_WORKFLOW, NOW);
+    // Jun 8: in-progress (log replay; anchor at Jun 9 has no effect on this day).
+    expect(flow[0]).toMatchObject({ notStarted: 0, inProgress: 1, done: 0 });
+    // Jun 9+: done (log replay + anchor agree).
+    expect(flow[1]).toMatchObject({ notStarted: 0, inProgress: 0, done: 1 });
+    expect(flow[2]).toMatchObject({ notStarted: 0, inProgress: 0, done: 1 });
+  });
+
+  it("reconciles a recently reopened issue (done→in-progress) that lives past the page cap", () => {
+    // An issue went todo→in-progress→done on older pages, then was reopened
+    // (done→in-progress) on a page past the cap. The current record shows
+    // in-progress. The truncated log only shows todo→in-progress→done.
+    // The anchor (current record: in-progress, modified=Jun 10) must override
+    // the stale done state for Jun 10.
+    const issues = [
+      mk({
+        url: "1",
+        created: new Date("2026-06-08T09:00:00Z"),
+        state: "open",
+        status: "in-progress",
+        modified: new Date("2026-06-10T08:00:00Z"),
+      }),
+    ];
+    // Truncated log: only the todo→in-progress→done transitions (oldest pages).
+    const truncatedHistory = new Map<string, StatusTransition[]>([
+      [
+        "1",
+        [tx("in-progress", "2026-06-08T10:00:00Z"), tx("done", "2026-06-09T08:00:00Z")],
+      ],
+    ]);
+    const flow = computeCumulativeFlowBands(issues, truncatedHistory, DEFAULT_WORKFLOW, NOW);
+    // Jun 8: in-progress.
+    expect(flow[0]).toMatchObject({ notStarted: 0, inProgress: 1, done: 0 });
+    // Jun 9: log says done (transition fired at Jun 9 08:00; anchor is Jun 10).
+    expect(flow[1]).toMatchObject({ notStarted: 0, inProgress: 0, done: 1 });
+    // Jun 10: anchor fires (in-progress, Jun 10) → overrides the stale done state.
+    expect(flow[2]).toMatchObject({ notStarted: 0, inProgress: 1, done: 0 });
+  });
 });
