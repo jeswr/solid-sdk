@@ -328,6 +328,45 @@ describe("useChat", () => {
     expect(result.current.rooms).toHaveLength(0); // access-denied, NOT a populated list
   });
 
+  it("clears a previously-loaded room list (and the open room) when a reload 403s", async () => {
+    // Regression guard for the access-error STALE-DATA bug: a first load
+    // succeeds and a room is opened; then the user loses permission (or the
+    // pod becomes unreadable) and the next room-list load 403s. The hook must
+    // surface the access-denied state with NO stale rooms still rendered
+    // beneath it — `rooms` empty AND the open room cleared — not the previously
+    // loaded list alongside an access error.
+    let denied = false;
+    const fetch = (async (input: string | URL | Request) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url === ROOMS) {
+        return denied
+          ? new Response("forbidden", { status: 403 })
+          : ttl(containerTtl(ROOMS, [ROOM_A]));
+      }
+      if (url === ROOM_A) return ttl(roomTtl(ROOM_A, "General", []));
+      return new Response(null, { status: 404 });
+    }) as unknown as typeof globalThis.fetch;
+
+    const { result } = renderHook(() => useChat(POD, WEBID, { fetch }));
+    await waitFor(() => expect(result.current.loadingRooms).toBe(false));
+    // First load succeeded: the room is listed and opened.
+    expect(result.current.rooms).toHaveLength(1);
+    act(() => result.current.open(ROOM_A));
+    await waitFor(() => expect(result.current.openRoom).not.toBeNull());
+    expect(result.current.openRoomUrl).toBe(ROOM_A);
+
+    // Permission is now lost; a reload of the room list 403s.
+    denied = true;
+    act(() => result.current.refreshRooms());
+    await waitFor(() => expect(result.current.roomsAccessError).toBe(true));
+    expect(result.current.roomsError).toContain("permission");
+    // The stale list and the stale selection are BOTH cleared — the
+    // access-denied state shows with no leftover rooms or open room.
+    expect(result.current.rooms).toHaveLength(0);
+    expect(result.current.openRoomUrl).toBeNull();
+    expect(result.current.openRoom).toBeNull();
+  });
+
   it("treats a 404 rooms container as an empty list, not an access error", async () => {
     // A not-yet-created rooms container is the new-pod case: empty, not denied.
     const fetch = (async () =>

@@ -329,6 +329,13 @@ export function useChat(podRoot: string, webId: string, options: UseChatOptions 
       .catch((err: unknown) => {
         if (requestId !== roomsRequestIdRef.current) return; // superseded
         const { message, isAccess } = describeError(err);
+        // Clear any PREVIOUSLY-loaded list (and the open room) so a reload that
+        // now fails — e.g. permission lost, or switched to a pod we can't read —
+        // shows the error/access-denied state with NO stale rooms rendered
+        // beneath it. The requestId guard above already ensures a concurrent
+        // newer load isn't clobbered: a superseded reject returns before here.
+        setRooms([]);
+        setOpenRoomUrl(null);
         setRoomsError(message);
         setRoomsAccessError(isAccess);
         setLoadingRooms(false);
