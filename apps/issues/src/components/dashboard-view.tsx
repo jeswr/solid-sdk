@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Line, LineChart, Pie, PieChart, XAxis, YAxis } from "recharts";
-import { computeBurndown, computeCumulativeFlow, computeStats, computeVelocity } from "@/lib/stats";
+import { computeBurndown, computeCumulativeFlowBands, computeStats, computeVelocity, type StatusTransition } from "@/lib/stats";
+import { DEFAULT_WORKFLOW, type WorkflowDef } from "@/lib/issue";
 import type { IssueRecord, SprintRecord } from "@/lib/use-issues";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
@@ -50,7 +51,19 @@ function StatCard({ label, value, icon, accent }: { label: string; value: number
 }
 
 /** Jira/Monday-style dashboard: stat cards + distribution charts + workload. */
-export function DashboardView({ issues, sprints = [] }: { issues: IssueRecord[]; sprints?: SprintRecord[] }) {
+export function DashboardView({
+  issues,
+  sprints = [],
+  workflow = DEFAULT_WORKFLOW,
+  loadStatusHistory,
+}: {
+  issues: IssueRecord[];
+  sprints?: SprintRecord[];
+  /** The tracker's configured workflow (for the three-band CFD state resolution). */
+  workflow?: WorkflowDef;
+  /** Bounded fan-out of the F3 status-transition history (for the three-band CFD). */
+  loadStatusHistory?: (urls: string[]) => Promise<Map<string, StatusTransition[]>>;
+}) {
   const velocity = useMemo(() => computeVelocity(sprints, issues), [sprints, issues]);
   const stats = useMemo(() => computeStats(issues), [issues]);
   // Burn down the active sprint; fall back to the most recently completed one.
@@ -66,7 +79,58 @@ export function DashboardView({ issues, sprints = [] }: { issues: IssueRecord[];
     () => (burnSprint ? computeBurndown(burnSprint, issues) : []),
     [burnSprint, issues],
   );
-  const flow = useMemo(() => computeCumulativeFlow(issues), [issues]);
+  // Three-band cumulative flow: fan out a bounded read of each issue's F3
+  // status-transition history, then replay it into not-started / in-progress /
+  // done bands per day. Until the history loads, the bands are empty (the chart
+  // hides itself when there is <2 days of data).
+  const [statusHistory, setStatusHistory] = useState<ReadonlyMap<string, StatusTransition[]>>(new Map());
+  // Revision key: re-fetch history whenever the set of issue URLs changes OR
+  // any issue's status/modification time changes. A URL-only key would leave
+  // statusHistory stale after a status mutation (URL set unchanged, but
+  // statusHistory reflects the old state). Including status + modified + endedAt
+  // ensures the effect re-runs on every issue state change, not just adds/removes.
+  const issueRevisionKey = useMemo(
+    () =>
+      issues
+        .map((i) => `${i.url}\x01${i.status}\x01${i.modified?.toISOString() ?? ""}\x01${i.endedAt?.toISOString() ?? ""}`)
+        .sort()
+        .join("\n"),
+    [issues],
+  );
+  // The URL list is stable for the same issueRevisionKey (URLs are embedded as
+  // the first segment of each row). Derived here so the effect has a stable
+  // reference without listing `issues` (which changes on every render cycle)
+  // as a raw effect dependency.
+  const issueUrls = useMemo(
+    () =>
+      issueRevisionKey === ""
+        ? []
+        : issueRevisionKey.split("\n").map((row) => row.split("\x01")[0]).filter(Boolean),
+    [issueRevisionKey],
+  );
+  useEffect(() => {
+    let cancelled = false;
+    // Resolve through a promise (even the empty/no-loader case) so the state
+    // update is always asynchronous, never a synchronous cascade in the effect.
+    const load =
+      !loadStatusHistory || issueUrls.length === 0
+        ? Promise.resolve(new Map<string, StatusTransition[]>())
+        : loadStatusHistory(issueUrls);
+    load
+      .then((history) => {
+        if (!cancelled) setStatusHistory(history);
+      })
+      .catch(() => {
+        if (!cancelled) setStatusHistory(new Map());
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [loadStatusHistory, issueRevisionKey, issueUrls]);
+  const flow = useMemo(
+    () => computeCumulativeFlowBands(issues, statusHistory, workflow),
+    [issues, statusHistory, workflow],
+  );
   const open = stats.byStatus.find((s) => s.status === "todo")?.count ?? 0;
   const inProgress = stats.byStatus.find((s) => s.status === "in-progress")?.count ?? 0;
   const done = stats.byStatus.find((s) => s.status === "done")?.count ?? 0;
@@ -243,11 +307,12 @@ export function DashboardView({ issues, sprints = [] }: { issues: IssueRecord[];
                 <XAxis dataKey="day" tickLine={false} axisLine={false} fontSize={11} />
                 <YAxis allowDecimals={false} width={28} tickLine={false} axisLine={false} fontSize={12} />
                 <ChartTooltip content={<ChartTooltipContent />} />
-                <Area type="monotone" dataKey="done" stackId="1" stroke="var(--chart-2)" fill="var(--chart-2)" fillOpacity={0.5} />
-                <Area type="monotone" dataKey="open" stackId="1" stroke="var(--chart-1)" fill="var(--chart-1)" fillOpacity={0.35} />
+                <Area type="monotone" dataKey="done" stackId="1" name="Done" stroke="var(--chart-2)" fill="var(--chart-2)" fillOpacity={0.5} />
+                <Area type="monotone" dataKey="inProgress" stackId="1" name="In progress" stroke="var(--chart-1)" fill="var(--chart-1)" fillOpacity={0.35} />
+                <Area type="monotone" dataKey="notStarted" stackId="1" name="Not started" stroke="var(--chart-5)" fill="var(--chart-5)" fillOpacity={0.25} />
               </AreaChart>
             </ChartContainer>
-            <p className="mt-1 text-center text-xs text-muted-foreground">Issues open vs done per day; the open band is the work in progress</p>
+            <p className="mt-1 text-center text-xs text-muted-foreground">Issues per day by disposition: not started · in progress · done</p>
           </CardContent>
         </Card>
       )}

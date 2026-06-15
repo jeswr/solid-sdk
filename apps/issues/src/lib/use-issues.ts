@@ -43,6 +43,12 @@ export interface UseIssues {
   batch: (fn: (repo: Repository) => Promise<void>) => Promise<void>;
   /** Read an issue's provenance activity log (F3), newest first. */
   activityLog: (url: string) => Promise<ActivityRecord[]>;
+  /**
+   * Fan out bounded reads of the F3 status-transition history for the given issues
+   * (for the three-band cumulative flow). Bounded: a few pages per issue, a few
+   * issues in flight at once.
+   */
+  statusHistory: (urls: string[]) => Promise<Map<string, { to: StatusSlug; at: Date }[]>>;
 }
 
 /** One fetched view of a tracker, tagged with the tracker it came from. */
@@ -153,6 +159,15 @@ export function useIssues(trackerUrl: string | null, creator: string | null): Us
     [trackerUrl, creator],
   );
 
+  // Bounded fan-out of status-transition history for the three-band CFD.
+  const statusHistory = useCallback(
+    async (urls: string[]) => {
+      if (!trackerUrl || urls.length === 0) return new Map<string, { to: StatusSlug; at: Date }[]>();
+      return new Repository(trackerUrl, undefined, creator ?? undefined).dashboardStatusHistory(urls);
+    },
+    [trackerUrl, creator],
+  );
+
   return {
     issues,
     sprints,
@@ -174,5 +189,6 @@ export function useIssues(trackerUrl: string | null, creator: string | null): Us
     completeSprint: (sprintIri, releaseUrls) => mutate((r) => r.completeSprint(sprintIri, releaseUrls)),
     batch: (fn) => mutate(fn),
     activityLog,
+    statusHistory,
   };
 }
