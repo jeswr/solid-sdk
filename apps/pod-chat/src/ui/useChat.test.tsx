@@ -14,6 +14,7 @@ import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { StrictMode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { RoomsAccessError } from "./rooms.js";
 import { chronological, describeError, type MessageView, useChat } from "./useChat.js";
 
 afterEach(() => {
@@ -107,6 +108,14 @@ describe("describeError", () => {
     expect(describeError(new RdfFetchError("missing", { status: 404 })).isAccess).toBe(false);
     expect(describeError(new TypeError("network down")).isAccess).toBe(false);
     expect(describeError("plain").message).toBe("plain");
+  });
+  it("classifies a RoomsAccessError (facade 401/403) as an access error", () => {
+    const a401 = describeError(new RoomsAccessError(401, ROOMS, null));
+    expect(a401.isAccess).toBe(true);
+    expect(a401.message).toContain("log in");
+    const a403 = describeError(new RoomsAccessError(403, ROOMS, null));
+    expect(a403.isAccess).toBe(true);
+    expect(a403.message).toContain("permission");
   });
 });
 
@@ -300,6 +309,47 @@ describe("useChat", () => {
     const { result } = renderHook(() => useChat(POD, WEBID, { fetch }));
     await waitFor(() => expect(result.current.roomsError).not.toBeNull());
     expect(result.current.roomsAccessError).toBe(true);
+  });
+
+  it("surfaces a 403 on the rooms CONTAINER as access-denied, NOT an empty 'No rooms'", async () => {
+    // Regression guard: the data layer's listContainer swallows a 403 on the
+    // container to [] (a misleading "No rooms." for a reader without access).
+    // The hook lists via the facade, so a forbidden rooms container surfaces the
+    // access-denied state instead — and the list stays empty (no false rows).
+    const fetch = (async (input: string | URL | Request) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url === ROOMS) return new Response("forbidden", { status: 403 });
+      return new Response(null, { status: 404 });
+    }) as unknown as typeof globalThis.fetch;
+    const { result } = renderHook(() => useChat(POD, WEBID, { fetch }));
+    await waitFor(() => expect(result.current.loadingRooms).toBe(false));
+    expect(result.current.roomsAccessError).toBe(true);
+    expect(result.current.roomsError).toContain("permission");
+    expect(result.current.rooms).toHaveLength(0); // access-denied, NOT a populated list
+  });
+
+  it("treats a 404 rooms container as an empty list, not an access error", async () => {
+    // A not-yet-created rooms container is the new-pod case: empty, not denied.
+    const fetch = (async () =>
+      new Response(null, { status: 404 })) as unknown as typeof globalThis.fetch;
+    const { result } = renderHook(() => useChat(POD, WEBID, { fetch }));
+    await waitFor(() => expect(result.current.loadingRooms).toBe(false));
+    expect(result.current.rooms).toHaveLength(0);
+    expect(result.current.roomsError).toBeNull();
+    expect(result.current.roomsAccessError).toBe(false);
+  });
+
+  it("treats an empty 2xx rooms container as an empty list, not an access error", async () => {
+    const fetch = (async (input: string | URL | Request) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url === ROOMS) return ttl(containerTtl(ROOMS, []));
+      return new Response(null, { status: 404 });
+    }) as unknown as typeof globalThis.fetch;
+    const { result } = renderHook(() => useChat(POD, WEBID, { fetch }));
+    await waitFor(() => expect(result.current.loadingRooms).toBe(false));
+    expect(result.current.rooms).toHaveLength(0);
+    expect(result.current.roomsError).toBeNull();
+    expect(result.current.roomsAccessError).toBe(false);
   });
 
   it("surfaces a generic thread error when the open room read 404s", async () => {

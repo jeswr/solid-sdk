@@ -20,6 +20,7 @@ export {
   formatRoomName,
   safeHref,
 } from "./format.js";
+export { listRoomsOrAccessError, RoomsAccessError } from "./rooms.js";
 export {
   type ChatState,
   chronological,

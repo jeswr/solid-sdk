@@ -3,7 +3,9 @@
 // The chat view's data hook — the SINGLE place the view touches the data layer.
 // It owns two concerns: (1) the list of rooms in the pod, and (2) the messages
 // of the currently-open room. It delegates the actual GET+parse to the data
-// layer's `ChatStore` (`listRooms` / `readRoom` / `readMessage`); it never
+// layer's `ChatStore` (`readRoom` / `readMessage`) and, for the room listing, to
+// the `listRoomsOrAccessError` facade (which surfaces a 401/403 on the rooms
+// container as a typed access error instead of an empty list); it never
 // re-implements LDP/RDF reading.
 //
 // A room's messages are read from the room descriptor's FORWARD INDEX
@@ -28,6 +30,7 @@ import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type ChatStore, createChatStore, nameFromUrl } from "../store.js";
 import { errorMessage } from "./format.js";
+import { listRoomsOrAccessError, RoomsAccessError } from "./rooms.js";
 
 /**
  * A render-shaped, plain view of one room in the list — a snapshot decoupled
@@ -122,16 +125,24 @@ export interface UseChatOptions {
 
 /**
  * Map a thrown value to `{ message, isAccess }`. A `RdfFetchError` with a
- * 401/403 status is reported as a distinct, login-/permission-flavoured access
- * error; anything else (404, network, parse) is reported generically. Exported
- * so its branches are directly unit-testable.
+ * 401/403 status (the message-thread path) OR a {@link RoomsAccessError} (the
+ * room-list facade's typed 401/403, raised so a forbidden rooms container is NOT
+ * mistaken for an empty pod) is reported as a distinct, login-/permission-
+ * flavoured access error; anything else (404, network, parse) is reported
+ * generically. Exported so its branches are directly unit-testable.
  */
 export function describeError(err: unknown): { message: string; isAccess: boolean } {
-  if (err instanceof RdfFetchError && (err.status === 401 || err.status === 403)) {
+  const accessStatus =
+    err instanceof RoomsAccessError
+      ? err.status
+      : err instanceof RdfFetchError && (err.status === 401 || err.status === 403)
+        ? err.status
+        : undefined;
+  if (accessStatus !== undefined) {
     return {
       isAccess: true,
       message:
-        err.status === 401
+        accessStatus === 401
           ? "You need to log in to view this."
           : "You don't have permission to view this.",
     };
@@ -296,8 +307,12 @@ export function useChat(podRoot: string, webId: string, options: UseChatOptions 
       authedFetch ? { podRoot, webId, fetchImpl: authedFetch } : { podRoot, webId },
     );
 
-    store
-      .listRooms()
+    // List via the room-list facade (NOT store.listRooms) so a 401/403 on the
+    // rooms container surfaces as a typed RoomsAccessError → the access-denied
+    // state, instead of the store's swallow-to-empty (which would show a
+    // misleading "No rooms."). A 404 / empty container still maps to an empty
+    // list. The per-room descriptor reads below still go through the store.
+    listRoomsOrAccessError(store.roomsContainer, authedFetch ? { fetch: authedFetch } : {})
       .then(async (entries) => {
         // Read each room descriptor for its name/metadata. A descriptor that no
         // longer parses to a room (deleted between list + read, or not a room)
