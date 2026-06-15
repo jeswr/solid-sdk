@@ -27,7 +27,8 @@ The OpenID-Federation-style metadata block an app embeds in its
   across releases of one `client_id`).
 - **`fedapp:SectorUse`** — a reified per-sector use bundling a `fedapp:sector`
   with the `fedapp:access` modes (+ optionally `consumes`/`produces`) scoped to
-  it; use when per-sector access differs.
+  it; use when per-sector access differs. Attached to an app with
+  **`fedapp:sectorUse`**.
 - **`fedapp:sector`** — the data sector an app operates in (the
   `https://w3id.org/jeswr/sectors/<sector>#` IRIs).
 - **`fedapp:access`** — a WAC/ACP access mode requested (`acl:Read` / `acl:Write`
@@ -82,8 +83,8 @@ metadata:
   "type": "App",
   "sector": "https://w3id.org/jeswr/sectors/productivity#sector",
   "access": ["Read", "Write", "Append"],
-  "produces": ["https://w3id.org/jeswr/task#Task"],
-  "consumes": ["https://w3id.org/jeswr/task#Task"]
+  "produces": ["http://www.w3.org/2005/01/wf/flow#Task"],
+  "consumes": ["http://www.w3.org/2005/01/wf/flow#Task"]
 }
 ```
 
@@ -92,13 +93,26 @@ In Turtle the same block is:
 ```turtle
 @prefix fedapp: <https://w3id.org/jeswr/fed#> .
 @prefix acl:    <http://www.w3.org/ns/auth/acl#> .
+@prefix wf:     <http://www.w3.org/2005/01/wf/flow#> .
 
 <https://app.example/clientid.jsonld>
     a fedapp:App ;
     fedapp:sector <https://w3id.org/jeswr/sectors/productivity#sector> ;
     fedapp:access acl:Read, acl:Write, acl:Append ;
-    fedapp:produces <https://w3id.org/jeswr/task#Task> ;
-    fedapp:consumes <https://w3id.org/jeswr/task#Task> .
+    fedapp:produces wf:Task ;
+    fedapp:consumes wf:Task .
+```
+
+For per-sector access, attach an `fedapp:SectorUse` via `fedapp:sectorUse`:
+
+```turtle
+<https://app.example/clientid.jsonld>
+    a fedapp:App ;
+    fedapp:sectorUse [
+        a fedapp:SectorUse ;
+        fedapp:sector <https://w3id.org/jeswr/sectors/health#sector> ;
+        fedapp:access acl:Read
+    ] .
 ```
 
 ## Content negotiation

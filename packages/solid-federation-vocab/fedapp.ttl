@@ -76,45 +76,63 @@ fedapp:SectorUse
 #    Properties
 #################################################################
 
+# NB on domains: fedapp:sector / access / consumes / produces may be attached
+# EITHER to an fedapp:App directly (the flat form) OR to an fedapp:SectorUse node
+# (the nested per-sector form), so they deliberately carry NO rdfs:domain — a
+# domain of fedapp:App would let a reasoner mis-infer that any SectorUse using
+# them is itself an App. The linking property fedapp:sectorUse attaches a
+# SectorUse node to an App.
+
+fedapp:sectorUse
+    a rdf:Property, owl:ObjectProperty ;
+    rdfs:label "sector use"@en ;
+    rdfs:comment """Links an fedapp:App to an fedapp:SectorUse node — the
+        nested form used when access (or consumed/produced shapes) differ
+        per sector. For a flat declaration attach fedapp:sector / fedapp:access
+        directly to the App instead."""@en ;
+    rdfs:domain fedapp:App ;
+    rdfs:range fedapp:SectorUse ;
+    rdfs:isDefinedBy <https://w3id.org/jeswr/fed> .
+
 fedapp:sector
     a rdf:Property, owl:ObjectProperty ;
     rdfs:label "sector"@en ;
-    rdfs:comment """The data sector an app operates in (e.g. the
+    rdfs:comment """The data sector operated in (e.g. the
         identity / productivity / media / finance / health / documents / social
         sector IRIs under https://w3id.org/jeswr/sectors/). May be attached to
-        an fedapp:App directly, or to an fedapp:SectorUse node."""@en ;
-    rdfs:domain fedapp:App ;
+        an fedapp:App directly, or to an fedapp:SectorUse node — so it carries
+        no rdfs:domain."""@en ;
     rdfs:isDefinedBy <https://w3id.org/jeswr/fed> .
 
 fedapp:access
     a rdf:Property, owl:ObjectProperty ;
     rdfs:label "access mode"@en ;
-    rdfs:comment """A WAC/ACP access mode the app requests — one of
+    rdfs:comment """A WAC/ACP access mode requested — one of
         acl:Read, acl:Write, acl:Append (and, rarely, acl:Control). Declares the
         app's intended footprint so a user/registry can reason about it before
-        granting consent."""@en ;
-    rdfs:domain fedapp:App ;
+        granting consent. Attaches to an fedapp:App or an fedapp:SectorUse — so
+        it carries no rdfs:domain."""@en ;
     rdfs:range <http://www.w3.org/ns/auth/acl#Mode> ;
     rdfs:isDefinedBy <https://w3id.org/jeswr/fed> .
 
 fedapp:consumes
     a rdf:Property, owl:ObjectProperty ;
     rdfs:label "consumes"@en ;
-    rdfs:comment """A shared data shape the app READS — references a SHACL
-        node shape (or a shared @context term / class IRI) the app expects to be
-        able to consume from the federation. Pairs with fedapp:produces to draw
-        the producer/consumer graph of the ecosystem."""@en ;
-    rdfs:domain fedapp:App ;
+    rdfs:comment """A shared data shape READ — references a SHACL
+        node shape (or a shared @context term / class IRI) expected to be
+        consumable from the federation. Pairs with fedapp:produces to draw
+        the producer/consumer graph of the ecosystem. Attaches to an fedapp:App
+        or an fedapp:SectorUse — so it carries no rdfs:domain."""@en ;
     rdfs:isDefinedBy <https://w3id.org/jeswr/fed> .
 
 fedapp:produces
     a rdf:Property, owl:ObjectProperty ;
     rdfs:label "produces"@en ;
-    rdfs:comment """A shared data shape the app WRITES — references a SHACL
-        node shape (or a shared @context term / class IRI) the app emits into
+    rdfs:comment """A shared data shape WRITTEN — references a SHACL
+        node shape (or a shared @context term / class IRI) emitted into
         the federation, so consumers can discover where data of that shape
-        originates."""@en ;
-    rdfs:domain fedapp:App ;
+        originates. Attaches to an fedapp:App or an fedapp:SectorUse — so it
+        carries no rdfs:domain."""@en ;
     rdfs:isDefinedBy <https://w3id.org/jeswr/fed> .
 
 fedapp:declaresShape

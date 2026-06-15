@@ -28,7 +28,7 @@
     "consumes": { "@id": "fedapp:consumes", "@type": "@id", "@container": "@set" },
     "produces": { "@id": "fedapp:produces", "@type": "@id", "@container": "@set" },
     "declaresShape": { "@id": "fedapp:declaresShape", "@type": "@id", "@container": "@set" },
-    "sectorUse": { "@id": "fedapp:sector", "@type": "@id", "@container": "@set" },
+    "sectorUse": { "@id": "fedapp:sectorUse", "@type": "@id", "@container": "@set" },
 
     "Read": "acl:Read",
     "Write": "acl:Write",

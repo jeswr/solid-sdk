@@ -76,8 +76,10 @@ const OWL_ONTOLOGY = "http://www.w3.org/2002/07/owl#Ontology";
 const esc = (s) =>
   String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
-function htmlFor(file, ttl) {
-  const quads = new Parser({ baseIRI: `https://w3id.org/jeswr/${file}` }).parse(ttl);
+// `slug` is the PUBLIC namespace slug / w3id route (fed, task) — NOT the source
+// filename (fedapp.ttl). `ctx` is the matching JSON-LD context filename.
+function htmlFor(file, slug, ctx, ttl) {
+  const quads = new Parser({ baseIRI: `https://w3id.org/jeswr/${slug}` }).parse(ttl);
   const byS = new Map();
   for (const q of quads) {
     if (q.subject.termType !== "NamedNode") continue;
@@ -87,8 +89,7 @@ function htmlFor(file, ttl) {
     if (q.predicate.value === `${RDFS}comment` && !e.comment) e.comment = q.object.value;
     byS.set(q.subject.value, e);
   }
-  const ont = [...byS].find(([, e]) => e.types.includes(OWL_ONTOLOGY));
-  const ns = file.replace(".ttl", "");
+  const ns = slug;
   const rows = [...byS]
     .filter(([, e]) => !e.types.includes(OWL_ONTOLOGY) && e.label)
     .sort((a, b) => a[0].localeCompare(b[0]))
@@ -103,7 +104,7 @@ function htmlFor(file, ttl) {
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>${esc(ont?.[1].comment ? ns : ns)} — w3id.org/jeswr/${ns}</title>
+    <title>w3id.org/jeswr/${ns} — Solid Federation Vocabulary</title>
     <style>
       :root { color-scheme: light dark; }
       body { font-family: system-ui, sans-serif; line-height: 1.6; max-width: 60rem; margin: 2rem auto; padding: 0 1rem; }
@@ -117,7 +118,7 @@ function htmlFor(file, ttl) {
   <body>
     <h1><code>https://w3id.org/jeswr/${ns}#</code></h1>
     <p class="warn">⚠️ <strong>Experimental</strong> — AI-agent-generated (Claude Opus 4.8, @jeswr PSS agent); under active development, not production-hardened.</p>
-    <p>Other representations: <a href="${ns}.ttl">Turtle</a> · <a href="${ns === "fedapp" ? "context" : "task-context"}.jsonld">JSON-LD context</a> · <a href="./">index</a></p>
+    <p>Other representations: <a href="${ns}.ttl">Turtle</a> · <a href="${ctx}">JSON-LD context</a> · <a href="./">index</a></p>
     <h2>Terms</h2>
     <table>
       <tr><th>Term</th><th>Label</th><th>Comment</th></tr>
@@ -128,8 +129,11 @@ ${rows}
 `;
 }
 
-for (const [file, slug] of [["fedapp.ttl", "fed"], ["task.ttl", "task"]]) {
-  const html = htmlFor(file, readFileSync(join(ROOT, file), "utf8"));
+for (const [file, slug, ctx] of [
+  ["fedapp.ttl", "fed", "context.jsonld"],
+  ["task.ttl", "task", "task-context.jsonld"],
+]) {
+  const html = htmlFor(file, slug, ctx, readFileSync(join(ROOT, file), "utf8"));
   writeFileSync(join(DOCS, `${slug}.html`), html);
   console.log(`docs/${slug}.html (text/html conneg target)`);
 }

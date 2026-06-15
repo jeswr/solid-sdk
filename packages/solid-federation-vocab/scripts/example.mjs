@@ -18,7 +18,10 @@ import {
 
 const FEDAPP = "https://w3id.org/jeswr/fed#";
 const ACL = "http://www.w3.org/ns/auth/acl#";
-const TASK = "https://w3id.org/jeswr/task#";
+// The shared task CLASS is the re-used wf:Task (NOT a minted tm:Task) — see
+// task.ttl + the @contexts, which map "Task" → wf:Task. Apps consume/produce
+// the same IRI a consumer expects.
+const WF = "http://www.w3.org/2005/01/wf/flow#";
 const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 
 /** Typed view of an app's Client-ID subject — object properties only. */
@@ -48,11 +51,11 @@ doc.sector.add("https://w3id.org/jeswr/sectors/productivity#sector");
 doc.access.add(`${ACL}Read`);
 doc.access.add(`${ACL}Write`);
 doc.access.add(`${ACL}Append`);
-doc.produces.add(`${TASK}Task`);
-doc.consumes.add(`${TASK}Task`);
+doc.produces.add(`${WF}Task`);
+doc.consumes.add(`${WF}Task`);
 
 const writer = new Writer({
-  prefixes: { fedapp: FEDAPP, acl: ACL, tm: TASK, sectors: "https://w3id.org/jeswr/sectors/" },
+  prefixes: { fedapp: FEDAPP, acl: ACL, wf: WF, sectors: "https://w3id.org/jeswr/sectors/" },
 });
 writer.addQuads(store.getQuads(null, null, null, null));
 
