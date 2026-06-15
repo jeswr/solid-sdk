@@ -84,6 +84,35 @@ export async function writeRdf(
 }
 
 /**
+ * Idempotently ensure a container exists, creating it (and any missing parent)
+ * via an LDP `PUT` of an empty Turtle body with `Content-Type: text/turtle` and
+ * `Link: …#Container`. A `2xx` (created) and a `4xx` "already exists" are BOTH
+ * the caller's desired end state — only a `5xx`/network-class failure throws.
+ *
+ * This is the belt-and-braces complement to PUT-creates-intermediates: a server
+ * that does NOT recursively mint parent containers on a deep resource PUT needs
+ * the parents created first, and a server that DOES simply answers the redundant
+ * container PUT with an "exists" status we swallow. Parents are created
+ * shallowest-first so a child container's PUT never precedes its parent's.
+ *
+ * @param fetchImpl - test-only override; **omit in production**.
+ * @throws ResourceWriteError on a non-2xx that is not a recoverable "exists".
+ */
+export async function ensureContainer(url: string, fetchImpl?: typeof fetch): Promise<void> {
+  const headers: Record<string, string> = {
+    "content-type": "text/turtle",
+    link: '<http://www.w3.org/ns/ldp#Container>; rel="type"',
+    "if-none-match": "*",
+  };
+  const init: RequestInit = { method: "PUT", headers, body: "" };
+  const res = fetchImpl ? await fetchImpl(url, init) : await fetch(url, init);
+  // 2xx = freshly created; 409/412 = already exists (the conditional create lost
+  // the race / the container is already present). Both are the desired state.
+  if (res.ok || res.status === 409 || res.status === 412) return;
+  throw new ResourceWriteError(url, res.status);
+}
+
+/**
  * Delete a resource. A `404`/`410` is treated as success (idempotent delete —
  * the resource is already gone, the caller's desired end state).
  *

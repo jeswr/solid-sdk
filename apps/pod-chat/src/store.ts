@@ -23,7 +23,7 @@ import { ContainerDataset } from "@solid/object";
 import { DataFactory } from "n3";
 import { OutOfScopeError } from "./errors.js";
 import { type BuildMessageInput, buildMessage, type ChatMessage, parseMessage } from "./message.js";
-import { deleteRdf, nameFromUrl, readRdf, writeRdf } from "./rdf-io.js";
+import { deleteRdf, ensureContainer, nameFromUrl, readRdf, writeRdf } from "./rdf-io.js";
 import { type BuildRoomInput, buildRoom, type ChatRoom, parseRoom } from "./room.js";
 import { ensureTypeRegistrations } from "./type-index.js";
 import { CHAT_ROOM_CLASS, PREFIXES } from "./vocab.js";
@@ -108,6 +108,17 @@ function assertDirectChild(url: string, container: string): void {
   }
 }
 
+/**
+ * `.catch` handler for a save-time pre-read: a missing resource (404/410) means
+ * "nothing to preserve", so resolve to `undefined`; any other error (403, 5xx,
+ * network) is real and must NOT be masked — rethrow it so the save fails loudly
+ * rather than silently dropping the original timestamp.
+ */
+function rethrowNon404(e: unknown): undefined {
+  if (e instanceof RdfFetchError && (e.status === 404 || e.status === 410)) return undefined;
+  throw e;
+}
+
 /** Mint a fresh, collision-resistant `.ttl` resource URL inside `container`. */
 function mintUrl(container: string, slugHint?: string): string {
   const slug = toSlug(slugHint);
@@ -179,6 +190,7 @@ export class ChatStore {
     input: BuildRoomInput,
     slugHint?: string,
   ): Promise<{ url: string; etag: string | null }> {
+    await this.ensureContainers();
     await this.ensureRegistered();
     const url = mintUrl(this.roomsUrl, slugHint ?? input.name);
     const dataset = buildRoom(url, input);
@@ -194,6 +206,11 @@ export class ChatStore {
    * Overwrite an existing room descriptor (e.g. rename, add/remove a
    * participant, append message refs). Sends `If-Match` when an `etag` is
    * supplied so a concurrent edit fails with 412 instead of clobbering.
+   *
+   * The original `dct:created` is preserved on save: if the caller omits
+   * `created`, the existing descriptor is read and its creation timestamp
+   * carried forward, so an edit (rename, participant change) never silently
+   * rewrites when the room was created. Pass an explicit `created` to override.
    */
   async saveRoom(
     url: string,
@@ -201,7 +218,8 @@ export class ChatStore {
     etag?: string | null,
   ): Promise<{ etag: string | null }> {
     assertDirectChild(url, this.roomsUrl);
-    const dataset = buildRoom(url, input);
+    const created = input.created ?? (await this.existingRoomCreated(url));
+    const dataset = buildRoom(url, { ...input, ...(created ? { created } : {}) });
     return writeRdf(url, dataset, { etag, fetchImpl: this.fetchImpl, prefixes: PREFIXES });
   }
 
@@ -243,6 +261,7 @@ export class ChatStore {
     input: BuildMessageInput,
     slugHint?: string,
   ): Promise<{ url: string; etag: string | null }> {
+    await this.ensureContainers();
     const url = mintUrl(this.messagesUrl, slugHint);
     const dataset = buildMessage(url, input);
     const { etag } = await writeRdf(url, dataset, {
@@ -257,6 +276,12 @@ export class ChatStore {
    * Overwrite an existing message (e.g. edit the body, flip an actionable task's
    * state open↔closed). Sends `If-Match` when an `etag` is supplied so a
    * concurrent edit fails with 412 instead of clobbering.
+   *
+   * The original `as:published` is preserved on save: if the caller omits
+   * `published`, the existing message is read and its publication timestamp
+   * carried forward, so editing the body or closing a task never silently
+   * rewrites when the message was posted. Pass an explicit `published` to
+   * override.
    */
   async saveMessage(
     url: string,
@@ -264,7 +289,8 @@ export class ChatStore {
     etag?: string | null,
   ): Promise<{ etag: string | null }> {
     assertDirectChild(url, this.messagesUrl);
-    const dataset = buildMessage(url, input);
+    const published = input.published ?? (await this.existingMessagePublished(url));
+    const dataset = buildMessage(url, { ...input, ...(published ? { published } : {}) });
     return writeRdf(url, dataset, { etag, fetchImpl: this.fetchImpl, prefixes: PREFIXES });
   }
 
@@ -284,6 +310,40 @@ export class ChatStore {
       registrations: [{ forClass: CHAT_ROOM_CLASS, container: this.roomsUrl }],
       fetchImpl: this.fetchImpl,
     });
+  }
+
+  /**
+   * Idempotently create the `pod-chat/`, `pod-chat/rooms/` and
+   * `pod-chat/messages/` containers, shallowest-first. Servers that mint
+   * intermediate containers on a deep resource PUT answer these redundant PUTs
+   * with an "already exists" status that {@link ensureContainer} swallows;
+   * servers that do NOT need them created up-front so the first room/message
+   * write does not 404/409 on a missing parent.
+   */
+  async ensureContainers(): Promise<void> {
+    await ensureContainer(this.chatRoot, this.fetchImpl);
+    await ensureContainer(this.roomsUrl, this.fetchImpl);
+    await ensureContainer(this.messagesUrl, this.fetchImpl);
+  }
+
+  /**
+   * The `dct:created` of an existing room descriptor, or `undefined` when the
+   * resource is absent (404/410) or holds no parseable room. Used to carry the
+   * original creation timestamp forward across a save.
+   */
+  private async existingRoomCreated(url: string): Promise<Date | undefined> {
+    const created = (await this.readRoom(url).catch(rethrowNon404))?.data.created;
+    return created ? new Date(created) : undefined;
+  }
+
+  /**
+   * The `as:published` of an existing message, or `undefined` when the resource
+   * is absent (404/410) or holds no parseable message. Used to carry the
+   * original publication timestamp forward across a save.
+   */
+  private async existingMessagePublished(url: string): Promise<Date | undefined> {
+    const published = (await this.readMessage(url).catch(rethrowNon404))?.data.published;
+    return published ? new Date(published) : undefined;
   }
 
   /**

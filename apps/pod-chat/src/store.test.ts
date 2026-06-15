@@ -15,6 +15,7 @@ import { CHAT_ROOM_CLASS } from "./vocab.js";
 
 const WEBID = "https://alice.pod/profile/card#me";
 const POD = "https://alice.pod/";
+const CHAT = "https://alice.pod/pod-chat/";
 const ROOMS = "https://alice.pod/pod-chat/rooms/";
 const MESSAGES = "https://alice.pod/pod-chat/messages/";
 const ROOM = "https://alice.pod/pod-chat/rooms/general.ttl";
@@ -155,7 +156,7 @@ describe("readMessage", () => {
 });
 
 describe("createRoom", () => {
-  it("registers the rooms container then writes the room create-only", async () => {
+  it("ensures containers, registers the rooms container, then writes the room create-only", async () => {
     const PrivateIndex = "https://alice.pod/settings/privateTypeIndex.ttl";
     const { fetch, calls } = mockFetch({
       [`GET ${WEBID}`]: {
@@ -168,8 +169,12 @@ describe("createRoom", () => {
         body: "@prefix solid: <http://www.w3.org/ns/solid/terms#> . <> a solid:TypeIndex .",
         etag: 'W/"i"',
       },
+      // container-ensure PUTs (idempotent; the server says "already exists")
+      [`PUT ${CHAT}`]: { status: 409 },
+      [`PUT ${ROOMS}`]: { status: 409 },
+      [`PUT ${MESSAGES}`]: { status: 409 },
     });
-    // The room PUT URL is dynamic (random); intercept any PUT to the rooms container.
+    // The room PUT URL is dynamic (random); intercept the room resource PUT only.
     const baseFetch = fetch;
     const wrapped = (async (input: string | URL | Request, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input.toString();
@@ -193,6 +198,10 @@ describe("createRoom", () => {
     // The type-index registration was written for the ChatRoom class.
     expect(calls.some((c) => c.method === "PUT" && c.url === PrivateIndex)).toBe(true);
     expect(roomPut?.body).toContain("pc:ChatRoom");
+    // All three containers were ensured (shallowest-first).
+    expect(calls.some((c) => c.method === "PUT" && c.url === CHAT)).toBe(true);
+    expect(calls.some((c) => c.method === "PUT" && c.url === ROOMS)).toBe(true);
+    expect(calls.some((c) => c.method === "PUT" && c.url === MESSAGES)).toBe(true);
   });
 
   it("registers CHAT_ROOM_CLASS at the rooms container", async () => {
@@ -219,7 +228,7 @@ describe("createRoom", () => {
           headers: { "content-type": "text/turtle", etag: 'W/"i"' },
         });
       }
-      if (method === "PUT" && url.startsWith(ROOMS)) {
+      if (method === "PUT" && url.startsWith(CHAT)) {
         return new Response(null, { status: 201, headers: { etag: 'W/"x"' } });
       }
       return new Response("nf", { status: 404 });
@@ -233,17 +242,32 @@ describe("createRoom", () => {
 });
 
 describe("saveRoom", () => {
-  it("writes with If-Match when an etag is given", async () => {
+  it("writes with If-Match and preserves the original dct:created", async () => {
     const calls: { url: string; method: string; headers: Record<string, string>; body?: string }[] =
       [];
+    const existing = `
+      @prefix pc: <https://w3id.org/jeswr/pod-chat#> .
+      @prefix as: <https://www.w3.org/ns/activitystreams#> .
+      @prefix dct: <http://purl.org/dc/terms/> .
+      @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+      <#it> a as:Collection, pc:ChatRoom ; as:name "Old" ;
+            dct:created "2020-03-03T00:00:00.000Z"^^xsd:dateTime .
+    `;
     const fetchImpl = (async (input: string | URL | Request, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input.toString();
+      const method = init?.method ?? "GET";
       calls.push({
         url,
-        method: init?.method ?? "GET",
+        method,
         headers: normaliseHeaders(init?.headers),
         body: init?.body as string,
       });
+      if (method === "GET" && url === ROOM) {
+        return new Response(existing, {
+          status: 200,
+          headers: { "content-type": "text/turtle", etag: 'W/"v1"' },
+        });
+      }
       return new Response(null, { status: 205, headers: { etag: 'W/"v2"' } });
     }) as typeof fetch;
 
@@ -253,9 +277,38 @@ describe("saveRoom", () => {
       'W/"v1"',
     );
     expect(etag).toBe('W/"v2"');
-    expect(calls[0]?.headers["if-match"]).toBe('W/"v1"');
-    expect(calls[0]?.body).toContain("Renamed");
-    expect(calls[0]?.body).toContain("pc:participant");
+    const put = calls.find((c) => c.method === "PUT" && c.url === ROOM);
+    expect(put?.headers["if-match"]).toBe('W/"v1"');
+    expect(put?.body).toContain("Renamed");
+    expect(put?.body).toContain("pc:participant");
+    // The original creation timestamp is carried forward, not rewritten to now.
+    expect(put?.body).toContain("2020-03-03T00:00:00.000Z");
+  });
+
+  it("honours an explicit created over the existing one (no pre-read needed)", async () => {
+    let body = "";
+    const fetchImpl = (async (_input: string | URL | Request, init?: RequestInit) => {
+      if ((init?.method ?? "GET") === "PUT") body = init?.body as string;
+      return new Response(null, { status: 205, headers: { etag: 'W/"v2"' } });
+    }) as typeof fetch;
+    await store(fetchImpl).saveRoom(ROOM, {
+      name: "R",
+      created: new Date("2019-01-01T00:00:00.000Z"),
+    });
+    expect(body).toContain("2019-01-01T00:00:00.000Z");
+  });
+
+  it("tolerates a missing room on save (no created to preserve)", async () => {
+    const { fetch } = mockFetch({ [`PUT ${ROOM}`]: { status: 201, etag: 'W/"v2"' } });
+    // GET ROOM → 404 (mock default); save still succeeds.
+    await expect(store(fetch).saveRoom(ROOM, { name: "Fresh" })).resolves.toEqual({
+      etag: 'W/"v2"',
+    });
+  });
+
+  it("propagates a non-404 pre-read failure on save (does not mask it)", async () => {
+    const { fetch } = mockFetch({ [`GET ${ROOM}`]: { status: 500, body: "err" } });
+    await expect(store(fetch).saveRoom(ROOM, { name: "R" })).rejects.toMatchObject({ status: 500 });
   });
 
   it("rejects an out-of-scope room save before any I/O", async () => {
@@ -281,17 +334,19 @@ describe("removeRoom", () => {
 });
 
 describe("postMessage", () => {
-  it("writes the message create-only with an as:context link, no type-index write", async () => {
+  it("ensures containers, writes the message create-only with an as:context link, no type-index write", async () => {
     const calls: { url: string; method: string; headers: Record<string, string>; body?: string }[] =
       [];
+    const msgPut: { url: string; headers: Record<string, string>; body?: string }[] = [];
     const fetchImpl = (async (input: string | URL | Request, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input.toString();
-      calls.push({
-        url,
-        method: init?.method ?? "GET",
-        headers: normaliseHeaders(init?.headers),
-        body: init?.body as string,
-      });
+      const method = init?.method ?? "GET";
+      const headers = normaliseHeaders(init?.headers);
+      const body = init?.body as string;
+      calls.push({ url, method, headers, body });
+      if (method === "PUT" && url.startsWith(MESSAGES) && url.endsWith(".ttl")) {
+        msgPut.push({ url, headers, body });
+      }
       return new Response(null, { status: 201, headers: { etag: 'W/"m"' } });
     }) as typeof fetch;
 
@@ -301,17 +356,23 @@ describe("postMessage", () => {
     );
     expect(url.startsWith(`${MESSAGES}hello-`)).toBe(true);
     expect(etag).toBe('W/"m"');
-    expect(calls[0]?.headers["if-none-match"]).toBe("*");
-    expect(calls[0]?.body).toContain("as:Note");
-    expect(calls[0]?.body).toContain("as:context");
+    const put = msgPut.find((c) => c.url === url);
+    expect(put?.headers["if-none-match"]).toBe("*");
+    expect(put?.body).toContain("as:Note");
+    expect(put?.body).toContain("as:context");
     // posting a message does not touch the type index
     expect(calls.every((c) => !c.url.includes("TypeIndex"))).toBe(true);
+    // containers were ensured first
+    expect(calls.some((c) => c.method === "PUT" && c.url === MESSAGES)).toBe(true);
   });
 
   it("posts an actionable task message that doubles as a wf:Task", async () => {
     let body = "";
-    const fetchImpl = (async (_input: string | URL | Request, init?: RequestInit) => {
-      body = init?.body as string;
+    const fetchImpl = (async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if ((init?.method ?? "GET") === "PUT" && url.endsWith(".ttl") && url.startsWith(MESSAGES)) {
+        body = init?.body as string;
+      }
       return new Response(null, { status: 201, headers: { etag: 'W/"m"' } });
     }) as typeof fetch;
     await store(fetchImpl).postMessage({
@@ -333,17 +394,31 @@ describe("postMessage", () => {
 });
 
 describe("saveMessage", () => {
-  it("overwrites a message with If-Match (e.g. flipping a task closed)", async () => {
+  it("overwrites with If-Match (e.g. closing a task) and preserves as:published", async () => {
     const calls: { url: string; method: string; headers: Record<string, string>; body?: string }[] =
       [];
+    const existing = `
+      @prefix as: <https://www.w3.org/ns/activitystreams#> .
+      @prefix wf: <http://www.w3.org/2005/01/wf/flow#> .
+      @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+      <#it> a as:Note, wf:Task, wf:Open ; as:content "do X" ;
+            as:published "2021-05-05T08:00:00.000Z"^^xsd:dateTime .
+    `;
     const fetchImpl = (async (input: string | URL | Request, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input.toString();
+      const method = init?.method ?? "GET";
       calls.push({
         url,
-        method: init?.method ?? "GET",
+        method,
         headers: normaliseHeaders(init?.headers),
         body: init?.body as string,
       });
+      if (method === "GET" && url === MSG) {
+        return new Response(existing, {
+          status: 200,
+          headers: { "content-type": "text/turtle", etag: 'W/"m1"' },
+        });
+      }
       return new Response(null, { status: 205, headers: { etag: 'W/"m2"' } });
     }) as typeof fetch;
 
@@ -353,8 +428,31 @@ describe("saveMessage", () => {
       'W/"m1"',
     );
     expect(etag).toBe('W/"m2"');
-    expect(calls[0]?.headers["if-match"]).toBe('W/"m1"');
-    expect(calls[0]?.body).toContain("wf:Closed");
+    const put = calls.find((c) => c.method === "PUT" && c.url === MSG);
+    expect(put?.headers["if-match"]).toBe('W/"m1"');
+    expect(put?.body).toContain("wf:Closed");
+    // The original publication timestamp is carried forward.
+    expect(put?.body).toContain("2021-05-05T08:00:00.000Z");
+  });
+
+  it("honours an explicit published over the existing one", async () => {
+    let body = "";
+    const fetchImpl = (async (_input: string | URL | Request, init?: RequestInit) => {
+      if ((init?.method ?? "GET") === "PUT") body = init?.body as string;
+      return new Response(null, { status: 205, headers: { etag: 'W/"m2"' } });
+    }) as typeof fetch;
+    await store(fetchImpl).saveMessage(MSG, {
+      content: "x",
+      published: new Date("2018-08-08T00:00:00.000Z"),
+    });
+    expect(body).toContain("2018-08-08T00:00:00.000Z");
+  });
+
+  it("tolerates a missing message on save (no published to preserve)", async () => {
+    const { fetch } = mockFetch({ [`PUT ${MSG}`]: { status: 201, etag: 'W/"m2"' } });
+    await expect(store(fetch).saveMessage(MSG, { content: "fresh" })).resolves.toEqual({
+      etag: 'W/"m2"',
+    });
   });
 });
 
@@ -407,6 +505,19 @@ describe("listRooms / listMessages", () => {
     const empty = `@prefix ldp: <http://www.w3.org/ns/ldp#> . <${ROOMS}> a ldp:Container .`;
     const { fetch } = mockFetch({ [`GET ${ROOMS}`]: { body: empty } });
     await expect(store(fetch).listRooms()).resolves.toEqual([]);
+  });
+});
+
+describe("ensureContainers", () => {
+  it("PUTs the pod-chat, rooms and messages containers shallowest-first", async () => {
+    const seen: string[] = [];
+    const fetchImpl = (async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if ((init?.method ?? "GET") === "PUT") seen.push(url);
+      return new Response(null, { status: 201 });
+    }) as typeof fetch;
+    await store(fetchImpl).ensureContainers();
+    expect(seen).toEqual([CHAT, ROOMS, MESSAGES]);
   });
 });
 

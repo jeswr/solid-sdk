@@ -213,6 +213,49 @@ describe("ensureTypeRegistrations", () => {
     expect(result.added).toBe(0);
   });
 
+  it("recovers from an advertised-but-missing index (404) by bootstrapping a fresh one", async () => {
+    // The profile advertises a private index, but that document is gone (404 —
+    // a stale or half-created profile). ensureTypeRegistrations must bootstrap a
+    // fresh private index rather than propagating the 404.
+    const Stale = "https://alice.pod/settings/stale.ttl";
+    const { fetch, calls } = mockFetch({
+      [`GET ${WEBID}`]: { body: profileWith({ privateIndex: Stale }), etag: 'W/"p"' },
+      // GET Stale → 404 (mock default) → recoverable
+      [`PUT ${PRIVATE_INDEX}`]: { status: 201 },
+      [`PUT ${PROFILE_DOC}`]: { status: 205 },
+      [`GET ${PRIVATE_INDEX}`]: {
+        body: "@prefix solid: <http://www.w3.org/ns/solid/terms#> . <> a solid:TypeIndex .",
+        etag: 'W/"i"',
+      },
+    });
+    const result = await ensureTypeRegistrations({
+      webId: WEBID,
+      podRoot: POD,
+      registrations: [REG],
+      fetchImpl: fetch,
+    });
+    expect(result.bootstrapped).toBe(true);
+    expect(result.indexUrl).toBe(PRIVATE_INDEX);
+    expect(result.added).toBe(1);
+    // The freshly-bootstrapped index was re-linked from the profile.
+    expect(calls.some((c) => c.method === "PUT" && c.url === PROFILE_DOC)).toBe(true);
+  });
+
+  it("propagates a non-404 failure while reading the advertised index", async () => {
+    const { fetch } = mockFetch({
+      [`GET ${WEBID}`]: { body: profileWith({ privateIndex: PRIVATE_INDEX }), etag: 'W/"p"' },
+      [`GET ${PRIVATE_INDEX}`]: { status: 500, body: "err" },
+    });
+    await expect(
+      ensureTypeRegistrations({
+        webId: WEBID,
+        podRoot: POD,
+        registrations: [REG],
+        fetchImpl: fetch,
+      }),
+    ).rejects.toMatchObject({ status: 500 });
+  });
+
   it("propagates a non-412 failure while creating the index document", async () => {
     const { fetch } = mockFetch({
       [`GET ${WEBID}`]: { body: profileWith({}), etag: 'W/"p"' },

@@ -195,6 +195,23 @@ export async function ensureTypeRegistrations(opts: {
   let indexUrl = links.privateIndex ?? links.publicIndex;
   let bootstrapped = false;
 
+  // Read the advertised index. An advertised-but-missing index (404/410 — a
+  // stale or half-created profile) is recoverable: fall through to bootstrapping
+  // a fresh private index rather than propagating the 404 and breaking setup.
+  let indexDs: DatasetCore | undefined;
+  let indexEtag: string | null = null;
+  if (indexUrl) {
+    try {
+      ({ dataset: indexDs, etag: indexEtag } = await readRdf(indexUrl, fetchImpl));
+    } catch (e) {
+      if (e instanceof RdfFetchError && (e.status === 404 || e.status === 410)) {
+        indexUrl = undefined; // advertised link dangles → bootstrap below
+      } else {
+        throw e;
+      }
+    }
+  }
+
   if (!indexUrl) {
     indexUrl = new URL("settings/privateTypeIndex.ttl", podRoot).toString();
     await createIndexDocument(indexUrl, fetchImpl);
@@ -202,10 +219,12 @@ export async function ensureTypeRegistrations(opts: {
     anchor.privateIndex = indexUrl;
     await writeRdf(documentUrl(webId), profileDs, { etag: profileEtag, fetchImpl });
     bootstrapped = true;
+    ({ dataset: indexDs, etag: indexEtag } = await readRdf(indexUrl, fetchImpl));
   }
 
-  const { dataset: indexDs, etag: indexEtag } = await readRdf(indexUrl, fetchImpl);
-  const index = new TypeIndexDataset(indexDs, DataFactory);
+  // After the read-or-bootstrap above, the index dataset is always present.
+  const dataset = indexDs as DatasetCore;
+  const index = new TypeIndexDataset(dataset, DataFactory);
 
   let added = 0;
   for (const desired of registrations) {
@@ -213,7 +232,7 @@ export async function ensureTypeRegistrations(opts: {
     if (exists) continue;
     const reg = new TypeRegistration(
       `${indexUrl}#reg-${fragmentFor(desired)}`,
-      indexDs,
+      dataset,
       DataFactory,
     );
     reg.markRegistration();
@@ -223,7 +242,7 @@ export async function ensureTypeRegistrations(opts: {
   }
 
   if (added > 0) {
-    await writeRdf(indexUrl, indexDs, { etag: indexEtag, fetchImpl, prefixes: INDEX_PREFIXES });
+    await writeRdf(indexUrl, dataset, { etag: indexEtag, fetchImpl, prefixes: INDEX_PREFIXES });
   }
   return { indexUrl, added, bootstrapped };
 }

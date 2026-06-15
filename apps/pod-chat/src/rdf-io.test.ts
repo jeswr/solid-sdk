@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { ResourceDeleteError, ResourceWriteError } from "./errors.js";
 import {
   deleteRdf,
+  ensureContainer,
   nameFromUrl,
   REVALIDATE_HEADERS,
   readRdf,
@@ -159,6 +160,48 @@ describe("writeRdf", () => {
       const err = await writeRdf(URL_X, new Store()).catch((e) => e);
       expect(err).toBeInstanceOf(ResourceWriteError);
       expect(err.status).toBe(500);
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+});
+
+describe("ensureContainer", () => {
+  const C = "https://alice.pod/pod-chat/rooms/";
+
+  it("PUTs an empty container with the LDP type Link + If-None-Match:*", async () => {
+    const { fetch, calls } = mockFetch({ [`PUT ${C}`]: { status: 201 } });
+    await expect(ensureContainer(C, fetch)).resolves.toBeUndefined();
+    expect(calls[0]?.method).toBe("PUT");
+    expect(calls[0]?.headers["content-type"]).toBe("text/turtle");
+    expect(calls[0]?.headers.link).toContain("ldp#Container");
+    expect(calls[0]?.headers["if-none-match"]).toBe("*");
+  });
+
+  it("treats 409 and 412 (already exists) as success", async () => {
+    const { fetch: f409 } = mockFetch({ [`PUT ${C}`]: { status: 409 } });
+    await expect(ensureContainer(C, f409)).resolves.toBeUndefined();
+    const { fetch: f412 } = mockFetch({ [`PUT ${C}`]: { status: 412 } });
+    await expect(ensureContainer(C, f412)).resolves.toBeUndefined();
+  });
+
+  it("throws ResourceWriteError on a 5xx", async () => {
+    const { fetch } = mockFetch({ [`PUT ${C}`]: { status: 500 } });
+    const err = await ensureContainer(C, fetch).catch((e) => e);
+    expect(err).toBeInstanceOf(ResourceWriteError);
+    expect(err.status).toBe(500);
+  });
+
+  it("uses the global fetch when no fetchImpl is given", async () => {
+    const original = globalThis.fetch;
+    let called = "";
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      called = typeof input === "string" ? input : input.toString();
+      return new Response(null, { status: 201 });
+    }) as typeof fetch;
+    try {
+      await expect(ensureContainer(C)).resolves.toBeUndefined();
+      expect(called).toBe(C);
     } finally {
       globalThis.fetch = original;
     }
