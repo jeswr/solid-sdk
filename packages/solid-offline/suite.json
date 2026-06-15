@@ -1,16 +1,19 @@
 {
-  "$schema": "https://solid.example/suite-tracking/suite.schema.json",
+  "$schema": "https://raw.githubusercontent.com/jeswr/full-solid-ecosystem/main/tracking/schema/suite.schema.json",
   "id": "solid-offline",
-  "kind": "sdk",
+  "kind": "package",
   "name": "Solid Offline",
   "repo": "https://github.com/jeswr/solid-offline",
   "category": "infrastructure",
   "maturity": "alpha",
   "visibility": "public",
   "stack": {
-    "language": "typescript",
+    "language": "TypeScript",
+    "runtime": "browser (service worker) + React/vanilla DX hooks",
     "bundler": "tsup",
-    "test": "vitest",
-    "rdf": "n3"
-  }
+    "rdf": "n3",
+    "test": "vitest (jsdom, fake-indexeddb)"
+  },
+  "dependsOn": [],
+  "federation": null
 }
