@@ -64,12 +64,9 @@
     "StepCountObservation": "health:StepCountObservation",
     "unitCode": {
       "@id": "health:unitCode",
-      "@type": "@id"
+      "@type": "xsd:string"
     },
-    "value": {
-      "@id": "health:value",
-      "@type": "@id"
-    },
+    "value": "health:value",
     "VitalSign": "health:VitalSign"
   }
 }

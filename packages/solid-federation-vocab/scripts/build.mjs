@@ -169,18 +169,23 @@ const OWL_CLASS = `${"http://www.w3.org/2002/07/owl#"}Class`;
 const OWL_OBJ = "http://www.w3.org/2002/07/owl#ObjectProperty";
 const OWL_DATA = "http://www.w3.org/2002/07/owl#DatatypeProperty";
 
+const RDFS_RANGE = `${RDFS}range`;
+const XSD = "http://www.w3.org/2001/XMLSchema#";
+
 /** Parse an ontology .ttl and index its OWN-namespace terms. */
 function indexOntology(ttl, route, ns) {
   const quads = new Parser({ baseIRI: `https://w3id.org/jeswr/${route}` }).parse(ttl);
   const byS = new Map();
   for (const q of quads) {
     if (q.subject.termType !== "NamedNode") continue;
-    const e = byS.get(q.subject.value) ?? { types: [], label: "", comment: "" };
+    const e = byS.get(q.subject.value) ?? { types: [], label: "", comment: "", range: null };
     if (q.predicate.value === RDF_TYPE) e.types.push(q.object.value);
     if ((q.predicate.value === RDF_LABEL || q.predicate.value === SKOS_PREFLABEL) && !e.label)
       e.label = q.object.value;
     if ((q.predicate.value === `${RDFS}comment` || q.predicate.value === SKOS_DEF) && !e.comment)
       e.comment = q.object.value;
+    if (q.predicate.value === RDFS_RANGE && q.object.termType === "NamedNode" && !e.range)
+      e.range = q.object.value;
     byS.set(q.subject.value, e);
   }
   // own-namespace named terms (classes / properties / individuals), not the ontology node
@@ -191,7 +196,10 @@ function indexOntology(ttl, route, ns) {
       local: iri.slice(ns.length),
       label: e.label,
       comment: e.comment,
-      isProperty: e.types.includes(OWL_OBJ) || e.types.includes(OWL_DATA),
+      // object properties take IRI values; datatype properties take literals.
+      isObjectProp: e.types.includes(OWL_OBJ),
+      isDataProp: e.types.includes(OWL_DATA),
+      range: e.range,
     }))
     .sort((a, b) => a.iri.localeCompare(b.iri));
   return terms;
@@ -205,16 +213,25 @@ function contextFor(prefix, ns, terms) {
     [prefix]: ns,
     rdfs: "http://www.w3.org/2000/01/rdf-schema#",
     skos: "http://www.w3.org/2004/02/skos/core#",
-    xsd: "http://www.w3.org/2001/XMLSchema#",
+    xsd: XSD,
     id: "@id",
     type: "@type",
   };
   for (const t of terms) {
-    // map the local short name; object/datatype properties keep their IRI form,
-    // object properties get @type:@id so values are treated as IRIs.
-    ctx[t.local] = t.isProperty
-      ? { "@id": `${prefix}:${t.local}`, "@type": "@id" }
-      : `${prefix}:${t.local}`;
+    if (t.isObjectProp) {
+      // object property → values are IRIs.
+      ctx[t.local] = { "@id": `${prefix}:${t.local}`, "@type": "@id" };
+    } else if (t.isDataProp) {
+      // datatype property → values are LITERALS. Carry the declared xsd: range as
+      // the @type when known; otherwise a plain term mapping (a literal, NOT @id).
+      ctx[t.local] =
+        t.range && t.range.startsWith(XSD)
+          ? { "@id": `${prefix}:${t.local}`, "@type": `xsd:${t.range.slice(XSD.length)}` }
+          : `${prefix}:${t.local}`;
+    } else {
+      // a class or coded-value individual → a plain prefixed term.
+      ctx[t.local] = `${prefix}:${t.local}`;
+    }
   }
   return { "@context": ctx };
 }

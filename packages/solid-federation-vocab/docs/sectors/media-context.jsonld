@@ -17,7 +17,7 @@
     "CreativeWork": "media:CreativeWork",
     "durationSeconds": {
       "@id": "media:durationSeconds",
-      "@type": "@id"
+      "@type": "xsd:decimal"
     },
     "hasLicense": {
       "@id": "media:hasLicense",
@@ -33,7 +33,7 @@
     },
     "isrc": {
       "@id": "media:isrc",
-      "@type": "@id"
+      "@type": "xsd:string"
     },
     "licensedWork": {
       "@id": "media:licensedWork",
@@ -41,14 +41,14 @@
     },
     "licenseTerms": {
       "@id": "media:licenseTerms",
-      "@type": "@id"
+      "@type": "xsd:string"
     },
     "ListeningActivity": "media:ListeningActivity",
     "ListeningHistory": "media:ListeningHistory",
     "MediaAccount": "media:MediaAccount",
     "msPlayed": {
       "@id": "media:msPlayed",
-      "@type": "@id"
+      "@type": "xsd:integer"
     },
     "MusicComposition": "media:MusicComposition",
     "MusicGroup": "media:MusicGroup",

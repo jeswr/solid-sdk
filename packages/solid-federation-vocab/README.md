@@ -134,7 +134,7 @@ metadata:
   "token_endpoint_auth_method": "none",
 
   "type": "App",
-  "sector": "https://w3id.org/jeswr/sectors/productivity#sector",
+  "sector": "https://w3id.org/jeswr/sectors/scheduling#sector",
   "access": ["Read", "Write", "Append"],
   "produces": ["http://www.w3.org/2005/01/wf/flow#Task"],
   "consumes": ["http://www.w3.org/2005/01/wf/flow#Task"]
@@ -150,7 +150,7 @@ In Turtle the same block is:
 
 <https://app.example/clientid.jsonld>
     a fedapp:App ;
-    fedapp:sector <https://w3id.org/jeswr/sectors/productivity#sector> ;
+    fedapp:sector <https://w3id.org/jeswr/sectors/scheduling#sector> ;
     fedapp:access acl:Read, acl:Write, acl:Append ;
     fedapp:produces wf:Task ;
     fedapp:consumes wf:Task .

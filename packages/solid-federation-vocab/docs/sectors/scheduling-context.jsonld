@@ -29,28 +29,28 @@
     "CalendarEvent": "sched:CalendarEvent",
     "completed": {
       "@id": "sched:completed",
-      "@type": "@id"
+      "@type": "xsd:boolean"
     },
     "completedAt": {
       "@id": "sched:completedAt",
-      "@type": "@id"
+      "@type": "xsd:dateTime"
     },
     "count": {
       "@id": "sched:count",
-      "@type": "@id"
+      "@type": "xsd:positiveInteger"
     },
     "Declined": "sched:Declined",
     "description": {
       "@id": "sched:description",
-      "@type": "@id"
+      "@type": "xsd:string"
     },
     "dueTime": {
       "@id": "sched:dueTime",
-      "@type": "@id"
+      "@type": "xsd:dateTime"
     },
     "endTime": {
       "@id": "sched:endTime",
-      "@type": "@id"
+      "@type": "xsd:dateTime"
     },
     "eventLocation": {
       "@id": "sched:eventLocation",
@@ -58,7 +58,7 @@
     },
     "frequency": {
       "@id": "sched:frequency",
-      "@type": "@id"
+      "@type": "xsd:string"
     },
     "hasAttendee": {
       "@id": "sched:hasAttendee",
@@ -74,7 +74,7 @@
     },
     "interval": {
       "@id": "sched:interval",
-      "@type": "@id"
+      "@type": "xsd:positiveInteger"
     },
     "NeedsAction": "sched:NeedsAction",
     "organizer": {
@@ -89,30 +89,30 @@
     "Reminder": "sched:Reminder",
     "respondedAt": {
       "@id": "sched:respondedAt",
-      "@type": "@id"
+      "@type": "xsd:dateTime"
     },
     "sector": "sched:sector",
     "startTime": {
       "@id": "sched:startTime",
-      "@type": "@id"
+      "@type": "xsd:dateTime"
     },
     "summary": {
       "@id": "sched:summary",
-      "@type": "@id"
+      "@type": "xsd:string"
     },
     "Task": "sched:Task",
     "Tentative": "sched:Tentative",
     "triggerOffset": {
       "@id": "sched:triggerOffset",
-      "@type": "@id"
+      "@type": "xsd:duration"
     },
     "triggerTime": {
       "@id": "sched:triggerTime",
-      "@type": "@id"
+      "@type": "xsd:dateTime"
     },
     "until": {
       "@id": "sched:until",
-      "@type": "@id"
+      "@type": "xsd:dateTime"
     }
   }
 }

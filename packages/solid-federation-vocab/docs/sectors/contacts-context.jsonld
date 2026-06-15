@@ -20,7 +20,7 @@
     "ContactRelationship": "contact:ContactRelationship",
     "countryName": {
       "@id": "contact:countryName",
-      "@type": "@id"
+      "@type": "xsd:string"
     },
     "EmailAddress": "contact:EmailAddress",
     "Family": "contact:Family",
@@ -40,7 +40,7 @@
     },
     "locality": {
       "@id": "contact:locality",
-      "@type": "@id"
+      "@type": "xsd:string"
     },
     "MobileType": "contact:MobileType",
     "OnlineHandle": "contact:OnlineHandle",
@@ -50,15 +50,15 @@
     "PostalAddress": "contact:PostalAddress",
     "postalCode": {
       "@id": "contact:postalCode",
-      "@type": "@id"
+      "@type": "xsd:string"
     },
     "rawValue": {
       "@id": "contact:rawValue",
-      "@type": "@id"
+      "@type": "xsd:string"
     },
     "region": {
       "@id": "contact:region",
-      "@type": "@id"
+      "@type": "xsd:string"
     },
     "relatesContact": {
       "@id": "contact:relatesContact",
@@ -71,7 +71,7 @@
     "sector": "contact:sector",
     "streetAddress": {
       "@id": "contact:streetAddress",
-      "@type": "@id"
+      "@type": "xsd:string"
     },
     "WorkType": "contact:WorkType"
   }

@@ -9,11 +9,11 @@
     "type": "@type",
     "additionalName": {
       "@id": "id:additionalName",
-      "@type": "@id"
+      "@type": "xsd:string"
     },
     "assertedAt": {
       "@id": "id:assertedAt",
-      "@type": "@id"
+      "@type": "xsd:dateTime"
     },
     "assertedBy": {
       "@id": "id:assertedBy",
@@ -30,30 +30,27 @@
     "AttributeAssertion": "id:AttributeAssertion",
     "attributeName": {
       "@id": "id:attributeName",
-      "@type": "@id"
+      "@type": "xsd:string"
     },
-    "attributeValue": {
-      "@id": "id:attributeValue",
-      "@type": "@id"
-    },
+    "attributeValue": "id:attributeValue",
     "Country": "id:Country",
     "CountryCode": "id:CountryCode",
     "dateOfBirth": {
       "@id": "id:dateOfBirth",
-      "@type": "@id"
+      "@type": "xsd:date"
     },
     "familyName": {
       "@id": "id:familyName",
-      "@type": "@id"
+      "@type": "xsd:string"
     },
     "fullName": {
       "@id": "id:fullName",
-      "@type": "@id"
+      "@type": "xsd:string"
     },
     "GenderIdentity": "id:GenderIdentity",
     "givenName": {
       "@id": "id:givenName",
-      "@type": "@id"
+      "@type": "xsd:string"
     },
     "hasLegalName": {
       "@id": "id:hasLegalName",
@@ -61,11 +58,11 @@
     },
     "honorificPrefix": {
       "@id": "id:honorificPrefix",
-      "@type": "@id"
+      "@type": "xsd:string"
     },
     "honorificSuffix": {
       "@id": "id:honorificSuffix",
-      "@type": "@id"
+      "@type": "xsd:string"
     },
     "IdentityDocumentNumber": "id:IdentityDocumentNumber",
     "IssuingAuthority": "id:IssuingAuthority",

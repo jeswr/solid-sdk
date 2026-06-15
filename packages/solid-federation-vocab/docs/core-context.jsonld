@@ -71,7 +71,7 @@
     "NaturalPerson": "core:NaturalPerson",
     "numericValue": {
       "@id": "core:numericValue",
-      "@type": "@id"
+      "@type": "xsd:decimal"
     },
     "Organization": "core:Organization",
     "Owner": "core:Owner",
@@ -114,7 +114,7 @@
     },
     "timestamp": {
       "@id": "core:timestamp",
-      "@type": "@id"
+      "@type": "xsd:dateTime"
     },
     "unit": {
       "@id": "core:unit",
@@ -122,15 +122,12 @@
     },
     "validFrom": {
       "@id": "core:validFrom",
-      "@type": "@id"
+      "@type": "xsd:dateTime"
     },
     "validUntil": {
       "@id": "core:validUntil",
-      "@type": "@id"
+      "@type": "xsd:dateTime"
     },
-    "value": {
-      "@id": "core:value",
-      "@type": "@id"
-    }
+    "value": "core:value"
   }
 }

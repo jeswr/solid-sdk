@@ -47,7 +47,7 @@ const store = new Store();
 const doc = new FedAppDoc("https://app.example/clientid.jsonld", store, DataFactory);
 
 doc.types.add(`${FEDAPP}App`);
-doc.sector.add("https://w3id.org/jeswr/sectors/productivity#sector");
+doc.sector.add("https://w3id.org/jeswr/sectors/scheduling#sector");
 doc.access.add(`${ACL}Read`);
 doc.access.add(`${ACL}Write`);
 doc.access.add(`${ACL}Append`);

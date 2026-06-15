@@ -12,7 +12,7 @@
     "ActiveFinancialAccount": "fin:ActiveFinancialAccount",
     "amount": {
       "@id": "fin:amount",
-      "@type": "@id"
+      "@type": "xsd:decimal"
     },
     "Balance": "fin:Balance",
     "Bank": "fin:Bank",
@@ -26,7 +26,7 @@
     "CreditAccount": "fin:CreditAccount",
     "currency": {
       "@id": "fin:currency",
-      "@type": "@id"
+      "@type": "xsd:string"
     },
     "CurrentAccount": "fin:CurrentAccount",
     "debitAccount": {
@@ -69,11 +69,11 @@
     "Payment": "fin:Payment",
     "postingTime": {
       "@id": "fin:postingTime",
-      "@type": "@id"
+      "@type": "xsd:dateTime"
     },
     "quantity": {
       "@id": "fin:quantity",
-      "@type": "@id"
+      "@type": "xsd:decimal"
     },
     "SavingsAccount": "fin:SavingsAccount",
     "sector": "fin:sector",
