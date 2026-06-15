@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { useSolidSession } from "@/lib/session-context";
-import { useIssues, type IssueRecord } from "@/lib/use-issues";
+import { useIssues, type IssueRecord, type ActivityRecord } from "@/lib/use-issues";
 import { Repository } from "@/lib/repository";
 import { setGroupAccess } from "@/lib/sharing";
 import { type TrackerLocation } from "@/lib/profile";
@@ -12,7 +12,7 @@ import { ConflictError } from "@/lib/errors";
 import { filterAndSort, facets, DEFAULT_QUERY, type IssueQuery, type SortKey } from "@/lib/filter";
 import { SavedViews, type SavedView } from "@/lib/saved-views";
 import { resolveView, viewHref, VIEW_KEY, type View } from "@/lib/view";
-import { STATUSES, type FieldDef, type Priority, type StatusSlug } from "@/lib/issue";
+import { DEFAULT_WORKFLOW, type FieldDef, type Priority, type StatusSlug, type WorkflowDef } from "@/lib/issue";
 import { IssueFormDialog, type IssueFormSubmit } from "@/components/issue-form-dialog";
 import { ShareDialog } from "@/components/share-dialog";
 import { OpenTrackerDialog } from "@/components/open-tracker-dialog";
@@ -101,6 +101,7 @@ interface TrackerInfo {
   title?: string;
   fields: FieldDef[];
   group: { iri?: string; members: string[] };
+  workflow: WorkflowDef;
 }
 const EMPTY_GROUP: TrackerInfo["group"] = { members: [] };
 // Module-level so the derived fallbacks keep a stable identity across renders
@@ -169,6 +170,9 @@ export function IssuesView() {
   const fieldDefs = infoCurrent ? trackerInfo.fields : EMPTY_FIELDS;
   const group = infoCurrent ? trackerInfo.group : EMPTY_GROUP;
   const trackerTitle = infoCurrent ? trackerInfo.title : undefined;
+  const workflow = infoCurrent ? trackerInfo.workflow : DEFAULT_WORKFLOW;
+  // F3: the open issue's provenance log, loaded on demand when the detail dialog opens.
+  const [activity, setActivity] = useState<ActivityRecord[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const savedViewsStore = useMemo(() => new SavedViews(), []);
@@ -203,12 +207,13 @@ export function IssuesView() {
         title: info.title,
         fields: info.fields,
         group: isOwn ? { iri: info.assigneeGroup, members: info.groupMembers } : EMPTY_GROUP,
+        workflow: info.workflow,
       });
     } catch {
       if (seq !== infoSeq.current) return;
       // Config is optional sugar, but a failed load must still clear whatever
       // the previous project left behind.
-      setTrackerInfo({ tracker: url, fields: [], group: EMPTY_GROUP });
+      setTrackerInfo({ tracker: url, fields: [], group: EMPTY_GROUP, workflow: DEFAULT_WORKFLOW });
     }
   }, [isOwn, tracker.trackerUrl]);
 
@@ -330,6 +335,21 @@ export function IssuesView() {
     () => issues.issues.find((i) => i.url === commentsUrl),
     [issues.issues, commentsUrl],
   );
+  // F3: (re)load the provenance log whenever the open issue or the issue data
+  // (which a mutation refreshes) changes. Stale results are dropped if the dialog
+  // moved on. `issues.issues` is a dependency so a status/assign change re-fetches.
+  // No-URL resolves to [] inside loadActivityLog, so clearing happens off the
+  // async path (no synchronous setState in the effect body).
+  const { activityLog: loadActivityLog } = issues;
+  useEffect(() => {
+    let live = true;
+    void loadActivityLog(commentsUrl ?? "").then((log) => {
+      if (live) setActivity(commentsUrl ? log : []);
+    });
+    return () => {
+      live = false;
+    };
+  }, [commentsUrl, loadActivityLog, issues.issues]);
   const activeFilters = query.priorities.length + query.labels.length + query.assignees.length;
 
   async function run(action: () => Promise<void>, success: string) {
@@ -855,7 +875,7 @@ export function IssuesView() {
             canWrite={issues.canCreate}
             columns={
               groupBy === "status"
-                ? STATUSES.map((s) => ({ key: s.slug, label: s.label }))
+                ? workflow.statuses.map((s) => ({ key: s.slug, label: s.label }))
                 : [
                     { key: "high", label: "High" },
                     { key: "medium", label: "Medium" },
@@ -977,6 +997,7 @@ export function IssuesView() {
         onSubmit={onSubmitForm}
         assigneeSuggestions={assigneeSuggestions}
         fieldDefs={fieldDefs}
+        statuses={workflow.statuses}
       />
 
       <IssueDetailDialog
@@ -987,6 +1008,8 @@ export function IssuesView() {
         people={people}
         groupIri={group.iri}
         fieldDefs={fieldDefs}
+        activity={activity}
+        workflowStatuses={workflow.statuses}
         canComment={!!commentsIssue?.canWrite}
         onUpdate={(patch) => run(() => issues.update(commentsUrl!, patch), "Issue updated")}
         onUpload={(file) => run(() => issues.uploadAttachment(commentsUrl!, file), "File attached")}

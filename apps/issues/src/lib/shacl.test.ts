@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { Store, DataFactory, Parser } from "n3";
 import env from "@zazuko/env-node";
 import SHACLValidator from "rdf-validate-shacl";
-import { Issue, Comment } from "./issue";
+import { Issue, Comment, Tracker, Activity, type WorkflowDef } from "./issue";
 
 const TRACKER = "http://localhost:3000/alice/issue-tracker/tracker.ttl#this";
 const URL_ = "http://localhost:3000/alice/issue-tracker/issues/x.ttl";
@@ -14,6 +14,7 @@ const WF = "http://www.w3.org/2005/01/wf/flow#";
 const DCT = "http://purl.org/dc/terms/";
 const AS = "https://www.w3.org/ns/activitystreams#";
 const PROV = "http://www.w3.org/ns/prov#";
+const RDFS = "http://www.w3.org/2000/01/rdf-schema#";
 
 const shapesTtl = readFileSync("shapes/issue.ttl", "utf8");
 
@@ -252,5 +253,89 @@ describe("SHACL shape (shapes/issue.ttl)", () => {
     const report = await validate(ds);
     expect(report.conforms).toBe(false);
     expect(report.results.some((r) => r.path?.value === `${AS}object`)).toBe(true);
+  });
+
+  it("F1: a tracker with a custom workflow conforms — every state resolves to Open/Closed", async () => {
+    const ds = new Store();
+    const tracker = new Tracker(TRACKER, ds, DataFactory);
+    tracker.configure("Issues");
+    const custom: WorkflowDef = {
+      statuses: [
+        { slug: "backlog", label: "Backlog", terminal: false },
+        { slug: "in-progress", label: "In Progress", terminal: false },
+        { slug: "in-review", label: "In Review", terminal: false },
+        { slug: "done", label: "Done", terminal: true },
+      ],
+      transitions: { backlog: ["in-progress"], "in-progress": ["in-review"], "in-review": ["done"], done: [] },
+    };
+    tracker.defineWorkflow(custom);
+
+    const report = await validate(ds);
+    // Each wf:State subclasses exactly one of wf:Open/wf:Closed, so the State
+    // shape's qualified-exactly-one resolution constraint is satisfied.
+    expect(report.conforms).toBe(true);
+  });
+
+  it("F1: flags a wf:State that resolves to neither wf:Open nor wf:Closed", async () => {
+    // A malformed/foreign status class with no open/closed disposition.
+    const ds = new Store();
+    const state = DataFactory.namedNode(`${TRACKER.replace("#this", "")}#status-orphan`);
+    ds.addQuad(state, DataFactory.namedNode(RDF_TYPE), DataFactory.namedNode(`${RDFS}Class`));
+    ds.addQuad(state, DataFactory.namedNode(RDF_TYPE), DataFactory.namedNode(`${WF}State`));
+    ds.addQuad(state, DataFactory.namedNode(`${RDFS}label`), DataFactory.literal("Orphan"));
+    // No rdfs:subClassOf wf:Open|wf:Closed at all.
+
+    const report = await validate(ds);
+    expect(report.conforms).toBe(false);
+    expect(report.results.some((r) => r.path?.value === `${RDFS}subClassOf`)).toBe(true);
+  });
+
+  it("F1: flags a wf:State that resolves to BOTH wf:Open AND wf:Closed", async () => {
+    const ds = new Store();
+    const state = DataFactory.namedNode(`${TRACKER.replace("#this", "")}#status-both`);
+    ds.addQuad(state, DataFactory.namedNode(RDF_TYPE), DataFactory.namedNode(`${WF}State`));
+    ds.addQuad(state, DataFactory.namedNode(`${RDFS}subClassOf`), DataFactory.namedNode(`${WF}Open`));
+    ds.addQuad(state, DataFactory.namedNode(`${RDFS}subClassOf`), DataFactory.namedNode(`${WF}Closed`));
+
+    const report = await validate(ds);
+    expect(report.conforms).toBe(false);
+    expect(report.results.some((r) => r.path?.value === `${RDFS}subClassOf`)).toBe(true);
+  });
+
+  it("F3: a well-formed prov:Activity log entry conforms", async () => {
+    const ds = new Store();
+    const act = new Activity(`${URL_}#act-1`, ds, DataFactory);
+    act.record({
+      kind: "status",
+      actor: ME,
+      at: new Date("2026-06-10T09:00:00.000Z"),
+      used: `${TRACKER.replace("#this", "")}#status-todo`,
+      generated: `${TRACKER.replace("#this", "")}#status-in-progress`,
+    });
+
+    const report = await validate(ds);
+    expect(report.conforms).toBe(true);
+  });
+
+  it("F3: flags a prov:Activity missing its prov:startedAtTime", async () => {
+    const ds = new Store();
+    const act = DataFactory.namedNode(`${URL_}#act-2`);
+    ds.addQuad(act, DataFactory.namedNode(RDF_TYPE), DataFactory.namedNode(`${PROV}Activity`));
+    ds.addQuad(act, DataFactory.namedNode(`${PROV}wasAssociatedWith`), DataFactory.namedNode(ME));
+    // no prov:startedAtTime
+
+    const report = await validate(ds);
+    expect(report.conforms).toBe(false);
+    expect(report.results.some((r) => r.path?.value === `${PROV}startedAtTime`)).toBe(true);
+  });
+
+  it("F3: flags a prov:Activity actor that is not an http(s) IRI", async () => {
+    const ds = new Store();
+    const act = new Activity(`${URL_}#act-3`, ds, DataFactory);
+    act.record({ kind: "assignment", actor: "urn:agent:bob", at: new Date("2026-06-10T09:00:00.000Z") });
+
+    const report = await validate(ds);
+    expect(report.conforms).toBe(false);
+    expect(report.results.some((r) => r.path?.value === `${PROV}wasAssociatedWith`)).toBe(true);
   });
 });

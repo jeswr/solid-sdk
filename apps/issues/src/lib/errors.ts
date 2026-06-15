@@ -37,3 +37,15 @@ export class NoStorageError extends Error {
     this.name = "NoStorageError";
   }
 }
+
+/** A status change that the tracker's workflow does not permit (F1 transition rule). */
+export class TransitionError extends Error {
+  constructor(
+    public readonly from: string,
+    public readonly to: string,
+    message = `The "${from}" → "${to}" transition is not allowed by this tracker's workflow.`,
+  ) {
+    super(message);
+    this.name = "TransitionError";
+  }
+}

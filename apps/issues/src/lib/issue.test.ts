@@ -1,7 +1,23 @@
 import { describe, it, expect } from "vitest";
 import { Store, DataFactory } from "n3";
-import { Issue, Tracker, STATE, safeHttpUrl, ISSUE_TYPES, typeLevel, canNest, type IssueType } from "./issue";
-import { rdf, wf, dct, prov } from "./vocab";
+import {
+  Issue,
+  Tracker,
+  Activity,
+  ActivityLog,
+  STATE,
+  STATUSES,
+  DEFAULT_WORKFLOW,
+  canTransition,
+  statusState,
+  safeHttpUrl,
+  ISSUE_TYPES,
+  typeLevel,
+  canNest,
+  type IssueType,
+  type WorkflowDef,
+} from "./issue";
+import { rdf, wf, dct, prov, rdfs } from "./vocab";
 
 const IRI = "http://localhost:3000/alice/issue-tracker/issues.ttl#issue-1";
 
@@ -298,6 +314,215 @@ describe("Custom fields", () => {
     expect(def?.options).toEqual([]);
     const skosQuads = [...store].filter((q) => q.predicate.value.includes("skos") || q.object.value.includes("skos"));
     expect(skosQuads).toEqual([]);
+  });
+});
+
+describe("F1: configurable workflows", () => {
+  const DOC = "http://localhost:3000/alice/issue-tracker/tracker.ttl";
+  const TRACKER = `${DOC}#this`;
+  const ISSUE = "http://localhost:3000/alice/issue-tracker/issues/x.ttl#this";
+
+  /** A custom 4-state workflow with a directed transition graph. */
+  const CUSTOM: WorkflowDef = {
+    statuses: [
+      { slug: "backlog", label: "Backlog", terminal: false },
+      { slug: "in-progress", label: "In Progress", terminal: false },
+      { slug: "in-review", label: "In Review", terminal: false },
+      { slug: "done", label: "Done", terminal: true },
+    ],
+    transitions: {
+      backlog: ["in-progress"],
+      "in-progress": ["in-review", "backlog"],
+      "in-review": ["done", "in-progress"],
+      done: [],
+    },
+  };
+
+  function configuredTracker(workflow?: WorkflowDef) {
+    const store = new Store();
+    const tracker = new Tracker(TRACKER, store, DataFactory);
+    tracker.configure("Issues");
+    if (workflow) tracker.defineWorkflow(workflow);
+    return { tracker, store };
+  }
+
+  it("the built-in tracker exposes the default To Do → In Progress → Done workflow", () => {
+    const { tracker } = configuredTracker();
+    const wfDef = tracker.workflow;
+    expect(wfDef.statuses.map((s) => s.slug)).toEqual(["todo", "in-progress", "done"]);
+    expect(wfDef.statuses.find((s) => s.slug === "done")?.terminal).toBe(true);
+    // The first status (initial state) is todo.
+    expect(wfDef.statuses[0].slug).toBe("todo");
+  });
+
+  it("declares a custom workflow with ≥3 states and reads it back faithfully", () => {
+    const { tracker } = configuredTracker(CUSTOM);
+    const wfDef = tracker.workflow;
+    expect(wfDef.statuses.map((s) => s.slug)).toEqual(["backlog", "in-progress", "in-review", "done"]);
+    expect(wfDef.statuses.map((s) => s.label)).toEqual(["Backlog", "In Progress", "In Review", "Done"]);
+    // Initial state is the first declared status.
+    expect(wfDef.statuses[0].slug).toBe("backlog");
+    // Transition edges round-trip.
+    expect(wfDef.transitions["in-review"].sort()).toEqual(["done", "in-progress"]);
+    expect(wfDef.transitions["done"]).toEqual([]);
+  });
+
+  it("every custom state resolves to an open/closed disposition (subclass of wf:Open|wf:Closed)", () => {
+    const { store } = configuredTracker(CUSTOM);
+    for (const s of CUSTOM.statuses) {
+      const iri = `${DOC}#status-${s.slug}`;
+      const supers = [...store.match(DataFactory.namedNode(iri), DataFactory.namedNode(rdfs("subClassOf")))].map(
+        (q) => q.object.value,
+      );
+      // Exactly one of Open / Closed — the SHACL exactly-one rule still holds.
+      const resolution = supers.filter((x) => x === STATE.Open || x === STATE.Closed);
+      expect(resolution).toHaveLength(1);
+      expect(resolution[0]).toBe(s.terminal ? STATE.Closed : STATE.Open);
+      // It is typed wf:State so the workflow reader (and SHACL) find it.
+      const types = [...store.match(DataFactory.namedNode(iri), DataFactory.namedNode(rdf("type")))].map((q) => q.object.value);
+      expect(types).toContain(wf("State"));
+    }
+    // statusState resolves each declared status correctly.
+    expect(statusState(CUSTOM, "backlog")).toBe("open");
+    expect(statusState(CUSTOM, "done")).toBe("closed");
+  });
+
+  it("canTransition respects the declared rules (allowed accepted, others rejected)", () => {
+    expect(canTransition(CUSTOM, "backlog", "in-progress")).toBe(true);
+    expect(canTransition(CUSTOM, "in-review", "done")).toBe(true);
+    // Same status is always allowed (a no-op re-assert).
+    expect(canTransition(CUSTOM, "done", "done")).toBe(true);
+    // Not in the source's allowed set → rejected.
+    expect(canTransition(CUSTOM, "backlog", "done")).toBe(false);
+    expect(canTransition(CUSTOM, "done", "backlog")).toBe(false); // terminal, no outbound
+    // An unknown target is never reachable.
+    expect(canTransition(CUSTOM, "backlog", "nope")).toBe(false);
+  });
+
+  it("redefining a workflow drops statuses that are no longer declared", () => {
+    const { tracker, store } = configuredTracker(CUSTOM);
+    // Redefine to a smaller 3-state set; the old extra status must be removed.
+    const SMALLER: WorkflowDef = {
+      statuses: [
+        { slug: "open", label: "Open", terminal: false },
+        { slug: "doing", label: "Doing", terminal: false },
+        { slug: "shipped", label: "Shipped", terminal: true },
+      ],
+      transitions: { open: ["doing"], doing: ["shipped"], shipped: [] },
+    };
+    tracker.defineWorkflow(SMALLER);
+    expect(tracker.workflow.statuses.map((s) => s.slug)).toEqual(["open", "doing", "shipped"]);
+    // No orphan #status-backlog / #status-in-review left behind.
+    const stale = [...store].filter((q) => q.subject.value.includes("#status-backlog") || q.subject.value.includes("#status-in-review"));
+    expect(stale).toEqual([]);
+  });
+
+  it("an issue reads its status from the #status- class regardless of the workflow", () => {
+    const store = new Store();
+    const issue = new Issue(ISSUE, store, DataFactory);
+    issue.tracker = TRACKER;
+    // Set a custom status with its (terminal=false) resolution.
+    issue.setStatus("in-review", false);
+    expect(issue.status).toBe("in-review");
+    expect(issue.state).toBe("open"); // non-terminal resolves to open
+    // Move to a terminal status: resolves to closed and stamps completion.
+    issue.setStatus("done", true);
+    expect(issue.status).toBe("done");
+    expect(issue.state).toBe("closed");
+    expect(issue.endedAt).toBeInstanceOf(Date);
+    // Setting a status replaces the previous #status- class (never stacks).
+    const statusTypes = [...store.match(DataFactory.namedNode(ISSUE), DataFactory.namedNode(rdf("type")))]
+      .map((q) => q.object.value)
+      .filter((t) => t.includes("#status-"));
+    expect(statusTypes).toEqual([`${DOC}#status-done`]);
+  });
+
+  it("STATUSES stays the default workflow's statuses (back-compat)", () => {
+    expect(STATUSES).toBe(DEFAULT_WORKFLOW.statuses);
+    expect(STATUSES.map((s) => s.slug)).toEqual(["todo", "in-progress", "done"]);
+  });
+});
+
+describe("F3: provenance activity log (prov:Activity)", () => {
+  const PAGE = "http://localhost:3000/alice/issue-tracker/activity/x.ttl";
+  const ME = "http://localhost:3000/alice/profile/card#me";
+  const BOB = "http://localhost:3000/bob/profile/card#me";
+
+  function newActivity(id: string, store: Store) {
+    return new Activity(`${PAGE}#${id}`, store, DataFactory);
+  }
+
+  it("records a status change with actor, timestamp, and prov:used/generated", () => {
+    const store = new Store();
+    const at = new Date("2026-06-10T09:00:00.000Z");
+    const act = newActivity("act-1", store);
+    act.record({
+      kind: "status",
+      actor: ME,
+      at,
+      used: "http://localhost:3000/alice/issue-tracker/tracker.ttl#status-todo",
+      generated: "http://localhost:3000/alice/issue-tracker/tracker.ttl#status-in-progress",
+    });
+
+    expect(act.kind).toBe("status");
+    expect(act.actor).toBe(ME);
+    expect(act.at?.toISOString()).toBe(at.toISOString());
+    expect(act.used).toContain("#status-todo");
+    expect(act.generated).toContain("#status-in-progress");
+
+    // It lands on the exact PROV-O predicates as IRIs / dateTime.
+    const obj = (pred: string) =>
+      [...store.match(DataFactory.namedNode(act.id), DataFactory.namedNode(pred))].map((q) => q.object.value);
+    expect(obj(rdf("type"))).toContain(prov("Activity"));
+    expect(obj(prov("wasAssociatedWith"))).toEqual([ME]);
+    expect(obj(prov("startedAtTime"))).toHaveLength(1);
+    expect(obj(prov("used"))).toHaveLength(1);
+    expect(obj(prov("generated"))).toHaveLength(1);
+  });
+
+  it("records an assignment change (used/generated are WebIDs)", () => {
+    const store = new Store();
+    const act = newActivity("act-2", store);
+    act.record({ kind: "assignment", actor: ME, at: new Date("2026-06-11T00:00:00Z"), used: ME, generated: BOB });
+    expect(act.kind).toBe("assignment");
+    expect(act.used).toBe(ME);
+    expect(act.generated).toBe(BOB);
+  });
+
+  it("omits empty endpoints (first assignment has no prior assignee)", () => {
+    const store = new Store();
+    const act = newActivity("act-3", store);
+    act.record({ kind: "assignment", actor: ME, at: new Date(), generated: BOB });
+    expect(act.used).toBeUndefined();
+    expect(act.generated).toBe(BOB);
+  });
+
+  it("the log is append-only: a new entry never mutates or deletes existing ones", () => {
+    // Simulate a page that already holds one entry, then append a second.
+    const store = new Store();
+    const first = newActivity("act-1", store);
+    first.record({ kind: "status", actor: ME, at: new Date("2026-06-10T09:00:00Z"), generated: "tracker.ttl#status-todo" });
+    const firstQuads = [...store.match(DataFactory.namedNode(first.id))].map((q) => `${q.predicate.value} ${q.object.value}`);
+
+    const second = newActivity("act-2", store);
+    second.record({ kind: "status", actor: BOB, at: new Date("2026-06-11T09:00:00Z"), generated: "tracker.ttl#status-done" });
+
+    // The first entry is byte-for-byte untouched (no predicate added/removed/changed).
+    const firstAfter = [...store.match(DataFactory.namedNode(first.id))].map((q) => `${q.predicate.value} ${q.object.value}`);
+    expect(firstAfter.sort()).toEqual(firstQuads.sort());
+    // Both entries are present.
+    expect(new ActivityLog(store, DataFactory).entries).toHaveLength(2);
+  });
+
+  it("ActivityLog.entries returns entries newest-first", () => {
+    const store = new Store();
+    const older = newActivity("older", store);
+    older.record({ kind: "status", actor: ME, at: new Date("2026-06-10T00:00:00Z"), generated: "x#status-todo" });
+    const newer = newActivity("newer", store);
+    newer.record({ kind: "status", actor: ME, at: new Date("2026-06-12T00:00:00Z"), generated: "x#status-done" });
+
+    const entries = new ActivityLog(store, DataFactory).entries;
+    expect(entries.map((e) => e.id)).toEqual([newer.id, older.id]);
   });
 });
 

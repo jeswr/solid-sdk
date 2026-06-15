@@ -1,13 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Repository, type IssueRecord, type NewIssueInput, type IssuePatch, type SprintRecord } from "@/lib/repository";
+import { Repository, type IssueRecord, type NewIssueInput, type IssuePatch, type SprintRecord, type ActivityRecord } from "@/lib/repository";
 import { watchContainer } from "@/lib/notifications";
 import { ConflictError } from "@/lib/errors";
 import { RdfFetchError } from "@jeswr/fetch-rdf";
 import type { IssueState, StatusSlug } from "@/lib/issue";
 
-export type { IssueRecord, SprintRecord } from "@/lib/repository";
+export type { IssueRecord, SprintRecord, ActivityRecord } from "@/lib/repository";
 
 function describe(e: unknown): string {
   if (e instanceof ConflictError) return e.message;
@@ -41,6 +41,8 @@ export interface UseIssues {
   completeSprint: (sprintIri: string, releaseUrls?: string[]) => Promise<void>;
   /** Apply several operations against one Repository, then refresh once (bulk actions). */
   batch: (fn: (repo: Repository) => Promise<void>) => Promise<void>;
+  /** Read an issue's provenance activity log (F3), newest first. */
+  activityLog: (url: string) => Promise<ActivityRecord[]>;
 }
 
 /** One fetched view of a tracker, tagged with the tracker it came from. */
@@ -89,7 +91,7 @@ export function useIssues(trackerUrl: string | null, creator: string | null): Us
     if (!trackerUrl) return;
     const seq = ++fetchSeq.current;
     try {
-      const repo = new Repository(trackerUrl);
+      const repo = new Repository(trackerUrl, undefined, creator ?? undefined);
       const [{ issues: list, canCreate: cc }, sprintList] = await Promise.all([repo.list(), repo.listSprints()]);
       if (seq !== fetchSeq.current) return; // a newer fetch superseded this one
       setSnapshot({ tracker: trackerUrl, issues: list, sprints: sprintList, canCreate: cc, error: null });
@@ -104,7 +106,7 @@ export function useIssues(trackerUrl: string | null, creator: string | null): Us
     } finally {
       if (seq === fetchSeq.current) setRefreshing(false);
     }
-  }, [trackerUrl]);
+  }, [trackerUrl, creator]);
 
   const refresh = useCallback(async () => {
     if (trackerUrl) setRefreshing(true); // fetchInto no-ops without a tracker
@@ -135,10 +137,20 @@ export function useIssues(trackerUrl: string | null, creator: string | null): Us
   const mutate = useCallback(
     async (apply: (r: Repository) => Promise<unknown>) => {
       if (!trackerUrl) throw new Error("Not signed in.");
-      await apply(new Repository(trackerUrl));
+      await apply(new Repository(trackerUrl, undefined, creator ?? undefined));
       await refresh();
     },
-    [trackerUrl, refresh],
+    [trackerUrl, creator, refresh],
+  );
+
+  // Read-only fetch of an issue's provenance activity log (F3), not part of the
+  // list snapshot — the detail view loads it on demand.
+  const activityLog = useCallback(
+    async (url: string) => {
+      if (!trackerUrl || !url) return [];
+      return new Repository(trackerUrl, undefined, creator ?? undefined).activityLog(url);
+    },
+    [trackerUrl, creator],
   );
 
   return {
@@ -161,5 +173,6 @@ export function useIssues(trackerUrl: string | null, creator: string | null): Us
     startSprint: (sprintIri) => mutate((r) => r.startSprint(sprintIri)),
     completeSprint: (sprintIri, releaseUrls) => mutate((r) => r.completeSprint(sprintIri, releaseUrls)),
     batch: (fn) => mutate(fn),
+    activityLog,
   };
 }

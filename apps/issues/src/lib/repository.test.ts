@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { Repository } from "./repository";
+import { TransitionError } from "./errors";
+import { type WorkflowDef } from "./issue";
 import { fakePod } from "./testing/fake-pod";
 
 const POD = "http://localhost:3000/alice/";
@@ -254,5 +256,119 @@ describe("Repository (per-issue documents)", () => {
         for (const url of [ok, missing]) await repo.update(url, { assignee: `${POD}bob/profile/card#me` });
       })(),
     ).rejects.toBeTruthy();
+  });
+});
+
+describe("F1: configurable workflow (repository)", () => {
+  const CUSTOM: WorkflowDef = {
+    statuses: [
+      { slug: "backlog", label: "Backlog", terminal: false },
+      { slug: "doing", label: "Doing", terminal: false },
+      { slug: "review", label: "In Review", terminal: false },
+      { slug: "shipped", label: "Shipped", terminal: true },
+    ],
+    transitions: { backlog: ["doing"], doing: ["review", "backlog"], review: ["shipped", "doing"], shipped: [] },
+  };
+
+  it("persists a custom workflow to the tracker and reads it back", async () => {
+    const { impl } = fakePod();
+    const repo = new Repository(TRACKER, impl);
+    await repo.ensureTracker();
+    await repo.defineWorkflow(CUSTOM);
+
+    const wfDef = await repo.workflow();
+    expect(wfDef.statuses.map((s) => s.slug)).toEqual(["backlog", "doing", "review", "shipped"]);
+    expect(wfDef.statuses.find((s) => s.slug === "shipped")?.terminal).toBe(true);
+    expect(wfDef.transitions["review"].sort()).toEqual(["doing", "shipped"]);
+  });
+
+  it("allows a permitted transition and rejects a disallowed one", async () => {
+    const { impl } = fakePod();
+    const repo = new Repository(TRACKER, impl, ME);
+    await repo.ensureTracker();
+    await repo.defineWorkflow(CUSTOM);
+    // New issues start in the initial state (backlog) by default.
+    const url = await repo.create({ title: "Ship it", creator: ME, status: "backlog" });
+
+    // backlog → doing is allowed.
+    await repo.setStatus(url, "doing");
+    let { issues } = await repo.list();
+    expect(issues[0].status).toBe("doing");
+
+    // doing → shipped is NOT in the rules — rejected, status unchanged.
+    await expect(repo.setStatus(url, "shipped")).rejects.toBeInstanceOf(TransitionError);
+    ({ issues } = await repo.list());
+    expect(issues[0].status).toBe("doing");
+
+    // Walk the legal path doing → review → shipped.
+    await repo.setStatus(url, "review");
+    await repo.setStatus(url, "shipped");
+    ({ issues } = await repo.list());
+    expect(issues[0].status).toBe("shipped");
+    expect(issues[0].state).toBe("closed"); // terminal resolves to closed
+  });
+});
+
+describe("F3: provenance activity log (repository)", () => {
+  const TRACKER_STATUS = (slug: string) => `${TRACKER}#status-${slug}`;
+
+  it("appends an append-only status-change entry on setStatus", async () => {
+    const { impl } = fakePod();
+    const repo = new Repository(TRACKER, impl, ME);
+    const url = await repo.create({ title: "Track me", creator: ME, status: "todo" });
+
+    await repo.setStatus(url, "in-progress");
+    await repo.setStatus(url, "done");
+
+    const log = await repo.activityLog(url);
+    // Two status transitions recorded (creation default isn't a transition).
+    const statusEntries = log.filter((e) => e.kind === "status");
+    expect(statusEntries).toHaveLength(2);
+    // Newest first: the done transition leads.
+    expect(statusEntries[0].generated).toBe(TRACKER_STATUS("done"));
+    expect(statusEntries[0].used).toBe(TRACKER_STATUS("in-progress"));
+    expect(statusEntries[1].generated).toBe(TRACKER_STATUS("in-progress"));
+    // The actor (the signed-in WebID) is stamped.
+    expect(statusEntries[0].actor).toBe(ME);
+    expect(statusEntries[0].at).toBeInstanceOf(Date);
+  });
+
+  it("records assignment and link changes via update, and is append-only", async () => {
+    const { impl, store } = fakePod();
+    const repo = new Repository(TRACKER, impl, ME);
+    const url = await repo.create({ title: "Assign me", creator: ME });
+    const canonical = await repo.create({ title: "Canonical", creator: ME });
+    const bob = `${POD}bob/profile/card#me`;
+
+    await repo.update(url, { assignee: bob });
+    await repo.update(url, { duplicateOf: canonical });
+
+    const log = await repo.activityLog(url);
+    expect(log.find((e) => e.kind === "assignment")?.generated).toBe(bob);
+    expect(log.find((e) => e.kind === "link")?.generated).toBe(canonical);
+
+    // Append-only: the page document grows (more prov:Activity nodes) but no
+    // existing entry's IRI is reused or removed.
+    const ids = log.map((e) => e.id);
+    expect(new Set(ids).size).toBe(ids.length); // all distinct
+    // A second update appends without dropping the earlier entries.
+    const before = (await repo.activityLog(url)).length;
+    await repo.update(url, { assignee: ME });
+    const after = await repo.activityLog(url);
+    expect(after.length).toBe(before + 1);
+    // Every earlier entry id still present.
+    for (const id of ids) expect(after.some((e) => e.id === id)).toBe(true);
+
+    // The log lives in the sibling activity/ container (capped per-page growth).
+    expect([...store.keys()].some((k) => k.includes("/activity/"))).toBe(true);
+  });
+
+  it("does not record a status entry when the status is unchanged", async () => {
+    const { impl } = fakePod();
+    const repo = new Repository(TRACKER, impl, ME);
+    const url = await repo.create({ title: "Idempotent", creator: ME, status: "todo" });
+    await repo.setStatus(url, "todo"); // no-op transition
+    const log = await repo.activityLog(url);
+    expect(log.filter((e) => e.kind === "status")).toHaveLength(0);
   });
 });

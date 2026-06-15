@@ -2,9 +2,29 @@ import { fetchRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 import { Store, DataFactory, Writer } from "n3";
 import type { DatasetCore } from "@rdfjs/types";
 import { ContainerDataset } from "@solid/object";
-import { Issue, Tracker, Comment, Sprint, SprintsDataset, type FieldDef, type FieldValue, type FieldType, type IssueState, type IssueType, type Priority, type StatusSlug } from "./issue";
-import { wf, rdf } from "./vocab";
-import { ConflictError, WriteError } from "./errors";
+import {
+  Issue,
+  Tracker,
+  Comment,
+  Sprint,
+  SprintsDataset,
+  Activity,
+  ActivityLog,
+  DEFAULT_WORKFLOW,
+  canTransition,
+  statusState,
+  type ActivityKind,
+  type FieldDef,
+  type FieldValue,
+  type FieldType,
+  type IssueState,
+  type IssueType,
+  type Priority,
+  type StatusSlug,
+  type WorkflowDef,
+} from "./issue";
+import { wf, rdf, prov } from "./vocab";
+import { ConflictError, WriteError, TransitionError } from "./errors";
 
 const TRACKER_FRAGMENT = "#this";
 const ISSUE_FRAGMENT = "#this";
@@ -66,6 +86,21 @@ export interface SprintRecord {
   taskUrls: string[];
   /** Points committed to the sprint, snapshotted when it completes. */
   committedPoints?: number;
+}
+
+/** A render-friendly snapshot of one provenance activity-log entry (F3). */
+export interface ActivityRecord {
+  /** The activity node IRI (stable identity for keys). */
+  id: string;
+  kind: ActivityKind;
+  /** Actor WebID (`prov:wasAssociatedWith`), if recorded. */
+  actor?: string;
+  /** When the change happened (`prov:startedAtTime`). */
+  at?: Date;
+  /** Prior value (`prov:used`) — a status-class IRI / WebID / issue IRI. */
+  used?: string;
+  /** New value (`prov:generated`) — a status-class IRI / WebID / issue IRI. */
+  generated?: string;
 }
 
 export interface NewIssueInput {
@@ -187,6 +222,8 @@ export class Repository {
   constructor(
     readonly trackerUrl: string,
     private readonly fetchImpl?: typeof fetch,
+    /** The signed-in user's WebID — stamped as the actor of activity-log entries. */
+    private readonly actor?: string,
   ) {}
 
   get trackerIri(): string {
@@ -194,6 +231,10 @@ export class Repository {
   }
   get containerUrl(): string {
     return new URL("issues/", dirOf(this.trackerUrl)).toString();
+  }
+  /** The sibling `activity/` container holding one paginated log per issue. */
+  get activityContainerUrl(): string {
+    return new URL("activity/", dirOf(this.trackerUrl)).toString();
   }
 
   /** Load the tracker config; a 404 yields an empty, unconfigured tracker. */
@@ -241,7 +282,7 @@ export class Repository {
   }
 
   /** A snapshot of tracker-level config for the UI. */
-  async info(): Promise<{ title?: string; labels: { slug: string; label: string }[]; fields: FieldDef[]; groupMembers: string[]; assigneeGroup?: string }> {
+  async info(): Promise<{ title?: string; labels: { slug: string; label: string }[]; fields: FieldDef[]; groupMembers: string[]; assigneeGroup?: string; workflow: WorkflowDef }> {
     const { tracker } = await this.loadTracker();
     return {
       title: tracker.title,
@@ -249,6 +290,7 @@ export class Repository {
       fields: tracker.fieldDefs,
       groupMembers: tracker.groupMembers,
       assigneeGroup: tracker.assigneeGroup,
+      workflow: tracker.workflow,
     };
   }
 
@@ -377,15 +419,40 @@ export class Repository {
     return url;
   }
 
+  /**
+   * The tracker's configured workflow (F1). A collaborator without tracker-config
+   * access — or a not-yet-configured tracker — falls back to {@link DEFAULT_WORKFLOW},
+   * so status changes and the open/closed resolution always work.
+   */
+  async workflow(): Promise<WorkflowDef> {
+    try {
+      const { tracker } = await this.loadTracker();
+      return tracker.workflow;
+    } catch {
+      return DEFAULT_WORKFLOW;
+    }
+  }
+
+  /** Declare (replacing any existing) a custom workflow on the tracker (F1). */
+  async defineWorkflow(workflow: WorkflowDef): Promise<void> {
+    await this.mutateTracker((dataset) => {
+      new Tracker(this.trackerIri, dataset, DataFactory).defineWorkflow(workflow);
+    });
+  }
+
   async update(url: string, patch: IssuePatch): Promise<void> {
     const labelSlugs = "labels" in patch && patch.labels ? await this.declareLabels(patch.labels) : undefined;
+    const workflow = "status" in patch && patch.status ? await this.workflow() : undefined;
     const { dataset, etag, issue } = await this.openIssue(url);
+    // Snapshot the change-tracked fields BEFORE mutating, so the activity log
+    // records the true before→after (F3).
+    const before = { status: issue.status, assignee: issue.assignee, duplicateOf: issue.duplicateOf };
     if ("title" in patch) issue.title = patch.title;
     if ("description" in patch) issue.description = patch.description;
     if ("assignee" in patch) issue.assignee = patch.assignee;
     if ("dateDue" in patch) issue.dateDue = patch.dateDue;
     if ("priority" in patch) issue.priority = patch.priority;
-    if ("status" in patch && patch.status) issue.status = patch.status;
+    if ("status" in patch && patch.status && workflow) this.applyStatus(issue, patch.status, workflow);
     if ("issueType" in patch && patch.issueType) issue.issueType = patch.issueType;
     if (labelSlugs) issue.labels = labelSlugs;
     if ("parent" in patch) issue.parent = patch.parent;
@@ -409,18 +476,64 @@ export class Repository {
     }
     issue.modified = new Date();
     await this.put(url, dataset, etag);
+
+    // Append provenance for the change-tracked fields (after the issue write
+    // succeeds, so the log never gets ahead of the issue). Best-effort.
+    const now = new Date();
+    if (workflow && "status" in patch && patch.status && before.status !== patch.status) {
+      await this.appendActivity(url, { kind: "status", at: now, used: this.statusClassOf(url, before.status), generated: this.statusClassOf(url, patch.status) });
+    }
+    if ("assignee" in patch && before.assignee !== patch.assignee) {
+      await this.appendActivity(url, { kind: "assignment", at: now, used: before.assignee, generated: patch.assignee });
+    }
+    if ("duplicateOf" in patch && before.duplicateOf !== patch.duplicateOf) {
+      await this.appendActivity(url, { kind: "link", at: now, used: before.duplicateOf, generated: patch.duplicateOf });
+    }
   }
 
   async setState(url: string, state: IssueState): Promise<void> {
-    // Closing/reopening maps onto the workflow: closed ⇒ Done, open ⇒ To Do.
-    await this.setStatus(url, state === "closed" ? "done" : "todo");
+    // Closing/reopening maps onto the workflow: the first terminal status closes,
+    // the first non-terminal status (the initial state) reopens.
+    const workflow = await this.workflow();
+    const target = state === "closed"
+      ? workflow.statuses.find((s) => s.terminal)?.slug
+      : workflow.statuses.find((s) => !s.terminal)?.slug;
+    await this.setStatus(url, target ?? (state === "closed" ? "done" : "todo"));
   }
 
   async setStatus(url: string, status: StatusSlug): Promise<void> {
+    const workflow = await this.workflow();
     const { dataset, etag, issue } = await this.openIssue(url);
-    issue.status = status;
+    const from = issue.status;
+    this.applyStatus(issue, status, workflow);
     issue.modified = new Date();
     await this.put(url, dataset, etag);
+    if (from !== status) {
+      await this.appendActivity(url, {
+        kind: "status",
+        at: new Date(),
+        used: this.statusClassOf(url, from),
+        generated: this.statusClassOf(url, status),
+      });
+    }
+  }
+
+  /** The `#status-<slug>` class IRI of a status, derived from the tracker doc. */
+  private statusClassOf(_issueUrl: string, slug: StatusSlug): string {
+    return `${this.trackerUrl}#status-${slug}`;
+  }
+
+  /**
+   * Apply a status to an issue, enforcing the workflow's transition rules and its
+   * open/closed resolution (terminal ⇒ wf:Closed). A disallowed move throws
+   * {@link TransitionError}; same-status re-asserts are always allowed.
+   */
+  private applyStatus(issue: Issue, status: StatusSlug, workflow: WorkflowDef): void {
+    const from = issue.status;
+    if (from !== status && !canTransition(workflow, from, status)) {
+      throw new TransitionError(from, status);
+    }
+    issue.setStatus(status, statusState(workflow, status) === "closed");
   }
 
   async addComment(url: string, content: string, author?: string, mentions: string[] = []): Promise<void> {
@@ -434,6 +547,98 @@ export class Repository {
     issue.messages.add(comment);
     issue.modified = new Date();
     await this.put(url, dataset, etag);
+  }
+
+  // ---- Provenance activity log (F3): append-only, paginated, one log per issue ----
+
+  /** Max entries per log page before rolling over to a fresh page (caps doc growth). */
+  private static readonly ACTIVITY_PAGE_SIZE = 200;
+
+  /** The stem (`<activity/>/<issue-uuid>`) of an issue's paginated log pages. */
+  private activityStem(issueUrl: string): string {
+    const last = issueUrl.slice(issueUrl.lastIndexOf("/") + 1);
+    const slug = (last.endsWith(".ttl") ? last.slice(0, -4) : last).split("#")[0];
+    return `${this.activityContainerUrl}${slug}`;
+  }
+
+  /** Page document URL: `<stem>.ttl` for page 0, `<stem>.<n>.ttl` thereafter. */
+  private activityPageUrl(stem: string, page: number): string {
+    return page === 0 ? `${stem}.ttl` : `${stem}.${page}.ttl`;
+  }
+
+  /**
+   * Append one provenance entry for `issueUrl` (F3). Strictly append-only: it
+   * reads the current page, adds a NEW `prov:Activity` node (never touching the
+   * existing ones), and conditionally PUTs. When the page is full it rolls over
+   * to a fresh page so no single document grows without bound. Best-effort — a
+   * failure to log never fails the user's primary mutation.
+   */
+  async appendActivity(
+    issueUrl: string,
+    entry: { kind: ActivityKind; at: Date; used?: string; generated?: string },
+  ): Promise<void> {
+    const stem = this.activityStem(issueUrl);
+    try {
+      // Walk to the highest existing page (cheap: stops at the first 404).
+      let page = 0;
+      let current: { dataset: DatasetCore; etag: string | null } | undefined;
+      for (;;) {
+        const pageUrl = this.activityPageUrl(stem, page);
+        try {
+          const { dataset, etag } = await fetchRdf(pageUrl, opts(this.fetchImpl));
+          current = { dataset, etag };
+          page += 1;
+        } catch (e) {
+          if (e instanceof RdfFetchError && e.status === 404) break;
+          throw e;
+        }
+      }
+      page = Math.max(0, page - 1); // the last page that exists (or 0 if none)
+
+      const count = current ? [...current.dataset.match(null, DataFactory.namedNode(rdf("type")), DataFactory.namedNode(prov("Activity")))].length : 0;
+      // Roll over to a new page when the current one is full.
+      const full = current !== undefined && count >= Repository.ACTIVITY_PAGE_SIZE;
+      const targetPage = current === undefined ? 0 : full ? page + 1 : page;
+      const targetUrl = this.activityPageUrl(stem, targetPage);
+      const dataset: DatasetCore = full || current === undefined ? new Store() : current.dataset;
+      const etag = full || current === undefined ? null : current.etag;
+
+      const activity = new Activity(`${targetUrl}#act-${crypto.randomUUID()}`, dataset, DataFactory);
+      activity.record({ kind: entry.kind, actor: this.actor, at: entry.at, used: entry.used, generated: entry.generated });
+      await this.put(targetUrl, dataset, etag);
+    } catch {
+      // Logging is non-critical; swallow so a primary mutation still succeeds.
+    }
+  }
+
+  /**
+   * Read an issue's full activity log (F3), newest first. Reads every page until
+   * a 404. Returns [] for an issue with no log (or an inaccessible one).
+   */
+  async activityLog(issueUrl: string): Promise<ActivityRecord[]> {
+    const stem = this.activityStem(issueUrl);
+    const out: ActivityRecord[] = [];
+    for (let page = 0; ; page++) {
+      const pageUrl = this.activityPageUrl(stem, page);
+      try {
+        const { dataset } = await fetchRdf(pageUrl, opts(this.fetchImpl));
+        for (const entry of new ActivityLog(dataset, DataFactory).entries) {
+          out.push({
+            id: entry.id,
+            kind: entry.kind ?? "status",
+            actor: entry.actor,
+            at: entry.at,
+            used: entry.used,
+            generated: entry.generated,
+          });
+        }
+      } catch (e) {
+        if (e instanceof RdfFetchError && e.status === 404) break;
+        // An access error (401/403) or any other failure: stop, return what we have.
+        break;
+      }
+    }
+    return out.sort((a, b) => (b.at?.getTime() ?? 0) - (a.at?.getTime() ?? 0));
   }
 
   // ---- Sprints (schema:Event fragments in tracker.ttl; membership via wf:task) ----
