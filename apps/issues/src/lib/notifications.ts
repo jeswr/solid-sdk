@@ -3,16 +3,29 @@
  * with a polling fallback for servers that don't advertise a channel. Notifications
  * are optional: we probe, and degrade gracefully (solid-notifications skill).
  *
+ * The subscription endpoint is discovered from the server's **storage
+ * description** (F10, pss-76p, `notification-discovery.ts`) — NOT a hard-coded
+ * CSS path — so live-sync works against ANY conformant Solid server. A server
+ * that advertises no WebSocketChannel2023 falls through to polling.
+ *
  * `fetch` here is the @solid/reactive-authentication-patched global, so the
  * subscription POST is authenticated; the `wss://` socket carries its own token.
  */
 
-const CHANNEL_TYPE = "http://www.w3.org/ns/solid/notification#WebSocketChannel2023";
+import { discoverWebSocketSubscriptionEndpoint, WEBSOCKET_CHANNEL_TYPE } from "./notification-discovery";
+
 const CONTEXT = "https://www.w3.org/ns/solid/notifications-context/v1";
 
-/** The JSON-LD body to POST to a WebSocketChannel2023 subscription service. */
+/**
+ * The JSON-LD body to POST to a WebSocketChannel2023 subscription service.
+ * The `type` MUST be the SAME channel-type IRI discovery matched on
+ * (`WEBSOCKET_CHANNEL_TYPE`, the plural `notify:` namespace) — a conforming
+ * server discovered via its storage description rejects a subscription whose
+ * `type` is in the wrong namespace, so we reuse the exported constant rather
+ * than a separate string that could drift.
+ */
 export function subscriptionRequest(topic: string): string {
-  return JSON.stringify({ "@context": CONTEXT, type: CHANNEL_TYPE, topic });
+  return JSON.stringify({ "@context": CONTEXT, type: WEBSOCKET_CHANNEL_TYPE, topic });
 }
 
 /** The changed resource URL from a notification ActivityStreams object, if any. */
@@ -47,10 +60,15 @@ export function watchContainer(containerUrl: string, onChange: () => void, doFet
 
   (async () => {
     try {
-      const origin = new URL(containerUrl).origin;
-      // CSS exposes the WebSocketChannel2023 service at a fixed path; other servers
-      // would need Link/storageDescription discovery (falls through to polling).
-      const service = new URL("/.notifications/WebSocketChannel2023/", origin).toString();
+      // Server-agnostic: discover the WebSocketChannel2023 subscription endpoint
+      // from the server's storage description (F10). No advertised channel ⇒
+      // poll. This replaces the old hard-coded CSS `/.notifications/…` path.
+      const service = await discoverWebSocketSubscriptionEndpoint(containerUrl, doFetch);
+      if (closed) return;
+      if (!service) {
+        startPolling();
+        return;
+      }
       const res = await doFetch(service, {
         method: "POST",
         headers: { "content-type": "application/ld+json" },
