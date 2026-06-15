@@ -1,0 +1,65 @@
+{
+  "name": "@solid/agent-notify",
+  "version": "0.1.0",
+  "description": "SSRF-hardened cross-pod Linked Data Notifications (LDN) for Solid: discover an agent's ldp:inbox, POST an ActivityStreams 2.0 notification, and read an inbox — every outbound dereference forced through a single DNS-pinned, redirect-revalidating egress chokepoint.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Jesse Wright <jwrightwho@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jeswr/solid-agent-notify.git"
+  },
+  "bugs": {
+    "url": "https://github.com/jeswr/solid-agent-notify/issues"
+  },
+  "homepage": "https://github.com/jeswr/solid-agent-notify#readme",
+  "keywords": [
+    "solid",
+    "ldn",
+    "linked-data-notifications",
+    "activitystreams",
+    "inbox",
+    "ssrf",
+    "dns-pinning",
+    "rdf",
+    "federation"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "README.md", "LICENSE"],
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "prepare": "npm run build",
+    "lint": "biome check .",
+    "format": "biome format --write .",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "check:fetch": "node scripts/check-no-raw-fetch.mjs"
+  },
+  "dependencies": {
+    "@jeswr/fetch-rdf": "^0.1.0",
+    "@rdfjs/wrapper": "^0.34.0",
+    "@solid/object": "^0.6.0",
+    "n3": "^2.0.3",
+    "undici": "^7.27.2"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@rdfjs/types": "^2.0.1",
+    "@types/n3": "^1.26.1",
+    "@types/node": "^20.0.0",
+    "@vitest/coverage-v8": "^4.1.8",
+    "typescript": "^5.6.0",
+    "vitest": "^4.1.8"
+  }
+}
