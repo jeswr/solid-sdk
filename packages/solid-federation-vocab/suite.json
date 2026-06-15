@@ -1,18 +1,20 @@
 {
-  "$schema": "https://solid.example/suite-tracking/suite.schema.json",
+  "$schema": "https://raw.githubusercontent.com/jeswr/full-solid-ecosystem/main/tracking/schema/suite.schema.json",
   "id": "solid-federation-vocab",
-  "kind": "spec",
+  "kind": "vocab",
   "name": "Solid Federation Vocabulary",
   "repo": "https://github.com/jeswr/solid-federation-vocab",
   "category": "infrastructure",
   "maturity": "prototype",
   "visibility": "public",
   "stack": {
-    "rdf": "n3 ^1.x",
+    "vocab": "fedapp: app-registration + shared task/issue terms under https://w3id.org/jeswr",
+    "rdf": "n3 ^1.x, jsonld",
     "rdf-wrapper": "@rdfjs/wrapper ^0.x",
     "solid-object": "@solid/object ^0.6.x",
     "fetch-rdf": "@jeswr/fetch-rdf ^0.1.x",
     "node": ">=22"
   },
-  "dependsOn": []
+  "dependsOn": [],
+  "federation": null
 }
