@@ -88,6 +88,41 @@ export async function writeResource(
 }
 
 /**
+ * Idempotently make sure an LDP container exists. Most modern Solid servers
+ * (CSS / ESS / PSS) auto-create intermediate containers on a resource PUT, but
+ * some (and fresh-pod configurations) do not — so before the first write under
+ * a container we create it explicitly: a PUT with the LDP BasicContainer
+ * `Link` header and an empty body.
+ *
+ * Tolerant by design — a server that has the container already (or 409/405s a
+ * re-PUT, or already auto-created it) is the desired end state, not an error;
+ * only an auth/other failure that would also block the item write propagates.
+ *
+ * @param containerUrl - the container URL (must end in `/`).
+ * @param fetchImpl - test-only override; **omit in production** so auth runs.
+ */
+export async function ensureContainer(
+  containerUrl: string,
+  fetchImpl?: typeof fetch,
+): Promise<void> {
+  const url = containerUrl.endsWith('/') ? containerUrl : `${containerUrl}/`;
+  const init: RequestInit = {
+    method: 'PUT',
+    headers: {
+      'content-type': 'text/turtle',
+      link: '<http://www.w3.org/ns/ldp#BasicContainer>; rel="type"',
+    },
+    body: '',
+  };
+  const res = fetchImpl ? await fetchImpl(url, init) : await fetch(url, init);
+  // Created (2xx), already present, or a server that disallows PUT-on-container
+  // (405) / reports a conflict (409) all mean "the container is/▸will be there";
+  // a genuine auth/other failure surfaces on the subsequent item write.
+  if (res.ok || res.status === 405 || res.status === 409 || res.status === 412) return;
+  throw new ResourceWriteError(url, res.status);
+}
+
+/**
  * Read a single RDF resource and keep its ETag for a later conditional write.
  * A thin pass-through over `freshRdf` so app modules never import it directly.
  * Errors propagate as `RdfFetchError` (branch on `.status`; 404 = not found).

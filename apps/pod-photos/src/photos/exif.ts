@@ -82,19 +82,29 @@ function nonEmpty(s: unknown): string | undefined {
  * date part) to an ISO-8601 string. Returns `undefined` for anything that
  * doesn't match the EXIF grammar or isn't a real calendar instant.
  *
- * EXIF carries no timezone, so the wall-clock components are interpreted as
- * UTC (the only deterministic, machine-independent choice — a local-time read
- * would make the result depend on the runner's `TZ`). Already-ISO input
- * (`YYYY-MM-DDTHH:MM:SS`, with or without an offset) is accepted too, so a
- * caller that pre-normalised loses nothing.
+ * The bare EXIF colon form carries NO timezone, so its wall-clock components
+ * are interpreted as UTC (the only deterministic, machine-independent choice —
+ * a local-time read would make the result depend on the runner's `TZ`).
+ *
+ * An ISO-8601 input that DOES carry a timezone (`…Z` or `±HH:MM`) is honoured:
+ * its offset is applied (so `2026-06-15T09:41:07+02:00` → `…07:41:07.000Z`),
+ * never silently dropped. An offset-less ISO input is, like EXIF, read as UTC.
  */
 export function exifDateToIso(input: string | undefined): string | undefined {
   const s = nonEmpty(input);
   if (!s) return undefined;
-  // Pull the six wall-clock components from either the EXIF colon form
-  // ("2026:06:15 09:41:07") or a strict ISO date-time ("2026-06-15T09:41:07…").
+
+  // An ISO date-time WITH an explicit zone designator: parse the whole string
+  // so the offset is applied, then validate it is a real instant.
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(s)) {
+    const d = new Date(s);
+    return Number.isNaN(d.getTime()) ? undefined : d.toISOString();
+  }
+
+  // Otherwise pull the six wall-clock components from the EXIF colon form
+  // ("2026:06:15 09:41:07") or an offset-less ISO date-time ("…T09:41:07").
   const exif = /^(\d{4}):(\d{2}):(\d{2})[ T](\d{2}):(\d{2}):(\d{2})$/.exec(s);
-  const iso = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/.exec(s);
+  const iso = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})$/.exec(s);
   const m = exif ?? iso;
   if (!m) return undefined;
   const [year, month, day, hour, min, sec] = m.slice(1).map(Number) as [
@@ -136,30 +146,38 @@ export interface ExifGpsDms {
 /**
  * Convert an EXIF sexagesimal GPS coordinate (degrees/minutes/seconds + a
  * hemisphere ref) to signed decimal degrees. Returns `undefined` for a
- * mismatched/invalid component (a negative minute, a ref that doesn't belong to
- * the axis is the caller's concern — here we only require finite, non-negative
- * d/m/s).
+ * malformed component: a non-finite or negative value, or a sexagesimal
+ * minute/second outside `[0, 60)` (a corrupt EXIF tag). The ref↔axis match
+ * (latitude must be N/S, longitude E/W) is enforced by {@link geoPointFromExif}
+ * which knows the axis; this function trusts the supplied sign.
  */
 export function dmsToDecimal(dms: ExifGpsDms): number | undefined {
   const { degrees, minutes, seconds, ref } = dms;
   for (const v of [degrees, minutes, seconds]) {
     if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) return undefined;
   }
+  // Minutes and seconds are sexagesimal: a value ≥ 60 is a corrupt tag, never a
+  // valid coordinate (it would over-count into the next degree).
+  if (minutes >= 60 || seconds >= 60) return undefined;
   const magnitude = degrees + minutes / 60 + seconds / 3600;
   const sign = ref === 'S' || ref === 'W' ? -1 : 1;
   return sign * magnitude;
 }
 
 /**
- * Build a {@link GeoPoint} from EXIF latitude/longitude DMS pairs, validating
- * that the decimal result is within the legal range (|lat| ≤ 90, |long| ≤ 180).
- * Returns `undefined` if either coordinate is missing or out of range.
+ * Build a {@link GeoPoint} from EXIF latitude/longitude DMS pairs. Rejects:
+ * a missing/malformed component, a ref on the wrong axis (latitude must carry
+ * `N`/`S`, longitude `E`/`W` — a mismatched ref is corrupt EXIF), or a decimal
+ * result outside the legal range (|lat| ≤ 90, |long| ≤ 180).
  */
 export function geoPointFromExif(
   lat: ExifGpsDms | undefined,
   long: ExifGpsDms | undefined,
 ): GeoPoint | undefined {
   if (!lat || !long) return undefined;
+  // The hemisphere ref must belong to the coordinate's axis.
+  if (lat.ref !== 'N' && lat.ref !== 'S') return undefined;
+  if (long.ref !== 'E' && long.ref !== 'W') return undefined;
   const dLat = dmsToDecimal(lat);
   const dLong = dmsToDecimal(long);
   if (dLat === undefined || dLong === undefined) return undefined;

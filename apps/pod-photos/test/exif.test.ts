@@ -17,8 +17,28 @@ describe('exifDateToIso', () => {
     expect(exifDateToIso('2026:06:15T09:41:07')).toBe('2026-06-15T09:41:07.000Z');
   });
 
-  it('accepts an already-ISO string', () => {
+  it('accepts an already-ISO UTC string', () => {
     expect(exifDateToIso('2026-06-15T09:41:07Z')).toBe('2026-06-15T09:41:07.000Z');
+  });
+
+  it('applies a positive timezone offset (not silently dropped)', () => {
+    expect(exifDateToIso('2026-06-15T09:41:07+02:00')).toBe('2026-06-15T07:41:07.000Z');
+  });
+
+  it('applies a negative timezone offset', () => {
+    expect(exifDateToIso('2026-06-15T09:41:07-05:00')).toBe('2026-06-15T14:41:07.000Z');
+  });
+
+  it('honours fractional seconds with a zone', () => {
+    expect(exifDateToIso('2026-06-15T09:41:07.250Z')).toBe('2026-06-15T09:41:07.250Z');
+  });
+
+  it('reads an offset-less ISO string as UTC', () => {
+    expect(exifDateToIso('2026-06-15T09:41:07')).toBe('2026-06-15T09:41:07.000Z');
+  });
+
+  it('rejects a zoned ISO string that is not a real instant', () => {
+    expect(exifDateToIso('2026-13-15T09:41:07Z')).toBeUndefined();
   });
 
   it('returns undefined for undefined / empty / whitespace', () => {
@@ -67,6 +87,15 @@ describe('dmsToDecimal', () => {
   it('returns undefined for a non-finite component', () => {
     expect(dmsToDecimal({ degrees: Number.NaN, minutes: 0, seconds: 0, ref: 'N' })).toBeUndefined();
   });
+
+  it('rejects sexagesimal minutes / seconds at or above 60 (corrupt tag)', () => {
+    expect(dmsToDecimal({ degrees: 1, minutes: 60, seconds: 0, ref: 'N' })).toBeUndefined();
+    expect(dmsToDecimal({ degrees: 1, minutes: 0, seconds: 60, ref: 'N' })).toBeUndefined();
+  });
+
+  it('accepts minutes / seconds just below 60', () => {
+    expect(dmsToDecimal({ degrees: 0, minutes: 59, seconds: 59, ref: 'E' })).toBeGreaterThan(0);
+  });
 });
 
 describe('geoPointFromExif', () => {
@@ -97,6 +126,18 @@ describe('geoPointFromExif', () => {
   it('rejects an out-of-range longitude', () => {
     expect(
       geoPointFromExif(lat, { degrees: 200, minutes: 0, seconds: 0, ref: 'E' }),
+    ).toBeUndefined();
+  });
+
+  it('rejects a latitude carrying a longitude ref (wrong axis)', () => {
+    expect(
+      geoPointFromExif({ degrees: 51, minutes: 30, seconds: 0, ref: 'E' }, long),
+    ).toBeUndefined();
+  });
+
+  it('rejects a longitude carrying a latitude ref (wrong axis)', () => {
+    expect(
+      geoPointFromExif(lat, { degrees: 0, minutes: 7, seconds: 12, ref: 'N' }),
     ).toBeUndefined();
   });
 });

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { ResourceDeleteError, ResourceWriteError } from '../src/pod/errors.js';
 import {
   deleteResource,
+  ensureContainer,
   freshRdf,
   nameFromUrl,
   readResource,
@@ -87,6 +88,36 @@ describe('deleteResource', () => {
     const failing: typeof fetch = async () => new Response(null, { status: 500 });
     await expect(deleteResource('https://x.example/a.ttl', failing)).rejects.toBeInstanceOf(
       ResourceDeleteError,
+    );
+  });
+});
+
+describe('ensureContainer', () => {
+  it('PUTs the container with a BasicContainer Link header (normalising the slash)', async () => {
+    const seen: { url: string; link: string | null }[] = [];
+    const recording: typeof fetch = async (input, init) => {
+      seen.push({
+        url: typeof input === 'string' ? input : input.toString(),
+        link: new Headers(init?.headers).get('link'),
+      });
+      return new Response(null, { status: 201 });
+    };
+    await ensureContainer('https://x.example/photos', recording);
+    expect(seen[0]?.url).toBe('https://x.example/photos/');
+    expect(seen[0]?.link).toContain('BasicContainer');
+  });
+
+  for (const status of [200, 201, 205, 405, 409, 412]) {
+    it(`tolerates a ${status} response (container is/▸will be present)`, async () => {
+      const respond: typeof fetch = async () => new Response(null, { status });
+      await expect(ensureContainer('https://x.example/photos/', respond)).resolves.toBeUndefined();
+    });
+  }
+
+  it('throws ResourceWriteError on a genuine failure (e.g. 403)', async () => {
+    const forbidden: typeof fetch = async () => new Response('no', { status: 403 });
+    await expect(ensureContainer('https://x.example/photos/', forbidden)).rejects.toBeInstanceOf(
+      ResourceWriteError,
     );
   });
 });

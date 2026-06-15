@@ -57,6 +57,21 @@ describe('photosStore CRUD', () => {
     await expect(store.read(url)).rejects.toBeInstanceOf(RdfFetchError);
   });
 
+  it('ensures the container exists before the first write (fresh-pod safety)', async () => {
+    const pod = new MockPod();
+    seedProfile(pod);
+    const seenPuts: string[] = [];
+    const tracking: typeof fetch = async (input, init) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if ((init?.method ?? 'GET').toUpperCase() === 'PUT') seenPuts.push(url);
+      return pod.fetch(input, init);
+    };
+    const store = photosStore({ podRoot: POD, webId: WEBID, fetchImpl: tracking });
+    await store.create(PHOTO);
+    // A PUT to the container URL itself happened (ensureContainer) before items.
+    expect(seenPuts).toContain(`${POD}photos/`);
+  });
+
   it('updates an in-scope item without an etag (unconditional PUT)', async () => {
     const pod = new MockPod();
     seedProfile(pod);

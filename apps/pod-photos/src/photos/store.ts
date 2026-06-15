@@ -18,7 +18,13 @@ import type { DatasetCore } from '@rdfjs/types';
 import type { Store } from 'n3';
 import { listContainer } from '../pod/container.js';
 import { OutOfScopeError } from '../pod/errors.js';
-import { deleteResource, readResource, toSlug, writeResource } from '../pod/rdf.js';
+import {
+  deleteResource,
+  ensureContainer,
+  readResource,
+  toSlug,
+  writeResource,
+} from '../pod/rdf.js';
 import { ensureTypeRegistrations } from '../pod/type-index.js';
 
 /** A stored item as the UI consumes it: a stable `url`, its `etag`, the payload. */
@@ -152,11 +158,13 @@ export class PodStore<T> {
   }
 
   /**
-   * Create a new item. Registers the container in the Type Index on first use
-   * (idempotent), then writes the resource create-only so a colliding URL is
-   * never silently overwritten.
+   * Create a new item. Makes sure this app's container exists (for servers that
+   * don't auto-create it on PUT) and registers it in the Type Index on first
+   * use (both idempotent), then writes the resource create-only so a colliding
+   * URL is never silently overwritten.
    */
   async create(data: T, slugHint?: string): Promise<{ url: string; etag: string | null }> {
+    await ensureContainer(this.containerUrl, this.fetchImpl);
     await this.ensureRegistered();
     const url = this.newItemUrl(slugHint);
     const dataset = this.cfg.build(url, data);

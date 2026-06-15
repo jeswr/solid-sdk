@@ -74,6 +74,7 @@ export { OutOfScopeError, ResourceDeleteError, ResourceWriteError } from './pod/
 export type { WriteResourceOptions } from './pod/rdf.js';
 export {
   deleteResource,
+  ensureContainer,
   freshRdf,
   nameFromUrl,
   readResource,
