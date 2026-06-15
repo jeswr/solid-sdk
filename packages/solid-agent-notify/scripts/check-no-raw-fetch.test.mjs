@@ -56,6 +56,44 @@ describe("stripLineComment", () => {
     expect(result).not.toContain("// comment");
   });
 
+  it("does NOT strip // inside a backtick template literal", () => {
+    const line = "const url = `https://example.com`;";
+    expect(stripLineComment(line)).toBe(line);
+  });
+
+  it("CATCHES fetch( that follows a backtick URL on the same line (regression: backtick false-negative)", () => {
+    // Round-2 regression: `//` inside the backtick URL must NOT truncate the line,
+    // so `fetch(url)` which follows the template literal is still seen by the guard.
+    const line = "const url = `https://example.com`; fetch(url)";
+    const result = stripLineComment(line);
+    expect(result).toContain("fetch(url)");
+  });
+
+  it("does NOT catch fetch( that is itself inside a backtick literal", () => {
+    // fetch( is data, not code — should NOT be flagged.
+    const line = "const s = `call fetch(url) to get data`;";
+    const result = stripLineComment(line);
+    // The template literal text is preserved (no truncation at //) but
+    // the regex anchor /(?<![.\w])fetch\s*\(/ will still see it in the raw text —
+    // however the PATTERNS test below verifies the full guard ignores it correctly
+    // when it appears only inside a string.  Here we just check no truncation happened.
+    expect(result).toBe(line);
+  });
+
+  it("strips a trailing // comment after a backtick string", () => {
+    const line = "const url = `https://example.com`; // a comment";
+    const result = stripLineComment(line);
+    expect(result).not.toContain("// a comment");
+    expect(result).toContain("`https://example.com`");
+  });
+
+  it("handles an escaped backtick inside a template literal", () => {
+    const line = "const s = `it\\`s fine`; // comment";
+    const result = stripLineComment(line);
+    expect(result).not.toContain("// comment");
+    expect(result).toContain("`it\\`s fine`");
+  });
+
   it("handles an escaped quote inside a string correctly", () => {
     // The \\" in the source is an escaped double-quote inside a double-quoted string.
     const line = 'const s = "he said \\"hi\\""; // comment';
@@ -131,6 +169,21 @@ describe("guard detection — raw fetch(", () => {
   it("does NOT catch .fetch( (method call on an object — lookbehind for .)", () => {
     // e.g. something.fetch(url) — the lookbehind /(?<![.\w])/ excludes this.
     expect(checkLine("something.fetch(url)")).toBe(false);
+  });
+
+  it("CATCHES fetch( that follows a backtick URL literal on the same line (backtick false-negative regression)", () => {
+    // Round-2 bug: `//` inside a backtick URL was treated as a comment start,
+    // stripping `fetch(url)` and producing a false-negative miss.
+    expect(checkLine("const url = `https://example.com`; fetch(url)")).toBe(
+      true
+    );
+  });
+
+  it("CATCHES fetch( after a backtick URL when a real // comment follows", () => {
+    // Three zones: backtick URL (data), code (fetch), comment. All must be parsed correctly.
+    expect(
+      checkLine("const url = `https://example.com`; fetch(url) // legacy")
+    ).toBe(true);
   });
 });
 

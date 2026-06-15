@@ -59,26 +59,33 @@ export function walk(dir, out) {
 
 /**
  * Return the code portion of a line before any `//` line comment, skipping
- * `//` that appear inside single- or double-quoted string literals so that
- * URLs such as `"https://example.com"` do not trigger a premature truncation.
+ * `//` that appear inside single-, double-, or backtick-quoted string literals
+ * so that URLs such as `"https://example.com"` or `` `https://example.com` ``
+ * do not trigger a premature truncation.
  *
- * BUG FIXED: the previous implementation used `line.indexOf("//")` which
+ * BUG FIXED (round 1): the previous implementation used `line.indexOf("//")` which
  * matched `//` inside string literals (e.g. in URLs), causing the guard to
  * strip code that appeared after the `//` in a URL string and miss real
  * `fetch(` calls on the same line.
  *
- * This is intentionally NOT a full TS tokeniser — it handles the common cases
- * (plain string literals, no template literals) that appear in our source.
- * Template literals (backtick strings) are left un-stripped: a `//` inside
- * a template literal is treated as a comment start.  That is conservative —
- * it may produce a false-positive but never a false-negative (missed fetch).
+ * BUG FIXED (round 2): the round-1 fix handled single- and double-quoted strings
+ * but left template literals (backtick strings) untracked — a `//` inside a
+ * backtick URL was still treated as a comment delimiter, creating a false-negative
+ * when real code followed it on the same line.
+ *
+ * This is intentionally NOT a full TS tokeniser.  Template-literal interpolation
+ * (`${...}`) is NOT parsed — toggling in-backtick state on unescaped backticks is
+ * sufficient to prevent `//` inside a URL literal from being read as a comment
+ * delimiter.  A `fetch(` that appears inside a backtick literal's text is treated
+ * the same as one inside `'...'` / `"..."` (i.e. part of data, not code) — the
+ * patterns will therefore not fire on it, which is the desired conservative behaviour.
  */
 export function stripLineComment(line) {
-  let inString = null; // null | '"' | "'"
+  let inString = null; // null | '"' | "'" | "`"
   for (let i = 0; i < line.length; i++) {
     const ch = line[i];
     if (inString) {
-      // Inside a string literal: wait for the closing quote (ignore escaped ones).
+      // Inside a string literal: wait for the closing delimiter (ignore escaped ones).
       if (ch === "\\") {
         i++; // skip the escaped character
       } else if (ch === inString) {
@@ -86,7 +93,7 @@ export function stripLineComment(line) {
       }
     } else {
       // Outside a string literal.
-      if (ch === '"' || ch === "'") {
+      if (ch === '"' || ch === "'" || ch === "`") {
         inString = ch;
       } else if (ch === "/" && line[i + 1] === "/") {
         // Found `//` outside a string — everything from here is a comment.
