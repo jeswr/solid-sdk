@@ -1,0 +1,12 @@
+# roborev config — mirrors the solid-app-suite master shape.
+# Code is reviewed by a non-Anthropic model (codex) so it is never reviewed
+# only by the family that wrote it. review_min_severity = "low" surfaces every
+# finding; address each (fix / track / close-with-reason) before merging.
+
+agent = "codex"
+model = "gpt-5.5"
+
+review_min_severity = "low"
+
+reuse_review_session = true
+reuse_review_session_lookback = 5

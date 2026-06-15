@@ -1,0 +1,52 @@
+{
+  "name": "@jeswr/pod-mail",
+  "version": "0.0.1",
+  "description": "Pod Mail — a Solid-native mail data layer. Typed RDF model for messages, threads and folders stored in a Solid pod (schema:EmailMessage / SIOC). Experimental, AI-agent-generated.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Jesse Wright (PSS agent, Claude Opus 4.8)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jeswr/pod-mail.git"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "public/clientid.jsonld"
+  ],
+  "scripts": {
+    "lint": "biome check src test",
+    "lint:fix": "biome check --write src test",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "coverage": "vitest run --coverage",
+    "build": "tsc -p tsconfig.build.json",
+    "gate": "npm run lint && npm run typecheck && npm run coverage && npm run build"
+  },
+  "dependencies": {
+    "@jeswr/fetch-rdf": "^0.1.0",
+    "@rdfjs/wrapper": "^0.34.0",
+    "@solid/object": "^0.6.0",
+    "n3": "^2.0.3"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.0.0",
+    "@rdfjs/types": "^2.0.1",
+    "@types/n3": "^1.21.1",
+    "@types/node": "^22.0.0",
+    "@vitest/coverage-v8": "^4.0.0",
+    "typescript": "^5.6.0",
+    "vitest": "^4.0.0"
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "@context": [
+    "https://www.w3.org/ns/solid/oidc-context.jsonld",
+    {
+      "fedapp": "https://w3id.org/jeswr/fed#",
+      "schema": "http://schema.org/"
+    }
+  ],
+  "client_id": "https://mail.solid-test.jeswr.org/clientid.jsonld",
+  "client_name": "Pod Mail",
+  "client_uri": "https://mail.solid-test.jeswr.org/",
+  "redirect_uris": ["https://mail.solid-test.jeswr.org/callback.html"],
+  "scope": "openid webid offline_access",
+  "grant_types": ["authorization_code", "refresh_token"],
+  "response_types": ["code"],
+  "token_endpoint_auth_method": "none",
+
+  "fedapp:sector": [{ "@id": "fedapp:social" }, { "@id": "fedapp:productivity" }],
+  "fedapp:consumes": [
+    { "@id": "schema:EmailMessage" },
+    { "@id": "schema:Conversation" },
+    { "@id": "schema:ContactPoint" }
+  ],
+  "fedapp:produces": [
+    { "@id": "schema:EmailMessage" },
+    { "@id": "schema:Conversation" },
+    { "@id": "schema:Collection" }
+  ],
+  "fedapp:access": ["Read", "Append", "Write"],
+  "fedapp:membershipTodo": "TODO(O1-gated): https://w3id.org/jeswr/fed does not yet resolve (404 as of 2026-06-15); the fedapp: IRIs above are the intended targets per the suite tracking README. Replace/confirm once the namespace is frozen and the registry engine ships. Membership is asserted by the registry after a signed challenge — not self-asserted here."
+}

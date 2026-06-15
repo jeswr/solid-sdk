@@ -1,0 +1,26 @@
+{
+  "$schema": "https://solid.example/suite-tracking/suite.schema.json",
+  "id": "pod-mail",
+  "kind": "app",
+  "name": "Pod Mail",
+  "repo": "https://github.com/jeswr/pod-mail",
+  "category": "social",
+  "maturity": "prototype",
+  "visibility": "public",
+  "stack": {
+    "runtime": "Node >=20",
+    "language": "TypeScript",
+    "rdf": "@jeswr/fetch-rdf + @solid/object + @rdfjs/wrapper + n3",
+    "test": "vitest (v8 coverage)",
+    "lint": "biome"
+  },
+  "dependsOn": [],
+  "federation": {
+    "clientIdUrl": "https://mail.solid-test.jeswr.org/clientid.jsonld",
+    "sectors": ["social", "productivity"],
+    "accessModes": ["Read", "Append", "Write"],
+    "consumes": ["social", "productivity"],
+    "produces": ["social", "productivity"],
+    "membershipTodo": "TODO(O1-gated): declare fedapp:memberOf once the fedapp: namespace (https://w3id.org/jeswr/fed) is frozen and the registry engine ships. The clientid.jsonld already carries an interim fedapp: block; confirm/replace the IRIs at that point. Membership is the registry's call after a signed challenge — not self-asserted."
+  }
+}
