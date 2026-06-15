@@ -192,9 +192,13 @@ export interface FlowPoint {
 
 /**
  * Two-band cumulative flow from creation and completion stamps: per day, how
- * many issues existed (split open vs done). The pod records no per-status
- * transition history, so there is no in-progress band — the open/done gap is
- * the WIP. Spans first creation → today, clamped to `maxDays`.
+ * many issues existed (split open vs done) — the open/done gap is the WIP. This
+ * snapshot operates on the loaded {@link IssueRecord}s, which carry only the
+ * creation and completion timestamps, so it has no in-progress band. The F3
+ * provenance log (`prov:Activity`, see `Repository.activityLog`) now records
+ * per-status transitions, which a future three-band CFD can replay to split the
+ * in-progress band out — that consumer is tracked separately (it needs to fan out
+ * a log read per issue). Spans first creation → today, clamped to `maxDays`.
  */
 export function computeCumulativeFlow(issues: IssueRecord[], now = new Date(), maxDays = 56): FlowPoint[] {
   const dated = issues.filter((i) => i.created !== undefined);
@@ -237,6 +241,8 @@ export function computeVelocity(sprints: SprintRecord[], issues: IssueRecord[]):
       const pts = (list: IssueRecord[]) => list.reduce((sum, i) => sum + (i.estimate ?? 0), 0);
       // Completing a sprint releases unfinished tasks, so current membership
       // underreports the commitment — prefer the snapshot taken at completion.
-      return { sprint: s.title, done: pts(members.filter((i) => i.status === "done")), committed: s.committedPoints ?? pts(members) };
+      // Completion is the open/closed state (custom terminal statuses count), not
+      // the literal "done" slug.
+      return { sprint: s.title, done: pts(members.filter((i) => i.state === "closed")), committed: s.committedPoints ?? pts(members) };
     });
 }

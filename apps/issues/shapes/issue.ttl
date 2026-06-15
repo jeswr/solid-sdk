@@ -17,6 +17,7 @@
 @prefix as:    <https://www.w3.org/ns/activitystreams#> .
 @prefix prov:  <http://www.w3.org/ns/prov#> .
 @prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
 
 # --- An issue (wf:Task) ---
@@ -145,4 +146,62 @@
   sh:property [
     sh:path dct:created ; sh:name "created" ;
     sh:datatype xsd:dateTime ; sh:maxCount 1 ;
+  ] .
+
+# --- A configurable-workflow status class (wf:State) — F1 ---
+# A tracker declares its workflow as `#status-<slug>` classes (each a `wf:State`).
+# The crucial invariant for interop: EVERY custom status **resolves** to exactly
+# one open/closed disposition via `rdfs:subClassOf wf:Open | wf:Closed`. That keeps
+# the issue model (which still types each task `wf:Open`/`wf:Closed`) and the
+# exactly-one-state rule above well-defined no matter how many statuses a tracker
+# adds. The resolution constraint reuses the same `sh:qualifiedValueShape`
+# [ sh:in ( wf:Open wf:Closed ) ] pattern as the task-state shape: a status must be
+# a subclass of exactly one of {wf:Open, wf:Closed}.
+[] a sh:NodeShape ;
+  sh:targetClass wf:State ;
+  sh:property [
+    sh:path rdfs:label ; sh:name "label" ;
+    sh:datatype xsd:string ; sh:maxCount 1 ;
+  ] ;
+  # Every state resolves to exactly one of wf:Open / wf:Closed (the disposition).
+  sh:property [
+    sh:path rdfs:subClassOf ; sh:name "resolution" ;
+    sh:qualifiedValueShape [ sh:in ( wf:Open wf:Closed ) ] ;
+    sh:qualifiedMinCount 1 ;
+    sh:qualifiedMaxCount 1 ;
+  ] ;
+  # Allowed transition targets are state IRIs (the FSM edges), never literals.
+  sh:property [
+    sh:path wf:allowedTransitions ; sh:name "allowed transitions" ;
+    sh:nodeKind sh:IRI ;
+  ] .
+
+# --- A provenance activity-log entry (prov:Activity) — F3 ---
+# One immutable recorded change to an issue. `prov:startedAtTime` is the required
+# timestamp; `prov:wasAssociatedWith` is the actor's WebID (http(s) IRI);
+# `prov:used` / `prov:generated` are the prior / new values (a status class, a
+# WebID, or an issue IRI — always an IRI, at most one each); `dct:type` carries the
+# change kind. Entries are append-only — the writer never mutates an existing node.
+[] a sh:NodeShape ;
+  sh:targetClass prov:Activity ;
+  sh:property [
+    sh:path prov:startedAtTime ; sh:name "started at" ;
+    sh:datatype xsd:dateTime ; sh:minCount 1 ; sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path prov:wasAssociatedWith ; sh:name "actor" ;
+    sh:nodeKind sh:IRI ; sh:maxCount 1 ;
+    sh:pattern "^https?://" ;
+  ] ;
+  sh:property [
+    sh:path prov:used ; sh:name "prior value" ;
+    sh:nodeKind sh:IRI ; sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path prov:generated ; sh:name "new value" ;
+    sh:nodeKind sh:IRI ; sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path dct:type ; sh:name "change kind" ;
+    sh:datatype xsd:string ; sh:maxCount 1 ;
   ] .

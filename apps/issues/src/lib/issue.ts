@@ -17,13 +17,71 @@ export type IssueState = "open" | "closed";
 export type Priority = "high" | "medium" | "low";
 export const PRIORITIES: readonly Priority[] = ["high", "medium", "low"];
 
-export type StatusSlug = "todo" | "in-progress" | "done";
-/** The fixed workflow: ordered columns; `done` is terminal (⇒ state "closed"). */
-export const STATUSES: { slug: StatusSlug; label: string; terminal: boolean }[] = [
-  { slug: "todo", label: "To Do", terminal: false },
-  { slug: "in-progress", label: "In Progress", terminal: false },
-  { slug: "done", label: "Done", terminal: true },
-];
+/**
+ * A workflow status. `slug` becomes the `#status-<slug>` class fragment of the
+ * tracker doc; `terminal` is the open/closed **resolution** every status carries —
+ * a terminal status resolves to `wf:Closed`, a non-terminal one to `wf:Open` — so
+ * the SHACL exactly-one-of-{Open,Closed} rule and every state consumer still hold,
+ * no matter how many custom statuses a tracker declares (F1).
+ */
+export interface WorkflowStatus {
+  slug: string;
+  label: string;
+  terminal: boolean;
+}
+
+/**
+ * A configurable workflow: an ordered list of {@link WorkflowStatus} plus the
+ * allowed transition edges (`from slug → set of to slugs`). The first status is
+ * the initial state. A status missing from `transitions` (or whose target set is
+ * undefined) permits no outbound moves except staying put.
+ */
+export interface WorkflowDef {
+  statuses: WorkflowStatus[];
+  /** Allowed transitions keyed by source slug; values are reachable target slugs. */
+  transitions: Record<string, string[]>;
+}
+
+export type StatusSlug = string;
+
+/**
+ * The built-in workflow used when a tracker declares none: To Do → In Progress →
+ * Done, the classic three-column Kanban. `done` is terminal (⇒ resolves to
+ * `wf:Closed`). Kept as the default so existing trackers are unchanged.
+ */
+export const DEFAULT_WORKFLOW: WorkflowDef = {
+  statuses: [
+    { slug: "todo", label: "To Do", terminal: false },
+    { slug: "in-progress", label: "In Progress", terminal: false },
+    { slug: "done", label: "Done", terminal: true },
+  ],
+  // A linear board with free backward moves: any column can reach any other.
+  transitions: {
+    todo: ["in-progress", "done"],
+    "in-progress": ["todo", "done"],
+    done: ["todo", "in-progress"],
+  },
+};
+
+/**
+ * The fixed built-in statuses. Retained as a convenience export (dashboards,
+ * boards, and tests that predate configurable workflows read it); it is exactly
+ * `DEFAULT_WORKFLOW.statuses`. For a tracker's *actual* statuses, read
+ * {@link Tracker.workflow}.
+ */
+export const STATUSES: WorkflowStatus[] = DEFAULT_WORKFLOW.statuses;
+
+/** Whether `to` is reachable from `from` under `workflow` (same-status is always allowed). */
+export function canTransition(workflow: WorkflowDef, from: StatusSlug, to: StatusSlug): boolean {
+  if (from === to) return true;
+  if (!workflow.statuses.some((s) => s.slug === to)) return false;
+  return (workflow.transitions[from] ?? []).includes(to);
+}
+
+/** The slug a status of `terminal` disposition resolves to is "closed"; otherwise "open". */
+export function statusState(workflow: WorkflowDef, slug: StatusSlug): IssueState {
+  return workflow.statuses.find((s) => s.slug === slug)?.terminal ? "closed" : "open";
+}
 
 export type IssueType = "initiative" | "epic" | "feature" | "story" | "task" | "bug";
 /**
@@ -114,6 +172,83 @@ export class Comment extends TermWrapper {
   /** WebIDs mentioned in this comment, via `schema:mentions` — live set. */
   get mentions(): Set<string> {
     return SetFrom.subjectPredicate(this, schema("mentions"), NamedNodeAs.string, NamedNodeFrom.string);
+  }
+}
+
+/**
+ * The kind of change an {@link Activity} records — carried as `dct:type` so the
+ * timeline can label it without parsing the used/generated values.
+ */
+export type ActivityKind = "status" | "assignment" | "link";
+
+/**
+ * An immutable PROV-O activity-log entry (F3): one recorded change to an issue.
+ * A `prov:Activity` with `prov:startedAtTime` (when), `prov:wasAssociatedWith`
+ * (the actor WebID), `dct:type` (the {@link ActivityKind}), and — depending on the
+ * kind — `prov:used` (the prior value/class) and `prov:generated` (the new one).
+ *
+ * Entries are **append-only**: the writer only ever adds a fresh activity node;
+ * it never mutates or deletes an existing one. There is no setter that rewrites
+ * an entry's predicates after construction beyond the initial `record`.
+ */
+export class Activity extends TermWrapper {
+  get id(): string {
+    return this.value;
+  }
+  private get types(): Set<string> {
+    return SetFrom.subjectPredicate(this, rdf("type"), NamedNodeAs.string, NamedNodeFrom.string);
+  }
+
+  /** Stamp this node as a typed activity with its actor + time. */
+  private mark(kind: ActivityKind, actor: string | undefined, at: Date): void {
+    this.types.add(prov("Activity"));
+    OptionalAs.object(this, dct("type"), kind, LiteralFrom.string);
+    if (actor) OptionalAs.object(this, prov("wasAssociatedWith"), actor, NamedNodeFrom.string);
+    OptionalAs.object(this, prov("startedAtTime"), at, LiteralFrom.dateTime);
+  }
+
+  /**
+   * Record a change. `used`/`generated` are the prior and new values: status-class
+   * IRIs for a status change, WebIDs for an assignment, or issue IRIs for a link.
+   * Empty/undefined endpoints (e.g. the first assignment has no prior assignee)
+   * are simply omitted.
+   */
+  record(opts: { kind: ActivityKind; actor?: string; at: Date; used?: string; generated?: string }): void {
+    this.mark(opts.kind, opts.actor, opts.at);
+    if (opts.used) OptionalAs.object(this, prov("used"), opts.used, NamedNodeFrom.string);
+    if (opts.generated) OptionalAs.object(this, prov("generated"), opts.generated, NamedNodeFrom.string);
+  }
+
+  get kind(): ActivityKind | undefined {
+    return OptionalFrom.subjectPredicate(this, dct("type"), LiteralAs.string) as ActivityKind | undefined;
+  }
+  get actor(): string | undefined {
+    return OptionalFrom.subjectPredicate(this, prov("wasAssociatedWith"), NamedNodeAs.string);
+  }
+  get at(): Date | undefined {
+    return OptionalFrom.subjectPredicate(this, prov("startedAtTime"), LiteralAs.date);
+  }
+  /** Prior value (status class / WebID / issue IRI), if recorded. */
+  get used(): string | undefined {
+    return OptionalFrom.subjectPredicate(this, prov("used"), NamedNodeAs.string);
+  }
+  /** New value (status class / WebID / issue IRI), if recorded. */
+  get generated(): string | undefined {
+    return OptionalFrom.subjectPredicate(this, prov("generated"), NamedNodeAs.string);
+  }
+}
+
+/** Reads the activity entries (`prov:Activity`) out of a parsed log document. */
+export class ActivityLog extends DatasetWrapper {
+  /**
+   * All entries, newest first (descending `prov:startedAtTime`). Ties broken by
+   * the entry IRI so the order is STABLE when two entries share a timestamp
+   * (rapid changes can collide at millisecond resolution).
+   */
+  get entries(): Activity[] {
+    return [...this.instancesOf(prov("Activity"), Activity)].sort(
+      (a, b) => (b.at?.getTime() ?? 0) - (a.at?.getTime() ?? 0) || a.id.localeCompare(b.id),
+    );
   }
 }
 
@@ -295,25 +430,42 @@ export class Issue extends TermWrapper {
   private statusClass(slug: StatusSlug, doc = this.trackerDoc()): string | undefined {
     return doc ? `${doc}#status-${slug}` : undefined;
   }
-  /** Workflow status (carried by rdf:type). Falls back to state for unstatused issues. */
+  private statusPrefix(doc = this.trackerDoc()): string | undefined {
+    return doc ? `${doc}#status-` : undefined;
+  }
+  /**
+   * Workflow status (carried by rdf:type via a `#status-<slug>` class). Read
+   * directly off the `#status-` prefixed type so it is workflow-agnostic — a
+   * custom-status tracker needs no slug list here. Falls back to the open/closed
+   * state for an unstatused issue (closed ⇒ "done", open ⇒ "todo").
+   */
   get status(): StatusSlug {
-    const doc = this.trackerDoc();
-    if (doc) {
-      const types = this.types;
-      const found = STATUSES.find((s) => types.has(this.statusClass(s.slug, doc)!));
-      if (found) return found.slug;
+    const prefix = this.statusPrefix();
+    if (prefix) {
+      for (const t of this.types) if (t.startsWith(prefix)) return t.slice(prefix.length);
     }
     return this.state === "closed" ? "done" : "todo";
   }
-  set status(slug: StatusSlug) {
+  /**
+   * Set the status. Clears any existing `#status-` class and adds the new one.
+   * `terminal` (the open/closed resolution of the new status) keeps `wf:Open` /
+   * `wf:Closed` in sync; pass it from the tracker's workflow. Defaults to the
+   * built-in resolution (only `done` is terminal) when omitted — back-compat for
+   * the fixed three-column board.
+   */
+  setStatus(slug: StatusSlug, terminal = statusState(DEFAULT_WORKFLOW, slug) === "closed"): void {
     const doc = this.trackerDoc();
-    if (doc) {
+    const prefix = this.statusPrefix(doc);
+    if (doc && prefix) {
       const types = this.types;
-      for (const s of STATUSES) types.delete(this.statusClass(s.slug, doc)!);
+      for (const t of [...types]) if (t.startsWith(prefix)) types.delete(t);
       types.add(this.statusClass(slug, doc)!);
     }
     // Keep wf:Open/wf:Closed (and the open/closed filter) in sync with the status.
-    this.state = STATUSES.find((s) => s.slug === slug)?.terminal ? "closed" : "open";
+    this.state = terminal ? "closed" : "open";
+  }
+  set status(slug: StatusSlug) {
+    this.setStatus(slug);
   }
 
   private priorityClass(level: Priority, doc = this.trackerDoc()): string | undefined {
@@ -530,13 +682,108 @@ export class Tracker extends TermWrapper {
     return iri;
   }
 
-  /** Define a workflow status class as a subclass of an external wf state (Open/Closed). */
-  private defineStatus(slug: string, label: string, terminal: boolean): void {
-    const iri = `${this.doc}#status-${slug}`;
+  private statusIri(slug: string): string {
+    return `${this.doc}#status-${slug}`;
+  }
+
+  /**
+   * Define a workflow status class. It is a `wf:State` typed `rdfs:Class` whose
+   * open/closed **resolution** is carried as `rdfs:subClassOf wf:Open|wf:Closed`
+   * (terminal ⇒ Closed). An issue typed with this class therefore *inherits*
+   * `wf:Open`/`wf:Closed` semantically — but the writer also stamps the issue with
+   * the concrete `wf:Open`/`wf:Closed` type so the SHACL exactly-one rule holds
+   * without an OWL reasoner. A non-terminal state additionally declares its
+   * allowed transition targets via `wf:allowedTransitions`.
+   */
+  private defineStatus(slug: string, label: string, terminal: boolean, position: number, targets: string[] = []): void {
+    const iri = this.statusIri(slug);
     const klass = new TermWrapper(iri, this.dataset, this.factory);
-    SetFrom.subjectPredicate(klass, rdf("type"), NamedNodeAs.string, NamedNodeFrom.string).add(rdfs("Class"));
+    const types = SetFrom.subjectPredicate(klass, rdf("type"), NamedNodeAs.string, NamedNodeFrom.string);
+    types.add(rdfs("Class"));
+    types.add(wf("State"));
     OptionalAs.object(klass, rdfs("label"), label, LiteralFrom.string);
     OptionalAs.object(klass, rdfs("subClassOf"), terminal ? STATE.Closed : STATE.Open, NamedNodeFrom.string);
+    // The declared column order is meaningful (the board/list layout); persist it
+    // via schema:position (lower sorts first) — the same predicate used for issue rank.
+    OptionalAs.object(klass, schema("position"), position, LiteralFrom.double);
+    const allowed = SetFrom.subjectPredicate(klass, wf("allowedTransitions"), NamedNodeAs.string, NamedNodeFrom.string);
+    for (const t of targets) allowed.add(this.statusIri(t));
+  }
+
+  /** Remove a status class and its transition edges (issue type-quads are untouched). */
+  private removeStatus(slug: string): void {
+    const iri = this.statusIri(slug);
+    for (const q of [...this.dataset.match(this.factory.namedNode(iri))]) this.dataset.delete(q);
+  }
+
+  /**
+   * Read the tracker's configured workflow. Statuses are the declared `wf:State`
+   * classes (`#status-*`) in the document's transition graph, ordered with the
+   * `wf:initialState` first; transitions come from each state's
+   * `wf:allowedTransitions`. A tracker with no declared statuses yields the
+   * {@link DEFAULT_WORKFLOW}, so consumers always get a usable workflow.
+   */
+  get workflow(): WorkflowDef {
+    const prefix = `${this.doc}#status-`;
+    const nn = this.factory.namedNode.bind(this.factory);
+    const slugs = new Set<string>();
+    for (const q of this.dataset.match(null, nn(rdf("type")), nn(wf("State")))) {
+      if (q.subject.value.startsWith(prefix)) slugs.add(q.subject.value.slice(prefix.length));
+    }
+    if (slugs.size === 0) return DEFAULT_WORKFLOW;
+
+    const initial = OptionalFrom.subjectPredicate(this, wf("initialState"), NamedNodeAs.string);
+    const initialSlug = initial?.startsWith(prefix) ? initial.slice(prefix.length) : undefined;
+    const positionOf = (slug: string): number =>
+      OptionalFrom.subjectPredicate(new TermWrapper(this.statusIri(slug), this.dataset, this.factory), schema("position"), LiteralAs.number) ??
+      Number.MAX_SAFE_INTEGER;
+    // Order by the persisted column position (the declared order); the initial
+    // state always leads, and an unpositioned status falls back to slug order.
+    const ordered = [...slugs].sort((a, b) => {
+      if (a === initialSlug) return -1;
+      if (b === initialSlug) return 1;
+      const pa = positionOf(a);
+      const pb = positionOf(b);
+      return pa !== pb ? pa - pb : a.localeCompare(b);
+    });
+    const statuses: WorkflowStatus[] = ordered.map((slug) => {
+      const klass = new TermWrapper(this.statusIri(slug), this.dataset, this.factory);
+      const supers = SetFrom.subjectPredicate(klass, rdfs("subClassOf"), NamedNodeAs.string, NamedNodeFrom.string);
+      return {
+        slug,
+        label: OptionalFrom.subjectPredicate(klass, rdfs("label"), LiteralAs.string) ?? slug,
+        terminal: supers.has(STATE.Closed),
+      };
+    });
+    const transitions: Record<string, string[]> = {};
+    for (const slug of ordered) {
+      const klass = new TermWrapper(this.statusIri(slug), this.dataset, this.factory);
+      const targets = SetFrom.subjectPredicate(klass, wf("allowedTransitions"), NamedNodeAs.string, NamedNodeFrom.string);
+      transitions[slug] = [...targets]
+        .filter((iri) => iri.startsWith(prefix))
+        .map((iri) => iri.slice(prefix.length))
+        .filter((s) => slugs.has(s));
+    }
+    return { statuses, transitions };
+  }
+
+  /**
+   * Declare (replacing any existing) a custom workflow on the tracker: mint each
+   * `#status-<slug>` `wf:State` class with its open/closed resolution and allowed
+   * transition edges, and set the first status as `wf:initialState`. Every state
+   * resolves to wf:Open or wf:Closed, so the issue model and SHACL are unchanged.
+   * At least one status is required, and exactly one initial state results.
+   */
+  defineWorkflow(workflow: WorkflowDef): void {
+    if (workflow.statuses.length === 0) throw new Error("A workflow needs at least one status.");
+    // Clear the previously-declared statuses (the union of old + new slugs), so
+    // a redefinition that drops a status leaves no orphan #status- class behind.
+    for (const slug of this.workflow.statuses.map((s) => s.slug)) this.removeStatus(slug);
+    for (const slug of workflow.statuses.map((s) => s.slug)) this.removeStatus(slug);
+    workflow.statuses.forEach((s, i) => {
+      this.defineStatus(s.slug, s.label, s.terminal, i, workflow.transitions[s.slug] ?? []);
+    });
+    OptionalAs.object(this, wf("initialState"), this.statusIri(workflow.statuses[0].slug), NamedNodeFrom.string);
   }
 
   /** Write the fixed tracker configuration (type, issue class, statuses, priorities). */
@@ -544,9 +791,8 @@ export class Tracker extends TermWrapper {
     this.types.add(wf("Tracker"));
     this.title = title;
     OptionalAs.object(this, wf("issueClass"), wf("Task"), NamedNodeFrom.string);
-    // Workflow statuses (subclasses of wf:Open / wf:Closed); To Do is the initial state.
-    for (const s of STATUSES) this.defineStatus(s.slug, s.label, s.terminal);
-    OptionalAs.object(this, wf("initialState"), `${this.doc}#status-todo`, NamedNodeFrom.string);
+    // Workflow statuses (the default To Do → In Progress → Done board).
+    this.defineWorkflow(DEFAULT_WORKFLOW);
     // Priority dimension (#Priority parent + the three ordered priorities).
     this.defineClass("Priority", "Priority");
     this.defineClass("priority-high", "High", "Priority");

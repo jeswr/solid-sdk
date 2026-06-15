@@ -36,8 +36,8 @@ const renderBody = (text: string) =>
       <span key={i}>{part}</span>
     ),
   );
-import type { IssueRecord } from "@/lib/use-issues";
-import { STATUSES, safeHttpUrl, canNest, type FieldDef } from "@/lib/issue";
+import type { IssueRecord, ActivityRecord } from "@/lib/use-issues";
+import { STATUSES, safeHttpUrl, canNest, type FieldDef, type WorkflowStatus } from "@/lib/issue";
 import { linksOf, rollupOf, descendantUrlsOf } from "@/lib/rollups";
 import { priorityVariant, shortWebId } from "@/components/issue-card";
 import { PersonChip } from "@/components/person";
@@ -46,6 +46,10 @@ import { TypeBadge, typeLabel } from "@/components/type-badge";
 const dateFmt = new Intl.DateTimeFormat(undefined, { dateStyle: "medium" });
 const timeFmt = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
 const statusLabel = (slug: string) => STATUSES.find((s) => s.slug === slug)?.label ?? slug;
+
+/** The `#status-<slug>` fragment of a status-class IRI, or the value unchanged. */
+const statusSlugOf = (iri?: string): string | undefined =>
+  iri?.includes("#status-") ? iri.slice(iri.indexOf("#status-") + "#status-".length) : iri;
 
 type Activity = { at: Date; text: string; kind: "event" | "comment"; author?: string; body?: string };
 
@@ -58,6 +62,8 @@ export function IssueDetailDialog({
   people,
   groupIri,
   fieldDefs = [],
+  activity = [],
+  workflowStatuses = STATUSES,
   canComment,
   onEdit,
   onAddComment,
@@ -73,6 +79,10 @@ export function IssueDetailDialog({
   groupIri?: string;
   /** Custom-field definitions, used to label and format `issue.fields`. */
   fieldDefs?: FieldDef[];
+  /** The issue's provenance activity log (F3), newest first; merged into the timeline. */
+  activity?: ActivityRecord[];
+  /** The tracker's workflow statuses, used to label status transitions in the timeline. */
+  workflowStatuses?: WorkflowStatus[];
   canComment: boolean;
   onEdit: () => void;
   onAddComment: (content: string, mentions: string[]) => Promise<void>;
@@ -96,8 +106,34 @@ export function IssueDetailDialog({
     if (issue.created) items.push({ at: issue.created, text: "created this issue", kind: "event", author: issue.creator });
     for (const c of issue.comments)
       if (c.created) items.push({ at: c.created, text: "commented", kind: "comment", author: c.author, body: c.content });
+
+    // F3: merge the immutable provenance log (status / assignment / link changes).
+    const statusName = (iri?: string) => {
+      const slug = statusSlugOf(iri);
+      return slug ? (workflowStatuses.find((s) => s.slug === slug)?.label ?? slug) : undefined;
+    };
+    const issueTitleOf = (iri?: string) =>
+      iri ? (allIssues.find((i) => i.url === iri)?.title ?? iri) : undefined;
+    const personName = (webId?: string) => (webId ? webId.replace(/^https?:\/\//, "").replace(/\/profile\/card#me$/, "") : undefined);
+    for (const a of activity) {
+      if (!a.at) continue;
+      let text: string;
+      if (a.kind === "status") {
+        const to = statusName(a.generated) ?? "(unknown)";
+        const from = statusName(a.used);
+        text = from ? `changed status from ${from} to ${to}` : `set status to ${to}`;
+      } else if (a.kind === "assignment") {
+        const to = personName(a.generated);
+        const from = personName(a.used);
+        text = to ? (from ? `reassigned from ${from} to ${to}` : `assigned to ${to}`) : "cleared the assignee";
+      } else {
+        const to = issueTitleOf(a.generated);
+        text = to ? `linked to ${to}` : "removed a link";
+      }
+      items.push({ at: a.at, text, kind: "event", author: a.actor });
+    }
     return items.sort((a, b) => a.at.getTime() - b.at.getTime());
-  }, [issue]);
+  }, [issue, activity, workflowStatuses, allIssues]);
 
   const submit = async () => {
     const content = text.trim();

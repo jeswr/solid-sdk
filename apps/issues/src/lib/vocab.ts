@@ -5,7 +5,11 @@
  * the SolidOS issue-pane model.
  */
 
-/** W3C workflow ontology — `wf:Tracker`, `wf:Task`, `wf:Open`, `wf:Closed`, … */
+/**
+ * W3C workflow ontology — `wf:Tracker`, `wf:Task`, `wf:Open`, `wf:Closed`, and the
+ * F1 finite-state-machine terms: `wf:State`, `wf:initialState`,
+ * `wf:allowedTransitions` (the per-state set of reachable target states).
+ */
 export const WF = "http://www.w3.org/2005/01/wf/flow#";
 /** Dublin Core Terms — generic metadata (title, created, modified, creator). */
 export const DCT = "http://purl.org/dc/terms/";
@@ -25,7 +29,12 @@ export const VCARD = "http://www.w3.org/2006/vcard/ns#";
 export const SCHEMA = "http://schema.org/";
 /** SKOS — `skos:Concept` / `skos:prefLabel` / `skos:inScheme` (select-field options). */
 export const SKOS = "http://www.w3.org/2004/02/skos/core#";
-/** PROV-O — `prov:endedAtTime` (completion), `prov:wasDerivedFrom` (clone source). */
+/**
+ * PROV-O — `prov:endedAtTime` (completion), `prov:wasDerivedFrom` (clone source),
+ * and the F3 activity log: `prov:Activity`, `prov:startedAtTime`,
+ * `prov:wasAssociatedWith` (actor), `prov:used` (prior status class),
+ * `prov:generated` (new status class).
+ */
 export const PROV = "http://www.w3.org/ns/prov#";
 
 export const wf = (local: string) => `${WF}${local}`;

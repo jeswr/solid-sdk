@@ -5,7 +5,7 @@ export interface EpicGroup {
   children: IssueRecord[];
   done: number;
   total: number;
-  /** 0–100 completion across children (done = status "done"). */
+  /** 0–100 completion across children (done = a closed/terminal state). */
   percent: number;
 }
 
@@ -20,7 +20,9 @@ export function groupByEpic(issues: IssueRecord[]): { epics: EpicGroup[]; unassi
     .filter((i) => i.issueType === "epic")
     .map((epic) => {
       const children = issues.filter((c) => c.parent === epic.url && c.url !== epic.url);
-      const done = children.filter((c) => c.status === "done").length;
+      // Completion is the open/closed resolution (custom terminal statuses count),
+      // not the literal "done" slug.
+      const done = children.filter((c) => c.state === "closed").length;
       const total = children.length;
       return { epic, children, done, total, percent: total === 0 ? 0 : Math.round((done / total) * 100) };
     })

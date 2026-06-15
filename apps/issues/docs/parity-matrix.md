@@ -17,6 +17,8 @@ Status: ✅ shipped · 🔶 partial · ⏳ queued (priority order) · ◻ later/
 | Feature (Jira/Monday) | Status | Notes |
 |---|---|---|
 | Issues with status workflow (To Do/In Progress/Done) | ✅ | per-tracker status classes |
+| **Configurable workflows (custom states + allowed transitions)** | ✅ | F1: a tracker declares its workflow as `#status-*` `wf:State` classes with `wf:allowedTransitions` edges and `schema:position` ordering; every state resolves (`rdfs:subClassOf wf:Open\|wf:Closed`) so the issue model + SHACL exactly-one-state rule are unchanged; `Repository.setStatus`/`update` enforce the transition rules (`TransitionError`) |
+| **Activity history / audit trail (immutable)** | ✅ | F3: append-only PROV-O log (`prov:Activity` + `prov:startedAtTime` / `prov:wasAssociatedWith` actor / `prov:used` → `prov:generated`) for status, assignment, and link changes, paginated into a sibling `activity/` container; surfaced in the issue-detail timeline |
 | Kanban board, drag-and-drop | ✅ | labeled view tabs (persisted), per-column add, drop highlight |
 | List/table view | ✅ | |
 | Priorities, labels/tags, due dates | ✅ | |
@@ -46,7 +48,7 @@ Status: ✅ shipped · 🔶 partial · ⏳ queued (priority order) · ◻ later/
 |---|---|---|
 | Dashboards (charts: status/assignee/priority distribution) | ✅ | Dashboard tab: stat cards, status donut, type/priority bars, workload, created-per-week |
 | Reports: velocity | ✅ | done vs committed points per completed sprint (commitment snapshotted at completion) |
-| Reports: burndown, cumulative flow | ✅ | issues stamp `prov:endedAtTime` on completion; burndown charts estimated points per sprint day vs ideal (committed-points snapshot for done sprints); CFD is a two-band open/done flow — no in-progress band, the pod records no per-status transition history |
+| Reports: burndown, cumulative flow | ✅ | issues stamp `prov:endedAtTime` on completion; burndown charts estimated points per sprint day vs ideal (committed-points snapshot for done sprints); CFD is currently a two-band open/done flow. F3 now records per-status transition history (the `prov:Activity` log), which unblocks a three-band CFD that replays it — that consumer is tracked as follow-up (it fans out a log read per issue) |
 | Automation rules (when X then Y) | ✅ | built-in client-side rules with toggles (close-parent, escalate-overdue); per-device |
 | Custom fields / column types | ✅ | text / number / date / link / select; fields are `rdf:Property` fragments of the tracker config, select options are SKOS concepts; typed inputs in the form, formatted in detail view |
 | Workload view (Monday) | ✅ | per-assignee open points bucketed by due week (Overdue / weeks / Later / No date), adjustable points-per-week capacity with overload flags; unestimated issues weigh 1 point |

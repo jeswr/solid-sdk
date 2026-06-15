@@ -67,6 +67,16 @@ describe("parseQuery", () => {
     expect(q.text).toEqual(["nonsense:thing", "due:whenever"]);
     expect(q.due).toBeUndefined();
   });
+
+  it("accepts custom workflow status slugs, not just the built-in set", () => {
+    // "review" / "shipped" are custom statuses (not in STATUSES) — they must be
+    // parsed as a status filter, NOT fall through to free text.
+    const q = parseQuery("status:review status:shipped");
+    expect(q.statuses).toEqual(["review", "shipped"]);
+    expect(q.text).toEqual([]);
+    // A bare "status:" (empty value) is meaningless → free text.
+    expect(parseQuery("status:").text).toEqual(["status:"]);
+  });
 });
 
 describe("matchesQuery", () => {

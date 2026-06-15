@@ -39,7 +39,9 @@ const schema = z.object({
     .refine((v) => v === "" || /^https?:\/\//.test(v), "Assignee must be a WebID (http(s) URL)")
     .optional(),
   priority: z.enum(["none", "high", "medium", "low"]),
-  status: z.enum(["todo", "in-progress", "done"]),
+  // Any workflow-status slug — the tracker declares the set (F1), so this can't be
+  // a fixed enum. The Select below only offers the tracker's configured statuses.
+  status: z.string().min(1),
   // Derived from ISSUE_TYPES so the form can never drift from the model's levels.
   issueType: z.enum(ISSUE_TYPES.map((t) => t.slug) as [IssueType, ...IssueType[]]),
   estimate: z
@@ -101,6 +103,7 @@ export function IssueFormDialog({
   onSubmit,
   assigneeSuggestions = [],
   fieldDefs = [],
+  statuses = STATUSES,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -112,13 +115,15 @@ export function IssueFormDialog({
   assigneeSuggestions?: string[];
   /** The tracker's custom fields, rendered as typed inputs. */
   fieldDefs?: FieldDef[];
+  /** The tracker's workflow statuses (F1); defaults to the built-in three-column set. */
+  statuses?: { slug: string; label: string }[];
 }) {
   const editing = !!initial;
   // Custom fields are dynamic, so they live beside the zod-validated form.
   const [fieldInputs, setFieldInputs] = useState<Record<string, string>>({});
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { title: "", description: "", dateDue: "", assignee: "", priority: "none", status: "todo", issueType: "task", estimate: "", labels: "" },
+    defaultValues: { title: "", description: "", dateDue: "", assignee: "", priority: "none", status: statuses[0]?.slug ?? "todo", issueType: "task", estimate: "", labels: "" },
   });
   const priority = useWatch({ control: form.control, name: "priority" });
   const status = useWatch({ control: form.control, name: "status" });
@@ -138,7 +143,7 @@ export function IssueFormDialog({
         dateDue: toDateInput(initial?.dateDue),
         assignee: initial?.assignee ?? "",
         priority: initial?.priority ?? "none",
-        status: initial?.status ?? defaultStatus ?? "todo",
+        status: initial?.status ?? defaultStatus ?? statuses[0]?.slug ?? "todo",
         issueType: initial?.issueType ?? "task",
         estimate: initial?.estimate !== undefined ? String(initial.estimate) : "",
         labels: (initial?.labels ?? []).join(", "),
@@ -149,7 +154,7 @@ export function IssueFormDialog({
         Object.fromEntries(fieldDefs.map((d) => [d.slug, fieldToInput(d, initial?.fields[d.slug])])),
       );
     }
-  }, [open, initial, defaultStatus, form, fieldDefs]);
+  }, [open, initial, defaultStatus, form, fieldDefs, statuses]);
 
   // Field definitions can arrive AFTER the dialog opened (slow tracker-info
   // load). Backfill those inputs from the stored values so submitting doesn't
@@ -239,12 +244,12 @@ export function IssueFormDialog({
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="status">Status</Label>
-              <Select value={status} onValueChange={(v) => form.setValue("status", v as FormValues["status"])}>
+              <Select value={status} onValueChange={(v) => form.setValue("status", v)}>
                 <SelectTrigger id="status">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {STATUSES.map((s) => (
+                  {statuses.map((s) => (
                     <SelectItem key={s.slug} value={s.slug}>
                       {s.label}
                     </SelectItem>

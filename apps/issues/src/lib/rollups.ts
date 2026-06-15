@@ -11,7 +11,7 @@ export interface Rollup {
   childCount: number;
   /** Every descendant (transitive), the subtree excluding the issue itself. */
   descendantCount: number;
-  /** Descendants whose status is "done". */
+  /** Descendants that are complete (resolve to a closed/terminal state). */
   done: number;
   /** Total descendants counted toward completion (= descendantCount). */
   total: number;
@@ -87,7 +87,9 @@ export function rollupOf(
     return issue.dateDue ? { ...EMPTY_ROLLUP, earliestDue: issue.dateDue, latestDue: issue.dateDue } : EMPTY_ROLLUP;
   }
 
-  const done = descendants.filter((d) => d.status === "done").length;
+  // Completion is the open/closed resolution, not the literal "done" slug — a
+  // custom workflow's terminal status (e.g. "shipped") resolves to state="closed".
+  const done = descendants.filter((d) => d.state === "closed").length;
   const total = descendants.length;
   const estimate = descendants.reduce((sum, d) => sum + (d.estimate ?? 0), 0);
 

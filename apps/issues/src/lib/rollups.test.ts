@@ -23,9 +23,11 @@ describe("F6 rollups — subitems / progress", () => {
   it("rolls up direct children: 3/5 done style counts and percent", () => {
     const issues = [
       mk({ url: "p", issueType: "epic" }),
-      mk({ url: "a", parent: "p", status: "done" }),
-      mk({ url: "b", parent: "p", status: "done" }),
-      mk({ url: "c", parent: "p", status: "done" }),
+      // Completion is the open/closed state: a "done" status always resolves to
+      // state="closed" in real data, and the rollup counts by state, not slug.
+      mk({ url: "a", parent: "p", status: "done", state: "closed" }),
+      mk({ url: "b", parent: "p", status: "done", state: "closed" }),
+      mk({ url: "c", parent: "p", status: "done", state: "closed" }),
       mk({ url: "d", parent: "p", status: "in-progress" }),
       mk({ url: "e", parent: "p", status: "todo" }),
     ];
@@ -37,11 +39,25 @@ describe("F6 rollups — subitems / progress", () => {
     expect(r.percent).toBe(60); // 3/5
   });
 
+  it("counts a custom terminal status (state=closed, slug≠'done') as complete", () => {
+    // A custom workflow ships issues to a "shipped" terminal status, written with
+    // state="closed". The rollup must count them as done — not just the "done" slug.
+    const issues = [
+      mk({ url: "p", issueType: "epic" }),
+      mk({ url: "a", parent: "p", status: "shipped", state: "closed" }),
+      mk({ url: "b", parent: "p", status: "review" }),
+    ];
+    const r = rollupOf(issues[0], issues);
+    expect(r.done).toBe(1); // the shipped (closed) child
+    expect(r.total).toBe(2);
+    expect(r.percent).toBe(50);
+  });
+
   it("rolls up TRANSITIVELY across multiple levels (grandchildren count)", () => {
     const issues = [
       mk({ url: "epic", issueType: "epic" }),
       mk({ url: "story", parent: "epic", issueType: "story", status: "in-progress" }),
-      mk({ url: "t1", parent: "story", status: "done" }),
+      mk({ url: "t1", parent: "story", status: "done", state: "closed" }),
       mk({ url: "t2", parent: "story", status: "todo" }),
     ];
     const r = rollupOf(issues[0], issues);
@@ -77,7 +93,7 @@ describe("F6 rollups — subitems / progress", () => {
   it("is CYCLE-SAFE: A⊂B⊂A is counted once each, no infinite recursion", () => {
     // Malformed pod data: a points to b as parent, b points to a as parent.
     const issues = [
-      mk({ url: "a", parent: "b", status: "done" }),
+      mk({ url: "a", parent: "b", status: "done", state: "closed" }),
       mk({ url: "b", parent: "a", status: "todo" }),
     ];
     // Must terminate and count each node at most once.
@@ -112,7 +128,7 @@ describe("F6 rollups — subitems / progress", () => {
     // childCount must be 2 (the real children), not 3 (which would include self).
     const issues = [
       mk({ url: "p", parent: "p", issueType: "epic" }),
-      mk({ url: "a", parent: "p", status: "done" }),
+      mk({ url: "a", parent: "p", status: "done", state: "closed" }),
       mk({ url: "b", parent: "p", status: "todo" }),
     ];
     const r = rollupOf(issues[0], issues);
@@ -124,7 +140,7 @@ describe("F6 rollups — subitems / progress", () => {
   it("rollupAll keys every issue and matches per-issue rollupOf", () => {
     const issues = [
       mk({ url: "p", issueType: "epic" }),
-      mk({ url: "a", parent: "p", status: "done" }),
+      mk({ url: "a", parent: "p", status: "done", state: "closed" }),
       mk({ url: "b", parent: "p", status: "todo" }),
     ];
     const all = rollupAll(issues);
