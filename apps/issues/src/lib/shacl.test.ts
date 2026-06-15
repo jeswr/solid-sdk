@@ -131,6 +131,30 @@ describe("SHACL shape (shapes/issue.ttl)", () => {
     expect(stateResult?.severity?.value).toBe("http://www.w3.org/ns/shacl#Warning");
   });
 
+  it("warns when a wf:Task is typed with BOTH wf:Open AND wf:Closed (qualifiedMaxCount violation)", async () => {
+    // A contradictory task: Open and Closed simultaneously. Issue.state prevents
+    // this at write time, but sh:qualifiedMaxCount 1 now catches it on read of
+    // untrusted data too.
+    const ds = new Store();
+    const subject = DataFactory.namedNode(`${URL_}#this`);
+    ds.addQuad(subject, DataFactory.namedNode(RDF_TYPE), DataFactory.namedNode(`${WF}Task`));
+    ds.addQuad(subject, DataFactory.namedNode(RDF_TYPE), DataFactory.namedNode(`${WF}Open`));
+    ds.addQuad(subject, DataFactory.namedNode(RDF_TYPE), DataFactory.namedNode(`${WF}Closed`));
+    ds.addQuad(
+      subject,
+      DataFactory.namedNode(`${DCT}title`),
+      DataFactory.literal("Contradictory state task"),
+    );
+
+    const report = await validate(ds);
+    expect(report.conforms).toBe(false);
+    const stateResult = report.results.find((r) => r.path?.value === RDF_TYPE);
+    expect(stateResult).toBeDefined();
+    // The shape reports at Warning severity (not Violation) — the caller
+    // escalates if desired; see decisions/0003 rationale.
+    expect(stateResult?.severity?.value).toBe("http://www.w3.org/ns/shacl#Warning");
+  });
+
   it("flags a non-IRI dct:isPartOf (parent must be an IRI, not a literal)", async () => {
     const ds = new Store();
     const issue = new Issue(`${URL_}#this`, ds, DataFactory);

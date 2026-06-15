@@ -49,13 +49,17 @@ SHACL caught a real wrapper bug: `LiteralFrom.date` emits a malformed `xsd:date`
 
 The `wf:Task` shape constrains state (the `wf:Open`/`wf:Closed` `rdf:type` classes,
 since the literal `wf:state` was replaced) via a `sh:qualifiedValueShape`
-`[ sh:in ( wf:Open wf:Closed ) ]` requiring at least one state class, at
-`sh:Warning` severity. SHACL **Core** cannot express the Open-XOR-Closed
-*disjointness*; the SHACL-SPARQL way to do so is inert here because
-`rdf-validate-shacl` does not run `sh:sparql` constraints, so we accept the Core
-limitation (documented inline in the shape) and rely on `Issue.state` for
-exclusivity. Issue↔issue links (`dct:isPartOf`, `dct:requires`, `dct:relation`)
-are constrained to IRIs, and `wf:assignee` to an `^https?://` IRI.
+`[ sh:in ( wf:Open wf:Closed ) ]` with `sh:qualifiedMinCount 1` (at least one) and
+`sh:qualifiedMaxCount 1` (at most one), enforcing exactly-one-of {Open, Closed} at
+`sh:Warning` severity. SHACL **Core** *can* express this Open-XOR-Closed
+exclusivity on a single `rdf:type` path via `sh:qualifiedMaxCount 1`; a node typed
+with both `wf:Open` and `wf:Closed` is rejected by the shape. (What Core cannot
+express is cross-path conditionals — none are needed here.) Severity stays Warning
+because `Issue.state` already guarantees exclusivity at write time (it deletes the
+opposite class), and Warning lets read-path callers of untrusted/mid-migration data
+decide their own escalation policy. Issue↔issue links (`dct:isPartOf`,
+`dct:requires`, `dct:relation`) are constrained to IRIs, and `wf:assignee` to an
+`^https?://` IRI.
 
 ## Trade-offs / deferred
 - Listing is N+1 fetches (container + each issue) — fine at this scale; a pod
