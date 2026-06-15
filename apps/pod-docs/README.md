@@ -9,7 +9,9 @@ Solid suite (ADR-0013: every app built in parallel), federation-registry-ready v
 
 This package is the **non-throwaway core**: a typed model over quads, read/write/list against
 a Solid pod, type-index registration, and a `clientid.jsonld` that declares the app's
-federation metadata. The full editor UI is a deliberate follow-up (see below).
+federation metadata. A framework-agnostic **read-only React view** ships as the optional
+[`@jeswr/pod-docs/ui`](#optional-react-view-pod-docsui) export; the full editor UI is a
+deliberate follow-up (see below).
 
 ## What it does
 
@@ -65,12 +67,36 @@ await store.save(url, { ...doc!.data, body: "<p>edited</p>",
 const all = await store.list();
 ```
 
+## Optional React view (`@jeswr/pod-docs/ui`)
+
+A **framework-agnostic React** document browser, sitting on top of the data layer. React is an
+*optional peer* dependency, so a data-layer-only consumer never pulls it in. It renders only —
+all data flows through the data layer (`DocsStore`) — and takes the authenticated `fetch` as an
+**injected seam** (omit it and the global fetch that `@solid/reactive-authentication` patches in a
+real session is used; the interactive-login wiring is `create-solid-app`-gated). Document bodies
+are rendered as **escaped text** (never injected HTML) — the editor *engine* that interprets
+`pd:body` for a given format is a separate ADR.
+
+```tsx
+import { DocumentBrowser } from "@jeswr/pod-docs/ui";
+
+// In production pass NO fetch — the auth-patched global runs. Tests inject one.
+<DocumentBrowser podRoot="https://alice.pod/" webId={webId} />;
+```
+
+It lists the documents in the pod's `pod-docs/` container (title + modified), opens any document
+read-only (title, format, author, modified, body), and surfaces loading / empty / error /
+access-denied (401 login vs 403 permission) states. The `useDocsListing` hook is exported for a
+custom view. The lower-level write/edit surface (the editor) is a follow-up.
+
 ## Tracked follow-ups
 
 These are the deliberate next steps for Pod Docs — tracked, not bundled into this core:
 
-- **Next.js UI via `create-solid-app`.** The browser app (editor + document browser + login)
-  is built on `create-solid-app` once it lands — this package stays the headless data layer.
+- **Next.js app shell via `create-solid-app`.** The read-only document browser already ships as
+  `@jeswr/pod-docs/ui`; the surrounding app shell (interactive login + the rich-text **editor**
+  surface) is built on `create-solid-app` once it lands. This package stays the headless data
+  layer + the optional render-only view.
 - **Cross-server E2E matrix.** A Playwright matrix exercising the data layer against every
   well-known Solid server — including **prod-solid-server with passkey AND username/password**,
   CSS (WAC + ACP), ESS and NSS — to ratchet real-server behaviour.
