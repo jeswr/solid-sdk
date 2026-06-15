@@ -686,6 +686,109 @@ describe("useDocsListing — saveOpenDocument (optimistic)", () => {
     expect(result.current.openDocument?.data.body).toBe("<p>second</p>");
   });
 
+  it("SINGLE-FLIGHT is PER DOCUMENT: a save to doc B is not wedged by an in-flight save to doc A", async () => {
+    // Regression for the global-latch bug: the single-flight guard is scoped per
+    // document URL, NOT global to the hook. A save for doc A is left in flight, then
+    // the user navigates to open doc B and saves it — B's save MUST proceed (a pod
+    // write must happen for B), even though A's save is still settling. A global
+    // boolean latch (still held by A) would have silently blocked B's save (no-op),
+    // wedging it. After both are in flight, settling A must not disturb B's latch.
+    const doc2Url = "https://alice.pod/pod-docs/other-xyz.ttl";
+    const doc2: StoredDocument = {
+      url: doc2Url,
+      etag: '"o1"',
+      data: { ...stored().data, title: "Other", body: "<p>other</p>" },
+    };
+    // Per-URL deferred saves so we can leave A in flight while B's save is issued.
+    const resolvers = new Map<string, (v: { etag: string | null }) => void>();
+    const save = vi.fn(
+      (url: string) =>
+        new Promise<{ etag: string | null }>((r) => {
+          resolvers.set(url, r);
+        }),
+    );
+    const createStore = stableFactory({
+      list: async () => [entry(), entry({ url: doc2Url, title: "Other" })],
+      read: async (url: string) => (url === doc2Url ? doc2 : stored()),
+      save: save as never,
+    });
+    const { result } = renderHook(() => useDocsListing(POD, WEBID, { createStore }));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    // Open + save doc A — A's save is now in flight (latch holds A's URL).
+    act(() => result.current.open(DOC_URL));
+    await waitFor(() => expect(result.current.openDocument?.url).toBe(DOC_URL));
+    act(() => {
+      void result.current.saveOpenDocument("<p>edited A</p>");
+    });
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(save).toHaveBeenLastCalledWith(DOC_URL, expect.anything(), expect.anything());
+
+    // Navigate to open doc B (A's save still in flight), then save B.
+    act(() => result.current.open(doc2Url));
+    await waitFor(() => expect(result.current.openDocument?.url).toBe(doc2Url));
+    act(() => {
+      void result.current.saveOpenDocument("<p>edited B</p>");
+    });
+
+    // B's save MUST have fired — it is NOT blocked by A's in-flight save.
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(save).toHaveBeenLastCalledWith(
+      doc2Url,
+      expect.objectContaining({ body: "<p>edited B</p>" }),
+      '"o1"',
+    );
+    expect(result.current.openDocument?.data.body).toBe("<p>edited B</p>");
+    expect(result.current.saveStatus).toBe("saving");
+
+    // Settle B → it commits its own etag onto the open (B) document.
+    await act(async () => {
+      resolvers.get(doc2Url)?.({ etag: '"o2"' });
+      await Promise.resolve();
+    });
+    expect(result.current.openDocument?.url).toBe(doc2Url);
+    expect(result.current.openDocument?.etag).toBe('"o2"');
+    expect(result.current.saveStatus).toBe("saved");
+
+    // Settle A's late save → the navigate-away guard drops it (B stays open/intact).
+    await act(async () => {
+      resolvers.get(DOC_URL)?.({ etag: '"v2"' });
+      await Promise.resolve();
+    });
+    expect(result.current.openDocument?.url).toBe(doc2Url);
+    expect(result.current.openDocument?.etag).toBe('"o2"');
+  });
+
+  it("SINGLE-FLIGHT: a rapid double-save within ONE document is still single-flighted", async () => {
+    // The per-document scoping must NOT loosen the within-one-doc invariant: two
+    // saveOpenDocument() calls to the SAME open doc, the second issued while the
+    // first is in flight, must still collapse to a single pod write (no overlap).
+    const resolvers: Array<(v: { etag: string | null }) => void> = [];
+    const save = vi.fn(
+      () =>
+        new Promise<{ etag: string | null }>((r) => {
+          resolvers.push(r);
+        }),
+    );
+    const result = await withOpenDoc(openedStore(save));
+
+    act(() => {
+      void result.current.saveOpenDocument("<p>first</p>");
+      // Second call to the SAME doc while the first is still in flight: a no-op.
+      void result.current.saveOpenDocument("<p>second</p>");
+    });
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(result.current.openDocument?.data.body).toBe("<p>first</p>");
+
+    await act(async () => {
+      resolvers[0]?.({ etag: '"v2"' });
+      await Promise.resolve();
+    });
+    expect(result.current.saveStatus).toBe("saved");
+    expect(result.current.openDocument?.etag).toBe('"v2"');
+    expect(result.current.openDocument?.data.body).toBe("<p>first</p>");
+  });
+
   it("SINGLE-FLIGHT: the latch is released after a FAILED save so the next save proceeds", async () => {
     // The latch is released in a `finally`, so even when a save REJECTS, a
     // subsequent save can still run. (Otherwise a single failure would wedge the

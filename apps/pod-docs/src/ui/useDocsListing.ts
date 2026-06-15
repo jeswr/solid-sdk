@@ -100,10 +100,12 @@ export interface DocsListingState {
    * runs async under the document's `If-Match` etag. On success the open
    * document is refreshed with the new etag/revision; on failure the body is
    * reverted and `saveStatus` becomes `failed`. A no-op when no document is open.
-   * SINGLE-FLIGHT: calling this while a save is already in flight is a no-op
-   * (the second call returns immediately, no second write) — so saves to the
-   * same open document never overlap and a save always resolves against the
-   * etag/body it started from (no lost update / etag desync).
+   * SINGLE-FLIGHT (per document): calling this while a save to the SAME open
+   * document is already in flight is a no-op (the second call returns
+   * immediately, no second write) — so saves to one document never overlap and a
+   * save always resolves against the etag/body it started from (no lost update /
+   * etag desync). A save to a DIFFERENT document (after navigating to open it) is
+   * NOT blocked by another document's in-flight save.
    */
   saveOpenDocument: (body: string) => Promise<void>;
 }
@@ -172,23 +174,35 @@ export function useDocsListing(
   // Monotonic seed for the temporary URL of an optimistic create placeholder —
   // kept separate from the request guard so the two concerns don't conflate.
   const tempIdRef = useRef(0);
-  // SINGLE-FLIGHT guard for saveOpenDocument(). Set SYNCHRONOUSLY at the top of a
-  // save and cleared in a `finally`, so a second saveOpenDocument() called while
-  // one is still in flight is a no-op (returns early) — overlapping saves to the
-  // same open document CANNOT occur. This is the robust fix for the lost-update /
-  // etag-desync class of races (two were surfaced in the prior id-reconcile
-  // approach): with at most one save in flight, every save resolves against the
-  // etag/body it STARTED from — there is no "older vs newer save" ordering to
-  // reconcile, no late-resolving older save to discard, no inconsistent persisted
-  // state. The Save button is also disabled while `saveStatus === "saving"`
-  // (defense-in-depth), but a fast / programmatic double-call can still race the
-  // async state update, so the synchronous ref — not the disabled button — is
-  // what actually closes the race. Imperative bookkeeping — a ref is the right
-  // home (read/written only in event handlers, never during render). The
-  // navigate-away guard below (`live.url === current.url`) is STILL required: a
-  // single in-flight save can resolve after the user has navigated to a different
-  // open document, and its result must not apply to that other doc.
-  const saveInFlightRef = useRef(false);
+  // SINGLE-FLIGHT guard for saveOpenDocument(), scoped PER DOCUMENT URL. Holds the
+  // URL of the document whose save is currently in flight (or `null` when no save
+  // is in flight). Set SYNCHRONOUSLY at the top of a save and cleared in a
+  // `finally`, so a second saveOpenDocument() to the SAME open document while one
+  // is still in flight is a no-op (returns early) — overlapping saves to the same
+  // document CANNOT occur. This is the robust fix for the lost-update / etag-desync
+  // class of races (two were surfaced in the prior id-reconcile approach): with at
+  // most one save in flight PER DOC, every save resolves against the etag/body it
+  // STARTED from — there is no "older vs newer save" ordering to reconcile, no
+  // late-resolving older save to discard, no inconsistent persisted state.
+  //
+  // Why per-URL and not a global boolean: a global latch would WEDGE a different
+  // document. If a save for doc A is still in flight and the user navigates to open
+  // doc B, a global latch (still held by A) would silently block B's save forever.
+  // The single-flight invariant is only meaningful within ONE document — A's
+  // in-flight save is no longer this editor's concern once the open doc is B (and
+  // A's result can't apply to B: the navigate-away `live.url === current.url` guard
+  // below already drops it). So we block only a save to the SAME URL that already
+  // has one in flight; a save to a DIFFERENT open document always proceeds.
+  //
+  // The Save button is also disabled while `saveStatus === "saving"` (defense-in-
+  // depth), but a fast / programmatic double-call can still race the async state
+  // update, so the synchronous ref — not the disabled button — is what actually
+  // closes the race. Imperative bookkeeping — a ref is the right home (read/written
+  // only in event handlers, never during render). The navigate-away guard below
+  // (`live.url === current.url`) is STILL required: a single in-flight save can
+  // resolve after the user has navigated to a different open document, and its
+  // result must not apply to that other doc.
+  const saveInFlightUrlRef = useRef<string | null>(null);
   // Tracks the store the navigation state currently belongs to, kept in STATE
   // (not a ref) so the store-change reset is concurrent-rendering safe.
   const [prevStore, setPrevStore] = useState(store);
@@ -415,14 +429,17 @@ export function useDocsListing(
       const current = openDocument;
       if (current === null) return; // nothing open to save
 
-      // SINGLE-FLIGHT: if a save is already in flight, this overlapping call is a
-      // no-op — return WITHOUT a second optimistic update or pod write. (See
-      // saveInFlightRef.) The latch is synchronous, so it wins the race even when
-      // the `saving` status / disabled Save button hasn't propagated to the DOM
-      // yet. With at most one save in flight, the in-flight save always resolves
-      // against the etag/body it started from — no lost update, no etag desync.
-      if (saveInFlightRef.current) return;
-      saveInFlightRef.current = true;
+      // SINGLE-FLIGHT (per document): if a save to THIS document is already in
+      // flight, this overlapping call is a no-op — return WITHOUT a second
+      // optimistic update or pod write. (See saveInFlightUrlRef.) The latch is
+      // synchronous, so it wins the race even when the `saving` status / disabled
+      // Save button hasn't propagated to the DOM yet. With at most one save in
+      // flight per doc, the in-flight save always resolves against the etag/body it
+      // started from — no lost update, no etag desync. A save to a DIFFERENT open
+      // document is NOT blocked: navigating to open doc B never wedges B's save just
+      // because A's save is still settling.
+      if (saveInFlightUrlRef.current === current.url) return;
+      saveInFlightUrlRef.current = current.url;
 
       // Optimistic body update: reflect the edit in the open view immediately.
       const previous = current;
@@ -464,8 +481,14 @@ export function useDocsListing(
         reportSaveFailure(err);
       } finally {
         // Release the single-flight latch once this save has settled (resolved or
-        // rejected) so the next save can proceed.
-        saveInFlightRef.current = false;
+        // rejected) so the next save to THIS document can proceed. Clear only if the
+        // latch still marks THIS save's URL: were two saves to two different docs in
+        // flight concurrently (A in flight, user opens B and saves B), A settling
+        // must not wipe B's in-flight marker — guard the clear by URL so each save
+        // only releases its own latch.
+        if (saveInFlightUrlRef.current === current.url) {
+          saveInFlightUrlRef.current = null;
+        }
       }
     },
     [store, openDocument, reportSaveFailure],
