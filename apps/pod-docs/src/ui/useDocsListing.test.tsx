@@ -59,6 +59,11 @@ function httpError(status: number): Error & { status: number } {
 function stableFactory(stub: {
   list: () => Promise<DocumentEntry[]>;
   read?: (url: string) => Promise<StoredDocument | undefined>;
+  create?: (
+    input: { title: string; body?: string },
+    slugHint?: string,
+  ) => Promise<{ url: string; etag: string | null }>;
+  save?: (url: string, input: unknown, etag?: string | null) => Promise<{ etag: string | null }>;
 }): typeof createDocsStore {
   const store = { read: async () => undefined, ...stub } as unknown as DocsStore;
   return (() => store) as typeof createDocsStore;
@@ -392,5 +397,271 @@ describe("useDocsListing — auth seam + staleness", () => {
     });
     expect(result.current.error).toBeNull();
     expect(result.current.isAccessError).toBe(false);
+  });
+});
+
+describe("useDocsListing — createDocument (optimistic)", () => {
+  const NewUrl = "https://alice.pod/pod-docs/my-doc-abc.ttl";
+
+  it("inserts the new doc optimistically, persists, then marks Saved and opens it", async () => {
+    let resolveCreate: (v: { url: string; etag: string | null }) => void = () => {};
+    const create = vi.fn(
+      () =>
+        new Promise<{ url: string; etag: string | null }>((r) => {
+          resolveCreate = r;
+        }),
+    );
+    const createStore = stableFactory({ list: async () => [], create });
+    const { result } = renderHook(() => useDocsListing(POD, WEBID, { createStore }));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    // Fire the create — the placeholder must appear IMMEDIATELY, before persist.
+    act(() => {
+      void result.current.createDocument({ title: "My Doc", body: "<p>hi</p>" });
+    });
+    expect(result.current.saveStatus).toBe("saving");
+    expect(result.current.entries).toHaveLength(1);
+    expect(result.current.entries[0]?.title).toBe("My Doc");
+    expect(create).toHaveBeenCalledWith({ title: "My Doc", body: "<p>hi</p>" });
+
+    // Persist resolves → placeholder swapped for the real URL, Saved, opened.
+    await act(async () => {
+      resolveCreate({ url: NewUrl, etag: 'W/"new"' });
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(result.current.saveStatus).toBe("saved"));
+    expect(result.current.entries[0]?.url).toBe(NewUrl);
+    expect(result.current.openDocument?.url).toBe(NewUrl);
+    expect(result.current.openDocument?.data.body).toBe("<p>hi</p>");
+    expect(result.current.openDocument?.etag).toBe('W/"new"');
+  });
+
+  it("reverts the optimistic insert and surfaces the error on create failure", async () => {
+    const create = vi.fn(async () => {
+      throw new Error("disk full");
+    });
+    const createStore = stableFactory({ list: async () => [entry()], create });
+    const { result } = renderHook(() => useDocsListing(POD, WEBID, { createStore }));
+    await waitFor(() => expect(result.current.entries).toHaveLength(1));
+
+    await act(async () => {
+      await result.current.createDocument({ title: "Doomed", body: "x" });
+    });
+    // Reverted: the placeholder is gone, only the original listing remains.
+    expect(result.current.entries).toHaveLength(1);
+    expect(result.current.entries[0]?.title).toBe("My notes");
+    expect(result.current.saveStatus).toBe("failed");
+    expect(result.current.saveError).toBe("disk full");
+    expect(result.current.openDocument).toBeNull();
+  });
+
+  it("rejects an all-blank create with a validation message and no I/O", async () => {
+    const create = vi.fn(async () => ({ url: NewUrl, etag: null }));
+    const createStore = stableFactory({ list: async () => [], create });
+    const { result } = renderHook(() => useDocsListing(POD, WEBID, { createStore }));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await result.current.createDocument({ title: "   ", body: "  " });
+    });
+    expect(create).not.toHaveBeenCalled();
+    expect(result.current.saveStatus).toBe("failed");
+    expect(result.current.saveError).toMatch(/title or some content/i);
+    expect(result.current.entries).toHaveLength(0);
+  });
+
+  it("surfaces a 403 on create as a permission-flavoured save error", async () => {
+    const create = vi.fn(async () => {
+      throw httpError(403);
+    });
+    const createStore = stableFactory({ list: async () => [], create });
+    const { result } = renderHook(() => useDocsListing(POD, WEBID, { createStore }));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await result.current.createDocument({ title: "Doc", body: "b" });
+    });
+    expect(result.current.isSaveAccessError).toBe(true);
+    expect(result.current.saveError).toMatch(/permission/i);
+  });
+
+  it("surfaces a 401 on create as a login-flavoured save error", async () => {
+    const create = vi.fn(async () => {
+      throw httpError(401);
+    });
+    const createStore = stableFactory({ list: async () => [], create });
+    const { result } = renderHook(() => useDocsListing(POD, WEBID, { createStore }));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await act(async () => {
+      await result.current.createDocument({ title: "Doc", body: "b" });
+    });
+    expect(result.current.isSaveAccessError).toBe(true);
+    expect(result.current.saveError).toMatch(/log in/i);
+  });
+
+  it("uses the URL-tail name for a body-only (untitled) optimistic create", async () => {
+    const create = vi.fn(async () => ({ url: NewUrl, etag: null }));
+    const createStore = stableFactory({ list: async () => [], create });
+    const { result } = renderHook(() => useDocsListing(POD, WEBID, { createStore }));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await act(async () => {
+      await result.current.createDocument({ title: "", body: "just a body" });
+    });
+    expect(result.current.entries[0]?.url).toBe(NewUrl);
+    expect(result.current.entries[0]?.name).toBe("my-doc-abc.ttl");
+  });
+});
+
+describe("useDocsListing — saveOpenDocument (optimistic)", () => {
+  function openedStore(
+    save: (url: string, input: unknown, etag?: string | null) => Promise<{ etag: string | null }>,
+  ): typeof createDocsStore {
+    return stableFactory({ list: async () => [entry()], read: async () => stored(), save });
+  }
+
+  async function withOpenDoc(createStore: typeof createDocsStore) {
+    const { result } = renderHook(() => useDocsListing(POD, WEBID, { createStore }));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    act(() => result.current.open(DOC_URL));
+    await waitFor(() => expect(result.current.openDocument).not.toBeNull());
+    return result;
+  }
+
+  it("updates the body optimistically, persists, and commits the new etag + Saved", async () => {
+    let resolveSave: (v: { etag: string | null }) => void = () => {};
+    const save = vi.fn(
+      () =>
+        new Promise<{ etag: string | null }>((r) => {
+          resolveSave = r;
+        }),
+    );
+    const result = await withOpenDoc(openedStore(save));
+
+    act(() => {
+      void result.current.saveOpenDocument("<p>edited</p>");
+    });
+    // Optimistic: the open body updates immediately, status is saving.
+    expect(result.current.openDocument?.data.body).toBe("<p>edited</p>");
+    expect(result.current.saveStatus).toBe("saving");
+    expect(save).toHaveBeenCalledWith(
+      DOC_URL,
+      expect.objectContaining({ title: "My notes", body: "<p>edited</p>" }),
+      '"v1"',
+    );
+
+    await act(async () => {
+      resolveSave({ etag: '"v2"' });
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(result.current.saveStatus).toBe("saved"));
+    expect(result.current.openDocument?.etag).toBe('"v2"');
+    expect(result.current.openDocument?.data.body).toBe("<p>edited</p>");
+  });
+
+  it("reverts the body and surfaces the error on save failure", async () => {
+    const save = vi.fn(async () => {
+      throw httpError(412); // a concurrent-edit clobber guard
+    });
+    const result = await withOpenDoc(openedStore(save));
+
+    await act(async () => {
+      await result.current.saveOpenDocument("<p>edited</p>");
+    });
+    // Reverted to the persisted body; generic error (412 is not 401/403).
+    expect(result.current.openDocument?.data.body).toBe("<p>hello</p>");
+    expect(result.current.saveStatus).toBe("failed");
+    expect(result.current.isSaveAccessError).toBe(false);
+    expect(result.current.saveError).toMatch(/412/);
+  });
+
+  it("surfaces a 403 on save as a permission-flavoured error", async () => {
+    const save = vi.fn(async () => {
+      throw httpError(403);
+    });
+    const result = await withOpenDoc(openedStore(save));
+    await act(async () => {
+      await result.current.saveOpenDocument("<p>edited</p>");
+    });
+    expect(result.current.isSaveAccessError).toBe(true);
+    expect(result.current.saveError).toMatch(/permission/i);
+  });
+
+  it("is a no-op when no document is open", async () => {
+    const save = vi.fn(async () => ({ etag: '"v2"' }));
+    const createStore = stableFactory({ list: async () => [entry()], save: save as never });
+    const { result } = renderHook(() => useDocsListing(POD, WEBID, { createStore }));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await act(async () => {
+      await result.current.saveOpenDocument("nothing open");
+    });
+    expect(save).not.toHaveBeenCalled();
+    expect(result.current.saveStatus).toBe("idle");
+  });
+
+  it("ignores a save result that resolves after navigating to another resource", async () => {
+    let resolveSave: (v: { etag: string | null }) => void = () => {};
+    const save = vi.fn(
+      () =>
+        new Promise<{ etag: string | null }>((r) => {
+          resolveSave = r;
+        }),
+    );
+    const result = await withOpenDoc(openedStore(save));
+    act(() => {
+      void result.current.saveOpenDocument("<p>edited</p>");
+    });
+    // Navigate away (close) before the save resolves.
+    act(() => result.current.close());
+    await act(async () => {
+      resolveSave({ etag: '"v2"' });
+      await Promise.resolve();
+    });
+    // The late save must NOT resurrect the closed document.
+    expect(result.current.openDocument).toBeNull();
+  });
+
+  it("does not revert another open document when a stale save REJECTS", async () => {
+    // Save the first doc, then open a SECOND doc before the save rejects: the
+    // late failure's revert must target only the original resource (now not
+    // open), never clobber the currently-open second document's body.
+    const doc2Url = "https://alice.pod/pod-docs/other-xyz.ttl";
+    let rejectSave: (e: unknown) => void = () => {};
+    const save = vi.fn(
+      () =>
+        new Promise<{ etag: string | null }>((_, rej) => {
+          rejectSave = rej;
+        }),
+    );
+    // The shared `stored()` helper hardcodes DOC_URL; build the second doc with
+    // its own url so opening it actually switches the open resource.
+    const doc2: StoredDocument = {
+      url: doc2Url,
+      etag: '"o1"',
+      data: { ...stored().data, title: "Other", body: "<p>other</p>" },
+    };
+    const createStore = stableFactory({
+      list: async () => [entry(), entry({ url: doc2Url, title: "Other" })],
+      read: async (url: string) => (url === doc2Url ? doc2 : stored({ body: "<p>hello</p>" })),
+      save,
+    });
+    const { result } = renderHook(() => useDocsListing(POD, WEBID, { createStore }));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    act(() => result.current.open(DOC_URL));
+    await waitFor(() => expect(result.current.openDocument?.url).toBe(DOC_URL));
+    act(() => {
+      void result.current.saveOpenDocument("<p>edited</p>");
+    });
+    // Open a different document before the save settles.
+    act(() => result.current.open(doc2Url));
+    await waitFor(() => expect(result.current.openDocument?.url).toBe(doc2Url));
+
+    await act(async () => {
+      rejectSave(new Error("late failure"));
+      await Promise.resolve();
+    });
+    // The second document is untouched by the first doc's stale rejection.
+    expect(result.current.openDocument?.url).toBe(doc2Url);
+    expect(result.current.openDocument?.data.title).toBe("Other");
   });
 });

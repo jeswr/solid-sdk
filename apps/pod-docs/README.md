@@ -9,9 +9,11 @@ Solid suite (ADR-0013: every app built in parallel), federation-registry-ready v
 
 This package is the **non-throwaway core**: a typed model over quads, read/write/list against
 a Solid pod, type-index registration, and a `clientid.jsonld` that declares the app's
-federation metadata. A framework-agnostic **read-only React view** ships as the optional
-[`@jeswr/pod-docs/ui`](#optional-react-view-pod-docsui) export; the full editor UI is a
-deliberate follow-up (see below).
+federation metadata. A framework-agnostic **React view** ships as the optional
+[`@jeswr/pod-docs/ui`](#optional-react-view-pod-docsui) export — it browses and opens documents,
+**creates** new ones, and **saves body edits** (each an optimistic mutation with revert-on-failure);
+the rich-text **editor engine** that interprets a body for a given format is a deliberate follow-up
+(see below).
 
 ## What it does
 
@@ -74,8 +76,8 @@ A **framework-agnostic React** document browser, sitting on top of the data laye
 all data flows through the data layer (`DocsStore`) — and takes the authenticated `fetch` as an
 **injected seam** (omit it and the global fetch that `@solid/reactive-authentication` patches in a
 real session is used; the interactive-login wiring is `create-solid-app`-gated). Document bodies
-are rendered as **escaped text** (never injected HTML) — the editor *engine* that interprets
-`pd:body` for a given format is a separate ADR.
+are rendered as **escaped text** (never injected HTML) and edits are stored as a plain literal —
+the editor *engine* that interprets `pd:body` for a given format is a separate ADR.
 
 ```tsx
 import { DocumentBrowser } from "@jeswr/pod-docs/ui";
@@ -85,9 +87,13 @@ import { DocumentBrowser } from "@jeswr/pod-docs/ui";
 ```
 
 It lists the documents in the pod's `pod-docs/` container (title + modified), opens any document
-read-only (title, format, author, modified, body), and surfaces loading / empty / error /
-access-denied (401 login vs 403 permission) states. The `useDocsListing` hook is exported for a
-custom view. The lower-level write/edit surface (the editor) is a follow-up.
+(title, format, author, modified, body), and surfaces loading / empty / error / access-denied
+(401 login vs 403 permission) states. It also **creates** documents (a title + body form) and
+**saves body edits** to the open document — both **optimistic**: the change appears immediately,
+persists asynchronously through the data layer's scope-guarded `create` / `save` (a new PROV
+revision), shows a "Saving…/Saved/failed" indicator, and **reverts on failure**. The
+`useDocsListing` hook (exposing `createDocument` / `saveOpenDocument` / `saveStatus`) is exported
+for a custom view. The rich-text editor *engine* is a follow-up.
 
 ## Tracked follow-ups
 

@@ -23,9 +23,19 @@ import {
   createDocsStore,
   type DocsStore,
   type DocumentEntry,
+  nameFromUrl,
   type StoredDocument,
 } from "../store.js";
 import { errorMessage } from "./format.js";
+
+/**
+ * The lifecycle of a write (create / save-edit) as the view renders it: `idle`
+ * before any write, `saving` while the pod PUT is in flight (the optimistic
+ * state is already visible), `saved` on success, `failed` when the persist
+ * rejected (the optimistic change has been reverted). Drives the
+ * "Saving…/Saved/failed" indicator.
+ */
+export type SaveStatus = "idle" | "saving" | "saved" | "failed";
 
 /** True when a caught value is an HTTP access failure (401 / 403). */
 function isAccessFailure(err: unknown): err is { status: 401 | 403 } {
@@ -63,6 +73,35 @@ export interface DocsListingState {
   close: () => void;
   /** Re-fetch the listing (e.g. a manual "retry" after an error). */
   refresh: () => void;
+  /**
+   * The current write lifecycle for the create / save-edit flows — drives the
+   * "Saving…/Saved/failed" indicator. `idle` until the first write.
+   */
+  saveStatus: SaveStatus;
+  /**
+   * A user-facing error for the last write that failed, or `null`. A 401/403 is
+   * reported with a login-/permission-flavoured message; any other failure is
+   * generic. (`saveStatus === "failed"` whenever this is set.)
+   */
+  saveError: string | null;
+  /** True when the last write error was an authentication/authorization failure. */
+  isSaveAccessError: boolean;
+  /**
+   * Create a new document (optimistic): a placeholder row is inserted into the
+   * listing immediately, the pod write runs async, and on success the row is
+   * replaced with the persisted entry and the document is opened. On failure the
+   * placeholder is removed and `saveStatus` becomes `failed` with `saveError`.
+   * Rejects (and surfaces an error) when `title` and `body` are both blank.
+   */
+  createDocument: (input: { title: string; body: string }) => Promise<void>;
+  /**
+   * Save an edit to the currently-open document's body (optimistic): the open
+   * document's body updates immediately, the pod write (a new PROV revision)
+   * runs async under the document's `If-Match` etag. On success the open
+   * document is refreshed with the new etag/revision; on failure the body is
+   * reverted and `saveStatus` becomes `failed`. A no-op when no document is open.
+   */
+  saveOpenDocument: (body: string) => Promise<void>;
 }
 
 /** Options for {@link useDocsListing}. */
@@ -114,6 +153,9 @@ export function useDocsListing(
   const [opening, setOpening] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isAccessError, setIsAccessError] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [isSaveAccessError, setIsSaveAccessError] = useState(false);
   // Bumped to force a re-fetch of the listing (refresh) without a store change.
   const [reloadToken, setReloadToken] = useState(0);
   // Monotonic id for the in-flight async op; bumped on every navigation action
@@ -123,6 +165,9 @@ export function useDocsListing(
   // use a render-mutated ref; this guard is only ever read/written in effects
   // and event handlers, never during render.
   const requestRef = useRef(0);
+  // Monotonic seed for the temporary URL of an optimistic create placeholder —
+  // kept separate from the request guard so the two concerns don't conflate.
+  const tempIdRef = useRef(0);
   // Tracks the store the navigation state currently belongs to, kept in STATE
   // (not a ref) so the store-change reset is concurrent-rendering safe.
   const [prevStore, setPrevStore] = useState(store);
@@ -149,6 +194,11 @@ export function useDocsListing(
     setOpening(false);
     setError(null);
     setIsAccessError(false);
+    // A new pod/WebID also resets the write indicator — a "Saved"/"failed" from
+    // the previous store must not bleed into the new one's view.
+    setSaveStatus("idle");
+    setSaveError(null);
+    setIsSaveAccessError(false);
   }
 
   // `reloadToken` is a deliberate re-fetch TRIGGER (bumped by refresh()): it is
@@ -253,6 +303,138 @@ export function useDocsListing(
     setReloadToken((n) => n + 1);
   }, []);
 
+  // Classify a write failure into the user-facing save indicator. Mirrors the
+  // read path's 401/403 handling so a create/save surfaces the same login-vs-
+  // permission message; any other failure (412 clobber, network, …) is generic.
+  const reportSaveFailure = useCallback((err: unknown) => {
+    if (isAccessFailure(err)) {
+      setIsSaveAccessError(true);
+      setSaveError(
+        err.status === 401
+          ? "You need to log in to save changes."
+          : "You don't have permission to save changes here.",
+      );
+    } else {
+      setIsSaveAccessError(false);
+      setSaveError(errorMessage(err));
+    }
+    setSaveStatus("failed");
+  }, []);
+
+  const createDocument = useCallback(
+    async (input: { title: string; body: string }) => {
+      const title = input.title.trim();
+      const body = input.body.trim();
+      // Validation: a document with neither a title nor a body is rejected
+      // before any optimistic insert or pod I/O — there is nothing to create.
+      if (title === "" && body === "") {
+        setIsSaveAccessError(false);
+        setSaveError("Enter a title or some content before creating a document.");
+        setSaveStatus("failed");
+        return;
+      }
+
+      // Optimistic insert: a placeholder row keyed by a temporary, local-only URL
+      // appears in the listing IMMEDIATELY, before the pod write resolves. The
+      // temp URL is never sent to the pod and is replaced by the real persisted
+      // URL on success. Bump the read guard so a concurrent list()/open() read
+      // resolving mid-create can't wipe the placeholder out from under us.
+      requestRef.current++;
+      const tempUrl = `pod-docs:pending:${++tempIdRef.current}`;
+      const placeholder: DocumentEntry = {
+        url: tempUrl,
+        name: title || "Untitled",
+        title,
+        isContainer: false,
+        modified: new Date().toISOString(),
+      };
+      setEntries((prev) => [...prev, placeholder]);
+      setSaveStatus("saving");
+      setSaveError(null);
+      setIsSaveAccessError(false);
+
+      try {
+        const { url, etag } = await store.create({ title, body });
+        // Swap the placeholder for the persisted entry (real URL keeps the row
+        // stable for React + makes it openable). Then open the new document so
+        // the author lands in it.
+        setEntries((prev) =>
+          prev.map((e) => (e.url === tempUrl ? { ...e, url, name: nameFromUrl(url) } : e)),
+        );
+        setSaveStatus("saved");
+        const created: StoredDocument = {
+          url,
+          etag,
+          data: {
+            title,
+            body,
+            format: "text/html",
+            created: placeholder.modified,
+            modified: placeholder.modified,
+            revisions: [],
+          },
+        };
+        // Show the freshly-created document. Bump the request id so any in-flight
+        // open()/list() read can't later clobber this navigation.
+        requestRef.current++;
+        setOpenDocument(created);
+        setOpening(false);
+      } catch (err) {
+        // Revert: drop the optimistic placeholder so the listing reflects the
+        // pod's true (unchanged) state, and surface the failure.
+        setEntries((prev) => prev.filter((e) => e.url !== tempUrl));
+        reportSaveFailure(err);
+      }
+    },
+    [store, reportSaveFailure],
+  );
+
+  const saveOpenDocument = useCallback(
+    async (body: string) => {
+      const current = openDocument;
+      if (current === null) return; // nothing open to save
+
+      // Optimistic body update: reflect the edit in the open view immediately.
+      const previous = current;
+      const optimistic: StoredDocument = {
+        ...current,
+        data: { ...current.data, body, modified: new Date().toISOString() },
+      };
+      setOpenDocument(optimistic);
+      setSaveStatus("saving");
+      setSaveError(null);
+      setIsSaveAccessError(false);
+
+      try {
+        const { etag } = await store.save(
+          current.url,
+          {
+            title: current.data.title,
+            body,
+            format: current.data.format,
+            creator: current.data.creator,
+            created: current.data.created,
+            priorRevisions: current.data.revisions,
+          },
+          current.etag,
+        );
+        // Commit the new etag so a subsequent save sends the right If-Match. We
+        // only mutate the open document if the user hasn't navigated away from
+        // THIS resource in the meantime (a store change / close / open-of-another
+        // would have replaced it).
+        setOpenDocument((live) =>
+          live && live.url === current.url ? { ...live, etag, data: { ...live.data, body } } : live,
+        );
+        setSaveStatus("saved");
+      } catch (err) {
+        // Revert the body to the pre-edit state (only if still on this resource).
+        setOpenDocument((live) => (live && live.url === current.url ? previous : live));
+        reportSaveFailure(err);
+      }
+    },
+    [store, openDocument, reportSaveFailure],
+  );
+
   return {
     entries,
     openDocument,
@@ -263,5 +445,10 @@ export function useDocsListing(
     open,
     close,
     refresh,
+    saveStatus,
+    saveError,
+    isSaveAccessError,
+    createDocument,
+    saveOpenDocument,
   };
 }
