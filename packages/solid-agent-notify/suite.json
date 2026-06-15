@@ -1,5 +1,20 @@
 {
-  "kind": "sdk",
-  "repo": "jeswr/solid-agent-notify",
-  "visibility": "public"
+  "$schema": "https://raw.githubusercontent.com/jeswr/full-solid-ecosystem/main/tracking/schema/suite.schema.json",
+  "id": "solid-agent-notify",
+  "kind": "package",
+  "name": "Solid Agent Notify",
+  "repo": "https://github.com/jeswr/solid-agent-notify",
+  "category": "infrastructure",
+  "maturity": "alpha",
+  "visibility": "public",
+  "stack": {
+    "language": "TypeScript",
+    "runtime": "Node >=20",
+    "rdf": "@jeswr/fetch-rdf, @solid/object, @rdfjs/wrapper, n3",
+    "fetch": "undici (SSRF-guarded, DNS-pinned egress chokepoint)",
+    "test": "vitest (v8 coverage)",
+    "lint": "@biomejs/biome"
+  },
+  "dependsOn": [],
+  "federation": null
 }
