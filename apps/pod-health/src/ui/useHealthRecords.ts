@@ -112,6 +112,12 @@ export function useHealthRecords(
   // applies in the same commit, so the view never flashes the previous
   // resource's entries). The load effect below then GETs the new resource. The
   // mount case is excluded because `prevUrl` is seeded with the initial url.
+  // `loading` is set true HERE (not only in the post-commit effect) so a
+  // resource change AFTER a completed load (loading=false) transitions
+  // atomically to loading in the SAME render — clearing data + error and
+  // showing the spinner together. Without it the committed render would briefly
+  // show the stale `loading=false` over empty data (a blank flash) until the
+  // effect runs; this matches the initial-mount loading semantics.
   if (prevUrl !== normalizedUrl) {
     setPrevUrl(normalizedUrl);
     setCurrentUrl(normalizedUrl);
@@ -119,6 +125,7 @@ export function useHealthRecords(
     setError(null);
     setIsAccessError(false);
     setLoaded(false);
+    setLoading(true);
   }
 
   // `reloadToken` is a deliberate re-fetch TRIGGER (bumped by refresh()): it is
