@@ -309,6 +309,15 @@ export function useChat(podRoot: string, webId: string, options: UseChatOptions 
   // A bumped id marks any in-flight send as stale (e.g. the room changed), so a
   // late resolve/reject can't write a status/thread for a room left behind.
   const sendRequestIdRef = useRef(0);
+  // SINGLE-FLIGHT guard. Set SYNCHRONOUSLY at the top of a send and cleared in a
+  // `finally`, so a second send() called while one is still saving is a no-op
+  // (returns false) — it never adds a second optimistic row. This closes a race
+  // the requestId guard alone could not: starting send #2 bumps the id, so when
+  // send #1 resolved it took the superseded early-return and NEVER reconciled its
+  // optimistic row, stranding a permanent "Saving…" message in the thread. The
+  // Send button is disabled while saving, but a programmatic/fast double-call can
+  // still race the async state update; this synchronous ref forecloses it.
+  const sendInFlightRef = useRef(false);
 
   // Tracks the (podRoot, webId, fetch) the current state belongs to, kept in
   // STATE (not a ref) so the input-change reset is concurrent-rendering safe: a
@@ -491,8 +500,16 @@ export function useChat(podRoot: string, webId: string, options: UseChatOptions 
     async (content: string): Promise<boolean> => {
       const roomUrl = openRoomUrlRef.current;
       // No open room, or an empty / whitespace-only body → a no-op (no write, no
-      // optimistic row, no status change).
+      // optimistic row, no status change). Checked BEFORE the single-flight latch
+      // so a no-op send never blocks a subsequent real one.
       if (roomUrl === null || content.trim().length === 0) return false;
+
+      // SINGLE-FLIGHT: if a send is already saving, this overlapping call is a
+      // no-op — return false WITHOUT adding a second optimistic row. (See
+      // sendInFlightRef.) The latch is synchronous, so it wins the race even when
+      // the `saving` status / disabled button hasn't propagated to the DOM yet.
+      if (sendInFlightRef.current) return false;
+      sendInFlightRef.current = true;
 
       const requestId = ++sendRequestIdRef.current;
       // A client-only key for the optimistic row, replaced by the real URL on
@@ -546,9 +563,11 @@ export function useChat(podRoot: string, webId: string, options: UseChatOptions 
           room.etag,
         );
 
-        // The user switched/closed the room (or sent again) while the write was
-        // in flight — discard this stale result rather than mutating a thread
-        // that no longer belongs to the room we wrote to.
+        // The user switched/closed the room while the write was in flight (which
+        // bumps sendRequestIdRef via the thread effect) — discard this stale
+        // result rather than mutating a thread that no longer belongs to the room
+        // we wrote to. (Overlapping sends can't reach here: the single-flight
+        // latch makes a second send a no-op while this one is saving.)
         if (requestId !== sendRequestIdRef.current) return true;
         // Swap the optimistic row for the confirmed, persisted one (real URL, no
         // longer pending).
@@ -569,6 +588,10 @@ export function useChat(podRoot: string, webId: string, options: UseChatOptions 
         setSendError(message);
         setSendAccessError(isAccess);
         return false;
+      } finally {
+        // Release the single-flight latch once this send has settled (resolved or
+        // rejected), regardless of staleness, so the next send can proceed.
+        sendInFlightRef.current = false;
       }
     },
     // openRoomUrlRef is a stable ref (read via `.current` for the live value), so

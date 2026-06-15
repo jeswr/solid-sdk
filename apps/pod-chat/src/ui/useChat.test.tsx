@@ -844,6 +844,99 @@ describe("useChat send (optimistic mutation)", () => {
     expect(result.current.messages[0]?.pending).toBe(false);
   });
 
+  it("single-flights overlapping sends — a 2nd send while the 1st is in flight is a no-op (no orphan pending row)", async () => {
+    // The roborev Medium: a 2nd send() started while the 1st write is in flight
+    // used to add a SECOND optimistic row AND bump the request id, so when the
+    // 1st write resolved it took the superseded early-return and never reconciled
+    // its own optimistic row — leaving a permanent "Saving…" message stuck in the
+    // thread. The synchronous single-flight latch makes the 2nd call a no-op:
+    // exactly one optimistic row exists, and the 1st send completes + confirms it.
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    const base = writablePod();
+    const fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.toString();
+      const method = (init?.method ?? "GET").toUpperCase();
+      if (method === "PUT" && url.startsWith(MESSAGES) && url !== MESSAGES) {
+        await gate;
+      }
+      return base.fetch(input, init);
+    }) as unknown as typeof globalThis.fetch;
+
+    const { result } = renderHook(() => useChat(POD, WEBID, { fetch }));
+    await waitFor(() => expect(result.current.loadingRooms).toBe(false));
+    act(() => result.current.open(ROOM_A));
+    await waitFor(() => expect(result.current.loadingMessages).toBe(false));
+
+    // Fire send #1 (its message PUT blocks on the gate), then send #2 RAPIDLY
+    // while #1 is still saving — both in the SAME synchronous act() so #2 races
+    // #1 before any state update has propagated.
+    let first: Promise<boolean>;
+    let secondResult: boolean | undefined;
+    act(() => {
+      first = result.current.send("first");
+      // The 2nd call returns synchronously-resolved false (the latch is set), so
+      // it never adds a second optimistic row.
+      void result.current.send("second (should be a no-op)").then((r) => {
+        secondResult = r;
+      });
+    });
+
+    // Exactly ONE optimistic (pending) row is shown — the 2nd send added nothing.
+    await waitFor(() => expect(result.current.messages).toHaveLength(1));
+    expect(result.current.messages[0]?.pending).toBe(true);
+    expect(result.current.messages[0]?.content).toBe("first");
+    expect(result.current.sendStatus).toBe("saving");
+
+    // Release the gate so send #1 completes; it must confirm its own row.
+    let firstResult: boolean | undefined;
+    await act(async () => {
+      release();
+      firstResult = await first;
+    });
+
+    // The 2nd send was rejected as a no-op; the 1st settled to Saved with NO
+    // orphan pending row left behind.
+    expect(secondResult).toBe(false);
+    expect(firstResult).toBe(true);
+    expect(result.current.sendStatus).toBe("saved");
+    expect(result.current.sendError).toBeNull();
+    expect(result.current.messages).toHaveLength(1);
+    expect(result.current.messages[0]?.content).toBe("first");
+    expect(result.current.messages[0]?.pending).toBe(false);
+    // No row is ever left pending — the orphan-"Saving…" bug cannot recur.
+    expect(result.current.messages.some((m) => m.pending)).toBe(false);
+    // Only ONE message was actually persisted (the 2nd never wrote).
+    expect(base.posted()).toHaveLength(1);
+  });
+
+  it("releases the single-flight latch after a settled send — a subsequent send proceeds normally", async () => {
+    // The latch must be cleared in the finally so the NEXT (non-overlapping) send
+    // is not wrongly blocked. Send once, await it, then send again sequentially.
+    const pod = writablePod();
+    const { result } = renderHook(() => useChat(POD, WEBID, { fetch: pod.fetch }));
+    await waitFor(() => expect(result.current.loadingRooms).toBe(false));
+    act(() => result.current.open(ROOM_A));
+    await waitFor(() => expect(result.current.loadingMessages).toBe(false));
+
+    let r1: boolean | undefined;
+    await act(async () => {
+      r1 = await result.current.send("one");
+    });
+    expect(r1).toBe(true);
+
+    let r2: boolean | undefined;
+    await act(async () => {
+      r2 = await result.current.send("two");
+    });
+    expect(r2).toBe(true);
+    expect(result.current.sendStatus).toBe("saved");
+    expect(pod.posted()).toHaveLength(2);
+    expect(result.current.messages.some((m) => m.pending)).toBe(false);
+  });
+
   it("REVERTS the optimistic message and surfaces an error when the write fails", async () => {
     const pod = writablePod({ failWrite: 500 });
     const { result } = renderHook(() => useChat(POD, WEBID, { fetch: pod.fetch }));
