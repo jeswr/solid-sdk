@@ -1,0 +1,244 @@
+// AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+/**
+ * guardedFetch.ts — THE SINGLE EGRESS CHOKEPOINT for solid-agent-notify.
+ *
+ * ════════════════════════════════════════════════════════════════════════════════════════════════
+ * This is the ONLY permitted path for fetching an attacker-influenced URL in this package. Every
+ * cross-pod dereference — a recipient's WebID profile (GET), their inbox listing (GET), a single
+ * notification (GET), and the LDN POST that delivers a notification — MUST go through `guardedFetch`.
+ * Calling the global `fetch`, `undici.fetch`, or `undici.request` directly for an external URL is
+ * FORBIDDEN; `scripts/check-no-raw-fetch.mjs` (`npm run check:fetch`) fails the build otherwise.
+ * ════════════════════════════════════════════════════════════════════════════════════════════════
+ *
+ * VENDORED from `solid-webid-index` `src/lib/security/guardedFetch.ts` (prod-solid-server lineage),
+ * extended here so the SAME chokepoint serves both the RDF GET path and the LDN POST path. The PM's
+ * original cross-pod guard was a host-STRING validator (no DNS resolution) — a public name that
+ * resolves to a private IP slipped through it. This DNS-pinned guard closes that rebinding gap.
+ *
+ * Defence-in-depth, every step fails closed:
+ *   1. Boot assertion — Node runtime with `node:net#isIP` (DNS-pin needs Node; fail at load).
+ *   2. Parse URL → scheme gate (https-only in prod; http only under `allowLoopback` for dev/tests).
+ *   3. Port gate (443 only; +80 for http under loopback) → reject userinfo.
+ *   4. Hostname denylist (cloud-internal names) + alternate-IP-encoding normalisation.
+ *   5. DNS resolve ALL records → classify EVERY one as public; pin the first validated IP.
+ *   6. undici `Agent({ connect: { lookup: pinnedLookup(ip) } })` so the socket connects to the
+ *      PINNED IP — a hostile resolver cannot rebind between the guard and the connect (TOCTOU).
+ *   7. Single AbortController + timeout over fetch + redirects + body.
+ *   8. `redirect: "manual"` loop. A GET re-classifies + re-pins EACH hop (≤ MAX_REDIRECTS) and
+ *      rejects a scheme downgrade / a loop. A **POST refuses to follow ANY 3xx** (an authenticated
+ *      POST must never be transparently bounced to a blocked origin — the confused-deputy this layer
+ *      exists to prevent).
+ *   9. Content-type allowlist on the FINAL GET response (the RDF set); a POST bounds its body but
+ *      does not impose the RDF allowlist (the LDN receipt is not RDF we parse).
+ *  10. Bounded body read (stream + abort past the cap).
+ */
+import { isIP } from "node:net";
+import { Agent, fetch as undiciFetch } from "undici";
+import { FETCH_TIMEOUT_MS, FETCH_USER_AGENT, MAX_BYTES_PROFILE, MAX_REDIRECTS, RDF_ACCEPT, RDF_CONTENT_TYPES, } from "../config.js";
+import { BodyTooLargeError, readBoundedBytes } from "./body.js";
+import { assertNotSsrf, pinnedLookup } from "./ssrf.js";
+export { SsrfError } from "./ssrf.js";
+export { BodyTooLargeError };
+/** Raised by guardedFetch for non-SSRF failures (bad scheme/port, disallowed content-type, redirect
+ * cap, redirect loop, scheme downgrade, a refused POST redirect, network error). SSRF failures
+ * throw {@link SsrfError}. */
+export class GuardedFetchError extends Error {
+    constructor(message, options) {
+        super(message, options);
+        this.name = "GuardedFetchError";
+    }
+}
+/**
+ * Boot assertion (the runtime is load-bearing). Throws at module evaluation if we are NOT on a Node
+ * runtime with `node:net#isIP` — a proxy for the DNS-pin-capable runtime. Where undici Agents +
+ * `node:dns` are absent, DNS-pinning is impossible and we MUST fail closed rather than fetch
+ * unguarded.
+ */
+function assertNodeRuntime() {
+    if (typeof isIP !== "function") {
+        throw new GuardedFetchError("guardedFetch requires node:net#isIP — DNS-pinning is unavailable in this runtime.");
+    }
+}
+assertNodeRuntime();
+/** Per-hop scheme + port gate. 443 always; 80 only under loopback (dev/tests). `prevWasHttps`
+ * rejects a downgrade redirect (https → http). Exported for exhaustive unit testing of the
+ * scheme/port/downgrade branches. */
+export function assertSchemeAndPort(url, allowLoopback, prevWasHttps) {
+    if (url.protocol !== "https:" && url.protocol !== "http:") {
+        throw new GuardedFetchError(`URL must be http/https (got ${url.protocol}).`);
+    }
+    if (url.protocol === "http:" && !allowLoopback) {
+        throw new GuardedFetchError(`URL must be https: (got http: ${url.host}). http: is permitted only under allowLoopback (dev/tests).`);
+    }
+    if (prevWasHttps && url.protocol === "http:") {
+        throw new GuardedFetchError(`Refusing redirect scheme downgrade (https → http): ${url.host}.`);
+    }
+    // Port gate. In PRODUCTION (allowLoopback=false) an explicit port must be 443 (https) — fetching
+    // an internal service on a non-standard port is exactly the SSRF we block. Under allowLoopback
+    // any port is permitted: a fixture server binds an ephemeral loopback port, and the SSRF guard has
+    // already constrained the resolved address to loopback. `url.port` is "" for the scheme default.
+    if (!allowLoopback && url.port !== "") {
+        const port = Number(url.port);
+        if (!(url.protocol === "https:" && port === 443)) {
+            throw new GuardedFetchError(`URL port not allowed (${url.port}); only 443 (https) is permitted in production.`);
+        }
+    }
+}
+/** A per-request undici Agent pinned to the validated IP (closes the rebinding TOCTOU). The Agent +
+ * `undiciFetch` come from the SAME undici copy (dispatchers only interoperate within one undici). */
+function pinningAgent(pinned) {
+    return new Agent({ connect: { lookup: pinnedLookup(pinned) } });
+}
+/**
+ * Fetch an attacker-influenced URL with full SSRF defence-in-depth. Returns the final response, the
+ * resolved URL, the content-type, and the bounded body. Throws {@link SsrfError} for an SSRF refusal
+ * (private/loopback/denied target, rebinding), {@link GuardedFetchError} for any other guard failure
+ * (bad scheme/port, redirect cap/loop/downgrade, refused POST redirect, disallowed content-type,
+ * network/timeout), or {@link BodyTooLargeError} for an over-cap body.
+ */
+export async function guardedFetch(rawUrl, opts = {}) {
+    assertNodeRuntime();
+    const method = opts.method ?? "GET";
+    const allowLoopback = opts.allowLoopback ?? false;
+    const maxBytes = opts.maxBytes ?? MAX_BYTES_PROFILE;
+    const timeoutMs = opts.timeoutMs ?? FETCH_TIMEOUT_MS;
+    const maxRedirects = opts.maxRedirects ?? MAX_REDIRECTS;
+    const accept = opts.accept ?? RDF_ACCEPT;
+    const skipContentTypeAllowlist = opts.skipContentTypeAllowlist ?? false;
+    const allowedContentTypes = (opts.allowedContentTypes ?? RDF_CONTENT_TYPES).map((t) => t.toLowerCase());
+    const headers = {
+        accept,
+        "user-agent": FETCH_USER_AGENT,
+        ...(opts.conditional?.etag
+            ? { "if-none-match": opts.conditional.etag }
+            : {}),
+        ...(opts.conditional?.lastModified
+            ? { "if-modified-since": opts.conditional.lastModified }
+            : {}),
+        ...(opts.headers ?? {}),
+    };
+    // ONE controller + ONE timer for the whole operation (fetch + redirects + body). Cleared in the
+    // finally so a slow redirect chain or slow body can never exceed `timeoutMs`.
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+        let currentUrl = rawUrl;
+        let prevWasHttps = false;
+        const seen = new Set();
+        for (let hop = 0;; hop += 1) {
+            if (hop > maxRedirects) {
+                throw new GuardedFetchError(`Exceeded max redirects (${maxRedirects}); last URL: ${currentUrl}.`);
+            }
+            const parsed = parseUrl(currentUrl);
+            assertSchemeAndPort(parsed, allowLoopback, prevWasHttps);
+            // SSRF guard: resolve + classify all records, pin the first validated IP. Throws SsrfError.
+            const pinned = await assertNotSsrf(parsed.toString(), {
+                allowLoopback,
+                dnsLookup: opts.dnsLookup,
+                enforceHttpsExceptLoopback: true,
+            });
+            const agent = pinningAgent(pinned);
+            let res;
+            try {
+                res = (await undiciFetch(parsed.toString(), {
+                    method,
+                    headers,
+                    body: method === "POST" ? opts.body : undefined,
+                    redirect: "manual",
+                    signal: controller.signal,
+                    dispatcher: agent,
+                }));
+            }
+            catch (error) {
+                if (controller.signal.aborted) {
+                    throw new GuardedFetchError(`Fetch timed out after ${timeoutMs}ms: ${currentUrl}.`, { cause: error });
+                }
+                throw new GuardedFetchError(`Fetch failed for ${currentUrl}: ${reason(error)}`, { cause: error });
+            }
+            finally {
+                // Close the per-hop Agent (a redirect spawns a fresh one for the next hop).
+                void agent.close().catch(() => { });
+            }
+            // Redirect?
+            if (res.status >= 300 && res.status < 400) {
+                const location = res.headers.get("location");
+                if (location) {
+                    // SECURITY (POST confused-deputy): a POST to an attacker-influenced host that answers a
+                    // 3xx could bounce us — with the body and any auth header — to a private/metadata host.
+                    // We refuse to follow ANY redirect on a POST and fail closed.
+                    if (method === "POST") {
+                        void res.body?.cancel().catch(() => { });
+                        throw new GuardedFetchError(`Refusing to follow a ${res.status} redirect on a POST: ${currentUrl} → ${location}.`);
+                    }
+                    const nextUrl = new URL(location, parsed).toString();
+                    if (seen.has(nextUrl)) {
+                        throw new GuardedFetchError(`Redirect loop at ${nextUrl}.`);
+                    }
+                    seen.add(nextUrl);
+                    prevWasHttps = parsed.protocol === "https:";
+                    currentUrl = nextUrl;
+                    // Drain/cancel the redirect response body so the socket is released.
+                    void res.body?.cancel().catch(() => { });
+                    continue;
+                }
+                // A 3xx without Location — treat as final (atypical) and fall through to validation.
+            }
+            // Final response: enforce content-type allowlist (GET only), then read the bounded body.
+            const finalUrl = parsed.toString();
+            const status = res.status;
+            const contentType = (res.headers.get("content-type") ?? "")
+                .split(";")[0]
+                ?.trim()
+                .toLowerCase() ?? "";
+            // Body-irrelevant statuses bypass the content-type allowlist and return an empty bounded body,
+            // letting the caller act on `status` (304/204/205 carry no body; >=400 is an error page, never
+            // RDF we parse; a 2xx POST receipt is bounded but not allowlisted). The body is cancelled, not
+            // read, so this does NOT widen the SSRF surface.
+            if (status === 304 || status === 204 || status === 205 || status >= 400) {
+                void res.body?.cancel().catch(() => { });
+                return {
+                    response: res,
+                    finalUrl,
+                    contentType,
+                    text: "",
+                    bytes: new Uint8Array(0),
+                    status,
+                };
+            }
+            if (!skipContentTypeAllowlist &&
+                !allowedContentTypes.includes(contentType)) {
+                void res.body?.cancel().catch(() => { });
+                throw new GuardedFetchError(`Disallowed content-type "${contentType || "(none)"}" for ${finalUrl}; expected one of ${allowedContentTypes.join(", ")}.`);
+            }
+            let bytes;
+            try {
+                bytes = await readBoundedBytes(res, { maxBytes, controller });
+            }
+            catch (error) {
+                if (error instanceof BodyTooLargeError)
+                    throw error;
+                if (controller.signal.aborted) {
+                    throw new GuardedFetchError(`Fetch body timed out after ${timeoutMs}ms: ${finalUrl}.`, { cause: error });
+                }
+                throw new GuardedFetchError(`Failed reading body for ${finalUrl}: ${reason(error)}`, { cause: error });
+            }
+            const text = new TextDecoder("utf-8").decode(bytes);
+            return { response: res, finalUrl, contentType, text, bytes, status };
+        }
+    }
+    finally {
+        clearTimeout(timer);
+    }
+}
+function parseUrl(raw) {
+    try {
+        return new URL(raw);
+    }
+    catch {
+        throw new GuardedFetchError(`URL is malformed: ${raw}.`);
+    }
+}
+function reason(error) {
+    return error instanceof Error ? error.message : "unknown error";
+}
+//# sourceMappingURL=guardedFetch.js.map

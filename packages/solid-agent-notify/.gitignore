@@ -1,5 +1,7 @@
 node_modules/
-dist/
+# dist/ is intentionally committed (NOT ignored) so the package installs directly
+# from a GitHub branch under ignore-scripts=true — no build step runs on the
+# consumer. Rebuild with `npm run build` before committing source changes.
 coverage/
 *.tsbuildinfo
 .DS_Store

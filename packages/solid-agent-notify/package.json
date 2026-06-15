@@ -44,7 +44,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "check:fetch": "node scripts/check-no-raw-fetch.mjs"
+    "check:fetch": "node scripts/check-no-raw-fetch.mjs",
+    "check:dist": "node scripts/check-dist-fresh.mjs"
   },
   "dependencies": {
     "@jeswr/fetch-rdf": "^0.1.0",
