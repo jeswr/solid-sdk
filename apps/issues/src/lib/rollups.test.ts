@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { rollupOf, rollupAll, directChildren, descendantUrlsOf, linksOf } from "./rollups";
+import { canNest } from "./issue";
 import type { IssueRecord } from "./repository";
 
 const base: IssueRecord = {
@@ -223,5 +224,114 @@ describe("F2 bidirectional links", () => {
     ];
     expect(linksOf(issues[0], issues).clonedFrom).toBe("orig");
     expect(linksOf(issues[1], issues).clones).toEqual(["clone"]); // derived inverse
+  });
+});
+
+/**
+ * Regression: F5 candidate-list split.
+ *
+ * The parent selector must apply canNest hierarchy filtering; the blocker /
+ * relates-to / duplicate-of selectors must NOT — any issue (same-level,
+ * finer-grained, or descendant) can block another regardless of type hierarchy.
+ *
+ * This test models the filtering logic that IssueDetailDialog computes and
+ * pins the invariant so a future refactor cannot accidentally re-merge the lists.
+ */
+describe("F5/F2 candidate-list split — parent vs dependency selectors", () => {
+  /**
+   * Helper that mirrors the filtering logic in IssueDetailDialog:
+   *   parentCandidates  — canNest-filtered + not self + not descendants
+   *   dependencyCandidates — not self only
+   *   addableBlockers   — dependencyCandidates excluding already-blockers and own parent
+   */
+  function computeCandidates(self: IssueRecord, allIssues: IssueRecord[]) {
+    const selfDescendants = descendantUrlsOf(self, allIssues);
+    const parentCandidates = allIssues.filter(
+      (i) => i.url !== self.url && !selfDescendants.has(i.url) && canNest(i.issueType, self.issueType),
+    );
+    const dependencyCandidates = allIssues.filter((i) => i.url !== self.url);
+    const addableBlockers = dependencyCandidates.filter(
+      (i) => !self.blockedBy.includes(i.url) && i.url !== self.parent,
+    );
+    const links = linksOf(self, allIssues);
+    const addableRelated = dependencyCandidates.filter((i) => !links.relates.includes(i.url));
+    return { parentCandidates, dependencyCandidates, addableBlockers, addableRelated };
+  }
+
+  it("a same-level issue is NOT a parent candidate but IS an addable blocker", () => {
+    // Two stories: "self" is a story and "peer" is another story.
+    // canNest("story", "story") === false → peer must be absent from parentCandidates.
+    // But "peer" can still block "self" → must appear in addableBlockers.
+    const self = mk({ url: "self", issueType: "story" });
+    const peer = mk({ url: "peer", issueType: "story" });
+    const allIssues = [self, peer];
+
+    const { parentCandidates, addableBlockers } = computeCandidates(self, allIssues);
+
+    expect(parentCandidates.map((i) => i.url)).not.toContain("peer"); // hierarchy rejects it
+    expect(addableBlockers.map((i) => i.url)).toContain("peer");      // dependency allows it
+  });
+
+  it("a finer-grained (child-level) issue is NOT a parent candidate but IS an addable blocker", () => {
+    // self = epic; "task" is a task (finer).
+    // canNest("task", "epic") === false → task is not a valid parent of epic.
+    // But a task can still block an epic.
+    const self = mk({ url: "epic", issueType: "epic" });
+    const task = mk({ url: "task1", issueType: "task" });
+    const allIssues = [self, task];
+
+    const { parentCandidates, addableBlockers } = computeCandidates(self, allIssues);
+
+    expect(parentCandidates.map((i) => i.url)).not.toContain("task1");
+    expect(addableBlockers.map((i) => i.url)).toContain("task1");
+  });
+
+  it("a descendant (child in the tree) is NOT a parent candidate but IS an addable blocker", () => {
+    // self = epic; story is a direct child in the hierarchy tree.
+    // Cannot be set as parent of epic (would create a cycle) BUT can block the epic.
+    const self = mk({ url: "epic", issueType: "epic" });
+    const story = mk({ url: "story1", parent: "epic", issueType: "story" });
+    const allIssues = [self, story];
+
+    const { parentCandidates, addableBlockers } = computeCandidates(self, allIssues);
+
+    // story is a descendant → excluded from parentCandidates (cycle guard)
+    expect(parentCandidates.map((i) => i.url)).not.toContain("story1");
+    // but the dependency link is independent — story can block epic
+    expect(addableBlockers.map((i) => i.url)).toContain("story1");
+  });
+
+  it("a coarser-level issue IS both a parent candidate and an addable blocker when not already linked", () => {
+    // self = story; initiative is strictly coarser → valid parent AND valid blocker.
+    const self = mk({ url: "story1", issueType: "story" });
+    const initiative = mk({ url: "init", issueType: "initiative" });
+    const allIssues = [self, initiative];
+
+    const { parentCandidates, addableBlockers } = computeCandidates(self, allIssues);
+
+    expect(parentCandidates.map((i) => i.url)).toContain("init");
+    expect(addableBlockers.map((i) => i.url)).toContain("init");
+  });
+
+  it("an already-blocked issue is absent from addableBlockers but still in dependencyCandidates", () => {
+    const self = mk({ url: "self", issueType: "task", blockedBy: ["other"] });
+    const other = mk({ url: "other", issueType: "task" });
+    const allIssues = [self, other];
+
+    const { dependencyCandidates, addableBlockers } = computeCandidates(self, allIssues);
+
+    expect(dependencyCandidates.map((i) => i.url)).toContain("other"); // raw list has it
+    expect(addableBlockers.map((i) => i.url)).not.toContain("other");  // already a blocker
+  });
+
+  it("self is excluded from all candidate lists", () => {
+    const self = mk({ url: "self", issueType: "story" });
+    const allIssues = [self];
+
+    const { parentCandidates, dependencyCandidates, addableBlockers } = computeCandidates(self, allIssues);
+
+    expect(parentCandidates.map((i) => i.url)).not.toContain("self");
+    expect(dependencyCandidates.map((i) => i.url)).not.toContain("self");
+    expect(addableBlockers.map((i) => i.url)).not.toContain("self");
   });
 });

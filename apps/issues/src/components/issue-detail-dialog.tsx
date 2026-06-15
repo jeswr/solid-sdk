@@ -129,15 +129,19 @@ export function IssueDetailDialog({
   // F5: parent candidates must be strictly coarser types (canNest enforces the
   // Initiative→Epic→Feature→Story→Task/Bug hierarchy), must not be self, and must
   // not be an existing descendant (to prevent cycles in the tree).
-  const candidates = allIssues.filter(
+  const parentCandidates = allIssues.filter(
     (i) => i.url !== self.url && !selfDescendants.has(i.url) && canNest(i.issueType, self.issueType),
   );
+  // Dependency-link candidates: ANY issue except self — hierarchy does not constrain
+  // blocker/relates-to/duplicate-of relationships.  Self-descendants are allowed here
+  // because a descendant can block its ancestor without being its parent.
+  const dependencyCandidates = allIssues.filter((i) => i.url !== self.url);
   const subTasks = allIssues.filter((i) => i.parent === self.url);
   const blocking = allIssues.filter((i) => i.blockedBy.includes(self.url));
-  const addableBlockers = candidates.filter((i) => !self.blockedBy.includes(i.url) && i.url !== self.parent);
+  const addableBlockers = dependencyCandidates.filter((i) => !self.blockedBy.includes(i.url) && i.url !== self.parent);
   // F2: bidirectional links (relates is symmetric; duplicate/clone show inverses).
   const links = linksOf(self, allIssues);
-  const addableRelated = candidates.filter((i) => !links.relates.includes(i.url));
+  const addableRelated = dependencyCandidates.filter((i) => !links.relates.includes(i.url));
   // F6: roll up child completion to the parent ("3/5 done").
   const rollup = rollupOf(self, allIssues);
 
@@ -257,7 +261,7 @@ export function IssueDetailDialog({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">None</SelectItem>
-                  {candidates.map((c) => (
+                  {parentCandidates.map((c) => (
                     <SelectItem key={c.url} value={c.url}>
                       {c.title}
                     </SelectItem>
@@ -397,7 +401,7 @@ export function IssueDetailDialog({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">None</SelectItem>
-                  {candidates.map((c) => (
+                  {dependencyCandidates.map((c) => (
                     <SelectItem key={c.url} value={c.url}>
                       {c.title}
                     </SelectItem>
