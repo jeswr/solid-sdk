@@ -1,4 +1,6 @@
-# @solid/agent-notify
+# solid-agent-notify
+
+> ⚠️ **Experimental — AI-agent-generated.** This package was created by an AI coding agent (Claude Opus 4.8, @jeswr's PSS agent) and is under active development. It is not yet production-hardened — review before relying on it.
 
 SSRF-hardened cross-pod **Linked Data Notifications (LDN)** for Solid: discover an
 agent's `ldp:inbox`, POST an [ActivityStreams 2.0](https://www.w3.org/TR/activitystreams-core/)
@@ -14,7 +16,7 @@ external URL in this package.
 ## Install
 
 ```bash
-npm install @solid/agent-notify
+npm install solid-agent-notify
 # or as a git dependency (a `prepare` build produces dist/ on install):
 npm install github:jeswr/solid-agent-notify
 ```
@@ -29,7 +31,7 @@ import {
   sendNotification,
   notifyAgent,
   readInbox,
-} from "@solid/agent-notify";
+} from "solid-agent-notify";
 
 // 1. Discover an agent's LDN inbox from their WebID profile (ldp:inbox).
 const inbox = await discoverInbox("https://alice.example/card#me");

@@ -1,6 +1,6 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 /**
- * guardedFetch.ts — THE SINGLE EGRESS CHOKEPOINT for @solid/agent-notify.
+ * guardedFetch.ts — THE SINGLE EGRESS CHOKEPOINT for solid-agent-notify.
  *
  * ════════════════════════════════════════════════════════════════════════════════════════════════
  * This is the ONLY permitted path for fetching an attacker-influenced URL in this package. Every

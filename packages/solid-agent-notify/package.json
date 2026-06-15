@@ -1,5 +1,5 @@
 {
-  "name": "@solid/agent-notify",
+  "name": "solid-agent-notify",
   "version": "0.1.0",
   "description": "SSRF-hardened cross-pod Linked Data Notifications (LDN) for Solid: discover an agent's ldp:inbox, POST an ActivityStreams 2.0 notification, and read an inbox — every outbound dereference forced through a single DNS-pinned, redirect-revalidating egress chokepoint.",
   "type": "module",
@@ -7,7 +7,7 @@
   "author": "Jesse Wright <jwrightwho@gmail.com>",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jeswr/solid-agent-notify.git"
+    "url": "https://github.com/jeswr/solid-agent-notify.git"
   },
   "bugs": {
     "url": "https://github.com/jeswr/solid-agent-notify/issues"

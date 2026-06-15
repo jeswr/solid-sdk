@@ -1,6 +1,6 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 /**
- * `@solid/agent-notify` — SSRF-hardened cross-pod Linked Data Notifications (LDN)
+ * `solid-agent-notify` — SSRF-hardened cross-pod Linked Data Notifications (LDN)
  * for Solid: discover an agent's `ldp:inbox`, POST an ActivityStreams 2.0
  * notification to it, and read an inbox.
  *

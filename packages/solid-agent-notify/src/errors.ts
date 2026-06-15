@@ -1,6 +1,6 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 /**
- * Typed domain errors for @solid/agent-notify. The SSRF/guard-layer errors
+ * Typed domain errors for solid-agent-notify. The SSRF/guard-layer errors
  * (`SsrfError`, `GuardedFetchError`, `BodyTooLargeError`) are re-exported from
  * the security layer; these are the higher-level send/discover/read errors.
  */
