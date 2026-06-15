@@ -128,6 +128,13 @@ export function usePhotoGallery(
     setLoading(true);
     setError(null);
     setIsAccessError(false);
+    // Drop the previous container's listing as a NEW load begins, so the grid
+    // never shows the OLD folder's photos under the NEW folder's breadcrumb
+    // (the loading state renders alone until this container resolves). Done in
+    // the effect — which only re-runs on an actual currentUrl/reloadToken/fetch
+    // change — so navigating to the URL already shown is a no-op that never
+    // blanks the gallery without a reload.
+    setListing(null);
 
     listGallery(currentUrl, {
       ...(authedFetch ? { fetch: authedFetch } : {}),
@@ -169,14 +176,10 @@ export function usePhotoGallery(
   }, [currentUrl, authedFetch, reloadToken]);
 
   const navigate = useCallback((url: string) => {
-    // Clear the previous container's listing + error as we move, so the grid
-    // never shows the OLD folder's photos under the NEW folder's breadcrumb
-    // while the load is in flight (the loading state renders alone). The load
-    // effect repopulates `listing` when the new container resolves.
+    // Just set the target; the load effect (re-run only on an actual change)
+    // owns the stale-clear + reload. Navigating to the URL already shown is a
+    // no-op, so the gallery is never blanked without a reload.
     setCurrentUrl(ensureTrailingSlash(url));
-    setListing(null);
-    setError(null);
-    setIsAccessError(false);
   }, []);
 
   const refresh = useCallback(() => {

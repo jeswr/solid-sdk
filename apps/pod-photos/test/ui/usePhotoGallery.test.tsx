@@ -146,6 +146,35 @@ describe('usePhotoGallery — stale-response guard', () => {
     await waitFor(() => expect(result.current.listing?.url).toBe('https://pod.example/b/'));
   });
 
+  it('navigating to the URL already shown is a no-op (does NOT blank the gallery)', async () => {
+    const fetch = (async (input: string | URL | Request) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      const map: Record<string, string> = {
+        'https://pod.example/a/': A,
+        'https://pod.example/a/x.ttl': A_PHOTO,
+      };
+      const body = map[url];
+      if (body === undefined) {
+        const res = new Response(null, { status: 404 });
+        Object.defineProperty(res, 'url', { value: url });
+        return res;
+      }
+      return turtle(url, body);
+    }) as unknown as typeof globalThis.fetch;
+
+    const { result } = renderHook(() => usePhotoGallery('https://pod.example/a/', { fetch }));
+    await waitFor(() => expect(result.current.listing?.url).toBe('https://pod.example/a/'));
+
+    // Re-navigate to the SAME container (slashless form normalises to the same
+    // URL): setCurrentUrl is a no-op, the effect does not re-run, and the
+    // gallery stays populated rather than being cleared to null forever.
+    await act(async () => {
+      result.current.navigate('https://pod.example/a');
+    });
+    expect(result.current.listing?.url).toBe('https://pod.example/a/');
+    expect(result.current.listing?.photos.map((p) => p.photo.name)).toEqual(['A photo']);
+  });
+
   it('drops a slow earlier ERROR that resolves after a navigation (catch-branch)', async () => {
     let releaseA: () => void = () => {};
     const gateA = new Promise<void>((r) => {
