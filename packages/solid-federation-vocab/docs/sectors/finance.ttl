@@ -1,0 +1,359 @@
+# AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+#
+@prefix fin:     <https://w3id.org/jeswr/sectors/finance#> .
+@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix gufo:    <http://purl.org/nemo/gufo#> .
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix skos:    <http://www.w3.org/2004/02/skos/core#> .
+@prefix vann:    <http://purl.org/vocab/vann/> .
+@prefix fibo-fnd-acc-cur: <https://spec.edmcouncil.org/fibo/ontology/FND/Accounting/CurrencyAmount/> .
+@prefix fibo-fbc-pas-caa: <https://spec.edmcouncil.org/fibo/ontology/FBC/ProductsAndServices/ClientsAndAccounts/> .
+@prefix fibo-fbc-fct-fse: <https://spec.edmcouncil.org/fibo/ontology/FBC/FunctionalEntities/FinancialServicesEntities/> .
+@prefix fibo-fbc-fi-fi:   <https://spec.edmcouncil.org/fibo/ontology/FBC/FinancialInstruments/FinancialInstruments/> .
+
+# =============================================================================
+# Finance Sector Ontology (FIN) — RE-BASED onto the gUFO Solid Core (R11 §4.2).
+#
+# AUTHORING PROVENANCE: authored as an OntoUML model (finance.ontouml.json),
+# verified anti-pattern-free by OntoumlVerification.verify() (F3, 0 issues),
+# transformed to gUFO-OWL by Ontouml2Gufo (finance.gufo.ttl backbone), then
+# ENRICHED here with F1 definitions, Core-rooting, the FIBO slim-module subclass
+# axioms, the status-phase partition, and the property spine. The backbone's
+# gUFO meta-types are preserved verbatim.
+#
+# gUFO META-TYPES (each sector class carries its own meta-type AND roots in Core):
+#   FinancialAccount = gufo:Relator (Kind), subtypes = gufo:SubKind, status =
+#       gufo:Phase  → root core:Account (gufo:Relator)
+#   Transaction/Payment/Transfer/CardPayment = gufo:EventType → root core:Activity
+#   FinancialInstitution = gufo:Kind, Bank = gufo:SubKind → root core:Organization
+#   FinancialInstrument = gufo:Kind, Security = gufo:SubKind, Holding = gufo:Kind
+#       → root core:Asset
+#   MonetaryAmount = gufo:Kind (Object value) → root gufo:Object
+#   Counterparty/Payer/Payee/AccountCustodian = gufo:RoleMixin → root core:Agent
+#
+# CONTRACT (R8 §4, F1–F7): imports the re-based gUFO Core; roots every domain
+# class transitively in a Core class; CONSTRAINS, never forks. External FIBO
+# terms are reused via the version-pinned slim MIREOT module (imports/fibo-slim.ttl,
+# Mode B). ISO 4217 is data (currency codes); ISO 20022 is Mode-A alignment.
+#
+# v0 COUNTERPARTY FIX: v0 made fin:counterparty an rdfs:subPropertyOf
+# core:hadParticipant (domain core:Event), which forced every Transaction to be a
+# core:Event by entailment and coupled the party-link to a domain-narrow Core
+# property. Under gUFO that is wrong: a counterparty is a contingent, relational
+# ROLE, not a participation-of-a-Core-Event. The fix: model Counterparty (with
+# Payer/Payee) as a gufo:RoleMixin played by an Agent, linked from the Transaction
+# event by fin:hasCounterparty — a fresh sector property, NOT a subproperty of any
+# domain-narrow Core property. No Core property's domain/range is widened.
+#
+# =============================================================================
+
+<https://w3id.org/jeswr/sectors/finance> a owl:Ontology ;
+    dcterms:title "Solid Finance Sector Ontology (gUFO re-base)"@en ;
+    rdfs:label "Solid Finance Sector Ontology"@en ;
+    vann:preferredNamespacePrefix "fin" ;
+    vann:preferredNamespaceUri "https://w3id.org/jeswr/sectors/finance#" ;
+    owl:imports <https://w3id.org/jeswr/core> ,
+                <https://w3id.org/jeswr/sectors/finance/imports/fibo-slim> ;
+    owl:versionInfo "1.0.0" ;
+    owl:versionIRI <https://w3id.org/jeswr/sectors/finance/1.0.0> ;
+    dcterms:description """Personal-finance terms (accounts, transactions,
+        holdings, payments) for the EDMA lending/banking use cases, re-based onto
+        the gUFO Solid Core. Account=Relator(+Phase status); transactions/payments
+        =Event; institutions/instruments=Kind; counterparty roles=RoleMixin. Reuses
+        FIBO via a version-pinned slim MIREOT module (Mode B); ISO 4217 as data,
+        ISO 20022 as Mode-A alignment (finance-alignments.ttl). v1 is a BREAKING
+        re-base of v0 (meta-types change meaning), so a new MAJOR version."""@en ;
+    dcterms:modified "2026-06-13"^^xsd:date ;
+    rdfs:comment "Re-based per R11 §4.2."@en .
+
+# -----------------------------------------------------------------------------
+# Annotation-property declarations (F5 DL hygiene — match the Core pattern).
+# -----------------------------------------------------------------------------
+dcterms:title       a owl:AnnotationProperty .
+dcterms:description a owl:AnnotationProperty .
+dcterms:modified    a owl:AnnotationProperty .
+dcterms:source      a owl:AnnotationProperty .
+vann:preferredNamespacePrefix a owl:AnnotationProperty .
+vann:preferredNamespaceUri    a owl:AnnotationProperty .
+skos:definition     a owl:AnnotationProperty .
+skos:scopeNote      a owl:AnnotationProperty .
+
+# =============================================================================
+# 1. INSTITUTIONS — providers of accounts and services
+#    gufo:Kind / SubKind; root core:Organization. FIBO: fibo-fbc-fct-fse.
+# =============================================================================
+
+fin:FinancialInstitution a owl:Class, gufo:Kind ;
+    rdfs:subClassOf core:Organization, fibo-fbc-fct-fse:FinancialInstitution ;
+    rdfs:label "Financial Institution"@en ;
+    skos:definition "An organization that provides financial accounts and services (a bank, a building society, a payment institution). Typically the agent playing core:AccountProvider for an account."@en ;
+    skos:scopeNote "gufo:Kind. Roots in core:Organization; reuses fibo-fbc-fct-fse:FinancialInstitution from the slim module."@en .
+
+fin:Bank a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf fin:FinancialInstitution, fibo-fbc-fct-fse:Bank ;
+    rdfs:label "Bank"@en ;
+    skos:definition "A deposit-taking financial institution."@en ;
+    skos:scopeNote "gufo:SubKind of FinancialInstitution (a Kind is an ultimate sortal and cannot be specialised by another Kind)."@en .
+
+# =============================================================================
+# 2. MONETARY AMOUNT — a value + an ISO 4217 currency
+#    gufo:Kind (an Object value); root gufo:Object. FIBO: MonetaryAmount.
+# =============================================================================
+
+fin:MonetaryAmount a owl:Class, gufo:Kind ;
+    rdfs:subClassOf core:Quantity, fibo-fnd-acc-cur:MonetaryAmount ;
+    rdfs:label "Monetary Amount"@en ;
+    skos:definition "A quantity of money: a decimal value in a single ISO 4217 currency. A value object reused by transactions, payments, balances and holdings. A core:Quantity whose unit is a currency (the ISO 4217 code on fin:currency)."@en ;
+    skos:scopeNote "gufo:Kind (Object value). Roots in core:Quantity (which roots in gufo:Object) — this is the foundation rooting. Reuses fibo-fnd-acc-cur:MonetaryAmount from the slim module; fin:amount/fin:currency are the sector-typed forms of core:numericValue/core:unit. Not an Agent/Account/Asset/Event."@en .
+
+fin:amount a owl:DatatypeProperty ;
+    rdfs:label "amount"@en ;
+    rdfs:domain fin:MonetaryAmount ;
+    rdfs:range xsd:decimal ;
+    skos:definition "The numeric value of a monetary amount."@en .
+
+fin:currency a owl:DatatypeProperty ;
+    rdfs:label "currency"@en ;
+    rdfs:domain fin:MonetaryAmount ;
+    rdfs:range xsd:string ;
+    skos:definition "The ISO 4217 alphabetic currency code (e.g. \"GBP\", \"EUR\", \"USD\") of a monetary amount."@en .
+
+fin:hasMonetaryAmount a owl:ObjectProperty ;
+    rdfs:label "has monetary amount"@en ;
+    rdfs:range fin:MonetaryAmount ;
+    skos:definition "Relates an entity (a transaction, payment, balance, or holding) to a monetary amount. No rdfs:domain: it spans both endurants (holdings) and events (transactions), which gUFO holds disjoint, so a domain axiom would force inconsistent typing — intended usage is enforced in SHACL."@en .
+
+# =============================================================================
+# 3. ACCOUNTS — gufo:Relator; root core:Account. Subtypes = gufo:SubKind.
+#    Status (Active/Frozen/Closed) = gufo:Phase partition of the relator.
+#    FIBO: fibo-fbc-pas-caa:Account + DepositAccount.
+# =============================================================================
+
+fin:FinancialAccount a owl:Class, gufo:Relator ;
+    rdfs:subClassOf gufo:Relator, core:Account, fibo-fbc-pas-caa:Account ;
+    rdfs:label "Financial Account"@en ;
+    skos:definition "A core:Account at a financial institution through which money is held and money movements are recorded. A reified relator mediating an account holder and a provider."@en ;
+    skos:scopeNote "gufo:Relator. Roots in core:Account; reuses fibo-fbc-pas-caa:Account. Holder/provider via the inherited core:hasAccountHolder / core:hasAccountProvider mediations."@en .
+
+fin:CurrentAccount a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf fin:FinancialAccount ;
+    rdfs:label "Current Account"@en ;
+    skos:definition "A transactional demand-deposit account (US: checking account)."@en ;
+    skos:scopeNote "gufo:SubKind of the FinancialAccount relator."@en .
+
+fin:SavingsAccount a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf fin:FinancialAccount, fibo-fbc-pas-caa:DepositAccount ;
+    rdfs:label "Savings Account"@en ;
+    skos:definition "An interest-bearing deposit account intended for saving rather than day-to-day transactions."@en ;
+    skos:scopeNote "gufo:SubKind. Reuses fibo-fbc-pas-caa:DepositAccount."@en .
+
+fin:CreditAccount a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf fin:FinancialAccount ;
+    rdfs:label "Credit Account"@en ;
+    skos:definition "An account representing a credit facility or revolving credit line (a credit card or overdraft), where the holder owes the provider. Relevant to the EDMA lending use cases."@en ;
+    skos:scopeNote "gufo:SubKind."@en .
+
+fin:InvestmentAccount a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf fin:FinancialAccount ;
+    rdfs:label "Investment Account"@en ;
+    skos:definition "An account through which financial instruments are held (a brokerage or securities account). Its holdings are fin:Holding / fin:FinancialInstrument assets."@en ;
+    skos:scopeNote "gufo:SubKind."@en .
+
+# --- account-status phases (partition of the FinancialAccount relator) ---
+
+fin:ActiveFinancialAccount a owl:Class, gufo:Phase ;
+    rdfs:subClassOf fin:FinancialAccount ;
+    rdfs:label "Active Financial Account"@en ;
+    skos:definition "The phase of a financial account that is open and operable."@en ;
+    skos:scopeNote "gufo:Phase. Member of the accountStatus partition; specialises the global core ActiveAccount phase pattern."@en .
+
+fin:FrozenFinancialAccount a owl:Class, gufo:Phase ;
+    rdfs:subClassOf fin:FinancialAccount ;
+    rdfs:label "Frozen Financial Account"@en ;
+    skos:definition "The phase of a financial account temporarily suspended (e.g. a compliance hold)."@en ;
+    skos:scopeNote "gufo:Phase. Member of the accountStatus partition."@en .
+
+fin:ClosedFinancialAccount a owl:Class, gufo:Phase ;
+    rdfs:subClassOf fin:FinancialAccount ;
+    rdfs:label "Closed Financial Account"@en ;
+    skos:definition "The phase of a financial account that has been terminated."@en ;
+    skos:scopeNote "gufo:Phase. Member of the accountStatus partition."@en .
+
+# DISJOINT, complete status partition: an account is in EXACTLY ONE phase at a time.
+# Ontouml2Gufo emits only owl:unionOf for an anti-rigid (Phase) partition — it writes
+# owl:AllDisjointClasses only for rigid/abstract children — so the enrichment asserts the
+# disjointness here. owl:disjointUnionOf gives both: union (complete) + pairwise disjoint,
+# so an individual typed Active AND Closed is inconsistent.
+fin:FinancialAccount owl:disjointUnionOf
+    ( fin:ActiveFinancialAccount fin:FrozenFinancialAccount fin:ClosedFinancialAccount ) .
+
+fin:Balance a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf core:Record ;
+    rdfs:label "Balance"@en ;
+    skos:definition "A point-in-time statement of the monetary amount standing on a financial account. A core:Record about the account, distinct from the account itself; use core:about for the account and core:timestamp for the as-of instant."@en ;
+    skos:scopeNote "gufo:SubKind of core:Record (information object)."@en .
+
+# =============================================================================
+# 4. TRANSACTIONS & PAYMENTS — gufo:EventType; root core:Activity.
+# =============================================================================
+
+fin:Transaction a owl:Class, gufo:EventType ;
+    rdfs:subClassOf gufo:Event, core:Activity ;
+    rdfs:label "Transaction"@en ;
+    skos:definition "A money movement on a financial account, having a monetary amount, a posting time and (usually) a counterparty. A core:Activity event."@en ;
+    skos:scopeNote "gufo:EventType. Roots in core:Activity. Value via fin:hasMonetaryAmount, posting time via fin:postingTime, the other party via fin:hasCounterparty."@en .
+
+fin:Payment a owl:Class, gufo:EventType ;
+    rdfs:subClassOf fin:Transaction ;
+    rdfs:label "Payment"@en ;
+    skos:definition "A transaction that transfers money from a payer to a payee to settle an obligation."@en ;
+    skos:scopeNote "gufo:EventType. Parties via fin:payer / fin:payee."@en .
+
+fin:CardPayment a owl:Class, gufo:EventType ;
+    rdfs:subClassOf fin:Payment ;
+    rdfs:label "Card Payment"@en ;
+    skos:definition "A payment initiated with a payment card."@en ;
+    skos:scopeNote "gufo:EventType."@en .
+
+fin:Transfer a owl:Class, gufo:EventType ;
+    rdfs:subClassOf fin:Transaction ;
+    rdfs:label "Transfer"@en ;
+    skos:definition "A movement of money between accounts (a bank transfer, a standing-order execution)."@en ;
+    skos:scopeNote "gufo:EventType. Accounts via fin:debitAccount / fin:creditAccount."@en .
+
+fin:TransactionRecord a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf core:Record ;
+    rdfs:label "Transaction Record"@en ;
+    skos:definition "The stored statement-line record of a transaction (as it appears on a statement), as opposed to the money-movement event itself. Use core:about to point at the fin:Transaction it documents."@en ;
+    skos:scopeNote "gufo:SubKind of core:Record. Keeps the document-vs-event split."@en .
+
+# --- transaction properties ---
+
+fin:debitAccount a owl:ObjectProperty ;
+    rdfs:label "debit account"@en ;
+    rdfs:domain fin:Transaction ;
+    rdfs:range fin:FinancialAccount ;
+    skos:definition "The account debited (money leaves) by a transaction."@en .
+
+fin:creditAccount a owl:ObjectProperty ;
+    rdfs:label "credit account"@en ;
+    rdfs:domain fin:Transaction ;
+    rdfs:range fin:FinancialAccount ;
+    skos:definition "The account credited (money arrives) by a transaction."@en .
+
+fin:postingTime a owl:DatatypeProperty ;
+    rdfs:subPropertyOf core:timestamp ;
+    rdfs:label "posting time"@en ;
+    rdfs:domain fin:Transaction ;
+    rdfs:range xsd:dateTime ;
+    skos:definition "The instant a transaction was posted to the account ledger. A specialisation of core:timestamp."@en .
+
+# =============================================================================
+# 5. COUNTERPARTY ROLES — gufo:RoleMixin; root core:Agent. The v0 fix.
+#    Counterparty/Payer/Payee are roles played by an Agent, NOT a participation
+#    in a Core Event. fin:hasCounterparty links the Transaction event to the role
+#    player and is a FRESH sector property — not a subproperty of any
+#    domain-narrow Core property.
+# =============================================================================
+
+fin:Counterparty a owl:Class, gufo:RoleMixin ;
+    rdfs:subClassOf core:Agent ;
+    rdfs:label "Counterparty"@en ;
+    skos:definition "The role of the agent on the far side of a transaction's money movement, played contingently and relationally for that transaction."@en ;
+    skos:scopeNote "gufo:RoleMixin (cross-kind, anti-rigid). Replaces the v0 fin:counterparty subproperty of core:hadParticipant — the counterparty is a role, not a Core-Event participation."@en .
+
+fin:Payer a owl:Class, gufo:RoleMixin ;
+    rdfs:subClassOf fin:Counterparty ;
+    rdfs:label "Payer"@en ;
+    skos:definition "The role of the agent that sends money in a payment."@en ;
+    skos:scopeNote "gufo:RoleMixin specialising Counterparty."@en .
+
+fin:Payee a owl:Class, gufo:RoleMixin ;
+    rdfs:subClassOf fin:Counterparty ;
+    rdfs:label "Payee"@en ;
+    skos:definition "The role of the agent that receives money in a payment."@en ;
+    skos:scopeNote "gufo:RoleMixin specialising Counterparty."@en .
+
+fin:AccountCustodian a owl:Class, gufo:RoleMixin ;
+    rdfs:subClassOf core:Custodian ;
+    rdfs:label "Account Custodian"@en ;
+    skos:definition "The role of an agent that holds or controls a financial account's assets without necessarily owning them (a custodian bank)."@en ;
+    skos:scopeNote "gufo:RoleMixin specialising the Core Custodian role-mixin."@en .
+
+fin:hasCounterparty a owl:ObjectProperty ;
+    rdfs:label "has counterparty"@en ;
+    rdfs:domain fin:Transaction ;
+    rdfs:range fin:Counterparty ;
+    skos:definition "Links a transaction event to the agent playing the Counterparty role on the far side of the money movement. A fresh sector property — NOT a subproperty of core:hadParticipant, so it does not entail that a Transaction is a core:Event participation nor widen any Core property."@en .
+
+fin:payer a owl:ObjectProperty ;
+    rdfs:subPropertyOf fin:hasCounterparty ;
+    rdfs:label "payer"@en ;
+    rdfs:domain fin:Payment ;
+    rdfs:range fin:Payer ;
+    skos:definition "Links a payment to the agent playing the Payer role."@en .
+
+fin:payee a owl:ObjectProperty ;
+    rdfs:subPropertyOf fin:hasCounterparty ;
+    rdfs:label "payee"@en ;
+    rdfs:domain fin:Payment ;
+    rdfs:range fin:Payee ;
+    skos:definition "Links a payment to the agent playing the Payee role."@en .
+
+# =============================================================================
+# 6. INSTRUMENTS & HOLDINGS — gufo:Kind / SubKind; root core:Asset.
+#    FIBO: fibo-fbc-fi-fi:FinancialInstrument.
+# =============================================================================
+
+fin:FinancialInstrument a owl:Class, gufo:Kind ;
+    rdfs:subClassOf core:Asset, fibo-fbc-fi-fi:FinancialInstrument ;
+    rdfs:label "Financial Instrument"@en ;
+    skos:definition "A tradable financial asset — a security, bond, fund unit, or similar. Identify it with core:identifiedBy + an ISIN-scheme core:Identifier."@en ;
+    skos:scopeNote "gufo:Kind. Roots in core:Asset; reuses fibo-fbc-fi-fi:FinancialInstrument."@en .
+
+fin:Security a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf fin:FinancialInstrument ;
+    rdfs:label "Security"@en ;
+    skos:definition "A negotiable financial instrument such as a share or bond."@en ;
+    skos:scopeNote "gufo:SubKind of FinancialInstrument."@en .
+
+fin:Holding a owl:Class, gufo:Kind ;
+    rdfs:subClassOf core:Asset ;
+    rdfs:label "Holding"@en ;
+    skos:definition "A held position: a quantity of a financial instrument owned within an investment account. Use core:owns for the owner, fin:ofInstrument for the instrument, fin:quantity for the units, and fin:hasMonetaryAmount for its valuation."@en ;
+    skos:scopeNote "gufo:Kind. Roots in core:Asset."@en .
+
+fin:ofInstrument a owl:ObjectProperty ;
+    rdfs:label "of instrument"@en ;
+    rdfs:domain fin:Holding ;
+    rdfs:range fin:FinancialInstrument ;
+    skos:definition "The financial instrument a holding is a position in."@en .
+
+fin:quantity a owl:DatatypeProperty ;
+    rdfs:label "quantity"@en ;
+    rdfs:domain fin:Holding ;
+    rdfs:range xsd:decimal ;
+    skos:definition "The number of units of the instrument held."@en .
+
+fin:heldInAccount a owl:ObjectProperty ;
+    rdfs:label "held in account"@en ;
+    rdfs:domain fin:Holding ;
+    rdfs:range fin:InvestmentAccount ;
+    skos:definition "The investment account a holding is custodied within."@en .
+
+# =============================================================================
+# SECTOR MARKER — the IRI an app's fedapp:sector points at to declare it operates
+# in this sector (https://w3id.org/jeswr/fed#sector). A skos:Concept in the
+# federation sector register; dereferences to this ontology.
+# =============================================================================
+
+<https://w3id.org/jeswr/sectors/finance#sector>
+    a <http://www.w3.org/2004/02/skos/core#Concept> ;
+    rdfs:label "Finance sector"@en ;
+    rdfs:comment "The Finance data sector. The value an app's fedapp:sector names in its Client Identifier Document to declare it operates over finance data. Backed by this sector ontology."@en ;
+    rdfs:isDefinedBy <https://w3id.org/jeswr/sectors/finance> ;
+    skos:prefLabel "Finance"@en .

@@ -1,0 +1,83 @@
+<!doctype html>
+<!-- AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>w3id.org/jeswr/core# — Solid Federation Sector Ontology</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body { font-family: system-ui, sans-serif; line-height: 1.6; max-width: 64rem; margin: 2rem auto; padding: 0 1rem; }
+      code { background: rgba(127,127,127,0.15); padding: 0.1em 0.35em; border-radius: 4px; }
+      .warn { border-left: 4px solid #d97706; padding: 0.5rem 1rem; background: rgba(217,119,6,0.08); border-radius: 4px; }
+      table { border-collapse: collapse; width: 100%; }
+      th, td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid rgba(127,127,127,0.3); vertical-align: top; }
+      a { color: #2563eb; }
+    </style>
+  </head>
+  <body>
+    <h1><code>https://w3id.org/jeswr/core#</code></h1>
+    <p>Prefix <code>core:</code> · a gUFO-based ontology in the @jeswr Solid federation; imports the <a href="core.html">Solid Core</a>.</p>
+    <p class="warn">⚠️ <strong>Experimental</strong> — AI-agent-generated (Claude Opus 4.8, @jeswr PSS agent); under active development, not production-hardened.</p>
+    <p>Other representations: <a href="core.ttl">Turtle</a> · <a href="core-context.jsonld">JSON-LD context</a> · <a href="">index</a></p>
+    <h2>Terms (55)</h2>
+    <table>
+      <tr><th>Term</th><th>Label</th><th>Comment / definition</th></tr>
+      <tr><td><code>core:about</code></td><td>about</td><td>The real-world entity an information resource describes. Keeping subject distinct from document is essential for provenance and access control.</td></tr>
+      <tr><td><code>core:Account</code></td><td>Account</td><td>A standing relationship between an account-holder agent and a provider agent through which assets, records, or activity are managed (a bank account, a streaming account). A reified relator, not a thing — it carries parties, time, jurisdiction, and lifecycle status.</td></tr>
+      <tr><td><code>core:AccountHolder</code></td><td>Account Holder</td><td>The role of the agent to whom an account belongs, played contingently and relationally while the Account relator mediates that agent.</td></tr>
+      <tr><td><code>core:AccountProvider</code></td><td>Account Provider</td><td>The role of the agent (usually an Organization) that provides and administers an account.</td></tr>
+      <tr><td><code>core:ActiveAccount</code></td><td>Active Account</td><td>The phase of an Account that is open and operable.</td></tr>
+      <tr><td><code>core:Activity</code></td><td>Activity</td><td>Something that occurs over time and acts upon or generates entities (a payment, a data import, an appointment). Aligns to prov:Activity.</td></tr>
+      <tr><td><code>core:Adult</code></td><td>Adult</td><td>The life-stage phase of a natural person at or above the age of majority. Where the boundary lies is a jurisdiction-scoped profile.</td></tr>
+      <tr><td><code>core:Agent</code></td><td>Agent</td><td>An entity that can act, hold assets and accounts, and bear attributed responsibility — a Person, Organization, SoftwareAgent, or Group. A rigid, cross-kind category: it spans several kinds without itself supplying a principle of identity.</td></tr>
+      <tr><td><code>core:Asset</code></td><td>Asset</td><td>Something of value that can be owned or held — financial (a holding), informational (a licensed track), or physical.</td></tr>
+      <tr><td><code>core:atPlace</code></td><td>at place</td><td>The place an entity (endurant or event) is located at or associated with. No rdfs:domain — endurants and events are disjoint in gUFO; intended usage is enforced in SHACL.</td></tr>
+      <tr><td><code>core:atTime</code></td><td>at time</td><td>Associates an entity (typically an Event, Activity, or Record) with a W3C Time temporal entity (instant or interval). No rdfs:domain: it spans both endurants and events/situations, which gUFO holds disjoint, so a domain axiom would force inconsistent typing — intended usage is enforced in SHACL instead.</td></tr>
+      <tr><td><code>core:Category</code></td><td>Category</td><td>A controlled-vocabulary value: a status, type, role, or classification drawn from a managed scheme (an RSVP state, an account type, a clinical code). The shared root every sector's enumerations hang off; aligned to skos:Concept in the alignments file.</td></tr>
+      <tr><td><code>core:ClosedAccount</code></td><td>Closed Account</td><td>The phase of an Account that has been terminated.</td></tr>
+      <tr><td><code>core:custodian</code></td><td>custodian</td><td>The agent that holds or controls an entity without necessarily owning it (a bank holding funds, a pod provider holding data).</td></tr>
+      <tr><td><code>core:Custodian</code></td><td>Custodian</td><td>The role of an agent that holds or controls an entity without necessarily owning it.</td></tr>
+      <tr><td><code>core:DataSubject</code></td><td>Data Subject</td><td>The role of the agent whom personal data is about — the data subject of a record, in the GDPR/personal-data sense.</td></tr>
+      <tr><td><code>core:Event</code></td><td>Event</td><td>An occurrence located in time and (optionally) place that agents may participate in or observe (a concert, a transaction posting).</td></tr>
+      <tr><td><code>core:FrozenAccount</code></td><td>Frozen Account</td><td>The phase of an Account that is temporarily suspended (e.g. for a compliance hold).</td></tr>
+      <tr><td><code>core:Group</code></td><td>Group</td><td>A collection of agents treated as one acting or holding party (a household, a team). A collective with possibly-varying membership.</td></tr>
+      <tr><td><code>core:hadParticipant</code></td><td>had participant</td><td>An agent that took part in an event.</td></tr>
+      <tr><td><code>core:hasAccountHolder</code></td><td>has account holder</td><td>Mediation tying an Account relator to the agent playing the AccountHolder role.</td></tr>
+      <tr><td><code>core:hasAccountProvider</code></td><td>has account provider</td><td>Mediation tying an Account relator to the agent playing the AccountProvider role.</td></tr>
+      <tr><td><code>core:hasPart</code></td><td>has part</td><td>Inverse of core:partOf.</td></tr>
+      <tr><td><code>core:identifiedBy</code></td><td>identified by</td><td>Relates an endurant to one of its identifiers.</td></tr>
+      <tr><td><code>core:Identifier</code></td><td>Identifier</td><td>A value that identifies an entity within some scheme (an account number, NI number, ISIN, patient MRN). The anchor for KYC and identity reuse.</td></tr>
+      <tr><td><code>core:IdentifierScheme</code></td><td>Identifier Scheme</td><td>The authority and namespace within which an Identifier is unique and meaningful (ISO 6166 for ISINs, an NHS numbering scheme).</td></tr>
+      <tr><td><code>core:InformationResource</code></td><td>Information Resource</td><td>A document, dataset, or record — an information object, as opposed to the real-world thing it is about.</td></tr>
+      <tr><td><code>core:inScheme</code></td><td>in scheme</td><td>The scheme an identifier belongs to and within which it is unique.</td></tr>
+      <tr><td><code>core:LegalPerson</code></td><td>Legal Person</td><td>An organization recognised as a bearer of legal rights and duties (a registered company, an incorporated body). The sub-kind specialised by jurisdiction-scoped legal-entity profiles.</td></tr>
+      <tr><td><code>core:Minor</code></td><td>Minor</td><td>The life-stage phase of a natural person below the age of majority. Age of majority is a jurisdiction-scoped value (R11 §3) — this is the global abstract slot.</td></tr>
+      <tr><td><code>core:NaturalPerson</code></td><td>Natural Person</td><td>A human being recognised as a person. The identity-preserving sub-kind of Person that bears life-stage phases (Minor/Adult) and is the data subject of personal-data sectors.</td></tr>
+      <tr><td><code>core:numericValue</code></td><td>numeric value</td><td>The numeric magnitude of a quantity value (xsd:decimal; an xsd:double sub-value is admissible where higher-range precision is needed). The unit is carried separately by core:unit.</td></tr>
+      <tr><td><code>core:Organization</code></td><td>Organization</td><td>A legal or social organization able to act as an agent — a company, public body, or association. Aligns to W3C Org in the alignments file.</td></tr>
+      <tr><td><code>core:Owner</code></td><td>Owner</td><td>The role of an agent that holds title to an asset.</td></tr>
+      <tr><td><code>core:owns</code></td><td>owns</td><td>The agent that holds title to an asset. Distinct from custody (who physically holds it).</td></tr>
+      <tr><td><code>core:partOf</code></td><td>part of</td><td>Transitive part-whole relation between endurants.</td></tr>
+      <tr><td><code>core:performedBy</code></td><td>performed by</td><td>The agent that carried out an activity.</td></tr>
+      <tr><td><code>core:Person</code></td><td>Person</td><td>A person able to act as an agent — the bearer of identity for human (natural) and, by sub-kinding, legal-person agency. The subject of most personal data in a Solid pod.</td></tr>
+      <tr><td><code>core:Place</code></td><td>Place</td><td>A spatial location. Reuse W3C Basic Geo / GeoSPARQL for coordinates via the alignments file.</td></tr>
+      <tr><td><code>core:Quantity</code></td><td>Quantity</td><td>A reified quantity value: a numeric magnitude paired with a unit of measure (a monetary amount, a heart-rate reading, a duration). A value object, modelled on qudt:QuantityValue — the cross-sector root every measured/valued quantity specialises. Not an Agent, Account, Asset, or Event.</td></tr>
+      <tr><td><code>core:RecognitionSituation</code></td><td>Recognition Situation</td><td>A situation in which a fact about a person holds relative to a recognising authority or jurisdiction — 'person-as-recognised-by-government-X'. The foundational grounding for the reified, jurisdiction-scoped claims of §3.5 (legal gender, legal adulthood).</td></tr>
+      <tr><td><code>core:Record</code></td><td>Record</td><td>A structured information resource capturing facts about a subject at or over a time (a transaction record, a lab result, a calendar entry).</td></tr>
+      <tr><td><code>core:relatesParty</code></td><td>relates party</td><td>Mediation tying a Relationship relator to an agent playing a RelationshipParty role. Replaces v0 core:relatesAgent + core:relationshipRole.</td></tr>
+      <tr><td><code>core:Relationship</code></td><td>Relationship</td><td>A reified relationship between agents, carrying the parties, a time span, a jurisdiction, and provenance (employment, family, agency/delegation). The central gUFO upgrade: sector relationships (Employment, Delegation, Agreement, KYC, Consent) subclass this relator.</td></tr>
+      <tr><td><code>core:RelationshipParty</code></td><td>Relationship Party</td><td>The role of an agent party to a reified Relationship. Sector role-mixins (Employer, Delegate, Patient, Customer) specialise this.</td></tr>
+      <tr><td><code>core:schemeAuthority</code></td><td>scheme authority</td><td>The agent (usually an Organization) that governs a scheme — who may issue identifiers in it. Ties to the trust framework.</td></tr>
+      <tr><td><code>core:SchemeAuthority</code></td><td>Scheme Authority</td><td>The role of an agent that governs an identifier scheme — who may issue identifiers within it.</td></tr>
+      <tr><td><code>core:SoftwareAgent</code></td><td>Software Agent</td><td>A non-human agent that acts on a principal's behalf — an application or an AI agent. The acting party recorded in a write receipt (governance plane L1).</td></tr>
+      <tr><td><code>core:status</code></td><td>status</td><td>The coded lifecycle status of an account, drawn from a managed scheme. The phase partition (Active/Frozen/Closed) is the ontological backbone; this property carries the operational coded value used in data and SHACL value-set binding.</td></tr>
+      <tr><td><code>core:subject</code></td><td>subject</td><td>The agent a record is primarily about (the data subject).</td></tr>
+      <tr><td><code>core:timestamp</code></td><td>timestamp</td><td>A simple instant when literal-level precision is enough (e.g. record creation).</td></tr>
+      <tr><td><code>core:unit</code></td><td>unit</td><td>The unit of measure of a quantity value, a qudt:Unit (reusing QUDT before minting). For a monetary amount the 'unit' is an ISO 4217 currency; sectors MAY bind a currency/UCUM code alongside via their own property.</td></tr>
+      <tr><td><code>core:validFrom</code></td><td>valid from</td><td>Start of an entity's validity or applicability period.</td></tr>
+      <tr><td><code>core:validUntil</code></td><td>valid until</td><td>End of an entity's validity or applicability period.</td></tr>
+      <tr><td><code>core:value</code></td><td>value</td><td>The literal value of an identifier.</td></tr>
+    </table>
+  </body>
+</html>

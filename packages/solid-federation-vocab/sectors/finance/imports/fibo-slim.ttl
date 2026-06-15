@@ -1,0 +1,125 @@
+# AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+#
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos:    <http://www.w3.org/2004/02/skos/core#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix fibo-fnd-acc-cur: <https://spec.edmcouncil.org/fibo/ontology/FND/Accounting/CurrencyAmount/> .
+@prefix fibo-fbc-pas-caa: <https://spec.edmcouncil.org/fibo/ontology/FBC/ProductsAndServices/ClientsAndAccounts/> .
+@prefix fibo-fbc-fct-fse: <https://spec.edmcouncil.org/fibo/ontology/FBC/FunctionalEntities/FinancialServicesEntities/> .
+@prefix fibo-fbc-fi-fi:   <https://spec.edmcouncil.org/fibo/ontology/FBC/FinancialInstruments/FinancialInstruments/> .
+
+# =============================================================================
+# FIBO SLIM MODULE — version-pinned MIREOT extract (Reuse Mode B, R11 §2).
+#
+# WHAT THIS IS: a SLIM module holding ONLY the FIBO terms the Solid finance
+# sector references — not whole FIBO (whole-FIBO's closure spans 51+ FIBO/OMG-
+# Commons ontologies and is intractable to reason over). Extracted with
+# `robot extract --method mireot` from FIBO source ontologies, then curated to
+# drop dangling upper-ontology references that the MIREOT cut leaves as bare
+# class IRIs (OMG Commons QuantitiesAndUnits, Organizations, BE/Ownership,
+# FND/Agreements), so the module is self-contained and reasoner-clean.
+#
+# PROVENANCE / VERSION PIN: extracted 2026-06-13 from the FIBO production
+# Turtle at https://spec.edmcouncil.org/fibo/ontology/ (master/latest snapshot
+# of that date). FIBO publishes "latest" as a rolling head; the pin is the
+# fetch date. IRIs are the un-versioned FIBO production IRIs (the stable form
+# FIBO mints its terms at). Source files:
+#   FND/Accounting/CurrencyAmount         → MonetaryAmount, Currency
+#   FBC/ProductsAndServices/ClientsAndAccounts → Account, DepositAccount,
+#       InvestmentOrDepositAccount, AccountHolder, AccountProvider
+#   FBC/FunctionalEntities/FinancialServicesEntities → FinancialInstitution,
+#       DepositoryInstitution, Bank
+#   FBC/FinancialInstruments/FinancialInstruments → FinancialInstrument
+#
+# AXIOM POLICY: only the FIBO-INTERNAL asserted rdfs:subClassOf spine is kept
+# (Bank ⊑ DepositoryInstitution ⊑ FinancialInstitution; DepositAccount ⊑
+# InvestmentOrDepositAccount ⊑ Account). FIBO's owl:Restriction axioms onto
+# cut OMG-Commons terms are dropped — they need the full closure to be
+# meaningful and would re-introduce intractability. Labels and definitions are
+# verbatim from the FIBO source. finance.ttl roots its sector classes into
+# these terms (rdfs:subClassOf) in finance-alignments.ttl.
+# =============================================================================
+
+<https://w3id.org/jeswr/sectors/finance/imports/fibo-slim> a owl:Ontology ;
+    dcterms:title "FIBO slim MIREOT module for the Solid finance sector"@en ;
+    owl:versionInfo "fibo-2026-06-13-slim" ;
+    owl:versionIRI <https://w3id.org/jeswr/sectors/finance/imports/fibo-slim/2026-06-13> ;
+    dcterms:source <https://spec.edmcouncil.org/fibo/ontology/> ;
+    dcterms:modified "2026-06-13"^^<http://www.w3.org/2001/XMLSchema#date> ;
+    rdfs:comment "Slim Mode-B MIREOT extract of FIBO (robot extract --method mireot), version-pinned to the 2026-06-13 master/latest snapshot. Curated to be self-contained: dangling OMG-Commons/BE upper references removed."@en .
+
+# Annotation-property declarations (F5 DL hygiene): the title/source/modified and the FIBO
+# skos:definition annotations below must be declared in this module's own closure.
+dcterms:title    a owl:AnnotationProperty .
+dcterms:source   a owl:AnnotationProperty .
+dcterms:modified a owl:AnnotationProperty .
+skos:definition  a owl:AnnotationProperty .
+
+# --- FND/Accounting/CurrencyAmount -------------------------------------------
+
+fibo-fnd-acc-cur:MonetaryAmount a owl:Class ;
+    rdfs:label "monetary amount"@en ;
+    skos:definition "measure that is an amount of money specified in monetary units"@en ;
+    rdfs:isDefinedBy <https://spec.edmcouncil.org/fibo/ontology/FND/Accounting/CurrencyAmount/> .
+
+fibo-fnd-acc-cur:Currency a owl:Class ;
+    rdfs:label "currency"@en ;
+    skos:definition "medium of exchange value, defined by reference to the geographical location of the monetary authorities responsible for it"@en ;
+    rdfs:isDefinedBy <https://spec.edmcouncil.org/fibo/ontology/FND/Accounting/CurrencyAmount/> .
+
+# --- FBC/ProductsAndServices/ClientsAndAccounts ------------------------------
+
+fibo-fbc-pas-caa:Account a owl:Class ;
+    rdfs:label "account"@en ;
+    skos:definition "container for records associated with a business arrangement for regular transactions and services"@en ;
+    rdfs:isDefinedBy <https://spec.edmcouncil.org/fibo/ontology/FBC/ProductsAndServices/ClientsAndAccounts/> .
+
+fibo-fbc-pas-caa:InvestmentOrDepositAccount a owl:Class ;
+    rdfs:subClassOf fibo-fbc-pas-caa:Account ;
+    rdfs:label "investment or deposit account"@en ;
+    skos:definition "account that may be either an investment account or a deposit account, or both"@en ;
+    rdfs:isDefinedBy <https://spec.edmcouncil.org/fibo/ontology/FBC/ProductsAndServices/ClientsAndAccounts/> .
+
+fibo-fbc-pas-caa:DepositAccount a owl:Class ;
+    rdfs:subClassOf fibo-fbc-pas-caa:InvestmentOrDepositAccount ;
+    rdfs:label "deposit account"@en ;
+    skos:definition "account that provides a record of money placed with a depository institution for safekeeping and management"@en ;
+    rdfs:isDefinedBy <https://spec.edmcouncil.org/fibo/ontology/FBC/ProductsAndServices/ClientsAndAccounts/> .
+
+fibo-fbc-pas-caa:AccountHolder a owl:Class ;
+    rdfs:label "account holder"@en ;
+    skos:definition "party that holds an account and may transact through it"@en ;
+    rdfs:isDefinedBy <https://spec.edmcouncil.org/fibo/ontology/FBC/ProductsAndServices/ClientsAndAccounts/> .
+
+fibo-fbc-pas-caa:AccountProvider a owl:Class ;
+    rdfs:label "account provider"@en ;
+    skos:definition "party that provides and administers an account"@en ;
+    rdfs:isDefinedBy <https://spec.edmcouncil.org/fibo/ontology/FBC/ProductsAndServices/ClientsAndAccounts/> .
+
+# --- FBC/FunctionalEntities/FinancialServicesEntities ------------------------
+
+fibo-fbc-fct-fse:FinancialInstitution a owl:Class ;
+    rdfs:label "financial institution"@en ;
+    skos:definition "financial service provider identified as either a government agency or privately owned entity that collects funds from the public and from other institutions, and invests those funds in financial assets, such as loans, securities, bank deposits, and income-generating property"@en ;
+    rdfs:isDefinedBy <https://spec.edmcouncil.org/fibo/ontology/FBC/FunctionalEntities/FinancialServicesEntities/> .
+
+fibo-fbc-fct-fse:DepositoryInstitution a owl:Class ;
+    rdfs:subClassOf fibo-fbc-fct-fse:FinancialInstitution ;
+    rdfs:label "depository institution"@en ;
+    skos:definition "financial institution whose main service is collecting deposits and lending money"@en ;
+    rdfs:isDefinedBy <https://spec.edmcouncil.org/fibo/ontology/FBC/FunctionalEntities/FinancialServicesEntities/> .
+
+fibo-fbc-fct-fse:Bank a owl:Class ;
+    rdfs:subClassOf fibo-fbc-fct-fse:DepositoryInstitution ;
+    rdfs:label "bank"@en ;
+    skos:definition "depository institution, usually a corporation, that accepts deposits, makes loans, pays checks, and performs related services, for individual members of the public, businesses or other organizations"@en ;
+    rdfs:isDefinedBy <https://spec.edmcouncil.org/fibo/ontology/FBC/FunctionalEntities/FinancialServicesEntities/> .
+
+# --- FBC/FinancialInstruments/FinancialInstruments ---------------------------
+
+fibo-fbc-fi-fi:FinancialInstrument a owl:Class ;
+    rdfs:label "financial instrument"@en ;
+    skos:definition "written contract that gives rise to both a financial asset of one entity and a financial liability of another entity"@en ;
+    rdfs:isDefinedBy <https://spec.edmcouncil.org/fibo/ontology/FBC/FinancialInstruments/FinancialInstruments/> .

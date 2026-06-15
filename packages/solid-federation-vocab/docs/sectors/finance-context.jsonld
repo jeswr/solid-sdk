@@ -1,0 +1,85 @@
+{
+  "@context": {
+    "@version": 1.1,
+    "@protected": true,
+    "fin": "https://w3id.org/jeswr/sectors/finance#",
+    "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+    "skos": "http://www.w3.org/2004/02/skos/core#",
+    "xsd": "http://www.w3.org/2001/XMLSchema#",
+    "id": "@id",
+    "type": "@type",
+    "AccountCustodian": "fin:AccountCustodian",
+    "ActiveFinancialAccount": "fin:ActiveFinancialAccount",
+    "amount": {
+      "@id": "fin:amount",
+      "@type": "@id"
+    },
+    "Balance": "fin:Balance",
+    "Bank": "fin:Bank",
+    "CardPayment": "fin:CardPayment",
+    "ClosedFinancialAccount": "fin:ClosedFinancialAccount",
+    "Counterparty": "fin:Counterparty",
+    "creditAccount": {
+      "@id": "fin:creditAccount",
+      "@type": "@id"
+    },
+    "CreditAccount": "fin:CreditAccount",
+    "currency": {
+      "@id": "fin:currency",
+      "@type": "@id"
+    },
+    "CurrentAccount": "fin:CurrentAccount",
+    "debitAccount": {
+      "@id": "fin:debitAccount",
+      "@type": "@id"
+    },
+    "FinancialAccount": "fin:FinancialAccount",
+    "FinancialInstitution": "fin:FinancialInstitution",
+    "FinancialInstrument": "fin:FinancialInstrument",
+    "FrozenFinancialAccount": "fin:FrozenFinancialAccount",
+    "hasCounterparty": {
+      "@id": "fin:hasCounterparty",
+      "@type": "@id"
+    },
+    "hasMonetaryAmount": {
+      "@id": "fin:hasMonetaryAmount",
+      "@type": "@id"
+    },
+    "heldInAccount": {
+      "@id": "fin:heldInAccount",
+      "@type": "@id"
+    },
+    "Holding": "fin:Holding",
+    "InvestmentAccount": "fin:InvestmentAccount",
+    "MonetaryAmount": "fin:MonetaryAmount",
+    "ofInstrument": {
+      "@id": "fin:ofInstrument",
+      "@type": "@id"
+    },
+    "payee": {
+      "@id": "fin:payee",
+      "@type": "@id"
+    },
+    "Payee": "fin:Payee",
+    "payer": {
+      "@id": "fin:payer",
+      "@type": "@id"
+    },
+    "Payer": "fin:Payer",
+    "Payment": "fin:Payment",
+    "postingTime": {
+      "@id": "fin:postingTime",
+      "@type": "@id"
+    },
+    "quantity": {
+      "@id": "fin:quantity",
+      "@type": "@id"
+    },
+    "SavingsAccount": "fin:SavingsAccount",
+    "sector": "fin:sector",
+    "Security": "fin:Security",
+    "Transaction": "fin:Transaction",
+    "TransactionRecord": "fin:TransactionRecord",
+    "Transfer": "fin:Transfer"
+  }
+}

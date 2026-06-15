@@ -1,0 +1,392 @@
+# AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+#
+@prefix sched:   <https://w3id.org/jeswr/sectors/scheduling#> .
+@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix skos:    <http://www.w3.org/2004/02/skos/core#> .
+@prefix vann:    <http://purl.org/vocab/vann/> .
+@prefix gufo:    <http://purl.org/nemo/gufo#> .
+
+# =============================================================================
+# Solid Scheduling sector ontology — RE-BASED onto gUFO (KEY=scheduling).
+#
+# v1.0.0 re-base of the v0 scheduling sector, per R11 §4.2 (the SCHEDULING row:
+# Event=Event; participation=Role/mediates; reminders=Object; fully global).
+# Every sector class now carries its own gUFO meta-type AND rdfs:subClassOf a
+# re-based Core class (contract rule 2): CalendarEvent=gufo:EventType of
+# core:Event; Task=gufo:EventType of core:Activity; Calendar/RecurrenceRule/
+# Reminder=gufo:Kind (Object) of core:InformationResource; Attendance=gufo:Relator
+# of core:Relationship; Attendee=gufo:RoleMixin of core:Agent; AttendanceStatus=
+# gufo:Mixin (coded value) of core:Category (kept from v0).
+#
+# AUTHORING PROVENANCE: authored as an OntoUML model (scheduling.ontouml.json),
+# verified anti-pattern-free by OntoumlVerification.verify() (F3, 0 issues),
+# transformed to a gUFO-OWL backbone by ontouml-js Ontouml2Gufo
+# (scheduling.gufo.ttl), then ENRICHED here with F1 definitions, the Core rooting
+# (rdfs:subClassOf core:* — the standalone OntoUML model used Core stubs in the
+# sched: namespace which are replaced here by the real core: IRIs), the property
+# spine, and the RSVP coded-value individuals.
+#
+# v0 CLEANUP (R11 §4.2 note): the v0 string-valued reified relationship is
+# replaced by a proper gUFO relator (Attendance) mediating a gUFO role
+# (Attendee) — the single biggest modelling upgrade in the re-base. The v0
+# core:Entity / core:relatesAgent / core:relationshipRole (none of which survive
+# in the gUFO Core) are dropped: Attendance now mediates Attendee via
+# sched:hasAttendee (sub-property of core:relatesParty), and the RSVP value is
+# the coded-value sched:attendanceStatus.
+#
+# CONTRACT (R8 §4 + R11 F1-F7) — admissible because: (1) imports the Core;
+# (2) every class roots in a Core class and carries its gUFO meta-type;
+# (3) constrains, never forks; (4) reuses iCalendar/schema.org/OWL-Time in the
+# companion scheduling-alignments.ttl; (5) ships scheduling.shacl.ttl;
+# (6) carries owl:versionInfo "1.0.0" + a version IRI (gUFO re-base = new MAJOR);
+# (7) Core ∪ scheduling is DL-valid + reasoner-consistent (see verification).
+# Open-world by default; the SHACL profile carries the closed-world MUST/SHOULD.
+# =============================================================================
+
+<https://w3id.org/jeswr/sectors/scheduling> a owl:Ontology ;
+    dcterms:title "Solid Scheduling Ontology (gUFO re-base)"@en ;
+    rdfs:label "Solid Scheduling Ontology"@en ;
+    vann:preferredNamespacePrefix "sched" ;
+    vann:preferredNamespaceUri "https://w3id.org/jeswr/sectors/scheduling#" ;
+    owl:imports <https://w3id.org/jeswr/core> ;
+    owl:versionInfo "1.0.0" ;
+    owl:versionIRI <https://w3id.org/jeswr/sectors/scheduling/1.0.0> ;
+    dcterms:description """Calendars and scheduling (the Calendar app), re-based
+        onto the gUFO Core. Roots CalendarEvent in core:Event, Task/ToDo in
+        core:Activity, Calendar/RecurrenceRule/Reminder in core:InformationResource
+        (Object), Attendance in core:Relationship (gufo:Relator) mediating an
+        Attendee role, and AttendanceStatus in core:Category (coded value). Reuses
+        the Core temporal/spatial/participation spine (core:atTime/atPlace/
+        hadParticipant). v1.0.0 is a BREAKING re-base of v0 (the meta-types change
+        meaning, and the v0 string-role relationship is replaced by a relator), so
+        a new MAJOR version. Aligns to iCalendar RFC 5545, schema:Event/Schedule
+        and W3C OWL-Time in the companion alignments file."""@en ;
+    dcterms:modified "2026-06-13"^^xsd:date ;
+    rdfs:comment "Re-based per R11 §4.2."@en .
+
+# -----------------------------------------------------------------------------
+# Annotation-property declarations (F5: keep the merged closure unambiguously
+# OWL 2 DL — declare the dcterms:/vann: annotation properties used here).
+# -----------------------------------------------------------------------------
+dcterms:title       a owl:AnnotationProperty .
+dcterms:description a owl:AnnotationProperty .
+dcterms:modified    a owl:AnnotationProperty .
+vann:preferredNamespacePrefix a owl:AnnotationProperty .
+vann:preferredNamespaceUri    a owl:AnnotationProperty .
+skos:definition     a owl:AnnotationProperty .
+skos:scopeNote      a owl:AnnotationProperty .
+skos:prefLabel      a owl:AnnotationProperty .
+skos:inScheme       a owl:AnnotationProperty .
+
+# -----------------------------------------------------------------------------
+# External SKOS terms used on the RSVP coded-value scheme, and xsd:duration,
+# declared so the merged closure is unambiguously OWL 2 DL even though SKOS is a
+# Mode-A alignment target not in the reasoned closure (mirrors the Core's
+# time:TemporalEntity punning fix). skos:Concept / skos:ConceptScheme are the
+# coded-value roots AttendanceStatus / AttendanceScheme bind to.
+# -----------------------------------------------------------------------------
+skos:Concept       a owl:Class ;
+    rdfs:isDefinedBy <http://www.w3.org/2004/02/skos/core#> .
+skos:ConceptScheme a owl:Class ;
+    rdfs:isDefinedBy <http://www.w3.org/2004/02/skos/core#> .
+xsd:duration       a rdfs:Datatype .
+
+# =============================================================================
+# 1. CALENDAR EVENT  (gufo:EventType of core:Event)
+# A scheduled occurrence located in time and (optionally) place that agents
+# participate in. Rooted in core:Event; reuses core:atTime/atPlace/hadParticipant.
+# =============================================================================
+
+sched:CalendarEvent a owl:Class, gufo:EventType ;
+    rdfs:subClassOf core:Event ;
+    rdfs:label "Calendar Event"@en ;
+    skos:definition "A scheduled occurrence located in time and (optionally) place that agents participate in — a meeting, appointment, concert. The gufo:Event sub-type the Calendar app holds; aligns to iCalendar VEVENT and schema:Event."@en ;
+    skos:scopeNote "gufo:EventType (instances are gufo:Event perdurants) under core:Event. Time via core:atTime; venue via sched:eventLocation (⊑ core:atPlace); participants via sched:attendee (⊑ core:hadParticipant)."@en .
+
+# =============================================================================
+# 2. TASK / TO-DO  (gufo:EventType of core:Activity)
+# Something to be done over time, optionally with a due date and completion state.
+# core:Activity (it acts/generates over time), not a mere occurrence.
+# =============================================================================
+
+sched:Task a owl:Class, gufo:EventType ;
+    rdfs:subClassOf core:Activity ;
+    rdfs:label "Task"@en ;
+    skos:definition "A to-do item: something to be done over time, optionally with a due date and completion state. Rooted in core:Activity (it acts/generates over time, it is not merely an occurrence); aligns to iCalendar VTODO and schema:PlanAction."@en ;
+    skos:scopeNote "gufo:EventType under core:Activity. Performer via core:performedBy; due via sched:dueTime; completion via sched:completed/completedAt."@en .
+
+# =============================================================================
+# 3. CALENDAR  (gufo:Kind / Object of core:InformationResource)
+# The named collection that holds entries.
+# =============================================================================
+
+sched:Calendar a owl:Class, gufo:Kind ;
+    rdfs:subClassOf core:InformationResource ;
+    rdfs:label "Calendar"@en ;
+    skos:definition "A named collection of calendar entries (events, tasks) — an information resource the Calendar app manages. Aligns to iCalendar VCALENDAR and schema:Schedule's host context."@en ;
+    skos:scopeNote "gufo:Kind (information object) under core:InformationResource. Holds entries via sched:inCalendar."@en .
+
+# =============================================================================
+# 4. RECURRENCE RULE  (gufo:Kind / Object of core:InformationResource)
+# A specification that generates a series — an information object, not an
+# occurrence itself.
+# =============================================================================
+
+sched:RecurrenceRule a owl:Class, gufo:Kind ;
+    rdfs:subClassOf core:InformationResource ;
+    rdfs:label "Recurrence Rule"@en ;
+    skos:definition "A specification (frequency, interval, by-day/by-month, count/until) that generates a series of recurring entries. An information object describing a series, not an occurrence itself. Aligns to iCalendar RRULE and schema:Schedule."@en ;
+    skos:scopeNote "gufo:Kind (information object) under core:InformationResource."@en .
+
+# =============================================================================
+# 5. REMINDER / ALARM  (gufo:Kind / Object of core:InformationResource)
+# A triggered notification attached to an entry.
+# =============================================================================
+
+sched:Reminder a owl:Class, gufo:Kind ;
+    rdfs:subClassOf core:InformationResource ;
+    rdfs:label "Reminder"@en ;
+    skos:definition "An alarm attached to a calendar entry that fires at, before, or after a reference time to notify an agent. An information object, not the firing event. Aligns to iCalendar VALARM."@en ;
+    skos:scopeNote "gufo:Kind (information object) under core:InformationResource. Attached via sched:hasReminder (⊑ core:hasPart)."@en .
+
+# =============================================================================
+# 6. ATTENDANCE  (gufo:Relator of core:Relationship) — the reified RSVP
+# A reified link between a CalendarEvent and an attending core:Agent carrying the
+# RSVP/participation status, role and response time. The v0 string-role
+# relationship upgraded to a proper relator mediating an Attendee role.
+# =============================================================================
+
+sched:Attendance a owl:Class, gufo:Relator ;
+    rdfs:subClassOf core:Relationship ;
+    rdfs:label "Attendance"@en ;
+    skos:definition "A reified link between a CalendarEvent and an attending agent that carries the RSVP/participation status, role and response time. A core:Relationship relator: it mediates an Attendee role and bundles status + provenance. Aligns to iCalendar ATTENDEE and schema:RsvpAction."@en ;
+    skos:scopeNote "gufo:Relator under core:Relationship. Mediates the Attendee role via sched:hasAttendee (⊑ core:relatesParty); the event via sched:attendanceFor; the RSVP via sched:attendanceStatus."@en .
+
+# =============================================================================
+# 7. ATTENDEE  (gufo:RoleMixin of core:Agent)
+# The anti-rigid, cross-kind role an Agent plays in an Attendance.
+# =============================================================================
+
+sched:Attendee a owl:Class, gufo:RoleMixin ;
+    rdfs:subClassOf core:Agent ;
+    rdfs:label "Attendee"@en ;
+    skos:definition "The role an agent plays when invited to / participating in an event, as captured by an Attendance relator. Anti-rigid and cross-kind (any Agent kind may play it). Specialises core:RelationshipParty in usage; aligns to iCalendar ATTENDEE."@en ;
+    skos:scopeNote "gufo:RoleMixin (anti-rigid, cross-kind) played by core:Agent. Derived from the Attendance relator via the sched:hasAttendee mediation."@en .
+
+# =============================================================================
+# 8. ATTENDANCE STATUS  (gufo:Mixin / coded value of core:Category) — kept from v0
+# A controlled-vocabulary RSVP value. The canonical scheme + RSVP individuals.
+# =============================================================================
+
+sched:AttendanceStatus a owl:Class, gufo:Mixin ;
+    rdfs:subClassOf core:Category , skos:Concept ;
+    rdfs:label "Attendance Status"@en ;
+    skos:definition "A controlled-vocabulary value for an RSVP state (accepted, declined, tentative, needs-action). Roots in core:Category (the federation's shared coded-value root, equivalent to skos:Concept) so values come from a managed scheme; the sched:AttendanceScheme provides the canonical set. Mirrors iCalendar PARTSTAT and schema RsvpResponseType."@en ;
+    skos:scopeNote "gufo:Mixin (coded value) under core:Category. Values supplied by sched:AttendanceScheme."@en .
+
+# Canonical RSVP status values (a controlled vocabulary). These mirror iCalendar
+# PARTSTAT and schema RsvpResponseType; bridged in the alignments file.
+sched:AttendanceScheme a core:IdentifierScheme , skos:ConceptScheme ;
+    rdfs:label "Attendance Status Scheme"@en ;
+    skos:definition "The canonical scheme of RSVP/participation status values for scheduling (ACCEPTED / DECLINED / TENTATIVE / NEEDS-ACTION)."@en .
+
+sched:Accepted a sched:AttendanceStatus ;
+    skos:inScheme sched:AttendanceScheme ;
+    skos:prefLabel "Accepted"@en ;
+    skos:definition "The attendee has accepted the invitation. iCalendar PARTSTAT=ACCEPTED; schema RsvpResponseYes."@en .
+
+sched:Declined a sched:AttendanceStatus ;
+    skos:inScheme sched:AttendanceScheme ;
+    skos:prefLabel "Declined"@en ;
+    skos:definition "The attendee has declined the invitation. iCalendar PARTSTAT=DECLINED; schema RsvpResponseNo."@en .
+
+sched:Tentative a sched:AttendanceStatus ;
+    skos:inScheme sched:AttendanceScheme ;
+    skos:prefLabel "Tentative"@en ;
+    skos:definition "The attendee has tentatively accepted the invitation. iCalendar PARTSTAT=TENTATIVE; schema RsvpResponseMaybe."@en .
+
+sched:NeedsAction a sched:AttendanceStatus ;
+    skos:inScheme sched:AttendanceScheme ;
+    skos:prefLabel "Needs Action"@en ;
+    skos:definition "The invitation awaits the attendee's response. iCalendar PARTSTAT=NEEDS-ACTION (the default)."@en .
+
+# =============================================================================
+# 9. PROPERTIES — sub-properties of Core where one fits (constrain, never widen);
+#    otherwise fresh properties whose domain is one of THIS file's subclasses.
+# =============================================================================
+
+# --- Calendar membership (mereology over a collection) ---
+sched:inCalendar a owl:ObjectProperty ;
+    rdfs:subPropertyOf core:partOf ;
+    rdfs:range sched:Calendar ;
+    rdfs:label "in calendar"@en ;
+    skos:definition "The calendar a calendar entry belongs to. Specialises core:partOf. No rdfs:domain — entries are events (core:Event/Activity), which are gUFO-disjoint from one another only via meta-type; intended usage (a CalendarEvent or Task) is enforced in SHACL. Aligns to schema:partOfSeries."@en .
+
+# --- Entry descriptive ---
+sched:summary a owl:DatatypeProperty ;
+    rdfs:range xsd:string ;
+    rdfs:label "summary"@en ;
+    skos:definition "Short title/subject of a calendar entry (a CalendarEvent or Task). Usage enforced in SHACL. Aligns to iCalendar SUMMARY and schema:name."@en .
+
+sched:description a owl:DatatypeProperty ;
+    rdfs:range xsd:string ;
+    rdfs:label "description"@en ;
+    skos:definition "Longer free-text description of a calendar entry. Aligns to iCalendar DESCRIPTION and schema:description."@en .
+
+# --- Temporal: reuse Core validFrom/validUntil for clock start/end ---
+sched:startTime a owl:DatatypeProperty ;
+    rdfs:subPropertyOf core:validFrom ;
+    rdfs:range xsd:dateTime ;
+    rdfs:label "start time"@en ;
+    skos:definition "Clock start of an entry. Specialises core:validFrom; aligns to iCalendar DTSTART and schema:startDate. For full interval modelling use core:atTime → time:Interval (OWL-Time)."@en .
+
+sched:endTime a owl:DatatypeProperty ;
+    rdfs:subPropertyOf core:validUntil ;
+    rdfs:range xsd:dateTime ;
+    rdfs:label "end time"@en ;
+    skos:definition "Clock end of an entry. Specialises core:validUntil; aligns to iCalendar DTEND and schema:endDate."@en .
+
+sched:dueTime a owl:DatatypeProperty ;
+    rdfs:subPropertyOf core:validUntil ;
+    rdfs:domain sched:Task ;
+    rdfs:range xsd:dateTime ;
+    rdfs:label "due time"@en ;
+    skos:definition "When a task is due. Specialises core:validUntil; aligns to iCalendar DUE."@en .
+
+# --- Spatial: an event's venue (reuse core:atPlace via subproperty) ---
+sched:eventLocation a owl:ObjectProperty ;
+    rdfs:subPropertyOf core:atPlace ;
+    rdfs:domain sched:CalendarEvent ;
+    rdfs:range core:Place ;
+    rdfs:label "event location"@en ;
+    skos:definition "The venue of an event. Specialises core:atPlace; aligns to iCalendar LOCATION and schema:location."@en .
+
+# --- Organizer: the agent who set up the entry ---
+# Deliberately NOT a subproperty of core:performedBy. core:performedBy has domain
+# core:Activity; subpropertying it would entail that every CalendarEvent (a
+# core:Event) carrying an organizer is ALSO a core:Activity — a silent
+# reclassification we avoid. organizer is a fresh property; the affinity to
+# performedBy/hadParticipant is recorded as skos:closeMatch in the alignments
+# file. For Tasks (which ARE core:Activity) core:performedBy may be used directly.
+sched:organizer a owl:ObjectProperty ;
+    rdfs:range core:Agent ;
+    rdfs:label "organizer"@en ;
+    skos:definition "The agent that organises/owns an entry (a CalendarEvent or Task; usage enforced in SHACL). Aligns to iCalendar ORGANIZER and schema:organizer; close to core:performedBy (see alignments)."@en .
+
+# --- Attendees: agents who take part in the event ---
+sched:attendee a owl:ObjectProperty ;
+    rdfs:subPropertyOf core:hadParticipant ;
+    rdfs:domain sched:CalendarEvent ;
+    rdfs:range core:Agent ;
+    rdfs:label "attendee"@en ;
+    skos:definition "An agent invited to / participating in an event (the direct shortcut). Specialises core:hadParticipant; aligns to iCalendar ATTENDEE and schema:attendee. The reified RSVP-bearing form is sched:Attendance."@en .
+
+# --- Attendance reification links ---
+sched:attendanceFor a owl:ObjectProperty ;
+    rdfs:domain sched:Attendance ;
+    rdfs:range sched:CalendarEvent ;
+    rdfs:label "attendance for"@en ;
+    skos:definition "The event an Attendance record concerns."@en .
+
+# Mediation: the Attendance relator → the Attendee role (relator-to-role,
+# a sub-property of core:relatesParty / gufo:mediates).
+sched:hasAttendee a owl:ObjectProperty ;
+    rdfs:subPropertyOf core:relatesParty ;
+    rdfs:domain sched:Attendance ;
+    rdfs:range sched:Attendee ;
+    rdfs:label "has attendee"@en ;
+    skos:definition "Mediation tying an Attendance relator to the agent playing the Attendee role. Specialises core:relatesParty (replaces the v0 core:relatesAgent + core:relationshipRole)."@en .
+
+sched:attendanceStatus a owl:ObjectProperty ;
+    rdfs:domain sched:Attendance ;
+    rdfs:range sched:AttendanceStatus ;
+    rdfs:label "attendance status"@en ;
+    skos:definition "The RSVP/participation state of an Attendance, a coded value from sched:AttendanceScheme. Aligns to iCalendar PARTSTAT and schema:rsvpResponse."@en .
+
+sched:respondedAt a owl:DatatypeProperty ;
+    rdfs:subPropertyOf core:timestamp ;
+    rdfs:domain sched:Attendance ;
+    rdfs:range xsd:dateTime ;
+    rdfs:label "responded at"@en ;
+    skos:definition "When the attendee last set their RSVP. Specialises core:timestamp."@en .
+
+# --- Recurrence wiring ---
+sched:recurrence a owl:ObjectProperty ;
+    rdfs:range sched:RecurrenceRule ;
+    rdfs:label "recurrence"@en ;
+    skos:definition "The recurrence rule that makes an entry repeat. Domain is a calendar entry (CalendarEvent or Task; usage enforced in SHACL). Aligns to iCalendar RRULE and schema:eventSchedule."@en .
+
+sched:frequency a owl:DatatypeProperty ;
+    rdfs:domain sched:RecurrenceRule ;
+    rdfs:range xsd:string ;
+    rdfs:label "frequency"@en ;
+    skos:definition "Recurrence frequency (DAILY, WEEKLY, MONTHLY, YEARLY). Aligns to iCalendar FREQ and schema:repeatFrequency."@en .
+
+sched:interval a owl:DatatypeProperty ;
+    rdfs:domain sched:RecurrenceRule ;
+    rdfs:range xsd:positiveInteger ;
+    rdfs:label "interval"@en ;
+    skos:definition "How many frequency units between occurrences (every N). Aligns to iCalendar INTERVAL."@en .
+
+sched:count a owl:DatatypeProperty ;
+    rdfs:domain sched:RecurrenceRule ;
+    rdfs:range xsd:positiveInteger ;
+    rdfs:label "count"@en ;
+    skos:definition "Total number of occurrences the rule generates (mutually exclusive with until). Aligns to iCalendar COUNT."@en .
+
+sched:until a owl:DatatypeProperty ;
+    rdfs:domain sched:RecurrenceRule ;
+    rdfs:range xsd:dateTime ;
+    rdfs:label "until"@en ;
+    skos:definition "The last date/time at which the recurrence may produce an occurrence. Aligns to iCalendar UNTIL."@en .
+
+# --- Task completion state ---
+sched:completed a owl:DatatypeProperty ;
+    rdfs:domain sched:Task ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "completed"@en ;
+    skos:definition "Whether a task has been completed."@en .
+
+sched:completedAt a owl:DatatypeProperty ;
+    rdfs:subPropertyOf core:timestamp ;
+    rdfs:domain sched:Task ;
+    rdfs:range xsd:dateTime ;
+    rdfs:label "completed at"@en ;
+    skos:definition "When a task was completed. Specialises core:timestamp; aligns to iCalendar COMPLETED."@en .
+
+# --- Reminder wiring ---
+sched:hasReminder a owl:ObjectProperty ;
+    rdfs:subPropertyOf core:hasPart ;
+    rdfs:range sched:Reminder ;
+    rdfs:label "has reminder"@en ;
+    skos:definition "Attaches a reminder/alarm to a calendar entry. Specialises core:hasPart; aligns to iCalendar (VALARM nested in VEVENT/VTODO)."@en .
+
+sched:triggerTime a owl:DatatypeProperty ;
+    rdfs:domain sched:Reminder ;
+    rdfs:range xsd:dateTime ;
+    rdfs:label "trigger time"@en ;
+    skos:definition "Absolute time a reminder fires. Aligns to iCalendar TRIGGER (absolute form)."@en .
+
+sched:triggerOffset a owl:DatatypeProperty ;
+    rdfs:domain sched:Reminder ;
+    rdfs:range xsd:duration ;
+    rdfs:label "trigger offset"@en ;
+    skos:definition "Relative offset (e.g. -PT15M for 15 minutes before) from the entry's start at which a reminder fires. Aligns to iCalendar TRIGGER (relative form)."@en .
+
+# =============================================================================
+# SECTOR MARKER — the IRI an app's fedapp:sector points at to declare it operates
+# in this sector (https://w3id.org/jeswr/fed#sector). A skos:Concept in the
+# federation sector register; dereferences to this ontology.
+# =============================================================================
+
+<https://w3id.org/jeswr/sectors/scheduling#sector>
+    a <http://www.w3.org/2004/02/skos/core#Concept> ;
+    rdfs:label "Scheduling sector"@en ;
+    rdfs:comment "The Scheduling data sector. The value an app's fedapp:sector names in its Client Identifier Document to declare it operates over scheduling data. Backed by this sector ontology."@en ;
+    rdfs:isDefinedBy <https://w3id.org/jeswr/sectors/scheduling> ;
+    skos:prefLabel "Scheduling"@en .

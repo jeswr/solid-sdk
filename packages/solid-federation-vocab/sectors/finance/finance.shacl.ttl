@@ -1,0 +1,277 @@
+# AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+#
+@prefix fin:     <https://w3id.org/jeswr/sectors/finance#> .
+@prefix finsh:   <https://w3id.org/jeswr/sectors/finance/shapes#> .
+@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix sh:      <http://www.w3.org/ns/shacl#> .
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix prof:    <http://www.w3.org/ns/dx/prof/> .
+
+# =============================================================================
+# Finance Sector — SHACL DATA-MODEL PROFILE (R4 discipline)
+#
+# This is the NORMATIVE conformance artifact (R4 §2.2): the ontology licenses
+# meaning, this shape checks shape. Discipline applied here:
+#  - OPEN BY DEFAULT: no sh:closed anywhere — shapes compose with extensions and
+#    downstream profiles (R4 §2.2; the solid/shapes stance).
+#  - sh:severity carries the RFC 2119 grade: sh:Violation = MUST,
+#    sh:Warning = SHOULD.
+#  - IMMUTABLE version IRI (…/1.0.0) + version-independent IRI; additive-only.
+# =============================================================================
+
+<https://w3id.org/jeswr/sectors/finance/profile> a prof:Profile ;
+    dcterms:title "Solid Finance data-model profile (version-independent)"@en ;
+    dcterms:hasVersion <https://w3id.org/jeswr/sectors/finance/profile/1.0.0> ;
+    rdfs:comment "Version-independent IRI resolving to the current Finance profile. "@en .
+
+<https://w3id.org/jeswr/sectors/finance/profile/1.0.0> a prof:Profile ;
+    dcterms:title "Solid Finance data-model profile 1.0.0"@en ;
+    dcterms:isVersionOf <https://w3id.org/jeswr/sectors/finance/profile> ;
+    owl:versionInfo "1.0.0" ;
+    prof:isProfileOf <https://w3id.org/jeswr/sectors/finance> ;
+    prof:hasToken "finance-1.0.0" ;
+    rdfs:comment "IMMUTABLE version IRI. Open shapes; sh:Violation=MUST, sh:Warning=SHOULD. "@en .
+
+# -----------------------------------------------------------------------------
+# MonetaryAmount — a value MUST have an amount and an ISO 4217 currency code.
+# -----------------------------------------------------------------------------
+
+finsh:MonetaryAmountShape a sh:NodeShape ;
+    sh:targetClass fin:MonetaryAmount ;
+    rdfs:label "Monetary Amount shape"@en ;
+    # open shape: no sh:closed — composes with extensions
+    sh:property [
+        sh:path fin:amount ;
+        sh:datatype xsd:decimal ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:severity sh:Violation ;          # MUST: exactly one amount
+        sh:message "A monetary amount MUST have exactly one fin:amount (xsd:decimal)."@en
+    ] ;
+    sh:property [
+        sh:path fin:currency ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:pattern "^[A-Z]{3}$" ;            # ISO 4217 alphabetic code
+        sh:severity sh:Violation ;          # MUST: exactly one ISO 4217 code
+        sh:message "A monetary amount MUST carry exactly one ISO 4217 alphabetic currency code (3 uppercase letters)."@en
+    ] .
+
+# -----------------------------------------------------------------------------
+# FinancialAccount — a financial account MUST name its holder and SHOULD name
+# its provider; an identifier (e.g. IBAN) is SHOULD.
+# -----------------------------------------------------------------------------
+
+finsh:FinancialAccountShape a sh:NodeShape ;
+    sh:targetClass fin:FinancialAccount ;
+    rdfs:label "Financial Account shape"@en ;
+    # Re-based Core uses the relator->role mediations (core:hasAccountHolder /
+    # core:hasAccountProvider to the AccountHolder / AccountProvider role-mixins),
+    # replacing the v0 string-era core:accountHolder / core:accountProvider.
+    sh:property [
+        sh:path core:hasAccountHolder ;
+        sh:class core:Agent ;
+        sh:minCount 1 ;
+        sh:severity sh:Violation ;          # MUST: an account has a holder
+        sh:message "A financial account MUST mediate at least one core:hasAccountHolder (an agent playing the AccountHolder role)."@en
+    ] ;
+    sh:property [
+        sh:path core:hasAccountProvider ;
+        sh:class core:Agent ;
+        sh:minCount 1 ;
+        sh:severity sh:Warning ;            # SHOULD: name the providing institution
+        sh:message "A financial account SHOULD mediate a core:hasAccountProvider (ideally a fin:FinancialInstitution)."@en
+    ] ;
+    sh:property [
+        sh:path core:identifiedBy ;
+        sh:class core:Identifier ;
+        sh:minCount 1 ;
+        sh:severity sh:Warning ;            # SHOULD: carry an identifier (IBAN/account number)
+        sh:message "A financial account SHOULD be identified by a core:Identifier (e.g. an IBAN or account number)."@en
+    ] .
+
+# -----------------------------------------------------------------------------
+# Transaction — MUST have a monetary amount and a posting time; SHOULD name a
+# counterparty.
+# -----------------------------------------------------------------------------
+
+finsh:TransactionShape a sh:NodeShape ;
+    sh:targetClass fin:Transaction ;
+    rdfs:label "Transaction shape"@en ;
+    sh:property [
+        sh:path fin:hasMonetaryAmount ;
+        sh:class fin:MonetaryAmount ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:severity sh:Violation ;          # MUST: one amount per transaction
+        sh:message "A transaction MUST have exactly one fin:hasMonetaryAmount (a fin:MonetaryAmount)."@en
+    ] ;
+    sh:property [
+        sh:path fin:postingTime ;
+        sh:datatype xsd:dateTime ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:severity sh:Violation ;          # MUST: a posting time
+        sh:message "A transaction MUST have exactly one fin:postingTime (xsd:dateTime)."@en
+    ] ;
+    sh:property [
+        sh:path fin:hasCounterparty ;
+        sh:class core:Agent ;
+        sh:minCount 1 ;
+        sh:severity sh:Warning ;            # SHOULD: name the other party
+        sh:message "A transaction SHOULD name at least one fin:hasCounterparty (an agent playing the Counterparty role)."@en
+    ] .
+
+# -----------------------------------------------------------------------------
+# Payment — a payment (a transaction) MUST name both payer and payee.
+# -----------------------------------------------------------------------------
+
+finsh:PaymentShape a sh:NodeShape ;
+    sh:targetClass fin:Payment ;
+    rdfs:label "Payment shape"@en ;
+    sh:property [
+        sh:path fin:payer ;
+        sh:class core:Agent ;
+        sh:minCount 1 ;
+        sh:severity sh:Violation ;          # MUST: a payer
+        sh:message "A payment MUST name a fin:payer (a core:Agent)."@en
+    ] ;
+    sh:property [
+        sh:path fin:payee ;
+        sh:class core:Agent ;
+        sh:minCount 1 ;
+        sh:severity sh:Violation ;          # MUST: a payee
+        sh:message "A payment MUST name a fin:payee (a core:Agent)."@en
+    ] .
+
+# -----------------------------------------------------------------------------
+# Holding — a holding MUST reference an instrument and a quantity; SHOULD carry
+# a valuation.
+# -----------------------------------------------------------------------------
+
+finsh:HoldingShape a sh:NodeShape ;
+    sh:targetClass fin:Holding ;
+    rdfs:label "Holding shape"@en ;
+    sh:property [
+        sh:path fin:ofInstrument ;
+        sh:class fin:FinancialInstrument ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:severity sh:Violation ;          # MUST: which instrument
+        sh:message "A holding MUST reference exactly one fin:ofInstrument (a fin:FinancialInstrument)."@en
+    ] ;
+    sh:property [
+        sh:path fin:quantity ;
+        sh:datatype xsd:decimal ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:severity sh:Violation ;          # MUST: how many units
+        sh:message "A holding MUST carry exactly one fin:quantity (xsd:decimal)."@en
+    ] ;
+    sh:property [
+        sh:path fin:hasMonetaryAmount ;
+        sh:class fin:MonetaryAmount ;
+        sh:minCount 1 ;
+        sh:severity sh:Warning ;            # SHOULD: a valuation
+        sh:message "A holding SHOULD carry a fin:hasMonetaryAmount valuation."@en
+    ] .
+
+# =============================================================================
+# F4 coverage — a node shape per remaining instantiable class. Subtypes/phases
+# do NOT inherit a parent's sh:targetClass, so each needs its own shape; they
+# refine the inherited contract where a key property is obvious, else stay open.
+# =============================================================================
+
+# --- account subtypes (refine FinancialAccount: still MUST a holder) ---
+finsh:CurrentAccountShape a sh:NodeShape ;
+    sh:targetClass fin:CurrentAccount ; rdfs:label "Current Account shape"@en ;
+    sh:property [ sh:path core:hasAccountHolder ; sh:class core:Agent ; sh:minCount 1 ;
+        sh:severity sh:Violation ;
+        sh:message "A current account MUST mediate a core:hasAccountHolder."@en ] .
+
+finsh:SavingsAccountShape a sh:NodeShape ;
+    sh:targetClass fin:SavingsAccount ; rdfs:label "Savings Account shape"@en ;
+    sh:property [ sh:path core:hasAccountHolder ; sh:class core:Agent ; sh:minCount 1 ;
+        sh:severity sh:Violation ;
+        sh:message "A savings account MUST mediate a core:hasAccountHolder."@en ] .
+
+finsh:CreditAccountShape a sh:NodeShape ;
+    sh:targetClass fin:CreditAccount ; rdfs:label "Credit Account shape"@en ;
+    sh:property [ sh:path core:hasAccountHolder ; sh:class core:Agent ; sh:minCount 1 ;
+        sh:severity sh:Violation ;
+        sh:message "A credit account MUST mediate a core:hasAccountHolder."@en ] .
+
+finsh:InvestmentAccountShape a sh:NodeShape ;
+    sh:targetClass fin:InvestmentAccount ; rdfs:label "Investment Account shape"@en ;
+    sh:property [ sh:path core:hasAccountHolder ; sh:class core:Agent ; sh:minCount 1 ;
+        sh:severity sh:Violation ;
+        sh:message "An investment account MUST mediate a core:hasAccountHolder."@en ] .
+
+# --- account-status phases (open shapes — a phase is a typed account state) ---
+finsh:ActiveFinancialAccountShape a sh:NodeShape ;
+    sh:targetClass fin:ActiveFinancialAccount ; rdfs:label "Active Financial Account shape"@en .
+
+finsh:FrozenFinancialAccountShape a sh:NodeShape ;
+    sh:targetClass fin:FrozenFinancialAccount ; rdfs:label "Frozen Financial Account shape"@en .
+
+finsh:ClosedFinancialAccountShape a sh:NodeShape ;
+    sh:targetClass fin:ClosedFinancialAccount ; rdfs:label "Closed Financial Account shape"@en .
+
+# --- transaction subtypes — compose with the parent shapes (SHACL targets don't
+#     inherit), so subtype data must satisfy every inherited Transaction/Payment MUST. ---
+finsh:TransferShape a sh:NodeShape ;
+    sh:targetClass fin:Transfer ; rdfs:label "Transfer shape"@en ;
+    sh:node finsh:TransactionShape ;     # inherits hasMonetaryAmount + postingTime MUSTs
+    sh:property [ sh:path fin:debitAccount ; sh:class fin:FinancialAccount ;
+        sh:minCount 1 ; sh:severity sh:Warning ;
+        sh:message "A transfer SHOULD name its fin:debitAccount."@en ] ;
+    sh:property [ sh:path fin:creditAccount ; sh:class fin:FinancialAccount ;
+        sh:minCount 1 ; sh:severity sh:Warning ;
+        sh:message "A transfer SHOULD name its fin:creditAccount."@en ] .
+
+finsh:CardPaymentShape a sh:NodeShape ;
+    sh:targetClass fin:CardPayment ; rdfs:label "Card Payment shape"@en ;
+    sh:node finsh:TransactionShape ;     # inherits hasMonetaryAmount + postingTime MUSTs
+    sh:node finsh:PaymentShape ;         # inherits payer + payee MUSTs
+    sh:property [ sh:path fin:payer ; sh:class core:Agent ; sh:minCount 1 ;
+        sh:severity sh:Violation ; sh:message "A card payment MUST name a fin:payer."@en ] ;
+    sh:property [ sh:path fin:payee ; sh:class core:Agent ; sh:minCount 1 ;
+        sh:severity sh:Violation ; sh:message "A card payment MUST name a fin:payee."@en ] .
+
+# --- records (Balance, TransactionRecord): MUST be about their subject ---
+finsh:BalanceShape a sh:NodeShape ;
+    sh:targetClass fin:Balance ; rdfs:label "Balance shape"@en ;
+    sh:property [ sh:path core:about ; sh:minCount 1 ; sh:severity sh:Violation ;
+        sh:message "A balance MUST be core:about the account it states."@en ] ;
+    sh:property [ sh:path fin:hasMonetaryAmount ; sh:class fin:MonetaryAmount ;
+        sh:minCount 1 ; sh:severity sh:Warning ;
+        sh:message "A balance SHOULD carry its fin:hasMonetaryAmount."@en ] .
+
+finsh:TransactionRecordShape a sh:NodeShape ;
+    sh:targetClass fin:TransactionRecord ; rdfs:label "Transaction Record shape"@en ;
+    sh:property [ sh:path core:about ; sh:minCount 1 ; sh:severity sh:Violation ;
+        sh:message "A transaction record MUST be core:about the transaction it documents."@en ] .
+
+# --- institutions (Kind/SubKind under core:Organization) ---
+finsh:FinancialInstitutionShape a sh:NodeShape ;
+    sh:targetClass fin:FinancialInstitution ; rdfs:label "Financial Institution shape"@en ;
+    sh:property [ sh:path core:identifiedBy ; sh:class core:Identifier ;
+        sh:minCount 1 ; sh:severity sh:Warning ;
+        sh:message "A financial institution SHOULD be core:identifiedBy an identifier (e.g. a BIC/LEI)."@en ] .
+
+finsh:BankShape a sh:NodeShape ;
+    sh:targetClass fin:Bank ; rdfs:label "Bank shape"@en .
+
+# --- instruments (Kind/SubKind under core:Asset) ---
+finsh:FinancialInstrumentShape a sh:NodeShape ;
+    sh:targetClass fin:FinancialInstrument ; rdfs:label "Financial Instrument shape"@en ;
+    sh:property [ sh:path core:identifiedBy ; sh:class core:Identifier ;
+        sh:minCount 1 ; sh:severity sh:Warning ;
+        sh:message "A financial instrument SHOULD be core:identifiedBy an identifier (e.g. an ISIN)."@en ] .
+
+finsh:SecurityShape a sh:NodeShape ;
+    sh:targetClass fin:Security ; rdfs:label "Security shape"@en .

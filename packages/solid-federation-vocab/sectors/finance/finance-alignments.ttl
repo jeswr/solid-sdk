@@ -1,0 +1,65 @@
+# AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+#
+@prefix fin:     <https://w3id.org/jeswr/sectors/finance#> .
+@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos:    <http://www.w3.org/2004/02/skos/core#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+
+# FIBO production IRIs (verified against the 2026-06-13 spec.edmcouncil.org snapshot).
+@prefix fibo-fbc-pas-caa:  <https://spec.edmcouncil.org/fibo/ontology/FBC/ProductsAndServices/ClientsAndAccounts/> .
+@prefix fibo-fbc-fi-fi:    <https://spec.edmcouncil.org/fibo/ontology/FBC/FinancialInstruments/FinancialInstruments/> .
+@prefix fibo-fbc-fct-fse:  <https://spec.edmcouncil.org/fibo/ontology/FBC/FunctionalEntities/FinancialServicesEntities/> .
+@prefix fibo-fnd-acc-cur:  <https://spec.edmcouncil.org/fibo/ontology/FND/Accounting/CurrencyAmount/> .
+@prefix fibo-fnd-txn-txn:  <https://spec.edmcouncil.org/fibo/ontology/FND/Transactions/Transactions/> .
+@prefix fibo-fnd-rel-rel:  <https://spec.edmcouncil.org/fibo/ontology/FND/Relations/Relations/> .
+# ISO 20022 financial-messaging business concepts (UNIFI e-Repository).
+@prefix iso20022:          <https://www.iso20022.org/standardsrepository/type/> .
+
+# =============================================================================
+# Finance Sector Ontology — ALIGNMENTS (Mode A: annotation-only bridges)
+#
+# TWO REUSE SEAMS, kept apart on purpose:
+#  - Mode B (real reuse, the default for FIBO terms whose AXIOMS we want): the
+#    rdfs:subClassOf onto the FIBO slim MIREOT module lives in finance.ttl and is
+#    reasoned over (F6/F7). It uses imports/fibo-slim.ttl, NOT whole FIBO.
+#  - Mode A (this file, annotation-only): skos:closeMatch bridges to FIBO terms
+#    NOT pulled into the slim module, and to ISO 20022 message concepts. NO
+#    entailment — data authored against those standards is recognised without
+#    inheriting their heavy axioms. The engine loads this only when cross-
+#    vocabulary recognition is wanted; importing it never changes the reasoned
+#    closure's consistency.
+# Every line is a reviewable claim; nothing is silently inherited.
+# =============================================================================
+
+<https://w3id.org/jeswr/sectors/finance/alignments> a owl:Ontology ;
+    dcterms:title "Solid Finance Sector Ontology — FIBO + ISO 20022 Mode-A alignments"@en ;
+    owl:imports <https://w3id.org/jeswr/sectors/finance> ;
+    rdfs:comment "Annotation-only (skos:closeMatch) bridges to FIBO terms outside the slim module and to ISO 20022. Mode-B FIBO reuse (subClassOf the slim module) is in finance.ttl. "@en .
+
+# --- Accounts: subtype-level FIBO matches not carried by the slim module ---
+fin:CurrentAccount       skos:closeMatch fibo-fbc-pas-caa:DepositAccount ;
+                         skos:closeMatch iso20022:CashAccount .
+fin:FinancialAccount     skos:closeMatch iso20022:CashAccount .
+
+# --- Monetary amount + currency (FIBO match is Mode-B in finance.ttl; ISO 20022 here) ---
+fin:MonetaryAmount       skos:closeMatch iso20022:ActiveCurrencyAndAmount .
+fin:amount               skos:closeMatch fibo-fnd-acc-cur:hasAmount .
+fin:currency             skos:closeMatch fibo-fnd-acc-cur:hasCurrency .
+
+# --- Transactions & payments (FIBO FND Transactions; ISO 20022) ---
+fin:Transaction          skos:closeMatch fibo-fnd-txn-txn:FinancialTransaction .
+fin:Payment              skos:closeMatch fibo-fnd-txn-txn:Payment ;
+                         skos:closeMatch iso20022:Payment .
+fin:Transfer             skos:closeMatch iso20022:CreditTransfer .
+
+# --- Instruments & holdings (FIBO match is Mode-B in finance.ttl; ISO 20022 here) ---
+fin:Security             skos:closeMatch fibo-fbc-fi-fi:FinancialInstrument .
+fin:Holding              skos:closeMatch fibo-fbc-fi-fi:FinancialInstrument ;
+                         skos:closeMatch iso20022:FinancialInstrument .
+
+# --- Account-holding role link (FIBO FND Relations isHeldBy) ---
+# Core's account-holder mediation; annotation only — the Core mediation property
+# is never widened.
+core:hasAccountHolder    skos:closeMatch fibo-fnd-rel-rel:isHeldBy .

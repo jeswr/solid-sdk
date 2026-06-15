@@ -1,0 +1,63 @@
+<!doctype html>
+<!-- AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>w3id.org/jeswr/sectors/identity# — Solid Federation Sector Ontology</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body { font-family: system-ui, sans-serif; line-height: 1.6; max-width: 64rem; margin: 2rem auto; padding: 0 1rem; }
+      code { background: rgba(127,127,127,0.15); padding: 0.1em 0.35em; border-radius: 4px; }
+      .warn { border-left: 4px solid #d97706; padding: 0.5rem 1rem; background: rgba(217,119,6,0.08); border-radius: 4px; }
+      table { border-collapse: collapse; width: 100%; }
+      th, td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid rgba(127,127,127,0.3); vertical-align: top; }
+      a { color: #2563eb; }
+    </style>
+  </head>
+  <body>
+    <h1><code>https://w3id.org/jeswr/sectors/identity#</code></h1>
+    <p>Prefix <code>id:</code> · a gUFO-based ontology in the @jeswr Solid federation; imports the <a href="../core.html">Solid Core</a>.</p>
+    <p class="warn">⚠️ <strong>Experimental</strong> — AI-agent-generated (Claude Opus 4.8, @jeswr PSS agent); under active development, not production-hardened.</p>
+    <p>Other representations: <a href="identity.ttl">Turtle</a> · <a href="identity-context.jsonld">JSON-LD context</a> · <a href="../">index</a></p>
+    <h2>Terms (35)</h2>
+    <table>
+      <tr><th>Term</th><th>Label</th><th>Comment / definition</th></tr>
+      <tr><td><code>id:additionalName</code></td><td>additional name</td><td>Middle/additional name part. vcard:additional-name; schema:additionalName.</td></tr>
+      <tr><td><code>id:assertedAt</code></td><td>asserted at</td><td>When the attribute was asserted. Sub-property of core:timestamp.</td></tr>
+      <tr><td><code>id:assertedBy</code></td><td>asserted by</td><td>The agent (an IssuingAuthority, an attribute provider, or the subject in a self-asserted claim) that asserted this attribute. The trust anchor: a relying party trusts a claim insofar as it trusts this asserter.</td></tr>
+      <tr><td><code>id:assertionActivity</code></td><td>assertion activity</td><td>Links a verifiable attribute to the assertion activity that produced it, carrying performer (core:performedBy) and time (core:atTime).</td></tr>
+      <tr><td><code>id:assuranceLevel</code></td><td>assurance level</td><td>The level of identity assurance under a trust framework (eIDAS LoA low/substantial/high). A coded value (core:Category, aligned to skos:Concept). The dial a relying party reads for 'who do I trust to assert date-of-birth'.</td></tr>
+      <tr><td><code>id:AttributeAssertion</code></td><td>Attribute Assertion</td><td>The act of asserting/attesting a verifiable attribute — performed by the asserting agent at a time. A core:Activity that ties the claim to provenance and the trust framework.</td></tr>
+      <tr><td><code>id:attributeName</code></td><td>attribute name</td><td>The name of the asserted attribute, SHOULD be an eIDAS PID identifier where applicable (&quot;birth_date&quot;, &quot;family_name&quot;, &quot;nationality&quot;).</td></tr>
+      <tr><td><code>id:attributeValue</code></td><td>attribute value</td><td>The asserted value of the attribute (literal). Range deliberately left open — the value datatype depends on the attribute.</td></tr>
+      <tr><td><code>id:Country</code></td><td>Country</td><td>A sovereign state / country — the value of nationality and birth/residence country. A core:Place sub-kind identified by an ISO 3166 country code; aligns to schema:Country.</td></tr>
+      <tr><td><code>id:CountryCode</code></td><td>Country Code</td><td>An ISO 3166 country code (alpha-2 / alpha-3 / numeric) identifying a Country within the ISO 3166 scheme.</td></tr>
+      <tr><td><code>id:dateOfBirth</code></td><td>date of birth</td><td>The person's date of birth. eIDAS PID birth_date; vcard:bday; schema:birthDate.</td></tr>
+      <tr><td><code>id:familyName</code></td><td>family name</td><td>Family/last/surname part. eIDAS PID family_name; vcard:family-name; schema:familyName.</td></tr>
+      <tr><td><code>id:fullName</code></td><td>full name</td><td>The complete formatted name as a single string. vcard:fn; schema:name.</td></tr>
+      <tr><td><code>id:GenderIdentity</code></td><td>Gender Identity</td><td>A person's own internal sense of their gender, as recorded. HL7 Gender-Harmony slot. Global abstract slot: 0..n, time-bounded; value-sets are jurisdiction/context-scoped (later phase). NOT the person's canonical gender.</td></tr>
+      <tr><td><code>id:givenName</code></td><td>given name</td><td>Given/first name part. eIDAS PID given_name; vcard:given-name; schema:givenName.</td></tr>
+      <tr><td><code>id:hasLegalName</code></td><td>has legal name</td><td>Relates a person to a structured legal name. A sub-property of core:identifiedBy — a name is a (weak) identifier of a person.</td></tr>
+      <tr><td><code>id:honorificPrefix</code></td><td>honorific prefix</td><td>Title preceding the name (Dr, Mrs). vcard:honorific-prefix; schema:honorificPrefix.</td></tr>
+      <tr><td><code>id:honorificSuffix</code></td><td>honorific suffix</td><td>Suffix following the name (PhD, Jr). vcard:honorific-suffix; schema:honorificSuffix.</td></tr>
+      <tr><td><code>id:IdentityDocumentNumber</code></td><td>Identity Document Number</td><td>The document number of any physical identity document (ID card, residence permit). eIDAS PID document_number.</td></tr>
+      <tr><td><code>id:IssuingAuthority</code></td><td>Issuing Authority</td><td>The role of an organization that issues identity documents/identifiers or attests identity attributes (passport office, tax authority, KYC provider). The core:schemeAuthority of its identifier scheme. eIDAS PID issuing_authority.</td></tr>
+      <tr><td><code>id:LegalName</code></td><td>Legal Name</td><td>A structured rendering of a person's legal name with separable parts (given, family, additional, honorifics). An information object about a person, distinct from the person; aligns to vcard:Name.</td></tr>
+      <tr><td><code>id:NameToUse</code></td><td>Name to Use</td><td>The name a person wishes to be addressed by in a given context, independent of legal name. HL7 Gender-Harmony slot. Global abstract slot, 0..n, context-tagged.</td></tr>
+      <tr><td><code>id:NationalIdentifier</code></td><td>National Identifier</td><td>A state-issued national identity number (national ID card number, personal administrative number). eIDAS PID personal_administrative_number / document_number.</td></tr>
+      <tr><td><code>id:nationality</code></td><td>nationality</td><td>A country of which the person is a national. May be multi-valued. eIDAS PID nationality; schema:nationality.</td></tr>
+      <tr><td><code>id:NaturalPerson</code></td><td>Natural Person</td><td>A human being whose identity attributes are subject to KYC / identity-reuse. The identity-preserving sub-kind of core:Person carrying the sector's profile attributes.</td></tr>
+      <tr><td><code>id:PassportNumber</code></td><td>Passport Number</td><td>A passport document number issued by a state passport authority.</td></tr>
+      <tr><td><code>id:placeOfBirth</code></td><td>place of birth</td><td>The country where the person was born. Sub-property of core:atPlace (which carries no rdfs:domain — endurants and events are gUFO-disjoint; intended usage is on a person, enforced in SHACL). eIDAS PID birth_place/birth_country; schema:birthPlace.</td></tr>
+      <tr><td><code>id:Pronouns</code></td><td>Pronouns</td><td>The pronouns a person wishes used for them in a given context. HL7 Gender-Harmony slot. Global abstract slot, 0..n, context-tagged.</td></tr>
+      <tr><td><code>id:RecordedSexOrGender</code></td><td>Recorded Sex or Gender</td><td>A sex or gender value as recorded on a document or in a register by some authority. HL7 Gender-Harmony slot (RSG). Global abstract slot, 0..n; each instance is jurisdiction/document-scoped (the reified scoped-claim hook of §3.5).</td></tr>
+      <tr><td><code>id:sector</code></td><td>Identity &amp; Profile sector</td><td>The Identity &amp; Profile data sector. The value an app's fedapp:sector names in its Client Identifier Document to declare it operates over identity &amp; profile data. Backed by this sector ontology.</td></tr>
+      <tr><td><code>id:SexParameterForClinicalUse</code></td><td>Sex Parameter for Clinical Use</td><td>A context-specific parameter summarising sex-related biological attributes for a clinical decision. HL7 Gender-Harmony slot. Global abstract slot, 0..n, observation-linked; explicitly sex-for-clinical-use, not gender, not legal.</td></tr>
+      <tr><td><code>id:SocialSecurityNumber</code></td><td>Social Security Number</td><td>A social-security / national-insurance number issued by a social-security authority.</td></tr>
+      <tr><td><code>id:TaxIdentifier</code></td><td>Tax Identifier</td><td>A taxpayer identification number (TIN, NINO, SSN-as-tax-id) issued by a revenue/tax authority.</td></tr>
+      <tr><td><code>id:underTrustFramework</code></td><td>under trust framework</td><td>The trust framework / scheme under which this attribute was asserted (ties to the R3/R4 trust-framework layer). A coded value (core:Category) pending the trust vocabulary's class IRIs.</td></tr>
+      <tr><td><code>id:VerifiableAttribute</code></td><td>Verifiable Attribute</td><td>A reified, attestable claim about a person's identity attribute (e.g. date-of-birth = 1990-01-01) recording who asserted it and when. A core:Record about a core:Person; the unit a verifiable credential / KYC attestation carries. Aligns to cred:VerifiableCredential.</td></tr>
+    </table>
+  </body>
+</html>

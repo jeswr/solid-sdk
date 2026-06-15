@@ -1,0 +1,319 @@
+# AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+#
+@prefix media:   <https://w3id.org/jeswr/sectors/media#> .
+@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix skos:    <http://www.w3.org/2004/02/skos/core#> .
+@prefix vann:    <http://purl.org/vocab/vann/> .
+@prefix gufo:    <http://purl.org/nemo/gufo#> .
+
+# =============================================================================
+# Solid Media & Activity sector ontology — RE-BASED onto gUFO (KEY=media).
+#
+# v1.0.0 re-base of the v0 thin media sector, per R11 §4.2 (the MEDIA row).
+# Every sector class now carries its own gUFO meta-type AND rdfs:subClassOf a
+# re-based Core class (contract rule 2): CreativeWork + work types = gufo:SubKind
+# rooting in core:InformationResource (CreativeWork also rdfs:subClassOf
+# core:Asset — a licensable work); Artist = gufo:RoleMixin of core:Agent (a
+# Person or Organization is an artist only while credited); ListeningActivity /
+# PlaybackEvent = gufo:EventType under core:Activity / core:Event;
+# ListeningHistory = gufo:SubKind of core:Record (the Spotify export, about the
+# listener); MediaAccount = relator gufo:SubKind of core:Account; UsageLicense =
+# relator gufo:SubKind of core:Relationship; Playlist = a SubKind over a curated
+# collection. MusicGroup = gufo:SubKind of core:Organization that PLAYS the
+# Artist role (a rigid Kind does NOT subclass the anti-rigid Artist RoleMixin).
+#
+# AUTHORING PROVENANCE: authored as an OntoUML model (media.ontouml.json),
+# verified anti-pattern-free by OntoumlVerification.verify() (F3, 0 issues),
+# transformed to a gUFO-OWL backbone by ontouml-js Ontouml2Gufo (media.gufo.ttl),
+# then ENRICHED here with F1 definitions, the Core rooting (rdfs:subClassOf
+# core:* — the standalone OntoUML model used Core stubs in the media: namespace,
+# replaced here by the real core: IRIs) and the property spine.
+#
+# CONTRACT (R8 §4 + R11 F1-F7) — admissible because: (1) imports the Core;
+# (2) every class roots in a Core class and carries its gUFO meta-type;
+# (3) constrains, never forks; (4) reuses schema.org in the companion
+# media-alignments.ttl; (5) ships media.shacl.ttl; (6) carries owl:versionInfo
+# "1.0.0" + a version IRI (gUFO re-base = new MAJOR); (7) Core ∪ media is
+# DL-valid + reasoner-consistent (see verification report). Open-world by
+# default; the SHACL profile carries the closed-world MUST/SHOULD.
+#
+# gUFO-DISJOINTNESS NOTE: core:about has domain core:InformationResource and
+# range gufo:Endurant; gUFO holds endurants and events disjoint. The
+# event-domain "what was played/consumed" links (media:playedWork,
+# media:consumedWork) are therefore PLAIN object properties, NOT sub-properties
+# of core:about — sub-propertying them would force PlaybackEvent/ListeningActivity
+# ⊑ core:InformationResource and make those event classes unsatisfiable. Only the
+# endurant-domain media:recordingOf is rooted in core:about.
+# =============================================================================
+
+<https://w3id.org/jeswr/sectors/media> a owl:Ontology ;
+    dcterms:title "Solid Media & Activity Ontology (gUFO re-base)"@en ;
+    rdfs:label "Solid Media & Activity Ontology"@en ;
+    vann:preferredNamespacePrefix "media" ;
+    vann:preferredNamespaceUri "https://w3id.org/jeswr/sectors/media#" ;
+    owl:imports <https://w3id.org/jeswr/core> ;
+    owl:versionInfo "1.0.0" ;
+    owl:versionIRI <https://w3id.org/jeswr/sectors/media/1.0.0> ;
+    dcterms:description """Media consumption & creative works — the Spotify
+        end-to-end example and the media importers — re-based onto the gUFO Core.
+        Roots in core:InformationResource/core:Asset (creative works),
+        core:Agent (the Artist role), core:Activity/core:Event (listening /
+        playback), core:Record (the imported listening history about the
+        listener), core:Account (the streaming account) and core:Relationship
+        (the usage licence). v1.0.0 is a BREAKING re-base of v0 (the meta-types
+        change meaning), so a new MAJOR version. Aligns to schema.org
+        CreativeWork/MusicRecording/MusicGroup/Event and ODRL in the companion
+        alignments file."""@en ;
+    dcterms:modified "2026-06-13"^^xsd:date ;
+    rdfs:comment "Re-based per R11 §4.2."@en .
+
+# -----------------------------------------------------------------------------
+# Annotation-property declarations (F5: keep the merged closure unambiguously
+# OWL 2 DL — declare the dcterms:/vann: annotation properties used here).
+# -----------------------------------------------------------------------------
+dcterms:title       a owl:AnnotationProperty .
+dcterms:description a owl:AnnotationProperty .
+dcterms:modified    a owl:AnnotationProperty .
+vann:preferredNamespacePrefix a owl:AnnotationProperty .
+vann:preferredNamespaceUri    a owl:AnnotationProperty .
+skos:definition     a owl:AnnotationProperty .
+skos:scopeNote      a owl:AnnotationProperty .
+
+# =============================================================================
+# 1. CREATIVE WORKS  (gufo:SubKind rooting in core:InformationResource)
+# A creative work is an information object that, when licensable, is also a
+# core:Asset (matching core:Asset's own "a licensed track" example). Both are
+# asserted on CreativeWork; this does NOT collapse the two Core classes (no
+# owl:equivalentClass between them) — instances simply participate in both.
+# =============================================================================
+
+media:CreativeWork a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf core:InformationResource , core:Asset ;
+    rdfs:label "Creative Work"@en ;
+    skos:definition "A work of authorship — a recording, album, podcast episode, video, or other media item. An information object that, when licensable, is also a core:Asset. Aligns to schema:CreativeWork."@en ;
+    skos:scopeNote "gufo:SubKind under core:InformationResource (its identity principle) and core:Asset."@en .
+
+media:MusicRecording a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf media:CreativeWork ;
+    rdfs:label "Music Recording"@en ;
+    skos:definition "A single recorded performance of a composition — the played unit in a streaming service. Aligns to schema:MusicRecording."@en ;
+    skos:scopeNote "gufo:SubKind of media:CreativeWork."@en .
+
+media:Track a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf media:MusicRecording ;
+    rdfs:label "Track"@en ;
+    skos:definition "A music recording as it appears as a playable track on a service (the Spotify-style 'track'), carrying service-level identifiers."@en ;
+    skos:scopeNote "gufo:SubKind of media:MusicRecording."@en .
+
+media:MusicComposition a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf media:CreativeWork ;
+    rdfs:label "Music Composition"@en ;
+    skos:definition "The underlying musical work (songwriting/score) that a recording is a recording of. Aligns to schema:MusicComposition."@en ;
+    skos:scopeNote "gufo:SubKind of media:CreativeWork."@en .
+
+media:Album a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf core:InformationResource ;
+    rdfs:label "Album"@en ;
+    skos:definition "A released collection of recordings; its tracks are core:hasPart of it. A curated collection whole. Aligns to schema:MusicAlbum."@en ;
+    skos:scopeNote "gufo:SubKind of core:InformationResource (collection whole)."@en .
+
+media:Playlist a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf core:InformationResource ;
+    rdfs:label "Playlist"@en ;
+    skos:definition "A curated, ordered collection of recordings assembled by a Person or service; its entries are core:hasPart of it. A SubKind over a collection. Aligns to schema:MusicPlaylist."@en ;
+    skos:scopeNote "gufo:SubKind of core:InformationResource (collection whole)."@en .
+
+media:PodcastEpisode a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf media:CreativeWork ;
+    rdfs:label "Podcast Episode"@en ;
+    skos:definition "A single episode of a podcast — a spoken-audio creative work. Aligns to schema:PodcastEpisode."@en ;
+    skos:scopeNote "gufo:SubKind of media:CreativeWork."@en .
+
+# =============================================================================
+# 2. ARTIST  (gufo:RoleMixin of core:Agent)
+# The role an Agent plays when credited as creator/performer of a work.
+# Anti-rigid (an agent is an artist only while credited) and cross-kind (a solo
+# artist is a core:Person, a band a core:Organization) — hence a RoleMixin,
+# rooted at core:Agent precisely so it does not collapse Person and Organization.
+# =============================================================================
+
+media:Artist a owl:Class, gufo:RoleMixin ;
+    rdfs:subClassOf core:Agent ;
+    rdfs:label "Artist"@en ;
+    skos:definition "The role of an agent (a core:Person or a core:Organization) credited as the creator/performer of a creative work. Rooted in core:Agent so both solo artists and bands qualify without collapsing those Core classes."@en ;
+    skos:scopeNote "gufo:RoleMixin (anti-rigid, cross-kind) played by core:Agent. Played by media:MusicGroup and by core:Person."@en .
+
+media:MusicGroup a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf core:Organization ;
+    rdfs:label "Music Group"@en ;
+    skos:definition "A band or musical ensemble acting as a single artist — an organization. Plays the media:Artist role. Aligns to schema:MusicGroup."@en ;
+    skos:scopeNote "gufo:SubKind of core:Organization. Plays media:Artist (not a subclass of the anti-rigid Artist RoleMixin — a rigid Kind under an anti-rigid role would be an OntoUML anti-pattern)."@en .
+
+# =============================================================================
+# 3. CONSUMPTION  (gufo:EventType under core:Activity / core:Event)
+# A listen is performed over time (ListeningActivity, a core:Activity,
+# core:performedBy the listener) and also occurs as a datable happening
+# (PlaybackEvent, a core:Event, core:hadParticipant the listener). Distinct,
+# linkable facets — neither redefines a Core class.
+# =============================================================================
+
+media:ListeningActivity a owl:Class, gufo:EventType ;
+    rdfs:subClassOf core:Activity ;
+    rdfs:label "Listening Activity"@en ;
+    skos:definition "An agent's act of consuming a creative work over time (listening to a track, watching a video). core:performedBy the listener. Aligns to schema:ListenAction (a schema:ConsumeAction)."@en ;
+    skos:scopeNote "gufo:EventType (its instances are gufo:Event perdurants) under core:Activity."@en .
+
+media:PlaybackEvent a owl:Class, gufo:EventType ;
+    rdfs:subClassOf core:Event ;
+    rdfs:label "Playback Event"@en ;
+    skos:definition "A single datable play occurrence — WHAT was played (media:playedWork), WHEN (core:atTime), and on which Account (media:onAccount). core:hadParticipant the listener. The atomic row of a streaming history."@en ;
+    skos:scopeNote "gufo:EventType (perdurant) under core:Event."@en .
+
+# =============================================================================
+# 4. IMPORTED LISTENING HISTORY  (gufo:SubKind of core:Record)
+# An imported export (a Spotify data dump) is a Record core:about / core:subject
+# the listener, aggregating PlaybackEvents via core:hasPart. The Spotify e2e tie.
+# =============================================================================
+
+media:ListeningHistory a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf core:Record ;
+    rdfs:label "Listening History"@en ;
+    skos:definition "An imported record of a person's media consumption (e.g. a Spotify data export). core:subject the listener; aggregates PlaybackEvents via core:hasPart. The imported listening record about the Person."@en ;
+    skos:scopeNote "gufo:SubKind of core:Record."@en .
+
+# =============================================================================
+# 5. MEDIA ACCOUNT  (relator gufo:SubKind of core:Account)
+# A standing streaming account; a reified relator carrying the holder and
+# provider via the Core's Account mediations (core:hasAccountHolder /
+# core:hasAccountProvider). No new mediation minted.
+# =============================================================================
+
+media:MediaAccount a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf core:Account ;
+    rdfs:label "Media Account"@en ;
+    skos:definition "A standing account with a media/streaming service through which a person consumes works (a Spotify account). A reified relator: core:hasAccountHolder the person, core:hasAccountProvider the service."@en ;
+    skos:scopeNote "gufo:SubKind of core:Account (relator). Reuses the Core's Account mediations."@en .
+
+# =============================================================================
+# 6. USAGE LICENCE  (relator gufo:SubKind of core:Relationship) — ODRL tie (R2)
+# A reified grant of usage rights over a work, between rights-holder and
+# beneficiary, carrying validity and terms. Parties via the Core's
+# core:relatesParty mediation; conceptual tie to ODRL usage control (R2).
+# =============================================================================
+
+media:UsageLicense a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf core:Relationship ;
+    rdfs:label "Usage License"@en ;
+    skos:definition "A reified grant of usage rights over a creative work, between a rights-holder and a beneficiary, with validity and terms. Conceptually ties to ODRL usage control (R2); aligns to schema:license."@en ;
+    skos:scopeNote "gufo:SubKind of core:Relationship (relator). Parties via core:relatesParty; the licensed work via media:licensedWork."@en .
+
+# =============================================================================
+# Properties — sub-properties of Core where one fits (constrain, never widen).
+# Event/relator-domain "what" links are PLAIN properties (see disjointness note).
+# =============================================================================
+
+# --- crediting works to artists ---
+media:performedByArtist a owl:ObjectProperty ;
+    rdfs:subPropertyOf core:custodian ;
+    rdfs:domain media:CreativeWork ;
+    rdfs:range media:Artist ;
+    rdfs:label "performed by artist"@en ;
+    skos:definition "The artist credited with creating/performing a work. A sub-property of core:custodian (the agent controlling/holding the work) narrowed to the artist credit. Aligns to schema:byArtist."@en .
+
+# --- recording -> composition (endurant domain: safe under core:about) ---
+media:recordingOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf core:about ;
+    rdfs:domain media:MusicRecording ;
+    rdfs:range media:MusicComposition ;
+    rdfs:label "recording of"@en ;
+    skos:definition "The composition that a recording is a recording of. A sub-property of core:about (the recording, an information object, is about the composition). Aligns to schema:recordingOf."@en .
+
+# --- structural membership (sub-properties of core:partOf, transitive) ---
+media:inAlbum a owl:ObjectProperty ;
+    rdfs:subPropertyOf core:partOf ;
+    rdfs:domain media:MusicRecording ;
+    rdfs:range media:Album ;
+    rdfs:label "in album"@en ;
+    skos:definition "The album a recording belongs to. Sub-property of core:partOf. Aligns to schema:inAlbum."@en .
+
+media:inPlaylist a owl:ObjectProperty ;
+    rdfs:subPropertyOf core:partOf ;
+    rdfs:domain media:MusicRecording ;
+    rdfs:range media:Playlist ;
+    rdfs:label "in playlist"@en ;
+    skos:definition "A playlist a recording is included in. Sub-property of core:partOf. Aligns to schema:inPlaylist."@en .
+
+# --- the consumption act: what was played / consumed (event-domain: PLAIN) ---
+media:playedWork a owl:ObjectProperty ;
+    rdfs:domain media:PlaybackEvent ;
+    rdfs:range media:CreativeWork ;
+    rdfs:label "played work"@en ;
+    skos:definition "The creative work that was played in this playback event (the WHAT). A plain object property: PlaybackEvent is a gufo:Event, so this is NOT a sub-property of core:about (whose domain core:InformationResource is gUFO-disjoint from events)."@en .
+
+media:consumedWork a owl:ObjectProperty ;
+    rdfs:domain media:ListeningActivity ;
+    rdfs:range media:CreativeWork ;
+    rdfs:label "consumed work"@en ;
+    skos:definition "The creative work consumed during a listening activity. A plain object property for the same gUFO-disjointness reason as media:playedWork. Aligns to schema:object of the ListenAction."@en .
+
+media:onAccount a owl:ObjectProperty ;
+    rdfs:domain media:PlaybackEvent ;
+    rdfs:range media:MediaAccount ;
+    rdfs:label "on account"@en ;
+    skos:definition "The media account through which a playback occurred."@en .
+
+# --- usage licence wiring (relator domain: PLAIN, not core:about) ---
+media:licensedWork a owl:ObjectProperty ;
+    rdfs:domain media:UsageLicense ;
+    rdfs:range media:CreativeWork ;
+    rdfs:label "licensed work"@en ;
+    skos:definition "The creative work a usage licence applies to. A plain object property: UsageLicense is a gufo:Relator, distinct from core:InformationResource, so it is NOT a sub-property of core:about."@en .
+
+media:hasLicense a owl:ObjectProperty ;
+    rdfs:domain media:CreativeWork ;
+    rdfs:range media:UsageLicense ;
+    rdfs:label "has license"@en ;
+    skos:definition "A usage licence that applies to this creative work. Aligns to schema:license."@en .
+
+# --- datatype properties (literal-level service metadata) ---
+media:isrc a owl:DatatypeProperty ;
+    rdfs:domain media:MusicRecording ;
+    rdfs:range xsd:string ;
+    rdfs:label "ISRC"@en ;
+    skos:definition "International Standard Recording Code for a recording. Aligns to schema:isrcCode. For scheme-anchored identifiers prefer core:identifiedBy + core:Identifier."@en .
+
+media:durationSeconds a owl:DatatypeProperty ;
+    rdfs:domain media:CreativeWork ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "duration (seconds)"@en ;
+    skos:definition "Playable duration of a work in seconds. A literal shortcut; schema:duration (ISO-8601) is the aligned external term."@en .
+
+media:msPlayed a owl:DatatypeProperty ;
+    rdfs:domain media:PlaybackEvent ;
+    rdfs:range xsd:integer ;
+    rdfs:label "milliseconds played"@en ;
+    skos:definition "How long the work was actually played in this event, in milliseconds (the Spotify-export 'ms_played' field). Distinguishes a skip from a full listen."@en .
+
+media:licenseTerms a owl:DatatypeProperty ;
+    rdfs:domain media:UsageLicense ;
+    rdfs:range xsd:string ;
+    rdfs:label "license terms"@en ;
+    skos:definition "Human-readable summary of the licence terms. Machine-actionable terms SHOULD be expressed via an ODRL policy (R2) referenced from the licence."@en .
+
+# =============================================================================
+# SECTOR MARKER — the IRI an app's fedapp:sector points at to declare it operates
+# in this sector (https://w3id.org/jeswr/fed#sector). A skos:Concept in the
+# federation sector register; dereferences to this ontology.
+# =============================================================================
+
+<https://w3id.org/jeswr/sectors/media#sector>
+    a <http://www.w3.org/2004/02/skos/core#Concept> ;
+    rdfs:label "Media & Activity sector"@en ;
+    rdfs:comment "The Media & Activity data sector. The value an app's fedapp:sector names in its Client Identifier Document to declare it operates over media & activity data. Backed by this sector ontology."@en ;
+    rdfs:isDefinedBy <https://w3id.org/jeswr/sectors/media> ;
+    skos:prefLabel "Media & Activity"@en .

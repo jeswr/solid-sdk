@@ -1,0 +1,97 @@
+{
+  "@context": {
+    "@version": 1.1,
+    "@protected": true,
+    "id": "@id",
+    "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+    "skos": "http://www.w3.org/2004/02/skos/core#",
+    "xsd": "http://www.w3.org/2001/XMLSchema#",
+    "type": "@type",
+    "additionalName": {
+      "@id": "id:additionalName",
+      "@type": "@id"
+    },
+    "assertedAt": {
+      "@id": "id:assertedAt",
+      "@type": "@id"
+    },
+    "assertedBy": {
+      "@id": "id:assertedBy",
+      "@type": "@id"
+    },
+    "assertionActivity": {
+      "@id": "id:assertionActivity",
+      "@type": "@id"
+    },
+    "assuranceLevel": {
+      "@id": "id:assuranceLevel",
+      "@type": "@id"
+    },
+    "AttributeAssertion": "id:AttributeAssertion",
+    "attributeName": {
+      "@id": "id:attributeName",
+      "@type": "@id"
+    },
+    "attributeValue": {
+      "@id": "id:attributeValue",
+      "@type": "@id"
+    },
+    "Country": "id:Country",
+    "CountryCode": "id:CountryCode",
+    "dateOfBirth": {
+      "@id": "id:dateOfBirth",
+      "@type": "@id"
+    },
+    "familyName": {
+      "@id": "id:familyName",
+      "@type": "@id"
+    },
+    "fullName": {
+      "@id": "id:fullName",
+      "@type": "@id"
+    },
+    "GenderIdentity": "id:GenderIdentity",
+    "givenName": {
+      "@id": "id:givenName",
+      "@type": "@id"
+    },
+    "hasLegalName": {
+      "@id": "id:hasLegalName",
+      "@type": "@id"
+    },
+    "honorificPrefix": {
+      "@id": "id:honorificPrefix",
+      "@type": "@id"
+    },
+    "honorificSuffix": {
+      "@id": "id:honorificSuffix",
+      "@type": "@id"
+    },
+    "IdentityDocumentNumber": "id:IdentityDocumentNumber",
+    "IssuingAuthority": "id:IssuingAuthority",
+    "LegalName": "id:LegalName",
+    "NameToUse": "id:NameToUse",
+    "NationalIdentifier": "id:NationalIdentifier",
+    "nationality": {
+      "@id": "id:nationality",
+      "@type": "@id"
+    },
+    "NaturalPerson": "id:NaturalPerson",
+    "PassportNumber": "id:PassportNumber",
+    "placeOfBirth": {
+      "@id": "id:placeOfBirth",
+      "@type": "@id"
+    },
+    "Pronouns": "id:Pronouns",
+    "RecordedSexOrGender": "id:RecordedSexOrGender",
+    "sector": "id:sector",
+    "SexParameterForClinicalUse": "id:SexParameterForClinicalUse",
+    "SocialSecurityNumber": "id:SocialSecurityNumber",
+    "TaxIdentifier": "id:TaxIdentifier",
+    "underTrustFramework": {
+      "@id": "id:underTrustFramework",
+      "@type": "@id"
+    },
+    "VerifiableAttribute": "id:VerifiableAttribute"
+  }
+}

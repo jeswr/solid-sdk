@@ -1,0 +1,118 @@
+{
+  "@context": {
+    "@version": 1.1,
+    "@protected": true,
+    "sched": "https://w3id.org/jeswr/sectors/scheduling#",
+    "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+    "skos": "http://www.w3.org/2004/02/skos/core#",
+    "xsd": "http://www.w3.org/2001/XMLSchema#",
+    "id": "@id",
+    "type": "@type",
+    "Accepted": "sched:Accepted",
+    "Attendance": "sched:Attendance",
+    "attendanceFor": {
+      "@id": "sched:attendanceFor",
+      "@type": "@id"
+    },
+    "AttendanceScheme": "sched:AttendanceScheme",
+    "attendanceStatus": {
+      "@id": "sched:attendanceStatus",
+      "@type": "@id"
+    },
+    "AttendanceStatus": "sched:AttendanceStatus",
+    "attendee": {
+      "@id": "sched:attendee",
+      "@type": "@id"
+    },
+    "Attendee": "sched:Attendee",
+    "Calendar": "sched:Calendar",
+    "CalendarEvent": "sched:CalendarEvent",
+    "completed": {
+      "@id": "sched:completed",
+      "@type": "@id"
+    },
+    "completedAt": {
+      "@id": "sched:completedAt",
+      "@type": "@id"
+    },
+    "count": {
+      "@id": "sched:count",
+      "@type": "@id"
+    },
+    "Declined": "sched:Declined",
+    "description": {
+      "@id": "sched:description",
+      "@type": "@id"
+    },
+    "dueTime": {
+      "@id": "sched:dueTime",
+      "@type": "@id"
+    },
+    "endTime": {
+      "@id": "sched:endTime",
+      "@type": "@id"
+    },
+    "eventLocation": {
+      "@id": "sched:eventLocation",
+      "@type": "@id"
+    },
+    "frequency": {
+      "@id": "sched:frequency",
+      "@type": "@id"
+    },
+    "hasAttendee": {
+      "@id": "sched:hasAttendee",
+      "@type": "@id"
+    },
+    "hasReminder": {
+      "@id": "sched:hasReminder",
+      "@type": "@id"
+    },
+    "inCalendar": {
+      "@id": "sched:inCalendar",
+      "@type": "@id"
+    },
+    "interval": {
+      "@id": "sched:interval",
+      "@type": "@id"
+    },
+    "NeedsAction": "sched:NeedsAction",
+    "organizer": {
+      "@id": "sched:organizer",
+      "@type": "@id"
+    },
+    "recurrence": {
+      "@id": "sched:recurrence",
+      "@type": "@id"
+    },
+    "RecurrenceRule": "sched:RecurrenceRule",
+    "Reminder": "sched:Reminder",
+    "respondedAt": {
+      "@id": "sched:respondedAt",
+      "@type": "@id"
+    },
+    "sector": "sched:sector",
+    "startTime": {
+      "@id": "sched:startTime",
+      "@type": "@id"
+    },
+    "summary": {
+      "@id": "sched:summary",
+      "@type": "@id"
+    },
+    "Task": "sched:Task",
+    "Tentative": "sched:Tentative",
+    "triggerOffset": {
+      "@id": "sched:triggerOffset",
+      "@type": "@id"
+    },
+    "triggerTime": {
+      "@id": "sched:triggerTime",
+      "@type": "@id"
+    },
+    "until": {
+      "@id": "sched:until",
+      "@type": "@id"
+    }
+  }
+}

@@ -15,10 +15,11 @@
   },
   "scripts": {
     "lint": "node scripts/lint.mjs",
-    "typecheck": "node --check scripts/validate.mjs && node --check scripts/lint.mjs && node --check scripts/build.mjs && node --check scripts/example.mjs",
+    "typecheck": "node --check scripts/validate.mjs && node --check scripts/lint.mjs && node --check scripts/build.mjs && node --check scripts/example.mjs && node --check scripts/ontology-gate.mjs && node --check scripts/import-sectors.mjs",
     "test": "node scripts/validate.mjs",
+    "ontology": "node scripts/ontology-gate.mjs",
     "build": "node scripts/build.mjs && node scripts/example.mjs",
-    "gate": "npm run lint && npm run typecheck && npm test && npm run build"
+    "gate": "npm run lint && npm run typecheck && npm test && npm run ontology && npm run build"
   },
   "devDependencies": {
     "@rdfjs/wrapper": "^0.34.0",

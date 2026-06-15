@@ -1,0 +1,78 @@
+{
+  "@context": {
+    "@version": 1.1,
+    "@protected": true,
+    "contact": "https://w3id.org/jeswr/sectors/contacts#",
+    "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+    "skos": "http://www.w3.org/2004/02/skos/core#",
+    "xsd": "http://www.w3.org/2001/XMLSchema#",
+    "id": "@id",
+    "type": "@type",
+    "Acquaintance": "contact:Acquaintance",
+    "Colleague": "contact:Colleague",
+    "Contact": "contact:Contact",
+    "ContactGroup": "contact:ContactGroup",
+    "ContactPoint": "contact:ContactPoint",
+    "contactPointType": {
+      "@id": "contact:contactPointType",
+      "@type": "@id"
+    },
+    "ContactRelationship": "contact:ContactRelationship",
+    "countryName": {
+      "@id": "contact:countryName",
+      "@type": "@id"
+    },
+    "EmailAddress": "contact:EmailAddress",
+    "Family": "contact:Family",
+    "Friend": "contact:Friend",
+    "hasContactPoint": {
+      "@id": "contact:hasContactPoint",
+      "@type": "@id"
+    },
+    "hasMemberContact": {
+      "@id": "contact:hasMemberContact",
+      "@type": "@id"
+    },
+    "HomeType": "contact:HomeType",
+    "identifies": {
+      "@id": "contact:identifies",
+      "@type": "@id"
+    },
+    "locality": {
+      "@id": "contact:locality",
+      "@type": "@id"
+    },
+    "MobileType": "contact:MobileType",
+    "OnlineHandle": "contact:OnlineHandle",
+    "OrganizationContact": "contact:OrganizationContact",
+    "PersonContact": "contact:PersonContact",
+    "PhoneNumber": "contact:PhoneNumber",
+    "PostalAddress": "contact:PostalAddress",
+    "postalCode": {
+      "@id": "contact:postalCode",
+      "@type": "@id"
+    },
+    "rawValue": {
+      "@id": "contact:rawValue",
+      "@type": "@id"
+    },
+    "region": {
+      "@id": "contact:region",
+      "@type": "@id"
+    },
+    "relatesContact": {
+      "@id": "contact:relatesContact",
+      "@type": "@id"
+    },
+    "relationshipRole": {
+      "@id": "contact:relationshipRole",
+      "@type": "@id"
+    },
+    "sector": "contact:sector",
+    "streetAddress": {
+      "@id": "contact:streetAddress",
+      "@type": "@id"
+    },
+    "WorkType": "contact:WorkType"
+  }
+}

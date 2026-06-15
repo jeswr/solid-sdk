@@ -1,0 +1,75 @@
+{
+  "@context": {
+    "@version": 1.1,
+    "@protected": true,
+    "health": "https://w3id.org/jeswr/sectors/health#",
+    "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+    "skos": "http://www.w3.org/2004/02/skos/core#",
+    "xsd": "http://www.w3.org/2001/XMLSchema#",
+    "id": "@id",
+    "type": "@type",
+    "careProvider": {
+      "@id": "health:careProvider",
+      "@type": "@id"
+    },
+    "ClinicalEntry": "health:ClinicalEntry",
+    "CodeableConcept": "health:CodeableConcept",
+    "Condition": "health:Condition",
+    "effectiveTime": {
+      "@id": "health:effectiveTime",
+      "@type": "@id"
+    },
+    "Encounter": "health:Encounter",
+    "hasCode": {
+      "@id": "health:hasCode",
+      "@type": "@id"
+    },
+    "hasEntry": {
+      "@id": "health:hasEntry",
+      "@type": "@id"
+    },
+    "hasUnit": {
+      "@id": "health:hasUnit",
+      "@type": "@id"
+    },
+    "HealthcareProvider": "health:HealthcareProvider",
+    "HealthRecord": "health:HealthRecord",
+    "HeartRateObservation": "health:HeartRateObservation",
+    "Immunization": "health:Immunization",
+    "ImmunizationActivity": "health:ImmunizationActivity",
+    "medication": {
+      "@id": "health:medication",
+      "@type": "@id"
+    },
+    "MedicationStatement": "health:MedicationStatement",
+    "MedicinalProduct": "health:MedicinalProduct",
+    "Observation": "health:Observation",
+    "ObservationActivity": "health:ObservationActivity",
+    "patient": {
+      "@id": "health:patient",
+      "@type": "@id"
+    },
+    "Patient": "health:Patient",
+    "Practitioner": "health:Practitioner",
+    "recordedBy": {
+      "@id": "health:recordedBy",
+      "@type": "@id"
+    },
+    "resultsIn": {
+      "@id": "health:resultsIn",
+      "@type": "@id"
+    },
+    "sector": "health:sector",
+    "SleepObservation": "health:SleepObservation",
+    "StepCountObservation": "health:StepCountObservation",
+    "unitCode": {
+      "@id": "health:unitCode",
+      "@type": "@id"
+    },
+    "value": {
+      "@id": "health:value",
+      "@type": "@id"
+    },
+    "VitalSign": "health:VitalSign"
+  }
+}

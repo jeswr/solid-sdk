@@ -1,0 +1,65 @@
+<!doctype html>
+<!-- AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>w3id.org/jeswr/sectors/finance# — Solid Federation Sector Ontology</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body { font-family: system-ui, sans-serif; line-height: 1.6; max-width: 64rem; margin: 2rem auto; padding: 0 1rem; }
+      code { background: rgba(127,127,127,0.15); padding: 0.1em 0.35em; border-radius: 4px; }
+      .warn { border-left: 4px solid #d97706; padding: 0.5rem 1rem; background: rgba(217,119,6,0.08); border-radius: 4px; }
+      table { border-collapse: collapse; width: 100%; }
+      th, td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid rgba(127,127,127,0.3); vertical-align: top; }
+      a { color: #2563eb; }
+    </style>
+  </head>
+  <body>
+    <h1><code>https://w3id.org/jeswr/sectors/finance#</code></h1>
+    <p>Prefix <code>fin:</code> · a gUFO-based ontology in the @jeswr Solid federation; imports the <a href="../core.html">Solid Core</a>.</p>
+    <p class="warn">⚠️ <strong>Experimental</strong> — AI-agent-generated (Claude Opus 4.8, @jeswr PSS agent); under active development, not production-hardened.</p>
+    <p>Other representations: <a href="finance.ttl">Turtle</a> · <a href="finance-context.jsonld">JSON-LD context</a> · <a href="../">index</a></p>
+    <h2>Terms (37)</h2>
+    <table>
+      <tr><th>Term</th><th>Label</th><th>Comment / definition</th></tr>
+      <tr><td><code>fin:AccountCustodian</code></td><td>Account Custodian</td><td>The role of an agent that holds or controls a financial account's assets without necessarily owning them (a custodian bank).</td></tr>
+      <tr><td><code>fin:ActiveFinancialAccount</code></td><td>Active Financial Account</td><td>The phase of a financial account that is open and operable.</td></tr>
+      <tr><td><code>fin:amount</code></td><td>amount</td><td>The numeric value of a monetary amount.</td></tr>
+      <tr><td><code>fin:Balance</code></td><td>Balance</td><td>A point-in-time statement of the monetary amount standing on a financial account. A core:Record about the account, distinct from the account itself; use core:about for the account and core:timestamp for the as-of instant.</td></tr>
+      <tr><td><code>fin:Bank</code></td><td>Bank</td><td>A deposit-taking financial institution.</td></tr>
+      <tr><td><code>fin:CardPayment</code></td><td>Card Payment</td><td>A payment initiated with a payment card.</td></tr>
+      <tr><td><code>fin:ClosedFinancialAccount</code></td><td>Closed Financial Account</td><td>The phase of a financial account that has been terminated.</td></tr>
+      <tr><td><code>fin:Counterparty</code></td><td>Counterparty</td><td>The role of the agent on the far side of a transaction's money movement, played contingently and relationally for that transaction.</td></tr>
+      <tr><td><code>fin:creditAccount</code></td><td>credit account</td><td>The account credited (money arrives) by a transaction.</td></tr>
+      <tr><td><code>fin:CreditAccount</code></td><td>Credit Account</td><td>An account representing a credit facility or revolving credit line (a credit card or overdraft), where the holder owes the provider. Relevant to the EDMA lending use cases.</td></tr>
+      <tr><td><code>fin:currency</code></td><td>currency</td><td>The ISO 4217 alphabetic currency code (e.g. &quot;GBP&quot;, &quot;EUR&quot;, &quot;USD&quot;) of a monetary amount.</td></tr>
+      <tr><td><code>fin:CurrentAccount</code></td><td>Current Account</td><td>A transactional demand-deposit account (US: checking account).</td></tr>
+      <tr><td><code>fin:debitAccount</code></td><td>debit account</td><td>The account debited (money leaves) by a transaction.</td></tr>
+      <tr><td><code>fin:FinancialAccount</code></td><td>Financial Account</td><td>A core:Account at a financial institution through which money is held and money movements are recorded. A reified relator mediating an account holder and a provider.</td></tr>
+      <tr><td><code>fin:FinancialInstitution</code></td><td>Financial Institution</td><td>An organization that provides financial accounts and services (a bank, a building society, a payment institution). Typically the agent playing core:AccountProvider for an account.</td></tr>
+      <tr><td><code>fin:FinancialInstrument</code></td><td>Financial Instrument</td><td>A tradable financial asset — a security, bond, fund unit, or similar. Identify it with core:identifiedBy + an ISIN-scheme core:Identifier.</td></tr>
+      <tr><td><code>fin:FrozenFinancialAccount</code></td><td>Frozen Financial Account</td><td>The phase of a financial account temporarily suspended (e.g. a compliance hold).</td></tr>
+      <tr><td><code>fin:hasCounterparty</code></td><td>has counterparty</td><td>Links a transaction event to the agent playing the Counterparty role on the far side of the money movement. A fresh sector property — NOT a subproperty of core:hadParticipant, so it does not entail that a Transaction is a core:Event participation nor widen any Core property.</td></tr>
+      <tr><td><code>fin:hasMonetaryAmount</code></td><td>has monetary amount</td><td>Relates an entity (a transaction, payment, balance, or holding) to a monetary amount. No rdfs:domain: it spans both endurants (holdings) and events (transactions), which gUFO holds disjoint, so a domain axiom would force inconsistent typing — intended usage is enforced in SHACL.</td></tr>
+      <tr><td><code>fin:heldInAccount</code></td><td>held in account</td><td>The investment account a holding is custodied within.</td></tr>
+      <tr><td><code>fin:Holding</code></td><td>Holding</td><td>A held position: a quantity of a financial instrument owned within an investment account. Use core:owns for the owner, fin:ofInstrument for the instrument, fin:quantity for the units, and fin:hasMonetaryAmount for its valuation.</td></tr>
+      <tr><td><code>fin:InvestmentAccount</code></td><td>Investment Account</td><td>An account through which financial instruments are held (a brokerage or securities account). Its holdings are fin:Holding / fin:FinancialInstrument assets.</td></tr>
+      <tr><td><code>fin:MonetaryAmount</code></td><td>Monetary Amount</td><td>A quantity of money: a decimal value in a single ISO 4217 currency. A value object reused by transactions, payments, balances and holdings. A core:Quantity whose unit is a currency (the ISO 4217 code on fin:currency).</td></tr>
+      <tr><td><code>fin:ofInstrument</code></td><td>of instrument</td><td>The financial instrument a holding is a position in.</td></tr>
+      <tr><td><code>fin:payee</code></td><td>payee</td><td>Links a payment to the agent playing the Payee role.</td></tr>
+      <tr><td><code>fin:Payee</code></td><td>Payee</td><td>The role of the agent that receives money in a payment.</td></tr>
+      <tr><td><code>fin:payer</code></td><td>payer</td><td>Links a payment to the agent playing the Payer role.</td></tr>
+      <tr><td><code>fin:Payer</code></td><td>Payer</td><td>The role of the agent that sends money in a payment.</td></tr>
+      <tr><td><code>fin:Payment</code></td><td>Payment</td><td>A transaction that transfers money from a payer to a payee to settle an obligation.</td></tr>
+      <tr><td><code>fin:postingTime</code></td><td>posting time</td><td>The instant a transaction was posted to the account ledger. A specialisation of core:timestamp.</td></tr>
+      <tr><td><code>fin:quantity</code></td><td>quantity</td><td>The number of units of the instrument held.</td></tr>
+      <tr><td><code>fin:SavingsAccount</code></td><td>Savings Account</td><td>An interest-bearing deposit account intended for saving rather than day-to-day transactions.</td></tr>
+      <tr><td><code>fin:sector</code></td><td>Finance sector</td><td>The Finance data sector. The value an app's fedapp:sector names in its Client Identifier Document to declare it operates over finance data. Backed by this sector ontology.</td></tr>
+      <tr><td><code>fin:Security</code></td><td>Security</td><td>A negotiable financial instrument such as a share or bond.</td></tr>
+      <tr><td><code>fin:Transaction</code></td><td>Transaction</td><td>A money movement on a financial account, having a monetary amount, a posting time and (usually) a counterparty. A core:Activity event.</td></tr>
+      <tr><td><code>fin:TransactionRecord</code></td><td>Transaction Record</td><td>The stored statement-line record of a transaction (as it appears on a statement), as opposed to the money-movement event itself. Use core:about to point at the fin:Transaction it documents.</td></tr>
+      <tr><td><code>fin:Transfer</code></td><td>Transfer</td><td>A movement of money between accounts (a bank transfer, a standing-order execution).</td></tr>
+    </table>
+  </body>
+</html>

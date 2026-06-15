@@ -1,0 +1,110 @@
+# AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+#
+@prefix owl:          <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:          <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:         <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos:         <http://www.w3.org/2004/02/skos/core#> .
+@prefix dcterms:      <http://purl.org/dc/terms/> .
+@prefix xsd:          <http://www.w3.org/2001/XMLSchema#> .
+@prefix qudt:         <http://qudt.org/schema/qudt/> .
+@prefix qkdv:         <http://qudt.org/vocab/dimensionvector/> .
+@prefix quantitykind: <http://qudt.org/vocab/quantitykind/> .
+@prefix unit:         <http://qudt.org/vocab/unit/> .
+
+# =============================================================================
+# QUDT HEALTH SLIM MODULE — version-pinned curated extract (Reuse Mode B, R11 §2).
+#
+# WHAT THIS IS: the QUDT QuantityKinds + Units the health sector's vital-sign
+# Observations need, that the core QUDT-units slim (Length/Mass/Time + metre/
+# kilogram/second) does NOT already carry — chiefly HeartRate + Beat-per-Minute.
+# Mirrors the finance FIBO-slim pattern (curated MIREOT-style extract, not whole
+# QUDT, whose unit/quantitykind closure is intractable to reason over). The core
+# slim (../../../core/imports/qudt-units-slim.ttl) is loaded alongside for the
+# step/sleep dimensions (Length=distance walked, Time=sleep duration); only the
+# heart-rate terms are minted here.
+#
+# PROVENANCE / VERSION PIN: extracted 2026-06-13 from QUDT 2.1
+# (http://qudt.org/2.1/vocab/unit + .../quantitykind). IRIs are the stable
+# un-versioned QUDT production IRIs. Labels/symbols/UCUM/dimension vectors are
+# verbatim from the QUDT source. health-alignments.ttl binds these to the
+# vital-sign Observation subtypes (skos:closeMatch) + UCUM codes.
+#
+# AXIOM POLICY: only the qudt:hasQuantityKind / qudt:hasDimensionVector /
+# qudt:ucumCode triples needed for unit recognition are kept; QUDT's heavy
+# multilingual-label + conversion-graph closure is dropped (it needs the full
+# QUDT closure and would re-introduce intractability). DL-clean: no dangling
+# class references beyond the qudt: schema terms (resolved via the catalog).
+# =============================================================================
+
+<https://w3id.org/jeswr/sectors/health/imports/qudt-health-slim> a owl:Ontology ;
+    dcterms:title "QUDT health slim module for the Solid health sector"@en ;
+    owl:versionInfo "qudt-2.1-2026-06-13-health-slim" ;
+    owl:versionIRI <https://w3id.org/jeswr/sectors/health/imports/qudt-health-slim/2026-06-13> ;
+    dcterms:source <http://qudt.org/2.1/vocab/unit> ;
+    dcterms:modified "2026-06-13"^^xsd:date ;
+    rdfs:comment "Slim Mode-B curated extract of QUDT 2.1 (HeartRate + Beat-per-Minute), version-pinned 2026-06-13. Self-contained; the core QUDT-units slim supplies Length/Mass/Time. The QUDT schema is NOT owl:imported (its transitive vaem/dtype/coordinateSystems closure is not DL-reasonable); the qudt: meta-classes used are declared as punned owl:Class locally — the F5 fix the Core applies for time:TemporalEntity."@en .
+
+# --- annotation-property declarations (F5 DL hygiene) ---
+dcterms:title    a owl:AnnotationProperty .
+dcterms:source   a owl:AnnotationProperty .
+dcterms:modified a owl:AnnotationProperty .
+
+# --- QUDT schema meta-classes (punned, declared locally — NOT importing the
+#     heavy qudt-schema closure; keeps the module DL-clean and self-contained). ---
+qudt:QuantityKind a owl:Class ;
+    rdfs:label "Quantity Kind"@en ;
+    rdfs:isDefinedBy <http://qudt.org/schema/qudt/> .
+
+qudt:Unit a owl:Class ;
+    rdfs:label "Unit"@en ;
+    rdfs:isDefinedBy <http://qudt.org/schema/qudt/> .
+
+# --- QUDT properties used below, declared so the merged closure is OWL 2 DL.
+#     hasQuantityKind/hasDimensionVector are object properties (range = punned
+#     IRIs); the descriptive ones are annotation/datatype properties. ---
+qudt:hasQuantityKind   a owl:ObjectProperty .
+qudt:hasDimensionVector a owl:ObjectProperty .
+qudt:conversionMultiplier a owl:DatatypeProperty .
+qudt:symbol   a owl:AnnotationProperty .
+qudt:ucumCode a owl:AnnotationProperty .
+skos:definition a owl:AnnotationProperty .
+
+# --- QuantityKind: HeartRate (T^-1, a frequency of heartbeats) ----------------
+
+quantitykind:HeartRate a qudt:QuantityKind ;
+    rdfs:label "Heart Rate"@en ;
+    skos:definition "The number of heartbeats per unit of time, usually per minute."@en ;
+    qudt:hasDimensionVector qkdv:A0E0L0I0M0H0T-1D0 ;
+    qudt:symbol "f_H" ;
+    rdfs:isDefinedBy <http://qudt.org/2.1/vocab/quantitykind> .
+
+# --- Unit: Beat per Minute (BPM) — the heart-rate unit; UCUM "/min" ----------
+
+unit:BEAT-PER-MIN a qudt:Unit ;
+    rdfs:label "Beat per Minute"@en ;
+    skos:definition "Heart Beat per Minute, the unit of heart rate (HKQuantityTypeIdentifierHeartRate)."@en ;
+    qudt:hasQuantityKind quantitykind:HeartRate ;
+    qudt:hasDimensionVector qkdv:A0E0L0I0M0H0T-1D0 ;
+    qudt:conversionMultiplier 0.016666666666666666 ;
+    qudt:symbol "BPM" ;
+    qudt:ucumCode "min-1{H.B.}"^^qudt:UCUMcs ;
+    rdfs:isDefinedBy <http://qudt.org/2.1/vocab/unit> .
+
+# --- Unit: Per Minute — the generic reciprocal-minute (UCUM "/min") ----------
+# Used where the bare UCUM "/min" frequency form is preferred over BPM.
+
+unit:PER-MIN a qudt:Unit ;
+    rdfs:label "Reciprocal Minute"@en ;
+    skos:definition "Reciprocal minute — a per-minute frequency (UCUM min-1)."@en ;
+    qudt:hasQuantityKind quantitykind:Frequency ;
+    qudt:hasDimensionVector qkdv:A0E0L0I0M0H0T-1D0 ;
+    qudt:conversionMultiplier 0.016666666666666666 ;
+    qudt:symbol "/min" ;
+    qudt:ucumCode "min-1"^^qudt:UCUMcs ;
+    rdfs:isDefinedBy <http://qudt.org/2.1/vocab/unit> .
+
+quantitykind:Frequency a qudt:QuantityKind ;
+    rdfs:label "Frequency"@en ;
+    skos:definition "The number of occurrences of a repeating event per unit time."@en ;
+    qudt:hasDimensionVector qkdv:A0E0L0I0M0H0T-1D0 ;
+    rdfs:isDefinedBy <http://qudt.org/2.1/vocab/quantitykind> .

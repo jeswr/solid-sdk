@@ -41,6 +41,62 @@
       </tr>
     </table>
 
+    <h2>Domain ontologies — the gUFO Core + sectors</h2>
+    <p>A foundational <strong>Solid Core</strong> ontology (re-based onto
+      <a href="https://nemo-ufes.github.io/gufo/">gUFO</a>, the gentle OWL-2-DL
+      implementation of the Unified Foundational Ontology) and the
+      <strong>sector ontologies</strong> that import and constrain it. These are
+      the IRIs an app's <code>fedapp:sector</code> points at
+      (<code>…/sectors/&lt;sector&gt;#sector</code>). Each reuses real vocabularies
+      (FIBO for finance, FHIR-mode-A + QUDT for health, vCard for contacts,
+      schema.org for media, iCalendar for scheduling, eIDAS/ISO for identity) and
+      passes a HermiT consistency gate (0 unsatisfiable classes).</p>
+    <table>
+      <tr><th>Namespace</th><th>Prefix</th><th>Reuses</th><th>Representations</th></tr>
+      <tr>
+        <td><a href="https://w3id.org/jeswr/core">…/core#</a></td>
+        <td><code>core:</code></td>
+        <td>gUFO foundation</td>
+        <td><a href="core.ttl">Turtle</a> · <a href="core-context.jsonld">JSON-LD</a> · <a href="core.html">HTML</a></td>
+      </tr>
+      <tr>
+        <td><a href="https://w3id.org/jeswr/sectors/identity">…/sectors/identity#</a></td>
+        <td><code>id:</code></td>
+        <td>eIDAS, ISO 3166, vCard, HL7 Gender-Harmony</td>
+        <td><a href="sectors/identity.ttl">Turtle</a> · <a href="sectors/identity-context.jsonld">JSON-LD</a> · <a href="sectors/identity.html">HTML</a></td>
+      </tr>
+      <tr>
+        <td><a href="https://w3id.org/jeswr/sectors/finance">…/sectors/finance#</a></td>
+        <td><code>fin:</code></td>
+        <td>FIBO (slim), ISO 4217/20022</td>
+        <td><a href="sectors/finance.ttl">Turtle</a> · <a href="sectors/finance-context.jsonld">JSON-LD</a> · <a href="sectors/finance.html">HTML</a></td>
+      </tr>
+      <tr>
+        <td><a href="https://w3id.org/jeswr/sectors/health">…/sectors/health#</a></td>
+        <td><code>health:</code></td>
+        <td>FHIR (Mode A), SNOMED/LOINC, QUDT/UCUM</td>
+        <td><a href="sectors/health.ttl">Turtle</a> · <a href="sectors/health-context.jsonld">JSON-LD</a> · <a href="sectors/health.html">HTML</a></td>
+      </tr>
+      <tr>
+        <td><a href="https://w3id.org/jeswr/sectors/media">…/sectors/media#</a></td>
+        <td><code>media:</code></td>
+        <td>schema.org, ODRL</td>
+        <td><a href="sectors/media.ttl">Turtle</a> · <a href="sectors/media-context.jsonld">JSON-LD</a> · <a href="sectors/media.html">HTML</a></td>
+      </tr>
+      <tr>
+        <td><a href="https://w3id.org/jeswr/sectors/scheduling">…/sectors/scheduling#</a></td>
+        <td><code>sched:</code></td>
+        <td>iCalendar RFC 5545, schema.org, OWL-Time</td>
+        <td><a href="sectors/scheduling.ttl">Turtle</a> · <a href="sectors/scheduling-context.jsonld">JSON-LD</a> · <a href="sectors/scheduling.html">HTML</a></td>
+      </tr>
+      <tr>
+        <td><a href="https://w3id.org/jeswr/sectors/contacts">…/sectors/contacts#</a></td>
+        <td><code>contact:</code></td>
+        <td>vCard, schema.org ContactPoint</td>
+        <td><a href="sectors/contacts.ttl">Turtle</a> · <a href="sectors/contacts-context.jsonld">JSON-LD</a> · <a href="sectors/contacts.html">HTML</a></td>
+      </tr>
+    </table>
+
     <h2>Content negotiation</h2>
     <p>The w3id.org redirect honours the <code>Accept</code> header:
       <code>text/turtle</code> → the <code>.ttl</code>;

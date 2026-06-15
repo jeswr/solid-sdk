@@ -1,0 +1,79 @@
+{
+  "@context": {
+    "@version": 1.1,
+    "@protected": true,
+    "media": "https://w3id.org/jeswr/sectors/media#",
+    "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+    "skos": "http://www.w3.org/2004/02/skos/core#",
+    "xsd": "http://www.w3.org/2001/XMLSchema#",
+    "id": "@id",
+    "type": "@type",
+    "Album": "media:Album",
+    "Artist": "media:Artist",
+    "consumedWork": {
+      "@id": "media:consumedWork",
+      "@type": "@id"
+    },
+    "CreativeWork": "media:CreativeWork",
+    "durationSeconds": {
+      "@id": "media:durationSeconds",
+      "@type": "@id"
+    },
+    "hasLicense": {
+      "@id": "media:hasLicense",
+      "@type": "@id"
+    },
+    "inAlbum": {
+      "@id": "media:inAlbum",
+      "@type": "@id"
+    },
+    "inPlaylist": {
+      "@id": "media:inPlaylist",
+      "@type": "@id"
+    },
+    "isrc": {
+      "@id": "media:isrc",
+      "@type": "@id"
+    },
+    "licensedWork": {
+      "@id": "media:licensedWork",
+      "@type": "@id"
+    },
+    "licenseTerms": {
+      "@id": "media:licenseTerms",
+      "@type": "@id"
+    },
+    "ListeningActivity": "media:ListeningActivity",
+    "ListeningHistory": "media:ListeningHistory",
+    "MediaAccount": "media:MediaAccount",
+    "msPlayed": {
+      "@id": "media:msPlayed",
+      "@type": "@id"
+    },
+    "MusicComposition": "media:MusicComposition",
+    "MusicGroup": "media:MusicGroup",
+    "MusicRecording": "media:MusicRecording",
+    "onAccount": {
+      "@id": "media:onAccount",
+      "@type": "@id"
+    },
+    "performedByArtist": {
+      "@id": "media:performedByArtist",
+      "@type": "@id"
+    },
+    "PlaybackEvent": "media:PlaybackEvent",
+    "playedWork": {
+      "@id": "media:playedWork",
+      "@type": "@id"
+    },
+    "Playlist": "media:Playlist",
+    "PodcastEpisode": "media:PodcastEpisode",
+    "recordingOf": {
+      "@id": "media:recordingOf",
+      "@type": "@id"
+    },
+    "sector": "media:sector",
+    "Track": "media:Track",
+    "UsageLicense": "media:UsageLicense"
+  }
+}

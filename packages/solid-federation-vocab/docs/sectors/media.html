@@ -1,0 +1,56 @@
+<!doctype html>
+<!-- AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>w3id.org/jeswr/sectors/media# — Solid Federation Sector Ontology</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body { font-family: system-ui, sans-serif; line-height: 1.6; max-width: 64rem; margin: 2rem auto; padding: 0 1rem; }
+      code { background: rgba(127,127,127,0.15); padding: 0.1em 0.35em; border-radius: 4px; }
+      .warn { border-left: 4px solid #d97706; padding: 0.5rem 1rem; background: rgba(217,119,6,0.08); border-radius: 4px; }
+      table { border-collapse: collapse; width: 100%; }
+      th, td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid rgba(127,127,127,0.3); vertical-align: top; }
+      a { color: #2563eb; }
+    </style>
+  </head>
+  <body>
+    <h1><code>https://w3id.org/jeswr/sectors/media#</code></h1>
+    <p>Prefix <code>media:</code> · a gUFO-based ontology in the @jeswr Solid federation; imports the <a href="../core.html">Solid Core</a>.</p>
+    <p class="warn">⚠️ <strong>Experimental</strong> — AI-agent-generated (Claude Opus 4.8, @jeswr PSS agent); under active development, not production-hardened.</p>
+    <p>Other representations: <a href="media.ttl">Turtle</a> · <a href="media-context.jsonld">JSON-LD context</a> · <a href="../">index</a></p>
+    <h2>Terms (28)</h2>
+    <table>
+      <tr><th>Term</th><th>Label</th><th>Comment / definition</th></tr>
+      <tr><td><code>media:Album</code></td><td>Album</td><td>A released collection of recordings; its tracks are core:hasPart of it. A curated collection whole. Aligns to schema:MusicAlbum.</td></tr>
+      <tr><td><code>media:Artist</code></td><td>Artist</td><td>The role of an agent (a core:Person or a core:Organization) credited as the creator/performer of a creative work. Rooted in core:Agent so both solo artists and bands qualify without collapsing those Core classes.</td></tr>
+      <tr><td><code>media:consumedWork</code></td><td>consumed work</td><td>The creative work consumed during a listening activity. A plain object property for the same gUFO-disjointness reason as media:playedWork. Aligns to schema:object of the ListenAction.</td></tr>
+      <tr><td><code>media:CreativeWork</code></td><td>Creative Work</td><td>A work of authorship — a recording, album, podcast episode, video, or other media item. An information object that, when licensable, is also a core:Asset. Aligns to schema:CreativeWork.</td></tr>
+      <tr><td><code>media:durationSeconds</code></td><td>duration (seconds)</td><td>Playable duration of a work in seconds. A literal shortcut; schema:duration (ISO-8601) is the aligned external term.</td></tr>
+      <tr><td><code>media:hasLicense</code></td><td>has license</td><td>A usage licence that applies to this creative work. Aligns to schema:license.</td></tr>
+      <tr><td><code>media:inAlbum</code></td><td>in album</td><td>The album a recording belongs to. Sub-property of core:partOf. Aligns to schema:inAlbum.</td></tr>
+      <tr><td><code>media:inPlaylist</code></td><td>in playlist</td><td>A playlist a recording is included in. Sub-property of core:partOf. Aligns to schema:inPlaylist.</td></tr>
+      <tr><td><code>media:isrc</code></td><td>ISRC</td><td>International Standard Recording Code for a recording. Aligns to schema:isrcCode. For scheme-anchored identifiers prefer core:identifiedBy + core:Identifier.</td></tr>
+      <tr><td><code>media:licensedWork</code></td><td>licensed work</td><td>The creative work a usage licence applies to. A plain object property: UsageLicense is a gufo:Relator, distinct from core:InformationResource, so it is NOT a sub-property of core:about.</td></tr>
+      <tr><td><code>media:licenseTerms</code></td><td>license terms</td><td>Human-readable summary of the licence terms. Machine-actionable terms SHOULD be expressed via an ODRL policy (R2) referenced from the licence.</td></tr>
+      <tr><td><code>media:ListeningActivity</code></td><td>Listening Activity</td><td>An agent's act of consuming a creative work over time (listening to a track, watching a video). core:performedBy the listener. Aligns to schema:ListenAction (a schema:ConsumeAction).</td></tr>
+      <tr><td><code>media:ListeningHistory</code></td><td>Listening History</td><td>An imported record of a person's media consumption (e.g. a Spotify data export). core:subject the listener; aggregates PlaybackEvents via core:hasPart. The imported listening record about the Person.</td></tr>
+      <tr><td><code>media:MediaAccount</code></td><td>Media Account</td><td>A standing account with a media/streaming service through which a person consumes works (a Spotify account). A reified relator: core:hasAccountHolder the person, core:hasAccountProvider the service.</td></tr>
+      <tr><td><code>media:msPlayed</code></td><td>milliseconds played</td><td>How long the work was actually played in this event, in milliseconds (the Spotify-export 'ms_played' field). Distinguishes a skip from a full listen.</td></tr>
+      <tr><td><code>media:MusicComposition</code></td><td>Music Composition</td><td>The underlying musical work (songwriting/score) that a recording is a recording of. Aligns to schema:MusicComposition.</td></tr>
+      <tr><td><code>media:MusicGroup</code></td><td>Music Group</td><td>A band or musical ensemble acting as a single artist — an organization. Plays the media:Artist role. Aligns to schema:MusicGroup.</td></tr>
+      <tr><td><code>media:MusicRecording</code></td><td>Music Recording</td><td>A single recorded performance of a composition — the played unit in a streaming service. Aligns to schema:MusicRecording.</td></tr>
+      <tr><td><code>media:onAccount</code></td><td>on account</td><td>The media account through which a playback occurred.</td></tr>
+      <tr><td><code>media:performedByArtist</code></td><td>performed by artist</td><td>The artist credited with creating/performing a work. A sub-property of core:custodian (the agent controlling/holding the work) narrowed to the artist credit. Aligns to schema:byArtist.</td></tr>
+      <tr><td><code>media:PlaybackEvent</code></td><td>Playback Event</td><td>A single datable play occurrence — WHAT was played (media:playedWork), WHEN (core:atTime), and on which Account (media:onAccount). core:hadParticipant the listener. The atomic row of a streaming history.</td></tr>
+      <tr><td><code>media:playedWork</code></td><td>played work</td><td>The creative work that was played in this playback event (the WHAT). A plain object property: PlaybackEvent is a gufo:Event, so this is NOT a sub-property of core:about (whose domain core:InformationResource is gUFO-disjoint from events).</td></tr>
+      <tr><td><code>media:Playlist</code></td><td>Playlist</td><td>A curated, ordered collection of recordings assembled by a Person or service; its entries are core:hasPart of it. A SubKind over a collection. Aligns to schema:MusicPlaylist.</td></tr>
+      <tr><td><code>media:PodcastEpisode</code></td><td>Podcast Episode</td><td>A single episode of a podcast — a spoken-audio creative work. Aligns to schema:PodcastEpisode.</td></tr>
+      <tr><td><code>media:recordingOf</code></td><td>recording of</td><td>The composition that a recording is a recording of. A sub-property of core:about (the recording, an information object, is about the composition). Aligns to schema:recordingOf.</td></tr>
+      <tr><td><code>media:sector</code></td><td>Media &amp; Activity sector</td><td>The Media &amp; Activity data sector. The value an app's fedapp:sector names in its Client Identifier Document to declare it operates over media &amp; activity data. Backed by this sector ontology.</td></tr>
+      <tr><td><code>media:Track</code></td><td>Track</td><td>A music recording as it appears as a playable track on a service (the Spotify-style 'track'), carrying service-level identifiers.</td></tr>
+      <tr><td><code>media:UsageLicense</code></td><td>Usage License</td><td>A reified grant of usage rights over a creative work, between a rights-holder and a beneficiary, with validity and terms. Conceptually ties to ODRL usage control (R2); aligns to schema:license.</td></tr>
+    </table>
+  </body>
+</html>

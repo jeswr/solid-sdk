@@ -1,0 +1,136 @@
+{
+  "@context": {
+    "@version": 1.1,
+    "@protected": true,
+    "core": "https://w3id.org/jeswr/core#",
+    "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+    "skos": "http://www.w3.org/2004/02/skos/core#",
+    "xsd": "http://www.w3.org/2001/XMLSchema#",
+    "id": "@id",
+    "type": "@type",
+    "about": {
+      "@id": "core:about",
+      "@type": "@id"
+    },
+    "Account": "core:Account",
+    "AccountHolder": "core:AccountHolder",
+    "AccountProvider": "core:AccountProvider",
+    "ActiveAccount": "core:ActiveAccount",
+    "Activity": "core:Activity",
+    "Adult": "core:Adult",
+    "Agent": "core:Agent",
+    "Asset": "core:Asset",
+    "atPlace": {
+      "@id": "core:atPlace",
+      "@type": "@id"
+    },
+    "atTime": {
+      "@id": "core:atTime",
+      "@type": "@id"
+    },
+    "Category": "core:Category",
+    "ClosedAccount": "core:ClosedAccount",
+    "custodian": {
+      "@id": "core:custodian",
+      "@type": "@id"
+    },
+    "Custodian": "core:Custodian",
+    "DataSubject": "core:DataSubject",
+    "Event": "core:Event",
+    "FrozenAccount": "core:FrozenAccount",
+    "Group": "core:Group",
+    "hadParticipant": {
+      "@id": "core:hadParticipant",
+      "@type": "@id"
+    },
+    "hasAccountHolder": {
+      "@id": "core:hasAccountHolder",
+      "@type": "@id"
+    },
+    "hasAccountProvider": {
+      "@id": "core:hasAccountProvider",
+      "@type": "@id"
+    },
+    "hasPart": {
+      "@id": "core:hasPart",
+      "@type": "@id"
+    },
+    "identifiedBy": {
+      "@id": "core:identifiedBy",
+      "@type": "@id"
+    },
+    "Identifier": "core:Identifier",
+    "IdentifierScheme": "core:IdentifierScheme",
+    "InformationResource": "core:InformationResource",
+    "inScheme": {
+      "@id": "core:inScheme",
+      "@type": "@id"
+    },
+    "LegalPerson": "core:LegalPerson",
+    "Minor": "core:Minor",
+    "NaturalPerson": "core:NaturalPerson",
+    "numericValue": {
+      "@id": "core:numericValue",
+      "@type": "@id"
+    },
+    "Organization": "core:Organization",
+    "Owner": "core:Owner",
+    "owns": {
+      "@id": "core:owns",
+      "@type": "@id"
+    },
+    "partOf": {
+      "@id": "core:partOf",
+      "@type": "@id"
+    },
+    "performedBy": {
+      "@id": "core:performedBy",
+      "@type": "@id"
+    },
+    "Person": "core:Person",
+    "Place": "core:Place",
+    "Quantity": "core:Quantity",
+    "RecognitionSituation": "core:RecognitionSituation",
+    "Record": "core:Record",
+    "relatesParty": {
+      "@id": "core:relatesParty",
+      "@type": "@id"
+    },
+    "Relationship": "core:Relationship",
+    "RelationshipParty": "core:RelationshipParty",
+    "schemeAuthority": {
+      "@id": "core:schemeAuthority",
+      "@type": "@id"
+    },
+    "SchemeAuthority": "core:SchemeAuthority",
+    "SoftwareAgent": "core:SoftwareAgent",
+    "status": {
+      "@id": "core:status",
+      "@type": "@id"
+    },
+    "subject": {
+      "@id": "core:subject",
+      "@type": "@id"
+    },
+    "timestamp": {
+      "@id": "core:timestamp",
+      "@type": "@id"
+    },
+    "unit": {
+      "@id": "core:unit",
+      "@type": "@id"
+    },
+    "validFrom": {
+      "@id": "core:validFrom",
+      "@type": "@id"
+    },
+    "validUntil": {
+      "@id": "core:validUntil",
+      "@type": "@id"
+    },
+    "value": {
+      "@id": "core:value",
+      "@type": "@id"
+    }
+  }
+}

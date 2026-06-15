@@ -10,6 +10,8 @@ suite, served under the persistent namespace **`https://w3id.org/jeswr/`**
 |---|---|---|
 | `https://w3id.org/jeswr/fed#` | `fedapp:` | **App-registration** metadata an app publishes in its Client Identifier Document (OpenID-Federation-style): the sectors it operates in, the WAC/ACP access modes it requests, and the shared shapes it consumes / produces. |
 | `https://w3id.org/jeswr/task#` | `tm:` | The **shared cross-app task / issue model** — the canonical, dereferenceable re-use of the W3C workflow ontology (`wf:`), Dublin Core Terms (`dct:`) and ActivityStreams 2.0 (`as:`) every suite app reads/writes for tasks and issues. |
+| `https://w3id.org/jeswr/core#` | `core:` | The **gUFO-based Solid Core** — the foundational ontology every sector imports and constrains-but-never-forks. Every cross-sector root (Agent, Account, Identifier, Record, Relationship, Quantity, …) carries a gUFO meta-type (Kind / Relator / Role(Mixin) / Phase / EventType / …). |
+| `https://w3id.org/jeswr/sectors/<sector>#` | per-sector | The **sector ontologies** (`identity`, `finance`, `health`, `media`, `scheduling`, `contacts`) — the domain models a `fedapp:sector` references. Each imports `core:` and reuses real vocabularies (see below). |
 
 The IRIs resolve via a permanent `w3id.org` redirect to a GitHub Pages target
 under this repo (`docs/`), so they survive a host move and stay under `@jeswr`
@@ -61,6 +63,57 @@ write:
 JSON-LD `@context`s:
 [`context.jsonld`](./context.jsonld) (fedapp + task) and
 [`task-context.jsonld`](./task-context.jsonld) (task only).
+
+## The Solid Core + sector ontologies (`core:` + `sectors/<sector>#`)
+
+The domain models a `fedapp:sector` references. They live under `sectors/` and
+are served from `docs/core.*` and `docs/sectors/*`.
+
+**`core:` — the gUFO-based Solid Core** (`sectors/core/core.ttl`). Re-based onto
+[gUFO](https://nemo-ufes.github.io/gufo/) (the gentle OWL-2-DL UFO): every
+cross-sector root carries a gUFO meta-type — `core:Agent` is a `gufo:Category`;
+`core:Account`/`core:Relationship` are `gufo:Relator`; roles
+(`core:AccountHolder`, `core:DataSubject`, …) are `gufo:RoleMixin`; status /
+life-stage enums (`core:ActiveAccount`, `core:Minor`, …) are `gufo:Phase`;
+activities/events are `gufo:EventType`. This carries real ontological force
+(rigid-vs-anti-rigid discipline, reified relators, role/phase separation) so
+independently-authored sectors stay non-overlapping. Imports gUFO; reaches
+external vocabularies (PROV/FOAF/Org/vCard/schema.org/gist) only via the optional
+`core-alignments.ttl`.
+
+**The six sectors** — each `rdfs:subClassOf`-roots every class in a `core:` class,
+carries its own gUFO meta-type, **constrains but never forks** the Core, and
+reuses a real domain vocabulary:
+
+| Sector | Prefix | gUFO highlights | External reuse |
+|---|---|---|---|
+| `sectors/identity#` | `id:` | NaturalPerson SubKind; VerifiableAttribute; HL7 Gender-Harmony five slots | eIDAS PID, ISO 3166, vCard, schema:Person |
+| `sectors/finance#` | `fin:` | Account=Relator(+Phase status); Transaction=Event; Counterparty=RoleMixin | FIBO (version-pinned slim MIREOT), ISO 4217/20022 |
+| `sectors/health#` | `health:` | Patient=RoleMixin of Person; Observation=Record+Quantity; record-vs-act split | FHIR (Mode A, no fhir.ttl), SNOMED CT/LOINC, QUDT/UCUM units |
+| `sectors/media#` | `media:` | CreativeWork=InformationResource+Asset; Artist=RoleMixin; PlaybackEvent | schema.org CreativeWork/MusicRecording, ODRL |
+| `sectors/scheduling#` | `sched:` | CalendarEvent=Event; Attendance=Relator mediating an Attendee role; RSVP coded values | iCalendar RFC 5545, schema.org, OWL-Time |
+| `sectors/contacts#` | `contact:` | Contact=Record about an agent; ContactPoint=Identifier; ContactRelationship=Relator | vCard, schema:ContactPoint/PostalAddress |
+
+Each sector declares a `…/sectors/<sector>#sector` marker (a `skos:Concept`) —
+that is the IRI an app names in `fedapp:sector`.
+
+Each ontology ships a **SHACL profile** (`<x>.shacl.ttl`, the closed-world
+MUST/SHOULD contract; the ontology is open-world) and a **Mode-A alignments file**
+(`<x>-alignments.ttl`, the auditable `skos:*Match` / `owl:equivalent*` bridge to
+external vocabularies, kept out of the reasoned closure). The whole stack passes a
+consistency gate: `npm run ontology` parses every Turtle with n3, checks every
+named term carries a label + definition, and — when ROBOT/HermiT is available —
+reasons each ontology over its `owl:imports` closure (resolved offline via the
+per-dir `catalog-v001.xml`) for **zero unsatisfiable classes**.
+
+> **Provenance + scope.** These ontologies were modelled as OntoUML and
+> transformed to gUFO-OWL upstream in
+> [`full-solid-ecosystem`](https://github.com/jeswr/full-solid-ecosystem)'s
+> federation tree, then **re-namespaced** here from the upstream placeholder IRIs
+> to the persistent `https://w3id.org/jeswr/` home. Re-sync with
+> `node scripts/import-sectors.mjs <federation/ontologies path>`. Four further
+> sectors (work / mobility / documents / social) are **not yet authored** — a
+> separate decision.
 
 ## How an app references the vocabulary in its Client-ID document
 
@@ -121,9 +174,9 @@ The w3id redirect serves the right representation by `Accept`:
 
 | `Accept` | Served |
 |---|---|
-| `text/turtle` | the `.ttl` (`fed.ttl` / `task.ttl`) |
-| `application/ld+json` | the `.jsonld` context |
-| `text/html` (browsers) | the human-readable HTML page (`fed.html` / `task.html`) |
+| `text/turtle` | the `.ttl` (`fed.ttl` / `task.ttl` / `core.ttl` / `sectors/<x>.ttl`) |
+| `application/ld+json` | the `.jsonld` context (`context.jsonld` / `<slug>-context.jsonld`) |
+| `text/html` (browsers) | the human-readable HTML page (`fed.html` / `task.html` / `core.html` / `sectors/<x>.html`) |
 
 ## GitHub Pages
 
@@ -163,28 +216,65 @@ RewriteCond %{HTTP_ACCEPT} application/json
 RewriteRule ^task$ https://jeswr.github.io/solid-federation-vocab/task-context.jsonld [R=302,L]
 RewriteRule ^task$ https://jeswr.github.io/solid-federation-vocab/task.html [R=302,L]
 
+# --- core (the gUFO Solid Core) ---
+RewriteCond %{HTTP_ACCEPT} text/turtle [OR]
+RewriteCond %{HTTP_ACCEPT} application/x-turtle
+RewriteRule ^core$ https://jeswr.github.io/solid-federation-vocab/core.ttl [R=302,L]
+RewriteCond %{HTTP_ACCEPT} application/ld\+json [OR]
+RewriteCond %{HTTP_ACCEPT} application/json
+RewriteRule ^core$ https://jeswr.github.io/solid-federation-vocab/core-context.jsonld [R=302,L]
+RewriteRule ^core$ https://jeswr.github.io/solid-federation-vocab/core.html [R=302,L]
+
+# --- sectors/<sector> (the 6 sector ontologies; $1 = identity|finance|… ) ---
+RewriteCond %{HTTP_ACCEPT} text/turtle [OR]
+RewriteCond %{HTTP_ACCEPT} application/x-turtle
+RewriteRule ^sectors/([a-z]+)$ https://jeswr.github.io/solid-federation-vocab/sectors/$1.ttl [R=302,L]
+RewriteCond %{HTTP_ACCEPT} application/ld\+json [OR]
+RewriteCond %{HTTP_ACCEPT} application/json
+RewriteRule ^sectors/([a-z]+)$ https://jeswr.github.io/solid-federation-vocab/sectors/$1-context.jsonld [R=302,L]
+RewriteRule ^sectors/([a-z]+)$ https://jeswr.github.io/solid-federation-vocab/sectors/$1.html [R=302,L]
+
 # --- default: the index ---
 RewriteRule ^$ https://jeswr.github.io/solid-federation-vocab/ [R=302,L]
 RewriteRule ^(.+)$ https://jeswr.github.io/solid-federation-vocab/$1 [R=302,L]
 ```
 
-> Note: w3id serves a 302 to the Pages target; the fragment (`#App`, `#Task`) is
-> retained by the client. The `RewriteRule` rows are evaluated top-down, so the
-> conneg `RewriteCond` rows must precede the HTML fallback for each path.
+> Note: w3id serves a 302 to the Pages target; the fragment (`#App`, `#Task`,
+> `#Person`, `#sector`, …) is retained by the client. The `RewriteRule` rows are
+> evaluated top-down, so the conneg `RewriteCond` rows must precede the HTML
+> fallback for each path, and the more specific `core` / `sectors/<x>` rules must
+> precede the catch-all `^(.+)$` row.
 
 ## Develop & gate
 
 ```bash
 npm install
-npm run gate    # lint + typecheck + test (n3 parse + jsonld expand) + build
+npm run gate    # lint + typecheck + test (n3 parse + jsonld expand) + ontology + build
 ```
 
-The gate parses every `.ttl` with **n3** (well-formedness + required
-`rdfs:label`/`rdfs:comment`/`rdfs:isDefinedBy` on each term), expands every
-`@context` with **jsonld**, and re-serialises the merged graph through
-**`n3.Writer`** — RDF goes through `@jeswr/fetch-rdf` / `@solid/object` /
-`@rdfjs/wrapper` / `n3` only, never a bespoke parser/serialiser (suite house
-rule). The `.ttl` source files are authored as Turtle directly.
+The gate, in order:
+
+- **`lint`** — every `.ttl` / `.mjs` carries the `AUTHORED-BY` marker, the JSON-LD
+  contexts are valid JSON, the required files exist.
+- **`typecheck`** — `node --check` on every script.
+- **`test`** (`validate.mjs`) — parses the root vocabs (`fed.ttl` / `task.ttl`)
+  with **n3** (well-formedness + `rdfs:label`/`rdfs:comment`/`rdfs:isDefinedBy`
+  per term) and expands the `@context`s with **jsonld**.
+- **`ontology`** (`ontology-gate.mjs`) — for the Core + 6 sectors: n3
+  well-formedness, term hygiene (`rdfs:label`|`skos:prefLabel` + a definition per
+  named term), and — when ROBOT/HermiT is discoverable — a **reasoner-consistency
+  pass** (`robot reason --reasoner HermiT` over each `owl:imports` closure, 0
+  unsatisfiable classes). It **fail-softs** (SKIP, not fail) when Java/ROBOT is
+  absent so CI is not blocked on a host-capability gap; set
+  `PSS_ONTOLOGY_REASON=required` (or `SOLIDFED_ROBOT_JAR=/path/to/robot.jar`) to
+  enforce / run the real pass.
+- **`build`** — re-serialises the root vocabs through **`n3.Writer`** to
+  `dist/vocab.nt` and regenerates `docs/` (the served `.ttl` + the derived HTML +
+  JSON-LD contexts for every vocab and ontology).
+
+RDF goes through `@jeswr/fetch-rdf` / `@solid/object` / `@rdfjs/wrapper` / `n3`
+only, never a bespoke parser/serialiser (suite house rule). The `.ttl` source
+files are authored as Turtle directly.
 
 ## Provenance
 
