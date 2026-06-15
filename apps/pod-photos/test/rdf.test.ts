@@ -93,18 +93,22 @@ describe('deleteResource', () => {
 });
 
 describe('ensureContainer', () => {
-  it('PUTs the container with a BasicContainer Link header (normalising the slash)', async () => {
-    const seen: { url: string; link: string | null }[] = [];
+  it('PUTs the container create-only (If-None-Match:*) with a BasicContainer Link, normalising the slash', async () => {
+    const seen: { url: string; link: string | null; ifNoneMatch: string | null }[] = [];
     const recording: typeof fetch = async (input, init) => {
+      const h = new Headers(init?.headers);
       seen.push({
         url: typeof input === 'string' ? input : input.toString(),
-        link: new Headers(init?.headers).get('link'),
+        link: h.get('link'),
+        ifNoneMatch: h.get('if-none-match'),
       });
       return new Response(null, { status: 201 });
     };
     await ensureContainer('https://x.example/photos', recording);
     expect(seen[0]?.url).toBe('https://x.example/photos/');
     expect(seen[0]?.link).toContain('BasicContainer');
+    // Create-only, so an existing container is never overwritten/cleared.
+    expect(seen[0]?.ifNoneMatch).toBe('*');
   });
 
   for (const status of [200, 201, 205, 405, 409, 412]) {

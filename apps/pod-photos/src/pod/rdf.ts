@@ -110,14 +110,19 @@ export async function ensureContainer(
     method: 'PUT',
     headers: {
       'content-type': 'text/turtle',
+      // CREATE-ONLY: a server that allows PUT-over-an-existing-container would
+      // otherwise clear its RDF metadata. `If-None-Match: *` makes this a pure
+      // create — an existing container answers 412 and is left untouched.
+      'if-none-match': '*',
       link: '<http://www.w3.org/ns/ldp#BasicContainer>; rel="type"',
     },
     body: '',
   };
   const res = fetchImpl ? await fetchImpl(url, init) : await fetch(url, init);
-  // Created (2xx), already present, or a server that disallows PUT-on-container
-  // (405) / reports a conflict (409) all mean "the container is/▸will be there";
-  // a genuine auth/other failure surfaces on the subsequent item write.
+  // Created (2xx); already present (412 under If-None-Match:*); or a server that
+  // disallows PUT-on-container (405) / reports a conflict (409) — all mean "the
+  // container is/▸will be there". A genuine auth/other failure surfaces on the
+  // subsequent item write.
   if (res.ok || res.status === 405 || res.status === 409 || res.status === 412) return;
   throw new ResourceWriteError(url, res.status);
 }

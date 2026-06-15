@@ -94,44 +94,54 @@ export function exifDateToIso(input: string | undefined): string | undefined {
   const s = nonEmpty(input);
   if (!s) return undefined;
 
-  // An ISO date-time WITH an explicit zone designator: parse the whole string
-  // so the offset is applied, then validate it is a real instant.
-  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(s)) {
+  // An ISO date-time WITH an explicit zone designator. Validate the LOCAL
+  // wall-clock fields with the same round-trip used below (so a rolled-over
+  // calendar date like 2026-06-31 is rejected, not normalised), THEN apply the
+  // offset via Date so the returned instant is correct.
+  const zoned =
+    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.exec(s);
+  if (zoned) {
+    if (!validWallClock(zoned)) return undefined;
     const d = new Date(s);
     return Number.isNaN(d.getTime()) ? undefined : d.toISOString();
   }
 
   // Otherwise pull the six wall-clock components from the EXIF colon form
-  // ("2026:06:15 09:41:07") or an offset-less ISO date-time ("…T09:41:07").
-  const exif = /^(\d{4}):(\d{2}):(\d{2})[ T](\d{2}):(\d{2}):(\d{2})$/.exec(s);
-  const iso = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})$/.exec(s);
-  const m = exif ?? iso;
+  // ("2026:06:15 09:41:07") or an offset-less ISO date-time ("…T09:41:07"),
+  // interpreted as UTC (neither carries a zone).
+  const m = /^(\d{4})[:-](\d{2})[:-](\d{2})[ T](\d{2}):(\d{2}):(\d{2})$/.exec(s);
   if (!m) return undefined;
-  const [year, month, day, hour, min, sec] = m.slice(1).map(Number) as [
-    number,
-    number,
-    number,
-    number,
-    number,
-    number,
-  ];
-  // Build the instant in UTC, then verify every component survived round-trip
-  // — this rejects an out-of-range value (month 13, day 30 in February) that
-  // Date.UTC would otherwise silently roll over into a different real date.
-  // The regex guarantees all six components are numeric, so Date.UTC never
-  // yields NaN; the round-trip check below is the real out-of-range guard.
+  if (!validWallClock(m)) return undefined;
+  const [, y, mo, da, h, mi, se] = m;
+  return new Date(
+    Date.UTC(Number(y), Number(mo) - 1, Number(da), Number(h), Number(mi), Number(se)),
+  ).toISOString();
+}
+
+/**
+ * True iff the six captured wall-clock components (`[, year, month, day, hour,
+ * min, sec]` from a date-time regex) form a real calendar instant — i.e. they
+ * survive a `Date.UTC` round-trip unchanged. Rejects an out-of-range value
+ * (month 13, day 31 in June, 25:00) that `Date.UTC`/`new Date` would otherwise
+ * silently roll over into a different date.
+ */
+function validWallClock(m: RegExpExecArray): boolean {
+  const [, y, mo, da, h, mi, se] = m;
+  const year = Number(y);
+  const month = Number(mo);
+  const day = Number(da);
+  const hour = Number(h);
+  const min = Number(mi);
+  const sec = Number(se);
   const d = new Date(Date.UTC(year, month - 1, day, hour, min, sec));
-  if (
-    d.getUTCFullYear() !== year ||
-    d.getUTCMonth() !== month - 1 ||
-    d.getUTCDate() !== day ||
-    d.getUTCHours() !== hour ||
-    d.getUTCMinutes() !== min ||
-    d.getUTCSeconds() !== sec
-  ) {
-    return undefined;
-  }
-  return d.toISOString();
+  return (
+    d.getUTCFullYear() === year &&
+    d.getUTCMonth() === month - 1 &&
+    d.getUTCDate() === day &&
+    d.getUTCHours() === hour &&
+    d.getUTCMinutes() === min &&
+    d.getUTCSeconds() === sec
+  );
 }
 
 /** One component of an EXIF GPS coordinate (degrees / minutes / seconds). */

@@ -41,6 +41,18 @@ describe('exifDateToIso', () => {
     expect(exifDateToIso('2026-13-15T09:41:07Z')).toBeUndefined();
   });
 
+  it('rejects a zoned ISO string with a rolled-over calendar day (no silent roll)', () => {
+    // 2026-06-31 is not a real date; the zoned path must reject it, not roll to
+    // July 1 the way `new Date(...)` alone would.
+    expect(exifDateToIso('2026-06-31T09:41:07Z')).toBeUndefined();
+    expect(exifDateToIso('2026-06-15T25:00:00+02:00')).toBeUndefined();
+  });
+
+  it('rejects a zoned ISO string with an out-of-range offset', () => {
+    // The wall clock is valid but the offset (+25:00) is not — Date yields NaN.
+    expect(exifDateToIso('2026-06-15T09:41:07+25:00')).toBeUndefined();
+  });
+
   it('returns undefined for undefined / empty / whitespace', () => {
     expect(exifDateToIso(undefined)).toBeUndefined();
     expect(exifDateToIso('')).toBeUndefined();
