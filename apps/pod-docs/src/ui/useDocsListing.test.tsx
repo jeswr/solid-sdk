@@ -297,6 +297,61 @@ describe("useDocsListing — auth seam + staleness", () => {
     expect(result.current.entries[0]?.title).toBe("fresh");
   });
 
+  it("clears `opening` and renders the new listing when a store dep changes mid-open", async () => {
+    // Regression: a `store.read()` is in flight (opening=true) when an identity
+    // prop changes, rebuilding the store. The stale read is dropped by the
+    // request-id guard, so its `setOpening(false)` never runs — without the
+    // store-change reset clearing `opening`, the view stays stuck on the loading
+    // flag (table hidden) after the new pod's listing loads. Assert: `opening`
+    // is cleared, the new listing renders, and the late stale read does not flip
+    // state back to the old document.
+    let resolveReadA: (v: StoredDocument) => void = () => {};
+    const slowReadA = new Promise<StoredDocument>((r) => {
+      resolveReadA = r;
+    });
+    const readA = vi
+      .fn<(url: string) => Promise<StoredDocument | undefined>>()
+      .mockReturnValueOnce(slowReadA);
+    const storeA = {
+      list: async () => [entry({ title: "pod-a-doc" })],
+      read: readA,
+    } as unknown as DocsStore;
+    const storeB = {
+      list: async () => [entry({ title: "pod-b-doc" })],
+      read: async () => undefined,
+    } as unknown as DocsStore;
+    const createStore = ((opts: { podRoot: string }) =>
+      opts.podRoot === POD ? storeA : storeB) as typeof createDocsStore;
+
+    const { result, rerender } = renderHook(
+      ({ pod }: { pod: string }) => useDocsListing(pod, WEBID, { createStore }),
+      { initialProps: { pod: POD } },
+    );
+    await waitFor(() => expect(result.current.entries[0]?.title).toBe("pod-a-doc"));
+
+    // Begin opening a document — read is now in flight (opening=true).
+    act(() => result.current.open(DOC_URL));
+    expect(result.current.opening).toBe(true);
+
+    // Switch pods (store dep changes) BEFORE the read resolves.
+    rerender({ pod: "https://bob.pod/" });
+
+    // The new listing loads and `opening` is cleared (not stuck on loading).
+    await waitFor(() => expect(result.current.entries[0]?.title).toBe("pod-b-doc"));
+    expect(result.current.opening).toBe(false);
+    expect(result.current.openDocument).toBeNull();
+
+    // Now let the stale pod-A read resolve LATE — it must be ignored entirely:
+    // no open document, `opening` stays false, listing unchanged.
+    await act(async () => {
+      resolveReadA(stored());
+      await Promise.resolve();
+    });
+    expect(result.current.openDocument).toBeNull();
+    expect(result.current.opening).toBe(false);
+    expect(result.current.entries[0]?.title).toBe("pod-b-doc");
+  });
+
   it("drops an open response that resolves after navigating away", async () => {
     let resolveRead: (v: StoredDocument) => void = () => {};
     const slowRead = new Promise<StoredDocument>((r) => {

@@ -127,14 +127,26 @@ export function useDocsListing(
   // (not a ref) so the store-change reset is concurrent-rendering safe.
   const [prevStore, setPrevStore] = useState(store);
 
-  // Reset the open document + error DURING render when the store identity
-  // changes (React's documented "adjusting state when a prop changes" pattern —
-  // applies in the same commit, so the view never flashes the previous pod's
-  // open document). The load effect below then lists the new store. The mount
-  // case is excluded because `prevStore` is seeded with the initial store.
+  // Reset the navigation state DURING render when the store identity changes
+  // (React's documented "adjusting state when a prop changes" pattern — applies
+  // in the same commit, so the view never flashes the previous pod's open
+  // document). The load effect below then lists the new store. The mount case is
+  // excluded because `prevStore` is seeded with the initial store.
+  //
+  // `opening` MUST be reset here too: if a store dep (podRoot/webId/fetch/
+  // createStore) changes while an open `store.read()` is in flight, that read's
+  // captured request id is staled by the load effect's guard bump (below) and is
+  // therefore dropped — its `setOpening(false)` never runs. Without this reset
+  // the view would stay stuck on the open/loading flag (table hidden) forever
+  // after the new listing loads. The guard is bumped — not here (mutating the
+  // request ref during render would break concurrent rendering; see its note
+  // above) — but in the load effect that re-runs on the store change AND in the
+  // old effect's cleanup, both of which invalidate the in-flight read so it can
+  // never later flip state for the old store.
   if (prevStore !== store) {
     setPrevStore(store);
     setOpenDocument(null);
+    setOpening(false);
     setError(null);
     setIsAccessError(false);
   }
@@ -143,8 +155,14 @@ export function useDocsListing(
   // not read in the body, but its change must re-run the effect to list again.
   // biome-ignore lint/correctness/useExhaustiveDependencies: reloadToken is an intentional refetch trigger
   useEffect(() => {
+    // Bumping the request id here invalidates any in-flight open `read()` (its
+    // captured id is now stale), so a load starting (store change or refresh)
+    // can never have its `setOpening(false)` run from the dropped read — we must
+    // clear `opening` ourselves. (The store-change render reset clears it in the
+    // same commit for the no-flash case; this also covers a refresh-while-opening.)
     const requestId = ++requestRef.current;
     setLoading(true);
+    setOpening(false);
     setError(null);
     setIsAccessError(false);
     setOpenDocument(null);
