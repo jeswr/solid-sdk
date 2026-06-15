@@ -1,11 +1,16 @@
 import { describe, it, expect, vi } from "vitest";
-import { resolveTrackerFromTypeIndex, registerTracker } from "./type-index";
+import { resolveTrackerFromTypeIndex, registerTracker, resolveTaskContainersFromTypeIndex } from "./type-index";
 
 const WEBID = "http://localhost:3000/alice/profile/card#me";
 const PROFILE = "http://localhost:3000/alice/profile/card";
 const POD = "http://localhost:3000/alice/";
 const INDEX = "http://localhost:3000/alice/settings/publicTypeIndex.ttl";
-const ISSUES = "http://localhost:3000/alice/issue-tracker/issues.ttl";
+/** Tracker config document (the default project). */
+const TRACKER = "http://localhost:3000/alice/issue-tracker/tracker.ttl";
+/** Legacy constant kept for the wf:Tracker registration tests. */
+const ISSUES = TRACKER;
+/** The `issues/` container that solid-issues registers for `wf:Task` discovery. */
+const ISSUES_CONTAINER = "http://localhost:3000/alice/issue-tracker/issues/";
 
 interface Call {
   url: string;
@@ -63,7 +68,7 @@ describe("type index", () => {
       // profile exists but has no publicTypeIndex; index 404s.
       [WEBID]: { body: `<${WEBID}> a <http://xmlns.com/foaf/0.1/Person>.`, etag: '"p1"' },
     });
-    const ok = await registerTracker(WEBID, POD, ISSUES, impl);
+    const ok = await registerTracker(WEBID, POD, TRACKER, impl);
     expect(ok).toBe(true);
 
     const puts = calls.filter((c) => c.method === "PUT");
@@ -74,8 +79,66 @@ describe("type index", () => {
     expect(profilePut?.body).toContain("publicTypeIndex");
     expect(indexPut?.body).toContain("TypeRegistration");
     expect(indexPut?.body).toContain("flow#Tracker");
-    expect(indexPut?.body).toContain(ISSUES);
+    expect(indexPut?.body).toContain(TRACKER);
     expect(indexPut?.headers["if-none-match"]).toBeUndefined(); // created via plain PUT (no prior etag)
+  });
+
+  it("registers wf:Task instanceContainer pointing at issues/ alongside the wf:Tracker registration", async () => {
+    const { impl, calls } = router({
+      // profile exists but has no publicTypeIndex; index 404s.
+      [WEBID]: { body: `<${WEBID}> a <http://xmlns.com/foaf/0.1/Person>.`, etag: '"p1"' },
+    });
+    const ok = await registerTracker(WEBID, POD, TRACKER, impl);
+    expect(ok).toBe(true);
+
+    const indexPut = calls.filter((c) => c.method === "PUT").find((c) => c.url === INDEX);
+    // Must carry solid:instanceContainer pointing at the issues/ container
+    // (D6, FEDERATION-DESIGN.staged.md §2.1 — cross-app wf:Task discovery seam).
+    expect(indexPut?.body).toContain("flow#Task");
+    expect(indexPut?.body).toContain("instanceContainer");
+    expect(indexPut?.body).toContain(ISSUES_CONTAINER);
+  });
+
+  it("resolveTaskContainersFromTypeIndex returns the issues container registered for wf:Task", async () => {
+    const { impl } = router({
+      [WEBID]: {
+        body: `@prefix solid: <http://www.w3.org/ns/solid/terms#>.
+<${WEBID}> solid:publicTypeIndex <${INDEX}>.`,
+      },
+      [INDEX]: {
+        body: `@prefix solid: <http://www.w3.org/ns/solid/terms#>.
+@prefix wf: <http://www.w3.org/2005/01/wf/flow#>.
+<#reg-tracker> a solid:TypeRegistration; solid:forClass wf:Tracker; solid:instance <${TRACKER}>.
+<#reg-task> a solid:TypeRegistration; solid:forClass wf:Task; solid:instanceContainer <${ISSUES_CONTAINER}>.`,
+      },
+    });
+    const containers = await resolveTaskContainersFromTypeIndex(WEBID, impl);
+    expect(containers).toContain(ISSUES_CONTAINER);
+  });
+
+  it("does not re-register wf:Task instanceContainer when already present", async () => {
+    const { impl, calls } = router({
+      [WEBID]: {
+        body: `@prefix solid: <http://www.w3.org/ns/solid/terms#>.
+<${WEBID}> solid:publicTypeIndex <${INDEX}>.`,
+        etag: '"p1"',
+      },
+      [INDEX]: {
+        body: `@prefix solid: <http://www.w3.org/ns/solid/terms#>.
+@prefix wf: <http://www.w3.org/2005/01/wf/flow#>.
+<#reg-tracker> a solid:TypeRegistration; solid:forClass wf:Tracker; solid:instance <${TRACKER}>.
+<#reg-task> a solid:TypeRegistration; solid:forClass wf:Task; solid:instanceContainer <${ISSUES_CONTAINER}>.`,
+        etag: '"i1"',
+      },
+    });
+    await registerTracker(WEBID, POD, TRACKER, impl);
+    const indexPut = calls.filter((c) => c.method === "PUT").find((c) => c.url === INDEX);
+    // index is updated (Tracker + Task already present, but index PUT is still
+    // issued to keep the idempotency contract and refresh the ACL grant).
+    // The body must NOT contain a duplicate wf:Task registration fragment.
+    const body = indexPut?.body ?? "";
+    const taskMatches = [...body.matchAll(/flow#Task/g)];
+    expect(taskMatches.length).toBe(1); // exactly one registration
   });
 
   it("does not rewrite the profile link when already registered", async () => {
@@ -88,11 +151,11 @@ describe("type index", () => {
       [INDEX]: {
         body: `@prefix solid: <http://www.w3.org/ns/solid/terms#>.
 @prefix wf: <http://www.w3.org/2005/01/wf/flow#>.
-<#tracker> a solid:TypeRegistration; solid:forClass wf:Tracker; solid:instance <${ISSUES}>.`,
+<#tracker> a solid:TypeRegistration; solid:forClass wf:Tracker; solid:instance <${TRACKER}>.`,
         etag: '"i1"',
       },
     });
-    await registerTracker(WEBID, POD, ISSUES, impl);
+    await registerTracker(WEBID, POD, TRACKER, impl);
     const puts = calls.filter((c) => c.method === "PUT");
     expect(puts.find((c) => c.url === PROFILE)).toBeUndefined(); // link already present
   });
