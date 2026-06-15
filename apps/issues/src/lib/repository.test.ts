@@ -178,4 +178,81 @@ describe("Repository (per-issue documents)", () => {
     expect(issues).toEqual([]);
     expect(canCreate).toBe(true);
   });
+
+  it("F2: round-trips typed links through create and update", async () => {
+    const { impl } = fakePod();
+    const repo = new Repository(TRACKER, impl);
+    const orig = await repo.create({ title: "Original", creator: ME });
+    const canon = await repo.create({ title: "Canonical", creator: ME });
+    const peer = await repo.create({ title: "Peer", creator: ME });
+
+    const url = await repo.create({
+      title: "Linked",
+      creator: ME,
+      relatesTo: [peer],
+      duplicateOf: canon,
+      clonedFrom: orig,
+    });
+    let rec = (await repo.list()).issues.find((i) => i.url === url)!;
+    expect(rec.relatesTo).toEqual([peer]);
+    expect(rec.duplicateOf).toBe(canon);
+    expect(rec.clonedFrom).toBe(orig);
+
+    // Update replaces the relates set and clears the duplicate link.
+    await repo.update(url, { relatesTo: [], duplicateOf: undefined });
+    rec = (await repo.list()).issues.find((i) => i.url === url)!;
+    expect(rec.relatesTo).toEqual([]);
+    expect(rec.duplicateOf).toBeUndefined();
+    expect(rec.clonedFrom).toBe(orig); // untouched by the patch
+  });
+
+  it("F8: a bulk assign + label across a selection applies to every issue in one batch", async () => {
+    const { impl } = fakePod();
+    const repo = new Repository(TRACKER, impl);
+    const a = await repo.create({ title: "A", creator: ME });
+    const b = await repo.create({ title: "B", creator: ME });
+    const c = await repo.create({ title: "C", creator: ME });
+    const selection = [a, b, c];
+    const ASSIGNEE = `${POD}bob/profile/card#me`;
+
+    // The hook's batch boundary is "apply N ops against one Repository, then
+    // refresh once" — modelled here as a sequential apply over the selection.
+    for (const url of selection) {
+      await repo.update(url, { assignee: ASSIGNEE, labels: ["triage"] });
+    }
+
+    const { issues } = await repo.list();
+    for (const url of selection) {
+      const rec = issues.find((i) => i.url === url)!;
+      expect(rec.assignee).toBe(ASSIGNEE);
+      expect(rec.labels).toEqual(["triage"]);
+    }
+  });
+
+  it("F8: a bulk state change closes every selected issue", async () => {
+    const { impl } = fakePod();
+    const repo = new Repository(TRACKER, impl);
+    const urls = await Promise.all([
+      repo.create({ title: "A", creator: ME }),
+      repo.create({ title: "B", creator: ME }),
+    ]);
+    for (const url of urls) await repo.setState(url, "closed");
+    const { issues } = await repo.list();
+    expect(issues.every((i) => i.state === "closed")).toBe(true);
+  });
+
+  it("F8: a bulk op surfaces a failure instead of silently swallowing it", async () => {
+    const { impl } = fakePod();
+    const repo = new Repository(TRACKER, impl);
+    const ok = await repo.create({ title: "Real", creator: ME });
+    const missing = `${CONTAINER}does-not-exist.ttl`;
+
+    // Running the batch over [ok, missing] must reject when it reaches the
+    // unreadable member — the caller (the hook's `run`) then refreshes/toasts.
+    await expect(
+      (async () => {
+        for (const url of [ok, missing]) await repo.update(url, { assignee: `${POD}bob/profile/card#me` });
+      })(),
+    ).rejects.toBeTruthy();
+  });
 });

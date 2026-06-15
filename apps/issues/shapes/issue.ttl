@@ -15,6 +15,7 @@
 @prefix sioc:  <http://rdfs.org/sioc/ns#> .
 @prefix foaf:  <http://xmlns.com/foaf/0.1/> .
 @prefix as:    <https://www.w3.org/ns/activitystreams#> .
+@prefix prov:  <http://www.w3.org/ns/prov#> .
 @prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
 
@@ -66,6 +67,17 @@
   sh:property [
     sh:path dct:relation ; sh:name "related" ;
     sh:nodeKind sh:IRI ;
+  ] ;
+  # Close-as-duplicate: this issue is superseded by exactly one canonical
+  # successor (supersession semantics, not blocking). An issue IRI, never a literal.
+  sh:property [
+    sh:path dct:isReplacedBy ; sh:name "duplicate of" ;
+    sh:nodeKind sh:IRI ; sh:maxCount 1 ;
+  ] ;
+  # Clone provenance: the single original this issue was derived from.
+  sh:property [
+    sh:path prov:wasDerivedFrom ; sh:name "cloned from" ;
+    sh:nodeKind sh:IRI ; sh:maxCount 1 ;
   ] ;
   sh:property [
     sh:path wf:dateDue ; sh:name "due date" ;

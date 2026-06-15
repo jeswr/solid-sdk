@@ -20,13 +20,13 @@ Status: ✅ shipped · 🔶 partial · ⏳ queued (priority order) · ◻ later/
 | Kanban board, drag-and-drop | ✅ | labeled view tabs (persisted), per-column add, drop highlight |
 | List/table view | ✅ | |
 | Priorities, labels/tags, due dates | ✅ | |
-| **Issue types (Epic / Story / Task / Bug)** | ✅ | type dimension via `wf:issueCategory`; colored type badges |
+| **Issue-type hierarchy (Initiative → Epic → Feature → Story → Task / Bug)** | ✅ | six `#type-*` levels; `typeLevel`/`canNest` enforce strictly-coarser-parent nesting; colored type badges |
 | **Epics + progress roll-up (epic view)** | ✅ | Epics tab: per-epic progress bars, expandable children, add-to-epic |
-| Sub-tasks & dependencies (blocked-by) | ✅ | |
+| Sub-tasks & dependencies + typed links | ✅ | parent (`dct:isPartOf`, recursive subitems w/ cycle-safe rollups), blocked-by (`dct:requires`), relates-to (`dct:relation`, symmetric), duplicate-of (`dct:isReplacedBy`), cloned-from (`prov:wasDerivedFrom`); bidirectional display |
 | Comments, @mentions, attachments, activity log | ✅ | |
 | **People as profiles (name/avatar), not raw IDs** | ✅ | profile cache + PersonChip/Avatar across cards, detail, team, sharing |
 | Search, filters, saved views | ✅ | |
-| Bulk edit | ✅ | close/reopen/delete; extend to assign/label later |
+| Bulk edit | ✅ | close / reopen / delete / assign / label, batched per selection |
 | Real-time collaboration | ✅ | notifications + polling fallback |
 | Permissions / sharing | ✅ | WAC/ACP, per-issue + tracker, teams |
 

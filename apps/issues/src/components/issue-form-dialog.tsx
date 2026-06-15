@@ -40,7 +40,8 @@ const schema = z.object({
     .optional(),
   priority: z.enum(["none", "high", "medium", "low"]),
   status: z.enum(["todo", "in-progress", "done"]),
-  issueType: z.enum(["epic", "story", "task", "bug"]),
+  // Derived from ISSUE_TYPES so the form can never drift from the model's levels.
+  issueType: z.enum(ISSUE_TYPES.map((t) => t.slug) as [IssueType, ...IssueType[]]),
   estimate: z
     .string()
     .trim()

@@ -13,6 +13,7 @@ const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 const WF = "http://www.w3.org/2005/01/wf/flow#";
 const DCT = "http://purl.org/dc/terms/";
 const AS = "https://www.w3.org/ns/activitystreams#";
+const PROV = "http://www.w3.org/ns/prov#";
 
 const shapesTtl = readFileSync("shapes/issue.ttl", "utf8");
 
@@ -184,6 +185,51 @@ describe("SHACL shape (shapes/issue.ttl)", () => {
     const report = await validate(ds);
     expect(report.conforms).toBe(false);
     expect(report.results.some((r) => r.path?.value === `${WF}assignee`)).toBe(true);
+  });
+
+  it("F2: an issue with all typed links (relation/duplicate/clone) conforms", async () => {
+    const ds = new Store();
+    const issue = new Issue(`${URL_}#this`, ds, DataFactory);
+    issue.tracker = TRACKER;
+    issue.title = "Linked issue";
+    issue.state = "open";
+    issue.relatesTo.add(`${URL_}#r1`);
+    issue.relatesTo.add(`${URL_}#r2`);
+    issue.duplicateOf = `${URL_}#canonical`;
+    issue.clonedFrom = `${URL_}#orig`;
+
+    const report = await validate(ds);
+    expect(report.conforms).toBe(true);
+  });
+
+  it("F2: flags a non-IRI dct:isReplacedBy (duplicate-of must be an issue IRI)", async () => {
+    const ds = new Store();
+    const issue = new Issue(`${URL_}#this`, ds, DataFactory);
+    issue.tracker = TRACKER;
+    issue.title = "Bad duplicate link";
+    issue.state = "open";
+    ds.addQuad(
+      DataFactory.namedNode(`${URL_}#this`),
+      DataFactory.namedNode(`${DCT}isReplacedBy`),
+      DataFactory.literal("not-an-iri"),
+    );
+    const report = await validate(ds);
+    expect(report.conforms).toBe(false);
+    expect(report.results.some((r) => r.path?.value === `${DCT}isReplacedBy`)).toBe(true);
+  });
+
+  it("F2: flags more than one prov:wasDerivedFrom (a clone has a single source)", async () => {
+    const ds = new Store();
+    const issue = new Issue(`${URL_}#this`, ds, DataFactory);
+    issue.tracker = TRACKER;
+    issue.title = "Two clone sources";
+    issue.state = "open";
+    const subject = DataFactory.namedNode(`${URL_}#this`);
+    ds.addQuad(subject, DataFactory.namedNode(`${PROV}wasDerivedFrom`), DataFactory.namedNode(`${URL_}#o1`));
+    ds.addQuad(subject, DataFactory.namedNode(`${PROV}wasDerivedFrom`), DataFactory.namedNode(`${URL_}#o2`));
+    const report = await validate(ds);
+    expect(report.conforms).toBe(false);
+    expect(report.results.some((r) => r.path?.value === `${PROV}wasDerivedFrom`)).toBe(true);
   });
 
   it("a well-formed as:Announce assignment notification conforms", async () => {

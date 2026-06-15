@@ -10,6 +10,7 @@ const base: IssueRecord = {
   issueType: "task",
   labels: [],
   blockedBy: [],
+  relatesTo: [],
   attachments: [],
   comments: [],
   canWrite: true,

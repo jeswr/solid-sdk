@@ -57,9 +57,29 @@ with both `wf:Open` and `wf:Closed` is rejected by the shape. (What Core cannot
 express is cross-path conditionals — none are needed here.) Severity stays Warning
 because `Issue.state` already guarantees exclusivity at write time (it deletes the
 opposite class), and Warning lets read-path callers of untrusted/mid-migration data
-decide their own escalation policy. Issue↔issue links (`dct:isPartOf`,
-`dct:requires`, `dct:relation`) are constrained to IRIs, and `wf:assignee` to an
-`^https?://` IRI.
+decide their own escalation policy. Issue↔issue links are constrained to IRIs:
+`dct:isPartOf` (parent / Monday subitem), `dct:requires` (blocked-by),
+`dct:relation` (symmetric relates-to), `dct:isReplacedBy` (close-as-duplicate /
+supersession, `sh:maxCount 1`) and `prov:wasDerivedFrom` (clone source,
+`sh:maxCount 1`); `wf:assignee` is constrained to an `^https?://` IRI.
+
+## Jira/Monday parity (F2/F5/F6/F8)
+
+No new surface — all four reuse the model above:
+
+- **F2 link types** — typed issue↔issue links via the IRI-valued predicates above.
+  `src/lib/rollups.ts#linksOf` derives the bidirectional view (A `dct:requires` B ⇒
+  B blocks A; `dct:relation` is symmetric; `dct:isReplacedBy`/`prov:wasDerivedFrom`
+  surface their inverses as duplicated-by / clones).
+- **F5 issue-type levels** — the `#type-*` class dimension extends to a six-level
+  hierarchy (Initiative → Epic → Feature → Story → Task/Bug, see `issue.ts`
+  `typeLevel`/`canNest`); `canNest` requires a parent strictly coarser than its
+  child, so a leaf (task/bug) never parents.
+- **F6 subitems / rollups** — `dct:isPartOf` is already recursive; `rollups.ts`
+  derives sum/min/max + done/total over the transitive subtree (cycle-safe — a
+  `seen` set short-circuits A⊂B⊂A). Nothing new is written to the pod.
+- **F8 bulk ops** — the list-view selection toolbar batches close/reopen/delete
+  **+ assign + label** through one `useIssues.batch` boundary.
 
 ## Trade-offs / deferred
 - Listing is N+1 fetches (container + each issue) — fine at this scale; a pod

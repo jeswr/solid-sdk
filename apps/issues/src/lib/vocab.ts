@@ -25,7 +25,7 @@ export const VCARD = "http://www.w3.org/2006/vcard/ns#";
 export const SCHEMA = "http://schema.org/";
 /** SKOS — `skos:Concept` / `skos:prefLabel` / `skos:inScheme` (select-field options). */
 export const SKOS = "http://www.w3.org/2004/02/skos/core#";
-/** PROV-O — `prov:endedAtTime` (when a task was completed). */
+/** PROV-O — `prov:endedAtTime` (completion), `prov:wasDerivedFrom` (clone source). */
 export const PROV = "http://www.w3.org/ns/prov#";
 
 export const wf = (local: string) => `${WF}${local}`;
