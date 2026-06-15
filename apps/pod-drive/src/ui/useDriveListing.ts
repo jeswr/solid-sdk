@@ -93,18 +93,24 @@ export function useDriveListing(
   const [reloadToken, setReloadToken] = useState(0);
   // Guards against a resolved-but-stale response overwriting newer state.
   const requestIdRef = useRef(0);
-  // Tracks the normalised root the navigation state currently belongs to, so a
-  // changed `rootUrl` PROP (parent re-render with a new root) resets navigation
-  // to the new container instead of stranding the view on the previous one.
-  const rootRef = useRef(normalizedRoot);
+  // Tracks the normalised root the navigation state currently belongs to, kept
+  // in STATE (not a ref) so the prop-change reset is concurrent-rendering safe:
+  // a ref written during render can leak from an ABANDONED render, which would
+  // make a later committed render with the same root skip the reset and strand
+  // `currentUrl` on the previous container. State set during render is instead
+  // applied by React only when the render commits (an abandoned render is
+  // discarded), so the comparison below is always against the committed value.
+  const [prevRoot, setPrevRoot] = useState(normalizedRoot);
 
   // Reset navigation + listing state DURING render when the normalised root
-  // prop changes (React's "adjusting state on prop change" pattern — applies in
-  // the same commit, so the view never flashes the previous container or its
-  // stale breadcrumb). The load effect below then GETs the new root. The raw
-  // mount case is excluded because `rootRef` is seeded with the initial root.
-  if (rootRef.current !== normalizedRoot) {
-    rootRef.current = normalizedRoot;
+  // prop changes (React's documented "adjusting state when a prop changes"
+  // pattern — applies in the same commit, so the view never flashes the previous
+  // container or its stale breadcrumb). The load effect below then GETs the new
+  // root. The mount case is excluded because `prevRoot` is seeded with the
+  // initial root. This is driven by the `prevRoot` STATE, not a render-time ref
+  // write, so it is correct under React's concurrent rendering.
+  if (prevRoot !== normalizedRoot) {
+    setPrevRoot(normalizedRoot);
     setCurrentUrl(normalizedRoot);
     setListing(null);
     setError(null);

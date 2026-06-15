@@ -7,6 +7,7 @@
 // must not surface an error.
 
 import { act, renderHook, waitFor } from "@testing-library/react";
+import { StrictMode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { breadcrumbFor } from "../../src/ui/breadcrumb.js";
 import { useDriveListing } from "../../src/ui/useDriveListing.js";
@@ -199,6 +200,50 @@ describe("useDriveListing", () => {
     rerender({ root: "https://pod.example/other" });
     await waitFor(() => expect(result.current.currentUrl).toBe("https://pod.example/other/"));
     await waitFor(() => expect(result.current.listing?.url).toBe("https://pod.example/other/"));
+  });
+
+  it("resets via committed state — survives StrictMode's double render of a root change", async () => {
+    // StrictMode double-invokes render in development, the closest deterministic
+    // proxy for the concurrent "abandoned render" hazard the fix guards against.
+    // The previous-root is tracked in STATE (set during render, applied only on
+    // commit) rather than a ref written during render: were it a ref, the extra
+    // render invocation could leave the tracker out of step and make a later
+    // committed render skip the reset, stranding `currentUrl` on the old root.
+    // With state it stays correct — each committed root change resets cleanly.
+    const fetch = (async (input: string | URL | Request) =>
+      okFor(
+        typeof input === "string" ? input : input.toString(),
+      )) as unknown as typeof globalThis.fetch;
+
+    const { result, rerender } = renderHook(
+      ({ root }: { root: string }) => useDriveListing(root, { fetch }),
+      {
+        initialProps: { root: "https://pod.example/drive/" },
+        wrapper: StrictMode,
+      },
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    act(() => result.current.navigate("https://pod.example/drive/sub"));
+    await waitFor(() => expect(result.current.currentUrl).toBe("https://pod.example/drive/sub/"));
+
+    // First root change resets to the new container despite the double render.
+    rerender({ root: "https://pod.example/other/" });
+    await waitFor(() => expect(result.current.currentUrl).toBe("https://pod.example/other/"));
+    await waitFor(() => expect(result.current.listing?.url).toBe("https://pod.example/other/"));
+
+    // Navigate down again, then change root a SECOND time: the state-tracked
+    // previous root must again detect the change and reset (a leaked ref write
+    // from an abandoned render would have desynced this second detection).
+    act(() => result.current.navigate("https://pod.example/other/nested"));
+    await waitFor(() =>
+      expect(result.current.currentUrl).toBe("https://pod.example/other/nested/"),
+    );
+
+    rerender({ root: "https://pod.example/third/" });
+    await waitFor(() => expect(result.current.currentUrl).toBe("https://pod.example/third/"));
+    await waitFor(() => expect(result.current.listing?.url).toBe("https://pod.example/third/"));
+    expect(result.current.error).toBeNull();
   });
 
   it("does NOT reset navigation when the rootUrl prop is unchanged across a re-render", async () => {
