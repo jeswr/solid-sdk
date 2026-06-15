@@ -12,14 +12,20 @@
  * subscription POST is authenticated; the `wss://` socket carries its own token.
  */
 
-import { discoverWebSocketSubscriptionEndpoint } from "./notification-discovery";
+import { discoverWebSocketSubscriptionEndpoint, WEBSOCKET_CHANNEL_TYPE } from "./notification-discovery";
 
-const CHANNEL_TYPE = "http://www.w3.org/ns/solid/notification#WebSocketChannel2023";
 const CONTEXT = "https://www.w3.org/ns/solid/notifications-context/v1";
 
-/** The JSON-LD body to POST to a WebSocketChannel2023 subscription service. */
+/**
+ * The JSON-LD body to POST to a WebSocketChannel2023 subscription service.
+ * The `type` MUST be the SAME channel-type IRI discovery matched on
+ * (`WEBSOCKET_CHANNEL_TYPE`, the plural `notify:` namespace) — a conforming
+ * server discovered via its storage description rejects a subscription whose
+ * `type` is in the wrong namespace, so we reuse the exported constant rather
+ * than a separate string that could drift.
+ */
 export function subscriptionRequest(topic: string): string {
-  return JSON.stringify({ "@context": CONTEXT, type: CHANNEL_TYPE, topic });
+  return JSON.stringify({ "@context": CONTEXT, type: WEBSOCKET_CHANNEL_TYPE, topic });
 }
 
 /** The changed resource URL from a notification ActivityStreams object, if any. */
