@@ -41,7 +41,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "check:dist": "node scripts/check-dist-fresh.mjs",
-    "gate": "npm run lint && npm run typecheck && npm run test && npm run build && npm run check:dist"
+    "gate": "npm run lint && npm run typecheck && npm run test && npm run check:dist && npm run build"
   },
   "dependencies": {
     "n3": "^1.21.0"
