@@ -31,8 +31,11 @@ npm install github:jeswr/solid-offline#main n3
 > installable from a GitHub branch (`npm install github:jeswr/solid-offline#main`)
 > even under `ignore-scripts=true`, where no build step runs in the consumer.
 > **Rebuild `dist/` (`npm run build`) before committing any source change** so the
-> committed output never drifts from `src/`. Once npm publish is enabled this can
-> be reverted to a publish-time build with `dist/` re-gitignored.
+> committed output never drifts from `src/`. This is **enforced**, not just
+> conventional: `npm run check:dist` (part of `npm run gate`) rebuilds into a
+> scratch dir and fails on any drift between the committed `dist/` and `src/`.
+> Once npm publish is enabled this can be reverted to a publish-time build with
+> `dist/` re-gitignored.
 
 ## Use (page client)
 
