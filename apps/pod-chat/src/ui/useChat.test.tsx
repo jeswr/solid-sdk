@@ -478,7 +478,7 @@ describe("useChat", () => {
 
   it("does not let a slow superseded thread load overwrite a newer room (stale resolve)", async () => {
     // Opening ROOM_A starts a thread load whose message read HANGS; switching to
-    // ROOM_B (a distinct room + message) supersedes it and resolves fast. When
+    // RoomB (a distinct room + message) supersedes it and resolves fast. When
     // ROOM_A's slow read finally resolves it must be discarded as stale. Keying
     // the slow gate by message URL (not call order) makes this deterministic.
     const RoomB = `${ROOMS}team-bbb.ttl`;
@@ -910,6 +910,110 @@ describe("useChat send (optimistic mutation)", () => {
     expect(result.current.messages.some((m) => m.pending)).toBe(false);
     // Only ONE message was actually persisted (the 2nd never wrote).
     expect(base.posted()).toHaveLength(1);
+  });
+
+  it("does NOT block a send in a DIFFERENT room while a send in the first room is in flight (per-room latch)", async () => {
+    // The roborev Medium (per-room scoping): the single-flight latch must be
+    // SCOPED to the room. With a GLOBAL boolean latch, a send to room A still in
+    // flight wedged the composer of room B — after switching to B the room-change
+    // effect reset sendStatus to "idle" (composer LOOKS enabled) but send() in B
+    // silently returned false because the global latch was still held by A's
+    // send. The user types, hits Send, and nothing happens. Keying the latch by
+    // room URL fixes it: B's send is blocked only by an in-flight send TO B.
+    const RoomB = `${ROOMS}team-bbb.ttl`;
+    // Per-room appended message refs.
+    const refs: Record<string, string[]> = { [ROOM_A]: [], [RoomB]: [] };
+    const posted: string[] = [];
+    // Gate ONLY the first message-resource PUT (room A's) so A's send stays in
+    // flight while we switch to B and send there; B's PUT runs to completion. The
+    // message URL the store mints is opaque, so we gate by call order, not URL.
+    let gatedFirst = false;
+    let releaseA: () => void = () => {};
+    const gateA = new Promise<void>((r) => {
+      releaseA = r;
+    });
+    const fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.toString();
+      const method = (init?.method ?? "GET").toUpperCase();
+
+      if (method === "PUT") {
+        // ensureContainers PUTs the three containers (If-None-Match: *) → 412.
+        if (url === ROOMS || url === MESSAGES || url === "https://pod.example/pod-chat/") {
+          return new Response(null, { status: 412 });
+        }
+        // A message-resource create under the messages container.
+        if (url.startsWith(MESSAGES)) {
+          if (!gatedFirst) {
+            // The FIRST message PUT is room A's — hang it on the gate.
+            gatedFirst = true;
+            await gateA;
+          }
+          posted.push(url);
+          return written();
+        }
+        // The room descriptor PUTs (saveRoom appending the latest posted ref to
+        // the room being written). Both rooms accept the append.
+        if (url === ROOM_A || url === RoomB) {
+          const last = posted.at(-1);
+          if (last !== undefined) refs[url]?.push(last);
+          return written('"r2"');
+        }
+        return new Response(null, { status: 404 });
+      }
+
+      // GETs.
+      if (url === ROOMS) return ttl(containerTtl(ROOMS, [ROOM_A, RoomB]));
+      if (url === ROOM_A) return ttl(roomTtl(ROOM_A, "General", refs[ROOM_A] ?? []));
+      if (url === RoomB) return ttl(roomTtl(RoomB, "Team", refs[RoomB] ?? []));
+      if (posted.includes(url)) {
+        return ttl(messageTtl(url, "from room B", "2026-06-12T13:00:00Z"));
+      }
+      return new Response(null, { status: 404 });
+    }) as unknown as typeof globalThis.fetch;
+
+    const { result } = renderHook(() => useChat(POD, WEBID, { fetch }));
+    await waitFor(() => expect(result.current.loadingRooms).toBe(false));
+    act(() => result.current.open(ROOM_A));
+    await waitFor(() => expect(result.current.loadingMessages).toBe(false));
+
+    // Fire send in room A — its message PUT blocks on the gate, so A's send is
+    // still in flight (the per-room latch holds ROOM_A).
+    let sendingA: Promise<boolean>;
+    act(() => {
+      sendingA = result.current.send("from room A");
+    });
+    await waitFor(() => expect(result.current.sendStatus).toBe("saving"));
+
+    // Switch to room B WHILE A's send is in flight. The room-change effect resets
+    // sendStatus to "idle" (composer looks enabled).
+    act(() => result.current.open(RoomB));
+    await waitFor(() => expect(result.current.openRoomUrl).toBe(RoomB));
+    await waitFor(() => expect(result.current.sendStatus).toBe("idle"));
+
+    // Send in room B — with the GLOBAL boolean latch this silently returned false
+    // (latch still held by A) and nothing happened; with the PER-ROOM latch it
+    // SUCCEEDS, because room B is not the in-flight room.
+    let resultB: boolean | undefined;
+    await act(async () => {
+      resultB = await result.current.send("from room B");
+    });
+    expect(resultB).toBe(true);
+    expect(result.current.sendStatus).toBe("saved");
+    // B's message is present + persisted (a confirmed, non-pending row).
+    expect(result.current.messages).toHaveLength(1);
+    expect(result.current.messages[0]?.pending).toBe(false);
+    expect(refs[RoomB]).toHaveLength(1);
+
+    // Now release room A's gated send; it must settle without error (its own
+    // staleness guard discards the now-stale thread mutation), leaving B intact.
+    await act(async () => {
+      releaseA();
+      await sendingA.catch(() => {});
+    });
+    // Still showing room B's thread; A's send did not corrupt it, no orphan row.
+    expect(result.current.openRoomUrl).toBe(RoomB);
+    expect(result.current.messages).toHaveLength(1);
+    expect(result.current.messages.some((m) => m.pending)).toBe(false);
   });
 
   it("releases the single-flight latch after a settled send — a subsequent send proceeds normally", async () => {
