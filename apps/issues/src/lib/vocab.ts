@@ -43,6 +43,14 @@ export const PROV = "http://www.w3.org/ns/prov#";
  * `time:unitSecond` (one canonical unit, so figures sum without conversion).
  */
 export const TIME = "http://www.w3.org/2006/time#";
+/**
+ * Solid Notifications Protocol vocabulary — used to discover a server's
+ * notification subscription services from its storage description doc
+ * (F10, server-agnostic): `notify:subscription` (a description subject →
+ * a subscription-service resource) and `notify:channelType` (the channel
+ * type a subscription service implements, e.g. `notify:WebSocketChannel2023`).
+ */
+export const NOTIFY = "http://www.w3.org/ns/solid/notifications#";
 
 export const wf = (local: string) => `${WF}${local}`;
 export const dct = (local: string) => `${DCT}${local}`;
@@ -56,6 +64,7 @@ export const xsd = (local: string) => `${XSD}${local}`;
 export const skos = (local: string) => `${SKOS}${local}`;
 export const prov = (local: string) => `${PROV}${local}`;
 export const time = (local: string) => `${TIME}${local}`;
+export const notify = (local: string) => `${NOTIFY}${local}`;
 
 /** The single canonical OWL-Time unit all logged durations are stored in. */
 export const TIME_UNIT_SECOND = time("unitSecond");
