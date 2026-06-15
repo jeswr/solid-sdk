@@ -122,6 +122,13 @@ interface IssuerSession {
   clientRegistration: oauth.Client;
   dpopKey: CryptoKeyPair;
   accessToken: string;
+  /**
+   * The WebID this session actually authenticated AS — the `webid` claim of the
+   * id_token (Solid-OIDC), falling back to `sub`. This is the identity the OP
+   * vouched for, NOT the WebID the user typed; the login flow MUST confirm the
+   * two agree before flipping to logged-in (see {@link WebIdDPoPTokenProvider.authenticatedWebId}).
+   */
+  authenticatedWebId: string | undefined;
 }
 
 const isLoopback = (host: string): boolean =>
@@ -169,6 +176,15 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
    * during THIS attempt, never inferring it from a flag a previous session left.
    */
   #tokensAttached = 0;
+  /**
+   * The WebID the most-recently-established session actually authenticated AS
+   * (the `webid`/`sub` claim of its id_token), or undefined when no session has
+   * been established since the last {@link reset}. The login flow reads this to
+   * PROVE the authenticated identity matches the WebID the user asked to log in
+   * as — never inferring "logged in" from merely "a token is attached". Cleared
+   * by {@link reset} so a prior identity cannot survive a logout / re-login.
+   */
+  #authenticatedWebId: string | undefined;
   /**
    * Shared auth work (issuer resolution, login) is provider-owned: it must NOT
    * be tied to any single request's AbortSignal, or aborting one request would
@@ -236,6 +252,41 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
     return this.#tokensAttached;
   }
 
+  /**
+   * The WebID the current authenticated session was issued FOR — the `webid`
+   * claim of the id_token (Solid-OIDC), falling back to `sub` — or undefined
+   * when nothing has authenticated since the last {@link reset}. The login flow
+   * compares this against the WebID the user asked to log in as; they MUST match
+   * before the app treats the user as logged in (a token being attached is NOT,
+   * by itself, proof of THIS WebID — a stale session from a prior identity would
+   * otherwise pass). The returned string is the issuer-vouched identity, not the
+   * user's typed input.
+   */
+  authenticatedWebId(): string | undefined {
+    return this.#authenticatedWebId;
+  }
+
+  /**
+   * Drop EVERY piece of per-identity state so nothing from a prior login can be
+   * reused by the next one: the memoised issuer resolution, every cached
+   * per-issuer session (its DPoP key pair + access/refresh tokens), the
+   * authenticated-WebID claim, and the running token-attachment count.
+   *
+   * MUST be called on logout AND at the start of a new login. Without it, the
+   * provider keeps the previous user's issuer + DPoP-bound token in memory, so a
+   * login as a DIFFERENT WebID would silently reuse the prior identity's session
+   * (a cross-user session leak), and a login-detection probe that only checks
+   * "is a token attached" would look authenticated with the STALE token. Resetting
+   * `#tokensAttached` to 0 also guarantees the per-attempt before/after delta the
+   * login flow relies on starts from a clean baseline for the new identity.
+   */
+  reset(): void {
+    this.#issuer = undefined;
+    this.#sessions.clear();
+    this.#authenticatedWebId = undefined;
+    this.#tokensAttached = 0;
+  }
+
   async upgrade(request: Request): Promise<Request> {
     this.#issuer ??= this.#resolveIssuer(this.#authSignal).catch((e) => {
       this.#issuer = undefined; // allow retry after cancel/failure
@@ -243,6 +294,10 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
     });
     const issuer = await this.#issuer;
     const session = await this.#getSession(issuer, this.#authSignal);
+    // Record the identity the OP vouched for, so the login flow can confirm it
+    // matches the requested WebID. Set here (not only at session creation) so a
+    // cached/in-flight session shared across concurrent 401s also publishes it.
+    this.#authenticatedWebId = session.authenticatedWebId;
     const headers = new Headers(request.headers);
     headers.set(
       "DPoP",
@@ -390,6 +445,9 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
       clientRegistration,
       dpopKey,
       accessToken: tokenResult.access_token,
+      // The identity the OP actually vouched for. The login flow checks this
+      // against the requested WebID before treating the user as logged in.
+      authenticatedWebId: webIdFromClaims(oauth.getValidatedIdTokenClaims(tokenResult)),
     };
   }
 
@@ -445,6 +503,44 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
     }
     return nonce;
   }
+}
+
+/**
+ * Compare two WebIDs for IDENTITY equality, tolerant only of trivial URL
+ * normalisation (case-insensitive scheme + host, default-port elision), never of
+ * a different path/fragment. Returns false if either side is missing or unparseable
+ * — an unverifiable identity must FAIL closed, not pass. Used by the login flow to
+ * confirm the OP authenticated the user as the WebID they asked to log in as.
+ */
+export function webIdsEqual(a: string | undefined, b: string | undefined): boolean {
+  if (!a || !b) return false;
+  try {
+    const ua = new URL(a);
+    const ub = new URL(b);
+    return (
+      ua.protocol === ub.protocol &&
+      ua.host.toLowerCase() === ub.host.toLowerCase() &&
+      ua.pathname === ub.pathname &&
+      ua.search === ub.search &&
+      ua.hash === ub.hash
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The WebID an id_token authenticated AS. Solid-OIDC carries the WebID in the
+ * `webid` claim; when absent (some servers put it in `sub`), `sub` is the WebID.
+ * Returns undefined when neither is a usable string — the caller then refuses to
+ * treat the login as verified rather than guessing an identity.
+ */
+function webIdFromClaims(claims: oauth.IDToken | undefined): string | undefined {
+  if (!claims) return undefined;
+  const webid = claims.webid;
+  if (typeof webid === "string" && webid.length > 0) return webid;
+  if (typeof claims.sub === "string" && claims.sub.length > 0) return claims.sub;
+  return undefined;
 }
 
 function isEssMissingIssInteractionNeeded(e: unknown): boolean {

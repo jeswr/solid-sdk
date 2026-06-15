@@ -16,7 +16,8 @@
     "preview": "vite preview",
     "lint": "biome check src scripts",
     "lint:fix": "biome check --write src scripts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@jeswr/fetch-rdf": "^0.1.0",
@@ -38,6 +39,7 @@
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^5.2.0",
     "typescript": "^5.9.0",
-    "vite": "^7.0.0"
+    "vite": "^7.0.0",
+    "vitest": "^4.1.8"
   }
 }
