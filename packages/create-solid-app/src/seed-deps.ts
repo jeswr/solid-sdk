@@ -22,6 +22,9 @@
  *   1. Already resolvable from the CLI's own module graph (the dev checkout's
  *      node_modules, or a user who installed these deps alongside the CLI) — use it.
  *   2. Already present in the per-user seed-deps cache (a previous --seed-pod run) — use it.
+ *      The cache dir is keyed by a hash of `SEED_DEP_SPECS` (see {@link seedDepsCacheDir}
+ *      / {@link seedDepsSpecHash}), so a CLI upgrade that BUMPS a spec lands in a fresh
+ *      dir — the stale versions of an older spec set are never silently reused.
  *   3. Otherwise `npm install` them into the cache (one-time, with a clear message),
  *      then resolve from there.
  *
@@ -30,6 +33,7 @@
  * success.
  */
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
@@ -46,10 +50,39 @@ export const SEED_DEP_SPECS = {
   jose: "^6.2.3",
 } as const;
 
-/** Per-user cache the on-demand seed-pod deps are installed into (writable, unlike an npx cache). */
+/**
+ * A short, stable hash of the CURRENT {@link SEED_DEP_SPECS}. It keys the cache
+ * dir so a CLI upgrade that bumps a spec (e.g. a new CSS / jose version) lands in
+ * a FRESH dir — the stale cached versions are never silently reused. The hash is
+ * over the canonical `name@range` set (sorted, so key order can't change it).
+ *
+ * WHY a hash and not "read installed versions + reinstall on mismatch": the
+ * resolve step (`tryResolve`) only proves a module is *resolvable*, not that its
+ * version satisfies the spec — so a stale cache would pass the resolve check and
+ * be reused. Hashing the spec set into the path makes a spec change a cache MISS
+ * structurally (a different dir), with zero version-parsing/semver logic to get
+ * wrong, and old dirs simply become inert (harmless, GC-able) on disk.
+ */
+export function seedDepsSpecHash(specs: Readonly<Record<string, string>> = SEED_DEP_SPECS): string {
+  const canonical = Object.entries(specs)
+    .map(([name, range]) => `${name}@${range}`)
+    .sort()
+    .join("\n");
+  return createHash("sha256").update(canonical).digest("hex").slice(0, 12);
+}
+
+/**
+ * Per-user cache the on-demand seed-pod deps are installed into (writable, unlike
+ * an npx cache). Keyed by {@link seedDepsSpecHash} so a spec/version bump uses a
+ * fresh dir rather than reusing stale cached versions. The
+ * `CREATE_SOLID_APP_SEED_DEPS_DIR` override is treated as the BASE and is
+ * spec-keyed too, so the same guarantee holds under the override.
+ */
 export function seedDepsCacheDir(): string {
-  const base = process.env["CREATE_SOLID_APP_SEED_DEPS_DIR"];
-  return base ?? join(homedir(), ".cache", "create-solid-app", "seed-deps");
+  const base =
+    process.env["CREATE_SOLID_APP_SEED_DEPS_DIR"] ??
+    join(homedir(), ".cache", "create-solid-app", "seed-deps");
+  return join(base, seedDepsSpecHash());
 }
 
 /** A `require` rooted at this module (the CLI's own graph). */

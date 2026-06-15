@@ -148,6 +148,15 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
   /** Single-flight session per issuer: parallel 401s share one login flow. */
   readonly #sessions = new Map<string, Promise<IssuerSession>>();
   /**
+   * True once an authorization-code + DPoP flow has COMPLETED for some issuer —
+   * i.e. a real access token was minted and attached to a request. This is the
+   * proof that the auth flow actually ran: a probe that returns 2xx WITHOUT this
+   * being set means the resource was public (no token attached, no flow), which
+   * is NOT a login. The login flow checks {@link hasEstablishedSession} so a
+   * public 200 is never mistaken for an authenticated session.
+   */
+  #established = false;
+  /**
    * Shared auth work (issuer resolution, login) is provider-owned: it must NOT
    * be tied to any single request's AbortSignal, or aborting one request would
    * cancel the login other concurrent 401 upgrades are waiting on. The user
@@ -202,6 +211,17 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
     return true;
   }
 
+  /**
+   * Whether an auth flow has actually COMPLETED — a DPoP-bound access token was
+   * minted and attached to at least one request via {@link upgrade}. The login
+   * flow uses this to distinguish a genuine authenticated 2xx (token attached
+   * and accepted) from a PUBLIC 2xx where no token was ever attached (resource
+   * was public, no flow ran) — only the former is a real login.
+   */
+  hasEstablishedSession(): boolean {
+    return this.#established;
+  }
+
   async upgrade(request: Request): Promise<Request> {
     this.#issuer ??= this.#resolveIssuer(this.#authSignal).catch((e) => {
       this.#issuer = undefined; // allow retry after cancel/failure
@@ -221,6 +241,10 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
       ),
     );
     headers.set("Authorization", ["DPoP", session.accessToken].join(" "));
+    // A token was minted AND attached: the auth flow ran to completion. (Set only
+    // after the session resolved — a cancelled/failed flow throws above and never
+    // reaches here, so #established stays false.)
+    this.#established = true;
     return new Request(request, { headers });
   }
 

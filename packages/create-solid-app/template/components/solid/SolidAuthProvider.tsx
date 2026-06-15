@@ -40,6 +40,7 @@ import {
   AmbiguousIssuerError,
 } from "@/lib/solid/webid-token-provider";
 import { readProfile, type Profile } from "@/lib/solid/profile";
+import { assessLoginProbe } from "@/lib/solid/login-result";
 
 export interface SolidAuthContextValue {
   /** The WebID once the user has authenticated, else null. */
@@ -73,6 +74,9 @@ export function SolidAuthProvider({ children }: { children: ReactNode }) {
   const flowRef = useRef<AuthorizationCodeFlow>(null);
   // The WebID the user is logging in with — read by the provider's getWebId.
   const pendingWebId = useRef<string | null>(null);
+  // The token provider, held so login() can confirm a token was actually minted
+  // and attached (an auth flow truly ran) — not merely that some probe returned 2xx.
+  const providerRef = useRef<WebIdDPoPTokenProvider | null>(null);
   const [ready, setReady] = useState(false);
   const [webId, setWebId] = useState<string | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -108,7 +112,10 @@ export function SolidAuthProvider({ children }: { children: ReactNode }) {
       );
       const manager = new ReactiveFetchManager([provider]);
       manager.registerGlobally(); // 0.1.3: the constructor does NOT patch fetch — THIS does.
-      if (!cancelled) setReady(true);
+      if (!cancelled) {
+        providerRef.current = provider;
+        setReady(true);
+      }
     }
     loadAuth().catch((e) => {
       if (!cancelled) setError(e instanceof Error ? e.message : String(e));
@@ -134,21 +141,22 @@ export function SolidAuthProvider({ children }: { children: ReactNode }) {
       // popup → retry, and the RETRY's status tells us whether login succeeded.
       const probe = pub.storages[0] ?? new URL("/", id).toString();
       const res = await fetch(probe, { method: "GET" });
-      // ONLY a genuine 2xx proves the token was attached AND accepted — i.e. the
-      // user is logged in. A final 401/403 means the popup was cancelled or the
-      // minted token was rejected: that is NOT a session, so we must NOT set
-      // webId/profile. (Treating 401/403 as success was the bug — it marked a
-      // failed/absent token as "logged in".) Any other non-2xx is also a failure.
-      if (!res.ok) {
-        throw new Error(
-          res.status === 401 || res.status === 403
-            ? "Login did not complete — no valid token was accepted (the popup may have been " +
-              "cancelled, or the identity provider rejected the login)."
-            : `Login probe failed: ${res.status}`,
-        );
+      // Success requires BOTH a 2xx AND that the token provider actually minted +
+      // attached a token (an auth flow ran to completion). A bare 2xx is NOT
+      // enough: probing a PUBLIC resource returns 200 with no token attached and
+      // no flow at all — that must NOT count as logged in. (Treating any 2xx as
+      // success was the bug — a public 200 marked the user authenticated with no
+      // token.) A final 401/403 (cancelled popup / rejected token) is also a
+      // failure. The decision is the pure assessLoginProbe() so the rule is
+      // testable in isolation and can't be silently weakened.
+      const tokenAttached =
+        providerRef.current?.hasEstablishedSession() ?? false;
+      const assessment = assessLoginProbe({ status: res.status, tokenAttached });
+      if (!assessment.ok) {
+        throw new Error(assessment.message);
       }
-      // The token was accepted. Re-read the profile (now authenticated) and record
-      // the session — only reached on a proven-successful authenticated probe.
+      // The token was minted, attached AND accepted. Re-read the profile (now
+      // authenticated) and record the session — only reached on a proven login.
       const me = await readProfile(id);
       setWebId(id);
       setProfile(me);

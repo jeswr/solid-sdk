@@ -49,6 +49,7 @@ describe("scaffold", () => {
       "components/solid/ProfileCard.tsx",
       "lib/solid/profile.ts",
       "lib/solid/login-ux.ts",
+      "lib/solid/login-result.ts",
       "lib/solid/webid-token-provider.ts",
       "scripts/dev.mjs",
       "tests/lib/profile.test.ts",
