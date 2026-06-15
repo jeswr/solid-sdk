@@ -38,6 +38,7 @@ import type { AuthorizationCodeFlow } from "@solid/reactive-authentication";
 import {
   WebIdDPoPTokenProvider,
   AmbiguousIssuerError,
+  webIdsEqual,
 } from "@/lib/solid/webid-token-provider";
 import { readProfile, type Profile } from "@/lib/solid/profile";
 import { assessLoginProbe } from "@/lib/solid/login-result";
@@ -70,14 +71,79 @@ export function useSolidAuth(): SolidAuthContextValue {
   return ctx;
 }
 
+/**
+ * MODULE-LEVEL singleton for the auth runtime — the fix for the global-fetch
+ * patch lifecycle bug. `ReactiveFetchManager.registerGlobally()` monkey-patches
+ * `globalThis.fetch` and offers NO idempotency guard or cleanup, so a naive
+ * per-mount effect is unsafe: under React.StrictMode the mount effect runs TWICE,
+ * and the second pass would call `registerGlobally()` again, STACKING a second
+ * patch over the first. Two stacked patches double-handle auth and break plain
+ * reads (and the second pass would also capture the already-patched fetch as if it
+ * were pristine). Hoisting the build+register out of React, behind a once-only
+ * guard, makes it run exactly once for the page lifetime regardless of how many
+ * times the effect mounts.
+ */
+let authProviderSingleton: Promise<WebIdDPoPTokenProvider> | null = null;
+
+/**
+ * The WebID the user is currently logging in with, in a MODULE-level holder (not
+ * a per-mount ref). The auth runtime is a page-lifetime singleton, so its
+ * `getWebId` closure reads the latest value through this stable holder rather than
+ * capturing one mount's ref. `login()` sets it; the singleton reads it on each 401.
+ */
+const pendingWebIdHolder: { current: string | null } = { current: null };
+
+interface AuthProviderConfig {
+  callbackUri: string;
+  allowInsecureLoopback: boolean;
+  getCode: ConstructorParameters<typeof WebIdDPoPTokenProvider>[1];
+}
+
+/**
+ * Build + globally-register the auth provider EXACTLY ONCE per page. Repeated
+ * calls (e.g. a StrictMode double-mount) return the same in-flight/settled promise
+ * without re-patching the global fetch.
+ */
+function getAuthProvider(cfg: AuthProviderConfig): Promise<WebIdDPoPTokenProvider> {
+  if (authProviderSingleton) return authProviderSingleton;
+  authProviderSingleton = (async () => {
+    // Dynamic import keeps the browser-only custom element out of the SSR bundle.
+    const { ReactiveFetchManager } = await import(
+      "@solid/reactive-authentication"
+    );
+    const provider = new WebIdDPoPTokenProvider(
+      cfg.callbackUri,
+      cfg.getCode,
+      // getWebId: hand back whichever WebID the user is logging in with.
+      async () => {
+        const id = pendingWebIdHolder.current;
+        if (!id) throw new Error("No WebID set for login");
+        return id;
+      },
+      {
+        // Dev-only: lets interactive login target a local CSS over HTTP.
+        // Remote issuers stay HTTPS-strict.
+        allowInsecureLoopback: cfg.allowInsecureLoopback,
+      },
+    );
+    const manager = new ReactiveFetchManager([provider]);
+    manager.registerGlobally(); // 0.1.3: the constructor does NOT patch fetch — THIS does.
+    return provider;
+  })().catch((e) => {
+    // A failed build must not poison the singleton — allow a later retry.
+    authProviderSingleton = null;
+    throw e;
+  });
+  return authProviderSingleton;
+}
+
 export function SolidAuthProvider({ children }: { children: ReactNode }) {
   const flowRef = useRef<AuthorizationCodeFlow>(null);
-  // The WebID the user is logging in with — read by the provider's getWebId.
-  const pendingWebId = useRef<string | null>(null);
-  // The token provider, held so login() can confirm a token was actually minted
-  // and attached DURING THIS attempt (its monotonic attach-count went up while
-  // this probe ran) — not merely that some probe returned 2xx, and not a sticky
-  // flag a previous session left set.
+  // The token provider, resolved from the page-lifetime singleton. Held so login()
+  // can (a) reset it on every identity change, (b) confirm a token was actually
+  // minted + attached DURING THIS attempt, and (c) confirm the OP authenticated
+  // the REQUESTED WebID — never inferring "logged in" from a token merely being
+  // attached, and never letting a prior identity's session leak into a new login.
   const providerRef = useRef<WebIdDPoPTokenProvider | null>(null);
   const [ready, setReady] = useState(false);
   const [webId, setWebId] = useState<string | null>(null);
@@ -85,43 +151,27 @@ export function SolidAuthProvider({ children }: { children: ReactNode }) {
   const [loggingIn, setLoggingIn] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Mount the auth runtime exactly once, client-side, after the element exists.
+  // Acquire the auth runtime, client-side, after the element exists. The runtime
+  // is a page-lifetime singleton (getAuthProvider), so a StrictMode double-mount
+  // re-uses it instead of re-patching the global fetch.
   useEffect(() => {
     let cancelled = false;
-    async function loadAuth() {
-      const ui = flowRef.current;
-      if (!ui) return;
-      // Dynamic import keeps the browser-only custom element out of the SSR bundle.
-      const { ReactiveFetchManager } = await import(
-        "@solid/reactive-authentication"
-      );
-      const callbackUri = new URL("/callback.html", location.href).toString();
-      const provider = new WebIdDPoPTokenProvider(
-        callbackUri,
-        ui.getCode.bind(ui),
-        // getWebId: hand back whichever WebID the user is logging in with.
-        async () => {
-          const id = pendingWebId.current;
-          if (!id) throw new Error("No WebID set for login");
-          return id;
-        },
-        {
-          // Dev-only: lets interactive login target a local CSS over HTTP.
-          // Remote issuers stay HTTPS-strict.
-          allowInsecureLoopback:
-            process.env.NEXT_PUBLIC_ALLOW_INSECURE_LOOPBACK === "true",
-        },
-      );
-      const manager = new ReactiveFetchManager([provider]);
-      manager.registerGlobally(); // 0.1.3: the constructor does NOT patch fetch — THIS does.
-      if (!cancelled) {
+    const ui = flowRef.current;
+    if (!ui) return;
+    getAuthProvider({
+      callbackUri: new URL("/callback.html", location.href).toString(),
+      allowInsecureLoopback:
+        process.env.NEXT_PUBLIC_ALLOW_INSECURE_LOOPBACK === "true",
+      getCode: ui.getCode.bind(ui),
+    })
+      .then((provider) => {
+        if (cancelled) return;
         providerRef.current = provider;
         setReady(true);
-      }
-    }
-    loadAuth().catch((e) => {
-      if (!cancelled) setError(e instanceof Error ? e.message : String(e));
-    });
+      })
+      .catch((e) => {
+        if (!cancelled) setError(e instanceof Error ? e.message : String(e));
+      });
     return () => {
       cancelled = true;
     };
@@ -130,7 +180,16 @@ export function SolidAuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(async (id: string) => {
     setError(null);
     setLoggingIn(true);
-    pendingWebId.current = id;
+    // IDENTITY CHANGE — drop EVERY trace of any prior identity FIRST: reset the
+    // provider so its cached issuer, per-issuer sessions (DPoP keys + access
+    // tokens), authenticated-WebID claim, and token-attach count are gone (so a
+    // login as a different WebID can never reuse the previous user's session), and
+    // clear the rendered profile so WebID-A's data is not shown while
+    // authenticating as WebID-B.
+    providerRef.current?.reset();
+    setWebId(null);
+    setProfile(null);
+    pendingWebIdHolder.current = id;
     try {
       // Resolve the issuer/storage from the PUBLIC profile first — this gives a
       // clear, early error if the WebID is unusable (no oidcIssuer / unreachable)
@@ -139,11 +198,8 @@ export function SolidAuthProvider({ children }: { children: ReactNode }) {
       // Snapshot the provider's running token-attachment count BEFORE the probe.
       // Detection is PER-ATTEMPT: we compare this against the count AFTER the
       // probe, so only a token attached during THIS attempt counts — never a
-      // sticky flag a previous session/attempt left set (the round-3 bug: a prior
-      // upgrade had marked the provider "established", so a later public-200 probe
-      // with no token attached this attempt was wrongly accepted; after logout→
-      // re-login it would do the same). A monotonic delta cannot be faked by a
-      // prior session because that session's attachments are already in `before`.
+      // sticky flag a previous session/attempt left set. (reset() above also zeroes
+      // the count, so this baseline is clean for the new identity.)
       const tokensAttachedBefore =
         providerRef.current?.tokensAttachedCount() ?? 0;
       // Trigger the auth flow by making an authenticated request the global fetch
@@ -156,12 +212,9 @@ export function SolidAuthProvider({ children }: { children: ReactNode }) {
       // Success requires BOTH a 2xx AND that the token provider attached a token
       // DURING THIS attempt (the count went up). A bare 2xx is NOT enough:
       // probing a PUBLIC resource returns 200 with no token attached this attempt
-      // and no flow at all — that must NOT count as logged in. (Treating any 2xx
-      // as success — or trusting a sticky "established" flag — was the bug: a
-      // public 200 marked the user authenticated with no token attached now.) A
-      // final 401/403 (cancelled popup / rejected token) is also a failure. The
-      // decision is the pure assessLoginProbe() so the rule is testable in
-      // isolation and can't be silently weakened.
+      // and no flow at all — that must NOT count as logged in. A final 401/403
+      // (cancelled popup / rejected token) is also a failure. The decision is the
+      // pure assessLoginProbe() so the rule is testable in isolation.
       const tokensAttachedAfter =
         providerRef.current?.tokensAttachedCount() ?? 0;
       const assessment = assessLoginProbe({
@@ -172,13 +225,29 @@ export function SolidAuthProvider({ children }: { children: ReactNode }) {
       if (!assessment.ok) {
         throw new Error(assessment.message);
       }
-      // The token was minted, attached AND accepted. Re-read the profile (now
-      // authenticated) and record the session — only reached on a proven login.
+      // PROVE the session authenticated AS the requested WebID — never infer
+      // "logged in" from "a token is attached". The OP's id_token `webid`/`sub`
+      // claim is the identity it vouched for; if it doesn't match what the user
+      // asked to log in as (e.g. a stale session leaked from a prior identity, or
+      // an IdP that authenticated a different account), fail closed.
+      const authedWebId = providerRef.current?.authenticatedWebId();
+      if (!webIdsEqual(authedWebId, id)) {
+        throw new Error(
+          "Login did not complete — the identity provider authenticated a " +
+            `different WebID (${authedWebId ?? "unknown"}) than the one requested ` +
+            `(${id}). For your security you were not logged in.`,
+        );
+      }
+      // The token was minted, attached AND accepted, AND proven to be THIS WebID's.
+      // Re-read the profile (now authenticated) and record the session.
       const me = await readProfile(id);
       setWebId(id);
       setProfile(me);
     } catch (e) {
-      pendingWebId.current = null;
+      // The attempt failed — clear the pending WebID AND drop any partial provider
+      // state, so a half-established session can't leak into the next attempt.
+      pendingWebIdHolder.current = null;
+      providerRef.current?.reset();
       const msg =
         e instanceof AmbiguousIssuerError
           ? "This WebID lists multiple identity providers — multi-issuer choice is not yet wired in this template."
@@ -193,8 +262,13 @@ export function SolidAuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(() => {
-    // Tokens live in memory only; reloading drops them. Here we clear app state.
-    pendingWebId.current = null;
+    // RESET THE PROVIDER, not just React state: the in-memory issuer, per-issuer
+    // sessions (DPoP key + access/refresh tokens), authenticated-WebID claim, and
+    // token-attach count are all dropped, so a later login as a DIFFERENT WebID
+    // cannot reuse this user's token/session and a login probe cannot look
+    // authenticated with the stale token.
+    providerRef.current?.reset();
+    pendingWebIdHolder.current = null;
     setWebId(null);
     setProfile(null);
     setError(null);
