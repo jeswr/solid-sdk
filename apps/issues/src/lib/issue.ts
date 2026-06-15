@@ -42,20 +42,23 @@ export const ISSUE_TYPES: { slug: IssueType; label: string }[] = [
 
 /**
  * The hierarchy level of an issue type: lower numbers are coarser (an Initiative
- * sits above an Epic above a Feature/Story above a Task/Sub-task). `bug` shares the
- * leaf level with `task` — both are work items that may nest under a story/feature
- * but take no children of their own.
+ * sits above an Epic above a Feature above a Story above a Task/Bug). `bug` shares
+ * the leaf level with `task` — both are work items that may nest under a story but
+ * take no children of their own.
+ *
+ * Full ordering: Initiative(0) > Epic(1) > Feature(2) > Story(3) > Task/Bug(4).
  *
  * Drives F5 (type-driven nesting): a parent must be strictly coarser than its
- * child, so an Epic can contain a Story but not another Epic, and a Task is a leaf.
+ * child, so an Epic can contain a Feature/Story but not another Epic, a Feature can
+ * parent a Story, and a Task/Bug is a leaf.
  */
 const TYPE_LEVEL: Record<IssueType, number> = {
   initiative: 0,
   epic: 1,
   feature: 2,
-  story: 2,
-  task: 3,
-  bug: 3,
+  story: 3,
+  task: 4,
+  bug: 4,
 };
 
 /** Hierarchy depth of an issue type (0 = coarsest). See {@link TYPE_LEVEL}. */

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { rollupOf, rollupAll, directChildren, linksOf } from "./rollups";
+import { rollupOf, rollupAll, directChildren, descendantUrlsOf, linksOf } from "./rollups";
 import type { IssueRecord } from "./repository";
 
 const base: IssueRecord = {
@@ -106,6 +106,20 @@ describe("F6 rollups — subitems / progress", () => {
     expect(r.childCount).toBe(0);
   });
 
+  it("childCount excludes self even when the issue also has real children (self-parent + real children)", () => {
+    // Malformed: "p" lists itself as its own parent AND has two real children.
+    // childCount must be 2 (the real children), not 3 (which would include self).
+    const issues = [
+      mk({ url: "p", parent: "p", issueType: "epic" }),
+      mk({ url: "a", parent: "p", status: "done" }),
+      mk({ url: "b", parent: "p", status: "todo" }),
+    ];
+    const r = rollupOf(issues[0], issues);
+    expect(r.childCount).toBe(2); // only the two real children
+    expect(r.descendantCount).toBe(2);
+    expect(r.done).toBe(1);
+  });
+
   it("rollupAll keys every issue and matches per-issue rollupOf", () => {
     const issues = [
       mk({ url: "p", issueType: "epic" }),
@@ -126,6 +140,40 @@ describe("F6 rollups — subitems / progress", () => {
       mk({ url: "task", parent: "story" }),
     ];
     expect(directChildren(issues[0], issues).map((i) => i.url)).toEqual(["story"]);
+  });
+});
+
+describe("descendantUrlsOf — parent-candidate cycle guard", () => {
+  it("returns an empty set for a leaf with no children", () => {
+    const leaf = mk({ url: "x" });
+    expect(descendantUrlsOf(leaf, [leaf]).size).toBe(0);
+  });
+
+  it("returns all transitive descendants, not including the root", () => {
+    const issues = [
+      mk({ url: "epic", issueType: "epic" }),
+      mk({ url: "story", parent: "epic", issueType: "story" }),
+      mk({ url: "task1", parent: "story" }),
+      mk({ url: "task2", parent: "story" }),
+    ];
+    const desc = descendantUrlsOf(issues[0], issues);
+    expect(desc).toEqual(new Set(["story", "task1", "task2"]));
+  });
+
+  it("excludes self — an issue is not a descendant of itself (self-parent guard)", () => {
+    const self = mk({ url: "x", parent: "x" });
+    const desc = descendantUrlsOf(self, [self]);
+    expect(desc.has("x")).toBe(false);
+  });
+
+  it("is cycle-safe — a cycle does not cause infinite recursion", () => {
+    const issues = [
+      mk({ url: "a", parent: "b" }),
+      mk({ url: "b", parent: "a" }),
+    ];
+    const desc = descendantUrlsOf(issues[0], issues);
+    // From "a": child is "b"; "b"'s child is "a" (already seen) → stop.
+    expect(desc).toEqual(new Set(["b"]));
   });
 });
 

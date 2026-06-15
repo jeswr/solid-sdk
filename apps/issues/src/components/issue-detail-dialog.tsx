@@ -37,8 +37,8 @@ const renderBody = (text: string) =>
     ),
   );
 import type { IssueRecord } from "@/lib/use-issues";
-import { STATUSES, safeHttpUrl, type FieldDef } from "@/lib/issue";
-import { linksOf, rollupOf } from "@/lib/rollups";
+import { STATUSES, safeHttpUrl, canNest, type FieldDef } from "@/lib/issue";
+import { linksOf, rollupOf, descendantUrlsOf } from "@/lib/rollups";
 import { priorityVariant, shortWebId } from "@/components/issue-card";
 import { PersonChip } from "@/components/person";
 import { TypeBadge, typeLabel } from "@/components/type-badge";
@@ -114,12 +114,24 @@ export function IssueDetailDialog({
     }
   };
 
-  if (!issue) return null;
+  // F5: compute descendants BEFORE the early return so the hook order is stable.
+  // When `issue` is undefined this returns an empty set (no-op); it's only used after
+  // the guard below.
+  const selfDescendants = useMemo(
+    () => (issue ? descendantUrlsOf(issue, allIssues) : new Set<string>()),
+    [issue, allIssues],
+  );
 
+  if (!issue) return null;
 
   const self = issue;
   const titleOf = (url: string) => allIssues.find((i) => i.url === url)?.title ?? "(unknown issue)";
-  const candidates = allIssues.filter((i) => i.url !== self.url);
+  // F5: parent candidates must be strictly coarser types (canNest enforces the
+  // Initiative→Epic→Feature→Story→Task/Bug hierarchy), must not be self, and must
+  // not be an existing descendant (to prevent cycles in the tree).
+  const candidates = allIssues.filter(
+    (i) => i.url !== self.url && !selfDescendants.has(i.url) && canNest(i.issueType, self.issueType),
+  );
   const subTasks = allIssues.filter((i) => i.parent === self.url);
   const blocking = allIssues.filter((i) => i.blockedBy.includes(self.url));
   const addableBlockers = candidates.filter((i) => !self.blockedBy.includes(i.url) && i.url !== self.parent);

@@ -97,7 +97,9 @@ export function rollupOf(
     .map((d) => d.getTime());
 
   return {
-    childCount: (byParent.get(issue.url) ?? []).length,
+    // Exclude the issue itself from childCount — a self-parented issue must not
+    // count itself as its own direct child (mirrors the cycle guard in descendantsOf).
+    childCount: (byParent.get(issue.url) ?? []).filter((c) => c.url !== issue.url).length,
     descendantCount: total,
     done,
     total,
@@ -106,6 +108,21 @@ export function rollupOf(
     earliestDue: dues.length ? new Date(Math.min(...dues)) : undefined,
     latestDue: dues.length ? new Date(Math.max(...dues)) : undefined,
   };
+}
+
+/**
+ * Returns the set of URLs of all transitive descendants of `issue` (cycle-safe,
+ * excludes `issue.url` itself). Useful for computing valid parent candidates —
+ * an issue may not become its own ancestor, so descendants must be excluded.
+ */
+export function descendantUrlsOf(issue: IssueRecord, issues: IssueRecord[]): Set<string> {
+  const byParent = childIndex(issues);
+  const seen = new Set<string>([issue.url]);
+  for (const d of descendantsOf(issue.url, byParent, seen)) {
+    seen.add(d.url);
+  }
+  seen.delete(issue.url); // the root is not a descendant of itself
+  return seen;
 }
 
 /** Roll up every issue at once, keyed by URL (shares one child index). */
