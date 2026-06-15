@@ -1,0 +1,33 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jeswr/full-solid-ecosystem/main/tracking/schema/suite.schema.json",
+  "id": "solid-issues",
+  "kind": "app",
+  "name": "Solid Issues",
+  "repo": "https://github.com/jeswr/solid-issues",
+  "category": "productivity",
+  "maturity": "alpha",
+  "visibility": "public",
+  "stack": {
+    "language": "TypeScript",
+    "runtime": "Node >=20",
+    "framework": "Next.js 16",
+    "ui": "shadcn/ui + Radix + Tailwind 4",
+    "rdf": "@jeswr/fetch-rdf ^0.1, @solid/object ^0.6, @rdfjs/wrapper ^0.34, n3 ^2",
+    "shacl": "rdf-validate-shacl",
+    "auth": "@solid/reactive-authentication ^0.1.3, jose ^6",
+    "test": "vitest, Playwright (e2e)",
+    "deploy": "Vercel Hobby"
+  },
+  "dependsOn": [
+    "prod-solid-server",
+    "solid-webid-index",
+    "solid-federation-vocab"
+  ],
+  "federation": {
+    "sectors": ["productivity"],
+    "accessModes": ["Read", "Write", "Append"],
+    "consumes": ["productivity"],
+    "produces": ["productivity"],
+    "membershipTodo": "TODO(O1-gated): declare fedapp:memberOf once the fedapp: namespace is frozen and the registry engine ships. Solid Issues is a Jira/Monday-parity issue tracker storing wf:Task data in the user's pod (productivity sector, Read/Write/Append); its clientid.jsonld will gain a fedapp: block at that point. Membership is the registry's job after a signed challenge — never self-asserted here."
+  }
+}
