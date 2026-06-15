@@ -1,0 +1,32 @@
+{
+  "@context": [
+    "https://www.w3.org/ns/solid/oidc-context.jsonld",
+    {
+      "fedapp": "https://w3id.org/jeswr/fed#",
+      "acl": "http://www.w3.org/ns/auth/acl#",
+      "ldp": "http://www.w3.org/ns/ldp#",
+      "sectors": "https://w3id.org/jeswr/sectors/",
+      "poddrive": "https://w3id.org/jeswr/pod-drive#",
+      "fedapp:sector": { "@type": "@id" },
+      "fedapp:access": { "@type": "@id" },
+      "fedapp:consumes": { "@type": "@id" },
+      "fedapp:produces": { "@type": "@id" },
+      "fedapp:declaresShape": { "@type": "@id" }
+    }
+  ],
+  "client_id": "https://pod-drive.example/clientid.jsonld",
+  "client_name": "Pod Drive",
+  "client_uri": "https://pod-drive.example/",
+  "redirect_uris": ["https://pod-drive.example/callback.html"],
+  "scope": "openid webid offline_access",
+  "grant_types": ["authorization_code", "refresh_token"],
+  "response_types": ["code"],
+  "token_endpoint_auth_method": "none",
+
+  "@type": "fedapp:App",
+  "fedapp:sector": "sectors:documents#sector",
+  "fedapp:access": ["acl:Read", "acl:Write", "acl:Append"],
+  "fedapp:consumes": ["ldp:Container", "ldp:Resource"],
+  "fedapp:produces": ["ldp:Container", "ldp:Resource"],
+  "fedapp:declaresShape": "poddrive:DriveRoot"
+}

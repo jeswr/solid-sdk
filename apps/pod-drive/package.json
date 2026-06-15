@@ -1,0 +1,51 @@
+{
+  "name": "@jeswr/pod-drive",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "Pod Drive — a file/folder browser over Solid LDP containers. Data-layer core: a typed RDF model for containers + binary resources (size, mtime, content-type), built on @jeswr/fetch-rdf + @solid/object + @rdfjs/wrapper + n3.Writer. Experimental, AI-agent-generated.",
+  "license": "MIT",
+  "author": "Claude Opus 4.8 (@jeswr PSS agent)",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jeswr/pod-drive.git"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "public"
+  ],
+  "scripts": {
+    "lint": "biome check src test",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --coverage",
+    "test:watch": "vitest",
+    "build": "tsc -p tsconfig.build.json",
+    "gate": "npm run lint && npm run typecheck && npm test && npm run build"
+  },
+  "dependencies": {
+    "@jeswr/fetch-rdf": "^0.1.0",
+    "@rdfjs/wrapper": "^0.34.0",
+    "@solid/object": "^0.6.0",
+    "n3": "^1.17.4"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.0.3",
+    "@rdfjs/types": "^2.0.0",
+    "@types/n3": "^1.16.4",
+    "@types/node": "^22.10.0",
+    "@vitest/coverage-v8": "^4.1.9",
+    "typescript": "^5.6.0",
+    "vitest": "^4.1.9"
+  }
+}
