@@ -56,6 +56,19 @@ describe("findDriveRoots", () => {
     expect(roots).toEqual([]); // Task is registered as instance, not instanceContainer
   });
 
+  it("finds a registration whose subject is a blank node", () => {
+    // Type-index registrations are frequently blank nodes. The lookup must
+    // preserve the blank-node term, not reconstruct a NamedNode from `.value`.
+    const bnode = turtle(`
+      @prefix solid: <http://www.w3.org/ns/solid/terms#> .
+      @prefix poddrive: <https://w3id.org/jeswr/pod-drive#> .
+      [] a solid:TypeRegistration ;
+        solid:forClass poddrive:DriveRoot ;
+        solid:instanceContainer <https://pod.example/drive/> .
+    `);
+    expect(findDriveRoots(bnode)).toEqual(["https://pod.example/drive/"]);
+  });
+
   it("de-dupes the same container registered twice", () => {
     const dup = turtle(`
       @prefix solid: <http://www.w3.org/ns/solid/terms#> .

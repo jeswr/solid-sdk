@@ -58,9 +58,13 @@ export function findDriveRoots(
 ): string[] {
   const roots = new Set<string>();
   const klass = namedNode(forClass);
-  // Every subject that is `solid:forClass <DriveRoot>` is a registration.
+  // Every subject that is `solid:forClass <DriveRoot>` is a registration. Pass
+  // the ORIGINAL subject term (not its `.value`) to TypeRegistration so a
+  // blank-node registration — common in type-index docs — keeps its term type
+  // and matches; reconstructing from `.value` would always mint a NamedNode and
+  // silently miss blank-node registrations' solid:instanceContainer values.
   for (const q of index.match(null, namedNode(SOLID.forClass), klass)) {
-    const reg = new TypeRegistration(q.subject.value, index, DataFactory);
+    const reg = new TypeRegistration(q.subject, index, DataFactory);
     for (const c of reg.instanceContainers) {
       roots.add(c);
     }
