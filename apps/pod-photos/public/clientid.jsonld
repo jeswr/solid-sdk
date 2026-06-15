@@ -1,0 +1,30 @@
+{
+  "@context": [
+    "https://www.w3.org/ns/solid/oidc-context.jsonld",
+    {
+      "fedapp": "https://w3id.org/jeswr/fed#",
+      "schema": "https://schema.org/",
+      "acl": "http://www.w3.org/ns/auth/acl#",
+      "sectors": "https://w3id.org/jeswr/sectors/",
+      "App": "fedapp:App",
+      "sector": { "@id": "fedapp:sector", "@type": "@id" },
+      "access": { "@id": "fedapp:access", "@type": "@id", "@container": "@set" },
+      "consumes": { "@id": "fedapp:consumes", "@type": "@id", "@container": "@set" },
+      "produces": { "@id": "fedapp:produces", "@type": "@id", "@container": "@set" }
+    }
+  ],
+  "client_id": "https://pod-photos.example/clientid.jsonld",
+  "client_name": "Pod Photos",
+  "client_uri": "https://pod-photos.example/",
+  "redirect_uris": ["https://pod-photos.example/callback.html"],
+  "scope": "openid webid offline_access",
+  "grant_types": ["authorization_code", "refresh_token"],
+  "response_types": ["code"],
+  "token_endpoint_auth_method": "none",
+
+  "@type": "App",
+  "sector": "https://w3id.org/jeswr/sectors/media#sector",
+  "access": ["acl:Read", "acl:Write", "acl:Append"],
+  "produces": ["schema:Photograph", "schema:ImageGallery"],
+  "consumes": ["schema:Photograph", "schema:ImageGallery"]
+}

@@ -1,0 +1,28 @@
+{
+  "$schema": "https://solid.example/suite-tracking/suite.schema.json",
+  "id": "pod-photos",
+  "kind": "app",
+  "name": "Pod Photos",
+  "repo": "https://github.com/jeswr/pod-photos",
+  "category": "media",
+  "maturity": "prototype",
+  "visibility": "public",
+  "stack": {
+    "rdf": "n3 ^1.21.0",
+    "rdf-wrapper": "@rdfjs/wrapper ^0.34.0",
+    "solid-object": "@solid/object ^0.6.0",
+    "fetch-rdf": "@jeswr/fetch-rdf ^0.1.0",
+    "test": "vitest ^3.2.6",
+    "lint": "@biomejs/biome ^1.9.4",
+    "node": ">=22"
+  },
+  "dependsOn": ["solid-federation-vocab"],
+  "federation": {
+    "clientIdUrl": "https://pod-photos.example/clientid.jsonld",
+    "sectors": ["media"],
+    "accessModes": ["Read", "Write", "Append"],
+    "produces": ["media"],
+    "consumes": ["media"],
+    "membershipTodo": "Federation membership is asserted by the registry after a signed challenge, not here. Once fedapp: (https://w3id.org/jeswr/fed#) is frozen (ADR-0013 / O1), this app publishes fedapp:sector media + fedapp:produces/consumes schema:Photograph + schema:ImageGallery from its clientid.jsonld; see public/clientid.jsonld."
+  }
+}
