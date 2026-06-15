@@ -1,6 +1,6 @@
 # Model Provenance
 
-This file tracks which parts of `@solid/offline` were authored by an AI model,
+This file tracks which parts of `@jeswr/offline` were authored by an AI model,
 which model, and any re-review/upgrade caveats. It exists so a later human or a
 stronger model can find and re-review machine-authored code.
 
@@ -131,7 +131,7 @@ New files:
   WebID-scoped Cache API cache + IndexedDB DB. Best-effort but total (a missing
   store is success; one half failing does not stop the other); injectable
   `caches`/`indexedDB`; reports the outcome.
-- `src/react.ts` — `@solid/offline/react`: the thin hooks `useOfflineStatus`
+- `src/react.ts` — `@jeswr/offline/react`: the thin hooks `useOfflineStatus`
   (wraps the status surface with `useSyncExternalStore`; can own or borrow a
   surface) and `useOfflineResource` (reads a URL through the page fetch, tracks
   pending/stale/outdated, re-reads on an `updated` broadcast for that URL). React

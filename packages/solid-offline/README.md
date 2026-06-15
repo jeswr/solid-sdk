@@ -1,4 +1,4 @@
-# @solid/offline
+# @jeswr/offline
 
 Offline-first drop-in layer for Solid apps. A service worker intercepts `fetch`,
 caches the user's documents **never-authoritatively**, and (in later phases)
@@ -16,13 +16,13 @@ yet.
 ## Install
 
 ```sh
-npm install @solid/offline n3
+npm install @jeswr/offline n3
 ```
 
 ## Use (page client)
 
 ```ts
-import { createOfflineClient } from '@solid/offline';
+import { createOfflineClient } from '@jeswr/offline';
 
 const offline = createOfflineClient({
   webId: 'https://alice.example/profile/card#me',
@@ -132,12 +132,12 @@ tab's revalidation flips status in every tab. It is a plain `subscribe`/
 `getSnapshot` store (referentially stable snapshots) so it drives
 `useSyncExternalStore` directly.
 
-### React hooks (`@solid/offline/react`) — optional
+### React hooks (`@jeswr/offline/react`) — optional
 
 `react` is an **optional peer dependency**; the core imports nothing from React.
 
 ```tsx
-import { useOfflineStatus, useOfflineResource } from '@solid/offline/react';
+import { useOfflineStatus, useOfflineResource } from '@jeswr/offline/react';
 
 function Connectivity() {
   const { online, pending, stale } = useOfflineStatus(offline.status);
@@ -196,10 +196,10 @@ from your origin so its scope covers your pod reads):
 
 ```js
 // /solid-offline-worker.js
-import '@solid/offline/worker';
+import '@jeswr/offline/worker';
 ```
 
-(Or bundle `@solid/offline/worker` into a standalone classic worker if you don't
+(Or bundle `@jeswr/offline/worker` into a standalone classic worker if you don't
 serve ES-module workers.)
 
 ## What P1 does (read cache, §2 of the design)

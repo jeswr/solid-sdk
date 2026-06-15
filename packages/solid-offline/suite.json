@@ -1,0 +1,16 @@
+{
+  "$schema": "https://solid.example/suite-tracking/suite.schema.json",
+  "id": "solid-offline",
+  "kind": "sdk",
+  "name": "Solid Offline",
+  "repo": "https://github.com/jeswr/solid-offline",
+  "category": "infrastructure",
+  "maturity": "alpha",
+  "visibility": "public",
+  "stack": {
+    "language": "typescript",
+    "bundler": "tsup",
+    "test": "vitest",
+    "rdf": "n3"
+  }
+}

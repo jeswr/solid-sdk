@@ -1,5 +1,5 @@
 /**
- * `@solid/offline` — framework-agnostic page client (P0–P2).
+ * `@jeswr/offline` — framework-agnostic page client (P0–P2).
  *
  * `createOfflineClient(config)` returns a handle whose `register()`:
  *   1. registers the service worker (`navigator.serviceWorker.register`),
@@ -12,7 +12,7 @@
  * intercepts + caches them. The SW is NEVER authenticated. Notifications (P3) are
  * still config-only.
  *
- * NO React. (The `@solid/offline/react` entry is P5.)
+ * NO React. (The `@jeswr/offline/react` entry is P5.)
  */
 
 import { type PurgeResult, purgeForWebId } from './logout.js';
@@ -402,7 +402,7 @@ export function createOfflineClient(config: OfflineClientConfig = {}): OfflineCl
    * The offline status surface (offline/stale/pending) for this client. Lazily
    * created on first access; shares the client's `channelName` so it reflects
    * `updated` broadcasts. A vanilla app renders `status.getSnapshot()`; a React
-   * app passes this to `useOfflineStatus` (`@solid/offline/react`).
+   * app passes this to `useOfflineStatus` (`@jeswr/offline/react`).
    */
   function getStatus(): OfflineStatusSurface {
     if (!status) {

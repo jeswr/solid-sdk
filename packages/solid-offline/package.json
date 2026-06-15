@@ -1,5 +1,5 @@
 {
-  "name": "@solid/offline",
+  "name": "@jeswr/offline",
   "version": "0.0.0",
   "description": "Offline-first drop-in layer for Solid apps: a service worker that intercepts fetch and caches documents never-authoritatively (P0 scaffold + P1 read cache).",
   "type": "module",
@@ -36,7 +36,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "gate": "npm run lint && npm run typecheck && npm run test && npm run build"
   },
   "dependencies": {
     "n3": "^1.21.0"

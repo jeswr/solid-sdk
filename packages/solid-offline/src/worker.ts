@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
 /**
- * `@solid/offline/worker` — the service-worker script (P0 install/intercept
+ * `@jeswr/offline/worker` — the service-worker script (P0 install/intercept
  * plumbing + P1 read cache).
  *
  * P0: install + activate + claim, page↔SW `postMessage`, and a network-only
