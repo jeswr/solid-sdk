@@ -6,6 +6,18 @@ Canonical Solid-OIDC client-credentials session + RFC 9449 DPoP proof primitives
 user-delegated **authorization-code + PKCE + DPoP** flow. `jose`-only crypto (nothing
 hand-rolled); ships dual ESM + CJS builds.
 
+## Install
+
+```sh
+npm install github:jeswr/solid-dpop#main
+```
+
+The built `dist/` (esm + cjs) is **committed** so the package is installable directly from a
+GitHub branch (`npm install github:jeswr/solid-dpop#main`) under `ignore-scripts=true` — there is no
+build step at install time, so the consumer imports the committed `dist/` as-is. npm publish is
+deferred. Because `dist/` is committed, **rebuild it (`npm run build`) and commit the result in the
+same change whenever you edit `src/`** — otherwise the committed `dist/` drifts from source.
+
 ## What it provides
 
 - `createDpopProof` / `canonicalHtu` / `accessTokenHash` / `toDpopKeyPair` /
