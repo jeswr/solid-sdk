@@ -61,6 +61,10 @@ export async function sendNotification(
     ...activity,
     type: (activity.type ?? "Announce") as ActivityType,
   });
+  // ADVANCED: let a caller augment the dataset (e.g. embed a wf:Task) before
+  // serialise — the single place the on-the-wire body is built. AWAITED so an
+  // async extend's mutations are complete before we serialise + POST.
+  await opts.extend?.(store);
   const body = await serializeTurtle(store);
 
   const fetcher = opts.fetchImpl ?? guardedFetch;

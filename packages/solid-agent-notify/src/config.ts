@@ -108,3 +108,23 @@ export const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 
 /** The LDP `contains` predicate (an inbox container lists its members with this). */
 export const LDP_CONTAINS = "http://www.w3.org/ns/ldp#contains";
+
+// ─── Shared federation task model (https://w3id.org/jeswr/task) ────────────────
+//
+// The cross-app task/issue model the ecosystem (solid-issues, Pod Manager) agrees
+// on, pinned by the federation vocab at https://w3id.org/jeswr/task. It is the
+// canonical RE-USE of established vocabularies (NOT a new ontology): a task is a
+// `wf:Task`, its lifecycle state is `rdf:type wf:Open|wf:Closed`, metadata is
+// `dct:`, assignment is `wf:assignee`, and a cross-app task event is an
+// `as:Announce` whose `as:object` is the task. The IRIs below are the OWNING
+// vocabularies (the task vocab does not mint terms), so a notification carrying a
+// `wf:Task` resolves against the real SolidOS workflow + Dublin Core ontologies.
+
+/** The W3C SolidOS workflow ontology namespace (`wf:`) — the task class + state + assignee. */
+export const WF = "http://www.w3.org/2005/01/wf/flow#";
+
+/** Dublin Core Terms namespace (`dct:`) — task title / description / created / creator. */
+export const DCT = "http://purl.org/dc/terms/";
+
+/** The shared-task home vocab IRI (`https://w3id.org/jeswr/task`), for `rdfs:seeAlso` / provenance. */
+export const TASK_VOCAB = "https://w3id.org/jeswr/task";

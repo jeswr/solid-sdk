@@ -58,8 +58,66 @@ const notifications = await readInbox(inbox!);
 //    → InboxNotification[]  ({ url, type, actor?, object?, target?, summary?, content?, published? })
 ```
 
-All four accept a final `NotifyOptions` argument (`timeoutMs`, and TEST-only
+All four accept a final `NotifyOptions` argument (`timeoutMs`; the send path also
+takes an advanced `extend` hook — see Federation tasks below; and TEST-only
 `allowLoopback` / `dnsLookup` / `fetchImpl`).
+
+### Federation tasks (`wf:Task`)
+
+The headline cross-pod use case is a **"task assigned" / "task state changed"**
+notification: an `as:Announce` whose `as:object` IS a shared `wf:Task` (the SolidOS
+workflow-ontology task/issue — the same shape [`solid-issues`](https://github.com/jeswr/solid-issues)
+and the Pod Manager read/write). The shared terms are pinned by the federation
+vocab at [`https://w3id.org/jeswr/task`](https://w3id.org/jeswr/task) — a canonical
+**re-use** of `wf:` + `dct:` + `as:`, not new terms: a task is a `wf:Task`, its
+state is `rdf:type wf:Open|wf:Closed`, metadata is `dct:title`/`dct:description`/
+`dct:created`/`dct:creator`, assignment is `wf:assignee`.
+
+```ts
+import {
+  notifyTaskAssigned,
+  notifyTaskStateChanged,
+  buildTaskNotification,
+  parseTaskFromNotification,
+} from "solid-agent-notify";
+
+// Assign a task to an agent (discover their inbox + deliver the Announce+wf:Task).
+// `wf:assignee` defaults to the recipient unless the task already names one.
+await notifyTaskAssigned({
+  recipientWebId: "https://bob.example/card#me",
+  actorWebId: "https://me.example/card#me",
+  task: {
+    task: "https://me.example/tasks/42#it",  // the wf:Task subject IRI
+    title: "Review the PR",                  // → dct:title
+    description: "Check the SSRF guard.",     // → dct:description
+    // state defaults to "Open"; created defaults to now; creator optional.
+  },
+  summary: "A task was assigned to you",      // → as:summary on the Announce
+});
+
+// Announce a state change (Open ↔ Closed).
+await notifyTaskStateChanged({
+  recipientWebId: "https://bob.example/card#me",
+  actorWebId: "https://me.example/card#me",
+  task: { task: "https://me.example/tasks/42#it" },
+  state: "Closed",
+});
+
+// Build the notification dataset yourself (e.g. to POST elsewhere)…
+const store = buildTaskNotification(
+  { task: "https://me.example/tasks/42#it", title: "Triage", assignee: "https://bob.example/card#me" },
+  { actor: "https://me.example/card#me" },
+);
+// …and read a task back out of a parsed notification:
+const task = parseTaskFromNotification(activitySubject, dataset);
+//   → { task, state?, title?, description?, assignee?, creator?, created? } | undefined
+```
+
+`TaskDoc` (the typed `wf:Task` accessor), `writeTask` (embed a task into any
+dataset), and `parseTask` (read a `wf:Task` subject) are also exported. Under the
+hood the send helpers use the send-path `extend` hook to embed the `wf:Task`
+**alongside** the activity in the SAME dataset, so it is delivered in one
+SSRF-guarded POST — no second request, same egress chokepoint.
 
 ### Errors
 

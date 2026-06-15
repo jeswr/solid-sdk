@@ -38,6 +38,22 @@ export {
 } from "./activity.js";
 export type { ActivityNotification, ActivityType } from "./activity.js";
 
+// ── Shared federation task model (https://w3id.org/jeswr/task — wf:Task + dct:) ──
+export {
+  TaskDoc,
+  writeTask,
+  buildTaskNotification,
+  parseTask,
+  parseTaskFromNotification,
+  notifyTaskAssigned,
+  notifyTaskStateChanged,
+} from "./task.js";
+export type {
+  TaskNotification,
+  TaskState,
+  NotifyTaskArgs,
+} from "./task.js";
+
 // ── Errors ──
 export {
   AgentNotifyError,

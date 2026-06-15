@@ -20,7 +20,7 @@ import {
   SetFrom,
   TermWrapper,
 } from "@rdfjs/wrapper";
-import { DataFactory } from "n3";
+import { DataFactory, type Store } from "n3";
 import { LDP_INBOX, MAX_BYTES_PROFILE } from "./config.js";
 import {
   type GuardedFetchOptions,
@@ -45,6 +45,16 @@ export interface NotifyOptions {
     url: string,
     opts?: GuardedFetchOptions
   ) => Promise<GuardedFetchResult>;
+  /**
+   * ADVANCED (send-only): augment the notification dataset before it is serialised
+   * to Turtle and POSTed — e.g. embed a shared `wf:Task` body alongside the
+   * `as:Announce` (see `task.ts` / `notifyTaskAssigned`). Receives the n3 `Store`
+   * holding the just-built activity; mutate it via TYPED accessors (never
+   * hand-built quads). May be `async` — the send path `await`s it, so its mutations
+   * are guaranteed complete BEFORE serialise + POST. Ignored by `discoverInbox` /
+   * `readInbox` (no body there).
+   */
+  extend?: (store: Store) => void | Promise<void>;
 }
 
 /** Strip the fragment from a WebID to get its profile DOCUMENT URL (the RDF base). */
