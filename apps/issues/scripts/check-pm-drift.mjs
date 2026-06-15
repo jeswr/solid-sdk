@@ -51,7 +51,8 @@ let skipped = 0;
 for (const entry of lock.files) {
   const pmFile = join(pmDir, entry.src);
   if (!existsSync(pmFile)) {
-    console.warn(`  SKIP  ${entry.src}  (file not found in PM repo — may have been moved)`);
+    console.error(`  DRIFT ${entry.src}  (file not found in PM repo — deleted or moved)`);
+    drifted++;
     skipped++;
     continue;
   }
@@ -69,13 +70,11 @@ for (const entry of lock.files) {
   }
 }
 
-console.log(`\n${ok} unchanged, ${drifted} drifted, ${skipped} skipped`);
+const missingCount = skipped;
+console.log(`\n${ok} unchanged, ${drifted} drifted (${missingCount} missing from PM repo)`);
 if (drifted > 0) {
   console.error(
     "\nDrift detected — review the PM changes and apply the relevant delta to the vendored copies in solid-issues.",
   );
   process.exit(1);
-}
-if (skipped > 0) {
-  console.warn("Some files were skipped (missing from PM repo). Verify manually.");
 }

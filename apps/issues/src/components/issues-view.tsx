@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { useSolidSession } from "@/lib/session-context";
 import { useIssues, type IssueRecord } from "@/lib/use-issues";
@@ -10,6 +11,7 @@ import { type TrackerLocation } from "@/lib/profile";
 import { ConflictError } from "@/lib/errors";
 import { filterAndSort, facets, DEFAULT_QUERY, type IssueQuery, type SortKey } from "@/lib/filter";
 import { SavedViews, type SavedView } from "@/lib/saved-views";
+import { resolveView, viewHref, VIEW_KEY, type View } from "@/lib/view";
 import { STATUSES, type FieldDef, type Priority, type StatusSlug } from "@/lib/issue";
 import { IssueFormDialog, type IssueFormSubmit } from "@/components/issue-form-dialog";
 import { ShareDialog } from "@/components/share-dialog";
@@ -82,9 +84,6 @@ import {
   ListTodo,
 } from "lucide-react";
 
-type View = "list" | "board" | "epics" | "dashboard" | "backlog" | "timeline" | "calendar" | "workload";
-const VIEWS: View[] = ["list", "board", "epics", "backlog", "timeline", "calendar", "dashboard", "workload"];
-const VIEW_KEY = "solid-issues:view";
 const PROJECT_KEY = "solid-issues:project";
 const SORTS: { key: SortKey; label: string }[] = [
   { key: "created", label: "Created" },
@@ -136,18 +135,23 @@ export function IssuesView() {
   const issues = useIssues(tracker.trackerUrl, profile?.webId ?? null);
 
   const [query, setQuery] = useState<IssueQuery>(DEFAULT_QUERY);
-  const [view, setViewState] = useState<View>(() => {
-    const saved = typeof localStorage !== "undefined" ? localStorage.getItem(VIEW_KEY) : null;
-    return VIEWS.includes(saved as View) && saved !== null ? (saved as View) : "list";
-  });
-  const setView = (v: View) => {
-    setViewState(v);
+
+  // URL is the source of truth for the active view (?view=board, etc.).
+  // localStorage is a fallback used only when the URL has no ?view param
+  // (first visit, or the user navigated to "/" bare).
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const view: View = resolveView(searchParams.get("view"), typeof localStorage !== "undefined" ? localStorage : { getItem: () => null, setItem: () => undefined });
+
+  const setView = useCallback((v: View) => {
+    // Drive the URL; the sidebar/bottom-nav highlights follow automatically.
+    router.push(viewHref(v), { scroll: false });
     try {
       localStorage.setItem(VIEW_KEY, v);
     } catch {
       /* private mode */
     }
-  };
+  }, [router]);
   const [groupBy, setGroupBy] = useState<"status" | "priority">("status");
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<IssueRecord | undefined>(undefined);
@@ -284,7 +288,7 @@ export function IssuesView() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [issues.canCreate]);
+  }, [issues.canCreate, setView]);
 
   const saveCurrentView = () => {
     const name = viewName.trim();
