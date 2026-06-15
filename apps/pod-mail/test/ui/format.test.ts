@@ -46,6 +46,12 @@ describe("formatDate", () => {
   it("formats a date as YYYY-MM-DD HH:MM (UTC)", () => {
     expect(formatDate(new Date("2026-06-15T12:34:56Z"))).toBe("2026-06-15 12:34");
   });
+
+  it("returns an em-dash for an invalid Date without throwing", () => {
+    const invalid = new Date("garbage");
+    expect(() => formatDate(invalid)).not.toThrow();
+    expect(formatDate(invalid)).toBe("—");
+  });
 });
 
 describe("safeHref", () => {

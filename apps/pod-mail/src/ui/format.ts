@@ -41,11 +41,15 @@ export function formatSender(sender: string | undefined): string {
 
 /**
  * ISO-date-time (`YYYY-MM-DD HH:MM`) for a message timestamp, or `"—"` when
- * absent. Deliberately locale-independent (no `toLocaleString`) so the rendered
- * value is stable across environments and trivially assertable in a test.
+ * absent OR invalid. Deliberately locale-independent (no `toLocaleString`) so
+ * the rendered value is stable across environments and trivially assertable in
+ * a test. A message timestamp is UNTRUSTED RDF; an unparseable date literal can
+ * surface as an `Invalid Date`, whose `toISOString()` throws
+ * `RangeError: Invalid time value` and would crash the row render — so we guard
+ * with `Number.isNaN(date.getTime())` and fall back to the same em-dash.
  */
 export function formatDate(date: Date | undefined): string {
-  if (date === undefined) {
+  if (date === undefined || Number.isNaN(date.getTime())) {
     return "—";
   }
   const iso = date.toISOString();
