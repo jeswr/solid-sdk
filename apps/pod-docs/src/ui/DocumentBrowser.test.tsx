@@ -156,12 +156,17 @@ describe("DocumentBrowser — opening + navigating", () => {
         }),
       },
     });
-    render(<DocumentBrowser podRoot={POD} webId={WEBID} fetch={fetch} />);
+    const { container } = render(<DocumentBrowser podRoot={POD} webId={WEBID} fetch={fetch} />);
 
     fireEvent.click(await screen.findByRole("button", { name: /My notes/i }));
 
-    expect(await screen.findByText("the body content")).toBeInTheDocument();
-    expect(screen.getByText("text/markdown")).toBeInTheDocument();
+    // The persisted body is rendered in the read-only <pre> AND seeded into the
+    // editor textarea — assert the <pre> specifically (the body appears twice).
+    await screen.findByText("text/markdown");
+    expect(container.querySelector(".pod-docs-body")?.textContent).toBe("the body content");
+    expect((container.querySelector(".pod-docs-edit-body") as HTMLTextAreaElement)?.value).toBe(
+      "the body content",
+    );
     expect(screen.getByText(WEBID)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /back to documents/i }));
@@ -176,7 +181,13 @@ describe("DocumentBrowser — opening + navigating", () => {
     });
     const { container } = render(<DocumentBrowser podRoot={POD} webId={WEBID} fetch={fetch} />);
     fireEvent.click(await screen.findByRole("button", { name: /My notes/i }));
-    expect(await screen.findByText(hostile)).toBeInTheDocument();
+    // The hostile string is rendered as ESCAPED TEXT in the <pre> and seeded as
+    // an inert textarea value — never parsed into live markup.
+    const pre = await screen.findByText(hostile, { selector: ".pod-docs-body" });
+    expect(pre).toBeInTheDocument();
+    expect((container.querySelector(".pod-docs-edit-body") as HTMLTextAreaElement)?.value).toBe(
+      hostile,
+    );
     // The hostile markup is NOT parsed into a live <img> in the document.
     expect(container.querySelector("img")).toBeNull();
   });
@@ -188,7 +199,7 @@ describe("DocumentBrowser — opening + navigating", () => {
     });
     render(<DocumentBrowser podRoot={POD} webId={WEBID} fetch={fetch} />);
     fireEvent.click(await screen.findByRole("button", { name: /My notes/i }));
-    await screen.findByText("hello body text");
+    await screen.findByText("hello body text", { selector: ".pod-docs-body" });
     expect(screen.queryByText("Author")).not.toBeInTheDocument();
   });
 });
@@ -209,5 +220,226 @@ describe("DocumentBrowser — global-fetch fallback", () => {
     } finally {
       globalThis.fetch = original;
     }
+  });
+});
+
+// ── WRITE flow (create + save-edit) end-to-end against the real DocsStore. ─────
+
+const PRIVATE_INDEX = "https://alice.pod/settings/privateTypeIndex.ttl";
+
+/**
+ * A WRITE-aware fetch stub: serves the container + documents on GET, a WebID
+ * pre-linked to a private Type Index ALREADY carrying the pod-docs registration
+ * (so `DocsStore.create`'s `ensureRegistered` does no extra writes), and accepts
+ * any PUT inside the container. `putStatus` lets a test fail the document write.
+ */
+function writeStub(opts: {
+  documents?: Record<string, { body?: string; status?: number; etag?: string }>;
+  containerChildren?: string[];
+  putStatus?: number;
+  onPut?: (url: string, body: string) => void;
+}): typeof fetch {
+  const documents = opts.documents ?? {};
+  const indexBody = `
+    @prefix solid: <http://www.w3.org/ns/solid/terms#> .
+    @prefix pd: <https://w3id.org/jeswr/pod-docs#> .
+    <> a solid:TypeIndex .
+    <#reg> a solid:TypeRegistration ; solid:forClass pd:Document ;
+      solid:instanceContainer <${CONTAINER}> .
+  `;
+  return (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = typeof input === "string" ? input : input.toString();
+    const method = (init?.method ?? "GET").toUpperCase();
+
+    if (method === "PUT") {
+      if (url.startsWith(CONTAINER) && url.endsWith(".ttl")) {
+        opts.onPut?.(url, init?.body as string);
+        const status = opts.putStatus ?? 201;
+        if (status >= 400) return new Response("err", { status });
+        return new Response(null, { status, headers: { etag: 'W/"new"' } });
+      }
+      return new Response(null, { status: 201 });
+    }
+
+    // GET routes.
+    if (url === WEBID) {
+      return new Response(
+        `<${WEBID}> <http://www.w3.org/ns/solid/terms#privateTypeIndex> <${PRIVATE_INDEX}> .`,
+        { status: 200, headers: { "content-type": "text/turtle", etag: 'W/"p"' } },
+      );
+    }
+    if (url === PRIVATE_INDEX) {
+      return new Response(indexBody, {
+        status: 200,
+        headers: { "content-type": "text/turtle", etag: 'W/"i"' },
+      });
+    }
+    if (url === CONTAINER) {
+      return new Response(containerTtl(opts.containerChildren ?? []), {
+        status: 200,
+        headers: { "content-type": "text/turtle" },
+      });
+    }
+    const doc = documents[url];
+    if (doc) {
+      if (doc.status && doc.status >= 400) return new Response("err", { status: doc.status });
+      return new Response(doc.body ?? "", {
+        status: 200,
+        headers: { "content-type": "text/turtle", etag: doc.etag ?? 'W/"e"' },
+      });
+    }
+    return new Response("not found", { status: 404 });
+  }) as typeof fetch;
+}
+
+describe("DocumentBrowser — creating a document", () => {
+  it("expands the form, creates a document optimistically, shows Saved and opens it", async () => {
+    const fetch = writeStub({ containerChildren: [] });
+    render(<DocumentBrowser podRoot={POD} webId={WEBID} fetch={fetch} />);
+    await screen.findByText(/no documents yet/i);
+
+    fireEvent.click(screen.getByRole("button", { name: /new document/i }));
+    fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Fresh Doc" } });
+    fireEvent.change(screen.getByLabelText("Body"), { target: { value: "hello world" } });
+    fireEvent.click(screen.getByRole("button", { name: /create document/i }));
+
+    // Optimistic: a "Saving…" indicator appears immediately.
+    expect(screen.getByText(/saving…/i)).toBeInTheDocument();
+    // On persist, the new document opens (its body is shown in the <pre>) and
+    // Saved is shown.
+    expect(
+      await screen.findByText("hello world", { selector: ".pod-docs-body" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/^Saved$/)).toBeInTheDocument();
+  });
+
+  it("reverts and shows an error when the create write fails", async () => {
+    const fetch = writeStub({ containerChildren: [], putStatus: 500 });
+    render(<DocumentBrowser podRoot={POD} webId={WEBID} fetch={fetch} />);
+    await screen.findByText(/no documents yet/i);
+
+    fireEvent.click(screen.getByRole("button", { name: /new document/i }));
+    fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Doomed" } });
+    fireEvent.click(screen.getByRole("button", { name: /create document/i }));
+
+    // The failure surfaces and the optimistic row is reverted (back to empty).
+    expect(await screen.findByRole("alert")).toHaveTextContent(/500|fail|write/i);
+    expect(screen.queryByText("Doomed")).not.toBeInTheDocument();
+    expect(screen.getByText(/no documents yet/i)).toBeInTheDocument();
+  });
+
+  it("disables Create while the title and body are both blank", async () => {
+    const fetch = writeStub({ containerChildren: [] });
+    render(<DocumentBrowser podRoot={POD} webId={WEBID} fetch={fetch} />);
+    await screen.findByText(/no documents yet/i);
+    fireEvent.click(screen.getByRole("button", { name: /new document/i }));
+    expect(screen.getByRole("button", { name: /create document/i })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Title"), { target: { value: "x" } });
+    expect(screen.getByRole("button", { name: /create document/i })).toBeEnabled();
+  });
+
+  it("ignores a blank form submit (the guard mirrors the disabled button)", async () => {
+    let puts = 0;
+    const fetch = writeStub({ containerChildren: [], onPut: () => puts++ });
+    const { container } = render(<DocumentBrowser podRoot={POD} webId={WEBID} fetch={fetch} />);
+    await screen.findByText(/no documents yet/i);
+    fireEvent.click(screen.getByRole("button", { name: /new document/i }));
+    // Submit the form directly while both fields are blank (bypassing the
+    // disabled submit button) — the onSubmit guard must short-circuit, no I/O.
+    const form = container.querySelector(".pod-docs-new-form") as HTMLFormElement;
+    fireEvent.submit(form);
+    expect(puts).toBe(0);
+    expect(screen.queryByText(/saving…/i)).not.toBeInTheDocument();
+  });
+
+  it("cancels the form without creating anything", async () => {
+    const fetch = writeStub({ containerChildren: [] });
+    render(<DocumentBrowser podRoot={POD} webId={WEBID} fetch={fetch} />);
+    await screen.findByText(/no documents yet/i);
+    fireEvent.click(screen.getByRole("button", { name: /new document/i }));
+    fireEvent.change(screen.getByLabelText("Title"), { target: { value: "abandoned" } });
+    fireEvent.click(screen.getByRole("button", { name: /cancel/i }));
+    expect(screen.queryByLabelText("Title")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /new document/i })).toBeInTheDocument();
+  });
+
+  it("surfaces a 403 on create as a permission error", async () => {
+    const fetch = writeStub({ containerChildren: [], putStatus: 403 });
+    render(<DocumentBrowser podRoot={POD} webId={WEBID} fetch={fetch} />);
+    await screen.findByText(/no documents yet/i);
+    fireEvent.click(screen.getByRole("button", { name: /new document/i }));
+    fireEvent.change(screen.getByLabelText("Body"), { target: { value: "b" } });
+    fireEvent.click(screen.getByRole("button", { name: /create document/i }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/permission/i);
+  });
+});
+
+describe("DocumentBrowser — saving an edit to an open document", () => {
+  it("edits the body, saves optimistically and shows Saved", async () => {
+    let putBody = "";
+    const fetch = writeStub({
+      containerChildren: [DOC],
+      documents: { [DOC]: { body: docTtl({ title: "My notes", body: "original" }) } },
+      onPut: (_url, body) => {
+        putBody = body;
+      },
+    });
+    render(<DocumentBrowser podRoot={POD} webId={WEBID} fetch={fetch} />);
+    fireEvent.click(await screen.findByRole("button", { name: /My notes/i }));
+
+    const editor = await screen.findByLabelText("Body");
+    fireEvent.change(editor, { target: { value: "revised text" } });
+    fireEvent.click(screen.getByRole("button", { name: /^Save$/ }));
+
+    expect(await screen.findByText(/^Saved$/)).toBeInTheDocument();
+    // The new body was serialised into the PUT (a new PROV revision).
+    expect(putBody).toContain("revised text");
+  });
+
+  it("reverts the body and shows an error when the save write fails", async () => {
+    const fetch = writeStub({
+      containerChildren: [DOC],
+      documents: { [DOC]: { body: docTtl({ title: "My notes", body: "original" }) } },
+      putStatus: 409,
+    });
+    render(<DocumentBrowser podRoot={POD} webId={WEBID} fetch={fetch} />);
+    fireEvent.click(await screen.findByRole("button", { name: /My notes/i }));
+    const editor = await screen.findByLabelText("Body");
+    fireEvent.change(editor, { target: { value: "revised text" } });
+    fireEvent.click(screen.getByRole("button", { name: /^Save$/ }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/409|fail|write/i);
+    // The persisted body (rendered in the <pre>) remains the original.
+    expect(screen.getByText("original")).toBeInTheDocument();
+  });
+
+  it("ignores a clean (un-edited) save submit (the guard mirrors the disabled button)", async () => {
+    let puts = 0;
+    const fetch = writeStub({
+      containerChildren: [DOC],
+      documents: { [DOC]: { body: docTtl({ title: "My notes", body: "original" }) } },
+      onPut: () => puts++,
+    });
+    const { container } = render(<DocumentBrowser podRoot={POD} webId={WEBID} fetch={fetch} />);
+    fireEvent.click(await screen.findByRole("button", { name: /My notes/i }));
+    await screen.findByLabelText("Body");
+    // Submit the edit form without changing the body (bypassing the disabled
+    // Save button) — the not-dirty guard must short-circuit, no PUT.
+    const form = container.querySelector(".pod-docs-edit-form") as HTMLFormElement;
+    fireEvent.submit(form);
+    expect(puts).toBe(0);
+  });
+
+  it("disables Save until the body is edited (dirty tracking)", async () => {
+    const fetch = writeStub({
+      containerChildren: [DOC],
+      documents: { [DOC]: { body: docTtl({ title: "My notes", body: "original" }) } },
+    });
+    render(<DocumentBrowser podRoot={POD} webId={WEBID} fetch={fetch} />);
+    fireEvent.click(await screen.findByRole("button", { name: /My notes/i }));
+    await screen.findByLabelText("Body");
+    expect(screen.getByRole("button", { name: /^Save$/ })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Body"), { target: { value: "changed" } });
+    expect(screen.getByRole("button", { name: /^Save$/ })).toBeEnabled();
   });
 });

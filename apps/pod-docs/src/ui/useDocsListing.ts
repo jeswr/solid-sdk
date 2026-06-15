@@ -23,9 +23,19 @@ import {
   createDocsStore,
   type DocsStore,
   type DocumentEntry,
+  nameFromUrl,
   type StoredDocument,
 } from "../store.js";
 import { errorMessage } from "./format.js";
+
+/**
+ * The lifecycle of a write (create / save-edit) as the view renders it: `idle`
+ * before any write, `saving` while the pod PUT is in flight (the optimistic
+ * state is already visible), `saved` on success, `failed` when the persist
+ * rejected (the optimistic change has been reverted). Drives the
+ * "Saving…/Saved/failed" indicator.
+ */
+export type SaveStatus = "idle" | "saving" | "saved" | "failed";
 
 /** True when a caught value is an HTTP access failure (401 / 403). */
 function isAccessFailure(err: unknown): err is { status: 401 | 403 } {
@@ -63,6 +73,41 @@ export interface DocsListingState {
   close: () => void;
   /** Re-fetch the listing (e.g. a manual "retry" after an error). */
   refresh: () => void;
+  /**
+   * The current write lifecycle for the create / save-edit flows — drives the
+   * "Saving…/Saved/failed" indicator. `idle` until the first write.
+   */
+  saveStatus: SaveStatus;
+  /**
+   * A user-facing error for the last write that failed, or `null`. A 401/403 is
+   * reported with a login-/permission-flavoured message; any other failure is
+   * generic. (`saveStatus === "failed"` whenever this is set.)
+   */
+  saveError: string | null;
+  /** True when the last write error was an authentication/authorization failure. */
+  isSaveAccessError: boolean;
+  /**
+   * Create a new document (optimistic): a placeholder row is inserted into the
+   * listing immediately, the pod write runs async, and on success the row is
+   * replaced with the persisted entry and the document is opened. On failure the
+   * placeholder is removed and `saveStatus` becomes `failed` with `saveError`.
+   * Rejects (and surfaces an error) when `title` and `body` are both blank.
+   */
+  createDocument: (input: { title: string; body: string }) => Promise<void>;
+  /**
+   * Save an edit to the currently-open document's body (optimistic): the open
+   * document's body updates immediately, the pod write (a new PROV revision)
+   * runs async under the document's `If-Match` etag. On success the open
+   * document is refreshed with the new etag/revision; on failure the body is
+   * reverted and `saveStatus` becomes `failed`. A no-op when no document is open.
+   * SINGLE-FLIGHT (per document): calling this while a save to the SAME open
+   * document is already in flight is a no-op (the second call returns
+   * immediately, no second write) — so saves to one document never overlap and a
+   * save always resolves against the etag/body it started from (no lost update /
+   * etag desync). A save to a DIFFERENT document (after navigating to open it) is
+   * NOT blocked by another document's in-flight save.
+   */
+  saveOpenDocument: (body: string) => Promise<void>;
 }
 
 /** Options for {@link useDocsListing}. */
@@ -114,6 +159,9 @@ export function useDocsListing(
   const [opening, setOpening] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isAccessError, setIsAccessError] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [isSaveAccessError, setIsSaveAccessError] = useState(false);
   // Bumped to force a re-fetch of the listing (refresh) without a store change.
   const [reloadToken, setReloadToken] = useState(0);
   // Monotonic id for the in-flight async op; bumped on every navigation action
@@ -123,6 +171,44 @@ export function useDocsListing(
   // use a render-mutated ref; this guard is only ever read/written in effects
   // and event handlers, never during render.
   const requestRef = useRef(0);
+  // Monotonic seed for the temporary URL of an optimistic create placeholder —
+  // kept separate from the request guard so the two concerns don't conflate.
+  const tempIdRef = useRef(0);
+  // SINGLE-FLIGHT guard for saveOpenDocument(), scoped PER DOCUMENT URL. Holds the
+  // SET of document URLs whose saves are currently in flight. A URL is added
+  // SYNCHRONOUSLY at the top of a save and removed in a `finally`, so a second
+  // saveOpenDocument() to a document whose URL is already in the set while one is
+  // still in flight is a no-op (returns early) — overlapping saves to the SAME
+  // document CANNOT occur. A Set (not a single URL) is required so that EACH
+  // document is independently single-flighted: with a single-URL ref, a save to
+  // doc B would overwrite A's marker, so a SECOND save to A (while A's first save
+  // is still settling) would no longer be blocked → A could double-save. The Set
+  // tracks every in-flight document at once, so A stays single-flighted regardless
+  // of whether B is also saving, while different docs save concurrently. This is
+  // the robust fix for the lost-update / etag-desync
+  // class of races (two were surfaced in the prior id-reconcile approach): with at
+  // most one save in flight PER DOC, every save resolves against the etag/body it
+  // STARTED from — there is no "older vs newer save" ordering to reconcile, no
+  // late-resolving older save to discard, no inconsistent persisted state.
+  //
+  // Why per-URL and not a global boolean: a global latch would WEDGE a different
+  // document. If a save for doc A is still in flight and the user navigates to open
+  // doc B, a global latch (still held by A) would silently block B's save forever.
+  // The single-flight invariant is only meaningful within ONE document — A's
+  // in-flight save is no longer this editor's concern once the open doc is B (and
+  // A's result can't apply to B: the navigate-away `live.url === current.url` guard
+  // below already drops it). So we block only a save to the SAME URL that already
+  // has one in flight; a save to a DIFFERENT open document always proceeds.
+  //
+  // The Save button is also disabled while `saveStatus === "saving"` (defense-in-
+  // depth), but a fast / programmatic double-call can still race the async state
+  // update, so the synchronous ref — not the disabled button — is what actually
+  // closes the race. Imperative bookkeeping — a ref is the right home (read/written
+  // only in event handlers, never during render). The navigate-away guard below
+  // (`live.url === current.url`) is STILL required: a single in-flight save can
+  // resolve after the user has navigated to a different open document, and its
+  // result must not apply to that other doc.
+  const saveInFlightUrlsRef = useRef<Set<string>>(new Set());
   // Tracks the store the navigation state currently belongs to, kept in STATE
   // (not a ref) so the store-change reset is concurrent-rendering safe.
   const [prevStore, setPrevStore] = useState(store);
@@ -149,6 +235,11 @@ export function useDocsListing(
     setOpening(false);
     setError(null);
     setIsAccessError(false);
+    // A new pod/WebID also resets the write indicator — a "Saved"/"failed" from
+    // the previous store must not bleed into the new one's view.
+    setSaveStatus("idle");
+    setSaveError(null);
+    setIsSaveAccessError(false);
   }
 
   // `reloadToken` is a deliberate re-fetch TRIGGER (bumped by refresh()): it is
@@ -253,6 +344,163 @@ export function useDocsListing(
     setReloadToken((n) => n + 1);
   }, []);
 
+  // Classify a write failure into the user-facing save indicator. Mirrors the
+  // read path's 401/403 handling so a create/save surfaces the same login-vs-
+  // permission message; any other failure (412 clobber, network, …) is generic.
+  const reportSaveFailure = useCallback((err: unknown) => {
+    if (isAccessFailure(err)) {
+      setIsSaveAccessError(true);
+      setSaveError(
+        err.status === 401
+          ? "You need to log in to save changes."
+          : "You don't have permission to save changes here.",
+      );
+    } else {
+      setIsSaveAccessError(false);
+      setSaveError(errorMessage(err));
+    }
+    setSaveStatus("failed");
+  }, []);
+
+  const createDocument = useCallback(
+    async (input: { title: string; body: string }) => {
+      const title = input.title.trim();
+      const body = input.body.trim();
+      // Validation: a document with neither a title nor a body is rejected
+      // before any optimistic insert or pod I/O — there is nothing to create.
+      if (title === "" && body === "") {
+        setIsSaveAccessError(false);
+        setSaveError("Enter a title or some content before creating a document.");
+        setSaveStatus("failed");
+        return;
+      }
+
+      // Optimistic insert: a placeholder row keyed by a temporary, local-only URL
+      // appears in the listing IMMEDIATELY, before the pod write resolves. The
+      // temp URL is never sent to the pod and is replaced by the real persisted
+      // URL on success. Bump the read guard so a concurrent list()/open() read
+      // resolving mid-create can't wipe the placeholder out from under us.
+      requestRef.current++;
+      const tempUrl = `pod-docs:pending:${++tempIdRef.current}`;
+      const placeholder: DocumentEntry = {
+        url: tempUrl,
+        name: title || "Untitled",
+        title,
+        isContainer: false,
+        modified: new Date().toISOString(),
+      };
+      setEntries((prev) => [...prev, placeholder]);
+      setSaveStatus("saving");
+      setSaveError(null);
+      setIsSaveAccessError(false);
+
+      try {
+        const { url, etag } = await store.create({ title, body });
+        // Swap the placeholder for the persisted entry (real URL keeps the row
+        // stable for React + makes it openable). Then open the new document so
+        // the author lands in it.
+        setEntries((prev) =>
+          prev.map((e) => (e.url === tempUrl ? { ...e, url, name: nameFromUrl(url) } : e)),
+        );
+        setSaveStatus("saved");
+        const created: StoredDocument = {
+          url,
+          etag,
+          data: {
+            title,
+            body,
+            format: "text/html",
+            created: placeholder.modified,
+            modified: placeholder.modified,
+            revisions: [],
+          },
+        };
+        // Show the freshly-created document. Bump the request id so any in-flight
+        // open()/list() read can't later clobber this navigation.
+        requestRef.current++;
+        setOpenDocument(created);
+        setOpening(false);
+      } catch (err) {
+        // Revert: drop the optimistic placeholder so the listing reflects the
+        // pod's true (unchanged) state, and surface the failure.
+        setEntries((prev) => prev.filter((e) => e.url !== tempUrl));
+        reportSaveFailure(err);
+      }
+    },
+    [store, reportSaveFailure],
+  );
+
+  const saveOpenDocument = useCallback(
+    async (body: string) => {
+      const current = openDocument;
+      if (current === null) return; // nothing open to save
+
+      // SINGLE-FLIGHT (per document): if a save to THIS document is already in
+      // flight, this overlapping call is a no-op — return WITHOUT a second
+      // optimistic update or pod write. (See saveInFlightUrlsRef.) The latch is
+      // synchronous, so it wins the race even when the `saving` status / disabled
+      // Save button hasn't propagated to the DOM yet. With at most one save in
+      // flight per doc, the in-flight save always resolves against the etag/body it
+      // started from — no lost update, no etag desync. Because the set tracks EVERY
+      // in-flight URL, THIS document stays single-flighted regardless of whether
+      // another document is also saving. A save to a DIFFERENT open document is NOT
+      // blocked: navigating to open doc B never wedges B's save just because A's
+      // save is still settling.
+      const inFlight = saveInFlightUrlsRef.current;
+      if (inFlight.has(current.url)) return;
+      inFlight.add(current.url);
+
+      // Optimistic body update: reflect the edit in the open view immediately.
+      const previous = current;
+      const optimistic: StoredDocument = {
+        ...current,
+        data: { ...current.data, body, modified: new Date().toISOString() },
+      };
+      setOpenDocument(optimistic);
+      setSaveStatus("saving");
+      setSaveError(null);
+      setIsSaveAccessError(false);
+
+      try {
+        const { etag } = await store.save(
+          current.url,
+          {
+            title: current.data.title,
+            body,
+            format: current.data.format,
+            creator: current.data.creator,
+            created: current.data.created,
+            priorRevisions: current.data.revisions,
+          },
+          current.etag,
+        );
+        // Commit the new etag so a subsequent save sends the right If-Match. We
+        // only mutate the open document if the user hasn't navigated away from
+        // THIS resource in the meantime (a store change / close / open-of-another
+        // would have replaced it). This navigate-away guard is independent of the
+        // single-flight latch: the one in-flight save can resolve after a
+        // navigation, and its etag/body must not apply to a different open doc.
+        setOpenDocument((live) =>
+          live && live.url === current.url ? { ...live, etag, data: { ...live.data, body } } : live,
+        );
+        setSaveStatus("saved");
+      } catch (err) {
+        // Revert the body to the pre-edit state (only if still on this resource).
+        setOpenDocument((live) => (live && live.url === current.url ? previous : live));
+        reportSaveFailure(err);
+      } finally {
+        // Release the single-flight latch once this save has settled (resolved or
+        // rejected) so the next save to THIS document can proceed. Remove ONLY this
+        // save's own URL from the set: were two saves to two different docs in
+        // flight concurrently (A in flight, user opens B and saves B), A settling
+        // must not wipe B's in-flight marker — the set holds B's URL independently,
+        // so deleting A's URL leaves B's marker untouched.
+        inFlight.delete(current.url);
+      }
+    },
+    [store, openDocument, reportSaveFailure],
+  );
+
   return {
     entries,
     openDocument,
@@ -263,5 +511,10 @@ export function useDocsListing(
     open,
     close,
     refresh,
+    saveStatus,
+    saveError,
+    isSaveAccessError,
+    createDocument,
+    saveOpenDocument,
   };
 }

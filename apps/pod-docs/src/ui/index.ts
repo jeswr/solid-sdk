@@ -22,6 +22,7 @@ export {
 } from "./format.js";
 export {
   type DocsListingState,
+  type SaveStatus,
   type UseDocsListingOptions,
   useDocsListing,
 } from "./useDocsListing.js";
