@@ -24,11 +24,27 @@ registration documents.
 
 ## Install
 
+Not yet on npm — install directly from the GitHub branch (npm publish deferred):
+
 ```sh
-npm install @jeswr/federation-client
+npm install github:jeswr/federation-client#main
 ```
 
+This works with **no build step**, even under `ignore-scripts=true`: the
+committed `dist/` is self-contained. The package's one off-npm dependency,
+[`@jeswr/fetch-rdf`](https://github.com/jeswr/fetch-rdf), is **bundled (inlined)**
+into `dist/index.js`; every other runtime dependency (`n3`, `@solid/object`,
+`@rdfjs/wrapper`, and fetch-rdf's own runtime deps `jsonld-streaming-parser` +
+`content-type`) is npm-published and resolves normally. So a consumer never needs
+to clone or build `@jeswr/fetch-rdf`.
+
 Peer runtime: Node ≥ 24 (a transitive requirement of `@solid/object`), ESM only.
+
+> **Maintainers — the committed `dist/` is the install artifact.** Because
+> consumers install from this branch without running the build, you MUST rebuild
+> and commit `dist/` whenever `src/` changes: `npm run build` then commit `dist/`.
+> The `npm run check:dist` gate fails CI/pre-merge if the committed `dist/` has
+> drifted from `src/`.
 
 ## Surface
 
@@ -150,8 +166,14 @@ npm install
 npm run lint        # biome
 npm run typecheck   # tsc --noEmit
 npm test            # vitest
-npm run build       # tsc → dist/
+npm run build       # esbuild: bundle src/ (+ inline @jeswr/fetch-rdf) → dist/index.js; tsc → dist/*.d.ts
+npm run check:dist  # fail if committed dist/ has drifted from src/
 ```
+
+`npm run build` produces the **committed, self-contained `dist/`** (esbuild inlines
+the off-npm `@jeswr/fetch-rdf`, keeps every npm-published dep external; tsc emits the
+`.d.ts`). After any change to `src/`, run `npm run build` and commit the regenerated
+`dist/` — `npm run check:dist` enforces that the artifact matches the source.
 
 ## License
 

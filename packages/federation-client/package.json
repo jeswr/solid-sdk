@@ -17,10 +17,12 @@
   ],
   "scripts": {
     "build:deps": "node scripts/build-deps.mjs",
-    "build": "npm run build:deps && tsc -p tsconfig.json",
+    "build": "node scripts/build-dist.mjs",
+    "build:dev": "npm run build:deps && tsc -p tsconfig.json",
+    "check:dist": "node scripts/check-dist-fresh.mjs",
     "typecheck": "npm run build:deps && tsc -p tsconfig.json --noEmit",
-    "lint": "biome check src test",
-    "lint:fix": "biome check --write src test",
+    "lint": "biome check src test scripts",
+    "lint:fix": "biome check --write src test scripts",
     "test": "npm run build:deps && vitest run",
     "test:coverage": "npm run build:deps && vitest run --coverage",
     "prepare": "npm run build"
@@ -46,17 +48,20 @@
   },
   "homepage": "https://github.com/jeswr/federation-client#readme",
   "dependencies": {
-    "@jeswr/fetch-rdf": "github:jeswr/fetch-rdf#main",
     "@rdfjs/wrapper": "^0.34.0",
     "@solid/object": "^0.6.0",
+    "content-type": "^1.0.5",
+    "jsonld-streaming-parser": "^5.0.0",
     "n3": "^2.0.3"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.0.0",
+    "@jeswr/fetch-rdf": "github:jeswr/fetch-rdf#main",
     "@rdfjs/types": "^2.0.1",
     "@types/n3": "^1.16.0",
     "@types/node": "^22.0.0",
     "@vitest/coverage-v8": "^2.1.0",
+    "esbuild": "^0.21.5",
     "typescript": "^5.6.0",
     "vitest": "^2.1.0"
   },

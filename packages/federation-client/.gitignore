@@ -3,6 +3,5 @@
 .vscode/
 *.swp
 node_modules/
-dist/
 coverage/
 .roborev/
