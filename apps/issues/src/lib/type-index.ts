@@ -41,6 +41,13 @@ class TypeRegistration extends TermWrapper {
   set instance(v: string | undefined) {
     OptionalAs.object(this, solid("instance"), v, NamedNodeFrom.string);
   }
+  /** A container whose members are instances of `forClass` (`solid:instanceContainer`). */
+  get instanceContainer(): string | undefined {
+    return OptionalFrom.subjectPredicate(this, solid("instanceContainer"), NamedNodeAs.string);
+  }
+  set instanceContainer(v: string | undefined) {
+    OptionalAs.object(this, solid("instanceContainer"), v, NamedNodeFrom.string);
+  }
   get types(): Set<string> {
     return SetFrom.subjectPredicate(this, `${RDF}type`, NamedNodeAs.string, NamedNodeFrom.string);
   }
@@ -55,7 +62,7 @@ class TypeIndexDataset extends DatasetWrapper {
     return this.instancesOf(solid("TypeRegistration"), TypeRegistration);
   }
 
-  /** All instance URLs registered for a class IRI. */
+  /** All `solid:instance` URLs registered for a class IRI. */
   locate(classIri: string): string[] {
     const out: string[] = [];
     for (const reg of this.registrations) {
@@ -64,12 +71,36 @@ class TypeIndexDataset extends DatasetWrapper {
     return out;
   }
 
-  /** Add (or refresh) a registration mapping `classIri` → `instanceUrl`. */
+  /**
+   * All `solid:instanceContainer` URLs registered for a class IRI.
+   * Used by the Pod Manager to enumerate cross-app `wf:Task` containers.
+   */
+  locateContainers(classIri: string): string[] {
+    const out: string[] = [];
+    for (const reg of this.registrations) {
+      if (reg.forClass === classIri && reg.instanceContainer) out.push(reg.instanceContainer);
+    }
+    return out;
+  }
+
+  /** Add (or refresh) a registration mapping `classIri` → `instanceUrl` via `solid:instance`. */
   register(indexUrl: string, fragment: string, classIri: string, instanceUrl: string): void {
     const reg = new TypeRegistration(`${indexUrl}${fragment}`, this, this.factory);
     reg.markRegistration();
     reg.forClass = classIri;
     reg.instance = instanceUrl;
+  }
+
+  /**
+   * Add (or refresh) a registration mapping `classIri` → `containerUrl` via
+   * `solid:instanceContainer` (used for the `wf:Task` issues container so that
+   * cross-app discovery enumerates individual tasks, not just the tracker document).
+   */
+  registerContainer(indexUrl: string, fragment: string, classIri: string, containerUrl: string): void {
+    const reg = new TypeRegistration(`${indexUrl}${fragment}`, this, this.factory);
+    reg.markRegistration();
+    reg.forClass = classIri;
+    reg.instanceContainer = containerUrl;
   }
 
   /** Stamp the document as a public, listed type index. */
@@ -143,10 +174,28 @@ export async function resolveTrackerFromTypeIndex(
 }
 
 /**
+ * The `issues/` container URL for a tracker document.  Mirrors
+ * `Repository.containerUrl` but kept here to avoid a circular dep between
+ * type-index.ts and repository.ts.
+ */
+function issuesContainerUrl(trackerUrl: string): string {
+  const dir = trackerUrl.slice(0, trackerUrl.lastIndexOf("/") + 1);
+  return new URL("issues/", dir).toString();
+}
+
+/**
  * Ensure the user's public type index exists and registers their tracker. Creates
  * the index document and links it from the profile when absent (create-and-link,
  * per the solid-type-index skill). Best-effort: discovery is a convenience, so a
  * failure here is reported via the returned boolean rather than thrown.
+ *
+ * Two registrations are written per tracker:
+ *   • `solid:forClass wf:Tracker ; solid:instance <trackerUrl>`
+ *     — lets other solid-issues instances find the tracker config.
+ *   • `solid:forClass wf:Task ; solid:instanceContainer <issues/>`
+ *     — lets cross-app consumers (e.g. the Pod Manager) enumerate individual
+ *     `wf:Task` resources without needing to parse the tracker config first
+ *     (D6, FEDERATION-DESIGN.staged.md §2.1).
  */
 export async function registerTracker(
   webId: string,
@@ -168,7 +217,7 @@ export async function registerTracker(
       await conditionalPut(profileDocUrl(webId), profile, profileEtag, doFetch);
     }
 
-    // 2. Load (or start) the index and ensure the tracker registration is present.
+    // 2. Load (or start) the index and ensure both registrations are present.
     let indexDataset: DatasetCore;
     let indexEtag: string | null;
     try {
@@ -185,9 +234,17 @@ export async function registerTracker(
     }
     const index = new TypeIndexDataset(indexDataset, DataFactory);
     index.markPublicIndex(indexUrl);
+    // wf:Tracker registration (solid:instance → the tracker config document).
     if (!index.locate(wf("Tracker")).includes(trackerUrl)) {
       // Unique fragment: a shared index may already carry other apps' entries.
       index.register(indexUrl, `#registration-${crypto.randomUUID()}`, wf("Tracker"), trackerUrl);
+    }
+    // wf:Task instanceContainer registration (solid:instanceContainer → issues/).
+    // This is the cross-app discovery seam: the Pod Manager enumerates wf:Task
+    // containers from the type index rather than parsing the tracker config.
+    const container = issuesContainerUrl(trackerUrl);
+    if (!index.locateContainers(wf("Task")).includes(container)) {
+      index.registerContainer(indexUrl, `#registration-${crypto.randomUUID()}`, wf("Task"), container);
     }
     await conditionalPut(indexUrl, indexDataset, indexEtag, doFetch);
     // The public index must be world-readable for others to discover the tracker
@@ -196,6 +253,32 @@ export async function registerTracker(
     return true;
   } catch {
     return false;
+  }
+}
+
+/**
+ * All `wf:Task` instance-container URLs a WebID has registered in their public
+ * type index.  The Pod Manager calls this to enumerate solid-issues' issue
+ * containers for cross-app discovery (D6, FEDERATION-DESIGN.staged.md §2.1).
+ * Empty when no index or no registration exists.
+ */
+export async function resolveTaskContainersFromTypeIndex(
+  webId: string,
+  fetchImpl?: typeof fetch,
+): Promise<string[]> {
+  let profile: DatasetCore;
+  try {
+    profile = (await fetchRdf(webId, opts(fetchImpl))).dataset;
+  } catch {
+    return [];
+  }
+  const indexUrl = new ProfileLinks(webId, profile, DataFactory).publicTypeIndex;
+  if (!indexUrl) return [];
+  try {
+    const { dataset } = await fetchRdf(indexUrl, opts(fetchImpl));
+    return new TypeIndexDataset(dataset, DataFactory).locateContainers(wf("Task"));
+  } catch {
+    return [];
   }
 }
 
