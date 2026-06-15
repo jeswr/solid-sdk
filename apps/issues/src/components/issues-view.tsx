@@ -73,6 +73,7 @@ import {
   Search,
   Share2,
   SlidersHorizontal,
+  Tag,
   Trash2,
   Users,
   UsersRound,
@@ -408,6 +409,20 @@ export function IssuesView() {
       });
       clearSelection();
     }, success);
+  // F8 bulk assign / label: every selected issue updated in the same batch.
+  const bulkAssign = (assignee: string | undefined) =>
+    bulk((r, u) => r.update(u, { assignee }), assignee ? "Assignee set" : "Assignee cleared");
+  const bulkAddLabel = (label: string) =>
+    run(async () => {
+      await issues.batch(async (r) => {
+        for (const i of selectedVisible) {
+          // Union the new label with the issue's existing labels (display names).
+          const next = i.labels.includes(label) ? i.labels : [...i.labels, label];
+          await r.update(i.url, { labels: next });
+        }
+      });
+      clearSelection();
+    }, `Labeled “${label}”`);
 
   const paletteGroups: PaletteGroup[] = [
     {
@@ -876,6 +891,47 @@ export function IssuesView() {
                     <Button variant="outline" size="sm" className="gap-1.5" onClick={() => bulk((r, u) => r.setState(u, "open"), "Issues reopened")}>
                       <RotateCcw className="size-4" aria-hidden /> Reopen
                     </Button>
+                    {/* F8: bulk assign */}
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="outline" size="sm" className="gap-1.5">
+                          <Users className="size-4" aria-hidden /> Assign
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start" className="max-h-72 w-56 overflow-y-auto">
+                        <DropdownMenuLabel>Assign to</DropdownMenuLabel>
+                        {assigneeSuggestions.length === 0 && (
+                          <DropdownMenuLabel className="font-normal text-muted-foreground">
+                            No team members yet
+                          </DropdownMenuLabel>
+                        )}
+                        {assigneeSuggestions.map((a) => (
+                          <DropdownMenuItem key={a} onClick={() => bulkAssign(a)}>
+                            {a === group.iri ? "Team" : shortWebId(a)}
+                          </DropdownMenuItem>
+                        ))}
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={() => bulkAssign(undefined)}>Clear assignee</DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                    {/* F8: bulk label */}
+                    {fac.labels.length > 0 && (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="outline" size="sm" className="gap-1.5">
+                            <Tag className="size-4" aria-hidden /> Label
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start" className="max-h-72 w-56 overflow-y-auto">
+                          <DropdownMenuLabel>Add label</DropdownMenuLabel>
+                          {fac.labels.map((l) => (
+                            <DropdownMenuItem key={l} onClick={() => bulkAddLabel(l)}>
+                              {l}
+                            </DropdownMenuItem>
+                          ))}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
                     <Button variant="outline" size="sm" className="gap-1.5 text-destructive" onClick={() => setBulkDeleteOpen(true)}>
                       <Trash2 className="size-4" aria-hidden /> Delete
                     </Button>

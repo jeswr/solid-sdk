@@ -34,6 +34,12 @@ export interface IssueRecord {
   parent?: string;
   /** Issue URLs that block this one. */
   blockedBy: string[];
+  /** Issue URLs this one (non-blockingly) relates to (`dct:relation`). */
+  relatesTo: string[];
+  /** The issue this one is a duplicate of / superseded by (`dct:isReplacedBy`). */
+  duplicateOf?: string;
+  /** The issue this one was cloned from (`prov:wasDerivedFrom`). */
+  clonedFrom?: string;
   /** Attached file URLs in the pod. */
   attachments: string[];
   /** Story-point estimate. */
@@ -73,6 +79,12 @@ export interface NewIssueInput {
   labels?: string[];
   parent?: string;
   blockedBy?: string[];
+  /** Issue URLs this one relates to (non-blocking, `dct:relation`). */
+  relatesTo?: string[];
+  /** The issue this duplicates / is superseded by (`dct:isReplacedBy`). */
+  duplicateOf?: string;
+  /** The issue this was cloned from (`prov:wasDerivedFrom`). */
+  clonedFrom?: string;
   estimate?: number;
   rank?: number;
   creator?: string;
@@ -138,6 +150,9 @@ function toRecord(issue: Issue, url: string, canWrite: boolean, fieldDefs: Field
     dateDue: issue.dateDue,
     parent: issue.parent,
     blockedBy: [...issue.blockedBy],
+    relatesTo: [...issue.relatesTo],
+    duplicateOf: issue.duplicateOf,
+    clonedFrom: issue.clonedFrom,
     attachments: [...issue.attachments],
     estimate: issue.estimate,
     rank: issue.rank,
@@ -349,9 +364,12 @@ export class Repository {
     issue.priority = input.priority;
     issue.labels = labelSlugs;
     issue.parent = input.parent;
+    issue.duplicateOf = input.duplicateOf;
+    issue.clonedFrom = input.clonedFrom;
     issue.estimate = input.estimate;
     issue.rank = input.rank;
     for (const b of input.blockedBy ?? []) issue.blockedBy.add(b);
+    for (const r of input.relatesTo ?? []) issue.relatesTo.add(r);
     if (input.fields) this.applyFields(issue, fieldDefs, input.fields);
     issue.created = now;
     issue.modified = now;
@@ -371,12 +389,19 @@ export class Repository {
     if ("issueType" in patch && patch.issueType) issue.issueType = patch.issueType;
     if (labelSlugs) issue.labels = labelSlugs;
     if ("parent" in patch) issue.parent = patch.parent;
+    if ("duplicateOf" in patch) issue.duplicateOf = patch.duplicateOf;
+    if ("clonedFrom" in patch) issue.clonedFrom = patch.clonedFrom;
     if ("estimate" in patch) issue.estimate = patch.estimate;
     if ("rank" in patch) issue.rank = patch.rank;
     if ("blockedBy" in patch && patch.blockedBy) {
       const set = issue.blockedBy;
       for (const b of [...set]) set.delete(b);
       for (const b of patch.blockedBy) set.add(b);
+    }
+    if ("relatesTo" in patch && patch.relatesTo) {
+      const set = issue.relatesTo;
+      for (const r of [...set]) set.delete(r);
+      for (const r of patch.relatesTo) set.add(r);
     }
     if (patch.fields) {
       const defs = await this.fieldDefs().catch(() => [] as FieldDef[]);

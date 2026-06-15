@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Ban, CalendarClock, CheckCircle2, CircleDot, Download, GitBranch, Link2, Loader2, MessageSquare, Paperclip, Pencil, Plus, Tag, Upload, X } from "lucide-react";
+import { Ban, CalendarClock, CheckCircle2, CircleDot, Copy as CopyIcon, Download, GitBranch, Link2, Loader2, MessageSquare, Paperclip, Pencil, Plus, Tag, Upload, X } from "lucide-react";
 
 const fileName = (url: string) => {
   const last = url.split("/").pop() ?? url;
@@ -37,7 +37,8 @@ const renderBody = (text: string) =>
     ),
   );
 import type { IssueRecord } from "@/lib/use-issues";
-import { STATUSES, safeHttpUrl, type FieldDef } from "@/lib/issue";
+import { STATUSES, safeHttpUrl, canNest, type FieldDef } from "@/lib/issue";
+import { linksOf, rollupOf, descendantUrlsOf } from "@/lib/rollups";
 import { priorityVariant, shortWebId } from "@/components/issue-card";
 import { PersonChip } from "@/components/person";
 import { TypeBadge, typeLabel } from "@/components/type-badge";
@@ -75,7 +76,13 @@ export function IssueDetailDialog({
   canComment: boolean;
   onEdit: () => void;
   onAddComment: (content: string, mentions: string[]) => Promise<void>;
-  onUpdate: (patch: { parent?: string; blockedBy?: string[] }) => Promise<void>;
+  onUpdate: (patch: {
+    parent?: string;
+    blockedBy?: string[];
+    relatesTo?: string[];
+    duplicateOf?: string;
+    clonedFrom?: string;
+  }) => Promise<void>;
   onUpload: (file: { name: string; type: string; data: ArrayBuffer }) => Promise<void>;
   onRemoveAttachment: (fileUrl: string) => Promise<void>;
 }) {
@@ -107,15 +114,36 @@ export function IssueDetailDialog({
     }
   };
 
-  if (!issue) return null;
+  // F5: compute descendants BEFORE the early return so the hook order is stable.
+  // When `issue` is undefined this returns an empty set (no-op); it's only used after
+  // the guard below.
+  const selfDescendants = useMemo(
+    () => (issue ? descendantUrlsOf(issue, allIssues) : new Set<string>()),
+    [issue, allIssues],
+  );
 
+  if (!issue) return null;
 
   const self = issue;
   const titleOf = (url: string) => allIssues.find((i) => i.url === url)?.title ?? "(unknown issue)";
-  const candidates = allIssues.filter((i) => i.url !== self.url);
+  // F5: parent candidates must be strictly coarser types (canNest enforces the
+  // Initiative→Epic→Feature→Story→Task/Bug hierarchy), must not be self, and must
+  // not be an existing descendant (to prevent cycles in the tree).
+  const parentCandidates = allIssues.filter(
+    (i) => i.url !== self.url && !selfDescendants.has(i.url) && canNest(i.issueType, self.issueType),
+  );
+  // Dependency-link candidates: ANY issue except self — hierarchy does not constrain
+  // blocker/relates-to/duplicate-of relationships.  Self-descendants are allowed here
+  // because a descendant can block its ancestor without being its parent.
+  const dependencyCandidates = allIssues.filter((i) => i.url !== self.url);
   const subTasks = allIssues.filter((i) => i.parent === self.url);
   const blocking = allIssues.filter((i) => i.blockedBy.includes(self.url));
-  const addableBlockers = candidates.filter((i) => !self.blockedBy.includes(i.url) && i.url !== self.parent);
+  const addableBlockers = dependencyCandidates.filter((i) => !self.blockedBy.includes(i.url) && i.url !== self.parent);
+  // F2: bidirectional links (relates is symmetric; duplicate/clone show inverses).
+  const links = linksOf(self, allIssues);
+  const addableRelated = dependencyCandidates.filter((i) => !links.relates.includes(i.url));
+  // F6: roll up child completion to the parent ("3/5 done").
+  const rollup = rollupOf(self, allIssues);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -233,7 +261,7 @@ export function IssueDetailDialog({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">None</SelectItem>
-                  {candidates.map((c) => (
+                  {parentCandidates.map((c) => (
                     <SelectItem key={c.url} value={c.url}>
                       {c.title}
                     </SelectItem>
@@ -288,8 +316,12 @@ export function IssueDetailDialog({
 
           {subTasks.length > 0 && (
             <div className="space-y-1">
-              <h3 className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+              <h3 className="flex flex-wrap items-center gap-1.5 text-xs font-medium text-muted-foreground">
                 <Link2 className="size-3.5" aria-hidden /> Sub-tasks
+                {/* F6: roll up child completion to the parent. */}
+                <span className="tabular-nums text-muted-foreground">
+                  · {rollup.done}/{rollup.total} done ({rollup.percent}%)
+                </span>
               </h3>
               <ul className="space-y-0.5 text-sm">
                 {subTasks.map((s) => (
@@ -309,6 +341,90 @@ export function IssueDetailDialog({
                   <li key={s.url}>{s.title}</li>
                 ))}
               </ul>
+            </div>
+          )}
+
+          {/* F2: Relates-to (symmetric, non-blocking) */}
+          <div className="space-y-1">
+            <h3 className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+              <Link2 className="size-3.5" aria-hidden /> Relates to
+            </h3>
+            {links.relates.length === 0 && !canComment && <p className="text-sm text-muted-foreground">Nothing.</p>}
+            <ul className="space-y-1">
+              {links.relates.map((rUrl) => (
+                <li key={rUrl} className="flex items-center gap-2 text-sm">
+                  <span className="truncate">{titleOf(rUrl)}</span>
+                  {canComment && self.relatesTo.includes(rUrl) && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-6"
+                      aria-label={`Remove related ${titleOf(rUrl)}`}
+                      onClick={() => onUpdate({ relatesTo: self.relatesTo.filter((x) => x !== rUrl) })}
+                    >
+                      <X className="size-3.5" aria-hidden />
+                    </Button>
+                  )}
+                </li>
+              ))}
+            </ul>
+            {canComment && addableRelated.length > 0 && (
+              <Select value="" onValueChange={(v) => onUpdate({ relatesTo: [...self.relatesTo, v] })}>
+                <SelectTrigger className="h-7 w-56 text-sm" aria-label="Add related issue">
+                  <span className="flex items-center gap-1 text-muted-foreground">
+                    <Plus className="size-3.5" aria-hidden /> Add related
+                  </span>
+                </SelectTrigger>
+                <SelectContent>
+                  {addableRelated.map((c) => (
+                    <SelectItem key={c.url} value={c.url}>
+                      {c.title}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+
+          {/* F2: Duplicate-of (supersession) */}
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+              <CopyIcon className="size-3.5" aria-hidden /> Duplicate of
+            </h3>
+            {canComment ? (
+              <Select
+                value={self.duplicateOf ?? "none"}
+                onValueChange={(v) => onUpdate({ duplicateOf: v === "none" ? undefined : v })}
+              >
+                <SelectTrigger className="h-7 w-56 text-sm" aria-label="Duplicate of">
+                  <SelectValue placeholder="None" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None</SelectItem>
+                  {dependencyCandidates.map((c) => (
+                    <SelectItem key={c.url} value={c.url}>
+                      {c.title}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <span className="text-sm">{self.duplicateOf ? titleOf(self.duplicateOf) : "None"}</span>
+            )}
+          </div>
+          {(links.duplicatedBy.length > 0 || links.clones.length > 0 || self.clonedFrom) && (
+            <div className="space-y-1 text-sm">
+              {links.duplicatedBy.length > 0 && (
+                <p className="text-muted-foreground">
+                  Duplicated by: {links.duplicatedBy.map(titleOf).join(", ")}
+                </p>
+              )}
+              {self.clonedFrom && (
+                <p className="text-muted-foreground">Cloned from: {titleOf(self.clonedFrom)}</p>
+              )}
+              {links.clones.length > 0 && (
+                <p className="text-muted-foreground">Clones: {links.clones.map(titleOf).join(", ")}</p>
+              )}
             </div>
           )}
         </div>

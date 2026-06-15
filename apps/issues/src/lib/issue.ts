@@ -25,14 +25,55 @@ export const STATUSES: { slug: StatusSlug; label: string; terminal: boolean }[] 
   { slug: "done", label: "Done", terminal: true },
 ];
 
-export type IssueType = "epic" | "story" | "task" | "bug";
-/** Jira-style issue types; carried by rdf:type via per-tracker `#type-*` classes. */
+export type IssueType = "initiative" | "epic" | "feature" | "story" | "task" | "bug";
+/**
+ * Jira-style issue types; carried by rdf:type via per-tracker `#type-*` classes.
+ * Ordered coarse→fine — the order also defines the planning hierarchy used by the
+ * nesting rules ({@link typeLevel} / {@link canNest}).
+ */
 export const ISSUE_TYPES: { slug: IssueType; label: string }[] = [
+  { slug: "initiative", label: "Initiative" },
   { slug: "epic", label: "Epic" },
+  { slug: "feature", label: "Feature" },
   { slug: "story", label: "Story" },
   { slug: "task", label: "Task" },
   { slug: "bug", label: "Bug" },
 ];
+
+/**
+ * The hierarchy level of an issue type: lower numbers are coarser (an Initiative
+ * sits above an Epic above a Feature above a Story above a Task/Bug). `bug` shares
+ * the leaf level with `task` — both are work items that may nest under a story but
+ * take no children of their own.
+ *
+ * Full ordering: Initiative(0) > Epic(1) > Feature(2) > Story(3) > Task/Bug(4).
+ *
+ * Drives F5 (type-driven nesting): a parent must be strictly coarser than its
+ * child, so an Epic can contain a Feature/Story but not another Epic, a Feature can
+ * parent a Story, and a Task/Bug is a leaf.
+ */
+const TYPE_LEVEL: Record<IssueType, number> = {
+  initiative: 0,
+  epic: 1,
+  feature: 2,
+  story: 3,
+  task: 4,
+  bug: 4,
+};
+
+/** Hierarchy depth of an issue type (0 = coarsest). See {@link TYPE_LEVEL}. */
+export function typeLevel(type: IssueType): number {
+  return TYPE_LEVEL[type];
+}
+
+/**
+ * Whether an issue of `childType` may be nested under a parent of `parentType`.
+ * A parent must be strictly coarser (a lower level number) than its child — so a
+ * leaf type (task/bug) can never be a parent, and same-level types never nest.
+ */
+export function canNest(parentType: IssueType, childType: IssueType): boolean {
+  return TYPE_LEVEL[parentType] < TYPE_LEVEL[childType];
+}
 
 /** Strip the fragment from an IRI to get its document URL. */
 function docOf(iri: string): string {
@@ -157,6 +198,39 @@ export class Issue extends TermWrapper {
   /** Issues this one is blocked by (must be done first), via `dct:requires` — live set. */
   get blockedBy(): Set<string> {
     return SetFrom.subjectPredicate(this, dct("requires"), NamedNodeAs.string, NamedNodeFrom.string);
+  }
+
+  /**
+   * Issues this one merely relates to (a non-blocking, symmetric "relates-to"
+   * link), via `dct:relation` — live set. The peer should carry the reverse
+   * `dct:relation` too (the relation is symmetric); {@link relatedLinks} derives
+   * the union for display.
+   */
+  get relatesTo(): Set<string> {
+    return SetFrom.subjectPredicate(this, dct("relation"), NamedNodeAs.string, NamedNodeFrom.string);
+  }
+
+  /**
+   * The issue this one duplicates / is superseded by (close-as-duplicate), via
+   * `dct:isReplacedBy`. Supersession only — a single canonical successor; the
+   * peer surfaces it as `dct:replaces` (derived for display, not stored here).
+   */
+  get duplicateOf(): string | undefined {
+    return OptionalFrom.subjectPredicate(this, dct("isReplacedBy"), NamedNodeAs.string);
+  }
+  set duplicateOf(value: string | undefined) {
+    OptionalAs.object(this, dct("isReplacedBy"), value, NamedNodeFrom.string);
+  }
+
+  /**
+   * The issue this one was cloned from (clone v1), via `prov:wasDerivedFrom`.
+   * A single provenance source — the original this issue was derived from.
+   */
+  get clonedFrom(): string | undefined {
+    return OptionalFrom.subjectPredicate(this, prov("wasDerivedFrom"), NamedNodeAs.string);
+  }
+  set clonedFrom(value: string | undefined) {
+    OptionalAs.object(this, prov("wasDerivedFrom"), value, NamedNodeFrom.string);
   }
 
   /** Attached file URLs (in the pod), via `wf:attachment` — live set. */

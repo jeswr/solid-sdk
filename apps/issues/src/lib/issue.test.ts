@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { Store, DataFactory } from "n3";
-import { Issue, Tracker, STATE, safeHttpUrl } from "./issue";
-import { rdf, wf, dct } from "./vocab";
+import { Issue, Tracker, STATE, safeHttpUrl, ISSUE_TYPES, typeLevel, canNest, type IssueType } from "./issue";
+import { rdf, wf, dct, prov } from "./vocab";
 
 const IRI = "http://localhost:3000/alice/issue-tracker/issues.ttl#issue-1";
 
@@ -111,6 +111,93 @@ describe("Issue wrapper", () => {
     issue.parent = undefined;
     expect(issue.parent).toBeUndefined();
     expect([...issue.blockedBy]).toEqual([b2]);
+  });
+
+  it("F2: round-trips typed links (relates / duplicate-of / cloned-from) to the right predicates", () => {
+    const issue = newIssue();
+    const r1 = "http://localhost:3000/alice/issue-tracker/issues/r1.ttl#this";
+    const r2 = "http://localhost:3000/alice/issue-tracker/issues/r2.ttl#this";
+    const orig = "http://localhost:3000/alice/issue-tracker/issues/orig.ttl#this";
+    const canonical = "http://localhost:3000/alice/issue-tracker/issues/canon.ttl#this";
+
+    issue.relatesTo.add(r1);
+    issue.relatesTo.add(r2);
+    issue.duplicateOf = canonical;
+    issue.clonedFrom = orig;
+
+    expect([...issue.relatesTo].sort()).toEqual([r1, r2].sort());
+    expect(issue.duplicateOf).toBe(canonical);
+    expect(issue.clonedFrom).toBe(orig);
+
+    // The links land on the exact reused predicates (dct:relation /
+    // dct:isReplacedBy / prov:wasDerivedFrom), as IRIs.
+    const dataset = (issue as unknown as { dataset: Store }).dataset;
+    const obj = (pred: string) =>
+      [...dataset.match(DataFactory.namedNode(IRI), DataFactory.namedNode(pred))].map((q) => q.object.value);
+    expect(obj(dct("relation")).sort()).toEqual([r1, r2].sort());
+    expect(obj(dct("isReplacedBy"))).toEqual([canonical]);
+    expect(obj(prov("wasDerivedFrom"))).toEqual([orig]);
+
+    // Supersession/clone sources are single — set replaces, clear removes.
+    issue.duplicateOf = undefined;
+    issue.relatesTo.delete(r1);
+    expect(issue.duplicateOf).toBeUndefined();
+    expect([...issue.relatesTo]).toEqual([r2]);
+  });
+
+  it("F5: declares all six issue-type levels including initiative and feature", () => {
+    const slugs = ISSUE_TYPES.map((t) => t.slug);
+    expect(slugs).toEqual(["initiative", "epic", "feature", "story", "task", "bug"]);
+
+    const issue = newIssue();
+    issue.tracker = "http://localhost:3000/alice/issue-tracker/tracker.ttl#this";
+    for (const slug of slugs as IssueType[]) {
+      issue.issueType = slug;
+      expect(issue.issueType).toBe(slug); // replaces, never stacks
+    }
+  });
+
+  it("F5: typeLevel orders the full hierarchy coarse→fine and canNest enforces strict nesting", () => {
+    // Full ordering: Initiative > Epic > Feature > Story > Task/Bug.
+    expect(typeLevel("initiative")).toBeLessThan(typeLevel("epic"));
+    expect(typeLevel("epic")).toBeLessThan(typeLevel("feature"));
+    expect(typeLevel("feature")).toBeLessThan(typeLevel("story")); // feature is coarser than story
+    expect(typeLevel("story")).toBeLessThan(typeLevel("task"));
+    expect(typeLevel("task")).toBe(typeLevel("bug")); // both leaves at the same depth
+
+    // A parent must be strictly coarser than its child — verify each step.
+    expect(canNest("initiative", "epic")).toBe(true);
+    expect(canNest("initiative", "feature")).toBe(true);
+    expect(canNest("initiative", "story")).toBe(true);
+    expect(canNest("initiative", "task")).toBe(true);
+    expect(canNest("epic", "feature")).toBe(true);
+    expect(canNest("epic", "story")).toBe(true);
+    expect(canNest("epic", "task")).toBe(true);
+    expect(canNest("feature", "story")).toBe(true); // feature can parent story
+    expect(canNest("feature", "task")).toBe(true);
+    expect(canNest("feature", "bug")).toBe(true);
+    expect(canNest("story", "task")).toBe(true);   // story can parent task
+    expect(canNest("story", "bug")).toBe(true);
+
+    // Same-level or inverted nesting is rejected — a task/bug is always a leaf.
+    expect(canNest("epic", "epic")).toBe(false);
+    expect(canNest("feature", "feature")).toBe(false);
+    expect(canNest("story", "story")).toBe(false);
+    expect(canNest("task", "bug")).toBe(false);
+    expect(canNest("task", "story")).toBe(false);
+    expect(canNest("story", "feature")).toBe(false); // inverted
+    expect(canNest("story", "initiative")).toBe(false);
+    expect(canNest("task", "task")).toBe(false);
+  });
+
+  it("F5: declares #type-initiative and #type-feature classes on the tracker", () => {
+    const DOC = "http://localhost:3000/alice/issue-tracker/tracker.ttl";
+    const store = new Store();
+    const tracker = new Tracker(`${DOC}#this`, store, DataFactory);
+    tracker.configure("Issues");
+    const ser = [...store].map((q) => `${q.subject.value} ${q.predicate.value} ${q.object.value}`).join("\n");
+    expect(ser).toContain(`${DOC}#type-initiative`);
+    expect(ser).toContain(`${DOC}#type-feature`);
   });
 
   it("is readable from data parsed independently", () => {
