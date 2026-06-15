@@ -37,6 +37,20 @@ export interface CommentRecord {
   mentions: string[];
 }
 
+/** A render-friendly snapshot of one worklog entry (F4 time tracking). */
+export interface WorklogRecord {
+  /** The entry node IRI (stable identity for keys). */
+  id: string;
+  /** Who logged the work (`prov:wasAssociatedWith`). */
+  actor?: string;
+  /** When the work was logged (`prov:startedAtTime`). */
+  at?: Date;
+  /** Logged effort in seconds. */
+  seconds: number;
+  /** Optional free-text note (`dct:description`). */
+  note?: string;
+}
+
 /** A render-friendly snapshot of one issue (decoupled from the RDF wrapper). */
 export interface IssueRecord {
   url: string;
@@ -70,6 +84,10 @@ export interface IssueRecord {
   modified?: Date;
   /** When the issue was completed (cleared on reopen). */
   endedAt?: Date;
+  /** F4: worklog entries logged against this issue (newest first). */
+  worklog: WorklogRecord[];
+  /** F4: total logged effort on THIS issue (own worklog only), in seconds. */
+  loggedSeconds: number;
   comments: CommentRecord[];
   /** Custom-field values keyed by field slug (selects hold the option IRI). */
   fields: Record<string, FieldValue>;
@@ -194,6 +212,8 @@ function toRecord(issue: Issue, url: string, canWrite: boolean, fieldDefs: Field
     created: issue.created,
     modified: issue.modified,
     endedAt: issue.endedAt,
+    worklog: issue.worklog.map((w) => ({ id: w.id, actor: w.actor, at: w.at, seconds: w.seconds, note: w.note })),
+    loggedSeconds: issue.loggedSeconds,
     comments: issue.comments.map((c) => ({
       author: c.author,
       content: c.content ?? "",
@@ -571,6 +591,22 @@ export class Repository {
     comment.created = new Date();
     for (const m of mentions) comment.mentions.add(m);
     issue.messages.add(comment);
+    issue.modified = new Date();
+    await this.put(url, dataset, etag);
+  }
+
+  /**
+   * Log work against an issue (F4 time tracking). Appends a NEW worklog entry
+   * (`prov:Activity` of `dct:type "worklog"`) to the issue's document — existing
+   * entries are never touched (append-only). The actor defaults to the repository's
+   * signed-in WebID. `seconds` must be a positive, finite number.
+   */
+  async logWork(url: string, seconds: number, note?: string, at: Date = new Date()): Promise<void> {
+    if (!Number.isFinite(seconds) || seconds <= 0) {
+      throw new RangeError("Logged work must be a positive number of seconds.");
+    }
+    const { dataset, etag, issue } = await this.openIssue(url);
+    issue.logWork(`${url}#work-${crypto.randomUUID()}`, { actor: this.actor, at, seconds, note: note?.trim() || undefined });
     issue.modified = new Date();
     await this.put(url, dataset, etag);
   }

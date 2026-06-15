@@ -13,7 +13,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Ban, CalendarClock, CheckCircle2, CircleDot, Copy as CopyIcon, Download, GitBranch, Link2, Loader2, MessageSquare, Paperclip, Pencil, Plus, Tag, Upload, X } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Ban, CalendarClock, CheckCircle2, CircleDot, Clock, Copy as CopyIcon, Download, GitBranch, Link2, Loader2, MessageSquare, Paperclip, Pencil, Plus, Tag, Upload, X } from "lucide-react";
+import { formatDuration, parseDuration } from "@/lib/dates";
 
 const fileName = (url: string) => {
   const last = url.split("/").pop() ?? url;
@@ -67,6 +69,7 @@ export function IssueDetailDialog({
   canComment,
   onEdit,
   onAddComment,
+  onLogWork,
   onUpdate,
   onUpload,
   onRemoveAttachment,
@@ -86,6 +89,8 @@ export function IssueDetailDialog({
   canComment: boolean;
   onEdit: () => void;
   onAddComment: (content: string, mentions: string[]) => Promise<void>;
+  /** F4: log work (seconds, optional note) against this issue. */
+  onLogWork: (seconds: number, note?: string) => Promise<void>;
   onUpdate: (patch: {
     parent?: string;
     blockedBy?: string[];
@@ -99,6 +104,10 @@ export function IssueDetailDialog({
   const [uploading, setUploading] = useState(false);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
+  // F4 time tracking: the log-work form (a free-text duration + an optional note).
+  const [logDuration, setLogDuration] = useState("");
+  const [logNote, setLogNote] = useState("");
+  const [logging, setLogging] = useState(false);
 
   const timeline = useMemo<Activity[]>(() => {
     if (!issue) return [];
@@ -147,6 +156,25 @@ export function IssueDetailDialog({
       toast.error(e instanceof Error ? e.message : "Could not post the comment.");
     } finally {
       setBusy(false);
+    }
+  };
+
+  const submitLog = async () => {
+    const seconds = parseDuration(logDuration);
+    if (seconds === undefined) {
+      toast.error("Enter a duration like “1h 30m”, “90m”, or “45”.");
+      return;
+    }
+    setLogging(true);
+    try {
+      await onLogWork(seconds, logNote.trim() || undefined);
+      setLogDuration("");
+      setLogNote("");
+      toast.success("Time logged");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not log the time.");
+    } finally {
+      setLogging(false);
     }
   };
 
@@ -523,6 +551,65 @@ export function IssueDetailDialog({
                 }}
               />
             </label>
+          )}
+        </div>
+
+        {/* F4: Time tracking */}
+        <div className="space-y-2 border-b py-3">
+          <h3 className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+            <Clock className="size-3.5" aria-hidden /> Time tracking
+          </h3>
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm sm:grid-cols-3">
+            {issue.estimate !== undefined && (
+              <div>
+                <dt className="text-xs text-muted-foreground">Estimate</dt>
+                <dd className="tabular-nums">{issue.estimate} pt</dd>
+              </div>
+            )}
+            <div>
+              <dt className="text-xs text-muted-foreground">Logged (this issue)</dt>
+              <dd className="tabular-nums">{formatDuration(issue.loggedSeconds)}</dd>
+            </div>
+            {rollup.loggedSeconds > issue.loggedSeconds && (
+              <div>
+                <dt className="text-xs text-muted-foreground">Logged (incl. sub-tasks)</dt>
+                <dd className="tabular-nums">{formatDuration(rollup.loggedSeconds)}</dd>
+              </div>
+            )}
+          </dl>
+          {issue.worklog.length > 0 && (
+            <ul className="space-y-1">
+              {issue.worklog.map((w) => (
+                <li key={w.id} className="flex flex-wrap items-baseline gap-x-2 text-sm">
+                  <span className="font-medium tabular-nums">{formatDuration(w.seconds)}</span>
+                  {w.actor && <PersonChip webId={w.actor} className="text-xs text-muted-foreground" />}
+                  {w.at && <span className="text-xs text-muted-foreground">· {dateFmt.format(w.at)}</span>}
+                  {w.note && <span className="w-full text-xs text-muted-foreground sm:w-auto">— {w.note}</span>}
+                </li>
+              ))}
+            </ul>
+          )}
+          {canComment && (
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <Input
+                aria-label="Time spent"
+                placeholder="1h 30m"
+                className="h-8 sm:w-28"
+                value={logDuration}
+                onChange={(e) => setLogDuration(e.target.value)}
+              />
+              <Input
+                aria-label="Work note"
+                placeholder="What did you do? (optional)"
+                className="h-8 flex-1"
+                value={logNote}
+                onChange={(e) => setLogNote(e.target.value)}
+              />
+              <Button size="sm" variant="outline" className="gap-1.5" onClick={submitLog} disabled={logging || !logDuration.trim()}>
+                {logging ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Plus className="size-4" aria-hidden />}
+                Log time
+              </Button>
+            </div>
           )}
         </div>
 

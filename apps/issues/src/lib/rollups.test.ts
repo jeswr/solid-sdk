@@ -14,6 +14,8 @@ const base: IssueRecord = {
   relatesTo: [],
   attachments: [],
   comments: [],
+  worklog: [],
+  loggedSeconds: 0,
   canWrite: true,
   fields: {},
 };
@@ -135,6 +137,40 @@ describe("F6 rollups — subitems / progress", () => {
     expect(r.childCount).toBe(2); // only the two real children
     expect(r.descendantCount).toBe(2);
     expect(r.done).toBe(1);
+  });
+
+  it("F4: rolls up logged time across the subtree, INCLUDING the issue's own logged work", () => {
+    const issues = [
+      mk({ url: "epic", issueType: "epic", loggedSeconds: 600 }), // own time counts
+      mk({ url: "story", parent: "epic", issueType: "story", loggedSeconds: 3600 }),
+      mk({ url: "t1", parent: "story", loggedSeconds: 1800, state: "closed", status: "done" }),
+      mk({ url: "t2", parent: "story", loggedSeconds: 0 }),
+    ];
+    const r = rollupOf(issues[0], issues);
+    // 600 (own) + 3600 (story) + 1800 (t1) + 0 (t2) = 6000s
+    expect(r.loggedSeconds).toBe(6000);
+  });
+
+  it("F4: a leaf surfaces its OWN logged time even with no children", () => {
+    const leaf = mk({ url: "x", loggedSeconds: 2700 });
+    const r = rollupOf(leaf, [leaf]);
+    expect(r.descendantCount).toBe(0);
+    expect(r.loggedSeconds).toBe(2700); // own time still surfaces
+  });
+
+  it("F4: a leaf with no logged time and no due date rolls up to zero logged", () => {
+    const leaf = mk({ url: "x" });
+    expect(rollupOf(leaf, [leaf]).loggedSeconds).toBe(0);
+  });
+
+  it("F4: logged-time rollup is CYCLE-SAFE (A⊂B⊂A counts each once)", () => {
+    const issues = [
+      mk({ url: "a", parent: "b", loggedSeconds: 100 }),
+      mk({ url: "b", parent: "a", loggedSeconds: 200 }),
+    ];
+    // From a: own 100 + descendant b 200 = 300, no infinite loop.
+    expect(rollupOf(issues[0], issues).loggedSeconds).toBe(300);
+    expect(rollupOf(issues[1], issues).loggedSeconds).toBe(300);
   });
 
   it("rollupAll keys every issue and matches per-issue rollupOf", () => {

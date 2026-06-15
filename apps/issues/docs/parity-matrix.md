@@ -30,7 +30,7 @@ Status: ✅ shipped · 🔶 partial · ⏳ queued (priority order) · ◻ later/
 | Search, filters, saved views | ✅ | |
 | Bulk edit | ✅ | close / reopen / delete / assign / label, batched per selection |
 | Real-time collaboration | ✅ | notifications + polling fallback |
-| Permissions / sharing | ✅ | WAC/ACP, per-issue + tracker, teams |
+| Permissions / sharing | ✅ | WAC/ACP, per-issue + tracker, teams; F7 named role presets (Viewer / Editor / Admin) map to WAC mode bundles (read / read+write / read+write+control) and apply via the typed WAC accessors (`src/lib/roles.ts` → `sharing.ts`, never hand-built ACL); field-level perms + server-administered schemes out of scope |
 
 ## Tier 2 — agile planning (next)
 
@@ -39,6 +39,7 @@ Status: ✅ shipped · 🔶 partial · ⏳ queued (priority order) · ◻ later/
 | Backlog view (ranked) | ✅ | Backlog tab; rank via `schema:position` (fractional re-rank); sprint sections + points totals |
 | Sprints (create, scope, start/complete) | ✅ | `schema:Event` fragments in tracker.ttl, membership via `wf:task`; lifecycle from dates |
 | Story points / estimates | ✅ | `dct:extent`; form field, badges, per-sprint/backlog totals |
+| Time tracking (logged work + rollups) | ✅ | F4: opt-in worklog entries are `prov:Activity` of `dct:type "worklog"` carrying an OWL-Time `time:Duration` (`time:numericDuration` xsd:decimal **seconds**, `time:unitType time:unitSecond`); estimate stays `dct:extent`; logged time rolls up cycle-safe across the subtree (`Rollup.loggedSeconds`, includes the issue's own work) and surfaces in the issue-detail Time-tracking panel |
 | Timeline / Gantt view | ✅ | epics-first Gantt rows, month axis, status-colored bars |
 | Calendar view | ✅ | month grid with navigation; due issues as chips |
 

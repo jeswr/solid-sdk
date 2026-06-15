@@ -5,7 +5,8 @@ import { toast } from "sonner";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { listCollaborators, setAccess, removeAccess, type Collaborator } from "@/lib/sharing";
+import { removeAccess } from "@/lib/sharing";
+import { assignRole, listRoleAssignments, ROLES, ROLE_PRESETS, type Role, type RoleAssignment } from "@/lib/roles";
 import {
   Dialog,
   DialogContent,
@@ -26,17 +27,13 @@ import {
 import { AlertCircle, Loader2, Trash2, UserPlus } from "lucide-react";
 import { PersonAvatar, PersonName } from "@/components/person";
 
-type Level = "view" | "edit";
-const levelToAccess = (l: Level) => ({ read: true, write: l === "edit", control: false });
-const accessToLevel = (a: Collaborator["access"]): Level => (a.write ? "edit" : "view");
-
 const schema = z.object({
   webId: z
     .string()
     .trim()
     .min(1, "Enter a WebID")
     .refine((v) => /^https?:\/\//.test(v), "Must be a WebID (http(s) URL)"),
-  level: z.enum(["view", "edit"]),
+  role: z.enum(["viewer", "editor", "admin"]),
 });
 type FormValues = z.infer<typeof schema>;
 
@@ -61,21 +58,23 @@ export function ShareDialog({
   /** Called after access changes so the parent can refresh assignee suggestions. */
   onChanged?: () => void;
 }) {
-  const [collaborators, setCollaborators] = useState<Collaborator[]>([]);
+  const [assignments, setAssignments] = useState<RoleAssignment[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { webId: "", level: "edit" },
+    defaultValues: { webId: "", role: "editor" },
   });
 
   const refresh = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      setCollaborators(await listCollaborators(resourceUrl, ownerWebId));
+      // F7: surface each grant as its named role (viewer / editor / admin).
+      const all = await listRoleAssignments(resourceUrl, ownerWebId);
+      setAssignments(all.filter((a) => a.kind === "agent"));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not read who this is shared with.");
     } finally {
@@ -92,15 +91,16 @@ export function ShareDialog({
   const grant = async (values: FormValues) => {
     try {
       const webId = values.webId.trim();
-      const access = levelToAccess(values.level);
-      await setAccess(resourceUrl, ownerWebId, webId, access);
-      // Collaborators need the side resources too: read always; write when they
-      // can edit (sprint membership and label declaration write the config doc).
+      await assignRole(resourceUrl, ownerWebId, webId, values.role);
+      // Collaborators need the side resources too (sprint membership / label
+      // declaration write the config doc). The config never confers control, so an
+      // admin on the issues still only gets editor on the config — capped at editor.
+      const sideRole: Role = values.role === "viewer" ? "viewer" : "editor";
       for (const extra of extraResourceUrls) {
-        await setAccess(extra, ownerWebId, webId, { ...access, control: false });
+        await assignRole(extra, ownerWebId, webId, sideRole);
       }
       toast.success("Access granted");
-      form.reset({ webId: "", level: values.level });
+      form.reset({ webId: "", role: values.role });
       await refresh();
       onChanged?.();
     } catch (e) {
@@ -148,15 +148,18 @@ export function ShareDialog({
             )}
           </div>
           <Select
-            defaultValue="edit"
-            onValueChange={(v) => form.setValue("level", v as Level)}
+            defaultValue="editor"
+            onValueChange={(v) => form.setValue("role", v as Role)}
           >
-            <SelectTrigger className="sm:w-36" aria-label="Access level">
+            <SelectTrigger className="sm:w-36" aria-label="Role">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="view">Can view</SelectItem>
-              <SelectItem value="edit">Can edit</SelectItem>
+              {ROLES.map((r) => (
+                <SelectItem key={r.role} value={r.role}>
+                  {r.label}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
           <Button type="submit" disabled={form.formState.isSubmitting} className="gap-1.5">
@@ -179,29 +182,29 @@ export function ShareDialog({
             <p role="alert" className="flex items-center gap-2 text-sm text-destructive">
               <AlertCircle className="size-4" aria-hidden /> {error}
             </p>
-          ) : collaborators.length === 0 ? (
+          ) : assignments.length === 0 ? (
             <p className="text-sm text-muted-foreground">Not shared with anyone yet.</p>
           ) : (
             <ul className="space-y-2">
-              {collaborators.map((c) => (
-                <li key={c.webId} className="flex items-center gap-3 rounded-md border p-2">
-                  <PersonAvatar webId={c.webId} className="size-8" />
+              {assignments.map((a) => (
+                <li key={a.subject} className="flex items-center gap-3 rounded-md border p-2">
+                  <PersonAvatar webId={a.subject} className="size-8" />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-medium">
-                      <PersonName webId={c.webId} />
+                      <PersonName webId={a.subject} />
                     </span>
-                    <span className="block truncate text-xs text-muted-foreground" title={c.webId}>
-                      {accessToLevel(c.access) === "edit" ? "Can edit" : "Can view"} · {c.webId}
+                    <span className="block truncate text-xs text-muted-foreground" title={a.subject}>
+                      {ROLE_PRESETS[a.role].label} · {a.subject}
                     </span>
                   </span>
                   <Button
                     variant="ghost"
                     size="icon"
-                    aria-label={`Remove access for ${c.webId}`}
-                    onClick={() => revoke(c.webId)}
-                    disabled={busyId === c.webId}
+                    aria-label={`Remove access for ${a.subject}`}
+                    onClick={() => revoke(a.subject)}
+                    disabled={busyId === a.subject}
                   >
-                    {busyId === c.webId ? (
+                    {busyId === a.subject ? (
                       <Loader2 className="size-4 animate-spin" aria-hidden />
                     ) : (
                       <Trash2 className="size-4" aria-hidden />

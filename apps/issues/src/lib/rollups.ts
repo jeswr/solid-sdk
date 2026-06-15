@@ -19,6 +19,13 @@ export interface Rollup {
   percent: number;
   /** Sum of descendant story-point estimates (own estimate excluded). */
   estimate: number;
+  /**
+   * F4 time tracking: total logged effort (seconds) across the issue + every
+   * descendant. Unlike `estimate`/`done` this INCLUDES the issue's own logged
+   * work, so a leaf still reports the time logged directly against it. Cycle-safe
+   * (the same subtree walk as the rest of the rollup).
+   */
+  loggedSeconds: number;
   /** Earliest due date across the issue + its descendants, if any. */
   earliestDue?: Date;
   /** Latest due date across the issue + its descendants, if any. */
@@ -32,6 +39,7 @@ const EMPTY_ROLLUP: Rollup = {
   total: 0,
   percent: 0,
   estimate: 0,
+  loggedSeconds: 0,
 };
 
 /** Build a parent → direct-children index (by URL). */
@@ -83,8 +91,14 @@ export function rollupOf(
   // Seed `seen` with the root so a child cycling straight back to it is ignored.
   const descendants = descendantsOf(issue.url, byParent, new Set([issue.url]));
   if (descendants.length === 0) {
-    // A leaf still surfaces its own due date so callers can fold it uniformly.
-    return issue.dateDue ? { ...EMPTY_ROLLUP, earliestDue: issue.dateDue, latestDue: issue.dateDue } : EMPTY_ROLLUP;
+    // A leaf still surfaces its own logged time + due date so callers fold it uniformly.
+    const ownLogged = issue.loggedSeconds ?? 0;
+    if (!issue.dateDue && ownLogged === 0) return EMPTY_ROLLUP;
+    return {
+      ...EMPTY_ROLLUP,
+      loggedSeconds: ownLogged,
+      ...(issue.dateDue ? { earliestDue: issue.dateDue, latestDue: issue.dateDue } : {}),
+    };
   }
 
   // Completion is the open/closed resolution, not the literal "done" slug — a
@@ -92,6 +106,9 @@ export function rollupOf(
   const done = descendants.filter((d) => d.state === "closed").length;
   const total = descendants.length;
   const estimate = descendants.reduce((sum, d) => sum + (d.estimate ?? 0), 0);
+  // Logged time INCLUDES the issue's own logged work (unlike estimate/done, which
+  // count descendants only), so a parent's total reflects effort spent on it too.
+  const loggedSeconds = [issue, ...descendants].reduce((sum, d) => sum + (d.loggedSeconds ?? 0), 0);
 
   const dues = [issue, ...descendants]
     .map((d) => d.dateDue)
@@ -107,6 +124,7 @@ export function rollupOf(
     total,
     percent: Math.round((done / total) * 100),
     estimate,
+    loggedSeconds,
     earliestDue: dues.length ? new Date(Math.min(...dues)) : undefined,
     latestDue: dues.length ? new Date(Math.max(...dues)) : undefined,
   };

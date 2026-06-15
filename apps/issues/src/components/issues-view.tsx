@@ -1031,6 +1031,7 @@ export function IssuesView() {
           }
         }}
         onAddComment={(content, mentions) => issues.addComment(commentsUrl!, content, mentions)}
+        onLogWork={(seconds, note) => issues.logWork(commentsUrl!, seconds, note)}
       />
 
       {profile && shareResource && (

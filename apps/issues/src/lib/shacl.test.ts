@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { Store, DataFactory, Parser } from "n3";
 import env from "@zazuko/env-node";
 import SHACLValidator from "rdf-validate-shacl";
-import { Issue, Comment, Tracker, Activity, type WorkflowDef } from "./issue";
+import { Issue, Comment, Tracker, Activity, Worklog, type WorkflowDef } from "./issue";
 
 const TRACKER = "http://localhost:3000/alice/issue-tracker/tracker.ttl#this";
 const URL_ = "http://localhost:3000/alice/issue-tracker/issues/x.ttl";
@@ -15,6 +15,8 @@ const DCT = "http://purl.org/dc/terms/";
 const AS = "https://www.w3.org/ns/activitystreams#";
 const PROV = "http://www.w3.org/ns/prov#";
 const RDFS = "http://www.w3.org/2000/01/rdf-schema#";
+const TIME = "http://www.w3.org/2006/time#";
+const XSD = "http://www.w3.org/2001/XMLSchema#";
 
 const shapesTtl = readFileSync("shapes/issue.ttl", "utf8");
 
@@ -337,5 +339,80 @@ describe("SHACL shape (shapes/issue.ttl)", () => {
     const report = await validate(ds);
     expect(report.conforms).toBe(false);
     expect(report.results.some((r) => r.path?.value === `${PROV}wasAssociatedWith`)).toBe(true);
+  });
+
+  it("F4: a well-formed worklog entry (+ its time:Duration) conforms", async () => {
+    const ds = new Store();
+    const entry = new Worklog(`${URL_}#work-1`, ds, DataFactory);
+    entry.record({ issueIri: `${URL_}#this`, actor: ME, at: new Date("2026-06-12T09:00:00.000Z"), seconds: 5400, note: "Pairing on the repro." });
+
+    const report = await validate(ds);
+    expect(report.conforms).toBe(true);
+    // The duration is stored as xsd:decimal seconds (OWL-Time's numericDuration range).
+    const decimalQuad = [...ds.match(null, DataFactory.namedNode(`${TIME}numericDuration`))][0];
+    const obj = decimalQuad.object;
+    expect(obj.termType).toBe("Literal");
+    expect((obj as { datatype: { value: string } }).datatype.value).toBe(`${XSD}decimal`);
+    expect(obj.value).toBe("5400");
+  });
+
+  it("F4: flags a time:Duration missing its numericDuration", async () => {
+    const ds = new Store();
+    const dur = DataFactory.namedNode(`${URL_}#work-2-dur`);
+    ds.addQuad(dur, DataFactory.namedNode(RDF_TYPE), DataFactory.namedNode(`${TIME}Duration`));
+    ds.addQuad(dur, DataFactory.namedNode(`${TIME}unitType`), DataFactory.namedNode(`${TIME}unitSecond`));
+    // no time:numericDuration
+
+    const report = await validate(ds);
+    expect(report.conforms).toBe(false);
+    expect(report.results.some((r) => r.path?.value === `${TIME}numericDuration`)).toBe(true);
+  });
+
+  it("F4: flags a time:Duration missing its unitType", async () => {
+    const ds = new Store();
+    const dur = DataFactory.namedNode(`${URL_}#work-3-dur`);
+    ds.addQuad(dur, DataFactory.namedNode(RDF_TYPE), DataFactory.namedNode(`${TIME}Duration`));
+    ds.addQuad(
+      dur,
+      DataFactory.namedNode(`${TIME}numericDuration`),
+      DataFactory.literal("3600", DataFactory.namedNode(`${XSD}decimal`)),
+    );
+    // no time:unitType
+
+    const report = await validate(ds);
+    expect(report.conforms).toBe(false);
+    expect(report.results.some((r) => r.path?.value === `${TIME}unitType`)).toBe(true);
+  });
+
+  it("F4: flags a time:Duration whose unit is not time:unitSecond", async () => {
+    // Seconds is the only supported unit (the reader skips anything else); the shape
+    // requires time:unitType = time:unitSecond (sh:hasValue), so a minutes duration
+    // can't be written in the first place.
+    const ds = new Store();
+    const dur = DataFactory.namedNode(`${URL_}#work-5-dur`);
+    ds.addQuad(dur, DataFactory.namedNode(RDF_TYPE), DataFactory.namedNode(`${TIME}Duration`));
+    ds.addQuad(
+      dur,
+      DataFactory.namedNode(`${TIME}numericDuration`),
+      DataFactory.literal("90", DataFactory.namedNode(`${XSD}decimal`)),
+    );
+    ds.addQuad(dur, DataFactory.namedNode(`${TIME}unitType`), DataFactory.namedNode(`${TIME}unitMinute`)); // NOT unitSecond
+
+    const report = await validate(ds);
+    expect(report.conforms).toBe(false);
+    expect(report.results.some((r) => r.path?.value === `${TIME}unitType`)).toBe(true);
+  });
+
+  it("F4: a worklog-kind prov:Activity also satisfies the F3 activity shape (used = issue IRI)", async () => {
+    // A worklog is a prov:Activity, so the F3 shape (required startedAtTime, single
+    // IRI prov:used, http actor) must hold for it too — they coexist on one node.
+    const ds = new Store();
+    const entry = new Worklog(`${URL_}#work-4`, ds, DataFactory);
+    entry.record({ issueIri: `${URL_}#this`, actor: ME, at: new Date("2026-06-12T10:00:00.000Z"), seconds: 1800 });
+    const report = await validate(ds);
+    expect(report.conforms).toBe(true);
+    // No prov:startedAtTime violation, no prov:used cardinality violation.
+    expect(report.results.some((r) => r.path?.value === `${PROV}startedAtTime`)).toBe(false);
+    expect(report.results.some((r) => r.path?.value === `${PROV}used`)).toBe(false);
   });
 });

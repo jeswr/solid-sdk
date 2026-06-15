@@ -36,6 +36,13 @@ export const SKOS = "http://www.w3.org/2004/02/skos/core#";
  * `prov:generated` (new status class).
  */
 export const PROV = "http://www.w3.org/ns/prov#";
+/**
+ * W3C OWL-Time — the F4 time-tracking model. A worklog entry's logged effort is a
+ * `time:Duration` linked via `time:hasDuration`; the duration carries a
+ * `time:numericDuration` (xsd:decimal) in the `time:unitType` units we fix to
+ * `time:unitSecond` (one canonical unit, so figures sum without conversion).
+ */
+export const TIME = "http://www.w3.org/2006/time#";
 
 export const wf = (local: string) => `${WF}${local}`;
 export const dct = (local: string) => `${DCT}${local}`;
@@ -48,6 +55,10 @@ export const schema = (local: string) => `${SCHEMA}${local}`;
 export const xsd = (local: string) => `${XSD}${local}`;
 export const skos = (local: string) => `${SKOS}${local}`;
 export const prov = (local: string) => `${PROV}${local}`;
+export const time = (local: string) => `${TIME}${local}`;
+
+/** The single canonical OWL-Time unit all logged durations are stored in. */
+export const TIME_UNIT_SECOND = time("unitSecond");
 
 /** The two terminal/non-terminal state classes an issue is typed with. */
 export const STATE = {
