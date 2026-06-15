@@ -43,10 +43,11 @@ Flags:
 | Flag | Effect |
 |---|---|
 | `--no-install` | Skip `npm install` in the scaffolded dir. |
-| `--seed-pod` | After scaffold, boot a local in-memory CSS v8 on `:3088`, seed an account, and print the issuer + WebID + client credentials. Verifies the credentials by minting a client-credentials DPoP token. CSS stays up until Ctrl-C. |
+| `--seed-pod` | After scaffold, boot a local in-memory CSS v8 on `:3088`, seed an account, and print the issuer + WebID + client credentials. Verifies the credentials by minting a client-credentials DPoP token. CSS stays up until Ctrl-C. **First run installs the dev-pod deps on demand** (`@solid/community-server` + `jose`) into a per-user cache — they are intentionally **not** part of the default install, so a plain scaffold stays fast. |
 | `-h`, `--help` | Help. |
 
-What it does: copies the bundled template (minus `node_modules`/`.next`/lockfile-build-info),
+What it does: copies the bundled template (minus `node_modules`/`.next`/`tsconfig.tsbuildinfo`
+— the committed `package-lock.json` IS copied, for a resolution-free first install),
 substitutes `package.json` `name`, generates a `README.md` titled with the app
 name, optionally installs deps, optionally boots a seeded dev pod.
 

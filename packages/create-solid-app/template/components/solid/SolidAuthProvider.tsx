@@ -127,17 +127,28 @@ export function SolidAuthProvider({ children }: { children: ReactNode }) {
       // clear, early error if the WebID is unusable (no oidcIssuer / unreachable)
       // before we open a popup, and gives us the storage to probe.
       const pub = await readProfile(id);
-      // Trigger the auth flow by making an AUTHENTICATED request the global fetch
-      // will upgrade on 401. We HEAD the user's storage root with a private path;
-      // CSS storage roots are private by default, so this 401s → popup login.
+      // Trigger the auth flow by making an authenticated request the global fetch
+      // will upgrade on 401: registerGlobally() intercepts the 401, opens the
+      // <authorization-code-flow> popup, mints a DPoP token, and RETRIES the
+      // request. A storage root is private on CSS by default, so this 401s →
+      // popup → retry, and the RETRY's status tells us whether login succeeded.
       const probe = pub.storages[0] ?? new URL("/", id).toString();
       const res = await fetch(probe, { method: "GET" });
-      // A 2xx here means the token was attached and accepted (or the resource was
-      // already public AND auth completed); either way we now have a session.
-      if (!res.ok && res.status !== 401 && res.status !== 403) {
-        throw new Error(`Login probe failed: ${res.status}`);
+      // ONLY a genuine 2xx proves the token was attached AND accepted — i.e. the
+      // user is logged in. A final 401/403 means the popup was cancelled or the
+      // minted token was rejected: that is NOT a session, so we must NOT set
+      // webId/profile. (Treating 401/403 as success was the bug — it marked a
+      // failed/absent token as "logged in".) Any other non-2xx is also a failure.
+      if (!res.ok) {
+        throw new Error(
+          res.status === 401 || res.status === 403
+            ? "Login did not complete — no valid token was accepted (the popup may have been " +
+              "cancelled, or the identity provider rejected the login)."
+            : `Login probe failed: ${res.status}`,
+        );
       }
-      // Re-read the profile (now authenticated) and record the session.
+      // The token was accepted. Re-read the profile (now authenticated) and record
+      // the session — only reached on a proven-successful authenticated probe.
       const me = await readProfile(id);
       setWebId(id);
       setProfile(me);
