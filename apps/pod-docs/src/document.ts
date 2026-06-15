@@ -231,8 +231,13 @@ export interface BuildDocumentInput {
   format?: string;
   /** Authoring WebID (an IRI). Also attributed to the new head revision. */
   creator?: string;
-  /** Created stamp; defaults to `now` for a brand-new document. */
-  created?: Date;
+  /**
+   * Created stamp; defaults to `now` for a brand-new document. On a SAVE, pass
+   * back the document's existing `created` (a `Date` or the ISO string from a
+   * prior {@link parseDocument}) so the original creation time is preserved
+   * rather than silently rewritten to the edit time.
+   */
+  created?: Date | string;
   /**
    * Prior revisions to preserve, head-first (newest → oldest) — typically the
    * `revisions` array from the document just read. A NEW head revision capturing
@@ -259,12 +264,13 @@ export function buildDocument(resourceUrl: string, input: BuildDocumentInput): S
   const body = input.body ?? "";
   const prior = input.priorRevisions ?? [];
 
+  const created = input.created === undefined ? now : new Date(input.created);
   const doc = new DocumentDoc(documentSubject(resourceUrl), store, DataFactory).mark();
   doc.title = input.title || undefined;
   doc.body = body;
   doc.format = format;
   doc.creator = input.creator;
-  doc.created = input.created ?? now;
+  doc.created = created;
   doc.modified = now;
 
   // New head revision index = (max prior index for THIS resource) + 1.

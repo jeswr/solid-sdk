@@ -43,7 +43,11 @@ export interface StoredDocument {
 /** One browsable entry in the documents container (a listing row). */
 export interface DocumentEntry {
   url: string;
+  /** Friendly name from the container listing (the URL tail). */
   name: string;
+  /** The document's `dct:title` (parsed), if any. */
+  title: string;
+  /** Always `false` — `list()` only returns document resources. */
   isContainer: boolean;
   modified?: string;
 }
@@ -132,9 +136,13 @@ export class DocsStore {
   }
 
   /**
-   * List every document in the container. Skips sub-containers and any resource
-   * that doesn't parse to a `pd:Document`. Unreadable individual rows are
-   * skipped rather than failing the whole list.
+   * List every Pod-Docs document in the container. Reads each non-container
+   * child and keeps only those that actually parse to a `pd:Document`, so a
+   * stray non-document file in `pod-docs/` is never listed. Unreadable or
+   * out-of-scope rows are skipped rather than failing the whole list.
+   *
+   * The `name` and `modified` come from the container listing (cheap); `title`
+   * is the parsed `dct:title`. A missing/forbidden container resolves to `[]`.
    */
   async list(): Promise<DocumentEntry[]> {
     const url = this.containerUrl;
@@ -150,10 +158,20 @@ export class DocsStore {
     for (const r of container?.contains ?? []) {
       if (r.id === url) continue; // the container's self-description
       if (r.isContainer) continue; // sub-containers are not documents
+      let doc: StoredDocument | undefined;
+      try {
+        doc = await this.read(r.id);
+      } catch {
+        // A child that vanished, is out of scope, or failed to fetch/parse is
+        // skipped; the rest of the listing still loads.
+        continue;
+      }
+      if (!doc) continue; // not a pd:Document — skip the stray file
       out.push({
         url: r.id,
         name: r.name,
-        isContainer: r.isContainer,
+        title: doc.data.title,
+        isContainer: false,
         modified: r.modified?.toISOString(),
       });
     }
@@ -196,9 +214,13 @@ export class DocsStore {
 
   /**
    * Save an edit to an existing document, appending a new `prov:Entity`
-   * revision to its history. Pass the prior `revisions` (from {@link read}) as
-   * `priorRevisions` so the chain is preserved. Sends `If-Match` when an `etag`
-   * is supplied so a concurrent edit fails with 412 instead of clobbering.
+   * revision to its history. Pass back the document's prior state from
+   * {@link read} — its `revisions` as `priorRevisions` (so the chain is
+   * preserved), and its `created` / `creator` (so the original creation time
+   * and authorship are NOT silently rewritten to the edit; an omitted `created`
+   * defaults to now and an omitted `creator` is cleared). Sends `If-Match` when
+   * an `etag` is supplied so a concurrent edit fails with 412 instead of
+   * clobbering.
    */
   async save(
     url: string,

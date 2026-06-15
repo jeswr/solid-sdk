@@ -210,6 +210,7 @@ describe("save", () => {
       {
         title: "v2",
         body: "two",
+        created: "2020-03-03T00:00:00.000Z", // threaded back from the prior read
         priorRevisions: [
           {
             id: `${DOC}#rev-0`,
@@ -225,6 +226,8 @@ describe("save", () => {
     expect(calls[0]?.headers["if-match"]).toBe('W/"v1"');
     expect(calls[0]?.body).toContain("rev-1");
     expect(calls[0]?.body).toContain("rev-0");
+    // The original creation timestamp is preserved, not rewritten to the edit.
+    expect(calls[0]?.body).toContain("2020-03-03T00:00:00.000Z");
   });
 
   it("rejects an out-of-scope save before any I/O", async () => {
@@ -250,18 +253,38 @@ describe("remove", () => {
 });
 
 describe("list", () => {
-  it("lists document resources, skipping the self-description and sub-containers", async () => {
+  const docTtl = (title: string) => `
+    @prefix pd: <https://w3id.org/jeswr/pod-docs#> .
+    @prefix dct: <http://purl.org/dc/terms/> .
+    <#it> a pd:Document ; dct:title "${title}" ; pd:body "b" .
+  `;
+
+  it("lists only pd:Document resources, skipping self-description, sub-containers, strays and unreadable rows", async () => {
     const containerTtl = `
       @prefix ldp: <http://www.w3.org/ns/ldp#> .
       @prefix dct: <http://purl.org/dc/terms/> .
-      <${CONTAINER}> a ldp:Container ; ldp:contains <${CONTAINER}>, <${CONTAINER}b.ttl>, <${CONTAINER}a.ttl>, <${CONTAINER}sub/> .
-      <${CONTAINER}b.ttl> a ldp:Resource .
+      <${CONTAINER}> a ldp:Container ; ldp:contains
+        <${CONTAINER}>, <${CONTAINER}b.ttl>, <${CONTAINER}a.ttl>,
+        <${CONTAINER}stray.ttl>, <${CONTAINER}gone.ttl>, <${CONTAINER}sub/> .
       <${CONTAINER}a.ttl> a ldp:Resource ; dct:modified "2026-01-01T00:00:00.000Z"^^<http://www.w3.org/2001/XMLSchema#dateTime> .
+      <${CONTAINER}b.ttl> a ldp:Resource .
+      <${CONTAINER}stray.ttl> a ldp:Resource .
+      <${CONTAINER}gone.ttl> a ldp:Resource .
       <${CONTAINER}sub/> a ldp:Container .
     `;
-    const { fetch } = mockFetch({ [`GET ${CONTAINER}`]: { body: containerTtl } });
+    const { fetch } = mockFetch({
+      [`GET ${CONTAINER}`]: { body: containerTtl },
+      [`GET ${CONTAINER}a.ttl`]: { body: docTtl("Doc A"), etag: 'W/"a"' },
+      [`GET ${CONTAINER}b.ttl`]: { body: docTtl("Doc B"), etag: 'W/"b"' },
+      // stray.ttl is not a pd:Document → filtered out.
+      [`GET ${CONTAINER}stray.ttl`]: {
+        body: `<#it> <http://purl.org/dc/terms/title> "not a doc" .`,
+      },
+      // gone.ttl → 404 → skipped without failing the whole list.
+    });
     const items = await store(fetch).list();
     expect(items.map((i) => i.url)).toEqual([`${CONTAINER}a.ttl`, `${CONTAINER}b.ttl`]);
+    expect(items[0]?.title).toBe("Doc A");
     expect(items[0]?.modified).toBe("2026-01-01T00:00:00.000Z");
     expect(items.every((i) => !i.isContainer)).toBe(true);
   });

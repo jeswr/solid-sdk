@@ -65,6 +65,21 @@ describe("buildDocument", () => {
     expect(parseDocument(RES, store)?.format).toBe(DEFAULT_FORMAT);
   });
 
+  it("preserves a prior created stamp passed back as an ISO string (save path)", () => {
+    const created = "2020-01-01T00:00:00.000Z";
+    const now = new Date("2026-06-15T13:00:00.000Z");
+    const store = buildDocument(RES, {
+      title: "edited",
+      body: "new body",
+      created, // string, as it comes back from parseDocument
+      priorRevisions: [],
+      now,
+    });
+    const parsed = parseDocument(RES, store);
+    expect(parsed?.created).toBe(created); // NOT rewritten to `now`
+    expect(parsed?.modified).toBe(now.toISOString());
+  });
+
   it("honours an explicit format and an explicit created stamp", () => {
     const created = new Date("2020-01-01T00:00:00.000Z");
     const now = new Date("2026-06-15T11:00:00.000Z");
