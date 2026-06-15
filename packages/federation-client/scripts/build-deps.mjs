@@ -9,6 +9,16 @@
 // source, compile it with the local TypeScript, and drop the built `dist/` into
 // `node_modules/@jeswr/fetch-rdf`.
 //
+// REPRODUCIBILITY: the clone is pinned to the EXACT git commit resolved in
+// `package-lock.json` (not a moving `main`), so the built dep always matches the
+// lockfile-resolved version — `npm ci` on CI and a dev `npm install` build the
+// same source. Building from `main` would silently drift from the lockfile.
+//
+// DURABLE FIX (bead pss-ront): this whole `build:deps` hack exists ONLY because
+// `@jeswr/fetch-rdf` does not publish a usable `dist/`. Once fetch-rdf ships a
+// proper packaged `dist` (the upstream packaging fix), DELETE this script and the
+// `build:deps` step entirely and depend on the published package directly.
+//
 // Idempotent: if `dist/index.js` is already present (e.g. a workspace symlink or
 // a prior run) this is a no-op. Network is needed only the first time.
 
@@ -21,10 +31,42 @@ import { fileURLToPath } from "node:url";
 const ROOT = join(fileURLToPath(import.meta.url), "..", "..");
 const DEP_DIR = join(ROOT, "node_modules", "@jeswr", "fetch-rdf");
 const DEP_DIST = join(DEP_DIR, "dist", "index.js");
+const LOCKFILE = join(ROOT, "package-lock.json");
 const FETCH_RDF_GIT = "https://github.com/jeswr/fetch-rdf.git";
 
 function run(cmd, cwd) {
   execSync(cmd, { cwd, stdio: "inherit" });
+}
+
+/**
+ * Read the EXACT git commit `@jeswr/fetch-rdf` resolves to from
+ * `package-lock.json`, so the clone is pinned (reproducible) rather than tracking
+ * a moving `main`. The lock's `resolved` is a git URL ending `#<commit-or-ref>`
+ * (e.g. `git+ssh://…/fetch-rdf.git#<sha>`). Returns the ref after `#`, or
+ * `undefined` if it cannot be determined (caller then refuses to build from an
+ * unpinned source — failing closed beats a silently non-reproducible build).
+ */
+function resolvedFetchRdfRef() {
+  if (!existsSync(LOCKFILE)) {
+    return undefined;
+  }
+  let lock;
+  try {
+    lock = JSON.parse(readFileSync(LOCKFILE, "utf8"));
+  } catch {
+    return undefined;
+  }
+  const entry = lock.packages?.["node_modules/@jeswr/fetch-rdf"];
+  const resolved = entry?.resolved;
+  if (typeof resolved !== "string") {
+    return undefined;
+  }
+  const hash = resolved.lastIndexOf("#");
+  if (hash === -1) {
+    return undefined;
+  }
+  const ref = resolved.slice(hash + 1).trim();
+  return ref.length > 0 ? ref : undefined;
 }
 
 function main() {
@@ -38,10 +80,26 @@ function main() {
     process.exit(1);
   }
 
-  console.log("[build-deps] building @jeswr/fetch-rdf dist (ignore-scripts skipped its prepare)…");
+  const ref = resolvedFetchRdfRef();
+  if (!ref) {
+    console.error(
+      "[build-deps] could not resolve the @jeswr/fetch-rdf git commit from package-lock.json; " +
+        "refusing to build from an unpinned source (a non-reproducible build). " +
+        "Run `npm install` to (re)generate the lockfile.",
+    );
+    process.exit(1);
+  }
+
+  console.log(
+    `[build-deps] building @jeswr/fetch-rdf dist at pinned commit ${ref} (ignore-scripts skipped its prepare)…`,
+  );
   const work = mkdtempSync(join(tmpdir(), "fetch-rdf-build-"));
   try {
-    run(`git clone --depth 1 ${FETCH_RDF_GIT} "${work}"`);
+    // Clone then check out the EXACT lockfile-resolved commit (deterministic).
+    // A bare `git clone` (no --depth) so an arbitrary commit SHA is fetchable;
+    // we then detach onto the pinned ref.
+    run(`git clone ${FETCH_RDF_GIT} "${work}"`);
+    run(`git checkout --quiet ${ref}`, work);
     // Build with this repo's TypeScript so no extra toolchain is needed.
     run("npm install --no-audit --no-fund --ignore-scripts --prefer-offline", work);
     run(`node "${join(ROOT, "node_modules", "typescript", "bin", "tsc")}" -p tsconfig.json`, work);

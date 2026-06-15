@@ -9,8 +9,22 @@
 import { fetchRdf, parseRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 import type { DatasetCore } from "@rdfjs/types";
 import type { AppRegistration, SectorUse, VerificationIssue, VerificationResult } from "./types.js";
-import { accessModeName, VALID_ACCESS_MODE_IRIS } from "./vocab.js";
-import { type AppNode, type FederationDataset, type SectorUseNode, wrap } from "./wrappers.js";
+import {
+  accessModeName,
+  FEDAPP_ACCESS,
+  FEDAPP_CONSUMES,
+  FEDAPP_DECLARES_SHAPE,
+  FEDAPP_PRODUCES,
+  FEDAPP_SECTOR,
+  VALID_ACCESS_MODE_IRIS,
+} from "./vocab.js";
+import {
+  type AppNode,
+  type FederationDataset,
+  type SectorUseNode,
+  type TermWrapperType,
+  wrap,
+} from "./wrappers.js";
 
 /** Options for {@link verify}. */
 export interface VerifyOptions {
@@ -26,6 +40,17 @@ export interface VerifyOptions {
   readonly bodyContentType?: string;
   /** Base IRI to resolve relative IRIs when parsing a body (default the input). */
   readonly baseIRI?: string;
+  /**
+   * Require the single `fedapp:App` subject to equal the fetched URL (the
+   * expected client-id IRI). This binds the description to the location it was
+   * served from, so a document at URL A cannot cleanly describe a different app
+   * IRI B (a spoofing vector for the federation trust model).
+   *
+   * Defaults to `true` for a FETCHED document (the URL is a meaningful identity
+   * claim) and to `false` for a `body` already in hand (the caller supplies a
+   * base IRI, not an authoritative location). Set explicitly to override either.
+   */
+  readonly requireSubjectMatch?: boolean;
 }
 
 /**
@@ -40,6 +65,7 @@ export async function verify(
   input: string,
   options: VerifyOptions = {},
 ): Promise<VerificationResult> {
+  const isBody = options.body !== undefined;
   let dataset: DatasetCore;
   try {
     if (options.body !== undefined) {
@@ -58,7 +84,26 @@ export async function verify(
     };
   }
 
-  return verifyDataset(dataset, input);
+  // A FETCHED document is bound to the URL it was served from by default — the
+  // App subject must equal `input` (the expected client-id IRI), else a document
+  // at URL A could describe a different app B. A `body` in hand carries no
+  // authoritative location, so subject-binding is off by default there. Either
+  // can be overridden via `options.requireSubjectMatch`.
+  const requireSubjectMatch = options.requireSubjectMatch ?? !isBody;
+  return verifyDataset(dataset, input, { requireSubjectMatch });
+}
+
+/** Options for {@link verifyDataset}. */
+export interface VerifyDatasetOptions {
+  /**
+   * Require the single `fedapp:App` subject to equal `expectedId`. When `true`,
+   * a document whose App subject ≠ `expectedId` is rejected with a
+   * `subject-mismatch` issue (the spoofing guard). Requires `expectedId`; if
+   * `expectedId` is absent this check is skipped. Defaults to `false` so the
+   * existing registry / offline `{body}` callers (where the subject legitimately
+   * differs from the fetch/base IRI) keep their behaviour.
+   */
+  readonly requireSubjectMatch?: boolean;
 }
 
 /**
@@ -66,11 +111,16 @@ export async function verify(
  * themselves (e.g. inside {@link list}) avoid a second fetch.
  *
  * @param dataset - the parsed RDF graph.
- * @param expectedId - the document URL, used to pick the app subject when
- *   several `fedapp:App` nodes are present is NOT done — multiple Apps is an
- *   issue; this is only used to scope error messages.
+ * @param expectedId - the document URL / expected client-id IRI. Used to scope
+ *   error messages and, when `options.requireSubjectMatch` is set, to bind the
+ *   `fedapp:App` subject to this IRI.
+ * @param options - see {@link VerifyDatasetOptions}.
  */
-export function verifyDataset(dataset: DatasetCore, expectedId?: string): VerificationResult {
+export function verifyDataset(
+  dataset: DatasetCore,
+  expectedId?: string,
+  options: VerifyDatasetOptions = {},
+): VerificationResult {
   const fed: FederationDataset = wrap(dataset);
   const apps = fed.apps();
   const issues: VerificationIssue[] = [];
@@ -91,11 +141,26 @@ export function verifyDataset(dataset: DatasetCore, expectedId?: string): Verifi
     });
   }
 
+  // Subject-binding (spoofing guard): when the caller asserts an expected IRI
+  // (the fetch URL for a fetched document), the App subject MUST equal it — a
+  // document served at URL A must not describe a different app B. Off by default
+  // (verifyDataset's registry/offline callers legitimately have subject ≠
+  // location); `verify()` turns it on for fetched documents.
+  const appNode = apps[0] as AppNode;
+  if (options.requireSubjectMatch && expectedId !== undefined && appNode.value !== expectedId) {
+    issues.push({
+      code: "subject-mismatch",
+      message: `fedapp:App subject (${appNode.value}) does not equal the expected client-id IRI (${expectedId}).`,
+      subject: appNode.value,
+      value: expectedId,
+    });
+  }
+
   // verify() treats a registration document as describing ONE app: it projects
   // and validates the first fedapp:App (a >1 count is already flagged above as a
   // `multiple-apps` issue). Use list() for multi-app registry documents, which
   // verifies each app independently via verifyApp().
-  const result = verifyApp(apps[0] as AppNode);
+  const result = verifyApp(appNode);
   issues.push(...result.issues);
 
   return {
@@ -142,16 +207,16 @@ export function verifyApp(app: AppNode): VerificationResult {
 
 /** Project an {@link AppNode} into a plain {@link AppRegistration}, recording issues. */
 function appToRegistration(app: AppNode, issues: VerificationIssue[]): AppRegistration {
-  const access = mapAccessModes(app.access, app.value, issues);
+  const access = mapAccessModes(app.access, app.value, FEDAPP_ACCESS, issues);
   const sectorUse = [...app.sectorUses].map((node) => sectorUseNodeToView(node, issues));
 
   return {
     id: app.value,
-    sectors: [...app.sectors],
+    sectors: validIris(app.sectors, app.value, FEDAPP_SECTOR, issues),
     access,
-    consumes: [...app.consumes],
-    produces: [...app.produces],
-    declaresShape: [...app.declaresShape],
+    consumes: validIris(app.consumes, app.value, FEDAPP_CONSUMES, issues),
+    produces: validIris(app.produces, app.value, FEDAPP_PRODUCES, issues),
+    declaresShape: validIris(app.declaresShape, app.value, FEDAPP_DECLARES_SHAPE, issues),
     sectorUse,
   };
 }
@@ -159,8 +224,8 @@ function appToRegistration(app: AppNode, issues: VerificationIssue[]): AppRegist
 /** Project a {@link SectorUseNode} into a {@link SectorUse} view, recording issues. */
 function sectorUseNodeToView(node: SectorUseNode, issues: VerificationIssue[]): SectorUse {
   const id = node.value;
-  const sectors = [...node.sectors];
-  const access = mapAccessModes(node.access, id, issues);
+  const sectors = validIris(node.sectors, id, FEDAPP_SECTOR, issues);
+  const access = mapAccessModes(node.access, id, FEDAPP_ACCESS, issues);
 
   if (sectors.length === 0) {
     issues.push({
@@ -181,19 +246,53 @@ function sectorUseNodeToView(node: SectorUseNode, issues: VerificationIssue[]): 
     id,
     sector: sectors[0] ?? "",
     access,
-    consumes: [...node.consumes],
-    produces: [...node.produces],
+    consumes: validIris(node.consumes, id, FEDAPP_CONSUMES, issues),
+    produces: validIris(node.produces, id, FEDAPP_PRODUCES, issues),
   };
 }
 
-/** Validate + map access-mode IRIs to short names, recording invalid ones. */
-function mapAccessModes(
-  modeIris: ReadonlySet<string>,
+/**
+ * Filter a Set of object TERMS for an IRI-valued property down to the IRI string
+ * values whose term is a `NamedNode`, recording an `invalid-term-type` issue for
+ * every object that is NOT a NamedNode (a string literal or blank node where an
+ * IRI is required is invalid — e.g. `fedapp:access "…acl#Read"` as a literal).
+ */
+function validIris(
+  terms: ReadonlySet<TermWrapperType>,
   subject: string,
+  predicate: string,
+  issues: VerificationIssue[],
+): string[] {
+  const out: string[] = [];
+  for (const term of terms) {
+    if (term.termType !== "NamedNode") {
+      issues.push({
+        code: "invalid-term-type",
+        message: `Expected an IRI (NamedNode) for <${predicate}> but found a ${term.termType} ("${term.value}").`,
+        subject,
+        value: term.value,
+      });
+      continue;
+    }
+    out.push(term.value);
+  }
+  return out;
+}
+
+/**
+ * Validate + map access-mode object TERMS to short names. Rejects non-`NamedNode`
+ * objects (via {@link validIris}) before checking each IRI is an `acl:` mode, so
+ * a literal in `fedapp:access` position is flagged `invalid-term-type` rather than
+ * silently accepted by its lexical value.
+ */
+function mapAccessModes(
+  modeTerms: ReadonlySet<TermWrapperType>,
+  subject: string,
+  predicate: string,
   issues: VerificationIssue[],
 ): readonly ("Read" | "Write" | "Append" | "Control")[] {
   const out: ("Read" | "Write" | "Append" | "Control")[] = [];
-  for (const iri of modeIris) {
+  for (const iri of validIris(modeTerms, subject, predicate, issues)) {
     if (!VALID_ACCESS_MODE_IRIS.has(iri)) {
       issues.push({
         code: "invalid-access-mode",

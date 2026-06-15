@@ -70,6 +70,50 @@ export const INVALID_EMPTY = `
 <https://app.example/clientid> a fedapp:App .
 `;
 
+/**
+ * An fedapp:App whose `fedapp:access` is a string LITERAL of the acl:Read IRI
+ * (not a NamedNode). The lexical value matches a valid mode, but an IRI-valued
+ * property must have a NamedNode object — this must be REJECTED as a term-type
+ * error, not silently accepted by its string value.
+ */
+export const INVALID_LITERAL_ACCESS = `
+@prefix fedapp: <https://w3id.org/jeswr/fed#> .
+
+<https://app.example/clientid>
+    a fedapp:App ;
+    fedapp:sector <https://w3id.org/jeswr/sectors/identity> ;
+    fedapp:access "http://www.w3.org/ns/auth/acl#Read" .
+`;
+
+/**
+ * An fedapp:App whose `fedapp:sector` is a blank node (not a NamedNode) — an
+ * IRI-valued property with a non-IRI object, which must be rejected.
+ */
+export const INVALID_BNODE_SECTOR = `
+@prefix fedapp: <https://w3id.org/jeswr/fed#> .
+@prefix acl: <http://www.w3.org/ns/auth/acl#> .
+
+<https://app.example/clientid>
+    a fedapp:App ;
+    fedapp:sector [ ] ;
+    fedapp:access acl:Read .
+`;
+
+/**
+ * A registration served at one URL whose `fedapp:App` subject is a DIFFERENT
+ * IRI — the spoofing case the subject-binding guard must reject for a fetched
+ * document.
+ */
+export const VALID_FLAT_OTHER_SUBJECT = `
+@prefix fedapp: <https://w3id.org/jeswr/fed#> .
+@prefix acl: <http://www.w3.org/ns/auth/acl#> .
+
+<https://attacker.example/otherapp>
+    a fedapp:App ;
+    fedapp:sector <https://w3id.org/jeswr/sectors/identity> ;
+    fedapp:access acl:Read, acl:Write .
+`;
+
 /** An fedapp:App that declares a sector but requests no access modes. */
 export const INVALID_NO_ACCESS = `
 @prefix fedapp: <https://w3id.org/jeswr/fed#> .
