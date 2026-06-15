@@ -21,6 +21,19 @@ yet.
 npm install solid-offline n3
 ```
 
+`npm` publish is currently deferred — install directly from the GitHub branch:
+
+```sh
+npm install github:jeswr/solid-offline#main n3
+```
+
+> **Maintainer note:** the built `dist/` is **committed** so the package is
+> installable from a GitHub branch (`npm install github:jeswr/solid-offline#main`)
+> even under `ignore-scripts=true`, where no build step runs in the consumer.
+> **Rebuild `dist/` (`npm run build`) before committing any source change** so the
+> committed output never drifts from `src/`. Once npm publish is enabled this can
+> be reverted to a publish-time build with `dist/` re-gitignored.
+
 ## Use (page client)
 
 ```ts

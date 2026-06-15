@@ -1,5 +1,8 @@
 node_modules/
-dist/
+# dist/ is committed so the package is installable from a GitHub branch
+# (npm install github:jeswr/solid-offline#main) under ignore-scripts=true,
+# where no build runs in the consumer. Rebuild with `npm run build` before
+# committing source changes. npm publish is deferred.
 coverage/
 *.log
 .DS_Store
