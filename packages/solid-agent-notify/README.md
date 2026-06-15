@@ -17,11 +17,19 @@ external URL in this package.
 
 ```bash
 npm install solid-agent-notify
-# or as a git dependency (a `prepare` build produces dist/ on install):
-npm install github:jeswr/solid-agent-notify
+# or directly from a GitHub branch (no build step needed — see note below):
+npm install github:jeswr/solid-agent-notify#main
 ```
 
 Node ≥ 20, ESM-only.
+
+> **`dist/` is committed** so the package installs directly from a GitHub branch
+> (`npm install github:jeswr/solid-agent-notify#main`) **without a build step** —
+> consumers under `ignore-scripts=true` never run this package's `prepare`/`build`,
+> so the built `dist/` ships in the repo. npm publish is a deferred migration.
+> **Maintainers:** rebuild `dist/` whenever source changes — `npm run build`,
+> then commit `dist/` in the same change — so the committed artifact never drifts
+> from `src/`.
 
 ## API
 
