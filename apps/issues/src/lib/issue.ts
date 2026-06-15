@@ -239,11 +239,19 @@ export class Worklog extends TermWrapper {
   get note(): string | undefined {
     return OptionalFrom.subjectPredicate(this, dct("description"), LiteralAs.string);
   }
-  /** Logged effort in seconds (the `time:Duration`'s `time:numericDuration`), or 0 if absent. */
+  /**
+   * Logged effort in seconds (the `time:Duration`'s `time:numericDuration`), or 0 if
+   * absent. The unit is enforced: only a duration whose `time:unitType` is
+   * `time:unitSecond` is read. Seconds is the one canonical unit we write and sum, so
+   * a duration in any other OWL-Time unit (minutes, hours, …) is **skipped** (returns
+   * 0) rather than mis-summed as if it were seconds.
+   */
   get seconds(): number {
     const durationIri = OptionalFrom.subjectPredicate(this, time("hasDuration"), NamedNodeAs.string);
     if (!durationIri) return 0;
     const duration = new TermWrapper(durationIri, this.dataset, this.factory);
+    const unit = OptionalFrom.subjectPredicate(duration, time("unitType"), NamedNodeAs.string);
+    if (unit !== TIME_UNIT_SECOND) return 0; // not seconds → can't be summed as seconds
     return OptionalFrom.subjectPredicate(duration, time("numericDuration"), LiteralAs.number) ?? 0;
   }
 }

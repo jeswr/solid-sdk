@@ -384,6 +384,25 @@ describe("SHACL shape (shapes/issue.ttl)", () => {
     expect(report.results.some((r) => r.path?.value === `${TIME}unitType`)).toBe(true);
   });
 
+  it("F4: flags a time:Duration whose unit is not time:unitSecond", async () => {
+    // Seconds is the only supported unit (the reader skips anything else); the shape
+    // requires time:unitType = time:unitSecond (sh:hasValue), so a minutes duration
+    // can't be written in the first place.
+    const ds = new Store();
+    const dur = DataFactory.namedNode(`${URL_}#work-5-dur`);
+    ds.addQuad(dur, DataFactory.namedNode(RDF_TYPE), DataFactory.namedNode(`${TIME}Duration`));
+    ds.addQuad(
+      dur,
+      DataFactory.namedNode(`${TIME}numericDuration`),
+      DataFactory.literal("90", DataFactory.namedNode(`${XSD}decimal`)),
+    );
+    ds.addQuad(dur, DataFactory.namedNode(`${TIME}unitType`), DataFactory.namedNode(`${TIME}unitMinute`)); // NOT unitSecond
+
+    const report = await validate(ds);
+    expect(report.conforms).toBe(false);
+    expect(report.results.some((r) => r.path?.value === `${TIME}unitType`)).toBe(true);
+  });
+
   it("F4: a worklog-kind prov:Activity also satisfies the F3 activity shape (used = issue IRI)", async () => {
     // A worklog is a prov:Activity, so the F3 shape (required startedAtTime, single
     // IRI prov:used, http actor) must hold for it too — they coexist on one node.

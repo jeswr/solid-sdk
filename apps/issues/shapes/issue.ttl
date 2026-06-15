@@ -222,9 +222,11 @@
 # --- A logged-work duration (time:Duration) — F4 ---
 # The effort of a worklog entry, linked from its prov:Activity via time:hasDuration.
 # A well-formed duration carries exactly one `time:numericDuration` (xsd:decimal —
-# the OWL-Time range) in exactly one `time:unitType` (an IRI; the writer always uses
-# time:unitSecond, so figures sum without conversion). Both are required: a duration
-# with no magnitude or no unit is meaningless.
+# the OWL-Time range) in exactly one `time:unitType`. Seconds is the ONLY supported
+# unit: figures sum and display without conversion, and the reader only counts a
+# duration in time:unitSecond — so the shape REQUIRES time:unitType = time:unitSecond
+# (sh:hasValue) to forbid writing a non-second duration that would be mis-summed.
+# Both properties are required: a duration with no magnitude or no unit is meaningless.
 [] a sh:NodeShape ;
   sh:targetClass time:Duration ;
   sh:property [
@@ -234,4 +236,5 @@
   sh:property [
     sh:path time:unitType ; sh:name "unit" ;
     sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ;
+    sh:hasValue time:unitSecond ;
   ] .
