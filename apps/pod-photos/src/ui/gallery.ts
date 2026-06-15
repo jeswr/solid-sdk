@@ -68,7 +68,16 @@ export interface ListGalleryOptions {
    * auth seam — unit tests pass a stub here.
    */
   fetch?: typeof fetch;
-  /** Abort signal forwarded to every underlying GET. */
+  /**
+   * A cooperative cancellation signal. The data layer's `freshRdf` does not (yet)
+   * forward a signal to the underlying fetch, so this does NOT abort an in-flight
+   * GET mid-byte; instead it is checked before the container read and before each
+   * photo read, so an already-cancelled (or mid-walk cancelled) call rejects
+   * promptly with an `AbortError` rather than completing wasted work. The hook's
+   * request-id staleness guard is the real defence against stale state — this is
+   * a best-effort early-out on top of it. (If `freshRdf` gains signal support,
+   * thread it through here.)
+   */
   signal?: AbortSignal;
 }
 
@@ -117,6 +126,12 @@ export async function listGallery(
 ): Promise<GalleryListing> {
   const url = containerUrl.endsWith('/') ? containerUrl : `${containerUrl}/`;
   const { fetch: authedFetch, signal } = options;
+
+  // Early-out before doing any work if we were handed an already-aborted signal
+  // (e.g. a navigation superseded this load before its effect even ran).
+  if (signal?.aborted) {
+    throw new DOMException('Aborted', 'AbortError');
+  }
 
   // ONE GET for the container listing, with our own WAC branch (the data layer's
   // `listContainer` would have swallowed a 401/403 into `[]`).

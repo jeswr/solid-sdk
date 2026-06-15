@@ -113,6 +113,39 @@ describe('usePhotoGallery — stale-response guard', () => {
     expect(result.current.listing?.photos.map((p) => p.photo.name)).toEqual(['B photo']);
   });
 
+  it('clears the previous listing on navigate so no stale grid shows under the new breadcrumb', async () => {
+    let releaseB: () => void = () => {};
+    const gateB = new Promise<void>((r) => {
+      releaseB = r;
+    });
+    // A resolves immediately; B is gated, so between navigate and B's resolve the
+    // hook must expose listing=null (not A's photos under B's breadcrumb).
+    const fetch = gatedFetch(
+      {
+        'https://pod.example/a/': A,
+        'https://pod.example/a/x.ttl': A_PHOTO,
+        'https://pod.example/b/': B,
+        'https://pod.example/b/y.ttl': B_PHOTO,
+      },
+      { 'https://pod.example/b/': gateB },
+    );
+
+    const { result } = renderHook(() => usePhotoGallery('https://pod.example/a/', { fetch }));
+    await waitFor(() => expect(result.current.listing?.url).toBe('https://pod.example/a/'));
+
+    act(() => {
+      result.current.navigate('https://pod.example/b/');
+    });
+    // Breadcrumb is already on B, but the listing is cleared — no stale A grid.
+    expect(result.current.currentUrl).toBe('https://pod.example/b/');
+    expect(result.current.listing).toBeNull();
+
+    await act(async () => {
+      releaseB();
+    });
+    await waitFor(() => expect(result.current.listing?.url).toBe('https://pod.example/b/'));
+  });
+
   it('drops a slow earlier ERROR that resolves after a navigation (catch-branch)', async () => {
     let releaseA: () => void = () => {};
     const gateA = new Promise<void>((r) => {

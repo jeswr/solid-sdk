@@ -158,7 +158,7 @@ describe('listGallery', () => {
     );
   });
 
-  it('aborts the photo walk when the signal is already aborted', async () => {
+  it('rejects with AbortError when handed an already-aborted signal (early-out)', async () => {
     const controller = new AbortController();
     controller.abort();
     const fetch = routerFetch({
@@ -166,6 +166,30 @@ describe('listGallery', () => {
       'https://pod.example/photos/sunset.ttl': SUNSET,
       'https://pod.example/photos/aurora.ttl': AURORA,
     });
+    await expect(
+      listGallery('https://pod.example/photos/', { fetch, signal: controller.signal }),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+  });
+
+  it('aborts the photo walk when the signal trips mid-walk', async () => {
+    // The signal is NOT aborted up front (so the container read + early-out pass)
+    // — it is aborted the moment the first photo GET is issued, so the in-walk
+    // `signal.aborted` check rejects the call.
+    const controller = new AbortController();
+    const fetch = (async (input: string | URL | Request) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      const map: Record<string, string> = {
+        'https://pod.example/photos/': ROOT,
+        'https://pod.example/photos/sunset.ttl': SUNSET,
+        'https://pod.example/photos/aurora.ttl': AURORA,
+      };
+      if (url !== 'https://pod.example/photos/') {
+        controller.abort(); // a photo GET → trip the signal before parse
+      }
+      const body = map[url];
+      return body === undefined ? statusResponse(url, 404) : turtleResponse(url, body);
+    }) as unknown as typeof globalThis.fetch;
+
     await expect(
       listGallery('https://pod.example/photos/', { fetch, signal: controller.signal }),
     ).rejects.toMatchObject({ name: 'AbortError' });

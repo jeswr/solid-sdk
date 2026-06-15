@@ -169,7 +169,14 @@ export function usePhotoGallery(
   }, [currentUrl, authedFetch, reloadToken]);
 
   const navigate = useCallback((url: string) => {
+    // Clear the previous container's listing + error as we move, so the grid
+    // never shows the OLD folder's photos under the NEW folder's breadcrumb
+    // while the load is in flight (the loading state renders alone). The load
+    // effect repopulates `listing` when the new container resolves.
     setCurrentUrl(ensureTrailingSlash(url));
+    setListing(null);
+    setError(null);
+    setIsAccessError(false);
   }, []);
 
   const refresh = useCallback(() => {
