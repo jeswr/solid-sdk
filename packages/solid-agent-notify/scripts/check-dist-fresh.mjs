@@ -1,35 +1,43 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 /**
- * check-dist-fresh — guard against the committed `dist/` drifting from `src/`.
+ * check-dist-fresh — guard against the COMMITTED `dist/` drifting from `src/`.
  *
  * `dist/` is committed (not gitignored) so the package installs directly from a
  * GitHub branch without a build step — consumers run under `ignore-scripts=true`
  * and never execute this package's `prepare`/`build`. That only stays correct if
  * the committed artifact matches the source. This script rebuilds into a scratch
- * dir and diffs the EMITTED JavaScript + declarations against committed `dist/`.
+ * dir with `tsc` and diffs the EMITTED JavaScript + declarations against the
+ * version of `dist/` at git HEAD.
  *
- * It deliberately ignores the `*.map` sourcemap files: their byte content can vary
- * with absolute paths / tooling versions, and they are not load-bearing for a
- * consumer importing the package. Code (`.js`) and types (`.d.ts`) are what matter.
+ * Why compare against git HEAD, not the working-tree `dist/`:
+ *  - `npm run build` overwrites the working-tree `dist/`. If this check read the
+ *    working tree, then running it AFTER `build` would compare a fresh build
+ *    against a just-overwritten fresh build — always equal, so a STALE *committed*
+ *    `dist/` would never be caught. Comparing against the blobs at
+ *    `HEAD:dist/<path>` makes the check independent of whether `build` ran first
+ *    and of the working tree's state: it asks "does what's COMMITTED match a fresh
+ *    build of the COMMITTED src?", which is the property that actually keeps the
+ *    GitHub-installable artifact correct.
+ *
+ * It deliberately ignores the `*.map` sourcemap files: their byte content can
+ * vary with absolute paths / tooling versions (the scratch outDir differs from
+ * the committed build's cwd), and they are not load-bearing for a consumer
+ * importing the package. Code (`.js`) and types (`.d.ts`) are what matter.
  *
  * Exit 0 = in sync; exit 1 = drift (run `npm run build` and commit `dist/`).
  */
 import { execFileSync } from "node:child_process";
-import {
-  mkdtempSync,
-  readFileSync,
-  readdirSync,
-  rmSync,
-  statSync,
-} from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
-const committedDist = join(root, "dist");
 
-/** Recursively list relative paths of `.js`/`.d.ts` files under `dir`. */
+/**
+ * Recursively list relative paths of emitted `.js`/`.d.ts` files under `dir`,
+ * skipping `*.map` sourcemaps (vary with absolute paths, not load-bearing).
+ */
 function listArtifacts(dir) {
   const out = [];
   const walk = (d) => {
@@ -53,6 +61,42 @@ function toKey(base, abs) {
   return relative(base, abs).split(sep).join("/");
 }
 
+/**
+ * The set of `.js`/`.d.ts` artifacts committed under `dist/` at git HEAD,
+ * keyed by their path RELATIVE to `dist/` (matching `toKey(freshDist, …)`).
+ * Uses `git ls-tree` so it reads the COMMITTED tree, never the working copy.
+ */
+function committedDistKeysAtHead() {
+  const out = execFileSync(
+    "git",
+    ["ls-tree", "-r", "--name-only", "HEAD", "dist"],
+    { cwd: root, encoding: "utf8" }
+  );
+  return (
+    out
+      .split("\n")
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0)
+      .filter((p) => /\.(js|d\.ts)$/.test(p) && !p.endsWith(".map"))
+      // Strip the leading `dist/` so the key matches the fresh-build relative key.
+      .map((p) => p.replace(/^dist\//, ""))
+  );
+}
+
+/**
+ * Read a committed `dist/<key>` blob from git HEAD, or `null` if absent.
+ */
+function readCommittedDist(key) {
+  try {
+    return execFileSync("git", ["show", `HEAD:dist/${key}`], {
+      cwd: root,
+      encoding: "utf8",
+    });
+  } catch {
+    return null;
+  }
+}
+
 let scratch;
 try {
   scratch = mkdtempSync(join(tmpdir(), "san-dist-"));
@@ -67,26 +111,20 @@ try {
   const freshFiles = new Map(
     listArtifacts(freshDist).map((p) => [toKey(freshDist, p), p])
   );
-  const committedFiles = new Map(
-    statSync(committedDist, { throwIfNoEntry: false })
-      ? listArtifacts(committedDist).map((p) => [toKey(committedDist, p), p])
-      : []
-  );
+  const committedKeys = new Set(committedDistKeysAtHead());
 
   const drift = [];
   for (const [key, freshPath] of freshFiles) {
-    const committedPath = committedFiles.get(key);
-    if (!committedPath) {
+    const committed = readCommittedDist(key);
+    if (committed === null) {
       drift.push(`missing in committed dist/: ${key}`);
       continue;
     }
-    if (
-      readFileSync(freshPath, "utf8") !== readFileSync(committedPath, "utf8")
-    ) {
+    if (readFileSync(freshPath, "utf8") !== committed) {
       drift.push(`out of date: ${key}`);
     }
   }
-  for (const key of committedFiles.keys()) {
+  for (const key of committedKeys) {
     if (!freshFiles.has(key))
       drift.push(`stale (no longer emitted): dist/${key}`);
   }
