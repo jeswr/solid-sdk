@@ -1,0 +1,26 @@
+{
+  "$schema": "https://solid.example/suite-tracking/suite.schema.json",
+  "id": "pod-health",
+  "kind": "app",
+  "name": "Pod Health",
+  "repo": "https://github.com/jeswr/pod-health",
+  "category": "health",
+  "maturity": "prototype",
+  "visibility": "public",
+  "stack": {
+    "language": "typescript",
+    "runtime": "node>=20",
+    "rdf": "@jeswr/fetch-rdf + @solid/object + @rdfjs/wrapper + n3",
+    "test": "vitest",
+    "lint": "biome"
+  },
+  "dependsOn": ["full-solid-ecosystem", "solid-federation-vocab"],
+  "federation": {
+    "clientIdUrl": "https://health.solid.example/clientid.jsonld",
+    "sectors": ["health"],
+    "accessModes": ["Read", "Write", "Append"],
+    "produces": ["health"],
+    "consumes": ["health"],
+    "membershipTodo": "TODO(O1-gated): Pod Health consumes and produces health:HealthRecord / health:Observation (+ the vital-sign subtypes) / health:Condition / health:MedicationStatement / health:Immunization plus app-local GPX workouts on the health sector. The health sector namespace is currently the fse placeholder https://TBD.example/solid/health#, pending fse namespace decision #2; the fedapp: clientid block uses the frozen https://w3id.org/jeswr/fed# vocabulary and the https://w3id.org/jeswr/sectors/health#sector slug. Membership remains the registry's job after a signed challenge — never self-asserted here."
+  }
+}
