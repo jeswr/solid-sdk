@@ -52,11 +52,15 @@ const store = new MailStore(); // uses the ambient (authenticated) globalThis.fe
 const inboxUrl = folderDocument(podRoot, WellKnownFolders.inbox);
 
 // Load (or start empty), add a message reference, write back conditionally.
-const { mailbox, etag, url } = await store.loadOrEmpty(inboxUrl);
-const inbox = mailbox.findFolder(`${inboxUrl}#it`) ?? mailbox.createFolder(`${inboxUrl}#it`);
+const loaded = await store.loadOrEmpty(inboxUrl);
+const inbox =
+  loaded.mailbox.findFolder(`${inboxUrl}#it`) ?? loaded.mailbox.createFolder(`${inboxUrl}#it`);
 inbox.title = "Inbox";
 inbox.addMessage("https://pod.example/mail/messages/m1.ttl#it");
-await store.save({ mailbox, etag, url });
+// save() picks the precondition from loaded.exists + loaded.etag:
+// create-only on a new resource, If-Match on an existing one with an ETag, and
+// it refuses to blind-overwrite an existing ETag-less resource by default.
+await store.save(loaded);
 ```
 
 Auth is the caller's concern: the suite default is

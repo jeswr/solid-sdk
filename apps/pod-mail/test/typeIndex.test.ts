@@ -22,17 +22,28 @@ describe("TypeIndexDataset", () => {
     expect(idx.hasRegistrationFor(Classes.EmailMessage)).toBe(true);
   });
 
-  it("registerMail is idempotent — second call returns the existing entry", () => {
+  it("registerMail is idempotent on the SAME container — returns the existing entry", () => {
     const idx = emptyIndex();
     const a = idx.registerMail(INDEX, MAIL_CONTAINER);
-    const b = idx.registerMail(INDEX, "https://pod.example/other/");
+    const b = idx.registerMail(INDEX, MAIL_CONTAINER);
     expect(b.value).toBe(a.value);
-    // still only one registration for the class
     expect([...idx.registrations].filter((r) => r.forClass === Classes.EmailMessage)).toHaveLength(
       1,
     );
-    // and it kept the original container
     expect(b.instanceContainer).toBe(MAIL_CONTAINER);
+  });
+
+  it("registerMail adds a NEW entry for a different container (distinct subjects)", () => {
+    const idx = emptyIndex();
+    const a = idx.registerMail(INDEX, MAIL_CONTAINER);
+    const b = idx.registerMail(INDEX, "https://pod.example/other-mail/");
+    // a class registration that points elsewhere must NOT suppress our own
+    expect(b.value).not.toBe(a.value);
+    expect([...idx.registrations].filter((r) => r.forClass === Classes.EmailMessage)).toHaveLength(
+      2,
+    );
+    expect(a.instanceContainer).toBe(MAIL_CONTAINER);
+    expect(b.instanceContainer).toBe("https://pod.example/other-mail/");
   });
 
   it("locate returns container entries for a registered class", () => {

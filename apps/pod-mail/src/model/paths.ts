@@ -30,9 +30,14 @@ export function threadsContainer(podRoot: string): string {
   return new URL("threads/", mailRoot(podRoot)).toString();
 }
 
-/** The document for a named folder (e.g. "inbox" → `<mail>/folders/inbox.ttl`). */
+/**
+ * The document for a named folder (e.g. "inbox" → `<mail>/folders/inbox.ttl`).
+ * The slug is URL-encoded (as for message/thread ids) so a name containing
+ * `../`, `#`, `?` or spaces cannot escape the `folders/` namespace or address an
+ * unexpected resource.
+ */
 export function folderDocument(podRoot: string, folder: string): string {
-  return new URL(`folders/${folder}.ttl`, mailRoot(podRoot)).toString();
+  return new URL(`folders/${encodeURIComponent(folder)}.ttl`, mailRoot(podRoot)).toString();
 }
 
 /**

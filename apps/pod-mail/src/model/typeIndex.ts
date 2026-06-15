@@ -115,15 +115,40 @@ export class TypeIndexDataset extends DatasetWrapper {
 
   /**
    * Register Pod Mail's primary class (`schema:EmailMessage`) against its mail
-   * root container. Idempotent: a no-op (returns the existing entry) if a
-   * registration for the class already exists.
+   * root container.
+   *
+   * Idempotent on the *specific container*: returns the existing entry only if a
+   * `schema:EmailMessage` registration already points at `mailContainer`. A
+   * registration for the class that points elsewhere (e.g. another app's
+   * container) does NOT suppress Pod Mail's own registration — otherwise Pod
+   * Mail's container might never be advertised. The fragment is derived from the
+   * container so distinct containers get distinct registration subjects.
    */
   registerMail(indexUrl: string, mailContainer: string): TypeRegistration {
     for (const reg of this.registrations) {
-      if (reg.forClass === Classes.EmailMessage) return reg;
+      if (reg.forClass === Classes.EmailMessage && reg.instanceContainer === mailContainer) {
+        return reg;
+      }
     }
-    return this.register(indexUrl, "#registration-pod-mail", Classes.EmailMessage, {
+    const fragment = `#registration-pod-mail-${fragmentSlug(mailContainer)}`;
+    return this.register(indexUrl, fragment, Classes.EmailMessage, {
       container: mailContainer,
     });
   }
+}
+
+/**
+ * A stable, fragment-safe slug for a container IRI, so two different mail
+ * containers map to two different `solid:TypeRegistration` subjects. Uses a
+ * short FNV-1a hash in base36 — collision-resistant enough for distinguishing a
+ * handful of containers and free of characters that would need escaping in a
+ * URL fragment.
+ */
+function fragmentSlug(container: string): string {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < container.length; i++) {
+    hash ^= container.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(36);
 }

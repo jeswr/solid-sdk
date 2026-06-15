@@ -50,14 +50,43 @@ export class MailConflictError extends Error {
   }
 }
 
+/** Raised when an existing resource has no ETag and an unconditional write was
+ * not explicitly allowed (the safe default — refuse to blind-overwrite). */
+export class MailNoValidatorError extends Error {
+  readonly url: string;
+  constructor(url: string) {
+    super(
+      `Existing mail resource ${url} returned no ETag; refusing an unconditional overwrite. Pass { allowUnconditional: true } to save() to override.`,
+    );
+    this.name = "MailNoValidatorError";
+    this.url = url;
+  }
+}
+
 /** A mail document loaded from the pod, with its strong validator. */
 export interface LoadedMailbox {
   /** The typed wrapper over the document's dataset. */
   mailbox: MailboxDataset;
   /** ETag for the conditional write-back (`null` on servers that omit it). */
   etag: string | null;
+  /**
+   * Whether the resource already existed on the server. Tracked separately from
+   * `etag` so an existing-but-ETag-less resource (some legacy servers) is not
+   * mistaken for a new resource — they need different write preconditions.
+   */
+  exists: boolean;
   /** Final URL after redirects. */
   url: string;
+}
+
+/** Options for a single write. */
+export interface SaveOptions {
+  /**
+   * Allow an unconditional PUT of an *existing* resource that has no ETag.
+   * Off by default: without an ETag a conditional write is impossible, so the
+   * safe default is to refuse rather than risk clobbering a concurrent change.
+   */
+  allowUnconditional?: boolean;
 }
 
 /** Options for the store: the (authenticated) fetch to use. */
@@ -86,7 +115,7 @@ export class MailStore {
       const { dataset, etag, url: finalUrl } = await fetchRdf(url, this.fetchOpt());
       // fetchRdf returns an n3.Store-backed DatasetCore; wrap it directly.
       const mailbox = new MailboxDataset(dataset, DataFactory);
-      return { mailbox, etag, url: finalUrl };
+      return { mailbox, etag, exists: true, url: finalUrl };
     } catch (e) {
       throw mapFetchError(url, e);
     }
@@ -101,26 +130,40 @@ export class MailStore {
       return await this.load(url);
     } catch (e) {
       if (e instanceof MailNotFoundError) {
-        return { mailbox: new MailboxDataset(new Store(), DataFactory), etag: null, url };
+        return {
+          mailbox: new MailboxDataset(new Store(), DataFactory),
+          etag: null,
+          exists: false,
+          url,
+        };
       }
       throw e;
     }
   }
 
   /**
-   * Conditional-PUT a mail document back to the pod. Uses `If-Match: <etag>`
-   * when an ETag is known, and `If-None-Match: *` (create-only) when it is not,
-   * so a write never silently clobbers a concurrent change. Throws
-   * `MailConflictError` on 412 (lost the race — re-fetch and retry) and
+   * Conditional-PUT a mail document back to the pod, choosing the precondition
+   * from whether the resource exists and whether it has an ETag:
+   *
+   * - **new resource** (`exists === false`) → `If-None-Match: *` (create-only),
+   *   so a create never clobbers a resource another writer just created;
+   * - **existing resource with an ETag** → `If-Match: <etag>` (optimistic lock);
+   * - **existing resource with no ETag** → refuse by default
+   *   (`MailNoValidatorError`), because a conditional write is impossible; pass
+   *   `{ allowUnconditional: true }` to PUT it unconditionally.
+   *
+   * Throws `MailConflictError` on 412 (lost the race — re-fetch and retry) and
    * `MailAccessError` on 401/403.
    */
-  async save(loaded: LoadedMailbox): Promise<void> {
+  async save(loaded: LoadedMailbox, options: SaveOptions = {}): Promise<void> {
     const body = serialiseToTurtle(loaded.mailbox);
     const headers: Record<string, string> = { "content-type": "text/turtle" };
-    if (loaded.etag !== null) {
-      headers["if-match"] = loaded.etag;
-    } else {
+    if (!loaded.exists) {
       headers["if-none-match"] = "*";
+    } else if (loaded.etag !== null) {
+      headers["if-match"] = loaded.etag;
+    } else if (!options.allowUnconditional) {
+      throw new MailNoValidatorError(loaded.url);
     }
     const f = this.fetchImpl ?? globalThis.fetch;
     const res = await f(loaded.url, { method: "PUT", headers, body });

@@ -5,6 +5,7 @@ import {
   MailAccessError,
   MailConflictError,
   MailNotFoundError,
+  MailNoValidatorError,
   MailStore,
   mapFetchError,
 } from "../src/model/store.js";
@@ -38,6 +39,7 @@ describe("MailStore.load", () => {
     const store = new MailStore({ fetch: fetchStub as unknown as typeof fetch });
     const loaded = await store.load(URL_INBOX);
     expect(loaded.etag).toBe('"v1"');
+    expect(loaded.exists).toBe(true);
     expect(loaded.url).toBe(URL_INBOX);
     const f = loaded.mailbox.findFolder(`${URL_INBOX}#it`);
     expect(f?.title).toBe("Inbox");
@@ -85,6 +87,7 @@ describe("MailStore.loadOrEmpty", () => {
     const store = new MailStore({ fetch: fetchStub as unknown as typeof fetch });
     const loaded = await store.loadOrEmpty(URL_INBOX);
     expect(loaded.etag).toBeNull();
+    expect(loaded.exists).toBe(false);
     expect([...loaded.mailbox.folders]).toHaveLength(0);
     expect(loaded.url).toBe(URL_INBOX);
   });
@@ -179,8 +182,47 @@ describe("MailStore.save", () => {
     const putSpy = vi.fn(async () => new Response(null, { status: 205 }));
     vi.stubGlobal("fetch", putSpy);
     const store = new MailStore();
-    await store.save({ mailbox: (await freshEmpty()).mailbox, etag: '"v1"', url: URL_INBOX });
+    await store.save({
+      mailbox: (await freshEmpty()).mailbox,
+      etag: '"v1"',
+      exists: true,
+      url: URL_INBOX,
+    });
     expect(putSpy).toHaveBeenCalledOnce();
+  });
+
+  it("refuses an unconditional overwrite of an existing ETag-less resource", async () => {
+    const putSpy = vi.fn(async () => new Response(null, { status: 205 }));
+    const store = new MailStore({ fetch: putSpy as unknown as typeof fetch });
+    // existing resource (exists true) but server omitted the ETag (etag null)
+    const loaded = {
+      mailbox: (await freshEmpty()).mailbox,
+      etag: null,
+      exists: true,
+      url: URL_INBOX,
+    };
+    await expect(store.save(loaded)).rejects.toBeInstanceOf(MailNoValidatorError);
+    expect(putSpy).not.toHaveBeenCalled();
+  });
+
+  it("allows an unconditional overwrite when explicitly opted in (no precondition headers)", async () => {
+    const calls: { init: RequestInit }[] = [];
+    const putSpy = vi.fn(async (_url: string, init: RequestInit) => {
+      calls.push({ init });
+      return new Response(null, { status: 205 });
+    });
+    const store = new MailStore({ fetch: putSpy as unknown as typeof fetch });
+    const loaded = {
+      mailbox: (await freshEmpty()).mailbox,
+      etag: null,
+      exists: true,
+      url: URL_INBOX,
+    };
+    await store.save(loaded, { allowUnconditional: true });
+    const headers = new Headers(calls[0]?.init.headers);
+    expect(headers.get("if-match")).toBeNull();
+    expect(headers.get("if-none-match")).toBeNull();
+    expect(headers.get("content-type")).toBe("text/turtle");
   });
 });
 
