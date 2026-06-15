@@ -55,9 +55,12 @@ There is **no hand-built Turtle and no hand-concatenated triple** anywhere in `s
 | Ledger | `finance/ledger.ttl` | accounts + transactions + monetary amounts |
 | Public type index | `settings/publicTypeIndex.ttl` | a `solid:TypeRegistration` for `fin:Transaction` → `finance/` so peers can discover the data |
 
-Writes are **lost-update-safe**: a read returns the resource ETag, and `save` sends `If-Match`
-(or `If-None-Match: *` on create), surfacing a `412` as a `PreconditionFailedError` for the caller
-to re-read and retry.
+Writes are **lost-update-safe**. A read reports both the resource ETag *and* whether the resource
+existed, and `save` picks its precondition from that state: `If-Match: <etag>` for an update with a
+validator; an **unconditional PUT** for an existing resource the server returned without an ETag
+(degraded servers such as legacy NSS — sending a create precondition here would `412` forever);
+and `If-None-Match: *` only for a genuine create. A `412` surfaces as a `PreconditionFailedError`
+for the caller to re-read and retry.
 
 ## Usage
 

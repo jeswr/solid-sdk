@@ -57,16 +57,18 @@ describe("MoneyStore.load", () => {
       podRoot: POD,
       fetchRdf: fakeFetchRdf({ [LEDGER]: { turtle: SEED_LEDGER, etag: '"v1"' } }),
     });
-    const { document, etag, url } = await store.loadLedger();
+    const { document, etag, exists, url } = await store.loadLedger();
     expect(etag).toBe('"v1"');
+    expect(exists).toBe(true);
     expect(url).toBe(LEDGER);
     expect([...document.accounts]).toHaveLength(1);
   });
 
-  it("treats a 404 as an empty document with no ETag", async () => {
+  it("treats a 404 as an empty, non-existent document with no ETag", async () => {
     const store = new MoneyStore({ podRoot: POD, fetchRdf: fakeFetchRdf({}) });
-    const { document, dataset, etag } = await store.loadLedger();
+    const { document, dataset, etag, exists } = await store.loadLedger();
     expect(etag).toBeNull();
+    expect(exists).toBe(false);
     expect(dataset.size).toBe(0);
     expect([...document.accounts]).toHaveLength(0);
   });
@@ -118,37 +120,64 @@ describe("MoneyStore.save (conditional write)", () => {
       fetchRdf: fakeFetchRdf({ [LEDGER]: { turtle: SEED_LEDGER, etag: '"v1"' } }),
       fetch: fakeFetch(record),
     });
-    const { dataset, etag } = await store.loadLedger();
-    await store.save(LEDGER, dataset, etag);
+    const { dataset, etag, exists } = await store.loadLedger();
+    await store.save(LEDGER, dataset, { etag, exists });
     expect(record).toHaveLength(1);
     expect(record[0]?.headers["if-match"]).toBe('"v1"');
     expect(record[0]?.headers["content-type"]).toBe("text/turtle");
     expect(record[0]?.headers["if-none-match"]).toBeUndefined();
   });
 
-  it("sends If-None-Match:* when creating (no ETag)", async () => {
+  it("sends If-None-Match:* when creating (resource did not exist)", async () => {
     const record: RecordedPut[] = [];
     const store = new MoneyStore({ podRoot: POD, fetch: fakeFetch(record) });
-    await store.save(LEDGER, new Store(), null);
+    await store.save(LEDGER, new Store(), { etag: null, exists: false });
     expect(record[0]?.headers["if-none-match"]).toBe("*");
+    expect(record[0]?.headers["if-match"]).toBeUndefined();
+  });
+
+  it("sends If-None-Match:* by default (omitted condition = create)", async () => {
+    const record: RecordedPut[] = [];
+    const store = new MoneyStore({ podRoot: POD, fetch: fakeFetch(record) });
+    await store.save(LEDGER, new Store());
+    expect(record[0]?.headers["if-none-match"]).toBe("*");
+  });
+
+  it("does an UNCONDITIONAL PUT for an existing resource with no ETag (degraded server)", async () => {
+    // Regression: a legacy NSS-style server returns an existing resource with
+    // no ETag. Sending If-None-Match:* here would 412 forever; sending no
+    // precondition at all is the correct degraded-update path.
+    const record: RecordedPut[] = [];
+    const store = new MoneyStore({
+      podRoot: POD,
+      fetchRdf: fakeFetchRdf({ [LEDGER]: { turtle: SEED_LEDGER, etag: null } }),
+      fetch: fakeFetch(record),
+    });
+    const { dataset, etag, exists } = await store.loadLedger();
+    expect(etag).toBeNull();
+    expect(exists).toBe(true);
+    await store.save(LEDGER, dataset, { etag, exists });
+    expect(record[0]?.headers["if-none-match"]).toBeUndefined();
     expect(record[0]?.headers["if-match"]).toBeUndefined();
   });
 
   it("throws PreconditionFailedError on a 412", async () => {
     const store = new MoneyStore({ podRoot: POD, fetch: fakeFetch([], [412]) });
-    await expect(store.save(LEDGER, new Store(), '"stale"')).rejects.toBeInstanceOf(
-      PreconditionFailedError,
-    );
+    await expect(
+      store.save(LEDGER, new Store(), { etag: '"stale"', exists: true }),
+    ).rejects.toBeInstanceOf(PreconditionFailedError);
   });
 
   it("throws WriteError on a non-2xx, non-412 status", async () => {
     const store = new MoneyStore({ podRoot: POD, fetch: fakeFetch([], [403]) });
-    await expect(store.save(LEDGER, new Store(), null)).rejects.toBeInstanceOf(WriteError);
+    await expect(
+      store.save(LEDGER, new Store(), { etag: null, exists: false }),
+    ).rejects.toBeInstanceOf(WriteError);
   });
 
   it("resolves with the response on success", async () => {
     const store = new MoneyStore({ podRoot: POD, fetch: fakeFetch([], [201]) });
-    const res = await store.save(LEDGER, new Store(), null);
+    const res = await store.save(LEDGER, new Store(), { etag: null, exists: false });
     expect(res.status).toBe(201);
   });
 });
@@ -314,7 +343,7 @@ describe("MoneyStore uses the ambient fetch when none injected", () => {
     const spy = vi.spyOn(globalThis, "fetch").mockImplementation(fakeFetch(record, [205]));
     try {
       const store = new MoneyStore({ podRoot: POD });
-      await store.save(LEDGER, new Store(), '"v1"');
+      await store.save(LEDGER, new Store(), { etag: '"v1"', exists: true });
       expect(record).toHaveLength(1);
     } finally {
       spy.mockRestore();
