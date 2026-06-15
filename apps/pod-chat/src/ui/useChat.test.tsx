@@ -677,3 +677,421 @@ describe("useChat", () => {
     expect(result.current.messages).toHaveLength(2);
   });
 });
+
+// A 2xx Turtle write/create Response carrying a fresh ETag.
+function written(etag = '"w1"'): Response {
+  return new Response(null, { status: 201, headers: { etag } });
+}
+
+/**
+ * A stateful one-room pod that accepts WRITES. The rooms container lists ROOM_A;
+ * ROOM_A starts empty; container PUTs (ensureContainers) answer 412 ("already
+ * exists"); a message PUT under MESSAGES is recorded and the room's `as:items`
+ * is grown by the room PUT so a re-read of the room reflects the new message.
+ *
+ * `failWrite` (when set) makes the FIRST message-resource PUT fail with that
+ * status — the write-failure / access-error paths. Reads always succeed.
+ */
+function writablePod(opts: { failWrite?: number; seed?: string[] } = {}): {
+  fetch: typeof globalThis.fetch;
+  posted: () => string[];
+} {
+  // `seed` are pre-existing message refs already in the room (so a send appends
+  // to a NON-empty thread); only `posted()`-tracked refs are new writes.
+  const seed = opts.seed ?? [];
+  const refs: string[] = [...seed];
+  const posted: string[] = [];
+  let postedUrl: string | null = null;
+  const fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = typeof input === "string" ? input : input.toString();
+    const method = (init?.method ?? "GET").toUpperCase();
+
+    if (method === "PUT") {
+      // ensureContainers PUTs the three containers (If-None-Match: *) → 412.
+      if (url === ROOMS || url === MESSAGES || url === "https://pod.example/pod-chat/") {
+        return new Response(null, { status: 412 });
+      }
+      // A message-resource create under the messages container.
+      if (url.startsWith(MESSAGES)) {
+        if (opts.failWrite !== undefined) {
+          return new Response(null, { status: opts.failWrite });
+        }
+        postedUrl = url;
+        refs.push(url);
+        posted.push(url);
+        return written();
+      }
+      // The room descriptor PUT (saveRoom appending the new ref).
+      if (url === ROOM_A) return written('"r2"');
+      return new Response(null, { status: 404 });
+    }
+
+    // GETs.
+    if (url === ROOMS) return ttl(containerTtl(ROOMS, [ROOM_A]));
+    if (url === ROOM_A) return ttl(roomTtl(ROOM_A, "General", refs));
+    if (seed.includes(url)) return ttl(messageTtl(url, "seeded", "2026-06-11T09:00:00Z"));
+    if (postedUrl !== null && url === postedUrl) {
+      return ttl(messageTtl(postedUrl, "hello world", "2026-06-12T12:00:00Z"));
+    }
+    return new Response(null, { status: 404 });
+  }) as unknown as typeof globalThis.fetch;
+  return { fetch, posted: () => posted };
+}
+
+describe("useChat send (optimistic mutation)", () => {
+  it("appends the message optimistically, persists, and settles to Saved", async () => {
+    const pod = writablePod();
+    const { result } = renderHook(() => useChat(POD, WEBID, { fetch: pod.fetch }));
+    await waitFor(() => expect(result.current.loadingRooms).toBe(false));
+    act(() => result.current.open(ROOM_A));
+    await waitFor(() => expect(result.current.loadingMessages).toBe(false));
+    expect(result.current.messages).toHaveLength(0);
+
+    let sendResult: boolean | undefined;
+    await act(async () => {
+      sendResult = await result.current.send("hello world");
+    });
+
+    expect(sendResult).toBe(true);
+    expect(result.current.sendStatus).toBe("saved");
+    expect(result.current.sendError).toBeNull();
+    // The message is present, no longer pending, with the author = session WebID.
+    expect(result.current.messages).toHaveLength(1);
+    const msg = result.current.messages[0];
+    expect(msg?.content).toBe("hello world");
+    expect(msg?.author).toBe(WEBID);
+    expect(msg?.pending).toBe(false);
+    // It was persisted under the messages container and its ref appended.
+    expect(pod.posted()).toHaveLength(1);
+    expect(pod.posted()[0]?.startsWith(MESSAGES)).toBe(true);
+  });
+
+  it("keeps existing messages when appending a new one (the swap's `: m` branch)", async () => {
+    // The room already holds MSG_1; sending appends a second message. The
+    // optimistic-swap map must KEEP the existing message (the non-matching `: m`
+    // arm) while only the optimistic row is replaced.
+    const pod = writablePod({ seed: [MSG_1] });
+    const { result } = renderHook(() => useChat(POD, WEBID, { fetch: pod.fetch }));
+    await waitFor(() => expect(result.current.loadingRooms).toBe(false));
+    act(() => result.current.open(ROOM_A));
+    await waitFor(() => expect(result.current.messages).toHaveLength(1));
+    expect(result.current.messages[0]?.content).toBe("seeded");
+
+    await act(async () => {
+      await result.current.send("the new one");
+    });
+    expect(result.current.sendStatus).toBe("saved");
+    // BOTH messages present: the pre-existing seeded one + the new one.
+    const contents = result.current.messages.map((m) => m.content);
+    expect(contents).toContain("seeded");
+    expect(contents).toContain("the new one");
+    expect(result.current.messages).toHaveLength(2);
+  });
+
+  it("posts via the global fetch when no fetch is injected (production path)", async () => {
+    const pod = writablePod();
+    vi.stubGlobal("fetch", vi.fn(pod.fetch));
+    const { result } = renderHook(() => useChat(POD, WEBID));
+    await waitFor(() => expect(result.current.loadingRooms).toBe(false));
+    act(() => result.current.open(ROOM_A));
+    await waitFor(() => expect(result.current.loadingMessages).toBe(false));
+
+    let r: boolean | undefined;
+    await act(async () => {
+      r = await result.current.send("via global fetch");
+    });
+    expect(r).toBe(true);
+    expect(result.current.sendStatus).toBe("saved");
+    expect(result.current.messages.map((m) => m.content)).toContain("via global fetch");
+    expect(pod.posted()).toHaveLength(1);
+  });
+
+  it("shows the optimistic (pending) message WHILE the write is in flight", async () => {
+    // Gate the message-resource PUT so we can observe the pending state.
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    const base = writablePod();
+    const fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.toString();
+      const method = (init?.method ?? "GET").toUpperCase();
+      if (method === "PUT" && url.startsWith(MESSAGES) && url !== MESSAGES) {
+        await gate;
+      }
+      return base.fetch(input, init);
+    }) as unknown as typeof globalThis.fetch;
+
+    const { result } = renderHook(() => useChat(POD, WEBID, { fetch }));
+    await waitFor(() => expect(result.current.loadingRooms).toBe(false));
+    act(() => result.current.open(ROOM_A));
+    await waitFor(() => expect(result.current.loadingMessages).toBe(false));
+
+    let sending: Promise<boolean>;
+    act(() => {
+      sending = result.current.send("in flight");
+    });
+    // The optimistic message is present + pending, status is "saving".
+    await waitFor(() => expect(result.current.messages).toHaveLength(1));
+    expect(result.current.messages[0]?.pending).toBe(true);
+    expect(result.current.sendStatus).toBe("saving");
+
+    await act(async () => {
+      release();
+      await sending;
+    });
+    expect(result.current.sendStatus).toBe("saved");
+    expect(result.current.messages[0]?.pending).toBe(false);
+  });
+
+  it("REVERTS the optimistic message and surfaces an error when the write fails", async () => {
+    const pod = writablePod({ failWrite: 500 });
+    const { result } = renderHook(() => useChat(POD, WEBID, { fetch: pod.fetch }));
+    await waitFor(() => expect(result.current.loadingRooms).toBe(false));
+    act(() => result.current.open(ROOM_A));
+    await waitFor(() => expect(result.current.loadingMessages).toBe(false));
+
+    let sendResult: boolean | undefined;
+    await act(async () => {
+      sendResult = await result.current.send("doomed");
+    });
+
+    expect(sendResult).toBe(false);
+    expect(result.current.sendStatus).toBe("failed");
+    expect(result.current.sendError).not.toBeNull();
+    expect(result.current.sendAccessError).toBe(false);
+    // The optimistic message was pulled back out — the thread is empty again.
+    expect(result.current.messages).toHaveLength(0);
+  });
+
+  it("classifies a 403 write as an access error (and still reverts)", async () => {
+    const pod = writablePod({ failWrite: 403 });
+    const { result } = renderHook(() => useChat(POD, WEBID, { fetch: pod.fetch }));
+    await waitFor(() => expect(result.current.loadingRooms).toBe(false));
+    act(() => result.current.open(ROOM_A));
+    await waitFor(() => expect(result.current.loadingMessages).toBe(false));
+
+    await act(async () => {
+      await result.current.send("no permission");
+    });
+    expect(result.current.sendStatus).toBe("failed");
+    expect(result.current.sendAccessError).toBe(true);
+    expect(result.current.sendError).toContain("permission");
+    expect(result.current.messages).toHaveLength(0);
+  });
+
+  it("classifies a 401 write as a login-flavoured access error", async () => {
+    const pod = writablePod({ failWrite: 401 });
+    const { result } = renderHook(() => useChat(POD, WEBID, { fetch: pod.fetch }));
+    await waitFor(() => expect(result.current.loadingRooms).toBe(false));
+    act(() => result.current.open(ROOM_A));
+    await waitFor(() => expect(result.current.loadingMessages).toBe(false));
+
+    await act(async () => {
+      await result.current.send("logged out");
+    });
+    expect(result.current.sendStatus).toBe("failed");
+    expect(result.current.sendAccessError).toBe(true);
+    expect(result.current.sendError).toContain("log in");
+  });
+
+  it("is a no-op for an empty / whitespace-only body (no write, no status change)", async () => {
+    const pod = writablePod();
+    const { result } = renderHook(() => useChat(POD, WEBID, { fetch: pod.fetch }));
+    await waitFor(() => expect(result.current.loadingRooms).toBe(false));
+    act(() => result.current.open(ROOM_A));
+    await waitFor(() => expect(result.current.loadingMessages).toBe(false));
+
+    let r1: boolean | undefined;
+    let r2: boolean | undefined;
+    await act(async () => {
+      r1 = await result.current.send("");
+      r2 = await result.current.send("   \n\t ");
+    });
+    expect(r1).toBe(false);
+    expect(r2).toBe(false);
+    expect(result.current.sendStatus).toBe("idle");
+    expect(result.current.messages).toHaveLength(0);
+    expect(pod.posted()).toHaveLength(0);
+  });
+
+  it("is a no-op when no room is open", async () => {
+    const pod = writablePod();
+    const { result } = renderHook(() => useChat(POD, WEBID, { fetch: pod.fetch }));
+    await waitFor(() => expect(result.current.loadingRooms).toBe(false));
+    // No open room.
+    let r: boolean | undefined;
+    await act(async () => {
+      r = await result.current.send("nowhere");
+    });
+    expect(r).toBe(false);
+    expect(result.current.sendStatus).toBe("idle");
+    expect(pod.posted()).toHaveLength(0);
+  });
+
+  it("surfaces a write error when the room vanished between post and append", async () => {
+    // The message resource is created, but the room read for the append 404s
+    // (deleted concurrently) → the send fails and reverts.
+    let roomGone = false;
+    const fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.toString();
+      const method = (init?.method ?? "GET").toUpperCase();
+      if (method === "PUT") {
+        if (url === ROOMS || url === MESSAGES || url === "https://pod.example/pod-chat/") {
+          return new Response(null, { status: 412 });
+        }
+        if (url.startsWith(MESSAGES)) return written();
+        return new Response(null, { status: 404 });
+      }
+      if (url === ROOMS) return ttl(containerTtl(ROOMS, [ROOM_A]));
+      // The room read for the LIST succeeds; the append's re-read 404s.
+      if (url === ROOM_A) {
+        return roomGone ? new Response(null, { status: 404 }) : ttl(roomTtl(ROOM_A, "General", []));
+      }
+      return new Response(null, { status: 404 });
+    }) as unknown as typeof globalThis.fetch;
+
+    const { result } = renderHook(() => useChat(POD, WEBID, { fetch }));
+    await waitFor(() => expect(result.current.loadingRooms).toBe(false));
+    act(() => result.current.open(ROOM_A));
+    await waitFor(() => expect(result.current.loadingMessages).toBe(false));
+    roomGone = true;
+
+    let r: boolean | undefined;
+    await act(async () => {
+      r = await result.current.send("orphan");
+    });
+    expect(r).toBe(false);
+    expect(result.current.sendStatus).toBe("failed");
+    expect(result.current.messages).toHaveLength(0);
+  });
+
+  it("fails the send when the room is no longer a ChatRoom at append time (readRoom undefined)", async () => {
+    // The message PUT succeeds, but the append's re-read of the room returns a
+    // 200 body that no longer parses to a pc:ChatRoom → readRoom resolves
+    // undefined → the send throws + reverts (the `room === undefined` guard).
+    let notRoom = false;
+    const fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.toString();
+      const method = (init?.method ?? "GET").toUpperCase();
+      if (method === "PUT") {
+        if (url === ROOMS || url === MESSAGES || url === "https://pod.example/pod-chat/") {
+          return new Response(null, { status: 412 });
+        }
+        if (url.startsWith(MESSAGES)) return written();
+        return new Response(null, { status: 404 });
+      }
+      if (url === ROOMS) return ttl(containerTtl(ROOMS, [ROOM_A]));
+      if (url === ROOM_A) {
+        // After the send starts, the room body is a valid 200 that is NOT a room.
+        return notRoom
+          ? ttl(`<${ROOM_A}#it> <http://example.org/p> "x" .`)
+          : ttl(roomTtl(ROOM_A, "General", []));
+      }
+      return new Response(null, { status: 404 });
+    }) as unknown as typeof globalThis.fetch;
+
+    const { result } = renderHook(() => useChat(POD, WEBID, { fetch }));
+    await waitFor(() => expect(result.current.loadingRooms).toBe(false));
+    act(() => result.current.open(ROOM_A));
+    await waitFor(() => expect(result.current.loadingMessages).toBe(false));
+    notRoom = true;
+
+    let r: boolean | undefined;
+    await act(async () => {
+      r = await result.current.send("into a non-room");
+    });
+    expect(r).toBe(false);
+    expect(result.current.sendStatus).toBe("failed");
+    expect(result.current.messages).toHaveLength(0);
+  });
+
+  it("discards a send whose room was closed before the write resolved (stale)", async () => {
+    // Gate the message PUT; back out of the room while it's in flight, then
+    // release. The stale resolve must NOT set a status or re-add the message.
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    const base = writablePod();
+    const fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.toString();
+      const method = (init?.method ?? "GET").toUpperCase();
+      if (method === "PUT" && url.startsWith(MESSAGES) && url !== MESSAGES) {
+        await gate;
+      }
+      return base.fetch(input, init);
+    }) as unknown as typeof globalThis.fetch;
+
+    const { result } = renderHook(() => useChat(POD, WEBID, { fetch }));
+    await waitFor(() => expect(result.current.loadingRooms).toBe(false));
+    act(() => result.current.open(ROOM_A));
+    await waitFor(() => expect(result.current.loadingMessages).toBe(false));
+
+    let sending: Promise<boolean>;
+    act(() => {
+      sending = result.current.send("stale");
+    });
+    await waitFor(() => expect(result.current.messages).toHaveLength(1));
+    // Close the room while the write is in flight (marks the send stale).
+    act(() => result.current.back());
+
+    await act(async () => {
+      release();
+      await sending;
+    });
+    // Back-to-list reset the send state to idle; the stale resolve did not flip it.
+    expect(result.current.sendStatus).toBe("idle");
+    expect(result.current.openRoomUrl).toBeNull();
+  });
+
+  it("discards a send whose room was closed before the write REJECTED (stale catch)", async () => {
+    // As above, but the gated message PUT FAILS. The catch's staleness guard must
+    // swallow it: no "failed" status, no error, for a room left behind.
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    const fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.toString();
+      const method = (init?.method ?? "GET").toUpperCase();
+      if (method === "PUT") {
+        if (url === ROOMS || url === MESSAGES || url === "https://pod.example/pod-chat/") {
+          return new Response(null, { status: 412 });
+        }
+        if (url.startsWith(MESSAGES)) {
+          await gate;
+          return new Response(null, { status: 500 }); // fails AFTER the gate releases
+        }
+        return new Response(null, { status: 404 });
+      }
+      if (url === ROOMS) return ttl(containerTtl(ROOMS, [ROOM_A]));
+      if (url === ROOM_A) return ttl(roomTtl(ROOM_A, "General", []));
+      return new Response(null, { status: 404 });
+    }) as unknown as typeof globalThis.fetch;
+
+    const { result } = renderHook(() => useChat(POD, WEBID, { fetch }));
+    await waitFor(() => expect(result.current.loadingRooms).toBe(false));
+    act(() => result.current.open(ROOM_A));
+    await waitFor(() => expect(result.current.loadingMessages).toBe(false));
+
+    let sending: Promise<boolean>;
+    act(() => {
+      sending = result.current.send("stale failure");
+    });
+    await waitFor(() => expect(result.current.messages).toHaveLength(1));
+    act(() => result.current.back()); // supersede the send before it rejects
+
+    let r: boolean | undefined;
+    await act(async () => {
+      release();
+      r = await sending;
+    });
+    // The send returns false (superseded) but DOES NOT surface a failed status /
+    // error for the room we navigated away from.
+    expect(r).toBe(false);
+    expect(result.current.sendStatus).toBe("idle");
+    expect(result.current.sendError).toBeNull();
+    expect(result.current.openRoomUrl).toBeNull();
+  });
+});

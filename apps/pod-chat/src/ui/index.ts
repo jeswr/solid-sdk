@@ -27,6 +27,7 @@ export {
   describeError,
   type MessageView,
   type RoomView,
+  type SendStatus,
   type UseChatOptions,
   useChat,
 } from "./useChat.js";
