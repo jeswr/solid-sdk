@@ -1,7 +1,8 @@
 # SHACL shapes for the Solid Issues data model.
 #
 # Authored against reused, dereferenceable IRIs only (W3C workflow ontology `wf:`
-# + Dublin Core Terms + SIOC + FOAF) — see docs/data-modelling.md §5 and
+# + Dublin Core Terms + SIOC + FOAF + ActivityStreams 2.0 `as:`) — see
+# docs/data-modelling.md §5 and
 # decisions/0001-issue-tracker-vocabulary.md. The shapes are anonymous (blank
 # nodes), so nothing is minted at a non-resolving domain.
 #
@@ -13,6 +14,8 @@
 @prefix dct:   <http://purl.org/dc/terms/> .
 @prefix sioc:  <http://rdfs.org/sioc/ns#> .
 @prefix foaf:  <http://xmlns.com/foaf/0.1/> .
+@prefix as:    <https://www.w3.org/ns/activitystreams#> .
+@prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
 
 # --- An issue (wf:Task) ---
@@ -42,9 +45,27 @@
     sh:path dct:creator ; sh:name "creator" ;
     sh:nodeKind sh:IRI ; sh:maxCount 1 ;
   ] ;
+  # Assignee is a WebID / agent IRI: an IRI (nodeKind) AND http(s)-schemed
+  # (pattern). `sh:pattern` matches the node's lexical value, so for an IRI it
+  # constrains the scheme — a `urn:`/`mailto:` assignee is rejected.
   sh:property [
     sh:path wf:assignee ; sh:name "assignee" ;
     sh:nodeKind sh:IRI ; sh:maxCount 1 ;
+    sh:pattern "^https?://" ;
+  ] ;
+  # Issue↔issue links are always document IRIs (parent / blocked-by / related),
+  # never literals — see the `parent`, `blockedBy` wrappers in src/lib/issue.ts.
+  sh:property [
+    sh:path dct:isPartOf ; sh:name "parent" ;
+    sh:nodeKind sh:IRI ;
+  ] ;
+  sh:property [
+    sh:path dct:requires ; sh:name "blocked by" ;
+    sh:nodeKind sh:IRI ;
+  ] ;
+  sh:property [
+    sh:path dct:relation ; sh:name "related" ;
+    sh:nodeKind sh:IRI ;
   ] ;
   sh:property [
     sh:path wf:dateDue ; sh:name "due date" ;
@@ -53,6 +74,48 @@
   sh:property [
     sh:path wf:message ; sh:name "comments" ;
     sh:nodeKind sh:IRI ;
+  ] ;
+  # --- State (rdf:type carries wf:Open / wf:Closed; the SolidOS model, since
+  # dependency pss-qec replaced the literal `wf:state`). A well-formed task is
+  # typed with at least one of the two state classes.
+  #
+  # LIMITATION (documented choice): SHACL *Core* cannot express that Open and
+  # Closed are mutually exclusive (XOR / disjoint) — a node carrying BOTH
+  # `rdf:type wf:Open` and `rdf:type wf:Closed` is a logical contradiction this
+  # shape cannot reject. A bare `sh:hasValue wf:Open, wf:Closed` would be wrong
+  # (it would *demand* both, which is precisely the contradiction). The clean way
+  # to express the XOR is a SHACL-SPARQL (`sh:sparql`) constraint, an Advanced
+  # Feature — but the validator this repo uses (rdf-validate-shacl) explicitly
+  # does NOT support SHACL-SPARQL constraints (its README §"unsupported"), so a
+  # declared `sh:sparql` here would be silently inert and give false assurance.
+  # We therefore ACCEPT the Core limitation and express only what Core enforces
+  # and the validator runs: at least one of { wf:Open, wf:Closed } must be a
+  # type. The application setter (Issue.state) is the guarantor of exclusivity:
+  # it always deletes the opposite class when setting one. Severity is a Warning
+  # (untrusted read data may legitimately be mid-migration); a write path can
+  # escalate by treating any result as fatal.
+  sh:property [
+    sh:path rdf:type ; sh:name "state" ;
+    sh:qualifiedValueShape [ sh:in ( wf:Open wf:Closed ) ] ;
+    sh:qualifiedMinCount 1 ;
+    sh:severity sh:Warning ;
+  ] .
+
+# --- An assignment notification (as:Announce) ---
+# Posted to an assignee's inbox when an issue is assigned to them
+# (ActivityStreams 2.0; canonical https:// namespace — docs/data-modelling.md §3).
+# The shape targets exactly `as:Announce`: `as:object` is the assigned issue IRI
+# and `as:target` is the assignee's WebID, both IRIs.
+[] a sh:NodeShape ;
+  sh:targetClass as:Announce ;
+  sh:property [
+    sh:path as:object ; sh:name "assigned issue" ;
+    sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path as:target ; sh:name "assignee" ;
+    sh:nodeKind sh:IRI ; sh:minCount 1 ;
+    sh:pattern "^https?://" ;
   ] .
 
 # --- A comment (wf:Message) ---

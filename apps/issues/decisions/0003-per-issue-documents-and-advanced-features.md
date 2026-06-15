@@ -41,10 +41,21 @@ Per-issue comments are `wf:Message` fragments in the issue document, linked via
   shared with it via `acl:agentGroup` (`setGroupAccess`).
 
 ## SHACL
-`shapes/issue.ttl` ships anonymous SHACL node shapes (`wf:Task`, `wf:Message`)
-over the reused IRIs. `src/lib/shacl.test.ts` validates object-mapper output in CI
-(`rdf-validate-shacl`). SHACL caught a real wrapper bug: `LiteralFrom.date` emits a
-malformed `xsd:date` (dateTime lexical), so `wf:dateDue` is stored as `xsd:dateTime`.
+`shapes/issue.ttl` ships anonymous SHACL node shapes (`wf:Task`, `wf:Message`,
+and an `as:Announce` assignment-notification shape) over the reused IRIs.
+`src/lib/shacl.test.ts` validates object-mapper output in CI (`rdf-validate-shacl`).
+SHACL caught a real wrapper bug: `LiteralFrom.date` emits a malformed `xsd:date`
+(dateTime lexical), so `wf:dateDue` is stored as `xsd:dateTime`.
+
+The `wf:Task` shape constrains state (the `wf:Open`/`wf:Closed` `rdf:type` classes,
+since the literal `wf:state` was replaced) via a `sh:qualifiedValueShape`
+`[ sh:in ( wf:Open wf:Closed ) ]` requiring at least one state class, at
+`sh:Warning` severity. SHACL **Core** cannot express the Open-XOR-Closed
+*disjointness*; the SHACL-SPARQL way to do so is inert here because
+`rdf-validate-shacl` does not run `sh:sparql` constraints, so we accept the Core
+limitation (documented inline in the shape) and rely on `Issue.state` for
+exclusivity. Issue↔issue links (`dct:isPartOf`, `dct:requires`, `dct:relation`)
+are constrained to IRIs, and `wf:assignee` to an `^https?://` IRI.
 
 ## Trade-offs / deferred
 - Listing is N+1 fetches (container + each issue) — fine at this scale; a pod
