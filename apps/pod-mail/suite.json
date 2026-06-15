@@ -1,5 +1,5 @@
 {
-  "$schema": "https://solid.example/suite-tracking/suite.schema.json",
+  "$schema": "https://raw.githubusercontent.com/jeswr/full-solid-ecosystem/main/tracking/schema/suite.schema.json",
   "id": "pod-mail",
   "kind": "app",
   "name": "Pod Mail",
