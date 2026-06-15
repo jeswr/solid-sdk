@@ -759,6 +759,87 @@ describe("useDocsListing — saveOpenDocument (optimistic)", () => {
     expect(result.current.openDocument?.etag).toBe('"o2"');
   });
 
+  it("SINGLE-FLIGHT: doc A stays single-flighted even while doc B is ALSO in flight (the Set bug)", async () => {
+    // The exact case a single-URL ref could NOT represent: A's save starts (marker
+    // = A), then B's save starts (a single-URL marker would be OVERWRITTEN to B) —
+    // now a SECOND save to A would no longer be blocked (marker ≠ A) and A could
+    // DOUBLE-SAVE (the lost-update the single-flight exists to prevent). With a Set
+    // of in-flight URLs, A's marker survives B starting, so a 2nd save to A is still
+    // a no-op while B is in flight. Then: settling A clears ONLY A's marker (a fresh
+    // A save proceeds) and leaves B's still-pending marker untouched (a 2nd save to
+    // the still-in-flight B remains blocked).
+    const doc2Url = "https://alice.pod/pod-docs/other-xyz.ttl";
+    const doc2: StoredDocument = {
+      url: doc2Url,
+      etag: '"o1"',
+      data: { ...stored().data, title: "Other", body: "<p>other</p>" },
+    };
+    const resolvers = new Map<string, (v: { etag: string | null }) => void>();
+    const save = vi.fn(
+      (url: string) =>
+        new Promise<{ etag: string | null }>((r) => {
+          resolvers.set(url, r);
+        }),
+    );
+    const createStore = stableFactory({
+      list: async () => [entry(), entry({ url: doc2Url, title: "Other" })],
+      read: async (url: string) => (url === doc2Url ? doc2 : stored()),
+      save: save as never,
+    });
+    const { result } = renderHook(() => useDocsListing(POD, WEBID, { createStore }));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    // Open + save A — A's URL is now in the in-flight set.
+    act(() => result.current.open(DOC_URL));
+    await waitFor(() => expect(result.current.openDocument?.url).toBe(DOC_URL));
+    act(() => {
+      void result.current.saveOpenDocument("<p>A1</p>");
+    });
+    expect(save).toHaveBeenCalledTimes(1);
+
+    // Open + save B (A still in flight) — B's URL is ALSO added; A's stays in the set.
+    act(() => result.current.open(doc2Url));
+    await waitFor(() => expect(result.current.openDocument?.url).toBe(doc2Url));
+    act(() => {
+      void result.current.saveOpenDocument("<p>B1</p>");
+    });
+    expect(save).toHaveBeenCalledTimes(2);
+
+    // (b) Re-open A and save AGAIN while BOTH A and B are in flight: the previously
+    // broken case. A is still in the set, so this is a no-op — NO third pod write.
+    act(() => result.current.open(DOC_URL));
+    await waitFor(() => expect(result.current.openDocument?.url).toBe(DOC_URL));
+    act(() => {
+      void result.current.saveOpenDocument("<p>A-double</p>");
+    });
+    expect(save).toHaveBeenCalledTimes(2); // A did NOT double-save
+
+    // (c) Settle A → A's marker clears, B's is untouched (B still pending).
+    await act(async () => {
+      resolvers.get(DOC_URL)?.({ etag: '"v2"' });
+      await Promise.resolve();
+    });
+    // A's marker cleared → a fresh A save now proceeds (3rd write, against A's url).
+    act(() => {
+      void result.current.saveOpenDocument("<p>A2</p>");
+    });
+    expect(save).toHaveBeenCalledTimes(3);
+    expect(save).toHaveBeenLastCalledWith(
+      DOC_URL,
+      expect.objectContaining({ body: "<p>A2</p>" }),
+      expect.anything(),
+    );
+
+    // B's marker was NOT cleared by A settling → a 2nd save to the still-in-flight
+    // B is still single-flighted (a no-op): the write count stays at 3.
+    act(() => result.current.open(doc2Url));
+    await waitFor(() => expect(result.current.openDocument?.url).toBe(doc2Url));
+    act(() => {
+      void result.current.saveOpenDocument("<p>B-double</p>");
+    });
+    expect(save).toHaveBeenCalledTimes(3); // B still blocked — its marker survived A
+  });
+
   it("SINGLE-FLIGHT: a rapid double-save within ONE document is still single-flighted", async () => {
     // The per-document scoping must NOT loosen the within-one-doc invariant: two
     // saveOpenDocument() calls to the SAME open doc, the second issued while the
