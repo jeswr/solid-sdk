@@ -1,0 +1,25 @@
+{
+  "$schema": "https://solid.example/suite-tracking/suite.schema.json",
+  "id": "pod-chat",
+  "kind": "app",
+  "name": "Pod Chat",
+  "repo": "https://github.com/jeswr/pod-chat",
+  "category": "social",
+  "maturity": "prototype",
+  "visibility": "public",
+  "stack": {
+    "language": "typescript",
+    "bundler": "tsup",
+    "test": "vitest",
+    "rdf": "n3"
+  },
+  "dependsOn": ["solid-federation-vocab"],
+  "federation": {
+    "clientIdUrl": "https://pod-chat.jeswr.org/clientid.jsonld",
+    "sectors": ["social"],
+    "accessModes": ["Read", "Write", "Append"],
+    "produces": ["social"],
+    "consumes": ["social", "productivity"],
+    "membershipTodo": "fedapp: block published in clientid.jsonld (fedapp:App over the social sector; produces pc:ChatRoom + as:Note, consumes those plus wf:Task for actionable messages via the shared cross-app task model). Federation membership is asserted by the registry after a signed challenge, not here."
+  }
+}
