@@ -1,16 +1,19 @@
 {
-  "name": "@jeswr/offline",
-  "version": "0.0.0",
-  "description": "Offline-first drop-in layer for Solid apps: a service worker that intercepts fetch and caches documents never-authoritatively (P0 scaffold + P1 read cache).",
+  "name": "solid-offline",
+  "version": "0.1.0",
+  "description": "Offline-first drop-in layer for Solid apps: a service worker that intercepts fetch and caches documents never-authoritatively, with proactive cache warming, notification-driven invalidation, and React/vanilla DX hooks.",
   "type": "module",
   "license": "MIT",
   "author": "Jesse Wright",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jeswr/solid-offline.git"
+  },
   "engines": {
     "node": ">=22"
   },
   "files": [
-    "dist",
-    "src"
+    "dist"
   ],
   "exports": {
     ".": {

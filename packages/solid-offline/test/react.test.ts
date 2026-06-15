@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * @jeswr/offline/react thin hooks. Runs in jsdom with real React 18 +
+ * solid-offline/react thin hooks. Runs in jsdom with real React 18 +
  * @testing-library/react. Asserts the two behaviours the spec pins:
  *   - useOfflineStatus SUBSCRIBES (via useSyncExternalStore) and the component
  *     RE-RENDERS when a tracked resource is broadcast 'updated' and when

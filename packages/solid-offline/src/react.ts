@@ -1,10 +1,10 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate; see docs/MODEL-PROVENANCE.md
 /**
- * `@jeswr/offline/react` — THIN React hooks (P5).
+ * `solid-offline/react` — THIN React hooks (P5).
  *
  * ────────────────────────────────────────────────────────────────────────────
- * REACT IS AN OPTIONAL / PEER DEPENDENCY. The core (`@jeswr/offline`,
- * `@jeswr/offline/worker`) is framework-agnostic and imports nothing from here.
+ * REACT IS AN OPTIONAL / PEER DEPENDENCY. The core (`solid-offline`,
+ * `solid-offline/worker`) is framework-agnostic and imports nothing from here.
  * Only an app that already depends on React reaches for this entry, so we list
  * `react` as a (peer) dependency and import it here, never from the core.
  * ────────────────────────────────────────────────────────────────────────────
