@@ -183,6 +183,29 @@ describe("buildAuthorizationUrl (RFC 6749 §4.1.1 + RFC 7636 + OIDC)", () => {
     });
     expect(new URL(url).searchParams.get("prompt")).toBe("none");
   });
+
+  it("PRESERVES query params the provider published on authorization_endpoint", () => {
+    const metaWithQuery: OidcProviderMetadata = {
+      ...META,
+      authorization_endpoint: `${META.authorization_endpoint}?audience=solid&kc_idp_hint=oidc`,
+    };
+    const url = buildAuthorizationUrl({
+      meta: metaWithQuery,
+      client,
+      redirectUri: REDIRECT,
+      pkce,
+      state: "s",
+      nonce: "n",
+    });
+    const u = new URL(url);
+    // Pre-existing endpoint params survive…
+    expect(u.searchParams.get("audience")).toBe("solid");
+    expect(u.searchParams.get("kc_idp_hint")).toBe("oidc");
+    // …alongside the OAuth/OIDC params we add.
+    expect(u.searchParams.get("response_type")).toBe("code");
+    expect(u.searchParams.get("client_id")).toBe("client-xyz");
+    expect(u.searchParams.get("code_challenge")).toBe(pkce.challenge);
+  });
 });
 
 // ─────────────────────────────────────────── discovery + DCR ──────────────────────────────────
@@ -210,6 +233,70 @@ describe("discoverProvider", () => {
     const fetchImpl: FetchLike = async () =>
       new Response(JSON.stringify({ issuer: "http://localhost:3086/" }));
     await expect(discoverProvider("http://localhost:3086/", fetchImpl)).rejects.toThrow(/missing/);
+  });
+
+  it("REJECTS a discovery doc whose issuer does not match the requested issuer (OIDC §4.3)", async () => {
+    // A document that claims to speak for a DIFFERENT origin than the one we asked for.
+    const evil: OidcProviderMetadata = {
+      issuer: "http://localhost:9999/",
+      authorization_endpoint: "http://localhost:3086/.oidc/auth",
+      token_endpoint: "http://localhost:3086/.oidc/token",
+    };
+    const fetchImpl: FetchLike = async () =>
+      new Response(JSON.stringify(evil), { headers: { "content-type": "application/json" } });
+    await expect(discoverProvider("http://localhost:3086/", fetchImpl)).rejects.toThrow(
+      /issuer mismatch/,
+    );
+  });
+
+  it("REJECTS a discovered authorization_endpoint on a non-loopback http URL", async () => {
+    const doc: OidcProviderMetadata = {
+      issuer: "https://idp.example.com/",
+      authorization_endpoint: "http://idp.example.com/auth", // insecure non-loopback http
+      token_endpoint: "https://idp.example.com/token",
+    };
+    const fetchImpl: FetchLike = async () =>
+      new Response(JSON.stringify(doc), { headers: { "content-type": "application/json" } });
+    await expect(discoverProvider("https://idp.example.com/", fetchImpl)).rejects.toThrow(
+      /authorization_endpoint[\s\S]*loopback/,
+    );
+  });
+
+  it("REJECTS a discovered token_endpoint on a non-loopback http URL", async () => {
+    const doc: OidcProviderMetadata = {
+      issuer: "https://idp.example.com/",
+      authorization_endpoint: "https://idp.example.com/auth",
+      token_endpoint: "http://idp.example.com/token", // insecure non-loopback http
+    };
+    const fetchImpl: FetchLike = async () =>
+      new Response(JSON.stringify(doc), { headers: { "content-type": "application/json" } });
+    await expect(discoverProvider("https://idp.example.com/", fetchImpl)).rejects.toThrow(
+      /token_endpoint[\s\S]*loopback/,
+    );
+  });
+
+  it("REJECTS a discovered registration_endpoint on a non-loopback http URL", async () => {
+    const doc: OidcProviderMetadata = {
+      issuer: "https://idp.example.com/",
+      authorization_endpoint: "https://idp.example.com/auth",
+      token_endpoint: "https://idp.example.com/token",
+      registration_endpoint: "http://idp.example.com/reg", // insecure non-loopback http
+    };
+    const fetchImpl: FetchLike = async () =>
+      new Response(JSON.stringify(doc), { headers: { "content-type": "application/json" } });
+    await expect(discoverProvider("https://idp.example.com/", fetchImpl)).rejects.toThrow(
+      /registration_endpoint[\s\S]*loopback/,
+    );
+  });
+
+  it("ALLOWS discovered loopback http endpoints (the dx local-CSS case)", async () => {
+    // Every endpoint is loopback http — must pass, mirroring assertIssuerTransport's loopback rule.
+    const fetchImpl: FetchLike = async () =>
+      new Response(JSON.stringify(META), { headers: { "content-type": "application/json" } });
+    const meta = await discoverProvider("http://localhost:3086/", fetchImpl);
+    expect(meta.authorization_endpoint).toBe(META.authorization_endpoint);
+    expect(meta.token_endpoint).toBe(META.token_endpoint);
+    expect(meta.registration_endpoint).toBe(META.registration_endpoint);
   });
 });
 

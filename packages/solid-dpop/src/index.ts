@@ -20,6 +20,7 @@ export type {
  * `rdfFetchFor` surface as the client-credentials session.
  */
 export {
+  assertEndpointTransport,
   assertIssuerTransport,
   buildAuthorizationUrl,
   cliLogin,

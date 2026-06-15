@@ -46,6 +46,38 @@ export function isLoopbackHost(host: string): boolean {
 }
 
 /**
+ * Centralized transport policy: `https:` always allowed; `http:` allowed ONLY for loopback hosts;
+ * any other scheme rejected. This is the single source of truth for "is this URL safe to send
+ * credentials to" — the reactive-auth D11 loopback rule. It backs BOTH the input-issuer guard
+ * ({@link assertIssuerTransport}) AND the per-endpoint guard applied to discovered metadata
+ * ({@link assertEndpointTransport}), so a discovered `token_endpoint` is held to the same bar as
+ * the issuer the caller typed.
+ *
+ * @param url   the URL to validate.
+ * @param label a human label (e.g. `"issuer"`, `"token_endpoint"`) used in the thrown error.
+ * @throws if the URL uses `http:` against a non-loopback host, or an unsupported scheme.
+ */
+function assertSecureTransport(url: string, label: string): void {
+  let u: URL;
+  try {
+    u = new URL(url);
+  } catch {
+    throw new Error(`Invalid ${label} URL: ${url}`);
+  }
+  if (u.protocol === "https:") return;
+  if (u.protocol === "http:") {
+    if (isLoopbackHost(u.hostname)) return;
+    throw new Error(
+      `Insecure ${label} ${url}: http is only permitted for loopback hosts ` +
+        `(127.0.0.1, [::1], localhost). Use https for ${u.hostname}.`,
+    );
+  }
+  throw new Error(
+    `Unsupported ${label} scheme ${u.protocol} in ${url} (expected https or http-loopback).`,
+  );
+}
+
+/**
  * Enforce the issuer transport policy: `https:` always allowed; `http:` allowed ONLY for loopback
  * hosts. This is the deliberate fix for the reactive-auth 0.1.3 "rejects all http issuers" bug —
  * it must NOT reject `http://localhost:3000/` while it MUST reject `http://idp.example.com/`.
@@ -53,18 +85,20 @@ export function isLoopbackHost(host: string): boolean {
  * @throws if the issuer uses `http:` against a non-loopback host, or an unsupported scheme.
  */
 export function assertIssuerTransport(issuer: string): void {
-  const u = new URL(issuer);
-  if (u.protocol === "https:") return;
-  if (u.protocol === "http:") {
-    if (isLoopbackHost(u.hostname)) return;
-    throw new Error(
-      `Insecure issuer ${issuer}: http is only permitted for loopback hosts ` +
-        `(127.0.0.1, [::1], localhost). Use https for ${u.hostname}.`,
-    );
-  }
-  throw new Error(
-    `Unsupported issuer scheme ${u.protocol} in ${issuer} (expected https or http-loopback).`,
-  );
+  assertSecureTransport(issuer, "issuer");
+}
+
+/**
+ * Enforce the SAME https-or-loopback transport policy on a single DISCOVERED endpoint URL
+ * (`authorization_endpoint`, `token_endpoint`, `registration_endpoint`, …). A malicious or
+ * misconfigured discovery document could point an endpoint at an insecure non-loopback `http:` URL
+ * (or a different origin) and siphon authorization codes, refresh tokens, or client secrets — so
+ * every endpoint we will actually contact is validated, not just the input issuer.
+ *
+ * @throws if the endpoint uses `http:` against a non-loopback host, or an unsupported scheme.
+ */
+export function assertEndpointTransport(endpoint: string, name: string): void {
+  assertSecureTransport(endpoint, name);
 }
 
 // ─────────────────────────────────────────────────── PKCE (RFC 7636) ──────────────────────────
@@ -108,7 +142,21 @@ export interface OidcProviderMetadata {
   readonly dpop_signing_alg_values_supported?: string[];
 }
 
-/** Discover the provider metadata from `.well-known/openid-configuration`. */
+/**
+ * Discover the provider metadata from `.well-known/openid-configuration`.
+ *
+ * Hardening (defence against a malicious / misconfigured discovery document):
+ *  1. The INPUT issuer is transport-checked BEFORE the fetch (https-or-loopback).
+ *  2. The RETURNED `issuer` MUST equal the requested issuer exactly — OIDC Discovery 1.0 §4.3
+ *     requires issuer equality, and this stops a document that claims to speak for a different
+ *     origin.
+ *  3. EVERY endpoint we will actually contact (`authorization_endpoint`, `token_endpoint`, and
+ *     `registration_endpoint` when present) is held to the SAME https-or-loopback bar as the
+ *     issuer, so authorization codes / refresh tokens / client secrets cannot be redirected to an
+ *     insecure non-loopback `http:` URL.
+ *
+ * All checks run BEFORE the metadata is returned (and before any downstream request is made).
+ */
 export async function discoverProvider(
   issuer: string,
   fetchImpl: FetchLike = defaultFetch,
@@ -122,6 +170,20 @@ export async function discoverProvider(
   const meta = (await res.json()) as Partial<OidcProviderMetadata>;
   if (!meta.authorization_endpoint || !meta.token_endpoint) {
     throw new Error(`OIDC config at ${url} is missing authorization_endpoint or token_endpoint.`);
+  }
+  // OIDC Discovery 1.0 §4.3: the metadata `issuer` MUST be identical to the requested issuer.
+  if (meta.issuer !== issuer) {
+    throw new Error(
+      `OIDC issuer mismatch: discovery document at ${url} declares issuer ` +
+        `${meta.issuer ?? "<missing>"} but ${issuer} was requested.`,
+    );
+  }
+  // Apply the issuer's https-or-loopback policy to every discovered endpoint we will contact, so a
+  // malicious document cannot point a sensitive endpoint at an insecure / off-origin URL.
+  assertEndpointTransport(meta.authorization_endpoint, "authorization_endpoint");
+  assertEndpointTransport(meta.token_endpoint, "token_endpoint");
+  if (meta.registration_endpoint) {
+    assertEndpointTransport(meta.registration_endpoint, "registration_endpoint");
   }
   return meta as OidcProviderMetadata;
 }
@@ -245,19 +307,20 @@ function requestsOfflineAccess(scope: string): boolean {
 export function buildAuthorizationUrl(params: AuthUrlParams): string {
   const { meta, client, redirectUri, pkce, state, nonce } = params;
   const scope = params.scope ?? DEFAULT_SCOPE;
-  const q = new URLSearchParams({
-    response_type: "code",
-    client_id: client.client_id,
-    redirect_uri: redirectUri,
-    scope,
-    state,
-    nonce,
-    code_challenge: pkce.challenge,
-    code_challenge_method: pkce.method,
-  });
+  const url = new URL(meta.authorization_endpoint);
+  // Preserve any query params the provider published on its authorization_endpoint (some require
+  // them) by seeding the params from the URL, then ADDING the OAuth/OIDC params.
+  const q = url.searchParams;
+  q.set("response_type", "code");
+  q.set("client_id", client.client_id);
+  q.set("redirect_uri", redirectUri);
+  q.set("scope", scope);
+  q.set("state", state);
+  q.set("nonce", nonce);
+  q.set("code_challenge", pkce.challenge);
+  q.set("code_challenge_method", pkce.method);
   const prompt = params.prompt ?? (requestsOfflineAccess(scope) ? "consent" : undefined);
   if (prompt) q.set("prompt", prompt);
-  const url = new URL(meta.authorization_endpoint);
   url.search = q.toString();
   return url.toString();
 }

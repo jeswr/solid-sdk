@@ -91,6 +91,13 @@ for real domains. This lets local dev against an in-memory CSS at `http://localh
 while keeping `http:` off for real issuers. A regression test in `test/authCode.test.ts` pins the
 behaviour.
 
+`discoverProvider` extends that guard to the **discovered metadata**: it requires the returned
+`issuer` to equal the requested issuer exactly (OIDC Discovery 1.0 §4.3) and applies the SAME
+https-or-loopback rule (via `assertEndpointTransport`) to every endpoint it will contact —
+`authorization_endpoint`, `token_endpoint`, and `registration_endpoint` — so a malicious or
+misconfigured document cannot redirect authorization codes, refresh tokens, or client secrets to an
+insecure off-origin URL.
+
 ### Crypto policy
 
 `jose` for all JOSE ops (sign / thumbprint / JWK export), `node:crypto` only for keygen
