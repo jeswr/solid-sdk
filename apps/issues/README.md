@@ -1,5 +1,7 @@
 # Solid Issues
 
+> ⚠️ **Experimental — AI-agent-generated.** This project was created by an AI coding agent (Claude Opus 4.8, @jeswr's PSS agent) and is under active development. It is not yet production-hardened; review before relying on it.
+
 An issue tracker where the data lives in **your own Solid Pod**, not a central
 server. Sign in with your WebID; issues are read and written over authenticated
 HTTP to a single document in your pod.
