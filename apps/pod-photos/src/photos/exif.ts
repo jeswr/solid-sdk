@@ -108,8 +108,12 @@ export function exifDateToIso(input: string | undefined): string | undefined {
 
   // Otherwise pull the six wall-clock components from the EXIF colon form
   // ("2026:06:15 09:41:07") or an offset-less ISO date-time ("…T09:41:07"),
-  // interpreted as UTC (neither carries a zone).
-  const m = /^(\d{4})[:-](\d{2})[:-](\d{2})[ T](\d{2}):(\d{2}):(\d{2})$/.exec(s);
+  // interpreted as UTC (neither carries a zone). The two forms are kept as
+  // separate strict alternatives so a mixed-separator string (`2026:06-15…`)
+  // is rejected, not accepted.
+  const m =
+    /^(\d{4}):(\d{2}):(\d{2})[ T](\d{2}):(\d{2}):(\d{2})$/.exec(s) ??
+    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})$/.exec(s);
   if (!m) return undefined;
   if (!validWallClock(m)) return undefined;
   const [, y, mo, da, h, mi, se] = m;

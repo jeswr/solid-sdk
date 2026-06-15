@@ -63,6 +63,11 @@ describe('exifDateToIso', () => {
     expect(exifDateToIso('not a date')).toBeUndefined();
   });
 
+  it('rejects mixed date separators (strict EXIF-colon or ISO-hyphen only)', () => {
+    expect(exifDateToIso('2026:06-15T09:41:07')).toBeUndefined();
+    expect(exifDateToIso('2026-06:15 09:41:07')).toBeUndefined();
+  });
+
   it('rejects an out-of-range EXIF month (no silent roll-over)', () => {
     expect(exifDateToIso('2026:13:15 09:41:07')).toBeUndefined();
   });
