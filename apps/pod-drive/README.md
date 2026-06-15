@@ -7,10 +7,14 @@ A file/folder browser for [Solid](https://solidproject.org) pods — browse, rea
 LDP containers and binary resources in your pod the way you would a cloud drive, with the pod (not
 a vendor) as the source of truth.
 
-This repository currently ships the **non-throwaway data-layer core**: a typed RDF model over LDP
-containers + binary resources, built to a high quality bar (100 % unit-test coverage). The Next.js
-UI, the cross-server end-to-end matrix, and the coverage ratchet against every well-known server
-are deliberate, tracked follow-ups (see [Roadmap](#roadmap)).
+This repository ships the **non-throwaway data-layer core** (a typed RDF model over LDP containers +
+binary resources, built to a high quality bar — 100 % unit-test coverage) **plus a
+framework-agnostic React file-browser view** (`@jeswr/pod-drive/ui`) on top of it. The view lists a
+container's folders + files with name / kind / size / modified, navigates into sub-containers via a
+breadcrumb, and renders empty / loading / error / access-denied states. The full Next.js app shell
+(login + pages, scaffolded via `create-solid-app`), the cross-server end-to-end matrix, and the
+coverage ratchet against every well-known server remain deliberate, tracked follow-ups (see
+[Roadmap](#roadmap)).
 
 ## What the data layer does
 
@@ -43,6 +47,31 @@ are deliberate, tracked follow-ups (see [Roadmap](#roadmap)).
   `@solid/reactive-authentication` patches onto `globalThis.fetch`) into `listContainer`, or omit
   it to use the ambient global. The layer is issuer-agnostic.
 
+## What the view does (`@jeswr/pod-drive/ui`)
+
+`@jeswr/pod-drive/ui` is an OPTIONAL, React-only surface on top of the data-layer core. React is a
+**peer dependency**, so a data-layer-only consumer never pulls it in.
+
+- **`<FileBrowser rootUrl fetch? title? />`** — a framework-agnostic React component (no Next.js
+  import) that renders a container as a cloud-drive listing: folders first then files, each with
+  name / kind / size / modified; click a folder to descend, a breadcrumb to climb back. It renders
+  only and never touches RDF or `fetch` directly — all data flows through `useDriveListing`, which
+  calls `listContainer`. Styling is via plain `pod-drive-*` class names so the host app's CSS owns
+  the look. It drops straight into the `create-solid-app` Next.js shell's `components/` (like the
+  template's `ProfileCard`).
+- **`useDriveListing(rootUrl, { fetch? })`** — the data hook: owns the current-container + loading /
+  error / access-error state and the navigation stack, delegating every GET+parse to the data layer
+  (it never re-implements LDP/RDF reading). A stale-response guard ensures a slow earlier load can
+  never overwrite a newer navigation.
+- **Auth is an injectable seam.** The `fetch` prop/option is the authenticated fetch; omit it and
+  the ambient global is used. In production that global is the one
+  `@solid/reactive-authentication`'s `registerGlobally()` patches (wired once in the
+  `create-solid-app` shell's `<SolidAuthProvider>`), so a plain fetch upgrades on a 401 with a DPoP
+  token. That wiring is **#18-gated** (`create-solid-app` S2;
+  [reactive-authentication#18](https://github.com/solid-contrib/reactive-authentication/issues/18)).
+  The view is deliberately unaware of it: it works **today** against a stubbed fetch in unit tests
+  and later against the real session **with no code change** — there is no hard-wired login flow.
+
 ## Federation registry readiness
 
 `public/clientid.jsonld` is a Solid-OIDC Client Identifier Document that also publishes the
@@ -63,10 +92,15 @@ Individual gate steps: `npm run lint`, `npm run typecheck`, `npm test`, `npm run
 
 ## Roadmap
 
-The data layer above is intended to survive; the following are the tracked per-app follow-ups:
+The data layer + the React view above are intended to survive; the following are the tracked
+per-app follow-ups:
 
-- **Next.js UI** scaffolded via `create-solid-app` once it lands — the drive browser surface, login
-  (incl. Pod Drive's static `clientid.jsonld`), and pages. Not hand-rolled as a throwaway app.
+- **Next.js app shell** scaffolded via `create-solid-app` once it lands — hosting the existing
+  `<FileBrowser>` view, wiring login (incl. Pod Drive's static `clientid.jsonld`) so the authed
+  `fetch` flows into the view's seam, and adding pages. Not hand-rolled as a throwaway app.
+- **Offline-first cache** — the suite's service-worker offline-first layer (`@jeswr/solid-offline` +
+  WebSocketChannel2023 invalidation) wired in at the shell level; the view consumes the cached
+  fetch transparently through its existing seam.
 - **Cross-server E2E matrix** — the data layer exercised against every well-known server (CSS WAC +
   ACP, ESS, NSS, and **prod-solid-server with both passkey and username/password** auth).
 - **Coverage-ratchet gate** — a CI gate that holds the data-layer coverage at 100 % and ratchets
