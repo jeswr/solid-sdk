@@ -107,8 +107,14 @@ export class Observation extends TermWrapper {
   }
   set kind(value: ObservationKind) {
     for (const c of Object.values(OBS_CLASS)) this.types.delete(c);
+    // VitalSign is managed alongside the subtype: in the health sector ontology
+    // HeartRateObservation ⊑ VitalSign, while StepCount/Sleep are direct
+    // Observation subkinds (NOT vital signs). Drop any stale VitalSign first so
+    // reverting away from HeartRate (or to bare Observation) cleans it up.
+    this.types.delete(HealthClass.VitalSign);
     this.types.add(HealthClass.Observation);
     if (value !== "Observation") this.types.add(OBS_CLASS[value]);
+    if (value === "HeartRate") this.types.add(HealthClass.VitalSign);
   }
 
   /** The clinical code IRI stating WHAT was measured (`health:hasCode`). */
@@ -497,9 +503,33 @@ export class HealthDocument extends DatasetWrapper {
     return this.instancesOf(HealthClass.HealthRecord, HealthRecord);
   }
 
-  /** Every `health:Observation` subject in the document (includes all subtypes). */
+  /**
+   * Every observation subject in the document, including subtype-only nodes.
+   *
+   * No RDFS inference runs here, so a subject another app asserted as only
+   * `health:HeartRateObservation` / `health:StepCountObservation` /
+   * `health:SleepObservation` (without the base `health:Observation` type) would
+   * be missed by a bare `instancesOf(Observation)`. We therefore union the base
+   * class with the known subtypes and de-duplicate by subject IRI.
+   */
   get observations(): Iterable<Observation> {
-    return this.instancesOf(HealthClass.Observation, Observation);
+    const classes = [
+      HealthClass.Observation,
+      HealthClass.HeartRateObservation,
+      HealthClass.StepCountObservation,
+      HealthClass.SleepObservation,
+    ];
+    const seen = new Set<string>();
+    const out: Observation[] = [];
+    for (const klass of classes) {
+      for (const obs of this.instancesOf(klass, Observation)) {
+        if (!seen.has(obs.value)) {
+          seen.add(obs.value);
+          out.push(obs);
+        }
+      }
+    }
+    return out;
   }
 
   /** Every `health:Condition` subject in the document. */

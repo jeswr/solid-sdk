@@ -77,6 +77,24 @@ describe("TypeIndexDataset — creating + registering", () => {
     ]);
   });
 
+  it("clears a stale location when re-registering the same fixed fragment", () => {
+    const index = new TypeIndexDataset(new Store(), DataFactory);
+    // First registration uses a container.
+    index.registerHealthRecords(INDEX_URL, "https://carol.example/health/");
+    expect(index.locate(HealthClass.HealthRecord)).toEqual([
+      { container: "https://carol.example/health/" },
+    ]);
+
+    // Re-register the SAME fragment with a single instance — the old container
+    // predicate must not survive.
+    index.register(INDEX_URL, "#registration-pod-health-records", HealthClass.HealthRecord, {
+      instance: "https://carol.example/health/record.ttl",
+    });
+    expect(index.locate(HealthClass.HealthRecord)).toEqual([
+      { instance: "https://carol.example/health/record.ttl" },
+    ]);
+  });
+
   it("round-trips a registration's setters including clears", () => {
     const index = new TypeIndexDataset(new Store(), DataFactory);
     const reg = index.register(INDEX_URL, "#reg", HealthClass.Observation, {});

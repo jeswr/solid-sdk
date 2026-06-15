@@ -4,10 +4,11 @@ import { describe, expect, it } from "vitest";
 import {
   gpxToWorkout,
   haversineMetres,
+  parseGpxSegments,
   parseGpxTrackPoints,
   routeDistanceMetres,
 } from "../src/gpx.js";
-import { NOT_GPX, PARTIAL_GPX, SAMPLE_GPX, SPARSE_GPX } from "./fixtures.js";
+import { MULTI_SEGMENT_GPX, NOT_GPX, PARTIAL_GPX, SAMPLE_GPX, SPARSE_GPX } from "./fixtures.js";
 
 describe("parseGpxTrackPoints", () => {
   it("parses three timed, elevated points in document order", () => {
@@ -80,6 +81,38 @@ describe("parseGpxTrackPoints", () => {
   });
 });
 
+describe("parseGpxSegments", () => {
+  it("groups points by <trkseg>", () => {
+    const segs = parseGpxSegments(MULTI_SEGMENT_GPX);
+    expect(segs).toHaveLength(2);
+    expect(segs[0]).toHaveLength(2);
+    expect(segs[1]).toHaveLength(2);
+    expect(segs[0]?.[0]?.lat).toBe(51.5);
+    expect(segs[1]?.[0]?.lat).toBe(48.8566);
+  });
+
+  it("returns loose track points as a single segment when there is no <trkseg>", () => {
+    const noSeg = `<gpx version="1.1"><trkpt lat="1" lon="2"/><trkpt lat="3" lon="4"/></gpx>`;
+    const segs = parseGpxSegments(noSeg);
+    expect(segs).toHaveLength(1);
+    expect(segs[0]).toHaveLength(2);
+  });
+
+  it("returns no segments for a GPX with no track points", () => {
+    expect(parseGpxSegments(`<gpx version="1.1"></gpx>`)).toEqual([]);
+  });
+
+  it("throws on a non-GPX document", () => {
+    expect(() => parseGpxSegments(NOT_GPX)).toThrow(/Not a GPX document/);
+  });
+
+  it("flattens to the same points as parseGpxTrackPoints", () => {
+    expect(parseGpxTrackPoints(MULTI_SEGMENT_GPX)).toEqual(
+      parseGpxSegments(MULTI_SEGMENT_GPX).flat(),
+    );
+  });
+});
+
 describe("haversineMetres + routeDistanceMetres", () => {
   it("is zero for identical points", () => {
     expect(haversineMetres(51.5, -0.12, 51.5, -0.12)).toBeCloseTo(0, 6);
@@ -100,6 +133,18 @@ describe("haversineMetres + routeDistanceMetres", () => {
       { lat: 51.5014, long: -0.1255 },
     ]);
     expect(d).toBeGreaterThan(0);
+  });
+
+  it("does NOT bridge the gap between two segments", () => {
+    const segments = parseGpxSegments(MULTI_SEGMENT_GPX);
+    // Each segment is two close London / Paris points (~111 m each leg); the
+    // segmented distance is the sum of the two short legs, NOT the ~340 km gap.
+    const segmented = routeDistanceMetres(segments);
+    const flattened = routeDistanceMetres(segments.flat());
+    expect(segmented).toBeLessThan(1000);
+    // Flattening wrongly connects London→Paris, inflating distance by >300 km.
+    expect(flattened).toBeGreaterThan(300_000);
+    expect(flattened).toBeGreaterThan(segmented);
   });
 });
 
@@ -156,5 +201,12 @@ describe("gpxToWorkout", () => {
     const { workout } = gpxToWorkout(PARTIAL_GPX, { workoutIri: "urn:w" });
     // PARTIAL_GPX yields two valid points → a distance is computed.
     expect(workout.distance).toBeGreaterThan(0);
+  });
+
+  it("uses segment-aware distance for a multi-segment track", () => {
+    const { workout, points } = gpxToWorkout(MULTI_SEGMENT_GPX, { workoutIri: "urn:w" });
+    // All four points are written to the route, but distance ignores the gap.
+    expect(points).toHaveLength(4);
+    expect(workout.distance).toBeLessThan(1000);
   });
 });

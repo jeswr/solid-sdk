@@ -98,5 +98,23 @@ export const PARTIAL_GPX = `<gpx version="1.1" xmlns="http://www.topografix.com/
   </trkseg></trk>
 </gpx>`;
 
+/**
+ * A GPX track with TWO segments separated by a large geographic gap (a paused
+ * workout / lost fix). Distance must NOT bridge the gap between the segments.
+ */
+export const MULTI_SEGMENT_GPX = `<?xml version="1.0"?>
+<gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+  <trk>
+    <trkseg>
+      <trkpt lat="51.5000" lon="-0.1000"/>
+      <trkpt lat="51.5010" lon="-0.1000"/>
+    </trkseg>
+    <trkseg>
+      <trkpt lat="48.8566" lon="2.3522"/>
+      <trkpt lat="48.8576" lon="2.3522"/>
+    </trkseg>
+  </trk>
+</gpx>`;
+
 /** Not a GPX document at all. */
 export const NOT_GPX = `<?xml version="1.0"?><kml><Placemark/></kml>`;

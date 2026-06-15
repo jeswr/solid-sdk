@@ -96,20 +96,12 @@ function toDate(value: string | undefined): Date | undefined {
   return Number.isNaN(d.getTime()) ? undefined : d;
 }
 
-/**
- * Parse a GPX 1.1 document string into its track points (every `<trkpt>` in the
- * document, in order). Throws if there is no `<gpx>` root element. A `<trkpt>`
- * missing a valid lat/lon is skipped (one malformed fix does not lose the track).
- */
-export function parseGpxTrackPoints(gpx: string): GpxTrackPoint[] {
-  if (!/<gpx\b/i.test(gpx)) {
-    throw new Error("Not a GPX document: missing root <gpx> element.");
-  }
-
+/** Extract the track points from a single XML fragment, in order. */
+function extractTrackPoints(fragment: string): GpxTrackPoint[] {
   const out: GpxTrackPoint[] = [];
   // Match both self-closing `<trkpt .../>` and `<trkpt ...>...</trkpt>` forms.
   const trkptRe = /<trkpt\b([^>]*?)(?:\/>|>([\s\S]*?)<\/trkpt>)/gi;
-  let match: RegExpExecArray | null = trkptRe.exec(gpx);
+  let match: RegExpExecArray | null = trkptRe.exec(fragment);
   while (match !== null) {
     // Group 1 (attributes) is always present; group 2 (body) is absent for the
     // self-closing `<trkpt .../>` form, in which case there is no <ele>/<time>.
@@ -125,10 +117,51 @@ export function parseGpxTrackPoints(gpx: string): GpxTrackPoint[] {
       if (time !== undefined) point.time = time;
       out.push(point);
     }
-    match = trkptRe.exec(gpx);
+    match = trkptRe.exec(fragment);
+  }
+  return out;
+}
+
+/**
+ * Parse a GPX 1.1 document into its `<trkseg>` track segments, each a list of
+ * track points in order. A GPX track can hold several segments separated by
+ * recording gaps (a paused workout, a lost GPS fix), and a segment boundary is a
+ * genuine route discontinuity — so distance is summed WITHIN a segment, never
+ * across the gap between two segments (see `routeDistanceMetres`). Throws if
+ * there is no `<gpx>` root element. A `<trkpt>` missing a valid lat/lon is
+ * skipped. A GPX with track points but no explicit `<trkseg>` is returned as a
+ * single segment.
+ */
+export function parseGpxSegments(gpx: string): GpxTrackPoint[][] {
+  if (!/<gpx\b/i.test(gpx)) {
+    throw new Error("Not a GPX document: missing root <gpx> element.");
   }
 
-  return out;
+  const segments: GpxTrackPoint[][] = [];
+  const segRe = /<trkseg\b[^>]*>([\s\S]*?)<\/trkseg>/gi;
+  let match: RegExpExecArray | null = segRe.exec(gpx);
+  while (match !== null) {
+    segments.push(extractTrackPoints(match[1] ?? ""));
+    match = segRe.exec(gpx);
+  }
+
+  if (segments.length === 0) {
+    // No <trkseg> wrappers — treat any loose track points as one segment.
+    const loose = extractTrackPoints(gpx);
+    if (loose.length > 0) segments.push(loose);
+  }
+
+  return segments;
+}
+
+/**
+ * Parse a GPX 1.1 document into a flat list of every `<trkpt>`, in document
+ * order across all segments. Use this for the route ORDER (the points written
+ * to RDF); use {@link parseGpxSegments} + {@link routeDistanceMetres} for the
+ * distance, which must respect segment boundaries.
+ */
+export function parseGpxTrackPoints(gpx: string): GpxTrackPoint[] {
+  return parseGpxSegments(gpx).flat();
 }
 
 /** Great-circle distance in metres between two lat/long fixes (haversine). */
@@ -142,15 +175,28 @@ export function haversineMetres(aLat: number, aLong: number, bLat: number, bLong
   return 2 * EARTH_RADIUS_M * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
-/** Total route distance in metres (sum of haversine over consecutive points). */
-export function routeDistanceMetres(points: readonly GpxTrackPoint[]): number {
+/**
+ * Total route distance in metres — the haversine sum over consecutive points
+ * WITHIN each segment, with no distance accrued across a segment boundary (a
+ * recording gap is not a travelled leg). Accepts either a flat point list (one
+ * implicit segment) or the segmented form from {@link parseGpxSegments}.
+ */
+export function routeDistanceMetres(
+  pointsOrSegments: readonly GpxTrackPoint[] | readonly (readonly GpxTrackPoint[])[],
+): number {
+  const segments: readonly (readonly GpxTrackPoint[])[] = Array.isArray(pointsOrSegments[0])
+    ? (pointsOrSegments as readonly (readonly GpxTrackPoint[])[])
+    : [pointsOrSegments as readonly GpxTrackPoint[]];
+
   let total = 0;
-  let prev: GpxTrackPoint | undefined;
-  for (const cur of points) {
-    if (prev !== undefined) {
-      total += haversineMetres(prev.lat, prev.long, cur.lat, cur.long);
+  for (const segment of segments) {
+    let prev: GpxTrackPoint | undefined;
+    for (const cur of segment) {
+      if (prev !== undefined) {
+        total += haversineMetres(prev.lat, prev.long, cur.lat, cur.long);
+      }
+      prev = cur;
     }
-    prev = cur;
   }
   return total;
 }
@@ -165,7 +211,8 @@ export function routeDistanceMetres(points: readonly GpxTrackPoint[]): number {
  * preserving GPX order.
  */
 export function gpxToWorkout(gpx: string, options: GpxToWorkoutOptions): ParsedGpxWorkout {
-  const trackPoints = parseGpxTrackPoints(gpx);
+  const segments = parseGpxSegments(gpx);
+  const trackPoints = segments.flat();
   const document = new HealthDocument(new Store(), DataFactory);
 
   const workout = document.mintWorkout(options.workoutIri);
@@ -195,7 +242,8 @@ export function gpxToWorkout(gpx: string, options: GpxToWorkoutOptions): ParsedG
   }
 
   if (trackPoints.length > 1) {
-    workout.distance = routeDistanceMetres(trackPoints);
+    // Distance respects segment boundaries — no leg across a recording gap.
+    workout.distance = routeDistanceMetres(segments);
   }
 
   return { document, workout, points, trackPoints };

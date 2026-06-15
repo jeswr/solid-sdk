@@ -3,18 +3,11 @@
 import { DataFactory, Parser, Store } from "n3";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
-  CodeableConcept,
   type Condition,
   HealthDocument,
   type HealthRecord,
-  Immunization,
-  Instant,
-  MedicationStatement,
-  MedicinalProduct,
   Observation,
   type ObservationKind,
-  RoutePoint,
-  Workout,
 } from "../src/model.js";
 import {
   CoreProp,
@@ -165,6 +158,27 @@ describe("Observation — kind transitions and round-trip", () => {
     const obs = new Observation("urn:o", doc, DataFactory);
     obs.markObservation();
     expect([...obs.types]).toEqual([HealthClass.Observation]);
+  });
+
+  it("stamps health:VitalSign on a HeartRate observation, not on StepCount/Sleep", () => {
+    const doc = empty();
+    const hr = doc.mintObservation("urn:hr", "HeartRate");
+    expect([...hr.types]).toContain(HealthClass.VitalSign);
+
+    const step = doc.mintObservation("urn:step", "StepCount");
+    expect([...step.types]).not.toContain(HealthClass.VitalSign);
+    const sleep = doc.mintObservation("urn:sleep", "Sleep");
+    expect([...sleep.types]).not.toContain(HealthClass.VitalSign);
+  });
+
+  it("removes health:VitalSign when a HeartRate observation changes kind", () => {
+    const doc = empty();
+    const obs = doc.mintObservation("urn:o", "HeartRate");
+    expect([...obs.types]).toContain(HealthClass.VitalSign);
+    obs.kind = "StepCount";
+    expect([...obs.types]).not.toContain(HealthClass.VitalSign);
+    obs.kind = "Observation";
+    expect([...obs.types]).not.toContain(HealthClass.VitalSign);
   });
 });
 
@@ -391,6 +405,41 @@ describe("Workout + RoutePoint", () => {
     const p = doc.mintRoutePoint("urn:same");
     w.points.add(p.value);
     expect(doc.orderedPoints(w).map((x) => x.value)).toEqual(["urn:same"]);
+  });
+});
+
+describe("HealthDocument.observations — subtype-only RDF (no RDFS inference)", () => {
+  it("lists subjects typed ONLY as a subtype (no base health:Observation)", () => {
+    // Mimic another app that asserts only the subtype class.
+    const ttl = `
+      @prefix health: <https://TBD.example/solid/health#> .
+      @prefix ex: <https://carol.example/health/> .
+      ex:HR a health:HeartRateObservation .
+      ex:Step a health:StepCountObservation .
+      ex:Sleep a health:SleepObservation .
+      ex:Plain a health:Observation .
+    `;
+    const doc = load(ttl);
+    const obs = [...doc.observations];
+    expect(obs).toHaveLength(4);
+    expect(obs.map((o) => o.kind).sort()).toEqual([
+      "HeartRate",
+      "Observation",
+      "Sleep",
+      "StepCount",
+    ]);
+  });
+
+  it("de-duplicates a subject carrying both the base and a subtype type", () => {
+    const ttl = `
+      @prefix health: <https://TBD.example/solid/health#> .
+      @prefix ex: <https://carol.example/health/> .
+      ex:HR a health:Observation, health:HeartRateObservation .
+    `;
+    const doc = load(ttl);
+    const obs = [...doc.observations];
+    expect(obs).toHaveLength(1);
+    expect(obs[0]?.kind).toBe("HeartRate");
   });
 });
 

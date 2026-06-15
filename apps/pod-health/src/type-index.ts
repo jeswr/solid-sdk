@@ -122,6 +122,11 @@ export class TypeIndexDataset extends DatasetWrapper {
     const reg = new TypeRegistration(`${documentUrl}${fragment}`, this, this.factory);
     reg.markRegistration();
     reg.forClass = classIri;
+    // Clear BOTH location predicates first: re-registering an existing
+    // fixed-fragment entry must not leave a stale solid:instance /
+    // solid:instanceContainer behind (a registration carries one, not both).
+    reg.instance = undefined;
+    reg.instanceContainer = undefined;
     if (location.instance !== undefined) reg.instance = location.instance;
     if (location.container !== undefined) reg.instanceContainer = location.container;
     return reg;
