@@ -86,6 +86,11 @@ export function SolidSessionProvider({ children }: { children: ReactNode }) {
   // The current pod storage URL, mirrored in a ref so persistSession (a stable
   // callback) can read it synchronously when the provider emits a session.
   const storageUrlRef = useRef<string | null>(null);
+  // The WebID of the currently-active session, so completeLogin can detect an
+  // ACCOUNT SWITCH (a different WebID becoming active) and purge the prior
+  // user's cached issue snapshots — defence in depth on top of the WebID-scoped
+  // cache, so no prior identity's data lingers when a new one signs in.
+  const activeWebIdRef = useRef<string | null>(null);
 
   // Persist a freshly (re)established session so a later reopen can silently
   // restore it (pss-203m). Scoped to the WebID set in persistWebIdRef — a
@@ -106,6 +111,17 @@ export function SolidSessionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const completeLogin = useCallback(async (loaded: SolidProfile, storage: string) => {
+    // Account switch: a DIFFERENT WebID is becoming active. Purge the prior
+    // user's cached issue snapshots so none of their (possibly private) issue
+    // data can be painted under the new identity. Defence in depth: the cache is
+    // also WebID-scoped, so a mismatched snapshot is already a miss — but clearing
+    // here keeps the device free of the previous user's data outright.
+    const previousWebId = activeWebIdRef.current;
+    if (previousWebId && previousWebId !== loaded.webId) {
+      clearAllIssueCaches();
+    }
+    activeWebIdRef.current = loaded.webId;
+
     // Scope refresh-token persistence to this identity + storage BEFORE the first
     // authenticated fetch below — that fetch is what drives the auth-code flow,
     // and the provider emits its session (with the refresh token) via onSession
@@ -296,6 +312,7 @@ export function SolidSessionProvider({ children }: { children: ReactNode }) {
     setStatus("logged-out");
     persistWebIdRef.current = null;
     storageUrlRef.current = null;
+    activeWebIdRef.current = null;
     clearAllIssueCaches();
     void clearSession().finally(() => window.location.reload());
   }, []);

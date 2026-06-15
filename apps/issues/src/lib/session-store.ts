@@ -56,21 +56,52 @@ function openDb(): Promise<IDBDatabase> {
   });
 }
 
+/**
+ * Resolve once the WHOLE transaction has COMMITTED (`oncomplete`), not merely
+ * when the request fired `onsuccess`. A request's `onsuccess` runs before the
+ * transaction commits, so resolving on it lets `clearSession().finally(reload)`
+ * reload BEFORE a `delete` actually lands — leaving the refresh token on disk and
+ * silently restoring the just-logged-out user (the bug). We therefore capture the
+ * request result on `onsuccess` and only resolve from `transaction.oncomplete`,
+ * rejecting on `transaction.onabort`/`onerror` (or a request error) before any
+ * resolve. Exported for unit testing against a fake transaction/request.
+ */
+export function txResult<T>(
+  transaction: IDBTransaction,
+  request: IDBRequest<T>,
+  onSettled: () => void,
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    let result: T;
+    let failed = false;
+    const fail = (err: unknown) => {
+      if (failed) return;
+      failed = true;
+      onSettled();
+      reject(err);
+    };
+    // Capture the value when the request succeeds, but DON'T resolve yet — the
+    // transaction has not committed. A read transaction still completes after.
+    request.onsuccess = () => {
+      result = request.result;
+    };
+    request.onerror = () => fail(request.error);
+    // The transaction has durably committed — only now is the result safe to use.
+    transaction.oncomplete = () => {
+      onSettled();
+      if (!failed) resolve(result);
+    };
+    transaction.onerror = () => fail(transaction.error);
+    transaction.onabort = () => fail(transaction.error ?? new DOMException("Transaction aborted", "AbortError"));
+  });
+}
+
 function tx<T>(mode: IDBTransactionMode, run: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> {
-  return openDb().then(
-    (db) =>
-      new Promise<T>((resolve, reject) => {
-        const transaction = db.transaction(STORE, mode);
-        const request = run(transaction.objectStore(STORE));
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error);
-        transaction.oncomplete = () => db.close();
-        transaction.onerror = () => {
-          db.close();
-          reject(transaction.error);
-        };
-      }),
-  );
+  return openDb().then((db) => {
+    const transaction = db.transaction(STORE, mode);
+    const request = run(transaction.objectStore(STORE));
+    return txResult(transaction, request, () => db.close());
+  });
 }
 
 /** Persist (replacing any previous) the current restorable session. Best-effort. */

@@ -34,13 +34,19 @@ export function groupOf(issue: IssueRecord, groupBy: GroupBy): string {
 }
 
 /**
- * The issues a status-grouped board should display, given the user's state
- * filter. The board is the one place completed cards stay visible: even when
- * the state filter is "open", an issue whose current status is a terminal
- * (done) column is kept so the Done column is populated — UNLESS it has been
- * archived off the board. With the filter on "closed" or "all" the usual
- * filter already includes them, so this only ever ADDS the done-but-hidden
+ * The issues a board should display, given the user's state filter and the
+ * active grouping. The board is the one place completed cards stay visible:
+ * even when the state filter is "open", an issue whose current status is a
+ * terminal (done) column is kept so the Done column is populated — UNLESS it
+ * has been archived off the board. With the filter on "closed" or "all" the
+ * usual filter already includes them, so this only ever ADDS the done-but-hidden
  * cards back; it never removes anything the filter kept.
+ *
+ * The "keep terminal cards visible" exception applies ONLY when `groupBy ===
+ * "status"` — that is the only grouping with a Done column to populate. When
+ * grouping by priority there is no Done column, so a closed Done card under the
+ * "open" filter would otherwise leak into a priority column; in that grouping we
+ * honour the state filter exactly (closed cards drop out of the "open" board).
  *
  * `archived` is the set of issue URLs the user has archived off the board
  * (board membership only — the issue stays closed in the pod).
@@ -49,16 +55,21 @@ export function boardIssues(
   issues: IssueRecord[],
   workflow: WorkflowDef,
   state: "open" | "closed" | "all",
+  groupBy: GroupBy,
   archived: ReadonlySet<string> = new Set(),
 ): IssueRecord[] {
   const terminalSlugs = new Set(workflow.statuses.filter((s) => s.terminal).map((s) => s.slug));
+  // Only a status-grouped board has a Done column; only there do we keep
+  // terminal-status cards visible past the "open" filter.
+  const keepTerminalVisible = groupBy === "status";
   return issues.filter((i) => {
     if (archived.has(i.url)) return false;
     // The chosen state filter always shows its matches…
     if (state === "all") return true;
     if (state === "closed") return i.state === "closed";
-    // …and on "open", a card in a terminal (done) column stays visible too.
-    return i.state === "open" || terminalSlugs.has(i.status);
+    // …and on "open" a status-grouped board also keeps cards in a terminal
+    // (done) column; a priority-grouped board honours the filter exactly.
+    return i.state === "open" || (keepTerminalVisible && terminalSlugs.has(i.status));
   });
 }
 
@@ -132,4 +143,33 @@ export function optimisticMove(
 /** Restore a reverted record into the list (used when the async write fails). */
 export function revertMove(issues: IssueRecord[], original: IssueRecord): IssueRecord[] {
   return issues.map((i) => (i.url === original.url ? original : i));
+}
+
+/**
+ * Revert a FAILED optimistic move to `original`, but ONLY when the card's
+ * current local record still corresponds to the move that failed — identified
+ * by `optimistic` (the record this move optimistically wrote). If, while the
+ * write was in flight, the user moved the SAME card again (so its current record
+ * no longer equals `optimistic`), that newer move owns the card's state: the
+ * stale failure is dropped and the list returned unchanged.
+ *
+ * The relevant grouped value is what a move changes, so we compare on the move's
+ * dimension (status vs priority) — a later, unrelated re-render that produced a
+ * fresh object reference must not look like a "newer move".
+ */
+export function revertMoveIfCurrent(
+  issues: IssueRecord[],
+  original: IssueRecord,
+  optimistic: IssueRecord,
+  move: BoardMove,
+): IssueRecord[] {
+  const current = issues.find((i) => i.url === original.url);
+  if (!current) return issues; // card gone (deleted/archived) — nothing to revert
+  const stillThisMove =
+    move.kind === "status"
+      ? current.status === optimistic.status && current.state === optimistic.state
+      : current.priority === optimistic.priority;
+  // A newer move of the same card already changed it — drop the stale failure.
+  if (!stillThisMove) return issues;
+  return revertMove(issues, original);
 }

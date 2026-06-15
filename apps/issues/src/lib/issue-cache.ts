@@ -17,18 +17,27 @@
  * until that layer is wired in here. See `jeswr/solid-offline`.
  *
  * Security/correctness notes:
- *  - Scoped per tracker URL: one tracker's cache can never paint under another.
+ *  - Scoped per (WebID, tracker URL): a snapshot is keyed AND stamped with the
+ *    WebID that fetched it, and is only ever painted back for that same
+ *    authenticated WebID. Issue data a tracker exposes can differ per viewer
+ *    (private trackers, per-member ACLs), so a snapshot cached by one signed-in
+ *    user must never paint for a different later user on the same browser before
+ *    authorization revalidates. A missing or mismatched WebID is a cache MISS
+ *    (no hydrate) — never a hydrate of someone else's data.
  *  - Best-effort only: any read/parse/quota error degrades to "no cache" (a
  *    normal network fetch), never an exception that blocks the app.
- *  - This is a cache of data the user could already read; it is NOT an auth
- *    artefact, so it does not need the IndexedDB/WebID-scoping the session
- *    refresh-token store uses. It is cleared on logout regardless (see clearAll).
+ *  - Cleared on both logout AND account switch (see clearAllIssueCaches), so a
+ *    signed-out / switched device leaves no prior user's issue snapshots behind.
  */
 import type { IssueRecord } from "./repository";
 
 const PREFIX = "solid-issues:cache:";
-/** Cache schema version — bump to invalidate all entries on a shape change. */
-const VERSION = 1;
+/**
+ * Cache schema version — bump to invalidate all entries on a shape change.
+ * Bumped to 2 when the cache became WebID-scoped (the key + envelope gained the
+ * WebID): v1 entries (no WebID) are now unreadable, so they cannot leak.
+ */
+const VERSION = 2;
 /** Don't paint from a cache older than this (ms) — a week. Stale data still
  *  revalidates; this only bounds how old a first-paint may be. */
 const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
@@ -37,6 +46,8 @@ interface CacheEnvelope {
   v: number;
   /** When the snapshot was written (epoch ms). */
   at: number;
+  /** The WebID that fetched these issues — only this identity may paint them. */
+  webId: string;
   /** The tracker the issues belong to (defence-in-depth against key collisions). */
   tracker: string;
   issues: IssueRecord[];
@@ -59,7 +70,13 @@ function defaultStorage(): SyncStorage | null {
   }
 }
 
-const keyFor = (trackerUrl: string) => `${PREFIX}${trackerUrl}`;
+/**
+ * The storage key for a (WebID, tracker) snapshot. The WebID is part of the key
+ * so two users on the same browser never share a slot — defence in depth on top
+ * of the in-envelope WebID check. The separator is a NUL byte, which cannot
+ * appear in a URL, so a crafted WebID/tracker can't forge another pair's key.
+ */
+const keyFor = (webId: string, trackerUrl: string) => `${PREFIX}${webId}\u0000${trackerUrl}`;
 
 /** ISO-8601 datetime (what JSON.stringify emits for a Date) — for revival on read. */
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/;
@@ -74,20 +91,27 @@ function reviveValue(value: unknown): unknown {
 }
 
 /**
- * Read the cached issues for a tracker, or null when there is no usable cache
- * (absent, wrong version/tracker, too old, or unparseable). Dates are revived.
+ * Read the cached issues for a (WebID, tracker) pair, or null when there is no
+ * usable cache (absent, wrong version, WebID/tracker mismatch, too old, or
+ * unparseable). A missing or mismatched WebID is treated as a MISS — a snapshot
+ * is only ever painted back for the SAME authenticated WebID that fetched it, so
+ * one user's private issue data can never paint for a different later user on the
+ * same browser. Dates are revived.
  */
 export function readIssueCache(
+  webId: string | null | undefined,
   trackerUrl: string,
   storage: SyncStorage | null = defaultStorage(),
   now: number = Date.now(),
 ): IssueRecord[] | null {
-  if (!storage || !trackerUrl) return null;
+  // No authenticated identity ⇒ nothing to match against ⇒ cache miss (no hydrate).
+  if (!storage || !trackerUrl || !webId) return null;
   try {
-    const raw = storage.getItem(keyFor(trackerUrl));
+    const raw = storage.getItem(keyFor(webId, trackerUrl));
     if (!raw) return null;
     const env = JSON.parse(raw, (_k, v) => reviveValue(v)) as CacheEnvelope;
-    if (env.v !== VERSION || env.tracker !== trackerUrl) return null;
+    // Version, WebID, AND tracker must all match the current identity/tracker.
+    if (env.v !== VERSION || env.webId !== webId || env.tracker !== trackerUrl) return null;
     if (!Array.isArray(env.issues)) return null;
     if (now - env.at > MAX_AGE_MS) return null;
     return env.issues;
@@ -96,35 +120,45 @@ export function readIssueCache(
   }
 }
 
-/** Persist the latest issues for a tracker (best-effort; quota errors swallowed). */
+/**
+ * Persist the latest issues for a (WebID, tracker) pair (best-effort; quota
+ * errors swallowed). Without a WebID there is nothing to scope the snapshot to,
+ * so the write is skipped (the data would be unreadable anyway).
+ */
 export function writeIssueCache(
+  webId: string | null | undefined,
   trackerUrl: string,
   issues: IssueRecord[],
   storage: SyncStorage | null = defaultStorage(),
   now: number = Date.now(),
 ): void {
-  if (!storage || !trackerUrl) return;
-  const env: CacheEnvelope = { v: VERSION, at: now, tracker: trackerUrl, issues };
+  if (!storage || !trackerUrl || !webId) return;
+  const env: CacheEnvelope = { v: VERSION, at: now, webId, tracker: trackerUrl, issues };
   try {
-    storage.setItem(keyFor(trackerUrl), JSON.stringify(env));
+    storage.setItem(keyFor(webId, trackerUrl), JSON.stringify(env));
   } catch {
     // Quota/serialisation failure — the cache is an optimisation, never required.
   }
 }
 
-/** Remove one tracker's cache entry. */
-export function clearIssueCache(trackerUrl: string, storage: SyncStorage | null = defaultStorage()): void {
-  if (!storage || !trackerUrl) return;
+/** Remove one (WebID, tracker) cache entry. */
+export function clearIssueCache(
+  webId: string | null | undefined,
+  trackerUrl: string,
+  storage: SyncStorage | null = defaultStorage(),
+): void {
+  if (!storage || !trackerUrl || !webId) return;
   try {
-    storage.removeItem(keyFor(trackerUrl));
+    storage.removeItem(keyFor(webId, trackerUrl));
   } catch {
     /* best-effort */
   }
 }
 
 /**
- * Remove every issue-cache entry (all trackers). Called on logout so a signed-out
- * device leaves no issue snapshots behind, regardless of which trackers were open.
+ * Remove every issue-cache entry (all WebIDs, all trackers). Called on logout
+ * AND on account switch, so a signed-out / switched device leaves no prior
+ * user's issue snapshots behind, regardless of which trackers were open.
  */
 export function clearAllIssueCaches(storage: SyncStorage | null = defaultStorage()): void {
   if (!storage) return;

@@ -104,10 +104,15 @@ const EMPTY_SNAPSHOT: Omit<TrackerSnapshot, "tracker"> = {
  * conditionally PUT the individual issue and refresh the list; a {@link ConflictError}
  * (412) is rethrown for the caller to surface and retry.
  */
-/** Seed the snapshot from the durable cache so the board paints instantly. */
-function hydrate(trackerUrl: string | null): TrackerSnapshot {
-  if (!trackerUrl) return { tracker: null, ...EMPTY_SNAPSHOT };
-  const cached = readIssueCache(trackerUrl);
+/**
+ * Seed the snapshot from the durable cache so the board paints instantly. The
+ * cache is WebID-scoped: without an authenticated WebID, or for a snapshot
+ * fetched by a different WebID, this is a MISS — so a previous user's data can
+ * never paint for the current one before authorization revalidates.
+ */
+function hydrate(webId: string | null, trackerUrl: string | null): TrackerSnapshot {
+  if (!trackerUrl || !webId) return { tracker: null, ...EMPTY_SNAPSHOT };
+  const cached = readIssueCache(webId, trackerUrl);
   if (!cached) return { tracker: null, ...EMPTY_SNAPSHOT };
   // Tag with the tracker so the render shows the cached issues immediately; a
   // background fetch reconciles. Sprints aren't cached (small, config-derived).
@@ -124,7 +129,7 @@ export function useIssues(trackerUrl: string | null, creator: string | null): Us
   // The initial snapshot is hydrated SYNCHRONOUSLY from the durable cache
   // (pss-tvds): a returning user sees their last board paint immediately, while
   // the network fetch revalidates in the background (stale-while-revalidate).
-  const [snapshot, setSnapshot] = useState<TrackerSnapshot>(() => hydrate(trackerUrl));
+  const [snapshot, setSnapshot] = useState<TrackerSnapshot>(() => hydrate(creator, trackerUrl));
   const [refreshing, setRefreshing] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   // True until the first network fetch lands for the current tracker — used only
@@ -157,8 +162,9 @@ export function useIssues(trackerUrl: string | null, creator: string | null): Us
       if (seq !== fetchSeq.current) return; // a newer fetch superseded this one
       setSnapshot({ tracker: trackerUrl, issues: list, sprints: sprintList, canCreate: cc, error: null });
       setFetched(true);
-      // Persist the fresh list so the next reopen paints from it.
-      writeIssueCache(trackerUrl, list);
+      // Persist the fresh list so the next reopen paints from it — scoped to the
+      // active WebID so it only ever rehydrates for this same identity.
+      writeIssueCache(creator, trackerUrl, list);
     } catch (e) {
       if (seq !== fetchSeq.current) return;
       // Keep the last good data for THIS tracker; never carry another's over.
@@ -182,11 +188,11 @@ export function useIssues(trackerUrl: string | null, creator: string | null): Us
   // old one's "loaded" status.
   useEffect(() => {
     setFetched(false);
-    const hydrated = hydrate(trackerUrl);
+    const hydrated = hydrate(creator, trackerUrl);
     if (hydrated.tracker === trackerUrl) {
       setSnapshot(hydrated);
     }
-  }, [trackerUrl]);
+  }, [creator, trackerUrl]);
 
   useEffect(() => {
     // Client-side mount fetch; setState only runs after the await inside fetchInto.
@@ -224,12 +230,13 @@ export function useIssues(trackerUrl: string | null, creator: string | null): Us
       setSnapshot((prev) => {
         if (prev.tracker !== trackerUrl) return prev; // never edit another tracker's snapshot
         const next = updater(prev.issues);
-        // Keep the cache in lock-step so a reopen mid-write paints the optimistic state.
-        if (trackerUrl) writeIssueCache(trackerUrl, next);
+        // Keep the cache in lock-step so a reopen mid-write paints the optimistic
+        // state — scoped to the active WebID (writeIssueCache no-ops without one).
+        if (trackerUrl) writeIssueCache(creator, trackerUrl, next);
         return { ...prev, issues: next };
       });
     },
-    [trackerUrl],
+    [creator, trackerUrl],
   );
 
   // A "saved" flash auto-clears back to idle so the indicator is non-intrusive.

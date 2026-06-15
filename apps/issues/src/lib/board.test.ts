@@ -7,6 +7,7 @@ import {
   moveForColumn,
   optimisticMove,
   revertMove,
+  revertMoveIfCurrent,
 } from "./board";
 import { DEFAULT_WORKFLOW, type WorkflowDef } from "./issue";
 import type { IssueRecord } from "./repository";
@@ -46,25 +47,49 @@ describe("boardIssues — Done column is populated (pss-w29w)", () => {
   // A completed card: terminal status ⇒ wf:Closed (state "closed"), as the data layer couples them.
   const done = mk({ url: "d", status: "done", state: "closed" });
 
-  it("keeps done (closed) cards visible even with the OPEN state filter", () => {
-    const result = boardIssues([todo, wip, done], wf, "open").map((i) => i.url);
+  it("keeps done (closed) cards visible even with the OPEN state filter (status grouping)", () => {
+    const result = boardIssues([todo, wip, done], wf, "open", "status").map((i) => i.url);
     expect(result).toContain("d"); // the bug: previously dropped, leaving Done empty
     expect(result).toEqual(["t", "w", "d"]);
   });
 
   it("shows only closed cards with the CLOSED filter", () => {
-    expect(boardIssues([todo, wip, done], wf, "closed").map((i) => i.url)).toEqual(["d"]);
+    expect(boardIssues([todo, wip, done], wf, "closed", "status").map((i) => i.url)).toEqual(["d"]);
   });
 
   it("shows everything with the ALL filter", () => {
-    expect(boardIssues([todo, wip, done], wf, "all").map((i) => i.url)).toEqual(["t", "w", "d"]);
+    expect(boardIssues([todo, wip, done], wf, "all", "status").map((i) => i.url)).toEqual(["t", "w", "d"]);
   });
 
   it("excludes archived cards from the board", () => {
     const archived = new Set(["d"]);
-    expect(boardIssues([todo, wip, done], wf, "open", archived).map((i) => i.url)).toEqual(["t", "w"]);
+    expect(boardIssues([todo, wip, done], wf, "open", "status", archived).map((i) => i.url)).toEqual(["t", "w"]);
     // even with the ALL filter, an archived card stays off the board
-    expect(boardIssues([todo, wip, done], wf, "all", archived).map((i) => i.url)).toEqual(["t", "w"]);
+    expect(boardIssues([todo, wip, done], wf, "all", "status", archived).map((i) => i.url)).toEqual(["t", "w"]);
+  });
+});
+
+describe("boardIssues — terminal-visible exception is status-grouping only", () => {
+  const todo = mk({ url: "t", status: "todo", state: "open", priority: "high" });
+  const wip = mk({ url: "w", status: "in-progress", state: "open", priority: "medium" });
+  // A Done (closed) card that still carries a priority.
+  const done = mk({ url: "d", status: "done", state: "closed", priority: "high" });
+
+  it("priority grouping + OPEN filter DROPS closed Done cards (no Done column to keep them)", () => {
+    // The bug: a priority-grouped board showed the closed Done card inside the
+    // High priority column. With groupBy honoured, the open filter excludes it.
+    const result = boardIssues([todo, wip, done], wf, "open", "priority").map((i) => i.url);
+    expect(result).toEqual(["t", "w"]);
+    expect(result).not.toContain("d");
+  });
+
+  it("priority grouping still shows closed cards under the CLOSED / ALL filters", () => {
+    expect(boardIssues([todo, wip, done], wf, "closed", "priority").map((i) => i.url)).toEqual(["d"]);
+    expect(boardIssues([todo, wip, done], wf, "all", "priority").map((i) => i.url)).toEqual(["t", "w", "d"]);
+  });
+
+  it("status grouping (same data) DOES keep the Done card on the OPEN filter", () => {
+    expect(boardIssues([todo, wip, done], wf, "open", "status").map((i) => i.url)).toEqual(["t", "w", "d"]);
   });
 });
 
@@ -138,5 +163,53 @@ describe("optimisticMove + revertMove", () => {
     expect(groupOf(mk({ status: "done", priority: "high" }), "status")).toBe("done");
     expect(groupOf(mk({ status: "done", priority: "high" }), "priority")).toBe("high");
     expect(groupOf(mk({ status: "done" }), "priority")).toBe("none");
+  });
+});
+
+describe("revertMoveIfCurrent — a stale failure never clobbers a newer move", () => {
+  const move = (status: string) => ({ kind: "status", status } as const);
+
+  it("reverts when the card still sits at the failed move's optimistic state", () => {
+    // Move A: todo → in-progress, optimistic applied, save then fails.
+    const original = mk({ url: "a", status: "todo", state: "open" });
+    const optimistic = applyMove(original, move("in-progress"), wf); // status in-progress
+    const list = [optimistic, mk({ url: "b", status: "todo", state: "open" })];
+    const reverted = revertMoveIfCurrent(list, original, optimistic, move("in-progress"));
+    expect(reverted.find((i) => i.url === "a")?.status).toBe("todo"); // rolled back
+  });
+
+  it("move A→B (pending), move B→C, then A→B's save fails → card stays at C", () => {
+    // First move: todo (A) → in-progress (B). Its save is in flight.
+    const original = mk({ url: "card", status: "todo", state: "open" });
+    const optimisticB = applyMove(original, move("in-progress"), wf);
+    // While pending, the user moves the SAME card B → done (C). Current list has C.
+    const optimisticC = applyMove(optimisticB, move("done"), wf);
+    const list = [optimisticC];
+    // Now the FIRST move's save fails. The stale revert must NOT pull the card back.
+    const result = revertMoveIfCurrent(list, original, optimisticB, move("in-progress"));
+    expect(result).toBe(list); // unchanged — newer move owns the state
+    expect(result.find((i) => i.url === "card")?.status).toBe("done"); // stays at C
+  });
+
+  it("does nothing when the card has been removed from the list", () => {
+    const original = mk({ url: "gone", status: "todo", state: "open" });
+    const optimistic = applyMove(original, move("done"), wf);
+    const list = [mk({ url: "other", status: "todo", state: "open" })];
+    expect(revertMoveIfCurrent(list, original, optimistic, move("done"))).toBe(list);
+  });
+
+  it("guards priority moves on the priority dimension", () => {
+    const original = mk({ url: "p", priority: "low", status: "todo" });
+    const optimisticHigh = applyMove(original, { kind: "priority", priority: "high" }, wf);
+    // A newer priority move to medium supersedes the pending high move.
+    const optimisticMedium = applyMove(optimisticHigh, { kind: "priority", priority: "medium" }, wf);
+    const list = [optimisticMedium];
+    const result = revertMoveIfCurrent(list, original, optimisticHigh, { kind: "priority", priority: "high" });
+    expect(result).toBe(list); // stale failure dropped
+    expect(result[0].priority).toBe("medium");
+    // But if it still sits at high, the revert applies.
+    const stillHigh = [optimisticHigh];
+    const reverted = revertMoveIfCurrent(stillHigh, original, optimisticHigh, { kind: "priority", priority: "high" });
+    expect(reverted[0].priority).toBe("low");
   });
 });

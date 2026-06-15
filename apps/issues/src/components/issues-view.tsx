@@ -23,7 +23,7 @@ import { TeamDialog } from "@/components/team-dialog";
 import { FieldsDialog } from "@/components/fields-dialog";
 import { IssueBoard } from "@/components/issue-board";
 import { SaveIndicator } from "@/components/save-indicator";
-import { boardColumns, boardIssues, moveForColumn, optimisticMove, revertMove } from "@/lib/board";
+import { boardColumns, boardIssues, moveForColumn, optimisticMove, revertMoveIfCurrent } from "@/lib/board";
 import { EpicView } from "@/components/epic-view";
 import { DashboardView } from "@/components/dashboard-view";
 import { WorkloadView } from "@/components/workload-view";
@@ -344,8 +344,8 @@ export function IssuesView() {
   // — pss-w29w). So the board uses the query with state forced to "all", and
   // boardIssues then re-applies the user's state filter + archive hiding.
   const boardVisible = useMemo(
-    () => boardIssues(filterAndSort(issues.issues, { ...query, state: "all" }), workflow, query.state, archived),
-    [issues.issues, query, workflow, archived],
+    () => boardIssues(filterAndSort(issues.issues, { ...query, state: "all" }), workflow, query.state, groupBy, archived),
+    [issues.issues, query, workflow, groupBy, archived],
   );
   const commentsIssue = useMemo(
     () => issues.issues.find((i) => i.url === commentsUrl),
@@ -404,7 +404,11 @@ export function IssuesView() {
     }
   };
 
-  const cardActions = (issue: IssueRecord): IssueCardActions => ({
+  // `context` gates board-only actions: Archive removes a card from the board and
+  // is meaningless in list/table views, so it is supplied ONLY for `"board"`.
+  // Without this, the shared factory leaked the Archive action onto closed cards
+  // in non-board views.
+  const cardActions = (issue: IssueRecord, context: "board" | "list" = "list"): IssueCardActions => ({
     isOwner: isOwn,
     groupIri: group.iri,
     onEdit: () => {
@@ -423,12 +427,16 @@ export function IssuesView() {
         () => issues.setState(issue.url, issue.state === "open" ? "closed" : "open"),
         issue.state === "open" ? "Issue closed" : "Issue reopened",
       ),
-    onArchive: () => {
-      // Board-only: hide a finished card from the board (it stays closed in the
-      // pod). The card only renders this when closed (pss-w29w).
-      setArchived((s) => new Set(s).add(issue.url));
-      toast.info("Card archived from the board. Switch to “Closed” to find it.");
-    },
+    // Board-only: hide a finished card from the board (it stays closed in the
+    // pod). The card only renders this when closed (pss-w29w), and it is supplied
+    // only from the board path — never on a list/table card.
+    onArchive:
+      context === "board"
+        ? () => {
+            setArchived((s) => new Set(s).add(issue.url));
+            toast.info("Card archived from the board. Switch to “Closed” to find it.");
+          }
+        : undefined,
     onDelete: () => setDeleteTarget(issue),
   });
 
@@ -904,7 +912,7 @@ export function IssuesView() {
           // would otherwise hide.
           <IssueBoard
             issues={boardVisible}
-            cardActions={cardActions}
+            cardActions={(issue) => cardActions(issue, "board")}
             canWrite={issues.canCreate}
             columns={boardColumns(workflow, groupBy)}
             groupOf={(i) => (groupBy === "status" ? i.status : (i.priority ?? "none"))}
@@ -914,6 +922,10 @@ export function IssuesView() {
               const move = moveForColumn(groupBy, key);
               const { next, original } = optimisticMove(issues.issues, url, move, groupBy, workflow);
               if (!original) return; // no-op drop (same column)
+              // The record this move optimistically wrote — used to detect whether a
+              // LATER move of the same card has since superseded it, so a stale
+              // failure never clobbers a newer move (revertMoveIfCurrent).
+              const optimistic = next.find((i) => i.url === url)!;
               issues.setIssuesLocal(() => next);
               void issues
                 .persist((r) =>
@@ -922,7 +934,7 @@ export function IssuesView() {
                     : r.update(url, { priority: move.priority }),
                 )
                 .catch((e) => {
-                  issues.setIssuesLocal((list) => revertMove(list, original));
+                  issues.setIssuesLocal((list) => revertMoveIfCurrent(list, original, optimistic, move));
                   if (e instanceof ConflictError) {
                     toast.error(e.message);
                     void issues.refresh();
@@ -1019,7 +1031,7 @@ export function IssuesView() {
                     />
                   )}
                   <div className="min-w-0 flex-1">
-                    <IssueCard issue={issue} {...cardActions(issue)} />
+                    <IssueCard issue={issue} {...cardActions(issue, "list")} />
                   </div>
                 </li>
               ))}
