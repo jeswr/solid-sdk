@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useTheme } from "next-themes";
 import { toast } from "sonner";
 import { useSolidSession } from "@/lib/session-context";
 import { useIssues, type IssueRecord } from "@/lib/use-issues";
@@ -67,18 +66,13 @@ import {
   FolderOpen,
   LayoutGrid,
   List as ListIcon,
-  LogOut,
-  Monitor,
-  Moon,
   Plus,
   RotateCcw,
   Search,
-  Sun,
   Share2,
   SlidersHorizontal,
   Trash2,
   Users,
-  UserRound,
   UsersRound,
   X,
   Zap,
@@ -115,7 +109,6 @@ const EMPTY_FIELDS: FieldDef[] = [];
 
 export function IssuesView() {
   const { profile, trackerUrl, storageUrl, logout } = useSolidSession();
-  const { theme, setTheme } = useTheme();
   const ownTracker: TrackerLocation = { ownerWebId: profile!.webId, trackerUrl: trackerUrl! };
 
   const [tracker, setTracker] = useState<TrackerLocation>(() => {
@@ -455,19 +448,29 @@ export function IssuesView() {
   ];
 
   return (
-    <div className="flex flex-1 flex-col">
-      <header className="sticky top-0 z-30 border-b bg-background/85 backdrop-blur supports-[backdrop-filter]:bg-background/70">
-        <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-4 py-2.5">
-          <div className="flex min-w-0 items-center gap-2">
-            <span
-              aria-hidden
-              className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground"
-            >
-              <CircleDot className="size-4" />
-            </span>
-            <span className="hidden text-lg font-semibold tracking-tight whitespace-nowrap lg:inline">Solid Issues</span>
-            <span aria-hidden className="hidden text-muted-foreground/50 lg:inline">/</span>
-            {profile && storageUrl && (
+    <div className="flex flex-col gap-4">
+      {/* Project context bar — visible below the AppShell header when viewing
+          another user's tracker (replaces the old sticky sub-header). */}
+      {!isOwn && (
+        <div className="-mx-4 -mt-6 border-b bg-muted/40 px-4 py-2 md:-mx-8 md:px-8">
+          <div className="flex items-center justify-between gap-3">
+            <p className="min-w-0 truncate text-sm text-muted-foreground">
+              Viewing <span className="font-medium text-foreground">{shortWebId(tracker.ownerWebId)}</span>&apos;s
+              tracker
+            </p>
+            <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => switchTracker(ownTracker)}>
+              <ArrowLeft className="size-4" aria-hidden /> My issues
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Page header */}
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div className="min-w-0">
+          {/* Project switcher — pick a different tracker / collaborator's pod. */}
+          {profile && storageUrl && (
+            <div className="mb-1 flex items-center gap-2">
               <ProjectSwitcher
                 webId={profile.webId}
                 storageUrl={storageUrl}
@@ -477,139 +480,70 @@ export function IssuesView() {
                   setSelected(new Set());
                 }}
               />
-            )}
-          </div>
-          <div className="flex shrink-0 items-center gap-1">
-            {isOwn && (
-              <Button variant="ghost" size="sm" className="gap-1.5" aria-label="Team" onClick={() => setTeamOpen(true)}>
-                <Users className="size-4" aria-hidden />
-                <span className="hidden lg:inline">Team</span>
-              </Button>
-            )}
-            {isOwn && (
-              <Button variant="ghost" size="sm" className="gap-1.5" aria-label="Fields" onClick={() => setFieldsOpen(true)}>
-                <SlidersHorizontal className="size-4" aria-hidden />
-                <span className="hidden lg:inline">Fields</span>
-              </Button>
-            )}
-            {isOwn && (
-              <Button variant="ghost" size="sm" className="gap-1.5" aria-label="Automations" onClick={() => setAutomationsOpen(true)}>
-                <Zap className="size-4" aria-hidden />
-                <span className="hidden lg:inline">Automations</span>
-              </Button>
-            )}
-            <Button variant="ghost" size="sm" className="gap-1.5" aria-label="Open tracker" onClick={() => setOpenTrackerOpen(true)}>
-              <FolderOpen className="size-4" aria-hidden />
-              <span className="hidden lg:inline">Open tracker</span>
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="gap-1.5"
-              aria-label="Command palette"
-              onClick={() => setPaletteOpen(true)}
-            >
-              <CommandIcon className="size-4" aria-hidden />
-              <span className="hidden text-xs text-muted-foreground lg:inline">⌘K</span>
-            </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="gap-2">
-                  <span
-                    aria-hidden
-                    className="flex size-7 items-center justify-center rounded-full bg-primary/10 text-primary"
-                  >
-                    <UserRound className="size-4" />
-                  </span>
-                  <span className="hidden max-w-[10rem] truncate sm:inline">
-                    {profile?.name ?? profile?.webId}
-                  </span>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-72">
-                <div className="px-2 py-1.5">
-                  <p className="truncate text-sm font-medium">{profile?.name ?? "Signed in"}</p>
-                  <p className="truncate text-xs text-muted-foreground">{profile?.webId}</p>
-                </div>
-                <DropdownMenuSeparator />
-                <div className="flex items-center gap-1 px-2 py-1.5">
-                  <span className="mr-auto text-xs text-muted-foreground">Theme</span>
-                  {([
-                    { k: "light", I: Sun, label: "Light" },
-                    { k: "dark", I: Moon, label: "Dark" },
-                    { k: "system", I: Monitor, label: "System" },
-                  ] as const).map(({ k, I, label }) => (
-                    <Button
-                      key={k}
-                      variant={theme === k ? "secondary" : "ghost"}
-                      size="icon"
-                      className="size-7"
-                      aria-label={`${label} theme`}
-                      aria-pressed={theme === k}
-                      onClick={() => setTheme(k)}
-                    >
-                      <I className="size-4" aria-hidden />
-                    </Button>
-                  ))}
-                </div>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={logout}>
-                  <LogOut className="size-4" aria-hidden /> Sign out
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        </div>
-
-        {!isOwn && (
-          <div className="border-t bg-muted/40">
-            <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-3 px-4 py-2">
-              <p className="min-w-0 truncate text-sm text-muted-foreground">
-                Viewing <span className="font-medium text-foreground">{shortWebId(tracker.ownerWebId)}</span>&apos;s
-                tracker
-              </p>
-              <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => switchTracker(ownTracker)}>
-                <ArrowLeft className="size-4" aria-hidden /> My issues
-              </Button>
             </div>
-          </div>
-        )}
-      </header>
-
-      <main id="main" className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">
-        {/* Page header */}
-        <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-xs font-semibold tracking-[0.08em] text-muted-foreground uppercase">Tracker</p>
-            <h1 className="mt-0.5 truncate text-2xl font-bold tracking-tight text-balance">
-              {trackerTitle ?? "Issues"}
-            </h1>
-            <p className="mt-1 text-sm text-muted-foreground tabular-nums">
-              {counts.open} open · {counts.closed} closed
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            {!issues.canCreate && (
-              <Badge variant="secondary" className="gap-1">
-                <Eye className="size-3" aria-hidden /> Read-only
-              </Badge>
-            )}
-            {isOwn && (
-              <Button
-                variant="outline"
-                className="gap-1.5"
-                onClick={() => setShareResource({ url: repo.containerUrl, extraUrls: [tracker.trackerUrl], label: "this tracker" })}
-              >
-                <Share2 className="size-4" aria-hidden /> Share
-              </Button>
-            )}
-            {issues.canCreate && (
-              <Button onClick={() => onCreate()} className="gap-1.5">
-                <Plus className="size-4" aria-hidden /> New issue
-              </Button>
-            )}
-          </div>
+          )}
+          <p className="text-xs font-semibold tracking-[0.08em] text-muted-foreground uppercase">Tracker</p>
+          <h1 className="mt-0.5 truncate text-2xl font-bold tracking-tight text-balance">
+            {trackerTitle ?? "Issues"}
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground tabular-nums">
+            {counts.open} open · {counts.closed} closed
+          </p>
         </div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {isOwn && (
+            <Button variant="ghost" size="sm" className="gap-1.5" aria-label="Team" onClick={() => setTeamOpen(true)}>
+              <Users className="size-4" aria-hidden />
+              <span className="hidden lg:inline">Team</span>
+            </Button>
+          )}
+          {isOwn && (
+            <Button variant="ghost" size="sm" className="gap-1.5" aria-label="Fields" onClick={() => setFieldsOpen(true)}>
+              <SlidersHorizontal className="size-4" aria-hidden />
+              <span className="hidden lg:inline">Fields</span>
+            </Button>
+          )}
+          {isOwn && (
+            <Button variant="ghost" size="sm" className="gap-1.5" aria-label="Automations" onClick={() => setAutomationsOpen(true)}>
+              <Zap className="size-4" aria-hidden />
+              <span className="hidden lg:inline">Automations</span>
+            </Button>
+          )}
+          <Button variant="ghost" size="sm" className="gap-1.5" aria-label="Open tracker" onClick={() => setOpenTrackerOpen(true)}>
+            <FolderOpen className="size-4" aria-hidden />
+            <span className="hidden lg:inline">Open tracker</span>
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="gap-1.5"
+            aria-label="Command palette"
+            onClick={() => setPaletteOpen(true)}
+          >
+            <CommandIcon className="size-4" aria-hidden />
+            <span className="hidden text-xs text-muted-foreground lg:inline">⌘K</span>
+          </Button>
+          {!issues.canCreate && (
+            <Badge variant="secondary" className="gap-1">
+              <Eye className="size-3" aria-hidden /> Read-only
+            </Badge>
+          )}
+          {isOwn && (
+            <Button
+              variant="outline"
+              className="gap-1.5"
+              onClick={() => setShareResource({ url: repo.containerUrl, extraUrls: [tracker.trackerUrl], label: "this tracker" })}
+            >
+              <Share2 className="size-4" aria-hidden /> Share
+            </Button>
+          )}
+          {issues.canCreate && (
+            <Button onClick={() => onCreate()} className="gap-1.5">
+              <Plus className="size-4" aria-hidden /> New issue
+            </Button>
+          )}
+        </div>
+      </div>
 
         {/* Toolbar */}
         <div className="mb-4 space-y-3">
@@ -974,7 +908,6 @@ export function IssuesView() {
           </div>
         )}
         </div>
-      </main>
 
       <IssueFormDialog
         open={formOpen}
