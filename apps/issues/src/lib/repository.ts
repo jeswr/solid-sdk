@@ -705,6 +705,78 @@ export class Repository {
     return out.sort((a, b) => (b.at?.getTime() ?? 0) - (a.at?.getTime() ?? 0) || a.id.localeCompare(b.id));
   }
 
+  /** Default cap on log pages read per issue when reconstructing the CFD. */
+  private static readonly STATUS_HISTORY_MAX_PAGES = 4;
+  /** Default cap on concurrent per-issue log reads during a CFD fan-out. */
+  private static readonly STATUS_HISTORY_CONCURRENCY = 6;
+
+  /**
+   * One issue's recorded status transitions for CFD replay (F3): the `{ to, at }`
+   * of every `status`-kind `prov:Activity`, ascending by time. `to` is the slug
+   * the issue moved into (`prov:generated`, the part after `#status-`). Reads at
+   * most `maxPages` log pages so the fan-out stays bounded — the early pages hold
+   * the oldest transitions, which is exactly the history the window needs; a very
+   * long-lived issue past the cap simply contributes its capped early history.
+   * Returns [] for an issue with no log (or an inaccessible one).
+   */
+  async statusHistory(
+    issueUrl: string,
+    maxPages = Repository.STATUS_HISTORY_MAX_PAGES,
+  ): Promise<{ to: StatusSlug; at: Date }[]> {
+    const stem = this.activityStem(issueUrl);
+    const out: { to: StatusSlug; at: Date }[] = [];
+    for (let page = 0; page < maxPages; page++) {
+      const pageUrl = this.activityPageUrl(stem, page);
+      try {
+        const { dataset } = await fetchRdf(pageUrl, opts(this.fetchImpl));
+        for (const entry of new ActivityLog(dataset, DataFactory).entries) {
+          if (entry.kind !== "status" || entry.at === undefined) continue;
+          const to = this.slugOfStatusClass(entry.generated);
+          if (to !== undefined) out.push({ to, at: entry.at });
+        }
+      } catch (e) {
+        if (e instanceof RdfFetchError && e.status === 404) break;
+        // An access error (401/403) or any other failure: stop, return what we have.
+        break;
+      }
+    }
+    return out.sort((a, b) => a.at.getTime() - b.at.getTime());
+  }
+
+  /**
+   * Fan out {@link statusHistory} over `issueUrls` to feed the three-band CFD
+   * ({@link computeCumulativeFlowBands}). Reads are bounded: at most `maxPages`
+   * pages per issue and at most `concurrency` issues in flight at once, so a large
+   * tracker does not open an unbounded number of simultaneous requests.
+   */
+  async dashboardStatusHistory(
+    issueUrls: string[],
+    maxPages = Repository.STATUS_HISTORY_MAX_PAGES,
+    concurrency = Repository.STATUS_HISTORY_CONCURRENCY,
+  ): Promise<Map<string, { to: StatusSlug; at: Date }[]>> {
+    const result = new Map<string, { to: StatusSlug; at: Date }[]>();
+    let next = 0;
+    const worker = async (): Promise<void> => {
+      for (;;) {
+        const i = next++;
+        if (i >= issueUrls.length) return;
+        const url = issueUrls[i];
+        result.set(url, await this.statusHistory(url, maxPages));
+      }
+    };
+    const workers = Array.from({ length: Math.max(1, Math.min(concurrency, issueUrls.length)) }, worker);
+    await Promise.all(workers);
+    return result;
+  }
+
+  /** Slug of a `#status-<slug>` class IRI (the part after `#status-`); undefined otherwise. */
+  private slugOfStatusClass(iri: string | undefined): StatusSlug | undefined {
+    if (!iri) return undefined;
+    const marker = "#status-";
+    const at = iri.lastIndexOf(marker);
+    return at === -1 ? undefined : iri.slice(at + marker.length);
+  }
+
   // ---- Sprints (schema:Event fragments in tracker.ttl; membership via wf:task) ----
 
   async listSprints(now = new Date()): Promise<SprintRecord[]> {

@@ -1,5 +1,15 @@
 import { describe, it, expect } from "vitest";
-import { computeBurndown, computeCumulativeFlow, computeStats, computeVelocity, computeWorkload } from "./stats";
+import {
+  computeBurndown,
+  computeCumulativeFlow,
+  computeCumulativeFlowBands,
+  computeStats,
+  computeVelocity,
+  computeWorkload,
+  statusSlugFromClass,
+  type StatusTransition,
+} from "./stats";
+import { DEFAULT_WORKFLOW, type WorkflowDef } from "./issue";
 import type { IssueRecord, SprintRecord } from "./repository";
 
 const base: IssueRecord = {
@@ -196,5 +206,107 @@ describe("computeVelocity", () => {
       { iri: "s1", title: "Sprint 1", state: "done", endDate: new Date("2026-06-01"), taskUrls: ["a"], committedPoints: 8 },
     ];
     expect(computeVelocity(sprints, issues)).toEqual([{ sprint: "Sprint 1", done: 3, committed: 8 }]);
+  });
+});
+
+describe("statusSlugFromClass", () => {
+  it("extracts the slug after #status-", () => {
+    expect(statusSlugFromClass("https://pod.example/tracker.ttl#status-in-progress")).toBe("in-progress");
+    expect(statusSlugFromClass("https://pod.example/tracker.ttl#status-done")).toBe("done");
+  });
+  it("returns undefined for a non-status IRI or missing value", () => {
+    expect(statusSlugFromClass("https://pod.example/tracker.ttl#priority-high")).toBeUndefined();
+    expect(statusSlugFromClass(undefined)).toBeUndefined();
+  });
+});
+
+describe("computeCumulativeFlowBands", () => {
+  // A status transition into `to` at `at`.
+  const tx = (to: string, iso: string): StatusTransition => ({ to, at: new Date(iso) });
+
+  it("replays the activity log into not-started / in-progress / done bands per day", () => {
+    // Issue 1: created Jun 8 (todo), → in-progress Jun 9, → done Jun 10.
+    // Issue 2: created Jun 8 (todo), → in-progress Jun 10 (still open at NOW).
+    // Issue 3: created Jun 9 (todo), no transitions (stays not-started).
+    const issues = [
+      mk({ url: "1", created: new Date("2026-06-08T09:00:00Z"), state: "closed", status: "done" }),
+      mk({ url: "2", created: new Date("2026-06-08T09:00:00Z"), state: "open", status: "in-progress" }),
+      mk({ url: "3", created: new Date("2026-06-09T09:00:00Z"), state: "open", status: "todo" }),
+    ];
+    const history = new Map<string, StatusTransition[]>([
+      ["1", [tx("in-progress", "2026-06-09T10:00:00Z"), tx("done", "2026-06-10T10:00:00Z")]],
+      ["2", [tx("in-progress", "2026-06-10T08:00:00Z")]],
+      ["3", []],
+    ]);
+    const flow = computeCumulativeFlowBands(issues, history, DEFAULT_WORKFLOW, NOW);
+    expect(flow).toHaveLength(3); // Jun 8 → Jun 10
+    // Jun 8: only 1 & 2 exist, both still at todo → not-started.
+    expect(flow[0]).toMatchObject({ notStarted: 2, inProgress: 0, done: 0 });
+    // Jun 9: 3 created (todo); 1 moved to in-progress; 2 still todo.
+    expect(flow[1]).toMatchObject({ notStarted: 2, inProgress: 1, done: 0 });
+    // Jun 10: 1 done; 2 in-progress; 3 still not-started.
+    expect(flow[2]).toMatchObject({ notStarted: 1, inProgress: 1, done: 1 });
+  });
+
+  it("shows no in-progress day for an issue that went straight open→closed", () => {
+    // Created Jun 8 (todo), closed Jun 9 directly (todo → done, no in-progress).
+    const issues = [mk({ url: "1", created: new Date("2026-06-08T09:00:00Z"), state: "closed", status: "done" })];
+    const history = new Map<string, StatusTransition[]>([["1", [tx("done", "2026-06-09T10:00:00Z")]]]);
+    const flow = computeCumulativeFlowBands(issues, history, DEFAULT_WORKFLOW, NOW);
+    expect(flow.map((f) => f.inProgress)).toEqual([0, 0, 0]); // never in-progress
+    expect(flow[0]).toMatchObject({ notStarted: 1, done: 0 });
+    expect(flow[1]).toMatchObject({ notStarted: 0, done: 1 });
+    expect(flow[2]).toMatchObject({ notStarted: 0, done: 1 });
+  });
+
+  it("is workflow-correct for a custom workflow (custom in-progress = open past initial)", () => {
+    // Triage → Building → Shipped(terminal). Building is a custom in-progress.
+    const custom: WorkflowDef = {
+      statuses: [
+        { slug: "triage", label: "Triage", terminal: false },
+        { slug: "building", label: "Building", terminal: false },
+        { slug: "shipped", label: "Shipped", terminal: true },
+      ],
+      transitions: { triage: ["building"], building: ["shipped"], shipped: [] },
+    };
+    const issues = [mk({ url: "1", created: new Date("2026-06-08T09:00:00Z"), state: "open", status: "building" })];
+    const history = new Map<string, StatusTransition[]>([["1", [tx("building", "2026-06-09T10:00:00Z")]]]);
+    const flow = computeCumulativeFlowBands(issues, history, custom, NOW);
+    // Jun 8 at triage (initial) → not-started; Jun 9+ moved to building → in-progress.
+    expect(flow[0]).toMatchObject({ notStarted: 1, inProgress: 0, done: 0 });
+    expect(flow[1]).toMatchObject({ notStarted: 0, inProgress: 1, done: 0 });
+    expect(flow[2]).toMatchObject({ notStarted: 0, inProgress: 1, done: 0 });
+  });
+
+  it("falls back to the current record when an issue has no recorded history", () => {
+    // No history entries: an open in-progress record reads from its current status;
+    // a closed record with an endedAt reads as done from that day.
+    const issues = [
+      mk({ url: "1", created: new Date("2026-06-08T09:00:00Z"), state: "open", status: "in-progress" }),
+      mk({ url: "2", created: new Date("2026-06-08T09:00:00Z"), state: "closed", status: "done", endedAt: new Date("2026-06-09T10:00:00Z") }),
+    ];
+    const flow = computeCumulativeFlowBands(issues, new Map(), DEFAULT_WORKFLOW, NOW);
+    // Issue 1's current status is in-progress for every day it exists (no history
+    // to time-resolve). Issue 2 is closed but only counts done from its endedAt
+    // day onward — before that, with no timeline, it reads as not-started rather
+    // than falsely closed.
+    expect(flow[0]).toMatchObject({ inProgress: 1, notStarted: 1, done: 0 });
+    expect(flow[1]).toMatchObject({ inProgress: 1, notStarted: 0, done: 1 });
+    expect(flow[2]).toMatchObject({ inProgress: 1, notStarted: 0, done: 1 });
+  });
+
+  it("is empty when no issue has a created date", () => {
+    expect(computeCumulativeFlowBands([mk({ url: "1" })], new Map(), DEFAULT_WORKFLOW, NOW)).toEqual([]);
+  });
+
+  it("clamps the window to the most recent days", () => {
+    const issues = [
+      mk({ url: "1", created: new Date("2026-01-01"), state: "open", status: "todo" }),
+      mk({ url: "2", created: new Date("2026-06-09"), state: "open", status: "todo" }),
+    ];
+    const flow = computeCumulativeFlowBands(issues, new Map(), DEFAULT_WORKFLOW, NOW, 7);
+    expect(flow).toHaveLength(7);
+    expect(flow[0].notStarted).toBe(1); // the January issue is already in the baseline
+    expect(flow.at(-1)!.notStarted).toBe(2);
   });
 });

@@ -76,9 +76,15 @@ duplicate-link change, using PROV-O (W3C REC):
 
 ## Follow-up
 
-- A three-band cumulative-flow chart can now replay the F3 log to split the
-  in-progress band out of the open/done flow (`computeCumulativeFlow` today reads
-  only the loaded `IssueRecord`s). The consumer is deferred — it fans out a log
-  read per issue.
 - Federating the activity log across pods (a cross-pod audit trail) needs the
   O1-gated federation `@context`; out of scope here.
+
+## Built on this
+
+- The three-band cumulative-flow chart replays the F3 log to split the in-progress
+  band out of the open/done flow (`computeCumulativeFlowBands` in `src/lib/stats.ts`
+  reconstructs not-started / in-progress / done per day from each issue's recorded
+  status transitions). The dashboard fans out a bounded read of the history per
+  issue (`Repository.statusHistory` / `dashboardStatusHistory`: a page cap per
+  issue, a concurrency cap across issues). The original `computeCumulativeFlow`
+  (two-band, from the loaded `IssueRecord`s) remains for the no-history case.

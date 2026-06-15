@@ -837,7 +837,12 @@ export function IssuesView() {
           <CalendarView issues={visible} onOpenIssue={(i) => setCommentsUrl(i.url)} />
         ) : view === "dashboard" ? (
           // The dashboard aggregates over ALL issues, unfiltered.
-          <DashboardView issues={issues.issues} sprints={issues.sprints} />
+          <DashboardView
+            issues={issues.issues}
+            sprints={issues.sprints}
+            workflow={workflow}
+            loadStatusHistory={issues.statusHistory}
+          />
         ) : view === "workload" ? (
           // Workload balances ALL open work, unfiltered.
           <WorkloadView issues={issues.issues} groupIri={group.iri} />

@@ -410,6 +410,56 @@ describe("F3: provenance activity log (repository)", () => {
     expect(log.filter((e) => e.kind === "status")).toHaveLength(0);
   });
 
+  it("statusHistory returns only status transitions as { to, at }, ascending, with slugs", async () => {
+    const { impl } = fakePod();
+    const repo = new Repository(TRACKER, impl, ME);
+    const url = await repo.create({ title: "Replay me", creator: ME, status: "todo" });
+    const bob = `${POD}bob/profile/card#me`;
+
+    await repo.setStatus(url, "in-progress");
+    await repo.update(url, { assignee: bob }); // assignment, NOT a status entry
+    await repo.setStatus(url, "done");
+
+    const history = await repo.statusHistory(url);
+    // Only the two status transitions, ascending by time.
+    expect(history.map((h) => h.to)).toEqual(["in-progress", "done"]);
+    for (const h of history) expect(h.at).toBeInstanceOf(Date);
+    expect(history[0].at.getTime()).toBeLessThan(history[1].at.getTime());
+  });
+
+  it("statusHistory bounds the pages it reads", async () => {
+    const { impl } = fakePod();
+    const repo = new Repository(TRACKER, impl, ME);
+    const url = await repo.create({ title: "Bounded", creator: ME, status: "todo" });
+    await repo.setStatus(url, "in-progress");
+
+    // Count network reads of activity pages; with maxPages=1 only page-0 is read.
+    let pageReads = 0;
+    const counting: typeof fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const u = String(input).split("#")[0];
+      if ((init?.method ?? "GET").toUpperCase() === "GET" && u.includes("/activity/")) pageReads++;
+      return impl(input as never, init);
+    }) as typeof fetch;
+
+    const bounded = new Repository(TRACKER, counting, ME);
+    const history = await bounded.statusHistory(url, 1);
+    expect(history.map((h) => h.to)).toEqual(["in-progress"]);
+    expect(pageReads).toBe(1); // never walked past page 0
+  });
+
+  it("dashboardStatusHistory fans out a bounded read across issues", async () => {
+    const { impl } = fakePod();
+    const repo = new Repository(TRACKER, impl, ME);
+    const a = await repo.create({ title: "A", creator: ME, status: "todo" });
+    const b = await repo.create({ title: "B", creator: ME, status: "todo" });
+    await repo.setStatus(a, "in-progress");
+    await repo.setStatus(b, "done");
+
+    const map = await repo.dashboardStatusHistory([a, b], 4, 2);
+    expect(map.get(a)?.map((h) => h.to)).toEqual(["in-progress"]);
+    expect(map.get(b)?.map((h) => h.to)).toEqual(["done"]);
+  });
+
   it("two concurrent appends to a new page both survive (If-None-Match retry)", async () => {
     // Simulate a lost-update race on the FIRST (create-only) write of a fresh log
     // page: a competing writer slips its own entry into the same page document
