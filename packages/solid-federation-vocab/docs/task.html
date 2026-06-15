@@ -1,0 +1,36 @@
+<!doctype html>
+<!-- AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>task — w3id.org/jeswr/task</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body { font-family: system-ui, sans-serif; line-height: 1.6; max-width: 60rem; margin: 2rem auto; padding: 0 1rem; }
+      code { background: rgba(127,127,127,0.15); padding: 0.1em 0.35em; border-radius: 4px; }
+      .warn { border-left: 4px solid #d97706; padding: 0.5rem 1rem; background: rgba(217,119,6,0.08); border-radius: 4px; }
+      table { border-collapse: collapse; width: 100%; }
+      th, td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid rgba(127,127,127,0.3); vertical-align: top; }
+      a { color: #2563eb; }
+    </style>
+  </head>
+  <body>
+    <h1><code>https://w3id.org/jeswr/task#</code></h1>
+    <p class="warn">⚠️ <strong>Experimental</strong> — AI-agent-generated (Claude Opus 4.8, @jeswr PSS agent); under active development, not production-hardened.</p>
+    <p>Other representations: <a href="task.ttl">Turtle</a> · <a href="task-context.jsonld">JSON-LD context</a> · <a href="./">index</a></p>
+    <h2>Terms</h2>
+    <table>
+      <tr><th>Term</th><th>Label</th><th>Comment</th></tr>
+      <tr><td><code>http://purl.org/dc/terms/created</code></td><td>created</td><td>Creation timestamp (xsd:dateTime) of the task (dct: relation).</td></tr>
+      <tr><td><code>http://purl.org/dc/terms/creator</code></td><td>creator</td><td>WebID of the task creator (dct: relation).</td></tr>
+      <tr><td><code>http://purl.org/dc/terms/description</code></td><td>description</td><td>Task body / description (dct: relation).</td></tr>
+      <tr><td><code>http://purl.org/dc/terms/title</code></td><td>title</td><td>Task title (the dct: relation used for the human-readable summary).</td></tr>
+      <tr><td><code>assignee</code></td><td>assignee</td><td>The WebID of the agent a task is assigned to. Drives the cross-app 'tasks assigned to me' federation query.</td></tr>
+      <tr><td><code>Closed</code></td><td>Closed</td><td>Lifecycle state class: the task is closed. Asserted as rdf:type on the task subject (never a literal).</td></tr>
+      <tr><td><code>Open</code></td><td>Open</td><td>Lifecycle state class: the task is open. Asserted as rdf:type on the task subject (never a literal).</td></tr>
+      <tr><td><code>Task</code></td><td>Task</td><td>The shared task/issue class — one wf:Task per item, the SolidOS issue-pane model.</td></tr>
+      <tr><td><code>Announce</code></td><td>Announce</td><td>ActivityStreams 2.0 Announce — the activity an app POSTs to a peer's inbox to notify of a task event (assignment, state change). The cross-app notification verb.</td></tr>
+    </table>
+  </body>
+</html>

@@ -1,0 +1,61 @@
+<!doctype html>
+<!-- AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>fedapp — w3id.org/jeswr/fedapp</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body { font-family: system-ui, sans-serif; line-height: 1.6; max-width: 60rem; margin: 2rem auto; padding: 0 1rem; }
+      code { background: rgba(127,127,127,0.15); padding: 0.1em 0.35em; border-radius: 4px; }
+      .warn { border-left: 4px solid #d97706; padding: 0.5rem 1rem; background: rgba(217,119,6,0.08); border-radius: 4px; }
+      table { border-collapse: collapse; width: 100%; }
+      th, td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid rgba(127,127,127,0.3); vertical-align: top; }
+      a { color: #2563eb; }
+    </style>
+  </head>
+  <body>
+    <h1><code>https://w3id.org/jeswr/fedapp#</code></h1>
+    <p class="warn">⚠️ <strong>Experimental</strong> — AI-agent-generated (Claude Opus 4.8, @jeswr PSS agent); under active development, not production-hardened.</p>
+    <p>Other representations: <a href="fedapp.ttl">Turtle</a> · <a href="context.jsonld">JSON-LD context</a> · <a href="./">index</a></p>
+    <h2>Terms</h2>
+    <table>
+      <tr><th>Term</th><th>Label</th><th>Comment</th></tr>
+      <tr><td><code>access</code></td><td>access mode</td><td>A WAC/ACP access mode the app requests — one of
+        acl:Read, acl:Write, acl:Append (and, rarely, acl:Control). Declares the
+        app's intended footprint so a user/registry can reason about it before
+        granting consent.</td></tr>
+      <tr><td><code>App</code></td><td>Federated App</td><td>A Solid client application that participates in the
+        ecosystem federation. The subject of an fedapp:App description is
+        typically the app's client_id IRI (its Client Identifier Document).
+        It declares the sectors, access modes and shapes the app works
+        with.</td></tr>
+      <tr><td><code>AppVersion</code></td><td>App Version</td><td>A specific released version of an fedapp:App. Lets a
+        registry track behavioural changes (e.g. a newly requested access mode
+        or a new produced shape) across releases of the same client_id.</td></tr>
+      <tr><td><code>consumes</code></td><td>consumes</td><td>A shared data shape the app READS — references a SHACL
+        node shape (or a shared @context term / class IRI) the app expects to be
+        able to consume from the federation. Pairs with fedapp:produces to draw
+        the producer/consumer graph of the ecosystem.</td></tr>
+      <tr><td><code>declaresShape</code></td><td>declares shape</td><td>Links an fedapp:App to a SHACL node shape it authors /
+        vouches for as the canonical definition of a shared model. Distinct from
+        consumes/produces (which only reference a shape): declaresShape asserts
+        the app is a source-of-truth definer for that shape.</td></tr>
+      <tr><td><code>produces</code></td><td>produces</td><td>A shared data shape the app WRITES — references a SHACL
+        node shape (or a shared @context term / class IRI) the app emits into
+        the federation, so consumers can discover where data of that shape
+        originates.</td></tr>
+      <tr><td><code>sector</code></td><td>sector</td><td>The data sector an app operates in (e.g. the
+        identity / productivity / media / finance / health / documents / social
+        sector IRIs under https://w3id.org/jeswr/sectors/). May be attached to
+        an fedapp:App directly, or to an fedapp:SectorUse node.</td></tr>
+      <tr><td><code>SectorUse</code></td><td>Sector Use</td><td>A reified statement of how an app uses one data sector — a
+        node bundling a fedapp:sector with the fedapp:access modes requested in
+        that sector, and optionally the fedapp:consumes / fedapp:produces shapes
+        scoped to it. Use SectorUse when per-sector access differs; for a flat
+        declaration attach fedapp:sector / fedapp:access directly to the
+        App.</td></tr>
+    </table>
+  </body>
+</html>

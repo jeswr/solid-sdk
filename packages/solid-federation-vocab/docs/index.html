@@ -1,0 +1,53 @@
+<!doctype html>
+<!-- AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>w3id.org/jeswr — Solid Federation Vocabularies</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body { font-family: system-ui, -apple-system, sans-serif; line-height: 1.6; max-width: 52rem; margin: 2rem auto; padding: 0 1rem; }
+      code { background: rgba(127,127,127,0.15); padding: 0.1em 0.35em; border-radius: 4px; }
+      h1 { margin-bottom: 0.2em; }
+      .warn { border-left: 4px solid #d97706; padding: 0.5rem 1rem; background: rgba(217,119,6,0.08); border-radius: 4px; }
+      table { border-collapse: collapse; width: 100%; }
+      th, td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid rgba(127,127,127,0.3); }
+      a { color: #2563eb; }
+    </style>
+  </head>
+  <body>
+    <h1>Solid Federation Vocabularies</h1>
+    <p><code>https://w3id.org/jeswr/</code> — the home for the federation
+      app-registration vocabulary and the shared cross-app task / issue model
+      used across the @jeswr Solid app suite.</p>
+
+    <p class="warn">⚠️ <strong>Experimental</strong> — AI-agent-generated
+      (Claude Opus 4.8, @jeswr PSS agent); under active development, not
+      production-hardened.</p>
+
+    <h2>Vocabularies</h2>
+    <table>
+      <tr><th>Namespace</th><th>Prefix</th><th>Representations</th></tr>
+      <tr>
+        <td><a href="https://w3id.org/jeswr/fed">…/fed#</a></td>
+        <td><code>fedapp:</code></td>
+        <td><a href="fedapp.ttl">Turtle</a> · <a href="context.jsonld">JSON-LD context</a> · <a href="fed.html">HTML</a></td>
+      </tr>
+      <tr>
+        <td><a href="https://w3id.org/jeswr/task">…/task#</a></td>
+        <td><code>tm:</code> (re-uses <code>wf:</code>/<code>dct:</code>/<code>as:</code>)</td>
+        <td><a href="task.ttl">Turtle</a> · <a href="task-context.jsonld">JSON-LD context</a> · <a href="task.html">HTML</a></td>
+      </tr>
+    </table>
+
+    <h2>Content negotiation</h2>
+    <p>The w3id.org redirect honours the <code>Accept</code> header:
+      <code>text/turtle</code> → the <code>.ttl</code>;
+      <code>application/ld+json</code> → the <code>.jsonld</code> context;
+      <code>text/html</code> (default browser) → this human-readable page.</p>
+
+    <p>Source &amp; docs:
+      <a href="https://github.com/jeswr/solid-federation-vocab">github.com/jeswr/solid-federation-vocab</a></p>
+  </body>
+</html>

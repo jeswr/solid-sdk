@@ -1,0 +1,95 @@
+# AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+#
+# Shared Cross-App Task / Issue Model (the federation task vocabulary)
+# Namespace: https://w3id.org/jeswr/task#   (ADR-0013; beads pss-tof + pss-74i)
+#
+# This is NOT a new ontology of task terms — it is the canonical, dereferenceable
+# RE-USE of established vocabularies (the SolidOS W3C workflow ontology `wf:`,
+# Dublin Core Terms `dct:`, and ActivityStreams 2.0 `as:`) that every app in the
+# suite reads/writes for tasks + issues. solid-issues and Pod Manager already
+# write `wf:Task` + `rdf:type wf:Open|wf:Closed` + `dct:` relations + a
+# `wf:assignee` WebID; cross-app notifications use `as:Announce`. This file pins
+# that agreement so the @context (task-context.jsonld) has a stable home and the
+# shared terms resolve.
+
+@prefix tm:      <https://w3id.org/jeswr/task#> .
+@prefix wf:      <http://www.w3.org/2005/01/wf/flow#> .
+@prefix dct:     <http://purl.org/dc/terms/> .
+@prefix as:      <https://www.w3.org/ns/activitystreams#> .
+@prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+@prefix vann:    <http://purl.org/vocab/vann/> .
+@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
+
+<https://w3id.org/jeswr/task>
+    a owl:Ontology ;
+    dct:title "Shared Cross-App Task / Issue Model"@en ;
+    dct:description """The canonical, dereferenceable re-use of the W3C workflow
+        ontology (wf:), Dublin Core Terms (dct:) and ActivityStreams 2.0 (as:)
+        that every app in the ecosystem reads/writes for tasks and issues. A
+        task is a wf:Task; its lifecycle state is rdf:type wf:Open or wf:Closed;
+        metadata is dct:; assignment is wf:assignee; cross-app updates are
+        announced with as:Announce."""@en ;
+    dct:creator "Claude Opus 4.8 (@jeswr PSS agent)" ;
+    dct:issued "2026-06-15"^^xsd:date ;
+    vann:preferredNamespaceUri "https://w3id.org/jeswr/task#" ;
+    vann:preferredNamespacePrefix "tm" ;
+    rdfs:seeAlso <https://w3id.org/jeswr/fed> ;
+    rdfs:comment "Experimental — AI-agent-generated; under active development, not production-hardened."@en .
+
+# ---------------------------------------------------------------------------
+#  The canonical shared terms (re-used, NOT minted here). Each is restated with
+#  the agreed role so a reader of this vocab sees the whole model in one place;
+#  rdfs:isDefinedBy points at the OWNING vocabulary, not at this file.
+# ---------------------------------------------------------------------------
+
+wf:Task
+    a rdfs:Class ;
+    rdfs:label "Task"@en ;
+    rdfs:comment "The shared task/issue class — one wf:Task per item, the SolidOS issue-pane model."@en ;
+    rdfs:isDefinedBy wf: .
+
+wf:Open
+    a rdfs:Class ;
+    rdfs:label "Open"@en ;
+    rdfs:comment "Lifecycle state class: the task is open. Asserted as rdf:type on the task subject (never a literal)."@en ;
+    rdfs:isDefinedBy wf: .
+
+wf:Closed
+    a rdfs:Class ;
+    rdfs:label "Closed"@en ;
+    rdfs:comment "Lifecycle state class: the task is closed. Asserted as rdf:type on the task subject (never a literal)."@en ;
+    rdfs:isDefinedBy wf: .
+
+wf:assignee
+    a rdf:Property ;
+    rdfs:label "assignee"@en ;
+    rdfs:comment "The WebID of the agent a task is assigned to. Drives the cross-app 'tasks assigned to me' federation query."@en ;
+    rdfs:isDefinedBy wf: .
+
+dct:title
+    rdfs:label "title"@en ;
+    rdfs:comment "Task title (the dct: relation used for the human-readable summary)."@en ;
+    rdfs:isDefinedBy dct: .
+
+dct:description
+    rdfs:label "description"@en ;
+    rdfs:comment "Task body / description (dct: relation)."@en ;
+    rdfs:isDefinedBy dct: .
+
+dct:created
+    rdfs:label "created"@en ;
+    rdfs:comment "Creation timestamp (xsd:dateTime) of the task (dct: relation)."@en ;
+    rdfs:isDefinedBy dct: .
+
+dct:creator
+    rdfs:label "creator"@en ;
+    rdfs:comment "WebID of the task creator (dct: relation)."@en ;
+    rdfs:isDefinedBy dct: .
+
+as:Announce
+    a rdfs:Class ;
+    rdfs:label "Announce"@en ;
+    rdfs:comment "ActivityStreams 2.0 Announce — the activity an app POSTs to a peer's inbox to notify of a task event (assignment, state change). The cross-app notification verb."@en ;
+    rdfs:isDefinedBy as: .

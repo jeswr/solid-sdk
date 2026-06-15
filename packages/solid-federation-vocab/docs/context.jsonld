@@ -1,0 +1,48 @@
+{
+  "@context": {
+    "@version": 1.1,
+    "@protected": true,
+
+    "fedapp": "https://w3id.org/jeswr/fed#",
+    "tm": "https://w3id.org/jeswr/task#",
+    "wf": "http://www.w3.org/2005/01/wf/flow#",
+    "dct": "http://purl.org/dc/terms/",
+    "as": "https://www.w3.org/ns/activitystreams#",
+    "acl": "http://www.w3.org/ns/auth/acl#",
+    "sh": "http://www.w3.org/ns/shacl#",
+    "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+    "xsd": "http://www.w3.org/2001/XMLSchema#",
+
+    "id": "@id",
+    "type": "@type",
+
+    "App": "fedapp:App",
+    "AppVersion": "fedapp:AppVersion",
+    "SectorUse": "fedapp:SectorUse",
+
+    "label": { "@id": "rdfs:label", "@language": "en" },
+    "comment": { "@id": "rdfs:comment", "@language": "en" },
+
+    "sector": { "@id": "fedapp:sector", "@type": "@id" },
+    "access": { "@id": "fedapp:access", "@type": "@id", "@container": "@set" },
+    "consumes": { "@id": "fedapp:consumes", "@type": "@id", "@container": "@set" },
+    "produces": { "@id": "fedapp:produces", "@type": "@id", "@container": "@set" },
+    "declaresShape": { "@id": "fedapp:declaresShape", "@type": "@id", "@container": "@set" },
+    "sectorUse": { "@id": "fedapp:sector", "@type": "@id", "@container": "@set" },
+
+    "Read": "acl:Read",
+    "Write": "acl:Write",
+    "Append": "acl:Append",
+    "Control": "acl:Control",
+
+    "Task": "wf:Task",
+    "Open": "wf:Open",
+    "Closed": "wf:Closed",
+    "assignee": { "@id": "wf:assignee", "@type": "@id" },
+    "title": "dct:title",
+    "description": "dct:description",
+    "created": { "@id": "dct:created", "@type": "xsd:dateTime" },
+    "creator": { "@id": "dct:creator", "@type": "@id" },
+    "Announce": "as:Announce"
+  }
+}

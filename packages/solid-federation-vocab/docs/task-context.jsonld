@@ -1,0 +1,35 @@
+{
+  "@context": {
+    "@version": 1.1,
+    "@protected": true,
+
+    "tm": "https://w3id.org/jeswr/task#",
+    "wf": "http://www.w3.org/2005/01/wf/flow#",
+    "dct": "http://purl.org/dc/terms/",
+    "as": "https://www.w3.org/ns/activitystreams#",
+    "xsd": "http://www.w3.org/2001/XMLSchema#",
+
+    "id": "@id",
+    "type": "@type",
+
+    "Task": "wf:Task",
+    "Open": "wf:Open",
+    "Closed": "wf:Closed",
+
+    "title": "dct:title",
+    "description": "dct:description",
+    "created": { "@id": "dct:created", "@type": "xsd:dateTime" },
+    "creator": { "@id": "dct:creator", "@type": "@id" },
+    "relation": { "@id": "dct:relation", "@type": "@id", "@container": "@set" },
+    "references": { "@id": "dct:references", "@type": "@id", "@container": "@set" },
+    "isPartOf": { "@id": "dct:isPartOf", "@type": "@id" },
+
+    "assignee": { "@id": "wf:assignee", "@type": "@id" },
+
+    "Announce": "as:Announce",
+    "actor": { "@id": "as:actor", "@type": "@id" },
+    "object": { "@id": "as:object", "@type": "@id" },
+    "target": { "@id": "as:target", "@type": "@id" },
+    "published": { "@id": "as:published", "@type": "xsd:dateTime" }
+  }
+}
