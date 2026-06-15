@@ -1,8 +1,10 @@
+// AUTHORED-BY Claude Opus 4.8
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { SolidSessionProvider } from "@/lib/session-context";
 import { ThemeProvider } from "@/components/theme-provider";
+import { AppShell } from "@/components/app-shell";
 import { Toaster } from "@/components/ui/sonner";
 
 const geistSans = Geist({
@@ -22,8 +24,9 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   // Follows the system theme; the in-app toggle still restyles the page itself.
+  // Values match the sidebar bg (light) and dark background token.
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#faf8f5" },
+    { media: "(prefers-color-scheme: light)", color: "#f5f9fa" },
     { media: "(prefers-color-scheme: dark)", color: "#17181f" },
   ],
 };
@@ -39,7 +42,8 @@ export default function RootLayout({
       suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col bg-background text-foreground">
+      <body className="min-h-full bg-background text-foreground">
+        {/* Skip-to-content: targets #main inside AppShell. */}
         <a
           href="#main"
           className="sr-only z-50 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground focus:not-sr-only focus:absolute focus:top-2 focus:left-2"
@@ -47,7 +51,9 @@ export default function RootLayout({
           Skip to content
         </a>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
-          <SolidSessionProvider>{children}</SolidSessionProvider>
+          <SolidSessionProvider>
+            <AppShell>{children}</AppShell>
+          </SolidSessionProvider>
           <Toaster richColors closeButton />
         </ThemeProvider>
       </body>
