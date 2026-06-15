@@ -75,7 +75,9 @@ export function SolidAuthProvider({ children }: { children: ReactNode }) {
   // The WebID the user is logging in with — read by the provider's getWebId.
   const pendingWebId = useRef<string | null>(null);
   // The token provider, held so login() can confirm a token was actually minted
-  // and attached (an auth flow truly ran) — not merely that some probe returned 2xx.
+  // and attached DURING THIS attempt (its monotonic attach-count went up while
+  // this probe ran) — not merely that some probe returned 2xx, and not a sticky
+  // flag a previous session left set.
   const providerRef = useRef<WebIdDPoPTokenProvider | null>(null);
   const [ready, setReady] = useState(false);
   const [webId, setWebId] = useState<string | null>(null);
@@ -134,6 +136,16 @@ export function SolidAuthProvider({ children }: { children: ReactNode }) {
       // clear, early error if the WebID is unusable (no oidcIssuer / unreachable)
       // before we open a popup, and gives us the storage to probe.
       const pub = await readProfile(id);
+      // Snapshot the provider's running token-attachment count BEFORE the probe.
+      // Detection is PER-ATTEMPT: we compare this against the count AFTER the
+      // probe, so only a token attached during THIS attempt counts — never a
+      // sticky flag a previous session/attempt left set (the round-3 bug: a prior
+      // upgrade had marked the provider "established", so a later public-200 probe
+      // with no token attached this attempt was wrongly accepted; after logout→
+      // re-login it would do the same). A monotonic delta cannot be faked by a
+      // prior session because that session's attachments are already in `before`.
+      const tokensAttachedBefore =
+        providerRef.current?.tokensAttachedCount() ?? 0;
       // Trigger the auth flow by making an authenticated request the global fetch
       // will upgrade on 401: registerGlobally() intercepts the 401, opens the
       // <authorization-code-flow> popup, mints a DPoP token, and RETRIES the
@@ -141,17 +153,22 @@ export function SolidAuthProvider({ children }: { children: ReactNode }) {
       // popup → retry, and the RETRY's status tells us whether login succeeded.
       const probe = pub.storages[0] ?? new URL("/", id).toString();
       const res = await fetch(probe, { method: "GET" });
-      // Success requires BOTH a 2xx AND that the token provider actually minted +
-      // attached a token (an auth flow ran to completion). A bare 2xx is NOT
-      // enough: probing a PUBLIC resource returns 200 with no token attached and
-      // no flow at all — that must NOT count as logged in. (Treating any 2xx as
-      // success was the bug — a public 200 marked the user authenticated with no
-      // token.) A final 401/403 (cancelled popup / rejected token) is also a
-      // failure. The decision is the pure assessLoginProbe() so the rule is
-      // testable in isolation and can't be silently weakened.
-      const tokenAttached =
-        providerRef.current?.hasEstablishedSession() ?? false;
-      const assessment = assessLoginProbe({ status: res.status, tokenAttached });
+      // Success requires BOTH a 2xx AND that the token provider attached a token
+      // DURING THIS attempt (the count went up). A bare 2xx is NOT enough:
+      // probing a PUBLIC resource returns 200 with no token attached this attempt
+      // and no flow at all — that must NOT count as logged in. (Treating any 2xx
+      // as success — or trusting a sticky "established" flag — was the bug: a
+      // public 200 marked the user authenticated with no token attached now.) A
+      // final 401/403 (cancelled popup / rejected token) is also a failure. The
+      // decision is the pure assessLoginProbe() so the rule is testable in
+      // isolation and can't be silently weakened.
+      const tokensAttachedAfter =
+        providerRef.current?.tokensAttachedCount() ?? 0;
+      const assessment = assessLoginProbe({
+        status: res.status,
+        tokensAttachedBefore,
+        tokensAttachedAfter,
+      });
       if (!assessment.ok) {
         throw new Error(assessment.message);
       }

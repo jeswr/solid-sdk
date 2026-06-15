@@ -148,14 +148,21 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
   /** Single-flight session per issuer: parallel 401s share one login flow. */
   readonly #sessions = new Map<string, Promise<IssuerSession>>();
   /**
-   * True once an authorization-code + DPoP flow has COMPLETED for some issuer —
-   * i.e. a real access token was minted and attached to a request. This is the
-   * proof that the auth flow actually ran: a probe that returns 2xx WITHOUT this
-   * being set means the resource was public (no token attached, no flow), which
-   * is NOT a login. The login flow checks {@link hasEstablishedSession} so a
-   * public 200 is never mistaken for an authenticated session.
+   * Monotonic count of how many times {@link upgrade} has actually MINTED +
+   * ATTACHED a DPoP/Authorization header to a request. This is the proof that an
+   * auth flow ran — but, crucially, it is a *running total*, NOT a sticky "ever
+   * established" flag.
+   *
+   * Why a counter and not a boolean: a boolean is sticky — once any prior
+   * `upgrade()` set it, it stays set forever, so a LATER login attempt whose
+   * probe hits a PUBLIC 200 (no `upgrade()` ran for THAT probe) would still see
+   * the flag set by the earlier session and be wrongly accepted as logged in
+   * (the "public 200 = logged in" bug, reintroduced after logout→re-login or a
+   * prior rejected probe). With a counter, a login attempt snapshots the count
+   * BEFORE its probe and checks it INCREASED after — proving a token was attached
+   * during THIS attempt, never inferring it from a flag a previous session left.
    */
-  #established = false;
+  #tokensAttached = 0;
   /**
    * Shared auth work (issuer resolution, login) is provider-owned: it must NOT
    * be tied to any single request's AbortSignal, or aborting one request would
@@ -212,14 +219,16 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
   }
 
   /**
-   * Whether an auth flow has actually COMPLETED — a DPoP-bound access token was
-   * minted and attached to at least one request via {@link upgrade}. The login
-   * flow uses this to distinguish a genuine authenticated 2xx (token attached
-   * and accepted) from a PUBLIC 2xx where no token was ever attached (resource
-   * was public, no flow ran) — only the former is a real login.
+   * The running total of requests this provider has minted + attached a token to
+   * via {@link upgrade}. NOT a boolean "ever logged in" flag — it is read as a
+   * BEFORE/AFTER pair around a single login attempt: a login attempt snapshots
+   * this count, runs its probe, and re-reads it; an INCREASE proves a token was
+   * attached during THAT attempt. This is what makes login detection
+   * per-attempt rather than sticky — a prior session's attachments are already
+   * counted, so they do not make a later token-less probe look authenticated.
    */
-  hasEstablishedSession(): boolean {
-    return this.#established;
+  tokensAttachedCount(): number {
+    return this.#tokensAttached;
   }
 
   async upgrade(request: Request): Promise<Request> {
@@ -241,10 +250,12 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
       ),
     );
     headers.set("Authorization", ["DPoP", session.accessToken].join(" "));
-    // A token was minted AND attached: the auth flow ran to completion. (Set only
-    // after the session resolved — a cancelled/failed flow throws above and never
-    // reaches here, so #established stays false.)
-    this.#established = true;
+    // A token was minted AND attached: the auth flow ran to completion. Bump the
+    // running total (only after the session resolved — a cancelled/failed flow
+    // throws above and never reaches here, so the count is not bumped). The login
+    // flow reads this count BEFORE and AFTER its probe; the DELTA — not any sticky
+    // flag — is what proves a token was attached during THAT attempt.
+    this.#tokensAttached += 1;
     return new Request(request, { headers });
   }
 
