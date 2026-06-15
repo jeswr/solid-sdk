@@ -1,0 +1,36 @@
+{
+  "name": "create-solid-app",
+  "version": "0.0.0-prototype",
+  "private": true,
+  "description": "EXPERIMENTAL, AI-generated scaffolder for house-rules-conformant Solid web apps. Not yet published (publish is gated on @solid/reactive-authentication#18 — see README).",
+  "license": "MIT",
+  "author": "Jesse Wright (@jeswr)",
+  "type": "module",
+  "bin": {
+    "create-solid-app": "./bin.ts"
+  },
+  "files": [
+    "bin.ts",
+    "src",
+    "template",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "lint": "biome check bin.ts src test",
+    "lint:fix": "biome check --write bin.ts src test",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "build": "tsc --noEmit && node scripts/verify-package.mjs"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.16",
+    "@solid/community-server": "8.0.0-alpha.3",
+    "@types/node": "^24",
+    "jose": "^6.2.3",
+    "typescript": "^5",
+    "vitest": "^4.1.8"
+  }
+}

@@ -1,0 +1,20 @@
+# npm publish allowlist is `files` in package.json (bin.ts, src, template, README).
+# This .npmignore exists so npm does NOT fall back to the nested template/.gitignore
+# (whose `.env*` / `next-env.d.ts` rules would otherwise drop the template's
+# `.env.example` documentation from the published tarball). Only genuine artefacts
+# are excluded here; the bundled template ships verbatim.
+node_modules
+/dist
+*.tsbuildinfo
+.DS_Store
+*.log
+
+# Dev-only, never published:
+test
+scripts
+biome.json
+vitest.config.ts
+tsconfig.json
+.roborev.toml
+suite.json
+.npmrc

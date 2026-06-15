@@ -1,0 +1,22 @@
+# Root .gitignore for the CLI package itself.
+#
+# IMPORTANT: this must NOT exclude anything under `template/`. The bundled
+# template is the scaffold's source-of-truth fixture and is committed verbatim
+# (it ships its own `template/.gitignore` for the SCAFFOLDED app, but that file
+# governs the generated app — not this repo). Patterns here are anchored so they
+# only match the CLI package, never the template tree.
+
+# CLI dependencies (the template's own node_modules is excluded by the bundle).
+/node_modules
+
+# OS / editor cruft
+.DS_Store
+*.log
+
+# TypeScript incremental build info (CLI runs via type-stripping — no dist).
+*.tsbuildinfo
+/dist
+
+# never commit secrets / local env
+.env
+.env.*

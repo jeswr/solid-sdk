@@ -1,0 +1,22 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jeswr/full-solid-ecosystem/main/tracking/schema/suite.schema.json",
+  "id": "create-solid-app",
+  "kind": "harness",
+  "name": "create-solid-app",
+  "repo": "https://github.com/jeswr/create-solid-app",
+  "category": "developer-tooling",
+  "maturity": "prototype",
+  "visibility": "public",
+  "stack": {
+    "language": "TypeScript",
+    "runtime": "Node >=24 (native type-stripping — no build step)",
+    "cli": "bin.ts (npx create-solid-app)",
+    "template": "Next.js 16 + shadcn/ui + Tailwind 4 (App Router, React 19)",
+    "auth": "@solid/reactive-authentication ^0.1.3 (S2 auth-code login is #18-gated)",
+    "rdf": "@jeswr/fetch-rdf ^0.1, @solid/object ^0.6, @rdfjs/wrapper ^0.34, n3 ^2",
+    "devPod": "@solid/community-server 8.0.0-alpha.3 (in-memory, client-credentials DPoP seeding)",
+    "test": "vitest"
+  },
+  "dependsOn": [],
+  "federation": null
+}
