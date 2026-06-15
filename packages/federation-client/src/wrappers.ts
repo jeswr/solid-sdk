@@ -30,32 +30,44 @@ import {
   RDF_TYPE,
 } from "./vocab.js";
 
-/** Map an RDF/JS term to its lexical value (the `termAs` for IRI sets). */
-function termValue(term: { value: string }): string {
-  return term.value;
+/**
+ * Read an IRI-valued property as a Set of the OBJECT TERMS themselves (not their
+ * lexical `.value`) — so the term type survives the read. An IRI-valued property
+ * (access mode, sector, consumes/produces/declaresShape link) is only valid when
+ * its object is a `NamedNode`; a string LITERAL or a BLANK NODE in that position
+ * is malformed. Reading `.value` alone discarded that distinction, so a literal
+ * `"http://www.w3.org/ns/auth/acl#Read"` would pass as a valid IRI value. By
+ * projecting the term (via `TermAs.instance(TermWrapper)` + `TermFrom.instance`,
+ * the same term-type-preserving pattern `sectorUses` already uses) the validation
+ * layer can inspect `.termType` and reject non-`NamedNode` objects with a coded
+ * issue. The factory is shared so term identity / Set de-duplication hold.
+ */
+function iriTerms(node: TermWrapper, predicate: string): Set<TermWrapperType> {
+  return SetFrom.subjectPredicate(node, predicate, TermAs.instance(TermWrapper), TermFrom.instance);
 }
 
 /**
  * A typed view of an `fedapp:SectorUse` node. Reads `fedapp:sector` (the single
  * sector — exposed as a Set so a malformed multi-sector node is observable
  * rather than silently truncated), `fedapp:access`, `fedapp:consumes`,
- * `fedapp:produces`.
+ * `fedapp:produces`. Each is exposed as a Set of the OBJECT TERMS so the
+ * validation layer can reject non-`NamedNode` objects (see {@link iriTerms}).
  */
 export class SectorUseNode extends TermWrapper {
-  get sectors(): Set<string> {
-    return SetFrom.subjectPredicate(this, FEDAPP_SECTOR, termValue, NamedNodeFrom.string);
+  get sectors(): Set<TermWrapperType> {
+    return iriTerms(this, FEDAPP_SECTOR);
   }
 
-  get access(): Set<string> {
-    return SetFrom.subjectPredicate(this, FEDAPP_ACCESS, termValue, NamedNodeFrom.string);
+  get access(): Set<TermWrapperType> {
+    return iriTerms(this, FEDAPP_ACCESS);
   }
 
-  get consumes(): Set<string> {
-    return SetFrom.subjectPredicate(this, FEDAPP_CONSUMES, termValue, NamedNodeFrom.string);
+  get consumes(): Set<TermWrapperType> {
+    return iriTerms(this, FEDAPP_CONSUMES);
   }
 
-  get produces(): Set<string> {
-    return SetFrom.subjectPredicate(this, FEDAPP_PRODUCES, termValue, NamedNodeFrom.string);
+  get produces(): Set<TermWrapperType> {
+    return iriTerms(this, FEDAPP_PRODUCES);
   }
 }
 
@@ -65,24 +77,24 @@ export class SectorUseNode extends TermWrapper {
  * nested `fedapp:sectorUse` blocks.
  */
 export class AppNode extends TermWrapper {
-  get sectors(): Set<string> {
-    return SetFrom.subjectPredicate(this, FEDAPP_SECTOR, termValue, NamedNodeFrom.string);
+  get sectors(): Set<TermWrapperType> {
+    return iriTerms(this, FEDAPP_SECTOR);
   }
 
-  get access(): Set<string> {
-    return SetFrom.subjectPredicate(this, FEDAPP_ACCESS, termValue, NamedNodeFrom.string);
+  get access(): Set<TermWrapperType> {
+    return iriTerms(this, FEDAPP_ACCESS);
   }
 
-  get consumes(): Set<string> {
-    return SetFrom.subjectPredicate(this, FEDAPP_CONSUMES, termValue, NamedNodeFrom.string);
+  get consumes(): Set<TermWrapperType> {
+    return iriTerms(this, FEDAPP_CONSUMES);
   }
 
-  get produces(): Set<string> {
-    return SetFrom.subjectPredicate(this, FEDAPP_PRODUCES, termValue, NamedNodeFrom.string);
+  get produces(): Set<TermWrapperType> {
+    return iriTerms(this, FEDAPP_PRODUCES);
   }
 
-  get declaresShape(): Set<string> {
-    return SetFrom.subjectPredicate(this, FEDAPP_DECLARES_SHAPE, termValue, NamedNodeFrom.string);
+  get declaresShape(): Set<TermWrapperType> {
+    return iriTerms(this, FEDAPP_DECLARES_SHAPE);
   }
 
   /**

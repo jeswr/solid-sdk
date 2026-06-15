@@ -31,7 +31,7 @@ export type {
   VerificationIssueCode,
   VerificationResult,
 } from "./types.js";
-export type { VerifyOptions } from "./verify.js";
+export type { VerifyDatasetOptions, VerifyOptions } from "./verify.js";
 export { verify, verifyDataset } from "./verify.js";
 
 export {

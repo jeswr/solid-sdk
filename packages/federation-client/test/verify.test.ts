@@ -1,14 +1,18 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+import { parseRdf } from "@jeswr/fetch-rdf";
 import { describe, expect, it } from "vitest";
-import { verify } from "../src/index.js";
+import { verify, verifyDataset } from "../src/index.js";
 import {
   INVALID_BAD_ACCESS_MODE,
+  INVALID_BNODE_SECTOR,
   INVALID_EMPTY,
   INVALID_INCOMPLETE_SECTOR_USE,
+  INVALID_LITERAL_ACCESS,
   INVALID_MULTIPLE_APPS,
   INVALID_NO_ACCESS,
   INVALID_NO_APP,
   VALID_FLAT,
+  VALID_FLAT_OTHER_SUBJECT,
   VALID_NESTED,
 } from "./fixtures.js";
 
@@ -86,6 +90,89 @@ describe("verify — invalid registrations", () => {
     const r = await verify(BASE, { body: INVALID_MULTIPLE_APPS });
     expect(r.valid).toBe(false);
     expect(codes(r.issues)).toContain("multiple-apps");
+  });
+});
+
+describe("verify — term-type validation (IRI-valued properties)", () => {
+  it("rejects fedapp:access given as a string literal (not a NamedNode)", async () => {
+    const r = await verify(BASE, { body: INVALID_LITERAL_ACCESS });
+    expect(r.valid).toBe(false);
+    expect(codes(r.issues)).toContain("invalid-term-type");
+    const issue = r.issues.find((i) => i.code === "invalid-term-type");
+    // The literal's lexical value is the valid acl:Read IRI, yet it is rejected
+    // on TERM TYPE — it must NOT pass as a valid access mode.
+    expect(issue?.value).toBe("http://www.w3.org/ns/auth/acl#Read");
+    expect(r.registration?.access ?? []).toHaveLength(0);
+  });
+
+  it("rejects fedapp:sector given as a blank node (not a NamedNode)", async () => {
+    const r = await verify(BASE, { body: INVALID_BNODE_SECTOR });
+    expect(r.valid).toBe(false);
+    expect(codes(r.issues)).toContain("invalid-term-type");
+    expect(r.registration?.sectors ?? []).toHaveLength(0);
+  });
+});
+
+describe("verify — subject binding (anti-spoofing)", () => {
+  function stubFetch(body: string): typeof globalThis.fetch {
+    return (async () =>
+      new Response(body, {
+        status: 200,
+        headers: { "content-type": "text/turtle" },
+      })) as typeof globalThis.fetch;
+  }
+
+  it("rejects a FETCHED document whose App subject ≠ the fetch URL (default)", async () => {
+    const r = await verify("https://app.example/clientid", {
+      fetch: stubFetch(VALID_FLAT_OTHER_SUBJECT),
+    });
+    expect(r.valid).toBe(false);
+    expect(codes(r.issues)).toContain("subject-mismatch");
+    const issue = r.issues.find((i) => i.code === "subject-mismatch");
+    expect(issue?.subject).toBe("https://attacker.example/otherapp");
+    expect(issue?.value).toBe("https://app.example/clientid");
+  });
+
+  it("allows a FETCHED subject mismatch when requireSubjectMatch is explicitly false", async () => {
+    const r = await verify("https://app.example/clientid", {
+      fetch: stubFetch(VALID_FLAT_OTHER_SUBJECT),
+      requireSubjectMatch: false,
+    });
+    expect(codes(r.issues)).not.toContain("subject-mismatch");
+    expect(r.valid).toBe(true);
+    expect(r.registration?.id).toBe("https://attacker.example/otherapp");
+  });
+
+  it("accepts a FETCHED document whose App subject equals the fetch URL", async () => {
+    const r = await verify("https://app.example/clientid", { fetch: stubFetch(VALID_FLAT) });
+    expect(r.valid).toBe(true);
+    expect(codes(r.issues)).not.toContain("subject-mismatch");
+  });
+
+  it("does NOT bind the subject for a body in hand by default (offline path)", async () => {
+    // A body supplied directly carries no authoritative location, so a subject
+    // that differs from the base IRI is allowed (no subject-mismatch).
+    const r = await verify("https://app.example/clientid", { body: VALID_FLAT_OTHER_SUBJECT });
+    expect(codes(r.issues)).not.toContain("subject-mismatch");
+    expect(r.valid).toBe(true);
+  });
+
+  it("verifyDataset leaves subject-binding off by default (registry/multi-app path)", async () => {
+    const dataset = await parseRdf(VALID_FLAT_OTHER_SUBJECT, "text/turtle", {
+      baseIRI: "https://app.example/clientid",
+    });
+    const r = verifyDataset(dataset, "https://app.example/clientid");
+    expect(codes(r.issues)).not.toContain("subject-mismatch");
+    expect(r.valid).toBe(true);
+  });
+
+  it("verifyDataset rejects a subject mismatch when requireSubjectMatch is set", async () => {
+    const dataset = await parseRdf(VALID_FLAT_OTHER_SUBJECT, "text/turtle", {
+      baseIRI: "https://app.example/clientid",
+    });
+    const r = verifyDataset(dataset, "https://app.example/clientid", { requireSubjectMatch: true });
+    expect(r.valid).toBe(false);
+    expect(codes(r.issues)).toContain("subject-mismatch");
   });
 });
 

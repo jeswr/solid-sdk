@@ -61,8 +61,10 @@ export interface VerificationIssue {
 export type VerificationIssueCode =
   | "no-app"
   | "multiple-apps"
+  | "subject-mismatch"
   | "missing-access"
   | "invalid-access-mode"
+  | "invalid-term-type"
   | "sector-use-missing-sector"
   | "sector-use-missing-access"
   | "empty-registration"
