@@ -400,4 +400,61 @@ describe("computeCumulativeFlowBands", () => {
     // Jun 10: anchor fires (in-progress, Jun 10) → overrides the stale done state.
     expect(flow[2]).toMatchObject({ notStarted: 0, inProgress: 1, done: 0 });
   });
+
+  it("MEDIUM 1 — empty history array is treated the same as absent history (no synthetic anchor injected)", () => {
+    // An issue whose history entry is an empty array `[]` must use the no-history
+    // fallback path, not inject a synthetic anchor. Before the fix, `!logged` was
+    // false for `[]` (truthy), so the issue got an anchor to its current status at
+    // `now`, misclassifying it as having real history.
+    //
+    // Here: issue 1 is closed with no log entries (empty array). The no-history
+    // fallback for a closed issue uses `endedAt` — so it should count as done only
+    // from Jun 9, not from its current status at `now`.
+    const issues = [
+      mk({
+        url: "1",
+        created: new Date("2026-06-08T09:00:00Z"),
+        state: "closed",
+        status: "done",
+        endedAt: new Date("2026-06-09T10:00:00Z"),
+      }),
+    ];
+    // Explicitly mapped to an empty array — no real transitions recorded.
+    const flow = computeCumulativeFlowBands(issues, new Map([["1", []]]), DEFAULT_WORKFLOW, NOW);
+    // Jun 8: closed issue, no log, endedAt is Jun 9 → before Jun 9 it reads as not-started.
+    expect(flow[0]).toMatchObject({ notStarted: 1, inProgress: 0, done: 0 });
+    // Jun 9: endedAt fires → done.
+    expect(flow[1]).toMatchObject({ notStarted: 0, inProgress: 0, done: 1 });
+    // Jun 10: still done.
+    expect(flow[2]).toMatchObject({ notStarted: 0, inProgress: 0, done: 1 });
+  });
+
+  it("MEDIUM 2 — closed issue anchor uses endedAt (not modified) when endedAt precedes a later non-status edit", () => {
+    // An issue was done on Jun 8 but had a comment/label edit on Jun 10 that bumped
+    // `modified`. Before the fix the anchor timestamp was `modified` (Jun 10), so the
+    // CFD showed the issue as in-progress between Jun 8 and Jun 9 even though it was
+    // already done. With the fix the anchor uses `endedAt` (Jun 8) so the done band
+    // starts correctly.
+    const issues = [
+      mk({
+        url: "1",
+        created: new Date("2026-06-08T09:00:00Z"),
+        state: "closed",
+        status: "done",
+        endedAt: new Date("2026-06-08T12:00:00Z"), // actual completion
+        modified: new Date("2026-06-10T09:00:00Z"), // later non-status edit
+      }),
+    ];
+    // Truncated log: only the in-progress transition; the done transition was on a
+    // later (unread) page. The anchor must land at endedAt (Jun 8), not modified (Jun 10).
+    const truncatedHistory = new Map<string, StatusTransition[]>([
+      ["1", [tx("in-progress", "2026-06-08T10:00:00Z")]],
+    ]);
+    const flow = computeCumulativeFlowBands(issues, truncatedHistory, DEFAULT_WORKFLOW, NOW);
+    // Jun 8: created and in-progress per log; anchor is ALSO Jun 8 (endedAt) → done wins.
+    expect(flow[0]).toMatchObject({ notStarted: 0, inProgress: 0, done: 1 });
+    // Jun 9 & 10: still done (anchor fired on Jun 8).
+    expect(flow[1]).toMatchObject({ notStarted: 0, inProgress: 0, done: 1 });
+    expect(flow[2]).toMatchObject({ notStarted: 0, inProgress: 0, done: 1 });
+  });
 });

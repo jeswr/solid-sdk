@@ -304,17 +304,30 @@ export function computeCumulativeFlowBands(
   // every recorded transition in time order. The slug "at time T" is the last
   // segment whose timestamp is strictly before the day's close.
   //
-  // When recorded history exists (even partially), we also inject the current
+  // When recorded history exists and is non-empty, we also inject the current
   // record's status as a synthetic anchor transition so that days at or after
   // the issue's last modification always reflect the correct current state,
-  // regardless of whether the log was read with a page cap. The anchor
-  // timestamp is issue.modified (most precise), falling back to issue.endedAt
-  // for closed issues, then to `now` as a last resort.
+  // regardless of whether the log was read with a page cap. An absent OR empty
+  // history both fall through to the no-history path (see below).
+  //
+  // The anchor timestamp: for a closed status, prefer `endedAt` (the actual
+  // completion stamp) over `modified` (which is bumped by non-status edits),
+  // then fall back to `now`. For an open status, prefer `modified`, then `now`.
   const timelines = dated.map((issue) => {
     const logged = statusHistory.get(issue.url);
-    if (!logged) return { issue, transitions: [] as StatusTransition[] };
+    // Treat an absent OR empty history the same way: fall through to the no-history
+    // path. An empty array `[]` is truthy, so an explicit `!logged` check would
+    // incorrectly inject a synthetic anchor for issues with inaccessible / zero-entry
+    // logs, misclassifying them as having real history. (MEDIUM 1 fix.)
+    if (!logged || logged.length === 0) return { issue, transitions: [] as StatusTransition[] };
 
-    const anchorAt = issue.modified ?? (statusState(workflow, issue.status) === "closed" ? issue.endedAt : undefined) ?? now;
+    // For a closed status, prefer `endedAt` over `modified` as the anchor timestamp.
+    // `modified` is bumped by non-status edits and comments, so using it for a closed
+    // issue delays the synthetic done transition to the time of the last edit rather
+    // than the real completion time — making the CFD wrong between completion and
+    // the edit. `endedAt` is the actual completion stamp. (MEDIUM 2 fix.)
+    const isClosed = statusState(workflow, issue.status) === "closed";
+    const anchorAt = (isClosed ? (issue.endedAt ?? issue.modified) : issue.modified) ?? now;
     const anchor: StatusTransition = { to: issue.status, at: anchorAt };
     const transitions = [...logged, anchor]
       .filter((t) => t.at !== undefined)
