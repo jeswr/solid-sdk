@@ -370,7 +370,10 @@ export function IssueDetailDialog({
                     <Plus className="size-3.5" aria-hidden /> Add blocker
                   </span>
                 </SelectTrigger>
-                <SelectContent>
+                {/* No selected value, so anchor the dropdown to the trigger
+                    (popper); item-aligned has no item to align and clamps the
+                    panel to the viewport corner (off-screen). */}
+                <SelectContent position="popper">
                   {addableBlockers.map((c) => (
                     <SelectItem key={c.url} value={c.url}>
                       {c.title}
@@ -442,7 +445,9 @@ export function IssueDetailDialog({
                     <Plus className="size-3.5" aria-hidden /> Add related
                   </span>
                 </SelectTrigger>
-                <SelectContent>
+                {/* Anchor to the trigger (popper) — there is no selected value
+                    for item-aligned to position against (see Add blocker). */}
+                <SelectContent position="popper">
                   {addableRelated.map((c) => (
                     <SelectItem key={c.url} value={c.url}>
                       {c.title}

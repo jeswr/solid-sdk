@@ -17,8 +17,11 @@ pick_free_port() {
   return 1
 }
 
-# Next 16 refuses a second dev server per project dir — clear any stale one of
-# OURS (scoped to this repo's node_modules path; other projects are untouched).
+# Clear any stale Next server of OURS from a previous run (scoped to this repo's
+# node_modules path; other projects are untouched). We serve a production build
+# (`next start`) for stability — see playwright.config.ts — but also clear a stale
+# `next dev` in case one is lingering from an older config.
+pkill -f "$(pwd)/node_modules/.bin/next start" 2>/dev/null || true
 pkill -f "$(pwd)/node_modules/.bin/next dev" 2>/dev/null || true
 sleep 1
 

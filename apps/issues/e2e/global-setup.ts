@@ -107,4 +107,22 @@ export default async function globalSetup() {
   const cc = await jsonPost(c.account.clientCredentials, { name: "seed", webId: WEBID }, jar);
   await seedProfile(cc.json.id, cc.json.secret);
   console.log(`[global-setup] seeded pod for ${WEBID}`);
+
+  // Warm the Next app server (a prod build — see playwright.config.ts) by hitting
+  // "/" once before any test, so the first test never races the server's
+  // first-request warmup/connection setup (best-effort — a slow/absent app must
+  // not fail setup).
+  const appPort = process.env.IT_APP_PORT ?? "3200";
+  const appUrl = `http://localhost:${appPort}/`;
+  const ac = new AbortController();
+  const t = setTimeout(() => ac.abort(), 60_000);
+  try {
+    const res = await fetch(appUrl, { signal: ac.signal });
+    await res.text(); // drain the streamed body so compilation completes
+    console.log(`[global-setup] warmed Next app at ${appUrl} (${res.status})`);
+  } catch {
+    console.log(`[global-setup] app warmup skipped (${appUrl} not ready yet)`);
+  } finally {
+    clearTimeout(t); // best-effort warmup: never leave the abort timer live
+  }
 }
