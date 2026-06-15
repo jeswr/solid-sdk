@@ -22,6 +22,8 @@ import { CommandPalette, type PaletteGroup } from "@/components/command-palette"
 import { TeamDialog } from "@/components/team-dialog";
 import { FieldsDialog } from "@/components/fields-dialog";
 import { IssueBoard } from "@/components/issue-board";
+import { SaveIndicator } from "@/components/save-indicator";
+import { boardColumns, boardIssues, moveForColumn, optimisticMove, revertMoveIfCurrent } from "@/lib/board";
 import { EpicView } from "@/components/epic-view";
 import { DashboardView } from "@/components/dashboard-view";
 import { WorkloadView } from "@/components/workload-view";
@@ -174,6 +176,10 @@ export function IssuesView() {
   // F3: the open issue's provenance log, loaded on demand when the detail dialog opens.
   const [activity, setActivity] = useState<ActivityRecord[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  // Board-only: cards the user has archived off the board (still closed in the
+  // pod, just removed from the Done column once they're finished with it). This
+  // is view state, not persisted — a refresh brings them back if still relevant.
+  const [archived, setArchived] = useState<Set<string>>(new Set());
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const savedViewsStore = useMemo(() => new SavedViews(), []);
   const [views, setViews] = useState<SavedView[]>([]);
@@ -333,6 +339,14 @@ export function IssuesView() {
   );
   const fac = useMemo(() => facets(issues.issues), [issues.issues]);
   const visible = useMemo(() => filterAndSort(issues.issues, query), [issues.issues, query]);
+  // The board applies the same text/facet filters as the list, but its own state
+  // visibility is owned by boardIssues (so the Done column keeps completed cards
+  // — pss-w29w). So the board uses the query with state forced to "all", and
+  // boardIssues then re-applies the user's state filter + archive hiding.
+  const boardVisible = useMemo(
+    () => boardIssues(filterAndSort(issues.issues, { ...query, state: "all" }), workflow, query.state, groupBy, archived),
+    [issues.issues, query, workflow, groupBy, archived],
+  );
   const commentsIssue = useMemo(
     () => issues.issues.find((i) => i.url === commentsUrl),
     [issues.issues, commentsUrl],
@@ -390,7 +404,11 @@ export function IssuesView() {
     }
   };
 
-  const cardActions = (issue: IssueRecord): IssueCardActions => ({
+  // `context` gates board-only actions: Archive removes a card from the board and
+  // is meaningless in list/table views, so it is supplied ONLY for `"board"`.
+  // Without this, the shared factory leaked the Archive action onto closed cards
+  // in non-board views.
+  const cardActions = (issue: IssueRecord, context: "board" | "list" = "list"): IssueCardActions => ({
     isOwner: isOwn,
     groupIri: group.iri,
     onEdit: () => {
@@ -409,6 +427,16 @@ export function IssuesView() {
         () => issues.setState(issue.url, issue.state === "open" ? "closed" : "open"),
         issue.state === "open" ? "Issue closed" : "Issue reopened",
       ),
+    // Board-only: hide a finished card from the board (it stays closed in the
+    // pod). The card only renders this when closed (pss-w29w), and it is supplied
+    // only from the board path — never on a list/table card.
+    onArchive:
+      context === "board"
+        ? () => {
+            setArchived((s) => new Set(s).add(issue.url));
+            toast.info("Card archived from the board. Switch to “Closed” to find it.");
+          }
+        : undefined,
     onDelete: () => setDeleteTarget(issue),
   });
 
@@ -774,7 +802,7 @@ export function IssuesView() {
         </div>
 
         <div key={view} className="animate-view-in">
-        {issues.loading ? (
+        {issues.initialLoading ? (
           <ul className="space-y-3" aria-busy="true" aria-label="Loading issues">
             {[0, 1, 2].map((i) => (
               <li key={i}>
@@ -856,7 +884,7 @@ export function IssuesView() {
             onOpenIssue={(i) => setCommentsUrl(i.url)}
             onAddToEpic={(epicUrl) => onCreate({ parent: epicUrl })}
           />
-        ) : visible.length === 0 ? (
+        ) : (view === "board" ? boardVisible.length === 0 : visible.length === 0) ? (
           <div className="flex flex-col items-center gap-4 rounded-xl border border-dashed p-12 text-center">
             <span aria-hidden className="flex size-12 items-center justify-center rounded-full bg-primary/10 text-primary">
               <CircleDot className="size-6" />
@@ -878,29 +906,43 @@ export function IssuesView() {
             )}
           </div>
         ) : view === "board" ? (
+          // The board shows open work AND completed cards in the Done column
+          // (done-and-visible, pss-w29w); boardVisible applies the text/facet
+          // filters while keeping terminal-status cards the open-state filter
+          // would otherwise hide.
           <IssueBoard
-            issues={visible}
-            cardActions={cardActions}
+            issues={boardVisible}
+            cardActions={(issue) => cardActions(issue, "board")}
             canWrite={issues.canCreate}
-            columns={
-              groupBy === "status"
-                ? workflow.statuses.map((s) => ({ key: s.slug, label: s.label }))
-                : [
-                    { key: "high", label: "High" },
-                    { key: "medium", label: "Medium" },
-                    { key: "low", label: "Low" },
-                    { key: "none", label: "No priority" },
-                  ]
-            }
+            columns={boardColumns(workflow, groupBy)}
             groupOf={(i) => (groupBy === "status" ? i.status : (i.priority ?? "none"))}
-            onMove={(url, key) =>
-              groupBy === "status"
-                ? run(() => issues.setStatus(url, key as StatusSlug), "Status updated")
-                : run(
-                    () => issues.update(url, { priority: key === "none" ? undefined : (key as Priority) }),
-                    key === "none" ? "Priority cleared" : `Priority set to ${key}`,
-                  )
-            }
+            onMove={(url, key) => {
+              // Optimistic move (pss-w29w): slide the card immediately, persist in
+              // the background, revert + toast on failure.
+              const move = moveForColumn(groupBy, key);
+              const { next, original } = optimisticMove(issues.issues, url, move, groupBy, workflow);
+              if (!original) return; // no-op drop (same column)
+              // The record this move optimistically wrote — used to detect whether a
+              // LATER move of the same card has since superseded it, so a stale
+              // failure never clobbers a newer move (revertMoveIfCurrent).
+              const optimistic = next.find((i) => i.url === url)!;
+              issues.setIssuesLocal(() => next);
+              void issues
+                .persist((r) =>
+                  move.kind === "status"
+                    ? r.setStatus(url, move.status)
+                    : r.update(url, { priority: move.priority }),
+                )
+                .catch((e) => {
+                  issues.setIssuesLocal((list) => revertMoveIfCurrent(list, original, optimistic, move));
+                  if (e instanceof ConflictError) {
+                    toast.error(e.message);
+                    void issues.refresh();
+                  } else {
+                    toast.error(e instanceof Error ? e.message : "Could not move the card.");
+                  }
+                });
+            }}
             onAddToColumn={
               issues.canCreate && groupBy === "status"
                 ? (key) => onCreate({ status: key as StatusSlug })
@@ -989,7 +1031,7 @@ export function IssuesView() {
                     />
                   )}
                   <div className="min-w-0 flex-1">
-                    <IssueCard issue={issue} {...cardActions(issue)} />
+                    <IssueCard issue={issue} {...cardActions(issue, "list")} />
                   </div>
                 </li>
               ))}
@@ -997,6 +1039,9 @@ export function IssuesView() {
           </div>
         )}
         </div>
+
+      {/* Non-intrusive global save indicator for optimistic board writes. */}
+      <SaveIndicator state={issues.saveState} />
 
       <IssueFormDialog
         open={formOpen}

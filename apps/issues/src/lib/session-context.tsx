@@ -14,9 +14,15 @@ import { Repository } from "@/lib/repository";
 import { registerTracker } from "@/lib/type-index";
 import { RecentAccounts, type RecentAccount } from "@/lib/login-ux";
 import { NoStorageError } from "@/lib/errors";
+import { clearSession, loadSession, saveSession } from "@/lib/session-store";
+import { classifyRestoreError, shouldAttemptRestore, shouldClearStoredSession } from "@/lib/silent-restore";
+import { clearAllIssueCaches } from "@/lib/issue-cache";
+import type { RestorableSession, WebIdDPoPTokenProvider } from "@/lib/webid-token-provider";
 
 export type SessionStatus =
   | "initialising"
+  // Attempting a silent refresh-grant restore on reopen (brief "Restoring…" state).
+  | "restoring"
   | "logged-out"
   | "authenticating"
   | "choose-storage"
@@ -72,49 +78,57 @@ export function SolidSessionProvider({ children }: { children: ReactNode }) {
   // The WebID the user is logging in with — the provider's getWebId resolves this.
   const webIdRef = useRef<string | null>(null);
   const recentRef = useRef<RecentAccounts | null>(null);
+  // The live token provider, so silent restore can drive a refresh-grant on it.
+  const providerRef = useRef<WebIdDPoPTokenProvider | null>(null);
+  // The WebID whose refresh token we are persisting — `onSession` scopes the
+  // saved record to it. Set before any auth flow that should persist a session.
+  const persistWebIdRef = useRef<string | null>(null);
+  // The current pod storage URL, mirrored in a ref so persistSession (a stable
+  // callback) can read it synchronously when the provider emits a session.
+  const storageUrlRef = useRef<string | null>(null);
+  // The WebID of the currently-active session, so completeLogin can detect an
+  // ACCOUNT SWITCH (a different WebID becoming active) and purge the prior
+  // user's cached issue snapshots — defence in depth on top of the WebID-scoped
+  // cache, so no prior identity's data lingers when a new one signs in.
+  const activeWebIdRef = useRef<string | null>(null);
 
-  // Patch globalThis.fetch exactly once, as early as possible (AGENTS.md §Authentication).
-  useEffect(() => {
-    if (managerReady.current) return;
-    let cancelled = false;
-    (async () => {
-      const { ReactiveFetchManager } = await import("@solid/reactive-authentication");
-      const { WebIdDPoPTokenProvider } = await import("@/lib/webid-token-provider");
-      const ui = flowRef.current;
-      if (cancelled || !ui || managerReady.current) return;
-
-      // Static client-id only when deployed (HTTPS): a remote IdP can't dereference
-      // a localhost client-id document, so localhost falls back to dynamic
-      // registration — which works against both local CSS and live servers.
-      const host = location.hostname;
-      const isLoopback = host === "localhost" || host === "127.0.0.1" || host === "[::1]";
-      const clientId = isLoopback ? undefined : new URL("/clientid.jsonld", location.href).toString();
-
-      const provider = new WebIdDPoPTokenProvider(
-        new URL("/callback.html", location.href).toString(),
-        ui.getCode.bind(ui),
-        // getWebId — resolves to the WebID the user submitted via login().
-        async () => {
-          if (!webIdRef.current) throw new Error("No WebID provided.");
-          return webIdRef.current;
-        },
-        { allowInsecureLoopback: true, ...(clientId ? { clientId } : {}) },
-      );
-      // 0.1.3: the constructor does NOT patch globalThis.fetch — registerGlobally() does.
-      const manager = new ReactiveFetchManager([provider]);
-      manager.registerGlobally();
-      managerReady.current = true;
-
-      recentRef.current = new RecentAccounts();
-      setRecentAccounts(recentRef.current.list());
-      setStatus("logged-out");
-    })();
-    return () => {
-      cancelled = true;
-    };
+  // Persist a freshly (re)established session so a later reopen can silently
+  // restore it (pss-203m). Scoped to the WebID set in persistWebIdRef — a
+  // session emitted for one identity can never be saved under another.
+  const persistSession = useCallback((session: RestorableSession) => {
+    const webId = persistWebIdRef.current;
+    if (!webId) return;
+    void saveSession({
+      webId,
+      issuer: session.issuer,
+      storageUrl: storageUrlRef.current ?? "",
+      hasRefreshToken: session.refreshToken !== undefined,
+      refreshExpiresAt: session.refreshExpiresAt,
+      client: session.client as unknown as Record<string, unknown>,
+      refreshToken: session.refreshToken,
+      dpopKey: session.dpopKey,
+    });
   }, []);
 
   const completeLogin = useCallback(async (loaded: SolidProfile, storage: string) => {
+    // Account switch: a DIFFERENT WebID is becoming active. Purge the prior
+    // user's cached issue snapshots so none of their (possibly private) issue
+    // data can be painted under the new identity. Defence in depth: the cache is
+    // also WebID-scoped, so a mismatched snapshot is already a miss — but clearing
+    // here keeps the device free of the previous user's data outright.
+    const previousWebId = activeWebIdRef.current;
+    if (previousWebId && previousWebId !== loaded.webId) {
+      clearAllIssueCaches();
+    }
+    activeWebIdRef.current = loaded.webId;
+
+    // Scope refresh-token persistence to this identity + storage BEFORE the first
+    // authenticated fetch below — that fetch is what drives the auth-code flow,
+    // and the provider emits its session (with the refresh token) via onSession
+    // mid-flight. Setting these first means the emitted session is saved correctly.
+    persistWebIdRef.current = loaded.webId;
+    storageUrlRef.current = storage;
+
     // First authenticated fetch: a private resource in the pod returns 401,
     // which transparently drives the login popup, then retries. A 404 (the
     // tracker doesn't exist yet) is success — the pod is reachable + authed.
@@ -136,6 +150,109 @@ export function SolidSessionProvider({ children }: { children: ReactNode }) {
     });
     if (recentRef.current) setRecentAccounts(recentRef.current.list());
   }, []);
+
+  /**
+   * Try to silently restore a persisted session via the refresh grant (pss-203m).
+   * Shows a brief "restoring" state, then lands the user on their page on success,
+   * or falls back to the login screen on a genuine failure. A dead token is
+   * purged; a transient failure keeps it for a later retry.
+   */
+  const attemptSilentRestore = useCallback(
+    async (provider: WebIdDPoPTokenProvider, isCancelled: () => boolean) => {
+      const stored = await loadSession();
+      if (isCancelled()) return;
+      if (
+        !stored ||
+        !stored.refreshToken ||
+        !shouldAttemptRestore({
+          webId: stored.webId,
+          issuer: stored.issuer,
+          storageUrl: stored.storageUrl,
+          hasRefreshToken: stored.hasRefreshToken,
+          refreshExpiresAt: stored.refreshExpiresAt,
+        })
+      ) {
+        setStatus("logged-out");
+        return;
+      }
+      setStatus("restoring");
+      // Scope any re-emitted (rotated) refresh token to this WebID, and let the
+      // provider resolve the issuer to it without re-prompting.
+      webIdRef.current = stored.webId;
+      persistWebIdRef.current = stored.webId;
+      storageUrlRef.current = stored.storageUrl;
+      try {
+        await provider.restore({
+          issuer: stored.issuer,
+          client: stored.client as never,
+          dpopKey: stored.dpopKey,
+          refreshToken: stored.refreshToken,
+        });
+        if (isCancelled()) return;
+        // The access token is now seeded; load the profile + tracker as a normal login.
+        const loaded = await loadProfile(stored.webId);
+        if (isCancelled()) return;
+        await completeLogin(loaded, stored.storageUrl);
+      } catch (e) {
+        if (isCancelled()) return;
+        const outcome = classifyRestoreError(e);
+        if (shouldClearStoredSession(outcome)) void clearSession();
+        webIdRef.current = null;
+        persistWebIdRef.current = null;
+        setStatus("logged-out");
+      }
+    },
+    [completeLogin],
+  );
+
+  // Patch globalThis.fetch exactly once, as early as possible (AGENTS.md §Authentication),
+  // then attempt a silent session restore before ever showing the login screen.
+  useEffect(() => {
+    if (managerReady.current) return;
+    let cancelled = false;
+    (async () => {
+      const { ReactiveFetchManager } = await import("@solid/reactive-authentication");
+      const { WebIdDPoPTokenProvider } = await import("@/lib/webid-token-provider");
+      const ui = flowRef.current;
+      if (cancelled || !ui || managerReady.current) return;
+
+      // Static client-id only when deployed (HTTPS): a remote IdP can't dereference
+      // a localhost client-id document, so localhost falls back to dynamic
+      // registration — which works against both local CSS and live servers.
+      const host = location.hostname;
+      const isLoopback = host === "localhost" || host === "127.0.0.1" || host === "[::1]";
+      const clientId = isLoopback ? undefined : new URL("/clientid.jsonld", location.href).toString();
+
+      const provider = new WebIdDPoPTokenProvider(
+        new URL("/callback.html", location.href).toString(),
+        ui.getCode.bind(ui),
+        // getWebId — resolves to the WebID the user submitted via login() or the
+        // WebID being silently restored.
+        async () => {
+          if (!webIdRef.current) throw new Error("No WebID provided.");
+          return webIdRef.current;
+        },
+        { allowInsecureLoopback: true, onSession: persistSession, ...(clientId ? { clientId } : {}) },
+      );
+      providerRef.current = provider;
+      // 0.1.3: the constructor does NOT patch globalThis.fetch — registerGlobally() does.
+      const manager = new ReactiveFetchManager([provider]);
+      manager.registerGlobally();
+      managerReady.current = true;
+
+      recentRef.current = new RecentAccounts();
+      setRecentAccounts(recentRef.current.list());
+
+      // Silent session restore (pss-203m): if a refresh token was persisted on a
+      // previous visit, re-establish the session WITHOUT a redirect/popup before
+      // ever showing the login screen. Only a genuine failure (no token /
+      // expired / revoked) drops to logged-out.
+      await attemptSilentRestore(provider, () => cancelled);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [persistSession, attemptSilentRestore]);
 
   const login = useCallback(async (webIdInput: string) => {
     setError(null);
@@ -186,10 +303,18 @@ export function SolidSessionProvider({ children }: { children: ReactNode }) {
     // Tokens live in memory in the fetch manager; a reload is the clean way to
     // drop them (skill: solid-reactive-authentication §Sessions). Recent accounts
     // persist in localStorage and survive the reload.
+    //
+    // Logging out MUST also drop the persisted refresh token (so the next reopen
+    // does NOT silently restore) and the cached issue snapshots (so a signed-out
+    // device leaves no pod data behind). Clear them, then reload once cleared.
     setProfile(null);
     setStorageUrl(null);
     setStatus("logged-out");
-    window.location.reload();
+    persistWebIdRef.current = null;
+    storageUrlRef.current = null;
+    activeWebIdRef.current = null;
+    clearAllIssueCaches();
+    void clearSession().finally(() => window.location.reload());
   }, []);
 
   const forgetAccount = useCallback((webId: string) => {

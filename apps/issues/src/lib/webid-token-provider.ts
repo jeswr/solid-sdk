@@ -47,6 +47,28 @@ export type GetWebIdCallback = () => Promise<string>;
  */
 export type ChooseIssuerCallback = (issuers: string[]) => Promise<string>;
 
+/**
+ * A restorable session emitted after a successful login (or refresh): the
+ * issuer + client + DPoP key + refresh token the app persists (IndexedDB) so a
+ * later reopen can silently refresh-grant back in without a redirect/popup.
+ */
+export interface RestorableSession {
+  issuer: string;
+  client: oauth.Client;
+  dpopKey: CryptoKeyPair;
+  refreshToken?: string;
+  /** Absolute refresh-token expiry (epoch ms), when the IdP advertises one. */
+  refreshExpiresAt?: number;
+}
+
+/** Material needed to silently re-establish a session via the refresh grant. */
+export interface SeedSession {
+  issuer: string;
+  client: oauth.Client;
+  dpopKey: CryptoKeyPair;
+  refreshToken: string;
+}
+
 export interface WebIdDPoPTokenProviderOptions {
   /**
    * A **Solid-OIDC Client Identifier Document** URL. When set, the provider
@@ -85,6 +107,13 @@ export interface WebIdDPoPTokenProviderOptions {
    * patches the global) — see the recursion note in the class docs. Test-only.
    */
   profileFetch?: typeof fetch;
+  /**
+   * Called whenever a session is (re)established — after an interactive login or
+   * a silent refresh-grant. The app persists this so a later reopen can silently
+   * restore (see `session-store.ts`). The refresh token is a possession secret;
+   * persist it in IndexedDB scoped to the WebID, never localStorage.
+   */
+  onSession?: (session: RestorableSession) => void;
 }
 
 /** A WebID advertises several issuers but no `chooseIssuer` was supplied. */
@@ -116,6 +145,8 @@ interface IssuerSession {
   clientRegistration: oauth.Client;
   dpopKey: CryptoKeyPair;
   accessToken: string;
+  /** Refresh token for silent re-establishment, when the IdP granted one. */
+  refreshToken?: string;
 }
 
 const isLoopback = (host: string): boolean =>
@@ -128,6 +159,7 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
   readonly #clientId?: string;
   readonly #chooseIssuer?: ChooseIssuerCallback;
   readonly #allowInsecureLoopback: boolean;
+  readonly #onSession?: (session: RestorableSession) => void;
   /**
    * The profile is PUBLIC, so reading it needs no auth. We must not read it
    * through the patched global fetch in a way that recurses back into this
@@ -167,6 +199,7 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
     this.#clientId = options.clientId;
     this.#chooseIssuer = options.chooseIssuer;
     this.#allowInsecureLoopback = options.allowInsecureLoopback ?? false;
+    this.#onSession = options.onSession;
     this.#profileFetch =
       options.profileFetch ?? globalThis.fetch.bind(globalThis);
   }
@@ -276,7 +309,10 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
       url.searchParams.set("client_id", clientRegistration.client_id);
       url.searchParams.set("redirect_uri", registeredRedirectUri);
       url.searchParams.set("response_type", registeredResponseType);
-      url.searchParams.set("scope", "openid webid");
+      // `offline_access` asks the IdP for a refresh token, so a later reopen can
+      // silently refresh-grant a fresh access token (no redirect/popup). An IdP
+      // that doesn't support it simply omits the refresh token — login still works.
+      url.searchParams.set("scope", "openid webid offline_access");
       if (withPrompt) url.searchParams.set("prompt", "none");
       url.searchParams.set("state", state);
       url.searchParams.set("nonce", nonce);
@@ -355,12 +391,72 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
       { expectedNonce: this.#nonceVerification(authorizationServer.issuer, nonce) },
     );
 
-    return {
+    const session: IssuerSession = {
       authorizationServer,
       clientRegistration,
       dpopKey,
       accessToken: tokenResult.access_token,
+      refreshToken: tokenResult.refresh_token,
     };
+    this.#emitSession(session);
+    return session;
+  }
+
+  /**
+   * Re-establish a session SILENTLY from a previously persisted refresh token
+   * (pss-203m): a refresh-grant token request bound to the SAME DPoP key — no
+   * redirect, no popup, no iframe. On success the issuer session is seeded so the
+   * next pod fetch is already authenticated; the (possibly rotated) refresh token
+   * is re-emitted for persistence. Throws on a dead/invalid token so the caller
+   * can fall back to a fresh login (see `classifyRestoreError`).
+   */
+  async restore(seed: SeedSession): Promise<void> {
+    const issuer = new URL(seed.issuer);
+    const pending = this.#refreshGrant(issuer, seed).catch((e) => {
+      this.#sessions.delete(issuer.href); // a failed restore is retryable / falls back
+      throw e;
+    });
+    this.#sessions.set(issuer.href, pending);
+    // Pre-seed issuer resolution so `upgrade()` doesn't re-prompt for the WebID.
+    this.#issuer ??= Promise.resolve(issuer);
+    await pending;
+  }
+
+  /** The refresh-grant exchange: refresh token → fresh DPoP-bound access token. */
+  async #refreshGrant(issuer: URL, seed: SeedSession): Promise<IssuerSession> {
+    const http = this.#httpOptions(issuer, this.#authSignal);
+    const discoveryResponse = await oauth.discoveryRequest(issuer, http);
+    const authorizationServer = await oauth.processDiscoveryResponse(issuer, discoveryResponse);
+    const dpop = oauth.DPoP({}, seed.dpopKey);
+    const response = await oauth.refreshTokenGrantRequest(
+      authorizationServer,
+      seed.client,
+      this.#clientAuth(authorizationServer.issuer, seed.client),
+      seed.refreshToken,
+      { DPoP: dpop, ...http },
+    );
+    const result = await oauth.processRefreshTokenResponse(authorizationServer, seed.client, response);
+    const session: IssuerSession = {
+      authorizationServer,
+      clientRegistration: seed.client,
+      dpopKey: seed.dpopKey,
+      accessToken: result.access_token,
+      // The IdP MAY rotate the refresh token; keep the new one if present, else reuse.
+      refreshToken: result.refresh_token ?? seed.refreshToken,
+    };
+    this.#emitSession(session);
+    return session;
+  }
+
+  /** Hand the app a restorable snapshot of a freshly established session. */
+  #emitSession(session: IssuerSession): void {
+    if (!this.#onSession) return;
+    this.#onSession({
+      issuer: session.authorizationServer.issuer,
+      client: session.clientRegistration,
+      dpopKey: session.dpopKey,
+      refreshToken: session.refreshToken,
+    });
   }
 
   /**
