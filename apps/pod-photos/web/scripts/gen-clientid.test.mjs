@@ -18,7 +18,12 @@
 // `.mjs` script and `tsconfig` has `allowJs:false`, so co-locating a `.mjs` test
 // keeps it OUT of `tsc` while vitest still runs it.
 import { describe, expect, it } from "vitest";
-import { DEV_DEFAULT, normaliseOrigin, resolveOriginValue } from "./gen-clientid.mjs";
+import {
+  clientIdDocument,
+  DEV_DEFAULT,
+  normaliseOrigin,
+  resolveOriginValue,
+} from "./gen-clientid.mjs";
 
 const A = "https://a.example";
 const B = "https://b.example";
@@ -99,5 +104,27 @@ describe("normaliseOrigin", () => {
 
   it("throws on a non-http(s) scheme", () => {
     expect(() => normaliseOrigin("ftp://x.example")).toThrow();
+  });
+});
+
+describe("clientIdDocument — redirect_uris", () => {
+  const origin = "https://photos.example";
+
+  it("registers BOTH the popup callback AND the app-root redirect_uri (autologin)", () => {
+    const doc = clientIdDocument(origin);
+    // The popup path posts back from callback.html; the full-page-redirect
+    // (autologin) path returns to the app root, so both MUST be registered or a
+    // compliant OP rejects the autologin redirect_uri.
+    expect(doc.redirect_uris).toContain(`${origin}/callback.html`);
+    expect(doc.redirect_uris).toContain(`${origin}/`);
+  });
+
+  it("the app-root redirect_uri is the EXACT origin + '/' (byte-for-byte)", () => {
+    // beginRedirectLogin uses `${origin}/` verbatim as both the authorization and
+    // the token-exchange redirect_uri; it must match this registered value exactly.
+    expect(clientIdDocument(origin).redirect_uris).toEqual([
+      `${origin}/callback.html`,
+      `${origin}/`,
+    ]);
   });
 });

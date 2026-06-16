@@ -894,6 +894,9 @@ describe("AUTOLOGIN — two-phase full-page redirect login (beginRedirectLogin /
     expect(url.searchParams.get("redirect_uri")).toBe(RETURN_URI);
     expect(url.searchParams.get("response_type")).toBe("code");
     expect(url.searchParams.get("scope")).toBe("openid webid offline_access");
+    // prompt=none makes autologin SILENT-with-fallback: a live OP session returns the
+    // code, an absent one returns ?error=login_required for SessionProvider's abort path.
+    expect(url.searchParams.get("prompt")).toBe("none");
     expect(url.searchParams.get("state")).toBe("state");
     expect(url.searchParams.get("nonce")).toBe("nonce");
     expect(url.searchParams.get("code_challenge_method")).toBe("S256");
@@ -919,6 +922,19 @@ describe("AUTOLOGIN — two-phase full-page redirect login (beginRedirectLogin /
     expect(typeof flow.dpopPrivateJwk.d).toBe("string");
     expect(flow.dpopPublicJwk.kty).toBe("EC");
     expect(flow.dpopPublicJwk.d).toBeUndefined(); // public JWK has no private scalar.
+  });
+
+  it("beginRedirectLogin sets prompt=none AND uses the app-root redirect_uri (autologin abort path)", async () => {
+    // FIX-2 (roborev MEDIUM): without prompt=none the redirect renders an interactive
+    // IdP page on autologin and SessionProvider's ?error=login_required abort path is
+    // unreachable. The redirect_uri must be the app root (callback.html cannot run the
+    // app to complete the redirect), and must match the registered `${origin}/`.
+    const provider = makeProvider();
+    const { authorizationUrl } = await provider.beginRedirectLogin(RETURN_URI);
+    const url = new URL(authorizationUrl);
+    expect(url.searchParams.get("prompt")).toBe("none");
+    expect(url.searchParams.get("redirect_uri")).toBe(RETURN_URI);
+    expect(RETURN_URI.endsWith("/")).toBe(true); // the app root, not callback.html.
   });
 
   it("generates an EXTRACTABLE DPoP key for the redirect path (so it can be exported)", async () => {
