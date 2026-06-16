@@ -1,0 +1,26 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jeswr/full-solid-ecosystem/main/tracking/schema/suite.schema.json",
+  "id": "solid-agent-card",
+  "kind": "sdk",
+  "name": "Solid Agent Card",
+  "repo": "https://github.com/jeswr/solid-agent-card",
+  "category": "infrastructure",
+  "maturity": "prototype",
+  "visibility": "public",
+  "stack": {
+    "lang": "TypeScript (ESM, NodeNext)",
+    "rdf": "n3 ^2.x",
+    "rdf-wrapper": "@rdfjs/wrapper ^0.34.x",
+    "solid-object": "@solid/object ^0.6.x",
+    "fetch-rdf": "@jeswr/fetch-rdf (git: jeswr/fetch-rdf#main)",
+    "test": "vitest ^2.x",
+    "lint": "@biomejs/biome ^2.x",
+    "node": ">=24"
+  },
+  "dependsOn": [],
+  "roadmap": {
+    "doc": "https://github.com/jeswr/prod-solid-server/blob/main/docs/design/agentic-solid-infrastructure.md",
+    "milestone": "M1 — Pod / WebID README → agent pointer + self-describing agent",
+    "note": "First, foundational, dependency-free slice of the agentic-Solid roadmap (build-order step 1; the discovery anchor the M2/M4 packages attach to). SEPARATE-CODEBASE — zero prod-solid-server core risk for the common case (the pod serves static documents)."
+  }
+}
