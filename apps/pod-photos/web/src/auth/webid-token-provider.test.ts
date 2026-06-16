@@ -1212,14 +1212,27 @@ describe("durable persistence security (roborev findings 2/3/4)", () => {
     expect(provider.authenticatedWebId()).toBe(WEBID_A);
     const stored = store.map.get("https://issuer.example/");
     expect(stored).toBeDefined();
-    // The whole point: the PERSISTED private key must NOT be extractable, so a
-    // same-origin XSS reading IndexedDB cannot export it to redeem the token
-    // off-origin. (The transient JWK in sessionStorage WAS extractable to survive the
-    // redirect; the re-imported, durable key is not.) The public key too.
+    // The security invariant: the PERSISTED PRIVATE key must NOT be extractable, so a
+    // same-origin XSS reading IndexedDB cannot export it to redeem the token off-origin.
+    // (The transient JWK in sessionStorage WAS extractable to survive the redirect; the
+    // re-imported, durable private key is not.)
     expect((stored as PersistedSession).dpopKey.privateKey.extractable).toBe(false);
-    expect((stored as PersistedSession).dpopKey.publicKey.extractable).toBe(false);
-    // The persisted key can still SIGN — proven by a subsequent upgrade attaching a
-    // DPoP proof with the restored access token (no re-prompt).
+    // The PUBLIC key, by contrast, MUST be extractable: the `dpop` library exports it as
+    // the proof header `jwk` (RFC 9449 §4.2) on every DPoP proof — token exchange AND
+    // refresh-grant restore. A non-extractable public key throws in generateProof
+    // ('"keypair.publicKey.extractable" must be true'). Public keys are not secret, so
+    // this does not weaken the proof-of-possession invariant above.
+    expect((stored as PersistedSession).dpopKey.publicKey.extractable).toBe(true);
+    // Adversarial proof of the above: exporting the persisted public key as a JWK
+    // RESOLVES — it throws synchronously if the key is non-extractable, so this fails
+    // hard if the public-key import regresses to `extractable: false`.
+    await expect(
+      crypto.subtle.exportKey("jwk", (stored as PersistedSession).dpopKey.publicKey),
+    ).resolves.toMatchObject({ kty: "EC" });
+    // The persisted key can still SIGN + build a usable DPoP proof — proven by a
+    // subsequent upgrade attaching a DPoP proof with the restored access token (no
+    // re-prompt). This exercises oauth.DPoP / dpop's generateProof end-to-end, which
+    // exports the public key as the proof JWK and would throw on a non-extractable key.
     const upgraded = await provider.upgrade(new Request("https://alice.example/storage/"));
     expect(upgraded.headers.get("Authorization")).toBe("DPoP tok-A");
   });

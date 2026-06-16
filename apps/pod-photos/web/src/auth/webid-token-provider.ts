@@ -1404,7 +1404,7 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
         "jwk",
         flow.dpopPublicJwk,
         ES256_IMPORT_ALG,
-        false, // public key: non-extractable too (only used to verify)
+        true, // public key MUST be extractable: dpop exports it as the proof header JWK (RFC 9449 §4.2). Public keys are not secret; only the private key stays non-extractable.
         ["verify"],
       );
       if (generation !== this.#generation) throw new ReactiveAuthResetError();
