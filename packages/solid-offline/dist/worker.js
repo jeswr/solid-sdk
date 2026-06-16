@@ -870,7 +870,10 @@ async function runPrecache() {
 function adoptShellConfig(next, event) {
   if (next.precache.length === 0) return;
   const resolved = resolveAppShellConfig(next);
-  if (shellConfig && sameShellConfig(shellConfig, resolved)) return;
+  if (shellConfig && sameShellConfig(shellConfig, resolved)) {
+    if (!shellPrecached) keepAlive(event, runPrecache);
+    return;
+  }
   if (!shellConfig) {
     shellConfig = resolved;
     shellPrecached = false;
@@ -925,7 +928,7 @@ self.addEventListener("install", (event) => {
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     (async () => {
-      if (shellConfig) {
+      if (shellConfig && shellPrecached) {
         await cleanupOldShellCaches(shellCaches(), shellConfig.version).catch(() => []);
       }
       await self.clients.claim();
@@ -989,7 +992,7 @@ self.addEventListener("fetch", (event) => {
   if (method !== "GET" && method !== "HEAD") {
     return;
   }
-  if (shellConfig) {
+  if (shellConfig && shellPrecached) {
     if (request.mode === "navigate" && method === "GET") {
       event.respondWith(respondShellNavigation(event));
       return;

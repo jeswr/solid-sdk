@@ -142,7 +142,14 @@ async function runPrecache(): Promise<void> {
 function adoptShellConfig(next: AppShellConfig, event: ExtendableMessageEvent): void {
   if (next.precache.length === 0) return;
   const resolved = resolveAppShellConfig(next);
-  if (shellConfig && sameShellConfig(shellConfig, resolved)) return; // unchanged
+  if (shellConfig && sameShellConfig(shellConfig, resolved)) {
+    // Same manifest as the current one. Normally a no-op — but if a previous
+    // (install-time) precache was left INCOMPLETE (`!shellPrecached`), this is the
+    // retry opportunity roborev (Low) asks for: re-run the precache so a transiently
+    // failed asset can be fetched now. `runPrecache` is idempotent + completeness-gated.
+    if (!shellPrecached) keepAlive(event, runPrecache);
+    return;
+  }
 
   // FIRST config (no current shell): promote immediately + precache (the SW had
   // nothing to serve anyway, so there's no working shell to protect).
@@ -227,7 +234,12 @@ self.addEventListener('activate', (event: ExtendableEvent) => {
   // control of open clients so interception starts without a reload.
   event.waitUntil(
     (async () => {
-      if (shellConfig) {
+      // roborev (Medium): clean up old buckets ONLY when the current precache is
+      // COMPLETE (`shellPrecached`). If the install-time precache was incomplete
+      // (`runPrecache` left it un-latched), deleting the previous COMPLETE bucket
+      // here would strand offline boot — keep the old bucket until a complete
+      // precache (a later config message's retry) promotes + cleans up.
+      if (shellConfig && shellPrecached) {
         await cleanupOldShellCaches(shellCaches(), shellConfig.version).catch(() => []);
       }
       await self.clients.claim();
@@ -333,7 +345,15 @@ self.addEventListener('fetch', (event: FetchEvent) => {
   // (e.g. `https://pod.example/assets/x.js`) would be diverted from the WebID-scoped
   // pod-data SWR path into the public shell handler. Cross-origin requests therefore
   // never reach the shell asset handler — they stay on the pod-data path.
-  if (shellConfig) {
+  //
+  // COMPLETENESS (roborev): route to the shell handlers ONLY when the current shell
+  // precache is COMPLETE (`shellPrecached`). The new worker serves the new
+  // `shellConfig.version` bucket; if that precache is incomplete (some asset failed),
+  // routing a navigation there would serve a shell whose assets 404 offline. While
+  // incomplete we leave navigations/assets on the live-network / pod-data path (which
+  // is correct — an incomplete shell can't reliably boot), and a config-message retry
+  // completes the precache before the shell starts serving.
+  if (shellConfig && shellPrecached) {
     if (request.mode === 'navigate' && method === 'GET') {
       event.respondWith(respondShellNavigation(event));
       return;

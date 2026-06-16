@@ -280,11 +280,30 @@ Round 4 (on the round-3 fix — 1 Medium):
   `shellPrecached = false` (so a later activate / config message retries) and SKIPS
   the cleanup, so the active worker can't strand an offline boot on missing assets.
 
+Round 5 (on the round-4 fix — 2 Medium + 1 Low; the install/incomplete-precache theme):
+
+- **Incomplete install precache still served (Medium).** Even with `runPrecache`
+  skipping cleanup, the new worker reads the NEW `shellConfig.version` bucket, so an
+  incomplete install precache could route navigations to a bucket whose assets 404
+  offline. FIXED: the fetch router now routes to the shell handlers ONLY when the
+  current precache is COMPLETE (`shellConfig && shellPrecached`); while incomplete,
+  navigations/assets stay on the live-network / pod-data path (an incomplete shell
+  can't reliably boot), and a config retry completes it before the shell serves.
+- **activate cleanup ran on an incomplete precache (Medium).** The `activate` handler
+  cleaned up old buckets whenever `shellConfig` existed, deleting the previous COMPLETE
+  bucket even after `runPrecache` left the new one incomplete. FIXED: activate cleanup
+  is gated on `shellConfig && shellPrecached`.
+- **Same-manifest config never retried an incomplete precache (Low).** After an
+  incomplete install precache (`!shellPrecached`), a later config message with the SAME
+  manifest returned as "unchanged" and never retried. FIXED: the same-config branch of
+  `adoptShellConfig` re-runs `runPrecache` when `!shellPrecached`.
+
 The change-detection decision (`sameShellConfig`) and the URL classifiers
 (`canonicalShellUrl`/`isExactConfiguredShellUrl`, via `handleNavigation`) are pure,
-exported, and unit-tested; the worker's `adoptShellConfig`/`runPrecache` orchestration
-(the token/latest-wins + promote-after-complete-precache sequencing) is the
-browser-only adapter (excluded from coverage, like the rest of `worker.ts`).
+exported, and unit-tested; the worker's `adoptShellConfig`/`runPrecache` + fetch-router
+orchestration (token/latest-wins, promote-after-complete-precache, complete-gated
+routing + cleanup, same-manifest retry) is the browser-only adapter (excluded from
+coverage, like the rest of `worker.ts`).
 
 ### P4 re-review focus areas
 
