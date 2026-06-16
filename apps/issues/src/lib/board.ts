@@ -146,6 +146,70 @@ export function revertMove(issues: IssueRecord[], original: IssueRecord): IssueR
 }
 
 /**
+ * How the board partitions cards into horizontal SWIMLANES — the Jira board
+ * hallmark. "none" is the flat board (one lane); "assignee" lanes by who owns
+ * the card; "epic" lanes by the card's parent epic.
+ */
+export type SwimlaneBy = "none" | "assignee" | "epic";
+
+/** A board swimlane: a stable key, a display label, and the issues in it. */
+export interface Swimlane {
+  key: string;
+  label: string;
+  issues: IssueRecord[];
+}
+
+/** Sentinel key for the "no assignee" / "no epic" catch-all lane. */
+export const UNGROUPED_LANE = "__none__";
+
+/**
+ * Partition board issues into swimlanes for `swimlaneBy`. With "none", a single
+ * lane holding every issue. With "assignee"/"epic", one lane per distinct value
+ * plus a trailing catch-all ({@link UNGROUPED_LANE}) for cards with no
+ * assignee / no epic parent — and the catch-all is omitted when it would be
+ * empty. Lanes (other than the catch-all, which always trails) are ordered by
+ * `labelOf`, so the layout is stable across renders.
+ *
+ * `labelOf` resolves a lane VALUE (a WebID, or an epic issue URL) to its display
+ * label, letting the caller render people as names and epics as titles without
+ * this pure function depending on the profile cache or the issue list.
+ */
+export function swimlanes(
+  issues: IssueRecord[],
+  swimlaneBy: SwimlaneBy,
+  labelOf: (key: string) => string,
+): Swimlane[] {
+  if (swimlaneBy === "none") {
+    return [{ key: UNGROUPED_LANE, label: "All", issues }];
+  }
+  const valueOf = (i: IssueRecord): string | undefined =>
+    swimlaneBy === "assignee" ? i.assignee : i.parent;
+  const byKey = new Map<string, IssueRecord[]>();
+  const ungrouped: IssueRecord[] = [];
+  for (const issue of issues) {
+    const value = valueOf(issue);
+    if (value === undefined) {
+      ungrouped.push(issue);
+      continue;
+    }
+    const lane = byKey.get(value);
+    if (lane) lane.push(issue);
+    else byKey.set(value, [issue]);
+  }
+  const lanes: Swimlane[] = [...byKey.entries()]
+    .map(([key, laneIssues]) => ({ key, label: labelOf(key), issues: laneIssues }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+  if (ungrouped.length > 0) {
+    lanes.push({
+      key: UNGROUPED_LANE,
+      label: swimlaneBy === "assignee" ? "Unassigned" : "No epic",
+      issues: ungrouped,
+    });
+  }
+  return lanes;
+}
+
+/**
  * Revert a FAILED optimistic move to `original`, but ONLY when the card's
  * current local record still corresponds to the move that failed — identified
  * by `optimistic` (the record this move optimistically wrote). If, while the

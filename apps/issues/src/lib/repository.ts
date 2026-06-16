@@ -20,6 +20,7 @@ import {
   type IssueState,
   type IssueType,
   type Priority,
+  type SavedViewDef,
   type StatusSlug,
   type WorkflowDef,
 } from "./issue";
@@ -348,6 +349,42 @@ export class Repository {
   async removeField(slug: string): Promise<void> {
     await this.mutateTracker((dataset) => {
       new Tracker(this.trackerIri, dataset, DataFactory).removeField(slug);
+    });
+  }
+
+  /**
+   * The tracker's saved views (shareable, pod-persisted). A collaborator without
+   * tracker-config access — or a not-yet-configured tracker — gets [], so the UI
+   * degrades to its local views rather than erroring.
+   */
+  async savedViews(): Promise<SavedViewDef[]> {
+    try {
+      const { tracker } = await this.loadTracker();
+      return tracker.savedViews;
+    } catch (e) {
+      if (e instanceof RdfFetchError && (e.status === 401 || e.status === 403)) return [];
+      throw e;
+    }
+  }
+
+  /**
+   * Define (or overwrite by IRI) a saved view on the tracker. With no `iri` a
+   * fresh one is minted from the name; passing an existing IRI overwrites that
+   * view (rename / re-query). Returns the stored definition.
+   */
+  async defineSavedView(name: string, payload: string, iri?: string): Promise<SavedViewDef> {
+    let def: SavedViewDef | undefined;
+    await this.mutateTracker((dataset) => {
+      const tracker = new Tracker(this.trackerIri, dataset, DataFactory);
+      def = iri ? tracker.defineSavedView(name, payload, iri) : tracker.defineSavedView(name, payload);
+    });
+    return def!;
+  }
+
+  /** Remove a saved view from the tracker. */
+  async removeSavedView(iri: string): Promise<void> {
+    await this.mutateTracker((dataset) => {
+      new Tracker(this.trackerIri, dataset, DataFactory).removeSavedView(iri);
     });
   }
 

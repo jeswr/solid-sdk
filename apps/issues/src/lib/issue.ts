@@ -17,7 +17,7 @@ import {
 // `Issue` model is used in client components (e.g. session-context), so it must
 // stay `node:fs`-free; `./task` carries only the runtime accessors.
 import { Task, type TaskPriority } from "@jeswr/solid-task-model/task";
-import { WF, DCT, RDF, STATE, wf, dct, rdf, rdfs, sioc, foaf, vcard, schema, xsd, skos, prov, time, TIME_UNIT_SECOND } from "./vocab";
+import { WF, DCT, RDF, STATE, wf, dct, rdf, rdfs, sioc, foaf, vcard, schema, xsd, skos, prov, time, TIME_UNIT_SECOND, SAVED_VIEW, VIEW_QUERY } from "./vocab";
 
 export type IssueState = "open" | "closed";
 /**
@@ -804,6 +804,18 @@ export interface FieldDef {
 export type FieldValue = string | number | Date;
 
 /**
+ * A saved view persisted on the tracker (shareable, cross-device): its stable
+ * IRI (a fragment of the tracker doc), display name, and the serialised
+ * query+layout payload (an opaque JSON string the app interprets).
+ */
+export interface SavedViewDef {
+  iri: string;
+  name: string;
+  /** The serialised query+layout (JSON). Opaque to the data layer. */
+  payload: string;
+}
+
+/**
  * The URL if it parses with an http(s) scheme, else undefined. Pod data is
  * untrusted input: a stored `javascript:` URL must never become a clickable
  * link, and we reject it on write too.
@@ -1089,6 +1101,51 @@ export class Tracker extends TermWrapper {
       for (const q of [...this.dataset.match(oq.subject)]) this.dataset.delete(q);
     }
     for (const q of [...this.dataset.match(nn(iri))]) this.dataset.delete(q);
+  }
+
+  /** Live set of saved-view node IRIs declared on the tracker (`wf:savedView`). */
+  private get savedViewIris(): Set<string> {
+    return SetFrom.subjectPredicate(this, SAVED_VIEW, NamedNodeAs.string, NamedNodeFrom.string);
+  }
+
+  /**
+   * The saved views declared on the tracker (`wf:savedView` → a node carrying a
+   * `dct:title` name and a `wf:viewQuery` JSON payload), sorted by name. A view
+   * missing its name or payload is skipped (defensive against partial data).
+   */
+  get savedViews(): SavedViewDef[] {
+    const out: SavedViewDef[] = [];
+    for (const iri of this.savedViewIris) {
+      const node = new TermWrapper(iri, this.dataset, this.factory);
+      const name = OptionalFrom.subjectPredicate(node, dct("title"), LiteralAs.string);
+      const payload = OptionalFrom.subjectPredicate(node, VIEW_QUERY, LiteralAs.string);
+      if (name === undefined || payload === undefined) continue;
+      out.push({ iri, name, payload });
+    }
+    return out.sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  /**
+   * Define (or overwrite by IRI) a saved view: mint/refresh the `#view-<slug>`
+   * node with its name + serialised payload, and link it from the tracker via
+   * `wf:savedView`. Overwriting first clears the node's previous triples so a
+   * relabel/re-query never leaves stale values behind. Returns the definition.
+   */
+  defineSavedView(name: string, payload: string, iri = `${this.doc}#view-${fragmentSlug(name)}`): SavedViewDef {
+    const nn = this.factory.namedNode.bind(this.factory);
+    // Clear any prior triples on this exact node (idempotent overwrite).
+    for (const q of [...this.dataset.match(nn(iri))]) this.dataset.delete(q);
+    const node = new TermWrapper(iri, this.dataset, this.factory);
+    OptionalAs.object(node, dct("title"), name.trim(), LiteralFrom.string);
+    OptionalAs.object(node, VIEW_QUERY, payload, LiteralFrom.string);
+    this.savedViewIris.add(iri);
+    return { iri, name: name.trim(), payload };
+  }
+
+  /** Remove a saved view (its node triples and the tracker's link to it). */
+  removeSavedView(iri: string): void {
+    this.savedViewIris.delete(iri);
+    for (const q of [...this.dataset.match(this.factory.namedNode(iri))]) this.dataset.delete(q);
   }
 
   private get groupIri(): string {

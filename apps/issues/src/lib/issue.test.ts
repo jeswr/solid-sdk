@@ -317,6 +317,71 @@ describe("Custom fields", () => {
   });
 });
 
+describe("Saved views (pod-persisted, shareable)", () => {
+  const DOC = "http://localhost:3000/alice/issue-tracker/tracker.ttl";
+
+  function newTracker() {
+    const store = new Store();
+    const tracker = new Tracker(`${DOC}#this`, store, DataFactory);
+    tracker.configure("Issues");
+    return { tracker, store };
+  }
+
+  it("defines a view as a resolvable fragment and round-trips name + payload", () => {
+    const { tracker } = newTracker();
+    const def = tracker.defineSavedView("My bugs", '{"labels":["bug"]}');
+    expect(def.iri).toBe(`${DOC}#view-my-bugs`);
+    expect(def.name).toBe("My bugs");
+
+    const views = tracker.savedViews;
+    expect(views).toHaveLength(1);
+    expect(views[0].name).toBe("My bugs");
+    expect(views[0].payload).toBe('{"labels":["bug"]}');
+  });
+
+  it("links each view from the tracker via wf:savedView and sorts by name", () => {
+    const { tracker, store } = newTracker();
+    tracker.defineSavedView("Zeta", "{}");
+    tracker.defineSavedView("Alpha", "{}");
+    expect(tracker.savedViews.map((v) => v.name)).toEqual(["Alpha", "Zeta"]);
+    expect([...store].some((q) => q.predicate.value === wf("savedView"))).toBe(true);
+  });
+
+  it("overwrites a view in place when re-defined at the same IRI (no stale payload)", () => {
+    const { tracker } = newTracker();
+    const first = tracker.defineSavedView("Bugs", '{"labels":["bug"]}');
+    const second = tracker.defineSavedView("Bugs renamed", '{"labels":["bug","ui"]}', first.iri);
+    expect(second.iri).toBe(first.iri);
+    const views = tracker.savedViews;
+    expect(views).toHaveLength(1);
+    expect(views[0].name).toBe("Bugs renamed");
+    expect(views[0].payload).toBe('{"labels":["bug","ui"]}');
+  });
+
+  it("removes a view's node and the tracker's link to it", () => {
+    const { tracker, store } = newTracker();
+    const a = tracker.defineSavedView("A", "{}");
+    tracker.defineSavedView("B", "{}");
+    tracker.removeSavedView(a.iri);
+    expect(tracker.savedViews.map((v) => v.name)).toEqual(["B"]);
+    // No dangling triples on the removed node.
+    expect([...store].some((q) => q.subject.value === a.iri)).toBe(false);
+  });
+
+  it("skips a malformed view node missing its name or payload (defensive)", () => {
+    const { tracker, store } = newTracker();
+    const good = tracker.defineSavedView("Good", "{}");
+    // A linked-but-empty node (no title/payload) must not surface as a view.
+    const orphan = `${DOC}#view-orphan`;
+    store.addQuad(
+      DataFactory.namedNode(`${DOC}#this`),
+      DataFactory.namedNode(wf("savedView")),
+      DataFactory.namedNode(orphan),
+    );
+    expect(tracker.savedViews.map((v) => v.iri)).toEqual([good.iri]);
+  });
+});
+
 describe("F1: configurable workflows", () => {
   const DOC = "http://localhost:3000/alice/issue-tracker/tracker.ttl";
   const TRACKER = `${DOC}#this`;

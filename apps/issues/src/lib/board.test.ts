@@ -8,6 +8,8 @@ import {
   optimisticMove,
   revertMove,
   revertMoveIfCurrent,
+  swimlanes,
+  UNGROUPED_LANE,
 } from "./board";
 import { DEFAULT_WORKFLOW, type WorkflowDef } from "./issue";
 import type { IssueRecord } from "./repository";
@@ -238,5 +240,62 @@ describe("revertMoveIfCurrent — a stale failure never clobbers a newer move", 
     expect(reverted[0].priority).toBe("low"); // priority rolled back
     expect(reverted[0].status).toBe("todo"); // status untouched by a priority revert
     expect(reverted[0].assignee).toBe("bob"); // the concurrent reassignment survives
+  });
+});
+
+describe("swimlanes — board partitioning (Jira hallmark)", () => {
+  const label = (k: string) => `name(${k})`;
+
+  it("'none' returns one flat lane holding every issue", () => {
+    const issues = [mk({ url: "a", assignee: "alice" }), mk({ url: "b" })];
+    const lanes = swimlanes(issues, "none", label);
+    expect(lanes).toHaveLength(1);
+    expect(lanes[0].key).toBe(UNGROUPED_LANE);
+    expect(lanes[0].issues.map((i) => i.url)).toEqual(["a", "b"]);
+  });
+
+  it("lanes by assignee, ordered by label, with an Unassigned catch-all last", () => {
+    const issues = [
+      mk({ url: "a1", assignee: "zeb" }),
+      mk({ url: "a2", assignee: "amy" }),
+      mk({ url: "u1" }), // unassigned
+      mk({ url: "a3", assignee: "amy" }),
+    ];
+    const lanes = swimlanes(issues, "assignee", label);
+    expect(lanes.map((l) => l.key)).toEqual(["amy", "zeb", UNGROUPED_LANE]);
+    expect(lanes[0].issues.map((i) => i.url)).toEqual(["a2", "a3"]);
+    expect(lanes[1].issues.map((i) => i.url)).toEqual(["a1"]);
+    // The catch-all uses the friendly "Unassigned" label, not labelOf.
+    expect(lanes[2].label).toBe("Unassigned");
+    expect(lanes[2].issues.map((i) => i.url)).toEqual(["u1"]);
+  });
+
+  it("omits the catch-all lane when every issue has the lane value", () => {
+    const issues = [mk({ url: "a", assignee: "amy" }), mk({ url: "b", assignee: "bob" })];
+    const lanes = swimlanes(issues, "assignee", label);
+    expect(lanes.map((l) => l.key)).toEqual(["amy", "bob"]);
+    expect(lanes.some((l) => l.key === UNGROUPED_LANE)).toBe(false);
+  });
+
+  it("lanes by epic (the issue's parent), with a 'No epic' catch-all", () => {
+    const issues = [
+      mk({ url: "c1", parent: "epicB" }),
+      mk({ url: "c2", parent: "epicA" }),
+      mk({ url: "loose" }), // no parent
+    ];
+    const lanes = swimlanes(issues, "epic", (k) => k); // label = the url itself
+    expect(lanes.map((l) => l.key)).toEqual(["epicA", "epicB", UNGROUPED_LANE]);
+    expect(lanes[2].label).toBe("No epic");
+    expect(lanes[2].issues.map((i) => i.url)).toEqual(["loose"]);
+  });
+
+  it("resolves lane labels via labelOf (people/epic titles), used for ordering", () => {
+    // labelOf maps webids to display names; ordering is by the LABEL, not the key.
+    const named = (k: string) => ({ z_id: "Aaron", a_id: "Zach" }[k] ?? k);
+    const issues = [mk({ url: "1", assignee: "a_id" }), mk({ url: "2", assignee: "z_id" })];
+    const lanes = swimlanes(issues, "assignee", named);
+    // "Aaron" (z_id) sorts before "Zach" (a_id) by label.
+    expect(lanes.map((l) => l.label)).toEqual(["Aaron", "Zach"]);
+    expect(lanes[0].key).toBe("z_id");
   });
 });

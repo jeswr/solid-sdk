@@ -53,6 +53,17 @@ export const TIME = "http://www.w3.org/2006/time#";
 export const NOTIFY = "http://www.w3.org/ns/solid/notifications#";
 
 export const wf = (local: string) => `${WF}${local}`;
+/**
+ * Saved-view predicates. A shareable saved view is persisted in the tracker
+ * config document (so it follows the user across devices and is visible to any
+ * collaborator who can read the tracker — the Jira/Monday "saved filter"
+ * hallmark), declared via `wf:savedView` from the tracker. Its serialised query
+ * + layout are carried as a single JSON literal on `wf:viewQuery`; `dct:title`
+ * holds the display name. The query JSON is an app-private payload, not a
+ * federated predicate — the cross-app model is unchanged.
+ */
+export const SAVED_VIEW = wf("savedView");
+export const VIEW_QUERY = wf("viewQuery");
 export const dct = (local: string) => `${DCT}${local}`;
 export const rdf = (local: string) => `${RDF}${local}`;
 export const rdfs = (local: string) => `${RDFS}${local}`;

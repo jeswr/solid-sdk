@@ -7,6 +7,9 @@ import { ConflictError } from "@/lib/errors";
 import { RdfFetchError } from "@jeswr/fetch-rdf";
 import type { IssueState, StatusSlug } from "@/lib/issue";
 import { readIssueCache, writeIssueCache } from "@/lib/issue-cache";
+import { PodSavedViews, type PodSavedView } from "@/lib/pod-saved-views";
+import type { IssueQuery } from "@/lib/filter";
+import type { View } from "@/lib/view";
 
 export type { IssueRecord, SprintRecord, ActivityRecord, WorklogRecord } from "@/lib/repository";
 
@@ -81,6 +84,12 @@ export interface UseIssues {
    * issues in flight at once.
    */
   statusHistory: (urls: string[]) => Promise<Map<string, { to: StatusSlug; at: Date }[]>>;
+  /** List the tracker's shareable, pod-persisted saved views (name-sorted). */
+  listSavedViews: () => Promise<PodSavedView[]>;
+  /** Save (or overwrite by name) a shareable saved view in the tracker config. */
+  saveView: (name: string, query: IssueQuery, view?: View) => Promise<PodSavedView>;
+  /** Remove a shareable saved view from the tracker config (by its IRI). */
+  removeView: (iri: string) => Promise<void>;
 }
 
 /**
@@ -309,6 +318,30 @@ export function useIssues(trackerUrl: string | null, creator: string | null): Us
     [trackerUrl, creator],
   );
 
+  // Shareable, pod-persisted saved views (tracker-config reads/writes). These do
+  // NOT touch the issue list, so they bypass the blocking issue refresh in
+  // `mutate` — they operate directly on a fresh Repository.
+  const listSavedViews = useCallback(async () => {
+    if (!trackerUrl) return [];
+    return new PodSavedViews(new Repository(trackerUrl, undefined, creator ?? undefined)).list();
+  }, [trackerUrl, creator]);
+
+  const saveView = useCallback(
+    async (name: string, query: IssueQuery, view?: View) => {
+      if (!trackerUrl) throw new Error("Not signed in.");
+      return new PodSavedViews(new Repository(trackerUrl, undefined, creator ?? undefined)).save(name, query, view);
+    },
+    [trackerUrl, creator],
+  );
+
+  const removeView = useCallback(
+    async (iri: string) => {
+      if (!trackerUrl) throw new Error("Not signed in.");
+      await new PodSavedViews(new Repository(trackerUrl, undefined, creator ?? undefined)).remove(iri);
+    },
+    [trackerUrl, creator],
+  );
+
   return {
     issues,
     sprints,
@@ -336,5 +369,8 @@ export function useIssues(trackerUrl: string | null, creator: string | null): Us
     batch: (fn) => mutate(fn),
     activityLog,
     statusHistory,
+    listSavedViews,
+    saveView,
+    removeView,
   };
 }

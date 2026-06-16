@@ -10,7 +10,8 @@ import { setGroupAccess } from "@/lib/sharing";
 import { type TrackerLocation } from "@/lib/profile";
 import { ConflictError } from "@/lib/errors";
 import { filterAndSort, facets, DEFAULT_QUERY, type IssueQuery, type SortKey } from "@/lib/filter";
-import { SavedViews, type SavedView } from "@/lib/saved-views";
+import { SavedViews } from "@/lib/saved-views";
+import type { PodSavedView } from "@/lib/pod-saved-views";
 import { resolveView, viewHref, VIEW_KEY, type View } from "@/lib/view";
 import { DEFAULT_WORKFLOW, type FieldDef, type Priority, type StatusSlug, type WorkflowDef } from "@/lib/issue";
 import { IssueFormDialog, type IssueFormSubmit } from "@/components/issue-form-dialog";
@@ -23,7 +24,7 @@ import { TeamDialog } from "@/components/team-dialog";
 import { FieldsDialog } from "@/components/fields-dialog";
 import { IssueBoard } from "@/components/issue-board";
 import { SaveIndicator } from "@/components/save-indicator";
-import { boardColumns, boardIssues, moveForColumn, optimisticMove, revertMoveIfCurrent } from "@/lib/board";
+import { boardColumns, boardIssues, moveForColumn, optimisticMove, revertMoveIfCurrent, type SwimlaneBy } from "@/lib/board";
 import { EpicView } from "@/components/epic-view";
 import { DashboardView } from "@/components/dashboard-view";
 import { WorkloadView } from "@/components/workload-view";
@@ -181,10 +182,13 @@ export function IssuesView() {
   // is view state, not persisted — a refresh brings them back if still relevant.
   const [archived, setArchived] = useState<Set<string>>(new Set());
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
-  const savedViewsStore = useMemo(() => new SavedViews(), []);
-  const [views, setViews] = useState<SavedView[]>([]);
+  // Saved views are now pod-persisted (shareable, cross-device — Jira/Monday
+  // saved filters). The localStorage store is kept only to MIGRATE any
+  // device-local views the user saved before this change into their pod.
+  const [views, setViews] = useState<PodSavedView[]>([]);
   const [saveViewOpen, setSaveViewOpen] = useState(false);
   const [viewName, setViewName] = useState("");
+  const [groupBoardBy, setGroupBoardBy] = useState<SwimlaneBy>("none");
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [automationsOpen, setAutomationsOpen] = useState(false);
   const [automations, setAutomations] = useState<AutomationSettings | null>(null);
@@ -230,12 +234,48 @@ export function IssuesView() {
   }, [loadTrackerInfo]);
 
   useEffect(() => {
-    // localStorage is client-only, so views are read after mount.
+    // Automations stay device-local for now (per-device toggles).
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setViews(savedViewsStore.list());
-     
     setAutomations(loadAutomationSettings());
-  }, [savedViewsStore]);
+  }, []);
+
+  // Load the tracker's shareable saved views, MIGRATING any localStorage views
+  // saved before pod-backing landed (one-time, only on a writable own tracker).
+  // Tagged with the tracker URL so a slow load from a previously-open project
+  // can never leak its views into this one (the snapshot/info pattern).
+  const loadSavedViews = useCallback(async () => {
+    const url = tracker.trackerUrl;
+    try {
+      let podViews = await issues.listSavedViews();
+      // Migrate device-local views into the pod the first time we have a writable
+      // own tracker, then clear the local store so it never re-migrates.
+      if (isOwn && issues.canCreate) {
+        const local = new SavedViews();
+        const stale = local.list();
+        if (stale.length > 0) {
+          const existing = new Set(podViews.map((v) => v.name));
+          for (const v of stale) {
+            if (existing.has(v.name)) continue;
+            try {
+              await issues.saveView(v.name, v.query, v.view);
+            } catch {
+              /* best-effort migration; a failure leaves the local copy intact */
+            }
+          }
+          local.clear();
+          podViews = await issues.listSavedViews();
+        }
+      }
+      if (tracker.trackerUrl === url) setViews(podViews);
+    } catch {
+      if (tracker.trackerUrl === url) setViews([]);
+    }
+  }, [issues, isOwn, tracker.trackerUrl]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadSavedViews();
+  }, [loadSavedViews]);
 
   // Built-in automations: evaluate whenever fresh issue state arrives; apply in
   // one batch. State changes remove the trigger conditions, and the applied-set
@@ -304,19 +344,32 @@ export function IssuesView() {
     return () => window.removeEventListener("keydown", onKey);
   }, [issues.canCreate, setView]);
 
-  const saveCurrentView = () => {
+  // Apply a saved view: restore its query AND its captured layout (board/list/…),
+  // so reopening a saved view lands you on the same board the way Jira/Monday do.
+  const applyView = useCallback(
+    (v: PodSavedView) => {
+      setQuery(v.query);
+      if (v.view) setView(v.view);
+    },
+    [setView],
+  );
+
+  const saveCurrentView = async () => {
     const name = viewName.trim();
     if (!name) return;
-    savedViewsStore.save(name, query);
-    setViews(savedViewsStore.list());
-    setViewName("");
     setSaveViewOpen(false);
-    toast.success("View saved");
+    setViewName("");
+    // Capture the active layout alongside the query so the view restores both.
+    await run(async () => {
+      await issues.saveView(name, query, view);
+      await loadSavedViews();
+    }, "View saved");
   };
-  const deleteView = (id: string) => {
-    savedViewsStore.remove(id);
-    setViews(savedViewsStore.list());
-  };
+  const deleteView = (iri: string) =>
+    run(async () => {
+      await issues.removeView(iri);
+      await loadSavedViews();
+    }, "View deleted");
 
   const assigneeSuggestions = useMemo(
     () => (group.iri ? [group.iri, ...group.members] : group.members),
@@ -350,6 +403,20 @@ export function IssuesView() {
   const commentsIssue = useMemo(
     () => issues.issues.find((i) => i.url === commentsUrl),
     [issues.issues, commentsUrl],
+  );
+  // Resolve a swimlane value to its label: an assignee WebID → "Team"/short
+  // WebID; an epic issue URL → the epic's title (falling back to its short URL).
+  const epicTitleByUrl = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const i of issues.issues) if (i.issueType === "epic") m.set(i.url, i.title);
+    return m;
+  }, [issues.issues]);
+  const swimlaneLabel = useCallback(
+    (value: string): string => {
+      if (groupBoardBy === "assignee") return value === group.iri ? "Team" : shortWebId(value);
+      return epicTitleByUrl.get(value) ?? shortWebId(value);
+    },
+    [groupBoardBy, group.iri, epicTitleByUrl],
   );
   // F3: (re)load the provenance log whenever the open issue or the issue data
   // (which a mutation refreshes) changes. Stale results are dropped if the dialog
@@ -513,7 +580,7 @@ export function IssuesView() {
         { id: "signout", label: "Sign out", run: logout },
       ],
     },
-    { heading: "Saved views", items: views.map((v) => ({ id: `v-${v.id}`, label: v.name, run: () => setQuery(v.query) })) },
+    { heading: "Saved views", items: views.map((v) => ({ id: `v-${v.iri}`, label: v.name, run: () => applyView(v) })) },
   ];
 
   return (
@@ -697,26 +764,32 @@ export function IssuesView() {
                   <DropdownMenuLabel className="font-normal text-muted-foreground">No saved views</DropdownMenuLabel>
                 ) : (
                   views.map((v) => (
-                    <div key={v.id} className="flex items-center">
-                      <DropdownMenuItem className="flex-1" onClick={() => setQuery(v.query)}>
+                    <div key={v.iri} className="flex items-center">
+                      <DropdownMenuItem className="flex-1" onClick={() => applyView(v)}>
                         {v.name}
                       </DropdownMenuItem>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="mr-1 size-7"
-                        aria-label={`Delete view ${v.name}`}
-                        onClick={() => deleteView(v.id)}
-                      >
-                        <Trash2 className="size-3.5" aria-hidden />
-                      </Button>
+                      {isOwn && issues.canCreate && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="mr-1 size-7"
+                          aria-label={`Delete view ${v.name}`}
+                          onClick={() => deleteView(v.iri)}
+                        >
+                          <Trash2 className="size-3.5" aria-hidden />
+                        </Button>
+                      )}
                     </div>
                   ))
                 )}
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => setSaveViewOpen(true)}>
-                  <BookmarkPlus className="size-4" aria-hidden /> Save current view…
-                </DropdownMenuItem>
+                {isOwn && issues.canCreate && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => setSaveViewOpen(true)}>
+                      <BookmarkPlus className="size-4" aria-hidden /> Save current view…
+                    </DropdownMenuItem>
+                  </>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
 
@@ -742,17 +815,29 @@ export function IssuesView() {
               <ArrowDownUp className="size-4" aria-hidden />
             </Button>
 
-            {/* Group-by (board only) */}
+            {/* Group-by + swimlanes (board only) */}
             {view === "board" && (
-              <Select value={groupBy} onValueChange={(v) => setGroupBy(v as "status" | "priority")}>
-                <SelectTrigger className="w-36" aria-label="Group by">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="status">Group: Status</SelectItem>
-                  <SelectItem value="priority">Group: Priority</SelectItem>
-                </SelectContent>
-              </Select>
+              <>
+                <Select value={groupBy} onValueChange={(v) => setGroupBy(v as "status" | "priority")}>
+                  <SelectTrigger className="w-36" aria-label="Group by">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="status">Group: Status</SelectItem>
+                    <SelectItem value="priority">Group: Priority</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={groupBoardBy} onValueChange={(v) => setGroupBoardBy(v as SwimlaneBy)}>
+                  <SelectTrigger className="w-40" aria-label="Swimlanes">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Swimlanes: None</SelectItem>
+                    <SelectItem value="assignee">Swimlanes: Assignee</SelectItem>
+                    <SelectItem value="epic">Swimlanes: Epic</SelectItem>
+                  </SelectContent>
+                </Select>
+              </>
             )}
 
             {/* View toggle */}
@@ -915,6 +1000,8 @@ export function IssuesView() {
             cardActions={(issue) => cardActions(issue, "board")}
             canWrite={issues.canCreate}
             columns={boardColumns(workflow, groupBy)}
+            swimlaneBy={groupBoardBy}
+            labelOf={swimlaneLabel}
             groupOf={(i) => (groupBy === "status" ? i.status : (i.priority ?? "none"))}
             onMove={(url, key) => {
               // Optimistic move (pss-w29w): slide the card immediately, persist in

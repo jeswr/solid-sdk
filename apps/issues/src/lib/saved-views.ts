@@ -1,10 +1,18 @@
 import type { IssueQuery } from "./filter";
+import type { View } from "./view";
 
-/** A named, persisted filter/sort preset. */
+/**
+ * A named, persisted filter/sort/layout preset. The optional `view` captures the
+ * active layout (board/list/timeline/…) so restoring a saved view also restores
+ * how the work is displayed — the Jira/Monday "saved filter + board" behaviour.
+ * `view` is optional for backward-compatibility with views saved before layouts
+ * were captured (they restore only the query and leave the layout unchanged).
+ */
 export interface SavedView {
   id: string;
   name: string;
   query: IssueQuery;
+  view?: View;
 }
 
 const KEY = "solid-issues:saved-views";
@@ -32,14 +40,19 @@ export class SavedViews {
   }
 
   /** Save (or overwrite by name) a view; returns it. */
-  save(name: string, query: IssueQuery, id = crypto.randomUUID()): SavedView {
-    const view: SavedView = { id, name: name.trim(), query };
-    const rest = this.list().filter((v) => v.name !== view.name);
-    this.#storage.setItem(KEY, JSON.stringify([view, ...rest]));
-    return view;
+  save(name: string, query: IssueQuery, id = crypto.randomUUID(), view?: View): SavedView {
+    const saved: SavedView = { id, name: name.trim(), query, ...(view ? { view } : {}) };
+    const rest = this.list().filter((v) => v.name !== saved.name);
+    this.#storage.setItem(KEY, JSON.stringify([saved, ...rest]));
+    return saved;
   }
 
   remove(id: string): void {
     this.#storage.setItem(KEY, JSON.stringify(this.list().filter((v) => v.id !== id)));
+  }
+
+  /** Replace the entire stored list (used when migrating to pod-backed views). */
+  clear(): void {
+    this.#storage.setItem(KEY, JSON.stringify([]));
   }
 }
