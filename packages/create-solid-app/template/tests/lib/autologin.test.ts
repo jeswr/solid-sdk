@@ -28,6 +28,7 @@ import {
   parseAutologinFragment,
   runAutologin,
 } from "@/lib/solid/autologin";
+import { RedirectAbortedError } from "@/lib/solid/webid-token-provider";
 
 const WEBID = "https://alice.example/profile/card#me";
 const WEBID_B = "https://bob.example/profile/card#me";
@@ -39,6 +40,7 @@ function makeCallbacks(opts: {
   href: string;
   beginRedirectLogin?: () => Promise<{ authorizationUrl: string }>;
   completeRedirectLogin?: () => Promise<void>;
+  abortRedirectLogin?: () => Promise<void>;
   authenticatedWebId?: () => string | undefined;
   readProfile?: (id: string) => Promise<unknown>;
 }) {
@@ -49,6 +51,7 @@ function makeCallbacks(opts: {
       opts.beginRedirectLogin ?? (async () => ({ authorizationUrl: ISSUER_AUTH })),
     ),
     completeRedirectLogin: vi.fn(opts.completeRedirectLogin ?? (async () => {})),
+    abortRedirectLogin: vi.fn(opts.abortRedirectLogin ?? (async () => {})),
     reset: vi.fn(),
     authenticatedWebId: vi.fn(opts.authenticatedWebId ?? (() => WEBID)),
     readProfile: vi.fn(
@@ -73,6 +76,7 @@ function makeCallbacks(opts: {
     provider: {
       beginRedirectLogin: calls.beginRedirectLogin as never,
       completeRedirectLogin: calls.completeRedirectLogin as never,
+      abortRedirectLogin: calls.abortRedirectLogin as never,
       authenticatedWebId: calls.authenticatedWebId as never,
       reset: calls.reset as never,
     },
@@ -429,12 +433,17 @@ describe("runAutologin — (c) loop-guard-fallback: bounced back unauthenticated
   });
 });
 
-describe("runAutologin — (finding 3) abort-redirect: an OIDC error return resets + cleans + surfaces", () => {
+describe("runAutologin — abort-redirect: an OIDC error return is STATE-VALIDATED before any teardown (roborev MEDIUM)", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("resets the provider (clears the pending record + state), clears the sentinel, cleans the URL, and surfaces the error", async () => {
+  it("(validated error) abortRedirectLogin threw RedirectAbortedError ⇒ clear sentinel, clean URL, surface the error", async () => {
     const { cb, calls, sentinel } = makeCallbacks({
       href: `${ORIGIN}/?error=login_required&state=xyz`,
+      // The provider validated the callback `state` against the persisted record,
+      // consumed it + reset itself, and threw RedirectAbortedError (the genuine decline).
+      abortRedirectLogin: async () => {
+        throw new RedirectAbortedError("login_required: declined", "login_required");
+      },
     });
     // Simulate the sentinel being set by the begin pass that preceded this bounce.
     cb.setSentinel(WEBID);
@@ -445,17 +454,57 @@ describe("runAutologin — (finding 3) abort-redirect: an OIDC error return rese
       cb,
     );
 
-    // The provider is reset so its persisted redirect record + state are cleared.
-    expect(calls.reset).toHaveBeenCalled();
-    // The one-shot sentinel is cleared so a later fresh attempt is NOT blocked.
+    // The error callback was routed THROUGH the provider's state-validating abort.
+    expect(calls.abortRedirectLogin).toHaveBeenCalledWith(
+      `${ORIGIN}/?error=login_required&state=xyz`,
+    );
+    // The provider already reset itself inside abortRedirectLogin — runAutologin must
+    // NOT call reset() again (the validated-abort owns the teardown).
+    expect(calls.reset).not.toHaveBeenCalled();
+    // A validated decline: clear the one-shot sentinel so a later attempt is not blocked,
+    // clean the URL (strip `?error&state`), and surface the provider's error message.
     expect(calls.clearSentinel).toHaveBeenCalled();
     expect(sentinel.value).toBeNull();
-    // The URL is cleaned (strip `?error&state` + fragment).
     expect(calls.replaceUrl).toHaveBeenCalledWith(`${ORIGIN}/`);
-    // The OAuth error is surfaced to the UI.
     expect(calls.onFallback).toHaveBeenCalledWith("login_required: declined");
     // No completion / no second redirect.
     expect(calls.completeRedirectLogin).not.toHaveBeenCalled();
+    expect(calls.beginRedirectLogin).not.toHaveBeenCalled();
+    expect(calls.assignUrl).not.toHaveBeenCalled();
+  });
+
+  // THE CORE roborev MEDIUM regression at the orchestration layer: a FORGED `?error&state`
+  // whose state did NOT match makes abortRedirectLogin throw a NON-RedirectAbortedError.
+  // runAutologin must then leave the in-flight login UNTOUCHED — no reset, no sentinel
+  // clear, no URL rewrite — so the forged callback cannot destroy a legitimate login.
+  it("(SECURITY: forged/mismatched state) abortRedirectLogin threw a NON-abort error ⇒ NOTHING destructive: no reset, no sentinel clear, no URL rewrite", async () => {
+    const { cb, calls, sentinel } = makeCallbacks({
+      href: `${ORIGIN}/?error=login_required&state=FORGED`,
+      // State mismatch inside oauth.validateAuthResponse → provider left the pending
+      // record + its state INTACT and threw a plain (non-RedirectAborted) error.
+      abortRedirectLogin: async () => {
+        throw new Error('unexpected "state" response parameter value');
+      },
+    });
+    cb.setSentinel(WEBID);
+    calls.setSentinel.mockClear();
+
+    await runAutologin(
+      { kind: "abort-redirect", error: "login_required" },
+      cb,
+    );
+
+    // The callback was routed through the provider's validator.
+    expect(calls.abortRedirectLogin).toHaveBeenCalledWith(
+      `${ORIGIN}/?error=login_required&state=FORGED`,
+    );
+    // CRUCIAL — the forged error must NOT tear down the legitimate in-flight login:
+    expect(calls.reset).not.toHaveBeenCalled(); // provider state preserved
+    expect(calls.clearSentinel).not.toHaveBeenCalled(); // loop-guard preserved
+    expect(sentinel.value).toBe(WEBID); // sentinel untouched
+    expect(calls.replaceUrl).not.toHaveBeenCalled(); // URL not rewritten
+    // A benign fallback is surfaced; the pending sign-in is unaffected.
+    expect(calls.onFallback).toHaveBeenCalled();
     expect(calls.beginRedirectLogin).not.toHaveBeenCalled();
     expect(calls.assignUrl).not.toHaveBeenCalled();
   });

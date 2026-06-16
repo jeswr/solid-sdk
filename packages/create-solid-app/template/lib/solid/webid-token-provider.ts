@@ -116,6 +116,29 @@ export class ReactiveAuthResetError extends Error {
   }
 }
 
+/**
+ * Thrown by {@link WebIdDPoPTokenProvider.abortRedirectLogin} ONLY when an OIDC error
+ * callback's `state` VALIDATED against the persisted redirect record — i.e. the broker
+ * genuinely declined THIS in-flight redirect login (or the user declined). When this
+ * is thrown the provider has already cleared the persisted record + reset its state, so
+ * the caller may clear the loop-guard sentinel + clean the URL and surface the error.
+ *
+ * Any OTHER throw from `abortRedirectLogin` (a `state` mismatch — a forged/stray
+ * `?error&state`, or a generation reset) means the callback did NOT belong to the
+ * pending flow: the record + provider state are LEFT INTACT, and the caller must NOT
+ * tear down the legitimate in-flight login. Distinguishing the two by TYPE (not a
+ * string match) is what makes the abort path fail-closed against a forged error return.
+ */
+export class RedirectAbortedError extends Error {
+  /** The OAuth `error` code from the validated error response (e.g. `login_required`). */
+  readonly oauthError: string;
+  constructor(message: string, oauthError: string) {
+    super(message);
+    this.name = "RedirectAbortedError";
+    this.oauthError = oauthError;
+  }
+}
+
 /** The default issuer policy: single → it; several → throw (never pick silently). */
 function defaultChooseIssuer(webId: string): ChooseIssuerCallback {
   return async (issuers: string[]) => {
@@ -1080,6 +1103,84 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
         // sessionStorage may be unavailable (private mode / SSR) — non-fatal.
       }
     }
+  }
+
+  /**
+   * Handle a FULL-PAGE redirect that returned an OIDC ERROR (`?error&state` — the
+   * broker declined silent SSO, or the user declined) — but ONLY after PROVING the
+   * callback belongs to THIS pending redirect flow.
+   *
+   * SECURITY (roborev MEDIUM finding): an error return must NOT be trusted on the
+   * mere presence of `error`+`state`. The caller used to {@link reset} the provider
+   * (clearing the persisted record — its single-use DPoP key + PKCE verifier +
+   * state) for ANY `?error&state` URL, so a forged/stray `https://app/?error=…&state=…`
+   * (a CSRF/mix-up) could destroy a legitimate in-flight redirect login. Here we run
+   * the SAME state check the success path relies on — {@link oauth.validateAuthResponse}
+   * compares the callback `state` against the PERSISTED `record.state` (and the `iss`,
+   * when advertised) BEFORE it surfaces the error:
+   *   - state MATCHES + an `error` is present → `validateAuthResponse` throws
+   *     {@link oauth.AuthorizationResponseError}. This IS our flow declining: clear the
+   *     persisted record + reset() the provider, then throw a descriptive error.
+   *   - state MISMATCH / missing (a forged or unrelated callback) → `validateAuthResponse`
+   *     throws an {@link oauth.OperationProcessingError} (NOT AuthorizationResponseError).
+   *     We DO NOT consume the record and DO NOT reset — the pending flow is left intact —
+   *     and re-throw so the caller leaves the in-flight login untouched.
+   * The persisted record is therefore cleared ONLY when the callback genuinely belongs
+   * to this flow, exactly mirroring how `completeRedirectLogin` validates `?code&state`.
+   *
+   * @param callbackUrl the full return URL (`location.href`) carrying `?error&state`.
+   * @throws {@link RedirectAbortedError} on a VALIDATED error return (record consumed +
+   *   provider reset — the caller may then clean up). Throws the underlying
+   *   state-mismatch error (or {@link ReactiveAuthResetError}) on a forged/unrelated
+   *   callback, leaving the record + provider state fully INTACT.
+   */
+  async abortRedirectLogin(callbackUrl: string): Promise<void> {
+    const generation = this.#generation;
+    const controller = this.#authController;
+    const raw = sessionStorage.getItem(REDIRECT_FLOW_STORAGE_KEY);
+    if (!raw) {
+      throw new Error("No pending redirect login to abort.");
+    }
+    const record = JSON.parse(raw) as PersistedRedirectFlow;
+    const issuer = new URL(record.issuer);
+    const http = this.#httpOptions(issuer, controller.signal);
+    // Discovery is needed so validateAuthResponse can assert `iss` (when the AS
+    // advertises it). A reset() during discovery supersedes this — leave the record
+    // for the next pass to reconcile.
+    const authorizationServer = await this.#discover(issuer, http);
+    if (generation !== this.#generation) throw new ReactiveAuthResetError();
+    try {
+      // Throws OperationProcessingError on a state MISMATCH/missing (BEFORE the error
+      // check), or AuthorizationResponseError when state matched AND an `error` is set.
+      oauth.validateAuthResponse(
+        authorizationServer,
+        record.client,
+        new URL(callbackUrl),
+        record.state,
+      );
+    } catch (e) {
+      if (e instanceof oauth.AuthorizationResponseError) {
+        // State VALIDATED and the response is a genuine error for THIS flow. Now — and
+        // only now — it is safe to consume the persisted record + drop provider state.
+        this.reset(); // clears the persisted record + all per-identity state.
+        const params = e.cause instanceof URLSearchParams ? e.cause : undefined;
+        const code = params?.get("error") ?? "login_failed";
+        const description = params?.get("error_description");
+        throw new RedirectAbortedError(
+          description
+            ? `${code}: ${description}`
+            : `Sign-in was declined by the identity provider (${code}).`,
+          code,
+        );
+      }
+      // State MISMATCH / missing / any other validation failure: the callback does NOT
+      // belong to this pending flow. Leave the persisted record + provider state intact
+      // so a forged/stray `?error&state` cannot destroy a legitimate in-flight login.
+      throw e;
+    }
+    // No error in the response (e.g. only `?state` with no `error`/`code`) — not an
+    // abortable error return. Do NOT consume the record; let the caller decide.
+    throw new Error("Redirect callback is not an OIDC error response.");
   }
 
   /**

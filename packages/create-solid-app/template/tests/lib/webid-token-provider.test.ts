@@ -90,7 +90,25 @@ vi.mock("oauth4webapi", () => {
       iat: 0,
       exp: 0,
     })),
-    AuthorizationResponseError: class extends Error {},
+    // Faithful to oauth4webapi: AuthorizationResponseError carries the response
+    // parameters (a URLSearchParams) on `.cause`, which abortRedirectLogin reads to
+    // surface the OAuth `error` / `error_description`.
+    AuthorizationResponseError: class AuthorizationResponseError extends Error {
+      cause?: unknown;
+      constructor(message: string, options?: { cause?: unknown }) {
+        super(message);
+        this.name = "AuthorizationResponseError";
+        this.cause = options?.cause;
+      }
+    },
+    // OperationProcessingError is what real validateAuthResponse throws on a state
+    // mismatch (BEFORE the error check) — distinct from AuthorizationResponseError.
+    OperationProcessingError: class OperationProcessingError extends Error {
+      constructor(message: string) {
+        super(message);
+        this.name = "OperationProcessingError";
+      }
+    },
   };
 });
 
@@ -100,6 +118,7 @@ const {
   withProbeFragment,
   httpUri,
   ReactiveAuthResetError,
+  RedirectAbortedError,
   REDIRECT_FLOW_STORAGE_KEY,
   hasPendingRedirectLogin,
   consumePendingRedirectWebId,
@@ -1182,5 +1201,166 @@ describe("REDIRECT autologin — beginRedirectLogin / completeRedirectLogin", ()
     );
     expect(upgraded.headers.get("Authorization")).toBe("DPoP tok-A");
     expect(provider.authenticatedWebId()).toBe(WEBID_A);
+  });
+
+  // ── ROBOREV MEDIUM (finding 2): an OIDC error return (`?error&state`) must NOT be
+  // trusted on the bare presence of error+state. abortRedirectLogin routes the callback
+  // through oauth.validateAuthResponse, which checks the callback `state` against the
+  // PERSISTED record's state BEFORE surfacing the error. Only a state-VALIDATED error
+  // return may consume the record + reset the provider; a forged/stray callback (bad or
+  // missing state) must leave the pending flow + provider state FULLY INTACT.
+  const ERROR_CALLBACK_GOOD_STATE =
+    "https://app.example/?error=login_required&state=state";
+  const ERROR_CALLBACK_BAD_STATE =
+    "https://app.example/?error=login_required&state=FORGED";
+
+  it("(abort) a VALIDATED error return (state matches the record) throws RedirectAbortedError, clears the record + resets", async () => {
+    const provider = makeRedirectProvider();
+    await provider.beginRedirectLogin(RETURN_URI);
+    expect(hasPendingRedirectLogin()).toBe(true);
+
+    // Real validateAuthResponse: state matches → it reaches the error check and throws
+    // AuthorizationResponseError carrying the response params on `.cause`.
+    vi.mocked(oauth.validateAuthResponse).mockImplementationOnce(() => {
+      throw new oauth.AuthorizationResponseError(
+        "authorization response from the server is an error",
+        {
+          cause: new URLSearchParams({
+            error: "login_required",
+            error_description: "interaction required",
+            state: "state",
+          }),
+        },
+      );
+    });
+
+    await expect(
+      provider.abortRedirectLogin(ERROR_CALLBACK_GOOD_STATE),
+    ).rejects.toBeInstanceOf(RedirectAbortedError);
+
+    // The state was validated against the persisted record before any teardown.
+    expect(oauth.validateAuthResponse).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      new URL(ERROR_CALLBACK_GOOD_STATE),
+      "state",
+    );
+    // VALIDATED error → the record is consumed and the provider is reset-clean.
+    expect(hasPendingRedirectLogin()).toBe(false);
+    expect(provider.authenticatedWebId()).toBeUndefined();
+    expect(provider.tokensAttachedCount()).toBe(0);
+  });
+
+  it("(abort) the RedirectAbortedError surfaces the OAuth error + description from the validated response", async () => {
+    const provider = makeRedirectProvider();
+    await provider.beginRedirectLogin(RETURN_URI);
+    vi.mocked(oauth.validateAuthResponse).mockImplementationOnce(() => {
+      throw new oauth.AuthorizationResponseError("error", {
+        cause: new URLSearchParams({
+          error: "access_denied",
+          error_description: "user declined",
+          state: "state",
+        }),
+      });
+    });
+    await provider.abortRedirectLogin(ERROR_CALLBACK_GOOD_STATE).then(
+      () => expect.unreachable("abort should reject"),
+      (e) => {
+        expect(e).toBeInstanceOf(RedirectAbortedError);
+        expect(e.oauthError).toBe("access_denied");
+        expect(e.message).toBe("access_denied: user declined");
+      },
+    );
+  });
+
+  // THE CORE roborev MEDIUM regression: a FORGED error callback whose `state` does NOT
+  // match the persisted record must be REJECTED — the record is NOT consumed and the
+  // provider is left untouched, so a stray/CSRF `?error&state` cannot destroy a
+  // legitimate in-flight redirect login.
+  it("(abort, SECURITY) a FORGED error callback (state mismatch) is rejected; the pending record + provider state are LEFT INTACT", async () => {
+    const provider = makeRedirectProvider();
+    await provider.beginRedirectLogin(RETURN_URI);
+    expect(hasPendingRedirectLogin()).toBe(true);
+    const recordBefore = sessionStorage.getItem(REDIRECT_FLOW_STORAGE_KEY);
+
+    // Real validateAuthResponse throws on a state mismatch BEFORE the error check —
+    // an OperationProcessingError, NOT an AuthorizationResponseError.
+    vi.mocked(oauth.validateAuthResponse).mockImplementationOnce(() => {
+      throw new oauth.OperationProcessingError(
+        'unexpected "state" response parameter value',
+      );
+    });
+
+    await expect(
+      provider.abortRedirectLogin(ERROR_CALLBACK_BAD_STATE),
+    ).rejects.not.toBeInstanceOf(RedirectAbortedError);
+
+    // CRUCIAL: the forged callback consumed NOTHING. The pending record is byte-for-byte
+    // intact, and the provider state is untouched — the legitimate login still resumable.
+    expect(hasPendingRedirectLogin()).toBe(true);
+    expect(sessionStorage.getItem(REDIRECT_FLOW_STORAGE_KEY)).toBe(recordBefore);
+    expect(provider.authenticatedWebId()).toBeUndefined();
+    expect(provider.tokensAttachedCount()).toBe(0);
+
+    // And the still-intact record can be completed by a genuine `?code&state` later —
+    // proving the forged error did not poison the flow.
+    await provider.completeRedirectLogin(CALLBACK);
+    expect(provider.authenticatedWebId()).toBe(WEBID_A);
+    expect(hasPendingRedirectLogin()).toBe(false);
+  });
+
+  it("(abort) with NO pending record throws and writes nothing (not a RedirectAbortedError)", async () => {
+    const provider = makeRedirectProvider();
+    await expect(
+      provider.abortRedirectLogin(ERROR_CALLBACK_GOOD_STATE),
+    ).rejects.toThrow(/No pending redirect login to abort/);
+    expect(provider.authenticatedWebId()).toBeUndefined();
+    expect(provider.tokensAttachedCount()).toBe(0);
+  });
+
+  it("(abort) a callback that VALIDATES but carries no error (only state) is rejected WITHOUT consuming the record", async () => {
+    const provider = makeRedirectProvider();
+    await provider.beginRedirectLogin(RETURN_URI);
+    const recordBefore = sessionStorage.getItem(REDIRECT_FLOW_STORAGE_KEY);
+    // validateAuthResponse resolves (no error param) — abortRedirectLogin then refuses
+    // to consume the record because this is not an error response.
+    vi.mocked(oauth.validateAuthResponse).mockReturnValueOnce(
+      new URLSearchParams({ state: "state" }),
+    );
+    await expect(
+      provider.abortRedirectLogin("https://app.example/?state=state"),
+    ).rejects.not.toBeInstanceOf(RedirectAbortedError);
+    // The record is intact — a state-only callback is not an abortable error return.
+    expect(hasPendingRedirectLogin()).toBe(true);
+    expect(sessionStorage.getItem(REDIRECT_FLOW_STORAGE_KEY)).toBe(recordBefore);
+  });
+
+  it("(abort) a reset() during discovery supersedes the abort (ReactiveAuthResetError); record left for reconciliation", async () => {
+    let releaseDiscovery!: () => void;
+    const gate = new Promise<void>((r) => {
+      releaseDiscovery = r;
+    });
+    const provider = makeRedirectProvider();
+    await provider.beginRedirectLogin(RETURN_URI);
+
+    vi.mocked(oauth.processDiscoveryResponse).mockImplementationOnce(async () => {
+      await gate;
+      return {
+        issuer: "https://issuer.example/",
+        authorization_endpoint: "https://issuer.example/auth",
+        token_endpoint: "https://issuer.example/token",
+        code_challenge_methods_supported: ["S256"],
+      } as oauth.AuthorizationServer;
+    });
+
+    const inflight = provider.abortRedirectLogin(ERROR_CALLBACK_GOOD_STATE);
+    inflight.catch(() => {});
+    await Promise.resolve();
+    provider.reset(); // logout / new login races the abort's discovery.
+    releaseDiscovery();
+
+    await expect(inflight).rejects.toBeInstanceOf(ReactiveAuthResetError);
+    // reset() itself cleared the record (its own contract); the abort did not consume it.
+    expect(provider.authenticatedWebId()).toBeUndefined();
   });
 });

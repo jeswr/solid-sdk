@@ -26,8 +26,11 @@
 //     the URL has `?code` + `?state`. Complete the exchange (silent SSO).
 //   CASE A' — returning from the broker redirect with an OIDC ERROR: a pending record
 //     exists AND the URL has `?error` + `?state` (the broker declined silent SSO /
-//     the user declined). Abort: reset the record + sentinel, clean the URL, surface
-//     the error — so a declined SSO does not leave a stale record blocking retries.
+//     the user declined). The error callback is routed THROUGH the provider's
+//     state-validating abort (oauth.validateAuthResponse against the persisted record):
+//     only a STATE-VALIDATED error consumes the record + resets + cleans up; a forged
+//     callback (state mismatch) leaves the in-flight login fully intact. This prevents
+//     a stray/CSRF `?error&state` from destroying a legitimate redirect login.
 //   CASE B  — a fresh deep-link: NOT logged in, NO pending record, and
 //     `location.hash` starts with `#autologin/`. Begin the redirect.
 //
@@ -38,6 +41,7 @@
 // A) clears the sentinel too.
 
 import {
+  RedirectAbortedError,
   type WebIdDPoPTokenProvider,
   webIdsEqual,
 } from "./webid-token-provider";
@@ -88,8 +92,9 @@ export interface AutologinEnv {
  *    return (`?error&state` — the broker declined silent SSO / the user declined).
  *    Without this the error return is NOT classified as a callback (it has no `code`),
  *    so the pending record + sentinel are left set, blocking later fresh attempts in
- *    the tab. ⇒ "abort-redirect" (reset the provider's record + clear sentinel +
- *    clean URL + surface the OAuth error).
+ *    the tab. ⇒ "abort-redirect". The TEARDOWN itself is gated on a provider-side STATE
+ *    CHECK (see {@link runAutologin}): only a state-validated error return consumes the
+ *    record + resets, so a forged `?error&state` cannot destroy the in-flight login.
  *  - CASE B (begin): NOT logged in, NO pending record, and `#autologin/<webid>` —
  *    but if the loop-guard sentinel is already set FOR THIS WebID (we bounced back
  *    unauthenticated for the same identity) ⇒ "loop-guard-fallback" (do NOT
@@ -205,7 +210,11 @@ export interface AutologinCallbacks {
   /** WebIdDPoPTokenProvider — its redirect methods + identity accessors. */
   provider: Pick<
     WebIdDPoPTokenProvider,
-    "beginRedirectLogin" | "completeRedirectLogin" | "authenticatedWebId" | "reset"
+    | "beginRedirectLogin"
+    | "completeRedirectLogin"
+    | "abortRedirectLogin"
+    | "authenticatedWebId"
+    | "reset"
   >;
   /** Read a profile (the template's readProfile). */
   readProfile: (webId: string) => Promise<unknown>;
@@ -264,10 +273,14 @@ export function cleanedUrl(href: string): string {
  *   redirect and full-page navigate. On any pre-redirect error: clear the sentinel
  *   and fall back to the login panel.
  *
- * abort-redirect (CASE A', the OIDC error return): reset the provider (clears the
- *   persisted redirect record + per-identity state), clear the sentinel, clean the URL
- *   (strip `?error&state` + fragment), and surface the OAuth error — so a declined
- *   silent SSO does NOT leave a stale record/sentinel blocking later attempts.
+ * abort-redirect (CASE A', the OIDC error return): route the callback through the
+ *   provider's STATE-VALIDATING {@link WebIdDPoPTokenProvider.abortRedirectLogin}. Only a
+ *   STATE-VALIDATED error (state matches the persisted record → RedirectAbortedError, the
+ *   provider having already cleared the record + reset) triggers the teardown here: clear
+ *   the sentinel, clean the URL (strip `?error&state` + fragment), surface the error. A
+ *   FORGED/stray `?error&state` (state mismatch → a non-abort throw) is left ENTIRELY
+ *   alone — no reset, no sentinel clear, no URL rewrite — so it cannot destroy a
+ *   legitimate in-flight redirect login (roborev MEDIUM finding).
  *
  * loop-guard-fallback: clear the sentinel, clean the fragment, fall back (no loop).
  */
@@ -289,16 +302,50 @@ export async function runAutologin(
     }
 
     case "abort-redirect": {
-      // CASE A' — the broker redirected back with an OIDC ERROR (declined silent
-      // SSO / the user declined). reset() the provider so the PENDING redirect
-      // record (its persisted DPoP key + PKCE verifier + state) is cleared along with
-      // any per-identity state — otherwise the stale record would block later fresh
-      // attempts. Clear the one-shot sentinel, clean the URL (strip `?error&state` +
-      // fragment), and surface the OAuth error to the UI. No re-attempt — no loop.
-      cb.provider.reset();
-      cb.clearSentinel();
-      cb.replaceUrl(cleanedUrl(cb.href()));
-      cb.onFallback(decision.error);
+      // CASE A' — the broker redirected back with an OIDC ERROR (`?error&state`:
+      // declined silent SSO / the user declined).
+      //
+      // SECURITY (roborev MEDIUM): do NOT reset/clear on the bare presence of
+      // `error`+`state`. Route the error callback through the PROVIDER, which validates
+      // the callback `state` against the PERSISTED redirect record (via
+      // oauth.validateAuthResponse) BEFORE consuming anything:
+      //  - VALIDATED error return → abortRedirectLogin clears the persisted record +
+      //    reset()s the provider, then throws a descriptive error. We then clear the
+      //    one-shot sentinel, clean the URL (strip `?error&state` + fragment), and
+      //    surface the error. No re-attempt — no loop.
+      //  - FORGED/STRAY callback (state mismatch/missing) → abortRedirectLogin throws
+      //    WITHOUT consuming the record or touching provider state. We MUST NOT reset,
+      //    NOT clear the sentinel, and NOT clean the URL toward a fresh state — the
+      //    legitimate in-flight redirect login is left fully intact so the forged error
+      //    cannot destroy it. We simply fall back (surface a benign message) and return.
+      try {
+        await cb.provider.abortRedirectLogin(cb.href());
+        // abortRedirectLogin NEVER resolves: it throws RedirectAbortedError on a
+        // validated error return, or the state-mismatch error otherwise. Reaching here
+        // means neither path consumed the record — treat as preserved (do nothing
+        // destructive) and surface a benign fallback.
+        cb.onFallback(
+          "Ignored an unrecognized sign-in response; your pending sign-in is unaffected.",
+        );
+      } catch (e) {
+        if (e instanceof RedirectAbortedError) {
+          // VALIDATED error return: the callback `state` matched the persisted record,
+          // so the broker genuinely declined THIS flow. The provider already cleared
+          // the persisted record + reset its state. Clear the loop-guard sentinel, clean
+          // the URL (strip `?error&state` + fragment), and surface the OAuth error.
+          cb.clearSentinel();
+          cb.replaceUrl(cleanedUrl(cb.href()));
+          cb.onFallback(e.message);
+          return;
+        }
+        // STATE MISMATCH / forged or unrelated `?error&state` (or a generation reset):
+        // the provider LEFT the pending flow + its own state intact. We must NOT tear
+        // down the legitimate in-flight login — NO reset, NO sentinel clear, NO URL
+        // rewrite. Surface only a benign message; the pending sign-in is unaffected.
+        cb.onFallback(
+          "Ignored an unrecognized sign-in response; your pending sign-in is unaffected.",
+        );
+      }
       return;
     }
 
