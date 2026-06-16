@@ -66,6 +66,13 @@ let shellConfig: ResolvedAppShellConfig | undefined =
     : undefined;
 /** Whether the precache (addAll) has already run for `shellConfig` this lifetime. */
 let shellPrecached = false;
+/**
+ * Monotonic token for the LATEST requested shell-config adoption (roborev Medium).
+ * Each `adoptShellConfig` change captures the token it bumped to; a slower task
+ * whose token is no longer the latest must NOT promote/cleanup — otherwise rapid
+ * v2→v3 messages could let a late v2 overwrite v3 and delete v3's bucket.
+ */
+let shellAdoptToken = 0;
 
 /** The CacheStorage cast to our minimal shell surface. */
 function shellCaches(): ShellCacheStorage {
@@ -84,17 +91,15 @@ function shellDeps(config: ResolvedAppShellConfig): ShellDeps {
 
 /**
  * Precache a given config's bucket WITHOUT touching any other bucket. Returns true
- * if the precache succeeded enough to serve offline (the fallback document — the one
- * a SPA boot depends on — is cached, or there is no configured fallback). Does NOT
- * mutate `shellConfig`/`shellPrecached` and does NOT clean up old buckets; the caller
- * promotes + cleans up only AFTER a successful precache, so the old working bucket is
- * never dropped before the new one can boot.
+ * only if EVERY configured precache entry cached (roborev Medium: boot-completeness
+ * — a fallback HTML whose referenced JS/CSS failed to precache would boot to a broken
+ * offline page). Does NOT mutate `shellConfig`/`shellPrecached` and does NOT clean up
+ * old buckets; the caller promotes + cleans up only AFTER a complete precache, so the
+ * old working bucket is never dropped before the new one can fully boot.
  */
 async function precacheConfig(config: ResolvedAppShellConfig): Promise<boolean> {
   const { failed } = await precacheAppShell(shellCaches(), config);
-  // The fallback doc is the must-have for an offline SPA boot. If it failed, the
-  // new bucket can't serve a boot — the caller should keep the old config.
-  return !config.fallback || !failed.includes(config.fallback);
+  return failed.length === 0;
 }
 
 /** Run the install-time precache for the current shellConfig (idempotent). */
@@ -117,12 +122,13 @@ async function runPrecache(): Promise<void> {
  * deploy's version/manifest must take effect, not be ignored for the active
  * worker's lifetime). A no-op when the incoming config is byte-equivalent.
  *
- * PROMOTE-AFTER-PRECACHE (roborev Medium): the new shell is precached into its OWN
- * versioned bucket (buckets are version-keyed, so the old, still-serving bucket is
- * untouched) BEFORE `shellConfig` is switched. We promote only once the new bucket
- * can actually boot offline (its fallback is cached) — so a slow/partial precache
- * never strands offline navigations on an empty new cache while the working old
- * shell is dropped. If the new precache can't boot, we keep the old config serving.
+ * PROMOTE-AFTER-COMPLETE-PRECACHE, LATEST-WINS (roborev Mediums): the new shell is
+ * precached into its OWN versioned bucket (buckets are version-keyed, so the old,
+ * still-serving bucket is untouched) BEFORE `shellConfig` is switched. We promote
+ * only once EVERY configured entry cached (not just the fallback — boot-completeness)
+ * AND only if this task is still the LATEST requested adoption (a monotonic token, so
+ * a slow v2 finishing after v3 can't overwrite v3 or delete its bucket). On any
+ * failure / supersession we keep the old working shell config + bucket.
  */
 function adoptShellConfig(next: AppShellConfig, event: ExtendableMessageEvent): void {
   if (next.precache.length === 0) return;
@@ -134,22 +140,27 @@ function adoptShellConfig(next: AppShellConfig, event: ExtendableMessageEvent): 
   if (!shellConfig) {
     shellConfig = resolved;
     shellPrecached = false;
+    shellAdoptToken += 1;
     keepAlive(event, runPrecache);
     return;
   }
 
-  // CHANGE: precache the NEW version's bucket first (its own version key, so the
-  // old still-serving bucket is untouched); promote ONLY on success, and clean up
-  // the now-stale old bucket(s) AFTER promotion.
+  // CHANGE: claim the latest-request token, precache the NEW version's bucket first
+  // (its own version key, so the old still-serving bucket is untouched), then promote
+  // ONLY if (a) the precache was COMPLETE and (b) we are STILL the latest request;
+  // clean up the now-stale old bucket(s) only AFTER promotion.
+  shellAdoptToken += 1;
+  const myToken = shellAdoptToken;
   keepAlive(event, async () => {
     try {
-      const canBoot = await precacheConfig(resolved);
-      if (canBoot) {
+      const complete = await precacheConfig(resolved);
+      if (complete && myToken === shellAdoptToken) {
         shellConfig = resolved;
         shellPrecached = true;
         await cleanupOldShellCaches(shellCaches(), resolved.version).catch(() => []);
       }
-      // else: keep the old config + bucket serving; a later config message retries.
+      // else: superseded by a newer config, or incomplete precache — keep the old
+      // config + bucket serving; the latest request's own task will promote.
     } catch {
       // Keep the old, working shell config on any precache failure.
     }

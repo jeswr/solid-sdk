@@ -240,13 +240,18 @@ function canonicalShellUrl(requestUrl: string, config: ResolvedAppShellConfig): 
   return undefined;
 }
 
-/** The path+search of a (possibly root-relative) URL, lowercased, '' on failure. */
-function pathAndSearchOf(url: string): string {
+/**
+ * The path+search of a (possibly root-relative) URL with the PATHNAME lowercased
+ * (matching `pathOf`'s case-insensitive path convention) but the QUERY preserved
+ * BYTE-FOR-BYTE — query keys/values are case-sensitive (roborev Low). `null` on a
+ * parse failure (distinct from an empty path, so two failures don't compare equal).
+ */
+function pathAndSearchOf(url: string): string | null {
   try {
     const u = new URL(url, 'https://x.invalid/');
-    return `${u.pathname}${u.search}`.toLowerCase();
+    return `${u.pathname.toLowerCase()}${u.search}`;
   } catch {
-    return '';
+    return null;
   }
 }
 
@@ -254,16 +259,17 @@ function pathAndSearchOf(url: string): string {
  * Is this navigation an EXACT configured shell URL (same path AND query)? Only an
  * exact match may be WRITTEN to the shell cache.
  *
- * SECURITY (roborev): configured shell URLs are static, public documents with no
- * query. A navigation that carries a personalizing query (`/index.html?user=alice`)
+ * SECURITY (roborev): configured shell URLs are static, public documents (typically
+ * no query). A navigation that carries a personalizing query (`/index.html?user=alice`)
  * may be a server-rendered PRIVATE variant, so its response must NEVER be stored —
  * even though it resolves to the canonical `/index.html` for the offline READ (so a
- * client route still boots). We therefore gate the WRITE on an exact path+search
- * match against a configured URL: a query variant fails it and is served live only.
+ * client route still boots). We gate the WRITE on an exact path+query match against a
+ * configured URL (pathname case-insensitive, query byte-exact): a query variant fails
+ * it and is served live only.
  */
 function isExactConfiguredShellUrl(requestUrl: string, config: ResolvedAppShellConfig): boolean {
   const reqPS = pathAndSearchOf(requestUrl);
-  if (!reqPS) return false;
+  if (reqPS === null) return false;
   if (config.fallback && pathAndSearchOf(config.fallback) === reqPS) return true;
   for (const url of config.precache) {
     if (pathAndSearchOf(url) === reqPS) return true;

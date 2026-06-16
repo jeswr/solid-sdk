@@ -254,10 +254,27 @@ paths open; all closed by a stronger, key-canonical design:
   (its fallback is cached); the stale bucket is cleaned up only AFTER promotion. On a
   precache failure the old working shell config is kept.
 
+Round 3 (on the round-2 fix — 2 Medium + 1 Low):
+
+- **Async adopt ordering race (Medium).** Rapid v2→v3 config messages each started an
+  untracked precache/promote; a slow v2 finishing after v3 could overwrite
+  `shellConfig` back to v2 and delete v3's bucket. FIXED: a monotonic `shellAdoptToken`
+  — each change captures the token it bumped to and promotes/cleans up ONLY if it is
+  still the latest (LATEST-WINS).
+- **Promoted on an INCOMPLETE precache (Medium).** Promotion required only the fallback
+  HTML cached, so if referenced JS/CSS failed, an offline boot served HTML whose assets
+  miss. FIXED: `precacheConfig` now returns true only when EVERY configured entry cached
+  (`failed.length === 0`); a config CHANGE promotes only on a COMPLETE precache.
+- **Query lowercased in the exact-match (Low).** `pathAndSearchOf` lowercased the whole
+  path+search, but query keys/values are case-sensitive. FIXED: lowercase only the
+  pathname, compare `URL.search` byte-for-byte (and return `null` on parse failure so
+  two failures don't compare equal). New test locks the case-sensitive-query contract.
+
 The change-detection decision (`sameShellConfig`) and the URL classifiers
 (`canonicalShellUrl`/`isExactConfiguredShellUrl`, via `handleNavigation`) are pure,
-exported, and unit-tested; the worker's `adoptShellConfig` orchestration is the
-browser-only adapter (excluded from coverage, like the rest of `worker.ts`).
+exported, and unit-tested; the worker's `adoptShellConfig` orchestration (the
+token/latest-wins + promote-after-complete-precache sequencing) is the browser-only
+adapter (excluded from coverage, like the rest of `worker.ts`).
 
 ### P4 re-review focus areas
 

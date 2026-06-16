@@ -72,14 +72,14 @@ function canonicalShellUrl(requestUrl, config) {
 function pathAndSearchOf(url) {
   try {
     const u = new URL(url, "https://x.invalid/");
-    return `${u.pathname}${u.search}`.toLowerCase();
+    return `${u.pathname.toLowerCase()}${u.search}`;
   } catch {
-    return "";
+    return null;
   }
 }
 function isExactConfiguredShellUrl(requestUrl, config) {
   const reqPS = pathAndSearchOf(requestUrl);
-  if (!reqPS) return false;
+  if (reqPS === null) return false;
   if (config.fallback && pathAndSearchOf(config.fallback) === reqPS) return true;
   for (const url of config.precache) {
     if (pathAndSearchOf(url) === reqPS) return true;
@@ -837,6 +837,7 @@ var webIdConfigured = false;
 var channelName = DEFAULT_CHANNEL_NAME;
 var shellConfig = self.__SOLID_OFFLINE_SHELL__ && self.__SOLID_OFFLINE_SHELL__.precache.length > 0 ? resolveAppShellConfig(self.__SOLID_OFFLINE_SHELL__) : void 0;
 var shellPrecached = false;
+var shellAdoptToken = 0;
 function shellCaches() {
   return self.caches;
 }
@@ -850,7 +851,7 @@ function shellDeps(config) {
 }
 async function precacheConfig(config) {
   const { failed } = await precacheAppShell(shellCaches(), config);
-  return !config.fallback || !failed.includes(config.fallback);
+  return failed.length === 0;
 }
 async function runPrecache() {
   if (!shellConfig || shellPrecached) return;
@@ -869,13 +870,16 @@ function adoptShellConfig(next, event) {
   if (!shellConfig) {
     shellConfig = resolved;
     shellPrecached = false;
+    shellAdoptToken += 1;
     keepAlive(event, runPrecache);
     return;
   }
+  shellAdoptToken += 1;
+  const myToken = shellAdoptToken;
   keepAlive(event, async () => {
     try {
-      const canBoot = await precacheConfig(resolved);
-      if (canBoot) {
+      const complete = await precacheConfig(resolved);
+      if (complete && myToken === shellAdoptToken) {
         shellConfig = resolved;
         shellPrecached = true;
         await cleanupOldShellCaches(shellCaches(), resolved.version).catch(() => []);

@@ -429,6 +429,40 @@ describe('handleNavigation — ONLINE revalidate', () => {
     const canonical = await bucket?.match('https://app.example/index.html');
     expect(await canonical?.text()).not.toContain('alice personalized');
   });
+
+  it('matches a configured query-bearing URL BYTE-FOR-BYTE (case-sensitive query)', async () => {
+    // A (rare) configured shell URL that carries a query. The query must match
+    // case-SENSITIVELY: a different-case query is a different resource, not the shell.
+    const cfg = resolveAppShellConfig({ precache: ['/index.html?v=ABC'], version: 'q1' });
+    const caches = new MockCacheStorage();
+    await precacheAppShell(caches, cfg);
+
+    // Exact byte match → cached.
+    const exactDeps = shellDeps(
+      caches,
+      true,
+      vi.fn(async () => htmlResponse('<title>exact</title>')) as unknown as typeof fetch,
+      cfg,
+    );
+    const exact = await handleNavigation(
+      navRequest('https://app.example/index.html?v=ABC'),
+      exactDeps,
+    );
+    expect(exact.source).toBe('shell-network-cached');
+
+    // Different-case query → NOT a configured shell URL → served live, not stored.
+    const caseDeps = shellDeps(
+      caches,
+      true,
+      vi.fn(async () => htmlResponse('<title>casevariant</title>')) as unknown as typeof fetch,
+      cfg,
+    );
+    const variant = await handleNavigation(
+      navRequest('https://app.example/index.html?v=abc'),
+      caseDeps,
+    );
+    expect(variant.source).toBe('shell-network');
+  });
 });
 
 describe('handlePrecachedAsset — cache-first', () => {

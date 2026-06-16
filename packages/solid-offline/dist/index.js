@@ -1078,14 +1078,14 @@ function canonicalShellUrl(requestUrl, config) {
 function pathAndSearchOf(url) {
   try {
     const u = new URL(url, "https://x.invalid/");
-    return `${u.pathname}${u.search}`.toLowerCase();
+    return `${u.pathname.toLowerCase()}${u.search}`;
   } catch {
-    return "";
+    return null;
   }
 }
 function isExactConfiguredShellUrl(requestUrl, config) {
   const reqPS = pathAndSearchOf(requestUrl);
-  if (!reqPS) return false;
+  if (reqPS === null) return false;
   if (config.fallback && pathAndSearchOf(config.fallback) === reqPS) return true;
   for (const url of config.precache) {
     if (pathAndSearchOf(url) === reqPS) return true;
