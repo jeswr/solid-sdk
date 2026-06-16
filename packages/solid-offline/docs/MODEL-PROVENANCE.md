@@ -270,11 +270,21 @@ Round 3 (on the round-2 fix — 2 Medium + 1 Low):
   pathname, compare `URL.search` byte-for-byte (and return `null` on parse failure so
   two failures don't compare equal). New test locks the case-sensitive-query contract.
 
+Round 4 (on the round-3 fix — 1 Medium):
+
+- **Install path ignored the completeness result (Medium).** `runPrecache()` (the
+  build-time `__SOLID_OFFLINE_SHELL__` / first-config path) still latched
+  `shellPrecached = true` and cleaned up old buckets even on an INCOMPLETE precache,
+  inconsistent with the new "all entries must cache" rule for a config CHANGE. FIXED:
+  `runPrecache` now checks `precacheConfig`'s boolean — on incomplete it leaves
+  `shellPrecached = false` (so a later activate / config message retries) and SKIPS
+  the cleanup, so the active worker can't strand an offline boot on missing assets.
+
 The change-detection decision (`sameShellConfig`) and the URL classifiers
 (`canonicalShellUrl`/`isExactConfiguredShellUrl`, via `handleNavigation`) are pure,
-exported, and unit-tested; the worker's `adoptShellConfig` orchestration (the
-token/latest-wins + promote-after-complete-precache sequencing) is the browser-only
-adapter (excluded from coverage, like the rest of `worker.ts`).
+exported, and unit-tested; the worker's `adoptShellConfig`/`runPrecache` orchestration
+(the token/latest-wins + promote-after-complete-precache sequencing) is the
+browser-only adapter (excluded from coverage, like the rest of `worker.ts`).
 
 ### P4 re-review focus areas
 

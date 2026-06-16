@@ -857,7 +857,11 @@ async function runPrecache() {
   if (!shellConfig || shellPrecached) return;
   shellPrecached = true;
   try {
-    await precacheConfig(shellConfig);
+    const complete = await precacheConfig(shellConfig);
+    if (!complete) {
+      shellPrecached = false;
+      return;
+    }
     await cleanupOldShellCaches(shellCaches(), shellConfig.version).catch(() => []);
   } catch {
     shellPrecached = false;

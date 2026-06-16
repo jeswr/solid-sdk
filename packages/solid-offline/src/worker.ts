@@ -107,8 +107,17 @@ async function runPrecache(): Promise<void> {
   if (!shellConfig || shellPrecached) return;
   shellPrecached = true;
   try {
-    await precacheConfig(shellConfig);
-    // Install path: shellConfig is already the active version, so cleaning up other
+    const complete = await precacheConfig(shellConfig);
+    if (!complete) {
+      // roborev (Medium): the install/build-time path must honour the same
+      // completeness rule as a config CHANGE. An INCOMPLETE precache (some JS/CSS
+      // failed) must NOT mark the shell done and must NOT clean up older buckets —
+      // otherwise the active worker can strand an offline boot on missing assets.
+      // Leave it un-latched so a later activate / config message retries.
+      shellPrecached = false;
+      return;
+    }
+    // Complete: shellConfig is already the active version, so cleaning up other
     // (older) buckets here is safe — nothing else is serving.
     await cleanupOldShellCaches(shellCaches(), shellConfig.version).catch(() => []);
   } catch {
