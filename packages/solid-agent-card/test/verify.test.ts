@@ -201,12 +201,39 @@ describe("verifyDescriptor — fetch path", () => {
     expect(r.issues.map((i) => i.code)).toContain("subject-mismatch");
   });
 
-  it("returns parse-failed on a non-RDF body", async () => {
+  it("binds a FETCHED document to expectedId — the well-known serving pattern (URL ≠ subject)", async () => {
+    // ANP descriptions are commonly served at a well-known URL while the RDF
+    // subject is the actual agent IRI. Supplying expectedId binds to the agent
+    // IRI, not the fetch URL, so the documented serving pattern verifies cleanly.
+    const ttl = await turtleOf(FULL); // subject is FULL.id, not the fetch URL below
+    const fetch = async () =>
+      new Response(ttl, { status: 200, headers: { "content-type": "text/turtle" } });
+    const r = await verifyDescriptor("https://alice.pod.example/.well-known/agent-descriptions", {
+      fetch,
+      expectedId: ID,
+    });
+    expect(r.valid).toBe(true);
+    expect(r.issues.map((i) => i.code)).not.toContain("subject-mismatch");
+    expect(r.descriptor?.id).toBe(ID);
+  });
+
+  it("returns parse-failed on a non-RDF body (server answered, parse failed)", async () => {
     const fetch = async () =>
       new Response("<<not rdf>>", { status: 200, headers: { "content-type": "text/html" } });
     const r = await verifyDescriptor("https://a/agent", { fetch });
     expect(r.valid).toBe(false);
-    expect(["parse-failed", "fetch-failed"]).toContain(r.issues[0]?.code);
+    expect(r.issues[0]?.code).toBe("parse-failed");
+  });
+
+  it("classifies a transport/network failure as fetch-failed, not parse-failed", async () => {
+    // A fetch that rejects (DNS / connection refused) → no status, no parsed
+    // content-type → the transport failed, so the code is fetch-failed.
+    const fetch = (async () => {
+      throw new TypeError("network down");
+    }) as unknown as typeof globalThis.fetch;
+    const r = await verifyDescriptor("https://a/agent", { fetch });
+    expect(r.valid).toBe(false);
+    expect(r.issues[0]?.code).toBe("fetch-failed");
   });
 });
 

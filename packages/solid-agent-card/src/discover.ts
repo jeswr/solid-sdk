@@ -10,7 +10,7 @@
 
 import { fetchRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 import type { AgentDiscovery, AgentPointer } from "./types.js";
-import { verifyDataset } from "./verify.js";
+import { classifyFetchError, verifyDataset } from "./verify.js";
 import { WELL_KNOWN_AGENT_CARD, WELL_KNOWN_AGENT_DESCRIPTIONS } from "./vocab.js";
 import { wrapProfile } from "./wrappers.js";
 
@@ -83,13 +83,12 @@ export async function discoverAgent(
     const fetched = await fetchRdf(agentIri, fetchOpts);
     descriptorDataset = fetched.dataset;
   } catch (err) {
-    const code = err instanceof RdfFetchError && err.status ? "fetch-failed" : "parse-failed";
     return {
       webId,
       pointers,
       verification: {
         valid: false,
-        issues: [{ code, message: describeError(err), subject: agentIri }],
+        issues: [{ code: classifyFetchError(err), message: describeError(err), subject: agentIri }],
       },
     };
   }

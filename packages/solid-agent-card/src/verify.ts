@@ -5,7 +5,9 @@
 // owner / protocolSource IRIs, skills with id + name (no duplicate ids), and
 // security schemes of a known type. Parsing is via @jeswr/fetch-rdf (Turtle /
 // JSON-LD conneg); extraction via the typed wrappers. A FETCHED document is bound
-// to the URL it was served from (the subject-match spoofing guard).
+// (the subject-match spoofing guard) to `expectedId` when supplied — for the
+// well-known serving pattern where the URL ≠ the agent IRI it describes —
+// otherwise to the URL it was served from.
 
 import { fetchRdf, parseRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 import type { DatasetCore } from "@rdfjs/types";
@@ -82,11 +84,18 @@ export async function verifyDescriptor(
       dataset = fetched.dataset;
     }
   } catch (err) {
-    const code = err instanceof RdfFetchError && err.status ? "fetch-failed" : "parse-failed";
-    return { valid: false, issues: [{ code, message: describeError(err), subject: input }] };
+    return {
+      valid: false,
+      issues: [{ code: classifyFetchError(err), message: describeError(err), subject: input }],
+    };
   }
 
-  const expectedId = isBody ? options.expectedId : input;
+  // The subject the document is bound to:
+  //  - a FETCHED document binds to `expectedId` if the caller supplied one (an
+  //    ANP description is commonly served at a well-known URL while its RDF
+  //    subject is the agent IRI), otherwise to the fetch `input` URL;
+  //  - an in-hand `body` binds to `expectedId` only (there is no fetch URL).
+  const expectedId = isBody ? options.expectedId : (options.expectedId ?? input);
   const requireSubjectMatch =
     options.requireSubjectMatch ?? (!isBody || options.expectedId !== undefined);
   return verifyDataset(dataset, expectedId, { requireSubjectMatch });
@@ -314,6 +323,24 @@ function isHttpUrl(value: string): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Classify a fetch/parse error into the right issue code. An {@link RdfFetchError}
+ * carries discriminator fields: an HTTP `status` ⇒ the request reached the server
+ * but it answered non-2xx (`fetch-failed`); a `contentType` WITHOUT a status ⇒ we
+ * received a response but could not parse that media type (`parse-failed`); neither
+ * ⇒ a transport/network failure (`fetch-failed`). A non-RdfFetchError is treated as
+ * a parse failure (it surfaced from the parser, not the transport).
+ */
+export function classifyFetchError(err: unknown): "fetch-failed" | "parse-failed" {
+  if (err instanceof RdfFetchError) {
+    if (err.status !== undefined) {
+      return "fetch-failed";
+    }
+    return err.contentType !== undefined ? "parse-failed" : "fetch-failed";
+  }
+  return "parse-failed";
 }
 
 function describeError(err: unknown): string {

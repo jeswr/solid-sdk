@@ -662,10 +662,12 @@ async function verifyDescriptor(input, options = {}) {
       dataset = fetched.dataset;
     }
   } catch (err) {
-    const code = err instanceof RdfFetchError && err.status ? "fetch-failed" : "parse-failed";
-    return { valid: false, issues: [{ code, message: describeError(err), subject: input }] };
+    return {
+      valid: false,
+      issues: [{ code: classifyFetchError(err), message: describeError(err), subject: input }]
+    };
   }
-  const expectedId = isBody ? options.expectedId : input;
+  const expectedId = isBody ? options.expectedId : options.expectedId ?? input;
   const requireSubjectMatch = options.requireSubjectMatch ?? (!isBody || options.expectedId !== void 0);
   return verifyDataset(dataset, expectedId, { requireSubjectMatch });
 }
@@ -852,6 +854,15 @@ function isHttpUrl(value) {
     return false;
   }
 }
+function classifyFetchError(err) {
+  if (err instanceof RdfFetchError) {
+    if (err.status !== void 0) {
+      return "fetch-failed";
+    }
+    return err.contentType !== void 0 ? "parse-failed" : "fetch-failed";
+  }
+  return "parse-failed";
+}
 function describeError(err) {
   if (err instanceof RdfFetchError) {
     return err.status ? `Failed to fetch agent description (HTTP ${err.status}): ${err.message}` : `Failed to parse agent description: ${err.message}`;
@@ -890,13 +901,12 @@ async function discoverAgent(webId, options = {}) {
     const fetched = await fetchRdf(agentIri, fetchOpts);
     descriptorDataset = fetched.dataset;
   } catch (err) {
-    const code = err instanceof RdfFetchError && err.status ? "fetch-failed" : "parse-failed";
     return {
       webId,
       pointers,
       verification: {
         valid: false,
-        issues: [{ code, message: describeError2(err), subject: agentIri }]
+        issues: [{ code: classifyFetchError(err), message: describeError2(err), subject: agentIri }]
       }
     };
   }

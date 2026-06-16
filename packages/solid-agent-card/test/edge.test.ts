@@ -57,7 +57,9 @@ describe("discover — descriptor parse failure (non-HTTP error)", () => {
     const r = await discoverAgent(Webid, { fetch });
     expect(r.pointers).toHaveLength(1);
     expect(r.verification?.valid).toBe(false);
-    expect(["parse-failed", "fetch-failed"]).toContain(r.verification?.issues[0]?.code);
+    // A 200 response with a non-RDF content-type → the server answered but the
+    // body could not be parsed → parse-failed (not a transport fetch-failed).
+    expect(r.verification?.issues[0]?.code).toBe("parse-failed");
   });
 });
 
