@@ -1,0 +1,25 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jeswr/full-solid-ecosystem/main/tracking/schema/suite.schema.json",
+  "id": "federation-registry",
+  "kind": "sdk",
+  "name": "Solid Federation Registry / Catalogue Client",
+  "repo": "https://github.com/jeswr/federation-registry",
+  "category": "infrastructure",
+  "maturity": "prototype",
+  "visibility": "public",
+  "stack": {
+    "lang": "TypeScript (ESM, NodeNext)",
+    "rdf": "n3 ^2.x",
+    "rdf-wrapper": "@rdfjs/wrapper ^0.34.x",
+    "fetch-rdf": "@jeswr/fetch-rdf (git: jeswr/fetch-rdf#main)",
+    "test": "vitest ^2.x",
+    "lint": "@biomejs/biome ^2.x",
+    "node": ">=24"
+  },
+  "dependsOn": ["solid-federation-vocab"],
+  "federation": {
+    "service": "Catalogue/Registry (the discovery axis — R9 §2.2 / brief 09 §2)",
+    "vocab": "https://w3id.org/jeswr/fedreg#",
+    "membershipTodo": "SDK (not an app) — it reads/writes the federation Catalogue/Registry. buildRegistry()/parseRegistry()/listMembers()/verifyMembership() author and discover a fedreg:Registry of registry-ASSERTED memberships (distinct from a self-asserted fedapp:App). describeStorage()/parseStorage()/acceptsSpec() build and query a fedreg:StorageDescription advertising which client-client spec-versions a resource server accepts — the substrate for asynchronous schema migration. Signed-challenge membership establishment + the registry HTTP surface are follow-ups."
+  }
+}
