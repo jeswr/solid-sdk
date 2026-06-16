@@ -366,6 +366,38 @@ describe("redirect/autologin path persists a NON-extractable DPoP key (roborev f
     expect(persisted?.dpopKey).toBeDefined();
     expect(persisted?.dpopKey.privateKey.extractable).toBe(false);
   });
+
+  // #85 / FIX-1 regression: the redirect path re-imports the DPoP PUBLIC key, and
+  // `dpop`/oauth4webapi serialise that public key into the DPoP proof-header JWK
+  // (RFC 9449 §4.2), which requires `publicKey.extractable === true`. Before the fix
+  // the public key was re-imported `extractable: false`, so `exportKey("jwk", …)`
+  // REJECTED → redirect-path DPoP proof generation (and thus silent restore on the
+  // redirect path) was broken. Mirrors the FIX-1 test pod-mail/pod-photos added.
+  it("the redirect-completed session's persisted DPoP PUBLIC key exports to a JWK (extractable:true)", async () => {
+    installSessionStorage();
+    const store = makeStore();
+    const provider = makeProvider(store);
+    const RETURN_URI = "https://app.example/";
+
+    await provider.beginRedirectLogin(RETURN_URI);
+    await provider.completeRedirectLogin(`${RETURN_URI}?code=auth-code&state=state`);
+    await provider.persistSession(ISSUER, WEBID_A);
+
+    const persisted = store.map.get(ISSUER.href);
+    expect(persisted?.dpopKey).toBeDefined();
+    const dpopKey = persisted?.dpopKey as CryptoKeyPair;
+    expect(dpopKey.publicKey).toBeDefined();
+
+    // The load-bearing assertion: exporting the PUBLIC key to JWK SUCCEEDS. With the
+    // pre-fix `extractable: false` import this throws ("key is not extractable") — so
+    // this test genuinely FAILS without the one-flag fix, then passes with it.
+    const jwk = await crypto.subtle.exportKey("jwk", dpopKey.publicKey);
+    expect(jwk).toMatchObject({ kty: "EC", crv: "P-256" });
+
+    // Defence-in-depth: the fix must NOT weaken the PRIVATE key — it stays non-extractable.
+    expect(dpopKey.privateKey.extractable).toBe(false);
+    await expect(crypto.subtle.exportKey("jwk", dpopKey.privateKey)).rejects.toThrow();
+  });
 });
 
 describe("forgetIssuer / hasPersistedFor — logout + the tri-state presence read", () => {

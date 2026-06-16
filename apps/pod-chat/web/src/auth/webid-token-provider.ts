@@ -1305,8 +1305,8 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
       // Re-import the persisted ES256 DPoP key and rebuild the DPoP handle for the
       // token exchange. The JWK was EXPORTED only to survive the full-page redirect
       // (the closure that would otherwise hold the key is erased by the navigation);
-      // re-import it NON-extractable (`extractable: false`) so the rebuilt private
-      // key cannot be exported again — this is what SILENT RESTORE now relies on,
+      // re-import the PRIVATE half NON-extractable (`extractable: false`) so the
+      // rebuilt private key cannot be exported again — this is what SILENT RESTORE relies on,
       // because completeRedirectLogin's IssuerSession (with its refresh token) is
       // PERSISTED to the credential store, and the package's invariant is that the
       // persisted DPoP key is non-extractable (RFC 9449 §4.3: a stolen refresh token
@@ -1317,14 +1317,14 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
         "jwk",
         flow.dpopPrivateJwk,
         ES256_IMPORT_ALG,
-        false,
+        false, // non-extractable: re-imported for signing + durable persistence
         ["sign"],
       );
       const publicKey = await crypto.subtle.importKey(
         "jwk",
         flow.dpopPublicJwk,
         ES256_IMPORT_ALG,
-        false,
+        true, // public key MUST be extractable: dpop exports it as the proof-header JWK (RFC 9449 §4.2). Public keys are not secret; only the private key stays non-extractable.
         ["verify"],
       );
       if (generation !== this.#generation) throw new ReactiveAuthResetError();
