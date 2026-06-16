@@ -27,8 +27,8 @@
 //     CURRENT credential, not a spent one).
 //
 // The whole OAuth/DPoP stack is mocked so this runs with no browser + no network.
+import type { PersistedSession, SessionStore } from "@jeswr/solid-session-restore";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { PersistedSession, SessionStore } from "./session-persistence";
 
 // A switch each test sets so the next authentication "returns" a chosen identity.
 const authState = {
@@ -84,8 +84,12 @@ vi.mock("oauth4webapi", () => {
       // The server supports refresh tokens → the provider requests offline_access.
       scopes_supported: ["openid", "webid", "offline_access"],
     })),
-    dynamicClientRegistrationRequest: vi.fn(),
-    processDynamicClientRegistrationResponse: vi.fn(),
+    dynamicClientRegistrationRequest: vi.fn(async () => ({})),
+    // A server-assigned dynamic client (the no-static-clientId fallback path).
+    processDynamicClientRegistrationResponse: vi.fn(async () => ({
+      client_id: "dyn-client-id",
+      token_endpoint_auth_method: "none",
+    })),
     generateKeyPair: vi.fn(async (_alg: string, opts?: { extractable?: boolean }) =>
       crypto.subtle.generateKey(
         { name: "ECDSA", namedCurve: "P-256" },
@@ -393,6 +397,44 @@ describe("restoreIssuer — silent refresh-token-grant restore (no popup)", () =
   it("returns undefined (in-memory-only) when the provider has NO session store", async () => {
     const provider = makeProvider(); // no store
     expect(await provider.restoreIssuer(ISSUER)).toBeUndefined();
+  });
+
+  it("NO-STATIC-CLIENT dynamic fallback registers with the provider's callbackUri redirect_uri (parity)", async () => {
+    // A provider WITHOUT a static Client Identifier Document (dynamic-registration
+    // dev path) restoring a record that ALSO has no persisted clientId: the helper
+    // performs a fresh dynamic registration, which MUST carry this provider's callback
+    // URI as the redirect_uri — exactly as the pre-package #resolveClient always did.
+    // The restore wrapper now passes `callbackUri: this.#callbackUri` to preserve that.
+    const store = makeStore();
+    const dpopKey = (await crypto.subtle.generateKey(
+      { name: "ECDSA", namedCurve: "P-256" },
+      false,
+      ["sign", "verify"],
+    )) as CryptoKeyPair;
+    // No `clientId` in the persisted record → the dynamic-registration fallback.
+    store.map.set(ISSUER.href, {
+      issuer: ISSUER.href,
+      webId: WEBID_A,
+      refreshToken: "rt-A",
+      dpopKey,
+    });
+    // A provider with NO static clientId (dynamic-registration path).
+    const provider = new WebIdDPoPTokenProvider(
+      "https://app.example/callback.html",
+      async () => REDIRECT,
+      async () => authState.webId,
+      { sessionStore: store }, // no clientId
+    );
+    const oauth = await import("oauth4webapi");
+    const restored = await provider.restoreIssuer(ISSUER);
+    expect(restored).toEqual({ webId: WEBID_A });
+    // The dynamic registration ran and carried the callback URI as the redirect_uri.
+    const regCall = (
+      oauth.dynamicClientRegistrationRequest as ReturnType<typeof vi.fn>
+    ).mock.calls.at(-1);
+    expect((regCall?.[1] as { redirect_uris?: string[] })?.redirect_uris).toEqual([
+      "https://app.example/callback.html",
+    ]);
   });
 });
 

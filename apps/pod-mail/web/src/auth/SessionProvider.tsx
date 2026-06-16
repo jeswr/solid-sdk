@@ -23,6 +23,15 @@
 //  4. `allowInsecureLoopback` is enabled ONLY for a localhost origin (dev against
 //     a local CSS over HTTP); a deployed HTTPS origin stays strict.
 
+import {
+  type CredentialPresence,
+  decideSilentRestore,
+  IndexedDbSessionStore,
+  indexedDbAvailable,
+  RememberedAccount,
+  type SessionStore,
+  shouldDropRememberedPointer,
+} from "@jeswr/solid-session-restore";
 import type { AuthorizationCodeFlow, GetCodeCallback } from "@solid/reactive-authentication";
 import {
   createContext,
@@ -38,22 +47,7 @@ import { authFlowHolder, getCodeThroughHolder, lazyElementGetCode } from "./auth
 import { planAutologin } from "./autologin-plan";
 import { assessLoginProbe } from "./login-result";
 import { readProfile } from "./profile";
-import {
-  clearRememberedAccount,
-  readRememberedAccount,
-  writeRememberedAccount,
-} from "./remembered-account";
 import { type DerivedSession, deriveSession } from "./session-derivation";
-import {
-  IndexedDbSessionStore,
-  indexedDbAvailable,
-  type SessionStore,
-} from "./session-persistence";
-import {
-  type CredentialPresence,
-  decideSilentRestore,
-  shouldDropRememberedPointer,
-} from "./session-restore";
 import { decideSingleFlight } from "./single-flight";
 import {
   AmbiguousIssuerError,
@@ -142,6 +136,23 @@ interface AuthRuntime {
  * in-memory-only and silent restore is simply unavailable.
  */
 let sessionStoreSingleton: SessionStore | undefined;
+
+/**
+ * Pod Mail's IndexedDB database name for the durable refresh-token store. The
+ * @jeswr/solid-session-restore package makes this INJECTABLE per app (so two apps on
+ * a shared origin never share a session store); we supply Pod Mail's EXISTING name
+ * verbatim, so the store + every persisted credential is bit-for-bit unchanged from
+ * the pre-package copy.
+ */
+const SESSION_DB_NAME = "pod-mail:sessions";
+
+/**
+ * Pod Mail's localStorage key for the credential-free remembered-account pointer
+ * (WebID → issuer), now an injectable per-app constructor arg on the package's
+ * {@link RememberedAccount}. The EXACT key the pre-package copy used, so an existing
+ * returning user's pointer is read unchanged. The instance holds NO credential.
+ */
+const rememberedAccount = new RememberedAccount("pod-mail.remembered-account");
 
 interface AuthRuntimeConfig {
   callbackUri: string;
@@ -313,7 +324,7 @@ async function credentialPresenceFor(
 function runSilentRestore(provider: WebIdDPoPTokenProvider): Promise<SilentRestoreOutcome> {
   if (silentRestorePromise) return silentRestorePromise;
   silentRestorePromise = (async (): Promise<SilentRestoreOutcome> => {
-    const remembered = readRememberedAccount();
+    const remembered = rememberedAccount.read();
     const decision = await decideSilentRestore({
       lastActiveWebId: remembered?.webId,
       remembered: remembered ? [remembered] : [],
@@ -339,7 +350,7 @@ function runSilentRestore(provider: WebIdDPoPTokenProvider): Promise<SilentResto
         const issuer = parseIssuer(remembered?.issuer);
         provider.reset();
         if (issuer) await provider.forgetPersisted(issuer);
-        clearRememberedAccount();
+        rememberedAccount.clear();
         return { kind: "login" };
       }
       // Otherwise: fall back to login. The keep/drop-pointer decision is the PURE
@@ -349,7 +360,7 @@ function runSilentRestore(provider: WebIdDPoPTokenProvider): Promise<SilentResto
       // first — a malformed remembered issuer is an unusable pointer (credential
       // `absent`), so it gets dropped rather than retried forever.
       const credential = await credentialPresenceFor(provider, remembered?.issuer);
-      if (shouldDropRememberedPointer(decision.reason, credential)) clearRememberedAccount();
+      if (shouldDropRememberedPointer(decision.reason, credential)) rememberedAccount.clear();
       return { kind: "login" };
     }
     // The refresh grant rebuilt a live session in the provider (issuer pinned,
@@ -371,7 +382,7 @@ function runSilentRestore(provider: WebIdDPoPTokenProvider): Promise<SilentResto
     }
     // Refresh the remembered pointer (issuer re-confirmed) so the NEXT reload
     // restores from the current credential.
-    writeRememberedAccount(decision.webId, decision.issuer);
+    rememberedAccount.write(decision.webId, decision.issuer);
     return { kind: "restored", webId: decision.webId, session };
   })().catch(() => {
     // Any UNEXPECTED error in the restore wiring → fall back to login, fail-closed.
@@ -406,7 +417,7 @@ function shouldAttemptSilentRestore(): boolean {
   ) {
     return false;
   }
-  return readRememberedAccount() !== null;
+  return rememberedAccount.read() !== null;
 }
 
 /**
@@ -478,7 +489,9 @@ function getAuthRuntime(cfg: AuthRuntimeConfig): Promise<AuthRuntime> {
     const { ReactiveFetchManager } = await import("@solid/reactive-authentication");
     // Durable, origin-scoped DPoP-bound refresh-token store (silent restore on a
     // closed-tab reopen). Undefined in SSR / locked-down envs → in-memory-only.
-    sessionStoreSingleton = indexedDbAvailable() ? new IndexedDbSessionStore() : undefined;
+    sessionStoreSingleton = indexedDbAvailable()
+      ? new IndexedDbSessionStore({ dbName: SESSION_DB_NAME })
+      : undefined;
     const provider = new WebIdDPoPTokenProvider(
       cfg.callbackUri,
       // getCode reads the CURRENT mounted element from the module-level holder —
@@ -655,7 +668,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     // this localStorage pointer just records WHICH issuer to restore. Only when the
     // provider knows the resolved issuer (it always does after a successful login).
     const issuer = providerRef.current?.resolvedIssuer();
-    if (issuer) writeRememberedAccount(id, issuer);
+    if (issuer) rememberedAccount.write(id, issuer);
     setWebId(id);
     setSession(derived);
   }, []);
@@ -812,7 +825,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     // reset() (which clears it). forgetPersisted is fire-and-forget + best-effort.
     const issuer = providerRef.current?.resolvedIssuer();
     if (issuer) void providerRef.current?.forgetPersisted(new URL(issuer)).catch(() => {});
-    clearRememberedAccount();
+    rememberedAccount.clear();
     // RESET THE PROVIDER, not just React state (Finding 1): the in-memory issuer,
     // per-issuer sessions (DPoP key + access/refresh tokens), authenticated-WebID
     // claim, and token-attach count are all dropped, so a later login as a DIFFERENT

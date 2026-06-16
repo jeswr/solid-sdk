@@ -34,11 +34,11 @@
  */
 
 import { fetchRdf } from "@jeswr/fetch-rdf";
+import { restoreSession, type SessionStore } from "@jeswr/solid-session-restore";
 import type { GetCodeCallback } from "@solid/reactive-authentication";
 import * as DPoP from "dpop";
 import * as oauth from "oauth4webapi";
 import { resolveIssuers, validateWebId } from "./login-ux";
-import type { PersistedSession, SessionStore } from "./session-persistence";
 
 /**
  * The library's TokenProvider interface. @solid/reactive-authentication 0.1.2
@@ -389,8 +389,18 @@ function defaultChooseIssuer(webId: string): ChooseIssuerCallback {
 
 /** Per-issuer session state cached so repeat upgrades don't re-prompt. */
 interface IssuerSession {
-  authorizationServer: oauth.AuthorizationServer;
-  clientRegistration: oauth.Client;
+  /**
+   * The discovered AS metadata + resolved OAuth client for THIS session's grants.
+   * Populated by the popup / redirect login flows (which build them locally for the
+   * authorization-code grant). OPTIONAL because a session RESTORED via the bundled
+   * {@link restoreSession} helper does not surface them (the helper discovers + runs
+   * the refresh grant internally) — and they are never read off a CACHED session:
+   * `upgrade()` only consumes {@link dpopKey} / {@link accessToken} /
+   * {@link authenticatedWebId}, and the grant helpers always hold their own locals.
+   * So a restored session leaving these unset is correct, not a regression.
+   */
+  authorizationServer?: oauth.AuthorizationServer;
+  clientRegistration?: oauth.Client;
   dpopKey: CryptoKeyPair;
   /**
    * The oauth4webapi DPoP handle for TOKEN-ENDPOINT requests (the refresh grant),
@@ -1005,139 +1015,66 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
   async restoreIssuer(issuer: URL): Promise<{ webId: string } | undefined> {
     if (this.#sessionStore === undefined) return undefined;
 
-    let stored: PersistedSession | undefined;
-    try {
-      stored = await this.#sessionStore.get(issuer.href);
-    } catch {
-      return undefined; // store unreadable — nothing to restore, stay silent.
-    }
-    if (stored === undefined || stored.refreshToken === undefined) return undefined;
-
+    // Capture the generation/controller for THIS restore BEFORE the (awaited) grant.
     const generation = this.#generation;
     const controller = this.#authController;
-    try {
-      const session = await this.#restore(issuer, stored, controller.signal);
-      // FENCE: a reset() (logout / a new login) during the refresh grant supersedes
-      // this restore — discard the rebuilt session, do NOT pin/cache it, and report
-      // "nothing restored" so the now-current identity's flow is untouched.
-      if (generation !== this.#generation) return undefined;
-      this.#sessions.set(issuer.href, Promise.resolve(session));
-      this.#issuer = Promise.resolve(issuer); // pin, like the popup login
-      this.#resolvedIssuerHref = issuer.href;
-      this.#authenticatedWebId = session.authenticatedWebId;
-      return session.authenticatedWebId === undefined
-        ? undefined
-        : { webId: session.authenticatedWebId };
-    } catch (e) {
-      // Distinguish a DEFINITIVELY DEAD refresh token from a TRANSIENT failure
-      // (roborev finding 2): only `invalid_grant` (expired / revoked /
-      // rotation-reuse) means the credential is gone — clear it so a doomed restore
-      // is not re-attempted. A transient discovery/network/server error on page
-      // load must NOT erase an otherwise-valid refresh token (that would force a
-      // needless re-login); leave the entry intact for a later retry. Either way we
-      // report "nothing restored" so the caller falls back to login silently (no
-      // popup on restore) for THIS load.
-      if (isInvalidGrantError(e)) await this.#clearPersisted(issuer);
-      return undefined;
-    }
-  }
 
-  /**
-   * Rebuild an {@link IssuerSession} from a {@link PersistedSession}: discover the
-   * AS, reconstruct the DPoP handle around the PERSISTED key (key continuity — the
-   * same non-extractable key that minted the original token signs the refresh
-   * proof, which is the whole point of DPoP sender-constraining), then run the
-   * refresh grant. Throws on a dead refresh token so restoreIssuer() clears it.
-   */
-  async #restore(
-    issuer: URL,
-    stored: PersistedSession,
-    signal: AbortSignal,
-  ): Promise<IssuerSession> {
-    const http = this.#httpOptions(issuer, signal);
-    const authorizationServer = await this.#discover(issuer, http);
-    const clientRegistration = await this.#resolveClient(authorizationServer, http);
+    // The DPoP-bound refresh-token grant is now the shared, audited
+    // @jeswr/solid-session-restore helper (extracted from this provider, behaviour
+    // preserved): it reads the persisted record, discovers the AS, reattaches the
+    // PERSISTED non-extractable DPoP key (key continuity, RFC 9449 §4.3), runs the
+    // refresh grant (one DPoP-nonce retry), re-persists the ROTATED token, and —
+    // crucially for the security model — CLEARS the entry ONLY on a definitive
+    // `invalid_grant` while PRESERVING it on a transient blip. So the dead-vs-transient
+    // discrimination, the no-store guard, the unreadable-store guard, and the
+    // nothing-to-restore guard all live in the helper now; this wrapper keeps ONLY the
+    // provider-specific concerns: the generation fence + pinning the in-memory session.
+    const restored = await restoreSession({
+      store: this.#sessionStore,
+      issuer,
+      // A refresh token is CLIENT-BOUND (RFC 6749 §6): the grant must run as the
+      // original client. Pass this provider's static Client Identifier Document URL
+      // when it has one; otherwise the helper reuses the `clientId` the login
+      // PERSISTED into the record (the dynamic-registration path's server-assigned
+      // id), falling back to a fresh registration only when neither exists.
+      clientId: this.#clientId,
+      // PARITY: the OLD #resolveClient ALWAYS seeded redirect_uris with the callback
+      // URI (static AND dynamic). restoreSession uses callbackUri ONLY for the
+      // no-static-client dynamic-registration FALLBACK; pass it so that fallback
+      // registers with the same redirect_uri the original dynamic login used,
+      // preserving the pre-package behaviour exactly. (No-op on the static-client
+      // path — no registration happens there.)
+      callbackUri: this.#callbackUri,
+      allowInsecureLoopback: this.#allowInsecureLoopback,
+      signal: controller.signal,
+    });
+    if (restored === undefined) return undefined;
 
-    // Reattach the PERSISTED, non-extractable DPoP key — the refresh-grant proof
-    // must be signed by the key the token is bound to (RFC 9449 §4.3).
-    const dpopHandle = oauth.DPoP(clientRegistration, stored.dpopKey);
+    // FENCE: a reset() (logout / a new login) during the refresh grant supersedes
+    // this restore — discard the rebuilt session, do NOT pin/cache it, and report
+    // "nothing restored" so the now-current identity's flow is untouched. (The helper
+    // already re-persisted the rotated credential durably; leaving it is harmless —
+    // a stale entry is DPoP-bound and a later restore re-clears it on invalid_grant.)
+    if (generation !== this.#generation) return undefined;
 
-    // A bare in-memory session shell; #refresh redeems the persisted refresh token
-    // against it and returns the populated, rotated session.
-    const shell: IssuerSession = {
-      authorizationServer,
-      clientRegistration,
-      dpopKey: stored.dpopKey,
-      dpopHandle,
-      accessToken: "", // never persisted; minted by the refresh grant below
-      refreshToken: stored.refreshToken,
-      expiresAt: undefined,
-      authenticatedWebId: stored.webId,
+    // Pin exactly as the popup login does, so a later 401 upgrade reuses the restored
+    // session with no re-prompt. The cached IssuerSession needs only the fields
+    // upgrade() reads (dpopKey / accessToken / authenticatedWebId); authorizationServer
+    // / clientRegistration are intentionally unset (the helper owns the grant) — they
+    // are never read off a cached session (see IssuerSession).
+    const session: IssuerSession = {
+      dpopKey: restored.dpopKey,
+      dpopHandle: restored.dpopHandle,
+      accessToken: restored.accessToken,
+      refreshToken: restored.refreshToken,
+      expiresAt: restored.expiresAt,
+      authenticatedWebId: restored.webId,
     };
-    const refreshToken = stored.refreshToken;
-    if (refreshToken === undefined) {
-      throw new Error("No persisted refresh token to restore.");
-    }
-    const refreshed = await this.#refresh(issuer, shell, refreshToken, signal);
-    // Persist the ROTATED token (servers rotate refresh tokens, RFC 9700 §4.14.2)
-    // so the NEXT reload restores from the current credential, not a spent one.
-    await this.#persist(issuer, refreshed);
-    return refreshed;
-  }
-
-  /**
-   * The refresh-token grant (RFC 6749 §6), DPoP-bound with the session's existing
-   * key/handle, adopting the rotated refresh token when the server issues one. One
-   * retry on a server-required DPoP nonce (the handle captures it from the error).
-   */
-  async #refresh(
-    issuer: URL,
-    session: IssuerSession,
-    refreshToken: string,
-    signal: AbortSignal,
-  ): Promise<IssuerSession> {
-    const { authorizationServer, clientRegistration, dpopHandle } = session;
-    const clientAuth = this.#clientAuth(authorizationServer.issuer, clientRegistration);
-    const http = this.#httpOptions(issuer, signal);
-
-    const grant = () =>
-      oauth.refreshTokenGrantRequest(
-        authorizationServer,
-        clientRegistration,
-        clientAuth,
-        refreshToken,
-        { DPoP: dpopHandle, ...http },
-      );
-
-    let tokenResult: oauth.TokenEndpointResponse;
-    try {
-      tokenResult = await oauth.processRefreshTokenResponse(
-        authorizationServer,
-        clientRegistration,
-        await grant(),
-      );
-    } catch (e) {
-      if (!oauth.isDPoPNonceError(e)) throw e;
-      // The handle captured the server's DPoP nonce from the error; retry once.
-      tokenResult = await oauth.processRefreshTokenResponse(
-        authorizationServer,
-        clientRegistration,
-        await grant(),
-      );
-    }
-
-    return {
-      ...session,
-      accessToken: tokenResult.access_token,
-      // Adopt the rotated refresh token when the server issues one; keep the old
-      // one otherwise (some servers do not rotate).
-      refreshToken: tokenResult.refresh_token ?? refreshToken,
-      expiresAt: expiresAtFrom(tokenResult),
-      // Prefer the id_token's WebID when the refresh response carries one; else
-      // keep the WebID the persisted session authenticated AS originally.
-      authenticatedWebId:
-        webIdFromClaims(oauth.getValidatedIdTokenClaims(tokenResult)) ?? session.authenticatedWebId,
-    };
+    this.#sessions.set(issuer.href, Promise.resolve(session));
+    this.#issuer = Promise.resolve(issuer); // pin, like the popup login
+    this.#resolvedIssuerHref = issuer.href;
+    this.#authenticatedWebId = restored.webId;
+    return { webId: restored.webId };
   }
 
   /**
@@ -1671,28 +1608,11 @@ function webIdFromClaims(claims: oauth.IDToken | undefined): string | undefined 
   return undefined;
 }
 
-/**
- * Whether a refresh-grant error is a DEFINITIVE `invalid_grant` — the refresh
- * token is expired / revoked / rotation-reuse-detected, so it is dead and the
- * persisted entry should be cleared. oauth4webapi surfaces a token-endpoint OAuth
- * error as a `ResponseBodyError` carrying an `error` field; we read that
- * structurally (an instanceof can be brittle across module/bundle boundaries) and
- * also accept an `error` nested under `.cause.parameters` (the shape some flows
- * wrap it in). Any OTHER failure (network, discovery 5xx, abort) returns false, so
- * a transient blip on load does NOT erase an otherwise-valid credential (finding 2).
- */
-function isInvalidGrantError(e: unknown): boolean {
-  if (e && typeof e === "object") {
-    const err = e as { error?: unknown; cause?: { parameters?: URLSearchParams } };
-    if (err.error === "invalid_grant") return true;
-    try {
-      if (err.cause?.parameters?.get("error") === "invalid_grant") return true;
-    } catch {
-      // .cause.parameters not a URLSearchParams — not the shape we handle.
-    }
-  }
-  return false;
-}
+// The DEFINITIVE-`invalid_grant`-vs-transient discrimination that decides whether a
+// failed refresh grant CLEARS the dead persisted credential or PRESERVES it for a
+// retry now lives in @jeswr/solid-session-restore (exported as `isInvalidGrantError`)
+// and runs inside `restoreSession`, so the provider no longer carries its own copy —
+// one audited implementation across the suite.
 
 function isEssMissingIssInteractionNeeded(e: unknown): boolean {
   try {

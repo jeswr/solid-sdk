@@ -22,6 +22,19 @@ export default mergeConfig(
       globals: true,
       setupFiles: ["./test/setup.ts"],
       include: ["src/**/*.test.{ts,tsx}"],
+      // INLINE the silent-restore package so it is processed by Vitest (not loaded
+      // as an opaque external CJS/ESM module). The provider's restore now delegates
+      // the DPoP refresh-token GRANT to @jeswr/solid-session-restore's `restoreSession`,
+      // which imports `oauth4webapi` + `dpop` as bare specifiers. The provider's
+      // adversarial restore tests `vi.mock("oauth4webapi")` / `vi.mock("dpop")`; that
+      // mock only reaches imports made INSIDE this package when the package is inlined.
+      // Without this, restoreSession would hit the REAL oauth stack (network discovery)
+      // and the provider tests could not exercise the wrapped grant.
+      server: {
+        deps: {
+          inline: [/@jeswr\/solid-session-restore/],
+        },
+      },
     },
   }),
 );
