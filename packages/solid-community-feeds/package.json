@@ -1,0 +1,63 @@
+{
+  "name": "@jeswr/solid-community-feeds",
+  "version": "0.1.0",
+  "description": "Framework-agnostic read client that normalizes Solid community channels — Matrix rooms (Client-Server API) and the Solid forum (Discourse) — into ONE unified channel→thread→message feed model. SSRF-safe, injectable fetch, no live network in tests. Experimental, AI-agent-generated.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "check:dist": "node scripts/check-dist-fresh.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "biome check src test scripts",
+    "lint:fix": "biome check --write src test scripts",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "prepare": "npm run build"
+  },
+  "keywords": [
+    "solid",
+    "matrix",
+    "discourse",
+    "community",
+    "feed",
+    "chat",
+    "forum",
+    "activitystreams",
+    "linked-data"
+  ],
+  "author": "Jesse Wright <jwrightwho@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jeswr/solid-community-feeds.git"
+  },
+  "bugs": {
+    "url": "https://github.com/jeswr/solid-community-feeds/issues"
+  },
+  "homepage": "https://github.com/jeswr/solid-community-feeds#readme",
+  "dependencies": {},
+  "devDependencies": {
+    "@biomejs/biome": "^2.0.0",
+    "@types/node": "^22.0.0",
+    "@vitest/coverage-v8": "^2.1.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

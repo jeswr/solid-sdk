@@ -1,0 +1,22 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jeswr/full-solid-ecosystem/main/tracking/schema/suite.schema.json",
+  "id": "solid-community-feeds",
+  "kind": "sdk",
+  "name": "Solid Community Feeds",
+  "repo": "https://github.com/jeswr/solid-community-feeds",
+  "category": "social",
+  "maturity": "prototype",
+  "visibility": "public",
+  "stack": {
+    "lang": "TypeScript (ESM, NodeNext)",
+    "deps": "none (zero runtime dependencies)",
+    "test": "vitest ^2.x",
+    "lint": "@biomejs/biome ^2.x",
+    "node": ">=24"
+  },
+  "dependsOn": [],
+  "federation": {
+    "sectors": ["social"],
+    "membershipTodo": "SDK (not an app) — a read-first client normalizing Solid community channels (Matrix rooms via the CS API + the Solid forum via the Discourse JSON API) into one channel→thread→message feed model, with optional ActivityStreams 2.0 projection. Consumed by the Pod Manager's 'Solid Community' surface (#81). SSRF-safe, injectable fetch, credentials via the suite seam."
+  }
+}
