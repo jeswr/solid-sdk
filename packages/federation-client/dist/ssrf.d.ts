@@ -4,6 +4,13 @@ export declare class SsrfError extends Error {
         cause?: unknown;
     });
 }
+/**
+ * Browser-safe equivalent of `node:net#isIP`. Returns `4` for a valid IPv4 literal,
+ * `6` for a valid IPv6 literal, or `0` for anything else (a hostname, a malformed
+ * literal, a bracketed literal, leading/trailing whitespace, …). Pure JS — no Node
+ * builtin — so the module needs no polyfill in a browser bundle.
+ */
+export declare function classifyIpLiteral(value: string): 0 | 4 | 6;
 /** The shape of `node:dns/promises#lookup(host, { all: true })`. */
 export interface ResolvedAddress {
     readonly address: string;
@@ -37,12 +44,18 @@ export interface GuardOptions {
      */
     readonly pinningFetch?: typeof globalThis.fetch;
     /**
-     * A DNS lookup for hostname classification. Defaults to Node's
-     * `dns/promises.lookup(host, { all: true })` when available. Pass `null` to
-     * explicitly declare NO DNS is available (a non-Node runtime); then a hostname
-     * that is not an IP literal is REFUSED — fail closed — because the guard cannot
-     * verify where it resolves, unless {@link GuardOptions.allowUnresolvedHosts} is set.
-     * Injected in tests to drive the rebinding cases deterministically.
+     * A DNS lookup for hostname classification — selects the guard BRANCH. Defaults to
+     * Node's `dns/promises.lookup(host, { all: true })` when running on Node (the NODE
+     * branch: full DNS-resolve + every-record-public + rebinding mitigation). Pass `null`
+     * to force the DNS-LESS branch (a syntactic guard: https-only, no userinfo,
+     * private/loopback/metadata LITERALS blocked, `localhost`/`*.localhost`/`*.local` names
+     * blocked, http: bound to loopback names, each redirect re-validated). On the DNS-less
+     * branch a public-LOOKING hostname (no resolver to verify it) is allowed ONLY in a
+     * positively-identified BROWSER (`window === globalThis`) — the documented residual; in
+     * any other DNS-less runtime (edge / Workers / Deno / a DOM-shimmed SSR process) it
+     * FAILS CLOSED unless {@link GuardOptions.allowUnresolvedHosts} is set. Injected in
+     * tests to drive the rebinding cases (Node branch) and the DNS-less cases (`null`)
+     * deterministically.
      */
     readonly dnsLookup?: DnsLookup | null;
     /**
@@ -61,10 +74,20 @@ export interface GuardOptions {
      */
     readonly allowLoopback?: boolean;
     /**
-     * When no DNS lookup is available (non-Node runtime) AND the host is not an IP
-     * literal, permit the request anyway instead of failing closed. Default `false`
-     * (refuse). Set `true` only if you accept that hostname targets cannot be
-     * classified in that environment and you trust the URL source.
+     * DNS-less branch only (no DNS resolver). Accepts the no-resolver residual for a
+     * public-looking HOSTNAME target. It is needed in TWO DNS-less situations; in a
+     * positively-identified BROWSER neither needs it (the browser residual is accepted by
+     * default):
+     *   - in a NON-browser DNS-less runtime (edge / Cloudflare Workers / Deno without node
+     *     compat), a public-looking hostname FAILS CLOSED by default — reaching private
+     *     infra via an unresolved hostname is a real SSRF escalation there; set this `true`
+     *     to accept it (you trust the URL source);
+     *   - with {@link GuardOptions.requireDnsPinning} set, a hostname fails closed in ANY
+     *     DNS-less runtime (a socket cannot be pinned without a resolver) UNLESS this is
+     *     `true`.
+     * Regardless of this flag, `localhost` / `*.local` NAMES, private/loopback/metadata IP
+     * LITERALS, and `http:` to a non-loopback name are ALWAYS refused. Default `false`. (On
+     * the NODE branch DNS is always available, so this flag is inert there.)
      */
     readonly allowUnresolvedHosts?: boolean;
     /**

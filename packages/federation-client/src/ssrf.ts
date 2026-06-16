@@ -8,30 +8,50 @@
 // `fetch`-shaped function that, on every request AND every redirect hop:
 //   - allows only `https:` (no http:, file:, data:, gopher:, …) by default;
 //   - rejects userinfo (`https://user:pass@…`) so credentials never leak to the host;
-//   - classifies the target host: an IP literal is checked directly; a hostname is
-//     DNS-resolved (Node) and EVERY resolved A/AAAA record must be public — a
-//     DNS-rebinding mitigation (one record to a public IP, one to 127.0.0.1 is
-//     refused). Loopback / RFC-1918 / CGNAT / link-local / metadata / multicast /
+//   - classifies the target host. There are TWO branches, selected automatically by
+//     CAPABILITY DETECTION (is `node:dns/promises` importable), NOT a caller flag, so
+//     a Node consumer is unaffected and a browser/static-export consumer needs no shim:
+//       * NODE branch (DNS available): an IP literal is checked directly; a hostname is
+//         DNS-resolved and EVERY resolved A/AAAA record must be public — a DNS-rebinding
+//         mitigation (one record to a public IP, one to 127.0.0.1 is refused).
+//       * BROWSER branch (no `node:dns`): a DNS-LESS guard — there is no resolver, so a
+//         hostname is inspected SYNTACTICALLY (reject `localhost`, `*.local`,
+//         `*.localhost`, and any private/loopback/link-local/metadata IP LITERAL in the
+//         URL host) and otherwise allowed. See the residual note below — this is the
+//         inherent limit of browser `fetch`, surfaced honestly.
+//     In both branches Loopback / RFC-1918 / CGNAT / link-local / metadata / multicast /
 //     reserved / IPv4-mapped-IPv6 / IPv6-ULA / 6to4- and NAT64-embedded-private-v4
-//     are all refused;
+//     LITERALS are all refused;
 //   - does NOT auto-follow redirects: it sets `redirect: "manual"`, then re-runs the
-//     full guard against each `Location` (bounded hops + loop detection) and only
-//     follows allowed hosts — so a 302 to `http://169.254.169.254/…` is refused;
+//     full guard (the SAME branch) against each `Location` (bounded hops + loop
+//     detection) and only follows allowed hosts — so a 302 to `http://169.254.169.254/…`
+//     is refused in both branches;
 //   - caps the response body (buffered up to `maxBytes`, over-cap rejected) and
 //     bounds the whole operation (initial fetch + redirects + body) with a single
 //     timeout via one AbortController.
 //
-// The IP-classification logic (`isPublicAddress` + helpers) is ported VERBATIM from
-// the suite's vetted, exhaustively-tested `@pss/guarded-fetch` package
-// (prod-solid-server `packages/guarded-fetch/src/addresses.ts`, itself ported from
-// the RS WebID resolver). It is duplicated here (not depended on) only because
-// `@pss/guarded-fetch` is an internal workspace package, not on npm; this client
-// library ships standalone. Keep the two in lock-step.
+// BROWSER-SAFE node: imports (the load-bearing mechanism for task #92). This module
+// has NO top-level `import` of a `node:` builtin. The IP-literal classifier is a
+// pure-JS `classifyIpLiteral` (matching `node:net#isIP` semantics; fuzzed against it in
+// the tests) so `node:net` is never imported, and the only `node:dns/promises` use is a
+// LAZY `await import(...)` reached ONLY on the Node branch (gated by `hasNodeDns()`). So
+// a browser bundler with no Node polyfills resolves + tree-shakes this module with no
+// `NormalModuleReplacementPlugin` / `resolve.fallback` shim. (Before #92 a top-level
+// `import { isIP } from "node:net"` forced the PM /federations build to add a webpack
+// shim — that is now unnecessary.)
 //
-// DNS-pinning note: the suite RS pins the validated IP into the connection via an
-// undici `Agent({ connect: { lookup } })`, closing the lookup→connect rebinding
-// TOCTOU exactly. This client library targets plain `fetch` (browser + Node) and
-// deliberately does NOT depend on undici (it would bloat the browser bundle for a
+// The IP-classification ranges (`isPublicAddress` + helpers) are ported from the
+// suite's vetted, exhaustively-tested `@pss/guarded-fetch` package (prod-solid-server
+// `packages/guarded-fetch/src/addresses.ts`, itself ported from the RS WebID resolver).
+// They are duplicated here (not depended on) only because `@pss/guarded-fetch` is an
+// internal workspace package, not on npm; this client library ships standalone. The
+// only deliberate divergence is the `node:net#isIP` dependency, replaced by the
+// browser-safe `classifyIpLiteral` above. Keep the ranges in lock-step with the source.
+//
+// DNS-pinning note (NODE branch): the suite RS pins the validated IP into the
+// connection via an undici `Agent({ connect: { lookup } })`, closing the lookup→connect
+// rebinding TOCTOU exactly. This client library targets plain `fetch` (browser + Node)
+// and deliberately does NOT depend on undici (it would bloat the browser bundle for a
 // Node-only capability), so the DEFAULT plain-fetch path cannot pin the socket: the
 // residual gap is a host that resolves to a public IP at guard time and a private IP
 // microseconds later at connect time. Two things bound this: (1) the redirect
@@ -42,10 +62,31 @@
 // connection. A generic auth/custom `fetch` does NOT satisfy the strict posture; only
 // `pinningFetch` does, so an ordinary fetch can never silently re-open the window.
 // Full closure is therefore a deliberate, opt-in caller choice; the default
-// best-effort posture documents the window rather than silently leaving it. (A bundled
-// undici-pinning Node entry point is a tracked follow-up — see the package follow-ups.)
-
-import { isIP } from "node:net";
+// best-effort posture documents the window rather than silently leaving it.
+// (#86 tracks adding undici socket-pinning to the NODE path for full rebinding closure;
+// do NOT implement undici here — it would re-introduce a Node-only dep into the browser
+// bundle and re-break the browser path #92 just fixed.)
+//
+// DNS-LESS-branch RESIDUAL + the edge/worker distinction (documented honestly, not
+// hidden). On the DNS-less branch there is NO DNS resolver and `fetch` exposes no socket,
+// so the guard CANNOT verify where a hostname actually resolves at connect time. A
+// hostname that looks public in the URL (`https://innocent.example/…`) but resolves to a
+// private IP (`10.x`, `169.254.169.254`, …) at connect time is NOT caught by hostname
+// inspection alone. How that residual is handled depends on the RUNTIME (roborev #92
+// round-2 High):
+//   - A POSITIVELY-IDENTIFIED BROWSER (a DOM `window`): a public-looking https hostname
+//     is ALLOWED — this is the SAME residual every browser app already has (the page can
+//     `fetch` any origin regardless), and accepting it is the cost of needing no Node
+//     builtins / no shim.
+//   - ANY OTHER DNS-less runtime (edge / Cloudflare Workers / Deno without node compat):
+//     a public-looking hostname FAILS CLOSED unless the caller sets `allowUnresolvedHosts`
+//     — in a server runtime an unresolved hostname reaching private infra is a real SSRF
+//     escalation, not the benign browser residual.
+// In BOTH cases the DNS-less branch still blocks the obvious vectors (non-https,
+// userinfo, `localhost`/`*.local` NAMES, private/loopback/metadata IP LITERALS in the
+// host, http: to a non-loopback name) and re-validates each redirect hop the same way.
+// For a target you do not control on the NODE branch you get the full DNS-resolve +
+// every-record-public check on top.
 
 /** Raised when the SSRF guard refuses a URL / redirect / oversize body. */
 export class SsrfError extends Error {
@@ -53,6 +94,141 @@ export class SsrfError extends Error {
     super(message, options);
     this.name = "SsrfError";
   }
+}
+
+// --- browser-safe IP-literal classification --------------------------------
+// `classifyIpLiteral` REPLACES `node:net#isIP` so this module imports no `node:`
+// builtin at the top level (the #92 browser-safe mechanism). It returns the SAME
+// values as `isIP` — `4` (IPv4), `6` (IPv6), `0` (not an IP literal) — and matches its
+// STRICT semantics: canonical dotted-decimal IPv4 with no leading zeros / hex / extra
+// octets, and canonical colon-hex IPv6 with at most one `::` and an optional embedded
+// IPv4 in the last 32 bits. The test suite fuzzes this against `node:net#isIP` over a
+// large corpus to keep the two in lock-step; a divergence would weaken or over-tighten
+// the SSRF classification, so it is treated as security-critical.
+
+/** Matches one canonical IPv4 dotted-decimal octet: 0, or 1–255 with no leading zero. */
+const IPV4_OCTET = /^(?:0|[1-9]\d{0,2})$/;
+
+/**
+ * Browser-safe equivalent of `node:net#isIP`. Returns `4` for a valid IPv4 literal,
+ * `6` for a valid IPv6 literal, or `0` for anything else (a hostname, a malformed
+ * literal, a bracketed literal, leading/trailing whitespace, …). Pure JS — no Node
+ * builtin — so the module needs no polyfill in a browser bundle.
+ */
+export function classifyIpLiteral(value: string): 0 | 4 | 6 {
+  if (isIpv4Literal(value)) {
+    return 4;
+  }
+  if (isIpv6Literal(value)) {
+    return 6;
+  }
+  return 0;
+}
+
+/** Strict canonical IPv4: exactly four octets 0–255, no leading zeros, no hex/space. */
+function isIpv4Literal(value: string): boolean {
+  const parts = value.split(".");
+  if (parts.length !== 4) {
+    return false;
+  }
+  for (const part of parts) {
+    if (!IPV4_OCTET.test(part)) {
+      return false;
+    }
+    if (Number.parseInt(part, 10) > 255) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Strict canonical IPv6 (matching `node:net#isIP`'s acceptance set): hextet groups
+ * separated by `:`, at most ONE `::` compression, optional trailing embedded IPv4 in
+ * the last 32 bits. Each non-embedded group is 1–4 hex digits. Rejects bracketed
+ * forms, zone ids, double `::`, over-/under-length, and whitespace.
+ */
+function isIpv6Literal(value: string): boolean {
+  // Match `node:net#isIP`'s acceptance of a scoped/zone id (`fe80::1%eth0`): the part
+  // before `%` must be a valid IPv6 and the zone after `%` must be NON-EMPTY. Strip a
+  // well-formed zone, then validate the address proper. (WHATWG `new URL` rejects a
+  // bracketed zone-id host outright, so this only matters for the exported helpers
+  // called with a raw address — keeping them in lock-step with `isIP`.) A `%` with an
+  // empty zone, or a leading `%`, is NOT a valid literal.
+  const pct = value.indexOf("%");
+  if (pct !== -1) {
+    const zone = value.slice(pct + 1);
+    // The zone must be NON-EMPTY and contain no further `%` (matching `node:net#isIP`,
+    // which rejects `fe80::1%` and `fe80::1%eth0%more`).
+    if (zone.length === 0 || zone.includes("%")) {
+      return false;
+    }
+    return isIpv6Literal(value.slice(0, pct));
+  }
+  if (value.length === 0 || /[^0-9a-fA-F:.]/.test(value)) {
+    return false;
+  }
+  // At most one "::" compression marker.
+  const compressionMatches = value.match(/::/g);
+  if (compressionMatches && compressionMatches.length > 1) {
+    return false;
+  }
+  const hasCompression = value.includes("::");
+
+  // A trailing embedded IPv4 (e.g. `::ffff:1.2.3.4`) occupies the final two hextets.
+  let core = value;
+  let embeddedV4Groups = 0;
+  const lastColon = value.lastIndexOf(":");
+  const dot = value.indexOf(".");
+  if (dot !== -1) {
+    // The dotted part must be the suffix after the final colon, and a valid IPv4.
+    if (lastColon === -1 || lastColon > dot) {
+      return false;
+    }
+    const v4 = value.slice(lastColon + 1);
+    if (!isIpv4Literal(v4)) {
+      return false;
+    }
+    core = value.slice(0, lastColon + 1); // keep the trailing ':' so split logic is uniform
+    embeddedV4Groups = 2; // an embedded v4 fills two 16-bit groups
+  }
+
+  // Split the (v4-stripped) core into groups around the optional "::".
+  const requiredGroups = 8 - embeddedV4Groups;
+  if (hasCompression) {
+    const idx = core.indexOf("::");
+    const headStr = core.slice(0, idx);
+    // For the embedded-v4 case `core` ends with a ':'; drop the trailing empty token.
+    let tailStr = core.slice(idx + 2);
+    if (embeddedV4Groups > 0 && tailStr.endsWith(":")) {
+      tailStr = tailStr.slice(0, -1);
+    }
+    const head = headStr === "" ? [] : headStr.split(":");
+    const tail = tailStr === "" ? [] : tailStr.split(":");
+    if (!head.every(isHextet) || !tail.every(isHextet)) {
+      return false;
+    }
+    // "::" must stand in for AT LEAST ONE zero group, so head+tail must be < required.
+    if (head.length + tail.length >= requiredGroups) {
+      return false;
+    }
+    return true;
+  }
+  // No compression: exactly `requiredGroups` groups, each a valid hextet.
+  let groupsStr = core;
+  if (embeddedV4Groups > 0 && groupsStr.endsWith(":")) {
+    groupsStr = groupsStr.slice(0, -1);
+  }
+  const groups = groupsStr === "" ? [] : groupsStr.split(":");
+  if (groups.length !== requiredGroups) {
+    return false;
+  }
+  return groups.every(isHextet);
+}
+
+/** A single IPv6 hextet: 1–4 hex digits. */
+function isHextet(group: string): boolean {
+  return /^[0-9a-fA-F]{1,4}$/.test(group);
 }
 
 /** The shape of `node:dns/promises#lookup(host, { all: true })`. */
@@ -90,12 +266,18 @@ export interface GuardOptions {
    */
   readonly pinningFetch?: typeof globalThis.fetch;
   /**
-   * A DNS lookup for hostname classification. Defaults to Node's
-   * `dns/promises.lookup(host, { all: true })` when available. Pass `null` to
-   * explicitly declare NO DNS is available (a non-Node runtime); then a hostname
-   * that is not an IP literal is REFUSED — fail closed — because the guard cannot
-   * verify where it resolves, unless {@link GuardOptions.allowUnresolvedHosts} is set.
-   * Injected in tests to drive the rebinding cases deterministically.
+   * A DNS lookup for hostname classification — selects the guard BRANCH. Defaults to
+   * Node's `dns/promises.lookup(host, { all: true })` when running on Node (the NODE
+   * branch: full DNS-resolve + every-record-public + rebinding mitigation). Pass `null`
+   * to force the DNS-LESS branch (a syntactic guard: https-only, no userinfo,
+   * private/loopback/metadata LITERALS blocked, `localhost`/`*.localhost`/`*.local` names
+   * blocked, http: bound to loopback names, each redirect re-validated). On the DNS-less
+   * branch a public-LOOKING hostname (no resolver to verify it) is allowed ONLY in a
+   * positively-identified BROWSER (`window === globalThis`) — the documented residual; in
+   * any other DNS-less runtime (edge / Workers / Deno / a DOM-shimmed SSR process) it
+   * FAILS CLOSED unless {@link GuardOptions.allowUnresolvedHosts} is set. Injected in
+   * tests to drive the rebinding cases (Node branch) and the DNS-less cases (`null`)
+   * deterministically.
    */
   readonly dnsLookup?: DnsLookup | null;
   /**
@@ -114,10 +296,20 @@ export interface GuardOptions {
    */
   readonly allowLoopback?: boolean;
   /**
-   * When no DNS lookup is available (non-Node runtime) AND the host is not an IP
-   * literal, permit the request anyway instead of failing closed. Default `false`
-   * (refuse). Set `true` only if you accept that hostname targets cannot be
-   * classified in that environment and you trust the URL source.
+   * DNS-less branch only (no DNS resolver). Accepts the no-resolver residual for a
+   * public-looking HOSTNAME target. It is needed in TWO DNS-less situations; in a
+   * positively-identified BROWSER neither needs it (the browser residual is accepted by
+   * default):
+   *   - in a NON-browser DNS-less runtime (edge / Cloudflare Workers / Deno without node
+   *     compat), a public-looking hostname FAILS CLOSED by default — reaching private
+   *     infra via an unresolved hostname is a real SSRF escalation there; set this `true`
+   *     to accept it (you trust the URL source);
+   *   - with {@link GuardOptions.requireDnsPinning} set, a hostname fails closed in ANY
+   *     DNS-less runtime (a socket cannot be pinned without a resolver) UNLESS this is
+   *     `true`.
+   * Regardless of this flag, `localhost` / `*.local` NAMES, private/loopback/metadata IP
+   * LITERALS, and `http:` to a non-loopback name are ALWAYS refused. Default `false`. (On
+   * the NODE branch DNS is always available, so this flag is inert there.)
    */
   readonly allowUnresolvedHosts?: boolean;
   /**
@@ -143,14 +335,52 @@ const DEFAULT_TIMEOUT_MS = 10_000;
 const DEFAULT_MAX_REDIRECTS = 5;
 
 /**
- * Lazily resolve Node's `dns/promises.lookup` if running on Node; `undefined` in a
- * browser/edge runtime. Kept out of the module top-level `import` list so this file
- * imports cleanly where `node:dns` is unavailable (only `node:net#isIP` is needed
- * universally, and bundlers polyfill it).
+ * The `node:dns/promises` module specifier, assembled at runtime so a browser bundler
+ * (esbuild / webpack / turbopack) CANNOT statically see the literal `"node:dns/promises"`
+ * and therefore never tries to resolve it at build time. This is the load-bearing part
+ * of the #92 browser-safe mechanism: a *literal* `await import("node:dns/promises")` is
+ * still statically analysed by esbuild (it errors `Could not resolve "node:dns/promises"`
+ * under `platform:"browser"`), which is exactly the resolution failure that forced the
+ * PM build to add a `NormalModuleReplacementPlugin` shim. An OPAQUE specifier sidesteps
+ * the static analyser — the import is performed only at runtime, only on Node (gated by
+ * `hasNodeDns()` so it never even runs in a browser). `classifyIpLiteral` (pure JS)
+ * replaces `node:net`, so `node:net` is not imported at all.
  */
-async function nodeDnsLookup(host: string): Promise<ResolvedAddress[]> {
-  const { lookup } = await import("node:dns/promises");
-  return lookup(host, { all: true });
+const NODE_DNS_SPECIFIER = ["node:dns", "promises"].join("/");
+
+/**
+ * Marker error thrown by {@link loadNodeDnsLookup} when the `node:dns/promises` MODULE itself
+ * cannot be imported (as opposed to a genuine DNS resolution failure). The guard uses
+ * this to distinguish "this isn't really a Node runtime — fall back to the DNS-less
+ * policy" from "the host did not resolve — fail" (roborev #92 round-3 Medium). This
+ * matters when `process.versions.node` is present (e.g. a browser bundle with a `process`
+ * shim) but `node:dns` is not actually importable.
+ */
+class NodeDnsUnavailableError extends Error {}
+
+/**
+ * PROBE + load Node's `dns/promises.lookup` if running on Node, returning a bound
+ * {@link DnsLookup}. Uses the opaque {@link NODE_DNS_SPECIFIER} so the import is invisible
+ * to a browser bundler's static analysis (see that constant's note) — no `node:`
+ * resolution at build time, no shim. If the module cannot be imported (a non-Node runtime
+ * that merely *looks* like Node via a `process` shim), throws {@link
+ * NodeDnsUnavailableError} so the caller can fall back to the DNS-less policy.
+ *
+ * The IMPORT (capability probe) is separated from a host RESOLUTION (roborev #92 round-6
+ * Medium): the guard probes importability ONCE up front, so the strict `requireDnsPinning`
+ * rejection can fire BEFORE any `lookup(host)` network query — no DNS leaks for a request
+ * the strict posture was always going to refuse.
+ */
+async function loadNodeDnsLookup(): Promise<DnsLookup> {
+  let mod: { lookup: (host: string, opts: { all: true }) => Promise<ResolvedAddress[]> };
+  try {
+    mod = (await import(/* @vite-ignore */ NODE_DNS_SPECIFIER)) as typeof mod;
+  } catch (cause) {
+    throw new NodeDnsUnavailableError(`node:dns/promises is not importable: ${message(cause)}`, {
+      cause,
+    });
+  }
+  return (host: string) => mod.lookup(host, { all: true });
 }
 
 /**
@@ -180,7 +410,13 @@ export function guardedFetch(
 /** The guard implementation: URL validation, redirect re-validation, body cap, timeout. */
 class SsrfGuard {
   private readonly fetcher: typeof globalThis.fetch;
-  private readonly lookup: DnsLookup | undefined;
+  /**
+   * A caller-INJECTED DNS lookup (a custom resolver / test stub), or `undefined`. When
+   * present it is the resolver and there is no import-failure fallback (an injected lookup
+   * throwing is always a genuine resolution failure). Distinct from the DEFAULT node
+   * lookup (see {@link usingDefaultNodeLookup}), which is probed lazily.
+   */
+  private readonly injectedLookup: DnsLookup | undefined;
   private readonly maxBytes: number;
   private readonly timeoutMs: number;
   private readonly maxRedirects: number;
@@ -194,19 +430,38 @@ class SsrfGuard {
    * `requireDnsPinning` (roborev round-2 High).
    */
   private readonly havePinningFetch: boolean;
+  /**
+   * Whether we are in a positively-identified BROWSER context (a DOM window). On the
+   * DNS-less branch this gates whether a public-looking hostname is allowed by default:
+   * a real browser accepts the documented residual; any other DNS-less runtime
+   * (edge / workers) fails closed unless `allowUnresolvedHosts` (roborev #92 round-2
+   * High). Captured once at construction.
+   */
+  private readonly isBrowser: boolean;
+  /**
+   * Whether the DEFAULT Node `node:dns` lookup is in play (no injected lookup AND the
+   * process LOOKS like Node). The actual `node:dns` import is probed lazily by
+   * {@link resolveDefaultLookup}; if it cannot be imported (a non-Node runtime with only a
+   * `process` shim) the guard FALLS BACK to the DNS-less policy (roborev #92 round-3).
+   */
+  private readonly usingDefaultNodeLookup: boolean;
+  /** Cached default-node-lookup probe (see {@link resolveDefaultLookup}). */
+  private defaultLookup: Promise<DnsLookup> | undefined;
 
   constructor(options: GuardOptions) {
     this.havePinningFetch = options.pinningFetch !== undefined;
+    this.isBrowser = isBrowserContext();
     // A branded pinningFetch (if given) is the underlying fetch; else the generic
     // fetch; else the global. pinningFetch takes precedence when both are present.
     this.fetcher = options.pinningFetch ?? options.fetch ?? globalThis.fetch;
-    // Resolve the DNS lookup: an injected function (test) wins; `null` explicitly
-    // disables DNS (simulate a non-Node runtime); `undefined` (the default) uses
-    // Node DNS when available, else no DNS (fail-closed for hostnames).
-    this.lookup =
-      options.dnsLookup === null
-        ? undefined
-        : (options.dnsLookup ?? (hasNodeDns() ? nodeDnsLookup : undefined));
+    // DNS lookup selection: an INJECTED function (test/custom) wins and resolves directly;
+    // `null` explicitly disables DNS (the DNS-less branch); `undefined` (the default) uses
+    // the Node `node:dns` lookup WHEN the process LOOKS like Node — but its IMPORT is only
+    // probed lazily (resolveDefaultLookup), separating capability from a host query so the
+    // strict requireDnsPinning rejection can fire before any network lookup (roborev #92
+    // round-6). `hasNodeDns()` is a cheap heuristic; the import probe is authoritative.
+    this.injectedLookup = options.dnsLookup === null ? undefined : (options.dnsLookup ?? undefined);
+    this.usingDefaultNodeLookup = options.dnsLookup === undefined && hasNodeDns();
     this.maxBytes = options.maxBytes ?? DEFAULT_MAX_BYTES;
     this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.maxRedirects = options.maxRedirects ?? DEFAULT_MAX_REDIRECTS;
@@ -409,9 +664,17 @@ class SsrfGuard {
 
   /**
    * Refuse `rawUrl` unless it is an https (or, under `allowLoopback`, http-to-loopback)
-   * URL with no userinfo whose host classifies as public. A hostname is DNS-resolved
-   * and EVERY record must pass (DNS-rebinding mitigation); under `requireDnsPinning` a
-   * hostname through the default fetch is refused outright.
+   * URL with no userinfo whose host is allowed by the active branch:
+   *   - NODE branch (DNS available): an IP literal is checked directly; a hostname is
+   *     DNS-resolved and EVERY record must be public (DNS-rebinding mitigation); under
+   *     `requireDnsPinning` a hostname through the default fetch is refused outright.
+   *   - BROWSER branch (no DNS): an IP literal is checked directly; a hostname is
+   *     inspected SYNTACTICALLY (reject `localhost` / `*.local` / `*.localhost`) and
+   *     otherwise allowed — see the module-header residual note (a hostname that
+   *     resolves to a private IP at connect time is NOT caught: inherent to browser
+   *     `fetch`).
+   * The host-shape checks (scheme, userinfo, IP literal) are identical in both branches;
+   * only the hostname (non-literal) path differs.
    */
   private async assertAllowed(rawUrl: string): Promise<void> {
     let url: URL;
@@ -435,42 +698,185 @@ class SsrfGuard {
     }
 
     const hostname = url.hostname.replace(/^\[|\]$/g, "");
-    const literalKind = isIP(hostname);
-    // DNS-rebinding fail-closed posture: a HOSTNAME (which the guard validates but, on
-    // plain `fetch`, cannot pin the socket to) is refused unless a DISTINCT, branded
-    // `pinningFetch` was supplied. A generic auth/custom `fetch` does NOT satisfy this
-    // — only the explicit pinning attestation does (roborev round-2 High). IP literals
-    // need no resolution and have no rebinding window, so they bypass this check.
-    if (this.requireDnsPinning && literalKind === 0 && !this.havePinningFetch) {
+    const literalKind = classifyIpLiteral(hostname);
+
+    // IP-LITERAL targets: classified directly in BOTH branches (no resolution, no
+    // rebinding window). This is the absolute literal-IP block that holds regardless of
+    // whether DNS is available — so a `https://10.0.0.1/`, `https://169.254.169.254/`,
+    // `https://[::1]/`, `https://[::ffff:10.0.0.1]/` etc. is refused everywhere.
+    if (literalKind !== 0) {
+      const r = { address: hostname, family: literalKind };
+      this.assertResolvedAddressesAllowed(url, hostname, [r]);
+      return;
+    }
+
+    // HOSTNAME targets (non-literal). Determine the active resolver, separating DNS
+    // CAPABILITY (is a resolver available) from a host QUERY:
+    //   - an INJECTED lookup is a known-available resolver (resolve directly);
+    //   - the DEFAULT node lookup is probed (import only — no host query); on import
+    //     failure (a runtime that only LOOKS like Node via a `process` shim) we route to
+    //     the DNS-less policy;
+    //   - neither ⇒ the DNS-less branch.
+    let lookup: DnsLookup;
+    if (this.injectedLookup) {
+      lookup = this.injectedLookup;
+    } else if (this.usingDefaultNodeLookup) {
+      try {
+        lookup = await this.resolveDefaultLookup();
+      } catch (cause) {
+        // The default `node:dns` import is NOT possible here — not really Node. This is a
+        // CAPABILITY result, not a resolution failure, and it leaked no DNS query: route to
+        // the DNS-less policy (roborev #92 round-3 + round-6 Medium).
+        if (cause instanceof NodeDnsUnavailableError) {
+          this.assertDnslessHostnameAllowed(url.protocol, hostname);
+          return;
+        }
+        throw new SsrfError(`node:dns probe failed for ${hostname}: ${message(cause)}`, { cause });
+      }
+    } else {
+      // --- DNS-LESS branch (no resolver available at all).
+      this.assertDnslessHostnameAllowed(url.protocol, hostname);
+      return;
+    }
+
+    // --- NODE branch: a resolver IS available. The DNS-rebinding fail-closed posture now
+    // applies and fires BEFORE any host query (roborev #92 round-6 Medium — no DNS leak for
+    // a request the strict posture was always going to refuse): a HOSTNAME (validated but,
+    // on plain `fetch`, not socket-pinned) is refused under `requireDnsPinning` unless a
+    // DISTINCT, branded `pinningFetch` was supplied. A generic auth/custom `fetch` does NOT
+    // satisfy this — only the explicit pinning attestation does (roborev round-2 High).
+    if (this.requireDnsPinning && !this.havePinningFetch) {
       throw new SsrfError(
         `Registry URL refused — requireDnsPinning is set and "${hostname}" is a hostname, which cannot be DNS-pinned without an explicit pinningFetch. Pass a pinningFetch (asserted to pin DNS), or use an IP literal.`,
       );
     }
     let resolved: ResolvedAddress[];
-    if (literalKind !== 0) {
-      resolved = [{ address: hostname, family: literalKind }];
-    } else if (this.lookup) {
-      try {
-        resolved = await this.lookup(hostname);
-      } catch (cause) {
-        throw new SsrfError(`Registry host did not resolve: ${hostname}: ${message(cause)}`, {
-          cause,
-        });
-      }
-      if (resolved.length === 0) {
-        throw new SsrfError(`Registry host resolved to no addresses: ${hostname}.`);
-      }
-    } else {
-      // No DNS available (non-Node) and not an IP literal: cannot verify the target.
-      if (this.allowUnresolvedHosts) {
-        return;
-      }
+    try {
+      resolved = await lookup(hostname);
+    } catch (cause) {
+      throw new SsrfError(`Registry host did not resolve: ${hostname}: ${message(cause)}`, {
+        cause,
+      });
+    }
+    if (resolved.length === 0) {
+      throw new SsrfError(`Registry host resolved to no addresses: ${hostname}.`);
+    }
+    this.assertResolvedAddressesAllowed(url, hostname, resolved);
+  }
+
+  /**
+   * Probe + cache the DEFAULT Node `node:dns` lookup. The import (capability) is attempted
+   * ONCE and memoised; a successful probe yields the bound lookup, a failed import throws
+   * {@link NodeDnsUnavailableError} (cached so we do not retry the import per request). The
+   * caller (the hostname path) probes this BEFORE the requireDnsPinning rejection so the
+   * strict posture fails before any network query (roborev #92 round-6 Medium).
+   */
+  private resolveDefaultLookup(): Promise<DnsLookup> {
+    if (this.defaultLookup === undefined) {
+      this.defaultLookup = loadNodeDnsLookup();
+    }
+    return this.defaultLookup;
+  }
+
+  /**
+   * DNS-LESS branch hostname guard (no resolver). The IP-literal cases are already
+   * handled by the caller; here `hostname` is a non-literal name. We:
+   *   1. REFUSE the obvious local/loopback names — `localhost`, `*.localhost`, `local`,
+   *      `*.local` — which denote a private host on essentially every system (only
+   *      permitted under the dev `allowLoopback` escape hatch);
+   *   2. enforce the scheme policy WITH protocol context (roborev #92 round-2 Medium): an
+   *      `http:` URL (reachable here only under `allowLoopback`) is allowed ONLY for the
+   *      loopback NAMES above — never a public-looking hostname over `http:`, matching the
+   *      Node branch's "http is loopback-only" intent;
+   *   3. for a public-looking https hostname, ALLOW it ONLY in a positively-identified
+   *      browser (the documented inherent residual — the page can `fetch` any origin
+   *      anyway) OR when the caller set `allowUnresolvedHosts`. In a DNS-less *server*
+   *      runtime (edge / workers) WITHOUT that opt-in we FAIL CLOSED (roborev #92 round-2
+   *      High) — an unresolved public-looking hostname reaching private infra is a real
+   *      SSRF escalation there, not the benign browser residual.
+   * `requireDnsPinning` cannot be honoured without a resolver, so it fails closed for ANY
+   * hostname (incl. a loopback name) unless `allowUnresolvedHosts` is set — and that check
+   * runs FIRST, ahead of every allow path, so the `allowLoopback` dev hatch cannot let a
+   * `localhost` target bypass the strict posture (roborev #92 round-3 Medium). The
+   * browser-vs-server decision uses `this.isBrowser`, which is `process`-independent
+   * (`window === globalThis`), so it is correct on the import-failure fallback path too.
+   */
+  private assertDnslessHostnameAllowed(protocol: string, hostname: string): void {
+    const lower = hostname.toLowerCase().replace(/\.$/, ""); // strip a trailing FQDN dot
+
+    // STRICT-PINNING GATE FIRST (roborev #92 round-3 Medium): `requireDnsPinning` asks for
+    // a socket pinned to a validated address, which is impossible without a resolver. It
+    // therefore fails closed for EVERY DNS-less hostname target — INCLUDING a loopback
+    // name — unless the caller explicitly accepted the no-resolver residual via
+    // `allowUnresolvedHosts`. This must run BEFORE any allow path below, so the
+    // `allowLoopback` dev hatch cannot let a `localhost` target slip past the strict
+    // posture (the pre-#92 behaviour rejected any hostname under requireDnsPinning).
+    if (this.requireDnsPinning && !this.allowUnresolvedHosts) {
       throw new SsrfError(
-        `Cannot classify host ${hostname}: no DNS lookup is available in this runtime. ` +
-          "Pass a dnsLookup, or set allowUnresolvedHosts to accept the risk.",
+        `Registry URL refused — requireDnsPinning is set but no DNS resolver is available in this runtime to pin "${hostname}". A browser cannot pin a socket; set allowUnresolvedHosts to accept the residual, or run on Node with a pinningFetch.`,
       );
     }
 
+    // `.local` / `local` is the mDNS LAN namespace (RFC 6762) — a LINK-LOCAL/private
+    // network target (e.g. `printer.local`), NOT loopback. It must be REFUSED outright
+    // and is NOT re-permitted by `allowLoopback` (which is a localhost dev escape hatch)
+    // — on the Node branch such a name resolving to a private LAN address would be
+    // rejected, so the DNS-less branch must not silently allow it (roborev #92 round-3
+    // Medium).
+    if (lower === "local" || lower.endsWith(".local")) {
+      throw new SsrfError(
+        `Registry URL refused — "${hostname}" is an mDNS/link-local (.local) name denoting a private LAN target. Use a public https host.`,
+      );
+    }
+
+    // `localhost` / `*.localhost` is the loopback namespace (RFC 6761). Permit ONLY under
+    // the dev `allowLoopback` escape hatch (matching the Node branch's intent that
+    // http/loopback is dev-only); refused otherwise.
+    if (lower === "localhost" || lower.endsWith(".localhost")) {
+      if (this.allowLoopback) {
+        return;
+      }
+      throw new SsrfError(
+        `Registry URL refused — "${hostname}" is a loopback name (localhost/*.localhost), which denotes a private target. Use a public https host.`,
+      );
+    }
+
+    // An http: URL only reaches here under allowLoopback (the scheme check refuses http:
+    // otherwise). http: is dev-loopback-only — a public-looking hostname over http: is
+    // NEVER allowed (it was already rejected above if it were a loopback name).
+    if (protocol === "http:") {
+      throw new SsrfError(
+        `Registry URL refused — http: is allowed only for a loopback name (localhost/*.localhost) in this runtime; "${hostname}" is not loopback. Use https:.`,
+      );
+    }
+
+    // A public-looking https hostname with no resolver. Allow it ONLY when EITHER we are
+    // in a positively-identified browser (the documented inherent residual — a page can
+    // `fetch` any origin anyway) OR the caller explicitly accepted the no-resolver risk
+    // via `allowUnresolvedHosts`. In any OTHER DNS-less runtime (edge / Cloudflare
+    // Workers / Deno / a DOM-shimmed SSR process) we FAIL CLOSED: there, reaching private
+    // infra via an unresolved hostname is a real SSRF escalation, not the benign browser
+    // residual (roborev #92 round-2 High).
+    if (this.isBrowser || this.allowUnresolvedHosts) {
+      return;
+    }
+    throw new SsrfError(
+      `Registry URL refused — no DNS resolver is available in this runtime to classify "${hostname}", and this is not a positively-identified browser context. ` +
+        "Set allowUnresolvedHosts to accept that hostname targets cannot be classified here (you trust the URL source), or run on Node where the full DNS-resolve guard applies.",
+    );
+  }
+
+  /**
+   * Enforce the address-level policy on a set of resolved (or literal) addresses, shared
+   * by the IP-literal and Node-branch paths: under `allowLoopback` an http: URL must
+   * resolve to loopback ONLY, and EVERY address must be public (or loopback when
+   * allowLoopback) — one private record fails the whole request (rebinding mitigation).
+   */
+  private assertResolvedAddressesAllowed(
+    url: URL,
+    hostname: string,
+    resolved: ResolvedAddress[],
+  ): void {
     // Under `allowLoopback`, an http: URL must resolve to loopback ONLY — a dev box
     // must not HTTP-fetch a public host. (https: under allowLoopback may still target
     // loopback or public.)
@@ -496,16 +902,18 @@ class SsrfGuard {
 }
 
 // --- IP classification ------------------------------------------------------
-// Ported verbatim from @pss/guarded-fetch (prod-solid-server
+// Ported from @pss/guarded-fetch (prod-solid-server
 // packages/guarded-fetch/src/addresses.ts). See the module header for why it is
-// duplicated rather than imported. Keep in lock-step with the source.
+// duplicated rather than imported. Keep the RANGES in lock-step with the source; the
+// only deliberate divergence is using the browser-safe `classifyIpLiteral` instead of
+// `node:net#isIP` so the module imports no Node builtin (#92).
 
 /**
  * Classify an IPv4/IPv6 literal as public. Returns `false` for any non-public range,
  * malformed input, or a non-IP string. `allowLoopback` re-permits loopback only.
  */
 export function isPublicAddress(address: string, allowLoopback: boolean): boolean {
-  const family = isIP(address);
+  const family = classifyIpLiteral(address);
   if (family === 4) {
     return isPublicIpv4(address, allowLoopback);
   }
@@ -517,7 +925,7 @@ export function isPublicAddress(address: string, allowLoopback: boolean): boolea
 
 /** Whether `address` is loopback (127/8, ::1, or IPv4-mapped ::ffff:127.x.x.x). */
 export function isLoopbackAddress(address: string): boolean {
-  const family = isIP(address);
+  const family = classifyIpLiteral(address);
   if (family === 4) {
     return address.startsWith("127.");
   }
@@ -528,7 +936,7 @@ export function isLoopbackAddress(address: string): boolean {
     }
     if (lower.startsWith("::ffff:")) {
       const v4 = lower.slice("::ffff:".length);
-      return isIP(v4) === 4 && v4.startsWith("127.");
+      return classifyIpLiteral(v4) === 4 && v4.startsWith("127.");
     }
   }
   return false;
@@ -686,7 +1094,7 @@ function expandIpv6(addr: string): string[] | undefined {
       return undefined;
     }
     const v4 = s.slice(colon + 1);
-    if (isIP(v4) !== 4) {
+    if (classifyIpLiteral(v4) !== 4) {
       return undefined;
     }
     const [a, b, c, d] = v4.split(".").map((p) => Number.parseInt(p, 10));
@@ -887,6 +1295,38 @@ function hasNodeDns(): boolean {
     typeof process !== "undefined" &&
     process.versions !== undefined &&
     process.versions.node !== undefined
+  );
+}
+
+/**
+ * Positively identify a REAL BROWSER context. This is consulted only on the DNS-LESS path
+ * (no resolver available) to decide whether a public-looking hostname is allowed by
+ * default — the documented browser residual is acceptable in an actual browser (a page can
+ * `fetch` any origin anyway), but a DNS-less SERVER runtime (edge / Workers / Deno / an
+ * SSR process with a DOM shim) must FAIL CLOSED for it (an unresolved public host reaching
+ * private infra is a real SSRF escalation there).
+ *
+ * The load-bearing signal is `window === globalThis`: in an actual browser the global
+ * object IS the `window`, so this identity holds. A SERVER DOM shim — jsdom / happy-dom on
+ * Node, or an SSR polyfill — sets `globalThis.window` to a SEPARATE object, so
+ * `window !== globalThis` there; an edge/worker runtime has no `window` at all. So this one
+ * check distinguishes a real browser from BOTH a Node-with-jsdom runtime AND a DOM-shimmed
+ * SSR/server runtime (roborev #92 round-3 + round-5 Medium). It needs NO `process`
+ * heuristic, so it is correct on the import-failure fallback path too (roborev #92 round-4
+ * Medium), where the Node signal would be moot. `document` is additionally required as
+ * belt-and-braces.
+ *
+ * Conservative by design: a false negative (a real browser misdetected) only costs the
+ * caller an explicit `allowUnresolvedHosts`; a false positive would re-open the SSRF
+ * window — so we err toward fail-closed.
+ */
+function isBrowserContext(): boolean {
+  const g = globalThis as { window?: unknown; document?: unknown };
+  return (
+    typeof g.window !== "undefined" &&
+    (g.window as unknown) === (globalThis as unknown) &&
+    typeof g.document !== "undefined" &&
+    g.document !== null
   );
 }
 

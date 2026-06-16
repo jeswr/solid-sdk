@@ -1104,19 +1104,119 @@ function describeError22(err) {
 }
 
 // src/ssrf.ts
-import { isIP } from "node:net";
 var SsrfError = class extends Error {
   constructor(message2, options) {
     super(message2, options);
     this.name = "SsrfError";
   }
 };
+var IPV4_OCTET = /^(?:0|[1-9]\d{0,2})$/;
+function classifyIpLiteral(value) {
+  if (isIpv4Literal(value)) {
+    return 4;
+  }
+  if (isIpv6Literal(value)) {
+    return 6;
+  }
+  return 0;
+}
+function isIpv4Literal(value) {
+  const parts = value.split(".");
+  if (parts.length !== 4) {
+    return false;
+  }
+  for (const part of parts) {
+    if (!IPV4_OCTET.test(part)) {
+      return false;
+    }
+    if (Number.parseInt(part, 10) > 255) {
+      return false;
+    }
+  }
+  return true;
+}
+function isIpv6Literal(value) {
+  const pct = value.indexOf("%");
+  if (pct !== -1) {
+    const zone = value.slice(pct + 1);
+    if (zone.length === 0 || zone.includes("%")) {
+      return false;
+    }
+    return isIpv6Literal(value.slice(0, pct));
+  }
+  if (value.length === 0 || /[^0-9a-fA-F:.]/.test(value)) {
+    return false;
+  }
+  const compressionMatches = value.match(/::/g);
+  if (compressionMatches && compressionMatches.length > 1) {
+    return false;
+  }
+  const hasCompression = value.includes("::");
+  let core = value;
+  let embeddedV4Groups = 0;
+  const lastColon = value.lastIndexOf(":");
+  const dot = value.indexOf(".");
+  if (dot !== -1) {
+    if (lastColon === -1 || lastColon > dot) {
+      return false;
+    }
+    const v4 = value.slice(lastColon + 1);
+    if (!isIpv4Literal(v4)) {
+      return false;
+    }
+    core = value.slice(0, lastColon + 1);
+    embeddedV4Groups = 2;
+  }
+  const requiredGroups = 8 - embeddedV4Groups;
+  if (hasCompression) {
+    const idx = core.indexOf("::");
+    const headStr = core.slice(0, idx);
+    let tailStr = core.slice(idx + 2);
+    if (embeddedV4Groups > 0 && tailStr.endsWith(":")) {
+      tailStr = tailStr.slice(0, -1);
+    }
+    const head = headStr === "" ? [] : headStr.split(":");
+    const tail = tailStr === "" ? [] : tailStr.split(":");
+    if (!head.every(isHextet) || !tail.every(isHextet)) {
+      return false;
+    }
+    if (head.length + tail.length >= requiredGroups) {
+      return false;
+    }
+    return true;
+  }
+  let groupsStr = core;
+  if (embeddedV4Groups > 0 && groupsStr.endsWith(":")) {
+    groupsStr = groupsStr.slice(0, -1);
+  }
+  const groups = groupsStr === "" ? [] : groupsStr.split(":");
+  if (groups.length !== requiredGroups) {
+    return false;
+  }
+  return groups.every(isHextet);
+}
+function isHextet(group) {
+  return /^[0-9a-fA-F]{1,4}$/.test(group);
+}
 var DEFAULT_MAX_BYTES = 1024 * 1024;
 var DEFAULT_TIMEOUT_MS = 1e4;
 var DEFAULT_MAX_REDIRECTS = 5;
-async function nodeDnsLookup(host) {
-  const { lookup } = await import("node:dns/promises");
-  return lookup(host, { all: true });
+var NODE_DNS_SPECIFIER = ["node:dns", "promises"].join("/");
+var NodeDnsUnavailableError = class extends Error {
+};
+async function loadNodeDnsLookup() {
+  let mod;
+  try {
+    mod = await import(
+      /* @vite-ignore */
+      NODE_DNS_SPECIFIER
+    );
+  } catch (cause) {
+    throw new NodeDnsUnavailableError(`node:dns/promises is not importable: ${message(cause)}`, {
+      cause
+    });
+  }
+  return (host) => mod.lookup(host, { all: true });
 }
 function createGuardedFetch(options = {}) {
   const guard = new SsrfGuard(options);
@@ -1127,7 +1227,13 @@ function guardedFetch(input, init) {
 }
 var SsrfGuard = class {
   fetcher;
-  lookup;
+  /**
+   * A caller-INJECTED DNS lookup (a custom resolver / test stub), or `undefined`. When
+   * present it is the resolver and there is no import-failure fallback (an injected lookup
+   * throwing is always a genuine resolution failure). Distinct from the DEFAULT node
+   * lookup (see {@link usingDefaultNodeLookup}), which is probed lazily.
+   */
+  injectedLookup;
   maxBytes;
   timeoutMs;
   maxRedirects;
@@ -1141,10 +1247,29 @@ var SsrfGuard = class {
    * `requireDnsPinning` (roborev round-2 High).
    */
   havePinningFetch;
+  /**
+   * Whether we are in a positively-identified BROWSER context (a DOM window). On the
+   * DNS-less branch this gates whether a public-looking hostname is allowed by default:
+   * a real browser accepts the documented residual; any other DNS-less runtime
+   * (edge / workers) fails closed unless `allowUnresolvedHosts` (roborev #92 round-2
+   * High). Captured once at construction.
+   */
+  isBrowser;
+  /**
+   * Whether the DEFAULT Node `node:dns` lookup is in play (no injected lookup AND the
+   * process LOOKS like Node). The actual `node:dns` import is probed lazily by
+   * {@link resolveDefaultLookup}; if it cannot be imported (a non-Node runtime with only a
+   * `process` shim) the guard FALLS BACK to the DNS-less policy (roborev #92 round-3).
+   */
+  usingDefaultNodeLookup;
+  /** Cached default-node-lookup probe (see {@link resolveDefaultLookup}). */
+  defaultLookup;
   constructor(options) {
     this.havePinningFetch = options.pinningFetch !== void 0;
+    this.isBrowser = isBrowserContext();
     this.fetcher = options.pinningFetch ?? options.fetch ?? globalThis.fetch;
-    this.lookup = options.dnsLookup === null ? void 0 : options.dnsLookup ?? (hasNodeDns() ? nodeDnsLookup : void 0);
+    this.injectedLookup = options.dnsLookup === null ? void 0 : options.dnsLookup ?? void 0;
+    this.usingDefaultNodeLookup = options.dnsLookup === void 0 && hasNodeDns();
     this.maxBytes = options.maxBytes ?? DEFAULT_MAX_BYTES;
     this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.maxRedirects = options.maxRedirects ?? DEFAULT_MAX_REDIRECTS;
@@ -1291,9 +1416,17 @@ var SsrfGuard = class {
   }
   /**
    * Refuse `rawUrl` unless it is an https (or, under `allowLoopback`, http-to-loopback)
-   * URL with no userinfo whose host classifies as public. A hostname is DNS-resolved
-   * and EVERY record must pass (DNS-rebinding mitigation); under `requireDnsPinning` a
-   * hostname through the default fetch is refused outright.
+   * URL with no userinfo whose host is allowed by the active branch:
+   *   - NODE branch (DNS available): an IP literal is checked directly; a hostname is
+   *     DNS-resolved and EVERY record must be public (DNS-rebinding mitigation); under
+   *     `requireDnsPinning` a hostname through the default fetch is refused outright.
+   *   - BROWSER branch (no DNS): an IP literal is checked directly; a hostname is
+   *     inspected SYNTACTICALLY (reject `localhost` / `*.local` / `*.localhost`) and
+   *     otherwise allowed — see the module-header residual note (a hostname that
+   *     resolves to a private IP at connect time is NOT caught: inherent to browser
+   *     `fetch`).
+   * The host-shape checks (scheme, userinfo, IP literal) are identical in both branches;
+   * only the hostname (non-literal) path differs.
    */
   async assertAllowed(rawUrl) {
     let url;
@@ -1316,34 +1449,122 @@ var SsrfGuard = class {
       throw new SsrfError(`Registry URL must not carry userinfo (credentials): ${url.host}.`);
     }
     const hostname = url.hostname.replace(/^\[|\]$/g, "");
-    const literalKind = isIP(hostname);
-    if (this.requireDnsPinning && literalKind === 0 && !this.havePinningFetch) {
+    const literalKind = classifyIpLiteral(hostname);
+    if (literalKind !== 0) {
+      const r = { address: hostname, family: literalKind };
+      this.assertResolvedAddressesAllowed(url, hostname, [r]);
+      return;
+    }
+    let lookup;
+    if (this.injectedLookup) {
+      lookup = this.injectedLookup;
+    } else if (this.usingDefaultNodeLookup) {
+      try {
+        lookup = await this.resolveDefaultLookup();
+      } catch (cause) {
+        if (cause instanceof NodeDnsUnavailableError) {
+          this.assertDnslessHostnameAllowed(url.protocol, hostname);
+          return;
+        }
+        throw new SsrfError(`node:dns probe failed for ${hostname}: ${message(cause)}`, { cause });
+      }
+    } else {
+      this.assertDnslessHostnameAllowed(url.protocol, hostname);
+      return;
+    }
+    if (this.requireDnsPinning && !this.havePinningFetch) {
       throw new SsrfError(
         `Registry URL refused \u2014 requireDnsPinning is set and "${hostname}" is a hostname, which cannot be DNS-pinned without an explicit pinningFetch. Pass a pinningFetch (asserted to pin DNS), or use an IP literal.`
       );
     }
     let resolved;
-    if (literalKind !== 0) {
-      resolved = [{ address: hostname, family: literalKind }];
-    } else if (this.lookup) {
-      try {
-        resolved = await this.lookup(hostname);
-      } catch (cause) {
-        throw new SsrfError(`Registry host did not resolve: ${hostname}: ${message(cause)}`, {
-          cause
-        });
-      }
-      if (resolved.length === 0) {
-        throw new SsrfError(`Registry host resolved to no addresses: ${hostname}.`);
-      }
-    } else {
-      if (this.allowUnresolvedHosts) {
+    try {
+      resolved = await lookup(hostname);
+    } catch (cause) {
+      throw new SsrfError(`Registry host did not resolve: ${hostname}: ${message(cause)}`, {
+        cause
+      });
+    }
+    if (resolved.length === 0) {
+      throw new SsrfError(`Registry host resolved to no addresses: ${hostname}.`);
+    }
+    this.assertResolvedAddressesAllowed(url, hostname, resolved);
+  }
+  /**
+   * Probe + cache the DEFAULT Node `node:dns` lookup. The import (capability) is attempted
+   * ONCE and memoised; a successful probe yields the bound lookup, a failed import throws
+   * {@link NodeDnsUnavailableError} (cached so we do not retry the import per request). The
+   * caller (the hostname path) probes this BEFORE the requireDnsPinning rejection so the
+   * strict posture fails before any network query (roborev #92 round-6 Medium).
+   */
+  resolveDefaultLookup() {
+    if (this.defaultLookup === void 0) {
+      this.defaultLookup = loadNodeDnsLookup();
+    }
+    return this.defaultLookup;
+  }
+  /**
+   * DNS-LESS branch hostname guard (no resolver). The IP-literal cases are already
+   * handled by the caller; here `hostname` is a non-literal name. We:
+   *   1. REFUSE the obvious local/loopback names — `localhost`, `*.localhost`, `local`,
+   *      `*.local` — which denote a private host on essentially every system (only
+   *      permitted under the dev `allowLoopback` escape hatch);
+   *   2. enforce the scheme policy WITH protocol context (roborev #92 round-2 Medium): an
+   *      `http:` URL (reachable here only under `allowLoopback`) is allowed ONLY for the
+   *      loopback NAMES above — never a public-looking hostname over `http:`, matching the
+   *      Node branch's "http is loopback-only" intent;
+   *   3. for a public-looking https hostname, ALLOW it ONLY in a positively-identified
+   *      browser (the documented inherent residual — the page can `fetch` any origin
+   *      anyway) OR when the caller set `allowUnresolvedHosts`. In a DNS-less *server*
+   *      runtime (edge / workers) WITHOUT that opt-in we FAIL CLOSED (roborev #92 round-2
+   *      High) — an unresolved public-looking hostname reaching private infra is a real
+   *      SSRF escalation there, not the benign browser residual.
+   * `requireDnsPinning` cannot be honoured without a resolver, so it fails closed for ANY
+   * hostname (incl. a loopback name) unless `allowUnresolvedHosts` is set — and that check
+   * runs FIRST, ahead of every allow path, so the `allowLoopback` dev hatch cannot let a
+   * `localhost` target bypass the strict posture (roborev #92 round-3 Medium). The
+   * browser-vs-server decision uses `this.isBrowser`, which is `process`-independent
+   * (`window === globalThis`), so it is correct on the import-failure fallback path too.
+   */
+  assertDnslessHostnameAllowed(protocol, hostname) {
+    const lower = hostname.toLowerCase().replace(/\.$/, "");
+    if (this.requireDnsPinning && !this.allowUnresolvedHosts) {
+      throw new SsrfError(
+        `Registry URL refused \u2014 requireDnsPinning is set but no DNS resolver is available in this runtime to pin "${hostname}". A browser cannot pin a socket; set allowUnresolvedHosts to accept the residual, or run on Node with a pinningFetch.`
+      );
+    }
+    if (lower === "local" || lower.endsWith(".local")) {
+      throw new SsrfError(
+        `Registry URL refused \u2014 "${hostname}" is an mDNS/link-local (.local) name denoting a private LAN target. Use a public https host.`
+      );
+    }
+    if (lower === "localhost" || lower.endsWith(".localhost")) {
+      if (this.allowLoopback) {
         return;
       }
       throw new SsrfError(
-        `Cannot classify host ${hostname}: no DNS lookup is available in this runtime. Pass a dnsLookup, or set allowUnresolvedHosts to accept the risk.`
+        `Registry URL refused \u2014 "${hostname}" is a loopback name (localhost/*.localhost), which denotes a private target. Use a public https host.`
       );
     }
+    if (protocol === "http:") {
+      throw new SsrfError(
+        `Registry URL refused \u2014 http: is allowed only for a loopback name (localhost/*.localhost) in this runtime; "${hostname}" is not loopback. Use https:.`
+      );
+    }
+    if (this.isBrowser || this.allowUnresolvedHosts) {
+      return;
+    }
+    throw new SsrfError(
+      `Registry URL refused \u2014 no DNS resolver is available in this runtime to classify "${hostname}", and this is not a positively-identified browser context. Set allowUnresolvedHosts to accept that hostname targets cannot be classified here (you trust the URL source), or run on Node where the full DNS-resolve guard applies.`
+    );
+  }
+  /**
+   * Enforce the address-level policy on a set of resolved (or literal) addresses, shared
+   * by the IP-literal and Node-branch paths: under `allowLoopback` an http: URL must
+   * resolve to loopback ONLY, and EVERY address must be public (or loopback when
+   * allowLoopback) — one private record fails the whole request (rebinding mitigation).
+   */
+  assertResolvedAddressesAllowed(url, hostname, resolved) {
     if (url.protocol === "http:" && this.allowLoopback) {
       for (const r of resolved) {
         if (!isLoopbackAddress(r.address)) {
@@ -1363,7 +1584,7 @@ var SsrfGuard = class {
   }
 };
 function isPublicAddress(address, allowLoopback) {
-  const family = isIP(address);
+  const family = classifyIpLiteral(address);
   if (family === 4) {
     return isPublicIpv4(address, allowLoopback);
   }
@@ -1373,7 +1594,7 @@ function isPublicAddress(address, allowLoopback) {
   return false;
 }
 function isLoopbackAddress(address) {
-  const family = isIP(address);
+  const family = classifyIpLiteral(address);
   if (family === 4) {
     return address.startsWith("127.");
   }
@@ -1384,7 +1605,7 @@ function isLoopbackAddress(address) {
     }
     if (lower.startsWith("::ffff:")) {
       const v4 = lower.slice("::ffff:".length);
-      return isIP(v4) === 4 && v4.startsWith("127.");
+      return classifyIpLiteral(v4) === 4 && v4.startsWith("127.");
     }
   }
   return false;
@@ -1507,7 +1728,7 @@ function expandIpv6(addr) {
       return void 0;
     }
     const v4 = s.slice(colon + 1);
-    if (isIP(v4) !== 4) {
+    if (classifyIpLiteral(v4) !== 4) {
       return void 0;
     }
     const [a, b, c, d] = v4.split(".").map((p) => Number.parseInt(p, 10));
@@ -1630,6 +1851,10 @@ function normalizeRequest(input, init) {
 }
 function hasNodeDns() {
   return typeof process !== "undefined" && process.versions !== void 0 && process.versions.node !== void 0;
+}
+function isBrowserContext() {
+  const g = globalThis;
+  return typeof g.window !== "undefined" && g.window === globalThis && typeof g.document !== "undefined" && g.document !== null;
 }
 function message(cause) {
   return cause instanceof Error ? cause.message : String(cause);

@@ -206,19 +206,36 @@ unverifiable storage.
 
 A registry / storage URL is a **user/config-supplied remote origin**, so
 `discoverFromRegistry` and `resolveStorageSpecVersion` fetch it through an SSRF
-guard. The guard, on the initial request **and every redirect hop**:
+guard. The guard has **two branches, selected automatically by capability detection**
+(is `node:dns` importable) — never a caller flag, so a Node consumer is unaffected and a
+browser / static-export consumer needs no build shim:
+
+- **Node branch** (DNS available): an IP literal is checked directly; a hostname is
+  DNS-resolved and **every** resolved A/AAAA record must be public (a DNS-rebinding
+  mitigation).
+- **DNS-less branch** (no `node:dns` — a browser, or an edge/worker runtime): a
+  **DNS-less** guard — https-only, no userinfo, every private/loopback/link-local/metadata
+  **IP literal** in the host refused, `localhost` / `*.local` / `*.localhost` **names**
+  refused, and `http:` bound to loopback names only. For a public-looking hostname (which
+  has no resolver to verify it) the posture depends on the runtime: in a
+  **positively-identified browser** it is **allowed** (the documented residual below); in
+  any **non-browser DNS-less runtime** (edge / Cloudflare Workers / Deno without node
+  compat) it **fails closed** unless the caller sets `allowUnresolvedHosts` — there an
+  unresolved hostname reaching private infra is a real SSRF escalation, not the benign
+  browser residual.
+
+On the initial request **and every redirect hop**, in both branches the guard:
 
 - allows only `https:` (no `http:`, `file:`, `data:`, …) — `http:` to loopback only
   under the dev `allowLoopback` flag;
 - rejects userinfo (`https://user:pass@…`) so credentials never leak to the host;
-- classifies the host: an IP literal is checked directly; a hostname is DNS-resolved
-  and **every** resolved A/AAAA record must be public (a DNS-rebinding mitigation).
-  Loopback / RFC-1918 / CGNAT / link-local / cloud-metadata (`169.254.169.254`) /
-  multicast / reserved / IPv4-mapped-IPv6 / IPv6-ULA / 6to4- and NAT64-embedded
-  private v4 are all refused;
+- refuses every private IP **literal** in the host — Loopback / RFC-1918 / CGNAT /
+  link-local / cloud-metadata (`169.254.169.254`) / multicast / reserved /
+  IPv4-mapped-IPv6 / IPv6-ULA / 6to4- and NAT64-embedded private v4 — and, on the Node
+  branch, refuses a hostname any of whose resolved records is private;
 - does **not** auto-follow redirects — it sets `redirect: "manual"` and re-runs the
-  full guard against each `Location` (bounded hops + loop detection), so a `302` to
-  an internal address is refused;
+  full guard (the **same branch**) against each `Location` (bounded hops + loop
+  detection), so a `302` to an internal address is refused in both branches;
 - applies standard redirect method/body rewrite: a `303` (and a `301`/`302` on a
   non-`GET`/`HEAD` method) switches to `GET` and drops the body + `Content-*` headers,
   while `307`/`308` preserve them on a same-origin hop;
@@ -232,18 +249,50 @@ guard. The guard, on the initial request **and every redirect hop**:
 - caps the response body (`maxBytes`, default 1 MiB) and bounds the whole operation
   (fetch + redirects + body) with a single `timeoutMs` deadline.
 
-**DNS-rebinding posture.** With plain `fetch` the guard validates a hostname's
-resolved addresses but cannot pin the socket to them (no `undici` dependency — this is
-a browser+Node client), so a residual lookup→connect rebinding window remains in the
-default *best-effort* posture (DNS validation + redirect re-validation + absolute
-literal-IP blocking still apply). A hardened deployment sets `requireDnsPinning: true`,
-which **refuses a hostname target unless a distinct `pinningFetch` is supplied** — a
-separate, branded option the caller uses to attest "this fetch pins DNS" (e.g. an
-undici-`Agent` fetch). Crucially, a plain auth/custom `fetch` (the generic `fetch`
-option) does **not** satisfy the strict posture — only `pinningFetch` does — so an
-ordinary fetch can never silently re-open the window. IP-literal targets (no
-resolution, no rebinding window) are always allowed. A bundled undici-pinning Node
-entry point is a tracked follow-up.
+**Browser-safe — no `node:net` shim needed (#92).** This module imports **no `node:`
+builtin at the top level**: IP-literal detection is a pure-JS classifier (matching
+`node:net#isIP`, fuzzed against it), and the only `node:dns` use is a runtime-only,
+bundler-opaque dynamic import reached **solely** on the Node branch. So a browser
+bundler (Next.js webpack / turbopack, Vite, esbuild `platform:"browser"`) resolves and
+tree-shakes the package with **no `NormalModuleReplacementPlugin` / `resolve.fallback`
+shim**. (A previous top-level `import { isIP } from "node:net"` forced exactly such a
+shim in the Pod Manager `/federations` build — that is no longer required.)
+
+**DNS-less residual + the edge/worker distinction (documented honestly).** On the
+DNS-less branch there is no DNS resolver and `fetch` exposes no socket, so the guard
+**cannot** verify where a hostname resolves at connect time. A hostname that looks public
+in the URL but resolves to a private IP (`10.x`, `169.254.169.254`, …) at connect time is
+**not** caught by hostname inspection alone. How that residual is handled depends on the
+runtime:
+
+- in a **positively-identified browser** (a DOM `window` + `document`) a public-looking
+  https hostname is **allowed** — the **same residual every browser app already has** (the
+  page can `fetch` any origin regardless), and accepting it is the cost of needing no Node
+  builtins / no shim;
+- in **any other DNS-less runtime** (edge / Cloudflare Workers / Deno without node compat)
+  a public-looking hostname **fails closed** unless the caller sets `allowUnresolvedHosts`
+  — there, reaching private infra via an unresolved hostname is a real SSRF escalation.
+
+In both cases the DNS-less branch still blocks the obvious vectors (non-https, userinfo,
+private/loopback/metadata **literals**, `localhost`/`*.local` **names**, `http:` to a
+non-loopback name) and re-validates each redirect hop. On the **Node branch** you
+additionally get the full DNS-resolve + every-record-public check.
+
+**DNS-rebinding posture (Node branch).** With plain `fetch` the guard validates a
+hostname's resolved addresses but cannot pin the socket to them (no `undici` dependency
+— it would re-introduce a Node-only dep into the browser bundle and re-break #92), so a
+residual lookup→connect rebinding window remains in the default *best-effort* posture
+(DNS validation + redirect re-validation + absolute literal-IP blocking still apply). A
+hardened deployment sets `requireDnsPinning: true`, which **refuses a hostname target
+unless a distinct `pinningFetch` is supplied** — a separate, branded option the caller
+uses to attest "this fetch pins DNS" (e.g. an undici-`Agent` fetch). Crucially, a plain
+auth/custom `fetch` (the generic `fetch` option) does **not** satisfy the strict posture
+— only `pinningFetch` does — so an ordinary fetch can never silently re-open the window.
+IP-literal targets (no resolution, no rebinding window) are always allowed. On the
+browser branch, `requireDnsPinning` cannot be honoured (no resolver to pin), so it fails
+closed for a hostname unless the caller opts into the residual via `allowUnresolvedHosts`.
+Adding undici socket-pinning to the Node path for full rebinding closure is tracked as
+**#86** (it must stay Node-only — never imported into the browser branch).
 
 The guard composes **under** any `fetch` you pass (an authenticated Solid fetch is
 threaded through unchanged). It is also exported directly for reuse:
@@ -255,13 +304,14 @@ const guarded = createGuardedFetch({ fetch: authFetch, timeoutMs: 8000 });
 // `guarded` has the standard `fetch` signature; pass it anywhere a fetch is wanted.
 ```
 
-> The classification logic (`isPublicAddress` / `isLoopbackAddress`) is ported
-> verbatim from the suite's vetted `@pss/guarded-fetch` package. Note: unlike the
-> server-side resolver, this client library targets plain `fetch` (browser + Node)
-> and does **not** pin the resolved IP into the socket (no `undici` dependency), so a
-> microsecond-scale lookup→connect DNS-rebinding window remains; the redirect
-> re-validation and literal-IP blocking are absolute. A caller needing full DNS
-> pinning can pass a pinning `fetch` via the `fetch` option.
+> The IP-range classification (`isPublicAddress` / `isLoopbackAddress`) is ported from
+> the suite's vetted `@pss/guarded-fetch` package; the only deliberate divergence is the
+> browser-safe `node:net#isIP` replacement (#92). Unlike the server-side resolver, this
+> client library targets plain `fetch` (browser + Node) and does **not** pin the resolved
+> IP into the socket (no `undici` dependency), so on the Node branch a microsecond-scale
+> lookup→connect DNS-rebinding window remains (the redirect re-validation and literal-IP
+> blocking are absolute); a caller needing full closure passes a `pinningFetch` with
+> `requireDnsPinning: true`. On the browser branch the residual above applies.
 
 ### Vocabulary helpers
 
