@@ -10,9 +10,24 @@ import { useSession } from "./auth/SessionProvider";
 import { LoginScreen } from "./LoginScreen";
 
 export function App() {
-  const { webId, session, logout } = useSession();
+  const { webId, session, logout, autologinPending } = useSession();
 
   if (!webId || !session) {
+    // Autologin (a Pod-Manager deep-link or a redirect return) is silently signing
+    // the user in via a full-page redirect — show a brief restoring state rather than
+    // the interactive login form, since there is no gesture to prompt for.
+    if (autologinPending) {
+      return (
+        <main className="login-screen" aria-busy="true">
+          <section className="login-card">
+            <h1>Pod Chat</h1>
+            <p className="login-sub" role="status">
+              Signing you in…
+            </p>
+          </section>
+        </main>
+      );
+    }
     return <LoginScreen />;
   }
 

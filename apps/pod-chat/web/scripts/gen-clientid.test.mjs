@@ -18,7 +18,12 @@
 // `.mjs` script and `tsconfig` has `allowJs:false`, so co-locating a `.mjs` test
 // keeps it OUT of `tsc` while vitest still runs it.
 import { describe, expect, it } from "vitest";
-import { DEV_DEFAULT, normaliseOrigin, resolveOriginValue } from "./gen-clientid.mjs";
+import {
+  clientIdDocument,
+  DEV_DEFAULT,
+  normaliseOrigin,
+  resolveOriginValue,
+} from "./gen-clientid.mjs";
 
 const A = "https://a.example";
 const B = "https://b.example";
@@ -85,6 +90,22 @@ describe("resolveOriginValue — origin precedence", () => {
 
   it("falls back to the dev default when nothing is set", () => {
     expect(resolveOriginValue({})).toBe(DEV_DEFAULT);
+  });
+});
+
+describe("clientIdDocument — redirect_uris", () => {
+  it("registers BOTH the popup callback.html AND the app-root (autologin) redirect targets", () => {
+    const doc = clientIdDocument("https://chat.example");
+    // The popup path posts the code back from callback.html; the full-page redirect
+    // (autologin) path redirects back to the app root which re-runs SessionProvider.
+    // Both MUST be registered or the OP rejects the respective redirect_uri.
+    expect(doc.redirect_uris).toEqual([
+      "https://chat.example/callback.html",
+      "https://chat.example/",
+    ]);
+    // client_id is byte-exact the served URL, and the doc stays a public client.
+    expect(doc.client_id).toBe("https://chat.example/clientid.jsonld");
+    expect(doc.token_endpoint_auth_method).toBe("none");
   });
 });
 
