@@ -401,13 +401,15 @@ function shortHash(input: string): string {
 }
 
 /**
- * An OPTIONAL string field on a draft is valid iff it is absent OR a non-empty
- * string. A present-but-non-string (or empty) value is malformed model output and
- * must be rejected (→ an unresolved result), never lowered to invalid RDF. Used
- * for EVERY optional string field on the draft (`target`, `recipient`, `agent`).
+ * An OPTIONAL string field on a draft is valid iff it is absent OR a non-blank
+ * string (a string with at least one non-whitespace char). A present-but-non-string
+ * value, an empty string, OR a whitespace-only string (`"   "`) is malformed model
+ * output and must be rejected (→ an unresolved result), never lowered to an invalid
+ * RDF term. These fields (`target`/`recipient`/`agent`) are IRIs in the RDF graph,
+ * and a blank IRI is never valid. Used for EVERY optional string field on the draft.
  */
 function optionalStringOk(value: unknown): boolean {
-  return value === undefined || (typeof value === "string" && value.length > 0);
+  return value === undefined || (typeof value === "string" && value.trim().length > 0);
 }
 
 /**

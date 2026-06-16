@@ -1428,7 +1428,7 @@ function shortHash(input) {
   return (h >>> 0).toString(36);
 }
 function optionalStringOk(value) {
-  return value === void 0 || typeof value === "string" && value.length > 0;
+  return value === void 0 || typeof value === "string" && value.trim().length > 0;
 }
 function isValidDraft(draft) {
   if (typeof draft !== "object" || draft === null) {

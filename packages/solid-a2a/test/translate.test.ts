@@ -264,6 +264,21 @@ describe("injected-translate seam", () => {
     expect((await parseIntent("zorp", { translate: emptyAgent })).resolved).toBe(false);
   });
 
+  it("rejects a whitespace-only target/recipient/agent (blank IRI is invalid)", async () => {
+    const blankTarget = vi.fn<TranslateFn>(
+      async () => ({ action: "read", target: "   " }) as unknown as StructuredIntentDraft,
+    );
+    expect((await parseIntent("zorp", { translate: blankTarget })).resolved).toBe(false);
+    const blankRecipient = vi.fn<TranslateFn>(
+      async () => ({ action: "grant", recipient: "\t\n " }) as unknown as StructuredIntentDraft,
+    );
+    expect((await parseIntent("zorp", { translate: blankRecipient })).resolved).toBe(false);
+    const blankAgent = vi.fn<TranslateFn>(
+      async () => ({ action: "read", agent: " " }) as unknown as StructuredIntentDraft,
+    );
+    expect((await parseIntent("zorp", { translate: blankAgent })).resolved).toBe(false);
+  });
+
   it("rejects a prototype-chain key as a mode (toString / constructor) — own-key allowlist", async () => {
     for (const proto of ["toString", "constructor", "hasOwnProperty", "valueOf"]) {
       const translate = vi.fn<TranslateFn>(
