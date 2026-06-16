@@ -1,15 +1,15 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
-// session-derivation.ts — derive the values the host needs (the pod ROOT URL +
-// the WebID) from the authenticated profile.
+// session-derivation.ts — derive the values <DocumentBrowser> needs (the pod
+// ROOT URL + the WebID) from the authenticated profile.
 //
-// WHY THE HOST ONLY NEEDS A POD ROOT (not the ledger URL itself):
-// the host derives the pod root + WebID here, then App.tsx discovers the
-// finance ledger from that root — via the user's Type Index (pod-money's
-// `MoneyStore.discover(MoneyStore.primaryClass)`) for cross-app discovery,
-// falling back to the conventional `${podRoot}finance/ledger.ttl` path. So this
-// module's job is ONLY to derive a correct pod root; the ledger-URL derivation
-// lives in App.tsx (see deriveLedgerUrl there).
+// WHY THE BROWSER ONLY NEEDS A POD ROOT (not the documents container):
+// <DocumentBrowser podRoot webId /> hands those two to @jeswr/pod-docs's
+// `useDocsListing` → `DocsStore`, which OWNS container discovery: it registers /
+// resolves the `pod-docs/` container via the user's Type Index
+// (`ensureTypeRegistrations`) for cross-app discovery, falling back to the
+// conventional `${podRoot}pod-docs/` path. So the host's job is ONLY to derive a
+// correct pod root; the documents-container derivation lives in the data layer.
 //
 // POD-ROOT DERIVATION (first that yields a value):
 //   1. the FIRST `pim:storage` advertised on the WebID profile (the canonical
@@ -22,9 +22,9 @@
 import type { Profile } from "./profile";
 
 export interface DerivedSession {
-  /** The pod root URL (always ends in "/"). Used to discover the finance ledger. */
+  /** The pod root URL (always ends in "/"). Passed to <DocumentBrowser podRoot>. */
   podRoot: string;
-  /** The authenticated user's WebID. */
+  /** The authenticated user's WebID. Passed to <DocumentBrowser webId>. */
   webId: string;
   /** True when the pod root came from the WebID origin fallback, not pim:storage. */
   podRootIsFallback: boolean;
@@ -35,7 +35,7 @@ function asContainer(url: string): string {
   return url.endsWith("/") ? url : `${url}/`;
 }
 
-/** Derive the pod root + WebID the host needs from a read profile. */
+/** Derive the pod root + WebID the DocumentBrowser needs from a read profile. */
 export function deriveSession(profile: Profile): DerivedSession {
   const storage = profile.storages[0];
   if (storage) {

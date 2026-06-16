@@ -1,10 +1,10 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
-// SessionProvider — the ONE place auth is wired for the Pod Money static host.
+// SessionProvider — the ONE place auth is wired for the Pod Docs static host.
 // It mounts the browser-only <authorization-code-flow> popup element, builds a
 // WebID-driven DPoP token provider bound to THIS origin's static Client
 // Identifier Document, and calls registerGlobally() so EVERY plain `fetch()`
-// (including the ones inside @jeswr/fetch-rdf and the @jeswr/pod-money data layer)
+// (including the ones inside @jeswr/fetch-rdf and the @jeswr/pod-docs data layer)
 // transparently upgrades on a 401 with a DPoP token. The library's
 // `fetch?:` seam can then be left as the ambient global — no per-call wiring.
 //
@@ -18,7 +18,7 @@
 //     call `manager.registerGlobally()`. Forgetting it is the #1 reactive-auth bug.
 //  3. The client_id is the per-origin static Client Identifier Document at
 //     `${origin}/clientid.jsonld` (generated at build by scripts/gen-clientid.mjs),
-//     so the OP shows "Pod Money" on the consent screen instead of a throwaway
+//     so the OP shows "Pod Docs" on the consent screen instead of a throwaway
 //     dynamic registration.
 //  4. `allowInsecureLoopback` is enabled ONLY for a localhost origin (dev against
 //     a local CSS over HTTP); a deployed HTTPS origin stays strict.
@@ -34,7 +34,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { authFlowHolder, getCodeThroughHolder } from "./auth-flow-holder";
+import { authFlowHolder, getCodeThroughHolder, lazyElementGetCode } from "./auth-flow-holder";
 import { assessLoginProbe } from "./login-result";
 import { readProfile } from "./profile";
 import { type DerivedSession, deriveSession } from "./session-derivation";
@@ -212,7 +212,22 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     // the first element is unmounted right after this effect runs; the second mount
     // overwrites the holder with its (live) element — so the singleton never ends
     // up bound to a removed element.
-    const getCode: GetCodeCallback = ui.getCode.bind(ui);
+    //
+    // COLD-START SAFETY (roborev HIGH): @solid/reactive-authentication is loaded by
+    // a DYNAMIC import (`getAuthRuntime`), and `customElements.define(
+    // "authorization-code-flow", …)` lives at the top of that chunk. So on a COLD
+    // first mount this effect runs BEFORE the import resolves and BEFORE the element
+    // is upgraded — `ui.getCode` is still `undefined`. Eagerly binding it here
+    // (`ui.getCode.bind(ui)`) would THROW on that very first load and break login.
+    //
+    // The holder therefore gets a LAZY accessor (`lazyElementGetCode`) that reads
+    // `getCode` at CALL time (login time), not at mount time. By the time the
+    // singleton invokes it (inside `login()`, which has awaited the dynamic import +
+    // element registration), the element is upgraded and `getCode` is defined; and
+    // as belt-and-braces the accessor awaits `customElements.whenDefined` first if
+    // the element is somehow still un-upgraded — so even a very-early login can't
+    // throw. We do NOT touch `ui.getCode` until invocation.
+    const getCode: GetCodeCallback = lazyElementGetCode(ui);
     authFlowHolder.current = getCode;
     getAuthRuntime({
       callbackUri: new URL("/callback.html", location.href).toString(),

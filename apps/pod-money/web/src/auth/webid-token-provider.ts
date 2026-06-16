@@ -2,7 +2,7 @@
 // Ported verbatim from create-solid-app's reference provider (which itself ports
 // the published 0.1.2 DPoPTokenProvider). The host shell uses its STATIC Client
 // Identifier Document branch (the `clientId` option) so the consent screen shows
-// "Pod Money" instead of a throwaway dynamic registration.
+// "Pod Docs" instead of a throwaway dynamic registration.
 /**
  * webid-token-provider.ts — a custom @solid/reactive-authentication `TokenProvider`
  * whose OIDC issuer is resolved from the user's WebID profile (via callbacks),
