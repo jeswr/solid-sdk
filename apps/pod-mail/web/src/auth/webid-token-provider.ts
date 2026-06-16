@@ -956,21 +956,28 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
   }
 
   /**
-   * Whether a durable refresh-token session is STILL persisted for this issuer.
-   * The SessionProvider reads this AFTER a non-restored load to decide whether to
-   * drop the remembered-account POINTER: if the credential survived (a transient
-   * restore failure preserved it — see {@link restoreIssuer}), the pointer MUST be
-   * kept so a later reload can retry; if it is gone (a definitive invalid_grant
-   * cleared it, or there never was one), the pointer is cleared. Returns false
-   * without a store / on a read error (fail-safe: a kept pointer over a missing one
-   * only risks one extra doomed restore attempt, which then re-clears).
+   * Whether a durable refresh-token session is STILL persisted for this issuer —
+   * a TRI-STATE so the caller can distinguish "definitely gone" from "couldn't
+   * tell":
+   *  - `"present"` — a credential exists (a transient restore failure preserved it
+   *                   — see {@link restoreIssuer}); KEEP the remembered pointer to
+   *                   retry on the next load.
+   *  - `"absent"`  — no credential (a definitive invalid_grant cleared it, or there
+   *                   never was one); the pointer can be dropped.
+   *  - `"unknown"` — the store read FAILED (transient IndexedDB error). Do NOT treat
+   *                   this as absent — the credential may well be intact, so the
+   *                   caller KEEPS the pointer (a kept pointer at worst costs one
+   *                   extra doomed restore next load, which then re-clears cleanly;
+   *                   dropping it could orphan a valid credential — roborev finding).
+   * Returns `"absent"` only when there is genuinely no store (in-memory-only — there
+   * is nothing durable to keep a pointer for).
    */
-  async hasPersisted(issuer: URL): Promise<boolean> {
-    if (this.#sessionStore === undefined) return false;
+  async hasPersisted(issuer: URL): Promise<"present" | "absent" | "unknown"> {
+    if (this.#sessionStore === undefined) return "absent";
     try {
-      return (await this.#sessionStore.get(issuer.href)) !== undefined;
+      return (await this.#sessionStore.get(issuer.href)) !== undefined ? "present" : "absent";
     } catch {
-      return false;
+      return "unknown";
     }
   }
 

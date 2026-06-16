@@ -396,8 +396,8 @@ describe("restoreIssuer — silent refresh-token-grant restore (no popup)", () =
   });
 });
 
-describe("hasPersisted — lets the caller keep the pointer when a transient failure preserved the token", () => {
-  it("reports true after a transient restore failure preserved the credential, false after a dead-token clear", async () => {
+describe("hasPersisted — tri-state lets the caller keep the pointer under uncertainty", () => {
+  it("'present' after a transient restore failure preserved the credential, 'absent' after a dead-token clear", async () => {
     const store = makeStore();
     const dpopKey = (await crypto.subtle.generateKey(
       { name: "ECDSA", namedCurve: "P-256" },
@@ -415,20 +415,29 @@ describe("hasPersisted — lets the caller keep the pointer when a transient fai
     refreshMock.reject = new Error("network timeout");
     let provider = makeProvider(store);
     expect(await provider.restoreIssuer(ISSUER)).toBeUndefined();
-    // hasPersisted is true → the SessionProvider KEEPS the remembered pointer.
-    expect(await provider.hasPersisted(ISSUER)).toBe(true);
+    // 'present' → the SessionProvider KEEPS the remembered pointer.
+    expect(await provider.hasPersisted(ISSUER)).toBe("present");
 
     // Now a definitive invalid_grant clears the credential.
     refreshMock.reject = Object.assign(new Error("invalid_grant"), { error: "invalid_grant" });
     provider = makeProvider(store);
     expect(await provider.restoreIssuer(ISSUER)).toBeUndefined();
-    // hasPersisted is false → the SessionProvider clears the pointer (no doomed retry).
-    expect(await provider.hasPersisted(ISSUER)).toBe(false);
+    // 'absent' → the SessionProvider clears the pointer (no doomed retry).
+    expect(await provider.hasPersisted(ISSUER)).toBe("absent");
   });
 
-  it("reports false when there is no store / no entry (fail-safe)", async () => {
-    expect(await makeProvider().hasPersisted(ISSUER)).toBe(false);
-    expect(await makeProvider(makeStore()).hasPersisted(ISSUER)).toBe(false);
+  it("'absent' when there is no store / no entry, 'unknown' when the store read throws", async () => {
+    expect(await makeProvider().hasPersisted(ISSUER)).toBe("absent"); // no store
+    expect(await makeProvider(makeStore()).hasPersisted(ISSUER)).toBe("absent"); // empty store
+    // A store whose get() THROWS → 'unknown' (do not treat as absent → keep pointer).
+    const throwingStore: SessionStore = {
+      get: async () => {
+        throw new Error("IndexedDB read failed");
+      },
+      put: async () => {},
+      delete: async () => {},
+    };
+    expect(await makeProvider(throwingStore).hasPersisted(ISSUER)).toBe("unknown");
   });
 });
 

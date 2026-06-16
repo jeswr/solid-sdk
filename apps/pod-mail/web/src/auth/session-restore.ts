@@ -38,6 +38,24 @@
 // no autologin fragment / pending redirect, and the autologin plan in turn
 // short-circuits to `none` once a session is already logged in.
 
+/**
+ * Why a `login` decision was reached — drives whether the caller should DROP the
+ * remembered-account pointer (a doomed retry) or KEEP it (a transient blip the
+ * credential survived, worth retrying on the next load):
+ *  - `"no-account"`     — nothing remembered (no pointer of interest).
+ *  - `"no-issuer"`      — the remembered account has no usable issuer → unusable
+ *                          pointer, drop it.
+ *  - `"restore-failed"` — the refresh grant returned undefined OR threw. The
+ *                          credential may still be valid (the provider clears it
+ *                          ONLY on a definitive invalid_grant), so the CALLER checks
+ *                          whether it survived before deciding to keep/drop.
+ *  - `"webid-mismatch"` — the refresh grant SUCCEEDED but authenticated a DIFFERENT
+ *                          WebID than the remembered one (fail-closed). The credential
+ *                          is intact but KNOWN-BAD for this pointer, so drop it (it
+ *                          would fail the isolation check on every reload).
+ */
+export type LoginReason = "no-account" | "no-issuer" | "restore-failed" | "webid-mismatch";
+
 /** Where the mount-time restore decision lands. */
 export type SessionRestoreDecision =
   | {
@@ -51,6 +69,8 @@ export type SessionRestoreDecision =
   | {
       /** No usable persisted session — the login screen must be shown. */
       readonly outcome: "login";
+      /** Why login was reached (drives the caller's keep/drop-pointer decision). */
+      readonly reason: LoginReason;
     };
 
 /** The remembered-account shape this decision needs. */
@@ -118,7 +138,7 @@ export async function decideSilentRestore(
   const { lastActiveWebId, remembered, restoreIssuer, webIdsEqual } = inputs;
 
   // No prior active account on this device → nothing to restore; show login.
-  if (!lastActiveWebId) return { outcome: "login" };
+  if (!lastActiveWebId) return { outcome: "login", reason: "no-account" };
 
   // The issuer the user chose for this account, remembered at login. Without it
   // we cannot run a refresh-token grant (the grant is per-issuer), so there is
@@ -127,29 +147,72 @@ export async function decideSilentRestore(
   // SAME equality the rest of the seam uses, so a trivial case/normalisation
   // difference does not silently lose the issuer.
   const issuer = remembered.find((a) => webIdsEqual(a.webId, lastActiveWebId))?.issuer;
-  if (!issuer) return { outcome: "login" };
+  if (!issuer) return { outcome: "login", reason: "no-issuer" };
 
   let restored: { webId: string } | undefined;
   try {
     restored = await restoreIssuer(issuer);
   } catch {
     // An UNEXPECTED restore error (not the normal expired/revoked `undefined`):
-    // fail closed to LOGIN. We never claim a session we could not rebuild.
-    return { outcome: "login" };
+    // fail closed to LOGIN. We never claim a session we could not rebuild. The
+    // credential may still be valid (a transient blip), so reason is restore-failed
+    // — the caller checks whether it survived before deciding keep/drop.
+    return { outcome: "login", reason: "restore-failed" };
   }
 
-  // Expired / revoked / no persisted token: restoreIssuer returns undefined and
-  // has already cleared the dead entry → show login (the credential is gone).
-  if (restored === undefined) return { outcome: "login" };
+  // Expired / revoked / no persisted token: restoreIssuer returns undefined (it has
+  // cleared the entry ONLY on a definitive invalid_grant; a transient failure
+  // preserves it) → show login. reason restore-failed; the caller checks survival.
+  if (restored === undefined) return { outcome: "login", reason: "restore-failed" };
 
   // SECURITY — confirm the restored session authenticated AS the last-active
   // WebID. The refresh grant mints a token for whatever the persisted record's
   // WebID is; if (through a corrupted/misfiled store) that disagrees with the
   // last-active WebID we asked to restore, FAIL CLOSED to login rather than
   // silently logging the user in as someone else. webIdsEqual fails closed for a
-  // missing/unparseable side.
-  if (!webIdsEqual(restored.webId, lastActiveWebId)) return { outcome: "login" };
+  // missing/unparseable side. reason webid-mismatch: the credential is intact but
+  // KNOWN-BAD for this pointer, so the caller drops the pointer (it would fail this
+  // same isolation check on every reload).
+  if (!webIdsEqual(restored.webId, lastActiveWebId)) {
+    return { outcome: "login", reason: "webid-mismatch" };
+  }
 
   // Live session rebuilt silently (refresh grant only): render the app.
   return { outcome: "restored", webId: restored.webId, issuer };
+}
+
+/** Whether the durable credential is still present for the remembered issuer. */
+export type CredentialPresence = "present" | "absent" | "unknown";
+
+/**
+ * Decide whether to DROP the remembered-account pointer after a `login`
+ * decision, given the reason and (for the restore-failed case) whether the
+ * durable credential survived. PURE so the keep/drop matrix is unit-tested.
+ *
+ *  - `no-account`     → drop (nothing useful; idempotent).
+ *  - `no-issuer`      → drop (an unusable pointer with no issuer).
+ *  - `webid-mismatch` → drop (the credential is intact but KNOWN-BAD for this
+ *                        pointer — it fails the isolation check every reload).
+ *  - `restore-failed` → KEEP iff the credential is `present` OR `unknown` (a
+ *                        transient blip may have preserved it / a store-read error
+ *                        cannot prove it gone); DROP only when `absent` (a
+ *                        definitive invalid_grant cleared it, or there is no store).
+ *
+ * Keeping a pointer over a credential that is actually gone costs at most one extra
+ * doomed restore next load (which then re-clears); dropping a pointer over a
+ * credential that is actually present orphans it forever — so we bias to KEEP under
+ * uncertainty (`unknown`).
+ */
+export function shouldDropRememberedPointer(
+  reason: LoginReason,
+  credential: CredentialPresence,
+): boolean {
+  switch (reason) {
+    case "no-account":
+    case "no-issuer":
+    case "webid-mismatch":
+      return true;
+    case "restore-failed":
+      return credential === "absent";
+  }
 }

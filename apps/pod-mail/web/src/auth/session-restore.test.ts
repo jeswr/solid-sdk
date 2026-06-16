@@ -8,7 +8,11 @@
 // WebID that disagrees with the last-active WebID → login (fail-closed); and the
 // WebID-scoped isolation invariant (account A's pointer can never restore B).
 import { describe, expect, it, vi } from "vitest";
-import { decideSilentRestore, type RememberedAccount } from "./session-restore";
+import {
+  decideSilentRestore,
+  type RememberedAccount,
+  shouldDropRememberedPointer,
+} from "./session-restore";
 import { webIdsEqual } from "./webid-token-provider";
 
 const WEBID_A = "https://alice.example/profile/card#me";
@@ -25,7 +29,7 @@ describe("decideSilentRestore — the mount-time restore branch table", () => {
       restoreIssuer,
       webIdsEqual,
     });
-    expect(decision).toEqual({ outcome: "login" });
+    expect(decision).toEqual({ outcome: "login", reason: "no-account" });
     // The refresh grant must NOT be attempted when nothing is remembered.
     expect(restoreIssuer).not.toHaveBeenCalled();
   });
@@ -38,7 +42,7 @@ describe("decideSilentRestore — the mount-time restore branch table", () => {
       restoreIssuer,
       webIdsEqual,
     });
-    expect(decision).toEqual({ outcome: "login" });
+    expect(decision).toEqual({ outcome: "login", reason: "no-issuer" });
     expect(restoreIssuer).not.toHaveBeenCalled();
   });
 
@@ -65,7 +69,7 @@ describe("decideSilentRestore — the mount-time restore branch table", () => {
       restoreIssuer,
       webIdsEqual,
     });
-    expect(decision).toEqual({ outcome: "login" });
+    expect(decision).toEqual({ outcome: "login", reason: "restore-failed" });
     expect(restoreIssuer).toHaveBeenCalledOnce();
   });
 
@@ -79,7 +83,7 @@ describe("decideSilentRestore — the mount-time restore branch table", () => {
       restoreIssuer,
       webIdsEqual,
     });
-    expect(decision).toEqual({ outcome: "login" });
+    expect(decision).toEqual({ outcome: "login", reason: "restore-failed" });
   });
 
   it("LOGIN (fail-closed) when the restored WebID disagrees with the last-active WebID", async () => {
@@ -92,7 +96,7 @@ describe("decideSilentRestore — the mount-time restore branch table", () => {
       restoreIssuer,
       webIdsEqual,
     });
-    expect(decision).toEqual({ outcome: "login" });
+    expect(decision).toEqual({ outcome: "login", reason: "webid-mismatch" });
   });
 
   it("matches the active WebID to its remembered record case-insensitively on host/scheme (no lost issuer)", async () => {
@@ -148,8 +152,27 @@ describe("decideSilentRestore — WebID-scoped isolation (account A's pointer ne
       restoreIssuer,
       webIdsEqual,
     });
-    expect(decision).toEqual({ outcome: "login" });
+    expect(decision).toEqual({ outcome: "login", reason: "restore-failed" });
     expect(restoreIssuer).toHaveBeenCalledExactlyOnceWith(ISSUER_A);
     expect(restoreIssuer).not.toHaveBeenCalledWith(ISSUER_B);
+  });
+});
+
+describe("shouldDropRememberedPointer — keep/drop the pointer after a login decision", () => {
+  it("drops on no-account / no-issuer / webid-mismatch (regardless of credential state)", () => {
+    for (const cred of ["present", "absent", "unknown"] as const) {
+      expect(shouldDropRememberedPointer("no-account", cred)).toBe(true);
+      expect(shouldDropRememberedPointer("no-issuer", cred)).toBe(true);
+      // webid-mismatch: the credential is intact but KNOWN-BAD for this pointer.
+      expect(shouldDropRememberedPointer("webid-mismatch", cred)).toBe(true);
+    }
+  });
+
+  it("on restore-failed: DROP only when the credential is definitively absent", () => {
+    expect(shouldDropRememberedPointer("restore-failed", "absent")).toBe(true);
+    // KEEP when present (transient blip preserved it) or unknown (store read failed —
+    // cannot prove it gone; dropping would orphan a possibly-valid credential).
+    expect(shouldDropRememberedPointer("restore-failed", "present")).toBe(false);
+    expect(shouldDropRememberedPointer("restore-failed", "unknown")).toBe(false);
   });
 });

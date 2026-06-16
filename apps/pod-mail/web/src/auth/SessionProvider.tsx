@@ -49,7 +49,11 @@ import {
   indexedDbAvailable,
   type SessionStore,
 } from "./session-persistence";
-import { decideSilentRestore } from "./session-restore";
+import {
+  type CredentialPresence,
+  decideSilentRestore,
+  shouldDropRememberedPointer,
+} from "./session-restore";
 import { decideSingleFlight } from "./single-flight";
 import {
   AmbiguousIssuerError,
@@ -280,6 +284,27 @@ let silentRestorePromise: Promise<SilentRestoreOutcome> | null = null;
  * state — it returns a pure {@link SilentRestoreOutcome} the effect applies. Never
  * throws (fail-closed to `login`).
  */
+/**
+ * The durable-credential presence for a remembered issuer, for the pointer keep/drop
+ * decision. A MALFORMED issuer (unparseable URL) is an unusable pointer → `"absent"`
+ * (dropped rather than retried forever — roborev finding). An undefined issuer is
+ * likewise `"absent"`. Otherwise delegate to the provider's tri-state read (which
+ * returns `"unknown"` on a store-read error so a blip does not orphan the credential).
+ */
+async function credentialPresenceFor(
+  provider: WebIdDPoPTokenProvider,
+  issuer: string | undefined,
+): Promise<CredentialPresence> {
+  if (!issuer) return "absent";
+  let url: URL;
+  try {
+    url = new URL(issuer);
+  } catch {
+    return "absent"; // corrupt remembered issuer — unusable, drop the pointer.
+  }
+  return provider.hasPersisted(url);
+}
+
 function runSilentRestore(provider: WebIdDPoPTokenProvider): Promise<SilentRestoreOutcome> {
   if (silentRestorePromise) return silentRestorePromise;
   silentRestorePromise = (async (): Promise<SilentRestoreOutcome> => {
@@ -295,18 +320,15 @@ function runSilentRestore(provider: WebIdDPoPTokenProvider): Promise<SilentResto
       webIdsEqual,
     });
     if (decision.outcome !== "restored") {
-      // Not restored on THIS load → fall back to login. Clear the remembered POINTER
-      // ONLY when the durable credential is genuinely gone (roborev finding: do NOT
-      // wipe the pointer on a TRANSIENT failure, or a later reload could never retry
-      // the preserved credential). restoreIssuer clears the IndexedDB entry only on a
-      // definitive invalid_grant; so: if a credential STILL exists for the remembered
-      // issuer, a transient failure preserved it → KEEP the pointer for a retry.
-      // Otherwise (dead-and-cleared, or there was never a usable issuer) clear it so
-      // we don't re-attempt a doomed restore every load.
-      const issuer = remembered?.issuer;
-      const credentialSurvives =
-        issuer !== undefined && (await provider.hasPersisted(new URL(issuer)));
-      if (!credentialSurvives) clearRememberedAccount();
+      // Not restored on THIS load → fall back to login. The keep/drop-pointer
+      // decision is the PURE shouldDropRememberedPointer, driven by the decision's
+      // REASON + (for restore-failed) whether the durable credential survived
+      // (roborev findings: do NOT wipe the pointer on a transient blip / an
+      // unreadable store, and DO drop it on a known-bad webid-mismatch). The issuer
+      // is validated as a URL first — a malformed remembered issuer is an unusable
+      // pointer (credential `absent`), so it gets dropped rather than retried forever.
+      const credential = await credentialPresenceFor(provider, remembered?.issuer);
+      if (shouldDropRememberedPointer(decision.reason, credential)) clearRememberedAccount();
       return { kind: "login" };
     }
     // The refresh grant rebuilt a live session in the provider (issuer pinned,
