@@ -111,7 +111,15 @@ export function ThemeProvider({
   // Start from the default; reconcile to the stored value on mount so SSR markup
   // is deterministic (no hydration mismatch from reading storage during render).
   const [theme, setThemeState] = useState<Theme>(defaultTheme);
-  const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>(() => resolve(defaultTheme));
+  // SSR-STABLE initial value: the server (and therefore the client's FIRST render)
+  // must agree, so we deliberately do NOT consult `matchMedia` here — for "system"
+  // that means the initial render is "light" everywhere. The mount effect below
+  // immediately corrects `resolvedTheme` to the real OS/stored value (and the
+  // `themeScript` sets the `.dark` class before paint), so there is no flash and
+  // no hydration mismatch from a dark-OS client reading `resolvedTheme` early.
+  const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>(
+    defaultTheme === "system" ? "light" : defaultTheme,
+  );
 
   // On mount (and if the storageKey changes), adopt any persisted preference.
   // `theme` is intentionally NOT a dep: a later setTheme must not re-read storage

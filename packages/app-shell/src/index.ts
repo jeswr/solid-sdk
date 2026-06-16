@@ -30,4 +30,5 @@ export {
   themeScript,
   useTheme,
 } from "./components/theme-provider.js";
+export { ThemeToggle } from "./components/theme-toggle.js";
 export { cn } from "./lib/cn.js";

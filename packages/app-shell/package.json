@@ -13,7 +13,9 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
-    "./styles.css": "./dist/styles.css"
+    "./styles.css": "./dist/styles.css",
+    "./tokens.css": "./dist/styles/tokens.css",
+    "./theme.css": "./dist/styles/theme.css"
   },
   "files": [
     "dist",

@@ -9,4 +9,5 @@
 export { AccountMenu, initials } from "./components/account-menu.js";
 export { Avatar, AvatarFallback, AvatarImage, Button, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger, } from "./components/primitives.js";
 export { ThemeProvider, themeScript, useTheme, } from "./components/theme-provider.js";
+export { ThemeToggle } from "./components/theme-toggle.js";
 export { cn } from "./lib/cn.js";

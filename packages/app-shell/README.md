@@ -85,7 +85,7 @@ The components use shadcn token utility classes (`bg-popover`,
   Tailwind's content scan includes this package (e.g. `@source` the install path)
   so the classes are generated.
 - **Non-Tailwind app** — import just the raw variables
-  (`@jeswr/app-shell/src/styles/tokens.css`) and provide your own utility CSS for
+  (`@jeswr/app-shell/tokens.css`) and provide your own utility CSS for
   the few class names the components use; they reference the same `--background`
   etc. so the palette stays consistent.
 
