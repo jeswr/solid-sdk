@@ -48,11 +48,19 @@ export class SavedViews {
   }
 
   remove(id: string): void {
-    this.#storage.setItem(KEY, JSON.stringify(this.list().filter((v) => v.id !== id)));
+    this.replace(this.list().filter((v) => v.id !== id));
   }
 
-  /** Replace the entire stored list (used when migrating to pod-backed views). */
+  /**
+   * Overwrite the entire stored list. Used by the pod migration to keep ONLY the
+   * views that failed to migrate (so a partial failure never drops local views).
+   */
+  replace(views: SavedView[]): void {
+    this.#storage.setItem(KEY, JSON.stringify(views));
+  }
+
+  /** Empty the stored list. */
   clear(): void {
-    this.#storage.setItem(KEY, JSON.stringify([]));
+    this.replace([]);
   }
 }

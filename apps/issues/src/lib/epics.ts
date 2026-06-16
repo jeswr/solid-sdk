@@ -33,3 +33,25 @@ export function groupByEpic(issues: IssueRecord[]): { epics: EpicGroup[]; unassi
   );
   return { epics, unassigned };
 }
+
+/**
+ * Resolve an issue's nearest EPIC ancestor URL by walking the `parent` chain,
+ * for board swimlanes. The hierarchy is Initiative → Epic → Feature → Story →
+ * Task/Bug, so an issue's direct `parent` is often a Feature/Story, NOT the epic
+ * — walking up returns the first ancestor that is itself an epic. An epic maps to
+ * itself; an issue with no epic ancestor returns undefined (the "No epic" lane).
+ *
+ * Cycle-safe (a malformed parent loop is bounded by a visited set), and tolerant
+ * of dangling parents (a parent not in `issues` simply ends the walk).
+ */
+export function epicAncestorOf(issue: IssueRecord, issues: IssueRecord[]): string | undefined {
+  const byUrl = new Map(issues.map((i) => [i.url, i]));
+  const seen = new Set<string>();
+  let current: IssueRecord | undefined = issue;
+  while (current && !seen.has(current.url)) {
+    if (current.issueType === "epic") return current.url;
+    seen.add(current.url);
+    current = current.parent ? byUrl.get(current.parent) : undefined;
+  }
+  return undefined;
+}

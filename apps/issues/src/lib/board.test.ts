@@ -277,7 +277,7 @@ describe("swimlanes — board partitioning (Jira hallmark)", () => {
     expect(lanes.some((l) => l.key === UNGROUPED_LANE)).toBe(false);
   });
 
-  it("lanes by epic (the issue's parent), with a 'No epic' catch-all", () => {
+  it("lanes by epic via the direct parent (default epicOf), with a 'No epic' catch-all", () => {
     const issues = [
       mk({ url: "c1", parent: "epicB" }),
       mk({ url: "c2", parent: "epicA" }),
@@ -287,6 +287,22 @@ describe("swimlanes — board partitioning (Jira hallmark)", () => {
     expect(lanes.map((l) => l.key)).toEqual(["epicA", "epicB", UNGROUPED_LANE]);
     expect(lanes[2].label).toBe("No epic");
     expect(lanes[2].issues.map((i) => i.url)).toEqual(["loose"]);
+  });
+
+  it("lanes by epic via the epicOf RESOLVER (nearest epic ancestor, not direct parent)", () => {
+    // A Story whose direct parent is a Feature must lane under the EPIC, supplied
+    // by the caller's epicOf resolver — not the intermediate feature.
+    const issues = [
+      mk({ url: "s1", parent: "feature" }),
+      mk({ url: "s2", parent: "feature" }),
+      mk({ url: "orphan", parent: "feature" }),
+    ];
+    const epicOf = (i: IssueRecord) =>
+      i.url === "orphan" ? undefined : "epic"; // s1/s2 → epic; orphan → no epic
+    const lanes = swimlanes(issues, "epic", (k) => k, epicOf);
+    expect(lanes.map((l) => l.key)).toEqual(["epic", UNGROUPED_LANE]);
+    expect(lanes[0].issues.map((i) => i.url)).toEqual(["s1", "s2"]);
+    expect(lanes[1].issues.map((i) => i.url)).toEqual(["orphan"]);
   });
 
   it("resolves lane labels via labelOf (people/epic titles), used for ordering", () => {

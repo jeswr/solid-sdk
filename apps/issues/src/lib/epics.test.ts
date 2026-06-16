@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { groupByEpic } from "./epics";
+import { groupByEpic, epicAncestorOf } from "./epics";
 import type { IssueRecord } from "./repository";
 
 const base: IssueRecord = {
@@ -42,5 +42,40 @@ describe("groupByEpic", () => {
     const { epics } = groupByEpic([mk({ url: "e", issueType: "epic" })]);
     expect(epics[0].percent).toBe(0);
     expect(epics[0].total).toBe(0);
+  });
+});
+
+describe("epicAncestorOf — nearest epic up the hierarchy (Initiative→Epic→Feature→Story→Task)", () => {
+  const epic = mk({ url: "epic", issueType: "epic" });
+  const feature = mk({ url: "feature", issueType: "feature", parent: "epic" });
+  const story = mk({ url: "story", issueType: "story", parent: "feature" });
+  const task = mk({ url: "task", issueType: "task", parent: "story" });
+  const all = [epic, feature, story, task];
+
+  it("returns the epic ANCESTOR, not the direct parent (a Story under a Feature)", () => {
+    // task.parent is the story, story.parent is the feature, feature.parent is the
+    // epic — walking up lands on the epic, not the intermediate feature/story.
+    expect(epicAncestorOf(task, all)).toBe("epic");
+    expect(epicAncestorOf(story, all)).toBe("epic");
+    expect(epicAncestorOf(feature, all)).toBe("epic");
+  });
+
+  it("maps an epic to itself", () => {
+    expect(epicAncestorOf(epic, all)).toBe("epic");
+  });
+
+  it("returns undefined when there is no epic ancestor", () => {
+    const loose = mk({ url: "loose", issueType: "task" });
+    const child = mk({ url: "c", issueType: "task", parent: "loose" });
+    expect(epicAncestorOf(loose, [loose, child])).toBeUndefined();
+    expect(epicAncestorOf(child, [loose, child])).toBeUndefined();
+  });
+
+  it("is cycle-safe and tolerant of a dangling parent", () => {
+    const a = mk({ url: "a", issueType: "task", parent: "b" });
+    const b = mk({ url: "b", issueType: "task", parent: "a" }); // cycle
+    expect(epicAncestorOf(a, [a, b])).toBeUndefined();
+    const dangling = mk({ url: "d", issueType: "task", parent: "missing" });
+    expect(epicAncestorOf(dangling, [dangling])).toBeUndefined();
   });
 });

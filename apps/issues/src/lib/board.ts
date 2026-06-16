@@ -166,24 +166,31 @@ export const UNGROUPED_LANE = "__none__";
  * Partition board issues into swimlanes for `swimlaneBy`. With "none", a single
  * lane holding every issue. With "assignee"/"epic", one lane per distinct value
  * plus a trailing catch-all ({@link UNGROUPED_LANE}) for cards with no
- * assignee / no epic parent — and the catch-all is omitted when it would be
- * empty. Lanes (other than the catch-all, which always trails) are ordered by
+ * assignee / no epic — and the catch-all is omitted when it would be empty.
+ * Lanes (other than the catch-all, which always trails) are ordered by
  * `labelOf`, so the layout is stable across renders.
  *
  * `labelOf` resolves a lane VALUE (a WebID, or an epic issue URL) to its display
  * label, letting the caller render people as names and epics as titles without
  * this pure function depending on the profile cache or the issue list.
+ *
+ * The lane VALUE for "assignee" is the assignee WebID. For "epic" it is supplied
+ * by `epicOf` — the caller resolves the issue's nearest EPIC ANCESTOR (the
+ * hierarchy is Initiative → Epic → Feature → Story → Task/Bug, so a card's direct
+ * `parent` is often a Feature, not the epic). When `epicOf` is omitted the
+ * "epic" mode falls back to the direct `parent` (legacy behaviour).
  */
 export function swimlanes(
   issues: IssueRecord[],
   swimlaneBy: SwimlaneBy,
   labelOf: (key: string) => string,
+  epicOf: (issue: IssueRecord) => string | undefined = (i) => i.parent,
 ): Swimlane[] {
   if (swimlaneBy === "none") {
     return [{ key: UNGROUPED_LANE, label: "All", issues }];
   }
   const valueOf = (i: IssueRecord): string | undefined =>
-    swimlaneBy === "assignee" ? i.assignee : i.parent;
+    swimlaneBy === "assignee" ? i.assignee : epicOf(i);
   const byKey = new Map<string, IssueRecord[]>();
   const ungrouped: IssueRecord[] = [];
   for (const issue of issues) {

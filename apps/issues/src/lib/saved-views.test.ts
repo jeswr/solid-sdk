@@ -32,4 +32,25 @@ describe("SavedViews", () => {
     storage.setItem("solid-issues:saved-views", "{not json");
     expect(views.list()).toEqual([]);
   });
+
+  it("captures the active layout (view) alongside the query", () => {
+    const views = new SavedViews(memoryStorage());
+    views.save("Board high", { ...DEFAULT_QUERY, priorities: ["high"] }, "1", "board");
+    expect(views.list()[0].view).toBe("board");
+    // No layout → view is omitted (backward-compatible with older saved views).
+    views.save("No layout", DEFAULT_QUERY, "2");
+    expect(views.list().find((v) => v.id === "2")?.view).toBeUndefined();
+  });
+
+  it("replace() keeps only the given views (partial-migration safe)", () => {
+    const views = new SavedViews(memoryStorage());
+    views.save("A", DEFAULT_QUERY, "a");
+    views.save("B", DEFAULT_QUERY, "b");
+    views.save("C", DEFAULT_QUERY, "c");
+    // Simulate a migration where only B failed: keep B, drop A + C.
+    views.replace(views.list().filter((v) => v.id === "b"));
+    expect(views.list().map((v) => v.id)).toEqual(["b"]);
+    views.clear();
+    expect(views.list()).toEqual([]);
+  });
 });

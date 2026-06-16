@@ -380,6 +380,44 @@ describe("Saved views (pod-persisted, shareable)", () => {
     );
     expect(tracker.savedViews.map((v) => v.iri)).toEqual([good.iri]);
   });
+
+  it("ignores a saved-view link pointing OUTSIDE the trusted #view- shape (read)", () => {
+    const { tracker, store } = newTracker();
+    const good = tracker.defineSavedView("Good", "{}");
+    // A hostile link to the tracker node itself (which DOES carry dct:title +
+    // could be coerced) must never be read back as a view.
+    store.addQuad(
+      DataFactory.namedNode(`${DOC}#this`),
+      DataFactory.namedNode(wf("savedView")),
+      DataFactory.namedNode(`${DOC}#this`),
+    );
+    expect(tracker.savedViews.map((v) => v.iri)).toEqual([good.iri]);
+  });
+
+  it("removeSavedView UNLINKS a hostile target but never wipes its triples", () => {
+    const { tracker, store } = newTracker();
+    // Point a saved-view link at the tracker node (its config: title, statuses…).
+    const trackerNode = `${DOC}#this`;
+    store.addQuad(
+      DataFactory.namedNode(trackerNode),
+      DataFactory.namedNode(wf("savedView")),
+      DataFactory.namedNode(trackerNode),
+    );
+    const titleBefore = tracker.title;
+    tracker.removeSavedView(trackerNode);
+    // The link is gone, but the tracker's own config survives intact.
+    expect([...store].some((q) => q.predicate.value === wf("savedView") && q.object.value === trackerNode)).toBe(false);
+    expect(tracker.title).toBe(titleBefore);
+    expect(tracker.workflow.statuses.length).toBeGreaterThan(0);
+  });
+
+  it("defineSavedView ignores an untrusted IRI and mints a safe #view- one instead", () => {
+    const { tracker } = newTracker();
+    const def = tracker.defineSavedView("Sneaky", "{}", `${DOC}#this`);
+    // It did NOT write onto the tracker node; a fresh #view- fragment was used.
+    expect(def.iri).toBe(`${DOC}#view-sneaky`);
+    expect(tracker.title).toBe("Issues"); // tracker config untouched
+  });
 });
 
 describe("F1: configurable workflows", () => {

@@ -25,6 +25,7 @@ import { FieldsDialog } from "@/components/fields-dialog";
 import { IssueBoard } from "@/components/issue-board";
 import { SaveIndicator } from "@/components/save-indicator";
 import { boardColumns, boardIssues, moveForColumn, optimisticMove, revertMoveIfCurrent, type SwimlaneBy } from "@/lib/board";
+import { epicAncestorOf } from "@/lib/epics";
 import { EpicView } from "@/components/epic-view";
 import { DashboardView } from "@/components/dashboard-view";
 import { WorkloadView } from "@/components/workload-view";
@@ -243,34 +244,50 @@ export function IssuesView() {
   // saved before pod-backing landed (one-time, only on a writable own tracker).
   // Tagged with the tracker URL so a slow load from a previously-open project
   // can never leak its views into this one (the snapshot/info pattern).
+  //
+  // Depends ONLY on the stable `useCallback` pieces of the issues hook (not the
+  // whole `issues` object, which `useIssues` rebuilds every render) so this
+  // callback's identity is stable and the load effect does NOT re-run on every
+  // render (which would loop fetch→setState→render).
+  const { listSavedViews, saveView } = issues;
+  const canCreate = issues.canCreate;
   const loadSavedViews = useCallback(async () => {
     const url = tracker.trackerUrl;
     try {
-      let podViews = await issues.listSavedViews();
+      let podViews = await listSavedViews();
       // Migrate device-local views into the pod the first time we have a writable
-      // own tracker, then clear the local store so it never re-migrates.
-      if (isOwn && issues.canCreate) {
+      // own tracker. Only views that actually landed in the pod (or were already
+      // present by name) are dropped locally; any that FAILED to migrate stay in
+      // localStorage so they can be retried — never cleared wholesale.
+      if (isOwn && canCreate) {
         const local = new SavedViews();
         const stale = local.list();
         if (stale.length > 0) {
           const existing = new Set(podViews.map((v) => v.name));
+          const migratedIds = new Set<string>();
           for (const v of stale) {
-            if (existing.has(v.name)) continue;
+            if (existing.has(v.name)) {
+              migratedIds.add(v.id); // already in the pod under this name
+              continue;
+            }
             try {
-              await issues.saveView(v.name, v.query, v.view);
+              await saveView(v.name, v.query, v.view);
+              migratedIds.add(v.id);
             } catch {
-              /* best-effort migration; a failure leaves the local copy intact */
+              /* leave this one in localStorage to retry on a later load */
             }
           }
-          local.clear();
-          podViews = await issues.listSavedViews();
+          // Re-persist only the views that did NOT migrate (partial-failure safe).
+          const remaining = stale.filter((v) => !migratedIds.has(v.id));
+          local.replace(remaining);
+          podViews = await listSavedViews();
         }
       }
       if (tracker.trackerUrl === url) setViews(podViews);
     } catch {
       if (tracker.trackerUrl === url) setViews([]);
     }
-  }, [issues, isOwn, tracker.trackerUrl]);
+  }, [listSavedViews, saveView, isOwn, canCreate, tracker.trackerUrl]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -417,6 +434,12 @@ export function IssuesView() {
       return epicTitleByUrl.get(value) ?? shortWebId(value);
     },
     [groupBoardBy, group.iri, epicTitleByUrl],
+  );
+  // Epic swimlanes lane by the nearest EPIC ancestor, not the direct parent
+  // (which may be a Feature/Story in the Initiative→Epic→…→Task hierarchy).
+  const epicOf = useCallback(
+    (issue: IssueRecord) => epicAncestorOf(issue, issues.issues),
+    [issues.issues],
   );
   // F3: (re)load the provenance log whenever the open issue or the issue data
   // (which a mutation refreshes) changes. Stale results are dropped if the dialog
@@ -1002,6 +1025,7 @@ export function IssuesView() {
             columns={boardColumns(workflow, groupBy)}
             swimlaneBy={groupBoardBy}
             labelOf={swimlaneLabel}
+            epicOf={epicOf}
             groupOf={(i) => (groupBy === "status" ? i.status : (i.priority ?? "none"))}
             onMove={(url, key) => {
               // Optimistic move (pss-w29w): slide the card immediately, persist in

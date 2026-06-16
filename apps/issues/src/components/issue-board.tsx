@@ -31,6 +31,7 @@ export function IssueBoard({
   canWrite,
   swimlaneBy = "none",
   labelOf = (k) => k,
+  epicOf,
 }: {
   issues: IssueRecord[];
   columns: BoardColumn[];
@@ -44,6 +45,8 @@ export function IssueBoard({
   swimlaneBy?: SwimlaneBy;
   /** Resolve a swimlane value (WebID / epic URL) to its display label. */
   labelOf?: (value: string) => string;
+  /** For epic swimlanes: resolve a card to its nearest epic-ancestor URL. */
+  epicOf?: (issue: IssueRecord) => string | undefined;
 }) {
   const [dragOver, setDragOver] = useState<string | null>(null);
 
@@ -54,7 +57,7 @@ export function IssueBoard({
     if (url) onMove(url, key);
   };
 
-  const lanes = swimlanes(issues, swimlaneBy, labelOf);
+  const lanes = swimlanes(issues, swimlaneBy, labelOf, epicOf);
   const showLaneHeadings = swimlaneBy !== "none";
 
   // The drop target is unique across lanes: a column key alone repeats per lane,

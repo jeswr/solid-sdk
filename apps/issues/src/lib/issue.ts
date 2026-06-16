@@ -1108,14 +1108,32 @@ export class Tracker extends TermWrapper {
     return SetFrom.subjectPredicate(this, SAVED_VIEW, NamedNodeAs.string, NamedNodeFrom.string);
   }
 
+  /** The trusted prefix for a saved-view node: a `#view-` fragment of THIS doc. */
+  private get savedViewPrefix(): string {
+    return `${this.doc}#view-`;
+  }
+  /**
+   * Whether `iri` is a trusted saved-view node — a `#view-` fragment of the
+   * tracker document itself. A `wf:savedView` link is untrusted pod data: a
+   * hostile one could point at the tracker node (`#this`), a field/status class,
+   * or a foreign document. Mutating/clearing such a target would wipe unrelated
+   * tracker config — so define/remove operate ONLY on this trusted shape, and
+   * read SKIPS anything else.
+   */
+  private isOwnSavedView(iri: string): boolean {
+    return iri.startsWith(this.savedViewPrefix);
+  }
+
   /**
    * The saved views declared on the tracker (`wf:savedView` → a node carrying a
    * `dct:title` name and a `wf:viewQuery` JSON payload), sorted by name. A view
-   * missing its name or payload is skipped (defensive against partial data).
+   * missing its name or payload — or whose IRI is not a trusted `#view-` fragment
+   * of this doc — is skipped (defensive against partial/hostile data).
    */
   get savedViews(): SavedViewDef[] {
     const out: SavedViewDef[] = [];
     for (const iri of this.savedViewIris) {
+      if (!this.isOwnSavedView(iri)) continue;
       const node = new TermWrapper(iri, this.dataset, this.factory);
       const name = OptionalFrom.subjectPredicate(node, dct("title"), LiteralAs.string);
       const payload = OptionalFrom.subjectPredicate(node, VIEW_QUERY, LiteralAs.string);
@@ -1129,22 +1147,34 @@ export class Tracker extends TermWrapper {
    * Define (or overwrite by IRI) a saved view: mint/refresh the `#view-<slug>`
    * node with its name + serialised payload, and link it from the tracker via
    * `wf:savedView`. Overwriting first clears the node's previous triples so a
-   * relabel/re-query never leaves stale values behind. Returns the definition.
+   * relabel/re-query never leaves stale values behind. A supplied `iri` MUST be a
+   * trusted `#view-` fragment of this tracker doc — otherwise it is ignored and a
+   * fresh slug-derived IRI is minted, so a caller can never coax this into
+   * clearing the tracker node or another config node's triples. Returns the
+   * definition.
    */
-  defineSavedView(name: string, payload: string, iri = `${this.doc}#view-${fragmentSlug(name)}`): SavedViewDef {
+  defineSavedView(name: string, payload: string, iri?: string): SavedViewDef {
+    const target = iri && this.isOwnSavedView(iri) ? iri : `${this.savedViewPrefix}${fragmentSlug(name)}`;
     const nn = this.factory.namedNode.bind(this.factory);
-    // Clear any prior triples on this exact node (idempotent overwrite).
-    for (const q of [...this.dataset.match(nn(iri))]) this.dataset.delete(q);
-    const node = new TermWrapper(iri, this.dataset, this.factory);
+    // Clear any prior triples on this exact (trusted) node — idempotent overwrite.
+    for (const q of [...this.dataset.match(nn(target))]) this.dataset.delete(q);
+    const node = new TermWrapper(target, this.dataset, this.factory);
     OptionalAs.object(node, dct("title"), name.trim(), LiteralFrom.string);
     OptionalAs.object(node, VIEW_QUERY, payload, LiteralFrom.string);
-    this.savedViewIris.add(iri);
-    return { iri, name: name.trim(), payload };
+    this.savedViewIris.add(target);
+    return { iri: target, name: name.trim(), payload };
   }
 
-  /** Remove a saved view (its node triples and the tracker's link to it). */
+  /**
+   * Remove a saved view (its node triples and the tracker's link to it). The
+   * `wf:savedView` link is always dropped, but the subject's triples are cleared
+   * ONLY when `iri` is a trusted `#view-` fragment of this doc — so a hostile
+   * link pointing at the tracker node or another config node can be UNLINKED
+   * without wiping that node's unrelated configuration.
+   */
   removeSavedView(iri: string): void {
     this.savedViewIris.delete(iri);
+    if (!this.isOwnSavedView(iri)) return;
     for (const q of [...this.dataset.match(this.factory.namedNode(iri))]) this.dataset.delete(q);
   }
 
