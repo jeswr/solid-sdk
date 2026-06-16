@@ -233,9 +233,11 @@ export function FeedbackDialog({
       if (e.key !== "Tab") return;
       const dialog = dialogRef.current;
       if (!dialog) return;
-      const focusable = Array.from(dialog.querySelectorAll<HTMLElement>(focusableSelector)).filter(
-        (el) => el.offsetParent !== null || el === document.activeElement,
-      );
+      // The selector already excludes disabled controls and tabindex=-1 (the
+      // backdrop), which is the full set of non-tabbable cases the panel has —
+      // so no layout-based visibility filter is needed (and none would work
+      // under jsdom, which does no layout). `sr-only` radios stay tabbable.
+      const focusable = Array.from(dialog.querySelectorAll<HTMLElement>(focusableSelector));
       if (focusable.length === 0) {
         // Nothing focusable in the panel — keep focus on the dialog itself.
         e.preventDefault();

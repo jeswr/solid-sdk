@@ -226,4 +226,48 @@ describe("FeedbackDialog — modal focus management (a11y)", () => {
     await vi.waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(trigger).toHaveFocus();
   });
+
+  it("traps Tab within the dialog: wraps last→first and Shift+Tab first→last", async () => {
+    render(<FeedbackButton repo="jeswr/pod-docs" appName="Pod Docs" />);
+    await user.click(screen.getByRole("button", { name: "Feedback" }));
+    const dialog = await screen.findByRole("dialog");
+
+    // The trap considers the dialog's visible focusables in DOM order — query the
+    // same selector the component uses so the test mirrors the trap's view.
+    const selector =
+      'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+    const focusable = Array.from(dialog.querySelectorAll<HTMLElement>(selector));
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+
+    // Forward Tab from the last focusable wraps to the first.
+    last.focus();
+    expect(last).toHaveFocus();
+    await user.tab();
+    await vi.waitFor(() => expect(first).toHaveFocus());
+
+    // Shift+Tab from the first focusable wraps to the last.
+    first.focus();
+    expect(first).toHaveFocus();
+    await user.tab({ shift: true });
+    await vi.waitFor(() => expect(last).toHaveFocus());
+  });
+
+  it("pulls focus back into the dialog if focus starts outside it", async () => {
+    render(
+      <>
+        <button type="button">outside</button>
+        <FeedbackButton repo="jeswr/pod-docs" appName="Pod Docs" />
+      </>,
+    );
+    await user.click(screen.getByRole("button", { name: "Feedback" }));
+    const dialog = await screen.findByRole("dialog");
+
+    // Move focus to a control OUTSIDE the dialog, then Tab — the trap pulls it back.
+    const outside = screen.getByRole("button", { name: "outside" });
+    outside.focus();
+    expect(outside).toHaveFocus();
+    await user.tab();
+    await vi.waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true));
+  });
 });
