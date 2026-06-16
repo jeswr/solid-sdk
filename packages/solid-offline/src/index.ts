@@ -45,6 +45,7 @@ export type {
 // P4 — app-shell precache pure logic (consumable by apps + the SW, unit-tested).
 export {
   resolveAppShellConfig,
+  sameShellConfig,
   shellCacheName,
   precacheAppShell,
   cleanupOldShellCaches,

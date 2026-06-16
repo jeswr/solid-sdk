@@ -221,15 +221,32 @@ Files modified for P4 (not newly authored, so no top-of-file marker):
 - `src/index.ts` — re-exports the P4 surface from the package root.
 - `README.md`, `docs/MODEL-PROVENANCE.md` — P4 documentation.
 
+**roborev (codex/gpt-5.5) Medium findings on the first P4 commit — both fixed in the
+same branch:**
+
+- **Shell cache could store a private same-origin page (Medium).** `handleNavigation`
+  originally cached ANY `2xx text/html` navigation, so an authenticated/private
+  same-origin route could land in the identity-independent, logout-surviving shell
+  cache. FIXED: navigation responses are written ONLY for a CONFIGURED shell document
+  (`isConfiguredShellDoc` — a `precache` entry or the `fallback`); an unknown route is
+  served live but never cached. Covered by a new test.
+- **A config-message deploy never updated the shell (Medium).** The worker adopted
+  `appShell` only when it had none, so a new `version`/manifest sent via `config` was
+  ignored for the active worker's lifetime. FIXED: `adoptShellConfig` compares the
+  incoming resolved config (`sameShellConfig`, a new exported pure helper) and, on a
+  change, replaces `shellConfig`, resets the precache latch, and re-precaches (which
+  cleans up the stale bucket). `sameShellConfig` is unit-tested.
+
 ### P4 re-review focus areas
 
 - The shell bucket is identity-INDEPENDENT and deliberately survives `logout()` — it
   holds the app's own public static assets, not pod data. Confirm no pod data can
-  ever land in it: only navigations + URLs listed in `appShell.precache` route to
-  the shell handler; everything else (pod reads) stays on the WebID-scoped SWR path.
-- `handleNavigation` caches only `2xx` `text/html` responses (an API/JSON/redirect
-  navigation answer is passed through, never cached as a shell) — re-check that
-  classifier against odd content-types.
+  ever land in it: only navigations to CONFIGURED shell docs + same-origin URLs listed
+  in `appShell.precache` route to (and are written by) the shell handler; everything
+  else (pod reads) stays on the WebID-scoped SWR path.
+- The asset routing is gated SAME-ORIGIN (`isSameOrigin` in `worker.ts`) so a
+  cross-origin pod path that shares a pathname with a precached asset is never diverted
+  off the pod-data path. Re-check that gate.
 - A first-ever offline visit (nothing precached) intentionally surfaces the network
   error rather than fabricating a response — verify that's the desired UX vs a
   generic offline page (an `offlineFallback` is a candidate follow-up).

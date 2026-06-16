@@ -90,6 +90,21 @@ export function resolveAppShellConfig(config: AppShellConfig): ResolvedAppShellC
   return { precache, fallback, version };
 }
 
+/**
+ * True if two resolved shell configs are equivalent (same version + fallback +
+ * ordered precache set). The SW uses this to decide whether a `config` message
+ * carries a NEW deploy's manifest (→ replace + re-precache) or just re-sends the
+ * current one (→ no-op), so a long-lived active worker doesn't pin the old shell.
+ */
+export function sameShellConfig(a: ResolvedAppShellConfig, b: ResolvedAppShellConfig): boolean {
+  return (
+    a.version === b.version &&
+    a.fallback === b.fallback &&
+    a.precache.length === b.precache.length &&
+    a.precache.every((url, i) => url === b.precache[i])
+  );
+}
+
 /** The pathname of a (possibly root-relative) URL, lowercased, '' on parse failure. */
 function pathOf(url: string): string {
   try {
@@ -198,6 +213,28 @@ export interface ShellDeps {
 }
 
 /**
+ * Is this navigation URL one of the CONFIGURED shell documents (a precache entry
+ * or the fallback)? Only configured shell docs may be WRITTEN to the shell cache.
+ *
+ * SECURITY (roborev Medium): the shell cache is identity-independent and survives
+ * logout, so it must hold ONLY the app's declared public shell documents. Without
+ * this gate, `handleNavigation` would cache ANY successful same-origin `text/html`
+ * navigation — including an authenticated/private server-rendered page — into a
+ * cache the next user of the browser can read. We therefore match the navigation
+ * URL's pathname against the precache list + the fallback (origin-agnostic, like
+ * `isPrecachedAsset`); an unknown route is served live but NEVER cached.
+ */
+function isConfiguredShellDoc(requestUrl: string, config: ResolvedAppShellConfig): boolean {
+  const reqPath = pathOf(requestUrl);
+  if (!reqPath) return false;
+  if (config.fallback && pathOf(config.fallback) === reqPath) return true;
+  for (const url of config.precache) {
+    if (pathOf(url) === reqPath) return true;
+  }
+  return false;
+}
+
+/**
  * NAVIGATION HANDLER — the load-bearing piece for "the app boots offline".
  *
  * A navigation request (`request.mode === 'navigate'`, i.e. the browser loading a
@@ -210,8 +247,10 @@ export interface ShellDeps {
  * offline — unavoidable, the shell was never fetched).
  *
  * When online and the network succeeds, we refresh the cached copy of the route's
- * HTML so the offline fallback tracks the latest deploy (best-effort; a put
- * failure never affects the response).
+ * HTML — but ONLY for a CONFIGURED shell document (a precache entry / the
+ * fallback), never an arbitrary same-origin route — so the offline fallback tracks
+ * the latest deploy without ever caching a private/authenticated page (best-effort;
+ * a put failure never affects the response).
  */
 export async function handleNavigation(request: Request, deps: ShellDeps): Promise<ShellResult> {
   const cache = await deps.caches.open(shellCacheName(deps.config.version));
@@ -220,8 +259,9 @@ export async function handleNavigation(request: Request, deps: ShellDeps): Promi
     try {
       const fresh = await deps.fetch(request);
       // Refresh the cached copy of this route's document so the offline fallback
-      // stays current (best-effort; only cache a real, cacheable HTML document).
-      if (fresh.ok && isHtmlResponse(fresh)) {
+      // stays current — but ONLY a real HTML doc that is a CONFIGURED shell URL
+      // (never an arbitrary same-origin, possibly-authenticated, navigation answer).
+      if (fresh.ok && isHtmlResponse(fresh) && isConfiguredShellDoc(request.url, deps.config)) {
         try {
           await cache.put(request, fresh.clone());
           return { response: fresh, source: 'shell-network-cached' };

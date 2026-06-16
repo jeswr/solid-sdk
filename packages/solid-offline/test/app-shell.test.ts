@@ -30,6 +30,7 @@ import {
   isPrecachedAsset,
   precacheAppShell,
   resolveAppShellConfig,
+  sameShellConfig,
   shellCacheName,
 } from '../src/app-shell.js';
 
@@ -154,6 +155,32 @@ describe('resolveAppShellConfig', () => {
       fallback: '/404.html',
     });
     expect(c.fallback).toBe('/404.html');
+  });
+});
+
+describe('sameShellConfig (config-change detection for a new deploy)', () => {
+  it('is true for byte-equivalent configs (a re-sent config message = no-op)', () => {
+    const a = resolveAppShellConfig({ precache: ['/index.html', '/a.js'], version: 'v1' });
+    const b = resolveAppShellConfig({ precache: ['/index.html', '/a.js'], version: 'v1' });
+    expect(sameShellConfig(a, b)).toBe(true);
+  });
+
+  it('is false when the version changes (a new deploy must re-precache)', () => {
+    const a = resolveAppShellConfig({ precache: ['/index.html'], version: 'abc' });
+    const b = resolveAppShellConfig({ precache: ['/index.html'], version: 'def' });
+    expect(sameShellConfig(a, b)).toBe(false);
+  });
+
+  it('is false when the precache set or fallback changes', () => {
+    const base = resolveAppShellConfig({ precache: ['/index.html', '/a.js'], version: 'v1' });
+    const changedSet = resolveAppShellConfig({ precache: ['/index.html', '/b.js'], version: 'v1' });
+    const changedFallback = resolveAppShellConfig({
+      precache: ['/index.html', '/404.html'],
+      fallback: '/404.html',
+      version: 'v1',
+    });
+    expect(sameShellConfig(base, changedSet)).toBe(false);
+    expect(sameShellConfig(base, changedFallback)).toBe(false);
   });
 });
 
@@ -325,6 +352,22 @@ describe('handleNavigation — ONLINE revalidate', () => {
     // The cached index.html is untouched (we don't cache a non-HTML doc).
     const bucket = caches.caches.get(shellCacheName('vite-1'));
     expect(await bucket?.match('https://app.example/api/whoami')).toBeUndefined();
+  });
+
+  it('NEVER caches an UNKNOWN same-origin HTML route (a private/authed page must not enter the logout-surviving shell cache)', async () => {
+    const caches = new MockCacheStorage();
+    await precacheAppShell(caches, VITE_CONFIG);
+    // A same-origin, 200 text/html navigation to a route NOT in the precache list
+    // (e.g. an authenticated server-rendered page). It must be served live but
+    // NOT written to the identity-independent shell cache.
+    const privatePage = htmlResponse('<title>Alice private dashboard</title>');
+    const fetchImpl = vi.fn(async () => privatePage) as unknown as typeof fetch;
+    const deps = shellDeps(caches, true, fetchImpl, VITE_CONFIG);
+
+    const result = await handleNavigation(navRequest('https://app.example/account/secret'), deps);
+    expect(result.source).toBe('shell-network'); // served live, NOT 'shell-network-cached'
+    const bucket = caches.caches.get(shellCacheName('vite-1'));
+    expect(await bucket?.match('https://app.example/account/secret')).toBeUndefined();
   });
 });
 

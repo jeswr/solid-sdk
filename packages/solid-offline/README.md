@@ -97,11 +97,18 @@ offline after first use.
   (or derive it from your build hash) per deploy; the old bucket is dropped at
   activate. A single bad URL does NOT abort the precache — the rest still cache.
 - **Navigations = network-first, cache-fallback.** A document request is served
-  fresh when online (a deploy ships immediately) and refreshes the cached copy;
-  offline it serves the cached route HTML, else the configured `fallback`
-  (the SPA single document / Next index), so the app boots and client routing
-  takes over. Only a first-ever offline visit (nothing cached) surfaces the
-  network error — there's genuinely nothing to serve.
+  fresh when online (a deploy ships immediately); offline it serves the cached
+  route HTML, else the configured `fallback` (the SPA single document / Next
+  index), so the app boots and client routing takes over. Only a first-ever
+  offline visit (nothing cached) surfaces the network error — there's genuinely
+  nothing to serve. **Only a CONFIGURED shell document (a `precache` entry or the
+  `fallback`) is ever WRITTEN to the shell cache** — an unknown same-origin route
+  (e.g. an authenticated server-rendered page) is served live but never cached, so
+  a private page can't leak into the logout-surviving public shell cache.
+- **A new deploy updates the shell.** Bump `version` (or re-send `appShell` with a
+  changed `precache`/`version`) and the worker replaces its shell config + re-runs
+  the precache on the next `config` message — the active worker never pins an old
+  shell — and the previous version's bucket is cleaned up at activate.
 - **Precached assets = cache-first.** Hashed JS/CSS/fonts are immutable under a
   fixed URL (a new deploy emits new filenames), so a cache hit is authoritative
   and the network is never touched.

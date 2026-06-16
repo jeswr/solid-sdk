@@ -12,6 +12,9 @@ function resolveAppShellConfig(config) {
   });
   return { precache, fallback, version };
 }
+function sameShellConfig(a, b) {
+  return a.version === b.version && a.fallback === b.fallback && a.precache.length === b.precache.length && a.precache.every((url, i) => url === b.precache[i]);
+}
 function pathOf(url) {
   try {
     return new URL(url, "https://x.invalid/").pathname.toLowerCase();
@@ -57,12 +60,21 @@ function isPrecachedAsset(requestUrl, config) {
   }
   return false;
 }
+function isConfiguredShellDoc(requestUrl, config) {
+  const reqPath = pathOf(requestUrl);
+  if (!reqPath) return false;
+  if (config.fallback && pathOf(config.fallback) === reqPath) return true;
+  for (const url of config.precache) {
+    if (pathOf(url) === reqPath) return true;
+  }
+  return false;
+}
 async function handleNavigation(request, deps) {
   const cache = await deps.caches.open(shellCacheName(deps.config.version));
   if (deps.isOnline()) {
     try {
       const fresh = await deps.fetch(request);
-      if (fresh.ok && isHtmlResponse(fresh)) {
+      if (fresh.ok && isHtmlResponse(fresh) && isConfiguredShellDoc(request.url, deps.config)) {
         try {
           await cache.put(request, fresh.clone());
           return { response: fresh, source: "shell-network-cached" };
@@ -826,6 +838,14 @@ async function runPrecache() {
     shellPrecached = false;
   }
 }
+function adoptShellConfig(next, event) {
+  if (next.precache.length === 0) return;
+  const resolved = resolveAppShellConfig(next);
+  if (shellConfig && sameShellConfig(shellConfig, resolved)) return;
+  shellConfig = resolved;
+  shellPrecached = false;
+  keepAlive(event, runPrecache);
+}
 function getMeta() {
   if (!metaPromise) {
     metaPromise = MetadataStore.open(configuredWebId);
@@ -871,9 +891,8 @@ self.addEventListener("message", (event) => {
   if (!data || typeof data !== "object") return;
   if (data.type === "config") {
     setChannelName(data.config.channelName);
-    if (data.config.appShell && data.config.appShell.precache.length > 0 && !shellConfig) {
-      shellConfig = resolveAppShellConfig(data.config.appShell);
-      keepAlive(event, runPrecache);
+    if (data.config.appShell) {
+      adoptShellConfig(data.config.appShell, event);
     }
     const nextWebId = data.config.webId;
     const changed = isScopeChange(webIdConfigured, configuredWebId, nextWebId);

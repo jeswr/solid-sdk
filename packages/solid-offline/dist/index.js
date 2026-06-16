@@ -1017,6 +1017,9 @@ function resolveAppShellConfig(config) {
   });
   return { precache, fallback, version };
 }
+function sameShellConfig(a, b) {
+  return a.version === b.version && a.fallback === b.fallback && a.precache.length === b.precache.length && a.precache.every((url, i) => url === b.precache[i]);
+}
 function pathOf(url) {
   try {
     return new URL(url, "https://x.invalid/").pathname.toLowerCase();
@@ -1063,12 +1066,21 @@ function isPrecachedAsset(requestUrl, config) {
   }
   return false;
 }
+function isConfiguredShellDoc(requestUrl, config) {
+  const reqPath = pathOf(requestUrl);
+  if (!reqPath) return false;
+  if (config.fallback && pathOf(config.fallback) === reqPath) return true;
+  for (const url of config.precache) {
+    if (pathOf(url) === reqPath) return true;
+  }
+  return false;
+}
 async function handleNavigation(request, deps) {
   const cache = await deps.caches.open(shellCacheName(deps.config.version));
   if (deps.isOnline()) {
     try {
       const fresh = await deps.fetch(request);
-      if (fresh.ok && isHtmlResponse(fresh)) {
+      if (fresh.ok && isHtmlResponse(fresh) && isConfiguredShellDoc(request.url, deps.config)) {
         try {
           await cache.put(request, fresh.clone());
           return { response: fresh, source: "shell-network-cached" };
@@ -1626,6 +1638,6 @@ function createOfflineClient(config = {}) {
   };
 }
 
-export { ANONYMOUS_SCOPE, CACHE_PREFIX, DB_PREFIX, DEFAULT_CACHE_NAME, DEFAULT_DB_NAME, DEFAULT_WARM_BUDGET, backoffDelay, cacheNameForWebId, cleanupOldShellCaches, containerChildren, createNotificationsClient, createOfflineClient, createStatusSurface, createWarmController, dbNameForWebId, deriveSeeds, discoverSubscriptionUrl, handleNavigation, handleNotification, handlePrecachedAsset, isPrecachedAsset, isScopeChange, onIdle, parseFrame, parseWacAllow, precacheAppShell, purgeForWebId, resolveAppShellConfig, resolveBudget, resyncSweep, scopeFor, scopeHash, shellCacheName, storageDescriptionFromLink, subscribe, typeIndexTargets, userCanRead, warm };
+export { ANONYMOUS_SCOPE, CACHE_PREFIX, DB_PREFIX, DEFAULT_CACHE_NAME, DEFAULT_DB_NAME, DEFAULT_WARM_BUDGET, backoffDelay, cacheNameForWebId, cleanupOldShellCaches, containerChildren, createNotificationsClient, createOfflineClient, createStatusSurface, createWarmController, dbNameForWebId, deriveSeeds, discoverSubscriptionUrl, handleNavigation, handleNotification, handlePrecachedAsset, isPrecachedAsset, isScopeChange, onIdle, parseFrame, parseWacAllow, precacheAppShell, purgeForWebId, resolveAppShellConfig, resolveBudget, resyncSweep, sameShellConfig, scopeFor, scopeHash, shellCacheName, storageDescriptionFromLink, subscribe, typeIndexTargets, userCanRead, warm };
 //# sourceMappingURL=index.js.map
 //# sourceMappingURL=index.js.map

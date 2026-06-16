@@ -23,6 +23,7 @@ import {
   isPrecachedAsset,
   precacheAppShell,
   resolveAppShellConfig,
+  sameShellConfig,
 } from './app-shell.js';
 import { type InvalidateDeps, handleNotification, resyncSweep } from './invalidation.js';
 import { MetadataStore } from './metadata-store.js';
@@ -94,6 +95,22 @@ async function runPrecache(): Promise<void> {
   }
 }
 
+/**
+ * Adopt an app-shell config delivered by a `config` message (roborev Medium fix:
+ * a new deploy's version/manifest must take effect, not be ignored for the active
+ * worker's lifetime). On a CHANGE we replace `shellConfig`, reset the precache
+ * latch, and re-run precache (which also cleans up the now-stale old version's
+ * bucket). A no-op when the incoming config is byte-equivalent to the current one.
+ */
+function adoptShellConfig(next: AppShellConfig, event: ExtendableMessageEvent): void {
+  if (next.precache.length === 0) return;
+  const resolved = resolveAppShellConfig(next);
+  if (shellConfig && sameShellConfig(shellConfig, resolved)) return; // unchanged
+  shellConfig = resolved;
+  shellPrecached = false; // a new manifest must be (re)precached
+  keepAlive(event, runPrecache);
+}
+
 function getMeta(): Promise<MetadataStore> {
   if (!metaPromise) {
     metaPromise = MetadataStore.open(configuredWebId);
@@ -159,12 +176,13 @@ self.addEventListener('message', (event: ExtendableMessageEvent) => {
   if (data.type === 'config') {
     // #15: adopt the page's resolved channel name (custom channels must work).
     setChannelName(data.config.channelName);
-    // P4: if the page sent an app-shell config and we don't have one yet (no
-    // build-time injection), adopt it and precache now. The shell is
-    // identity-independent so this is independent of the webId scope below.
-    if (data.config.appShell && data.config.appShell.precache.length > 0 && !shellConfig) {
-      shellConfig = resolveAppShellConfig(data.config.appShell);
-      keepAlive(event, runPrecache);
+    // P4: if the page sent an app-shell config, adopt it. `adoptShellConfig` is a
+    // no-op when it equals the current one, and (roborev) REPLACES + re-precaches
+    // when a new deploy ships a changed version/manifest — so a long-lived active
+    // worker doesn't pin the old shell. The shell is identity-independent, so this
+    // is independent of the webId scope below.
+    if (data.config.appShell) {
+      adoptShellConfig(data.config.appShell, event);
     }
     // #4: treat `undefined` as a VALID scope change. After a logged-in user, an
     // anonymous client (webId === undefined) MUST be able to clear the previous
