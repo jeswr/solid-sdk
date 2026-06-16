@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import type { NextConfig } from "next";
 
 // Static-export deploy (Caddy `file_server` on a subdomain) vs. the default
@@ -14,8 +15,38 @@ import type { NextConfig } from "next";
 // `output: "export"` is INCOMPATIBLE with `next start`, so it must stay opt-in.
 const staticExport = process.env.APP_STATIC_EXPORT === "1";
 
+/**
+ * The build version attached to feedback diagnostics (the FeedbackButton's
+ * `appVersion`). Resolved at build time, deploy-portable: an explicit
+ * `NEXT_PUBLIC_APP_VERSION`, else a CI git SHA (Vercel / GitHub Actions), else
+ * the package version. Baked into the client bundle as a NEXT_PUBLIC_ var so a
+ * static export can read it with no runtime.
+ */
+function buildVersion(): string {
+  const sha = (
+    process.env.NEXT_PUBLIC_APP_VERSION ??
+    process.env.VERCEL_GIT_COMMIT_SHA ??
+    process.env.GITHUB_SHA ??
+    ""
+  ).trim();
+  if (sha) return sha.slice(0, 12);
+  try {
+    const pkg = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8"));
+    return typeof pkg.version === "string" ? `v${pkg.version}` : "dev";
+  } catch {
+    return "dev";
+  }
+}
+
+const baseConfig: NextConfig = {
+  // Bake the build version into the client bundle so the FeedbackButton can
+  // attach it to issue diagnostics without a runtime lookup.
+  env: { NEXT_PUBLIC_APP_VERSION: buildVersion() },
+};
+
 const nextConfig: NextConfig = staticExport
   ? {
+      ...baseConfig,
       output: "export",
       // Caddy `file_server` serves `/foo` → `/foo/index.html`; trailing-slash
       // routing makes Next emit that directory layout so links resolve on disk.
@@ -23,6 +54,6 @@ const nextConfig: NextConfig = staticExport
       // No Next.js image optimisation server in a static export.
       images: { unoptimized: true },
     }
-  : {};
+  : baseConfig;
 
 export default nextConfig;

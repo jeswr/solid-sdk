@@ -6,6 +6,7 @@
 
 import { Suspense, useState } from "react";
 import { Loader2, Menu } from "lucide-react";
+import { FeedbackButton } from "@jeswr/app-shell";
 import { useSolidSession } from "@/lib/session-context";
 import { LoginScreen } from "@/components/login-screen";
 import { SidebarNav, BottomNav } from "@/components/sidebar-nav";
@@ -14,6 +15,10 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { AccountMenu } from "@/components/account-menu";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+
+// Build version baked in at build time (next.config.ts) — attached to feedback
+// diagnostics so a reported issue carries which build it came from.
+const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION;
 
 /**
  * The authenticated app frame: persistent sidebar on desktop, a slide-in
@@ -25,7 +30,7 @@ import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/s
  * requires a Suspense boundary in the Next.js App Router.
  */
 export function AppShell({ children }: { children: React.ReactNode }) {
-  const { status } = useSolidSession();
+  const { status, profile } = useSolidSession();
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   // "initialising" = booting the auth manager; "restoring" = a silent
@@ -100,6 +105,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
 
           <div className="ml-auto flex items-center gap-1">
+            {/* Report issue / feedback / help → a GitHub issue on this app's repo.
+                `submit` unset → GitHub prefill mode (opens the new-issue page). The
+                WebID is attached ONLY if the reporter ticks the in-dialog consent. */}
+            <FeedbackButton
+              repo="jeswr/solid-issues"
+              appName="Solid Issues"
+              appVersion={APP_VERSION}
+              webId={profile?.webId}
+            />
             <ThemeToggle />
             <AccountMenu />
           </div>

@@ -13,7 +13,10 @@ export default defineConfig({
     },
   },
   test: {
-    include: ["src/**/*.test.ts"],
+    // `.test.ts` is the data-layer/route default (node env); `.test.tsx` covers
+    // React component tests, which opt into jsdom via a per-file
+    // `// @vitest-environment jsdom` pragma (keeps the rest fast in node).
+    include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
     exclude: ["e2e/**", "node_modules/**"],
     environment: "node",
     passWithNoTests: true,

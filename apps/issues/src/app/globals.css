@@ -2,6 +2,14 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
+/* Scan the @jeswr/app-shell dist so the FeedbackButton dialog's utility classes
+   are generated. The shell components reference the SAME token variable names
+   already defined below (--background, --popover, --border, --ring, …), so we
+   only need Tailwind to see their class strings — NOT app-shell's own tokens
+   (we deliberately do not import its styles.css, which would clobber these).
+   `node_modules` is outside Tailwind v4's default content scan, hence @source. */
+@source "../../node_modules/@jeswr/app-shell/dist";
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
