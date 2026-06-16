@@ -956,6 +956,25 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
   }
 
   /**
+   * Whether a durable refresh-token session is STILL persisted for this issuer.
+   * The SessionProvider reads this AFTER a non-restored load to decide whether to
+   * drop the remembered-account POINTER: if the credential survived (a transient
+   * restore failure preserved it — see {@link restoreIssuer}), the pointer MUST be
+   * kept so a later reload can retry; if it is gone (a definitive invalid_grant
+   * cleared it, or there never was one), the pointer is cleared. Returns false
+   * without a store / on a read error (fail-safe: a kept pointer over a missing one
+   * only risks one extra doomed restore attempt, which then re-clears).
+   */
+  async hasPersisted(issuer: URL): Promise<boolean> {
+    if (this.#sessionStore === undefined) return false;
+    try {
+      return (await this.#sessionStore.get(issuer.href)) !== undefined;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * RESTORE a returning user's session for a KNOWN issuer from the durable store
    * via a `refresh_token` grant — the whole point of this module: a
    * token-endpoint FETCH, never a window/iframe. Call on page load once the

@@ -295,11 +295,18 @@ function runSilentRestore(provider: WebIdDPoPTokenProvider): Promise<SilentResto
       webIdsEqual,
     });
     if (decision.outcome !== "restored") {
-      // Nothing to restore (no/expired token, or no remembered issuer) → login. The
-      // dead persisted entry, if any, was already cleared by restoreIssuer (only on
-      // a definitive invalid_grant); clear the stale POINTER too so we don't
-      // re-attempt a doomed restore on every load.
-      clearRememberedAccount();
+      // Not restored on THIS load → fall back to login. Clear the remembered POINTER
+      // ONLY when the durable credential is genuinely gone (roborev finding: do NOT
+      // wipe the pointer on a TRANSIENT failure, or a later reload could never retry
+      // the preserved credential). restoreIssuer clears the IndexedDB entry only on a
+      // definitive invalid_grant; so: if a credential STILL exists for the remembered
+      // issuer, a transient failure preserved it → KEEP the pointer for a retry.
+      // Otherwise (dead-and-cleared, or there was never a usable issuer) clear it so
+      // we don't re-attempt a doomed restore every load.
+      const issuer = remembered?.issuer;
+      const credentialSurvives =
+        issuer !== undefined && (await provider.hasPersisted(new URL(issuer)));
+      if (!credentialSurvives) clearRememberedAccount();
       return { kind: "login" };
     }
     // The refresh grant rebuilt a live session in the provider (issuer pinned,
@@ -324,8 +331,12 @@ function runSilentRestore(provider: WebIdDPoPTokenProvider): Promise<SilentResto
     writeRememberedAccount(decision.webId, decision.issuer);
     return { kind: "restored", webId: decision.webId, session };
   })().catch(() => {
-    // Any unexpected error in the restore wiring → fall back to login, fail-closed.
-    clearRememberedAccount();
+    // Any UNEXPECTED error in the restore wiring → fall back to login, fail-closed.
+    // Deliberately do NOT clear the remembered pointer here: decideSilentRestore /
+    // restoreIssuer don't throw (the normal outcomes are handled above), so reaching
+    // here means a wiring fault — and over-clearing a pointer whose credential may
+    // still be valid would reintroduce the transient-wipe bug. A kept pointer at
+    // worst costs one extra doomed restore next load, which then re-clears cleanly.
     return { kind: "login" } as const;
   });
   return silentRestorePromise;

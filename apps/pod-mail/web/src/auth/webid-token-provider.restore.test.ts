@@ -396,6 +396,42 @@ describe("restoreIssuer — silent refresh-token-grant restore (no popup)", () =
   });
 });
 
+describe("hasPersisted — lets the caller keep the pointer when a transient failure preserved the token", () => {
+  it("reports true after a transient restore failure preserved the credential, false after a dead-token clear", async () => {
+    const store = makeStore();
+    const dpopKey = (await crypto.subtle.generateKey(
+      { name: "ECDSA", namedCurve: "P-256" },
+      false,
+      ["sign", "verify"],
+    )) as CryptoKeyPair;
+    store.map.set(ISSUER.href, {
+      issuer: ISSUER.href,
+      webId: WEBID_A,
+      refreshToken: "rt-A",
+      dpopKey,
+    });
+
+    // Transient failure — restoreIssuer preserves the credential.
+    refreshMock.reject = new Error("network timeout");
+    let provider = makeProvider(store);
+    expect(await provider.restoreIssuer(ISSUER)).toBeUndefined();
+    // hasPersisted is true → the SessionProvider KEEPS the remembered pointer.
+    expect(await provider.hasPersisted(ISSUER)).toBe(true);
+
+    // Now a definitive invalid_grant clears the credential.
+    refreshMock.reject = Object.assign(new Error("invalid_grant"), { error: "invalid_grant" });
+    provider = makeProvider(store);
+    expect(await provider.restoreIssuer(ISSUER)).toBeUndefined();
+    // hasPersisted is false → the SessionProvider clears the pointer (no doomed retry).
+    expect(await provider.hasPersisted(ISSUER)).toBe(false);
+  });
+
+  it("reports false when there is no store / no entry (fail-safe)", async () => {
+    expect(await makeProvider().hasPersisted(ISSUER)).toBe(false);
+    expect(await makeProvider(makeStore()).hasPersisted(ISSUER)).toBe(false);
+  });
+});
+
 describe("logout clears the durable credential; reset() does not", () => {
   it("forgetPersisted drops the persisted refresh token + key for the issuer", async () => {
     const store = makeStore();
