@@ -42,7 +42,8 @@ import {
   WebIdDPoPTokenProvider,
   AmbiguousIssuerError,
   webIdsEqual,
-  PROBE_ID_HEADER,
+  registerProbeRequest,
+  discardProbeRegistration,
 } from "@/lib/solid/webid-token-provider";
 import { authFlowHolder, getCodeThroughHolder } from "@/lib/solid/auth-flow-holder";
 import { readProfile, type Profile } from "@/lib/solid/profile";
@@ -225,22 +226,33 @@ export function SolidAuthProvider({ children }: { children: ReactNode }) {
       // DEFENCE-IN-DEPTH alongside the per-probe proof below.
       const tokensAttachedBefore =
         providerRef.current?.tokensAttachedCount() ?? 0;
-      // PER-PROBE PROOF (primary): stamp this probe with a unique id. The provider
-      // records the id iff it actually upgrades THIS request — so we can prove THIS
-      // probe was token-upgraded, not merely that "some request" was (a concurrent
-      // upgraded request for the SAME WebID can bump the provider-wide count, but
-      // not satisfy our own probe id).
+      // PER-PROBE PROOF (primary): tag this probe with a unique id via a Request
+      // registry — NOT a network header. The provider records the id iff it
+      // actually upgrades THIS request object — so we can prove THIS probe was
+      // token-upgraded, not merely that "some request" was (a concurrent upgraded
+      // request for the SAME WebID can bump the provider-wide count, but not satisfy
+      // our own probe id). Using the registry (instead of a custom header) keeps the
+      // probe a "simple" CORS request, so a cross-origin pod does not reject a
+      // preflight before the 401/upgrade path can run.
       const probeId = `probe-${crypto.randomUUID()}`;
       // Trigger the auth flow by making an authenticated request the global fetch
       // will upgrade on 401: registerGlobally() intercepts the 401, opens the
       // <authorization-code-flow> popup, mints a DPoP token, and RETRIES the
       // request. A storage root is private on CSS by default, so this 401s →
       // popup → retry, and the RETRY's status tells us whether login succeeded.
+      // Build the Request OBJECT first and register it before fetching.
       const probe = pub.storages[0] ?? new URL("/", id).toString();
-      const res = await fetch(probe, {
-        method: "GET",
-        headers: { [PROBE_ID_HEADER]: probeId },
-      });
+      const probeRequest = new Request(probe, { method: "GET" });
+      registerProbeRequest(probeRequest, probeId);
+      let res: Response;
+      try {
+        res = await fetch(probeRequest);
+      } finally {
+        // Drop any single-use URL registration the probe did not consume (e.g. a
+        // public 200 with no 401 → no upgrade ran), so a later request to the same
+        // URL can never inherit this probe's id.
+        discardProbeRegistration(probeRequest);
+      }
       // Success requires a 2xx AND that the token provider upgraded THIS specific
       // probe (per-probe), with the count delta kept as defence-in-depth. A bare
       // 2xx is NOT enough: probing a PUBLIC resource returns 200 with no token
