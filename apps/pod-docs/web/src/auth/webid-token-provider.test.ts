@@ -87,21 +87,44 @@ vi.mock("oauth4webapi", () => {
 });
 
 // Import AFTER the mocks are registered.
-const { WebIdDPoPTokenProvider, webIdsEqual } = await import("./webid-token-provider");
+const { WebIdDPoPTokenProvider, webIdsEqual, PROBE_ID_HEADER, ReactiveAuthResetError } =
+  await import("./webid-token-provider");
 
 const WEBID_A = "https://alice.example/profile/card#me";
 const WEBID_B = "https://bob.example/profile/card#me";
 
+const REDIRECT = "https://app.example/callback.html?code=auth-code&state=state";
+
 /** Build a provider whose getWebId returns the WebID currently in `authState`. */
-function makeProvider() {
+function makeProvider(
+  getCode: (uri: URL, signal: AbortSignal) => Promise<string> = async () => REDIRECT,
+) {
   return new WebIdDPoPTokenProvider(
     "https://app.example/callback.html",
     // getCode — the popup; returns a redirect URL with the auth code.
-    async () => "https://app.example/callback.html?code=auth-code&state=state",
+    getCode,
     // getWebId — hand back whichever WebID the current attempt is for.
     async () => authState.webId,
     { clientId: "https://app.example/clientid.jsonld" },
   );
+}
+
+/** A deferred whose `getCode` resolves only when the test calls `release()`. */
+function deferredGetCode() {
+  let release!: () => void;
+  const gate = new Promise<void>((r) => {
+    release = r;
+  });
+  const getCode = async () => {
+    await gate;
+    return REDIRECT;
+  };
+  return { getCode, release };
+}
+
+/** A login probe Request carrying a per-attempt probe id (FIX 3). */
+function probeRequest(url: string, probeId: string): Request {
+  return new Request(url, { headers: { [PROBE_ID_HEADER]: probeId } });
 }
 
 describe("webIdsEqual", () => {
@@ -206,5 +229,98 @@ describe("WebIdDPoPTokenProvider — no prior identity survives reset / re-login
     const reqStale = await provider.upgrade(new Request("https://alice.example/storage/"));
     expect(provider.authenticatedWebId()).toBe(WEBID_A); // leaked without reset
     expect(reqStale.headers.get("Authorization")).toBe("DPoP tok-A"); // A's token reused
+  });
+});
+
+describe("FIX 2 — reset() fences in-flight auth work (no contamination after logout/re-login)", () => {
+  beforeEach(() => {
+    authState.webId = WEBID_A;
+    authState.accessToken = "tok-A";
+  });
+
+  it("an upgrade() that resolves AFTER reset() writes NO provider state and is discarded", async () => {
+    // Stall the popup so user A's upgrade is in flight when logout/reset fires.
+    const { getCode, release } = deferredGetCode();
+    const provider = makeProvider(getCode);
+
+    const inflight = provider.upgrade(new Request("https://alice.example/storage/"));
+    // Let the flow reach the (stalled) getCode, then log out mid-flight.
+    await Promise.resolve();
+    provider.reset();
+    expect(provider.authenticatedWebId()).toBeUndefined();
+    expect(provider.tokensAttachedCount()).toBe(0);
+
+    // Now let A's stalled flow complete — it must NOT write any state.
+    release();
+    await expect(inflight).rejects.toBeInstanceOf(ReactiveAuthResetError);
+
+    // The superseded upgrade contaminated nothing: clean baseline survives.
+    expect(provider.authenticatedWebId()).toBeUndefined();
+    expect(provider.tokensAttachedCount()).toBe(0);
+  });
+
+  it("after a fenced in-flight upgrade, a fresh login as B reports ONLY B (no A residue)", async () => {
+    // A's popup is stalled, so A's upgrade is in flight when logout fires.
+    const { getCode: getCodeA, release: releaseA } = deferredGetCode();
+    const provider = makeProvider(getCodeA);
+    const inflightA = provider.upgrade(new Request("https://alice.example/storage/"));
+    await Promise.resolve();
+
+    // Logout (reset) fences A, then user B is the new identity.
+    provider.reset();
+    authState.webId = WEBID_B;
+    authState.accessToken = "tok-B";
+
+    // Release A's stalled flow — it must reject as superseded, writing nothing.
+    releaseA();
+    await expect(inflightA).rejects.toBeInstanceOf(ReactiveAuthResetError);
+
+    // B logs in on the same provider (the gate is now open, so B's flow completes).
+    const reqB = await provider.upgrade(probeRequest("https://bob.example/storage/", "p-b"));
+    expect(provider.authenticatedWebId()).toBe(WEBID_B);
+    expect(provider.authenticatedWebId()).not.toBe(WEBID_A);
+    expect(reqB.headers.get("Authorization")).toBe("DPoP tok-B");
+    // A's fenced attempt left no probe-upgrade record; only B's probe is recorded.
+    expect(provider.wasProbeUpgraded("p-b")).toBe(true);
+  });
+});
+
+describe("FIX 3 — login proof is PER-PROBE, not a provider-wide counter", () => {
+  beforeEach(() => {
+    authState.webId = WEBID_A;
+    authState.accessToken = "tok-A";
+  });
+
+  it("records the upgraded probe's own id, and only that id", async () => {
+    const provider = makeProvider();
+    const req = await provider.upgrade(probeRequest("https://alice.example/storage/", "probe-1"));
+    expect(req.headers.get("Authorization")).toBe("DPoP tok-A");
+    expect(provider.wasProbeUpgraded("probe-1")).toBe(true);
+    // A DIFFERENT id (e.g. another login attempt's probe) is NOT satisfied.
+    expect(provider.wasProbeUpgraded("probe-2")).toBe(false);
+  });
+
+  it("a concurrent same-WebID upgrade does NOT make a non-upgraded probe look logged in", async () => {
+    const provider = makeProvider();
+
+    // A concurrent upgraded request for the SAME WebID — e.g. a data-layer read —
+    // bumps the provider-wide attach count, but carries NO probe id of OUR login.
+    const before = provider.tokensAttachedCount();
+    await provider.upgrade(new Request("https://alice.example/data/doc"));
+    const after = provider.tokensAttachedCount();
+    expect(after).toBeGreaterThan(before); // the provider-wide counter DID advance
+
+    // Our login's OWN probe (id "my-login") was NEVER upgraded (imagine its target
+    // was public, so no upgrade ran for it). The per-probe proof must be false even
+    // though the provider-wide count moved — this is the spurious-pass FIX 3 closes.
+    expect(provider.wasProbeUpgraded("my-login")).toBe(false);
+  });
+
+  it("reset() clears the per-probe upgrade record", async () => {
+    const provider = makeProvider();
+    await provider.upgrade(probeRequest("https://alice.example/storage/", "probe-x"));
+    expect(provider.wasProbeUpgraded("probe-x")).toBe(true);
+    provider.reset();
+    expect(provider.wasProbeUpgraded("probe-x")).toBe(false);
   });
 });
