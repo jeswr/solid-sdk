@@ -1,17 +1,47 @@
 /* AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
    Host chrome + the pod-money-* classes the <AccountsView> emits (the component
-   ships no styles of its own — the host owns the look). */
+   ships no styles of its own — the host owns the look).
 
+   THEME: Tailwind v4 + the shared @jeswr/app-shell tokens drive light/dark. The
+   import order is load-bearing — `@import "tailwindcss"` FIRST, then the suite
+   OKLCH tokens + the `@theme inline` mapping (`@jeswr/app-shell/styles.css`) so
+   the shell components' utilities (bg-popover, text-muted-foreground, the `dark:`
+   variant, …) resolve to the suite palette. `@source` makes Tailwind scan the
+   app-shell package so the classes its <ThemeToggle/> + <AccountMenu/> emit are
+   actually generated (a node_modules package is otherwise outside the content
+   scan). The path is relative to THIS file. */
+@import "tailwindcss";
+@import "@jeswr/app-shell/styles.css";
+@source "../node_modules/@jeswr/app-shell/dist";
+
+/* The host chrome below predates the shared tokens and uses its own variable
+   names (--bg/--ink/…). Map them onto the app-shell OKLCH tokens so the WHOLE
+   pod-money UI (login card, header, accounts table) follows the theme — the
+   `.dark` class the ThemeProvider toggles on <html> flips the OKLCH vars, and
+   these aliases inherit it for free.
+
+   TOKEN-NAMESPACE SAFETY: the host's brand/action colour is a DISTINCT name
+   (`--host-accent`/`--host-accent-ink`) — it must NOT clobber the app-shell
+   `--accent`/`--accent-foreground` tokens, which the shared components consume
+   for their SUBTLE hover/focus surfaces (the AccountMenu dropdown items + the
+   FeedbackButton use `bg-accent` / `hover:bg-accent` / `focus:bg-accent` +
+   `text-accent-foreground`). Aliasing `--accent` to the much darker `--primary`
+   here, while `--accent-foreground` stays dark, would render those shell controls
+   dark-on-dark. So the host action colour maps to `--primary` under its own name,
+   and `--accent` is left to the shell. (Cross-app: the pod-mail pilot still
+   overwrites `--accent` directly — same fix is owed there + in the shared recipe.) */
 :root {
-  --bg: #f1f8f4;
-  --surface: #ffffff;
-  --ink: #14302a;
-  --muted: #57726a;
-  --accent: #0b8457;
-  --accent-ink: #ffffff;
-  --border: #d4e6dd;
-  --danger: #b02525;
-  --ok: #1a7a3f;
+  --bg: var(--background);
+  --surface: var(--card);
+  --ink: var(--foreground);
+  --muted: var(--muted-foreground);
+  --host-accent: var(--primary);
+  --host-accent-ink: var(--primary-foreground);
+  /* NOTE: the host's `--border` is the SAME name as the app-shell token, so it is
+     already unified — do NOT re-alias it to itself (that would self-reference to an
+     invalid value). The other host vars below use distinct names, so they alias. */
+  --danger: var(--destructive);
+  --ok: var(--success);
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
@@ -26,7 +56,7 @@ body {
 }
 
 a {
-  color: var(--accent);
+  color: var(--host-accent);
 }
 
 /* ── Login ─────────────────────────────────────────────────────────────── */
@@ -80,18 +110,27 @@ a {
   margin-top: 1rem;
 }
 
-button {
-  cursor: pointer;
-  border: none;
-  border-radius: 0.5rem;
-  padding: 0.6rem 0.9rem;
-  font-size: 0.95rem;
-  background: var(--accent);
-  color: var(--accent-ink);
-}
-button:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
+/* Host base button styling, scoped to Tailwind's `base` layer so the app-shell
+   controls (FeedbackButton/ThemeToggle/AccountMenu — styled with Tailwind UTILITY
+   classes, which live in the higher-priority `utilities` layer) always win over
+   these defaults. Without the layer, this bare `button` rule — emitted after the
+   Tailwind import — would override the shell controls' padding/background/border/
+   radius and break their design. The host's own buttons (login submit, the
+   pod-money table links) carry no utility classes, so they still pick these up. */
+@layer base {
+  button {
+    cursor: pointer;
+    border: none;
+    border-radius: 0.5rem;
+    padding: 0.6rem 0.9rem;
+    font-size: 0.95rem;
+    background: var(--host-accent);
+    color: var(--host-accent-ink);
+  }
+  button:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
 }
 
 /* ── App shell ─────────────────────────────────────────────────────────── */
@@ -111,23 +150,24 @@ button:disabled {
   font-weight: 700;
   font-size: 1.1rem;
 }
-.app-webid {
-  color: var(--muted);
-  font-size: 0.8rem;
+/* Right-aligned header controls: the app-shell <FeedbackButton/> + <ThemeToggle/>
+   + <AccountMenu/>. `margin-left: auto` pushes the trio to the top-right; the
+   app-shell components bring their own (Tailwind-utility) styling, so this only
+   handles placement. */
+.app-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
   margin-left: auto;
-  max-width: 22rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
-.app-logout {
-  background: transparent;
-  color: var(--accent);
-  border: 1px solid var(--border);
-}
+/* The fallback banners are theme-aware: a soft tint derived from the suite
+   `--warning` token (via color-mix over the card surface) with token-coloured
+   text + border. Because the tokens flip on `.dark`, the banners stay legible in
+   BOTH modes — no hard-coded light surfaces. */
 .app-note {
-  background: #fff8e6;
-  border: 1px solid #f0e0b0;
+  background: color-mix(in oklab, var(--warning) 16%, var(--card));
+  border: 1px solid color-mix(in oklab, var(--warning) 40%, var(--card));
+  color: var(--foreground);
   border-radius: 0.5rem;
   padding: 0.6rem 0.8rem;
   font-size: 0.85rem;
@@ -153,7 +193,7 @@ button:disabled {
 .pod-money-error button {
   margin-top: 0.5rem;
   background: transparent;
-  color: var(--accent);
+  color: var(--host-accent);
   border: 1px solid var(--border);
 }
 
@@ -183,7 +223,7 @@ button:disabled {
 /* The account name is a button that drills into transactions. */
 .pod-money-account-link {
   background: transparent;
-  color: var(--accent);
+  color: var(--host-accent);
   border: none;
   padding: 0;
   text-align: left;
@@ -197,7 +237,7 @@ button:disabled {
 }
 .pod-money-back-link {
   background: transparent;
-  color: var(--accent);
+  color: var(--host-accent);
   border: 1px solid var(--border);
 }
 .pod-money-account-heading {

@@ -13,11 +13,21 @@
 // falling back to the conventional `${podRoot}finance/ledger.ttl` path when the
 // index (or the registration) is absent. The discovery runs through the same
 // auth-patched global fetch, so it carries the session token. See useLedgerUrl.
+import { AccountMenu, FeedbackButton, ThemeToggle } from "@jeswr/app-shell";
 import { MoneyStore } from "@jeswr/pod-money";
 import { AccountsView } from "@jeswr/pod-money/ui";
 import { useEffect, useState } from "react";
 import { useSession } from "./auth/SessionProvider";
 import { LoginScreen } from "./LoginScreen";
+
+/**
+ * The app-specific identity for the header <FeedbackButton/>, in ONE place so the
+ * header wiring and the adoption test cannot drift: a filed issue must land on
+ * THIS app's own repo. Exported so feedback-button.test.tsx asserts the SAME
+ * values the header passes (and the generated issue URL targets jeswr/pod-money).
+ */
+export const FEEDBACK_REPO = "jeswr/pod-money";
+export const FEEDBACK_APP_NAME = "Pod Money";
 
 /** How the ledger URL was resolved — drives the fallback banner. */
 type LedgerSource = "discovering" | "type-index" | "fallback";
@@ -133,6 +143,8 @@ export function App() {
       podRoot={session.podRoot}
       podRootIsFallback={session.podRootIsFallback}
       webId={webId}
+      displayName={session.displayName}
+      avatarUrl={session.avatarUrl}
       onLogout={logout}
     />
   );
@@ -147,25 +159,53 @@ function LoggedIn({
   podRoot,
   podRootIsFallback,
   webId,
+  displayName,
+  avatarUrl,
   onLogout,
 }: {
   podRoot: string;
   podRootIsFallback: boolean;
   webId: string;
+  displayName?: string;
+  avatarUrl?: string;
   onLogout: () => void;
 }) {
   const { ledgerUrl, source } = useLedgerUrl(podRoot);
 
   return (
     <div className="app-shell">
+      {/* The header now uses the shared @jeswr/app-shell chrome: a header-level
+          <FeedbackButton/> (opens a themed dialog that files a GitHub issue against
+          THIS app's own repo), a light/dark/system <ThemeToggle/>, and a real
+          top-right <AccountMenu/> (avatar + display name, dropdown showing the WebID
+          + Sign out) — replacing the old raw-WebID span + bare logout button. The
+          session's WebID / profile name / avatar / logout wire straight into the
+          props (the components are fully decoupled — everything is a prop).
+          `app-header-actions` right-aligns the trio.
+
+          FEEDBACK: `repo` is the only app-specific value — pod-money files against
+          `jeswr/pod-money`. `appVersion` is the build SHA injected by Vite
+          (`__APP_VERSION__`), so a filed issue pins the deployed commit. `webId` is
+          attached to diagnostics ONLY if the reporter ticks the consent box. `submit`
+          is intentionally UNSET → the dialog uses the GitHub prefill page; the
+          feedback-proxy hook is wired suite-wide later. */}
       <header className="app-header">
         <span className="app-brand">Pod Money</span>
-        <span className="app-webid" title={webId}>
-          {webId}
-        </span>
-        <button type="button" className="app-logout" onClick={onLogout}>
-          Log out
-        </button>
+        <div className="app-header-actions">
+          <FeedbackButton
+            repo={FEEDBACK_REPO}
+            appName={FEEDBACK_APP_NAME}
+            appVersion={__APP_VERSION__}
+            webId={webId}
+          />
+          <ThemeToggle />
+          <AccountMenu
+            webId={webId}
+            displayName={displayName}
+            avatarUrl={avatarUrl}
+            onSignOut={onLogout}
+          />
+        </div>
       </header>
       {podRootIsFallback ? (
         <p className="app-note" role="note">
