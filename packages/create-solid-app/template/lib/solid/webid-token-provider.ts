@@ -102,6 +102,20 @@ export class AmbiguousIssuerError extends Error {
   }
 }
 
+/**
+ * An in-flight `upgrade()` resolved AFTER a {@link WebIdDPoPTokenProvider.reset}
+ * (logout / new login) advanced the provider's generation. The result belongs to
+ * a superseded identity, so the upgrade is rejected with this error and writes no
+ * provider state — preventing a prior identity's token/claim from contaminating
+ * the next attempt.
+ */
+export class ReactiveAuthResetError extends Error {
+  constructor() {
+    super("Authentication was reset (logout or a new login started) while this request was upgrading.");
+    this.name = "ReactiveAuthResetError";
+  }
+}
+
 /** The default issuer policy: single → it; several → throw (never pick silently). */
 function defaultChooseIssuer(webId: string): ChooseIssuerCallback {
   return async (issuers: string[]) => {
@@ -116,10 +130,91 @@ interface IssuerSession {
   clientRegistration: oauth.Client;
   dpopKey: CryptoKeyPair;
   accessToken: string;
+  /**
+   * The WebID this session actually authenticated AS — the `webid` claim of the
+   * id_token (Solid-OIDC), falling back to `sub`. This is the identity the OP
+   * vouched for, NOT the WebID the user typed; the login flow MUST confirm the
+   * two agree before flipping to logged-in (see {@link WebIdDPoPTokenProvider.authenticatedWebId}).
+   */
+  authenticatedWebId: string | undefined;
 }
 
 const isLoopback = (host: string): boolean =>
   host === "localhost" || host === "127.0.0.1" || host === "[::1]";
+
+/**
+ * Stamp a URL with a unique, unguessable login-probe FRAGMENT
+ * (`#probe-<uuid>`) — an UNFORGEABLE, off-the-wire marker that identifies the
+ * single login probe to {@link WebIdDPoPTokenProvider.beginLoginProbe} /
+ * {@link WebIdDPoPTokenProvider#matchActiveLoginProbe}.
+ *
+ * WHY A FRAGMENT (the round-4b roborev fix). The round-4 URL fallback matched a
+ * probe by `probe.url === request.url`, which is FORGEABLE: any unrelated fetch
+ * to the same base URL during the login window (e.g. a data-layer read of the
+ * storage root) would consume the single-use fallback and spuriously satisfy
+ * `wasLoginProbeUpgraded`. A fragment closes that hole because it is:
+ *  - **unguessable** — a `crypto.randomUUID()`, so a non-probe request to the
+ *    same resource has a DIFFERENT (or absent) fragment and cannot collide;
+ *  - **survives the manager re-wrap** — `new Request(input)` preserves the URL
+ *    fragment (verified), so the fallback still matches across the
+ *    `ReactiveFetchManager` re-wrap that drops object identity;
+ *  - **never sent on the wire** — fragments are client-side only (RFC 3986
+ *    §3.5): no header, no query, no CORS preflight, and the OP fetches the exact
+ *    same resource. So this is purely an in-process marker that rides safely on
+ *    the URL the manager already preserves.
+ *
+ * Exported so the (browser-only) login flow and the unit tests build probes the
+ * same way.
+ */
+export function withProbeFragment(url: string): string {
+  const u = new URL(url);
+  u.hash = `probe-${crypto.randomUUID()}`;
+  return u.toString();
+}
+
+/**
+ * RFC 9449 §4.2 `htu`: the request URI with query AND fragment removed. The probe
+ * carries a `#probe-<uuid>` in-process marker ({@link withProbeFragment}) that is
+ * NEVER sent on the wire (RFC 3986 §3.5); it MUST be stripped here or the DPoP
+ * proof's `htu` claim won't match the `htu` the resource server computes from the
+ * received request URI (which it derives with query and fragment removed). The
+ * `dpop` package uses its second argument as the `htu` VERBATIM (no stripping), so
+ * a fragment/query left on the URL would leak into the proof and the server would
+ * reject the retried probe's token in production.
+ */
+export function httpUri(url: string): string {
+  const u = new URL(url);
+  u.hash = "";
+  u.search = "";
+  return u.toString();
+}
+
+/**
+ * The single per-login probe record this provider tracks at a time, captured by
+ * {@link WebIdDPoPTokenProvider.beginLoginProbe} just before the login flow fetches
+ * its probe. It carries:
+ *  - `generation` — the provider generation in effect when the probe began, so a
+ *    {@link WebIdDPoPTokenProvider.reset} that supersedes the login invalidates the
+ *    record by advancing the generation (the flow snapshots the same generation and
+ *    asks {@link WebIdDPoPTokenProvider.wasLoginProbeUpgraded} for it).
+ *  - `url` — the probe's FULL URL INCLUDING its unguessable `#probe-<uuid>`
+ *    fragment ({@link withProbeFragment}), the only property that survives the
+ *    manager's `new Request(input)` re-wrap. Because the fragment is unguessable
+ *    and never sent on the wire, an unrelated same-resource request CANNOT forge
+ *    a match. Used as a SINGLE-USE fallback channel, consumed on first match
+ *    (defence-in-depth) so even a same-fragment upgrade fires at most once.
+ *  - `object` — a {@link WeakRef} to the EXACT Request object, the precise primary
+ *    channel that matches when no re-wrap happens (unit tests / non-wrapping
+ *    managers). Weak so it never pins the Request in memory.
+ *  - `urlConsumed` — set once the single-use URL fallback has matched, so the URL
+ *    channel fires for exactly one upgrade.
+ */
+interface LoginProbe {
+  generation: number;
+  url: string;
+  object: WeakRef<Request>;
+  urlConsumed: boolean;
+}
 
 export class WebIdDPoPTokenProvider implements TokenProvider {
   readonly #callbackUri: string;
@@ -164,12 +259,57 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
    */
   #tokensAttached = 0;
   /**
+   * The WebID the most-recently-established session actually authenticated AS
+   * (the `webid`/`sub` claim of its id_token), or undefined when no session has
+   * been established since the last {@link reset}. The login flow reads this to
+   * PROVE the authenticated identity matches the WebID the user asked to log in
+   * as — never inferring "logged in" from merely "a token is attached". Cleared
+   * by {@link reset} so a prior identity cannot survive a logout / re-login.
+   */
+  #authenticatedWebId: string | undefined;
+  /**
+   * The single ACTIVE login probe, captured by {@link beginLoginProbe} right before
+   * the login flow fetches its probe and cleared by {@link endLoginProbe} (and by
+   * {@link reset}). There is at most one because the SolidAuthProvider single-flights
+   * login — overlapping/double-clicked logins can no longer register competing
+   * probes. {@link upgrade} matches the request it is handed against this record (by
+   * object identity first, else a single-use, generation-scoped URL fallback) and,
+   * on a real token attach, records the generation into
+   * {@link #probeUpgradedGeneration}. Null when no login is in flight.
+   */
+  #loginProbe: LoginProbe | null = null;
+  /**
+   * The generation in which the active login probe was actually token-upgraded, or
+   * null if it has not been (yet). The login flow snapshots its generation via
+   * {@link loginGeneration} after {@link reset} and asserts
+   * {@link wasLoginProbeUpgraded} for that snapshot — so a probe upgrade only counts
+   * within its own login's generation, and a {@link reset} (which advances the
+   * generation AND nulls this) cannot let a stale upgrade satisfy a new login.
+   */
+  #probeUpgradedGeneration: number | null = null;
+  /**
+   * A per-attempt GENERATION (epoch) counter that fences in-flight auth work
+   * across a {@link reset}. {@link reset} increments it; an `upgrade()` /
+   * `#authenticate()` already running captures the generation at its start and,
+   * before mutating ANY provider state (`#sessions`, `#authenticatedWebId`,
+   * `#tokensAttached`, `#upgradedProbeIds`), checks the generation is still
+   * current. If a logout / new-login `reset()` advanced it mid-flight, the stale
+   * result is discarded and NO state is written (`#sessions`, `#authenticatedWebId`,
+   * `#tokensAttached`, `#probeUpgradedGeneration`) — so a login or upgrade that
+   * began before the reset cannot contaminate the next identity's clean baseline.
+   */
+  #generation = 0;
+  /**
    * Shared auth work (issuer resolution, login) is provider-owned: it must NOT
    * be tied to any single request's AbortSignal, or aborting one request would
    * cancel the login other concurrent 401 upgrades are waiting on. The user
    * cancels via the dialog/popup themselves, which rejects the shared promise.
+   *
+   * It is replaced on every {@link reset} (and any controller it replaces is
+   * aborted) so in-flight auth work spawned by a prior identity is actively
+   * cancelled, not merely fenced out after the fact.
    */
-  readonly #authSignal = new AbortController().signal;
+  #authController = new AbortController();
 
   constructor(
     callbackUri: string,
@@ -231,40 +371,245 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
     return this.#tokensAttached;
   }
 
+  /**
+   * The WebID the current authenticated session was issued FOR — the `webid`
+   * claim of the id_token (Solid-OIDC), falling back to `sub` — or undefined
+   * when nothing has authenticated since the last {@link reset}. The login flow
+   * compares this against the WebID the user asked to log in as; they MUST match
+   * before the app treats the user as logged in (a token being attached is NOT,
+   * by itself, proof of THIS WebID — a stale session from a prior identity would
+   * otherwise pass). The returned string is the issuer-vouched identity, not the
+   * user's typed input.
+   */
+  authenticatedWebId(): string | undefined {
+    return this.#authenticatedWebId;
+  }
+
+  /**
+   * The CURRENT provider generation. The login flow snapshots this AFTER its
+   * {@link reset} (so it gets the new identity's clean generation) and passes the
+   * snapshot to {@link wasLoginProbeUpgraded} — making the per-probe proof scoped to
+   * THIS login's generation, immune to a later {@link reset}.
+   */
+  loginGeneration(): number {
+    return this.#generation;
+  }
+
+  /**
+   * Register the active login probe just before the login flow fetches it. Captures
+   * the CURRENT generation, the FULL request URL — which MUST include the
+   * unguessable `#probe-<uuid>` fragment ({@link withProbeFragment}) so the URL
+   * fallback is unforgeable — and a {@link WeakRef} to the EXACT Request object
+   * (the precise primary channel). There is at most one active probe at a time —
+   * the SolidAuthProvider single-flights login, so there is never a competing
+   * registration. Cleared by {@link endLoginProbe} / {@link reset}.
+   */
+  beginLoginProbe(request: Request): void {
+    this.#loginProbe = {
+      generation: this.#generation,
+      url: request.url,
+      object: new WeakRef(request),
+      urlConsumed: false,
+    };
+  }
+
+  /**
+   * Clear the active login probe. Called by the login flow in its `finally` (like
+   * the old `discardProbeRegistration`) so a probe that never reached {@link upgrade}
+   * — e.g. a public 200 with no 401 — leaves no stale record a later same-URL
+   * upgrade could consume. {@link reset} also clears it.
+   */
+  endLoginProbe(): void {
+    this.#loginProbe = null;
+  }
+
+  /**
+   * Whether THIS login's probe was actually token-upgraded by this provider, scoped
+   * to the GENERATION the login captured via {@link loginGeneration}. This is the
+   * PRIMARY, per-probe proof of login — strictly stronger than the provider-wide
+   * token-attach count, which a concurrent upgrade for the SAME requested WebID (a
+   * different request) could bump spuriously. {@link reset} advances the generation
+   * AND nulls the record, so a stale upgrade can never satisfy a new login's check.
+   */
+  wasLoginProbeUpgraded(generation: number): boolean {
+    return this.#probeUpgradedGeneration === generation;
+  }
+
+  /**
+   * Drop EVERY piece of per-identity state so nothing from a prior login can be
+   * reused by the next one: the memoised issuer resolution, every cached
+   * per-issuer session (its DPoP key pair + access/refresh tokens), the
+   * authenticated-WebID claim, the active login probe + its upgrade record, and the
+   * running token-attachment count. Also ADVANCES the generation and aborts any in-flight
+   * auth controller, so an `upgrade()`/`#authenticate()` already running for the
+   * prior identity is both cancelled AND fenced from writing state after it
+   * resolves (see {@link #generation}).
+   *
+   * MUST be called on logout AND at the start of a new login. Without it, the
+   * provider keeps the previous user's issuer + DPoP-bound token in memory, so a
+   * login as a DIFFERENT WebID would silently reuse the prior identity's session
+   * (a cross-user session leak), and a login-detection probe that only checks
+   * "is a token attached" would look authenticated with the STALE token. Resetting
+   * `#tokensAttached` to 0 also guarantees the per-attempt before/after delta the
+   * login flow relies on starts from a clean baseline for the new identity.
+   */
+  reset(): void {
+    // Advance the generation FIRST so any in-flight work that resolves after this
+    // point sees a stale generation and writes nothing.
+    this.#generation += 1;
+    // Actively cancel in-flight auth work spawned by the prior identity.
+    this.#authController.abort();
+    this.#authController = new AbortController();
+    this.#issuer = undefined;
+    this.#sessions.clear();
+    this.#authenticatedWebId = undefined;
+    this.#loginProbe = null;
+    this.#probeUpgradedGeneration = null;
+    this.#tokensAttached = 0;
+  }
+
   async upgrade(request: Request): Promise<Request> {
-    this.#issuer ??= this.#resolveIssuer(this.#authSignal).catch((e) => {
-      this.#issuer = undefined; // allow retry after cancel/failure
-      throw e;
-    });
+    // Decide whether THIS request is the active login probe — on the ORIGINAL
+    // request we were handed, BEFORE any clone we make below to add Authorization (a
+    // clone is a different object and would not match by identity). No header is on
+    // the wire; this is a pure in-process check against the per-login record, so a
+    // cross-origin probe stays a "simple" request and triggers no CORS preflight.
+    const isLoginProbe = this.#matchActiveLoginProbe(request);
+    // Capture the generation + controller for THIS attempt up front. A concurrent
+    // reset() advances the generation and swaps the controller; comparing against
+    // the captured generation before any state write fences this attempt out.
+    const generation = this.#generation;
+    const controller = this.#authController;
+    if (this.#issuer === undefined) {
+      // Capture the EXACT promise we install so the catch only clears state it
+      // actually owns. Without this, an OLD aborted issuer resolution rejecting
+      // LATER (after a reset() advanced the generation and a NEW resolution is in
+      // flight) would blindly clear `#issuer = undefined`, destroying the current
+      // generation's single-flight — later requests would re-prompt or fail. The
+      // catch below clears ONLY if the generation is unchanged AND `#issuer` is
+      // still this same pending promise; a superseded/aborted resolution clears
+      // nothing.
+      const resolution: Promise<URL> = this.#resolveIssuer(controller.signal).catch((e) => {
+        if (this.#generation === generation && this.#issuer === resolution) {
+          this.#issuer = undefined; // allow retry after cancel/failure, current gen only
+        }
+        throw e;
+      });
+      this.#issuer = resolution;
+    }
     const issuer = await this.#issuer;
-    const session = await this.#getSession(issuer, this.#authSignal);
-    const headers = new Headers(request.headers);
-    headers.set(
-      "DPoP",
-      await DPoP.generateProof(
-        session.dpopKey,
-        request.url,
-        request.method,
-        undefined,
-        session.accessToken,
-      ),
+    const session = await this.#getSession(issuer, generation, controller.signal);
+    // FENCE: if a reset() (logout / new-login) advanced the generation while this
+    // upgrade was in flight, the result belongs to a SUPERSEDED identity. Mutate
+    // NO provider state and reject — the request must not carry a stale identity's
+    // token, and #authenticatedWebId / #tokensAttached / #probeUpgradedGeneration
+    // must stay at the new identity's clean baseline. Kept as a fail-fast BEFORE the
+    // awaited proof generation below; the post-await re-fence is the load-bearing one.
+    if (generation !== this.#generation) {
+      throw new ReactiveAuthResetError();
+    }
+    // RFC 9449 §4.2: the proof's `htu` is the request URI with query AND fragment
+    // removed. We strip BOTH via httpUri() because the in-process login probe carries
+    // a `#probe-<uuid>` marker that never reaches the wire (RFC 3986 §3.5), so the
+    // server computes `htu` from a fragment/query-less request URI; the `dpop` package
+    // uses arg 2 as `htu` verbatim, so an un-stripped URL would mint a proof whose
+    // `htu` the server rejects. The FULL `request.url` (fragment intact) is kept ONLY
+    // for in-process probe matching (#matchActiveLoginProbe / #loginProbe.url) — the
+    // returned `new Request(request, …)` below preserves the fragment on `.url`, but
+    // the browser strips it on the wire, so it matches the stripped htu.
+    const htu = httpUri(request.url);
+    const proof = await DPoP.generateProof(
+      session.dpopKey,
+      htu,
+      request.method,
+      undefined,
+      session.accessToken,
     );
+    // RE-FENCE: a reset() (logout / new-login) may have fired DURING the awaited
+    // proof generation above. Re-check the generation BEFORE any state write so a
+    // superseded attempt attaches NO token, publishes NO identity, bumps NO counter
+    // and records NO probe upgrade — leaving the next identity's baseline clean. The
+    // pre-await fence stays as a fail-fast; THIS one closes the race across the await.
+    if (generation !== this.#generation) {
+      throw new ReactiveAuthResetError();
+    }
+    // Record the identity the OP vouched for, so the login flow can confirm it
+    // matches the requested WebID. Set here (not only at session creation) so a
+    // cached/in-flight session shared across concurrent 401s also publishes it — and
+    // only AFTER the post-proof re-fence, so a raced reset publishes no identity.
+    this.#authenticatedWebId = session.authenticatedWebId;
+    const headers = new Headers(request.headers);
+    headers.set("DPoP", proof);
     headers.set("Authorization", ["DPoP", session.accessToken].join(" "));
     // A token was minted AND attached: the auth flow ran to completion. Bump the
-    // running total (only after the session resolved — a cancelled/failed flow
-    // throws above and never reaches here, so the count is not bumped). The login
-    // flow reads this count BEFORE and AFTER its probe; the DELTA — not any sticky
-    // flag — is what proves a token was attached during THAT attempt.
+    // running total (only after the session resolved AND the post-proof re-fence
+    // passed — a cancelled/failed/superseded flow throws above and never reaches
+    // here, so the count is not bumped). The login flow reads this count BEFORE and
+    // AFTER its probe; the DELTA — not any sticky flag — is what proves a token was
+    // attached during THAT attempt.
     this.#tokensAttached += 1;
+    // PER-PROBE PROOF: if THIS request IS the active login probe (matched at the top
+    // of upgrade() on the original request), record the generation it was upgraded
+    // in. The login flow asserts wasLoginProbeUpgraded(gen) for the generation it
+    // captured after reset() — proving THIS probe was upgraded in THIS login's
+    // generation, not merely that some request was. No header was ever on the wire,
+    // so cross-origin login is unaffected.
+    if (isLoginProbe) this.#probeUpgradedGeneration = generation;
     return new Request(request, { headers });
   }
 
+  /**
+   * Whether `request` is the active login probe ({@link beginLoginProbe}), matched
+   * IN the active probe's own generation only. Object identity is the PRIMARY,
+   * collision-proof channel — it matches when the manager passes the SAME object
+   * (unit tests / non-rewrapping managers). When the manager re-wraps via
+   * `new Request(input)` the object identity is lost, so we fall back to the FULL
+   * probe URL — which carries the unguessable `#probe-<uuid>` fragment
+   * ({@link withProbeFragment}) and survives the re-wrap. The fragment is what
+   * makes this fallback UNFORGEABLE (round-4b roborev fix): an unrelated fetch to
+   * the same base URL has a different/absent fragment, so its `request.url` does
+   * not equal `probe.url` and it cannot consume the channel. The single-use
+   * `urlConsumed` latch + generation scope are kept as defence-in-depth. Returns
+   * false outside the probe's generation (a stale probe after reset).
+   */
+  #matchActiveLoginProbe(request: Request): boolean {
+    const probe = this.#loginProbe;
+    if (!probe) return false;
+    // A probe is only valid in the generation it was begun in. After a reset()
+    // advances the generation, beginLoginProbe must run again for a new login.
+    if (probe.generation !== this.#generation) return false;
+    if (probe.object.deref() === request) return true;
+    // The full URL includes the unguessable #probe-<uuid> fragment, so this
+    // comparison is unforgeable: only the real probe (or its faithful re-wrap)
+    // carries that exact fragment. Single-use latch is defence-in-depth.
+    if (!probe.urlConsumed && probe.url === request.url) {
+      probe.urlConsumed = true; // single-use: this login window's first match only.
+      return true;
+    }
+    return false;
+  }
+
   /** Reuse the (possibly in-flight) session for the issuer, else run the code flow once. */
-  async #getSession(issuer: URL, signal: AbortSignal): Promise<IssuerSession> {
+  async #getSession(
+    issuer: URL,
+    generation: number,
+    signal: AbortSignal,
+  ): Promise<IssuerSession> {
+    // A reset() between issuer resolution and here means this attempt is already
+    // superseded — run the login NOT cached, so a stale attempt can never seed the
+    // current generation's #sessions map. The upgrade() fence then discards it.
+    if (generation !== this.#generation) {
+      return this.#authenticate(issuer, signal);
+    }
     const cached = this.#sessions.get(issuer.href);
     if (cached) return cached;
     const pending = this.#authenticate(issuer, signal).catch((e) => {
-      this.#sessions.delete(issuer.href); // failed login is retryable
+      // Only retract THIS generation's cache entry. If a reset() advanced the
+      // generation, #sessions was already cleared and may hold the NEXT identity's
+      // in-flight login — deleting blindly here could evict it. Guard on the
+      // captured generation so a superseded attempt's failure cannot disturb the
+      // current one's cache.
+      if (generation === this.#generation) this.#sessions.delete(issuer.href);
       throw e;
     });
     this.#sessions.set(issuer.href, pending);
@@ -395,6 +740,9 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
       clientRegistration,
       dpopKey,
       accessToken: tokenResult.access_token,
+      // The identity the OP actually vouched for. The login flow checks this
+      // against the requested WebID before treating the user as logged in.
+      authenticatedWebId: webIdFromClaims(oauth.getValidatedIdTokenClaims(tokenResult)),
     };
   }
 
@@ -450,6 +798,44 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
     }
     return nonce;
   }
+}
+
+/**
+ * Compare two WebIDs for IDENTITY equality, tolerant only of trivial URL
+ * normalisation (case-insensitive scheme + host, default-port elision), never of
+ * a different path/fragment. Returns false if either side is missing or unparseable
+ * — an unverifiable identity must FAIL closed, not pass. Used by the login flow to
+ * confirm the OP authenticated the user as the WebID they asked to log in as.
+ */
+export function webIdsEqual(a: string | undefined, b: string | undefined): boolean {
+  if (!a || !b) return false;
+  try {
+    const ua = new URL(a);
+    const ub = new URL(b);
+    return (
+      ua.protocol === ub.protocol &&
+      ua.host.toLowerCase() === ub.host.toLowerCase() &&
+      ua.pathname === ub.pathname &&
+      ua.search === ub.search &&
+      ua.hash === ub.hash
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The WebID an id_token authenticated AS. Solid-OIDC carries the WebID in the
+ * `webid` claim; when absent (some servers put it in `sub`), `sub` is the WebID.
+ * Returns undefined when neither is a usable string — the caller then refuses to
+ * treat the login as verified rather than guessing an identity.
+ */
+function webIdFromClaims(claims: oauth.IDToken | undefined): string | undefined {
+  if (!claims) return undefined;
+  const webid = claims.webid;
+  if (typeof webid === "string" && webid.length > 0) return webid;
+  if (typeof claims.sub === "string" && claims.sub.length > 0) return claims.sub;
+  return undefined;
 }
 
 function isEssMissingIssInteractionNeeded(e: unknown): boolean {
