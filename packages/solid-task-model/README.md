@@ -60,6 +60,68 @@ is an established, dereferenceable IRI:
 > not part of the shared model: a foreign consumer still reads `wf:Open` → open and is
 > correct.
 
+## The tracker (`wf:Tracker`) — the federation-core of a SolidOS issue tracker
+
+A `wf:Task` points at its tracker via `wf:tracker` (`Task.project`); a `wf:Tracker` is the
+entity on the other end. `@jeswr/solid-task-model/tracker` carries the **federation-core**
+of solid-issues' own `Tracker` so the Pod Manager and solid-issues share ONE tracker model
+— a tracker created in one is a valid, fully-readable SolidOS issue tracker in the others.
+App-specific surface (priority/label/type category classes, custom fields, saved views,
+sprints, the activity log) stays in the consuming app.
+
+| Field | Predicate | Vocabulary |
+|---|---|---|
+| class | `rdf:type wf:Tracker` | `wf:` |
+| title | `dct:title` | Dublin Core Terms |
+| issue class | `wf:issueClass` (defaults to `wf:Task`) | `wf:` |
+| state store | `wf:stateStore` (where issue resources live) | `wf:` |
+| categories | `wf:issueCategory` (dimension class IRIs) | `wf:` |
+| workflow status | `wf:State` `#status-*` `rdfs:subClassOf wf:Open`/`wf:Closed` | `wf:` |
+| initial status | `wf:initialState` | `wf:` |
+| transitions | `wf:allowedTransitions` | `wf:` |
+| assignee group | `wf:assigneeGroup` → `vcard:Group` / `vcard:hasMember` | `wf:` / vCard |
+
+> **SolidOS-readable by construction.** The SolidOS issue pane *throws* when a tracker is
+> missing `wf:issueClass`, so `buildTracker` always writes `wf:issueClass wf:Task`, a
+> `wf:initialState`, and (optionally) `wf:stateStore` — exactly the triples SolidOS needs.
+>
+> **The tracker subject is `#this`, NOT `#it`.** A task roots at `${url}#it`
+> (`taskSubject`); a tracker roots at `${docUrl}#this` (`trackerSubject`). The two fragments
+> are intentionally distinct — both match the existing producers — so don't unify them, or a
+> cross-app read silently misses the subject.
+
+```ts
+import {
+  buildTracker,
+  parseTracker,
+  parseTrackerTtl,
+  serializeTracker,
+  trackerSubject,
+  DEFAULT_WORKFLOW,
+  canTransition,
+  statusState,
+  type TrackerData,
+  type WorkflowDef,
+} from "@jeswr/solid-task-model/tracker"; // client-safe subpath (no node:fs)
+
+// Build + serialise a tracker (n3.Writer under the hood — never hand-built RDF).
+const ttl = await serializeTracker("https://alice.pod/issues/tracker.ttl", {
+  title: "Alice's Issues",
+  stateStore: "https://alice.pod/issues/",
+  groupMembers: ["https://bob.pod/profile/card#me"],
+});
+
+// Parse a fetched body (Turtle or JSON-LD, dispatched via @jeswr/fetch-rdf).
+const tracker: TrackerData | undefined = await parseTrackerTtl(url, body, contentType);
+```
+
+The runtime `Tracker` accessor (incremental edits) and the workflow helpers
+(`WorkflowDef` / `DEFAULT_WORKFLOW` / `canTransition` / `statusState`) are exported from both
+the barrel (`.`) and the **client-safe `./tracker` subpath** — import from `./tracker` (like
+`./task`) inside client components, since the barrel re-exports the `node:fs`-using
+`trackerShapeTtl`. The tracker SHACL shape is `shapes/tracker.ttl`, also a string via
+`trackerShapeTtl()`.
+
 ## Usage
 
 ```ts

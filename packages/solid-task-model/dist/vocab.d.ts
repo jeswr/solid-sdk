@@ -41,6 +41,12 @@ export declare const SCHEMA = "http://schema.org/";
 export declare const PROV = "http://www.w3.org/ns/prov#";
 /** XSD datatypes (referenced via the wrapper value mappers). */
 export declare const XSD = "http://www.w3.org/2001/XMLSchema#";
+/**
+ * vCard ontology — `vcard:Group` / `vcard:hasMember`, the assignee-group model a
+ * tracker uses (`wf:assigneeGroup` → a `vcard:Group` whose `vcard:hasMember`s are
+ * the assignable WebIDs). The same term family SolidOS's issue pane reads.
+ */
+export declare const VCARD = "http://www.w3.org/2006/vcard/ns#";
 /** Build a `wf:` term IRI. */
 export declare const wf: (local: string) => string;
 /** Build a `dct:` term IRI. */
@@ -55,6 +61,8 @@ export declare const schema: (local: string) => string;
 export declare const prov: (local: string) => string;
 /** Build an `xsd:` term IRI. */
 export declare const xsd: (local: string) => string;
+/** Build a `vcard:` term IRI. */
+export declare const vcard: (local: string) => string;
 /** The RDF class every federated task is stamped + Type-Index-registered with. */
 export declare const TASK_CLASS: string;
 /** `rdf:type` value for an open task — the dereferenceable, federation-canonical state. */
@@ -63,6 +71,22 @@ export declare const WF_OPEN: string;
 export declare const WF_CLOSED: string;
 /** The `rdf:type` predicate IRI (convenience). */
 export declare const RDF_TYPE: string;
+/** `rdf:type wf:Tracker` — the class stamped on a tracker/project configuration node. */
+export declare const WF_TRACKER: string;
+/** `wf:issueClass` — the class a tracker's issues carry (defaults to `wf:Task`). */
+export declare const WF_ISSUE_CLASS: string;
+/** `wf:issueCategory` — a category/dimension class declared by the tracker (priority, label, type…). */
+export declare const WF_ISSUE_CATEGORY: string;
+/** `wf:State` — the type of a configurable workflow status class (`#status-*`). */
+export declare const WF_STATE: string;
+/** `wf:initialState` — the tracker's starting status class (the workflow's entry state). */
+export declare const WF_INITIAL_STATE: string;
+/** `wf:allowedTransitions` — a status class's set of reachable target status classes. */
+export declare const WF_ALLOWED_TRANS: string;
+/** `wf:stateStore` — the container/resource where the tracker's issue resources live (SolidOS reads this). */
+export declare const WF_STATE_STORE: string;
+/** `wf:assigneeGroup` — the tracker's assignee group (`→ vcard:Group` of assignable WebIDs). */
+export declare const WF_ASSIGNEE_GROUP: string;
 /** Prefix map for an n3 Writer that serialises this model (pretty Turtle output). */
 export declare const PREFIXES: {
     readonly wf: "http://www.w3.org/2005/01/wf/flow#";
@@ -71,5 +95,6 @@ export declare const PREFIXES: {
     readonly rdfs: "http://www.w3.org/2000/01/rdf-schema#";
     readonly schema: "http://schema.org/";
     readonly prov: "http://www.w3.org/ns/prov#";
+    readonly vcard: "http://www.w3.org/2006/vcard/ns#";
 };
 //# sourceMappingURL=vocab.d.ts.map

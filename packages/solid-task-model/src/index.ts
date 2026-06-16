@@ -12,7 +12,12 @@
  * @packageDocumentation
  */
 
-export { TASK_SHAPE_PATH, taskShapeTtl } from "./shape.js";
+export {
+  TASK_SHAPE_PATH,
+  TRACKER_SHAPE_PATH,
+  taskShapeTtl,
+  trackerShapeTtl,
+} from "./shape.js";
 export {
   buildTask,
   isAssignedTo,
@@ -30,6 +35,21 @@ export {
   taskSubject,
 } from "./task.js";
 export {
+  buildTracker,
+  canTransition,
+  DEFAULT_WORKFLOW,
+  parseTracker,
+  parseTrackerTtl,
+  type StatusSlug,
+  serializeTracker,
+  statusState,
+  Tracker,
+  type TrackerData,
+  trackerSubject,
+  type WorkflowDef,
+  type WorkflowStatus,
+} from "./tracker.js";
+export {
   DCT,
   dct,
   PREFIXES,
@@ -43,9 +63,19 @@ export {
   SCHEMA,
   schema,
   TASK_CLASS,
+  VCARD,
+  vcard,
   WF,
+  WF_ALLOWED_TRANS,
+  WF_ASSIGNEE_GROUP,
   WF_CLOSED,
+  WF_INITIAL_STATE,
+  WF_ISSUE_CATEGORY,
+  WF_ISSUE_CLASS,
   WF_OPEN,
+  WF_STATE,
+  WF_STATE_STORE,
+  WF_TRACKER,
   wf,
   XSD,
   xsd,

@@ -1,0 +1,65 @@
+# SHACL shape for the SHARED FEDERATED TRACKER model (@jeswr/solid-task-model).
+#
+# The contract a `wf:Tracker` written by ANY suite app (Pod Manager,
+# solid-issues, …) must satisfy so it reads identically through every app's
+# accessor — and so the SolidOS issue pane renders it. Authored against reused,
+# dereferenceable IRIs only — the W3C SolidOS workflow ontology (`wf:`), Dublin
+# Core Terms (`dct:`), and the vCard ontology (`vcard:`) — per ADR-0013
+# (federation namespace) and the R9 data-federation recommendation.
+#
+# The shapes are ANONYMOUS (blank nodes), so this package mints nothing at a
+# non-resolving domain. This is the cross-app common denominator of the
+# tracker-config the existing producers (solid-issues' `Tracker`) write; a
+# producer that validates against it is federation-compatible by construction.
+#
+# Validate a tracker document's typed-accessor output before write, and on read
+# of untrusted data (rdf-validate-shacl; see src/tracker.test.ts).
+
+@prefix sh:     <http://www.w3.org/ns/shacl#> .
+@prefix wf:     <http://www.w3.org/2005/01/wf/flow#> .
+@prefix dct:    <http://purl.org/dc/terms/> .
+@prefix vcard:  <http://www.w3.org/2006/vcard/ns#> .
+@prefix rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd:    <http://www.w3.org/2001/XMLSchema#> .
+
+# --- A federated tracker / project (wf:Tracker) ---
+[] a sh:NodeShape ;
+  sh:targetClass wf:Tracker ;
+
+  # Title — required, exactly one string. The one field every tracker must set.
+  sh:property [
+    sh:path dct:title ; sh:name "title" ;
+    sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ;
+  ] ;
+
+  # Issue class — the rdf:type the tracker's issues carry. An IRI, at most one.
+  # The SolidOS issue pane THROWS without it, so the federation-core writer always
+  # stamps it (defaulting to wf:Task).
+  sh:property [
+    sh:path wf:issueClass ; sh:name "issue class" ;
+    sh:nodeKind sh:IRI ; sh:maxCount 1 ;
+  ] ;
+
+  # Category / dimension classes the tracker declares (priority, label, type…) —
+  # always document IRIs, never literals.
+  sh:property [
+    sh:path wf:issueCategory ; sh:name "issue category" ;
+    sh:nodeKind sh:IRI ;
+  ] ;
+
+  # State store — the container/resource where the tracker's issue resources live
+  # (SolidOS reads this). An IRI, at most one.
+  sh:property [
+    sh:path wf:stateStore ; sh:name "state store" ;
+    sh:nodeKind sh:IRI ; sh:maxCount 1 ;
+  ] ;
+
+  # Assignee group — links a vcard:Group of assignable WebIDs. An IRI, at most one.
+  # Soft (sh:Warning): a tracker need not declare a group, and a foreign/partial
+  # producer's group link should not fail the whole document — each consumer
+  # decides whether to treat it as fatal.
+  sh:property [
+    sh:path wf:assigneeGroup ; sh:name "assignee group" ;
+    sh:nodeKind sh:IRI ; sh:maxCount 1 ;
+    sh:severity sh:Warning ;
+  ] .

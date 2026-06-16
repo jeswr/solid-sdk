@@ -19,15 +19,28 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 /** Filesystem path to the canonical SHACL shape file. */
 export const TASK_SHAPE_PATH = fileURLToPath(new URL("../shapes/task.ttl", import.meta.url));
-let cached;
+/** Filesystem path to the canonical tracker SHACL shape file. */
+export const TRACKER_SHAPE_PATH = fileURLToPath(new URL("../shapes/tracker.ttl", import.meta.url));
+let cachedTask;
+let cachedTracker;
 /**
  * The canonical federated-task SHACL shape, as a Turtle string. Cached after the
  * first read. Pass it (with the data graph) to a SHACL validator — see the
  * round-trip + cross-app fixture tests for the `rdf-validate-shacl` pattern.
  */
 export function taskShapeTtl() {
-    if (cached === undefined)
-        cached = readFileSync(TASK_SHAPE_PATH, "utf8");
-    return cached;
+    if (cachedTask === undefined)
+        cachedTask = readFileSync(TASK_SHAPE_PATH, "utf8");
+    return cachedTask;
+}
+/**
+ * The canonical federated-tracker SHACL shape, as a Turtle string. Cached after
+ * the first read. Pass it (with the data graph) to a SHACL validator — see
+ * `src/tracker.test.ts` for the `rdf-validate-shacl` pattern.
+ */
+export function trackerShapeTtl() {
+    if (cachedTracker === undefined)
+        cachedTracker = readFileSync(TRACKER_SHAPE_PATH, "utf8");
+    return cachedTracker;
 }
 //# sourceMappingURL=shape.js.map
