@@ -45,13 +45,27 @@ export function groupByEpic(issues: IssueRecord[]): { epics: EpicGroup[]; unassi
  * of dangling parents (a parent not in `issues` simply ends the walk).
  */
 export function epicAncestorOf(issue: IssueRecord, issues: IssueRecord[]): string | undefined {
+  return createEpicAncestorResolver(issues)(issue);
+}
+
+/**
+ * Build a reusable nearest-epic-ancestor resolver over `issues`. The URL map is
+ * built ONCE here and closed over, so resolving every card on a board is O(n)
+ * total rather than O(n²) (one map rebuild per card). Memoize the factory on the
+ * issue list in React; see {@link epicAncestorOf} for the per-call convenience.
+ */
+export function createEpicAncestorResolver(
+  issues: IssueRecord[],
+): (issue: IssueRecord) => string | undefined {
   const byUrl = new Map(issues.map((i) => [i.url, i]));
-  const seen = new Set<string>();
-  let current: IssueRecord | undefined = issue;
-  while (current && !seen.has(current.url)) {
-    if (current.issueType === "epic") return current.url;
-    seen.add(current.url);
-    current = current.parent ? byUrl.get(current.parent) : undefined;
-  }
-  return undefined;
+  return (issue: IssueRecord): string | undefined => {
+    const seen = new Set<string>();
+    let current: IssueRecord | undefined = issue;
+    while (current && !seen.has(current.url)) {
+      if (current.issueType === "epic") return current.url;
+      seen.add(current.url);
+      current = current.parent ? byUrl.get(current.parent) : undefined;
+    }
+    return undefined;
+  };
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { groupByEpic, epicAncestorOf } from "./epics";
+import { groupByEpic, epicAncestorOf, createEpicAncestorResolver } from "./epics";
 import type { IssueRecord } from "./repository";
 
 const base: IssueRecord = {
@@ -77,5 +77,15 @@ describe("epicAncestorOf — nearest epic up the hierarchy (Initiative→Epic→
     expect(epicAncestorOf(a, [a, b])).toBeUndefined();
     const dangling = mk({ url: "d", issueType: "task", parent: "missing" });
     expect(epicAncestorOf(dangling, [dangling])).toBeUndefined();
+  });
+
+  it("createEpicAncestorResolver builds the map once and resolves consistently", () => {
+    // The memoizable factory must give the SAME answers as the per-call helper.
+    const resolve = createEpicAncestorResolver(all);
+    expect(resolve(task)).toBe("epic");
+    expect(resolve(story)).toBe("epic");
+    expect(resolve(epic)).toBe("epic");
+    const loose = mk({ url: "loose", issueType: "task" });
+    expect(createEpicAncestorResolver([loose])(loose)).toBeUndefined();
   });
 });

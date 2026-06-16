@@ -25,7 +25,7 @@ import { FieldsDialog } from "@/components/fields-dialog";
 import { IssueBoard } from "@/components/issue-board";
 import { SaveIndicator } from "@/components/save-indicator";
 import { boardColumns, boardIssues, moveForColumn, optimisticMove, revertMoveIfCurrent, type SwimlaneBy } from "@/lib/board";
-import { epicAncestorOf } from "@/lib/epics";
+import { createEpicAncestorResolver } from "@/lib/epics";
 import { EpicView } from "@/components/epic-view";
 import { DashboardView } from "@/components/dashboard-view";
 import { WorkloadView } from "@/components/workload-view";
@@ -436,11 +436,10 @@ export function IssuesView() {
     [groupBoardBy, group.iri, epicTitleByUrl],
   );
   // Epic swimlanes lane by the nearest EPIC ancestor, not the direct parent
-  // (which may be a Feature/Story in the Initiative→Epic→…→Task hierarchy).
-  const epicOf = useCallback(
-    (issue: IssueRecord) => epicAncestorOf(issue, issues.issues),
-    [issues.issues],
-  );
+  // (which may be a Feature/Story in the Initiative→Epic→…→Task hierarchy). The
+  // resolver is memoized on the issue list so it builds its URL map ONCE per
+  // load, keeping board rendering O(n) (not O(n²) — one rebuild per card).
+  const epicOf = useMemo(() => createEpicAncestorResolver(issues.issues), [issues.issues]);
   // F3: (re)load the provenance log whenever the open issue or the issue data
   // (which a mutation refreshes) changes. Stale results are dropped if the dialog
   // moved on. `issues.issues` is a dependency so a status/assign change re-fetches.
