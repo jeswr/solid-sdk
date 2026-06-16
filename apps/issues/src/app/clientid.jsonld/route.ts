@@ -24,7 +24,14 @@ export function GET(): Response {
     "@context": ["https://www.w3.org/ns/solid/oidc-context.jsonld"],
     client_id: at("/clientid.jsonld"), // MUST equal this document's own URL
     client_name: "Solid Issues",
-    redirect_uris: [at("/callback.html")],
+    // Two redirect targets, BOTH registered or the OP rejects the redirect:
+    //  - /callback.html — the popup login (postMessage back to the opener);
+    //  - / (the app root) — the Pod-Manager AUTOLOGIN full-page redirect, which
+    //    returns to the app itself (callback.html does not run the app and so cannot
+    //    read ?code&state to complete the redirect login). See session-context.tsx
+    //    beginRedirectLogin / completeRedirectLogin. The byte-exact app-root URI
+    //    `${origin}/` must match the redirect_uri the redirect flow sends.
+    redirect_uris: [at("/callback.html"), at("/")],
     scope: "openid webid offline_access",
     grant_types: ["authorization_code", "refresh_token"],
     response_types: ["code"],

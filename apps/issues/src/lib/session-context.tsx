@@ -18,11 +18,21 @@ import { clearSession, loadSession, saveSession } from "@/lib/session-store";
 import { classifyRestoreError, shouldAttemptRestore, shouldClearStoredSession } from "@/lib/silent-restore";
 import { clearAllIssueCaches } from "@/lib/issue-cache";
 import type { RestorableSession, WebIdDPoPTokenProvider } from "@/lib/webid-token-provider";
+import { planAutologin } from "@/lib/autologin-plan";
+import {
+  consumePendingRedirectWebId,
+  hasPendingRedirectLogin,
+  webIdsEqual,
+} from "@/lib/webid-token-provider";
 
 export type SessionStatus =
   | "initialising"
   // Attempting a silent refresh-grant restore on reopen (brief "Restoring…" state).
   | "restoring"
+  // A Pod-Manager `#autologin/<webid>` full-page redirect is being initiated or
+  // completed — a brief "Signing you in…" state (no user gesture, so it is NOT the
+  // interactive "authenticating" state the LoginScreen's spinner reflects).
+  | "autologin"
   | "logged-out"
   | "authenticating"
   | "choose-storage"
@@ -55,6 +65,130 @@ interface AuthCodeFlowElement extends HTMLElement {
   getCode: (authorizationUri: URL, signal: AbortSignal) => Promise<string>;
 }
 
+// ── Autologin (full-page redirect deep-link) ─────────────────────────────────
+//
+// The Pod Manager deep-links here with `#autologin/<encodeURIComponent(webid)>`.
+// Because the user already has a live IdP session at the shared broker AND the app
+// was previously authorized, a full-page Solid-OIDC redirect comes straight back
+// ALREADY AUTHENTICATED — silent SSO, no credential prompt. (A popup auto-opened on
+// load has no user gesture and is browser-blocked, which is why this MUST be a
+// full-page redirect — see WebIdDPoPTokenProvider.beginRedirectLogin.)
+
+/** The deep-link fragment prefix that triggers a fresh autologin (Case B). */
+const AUTOLOGIN_FRAGMENT_PREFIX = "#autologin/";
+
+/**
+ * sessionStorage sentinel key. ONE-SHOT loop guard: set to the WebID the instant a
+ * fresh autologin is initiated, and consulted before re-attempting. If the broker
+ * bounces back to the app root WITHOUT a `?code` and the deep-link fragment is
+ * somehow seen again, the already-set sentinel makes us fall through to the login
+ * screen instead of looping. Cleared on a successful completion, and on a non-code
+ * bounce.
+ */
+const AUTOLOGIN_SENTINEL_KEY = "solid-issues.autologin-attempted";
+
+/**
+ * MODULE-LEVEL once-guard so the autologin mount effect fires its redirect/complete
+ * AT MOST ONCE per page, even under React StrictMode (which double-invokes mount
+ * effects in dev). The sentinel + persisted-redirect record are the durable
+ * cross-navigation guards; this in-memory latch additionally stops the SAME render
+ * pass's double-mount from firing two redirects. Reset only by a full page load.
+ */
+let autologinEffectRan = false;
+
+/** Read the one-shot autologin sentinel (the WebID we last attempted), or null. */
+function readAutologinSentinel(): string | null {
+  try {
+    return globalThis.sessionStorage?.getItem(AUTOLOGIN_SENTINEL_KEY) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Set the one-shot autologin sentinel to the WebID being attempted. */
+function setAutologinSentinel(webId: string): void {
+  try {
+    globalThis.sessionStorage?.setItem(AUTOLOGIN_SENTINEL_KEY, webId);
+  } catch {
+    // sessionStorage unavailable — the fragment-clean + once-guard still prevent loops.
+  }
+}
+
+/** Clear the one-shot autologin sentinel (idempotent). */
+function clearAutologinSentinel(): void {
+  try {
+    globalThis.sessionStorage?.removeItem(AUTOLOGIN_SENTINEL_KEY);
+  } catch {
+    // sessionStorage unavailable — nothing to clear.
+  }
+}
+
+/**
+ * Parse the WebID out of a `#autologin/<encodeURIComponent(webid)>` fragment.
+ * Returns the decoded WebID, or null if the hash is not an autologin deep-link or
+ * decoding fails. Pure + exported for unit testing.
+ */
+export function parseAutologinFragment(hash: string): string | null {
+  if (!hash.startsWith(AUTOLOGIN_FRAGMENT_PREFIX)) return null;
+  const encoded = hash.slice(AUTOLOGIN_FRAGMENT_PREFIX.length);
+  if (!encoded) return null;
+  try {
+    const webId = decodeURIComponent(encoded);
+    return webId.length > 0 ? webId : null;
+  } catch {
+    return null; // malformed percent-encoding — not a usable deep-link.
+  }
+}
+
+/** True when the URL carries an OAuth `?code` AND `?state` (a redirect return). */
+export function hasAuthCodeParams(search: string): boolean {
+  const params = new URLSearchParams(search);
+  return params.has("code") && params.has("state");
+}
+
+/**
+ * True when the URL carries an OAuth `?error` AND `?state` (a FAILED redirect
+ * return — e.g. `?error=login_required` / `?error=access_denied`: the broker
+ * declined silent SSO or the user declined). The `state` is required so a stray
+ * `error` query unrelated to our flow is not mistaken for a redirect return.
+ */
+export function hasAuthErrorParams(search: string): boolean {
+  const params = new URLSearchParams(search);
+  return params.has("error") && params.has("state");
+}
+
+/**
+ * Strip BOTH the query (`?code&state…`) and the fragment from a URL, leaving the
+ * path. Used to clean the address bar after a redirect return / before a fresh
+ * autologin redirect so a refresh / bounce cannot re-trigger and the WebID is not
+ * left on display. Pure + exported for unit testing.
+ */
+export function cleanedUrl(href: string): string {
+  const u = new URL(href);
+  u.search = "";
+  u.hash = "";
+  return u.toString();
+}
+
+/**
+ * Whether autologin OWNS this page load — i.e. the mount effect should hand off to
+ * the autologin effect and NOT run a silent refresh-grant restore (both would race
+ * the same provider). True when a redirect is RETURNING (a persisted record + a
+ * `?code`/`?error&state` on the URL) OR a fresh `#autologin/<webid>` deep-link is
+ * present. Mirrors the conditions under which `planAutologin` yields a non-`none`
+ * action (complete / abort-redirect / begin / clear-sentinel). Browser-only; on the
+ * server (no `location`) it is conservatively false.
+ */
+function autologinOwnsLoad(): boolean {
+  if (typeof location === "undefined") return false;
+  const pending = hasPendingRedirectLogin();
+  if (pending && (hasAuthCodeParams(location.search) || hasAuthErrorParams(location.search))) {
+    return true;
+  }
+  if (!pending && parseAutologinFragment(location.hash) !== null) return true;
+  return false;
+}
+
 function describeError(e: unknown): string {
   if (e instanceof NoStorageError) return e.message;
   if (e instanceof DOMException && e.name === "AbortError") {
@@ -71,6 +205,10 @@ export function SolidSessionProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [recentAccounts, setRecentAccounts] = useState<RecentAccount[]>([]);
   const [storageChoices, setStorageChoices] = useState<string[]>([]);
+  // True once the auth manager is wired (registerGlobally ran) AND the provider is
+  // live. The autologin mount effect waits on this — it must never run a
+  // begin/complete before the patched fetch + provider exist.
+  const [ready, setReady] = useState(false);
   const pendingProfile = useRef<SolidProfile | null>(null);
 
   const flowRef = useRef<AuthCodeFlowElement | null>(null);
@@ -243,6 +381,18 @@ export function SolidSessionProvider({ children }: { children: ReactNode }) {
       recentRef.current = new RecentAccounts();
       setRecentAccounts(recentRef.current.list());
 
+      // The runtime is wired — let the autologin effect (which depends on `ready`)
+      // run. If a Pod-Manager autologin redirect is RETURNING (?code/?error&state +
+      // a persisted record) or a fresh `#autologin/<webid>` deep-link is present, the
+      // autologin effect OWNS this load and we must NOT also run silent restore
+      // (both would race the same provider). Otherwise fall through to silent restore.
+      setReady(true);
+      if (autologinOwnsLoad()) {
+        // The autologin effect drives the status from here (autologin → logged-in,
+        // or it cleans up + falls back to logged-out). Do not run silent restore.
+        return;
+      }
+
       // Silent session restore (pss-203m): if a refresh token was persisted on a
       // previous visit, re-establish the session WITHOUT a redirect/popup before
       // ever showing the login screen. Only a genuine failure (no token /
@@ -253,6 +403,166 @@ export function SolidSessionProvider({ children }: { children: ReactNode }) {
       cancelled = true;
     };
   }, [persistSession, attemptSilentRestore]);
+
+  // Land an autologin (the SHARED post-redirect step). After completeRedirectLogin
+  // has established + verified the provider session, load the (now authenticated)
+  // profile and run the SAME completeLogin path the popup + silent-restore use, so
+  // storage selection / tracker / cache / refresh-token persistence all behave
+  // identically. A multi-storage WebID that needs a choice falls back to the
+  // login screen's choose-storage step rather than silently picking one.
+  const landAutologin = useCallback(
+    async (verifiedWebId: string) => {
+      webIdRef.current = verifiedWebId;
+      persistWebIdRef.current = verifiedWebId;
+      const loaded = await loadProfile(verifiedWebId);
+      if (loaded.storageUrls.length === 0) throw new NoStorageError(verifiedWebId);
+      if (loaded.storageUrls.length > 1) {
+        const remembered = recentRef.current?.list().find((a) => a.webId === verifiedWebId)?.storage;
+        if (!remembered || !loaded.storageUrls.includes(remembered)) {
+          pendingProfile.current = loaded;
+          setStorageChoices(loaded.storageUrls);
+          setStatus("choose-storage");
+          return;
+        }
+        await completeLogin(loaded, remembered);
+        return;
+      }
+      await completeLogin(loaded, loaded.storageUrls[0]);
+    },
+    [completeLogin],
+  );
+
+  // ── AUTOLOGIN mount effect (full-page redirect deep-link / return) ───────────
+  //
+  // The DECISION (what to do given the URL + persisted/sentinel state + login state)
+  // is the PURE `planAutologin`; this effect only EXECUTES the chosen action (URL
+  // cleaning, provider calls, navigation). Keeping the decision pure makes the
+  // security-critical scenarios unit-testable with no DOM (autologin-plan.test.ts).
+  //
+  // It runs AFTER the runtime is `ready`, ONLY when NOT already logged in: a
+  // restored / active session WINS — `planAutologin` returns `none` when `loggedIn`.
+  // The module-level `autologinEffectRan` latch + the persisted-redirect record +
+  // the sessionStorage sentinel together make the body idempotent so at most one
+  // redirect/complete fires (also covers React StrictMode's dev double-mount).
+  useEffect(() => {
+    const provider = providerRef.current;
+    const action = planAutologin({
+      ready,
+      hasProvider: provider !== null,
+      loggedIn: status === "logged-in",
+      effectAlreadyRan: autologinEffectRan,
+      hasPendingRedirect: hasPendingRedirectLogin(),
+      pendingRedirectWebId: consumePendingRedirectWebId(),
+      hasCodeParams: hasAuthCodeParams(location.search),
+      hasErrorParams: hasAuthErrorParams(location.search),
+      fragmentWebId: parseAutologinFragment(location.hash),
+      sentinel: readAutologinSentinel(),
+      webIdsEqual,
+    });
+    if (action.kind === "none" || !provider) return;
+    // Any non-`none` action consumes the once-guard so a StrictMode double-mount
+    // cannot fire a second redirect/complete.
+    autologinEffectRan = true;
+
+    // LOOP GUARD (CASE B repeat): a second `#autologin` for the SAME WebID with the
+    // sentinel already set means we bounced back still unauthenticated. Do NOT
+    // re-attempt: clear the sentinel + fragment and fall through to the login screen.
+    if (action.kind === "clear-sentinel") {
+      clearAutologinSentinel();
+      history.replaceState(null, "", cleanedUrl(location.href));
+      setStatus("logged-out");
+      return;
+    }
+
+    // ABORT — returning from the full-page redirect with an OAuth ERROR
+    // (?error&state: the broker declined silent SSO / the user declined). Without
+    // this the error return is ignored and the persisted record + DPoP key + sentinel
+    // + the error query all leak, BLOCKING future autologins. Clean EVERYTHING up and
+    // surface the error once — do NOT loop, do NOT spew.
+    if (action.kind === "abort-redirect") {
+      const errParams = new URLSearchParams(location.search);
+      const oauthError = errParams.get("error");
+      // Drop the persisted record (the single-use PKCE verifier + exported DPoP key)
+      // WITHOUT a token exchange — there is no code to exchange on an error return.
+      provider.abortRedirectLogin();
+      clearAutologinSentinel();
+      webIdRef.current = null;
+      persistWebIdRef.current = null;
+      history.replaceState(null, "", cleanedUrl(location.href));
+      setError(
+        `Automatic sign-in was declined or unavailable${
+          oauthError ? ` (${oauthError})` : ""
+        } — please sign in.`,
+      );
+      setStatus("logged-out");
+      return;
+    }
+
+    // CASE A — returning from the full-page redirect: complete the persisted login.
+    if (action.kind === "complete") {
+      const callbackUrl = location.href;
+      const targetWebId = action.webId;
+      // Clean the URL IMMEDIATELY so a refresh cannot replay the code/state.
+      history.replaceState(null, "", cleanedUrl(callbackUrl));
+      setError(null);
+      setStatus("autologin");
+      provider
+        .completeRedirectLogin(callbackUrl)
+        .then(async (result) => {
+          // completeRedirectLogin already PROVED the OP authenticated AS flow.webId
+          // (fail-closed). Defence in depth: confirm it also equals the persisted
+          // target the planner carried, then land via the shared completeLogin path.
+          if (targetWebId && !webIdsEqual(result.webId, targetWebId)) {
+            throw new Error(
+              "Autologin completed for an unexpected WebID — you were not logged in.",
+            );
+          }
+          await landAutologin(result.webId);
+          clearAutologinSentinel(); // success → clean slate for next time.
+        })
+        .catch((e) => {
+          // Failure: the persisted record is already cleared by completeRedirectLogin;
+          // drop the sentinel + fall back to the login screen with a single error.
+          clearAutologinSentinel();
+          webIdRef.current = null;
+          persistWebIdRef.current = null;
+          setError(describeError(e));
+          setStatus("logged-out");
+        });
+      return;
+    }
+
+    // CASE B — fresh autologin deep-link: begin the full-page redirect.
+    const targetWebId = action.webId;
+    // Clean the URL (strip the fragment) BEFORE anything else, so a refresh /
+    // redirect-bounce can't re-trigger and the WebID isn't left in the address bar.
+    history.replaceState(null, "", cleanedUrl(location.href));
+    setAutologinSentinel(targetWebId);
+    // Resolve the provider's getWebId to the deep-link target for this redirect.
+    webIdRef.current = targetWebId;
+    persistWebIdRef.current = targetWebId;
+    setError(null);
+    setStatus("autologin");
+
+    const redirectReturnUri = new URL("/", location.href).toString();
+    provider
+      .beginRedirectLogin(redirectReturnUri)
+      .then(({ authorizationUrl }) => {
+        // Full-page redirect to the broker. Because the IdP session is live + the app
+        // is pre-authorized, the broker redirects straight back authenticated.
+        location.assign(authorizationUrl);
+      })
+      .catch((e) => {
+        // Any error BEFORE the redirect: clear the sentinel, fall back to login.
+        clearAutologinSentinel();
+        webIdRef.current = null;
+        persistWebIdRef.current = null;
+        setError(describeError(e));
+        setStatus("logged-out");
+      });
+    // `status` is a dep so a logout (→ logged-out) does NOT re-trigger autologin —
+    // the once-guard + the cleaned URL (no fragment / no code) keep it inert.
+  }, [ready, status, landAutologin]);
 
   const login = useCallback(async (webIdInput: string) => {
     setError(null);
