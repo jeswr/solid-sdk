@@ -1,17 +1,51 @@
 /* AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
    Host chrome + the pod-photos-* classes the @jeswr/pod-photos <PhotoGallery>
-   emits (the component ships no styles of its own — the host owns the look). */
+   emits (the component ships no styles of its own — the host owns the look).
 
+   THEME: Tailwind v4 + the shared @jeswr/app-shell tokens drive light/dark. The
+   import order is load-bearing — `@import "tailwindcss"` FIRST, then the suite
+   OKLCH tokens + the `@theme inline` mapping (`@jeswr/app-shell/styles.css`) so
+   the shell components' utilities (bg-popover, text-muted-foreground, the `dark:`
+   variant, …) resolve to the suite palette. `@source` makes Tailwind scan the
+   app-shell package so the classes its <ThemeToggle/> + <AccountMenu/> emit are
+   actually generated (a node_modules package is otherwise outside the content
+   scan). The path is relative to THIS file. */
+@import "tailwindcss";
+@import "@jeswr/app-shell/styles.css";
+@source "../node_modules/@jeswr/app-shell/dist";
+
+/* The host chrome below predates the shared tokens and uses its own variable
+   names (--bg/--ink/…). Map them onto the app-shell OKLCH tokens so the WHOLE
+   pod-photos UI (login card, header, gallery grid, breadcrumb) follows the theme
+   — the `.dark` class the ThemeProvider toggles on <html> flips the OKLCH vars,
+   and these aliases inherit it for free. */
 :root {
-  --bg: #f4f5fb;
-  --surface: #ffffff;
-  --ink: #1c2230;
-  --muted: #5b6275;
-  --accent: #5b4ad1;
-  --accent-ink: #ffffff;
-  --border: #ddddef;
-  --danger: #b02525;
-  --ok: #1a7a3f;
+  --bg: var(--background);
+  --surface: var(--card);
+  --ink: var(--foreground);
+  /* The host's "muted" historically meant muted TEXT, but the app-shell token
+     `--muted` is a muted SURFACE color (with `--muted-foreground` being the text).
+     Overriding `--muted` here would clobber that surface token for any app-shell
+     utility (e.g. `bg-muted`). So the host gets its OWN name `--muted-text`,
+     aliased to the app-shell `--muted-foreground` text token, and app-shell's
+     `--muted` surface token is left untouched. */
+  --muted-text: var(--muted-foreground);
+  /* Same collision hazard as `--muted`: the host's "accent" is its BRAND/primary
+     action color (links, buttons), but the app-shell `--accent` token is a subtle
+     hover/selected SURFACE (paired with `--accent-foreground`) used by the shell
+     components (bg-accent / text-accent-foreground in dropdown hover, avatar
+     fallback, …). Overriding `--accent` would clobber that and produce
+     mismatched hover/selected pairs. So the host uses its OWN `--host-accent`
+     (the app-shell `--primary`), leaving app-shell's `--accent` untouched.
+     `--accent-ink` is a host-only name (no app-shell collision). */
+  --host-accent: var(--primary);
+  --accent-ink: var(--primary-foreground);
+  /* NOTE: the host's `--border` is the SAME name as the app-shell token, so it is
+     already unified — do NOT re-alias it to itself (that would self-reference to an
+     invalid value). Likewise `--muted` and `--accent` are NOT re-aliased — see
+     above. The other host vars below use distinct names, so they alias. */
+  --danger: var(--destructive);
+  --ok: var(--success);
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
@@ -26,7 +60,7 @@ body {
 }
 
 a {
-  color: var(--accent);
+  color: var(--host-accent);
 }
 
 /* ── Login ─────────────────────────────────────────────────────────────── */
@@ -50,7 +84,7 @@ a {
   font-size: 1.5rem;
 }
 .login-sub {
-  color: var(--muted);
+  color: var(--muted-text);
   margin: 0 0 1.25rem;
   font-size: 0.95rem;
 }
@@ -75,21 +109,30 @@ a {
   margin-top: 0.75rem;
 }
 .login-hint {
-  color: var(--muted);
+  color: var(--muted-text);
   font-size: 0.85rem;
   margin-top: 1rem;
 }
 
-button {
+/* HOST buttons only — a SCOPED selector, never the bare `button` element.
+   The host CSS is UNLAYERED, and unlayered rules beat Tailwind's `@layer
+   utilities`, so a bare `button { … }` would override the app-shell components'
+   own utility styling (ThemeToggle, the FeedbackButton trigger + its portaled
+   dialog actions, the AccountMenu trigger) — forcing a primary background,
+   padding + radius onto controls that bring their own look. Scoping the brand
+   base to the host's OWN login submit (the only host button relying on the base;
+   the gallery's breadcrumb / error / folder buttons each carry their own class
+   below) keeps app-shell's button utilities authoritative. */
+.login-form button {
   cursor: pointer;
   border: none;
   border-radius: 0.5rem;
   padding: 0.6rem 0.9rem;
   font-size: 0.95rem;
-  background: var(--accent);
+  background: var(--host-accent);
   color: var(--accent-ink);
 }
-button:disabled {
+.login-form button:disabled {
   opacity: 0.55;
   cursor: not-allowed;
 }
@@ -111,23 +154,37 @@ button:disabled {
   font-weight: 700;
   font-size: 1.1rem;
 }
-.app-webid {
-  color: var(--muted);
-  font-size: 0.8rem;
+/* Right-aligned header controls: the app-shell <FeedbackButton/> + <ThemeToggle/>
+   + <AccountMenu/>. `margin-left: auto` pushes the trio to the top-right; the
+   app-shell components bring their own (Tailwind-utility) styling, so this only
+   handles placement. */
+.app-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
   margin-left: auto;
-  max-width: 22rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
+/* `.app-logout` no longer relies on the (now-scoped) host button base, so it
+   carries its own cursor/radius/padding. (The header replaced the bare logout
+   button with the app-shell AccountMenu; this class remains for any host-owned
+   secondary action.) */
 .app-logout {
+  cursor: pointer;
   background: transparent;
-  color: var(--accent);
+  color: var(--host-accent);
   border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 0.6rem 0.9rem;
+  font-size: 0.95rem;
 }
+/* The fallback banner is theme-aware: a soft tint derived from the suite
+   `--warning` token (via color-mix over the card surface) with token-coloured
+   text + border. Because the tokens flip on `.dark`, the banner stays legible in
+   BOTH modes — no hard-coded light surface. */
 .app-note {
-  background: #fff8e6;
-  border: 1px solid #f0e0b0;
+  background: color-mix(in oklab, var(--warning) 16%, var(--card));
+  border: 1px solid color-mix(in oklab, var(--warning) 40%, var(--card));
+  color: var(--foreground);
   border-radius: 0.5rem;
   padding: 0.6rem 0.8rem;
   font-size: 0.85rem;
@@ -138,7 +195,7 @@ button:disabled {
 }
 .app-loading {
   display: block;
-  color: var(--muted);
+  color: var(--muted-text);
   font-style: italic;
   padding: 2rem 0;
 }
@@ -164,12 +221,12 @@ button:disabled {
 }
 .pod-photos-breadcrumb li:not(:last-child)::after {
   content: "/";
-  color: var(--muted);
+  color: var(--muted-text);
   margin-left: 0.35rem;
 }
 .pod-photos-breadcrumb button {
   background: transparent;
-  color: var(--accent);
+  color: var(--host-accent);
   border: none;
   padding: 0;
   font: inherit;
@@ -183,16 +240,22 @@ button:disabled {
 .pod-photos-loading,
 .pod-photos-empty {
   display: block;
-  color: var(--muted);
+  color: var(--muted-text);
 }
 .pod-photos-error {
   color: var(--danger);
 }
+/* Carries its own cursor/radius/padding (the host button base is now scoped to
+   `.login-form` only — see note there). */
 .pod-photos-error button {
   margin-top: 0.5rem;
+  cursor: pointer;
   background: transparent;
-  color: var(--accent);
+  color: var(--host-accent);
   border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 0.6rem 0.9rem;
+  font-size: 0.95rem;
 }
 
 /* Folders */
@@ -206,7 +269,7 @@ button:disabled {
 }
 .pod-photos-folder-link {
   background: var(--surface);
-  color: var(--accent);
+  color: var(--host-accent);
   border: 1px solid var(--border);
   border-radius: 0.5rem;
   padding: 0.5rem 0.8rem;
@@ -235,7 +298,10 @@ button:disabled {
   width: 100%;
   aspect-ratio: 4 / 3;
   object-fit: cover;
-  background: #eef0f8;
+  /* the app-shell `--muted` SURFACE token (a theme-aware neutral) so the
+     loading/placeholder tint follows light/dark — correct semantic use of the
+     surface token (NOT the host's `--muted-text`). */
+  background: var(--muted);
 }
 .pod-photos-thumb-missing {
   display: grid;
@@ -243,7 +309,7 @@ button:disabled {
   width: 100%;
   aspect-ratio: 4 / 3;
   font-size: 2rem;
-  background: #eef0f8;
+  background: var(--muted);
 }
 .pod-photos-caption {
   display: block;
@@ -255,5 +321,5 @@ button:disabled {
   word-break: break-word;
 }
 .pod-photos-dimensions {
-  color: var(--muted);
+  color: var(--muted-text);
 }
