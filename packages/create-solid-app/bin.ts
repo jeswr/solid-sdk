@@ -54,7 +54,12 @@ export function parseArgs(argv: string[]): ParsedArgs {
         i++; // consume the value
       }
     } else if (arg.startsWith("--repo=")) {
-      out.repo = arg.slice("--repo=".length);
+      // `--repo=owner/name`. An EMPTY value (`--repo=`) is a usage error, for
+      // symmetry with the value-less `--repo` form — otherwise a typo would
+      // silently fall back to the placeholder repo and look like it succeeded.
+      const value = arg.slice("--repo=".length);
+      if (value.length === 0) out.error ??= "--repo requires a value (owner/repo)";
+      else out.repo = value;
     } else if (arg.startsWith("-")) {
       // Unknown flag — fail rather than silently ignore (a typo'd flag would otherwise no-op).
       out.error ??= `unknown flag: ${arg}`;

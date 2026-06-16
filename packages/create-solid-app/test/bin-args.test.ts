@@ -60,4 +60,10 @@ describe("parseArgs", () => {
     const a = parseArgs(["my-app", "--repo", "--seed-pod"]);
     expect(a.error).toMatch(/--repo requires a value/);
   });
+
+  it("rejects an empty --repo= value", () => {
+    const a = parseArgs(["my-app", "--repo="]);
+    expect(a.repo).toBeUndefined();
+    expect(a.error).toMatch(/--repo requires a value/);
+  });
 });
