@@ -1108,10 +1108,11 @@ async function respondShellNavigation(event) {
   }
 }
 async function respondShellAsset(event) {
-  const routed = lastServingConfig;
+  const routedServing = lastServingConfig;
+  const routedCurrent = shellConfig;
   const serving = await servingConfig();
   if (!serving) return self.fetch(event.request);
-  const candidates = dedupeByVersion([serving, routed, shellConfig]);
+  const candidates = dedupeByVersion([serving, routedServing, routedCurrent, shellConfig]);
   const config = await resolveAssetShellConfig(shellCaches(), event.request.url, candidates).catch(
     () => serving
   ) ?? serving;

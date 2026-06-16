@@ -445,21 +445,24 @@ async function respondShellNavigation(event: FetchEvent): Promise<Response> {
 
 /** Serve a precached static asset cache-first. */
 async function respondShellAsset(event: FetchEvent): Promise<Response> {
-  // SNAPSHOT the serving config the SYNC router used to MATCH this asset BEFORE
-  // re-resolving (roborev Medium): the sync route decision matched against
-  // `lastServingConfig` as it stood when the fetch fired. `servingConfig()` may now
-  // ADVANCE to the newly-complete current version, dropping the retained bucket that
-  // actually holds the OLD-hashed asset — so the bucket the router routed for would
-  // no longer be a candidate. Keep that pre-resolution config in the candidate list.
-  const routed = lastServingConfig;
+  // SNAPSHOT BOTH route-time configs the SYNC router could have matched this asset
+  // against, BEFORE the `await` (roborev Medium): the router routes a same-origin GET
+  // when it matches EITHER `lastServingConfig` (`routedServing`) OR `shellConfig`
+  // (`routedCurrent`) as they stood when the fetch fired. `await servingConfig()` (or
+  // a concurrent `message`/`activate` promotion running during it) can ADVANCE both
+  // `lastServingConfig` and `shellConfig` to the newly-complete version, dropping the
+  // route-time bucket that actually holds the asset. Capturing both snapshots keeps
+  // every bucket the router could have routed for in the candidate list.
+  const routedServing = lastServingConfig;
+  const routedCurrent = shellConfig;
   const serving = await servingConfig();
   if (!serving) return self.fetch(event.request);
   // An asset may live ONLY in the retained complete bucket (an OLD-hashed file the
   // OLD HTML pulls) or ONLY in the current bucket — different version buckets. Pick
   // the config whose bucket actually HOLDS this asset, preferring the (post-resolve)
-  // serving config, then the config the router matched on, then the current
+  // serving config, then the route-time configs, then the (post-resolve) current
   // `shellConfig`. De-duped by version so a candidate isn't probed twice.
-  const candidates = dedupeByVersion([serving, routed, shellConfig]);
+  const candidates = dedupeByVersion([serving, routedServing, routedCurrent, shellConfig]);
   const config =
     (await resolveAssetShellConfig(shellCaches(), event.request.url, candidates).catch(
       () => serving,
