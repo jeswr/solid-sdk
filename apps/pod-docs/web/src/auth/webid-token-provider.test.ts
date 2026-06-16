@@ -87,7 +87,17 @@ vi.mock("oauth4webapi", () => {
     })),
     dynamicClientRegistrationRequest: vi.fn(),
     processDynamicClientRegistrationResponse: vi.fn(),
-    generateKeyPair: vi.fn(async () => ({ publicKey: {}, privateKey: {} })),
+    // Return a REAL extractable ES256 keypair: the popup path only hands this to the
+    // mocked DPoP/generateProof (so the object shape is irrelevant there), but the
+    // redirect path (beginRedirectLogin) genuinely `crypto.subtle.exportKey`s it, so
+    // it must be a real CryptoKeyPair. Honour the `extractable` option the caller passes.
+    generateKeyPair: vi.fn(async (_alg: string, opts?: { extractable?: boolean }) =>
+      crypto.subtle.generateKey(
+        { name: "ECDSA", namedCurve: "P-256" },
+        opts?.extractable ?? false,
+        ["sign", "verify"],
+      ),
+    ),
     generateRandomCodeVerifier: () => "verifier",
     generateRandomNonce: () => "nonce",
     generateRandomState: () => "state",
@@ -111,9 +121,38 @@ vi.mock("oauth4webapi", () => {
   };
 });
 
+/**
+ * A minimal in-memory sessionStorage stand-in for the node (DOM-less) vitest
+ * environment — the redirect-login tests persist/read a JSON record under one key.
+ * Installed once on `globalThis` (the existing tests don't touch sessionStorage, so
+ * this is inert for them); each redirect test clears it in its own setup.
+ */
+function installSessionStorage(): Map<string, string> {
+  const store = new Map<string, string>();
+  const stub: Pick<Storage, "getItem" | "setItem" | "removeItem"> = {
+    getItem: (k) => store.get(k) ?? null,
+    setItem: (k, v) => {
+      store.set(k, String(v));
+    },
+    removeItem: (k) => {
+      store.delete(k);
+    },
+  };
+  (globalThis as { sessionStorage?: unknown }).sessionStorage = stub;
+  return store;
+}
+
 // Import AFTER the mocks are registered.
-const { WebIdDPoPTokenProvider, webIdsEqual, ReactiveAuthResetError, withProbeFragment, httpUri } =
-  await import("./webid-token-provider");
+const {
+  WebIdDPoPTokenProvider,
+  webIdsEqual,
+  ReactiveAuthResetError,
+  withProbeFragment,
+  httpUri,
+  REDIRECT_FLOW_KEY,
+  hasPendingRedirectLogin,
+  consumePendingRedirectWebId,
+} = await import("./webid-token-provider");
 
 const WEBID_A = "https://alice.example/profile/card#me";
 const WEBID_B = "https://bob.example/profile/card#me";
@@ -827,5 +866,171 @@ describe("FIX (round 4) — generation scope is collision-free for two concurren
     expect(provider.wasLoginProbeUpgraded(generation)).toBe(true);
     // No proof leaks into an adjacent generation.
     expect(provider.wasLoginProbeUpgraded(generation + 1)).toBe(false);
+  });
+});
+
+describe("AUTOLOGIN — two-phase full-page redirect login (beginRedirectLogin / completeRedirectLogin)", () => {
+  let store: Map<string, string>;
+  const RETURN_URI = "https://app.example/";
+
+  beforeEach(() => {
+    authState.webId = WEBID_A;
+    authState.accessToken = "tok-A";
+    dpopMock.gate = null;
+    dpopMock.onEnter = null;
+    store = installSessionStorage();
+  });
+
+  it("beginRedirectLogin persists a record with the expected fields + returns an auth URL with the right params", async () => {
+    const provider = makeProvider();
+    const { authorizationUrl } = await provider.beginRedirectLogin(RETURN_URI);
+
+    // The authorization URL targets the resolved issuer's authorization_endpoint
+    // with the redirect-path params (response_type=code, offline_access scope, state,
+    // nonce, S256 challenge, and redirect_uri = the return URI we passed).
+    const url = new URL(authorizationUrl);
+    expect(url.origin + url.pathname).toBe("https://issuer.example/auth");
+    expect(url.searchParams.get("client_id")).toBe("https://app.example/clientid.jsonld");
+    expect(url.searchParams.get("redirect_uri")).toBe(RETURN_URI);
+    expect(url.searchParams.get("response_type")).toBe("code");
+    expect(url.searchParams.get("scope")).toBe("openid webid offline_access");
+    expect(url.searchParams.get("state")).toBe("state");
+    expect(url.searchParams.get("nonce")).toBe("nonce");
+    expect(url.searchParams.get("code_challenge_method")).toBe("S256");
+    expect(url.searchParams.get("code_challenge")).toBe("challenge");
+
+    // The persisted record carries everything completeRedirectLogin needs, including
+    // an EXPORTED (extractable) DPoP private+public JWK, the verifier, state, nonce,
+    // issuer, clientId, the registered redirect_uri, and the requested WebID.
+    const raw = store.get(REDIRECT_FLOW_KEY);
+    expect(raw).toBeTruthy();
+    const flow = JSON.parse(raw as string);
+    expect(flow.codeVerifier).toBe("verifier");
+    expect(flow.state).toBe("state");
+    expect(flow.nonce).toBe("nonce");
+    expect(flow.issuer).toBe("https://issuer.example/");
+    expect(flow.clientId).toBe("https://app.example/clientid.jsonld");
+    expect(flow.redirectUri).toBe(RETURN_URI);
+    expect(flow.webId).toBe(WEBID_A);
+    expect(flow.usePkce).toBe(true);
+    // The exported DPoP key is a real ES256 (P-256) private JWK with the secret `d`.
+    expect(flow.dpopPrivateJwk.kty).toBe("EC");
+    expect(flow.dpopPrivateJwk.crv).toBe("P-256");
+    expect(typeof flow.dpopPrivateJwk.d).toBe("string");
+    expect(flow.dpopPublicJwk.kty).toBe("EC");
+    expect(flow.dpopPublicJwk.d).toBeUndefined(); // public JWK has no private scalar.
+  });
+
+  it("generates an EXTRACTABLE DPoP key for the redirect path (so it can be exported)", async () => {
+    const provider = makeProvider();
+    await provider.beginRedirectLogin(RETURN_URI);
+    // generateKeyPair was called with extractable:true (the redirect path), unlike
+    // the popup path which uses extractable:false.
+    const oauth = await import("oauth4webapi");
+    const calls = (oauth.generateKeyPair as unknown as { mock: { calls: unknown[][] } }).mock.calls;
+    const lastCall = calls[calls.length - 1];
+    expect(lastCall[0]).toBe("ES256");
+    expect((lastCall[1] as { extractable?: boolean }).extractable).toBe(true);
+  });
+
+  it("hasPendingRedirectLogin / consumePendingRedirectWebId reflect the persisted record", async () => {
+    expect(hasPendingRedirectLogin()).toBe(false);
+    expect(consumePendingRedirectWebId()).toBeNull();
+    const provider = makeProvider();
+    await provider.beginRedirectLogin(RETURN_URI);
+    expect(hasPendingRedirectLogin()).toBe(true);
+    expect(consumePendingRedirectWebId()).toBe(WEBID_A);
+  });
+
+  it("completeRedirectLogin reads the record, exchanges the code, establishes session + authenticatedWebId, clears the record", async () => {
+    const provider = makeProvider();
+    await provider.beginRedirectLogin(RETURN_URI);
+    expect(hasPendingRedirectLogin()).toBe(true);
+
+    const callbackUrl = `${RETURN_URI}?code=auth-code&state=state`;
+    await provider.completeRedirectLogin(callbackUrl);
+
+    // The session is established: the provider reports the authenticated WebID and a
+    // token was attached (the count bumped). The record is CLEARED (no replay).
+    expect(provider.authenticatedWebId()).toBe(WEBID_A);
+    expect(provider.tokensAttachedCount()).toBe(1);
+    expect(hasPendingRedirectLogin()).toBe(false);
+    expect(store.get(REDIRECT_FLOW_KEY)).toBeUndefined();
+
+    // The established session upgrades a subsequent read for the issuer (proves the
+    // session landed in #sessions): an upgrade attaches the access token.
+    const upgraded = await provider.upgrade(new Request("https://alice.example/storage/"));
+    expect(upgraded.headers.get("Authorization")).toBe("DPoP tok-A");
+    // No SECOND getCode/popup was needed — the redirect path established the session.
+  });
+
+  it("completeRedirectLogin on a BAD state throws AND leaves the provider reset-clean (record cleared)", async () => {
+    const oauth = await import("oauth4webapi");
+    const validate = oauth.validateAuthResponse as unknown as {
+      mockImplementationOnce: (fn: () => never) => void;
+    };
+    // Model oauth4webapi rejecting a state mismatch on this one call.
+    validate.mockImplementationOnce(() => {
+      throw new Error("state mismatch");
+    });
+
+    const provider = makeProvider();
+    await provider.beginRedirectLogin(RETURN_URI);
+    const callbackUrl = `${RETURN_URI}?code=auth-code&state=WRONG`;
+
+    await expect(provider.completeRedirectLogin(callbackUrl)).rejects.toThrow("state mismatch");
+
+    // Reset-clean: NO half-established session, and the record is cleared (no replay).
+    expect(provider.authenticatedWebId()).toBeUndefined();
+    expect(provider.tokensAttachedCount()).toBe(0);
+    expect(hasPendingRedirectLogin()).toBe(false);
+  });
+
+  it("completeRedirectLogin with NO persisted record throws (nothing to complete)", async () => {
+    const provider = makeProvider();
+    await expect(
+      provider.completeRedirectLogin(`${RETURN_URI}?code=auth-code&state=state`),
+    ).rejects.toThrow(/No pending redirect login/);
+  });
+
+  it("reset() clears a persisted redirect record (a logout/new-login drops a stale pending flow)", async () => {
+    const provider = makeProvider();
+    await provider.beginRedirectLogin(RETURN_URI);
+    expect(hasPendingRedirectLogin()).toBe(true);
+    provider.reset();
+    expect(hasPendingRedirectLogin()).toBe(false);
+    expect(store.get(REDIRECT_FLOW_KEY)).toBeUndefined();
+  });
+
+  it("a reset() racing completeRedirectLogin (token exchange) writes NO state and rejects, record still cleared", async () => {
+    // Park the token-exchange await so a reset() can race it (fence parity with upgrade()).
+    const oauth = await import("oauth4webapi");
+    let releaseExchange!: () => void;
+    const exchangeGate = new Promise<void>((resolve) => {
+      releaseExchange = resolve;
+    });
+    const grant = oauth.authorizationCodeGrantRequest as unknown as {
+      mockImplementationOnce: (fn: () => Promise<unknown>) => void;
+    };
+    grant.mockImplementationOnce(async () => {
+      await exchangeGate;
+      return {};
+    });
+
+    const provider = makeProvider();
+    await provider.beginRedirectLogin(RETURN_URI);
+    const inflight = provider.completeRedirectLogin(`${RETURN_URI}?code=auth-code&state=state`);
+    inflight.catch(() => {});
+    // Let the flow reach the parked token exchange, then reset (logout / new login).
+    await Promise.resolve();
+    await Promise.resolve();
+    provider.reset();
+    releaseExchange();
+
+    await expect(inflight).rejects.toBeInstanceOf(ReactiveAuthResetError);
+    // No state published, and the record was cleared (the finally runs on rejection).
+    expect(provider.authenticatedWebId()).toBeUndefined();
+    expect(provider.tokensAttachedCount()).toBe(0);
+    expect(hasPendingRedirectLogin()).toBe(false);
   });
 });
