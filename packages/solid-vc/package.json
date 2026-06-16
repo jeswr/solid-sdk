@@ -1,0 +1,84 @@
+{
+  "name": "@jeswr/solid-vc",
+  "version": "0.1.0",
+  "description": "W3C Verifiable Credentials 2.0 data model + sign/verify with a PLUGGABLE proof-suite seam for agentic Solid (M4-VC of the agentic-Solid roadmap). Build/sign/verify VC 2.0 credentials and presentations as queryable JSON-LD/RDF (real W3C vocab https://www.w3.org/ns/credentials/v2), via the suite RDF libs (@jeswr/fetch-rdf / @solid/object / n3.Writer — never bespoke). Headline use case: a signed AgentAuthorizationCredential ('WebID X authorizes agent Y for action Z under ODRL policy P'), composing with @jeswr/solid-agent-card (M1) + @jeswr/solid-odrl (M3). Ships one concrete Data Integrity suite (EdDSA/ECDSA over RDFC-1.0 canonicalization via jose), plus a ProofSuite interface a JWT, BBS, or SPARQ ZKP proof plugs into. Security-critical: exhaustive tamper/invalid-signature/expiry/issuer-binding rejection tests. The ZKP cryptography itself lives in @jeswr/sparq (SPARQ agent's domain), NOT here — this only provides the verification seam it plugs into. Experimental, AI-agent-generated.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build:deps": "node scripts/build-deps.mjs",
+    "build": "node scripts/build-dist.mjs",
+    "build:dev": "npm run build:deps && tsc -p tsconfig.json",
+    "check:dist": "node scripts/check-dist-fresh.mjs",
+    "typecheck": "npm run build:deps && tsc -p tsconfig.json --noEmit",
+    "lint": "biome check src test scripts",
+    "lint:fix": "biome check --write src test scripts",
+    "test": "npm run build:deps && vitest run",
+    "test:coverage": "npm run build:deps && vitest run --coverage",
+    "prepare": "npm run build"
+  },
+  "keywords": [
+    "solid",
+    "verifiable-credentials",
+    "vc",
+    "vc-2.0",
+    "data-integrity",
+    "eddsa",
+    "ecdsa",
+    "rdfc",
+    "agent",
+    "authorization",
+    "odrl",
+    "rdf",
+    "jsonld",
+    "linked-data",
+    "agentic"
+  ],
+  "author": "Jesse Wright <jwrightwho@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jeswr/solid-vc.git"
+  },
+  "bugs": {
+    "url": "https://github.com/jeswr/solid-vc/issues"
+  },
+  "homepage": "https://github.com/jeswr/solid-vc#readme",
+  "dependencies": {
+    "@rdfjs/wrapper": "^0.34.0",
+    "@solid/object": "^0.6.0",
+    "content-type": "^1.0.5",
+    "jose": "^6.0.0",
+    "jsonld-streaming-parser": "^5.0.0",
+    "multiformats": "^14.0.0",
+    "n3": "^2.0.3",
+    "rdf-canonize": "^5.0.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.0.0",
+    "@jeswr/fetch-rdf": "github:jeswr/fetch-rdf#main",
+    "@rdfjs/types": "^2.0.1",
+    "@types/n3": "^1.16.0",
+    "@types/node": "^22.0.0",
+    "@vitest/coverage-v8": "^2.1.0",
+    "esbuild": "^0.21.5",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

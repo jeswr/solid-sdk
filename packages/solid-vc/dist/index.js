@@ -1,0 +1,940 @@
+// src/canonicalize.ts
+import { createHash } from "node:crypto";
+import { canonize } from "rdf-canonize";
+async function canonicalNQuads(quads) {
+  return await canonize(quads, {
+    algorithm: "RDFC-1.0",
+    format: "application/n-quads"
+  });
+}
+function sha256(input) {
+  return new Uint8Array(createHash("sha256").update(input, "utf8").digest());
+}
+async function dataIntegrityHash(documentQuads, proofOptionsQuads2) {
+  const docCanon = await canonicalNQuads(documentQuads);
+  const proofCanon = await canonicalNQuads(proofOptionsQuads2);
+  const proofHash = sha256(proofCanon);
+  const docHash = sha256(docCanon);
+  const out = new Uint8Array(proofHash.length + docHash.length);
+  out.set(proofHash, 0);
+  out.set(docHash, proofHash.length);
+  return out;
+}
+
+// src/credential.ts
+import { randomUUID } from "node:crypto";
+
+// node_modules/@jeswr/fetch-rdf/dist/parse.js
+import contentType from "content-type";
+import { Store, StreamParser } from "n3";
+import { JsonLdParser } from "jsonld-streaming-parser";
+
+// node_modules/@jeswr/fetch-rdf/dist/errors.js
+var RdfFetchError = class extends Error {
+  /** The original cause, if any (e.g. a network error or parser exception). */
+  cause;
+  /** HTTP status code from a non-2xx response, if applicable. */
+  status;
+  /** The final request URL (after redirects), if known. */
+  url;
+  /** Raw `Content-Type` header from the response, if known. */
+  contentType;
+  constructor(message, options = {}) {
+    super(message);
+    this.name = "RdfFetchError";
+    if (options.cause !== void 0)
+      this.cause = options.cause;
+    if (options.status !== void 0)
+      this.status = options.status;
+    if (options.url !== void 0)
+      this.url = options.url;
+    if (options.contentType !== void 0)
+      this.contentType = options.contentType;
+  }
+};
+
+// node_modules/@jeswr/fetch-rdf/dist/parse.js
+var SUPPORTED_RDF_MEDIA_TYPES = [
+  "text/turtle",
+  "application/n-triples",
+  "application/n-quads",
+  "application/trig",
+  "application/ld+json"
+];
+var N3_FAMILY = /* @__PURE__ */ new Set([
+  "text/turtle",
+  "application/n-triples",
+  "application/n-quads",
+  "application/trig"
+]);
+var JSON_LD_FAMILY = /* @__PURE__ */ new Set([
+  "application/ld+json"
+]);
+async function parseRdf(body, contentTypeHeader, options = {}) {
+  const rawHeader = contentTypeHeader ?? "text/turtle";
+  let mediaType;
+  try {
+    mediaType = contentType.parse(rawHeader).type;
+  } catch (cause) {
+    throw new RdfFetchError(`Invalid Content-Type header: "${rawHeader}".`, { cause, contentType: rawHeader });
+  }
+  const baseIRI = options.baseIRI;
+  let parser;
+  if (N3_FAMILY.has(mediaType)) {
+    parser = new StreamParser({
+      format: mediaType,
+      ...baseIRI !== void 0 && { baseIRI }
+    });
+  } else if (JSON_LD_FAMILY.has(mediaType)) {
+    parser = new JsonLdParser({
+      ...baseIRI !== void 0 && { baseIRI }
+    });
+  } else {
+    throw new RdfFetchError(`Unsupported RDF media type: "${mediaType}". Supported: ${SUPPORTED_RDF_MEDIA_TYPES.join(", ")}.`, { contentType: rawHeader, ...baseIRI !== void 0 && { url: baseIRI } });
+  }
+  const storePromise = collectIntoStore(parser);
+  try {
+    await pumpBody(parser, body);
+    return await storePromise;
+  } catch (cause) {
+    if (cause instanceof RdfFetchError)
+      throw cause;
+    throw new RdfFetchError(`Failed to parse ${mediaType} body${baseIRI ? ` at ${baseIRI}` : ""}.`, { cause, contentType: rawHeader, ...baseIRI !== void 0 && { url: baseIRI } });
+  }
+}
+function collectIntoStore(parser) {
+  return new Promise((resolve, reject) => {
+    const store = new Store();
+    parser.on("data", (quad) => {
+      store.addQuad(quad);
+    });
+    parser.on("error", reject);
+    parser.on("end", () => {
+      resolve(store);
+    });
+  });
+}
+async function pumpBody(parser, body) {
+  if (typeof body === "string") {
+    parser.end(body);
+    return;
+  }
+  let parserError = null;
+  const onParserError = (err) => {
+    parserError = err;
+  };
+  parser.on("error", onParserError);
+  const reader = body.getReader();
+  try {
+    const decoder = new TextDecoder();
+    for (; ; ) {
+      if (parserError)
+        throw parserError;
+      const { done, value } = await reader.read();
+      if (done)
+        break;
+      if (value === void 0)
+        continue;
+      const text = decoder.decode(value, { stream: true });
+      if (text.length === 0)
+        continue;
+      if (!parser.write(text))
+        await waitForDrain(parser);
+    }
+    if (parserError)
+      throw parserError;
+    const tail = decoder.decode();
+    if (tail.length > 0)
+      parser.write(tail);
+    parser.end();
+  } catch (err) {
+    parser.destroy(err instanceof Error ? err : new Error(String(err)));
+    try {
+      await reader.cancel();
+    } catch {
+    }
+    throw err;
+  } finally {
+    parser.off("error", onParserError);
+    reader.releaseLock();
+  }
+}
+function waitForDrain(parser) {
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      parser.off("drain", onDrain);
+      parser.off("error", onError);
+    };
+    const onDrain = () => {
+      cleanup();
+      resolve();
+    };
+    const onError = (err) => {
+      cleanup();
+      reject(err);
+    };
+    parser.once("drain", onDrain);
+    parser.once("error", onError);
+  });
+}
+
+// src/serialize.ts
+import { Writer } from "n3";
+
+// src/vocab.ts
+var VC = "https://www.w3.org/2018/credentials#";
+var VC_V2_CONTEXT = "https://www.w3.org/ns/credentials/v2";
+var SEC = "https://w3id.org/security#";
+var XSD = "http://www.w3.org/2001/XMLSchema#";
+var RDF = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
+var RDFS = "http://www.w3.org/2000/01/rdf-schema#";
+var ACL = "http://www.w3.org/ns/auth/acl#";
+var ODRL = "http://www.w3.org/ns/odrl/2/";
+var SCHEMA = "https://schema.org/";
+var SVC = "https://w3id.org/jeswr/solid-vc#";
+var RDF_TYPE = `${RDF}type`;
+var VC_CREDENTIAL = `${VC}VerifiableCredential`;
+var VC_PRESENTATION = `${VC}VerifiablePresentation`;
+var VC_ISSUER = `${VC}issuer`;
+var VC_CREDENTIAL_SUBJECT = `${VC}credentialSubject`;
+var VC_VALID_FROM = `${VC}validFrom`;
+var VC_VALID_UNTIL = `${VC}validUntil`;
+var VC_CREDENTIAL_STATUS = `${VC}credentialStatus`;
+var VC_VERIFIABLE_CREDENTIAL = `${VC}verifiableCredential`;
+var VC_HOLDER = `${VC}holder`;
+var SEC_PROOF = `${SEC}proof`;
+var SEC_DATA_INTEGRITY_PROOF = `${SEC}DataIntegrityProof`;
+var SEC_CRYPTOSUITE = `${SEC}cryptosuite`;
+var SEC_PROOF_VALUE = `${SEC}proofValue`;
+var SEC_VERIFICATION_METHOD = `${SEC}verificationMethod`;
+var SEC_PROOF_PURPOSE = `${SEC}proofPurpose`;
+var DC_CREATED = "http://purl.org/dc/terms/created";
+var SVC_AGENT_AUTHORIZATION = `${SVC}AgentAuthorizationCredential`;
+var SVC_AUTHORIZES = `${SVC}authorizes`;
+var SVC_ACTION = `${SVC}action`;
+var SVC_TARGET = `${SVC}target`;
+var SVC_POLICY = `${SVC}policy`;
+var SVC_TERMS = {
+  svc: SVC,
+  acl: ACL,
+  odrl: ODRL,
+  schema: SCHEMA,
+  AgentAuthorizationCredential: SVC_AGENT_AUTHORIZATION,
+  authorizes: { "@id": SVC_AUTHORIZES, "@type": "@id" },
+  action: { "@id": SVC_ACTION, "@type": "@id" },
+  target: { "@id": SVC_TARGET, "@type": "@id" },
+  policy: { "@id": SVC_POLICY, "@type": "@id" }
+};
+var SVC_INLINE_CONTEXT = [
+  VC_V2_CONTEXT,
+  SVC_TERMS
+];
+
+// src/serialize.ts
+var PREFIXES = {
+  cred: VC,
+  sec: SEC,
+  svc: SVC,
+  acl: ACL,
+  odrl: ODRL,
+  schema: SCHEMA,
+  xsd: XSD,
+  rdf: RDF,
+  rdfs: RDFS,
+  dcterms: DC_CREATED.replace("created", "")
+};
+function serialize(quads, format = "text/turtle") {
+  if (quads.length === 0) {
+    return Promise.resolve("");
+  }
+  return new Promise((resolve, reject) => {
+    const writer = new Writer({ format, prefixes: PREFIXES });
+    writer.addQuads(quads);
+    writer.end((error, result) => {
+      if (error) {
+        reject(error);
+      } else {
+        resolve(result);
+      }
+    });
+  });
+}
+
+// src/wrappers.ts
+import {
+  BlankNodeFrom,
+  DatasetWrapper,
+  LiteralFrom,
+  NamedNodeFrom,
+  SetFrom,
+  TermAs,
+  TermFrom,
+  TermWrapper
+} from "@rdfjs/wrapper";
+import { DataFactory, Store as Store2 } from "n3";
+function objectTerms(node, predicate) {
+  return SetFrom.subjectPredicate(node, predicate, TermAs.instance(TermWrapper), TermFrom.instance);
+}
+var ProofNode = class extends TermWrapper {
+  get types() {
+    return objectTerms(this, RDF_TYPE);
+  }
+  get cryptosuites() {
+    return objectTerms(this, SEC_CRYPTOSUITE);
+  }
+  get verificationMethods() {
+    return objectTerms(this, SEC_VERIFICATION_METHOD);
+  }
+  get proofPurposes() {
+    return objectTerms(this, SEC_PROOF_PURPOSE);
+  }
+  get proofValues() {
+    return objectTerms(this, SEC_PROOF_VALUE);
+  }
+  get createds() {
+    return objectTerms(this, DC_CREATED);
+  }
+};
+var CredentialNode = class extends TermWrapper {
+  get types() {
+    return objectTerms(this, RDF_TYPE);
+  }
+  get issuers() {
+    return objectTerms(this, VC_ISSUER);
+  }
+  get subjects() {
+    return objectTerms(this, VC_CREDENTIAL_SUBJECT);
+  }
+  get validFroms() {
+    return objectTerms(this, VC_VALID_FROM);
+  }
+  get validUntils() {
+    return objectTerms(this, VC_VALID_UNTIL);
+  }
+  get proofs() {
+    return SetFrom.subjectPredicate(this, SEC_PROOF, TermAs.instance(ProofNode), TermFrom.instance);
+  }
+};
+var PresentationNode = class extends TermWrapper {
+  get types() {
+    return objectTerms(this, RDF_TYPE);
+  }
+  get holders() {
+    return objectTerms(this, VC_HOLDER);
+  }
+  get credentials() {
+    return SetFrom.subjectPredicate(
+      this,
+      VC_VERIFIABLE_CREDENTIAL,
+      TermAs.instance(CredentialNode),
+      TermFrom.instance
+    );
+  }
+  get proofs() {
+    return SetFrom.subjectPredicate(this, SEC_PROOF, TermAs.instance(ProofNode), TermFrom.instance);
+  }
+};
+var VcDataset = class extends DatasetWrapper {
+  /** Every `cred:VerifiableCredential` subject in the dataset. */
+  credentials() {
+    return [...this.instancesOf(VC_CREDENTIAL, CredentialNode)];
+  }
+  /** Every `cred:VerifiablePresentation` subject in the dataset. */
+  presentations() {
+    return [...this.instancesOf(VC_PRESENTATION, PresentationNode)];
+  }
+};
+function wrapVc(dataset) {
+  return new VcDataset(dataset, DataFactory);
+}
+function firstIri(terms) {
+  for (const term of terms) {
+    if (term.termType === "NamedNode") {
+      return term.value;
+    }
+  }
+  return void 0;
+}
+function firstLiteral(terms) {
+  for (const term of terms) {
+    if (term.termType === "Literal") {
+      return term.value;
+    }
+  }
+  return void 0;
+}
+function iriRef(iri) {
+  return { kind: "iri", value: iri };
+}
+function normalize(subject) {
+  return typeof subject === "string" ? { kind: "iri", value: subject } : subject;
+}
+var GraphBuilder = class {
+  store = new Store2();
+  factory = DataFactory;
+  /** Materialise a {@link NodeRef} to its RDF/JS term. */
+  subjectTerm(ref) {
+    return ref.kind === "iri" ? NamedNodeFrom.string(ref.value, this.factory) : BlankNodeFrom.string(ref.value, this.factory);
+  }
+  /** Add `(subject, rdf:type, classIri)`. */
+  addType(subject, classIri) {
+    this.addIri(subject, RDF_TYPE, classIri);
+  }
+  /** Add `(subject, predicate, object-IRI)`. */
+  addIri(subject, predicate, objectIri) {
+    const s = this.subjectTerm(normalize(subject));
+    const p = NamedNodeFrom.string(predicate, this.factory);
+    const o = NamedNodeFrom.string(objectIri, this.factory);
+    this.store.add(this.factory.quad(s, p, o));
+  }
+  /** Add `(subject, predicate, literal)` with an optional datatype IRI. */
+  addLiteral(subject, predicate, value, datatypeIri) {
+    const s = this.subjectTerm(normalize(subject));
+    const p = NamedNodeFrom.string(predicate, this.factory);
+    const o = datatypeIri === void 0 ? LiteralFrom.string(value, this.factory) : this.factory.literal(
+      value,
+      NamedNodeFrom.string(datatypeIri, this.factory)
+    );
+    this.store.add(this.factory.quad(s, p, o));
+  }
+  /**
+   * Mint a fresh blank node, link it `(subject, predicate, _:b)`, and return a
+   * {@link NodeRef} to the new blank node (so subsequent writes target it
+   * unambiguously as a blank, never as an IRI).
+   */
+  linkBlankNode(subject, predicate) {
+    const s = this.subjectTerm(normalize(subject));
+    const blank = BlankNodeFrom.string(void 0, this.factory);
+    const p = NamedNodeFrom.string(predicate, this.factory);
+    this.store.add(this.factory.quad(s, p, blank));
+    return { kind: "blank", value: blank.value };
+  }
+  /**
+   * Link a CHILD node (a named IRI child if provided, else a fresh blank) from
+   * `subject` via `predicate`, and return its {@link NodeRef}.
+   */
+  linkChild(subject, predicate, childIri) {
+    if (childIri !== void 0) {
+      this.addIri(subject, predicate, childIri);
+      return iriRef(childIri);
+    }
+    return this.linkBlankNode(subject, predicate);
+  }
+  /** The underlying store (a DatasetCore). */
+  dataset() {
+    return this.store;
+  }
+  /** The accumulated quads. */
+  quads() {
+    return [...this.store];
+  }
+};
+
+// src/credential.ts
+function looksLikeIri(value) {
+  return /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(value);
+}
+function typeIri(type) {
+  if (type === "VerifiableCredential") return VC_CREDENTIAL;
+  if (type === "AgentAuthorizationCredential") return SVC_AGENT_AUTHORIZATION;
+  if (looksLikeIri(type)) return type;
+  return `https://w3id.org/jeswr/solid-vc#${type}`;
+}
+function writeSubject(b, credential, subject) {
+  const node = typeof subject.id === "string" && subject.id.length > 0 ? iriRef(subject.id) : b.linkBlankNode(credential, VC_CREDENTIAL_SUBJECT);
+  if (node.kind === "iri") {
+    b.addIri(credential, VC_CREDENTIAL_SUBJECT, node.value);
+  }
+  for (const [claim, value] of Object.entries(subject)) {
+    if (claim === "id" || value === void 0) continue;
+    writeClaim(b, node, claim, value);
+  }
+}
+function claimPredicate(claim) {
+  return looksLikeIri(claim) ? claim : `https://w3id.org/jeswr/solid-vc#${claim}`;
+}
+function writeClaim(b, subject, claim, value) {
+  const predicate = claimPredicate(claim);
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      writeClaim(b, subject, claim, item);
+    }
+    return;
+  }
+  if (value === null) {
+    return;
+  }
+  if (typeof value === "string") {
+    if (looksLikeIri(value)) {
+      b.addIri(subject, predicate, value);
+    } else {
+      b.addLiteral(subject, predicate, value);
+    }
+    return;
+  }
+  if (typeof value === "boolean") {
+    b.addLiteral(subject, predicate, String(value), `${XSD}boolean`);
+    return;
+  }
+  if (typeof value === "number") {
+    const dt = Number.isInteger(value) ? `${XSD}integer` : `${XSD}double`;
+    b.addLiteral(subject, predicate, String(value), dt);
+    return;
+  }
+  const child = b.linkBlankNode(subject, predicate);
+  for (const [k, v] of Object.entries(value)) {
+    if (v === void 0) continue;
+    writeClaim(b, child, k, v);
+  }
+}
+function credentialToRdf(credential) {
+  const id = credential.id ?? `urn:uuid:${randomUUID()}`;
+  const subject = iriRef(id);
+  const b = new GraphBuilder();
+  b.addType(subject, VC_CREDENTIAL);
+  for (const t of credential.type ?? []) {
+    const iri = typeIri(t);
+    if (iri !== VC_CREDENTIAL) b.addType(subject, iri);
+  }
+  b.addIri(subject, VC_ISSUER, credential.issuer);
+  if (credential.validFrom !== void 0) {
+    b.addLiteral(subject, VC_VALID_FROM, credential.validFrom, `${XSD}dateTime`);
+  }
+  if (credential.validUntil !== void 0) {
+    b.addLiteral(subject, VC_VALID_UNTIL, credential.validUntil, `${XSD}dateTime`);
+  }
+  const subjects = Array.isArray(credential.credentialSubject) ? credential.credentialSubject : [credential.credentialSubject];
+  for (const s of subjects) {
+    writeSubject(b, subject, s);
+  }
+  return b.quads();
+}
+function credentialToTurtle(credential, format) {
+  return serialize(credentialToRdf(credential), format);
+}
+function credentialToJsonLd(credential) {
+  const id = credential.id ?? `urn:uuid:${randomUUID()}`;
+  const types = ["VerifiableCredential", ...credential.type ?? []];
+  const doc = {
+    "@context": SVC_INLINE_CONTEXT,
+    id,
+    type: [...new Set(types)],
+    issuer: credential.issuer
+  };
+  if (credential.validFrom !== void 0) doc.validFrom = credential.validFrom;
+  if (credential.validUntil !== void 0) doc.validUntil = credential.validUntil;
+  const subjects = Array.isArray(credential.credentialSubject) ? credential.credentialSubject : [credential.credentialSubject];
+  doc.credentialSubject = subjects.length === 1 ? subjects[0] : subjects;
+  return doc;
+}
+function firstDateTime(terms) {
+  return firstLiteral(terms);
+}
+function credentialMetaFromNode(node) {
+  const types = [];
+  for (const t of node.types) {
+    if (t.termType === "NamedNode") types.push(t.value);
+  }
+  return {
+    id: node.value,
+    issuer: firstIri(node.issuers),
+    validFrom: firstDateTime(node.validFroms),
+    validUntil: firstDateTime(node.validUntils),
+    types
+  };
+}
+async function parseCredentialRdf(body, contentType2 = "text/turtle") {
+  return await parseRdf(body, contentType2);
+}
+function credentialFromRdf(dataset) {
+  return wrapVc(dataset).credentials()[0];
+}
+function buildAgentAuthorizationCredential(auth) {
+  const actions = Array.isArray(auth.action) ? auth.action : [auth.action];
+  const subject = {
+    [SVC_AUTHORIZES]: auth.agent,
+    [SVC_ACTION]: actions.length === 1 ? actions[0] : actions
+  };
+  if (auth.target !== void 0) subject[SVC_TARGET] = auth.target;
+  if (auth.policy !== void 0) subject[SVC_POLICY] = auth.policy;
+  const credentialSubject = { id: auth.principal, ...subject };
+  const credential = {
+    issuer: auth.principal,
+    type: ["AgentAuthorizationCredential"],
+    credentialSubject,
+    ...auth.id !== void 0 ? { id: auth.id } : {},
+    ...auth.validFrom !== void 0 ? { validFrom: auth.validFrom } : {},
+    ...auth.validUntil !== void 0 ? { validUntil: auth.validUntil } : {}
+  };
+  return credential;
+}
+function agentAuthorizationFromRdf(node) {
+  const meta = credentialMetaFromNode(node);
+  if (!meta.types.includes(SVC_AGENT_AUTHORIZATION)) return void 0;
+  const subjectTerm = [...node.subjects].find((t) => t.termType === "NamedNode");
+  if (subjectTerm === void 0) return void 0;
+  const subjectIri = subjectTerm.value;
+  const dataset = node.dataset;
+  const reads = readSubjectClaims(dataset, subjectIri);
+  if (reads.authorizes === void 0 || reads.action.length === 0) return void 0;
+  return {
+    principal: subjectIri,
+    agent: reads.authorizes,
+    action: reads.action.length === 1 ? reads.action[0] : reads.action,
+    ...reads.target !== void 0 ? { target: reads.target } : {},
+    ...reads.policy !== void 0 ? { policy: reads.policy } : {}
+  };
+}
+function readSubjectClaims(dataset, subjectIri) {
+  let authorizes;
+  const action = [];
+  let target;
+  let policy;
+  for (const quad of dataset.match()) {
+    if (quad.subject.termType !== "NamedNode" || quad.subject.value !== subjectIri) continue;
+    if (quad.object.termType !== "NamedNode") continue;
+    switch (quad.predicate.value) {
+      case SVC_AUTHORIZES:
+        authorizes = quad.object.value;
+        break;
+      case SVC_ACTION:
+        action.push(quad.object.value);
+        break;
+      case SVC_TARGET:
+        target = quad.object.value;
+        break;
+      case SVC_POLICY:
+        policy = quad.object.value;
+        break;
+      default:
+        break;
+    }
+  }
+  return {
+    ...authorizes !== void 0 ? { authorizes } : {},
+    action,
+    ...target !== void 0 ? { target } : {},
+    ...policy !== void 0 ? { policy } : {}
+  };
+}
+
+// src/issue.ts
+import { randomUUID as randomUUID2 } from "node:crypto";
+
+// src/multibase.ts
+import { base58btc } from "multiformats/bases/base58";
+function base58btcEncode(bytes) {
+  return base58btc.encode(bytes);
+}
+function base58btcDecode(value) {
+  return base58btc.decode(value);
+}
+
+// src/proof.ts
+var SuiteRegistry = class {
+  suites = /* @__PURE__ */ new Map();
+  /** Register a suite (overwrites any prior suite with the same cryptosuite id). */
+  register(suite) {
+    this.suites.set(suite.cryptosuite, suite);
+    return this;
+  }
+  /** The suite for a cryptosuite id, or `undefined` if none is registered. */
+  get(cryptosuite) {
+    return this.suites.get(cryptosuite);
+  }
+  /** Every registered cryptosuite id. */
+  list() {
+    return [...this.suites.keys()];
+  }
+};
+function proofOptionsQuads(proof) {
+  const b = new GraphBuilder();
+  const node = { kind: "blank", value: "_:proof" };
+  b.addType(node, "https://w3id.org/security#DataIntegrityProof");
+  b.addLiteral(node, SEC_CRYPTOSUITE, proof.cryptosuite);
+  b.addIri(node, SEC_VERIFICATION_METHOD, proof.verificationMethod);
+  b.addIri(node, SEC_PROOF_PURPOSE, purposeIri(proof.proofPurpose));
+  if (proof.created !== void 0) {
+    b.addLiteral(node, DC_CREATED, proof.created, "http://www.w3.org/2001/XMLSchema#dateTime");
+  }
+  return b.quads();
+}
+function purposeIri(purpose) {
+  return /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(purpose) ? purpose : `https://w3id.org/security#${purpose}`;
+}
+function algorithmFor(cryptosuite) {
+  switch (cryptosuite) {
+    case "eddsa-rdfc-2022":
+      return "Ed25519";
+    case "ecdsa-rdfc-2019":
+      return { name: "ECDSA", hash: "SHA-256" };
+    default:
+      throw new Error(`DataIntegritySuite: unsupported cryptosuite "${cryptosuite}"`);
+  }
+}
+var DataIntegritySuite = class {
+  cryptosuite;
+  constructor(cryptosuite = "eddsa-rdfc-2022") {
+    this.cryptosuite = cryptosuite;
+    algorithmFor(cryptosuite);
+  }
+  async sign(documentQuads, options) {
+    const key = options.key;
+    if (key?.privateKey === void 0 || key.verificationMethod === void 0) {
+      throw new Error("DataIntegritySuite.sign: options.key must be a KeyPair");
+    }
+    const created = options.created.toISOString();
+    const optionsNoValue = {
+      type: "DataIntegrityProof",
+      cryptosuite: this.cryptosuite,
+      verificationMethod: key.verificationMethod,
+      proofPurpose: options.proofPurpose,
+      created
+    };
+    const hash = await dataIntegrityHash(documentQuads, proofOptionsQuads(optionsNoValue));
+    const algorithm = algorithmFor(this.cryptosuite);
+    const signature = new Uint8Array(
+      await crypto.subtle.sign(algorithm, key.privateKey, hash)
+    );
+    return { ...optionsNoValue, proofValue: base58btcEncode(signature) };
+  }
+  async verify(documentQuads, proof, options) {
+    if (proof.type !== "DataIntegrityProof") return false;
+    if (proof.cryptosuite !== this.cryptosuite) return false;
+    const publicKey = await options.resolveKey(proof.verificationMethod);
+    if (publicKey === void 0) return false;
+    let signature;
+    try {
+      signature = base58btcDecode(proof.proofValue);
+    } catch {
+      return false;
+    }
+    const optionsNoValue = {
+      type: "DataIntegrityProof",
+      cryptosuite: proof.cryptosuite,
+      verificationMethod: proof.verificationMethod,
+      proofPurpose: proof.proofPurpose,
+      ...proof.created !== void 0 ? { created: proof.created } : {}
+    };
+    const hash = await dataIntegrityHash(documentQuads, proofOptionsQuads(optionsNoValue));
+    const algorithm = algorithmFor(this.cryptosuite);
+    try {
+      return await crypto.subtle.verify(
+        algorithm,
+        publicKey,
+        signature,
+        hash
+      );
+    } catch {
+      return false;
+    }
+  }
+};
+function defaultSuiteRegistry() {
+  return new SuiteRegistry().register(new DataIntegritySuite("eddsa-rdfc-2022")).register(new DataIntegritySuite("ecdsa-rdfc-2019"));
+}
+
+// src/issue.ts
+async function issue(input) {
+  const suite = input.suite ?? new DataIntegritySuite("eddsa-rdfc-2022");
+  const created = input.options?.created ?? /* @__PURE__ */ new Date();
+  const proofPurpose = input.options?.proofPurpose ?? "assertionMethod";
+  const credential = {
+    ...input.credential,
+    id: input.credential.id ?? `urn:uuid:${randomUUID2()}`,
+    validFrom: input.credential.validFrom ?? created.toISOString()
+  };
+  const documentQuads = credentialToRdf(credential);
+  const proof = await suite.sign(documentQuads, {
+    key: input.key,
+    proofPurpose,
+    created
+  });
+  return { ...credential, proof };
+}
+async function issueAgentAuthorization(auth, key, opts) {
+  const credential = buildAgentAuthorizationCredential(auth);
+  return issue({
+    credential,
+    key,
+    ...opts?.suite !== void 0 ? { suite: opts.suite } : {},
+    ...opts?.options !== void 0 ? { options: opts.options } : {}
+  });
+}
+
+// src/keys.ts
+import { exportJWK, generateKeyPair, importJWK } from "jose";
+function paramsFor(type) {
+  if (type === "Ed25519") {
+    return {
+      alg: "EdDSA",
+      cryptosuite: "eddsa-rdfc-2022",
+      options: { crv: "Ed25519", extractable: true }
+    };
+  }
+  return { alg: "ES256", cryptosuite: "ecdsa-rdfc-2019", options: { extractable: true } };
+}
+async function generateKeyPairForSuite(verificationMethod, type = "Ed25519") {
+  const { alg, options } = paramsFor(type);
+  const { privateKey, publicKey } = await generateKeyPair(alg, options);
+  return {
+    verificationMethod,
+    privateKey,
+    publicKey
+  };
+}
+function cryptosuiteForKeyType(type) {
+  return paramsFor(type).cryptosuite;
+}
+async function exportPublicJwk(key) {
+  return exportJWK(key.publicKey);
+}
+async function exportPrivateJwk(key) {
+  return exportJWK(key.privateKey);
+}
+async function importPublicKey(jwk) {
+  const alg = algForJwk(jwk);
+  return await importJWK(jwk, alg, { extractable: true });
+}
+async function importKeyPair(verificationMethod, privateJwk) {
+  const alg = algForJwk(privateJwk);
+  const privateKey = await importJWK(privateJwk, alg, { extractable: true });
+  const { d: _d, ...pub } = privateJwk;
+  const publicKey = await importJWK(pub, alg, { extractable: true });
+  return { verificationMethod, privateKey, publicKey };
+}
+function algForJwk(jwk) {
+  if (jwk.kty === "OKP" && jwk.crv === "Ed25519") return "EdDSA";
+  if (jwk.kty === "EC" && jwk.crv === "P-256") return "ES256";
+  throw new Error(`unsupported JWK: kty=${jwk.kty} crv=${jwk.crv ?? "?"}`);
+}
+
+// src/verify.ts
+function defaultControlledBy(verificationMethod, issuer) {
+  if (verificationMethod === issuer) return true;
+  return verificationMethod.startsWith(`${issuer}#`) || verificationMethod.startsWith(`${issuer}/`);
+}
+function proofsOf(vc) {
+  const proof = vc.proof;
+  return Array.isArray(proof) ? [...proof] : [proof];
+}
+function unsigned(vc) {
+  const { proof: _proof, ...rest } = vc;
+  return rest;
+}
+async function verifyCredential(vc, options) {
+  const errors = [];
+  const registry = options.registry ?? defaultSuiteRegistry();
+  const now = options.now ?? /* @__PURE__ */ new Date();
+  const expectedPurpose = options.expectedProofPurpose ?? "assertionMethod";
+  const controlledBy = options.isControlledBy ?? defaultControlledBy;
+  if (vc === null || typeof vc !== "object" || typeof vc.issuer !== "string" || vc.issuer.length === 0 || vc.credentialSubject === void 0) {
+    return {
+      verified: false,
+      errors: [{ code: "MALFORMED", message: "not a well-formed credential" }]
+    };
+  }
+  const issuer = vc.issuer;
+  const proofs = vc.proof === void 0 ? [] : proofsOf(vc);
+  if (proofs.length === 0) {
+    errors.push({ code: "NO_PROOF", message: "credential carries no proof" });
+  }
+  if (vc.validUntil !== void 0) {
+    const until = Date.parse(vc.validUntil);
+    if (!Number.isNaN(until) && now.getTime() > until) {
+      errors.push({ code: "EXPIRED", message: `credential expired at ${vc.validUntil}` });
+    }
+  }
+  if (vc.validFrom !== void 0) {
+    const from = Date.parse(vc.validFrom);
+    if (!Number.isNaN(from) && now.getTime() < from) {
+      errors.push({
+        code: "NOT_YET_VALID",
+        message: `credential not valid before ${vc.validFrom}`
+      });
+    }
+  }
+  if (options.trustedIssuers !== void 0 && !options.trustedIssuers.includes(issuer)) {
+    errors.push({ code: "UNTRUSTED_ISSUER", message: `issuer ${issuer} is not trusted` });
+  }
+  const documentQuads = credentialToRdf(unsigned(vc));
+  for (const proof of proofs) {
+    const suite = registry.get(proof.cryptosuite);
+    if (suite === void 0) {
+      errors.push({
+        code: "UNKNOWN_CRYPTOSUITE",
+        message: `no registered suite for cryptosuite "${proof.cryptosuite}"`
+      });
+      continue;
+    }
+    if (normalizePurpose(proof.proofPurpose) !== normalizePurpose(expectedPurpose)) {
+      errors.push({
+        code: "PROOF_PURPOSE_MISMATCH",
+        message: `proofPurpose "${proof.proofPurpose}" != expected "${expectedPurpose}"`
+      });
+    }
+    if (!controlledBy(proof.verificationMethod, issuer)) {
+      errors.push({
+        code: "ISSUER_MISMATCH",
+        message: `verificationMethod ${proof.verificationMethod} is not controlled by issuer ${issuer}`
+      });
+    }
+    const ok = await verifyOneProof(suite, documentQuads, proof, options.resolveKey);
+    if (!ok) {
+      errors.push({
+        code: "INVALID_SIGNATURE",
+        message: `signature did not verify for proof (${proof.cryptosuite})`
+      });
+    }
+  }
+  return errors.length === 0 ? { verified: true, errors: [], issuer } : { verified: false, errors, issuer };
+}
+async function verifyOneProof(suite, documentQuads, proof, resolveKey) {
+  try {
+    return await suite.verify(documentQuads, proof, { resolveKey });
+  } catch {
+    return false;
+  }
+}
+function normalizePurpose(purpose) {
+  const hash = purpose.lastIndexOf("#");
+  return hash === -1 ? purpose : purpose.slice(hash + 1);
+}
+export {
+  CredentialNode,
+  DataIntegritySuite,
+  PresentationNode,
+  ProofNode,
+  SVC,
+  SVC_AGENT_AUTHORIZATION,
+  SuiteRegistry,
+  VC,
+  VC_V2_CONTEXT,
+  VcDataset,
+  agentAuthorizationFromRdf,
+  base58btcDecode,
+  base58btcEncode,
+  buildAgentAuthorizationCredential,
+  canonicalNQuads,
+  credentialFromRdf,
+  credentialMetaFromNode,
+  credentialToJsonLd,
+  credentialToRdf,
+  credentialToTurtle,
+  cryptosuiteForKeyType,
+  dataIntegrityHash,
+  defaultSuiteRegistry,
+  exportPrivateJwk,
+  exportPublicJwk,
+  generateKeyPairForSuite,
+  importKeyPair,
+  importPublicKey,
+  issue,
+  issueAgentAuthorization,
+  parseCredentialRdf,
+  proofOptionsQuads,
+  serialize,
+  verifyCredential,
+  wrapVc
+};
+//# sourceMappingURL=index.js.map
