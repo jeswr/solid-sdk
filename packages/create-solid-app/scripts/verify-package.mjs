@@ -33,8 +33,44 @@ if (!existsSync(join(templateDir, "package.json"))) {
 }
 
 // The template must ship its lockfile for a resolution-free first install.
-if (!existsSync(join(templateDir, "package-lock.json"))) {
+const templateLockPath = join(templateDir, "package-lock.json");
+if (!existsSync(templateLockPath)) {
   fail("template/package-lock.json missing — first scaffold install would be slow/cold.");
+}
+
+// The shipped lockfile must be IN SYNC with template/package.json — every
+// declared dependency must be present in the lockfile. A scaffold copies this
+// lockfile and the README promises `npm install`/`npm ci` works keyless, so an
+// out-of-sync lockfile (e.g. a new dep added to package.json but the lockfile
+// not regenerated) would make a generated app fail to install. This catches that
+// at build time rather than at a user's first scaffold.
+const templatePkg = JSON.parse(readFileSync(join(templateDir, "package.json"), "utf8"));
+const templateLock = JSON.parse(readFileSync(templateLockPath, "utf8"));
+const lockPackages = templateLock.packages ?? {};
+const declaredDeps = {
+  ...(templatePkg.dependencies ?? {}),
+  ...(templatePkg.devDependencies ?? {}),
+};
+const missingFromLock = Object.keys(declaredDeps).filter(
+  (dep) => !(`node_modules/${dep}` in lockPackages),
+);
+if (missingFromLock.length > 0) {
+  fail(
+    `template/package-lock.json is out of sync with template/package.json — ` +
+      `missing: ${missingFromLock.join(", ")}. Regenerate the template lockfile ` +
+      `(npm install --package-lock-only in template/).`,
+  );
+}
+// The root lockfile entry must agree with package.json on the SAME deps spec, so
+// a hand-edited package.json can't drift from a stale lockfile root.
+const lockRootDeps = lockPackages[""]?.dependencies ?? {};
+for (const [dep, spec] of Object.entries(templatePkg.dependencies ?? {})) {
+  if (lockRootDeps[dep] !== spec) {
+    fail(
+      `template/package-lock.json root dependency "${dep}" is "${lockRootDeps[dep]}" ` +
+        `but package.json declares "${spec}" — regenerate the template lockfile.`,
+    );
+  }
 }
 
 // Build/dep artefacts must never be bundled (huge + stale).

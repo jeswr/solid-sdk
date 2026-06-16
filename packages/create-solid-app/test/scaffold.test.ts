@@ -22,6 +22,8 @@ describe("normalizeRepo", () => {
     expect(normalizeRepo("https://github.com/jeswr/my-app.git")).toBe("jeswr/my-app");
     expect(normalizeRepo("https://github.com/jeswr/my-app/")).toBe("jeswr/my-app");
     expect(normalizeRepo("git@github.com:jeswr/my-app.git")).toBe("jeswr/my-app");
+    // `.git` BEHIND a trailing slash must still be stripped (slash-then-git order).
+    expect(normalizeRepo("https://github.com/jeswr/my-app.git/")).toBe("jeswr/my-app");
   });
   it("rejects garbage (returns undefined so the placeholder stays)", () => {
     expect(normalizeRepo(undefined)).toBeUndefined();

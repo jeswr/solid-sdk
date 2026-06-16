@@ -161,9 +161,14 @@ export function normalizeRepo(raw?: string): string | undefined {
   let s = raw.trim();
   if (s.length === 0) return undefined;
   // Strip a github URL wrapper + a trailing .git, keeping just `owner/repo`.
+  // Order matters: strip trailing slashes FIRST, then `.git`, so a value like
+  // `https://github.com/owner/repo.git/` normalises to `owner/repo` (not
+  // `owner/repo.git`) — `.git` must be stripped after the slash, since the `$`
+  // anchor would otherwise miss it behind a trailing slash.
   s = s
     .replace(/^https?:\/\/github\.com\//i, "")
     .replace(/^git@github\.com:/i, "")
+    .replace(/\/+$/, "")
     .replace(/\.git$/i, "")
     .replace(/\/+$/, "");
   // Exactly two non-empty, GitHub-name-safe segments.
