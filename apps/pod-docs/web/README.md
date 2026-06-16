@@ -154,25 +154,35 @@ Everything else — `SessionProvider`, `LoginScreen`, the token provider, the
 | Repo | Component (`@jeswr/<pkg>/ui`) | Required prop(s) | Derive the prop from the session as… | `APP_ORIGIN` (prod) |
 |---|---|---|---|---|
 | `pod-docs`  | `DocumentBrowser` | `podRoot: string`, `webId: string` | pod root = `storages[0]` (else WebID origin); container discovered by the data layer via Type Index | `https://docs.solid-test.jeswr.org` |
-| `pod-music` | `MusicLibrary`    | `base: string` | the pod root (`storages[0]`) — the library resolves its `music/` container under it | `https://music.solid-test.jeswr.org` |
+| `pod-music` | `MusicLibrary`    | `base: string` | the **music container** `${podRoot}music/` (NOT the bare pod root) — the library derives `tracks/`/`albums/`/`playlists/` directly under `base` | `https://music.solid-test.jeswr.org` |
 | `pod-drive` | `FileBrowser`     | `rootUrl: string` | the pod root (`storages[0]`) — the file tree root to browse | `https://drive.solid-test.jeswr.org` |
-| `pod-photos`| `PhotoGallery`    | `rootUrl: string` | the pod root (`storages[0]`), or a `${podRoot}photos/` container | `https://photos.solid-test.jeswr.org` |
-| `pod-money` | `AccountsView`    | `ledgerUrl: string` | the ledger container/resource, e.g. `${podRoot}finance/` (Type-Index-discoverable) | `https://money.solid-test.jeswr.org` |
-| `pod-health`| `HealthRecords`   | `resourceUrl: string` | the health resource/container, e.g. `${podRoot}health/` | `https://health.solid-test.jeswr.org` |
-| `pod-mail`  | `Inbox`           | `mailboxUrl: string` | the mailbox container, e.g. `${podRoot}inbox/` (or the LDN inbox from the profile) | `https://mail.solid-test.jeswr.org` |
+| `pod-photos`| `PhotoGallery`    | `rootUrl: string` | the gallery root container — the pod root (`storages[0]`), or a `${podRoot}photos/` container | `https://photos.solid-test.jeswr.org` |
+| `pod-money` | `AccountsView`    | `ledgerUrl: string` | the ledger **document** URL, e.g. `${podRoot}finance/ledger.ttl` (from `MoneyStore.ledgerUrl`; Type-Index-discoverable) | `https://money.solid-test.jeswr.org` |
+| `pod-health`| `HealthRecords`   | `resourceUrl: string` | the health **record document** URL, e.g. `${podRoot}health/record.ttl` | `https://health.solid-test.jeswr.org` |
+| `pod-mail`  | `Inbox`           | `mailboxUrl: string` | the mailbox **document** URL, e.g. `${podRoot}mail/folders/inbox.ttl` (derive via the data layer's `folderDocument(podRoot, WellKnownFolders.inbox)`) | `https://mail.solid-test.jeswr.org` |
 | `pod-chat`  | `ChatRooms`       | `podRoot: string`, `webId: string` | pod root = `storages[0]`; same shape as `pod-docs` | `https://chat.solid-test.jeswr.org` |
 
 Notes / gaps for the 8:
 
-- **`pod-music`/`pod-drive`/`pod-photos`/`pod-chat`** take a pod-root-shaped URL
-  (`base`/`rootUrl`/`podRoot`) → derive exactly like `pod-docs` (`storages[0]`,
+- **`pod-drive`/`pod-photos`/`pod-chat`** take a pod-root-shaped URL
+  (`rootUrl`/`podRoot`) → derive exactly like `pod-docs` (`storages[0]`,
   origin fallback). `pod-chat` additionally needs `webId` (already in the
-  session).
-- **`pod-money`/`pod-health`/`pod-mail`** take a *specific container/resource*
-  URL, not a bare pod root → derive `${podRoot}<conventional-slug>/`. Prefer
-  **Type-Index discovery** of that container where the data layer supports it
-  (mirroring how `pod-docs` discovers `pod-docs/`), falling back to the
-  conventional path. Confirm each app's expected slug against its data layer
+  session). (`pod-photos` may instead point `rootUrl` at a `${podRoot}photos/`
+  gallery container.)
+- **`pod-music`/`pod-money`/`pod-health`/`pod-mail`** take a *specific
+  container/document* URL, NOT a bare pod root — passing `storages[0]` here is a
+  BUG. Derive `${podRoot}<conventional-slug>` for that app:
+  - `pod-music` → the **music container** `${podRoot}music/` (`base`; the library
+    derives `tracks/`/`albums/`/`playlists/` under it);
+  - `pod-money` → the **ledger document** `${podRoot}finance/ledger.ttl`
+    (`MoneyStore.ledgerUrl`);
+  - `pod-health` → the **record document** `${podRoot}health/record.ttl`;
+  - `pod-mail` → the **mailbox document** via `folderDocument(podRoot,
+    WellKnownFolders.inbox)`.
+
+  Prefer **Type-Index discovery** of that container/document where the data layer
+  supports it (mirroring how `pod-docs` discovers `pod-docs/`), falling back to
+  the conventional path. Confirm each app's expected slug against its data layer
   before shipping; treat a missing Type-Index registration as the same
   create-and-link fallback `pod-docs` uses.
 - All eight components expose the same `fetch?:` seam → mount them with **no
