@@ -54,6 +54,14 @@ export interface ShellCache {
   match(request: Request | string): Promise<Response | undefined>;
   put(request: Request | string, response: Response): Promise<void>;
   addAll(requests: string[]): Promise<void>;
+  /**
+   * Enumerate the requests cached in this bucket (the real `Cache.keys()`).
+   * Used by {@link resolveServingShellConfig} to reconstruct the precache list of
+   * a RETAINED complete bucket on a cold start, when the in-memory config that
+   * produced it has been lost. Optional only so existing mocks needn't implement
+   * it; the real Cache API always provides it.
+   */
+  keys?(): Promise<readonly Request[]>;
 }
 
 /** Minimal CacheStorage surface (open named caches + enumerate for cleanup). */
@@ -169,6 +177,125 @@ export async function cleanupOldShellCaches(
     }),
   );
   return removed;
+}
+
+/**
+ * DURABLE completeness check: is EVERY configured precache entry actually present
+ * in `config`'s versioned bucket RIGHT NOW? The Cache API — not an in-memory flag
+ * — is the source of truth, because the in-memory flag resets when the SW is
+ * terminated/restarted. An INCOMPLETE bucket (the HTML cached but a JS/CSS entry
+ * failed to precache) is the exact "half-applied update" the boot-completeness
+ * rule guards against: serving from it would boot the new HTML then 404 a missing
+ * asset offline. A bucket with no entries is trivially complete only when the
+ * config has no precache entries; an empty config is never "complete enough" to
+ * serve (it has no fallback to boot), so a missing bucket / missing entry → false.
+ */
+export async function shellBucketComplete(
+  caches: ShellCacheStorage,
+  config: ResolvedAppShellConfig,
+): Promise<boolean> {
+  if (config.precache.length === 0) return false;
+  try {
+    const cache = await caches.open(shellCacheName(config.version));
+    for (const url of config.precache) {
+      if (!(await cache.match(url))) return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Reconstruct a serving config from a RETAINED complete bucket's cached contents.
+ *
+ * On a cold start after a half-applied update, the in-memory `ResolvedAppShellConfig`
+ * that produced the previous COMPLETE bucket is gone — only its Cache API bucket
+ * survives. To keep serving offline boot from that complete bucket we rebuild a
+ * config from what it holds: every cached request URL becomes a precache entry, the
+ * fallback is derived the same way `resolveAppShellConfig` does (first `.html`/`/`),
+ * and the version is the bucket's. A bucket that can't be enumerated (no `keys()`)
+ * or holds nothing yields `undefined` — it can't serve a navigation.
+ */
+async function configFromBucket(
+  caches: ShellCacheStorage,
+  version: string,
+): Promise<ResolvedAppShellConfig | undefined> {
+  let cache: ShellCache;
+  try {
+    cache = await caches.open(shellCacheName(version));
+  } catch {
+    return undefined;
+  }
+  if (typeof cache.keys !== 'function') return undefined;
+  let requests: readonly Request[];
+  try {
+    requests = await cache.keys();
+  } catch {
+    return undefined;
+  }
+  const precache = [...new Set(requests.map((r) => r.url))];
+  if (precache.length === 0) return undefined;
+  const fallback = precache.find((u) => {
+    const path = pathOf(u);
+    return path.endsWith('.html') || path.endsWith('/');
+  });
+  return { precache, fallback, version };
+}
+
+/**
+ * The shell config the fetch handlers should actually SERVE FROM — the LAST KNOWN
+ * COMPLETE shell version (roborev Medium: never serve offline boot from a
+ * half-applied update).
+ *
+ * Routing in the worker is gated on whether ANY shell config exists, but the
+ * BUCKET a navigation/asset is served from must be a COMPLETE one, so offline boot
+ * is never stranded by an update that cached the HTML but failed a referenced
+ * JS/CSS entry. Resolution, in order:
+ *   1. If `current`'s bucket is durably COMPLETE → serve from `current` (the steady
+ *      state, and the moment a new deploy finishes precaching it switches here).
+ *   2. Otherwise the new bucket is INCOMPLETE — find the most-recent RETAINED
+ *      COMPLETE shell bucket (cleanup keeps it until the new one completes) and
+ *      serve from it, reconstructed from its cached contents. "Most recent" =
+ *      lexicographically-greatest version among the complete retained buckets; the
+ *      caller versions buckets with a build hash/incrementing tag so the newest
+ *      complete one wins (and a tie with `current` is impossible — `current` failed
+ *      step 1).
+ *   3. If nothing complete exists (first-ever install still precaching, or every
+ *      bucket incomplete) → return `current` so the handlers still degrade
+ *      gracefully (network-first navigation / network-fallback asset), exactly as
+ *      before — routing to an incomplete shell is never WORSE than no shell.
+ */
+export async function resolveServingShellConfig(
+  caches: ShellCacheStorage,
+  current: ResolvedAppShellConfig,
+): Promise<ResolvedAppShellConfig> {
+  if (await shellBucketComplete(caches, current)) return current;
+
+  // `current` is incomplete: prefer the newest RETAINED complete bucket.
+  let names: string[];
+  try {
+    names = await caches.keys();
+  } catch {
+    return current;
+  }
+  const versions = names
+    .filter((n) => n.startsWith(SHELL_CACHE_PREFIX) && n !== shellCacheName(current.version))
+    .map((n) => n.slice(SHELL_CACHE_PREFIX.length))
+    .sort()
+    .reverse();
+
+  for (const version of versions) {
+    const candidate = await configFromBucket(caches, version);
+    // configFromBucket already returns only the bucket's cached entries, so the
+    // reconstructed config is complete-by-construction — but re-check defensively
+    // (a concurrent cleanup could have raced it).
+    if (candidate && (await shellBucketComplete(caches, candidate))) return candidate;
+  }
+
+  // Nothing complete to fall back to — serve from `current` and let the handlers
+  // degrade gracefully (network-first / network-fallback) as before.
+  return current;
 }
 
 /**

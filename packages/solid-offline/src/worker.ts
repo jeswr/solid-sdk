@@ -23,7 +23,9 @@ import {
   isPrecachedAsset,
   precacheAppShell,
   resolveAppShellConfig,
+  resolveServingShellConfig,
   sameShellConfig,
+  shellBucketComplete,
   shellCacheName,
 } from './app-shell.js';
 import { type InvalidateDeps, handleNotification, resyncSweep } from './invalidation.js';
@@ -68,6 +70,14 @@ let shellConfig: ResolvedAppShellConfig | undefined =
 /** Whether the precache (addAll) has already run for `shellConfig` this lifetime. */
 let shellPrecached = false;
 /**
+ * The most recently RESOLVED serving config (the last-known-complete shell — see
+ * `resolveServingShellConfig`). Cached so the SYNCHRONOUS fetch-routing path can
+ * recognise the retained complete bucket's (old-hashed) asset URLs during a
+ * half-applied update, without an async resolution before `event.respondWith`.
+ * Populated by `servingConfig()` (the navigation that boots the app refreshes it).
+ */
+let lastServingConfig: ResolvedAppShellConfig | undefined;
+/**
  * Monotonic token for the LATEST requested shell-config adoption (roborev Medium).
  * Each `adoptShellConfig` change captures the token it bumped to; a slower task
  * whose token is no longer the latest must NOT promote/cleanup — otherwise rapid
@@ -101,27 +111,6 @@ function shellDeps(config: ResolvedAppShellConfig): ShellDeps {
 async function precacheConfig(config: ResolvedAppShellConfig): Promise<boolean> {
   const { failed } = await precacheAppShell(shellCaches(), config);
   return failed.length === 0;
-}
-
-/**
- * DURABLE completeness check (roborev Medium): is EVERY configured precache entry
- * actually present in `config`'s bucket RIGHT NOW? `shellPrecached` is an in-memory
- * flag that resets when the SW is terminated/restarted, so it is NOT a reliable
- * source of truth across a cold start — the Cache API is. This queries the bucket
- * directly and is used to (a) recover `shellPrecached` on a cold start and (b) gate
- * the bucket cleanup, so a previously-complete shell is never dropped or distrusted
- * just because the worker restarted.
- */
-async function shellBucketComplete(config: ResolvedAppShellConfig): Promise<boolean> {
-  try {
-    const cache = await shellCaches().open(shellCacheName(config.version));
-    for (const url of config.precache) {
-      if (!(await cache.match(url))) return false;
-    }
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 /** Run the install-time precache for the current shellConfig (idempotent). */
@@ -262,7 +251,7 @@ self.addEventListener('activate', (event: ExtendableEvent) => {
       // (which is unreliable after a restart). If the new bucket is incomplete,
       // deleting the previous COMPLETE bucket would strand offline boot — keep it
       // until a complete precache (a later config-message retry) cleans up.
-      if (shellConfig && (await shellBucketComplete(shellConfig))) {
+      if (shellConfig && (await shellBucketComplete(shellCaches(), shellConfig))) {
         shellPrecached = true; // recover the flag from durable state too
         await cleanupOldShellCaches(shellCaches(), shellConfig.version).catch(() => []);
       }
@@ -370,24 +359,39 @@ self.addEventListener('fetch', (event: FetchEvent) => {
   // pod-data SWR path into the public shell handler. Cross-origin requests therefore
   // never reach the shell asset handler — they stay on the pod-data path.
   //
-  // ROUTING is gated on `shellConfig` ALONE — never the transient `shellPrecached`
-  // flag (roborev Medium): that flag resets when the SW is terminated/restarted, so
-  // gating routing on it would make an offline COLD START bypass a FULLY-cached shell
-  // and fail to boot. The Cache API is the durable truth, and BOTH shell handlers
-  // degrade gracefully — `handleNavigation` falls back (canonical → fallback →
-  // network) and `handlePrecachedAsset` falls back to the network on a miss — so
-  // routing to an INCOMPLETE shell is never worse than no shell (it just fetches
-  // live / errors offline exactly as without the SW). Completeness governs only the
-  // CLEANUP of old buckets (durable-checked), never whether the shell serves.
+  // ROUTING (whether the shell layer handles a request AT ALL) is gated on
+  // `shellConfig` ALONE — never the transient `shellPrecached` flag (roborev): that
+  // flag resets when the SW is terminated/restarted, so gating routing on it would
+  // make an offline COLD START bypass a FULLY-cached shell and fail to boot. The
+  // Cache API is the durable truth.
+  //
+  // WHICH BUCKET is served, though, is the LAST KNOWN COMPLETE shell version, NOT
+  // necessarily `shellConfig` (roborev Medium). If a half-applied update left the
+  // current `shellConfig` bucket INCOMPLETE (the HTML cached but a referenced JS/CSS
+  // entry failed), serving from it would boot the new HTML then 404 its missing
+  // asset offline — even though an older COMPLETE bucket is retained. So both shell
+  // handlers resolve the serving config via `resolveServingShellConfig` (current if
+  // complete, else the newest retained complete bucket) so offline boot always
+  // serves a COMPLETE shell, switching to the new bucket the moment it finishes
+  // precaching. Both handlers also still degrade gracefully (network-first
+  // navigation / network-fallback asset) when nothing complete exists yet.
   if (shellConfig) {
     if (request.mode === 'navigate' && method === 'GET') {
       event.respondWith(respondShellNavigation(event));
       return;
     }
+    // Route a same-origin GET to the shell asset handler when its pathname matches a
+    // precached asset of EITHER the current config OR the last-known-complete serving
+    // config (roborev Medium). The second clause matters during a half-applied update:
+    // we serve the OLD complete HTML, whose referenced (old-hashed) asset URLs are NOT
+    // in the incomplete new `shellConfig` — without it those assets would route to the
+    // pod-data path and fail offline. SECURITY: the same-origin gate is unchanged — a
+    // cross-origin pod resource sharing a pathname never reaches the shell handler.
     if (
       method === 'GET' &&
       isSameOrigin(request.url) &&
-      isPrecachedAsset(request.url, shellConfig)
+      (isPrecachedAsset(request.url, shellConfig) ||
+        (lastServingConfig !== undefined && isPrecachedAsset(request.url, lastServingConfig)))
     ) {
       event.respondWith(respondShellAsset(event));
       return;
@@ -406,11 +410,31 @@ function isSameOrigin(url: string): boolean {
   }
 }
 
+/**
+ * Resolve the shell config the handlers should SERVE FROM: the current `shellConfig`
+ * if its bucket is durably complete, else the newest RETAINED COMPLETE bucket
+ * (roborev Medium — never serve offline boot from a half-applied update). Falls back
+ * to `shellConfig` itself if nothing complete exists (the handlers then degrade
+ * gracefully). Returns `undefined` only when there is no shell config at all.
+ */
+async function servingConfig(): Promise<ResolvedAppShellConfig | undefined> {
+  if (!shellConfig) return undefined;
+  try {
+    const resolved = await resolveServingShellConfig(shellCaches(), shellConfig);
+    lastServingConfig = resolved;
+    return resolved;
+  } catch {
+    // Resolution itself must never crash a fetch — fall back to the current config.
+    return shellConfig;
+  }
+}
+
 /** Serve a navigation through the shell handler (network-first, cache fallback). */
 async function respondShellNavigation(event: FetchEvent): Promise<Response> {
-  if (!shellConfig) return self.fetch(event.request);
+  const config = await servingConfig();
+  if (!config) return self.fetch(event.request);
   try {
-    const result = await handleNavigation(event.request, shellDeps(shellConfig));
+    const result = await handleNavigation(event.request, shellDeps(config));
     return result.response;
   } catch {
     // Never let the shell layer crash a navigation — fall back to the live network.
@@ -420,9 +444,10 @@ async function respondShellNavigation(event: FetchEvent): Promise<Response> {
 
 /** Serve a precached static asset cache-first. */
 async function respondShellAsset(event: FetchEvent): Promise<Response> {
-  if (!shellConfig) return self.fetch(event.request);
+  const config = await servingConfig();
+  if (!config) return self.fetch(event.request);
   try {
-    const result = await handlePrecachedAsset(event.request, shellDeps(shellConfig));
+    const result = await handlePrecachedAsset(event.request, shellDeps(config));
     return result.response;
   } catch {
     return self.fetch(event.request);

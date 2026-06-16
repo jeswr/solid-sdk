@@ -574,6 +574,14 @@ interface ShellCache {
     match(request: Request | string): Promise<Response | undefined>;
     put(request: Request | string, response: Response): Promise<void>;
     addAll(requests: string[]): Promise<void>;
+    /**
+     * Enumerate the requests cached in this bucket (the real `Cache.keys()`).
+     * Used by {@link resolveServingShellConfig} to reconstruct the precache list of
+     * a RETAINED complete bucket on a cold start, when the in-memory config that
+     * produced it has been lost. Optional only so existing mocks needn't implement
+     * it; the real Cache API always provides it.
+     */
+    keys?(): Promise<readonly Request[]>;
 }
 /** Minimal CacheStorage surface (open named caches + enumerate for cleanup). */
 interface ShellCacheStorage {
@@ -615,6 +623,42 @@ declare function precacheAppShell(caches: ShellCacheStorage, config: ResolvedApp
  * our `solid-offline-shell-` prefix — never the pod-data caches or another app's.
  */
 declare function cleanupOldShellCaches(caches: ShellCacheStorage, currentVersion: string): Promise<string[]>;
+/**
+ * DURABLE completeness check: is EVERY configured precache entry actually present
+ * in `config`'s versioned bucket RIGHT NOW? The Cache API — not an in-memory flag
+ * — is the source of truth, because the in-memory flag resets when the SW is
+ * terminated/restarted. An INCOMPLETE bucket (the HTML cached but a JS/CSS entry
+ * failed to precache) is the exact "half-applied update" the boot-completeness
+ * rule guards against: serving from it would boot the new HTML then 404 a missing
+ * asset offline. A bucket with no entries is trivially complete only when the
+ * config has no precache entries; an empty config is never "complete enough" to
+ * serve (it has no fallback to boot), so a missing bucket / missing entry → false.
+ */
+declare function shellBucketComplete(caches: ShellCacheStorage, config: ResolvedAppShellConfig): Promise<boolean>;
+/**
+ * The shell config the fetch handlers should actually SERVE FROM — the LAST KNOWN
+ * COMPLETE shell version (roborev Medium: never serve offline boot from a
+ * half-applied update).
+ *
+ * Routing in the worker is gated on whether ANY shell config exists, but the
+ * BUCKET a navigation/asset is served from must be a COMPLETE one, so offline boot
+ * is never stranded by an update that cached the HTML but failed a referenced
+ * JS/CSS entry. Resolution, in order:
+ *   1. If `current`'s bucket is durably COMPLETE → serve from `current` (the steady
+ *      state, and the moment a new deploy finishes precaching it switches here).
+ *   2. Otherwise the new bucket is INCOMPLETE — find the most-recent RETAINED
+ *      COMPLETE shell bucket (cleanup keeps it until the new one completes) and
+ *      serve from it, reconstructed from its cached contents. "Most recent" =
+ *      lexicographically-greatest version among the complete retained buckets; the
+ *      caller versions buckets with a build hash/incrementing tag so the newest
+ *      complete one wins (and a tie with `current` is impossible — `current` failed
+ *      step 1).
+ *   3. If nothing complete exists (first-ever install still precaching, or every
+ *      bucket incomplete) → return `current` so the handlers still degrade
+ *      gracefully (network-first navigation / network-fallback asset), exactly as
+ *      before — routing to an incomplete shell is never WORSE than no shell.
+ */
+declare function resolveServingShellConfig(caches: ShellCacheStorage, current: ResolvedAppShellConfig): Promise<ResolvedAppShellConfig>;
 /**
  * Is this request for one of the precached static assets (NOT a navigation)?
  *
@@ -1007,4 +1051,4 @@ declare function createOfflineClient(config?: OfflineClientConfig): OfflineClien
     readonly status: OfflineStatusSurface;
 };
 
-export { ANONYMOUS_SCOPE, type AppShellConfig, CACHE_PREFIX, type CacheMetadata, type CacheStorageLike, DB_PREFIX, DEFAULT_CACHE_NAME, DEFAULT_DB_NAME, DEFAULT_WARM_BUDGET, type InvalidateDeps, type InvalidateOutcome, type NotificationActivityType, type NotificationFrame, type NotificationsClient, type NotificationsClientConfig, type NotificationsConfig, type NotificationsDeps, type OfflineClient, type OfflineClientConfig, OfflineStatusSurface, type PageToWorkerMessage, type PurgeDeps, type PurgeResult, type ResolvedAppShellConfig, type ResolvedWarmBudget, type ShellCache, type ShellCacheStorage, type ShellDeps, type ShellResult, type ShellServeSource, type SocketFactory, type SocketLike, type SweepResult, type UpdatedEvent, type UpdatedListener, type WarmBudget, type WarmConfig, type WarmController, type WarmDeps, type WarmResult, type WarmVisit, backoffDelay, cacheNameForWebId, cleanupOldShellCaches, containerChildren, createNotificationsClient, createOfflineClient, createWarmController, dbNameForWebId, deriveSeeds, discoverSubscriptionUrl, handleNavigation, handleNotification, handlePrecachedAsset, isPrecachedAsset, isScopeChange, onIdle, parseFrame, parseWacAllow, precacheAppShell, purgeForWebId, resolveAppShellConfig, resolveBudget, resyncSweep, sameShellConfig, scopeFor, scopeHash, shellCacheName, storageDescriptionFromLink, subscribe, typeIndexTargets, userCanRead, warm };
+export { ANONYMOUS_SCOPE, type AppShellConfig, CACHE_PREFIX, type CacheMetadata, type CacheStorageLike, DB_PREFIX, DEFAULT_CACHE_NAME, DEFAULT_DB_NAME, DEFAULT_WARM_BUDGET, type InvalidateDeps, type InvalidateOutcome, type NotificationActivityType, type NotificationFrame, type NotificationsClient, type NotificationsClientConfig, type NotificationsConfig, type NotificationsDeps, type OfflineClient, type OfflineClientConfig, OfflineStatusSurface, type PageToWorkerMessage, type PurgeDeps, type PurgeResult, type ResolvedAppShellConfig, type ResolvedWarmBudget, type ShellCache, type ShellCacheStorage, type ShellDeps, type ShellResult, type ShellServeSource, type SocketFactory, type SocketLike, type SweepResult, type UpdatedEvent, type UpdatedListener, type WarmBudget, type WarmConfig, type WarmController, type WarmDeps, type WarmResult, type WarmVisit, backoffDelay, cacheNameForWebId, cleanupOldShellCaches, containerChildren, createNotificationsClient, createOfflineClient, createWarmController, dbNameForWebId, deriveSeeds, discoverSubscriptionUrl, handleNavigation, handleNotification, handlePrecachedAsset, isPrecachedAsset, isScopeChange, onIdle, parseFrame, parseWacAllow, precacheAppShell, purgeForWebId, resolveAppShellConfig, resolveBudget, resolveServingShellConfig, resyncSweep, sameShellConfig, scopeFor, scopeHash, shellBucketComplete, shellCacheName, storageDescriptionFromLink, subscribe, typeIndexTargets, userCanRead, warm };

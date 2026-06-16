@@ -30,7 +30,9 @@ import {
   isPrecachedAsset,
   precacheAppShell,
   resolveAppShellConfig,
+  resolveServingShellConfig,
   sameShellConfig,
+  shellBucketComplete,
   shellCacheName,
 } from '../src/app-shell.js';
 
@@ -69,6 +71,11 @@ class MockShellCache implements ShellCache {
       fetched.push([this.keyOf(url), res]);
     }
     for (const [k, r] of fetched) this.store.set(k, r.clone());
+  }
+
+  /** Enumerate cached requests (mirrors the real `Cache.keys()`). */
+  async keys(): Promise<readonly Request[]> {
+    return [...this.store.keys()].map((url) => new Request(url));
   }
 
   /** Test helper: seed a response directly under a URL. */
@@ -462,6 +469,184 @@ describe('handleNavigation — ONLINE revalidate', () => {
       caseDeps,
     );
     expect(variant.source).toBe('shell-network');
+  });
+});
+
+describe('shellBucketComplete (durable boot-completeness)', () => {
+  it('is true only when EVERY configured precache entry is cached', async () => {
+    const caches = new MockCacheStorage();
+    await precacheAppShell(caches, VITE_CONFIG);
+    expect(await shellBucketComplete(caches, VITE_CONFIG)).toBe(true);
+  });
+
+  it('is false when a configured entry is MISSING (a half-applied update)', async () => {
+    // Cache the HTML but make the JS 404 — the new bucket is incomplete.
+    const caches = new MockCacheStorage((url) =>
+      url.endsWith('.js') ? htmlResponse('nope', 404) : htmlResponse('ok'),
+    );
+    await precacheAppShell(caches, VITE_CONFIG);
+    expect(await shellBucketComplete(caches, VITE_CONFIG)).toBe(false);
+  });
+
+  it('is false for a missing bucket and for an empty config (nothing to boot)', async () => {
+    const caches = new MockCacheStorage();
+    expect(await shellBucketComplete(caches, VITE_CONFIG)).toBe(false);
+    const empty = resolveAppShellConfig({ precache: [], version: 'e1' });
+    expect(await shellBucketComplete(caches, empty)).toBe(false);
+  });
+});
+
+describe('resolveServingShellConfig (serve the LAST KNOWN COMPLETE shell)', () => {
+  // The two deploys: an OLD complete bucket and a NEW one that half-applies (its
+  // JS fails to precache). `version` ordering is irrelevant to correctness — the
+  // NEW (incomplete) bucket is excluded, so the OLD complete one is chosen.
+  const OLD = resolveAppShellConfig({
+    precache: ['/index.html', '/assets/old-abc.js'],
+    version: 'shell-001',
+  });
+  const NEW = resolveAppShellConfig({
+    precache: ['/index.html', '/assets/new-xyz.js'],
+    version: 'shell-002',
+  });
+
+  it('returns the CURRENT config when its bucket is complete (steady state)', async () => {
+    const caches = new MockCacheStorage();
+    await precacheAppShell(caches, NEW);
+    const serving = await resolveServingShellConfig(caches, NEW);
+    expect(serving.version).toBe('shell-002');
+    expect(serving.precache).toEqual(NEW.precache);
+  });
+
+  it('falls back to the RETAINED complete bucket when the current is INCOMPLETE', async () => {
+    // OLD fully precaches; NEW precaches its HTML but 404s its JS (half-applied).
+    const caches = new MockCacheStorage((url) =>
+      url.includes('new-xyz') ? htmlResponse('nope', 404) : htmlResponse('ok'),
+    );
+    await precacheAppShell(caches, OLD); // complete
+    await precacheAppShell(caches, NEW); // incomplete (JS failed)
+    expect(await shellBucketComplete(caches, NEW)).toBe(false);
+
+    const serving = await resolveServingShellConfig(caches, NEW);
+    // Serves from the OLD complete bucket — reconstructed from its cached contents.
+    // `Cache.keys()` yields absolute request URLs, so the reconstructed precache is
+    // absolute; compare by PATHNAME (the matching key the handlers actually use).
+    expect(serving.version).toBe('shell-001');
+    const pathsOf = (urls: string[]) => new Set(urls.map((u) => new URL(u, 'https://x/').pathname));
+    expect(pathsOf(serving.precache)).toEqual(pathsOf(OLD.precache));
+    expect(await shellBucketComplete(caches, serving)).toBe(true);
+  });
+
+  it('returns the CURRENT config when nothing complete exists (first install, still precaching)', async () => {
+    // NEW is incomplete and there is NO retained complete bucket to fall back to.
+    const caches = new MockCacheStorage((url) =>
+      url.includes('new-xyz') ? htmlResponse('nope', 404) : htmlResponse('ok'),
+    );
+    await precacheAppShell(caches, NEW);
+    const serving = await resolveServingShellConfig(caches, NEW);
+    // Degrade gracefully: serve from current (network-first) — never worse than no shell.
+    expect(serving.version).toBe('shell-002');
+  });
+
+  it('picks the NEWEST complete retained bucket among several', async () => {
+    const v1 = resolveAppShellConfig({ precache: ['/index.html', '/a1.js'], version: 'shell-001' });
+    const v2 = resolveAppShellConfig({ precache: ['/index.html', '/a2.js'], version: 'shell-002' });
+    const incoming = resolveAppShellConfig({
+      precache: ['/index.html', '/bad.js'],
+      version: 'shell-003',
+    });
+    const caches = new MockCacheStorage((url) =>
+      url.includes('bad') ? htmlResponse('nope', 404) : htmlResponse('ok'),
+    );
+    await precacheAppShell(caches, v1); // complete
+    await precacheAppShell(caches, v2); // complete (newer)
+    await precacheAppShell(caches, incoming); // incomplete
+    const serving = await resolveServingShellConfig(caches, incoming);
+    expect(serving.version).toBe('shell-002'); // the newest COMPLETE retained bucket
+  });
+});
+
+describe('half-applied update — offline boot is never stranded (roborev Medium)', () => {
+  // The exact scenario the finding calls out: a deploy caches the new HTML but a
+  // referenced JS entry fails. Offline navigation must keep serving the PREVIOUS
+  // complete shell (not the broken new one), and switch to the new bucket only once
+  // it fully caches.
+  const OLD = resolveAppShellConfig({
+    precache: ['/index.html', '/assets/old-abc.js'],
+    version: 'shell-001',
+  });
+  const NEW = resolveAppShellConfig({
+    precache: ['/index.html', '/assets/new-xyz.js'],
+    version: 'shell-002',
+  });
+
+  it('offline navigation serves the OLD complete shell while the NEW bucket is incomplete', async () => {
+    // OLD complete; NEW caches HTML but its JS 404s.
+    const caches = new MockCacheStorage((url) => {
+      if (url.includes('new-xyz')) return htmlResponse('nope', 404);
+      if (url.includes('/index.html')) {
+        // Distinguish the two HTML versions so we can assert WHICH boots.
+        const body = url.includes('shell-002')
+          ? '<title>NEW</title>'
+          : '<title>OLD-COMPLETE</title>';
+        return htmlResponse(body);
+      }
+      return jsResponse('// asset');
+    });
+    // Precache each version's bucket. The mock's fetchFor keys on the bare URL, so
+    // make the HTML bodies differ by bucket via separate caches: seed explicitly.
+    await precacheAppShell(caches, OLD);
+    await precacheAppShell(caches, NEW); // JS fails → incomplete
+
+    // Seed distinguishable HTML into each bucket (the mock can't see the version).
+    (caches.caches.get(shellCacheName('shell-001')) as MockShellCache).seed(
+      '/index.html',
+      htmlResponse('<title>OLD-COMPLETE</title>'),
+    );
+    (caches.caches.get(shellCacheName('shell-002')) as MockShellCache).seed(
+      '/index.html',
+      htmlResponse('<title>NEW-BROKEN</title>'),
+    );
+
+    // The worker would resolve the serving config before serving a navigation.
+    const serving = await resolveServingShellConfig(caches, NEW);
+    expect(serving.version).toBe('shell-001'); // the OLD complete bucket
+
+    // Offline navigation through the serving (OLD) config boots the COMPLETE shell.
+    // Navigate to the exact configured doc (/index.html) so the canonical-route read
+    // hits it directly (`shell-cache-offline`); `/` would resolve via the fallback,
+    // also OLD-COMPLETE, but we assert the direct-route path here.
+    const offline = vi.fn(() =>
+      Promise.reject(new TypeError('offline')),
+    ) as unknown as typeof fetch;
+    const deps = shellDeps(caches, false, offline, serving);
+    const result = await handleNavigation(navRequest('https://app.example/index.html'), deps);
+    expect(result.source).toBe('shell-cache-offline');
+    const body = await result.response.text();
+    expect(body).toContain('OLD-COMPLETE');
+    expect(body).not.toContain('NEW-BROKEN');
+  });
+
+  it('switches to the NEW bucket once it completes (the failed asset caches on a later pass)', async () => {
+    // Start: OLD complete, NEW incomplete (JS 404). Then the JS becomes available
+    // and NEW finishes precaching → serving config switches to NEW.
+    let jsAvailable = false;
+    const caches = new MockCacheStorage((url) => {
+      if (url.includes('new-xyz')) {
+        return jsAvailable ? jsResponse('// new asset') : htmlResponse('nope', 404);
+      }
+      return htmlResponse('ok');
+    });
+    await precacheAppShell(caches, OLD); // complete
+    await precacheAppShell(caches, NEW); // incomplete — JS 404
+    expect((await resolveServingShellConfig(caches, NEW)).version).toBe('shell-001');
+
+    // The asset becomes available; a later precache pass completes the NEW bucket.
+    jsAvailable = true;
+    await precacheAppShell(caches, NEW);
+    expect(await shellBucketComplete(caches, NEW)).toBe(true);
+
+    // Routing now serves from the NEW bucket.
+    expect((await resolveServingShellConfig(caches, NEW)).version).toBe('shell-002');
   });
 });
 

@@ -52,6 +52,55 @@ async function cleanupOldShellCaches(caches, currentVersion) {
   );
   return removed;
 }
+async function shellBucketComplete(caches, config) {
+  if (config.precache.length === 0) return false;
+  try {
+    const cache = await caches.open(shellCacheName(config.version));
+    for (const url of config.precache) {
+      if (!await cache.match(url)) return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+async function configFromBucket(caches, version) {
+  let cache;
+  try {
+    cache = await caches.open(shellCacheName(version));
+  } catch {
+    return void 0;
+  }
+  if (typeof cache.keys !== "function") return void 0;
+  let requests;
+  try {
+    requests = await cache.keys();
+  } catch {
+    return void 0;
+  }
+  const precache = [...new Set(requests.map((r) => r.url))];
+  if (precache.length === 0) return void 0;
+  const fallback = precache.find((u) => {
+    const path = pathOf(u);
+    return path.endsWith(".html") || path.endsWith("/");
+  });
+  return { precache, fallback, version };
+}
+async function resolveServingShellConfig(caches, current) {
+  if (await shellBucketComplete(caches, current)) return current;
+  let names;
+  try {
+    names = await caches.keys();
+  } catch {
+    return current;
+  }
+  const versions = names.filter((n) => n.startsWith(SHELL_CACHE_PREFIX) && n !== shellCacheName(current.version)).map((n) => n.slice(SHELL_CACHE_PREFIX.length)).sort().reverse();
+  for (const version of versions) {
+    const candidate = await configFromBucket(caches, version);
+    if (candidate && await shellBucketComplete(caches, candidate)) return candidate;
+  }
+  return current;
+}
 function isPrecachedAsset(requestUrl, config) {
   const reqPath = pathOf(requestUrl);
   if (!reqPath) return false;
@@ -837,6 +886,7 @@ var webIdConfigured = false;
 var channelName = DEFAULT_CHANNEL_NAME;
 var shellConfig = self.__SOLID_OFFLINE_SHELL__ && self.__SOLID_OFFLINE_SHELL__.precache.length > 0 ? resolveAppShellConfig(self.__SOLID_OFFLINE_SHELL__) : void 0;
 var shellPrecached = false;
+var lastServingConfig;
 var shellAdoptToken = 0;
 function shellCaches() {
   return self.caches;
@@ -852,17 +902,6 @@ function shellDeps(config) {
 async function precacheConfig(config) {
   const { failed } = await precacheAppShell(shellCaches(), config);
   return failed.length === 0;
-}
-async function shellBucketComplete(config) {
-  try {
-    const cache = await shellCaches().open(shellCacheName(config.version));
-    for (const url of config.precache) {
-      if (!await cache.match(url)) return false;
-    }
-    return true;
-  } catch {
-    return false;
-  }
 }
 async function runPrecache() {
   if (!shellConfig || shellPrecached) return;
@@ -939,7 +978,7 @@ self.addEventListener("install", (event) => {
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     (async () => {
-      if (shellConfig && await shellBucketComplete(shellConfig)) {
+      if (shellConfig && await shellBucketComplete(shellCaches(), shellConfig)) {
         shellPrecached = true;
         await cleanupOldShellCaches(shellCaches(), shellConfig.version).catch(() => []);
       }
@@ -1009,7 +1048,7 @@ self.addEventListener("fetch", (event) => {
       event.respondWith(respondShellNavigation(event));
       return;
     }
-    if (method === "GET" && isSameOrigin(request.url) && isPrecachedAsset(request.url, shellConfig)) {
+    if (method === "GET" && isSameOrigin(request.url) && (isPrecachedAsset(request.url, shellConfig) || lastServingConfig !== void 0 && isPrecachedAsset(request.url, lastServingConfig))) {
       event.respondWith(respondShellAsset(event));
       return;
     }
@@ -1023,19 +1062,31 @@ function isSameOrigin(url) {
     return false;
   }
 }
-async function respondShellNavigation(event) {
-  if (!shellConfig) return self.fetch(event.request);
+async function servingConfig() {
+  if (!shellConfig) return void 0;
   try {
-    const result = await handleNavigation(event.request, shellDeps(shellConfig));
+    const resolved = await resolveServingShellConfig(shellCaches(), shellConfig);
+    lastServingConfig = resolved;
+    return resolved;
+  } catch {
+    return shellConfig;
+  }
+}
+async function respondShellNavigation(event) {
+  const config = await servingConfig();
+  if (!config) return self.fetch(event.request);
+  try {
+    const result = await handleNavigation(event.request, shellDeps(config));
     return result.response;
   } catch {
     return self.fetch(event.request);
   }
 }
 async function respondShellAsset(event) {
-  if (!shellConfig) return self.fetch(event.request);
+  const config = await servingConfig();
+  if (!config) return self.fetch(event.request);
   try {
-    const result = await handlePrecachedAsset(event.request, shellDeps(shellConfig));
+    const result = await handlePrecachedAsset(event.request, shellDeps(config));
     return result.response;
   } catch {
     return self.fetch(event.request);

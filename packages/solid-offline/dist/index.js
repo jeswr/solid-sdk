@@ -1058,6 +1058,55 @@ async function cleanupOldShellCaches(caches2, currentVersion) {
   );
   return removed;
 }
+async function shellBucketComplete(caches2, config) {
+  if (config.precache.length === 0) return false;
+  try {
+    const cache = await caches2.open(shellCacheName(config.version));
+    for (const url of config.precache) {
+      if (!await cache.match(url)) return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+async function configFromBucket(caches2, version) {
+  let cache;
+  try {
+    cache = await caches2.open(shellCacheName(version));
+  } catch {
+    return void 0;
+  }
+  if (typeof cache.keys !== "function") return void 0;
+  let requests;
+  try {
+    requests = await cache.keys();
+  } catch {
+    return void 0;
+  }
+  const precache = [...new Set(requests.map((r) => r.url))];
+  if (precache.length === 0) return void 0;
+  const fallback = precache.find((u) => {
+    const path = pathOf(u);
+    return path.endsWith(".html") || path.endsWith("/");
+  });
+  return { precache, fallback, version };
+}
+async function resolveServingShellConfig(caches2, current) {
+  if (await shellBucketComplete(caches2, current)) return current;
+  let names;
+  try {
+    names = await caches2.keys();
+  } catch {
+    return current;
+  }
+  const versions = names.filter((n) => n.startsWith(SHELL_CACHE_PREFIX) && n !== shellCacheName(current.version)).map((n) => n.slice(SHELL_CACHE_PREFIX.length)).sort().reverse();
+  for (const version of versions) {
+    const candidate = await configFromBucket(caches2, version);
+    if (candidate && await shellBucketComplete(caches2, candidate)) return candidate;
+  }
+  return current;
+}
 function isPrecachedAsset(requestUrl, config) {
   const reqPath = pathOf(requestUrl);
   if (!reqPath) return false;
@@ -1658,6 +1707,6 @@ function createOfflineClient(config = {}) {
   };
 }
 
-export { ANONYMOUS_SCOPE, CACHE_PREFIX, DB_PREFIX, DEFAULT_CACHE_NAME, DEFAULT_DB_NAME, DEFAULT_WARM_BUDGET, backoffDelay, cacheNameForWebId, cleanupOldShellCaches, containerChildren, createNotificationsClient, createOfflineClient, createStatusSurface, createWarmController, dbNameForWebId, deriveSeeds, discoverSubscriptionUrl, handleNavigation, handleNotification, handlePrecachedAsset, isPrecachedAsset, isScopeChange, onIdle, parseFrame, parseWacAllow, precacheAppShell, purgeForWebId, resolveAppShellConfig, resolveBudget, resyncSweep, sameShellConfig, scopeFor, scopeHash, shellCacheName, storageDescriptionFromLink, subscribe, typeIndexTargets, userCanRead, warm };
+export { ANONYMOUS_SCOPE, CACHE_PREFIX, DB_PREFIX, DEFAULT_CACHE_NAME, DEFAULT_DB_NAME, DEFAULT_WARM_BUDGET, backoffDelay, cacheNameForWebId, cleanupOldShellCaches, containerChildren, createNotificationsClient, createOfflineClient, createStatusSurface, createWarmController, dbNameForWebId, deriveSeeds, discoverSubscriptionUrl, handleNavigation, handleNotification, handlePrecachedAsset, isPrecachedAsset, isScopeChange, onIdle, parseFrame, parseWacAllow, precacheAppShell, purgeForWebId, resolveAppShellConfig, resolveBudget, resolveServingShellConfig, resyncSweep, sameShellConfig, scopeFor, scopeHash, shellBucketComplete, shellCacheName, storageDescriptionFromLink, subscribe, typeIndexTargets, userCanRead, warm };
 //# sourceMappingURL=index.js.map
 //# sourceMappingURL=index.js.map
