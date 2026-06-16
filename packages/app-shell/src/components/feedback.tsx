@@ -206,20 +206,64 @@ export function FeedbackDialog({
       setPhase("idle");
       setResult(null);
       setErrorMessage(null);
-      // Focus the description shortly after mount.
-      const t = setTimeout(() => textareaRef.current?.focus(), 0);
-      return () => clearTimeout(t);
     }
   }, [open]);
 
-  // Close on Escape.
+  // Modal focus management: while open, (1) move focus into the dialog, (2) trap
+  // Tab/Shift+Tab within it so keyboard users cannot reach the background page
+  // (which `aria-modal="true"` promises), and (3) restore focus to the previously
+  // focused element (the trigger) on close. Escape closes the dialog.
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onOpenChange(false);
+    const previouslyFocused = (
+      typeof document !== "undefined" ? document.activeElement : null
+    ) as HTMLElement | null;
+
+    // Focus the description after the dialog has mounted.
+    const focusTimer = setTimeout(() => textareaRef.current?.focus(), 0);
+
+    const focusableSelector =
+      'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onOpenChange(false);
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const dialog = dialogRef.current;
+      if (!dialog) return;
+      const focusable = Array.from(dialog.querySelectorAll<HTMLElement>(focusableSelector)).filter(
+        (el) => el.offsetParent !== null || el === document.activeElement,
+      );
+      if (focusable.length === 0) {
+        // Nothing focusable in the panel — keep focus on the dialog itself.
+        e.preventDefault();
+        dialog.focus();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement as HTMLElement | null;
+      // Wrap focus, and pull focus back in if it has escaped the dialog.
+      if (e.shiftKey) {
+        if (active === first || !dialog.contains(active)) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else if (active === last || !dialog.contains(active)) {
+        e.preventDefault();
+        first.focus();
+      }
     };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
+
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      clearTimeout(focusTimer);
+      document.removeEventListener("keydown", onKeyDown);
+      // Restore focus to whatever was focused before the dialog opened.
+      previouslyFocused?.focus?.();
+    };
   }, [open, onOpenChange]);
 
   const buildPayload = useCallback((): FeedbackPayload => {
@@ -300,7 +344,8 @@ export function FeedbackDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="relative w-full max-w-md rounded-lg border border-border bg-popover p-5 text-popover-foreground shadow-md"
+        tabIndex={-1}
+        className="relative w-full max-w-md rounded-lg border border-border bg-popover p-5 text-popover-foreground shadow-md outline-none"
       >
         <h2 id={titleId} className="text-base font-semibold">
           {phase === "success" ? "Thanks for the feedback" : `Feedback on ${appName}`}

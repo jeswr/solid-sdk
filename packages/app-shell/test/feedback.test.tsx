@@ -207,3 +207,23 @@ describe("FeedbackButton — GitHub prefill path (no hook)", () => {
     expect(within(dialog).getByRole("button", { name: /open issue on github/i })).toBeDisabled();
   });
 });
+
+describe("FeedbackDialog — modal focus management (a11y)", () => {
+  it("moves focus into the dialog on open and restores it to the trigger on close", async () => {
+    render(<FeedbackButton repo="jeswr/pod-docs" appName="Pod Docs" />);
+    const trigger = screen.getByRole("button", { name: "Feedback" });
+    trigger.focus();
+    expect(trigger).toHaveFocus();
+
+    await user.click(trigger);
+    const dialog = await screen.findByRole("dialog");
+    // The description textarea takes focus on open (focus is inside the dialog).
+    const textarea = within(dialog).getByLabelText("Tell us more");
+    await vi.waitFor(() => expect(textarea).toHaveFocus());
+
+    // Escape closes and restores focus to the trigger.
+    await user.keyboard("{Escape}");
+    await vi.waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(trigger).toHaveFocus();
+  });
+});

@@ -114,21 +114,58 @@ export function FeedbackDialog({ repo, appName, appVersion, webId, submit, open,
             setPhase("idle");
             setResult(null);
             setErrorMessage(null);
-            // Focus the description shortly after mount.
-            const t = setTimeout(() => textareaRef.current?.focus(), 0);
-            return () => clearTimeout(t);
         }
     }, [open]);
-    // Close on Escape.
+    // Modal focus management: while open, (1) move focus into the dialog, (2) trap
+    // Tab/Shift+Tab within it so keyboard users cannot reach the background page
+    // (which `aria-modal="true"` promises), and (3) restore focus to the previously
+    // focused element (the trigger) on close. Escape closes the dialog.
     useEffect(() => {
         if (!open)
             return;
-        const onKey = (e) => {
-            if (e.key === "Escape")
+        const previouslyFocused = (typeof document !== "undefined" ? document.activeElement : null);
+        // Focus the description after the dialog has mounted.
+        const focusTimer = setTimeout(() => textareaRef.current?.focus(), 0);
+        const focusableSelector = 'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+        const onKeyDown = (e) => {
+            if (e.key === "Escape") {
                 onOpenChange(false);
+                return;
+            }
+            if (e.key !== "Tab")
+                return;
+            const dialog = dialogRef.current;
+            if (!dialog)
+                return;
+            const focusable = Array.from(dialog.querySelectorAll(focusableSelector)).filter((el) => el.offsetParent !== null || el === document.activeElement);
+            if (focusable.length === 0) {
+                // Nothing focusable in the panel — keep focus on the dialog itself.
+                e.preventDefault();
+                dialog.focus();
+                return;
+            }
+            const first = focusable[0];
+            const last = focusable[focusable.length - 1];
+            const active = document.activeElement;
+            // Wrap focus, and pull focus back in if it has escaped the dialog.
+            if (e.shiftKey) {
+                if (active === first || !dialog.contains(active)) {
+                    e.preventDefault();
+                    last.focus();
+                }
+            }
+            else if (active === last || !dialog.contains(active)) {
+                e.preventDefault();
+                first.focus();
+            }
         };
-        document.addEventListener("keydown", onKey);
-        return () => document.removeEventListener("keydown", onKey);
+        document.addEventListener("keydown", onKeyDown);
+        return () => {
+            clearTimeout(focusTimer);
+            document.removeEventListener("keydown", onKeyDown);
+            // Restore focus to whatever was focused before the dialog opened.
+            previouslyFocused?.focus?.();
+        };
     }, [open, onOpenChange]);
     const buildPayload = useCallback(() => {
         const diagnostics = {
@@ -186,7 +223,7 @@ export function FeedbackDialog({ repo, appName, appVersion, webId, submit, open,
     if (!open)
         return null;
     const versionLabel = appVersion ? ` ${appVersion}` : "";
-    return (_jsxs("div", { className: "fixed inset-0 z-50 flex items-center justify-center p-4", children: [_jsx("button", { type: "button", "aria-label": "Close feedback dialog", tabIndex: -1, className: "absolute inset-0 cursor-default bg-black/50", onClick: () => onOpenChange(false) }), _jsxs("div", { ref: dialogRef, role: "dialog", "aria-modal": "true", "aria-labelledby": titleId, className: "relative w-full max-w-md rounded-lg border border-border bg-popover p-5 text-popover-foreground shadow-md", children: [_jsx("h2", { id: titleId, className: "text-base font-semibold", children: phase === "success" ? "Thanks for the feedback" : `Feedback on ${appName}` }), phase === "success" && result ? (_jsxs("div", { className: "mt-3 flex flex-col gap-3 text-sm", children: [_jsxs("p", { children: ["Thanks \u2014 tracked as", " ", _jsxs("a", { href: result.url, target: "_blank", rel: "noopener noreferrer", className: "font-medium underline", children: ["#", result.number] }), "."] }), _jsx("div", { className: "flex justify-end", children: _jsx(Button, { variant: "outline", onClick: () => onOpenChange(false), children: "Close" }) })] })) : (_jsxs("form", { className: "mt-3 flex flex-col gap-4", onSubmit: handleSubmit, children: [_jsxs("fieldset", { className: "flex flex-col gap-2 border-0 p-0", children: [_jsx("legend", { className: "mb-2 text-sm font-medium", children: "What is this about?" }), _jsx("div", { className: "flex gap-2", children: CATEGORIES.map(({ value, label, emoji, icon: Icon }) => {
+    return (_jsxs("div", { className: "fixed inset-0 z-50 flex items-center justify-center p-4", children: [_jsx("button", { type: "button", "aria-label": "Close feedback dialog", tabIndex: -1, className: "absolute inset-0 cursor-default bg-black/50", onClick: () => onOpenChange(false) }), _jsxs("div", { ref: dialogRef, role: "dialog", "aria-modal": "true", "aria-labelledby": titleId, tabIndex: -1, className: "relative w-full max-w-md rounded-lg border border-border bg-popover p-5 text-popover-foreground shadow-md outline-none", children: [_jsx("h2", { id: titleId, className: "text-base font-semibold", children: phase === "success" ? "Thanks for the feedback" : `Feedback on ${appName}` }), phase === "success" && result ? (_jsxs("div", { className: "mt-3 flex flex-col gap-3 text-sm", children: [_jsxs("p", { children: ["Thanks \u2014 tracked as", " ", _jsxs("a", { href: result.url, target: "_blank", rel: "noopener noreferrer", className: "font-medium underline", children: ["#", result.number] }), "."] }), _jsx("div", { className: "flex justify-end", children: _jsx(Button, { variant: "outline", onClick: () => onOpenChange(false), children: "Close" }) })] })) : (_jsxs("form", { className: "mt-3 flex flex-col gap-4", onSubmit: handleSubmit, children: [_jsxs("fieldset", { className: "flex flex-col gap-2 border-0 p-0", children: [_jsx("legend", { className: "mb-2 text-sm font-medium", children: "What is this about?" }), _jsx("div", { className: "flex gap-2", children: CATEGORIES.map(({ value, label, emoji, icon: Icon }) => {
                                             const selected = category === value;
                                             const id = `${descId}-cat-${value}`;
                                             return (_jsxs("label", { htmlFor: id, className: [
