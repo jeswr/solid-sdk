@@ -69,17 +69,35 @@ export interface TokenProvider {
  * first (the precise channel that survives when the manager does NOT re-wrap, e.g.
  * a direct `upgrade()` in a unit test) and falls back to URL+generation as the
  * single-use channel that carries across the manager's `new Request(input)`
- * re-wrap. Because the login is single-flight AND the data layer is inactive
- * mid-login, the probe is the only fetch to the storage-root URL in the login
- * window — so the FIRST same-URL upgrade in this login's generation is the probe,
- * closing finding (a). `upgrade()` matches on the ORIGINAL request it receives —
- * before the clone it makes to add Authorization — and records the upgrade by
- * GENERATION iff it actually attaches a token.
+ * re-wrap.
+ *
+ * ROUND-4B (roborev finding 2): the URL fallback alone was forgeable — keyed on
+ * the bare storage-root URL, the FIRST same-URL request in the generation (even a
+ * non-probe data fetch) could consume the proof. That relied on an external,
+ * unverifiable "the data layer is idle mid-login" assumption. The fix makes the
+ * probe URL carry a unique, UNGUESSABLE fragment ({@link withProbeFragment} →
+ * `#probe-<uuid>`): an UNFORGEABLE in-process marker that (a) survives the
+ * manager's `new Request(input)` re-wrap (fragments are preserved on `.url`), and
+ * (b) is NEVER sent on the wire (RFC 3986 §3.5 — the browser strips it, so no
+ * custom header / CORS preflight, and the pod still GETs the storage root). The
+ * URL fallback now compares the FULL url-with-fragment, so an unrelated same-base
+ * data fetch (no fragment, or a different/guessed one) can NEVER match. The
+ * single-use latch is KEPT as defence-in-depth, but the unguessable fragment is
+ * what makes the fallback genuinely collision-resistant. `upgrade()` matches on
+ * the ORIGINAL request it receives — before the clone it makes to add
+ * Authorization — and records the upgrade by GENERATION iff it attaches a token.
  */
 interface LoginProbe {
   /** The provider generation in which this login's probe was registered. */
   generation: number;
-  /** The probe's request URL (survives the manager's `new Request(input)` re-wrap). */
+  /**
+   * The probe's FULL request URL — INCLUDING its unique unguessable
+   * `#probe-<uuid>` fragment ({@link withProbeFragment}). The fragment survives
+   * the manager's `new Request(input)` re-wrap (it lives on `.url`) yet is never
+   * sent on the wire, so the URL fallback matches only the exact probe URL the
+   * login flow built — never a plain same-base-URL data fetch. This is what makes
+   * the URL fallback unforgeable (roborev finding 2).
+   */
   url: string;
   /**
    * The exact Request object registered, held weakly so it cannot pin the Request
@@ -92,6 +110,33 @@ interface LoginProbe {
    * same generation cannot re-acquire the proof.
    */
   consumed: boolean;
+}
+
+/**
+ * Tag a probe URL with a unique, unguessable, OFF-THE-WIRE correlation marker — a
+ * URL FRAGMENT (`#probe-<uuid>`). This is what makes the URL fallback in
+ * {@link WebIdDPoPTokenProvider.upgrade matching} UNFORGEABLE (roborev finding 2):
+ *
+ *  - A fragment is preserved by `new Request(url + "#probe-<uuid>")` (it lands in
+ *    `.url`) AND by the manager's re-wrap `new Request(thatRequest)` — so the
+ *    URL-fallback match survives the exact path that loses object identity.
+ *  - A plain `new Request(storageUrl)` from the data layer has NO fragment, so it
+ *    can NEVER collide with the probe's fragment-bearing URL. The proof now
+ *    requires the EXACT unguessable probe URL, which only this login flow knows —
+ *    an unrelated same-base-URL fetch can no longer consume the single-use proof.
+ *  - Fragments are CLIENT-SIDE only (RFC 3986 §3.5): the browser strips the
+ *    fragment before sending the HTTP request, so this adds NO custom header, NO
+ *    CORS preflight, and does NOT change which resource the pod actually serves
+ *    (the pod still sees a GET to the storage root). The CORS-safety property of
+ *    the round-2/3 work is fully preserved.
+ *
+ * Any pre-existing fragment on the input is REPLACED (a storage URL normally has
+ * none, but this is defensive). Exported so it is unit-testable in isolation.
+ */
+export function withProbeFragment(url: string): string {
+  const u = new URL(url);
+  u.hash = `probe-${crypto.randomUUID()}`;
+  return u.toString();
 }
 
 /** Ask the user for their WebID. Resolves to the WebID string, or rejects/cancels. */
@@ -379,8 +424,12 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
 
   /**
    * Register THIS login's probe Request so {@link upgrade} can recognise it WITHOUT
-   * any header on the wire — by object identity first, then URL+generation as the
-   * single-use channel that survives the manager's `new Request(input)` re-wrap.
+   * any header on the wire — by object identity first, then by the probe's FULL
+   * url-with-fragment (generation-scoped, single-use) as the channel that survives
+   * the manager's `new Request(input)` re-wrap. The matching key is
+   * `request.url`, which INCLUDES the unique `#probe-<uuid>` fragment the login
+   * flow attached via {@link withProbeFragment} — so the URL fallback matches only
+   * the exact unguessable probe URL, never a same-base-URL data fetch (finding 2).
    * Captures the current generation; a later `reset()` (and the generation bump it
    * makes) supersedes the record. Call on the EXACT Request object then passed to
    * `fetch`. Login is single-flight, so there is never a competing registration.
@@ -454,21 +503,29 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
   /**
    * Whether `request` is the active login probe for THIS provider generation —
    * matched by OBJECT IDENTITY first (precise; survives when the manager does not
-   * re-wrap), then by URL within the SAME generation as a single-use fallback (the
-   * channel that carries across the manager's `new Request(input)` re-wrap, where
-   * object identity is lost). Single-use: the first match consumes the probe so a
-   * later same-URL request in the same generation cannot re-acquire the proof.
-   * Since the login is single-flight and the data layer is idle mid-login, the
-   * probe is the only fetch to its URL in the login window — so the first same-URL
-   * upgrade in this generation IS the probe.
+   * re-wrap), then by the probe's FULL url-with-fragment within the SAME
+   * generation as a single-use fallback (the channel that carries across the
+   * manager's `new Request(input)` re-wrap, where object identity is lost).
+   *
+   * The URL compared is `request.url`, which for the probe INCLUDES the unique
+   * unguessable `#probe-<uuid>` fragment ({@link withProbeFragment}). Because that
+   * fragment is unforgeable and off-the-wire, a same-base-URL data fetch (no
+   * fragment, or a different/guessed one) produces a DIFFERENT `request.url` and
+   * can NEVER match — closing roborev finding 2 (the bare-URL fallback was
+   * forgeable by the first same-URL request in the generation). Single-use is KEPT
+   * as defence-in-depth: the first match consumes the probe so a later request
+   * with the same (already-leaked) URL in the same generation cannot re-acquire
+   * the proof.
    */
   #matchesLoginProbe(request: Request): boolean {
     const probe = this.#loginProbe;
     // Only this generation's probe can match — a probe registered before a reset()
     // (which bumped the generation) is stale and must never satisfy a later upgrade.
     if (!probe || probe.consumed || probe.generation !== this.#generation) return false;
+    // URL match compares the FULL url INCLUDING the unguessable probe fragment, so
+    // an unrelated same-base-URL fetch (no/other fragment) cannot satisfy it.
     const matches = probe.object.deref() === request || probe.url === request.url;
-    if (matches) probe.consumed = true; // single-use within the generation.
+    if (matches) probe.consumed = true; // single-use within the generation (defence-in-depth).
     return matches;
   }
 
@@ -476,10 +533,12 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
     // Match THIS request against the active login probe on the ORIGINAL request we
     // were handed — BEFORE any clone we make below to add Authorization (a clone is
     // a different object and would not match by identity). No header is on the wire;
-    // this is a pure in-process check keyed on object identity (then URL), so a
-    // cross-origin probe stays a "simple" request and triggers no CORS preflight.
-    // The match is single-use (it consumes the probe latch) so a later same-URL
-    // request in this generation cannot re-acquire the proof — but we only RECORD
+    // this is a pure in-process check keyed on object identity (then the FULL
+    // url-with-fragment), so a cross-origin probe stays a "simple" request and
+    // triggers no CORS preflight. The URL fallback compares the probe's unguessable
+    // `#probe-<uuid>` fragment, so an unrelated same-base-URL fetch cannot forge the
+    // proof (finding 2). The match is single-use (defence-in-depth) so a later
+    // same-URL request in this generation cannot re-acquire it — but we only RECORD
     // the upgrade after the generation fence passes and a token is actually
     // attached (below), never for a superseded/failed attempt.
     const isLoginProbe = this.#matchesLoginProbe(request);
@@ -538,8 +597,9 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
     // flag — is what proves a token was attached during THAT attempt.
     this.#tokensAttached += 1;
     // PER-PROBE PROOF: if THIS request is THIS login's probe (matched at the top of
-    // upgrade() on the original request, by object identity or URL+generation),
-    // record that a token was attached to the probe IN THIS GENERATION. The login
+    // upgrade() on the original request, by object identity or the full
+    // url-with-fragment within this generation), record that a token was attached
+    // to the probe IN THIS GENERATION. The login
     // flow asserts wasLoginProbeUpgraded(its snapshot generation) — proving THIS
     // probe was upgraded, not merely that some request was. Single-flight login
     // guarantees no other login can occupy this generation, and the generation

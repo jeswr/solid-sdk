@@ -87,9 +87,8 @@ vi.mock("oauth4webapi", () => {
 });
 
 // Import AFTER the mocks are registered.
-const { WebIdDPoPTokenProvider, webIdsEqual, ReactiveAuthResetError } = await import(
-  "./webid-token-provider"
-);
+const { WebIdDPoPTokenProvider, webIdsEqual, ReactiveAuthResetError, withProbeFragment } =
+  await import("./webid-token-provider");
 
 const WEBID_A = "https://alice.example/profile/card#me";
 const WEBID_B = "https://bob.example/profile/card#me";
@@ -131,22 +130,32 @@ type ProbeProvider = InstanceType<typeof WebIdDPoPTokenProvider>;
  * (`beginLoginProbe`) — NOT a network header (the round-3 CORS fix is preserved),
  * and NOT a free-floating module registry (the round-4 fix moves the record ONTO
  * the provider so reset() clears it). The proof travels in process memory only, so
- * the returned Request carries NO app-custom header. Returns the request plus the
- * provider's generation snapshot the login flow would assert against.
+ * the returned Request carries NO app-custom header.
+ *
+ * ROUND-4B (finding 2): the probe URL carries a unique unguessable `#probe-<uuid>`
+ * fragment via `withProbeFragment` — exactly as the login flow builds it — so the
+ * provider's URL fallback recognises THIS exact probe and not a plain same-base-URL
+ * data fetch. Returns the request, the provider's generation snapshot, and the FULL
+ * fragment-bearing url the login flow would compare against.
  */
-function beginProbe(provider: ProbeProvider, url: string): { req: Request; generation: number } {
+function beginProbe(
+  provider: ProbeProvider,
+  baseUrl: string,
+): { req: Request; generation: number; url: string } {
   const generation = provider.loginGeneration();
+  const url = withProbeFragment(baseUrl);
   const req = new Request(url);
   provider.beginLoginProbe(req);
-  return { req, generation };
+  return { req, generation, url };
 }
 
 /**
  * Re-wrap a Request exactly as `ReactiveFetchManager.#fetch` does
  * (`new Request(input, init)`) before it calls `provider.upgrade(request)`. This
- * produces a DIFFERENT object than the one the login flow registered, so it
- * proves the side channel survives the manager's re-wrap (object identity is lost;
- * the single-use URL+generation channel carries the proof across).
+ * produces a DIFFERENT object than the one the login flow registered, so it proves
+ * the side channel survives the manager's re-wrap (object identity is lost; the
+ * single-use fragment-URL channel — the `#probe-<uuid>` is PRESERVED on `.url` by
+ * `new Request(input)` — carries the proof across).
  */
 function asManagerWraps(req: Request): Request {
   return new Request(req);
@@ -428,27 +437,25 @@ describe("FIX 3 (round 4) — login proof is a GENERATION-SCOPED per-login probe
     expect(provider.wasLoginProbeUpgraded(generation)).toBe(false);
   });
 
-  it("the same-URL match is FIRST-WINS + single-use within the generation (finding a, URL collision-bounded)", async () => {
+  it("the fragment-URL match is FIRST-WINS + single-use within the generation (finding a, single-use defence-in-depth)", async () => {
     // The round-3 weakness: the proof was keyed only on URL via a free-floating
     // module Map, so a stray same-URL upgrade could mis-attribute or double-fire.
     // Round-4 binds the match to a SINGLE per-login record on the provider, single-
-    // use within the generation. Single-flight login + an idle data layer mean the
-    // probe is the ONLY same-URL fetch in the login window, so the first same-URL
-    // upgrade IS the probe. This test pins the single-use property: the FIRST
-    // same-URL upgrade sets the proof; a SECOND does NOT re-fire or extend it.
+    // use within the generation; round-4b makes the matched URL carry an unguessable
+    // fragment so it cannot be forged at all. This test pins the single-use property
+    // (kept as defence-in-depth): the FIRST upgrade to the EXACT fragment-URL sets
+    // the proof; a SECOND to the same fragment-URL does NOT re-fire or extend it.
     const provider = makeProvider();
-    const generation = provider.loginGeneration();
-    const probe = new Request("https://alice.example/storage/");
-    provider.beginLoginProbe(probe);
+    const { url, generation } = beginProbe(provider, "https://alice.example/storage/");
 
-    // First same-url upgrade (a different object, modelling the manager's re-wrap)
-    // consumes the single-use latch and sets the proof for this generation.
-    await provider.upgrade(new Request("https://alice.example/storage/"));
+    // First upgrade to the EXACT fragment-URL (a different object, modelling the
+    // manager's re-wrap) consumes the single-use latch and sets the proof.
+    await provider.upgrade(new Request(url));
     expect(provider.wasLoginProbeUpgraded(generation)).toBe(true);
 
-    // A LATER same-url upgrade must NOT find the probe again (single-use). The proof
-    // stays scoped to this one generation; nothing leaks into an adjacent one.
-    await provider.upgrade(new Request("https://alice.example/storage/"));
+    // A LATER upgrade to the same fragment-URL must NOT find the probe again
+    // (single-use). The proof stays scoped to this one generation.
+    await provider.upgrade(new Request(url));
     expect(provider.wasLoginProbeUpgraded(generation)).toBe(true);
     expect(provider.wasLoginProbeUpgraded(generation + 1)).toBe(false);
   });
@@ -509,19 +516,26 @@ describe("FIX (round 4) — probe proof is an in-process side channel, NOT a net
     expect(provider.wasLoginProbeUpgraded(generation)).toBe(true);
   });
 
-  it("survives the manager re-wrap: a new Request(input) copy still resolves the probe (URL+generation channel)", async () => {
+  it("survives the manager re-wrap: a new Request(input) copy PRESERVES the probe fragment so the URL fallback still matches", async () => {
     // ReactiveFetchManager does `new Request(input, init)` before calling upgrade(),
     // so the object the provider receives is NOT the one we registered (identity is
-    // lost; a symbol/expando does not survive the copy). The URL+generation channel
-    // must carry the proof across this re-wrap — otherwise login detection silently
-    // always reads "not upgraded".
+    // lost; a symbol/expando does not survive the copy). The fragment-URL channel
+    // must carry the proof across this re-wrap — `new Request(probeReqWithFragment)`
+    // PRESERVES the `#probe-<uuid>` fragment on `.url` — otherwise login detection
+    // silently always reads "not upgraded".
     const provider = makeProvider();
-    const { req: registered, generation } = beginProbe(provider, "https://alice.example/storage/");
+    const {
+      req: registered,
+      generation,
+      url,
+    } = beginProbe(provider, "https://alice.example/storage/");
     const wrapped = asManagerWraps(registered);
     expect(wrapped).not.toBe(registered); // a different object, as the manager makes
+    expect(wrapped.url).toBe(url); // ...but the fragment survived the re-wrap.
+    expect(wrapped.url).toContain("#probe-");
     const upgraded = await provider.upgrade(wrapped);
     expect(upgraded.headers.get("Authorization")).toBe("DPoP tok-A");
-    // Proven via the URL fallback, since object identity was lost across the wrap.
+    // Proven via the fragment-URL fallback, since object identity was lost across the wrap.
     expect(provider.wasLoginProbeUpgraded(generation)).toBe(true);
   });
 
@@ -556,6 +570,83 @@ describe("FIX (round 4) — probe proof is an in-process side channel, NOT a net
     // A later upgrade of the same URL must not pick up the dropped probe.
     await provider.upgrade(new Request("https://alice.example/storage/"));
     expect(provider.wasLoginProbeUpgraded(generation)).toBe(false);
+  });
+});
+
+describe("FIX (round 4b) — the URL fallback is UNFORGEABLE via an unguessable probe fragment (finding 2)", () => {
+  beforeEach(() => {
+    authState.webId = WEBID_A;
+    authState.accessToken = "tok-A";
+  });
+
+  it("withProbeFragment appends a unique off-the-wire #probe-<uuid> fragment", () => {
+    const a = withProbeFragment("https://alice.example/storage/");
+    const b = withProbeFragment("https://alice.example/storage/");
+    // Same base, but each call produces a DISTINCT unguessable fragment.
+    expect(a).not.toBe(b);
+    expect(new URL(a).hash).toMatch(/^#probe-[0-9a-f-]{36}$/);
+    expect(new URL(b).hash).toMatch(/^#probe-[0-9a-f-]{36}$/);
+    // The path/host/scheme (what the pod actually serves) is untouched.
+    expect(new URL(a).origin).toBe("https://alice.example");
+    expect(new URL(a).pathname).toBe("/storage/");
+  });
+
+  it("REPLACES any pre-existing fragment (defensive — a storage URL normally has none)", () => {
+    const out = withProbeFragment("https://alice.example/storage/#stale");
+    expect(new URL(out).hash).toMatch(/^#probe-[0-9a-f-]{36}$/);
+    expect(new URL(out).hash).not.toBe("#stale");
+  });
+
+  it("a non-login upgrade to the SAME BASE URL with NO fragment does NOT satisfy the probe proof (CORE finding-2 regression)", async () => {
+    // This is the exact attack the fragment closes: the round-4 bare-URL fallback
+    // let the FIRST same-URL request in the generation (even a non-probe data fetch)
+    // consume the proof. Now the probe URL carries an unguessable fragment, so a
+    // plain `new Request(storageBase)` (NO fragment) produces a DIFFERENT `.url` and
+    // can never match — even though it bumps the provider-wide attach count.
+    const provider = makeProvider();
+    const { generation } = beginProbe(provider, "https://alice.example/storage/");
+
+    const before = provider.tokensAttachedCount();
+    // A non-login data fetch to the SAME storage root, but WITHOUT the probe fragment.
+    await provider.upgrade(new Request("https://alice.example/storage/"));
+    const after = provider.tokensAttachedCount();
+    expect(after).toBeGreaterThan(before); // the provider-wide counter moved...
+
+    // ...yet the per-probe proof is NOT satisfied: the bare-URL request did not carry
+    // the unguessable fragment, so it could not consume the proof. THIS is finding 2.
+    expect(provider.wasLoginProbeUpgraded(generation)).toBe(false);
+  });
+
+  it("a non-login upgrade to the same base URL with a DIFFERENT/guessed fragment does NOT satisfy the proof", async () => {
+    const provider = makeProvider();
+    const { generation } = beginProbe(provider, "https://alice.example/storage/");
+
+    // An attacker who knows the base URL but NOT the fragment guesses one.
+    await provider.upgrade(new Request("https://alice.example/storage/#probe-guessed"));
+    expect(provider.wasLoginProbeUpgraded(generation)).toBe(false);
+
+    // The empty-fragment form is also no match.
+    await provider.upgrade(new Request("https://alice.example/storage/#"));
+    expect(provider.wasLoginProbeUpgraded(generation)).toBe(false);
+  });
+
+  it("only the EXACT fragment-URL the login flow built satisfies the proof (across the manager re-wrap)", async () => {
+    const provider = makeProvider();
+    const { req, generation, url } = beginProbe(provider, "https://alice.example/storage/");
+    // The manager re-wraps the EXACT probe Request, preserving the fragment.
+    const upgraded = await provider.upgrade(asManagerWraps(req));
+    expect(upgraded.url).toBe(url); // exact fragment-URL carried across the wrap.
+    expect(provider.wasLoginProbeUpgraded(generation)).toBe(true);
+  });
+
+  it("the probe fragment is stripped on the wire — the upgraded request still carries NO app-custom header", async () => {
+    // The fragment lives in the URL, not a header (RFC 3986 §3.5 — stripped before
+    // the HTTP request), so the CORS-safety of round-2/3 is preserved.
+    const provider = makeProvider();
+    const { req } = beginProbe(provider, "https://alice.example/storage/");
+    expect([...req.headers.keys()]).toEqual([]); // no header on the probe.
+    const upgraded = await provider.upgrade(req);
+    expect([...upgraded.headers.keys()].sort()).toEqual(["authorization", "dpop"]);
   });
 });
 
