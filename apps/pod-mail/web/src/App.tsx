@@ -13,6 +13,7 @@
 // discovery reads the profile dataset (fetched here once via the auth-patched
 // global fetch) and the data layer's typed Type-Index reader — see
 // mailbox-discovery.ts.
+import { AccountMenu, ThemeToggle } from "@jeswr/app-shell";
 import { fetchRdf } from "@jeswr/fetch-rdf";
 import { Inbox } from "@jeswr/pod-mail/ui";
 import { useEffect, useState } from "react";
@@ -79,14 +80,23 @@ export function App() {
 
   return (
     <div className="app-shell">
+      {/* The header now uses the shared @jeswr/app-shell chrome: a light/dark/system
+          <ThemeToggle/> and a real top-right <AccountMenu/> (avatar + display name,
+          dropdown showing the WebID + Sign out) — replacing the old raw-WebID span +
+          bare logout button. The session's WebID / profile name / avatar / logout
+          wire straight into the menu's props (it is fully decoupled — everything is
+          a prop). `app-header-actions` right-aligns the toggle + menu. */}
       <header className="app-header">
         <span className="app-brand">Pod Mail</span>
-        <span className="app-webid" title={webId}>
-          {webId}
-        </span>
-        <button type="button" className="app-logout" onClick={logout}>
-          Log out
-        </button>
+        <div className="app-header-actions">
+          <ThemeToggle />
+          <AccountMenu
+            webId={webId}
+            displayName={session.displayName}
+            avatarUrl={session.avatarUrl}
+            onSignOut={logout}
+          />
+        </div>
       </header>
       {session.podRootIsFallback ? (
         <p className="app-note" role="note">

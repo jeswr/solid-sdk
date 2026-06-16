@@ -6,6 +6,7 @@
 // login, and emits a fully static `dist/` (index.html + clientid.jsonld +
 // callback.html + hashed assets) servable by any file server (Caddy file_server).
 import { fileURLToPath } from "node:url";
+import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
@@ -25,7 +26,9 @@ const hostModule = (pkg: string) =>
   fileURLToPath(new URL(`./node_modules/${pkg}`, import.meta.url));
 
 export default defineConfig({
-  plugins: [react()],
+  // tailwindcss() compiles the `@import "tailwindcss"` + the app-shell `@theme`
+  // mapping in src/styles.css; react() compiles JSX (host + bundled library).
+  plugins: [tailwindcss(), react()],
   resolve: {
     // Order matters: the more specific "/ui" subpath alias must precede the
     // bare-package alias so it is matched first. The trailing-slash forms pin the
@@ -45,11 +48,32 @@ export default defineConfig({
       { find: /^react-dom$/, replacement: hostModule("react-dom") },
       { find: /^react-dom\//, replacement: `${hostModule("react-dom")}/` },
     ],
-    // Guarantee a single React instance across the host + the bundled library.
-    dedupe: ["react", "react-dom"],
+    // Guarantee a single React instance across the host + the bundled library +
+    // the @jeswr/app-shell package. app-shell is a SYMLINKED file: dep, so Vite
+    // resolves its deps against the package's own realpath node_modules by
+    // default — which would pull a SECOND copy of react/react-dom (invalid-hook-
+    // call) and of Radix/lucide. Deduping these forces ONE copy from the host's
+    // node_modules (where they are installed as direct deps), regardless of the
+    // symlink. react/react-dom are also alias-pinned above for the bundled library.
+    dedupe: [
+      "react",
+      "react-dom",
+      "@radix-ui/react-avatar",
+      "@radix-ui/react-dropdown-menu",
+      "lucide-react",
+    ],
   },
-  // Let Vite read the library source one directory up from the host root.
-  server: { fs: { allow: [fileURLToPath(new URL("..", import.meta.url))] } },
+  // Let Vite read the library source one directory up from the host root, AND
+  // the @jeswr/app-shell package (a symlinked file: dep whose realpath lives
+  // outside this repo tree — the dev server must be allowed to serve it).
+  server: {
+    fs: {
+      allow: [
+        fileURLToPath(new URL("..", import.meta.url)),
+        fileURLToPath(new URL("./node_modules/@jeswr/app-shell", import.meta.url)),
+      ],
+    },
+  },
   // `base: "./"` makes the built asset URLs relative, so the static bundle works
   // when served from a domain root (the per-subdomain deploy) without rewriting.
   base: "./",
