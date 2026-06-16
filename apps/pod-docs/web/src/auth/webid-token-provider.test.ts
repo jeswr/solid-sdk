@@ -921,6 +921,22 @@ describe("AUTOLOGIN — two-phase full-page redirect login (beginRedirectLogin /
     expect(flow.dpopPublicJwk.d).toBeUndefined(); // public JWK has no private scalar.
   });
 
+  it("beginRedirectLogin's authorization URL sets prompt=none (silent-with-fallback) and redirect_uri = the app root", async () => {
+    // REGRESSION (media-kraken#54 autologin): the redirect/autologin path MUST send
+    // prompt=none so the OP returns the code silently for a live SSO session, and an
+    // ABSENT session yields ?error=login_required/interaction_required — the only
+    // way SessionProvider's OIDC-error abort path is reachable. Without prompt=none
+    // autologin would show an interactive IdP page and that abort path is dead code.
+    const provider = makeProvider();
+    const { authorizationUrl } = await provider.beginRedirectLogin(RETURN_URI);
+
+    const url = new URL(authorizationUrl);
+    expect(url.searchParams.get("prompt")).toBe("none");
+    // The redirect_uri stays the app root (RETURN_URI) — the page that re-runs
+    // SessionProvider and can read ?code&state (NOT the popup callback.html).
+    expect(url.searchParams.get("redirect_uri")).toBe(RETURN_URI);
+  });
+
   it("generates an EXTRACTABLE DPoP key for the redirect path (so it can be exported)", async () => {
     const provider = makeProvider();
     await provider.beginRedirectLogin(RETURN_URI);
