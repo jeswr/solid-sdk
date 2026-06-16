@@ -1033,4 +1033,84 @@ describe("AUTOLOGIN — two-phase full-page redirect login (beginRedirectLogin /
     expect(provider.tokensAttachedCount()).toBe(0);
     expect(hasPendingRedirectLogin()).toBe(false);
   });
+
+  it("FINDING A — after completeRedirectLogin, a subsequent upgrade() REUSES the seeded #issuer (never re-prompts getWebId)", async () => {
+    // After the full-page redirect, the page has no pending WebID — getWebId() must
+    // NEVER be consulted again for an upgrade on the now-authenticated page. The fix
+    // seeds #issuer with the completed issuer, so upgrade() resolves it from there and
+    // reuses the established session. Build a provider whose getWebId THROWS to PROVE
+    // it is never called (a regression — the missing #issuer seed — would call it and
+    // surface this exact error instead of upgrading).
+    let getWebIdCalls = 0;
+    const provider = new WebIdDPoPTokenProvider(
+      "https://app.example/callback.html",
+      async () => REDIRECT,
+      async () => {
+        getWebIdCalls += 1;
+        throw new Error("No WebID set for login");
+      },
+      { clientId: "https://app.example/clientid.jsonld" },
+    );
+
+    // beginRedirectLogin DOES need a WebID, so seed it for that one call, then make
+    // every later getWebId() (an upgrade re-resolution) throw — proving the upgrade
+    // below resolves the issuer from the seeded #issuer, not by re-prompting.
+    const begin = new WebIdDPoPTokenProvider(
+      "https://app.example/callback.html",
+      async () => REDIRECT,
+      async () => authState.webId,
+      { clientId: "https://app.example/clientid.jsonld" },
+    );
+    await begin.beginRedirectLogin(RETURN_URI);
+
+    // Complete on the throwing-getWebId provider (the persisted record carries the
+    // WebID, so completion needs no getWebId call).
+    const callbackUrl = `${RETURN_URI}?code=auth-code&state=state`;
+    await provider.completeRedirectLogin(callbackUrl);
+    expect(provider.authenticatedWebId()).toBe(WEBID_A);
+    expect(getWebIdCalls).toBe(0);
+
+    // The subsequent upgrade resolves the issuer from the seeded #issuer (NOT via
+    // getWebId, which would throw) and reuses the established session.
+    const upgraded = await provider.upgrade(new Request("https://alice.example/storage/"));
+    expect(upgraded.headers.get("Authorization")).toBe("DPoP tok-A");
+    // getWebId was STILL never called — #issuer was seeded, so no re-resolution.
+    expect(getWebIdCalls).toBe(0);
+  });
+
+  it("FINDING B — completeRedirectLogin where the id_token WebID != the persisted flow.webId THROWS, writes NO state, clears the record", async () => {
+    // Persist a flow for WEBID_A (the requested identity).
+    authState.webId = WEBID_A;
+    authState.accessToken = "tok-A";
+    const provider = makeProvider();
+    await provider.beginRedirectLogin(RETURN_URI);
+    expect(hasPendingRedirectLogin()).toBe(true);
+
+    // The OP, however, authenticates a DIFFERENT account (WEBID_B) — e.g. a live IdP
+    // session for another user satisfied the deep-link. The id_token claims now carry
+    // WEBID_B (the mocked getValidatedIdTokenClaims reads authState.webId).
+    authState.webId = WEBID_B;
+    authState.accessToken = "tok-B";
+
+    const callbackUrl = `${RETURN_URI}?code=auth-code&state=state`;
+    await expect(provider.completeRedirectLogin(callbackUrl)).rejects.toThrow(
+      /authenticated a different WebID .*For your security you were not logged in/s,
+    );
+
+    // FAIL-CLOSED: no provider state was written — no authenticated WebID, no token
+    // attached, and the persisted record was cleared (the finally runs on rejection).
+    expect(provider.authenticatedWebId()).toBeUndefined();
+    expect(provider.tokensAttachedCount()).toBe(0);
+    expect(hasPendingRedirectLogin()).toBe(false);
+    expect(store.get(REDIRECT_FLOW_KEY)).toBeUndefined();
+
+    // #issuer was NOT seeded by the rejected completion: a follow-up upgrade must
+    // RE-RESOLVE via getWebId() (returning WEBID_B now) rather than reusing a seeded
+    // session — proving the mismatch left no session in #sessions for the issuer.
+    const upgraded = await provider.upgrade(new Request("https://bob.example/storage/"));
+    // A fresh authenticate ran (getWebId → WEBID_B) and attached its token; the
+    // mismatched completion seeded nothing the upgrade could reuse.
+    expect(upgraded.headers.get("Authorization")).toBe("DPoP tok-B");
+    expect(provider.authenticatedWebId()).toBe(WEBID_B);
+  });
 });

@@ -1145,6 +1145,24 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
       if (generation !== this.#generation) throw new ReactiveAuthResetError();
 
       const authenticatedWebId = webIdFromClaims(oauth.getValidatedIdTokenClaims(tokenResult));
+      // SECURITY (finding B — cross-identity guard, fail-closed): the OP may have an
+      // active session for a DIFFERENT account that satisfies this deep-link, so the
+      // id_token's WebID is NOT necessarily the one the user asked to log in as. PROVE
+      // the OP authenticated AS the persisted requested WebID (`flow.webId`) BEFORE
+      // writing ANY provider state — exactly the invariant the popup path enforces in
+      // doLogin, but enforced HERE so the provider is authoritative (not reliant on the
+      // SessionProvider's defence-in-depth check). `webIdsEqual` returns false if either
+      // side is missing/unparseable, so an absent webId (token OR persisted record)
+      // fails closed. The `finally` clears the persisted record, so this throw leaves
+      // the provider reset-clean (no session, no #issuer, no authenticatedWebId, no
+      // token-attach bump).
+      if (!webIdsEqual(authenticatedWebId, flow.webId)) {
+        throw new Error(
+          "Login did not complete — the identity provider authenticated a different " +
+            `WebID (${authenticatedWebId ?? "unknown"}) than the one requested ` +
+            `(${flow.webId}). For your security you were not logged in.`,
+        );
+      }
       const session: IssuerSession = {
         authorizationServer,
         clientRegistration,
@@ -1156,6 +1174,14 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
       // and publish the authenticated identity + count the attach (all AFTER the
       // re-fence so a superseded completion publishes nothing).
       this.#sessions.set(issuer.href, Promise.resolve(session));
+      // FINDING A: seed #issuer with the resolved issuer of THIS completion, so a later
+      // upgrade() (a data fetch on the now-authenticated page) REUSES the seeded session
+      // instead of falling into #resolveIssuer → getWebId() (which has no pending WebID
+      // after the full-page redirect and would throw). Mirrors how upgrade()/#getSession
+      // rely on #issuer being set for subsequent upgrades. Written here, alongside the
+      // other state writes AFTER the authoritative generation re-fence, so a superseded
+      // completion seeds nothing.
+      this.#issuer = Promise.resolve(issuer);
       this.#authenticatedWebId = authenticatedWebId;
       this.#tokensAttached += 1;
     } finally {
