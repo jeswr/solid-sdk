@@ -21,7 +21,7 @@ export default mergeConfig(
       environment: "jsdom",
       globals: true,
       setupFiles: ["./test/setup.ts"],
-      include: ["src/**/*.test.{ts,tsx}"],
+      include: ["src/**/*.test.{ts,tsx}", "scripts/**/*.test.mjs"],
       // INLINE the silent-restore package so it is processed by Vitest (not loaded
       // as an opaque external CJS/ESM module). The provider's restore now delegates
       // the DPoP refresh-token GRANT to @jeswr/solid-session-restore's `restoreSession`,

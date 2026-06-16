@@ -469,12 +469,33 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
    */
   readonly #sessionStore?: SessionStore;
   /**
+   * Serialisation tail for durable-store MUTATIONS (put/delete), so a logout's
+   * `delete` and a subsequent re-login's `put` can NEVER reorder (the roborev
+   * MEDIUM: a slow logout delete racing a fast re-login's persist would erase the
+   * freshly-stored credential). Every mutation chains onto this promise via
+   * {@link #enqueueStoreOp}, so they run strictly FIFO: a `put` issued after a
+   * `delete` is guaranteed to run AFTER that delete has settled.
+   *
+   * CRITICAL — this field MUST SURVIVE {@link reset}: a logout calls `reset()` and
+   * THEN runs `forgetPersisted` (the delete); the next login's `reset()` + `persist`
+   * (the put) must still be ordered after that delete. If `reset()` cleared this
+   * tail, the put could jump ahead of the in-flight delete and be wiped. So this is
+   * deliberately NOT touched in `reset()` (it carries only an ordering promise, never
+   * any per-identity secret — the credentials live in the store, keyed by issuer).
+   */
+  #storeOps: Promise<void> = Promise.resolve();
+  /**
    * Memoised issuer resolution: the user is asked for their WebID ONCE per
    * provider instance, not on every 401 — and concurrent 401s share the same
    * in-flight prompt (single-flight). Cleared on failure so a cancelled or
    * failed prompt can be retried.
+   *
+   * Resolves to BOTH the issuer AND the validated requested `webId` (roborev HIGH):
+   * the popup persist gate binds the durable credential to the WebID THIS flow
+   * resolved from, never a value re-read from the mutable `#getWebId()` holder after
+   * auth. The restore/redirect pins write `Promise.resolve({ issuer, webId })` here.
    */
-  #issuer?: Promise<URL>;
+  #issuer?: Promise<{ issuer: URL; webId: string }>;
   /** Single-flight session per issuer: parallel 401s share one login flow. */
   readonly #sessions = new Map<string, Promise<IssuerSession>>();
   /**
@@ -583,15 +604,24 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
    * published provider. Ask the app for a WebID, validate it, dereference its
    * public profile (out-of-loop fetch), read every `solid:oidcIssuer`, then let
    * the app choose when several are advertised.
+   *
+   * Returns BOTH the resolved issuer AND the validated requested `webId`. The
+   * popup persist gate (FIX 3) MUST bind the durable credential to the WebID the
+   * user asked to log in as — and that is THIS exact validated value, captured at
+   * resolution time. Re-reading `#getWebId()` AFTER authentication (roborev HIGH)
+   * is wrong: the callback reads a MUTABLE module-level holder, so a racing login
+   * could have overwritten it, validating the credential against a DIFFERENT WebID
+   * than the one this flow resolved its issuer from. Carrying the value through is
+   * the only way the gate is sound.
    */
-  async #resolveIssuer(signal: AbortSignal): Promise<URL> {
+  async #resolveIssuer(signal: AbortSignal): Promise<{ issuer: URL; webId: string }> {
     const webId = validateWebId(await this.#getWebId());
     signal.throwIfAborted();
     const { dataset } = await fetchRdf(webId, { fetch: this.#profileFetch });
     const issuers = resolveIssuers(webId, dataset);
     const choose = this.#chooseIssuer ?? defaultChooseIssuer(webId);
     const chosen = await choose(issuers);
-    return new URL(chosen);
+    return { issuer: new URL(chosen), webId };
   }
 
   async matches(): Promise<boolean> {
@@ -788,7 +818,9 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
       // catch below clears ONLY if the generation is unchanged AND `#issuer` is
       // still this same pending promise; a superseded/aborted resolution clears
       // nothing.
-      const resolution: Promise<URL> = this.#resolveIssuer(controller.signal).catch((e) => {
+      const resolution: Promise<{ issuer: URL; webId: string }> = this.#resolveIssuer(
+        controller.signal,
+      ).catch((e) => {
         if (this.#generation === generation && this.#issuer === resolution) {
           this.#issuer = undefined; // allow retry after cancel/failure, current gen only
         }
@@ -796,8 +828,10 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
       });
       this.#issuer = resolution;
     }
-    const issuer = await this.#issuer;
-    const session = await this.#getSession(issuer, generation, controller.signal);
+    // The validated requested WebID travels WITH the resolved issuer (roborev HIGH) —
+    // the popup persist gate binds the credential to THIS value, not a post-auth re-read.
+    const { issuer, webId: requestedWebId } = await this.#issuer;
+    const session = await this.#getSession(issuer, requestedWebId, generation, controller.signal);
     // FENCE (pre-await, fail fast): if a reset() (logout / new-login) advanced the
     // generation while this upgrade was in flight (issuer resolution / login), the
     // result belongs to a SUPERSEDED identity. Mutate NO provider state and reject.
@@ -872,7 +906,12 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
   }
 
   /** Reuse the (possibly in-flight) session for the issuer, else run the code flow once. */
-  async #getSession(issuer: URL, generation: number, signal: AbortSignal): Promise<IssuerSession> {
+  async #getSession(
+    issuer: URL,
+    requestedWebId: string,
+    generation: number,
+    signal: AbortSignal,
+  ): Promise<IssuerSession> {
     // A reset() between issuer resolution and here means this attempt is already
     // superseded — run the login NOT cached, so a stale attempt can never seed the
     // current generation's #sessions map. The upgrade() fence then discards it.
@@ -890,7 +929,19 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
         // session belongs to a superseded identity, so it must not write a durable
         // credential. #persist is best-effort (its own errors are swallowed), so a
         // storage failure degrades to in-memory-only, never a failed login.
-        if (generation === this.#generation) await this.#persist(issuer, session);
+        if (generation === this.#generation) {
+          // FIX 3 — FAIL-CLOSED WebID gate: #persist persists ONLY when the OP
+          // authenticated AS the WebID the user REQUESTED. That requested WebID is the
+          // `requestedWebId` captured at issuer resolution and threaded here (roborev
+          // HIGH) — NOT a post-auth re-read of the mutable `#getWebId()` holder, which a
+          // racing login could have overwritten. The popup path used to persist the OP's
+          // response unconditionally; a wrong-identity OP response (a live session for a
+          // DIFFERENT account satisfying the login) would then leak that account's
+          // refresh token into the durable store. `webIdsEqual` fails closed inside
+          // #persist on any mismatch. The captured `generation` lets #persist's fence
+          // drop a write a reset() superseded (the #storeOps queue survives reset).
+          await this.#persist(issuer, session, requestedWebId, generation);
+        }
         return session;
       })
       .catch((e) => {
@@ -915,6 +966,60 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
   // popup/iframe. No-op without a {@link #sessionStore}.
 
   /**
+   * Run a durable session-store MUTATION serialised behind every prior one (the
+   * {@link #storeOps} tail), so a logout's `delete` and a subsequent login's `put`
+   * never reorder (roborev MEDIUM — a slow delete must not erase a fast re-login's
+   * persist). The op's own failure is swallowed (best-effort — a durable-store error
+   * must never fail login/logout) AND never breaks the chain: the tail is advanced
+   * to a resolved promise (`.then(op, op).catch(() => {})`) so a later op still runs
+   * after this one regardless of outcome. Awaits the op so the caller (e.g.
+   * {@link #persist}) sees it complete.
+   */
+  async #enqueueStoreOp(op: () => Promise<void>): Promise<void> {
+    // Chain onto the tail. `.then(op, op)` runs `op` whether the prior op resolved
+    // OR rejected (so one failure cannot stall the queue); the trailing `.catch`
+    // keeps the new tail resolved so the NEXT enqueue still chains strictly after.
+    const run = this.#storeOps.then(op, op).catch(() => {});
+    this.#storeOps = run;
+    return run;
+  }
+
+  /**
+   * Wrap the session store in an adapter whose MUTATIONS (`put` / `delete`) are
+   * routed through {@link #enqueueStoreOp} and generation-fenced — used to hand
+   * {@link restoreSession} a store it cannot use to bypass the serialization queue
+   * (roborev HIGH). {@link restoreSession} itself re-persists a ROTATED refresh
+   * credential and DELETES a dead one; without this wrapper those writes would race
+   * a logout's queued `delete`, so a restore in flight could re-persist a rotated
+   * token AFTER sign-out and silently revive the account on the next load.
+   *
+   * `get` is left direct (a pure read — nothing to serialize). `put`/`delete` are
+   * enqueued AND fenced on the `generation` captured when the restore began: if a
+   * reset() (logout / new login) advances the generation while the restore is in
+   * flight, the queued write is SKIPPED, so a superseded restore writes nothing.
+   */
+  #serializedStore(generation: number): SessionStore {
+    const store = this.#sessionStore;
+    if (store === undefined) {
+      // Unreachable in practice (callers guard on a store), but keeps the type total.
+      throw new Error("no session store");
+    }
+    return {
+      get: (issuer) => store.get(issuer),
+      put: (session) =>
+        this.#enqueueStoreOp(async () => {
+          if (generation !== this.#generation) return; // superseded restore: skip.
+          await store.put(session);
+        }),
+      delete: (issuer) =>
+        this.#enqueueStoreOp(async () => {
+          if (generation !== this.#generation) return; // superseded restore: skip.
+          await store.delete(issuer);
+        }),
+    };
+  }
+
+  /**
    * Persist (or update) the durable session for this issuer: the ROTATED refresh
    * token + the DPoP key. Persists ONLY when a refresh token exists AND a WebID is
    * known — an issuer-first login with no `webid` claim cannot be restored by
@@ -922,35 +1027,97 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
    * is nothing useful to store. The ACCESS TOKEN is NEVER written — only the
    * long-lived, key-bound credential. The refresh token is NEVER logged. No-op
    * without a store; all storage errors are swallowed (best-effort durability).
+   *
+   * FAIL-CLOSED WebID GATE (FIX 3 — the pod-drive HIGH): persist ONLY when the OP
+   * authenticated AS the WebID the user actually REQUESTED (`requestedWebId`). The
+   * OP may return a DIFFERENT account's session (a live IdP session for another
+   * user satisfying the flow), so the id_token's WebID is NOT necessarily the one
+   * requested; persisting a non-matching credential would LEAK the wrong account's
+   * refresh token into the durable store (which `reset()` does not clear). A
+   * mismatch persists NOTHING (so there is nothing to clean up). `webIdsEqual` fails
+   * closed on a missing/unparseable WebID on either side, so an empty/throwing
+   * requested WebID also persists nothing. This mirrors {@link completeRedirectLogin}
+   * (which proves the same equality BEFORE writing state) and pod-drive's
+   * `#persistSession`.
+   *
+   * The persisted `clientId` is the `client_id` actually USED (FIX 2): the static
+   * Client Identifier Document URL when {@link #clientId} is set, else the dynamic
+   * registration's server-assigned id ({@link IssuerSession.clientRegistration}'s
+   * `client_id`). RFC 6749 §6 binds the refresh token to that client, so a
+   * dynamic-registration restore's refresh grant MUST run as the same client.
+   *
+   * The `store.put` is routed through {@link #enqueueStoreOp} (FIX 4) so it is
+   * strictly ordered after any in-flight logout `delete`.
+   *
+   * GENERATION FENCE (roborev HIGH — delayed-write-after-reset): because
+   * {@link #storeOps} deliberately SURVIVES {@link reset} (to keep delete→put FIFO
+   * ordering across a logout→re-login), an individual `put` accepted just before a
+   * reset could otherwise wait its turn in the queue and then write a SUPERSEDED
+   * identity's refresh token AFTER the reset. So this method takes the caller's
+   * captured `generation` and re-checks `generation === this.#generation` TWICE: once
+   * before enqueuing, and again INSIDE the enqueued op immediately before `store.put`
+   * (the authoritative point — a reset can fire while the op is parked behind earlier
+   * ops in the queue). A superseded persist writes NOTHING; the queue still preserves
+   * FIFO ordering for the current generation's legitimate ops.
    */
-  async #persist(issuer: URL, session: IssuerSession): Promise<void> {
+  async #persist(
+    issuer: URL,
+    session: IssuerSession,
+    requestedWebId: string,
+    generation: number,
+  ): Promise<void> {
     if (this.#sessionStore === undefined) return;
     if (session.refreshToken === undefined || session.authenticatedWebId === undefined) return;
-    try {
-      await this.#sessionStore.put({
-        issuer: issuer.href,
-        webId: session.authenticatedWebId,
-        refreshToken: session.refreshToken,
-        dpopKey: session.dpopKey,
-        clientId: this.#clientId,
-        expiresAt: session.expiresAt,
-      });
-    } catch {
-      // Best-effort durability: a quota/transaction error degrades to the
-      // in-memory-only behaviour (a later return visit re-prompts), never a
-      // failed login. Deliberately not logged (would touch the refresh token).
-    }
+    // FAIL-CLOSED: a wrong-identity OP response must NOT write a durable credential.
+    if (!webIdsEqual(session.authenticatedWebId, requestedWebId)) return;
+    // FENCE (pre-enqueue, fast-path): a reset() already superseded this attempt — do
+    // not even queue the write.
+    if (generation !== this.#generation) return;
+    const store = this.#sessionStore;
+    // Bind the durable credential to the client that actually authenticated: the
+    // static client id when present, else the dynamic registration's assigned id, so
+    // a later refresh grant reuses the same client (RFC 6749 §6).
+    const clientId = this.#clientId ?? session.clientRegistration?.client_id;
+    await this.#enqueueStoreOp(async () => {
+      // FENCE (in-queue, authoritative): a reset() may have advanced the generation
+      // WHILE this op was parked behind earlier store ops. The queue survives reset
+      // (FIFO), but a SUPERSEDED identity's credential must never be written — so
+      // re-check at the moment the op actually runs and skip the put if stale.
+      if (generation !== this.#generation) return;
+      try {
+        await store.put({
+          issuer: issuer.href,
+          webId: session.authenticatedWebId as string,
+          refreshToken: session.refreshToken as string,
+          dpopKey: session.dpopKey,
+          clientId,
+          expiresAt: session.expiresAt,
+        });
+      } catch {
+        // Best-effort durability: a quota/transaction error degrades to the
+        // in-memory-only behaviour (a later return visit re-prompts), never a
+        // failed login. Deliberately not logged (would touch the refresh token).
+      }
+    });
   }
 
-  /** Drop the durable session for this issuer (logout / dead refresh token). */
+  /**
+   * Drop the durable session for this issuer (logout / dead refresh token). Routed
+   * through {@link #enqueueStoreOp} (FIX 4) so it is strictly ordered relative to any
+   * subsequent re-login `put` — a slow delete can never erase a fast re-login's
+   * freshly persisted credential.
+   */
   async #clearPersisted(issuer: URL): Promise<void> {
     if (this.#sessionStore === undefined) return;
-    try {
-      await this.#sessionStore.delete(issuer.href);
-    } catch {
-      // Non-fatal: a stale entry is harmless (its refresh token is DPoP-bound,
-      // and a failed restore re-clears it).
-    }
+    const store = this.#sessionStore;
+    await this.#enqueueStoreOp(async () => {
+      try {
+        await store.delete(issuer.href);
+      } catch {
+        // Non-fatal: a stale entry is harmless (its refresh token is DPoP-bound,
+        // and a failed restore re-clears it).
+      }
+    });
   }
 
   /**
@@ -1030,7 +1197,11 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
     // nothing-to-restore guard all live in the helper now; this wrapper keeps ONLY the
     // provider-specific concerns: the generation fence + pinning the in-memory session.
     const restored = await restoreSession({
-      store: this.#sessionStore,
+      // A SERIALIZED + generation-fenced store adapter (roborev HIGH): restoreSession
+      // re-persists the rotated credential + clears a dead one, and those mutations
+      // MUST go through #storeOps (so they never race a logout's queued delete) and be
+      // dropped when a reset() supersedes this restore. The raw store would bypass both.
+      store: this.#serializedStore(generation),
       issuer,
       // A refresh token is CLIENT-BOUND (RFC 6749 §6): the grant must run as the
       // original client. Pass this provider's static Client Identifier Document URL
@@ -1071,7 +1242,9 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
       authenticatedWebId: restored.webId,
     };
     this.#sessions.set(issuer.href, Promise.resolve(session));
-    this.#issuer = Promise.resolve(issuer); // pin, like the popup login
+    // Pin like the popup login. The pinned WebID is the RESTORED identity, so a later
+    // upgrade that re-derives requestedWebId from #issuer binds to the restored WebID.
+    this.#issuer = Promise.resolve({ issuer, webId: restored.webId }); // pin
     this.#resolvedIssuerHref = issuer.href;
     this.#authenticatedWebId = restored.webId;
     return { webId: restored.webId };
@@ -1278,7 +1451,7 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
     const controller = this.#authController;
     const signal = controller.signal;
 
-    const issuer = await this.#resolveIssuer(signal);
+    const { issuer } = await this.#resolveIssuer(signal);
     if (generation !== this.#generation) throw new ReactiveAuthResetError();
 
     const http = this.#httpOptions(issuer, signal);
@@ -1418,7 +1591,7 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
         "jwk",
         flow.dpopPublicJwk,
         ES256_IMPORT_ALG,
-        false, // public key: non-extractable too (it is only used to verify)
+        true, // public key MUST be extractable: dpop exports it as the proof-header JWK (RFC 9449 §4.2). Public keys are not secret; only the private key stays non-extractable.
         ["verify"],
       );
       if (generation !== this.#generation) throw new ReactiveAuthResetError();
@@ -1496,8 +1669,17 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
       // key's raw bytes never leave the browser key store and the refresh token
       // stays usefully sender-constrained even against same-origin XSS reading
       // IndexedDB. Awaited so the credential is durable before the caller proceeds
-      // (errors are swallowed inside #persist).
-      await this.#persist(issuer, session);
+      // (errors are swallowed inside #persist). The requested WebID is the persisted
+      // `flow.webId`, already proven to equal `authenticatedWebId` by the fail-closed
+      // guard above — #persist re-checks it (defence-in-depth) before writing, and the
+      // captured `generation` lets its fence drop a write a reset() superseded.
+      await this.#persist(issuer, session, flow.webId, generation);
+      // RE-FENCE (post-persist, authoritative — roborev MEDIUM): #persist is now
+      // serialised on #storeOps and awaited, so a reset() (logout / a new login) can
+      // fire WHILE it is parked in the queue. If so, this completion is superseded —
+      // publish NO identity state, so a stale redirect completion can never repopulate
+      // #issuer / #authenticatedWebId / #tokensAttached for a superseded generation.
+      if (generation !== this.#generation) throw new ReactiveAuthResetError();
       // FINDING A: seed #issuer with the resolved issuer of THIS completion, so a later
       // upgrade() (a data fetch on the now-authenticated page) REUSES the seeded session
       // instead of falling into #resolveIssuer → getWebId() (which has no pending WebID
@@ -1505,7 +1687,10 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
       // rely on #issuer being set for subsequent upgrades. Written here, alongside the
       // other state writes AFTER the authoritative generation re-fence, so a superseded
       // completion seeds nothing.
-      this.#issuer = Promise.resolve(issuer);
+      // Pin with `flow.webId` (the requested WebID): the `webIdsEqual` guard above
+      // already proved it equals `authenticatedWebId`, and it is a definite string
+      // (the persisted record's WebID), so the pin is sound + type-total.
+      this.#issuer = Promise.resolve({ issuer, webId: flow.webId });
       this.#resolvedIssuerHref = issuer.href;
       this.#authenticatedWebId = authenticatedWebId;
       this.#tokensAttached += 1;

@@ -132,7 +132,7 @@ vi.mock("oauth4webapi", () => {
   };
 });
 
-const { WebIdDPoPTokenProvider } = await import("./webid-token-provider");
+const { WebIdDPoPTokenProvider, ReactiveAuthResetError } = await import("./webid-token-provider");
 
 const WEBID_A = "https://alice.example/profile/card#me";
 const WEBID_B = "https://bob.example/profile/card#me";
@@ -332,6 +332,70 @@ describe("restoreIssuer — silent refresh-token-grant restore (no popup)", () =
     // processRefreshTokenResponse rotated the token to "rt-rotated"; it must be the
     // persisted credential now (a spent "rt-A" would be rejected on the next load).
     expect(store.map.get(ISSUER.href)?.refreshToken).toBe("rt-rotated");
+  });
+
+  it("a restore's rotated put is SERIALISED + fenced: it cannot revive a signed-out account (roborev HIGH)", async () => {
+    // restoreSession re-persists the ROTATED credential. That write now goes through the
+    // provider's #serializedStore adapter, so it (a) runs on #storeOps — strictly after
+    // a logout's queued delete (FIFO), never racing ahead — and (b) is generation-fenced
+    // on the restore's captured generation. The realistic revival bug: a logout enqueues
+    // a (slow) delete AND advances the generation (reset), then a restore in flight tries
+    // to re-persist the rotated token. Serialization makes the put run AFTER the delete
+    // (so it would otherwise REVIVE the just-deleted account); the generation fence is
+    // what saves it — by the time the queued put op runs, the generation has advanced, so
+    // it is SKIPPED. Prove both: no revival.
+    const map = new Map<string, PersistedSession>();
+    const order: string[] = [];
+    let releaseDelete!: () => void;
+    const deleteGate = new Promise<void>((resolve) => {
+      releaseDelete = resolve;
+    });
+    let deleteParked = false;
+    const dpopKey = (await crypto.subtle.generateKey(
+      { name: "ECDSA", namedCurve: "P-256" },
+      false,
+      ["sign", "verify"],
+    )) as CryptoKeyPair;
+    const store: SessionStore = {
+      async get(issuer) {
+        return map.get(issuer);
+      },
+      async put(session) {
+        order.push("put");
+        map.set(session.issuer, session);
+      },
+      async delete(issuer) {
+        deleteParked = true;
+        await deleteGate; // the logout delete parks, holding the queue.
+        deleteParked = false;
+        order.push("delete");
+        map.delete(issuer);
+      },
+    };
+    map.set(ISSUER.href, { issuer: ISSUER.href, webId: WEBID_A, refreshToken: "rt-A", dpopKey });
+
+    const provider = makeProvider(store);
+    // Start a restore (captures the current generation; its rotated put will queue).
+    const restoring = provider.restoreIssuer(ISSUER);
+    restoring.catch(() => {});
+    // A logout: enqueue a SLOW delete (parks, holding #storeOps) then reset() (advances
+    // the generation), exactly as the SessionProvider's logout does.
+    const forgetting = provider.forgetPersisted(ISSUER);
+    forgetting.catch(() => {});
+    for (let i = 0; i < 5 && !deleteParked; i++) await new Promise((r) => setTimeout(r, 0));
+    expect(deleteParked).toBe(true);
+    provider.reset(); // logout advances the generation while the restore's put is queued.
+
+    // Drain: the delete completes; the restore's rotated put — now queued AFTER it and
+    // SUPERSEDED — must be skipped by the adapter's generation fence.
+    releaseDelete();
+    await Promise.allSettled([restoring, forgetting]);
+    await new Promise((r) => setTimeout(r, 0));
+
+    // FENCED: the rotated put was SKIPPED (generation advanced), so the signed-out
+    // account was NOT revived — the delete is the last word.
+    expect(order).not.toContain("put");
+    expect(map.has(ISSUER.href)).toBe(false);
   });
 
   it("returns undefined + does NOT attempt a refresh grant when there is NO persisted session", async () => {
@@ -609,5 +673,405 @@ describe("WebID scoping — account A's persisted token never restores account B
       -1,
     );
     expect(grantCall?.[3]).toBe("rt-A"); // A's token — never some other account's
+  });
+});
+
+// ── CONVERGE FIXES (1-4): harden pod-mail's persistence to the clean siblings ──
+
+/**
+ * A minimal in-memory sessionStorage stand-in for the node (DOM-less) vitest
+ * environment — the redirect-login FIX-1 test persists/reads a JSON record under one
+ * key. Installed on `globalThis`; the test clears it in its own setup.
+ */
+function installSessionStorage(): Map<string, string> {
+  const store = new Map<string, string>();
+  const stub: Pick<Storage, "getItem" | "setItem" | "removeItem"> = {
+    getItem: (k) => store.get(k) ?? null,
+    setItem: (k, v) => {
+      store.set(k, String(v));
+    },
+    removeItem: (k) => {
+      store.delete(k);
+    },
+  };
+  (globalThis as { sessionStorage?: unknown }).sessionStorage = stub;
+  return store;
+}
+
+describe("FIX 1 — the redirect-restored DPoP PUBLIC key is EXTRACTABLE (exports to JWK)", () => {
+  const RETURN_URI = "https://app.example/";
+  let storage: Map<string, string>;
+
+  beforeEach(() => {
+    authState.webId = WEBID_A;
+    authState.accessToken = "tok-A";
+    authState.refreshToken = "rt-A";
+    storage = installSessionStorage();
+  });
+
+  it("after completeRedirectLogin, the persisted dpopKey's PUBLIC half exports to a JWK", async () => {
+    // `dpop` (RFC 9449 §4.2) embeds the PUBLIC key as the proof-header JWK, so it must
+    // be able to `exportKey("jwk", publicKey)`. The redirect path re-imports the
+    // persisted public JWK; before FIX 1 it was imported `extractable: false`, so this
+    // export REJECTS. The store + refresh-token mock here make the re-imported key
+    // observable via the persisted record (#persist writes session.dpopKey).
+    const store = makeStore();
+    const provider = makeProvider(store);
+
+    await provider.beginRedirectLogin(RETURN_URI);
+    expect(storage.size).toBeGreaterThan(0);
+    await provider.completeRedirectLogin(`${RETURN_URI}?code=auth-code&state=state`);
+
+    const persisted = store.map.get(ISSUER.href);
+    expect(persisted).toBeDefined();
+    const dpopKey = persisted?.dpopKey as CryptoKeyPair;
+    expect(dpopKey?.publicKey).toBeDefined();
+
+    // The load-bearing assertion: exporting the PUBLIC key to JWK SUCCEEDS. With the
+    // pre-FIX-1 `extractable: false` import this throws ("key is not extractable").
+    const jwk = await crypto.subtle.exportKey("jwk", dpopKey.publicKey);
+    expect(jwk).toMatchObject({ kty: "EC", crv: "P-256" });
+
+    // Defence-in-depth: the PRIVATE key stays NON-extractable (FIX 1 must not weaken it).
+    expect(dpopKey.privateKey.extractable).toBe(false);
+    await expect(crypto.subtle.exportKey("jwk", dpopKey.privateKey)).rejects.toThrow();
+  });
+});
+
+describe("FIX 2 — the persisted clientId is the BOUND client (static or dynamic)", () => {
+  beforeEach(() => {
+    authState.webId = WEBID_A;
+    authState.accessToken = "tok-A";
+    authState.refreshToken = "rt-A";
+  });
+
+  it("a DYNAMIC-registration login persists the server-ASSIGNED client_id", async () => {
+    // No static clientId → #resolveClient runs dynamic registration, whose mock
+    // returns client_id "dyn-client-id" on the IssuerSession.clientRegistration. FIX 2
+    // persists `this.#clientId ?? session.clientRegistration?.client_id`, so the bound
+    // dynamic id lands in the record (a refresh grant on the next load reuses it —
+    // RFC 6749 §6). Before FIX 2 the record's clientId was `this.#clientId` = undefined.
+    const store = makeStore();
+    const provider = new WebIdDPoPTokenProvider(
+      "https://app.example/callback.html",
+      async () => REDIRECT,
+      async () => authState.webId,
+      { sessionStore: store }, // NO static clientId → dynamic registration
+    );
+    await provider.upgrade(new Request("https://alice.example/storage/"));
+    await Promise.resolve();
+
+    const persisted = store.map.get(ISSUER.href);
+    expect(persisted).toBeDefined();
+    expect(persisted?.clientId).toBe("dyn-client-id");
+  });
+
+  it("a STATIC-clientId login persists the static Client Identifier Document URL", async () => {
+    const store = makeStore();
+    const provider = makeProvider(store); // clientId: "https://app.example/clientid.jsonld"
+    await provider.upgrade(new Request("https://alice.example/storage/"));
+    await Promise.resolve();
+
+    const persisted = store.map.get(ISSUER.href);
+    expect(persisted).toBeDefined();
+    expect(persisted?.clientId).toBe("https://app.example/clientid.jsonld");
+  });
+});
+
+describe("FIX 3 — popup persist is FAIL-CLOSED on a WebID mismatch (no cross-account leak)", () => {
+  beforeEach(() => {
+    authState.webId = WEBID_A;
+    authState.accessToken = "tok-A";
+    authState.refreshToken = "rt-A";
+  });
+
+  it("an OP that authenticates a DIFFERENT WebID than requested persists NOTHING", async () => {
+    // The user REQUESTS WEBID_B (getWebId), but the OP authenticates AS WEBID_A (the
+    // id_token claims read authState.webId) — e.g. a live IdP session for another
+    // account satisfied the login. FIX 3 gates #persist on
+    // webIdsEqual(authenticatedWebId, requestedWebId); a mismatch must write NO durable
+    // credential (else WEBID_A's refresh token leaks into the store under the
+    // wrong-account request). Without the gate this test goes RED (store.map.size===1).
+    const store = makeStore();
+    const provider = new WebIdDPoPTokenProvider(
+      "https://app.example/callback.html",
+      async () => REDIRECT,
+      async () => WEBID_B, // REQUESTED identity (differs from the OP-vouched WEBID_A)
+      { clientId: "https://app.example/clientid.jsonld", sessionStore: store },
+    );
+
+    // The upgrade itself still completes (the OP returned a usable token for WEBID_A);
+    // the SessionProvider's own webIdsEqual gate rejects the login one layer up. The
+    // provider-level invariant under test is: the DURABLE store stays EMPTY.
+    await provider.upgrade(new Request("https://alice.example/storage/"));
+    await Promise.resolve(); // let the persist microtask settle.
+
+    expect(store.map.size).toBe(0); // FAIL-CLOSED: nothing persisted on a mismatch.
+  });
+
+  it("a MATCHING WebID still persists (the gate does not break the happy path)", async () => {
+    // Control: requested === authenticated (both WEBID_A) → the credential IS persisted.
+    const store = makeStore();
+    const provider = makeProvider(store); // getWebId → authState.webId === WEBID_A
+    await provider.upgrade(new Request("https://alice.example/storage/"));
+    await Promise.resolve();
+    expect(store.map.size).toBe(1);
+    expect(store.map.get(ISSUER.href)?.webId).toBe(WEBID_A);
+  });
+
+  it("binds to the WebID captured at RESOLUTION, not a post-auth re-read of the mutable holder (roborev HIGH)", async () => {
+    // roborev HIGH: the popup persist gate must compare the OP-authenticated WebID to the
+    // WebID THIS flow resolved its issuer from — NOT a value re-read from #getWebId() after
+    // auth. #getWebId reads a MUTABLE module-level holder; a racing login can overwrite it
+    // mid-flow. Model that: getWebId returns WEBID_A on the FIRST call (issuer resolution),
+    // then MUTATES to WEBID_B for any later call. The OP authenticates WEBID_A (authState).
+    //   • FIXED (capture at resolution): the gate compares authenticated WEBID_A to the
+    //     captured WEBID_A → MATCH → the credential is persisted (under WEBID_A). Crucially,
+    //     getWebId is consulted exactly ONCE (resolution), never re-read post-auth.
+    //   • UNFIXED (post-auth re-read): the gate would read the MUTATED WEBID_B → MISMATCH →
+    //     a legitimate same-identity login would WRONGLY fail to persist (and, worse, the
+    //     re-read could bind a credential to whatever the holder now says).
+    const store = makeStore();
+    let getWebIdCalls = 0;
+    const provider = new WebIdDPoPTokenProvider(
+      "https://app.example/callback.html",
+      async () => REDIRECT,
+      async () => {
+        getWebIdCalls += 1;
+        return getWebIdCalls === 1 ? WEBID_A : WEBID_B; // mutates AFTER resolution
+      },
+      { clientId: "https://app.example/clientid.jsonld", sessionStore: store },
+    );
+    // OP vouches for WEBID_A (the originally requested identity).
+    authState.webId = WEBID_A;
+    await provider.upgrade(new Request("https://alice.example/storage/"));
+    await Promise.resolve();
+
+    // The credential IS persisted, bound to WEBID_A (the resolution-captured identity) —
+    // and getWebId was consulted ONLY at resolution (one call), never re-read at persist.
+    expect(store.map.size).toBe(1);
+    expect(store.map.get(ISSUER.href)?.webId).toBe(WEBID_A);
+    expect(getWebIdCalls).toBe(1);
+  });
+});
+
+describe("FIX 4 — durable-store mutations are SERIALISED (a slow delete cannot erase a re-login)", () => {
+  beforeEach(() => {
+    authState.webId = WEBID_A;
+    authState.accessToken = "tok-A";
+    authState.refreshToken = "rt-A";
+  });
+
+  /** Advance the REAL event loop (a macrotask) so an unchained re-login put would run. */
+  const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+  it("a SLOW logout delete enqueued before a re-login put leaves the credential PRESENT (FIFO)", async () => {
+    // The roborev MEDIUM: logout fires a delete; the user immediately logs back in and
+    // persists; if the (slow) delete runs AFTER the (fast) put, it wipes the fresh
+    // credential. FIX 4 chains both through #storeOps so they run strictly FIFO — the
+    // delete (enqueued first) completes BEFORE the put, so the put's record survives.
+    //
+    // Determinism: the delete PARKS on a gate. We advance the REAL event loop (tick())
+    // far enough that an UNCHAINED re-login put would have reached store.put, then assert
+    // whether the put ran WHILE the delete was still parked:
+    //   • FIXED (FIFO chain): the put is chained behind the parked delete, so it is NOT
+    //     invoked until the delete is released → `putWhileParked` stays false; on release
+    //     the order is delete→put and the fresh record survives.
+    //   • UNFIXED (no chain): the put fires as soon as #persist reaches store.put — while
+    //     the delete is parked → `putWhileParked` becomes true, and the late delete then
+    //     WIPES the record. This is the exact bug FIX 4 closes.
+    const map = new Map<string, PersistedSession>();
+    let releaseDelete!: () => void;
+    const deleteGate = new Promise<void>((resolve) => {
+      releaseDelete = resolve;
+    });
+    let deleteParked = false;
+    let putWhileParked = false;
+    const order: string[] = [];
+    const store: SessionStore = {
+      async get(issuer) {
+        return map.get(issuer);
+      },
+      async put(session) {
+        if (deleteParked) putWhileParked = true; // put ran while the delete was parked = UNORDERED.
+        order.push("put");
+        map.set(session.issuer, session);
+      },
+      async delete(issuer) {
+        deleteParked = true;
+        await deleteGate; // the slow logout delete parks here until released.
+        deleteParked = false;
+        order.push("delete");
+        map.delete(issuer);
+      },
+    };
+    // Seed an existing credential (as a prior login would have).
+    const dpopKey = (await crypto.subtle.generateKey(
+      { name: "ECDSA", namedCurve: "P-256" },
+      false,
+      ["sign", "verify"],
+    )) as CryptoKeyPair;
+    map.set(ISSUER.href, { issuer: ISSUER.href, webId: WEBID_A, refreshToken: "rt-old", dpopKey });
+
+    const provider = makeProvider(store);
+
+    // Logout enqueues the SLOW delete first (it parks at deleteGate, NOT awaited here).
+    const forgetting = provider.forgetPersisted(ISSUER);
+    forgetting.catch(() => {});
+    // Re-login enqueues a put. Under FIX 4 it is chained behind the parked delete.
+    const relogin = provider.upgrade(new Request("https://alice.example/storage/"));
+    relogin.catch(() => {});
+
+    // Advance the real event loop so the re-login reaches store.put IF it were unordered.
+    await tick();
+    await tick();
+    // FIXED: the put has NOT run while the delete is parked (it is chained behind it).
+    expect(deleteParked).toBe(true);
+    expect(putWhileParked).toBe(false);
+    expect(order).not.toContain("put");
+
+    // Release the parked delete; the chain drains: delete THEN put.
+    releaseDelete();
+    await Promise.all([forgetting, relogin]);
+    await tick();
+
+    // FIFO: delete completed BEFORE the put ran, so the re-login's credential SURVIVES.
+    expect(order).toEqual(["delete", "put"]);
+    const persisted = map.get(ISSUER.href);
+    expect(persisted).toBeDefined();
+    expect(persisted?.refreshToken).toBe("rt-A"); // the FRESH re-login credential, not erased.
+  });
+
+  it("#storeOps SURVIVES reset(): a put after a logout(reset+delete) is still ordered after the delete", async () => {
+    // CRITICAL invariant: logout does reset() THEN forgetPersisted(delete); the next
+    // login does reset() THEN persist(put). If reset() cleared #storeOps, the put could
+    // jump ahead of the in-flight delete. Prove the chain spans reset(): enqueue a slow
+    // delete, call reset(), then a put — the put must still land AFTER the delete.
+    const map = new Map<string, PersistedSession>();
+    const order: string[] = [];
+    let releaseDelete!: () => void;
+    const deleteGate = new Promise<void>((resolve) => {
+      releaseDelete = resolve;
+    });
+    let deleteParked = false;
+    const store: SessionStore = {
+      async get(issuer) {
+        return map.get(issuer);
+      },
+      async put(session) {
+        order.push("put");
+        map.set(session.issuer, session);
+      },
+      async delete(issuer) {
+        deleteParked = true;
+        order.push("delete-start");
+        await deleteGate;
+        deleteParked = false;
+        order.push("delete-done");
+        map.delete(issuer);
+      },
+    };
+    const dpopKey = (await crypto.subtle.generateKey(
+      { name: "ECDSA", namedCurve: "P-256" },
+      false,
+      ["sign", "verify"],
+    )) as CryptoKeyPair;
+    map.set(ISSUER.href, { issuer: ISSUER.href, webId: WEBID_A, refreshToken: "rt-old", dpopKey });
+
+    const provider = makeProvider(store);
+
+    // Logout: the slow delete is enqueued onto #storeOps...
+    const forgetting = provider.forgetPersisted(ISSUER);
+    forgetting.catch(() => {});
+    // ...then reset() runs (logout / a new login). #storeOps must NOT be cleared by it.
+    provider.reset();
+    // The next login persists (put) — chained behind the still-parked delete.
+    const relogin = provider.upgrade(new Request("https://alice.example/storage/"));
+    relogin.catch(() => {});
+
+    // Advance the real event loop; under FIX 4 the put is chained behind the parked
+    // delete (which survived reset()), so it must NOT have run yet.
+    await tick();
+    await tick();
+    expect(deleteParked).toBe(true);
+    expect(order).not.toContain("put"); // chain held ACROSS reset(): put waits for delete.
+
+    releaseDelete();
+    await Promise.all([forgetting, relogin]);
+    await tick();
+
+    // FIFO held ACROSS reset(): delete completed before the put ran.
+    expect(order).toEqual(["delete-start", "delete-done", "put"]);
+    expect(map.get(ISSUER.href)?.refreshToken).toBe("rt-A");
+  });
+
+  it("a persist PARKED in the queue does NOT write after a reset() supersedes it (generation fence)", async () => {
+    // roborev HIGH (delayed-write-after-reset): because #storeOps SURVIVES reset(), a
+    // put enqueued by a login in generation N can sit behind an earlier (parked) store
+    // op while a reset() (logout / new login) advances the generation — then write the
+    // SUPERSEDED identity's refresh token. The in-queue generation fence must skip that
+    // stale put entirely.
+    //
+    //   • UNFIXED (no in-queue fence): when the parked op is released, the stale put
+    //     runs and writes "rt-A" → the superseded credential leaks.
+    //   • FIXED: the stale put is skipped (generation ≠ current), so the store stays
+    //     untouched by the superseded login.
+    const map = new Map<string, PersistedSession>();
+    const order: string[] = [];
+    let releaseFirst!: () => void;
+    const firstGate = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    let firstParked = false;
+    const store: SessionStore = {
+      async get(issuer) {
+        return map.get(issuer);
+      },
+      async put(session) {
+        order.push("put");
+        map.set(session.issuer, session);
+      },
+      // The FIRST store op parks here, holding the queue so the login's persist (the
+      // SECOND op) is enqueued behind it and cannot run until release.
+      async delete(_issuer) {
+        firstParked = true;
+        order.push("delete-start");
+        await firstGate;
+        firstParked = false;
+        order.push("delete-done");
+      },
+    };
+
+    const provider = makeProvider(store);
+    // Occupy the queue with a parked op (a prior logout's delete, say).
+    const parked = provider.forgetPersisted(ISSUER);
+    parked.catch(() => {});
+    // A login in the CURRENT generation enqueues its persist behind the parked op.
+    const relogin = provider.upgrade(new Request("https://alice.example/storage/"));
+    relogin.catch(() => {});
+    await tick();
+    await tick();
+    expect(firstParked).toBe(true);
+    expect(order).not.toContain("put"); // the persist is parked behind the first op.
+
+    // A reset() (logout / new login) fires WHILE the persist waits in the queue —
+    // superseding the login that enqueued it. The queued persist is dropped by the
+    // generation fence, AND the in-flight upgrade rejects (its own post-proof fence) —
+    // both arms of the defence.
+    provider.reset();
+
+    // Drain the queue: the parked op completes; the (now-superseded) persist, if it
+    // ever reaches store.put, is fenced out. Releasing the gate unblocks #getSession,
+    // so the parked upgrade resumes and rejects.
+    releaseFirst();
+    await parked;
+    // The superseded upgrade rejects — expected; assert it so it is not unhandled.
+    await expect(relogin).rejects.toThrow(ReactiveAuthResetError);
+    await tick();
+
+    // FIXED: the superseded persist wrote NOTHING (skipped before/inside the queue by
+    // the generation fence) — store.put never ran, so no stale credential leaked.
+    expect(order).toEqual(["delete-start", "delete-done"]);
+    expect(map.has(ISSUER.href)).toBe(false);
   });
 });
