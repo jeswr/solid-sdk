@@ -328,16 +328,17 @@ function runSilentRestore(provider: WebIdDPoPTokenProvider): Promise<SilentResto
       // SECURITY (roborev finding) — a `webid-mismatch` means restoreIssuer ALREADY
       // succeeded one layer down: it pinned an in-memory session AND persisted a
       // rotated credential for the WRONG (mismatched) WebID before the
-      // last-active-WebID check up here failed it. Leaving that in place would leave
-      // the provider authenticated as the wrong identity (later reads would upgrade
-      // as them) and orphan a durable credential. So FULLY tear it down: forget the
-      // persisted credential for the issuer AND reset() the in-memory provider
-      // (fail-closed) before falling through to login. (reset() also re-fences any
-      // in-flight work, exactly like logout.)
+      // last-active-WebID check up here failed it. So FULLY tear it down, fail-closed:
+      //  1. reset() SYNCHRONOUSLY FIRST — drops the pinned in-memory session +
+      //     re-fences in-flight work IMMEDIATELY, so no patched fetch can upgrade as
+      //     the wrong WebID during the (awaited) IndexedDB delete window below
+      //     (closing the timing gap a delete-then-reset ordering left open).
+      //  2. THEN forget the persisted credential (async) so the orphaned durable
+      //     token for the wrong WebID is removed, and clear the pointer.
       if (decision.reason === "webid-mismatch") {
         const issuer = parseIssuer(remembered?.issuer);
-        if (issuer) await provider.forgetPersisted(issuer);
         provider.reset();
+        if (issuer) await provider.forgetPersisted(issuer);
         clearRememberedAccount();
         return { kind: "login" };
       }

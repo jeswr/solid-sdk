@@ -492,9 +492,13 @@ describe("logout clears the durable credential; reset() does not", () => {
     expect(provider.authenticatedWebId()).toBe(WEBID_A);
     expect(store.map.has(ISSUER.href)).toBe(true);
 
-    // The mismatch-cleanup the SessionProvider performs:
-    await provider.forgetPersisted(ISSUER);
+    // The mismatch-cleanup the SessionProvider performs, in order: reset()
+    // SYNCHRONOUSLY first (drops the pinned in-memory session immediately, closing
+    // the wrong-WebID upgrade window), THEN forget the durable credential.
     provider.reset();
+    expect(provider.authenticatedWebId()).toBeUndefined(); // dropped before the async delete
+    expect(provider.resolvedIssuer()).toBeUndefined();
+    await provider.forgetPersisted(ISSUER);
 
     // Durable credential gone AND in-memory session torn down — fully fail-closed.
     expect(store.map.has(ISSUER.href)).toBe(false);
