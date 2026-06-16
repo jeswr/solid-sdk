@@ -1,17 +1,39 @@
 /* AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
    Host chrome + the pod-health-* classes the pod-health <HealthRecords> emits
-   (the component ships no styles of its own — the host owns the look). */
+   (the component ships no styles of its own — the host owns the look).
 
+   THEME: Tailwind v4 + the shared @jeswr/app-shell tokens drive light/dark. The
+   import order is load-bearing — `@import "tailwindcss"` FIRST, then the suite
+   OKLCH tokens + the `@theme inline` mapping (`@jeswr/app-shell/styles.css`) so
+   the shell components' utilities (bg-popover, text-muted-foreground, the `dark:`
+   variant, …) resolve to the suite palette. `@source` makes Tailwind scan the
+   app-shell package so the classes its <ThemeToggle/> + <AccountMenu/> emit are
+   actually generated (a node_modules package is otherwise outside the content
+   scan). The path is relative to THIS file. */
+@import "tailwindcss";
+@import "@jeswr/app-shell/styles.css";
+@source "../node_modules/@jeswr/app-shell/dist";
+
+/* The host chrome below predates the shared tokens and uses its own variable
+   names. Map them onto the app-shell OKLCH tokens so the WHOLE pod-health UI
+   (login card, header, records table) follows the theme — the `.dark` class the
+   ThemeProvider toggles on <html> flips the OKLCH vars, and these aliases inherit
+   it for free.
+
+   IMPORTANT (learned from pod-photos/drive): we do NOT re-alias app-shell's OWN
+   tokens (`--muted`/`--accent`/`--border`) to host values — that would clobber
+   the shell's palette. Instead the host uses DISTINCT names (`--muted-text`,
+   `--host-accent`, …); only `--border` is shared so the host references the
+   app-shell `--border` token directly (no re-alias). */
 :root {
-  --bg: #f3f8f9;
-  --surface: #ffffff;
-  --ink: #1c2b30;
-  --muted: #5b6b70;
-  --accent: #0b7285;
-  --accent-ink: #ffffff;
-  --border: #d6e1e4;
-  --danger: #b02525;
-  --ok: #1a7a3f;
+  --bg: var(--background);
+  --surface: var(--card);
+  --ink: var(--foreground);
+  --muted-text: var(--muted-foreground);
+  --host-accent: var(--primary);
+  --host-accent-ink: var(--primary-foreground);
+  --danger: var(--destructive);
+  --ok: var(--success);
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
@@ -26,7 +48,7 @@ body {
 }
 
 a {
-  color: var(--accent);
+  color: var(--host-accent);
 }
 
 /* ── Login ─────────────────────────────────────────────────────────────── */
@@ -50,7 +72,7 @@ a {
   font-size: 1.5rem;
 }
 .login-sub {
-  color: var(--muted);
+  color: var(--muted-text);
   margin: 0 0 1.25rem;
   font-size: 0.95rem;
 }
@@ -75,21 +97,25 @@ a {
   margin-top: 0.75rem;
 }
 .login-hint {
-  color: var(--muted);
+  color: var(--muted-text);
   font-size: 0.85rem;
   margin-top: 1rem;
 }
 
-button {
+/* SCOPED filled-button style (learned from pod-photos/drive): scope the global
+   filled-button look to the app's OWN buttons (`.login-form button`) so it does
+   NOT leak onto the app-shell controls — the ThemeToggle, AccountMenu, and the
+   FeedbackButton dialog all bring their own Tailwind-utility styling. */
+.login-form button {
   cursor: pointer;
   border: none;
   border-radius: 0.5rem;
   padding: 0.6rem 0.9rem;
   font-size: 0.95rem;
-  background: var(--accent);
-  color: var(--accent-ink);
+  background: var(--host-accent);
+  color: var(--host-accent-ink);
 }
-button:disabled {
+.login-form button:disabled {
   opacity: 0.55;
   cursor: not-allowed;
 }
@@ -111,30 +137,31 @@ button:disabled {
   font-weight: 700;
   font-size: 1.1rem;
 }
-.app-webid {
-  color: var(--muted);
-  font-size: 0.8rem;
+/* Right-aligned header controls: the app-shell <FeedbackButton/> + <ThemeToggle/>
+   + <AccountMenu/>. `margin-left: auto` pushes the trio to the top-right; the
+   app-shell components bring their own (Tailwind-utility) styling, so this only
+   handles placement. */
+.app-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
   margin-left: auto;
-  max-width: 22rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
-.app-logout {
-  background: transparent;
-  color: var(--accent);
-  border: 1px solid var(--border);
-}
+/* The fallback/error banners are theme-aware: a soft tint derived from the suite
+   `--warning` token (via color-mix over the card surface) with token-coloured
+   text + border. Because the tokens flip on `.dark`, the banner stays legible in
+   BOTH modes — no hard-coded light surfaces. */
 .app-note {
-  background: #fff8e6;
-  border: 1px solid #f0e0b0;
+  background: color-mix(in oklab, var(--warning) 16%, var(--card));
+  border: 1px solid color-mix(in oklab, var(--warning) 40%, var(--card));
+  color: var(--foreground);
   border-radius: 0.5rem;
   padding: 0.6rem 0.8rem;
   font-size: 0.85rem;
   margin: 0.75rem 0;
 }
 .app-loading {
-  color: var(--muted);
+  color: var(--muted-text);
 }
 .app-main {
   margin-top: 1rem;
@@ -150,13 +177,20 @@ button:disabled {
 }
 .pod-health-loading,
 .pod-health-empty {
-  color: var(--muted);
+  color: var(--muted-text);
 }
 .pod-health-error {
   color: var(--danger);
 }
 .pod-health-error button {
   margin-top: 0.5rem;
+  background: transparent;
+  color: var(--host-accent);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  border-radius: 0.5rem;
+  padding: 0.6rem 0.9rem;
+  font-size: 0.95rem;
 }
 
 .pod-health-table {
@@ -176,5 +210,5 @@ button:disabled {
 }
 .pod-health-cell-date,
 .pod-health-cell-value {
-  color: var(--muted);
+  color: var(--muted-text);
 }
