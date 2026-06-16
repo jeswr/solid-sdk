@@ -34,6 +34,13 @@
  */
 
 import { fetchRdf } from "@jeswr/fetch-rdf";
+import {
+  forgetPersisted as forgetPersistedSession,
+  hasPersisted as hasPersistedSession,
+  type PersistedSession,
+  restoreSession,
+  type SessionStore,
+} from "@jeswr/solid-session-restore";
 import type { GetCodeCallback } from "@solid/reactive-authentication";
 import * as DPoP from "dpop";
 import * as oauth from "oauth4webapi";
@@ -333,6 +340,21 @@ export interface WebIdDPoPTokenProviderOptions {
    * patches the global) — see the recursion note in the class docs. Test-only.
    */
   profileFetch?: typeof fetch;
+  /**
+   * The durable, WebID/issuer-scoped credential store from
+   * `@jeswr/solid-session-restore` (an {@link SessionStore}). When set, a
+   * successful login PERSISTS its issued refresh token + (non-extractable) DPoP key
+   * into this store, and {@link WebIdDPoPTokenProvider.restoreIssuer} can later
+   * rebuild a live session from it via a refresh-token grant — so closing the tab
+   * (without logging out) then reopening silently restores the session, no redirect.
+   *
+   * When ABSENT (default) the provider is memory-only: login still works but nothing
+   * is persisted, and `restoreIssuer` always returns undefined (nothing to restore).
+   * The store is NEVER cleared by {@link WebIdDPoPTokenProvider.reset} — only an
+   * explicit logout (via {@link WebIdDPoPTokenProvider.forgetPersisted}) forgets the
+   * durable credential, so a logout-less tab close survives.
+   */
+  sessionStore?: SessionStore;
 }
 
 /** A WebID advertises several issuers but no `chooseIssuer` was supplied. */
@@ -410,12 +432,30 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
    */
   readonly #profileFetch: typeof fetch;
   /**
+   * The durable credential store (optional). When set, login persists its refresh
+   * token + DPoP key here and {@link restoreIssuer} rebuilds a session from it. NOT
+   * cleared by {@link reset} — only an explicit {@link forgetPersisted} (logout)
+   * drops the durable credential, so a logout-less tab close survives.
+   */
+  readonly #sessionStore?: SessionStore;
+  /**
    * Memoised issuer resolution: the user is asked for their WebID ONCE per
    * provider instance, not on every 401 — and concurrent 401s share the same
    * in-flight prompt (single-flight). Cleared on failure so a cancelled or
    * failed prompt can be retried.
    */
   #issuer?: Promise<URL>;
+  /**
+   * The resolved issuer href of the CURRENT authenticated session, tracked
+   * SYNCHRONOUSLY (alongside the `Promise<URL>` {@link #issuer}) so the SessionProvider
+   * can read it without awaiting — it needs the issuer to (a) write the
+   * remembered-account pointer after login (the per-issuer refresh grant runs against
+   * it) and (b) call {@link forgetPersisted} on logout. Set whenever an authenticated
+   * session is established (an `upgrade()` that attaches a token, a redirect-login
+   * completion, or a silent restore); cleared by {@link reset}. `undefined` until a
+   * session authenticates.
+   */
+  #currentIssuerHref: string | undefined;
   /** Single-flight session per issuer: parallel 401s share one login flow. */
   readonly #sessions = new Map<string, Promise<IssuerSession>>();
   /**
@@ -495,6 +535,7 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
     this.#chooseIssuer = options.chooseIssuer;
     this.#allowInsecureLoopback = options.allowInsecureLoopback ?? false;
     this.#profileFetch = options.profileFetch ?? globalThis.fetch.bind(globalThis);
+    this.#sessionStore = options.sessionStore;
   }
 
   /** oauth4webapi request options, enabling insecure loopback per the policy. */
@@ -553,6 +594,18 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
    */
   authenticatedWebId(): string | undefined {
     return this.#authenticatedWebId;
+  }
+
+  /**
+   * The resolved issuer href of the CURRENT authenticated session (synchronous), or
+   * undefined when nothing has authenticated since the last {@link reset}. The
+   * SessionProvider reads this AFTER a successful login to (a) write the
+   * remembered-account pointer (the per-issuer refresh grant runs against this issuer)
+   * and (b) forget the durable credential on logout. It mirrors {@link authenticatedWebId}
+   * for the issuer dimension, avoiding an `await this.#issuer` from synchronous callers.
+   */
+  currentIssuer(): string | undefined {
+    return this.#currentIssuerHref;
   }
 
   /**
@@ -638,6 +691,7 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
     this.#authController.abort();
     this.#authController = new AbortController();
     this.#issuer = undefined;
+    this.#currentIssuerHref = undefined;
     this.#sessions.clear();
     this.#authenticatedWebId = undefined;
     this.#loginProbe = null;
@@ -756,6 +810,9 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
     // cached/in-flight session shared across concurrent 401s also publishes it.
     // MUST be after the re-fence — a superseded attempt must not publish its identity.
     this.#authenticatedWebId = session.authenticatedWebId;
+    // Track the resolved issuer synchronously so the SessionProvider can read it
+    // (remembered-pointer write on login, forgetPersisted on logout) without awaiting.
+    this.#currentIssuerHref = issuer.href;
     const headers = new Headers(request.headers);
     headers.set("DPoP", proof);
     headers.set("Authorization", ["DPoP", session.accessToken].join(" "));
@@ -791,11 +848,11 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
     // superseded — run the login NOT cached, so a stale attempt can never seed the
     // current generation's #sessions map. The upgrade() fence then discards it.
     if (generation !== this.#generation) {
-      return this.#authenticate(issuer, signal);
+      return this.#authenticate(issuer, generation, signal);
     }
     const cached = this.#sessions.get(issuer.href);
     if (cached) return cached;
-    const pending = this.#authenticate(issuer, signal).catch((e) => {
+    const pending = this.#authenticate(issuer, generation, signal).catch((e) => {
       // Only retract THIS generation's cache entry. If a reset() advanced the
       // generation, #sessions was already cleared and may hold the NEXT identity's
       // in-flight login — deleting blindly here could evict it. Guard on the
@@ -815,8 +872,19 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
    * (static Client Identifier Document when {@link WebIdDPoPTokenProviderOptions.clientId}
    * is set, else dynamic client registration) → PKCE/DPoP authorization-code
    * grant, with the `prompt=none` silent retry preserved.
+   *
+   * SESSION RESTORE (silent restore): the scope requests `offline_access` so the OP
+   * issues a refresh token, and — when a {@link #sessionStore} is configured — the
+   * issued refresh token + the (NON-extractable) DPoP key are persisted under the
+   * generation fence (the `generation` captured by the caller's `upgrade()`). An OP
+   * that rejects `offline_access` (or simply omits a refresh_token) makes login still
+   * SUCCEED, just with no persisted credential / no later restore — never an error.
    */
-  async #authenticate(issuer: URL, signal: AbortSignal): Promise<IssuerSession> {
+  async #authenticate(
+    issuer: URL,
+    generation: number,
+    signal: AbortSignal,
+  ): Promise<IssuerSession> {
     const http = this.#httpOptions(issuer, signal);
 
     const authorizationServer = await this.#discover(issuer, http);
@@ -841,7 +909,13 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
       url.searchParams.set("client_id", clientRegistration.client_id);
       url.searchParams.set("redirect_uri", registeredRedirectUri);
       url.searchParams.set("response_type", registeredResponseType);
-      url.searchParams.set("scope", "openid webid");
+      // `offline_access` so the OP issues a refresh token for silent session restore
+      // (a later refresh-token grant rebuilds the session, no popup). The DPoP key
+      // stays NON-extractable (generated below) — it is structured-cloned into
+      // IndexedDB by the session store, raw bytes never enter JS. An OP that rejects
+      // offline_access must still let login succeed (no refresh_token → no restore),
+      // so this is purely additive: see the post-grant persist guard.
+      url.searchParams.set("scope", "openid webid offline_access");
       if (withPrompt) url.searchParams.set("prompt", "none");
       url.searchParams.set("state", state);
       url.searchParams.set("nonce", nonce);
@@ -916,15 +990,91 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
       { expectedNonce: this.#nonceVerification(authorizationServer.issuer, nonce) },
     );
 
+    // The identity the OP actually vouched for. The login flow checks this against
+    // the requested WebID before treating the user as logged in.
+    const authenticatedWebId = webIdFromClaims(oauth.getValidatedIdTokenClaims(tokenResult));
+
+    // SESSION RESTORE — persist the issued refresh credential (best-effort). When a
+    // store is configured AND the OP issued a refresh_token AND we know the
+    // authenticated WebID, write a PersistedSession so a later tab-reopen can rebuild
+    // the session silently. The DPoP key is NON-extractable; IndexedDB
+    // structured-clones it, so the raw private bytes never enter JS. We re-fence on
+    // the caller's generation FIRST: a reset() (logout / a new login) mid-grant
+    // supersedes this attempt, so it must persist NOTHING (otherwise a stale
+    // identity's credential would land in the store under the new login). A missing
+    // refresh_token (OP without offline_access) just means "no restore later" — never
+    // an error; login still returns the session below. The persisted client_id is the
+    // one actually used (static Client Identifier Document when #clientId set, else
+    // the dynamic registration's assigned id — RFC 6749 §6 binds the token to it).
+    await this.#persistSession(
+      issuer,
+      generation,
+      dpopKey,
+      authenticatedWebId,
+      this.#clientId ?? clientRegistration.client_id,
+      tokenResult,
+    );
+
     return {
       authorizationServer,
       clientRegistration,
       dpopKey,
       accessToken: tokenResult.access_token,
-      // The identity the OP actually vouched for. The login flow checks this
-      // against the requested WebID before treating the user as logged in.
-      authenticatedWebId: webIdFromClaims(oauth.getValidatedIdTokenClaims(tokenResult)),
+      authenticatedWebId,
     };
+  }
+
+  /**
+   * Persist a login's refresh credential into the {@link #sessionStore}, for silent
+   * session restore on a later tab-reopen. Best-effort + fail-open:
+   *  - no-ops when no store is configured, no refresh token was issued (OP without
+   *    offline_access), or the authenticated WebID is unusable — login still succeeds,
+   *    just with no restore;
+   *  - RE-FENCES on the caller-captured `generation`: a reset() (logout / a new login)
+   *    that advanced the generation while the grant was in flight supersedes this
+   *    attempt, so we persist NOTHING (a stale identity's credential must never land in
+   *    the store under the new login);
+   *  - a store `put()` failure is swallowed — a persistence fault must never break a
+   *    login that otherwise succeeded.
+   *
+   * The persisted `clientId` is the `client_id` that was actually used (the static
+   * Client Identifier Document URL when {@link #clientId} is set, else the dynamic
+   * registration's assigned id) — RFC 6749 §6 binds the refresh token to that client,
+   * so {@link restoreIssuer}'s refresh grant MUST run as the same client.
+   */
+  async #persistSession(
+    issuer: URL,
+    generation: number,
+    dpopKey: CryptoKeyPair,
+    authenticatedWebId: string | undefined,
+    clientId: string | undefined,
+    tokenResult: oauth.TokenEndpointResponse,
+  ): Promise<void> {
+    const store = this.#sessionStore;
+    if (!store) return;
+    // RE-FENCE: a reset() during the grant supersedes this login — persist nothing.
+    if (generation !== this.#generation) return;
+    const refreshToken = tokenResult.refresh_token;
+    if (typeof refreshToken !== "string" || refreshToken.length === 0) return; // no offline_access → no restore.
+    if (typeof authenticatedWebId !== "string" || authenticatedWebId.length === 0) return;
+    const expiresAt =
+      typeof tokenResult.expires_in === "number"
+        ? Date.now() + tokenResult.expires_in * 1000
+        : undefined;
+    const session: PersistedSession = {
+      issuer: issuer.href,
+      webId: authenticatedWebId,
+      refreshToken,
+      dpopKey,
+      ...(clientId !== undefined ? { clientId } : {}),
+      ...(expiresAt !== undefined ? { expiresAt } : {}),
+    };
+    try {
+      await store.put(session);
+    } catch {
+      // A persistence fault must never break an otherwise-successful login — the
+      // session is still returned; only silent restore on a later load is lost.
+    }
   }
 
   /**
@@ -1191,13 +1341,127 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
       // other state writes AFTER the authoritative generation re-fence, so a superseded
       // completion seeds nothing.
       this.#issuer = Promise.resolve(issuer);
+      this.#currentIssuerHref = issuer.href;
       this.#authenticatedWebId = authenticatedWebId;
       this.#tokensAttached += 1;
+      // SESSION RESTORE — persist the redirect (autologin) login's refresh credential
+      // too, for PARITY with the popup path: an autologin'd session also survives a
+      // logout-less tab close. All writes above already passed the authoritative
+      // generation re-fence, so `#persistSession`'s own re-fence is belt-and-braces.
+      // NOTE the redirect path's DPoP key is `extractable: true` (it was exported to
+      // JWK to survive the full-page redirect — see beginRedirectLogin), unlike the
+      // popup path's non-extractable key. That is an acceptable, documented tradeoff:
+      // the key already lived as a JWK in sessionStorage for the redirect round-trip,
+      // and `restoreSession` re-attaches whatever key is persisted for the refresh
+      // grant. `flow.clientId` is the client_id the redirect login used (RFC 6749 §6).
+      await this.#persistSession(
+        issuer,
+        generation,
+        dpopKey,
+        authenticatedWebId,
+        flow.clientId,
+        tokenResult,
+      );
     } finally {
       // Clear the persisted record whether we succeeded OR failed, so a refresh /
       // back-button can never replay the (single-use) code + verifier + key.
       clearPersistedRedirectFlow();
     }
+  }
+
+  // ── SILENT SESSION RESTORE (the @jeswr/solid-session-restore thin wiring) ───────
+  //
+  // These are NEW code paths; the popup #authenticate / upgrade / reset are
+  // unchanged in behaviour (only the popup scope now adds offline_access + the
+  // post-grant persist). The package owns the *restore* (refresh-token grant); this
+  // provider owns *pinning the restored session* into its in-memory state so a later
+  // 401 upgrade reuses it without re-prompting, under the generation/reset fence.
+
+  /**
+   * Rebuild a live session from the durable store for a KNOWN issuer (a returning
+   * user on a fresh page load), via the package's {@link restoreSession} (a
+   * refresh-token grant — a token-endpoint fetch, never a popup/iframe). On success,
+   * PIN the restored session into this provider's in-memory state (mirroring the
+   * popup login's post-auth pinning) so a subsequent private read upgrades with no
+   * re-prompt, and return the authenticated WebID; on nothing-to-restore / dead-token
+   * / transient failure, return undefined.
+   *
+   * GENERATION FENCE: a {@link reset} (logout / a new login) that advances the
+   * generation while the refresh grant is in flight supersedes this restore — we then
+   * pin NOTHING (a stale identity must never seed the current generation's state).
+   *
+   * The restored session has a fresh access token + the bound DPoP key, so the seeded
+   * {@link IssuerSession} carries exactly what {@link upgrade} reads (`dpopKey`,
+   * `accessToken`, `authenticatedWebId`). The `authorizationServer`/`clientRegistration`
+   * fields are reconstructed minimally for type-compliance ONLY — `upgrade()` never
+   * dereferences them after session creation (verified: they are written at session
+   * creation and never read off a cached session), and the refresh grant has already
+   * happened inside `restoreSession`, so no rediscovery is needed for a token-attach.
+   *
+   * No-ops to undefined when no store is configured (memory-only mode).
+   */
+  async restoreIssuer(issuer: URL): Promise<{ webId: string } | undefined> {
+    const store = this.#sessionStore;
+    if (!store) return undefined;
+    const generation = this.#generation;
+    const restored = await restoreSession({
+      store,
+      issuer,
+      clientId: this.#clientId,
+      allowInsecureLoopback: this.#allowInsecureLoopback,
+      signal: this.#authController.signal,
+    });
+    if (!restored) return undefined;
+    // FENCE: a reset() (logout / new login) during the grant supersedes this restore.
+    if (generation !== this.#generation) return undefined;
+    const session: IssuerSession = {
+      // Reconstructed minimally for type-compliance — never read off the cached
+      // session by upgrade() (only dpopKey/accessToken/authenticatedWebId are).
+      authorizationServer: { issuer: issuer.href } as oauth.AuthorizationServer,
+      clientRegistration: {
+        client_id: this.#clientId ?? restored.issuer,
+        token_endpoint_auth_method: "none",
+        redirect_uris: [this.#callbackUri],
+        response_types: ["code"],
+      },
+      dpopKey: restored.dpopKey,
+      accessToken: restored.accessToken,
+      authenticatedWebId: restored.webId,
+    };
+    // PIN like the popup login: seed #sessions (so the patched global fetch upgrades
+    // subsequent reads), #issuer (so a later upgrade() reuses it instead of falling
+    // into #resolveIssuer → getWebId(), which has no pending WebID after a restore),
+    // and #authenticatedWebId (so the SessionProvider's establishSessionFor identity
+    // check passes against the restored WebID).
+    this.#sessions.set(issuer.href, Promise.resolve(session));
+    this.#issuer = Promise.resolve(issuer);
+    this.#currentIssuerHref = issuer.href;
+    this.#authenticatedWebId = restored.webId;
+    return { webId: restored.webId };
+  }
+
+  /**
+   * Forget the durable credential for an issuer (explicit LOGOUT). Delegates to the
+   * package's {@link forgetPersistedSession}; a no-op when no store is configured.
+   * Distinct from {@link reset}, which clears only in-memory state — a logout-less tab
+   * close keeps the durable credential so silent restore can rebuild the session,
+   * while an explicit logout MUST drop it so the next load shows the login screen.
+   */
+  async forgetPersisted(issuer: URL): Promise<void> {
+    if (!this.#sessionStore) return;
+    await forgetPersistedSession(this.#sessionStore, issuer);
+  }
+
+  /**
+   * Whether a durable credential is STILL persisted for an issuer — the tri-state
+   * (`"present"`/`"absent"`/`"unknown"`) the SessionProvider feeds into
+   * {@link shouldDropRememberedPointer} to decide whether to keep the remembered
+   * pointer (a transient failure preserved the credential) or drop it (a definitive
+   * invalid_grant cleared it). `"absent"` when no store is configured.
+   */
+  async hasPersisted(issuer: URL): Promise<"present" | "absent" | "unknown"> {
+    if (!this.#sessionStore) return "absent";
+    return hasPersistedSession(this.#sessionStore, issuer);
   }
 
   /**

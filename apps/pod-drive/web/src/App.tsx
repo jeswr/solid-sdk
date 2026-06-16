@@ -17,7 +17,7 @@ import { useSession } from "./auth/SessionProvider";
 import { LoginScreen } from "./LoginScreen";
 
 export function App() {
-  const { webId, session, logout, autologinPending } = useSession();
+  const { webId, session, logout, autologinPending, restoringSession } = useSession();
 
   if (!webId || !session) {
     // Autologin (a Pod-Manager deep-link or a redirect return) is silently signing
@@ -30,6 +30,23 @@ export function App() {
             <h1>Pod Drive</h1>
             <p className="login-sub" role="status">
               Signing you in…
+            </p>
+          </section>
+        </main>
+      );
+    }
+    // SILENT SESSION RESTORE (#69 P0): a returning user's session is being rebuilt from
+    // a persisted DPoP-bound refresh token (no popup/redirect). Paint a brief restoring
+    // state instead of the login form — only ever shown when there is actually a
+    // remembered pointer to attempt, so a first-time user sees the login form with no
+    // flash.
+    if (restoringSession) {
+      return (
+        <main className="login-screen" aria-busy="true">
+          <section className="login-card">
+            <h1>Pod Drive</h1>
+            <p className="login-sub" role="status">
+              Restoring your session…
             </p>
           </section>
         </main>
