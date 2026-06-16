@@ -126,8 +126,32 @@ interface PersistedRedirectFlow {
   nonce: string;
   /** The resolved issuer href (the discovery + token endpoints are re-derived). */
   issuer: string;
-  /** The `client_id` used (this app's static Client Identifier Document URL). */
-  clientId: string;
+  /**
+   * The FULL OAuth client registration `#resolveClient` produced for the
+   * authorization request, persisted verbatim so `completeRedirectLogin`
+   * reconstructs the EXACT SAME client. The full-page redirect erases the in-memory
+   * `oauth.Client`; the popup path keeps it in `#authenticate`'s closure across the
+   * in-tab flow. Persisting only a hand-picked subset (e.g. just `client_id`, or
+   * just `client_id` + auth method) makes the redirect path reconstruct a THINNER
+   * client than the authorization request used — which breaks the token exchange for
+   * a confidential client (a non-`none` auth method / a `client_secret`) AND can
+   * diverge on other registration metadata `oauth4webapi` consults during response
+   * validation (e.g. `id_token_signed_response_alg`, `default_max_age`,
+   * `require_auth_time`). So we round-trip the whole object.
+   *
+   * `oauth.Client` is a plain JSON object (`client_id` + an index signature of
+   * JSON-serialisable values), so `JSON.stringify`/`parse` round-trips it.
+   *
+   * SECURITY: a persisted record MAY carry a `client_secret` (the dynamic-
+   * registration / local-CSS-dev path; never the production static-`clientid.jsonld`
+   * public client, which is `none` with no secret). A persisted secret sits at the
+   * SAME sessionStorage trust boundary the redirect flow ALREADY uses for the
+   * exported (extractable) DPoP private JWK above — same-origin, per-tab, cleared on
+   * tab close, and cleared the instant the record is consumed (see
+   * `completeRedirectLogin`'s `finally`) — so it is consistent with that existing
+   * boundary, not a new exposure.
+   */
+  client: oauth.Client;
   /**
    * The redirect_uri sent in BOTH the authorization request AND the token
    * exchange — they MUST be byte-identical or the token exchange is rejected.
@@ -743,6 +767,12 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
       authorizationUrl.searchParams.set("code_challenge", codeChallenge);
     }
 
+    // Persist the FULL resolved client registration so completeRedirectLogin rebuilds
+    // the EXACT SAME client this authorization request used — not a hand-picked subset
+    // that could diverge on auth method, secret, or any other registration metadata
+    // oauth4webapi consults. The static public-client path is `none` with no secret
+    // (unchanged); the dynamic-registration path may yield a confidential client, all
+    // of whose metadata round-trips here.
     const flow: PersistedRedirectFlow = {
       dpopPrivateJwk,
       dpopPublicJwk,
@@ -751,7 +781,7 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
       state,
       nonce,
       issuer: issuer.href,
-      clientId: clientRegistration.client_id,
+      client: clientRegistration,
       redirectUri: redirectReturnUri,
       webId: validateWebId(await this.#getWebId()),
     };
@@ -809,12 +839,54 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
       const http = this.#httpOptions(issuer, signal);
       const authorizationServer = await this.#discover(issuer, http);
 
+      // Rebuild the EXACT SAME client the authorization request used — from the FULL
+      // PERSISTED registration, NOT a hardcoded/thinner subset. The popup path keeps
+      // its full `oauth.Client` in `#authenticate`'s closure across the in-tab flow;
+      // the full-page redirect lost it, so we restore the whole object from
+      // sessionStorage. This preserves the auth method + any `client_secret` AND every
+      // other registration field `oauth4webapi` consults during response validation
+      // (e.g. `id_token_signed_response_alg`, `default_max_age`, `require_auth_time`),
+      // so the redirect path cannot behave differently from the popup path. We only
+      // pin `redirect_uris` to the single persisted redirect URI — it MUST be the
+      // exact value sent in the authorization request, and the token exchange passes
+      // `flow.redirectUri` explicitly below anyway.
       const clientRegistration: oauth.Client = {
-        client_id: flow.clientId,
-        token_endpoint_auth_method: "none",
+        ...flow.client,
         redirect_uris: [flow.redirectUri],
-        response_types: ["code"],
       };
+
+      // FAIL CLOSED on an auth method `#clientAuth` cannot honour. `#clientAuth`
+      // implements exactly `none` (public client) and `client_secret_basic`; ANY
+      // other confidential method (e.g. `client_secret_post`, `private_key_jwt`)
+      // would fall through to `oauth.None()` and send NO client authentication on the
+      // token exchange — a silent, hard-to-diagnose failure (and a confidential client
+      // presenting as public). The auth method is also SECRET-AWARE: per RFC 7591 /
+      // OIDC, a registration with a `client_secret` but no explicit auth method relies
+      // on the default `client_secret_basic` (a CONFIDENTIAL client), so we treat a
+      // secret-bearing record with no method as `client_secret_basic` rather than the
+      // public-client `none`. Refuse anything else explicitly so the caller falls back
+      // to interactive login — mirroring the redirect path's fail-closed posture (the
+      // WebID-mismatch guard). The popup + refresh-grant paths share `#clientAuth` and
+      // have the same support envelope; in practice the dynamic-registration dev path
+      // is `none` (CSS public client) or `client_secret_basic`.
+      const effectiveAuthMethod =
+        typeof clientRegistration.token_endpoint_auth_method === "string"
+          ? clientRegistration.token_endpoint_auth_method
+          : clientRegistration.client_secret !== undefined
+            ? "client_secret_basic"
+            : "none";
+      clientRegistration.token_endpoint_auth_method = effectiveAuthMethod;
+      if (
+        effectiveAuthMethod !== "none" &&
+        effectiveAuthMethod !== "client_secret_basic"
+      ) {
+        throw new Error(
+          "Login did not complete — the registered client uses an unsupported " +
+            `token-endpoint authentication method (${effectiveAuthMethod}); only ` +
+            "'none' and 'client_secret_basic' are supported for the redirect login. " +
+            "Please log in again.",
+        );
+      }
 
       // Re-import the persisted ES256 DPoP key (extractable so it survived the
       // redirect) and rebuild the DPoP handle for the token exchange.

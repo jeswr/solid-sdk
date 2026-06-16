@@ -24,6 +24,13 @@ const h = vi.hoisted(() => ({
   lastAuthEndpoint: "https://issuer.example/authorize",
 }));
 
+const h2 = vi.hoisted(() => ({
+  // The client registration the (mocked) dynamic client registration returns. Tests
+  // flip this to a CONFIDENTIAL client to prove the auth method + secret round-trip
+  // across the full-page redirect (the Medium fix).
+  dynamicClientRegistration: { client_id: "dyn-client" } as Record<string, unknown>,
+}));
+
 vi.mock("oauth4webapi", () => {
   const allowInsecureRequests = Symbol("allowInsecureRequests");
   const expectNoNonce = Symbol("expectNoNonce");
@@ -63,7 +70,7 @@ vi.mock("oauth4webapi", () => {
     refreshTokenGrantRequest: vi.fn(async () => ({})),
     processRefreshTokenResponse: vi.fn(async () => ({ access_token: "at-refresh" })),
     dynamicClientRegistrationRequest: vi.fn(async () => ({})),
-    processDynamicClientRegistrationResponse: vi.fn(() => ({ client_id: "dyn-client" })),
+    processDynamicClientRegistrationResponse: vi.fn(() => h2.dynamicClientRegistration),
     AuthorizationResponseError: class extends Error {},
   };
 });
@@ -80,6 +87,7 @@ vi.mock("./login-ux", () => ({
   resolveIssuers: () => ["https://issuer.example"],
 }));
 
+import * as oauth from "oauth4webapi";
 import { webIdsEqual, WebIdDPoPTokenProvider } from "./webid-token-provider";
 
 const ALICE = "https://alice.example/profile/card#me";
@@ -226,5 +234,178 @@ describe("completeRedirectLogin — WebID enforcement (invariant a) + seeding (i
     await expect(
       provider.completeRedirectLogin("https://app.example/?code=auth-code&state=state-xyz"),
     ).rejects.toThrow(/no pending redirect login/i);
+  });
+});
+
+// ── Medium fix: the persisted client registration round-trips across the redirect ─
+//
+// completeRedirectLogin must reconstruct the SAME client the authorization request
+// used — from the PERSISTED registration, not a hardcoded `token_endpoint_auth_method:
+// "none"`. Otherwise a dynamic-registration confidential client (an auth method other
+// than `none`, and/or a client_secret) is lost across the full-page redirect and the
+// token exchange FAILS. The static public-client (`clientid.jsonld`) path is `none`
+// with no secret and must stay byte-identical.
+describe("completeRedirectLogin — persisted client-registration round-trip (Medium fix)", () => {
+  let store: Map<string, string>;
+  beforeEach(() => {
+    store = installSessionStorage();
+    h.idTokenWebId = ALICE;
+    h2.dynamicClientRegistration = { client_id: "dyn-client" };
+    vi.mocked(oauth.authorizationCodeGrantRequest).mockClear();
+    vi.mocked(oauth.ClientSecretBasic).mockClear();
+    vi.mocked(oauth.None).mockClear();
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("PUBLIC client (static clientid.jsonld): persists + reconstructs `none`, no secret", async () => {
+    const provider = newProvider(); // has clientId → static public client, auth `none`
+    await provider.beginRedirectLogin("https://app.example/");
+
+    const flow = JSON.parse(store.get("solid-issues.autologin.flow")!);
+    // The FULL client registration is persisted (a public client, auth `none`).
+    expect(flow.client.client_id).toBe("https://app.example/clientid.jsonld");
+    expect(flow.client.token_endpoint_auth_method).toBe("none");
+    expect(flow.client.client_secret).toBeUndefined();
+
+    await provider.completeRedirectLogin("https://app.example/?code=auth-code&state=state-xyz");
+
+    // The client handed to the token exchange is the SAME public client.
+    const client = vi.mocked(oauth.authorizationCodeGrantRequest).mock.calls[0][1];
+    expect(client.token_endpoint_auth_method).toBe("none");
+    expect(client.client_secret).toBeUndefined();
+    // Public-client path uses `None()` auth, never `ClientSecretBasic`.
+    expect(oauth.None).toHaveBeenCalled();
+    expect(oauth.ClientSecretBasic).not.toHaveBeenCalled();
+  });
+
+  it("CONFIDENTIAL client (dynamic registration): the auth method + secret round-trip", async () => {
+    // Dynamic registration (no static clientId) returns a confidential client with
+    // EXTRA metadata oauth4webapi consults during response validation — the whole
+    // record must round-trip across the redirect, not just id/method/secret.
+    h2.dynamicClientRegistration = {
+      client_id: "dyn-client",
+      token_endpoint_auth_method: "client_secret_basic",
+      client_secret: "s3cr3t-from-registration",
+      id_token_signed_response_alg: "ES256",
+      require_auth_time: true,
+    };
+    const onSession = vi.fn();
+    const provider = new WebIdDPoPTokenProvider(
+      "https://app.example/callback.html",
+      async () => "unused",
+      async () => ALICE,
+      { onSession }, // NO clientId → dynamic client registration path
+    );
+
+    await provider.beginRedirectLogin("https://app.example/");
+
+    // beginRedirectLogin persisted the FULL confidential client registration…
+    const flow = JSON.parse(store.get("solid-issues.autologin.flow")!);
+    expect(flow.client.client_id).toBe("dyn-client");
+    expect(flow.client.token_endpoint_auth_method).toBe("client_secret_basic");
+    expect(flow.client.client_secret).toBe("s3cr3t-from-registration");
+    // …including the extra registration metadata (would diverge if we persisted a subset).
+    expect(flow.client.id_token_signed_response_alg).toBe("ES256");
+    expect(flow.client.require_auth_time).toBe(true);
+
+    const result = await provider.completeRedirectLogin(
+      "https://app.example/?code=auth-code&state=state-xyz",
+    );
+    expect(result.webId).toBe(ALICE);
+
+    // …and completeRedirectLogin reconstructed the SAME confidential client for the
+    // token exchange (NOT a hardcoded `none`/secret-less public client), preserving
+    // every registration field, with redirect_uris pinned to the persisted URI.
+    const client = vi.mocked(oauth.authorizationCodeGrantRequest).mock.calls[0][1];
+    expect(client.client_id).toBe("dyn-client");
+    expect(client.token_endpoint_auth_method).toBe("client_secret_basic");
+    expect(client.client_secret).toBe("s3cr3t-from-registration");
+    expect(client.id_token_signed_response_alg).toBe("ES256");
+    expect(client.require_auth_time).toBe(true);
+    expect(client.redirect_uris).toEqual(["https://app.example/"]);
+    // The confidential auth method drives ClientSecretBasic with the persisted secret.
+    expect(oauth.ClientSecretBasic).toHaveBeenCalledWith("s3cr3t-from-registration");
+    // The record is cleared (single-use), so the secret never outlives the round-trip.
+    expect(store.has("solid-issues.autologin.flow")).toBe(false);
+  });
+
+  it("secret WITHOUT an explicit auth method defaults to `client_secret_basic` (not `none`)", async () => {
+    // Per RFC 7591 / OIDC: an OP that returns a client_secret while OMITTING
+    // token_endpoint_auth_method relies on the default `client_secret_basic` (a
+    // CONFIDENTIAL client). The fix must NOT reconstruct a public `none` client and
+    // drop the secret.
+    h2.dynamicClientRegistration = {
+      client_id: "dyn-client",
+      client_secret: "s3cr3t-no-method",
+      // NOTE: no token_endpoint_auth_method.
+    };
+    const provider = new WebIdDPoPTokenProvider(
+      "https://app.example/callback.html",
+      async () => "unused",
+      async () => ALICE,
+      {}, // dynamic registration path
+    );
+    await provider.beginRedirectLogin("https://app.example/");
+
+    const flow = JSON.parse(store.get("solid-issues.autologin.flow")!);
+    expect(flow.client.client_secret).toBe("s3cr3t-no-method");
+    expect(flow.client.token_endpoint_auth_method).toBeUndefined();
+
+    await provider.completeRedirectLogin("https://app.example/?code=auth-code&state=state-xyz");
+
+    const client = vi.mocked(oauth.authorizationCodeGrantRequest).mock.calls[0][1];
+    expect(client.token_endpoint_auth_method).toBe("client_secret_basic");
+    expect(client.client_secret).toBe("s3cr3t-no-method");
+    // The secret is actually USED for client auth (not silently dropped via None()).
+    expect(oauth.ClientSecretBasic).toHaveBeenCalledWith("s3cr3t-no-method");
+    expect(oauth.None).not.toHaveBeenCalled();
+  });
+
+  it("FAILS CLOSED on an unsupported confidential auth method (e.g. client_secret_post)", async () => {
+    // #clientAuth implements only `none` + `client_secret_basic`; any other method
+    // would silently send NO client auth on the token exchange. completeRedirectLogin
+    // must refuse explicitly rather than reconstruct a client it cannot authenticate.
+    h2.dynamicClientRegistration = {
+      client_id: "dyn-client",
+      token_endpoint_auth_method: "client_secret_post",
+      client_secret: "s3cr3t-post",
+    };
+    const onSession = vi.fn();
+    const provider = new WebIdDPoPTokenProvider(
+      "https://app.example/callback.html",
+      async () => "unused",
+      async () => ALICE,
+      { onSession },
+    );
+    await provider.beginRedirectLogin("https://app.example/");
+    expect(store.has("solid-issues.autologin.flow")).toBe(true);
+
+    await expect(
+      provider.completeRedirectLogin("https://app.example/?code=auth-code&state=state-xyz"),
+    ).rejects.toThrow(/unsupported token-endpoint authentication method/i);
+
+    // No token exchange attempted, no session published, record cleared (no replay).
+    expect(oauth.authorizationCodeGrantRequest).not.toHaveBeenCalled();
+    expect(provider.authenticatedWebId()).toBeUndefined();
+    expect(onSession).not.toHaveBeenCalled();
+    expect(store.has("solid-issues.autologin.flow")).toBe(false);
+  });
+
+  it("minimal record (client carries neither auth method nor secret) falls back to `none`", async () => {
+    // A persisted client with no token_endpoint_auth_method and no client_secret is a
+    // public client: it must reconstruct as `none`, never accidentally confidential.
+    const provider = newProvider();
+    await provider.beginRedirectLogin("https://app.example/");
+    const flow = JSON.parse(store.get("solid-issues.autologin.flow")!);
+    delete flow.client.token_endpoint_auth_method;
+    delete flow.client.client_secret;
+    store.set("solid-issues.autologin.flow", JSON.stringify(flow));
+
+    await provider.completeRedirectLogin("https://app.example/?code=auth-code&state=state-xyz");
+
+    const client = vi.mocked(oauth.authorizationCodeGrantRequest).mock.calls[0][1];
+    expect(client.token_endpoint_auth_method).toBe("none");
+    expect(client.client_secret).toBeUndefined();
+    expect(oauth.ClientSecretBasic).not.toHaveBeenCalled();
   });
 });
