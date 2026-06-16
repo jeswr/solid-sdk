@@ -23,16 +23,34 @@ if (typeof window !== "undefined" && typeof window.matchMedia !== "function") {
     }) as unknown as MediaQueryList;
 }
 
-// Install a minimal in-memory localStorage when jsdom does not provide a working one
-// (this vitest/jsdom setup exposes `localStorage` but its methods are not callable —
-// it emits "`--localstorage-file` was provided without a valid path"). The
-// silent-session-restore RememberedAccount pointer is localStorage-backed, so the
-// implementation-level SessionProvider test needs a functioning store to seed a
+// Install a minimal in-memory localStorage when jsdom does not provide a WORKING one.
+// This vitest/jsdom setup exposes `localStorage` whose `setItem` IS a function but
+// THROWS when called — it emits "`--localstorage-file` was provided without a valid
+// path". A `typeof setItem === "function"` check is therefore too weak: it passes and
+// leaves the broken storage installed, so a test fails before reaching the behavior
+// under test. We instead PROBE by actually calling setItem/removeItem inside try/catch
+// and install the polyfill if the store is undefined, missing setItem, OR callable-but-
+// throwing. The silent-session-restore RememberedAccount pointer is localStorage-backed,
+// so the implementation-level SessionProvider test needs a functioning store to seed a
 // returning-user pointer. Test-infra only — never shipped.
-if (
-  typeof globalThis.localStorage === "undefined" ||
-  typeof globalThis.localStorage.setItem !== "function"
-) {
+const localStorageWorks = (): boolean => {
+  try {
+    if (
+      typeof globalThis.localStorage === "undefined" ||
+      typeof globalThis.localStorage.setItem !== "function"
+    ) {
+      return false;
+    }
+    // The load-bearing probe: jsdom's broken store has a callable setItem that THROWS.
+    const probeKey = "__localStorage_probe__";
+    globalThis.localStorage.setItem(probeKey, "1");
+    globalThis.localStorage.removeItem(probeKey);
+    return true;
+  } catch {
+    return false;
+  }
+};
+if (!localStorageWorks()) {
   const store = new Map<string, string>();
   const memoryLocalStorage: Storage = {
     get length() {

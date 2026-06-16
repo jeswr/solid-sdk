@@ -29,6 +29,7 @@
 //    (the dynamic @solid/reactive-authentication import is mocked to throw) and asserts the
 //    UI leaves "Restoring…". Removing `setRestoringFalse` (or the effect's use of it) fails
 //    both.
+import { RememberedAccount } from "@jeswr/solid-session-restore";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -163,19 +164,40 @@ describe("FINDING 4 (decision) — decideRuntimeInitFailure clears restoringSess
 // ── FINDING 4 (implementation) — a rejecting runtime init leaves the UI off "Restoring…" ─
 //
 // The decider is thin, so this IMPLEMENTATION-LEVEL test guards the WIRING: mount the
-// real <App> under <SessionProvider> with the @solid/reactive-authentication dynamic
-// import forced to REJECT (so getAuthRuntime rejects), and assert the UI does NOT hang on
-// "Restoring your session…" — it must surface the login/error path. Removing
-// `setRestoringFalse` from the catch (or from decideRuntimeInitFailure) makes this hang
-// and the test fails.
+// real <App> under <SessionProvider> with the @solid/reactive-authentication runtime init
+// forced to REJECT (so getAuthRuntime rejects), and assert the UI first ENTERS the
+// "Restoring your session…" state and is then UN-STUCK by the catch — surfacing the
+// login/error path. Removing `setRestoringFalse` from the catch (or from
+// decideRuntimeInitFailure) makes this hang and the test fails.
 //
-// We mock @solid/reactive-authentication's ReactiveFetchManager so its dynamic import in
-// getAuthRuntime throws on construction → the runtime promise rejects. We seed a
-// remembered pointer FIRST so restoringSession initialises TRUE (otherwise it starts
-// false and there is nothing to clear — the test must observe the catch doing the work).
+// NON-VACUOUSNESS (roborev finding): the prior version only `waitFor`-ed the absence of
+// the restoring text. That absence is ALSO true if `restoringSession` started FALSE (e.g.
+// the remembered pointer was not actually observed on mount), so it could pass WITHOUT
+// ever entering the restoring state — it did not prove the catch's `setRestoringSession(
+// false)` did any work. This version proves the FULL transition: the restoring text is
+// PRESENT (restore state entered) → THEN absent (the catch cleared it).
+//
+// REJECTION TIMING — why the present-then-absent transition is observable: production
+// `getAuthRuntime` does `const { ReactiveFetchManager } = await import(...)` then
+// `new ReactiveFetchManager([provider])`. The mock constructor throws SYNCHRONOUSLY, but
+// only AFTER the `await import(...)` resolves — i.e. on a later microtask. RTL's synchronous
+// `render(...)` paints the lazy `restoringSession=true` initializer FIRST (it read the
+// seeded pointer), so there is a render frame where the restoring text is on screen BEFORE
+// the deferred rejection propagates through the runtime-init `.catch`. The test asserts that
+// frame (PRESENT), then `waitFor`s the catch to clear it (ABSENT). With
+// `setRestoringSession(false)` removed from production, `ready` stays false forever, the
+// restore effect never runs, and the restoring text NEVER disappears → the final `waitFor`
+// times out and the test FAILS — so it genuinely guards the fix (the adversarial check).
+//
+// We seed a remembered pointer FIRST so restoringSession initialises TRUE (otherwise it
+// starts false and there is nothing to clear — the test must observe the catch doing work).
 vi.mock("@solid/reactive-authentication", () => ({
   ReactiveFetchManager: class {
     constructor() {
+      // Throwing synchronously in the constructor rejects production's runtime-init
+      // IIFE (`new ReactiveFetchManager(...)` is awaited inside it). Because the throw is
+      // downstream of the `await import(...)`, it propagates on a microtask AFTER the
+      // synchronous render — leaving the observable restoring-text frame the test asserts.
       throw new Error("runtime build failed (forced for the finding-4 test)");
     }
     registerGlobally() {}
@@ -189,13 +211,18 @@ describe("FINDING 4 (implementation) — runtime-init rejection un-sticks the Re
     invalidateSilentRestoreLatch();
   });
 
-  it("does NOT remain stuck on 'Restoring your session…' when getAuthRuntime rejects", async () => {
+  it("ENTERS 'Restoring your session…' then is un-stuck when getAuthRuntime rejects", async () => {
     // Seed the remembered-account pointer so restoringSession starts TRUE on mount —
     // matching the only scenario the finding-4 catch fix actually has to recover from.
     localStorage.setItem(
       "pod-drive:remembered-account",
       JSON.stringify({ webId: WEBID_A, issuer: "https://issuer.example/" }),
     );
+    // GUARD the precondition (roborev): the pointer MUST be observable as the production
+    // singleton reads it on mount — if it is not, restoringSession starts false and this
+    // test would be vacuous. Assert the EXACT module key is seeded and readable.
+    expect(new RememberedAccount("pod-drive:remembered-account").read()).not.toBeNull();
+
     // Import lazily AFTER the mock is installed (vi.mock is hoisted, so the dynamic import
     // inside getAuthRuntime resolves to the throwing mock). Compose exactly as main.tsx:
     // ThemeProvider > SessionProvider > App.
@@ -211,9 +238,19 @@ describe("FINDING 4 (implementation) — runtime-init rejection un-sticks the Re
       </ThemeProvider>,
     );
 
-    // It may briefly show "Restoring your session…", but the rejecting runtime init must
-    // flip restoringSession off so the login/error UI renders. If `setRestoringFalse` is
-    // removed from the catch, the app hangs on the restoring text forever and this fails.
+    // PRECONDITION — the restore state was ENTERED. The lazy `restoringSession`
+    // initializer ran on the SYNCHRONOUS render (it read the seeded pointer → true) and
+    // `ready` is still false (the runtime-init promise has not settled), so the restoring
+    // UI is painted. This is the assertion that makes the test NON-VACUOUS: a test that
+    // never entered the restoring state would fail HERE. (The runtime-init rejection is a
+    // microtask-deferred chain off the dynamic import, so it has not yet propagated.)
+    expect(screen.getByText(/Restoring your session/i)).toBeInTheDocument();
+
+    // POSTCONDITION — the catch flipped restoringSession off, so the restoring UI is
+    // gone and the login/error UI renders. If `setRestoringSession(false)` is removed
+    // from the production runtime-init `.catch`, `ready` stays false forever, the restore
+    // effect never runs, and the restoring text NEVER disappears → this waitFor times out
+    // and the test FAILS (the adversarial check).
     await waitFor(
       () => {
         expect(screen.queryByText(/Restoring your session/i)).toBeNull();
