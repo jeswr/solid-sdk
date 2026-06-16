@@ -11,10 +11,21 @@ import {
   TermAs,
   TermFrom,
 } from "@rdfjs/wrapper";
+// Import the runtime model from the `./task` subpath, NOT the barrel `.` — the
+// barrel re-exports `taskShapeTtl`, which reads the shape via `node:fs`, and a
+// client bundler (Next.js/Turbopack) cannot put `node:fs` in a browser chunk. The
+// `Issue` model is used in client components (e.g. session-context), so it must
+// stay `node:fs`-free; `./task` carries only the runtime accessors.
+import { Task, type TaskPriority } from "@jeswr/solid-task-model/task";
 import { WF, DCT, RDF, STATE, wf, dct, rdf, rdfs, sioc, foaf, vcard, schema, xsd, skos, prov, time, TIME_UNIT_SECOND } from "./vocab";
 
 export type IssueState = "open" | "closed";
-export type Priority = "high" | "medium" | "low";
+/**
+ * Issue priority. Identical to the shared model's {@link TaskPriority} — re-exported
+ * under the app's own name so consumers are unchanged while the values stay pinned
+ * to the federated vocabulary.
+ */
+export type Priority = TaskPriority;
 export const PRIORITIES: readonly Priority[] = ["high", "medium", "low"];
 
 /**
@@ -353,10 +364,37 @@ export class ActivityLog extends DatasetWrapper {
  * priority, and labels are all carried by `rdf:type` — the SolidOS model. Priority
  * and label classes are fragments of the tracker document (resolvable); the issue
  * derives their IRIs from its own `wf:tracker` link.
+ *
+ * **Federated core via `@jeswr/solid-task-model`.** The shared, cross-app fields
+ * (title, description, state, assignee, tracker, dates, creator, due-date, rank,
+ * and the issue↔issue link family) are read/written through an embedded shared
+ * {@link Task} over the SAME subject + dataset, so a task created in solid-issues
+ * is byte-compatible with one created in the Pod Manager (and vice-versa). The
+ * shared model writes the `wf:description` **+** `dct:description` pair, so a body
+ * authored by either app is read by the other. solid-issues' app-local refinements
+ * (the configurable status workflow + `#status-*` classes, the `#type-*` /
+ * `#priority-*` / `#label-*` subclasses, custom fields, comments, worklog, the
+ * activity log, story-point estimate) are layered ON TOP and unchanged.
  */
 export class Issue extends TermWrapper {
   get id(): string {
     return this.value;
+  }
+
+  /**
+   * The shared federated task view over THIS issue's subject + dataset. All
+   * cross-app predicates (`dct:title`/`description`/`created`/`modified`/`creator`,
+   * `wf:Open`/`wf:Closed` state, `wf:assignee`, `wf:tracker`, `wf:dateDue`,
+   * `schema:position`, and the `dct:isPartOf`/`requires`/`relation`/`isReplacedBy`
+   * + `prov:wasDerivedFrom` link family) flow through it, so they are written
+   * exactly as the Pod Manager and every other suite app write them. Lazily built
+   * once and reused; it shares this wrapper's `dataset` + `factory`, so edits land
+   * on the same graph the rest of the `Issue` accessors operate on.
+   */
+  private _shared?: Task;
+  private get shared(): Task {
+    if (!this._shared) this._shared = new Task(this.value, this.dataset, this.factory);
+    return this._shared;
   }
 
   private get types(): Set<string> {
@@ -369,116 +407,133 @@ export class Issue extends TermWrapper {
   }
 
   get title(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, dct("title"), LiteralAs.string);
+    return this.shared.title;
   }
   set title(value: string | undefined) {
-    OptionalAs.object(this, dct("title"), value, LiteralFrom.string);
+    this.shared.title = value;
   }
 
+  /**
+   * The issue body. Delegated to the shared model, which reads BOTH `wf:description`
+   * (solid-issues' historical predicate, preferred) AND `dct:description` (the Pod
+   * Manager's), and WRITES BOTH — so a PM-authored body is no longer missed on read,
+   * and a solid-issues-authored body is legible in PM. This is the cross-app
+   * reconciliation point for the description field.
+   */
   get description(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, wf("description"), LiteralAs.string);
+    return this.shared.description;
   }
   set description(value: string | undefined) {
-    OptionalAs.object(this, wf("description"), value, LiteralFrom.string);
+    this.shared.description = value;
   }
 
+  /**
+   * The tracker document this issue belongs to (`wf:tracker`). Same predicate the
+   * shared model exposes as {@link Task.project}; named `tracker` here for the app's
+   * vocabulary (and the priority/label/status class IRIs are derived from it).
+   */
   get tracker(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, wf("tracker"), NamedNodeAs.string);
+    return this.shared.project;
   }
   set tracker(value: string | undefined) {
-    OptionalAs.object(this, wf("tracker"), value, NamedNodeFrom.string);
+    this.shared.project = value;
   }
 
   get created(): Date | undefined {
-    return OptionalFrom.subjectPredicate(this, dct("created"), LiteralAs.date);
+    return this.shared.created;
   }
   set created(value: Date | undefined) {
-    OptionalAs.object(this, dct("created"), value, LiteralFrom.dateTime);
+    this.shared.created = value;
   }
 
   get modified(): Date | undefined {
-    return OptionalFrom.subjectPredicate(this, dct("modified"), LiteralAs.date);
+    return this.shared.modified;
   }
   set modified(value: Date | undefined) {
-    OptionalAs.object(this, dct("modified"), value, LiteralFrom.dateTime);
+    this.shared.modified = value;
   }
 
   get creator(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, dct("creator"), NamedNodeAs.string);
+    return this.shared.creator;
   }
   set creator(value: string | undefined) {
-    OptionalAs.object(this, dct("creator"), value, NamedNodeFrom.string);
+    this.shared.creator = value;
   }
 
-  /** WebID of the assigned agent or group (optional). */
+  /** WebID of the assigned agent or group (optional) — `wf:assignee` (shared). */
   get assignee(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, wf("assignee"), NamedNodeAs.string);
+    return this.shared.assignee;
   }
   set assignee(value: string | undefined) {
-    OptionalAs.object(this, wf("assignee"), value, NamedNodeFrom.string);
+    this.shared.assignee = value;
   }
 
-  /** Parent issue (this is a sub-task of it), via `dct:isPartOf`. */
+  /** Parent issue (this is a sub-task of it), via `dct:isPartOf` (shared). */
   get parent(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, dct("isPartOf"), NamedNodeAs.string);
+    return this.shared.parent;
   }
   set parent(value: string | undefined) {
-    OptionalAs.object(this, dct("isPartOf"), value, NamedNodeFrom.string);
+    this.shared.parent = value;
   }
 
-  /** Issues this one is blocked by (must be done first), via `dct:requires` — live set. */
+  /** Issues this one is blocked by (must be done first), via `dct:requires` — live set (shared). */
   get blockedBy(): Set<string> {
-    return SetFrom.subjectPredicate(this, dct("requires"), NamedNodeAs.string, NamedNodeFrom.string);
+    return this.shared.blockedBy;
   }
 
   /**
    * Issues this one merely relates to (a non-blocking, symmetric "relates-to"
-   * link), via `dct:relation` — live set. The peer should carry the reverse
-   * `dct:relation` too (the relation is symmetric); {@link relatedLinks} derives
-   * the union for display.
+   * link), via `dct:relation` — live set (shared). The peer should carry the
+   * reverse `dct:relation` too (the relation is symmetric); {@link relatedLinks}
+   * derives the union for display.
    */
   get relatesTo(): Set<string> {
-    return SetFrom.subjectPredicate(this, dct("relation"), NamedNodeAs.string, NamedNodeFrom.string);
+    return this.shared.relatesTo;
   }
 
   /**
    * The issue this one duplicates / is superseded by (close-as-duplicate), via
-   * `dct:isReplacedBy`. Supersession only — a single canonical successor; the
-   * peer surfaces it as `dct:replaces` (derived for display, not stored here).
+   * `dct:isReplacedBy` (shared). Supersession only — a single canonical successor;
+   * the peer surfaces it as `dct:replaces` (derived for display, not stored here).
    */
   get duplicateOf(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, dct("isReplacedBy"), NamedNodeAs.string);
+    return this.shared.duplicateOf;
   }
   set duplicateOf(value: string | undefined) {
-    OptionalAs.object(this, dct("isReplacedBy"), value, NamedNodeFrom.string);
+    this.shared.duplicateOf = value;
   }
 
   /**
-   * The issue this one was cloned from (clone v1), via `prov:wasDerivedFrom`.
-   * A single provenance source — the original this issue was derived from.
+   * The issue this one was cloned from (clone v1), via `prov:wasDerivedFrom`
+   * (shared). A single provenance source — the original this issue was derived from.
    */
   get clonedFrom(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, prov("wasDerivedFrom"), NamedNodeAs.string);
+    return this.shared.clonedFrom;
   }
   set clonedFrom(value: string | undefined) {
-    OptionalAs.object(this, prov("wasDerivedFrom"), value, NamedNodeFrom.string);
+    this.shared.clonedFrom = value;
   }
 
-  /** Attached file URLs (in the pod), via `wf:attachment` — live set. */
+  /**
+   * Attached file URLs (in the pod), via `wf:attachment` — live set. App-local
+   * (not part of the shared federated model); kept on the `Issue` directly.
+   */
   get attachments(): Set<string> {
     return SetFrom.subjectPredicate(this, wf("attachment"), NamedNodeAs.string, NamedNodeFrom.string);
   }
 
+  /** Due date (`wf:dateDue`, shared). Stored as xsd:dateTime (well-formed; round-trips). */
   get dateDue(): Date | undefined {
-    return OptionalFrom.subjectPredicate(this, wf("dateDue"), LiteralAs.date);
+    return this.shared.dueDate;
   }
   set dateDue(value: Date | undefined) {
-    // LiteralFrom.date emits an xsd:date with a full dateTime lexical (a wrapper
-    // quirk that fails SHACL); store dateTime, which is well-formed and round-trips.
-    OptionalAs.object(this, wf("dateDue"), value, LiteralFrom.dateTime);
+    this.shared.dueDate = value;
   }
 
-  /** Story-point estimate (`dct:extent` — "size of the resource"). */
+  /**
+   * Story-point estimate (`dct:extent` — "size of the resource"). App-local; not
+   * part of the shared federated model.
+   */
   get estimate(): number | undefined {
     return OptionalFrom.subjectPredicate(this, dct("extent"), LiteralAs.number);
   }
@@ -486,38 +541,34 @@ export class Issue extends TermWrapper {
     OptionalAs.object(this, dct("extent"), value, LiteralFrom.double);
   }
 
-  /** Backlog rank (`schema:position`); lower sorts first. Fractional for cheap reorder. */
+  /** Backlog rank (`schema:position`, shared); lower sorts first. Fractional for cheap reorder. */
   get rank(): number | undefined {
-    return OptionalFrom.subjectPredicate(this, schema("position"), LiteralAs.number);
+    return this.shared.rank;
   }
   set rank(value: number | undefined) {
-    OptionalAs.object(this, schema("position"), value, LiteralFrom.double);
+    this.shared.rank = value;
   }
 
+  /**
+   * Lifecycle state (`rdf:type wf:Open`/`wf:Closed`), delegated to the shared model
+   * — identical semantics to solid-issues' historical setter: closing stamps
+   * `prov:endedAtTime` once (preserved on re-close), reopening clears it, and
+   * `wf:Task` stays typed. The app-local `#status-*` workflow class is layered on
+   * top by {@link setStatus} / {@link status}.
+   */
   get state(): IssueState {
-    return this.types.has(STATE.Closed) ? "closed" : "open";
+    return this.shared.state;
   }
   set state(value: IssueState) {
-    const types = this.types;
-    if (value === "closed") {
-      types.add(STATE.Closed);
-      types.delete(STATE.Open);
-      // Completion is provenance: stamp once, keep the original on re-close.
-      this.endedAt ??= new Date();
-    } else {
-      types.add(STATE.Open);
-      types.delete(STATE.Closed);
-      this.endedAt = undefined;
-    }
-    types.add(wf("Task"));
+    this.shared.state = value;
   }
 
-  /** When the task was completed (`prov:endedAtTime`); cleared on reopen. */
+  /** When the task was completed (`prov:endedAtTime`, shared); cleared on reopen. */
   get endedAt(): Date | undefined {
-    return OptionalFrom.subjectPredicate(this, prov("endedAtTime"), LiteralAs.date);
+    return this.shared.endedAt;
   }
   set endedAt(value: Date | undefined) {
-    OptionalAs.object(this, prov("endedAtTime"), value, LiteralFrom.dateTime);
+    this.shared.endedAt = value;
   }
   get isOpen(): boolean {
     return this.state === "open";
@@ -567,13 +618,32 @@ export class Issue extends TermWrapper {
   private priorityClass(level: Priority, doc = this.trackerDoc()): string | undefined {
     return doc ? `${doc}#priority-${level}` : undefined;
   }
+  /**
+   * Priority (high/medium/low). solid-issues' app-local source of truth is the
+   * tracker-scoped `#priority-<level>` `rdf:type` subclass (resolvable, UI-driving);
+   * the SHARED federated model carries it as a flat `schema:priority` string literal
+   * (the predicate the Pod Manager reads). To keep the app refinement AND be legible
+   * cross-app, the setter writes BOTH and the getter prefers the local subclass,
+   * falling back to `schema:priority` (so a PM-authored priority is still read here).
+   * This is the one predicate where the two producers genuinely diverge — mirror it
+   * when wiring the Pod Manager (have PM also co-write the subclass, or read it).
+   */
   get priority(): Priority | undefined {
     const doc = this.trackerDoc();
-    if (!doc) return undefined;
-    const types = this.types;
-    return PRIORITIES.find((level) => types.has(this.priorityClass(level, doc)!));
+    if (doc) {
+      const types = this.types;
+      const local = PRIORITIES.find((level) => types.has(this.priorityClass(level, doc)!));
+      if (local) return local;
+    }
+    // Fall back to the shared `schema:priority` literal (e.g. a PM-authored task).
+    return this.shared.priority;
   }
   set priority(level: Priority | undefined) {
+    // Shared `schema:priority` literal — written regardless of tracker so a
+    // cross-app reader (PM) always sees it; cleared with undefined.
+    this.shared.priority = level;
+    // App-local `#priority-<level>` subclass — only when the tracker doc is known
+    // (the class IRI is a fragment of it). Replaces any existing level, never stacks.
     const doc = this.trackerDoc();
     if (!doc) return;
     const types = this.types;

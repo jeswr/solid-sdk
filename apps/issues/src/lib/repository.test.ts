@@ -1,4 +1,6 @@
 import { describe, it, expect } from "vitest";
+import { Store, Parser } from "n3";
+import { parseTask, isAssignedTo } from "@jeswr/solid-task-model/task";
 import { Repository } from "./repository";
 import { TransitionError } from "./errors";
 import { type WorkflowDef } from "./issue";
@@ -206,6 +208,40 @@ describe("Repository (per-issue documents)", () => {
     expect(rec.relatesTo).toEqual([]);
     expect(rec.duplicateOf).toBeUndefined();
     expect(rec.clonedFrom).toBe(orig); // untouched by the patch
+  });
+
+  it("federation: an issue CREATED by the repository is found by the shared parseTask", async () => {
+    // The linchpin: a task this app creates must be readable as a federated task by
+    // the Pod Manager (and any suite app), which parses the shared subject
+    // `${url}#it`. Exercise the REAL create path (no hand-constructed subject), then
+    // parse the stored bytes through the shared model exactly as a foreign app would.
+    const { impl, store } = fakePod();
+    const repo = new Repository(TRACKER, impl);
+    const ASSIGNEE = `${POD}bob/profile/card#me`;
+    const url = await repo.create({
+      title: "Federated issue",
+      description: "Body authored in solid-issues.",
+      creator: ME,
+      assignee: ASSIGNEE,
+      priority: "high",
+    });
+
+    // The created document is stored as Turtle; parse it and read it as a shared task.
+    const body = store.get(url)!;
+    const dataset = new Store();
+    dataset.addQuads(new Parser({ baseIRI: url }).parse(body));
+
+    // The subject is the SHARED canonical `${url}#it`, so parseTask finds it.
+    const task = parseTask(url, dataset);
+    expect(task).toBeDefined();
+    expect(task?.title).toBe("Federated issue");
+    expect(task?.description).toBe("Body authored in solid-issues.");
+    expect(task?.assignee).toBe(ASSIGNEE); // "assigned to me" in the Pod Manager
+    expect(task?.state).toBe("open");
+    // Priority is co-written as schema:priority (the PM-read predicate).
+    expect(task?.priority).toBe("high");
+    // isAssignedTo — the exact federation gate the Pod Manager applies.
+    expect(isAssignedTo(task?.assignee, ASSIGNEE)).toBe(true);
   });
 
   it("F8: a bulk assign + label across a selection applies to every issue in one batch", async () => {

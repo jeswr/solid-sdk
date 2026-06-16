@@ -28,8 +28,17 @@
     sh:path dct:title ; sh:name "title" ;
     sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ;
   ] ;
+  # Description — the body. Since adopting @jeswr/solid-task-model, an issue carries
+  # the body on BOTH predicates: `wf:description` (solid-issues' historical term) and
+  # `dct:description` (the Pod Manager's). The shared Issue.description setter writes
+  # both, the getter prefers `wf:description` and falls back to `dct:description`, so
+  # a body authored by either app is read by the other. Both are constrained here.
   sh:property [
     sh:path wf:description ; sh:name "description" ;
+    sh:datatype xsd:string ; sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path dct:description ; sh:name "description (Dublin Core)" ;
     sh:datatype xsd:string ; sh:maxCount 1 ;
   ] ;
   sh:property [

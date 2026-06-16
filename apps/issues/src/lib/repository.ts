@@ -27,7 +27,13 @@ import { wf, rdf, prov } from "./vocab";
 import { ConflictError, WriteError, TransitionError } from "./errors";
 
 const TRACKER_FRAGMENT = "#this";
-const ISSUE_FRAGMENT = "#this";
+// The issue subject fragment. `#it` is the SHARED federated canonical subject
+// (`@jeswr/solid-task-model`'s `taskSubject(url)` === `${url}#it`), so a task this
+// app CREATES is found by the shared `parseTask(url, dataset)` (which looks at
+// `${url}#it`) — i.e. it shows up as "assigned to me" in the Pod Manager. The READ
+// path (`issueSubject`) still discovers the subject by `rdf:type wf:Task` first, so
+// legacy issues authored at the old `#this` fragment continue to read correctly.
+const ISSUE_FRAGMENT = "#it";
 const DEFAULT_TITLE = "Issues";
 
 export interface CommentRecord {
