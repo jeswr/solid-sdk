@@ -298,12 +298,31 @@ Round 5 (on the round-4 fix — 2 Medium + 1 Low; the install/incomplete-precach
   manifest returned as "unchanged" and never retried. FIXED: the same-config branch of
   `adoptShellConfig` re-runs `runPrecache` when `!shellPrecached`.
 
+Round 6 (on the round-5 fix — 2 Medium; the round-5 completeness GATE was itself
+flawed): gating ROUTING on the transient `shellPrecached` flag was wrong.
+
+- **Transient flag broke offline cold start (Medium, the important one).**
+  `shellPrecached` is in-memory and RESETS every time the SW is terminated/restarted
+  (which happens constantly). So an offline COLD START — the dominant "reopen the app
+  offline" case — would find `shellPrecached === false`, bypass the shell handler, and
+  FAIL to boot even though the shell was FULLY cached. FIXED: ROUTING is gated on
+  `shellConfig` ALONE; the Cache API is the durable truth and both shell handlers
+  degrade gracefully (navigation → canonical → fallback → network; asset → network),
+  so routing to an incomplete shell is never worse than no shell.
+- **Cleanup must use DURABLE completeness (Medium).** Cleanup of old buckets is now
+  gated on `shellBucketComplete(config)` — a direct Cache-API check that EVERY
+  configured entry is present — not the transient flag, and the `activate` handler
+  recovers `shellPrecached` from that durable state. So a previously-complete shell is
+  never dropped or distrusted just because the worker restarted, while an incomplete
+  new bucket still can't trigger deletion of the old complete one.
+
 The change-detection decision (`sameShellConfig`) and the URL classifiers
 (`canonicalShellUrl`/`isExactConfiguredShellUrl`, via `handleNavigation`) are pure,
-exported, and unit-tested; the worker's `adoptShellConfig`/`runPrecache` + fetch-router
-orchestration (token/latest-wins, promote-after-complete-precache, complete-gated
-routing + cleanup, same-manifest retry) is the browser-only adapter (excluded from
-coverage, like the rest of `worker.ts`).
+exported, and unit-tested; the worker's `adoptShellConfig`/`runPrecache` +
+`shellBucketComplete` + fetch-router orchestration (token/latest-wins,
+promote-after-complete-precache, DURABLE-completeness cleanup, `shellConfig`-only
+routing with graceful-degrading handlers, same-manifest retry) is the browser-only
+adapter (excluded from coverage, like the rest of `worker.ts`).
 
 ### P4 re-review focus areas
 

@@ -24,6 +24,7 @@ import {
   precacheAppShell,
   resolveAppShellConfig,
   sameShellConfig,
+  shellCacheName,
 } from './app-shell.js';
 import { type InvalidateDeps, handleNotification, resyncSweep } from './invalidation.js';
 import { MetadataStore } from './metadata-store.js';
@@ -100,6 +101,27 @@ function shellDeps(config: ResolvedAppShellConfig): ShellDeps {
 async function precacheConfig(config: ResolvedAppShellConfig): Promise<boolean> {
   const { failed } = await precacheAppShell(shellCaches(), config);
   return failed.length === 0;
+}
+
+/**
+ * DURABLE completeness check (roborev Medium): is EVERY configured precache entry
+ * actually present in `config`'s bucket RIGHT NOW? `shellPrecached` is an in-memory
+ * flag that resets when the SW is terminated/restarted, so it is NOT a reliable
+ * source of truth across a cold start — the Cache API is. This queries the bucket
+ * directly and is used to (a) recover `shellPrecached` on a cold start and (b) gate
+ * the bucket cleanup, so a previously-complete shell is never dropped or distrusted
+ * just because the worker restarted.
+ */
+async function shellBucketComplete(config: ResolvedAppShellConfig): Promise<boolean> {
+  try {
+    const cache = await shellCaches().open(shellCacheName(config.version));
+    for (const url of config.precache) {
+      if (!(await cache.match(url))) return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** Run the install-time precache for the current shellConfig (idempotent). */
@@ -234,12 +256,14 @@ self.addEventListener('activate', (event: ExtendableEvent) => {
   // control of open clients so interception starts without a reload.
   event.waitUntil(
     (async () => {
-      // roborev (Medium): clean up old buckets ONLY when the current precache is
-      // COMPLETE (`shellPrecached`). If the install-time precache was incomplete
-      // (`runPrecache` left it un-latched), deleting the previous COMPLETE bucket
-      // here would strand offline boot — keep the old bucket until a complete
-      // precache (a later config message's retry) promotes + cleans up.
-      if (shellConfig && shellPrecached) {
+      // roborev (Medium): clean up old buckets ONLY when the current version's
+      // precache is actually COMPLETE — checked DURABLY against the Cache API
+      // (`shellBucketComplete`), not the transient in-memory `shellPrecached` flag
+      // (which is unreliable after a restart). If the new bucket is incomplete,
+      // deleting the previous COMPLETE bucket would strand offline boot — keep it
+      // until a complete precache (a later config-message retry) cleans up.
+      if (shellConfig && (await shellBucketComplete(shellConfig))) {
+        shellPrecached = true; // recover the flag from durable state too
         await cleanupOldShellCaches(shellCaches(), shellConfig.version).catch(() => []);
       }
       await self.clients.claim();
@@ -346,14 +370,16 @@ self.addEventListener('fetch', (event: FetchEvent) => {
   // pod-data SWR path into the public shell handler. Cross-origin requests therefore
   // never reach the shell asset handler — they stay on the pod-data path.
   //
-  // COMPLETENESS (roborev): route to the shell handlers ONLY when the current shell
-  // precache is COMPLETE (`shellPrecached`). The new worker serves the new
-  // `shellConfig.version` bucket; if that precache is incomplete (some asset failed),
-  // routing a navigation there would serve a shell whose assets 404 offline. While
-  // incomplete we leave navigations/assets on the live-network / pod-data path (which
-  // is correct — an incomplete shell can't reliably boot), and a config-message retry
-  // completes the precache before the shell starts serving.
-  if (shellConfig && shellPrecached) {
+  // ROUTING is gated on `shellConfig` ALONE — never the transient `shellPrecached`
+  // flag (roborev Medium): that flag resets when the SW is terminated/restarted, so
+  // gating routing on it would make an offline COLD START bypass a FULLY-cached shell
+  // and fail to boot. The Cache API is the durable truth, and BOTH shell handlers
+  // degrade gracefully — `handleNavigation` falls back (canonical → fallback →
+  // network) and `handlePrecachedAsset` falls back to the network on a miss — so
+  // routing to an INCOMPLETE shell is never worse than no shell (it just fetches
+  // live / errors offline exactly as without the SW). Completeness governs only the
+  // CLEANUP of old buckets (durable-checked), never whether the shell serves.
+  if (shellConfig) {
     if (request.mode === 'navigate' && method === 'GET') {
       event.respondWith(respondShellNavigation(event));
       return;
