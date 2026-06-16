@@ -1095,11 +1095,14 @@ async function configFromBucket(caches2, version) {
 }
 function pickConventionalFallback(htmlish) {
   if (htmlish.length === 0) return void 0;
-  const CONVENTIONAL = ["/index.html", "/", "/404.html"];
-  for (const conv of CONVENTIONAL) {
+  for (const conv of ["/index.html", "/", "/404.html"]) {
     const hit = htmlish.find((u) => pathOf(u) === conv);
     if (hit) return hit;
   }
+  const indexes = htmlish.filter((u) => pathOf(u).endsWith("/index.html")).sort((a, b) => pathOf(a).length - pathOf(b).length || (pathOf(a) < pathOf(b) ? -1 : 1));
+  if (indexes.length > 0) return indexes[0];
+  const dirs = htmlish.filter((u) => pathOf(u).endsWith("/")).sort((a, b) => pathOf(a).length - pathOf(b).length || (pathOf(a) < pathOf(b) ? -1 : 1));
+  if (dirs.length > 0) return dirs[0];
   return [...htmlish].sort()[0];
 }
 async function resolveServingShellConfig(caches2, current) {

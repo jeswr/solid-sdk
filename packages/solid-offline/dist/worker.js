@@ -89,11 +89,14 @@ async function configFromBucket(caches, version) {
 }
 function pickConventionalFallback(htmlish) {
   if (htmlish.length === 0) return void 0;
-  const CONVENTIONAL = ["/index.html", "/", "/404.html"];
-  for (const conv of CONVENTIONAL) {
+  for (const conv of ["/index.html", "/", "/404.html"]) {
     const hit = htmlish.find((u) => pathOf(u) === conv);
     if (hit) return hit;
   }
+  const indexes = htmlish.filter((u) => pathOf(u).endsWith("/index.html")).sort((a, b) => pathOf(a).length - pathOf(b).length || (pathOf(a) < pathOf(b) ? -1 : 1));
+  if (indexes.length > 0) return indexes[0];
+  const dirs = htmlish.filter((u) => pathOf(u).endsWith("/")).sort((a, b) => pathOf(a).length - pathOf(b).length || (pathOf(a) < pathOf(b) ? -1 : 1));
+  if (dirs.length > 0) return dirs[0];
   return [...htmlish].sort()[0];
 }
 async function resolveServingShellConfig(caches, current) {
@@ -1105,9 +1108,10 @@ async function respondShellNavigation(event) {
   }
 }
 async function respondShellAsset(event) {
+  const routed = lastServingConfig;
   const serving = await servingConfig();
   if (!serving) return self.fetch(event.request);
-  const candidates = shellConfig && shellConfig !== serving ? [serving, shellConfig] : [serving];
+  const candidates = dedupeByVersion([serving, routed, shellConfig]);
   const config = await resolveAssetShellConfig(shellCaches(), event.request.url, candidates).catch(
     () => serving
   ) ?? serving;
@@ -1117,6 +1121,16 @@ async function respondShellAsset(event) {
   } catch {
     return self.fetch(event.request);
   }
+}
+function dedupeByVersion(configs) {
+  const seen = /* @__PURE__ */ new Set();
+  const out = [];
+  for (const c of configs) {
+    if (!c || seen.has(c.version)) continue;
+    seen.add(c.version);
+    out.push(c);
+  }
+  return out;
 }
 async function respond(event) {
   const cache = await self.caches.open(cacheName());

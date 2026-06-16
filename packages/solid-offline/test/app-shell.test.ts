@@ -574,6 +574,29 @@ describe('resolveServingShellConfig (serve the LAST KNOWN COMPLETE shell)', () =
     );
   });
 
+  it('reconstructs a BASE-PATH deploy fallback to the index, not the 404 (roborev Low)', async () => {
+    // An app deployed under /app/ — no literal root /index.html. The reconstructed
+    // fallback must be /app/index.html, NOT /app/404.html (lexicographically first).
+    const based = resolveAppShellConfig({
+      precache: ['/app/404.html', '/app/index.html', '/app/a.js'],
+      version: 'shell-020',
+    });
+    const incoming = resolveAppShellConfig({
+      precache: ['/app/index.html', '/app/bad.js'],
+      version: 'shell-021',
+    });
+    const caches = new MockCacheStorage((url) =>
+      url.includes('bad') ? htmlResponse('nope', 404) : htmlResponse('ok'),
+    );
+    await precacheAppShell(caches, based); // complete
+    await precacheAppShell(caches, incoming); // incomplete
+    const serving = await resolveServingShellConfig(caches, incoming);
+    expect(serving.version).toBe('shell-020');
+    expect(serving.fallback && new URL(serving.fallback, 'https://x/').pathname).toBe(
+      '/app/index.html',
+    );
+  });
+
   it('picks the NEWEST complete retained bucket among several', async () => {
     const v1 = resolveAppShellConfig({ precache: ['/index.html', '/a1.js'], version: 'shell-001' });
     const v2 = resolveAppShellConfig({ precache: ['/index.html', '/a2.js'], version: 'shell-002' });

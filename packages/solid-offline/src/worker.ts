@@ -445,13 +445,21 @@ async function respondShellNavigation(event: FetchEvent): Promise<Response> {
 
 /** Serve a precached static asset cache-first. */
 async function respondShellAsset(event: FetchEvent): Promise<Response> {
+  // SNAPSHOT the serving config the SYNC router used to MATCH this asset BEFORE
+  // re-resolving (roborev Medium): the sync route decision matched against
+  // `lastServingConfig` as it stood when the fetch fired. `servingConfig()` may now
+  // ADVANCE to the newly-complete current version, dropping the retained bucket that
+  // actually holds the OLD-hashed asset — so the bucket the router routed for would
+  // no longer be a candidate. Keep that pre-resolution config in the candidate list.
+  const routed = lastServingConfig;
   const serving = await servingConfig();
   if (!serving) return self.fetch(event.request);
   // An asset may live ONLY in the retained complete bucket (an OLD-hashed file the
-  // OLD HTML pulls) or ONLY in the current bucket — the two are different version
-  // buckets (roborev Medium). Pick the config whose bucket actually HOLDS this asset,
-  // preferring the serving (complete) config, then the current `shellConfig`.
-  const candidates = shellConfig && shellConfig !== serving ? [serving, shellConfig] : [serving];
+  // OLD HTML pulls) or ONLY in the current bucket — different version buckets. Pick
+  // the config whose bucket actually HOLDS this asset, preferring the (post-resolve)
+  // serving config, then the config the router matched on, then the current
+  // `shellConfig`. De-duped by version so a candidate isn't probed twice.
+  const candidates = dedupeByVersion([serving, routed, shellConfig]);
   const config =
     (await resolveAssetShellConfig(shellCaches(), event.request.url, candidates).catch(
       () => serving,
@@ -462,6 +470,20 @@ async function respondShellAsset(event: FetchEvent): Promise<Response> {
   } catch {
     return self.fetch(event.request);
   }
+}
+
+/** Drop undefined entries + de-dupe configs by version (preserving order). */
+function dedupeByVersion(
+  configs: Array<ResolvedAppShellConfig | undefined>,
+): ResolvedAppShellConfig[] {
+  const seen = new Set<string>();
+  const out: ResolvedAppShellConfig[] = [];
+  for (const c of configs) {
+    if (!c || seen.has(c.version)) continue;
+    seen.add(c.version);
+    out.push(c);
+  }
+  return out;
 }
 
 async function respond(event: FetchEvent): Promise<Response> {

@@ -252,18 +252,35 @@ async function configFromBucket(
 }
 
 /**
- * Deterministically choose a navigation fallback from a bucket's HTML-ish entries:
- * the canonical roots apps configure (`/index.html` → `/` → `/404.html`), else the
- * lexicographically-first HTML-ish entry (stable regardless of `Cache.keys()` insertion
- * order), else `undefined`. Matching is by lowercased pathname (origin-/query-agnostic).
+ * Deterministically choose a navigation fallback from a bucket's HTML-ish entries.
+ * Preference order (each within the candidate set, matched by lowercased pathname):
+ *   1. an EXACT canonical root — `/index.html` → `/` → `/404.html`;
+ *   2. for a BASE-PATH deploy (roborev Low — `/app/index.html`, `/app/404.html`),
+ *      the SHORTEST `…/index.html` (the root-most index), preferred over any
+ *      `404.html` so an under-base app boots its index, not its 404 page;
+ *   3. the SHORTEST `…/` directory route;
+ *   4. otherwise the lexicographically-first HTML-ish entry (stable regardless of
+ *      `Cache.keys()` insertion order).
+ * Returns `undefined` only for an empty set.
  */
 function pickConventionalFallback(htmlish: string[]): string | undefined {
   if (htmlish.length === 0) return undefined;
-  const CONVENTIONAL = ['/index.html', '/', '/404.html'];
-  for (const conv of CONVENTIONAL) {
+  // 1. exact canonical roots.
+  for (const conv of ['/index.html', '/', '/404.html']) {
     const hit = htmlish.find((u) => pathOf(u) === conv);
     if (hit) return hit;
   }
+  // 2. base-path index.html — the shortest path ending in `/index.html` (root-most).
+  const indexes = htmlish
+    .filter((u) => pathOf(u).endsWith('/index.html'))
+    .sort((a, b) => pathOf(a).length - pathOf(b).length || (pathOf(a) < pathOf(b) ? -1 : 1));
+  if (indexes.length > 0) return indexes[0];
+  // 3. a directory route (`…/`) — the shortest, root-most.
+  const dirs = htmlish
+    .filter((u) => pathOf(u).endsWith('/'))
+    .sort((a, b) => pathOf(a).length - pathOf(b).length || (pathOf(a) < pathOf(b) ? -1 : 1));
+  if (dirs.length > 0) return dirs[0];
+  // 4. stable last resort.
   return [...htmlish].sort()[0];
 }
 
