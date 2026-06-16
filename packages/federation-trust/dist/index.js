@@ -531,10 +531,16 @@ function normalizePurpose(purpose) {
   return hash === -1 ? purpose : purpose.slice(hash + 1);
 }
 
+// src/issue.ts
+import { exportJWK as exportJWK2 } from "jose";
+
 // src/vocab.ts
 var FEDTRUST = "https://w3id.org/jeswr/fedtrust#";
 var FEDTRUST_MEMBERSHIP_CREDENTIAL = `${FEDTRUST}MembershipCredential`;
 var FEDTRUST_FEDERATION = `${FEDTRUST}federation`;
+var FEDTRUST_DELEGATION_CREDENTIAL = `${FEDTRUST}DelegationCredential`;
+var FEDTRUST_DELEGATE = `${FEDTRUST}delegate`;
+var FEDTRUST_DELEGATE_KEY = `${FEDTRUST}delegateKey`;
 var FEDREG_APP2 = `${FEDREG}app`;
 var FEDREG_STATUS2 = `${FEDREG}status`;
 var FEDREG_ASSERTED_BY2 = `${FEDREG}assertedBy`;
@@ -542,15 +548,16 @@ var FEDTRUST_CONTEXT_TERMS = {
   fedtrust: FEDTRUST,
   fedreg: FEDREG,
   MembershipCredential: FEDTRUST_MEMBERSHIP_CREDENTIAL,
+  DelegationCredential: FEDTRUST_DELEGATION_CREDENTIAL,
   federation: { "@id": FEDTRUST_FEDERATION, "@type": "@id" },
   app: { "@id": FEDREG_APP2, "@type": "@id" },
   status: { "@id": FEDREG_STATUS2, "@type": "@id" },
-  assertedBy: { "@id": FEDREG_ASSERTED_BY2, "@type": "@id" }
+  assertedBy: { "@id": FEDREG_ASSERTED_BY2, "@type": "@id" },
+  delegate: { "@id": FEDTRUST_DELEGATE, "@type": "@id" },
+  delegateKey: FEDTRUST_DELEGATE_KEY
 };
 
 // src/issue.ts
-var FEDTRUST_DELEGATION_CREDENTIAL = "https://w3id.org/jeswr/fedtrust#DelegationCredential";
-var FEDTRUST_DELEGATE = "https://w3id.org/jeswr/fedtrust#delegate";
 function suiteForKey(key) {
   const alg = key.privateKey?.algorithm;
   const name = typeof alg === "object" && alg !== null ? alg.name : void 0;
@@ -603,10 +610,13 @@ async function issueMembershipCredential(input) {
   });
 }
 async function issueDelegation(input) {
+  const delegateJwk = JSON.stringify(await exportJWK2(input.delegateKey));
   const subject = {
     id: input.authority,
     [FEDTRUST_DELEGATE]: input.authority,
-    [FEDTRUST_FEDERATION]: input.federation
+    [FEDTRUST_FEDERATION]: input.federation,
+    // A plain string literal (not an IRI) so the parser reads it back as the JWK.
+    [FEDTRUST_DELEGATE_KEY]: delegateJwk
   };
   const credential = {
     issuer: input.delegator,
@@ -665,21 +675,37 @@ async function verifyVcAgainstKeys(vc, resolutions, now) {
     expectedProofPurpose: "assertionMethod"
   });
 }
+async function importDelegateKey(jwkString) {
+  let jwk;
+  try {
+    jwk = JSON.parse(jwkString);
+  } catch {
+    return void 0;
+  }
+  if (jwk === null || typeof jwk !== "object") return void 0;
+  try {
+    return await importPublicKey(jwk);
+  } catch {
+    return void 0;
+  }
+}
 async function verifyChain(issuer, federation, chain, anchors, now) {
-  const fail = (message) => [{ code: "BROKEN_CHAIN", message }];
+  const fail = (message) => ({
+    errors: [{ code: "BROKEN_CHAIN", message }]
+  });
   if (chain.length === 0) {
     return fail("delegation chain is empty");
   }
-  const firstSigner = chain[0]?.delegatorKey;
-  if (firstSigner === void 0) {
-    return fail("first chain link has no delegator key");
+  const rootVc = chain[0]?.credential;
+  if (rootVc === void 0 || typeof rootVc.issuer !== "string") {
+    return fail("first chain link is malformed");
   }
-  const rootAnchor = anchors.find((a) => anchorMethod(a) === firstSigner.verificationMethod);
+  const rootAnchor = anchors.find((a) => a.authority === rootVc.issuer);
   if (rootAnchor === void 0) {
-    return fail(
-      `first chain link is not signed by a trust anchor (verificationMethod ${firstSigner.verificationMethod})`
-    );
+    return fail(`first chain link issuer ${rootVc.issuer} is not a trust anchor`);
   }
+  let trustedMethod = anchorMethod(rootAnchor);
+  let trustedKey = rootAnchor.publicKey;
   let expectedDelegator = rootAnchor.authority;
   for (let i = 0; i < chain.length; i++) {
     const link = chain[i];
@@ -693,20 +719,18 @@ async function verifyChain(issuer, federation, chain, anchors, now) {
     if (vc.issuer !== expectedDelegator) {
       return fail(`chain link ${i} issuer ${vc.issuer} != expected delegator ${expectedDelegator}`);
     }
-    const signerKey = link.delegatorKey;
-    if (!controlledBy(signerKey.verificationMethod, vc.issuer)) {
-      return fail(
-        `chain link ${i} verificationMethod ${signerKey.verificationMethod} not controlled by delegator ${vc.issuer}`
-      );
+    const proof = Array.isArray(vc.proof) ? vc.proof[0] : vc.proof;
+    if (proof === void 0 || !controlledBy(proof.verificationMethod, vc.issuer)) {
+      return fail(`chain link ${i} verificationMethod not controlled by delegator ${vc.issuer}`);
     }
     const res = await verifyVcAgainstKeys(
       vc,
-      /* @__PURE__ */ new Map([[signerKey.verificationMethod, signerKey.publicKey]]),
+      /* @__PURE__ */ new Map([[proof.verificationMethod, trustedKey]]),
       now
     );
     if (!res.verified) {
       return fail(
-        `chain link ${i} signature/validity invalid: ${res.errors.map((e) => e.code).join(",")}`
+        `chain link ${i} signature/validity invalid against the trusted delegator key (${trustedMethod}): ${res.errors.map((e) => e.code).join(",")}`
       );
     }
     const subject = firstSubject(vc);
@@ -715,20 +739,30 @@ async function verifyChain(issuer, federation, chain, anchors, now) {
     }
     const delegate = strClaim(subject, FEDTRUST_DELEGATE);
     const linkFederation = strClaim(subject, FEDTRUST_FEDERATION);
+    const delegateKeyJwk = strClaim(subject, FEDTRUST_DELEGATE_KEY);
     if (delegate === void 0) {
       return fail(`chain link ${i} names no fedtrust:delegate`);
     }
     if (linkFederation !== federation) {
       return fail(`chain link ${i} federation ${linkFederation ?? "(none)"} != ${federation}`);
     }
+    if (delegateKeyJwk === void 0) {
+      return fail(`chain link ${i} carries no fedtrust:delegateKey (chain not self-certifying)`);
+    }
+    const delegateKey = await importDelegateKey(delegateKeyJwk);
+    if (delegateKey === void 0) {
+      return fail(`chain link ${i} has an unparseable fedtrust:delegateKey`);
+    }
     expectedDelegator = delegate;
+    trustedKey = delegateKey;
+    trustedMethod = delegate;
   }
   if (expectedDelegator !== issuer) {
     return fail(
       `chain leaf delegates to ${expectedDelegator}, not the membership issuer ${issuer}`
     );
   }
-  return [];
+  return { errors: [], issuerKey: { verificationMethod: trustedMethod, publicKey: trustedKey } };
 }
 function controlledBy(verificationMethod, issuer) {
   if (verificationMethod === issuer) return true;
@@ -813,21 +847,28 @@ async function verifyMembershipCredential(vc, options) {
   const directAnchor = anchors.find((a) => a.authority === vc.issuer);
   const resolutions = /* @__PURE__ */ new Map();
   let trustEstablished = false;
+  const membershipProof = Array.isArray(vc.proof) ? vc.proof[0] : vc.proof;
+  const membershipMethod = membershipProof?.verificationMethod;
   if (directAnchor !== void 0) {
     resolutions.set(anchorMethod(directAnchor), directAnchor.publicKey);
+    if (membershipMethod !== void 0 && controlledBy(membershipMethod, vc.issuer)) {
+      resolutions.set(membershipMethod, directAnchor.publicKey);
+    }
     trustEstablished = true;
   } else if (options.chain !== void 0 && claim !== void 0) {
-    const chainErrors = await verifyChain(vc.issuer, claim.federation, options.chain, anchors, now);
-    if (chainErrors.length > 0) {
-      errors.push(...chainErrors);
-    } else if (options.issuerKey === void 0) {
-      errors.push({
-        code: "BROKEN_CHAIN",
-        message: "delegation chain authorized the issuer but no issuerKey was supplied to verify the membership signature"
-      });
-    } else {
-      resolutions.set(options.issuerKey.verificationMethod, options.issuerKey.publicKey);
-      trustEstablished = true;
+    const chainResult = await verifyChain(vc.issuer, claim.federation, options.chain, anchors, now);
+    if (chainResult.errors.length > 0) {
+      errors.push(...chainResult.errors);
+    } else if (chainResult.issuerKey !== void 0) {
+      if (membershipMethod !== void 0 && controlledBy(membershipMethod, vc.issuer)) {
+        resolutions.set(membershipMethod, chainResult.issuerKey.publicKey);
+        trustEstablished = true;
+      } else {
+        errors.push({
+          code: "BROKEN_CHAIN",
+          message: `membership proof verificationMethod ${membershipMethod ?? "(none)"} is not controlled by the chain-proven issuer ${vc.issuer}`
+        });
+      }
     }
   }
   if (!trustEstablished) {
@@ -871,6 +912,7 @@ export {
   FEDTRUST,
   FEDTRUST_CONTEXT_TERMS,
   FEDTRUST_DELEGATE,
+  FEDTRUST_DELEGATE_KEY,
   FEDTRUST_DELEGATION_CREDENTIAL,
   FEDTRUST_FEDERATION,
   FEDTRUST_MEMBERSHIP_CREDENTIAL,

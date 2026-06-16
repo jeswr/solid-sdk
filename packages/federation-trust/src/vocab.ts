@@ -52,6 +52,26 @@ export const FEDTRUST_MEMBERSHIP_CREDENTIAL = `${FEDTRUST}MembershipCredential` 
  */
 export const FEDTRUST_FEDERATION = `${FEDTRUST}federation` as const;
 
+/**
+ * `fedtrust:DelegationCredential` — one signed link in a TRUST CHAIN: a delegator
+ * authorizes a delegate to assert federation memberships for a federation. A chain
+ * of these lets a root trust anchor's authority reach a sub-authority. Used for R9
+ * O2 (Scheme-Authority composition across scope).
+ */
+export const FEDTRUST_DELEGATION_CREDENTIAL = `${FEDTRUST}DelegationCredential` as const;
+
+/** `fedtrust:delegate` — the authority a delegation authorizes (its WebID / IRI). */
+export const FEDTRUST_DELEGATE = `${FEDTRUST}delegate` as const;
+
+/**
+ * `fedtrust:delegateKey` — the delegate's PUBLIC key (a JWK, JSON-encoded as a
+ * string literal), embedded as a SIGNED claim so the delegation chain is
+ * self-certifying: each link's signature is verified with the key the link above
+ * it signed over, never a caller-supplied key. This is the property that closes a
+ * chain-forgery bypass.
+ */
+export const FEDTRUST_DELEGATE_KEY = `${FEDTRUST}delegateKey` as const;
+
 /** `fedreg:app` — the membership's app `client_id` IRI (reused, not minted). */
 export const FEDREG_APP = `${FEDREG}app` as const;
 /** `fedreg:status` — the membership lifecycle status IRI (reused). */
@@ -73,8 +93,11 @@ export const FEDTRUST_CONTEXT_TERMS: Readonly<Record<string, unknown>> = {
   fedtrust: FEDTRUST,
   fedreg: FEDREG,
   MembershipCredential: FEDTRUST_MEMBERSHIP_CREDENTIAL,
+  DelegationCredential: FEDTRUST_DELEGATION_CREDENTIAL,
   federation: { "@id": FEDTRUST_FEDERATION, "@type": "@id" },
   app: { "@id": FEDREG_APP, "@type": "@id" },
   status: { "@id": FEDREG_STATUS, "@type": "@id" },
   assertedBy: { "@id": FEDREG_ASSERTED_BY, "@type": "@id" },
+  delegate: { "@id": FEDTRUST_DELEGATE, "@type": "@id" },
+  delegateKey: FEDTRUST_DELEGATE_KEY,
 };

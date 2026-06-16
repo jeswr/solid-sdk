@@ -79,10 +79,15 @@ export interface TrustAnchor {
  * closed.
  */
 export interface DelegationLink {
-    /** The signed delegation credential (delegator → authority). */
+    /**
+     * The signed delegation credential (delegator → delegate). It carries, as a
+     * SIGNED claim, the delegate's public key (`fedtrust:delegateKey`, a JWK) — so
+     * the chain is SELF-CERTIFYING: link[i+1]'s signature is verified with the key
+     * that link[i] signed over, never with a caller-supplied key. The verifier holds
+     * only the trust-anchor's pinned key; every other key in the chain is proven by
+     * the link above it.
+     */
     readonly credential: VerifiableCredential;
-    /** The public key + verificationMethod for the DELEGATOR (the link's signer). */
-    readonly delegatorKey: KeyResolution;
 }
 /** A resolved verification key for one authority/method. */
 export interface KeyResolution {
@@ -121,22 +126,17 @@ export interface VerifyMembershipOptions {
     /**
      * An OPTIONAL delegation chain from a trust anchor down to the credential's
      * issuer. Each link delegates from `delegator` to the next link's `delegate`;
-     * the first link's `delegator` must be a trust anchor and the final link's
-     * `delegate` must be the credential issuer. When the issuer is itself a trust
-     * anchor, no chain is needed. A broken / wrong-key / expired / out-of-order /
+     * the FIRST link's `delegator` must be a trust anchor (its signature is verified
+     * with the ANCHOR'S PINNED key — never a caller-supplied one) and the final
+     * link's `delegate` must be the credential issuer. Each link carries the
+     * delegate's public key as a signed claim, so the chain is self-certifying: a
+     * presenter cannot forge a link by supplying their own key. The leaf's signed
+     * delegate key is the issuer's key, which then verifies the membership — so NO
+     * separate issuer key is needed. When the issuer is itself a trust anchor, no
+     * chain is needed. A broken / forged / wrong-key / expired / out-of-order /
      * mis-scoped chain fails closed (`BROKEN_CHAIN`).
      */
     readonly chain?: readonly DelegationLink[];
-    /**
-     * The membership ISSUER's own public verification key — REQUIRED when trust is
-     * established via a delegation {@link VerifyMembershipOptions.chain} (the chain
-     * proves the anchor authorized the issuer, but the issuer signs the membership
-     * with its OWN key, which the verifier must hold to check the membership
-     * signature). When the issuer is a direct trust anchor this is ignored (the
-     * anchor's own key is used). Supplying a key here NEVER bypasses the chain: the
-     * chain must still prove authorization before this key is trusted.
-     */
-    readonly issuerKey?: KeyResolution;
     /** The instant to evaluate validity against (default `new Date()`). Injectable for tests. */
     readonly now?: Date;
 }
@@ -146,6 +146,14 @@ export interface IssueDelegationInput {
     readonly delegator: string;
     /** The authority being authorized to assert memberships (the delegate). */
     readonly authority: string;
+    /**
+     * The delegate's PUBLIC key — embedded as a SIGNED `fedtrust:delegateKey` claim
+     * (a JWK) so the chain is self-certifying: a verifier checks the NEXT link (or
+     * the membership) with this key, which the delegator signed over. WebCrypto
+     * `CryptoKey` (it is exported to a public JWK). Pass the delegate's
+     * {@link KeyResolution} public key, NOT its private key.
+     */
+    readonly delegateKey: CryptoKey;
     /** The federation the delegation is scoped to (signed; checked on chain walk). */
     readonly federation: string;
     /** The delegator's signing key (a solid-vc {@link KeyPair}). */

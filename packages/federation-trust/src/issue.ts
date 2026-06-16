@@ -25,19 +25,18 @@ import {
   type ProofSuite,
   type VerifiableCredential,
 } from "@jeswr/solid-vc";
+import { exportJWK } from "jose";
 import type { IssueDelegationInput, IssueMembershipInput } from "./types.js";
 import {
   FEDREG_APP,
   FEDREG_ASSERTED_BY,
   FEDREG_STATUS,
+  FEDTRUST_DELEGATE,
+  FEDTRUST_DELEGATE_KEY,
+  FEDTRUST_DELEGATION_CREDENTIAL,
   FEDTRUST_FEDERATION,
   FEDTRUST_MEMBERSHIP_CREDENTIAL,
 } from "./vocab.js";
-
-/** The minted delegation-credential type IRI (delegator → sub-authority). */
-const FEDTRUST_DELEGATION_CREDENTIAL = "https://w3id.org/jeswr/fedtrust#DelegationCredential";
-/** The minted `fedtrust:delegate` claim IRI (the authorized sub-authority). */
-const FEDTRUST_DELEGATE = "https://w3id.org/jeswr/fedtrust#delegate";
 
 /**
  * Pick the Data Integrity proof suite matching a {@link KeyPair}'s algorithm so we
@@ -147,10 +146,17 @@ export async function issueMembershipCredential(
  * `verificationMethod` must be controlled by `delegator`.
  */
 export async function issueDelegation(input: IssueDelegationInput): Promise<VerifiableCredential> {
+  // Embed the delegate's PUBLIC key as a signed JWK string so the chain is
+  // self-certifying (a verifier checks the next link / the membership with this
+  // key — the delegator's signature covers it, so it cannot be swapped). We export
+  // the WebCrypto public key to a JWK via jose (never hand-encode a key).
+  const delegateJwk = JSON.stringify(await exportJWK(input.delegateKey));
   const subject: CredentialSubject = {
     id: input.authority,
     [FEDTRUST_DELEGATE]: input.authority,
     [FEDTRUST_FEDERATION]: input.federation,
+    // A plain string literal (not an IRI) so the parser reads it back as the JWK.
+    [FEDTRUST_DELEGATE_KEY]: delegateJwk,
   };
   const credential: Credential = {
     issuer: input.delegator,
@@ -167,5 +173,3 @@ export async function issueDelegation(input: IssueDelegationInput): Promise<Veri
     ...(input.created !== undefined ? { options: { created: input.created } } : {}),
   });
 }
-
-export { FEDTRUST_DELEGATE, FEDTRUST_DELEGATION_CREDENTIAL };

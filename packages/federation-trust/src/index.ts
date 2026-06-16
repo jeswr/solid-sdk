@@ -63,8 +63,6 @@ export {
 // --- issue (the authority's path) ------------------------------------------
 export {
   buildMembershipCredential,
-  FEDTRUST_DELEGATE,
-  FEDTRUST_DELEGATION_CREDENTIAL,
   issueDelegation,
   issueMembershipCredential,
 } from "./issue.js";
@@ -94,6 +92,9 @@ export {
   FEDREG_STATUS,
   FEDTRUST,
   FEDTRUST_CONTEXT_TERMS,
+  FEDTRUST_DELEGATE,
+  FEDTRUST_DELEGATE_KEY,
+  FEDTRUST_DELEGATION_CREDENTIAL,
   FEDTRUST_FEDERATION,
   FEDTRUST_MEMBERSHIP_CREDENTIAL,
 } from "./vocab.js";

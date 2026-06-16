@@ -148,31 +148,33 @@ federation:
 ```ts
 import { issueDelegation, verifyMembershipCredential } from "@jeswr/federation-trust";
 
-// ROOT (a trust anchor) delegates to SUB for the federation.
+// ROOT (a trust anchor) delegates to SUB for the federation, EMBEDDING SUB's
+// public key as a signed claim (so the chain is self-certifying).
 const delegation = await issueDelegation({
   delegator: "https://root.example/card#me",
   authority: "https://regional.example/card#me",
+  delegateKey: subKeyPair.publicKey, // SUB's PUBLIC key, signed into the link
   federation: "https://root.example/federation",
   key: rootKey,
 });
 
-// SUB issues the membership; the verifier presents the chain + SUB's own key.
+// SUB issues the membership; the verifier presents ONLY the chain — no
+// intermediate or issuer keys: the chain carries every key it needs, each one
+// signed by the link above it, rooted in the anchor's pinned key.
 const result = await verifyMembershipCredential(membershipFromSub, {
   trustAnchors: [{ authority: "https://root.example/card#me", publicKey: rootPub }],
   expectedFederation: "https://root.example/federation",
-  chain: [
-    {
-      credential: delegation,
-      delegatorKey: { verificationMethod: "https://root.example/card#me", publicKey: rootPub },
-    },
-  ],
-  issuerKey: { verificationMethod: "https://regional.example/card#me", publicKey: subPub },
+  chain: [{ credential: delegation }],
 });
 ```
 
-Each chain link is itself a signed `fedtrust:DelegationCredential`, so the whole
-chain is verifiable end-to-end. A broken / wrong-key / expired / out-of-order /
-mis-scoped chain fails closed (`BROKEN_CHAIN`).
+The chain is **self-certifying**: the **root link is verified with the trust
+anchor's pinned key** (never a key supplied alongside the chain — so a forged
+"from-anchor" delegation signed with an attacker's key cannot pass), and each link
+carries the **next delegate's public key as a signed claim**, so every key in the
+chain is proven by the link above it. The leaf's signed key is the membership
+issuer's key. A broken / forged / wrong-key / expired / out-of-order / mis-scoped
+chain fails closed (`BROKEN_CHAIN`).
 
 ## Scope — CLIENT-SIDE only
 

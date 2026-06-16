@@ -46,8 +46,8 @@
  */
 export { MEMBERSHIP_STATUS, statusName, TRUSTED_STATUS } from "@jeswr/federation-registry";
 export { cryptosuiteForKeyType, exportPublicJwk, generateKeyPairForSuite, importKeyPair, importPublicKey, type SuiteKeyType, } from "@jeswr/solid-vc";
-export { buildMembershipCredential, FEDTRUST_DELEGATE, FEDTRUST_DELEGATION_CREDENTIAL, issueDelegation, issueMembershipCredential, } from "./issue.js";
+export { buildMembershipCredential, issueDelegation, issueMembershipCredential, } from "./issue.js";
 export type { DelegationLink, IssueDelegationInput, IssueMembershipInput, KeyPair, KeyResolution, MembershipClaim, MembershipStatusName, MembershipVerificationResult, TrustAnchor, TrustError, TrustErrorCode, VerifiableCredential, VerifyMembershipOptions, } from "./types.js";
 export { verifyMembershipCredential } from "./verify.js";
-export { FEDREG, FEDREG_APP, FEDREG_ASSERTED_BY, FEDREG_STATUS, FEDTRUST, FEDTRUST_CONTEXT_TERMS, FEDTRUST_FEDERATION, FEDTRUST_MEMBERSHIP_CREDENTIAL, } from "./vocab.js";
+export { FEDREG, FEDREG_APP, FEDREG_ASSERTED_BY, FEDREG_STATUS, FEDTRUST, FEDTRUST_CONTEXT_TERMS, FEDTRUST_DELEGATE, FEDTRUST_DELEGATE_KEY, FEDTRUST_DELEGATION_CREDENTIAL, FEDTRUST_FEDERATION, FEDTRUST_MEMBERSHIP_CREDENTIAL, } from "./vocab.js";
 //# sourceMappingURL=index.d.ts.map

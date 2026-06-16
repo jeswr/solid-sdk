@@ -1,9 +1,5 @@
 import { type Credential, type VerifiableCredential } from "@jeswr/solid-vc";
 import type { IssueDelegationInput, IssueMembershipInput } from "./types.js";
-/** The minted delegation-credential type IRI (delegator → sub-authority). */
-declare const FEDTRUST_DELEGATION_CREDENTIAL = "https://w3id.org/jeswr/fedtrust#DelegationCredential";
-/** The minted `fedtrust:delegate` claim IRI (the authorized sub-authority). */
-declare const FEDTRUST_DELEGATE = "https://w3id.org/jeswr/fedtrust#delegate";
 /**
  * Build the UNSIGNED membership credential (the claim graph). Exposed so a caller
  * can inspect / serialise the claim graph before signing, or sign it with a
@@ -35,5 +31,4 @@ export declare function issueMembershipCredential(input: IssueMembershipInput): 
  * `verificationMethod` must be controlled by `delegator`.
  */
 export declare function issueDelegation(input: IssueDelegationInput): Promise<VerifiableCredential>;
-export { FEDTRUST_DELEGATE, FEDTRUST_DELEGATION_CREDENTIAL };
 //# sourceMappingURL=issue.d.ts.map

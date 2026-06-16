@@ -25,6 +25,23 @@ export declare const FEDTRUST_MEMBERSHIP_CREDENTIAL: "https://w3id.org/jeswr/fed
  * required, signed claim of a `fedtrust:MembershipCredential`.
  */
 export declare const FEDTRUST_FEDERATION: "https://w3id.org/jeswr/fedtrust#federation";
+/**
+ * `fedtrust:DelegationCredential` — one signed link in a TRUST CHAIN: a delegator
+ * authorizes a delegate to assert federation memberships for a federation. A chain
+ * of these lets a root trust anchor's authority reach a sub-authority. Used for R9
+ * O2 (Scheme-Authority composition across scope).
+ */
+export declare const FEDTRUST_DELEGATION_CREDENTIAL: "https://w3id.org/jeswr/fedtrust#DelegationCredential";
+/** `fedtrust:delegate` — the authority a delegation authorizes (its WebID / IRI). */
+export declare const FEDTRUST_DELEGATE: "https://w3id.org/jeswr/fedtrust#delegate";
+/**
+ * `fedtrust:delegateKey` — the delegate's PUBLIC key (a JWK, JSON-encoded as a
+ * string literal), embedded as a SIGNED claim so the delegation chain is
+ * self-certifying: each link's signature is verified with the key the link above
+ * it signed over, never a caller-supplied key. This is the property that closes a
+ * chain-forgery bypass.
+ */
+export declare const FEDTRUST_DELEGATE_KEY: "https://w3id.org/jeswr/fedtrust#delegateKey";
 /** `fedreg:app` — the membership's app `client_id` IRI (reused, not minted). */
 export declare const FEDREG_APP: "https://w3id.org/jeswr/fedreg#app";
 /** `fedreg:status` — the membership lifecycle status IRI (reused). */
