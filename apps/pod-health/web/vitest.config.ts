@@ -27,6 +27,13 @@ export default mergeConfig(
       globals: true,
       setupFiles: ["./test/setup.ts"],
       include: ["src/**/*.test.{ts,tsx}", "scripts/**/*.test.mjs"],
+      // INLINE @jeswr/solid-session-restore so its internal `import * as oauth from
+      // "oauth4webapi"` goes through Vite's transform pipeline and the silent-restore
+      // tests' `vi.mock("oauth4webapi")` intercepts it. Without inlining, the
+      // precompiled package is externalised and its oauth import binds to the REAL
+      // module (the mock never applies), so `restoreSession` cannot be driven in a unit
+      // test. Inlining is test-only (this config) — the build/runtime is unaffected.
+      server: { deps: { inline: ["@jeswr/solid-session-restore"] } },
     },
   }),
 );
