@@ -1,0 +1,308 @@
+/* AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+   Host chrome + the pod-chat-* classes the @jeswr/pod-chat <ChatRooms> emits (the
+   component ships no styles of its own — the host owns the look). */
+
+:root {
+  --bg: #f3f8f9;
+  --surface: #ffffff;
+  --ink: #1c2b30;
+  --muted: #5b6b70;
+  --accent: #0b7285;
+  --accent-ink: #ffffff;
+  --border: #d6e1e4;
+  --danger: #b02525;
+  --ok: #1a7a3f;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  color: var(--ink);
+  background: var(--bg);
+}
+
+a {
+  color: var(--accent);
+}
+
+/* ── Login ─────────────────────────────────────────────────────────────── */
+.login-screen {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 1.5rem;
+}
+.login-card {
+  width: 100%;
+  max-width: 28rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  padding: 2rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+.login-card h1 {
+  margin: 0 0 0.25rem;
+  font-size: 1.5rem;
+}
+.login-sub {
+  color: var(--muted);
+  margin: 0 0 1.25rem;
+  font-size: 0.95rem;
+}
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.login-form label {
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+.login-form input {
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  font-size: 0.95rem;
+}
+.login-error {
+  color: var(--danger);
+  font-size: 0.9rem;
+  margin-top: 0.75rem;
+}
+.login-hint {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin-top: 1rem;
+}
+
+button {
+  cursor: pointer;
+  border: none;
+  border-radius: 0.5rem;
+  padding: 0.6rem 0.9rem;
+  font-size: 0.95rem;
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+button[type="button"].pod-chat-back,
+button[type="button"].pod-chat-open {
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--border);
+}
+
+/* ── App shell ─────────────────────────────────────────────────────────── */
+.app-shell {
+  max-width: 56rem;
+  margin: 0 auto;
+  padding: 1.25rem;
+}
+.app-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+.app-brand {
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+.app-webid {
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin-left: auto;
+  max-width: 22rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.app-logout {
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--border);
+}
+.app-note {
+  background: #fff8e6;
+  border: 1px solid #f0e0b0;
+  border-radius: 0.5rem;
+  padding: 0.6rem 0.8rem;
+  font-size: 0.85rem;
+  margin: 0.75rem 0;
+}
+.app-main {
+  margin-top: 1rem;
+}
+
+/* ── ChatRooms (pod-chat-*) ───────────────────────────────────────────── */
+.pod-chat-title {
+  font-size: 1.25rem;
+  margin: 0 0 1rem;
+}
+
+/* Room list */
+.pod-chat-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--surface);
+}
+.pod-chat-table th,
+.pod-chat-table td {
+  text-align: left;
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.92rem;
+}
+.pod-chat-open {
+  background: transparent;
+  color: var(--accent);
+  border: none;
+  padding: 0;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+.pod-chat-cell-count {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Room thread */
+.pod-chat-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.pod-chat-back {
+  align-self: flex-start;
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--border);
+}
+.pod-chat-room-name {
+  font-size: 1.1rem;
+  margin: 0;
+}
+
+.pod-chat-messages {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.pod-chat-message {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 0.75rem 0.9rem;
+}
+.pod-chat-message-pending {
+  opacity: 0.6;
+}
+.pod-chat-message-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-bottom: 0.4rem;
+}
+.pod-chat-author {
+  font-weight: 600;
+  color: var(--ink);
+}
+.pod-chat-time {
+  color: var(--muted);
+}
+.pod-chat-message-sending {
+  font-style: italic;
+}
+.pod-chat-task-open,
+.pod-chat-task-closed {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.78rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.05rem 0.5rem;
+}
+.pod-chat-task-closed {
+  color: var(--ok);
+  border-color: var(--ok);
+}
+.pod-chat-task-open {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.pod-chat-assignee {
+  margin: 0 0 0.4rem;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+.pod-chat-assignee-label {
+  font-weight: 600;
+}
+.pod-chat-body {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font: inherit;
+}
+
+/* Composer */
+.pod-chat-composer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+}
+.pod-chat-composer-label {
+  font-weight: 600;
+  font-size: 0.85rem;
+  width: 100%;
+}
+.pod-chat-composer-input {
+  flex: 1 1 16rem;
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+  font: inherit;
+}
+.pod-chat-send-status {
+  font-size: 0.85rem;
+  color: var(--ok);
+}
+.pod-chat-send-status[data-send-status="failed"] {
+  color: var(--danger);
+}
+.pod-chat-send-error {
+  color: var(--danger);
+  font-size: 0.85rem;
+  width: 100%;
+  margin: 0.25rem 0 0;
+}
+
+/* Shared states */
+.pod-chat-loading,
+.pod-chat-empty {
+  color: var(--muted);
+}
+.pod-chat-error {
+  color: var(--danger);
+}
