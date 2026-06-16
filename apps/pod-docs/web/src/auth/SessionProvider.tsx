@@ -40,7 +40,8 @@ import { readProfile } from "./profile";
 import { type DerivedSession, deriveSession } from "./session-derivation";
 import {
   AmbiguousIssuerError,
-  PROBE_ID_HEADER,
+  discardProbeRegistration,
+  registerProbeRequest,
   WebIdDPoPTokenProvider,
   webIdsEqual,
 } from "./webid-token-provider";
@@ -240,21 +241,32 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       // Defence-in-depth: the provider-wide attach-count delta (per-attempt, not a
       // sticky flag) is kept alongside the per-probe proof below.
       const tokensAttachedBefore = providerRef.current?.tokensAttachedCount() ?? 0;
-      // PER-PROBE PROOF (primary): stamp this probe with a unique id. The provider
-      // records the id iff it actually upgrades THIS request — so we can prove THIS
+      // PER-PROBE PROOF (primary): tag this probe with a unique id via a
+      // Request-identity WeakMap — NOT a network header. The provider records the
+      // id iff it actually upgrades THIS request object — so we can prove THIS
       // probe was token-upgraded, not merely that "some request" was (a concurrent
       // upgraded request for the SAME WebID can bump the provider-wide count, but
-      // not satisfy our own probe id).
+      // not satisfy our own probe id). Using the WeakMap (instead of a custom
+      // header) keeps the probe a "simple" CORS request, so a cross-origin pod does
+      // not reject a preflight before the 401/upgrade path can run.
       const probeId = `probe-${crypto.randomUUID()}`;
       // Probe a protected resource via the PATCHED global fetch: a 401 triggers
       // the popup → token mint → retry. The retry's status + whether THIS probe was
       // token-upgraded prove login. A storage root is private on CSS/PSS by
-      // default, so it 401s.
+      // default, so it 401s. Build the Request OBJECT first and register it (by
+      // identity) before fetching — the provider reads the id off this exact object.
       const probe = pub.storages[0] ?? new URL("/", id).toString();
-      const res = await fetch(probe, {
-        method: "GET",
-        headers: { [PROBE_ID_HEADER]: probeId },
-      });
+      const probeRequest = new Request(probe, { method: "GET" });
+      registerProbeRequest(probeRequest, probeId);
+      let res: Response;
+      try {
+        res = await fetch(probeRequest);
+      } finally {
+        // Drop any single-use URL registration the probe did not consume (e.g. a
+        // public 200 with no 401 → no upgrade ran), so a later request to the same
+        // URL can never inherit this probe's id.
+        discardProbeRegistration(probeRequest);
+      }
       const tokensAttachedAfter = providerRef.current?.tokensAttachedCount() ?? 0;
       const assessment = assessLoginProbe({
         status: res.status,

@@ -87,8 +87,13 @@ vi.mock("oauth4webapi", () => {
 });
 
 // Import AFTER the mocks are registered.
-const { WebIdDPoPTokenProvider, webIdsEqual, PROBE_ID_HEADER, ReactiveAuthResetError } =
-  await import("./webid-token-provider");
+const {
+  WebIdDPoPTokenProvider,
+  webIdsEqual,
+  registerProbeRequest,
+  discardProbeRegistration,
+  ReactiveAuthResetError,
+} = await import("./webid-token-provider");
 
 const WEBID_A = "https://alice.example/profile/card#me";
 const WEBID_B = "https://bob.example/profile/card#me";
@@ -122,9 +127,26 @@ function deferredGetCode() {
   return { getCode, release };
 }
 
-/** A login probe Request carrying a per-attempt probe id (FIX 3). */
+/**
+ * A login probe Request tagged with a per-attempt probe id via the Request
+ * registry — NOT a network header (the round-3 CORS fix). The id travels in
+ * process memory only, so the returned Request carries NO app-custom header.
+ */
 function probeRequest(url: string, probeId: string): Request {
-  return new Request(url, { headers: { [PROBE_ID_HEADER]: probeId } });
+  const req = new Request(url);
+  registerProbeRequest(req, probeId);
+  return req;
+}
+
+/**
+ * Re-wrap a Request exactly as `ReactiveFetchManager.#fetch` does
+ * (`new Request(input, init)`) before it calls `provider.upgrade(request)`. This
+ * produces a DIFFERENT object than the one the login flow registered, so it
+ * proves the side channel survives the manager's re-wrap (object identity is lost;
+ * the single-use URL channel carries the id across).
+ */
+function asManagerWraps(req: Request): Request {
+  return new Request(req);
 }
 
 describe("webIdsEqual", () => {
@@ -285,6 +307,80 @@ describe("FIX 2 — reset() fences in-flight auth work (no contamination after l
   });
 });
 
+describe("FIX 2 (round 3) — a STALE issuer rejection after reset() must not clear the NEW generation's #issuer", () => {
+  beforeEach(() => {
+    authState.webId = WEBID_A;
+    authState.accessToken = "tok-A";
+  });
+
+  it("a superseded issuer resolution rejecting late leaves the current generation's single-flight intact", async () => {
+    // Drive issuer resolution timing via a controllable getWebId. The FIRST
+    // resolution (generation 0) is stalled, then rejected — but only AFTER reset()
+    // advanced the generation and a SECOND resolution (generation 1) is in flight.
+    // The stale rejection must NOT clear #issuer, or the current generation loses
+    // single-flight and the in-flight (and later) upgrades re-prompt / fail.
+    let calls = 0;
+    let releaseFirst!: () => void;
+    let rejectFirst!: (e: Error) => void;
+    const firstGate = new Promise<void>((resolve, reject) => {
+      releaseFirst = () => resolve();
+      rejectFirst = (e) => reject(e);
+    });
+    const getWebId = async () => {
+      calls += 1;
+      if (calls === 1) {
+        // The first (soon-to-be-superseded) resolution stalls here until the test
+        // decides to reject it.
+        await firstGate;
+        return WEBID_A;
+      }
+      // The second resolution (after reset) succeeds immediately.
+      return WEBID_B;
+    };
+    const provider = new WebIdDPoPTokenProvider(
+      "https://app.example/callback.html",
+      async () => REDIRECT,
+      getWebId,
+      { clientId: "https://app.example/clientid.jsonld" },
+    );
+
+    // Generation 0: kick off the first upgrade; its issuer resolution stalls in
+    // getWebId. Swallow its eventual rejection so it doesn't surface as unhandled.
+    const firstUpgrade = provider.upgrade(new Request("https://alice.example/storage/"));
+    firstUpgrade.catch(() => {});
+    await Promise.resolve();
+
+    // reset() → generation 1. The stalled first resolution is now superseded.
+    provider.reset();
+
+    // Generation 1: a fresh upgrade kicks off a SECOND issuer resolution (calls===2)
+    // which succeeds and establishes B's session. Run it to completion.
+    authState.webId = WEBID_B;
+    authState.accessToken = "tok-B";
+    const secondReq = await provider.upgrade(new Request("https://bob.example/storage/"));
+    expect(provider.authenticatedWebId()).toBe(WEBID_B);
+    expect(secondReq.headers.get("Authorization")).toBe("DPoP tok-B");
+
+    // NOW reject the stale first resolution. Its catch must NOT clear #issuer,
+    // because the generation advanced AND #issuer is no longer its promise.
+    rejectFirst(new Error("stale issuer resolution aborted"));
+    await firstUpgrade.catch(() => {}); // let the rejection propagate + run the catch
+    await Promise.resolve();
+
+    // The current generation's single-flight is intact: a further upgrade reuses
+    // B's issuer/session WITHOUT a third issuer resolution (getWebId not called
+    // again — calls stays at 2). If the stale catch had cleared #issuer, this
+    // upgrade would re-resolve (calls === 3).
+    const callsBefore = calls;
+    const thirdReq = await provider.upgrade(new Request("https://bob.example/other/"));
+    expect(calls).toBe(callsBefore); // no re-resolution — #issuer survived
+    expect(provider.authenticatedWebId()).toBe(WEBID_B);
+    expect(thirdReq.headers.get("Authorization")).toBe("DPoP tok-B");
+    // Tidy: release the (already-rejected) gate's resolve path harmlessly.
+    releaseFirst();
+  });
+});
+
 describe("FIX 3 — login proof is PER-PROBE, not a provider-wide counter", () => {
   beforeEach(() => {
     authState.webId = WEBID_A;
@@ -322,5 +418,77 @@ describe("FIX 3 — login proof is PER-PROBE, not a provider-wide counter", () =
     expect(provider.wasProbeUpgraded("probe-x")).toBe(true);
     provider.reset();
     expect(provider.wasProbeUpgraded("probe-x")).toBe(false);
+  });
+});
+
+describe("FIX (round 3) — probe id is a Request-registry side channel, NOT a network header (CORS)", () => {
+  beforeEach(() => {
+    authState.webId = WEBID_A;
+    authState.accessToken = "tok-A";
+  });
+
+  it("the probe Request carries NO app-custom header (no x-reactive-auth-probe-id, nothing non-standard)", () => {
+    // The CORS bug: a custom request header makes a cross-origin request
+    // non-"simple" → preflight → pod rejection. The fix must put NOTHING
+    // app-specific on the wire. Assert the registered probe Request has no headers
+    // at all (the id lives only in the in-process registry).
+    const req = probeRequest("https://alice.example/storage/", "probe-cors");
+    const headerNames = [...req.headers.keys()];
+    expect(headerNames).not.toContain("x-reactive-auth-probe-id");
+    // Defensive: the probe sets no app-custom header whatsoever.
+    expect(headerNames).toEqual([]);
+  });
+
+  it("wasProbeUpgraded resolves true via the registry when the SAME object reaches upgrade()", async () => {
+    const provider = makeProvider();
+    const req = probeRequest("https://alice.example/storage/", "probe-obj");
+    const upgraded = await provider.upgrade(req);
+    // The upgraded request carries the standard auth header — and NO probe header.
+    expect(upgraded.headers.get("Authorization")).toBe("DPoP tok-A");
+    expect(upgraded.headers.get("x-reactive-auth-probe-id")).toBeNull();
+    expect(provider.wasProbeUpgraded("probe-obj")).toBe(true);
+  });
+
+  it("survives the manager re-wrap: a new Request(input) copy still resolves the probe id (URL channel)", async () => {
+    // ReactiveFetchManager does `new Request(input, init)` before calling upgrade(),
+    // so the object the provider receives is NOT the one we registered (identity is
+    // lost; a symbol/expando does not survive the copy). The single-use URL channel
+    // must carry the id across this re-wrap — otherwise login detection silently
+    // always reads "not upgraded".
+    const provider = makeProvider();
+    const registered = probeRequest("https://alice.example/storage/", "probe-rewrap");
+    const wrapped = asManagerWraps(registered);
+    expect(wrapped).not.toBe(registered); // a different object, as the manager makes
+    const upgraded = await provider.upgrade(wrapped);
+    expect(upgraded.headers.get("Authorization")).toBe("DPoP tok-A");
+    // Proven via the URL fallback, since object identity was lost across the wrap.
+    expect(provider.wasProbeUpgraded("probe-rewrap")).toBe(true);
+  });
+
+  it("the URL channel is SINGLE-USE: a later same-URL request does NOT inherit the probe id", async () => {
+    const provider = makeProvider();
+    const registered = probeRequest("https://alice.example/storage/", "probe-single");
+    // First upgrade (the manager's wrapped copy) consumes the URL entry.
+    await provider.upgrade(asManagerWraps(registered));
+    expect(provider.wasProbeUpgraded("probe-single")).toBe(true);
+
+    provider.reset(); // clears #upgradedProbeIds; URL entry was already consumed.
+
+    // A later request to the SAME URL (a different object, no registration) must NOT
+    // re-acquire the consumed probe id.
+    await provider.upgrade(new Request("https://alice.example/storage/"));
+    expect(provider.wasProbeUpgraded("probe-single")).toBe(false);
+  });
+
+  it("discardProbeRegistration drops an unconsumed URL entry so no later request inherits it", async () => {
+    const provider = makeProvider();
+    const registered = probeRequest("https://alice.example/storage/", "probe-discard");
+    // Simulate a public 200: the probe never reached upgrade(); the login flow then
+    // discards the registration.
+    discardProbeRegistration(registered);
+
+    // A later upgrade of the same URL must not pick up the discarded id.
+    await provider.upgrade(new Request("https://alice.example/storage/"));
+    expect(provider.wasProbeUpgraded("probe-discard")).toBe(false);
   });
 });
