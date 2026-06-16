@@ -1,0 +1,75 @@
+{
+  "name": "@jeswr/solid-task-model",
+  "version": "0.1.0",
+  "description": "The shared federated Task/Issue RDF model for the Solid app suite — typed read/write accessors over wf:Task (+ Dublin Core / schema.org / ActivityStreams) so a task written by one app reads identically in another, plus the SHACL shape that pins it.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Jesse Wright",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jeswr/solid-task-model.git"
+  },
+  "homepage": "https://github.com/jeswr/solid-task-model#readme",
+  "bugs": {
+    "url": "https://github.com/jeswr/solid-task-model/issues"
+  },
+  "keywords": [
+    "solid",
+    "rdf",
+    "task",
+    "issue",
+    "federation",
+    "wf",
+    "workflow",
+    "shacl"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./shape": {
+      "import": "./dist/shape.js",
+      "types": "./dist/shape.d.ts"
+    },
+    "./shapes/task.ttl": "./shapes/task.ttl"
+  },
+  "files": [
+    "dist",
+    "shapes",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "biome check src",
+    "lint:fix": "biome check --write src",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "gate": "npm run lint && npm run typecheck && npm run test && npm run build && npm run check:dist",
+    "check:dist": "node scripts/check-dist.mjs"
+  },
+  "dependencies": {
+    "@jeswr/fetch-rdf": "^0.1.0",
+    "@rdfjs/wrapper": "^0.34.0",
+    "n3": "^2.0.3"
+  },
+  "peerDependencies": {
+    "@rdfjs/types": "^2.0.1"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.0.0",
+    "@rdfjs/types": "^2.0.1",
+    "@types/n3": "^1.26.1",
+    "@types/node": "^20",
+    "@zazuko/env-node": "^3.0.0",
+    "rdf-validate-shacl": "^0.6.5",
+    "typescript": "^5",
+    "vitest": "^4.1.8"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
