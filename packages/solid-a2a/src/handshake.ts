@@ -225,7 +225,10 @@ export async function handshakeFromRdf(
   const offerSubjects = new Set<string>();
   const responseSubjects = new Set<string>();
   for (const q of quads) {
-    if (q.predicate.value !== RDF_TYPE) {
+    // The rdf:type object must be a NamedNode (an IRI) — a literal-valued
+    // `rdf:type "…UpgradeOffer"` is malformed RDF and must not be treated as a
+    // typed handshake subject.
+    if (q.predicate.value !== RDF_TYPE || q.object.termType !== "NamedNode") {
       continue;
     }
     if (q.object.value === A2A_UPGRADE_OFFER) {

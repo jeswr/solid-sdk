@@ -400,7 +400,25 @@ function shortHash(input: string): string {
   return (h >>> 0).toString(36);
 }
 
-/** Validate a draft from the injected translate fn before lowering it. */
+/**
+ * An OPTIONAL string field on a draft is valid iff it is absent OR a non-empty
+ * string. A present-but-non-string (or empty) value is malformed model output and
+ * must be rejected (→ an unresolved result), never lowered to invalid RDF. Used
+ * for EVERY optional string field on the draft (`target`, `recipient`, `agent`).
+ */
+function optionalStringOk(value: unknown): boolean {
+  return value === undefined || (typeof value === "string" && value.length > 0);
+}
+
+/**
+ * Validate a draft from the injected translate fn before lowering it. Defensive:
+ * the draft is untrusted model output, so EVERY field is type-checked — every
+ * optional string field (`target`/`recipient`/`agent`) must be a non-empty string
+ * when present, and modes are checked against an OWN-KEY allowlist (NOT the `in`
+ * operator, which walks the prototype chain and would accept inherited keys like
+ * `toString`/`constructor`). Any malformed field → `false` (the caller returns the
+ * unresolved result the API promises; it never throws or builds invalid RDF).
+ */
 function isValidDraft(draft: StructuredIntentDraft): boolean {
   if (typeof draft !== "object" || draft === null) {
     return false;
@@ -408,7 +426,14 @@ function isValidDraft(draft: StructuredIntentDraft): boolean {
   if (typeof draft.action !== "string" || !VALID_INTENT_ACTIONS.has(draft.action)) {
     return false;
   }
-  if (draft.target !== undefined && typeof draft.target !== "string") {
+  // Every optional string field must be a non-empty string when present.
+  if (!optionalStringOk(draft.target)) {
+    return false;
+  }
+  if (!optionalStringOk(draft.recipient)) {
+    return false;
+  }
+  if (!optionalStringOk(draft.agent)) {
     return false;
   }
   if (draft.parameters !== undefined) {
@@ -426,7 +451,10 @@ function isValidDraft(draft: StructuredIntentDraft): boolean {
       return false;
     }
     for (const m of draft.modes) {
-      if (!(m in ACL_MODE_IRI)) {
+      // OWN-KEY allowlist via Object.hasOwn — NOT `m in ACL_MODE_IRI`, which would
+      // accept inherited prototype keys (`toString`, `constructor`, …). A mode must
+      // be a string that is an own key of the closed ACL_MODE_IRI map.
+      if (typeof m !== "string" || !Object.hasOwn(ACL_MODE_IRI, m)) {
         return false;
       }
     }

@@ -226,4 +226,13 @@ describe("handshake RDF form", () => {
 <urn:a2a:handshake> a a2a:UpgradeResponse ; a2a:protocolHash "sha256:A" ; a2a:accept "maybe" .`;
     expect(await handshakeFromRdf(invalid)).toBeUndefined();
   });
+
+  it("REJECTS a literal-valued rdf:type (malformed RDF, not a real typed handshake)", async () => {
+    // rdf:type with a LITERAL object must not be recognised as a handshake type.
+    const ttl = `@prefix a2a: <https://w3id.org/jeswr/a2a#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+<urn:a2a:handshake> rdf:type "https://w3id.org/jeswr/a2a#UpgradeOffer" ;
+  a2a:protocolHash "sha256:A" ; a2a:protocolSource <https://a/p> .`;
+    expect(await handshakeFromRdf(ttl)).toBeUndefined();
+  });
 });

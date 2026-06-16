@@ -228,6 +228,80 @@ describe("injected-translate seam", () => {
     expect((await parseIntent("zorp", { translate: badModes })).resolved).toBe(false);
   });
 
+  it("rejects a translated draft whose recipient is a non-string (not pass, not throw)", async () => {
+    const translate = vi.fn<TranslateFn>(
+      async () =>
+        ({ action: "grant", recipient: { webid: "x" } }) as unknown as StructuredIntentDraft,
+    );
+    const r = await parseIntent("zorp", { translate });
+    expect(r.resolved).toBe(false);
+    expect(r.intent).toBeUndefined();
+    expect(r.reason).toContain("invalid draft");
+  });
+
+  it("rejects a translated draft whose agent is a non-string (not pass, not throw)", async () => {
+    const translate = vi.fn<TranslateFn>(
+      async () => ({ action: "read", agent: 42 }) as unknown as StructuredIntentDraft,
+    );
+    const r = await parseIntent("zorp", { translate });
+    expect(r.resolved).toBe(false);
+    expect(r.intent).toBeUndefined();
+    expect(r.reason).toContain("invalid draft");
+  });
+
+  it("rejects a translated draft with an empty-string target/recipient/agent", async () => {
+    const emptyTarget = vi.fn<TranslateFn>(
+      async () => ({ action: "read", target: "" }) as unknown as StructuredIntentDraft,
+    );
+    expect((await parseIntent("zorp", { translate: emptyTarget })).resolved).toBe(false);
+    const emptyRecipient = vi.fn<TranslateFn>(
+      async () => ({ action: "grant", recipient: "" }) as unknown as StructuredIntentDraft,
+    );
+    expect((await parseIntent("zorp", { translate: emptyRecipient })).resolved).toBe(false);
+    const emptyAgent = vi.fn<TranslateFn>(
+      async () => ({ action: "read", agent: "" }) as unknown as StructuredIntentDraft,
+    );
+    expect((await parseIntent("zorp", { translate: emptyAgent })).resolved).toBe(false);
+  });
+
+  it("rejects a prototype-chain key as a mode (toString / constructor) — own-key allowlist", async () => {
+    for (const proto of ["toString", "constructor", "hasOwnProperty", "valueOf"]) {
+      const translate = vi.fn<TranslateFn>(
+        async () => ({ action: "grant", modes: [proto] }) as unknown as StructuredIntentDraft,
+      );
+      const r = await parseIntent("zorp", { translate });
+      expect(r.resolved, `mode "${proto}" must be rejected`).toBe(false);
+      expect(r.intent).toBeUndefined();
+      expect(r.reason).toContain("invalid draft");
+    }
+  });
+
+  it("rejects a non-string mode (numeric) without throwing", async () => {
+    const translate = vi.fn<TranslateFn>(
+      async () => ({ action: "grant", modes: [1] }) as unknown as StructuredIntentDraft,
+    );
+    const r = await parseIntent("zorp", { translate });
+    expect(r.resolved).toBe(false);
+  });
+
+  it("still resolves a fully-valid translated draft (recipient + agent + modes)", async () => {
+    const translate = vi.fn<TranslateFn>(async () => ({
+      action: "grant",
+      target: "https://alice.pod/notes.ttl",
+      recipient: "https://bob.pod/me",
+      agent: "https://carol.pod/me",
+      modes: ["Read", "Write"],
+    }));
+    const r = await parseIntent("zorp the thing", { translate });
+    expect(r.resolved).toBe(true);
+    expect(r.source).toBe("translated");
+    expect(r.intent?.action).toBe("grant");
+    expect(r.intent?.recipient).toBe("https://bob.pod/me");
+    expect(r.intent?.agent).toBe("https://carol.pod/me");
+    expect(r.intent?.modes).toEqual(["Read", "Write"]);
+    expect(r.quads.length).toBeGreaterThan(0);
+  });
+
   it("makes NO network call — the injected fn is the only translator", async () => {
     // If the package tried to reach a model it would call fetch; assert it never does.
     const fetchSpy = vi.spyOn(globalThis, "fetch");

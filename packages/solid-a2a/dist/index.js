@@ -765,7 +765,7 @@ async function handshakeFromRdf(input, contentType2 = "text/turtle") {
   const offerSubjects = /* @__PURE__ */ new Set();
   const responseSubjects = /* @__PURE__ */ new Set();
   for (const q of quads) {
-    if (q.predicate.value !== RDF_TYPE) {
+    if (q.predicate.value !== RDF_TYPE || q.object.termType !== "NamedNode") {
       continue;
     }
     if (q.object.value === A2A_UPGRADE_OFFER) {
@@ -1427,6 +1427,9 @@ function shortHash(input) {
   }
   return (h >>> 0).toString(36);
 }
+function optionalStringOk(value) {
+  return value === void 0 || typeof value === "string" && value.length > 0;
+}
 function isValidDraft(draft) {
   if (typeof draft !== "object" || draft === null) {
     return false;
@@ -1434,7 +1437,13 @@ function isValidDraft(draft) {
   if (typeof draft.action !== "string" || !VALID_INTENT_ACTIONS.has(draft.action)) {
     return false;
   }
-  if (draft.target !== void 0 && typeof draft.target !== "string") {
+  if (!optionalStringOk(draft.target)) {
+    return false;
+  }
+  if (!optionalStringOk(draft.recipient)) {
+    return false;
+  }
+  if (!optionalStringOk(draft.agent)) {
     return false;
   }
   if (draft.parameters !== void 0) {
@@ -1452,7 +1461,7 @@ function isValidDraft(draft) {
       return false;
     }
     for (const m of draft.modes) {
-      if (!(m in ACL_MODE_IRI)) {
+      if (typeof m !== "string" || !Object.hasOwn(ACL_MODE_IRI, m)) {
         return false;
       }
     }

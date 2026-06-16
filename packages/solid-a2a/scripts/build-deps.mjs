@@ -22,7 +22,7 @@
 // Idempotent: if `dist/index.js` is already present (e.g. a workspace symlink or
 // a prior run) this is a no-op. Network is needed only the first time.
 
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -34,8 +34,14 @@ const DEP_DIST = join(DEP_DIR, "dist", "index.js");
 const LOCKFILE = join(ROOT, "package-lock.json");
 const FETCH_RDF_GIT = "https://github.com/jeswr/fetch-rdf.git";
 
-function run(cmd, cwd) {
-  execSync(cmd, { cwd, stdio: "inherit" });
+/**
+ * Run a command via `execFileSync` (NO shell) so an argument (e.g. a ref read
+ * from the lockfile) can never be interpreted as shell syntax — a command-
+ * injection hardening. `args` are passed as a literal argv, not concatenated into
+ * a shell string.
+ */
+function run(file, args, cwd) {
+  execFileSync(file, args, { cwd, stdio: "inherit" });
 }
 
 /**
@@ -66,7 +72,14 @@ function resolvedFetchRdfRef() {
     return undefined;
   }
   const ref = resolved.slice(hash + 1).trim();
-  return ref.length > 0 ? ref : undefined;
+  // Require a full 40-hex git commit SHA. This both pins a reproducible build AND
+  // is a defence-in-depth guard: even though we no longer interpolate the ref into
+  // a shell (run() uses execFileSync — no shell), refusing anything that is not a
+  // bare commit SHA rejects a corrupted/malicious lockfile ref outright.
+  if (!/^[0-9a-f]{40}$/.test(ref)) {
+    return undefined;
+  }
+  return ref;
 }
 
 function main() {
@@ -81,9 +94,9 @@ function main() {
   const ref = resolvedFetchRdfRef();
   if (!ref) {
     console.error(
-      "[build-deps] could not resolve the @jeswr/fetch-rdf git commit from package-lock.json; " +
-        "refusing to build from an unpinned source (a non-reproducible build). " +
-        "Run `npm install` to (re)generate the lockfile.",
+      "[build-deps] could not resolve a valid @jeswr/fetch-rdf git commit SHA from " +
+        "package-lock.json; refusing to build from an unpinned/invalid source (a non-" +
+        "reproducible build). Run `npm install` to (re)generate the lockfile.",
     );
     process.exit(1);
   }
@@ -95,12 +108,13 @@ function main() {
   try {
     // Clone then check out the EXACT lockfile-resolved commit (deterministic).
     // A bare `git clone` (no --depth) so an arbitrary commit SHA is fetchable;
-    // we then detach onto the pinned ref.
-    run(`git clone ${FETCH_RDF_GIT} "${work}"`);
-    run(`git checkout --quiet ${ref}`, work);
+    // we then detach onto the pinned ref. All commands run via execFileSync (NO
+    // shell) so the ref / paths are literal argv, never shell-interpreted.
+    run("git", ["clone", FETCH_RDF_GIT, work]);
+    run("git", ["checkout", "--quiet", ref], work);
     // Build with this repo's TypeScript so no extra toolchain is needed.
-    run("npm install --no-audit --no-fund --ignore-scripts --prefer-offline", work);
-    run(`node "${join(ROOT, "node_modules", "typescript", "bin", "tsc")}" -p tsconfig.json`, work);
+    run("npm", ["install", "--no-audit", "--no-fund", "--ignore-scripts", "--prefer-offline"], work);
+    run("node", [join(ROOT, "node_modules", "typescript", "bin", "tsc"), "-p", "tsconfig.json"], work);
 
     // Copy the built dist (and src, for source maps) into the installed package.
     cpSync(join(work, "dist"), join(DEP_DIR, "dist"), { recursive: true });
