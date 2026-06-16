@@ -21,7 +21,11 @@ export default mergeConfig(
       environment: "jsdom",
       globals: true,
       setupFiles: ["./test/setup.ts"],
-      include: ["src/**/*.test.{ts,tsx}"],
+      // `src/**` covers the app's TS/TSX suites; `scripts/**/*.test.mjs` keeps the
+      // gen-clientid origin-precedence suite (a plain `.mjs` co-located with the
+      // generator script — see its header) in the run, so the build's `gen:clientid`
+      // contract stays tested by the same `vitest run`.
+      include: ["src/**/*.test.{ts,tsx}", "scripts/**/*.test.mjs"],
     },
   }),
 );

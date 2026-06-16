@@ -23,6 +23,15 @@
 //  4. `allowInsecureLoopback` is enabled ONLY for a localhost origin (dev against
 //     a local CSS over HTTP); a deployed HTTPS origin stays strict.
 
+import {
+  type CredentialPresence,
+  decideSilentRestore,
+  IndexedDbSessionStore,
+  indexedDbAvailable,
+  RememberedAccount,
+  type SessionStore,
+  shouldDropRememberedPointer,
+} from "@jeswr/solid-session-restore";
 import type { AuthorizationCodeFlow, GetCodeCallback } from "@solid/reactive-authentication";
 import {
   createContext,
@@ -68,9 +77,17 @@ export interface SessionContextValue {
    * interactive login form.
    */
   autologinPending: boolean;
+  /**
+   * True while the mount-time silent SESSION RESTORE is running — a refresh-token
+   * grant (a fetch, NO popup/iframe) that re-establishes a returning user's session
+   * from the persisted DPoP-bound refresh token. App/LoginScreen show a brief
+   * "Restoring…" state instead of flashing the login form while this runs, then
+   * either land on the app (restored) or fall through to login (genuine failure).
+   */
+  restoring: boolean;
   /** Begin login for a WebID. Resolves when authenticated, rejects on failure. */
   login: (webId: string) => Promise<void>;
-  /** Drop the in-memory session (tokens are memory-only; this clears app state). */
+  /** Drop the in-memory session (clears app state + the persisted credential + pointer). */
   logout: () => void;
 }
 
@@ -116,9 +133,25 @@ interface AuthRuntimeConfig {
   clientId: string;
   allowInsecureLoopback: boolean;
   getWebId: () => Promise<string>;
+  /** The durable session store wired into the provider (undefined → no restore). */
+  sessionStore?: SessionStore;
 }
 
 let authRuntimeSingleton: Promise<AuthRuntime> | null = null;
+
+// ── Silent session restore (closed-tab reopen) singletons ────────────────────
+//
+// Per-app, page-lifetime singletons (matching the auth-runtime model). The
+// IndexedDB DB name + the localStorage pointer key are app-specific so two suite
+// apps on a shared origin never share a session store or a remembered pointer.
+
+/** The durable, issuer-keyed DPoP-bound refresh-token store. Undefined when IndexedDB is unavailable (SSR/test/locked-down) → no silent restore. */
+const sessionStore: SessionStore | undefined = indexedDbAvailable()
+  ? new IndexedDbSessionStore({ dbName: "pod-photos:sessions" })
+  : undefined;
+
+/** The credential-free WebID→issuer pointer that selects which issuer to restore. */
+const rememberedAccount = new RememberedAccount("pod-photos:remembered-account");
 
 /**
  * The WebID the user is currently logging in with, in a MODULE-level holder (not
@@ -290,6 +323,9 @@ function getAuthRuntime(cfg: AuthRuntimeConfig): Promise<AuthRuntime> {
         clientId: cfg.clientId,
         allowInsecureLoopback: cfg.allowInsecureLoopback,
         profileFetch,
+        // Wire the durable store so login persists the refresh credential and
+        // restoreIssuer can rebuild the session on a later load (no popup/iframe).
+        sessionStore: cfg.sessionStore,
       },
     );
     const manager = new ReactiveFetchManager([provider]);
@@ -301,6 +337,172 @@ function getAuthRuntime(cfg: AuthRuntimeConfig): Promise<AuthRuntime> {
     throw e;
   });
   return authRuntimeSingleton;
+}
+
+// ── Silent session restore (closed-tab reopen) ───────────────────────────────
+//
+// The whole point: Pod Photos held tokens in MEMORY ONLY, so closing the tab logged
+// the user out. On a fresh load we look up the remembered WebID→issuer pointer and
+// run a refresh-token grant (a FETCH, no popup/iframe) for that issuer via the
+// provider's `restoreIssuer`, driven by the PURE `decideSilentRestore` — so the
+// security-critical branch table (no account / no issuer / restored / webid-mismatch
+// / restore-failed) is unit-tested without a browser. The package owns the grant +
+// the WebID-scoped isolation; this app keeps only the thin wiring below.
+
+/** The terminal outcome of a silent restore, applied by the mount effect. */
+type SilentRestoreOutcome =
+  | { kind: "restored"; webId: string; session: DerivedSession }
+  | { kind: "login" };
+
+/**
+ * Single-flight the ONE page-lifetime restore: memoised on this module-level
+ * promise so a StrictMode remount / concurrent mount reuses it instead of re-running
+ * the refresh grant. Provider-independent of React state — it returns a pure
+ * {@link SilentRestoreOutcome} the effect applies. Never throws (fail-closed to
+ * `login`).
+ */
+let silentRestorePromise: Promise<SilentRestoreOutcome> | null = null;
+
+/** Parse a remembered issuer string to a URL, or undefined when absent/malformed. */
+function parseIssuer(issuer: string | undefined): URL | undefined {
+  if (!issuer) return undefined;
+  try {
+    return new URL(issuer);
+  } catch {
+    return undefined; // corrupt remembered issuer — unusable.
+  }
+}
+
+/**
+ * The durable-credential presence for a remembered issuer, for the pointer keep/drop
+ * decision. A MALFORMED/absent issuer is an unusable pointer → `"absent"` (dropped
+ * rather than retried forever). Otherwise delegate to the provider's tri-state read
+ * (which returns `"unknown"` on a store-read error so a blip does not orphan it).
+ */
+async function credentialPresenceFor(
+  provider: Pick<WebIdDPoPTokenProvider, "hasPersisted">,
+  issuer: string | undefined,
+): Promise<CredentialPresence> {
+  const url = parseIssuer(issuer);
+  if (!url) return "absent";
+  return provider.hasPersisted(url);
+}
+
+/**
+ * The pure restore body, parametrised on the provider + the remembered-account
+ * pointer so it is unit-testable WITHOUT the React tree or a browser (the security-
+ * critical branch table — restored / webid-mismatch teardown / keep-drop pointer — is
+ * pinned in session-restore.test.ts). Never throws (fail-closed to `login`). The
+ * page-lifetime {@link runSilentRestore} memoises ONE call of this against the module
+ * singletons.
+ */
+export async function decideAndApplyRestore(
+  provider: Pick<
+    WebIdDPoPTokenProvider,
+    "restoreIssuer" | "reset" | "forgetPersisted" | "hasPersisted"
+  >,
+  // Structural slice of RememberedAccount (read/write/clear) so a test double need not
+  // fake its private fields. The real RememberedAccount satisfies it.
+  remembered: Pick<RememberedAccount, "read" | "write" | "clear">,
+): Promise<SilentRestoreOutcome> {
+  try {
+    const record = remembered.read();
+    const decision = await decideSilentRestore({
+      lastActiveWebId: record?.webId,
+      remembered: record ? [record] : [],
+      // The one fetch: a refresh-token grant for the remembered issuer (delegated to
+      // the package's restoreSession). Never throws for the expired/revoked case (the
+      // provider returns undefined and the package cleared the dead entry); a thrown
+      // error is unexpected and decideSilentRestore treats it as login (fail-closed).
+      restoreIssuer: async (issuer) => provider.restoreIssuer(new URL(issuer)),
+      // The APP's webIdsEqual, so the last-active-WebID ↔ restored-WebID comparison
+      // matches the rest of the auth seam exactly (the pod-mail pattern).
+      webIdsEqual,
+    });
+    if (decision.outcome !== "restored") {
+      // SECURITY — a `webid-mismatch` means restoreIssuer ALREADY succeeded one layer
+      // down: it pinned an in-memory session AND the package re-persisted a rotated
+      // credential for the WRONG (mismatched) WebID before the last-active-WebID check
+      // up here failed it. So FULLY tear it down, fail-closed, IN THIS ORDER:
+      //  1. reset() SYNCHRONOUSLY FIRST — drops the pinned in-memory session +
+      //     re-fences in-flight work IMMEDIATELY, so no patched fetch can upgrade as
+      //     the wrong WebID during the (awaited) IndexedDB delete window below.
+      //  2. THEN forget the persisted credential (async) so the orphaned durable token
+      //     for the wrong WebID is removed, and clear the pointer.
+      if (decision.reason === "webid-mismatch") {
+        const issuer = parseIssuer(record?.issuer);
+        provider.reset();
+        if (issuer) await provider.forgetPersisted(issuer);
+        remembered.clear();
+        return { kind: "login" };
+      }
+      // Otherwise: fall back to login. The keep/drop-pointer decision is the PURE
+      // shouldDropRememberedPointer, driven by the REASON + (for restore-failed)
+      // whether the durable credential survived — do NOT wipe the pointer on a
+      // transient blip / an unreadable store.
+      const credential = await credentialPresenceFor(provider, record?.issuer);
+      if (shouldDropRememberedPointer(decision.reason, credential)) remembered.clear();
+      return { kind: "login" };
+    }
+    // The refresh grant rebuilt a live session in the provider (issuer pinned,
+    // session cached). Per the cross-app invariant, a RESTORED token means logged-in
+    // even if the cosmetic profile read degrades: read the (now authenticated)
+    // profile to derive pod root / display name, but fall back to a WebID-origin-
+    // derived session rather than bouncing a fully-restored user to login on a
+    // transient profile blip.
+    let session: DerivedSession;
+    try {
+      session = deriveSession(await readProfile(decision.webId));
+    } catch {
+      session = deriveSession({
+        webId: decision.webId,
+        name: decision.webId,
+        storages: [],
+        oidcIssuers: [decision.issuer],
+      });
+    }
+    // Re-confirm the remembered pointer (issuer re-confirmed) so the NEXT reload
+    // restores from the current credential.
+    remembered.write(decision.webId, decision.issuer);
+    return { kind: "restored", webId: decision.webId, session };
+  } catch {
+    // Any UNEXPECTED error in the restore wiring → fall back to login, fail-closed.
+    // Deliberately do NOT clear the remembered pointer here: decideSilentRestore /
+    // restoreIssuer don't throw (the normal outcomes are handled above), so reaching
+    // here means a wiring fault — over-clearing a pointer whose credential may still
+    // be valid would reintroduce the transient-wipe bug. A kept pointer at worst costs
+    // one extra doomed restore next load, which then re-clears cleanly.
+    return { kind: "login" };
+  }
+}
+
+function runSilentRestore(provider: WebIdDPoPTokenProvider): Promise<SilentRestoreOutcome> {
+  if (silentRestorePromise) return silentRestorePromise;
+  silentRestorePromise = decideAndApplyRestore(provider, rememberedAccount);
+  return silentRestorePromise;
+}
+
+/**
+ * Whether a silent restore is even worth attempting on THIS load — used to decide
+ * the initial `restoring` paint so the login form does not flash before the
+ * refresh-grant runs. TRUE iff: a remembered account exists AND no autologin URL
+ * takes precedence (no `#autologin/…` fragment, no pending redirect record, no
+ * `?code`/`?error` redirect return). Cheap + synchronous (reads localStorage + the
+ * URL only) so it is safe in a `useState` initialiser. Conservative: any unavailable
+ * storage → false (→ login), never a hung "Restoring…".
+ */
+function shouldAttemptSilentRestore(): boolean {
+  if (typeof location === "undefined") return false; // SSR/test pre-DOM.
+  // Autologin precedence: a deep-link / pending redirect / redirect return wins.
+  if (
+    parseAutologinFragment(location.hash) !== null ||
+    hasPendingRedirectLogin() ||
+    hasAuthCodeParams(location.search) ||
+    hasAuthErrorParams(location.search)
+  ) {
+    return false;
+  }
+  return rememberedAccount.read() !== null;
 }
 
 export function SessionProvider({ children }: { children: ReactNode }) {
@@ -316,6 +518,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<DerivedSession | null>(null);
   const [loggingIn, setLoggingIn] = useState(false);
   const [autologinPending, setAutologinPending] = useState(false);
+  // Initialise `restoring` from the synchronous "is a restore worth attempting?"
+  // check so the login form does not FLASH before the refresh grant runs (a returning
+  // user with a remembered pointer paints "Restoring…", not the login screen).
+  const [restoring, setRestoring] = useState<boolean>(() => shouldAttemptSilentRestore());
   const [error, setError] = useState<string | null>(null);
 
   // Acquire the auth runtime, client-side, after the element exists. The runtime
@@ -360,6 +566,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         if (!id) throw new Error("No WebID set for login");
         return id;
       },
+      // The durable session store (page-lifetime singleton) so login persists the
+      // refresh credential and restoreIssuer can rebuild the session on a later load.
+      sessionStore,
     })
       .then(({ provider, profileFetch }) => {
         if (cancelled) return;
@@ -398,6 +607,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     // Re-read the profile (now authenticated) and derive the session.
     const me = await readProfile(id);
     const derived = deriveSession(me);
+    // REMEMBER this account (WebID + the issuer it authenticated against) so a later
+    // page load can attempt a silent refresh-token restore. The provider persisted
+    // the DPoP-bound refresh token + key in IndexedDB during the login; this
+    // localStorage pointer just records WHICH issuer to restore. Only when the
+    // provider knows the resolved issuer (it always does after a successful login).
+    const issuer = providerRef.current?.resolvedIssuer();
+    if (issuer) rememberedAccount.write(id, issuer);
     setWebId(id);
     setSession(derived);
   }, []);
@@ -545,17 +761,69 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   );
 
   const logout = useCallback(() => {
+    // Capture the resolved issuer BEFORE reset() (which clears it) so we can forget
+    // the DURABLE persisted credential for that issuer too — a logout must not leave
+    // a refresh token behind that the next load would silently revive.
+    const issuer = providerRef.current?.resolvedIssuer();
     // RESET THE PROVIDER, not just React state (Finding 1): the in-memory issuer,
     // per-issuer sessions (DPoP key + access/refresh tokens), authenticated-WebID
     // claim, and token-attach count are all dropped, so a later login as a DIFFERENT
     // WebID cannot reuse this user's token/session and a login probe cannot look
-    // authenticated with the stale token.
+    // authenticated with the stale token. reset() drops only IN-MEMORY state — the
+    // durable credential is wiped separately below.
     providerRef.current?.reset();
+    // Forget the DURABLE refresh credential + the remembered pointer so a signed-out
+    // account is never silently restored on the next load. Fire-and-forget +
+    // best-effort (a stale entry is harmless — its refresh token is DPoP-bound and a
+    // failed restore re-clears it).
+    if (issuer) void providerRef.current?.forgetPersisted(new URL(issuer)).catch(() => {});
+    rememberedAccount.clear();
     pendingWebIdHolder.current = null;
     setWebId(null);
     setSession(null);
     setError(null);
   }, []);
+
+  // ── SILENT SESSION RESTORE mount effect (closed-tab reopen) ──────────────────
+  //
+  // Runs ONCE per page, after the runtime is `ready`, ONLY when not already logged in
+  // AND no autologin URL takes precedence (the no-fragment returning-user path). It
+  // runs a refresh-token grant (a fetch, NO popup/iframe) via the provider's
+  // `restoreIssuer`, driven by the PURE `decideSilentRestore` — so the
+  // security-critical branch table (no account / no issuer / restored / webid-mismatch
+  // / failed) is unit-tested without a browser. On `restored` we derive + set the
+  // session; on `login` we just stop the restoring state and fall through to login.
+  //
+  // PRECEDENCE: the `restoring` initial state already excluded the autologin URLs
+  // (shouldAttemptSilentRestore), and this effect re-checks them, so a deep-link /
+  // redirect return is left entirely to the autologin effect. A `webId` already set
+  // (e.g. autologin completed first) also short-circuits here.
+  useEffect(() => {
+    const provider = providerRef.current;
+    if (!ready || !provider) return;
+    // Don't restore when a session already exists, or an autologin URL outranks us.
+    if (webId !== null || !shouldAttemptSilentRestore()) {
+      setRestoring(false);
+      return;
+    }
+    let cancelled = false;
+    setRestoring(true);
+    setError(null);
+    // Await the ONE page-lifetime restore (memoised), so a StrictMode remount reuses
+    // the same operation rather than re-running the grant — and ALWAYS clears its own
+    // `restoring` when it settles. runSilentRestore never throws.
+    runSilentRestore(provider).then((outcome) => {
+      if (cancelled) return;
+      if (outcome.kind === "restored") {
+        setWebId(outcome.webId);
+        setSession(outcome.session);
+      }
+      setRestoring(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [ready, webId]);
 
   // ── AUTOLOGIN mount effect (full-page redirect deep-link / return) ───────────
   //
@@ -566,9 +834,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   //
   // It runs AFTER the runtime is `ready`, ONLY when NOT already logged in: a restored
   // / active session WINS — `planAutologin` returns `none` when `loggedIn`, so a
-  // pre-set session short-circuits autologin (test (b)). There is no silent-session-
-  // restore in this host today (tokens are memory-only); this guard means that IF one
-  // is added later — or the user is already logged in — autologin is skipped.
+  // pre-set session short-circuits autologin (test (b)). A silent session restore
+  // (the effect above) only runs when NO autologin URL takes precedence
+  // (shouldAttemptSilentRestore excludes the `#autologin/…` fragment + redirect
+  // returns), so the two paths never race for the same load.
   //
   // StrictMode double-invokes mount effects in dev; the module-level
   // `autologinEffectRan` latch (fed into the plan) + the persisted-redirect record +
@@ -696,8 +965,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, [ready, webId, establishSessionFor]);
 
   const value = useMemo<SessionContextValue>(
-    () => ({ webId, session, loggingIn, autologinPending, error, ready, login, logout }),
-    [webId, session, loggingIn, autologinPending, error, ready, login, logout],
+    () => ({ webId, session, loggingIn, autologinPending, restoring, error, ready, login, logout }),
+    [webId, session, loggingIn, autologinPending, restoring, error, ready, login, logout],
   );
 
   return (

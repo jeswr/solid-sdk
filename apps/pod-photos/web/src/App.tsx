@@ -21,7 +21,7 @@ import { LoginScreen } from "./LoginScreen";
 import { type PhotosRoot, resolvePhotosRoot } from "./photos-root";
 
 export function App() {
-  const { webId, session, logout, autologinPending } = useSession();
+  const { webId, session, logout, autologinPending, restoring } = useSession();
   const [photosRoot, setPhotosRoot] = useState<PhotosRoot | null>(null);
 
   // Resolve the photos container under the derived pod root once a session
@@ -51,16 +51,21 @@ export function App() {
   }, [session]);
 
   if (!webId || !session) {
-    // Autologin (a Pod-Manager deep-link or a redirect return) is silently signing
-    // the user in via a full-page redirect — show a brief restoring state rather than
-    // the interactive login form, since there is no gesture to prompt for.
-    if (autologinPending) {
+    // A brief busy state instead of flashing the login form when the session is being
+    // established WITHOUT a gesture:
+    //  - `autologinPending` — a Pod-Manager deep-link / redirect return is signing the
+    //    user in via a full-page redirect ("Signing you in…").
+    //  - `restoring` — a returning user's session is being silently re-established from
+    //    the persisted DPoP-bound refresh token (a refresh grant, no popup/iframe)
+    //    after a closed-tab reopen ("Restoring your session…").
+    // Fall through to the interactive login form ONLY when neither is in flight.
+    if (autologinPending || restoring) {
       return (
         <main className="login-screen" aria-busy="true">
           <section className="login-card">
             <h1>Pod Photos</h1>
             <p className="login-sub" role="status">
-              Signing you in…
+              {autologinPending ? "Signing you in…" : "Restoring your session…"}
             </p>
           </section>
         </main>
