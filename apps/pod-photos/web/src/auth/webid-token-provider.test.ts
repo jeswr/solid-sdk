@@ -21,6 +21,7 @@
  * The full OAuth/DPoP/profile-fetch stack is mocked so this runs with no browser
  * and no network: we control exactly which WebID each authentication "returns".
  */
+import type { PersistedSession, SessionStore } from "@jeswr/solid-session-restore";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // --- Mock the heavy auth dependencies so #authenticate is fully controllable. ---
@@ -1128,5 +1129,208 @@ describe("AUTOLOGIN — two-phase full-page redirect login (beginRedirectLogin /
     // mismatched completion seeded nothing the upgrade could reuse.
     expect(upgraded.headers.get("Authorization")).toBe("DPoP tok-B");
     expect(provider.authenticatedWebId()).toBe(WEBID_B);
+  });
+});
+
+// ── DURABLE-PERSISTENCE SECURITY (roborev findings 2/3/4) ───────────────────────
+//
+// These pin the security invariants of the silent-session-restore persistence path:
+//  • finding 2 — the redirect login PERSISTS a NON-EXTRACTABLE DPoP private key (the
+//    extractable JWK only survives the round-trip; the durable key must be
+//    non-extractable so an XSS cannot export it + redeem the token off-origin);
+//  • finding 3 — #persist writes the ACTUAL client the refresh token was bound to
+//    (clientRegistration.client_id), so a dynamic-registration restore re-derives the
+//    SAME client (RFC 6749 §6) instead of a fresh throwaway that cannot redeem it;
+//  • finding 4 — a logout `forgetPersisted` whose IndexedDB delete is still in flight
+//    cannot land AFTER an immediate re-login's put and erase the fresh credential.
+describe("durable persistence security (roborev findings 2/3/4)", () => {
+  const RETURN_URI = "https://app.example/";
+
+  /** An in-memory SessionStore double recording put/delete; an optional delete gate. */
+  function makeStore(seed?: PersistedSession): SessionStore & {
+    map: Map<string, PersistedSession>;
+    deleteGate: { promise: Promise<void> | null; release: (() => void) | null };
+  } {
+    const map = new Map<string, PersistedSession>();
+    if (seed) map.set(seed.issuer, seed);
+    const deleteGate: { promise: Promise<void> | null; release: (() => void) | null } = {
+      promise: null,
+      release: null,
+    };
+    return {
+      map,
+      deleteGate,
+      async get(issuer) {
+        return map.get(issuer);
+      },
+      async put(session) {
+        map.set(session.issuer, session);
+      },
+      async delete(issuer) {
+        // When gated, PARK the delete so a test can land a put() BEFORE it completes
+        // (models a slow IndexedDB delete racing an immediate re-login).
+        if (deleteGate.promise) await deleteGate.promise;
+        map.delete(issuer);
+      },
+    };
+  }
+
+  /** A provider wired to a sessionStore (so the persistence path is exercised). */
+  function makePersistingProvider(store: SessionStore) {
+    return new WebIdDPoPTokenProvider(
+      "https://app.example/callback.html",
+      async () => REDIRECT,
+      async () => authState.webId,
+      { clientId: "https://app.example/clientid.jsonld", sessionStore: store },
+    );
+  }
+
+  beforeEach(async () => {
+    authState.webId = WEBID_A;
+    authState.accessToken = "tok-A";
+    dpopMock.gate = null;
+    dpopMock.onEnter = null;
+    installSessionStorage();
+    // The redirect path persists ONLY when a refresh token is issued: have the token
+    // response carry one for THIS suite (the default mock omits it).
+    const oauth = await import("oauth4webapi");
+    (
+      oauth.processAuthorizationCodeResponse as unknown as {
+        mockResolvedValue: (v: unknown) => void;
+      }
+    ).mockResolvedValue({ access_token: authState.accessToken, refresh_token: "rt-A" });
+  });
+
+  it("FINDING 2 — the redirect login persists a NON-EXTRACTABLE DPoP private key", async () => {
+    const store = makeStore();
+    const provider = makePersistingProvider(store);
+    await provider.beginRedirectLogin(RETURN_URI);
+
+    await provider.completeRedirectLogin(`${RETURN_URI}?code=auth-code&state=state`);
+
+    // The session was established + the credential persisted.
+    expect(provider.authenticatedWebId()).toBe(WEBID_A);
+    const stored = store.map.get("https://issuer.example/");
+    expect(stored).toBeDefined();
+    // The whole point: the PERSISTED private key must NOT be extractable, so a
+    // same-origin XSS reading IndexedDB cannot export it to redeem the token
+    // off-origin. (The transient JWK in sessionStorage WAS extractable to survive the
+    // redirect; the re-imported, durable key is not.) The public key too.
+    expect((stored as PersistedSession).dpopKey.privateKey.extractable).toBe(false);
+    expect((stored as PersistedSession).dpopKey.publicKey.extractable).toBe(false);
+    // The persisted key can still SIGN — proven by a subsequent upgrade attaching a
+    // DPoP proof with the restored access token (no re-prompt).
+    const upgraded = await provider.upgrade(new Request("https://alice.example/storage/"));
+    expect(upgraded.headers.get("Authorization")).toBe("DPoP tok-A");
+  });
+
+  it("FINDING 3 (static client) — persists the static Client Identifier Document URL", async () => {
+    const store = makeStore();
+    const provider = makePersistingProvider(store);
+    await provider.beginRedirectLogin(RETURN_URI);
+    await provider.completeRedirectLogin(`${RETURN_URI}?code=auth-code&state=state`);
+    // The static-client app persists its clientId URL (NOT undefined) — the value a
+    // later restore needs to re-derive the same public client.
+    expect(store.map.get("https://issuer.example/")?.clientId).toBe(
+      "https://app.example/clientid.jsonld",
+    );
+  });
+
+  it("FINDING 3 (dynamic registration) — persists the SERVER-ASSIGNED client_id, not undefined", async () => {
+    // The DYNAMIC path: no static clientId, so #resolveClient performs dynamic client
+    // registration and the refresh token is bound to the server-assigned client_id.
+    // #persist must store THAT id (from clientRegistration.client_id) so a later
+    // restore re-derives the same client — persisting `this.#clientId` (undefined)
+    // would make the restore register a fresh client that cannot redeem the token.
+    const oauth = await import("oauth4webapi");
+    (
+      oauth.dynamicClientRegistrationRequest as unknown as {
+        mockResolvedValue: (v: unknown) => void;
+      }
+    ).mockResolvedValue({});
+    (
+      oauth.processDynamicClientRegistrationResponse as unknown as {
+        mockReturnValue: (v: unknown) => void;
+      }
+    ).mockReturnValue({
+      client_id: "dynamic-client-xyz",
+      token_endpoint_auth_method: "none",
+      redirect_uris: ["https://app.example/callback.html"],
+      response_types: ["code"],
+    });
+
+    const store = makeStore();
+    // No `clientId` option → the dynamic-registration path.
+    const provider = new WebIdDPoPTokenProvider(
+      "https://app.example/callback.html",
+      async () => REDIRECT,
+      async () => authState.webId,
+      { sessionStore: store },
+    );
+    // The popup login path (#authenticate → #resolveClient → dynamic registration →
+    // #persist) drives this. upgrade() runs that whole flow on a 401.
+    await provider.upgrade(new Request("https://alice.example/storage/"));
+
+    const stored = store.map.get("https://issuer.example/");
+    expect(stored).toBeDefined();
+    // The bound client_id is persisted — NOT undefined.
+    expect(stored?.clientId).toBe("dynamic-client-xyz");
+  });
+
+  it("FINDING 4 — a slow logout delete cannot erase a credential persisted by an immediate re-login", async () => {
+    // Seed a stale credential (the about-to-be-logged-out account) under the issuer.
+    const dpopKey = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, false, [
+      "sign",
+      "verify",
+    ]);
+    const store = makeStore({
+      issuer: "https://issuer.example/",
+      webId: WEBID_A,
+      refreshToken: "rt-stale",
+      dpopKey,
+      clientId: "https://app.example/clientid.jsonld",
+    });
+    const provider = makePersistingProvider(store);
+
+    // Prepare the re-login flow record BEFORE starting the race, so the only async
+    // work in flight during the race is the forget delete + the completion's #persist.
+    await provider.beginRedirectLogin(RETURN_URI);
+
+    // GATE the store.delete so the logout's forget is PARKED mid-flight (a slow
+    // IndexedDB delete), modelling the race: the user logs back in before it commits.
+    let releaseDelete!: () => void;
+    store.deleteGate.promise = new Promise<void>((r) => {
+      releaseDelete = r;
+    });
+
+    // Logout fires forgetPersisted fire-and-forget — its delete is now parked on the
+    // gate (and registered as the issuer's #pendingForget).
+    const forgetting = provider.forgetPersisted(new URL("https://issuer.example/"));
+    // Immediately re-login through the SAME issuer; its #persist must SERIALIZE behind
+    // the in-flight forget (await it) before its put.
+    const completing = provider.completeRedirectLogin(`${RETURN_URI}?code=auth-code&state=state`);
+
+    // Drain ALL pending microtasks several macrotask ticks. This is the adversarial
+    // crux: WITHOUT the serialization fix, completeRedirectLogin's #persist puts the
+    // fresh credential NOW (the delete is still parked) and resolves — so by the time
+    // we release the delete below it would erase the just-written credential. WITH the
+    // fix, #persist is BLOCKED awaiting the parked forget, so nothing is put yet.
+    const flush = () => new Promise((r) => setTimeout(r, 0));
+    await flush();
+    await flush();
+    await flush();
+
+    // NOW release the parked delete. WITH the fix: the delete runs (store emptied),
+    // the forget resolves, then #persist's await returns and the put lands LAST →
+    // store holds the NEW credential. WITHOUT the fix: the put already landed during
+    // the flush and this delete now erases it → store empty (the test then fails).
+    releaseDelete();
+    await Promise.all([forgetting, completing]);
+
+    // The fresh credential SURVIVES — the stale delete could not land after the put.
+    const stored = store.map.get("https://issuer.example/");
+    expect(stored).toBeDefined();
+    expect(stored?.refreshToken).toBe("rt-A");
+    expect(provider.authenticatedWebId()).toBe(WEBID_A);
   });
 });

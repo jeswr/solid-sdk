@@ -444,6 +444,17 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
    */
   readonly #sessionStore?: SessionStore;
   /**
+   * Per-issuer IN-FLIGHT logout delete, so a re-login through the SAME issuer cannot
+   * have its freshly persisted credential wiped by a LATER-landing logout delete
+   * (roborev finding). {@link forgetPersisted} is invoked fire-and-forget on logout
+   * (the UI flips to logged-out optimistically); its IndexedDB `delete` may still be
+   * in flight when the user immediately logs back in. {@link #persist} `await`s any
+   * pending forget for the issuer BEFORE its `put`, so the durable delete can never
+   * land AFTER the new login's put and orphan the next-load restore. Keyed by
+   * issuer href; cleared once the delete settles.
+   */
+  readonly #pendingForget = new Map<string, Promise<void>>();
+  /**
    * The profile is PUBLIC, so reading it needs no auth. We must not read it
    * through the patched global fetch in a way that recurses back into this
    * provider on a 401. We snapshot `globalThis.fetch` at construction — the
@@ -912,12 +923,31 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
     if (this.#sessionStore === undefined) return;
     if (session.refreshToken === undefined || session.authenticatedWebId === undefined) return;
     try {
+      // SERIALIZE with a racing logout (roborev finding): if a logout's
+      // fire-and-forget `forgetPersisted` for THIS issuer is still in flight, await it
+      // BEFORE the put — otherwise the stale delete could land AFTER this put and
+      // erase the freshly persisted credential, breaking the next-load restore. The
+      // forget swallows its own errors, so this await never rejects.
+      const pendingForget = this.#pendingForget.get(issuer.href);
+      if (pendingForget !== undefined) await pendingForget;
       await this.#sessionStore.put({
         issuer: issuer.href,
         webId: session.authenticatedWebId,
         refreshToken: session.refreshToken,
         dpopKey: session.dpopKey,
-        clientId: this.#clientId,
+        // Persist the ACTUAL client the refresh token was issued for, NOT
+        // `this.#clientId` (roborev finding). A refresh token is client-bound
+        // (RFC 6749 §6), so a restore MUST re-derive the SAME client or the grant is
+        // rejected. `session.clientRegistration.client_id` is that client in BOTH
+        // modes: the static Client Identifier Document URL when `this.#clientId` is
+        // set, AND the server-assigned `client_id` from dynamic client registration
+        // when it is not — whereas `this.#clientId` is `undefined` in the dynamic
+        // case, which would make the restore register a fresh throwaway client and
+        // fail to redeem the (original-client-bound) refresh token. The package's
+        // `restoreSession` reads this persisted `clientId` as its fallback
+        // (`options.clientId ?? stored.clientId`), so persisting it makes the
+        // dynamic-registration restore path correct too.
+        clientId: session.clientRegistration.client_id,
         expiresAt: session.expiresAt,
       });
     } catch {
@@ -938,7 +968,26 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
    */
   async forgetPersisted(issuer: URL): Promise<void> {
     if (this.#sessionStore === undefined) return;
-    await forgetPersistedInStore(this.#sessionStore, issuer);
+    // Track this delete as IN-FLIGHT so a racing re-login's {@link #persist} for the
+    // SAME issuer awaits it before its put (roborev finding — the stale delete must
+    // not land after a later put). The store's `delete` already swallows errors, but
+    // we wrap defensively so a rejection can never leave a poisoned promise that a
+    // later #persist awaits-and-throws on; the entry is cleared once settled (and only
+    // if it is still THIS promise, so we never clear a newer forget's entry).
+    const done = (async () => {
+      try {
+        await forgetPersistedInStore(this.#sessionStore as SessionStore, issuer);
+      } catch {
+        // Best-effort: a failed delete degrades to the stale entry being re-cleared by
+        // a later failed restore; never surfaced (would touch the refresh token).
+      }
+    })();
+    this.#pendingForget.set(issuer.href, done);
+    try {
+      await done;
+    } finally {
+      if (this.#pendingForget.get(issuer.href) === done) this.#pendingForget.delete(issuer.href);
+    }
   }
 
   /**
@@ -1332,20 +1381,30 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
         response_types: ["code"],
       };
 
-      // Re-import the persisted ES256 DPoP key (extractable so it survived the
-      // redirect) and rebuild the DPoP handle for the token exchange.
+      // Re-import the persisted ES256 DPoP key as NON-EXTRACTABLE (roborev finding:
+      // the persisted redirect key must not be extractable). The key was exported to
+      // an extractable JWK ONLY to survive the full-page redirect via sessionStorage;
+      // the re-imported, long-lived key that we (a) build the DPoP handle from for the
+      // token exchange and (b) PERSIST to IndexedDB (see {@link #persist}) must be
+      // non-extractable, exactly like the popup path's key. A non-extractable ES256
+      // key can still SIGN the token-exchange + refresh proofs (all we need), but its
+      // raw bytes can no longer be exported — so a same-origin XSS cannot read the
+      // persisted CryptoKeyPair out of IndexedDB and exfiltrate the refresh token + key
+      // for off-origin reuse, preserving DPoP proof-of-possession. The transient
+      // extractable JWK in sessionStorage is cleared the instant this completion
+      // settles (the `finally` below).
       const privateKey = await crypto.subtle.importKey(
         "jwk",
         flow.dpopPrivateJwk,
         ES256_IMPORT_ALG,
-        true,
+        false, // non-extractable: re-imported for signing + durable persistence
         ["sign"],
       );
       const publicKey = await crypto.subtle.importKey(
         "jwk",
         flow.dpopPublicJwk,
         ES256_IMPORT_ALG,
-        true,
+        false, // public key: non-extractable too (only used to verify)
         ["verify"],
       );
       if (generation !== this.#generation) throw new ReactiveAuthResetError();
