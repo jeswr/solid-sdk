@@ -555,7 +555,17 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         setReady(true);
       })
       .catch((e) => {
-        if (!cancelled) setError(e instanceof Error ? e.message : String(e));
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : String(e));
+          // FINDING 4: a runtime-init REJECTION leaves `ready` false, so the silent-
+          // restore effect (which is gated on `ready`) never runs and never flips
+          // `restoringSession` to false — the UI would be stuck forever on "Restoring
+          // your session…", hiding the login/error path. Flip it off here so the error
+          // (set above) / login screen can render. Initialised true only when a
+          // remembered pointer exists, so this is the one place that would otherwise
+          // leave it latched on a runtime-build failure.
+          setRestoringSession(false);
+        }
       });
     return () => {
       cancelled = true;
@@ -777,6 +787,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     // authenticated with the stale token. (reset() does NOT touch the durable store.)
     providerRef.current?.reset();
     pendingWebIdHolder.current = null;
+    // FINDING 3: invalidate the module-level silent-restore latch on logout. The latch
+    // caches the restore RESULT for the page lifetime; logout sets webId=null which
+    // re-runs the restore mount effect, and a cached `{kind:"restored"}` (or a stale
+    // teardown) would otherwise be replayed against the now-logged-out state — a
+    // spurious post-logout error / wrong state. Nulling it means a future restore
+    // starts clean. The mount effect ALSO re-reads the pointer and bails to "skipped"
+    // when it is now null (belt-and-braces — see the restore effect).
+    silentRestorePromise = null;
     setWebId(null);
     setSession(null);
     setError(null);
@@ -823,6 +841,17 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       hasAuthErrorParams(location.search) ||
       parseAutologinFragment(location.hash) !== null
     ) {
+      setRestoringSession(false);
+      return;
+    }
+    // FINDING 3 (belt-and-braces with the logout latch-null): if there is NO remembered
+    // pointer NOW (logout cleared it — this effect re-runs because logout set webId=null),
+    // there is nothing to restore. Bail to a clean logged-out state WITHOUT consulting /
+    // awaiting the cached `silentRestorePromise`, so a stale `{kind:"restored"}` from a
+    // pre-logout restore can never be replayed. On the LEGITIMATE first load the pointer
+    // is non-null (a returning user), so this guard does NOT fire and StrictMode
+    // single-flight via runSilentRestore's latch is fully preserved for that path.
+    if (remembered.read() === null) {
       setRestoringSession(false);
       return;
     }

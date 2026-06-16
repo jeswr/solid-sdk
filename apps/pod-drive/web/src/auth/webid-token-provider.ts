@@ -442,9 +442,11 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
    * Memoised issuer resolution: the user is asked for their WebID ONCE per
    * provider instance, not on every 401 — and concurrent 401s share the same
    * in-flight prompt (single-flight). Cleared on failure so a cancelled or
-   * failed prompt can be retried.
+   * failed prompt can be retried. Holds BOTH the chosen issuer AND the validated
+   * REQUESTED WebID so the post-grant persist can gate on a WebID match (finding 1)
+   * without re-prompting for the WebID.
    */
-  #issuer?: Promise<URL>;
+  #issuer?: Promise<{ issuer: URL; webId: string }>;
   /**
    * The resolved issuer href of the CURRENT authenticated session, tracked
    * SYNCHRONOUSLY (alongside the `Promise<URL>` {@link #issuer}) so the SessionProvider
@@ -554,15 +556,23 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
    * published provider. Ask the app for a WebID, validate it, dereference its
    * public profile (out-of-loop fetch), read every `solid:oidcIssuer`, then let
    * the app choose when several are advertised.
+   *
+   * Returns BOTH the chosen issuer AND the validated REQUESTED WebID (the WebID
+   * the user asked to log in as). The requested WebID is threaded downstream so
+   * the post-grant persist (popup path) can gate on `webIdsEqual(authenticated,
+   * requested)` — persisting a credential ONLY when the OP authenticated the SAME
+   * account that was requested (roborev finding 1). Returning it here means we ask
+   * the app for the WebID exactly ONCE per resolution rather than calling
+   * `#getWebId()` a second time downstream.
    */
-  async #resolveIssuer(signal: AbortSignal): Promise<URL> {
+  async #resolveIssuer(signal: AbortSignal): Promise<{ issuer: URL; webId: string }> {
     const webId = validateWebId(await this.#getWebId());
     signal.throwIfAborted();
     const { dataset } = await fetchRdf(webId, { fetch: this.#profileFetch });
     const issuers = resolveIssuers(webId, dataset);
     const choose = this.#chooseIssuer ?? defaultChooseIssuer(webId);
     const chosen = await choose(issuers);
-    return new URL(chosen);
+    return { issuer: new URL(chosen), webId };
   }
 
   async matches(): Promise<boolean> {
@@ -759,7 +769,9 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
       // catch below clears ONLY if the generation is unchanged AND `#issuer` is
       // still this same pending promise; a superseded/aborted resolution clears
       // nothing.
-      const resolution: Promise<URL> = this.#resolveIssuer(controller.signal).catch((e) => {
+      const resolution: Promise<{ issuer: URL; webId: string }> = this.#resolveIssuer(
+        controller.signal,
+      ).catch((e) => {
         if (this.#generation === generation && this.#issuer === resolution) {
           this.#issuer = undefined; // allow retry after cancel/failure, current gen only
         }
@@ -767,8 +779,8 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
       });
       this.#issuer = resolution;
     }
-    const issuer = await this.#issuer;
-    const session = await this.#getSession(issuer, generation, controller.signal);
+    const { issuer, webId: requestedWebId } = await this.#issuer;
+    const session = await this.#getSession(issuer, requestedWebId, generation, controller.signal);
     // FENCE (pre-await, fail fast): if a reset() (logout / new-login) advanced the
     // generation while this upgrade was in flight (issuer resolution / login), the
     // result belongs to a SUPERSEDED identity. Mutate NO provider state and reject.
@@ -843,16 +855,21 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
   }
 
   /** Reuse the (possibly in-flight) session for the issuer, else run the code flow once. */
-  async #getSession(issuer: URL, generation: number, signal: AbortSignal): Promise<IssuerSession> {
+  async #getSession(
+    issuer: URL,
+    requestedWebId: string,
+    generation: number,
+    signal: AbortSignal,
+  ): Promise<IssuerSession> {
     // A reset() between issuer resolution and here means this attempt is already
     // superseded — run the login NOT cached, so a stale attempt can never seed the
     // current generation's #sessions map. The upgrade() fence then discards it.
     if (generation !== this.#generation) {
-      return this.#authenticate(issuer, generation, signal);
+      return this.#authenticate(issuer, requestedWebId, generation, signal);
     }
     const cached = this.#sessions.get(issuer.href);
     if (cached) return cached;
-    const pending = this.#authenticate(issuer, generation, signal).catch((e) => {
+    const pending = this.#authenticate(issuer, requestedWebId, generation, signal).catch((e) => {
       // Only retract THIS generation's cache entry. If a reset() advanced the
       // generation, #sessions was already cleared and may hold the NEXT identity's
       // in-flight login — deleting blindly here could evict it. Guard on the
@@ -882,6 +899,7 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
    */
   async #authenticate(
     issuer: URL,
+    requestedWebId: string,
     generation: number,
     signal: AbortSignal,
   ): Promise<IssuerSession> {
@@ -904,18 +922,26 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
     const nonce = oauth.generateRandomNonce();
     const state = oauth.generateRandomState();
 
-    const buildAuthorizationUrl = (withPrompt: boolean): URL => {
+    // The scope is a VARIABLE so the `invalid_scope` fallback below can DROP
+    // `offline_access` and retry (finding 2). The full scope (with offline_access)
+    // requests a refresh token for silent session restore; the reduced scope is the
+    // exact scope a pre-session-restore login used and is known to work everywhere.
+    const SCOPE_WITH_OFFLINE = "openid webid offline_access";
+    const SCOPE_NO_OFFLINE = "openid webid";
+
+    const buildAuthorizationUrl = (scope: string, withPrompt: boolean): URL => {
       const url = new URL(authorizationServer.authorization_endpoint as string);
       url.searchParams.set("client_id", clientRegistration.client_id);
       url.searchParams.set("redirect_uri", registeredRedirectUri);
       url.searchParams.set("response_type", registeredResponseType);
-      // `offline_access` so the OP issues a refresh token for silent session restore
-      // (a later refresh-token grant rebuilds the session, no popup). The DPoP key
-      // stays NON-extractable (generated below) — it is structured-cloned into
-      // IndexedDB by the session store, raw bytes never enter JS. An OP that rejects
-      // offline_access must still let login succeed (no refresh_token → no restore),
-      // so this is purely additive: see the post-grant persist guard.
-      url.searchParams.set("scope", "openid webid offline_access");
+      // `offline_access` (when in `scope`) so the OP issues a refresh token for silent
+      // session restore (a later refresh-token grant rebuilds the session, no popup).
+      // The DPoP key stays NON-extractable (generated below) — it is structured-cloned
+      // into IndexedDB by the session store, raw bytes never enter JS. An OP that
+      // rejects `offline_access` with `invalid_scope` is handled by retrying ONCE with
+      // the reduced scope (login still succeeds — no refresh_token → no restore), so
+      // this is purely additive: see the `invalid_scope` fallback + persist guard.
+      url.searchParams.set("scope", scope);
       if (withPrompt) url.searchParams.set("prompt", "none");
       url.searchParams.set("state", state);
       url.searchParams.set("nonce", nonce);
@@ -939,56 +965,78 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
       ? await oauth.calculatePKCECodeChallenge(codeVerifier)
       : codeVerifier;
 
-    const authorizationUrl = buildAuthorizationUrl(true);
-    if (usePkce) authorizationUrl.searchParams.set("code_challenge", codeChallenge);
+    // One full authorization-code + token-grant round (for a given scope), with the
+    // existing `prompt=none` → interactive retry preserved inside. Factored into a
+    // closure so the `invalid_scope` fallback can run it twice (once with
+    // `offline_access`, once without) without duplicating the flow.
+    const runCodeFlow = async (scope: string): Promise<oauth.TokenEndpointResponse> => {
+      const authorizationUrl = buildAuthorizationUrl(scope, true);
+      if (usePkce) authorizationUrl.searchParams.set("code_challenge", codeChallenge);
 
-    let authorizationCodeParams: URLSearchParams;
-    const authorizationCodeResponse = await this.#getCode(authorizationUrl, signal);
-    try {
-      authorizationCodeParams = oauth.validateAuthResponse(
-        authorizationServer,
-        clientRegistration,
-        new URL(authorizationCodeResponse),
-        state,
-      );
-    } catch (e) {
-      if (
-        (e instanceof oauth.AuthorizationResponseError &&
-          (e.error === "interaction_required" ||
-            e.error === "consent_required" ||
-            e.error === "login_required")) ||
-        isEssMissingIssInteractionNeeded(e)
-      ) {
-        // The IdP needs the user to interact: retry once without `prompt=none`.
-        const retryUrl = buildAuthorizationUrl(false);
-        if (usePkce) retryUrl.searchParams.set("code_challenge", codeChallenge);
-        const retryResponse = await this.#getCode(retryUrl, signal);
+      let authorizationCodeParams: URLSearchParams;
+      const authorizationCodeResponse = await this.#getCode(authorizationUrl, signal);
+      try {
         authorizationCodeParams = oauth.validateAuthResponse(
           authorizationServer,
           clientRegistration,
-          new URL(retryResponse),
+          new URL(authorizationCodeResponse),
           state,
         );
-      } else {
-        throw e;
+      } catch (e) {
+        if (
+          (e instanceof oauth.AuthorizationResponseError &&
+            (e.error === "interaction_required" ||
+              e.error === "consent_required" ||
+              e.error === "login_required")) ||
+          isEssMissingIssInteractionNeeded(e)
+        ) {
+          // The IdP needs the user to interact: retry once without `prompt=none`.
+          const retryUrl = buildAuthorizationUrl(scope, false);
+          if (usePkce) retryUrl.searchParams.set("code_challenge", codeChallenge);
+          const retryResponse = await this.#getCode(retryUrl, signal);
+          authorizationCodeParams = oauth.validateAuthResponse(
+            authorizationServer,
+            clientRegistration,
+            new URL(retryResponse),
+            state,
+          );
+        } else {
+          throw e;
+        }
       }
-    }
 
-    const tokenResponse = await oauth.authorizationCodeGrantRequest(
-      authorizationServer,
-      clientRegistration,
-      this.#clientAuth(authorizationServer.issuer, clientRegistration),
-      authorizationCodeParams,
-      this.#callbackUri,
-      usePkce ? codeVerifier : oauth.nopkce,
-      { DPoP: dpop, ...http },
-    );
-    const tokenResult = await oauth.processAuthorizationCodeResponse(
-      authorizationServer,
-      clientRegistration,
-      tokenResponse,
-      { expectedNonce: this.#nonceVerification(authorizationServer.issuer, nonce) },
-    );
+      const tokenResponse = await oauth.authorizationCodeGrantRequest(
+        authorizationServer,
+        clientRegistration,
+        this.#clientAuth(authorizationServer.issuer, clientRegistration),
+        authorizationCodeParams,
+        this.#callbackUri,
+        usePkce ? codeVerifier : oauth.nopkce,
+        { DPoP: dpop, ...http },
+      );
+      return oauth.processAuthorizationCodeResponse(
+        authorizationServer,
+        clientRegistration,
+        tokenResponse,
+        { expectedNonce: this.#nonceVerification(authorizationServer.issuer, nonce) },
+      );
+    };
+
+    // FINDING 2 — `invalid_scope` fallback. Try the full scope first; if the OP
+    // rejects `offline_access` with `invalid_scope` (surfaced either as an
+    // authorization-response error from `validateAuthResponse`, or a token-grant
+    // `ResponseBodyError`), retry ONCE with the reduced `openid webid` scope. Login
+    // then SUCCEEDS — just with no refresh_token / no silent restore (acceptable
+    // degradation, never a hard failure). Composes cleanly with the
+    // `interaction_required` retry inside `runCodeFlow` (that retry is per-scope).
+    let tokenResult: oauth.TokenEndpointResponse;
+    try {
+      tokenResult = await runCodeFlow(SCOPE_WITH_OFFLINE);
+    } catch (e) {
+      if (!isInvalidScopeError(e)) throw e;
+      // The OP does not accept `offline_access` — degrade to a no-restore login.
+      tokenResult = await runCodeFlow(SCOPE_NO_OFFLINE);
+    }
 
     // The identity the OP actually vouched for. The login flow checks this against
     // the requested WebID before treating the user as logged in.
@@ -996,21 +1044,31 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
 
     // SESSION RESTORE — persist the issued refresh credential (best-effort). When a
     // store is configured AND the OP issued a refresh_token AND we know the
-    // authenticated WebID, write a PersistedSession so a later tab-reopen can rebuild
-    // the session silently. The DPoP key is NON-extractable; IndexedDB
-    // structured-clones it, so the raw private bytes never enter JS. We re-fence on
-    // the caller's generation FIRST: a reset() (logout / a new login) mid-grant
-    // supersedes this attempt, so it must persist NOTHING (otherwise a stale
-    // identity's credential would land in the store under the new login). A missing
-    // refresh_token (OP without offline_access) just means "no restore later" — never
-    // an error; login still returns the session below. The persisted client_id is the
-    // one actually used (static Client Identifier Document when #clientId set, else
+    // authenticated WebID AND it MATCHES the requested WebID, write a PersistedSession
+    // so a later tab-reopen can rebuild the session silently. The DPoP key is
+    // NON-extractable; IndexedDB structured-clones it, so the raw private bytes never
+    // enter JS. We re-fence on the caller's generation FIRST: a reset() (logout / a new
+    // login) mid-grant supersedes this attempt, so it must persist NOTHING (otherwise a
+    // stale identity's credential would land in the store under the new login). A
+    // missing refresh_token (OP without offline_access) just means "no restore later" —
+    // never an error; login still returns the session below. The persisted client_id is
+    // the one actually used (static Client Identifier Document when #clientId set, else
     // the dynamic registration's assigned id — RFC 6749 §6 binds the token to it).
+    //
+    // FINDING 1 (HIGH — cross-account credential persistence): the OP may have an
+    // active session for a DIFFERENT account than the one requested, so it can return
+    // THAT account's tokens; the caller (doLogin) fails closed in React state and calls
+    // reset() — but reset() deliberately does NOT clear the durable store, so a wrong
+    // account's refresh credential would be LEFT PERSISTED. Gate the persist on the
+    // OP-authenticated WebID matching the REQUESTED WebID, so a mismatch persists
+    // NOTHING (and there is nothing to clean up because nothing was written). This
+    // mirrors completeRedirectLogin, which proves `webIdsEqual` BEFORE writing state.
     await this.#persistSession(
       issuer,
       generation,
       dpopKey,
       authenticatedWebId,
+      requestedWebId,
       this.#clientId ?? clientRegistration.client_id,
       tokenResult,
     );
@@ -1030,6 +1088,15 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
    *  - no-ops when no store is configured, no refresh token was issued (OP without
    *    offline_access), or the authenticated WebID is unusable — login still succeeds,
    *    just with no restore;
+   *  - PRECONDITION (finding 1 — fail-closed WebID match): persists ONLY when the
+   *    OP-authenticated WebID MATCHES the REQUESTED WebID (`webIdsEqual`). The OP may
+   *    hold an active session for a DIFFERENT account and return THAT account's tokens;
+   *    the caller then fails closed and reset()s — but reset() does NOT clear the
+   *    durable store, so persisting a non-matching credential would LEAK the wrong
+   *    account's refresh token into IndexedDB. Gating here means a mismatch persists
+   *    NOTHING (so there is nothing to clean up). `webIdsEqual` fails closed on a
+   *    missing/unparseable WebID on either side. This mirrors completeRedirectLogin,
+   *    which proves the same equality BEFORE writing any state;
    *  - RE-FENCES on the caller-captured `generation`: a reset() (logout / a new login)
    *    that advanced the generation while the grant was in flight supersedes this
    *    attempt, so we persist NOTHING (a stale identity's credential must never land in
@@ -1047,6 +1114,7 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
     generation: number,
     dpopKey: CryptoKeyPair,
     authenticatedWebId: string | undefined,
+    requestedWebId: string,
     clientId: string | undefined,
     tokenResult: oauth.TokenEndpointResponse,
   ): Promise<void> {
@@ -1057,6 +1125,11 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
     const refreshToken = tokenResult.refresh_token;
     if (typeof refreshToken !== "string" || refreshToken.length === 0) return; // no offline_access → no restore.
     if (typeof authenticatedWebId !== "string" || authenticatedWebId.length === 0) return;
+    // FINDING 1 (HIGH): persist ONLY when the OP authenticated the SAME account that
+    // was requested. A mismatch (the OP returned a DIFFERENT account's session) must
+    // persist NOTHING — otherwise the wrong account's refresh credential would be left
+    // in the durable store (reset() does not clear it). Fail closed.
+    if (!webIdsEqual(authenticatedWebId, requestedWebId)) return;
     const expiresAt =
       typeof tokenResult.expires_in === "number"
         ? Date.now() + tokenResult.expires_in * 1000
@@ -1134,7 +1207,9 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
     const controller = this.#authController;
     const signal = controller.signal;
 
-    const issuer = await this.#resolveIssuer(signal);
+    // Resolve the issuer AND the validated requested WebID in one shot, so we do not
+    // ask the app for the WebID twice (the resolution returns it).
+    const { issuer, webId: requestedWebId } = await this.#resolveIssuer(signal);
     if (generation !== this.#generation) throw new ReactiveAuthResetError();
 
     const http = this.#httpOptions(issuer, signal);
@@ -1197,7 +1272,8 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
       issuer: issuer.href,
       clientId: clientRegistration.client_id,
       redirectUri: redirectReturnUri,
-      webId: validateWebId(await this.#getWebId()),
+      // The requested WebID the #resolveIssuer call already validated — no second prompt.
+      webId: requestedWebId,
     };
     // Final fence before we touch persistent state: a reset() during any await
     // above means this flow is superseded — persist nothing, throw.
@@ -1340,7 +1416,9 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
       // rely on #issuer being set for subsequent upgrades. Written here, alongside the
       // other state writes AFTER the authoritative generation re-fence, so a superseded
       // completion seeds nothing.
-      this.#issuer = Promise.resolve(issuer);
+      // The memoised resolution now carries the WebID too; the requested WebID for a
+      // completed redirect is `flow.webId` (already proven == authenticatedWebId above).
+      this.#issuer = Promise.resolve({ issuer, webId: flow.webId });
       this.#currentIssuerHref = issuer.href;
       this.#authenticatedWebId = authenticatedWebId;
       this.#tokensAttached += 1;
@@ -1348,6 +1426,10 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
       // too, for PARITY with the popup path: an autologin'd session also survives a
       // logout-less tab close. All writes above already passed the authoritative
       // generation re-fence, so `#persistSession`'s own re-fence is belt-and-braces.
+      // The requested WebID passed to the persist gate is `flow.webId`, which the
+      // `webIdsEqual(authenticatedWebId, flow.webId)` check above has ALREADY proven
+      // matches — so the finding-1 persist gate is necessarily satisfied here (the
+      // proof is enforced twice: at the throw above, and inside #persistSession).
       // NOTE the redirect path's DPoP key is `extractable: true` (it was exported to
       // JWK to survive the full-page redirect — see beginRedirectLogin), unlike the
       // popup path's non-extractable key. That is an acceptable, documented tradeoff:
@@ -1359,6 +1441,7 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
         generation,
         dpopKey,
         authenticatedWebId,
+        flow.webId,
         flow.clientId,
         tokenResult,
       );
@@ -1434,7 +1517,9 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
     // and #authenticatedWebId (so the SessionProvider's establishSessionFor identity
     // check passes against the restored WebID).
     this.#sessions.set(issuer.href, Promise.resolve(session));
-    this.#issuer = Promise.resolve(issuer);
+    // The memoised resolution carries the WebID too; for a restore that is the WebID
+    // the refresh grant authenticated AS (`restored.webId`).
+    this.#issuer = Promise.resolve({ issuer, webId: restored.webId });
     this.#currentIssuerHref = issuer.href;
     this.#authenticatedWebId = restored.webId;
     return { webId: restored.webId };
@@ -1561,6 +1646,36 @@ function isEssMissingIssInteractionNeeded(e: unknown): boolean {
     return (
       (e as { cause: { parameters: URLSearchParams } }).cause.parameters.get("error") ===
       "interaction_required"
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Whether `e` is an OAuth `invalid_scope` error — surfaced when the OP rejects the
+ * `offline_access` scope (RFC 6749 §4.1.2.1 / §5.2). oauth4webapi raises this either
+ * as an `AuthorizationResponseError` (from `validateAuthResponse`) or a
+ * `ResponseBodyError` (from the token grant) with `.error === "invalid_scope"`. We
+ * match it STRUCTURALLY — by a `.error` property AND, defensively, by the same
+ * `.cause.parameters` channel {@link isEssMissingIssInteractionNeeded} uses — so the
+ * detection is robust across bundle boundaries / oauth4webapi versions where an
+ * `instanceof` check against the library's error classes can be unreliable.
+ *
+ * Used by {@link WebIdDPoPTokenProvider.#authenticate}'s finding-2 fallback to retry
+ * a login ONCE without `offline_access` (login then succeeds, just with no refresh
+ * token / no silent restore) instead of failing a login that worked before.
+ */
+function isInvalidScopeError(e: unknown): boolean {
+  try {
+    if ((e as { error?: unknown }).error === "invalid_scope") return true;
+  } catch {
+    // fall through to the cause-parameters channel.
+  }
+  try {
+    return (
+      (e as { cause: { parameters: URLSearchParams } }).cause.parameters.get("error") ===
+      "invalid_scope"
     );
   } catch {
     return false;
