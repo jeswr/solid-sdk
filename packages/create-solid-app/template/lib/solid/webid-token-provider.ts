@@ -124,6 +124,65 @@ function defaultChooseIssuer(webId: string): ChooseIssuerCallback {
   };
 }
 
+/**
+ * sessionStorage key under which the two-phase REDIRECT autologin flow persists
+ * its in-between state across the full-page Solid-OIDC redirect. Single key, one
+ * JSON record ({@link PersistedRedirectFlow}). Cleared as soon as consumed (success
+ * OR failure) and by {@link WebIdDPoPTokenProvider.reset}.
+ *
+ * WHY sessionStorage (and why this is the standard SPA redirect-PKCE+DPoP pattern):
+ *  - A FULL-PAGE redirect destroys all in-memory closure state (the DPoP key, PKCE
+ *    verifier, state, nonce that `#authenticate()` holds for the popup path). The
+ *    redirect path must therefore persist those across the navigation.
+ *  - sessionStorage is PER-TAB and SAME-ORIGIN, and is cleared when the tab closes —
+ *    so the record never outlives the browsing session and is never shared with
+ *    another origin. The `state` is verified on return (oauth.validateAuthResponse
+ *    against the persisted state), so a tampered/forged callback cannot be replayed.
+ *  - The DPoP private JWK is persisted because the token exchange after the redirect
+ *    must reuse the SAME key whose public thumbprint the OP bound the code to; a
+ *    fresh key would make the DPoP-bound code exchange fail. The key is generated
+ *    EXTRACTABLE (only for this path) so it can round-trip through JWK; the popup
+ *    path keeps its key non-extractable.
+ *  - The record is consumed and CLEARED immediately (success OR failure), so a stale
+ *    pending flow can never satisfy a later, unrelated callback.
+ */
+export const REDIRECT_FLOW_STORAGE_KEY = "solid.autologin.flow";
+
+/**
+ * The persisted in-between state for the two-phase redirect autologin flow, written
+ * to sessionStorage under {@link REDIRECT_FLOW_STORAGE_KEY} by
+ * {@link WebIdDPoPTokenProvider.beginRedirectLogin} and read back by
+ * {@link WebIdDPoPTokenProvider.completeRedirectLogin}. Everything here is what the
+ * completion phase needs to finish the DPoP-bound authorization-code exchange after
+ * the full-page redirect has destroyed in-memory state.
+ */
+export interface PersistedRedirectFlow {
+  /** The issuer's href; discovery is re-run from it in the completion phase. */
+  issuer: string;
+  /**
+   * The resolved OAuth client used for the authorization request — it MUST be reused
+   * verbatim for the token exchange (the broker validated `redirect_uri` against this
+   * client's registration). For the dynamic path this is the registration result
+   * (registered with BOTH the popup callback and the full-page return URI in
+   * `redirect_uris`); for the static path it is the Client Identifier Document client.
+   */
+  client: oauth.Client;
+  /** The exported DPoP private key JWK (re-imported via WebCrypto in the completion). */
+  dpopPrivateJwk: JsonWebKey;
+  /** The exported DPoP public key JWK (re-imported so `oauth.DPoP` has the pair). */
+  dpopPublicJwk: JsonWebKey;
+  /** The PKCE code_verifier (S256 challenge was sent in the authorization request). */
+  codeVerifier: string;
+  /** The OAuth `state` — verified against the callback via oauth.validateAuthResponse. */
+  state: string;
+  /** The OIDC `nonce` — the expected nonce in processAuthorizationCodeResponse. */
+  nonce: string;
+  /** The exact full-page `redirect_uri` used in the authorization request. */
+  redirectUri: string;
+  /** The WebID the user asked to log in as (the deep-link target). */
+  webId: string;
+}
+
 /** Per-issuer session state cached so repeat upgrades don't re-prompt. */
 interface IssuerSession {
   authorizationServer: oauth.AuthorizationServer;
@@ -466,6 +525,10 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
     this.#loginProbe = null;
     this.#probeUpgradedGeneration = null;
     this.#tokensAttached = 0;
+    // Drop any PENDING two-phase redirect-login record too: a logout or a new login
+    // must abandon a stale in-flight redirect flow (its persisted DPoP key + PKCE
+    // verifier + state) so a later callback can't resume a superseded identity's flow.
+    clearPendingRedirectLogin();
   }
 
   async upgrade(request: Request): Promise<Request> {
@@ -624,14 +687,25 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
    * is set, else dynamic client registration) → PKCE/DPoP authorization-code
    * grant, with the `prompt=none` silent retry preserved.
    */
+  /**
+   * Run OIDC discovery for an issuer and return its {@link oauth.AuthorizationServer}.
+   * Shared by the popup ({@link #authenticate}) and redirect
+   * ({@link beginRedirectLogin} / {@link completeRedirectLogin}) paths so discovery
+   * is expressed once. The completion phase re-runs this from the PERSISTED issuer
+   * href, which is why we persist the href rather than the whole AS object.
+   */
+  async #discover(
+    issuer: URL,
+    http: { signal: AbortSignal; [oauth.allowInsecureRequests]?: true },
+  ): Promise<oauth.AuthorizationServer> {
+    const discoveryResponse = await oauth.discoveryRequest(issuer, http);
+    return oauth.processDiscoveryResponse(issuer, discoveryResponse);
+  }
+
   async #authenticate(issuer: URL, signal: AbortSignal): Promise<IssuerSession> {
     const http = this.#httpOptions(issuer, signal);
 
-    const discoveryResponse = await oauth.discoveryRequest(issuer, http);
-    const authorizationServer = await oauth.processDiscoveryResponse(
-      issuer,
-      discoveryResponse,
-    );
+    const authorizationServer = await this.#discover(issuer, http);
 
     const clientRegistration = await this.#resolveClient(
       authorizationServer,
@@ -747,6 +821,229 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
   }
 
   /**
+   * PHASE 1 of the full-page REDIRECT autologin flow (the Pod-Manager deep-link).
+   *
+   * Published @solid/reactive-authentication 0.1.3 has NO redirect (non-popup) mode —
+   * only the popup via `<authorization-code-flow>`. A popup auto-opened on page load
+   * (no user gesture) is browser-blocked, so the deep-link autologin MUST use a
+   * full-page redirect, which this method begins. It:
+   *   1. resolves the issuer from the pending WebID (the existing
+   *      `#resolveIssuer`/getWebId path), runs discovery, and resolves the client —
+   *      RE-REGISTERING the dynamic client with BOTH the popup callback AND the
+   *      full-page `redirectReturnUri` in `redirect_uris` (the broker validates
+   *      `redirect_uri` against the registration; the popup path's registration
+   *      doesn't include the return URI). For the static-clientId path the Client
+   *      Identifier Document must already list the return URI.
+   *   2. generates an EXTRACTABLE ES256 DPoP keypair (so it can be exported to JWK,
+   *      persisted across the redirect, and re-imported) + PKCE verifier + state +
+   *      nonce, and builds the authorization URL (response_type=code, scope
+   *      `openid webid offline_access`, S256 code_challenge, state, nonce,
+   *      redirect_uri = `redirectReturnUri`).
+   *   3. PERSISTS everything {@link completeRedirectLogin} needs to sessionStorage
+   *      ({@link REDIRECT_FLOW_STORAGE_KEY}) — see {@link PersistedRedirectFlow}.
+   *
+   * Returns the authorization URL; the caller does the full-page `location.assign`.
+   *
+   * Obeys the generation fence: a {@link reset} during the awaits supersedes this
+   * begin, so it throws {@link ReactiveAuthResetError} and persists NOTHING.
+   */
+  async beginRedirectLogin(
+    redirectReturnUri: string,
+  ): Promise<{ authorizationUrl: string }> {
+    const generation = this.#generation;
+    const controller = this.#authController;
+    const issuer = await this.#resolveIssuer(controller.signal);
+    if (generation !== this.#generation) throw new ReactiveAuthResetError();
+    // The WebID we are authenticating as — resolved via the same getWebId path the
+    // popup flow uses (pendingWebIdHolder), validated by #resolveIssuer above.
+    const webId = validateWebId(await this.#getWebId());
+    if (generation !== this.#generation) throw new ReactiveAuthResetError();
+
+    const http = this.#httpOptions(issuer, controller.signal);
+    const authorizationServer = await this.#discover(issuer, http);
+    if (generation !== this.#generation) throw new ReactiveAuthResetError();
+
+    // Re-register (dynamic) / declare (static) the client so the full-page return
+    // URI is an accepted redirect_uri — the SAME client is reused for the token
+    // exchange after the redirect, so we persist it below.
+    const client = await this.#resolveClient(authorizationServer, http, [
+      redirectReturnUri,
+    ]);
+    if (generation !== this.#generation) throw new ReactiveAuthResetError();
+
+    // EXTRACTABLE so the private key can be exported to JWK, persisted across the
+    // full-page redirect, and re-imported in completeRedirectLogin. (The popup path
+    // keeps extractable:false — its key never leaves memory.)
+    const dpopKey = await oauth.generateKeyPair("ES256", { extractable: true });
+    if (generation !== this.#generation) throw new ReactiveAuthResetError();
+    const codeVerifier = oauth.generateRandomCodeVerifier();
+    const nonce = oauth.generateRandomNonce();
+    const state = oauth.generateRandomState();
+
+    const usePkce =
+      authorizationServer.code_challenge_methods_supported !== undefined;
+    const useS256 =
+      usePkce &&
+      authorizationServer.code_challenge_methods_supported!.includes("S256");
+    const codeChallenge = useS256
+      ? await oauth.calculatePKCECodeChallenge(codeVerifier)
+      : codeVerifier;
+    if (generation !== this.#generation) throw new ReactiveAuthResetError();
+
+    const authorizationUrl = new URL(
+      authorizationServer.authorization_endpoint as string,
+    );
+    authorizationUrl.searchParams.set("client_id", client.client_id);
+    authorizationUrl.searchParams.set("redirect_uri", redirectReturnUri);
+    authorizationUrl.searchParams.set("response_type", "code");
+    // offline_access requests a refresh token; webid is the Solid-OIDC claim.
+    authorizationUrl.searchParams.set("scope", "openid webid offline_access");
+    authorizationUrl.searchParams.set("state", state);
+    authorizationUrl.searchParams.set("nonce", nonce);
+    if (usePkce) {
+      authorizationUrl.searchParams.set(
+        "code_challenge_method",
+        useS256 ? "S256" : "plain",
+      );
+      authorizationUrl.searchParams.set("code_challenge", codeChallenge);
+    }
+
+    // Export the keypair to JWK so it survives the full-page navigation. The
+    // EXTRACTABLE flag set above is what permits exportKey here.
+    const [dpopPrivateJwk, dpopPublicJwk] = await Promise.all([
+      crypto.subtle.exportKey("jwk", dpopKey.privateKey),
+      crypto.subtle.exportKey("jwk", dpopKey.publicKey),
+    ]);
+    if (generation !== this.#generation) throw new ReactiveAuthResetError();
+
+    const record: PersistedRedirectFlow = {
+      issuer: authorizationServer.issuer,
+      client,
+      dpopPrivateJwk,
+      dpopPublicJwk,
+      codeVerifier,
+      state,
+      nonce,
+      redirectUri: redirectReturnUri,
+      webId,
+    };
+    sessionStorage.setItem(REDIRECT_FLOW_STORAGE_KEY, JSON.stringify(record));
+
+    return { authorizationUrl: authorizationUrl.toString() };
+  }
+
+  /**
+   * PHASE 2 of the full-page REDIRECT autologin flow: complete the DPoP-bound
+   * authorization-code exchange after the broker redirects back. Reads the persisted
+   * record ({@link REDIRECT_FLOW_STORAGE_KEY}), re-runs discovery from the persisted
+   * issuer href, re-imports the DPoP JWK, validates the auth response against the
+   * persisted `state`, exchanges the code, then ESTABLISHES the session in
+   * `#sessions` for the issuer AND sets `#authenticatedWebId` from the id_token AND
+   * bumps `#tokensAttached`.
+   *
+   * Clears the sessionStorage record in a `finally` (success OR failure), so a stale
+   * pending flow can never satisfy a later callback. On failure throws and leaves the
+   * provider clean — no half-session is written. Obeys the generation fence: a
+   * {@link reset} during the awaits supersedes the completion, which then writes NO
+   * provider state.
+   */
+  async completeRedirectLogin(callbackUrl: string): Promise<void> {
+    const generation = this.#generation;
+    const controller = this.#authController;
+    const raw = sessionStorage.getItem(REDIRECT_FLOW_STORAGE_KEY);
+    if (!raw) {
+      throw new Error("No pending redirect login to complete.");
+    }
+    try {
+      const record = JSON.parse(raw) as PersistedRedirectFlow;
+      const issuer = new URL(record.issuer);
+      const http = this.#httpOptions(issuer, controller.signal);
+      // Rebuild the AuthorizationServer from the persisted issuer href — avoids
+      // persisting the whole AS object, and the metadata may have refreshed.
+      const authorizationServer = await this.#discover(issuer, http);
+      if (generation !== this.#generation) throw new ReactiveAuthResetError();
+
+      // Re-import the SAME DPoP key the authorization code was bound to.
+      const [privateKey, publicKey] = await Promise.all([
+        crypto.subtle.importKey(
+          "jwk",
+          record.dpopPrivateJwk,
+          { name: "ECDSA", namedCurve: "P-256" },
+          true,
+          ["sign"],
+        ),
+        crypto.subtle.importKey(
+          "jwk",
+          record.dpopPublicJwk,
+          { name: "ECDSA", namedCurve: "P-256" },
+          true,
+          [],
+        ),
+      ]);
+      if (generation !== this.#generation) throw new ReactiveAuthResetError();
+      const dpopKey: CryptoKeyPair = { privateKey, publicKey };
+      const dpop = oauth.DPoP({}, dpopKey);
+      const client = record.client;
+
+      const usePkce =
+        authorizationServer.code_challenge_methods_supported !== undefined;
+      const authorizationCodeParams = oauth.validateAuthResponse(
+        authorizationServer,
+        client,
+        new URL(callbackUrl),
+        record.state,
+      );
+      const tokenResponse = await oauth.authorizationCodeGrantRequest(
+        authorizationServer,
+        client,
+        this.#clientAuth(authorizationServer.issuer, client),
+        authorizationCodeParams,
+        record.redirectUri,
+        usePkce ? record.codeVerifier : oauth.nopkce,
+        { DPoP: dpop, ...http },
+      );
+      const tokenResult = await oauth.processAuthorizationCodeResponse(
+        authorizationServer,
+        client,
+        tokenResponse,
+        {
+          expectedNonce: this.#nonceVerification(
+            authorizationServer.issuer,
+            record.nonce,
+          ),
+        },
+      );
+      // RE-FENCE before writing ANY provider state: a reset() during the awaits
+      // means this completion belongs to a superseded identity — write nothing.
+      if (generation !== this.#generation) throw new ReactiveAuthResetError();
+
+      const session: IssuerSession = {
+        authorizationServer,
+        clientRegistration: client,
+        dpopKey,
+        accessToken: tokenResult.access_token,
+        authenticatedWebId: webIdFromClaims(
+          oauth.getValidatedIdTokenClaims(tokenResult),
+        ),
+      };
+      // Establish the session for the issuer so subsequent upgrade()s reuse it,
+      // and publish the authenticated identity + bump the attach counter exactly
+      // like the popup path does on a successful token mint.
+      this.#sessions.set(issuer.href, Promise.resolve(session));
+      this.#authenticatedWebId = session.authenticatedWebId;
+      this.#tokensAttached += 1;
+    } finally {
+      // Consume the record immediately — success OR failure — so a stale pending
+      // flow can never satisfy a later, unrelated callback.
+      try {
+        sessionStorage.removeItem(REDIRECT_FLOW_STORAGE_KEY);
+      } catch {
+        // sessionStorage may be unavailable (private mode / SSR) — non-fatal.
+      }
+    }
+  }
+
+  /**
    * Resolve the OAuth client used for this issuer.
    *
    * - **Static (a Client Identifier Document):** when `clientId` is set, return a
@@ -763,21 +1060,27 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
   async #resolveClient(
     authorizationServer: oauth.AuthorizationServer,
     http: { signal: AbortSignal; [oauth.allowInsecureRequests]?: true },
+    extraRedirectUris: string[] = [],
   ): Promise<oauth.Client> {
+    // The popup callback is always registerable; any extra (e.g. the full-page
+    // autologin return URI) is appended and de-duplicated so the broker accepts
+    // BOTH the popup post-back and the redirect return. Order is preserved.
+    const redirectUris = [...new Set([this.#callbackUri, ...extraRedirectUris])];
     if (this.#clientId !== undefined) {
       // A public browser client identified by a dereferenceable URL. `oauth.Client`
       // requires only `client_id`; the rest are accepted via its index signature
-      // and consumed by the shared authorization-URL builder below.
+      // and consumed by the shared authorization-URL builder below. The Client
+      // Identifier Document itself must list every redirect_uri the OP will see.
       return {
         client_id: this.#clientId,
         token_endpoint_auth_method: "none",
-        redirect_uris: [this.#callbackUri],
+        redirect_uris: redirectUris,
         response_types: ["code"],
       };
     }
     const registrationResponse = await oauth.dynamicClientRegistrationRequest(
       authorizationServer,
-      { redirect_uris: [this.#callbackUri] },
+      { redirect_uris: redirectUris },
       http,
     );
     return oauth.processDynamicClientRegistrationResponse(registrationResponse);
@@ -797,6 +1100,54 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
       return oauth.expectNoNonce;
     }
     return nonce;
+  }
+}
+
+/**
+ * Whether a two-phase REDIRECT autologin flow is mid-flight — i.e. a
+ * {@link PersistedRedirectFlow} record is in sessionStorage under
+ * {@link REDIRECT_FLOW_STORAGE_KEY}. The SolidAuthProvider reads this on mount to
+ * decide CASE A (returning from the broker redirect, when `?code&state` is also
+ * present) vs CASE B (a fresh deep-link with no pending record). Returns false in
+ * any environment without sessionStorage (SSR / private mode).
+ */
+export function hasPendingRedirectLogin(): boolean {
+  try {
+    return sessionStorage.getItem(REDIRECT_FLOW_STORAGE_KEY) !== null;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The WebID a pending redirect-login flow targets (the deep-link WebID persisted by
+ * {@link WebIdDPoPTokenProvider.beginRedirectLogin}), or `null` when no flow is
+ * pending or the record is unreadable/corrupt. NON-DESTRUCTIVE — it does NOT clear
+ * the record (the completion phase's `finally` owns the clear). Named "consume" only
+ * because the caller treats the pending WebID as one-shot context.
+ */
+export function consumePendingRedirectWebId(): string | null {
+  try {
+    const raw = sessionStorage.getItem(REDIRECT_FLOW_STORAGE_KEY);
+    if (!raw) return null;
+    const record = JSON.parse(raw) as Partial<PersistedRedirectFlow>;
+    return typeof record.webId === "string" ? record.webId : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Clear any persisted pending redirect-login record. Used by
+ * {@link WebIdDPoPTokenProvider.reset} (logout / new login drops a stale flow) and by
+ * the SolidAuthProvider when it abandons a redirect attempt (a failed completion, or
+ * the loop-guard fallback). Safe to call when no record / no sessionStorage exists.
+ */
+export function clearPendingRedirectLogin(): void {
+  try {
+    sessionStorage.removeItem(REDIRECT_FLOW_STORAGE_KEY);
+  } catch {
+    // sessionStorage unavailable (SSR / private mode) — nothing to clear.
   }
 }
 

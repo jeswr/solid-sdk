@@ -69,7 +69,10 @@ vi.mock("oauth4webapi", () => {
       response_types: ["code"],
       token_endpoint_auth_method: "none",
     })),
-    generateKeyPair: vi.fn(async () => ({ publicKey: {}, privateKey: {} })),
+    generateKeyPair: vi.fn(async () => ({
+      publicKey: { __kind: "public" },
+      privateKey: { __kind: "private" },
+    })),
     generateRandomCodeVerifier: () => "verifier",
     generateRandomNonce: () => "nonce",
     generateRandomState: () => "state",
@@ -97,9 +100,32 @@ const {
   withProbeFragment,
   httpUri,
   ReactiveAuthResetError,
+  REDIRECT_FLOW_STORAGE_KEY,
+  hasPendingRedirectLogin,
+  consumePendingRedirectWebId,
 } = await import("@/lib/solid/webid-token-provider");
 type Provider = InstanceType<typeof WebIdDPoPTokenProvider>;
 import * as DPoP from "dpop";
+import * as oauth from "oauth4webapi";
+
+// ── Browser globals the REDIRECT autologin path needs, stubbed for the node env ──
+// sessionStorage (per-tab, same-origin in the browser) holds the two-phase redirect
+// record; crypto.subtle.export/importKey round-trips the EXTRACTABLE DPoP JWK across
+// the (simulated) full-page redirect. The crypto stub records what was exported so a
+// test can assert the persisted JWK is what completeRedirectLogin re-imports.
+function makeMemorySessionStorage(): Storage {
+  const map = new Map<string, string>();
+  return {
+    getItem: (k: string) => (map.has(k) ? map.get(k)! : null),
+    setItem: (k: string, v: string) => void map.set(k, String(v)),
+    removeItem: (k: string) => void map.delete(k),
+    clear: () => map.clear(),
+    key: (i: number) => [...map.keys()][i] ?? null,
+    get length() {
+      return map.size;
+    },
+  } as Storage;
+}
 
 // Reset the captured DPoP proof calls + restore the default (non-gated) mock
 // implementation before every test, so the htu-capture and the reset-during-proof
@@ -845,5 +871,224 @@ describe("FIX 4b — SolidAuthProvider WebID-scoped single-flight login gate (sh
     // beginLoginProbe is single-shot per login: a second begin (next login) would
     // need its own generation; the prior gen's proof is independent.
     expect(provider.wasLoginProbeUpgraded(gen + 1)).toBe(false);
+  });
+});
+
+// ── The two-phase full-page REDIRECT autologin path (media-kraken#54) ────────────
+// Published @solid/reactive-authentication 0.1.3 has NO redirect mode (only the
+// popup), so the provider adds beginRedirectLogin / completeRedirectLogin: phase 1
+// builds the auth URL + PERSISTS the in-between state (EXTRACTABLE DPoP JWK, PKCE
+// verifier, state, nonce, issuer, client, redirect_uri, WebID) to sessionStorage;
+// phase 2 (after the full-page redirect) re-imports the key, validates the callback
+// against the persisted state, exchanges the DPoP-bound code, and establishes the
+// session. oauth4webapi/dpop are mocked exactly as the popup tests mock them.
+describe("REDIRECT autologin — beginRedirectLogin / completeRedirectLogin", () => {
+  let exportedKeys: Array<{ format: string; key: unknown }>;
+  let importedKeys: Array<{ format: string; jwk: unknown }>;
+
+  beforeEach(() => {
+    authState.webId = WEBID_A;
+    authState.accessToken = "tok-A";
+    // Fresh per-tab sessionStorage for each test.
+    (globalThis as { sessionStorage?: Storage }).sessionStorage =
+      makeMemorySessionStorage();
+    // Stub crypto.subtle.export/importKey to round-trip the DPoP JWK. We keep the
+    // real `crypto.randomUUID` (used by withProbeFragment) by only overriding subtle.
+    exportedKeys = [];
+    importedKeys = [];
+    const subtle = {
+      exportKey: vi.fn(async (format: string, key: unknown) => {
+        exportedKeys.push({ format, key });
+        // Return a distinct JWK per key so the persisted record is inspectable.
+        return (key as { __kind?: string })?.__kind === "private"
+          ? { kty: "EC", crv: "P-256", d: "PRIV", x: "X", y: "Y" }
+          : { kty: "EC", crv: "P-256", x: "X", y: "Y" };
+      }),
+      importKey: vi.fn(async (format: string, jwk: unknown) => {
+        importedKeys.push({ format, jwk });
+        return { __imported: jwk } as unknown as CryptoKey;
+      }),
+    };
+    Object.defineProperty(globalThis, "crypto", {
+      configurable: true,
+      value: { ...globalThis.crypto, subtle },
+    });
+  });
+
+  function makeRedirectProvider() {
+    return new WebIdDPoPTokenProvider(
+      "https://app.example/callback.html",
+      async () => REDIRECT,
+      async () => authState.webId,
+    );
+  }
+
+  const RETURN_URI = "https://app.example/";
+  const CALLBACK =
+    "https://app.example/?code=auth-code&state=state";
+
+  it("(begin) persists a record with the expected fields and returns an auth URL with the right params", async () => {
+    const provider = makeRedirectProvider();
+    expect(hasPendingRedirectLogin()).toBe(false);
+
+    const { authorizationUrl } = await provider.beginRedirectLogin(RETURN_URI);
+
+    // The authorization URL targets the resolved issuer's authorization_endpoint with
+    // response_type=code, the offline_access scope, state, nonce, S256 challenge, and
+    // the full-page return URI as redirect_uri.
+    const u = new URL(authorizationUrl);
+    expect(`${u.origin}${u.pathname}`).toBe("https://issuer.example/auth");
+    expect(u.searchParams.get("response_type")).toBe("code");
+    expect(u.searchParams.get("scope")).toBe("openid webid offline_access");
+    expect(u.searchParams.get("state")).toBe("state");
+    expect(u.searchParams.get("nonce")).toBe("nonce");
+    expect(u.searchParams.get("redirect_uri")).toBe(RETURN_URI);
+    expect(u.searchParams.get("code_challenge_method")).toBe("S256");
+    expect(u.searchParams.get("code_challenge")).toBe("challenge");
+    expect(u.searchParams.get("client_id")).toBe("dynamic-client");
+
+    // A pending record now exists, carrying the requested WebID + the persisted bits.
+    expect(hasPendingRedirectLogin()).toBe(true);
+    expect(consumePendingRedirectWebId()).toBe(WEBID_A);
+    const record = JSON.parse(
+      sessionStorage.getItem(REDIRECT_FLOW_STORAGE_KEY)!,
+    );
+    expect(record.issuer).toBe("https://issuer.example/");
+    expect(record.codeVerifier).toBe("verifier");
+    expect(record.state).toBe("state");
+    expect(record.nonce).toBe("nonce");
+    expect(record.redirectUri).toBe(RETURN_URI);
+    expect(record.webId).toBe(WEBID_A);
+    // BOTH DPoP JWKs are exported + persisted (private has `d`, public does not).
+    expect(record.dpopPrivateJwk.d).toBe("PRIV");
+    expect(record.dpopPublicJwk.d).toBeUndefined();
+    // The EXTRACTABLE key was generated extractable (so it could be exported).
+    expect(oauth.generateKeyPair).toHaveBeenCalledWith("ES256", {
+      extractable: true,
+    });
+    expect(exportedKeys.length).toBe(2);
+  });
+
+  it("(begin) re-registers the dynamic client with BOTH the popup callback AND the full-page return URI", async () => {
+    const provider = makeRedirectProvider();
+    await provider.beginRedirectLogin(RETURN_URI);
+    // The dynamic registration must include both redirect_uris so the broker accepts
+    // the full-page redirect_uri (the popup-only registration would reject it).
+    const regCall = vi.mocked(oauth.dynamicClientRegistrationRequest).mock.calls.at(-1)!;
+    const metadata = regCall[1] as { redirect_uris: string[] };
+    expect(metadata.redirect_uris).toContain("https://app.example/callback.html");
+    expect(metadata.redirect_uris).toContain(RETURN_URI);
+  });
+
+  it("(complete) reads the record, exchanges the code, establishes the session + authenticatedWebId, and clears the record", async () => {
+    const provider = makeRedirectProvider();
+    await provider.beginRedirectLogin(RETURN_URI);
+    expect(hasPendingRedirectLogin()).toBe(true);
+
+    expect(provider.authenticatedWebId()).toBeUndefined();
+    expect(provider.tokensAttachedCount()).toBe(0);
+
+    await provider.completeRedirectLogin(CALLBACK);
+
+    // The session is established: identity published, attach counter bumped.
+    expect(provider.authenticatedWebId()).toBe(WEBID_A);
+    expect(provider.tokensAttachedCount()).toBe(1);
+    // The auth response was validated against the PERSISTED state.
+    expect(oauth.validateAuthResponse).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      new URL(CALLBACK),
+      "state",
+    );
+    // The DPoP private+public JWKs were re-imported (the SAME key the code bound to).
+    expect(importedKeys.length).toBe(2);
+    // The record is consumed (cleared) on success.
+    expect(hasPendingRedirectLogin()).toBe(false);
+
+    // A subsequent upgrade reuses the established session (no re-auth) and carries the
+    // DPoP-bound token — proving the session was actually seeded in #sessions.
+    const upgraded = await provider.upgrade(
+      new Request("https://alice.example/storage/"),
+    );
+    expect(upgraded.headers.get("Authorization")).toBe("DPoP tok-A");
+  });
+
+  it("(complete) a bad state throws and leaves the provider CLEAN — no half-session, record cleared", async () => {
+    const provider = makeRedirectProvider();
+    await provider.beginRedirectLogin(RETURN_URI);
+
+    // Simulate oauth.validateAuthResponse rejecting a forged/mismatched state.
+    vi.mocked(oauth.validateAuthResponse).mockImplementationOnce(() => {
+      throw new Error("unexpected state");
+    });
+
+    await expect(provider.completeRedirectLogin(CALLBACK)).rejects.toThrow(
+      /unexpected state/,
+    );
+    // No session, no identity, no attach — the provider is clean.
+    expect(provider.authenticatedWebId()).toBeUndefined();
+    expect(provider.tokensAttachedCount()).toBe(0);
+    // The record is cleared even on failure (the finally), so a stale flow can't
+    // satisfy a later callback.
+    expect(hasPendingRedirectLogin()).toBe(false);
+  });
+
+  it("(complete) with NO pending record throws and writes nothing", async () => {
+    const provider = makeRedirectProvider();
+    await expect(provider.completeRedirectLogin(CALLBACK)).rejects.toThrow(
+      /No pending redirect login/,
+    );
+    expect(provider.authenticatedWebId()).toBeUndefined();
+    expect(provider.tokensAttachedCount()).toBe(0);
+  });
+
+  it("reset() clears the pending redirect record (a stale flow is abandoned on logout/new-login)", async () => {
+    const provider = makeRedirectProvider();
+    await provider.beginRedirectLogin(RETURN_URI);
+    expect(hasPendingRedirectLogin()).toBe(true);
+
+    provider.reset();
+
+    expect(hasPendingRedirectLogin()).toBe(false);
+    expect(consumePendingRedirectWebId()).toBeNull();
+  });
+
+  it("a reset() during beginRedirectLogin's awaits supersedes it (ReactiveAuthResetError, nothing persisted)", async () => {
+    // Stall discovery so a reset() can fire mid-flight.
+    let releaseDiscovery!: () => void;
+    const gate = new Promise<void>((r) => {
+      releaseDiscovery = r;
+    });
+    vi.mocked(oauth.processDiscoveryResponse).mockImplementationOnce(async () => {
+      await gate;
+      return {
+        issuer: "https://issuer.example/",
+        authorization_endpoint: "https://issuer.example/auth",
+        token_endpoint: "https://issuer.example/token",
+        code_challenge_methods_supported: ["S256"],
+      } as oauth.AuthorizationServer;
+    });
+
+    const provider = makeRedirectProvider();
+    const inflight = provider.beginRedirectLogin(RETURN_URI);
+    inflight.catch(() => {});
+    await Promise.resolve();
+
+    // reset() (logout / new login) fires while begin is parked at discovery.
+    provider.reset();
+    releaseDiscovery();
+
+    await expect(inflight).rejects.toBeInstanceOf(ReactiveAuthResetError);
+    // Nothing persisted by the superseded begin.
+    expect(hasPendingRedirectLogin()).toBe(false);
+  });
+
+  it("hasPendingRedirectLogin / consumePendingRedirectWebId reflect the record without clearing it", async () => {
+    const provider = makeRedirectProvider();
+    await provider.beginRedirectLogin(RETURN_URI);
+    // consume is non-destructive — reading the WebID twice still works.
+    expect(consumePendingRedirectWebId()).toBe(WEBID_A);
+    expect(consumePendingRedirectWebId()).toBe(WEBID_A);
+    expect(hasPendingRedirectLogin()).toBe(true);
   });
 });

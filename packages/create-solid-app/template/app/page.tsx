@@ -6,7 +6,7 @@ import { LoginPanel } from "@/components/solid/LoginPanel";
 import { ProfileCard } from "@/components/solid/ProfileCard";
 
 export default function Home() {
-  const { webId } = useSolidAuth();
+  const { webId, autologinPending } = useSolidAuth();
   return (
     <main className="flex flex-1 flex-col items-center justify-center gap-8 p-8">
       <div className="flex flex-col items-center gap-2 text-center">
@@ -16,7 +16,18 @@ export default function Home() {
           data.
         </p>
       </div>
-      {webId ? <ProfileCard /> : <LoginPanel />}
+      {/* A deep-link autologin (#autologin/<webid>) is mid-redirect or completing —
+          show a "Signing you in…" state instead of the login panel so the silent SSO
+          doesn't flash the login form. */}
+      {webId ? (
+        <ProfileCard />
+      ) : autologinPending ? (
+        <p className="text-muted-foreground" role="status">
+          Signing you in…
+        </p>
+      ) : (
+        <LoginPanel />
+      )}
     </main>
   );
 }

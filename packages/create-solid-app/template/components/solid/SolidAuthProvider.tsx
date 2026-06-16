@@ -43,7 +43,14 @@ import {
   AmbiguousIssuerError,
   webIdsEqual,
   withProbeFragment,
+  hasPendingRedirectLogin,
 } from "@/lib/solid/webid-token-provider";
+import {
+  AUTOLOGIN_SENTINEL_KEY,
+  classifyAutologin,
+  runAutologin,
+  type AutologinCallbacks,
+} from "@/lib/solid/autologin";
 import {
   authFlowHolder,
   getCodeThroughHolder,
@@ -63,6 +70,12 @@ export interface SolidAuthContextValue {
   error: string | null;
   /** True once the auth runtime has loaded and registerGlobally() ran. */
   ready: boolean;
+  /**
+   * True while a deep-link AUTOLOGIN is in flight — either beginning the full-page
+   * Solid-OIDC redirect (CASE B) or completing it after the broker redirect back
+   * (CASE A). The UI shows a "Signing you in…" state instead of the login panel.
+   */
+  autologinPending: boolean;
   /** Begin login for a WebID. Resolves when authenticated, rejects on failure. */
   login: (webId: string) => Promise<void>;
   /** Drop the in-memory session (tokens are memory-only; this clears app state). */
@@ -122,6 +135,17 @@ const pendingWebIdHolder: { current: string | null } = { current: null };
  * `finally` (only if it still points at this run) so the next login starts fresh.
  */
 let inFlight: { id: string; promise: Promise<void> } | null = null;
+
+/**
+ * MODULE-LEVEL one-shot guard so the deep-link AUTOLOGIN effect fires at most once
+ * per page. React.StrictMode double-invokes effects in dev, so a per-mount flag is
+ * insufficient — the second invoke would run a second `runAutologin` (a second
+ * full-page redirect / a second completion). This guard, paired with the
+ * sessionStorage sentinel, makes the redirect fire exactly once. It is module-level
+ * (a page-level fact, like the auth singleton) and never reset — the page either
+ * navigates away (CASE B redirect) or settles into logged-in / login-panel.
+ */
+let autologinStarted = false;
 
 interface AuthProviderConfig {
   callbackUri: string;
@@ -187,6 +211,9 @@ export function SolidAuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loggingIn, setLoggingIn] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // "Signing you in…" while a deep-link autologin redirect is beginning (CASE B) or
+  // completing (CASE A). Distinct from `loggingIn` (the interactive popup login).
+  const [autologinPending, setAutologinPending] = useState(false);
 
   // Acquire the auth runtime, client-side, after the element exists. The runtime
   // is a page-lifetime singleton (getAuthProvider), so a StrictMode double-mount
@@ -238,6 +265,67 @@ export function SolidAuthProvider({ children }: { children: ReactNode }) {
       if (authFlowHolder.current === getCode) authFlowHolder.current = null;
     };
   }, []);
+
+  // DEEP-LINK AUTOLOGIN (media-kraken#54 pattern). Runs ONLY when the auth runtime is
+  // `ready` AND the user is NOT already logged in (`!webId`) — a stored/active session
+  // takes precedence. Decides CASE A (returning from the broker redirect: a pending
+  // record + `?code&state`) vs CASE B (a fresh `#autologin/<webid>` deep-link) vs the
+  // loop-guard fallback, then runs the side-effectful orchestration in `runAutologin`.
+  //
+  // STRICTMODE: the effect double-invokes in dev. The module-level `autologinStarted`
+  // guard (paired with the sessionStorage sentinel) makes the redirect fire at most
+  // once. We classify first and only flip the guard when there is real work to do, so
+  // a "none" mount doesn't burn the one-shot.
+  useEffect(() => {
+    if (!ready) return;
+    if (autologinStarted) return;
+    const decision = classifyAutologin({
+      ready,
+      loggedIn: webId !== null,
+      href: location.href,
+      hash: location.hash,
+      hasPendingRedirect: hasPendingRedirectLogin(),
+      sentinel: sessionStorage.getItem(AUTOLOGIN_SENTINEL_KEY),
+    });
+    if (decision.kind === "none") return;
+    // `ready` is only set after providerRef is populated, so this is defensive —
+    // but check BEFORE claiming the one-shot so a (theoretical) null provider does
+    // not burn the guard and block a later legitimate attempt.
+    const provider = providerRef.current;
+    if (!provider) return;
+    // Real work with a live provider — claim the one-shot so a StrictMode re-invoke
+    // (and any later re-run from the deps) is a no-op.
+    autologinStarted = true;
+
+    const cb: AutologinCallbacks = {
+      provider,
+      readProfile: (id) => readProfile(id),
+      href: () => location.href,
+      origin: () => location.origin,
+      replaceUrl: (url) => history.replaceState(null, "", url),
+      assignUrl: (url) => location.assign(url),
+      setPendingWebId: (id) => {
+        pendingWebIdHolder.current = id;
+      },
+      getSentinel: () => sessionStorage.getItem(AUTOLOGIN_SENTINEL_KEY),
+      setSentinel: (id) => sessionStorage.setItem(AUTOLOGIN_SENTINEL_KEY, id),
+      clearSentinel: () => sessionStorage.removeItem(AUTOLOGIN_SENTINEL_KEY),
+      setRestoring: (restoring) => setAutologinPending(restoring),
+      onAuthenticated: (id, profile) => {
+        setWebId(id);
+        setProfile(profile as Profile);
+        setAutologinPending(false);
+      },
+      onFallback: (message) => {
+        if (message) setError(message);
+        setAutologinPending(false);
+      },
+    };
+    // Fire-and-forget: runAutologin owns its own error handling (it never rejects).
+    void runAutologin(decision, cb);
+    // Re-run when readiness flips or the user logs in/out (the guard makes it a no-op
+    // after the first real run).
+  }, [ready, webId]);
 
   // The actual login body. Wrapped by `login` below in a module-level single-flight
   // so two concurrent / double-clicked logins never run overlapping probes (the
@@ -411,8 +499,8 @@ export function SolidAuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<SolidAuthContextValue>(
-    () => ({ webId, profile, loggingIn, error, ready, login, logout }),
-    [webId, profile, loggingIn, error, ready, login, logout],
+    () => ({ webId, profile, loggingIn, error, ready, autologinPending, login, logout }),
+    [webId, profile, loggingIn, error, ready, autologinPending, login, logout],
   );
 
   return (
