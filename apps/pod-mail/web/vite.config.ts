@@ -5,18 +5,36 @@
 // Vite/esbuild compile the TS source on the fly), wraps it in a standalone Solid
 // login, and emits a fully static `dist/` (index.html + clientid.jsonld +
 // callback.html + hashed assets) servable by any file server (Caddy file_server).
+import { execSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
+
+// BUILD VERSION for the header FeedbackButton's diagnostics block. Prefer the
+// short git SHA (so a filed issue pins the exact deployed commit); fall back to
+// the package version when git is unavailable (e.g. a tarball build). Resolved at
+// CONFIG-eval time and injected via `define` as a string literal, so the bundle
+// carries it with no runtime git/process access. `git` failures are swallowed —
+// the version is diagnostic-only and must never break the build.
+const buildVersion = (() => {
+  try {
+    return execSync("git rev-parse --short HEAD", {
+      cwd: fileURLToPath(new URL(".", import.meta.url)),
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+  } catch {
+    return process.env.npm_package_version ?? "dev";
+  }
+})();
 
 // Resolve the @jeswr/pod-mail library to its LOCAL TypeScript SOURCE, so Vite
 // compiles `../src/ui` (and the data-layer core) directly — no pre-built dist/ui
 // is needed, and the host always tracks the library's current source. The source
 // uses NodeNext-style `.js` extension imports (e.g. `./store.js`); Vite's
 // resolver maps those to the sibling `.ts` files when bundling.
-const podMailSrc = (rel: string) =>
-  fileURLToPath(new URL(`../src/${rel}`, import.meta.url));
+const podMailSrc = (rel: string) => fileURLToPath(new URL(`../src/${rel}`, import.meta.url));
 
 // The library SOURCE lives OUTSIDE web/ (in ../src), so when Rollup bundles it,
 // its bare imports (@jeswr/fetch-rdf, @solid/object, n3, …) would resolve against
@@ -29,6 +47,12 @@ export default defineConfig({
   // tailwindcss() compiles the `@import "tailwindcss"` + the app-shell `@theme`
   // mapping in src/styles.css; react() compiles JSX (host + bundled library).
   plugins: [tailwindcss(), react()],
+  // Inject the build version as a compile-time string literal for the header
+  // FeedbackButton (see App.tsx — read via `__APP_VERSION__`, declared in
+  // src/vite-env.d.ts). A bare JSON.stringify makes it a literal in the bundle.
+  define: {
+    __APP_VERSION__: JSON.stringify(buildVersion),
+  },
   resolve: {
     // Order matters: the more specific "/ui" subpath alias must precede the
     // bare-package alias so it is matched first. The trailing-slash forms pin the
@@ -49,12 +73,12 @@ export default defineConfig({
       { find: /^react-dom\//, replacement: `${hostModule("react-dom")}/` },
     ],
     // Guarantee a single React instance across the host + the bundled library +
-    // the @jeswr/app-shell package. app-shell is a SYMLINKED file: dep, so Vite
-    // resolves its deps against the package's own realpath node_modules by
-    // default — which would pull a SECOND copy of react/react-dom (invalid-hook-
-    // call) and of Radix/lucide. Deduping these forces ONE copy from the host's
-    // node_modules (where they are installed as direct deps), regardless of the
-    // symlink. react/react-dom are also alias-pinned above for the bundled library.
+    // the @jeswr/app-shell package. app-shell is now a PUBLISHED dep
+    // (github:jeswr/app-shell#main, committed dist/) — but a package can still
+    // resolve react/react-dom + Radix/lucide against its OWN nested node_modules,
+    // pulling a SECOND copy (invalid-hook-call). Deduping these forces ONE copy
+    // from the host's node_modules (where they are installed as direct deps).
+    // react/react-dom are also alias-pinned above for the bundled library.
     dedupe: [
       "react",
       "react-dom",
@@ -63,15 +87,13 @@ export default defineConfig({
       "lucide-react",
     ],
   },
-  // Let Vite read the library source one directory up from the host root, AND
-  // the @jeswr/app-shell package (a symlinked file: dep whose realpath lives
-  // outside this repo tree — the dev server must be allowed to serve it).
+  // Let Vite read the library source one directory up from the host root. The
+  // @jeswr/app-shell package is now a normal node_modules install (published
+  // github dep, no longer a symlink) so it is inside the default fs allow-list;
+  // the parent-dir allowance below remains for the out-of-root pod-mail source.
   server: {
     fs: {
-      allow: [
-        fileURLToPath(new URL("..", import.meta.url)),
-        fileURLToPath(new URL("./node_modules/@jeswr/app-shell", import.meta.url)),
-      ],
+      allow: [fileURLToPath(new URL("..", import.meta.url))],
     },
   },
   // `base: "./"` makes the built asset URLs relative, so the static bundle works

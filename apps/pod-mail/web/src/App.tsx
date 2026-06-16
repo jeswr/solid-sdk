@@ -13,7 +13,7 @@
 // discovery reads the profile dataset (fetched here once via the auth-patched
 // global fetch) and the data layer's typed Type-Index reader — see
 // mailbox-discovery.ts.
-import { AccountMenu, ThemeToggle } from "@jeswr/app-shell";
+import { AccountMenu, FeedbackButton, ThemeToggle } from "@jeswr/app-shell";
 import { fetchRdf } from "@jeswr/fetch-rdf";
 import { Inbox } from "@jeswr/pod-mail/ui";
 import { useEffect, useState } from "react";
@@ -80,15 +80,30 @@ export function App() {
 
   return (
     <div className="app-shell">
-      {/* The header now uses the shared @jeswr/app-shell chrome: a light/dark/system
-          <ThemeToggle/> and a real top-right <AccountMenu/> (avatar + display name,
-          dropdown showing the WebID + Sign out) — replacing the old raw-WebID span +
-          bare logout button. The session's WebID / profile name / avatar / logout
-          wire straight into the menu's props (it is fully decoupled — everything is
-          a prop). `app-header-actions` right-aligns the toggle + menu. */}
+      {/* The header now uses the shared @jeswr/app-shell chrome: a header-level
+          <FeedbackButton/> (opens a themed dialog that files a GitHub issue against
+          THIS app's own repo), a light/dark/system <ThemeToggle/>, and a real
+          top-right <AccountMenu/> (avatar + display name, dropdown showing the WebID
+          + Sign out) — replacing the old raw-WebID span + bare logout button. The
+          session's WebID / profile name / avatar / logout wire straight into the
+          props (the components are fully decoupled — everything is a prop).
+          `app-header-actions` right-aligns the trio.
+
+          FEEDBACK: `repo` is the only app-specific value — pod-mail files against
+          `jeswr/pod-mail`. `appVersion` is the build SHA injected by Vite
+          (`__APP_VERSION__`), so a filed issue pins the deployed commit. `webId` is
+          attached to diagnostics ONLY if the reporter ticks the consent box. `submit`
+          is intentionally UNSET → the dialog uses the GitHub prefill page; the
+          feedback-proxy hook is wired suite-wide later. */}
       <header className="app-header">
         <span className="app-brand">Pod Mail</span>
         <div className="app-header-actions">
+          <FeedbackButton
+            repo="jeswr/pod-mail"
+            appName="Pod Mail"
+            appVersion={__APP_VERSION__}
+            webId={webId}
+          />
           <ThemeToggle />
           <AccountMenu
             webId={webId}
