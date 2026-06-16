@@ -18,7 +18,12 @@
 // `.mjs` script and `tsconfig` has `allowJs:false`, so co-locating a `.mjs` test
 // keeps it OUT of `tsc` while vitest still runs it.
 import { describe, expect, it } from "vitest";
-import { DEV_DEFAULT, normaliseOrigin, resolveOriginValue } from "./gen-clientid.mjs";
+import {
+  clientIdDocument,
+  DEV_DEFAULT,
+  normaliseOrigin,
+  resolveOriginValue,
+} from "./gen-clientid.mjs";
 
 const A = "https://a.example";
 const B = "https://b.example";
@@ -85,6 +90,29 @@ describe("resolveOriginValue — origin precedence", () => {
 
   it("falls back to the dev default when nothing is set", () => {
     expect(resolveOriginValue({})).toBe(DEV_DEFAULT);
+  });
+});
+
+describe("clientIdDocument — redirect_uris", () => {
+  const ORIGIN = "https://mail.example";
+
+  it("registers BOTH the popup callback AND the app root (autologin redirect target)", () => {
+    const doc = clientIdDocument(ORIGIN);
+    // The autologin full-page redirect uses `${origin}/` as its redirect_uri; a
+    // compliant OP rejects an unregistered redirect_uri, so the app root MUST be
+    // registered alongside the popup callback or autologin fails entirely.
+    expect(doc.redirect_uris).toContain(`${ORIGIN}/`);
+    expect(doc.redirect_uris).toContain(`${ORIGIN}/callback.html`);
+  });
+
+  it("client_id is the dereferenceable clientid.jsonld URL on this origin (byte-exact)", () => {
+    expect(clientIdDocument(ORIGIN).client_id).toBe(`${ORIGIN}/clientid.jsonld`);
+  });
+
+  it("is a public browser client (token_endpoint_auth_method none, no secret)", () => {
+    const doc = clientIdDocument(ORIGIN);
+    expect(doc.token_endpoint_auth_method).toBe("none");
+    expect(doc).not.toHaveProperty("client_secret");
   });
 });
 

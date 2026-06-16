@@ -891,9 +891,17 @@ describe("AUTOLOGIN — two-phase full-page redirect login (beginRedirectLogin /
     const url = new URL(authorizationUrl);
     expect(url.origin + url.pathname).toBe("https://issuer.example/auth");
     expect(url.searchParams.get("client_id")).toBe("https://app.example/clientid.jsonld");
+    // The redirect_uri is the APP ROOT (the page that re-runs SessionProvider and can
+    // read ?code&state), NOT the popup callback.html — and it has no path beyond "/".
     expect(url.searchParams.get("redirect_uri")).toBe(RETURN_URI);
+    expect(new URL(RETURN_URI).pathname).toBe("/");
     expect(url.searchParams.get("response_type")).toBe("code");
     expect(url.searchParams.get("scope")).toBe("openid webid offline_access");
+    // prompt=none is what makes the autologin SILENT-with-fallback: a live OP session
+    // returns the code with no interactive page; an absent session returns
+    // ?error=login_required which SessionProvider's abort path catches. Without it the
+    // ?error abort return (handled by the autologin plan) could never occur.
+    expect(url.searchParams.get("prompt")).toBe("none");
     expect(url.searchParams.get("state")).toBe("state");
     expect(url.searchParams.get("nonce")).toBe("nonce");
     expect(url.searchParams.get("code_challenge_method")).toBe("S256");
