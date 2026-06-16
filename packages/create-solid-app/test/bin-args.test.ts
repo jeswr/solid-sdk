@@ -66,4 +66,16 @@ describe("parseArgs", () => {
     expect(a.repo).toBeUndefined();
     expect(a.error).toMatch(/--repo requires a value/);
   });
+
+  it("rejects an empty space-form --repo value", () => {
+    const a = parseArgs(["my-app", "--repo", ""]);
+    expect(a.repo).toBeUndefined();
+    expect(a.error).toMatch(/--repo requires a value/);
+  });
+
+  it("rejects a whitespace-only --repo value", () => {
+    const a = parseArgs(["my-app", "--repo", "   "]);
+    expect(a.repo).toBeUndefined();
+    expect(a.error).toMatch(/--repo requires a value/);
+  });
 });

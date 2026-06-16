@@ -45,20 +45,25 @@ export function parseArgs(argv: string[]): ParsedArgs {
     else if (arg === "--seed-pod") out.seedPod = true;
     else if (arg === "--help" || arg === "-h") out.help = true;
     else if (arg === "--repo") {
-      // `--repo owner/name` — the next token is the value.
+      // `--repo owner/name` — the next token is the value. Reject a missing
+      // value, another flag, OR an empty/whitespace-only value (`--repo ""`):
+      // any of those would otherwise silently fall back to the placeholder repo
+      // and look like the feedback target was configured when it wasn't.
       const value = argv[i + 1];
-      if (value === undefined || value.startsWith("-")) {
+      if (value === undefined || value.startsWith("-") || value.trim().length === 0) {
         out.error ??= "--repo requires a value (owner/repo)";
+        if (value !== undefined && !value.startsWith("-")) i++; // consume the empty value
       } else {
         out.repo = value;
         i++; // consume the value
       }
     } else if (arg.startsWith("--repo=")) {
-      // `--repo=owner/name`. An EMPTY value (`--repo=`) is a usage error, for
-      // symmetry with the value-less `--repo` form — otherwise a typo would
-      // silently fall back to the placeholder repo and look like it succeeded.
+      // `--repo=owner/name`. An EMPTY or whitespace-only value (`--repo=`) is a
+      // usage error, for symmetry with the value-less `--repo` form — otherwise
+      // a typo would silently fall back to the placeholder repo and look like it
+      // succeeded.
       const value = arg.slice("--repo=".length);
-      if (value.length === 0) out.error ??= "--repo requires a value (owner/repo)";
+      if (value.trim().length === 0) out.error ??= "--repo requires a value (owner/repo)";
       else out.repo = value;
     } else if (arg.startsWith("-")) {
       // Unknown flag — fail rather than silently ignore (a typo'd flag would otherwise no-op).
