@@ -865,7 +865,10 @@ function classifyFetchError(err) {
 }
 function describeError(err) {
   if (err instanceof RdfFetchError) {
-    return err.status ? `Failed to fetch agent description (HTTP ${err.status}): ${err.message}` : `Failed to parse agent description: ${err.message}`;
+    if (err.status !== void 0) {
+      return `Failed to fetch agent description (HTTP ${err.status}): ${err.message}`;
+    }
+    return classifyFetchError(err) === "parse-failed" ? `Failed to parse agent description: ${err.message}` : `Failed to fetch agent description: ${err.message}`;
   }
   return err instanceof Error ? err.message : String(err);
 }

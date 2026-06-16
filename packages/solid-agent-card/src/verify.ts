@@ -345,9 +345,15 @@ export function classifyFetchError(err: unknown): "fetch-failed" | "parse-failed
 
 function describeError(err: unknown): string {
   if (err instanceof RdfFetchError) {
-    return err.status
-      ? `Failed to fetch agent description (HTTP ${err.status}): ${err.message}`
-      : `Failed to parse agent description: ${err.message}`;
+    if (err.status !== undefined) {
+      return `Failed to fetch agent description (HTTP ${err.status}): ${err.message}`;
+    }
+    // Mirror classifyFetchError: a content-type without a status is a parse
+    // failure (server answered, body unparseable); neither is a transport
+    // failure — so the message matches the code rather than always saying "parse".
+    return classifyFetchError(err) === "parse-failed"
+      ? `Failed to parse agent description: ${err.message}`
+      : `Failed to fetch agent description: ${err.message}`;
   }
   return err instanceof Error ? err.message : String(err);
 }

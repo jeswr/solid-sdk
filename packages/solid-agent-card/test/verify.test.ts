@@ -234,6 +234,9 @@ describe("verifyDescriptor — fetch path", () => {
     const r = await verifyDescriptor("https://a/agent", { fetch });
     expect(r.valid).toBe(false);
     expect(r.issues[0]?.code).toBe("fetch-failed");
+    // The human-readable message must mirror the code (not mislabel as "parse").
+    expect(r.issues[0]?.message).toMatch(/fetch/i);
+    expect(r.issues[0]?.message).not.toMatch(/parse/i);
   });
 });
 
