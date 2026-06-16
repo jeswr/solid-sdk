@@ -236,11 +236,35 @@ async function configFromBucket(
   }
   const precache = [...new Set(requests.map((r) => r.url))];
   if (precache.length === 0) return undefined;
-  const fallback = precache.find((u) => {
+  // `Cache.keys()` reflects INSERTION order, not the original manifest order, so
+  // "first .html" would be non-deterministic across cold starts and could pick an
+  // arbitrary route as the fallback when several HTML pages were precached (roborev
+  // Medium). Prefer a DETERMINISTIC conventional fallback — the canonical root
+  // documents apps actually configure (`/index.html`, then `/`, `/404.html`) — and
+  // only when none of those is present fall back to the first HTML-ish entry (sorted
+  // so the choice is stable regardless of insertion order).
+  const htmlish = precache.filter((u) => {
     const path = pathOf(u);
     return path.endsWith('.html') || path.endsWith('/');
   });
+  const fallback = pickConventionalFallback(htmlish);
   return { precache, fallback, version };
+}
+
+/**
+ * Deterministically choose a navigation fallback from a bucket's HTML-ish entries:
+ * the canonical roots apps configure (`/index.html` → `/` → `/404.html`), else the
+ * lexicographically-first HTML-ish entry (stable regardless of `Cache.keys()` insertion
+ * order), else `undefined`. Matching is by lowercased pathname (origin-/query-agnostic).
+ */
+function pickConventionalFallback(htmlish: string[]): string | undefined {
+  if (htmlish.length === 0) return undefined;
+  const CONVENTIONAL = ['/index.html', '/', '/404.html'];
+  for (const conv of CONVENTIONAL) {
+    const hit = htmlish.find((u) => pathOf(u) === conv);
+    if (hit) return hit;
+  }
+  return [...htmlish].sort()[0];
 }
 
 /**
@@ -296,6 +320,37 @@ export async function resolveServingShellConfig(
   // Nothing complete to fall back to — serve from `current` and let the handlers
   // degrade gracefully (network-first / network-fallback) as before.
   return current;
+}
+
+/**
+ * Choose the shell config whose bucket should serve a precached ASSET request
+ * (roborev Medium). The sync fetch-router may route an asset because it matches
+ * EITHER the current config OR the last-known-complete (retained) config — but the
+ * two map to DIFFERENT version buckets. Blindly opening the serving config's bucket
+ * can miss an OLD-hashed asset that lives only in the retained bucket (and vice
+ * versa), failing offline. So we pick, among the provided candidate configs (most
+ * preferred first — typically [serving, current]), the FIRST whose bucket actually
+ * holds the requested asset. If none holds it, return the most-preferred candidate
+ * so the handler still attempts cache-first then degrades to the network.
+ */
+export async function resolveAssetShellConfig(
+  caches: ShellCacheStorage,
+  requestUrl: string,
+  candidates: readonly ResolvedAppShellConfig[],
+): Promise<ResolvedAppShellConfig | undefined> {
+  const present = candidates.filter((c) => c && isPrecachedAsset(requestUrl, c));
+  if (present.length === 0) return candidates[0];
+  for (const config of present) {
+    try {
+      const cache = await caches.open(shellCacheName(config.version));
+      if (await cache.match(requestUrl)) return config;
+    } catch {
+      /* try the next candidate */
+    }
+  }
+  // Configured as a precached asset somewhere but not yet cached in any candidate
+  // bucket — serve from the first config that lists it (cache-first → network).
+  return present[0];
 }
 
 /**

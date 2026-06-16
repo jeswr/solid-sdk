@@ -80,11 +80,21 @@ async function configFromBucket(caches, version) {
   }
   const precache = [...new Set(requests.map((r) => r.url))];
   if (precache.length === 0) return void 0;
-  const fallback = precache.find((u) => {
+  const htmlish = precache.filter((u) => {
     const path = pathOf(u);
     return path.endsWith(".html") || path.endsWith("/");
   });
+  const fallback = pickConventionalFallback(htmlish);
   return { precache, fallback, version };
+}
+function pickConventionalFallback(htmlish) {
+  if (htmlish.length === 0) return void 0;
+  const CONVENTIONAL = ["/index.html", "/", "/404.html"];
+  for (const conv of CONVENTIONAL) {
+    const hit = htmlish.find((u) => pathOf(u) === conv);
+    if (hit) return hit;
+  }
+  return [...htmlish].sort()[0];
 }
 async function resolveServingShellConfig(caches, current) {
   if (await shellBucketComplete(caches, current)) return current;
@@ -100,6 +110,18 @@ async function resolveServingShellConfig(caches, current) {
     if (candidate && await shellBucketComplete(caches, candidate)) return candidate;
   }
   return current;
+}
+async function resolveAssetShellConfig(caches, requestUrl, candidates) {
+  const present = candidates.filter((c) => c && isPrecachedAsset(requestUrl, c));
+  if (present.length === 0) return candidates[0];
+  for (const config of present) {
+    try {
+      const cache = await caches.open(shellCacheName(config.version));
+      if (await cache.match(requestUrl)) return config;
+    } catch {
+    }
+  }
+  return present[0];
 }
 function isPrecachedAsset(requestUrl, config) {
   const reqPath = pathOf(requestUrl);
@@ -1083,8 +1105,12 @@ async function respondShellNavigation(event) {
   }
 }
 async function respondShellAsset(event) {
-  const config = await servingConfig();
-  if (!config) return self.fetch(event.request);
+  const serving = await servingConfig();
+  if (!serving) return self.fetch(event.request);
+  const candidates = shellConfig && shellConfig !== serving ? [serving, shellConfig] : [serving];
+  const config = await resolveAssetShellConfig(shellCaches(), event.request.url, candidates).catch(
+    () => serving
+  ) ?? serving;
   try {
     const result = await handlePrecachedAsset(event.request, shellDeps(config));
     return result.response;

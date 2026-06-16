@@ -1086,11 +1086,21 @@ async function configFromBucket(caches2, version) {
   }
   const precache = [...new Set(requests.map((r) => r.url))];
   if (precache.length === 0) return void 0;
-  const fallback = precache.find((u) => {
+  const htmlish = precache.filter((u) => {
     const path = pathOf(u);
     return path.endsWith(".html") || path.endsWith("/");
   });
+  const fallback = pickConventionalFallback(htmlish);
   return { precache, fallback, version };
+}
+function pickConventionalFallback(htmlish) {
+  if (htmlish.length === 0) return void 0;
+  const CONVENTIONAL = ["/index.html", "/", "/404.html"];
+  for (const conv of CONVENTIONAL) {
+    const hit = htmlish.find((u) => pathOf(u) === conv);
+    if (hit) return hit;
+  }
+  return [...htmlish].sort()[0];
 }
 async function resolveServingShellConfig(caches2, current) {
   if (await shellBucketComplete(caches2, current)) return current;
@@ -1106,6 +1116,18 @@ async function resolveServingShellConfig(caches2, current) {
     if (candidate && await shellBucketComplete(caches2, candidate)) return candidate;
   }
   return current;
+}
+async function resolveAssetShellConfig(caches2, requestUrl, candidates) {
+  const present = candidates.filter((c) => c && isPrecachedAsset(requestUrl, c));
+  if (present.length === 0) return candidates[0];
+  for (const config of present) {
+    try {
+      const cache = await caches2.open(shellCacheName(config.version));
+      if (await cache.match(requestUrl)) return config;
+    } catch {
+    }
+  }
+  return present[0];
 }
 function isPrecachedAsset(requestUrl, config) {
   const reqPath = pathOf(requestUrl);
@@ -1707,6 +1729,6 @@ function createOfflineClient(config = {}) {
   };
 }
 
-export { ANONYMOUS_SCOPE, CACHE_PREFIX, DB_PREFIX, DEFAULT_CACHE_NAME, DEFAULT_DB_NAME, DEFAULT_WARM_BUDGET, backoffDelay, cacheNameForWebId, cleanupOldShellCaches, containerChildren, createNotificationsClient, createOfflineClient, createStatusSurface, createWarmController, dbNameForWebId, deriveSeeds, discoverSubscriptionUrl, handleNavigation, handleNotification, handlePrecachedAsset, isPrecachedAsset, isScopeChange, onIdle, parseFrame, parseWacAllow, precacheAppShell, purgeForWebId, resolveAppShellConfig, resolveBudget, resolveServingShellConfig, resyncSweep, sameShellConfig, scopeFor, scopeHash, shellBucketComplete, shellCacheName, storageDescriptionFromLink, subscribe, typeIndexTargets, userCanRead, warm };
+export { ANONYMOUS_SCOPE, CACHE_PREFIX, DB_PREFIX, DEFAULT_CACHE_NAME, DEFAULT_DB_NAME, DEFAULT_WARM_BUDGET, backoffDelay, cacheNameForWebId, cleanupOldShellCaches, containerChildren, createNotificationsClient, createOfflineClient, createStatusSurface, createWarmController, dbNameForWebId, deriveSeeds, discoverSubscriptionUrl, handleNavigation, handleNotification, handlePrecachedAsset, isPrecachedAsset, isScopeChange, onIdle, parseFrame, parseWacAllow, precacheAppShell, purgeForWebId, resolveAppShellConfig, resolveAssetShellConfig, resolveBudget, resolveServingShellConfig, resyncSweep, sameShellConfig, scopeFor, scopeHash, shellBucketComplete, shellCacheName, storageDescriptionFromLink, subscribe, typeIndexTargets, userCanRead, warm };
 //# sourceMappingURL=index.js.map
 //# sourceMappingURL=index.js.map

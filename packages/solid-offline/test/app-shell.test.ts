@@ -30,6 +30,7 @@ import {
   isPrecachedAsset,
   precacheAppShell,
   resolveAppShellConfig,
+  resolveAssetShellConfig,
   resolveServingShellConfig,
   sameShellConfig,
   shellBucketComplete,
@@ -547,6 +548,32 @@ describe('resolveServingShellConfig (serve the LAST KNOWN COMPLETE shell)', () =
     expect(serving.version).toBe('shell-002');
   });
 
+  it('reconstructs a DETERMINISTIC fallback from a retained multi-HTML bucket (insertion-order-independent)', async () => {
+    // A Next-style export with SEVERAL HTML routes. `Cache.keys()` reflects
+    // INSERTION order, so a "first .html" fallback would be non-deterministic. The
+    // reconstructed serving config must deterministically prefer the conventional
+    // /index.html regardless of which HTML was cached first.
+    const multiHtml = resolveAppShellConfig({
+      precache: ['/files/index.html', '/settings/index.html', '/index.html', '/a.js'],
+      version: 'shell-010',
+    });
+    const incoming = resolveAppShellConfig({
+      precache: ['/index.html', '/bad.js'],
+      version: 'shell-011',
+    });
+    const caches = new MockCacheStorage((url) =>
+      url.includes('bad') ? htmlResponse('nope', 404) : htmlResponse('ok'),
+    );
+    await precacheAppShell(caches, multiHtml); // complete, /files cached BEFORE /index
+    await precacheAppShell(caches, incoming); // incomplete
+    const serving = await resolveServingShellConfig(caches, incoming);
+    expect(serving.version).toBe('shell-010');
+    // /index.html wins the fallback even though /files/index.html was inserted first.
+    expect(serving.fallback && new URL(serving.fallback, 'https://x/').pathname).toBe(
+      '/index.html',
+    );
+  });
+
   it('picks the NEWEST complete retained bucket among several', async () => {
     const v1 = resolveAppShellConfig({ precache: ['/index.html', '/a1.js'], version: 'shell-001' });
     const v2 = resolveAppShellConfig({ precache: ['/index.html', '/a2.js'], version: 'shell-002' });
@@ -647,6 +674,66 @@ describe('half-applied update — offline boot is never stranded (roborev Medium
 
     // Routing now serves from the NEW bucket.
     expect((await resolveServingShellConfig(caches, NEW)).version).toBe('shell-002');
+  });
+});
+
+describe('resolveAssetShellConfig (serve an asset from the bucket that HOLDS it)', () => {
+  // During a half-applied update the router may match an asset against EITHER the
+  // current config or the retained complete (serving) config — different buckets.
+  const OLD = resolveAppShellConfig({
+    precache: ['/index.html', '/assets/old-abc.js'],
+    version: 'shell-001',
+  });
+  const NEW = resolveAppShellConfig({
+    precache: ['/index.html', '/assets/new-xyz.js'],
+    version: 'shell-002',
+  });
+
+  it('serves an OLD-hashed asset from the RETAINED bucket, not the (preferred) current one', async () => {
+    const caches = new MockCacheStorage((url) =>
+      url.endsWith('.js') ? jsResponse(`// ${url}`) : htmlResponse('ok'),
+    );
+    await precacheAppShell(caches, OLD);
+    await precacheAppShell(caches, NEW);
+    // Candidates prefer NEW (serving) but the requested asset lives only in OLD.
+    const config = await resolveAssetShellConfig(caches, 'https://app.example/assets/old-abc.js', [
+      NEW,
+      OLD,
+    ]);
+    expect(config?.version).toBe('shell-001'); // the bucket that actually holds it
+  });
+
+  it('serves a current-bucket asset from the current config when it holds it', async () => {
+    const caches = new MockCacheStorage((url) =>
+      url.endsWith('.js') ? jsResponse(`// ${url}`) : htmlResponse('ok'),
+    );
+    await precacheAppShell(caches, OLD);
+    await precacheAppShell(caches, NEW);
+    const config = await resolveAssetShellConfig(caches, 'https://app.example/assets/new-xyz.js', [
+      NEW,
+      OLD,
+    ]);
+    expect(config?.version).toBe('shell-002');
+  });
+
+  it('falls back to the most-preferred candidate when no bucket holds the asset', async () => {
+    const caches = new MockCacheStorage();
+    // Nothing precached — the asset is configured but absent from every bucket.
+    const config = await resolveAssetShellConfig(caches, 'https://app.example/assets/new-xyz.js', [
+      NEW,
+      OLD,
+    ]);
+    expect(config?.version).toBe('shell-002'); // the first (preferred) candidate
+  });
+
+  it('returns the first candidate for an unconfigured asset (no candidate lists it)', async () => {
+    const caches = new MockCacheStorage();
+    const config = await resolveAssetShellConfig(
+      caches,
+      'https://app.example/assets/totally-unknown.js',
+      [NEW, OLD],
+    );
+    expect(config?.version).toBe('shell-002');
   });
 });
 

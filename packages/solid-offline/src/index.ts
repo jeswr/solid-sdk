@@ -49,6 +49,7 @@ export {
   shellCacheName,
   shellBucketComplete,
   resolveServingShellConfig,
+  resolveAssetShellConfig,
   precacheAppShell,
   cleanupOldShellCaches,
   isPrecachedAsset,

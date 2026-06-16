@@ -660,6 +660,18 @@ declare function shellBucketComplete(caches: ShellCacheStorage, config: Resolved
  */
 declare function resolveServingShellConfig(caches: ShellCacheStorage, current: ResolvedAppShellConfig): Promise<ResolvedAppShellConfig>;
 /**
+ * Choose the shell config whose bucket should serve a precached ASSET request
+ * (roborev Medium). The sync fetch-router may route an asset because it matches
+ * EITHER the current config OR the last-known-complete (retained) config — but the
+ * two map to DIFFERENT version buckets. Blindly opening the serving config's bucket
+ * can miss an OLD-hashed asset that lives only in the retained bucket (and vice
+ * versa), failing offline. So we pick, among the provided candidate configs (most
+ * preferred first — typically [serving, current]), the FIRST whose bucket actually
+ * holds the requested asset. If none holds it, return the most-preferred candidate
+ * so the handler still attempts cache-first then degrades to the network.
+ */
+declare function resolveAssetShellConfig(caches: ShellCacheStorage, requestUrl: string, candidates: readonly ResolvedAppShellConfig[]): Promise<ResolvedAppShellConfig | undefined>;
+/**
  * Is this request for one of the precached static assets (NOT a navigation)?
  *
  * We match on the request URL's pathname against the precache list's pathnames, so
@@ -1051,4 +1063,4 @@ declare function createOfflineClient(config?: OfflineClientConfig): OfflineClien
     readonly status: OfflineStatusSurface;
 };
 
-export { ANONYMOUS_SCOPE, type AppShellConfig, CACHE_PREFIX, type CacheMetadata, type CacheStorageLike, DB_PREFIX, DEFAULT_CACHE_NAME, DEFAULT_DB_NAME, DEFAULT_WARM_BUDGET, type InvalidateDeps, type InvalidateOutcome, type NotificationActivityType, type NotificationFrame, type NotificationsClient, type NotificationsClientConfig, type NotificationsConfig, type NotificationsDeps, type OfflineClient, type OfflineClientConfig, OfflineStatusSurface, type PageToWorkerMessage, type PurgeDeps, type PurgeResult, type ResolvedAppShellConfig, type ResolvedWarmBudget, type ShellCache, type ShellCacheStorage, type ShellDeps, type ShellResult, type ShellServeSource, type SocketFactory, type SocketLike, type SweepResult, type UpdatedEvent, type UpdatedListener, type WarmBudget, type WarmConfig, type WarmController, type WarmDeps, type WarmResult, type WarmVisit, backoffDelay, cacheNameForWebId, cleanupOldShellCaches, containerChildren, createNotificationsClient, createOfflineClient, createWarmController, dbNameForWebId, deriveSeeds, discoverSubscriptionUrl, handleNavigation, handleNotification, handlePrecachedAsset, isPrecachedAsset, isScopeChange, onIdle, parseFrame, parseWacAllow, precacheAppShell, purgeForWebId, resolveAppShellConfig, resolveBudget, resolveServingShellConfig, resyncSweep, sameShellConfig, scopeFor, scopeHash, shellBucketComplete, shellCacheName, storageDescriptionFromLink, subscribe, typeIndexTargets, userCanRead, warm };
+export { ANONYMOUS_SCOPE, type AppShellConfig, CACHE_PREFIX, type CacheMetadata, type CacheStorageLike, DB_PREFIX, DEFAULT_CACHE_NAME, DEFAULT_DB_NAME, DEFAULT_WARM_BUDGET, type InvalidateDeps, type InvalidateOutcome, type NotificationActivityType, type NotificationFrame, type NotificationsClient, type NotificationsClientConfig, type NotificationsConfig, type NotificationsDeps, type OfflineClient, type OfflineClientConfig, OfflineStatusSurface, type PageToWorkerMessage, type PurgeDeps, type PurgeResult, type ResolvedAppShellConfig, type ResolvedWarmBudget, type ShellCache, type ShellCacheStorage, type ShellDeps, type ShellResult, type ShellServeSource, type SocketFactory, type SocketLike, type SweepResult, type UpdatedEvent, type UpdatedListener, type WarmBudget, type WarmConfig, type WarmController, type WarmDeps, type WarmResult, type WarmVisit, backoffDelay, cacheNameForWebId, cleanupOldShellCaches, containerChildren, createNotificationsClient, createOfflineClient, createWarmController, dbNameForWebId, deriveSeeds, discoverSubscriptionUrl, handleNavigation, handleNotification, handlePrecachedAsset, isPrecachedAsset, isScopeChange, onIdle, parseFrame, parseWacAllow, precacheAppShell, purgeForWebId, resolveAppShellConfig, resolveAssetShellConfig, resolveBudget, resolveServingShellConfig, resyncSweep, sameShellConfig, scopeFor, scopeHash, shellBucketComplete, shellCacheName, storageDescriptionFromLink, subscribe, typeIndexTargets, userCanRead, warm };

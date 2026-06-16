@@ -23,6 +23,7 @@ import {
   isPrecachedAsset,
   precacheAppShell,
   resolveAppShellConfig,
+  resolveAssetShellConfig,
   resolveServingShellConfig,
   sameShellConfig,
   shellBucketComplete,
@@ -444,8 +445,17 @@ async function respondShellNavigation(event: FetchEvent): Promise<Response> {
 
 /** Serve a precached static asset cache-first. */
 async function respondShellAsset(event: FetchEvent): Promise<Response> {
-  const config = await servingConfig();
-  if (!config) return self.fetch(event.request);
+  const serving = await servingConfig();
+  if (!serving) return self.fetch(event.request);
+  // An asset may live ONLY in the retained complete bucket (an OLD-hashed file the
+  // OLD HTML pulls) or ONLY in the current bucket — the two are different version
+  // buckets (roborev Medium). Pick the config whose bucket actually HOLDS this asset,
+  // preferring the serving (complete) config, then the current `shellConfig`.
+  const candidates = shellConfig && shellConfig !== serving ? [serving, shellConfig] : [serving];
+  const config =
+    (await resolveAssetShellConfig(shellCaches(), event.request.url, candidates).catch(
+      () => serving,
+    )) ?? serving;
   try {
     const result = await handlePrecachedAsset(event.request, shellDeps(config));
     return result.response;
