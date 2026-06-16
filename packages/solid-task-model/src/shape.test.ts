@@ -92,6 +92,33 @@ describe("SHACL shape (shapes/task.ttl)", () => {
     expect(report.results.some((r) => String(r.severity?.value).endsWith("Warning"))).toBe(true);
   });
 
+  it("a Pod Manager-style dct:description body conforms", async () => {
+    // PM writes the body as dct:description (solid-issues uses wf:description).
+    // The shape constrains BOTH predicates, so a well-formed PM body conforms.
+    const pmTtl = `
+      @prefix wf:  <http://www.w3.org/2005/01/wf/flow#> .
+      @prefix dct: <http://purl.org/dc/terms/> .
+      <#it> a wf:Task, wf:Open ;
+        dct:title "PM body" ;
+        dct:description "Body written by the Pod Manager." .
+    `;
+    expect((await validateTtl(pmTtl)).conforms).toBe(true);
+  });
+
+  it("two dct:description values are non-conforming (maxCount 1 on the DC predicate)", async () => {
+    const ttl = `
+      @prefix wf:  <http://www.w3.org/2005/01/wf/flow#> .
+      @prefix dct: <http://purl.org/dc/terms/> .
+      <#it> a wf:Task, wf:Open ;
+        dct:title "Two bodies" ;
+        dct:description "first" ;
+        dct:description "second" .
+    `;
+    const report = await validateTtl(ttl);
+    expect(report.conforms).toBe(false);
+    expect(report.results.some((r) => String(r.path?.value).endsWith("description"))).toBe(true);
+  });
+
   it("the Pod Manager + solid-issues wire formats both conform (federation contract)", async () => {
     const pmTtl = `
       @prefix wf:   <http://www.w3.org/2005/01/wf/flow#> .

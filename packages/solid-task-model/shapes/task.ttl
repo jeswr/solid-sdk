@@ -35,9 +35,18 @@
     sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ;
   ] ;
 
-  # Description — at most one string body (wf:description, the SolidOS field).
+  # Description — the body. The two existing producers DIVERGE on the predicate:
+  # solid-issues writes `wf:description`, the Pod Manager writes `dct:description`.
+  # The shared model reads BOTH and writes BOTH (see Task.description), so the
+  # shape constrains BOTH — at most one string each — or a malformed / multi-valued
+  # PM-written `dct:description` body would pass validation even though the code
+  # now treats it as part of the shared contract.
   sh:property [
     sh:path wf:description ; sh:name "description" ;
+    sh:datatype xsd:string ; sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path dct:description ; sh:name "description (Dublin Core)" ;
     sh:datatype xsd:string ; sh:maxCount 1 ;
   ] ;
 

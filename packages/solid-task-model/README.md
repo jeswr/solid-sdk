@@ -33,7 +33,7 @@ is an established, dereferenceable IRI:
 | class | `rdf:type wf:Task` | W3C SolidOS workflow ontology (`wf:`) |
 | state | `rdf:type wf:Open` / `wf:Closed` | `wf:` (the SolidOS open/closed model) |
 | title | `dct:title` | Dublin Core Terms |
-| description | `wf:description` | `wf:` |
+| description | `wf:description` **+** `dct:description` | `wf:` / Dublin Core (see note) |
 | created / modified | `dct:created` / `dct:modified` | Dublin Core Terms |
 | completed | `prov:endedAtTime` | W3C PROV-O (written on close) |
 | creator | `dct:creator` (WebID) | Dublin Core Terms |
@@ -48,6 +48,12 @@ is an established, dereferenceable IRI:
 | duplicate-of | `dct:isReplacedBy` | Dublin Core Terms |
 | cloned-from | `prov:wasDerivedFrom` | W3C PROV-O |
 
+> **Note on `description`.** The two existing producers diverged — solid-issues writes
+> `wf:description`, the Pod Manager writes `dct:description`. The model therefore reads
+> *both* (preferring `wf:description`) and writes *both*, and the SHACL shape constrains
+> both, so neither producer's body is dropped on a cross-app read. Once apps adopt this
+> package they converge on the pair.
+>
 > **Note on `wf:Open`/`wf:Closed`.** The wire state is binary so it federates cleanly —
 > any consumer maps a task to open or closed. An app-local "in-progress" band (the Pod
 > Manager carries one as an extra producer-scoped `rdf:type` subclass) is a *refinement*,
