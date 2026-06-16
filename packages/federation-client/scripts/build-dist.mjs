@@ -5,19 +5,23 @@
  *
  * WHY a bundler (esbuild) instead of plain `tsc`:
  *
- * `@jeswr/federation-client` depends on `@jeswr/fetch-rdf`, which is NOT on npm
- * and ships no usable `dist/` (a git dep that needs its own build). A consumer
- * running `npm install github:jeswr/federation-client#main` under the suite's
- * `ignore-scripts=true` invariant will NOT run our `build:deps`/`prepare`, so
- * `@jeswr/fetch-rdf` would never get built and the import would fail. The fix is
- * to make the committed artifact self-contained re: that off-npm dep by INLINING
- * `@jeswr/fetch-rdf`'s compiled code into our `dist/index.js`.
+ * `@jeswr/federation-client` depends on TWO off-npm `@jeswr/*` packages —
+ * `@jeswr/fetch-rdf` and `@jeswr/federation-registry` — that a consumer running
+ * `npm install github:jeswr/federation-client#main` under the suite's
+ * `ignore-scripts=true` invariant cannot resolve/build (fetch-rdf ships no usable
+ * `dist/`; federation-registry is a git-only package not on the npm registry). So
+ * the consumer's import would fail. The fix is to make the committed artifact
+ * self-contained re: those off-npm deps by INLINING their compiled code into our
+ * `dist/index.js`. (The registry's own bundle already inlines its copy of
+ * `@jeswr/fetch-rdf`, so the result is self-contained transitively.)
  *
  * Externalisation contract (the load-bearing part):
- *   - INLINED  (bundled into dist): `@jeswr/fetch-rdf` only — the one off-npm dep.
+ *   - INLINED  (bundled into dist): the off-npm `@jeswr/*` deps —
+ *       `@jeswr/fetch-rdf` AND `@jeswr/federation-registry` — by virtue of being
+ *       ABSENT from the EXTERNAL list below.
  *   - EXTERNAL (resolved from npm by the consumer): everything else —
- *       `n3`, `@solid/object`, `@rdfjs/wrapper`, `@rdfjs/types`, AND
- *       fetch-rdf's OWN runtime deps `jsonld-streaming-parser` + `content-type`
+ *       `n3`, `@solid/object`, `@rdfjs/wrapper`, `@rdfjs/types`, AND the off-npm
+ *       deps' OWN npm runtime deps `jsonld-streaming-parser` + `content-type`
  *       (all npm-published; we add them to our `dependencies` so the consumer
  *       resolves them). We deliberately do NOT bundle these — keeping them
  *       external means a single shared copy + normal npm dedupe/audit.

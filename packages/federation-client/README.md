@@ -31,12 +31,16 @@ npm install github:jeswr/federation-client#main
 ```
 
 This works with **no build step**, even under `ignore-scripts=true`: the
-committed `dist/` is self-contained. The package's one off-npm dependency,
-[`@jeswr/fetch-rdf`](https://github.com/jeswr/fetch-rdf), is **bundled (inlined)**
-into `dist/index.js`; every other runtime dependency (`n3`, `@solid/object`,
-`@rdfjs/wrapper`, and fetch-rdf's own runtime deps `jsonld-streaming-parser` +
-`content-type`) is npm-published and resolves normally. So a consumer never needs
-to clone or build `@jeswr/fetch-rdf`.
+committed `dist/` is self-contained. The package's two off-npm `@jeswr/*`
+dependencies, [`@jeswr/fetch-rdf`](https://github.com/jeswr/fetch-rdf) and
+[`@jeswr/federation-registry`](https://github.com/jeswr/federation-registry), are
+**bundled (inlined)** into `dist/index.js`; every other runtime dependency (`n3`,
+`@solid/object`, `@rdfjs/wrapper`, `@rdfjs/types`, and the inlined deps' own runtime
+deps `jsonld-streaming-parser` + `content-type`) is npm-published and resolves
+normally. So a consumer never needs to clone or build either off-npm package. (The
+runtime is fully inlined; `@jeswr/federation-registry` is also declared as a pinned
+git dependency so its TypeScript declarations resolve for `RegistryDiscovery` /
+`ResolvedStorageSpec` / `Membership` type imports.)
 
 Peer runtime: Node ≥ 24 (a transitive requirement of `@solid/object`), ESM only.
 
@@ -48,7 +52,11 @@ Peer runtime: Node ≥ 24 (a transitive requirement of `@solid/object`), ESM onl
 
 ## Surface
 
-Three functions plus a serialiser and the vocabulary constants.
+Five functions plus a serialiser, an SSRF-guarded fetch, and the vocabulary
+constants. `verify` / `list` / `selfDescribe` operate on the self-asserted `fedapp:`
+layer; `discoverFromRegistry` / `resolveStorageSpecVersion` consume the
+registry-asserted `fedreg:` layer (via
+[`@jeswr/federation-registry`](https://github.com/jeswr/federation-registry)).
 
 ### `verify(input, options?)` — validate a registration
 
@@ -129,6 +137,131 @@ const desc = selfDescribe({
 
 const turtle = await desc.toString(); // text/turtle by default
 ```
+
+### `discoverFromRegistry(registryUrl, options?)` — registry-asserted memberships
+
+Consume a federation **Catalogue / Registry** (the `fedreg:` layer). Where `list`
+discovers **self-asserted** `fedapp:App` registrations (which an app must NOT treat
+as a membership claim), `discoverFromRegistry` reads the **registry's own**
+`fedreg:Membership` assertions — each carrying a lifecycle `status` (`Proposed` /
+`Active` / `Suspended` / `Revoked`) and an `assertedBy` authority. Parsing is
+delegated to `@jeswr/federation-registry`'s typed `fedreg:` accessors; the registry
+URL is fetched through the **SSRF guard** below.
+
+```ts
+import { discoverFromRegistry } from "@jeswr/federation-client";
+
+const { members, valid, issues } = await discoverFromRegistry(
+  "https://registry.example/federation",
+  { fetch: authFetch }, // optional auth fetch; composed UNDER the SSRF guard
+);
+
+// `valid` / `issues` are DOCUMENT-level (fetch / parse / no-registry) — so a
+// fetch-refused or 404'd registry is observable, not a silently-empty list.
+for (const m of members) {
+  if (m.trusted) {
+    // `trusted` ⇔ status === "Active": a currently-live membership.
+    console.log("active member:", m.id, "asserted by", m.membership.assertedBy);
+  }
+}
+```
+
+> Still check `assertedBy` against your own trust anchors. The registry SDK verifies
+> a membership is *well-formed*; it does **not** verify the signature binding the
+> assertion to that authority (that layers above this — see
+> `@jeswr/federation-registry`).
+
+### `resolveStorageSpecVersion(storageUrl, options?)` — storage spec-versions
+
+Read a resource server's advertised client-client **spec-versions**
+(`fedreg:acceptsSpec`) for schema-migration coordination: before writing data
+validated against a spec version, an app asks the storage's
+`fedreg:StorageDescription` whether it accepts that version, so the app and the
+storage migrate on independent clocks. Exact-IRI matching (spec versions are
+immutable persistent IRIs — never a prefix match). Fetched through the SSRF guard.
+
+```ts
+import { resolveStorageSpecVersion } from "@jeswr/federation-client";
+
+const storage = await resolveStorageSpecVersion("https://alice.pod.example/", {
+  fetch: authFetch,
+});
+
+if (storage.valid && storage.accepts("https://w3id.org/jeswr/sectors/scheduling#1.1.0")) {
+  // safe to write 1.1.0-shaped data
+}
+// Which of my wanted versions does this storage NOT accept yet?
+const gap = storage.unsupported([
+  "https://w3id.org/jeswr/sectors/scheduling#1.1.0",
+  "https://w3id.org/jeswr/sectors/scheduling#2.0.0",
+]);
+```
+
+`resolveStorageSpecVersion` **fails closed**: when the description cannot be
+fetched/parsed/verified, `valid` is `false`, the version list is empty, and
+`accepts(...)` returns `false` for every version — an app must not write against an
+unverifiable storage.
+
+### SSRF guard — `createGuardedFetch` / `guardedFetch`
+
+A registry / storage URL is a **user/config-supplied remote origin**, so
+`discoverFromRegistry` and `resolveStorageSpecVersion` fetch it through an SSRF
+guard. The guard, on the initial request **and every redirect hop**:
+
+- allows only `https:` (no `http:`, `file:`, `data:`, …) — `http:` to loopback only
+  under the dev `allowLoopback` flag;
+- rejects userinfo (`https://user:pass@…`) so credentials never leak to the host;
+- classifies the host: an IP literal is checked directly; a hostname is DNS-resolved
+  and **every** resolved A/AAAA record must be public (a DNS-rebinding mitigation).
+  Loopback / RFC-1918 / CGNAT / link-local / cloud-metadata (`169.254.169.254`) /
+  multicast / reserved / IPv4-mapped-IPv6 / IPv6-ULA / 6to4- and NAT64-embedded
+  private v4 are all refused;
+- does **not** auto-follow redirects — it sets `redirect: "manual"` and re-runs the
+  full guard against each `Location` (bounded hops + loop detection), so a `302` to
+  an internal address is refused;
+- applies standard redirect method/body rewrite: a `303` (and a `301`/`302` on a
+  non-`GET`/`HEAD` method) switches to `GET` and drops the body + `Content-*` headers,
+  while `307`/`308` preserve them on a same-origin hop;
+- on a **cross-origin** redirect, strips credential-bearing headers (`Authorization`,
+  `Cookie`, `DPoP`, …) AND drops the request body + `Content-*` headers — for any
+  status, including `307`/`308` — so a hostile redirect to a different (even
+  allowed-public) origin never receives the caller's credentials or a replayed POST
+  body;
+- preserves the final (post-redirect) URL on the returned response, so relative IRIs
+  in a redirected registry/storage document resolve against the correct base;
+- caps the response body (`maxBytes`, default 1 MiB) and bounds the whole operation
+  (fetch + redirects + body) with a single `timeoutMs` deadline.
+
+**DNS-rebinding posture.** With plain `fetch` the guard validates a hostname's
+resolved addresses but cannot pin the socket to them (no `undici` dependency — this is
+a browser+Node client), so a residual lookup→connect rebinding window remains in the
+default *best-effort* posture (DNS validation + redirect re-validation + absolute
+literal-IP blocking still apply). A hardened deployment sets `requireDnsPinning: true`,
+which **refuses a hostname target unless a distinct `pinningFetch` is supplied** — a
+separate, branded option the caller uses to attest "this fetch pins DNS" (e.g. an
+undici-`Agent` fetch). Crucially, a plain auth/custom `fetch` (the generic `fetch`
+option) does **not** satisfy the strict posture — only `pinningFetch` does — so an
+ordinary fetch can never silently re-open the window. IP-literal targets (no
+resolution, no rebinding window) are always allowed. A bundled undici-pinning Node
+entry point is a tracked follow-up.
+
+The guard composes **under** any `fetch` you pass (an authenticated Solid fetch is
+threaded through unchanged). It is also exported directly for reuse:
+
+```ts
+import { createGuardedFetch, SsrfError } from "@jeswr/federation-client";
+
+const guarded = createGuardedFetch({ fetch: authFetch, timeoutMs: 8000 });
+// `guarded` has the standard `fetch` signature; pass it anywhere a fetch is wanted.
+```
+
+> The classification logic (`isPublicAddress` / `isLoopbackAddress`) is ported
+> verbatim from the suite's vetted `@pss/guarded-fetch` package. Note: unlike the
+> server-side resolver, this client library targets plain `fetch` (browser + Node)
+> and does **not** pin the resolved IP into the socket (no `undici` dependency), so a
+> microsecond-scale lookup→connect DNS-rebinding window remains; the redirect
+> re-validation and literal-IP blocking are absolute. A caller needing full DNS
+> pinning can pass a pinning `fetch` via the `fetch` option.
 
 ### Vocabulary helpers
 

@@ -48,6 +48,8 @@
   },
   "homepage": "https://github.com/jeswr/federation-client#readme",
   "dependencies": {
+    "@jeswr/federation-registry": "git+https://github.com/jeswr/federation-registry.git#4f06659c4fb54d83a118acf1e94bcff1a74663c0",
+    "@rdfjs/types": "^2.0.1",
     "@rdfjs/wrapper": "^0.34.0",
     "@solid/object": "^0.6.0",
     "content-type": "^1.0.5",
@@ -57,7 +59,6 @@
   "devDependencies": {
     "@biomejs/biome": "^2.0.0",
     "@jeswr/fetch-rdf": "github:jeswr/fetch-rdf#main",
-    "@rdfjs/types": "^2.0.1",
     "@types/n3": "^1.16.0",
     "@types/node": "^22.0.0",
     "@vitest/coverage-v8": "^2.1.0",
