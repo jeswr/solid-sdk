@@ -85,6 +85,7 @@ vi.mock("oauth4webapi", () => {
 const {
   WebIdDPoPTokenProvider,
   webIdsEqual,
+  withProbeFragment,
   ReactiveAuthResetError,
 } = await import("@/lib/solid/webid-token-provider");
 type Provider = InstanceType<typeof WebIdDPoPTokenProvider>;
@@ -119,12 +120,15 @@ function deferredGetCode() {
 }
 
 /**
- * A login probe Request. It carries NO app-custom header (the round-3 CORS fix) —
- * the round-4 design registers it with the provider via `beginLoginProbe`, an
- * in-process record, so nothing app-specific ever rides on the wire.
+ * A login probe Request, built exactly as the SolidAuthProvider login flow does in
+ * round-4b: the URL carries a unique, unguessable `#probe-<uuid>` fragment
+ * (`withProbeFragment`). It carries NO app-custom header (the round-3 CORS fix) — the
+ * fragment is the in-process marker, and fragments are never sent on the wire
+ * (RFC 3986 §3.5), so nothing app-specific ever rides over HTTP. The provider records
+ * it via `beginLoginProbe`; the fragment makes the URL fallback unforgeable.
  */
 function probeRequest(url: string): Request {
-  return new Request(url);
+  return new Request(withProbeFragment(url));
 }
 
 /**
@@ -451,6 +455,62 @@ describe("FIX (round 4) — login probe proof is generation-scoped, NOT a networ
     await provider.upgrade(new Request("https://alice.example/storage/"));
     expect(provider.wasLoginProbeUpgraded(gen)).toBe(false);
   });
+
+  // ── round-4b roborev finding 2: the URL fallback must be UNFORGEABLE ──────────
+  // The round-4 URL fallback matched on `probe.url === request.url`, so the FIRST
+  // unrelated same-URL request in the login window consumed the fallback and set
+  // the proof without the REAL probe being upgraded. The probe now carries an
+  // unguessable `#probe-<uuid>` fragment, closing that hole.
+
+  it("a non-login upgrade to the same BASE URL (no fragment) during the login window does NOT satisfy the proof", async () => {
+    const provider = makeProvider();
+    const gen = provider.loginGeneration();
+    // The real probe carries an unguessable fragment.
+    const realProbe = probeRequest("https://alice.example/storage/");
+    provider.beginLoginProbe(realProbe);
+    // A CONCURRENT, unrelated data-layer read to the SAME BASE URL — no fragment.
+    // Pre-fix this would have consumed the URL fallback and set #probeUpgradedGeneration.
+    const before = provider.tokensAttachedCount();
+    await provider.upgrade(new Request("https://alice.example/storage/"));
+    const after = provider.tokensAttachedCount();
+    expect(after).toBeGreaterThan(before); // the provider-wide count DID move…
+    // …but the per-probe proof stays FALSE: the unrelated request lacked the
+    // unguessable fragment, so it never matched the probe (it neither shares the
+    // object nor the full url-with-fragment).
+    expect(provider.wasLoginProbeUpgraded(gen)).toBe(false);
+    provider.endLoginProbe();
+  });
+
+  it("the URL fallback is UNGUESSABLE: a same-base-URL request with an EMPTY or GUESSED fragment does not match", async () => {
+    const provider = makeProvider();
+    const gen = provider.loginGeneration();
+    const realProbe = probeRequest("https://alice.example/storage/");
+    provider.beginLoginProbe(realProbe);
+    // An attacker-style guess: same base URL, an empty hash and a wrong fragment.
+    await provider.upgrade(new Request("https://alice.example/storage/#"));
+    await provider.upgrade(new Request("https://alice.example/storage/#probe-guessed"));
+    // Neither guess carries the real `#probe-<uuid>`, so the proof is still FALSE.
+    expect(provider.wasLoginProbeUpgraded(gen)).toBe(false);
+    provider.endLoginProbe();
+  });
+
+  it("withProbeFragment stamps a unique, off-the-wire #probe-<uuid> fragment (no header)", () => {
+    const a = withProbeFragment("https://alice.example/storage/");
+    const b = withProbeFragment("https://alice.example/storage/");
+    // Distinct each call (a fresh uuid), and the fragment is the ONLY difference.
+    expect(a).not.toBe(b);
+    expect(new URL(a).hash).toMatch(/^#probe-[0-9a-f-]{36}$/);
+    expect(new URL(a).origin + new URL(a).pathname).toBe(
+      "https://alice.example/storage/",
+    );
+    // The fragment rides only in the URL, never as a header on the wire.
+    const req = new Request(a);
+    expect([...req.headers.keys()]).toEqual([]);
+    expect(req.url).toBe(a);
+    // A faithful manager re-wrap preserves the fragment; a plain Request omits it.
+    expect(new Request(req).url).toBe(a);
+    expect(new Request("https://alice.example/storage/").url).not.toBe(a);
+  });
 });
 
 describe("FIX 4 — login proof is PER-PROBE + generation-scoped, not a provider-wide counter", () => {
@@ -547,54 +607,103 @@ describe("FIX 4 — login proof is PER-PROBE + generation-scoped, not a provider
   });
 });
 
-describe("FIX 4 — SolidAuthProvider single-flight login gate (shape)", () => {
+describe("FIX 4b — SolidAuthProvider WebID-scoped single-flight login gate (shape)", () => {
   // The SolidAuthProvider component is hard to mount in this oauth/dpop-mocked,
   // browser-less harness (it dynamically imports @solid/reactive-authentication and
-  // a custom element). We therefore test the single-flight GATE LOGIC directly — the
-  // exact `inFlightLogin ??= doLogin(id).finally(...)` shape the component uses — so
-  // the invariant "two concurrent login() calls run doLogin exactly once" is pinned.
-  it("two concurrent login() calls invoke the real login body exactly once and share the result", async () => {
-    let inFlightLogin: Promise<void> | null = null;
+  // a custom element). We therefore test the single-flight GATE LOGIC directly,
+  // mirroring the EXACT shape the component uses — a WebID-scoped `inFlight = { id,
+  // promise }` keyed via `webIdsEqual` (round-4b). This pins the invariants:
+  //   - a SAME-WebID double-click shares the one in-flight login (one doLogin run);
+  //   - a DIFFERENT-WebID concurrent login REJECTS cleanly — it never starts a
+  //     second doLogin and never resolves as the in-flight identity (the
+  //     false-positive the roborev finding flagged in the bare-promise version).
+  // The gate is factored out as the same pure logic the component runs, because
+  // SolidAuthProvider itself cannot mount in this harness.
+  function makeGate(doLogin: (id: string) => Promise<void>) {
+    let inFlight: { id: string; promise: Promise<void> } | null = null;
+    return (id: string): Promise<void> => {
+      if (inFlight) {
+        if (webIdsEqual(inFlight.id, id)) return inFlight.promise;
+        return Promise.reject(
+          new Error(
+            "A login for a different WebID is already in progress — wait for it to " +
+              "finish or log out first.",
+          ),
+        );
+      }
+      const run = { id, promise: Promise.resolve() };
+      run.promise = doLogin(id).finally(() => {
+        if (inFlight === run) inFlight = null;
+      });
+      inFlight = run;
+      return run.promise;
+    };
+  }
+
+  it("a SAME-WebID double-click shares ONE in-flight login (doLogin runs once)", async () => {
     let calls = 0;
     let release!: () => void;
     const gate = new Promise<void>((r) => {
       release = r;
     });
     const seen: string[] = [];
-    const doLogin = async (id: string): Promise<void> => {
+    const login = makeGate(async (id) => {
       calls += 1;
       seen.push(id);
       await gate; // stall so the second call overlaps the first.
-    };
-    const login = (id: string): Promise<void> => {
-      inFlightLogin ??= doLogin(id).finally(() => {
-        inFlightLogin = null;
-      });
-      return inFlightLogin;
-    };
+    });
 
-    const first = login("https://alice.example/profile/card#me");
-    const second = login("https://carol.example/profile/card#me");
-    expect(second).toBe(first); // the second call AWAITS the in-flight one
+    const first = login(WEBID_A);
+    const second = login(WEBID_A); // same WebID, concurrent (double-click)
+    expect(second).toBe(first); // shares the one in-flight promise
     expect(calls).toBe(1); // doLogin ran exactly once
-    // The OVERLAPPING second login() never started its own flow — only the first
-    // id reached doLogin; the second is a clean await/no-op.
-    expect(seen).toEqual(["https://alice.example/profile/card#me"]);
+    expect(seen).toEqual([WEBID_A]);
 
     release();
     await Promise.all([first, second]);
     expect(calls).toBe(1);
 
     // After settling, a LATER login starts a fresh flow (the in-flight slot cleared).
-    const third = login("https://bob.example/profile/card#me");
+    const third = login(WEBID_B);
     expect(third).not.toBe(first);
-    release(); // gate already resolved; third's doLogin completes immediately
     await third;
     expect(calls).toBe(2);
-    expect(seen).toEqual([
-      "https://alice.example/profile/card#me",
-      "https://bob.example/profile/card#me",
-    ]);
+    expect(seen).toEqual([WEBID_A, WEBID_B]);
+  });
+
+  it("a DIFFERENT-WebID concurrent login REJECTS without starting a second doLogin and never resolves as the in-flight identity", async () => {
+    let calls = 0;
+    let release!: () => void;
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    const seen: string[] = [];
+    const login = makeGate(async (id) => {
+      calls += 1;
+      seen.push(id);
+      await gate; // Alice's login stays in flight while Bob arrives.
+    });
+
+    // Alice's login is in flight (stalled at the gate).
+    const alice = login(WEBID_A);
+    // Bob arrives concurrently — must REJECT cleanly, NOT resolve as Alice and NOT
+    // run a second doLogin. This is the false-positive the roborev finding caught:
+    // the bare-promise gate would have returned ALICE's promise to Bob.
+    const bob = login(WEBID_B);
+    await expect(bob).rejects.toThrow(/different WebID is already in progress/);
+    expect(calls).toBe(1); // only Alice's doLogin ran
+    expect(seen).toEqual([WEBID_A]); // Bob never reached doLogin
+
+    // Alice's login completes normally — Bob's rejection did not disturb it.
+    release();
+    await expect(alice).resolves.toBeUndefined();
+    expect(calls).toBe(1);
+
+    // Once Alice settled, Bob can be retried and now proceeds.
+    const bobRetry = login(WEBID_B);
+    await expect(bobRetry).resolves.toBeUndefined();
+    expect(calls).toBe(2);
+    expect(seen).toEqual([WEBID_A, WEBID_B]);
   });
 
   it("a single login() with one active probe yields exactly one probe-upgrade proof in its generation", async () => {

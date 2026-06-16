@@ -42,6 +42,7 @@ import {
   WebIdDPoPTokenProvider,
   AmbiguousIssuerError,
   webIdsEqual,
+  withProbeFragment,
 } from "@/lib/solid/webid-token-provider";
 import { authFlowHolder, getCodeThroughHolder } from "@/lib/solid/auth-flow-holder";
 import { readProfile, type Profile } from "@/lib/solid/profile";
@@ -98,17 +99,25 @@ let authProviderSingleton: Promise<WebIdDPoPTokenProvider> | null = null;
 const pendingWebIdHolder: { current: string | null } = { current: null };
 
 /**
- * MODULE-LEVEL single-flight guard for `login()`. The token provider tracks exactly
- * ONE active login probe at a time (its generation-scoped record), so two
- * overlapping / double-clicked logins must NOT both run a probe — the second would
- * either overwrite the first's probe record or race it. We serialise instead: the
- * FIRST `login()` runs the real flow; a concurrent second `login()` AWAITS the
- * in-flight one and returns its result (a clean no-op for the caller — exactly one
- * login proceeds). It is module-level (not a ref) because the provider is a
- * page-lifetime singleton, so the in-flight login is a page-level fact, not a
- * per-mount one. Cleared in `finally` so the next, later login starts fresh.
+ * MODULE-LEVEL single-flight guard for `login()`, keyed on the in-flight WebID.
+ * The token provider tracks exactly ONE active login probe at a time (its
+ * generation-scoped record), so two overlapping / double-clicked logins must NOT
+ * both run a probe — the second would overwrite or race the first's probe record.
+ *
+ * KEYING ON THE WebID is the round-4b roborev fix. A bare promise single-flight
+ * (`inFlightLogin ??= doLogin(id)`) is WRONG for a DIFFERENT identity: `login("bob")`
+ * while `login("alice")` is still in flight would return ALICE's promise, so the
+ * caller resolves as if Bob logged in though Bob was never attempted — a false
+ * positive for a different identity. So we track WHICH WebID is in flight:
+ *  - same WebID (a double-click) → share the one in-flight promise (a clean no-op);
+ *  - DIFFERENT WebID → reject cleanly, WITHOUT starting a second probe and WITHOUT
+ *    disturbing the in-flight attempt's state — the caller must wait or log out.
+ *
+ * It is module-level (not a ref) because the provider is a page-lifetime singleton,
+ * so the in-flight login is a page-level fact, not a per-mount one. Cleared in
+ * `finally` (only if it still points at this run) so the next login starts fresh.
  */
-let inFlightLogin: Promise<void> | null = null;
+let inFlight: { id: string; promise: Promise<void> } | null = null;
 
 interface AuthProviderConfig {
   callbackUri: string;
@@ -247,19 +256,25 @@ export function SolidAuthProvider({ children }: { children: ReactNode }) {
       // PER-PROBE PROOF (primary): register THIS probe Request with the provider via
       // beginLoginProbe — a generation-scoped, in-process record, NOT a network
       // header. The provider records its upgrade generation iff it actually upgrades
-      // THIS request (object identity, or a single-use URL fallback that survives the
-      // manager's re-wrap) — so we can prove THIS probe was token-upgraded, not
+      // THIS request (object identity, or an unforgeable URL fallback that survives
+      // the manager's re-wrap) — so we can prove THIS probe was token-upgraded, not
       // merely that "some request" was (a concurrent upgraded request for the SAME
       // WebID can bump the provider-wide count, but not satisfy our own probe).
-      // Keeping the probe header-free leaves it a "simple" CORS request, so a
-      // cross-origin pod does not reject a preflight before the 401/upgrade path runs.
+      //
+      // The probe URL carries a unique, unguessable `#probe-<uuid>` fragment
+      // (withProbeFragment) — an UNFORGEABLE in-process marker that (a) survives the
+      // manager's `new Request(input)` re-wrap and (b) is NEVER sent on the wire
+      // (fragments are client-side per RFC 3986 §3.5), so an unrelated same-base-URL
+      // fetch during the login window cannot consume the URL fallback (the round-4b
+      // roborev fix). It is not a header, so the probe stays a "simple" CORS request
+      // and the OP fetches the exact same resource.
       // Trigger the auth flow by making an authenticated request the global fetch
       // will upgrade on 401: registerGlobally() intercepts the 401, opens the
       // <authorization-code-flow> popup, mints a DPoP token, and RETRIES the
       // request. A storage root is private on CSS by default, so this 401s →
       // popup → retry, and the RETRY's status tells us whether login succeeded.
       // Build the Request OBJECT first and register it before fetching.
-      const probe = pub.storages[0] ?? new URL("/", id).toString();
+      const probe = withProbeFragment(pub.storages[0] ?? new URL("/", id).toString());
       const probeRequest = new Request(probe, { method: "GET" });
       providerRef.current?.beginLoginProbe(probeRequest);
       let res: Response;
@@ -334,15 +349,31 @@ export function SolidAuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(
     async (id: string) => {
-      // SINGLE-FLIGHT: if a login is already running, a second concurrent /
-      // double-clicked login() must NOT start an overlapping probe (the provider
-      // tracks exactly one active probe). It AWAITS the in-flight one and returns its
-      // result — a clean no-op for the second caller; exactly one login proceeds.
-      // Cleared in `finally` so the NEXT login (after this one settles) starts fresh.
-      inFlightLogin ??= doLogin(id).finally(() => {
-        inFlightLogin = null;
+      // WebID-SCOPED SINGLE-FLIGHT (round-4b). The provider tracks exactly one
+      // active probe, so overlapping logins must not both run one.
+      if (inFlight) {
+        // A login is already in flight. If it is for the SAME WebID (a double-click
+        // / re-render), share its promise — exactly one login proceeds. If it is for
+        // a DIFFERENT WebID, REJECT cleanly: do NOT start a second probe, do NOT
+        // silently resolve as the in-flight identity (the false-positive this fixes),
+        // and do NOT disturb the in-flight attempt's React/provider state.
+        if (webIdsEqual(inFlight.id, id)) return inFlight.promise;
+        return Promise.reject(
+          new Error(
+            "A login for a different WebID is already in progress — wait for it to " +
+              "finish or log out first.",
+          ),
+        );
+      }
+      // No login in flight: run the real flow and record WHICH WebID it is for.
+      // Cleared in `finally` only if `inFlight` still points at THIS run (a later
+      // login that replaced it must not be cleared by ours).
+      const run = { id, promise: Promise.resolve() };
+      run.promise = doLogin(id).finally(() => {
+        if (inFlight === run) inFlight = null;
       });
-      return inFlightLogin;
+      inFlight = run;
+      return run.promise;
     },
     [doLogin],
   );

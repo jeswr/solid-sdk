@@ -143,6 +143,36 @@ const isLoopback = (host: string): boolean =>
   host === "localhost" || host === "127.0.0.1" || host === "[::1]";
 
 /**
+ * Stamp a URL with a unique, unguessable login-probe FRAGMENT
+ * (`#probe-<uuid>`) — an UNFORGEABLE, off-the-wire marker that identifies the
+ * single login probe to {@link WebIdDPoPTokenProvider.beginLoginProbe} /
+ * {@link WebIdDPoPTokenProvider#matchActiveLoginProbe}.
+ *
+ * WHY A FRAGMENT (the round-4b roborev fix). The round-4 URL fallback matched a
+ * probe by `probe.url === request.url`, which is FORGEABLE: any unrelated fetch
+ * to the same base URL during the login window (e.g. a data-layer read of the
+ * storage root) would consume the single-use fallback and spuriously satisfy
+ * `wasLoginProbeUpgraded`. A fragment closes that hole because it is:
+ *  - **unguessable** — a `crypto.randomUUID()`, so a non-probe request to the
+ *    same resource has a DIFFERENT (or absent) fragment and cannot collide;
+ *  - **survives the manager re-wrap** — `new Request(input)` preserves the URL
+ *    fragment (verified), so the fallback still matches across the
+ *    `ReactiveFetchManager` re-wrap that drops object identity;
+ *  - **never sent on the wire** — fragments are client-side only (RFC 3986
+ *    §3.5): no header, no query, no CORS preflight, and the OP fetches the exact
+ *    same resource. So this is purely an in-process marker that rides safely on
+ *    the URL the manager already preserves.
+ *
+ * Exported so the (browser-only) login flow and the unit tests build probes the
+ * same way.
+ */
+export function withProbeFragment(url: string): string {
+  const u = new URL(url);
+  u.hash = `probe-${crypto.randomUUID()}`;
+  return u.toString();
+}
+
+/**
  * The single per-login probe record this provider tracks at a time, captured by
  * {@link WebIdDPoPTokenProvider.beginLoginProbe} just before the login flow fetches
  * its probe. It carries:
@@ -150,9 +180,12 @@ const isLoopback = (host: string): boolean =>
  *    {@link WebIdDPoPTokenProvider.reset} that supersedes the login invalidates the
  *    record by advancing the generation (the flow snapshots the same generation and
  *    asks {@link WebIdDPoPTokenProvider.wasLoginProbeUpgraded} for it).
- *  - `url` — the probe's URL, the ONLY property that survives the manager's
- *    `new Request(input)` re-wrap; used as a SINGLE-USE fallback channel, consumed
- *    on first match so a later same-URL upgrade cannot reuse it.
+ *  - `url` — the probe's FULL URL INCLUDING its unguessable `#probe-<uuid>`
+ *    fragment ({@link withProbeFragment}), the only property that survives the
+ *    manager's `new Request(input)` re-wrap. Because the fragment is unguessable
+ *    and never sent on the wire, an unrelated same-resource request CANNOT forge
+ *    a match. Used as a SINGLE-USE fallback channel, consumed on first match
+ *    (defence-in-depth) so even a same-fragment upgrade fires at most once.
  *  - `object` — a {@link WeakRef} to the EXACT Request object, the precise primary
  *    channel that matches when no re-wrap happens (unit tests / non-wrapping
  *    managers). Weak so it never pins the Request in memory.
@@ -347,11 +380,12 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
 
   /**
    * Register the active login probe just before the login flow fetches it. Captures
-   * the CURRENT generation, the request URL (the single-use re-wrap fallback), and a
-   * {@link WeakRef} to the EXACT Request object (the precise primary channel). There
-   * is at most one active probe at a time — the SolidAuthProvider single-flights
-   * login, so there is never a competing registration. Cleared by
-   * {@link endLoginProbe} / {@link reset}.
+   * the CURRENT generation, the FULL request URL — which MUST include the
+   * unguessable `#probe-<uuid>` fragment ({@link withProbeFragment}) so the URL
+   * fallback is unforgeable — and a {@link WeakRef} to the EXACT Request object
+   * (the precise primary channel). There is at most one active probe at a time —
+   * the SolidAuthProvider single-flights login, so there is never a competing
+   * registration. Cleared by {@link endLoginProbe} / {@link reset}.
    */
   beginLoginProbe(request: Request): void {
     this.#loginProbe = {
@@ -493,10 +527,14 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
    * IN the active probe's own generation only. Object identity is the PRIMARY,
    * collision-proof channel — it matches when the manager passes the SAME object
    * (unit tests / non-rewrapping managers). When the manager re-wraps via
-   * `new Request(input)` the object identity is lost, so we fall back to the probe
-   * URL — the only property that survives — as a SINGLE-USE channel: consumed on the
-   * first match so a later same-URL upgrade in the login window cannot reuse it.
-   * Returns false outside the probe's generation (a stale probe after reset).
+   * `new Request(input)` the object identity is lost, so we fall back to the FULL
+   * probe URL — which carries the unguessable `#probe-<uuid>` fragment
+   * ({@link withProbeFragment}) and survives the re-wrap. The fragment is what
+   * makes this fallback UNFORGEABLE (round-4b roborev fix): an unrelated fetch to
+   * the same base URL has a different/absent fragment, so its `request.url` does
+   * not equal `probe.url` and it cannot consume the channel. The single-use
+   * `urlConsumed` latch + generation scope are kept as defence-in-depth. Returns
+   * false outside the probe's generation (a stale probe after reset).
    */
   #matchActiveLoginProbe(request: Request): boolean {
     const probe = this.#loginProbe;
@@ -505,8 +543,11 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
     // advances the generation, beginLoginProbe must run again for a new login.
     if (probe.generation !== this.#generation) return false;
     if (probe.object.deref() === request) return true;
+    // The full URL includes the unguessable #probe-<uuid> fragment, so this
+    // comparison is unforgeable: only the real probe (or its faithful re-wrap)
+    // carries that exact fragment. Single-use latch is defence-in-depth.
     if (!probe.urlConsumed && probe.url === request.url) {
-      probe.urlConsumed = true; // single-use: this login window's first same-URL upgrade only.
+      probe.urlConsumed = true; // single-use: this login window's first match only.
       return true;
     }
     return false;
