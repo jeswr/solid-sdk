@@ -1,0 +1,39 @@
+{
+  "@context": {
+    "@version": 1.1,
+    "@protected": true,
+
+    "fedreg": "https://w3id.org/jeswr/fedreg#",
+    "fedapp": "https://w3id.org/jeswr/fed#",
+    "dcat": "http://www.w3.org/ns/dcat#",
+    "dct": "http://purl.org/dc/terms/",
+    "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+    "xsd": "http://www.w3.org/2001/XMLSchema#",
+
+    "id": "@id",
+    "type": "@type",
+
+    "Registry": "fedreg:Registry",
+    "Membership": "fedreg:Membership",
+    "MembershipStatus": "fedreg:MembershipStatus",
+    "StorageDescription": "fedreg:StorageDescription",
+
+    "Proposed": "fedreg:Proposed",
+    "Active": "fedreg:Active",
+    "Suspended": "fedreg:Suspended",
+    "Revoked": "fedreg:Revoked",
+
+    "label": { "@id": "rdfs:label", "@language": "en" },
+    "comment": { "@id": "rdfs:comment", "@language": "en" },
+
+    "member": { "@id": "fedreg:member", "@type": "@id", "@container": "@set" },
+    "app": { "@id": "fedreg:app", "@type": "@id" },
+    "status": { "@id": "fedreg:status", "@type": "@id" },
+    "assertedBy": { "@id": "fedreg:assertedBy", "@type": "@id" },
+    "asserted": { "@id": "fedreg:asserted", "@type": "xsd:dateTime" },
+
+    "acceptsSpec": { "@id": "fedreg:acceptsSpec", "@type": "@id", "@container": "@set" },
+    "supportsSector": { "@id": "fedreg:supportsSector", "@type": "@id", "@container": "@set" },
+    "storage": { "@id": "fedreg:storage", "@type": "@id" }
+  }
+}

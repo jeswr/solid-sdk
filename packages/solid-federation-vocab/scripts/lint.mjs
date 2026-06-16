@@ -20,8 +20,10 @@ const ok = (m) => console.log(`  ✓ ${m}`);
 
 const REQUIRED = [
   "fedapp.ttl",
+  "fedreg.ttl",
   "task.ttl",
   "context.jsonld",
+  "fedreg-context.jsonld",
   "task-context.jsonld",
   "suite.json",
   ".npmrc",

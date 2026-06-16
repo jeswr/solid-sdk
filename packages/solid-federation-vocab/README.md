@@ -9,6 +9,7 @@ suite, served under the persistent namespace **`https://w3id.org/jeswr/`**
 | Namespace | Prefix | What it is |
 |---|---|---|
 | `https://w3id.org/jeswr/fed#` | `fedapp:` | **App-registration** metadata an app publishes in its Client Identifier Document (OpenID-Federation-style): the sectors it operates in, the WAC/ACP access modes it requests, and the shared shapes it consumes / produces. |
+| `https://w3id.org/jeswr/fedreg#` | `fedreg:` | **Federation Catalogue / Registry** — the discovery axis. A `fedreg:Registry` (a `dcat:Catalog`) listing member apps with a **registry-asserted** `fedreg:Membership` (lifecycle status + `assertedBy` authority — distinct from the app's self-asserted `fedapp:App`), and a `fedreg:StorageDescription` advertising **which client-client spec-versions a resource server accepts** (`acceptsSpec`) and which sectors it supports — the substrate for asynchronous schema migration. Consumed by [`@jeswr/federation-registry`](https://github.com/jeswr/federation-registry). |
 | `https://w3id.org/jeswr/task#` | `tm:` | The **shared cross-app task / issue model** — the canonical, dereferenceable re-use of the W3C workflow ontology (`wf:`), Dublin Core Terms (`dct:`) and ActivityStreams 2.0 (`as:`) every suite app reads/writes for tasks and issues. |
 | `https://w3id.org/jeswr/core#` | `core:` | The **gUFO-based Solid Core** — the foundational ontology every sector imports and constrains-but-never-forks. Every cross-sector root (Agent, Account, Identifier, Record, Relationship, Quantity, …) carries a gUFO meta-type (Kind / Relator / Role(Mixin) / Phase / EventType / …). |
 | `https://w3id.org/jeswr/sectors/<sector>#` | per-sector | The **sector ontologies** (`identity`, `finance`, `health`, `media`, `scheduling`, `contacts`) — the domain models a `fedapp:sector` references. Each imports `core:` and reuses real vocabularies (see below). |
@@ -44,6 +45,41 @@ The OpenID-Federation-style metadata block an app embeds in its
 membership claim from it — membership is established by the registry after a
 signed challenge. The vocabulary only describes the app's intended footprint so
 a user / registry can reason about it before granting consent.
+
+## The `fedreg:` vocabulary (Catalogue / Registry)
+
+The **discovery axis** of a Solid data federation — one of the five federation
+services (R9 §2.2 / research brief 09 in `full-solid-ecosystem`). It answers two
+questions the self-asserted `fedapp:` layer cannot:
+
+1. **Who is actually a member?** A **`fedreg:Registry`** (a `dcat:Catalog`) lists
+   apps via **`fedreg:Membership`** records (`dcat:CatalogRecord`s). A Membership
+   is the **registry's own** assertion — `fedreg:app` (the client_id),
+   `fedreg:status` (one of the coded values **`fedreg:Proposed` / `Active` /
+   `Suspended` / `Revoked`**), `fedreg:assertedBy` (the WebID / key of the
+   authority vouching for it) and `fedreg:asserted` (timestamp). This is the
+   load-bearing distinction the `fedapp:` vocab itself flags: *membership is the
+   registry's job after a signed challenge — a registry MUST NOT trust a
+   self-asserted membership claim*. `Suspended` / `Revoked` are the federation's
+   **recovery** lever.
+2. **Which storage accepts which spec-version?** A **`fedreg:StorageDescription`**
+   advertises **`fedreg:acceptsSpec`** (the persistent, immutable client-client
+   spec-version IRIs a resource server currently accepts) and
+   **`fedreg:supportsSector`** (the sectors it holds). This realises the
+   **decoupling** principle (each storage decides which specs it supports) and is
+   the substrate for **asynchronous schema migration**: during a dual-read window
+   a storage advertises both the old and new version, so apps, pods and RS upgrade
+   on their own clock — an app discovers acceptable versions here, never by
+   assumption.
+
+`fedreg:` reuses **DCAT** (`dcat:Catalog` / `dcat:CatalogRecord`, `fedreg:member
+⊑ dcat:record`) and Dublin Core Terms for the catalogue spine rather than minting
+parallel terms (the LD/SW "reuse, don't reinvent" rule). The typed TS client is
+[`@jeswr/federation-registry`](https://github.com/jeswr/federation-registry):
+`buildRegistry` / `parseRegistry` / `verifyMembership` and `describeStorage` /
+`parseStorage` / `acceptsSpec`.
+
+JSON-LD `@context`: [`fedreg-context.jsonld`](./fedreg-context.jsonld).
 
 ## The shared task / issue model (`tm:`)
 
@@ -174,9 +210,9 @@ The w3id redirect serves the right representation by `Accept`:
 
 | `Accept` | Served |
 |---|---|
-| `text/turtle` | the `.ttl` (`fed.ttl` / `task.ttl` / `core.ttl` / `sectors/<x>.ttl`) |
-| `application/ld+json` | the `.jsonld` context (`context.jsonld` / `<slug>-context.jsonld`) |
-| `text/html` (browsers) | the human-readable HTML page (`fed.html` / `task.html` / `core.html` / `sectors/<x>.html`) |
+| `text/turtle` | the `.ttl` (`fed.ttl` / `fedreg.ttl` / `task.ttl` / `core.ttl` / `sectors/<x>.ttl`) |
+| `application/ld+json` | the `.jsonld` context (`context.jsonld` / `fedreg-context.jsonld` / `<slug>-context.jsonld`) |
+| `text/html` (browsers) | the human-readable HTML page (`fed.html` / `fedreg.html` / `task.html` / `core.html` / `sectors/<x>.html`) |
 
 ## GitHub Pages
 
@@ -206,6 +242,15 @@ RewriteCond %{HTTP_ACCEPT} application/ld\+json [OR]
 RewriteCond %{HTTP_ACCEPT} application/json
 RewriteRule ^fed$ https://jeswr.github.io/solid-federation-vocab/context.jsonld [R=302,L]
 RewriteRule ^fed$ https://jeswr.github.io/solid-federation-vocab/fed.html [R=302,L]
+
+# --- fedreg (fedreg: — Catalogue / Registry) ---
+RewriteCond %{HTTP_ACCEPT} text/turtle [OR]
+RewriteCond %{HTTP_ACCEPT} application/x-turtle
+RewriteRule ^fedreg$ https://jeswr.github.io/solid-federation-vocab/fedreg.ttl [R=302,L]
+RewriteCond %{HTTP_ACCEPT} application/ld\+json [OR]
+RewriteCond %{HTTP_ACCEPT} application/json
+RewriteRule ^fedreg$ https://jeswr.github.io/solid-federation-vocab/fedreg-context.jsonld [R=302,L]
+RewriteRule ^fedreg$ https://jeswr.github.io/solid-federation-vocab/fedreg.html [R=302,L]
 
 # --- task (shared task/issue model) ---
 RewriteCond %{HTTP_ACCEPT} text/turtle [OR]

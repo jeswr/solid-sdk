@@ -55,7 +55,7 @@ console.log(`dist/vocab.nt — ${allQuads.length} triples (n3.Writer)`);
 // namespace-slug name (fed.ttl / task.ttl) so the served path matches the IRI
 // the w3id redirect resolves (…/fed → fed.ttl). The descriptive source name
 // (fedapp.ttl) is kept too for humans browsing the repo.
-const TTL_SLUG = { "fedapp.ttl": "fed.ttl", "task.ttl": "task.ttl" };
+const TTL_SLUG = { "fedapp.ttl": "fed.ttl", "fedreg.ttl": "fedreg.ttl", "task.ttl": "task.ttl" };
 for (const file of ttlFiles) {
   copyFileSync(join(ROOT, file), join(DOCS, file));
   const slug = TTL_SLUG[file];
@@ -131,6 +131,7 @@ ${rows}
 
 for (const [file, slug, ctx] of [
   ["fedapp.ttl", "fed", "context.jsonld"],
+  ["fedreg.ttl", "fedreg", "fedreg-context.jsonld"],
   ["task.ttl", "task", "task-context.jsonld"],
 ]) {
   const html = htmlFor(file, slug, ctx, readFileSync(join(ROOT, file), "utf8"));

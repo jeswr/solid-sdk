@@ -1,0 +1,99 @@
+<!doctype html>
+<!-- AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>w3id.org/jeswr/fedreg — Solid Federation Vocabulary</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body { font-family: system-ui, sans-serif; line-height: 1.6; max-width: 60rem; margin: 2rem auto; padding: 0 1rem; }
+      code { background: rgba(127,127,127,0.15); padding: 0.1em 0.35em; border-radius: 4px; }
+      .warn { border-left: 4px solid #d97706; padding: 0.5rem 1rem; background: rgba(217,119,6,0.08); border-radius: 4px; }
+      table { border-collapse: collapse; width: 100%; }
+      th, td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid rgba(127,127,127,0.3); vertical-align: top; }
+      a { color: #2563eb; }
+    </style>
+  </head>
+  <body>
+    <h1><code>https://w3id.org/jeswr/fedreg#</code></h1>
+    <p class="warn">⚠️ <strong>Experimental</strong> — AI-agent-generated (Claude Opus 4.8, @jeswr PSS agent); under active development, not production-hardened.</p>
+    <p>Other representations: <a href="fedreg.ttl">Turtle</a> · <a href="fedreg-context.jsonld">JSON-LD context</a> · <a href="./">index</a></p>
+    <h2>Terms</h2>
+    <table>
+      <tr><th>Term</th><th>Label</th><th>Comment</th></tr>
+      <tr><td><code>acceptsSpec</code></td><td>accepts spec</td><td>A client-client spec-VERSION IRI that this
+        fedreg:StorageDescription's storage currently accepts writes against — a
+        persistent, immutable version IRI from the Vocabulary/Spec Hub (e.g. a
+        canonical model version). During a dual-read migration window a storage
+        advertises BOTH the old and new version, so independent participants
+        migrate asynchronously. An app MUST discover acceptable versions here, not
+        assume them.</td></tr>
+      <tr><td><code>Active</code></td><td>Active</td><td>A current, ratified membership — the app is a recognised
+        member of the federation and its self-asserted fedapp: footprint has been
+        accepted.</td></tr>
+      <tr><td><code>app</code></td><td>app</td><td>Links a fedreg:Membership to the app it concerns — the app's
+        client_id IRI (the subject of the corresponding fedapp:App
+        self-description).</td></tr>
+      <tr><td><code>asserted</code></td><td>asserted</td><td>The timestamp (xsd:dateTime) at which the registry made this
+        membership assertion — used to reason about staleness / ordering of
+        status changes.</td></tr>
+      <tr><td><code>assertedBy</code></td><td>asserted by</td><td>The authority that asserts a fedreg:Membership — a WebID (or
+        key IRI) of the Scheme Authority / registry operator vouching for the
+        membership. This is what makes the membership a REGISTRY claim rather than
+        a self-asserted one: a verifier checks fedreg:assertedBy against the set of
+        authorities it trusts. (The cryptographic signature binding the assertion
+        to that authority is layered above this vocabulary.)</td></tr>
+      <tr><td><code>member</code></td><td>member</td><td>Links a fedreg:Registry to one of its fedreg:Membership
+        records. (A specialisation of dcat:record for the federation registry; a
+        consumer may also reach the records via dcat:record.)</td></tr>
+      <tr><td><code>Membership</code></td><td>Federation Membership</td><td>A registry's signed assertion that a particular app (its
+        client_id, linked via fedreg:app) is a member of the federation, carrying
+        a lifecycle fedreg:status, the fedreg:assertedBy authority (a WebID / key
+        that vouches for it) and fedreg:asserted timestamp. This is the
+        REGISTRY-ASSERTED counterpart to the app's self-asserted fedapp:App: a
+        verifier treats a Membership as a membership claim only when it is asserted
+        by a recognised authority — never the app's own fedapp: document.</td></tr>
+      <tr><td><code>MembershipStatus</code></td><td>Membership Status</td><td>The lifecycle state of a fedreg:Membership. The four coded
+        values fedreg:Proposed, fedreg:Active, fedreg:Suspended, fedreg:Revoked
+        are instances of this class. Suspended/Revoked are the federation's
+        recovery lever (brief 07 'recovery'): a misbehaving app is suspended or
+        revoked at the registry without touching the app's own self-asserted
+        document.</td></tr>
+      <tr><td><code>Proposed</code></td><td>Proposed</td><td>A membership proposed but not yet ratified by the federation's
+        Scheme Authority — the app appears in the registry pending review.</td></tr>
+      <tr><td><code>Registry</code></td><td>Federation Registry</td><td>A federation registry: the catalogue of apps that a Scheme
+        Authority has admitted to a data federation. A dcat:Catalog whose records
+        are fedreg:Membership assertions (linked via fedreg:member). The subject
+        is the registry's own IRI. Unlike a bag of self-asserted fedapp:App
+        documents, a Registry's entries carry the registry's OWN membership
+        assertion — so a consumer can trust the listing as a membership claim, not
+        merely an app's self-description.</td></tr>
+      <tr><td><code>Revoked</code></td><td>Revoked</td><td>A membership permanently withdrawn — the app is no longer a
+        member. A consumer MUST treat a revoked member as untrusted regardless of
+        the app's own self-asserted fedapp: claims.</td></tr>
+      <tr><td><code>status</code></td><td>status</td><td>The lifecycle status of a fedreg:Membership — one of the
+        fedreg:MembershipStatus coded values (Proposed / Active / Suspended /
+        Revoked).</td></tr>
+      <tr><td><code>storage</code></td><td>storage</td><td>Links a fedreg:StorageDescription to the storage (resource
+        server / pod root) it describes — typically the same IRI as the
+        description's subject, but explicit when a registry collates many storage
+        descriptions in one document.</td></tr>
+      <tr><td><code>StorageDescription</code></td><td>Storage Description</td><td>A resource server's (storage's) federation catalogue entry:
+        which client-client spec-VERSIONS it currently accepts
+        (fedreg:acceptsSpec) and which data sectors it supports
+        (fedreg:supportsSector). Realises the federation's 'decoupling' principle —
+        each storage independently decides which specs it supports — and is the
+        substrate for asynchronous schema migration: during a dual-read window the
+        storage advertises both versions, so participants upgrade on their own
+        clock. The subject is typically the storage root IRI.</td></tr>
+      <tr><td><code>supportsSector</code></td><td>supports sector</td><td>A data sector IRI (a https://w3id.org/jeswr/sectors/&lt;sector&gt;
+        marker) that this fedreg:StorageDescription's storage supports. Lets an app
+        discover which storages can hold its sector's data before attempting a
+        write.</td></tr>
+      <tr><td><code>Suspended</code></td><td>Suspended</td><td>A membership temporarily withdrawn (e.g. pending investigation
+        of a data-integrity issue). Reversible — distinct from fedreg:Revoked. The
+        recovery lever for a misbehaving member.</td></tr>
+    </table>
+  </body>
+</html>

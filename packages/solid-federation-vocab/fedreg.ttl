@@ -1,0 +1,256 @@
+# AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+#
+# Federation Catalogue / Registry Vocabulary (fedreg:)
+# Namespace: https://w3id.org/jeswr/fedreg#   (ADR-0013, prod-solid-server)
+#
+# The "Catalogue / Registry" federation service — one of the five services a
+# Solid federation node provides (R9 §2.2 / research brief 09 §2 + §6 rec #6 in
+# jeswr/full-solid-ecosystem). It is the DISCOVERY axis, distinct from:
+#   - fedapp: (https://w3id.org/jeswr/fed#) — an app's SELF-ASSERTED registration
+#     in its Client Identifier Document; and
+#   - the Vocabulary/Spec Hub — the canonical, versioned client-client specs.
+#
+# Two artifacts live here, answering two discovery questions the spec leaves the
+# fedapp: layer unable to answer:
+#
+#   1. fedreg:Registry + fedreg:Membership — a federation registry document that
+#      lists member apps with a REGISTRY-ASSERTED membership status. This is the
+#      load-bearing distinction the fedapp: vocab itself flags: "membership is the
+#      registry's job after a signed challenge — a registry MUST NOT trust a
+#      self-asserted membership claim." A fedreg:Membership is the registry's OWN
+#      signed assertion (fedreg:assertedBy a WebID/key), carrying a lifecycle
+#      status (proposed → active → suspended → revoked), so a verifier can tell a
+#      genuine membership from an app's self-description.
+#
+#   2. fedreg:StorageDescription — a resource server's catalogue entry advertising
+#      WHICH client-client spec-VERSIONS it accepts (fedreg:acceptsSpec) and which
+#      data sectors it supports (fedreg:supportsSector). This realises the
+#      "decoupling" design principle (each store independently decides which specs
+#      it supports — brief 07) and is the substrate for ASYNCHRONOUS schema
+#      migration (brief 09 §5 / rec #6): during a dual-read window an RS advertises
+#      both the old and new spec-version, so pods, RS and apps upgrade on their own
+#      clock. An app discovers acceptable versions from the catalogue, never by
+#      assumption.
+#
+# fedreg: deliberately reuses DCAT (dcat:Catalog / dcat:CatalogRecord) and Dublin
+# Core Terms for the catalogue spine, and ActivityStreams-style lifecycle nouns,
+# rather than minting parallel terms — the LD/SW best-practice "reuse, don't
+# reinvent" rule. The fedreg: terms are the federation-specific glue: the
+# registry-asserted membership and the spec-version-acceptance advertisement.
+#
+# Authored as Turtle directly (source form); machine-built RDF in this repo and in
+# @jeswr/federation-registry goes through n3.Writer / @rdfjs/wrapper typed
+# accessors — never hand-built quads.
+
+@prefix fedreg:  <https://w3id.org/jeswr/fedreg#> .
+@prefix fedapp:  <https://w3id.org/jeswr/fed#> .
+@prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+@prefix dcat:    <http://www.w3.org/ns/dcat#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix vann:    <http://purl.org/vocab/vann/> .
+@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
+
+#################################################################
+#    Ontology
+#################################################################
+
+<https://w3id.org/jeswr/fedreg>
+    a owl:Ontology ;
+    dcterms:title "Federation Catalogue / Registry Vocabulary"@en ;
+    dcterms:description """The Catalogue / Registry federation service: a
+        registry document listing member apps with a registry-asserted membership
+        status, and a resource-server catalogue entry advertising which
+        client-client spec-versions and data sectors it accepts. The discovery
+        axis of a Solid data federation, distinct from an app's self-asserted
+        fedapp: registration."""@en ;
+    dcterms:creator "Claude Opus 4.8 (@jeswr PSS agent)" ;
+    dcterms:issued "2026-06-16"^^xsd:date ;
+    vann:preferredNamespaceUri "https://w3id.org/jeswr/fedreg#" ;
+    vann:preferredNamespacePrefix "fedreg" ;
+    rdfs:seeAlso <https://w3id.org/jeswr/fed> ;
+    rdfs:comment "Experimental — AI-agent-generated; under active development, not production-hardened."@en .
+
+#################################################################
+#    Classes
+#################################################################
+
+fedreg:Registry
+    a rdfs:Class, owl:Class ;
+    rdfs:subClassOf dcat:Catalog ;
+    rdfs:label "Federation Registry"@en ;
+    rdfs:comment """A federation registry: the catalogue of apps that a Scheme
+        Authority has admitted to a data federation. A dcat:Catalog whose records
+        are fedreg:Membership assertions (linked via fedreg:member). The subject
+        is the registry's own IRI. Unlike a bag of self-asserted fedapp:App
+        documents, a Registry's entries carry the registry's OWN membership
+        assertion — so a consumer can trust the listing as a membership claim, not
+        merely an app's self-description."""@en ;
+    rdfs:isDefinedBy <https://w3id.org/jeswr/fedreg> .
+
+fedreg:Membership
+    a rdfs:Class, owl:Class ;
+    rdfs:subClassOf dcat:CatalogRecord ;
+    rdfs:label "Federation Membership"@en ;
+    rdfs:comment """A registry's signed assertion that a particular app (its
+        client_id, linked via fedreg:app) is a member of the federation, carrying
+        a lifecycle fedreg:status, the fedreg:assertedBy authority (a WebID / key
+        that vouches for it) and fedreg:asserted timestamp. This is the
+        REGISTRY-ASSERTED counterpart to the app's self-asserted fedapp:App: a
+        verifier treats a Membership as a membership claim only when it is asserted
+        by a recognised authority — never the app's own fedapp: document."""@en ;
+    rdfs:isDefinedBy <https://w3id.org/jeswr/fedreg> .
+
+fedreg:MembershipStatus
+    a rdfs:Class, owl:Class ;
+    rdfs:label "Membership Status"@en ;
+    rdfs:comment """The lifecycle state of a fedreg:Membership. The four coded
+        values fedreg:Proposed, fedreg:Active, fedreg:Suspended, fedreg:Revoked
+        are instances of this class. Suspended/Revoked are the federation's
+        recovery lever (brief 07 'recovery'): a misbehaving app is suspended or
+        revoked at the registry without touching the app's own self-asserted
+        document."""@en ;
+    rdfs:isDefinedBy <https://w3id.org/jeswr/fedreg> .
+
+fedreg:StorageDescription
+    a rdfs:Class, owl:Class ;
+    rdfs:label "Storage Description"@en ;
+    rdfs:comment """A resource server's (storage's) federation catalogue entry:
+        which client-client spec-VERSIONS it currently accepts
+        (fedreg:acceptsSpec) and which data sectors it supports
+        (fedreg:supportsSector). Realises the federation's 'decoupling' principle —
+        each storage independently decides which specs it supports — and is the
+        substrate for asynchronous schema migration: during a dual-read window the
+        storage advertises both versions, so participants upgrade on their own
+        clock. The subject is typically the storage root IRI."""@en ;
+    rdfs:isDefinedBy <https://w3id.org/jeswr/fedreg> .
+
+#################################################################
+#    Membership-status coded values (instances of MembershipStatus)
+#################################################################
+
+fedreg:Proposed
+    a fedreg:MembershipStatus ;
+    rdfs:label "Proposed"@en ;
+    rdfs:comment """A membership proposed but not yet ratified by the federation's
+        Scheme Authority — the app appears in the registry pending review."""@en ;
+    rdfs:isDefinedBy <https://w3id.org/jeswr/fedreg> .
+
+fedreg:Active
+    a fedreg:MembershipStatus ;
+    rdfs:label "Active"@en ;
+    rdfs:comment """A current, ratified membership — the app is a recognised
+        member of the federation and its self-asserted fedapp: footprint has been
+        accepted."""@en ;
+    rdfs:isDefinedBy <https://w3id.org/jeswr/fedreg> .
+
+fedreg:Suspended
+    a fedreg:MembershipStatus ;
+    rdfs:label "Suspended"@en ;
+    rdfs:comment """A membership temporarily withdrawn (e.g. pending investigation
+        of a data-integrity issue). Reversible — distinct from fedreg:Revoked. The
+        recovery lever for a misbehaving member."""@en ;
+    rdfs:isDefinedBy <https://w3id.org/jeswr/fedreg> .
+
+fedreg:Revoked
+    a fedreg:MembershipStatus ;
+    rdfs:label "Revoked"@en ;
+    rdfs:comment """A membership permanently withdrawn — the app is no longer a
+        member. A consumer MUST treat a revoked member as untrusted regardless of
+        the app's own self-asserted fedapp: claims."""@en ;
+    rdfs:isDefinedBy <https://w3id.org/jeswr/fedreg> .
+
+#################################################################
+#    Properties — Registry / Membership
+#################################################################
+
+fedreg:member
+    a rdf:Property, owl:ObjectProperty ;
+    rdfs:label "member"@en ;
+    rdfs:comment """Links a fedreg:Registry to one of its fedreg:Membership
+        records. (A specialisation of dcat:record for the federation registry; a
+        consumer may also reach the records via dcat:record.)"""@en ;
+    rdfs:domain fedreg:Registry ;
+    rdfs:range fedreg:Membership ;
+    rdfs:subPropertyOf <http://www.w3.org/ns/dcat#record> ;
+    rdfs:isDefinedBy <https://w3id.org/jeswr/fedreg> .
+
+fedreg:app
+    a rdf:Property, owl:ObjectProperty ;
+    rdfs:label "app"@en ;
+    rdfs:comment """Links a fedreg:Membership to the app it concerns — the app's
+        client_id IRI (the subject of the corresponding fedapp:App
+        self-description)."""@en ;
+    rdfs:domain fedreg:Membership ;
+    rdfs:range fedapp:App ;
+    rdfs:isDefinedBy <https://w3id.org/jeswr/fedreg> .
+
+fedreg:status
+    a rdf:Property, owl:ObjectProperty ;
+    rdfs:label "status"@en ;
+    rdfs:comment """The lifecycle status of a fedreg:Membership — one of the
+        fedreg:MembershipStatus coded values (Proposed / Active / Suspended /
+        Revoked)."""@en ;
+    rdfs:domain fedreg:Membership ;
+    rdfs:range fedreg:MembershipStatus ;
+    rdfs:isDefinedBy <https://w3id.org/jeswr/fedreg> .
+
+fedreg:assertedBy
+    a rdf:Property, owl:ObjectProperty ;
+    rdfs:label "asserted by"@en ;
+    rdfs:comment """The authority that asserts a fedreg:Membership — a WebID (or
+        key IRI) of the Scheme Authority / registry operator vouching for the
+        membership. This is what makes the membership a REGISTRY claim rather than
+        a self-asserted one: a verifier checks fedreg:assertedBy against the set of
+        authorities it trusts. (The cryptographic signature binding the assertion
+        to that authority is layered above this vocabulary.)"""@en ;
+    rdfs:domain fedreg:Membership ;
+    rdfs:isDefinedBy <https://w3id.org/jeswr/fedreg> .
+
+fedreg:asserted
+    a rdf:Property, owl:DatatypeProperty ;
+    rdfs:label "asserted"@en ;
+    rdfs:comment """The timestamp (xsd:dateTime) at which the registry made this
+        membership assertion — used to reason about staleness / ordering of
+        status changes."""@en ;
+    rdfs:domain fedreg:Membership ;
+    rdfs:range xsd:dateTime ;
+    rdfs:isDefinedBy <https://w3id.org/jeswr/fedreg> .
+
+#################################################################
+#    Properties — StorageDescription (spec-version acceptance + sectors)
+#################################################################
+
+fedreg:acceptsSpec
+    a rdf:Property, owl:ObjectProperty ;
+    rdfs:label "accepts spec"@en ;
+    rdfs:comment """A client-client spec-VERSION IRI that this
+        fedreg:StorageDescription's storage currently accepts writes against — a
+        persistent, immutable version IRI from the Vocabulary/Spec Hub (e.g. a
+        canonical model version). During a dual-read migration window a storage
+        advertises BOTH the old and new version, so independent participants
+        migrate asynchronously. An app MUST discover acceptable versions here, not
+        assume them."""@en ;
+    rdfs:domain fedreg:StorageDescription ;
+    rdfs:isDefinedBy <https://w3id.org/jeswr/fedreg> .
+
+fedreg:supportsSector
+    a rdf:Property, owl:ObjectProperty ;
+    rdfs:label "supports sector"@en ;
+    rdfs:comment """A data sector IRI (a https://w3id.org/jeswr/sectors/<sector>
+        marker) that this fedreg:StorageDescription's storage supports. Lets an app
+        discover which storages can hold its sector's data before attempting a
+        write."""@en ;
+    rdfs:domain fedreg:StorageDescription ;
+    rdfs:isDefinedBy <https://w3id.org/jeswr/fedreg> .
+
+fedreg:storage
+    a rdf:Property, owl:ObjectProperty ;
+    rdfs:label "storage"@en ;
+    rdfs:comment """Links a fedreg:StorageDescription to the storage (resource
+        server / pod root) it describes — typically the same IRI as the
+        description's subject, but explicit when a registry collates many storage
+        descriptions in one document."""@en ;
+    rdfs:domain fedreg:StorageDescription ;
+    rdfs:isDefinedBy <https://w3id.org/jeswr/fedreg> .
