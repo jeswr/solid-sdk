@@ -531,6 +531,55 @@ export function reconcileRememberedPointer(inputs: {
 }
 
 /**
+ * APPLY a decided {@link RememberedPointerAction} — the post-login pointer/credential
+ * reconciliation, extracted as a pure async step so the security-critical invariants are
+ * unit-testable WITHOUT a React render / auth runtime (the `runLogoutTeardown` pattern).
+ *
+ * The credential-free localStorage pointer write/clear are BEST-EFFORT + GUARDED
+ * (roborev Medium): a storage throw must NEVER reject an otherwise-successful login/restore
+ * (this runs AFTER `setWebId`/`setSession`), and on the `"clear"` path the security-critical
+ * durable `forgetDurable` (`forgetPersisted`) MUST still run even if clearing the pointer
+ * throws — so the pointer clear is wrapped + swallowed BEFORE the awaited durable forget.
+ * HEALTH-SENSITIVE: a stale durable credential left behind would silently restore the wrong
+ * / a dead account next load, so the forget is non-negotiable on the clear path.
+ */
+export async function applyRememberedPointerAction(steps: {
+  action: RememberedPointerAction;
+  /** The just-authenticated identity for the pointer write; `undefined` skips the write. */
+  issuer: string | undefined;
+  requestedWebId: string;
+  /** Best-effort, may throw (localStorage). Its failure must not propagate. */
+  writePointer: (webId: string, issuer: string) => void;
+  /** Best-effort, may throw (localStorage). Its failure must not skip forgetDurable. */
+  clearPointer: () => void;
+  /** Security-critical durable credential delete on the clear path; awaited regardless. */
+  forgetDurable: (issuer: string) => Promise<void>;
+}): Promise<void> {
+  if (steps.action === "write" && steps.issuer) {
+    // This login's restorable credential FOR THIS WebID is on disk — write the
+    // credential-free pointer. The write REPLACES any prior pointer. Best-effort.
+    try {
+      steps.writePointer(steps.requestedWebId, steps.issuer);
+    } catch {
+      // pointer write failed (storage unavailable) — non-fatal; the durable credential is
+      // already persisted, so the next load can still restore (it just re-reads the pointer).
+    }
+  } else if (steps.action === "clear") {
+    // Current login but NOT restorable as `requestedWebId` (no credential, or a DIFFERENT
+    // account's on this shared issuer). Drop the pointer AND forget the stale issuer
+    // credential so the next load cannot silently restore the WRONG / a dead account.
+    // GUARD the pointer clear so a localStorage throw can never skip the durable forget below.
+    try {
+      steps.clearPointer();
+    } catch {
+      // pointer clear failed (storage unavailable) — non-fatal; the durable forget is what
+      // actually prevents restoring the wrong/dead account, and it still runs next.
+    }
+    if (steps.issuer) await steps.forgetDurable(steps.issuer);
+  }
+}
+
+/**
  * Parse the WebID out of a `#autologin/<encodeURIComponent(webid)>` fragment.
  * Returns the decoded WebID, or null if the hash is not an autologin deep-link or
  * decoding fails. Pure + exported for unit testing.
@@ -773,33 +822,19 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     });
     // "noop" (a racing logout/new-login owns the state) leaves everything as-is. A transient
     // store-read failure now yields "write" (overwrite with THIS login's pointer), never a
-    // blind keep of a possibly-stale other-account pointer (roborev Medium). The pointer is
-    // credential-free localStorage; its read/write/clear are BEST-EFFORT + GUARDED (roborev
-    // Medium): a storage throw must NOT reject an otherwise-successful login/restore AFTER
-    // setWebId/setSession already ran, and on the `"clear"` path the security-critical
-    // durable `forgetPersisted` MUST still run even if clearing the pointer throws.
-    if (action === "write" && issuer) {
-      // This login's restorable credential FOR THIS WebID is on disk — write the
-      // credential-free pointer. `remembered.write` REPLACES any prior pointer.
-      try {
-        remembered.write(id, issuer);
-      } catch {
-        // pointer write failed (storage unavailable) — non-fatal; the durable credential is
-        // already persisted, so next load can still restore (it just re-reads the pointer).
-      }
-    } else if (action === "clear") {
-      // Current login but NOT restorable as `id` (no credential, or a DIFFERENT account's
-      // on this shared issuer). Drop the pointer AND forget the stale issuer credential so
-      // the next load cannot silently restore the WRONG / a dead account. Guard the pointer
-      // clear so a localStorage throw never skips the durable forget below.
-      try {
-        remembered.clear();
-      } catch {
-        // pointer clear failed (storage unavailable) — non-fatal; the durable forget is what
-        // actually prevents restoring the wrong/dead account, and it still runs next.
-      }
-      if (issuer && store) await forgetPersisted(store, new URL(issuer));
-    }
+    // blind keep of a possibly-stale other-account pointer (roborev Medium). The pointer
+    // write/clear are BEST-EFFORT + GUARDED and the durable forget on the clear path runs
+    // even if the pointer clear throws — all enforced by applyRememberedPointerAction below.
+    await applyRememberedPointerAction({
+      action,
+      issuer,
+      requestedWebId: id,
+      writePointer: (webId, iss) => remembered.write(webId, iss),
+      clearPointer: () => remembered.clear(),
+      forgetDurable: async (iss) => {
+        if (store) await forgetPersisted(store, new URL(iss));
+      },
+    });
   }, []);
 
   // The actual login body — run AT MOST ONCE concurrently via the module-level

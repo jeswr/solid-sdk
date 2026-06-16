@@ -22,6 +22,7 @@
 import { webIdsEqual as packageWebIdsEqual } from "@jeswr/solid-session-restore";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
+  applyRememberedPointerAction,
   explicitFlowInProgress,
   isStalePendingRedirect,
   reconcileRememberedPointer,
@@ -499,5 +500,123 @@ describe("roborev Mediums — reconcileRememberedPointer (WebID-aware, fenced)",
         webIdsEqual: packageWebIdsEqual,
       }),
     ).toBe("clear");
+  });
+});
+
+// ── roborev Medium (SessionProvider.tsx:760) — post-login pointer ops are GUARDED ──
+// applyRememberedPointerAction is the establish-path apply step. The credential-free
+// localStorage pointer write/clear are BEST-EFFORT: a storage throw (private mode / quota /
+// disabled) must NEVER reject an otherwise-successful login/restore (it runs AFTER
+// setWebId/setSession), and on the "clear" path the security-critical durable forget MUST
+// still run even when clearing the pointer throws — otherwise a stale durable credential is
+// left on disk and the next load silently restores the WRONG / a dead account. HEALTH-SENSITIVE.
+describe("roborev Medium — applyRememberedPointerAction: pointer ops best-effort, durable forget unconditional", () => {
+  const WEBID = "https://alice.example/profile/card#me";
+  const ISSUER = "https://issuer.example/";
+  const throwingStorage = () => {
+    throw new Error("localStorage unavailable (private mode / quota)");
+  };
+
+  it("WRITE — a throwing pointer write does NOT reject the (already-successful) login", async () => {
+    let forgot = false;
+    // The resolves-not-rejects assertion IS the regression: pre-guard, the bare
+    // remembered.write throw would propagate out of establishSessionFor and reject the login
+    // AFTER setWebId/setSession already published the session (authenticated UI behind a
+    // rejected login promise). The guard swallows it.
+    await expect(
+      applyRememberedPointerAction({
+        action: "write",
+        issuer: ISSUER,
+        requestedWebId: WEBID,
+        writePointer: throwingStorage,
+        clearPointer: () => {},
+        forgetDurable: async () => {
+          forgot = true;
+        },
+      }),
+    ).resolves.toBeUndefined();
+    expect(forgot).toBe(false); // write path never touches the durable credential.
+  });
+
+  it("CLEAR — a throwing pointer clear does NOT reject AND the durable forget STILL runs", async () => {
+    const events: string[] = [];
+    await expect(
+      applyRememberedPointerAction({
+        action: "clear",
+        issuer: ISSUER,
+        requestedWebId: WEBID,
+        writePointer: () => {},
+        clearPointer: () => {
+          events.push("clear-attempted");
+          throwingStorage(); // localStorage.removeItem throws here.
+        },
+        forgetDurable: async (iss) => {
+          events.push(`forget:${iss}`);
+        },
+      }),
+    ).resolves.toBeUndefined();
+    // The pointer clear was ATTEMPTED, its throw swallowed, and the durable forget ran anyway
+    // (with the right issuer) — the credential is gone despite the storage failure.
+    expect(events).toEqual(["clear-attempted", `forget:${ISSUER}`]);
+  });
+
+  it("CLEAR — the happy path still clears the pointer AND forgets the credential, in order", async () => {
+    const events: string[] = [];
+    await applyRememberedPointerAction({
+      action: "clear",
+      issuer: ISSUER,
+      requestedWebId: WEBID,
+      writePointer: () => {},
+      clearPointer: () => events.push("cleared"),
+      forgetDurable: async (iss) => {
+        events.push(`forget:${iss}`);
+      },
+    });
+    expect(events).toEqual(["cleared", `forget:${ISSUER}`]);
+  });
+
+  it("ADVERSARIAL CONTROL — an UNGUARDED pointer clear DOES skip the durable forget (the bug we fix)", async () => {
+    // Reproduce the PRE-FIX establish "clear" body INLINE (NO try/catch around the pointer
+    // clear): the throw propagates BEFORE the durable forget, so the credential survives —
+    // exactly the leak the guard above prevents. This proves the guarded test genuinely
+    // depends on the try/catch (it would FAIL against this unguarded order).
+    let forgot = false;
+    const buggyClear = async () => {
+      throwingStorage(); // UNGUARDED remembered.clear() throw…
+      // …so this never runs — the durable forget is SKIPPED, leaving the credential on disk.
+      forgot = true;
+    };
+    await expect(buggyClear()).rejects.toThrow("localStorage unavailable");
+    expect(forgot).toBe(false); // THE BUG: durable credential NOT forgotten → stale on disk.
+  });
+
+  it("NOOP — touches neither the pointer nor the durable credential (superseded login)", async () => {
+    const events: string[] = [];
+    await applyRememberedPointerAction({
+      action: "noop",
+      issuer: ISSUER,
+      requestedWebId: WEBID,
+      writePointer: () => events.push("write"),
+      clearPointer: () => events.push("clear"),
+      forgetDurable: async () => {
+        events.push("forget");
+      },
+    });
+    expect(events).toEqual([]); // a racing logout/new-login owns the state — leave it alone.
+  });
+
+  it("WRITE with no issuer is a no-op (nothing to point at)", async () => {
+    const events: string[] = [];
+    await applyRememberedPointerAction({
+      action: "write",
+      issuer: undefined,
+      requestedWebId: WEBID,
+      writePointer: () => events.push("write"),
+      clearPointer: () => events.push("clear"),
+      forgetDurable: async () => {
+        events.push("forget");
+      },
+    });
+    expect(events).toEqual([]);
   });
 });
