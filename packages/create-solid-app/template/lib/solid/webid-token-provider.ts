@@ -36,6 +36,19 @@ export interface TokenProvider {
   upgrade(request: Request): Promise<Request>;
 }
 
+/**
+ * The request header a login probe marks itself with so the provider can prove
+ * THIS specific probe request — not merely "some request" — was token-upgraded.
+ * The login flow stamps a unique id here on its probe; `upgrade()` records the
+ * stamped id when (and only when) it attaches a token to a request carrying it,
+ * and the login flow then asserts {@link WebIdDPoPTokenProvider.wasProbeUpgraded}
+ * for that exact id. A concurrent upgraded request for the SAME WebID (a
+ * different request, with no — or a different — probe id) therefore cannot make a
+ * non-upgraded probe look authenticated. The header is harmless if it reaches the
+ * server (an unknown header is ignored).
+ */
+export const PROBE_ID_HEADER = "x-reactive-auth-probe-id";
+
 /** Ask the user for their WebID. Resolves to the WebID string, or rejects/cancels. */
 export type GetWebIdCallback = () => Promise<string>;
 
@@ -99,6 +112,20 @@ export class AmbiguousIssuerError extends Error {
     this.name = "AmbiguousIssuerError";
     this.webId = webId;
     this.issuers = issuers;
+  }
+}
+
+/**
+ * An in-flight `upgrade()` resolved AFTER a {@link WebIdDPoPTokenProvider.reset}
+ * (logout / new login) advanced the provider's generation. The result belongs to
+ * a superseded identity, so the upgrade is rejected with this error and writes no
+ * provider state — preventing a prior identity's token/claim from contaminating
+ * the next attempt.
+ */
+export class ReactiveAuthResetError extends Error {
+  constructor() {
+    super("Authentication was reset (logout or a new login started) while this request was upgrading.");
+    this.name = "ReactiveAuthResetError";
   }
 }
 
@@ -180,12 +207,36 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
    */
   #authenticatedWebId: string | undefined;
   /**
+   * The set of login-probe ids (see {@link PROBE_ID_HEADER}) this provider has
+   * actually attached a token to via {@link upgrade}. The login flow stamps its
+   * probe with a unique id and, after the probe, asserts THAT id is in this set —
+   * proving the provider upgraded THIS probe request specifically, not merely that
+   * "some request" was upgraded (a concurrent same-WebID upgrade for a different
+   * request cannot satisfy it). Cleared by {@link reset}.
+   */
+  readonly #upgradedProbeIds = new Set<string>();
+  /**
+   * A per-attempt GENERATION (epoch) counter that fences in-flight auth work
+   * across a {@link reset}. {@link reset} increments it; an `upgrade()` /
+   * `#authenticate()` already running captures the generation at its start and,
+   * before mutating ANY provider state (`#sessions`, `#authenticatedWebId`,
+   * `#tokensAttached`, `#upgradedProbeIds`), checks the generation is still
+   * current. If a logout / new-login `reset()` advanced it mid-flight, the stale
+   * result is discarded and NO state is written — so a login or upgrade that began
+   * before the reset cannot contaminate the next identity's clean baseline.
+   */
+  #generation = 0;
+  /**
    * Shared auth work (issuer resolution, login) is provider-owned: it must NOT
    * be tied to any single request's AbortSignal, or aborting one request would
    * cancel the login other concurrent 401 upgrades are waiting on. The user
    * cancels via the dialog/popup themselves, which rejects the shared promise.
+   *
+   * It is replaced on every {@link reset} (and any controller it replaces is
+   * aborted) so in-flight auth work spawned by a prior identity is actively
+   * cancelled, not merely fenced out after the fact.
    */
-  readonly #authSignal = new AbortController().signal;
+  #authController = new AbortController();
 
   constructor(
     callbackUri: string,
@@ -262,10 +313,26 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
   }
 
   /**
+   * Whether THIS specific login probe (identified by the id it stamped on its
+   * request via {@link PROBE_ID_HEADER}) was actually token-upgraded by this
+   * provider. This is the PRIMARY, per-probe proof of login — strictly stronger
+   * than the provider-wide token-attach count, which a concurrent upgrade for the
+   * SAME requested WebID (a different request) could bump spuriously. Cleared by
+   * {@link reset}.
+   */
+  wasProbeUpgraded(probeId: string): boolean {
+    return this.#upgradedProbeIds.has(probeId);
+  }
+
+  /**
    * Drop EVERY piece of per-identity state so nothing from a prior login can be
    * reused by the next one: the memoised issuer resolution, every cached
    * per-issuer session (its DPoP key pair + access/refresh tokens), the
-   * authenticated-WebID claim, and the running token-attachment count.
+   * authenticated-WebID claim, the per-probe upgrade record, and the running
+   * token-attachment count. Also ADVANCES the generation and aborts any in-flight
+   * auth controller, so an `upgrade()`/`#authenticate()` already running for the
+   * prior identity is both cancelled AND fenced from writing state after it
+   * resolves (see {@link #generation}).
    *
    * MUST be called on logout AND at the start of a new login. Without it, the
    * provider keeps the previous user's issuer + DPoP-bound token in memory, so a
@@ -276,19 +343,39 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
    * login flow relies on starts from a clean baseline for the new identity.
    */
   reset(): void {
+    // Advance the generation FIRST so any in-flight work that resolves after this
+    // point sees a stale generation and writes nothing.
+    this.#generation += 1;
+    // Actively cancel in-flight auth work spawned by the prior identity.
+    this.#authController.abort();
+    this.#authController = new AbortController();
     this.#issuer = undefined;
     this.#sessions.clear();
     this.#authenticatedWebId = undefined;
+    this.#upgradedProbeIds.clear();
     this.#tokensAttached = 0;
   }
 
   async upgrade(request: Request): Promise<Request> {
-    this.#issuer ??= this.#resolveIssuer(this.#authSignal).catch((e) => {
+    // Capture the generation + controller for THIS attempt up front. A concurrent
+    // reset() advances the generation and swaps the controller; comparing against
+    // the captured generation before any state write fences this attempt out.
+    const generation = this.#generation;
+    const controller = this.#authController;
+    this.#issuer ??= this.#resolveIssuer(controller.signal).catch((e) => {
       this.#issuer = undefined; // allow retry after cancel/failure
       throw e;
     });
     const issuer = await this.#issuer;
-    const session = await this.#getSession(issuer, this.#authSignal);
+    const session = await this.#getSession(issuer, generation, controller.signal);
+    // FENCE: if a reset() (logout / new-login) advanced the generation while this
+    // upgrade was in flight, the result belongs to a SUPERSEDED identity. Mutate
+    // NO provider state and reject — the request must not carry a stale identity's
+    // token, and #authenticatedWebId / #tokensAttached / #upgradedProbeIds must
+    // stay at the new identity's clean baseline.
+    if (generation !== this.#generation) {
+      throw new ReactiveAuthResetError();
+    }
     // Record the identity the OP vouched for, so the login flow can confirm it
     // matches the requested WebID. Set here (not only at session creation) so a
     // cached/in-flight session shared across concurrent 401s also publishes it.
@@ -311,15 +398,35 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
     // flow reads this count BEFORE and AFTER its probe; the DELTA — not any sticky
     // flag — is what proves a token was attached during THAT attempt.
     this.#tokensAttached += 1;
+    // PER-PROBE PROOF: if THIS request is a login probe (it carries a probe id),
+    // record that id as upgraded. The login flow asserts its own id is present —
+    // proving THIS probe was upgraded, not merely that some request was.
+    const probeId = request.headers.get(PROBE_ID_HEADER);
+    if (probeId) this.#upgradedProbeIds.add(probeId);
     return new Request(request, { headers });
   }
 
   /** Reuse the (possibly in-flight) session for the issuer, else run the code flow once. */
-  async #getSession(issuer: URL, signal: AbortSignal): Promise<IssuerSession> {
+  async #getSession(
+    issuer: URL,
+    generation: number,
+    signal: AbortSignal,
+  ): Promise<IssuerSession> {
+    // A reset() between issuer resolution and here means this attempt is already
+    // superseded — run the login NOT cached, so a stale attempt can never seed the
+    // current generation's #sessions map. The upgrade() fence then discards it.
+    if (generation !== this.#generation) {
+      return this.#authenticate(issuer, signal);
+    }
     const cached = this.#sessions.get(issuer.href);
     if (cached) return cached;
     const pending = this.#authenticate(issuer, signal).catch((e) => {
-      this.#sessions.delete(issuer.href); // failed login is retryable
+      // Only retract THIS generation's cache entry. If a reset() advanced the
+      // generation, #sessions was already cleared and may hold the NEXT identity's
+      // in-flight login — deleting blindly here could evict it. Guard on the
+      // captured generation so a superseded attempt's failure cannot disturb the
+      // current one's cache.
+      if (generation === this.#generation) this.#sessions.delete(issuer.href);
       throw e;
     });
     this.#sessions.set(issuer.href, pending);

@@ -34,12 +34,17 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import type { AuthorizationCodeFlow } from "@solid/reactive-authentication";
+import type {
+  AuthorizationCodeFlow,
+  GetCodeCallback,
+} from "@solid/reactive-authentication";
 import {
   WebIdDPoPTokenProvider,
   AmbiguousIssuerError,
   webIdsEqual,
+  PROBE_ID_HEADER,
 } from "@/lib/solid/webid-token-provider";
+import { authFlowHolder, getCodeThroughHolder } from "@/lib/solid/auth-flow-holder";
 import { readProfile, type Profile } from "@/lib/solid/profile";
 import { assessLoginProbe } from "@/lib/solid/login-result";
 
@@ -96,13 +101,18 @@ const pendingWebIdHolder: { current: string | null } = { current: null };
 interface AuthProviderConfig {
   callbackUri: string;
   allowInsecureLoopback: boolean;
-  getCode: ConstructorParameters<typeof WebIdDPoPTokenProvider>[1];
 }
 
 /**
  * Build + globally-register the auth provider EXACTLY ONCE per page. Repeated
  * calls (e.g. a StrictMode double-mount) return the same in-flight/settled promise
  * without re-patching the global fetch.
+ *
+ * The provider is given `getCodeThroughHolder`, NOT a `getCode` bound to one
+ * element: the singleton outlives any single <authorization-code-flow> element, so
+ * binding the first element here would leave the singleton calling a StrictMode-
+ * removed element forever. The holder is updated on every mount; the singleton
+ * reads the latest from it at authentication time.
  */
 function getAuthProvider(cfg: AuthProviderConfig): Promise<WebIdDPoPTokenProvider> {
   if (authProviderSingleton) return authProviderSingleton;
@@ -113,7 +123,9 @@ function getAuthProvider(cfg: AuthProviderConfig): Promise<WebIdDPoPTokenProvide
     );
     const provider = new WebIdDPoPTokenProvider(
       cfg.callbackUri,
-      cfg.getCode,
+      // getCode reads the CURRENT mounted element from the module-level holder —
+      // never a first-mount element a StrictMode remount removed.
+      getCodeThroughHolder,
       // getWebId: hand back whichever WebID the user is logging in with.
       async () => {
         const id = pendingWebIdHolder.current;
@@ -158,11 +170,17 @@ export function SolidAuthProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     const ui = flowRef.current;
     if (!ui) return;
+    // Publish THIS mount's element to the module-level holder so the page-lifetime
+    // singleton's getCode always drives the CURRENT live element. Under StrictMode
+    // the first element is unmounted right after this effect runs; the second
+    // mount overwrites the holder with its (live) element — so the singleton never
+    // ends up bound to a removed element.
+    const getCode: GetCodeCallback = ui.getCode.bind(ui);
+    authFlowHolder.current = getCode;
     getAuthProvider({
       callbackUri: new URL("/callback.html", location.href).toString(),
       allowInsecureLoopback:
         process.env.NEXT_PUBLIC_ALLOW_INSECURE_LOOPBACK === "true",
-      getCode: ui.getCode.bind(ui),
     })
       .then((provider) => {
         if (cancelled) return;
@@ -174,6 +192,10 @@ export function SolidAuthProvider({ children }: { children: ReactNode }) {
       });
     return () => {
       cancelled = true;
+      // Only relinquish the holder if it still points at THIS element's getCode —
+      // a later mount may already have replaced it (StrictMode remount). Never null
+      // out a newer element's getCode.
+      if (authFlowHolder.current === getCode) authFlowHolder.current = null;
     };
   }, []);
 
@@ -199,22 +221,32 @@ export function SolidAuthProvider({ children }: { children: ReactNode }) {
       // Detection is PER-ATTEMPT: we compare this against the count AFTER the
       // probe, so only a token attached during THIS attempt counts — never a
       // sticky flag a previous session/attempt left set. (reset() above also zeroes
-      // the count, so this baseline is clean for the new identity.)
+      // the count, so this baseline is clean for the new identity.) This stays as
+      // DEFENCE-IN-DEPTH alongside the per-probe proof below.
       const tokensAttachedBefore =
         providerRef.current?.tokensAttachedCount() ?? 0;
+      // PER-PROBE PROOF (primary): stamp this probe with a unique id. The provider
+      // records the id iff it actually upgrades THIS request — so we can prove THIS
+      // probe was token-upgraded, not merely that "some request" was (a concurrent
+      // upgraded request for the SAME WebID can bump the provider-wide count, but
+      // not satisfy our own probe id).
+      const probeId = `probe-${crypto.randomUUID()}`;
       // Trigger the auth flow by making an authenticated request the global fetch
       // will upgrade on 401: registerGlobally() intercepts the 401, opens the
       // <authorization-code-flow> popup, mints a DPoP token, and RETRIES the
       // request. A storage root is private on CSS by default, so this 401s →
       // popup → retry, and the RETRY's status tells us whether login succeeded.
       const probe = pub.storages[0] ?? new URL("/", id).toString();
-      const res = await fetch(probe, { method: "GET" });
-      // Success requires BOTH a 2xx AND that the token provider attached a token
-      // DURING THIS attempt (the count went up). A bare 2xx is NOT enough:
-      // probing a PUBLIC resource returns 200 with no token attached this attempt
-      // and no flow at all — that must NOT count as logged in. A final 401/403
-      // (cancelled popup / rejected token) is also a failure. The decision is the
-      // pure assessLoginProbe() so the rule is testable in isolation.
+      const res = await fetch(probe, {
+        method: "GET",
+        headers: { [PROBE_ID_HEADER]: probeId },
+      });
+      // Success requires a 2xx AND that the token provider upgraded THIS specific
+      // probe (per-probe), with the count delta kept as defence-in-depth. A bare
+      // 2xx is NOT enough: probing a PUBLIC resource returns 200 with no token
+      // attached this attempt and no flow at all — that must NOT count as logged
+      // in. A final 401/403 (cancelled popup / rejected token) is also a failure.
+      // The status decision is the pure assessLoginProbe() so the rule is testable.
       const tokensAttachedAfter =
         providerRef.current?.tokensAttachedCount() ?? 0;
       const assessment = assessLoginProbe({
@@ -224,6 +256,15 @@ export function SolidAuthProvider({ children }: { children: ReactNode }) {
       });
       if (!assessment.ok) {
         throw new Error(assessment.message);
+      }
+      // The primary, per-probe gate: THIS probe must have been token-upgraded. A
+      // concurrent same-WebID upgrade for a DIFFERENT request cannot satisfy it.
+      if (!providerRef.current?.wasProbeUpgraded(probeId)) {
+        throw new Error(
+          "Login did not complete — no token was attached to this login's own " +
+            "request (the probed resource may be public, or a different request " +
+            "was upgraded). You were not logged in.",
+        );
       }
       // PROVE the session authenticated AS the requested WebID — never infer
       // "logged in" from "a token is attached". The OP's id_token `webid`/`sub`
