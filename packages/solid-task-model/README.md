@@ -102,6 +102,22 @@ task.state = "closed";        // sets wf:Closed + prov:endedAtTime
 task.assignee = myWebId;       // wf:assignee
 ```
 
+#### Browser/client bundles: import from `./task`
+
+The main entry (`.`) re-exports `taskShapeTtl`, which reads the shape file via
+`node:fs` — fine on the server, but a **client bundler** (Next.js / Turbopack)
+cannot bundle `node:fs` into a browser chunk, so importing `Task` from `.` inside a
+client component fails (`the chunking context does not support external modules
+(request: node:fs)`). Import the runtime model from the **`./task` subpath**, which
+never touches `node:fs`:
+
+```ts
+import { Task, parseTask, buildTask, type TaskData } from "@jeswr/solid-task-model/task";
+```
+
+The `./shape` subpath (`taskShapeTtl` / `TASK_SHAPE_PATH`) is the `node:fs`-using
+half — keep it on server-only / test code, never a client component.
+
 ### SHACL validation
 
 The canonical shape is `shapes/task.ttl` (also exported as a string via `taskShapeTtl()`).
