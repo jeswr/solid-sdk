@@ -1120,6 +1120,16 @@ async function resolveServingShellConfig(caches2, current) {
   }
   return current;
 }
+function assetConfigCandidates(...configs) {
+  const seen = /* @__PURE__ */ new Set();
+  const out = [];
+  for (const c of configs) {
+    if (!c || seen.has(c.version)) continue;
+    seen.add(c.version);
+    out.push(c);
+  }
+  return out;
+}
 async function resolveAssetShellConfig(caches2, requestUrl, candidates) {
   const present = candidates.filter((c) => c && isPrecachedAsset(requestUrl, c));
   if (present.length === 0) return candidates[0];
@@ -1732,6 +1742,6 @@ function createOfflineClient(config = {}) {
   };
 }
 
-export { ANONYMOUS_SCOPE, CACHE_PREFIX, DB_PREFIX, DEFAULT_CACHE_NAME, DEFAULT_DB_NAME, DEFAULT_WARM_BUDGET, backoffDelay, cacheNameForWebId, cleanupOldShellCaches, containerChildren, createNotificationsClient, createOfflineClient, createStatusSurface, createWarmController, dbNameForWebId, deriveSeeds, discoverSubscriptionUrl, handleNavigation, handleNotification, handlePrecachedAsset, isPrecachedAsset, isScopeChange, onIdle, parseFrame, parseWacAllow, precacheAppShell, purgeForWebId, resolveAppShellConfig, resolveAssetShellConfig, resolveBudget, resolveServingShellConfig, resyncSweep, sameShellConfig, scopeFor, scopeHash, shellBucketComplete, shellCacheName, storageDescriptionFromLink, subscribe, typeIndexTargets, userCanRead, warm };
+export { ANONYMOUS_SCOPE, CACHE_PREFIX, DB_PREFIX, DEFAULT_CACHE_NAME, DEFAULT_DB_NAME, DEFAULT_WARM_BUDGET, assetConfigCandidates, backoffDelay, cacheNameForWebId, cleanupOldShellCaches, containerChildren, createNotificationsClient, createOfflineClient, createStatusSurface, createWarmController, dbNameForWebId, deriveSeeds, discoverSubscriptionUrl, handleNavigation, handleNotification, handlePrecachedAsset, isPrecachedAsset, isScopeChange, onIdle, parseFrame, parseWacAllow, precacheAppShell, purgeForWebId, resolveAppShellConfig, resolveAssetShellConfig, resolveBudget, resolveServingShellConfig, resyncSweep, sameShellConfig, scopeFor, scopeHash, shellBucketComplete, shellCacheName, storageDescriptionFromLink, subscribe, typeIndexTargets, userCanRead, warm };
 //# sourceMappingURL=index.js.map
 //# sourceMappingURL=index.js.map

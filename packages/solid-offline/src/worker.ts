@@ -17,6 +17,7 @@ import {
   type ResolvedAppShellConfig,
   type ShellCacheStorage,
   type ShellDeps,
+  assetConfigCandidates,
   cleanupOldShellCaches,
   handleNavigation,
   handlePrecachedAsset,
@@ -458,11 +459,11 @@ async function respondShellAsset(event: FetchEvent): Promise<Response> {
   const serving = await servingConfig();
   if (!serving) return self.fetch(event.request);
   // An asset may live ONLY in the retained complete bucket (an OLD-hashed file the
-  // OLD HTML pulls) or ONLY in the current bucket — different version buckets. Pick
-  // the config whose bucket actually HOLDS this asset, preferring the (post-resolve)
-  // serving config, then the route-time configs, then the (post-resolve) current
-  // `shellConfig`. De-duped by version so a candidate isn't probed twice.
-  const candidates = dedupeByVersion([serving, routedServing, routedCurrent, shellConfig]);
+  // OLD HTML pulls) or ONLY in the current bucket — different version buckets. Build
+  // the de-duped candidate set (its ordering/de-dup contract is the pure, tested
+  // `assetConfigCandidates`), then pick the config whose bucket actually HOLDS the
+  // asset.
+  const candidates = assetConfigCandidates(serving, routedServing, routedCurrent, shellConfig);
   const config =
     (await resolveAssetShellConfig(shellCaches(), event.request.url, candidates).catch(
       () => serving,
@@ -473,20 +474,6 @@ async function respondShellAsset(event: FetchEvent): Promise<Response> {
   } catch {
     return self.fetch(event.request);
   }
-}
-
-/** Drop undefined entries + de-dupe configs by version (preserving order). */
-function dedupeByVersion(
-  configs: Array<ResolvedAppShellConfig | undefined>,
-): ResolvedAppShellConfig[] {
-  const seen = new Set<string>();
-  const out: ResolvedAppShellConfig[] = [];
-  for (const c of configs) {
-    if (!c || seen.has(c.version)) continue;
-    seen.add(c.version);
-    out.push(c);
-  }
-  return out;
 }
 
 async function respond(event: FetchEvent): Promise<Response> {

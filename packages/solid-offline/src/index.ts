@@ -50,6 +50,7 @@ export {
   shellBucketComplete,
   resolveServingShellConfig,
   resolveAssetShellConfig,
+  assetConfigCandidates,
   precacheAppShell,
   cleanupOldShellCaches,
   isPrecachedAsset,

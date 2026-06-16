@@ -114,6 +114,16 @@ async function resolveServingShellConfig(caches, current) {
   }
   return current;
 }
+function assetConfigCandidates(...configs) {
+  const seen = /* @__PURE__ */ new Set();
+  const out = [];
+  for (const c of configs) {
+    if (!c || seen.has(c.version)) continue;
+    seen.add(c.version);
+    out.push(c);
+  }
+  return out;
+}
 async function resolveAssetShellConfig(caches, requestUrl, candidates) {
   const present = candidates.filter((c) => c && isPrecachedAsset(requestUrl, c));
   if (present.length === 0) return candidates[0];
@@ -1112,7 +1122,7 @@ async function respondShellAsset(event) {
   const routedCurrent = shellConfig;
   const serving = await servingConfig();
   if (!serving) return self.fetch(event.request);
-  const candidates = dedupeByVersion([serving, routedServing, routedCurrent, shellConfig]);
+  const candidates = assetConfigCandidates(serving, routedServing, routedCurrent, shellConfig);
   const config = await resolveAssetShellConfig(shellCaches(), event.request.url, candidates).catch(
     () => serving
   ) ?? serving;
@@ -1122,16 +1132,6 @@ async function respondShellAsset(event) {
   } catch {
     return self.fetch(event.request);
   }
-}
-function dedupeByVersion(configs) {
-  const seen = /* @__PURE__ */ new Set();
-  const out = [];
-  for (const c of configs) {
-    if (!c || seen.has(c.version)) continue;
-    seen.add(c.version);
-    out.push(c);
-  }
-  return out;
 }
 async function respond(event) {
   const cache = await self.caches.open(cacheName());

@@ -24,6 +24,7 @@ import {
   type ShellCache,
   type ShellCacheStorage,
   type ShellDeps,
+  assetConfigCandidates,
   cleanupOldShellCaches,
   handleNavigation,
   handlePrecachedAsset,
@@ -697,6 +698,40 @@ describe('half-applied update — offline boot is never stranded (roborev Medium
 
     // Routing now serves from the NEW bucket.
     expect((await resolveServingShellConfig(caches, NEW)).version).toBe('shell-002');
+  });
+});
+
+describe('assetConfigCandidates (route-time + post-resolve config set, de-duped)', () => {
+  const v = (version: string) =>
+    resolveAppShellConfig({ precache: ['/index.html', `/${version}.js`], version });
+
+  it('considers ALL FOUR distinct configs the asset race can involve, in preference order', () => {
+    // The exact race (roborev): the router matched on a route-time `shellConfig`
+    // (routedCurrent) that DIFFERS from the post-resolve `shellConfig`. All four must
+    // survive so the bucket that actually holds the asset is still probed.
+    const serving = v('serving');
+    const routedServing = v('routed-serving');
+    const routedCurrent = v('routed-current');
+    const current = v('current');
+    const out = assetConfigCandidates(serving, routedServing, routedCurrent, current);
+    expect(out.map((c) => c.version)).toEqual([
+      'serving',
+      'routed-serving',
+      'routed-current',
+      'current',
+    ]);
+  });
+
+  it('de-dupes by version (a bucket is never probed twice) and drops undefined', () => {
+    const serving = v('shell-A');
+    const sameAsServing = v('shell-A'); // a distinct object, same version
+    const current = v('shell-B');
+    const out = assetConfigCandidates(serving, undefined, sameAsServing, current, undefined);
+    expect(out.map((c) => c.version)).toEqual(['shell-A', 'shell-B']);
+  });
+
+  it('returns an empty list when every candidate is undefined', () => {
+    expect(assetConfigCandidates(undefined, undefined)).toEqual([]);
   });
 });
 
