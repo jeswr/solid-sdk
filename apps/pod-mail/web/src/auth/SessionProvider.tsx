@@ -284,24 +284,29 @@ let silentRestorePromise: Promise<SilentRestoreOutcome> | null = null;
  * state — it returns a pure {@link SilentRestoreOutcome} the effect applies. Never
  * throws (fail-closed to `login`).
  */
+/** Parse a remembered issuer string to a URL, or undefined when absent/malformed. */
+function parseIssuer(issuer: string | undefined): URL | undefined {
+  if (!issuer) return undefined;
+  try {
+    return new URL(issuer);
+  } catch {
+    return undefined; // corrupt remembered issuer — unusable.
+  }
+}
+
 /**
  * The durable-credential presence for a remembered issuer, for the pointer keep/drop
- * decision. A MALFORMED issuer (unparseable URL) is an unusable pointer → `"absent"`
- * (dropped rather than retried forever — roborev finding). An undefined issuer is
- * likewise `"absent"`. Otherwise delegate to the provider's tri-state read (which
- * returns `"unknown"` on a store-read error so a blip does not orphan the credential).
+ * decision. A MALFORMED/absent issuer is an unusable pointer → `"absent"` (dropped
+ * rather than retried forever — roborev finding). Otherwise delegate to the
+ * provider's tri-state read (which returns `"unknown"` on a store-read error so a
+ * blip does not orphan the credential).
  */
 async function credentialPresenceFor(
   provider: WebIdDPoPTokenProvider,
   issuer: string | undefined,
 ): Promise<CredentialPresence> {
-  if (!issuer) return "absent";
-  let url: URL;
-  try {
-    url = new URL(issuer);
-  } catch {
-    return "absent"; // corrupt remembered issuer — unusable, drop the pointer.
-  }
+  const url = parseIssuer(issuer);
+  if (!url) return "absent";
   return provider.hasPersisted(url);
 }
 
@@ -320,13 +325,28 @@ function runSilentRestore(provider: WebIdDPoPTokenProvider): Promise<SilentResto
       webIdsEqual,
     });
     if (decision.outcome !== "restored") {
-      // Not restored on THIS load → fall back to login. The keep/drop-pointer
-      // decision is the PURE shouldDropRememberedPointer, driven by the decision's
-      // REASON + (for restore-failed) whether the durable credential survived
-      // (roborev findings: do NOT wipe the pointer on a transient blip / an
-      // unreadable store, and DO drop it on a known-bad webid-mismatch). The issuer
-      // is validated as a URL first — a malformed remembered issuer is an unusable
-      // pointer (credential `absent`), so it gets dropped rather than retried forever.
+      // SECURITY (roborev finding) — a `webid-mismatch` means restoreIssuer ALREADY
+      // succeeded one layer down: it pinned an in-memory session AND persisted a
+      // rotated credential for the WRONG (mismatched) WebID before the
+      // last-active-WebID check up here failed it. Leaving that in place would leave
+      // the provider authenticated as the wrong identity (later reads would upgrade
+      // as them) and orphan a durable credential. So FULLY tear it down: forget the
+      // persisted credential for the issuer AND reset() the in-memory provider
+      // (fail-closed) before falling through to login. (reset() also re-fences any
+      // in-flight work, exactly like logout.)
+      if (decision.reason === "webid-mismatch") {
+        const issuer = parseIssuer(remembered?.issuer);
+        if (issuer) await provider.forgetPersisted(issuer);
+        provider.reset();
+        clearRememberedAccount();
+        return { kind: "login" };
+      }
+      // Otherwise: fall back to login. The keep/drop-pointer decision is the PURE
+      // shouldDropRememberedPointer, driven by the REASON + (for restore-failed)
+      // whether the durable credential survived (do NOT wipe the pointer on a
+      // transient blip / an unreadable store). The issuer is validated as a URL
+      // first — a malformed remembered issuer is an unusable pointer (credential
+      // `absent`), so it gets dropped rather than retried forever.
       const credential = await credentialPresenceFor(provider, remembered?.issuer);
       if (shouldDropRememberedPointer(decision.reason, credential)) clearRememberedAccount();
       return { kind: "login" };

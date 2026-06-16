@@ -467,6 +467,40 @@ describe("logout clears the durable credential; reset() does not", () => {
     expect(provider.authenticatedWebId()).toBeUndefined(); // in-memory cleared
     expect(provider.resolvedIssuer()).toBeUndefined();
   });
+
+  it("WEBID-MISMATCH cleanup: forgetPersisted + reset fully tears down a wrongly-restored session", async () => {
+    // The SECURITY primitive the SessionProvider relies on when decideSilentRestore
+    // returns webid-mismatch (restoreIssuer ALREADY pinned + persisted a session for
+    // the wrong WebID one layer down): forgetPersisted(issuer) drops the orphaned
+    // durable credential AND reset() drops the pinned in-memory session, so the
+    // provider is NOT left authenticated as the wrong identity (roborev finding).
+    const store = makeStore();
+    const dpopKey = (await crypto.subtle.generateKey(
+      { name: "ECDSA", namedCurve: "P-256" },
+      false,
+      ["sign", "verify"],
+    )) as CryptoKeyPair;
+    store.map.set(ISSUER.href, {
+      issuer: ISSUER.href,
+      webId: WEBID_A,
+      refreshToken: "rt-A",
+      dpopKey,
+    });
+    // restoreIssuer succeeds + pins + re-persists the rotated credential.
+    const provider = makeProvider(store);
+    expect(await provider.restoreIssuer(ISSUER)).toEqual({ webId: WEBID_A });
+    expect(provider.authenticatedWebId()).toBe(WEBID_A);
+    expect(store.map.has(ISSUER.href)).toBe(true);
+
+    // The mismatch-cleanup the SessionProvider performs:
+    await provider.forgetPersisted(ISSUER);
+    provider.reset();
+
+    // Durable credential gone AND in-memory session torn down — fully fail-closed.
+    expect(store.map.has(ISSUER.href)).toBe(false);
+    expect(provider.authenticatedWebId()).toBeUndefined();
+    expect(provider.resolvedIssuer()).toBeUndefined();
+  });
 });
 
 describe("WebID scoping — account A's persisted token never restores account B", () => {
