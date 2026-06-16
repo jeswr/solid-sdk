@@ -33,8 +33,14 @@ vi.mock("@/lib/solid/login-ux", () => ({
   resolveIssuers: () => ["https://issuer.example/"],
 }));
 
+// Capture every DPoP.generateProof call's args so tests can assert the htu (arg 2)
+// the proof is minted with — RFC 9449 §4.2: query + fragment must be stripped.
+const dpopCalls: unknown[][] = [];
 vi.mock("dpop", () => ({
-  generateProof: vi.fn(async () => "dpop-proof"),
+  generateProof: vi.fn(async (...args: unknown[]) => {
+    dpopCalls.push(args);
+    return "dpop-proof";
+  }),
 }));
 
 vi.mock("oauth4webapi", () => {
@@ -86,9 +92,22 @@ const {
   WebIdDPoPTokenProvider,
   webIdsEqual,
   withProbeFragment,
+  httpUri,
   ReactiveAuthResetError,
 } = await import("@/lib/solid/webid-token-provider");
 type Provider = InstanceType<typeof WebIdDPoPTokenProvider>;
+import * as DPoP from "dpop";
+
+// Reset the captured DPoP proof calls + restore the default (non-gated) mock
+// implementation before every test, so the htu-capture and the reset-during-proof
+// gate tests start from a clean slate and don't leak a deferred gate into others.
+beforeEach(() => {
+  dpopCalls.length = 0;
+  vi.mocked(DPoP.generateProof).mockImplementation(async (...args: unknown[]) => {
+    dpopCalls.push(args);
+    return "dpop-proof";
+  });
+});
 
 const WEBID_A = "https://alice.example/profile/card#me";
 const WEBID_B = "https://bob.example/profile/card#me";
@@ -117,6 +136,31 @@ function deferredGetCode() {
     return REDIRECT;
   };
   return { getCode, release };
+}
+
+/**
+ * Install a `DPoP.generateProof` mock that BLOCKS on a gate the test controls, so a
+ * test can drive a `reset()` to fire DURING the awaited proof generation (the
+ * round-4c finding-B race). `reached` resolves once the gated proof has been
+ * entered (so the test knows the upgrade is parked at the await); `release` lets it
+ * complete. Args are still captured into `dpopCalls`.
+ */
+function gatedGenerateProof() {
+  let release!: () => void;
+  let signalReached!: () => void;
+  const gate = new Promise<void>((r) => {
+    release = r;
+  });
+  const reached = new Promise<void>((r) => {
+    signalReached = r;
+  });
+  vi.mocked(DPoP.generateProof).mockImplementation(async (...args: unknown[]) => {
+    dpopCalls.push(args);
+    signalReached();
+    await gate;
+    return "dpop-proof";
+  });
+  return { reached, release };
 }
 
 /**
@@ -289,6 +333,39 @@ describe("FIX 2 — reset() fences in-flight auth work (no contamination after l
     // The superseded upgrade contaminated nothing: clean baseline survives.
     expect(provider.authenticatedWebId()).toBeUndefined();
     expect(provider.tokensAttachedCount()).toBe(0);
+  });
+
+  // ── round-4c roborev finding B: a reset() that fires DURING the awaited
+  // DPoP.generateProof() must make the upgrade reject and write NO provider state.
+  // The pre-await fence alone is insufficient — the race is across the await.
+  it("a reset() that fires DURING the awaited DPoP.generateProof() rejects and writes NO state", async () => {
+    const provider = makeProvider();
+    // Gate the DPoP proof step so we can fire reset() while it is awaiting.
+    const { reached, release } = gatedGenerateProof();
+
+    const gen = provider.loginGeneration();
+    const probe = probeRequest("https://alice.example/storage/");
+    provider.beginLoginProbe(probe);
+    const inflight = provider.upgrade(probe);
+    inflight.catch(() => {});
+
+    // Wait until the upgrade has reached (and is parked at) the gated proof step —
+    // session resolved, pre-await fence passed, now awaiting generateProof.
+    await reached;
+
+    // Fire reset() DURING the proof await (logout / new login).
+    provider.reset();
+
+    // Release the gated proof; the upgrade resumes AFTER reset advanced the
+    // generation — the post-await re-fence must reject and write nothing.
+    release();
+    await expect(inflight).rejects.toBeInstanceOf(ReactiveAuthResetError);
+
+    // NO state written by the superseded attempt: clean baseline survives.
+    expect(provider.tokensAttachedCount()).toBe(0);
+    expect(provider.authenticatedWebId()).toBeUndefined();
+    expect(provider.wasLoginProbeUpgraded(gen)).toBe(false);
+    provider.endLoginProbe();
   });
 
   it("after a fenced in-flight upgrade, a fresh login as B reports ONLY B (no A residue)", async () => {
@@ -492,6 +569,53 @@ describe("FIX (round 4) — login probe proof is generation-scoped, NOT a networ
     // Neither guess carries the real `#probe-<uuid>`, so the proof is still FALSE.
     expect(provider.wasLoginProbeUpgraded(gen)).toBe(false);
     provider.endLoginProbe();
+  });
+
+  // ── round-4c roborev finding A: the probe fragment must NOT leak into the
+  // DPoP proof's htu. RFC 9449 §4.2 — htu is the request URI with query AND
+  // fragment removed; the server computes a fragment/query-less htu, so the proof
+  // must too or the retried probe's token is rejected in production.
+
+  it("httpUri strips the fragment AND query but keeps scheme/host/port/path", () => {
+    expect(httpUri("https://alice.example/storage/#probe-abc")).toBe(
+      "https://alice.example/storage/",
+    );
+    expect(httpUri("https://alice.example/storage/?q=1&r=2#probe-abc")).toBe(
+      "https://alice.example/storage/",
+    );
+    expect(httpUri("https://alice.example:8443/a/b/c?x=y")).toBe(
+      "https://alice.example:8443/a/b/c",
+    );
+    // No fragment / no query — unchanged (still a normalised URL string).
+    expect(httpUri("https://alice.example/storage/")).toBe(
+      "https://alice.example/storage/",
+    );
+  });
+
+  it("upgrading a probe mints a DPoP proof whose htu has NO #probe fragment and NO query", async () => {
+    const provider = makeProvider();
+    // A probe URL that carries BOTH a #probe-<uuid> fragment and a query string.
+    const probeUrl = withProbeFragment("https://alice.example/storage/?foo=bar");
+    expect(new URL(probeUrl).hash).toMatch(/^#probe-/);
+    expect(new URL(probeUrl).search).toBe("?foo=bar");
+
+    const { gen, upgraded } = await runLoginProbe(
+      provider,
+      probeRequest("https://alice.example/storage/?foo=bar"),
+    );
+
+    // The proof was minted: capture the htu (arg index 1) handed to generateProof.
+    expect(dpopCalls.length).toBe(1);
+    const htu = dpopCalls[0][1] as string;
+    // RFC 9449 §4.2: no fragment, no query — bare scheme + authority + path.
+    expect(htu).not.toContain("#probe-");
+    expect(htu).not.toContain("#");
+    expect(htu).not.toContain("?");
+    expect(htu).toBe("https://alice.example/storage/");
+    // The token still attached, and the in-process probe proof still holds (the
+    // fragment-bearing request.url is what matched the probe — finding-2 stays green).
+    expect(upgraded.headers.get("Authorization")).toBe("DPoP tok-A");
+    expect(provider.wasLoginProbeUpgraded(gen)).toBe(true);
   });
 
   it("withProbeFragment stamps a unique, off-the-wire #probe-<uuid> fragment (no header)", () => {
