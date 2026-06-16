@@ -937,9 +937,21 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
    * authorization-code exchange after the broker redirects back. Reads the persisted
    * record ({@link REDIRECT_FLOW_STORAGE_KEY}), re-runs discovery from the persisted
    * issuer href, re-imports the DPoP JWK, validates the auth response against the
-   * persisted `state`, exchanges the code, then ESTABLISHES the session in
-   * `#sessions` for the issuer AND sets `#authenticatedWebId` from the id_token AND
-   * bumps `#tokensAttached`.
+   * persisted `state`, exchanges the code, then — after PROVING the OP authenticated
+   * AS the persisted requested WebID — ESTABLISHES the session in `#sessions` for the
+   * issuer AND seeds `#issuer` with the resolved issuer URL AND sets
+   * `#authenticatedWebId` from the id_token AND bumps `#tokensAttached`.
+   *
+   * SECURITY: the authenticated WebID (id_token `webid`/`sub`) is compared against the
+   * persisted `record.webId` with {@link webIdsEqual} BEFORE any provider state is
+   * written; a mismatch (or either WebID missing — webIdsEqual fails closed) throws and
+   * seeds NOTHING, so a live IdP session for a DIFFERENT account can never log the app
+   * in as the wrong identity. This mirrors the popup path's "prove the requested WebID"
+   * invariant, and is the AUTHORITATIVE check (independent of any caller-side one).
+   *
+   * `#issuer` is seeded on success so a later `upgrade()` (a data fetch on the now-
+   * authenticated page, after the redirect reset pendingWebIdHolder to null) reuses
+   * this completed session's issuer instead of re-resolving via getWebId() and failing.
    *
    * Clears the sessionStorage record in a `finally` (success OR failure), so a stale
    * pending flow can never satisfy a later callback. On failure throws and leaves the
@@ -1017,20 +1029,47 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
       // means this completion belongs to a superseded identity — write nothing.
       if (generation !== this.#generation) throw new ReactiveAuthResetError();
 
+      const authenticatedWebId = webIdFromClaims(
+        oauth.getValidatedIdTokenClaims(tokenResult),
+      );
+      // SECURITY (finding 2 — cross-identity hole): the OP may have a LIVE session
+      // for a DIFFERENT account that satisfies this deep-link, so the id_token can
+      // vouch for a WebID we never requested. Mirror the popup path's invariant —
+      // PROVE the OP authenticated AS the persisted requested WebID before seeding
+      // ANY provider state. On mismatch (or either side missing — webIdsEqual fails
+      // closed) throw BEFORE any #sessions/#issuer/#authenticatedWebId/#tokensAttached
+      // write, so a session for an unrequested identity is NEVER established. The
+      // `finally` below still clears the persisted record. This is the AUTHORITATIVE
+      // check: the provider must never seed a session for an unrequested identity,
+      // regardless of any (defence-in-depth) caller-side check.
+      if (!webIdsEqual(authenticatedWebId, record.webId)) {
+        throw new Error(
+          "Autologin did not complete — the identity provider authenticated a " +
+            `different WebID (${authenticatedWebId ?? "unknown"}) than the one ` +
+            `requested (${record.webId}). For your security you were not logged in.`,
+        );
+      }
+
       const session: IssuerSession = {
         authorizationServer,
         clientRegistration: client,
         dpopKey,
         accessToken: tokenResult.access_token,
-        authenticatedWebId: webIdFromClaims(
-          oauth.getValidatedIdTokenClaims(tokenResult),
-        ),
+        authenticatedWebId,
       };
       // Establish the session for the issuer so subsequent upgrade()s reuse it,
       // and publish the authenticated identity + bump the attach counter exactly
       // like the popup path does on a successful token mint.
       this.#sessions.set(issuer.href, Promise.resolve(session));
       this.#authenticatedWebId = session.authenticatedWebId;
+      // FINDING 1: seed #issuer with the resolved issuer URL too. The full-page
+      // redirect reset pendingWebIdHolder to null, so a later upgrade() (a data
+      // fetch on the now-authenticated page) would re-resolve the issuer via
+      // getWebId() and FAIL ("No WebID set for login"). Seeding #issuer here lets
+      // upgrade() reuse this completed session's issuer (and thus #sessions) WITHOUT
+      // calling getWebId. Done AFTER the authoritative re-fence (a superseded
+      // completion publishes nothing), consistent with #sessions/#authenticatedWebId.
+      this.#issuer = Promise.resolve(issuer);
       this.#tokensAttached += 1;
     } finally {
       // Consume the record immediately — success OR failure — so a stale pending

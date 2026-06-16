@@ -21,10 +21,14 @@
 // completeRedirectLogin), a two-phase flow that persists its in-between state across
 // the navigation.
 //
-// THE TWO CASES (decided by `classifyAutologin`):
-//   CASE A — returning from the broker redirect: a pending redirect record exists AND
+// THE CASES (decided by `classifyAutologin`):
+//   CASE A  — returning from the broker redirect: a pending redirect record exists AND
 //     the URL has `?code` + `?state`. Complete the exchange (silent SSO).
-//   CASE B — a fresh deep-link: NOT logged in, NO pending record, and
+//   CASE A' — returning from the broker redirect with an OIDC ERROR: a pending record
+//     exists AND the URL has `?error` + `?state` (the broker declined silent SSO /
+//     the user declined). Abort: reset the record + sentinel, clean the URL, surface
+//     the error — so a declined SSO does not leave a stale record blocking retries.
+//   CASE B  — a fresh deep-link: NOT logged in, NO pending record, and
 //     `location.hash` starts with `#autologin/`. Begin the redirect.
 //
 // THE LOOP GUARD: a one-shot sessionStorage sentinel (`autologin-attempted`). If a
@@ -52,6 +56,7 @@ export type AutologinDecision =
   | { kind: "none" }
   | { kind: "complete-redirect" }
   | { kind: "begin-redirect"; webId: string }
+  | { kind: "abort-redirect"; error: string }
   | { kind: "loop-guard-fallback" };
 
 /** The ambient inputs the classifier reads — injected so tests need no browser. */
@@ -79,27 +84,48 @@ export interface AutologinEnv {
  *  - autologin runs ONLY when NOT logged in AND ready. A stored/active session
  *    takes precedence ⇒ "none".
  *  - CASE A (complete): a pending redirect record AND the URL carries `?code&state`.
+ *  - CASE A' (abort): a pending redirect record AND the URL carries an OIDC ERROR
+ *    return (`?error&state` — the broker declined silent SSO / the user declined).
+ *    Without this the error return is NOT classified as a callback (it has no `code`),
+ *    so the pending record + sentinel are left set, blocking later fresh attempts in
+ *    the tab. ⇒ "abort-redirect" (reset the provider's record + clear sentinel +
+ *    clean URL + surface the OAuth error).
  *  - CASE B (begin): NOT logged in, NO pending record, and `#autologin/<webid>` —
- *    but if the loop-guard sentinel is already set (we bounced back unauthenticated)
- *    ⇒ "loop-guard-fallback" (do NOT re-attempt), else ⇒ "begin-redirect".
+ *    but if the loop-guard sentinel is already set FOR THIS WebID (we bounced back
+ *    unauthenticated for the same identity) ⇒ "loop-guard-fallback" (do NOT
+ *    re-attempt); a sentinel for a DIFFERENT WebID does NOT swallow the new deep-link
+ *    ⇒ "begin-redirect" for the new WebID (the begin path overwrites the sentinel).
  */
 export function classifyAutologin(env: AutologinEnv): AutologinDecision {
   if (!env.ready) return { kind: "none" };
   // A stored/active session takes precedence — never autologin over it.
   if (env.loggedIn) return { kind: "none" };
 
-  // CASE A — returning from the broker redirect.
+  // CASE A — returning from the broker redirect with a successful auth code.
   if (env.hasPendingRedirect && hasAuthCallbackParams(env.href)) {
     return { kind: "complete-redirect" };
+  }
+
+  // CASE A' — returning from the broker redirect with an OIDC ERROR (e.g. the broker
+  // declined silent SSO with `?error=login_required&state=...`). This IS a callback
+  // return (it carries `state`), just an error one — classify it so the completion
+  // path clears the pending record + sentinel instead of leaving them set.
+  if (env.hasPendingRedirect && hasAuthErrorParams(env.href)) {
+    return { kind: "abort-redirect", error: authErrorFromHref(env.href) };
   }
 
   // CASE B — a fresh deep-link (only when there is no pending record to complete).
   if (!env.hasPendingRedirect && env.hash.startsWith(AUTOLOGIN_FRAGMENT_PREFIX)) {
     const webId = parseAutologinFragment(env.hash);
     if (!webId) return { kind: "none" }; // malformed fragment — ignore it.
-    // The loop guard: if we ALREADY attempted (sentinel set) we bounced back
-    // unauthenticated — do NOT loop; fall back to the login panel.
-    if (env.sentinel !== null) return { kind: "loop-guard-fallback" };
+    // The loop guard: only fall back when the sentinel is set FOR THIS SAME WebID —
+    // i.e. we already bounced back unauthenticated for THIS identity in this tab.
+    // A sentinel left by a DIFFERENT WebID's attempt must NOT swallow a new
+    // deep-link: a later deep-link for a different identity in the same tab should
+    // begin its own redirect (the begin path overwrites the sentinel with its WebID).
+    if (webIdsEqual(env.sentinel ?? undefined, webId)) {
+      return { kind: "loop-guard-fallback" };
+    }
     return { kind: "begin-redirect", webId };
   }
 
@@ -113,6 +139,42 @@ export function hasAuthCallbackParams(href: string): boolean {
     return u.searchParams.has("code") && u.searchParams.has("state");
   } catch {
     return false;
+  }
+}
+
+/**
+ * Whether a URL carries an OIDC ERROR return — `error` AND `state` query params (e.g.
+ * `?error=login_required&state=...`, the broker declining silent SSO or the user
+ * declining). This is still a redirect callback (it carries `state`), just an error
+ * one; {@link classifyAutologin} routes it to an explicit abort so the pending record
+ * + loop-guard sentinel are cleared instead of left set (which would block later fresh
+ * autologin attempts in the same tab). Requires `state` so a stray `?error` on an
+ * unrelated URL is not misclassified as our callback.
+ */
+export function hasAuthErrorParams(href: string): boolean {
+  try {
+    const u = new URL(href);
+    return u.searchParams.has("error") && u.searchParams.has("state");
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Build a human-readable message from an OIDC error callback's `error` /
+ * `error_description` query params, for surfacing to the UI on an aborted redirect.
+ * Falls back to a generic message when the params are unreadable.
+ */
+function authErrorFromHref(href: string): string {
+  try {
+    const u = new URL(href);
+    const error = u.searchParams.get("error") ?? "login_failed";
+    const description = u.searchParams.get("error_description");
+    return description
+      ? `${error}: ${description}`
+      : `Sign-in was declined by the identity provider (${error}).`;
+  } catch {
+    return "Sign-in was declined by the identity provider.";
   }
 }
 
@@ -202,6 +264,11 @@ export function cleanedUrl(href: string): string {
  *   redirect and full-page navigate. On any pre-redirect error: clear the sentinel
  *   and fall back to the login panel.
  *
+ * abort-redirect (CASE A', the OIDC error return): reset the provider (clears the
+ *   persisted redirect record + per-identity state), clear the sentinel, clean the URL
+ *   (strip `?error&state` + fragment), and surface the OAuth error — so a declined
+ *   silent SSO does NOT leave a stale record/sentinel blocking later attempts.
+ *
  * loop-guard-fallback: clear the sentinel, clean the fragment, fall back (no loop).
  */
 export async function runAutologin(
@@ -218,6 +285,20 @@ export async function runAutologin(
       cb.clearSentinel();
       cb.replaceUrl(cleanedUrl(cb.href()));
       cb.onFallback();
+      return;
+    }
+
+    case "abort-redirect": {
+      // CASE A' — the broker redirected back with an OIDC ERROR (declined silent
+      // SSO / the user declined). reset() the provider so the PENDING redirect
+      // record (its persisted DPoP key + PKCE verifier + state) is cleared along with
+      // any per-identity state — otherwise the stale record would block later fresh
+      // attempts. Clear the one-shot sentinel, clean the URL (strip `?error&state` +
+      // fragment), and surface the OAuth error to the UI. No re-attempt — no loop.
+      cb.provider.reset();
+      cb.clearSentinel();
+      cb.replaceUrl(cleanedUrl(cb.href()));
+      cb.onFallback(decision.error);
       return;
     }
 

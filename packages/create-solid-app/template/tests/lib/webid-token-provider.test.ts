@@ -1091,4 +1091,96 @@ describe("REDIRECT autologin — beginRedirectLogin / completeRedirectLogin", ()
     expect(consumePendingRedirectWebId()).toBe(WEBID_A);
     expect(hasPendingRedirectLogin()).toBe(true);
   });
+
+  // ── FINDING 1 (HIGH): completeRedirectLogin must seed #issuer so a later
+  // upgrade() reuses the completed session WITHOUT re-resolving via getWebId
+  // (pendingWebIdHolder is null after the full-page redirect). Build a provider
+  // whose getWebId becomes UNAVAILABLE (throws) after completion, then assert a
+  // subsequent upgrade() to the same issuer's resource succeeds (does NOT call
+  // getWebId, does NOT throw "No WebID set for login").
+  it("(finding 1) after completion, a later upgrade() reuses the seeded #issuer/session WITHOUT calling getWebId", async () => {
+    let getWebIdCalls = 0;
+    let webIdAvailable = true;
+    const provider = new WebIdDPoPTokenProvider(
+      "https://app.example/callback.html",
+      async () => REDIRECT,
+      async () => {
+        getWebIdCalls += 1;
+        if (!webIdAvailable) {
+          // Simulate the post-redirect reality: pendingWebIdHolder is null.
+          throw new Error("No WebID set for login");
+        }
+        return authState.webId;
+      },
+    );
+
+    await provider.beginRedirectLogin(RETURN_URI);
+    await provider.completeRedirectLogin(CALLBACK);
+    expect(provider.authenticatedWebId()).toBe(WEBID_A);
+
+    // getWebId is now unavailable — exactly the post-redirect state where #issuer
+    // would otherwise be unset and upgrade() would re-resolve and fail.
+    webIdAvailable = false;
+    const callsBefore = getWebIdCalls;
+
+    const upgraded = await provider.upgrade(
+      new Request("https://alice.example/storage/"),
+    );
+    // The seeded #issuer let upgrade() reuse the completed session: the DPoP-bound
+    // token is attached, and getWebId was NOT called again (no re-resolution).
+    expect(upgraded.headers.get("Authorization")).toBe("DPoP tok-A");
+    expect(getWebIdCalls).toBe(callsBefore);
+  });
+
+  // ── FINDING 2 (HIGH, security): completeRedirectLogin must enforce the persisted
+  // requested WebID against the id_token's webid claim. A live IdP session for a
+  // DIFFERENT account must NOT log the app in as the wrong identity.
+  it("(finding 2) a completion whose id_token WebID != the requested WebID throws AND leaves the provider clean + clears the record", async () => {
+    // begin with the REQUESTED identity = WEBID_A (persisted in record.webId).
+    authState.webId = WEBID_A;
+    authState.accessToken = "tok-A";
+    const provider = makeRedirectProvider();
+    await provider.beginRedirectLogin(RETURN_URI);
+    expect(hasPendingRedirectLogin()).toBe(true);
+
+    // The OP now vouches for a DIFFERENT WebID (a live session for another account).
+    authState.webId = WEBID_B;
+    authState.accessToken = "tok-B";
+
+    await expect(provider.completeRedirectLogin(CALLBACK)).rejects.toThrow(
+      /different WebID .* than the one requested/,
+    );
+
+    // The provider is CLEAN: no session seeded, #issuer unset, identity undefined,
+    // no attach — and a subsequent upgrade() would re-resolve via getWebId (proving
+    // #issuer was NOT seeded for the unrequested identity).
+    expect(provider.authenticatedWebId()).toBeUndefined();
+    expect(provider.tokensAttachedCount()).toBe(0);
+    // The persisted record was cleared by the finally even on this failure.
+    expect(hasPendingRedirectLogin()).toBe(false);
+  });
+
+  it("(finding 2) on a WebID mismatch, NO session is established for the issuer (#sessions stays empty)", async () => {
+    authState.webId = WEBID_A;
+    authState.accessToken = "tok-A";
+    const provider = makeRedirectProvider();
+    await provider.beginRedirectLogin(RETURN_URI);
+
+    authState.webId = WEBID_B;
+    authState.accessToken = "tok-B";
+    await expect(provider.completeRedirectLogin(CALLBACK)).rejects.toThrow(
+      /different WebID/,
+    );
+
+    // No session was seeded: a later upgrade() re-runs the full popup auth flow.
+    // With the OP now (back) vouching for WEBID_A, the upgrade authenticates A — if a
+    // half-session for B had been seeded, the token would be B's. It is A's.
+    authState.webId = WEBID_A;
+    authState.accessToken = "tok-A";
+    const upgraded = await provider.upgrade(
+      new Request("https://alice.example/storage/"),
+    );
+    expect(upgraded.headers.get("Authorization")).toBe("DPoP tok-A");
+    expect(provider.authenticatedWebId()).toBe(WEBID_A);
+  });
 });
