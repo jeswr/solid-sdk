@@ -40,24 +40,31 @@ vi.mock("./login-ux", () => ({
   resolveIssuers: () => ["https://issuer.example/"],
 }));
 
-// Record the args every `DPoP.generateProof` call receives so a test can assert
-// the `htu` (arg 2) the provider mints — the round-4c regression hinges on it.
-const dpopProofCalls: unknown[][] = [];
-// An OPTIONAL gate the round-4d reset-during-proof test installs to PARK the awaited
-// `DPoP.generateProof()` mid-flight (so a reset() can race the proof await). Default
-// null = resolve immediately (every prior test is unaffected); the new test sets it
-// to a deferred it releases. `onDpopEnter` (also opt-in) fires the instant the proof
-// mock is ENTERED, so the test can deterministically observe the flow is parked at
-// the await BEFORE it fires reset() — not rely on a fixed number of microtask ticks
-// (the mocked oauth flow has several real awaits before the proof await). Both reset
-// to null/undefined in `beforeEach` so they never leak between tests.
-let dpopGate: Promise<void> | null = null;
-let onDpopEnter: (() => void) | null = null;
+// Test fixtures for the `dpop` mock, in a `vi.hoisted` holder so they are
+// initialised BEFORE the hoisted `vi.mock("dpop")` factory's closure runs — a plain
+// top-level `const`/`let` is hoisted AFTER the mock factory by Vitest, so the
+// factory could reference them in their temporal dead zone. Fields:
+//  - `calls`: the args every `DPoP.generateProof` call receives, so a test can
+//    assert the `htu` (arg 2) the provider mints — the round-4c regression hinges
+//    on it.
+//  - `gate`: an OPTIONAL deferred the round-4d reset-during-proof test installs to
+//    PARK the awaited `DPoP.generateProof()` mid-flight (so a reset() can race the
+//    proof await). Null = resolve immediately (every prior test is unaffected).
+//  - `onEnter`: an OPTIONAL callback that fires the instant the proof mock is
+//    ENTERED, so the test deterministically observes the flow is parked at the await
+//    BEFORE it fires reset() — not relying on a fixed number of microtask ticks (the
+//    mocked oauth flow has several real awaits before the proof await).
+// `gate`/`onEnter` are reset to null in `beforeEach` so they never leak between tests.
+const dpopMock = vi.hoisted(() => ({
+  calls: [] as unknown[][],
+  gate: null as Promise<void> | null,
+  onEnter: null as (() => void) | null,
+}));
 vi.mock("dpop", () => ({
   generateProof: vi.fn(async (...args: unknown[]) => {
-    dpopProofCalls.push(args);
-    onDpopEnter?.();
-    if (dpopGate) await dpopGate;
+    dpopMock.calls.push(args);
+    dpopMock.onEnter?.();
+    if (dpopMock.gate) await dpopMock.gate;
     return "dpop-proof";
   }),
 }));
@@ -288,8 +295,8 @@ describe("FIX 2 — reset() fences in-flight auth work (no contamination after l
   beforeEach(() => {
     authState.webId = WEBID_A;
     authState.accessToken = "tok-A";
-    dpopGate = null; // no proof gate unless a test installs one (round-4d).
-    onDpopEnter = null;
+    dpopMock.gate = null; // no proof gate unless a test installs one (round-4d).
+    dpopMock.onEnter = null;
   });
 
   it("an upgrade() that resolves AFTER reset() writes NO provider state and is discarded", async () => {
@@ -352,7 +359,7 @@ describe("FIX 2 — reset() fences in-flight auth work (no contamination after l
     // write. Model: the proof await is PARKED via dpopGate, reset() fires while it is
     // parked, then the gate is released and the upgrade must reject + leave clean state.
     let releaseProof!: () => void;
-    dpopGate = new Promise<void>((resolve) => {
+    dpopMock.gate = new Promise<void>((resolve) => {
       releaseProof = resolve;
     });
     // Resolves the INSTANT generateProof is entered, so we fire reset() only once the
@@ -361,7 +368,7 @@ describe("FIX 2 — reset() fences in-flight auth work (no contamination after l
     const dpopEntered = new Promise<void>((resolve) => {
       proofEntered = resolve;
     });
-    onDpopEnter = proofEntered;
+    dpopMock.onEnter = proofEntered;
 
     const provider = makeProvider();
     // A login probe (with the unguessable fragment) — its upgrade must NOT record a
@@ -758,11 +765,11 @@ describe("FIX (round 4c) — the DPoP htu strips the probe fragment (and query) 
     const req = new Request(fullUrl);
     provider.beginLoginProbe(req);
 
-    dpopProofCalls.length = 0; // isolate THIS upgrade's proof call.
+    dpopMock.calls.length = 0; // isolate THIS upgrade's proof call.
     await provider.upgrade(req);
 
-    expect(dpopProofCalls).toHaveLength(1);
-    const htu = dpopProofCalls[0][1] as string;
+    expect(dpopMock.calls).toHaveLength(1);
+    const htu = dpopMock.calls[0][1] as string;
     // The exact regression roborev asked for: no fragment, no query in the htu.
     expect(htu).not.toContain("#probe-");
     expect(htu).not.toContain("#");
@@ -780,11 +787,11 @@ describe("FIX (round 4c) — the DPoP htu strips the probe fragment (and query) 
     const { req, generation, url } = beginProbe(provider, "https://alice.example/storage/");
     expect(url).toContain("#probe-");
 
-    dpopProofCalls.length = 0;
+    dpopMock.calls.length = 0;
     const upgraded = await provider.upgrade(asManagerWraps(req));
 
     // htu is fragment/query-free...
-    const htu = dpopProofCalls[0][1] as string;
+    const htu = dpopMock.calls[0][1] as string;
     expect(htu).toBe("https://alice.example/storage/");
     expect(htu).not.toContain("#probe-");
     // ...yet the probe match (which uses the full fragment-bearing url) still fired.
