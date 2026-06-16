@@ -1,0 +1,13 @@
+.DS_Store
+.idea/
+.vscode/
+*.swp
+node_modules/
+coverage/
+.roborev/
+# NOTE: package-lock.json is intentionally NOT committed yet. It currently pins
+# @jeswr/solid-vc to a local `file:../solid-vc` path because solid-vc is not yet
+# published to GitHub. Once the orchestrator publishes github:jeswr/solid-vc#main,
+# run `npm install` to generate a correct lockfile and REMOVE this ignore (the
+# suite pattern commits the lockfile — see federation-registry / solid-vc).
+package-lock.json

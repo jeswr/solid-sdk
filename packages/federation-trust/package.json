@@ -1,0 +1,82 @@
+{
+  "name": "@jeswr/federation-trust",
+  "version": "0.1.0",
+  "description": "The cryptographic trust layer above the Solid Federation registry's fedreg:assertedBy: issue and verify a SIGNED membership credential — an authority signs 'membership M (app X in federation F, status Active) asserted by authority A' as a W3C Verifiable Credential 2.0 (Data Integrity, EdDSA/ECDSA over RDFC-1.0). Verification is fail-closed (signature, expiry, issuer-binding, status=Active, expected app/federation/authority, optional delegation chain to a trust anchor). Composes @jeswr/solid-vc (the proof-suite seam) with @jeswr/federation-registry (the fedreg: Membership view) — duplicating neither. Client-side only. Experimental, AI-agent-generated.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build:deps": "node scripts/build-deps.mjs",
+    "build": "node scripts/build-dist.mjs",
+    "build:dev": "npm run build:deps && tsc -p tsconfig.json",
+    "check:dist": "node scripts/check-dist-fresh.mjs",
+    "typecheck": "npm run build:deps && tsc -p tsconfig.json --noEmit",
+    "lint": "biome check src test scripts",
+    "lint:fix": "biome check --write src test scripts",
+    "test": "npm run build:deps && vitest run",
+    "test:coverage": "npm run build:deps && vitest run --coverage",
+    "prepare": "npm run build"
+  },
+  "keywords": [
+    "solid",
+    "federation",
+    "trust",
+    "membership",
+    "verifiable-credentials",
+    "vc-2.0",
+    "data-integrity",
+    "eddsa",
+    "fedreg",
+    "signed-challenge",
+    "rdf",
+    "linked-data"
+  ],
+  "author": "Jesse Wright <jwrightwho@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jeswr/federation-trust.git"
+  },
+  "bugs": {
+    "url": "https://github.com/jeswr/federation-trust/issues"
+  },
+  "homepage": "https://github.com/jeswr/federation-trust#readme",
+  "dependencies": {
+    "@jeswr/federation-registry": "github:jeswr/federation-registry#main",
+    "@jeswr/solid-vc": "github:jeswr/solid-vc#main",
+    "@rdfjs/types": "^2.0.1",
+    "@rdfjs/wrapper": "^0.34.0",
+    "content-type": "^1.0.5",
+    "jose": "^6.0.0",
+    "jsonld-streaming-parser": "^5.0.0",
+    "multiformats": "^14.0.0",
+    "n3": "^2.0.3",
+    "rdf-canonize": "^5.0.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.0.0",
+    "@jeswr/fetch-rdf": "github:jeswr/fetch-rdf#main",
+    "@types/n3": "^1.16.0",
+    "@types/node": "^22.0.0",
+    "@vitest/coverage-v8": "^2.1.0",
+    "esbuild": "^0.21.5",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
