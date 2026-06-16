@@ -70,19 +70,47 @@ export async function resolvePhotosRoot(opts: {
   try {
     const { dataset: profile } = await freshRdf(webId, fetchImpl);
     const links = typeIndexLinks(webId, profile);
-    const indexUrl = links.privateIndex ?? links.publicIndex;
-    if (!indexUrl) return fallback;
-    const { dataset: indexDs } = await freshRdf(indexUrl, fetchImpl);
-    const index = new TypeIndexDataset(indexDs, DataFactory);
-    const located = index
-      .locate(PHOTOGRAPH_CLASS)
-      .map((l) => l.container)
-      .find((c): c is string => typeof c === "string" && c.length > 0);
-    if (!located) return fallback;
-    return { rootUrl: asContainer(located), isFallback: false };
+    // Try BOTH advertised indexes in priority order (private first, then public).
+    // Checking only `privateIndex ?? publicIndex` is a bug: a profile may advertise
+    // a private index that lacks the schema:Photograph registration (or is
+    // unreadable / unparseable) WHILE a public index DOES register it — only
+    // falling back to the conventional path after NEITHER index yields a usable
+    // schema:Photograph instanceContainer is correct cross-app discovery.
+    const indexUrls = [links.privateIndex, links.publicIndex].filter(
+      (u): u is string => typeof u === "string" && u.length > 0,
+    );
+    for (const indexUrl of indexUrls) {
+      const located = await locatePhotographContainer(indexUrl, fetchImpl);
+      if (located) return { rootUrl: asContainer(located), isFallback: false };
+    }
+    return fallback;
   } catch {
     // No usable Type Index (absent / unreadable / unparseable) — fall back to the
     // conventional path. Never block the gallery on discovery.
     return fallback;
+  }
+}
+
+/**
+ * Locate the first registered `schema:Photograph` `solid:instanceContainer` in one
+ * Type Index document. Returns `undefined` when the index is unreadable /
+ * unparseable / has no usable registration — so the caller can try the NEXT
+ * advertised index (rather than aborting discovery on one bad index). Per-index
+ * read failures are swallowed deliberately: an unreadable private index must not
+ * stop the public index from being consulted.
+ */
+async function locatePhotographContainer(
+  indexUrl: string,
+  fetchImpl?: typeof fetch,
+): Promise<string | undefined> {
+  try {
+    const { dataset: indexDs } = await freshRdf(indexUrl, fetchImpl);
+    const index = new TypeIndexDataset(indexDs, DataFactory);
+    return index
+      .locate(PHOTOGRAPH_CLASS)
+      .map((l) => l.container)
+      .find((c): c is string => typeof c === "string" && c.length > 0);
+  } catch {
+    return undefined;
   }
 }
