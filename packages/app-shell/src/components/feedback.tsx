@@ -144,6 +144,39 @@ export function feedbackLabels(category: FeedbackCategory): string[] {
   return ["user-feedback", category];
 }
 
+/**
+ * The list of ACTUALLY tabbable elements inside `root`, in DOM order, mirroring
+ * the browser's real Tab sequence. `selector` matches focusable candidates
+ * (already excluding disabled / `tabindex=-1`); the one nuance the raw selector
+ * misses is the **radio group**: native tab order visits only ONE radio per
+ * named group — the CHECKED radio, or the FIRST radio if none in the group is
+ * checked — never every radio. We therefore drop the non-tabbable members of
+ * each radio group. PURE (DOM in, array out) + exported for unit tests.
+ *
+ * Radios without a `name` are NOT grouped (each is its own control), matching
+ * the platform. Radios in a `<form>` group by (form, name); loose radios group
+ * by name within the document — for a single modal panel, grouping by `name`
+ * alone is the correct, sufficient model.
+ */
+export function tabbableElements(root: HTMLElement, selector: string): HTMLElement[] {
+  const candidates = Array.from(root.querySelectorAll<HTMLElement>(selector));
+  // Per radio-group name, find the single member that participates in tab order:
+  // the checked radio always wins; otherwise the first-seen (DOM order) radio.
+  const groupTabbable = new Map<string, HTMLElement>();
+  for (const el of candidates) {
+    if (el instanceof HTMLInputElement && el.type === "radio" && el.name) {
+      const existing = groupTabbable.get(el.name);
+      if (existing === undefined || el.checked) groupTabbable.set(el.name, el);
+    }
+  }
+  return candidates.filter((el) => {
+    if (el instanceof HTMLInputElement && el.type === "radio" && el.name) {
+      return groupTabbable.get(el.name) === el;
+    }
+    return true;
+  });
+}
+
 // ── FeedbackDialog ──────────────────────────────────────────────────────────────
 
 export interface FeedbackDialogProps {
@@ -237,7 +270,15 @@ export function FeedbackDialog({
       // backdrop), which is the full set of non-tabbable cases the panel has —
       // so no layout-based visibility filter is needed (and none would work
       // under jsdom, which does no layout). `sr-only` radios stay tabbable.
-      const focusable = Array.from(dialog.querySelectorAll<HTMLElement>(focusableSelector));
+      //
+      // BUT a radio GROUP is special: native browser tab order includes only ONE
+      // member per group — the CHECKED radio (or the first radio if none is
+      // checked) — never every radio. If we treated all three category radios as
+      // tabbable, selecting a non-default category (Feedback/Help) would make the
+      // checked radio differ from `first`, so Shift+Tab from it would NOT wrap and
+      // focus would escape the modal. Collapse each radio group to its single
+      // tabbable member to mirror the browser's real tab order.
+      const focusable = tabbableElements(dialog, focusableSelector);
       if (focusable.length === 0) {
         // Nothing focusable in the panel — keep focus on the dialog itself.
         e.preventDefault();

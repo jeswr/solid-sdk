@@ -14,6 +14,7 @@ import {
   FeedbackButton,
   type FeedbackDiagnostics,
   feedbackLabels,
+  tabbableElements,
 } from "../src/components/feedback.js";
 
 const user = userEvent.setup({ pointerEventsCheck: 0 });
@@ -269,5 +270,108 @@ describe("FeedbackDialog — modal focus management (a11y)", () => {
     expect(outside).toHaveFocus();
     await user.tab();
     await vi.waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true));
+  });
+
+  // Regression (roborev Medium): the trap must mirror the BROWSER's tab order, in
+  // which a radio group contributes only the CHECKED radio — not every radio. If
+  // it counted all three category radios, selecting a non-default category would
+  // leave the checked radio ≠ `first`, so Shift+Tab from it would NOT wrap and
+  // focus would escape the modal. Verify the wrap holds for a non-default pick.
+  it.each([
+    "Feedback",
+    "Help",
+  ])("keeps the trap wrapping after selecting the %s category (checked radio is the group's only tabbable)", async (categoryLabel) => {
+    render(<FeedbackButton repo="jeswr/pod-docs" appName="Pod Docs" />);
+    await user.click(screen.getByRole("button", { name: "Feedback" }));
+    const dialog = await screen.findByRole("dialog");
+
+    // Select a NON-default category so the checked radio is not the first radio.
+    const checkedRadio = within(dialog).getByRole("radio", {
+      name: new RegExp(categoryLabel),
+    });
+    await user.click(checkedRadio);
+    await vi.waitFor(() => expect(checkedRadio).toBeChecked());
+
+    // The trap's tabbable list mirrors the browser: the group yields ONLY the
+    // checked radio, so it is `first`. The last focusable is the submit button.
+    const selector =
+      'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+    const tabbable = tabbableElements(dialog, selector);
+    expect(tabbable[0]).toBe(checkedRadio);
+    const last = tabbable[tabbable.length - 1];
+    // Exactly one radio of the category group is tabbable (the checked one).
+    const radios = within(dialog).getAllByRole("radio");
+    expect(radios.length).toBeGreaterThan(1);
+    expect(tabbable.filter((el) => radios.includes(el as HTMLInputElement))).toEqual([
+      checkedRadio,
+    ]);
+
+    // Shift+Tab from the checked radio (the first focusable) wraps to the last,
+    // staying inside the modal — it no longer escapes.
+    checkedRadio.focus();
+    expect(checkedRadio).toHaveFocus();
+    await user.tab({ shift: true });
+    await vi.waitFor(() => expect(last).toHaveFocus());
+    expect(dialog.contains(document.activeElement)).toBe(true);
+
+    // Tab from the last focusable wraps back to the checked radio.
+    last.focus();
+    expect(last).toHaveFocus();
+    await user.tab();
+    await vi.waitFor(() => expect(checkedRadio).toHaveFocus());
+  });
+});
+
+describe("tabbableElements (radio-group tab-order helper)", () => {
+  const selector =
+    'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+  const mount = (html: string): HTMLElement => {
+    const root = document.createElement("div");
+    root.innerHTML = html;
+    document.body.appendChild(root);
+    return root;
+  };
+  afterEach(() => {
+    document.body.innerHTML = "";
+  });
+
+  it("includes only the CHECKED radio of a named group, not every member", () => {
+    const root = mount(`
+      <button type="button">b</button>
+      <input type="radio" name="cat" value="a" />
+      <input type="radio" name="cat" value="b" checked />
+      <input type="radio" name="cat" value="c" />
+    `);
+    const tabbable = tabbableElements(root, selector);
+    const radios = tabbable.filter(
+      (el): el is HTMLInputElement => el instanceof HTMLInputElement && el.type === "radio",
+    );
+    expect(radios.map((r) => r.value)).toEqual(["b"]);
+    // The non-radio button is untouched.
+    expect(tabbable.some((el) => el.tagName === "BUTTON")).toBe(true);
+  });
+
+  it("falls back to the FIRST radio when none in the group is checked", () => {
+    const root = mount(`
+      <input type="radio" name="g" value="x" />
+      <input type="radio" name="g" value="y" />
+    `);
+    const radios = tabbableElements(root, selector).filter(
+      (el): el is HTMLInputElement => el instanceof HTMLInputElement,
+    );
+    expect(radios.map((r) => r.value)).toEqual(["x"]);
+  });
+
+  it("keeps unrelated controls and radios with NO name (each its own control)", () => {
+    const root = mount(`
+      <input type="radio" value="lone-a" />
+      <input type="radio" value="lone-b" />
+      <input type="checkbox" />
+      <textarea></textarea>
+    `);
+    const tabbable = tabbableElements(root, selector);
+    // Nameless radios are not grouped — both survive — plus checkbox + textarea.
+    expect(tabbable.length).toBe(4);
   });
 });
