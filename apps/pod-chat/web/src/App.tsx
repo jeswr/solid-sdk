@@ -12,7 +12,7 @@ import { useSession } from "./auth/SessionProvider";
 import { LoginScreen } from "./LoginScreen";
 
 export function App() {
-  const { webId, session, logout, autologinPending } = useSession();
+  const { webId, session, logout, autologinPending, restoring } = useSession();
 
   if (!webId || !session) {
     // Autologin (a Pod-Manager deep-link or a redirect return) is silently signing
@@ -25,6 +25,23 @@ export function App() {
             <h1>Pod Chat</h1>
             <p className="login-sub" role="status">
               Signing you in…
+            </p>
+          </section>
+        </main>
+      );
+    }
+    // SILENT SESSION RESTORE (cross-app UX invariant #1): a returning user who only
+    // closed the tab is having their session silently re-established from the
+    // persisted DPoP-bound refresh token (a token-endpoint fetch, no popup). Show a
+    // brief "Restoring…" state rather than flashing the login form; we fall through
+    // to <LoginScreen> only when the restore resolves to a genuine login fall-back.
+    if (restoring) {
+      return (
+        <main className="login-screen" aria-busy="true">
+          <section className="login-card">
+            <h1>Pod Chat</h1>
+            <p className="login-sub" role="status">
+              Restoring your session…
             </p>
           </section>
         </main>
