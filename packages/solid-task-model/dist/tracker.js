@@ -35,29 +35,59 @@ import { LiteralAs, LiteralFrom, NamedNodeAs, NamedNodeFrom, OptionalAs, Optiona
 import { DataFactory, Store } from "n3";
 import { storeToTurtle } from "./task.js";
 import { dct, rdf, rdfs, schema, TASK_CLASS, vcard, WF_ALLOWED_TRANS, WF_ASSIGNEE_GROUP, WF_CLOSED, WF_INITIAL_STATE, WF_ISSUE_CATEGORY, WF_ISSUE_CLASS, WF_OPEN, WF_STATE, WF_STATE_STORE, WF_TRACKER, } from "./vocab.js";
+/** A fresh, independent copy of a workflow (no aliasing into a shared constant). */
+function cloneWorkflow(workflow) {
+    return {
+        statuses: workflow.statuses.map((s) => ({ ...s })),
+        transitions: Object.fromEntries(Object.entries(workflow.transitions).map(([k, v]) => [k, [...v]])),
+    };
+}
 /**
  * The built-in workflow used when a tracker declares none: To Do → In Progress →
  * Done, the classic three-column Kanban. `done` is terminal (⇒ resolves to
  * `wf:Closed`). Kept as the default so existing trackers are unchanged.
+ *
+ * **Deep-frozen.** This is a shared module-level constant, so it (and its nested
+ * arrays/objects) are `Object.freeze`d — a consumer that reads {@link Tracker.workflow}
+ * on a tracker with no declared statuses gets a defensive COPY (see the getter), and
+ * any direct mutation of the constant itself throws in strict mode rather than silently
+ * corrupting every future caller (roborev finding job 5612d10, Medium).
  */
-export const DEFAULT_WORKFLOW = {
-    statuses: [
-        { slug: "todo", label: "To Do", terminal: false },
-        { slug: "in-progress", label: "In Progress", terminal: false },
-        { slug: "done", label: "Done", terminal: true },
-    ],
-    // A linear board with free backward moves: any column can reach any other.
-    transitions: {
-        todo: ["in-progress", "done"],
-        "in-progress": ["todo", "done"],
-        done: ["todo", "in-progress"],
-    },
-};
-/** Whether `to` is reachable from `from` under `workflow` (same-status is always allowed). */
+export const DEFAULT_WORKFLOW = (() => {
+    const wf = {
+        statuses: [
+            { slug: "todo", label: "To Do", terminal: false },
+            { slug: "in-progress", label: "In Progress", terminal: false },
+            { slug: "done", label: "Done", terminal: true },
+        ],
+        // A linear board with free backward moves: any column can reach any other.
+        transitions: {
+            todo: ["in-progress", "done"],
+            "in-progress": ["todo", "done"],
+            done: ["todo", "in-progress"],
+        },
+    };
+    for (const s of wf.statuses)
+        Object.freeze(s);
+    Object.freeze(wf.statuses);
+    for (const v of Object.values(wf.transitions))
+        Object.freeze(v);
+    Object.freeze(wf.transitions);
+    return Object.freeze(wf);
+})();
+/**
+ * Whether `to` is reachable from `from` under `workflow` (same-status is always
+ * allowed). Both `from` and `to` must name a status declared in `workflow` — a
+ * malformed `from` that is not a declared status authorizes no transition (a same-
+ * status `from === to` short-circuits to true regardless, the identity move).
+ */
 export function canTransition(workflow, from, to) {
     if (from === to)
         return true;
-    if (!workflow.statuses.some((s) => s.slug === to))
+    const slugs = workflow.statuses;
+    if (!slugs.some((s) => s.slug === from))
+        return false;
+    if (!slugs.some((s) => s.slug === to))
         return false;
     return (workflow.transitions[from] ?? []).includes(to);
 }
@@ -221,8 +251,11 @@ export class Tracker extends TermWrapper {
             if (q.subject.value.startsWith(prefix))
                 slugs.add(q.subject.value.slice(prefix.length));
         }
+        // Return a defensive COPY of the default — DEFAULT_WORKFLOW is a shared frozen
+        // constant, so handing it out directly would let a consumer's mutation either
+        // throw (frozen) or, pre-freeze, corrupt every future caller.
         if (slugs.size === 0)
-            return DEFAULT_WORKFLOW;
+            return cloneWorkflow(DEFAULT_WORKFLOW);
         const initial = OptionalFrom.subjectPredicate(this, WF_INITIAL_STATE, NamedNodeAs.string);
         const initialSlug = initial?.startsWith(prefix) ? initial.slice(prefix.length) : undefined;
         const positionOf = (slug) => OptionalFrom.subjectPredicate(new TermWrapper(this.statusIri(slug), this.dataset, this.factory), schema("position"), LiteralAs.number) ?? Number.MAX_SAFE_INTEGER;

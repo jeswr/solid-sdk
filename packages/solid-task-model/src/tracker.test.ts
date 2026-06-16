@@ -120,6 +120,43 @@ describe("Tracker typed accessor", () => {
     expect(t.workflow).toEqual(DEFAULT_WORKFLOW);
   });
 
+  it("the default-workflow getter returns a defensive COPY (no shared-constant aliasing)", () => {
+    const store = new Store();
+    const t = new Tracker(trackerSubject(DOC), store, DataFactory).mark();
+    const wf1 = t.workflow;
+    // The returned default must not BE the shared constant…
+    expect(wf1).not.toBe(DEFAULT_WORKFLOW);
+    expect(wf1.statuses).not.toBe(DEFAULT_WORKFLOW.statuses);
+    // …and mutating the returned copy must not corrupt the constant or the next read.
+    wf1.statuses.push({ slug: "rogue", label: "Rogue", terminal: false });
+    wf1.transitions.todo?.push("rogue");
+    expect(DEFAULT_WORKFLOW.statuses.map((s) => s.slug)).toEqual(["todo", "in-progress", "done"]);
+    expect(t.workflow.statuses.map((s) => s.slug)).toEqual(["todo", "in-progress", "done"]);
+    expect(t.workflow.transitions.todo).toEqual(["in-progress", "done"]);
+  });
+
+  it("DEFAULT_WORKFLOW is deep-frozen (a shared constant must be immutable)", () => {
+    expect(Object.isFrozen(DEFAULT_WORKFLOW)).toBe(true);
+    expect(Object.isFrozen(DEFAULT_WORKFLOW.statuses)).toBe(true);
+    expect(Object.isFrozen(DEFAULT_WORKFLOW.transitions)).toBe(true);
+    expect(Object.isFrozen(DEFAULT_WORKFLOW.statuses[0])).toBe(true);
+  });
+
+  it("canTransition rejects an unknown `from` status (malformed workflow data)", () => {
+    const wf_ = DEFAULT_WORKFLOW;
+    // A `from` that is not a declared status authorizes nothing…
+    expect(canTransition(wf_, "ghost", "todo")).toBe(false);
+    expect(canTransition(wf_, "ghost", "done")).toBe(false);
+    // …even if a malformed transitions map names it as a source.
+    const malformed: WorkflowDef = {
+      statuses: [{ slug: "todo", label: "To Do", terminal: false }],
+      transitions: { ghost: ["todo"] },
+    };
+    expect(canTransition(malformed, "ghost", "todo")).toBe(false);
+    // But the identity move from an unknown status is still allowed (same-status).
+    expect(canTransition(wf_, "ghost", "ghost")).toBe(true);
+  });
+
   it("redefining a workflow leaves no orphan #status- class", () => {
     const store = new Store();
     const t = new Tracker(trackerSubject(DOC), store, DataFactory).mark();
@@ -336,6 +373,36 @@ describe("SHACL shape (shapes/tracker.ttl)", () => {
     const report = await validateTtl(ttl);
     expect(report.conforms).toBe(false);
     expect(report.results.some((r) => String(r.path?.value).endsWith("issueClass"))).toBe(true);
+  });
+
+  it("a tracker with NO wf:issueClass is non-conforming (required — SolidOS throws without it)", async () => {
+    // A bare tracker (no issueClass / initialState) is NOT a valid SolidOS tracker.
+    const ttl = `
+      @prefix wf:  <http://www.w3.org/2005/01/wf/flow#> .
+      @prefix dct: <http://purl.org/dc/terms/> .
+      <#this> a wf:Tracker ; dct:title "No issue class" .
+    `;
+    const report = await validateTtl(ttl);
+    expect(report.conforms).toBe(false);
+    expect(report.results.some((r) => String(r.path?.value).endsWith("issueClass"))).toBe(true);
+  });
+
+  it("a tracker with NO wf:initialState warns (soft compatibility requirement)", async () => {
+    // issueClass present (so it's not a hard violation), but no initialState.
+    const ttl = `
+      @prefix wf:  <http://www.w3.org/2005/01/wf/flow#> .
+      @prefix dct: <http://purl.org/dc/terms/> .
+      <#this> a wf:Tracker ; dct:title "No initial state" ; wf:issueClass wf:Task .
+    `;
+    const report = await validateTtl(ttl);
+    // The missing-initialState rule is sh:Warning → a result, but advisory.
+    expect(
+      report.results.some(
+        (r) =>
+          String(r.path?.value).endsWith("initialState") &&
+          String(r.severity?.value).endsWith("Warning"),
+      ),
+    ).toBe(true);
   });
 
   it("a literal wf:issueCategory is non-conforming (must be an IRI)", async () => {

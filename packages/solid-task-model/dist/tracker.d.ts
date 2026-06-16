@@ -61,9 +61,20 @@ export type StatusSlug = string;
  * The built-in workflow used when a tracker declares none: To Do → In Progress →
  * Done, the classic three-column Kanban. `done` is terminal (⇒ resolves to
  * `wf:Closed`). Kept as the default so existing trackers are unchanged.
+ *
+ * **Deep-frozen.** This is a shared module-level constant, so it (and its nested
+ * arrays/objects) are `Object.freeze`d — a consumer that reads {@link Tracker.workflow}
+ * on a tracker with no declared statuses gets a defensive COPY (see the getter), and
+ * any direct mutation of the constant itself throws in strict mode rather than silently
+ * corrupting every future caller (roborev finding job 5612d10, Medium).
  */
 export declare const DEFAULT_WORKFLOW: WorkflowDef;
-/** Whether `to` is reachable from `from` under `workflow` (same-status is always allowed). */
+/**
+ * Whether `to` is reachable from `from` under `workflow` (same-status is always
+ * allowed). Both `from` and `to` must name a status declared in `workflow` — a
+ * malformed `from` that is not a declared status authorizes no transition (a same-
+ * status `from === to` short-circuits to true regardless, the identity move).
+ */
 export declare function canTransition(workflow: WorkflowDef, from: StatusSlug, to: StatusSlug): boolean;
 /** A status of `terminal` disposition resolves to "closed"; otherwise "open". */
 export declare function statusState(workflow: WorkflowDef, slug: StatusSlug): "open" | "closed";

@@ -32,12 +32,24 @@
     sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ;
   ] ;
 
-  # Issue class — the rdf:type the tracker's issues carry. An IRI, at most one.
-  # The SolidOS issue pane THROWS without it, so the federation-core writer always
-  # stamps it (defaulting to wf:Task).
+  # Issue class — the rdf:type the tracker's issues carry. Exactly one IRI.
+  # REQUIRED (minCount 1): the SolidOS issue pane THROWS when a tracker is missing
+  # wf:issueClass, so a tracker without it is NOT a valid, federation-readable
+  # tracker. The federation-core writer always stamps it (defaulting to wf:Task).
   sh:property [
     sh:path wf:issueClass ; sh:name "issue class" ;
-    sh:nodeKind sh:IRI ; sh:maxCount 1 ;
+    sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ;
+  ] ;
+
+  # Initial workflow state — the tracker's entry status class. Part of the SolidOS
+  # compatibility contract (the pane needs an initial state to render the board),
+  # so the writer always sets it. Required at sh:Warning severity rather than
+  # Violation: a foreign/legacy tracker mid-migration may omit it, and a Warning
+  # lets each consumer decide whether to treat the omission as fatal. An IRI, one.
+  sh:property [
+    sh:path wf:initialState ; sh:name "initial state" ;
+    sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ;
+    sh:severity sh:Warning ;
   ] ;
 
   # Category / dimension classes the tracker declares (priority, label, type…) —
