@@ -1,0 +1,78 @@
+{
+  "name": "@jeswr/solid-odrl",
+  "version": "0.1.0",
+  "description": "ODRL usage-control policies for Solid resources + agent interactions (M3 of the agentic-Solid roadmap). Build an ODRL 2.2 Policy/Permission/Prohibition/Duty graph (the real W3C ODRL vocab, http://www.w3.org/ns/odrl/2/), serialise/parse it (Turtle/JSON-LD via the suite RDF libs), and evaluate it CLIENT-SIDE: given a policy + a request context (agent WebID, action, target, constraints like time/purpose) decide permit/deny/duty — pure, deterministic, testable. The expression + evaluation library; SERVER-SIDE enforcement (an authorizer beside WAC) is the CORE-PSS M5a item, NOT in this package. Experimental, AI-agent-generated.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build:deps": "node scripts/build-deps.mjs",
+    "build": "node scripts/build-dist.mjs",
+    "build:dev": "npm run build:deps && tsc -p tsconfig.json",
+    "check:dist": "node scripts/check-dist-fresh.mjs",
+    "typecheck": "npm run build:deps && tsc -p tsconfig.json --noEmit",
+    "lint": "biome check src test scripts",
+    "lint:fix": "biome check --write src test scripts",
+    "test": "npm run build:deps && vitest run",
+    "test:coverage": "npm run build:deps && vitest run --coverage",
+    "prepare": "npm run build"
+  },
+  "keywords": [
+    "solid",
+    "odrl",
+    "usage-control",
+    "policy",
+    "permission",
+    "prohibition",
+    "duty",
+    "agent",
+    "rdf",
+    "jsonld",
+    "linked-data",
+    "agentic"
+  ],
+  "author": "Jesse Wright <jwrightwho@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jeswr/solid-odrl.git"
+  },
+  "bugs": {
+    "url": "https://github.com/jeswr/solid-odrl/issues"
+  },
+  "homepage": "https://github.com/jeswr/solid-odrl#readme",
+  "dependencies": {
+    "@rdfjs/wrapper": "^0.34.0",
+    "@solid/object": "^0.6.0",
+    "content-type": "^1.0.5",
+    "jsonld-streaming-parser": "^5.0.0",
+    "n3": "^2.0.3"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.0.0",
+    "@jeswr/fetch-rdf": "github:jeswr/fetch-rdf#main",
+    "@rdfjs/types": "^2.0.1",
+    "@types/n3": "^1.16.0",
+    "@types/node": "^22.0.0",
+    "@vitest/coverage-v8": "^2.1.0",
+    "esbuild": "^0.21.5",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

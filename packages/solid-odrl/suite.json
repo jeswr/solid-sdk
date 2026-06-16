@@ -1,0 +1,26 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jeswr/full-solid-ecosystem/main/tracking/schema/suite.schema.json",
+  "id": "solid-odrl",
+  "kind": "sdk",
+  "name": "Solid ODRL",
+  "repo": "https://github.com/jeswr/solid-odrl",
+  "category": "infrastructure",
+  "maturity": "prototype",
+  "visibility": "public",
+  "stack": {
+    "lang": "TypeScript (ESM, NodeNext)",
+    "rdf": "n3 ^2.x",
+    "rdf-wrapper": "@rdfjs/wrapper ^0.34.x",
+    "solid-object": "@solid/object ^0.6.x",
+    "fetch-rdf": "@jeswr/fetch-rdf (git: jeswr/fetch-rdf#main)",
+    "test": "vitest ^2.x",
+    "lint": "@biomejs/biome ^2.x",
+    "node": ">=24"
+  },
+  "dependsOn": ["solid-agent-card", "solid-a2a"],
+  "roadmap": {
+    "doc": "https://github.com/jeswr/prod-solid-server/blob/main/docs/design/agentic-solid-infrastructure.md",
+    "milestone": "M3 — ODRL contract negotiation between agents, attached to pod resources",
+    "note": "The ODRL usage-control EXPRESSION + client-side EVALUATION library: build an ODRL 2.2 Policy/Permission/Prohibition/Duty graph (real W3C vocab http://www.w3.org/ns/odrl/2/), serialise/parse (Turtle/JSON-LD), and evaluate a request context (agent/action/target/constraints) to permit/deny/duty — pure, deterministic, testable, with ODRL conflict resolution + constraint satisfaction. Composes with M1 (a policy can reference an @jeswr/solid-agent-card AgentDescriptor) and M2 (a policy can gate an @jeswr/solid-a2a A2A action). SEPARATE-CODEBASE — zero prod-solid-server core risk (pure client-side library; no networking, no server change). The M3 negotiation state machine + Agreement signer + revocation-notify (@jeswr/agent-odrl) build ON this expression/evaluation layer; the SERVER-SIDE pod-side ODRL authorizer beside WAC (M5a) is CORE-PSS and is NOT built here (flagged for maintainer approval)."
+  }
+}
