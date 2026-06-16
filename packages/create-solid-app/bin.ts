@@ -30,17 +30,32 @@ interface ParsedArgs {
   install: boolean;
   seedPod: boolean;
   help: boolean;
+  /** GitHub `owner/repo` the baked-in FeedbackButton files issues against (--repo). */
+  repo?: string;
   /** A usage error (unknown flag / extra positional). Non-null means abort with this message. */
   error?: string;
 }
 
 export function parseArgs(argv: string[]): ParsedArgs {
   const out: ParsedArgs = { install: true, seedPod: false, help: false };
-  for (const arg of argv) {
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    if (arg === undefined) continue; // unreachable (i < length), but narrows for noUncheckedIndexedAccess
     if (arg === "--no-install") out.install = false;
     else if (arg === "--seed-pod") out.seedPod = true;
     else if (arg === "--help" || arg === "-h") out.help = true;
-    else if (arg.startsWith("-")) {
+    else if (arg === "--repo") {
+      // `--repo owner/name` — the next token is the value.
+      const value = argv[i + 1];
+      if (value === undefined || value.startsWith("-")) {
+        out.error ??= "--repo requires a value (owner/repo)";
+      } else {
+        out.repo = value;
+        i++; // consume the value
+      }
+    } else if (arg.startsWith("--repo=")) {
+      out.repo = arg.slice("--repo=".length);
+    } else if (arg.startsWith("-")) {
       // Unknown flag — fail rather than silently ignore (a typo'd flag would otherwise no-op).
       out.error ??= `unknown flag: ${arg}`;
     } else if (!out.appName) {
@@ -56,13 +71,16 @@ export function parseArgs(argv: string[]): ParsedArgs {
 const HELP = `create-solid-app (prototype)
 
 Usage:
-  node dx/create-solid-app/bin.ts <app-name> [--no-install] [--seed-pod]
-  create-solid-app <app-name> [--no-install] [--seed-pod]   # after npm link
+  node dx/create-solid-app/bin.ts <app-name> [--no-install] [--seed-pod] [--repo owner/repo]
+  create-solid-app <app-name> [--no-install] [--seed-pod] [--repo owner/repo]   # after npm link
 
 Flags:
   --no-install   Skip running npm install in the scaffolded directory.
   --seed-pod     Boot a local in-memory CSS on :3088 + seed an account and print
                  the issuer + client credentials for instant login.
+  --repo <o/r>   GitHub owner/repo the baked-in feedback button files issues
+                 against (e.g. --repo jeswr/my-app). Defaults to a placeholder
+                 you edit in lib/app-shell-config.ts.
   -h, --help     Show this help.
 `;
 
@@ -88,7 +106,7 @@ async function main(): Promise<void> {
 
   const appName = args.appName as string;
   process.stdout.write(`Scaffolding "${appName}" from the app-builder template…\n`);
-  const result = await scaffold({ targetDir: appName, appName });
+  const result = await scaffold({ targetDir: appName, appName, repo: args.repo });
   process.stdout.write(`✔ Created ${result.targetDir} (${result.files.length} files)\n`);
 
   if (args.install) {

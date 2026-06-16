@@ -67,6 +67,13 @@ export interface ScaffoldOptions {
   targetDir: string;
   /** Project name used in package.json `name` + README title. */
   appName: string;
+  /**
+   * GitHub repo (`owner/repo`) the baked-in @jeswr/app-shell FeedbackButton files
+   * issues against. Optional — when omitted the scaffolded app keeps the
+   * `your-org/your-repo` placeholder (which the user edits in
+   * `lib/app-shell-config.ts`). When given it is substituted in at scaffold time.
+   */
+  repo?: string;
   /** Override template location (tests). Defaults to resolveTemplateDir(). */
   templateDir?: string;
 }
@@ -144,9 +151,61 @@ See \`AGENTS.md\` for the agent-extension guide and the bundled house-rule stack
 `;
 
 /**
+ * Validate + normalise a `--repo` value to a bare `owner/repo`. Accepts the
+ * plain form, a full GitHub URL, or a `.git` suffix; returns `undefined` (leave
+ * the placeholder) for anything that is not a recognisable owner/repo, so a
+ * fat-fingered value never bakes a broken FeedbackButton target.
+ */
+export function normalizeRepo(raw?: string): string | undefined {
+  if (!raw) return undefined;
+  let s = raw.trim();
+  if (s.length === 0) return undefined;
+  // Strip a github URL wrapper + a trailing .git, keeping just `owner/repo`.
+  s = s
+    .replace(/^https?:\/\/github\.com\//i, "")
+    .replace(/^git@github\.com:/i, "")
+    .replace(/\.git$/i, "")
+    .replace(/\/+$/, "");
+  // Exactly two non-empty, GitHub-name-safe segments.
+  return /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(s) ? s : undefined;
+}
+
+/**
+ * Rewrite the `__CSA_APP_NAME__` / `__CSA_REPO__` placeholder tokens in the
+ * scaffolded `lib/app-shell-config.ts`. The template's runtime fallbacks keep
+ * any UN-substituted token harmless, so we only replace a token when we have a
+ * value — APP_NAME is always known (the display name); REPO only when `--repo`
+ * was passed. The config file is plain source the user can edit afterwards.
+ */
+async function substituteAppShellConfig(
+  targetDir: string,
+  values: { appName: string; repo?: string },
+): Promise<void> {
+  const configPath = join(targetDir, "lib", "app-shell-config.ts");
+  if (!existsSync(configPath)) return; // template without the config — nothing to do.
+  let src = await readFile(configPath, "utf8");
+  // Substitute inside the string literals only (the tokens are quoted in the
+  // template). `appName` is escaped for a JS double-quoted string; `repo` is
+  // already validated to a safe `owner/repo` charset by normalizeRepo.
+  src = src.replaceAll("__CSA_APP_NAME__", jsStringEscape(values.appName));
+  if (values.repo) src = src.replaceAll("__CSA_REPO__", values.repo);
+  await writeFile(configPath, src, "utf8");
+}
+
+/** Escape a value for embedding inside a double-quoted JS/TS string literal. */
+function jsStringEscape(value: string): string {
+  return value
+    .replace(/\\/g, "\\\\")
+    .replace(/"/g, '\\"')
+    .replace(/\n/g, "\\n")
+    .replace(/\r/g, "\\r");
+}
+
+/**
  * Copy the template into `targetDir`, then apply substitutions:
  *  - package.json `name` -> toPackageName(appName)
  *  - generate README.md with the app title (template ships none)
+ *  - bake the app-shell FeedbackButton config (APP_NAME + optional repo)
  */
 export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
   const templateDir = opts.templateDir ?? resolveTemplateDir();
@@ -176,6 +235,18 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
 
   // Substitution 2: generate the project README (template ships none).
   await writeFile(join(targetDir, "README.md"), README(opts.appName), "utf8");
+
+  // Substitution 3: bake the per-app @jeswr/app-shell FeedbackButton config —
+  // the human APP_NAME (the display name, not the package name) and, when a
+  // `--repo owner/repo` was given, the repo issues are filed against. The
+  // template ships `__CSA_*__` placeholders that fall back to safe defaults when
+  // NOT substituted (so the verbatim template still builds), so we only rewrite
+  // the tokens we actually have a value for — a missing repo leaves the
+  // `your-org/your-repo` placeholder for the user to edit.
+  await substituteAppShellConfig(targetDir, {
+    appName: opts.appName,
+    repo: normalizeRepo(opts.repo),
+  });
 
   const files = (await walk(targetDir)).sort();
   return { targetDir, appName: opts.appName, templateDir, files };

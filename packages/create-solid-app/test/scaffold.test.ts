@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { scaffold, toPackageName } from "../src/scaffold.ts";
+import { normalizeRepo, scaffold, toPackageName } from "../src/scaffold.ts";
 
 describe("toPackageName", () => {
   it("lowercases and url-safes names", () => {
@@ -11,6 +11,24 @@ describe("toPackageName", () => {
     expect(toPackageName("Foo_Bar.baz")).toBe("foo_bar.baz");
     expect(toPackageName("  --weird--  ")).toBe("weird");
     expect(toPackageName("")).toBe("solid-app");
+  });
+});
+
+describe("normalizeRepo", () => {
+  it("accepts a bare owner/repo", () => {
+    expect(normalizeRepo("jeswr/my-app")).toBe("jeswr/my-app");
+  });
+  it("strips a github URL + .git suffix", () => {
+    expect(normalizeRepo("https://github.com/jeswr/my-app.git")).toBe("jeswr/my-app");
+    expect(normalizeRepo("https://github.com/jeswr/my-app/")).toBe("jeswr/my-app");
+    expect(normalizeRepo("git@github.com:jeswr/my-app.git")).toBe("jeswr/my-app");
+  });
+  it("rejects garbage (returns undefined so the placeholder stays)", () => {
+    expect(normalizeRepo(undefined)).toBeUndefined();
+    expect(normalizeRepo("")).toBeUndefined();
+    expect(normalizeRepo("not-a-repo")).toBeUndefined();
+    expect(normalizeRepo("a/b/c")).toBeUndefined();
+    expect(normalizeRepo("bad repo/name")).toBeUndefined();
   });
 });
 
@@ -93,5 +111,50 @@ describe("scaffold", () => {
     } finally {
       process.chdir(prevCwd);
     }
+  });
+
+  it("ships the baked-in app-shell wiring (header + config)", () => {
+    for (const f of ["lib/app-shell-config.ts", "lib/app-version.ts", "components/AppHeader.tsx"]) {
+      expect(result.files, `missing ${f}`).toContain(f);
+    }
+  });
+
+  it("substitutes APP_NAME into lib/app-shell-config.ts", async () => {
+    const config = await readFile(join(result.targetDir, "lib", "app-shell-config.ts"), "utf8");
+    // The display name is baked in; the un-given repo keeps its placeholder token.
+    expect(config).toContain('"My App"');
+    expect(config).toContain("__CSA_REPO__");
+    expect(config).not.toContain("__CSA_APP_NAME__");
+  });
+});
+
+describe("scaffold with --repo", () => {
+  let workDir: string;
+  let result: Awaited<ReturnType<typeof scaffold>>;
+
+  beforeAll(async () => {
+    workDir = await mkdtemp(join(tmpdir(), "csa-repo-"));
+    const prevCwd = process.cwd();
+    process.chdir(workDir);
+    try {
+      result = await scaffold({
+        targetDir: "repo-app",
+        appName: "Repo App",
+        repo: "https://github.com/jeswr/repo-app.git",
+      });
+    } finally {
+      process.chdir(prevCwd);
+    }
+  });
+
+  afterAll(async () => {
+    await rm(workDir, { recursive: true, force: true });
+  });
+
+  it("bakes the normalised repo into FEEDBACK_REPO", async () => {
+    const config = await readFile(join(result.targetDir, "lib", "app-shell-config.ts"), "utf8");
+    expect(config).toContain('"jeswr/repo-app"');
+    expect(config).not.toContain("__CSA_REPO__");
+    expect(config).not.toContain("__CSA_APP_NAME__");
   });
 });

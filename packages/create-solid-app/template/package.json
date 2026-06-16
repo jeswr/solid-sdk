@@ -15,6 +15,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@jeswr/app-shell": "git+https://github.com/jeswr/app-shell.git#cc86f78",
     "@jeswr/fetch-rdf": "^0.1.0",
     "@rdfjs/wrapper": "^0.34.0",
     "@solid/object": "^0.6.0",

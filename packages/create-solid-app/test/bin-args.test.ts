@@ -37,4 +37,27 @@ describe("parseArgs", () => {
     const a = parseArgs(["--help", "--bogus"]);
     expect(a.help).toBe(true);
   });
+
+  it("parses --repo owner/name (space form)", () => {
+    const a = parseArgs(["my-app", "--repo", "jeswr/my-app"]);
+    expect(a.repo).toBe("jeswr/my-app");
+    expect(a.appName).toBe("my-app");
+    expect(a.error).toBeUndefined();
+  });
+
+  it("parses --repo=owner/name (equals form)", () => {
+    const a = parseArgs(["my-app", "--repo=jeswr/my-app"]);
+    expect(a.repo).toBe("jeswr/my-app");
+    expect(a.error).toBeUndefined();
+  });
+
+  it("rejects --repo with no value", () => {
+    const a = parseArgs(["my-app", "--repo"]);
+    expect(a.error).toMatch(/--repo requires a value/);
+  });
+
+  it("rejects --repo immediately followed by another flag", () => {
+    const a = parseArgs(["my-app", "--repo", "--seed-pod"]);
+    expect(a.error).toMatch(/--repo requires a value/);
+  });
 });

@@ -13,6 +13,7 @@ below are non-negotiable; the lint config and tests enforce most of them.
 | Package | Version | Role |
 |---|---|---|
 | `next` | 16.x (App Router, React 19) | framework |
+| `@jeswr/app-shell` | `git+https#cc86f78` | shared suite shell — `ThemeProvider`/`ThemeToggle`/`themeScript`, `AccountMenu`, `FeedbackButton`, primitives |
 | `@solid/reactive-authentication` | 0.1.3 | login — patches global `fetch` with DPoP tokens |
 | `@solid/object` | 0.6.0 | typed read wrappers (`WebIdDataset`, `Agent`, `ContainerDataset`, WAC/ACP) |
 | `@rdfjs/wrapper` | 0.34.0 | wrapper base (`OptionalFrom`, `LiteralAs`, `NamedNodeAs`) |
@@ -65,6 +66,39 @@ CSS login works. Do not swap it back to the published provider.
 > `allowInsecureLoopback`, which is gated behind `NEXT_PUBLIC_ALLOW_INSECURE_LOOPBACK=true`
 > (set in `.env.local` for dev). In production, log into **HTTPS** pods (e.g.
 > `solidcommunity.net`); leave the flag unset.
+
+## The shared suite shell (`@jeswr/app-shell`) — already wired
+
+This app is born with the suite's shared UX shell. Keep it; don't re-roll your own
+theme system or account menu.
+
+- **Theme.** `<ThemeProvider>` (light / dark / system) wraps the app in
+  `app/providers.tsx`, INSIDE which the auth provider mounts. A no-flash bootstrap
+  runs before first paint from `app/layout.tsx` `<head>` (the string lives in
+  `lib/theme-script.ts` — kept React-free so the SERVER layout never imports the
+  app-shell barrel; importing client-only `React.createContext` into a server
+  component breaks `next build` page-data collection). The bootstrap's
+  `storageKey`/`attributeClass` MUST match the `<ThemeProvider>` defaults
+  (`app-shell-theme` / `dark`) — change one, change both.
+- **Header.** `components/AppHeader.tsx` (a client component, mounted in the
+  layout) renders `<FeedbackButton/>` + `<ThemeToggle/>` + `<AccountMenu/>`. The
+  AccountMenu is DECOUPLED — it takes `webId`/`displayName`/`avatarUrl` + an
+  `onSignOut` callback as props, wired here to `useSolidAuth()`. It renders only
+  once signed in.
+- **Feedback.** `<FeedbackButton repo={FEEDBACK_REPO} appName={APP_NAME} … />`
+  files a GitHub issue against `FEEDBACK_REPO` (in `lib/app-shell-config.ts` —
+  scaffolded from `create-solid-app --repo owner/name`, editable). The signed-in
+  WebID is attached only if the reporter ticks the consent box (default OFF).
+- **Tokens.** `app/globals.css` defines the suite OKLCH palette (the SAME token
+  set `@jeswr/app-shell` ships) and `@source`s the app-shell `dist` so Tailwind
+  generates the utility classes its components emit. Do NOT also import
+  app-shell's `tokens.css`/`theme.css` — that would duplicate the token home.
+  Keep any bare element selectors scoped (`@layer base`), never a global
+  `button {}`, so the shadcn/app-shell button styling is not clobbered.
+
+The whole stack is from `@jeswr/app-shell` (a `git+https`-pinned dep that ships its
+own built `dist/`, so `npm install` is keyless). Don't fork these components into
+the app; if you need a behaviour change, contribute it upstream.
 
 ## The data-layer contract (copy this pattern for every new feature)
 
