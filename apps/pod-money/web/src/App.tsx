@@ -117,7 +117,7 @@ function pickLedgerUrl(locations: { instance?: string; container?: string }[]): 
 }
 
 export function App() {
-  const { webId, session, logout, autologinPending } = useSession();
+  const { webId, session, logout, autologinPending, restoring } = useSession();
 
   if (!webId || !session) {
     // Autologin (a Pod-Manager deep-link or a redirect return) is silently signing
@@ -130,6 +130,22 @@ export function App() {
             <h1>Pod Money</h1>
             <p className="login-sub" role="status">
               Signing you in…
+            </p>
+          </section>
+        </main>
+      );
+    }
+    // SILENT SESSION RESTORE (closed-tab reopen): a returning user's DPoP-bound
+    // refresh token is being redeemed at the token endpoint (a fetch, no popup). Show
+    // a brief restoring state so the login form does not flash before it resolves —
+    // it falls through to <LoginScreen /> only on a genuine restore failure.
+    if (restoring) {
+      return (
+        <main className="login-screen" aria-busy="true">
+          <section className="login-card">
+            <h1>Pod Money</h1>
+            <p className="login-sub" role="status">
+              Restoring your session…
             </p>
           </section>
         </main>
