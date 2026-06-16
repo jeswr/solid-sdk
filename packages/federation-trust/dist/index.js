@@ -662,6 +662,12 @@ function strClaim(subject, key) {
 function hasType(vc, typeIri2) {
   return Array.isArray(vc.type) && vc.type.includes(typeIri2);
 }
+function proofVerificationMethod(vc) {
+  const proof = Array.isArray(vc.proof) ? vc.proof[0] : vc.proof;
+  if (proof === null || typeof proof !== "object") return void 0;
+  const vm = proof.verificationMethod;
+  return typeof vm === "string" && vm.length > 0 ? vm : void 0;
+}
 function fixedResolver(resolutions) {
   return (vm) => resolutions.get(vm);
 }
@@ -669,11 +675,15 @@ function anchorMethod(anchor) {
   return anchor.verificationMethod ?? anchor.authority;
 }
 async function verifyVcAgainstKeys(vc, resolutions, now) {
-  return verifyCredential(vc, {
-    resolveKey: fixedResolver(resolutions),
-    now,
-    expectedProofPurpose: "assertionMethod"
-  });
+  try {
+    return await verifyCredential(vc, {
+      resolveKey: fixedResolver(resolutions),
+      now,
+      expectedProofPurpose: "assertionMethod"
+    });
+  } catch {
+    return { verified: false, errors: [{ code: "MALFORMED", message: "malformed proof" }] };
+  }
 }
 async function importDelegateKey(jwkString) {
   let jwk;
@@ -719,15 +729,11 @@ async function verifyChain(issuer, federation, chain, anchors, now) {
     if (vc.issuer !== expectedDelegator) {
       return fail(`chain link ${i} issuer ${vc.issuer} != expected delegator ${expectedDelegator}`);
     }
-    const proof = Array.isArray(vc.proof) ? vc.proof[0] : vc.proof;
-    if (proof === void 0 || !controlledBy(proof.verificationMethod, vc.issuer)) {
+    const linkMethod = proofVerificationMethod(vc);
+    if (linkMethod === void 0 || !controlledBy(linkMethod, vc.issuer)) {
       return fail(`chain link ${i} verificationMethod not controlled by delegator ${vc.issuer}`);
     }
-    const res = await verifyVcAgainstKeys(
-      vc,
-      /* @__PURE__ */ new Map([[proof.verificationMethod, trustedKey]]),
-      now
-    );
+    const res = await verifyVcAgainstKeys(vc, /* @__PURE__ */ new Map([[linkMethod, trustedKey]]), now);
     if (!res.verified) {
       return fail(
         `chain link ${i} signature/validity invalid against the trusted delegator key (${trustedMethod}): ${res.errors.map((e) => e.code).join(",")}`
@@ -847,8 +853,7 @@ async function verifyMembershipCredential(vc, options) {
   const directAnchor = anchors.find((a) => a.authority === vc.issuer);
   const resolutions = /* @__PURE__ */ new Map();
   let trustEstablished = false;
-  const membershipProof = Array.isArray(vc.proof) ? vc.proof[0] : vc.proof;
-  const membershipMethod = membershipProof?.verificationMethod;
+  const membershipMethod = proofVerificationMethod(vc);
   if (directAnchor !== void 0) {
     resolutions.set(anchorMethod(directAnchor), directAnchor.publicKey);
     if (membershipMethod !== void 0 && controlledBy(membershipMethod, vc.issuer)) {

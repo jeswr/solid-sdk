@@ -86,6 +86,19 @@ function hasType(vc: VerifiableCredential, typeIri: string): boolean {
 }
 
 /**
+ * Safely extract a credential's (first) proof `verificationMethod` as a non-empty
+ * string, or `undefined` for a missing / non-object / non-string-method proof.
+ * FAIL-CLOSED hardening: an attacker-supplied malformed proof (`proof: null`,
+ * `{ verificationMethod: 5 }`, …) must yield a structured rejection, never a throw.
+ */
+function proofVerificationMethod(vc: VerifiableCredential): string | undefined {
+  const proof = Array.isArray(vc.proof) ? vc.proof[0] : vc.proof;
+  if (proof === null || typeof proof !== "object") return undefined;
+  const vm = (proof as { verificationMethod?: unknown }).verificationMethod;
+  return typeof vm === "string" && vm.length > 0 ? vm : undefined;
+}
+
+/**
  * Resolve a `verificationMethod` IRI to its public key from a fixed set of
  * (verificationMethod → key) resolutions. Returns `undefined` (→ fail closed) if
  * the method is not in the set: the verifier never reaches out to the network for
@@ -112,12 +125,19 @@ async function verifyVcAgainstKeys(
   vc: VerifiableCredential,
   resolutions: ReadonlyMap<string, CryptoKey>,
   now: Date,
-) {
-  return verifyCredential(vc, {
-    resolveKey: fixedResolver(resolutions),
-    now,
-    expectedProofPurpose: "assertionMethod",
-  });
+): Promise<{ verified: boolean; errors: readonly { code: string; message: string }[] }> {
+  try {
+    return await verifyCredential(vc, {
+      resolveKey: fixedResolver(resolutions),
+      now,
+      expectedProofPurpose: "assertionMethod",
+    });
+  } catch {
+    // FAIL-CLOSED: a malformed proof (e.g. `proof: null`, a non-object proof) can
+    // make the underlying pipeline throw; never let that escape — treat it as a
+    // structurally invalid credential.
+    return { verified: false, errors: [{ code: "MALFORMED", message: "malformed proof" }] };
+  }
 }
 
 /** Import a delegate's public key from its embedded JWK-string claim (fail closed). */
@@ -211,22 +231,19 @@ async function verifyChain(
     if (vc.issuer !== expectedDelegator) {
       return fail(`chain link ${i} issuer ${vc.issuer} != expected delegator ${expectedDelegator}`);
     }
-    // The signing method must be controlled by the delegator AND must be exactly
-    // the trusted method we hold the key for (the anchor's, or the previous link's
-    // signed delegate method). We resolve ONLY that method → the trusted key, so a
-    // link signed by any other key fails closed.
-    const proof = Array.isArray(vc.proof) ? vc.proof[0] : vc.proof;
-    if (proof === undefined || !controlledBy(proof.verificationMethod, vc.issuer)) {
+    // The signing method must be a well-formed string controlled by the delegator
+    // AND must be exactly the trusted method we hold the key for (the anchor's, or
+    // the previous link's signed delegate method). We resolve ONLY that method →
+    // the trusted key, so a link signed by any other key fails closed. A malformed
+    // proof (null / non-string method) yields a structured BROKEN_CHAIN, not a throw.
+    const linkMethod = proofVerificationMethod(vc);
+    if (linkMethod === undefined || !controlledBy(linkMethod, vc.issuer)) {
       return fail(`chain link ${i} verificationMethod not controlled by delegator ${vc.issuer}`);
     }
 
     // Verify the link's signature against EXACTLY the trusted key, resolved under
     // the proof's verificationMethod (so the pinned/previous key is what checks it).
-    const res = await verifyVcAgainstKeys(
-      vc,
-      new Map([[proof.verificationMethod, trustedKey]]),
-      now,
-    );
+    const res = await verifyVcAgainstKeys(vc, new Map([[linkMethod, trustedKey]]), now);
     if (!res.verified) {
       return fail(
         `chain link ${i} signature/validity invalid against the trusted delegator key (${trustedMethod}): ${res.errors
@@ -414,8 +431,9 @@ export async function verifyMembershipCredential(
   const directAnchor = anchors.find((a) => a.authority === vc.issuer);
   const resolutions = new Map<string, CryptoKey>();
   let trustEstablished = false;
-  const membershipProof = Array.isArray(vc.proof) ? vc.proof[0] : vc.proof;
-  const membershipMethod = membershipProof?.verificationMethod;
+  // Safely extracted (string | undefined) — a malformed proof yields undefined, so
+  // the controlledBy guards below treat it as untrusted rather than throwing.
+  const membershipMethod = proofVerificationMethod(vc);
 
   if (directAnchor !== undefined) {
     // Resolve the anchor's pinned key under the membership proof's own method (when

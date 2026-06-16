@@ -326,4 +326,59 @@ describe("malformed / structural → reject", () => {
     expect(res.verified).toBe(false);
     expect(res.errors.map((e) => e.code)).toContain("MALFORMED");
   });
+
+  it("FAILS CLOSED (no throw) on a malformed proof — null proof", async () => {
+    const vc = await issueMembershipCredential({ claim: activeClaim(), key: authorityKey });
+    // biome-ignore lint/suspicious/noExplicitAny: deliberately malformed proof.
+    const broken = { ...vc, proof: null } as any;
+    const res = await verifyMembershipCredential(broken, opts());
+    expect(res.verified).toBe(false);
+    // No throw, and signature cannot verify (resolver holds no method for it).
+    expect(res.errors.length).toBeGreaterThan(0);
+  });
+
+  it("FAILS CLOSED (no throw) on a malformed proof — non-string verificationMethod", async () => {
+    const vc = await issueMembershipCredential({ claim: activeClaim(), key: authorityKey });
+    const broken = {
+      ...vc,
+      // biome-ignore lint/suspicious/noExplicitAny: deliberately malformed proof.
+      proof: { type: "DataIntegrityProof", verificationMethod: 5, proofValue: "z" } as any,
+    };
+    const res = await verifyMembershipCredential(broken, opts());
+    expect(res.verified).toBe(false);
+    expect(res.errors.length).toBeGreaterThan(0);
+  });
+
+  it("FAILS CLOSED (no throw) on a chain link with a malformed proof", async () => {
+    // A chained membership where the delegation link's proof is malformed must
+    // yield BROKEN_CHAIN, never a throw.
+    const subKey = await generateKeyPairForSuite("https://sub.example/card#me", "Ed25519");
+    const rootKey = await generateKeyPairForSuite(AUTHORITY_VM, "Ed25519");
+    const rootAnchor: TrustAnchor = {
+      authority: AUTHORITY,
+      verificationMethod: AUTHORITY_VM,
+      publicKey: rootKey.publicKey,
+    };
+    const vc = await issueMembershipCredential({
+      claim: activeClaim({ assertedBy: "https://sub.example/card#me" }),
+      key: subKey,
+    });
+    const { issueDelegation } = await import("../src/index.js");
+    const delegation = await issueDelegation({
+      delegator: AUTHORITY,
+      authority: "https://sub.example/card#me",
+      delegateKey: subKey.publicKey,
+      federation: FEDERATION,
+      key: rootKey,
+    });
+    // biome-ignore lint/suspicious/noExplicitAny: deliberately malformed link proof.
+    const brokenLink = { ...delegation, proof: { verificationMethod: 5 } } as any;
+    const res = await verifyMembershipCredential(vc, {
+      trustAnchors: [rootAnchor],
+      expectedFederation: FEDERATION,
+      chain: [{ credential: brokenLink }],
+    });
+    expect(res.verified).toBe(false);
+    expect(res.errors.map((e) => e.code)).toContain("BROKEN_CHAIN");
+  });
 });
