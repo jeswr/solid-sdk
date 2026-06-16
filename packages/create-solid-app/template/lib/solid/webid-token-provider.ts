@@ -36,103 +36,6 @@ export interface TokenProvider {
   upgrade(request: Request): Promise<Request>;
 }
 
-/**
- * Per-probe side channel — an in-process registry keyed on the Request, NOT a
- * network header.
- *
- * A login probe must be able to prove THIS specific probe request — not merely
- * "some request" — was token-upgraded. The previous design stamped a custom
- * `x-reactive-auth-probe-id` HEADER on the probe fetch. That broke CROSS-ORIGIN
- * login: a custom request header makes the request non-"simple", so the browser
- * fires a CORS preflight (OPTIONS) that many Solid pods reject — the probe failed
- * before the 401/upgrade path ever ran. The fix sends NOTHING app-specific on the
- * wire; the probe id travels only in process memory.
- *
- * It has two layers because of how `ReactiveFetchManager` is built (verified
- * against the published 0.1.3 dist):
- *
- *   async #fetch(input, init) {
- *     const request = new Request(input, init);   // ← a NEW object
- *     ...                                          //   (input identity is dropped)
- *     const upgraded = await provider.upgrade(request);
- *   }
- *
- * The manager wraps our `fetch(request)` argument in `new Request(input)` BEFORE
- * calling `upgrade()`, and a `new Request(req)` copy is a DIFFERENT object (and a
- * symbol/expando does not survive the copy — only URL/method/headers do). So a
- * pure object-identity WeakMap keyed on the login flow's Request would never be
- * found by `upgrade()` — login detection would silently always read "not
- * upgraded". Hence:
- *
- *  1. {@link probeIdsByObject} — a `WeakMap<Request, string>` keyed on object
- *     IDENTITY. This is the precise, collision-proof channel and is consulted
- *     FIRST; it matches when the manager passes the SAME object through (e.g. a
- *     future/worker manager that does not re-wrap, or a direct `upgrade()` call in
- *     a unit test). GC-collected with the Request — no leak.
- *  2. {@link probeIdsByUrl} — a SINGLE-USE `Map<string, string>` keyed on the
- *     probe's URL, the one property that survives `new Request(input)`. It is the
- *     channel that actually carries the id across the manager's re-wrap. It is
- *     consumed (deleted) on the first lookup, so it fires for exactly ONE upgrade
- *     of that URL — the login probe — and a later same-URL data read cannot reuse
- *     it. The login probe is the only fetch to the storage-root URL during a login
- *     (the data layer is inactive mid-login), so URL keying is unambiguous here.
- *
- * `upgrade()` reads the id (via {@link probeIdForRequest}) at its entry on the
- * ORIGINAL request it received — before the clone it makes to add Authorization —
- * and records it into `#upgradedProbeIds` IFF it actually attaches a token. A
- * concurrent upgraded request for the SAME requested WebID (a different Request,
- * not this probe's URL/object) is not in the registry under the probe's id, so it
- * cannot make a non-upgraded probe look authenticated.
- */
-const probeIdsByObject = new WeakMap<Request, string>();
-const probeIdsByUrl = new Map<string, string>();
-
-/**
- * Associate a probe id with a {@link Request} so {@link WebIdDPoPTokenProvider.upgrade}
- * can recognise it WITHOUT any header on the wire. Registers both the object
- * identity (primary) and the URL (single-use, to survive the manager's
- * `new Request(input)` re-wrap). Call this on the EXACT Request object you then
- * pass to `fetch`.
- */
-export function registerProbeRequest(request: Request, probeId: string): void {
-  probeIdsByObject.set(request, probeId);
-  probeIdsByUrl.set(request.url, probeId);
-}
-
-/**
- * The probe id registered for this request via {@link registerProbeRequest}, or
- * `undefined` if it is not a registered probe. Tries object identity first; falls
- * back to the SINGLE-USE URL channel (consumed on read) so it survives the
- * manager re-wrapping the request. Looked up on the ORIGINAL request the provider
- * receives — before any clone.
- */
-export function probeIdForRequest(request: Request): string | undefined {
-  const byObject = probeIdsByObject.get(request);
-  if (byObject !== undefined) {
-    // The same object reached us; the single-use URL entry is now redundant — drop
-    // it so a later same-URL request cannot consume it.
-    probeIdsByUrl.delete(request.url);
-    return byObject;
-  }
-  const byUrl = probeIdsByUrl.get(request.url);
-  if (byUrl !== undefined) {
-    probeIdsByUrl.delete(request.url); // single-use: this probe only.
-    return byUrl;
-  }
-  return undefined;
-}
-
-/**
- * Discard a still-pending single-use URL registration for a probe that never
- * reached {@link WebIdDPoPTokenProvider.upgrade} (e.g. the probe got a public 200
- * with no 401, so no upgrade ran). The login flow calls this after its probe so a
- * stale URL→id entry can never be consumed by an unrelated later request.
- */
-export function discardProbeRegistration(request: Request): void {
-  probeIdsByObject.delete(request);
-  probeIdsByUrl.delete(request.url);
-}
-
 /** Ask the user for their WebID. Resolves to the WebID string, or rejects/cancels. */
 export type GetWebIdCallback = () => Promise<string>;
 
@@ -239,6 +142,30 @@ interface IssuerSession {
 const isLoopback = (host: string): boolean =>
   host === "localhost" || host === "127.0.0.1" || host === "[::1]";
 
+/**
+ * The single per-login probe record this provider tracks at a time, captured by
+ * {@link WebIdDPoPTokenProvider.beginLoginProbe} just before the login flow fetches
+ * its probe. It carries:
+ *  - `generation` — the provider generation in effect when the probe began, so a
+ *    {@link WebIdDPoPTokenProvider.reset} that supersedes the login invalidates the
+ *    record by advancing the generation (the flow snapshots the same generation and
+ *    asks {@link WebIdDPoPTokenProvider.wasLoginProbeUpgraded} for it).
+ *  - `url` — the probe's URL, the ONLY property that survives the manager's
+ *    `new Request(input)` re-wrap; used as a SINGLE-USE fallback channel, consumed
+ *    on first match so a later same-URL upgrade cannot reuse it.
+ *  - `object` — a {@link WeakRef} to the EXACT Request object, the precise primary
+ *    channel that matches when no re-wrap happens (unit tests / non-wrapping
+ *    managers). Weak so it never pins the Request in memory.
+ *  - `urlConsumed` — set once the single-use URL fallback has matched, so the URL
+ *    channel fires for exactly one upgrade.
+ */
+interface LoginProbe {
+  generation: number;
+  url: string;
+  object: WeakRef<Request>;
+  urlConsumed: boolean;
+}
+
 export class WebIdDPoPTokenProvider implements TokenProvider {
   readonly #callbackUri: string;
   readonly #getCode: GetCodeCallback;
@@ -291,15 +218,25 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
    */
   #authenticatedWebId: string | undefined;
   /**
-   * The set of login-probe ids (registered via {@link registerProbeRequest}, a
-   * Request registry — NOT a network header) this provider has actually attached a
-   * token to via {@link upgrade}. The login flow registers its probe Request with a
-   * unique id and, after the probe, asserts THAT id is in this set — proving the
-   * provider upgraded THIS probe request specifically, not merely that "some
-   * request" was upgraded (a concurrent same-WebID upgrade for a different Request
-   * cannot satisfy it). Cleared by {@link reset}.
+   * The single ACTIVE login probe, captured by {@link beginLoginProbe} right before
+   * the login flow fetches its probe and cleared by {@link endLoginProbe} (and by
+   * {@link reset}). There is at most one because the SolidAuthProvider single-flights
+   * login — overlapping/double-clicked logins can no longer register competing
+   * probes. {@link upgrade} matches the request it is handed against this record (by
+   * object identity first, else a single-use, generation-scoped URL fallback) and,
+   * on a real token attach, records the generation into
+   * {@link #probeUpgradedGeneration}. Null when no login is in flight.
    */
-  readonly #upgradedProbeIds = new Set<string>();
+  #loginProbe: LoginProbe | null = null;
+  /**
+   * The generation in which the active login probe was actually token-upgraded, or
+   * null if it has not been (yet). The login flow snapshots its generation via
+   * {@link loginGeneration} after {@link reset} and asserts
+   * {@link wasLoginProbeUpgraded} for that snapshot — so a probe upgrade only counts
+   * within its own login's generation, and a {@link reset} (which advances the
+   * generation AND nulls this) cannot let a stale upgrade satisfy a new login.
+   */
+  #probeUpgradedGeneration: number | null = null;
   /**
    * A per-attempt GENERATION (epoch) counter that fences in-flight auth work
    * across a {@link reset}. {@link reset} increments it; an `upgrade()` /
@@ -307,8 +244,9 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
    * before mutating ANY provider state (`#sessions`, `#authenticatedWebId`,
    * `#tokensAttached`, `#upgradedProbeIds`), checks the generation is still
    * current. If a logout / new-login `reset()` advanced it mid-flight, the stale
-   * result is discarded and NO state is written — so a login or upgrade that began
-   * before the reset cannot contaminate the next identity's clean baseline.
+   * result is discarded and NO state is written (`#sessions`, `#authenticatedWebId`,
+   * `#tokensAttached`, `#probeUpgradedGeneration`) — so a login or upgrade that
+   * began before the reset cannot contaminate the next identity's clean baseline.
    */
   #generation = 0;
   /**
@@ -398,23 +336,60 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
   }
 
   /**
-   * Whether THIS specific login probe (identified by the id it registered for its
-   * Request via {@link registerProbeRequest} — a Request registry, NOT a network
-   * header) was actually token-upgraded by this provider. This is the PRIMARY,
-   * per-probe proof of login — strictly stronger than the provider-wide
-   * token-attach count, which a concurrent upgrade for the SAME requested WebID (a
-   * different request) could bump spuriously. Cleared by {@link reset}.
+   * The CURRENT provider generation. The login flow snapshots this AFTER its
+   * {@link reset} (so it gets the new identity's clean generation) and passes the
+   * snapshot to {@link wasLoginProbeUpgraded} — making the per-probe proof scoped to
+   * THIS login's generation, immune to a later {@link reset}.
    */
-  wasProbeUpgraded(probeId: string): boolean {
-    return this.#upgradedProbeIds.has(probeId);
+  loginGeneration(): number {
+    return this.#generation;
+  }
+
+  /**
+   * Register the active login probe just before the login flow fetches it. Captures
+   * the CURRENT generation, the request URL (the single-use re-wrap fallback), and a
+   * {@link WeakRef} to the EXACT Request object (the precise primary channel). There
+   * is at most one active probe at a time — the SolidAuthProvider single-flights
+   * login, so there is never a competing registration. Cleared by
+   * {@link endLoginProbe} / {@link reset}.
+   */
+  beginLoginProbe(request: Request): void {
+    this.#loginProbe = {
+      generation: this.#generation,
+      url: request.url,
+      object: new WeakRef(request),
+      urlConsumed: false,
+    };
+  }
+
+  /**
+   * Clear the active login probe. Called by the login flow in its `finally` (like
+   * the old `discardProbeRegistration`) so a probe that never reached {@link upgrade}
+   * — e.g. a public 200 with no 401 — leaves no stale record a later same-URL
+   * upgrade could consume. {@link reset} also clears it.
+   */
+  endLoginProbe(): void {
+    this.#loginProbe = null;
+  }
+
+  /**
+   * Whether THIS login's probe was actually token-upgraded by this provider, scoped
+   * to the GENERATION the login captured via {@link loginGeneration}. This is the
+   * PRIMARY, per-probe proof of login — strictly stronger than the provider-wide
+   * token-attach count, which a concurrent upgrade for the SAME requested WebID (a
+   * different request) could bump spuriously. {@link reset} advances the generation
+   * AND nulls the record, so a stale upgrade can never satisfy a new login's check.
+   */
+  wasLoginProbeUpgraded(generation: number): boolean {
+    return this.#probeUpgradedGeneration === generation;
   }
 
   /**
    * Drop EVERY piece of per-identity state so nothing from a prior login can be
    * reused by the next one: the memoised issuer resolution, every cached
    * per-issuer session (its DPoP key pair + access/refresh tokens), the
-   * authenticated-WebID claim, the per-probe upgrade record, and the running
-   * token-attachment count. Also ADVANCES the generation and aborts any in-flight
+   * authenticated-WebID claim, the active login probe + its upgrade record, and the
+   * running token-attachment count. Also ADVANCES the generation and aborts any in-flight
    * auth controller, so an `upgrade()`/`#authenticate()` already running for the
    * prior identity is both cancelled AND fenced from writing state after it
    * resolves (see {@link #generation}).
@@ -437,17 +412,18 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
     this.#issuer = undefined;
     this.#sessions.clear();
     this.#authenticatedWebId = undefined;
-    this.#upgradedProbeIds.clear();
+    this.#loginProbe = null;
+    this.#probeUpgradedGeneration = null;
     this.#tokensAttached = 0;
   }
 
   async upgrade(request: Request): Promise<Request> {
-    // Read the probe id from the Request registry on the ORIGINAL request we were
-    // handed — BEFORE any clone we make below to add Authorization (a clone is a
-    // different object and is NOT in the map). No header is on the wire; this is a
-    // pure in-process side channel, so a cross-origin probe stays a "simple"
-    // request and triggers no CORS preflight.
-    const probeId = probeIdForRequest(request);
+    // Decide whether THIS request is the active login probe — on the ORIGINAL
+    // request we were handed, BEFORE any clone we make below to add Authorization (a
+    // clone is a different object and would not match by identity). No header is on
+    // the wire; this is a pure in-process check against the per-login record, so a
+    // cross-origin probe stays a "simple" request and triggers no CORS preflight.
+    const isLoginProbe = this.#matchActiveLoginProbe(request);
     // Capture the generation + controller for THIS attempt up front. A concurrent
     // reset() advances the generation and swaps the controller; comparing against
     // the captured generation before any state write fences this attempt out.
@@ -475,8 +451,8 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
     // FENCE: if a reset() (logout / new-login) advanced the generation while this
     // upgrade was in flight, the result belongs to a SUPERSEDED identity. Mutate
     // NO provider state and reject — the request must not carry a stale identity's
-    // token, and #authenticatedWebId / #tokensAttached / #upgradedProbeIds must
-    // stay at the new identity's clean baseline.
+    // token, and #authenticatedWebId / #tokensAttached / #probeUpgradedGeneration
+    // must stay at the new identity's clean baseline.
     if (generation !== this.#generation) {
       throw new ReactiveAuthResetError();
     }
@@ -502,13 +478,38 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
     // flow reads this count BEFORE and AFTER its probe; the DELTA — not any sticky
     // flag — is what proves a token was attached during THAT attempt.
     this.#tokensAttached += 1;
-    // PER-PROBE PROOF: if THIS request is a login probe (its Request was registered
-    // with a probe id, read at the top of upgrade()), record that id as upgraded.
-    // The login flow asserts its own id is present — proving THIS probe was
-    // upgraded, not merely that some request was. No header was ever on the wire,
+    // PER-PROBE PROOF: if THIS request IS the active login probe (matched at the top
+    // of upgrade() on the original request), record the generation it was upgraded
+    // in. The login flow asserts wasLoginProbeUpgraded(gen) for the generation it
+    // captured after reset() — proving THIS probe was upgraded in THIS login's
+    // generation, not merely that some request was. No header was ever on the wire,
     // so cross-origin login is unaffected.
-    if (probeId) this.#upgradedProbeIds.add(probeId);
+    if (isLoginProbe) this.#probeUpgradedGeneration = generation;
     return new Request(request, { headers });
+  }
+
+  /**
+   * Whether `request` is the active login probe ({@link beginLoginProbe}), matched
+   * IN the active probe's own generation only. Object identity is the PRIMARY,
+   * collision-proof channel — it matches when the manager passes the SAME object
+   * (unit tests / non-rewrapping managers). When the manager re-wraps via
+   * `new Request(input)` the object identity is lost, so we fall back to the probe
+   * URL — the only property that survives — as a SINGLE-USE channel: consumed on the
+   * first match so a later same-URL upgrade in the login window cannot reuse it.
+   * Returns false outside the probe's generation (a stale probe after reset).
+   */
+  #matchActiveLoginProbe(request: Request): boolean {
+    const probe = this.#loginProbe;
+    if (!probe) return false;
+    // A probe is only valid in the generation it was begun in. After a reset()
+    // advances the generation, beginLoginProbe must run again for a new login.
+    if (probe.generation !== this.#generation) return false;
+    if (probe.object.deref() === request) return true;
+    if (!probe.urlConsumed && probe.url === request.url) {
+      probe.urlConsumed = true; // single-use: this login window's first same-URL upgrade only.
+      return true;
+    }
+    return false;
   }
 
   /** Reuse the (possibly in-flight) session for the issuer, else run the code flow once. */

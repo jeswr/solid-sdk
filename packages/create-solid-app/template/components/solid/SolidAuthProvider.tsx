@@ -42,8 +42,6 @@ import {
   WebIdDPoPTokenProvider,
   AmbiguousIssuerError,
   webIdsEqual,
-  registerProbeRequest,
-  discardProbeRegistration,
 } from "@/lib/solid/webid-token-provider";
 import { authFlowHolder, getCodeThroughHolder } from "@/lib/solid/auth-flow-holder";
 import { readProfile, type Profile } from "@/lib/solid/profile";
@@ -98,6 +96,19 @@ let authProviderSingleton: Promise<WebIdDPoPTokenProvider> | null = null;
  * capturing one mount's ref. `login()` sets it; the singleton reads it on each 401.
  */
 const pendingWebIdHolder: { current: string | null } = { current: null };
+
+/**
+ * MODULE-LEVEL single-flight guard for `login()`. The token provider tracks exactly
+ * ONE active login probe at a time (its generation-scoped record), so two
+ * overlapping / double-clicked logins must NOT both run a probe — the second would
+ * either overwrite the first's probe record or race it. We serialise instead: the
+ * FIRST `login()` runs the real flow; a concurrent second `login()` AWAITS the
+ * in-flight one and returns its result (a clean no-op for the caller — exactly one
+ * login proceeds). It is module-level (not a ref) because the provider is a
+ * page-lifetime singleton, so the in-flight login is a page-level fact, not a
+ * per-mount one. Cleared in `finally` so the next, later login starts fresh.
+ */
+let inFlightLogin: Promise<void> | null = null;
 
 interface AuthProviderConfig {
   callbackUri: string;
@@ -200,19 +211,26 @@ export function SolidAuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const login = useCallback(async (id: string) => {
+  // The actual login body. Wrapped by `login` below in a module-level single-flight
+  // so two concurrent / double-clicked logins never run overlapping probes (the
+  // provider tracks exactly ONE active probe — see beginLoginProbe).
+  const doLogin = useCallback(async (id: string) => {
     setError(null);
     setLoggingIn(true);
     // IDENTITY CHANGE — drop EVERY trace of any prior identity FIRST: reset the
     // provider so its cached issuer, per-issuer sessions (DPoP keys + access
-    // tokens), authenticated-WebID claim, and token-attach count are gone (so a
-    // login as a different WebID can never reuse the previous user's session), and
-    // clear the rendered profile so WebID-A's data is not shown while
+    // tokens), authenticated-WebID claim, active login probe, and token-attach count
+    // are gone (so a login as a different WebID can never reuse the previous user's
+    // session), and clear the rendered profile so WebID-A's data is not shown while
     // authenticating as WebID-B.
     providerRef.current?.reset();
     setWebId(null);
     setProfile(null);
     pendingWebIdHolder.current = id;
+    // Snapshot the provider's generation AFTER reset() so the per-probe proof below
+    // is scoped to THIS login's generation — a later reset() advances the generation
+    // and so can never make a stale upgrade satisfy this check.
+    const gen = providerRef.current?.loginGeneration() ?? 0;
     try {
       // Resolve the issuer/storage from the PUBLIC profile first — this gives a
       // clear, early error if the WebID is unusable (no oidcIssuer / unreachable)
@@ -226,15 +244,15 @@ export function SolidAuthProvider({ children }: { children: ReactNode }) {
       // DEFENCE-IN-DEPTH alongside the per-probe proof below.
       const tokensAttachedBefore =
         providerRef.current?.tokensAttachedCount() ?? 0;
-      // PER-PROBE PROOF (primary): tag this probe with a unique id via a Request
-      // registry — NOT a network header. The provider records the id iff it
-      // actually upgrades THIS request object — so we can prove THIS probe was
-      // token-upgraded, not merely that "some request" was (a concurrent upgraded
-      // request for the SAME WebID can bump the provider-wide count, but not satisfy
-      // our own probe id). Using the registry (instead of a custom header) keeps the
-      // probe a "simple" CORS request, so a cross-origin pod does not reject a
-      // preflight before the 401/upgrade path can run.
-      const probeId = `probe-${crypto.randomUUID()}`;
+      // PER-PROBE PROOF (primary): register THIS probe Request with the provider via
+      // beginLoginProbe — a generation-scoped, in-process record, NOT a network
+      // header. The provider records its upgrade generation iff it actually upgrades
+      // THIS request (object identity, or a single-use URL fallback that survives the
+      // manager's re-wrap) — so we can prove THIS probe was token-upgraded, not
+      // merely that "some request" was (a concurrent upgraded request for the SAME
+      // WebID can bump the provider-wide count, but not satisfy our own probe).
+      // Keeping the probe header-free leaves it a "simple" CORS request, so a
+      // cross-origin pod does not reject a preflight before the 401/upgrade path runs.
       // Trigger the auth flow by making an authenticated request the global fetch
       // will upgrade on 401: registerGlobally() intercepts the 401, opens the
       // <authorization-code-flow> popup, mints a DPoP token, and RETRIES the
@@ -243,15 +261,14 @@ export function SolidAuthProvider({ children }: { children: ReactNode }) {
       // Build the Request OBJECT first and register it before fetching.
       const probe = pub.storages[0] ?? new URL("/", id).toString();
       const probeRequest = new Request(probe, { method: "GET" });
-      registerProbeRequest(probeRequest, probeId);
+      providerRef.current?.beginLoginProbe(probeRequest);
       let res: Response;
       try {
         res = await fetch(probeRequest);
       } finally {
-        // Drop any single-use URL registration the probe did not consume (e.g. a
-        // public 200 with no 401 → no upgrade ran), so a later request to the same
-        // URL can never inherit this probe's id.
-        discardProbeRegistration(probeRequest);
+        // Clear the active probe record (e.g. a public 200 with no 401 → no upgrade
+        // ran), so a later request to the same URL can never match this probe.
+        providerRef.current?.endLoginProbe();
       }
       // Success requires a 2xx AND that the token provider upgraded THIS specific
       // probe (per-probe), with the count delta kept as defence-in-depth. A bare
@@ -269,9 +286,10 @@ export function SolidAuthProvider({ children }: { children: ReactNode }) {
       if (!assessment.ok) {
         throw new Error(assessment.message);
       }
-      // The primary, per-probe gate: THIS probe must have been token-upgraded. A
-      // concurrent same-WebID upgrade for a DIFFERENT request cannot satisfy it.
-      if (!providerRef.current?.wasProbeUpgraded(probeId)) {
+      // The primary, per-probe gate: THIS probe must have been token-upgraded IN
+      // this login's generation. A concurrent same-WebID upgrade for a DIFFERENT
+      // request cannot satisfy it.
+      if (!providerRef.current?.wasLoginProbeUpgraded(gen)) {
         throw new Error(
           "Login did not complete — no token was attached to this login's own " +
             "request (the probed resource may be public, or a different request " +
@@ -313,6 +331,21 @@ export function SolidAuthProvider({ children }: { children: ReactNode }) {
       setLoggingIn(false);
     }
   }, []);
+
+  const login = useCallback(
+    async (id: string) => {
+      // SINGLE-FLIGHT: if a login is already running, a second concurrent /
+      // double-clicked login() must NOT start an overlapping probe (the provider
+      // tracks exactly one active probe). It AWAITS the in-flight one and returns its
+      // result — a clean no-op for the second caller; exactly one login proceeds.
+      // Cleared in `finally` so the NEXT login (after this one settles) starts fresh.
+      inFlightLogin ??= doLogin(id).finally(() => {
+        inFlightLogin = null;
+      });
+      return inFlightLogin;
+    },
+    [doLogin],
+  );
 
   const logout = useCallback(() => {
     // RESET THE PROVIDER, not just React state: the in-memory issuer, per-issuer
