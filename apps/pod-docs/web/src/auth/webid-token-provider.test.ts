@@ -40,8 +40,14 @@ vi.mock("./login-ux", () => ({
   resolveIssuers: () => ["https://issuer.example/"],
 }));
 
+// Record the args every `DPoP.generateProof` call receives so a test can assert
+// the `htu` (arg 2) the provider mints — the round-4c regression hinges on it.
+const dpopProofCalls: unknown[][] = [];
 vi.mock("dpop", () => ({
-  generateProof: vi.fn(async () => "dpop-proof"),
+  generateProof: vi.fn(async (...args: unknown[]) => {
+    dpopProofCalls.push(args);
+    return "dpop-proof";
+  }),
 }));
 
 vi.mock("oauth4webapi", () => {
@@ -87,7 +93,7 @@ vi.mock("oauth4webapi", () => {
 });
 
 // Import AFTER the mocks are registered.
-const { WebIdDPoPTokenProvider, webIdsEqual, ReactiveAuthResetError, withProbeFragment } =
+const { WebIdDPoPTokenProvider, webIdsEqual, ReactiveAuthResetError, withProbeFragment, httpUri } =
   await import("./webid-token-provider");
 
 const WEBID_A = "https://alice.example/profile/card#me";
@@ -647,6 +653,78 @@ describe("FIX (round 4b) — the URL fallback is UNFORGEABLE via an unguessable 
     expect([...req.headers.keys()]).toEqual([]); // no header on the probe.
     const upgraded = await provider.upgrade(req);
     expect([...upgraded.headers.keys()].sort()).toEqual(["authorization", "dpop"]);
+  });
+});
+
+describe("FIX (round 4c) — the DPoP htu strips the probe fragment (and query) — RFC 9449 §4.2", () => {
+  beforeEach(() => {
+    authState.webId = WEBID_A;
+    authState.accessToken = "tok-A";
+  });
+
+  it("httpUri strips fragment AND query, leaving scheme/authority/path intact", () => {
+    expect(httpUri("https://alice.example/storage/#probe-abc")).toBe(
+      "https://alice.example/storage/",
+    );
+    expect(httpUri("https://alice.example/storage/?q=1")).toBe("https://alice.example/storage/");
+    expect(httpUri("https://alice.example/storage/res?q=1&r=2#probe-xyz")).toBe(
+      "https://alice.example/storage/res",
+    );
+    // A bare URL (no query/fragment) is returned unchanged (modulo URL normalisation).
+    expect(httpUri("https://alice.example:8443/a/b/c")).toBe("https://alice.example:8443/a/b/c");
+  });
+
+  it("the DPoP htu (generateProof arg 2) has NO probe fragment and NO query (CORE round-4c regression)", async () => {
+    // round-4b stamps an in-process #probe-<uuid> fragment on the probe URL. The
+    // `dpop` package uses its htu arg VERBATIM, so without the fix the fragment (and
+    // any query) would leak into the proof's htu claim — but a Solid server computes
+    // htu from the fragment/query-stripped received request URI (§4.2), so the proof
+    // would be rejected in production. Assert the minted htu is the bare
+    // scheme+authority+path.
+    const provider = makeProvider();
+    // A probe URL with BOTH a query and the unguessable fragment, for completeness.
+    const probeUrl = `${withProbeFragment("https://alice.example/storage/")}`;
+    const url = new URL(probeUrl);
+    url.searchParams.set("ts", "123"); // append a query too
+    // Re-stamp the fragment after the searchParams write (URL ordering keeps it last).
+    const fullUrl = url.toString();
+    expect(fullUrl).toContain("#probe-");
+    expect(fullUrl).toContain("ts=123");
+    const req = new Request(fullUrl);
+    provider.beginLoginProbe(req);
+
+    dpopProofCalls.length = 0; // isolate THIS upgrade's proof call.
+    await provider.upgrade(req);
+
+    expect(dpopProofCalls).toHaveLength(1);
+    const htu = dpopProofCalls[0][1] as string;
+    // The exact regression roborev asked for: no fragment, no query in the htu.
+    expect(htu).not.toContain("#probe-");
+    expect(htu).not.toContain("#");
+    expect(htu).not.toContain("?");
+    expect(htu).not.toContain("ts=123");
+    // It equals the bare scheme + authority + path the server will reconstruct.
+    expect(htu).toBe("https://alice.example/storage/");
+  });
+
+  it("stripping the htu does NOT regress the in-process probe match — the same upgrade is still recorded as the probe (finding-2 preserved)", async () => {
+    // The fix strips ONLY the DPoP htu; the in-process probe match must STILL key off
+    // the full fragment-bearing request.url. Prove the very upgrade that produced a
+    // fragment-less htu also recorded the probe upgrade for its generation.
+    const provider = makeProvider();
+    const { req, generation, url } = beginProbe(provider, "https://alice.example/storage/");
+    expect(url).toContain("#probe-");
+
+    dpopProofCalls.length = 0;
+    const upgraded = await provider.upgrade(asManagerWraps(req));
+
+    // htu is fragment/query-free...
+    const htu = dpopProofCalls[0][1] as string;
+    expect(htu).toBe("https://alice.example/storage/");
+    expect(htu).not.toContain("#probe-");
+    // ...yet the probe match (which uses the full fragment-bearing url) still fired.
+    expect(provider.wasLoginProbeUpgraded(generation)).toBe(true);
+    expect(upgraded.headers.get("DPoP")).toBe("dpop-proof");
   });
 });
 

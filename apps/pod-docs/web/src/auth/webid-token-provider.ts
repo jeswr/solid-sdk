@@ -139,6 +139,31 @@ export function withProbeFragment(url: string): string {
   return u.toString();
 }
 
+/**
+ * The RFC 9449 §4.2 DPoP `htu`: the request URI with the query AND fragment
+ * removed (scheme + authority + path only).
+ *
+ * The login probe carries a `#probe-<uuid>` fragment ({@link withProbeFragment})
+ * as an UNFORGEABLE, in-process correlation marker — it is NEVER sent on the wire
+ * (RFC 3986 §3.5: the browser strips the fragment before sending). When we mint
+ * the DPoP proof we MUST strip that fragment, because the `dpop` package uses its
+ * `htu` argument VERBATIM (it does not normalise), so the fragment would leak into
+ * the proof's `htu` claim. A Solid server computes `htu` from the RECEIVED request
+ * URI with query + fragment removed and compares; since the browser already
+ * stripped the fragment on the wire, the server-computed `htu` is fragment-less
+ * and would NOT match a fragment-bearing proof `htu` — the authenticated probe's
+ * token would be rejected in production. We also strip the query for full
+ * §4.2 correctness (a storage probe normally has none, but this is defensive).
+ *
+ * Exported so it is unit-testable in isolation.
+ */
+export function httpUri(url: string): string {
+  const u = new URL(url);
+  u.hash = "";
+  u.search = "";
+  return u.toString();
+}
+
 /** Ask the user for their WebID. Resolves to the WebID string, or rejects/cancels. */
 export type GetWebIdCallback = () => Promise<string>;
 
@@ -579,11 +604,17 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
     // cached/in-flight session shared across concurrent 401s also publishes it.
     this.#authenticatedWebId = session.authenticatedWebId;
     const headers = new Headers(request.headers);
+    // RFC 9449 §4.2 htu: scheme + authority + path only (query + fragment removed).
+    // `request.url` may carry the in-process `#probe-<uuid>` marker fragment (and a
+    // query); the `dpop` package uses this argument VERBATIM, so we MUST strip them
+    // here or the proof's `htu` would not match the htu the server computes from the
+    // fragment/query-stripped received request URI (the marker is never on the wire).
+    const htu = httpUri(request.url);
     headers.set(
       "DPoP",
       await DPoP.generateProof(
         session.dpopKey,
-        request.url,
+        htu,
         request.method,
         undefined,
         session.accessToken,
@@ -606,6 +637,12 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
     // fence above guarantees we only record for the current, non-superseded
     // identity. No header was ever on the wire, so cross-origin login is unaffected.
     if (isLoginProbe) this.#probeUpgradedGeneration = generation;
+    // The returned Request's `.url` still carries the probe fragment (it is built
+    // from the original `request`), but that is CORRECT and needs no stripping: a
+    // fragment is client-side only (RFC 3986 §3.5), so the browser drops it before
+    // sending — the on-the-wire request URI is already fragment-less and matches the
+    // fragment-stripped `htu` minted above. The fragment is preserved here only so
+    // in-process probe matching keeps working; it never reaches the server.
     return new Request(request, { headers });
   }
 
