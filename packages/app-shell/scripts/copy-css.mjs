@@ -3,13 +3,7 @@
 // Copy the CSS assets into dist/ after tsc emits the JS/d.ts. tsc does not copy
 // non-TS files, so the token/theme/styles CSS are mirrored here. Stdlib-only
 // (no extra build dep), in line with the suite's minimal-dependency rule.
-import {
-  copyFileSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  writeFileSync,
-} from "node:fs";
+import { copyFileSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
