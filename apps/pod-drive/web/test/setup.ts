@@ -22,3 +22,35 @@ if (typeof window !== "undefined" && typeof window.matchMedia !== "function") {
       dispatchEvent: () => false,
     }) as unknown as MediaQueryList;
 }
+
+// Install a minimal in-memory localStorage when jsdom does not provide a working one
+// (this vitest/jsdom setup exposes `localStorage` but its methods are not callable —
+// it emits "`--localstorage-file` was provided without a valid path"). The
+// silent-session-restore RememberedAccount pointer is localStorage-backed, so the
+// implementation-level SessionProvider test needs a functioning store to seed a
+// returning-user pointer. Test-infra only — never shipped.
+if (
+  typeof globalThis.localStorage === "undefined" ||
+  typeof globalThis.localStorage.setItem !== "function"
+) {
+  const store = new Map<string, string>();
+  const memoryLocalStorage: Storage = {
+    get length() {
+      return store.size;
+    },
+    clear: () => store.clear(),
+    getItem: (k: string) => (store.has(k) ? (store.get(k) as string) : null),
+    key: (i: number) => Array.from(store.keys())[i] ?? null,
+    removeItem: (k: string) => {
+      store.delete(k);
+    },
+    setItem: (k: string, v: string) => {
+      store.set(k, String(v));
+    },
+  };
+  Object.defineProperty(globalThis, "localStorage", {
+    value: memoryLocalStorage,
+    configurable: true,
+    writable: true,
+  });
+}

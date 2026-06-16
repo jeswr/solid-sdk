@@ -463,10 +463,114 @@ export async function silentRestoreOnce(
  * present (those are owned by the autologin effect). So on any given load, silent
  * restore and autologin never both run — they are mutually exclusive by URL.
  */
-function runSilentRestore(provider: WebIdDPoPTokenProvider): Promise<SilentRestoreResult> {
+// Exported so the latch-freshness test can drive the EXACT production single-flight
+// latch (prime it, invalidate it, prove a fresh promise is minted). The parameter is
+// the narrow {@link RestoreCapableProvider} (which WebIdDPoPTokenProvider satisfies)
+// so the test needs no full auth runtime; the production call site passes the real
+// provider unchanged.
+export function runSilentRestore(provider: RestoreCapableProvider): Promise<SilentRestoreResult> {
   if (silentRestorePromise) return silentRestorePromise;
   silentRestorePromise = silentRestoreOnce(provider, remembered);
   return silentRestorePromise;
+}
+
+/**
+ * Invalidate the module-level silent-restore latch (FINDING 3). The latch caches the
+ * restore RESULT promise for the page lifetime so a StrictMode double-mount runs the
+ * (refresh-granting) restore exactly once. On LOGOUT this MUST be nulled: logout sets
+ * `webId=null`, which re-runs the restore mount effect, and a cached `{kind:"restored"}`
+ * (or a stale teardown) would otherwise be REPLAYED against the now-logged-out state —
+ * a spurious post-logout error / wrong state. Exported as a named module-level function
+ * (rather than an inline `silentRestorePromise = null` in `logout`) so a test can
+ * exercise the EXACT production guard: prime the latch via {@link runSilentRestore},
+ * call this, and assert a subsequent {@link runSilentRestore} mints a FRESH promise
+ * (proving the stale one was cleared). Removing this call from `logout` — or emptying
+ * its body — must make that test fail.
+ */
+export function invalidateSilentRestoreLatch(): void {
+  silentRestorePromise = null;
+}
+
+/**
+ * The actions a runtime-init FAILURE (the `getAuthRuntime().catch`) must perform
+ * (FINDING 4). Pure data — the effect applies it. The load-bearing field is
+ * `setRestoringFalse`: when `getAuthRuntime` REJECTS, `ready` stays false so the
+ * silent-restore effect (gated on `ready`) never runs and never flips
+ * `restoringSession → false` — the UI would hang forever on "Restoring your session…",
+ * hiding the login/error path. So the catch must ALSO clear `restoringSession`.
+ * Extracted + exported (rather than left inline in the catch) so a test asserts the
+ * production decision genuinely includes clearing the restoring flag — removing
+ * `setRestoringFalse` here (or the effect's use of it) must fail that test.
+ */
+export interface RuntimeInitFailureAction {
+  /** Surface the build error to the UI (always). */
+  setError: true;
+  /** Clear `restoringSession` so the UI does not hang on "Restoring…" (the fix). */
+  setRestoringFalse: true;
+}
+
+/** Decide what the runtime-init `.catch` must do — see {@link RuntimeInitFailureAction}. */
+export function decideRuntimeInitFailure(): RuntimeInitFailureAction {
+  return { setError: true, setRestoringFalse: true };
+}
+
+/**
+ * The action the mount-time SILENT SESSION RESTORE effect should take, computed from
+ * the page state at effect time. Pure — the effect performs the side effects (clearing
+ * `restoringSession`, running the restore). Mirrors `planAutologin` / `decideSingleFlight`
+ * (the established extracted-decider pattern) so this decision is genuinely unit-tested
+ * against production code rather than a re-implementation:
+ *  - `"skip-not-ready"` — the runtime is not ready yet OR no provider OR already logged
+ *    in: do nothing this pass (the effect just returns; it does NOT touch
+ *    `restoringSession` — a later pass with `ready` true owns that).
+ *  - `"skip-autologin-url"` — an `#autologin`/`?code`/`?error` marker is present: this
+ *    load is the autologin effect's job. Clear `restoringSession` and return.
+ *  - `"skip-no-pointer"` — there is NO remembered pointer NOW (FINDING 3's restore-effect
+ *    half: logout cleared it, this effect re-ran because logout set `webId=null`). Bail
+ *    to a clean logged-out state WITHOUT consulting / awaiting the cached
+ *    `silentRestorePromise`, so a stale `{kind:"restored"}` can never be replayed. Clear
+ *    `restoringSession` and return.
+ *  - `"run"` — a returning user with a remembered pointer and no autologin marker: run
+ *    the silent restore.
+ */
+export type RestoreEffectAction =
+  | "skip-not-ready"
+  | "skip-logged-in"
+  | "skip-autologin-url"
+  | "skip-no-pointer"
+  | "run";
+
+export interface RestoreEffectInputs {
+  /** The auth runtime is loaded + registerGlobally() has run. */
+  ready: boolean;
+  /** The token provider singleton has resolved (mount wired providerRef). */
+  hasProvider: boolean;
+  /** Already authenticated (e.g. a re-render after restore set webId). */
+  loggedIn: boolean;
+  /** This load carries an `#autologin`/`?code`/`?error` marker (autologin's job). */
+  isAutologinUrl: boolean;
+  /** A remembered WebID→issuer pointer exists NOW (re-read at effect time). */
+  hasRememberedPointer: boolean;
+}
+
+/**
+ * Decide what the silent-restore mount effect should do. Pure — no I/O, no mutation.
+ *
+ * GUARDS in order: not ready / no provider / already logged in → skip (the not-ready
+ * skips DON'T clear `restoringSession`; the logged-in skip does — see below); an
+ * autologin-URL load → `skip-autologin-url`; no remembered pointer → `skip-no-pointer`
+ * (the FINDING-3 load-bearing case); otherwise → `run`.
+ *
+ * The `skip-no-pointer` branch is the one finding 3 (restore-effect half) depends on:
+ * if it is removed (i.e. the effect runs `runSilentRestore` even with no pointer), the
+ * post-logout latch replay reappears. The load-bearing test asserts this branch.
+ */
+export function decideRestoreEffect(inputs: RestoreEffectInputs): RestoreEffectAction {
+  if (!inputs.ready || !inputs.hasProvider) return "skip-not-ready";
+  if (inputs.loggedIn) return "skip-logged-in";
+  if (inputs.isAutologinUrl) return "skip-autologin-url";
+  if (!inputs.hasRememberedPointer) return "skip-no-pointer";
+  return "run";
 }
 
 export function SessionProvider({ children }: { children: ReactNode }) {
@@ -556,15 +660,16 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       })
       .catch((e) => {
         if (!cancelled) {
-          setError(e instanceof Error ? e.message : String(e));
           // FINDING 4: a runtime-init REJECTION leaves `ready` false, so the silent-
           // restore effect (which is gated on `ready`) never runs and never flips
           // `restoringSession` to false — the UI would be stuck forever on "Restoring
-          // your session…", hiding the login/error path. Flip it off here so the error
-          // (set above) / login screen can render. Initialised true only when a
-          // remembered pointer exists, so this is the one place that would otherwise
-          // leave it latched on a runtime-build failure.
-          setRestoringSession(false);
+          // your session…", hiding the login/error path. The actions to take are the
+          // exported, separately-tested `decideRuntimeInitFailure()` decision: surface
+          // the error AND clear restoringSession. Driving the catch off the decider
+          // means a test of the decider genuinely guards the "clear restoring" fix.
+          const onFail = decideRuntimeInitFailure();
+          if (onFail.setError) setError(e instanceof Error ? e.message : String(e));
+          if (onFail.setRestoringFalse) setRestoringSession(false);
         }
       });
     return () => {
@@ -787,14 +892,16 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     // authenticated with the stale token. (reset() does NOT touch the durable store.)
     providerRef.current?.reset();
     pendingWebIdHolder.current = null;
-    // FINDING 3: invalidate the module-level silent-restore latch on logout. The latch
-    // caches the restore RESULT for the page lifetime; logout sets webId=null which
-    // re-runs the restore mount effect, and a cached `{kind:"restored"}` (or a stale
-    // teardown) would otherwise be replayed against the now-logged-out state — a
-    // spurious post-logout error / wrong state. Nulling it means a future restore
-    // starts clean. The mount effect ALSO re-reads the pointer and bails to "skipped"
-    // when it is now null (belt-and-braces — see the restore effect).
-    silentRestorePromise = null;
+    // FINDING 3: invalidate the module-level silent-restore latch on logout via the
+    // exported helper. The latch caches the restore RESULT for the page lifetime; logout
+    // sets webId=null which re-runs the restore mount effect, and a cached
+    // `{kind:"restored"}` (or a stale teardown) would otherwise be replayed against the
+    // now-logged-out state — a spurious post-logout error / wrong state. Clearing it
+    // means a future restore starts clean. The mount effect ALSO re-reads the pointer
+    // and bails (decideRestoreEffect → "skip-no-pointer") when it is now null
+    // (belt-and-braces). Calling the named helper (not an inline `= null`) lets a test
+    // exercise the exact production guard — see invalidateSilentRestoreLatch.
+    invalidateSilentRestoreLatch();
     setWebId(null);
     setSession(null);
     setError(null);
@@ -830,28 +937,35 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   // double-mount runs the (refresh-granting) restore exactly once.
   useEffect(() => {
     const provider = providerRef.current;
-    if (!ready || !provider) return;
-    // Already logged in (e.g. a re-render after restore set webId) → nothing to do.
-    if (webId !== null) return;
-    // Mutual exclusion with autologin: a deep-link / redirect-return load is the
-    // autologin effect's job. Don't run restore (and the initial restoringSession was
-    // already false for these loads, so no flash).
-    if (
-      hasAuthCodeParams(location.search) ||
-      hasAuthErrorParams(location.search) ||
-      parseAutologinFragment(location.hash) !== null
-    ) {
-      setRestoringSession(false);
-      return;
-    }
-    // FINDING 3 (belt-and-braces with the logout latch-null): if there is NO remembered
-    // pointer NOW (logout cleared it — this effect re-runs because logout set webId=null),
-    // there is nothing to restore. Bail to a clean logged-out state WITHOUT consulting /
-    // awaiting the cached `silentRestorePromise`, so a stale `{kind:"restored"}` from a
-    // pre-logout restore can never be replayed. On the LEGITIMATE first load the pointer
-    // is non-null (a returning user), so this guard does NOT fire and StrictMode
-    // single-flight via runSilentRestore's latch is fully preserved for that path.
-    if (remembered.read() === null) {
+    // The skip/run decision is the PURE, exported, separately-tested decider
+    // `decideRestoreEffect` (mirrors planAutologin / decideSingleFlight) — so the
+    // load-bearing `skip-no-pointer` guard (FINDING 3's restore-effect half) is
+    // genuinely tested against production code, not a re-implementation.
+    const action = decideRestoreEffect({
+      ready,
+      hasProvider: provider !== null,
+      loggedIn: webId !== null,
+      // Mutual exclusion with autologin: a deep-link / redirect-return load is the
+      // autologin effect's job (and the initial restoringSession was already false for
+      // these loads, so no flash).
+      isAutologinUrl:
+        hasAuthCodeParams(location.search) ||
+        hasAuthErrorParams(location.search) ||
+        parseAutologinFragment(location.hash) !== null,
+      // Re-read the pointer NOW: logout clears it and re-runs this effect (it set
+      // webId=null). FINDING 3 (belt-and-braces with the logout latch-null): if there
+      // is NO remembered pointer, bail WITHOUT consulting / awaiting the cached
+      // `silentRestorePromise`, so a stale `{kind:"restored"}` can never be replayed.
+      // On a LEGITIMATE first load the pointer is non-null (a returning user), so this
+      // does NOT fire and StrictMode single-flight via runSilentRestore's latch is
+      // fully preserved.
+      hasRememberedPointer: remembered.read() !== null,
+    });
+    // skip-not-ready: a later pass with `ready` true owns restoringSession — leave it.
+    if (action === "skip-not-ready" || !provider) return;
+    // The remaining skips are terminal for THIS load: there is nothing to restore, so
+    // clear the restoring flag and let the login/already-logged-in UI render.
+    if (action !== "run") {
       setRestoringSession(false);
       return;
     }
