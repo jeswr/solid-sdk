@@ -35,12 +35,15 @@ class FakeObjectStore {
   constructor(
     private readonly data: Map<string, Rec>,
     private readonly keyPath: string,
+    private readonly tx: FakeTransaction,
   ) {}
   get(key: string): FakeRequest<Rec | undefined> {
     const req = new FakeRequest<Rec | undefined>();
     queueMicrotask(() => {
       req.result = this.data.get(key);
       req.onsuccess?.();
+      // A readonly transaction completes after its request settles.
+      queueMicrotask(() => this.tx.oncomplete?.());
     });
     return req;
   }
@@ -49,6 +52,10 @@ class FakeObjectStore {
     queueMicrotask(() => {
       this.data.set(value[this.keyPath] as string, value);
       req.onsuccess?.();
+      // The transaction COMMITS after the write request succeeds — fire oncomplete
+      // on a later microtask so the provider (which now resolves writes on
+      // tx.oncomplete) observes durable commit, mirroring real IndexedDB.
+      queueMicrotask(() => this.tx.oncomplete?.());
     });
     return req;
   }
@@ -57,6 +64,7 @@ class FakeObjectStore {
     queueMicrotask(() => {
       this.data.delete(key);
       req.onsuccess?.();
+      queueMicrotask(() => this.tx.oncomplete?.());
     });
     return req;
   }
@@ -64,13 +72,15 @@ class FakeObjectStore {
 
 class FakeTransaction {
   onabort: (() => void) | null = null;
+  oncomplete: (() => void) | null = null;
+  onerror: (() => void) | null = null;
   error: unknown = null;
   constructor(
     private readonly data: Map<string, Rec>,
     private readonly keyPath: string,
   ) {}
   objectStore(): FakeObjectStore {
-    return new FakeObjectStore(this.data, this.keyPath);
+    return new FakeObjectStore(this.data, this.keyPath, this);
   }
 }
 

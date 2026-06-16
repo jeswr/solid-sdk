@@ -1002,11 +1002,16 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
       return session.authenticatedWebId === undefined
         ? undefined
         : { webId: session.authenticatedWebId };
-    } catch {
-      // The refresh token was expired/revoked (token endpoint invalid_grant) or
-      // the restore otherwise failed: clear the dead entry and report "nothing
-      // restored" so the caller stays silent (no popup on restore).
-      await this.#clearPersisted(issuer);
+    } catch (e) {
+      // Distinguish a DEFINITIVELY DEAD refresh token from a TRANSIENT failure
+      // (roborev finding 2): only `invalid_grant` (expired / revoked /
+      // rotation-reuse) means the credential is gone — clear it so a doomed restore
+      // is not re-attempted. A transient discovery/network/server error on page
+      // load must NOT erase an otherwise-valid refresh token (that would force a
+      // needless re-login); leave the entry intact for a later retry. Either way we
+      // report "nothing restored" so the caller falls back to login silently (no
+      // popup on restore) for THIS load.
+      if (isInvalidGrantError(e)) await this.#clearPersisted(issuer);
       return undefined;
     }
   }
@@ -1430,20 +1435,27 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
         response_types: ["code"],
       };
 
-      // Re-import the persisted ES256 DPoP key (extractable so it survived the
-      // redirect) and rebuild the DPoP handle for the token exchange.
+      // Re-import the persisted ES256 DPoP key as NON-EXTRACTABLE (roborev finding
+      // 1). The key was exported to an extractable JWK ONLY to survive the
+      // full-page redirect via sessionStorage; the re-imported, long-lived key that
+      // we (a) build the DPoP handle from and (b) PERSIST to IndexedDB must be
+      // non-extractable, exactly like the popup path's key — a non-extractable key
+      // can still SIGN the token-exchange + refresh proofs (all we need), but its
+      // raw bytes can no longer be exported, so an XSS cannot exfiltrate the
+      // refresh token + key for off-origin reuse. The transient extractable JWK in
+      // sessionStorage is cleared the instant this completion settles (the finally).
       const privateKey = await crypto.subtle.importKey(
         "jwk",
         flow.dpopPrivateJwk,
         ES256_IMPORT_ALG,
-        true,
+        false, // non-extractable: re-imported for signing + durable persistence
         ["sign"],
       );
       const publicKey = await crypto.subtle.importKey(
         "jwk",
         flow.dpopPublicJwk,
         ES256_IMPORT_ALG,
-        true,
+        false, // public key: non-extractable too (it is only used to verify)
         ["verify"],
       );
       if (generation !== this.#generation) throw new ReactiveAuthResetError();
@@ -1516,13 +1528,12 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
       // re-fence so a superseded completion publishes nothing).
       this.#sessions.set(issuer.href, Promise.resolve(session));
       // PERSIST the DPoP-bound refresh credential so REOPENING THE TAB restores the
-      // session silently. NOTE: the redirect path's DPoP key is `extractable: true`
-      // (it had to survive the full-page redirect via sessionStorage — see
-      // beginRedirectLogin); the persisted key therefore keeps that property. This
-      // is the documented redirect-path exception to the non-extractable rule (the
-      // popup path persists a non-extractable key); the refresh token remains
-      // DPoP-sender-constrained either way. Awaited so the credential is durable
-      // before the caller proceeds (errors are swallowed inside #persist).
+      // session silently. The persisted `dpopKey` was re-imported NON-EXTRACTABLE
+      // above (roborev finding 1), so — exactly like the popup path — the durable
+      // key's raw bytes never leave the browser key store and the refresh token
+      // stays usefully sender-constrained even against same-origin XSS reading
+      // IndexedDB. Awaited so the credential is durable before the caller proceeds
+      // (errors are swallowed inside #persist).
       await this.#persist(issuer, session);
       // FINDING A: seed #issuer with the resolved issuer of THIS completion, so a later
       // upgrade() (a data fetch on the now-authenticated page) REUSES the seeded session
@@ -1632,6 +1643,29 @@ function webIdFromClaims(claims: oauth.IDToken | undefined): string | undefined 
   if (typeof webid === "string" && webid.length > 0) return webid;
   if (typeof claims.sub === "string" && claims.sub.length > 0) return claims.sub;
   return undefined;
+}
+
+/**
+ * Whether a refresh-grant error is a DEFINITIVE `invalid_grant` — the refresh
+ * token is expired / revoked / rotation-reuse-detected, so it is dead and the
+ * persisted entry should be cleared. oauth4webapi surfaces a token-endpoint OAuth
+ * error as a `ResponseBodyError` carrying an `error` field; we read that
+ * structurally (an instanceof can be brittle across module/bundle boundaries) and
+ * also accept an `error` nested under `.cause.parameters` (the shape some flows
+ * wrap it in). Any OTHER failure (network, discovery 5xx, abort) returns false, so
+ * a transient blip on load does NOT erase an otherwise-valid credential (finding 2).
+ */
+function isInvalidGrantError(e: unknown): boolean {
+  if (e && typeof e === "object") {
+    const err = e as { error?: unknown; cause?: { parameters?: URLSearchParams } };
+    if (err.error === "invalid_grant") return true;
+    try {
+      if (err.cause?.parameters?.get("error") === "invalid_grant") return true;
+    } catch {
+      // .cause.parameters not a URLSearchParams — not the shape we handle.
+    }
+  }
+  return false;
 }
 
 function isEssMissingIssInteractionNeeded(e: unknown): boolean {

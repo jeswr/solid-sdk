@@ -254,11 +254,82 @@ let autologinEffectRan = false;
 // restore is the NO-FRAGMENT returning-user path only.
 
 /**
- * MODULE-LEVEL once-guard so the silent-restore mount effect runs AT MOST ONCE
- * per page, even under React.StrictMode (which double-invokes mount effects in
- * dev). Reset only by a full page load (module re-eval).
+ * The settled outcome of the one page-lifetime silent restore — what BOTH a
+ * StrictMode double-mount apply to their own React state. `restored` carries the
+ * derived session so the second mount need not re-run the refresh grant.
  */
-let silentRestoreEffectRan = false;
+type SilentRestoreOutcome =
+  | { kind: "restored"; webId: string; session: DerivedSession }
+  | { kind: "login" };
+
+/**
+ * MODULE-LEVEL shared promise for the ONE silent restore per page (the fix for the
+ * roborev StrictMode-deadlock finding). StrictMode double-invokes mount effects in
+ * dev: the first run STARTS the restore (this promise); its cleanup marks itself
+ * cancelled; the second run does NOT re-run — it AWAITS this same promise and
+ * applies the outcome, so `restoring` is always cleared and the result is applied
+ * exactly once regardless of how many times the effect mounts. Built once, behind a
+ * null check, like {@link getAuthRuntime}. Reset only by a full page load.
+ */
+let silentRestorePromise: Promise<SilentRestoreOutcome> | null = null;
+
+/**
+ * Run the ONE silent restore (refresh-token grant via the provider, then derive
+ * the app session), memoised on {@link silentRestorePromise} so a StrictMode
+ * remount reuses it instead of re-running the grant. Provider-independent of React
+ * state — it returns a pure {@link SilentRestoreOutcome} the effect applies. Never
+ * throws (fail-closed to `login`).
+ */
+function runSilentRestore(provider: WebIdDPoPTokenProvider): Promise<SilentRestoreOutcome> {
+  if (silentRestorePromise) return silentRestorePromise;
+  silentRestorePromise = (async (): Promise<SilentRestoreOutcome> => {
+    const remembered = readRememberedAccount();
+    const decision = await decideSilentRestore({
+      lastActiveWebId: remembered?.webId,
+      remembered: remembered ? [remembered] : [],
+      // The one fetch: a refresh-token grant for the remembered issuer. Never throws
+      // for the expired/revoked case (the provider returns undefined and clears the
+      // dead entry); a thrown error is unexpected and decideSilentRestore treats it
+      // as "login" (fail-closed).
+      restoreIssuer: async (issuer) => provider.restoreIssuer(new URL(issuer)),
+      webIdsEqual,
+    });
+    if (decision.outcome !== "restored") {
+      // Nothing to restore (no/expired token, or no remembered issuer) → login. The
+      // dead persisted entry, if any, was already cleared by restoreIssuer (only on
+      // a definitive invalid_grant); clear the stale POINTER too so we don't
+      // re-attempt a doomed restore on every load.
+      clearRememberedAccount();
+      return { kind: "login" };
+    }
+    // The refresh grant rebuilt a live session in the provider (issuer pinned,
+    // session cached). Per the cross-app invariant, a RESTORED token means
+    // logged-in even if the cosmetic profile read degrades: read the (now
+    // authenticated) profile to derive pod root / display name, but fall back to a
+    // WebID-origin-derived session rather than bouncing a fully-restored user to
+    // login on a transient profile blip.
+    let session: DerivedSession;
+    try {
+      session = deriveSession(await readProfile(decision.webId));
+    } catch {
+      session = deriveSession({
+        webId: decision.webId,
+        name: decision.webId,
+        storages: [],
+        oidcIssuers: [decision.issuer],
+      });
+    }
+    // Refresh the remembered pointer (issuer re-confirmed) so the NEXT reload
+    // restores from the current credential.
+    writeRememberedAccount(decision.webId, decision.issuer);
+    return { kind: "restored", webId: decision.webId, session };
+  })().catch(() => {
+    // Any unexpected error in the restore wiring → fall back to login, fail-closed.
+    clearRememberedAccount();
+    return { kind: "login" } as const;
+  });
+  return silentRestorePromise;
+}
 
 /**
  * Whether a silent restore is even worth attempting on THIS load — used to decide
@@ -475,72 +546,31 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   // redirect return is left entirely to the autologin effect. A `webId` already set
   // (e.g. autologin completed first) also short-circuits to `none` here.
   useEffect(() => {
-    if (!ready || silentRestoreEffectRan) return;
+    const provider = providerRef.current;
+    if (!ready || !provider) return;
     // Don't restore when a session already exists, or an autologin URL outranks us.
+    // (Re-checked here, not just in the initial `restoring` paint, so a deep-link /
+    // redirect return is left entirely to the autologin effect.)
     if (webId !== null || !shouldAttemptSilentRestore()) {
-      silentRestoreEffectRan = true;
       setRestoring(false);
       return;
     }
-    silentRestoreEffectRan = true;
     let cancelled = false;
     setRestoring(true);
     setError(null);
-    const remembered = readRememberedAccount();
-    (async () => {
-      const decision = await decideSilentRestore({
-        lastActiveWebId: remembered?.webId,
-        remembered: remembered ? [remembered] : [],
-        // The one fetch: a refresh-token grant for the remembered issuer. Never
-        // throws for the expired/revoked case (the provider returns undefined and
-        // clears the dead entry); a thrown error is unexpected and decideSilentRestore
-        // treats it as "login" (fail-closed).
-        restoreIssuer: async (issuer) => providerRef.current?.restoreIssuer(new URL(issuer)),
-        webIdsEqual,
-      });
+    // Await the ONE page-lifetime restore (memoised), so a StrictMode remount reuses
+    // the same operation rather than re-running the grant — and ALWAYS clears its own
+    // `restoring` when it settles (the deadlock fix: the terminal state writes are
+    // guarded by the per-mount `cancelled`, but the SECOND mount runs this same await
+    // and clears its OWN restoring). runSilentRestore never throws.
+    runSilentRestore(provider).then((outcome) => {
       if (cancelled) return;
-      if (decision.outcome !== "restored") {
-        // Nothing to restore (no/expired token, or no remembered issuer) → fall
-        // through to the login screen. The dead persisted entry, if any, was
-        // already cleared by restoreIssuer; clear the stale pointer too so we don't
-        // re-attempt a doomed restore on every load.
-        clearRememberedAccount();
-        return;
+      if (outcome.kind === "restored") {
+        setWebId(outcome.webId);
+        setSession(outcome.session);
       }
-      // The refresh grant rebuilt a live session in the provider (issuer pinned,
-      // session cached). Derive the app session. Per the cross-app invariant, a
-      // RESTORED token means logged-in even if the cosmetic profile read degrades:
-      // read the (now authenticated) profile to derive pod root / display name, but
-      // fall back to a WebID-origin-derived session rather than bouncing a
-      // fully-restored user to login on a transient profile blip.
-      let derived: DerivedSession;
-      try {
-        derived = deriveSession(await readProfile(decision.webId));
-      } catch {
-        if (cancelled) return;
-        // Degrade gracefully: build a minimal session from the WebID origin so the
-        // restored user lands on the app, not the login screen.
-        derived = deriveSession({
-          webId: decision.webId,
-          name: decision.webId,
-          storages: [],
-          oidcIssuers: [decision.issuer],
-        });
-      }
-      if (cancelled) return;
-      // Refresh the remembered pointer (issuer may have been re-confirmed) so the
-      // NEXT reload restores from the current credential.
-      writeRememberedAccount(decision.webId, decision.issuer);
-      setWebId(decision.webId);
-      setSession(derived);
-    })()
-      .catch(() => {
-        // Any unexpected error in the restore wiring → fall back to login, fail-closed.
-        if (!cancelled) clearRememberedAccount();
-      })
-      .finally(() => {
-        if (!cancelled) setRestoring(false);
-      });
+      setRestoring(false);
+    });
     return () => {
       cancelled = true;
     };

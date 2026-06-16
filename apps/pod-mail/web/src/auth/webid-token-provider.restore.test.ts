@@ -341,7 +341,7 @@ describe("restoreIssuer — silent refresh-token-grant restore (no popup)", () =
     expect(after).toBe(before); // no grant attempted (nothing to restore)
   });
 
-  it("a DEAD refresh token (grant rejected) → undefined AND the dead entry is CLEARED (no popup on restore)", async () => {
+  it("a DEAD refresh token (invalid_grant) → undefined AND the dead entry is CLEARED (no popup on restore)", async () => {
     const store = makeStore();
     const dpopKey = (await crypto.subtle.generateKey(
       { name: "ECDSA", namedCurve: "P-256" },
@@ -354,13 +354,40 @@ describe("restoreIssuer — silent refresh-token-grant restore (no popup)", () =
       refreshToken: "rt-A",
       dpopKey,
     });
-    refreshMock.reject = new Error("invalid_grant"); // expired / revoked / reuse-detected
+    // oauth4webapi surfaces a token-endpoint OAuth error as a ResponseBodyError-shape
+    // carrying `.error` — invalid_grant = expired / revoked / rotation-reuse.
+    refreshMock.reject = Object.assign(new Error("invalid_grant"), { error: "invalid_grant" });
 
     const provider = makeProvider(store);
     const restored = await provider.restoreIssuer(ISSUER);
     expect(restored).toBeUndefined();
     // The dead entry was cleared so a doomed restore is not re-attempted next load.
     expect(store.map.has(ISSUER.href)).toBe(false);
+  });
+
+  it("a TRANSIENT failure (NOT invalid_grant) → undefined but PRESERVES the credential (finding 2)", async () => {
+    // A network/discovery/5xx blip on load must NOT erase an otherwise-valid refresh
+    // token — that would force a needless re-login. The entry survives for a retry;
+    // THIS load just falls back to login (silently — no popup on restore).
+    const store = makeStore();
+    const dpopKey = (await crypto.subtle.generateKey(
+      { name: "ECDSA", namedCurve: "P-256" },
+      false,
+      ["sign", "verify"],
+    )) as CryptoKeyPair;
+    store.map.set(ISSUER.href, {
+      issuer: ISSUER.href,
+      webId: WEBID_A,
+      refreshToken: "rt-A",
+      dpopKey,
+    });
+    refreshMock.reject = new Error("network timeout"); // transient, no OAuth error field
+
+    const provider = makeProvider(store);
+    const restored = await provider.restoreIssuer(ISSUER);
+    expect(restored).toBeUndefined();
+    // The credential is PRESERVED — a transient error did not wipe a valid token.
+    expect(store.map.get(ISSUER.href)?.refreshToken).toBe("rt-A");
   });
 
   it("returns undefined (in-memory-only) when the provider has NO session store", async () => {

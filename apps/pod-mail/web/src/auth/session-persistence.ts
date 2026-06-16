@@ -122,6 +122,17 @@ export class IndexedDbSessionStore implements SessionStore {
     });
   }
 
+  /**
+   * Run one request inside a transaction and resolve when it is DURABLE.
+   *
+   * Writes (put/delete) resolve from `tx.oncomplete` — the transaction has
+   * COMMITTED — so the caller never treats a credential as persisted/deleted
+   * before it actually hit disk (roborev finding 4: resolving on `request.success`
+   * alone races the commit). Reads (get) resolve from `request.onsuccess` with the
+   * read value (a read has no durable mutation to await — its result IS the value,
+   * and the readonly transaction completing carries no extra meaning). Either way a
+   * `tx.onabort`/`tx.onerror` rejects, and the connection is closed in `finally`.
+   */
   async #tx<T>(
     mode: IDBTransactionMode,
     run: (store: IDBObjectStore) => IDBRequest<T>,
@@ -131,8 +142,20 @@ export class IndexedDbSessionStore implements SessionStore {
       return await new Promise<T>((resolve, reject) => {
         const tx = db.transaction(STORE_NAME, mode);
         const request = run(tx.objectStore(STORE_NAME));
-        request.onsuccess = () => resolve(request.result);
+        if (mode === "readonly") {
+          // A read: its result is available on success; no commit to await.
+          request.onsuccess = () => resolve(request.result);
+        } else {
+          // A write: capture the request result, but only resolve once the
+          // transaction has COMMITTED (oncomplete) so persistence is durable.
+          let result: T;
+          request.onsuccess = () => {
+            result = request.result;
+          };
+          tx.oncomplete = () => resolve(result);
+        }
         request.onerror = () => reject(request.error);
+        tx.onerror = () => reject(tx.error);
         tx.onabort = () => reject(tx.error);
       });
     } finally {
