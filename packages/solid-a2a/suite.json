@@ -1,0 +1,27 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jeswr/full-solid-ecosystem/main/tracking/schema/suite.schema.json",
+  "id": "solid-a2a",
+  "kind": "sdk",
+  "name": "Solid A2A",
+  "repo": "https://github.com/jeswr/solid-a2a",
+  "category": "infrastructure",
+  "maturity": "prototype",
+  "visibility": "public",
+  "stack": {
+    "lang": "TypeScript (ESM, NodeNext)",
+    "rdf": "n3 ^2.x",
+    "rdf-wrapper": "@rdfjs/wrapper ^0.34.x",
+    "solid-object": "@solid/object ^0.6.x",
+    "shacl": "rdf-validate-shacl ^0.6.x",
+    "fetch-rdf": "@jeswr/fetch-rdf (git: jeswr/fetch-rdf#main)",
+    "test": "vitest ^2.x",
+    "lint": "@biomejs/biome ^2.x",
+    "node": ">=24"
+  },
+  "dependsOn": ["solid-agent-card"],
+  "roadmap": {
+    "doc": "https://github.com/jeswr/prod-solid-server/blob/main/docs/design/agentic-solid-infrastructure.md",
+    "milestone": "M2 — The NL→RDF upgrade (AGORA protocol document, RDF/SHACL-native)",
+    "note": "The NL→RDF translator + SHACL-bodied, hash-pinned Protocol Document + the upgrade-handshake codec. Builds on M1 (@jeswr/solid-agent-card) AgentDescriptor.protocolSources. SEPARATE-CODEBASE — zero prod-solid-server core risk (the translation/validation/codec is a client-side library; no networking or server change). The runtime carrier is a separate @jeswr/solid-agent package."
+  }
+}

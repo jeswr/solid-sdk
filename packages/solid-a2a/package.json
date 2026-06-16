@@ -1,0 +1,80 @@
+{
+  "name": "@jeswr/solid-a2a",
+  "version": "0.1.0",
+  "description": "NL→RDF intent translator + SHACL-bodied AGORA Protocol Document + upgrade-handshake codec (M2 of the agentic-Solid roadmap). Parse a natural-language agent request into a structured RDF 'intent' graph grounded in schema.org/ACL/LDP, SHACL-validate it against a hash-pinned, content-addressed Protocol Document, and encode the NL→RDF upgrade handshake (no-silent-downgrade for security steps). LLM-agnostic: bring your own translate() seam; a deterministic rule path needs no model. Experimental, AI-agent-generated.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build:deps": "node scripts/build-deps.mjs",
+    "build": "node scripts/build-dist.mjs",
+    "build:dev": "npm run build:deps && tsc -p tsconfig.json",
+    "check:dist": "node scripts/check-dist-fresh.mjs",
+    "typecheck": "npm run build:deps && tsc -p tsconfig.json --noEmit",
+    "lint": "biome check src test scripts",
+    "lint:fix": "biome check --write src test scripts",
+    "test": "npm run build:deps && vitest run",
+    "test:coverage": "npm run build:deps && vitest run --coverage",
+    "prepare": "npm run build"
+  },
+  "keywords": [
+    "solid",
+    "agent",
+    "a2a",
+    "agora",
+    "anp",
+    "nl-to-rdf",
+    "intent",
+    "shacl",
+    "protocol-document",
+    "rdf",
+    "jsonld",
+    "linked-data",
+    "agentic"
+  ],
+  "author": "Jesse Wright <jwrightwho@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jeswr/solid-a2a.git"
+  },
+  "bugs": {
+    "url": "https://github.com/jeswr/solid-a2a/issues"
+  },
+  "homepage": "https://github.com/jeswr/solid-a2a#readme",
+  "dependencies": {
+    "@rdfjs/wrapper": "^0.34.0",
+    "@solid/object": "^0.6.0",
+    "content-type": "^1.0.5",
+    "jsonld-streaming-parser": "^5.0.0",
+    "n3": "^2.0.3",
+    "rdf-validate-shacl": "^0.6.5"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.0.0",
+    "@jeswr/fetch-rdf": "github:jeswr/fetch-rdf#main",
+    "@rdfjs/types": "^2.0.1",
+    "@types/n3": "^1.16.0",
+    "@types/node": "^22.0.0",
+    "@vitest/coverage-v8": "^2.1.0",
+    "esbuild": "^0.21.5",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
