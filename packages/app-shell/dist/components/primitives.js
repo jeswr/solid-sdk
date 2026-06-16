@@ -16,7 +16,10 @@ import * as AvatarPrimitive from "@radix-ui/react-avatar";
 import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu";
 import { cn } from "../lib/cn.js";
 export function Button({ className, variant = "ghost", size = "default", type = "button", ...props }) {
-    return (_jsx("button", { type: type, "data-variant": variant, "data-size": size, className: cn("inline-flex items-center justify-center gap-2 rounded-md text-sm font-medium", "transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring", "disabled:pointer-events-none disabled:opacity-50", "hover:bg-accent hover:text-accent-foreground", size === "icon" ? "size-9" : "h-9 px-3 py-2", className), ...props }));
+    return (_jsx("button", { type: type, "data-variant": variant, "data-size": size, className: cn("inline-flex items-center justify-center gap-2 rounded-md text-sm font-medium", "transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring", "disabled:pointer-events-none disabled:opacity-50", "hover:bg-accent hover:text-accent-foreground", 
+        // The outline variant adds a border + a subtle base background so it
+        // reads as a discrete control (used by the feedback submit/close buttons).
+        variant === "outline" ? "border border-border bg-background" : "", size === "icon" ? "size-9" : "h-9 px-3 py-2", className), ...props }));
 }
 // ── Avatar (Radix) ───────────────────────────────────────────────────────────
 export function Avatar({ className, ...props }) {

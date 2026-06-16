@@ -20,7 +20,7 @@ import { cn } from "../lib/cn.js";
 // ── Button (ghost / icon) ───────────────────────────────────────────────────
 
 export interface ButtonProps extends React.ComponentProps<"button"> {
-  variant?: "ghost";
+  variant?: "ghost" | "outline";
   size?: "icon" | "default";
 }
 
@@ -41,6 +41,9 @@ export function Button({
         "transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring",
         "disabled:pointer-events-none disabled:opacity-50",
         "hover:bg-accent hover:text-accent-foreground",
+        // The outline variant adds a border + a subtle base background so it
+        // reads as a discrete control (used by the feedback submit/close buttons).
+        variant === "outline" ? "border border-border bg-background" : "",
         size === "icon" ? "size-9" : "h-9 px-3 py-2",
         className,
       )}

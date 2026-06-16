@@ -74,6 +74,80 @@ Avatar (image → initials fallback) + display name; the dropdown shows the WebI
 optional Profile / Settings entries, and Sign out. **Decoupled** — everything is a
 prop, so it has no dependency on any app's session/router/toast.
 
+## Feedback button
+
+A shared "report issue / give feedback / request help" control. Every suite app
+(and every `create-solid-app` scaffold) drops it in once and inherits ONE
+consistent way to file an issue **against that app's OWN repo**.
+
+```tsx
+import { FeedbackButton } from "@jeswr/app-shell";
+
+// The ONE-LINER each app adds — pass YOUR OWN repo:
+<FeedbackButton repo="jeswr/pod-mail" appName="Pod Mail" appVersion={BUILD_SHA} webId={session.webId} />;
+```
+
+The trigger (icon + "Feedback") opens a dialog with a category selector
+(Bug 🐛 / Feedback 💡 / Help ❓), a required description, an **optional**
+"Include my WebID so the maintainer can follow up" checkbox (**default off** for
+privacy), and a note that basic diagnostics are attached.
+
+### Props
+
+| Prop | Type | Notes |
+|---|---|---|
+| `repo` | `string` **(required)** | `OWNER/REPO` the issue is filed against — each app passes its **own** (e.g. `"jeswr/pod-mail"`). |
+| `appName` | `string` | App name, shown in the dialog and the diagnostics. |
+| `appVersion?` | `string` | Build SHA / version, attached to diagnostics. |
+| `webId?` | `string \| null` | The signed-in WebID. Attached to the issue **only** if the consent box is ticked. |
+| `submit?` | `(payload) => Promise<{ url; number }>` | The proxy hook (see below). When provided, the prefill path is **not** used. |
+| `triggerVariant?` | `"ghost" \| "outline"` | Trigger button style (default `"ghost"`). |
+| `className?` / `label?` | `string` | Trigger placement / label (default `"Feedback"`). |
+
+### Two mechanisms (graceful degradation)
+
+1. **Prefill (default, zero-infra).** With **no** `submit` hook, the dialog opens
+   GitHub's prefilled `…/issues/new?title=…&body=…&labels=…` page in a new tab
+   (`noopener,noreferrer`). The reporter (who has a GitHub account) submits. No
+   server, no credentials — works the moment an app adds the component.
+2. **Proxy (`submit` hook).** Provide a `submit(payload)` that creates the issue
+   **server-side** (the future "feedback proxy"), so the reporter needs **no**
+   GitHub account. On success the dialog shows "Thanks — tracked as #N" linking
+   the created issue.
+
+```tsx
+// Proxy mode — wire your feedback-proxy endpoint:
+<FeedbackButton
+  repo="jeswr/pod-mail"
+  appName="Pod Mail"
+  webId={session.webId}
+  submit={async (payload) => {
+    const res = await fetch("/api/feedback", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error("Could not submit feedback.");
+    return res.json(); // { url, number }
+  }}
+/>;
+```
+
+### Diagnostics & privacy
+
+The issue body always appends `App: <appName> <appVersion>`, `Page: <location.href>`,
+and `UA: <navigator.userAgent>`. The reporter's `Reporter WebID` line is added
+**only** when the consent box is ticked. No tokens or secrets are ever included.
+Labels are always `user-feedback` plus the category (`bug` / `feedback` / `help`).
+
+### Building blocks (unit-testable)
+
+`buildIssueUrl({ repo, title, body, labels })`, `composeIssueBody(description,
+diagnostics)`, `composeIssueTitle(category, description)`, and
+`feedbackLabels(category)` are exported pure helpers. `FeedbackDialog` is exported
+too if you want to drive the open state yourself; the `FeedbackPayload` /
+`FeedbackDiagnostics` / `FeedbackSubmitResult` types are exported for the proxy.
+
 ## Styling
 
 The components use shadcn token utility classes (`bg-popover`,
@@ -110,6 +184,10 @@ Rebuild + commit `dist/` alongside any `src/` change — `check:dist` guards dri
 4. Replace the hand-rolled header's logout button + raw WebID text with
    `<ThemeToggle />` + `<AccountMenu />`, wiring your session's WebID / display
    name / avatar / `onSignOut` into the props.
+5. Add `<FeedbackButton repo="jeswr/<this-app>" appName="<App>" />` to the header,
+   passing **this app's own** repo (the only required, app-specific value). Wire
+   `webId` + `appVersion` if available, and a `submit` hook once the feedback
+   proxy exists.
 
 The pod-mail app is the reference pilot.
 

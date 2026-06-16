@@ -2,7 +2,7 @@ import * as AvatarPrimitive from "@radix-ui/react-avatar";
 import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu";
 import type * as React from "react";
 export interface ButtonProps extends React.ComponentProps<"button"> {
-    variant?: "ghost";
+    variant?: "ghost" | "outline";
     size?: "icon" | "default";
 }
 export declare function Button({ className, variant, size, type, ...props }: ButtonProps): React.JSX.Element;
