@@ -591,41 +591,56 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
     }
     const issuer = await this.#issuer;
     const session = await this.#getSession(issuer, generation, controller.signal);
-    // FENCE: if a reset() (logout / new-login) advanced the generation while this
-    // upgrade was in flight, the result belongs to a SUPERSEDED identity. Mutate
-    // NO provider state and reject — the request must not carry a stale identity's
-    // token, and #authenticatedWebId / #tokensAttached / #probeUpgradedGeneration
-    // must stay at the new identity's clean baseline.
+    // FENCE (pre-await, fail fast): if a reset() (logout / new-login) advanced the
+    // generation while this upgrade was in flight (issuer resolution / login), the
+    // result belongs to a SUPERSEDED identity. Mutate NO provider state and reject.
+    // This is the cheap early-out; the AUTHORITATIVE fence is re-checked AFTER the
+    // proof await below — a reset() can still fire DURING `DPoP.generateProof()`.
     if (generation !== this.#generation) {
       throw new ReactiveAuthResetError();
     }
-    // Record the identity the OP vouched for, so the login flow can confirm it
-    // matches the requested WebID. Set here (not only at session creation) so a
-    // cached/in-flight session shared across concurrent 401s also publishes it.
-    this.#authenticatedWebId = session.authenticatedWebId;
-    const headers = new Headers(request.headers);
     // RFC 9449 §4.2 htu: scheme + authority + path only (query + fragment removed).
     // `request.url` may carry the in-process `#probe-<uuid>` marker fragment (and a
     // query); the `dpop` package uses this argument VERBATIM, so we MUST strip them
     // here or the proof's `htu` would not match the htu the server computes from the
     // fragment/query-stripped received request URI (the marker is never on the wire).
     const htu = httpUri(request.url);
-    headers.set(
-      "DPoP",
-      await DPoP.generateProof(
-        session.dpopKey,
-        htu,
-        request.method,
-        undefined,
-        session.accessToken,
-      ),
+    // Generate the proof into a LOCAL FIRST — before writing ANY provider state.
+    // `DPoP.generateProof()` is awaited, and a reset() (logout / new login) can fire
+    // DURING that await; the pre-await fence above does NOT cover this window. Doing
+    // the (state-free) proof generation first lets us re-fence immediately after and
+    // only then mutate state, so a reset racing the proof await writes nothing.
+    const proof = await DPoP.generateProof(
+      session.dpopKey,
+      htu,
+      request.method,
+      undefined,
+      session.accessToken,
     );
+    // RE-FENCE (post-await, authoritative): a reset() may have advanced the
+    // generation WHILE the proof await above was parked. If so, this attempt is now
+    // superseded — reject and mutate NO provider state, so a stale upgrade can never
+    // publish its identity (#authenticatedWebId), attach the old token, bump
+    // #tokensAttached, or record #probeUpgradedGeneration for a superseded
+    // generation (which would contaminate the next identity's clean baseline). Every
+    // state write below MUST stay after this re-check.
+    if (generation !== this.#generation) {
+      throw new ReactiveAuthResetError();
+    }
+    // Record the identity the OP vouched for, so the login flow can confirm it
+    // matches the requested WebID. Set here (not only at session creation) so a
+    // cached/in-flight session shared across concurrent 401s also publishes it.
+    // MUST be after the re-fence — a superseded attempt must not publish its identity.
+    this.#authenticatedWebId = session.authenticatedWebId;
+    const headers = new Headers(request.headers);
+    headers.set("DPoP", proof);
     headers.set("Authorization", ["DPoP", session.accessToken].join(" "));
     // A token was minted AND attached: the auth flow ran to completion. Bump the
-    // running total (only after the session resolved — a cancelled/failed flow
-    // throws above and never reaches here, so the count is not bumped). The login
-    // flow reads this count BEFORE and AFTER its probe; the DELTA — not any sticky
-    // flag — is what proves a token was attached during THAT attempt.
+    // running total (only after the session resolved AND the re-fence passed — a
+    // cancelled/failed/superseded flow throws above and never reaches here, so the
+    // count is not bumped). The login flow reads this count BEFORE and AFTER its
+    // probe; the DELTA — not any sticky flag — is what proves a token was attached
+    // during THAT attempt.
     this.#tokensAttached += 1;
     // PER-PROBE PROOF: if THIS request is THIS login's probe (matched at the top of
     // upgrade() on the original request, by object identity or the full
@@ -633,9 +648,9 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
     // to the probe IN THIS GENERATION. The login
     // flow asserts wasLoginProbeUpgraded(its snapshot generation) — proving THIS
     // probe was upgraded, not merely that some request was. Single-flight login
-    // guarantees no other login can occupy this generation, and the generation
-    // fence above guarantees we only record for the current, non-superseded
-    // identity. No header was ever on the wire, so cross-origin login is unaffected.
+    // guarantees no other login can occupy this generation, and the re-fence above
+    // guarantees we only record for the current, non-superseded identity. No header
+    // was ever on the wire, so cross-origin login is unaffected.
     if (isLoginProbe) this.#probeUpgradedGeneration = generation;
     // The returned Request's `.url` still carries the probe fragment (it is built
     // from the original `request`), but that is CORRECT and needs no stripping: a

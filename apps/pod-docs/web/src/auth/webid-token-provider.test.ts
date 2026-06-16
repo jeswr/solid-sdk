@@ -43,9 +43,21 @@ vi.mock("./login-ux", () => ({
 // Record the args every `DPoP.generateProof` call receives so a test can assert
 // the `htu` (arg 2) the provider mints — the round-4c regression hinges on it.
 const dpopProofCalls: unknown[][] = [];
+// An OPTIONAL gate the round-4d reset-during-proof test installs to PARK the awaited
+// `DPoP.generateProof()` mid-flight (so a reset() can race the proof await). Default
+// null = resolve immediately (every prior test is unaffected); the new test sets it
+// to a deferred it releases. `onDpopEnter` (also opt-in) fires the instant the proof
+// mock is ENTERED, so the test can deterministically observe the flow is parked at
+// the await BEFORE it fires reset() — not rely on a fixed number of microtask ticks
+// (the mocked oauth flow has several real awaits before the proof await). Both reset
+// to null/undefined in `beforeEach` so they never leak between tests.
+let dpopGate: Promise<void> | null = null;
+let onDpopEnter: (() => void) | null = null;
 vi.mock("dpop", () => ({
   generateProof: vi.fn(async (...args: unknown[]) => {
     dpopProofCalls.push(args);
+    onDpopEnter?.();
+    if (dpopGate) await dpopGate;
     return "dpop-proof";
   }),
 }));
@@ -276,6 +288,8 @@ describe("FIX 2 — reset() fences in-flight auth work (no contamination after l
   beforeEach(() => {
     authState.webId = WEBID_A;
     authState.accessToken = "tok-A";
+    dpopGate = null; // no proof gate unless a test installs one (round-4d).
+    onDpopEnter = null;
   });
 
   it("an upgrade() that resolves AFTER reset() writes NO provider state and is discarded", async () => {
@@ -327,6 +341,57 @@ describe("FIX 2 — reset() fences in-flight auth work (no contamination after l
     // A's fenced attempt left no probe-upgrade record; only B's probe is recorded
     // (in B's generation — A's reset() advanced the generation past A's window).
     expect(provider.wasLoginProbeUpgraded(genB)).toBe(true);
+  });
+
+  it("round-4d — a reset() racing DURING the DPoP proof await writes NO state and rejects", async () => {
+    // The round-4d HIGH: the generation fence ran BEFORE `await DPoP.generateProof()`,
+    // so a reset() (logout / new login) firing DURING the proof await let the stale
+    // upgrade resume and mutate provider state — set #authenticatedWebId, attach the
+    // OLD token, bump #tokensAttached, and record #probeUpgradedGeneration for the
+    // SUPERSEDED generation. The fix re-fences AFTER the proof await, before any state
+    // write. Model: the proof await is PARKED via dpopGate, reset() fires while it is
+    // parked, then the gate is released and the upgrade must reject + leave clean state.
+    let releaseProof!: () => void;
+    dpopGate = new Promise<void>((resolve) => {
+      releaseProof = resolve;
+    });
+    // Resolves the INSTANT generateProof is entered, so we fire reset() only once the
+    // flow is provably parked at the proof await — deterministic, not tick-counting.
+    let proofEntered!: () => void;
+    const dpopEntered = new Promise<void>((resolve) => {
+      proofEntered = resolve;
+    });
+    onDpopEnter = proofEntered;
+
+    const provider = makeProvider();
+    // A login probe (with the unguessable fragment) — its upgrade must NOT record a
+    // probe proof for the captured (pre-reset) generation if a reset races the proof.
+    const { req: probe, generation: gen } = beginProbe(provider, "https://alice.example/storage/");
+
+    // Kick off the upgrade. Issuer resolution + login resolve immediately (no getCode
+    // gate); the flow then reaches the PARKED `DPoP.generateProof()` await.
+    const inflight = provider.upgrade(probe);
+    inflight.catch(() => {}); // pre-attach so the rejection is never "unhandled".
+    // Wait until the proof mock is ENTERED — the upgrade is now parked at the await,
+    // PAST the pre-await fence, which is exactly the window the round-4d bug needs.
+    await dpopEntered;
+
+    // Logout / new login fires WHILE the proof await is parked.
+    provider.reset();
+    // Mid-flight clean: the parked upgrade has written nothing yet.
+    expect(provider.tokensAttachedCount()).toBe(0);
+    expect(provider.authenticatedWebId()).toBeUndefined();
+
+    // Release the parked proof — the (now superseded) upgrade resumes past the await
+    // and MUST hit the post-await re-fence, rejecting and writing nothing.
+    releaseProof();
+    await expect(inflight).rejects.toBeInstanceOf(ReactiveAuthResetError);
+
+    // Post-resolution clean: no token attached, no identity published, and the
+    // (pre-reset) generation recorded NO probe upgrade — a stale upgrade records nothing.
+    expect(provider.tokensAttachedCount()).toBe(0);
+    expect(provider.authenticatedWebId()).toBeUndefined();
+    expect(provider.wasLoginProbeUpgraded(gen)).toBe(false);
   });
 });
 
