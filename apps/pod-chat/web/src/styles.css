@@ -1,17 +1,45 @@
 /* AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
    Host chrome + the pod-chat-* classes the @jeswr/pod-chat <ChatRooms> emits (the
-   component ships no styles of its own — the host owns the look). */
+   component ships no styles of its own — the host owns the look).
 
+   THEME: Tailwind v4 + the shared @jeswr/app-shell tokens drive light/dark. The
+   import order is load-bearing — `@import "tailwindcss"` FIRST, then the suite
+   OKLCH tokens + the `@theme inline` mapping (`@jeswr/app-shell/styles.css`) so
+   the shell components' utilities (bg-popover, text-muted-foreground, the `dark:`
+   variant, …) resolve to the suite palette. `@source` makes Tailwind scan the
+   app-shell package so the classes its <ThemeToggle/> + <AccountMenu/> emit are
+   actually generated (a node_modules package is otherwise outside the content
+   scan). The path is relative to THIS file. */
+@import "tailwindcss";
+@import "@jeswr/app-shell/styles.css";
+@source "../node_modules/@jeswr/app-shell/dist";
+
+/* The host chrome below predates the shared tokens and uses its own variable
+   names. Map them onto the app-shell OKLCH tokens so the WHOLE pod-chat UI (login
+   card, header, room list, thread, composer) follows the theme — the `.dark` class
+   the ThemeProvider toggles on <html> flips the OKLCH vars, and these aliases
+   inherit it for free.
+
+   IMPORTANT (learned from pod-photos/drive): do NOT re-alias app-shell's OWN
+   tokens (`--accent`/`--muted`/`--border`) — re-pointing `--accent`/`--muted` at
+   different values would mis-theme the shell's own controls + the feedback dialog.
+   So the host uses DISTINCT names where it collides: `--host-accent` (was the host
+   `--accent`) and `--muted-text` (was the host `--muted`). `--border` keeps its
+   name but is simply pointed at the same OKLCH token (no collision — it IS the
+   shell's border token), so it is unified, not re-aliased to a foreign value. */
 :root {
-  --bg: #f3f8f9;
-  --surface: #ffffff;
-  --ink: #1c2b30;
-  --muted: #5b6b70;
-  --accent: #0b7285;
-  --accent-ink: #ffffff;
-  --border: #d6e1e4;
-  --danger: #b02525;
-  --ok: #1a7a3f;
+  --bg: var(--background);
+  --surface: var(--card);
+  --ink: var(--foreground);
+  --muted-text: var(--muted-foreground);
+  --host-accent: var(--primary);
+  --accent-ink: var(--primary-foreground);
+  /* NOTE: `--border` is intentionally NOT redefined here — it already IS the
+     app-shell token (set by the imported tokens.css on :root), so the host's
+     `var(--border)` usages resolve to it directly and flip on `.dark` for free.
+     Re-declaring `--border: var(--border)` would be a self-reference (invalid). */
+  --danger: var(--destructive);
+  --ok: var(--success);
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
@@ -26,7 +54,7 @@ body {
 }
 
 a {
-  color: var(--accent);
+  color: var(--host-accent);
 }
 
 /* ── Login ─────────────────────────────────────────────────────────────── */
@@ -50,7 +78,7 @@ a {
   font-size: 1.5rem;
 }
 .login-sub {
-  color: var(--muted);
+  color: var(--muted-text);
   margin: 0 0 1.25rem;
   font-size: 0.95rem;
 }
@@ -75,29 +103,29 @@ a {
   margin-top: 0.75rem;
 }
 .login-hint {
-  color: var(--muted);
+  color: var(--muted-text);
   font-size: 0.85rem;
   margin-top: 1rem;
 }
 
-button {
+/* The host's filled-button style is SCOPED to the login form (and the host's own
+   `.app-*` buttons below) so it cannot leak onto the @jeswr/app-shell controls
+   (ThemeToggle / AccountMenu trigger / the FeedbackButton + its dialog buttons),
+   which bring their own Tailwind-utility styling. A bare global `button {}` here
+   would override the shell's chrome — exactly the leak the pod-photos/drive
+   adoption hit. */
+.login-form button {
   cursor: pointer;
   border: none;
   border-radius: 0.5rem;
   padding: 0.6rem 0.9rem;
   font-size: 0.95rem;
-  background: var(--accent);
+  background: var(--host-accent);
   color: var(--accent-ink);
 }
-button:disabled {
+.login-form button:disabled {
   opacity: 0.55;
   cursor: not-allowed;
-}
-button[type="button"].pod-chat-back,
-button[type="button"].pod-chat-open {
-  background: transparent;
-  color: var(--accent);
-  border: 1px solid var(--border);
 }
 
 /* ── App shell ─────────────────────────────────────────────────────────── */
@@ -117,23 +145,24 @@ button[type="button"].pod-chat-open {
   font-weight: 700;
   font-size: 1.1rem;
 }
-.app-webid {
-  color: var(--muted);
-  font-size: 0.8rem;
+/* Right-aligned header controls: the app-shell <FeedbackButton/> + <ThemeToggle/>
+   + <AccountMenu/>. `margin-left: auto` pushes the trio to the top-right; the
+   app-shell components bring their own (Tailwind-utility) styling, so this only
+   handles placement. */
+.app-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
   margin-left: auto;
-  max-width: 22rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
-.app-logout {
-  background: transparent;
-  color: var(--accent);
-  border: 1px solid var(--border);
-}
+/* The fallback/error banners are theme-aware: a soft tint derived from the
+   suite `--warning` token (via color-mix over the card surface) with token-coloured
+   text + border. Because the tokens flip on `.dark`, the banner stays legible in
+   BOTH modes — no hard-coded light surfaces. */
 .app-note {
-  background: #fff8e6;
-  border: 1px solid #f0e0b0;
+  background: color-mix(in oklab, var(--warning) 16%, var(--card));
+  border: 1px solid color-mix(in oklab, var(--warning) 40%, var(--card));
+  color: var(--foreground);
   border-radius: 0.5rem;
   padding: 0.6rem 0.8rem;
   font-size: 0.85rem;
@@ -164,7 +193,7 @@ button[type="button"].pod-chat-open {
 }
 .pod-chat-open {
   background: transparent;
-  color: var(--accent);
+  color: var(--host-accent);
   border: none;
   padding: 0;
   text-align: left;
@@ -185,8 +214,12 @@ button[type="button"].pod-chat-open {
 .pod-chat-back {
   align-self: flex-start;
   background: transparent;
-  color: var(--accent);
+  color: var(--host-accent);
   border: 1px solid var(--border);
+  cursor: pointer;
+  border-radius: 0.5rem;
+  padding: 0.6rem 0.9rem;
+  font-size: 0.95rem;
 }
 .pod-chat-room-name {
   font-size: 1.1rem;
@@ -215,7 +248,7 @@ button[type="button"].pod-chat-open {
   align-items: center;
   gap: 0.6rem;
   font-size: 0.8rem;
-  color: var(--muted);
+  color: var(--muted-text);
   margin-bottom: 0.4rem;
 }
 .pod-chat-author {
@@ -223,7 +256,7 @@ button[type="button"].pod-chat-open {
   color: var(--ink);
 }
 .pod-chat-time {
-  color: var(--muted);
+  color: var(--muted-text);
 }
 .pod-chat-message-sending {
   font-style: italic;
@@ -243,13 +276,13 @@ button[type="button"].pod-chat-open {
   border-color: var(--ok);
 }
 .pod-chat-task-open {
-  color: var(--accent);
-  border-color: var(--accent);
+  color: var(--host-accent);
+  border-color: var(--host-accent);
 }
 .pod-chat-assignee {
   margin: 0 0 0.4rem;
   font-size: 0.82rem;
-  color: var(--muted);
+  color: var(--muted-text);
 }
 .pod-chat-assignee-label {
   font-weight: 600;
@@ -284,6 +317,22 @@ button[type="button"].pod-chat-open {
   border-radius: 0.4rem;
   font: inherit;
 }
+/* The composer's send button is the app's own action button — give it the host
+   filled style explicitly (the global filled `button {}` is now scoped to the
+   login form, so app buttons opt in by class rather than inheriting it). */
+.pod-chat-send {
+  cursor: pointer;
+  border: none;
+  border-radius: 0.5rem;
+  padding: 0.6rem 0.9rem;
+  font-size: 0.95rem;
+  background: var(--host-accent);
+  color: var(--accent-ink);
+}
+.pod-chat-send:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
 .pod-chat-send-status {
   font-size: 0.85rem;
   color: var(--ok);
@@ -301,8 +350,21 @@ button[type="button"].pod-chat-open {
 /* Shared states */
 .pod-chat-loading,
 .pod-chat-empty {
-  color: var(--muted);
+  color: var(--muted-text);
 }
 .pod-chat-error {
   color: var(--danger);
+}
+/* The error blocks render a bare Retry <button> (no app-specific class). With the
+   global filled `button {}` now scoped to the login form, style the retry button
+   here as an outlined control so it stays legible in both themes. */
+.pod-chat-error button {
+  margin-top: 0.5rem;
+  cursor: pointer;
+  background: transparent;
+  color: var(--host-accent);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.8rem;
+  font-size: 0.92rem;
 }
