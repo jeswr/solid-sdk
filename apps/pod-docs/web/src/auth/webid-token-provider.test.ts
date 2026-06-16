@@ -87,13 +87,9 @@ vi.mock("oauth4webapi", () => {
 });
 
 // Import AFTER the mocks are registered.
-const {
-  WebIdDPoPTokenProvider,
-  webIdsEqual,
-  registerProbeRequest,
-  discardProbeRegistration,
-  ReactiveAuthResetError,
-} = await import("./webid-token-provider");
+const { WebIdDPoPTokenProvider, webIdsEqual, ReactiveAuthResetError } = await import(
+  "./webid-token-provider"
+);
 
 const WEBID_A = "https://alice.example/profile/card#me";
 const WEBID_B = "https://bob.example/profile/card#me";
@@ -127,15 +123,22 @@ function deferredGetCode() {
   return { getCode, release };
 }
 
+/** A provider that exposes the round-4 login-probe API used by these tests. */
+type ProbeProvider = InstanceType<typeof WebIdDPoPTokenProvider>;
+
 /**
- * A login probe Request tagged with a per-attempt probe id via the Request
- * registry — NOT a network header (the round-3 CORS fix). The id travels in
- * process memory only, so the returned Request carries NO app-custom header.
+ * Register a login probe Request on the provider via the round-4 API
+ * (`beginLoginProbe`) — NOT a network header (the round-3 CORS fix is preserved),
+ * and NOT a free-floating module registry (the round-4 fix moves the record ONTO
+ * the provider so reset() clears it). The proof travels in process memory only, so
+ * the returned Request carries NO app-custom header. Returns the request plus the
+ * provider's generation snapshot the login flow would assert against.
  */
-function probeRequest(url: string, probeId: string): Request {
+function beginProbe(provider: ProbeProvider, url: string): { req: Request; generation: number } {
+  const generation = provider.loginGeneration();
   const req = new Request(url);
-  registerProbeRequest(req, probeId);
-  return req;
+  provider.beginLoginProbe(req);
+  return { req, generation };
 }
 
 /**
@@ -143,7 +146,7 @@ function probeRequest(url: string, probeId: string): Request {
  * (`new Request(input, init)`) before it calls `provider.upgrade(request)`. This
  * produces a DIFFERENT object than the one the login flow registered, so it
  * proves the side channel survives the manager's re-wrap (object identity is lost;
- * the single-use URL channel carries the id across).
+ * the single-use URL+generation channel carries the proof across).
  */
 function asManagerWraps(req: Request): Request {
   return new Request(req);
@@ -298,12 +301,17 @@ describe("FIX 2 — reset() fences in-flight auth work (no contamination after l
     await expect(inflightA).rejects.toBeInstanceOf(ReactiveAuthResetError);
 
     // B logs in on the same provider (the gate is now open, so B's flow completes).
-    const reqB = await provider.upgrade(probeRequest("https://bob.example/storage/", "p-b"));
+    const { req: reqBProbe, generation: genB } = beginProbe(
+      provider,
+      "https://bob.example/storage/",
+    );
+    const reqB = await provider.upgrade(reqBProbe);
     expect(provider.authenticatedWebId()).toBe(WEBID_B);
     expect(provider.authenticatedWebId()).not.toBe(WEBID_A);
     expect(reqB.headers.get("Authorization")).toBe("DPoP tok-B");
-    // A's fenced attempt left no probe-upgrade record; only B's probe is recorded.
-    expect(provider.wasProbeUpgraded("p-b")).toBe(true);
+    // A's fenced attempt left no probe-upgrade record; only B's probe is recorded
+    // (in B's generation — A's reset() advanced the generation past A's window).
+    expect(provider.wasLoginProbeUpgraded(genB)).toBe(true);
   });
 });
 
@@ -381,47 +389,88 @@ describe("FIX 2 (round 3) — a STALE issuer rejection after reset() must not cl
   });
 });
 
-describe("FIX 3 — login proof is PER-PROBE, not a provider-wide counter", () => {
+describe("FIX 3 (round 4) — login proof is a GENERATION-SCOPED per-login probe, not a provider-wide counter", () => {
   beforeEach(() => {
     authState.webId = WEBID_A;
     authState.accessToken = "tok-A";
   });
 
-  it("records the upgraded probe's own id, and only that id", async () => {
+  it("records the upgraded probe in THIS login's generation, and only that generation", async () => {
     const provider = makeProvider();
-    const req = await provider.upgrade(probeRequest("https://alice.example/storage/", "probe-1"));
-    expect(req.headers.get("Authorization")).toBe("DPoP tok-A");
-    expect(provider.wasProbeUpgraded("probe-1")).toBe(true);
-    // A DIFFERENT id (e.g. another login attempt's probe) is NOT satisfied.
-    expect(provider.wasProbeUpgraded("probe-2")).toBe(false);
+    const { req, generation } = beginProbe(provider, "https://alice.example/storage/");
+    const upgraded = await provider.upgrade(req);
+    expect(upgraded.headers.get("Authorization")).toBe("DPoP tok-A");
+    expect(provider.wasLoginProbeUpgraded(generation)).toBe(true);
+    // A DIFFERENT generation (e.g. another login attempt's snapshot) is NOT satisfied.
+    expect(provider.wasLoginProbeUpgraded(generation + 1)).toBe(false);
+    expect(provider.wasLoginProbeUpgraded(generation - 1)).toBe(false);
   });
 
-  it("a concurrent same-WebID upgrade does NOT make a non-upgraded probe look logged in", async () => {
+  it("a concurrent same-WebID NON-probe upgrade does NOT make a non-upgraded probe look logged in (finding a)", async () => {
     const provider = makeProvider();
+    const generation = provider.loginGeneration();
 
-    // A concurrent upgraded request for the SAME WebID — e.g. a data-layer read —
-    // bumps the provider-wide attach count, but carries NO probe id of OUR login.
+    // Our login's OWN probe targets the storage ROOT (imagine it gets a public 200,
+    // so its own upgrade never runs). Register it but do NOT upgrade it.
+    const probe = new Request("https://alice.example/storage/");
+    provider.beginLoginProbe(probe);
+
+    // Meanwhile a concurrent upgraded request for the SAME WebID — e.g. a data-layer
+    // read to a DIFFERENT url — bumps the provider-wide attach count. It is NOT the
+    // probe (different object AND different url), so it must not set the proof.
     const before = provider.tokensAttachedCount();
     await provider.upgrade(new Request("https://alice.example/data/doc"));
     const after = provider.tokensAttachedCount();
     expect(after).toBeGreaterThan(before); // the provider-wide counter DID advance
 
-    // Our login's OWN probe (id "my-login") was NEVER upgraded (imagine its target
-    // was public, so no upgrade ran for it). The per-probe proof must be false even
-    // though the provider-wide count moved — this is the spurious-pass FIX 3 closes.
-    expect(provider.wasProbeUpgraded("my-login")).toBe(false);
+    // The generation-scoped per-probe proof must be FALSE even though the provider-
+    // wide count moved — this is the spurious-pass the generation scope closes.
+    expect(provider.wasLoginProbeUpgraded(generation)).toBe(false);
   });
 
-  it("reset() clears the per-probe upgrade record", async () => {
+  it("the same-URL match is FIRST-WINS + single-use within the generation (finding a, URL collision-bounded)", async () => {
+    // The round-3 weakness: the proof was keyed only on URL via a free-floating
+    // module Map, so a stray same-URL upgrade could mis-attribute or double-fire.
+    // Round-4 binds the match to a SINGLE per-login record on the provider, single-
+    // use within the generation. Single-flight login + an idle data layer mean the
+    // probe is the ONLY same-URL fetch in the login window, so the first same-URL
+    // upgrade IS the probe. This test pins the single-use property: the FIRST
+    // same-URL upgrade sets the proof; a SECOND does NOT re-fire or extend it.
     const provider = makeProvider();
-    await provider.upgrade(probeRequest("https://alice.example/storage/", "probe-x"));
-    expect(provider.wasProbeUpgraded("probe-x")).toBe(true);
+    const generation = provider.loginGeneration();
+    const probe = new Request("https://alice.example/storage/");
+    provider.beginLoginProbe(probe);
+
+    // First same-url upgrade (a different object, modelling the manager's re-wrap)
+    // consumes the single-use latch and sets the proof for this generation.
+    await provider.upgrade(new Request("https://alice.example/storage/"));
+    expect(provider.wasLoginProbeUpgraded(generation)).toBe(true);
+
+    // A LATER same-url upgrade must NOT find the probe again (single-use). The proof
+    // stays scoped to this one generation; nothing leaks into an adjacent one.
+    await provider.upgrade(new Request("https://alice.example/storage/"));
+    expect(provider.wasLoginProbeUpgraded(generation)).toBe(true);
+    expect(provider.wasLoginProbeUpgraded(generation + 1)).toBe(false);
+  });
+
+  it("reset() clears the per-login probe record AND the upgrade proof", async () => {
+    const provider = makeProvider();
+    const { req, generation } = beginProbe(provider, "https://alice.example/storage/");
+    await provider.upgrade(req);
+    expect(provider.wasLoginProbeUpgraded(generation)).toBe(true);
     provider.reset();
-    expect(provider.wasProbeUpgraded("probe-x")).toBe(false);
+    // The proof is cleared, and the generation has advanced past the probe's window.
+    expect(provider.wasLoginProbeUpgraded(generation)).toBe(false);
+    // A stale probe registered before reset() can never satisfy a later upgrade: a
+    // post-reset same-url upgrade does not re-acquire it (the probe's generation no
+    // longer equals the current generation).
+    await provider.upgrade(new Request("https://alice.example/storage/"));
+    expect(provider.wasLoginProbeUpgraded(generation)).toBe(false);
+    expect(provider.wasLoginProbeUpgraded(provider.loginGeneration())).toBe(false);
   });
 });
 
-describe("FIX (round 3) — probe id is a Request-registry side channel, NOT a network header (CORS)", () => {
+describe("FIX (round 4) — probe proof is an in-process side channel, NOT a network header (CORS)", () => {
   beforeEach(() => {
     authState.webId = WEBID_A;
     authState.accessToken = "tok-A";
@@ -431,64 +480,111 @@ describe("FIX (round 3) — probe id is a Request-registry side channel, NOT a n
     // The CORS bug: a custom request header makes a cross-origin request
     // non-"simple" → preflight → pod rejection. The fix must put NOTHING
     // app-specific on the wire. Assert the registered probe Request has no headers
-    // at all (the id lives only in the in-process registry).
-    const req = probeRequest("https://alice.example/storage/", "probe-cors");
+    // at all (the proof lives only in the provider's in-process record).
+    const provider = makeProvider();
+    const { req } = beginProbe(provider, "https://alice.example/storage/");
     const headerNames = [...req.headers.keys()];
     expect(headerNames).not.toContain("x-reactive-auth-probe-id");
     // Defensive: the probe sets no app-custom header whatsoever.
     expect(headerNames).toEqual([]);
   });
 
-  it("wasProbeUpgraded resolves true via the registry when the SAME object reaches upgrade()", async () => {
+  it("the UPGRADED probe request carries only standard Authorization/DPoP — no probe header", async () => {
     const provider = makeProvider();
-    const req = probeRequest("https://alice.example/storage/", "probe-obj");
+    const { req } = beginProbe(provider, "https://alice.example/storage/");
     const upgraded = await provider.upgrade(req);
-    // The upgraded request carries the standard auth header — and NO probe header.
+    // The upgraded request carries the standard auth headers — and NO probe header.
     expect(upgraded.headers.get("Authorization")).toBe("DPoP tok-A");
+    expect(upgraded.headers.get("DPoP")).toBe("dpop-proof");
     expect(upgraded.headers.get("x-reactive-auth-probe-id")).toBeNull();
-    expect(provider.wasProbeUpgraded("probe-obj")).toBe(true);
+    const upgradedNames = [...upgraded.headers.keys()].sort();
+    expect(upgradedNames).toEqual(["authorization", "dpop"]);
   });
 
-  it("survives the manager re-wrap: a new Request(input) copy still resolves the probe id (URL channel)", async () => {
+  it("resolves true via object identity when the SAME object reaches upgrade()", async () => {
+    const provider = makeProvider();
+    const { req, generation } = beginProbe(provider, "https://alice.example/storage/");
+    const upgraded = await provider.upgrade(req);
+    expect(upgraded.headers.get("Authorization")).toBe("DPoP tok-A");
+    expect(provider.wasLoginProbeUpgraded(generation)).toBe(true);
+  });
+
+  it("survives the manager re-wrap: a new Request(input) copy still resolves the probe (URL+generation channel)", async () => {
     // ReactiveFetchManager does `new Request(input, init)` before calling upgrade(),
     // so the object the provider receives is NOT the one we registered (identity is
-    // lost; a symbol/expando does not survive the copy). The single-use URL channel
-    // must carry the id across this re-wrap — otherwise login detection silently
+    // lost; a symbol/expando does not survive the copy). The URL+generation channel
+    // must carry the proof across this re-wrap — otherwise login detection silently
     // always reads "not upgraded".
     const provider = makeProvider();
-    const registered = probeRequest("https://alice.example/storage/", "probe-rewrap");
+    const { req: registered, generation } = beginProbe(provider, "https://alice.example/storage/");
     const wrapped = asManagerWraps(registered);
     expect(wrapped).not.toBe(registered); // a different object, as the manager makes
     const upgraded = await provider.upgrade(wrapped);
     expect(upgraded.headers.get("Authorization")).toBe("DPoP tok-A");
     // Proven via the URL fallback, since object identity was lost across the wrap.
-    expect(provider.wasProbeUpgraded("probe-rewrap")).toBe(true);
+    expect(provider.wasLoginProbeUpgraded(generation)).toBe(true);
   });
 
-  it("the URL channel is SINGLE-USE: a later same-URL request does NOT inherit the probe id", async () => {
+  it("the URL channel is SINGLE-USE: a later same-URL request does NOT inherit the probe", async () => {
     const provider = makeProvider();
-    const registered = probeRequest("https://alice.example/storage/", "probe-single");
-    // First upgrade (the manager's wrapped copy) consumes the URL entry.
+    const { req: registered, generation } = beginProbe(provider, "https://alice.example/storage/");
+    // First upgrade (the manager's wrapped copy) consumes the URL latch.
     await provider.upgrade(asManagerWraps(registered));
-    expect(provider.wasProbeUpgraded("probe-single")).toBe(true);
+    expect(provider.wasLoginProbeUpgraded(generation)).toBe(true);
 
-    provider.reset(); // clears #upgradedProbeIds; URL entry was already consumed.
+    provider.endLoginProbe(); // the login flow's finally — the active probe is dropped.
 
     // A later request to the SAME URL (a different object, no registration) must NOT
-    // re-acquire the consumed probe id.
-    await provider.upgrade(new Request("https://alice.example/storage/"));
-    expect(provider.wasProbeUpgraded("probe-single")).toBe(false);
+    // re-acquire the consumed probe — and there is no active probe anyway.
+    const after = await provider.upgrade(new Request("https://alice.example/storage/"));
+    expect(after.headers.get("Authorization")).toBe("DPoP tok-A"); // still upgrades, just not as a probe
+    // The proof for the original generation is unchanged (true) but a NEW generation
+    // snapshot is not satisfied.
+    expect(provider.wasLoginProbeUpgraded(generation)).toBe(true);
+    expect(provider.wasLoginProbeUpgraded(generation + 1)).toBe(false);
   });
 
-  it("discardProbeRegistration drops an unconsumed URL entry so no later request inherits it", async () => {
+  it("endLoginProbe drops the active probe so no later request inherits it", async () => {
     const provider = makeProvider();
-    const registered = probeRequest("https://alice.example/storage/", "probe-discard");
+    const generation = provider.loginGeneration();
+    const probe = new Request("https://alice.example/storage/");
+    provider.beginLoginProbe(probe);
     // Simulate a public 200: the probe never reached upgrade(); the login flow then
-    // discards the registration.
-    discardProbeRegistration(registered);
+    // ends the probe in its finally.
+    provider.endLoginProbe();
 
-    // A later upgrade of the same URL must not pick up the discarded id.
+    // A later upgrade of the same URL must not pick up the dropped probe.
     await provider.upgrade(new Request("https://alice.example/storage/"));
-    expect(provider.wasProbeUpgraded("probe-discard")).toBe(false);
+    expect(provider.wasLoginProbeUpgraded(generation)).toBe(false);
+  });
+});
+
+describe("FIX (round 4) — generation scope is collision-free for two concurrent upgrades in ONE login", () => {
+  beforeEach(() => {
+    authState.webId = WEBID_A;
+    authState.accessToken = "tok-A";
+  });
+
+  it("two concurrent upgrades in one generation still yield exactly one probe-upgrade proof (single-flight invariant)", async () => {
+    // SessionProvider single-flights login, so there is never a second concurrent
+    // login. At the PROVIDER level, the invariant this guarantees is: even if two
+    // upgrades run in one generation (the probe + a same-WebID read), the proof is
+    // bound to the ONE probe — it does not double-count or get stolen.
+    const provider = makeProvider();
+    const { req: probe, generation } = beginProbe(provider, "https://alice.example/storage/");
+
+    // The probe and a concurrent data read upgrade together (same generation).
+    const [probeUpgraded] = await Promise.all([
+      provider.upgrade(probe),
+      provider.upgrade(new Request("https://alice.example/data/doc")),
+    ]);
+    expect(probeUpgraded.headers.get("Authorization")).toBe("DPoP tok-A");
+
+    // Exactly one probe proof exists, scoped to this login's generation. The
+    // concurrent read could not steal it (different object + url), and the probe's
+    // single-use latch means the proof is recorded once.
+    expect(provider.wasLoginProbeUpgraded(generation)).toBe(true);
+    // No proof leaks into an adjacent generation.
+    expect(provider.wasLoginProbeUpgraded(generation + 1)).toBe(false);
   });
 });

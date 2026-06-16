@@ -38,13 +38,7 @@ import { authFlowHolder, getCodeThroughHolder } from "./auth-flow-holder";
 import { assessLoginProbe } from "./login-result";
 import { readProfile } from "./profile";
 import { type DerivedSession, deriveSession } from "./session-derivation";
-import {
-  AmbiguousIssuerError,
-  discardProbeRegistration,
-  registerProbeRequest,
-  WebIdDPoPTokenProvider,
-  webIdsEqual,
-} from "./webid-token-provider";
+import { AmbiguousIssuerError, WebIdDPoPTokenProvider, webIdsEqual } from "./webid-token-provider";
 
 export interface SessionContextValue {
   /** The authenticated user's WebID, else null. */
@@ -118,6 +112,21 @@ let authRuntimeSingleton: Promise<AuthRuntime> | null = null;
  * reads it on each 401 upgrade.
  */
 const pendingWebIdHolder: { current: string | null } = { current: null };
+
+/**
+ * SINGLE-FLIGHT login (the round-4 fix for finding (b) — overlapping/double-clicked
+ * logins). The auth runtime + token provider are a page-lifetime singleton, so the
+ * in-flight guard is MODULE-level (matching that model) rather than a per-mount ref:
+ * a StrictMode remount's `login()` must observe the SAME in-flight promise. While a
+ * login is running, a second concurrent `login()` (a double-click, or a quick switch
+ * to a different WebID) does NOT start an overlapping probe — it AWAITS the in-flight
+ * one and observes its resolution/rejection. Exactly ONE login proceeds; the other is
+ * a clean await/no-op. This is what makes the provider's generation-scoped probe proof
+ * collision-free: there is never a second concurrent login to overwrite the first's
+ * probe registration or to upgrade a same-URL request inside the login's generation
+ * window.
+ */
+let inFlightLogin: Promise<void> | null = null;
 
 /**
  * Build + globally-register the auth runtime EXACTLY ONCE per page. Repeated
@@ -221,7 +230,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const login = useCallback(async (id: string) => {
+  // The actual login body — run AT MOST ONCE concurrently via the module-level
+  // single-flight gate in `login` below.
+  const doLogin = useCallback(async (id: string) => {
     setError(null);
     setLoggingIn(true);
     // IDENTITY CHANGE — drop EVERY trace of any prior identity FIRST (Finding 1):
@@ -234,6 +245,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setWebId(null);
     setSession(null);
     pendingWebIdHolder.current = id;
+    // Snapshot THIS login's generation immediately AFTER reset() — it equals the
+    // generation the probe will run in. Single-flight (the `login` wrapper) means
+    // no other login advances the generation between here and the assertion below,
+    // so the generation-scoped probe proof is unambiguous for THIS login.
+    const loginGeneration = providerRef.current?.loginGeneration() ?? -1;
     try {
       // Read the PUBLIC profile FIRST (pristine fetch) so an unusable WebID errors
       // early — before any popup — and gives us the storage to probe.
@@ -241,31 +257,32 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       // Defence-in-depth: the provider-wide attach-count delta (per-attempt, not a
       // sticky flag) is kept alongside the per-probe proof below.
       const tokensAttachedBefore = providerRef.current?.tokensAttachedCount() ?? 0;
-      // PER-PROBE PROOF (primary): tag this probe with a unique id via a
-      // Request-identity WeakMap — NOT a network header. The provider records the
-      // id iff it actually upgrades THIS request object — so we can prove THIS
-      // probe was token-upgraded, not merely that "some request" was (a concurrent
-      // upgraded request for the SAME WebID can bump the provider-wide count, but
-      // not satisfy our own probe id). Using the WeakMap (instead of a custom
-      // header) keeps the probe a "simple" CORS request, so a cross-origin pod does
-      // not reject a preflight before the 401/upgrade path can run.
-      const probeId = `probe-${crypto.randomUUID()}`;
-      // Probe a protected resource via the PATCHED global fetch: a 401 triggers
-      // the popup → token mint → retry. The retry's status + whether THIS probe was
-      // token-upgraded prove login. A storage root is private on CSS/PSS by
-      // default, so it 401s. Build the Request OBJECT first and register it (by
-      // identity) before fetching — the provider reads the id off this exact object.
+      // PER-PROBE PROOF (primary): register this probe Request on the provider (by
+      // object identity, with a URL+generation single-use fallback) — NOT a network
+      // header. The provider records an upgrade in THIS generation iff it actually
+      // upgrades THIS probe — so we can prove THIS login's probe was token-upgraded,
+      // not merely that "some request" was (a concurrent upgraded request for the
+      // SAME WebID can bump the provider-wide count, but cannot satisfy our own
+      // generation-scoped probe proof). Putting nothing on the wire keeps the probe
+      // a "simple" CORS request, so a cross-origin pod does not reject a preflight
+      // before the 401/upgrade path can run.
+      //
+      // Probe a protected resource via the PATCHED global fetch: a 401 triggers the
+      // popup → token mint → retry. The retry's status + whether THIS probe was
+      // token-upgraded prove login. A storage root is private on CSS/PSS by default,
+      // so it 401s. Build the Request OBJECT first and register it before fetching —
+      // the provider matches the id off this exact object (or its URL after the
+      // manager's re-wrap).
       const probe = pub.storages[0] ?? new URL("/", id).toString();
       const probeRequest = new Request(probe, { method: "GET" });
-      registerProbeRequest(probeRequest, probeId);
+      providerRef.current?.beginLoginProbe(probeRequest);
       let res: Response;
       try {
         res = await fetch(probeRequest);
       } finally {
-        // Drop any single-use URL registration the probe did not consume (e.g. a
-        // public 200 with no 401 → no upgrade ran), so a later request to the same
-        // URL can never inherit this probe's id.
-        discardProbeRegistration(probeRequest);
+        // Drop the active probe registration regardless of outcome (e.g. a public
+        // 200 with no 401 → no upgrade ran), so a later request can never match it.
+        providerRef.current?.endLoginProbe();
       }
       const tokensAttachedAfter = providerRef.current?.tokensAttachedCount() ?? 0;
       const assessment = assessLoginProbe({
@@ -274,9 +291,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         tokensAttachedAfter,
       });
       if (!assessment.ok) throw new Error(assessment.message);
-      // The primary, per-probe gate: THIS probe must have been token-upgraded. A
-      // concurrent same-WebID upgrade for a DIFFERENT request cannot satisfy it.
-      if (!providerRef.current?.wasProbeUpgraded(probeId)) {
+      // The primary, per-probe gate: THIS login's probe must have been token-
+      // upgraded IN THIS LOGIN'S GENERATION. A concurrent same-WebID upgrade for a
+      // DIFFERENT request cannot satisfy it.
+      if (!providerRef.current?.wasLoginProbeUpgraded(loginGeneration)) {
         throw new Error(
           "Login did not complete — no token was attached to this login's own " +
             "request (the probed resource may be public, or a different request " +
@@ -318,6 +336,29 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       setLoggingIn(false);
     }
   }, []);
+
+  // SINGLE-FLIGHT login (round-4 fix for finding (b)). If a login is already in
+  // flight, a second concurrent / double-clicked `login()` does NOT start an
+  // overlapping probe — it AWAITS the in-flight one and observes its result
+  // (resolution OR rejection). Exactly one login proceeds; the other is a clean
+  // await/no-op. Because reset() runs INSIDE doLogin, even a second concurrent
+  // login() to a DIFFERENT WebID while one is in flight just awaits the in-flight
+  // one — acceptable, and it keeps the provider's generation-scoped probe proof
+  // collision-free (no second login can ever occupy or overwrite the same window).
+  const login = useCallback(
+    (id: string): Promise<void> => {
+      const existing = inFlightLogin;
+      if (existing) return existing;
+      const run = doLogin(id).finally(() => {
+        // Clear the gate only if it still points at THIS run — a defensive guard;
+        // with `??=` semantics it always will, but this never strands a later login.
+        if (inFlightLogin === run) inFlightLogin = null;
+      });
+      inFlightLogin = run;
+      return run;
+    },
+    [doLogin],
+  );
 
   const logout = useCallback(() => {
     // RESET THE PROVIDER, not just React state (Finding 1): the in-memory issuer,
