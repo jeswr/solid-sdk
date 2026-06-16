@@ -79,6 +79,7 @@ describe("round-trip parse/serialise", () => {
       blockedBy: [`${URL_}-a`, `${URL_}-b`],
       relatesTo: [`${URL_}-c`],
       duplicateOf: `${URL_}-dup`,
+      clonedFrom: `${URL_}-orig`,
     };
 
     const ttl = await serializeTask(URL_, original);

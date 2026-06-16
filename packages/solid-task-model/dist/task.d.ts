@@ -68,6 +68,8 @@ export interface TaskData {
     relatesTo?: string[];
     /** `dct:isReplacedBy` — the canonical successor (close-as-duplicate). */
     duplicateOf?: string;
+    /** `prov:wasDerivedFrom` — the single original this task was cloned from. */
+    clonedFrom?: string;
 }
 /** True for an absolute http(s) URL usable as a WebID / IRI object. */
 export declare function isHttpIri(value: string | undefined): value is string;
@@ -87,6 +89,15 @@ export declare class Task extends TermWrapper {
     get isTask(): boolean;
     get title(): string | undefined;
     set title(value: string | undefined);
+    /**
+     * The body. The two existing producers DIVERGE on the predicate — solid-issues
+     * writes `wf:description`, the Pod Manager writes `dct:description` — so the
+     * shared model must read BOTH or it would silently drop a PM-written body on a
+     * cross-app read. The getter prefers `wf:description` and falls back to
+     * `dct:description`; the setter writes BOTH (and clears both on undefined) so a
+     * consumer querying either predicate finds it. This is the convergence point:
+     * once apps adopt this package they all read/write the same pair.
+     */
     get description(): string | undefined;
     set description(value: string | undefined);
     get created(): Date | undefined;
@@ -119,6 +130,9 @@ export declare class Task extends TermWrapper {
     /** `dct:isReplacedBy` — the canonical successor (close-as-duplicate). */
     get duplicateOf(): string | undefined;
     set duplicateOf(value: string | undefined);
+    /** `prov:wasDerivedFrom` — the single original this task was cloned from. */
+    get clonedFrom(): string | undefined;
+    set clonedFrom(value: string | undefined);
     /** `dct:requires` — issues this one is blocked by (live set of IRIs). */
     get blockedBy(): Set<string>;
     /** `dct:relation` — non-blocking, symmetric relates-to links (live set of IRIs). */

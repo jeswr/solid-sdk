@@ -1,0 +1,30 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jeswr/full-solid-ecosystem/main/tracking/schema/suite.schema.json",
+  "id": "solid-task-model",
+  "kind": "sdk",
+  "name": "Solid Task Model",
+  "repo": "https://github.com/jeswr/solid-task-model",
+  "category": "infrastructure",
+  "maturity": "alpha",
+  "visibility": "public",
+  "stack": {
+    "lang": "TypeScript (ESM, NodeNext)",
+    "runtime": "Node >=20",
+    "rdf": "n3 ^2.x",
+    "rdf-wrapper": "@rdfjs/wrapper ^0.34.x",
+    "fetch-rdf": "@jeswr/fetch-rdf ^0.1",
+    "shacl": "rdf-validate-shacl ^0.6, @zazuko/env-node ^3 (dev)",
+    "test": "vitest ^4.x",
+    "lint": "@biomejs/biome ^2.x",
+    "node": ">=20"
+  },
+  "dependsOn": [
+    "solid-federation-vocab"
+  ],
+  "federation": {
+    "sectors": ["productivity"],
+    "produces": ["productivity"],
+    "consumes": ["productivity"],
+    "note": "The SHARED federated Task/Issue RDF model — one wf:Task definition (typed accessors + SHACL shape) that the Pod Manager, solid-issues, and the pod-apps all read/write so a task created in one shows up as 'assigned to me' in another. Mints nothing; reuses wf:/flow, Dublin Core, schema.org and PROV-O per ADR-0013 + the R9 data-federation recommendation. GitHub-installable now (committed dist/, ignore-scripts=true); npm publish is a deferred migration."
+  }
+}

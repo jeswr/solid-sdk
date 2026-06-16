@@ -67,11 +67,22 @@ export class Task extends TermWrapper {
     set title(value) {
         OptionalAs.object(this, dct("title"), value, LiteralFrom.string);
     }
+    /**
+     * The body. The two existing producers DIVERGE on the predicate — solid-issues
+     * writes `wf:description`, the Pod Manager writes `dct:description` — so the
+     * shared model must read BOTH or it would silently drop a PM-written body on a
+     * cross-app read. The getter prefers `wf:description` and falls back to
+     * `dct:description`; the setter writes BOTH (and clears both on undefined) so a
+     * consumer querying either predicate finds it. This is the convergence point:
+     * once apps adopt this package they all read/write the same pair.
+     */
     get description() {
-        return OptionalFrom.subjectPredicate(this, wf("description"), LiteralAs.string);
+        return (OptionalFrom.subjectPredicate(this, wf("description"), LiteralAs.string) ??
+            OptionalFrom.subjectPredicate(this, dct("description"), LiteralAs.string));
     }
     set description(value) {
         OptionalAs.object(this, wf("description"), value, LiteralFrom.string);
+        OptionalAs.object(this, dct("description"), value, LiteralFrom.string);
     }
     get created() {
         return OptionalFrom.subjectPredicate(this, dct("created"), LiteralAs.date);
@@ -146,6 +157,13 @@ export class Task extends TermWrapper {
     }
     set duplicateOf(value) {
         OptionalAs.object(this, dct("isReplacedBy"), value, NamedNodeFrom.string);
+    }
+    /** `prov:wasDerivedFrom` — the single original this task was cloned from. */
+    get clonedFrom() {
+        return OptionalFrom.subjectPredicate(this, prov("wasDerivedFrom"), NamedNodeAs.string);
+    }
+    set clonedFrom(value) {
+        OptionalAs.object(this, prov("wasDerivedFrom"), value, NamedNodeFrom.string);
     }
     /** `dct:requires` — issues this one is blocked by (live set of IRIs). */
     get blockedBy() {
@@ -232,6 +250,8 @@ export function parseTask(resourceUrl, dataset) {
         data.parent = doc.parent;
     if (doc.duplicateOf !== undefined)
         data.duplicateOf = doc.duplicateOf;
+    if (doc.clonedFrom !== undefined)
+        data.clonedFrom = doc.clonedFrom;
     if (blockedBy.length > 0)
         data.blockedBy = blockedBy;
     if (relatesTo.length > 0)
@@ -263,6 +283,7 @@ export function buildTask(resourceUrl, data) {
     doc.project = isHttpIri(data.project) ? data.project : undefined;
     doc.parent = isHttpIri(data.parent) ? data.parent : undefined;
     doc.duplicateOf = isHttpIri(data.duplicateOf) ? data.duplicateOf : undefined;
+    doc.clonedFrom = isHttpIri(data.clonedFrom) ? data.clonedFrom : undefined;
     doc.dueDate = data.dueDate;
     doc.priority = data.priority;
     doc.rank = data.rank;
@@ -301,10 +322,16 @@ export function storeToTurtle(store) {
  *   the Solid Protocol §5.2 default).
  */
 export async function parseTaskTtl(url, body, contentType = "text/turtle") {
+    // Coalesce BEFORE parsing: callers routinely pass `Response.headers.get(
+    // "content-type")`, which is `null` for a header-less response. The default
+    // parameter only fires for `undefined`, so an explicit `null` would otherwise
+    // bypass this function's documented "⇒ text/turtle" default and lean on
+    // parseRdf's own null-handling. Honour the contract here regardless.
+    const resolvedContentType = contentType ?? "text/turtle";
     // Lazy import keeps the (Node-targeted) fetch-rdf dep out of any pure-parse
     // path a consumer might tree-shake — and matches how the apps import it.
     const { parseRdf } = await import("@jeswr/fetch-rdf");
-    const dataset = await parseRdf(body, contentType, { baseIRI: url });
+    const dataset = await parseRdf(body, resolvedContentType, { baseIRI: url });
     return parseTask(url, dataset);
 }
 /**

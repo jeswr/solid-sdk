@@ -85,6 +85,29 @@ describe("cross-app: read a task another app wrote", () => {
     expect(task?.title).toBe("Half done");
   });
 
+  it("reads a Pod Manager description written as dct:description (NOT wf:description)", () => {
+    // PM's IssueDoc.description writes `dct:description`; solid-issues writes
+    // `wf:description`. The shared model must read BOTH or a PM-written body is
+    // silently lost on a cross-app read (roborev finding 2796).
+    const pmTtl = `
+      @prefix wf:  <http://www.w3.org/2005/01/wf/flow#> .
+      @prefix dct: <http://purl.org/dc/terms/> .
+      <#it> a wf:Task, wf:Open ;
+        dct:title "PM body test" ;
+        dct:description "Body written by the Pod Manager." .
+    `;
+    const task = parseTask(RESOURCE, parseStore(pmTtl));
+    expect(task?.description).toBe("Body written by the Pod Manager.");
+  });
+
+  it("emits BOTH wf:description and dct:description so either consumer finds it", async () => {
+    const ttl = await serializeTask(RESOURCE, { title: "T", state: "open", description: "body" });
+    const store = parseStore(ttl);
+    const subject = taskSubject(RESOURCE);
+    expect(store.getQuads(subject, wf("description"), null, null).length).toBe(1);
+    expect(store.getQuads(subject, dct("description"), null, null).length).toBe(1);
+  });
+
   it("reads a solid-issues-emitted task (wf:tracker, wf:description, dct:creator, relations)", () => {
     // Transcribed from solid-issues src/lib/issue.ts: wf:description (not dct:),
     // wf:tracker, dct:creator, dct:isPartOf (parent), dct:requires (blocked-by),

@@ -84,6 +84,8 @@ export interface TaskData {
   relatesTo?: string[];
   /** `dct:isReplacedBy` — the canonical successor (close-as-duplicate). */
   duplicateOf?: string;
+  /** `prov:wasDerivedFrom` — the single original this task was cloned from. */
+  clonedFrom?: string;
 }
 
 /** True for an absolute http(s) URL usable as a WebID / IRI object. */
@@ -137,11 +139,24 @@ export class Task extends TermWrapper {
     OptionalAs.object(this, dct("title"), value, LiteralFrom.string);
   }
 
+  /**
+   * The body. The two existing producers DIVERGE on the predicate — solid-issues
+   * writes `wf:description`, the Pod Manager writes `dct:description` — so the
+   * shared model must read BOTH or it would silently drop a PM-written body on a
+   * cross-app read. The getter prefers `wf:description` and falls back to
+   * `dct:description`; the setter writes BOTH (and clears both on undefined) so a
+   * consumer querying either predicate finds it. This is the convergence point:
+   * once apps adopt this package they all read/write the same pair.
+   */
   get description(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, wf("description"), LiteralAs.string);
+    return (
+      OptionalFrom.subjectPredicate(this, wf("description"), LiteralAs.string) ??
+      OptionalFrom.subjectPredicate(this, dct("description"), LiteralAs.string)
+    );
   }
   set description(value: string | undefined) {
     OptionalAs.object(this, wf("description"), value, LiteralFrom.string);
+    OptionalAs.object(this, dct("description"), value, LiteralFrom.string);
   }
 
   get created(): Date | undefined {
@@ -231,6 +246,14 @@ export class Task extends TermWrapper {
     OptionalAs.object(this, dct("isReplacedBy"), value, NamedNodeFrom.string);
   }
 
+  /** `prov:wasDerivedFrom` — the single original this task was cloned from. */
+  get clonedFrom(): string | undefined {
+    return OptionalFrom.subjectPredicate(this, prov("wasDerivedFrom"), NamedNodeAs.string);
+  }
+  set clonedFrom(value: string | undefined) {
+    OptionalAs.object(this, prov("wasDerivedFrom"), value, NamedNodeFrom.string);
+  }
+
   /** `dct:requires` — issues this one is blocked by (live set of IRIs). */
   get blockedBy(): Set<string> {
     return SetFrom.subjectPredicate(
@@ -318,6 +341,7 @@ export function parseTask(resourceUrl: string, dataset: DatasetCore): TaskData |
   if (doc.rank !== undefined) data.rank = doc.rank;
   if (doc.parent !== undefined) data.parent = doc.parent;
   if (doc.duplicateOf !== undefined) data.duplicateOf = doc.duplicateOf;
+  if (doc.clonedFrom !== undefined) data.clonedFrom = doc.clonedFrom;
   if (blockedBy.length > 0) data.blockedBy = blockedBy;
   if (relatesTo.length > 0) data.relatesTo = relatesTo;
   return data;
@@ -349,6 +373,7 @@ export function buildTask(resourceUrl: string, data: TaskData): Store {
   doc.project = isHttpIri(data.project) ? data.project : undefined;
   doc.parent = isHttpIri(data.parent) ? data.parent : undefined;
   doc.duplicateOf = isHttpIri(data.duplicateOf) ? data.duplicateOf : undefined;
+  doc.clonedFrom = isHttpIri(data.clonedFrom) ? data.clonedFrom : undefined;
   doc.dueDate = data.dueDate;
   doc.priority = data.priority;
   doc.rank = data.rank;
@@ -392,10 +417,16 @@ export async function parseTaskTtl(
   body: string,
   contentType: string | null = "text/turtle",
 ): Promise<TaskData | undefined> {
+  // Coalesce BEFORE parsing: callers routinely pass `Response.headers.get(
+  // "content-type")`, which is `null` for a header-less response. The default
+  // parameter only fires for `undefined`, so an explicit `null` would otherwise
+  // bypass this function's documented "⇒ text/turtle" default and lean on
+  // parseRdf's own null-handling. Honour the contract here regardless.
+  const resolvedContentType = contentType ?? "text/turtle";
   // Lazy import keeps the (Node-targeted) fetch-rdf dep out of any pure-parse
   // path a consumer might tree-shake — and matches how the apps import it.
   const { parseRdf } = await import("@jeswr/fetch-rdf");
-  const dataset = await parseRdf(body, contentType, { baseIRI: url });
+  const dataset = await parseRdf(body, resolvedContentType, { baseIRI: url });
   return parseTask(url, dataset);
 }
 
