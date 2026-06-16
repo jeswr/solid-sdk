@@ -35,7 +35,10 @@ vi.mock("@/lib/solid/login-ux", () => ({
 
 // Capture every DPoP.generateProof call's args so tests can assert the htu (arg 2)
 // the proof is minted with — RFC 9449 §4.2: query + fragment must be stripped.
-const dpopCalls: unknown[][] = [];
+// `vi.hoisted` initialises this BEFORE the hoisted `vi.mock("dpop")` factory runs,
+// so the factory's closure over `dpopCalls` can never hit a temporal-dead-zone race
+// (a plain top-level `const` is hoisted AFTER the mock factory by Vitest).
+const { dpopCalls } = vi.hoisted(() => ({ dpopCalls: [] as unknown[][] }));
 vi.mock("dpop", () => ({
   generateProof: vi.fn(async (...args: unknown[]) => {
     dpopCalls.push(args);
