@@ -62,6 +62,21 @@ function asContainer(url: string): string {
 }
 
 /**
+ * The conventional inbox mailbox document for a pod root —
+ * `<podRoot>mail/folders/inbox.ttl` (via the data layer's `folderDocument`),
+ * marked as a fallback. Used both as the in-discovery fallback and by the host's
+ * discovery-failure catch path, so an authenticated user is NEVER stranded
+ * without an `<Inbox>` to render (roborev MEDIUM).
+ */
+export function conventionalMailbox(podRoot: string): DiscoveredMailbox {
+  return {
+    mailboxUrl: folderDocument(podRoot, WellKnownFolders.inbox),
+    isFallback: true,
+    source: "convention",
+  };
+}
+
+/**
  * Derive the inbox mailbox DOCUMENT inside a discovered mail ROOT container.
  * Pod Mail's layout is `<mailRoot>folders/<slug>.ttl`, so the inbox document is
  * `<mailContainer>folders/inbox.ttl`. Built with `new URL` (never string concat)
@@ -130,9 +145,5 @@ export async function discoverMailbox(
     }
   }
   // No registration discoverable → the conventional inbox document.
-  return {
-    mailboxUrl: folderDocument(podRoot, WellKnownFolders.inbox),
-    isFallback: true,
-    source: "convention",
-  };
+  return conventionalMailbox(podRoot);
 }

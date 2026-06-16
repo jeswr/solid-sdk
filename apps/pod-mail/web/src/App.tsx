@@ -18,7 +18,7 @@ import { Inbox } from "@jeswr/pod-mail/ui";
 import { useEffect, useState } from "react";
 import { useSession } from "./auth/SessionProvider";
 import { LoginScreen } from "./LoginScreen";
-import { type DiscoveredMailbox, discoverMailbox } from "./mailbox-discovery";
+import { conventionalMailbox, type DiscoveredMailbox, discoverMailbox } from "./mailbox-discovery";
 
 export function App() {
   const { webId, session, logout } = useSession();
@@ -45,8 +45,11 @@ export function App() {
       if (!cancelled) setMailbox(discovered);
     })().catch((e: unknown) => {
       if (!cancelled) {
-        // Discovery failed entirely (e.g. the profile became unreadable). Fall
-        // back to the conventional inbox document so the user is not stranded.
+        // Discovery failed entirely (e.g. the profile re-fetch threw before
+        // discoverMailbox could apply its own fallback). Fall back to the
+        // conventional inbox document AND surface the warning, so the user is
+        // never stranded without an <Inbox> to render.
+        setMailbox(conventionalMailbox(session.podRoot));
         setDiscoveryError(e instanceof Error ? e.message : String(e));
       }
     });
@@ -76,7 +79,10 @@ export function App() {
           <code>{session.podRoot}</code>) as the pod root.
         </p>
       ) : null}
-      {mailbox?.isFallback ? (
+      {/* A plain fallback note only when discovery SUCCEEDED but found no
+          Type-Index entry. When discovery threw, the error alert below already
+          explains the conventional-location fallback, so we don't double up. */}
+      {mailbox?.isFallback && !discoveryError ? (
         <p className="app-note" role="note">
           No <code>schema:EmailMessage</code> entry was found in your Type Index; reading the
           conventional inbox location (<code>{mailbox.mailboxUrl}</code>).
@@ -84,15 +90,24 @@ export function App() {
       ) : null}
       {discoveryError ? (
         <p className="app-note app-note-error" role="alert">
-          Could not locate your mailbox ({discoveryError}).
+          Could not look up your mailbox ({discoveryError}); reading the conventional inbox location
+          {mailbox ? (
+            <>
+              {" "}
+              (<code>{mailbox.mailboxUrl}</code>)
+            </>
+          ) : null}
+          .
         </p>
       ) : null}
       <main className="app-main">
         {mailbox ? (
           // mailboxUrl only — no fetch prop: the global fetch is auth-patched, so
-          // the Inbox's data layer reads carry the DPoP token automatically.
+          // the Inbox's data layer reads carry the DPoP token automatically. On a
+          // discovery error we still set `mailbox` to the conventional fallback,
+          // so an authenticated user always gets an <Inbox> (never stranded).
           <Inbox mailboxUrl={mailbox.mailboxUrl} title="Your inbox" />
-        ) : discoveryError ? null : (
+        ) : (
           <p className="app-loading" role="status">
             Locating your mailbox…
           </p>
