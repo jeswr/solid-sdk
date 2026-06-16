@@ -860,7 +860,8 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
    *   2. generates an EXTRACTABLE ES256 DPoP keypair (so it can be exported to JWK,
    *      persisted across the redirect, and re-imported) + PKCE verifier + state +
    *      nonce, and builds the authorization URL (response_type=code, scope
-   *      `openid webid offline_access`, S256 code_challenge, state, nonce,
+   *      `openid webid offline_access`, `prompt=none` for SILENT-with-fallback
+   *      autologin, S256 code_challenge, state, nonce,
    *      redirect_uri = `redirectReturnUri`).
    *   3. PERSISTS everything {@link completeRedirectLogin} needs to sessionStorage
    *      ({@link REDIRECT_FLOW_STORAGE_KEY}) — see {@link PersistedRedirectFlow}.
@@ -921,6 +922,19 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
     authorizationUrl.searchParams.set("response_type", "code");
     // offline_access requests a refresh token; webid is the Solid-OIDC claim.
     authorizationUrl.searchParams.set("scope", "openid webid offline_access");
+    // prompt=none makes the full-page AUTOLOGIN truly SILENT-with-fallback. The
+    // deep-link autologin fires on PAGE LOAD with no user gesture (CASE B), so it
+    // must NEVER show an interactive consent/login screen: a live OP session +
+    // prior app authorization redirects back ALREADY authenticated (`?code&state`),
+    // and ANY case requiring interaction comes back as an OIDC ERROR
+    // (`?error=login_required|interaction_required|consent_required&state=...`) that
+    // the autologin's state-validating ABORT path (CASE A' / abortRedirectLogin)
+    // then handles by falling back to the login panel. Without prompt=none the OP
+    // would render its own UI mid-redirect (defeating the silent SSO) AND would
+    // never return the `?error&state` that makes the abort path reachable. The popup
+    // (interactive) login keeps its OWN two-attempt prompt=none→retry logic in
+    // #authenticate and is untouched.
+    authorizationUrl.searchParams.set("prompt", "none");
     authorizationUrl.searchParams.set("state", state);
     authorizationUrl.searchParams.set("nonce", nonce);
     if (usePkce) {

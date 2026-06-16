@@ -62,13 +62,23 @@ vi.mock("oauth4webapi", () => {
       token_endpoint: "https://issuer.example/token",
       code_challenge_methods_supported: ["S256"],
     })),
-    dynamicClientRegistrationRequest: vi.fn(async () => ({})),
-    processDynamicClientRegistrationResponse: vi.fn(async () => ({
-      client_id: "dynamic-client",
-      redirect_uris: ["https://app.example/callback.html"],
-      response_types: ["code"],
-      token_endpoint_auth_method: "none",
-    })),
+    // Echo the requested metadata (the registered redirect_uris) back on the
+    // response, exactly as a real OP does — so the persisted client.redirect_uris a
+    // test inspects reflects what was actually registered (FIX-1), not a hardcoded
+    // stub. The request body is the 2nd arg to dynamicClientRegistrationRequest.
+    dynamicClientRegistrationRequest: vi.fn(
+      async (_as: unknown, metadata: { redirect_uris?: string[] }) => ({
+        __registered: metadata?.redirect_uris ?? ["https://app.example/callback.html"],
+      }),
+    ),
+    processDynamicClientRegistrationResponse: vi.fn(
+      async (response: { __registered?: string[] }) => ({
+        client_id: "dynamic-client",
+        redirect_uris: response?.__registered ?? ["https://app.example/callback.html"],
+        response_types: ["code"],
+        token_endpoint_auth_method: "none",
+      }),
+    ),
     generateKeyPair: vi.fn(async () => ({
       publicKey: { __kind: "public" },
       privateKey: { __kind: "private" },
@@ -953,12 +963,14 @@ describe("REDIRECT autologin — beginRedirectLogin / completeRedirectLogin", ()
     const { authorizationUrl } = await provider.beginRedirectLogin(RETURN_URI);
 
     // The authorization URL targets the resolved issuer's authorization_endpoint with
-    // response_type=code, the offline_access scope, state, nonce, S256 challenge, and
-    // the full-page return URI as redirect_uri.
+    // response_type=code, the offline_access scope, prompt=none (silent autologin),
+    // state, nonce, S256 challenge, and the full-page return URI as redirect_uri.
     const u = new URL(authorizationUrl);
     expect(`${u.origin}${u.pathname}`).toBe("https://issuer.example/auth");
     expect(u.searchParams.get("response_type")).toBe("code");
     expect(u.searchParams.get("scope")).toBe("openid webid offline_access");
+    // FIX-2: the full-page autologin MUST be silent — prompt=none on page load.
+    expect(u.searchParams.get("prompt")).toBe("none");
     expect(u.searchParams.get("state")).toBe("state");
     expect(u.searchParams.get("nonce")).toBe("nonce");
     expect(u.searchParams.get("redirect_uri")).toBe(RETURN_URI);
@@ -991,12 +1003,51 @@ describe("REDIRECT autologin — beginRedirectLogin / completeRedirectLogin", ()
   it("(begin) re-registers the dynamic client with BOTH the popup callback AND the full-page return URI", async () => {
     const provider = makeRedirectProvider();
     await provider.beginRedirectLogin(RETURN_URI);
-    // The dynamic registration must include both redirect_uris so the broker accepts
-    // the full-page redirect_uri (the popup-only registration would reject it).
+    // FIX-1: the dynamic registration (the "client document" on the localhost dynamic
+    // path) must REGISTER BOTH redirect_uris so the broker accepts the full-page
+    // redirect_uri (a popup-only registration would reject the app-root return URI).
     const regCall = vi.mocked(oauth.dynamicClientRegistrationRequest).mock.calls.at(-1)!;
     const metadata = regCall[1] as { redirect_uris: string[] };
     expect(metadata.redirect_uris).toContain("https://app.example/callback.html");
-    expect(metadata.redirect_uris).toContain(RETURN_URI);
+    expect(metadata.redirect_uris).toContain(RETURN_URI); // the app root ${origin}/
+  });
+
+  it("(begin, FIX-1) the PERSISTED client (reused for the token exchange) carries BOTH redirect_uris", async () => {
+    const provider = makeRedirectProvider();
+    await provider.beginRedirectLogin(RETURN_URI);
+    // The resolved client is persisted verbatim and REUSED for the post-redirect token
+    // exchange (the broker validated redirect_uri against THIS client). It must list
+    // BOTH the popup callback AND the app-root return URI, or the full-page autologin's
+    // code exchange would be rejected. We assert against the persisted record's client
+    // (the registration response echoes the requested redirect_uris).
+    const record = JSON.parse(
+      sessionStorage.getItem(REDIRECT_FLOW_STORAGE_KEY)!,
+    ) as { client: { redirect_uris: string[] } };
+    expect(record.client.redirect_uris).toContain("https://app.example/callback.html");
+    expect(record.client.redirect_uris).toContain(RETURN_URI);
+  });
+
+  it("(begin, FIX-1) the dynamic client document de-duplicates redirect_uris", async () => {
+    // When the full-page return URI EQUALS the popup callback (an unusual but valid
+    // config) the registration must not list it twice — the set-union in #resolveClient
+    // de-dupes. Register with the popup callback AS the return URI and assert one entry.
+    const provider = makeRedirectProvider();
+    await provider.beginRedirectLogin("https://app.example/callback.html");
+    const regCall = vi.mocked(oauth.dynamicClientRegistrationRequest).mock.calls.at(-1)!;
+    const metadata = regCall[1] as { redirect_uris: string[] };
+    expect(metadata.redirect_uris).toEqual(["https://app.example/callback.html"]);
+  });
+
+  it("(begin, FIX-2) sets prompt=none on the full-page autologin authorization URL", async () => {
+    // The deep-link autologin fires on page load with NO user gesture, so it must be
+    // SILENT: prompt=none tells the OP to authenticate ONLY from an existing session +
+    // prior authorization and never render interactive UI. Any interaction-required
+    // case comes back as an OIDC error (`?error&state`) that the state-validating abort
+    // path handles — that abort path is ONLY reachable because prompt=none forces the
+    // error return instead of an interactive screen.
+    const provider = makeRedirectProvider();
+    const { authorizationUrl } = await provider.beginRedirectLogin(RETURN_URI);
+    expect(new URL(authorizationUrl).searchParams.get("prompt")).toBe("none");
   });
 
   it("(complete) reads the record, exchanges the code, establishes the session + authenticatedWebId, and clears the record", async () => {
