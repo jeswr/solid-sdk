@@ -1003,6 +1003,109 @@ function createWarmController(opts) {
   };
 }
 
+// src/app-shell.ts
+var SHELL_CACHE_PREFIX = "solid-offline-shell-";
+function shellCacheName(version) {
+  return `${SHELL_CACHE_PREFIX}${version}`;
+}
+function resolveAppShellConfig(config) {
+  const version = config.version ?? "v1";
+  const precache = [...new Set(config.precache)];
+  const fallback = config.fallback ?? precache.find((u) => {
+    const path = pathOf(u);
+    return path.endsWith(".html") || path.endsWith("/");
+  });
+  return { precache, fallback, version };
+}
+function pathOf(url) {
+  try {
+    return new URL(url, "https://x.invalid/").pathname.toLowerCase();
+  } catch {
+    return "";
+  }
+}
+async function precacheAppShell(caches2, config, onError) {
+  const cache = await caches2.open(shellCacheName(config.version));
+  const cached = [];
+  const failed = [];
+  await Promise.all(
+    config.precache.map(async (url) => {
+      try {
+        await cache.addAll([url]);
+        cached.push(url);
+      } catch (error) {
+        failed.push(url);
+        onError?.(url, error);
+      }
+    })
+  );
+  return { cached, failed };
+}
+async function cleanupOldShellCaches(caches2, currentVersion) {
+  const keep = shellCacheName(currentVersion);
+  const names = await caches2.keys();
+  const removed = [];
+  await Promise.all(
+    names.map(async (name) => {
+      if (name.startsWith(SHELL_CACHE_PREFIX) && name !== keep) {
+        const ok = await caches2.delete(name);
+        if (ok) removed.push(name);
+      }
+    })
+  );
+  return removed;
+}
+function isPrecachedAsset(requestUrl, config) {
+  const reqPath = pathOf(requestUrl);
+  if (!reqPath) return false;
+  for (const url of config.precache) {
+    if (pathOf(url) === reqPath) return true;
+  }
+  return false;
+}
+async function handleNavigation(request, deps) {
+  const cache = await deps.caches.open(shellCacheName(deps.config.version));
+  if (deps.isOnline()) {
+    try {
+      const fresh = await deps.fetch(request);
+      if (fresh.ok && isHtmlResponse(fresh)) {
+        try {
+          await cache.put(request, fresh.clone());
+          return { response: fresh, source: "shell-network-cached" };
+        } catch {
+        }
+      }
+      return { response: fresh, source: "shell-network" };
+    } catch {
+    }
+  }
+  const routeHit = await cache.match(request);
+  if (routeHit) return { response: routeHit, source: "shell-cache-offline" };
+  if (deps.config.fallback) {
+    const fallbackHit = await cache.match(deps.config.fallback);
+    if (fallbackHit) return { response: fallbackHit, source: "shell-cache-fallback" };
+  }
+  const response = await deps.fetch(request);
+  return { response, source: "shell-miss" };
+}
+async function handlePrecachedAsset(request, deps) {
+  const cache = await deps.caches.open(shellCacheName(deps.config.version));
+  const hit = await cache.match(request);
+  if (hit) return { response: hit, source: "asset-cache-first" };
+  const fresh = await deps.fetch(request);
+  if (fresh.ok) {
+    try {
+      await cache.put(request, fresh.clone());
+    } catch {
+    }
+  }
+  return { response: fresh, source: "asset-network" };
+}
+function isHtmlResponse(response) {
+  const ct = response.headers.get("content-type") ?? "";
+  return ct.toLowerCase().includes("text/html");
+}
+
 // src/cache-policy.ts
 var CANONICAL_RDF_ACCEPT = "text/turtle";
 var RDF_ACCEPT_HINTS = [
@@ -1523,6 +1626,6 @@ function createOfflineClient(config = {}) {
   };
 }
 
-export { ANONYMOUS_SCOPE, CACHE_PREFIX, DB_PREFIX, DEFAULT_CACHE_NAME, DEFAULT_DB_NAME, DEFAULT_WARM_BUDGET, backoffDelay, cacheNameForWebId, containerChildren, createNotificationsClient, createOfflineClient, createStatusSurface, createWarmController, dbNameForWebId, deriveSeeds, discoverSubscriptionUrl, handleNotification, isScopeChange, onIdle, parseFrame, parseWacAllow, purgeForWebId, resolveBudget, resyncSweep, scopeFor, scopeHash, storageDescriptionFromLink, subscribe, typeIndexTargets, userCanRead, warm };
+export { ANONYMOUS_SCOPE, CACHE_PREFIX, DB_PREFIX, DEFAULT_CACHE_NAME, DEFAULT_DB_NAME, DEFAULT_WARM_BUDGET, backoffDelay, cacheNameForWebId, cleanupOldShellCaches, containerChildren, createNotificationsClient, createOfflineClient, createStatusSurface, createWarmController, dbNameForWebId, deriveSeeds, discoverSubscriptionUrl, handleNavigation, handleNotification, handlePrecachedAsset, isPrecachedAsset, isScopeChange, onIdle, parseFrame, parseWacAllow, precacheAppShell, purgeForWebId, resolveAppShellConfig, resolveBudget, resyncSweep, scopeFor, scopeHash, shellCacheName, storageDescriptionFromLink, subscribe, typeIndexTargets, userCanRead, warm };
 //# sourceMappingURL=index.js.map
 //# sourceMappingURL=index.js.map

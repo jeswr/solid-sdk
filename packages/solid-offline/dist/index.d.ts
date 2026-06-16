@@ -345,6 +345,32 @@ interface NotificationsClientConfig {
     /** Disconnected slow-poll interval (ms). */
     pollIntervalMs?: number;
 }
+/**
+ * App-shell precache config (P4). The list of static URLs (HTML + hashed JS/CSS)
+ * to precache at SW install so the app BOOTS with no network after the first
+ * visit, plus a navigation fallback document and a cache-busting version tag.
+ *
+ * The build tool emits `precache` (vite-plugin-pwa / a workbox manifest / a tiny
+ * `dist/` or `out/` glob). The shell lives in its OWN, identity-independent Cache
+ * bucket (it's the app's public static assets) — NOT the WebID-scoped pod-data
+ * cache — so it is not purged on logout. See `app-shell.ts`.
+ */
+interface AppShellConfig {
+    /** Same-origin URLs to precache: the HTML document(s) + every static JS/CSS asset. */
+    precache: string[];
+    /**
+     * HTML to serve for a navigation that misses the precache (unknown client route,
+     * or any navigation while offline). Defaults to the first `.html`/`/` entry in
+     * `precache`. Must be one of `precache`.
+     */
+    fallback?: string;
+    /**
+     * Cache-busting version for the precache bucket (`solid-offline-shell-<version>`).
+     * Bump per deploy (or derive from the build hash) so a new deploy gets a fresh
+     * precache and the old bucket is cleaned up at activate. Default `'v1'`.
+     */
+    version?: string;
+}
 /** Page-client config. `webId`, `warm`, `notifications` per spec "Package shape". */
 interface OfflineClientConfig {
     /** The logged-in user's WebID. Scopes the cache (DB name) per identity. */
@@ -368,6 +394,13 @@ interface OfflineClientConfig {
      * authenticated fetch) for the subscribe POSTs.
      */
     notifications?: boolean | NotificationsClientConfig;
+    /**
+     * App-shell precache (P4). Provide the static URLs (HTML + hashed JS/CSS) to
+     * precache at SW install so the app boots offline after the first visit. Omit to
+     * disable shell precaching (the SW still caches pod data per P1–P3). The shell is
+     * identity-independent and survives logout (it's the app's own public assets).
+     */
+    appShell?: AppShellConfig;
     /** Path to the service worker script. Default: '/solid-offline-worker.js'. */
     workerUrl?: string;
     /** Service-worker registration scope. Default: '/'. */
@@ -407,7 +440,7 @@ interface OfflineClient {
  * offline and revalidatable (the client analogue of QLever).
  */
 interface CacheMetadata {
-    /** Composite primary key: `${url} ${varyKey}`. */
+    /** Composite primary key: `${url} ${varyKey}`. */
     key: string;
     /** The request URL (without the varyKey discriminator). */
     url: string;
@@ -492,6 +525,137 @@ type PageToWorkerMessage = {
  | {
     type: 'poll';
 };
+
+/**
+ * App-shell precache (P4 — the missing half of "works COMPLETELY offline").
+ *
+ * The P1–P3 layer (swr.ts / warmer.ts / invalidation.ts) makes the user's *pod
+ * data* available offline. But an app that can read its data offline still can't
+ * *boot* offline unless its STATIC SHELL — the HTML document the browser loads
+ * plus the JS/CSS bundles it pulls — is served without the network. This module
+ * is that half: it precaches the app shell at SW `install` and serves it on a
+ * navigation request when the network is unavailable, so the app paints from the
+ * SW cache after the first visit.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * DESIGN — framework-agnostic, two app shapes (the GOAL's "Next out/ + vite dist/"):
+ *   - A **vite** SPA emits `dist/index.html` + hashed `dist/assets/*.js|css`. There
+ *     is ONE HTML document; every client route resolves to it. The navigation
+ *     fallback therefore serves the single precached `index.html`.
+ *   - A **Next static export** emits `out/` with PER-ROUTE HTML (`out/index.html`,
+ *     `out/files/index.html`, …) + hashed `out/_next/static/**`. A navigation to a
+ *     known route can serve that route's own HTML; an unknown route falls back to
+ *     a configured `appShellFallback` (typically `/index.html` or `/404.html`).
+ *   So the precache is just a LIST OF URLS the app passes in (its build tool emits
+ *   them — `vite-plugin-pwa`/`workbox manifest`/a tiny glob), plus a fallback URL.
+ *   This module does NOT know or care which framework produced them.
+ *
+ * SEPARATION FROM THE DATA CACHE (decisive, prevents the two layers fighting):
+ *   The app shell lives in its OWN Cache API bucket (`solid-offline-shell-<ver>`),
+ *   NOT the WebID-scoped pod-data cache. The shell is identity-independent + public
+ *   (it's the app's own static assets), so it is NOT purged on logout and NOT
+ *   re-fetched per identity. The pod-data SWR engine (swr.ts) owns same-origin pod
+ *   reads; this module owns ONLY navigations + precached static assets. A request
+ *   is routed to exactly one of them (see `isPrecachedAsset` / navigation check in
+ *   worker.ts) so they never double-handle a request.
+ *
+ * NEVER-AUTHORITATIVE, BUT NETWORK-FIRST FOR THE SHELL:
+ *   The shell is served network-first (so a deploy ships immediately when online)
+ *   with a cache fallback (so it boots offline). Precached *assets* are
+ *   cache-first (they are content-hashed and immutable — a new deploy emits new
+ *   filenames, which miss the cache and fetch fresh). This mirrors the standard
+ *   PWA app-shell model and composes with — does not duplicate — the in-app
+ *   durable-cache/SWR that renders the data model.
+ * ────────────────────────────────────────────────────────────────────────────
+ */
+
+/** Minimal Cache-API surface this module depends on (mockable in tests). */
+interface ShellCache {
+    match(request: Request | string): Promise<Response | undefined>;
+    put(request: Request | string, response: Response): Promise<void>;
+    addAll(requests: string[]): Promise<void>;
+}
+/** Minimal CacheStorage surface (open named caches + enumerate for cleanup). */
+interface ShellCacheStorage {
+    open(name: string): Promise<ShellCache>;
+    keys(): Promise<string[]>;
+    delete(name: string): Promise<boolean>;
+}
+declare function shellCacheName(version: string): string;
+/** Resolve the config's defaults (fallback = first .html in precache; version = v1). */
+interface ResolvedAppShellConfig {
+    precache: string[];
+    fallback: string | undefined;
+    version: string;
+}
+declare function resolveAppShellConfig(config: AppShellConfig): ResolvedAppShellConfig;
+/**
+ * INSTALL: open the versioned precache bucket and add every shell URL.
+ *
+ * Returns the resolved config so the worker can stash the fallback for the fetch
+ * handler. A precache failure (one bad URL) must NOT abort install — the app still
+ * works online, and a navigation simply falls through to the network. We therefore
+ * add entries individually and swallow per-URL errors (logging via `onError`),
+ * rather than `addAll` which rejects atomically on any single 404.
+ */
+declare function precacheAppShell(caches: ShellCacheStorage, config: ResolvedAppShellConfig, onError?: (url: string, error: unknown) => void): Promise<{
+    cached: string[];
+    failed: string[];
+}>;
+/**
+ * ACTIVATE: delete every shell precache bucket that is NOT the current version, so
+ * an old deploy's shell can't be served after an update. Only touches buckets with
+ * our `solid-offline-shell-` prefix — never the pod-data caches or another app's.
+ */
+declare function cleanupOldShellCaches(caches: ShellCacheStorage, currentVersion: string): Promise<string[]>;
+/**
+ * Is this request for one of the precached static assets (NOT a navigation)?
+ *
+ * We match on the request URL's pathname against the precache list's pathnames, so
+ * a precached `/_next/static/abc.js` (or `/assets/index-abc.js`) is served from the
+ * shell cache cache-first. The navigation document itself is handled separately
+ * (`handleNavigation`) — this is only for the JS/CSS/font assets the shell pulls.
+ */
+declare function isPrecachedAsset(requestUrl: string, config: ResolvedAppShellConfig): boolean;
+/** Outcome classifier for tests + observability. */
+type ShellServeSource = 'shell-network' | 'shell-network-cached' | 'shell-cache-offline' | 'shell-cache-fallback' | 'asset-cache-first' | 'asset-network' | 'shell-miss';
+interface ShellResult {
+    response: Response;
+    source: ShellServeSource;
+}
+/** Dependencies for the shell fetch handlers (all injectable for headless tests). */
+interface ShellDeps {
+    caches: ShellCacheStorage;
+    fetch: typeof fetch;
+    /** Whether the browser believes it is online (navigator.onLine in the SW). */
+    isOnline(): boolean;
+    config: ResolvedAppShellConfig;
+}
+/**
+ * NAVIGATION HANDLER — the load-bearing piece for "the app boots offline".
+ *
+ * A navigation request (`request.mode === 'navigate'`, i.e. the browser loading a
+ * document) is served NETWORK-FIRST so a fresh deploy ships immediately; on a
+ * network failure (offline, or the server is down) it falls back to:
+ *   1. the cached HTML for THIS exact route (a Next per-route export), else
+ *   2. the configured `fallback` HTML (the vite SPA single document, or Next's
+ *      index/404), which boots the app and lets client routing take over.
+ * Only if NOTHING is cached does the network error surface (first-ever visit while
+ * offline — unavoidable, the shell was never fetched).
+ *
+ * When online and the network succeeds, we refresh the cached copy of the route's
+ * HTML so the offline fallback tracks the latest deploy (best-effort; a put
+ * failure never affects the response).
+ */
+declare function handleNavigation(request: Request, deps: ShellDeps): Promise<ShellResult>;
+/**
+ * PRECACHED-ASSET HANDLER — cache-first for the immutable, content-hashed JS/CSS/
+ * fonts the shell pulls. They never change under a fixed URL (a deploy emits new
+ * hashed filenames), so a cache hit is authoritative and avoids the network. A miss
+ * (e.g. precache failed for this one) goes to the network and is opportunistically
+ * cached.
+ */
+declare function handlePrecachedAsset(request: Request, deps: ShellDeps): Promise<ShellResult>;
 
 /**
  * Page-side notifications client (P3, §5).
@@ -826,4 +990,4 @@ declare function createOfflineClient(config?: OfflineClientConfig): OfflineClien
     readonly status: OfflineStatusSurface;
 };
 
-export { ANONYMOUS_SCOPE, CACHE_PREFIX, type CacheMetadata, type CacheStorageLike, DB_PREFIX, DEFAULT_CACHE_NAME, DEFAULT_DB_NAME, DEFAULT_WARM_BUDGET, type InvalidateDeps, type InvalidateOutcome, type NotificationActivityType, type NotificationFrame, type NotificationsClient, type NotificationsClientConfig, type NotificationsConfig, type NotificationsDeps, type OfflineClient, type OfflineClientConfig, OfflineStatusSurface, type PageToWorkerMessage, type PurgeDeps, type PurgeResult, type ResolvedWarmBudget, type SocketFactory, type SocketLike, type SweepResult, type UpdatedEvent, type UpdatedListener, type WarmBudget, type WarmConfig, type WarmController, type WarmDeps, type WarmResult, type WarmVisit, backoffDelay, cacheNameForWebId, containerChildren, createNotificationsClient, createOfflineClient, createWarmController, dbNameForWebId, deriveSeeds, discoverSubscriptionUrl, handleNotification, isScopeChange, onIdle, parseFrame, parseWacAllow, purgeForWebId, resolveBudget, resyncSweep, scopeFor, scopeHash, storageDescriptionFromLink, subscribe, typeIndexTargets, userCanRead, warm };
+export { ANONYMOUS_SCOPE, type AppShellConfig, CACHE_PREFIX, type CacheMetadata, type CacheStorageLike, DB_PREFIX, DEFAULT_CACHE_NAME, DEFAULT_DB_NAME, DEFAULT_WARM_BUDGET, type InvalidateDeps, type InvalidateOutcome, type NotificationActivityType, type NotificationFrame, type NotificationsClient, type NotificationsClientConfig, type NotificationsConfig, type NotificationsDeps, type OfflineClient, type OfflineClientConfig, OfflineStatusSurface, type PageToWorkerMessage, type PurgeDeps, type PurgeResult, type ResolvedAppShellConfig, type ResolvedWarmBudget, type ShellCache, type ShellCacheStorage, type ShellDeps, type ShellResult, type ShellServeSource, type SocketFactory, type SocketLike, type SweepResult, type UpdatedEvent, type UpdatedListener, type WarmBudget, type WarmConfig, type WarmController, type WarmDeps, type WarmResult, type WarmVisit, backoffDelay, cacheNameForWebId, cleanupOldShellCaches, containerChildren, createNotificationsClient, createOfflineClient, createWarmController, dbNameForWebId, deriveSeeds, discoverSubscriptionUrl, handleNavigation, handleNotification, handlePrecachedAsset, isPrecachedAsset, isScopeChange, onIdle, parseFrame, parseWacAllow, precacheAppShell, purgeForWebId, resolveAppShellConfig, resolveBudget, resyncSweep, scopeFor, scopeHash, shellCacheName, storageDescriptionFromLink, subscribe, typeIndexTargets, userCanRead, warm };

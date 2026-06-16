@@ -52,6 +52,14 @@ const offline = createOfflineClient({
   // P3: page-side WebSocketChannel2023 client. `true` derives topics from the
   // warmed containers; pass an object to set explicit containers/resources/caps.
   notifications: true,
+  // P4: precache the app SHELL so the app BOOTS with no network after the first
+  // visit. Pass the static URLs your build emits (the HTML + hashed JS/CSS) +
+  // a navigation fallback + a version (bump per deploy). Omit to disable.
+  appShell: {
+    precache: ['/index.html', '/assets/index-abc123.js', '/assets/index-def456.css'],
+    fallback: '/index.html',
+    version: 'abc123', // your build hash
+  },
   workerUrl: '/solid-offline-worker.js',
 });
 
@@ -69,6 +77,62 @@ offline.onUpdated(({ url, etag }) => {
 // P5 (§7): MANDATORY on sign-out — purge this WebID's Cache API + IndexedDB.
 await offline.logout();
 ```
+
+## What P4 does (app-shell precache — the app BOOTS offline)
+
+P1–P3 make the user's *pod data* available offline. P4 is the other half: it makes
+the app's STATIC SHELL — the HTML document the browser loads plus the JS/CSS it
+pulls — serve from the SW cache, so the app **paints with no network after the
+first visit**. Together they deliver the goal: a Solid app works *completely*
+offline after first use.
+
+- **Pass the shell URLs your build emits.** `appShell.precache` is the list of
+  same-origin static URLs (the HTML document(s) + every hashed JS/CSS asset). A
+  vite SPA emits one `index.html` + `/assets/*`; a Next static export emits
+  per-route HTML + `/_next/static/**`. The list comes from your build tool
+  (`vite-plugin-pwa` / a workbox manifest / a tiny `dist/` or `out/` glob) — this
+  package is framework-agnostic and doesn't care which produced it.
+- **Precached at `install`, cleaned up at `activate`.** The shell lives in its
+  OWN, versioned Cache bucket (`solid-offline-shell-<version>`). Bump `version`
+  (or derive it from your build hash) per deploy; the old bucket is dropped at
+  activate. A single bad URL does NOT abort the precache — the rest still cache.
+- **Navigations = network-first, cache-fallback.** A document request is served
+  fresh when online (a deploy ships immediately) and refreshes the cached copy;
+  offline it serves the cached route HTML, else the configured `fallback`
+  (the SPA single document / Next index), so the app boots and client routing
+  takes over. Only a first-ever offline visit (nothing cached) surfaces the
+  network error — there's genuinely nothing to serve.
+- **Precached assets = cache-first.** Hashed JS/CSS/fonts are immutable under a
+  fixed URL (a new deploy emits new filenames), so a cache hit is authoritative
+  and the network is never touched.
+- **Identity-independent; survives logout.** The shell is the app's own *public*
+  static assets, so it lives OUTSIDE the WebID-scoped pod-data cache and is NOT
+  purged by `logout()`. Each request is routed to EXACTLY ONE layer — navigations
+  + precached assets → the shell handler, everything else (pod reads) → the P1–P3
+  SWR engine — so the two never fight over a request.
+
+**Build-time injection (optional, earlier precache).** The page `config` arrives
+*after* the SW activates, so the very first precache otherwise happens one
+round-trip in. To precache at `install` instead, have your build emit the manifest
+into the worker's global *before* importing the worker:
+
+```js
+// solid-offline-worker.js (your generated SW entry)
+self.__SOLID_OFFLINE_SHELL__ = {
+  precache: ['/index.html', '/assets/index-abc123.js'],
+  fallback: '/index.html',
+  version: 'abc123',
+};
+import 'solid-offline/worker';
+```
+
+If absent, the SW adopts the `appShell` from the first `config` message instead.
+
+The pure logic (`resolveAppShellConfig`, `precacheAppShell`,
+`cleanupOldShellCaches`, `isPrecachedAsset`, `handleNavigation`,
+`handlePrecachedAsset`) is exported and unit-tested with a mocked CacheStorage +
+fetch that **simulate offline** (fetch rejects / `navigator.onLine` false) — the
+strict offline-boot tests in `test/app-shell.test.ts`.
 
 ## What P3 does (notification invalidation, §5 of the design)
 
@@ -255,7 +319,7 @@ cache cannot back.
 
 ## Verified vs assumed
 
-- **Verified headlessly** (`npm test`, 103 unit tests via `vitest` +
+- **Verified headlessly** (`npm test`, via `vitest` +
   `fake-indexeddb` + Cache/fetch/WebSocket mocks): the cacheable/never-cache
   classifier, cache-key/varyKey computation, the full SWR decision tree
   (hit→serve+revalidate, 304 vs 200, offline→stale, miss→network+store,
@@ -263,12 +327,18 @@ cache cannot back.
   the IndexedDB metadata store, **the P2 warmer** (seed derivation +
   Type-Index-first ordering, BFS + dedup, budget enforcement, ACL/WAC pruning +
   negative-cache, large-binary skip, concurrency cap, ACL Link-header derivation,
-  idle/reconnect triggers), and **the P3 notifications + invalidation**: endpoint
+  idle/reconnect triggers), **the P3 notifications + invalidation** (endpoint
   discovery (Link rel + `/.well-known/solid` fallback), the subscribe POST →
   `receiveFrom`, frame parsing, message→SW forwarding, the **ETag short-circuit**
   no-op, Update→revalidate→broadcast (200 vs 304), Add/Remove→listing re-fetch,
   Delete/403/404 purge, reconnect backoff + re-subscribe, disconnected slow-poll,
-  and the reconnect ETag-resync sweep (incl. URL dedup + negative-entry skip).
+  and the reconnect ETag-resync sweep (incl. URL dedup + negative-entry skip)),
+  and **the P4 app-shell** (precache into the versioned bucket with per-URL 404
+  tolerance, stale-bucket cleanup that spares the pod-data caches, precached-asset
+  matching by pathname, and the offline-boot navigation path: cached-route serve,
+  fallback serve for an unknown route, graceful degrade on a failed-network /
+  stale-`onLine` fetch, online revalidate + cache refresh, asset cache-first, and
+  a first-ever-offline-visit surfacing the network error).
 - **Assumed / not verified headlessly:** the real ServiceWorker lifecycle
   (`install`/`activate`/`claim`/`fetch`/`message` events), the Cache API against a
   real browser, `navigator.serviceWorker.register`, and a **live
@@ -282,7 +352,7 @@ cache cannot back.
 
 | Script | What |
 |---|---|
-| `npm run build` | tsup → ESM bundles for `index` + `worker` (+ d.ts) |
+| `npm run build` | tsup → ESM bundles for `index` + `worker` + `react` (+ d.ts) |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run lint` | Biome |
 | `npm test` | Vitest (headless) |

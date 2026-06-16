@@ -183,6 +183,57 @@ Files modified for P5 (not newly authored, so no top-of-file marker):
 - React hooks are tested in `jsdom` with `@testing-library/react`, not against a
   real browser SW + a live pod.
 
+### P4 — app-shell precache (the app BOOTS offline) — Opus 4.8
+
+Branch `feat/offline-sw-complete`. The half of "works completely offline" that P1–P3
+left out: precaching the app's STATIC SHELL so it paints with no network after the
+first visit. Authored by **Claude Opus 4.8** (Fable unavailable);
+**re-review / upgrade candidate**.
+
+New files:
+
+- `src/app-shell.ts` — pure, framework-agnostic app-shell logic:
+  `resolveAppShellConfig` (defaults the fallback to the first HTML/`/` entry,
+  de-dupes, defaults the version), `precacheAppShell` (install-time precache into
+  the versioned `solid-offline-shell-<ver>` bucket, per-URL 404 tolerance so one
+  bad URL never aborts the rest), `cleanupOldShellCaches` (activate-time stale-bucket
+  cleanup that ONLY touches the `solid-offline-shell-` prefix — never the pod-data
+  caches), `isPrecachedAsset` (pathname match), `handleNavigation` (network-first
+  with cached-route → fallback offline path), `handlePrecachedAsset` (cache-first
+  for immutable hashed assets). Carries the top-of-file marker.
+- `test/app-shell.test.ts` — strict offline-boot unit tests (mocked CacheStorage +
+  fetch that simulate offline: fetch rejects / `navigator.onLine` false) over both a
+  vite `dist/` and a Next static `out/` shape.
+
+Files modified for P4 (not newly authored, so no top-of-file marker):
+
+- `src/types.ts` — `AppShellConfig` (the public precache config) +
+  `OfflineClientConfig.appShell`; the `PageToWorkerMessage` `config` already carries
+  it. (Also: removed a stray NUL byte that had corrupted a space in the
+  `CacheMetadata.key` JSDoc, which made git treat the file as binary.)
+- `src/worker.ts` — the SW adapter: a build-time `__SOLID_OFFLINE_SHELL__` injection
+  slot (precache at `install`) OR adoption from the first `config` message; the
+  install-precache / activate-cleanup wiring; and the fetch router that sends a
+  navigation → `handleNavigation`, a precached asset → `handlePrecachedAsset`, and
+  everything else → the existing pod-data SWR engine (each request handled by
+  EXACTLY ONE layer). The shell uses the SW's OWN unauthenticated fetch (the shell
+  is public static assets — decision 1 holds).
+- `src/index.ts` — re-exports the P4 surface from the package root.
+- `README.md`, `docs/MODEL-PROVENANCE.md` — P4 documentation.
+
+### P4 re-review focus areas
+
+- The shell bucket is identity-INDEPENDENT and deliberately survives `logout()` — it
+  holds the app's own public static assets, not pod data. Confirm no pod data can
+  ever land in it: only navigations + URLs listed in `appShell.precache` route to
+  the shell handler; everything else (pod reads) stays on the WebID-scoped SWR path.
+- `handleNavigation` caches only `2xx` `text/html` responses (an API/JSON/redirect
+  navigation answer is passed through, never cached as a shell) — re-check that
+  classifier against odd content-types.
+- A first-ever offline visit (nothing precached) intentionally surfaces the network
+  error rather than fabricating a response — verify that's the desired UX vs a
+  generic offline page (an `offlineFallback` is a candidate follow-up).
+
 ## roborev security/correctness fixes (codex/gpt-5.5 findings) — Opus 4.8
 
 Branch `fix/roborev-security-findings`. roborev (codex/gpt-5.5) reviewed the P0–P5

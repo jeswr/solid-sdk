@@ -40,7 +40,26 @@ export type {
   CacheMetadata,
   WarmConfig,
   WarmBudget,
+  AppShellConfig,
 } from './types.js';
+// P4 — app-shell precache pure logic (consumable by apps + the SW, unit-tested).
+export {
+  resolveAppShellConfig,
+  shellCacheName,
+  precacheAppShell,
+  cleanupOldShellCaches,
+  isPrecachedAsset,
+  handleNavigation,
+  handlePrecachedAsset,
+} from './app-shell.js';
+export type {
+  ResolvedAppShellConfig,
+  ShellCache,
+  ShellCacheStorage,
+  ShellDeps,
+  ShellResult,
+  ShellServeSource,
+} from './app-shell.js';
 export {
   warm,
   createWarmController,

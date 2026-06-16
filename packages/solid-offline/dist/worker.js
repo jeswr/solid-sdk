@@ -1,3 +1,105 @@
+// src/app-shell.ts
+var SHELL_CACHE_PREFIX = "solid-offline-shell-";
+function shellCacheName(version) {
+  return `${SHELL_CACHE_PREFIX}${version}`;
+}
+function resolveAppShellConfig(config) {
+  const version = config.version ?? "v1";
+  const precache = [...new Set(config.precache)];
+  const fallback = config.fallback ?? precache.find((u) => {
+    const path = pathOf(u);
+    return path.endsWith(".html") || path.endsWith("/");
+  });
+  return { precache, fallback, version };
+}
+function pathOf(url) {
+  try {
+    return new URL(url, "https://x.invalid/").pathname.toLowerCase();
+  } catch {
+    return "";
+  }
+}
+async function precacheAppShell(caches, config, onError) {
+  const cache = await caches.open(shellCacheName(config.version));
+  const cached = [];
+  const failed = [];
+  await Promise.all(
+    config.precache.map(async (url) => {
+      try {
+        await cache.addAll([url]);
+        cached.push(url);
+      } catch (error) {
+        failed.push(url);
+      }
+    })
+  );
+  return { cached, failed };
+}
+async function cleanupOldShellCaches(caches, currentVersion) {
+  const keep = shellCacheName(currentVersion);
+  const names = await caches.keys();
+  const removed = [];
+  await Promise.all(
+    names.map(async (name) => {
+      if (name.startsWith(SHELL_CACHE_PREFIX) && name !== keep) {
+        const ok = await caches.delete(name);
+        if (ok) removed.push(name);
+      }
+    })
+  );
+  return removed;
+}
+function isPrecachedAsset(requestUrl, config) {
+  const reqPath = pathOf(requestUrl);
+  if (!reqPath) return false;
+  for (const url of config.precache) {
+    if (pathOf(url) === reqPath) return true;
+  }
+  return false;
+}
+async function handleNavigation(request, deps) {
+  const cache = await deps.caches.open(shellCacheName(deps.config.version));
+  if (deps.isOnline()) {
+    try {
+      const fresh = await deps.fetch(request);
+      if (fresh.ok && isHtmlResponse(fresh)) {
+        try {
+          await cache.put(request, fresh.clone());
+          return { response: fresh, source: "shell-network-cached" };
+        } catch {
+        }
+      }
+      return { response: fresh, source: "shell-network" };
+    } catch {
+    }
+  }
+  const routeHit = await cache.match(request);
+  if (routeHit) return { response: routeHit, source: "shell-cache-offline" };
+  if (deps.config.fallback) {
+    const fallbackHit = await cache.match(deps.config.fallback);
+    if (fallbackHit) return { response: fallbackHit, source: "shell-cache-fallback" };
+  }
+  const response = await deps.fetch(request);
+  return { response, source: "shell-miss" };
+}
+async function handlePrecachedAsset(request, deps) {
+  const cache = await deps.caches.open(shellCacheName(deps.config.version));
+  const hit = await cache.match(request);
+  if (hit) return { response: hit, source: "asset-cache-first" };
+  const fresh = await deps.fetch(request);
+  if (fresh.ok) {
+    try {
+      await cache.put(request, fresh.clone());
+    } catch {
+    }
+  }
+  return { response: fresh, source: "asset-network" };
+}
+function isHtmlResponse(response) {
+  const ct = response.headers.get("content-type") ?? "";
+  return ct.toLowerCase().includes("text/html");
+}
+
 // src/cache-policy.ts
 var CANONICAL_RDF_ACCEPT = "text/turtle";
 var NEGATIVE_CACHE_TTL_MS = 3e4;
@@ -701,6 +803,29 @@ var channel;
 var configuredWebId;
 var webIdConfigured = false;
 var channelName = DEFAULT_CHANNEL_NAME;
+var shellConfig = self.__SOLID_OFFLINE_SHELL__ && self.__SOLID_OFFLINE_SHELL__.precache.length > 0 ? resolveAppShellConfig(self.__SOLID_OFFLINE_SHELL__) : void 0;
+var shellPrecached = false;
+function shellCaches() {
+  return self.caches;
+}
+function shellDeps(config) {
+  return {
+    caches: shellCaches(),
+    fetch: (input, init) => self.fetch(input, init),
+    isOnline: () => self.navigator.onLine,
+    config
+  };
+}
+async function runPrecache() {
+  if (!shellConfig || shellPrecached) return;
+  shellPrecached = true;
+  try {
+    await precacheAppShell(shellCaches(), shellConfig);
+    await cleanupOldShellCaches(shellCaches(), shellConfig.version);
+  } catch {
+    shellPrecached = false;
+  }
+}
 function getMeta() {
   if (!metaPromise) {
     metaPromise = MetadataStore.open(configuredWebId);
@@ -729,16 +854,27 @@ function setChannelName(name) {
   channel = void 0;
 }
 self.addEventListener("install", (event) => {
-  event.waitUntil(self.skipWaiting());
+  event.waitUntil(runPrecache().then(() => self.skipWaiting()));
 });
 self.addEventListener("activate", (event) => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(
+    (async () => {
+      if (shellConfig) {
+        await cleanupOldShellCaches(shellCaches(), shellConfig.version).catch(() => []);
+      }
+      await self.clients.claim();
+    })()
+  );
 });
 self.addEventListener("message", (event) => {
   const data = event.data;
   if (!data || typeof data !== "object") return;
   if (data.type === "config") {
     setChannelName(data.config.channelName);
+    if (data.config.appShell && data.config.appShell.precache.length > 0 && !shellConfig) {
+      shellConfig = resolveAppShellConfig(data.config.appShell);
+      keepAlive(event, runPrecache);
+    }
     const nextWebId = data.config.webId;
     const changed = isScopeChange(webIdConfigured, configuredWebId, nextWebId);
     if (changed) {
@@ -788,8 +924,43 @@ self.addEventListener("fetch", (event) => {
   if (method !== "GET" && method !== "HEAD") {
     return;
   }
+  if (shellConfig) {
+    if (request.mode === "navigate" && method === "GET") {
+      event.respondWith(respondShellNavigation(event));
+      return;
+    }
+    if (method === "GET" && isSameOrigin(request.url) && isPrecachedAsset(request.url, shellConfig)) {
+      event.respondWith(respondShellAsset(event));
+      return;
+    }
+  }
   event.respondWith(respond(event));
 });
+function isSameOrigin(url) {
+  try {
+    return new URL(url, self.location.href).origin === self.location.origin;
+  } catch {
+    return false;
+  }
+}
+async function respondShellNavigation(event) {
+  if (!shellConfig) return self.fetch(event.request);
+  try {
+    const result = await handleNavigation(event.request, shellDeps(shellConfig));
+    return result.response;
+  } catch {
+    return self.fetch(event.request);
+  }
+}
+async function respondShellAsset(event) {
+  if (!shellConfig) return self.fetch(event.request);
+  try {
+    const result = await handlePrecachedAsset(event.request, shellDeps(shellConfig));
+    return result.response;
+  } catch {
+    return self.fetch(event.request);
+  }
+}
 async function respond(event) {
   const cache = await self.caches.open(cacheName());
   const meta = await getMeta();

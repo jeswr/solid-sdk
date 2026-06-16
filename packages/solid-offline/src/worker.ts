@@ -13,13 +13,36 @@
  * coverage — it cannot be exercised without a real SW lifecycle.
  */
 
+import {
+  type ResolvedAppShellConfig,
+  type ShellCacheStorage,
+  type ShellDeps,
+  cleanupOldShellCaches,
+  handleNavigation,
+  handlePrecachedAsset,
+  isPrecachedAsset,
+  precacheAppShell,
+  resolveAppShellConfig,
+} from './app-shell.js';
 import { type InvalidateDeps, handleNotification, resyncSweep } from './invalidation.js';
 import { MetadataStore } from './metadata-store.js';
 import { cacheNameForWebId, isScopeChange } from './scope.js';
 import { type Broadcaster, type ByteCache, type SwrDeps, handleFetch } from './swr.js';
-import type { PageToWorkerMessage } from './types.js';
+import type { AppShellConfig, PageToWorkerMessage } from './types.js';
 
-declare const self: ServiceWorkerGlobalScope;
+declare const self: ServiceWorkerGlobalScope & {
+  /**
+   * BUILD-TIME app-shell injection. An app can set this on the worker's global
+   * BEFORE importing `solid-offline/worker`, so the precache list is available at
+   * the `install` event (config postMessage only arrives after activate). A
+   * vite/Next build emits the manifest into this slot, e.g.:
+   *   self.__SOLID_OFFLINE_SHELL__ = { precache: [...], fallback: '/index.html', version: 'abc123' };
+   *   import 'solid-offline/worker';
+   * If absent, the shell is precached on the FIRST config message instead (a
+   * round-trip later, but still before any offline navigation matters).
+   */
+  __SOLID_OFFLINE_SHELL__?: AppShellConfig;
+};
 
 const DEFAULT_CHANNEL_NAME = 'solid-offline';
 
@@ -31,6 +54,45 @@ let configuredWebId: string | undefined;
 let webIdConfigured = false;
 /** Resolved BroadcastChannel name (#15): the page sends the channel it uses. */
 let channelName: string = DEFAULT_CHANNEL_NAME;
+/**
+ * Resolved app-shell config (P4). Set from the build-time `__SOLID_OFFLINE_SHELL__`
+ * injection at module load (so it's available at `install`), or from the first
+ * `config` message carrying `appShell`. Drives the navigation/precache fetch path.
+ */
+let shellConfig: ResolvedAppShellConfig | undefined =
+  self.__SOLID_OFFLINE_SHELL__ && self.__SOLID_OFFLINE_SHELL__.precache.length > 0
+    ? resolveAppShellConfig(self.__SOLID_OFFLINE_SHELL__)
+    : undefined;
+/** Whether the precache (addAll) has already run for `shellConfig` this lifetime. */
+let shellPrecached = false;
+
+/** The CacheStorage cast to our minimal shell surface. */
+function shellCaches(): ShellCacheStorage {
+  return self.caches as unknown as ShellCacheStorage;
+}
+
+/** Build the shell fetch deps (its OWN, unauthenticated fetch — the shell is public). */
+function shellDeps(config: ResolvedAppShellConfig): ShellDeps {
+  return {
+    caches: shellCaches(),
+    fetch: (input, init) => self.fetch(input as RequestInfo, init),
+    isOnline: () => self.navigator.onLine,
+    config,
+  };
+}
+
+/** Run the install-time precache for the current shellConfig (idempotent). */
+async function runPrecache(): Promise<void> {
+  if (!shellConfig || shellPrecached) return;
+  shellPrecached = true;
+  try {
+    await precacheAppShell(shellCaches(), shellConfig);
+    await cleanupOldShellCaches(shellCaches(), shellConfig.version);
+  } catch {
+    // A precache failure must never abort install — the app still works online.
+    shellPrecached = false;
+  }
+}
 
 function getMeta(): Promise<MetadataStore> {
   if (!metaPromise) {
@@ -73,13 +135,22 @@ function setChannelName(name: string | undefined): void {
 }
 
 self.addEventListener('install', (event: ExtendableEvent) => {
-  // Activate the new SW immediately (no waiting for old tabs to close).
-  event.waitUntil(self.skipWaiting());
+  // P4: precache the app shell at install (when injected via __SOLID_OFFLINE_SHELL__)
+  // so the very next offline navigation can boot. Then activate immediately.
+  event.waitUntil(runPrecache().then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (event: ExtendableEvent) => {
-  // Take control of open clients so interception starts without a reload.
-  event.waitUntil(self.clients.claim());
+  // P4: drop any stale shell precache buckets from a previous version, then take
+  // control of open clients so interception starts without a reload.
+  event.waitUntil(
+    (async () => {
+      if (shellConfig) {
+        await cleanupOldShellCaches(shellCaches(), shellConfig.version).catch(() => []);
+      }
+      await self.clients.claim();
+    })(),
+  );
 });
 
 self.addEventListener('message', (event: ExtendableMessageEvent) => {
@@ -88,6 +159,13 @@ self.addEventListener('message', (event: ExtendableMessageEvent) => {
   if (data.type === 'config') {
     // #15: adopt the page's resolved channel name (custom channels must work).
     setChannelName(data.config.channelName);
+    // P4: if the page sent an app-shell config and we don't have one yet (no
+    // build-time injection), adopt it and precache now. The shell is
+    // identity-independent so this is independent of the webId scope below.
+    if (data.config.appShell && data.config.appShell.precache.length > 0 && !shellConfig) {
+      shellConfig = resolveAppShellConfig(data.config.appShell);
+      keepAlive(event, runPrecache);
+    }
     // #4: treat `undefined` as a VALID scope change. After a logged-in user, an
     // anonymous client (webId === undefined) MUST be able to clear the previous
     // identity scope; the old code only updated on a truthy webId, so the SW kept
@@ -157,8 +235,70 @@ self.addEventListener('fetch', (event: FetchEvent) => {
     return; // let the browser handle it normally
   }
 
+  // P4 — APP-SHELL ROUTING (before the pod-data SWR engine). A request is handled
+  // by EXACTLY ONE layer so they never double-handle it:
+  //   - a NAVIGATION (the browser loading a document) → the shell network-first /
+  //     cache-fallback handler, so the app boots offline;
+  //   - a request for a PRECACHED, SAME-ORIGIN STATIC ASSET (hashed JS/CSS) →
+  //     cache-first;
+  //   - everything else (pod data, etc.) → the pod-data SWR engine in `respond`.
+  //
+  // SECURITY: the asset branch is gated on SAME-ORIGIN. The app shell is always
+  // the app's own same-origin static files; `isPrecachedAsset` matches on PATHNAME
+  // (origin-agnostic by design, so it's headless-testable), so without this gate a
+  // CROSS-ORIGIN pod resource that merely shares a pathname with a precached asset
+  // (e.g. `https://pod.example/assets/x.js`) would be diverted from the WebID-scoped
+  // pod-data SWR path into the public shell handler. Cross-origin requests therefore
+  // never reach the shell asset handler — they stay on the pod-data path.
+  if (shellConfig) {
+    if (request.mode === 'navigate' && method === 'GET') {
+      event.respondWith(respondShellNavigation(event));
+      return;
+    }
+    if (
+      method === 'GET' &&
+      isSameOrigin(request.url) &&
+      isPrecachedAsset(request.url, shellConfig)
+    ) {
+      event.respondWith(respondShellAsset(event));
+      return;
+    }
+  }
+
   event.respondWith(respond(event));
 });
+
+/** True if `url` is same-origin as the service worker (the app's own assets). */
+function isSameOrigin(url: string): boolean {
+  try {
+    return new URL(url, self.location.href).origin === self.location.origin;
+  } catch {
+    return false;
+  }
+}
+
+/** Serve a navigation through the shell handler (network-first, cache fallback). */
+async function respondShellNavigation(event: FetchEvent): Promise<Response> {
+  if (!shellConfig) return self.fetch(event.request);
+  try {
+    const result = await handleNavigation(event.request, shellDeps(shellConfig));
+    return result.response;
+  } catch {
+    // Never let the shell layer crash a navigation — fall back to the live network.
+    return self.fetch(event.request);
+  }
+}
+
+/** Serve a precached static asset cache-first. */
+async function respondShellAsset(event: FetchEvent): Promise<Response> {
+  if (!shellConfig) return self.fetch(event.request);
+  try {
+    const result = await handlePrecachedAsset(event.request, shellDeps(shellConfig));
+    return result.response;
+  } catch {
+    return self.fetch(event.request);
+  }
+}
 
 async function respond(event: FetchEvent): Promise<Response> {
   const cache = await self.caches.open(cacheName());
