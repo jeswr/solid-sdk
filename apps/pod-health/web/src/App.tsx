@@ -8,10 +8,12 @@
 // automatically.
 //
 // RESOURCE DISCOVERY: unlike Pod Docs (whose DocsStore discovers its container
-// internally), pod-health's data layer reads a single resource URL handed to it.
-// So the host derives that URL after login via Type-Index discovery
-// (`discoverHealthResource` — locate health:HealthRecord), falling back to the
-// conventional `${podRoot}health/` path and surfacing a banner when it does.
+// internally), pod-health's data layer reads a single record DOCUMENT URL handed
+// to it (a plain GET, no container listing). So the host derives that document
+// URL after login via Type-Index discovery (`discoverHealthResource` — locate
+// health:HealthRecord), falling back to the conventional
+// `${podRoot}health/record.ttl` DOCUMENT (NOT the `health/` container) and
+// surfacing a banner when it does.
 
 import { HealthRecords } from "pod-health/ui";
 import { useEffect, useState } from "react";
@@ -40,9 +42,11 @@ export function App() {
       })
       .catch(() => {
         // discoverHealthResource never rejects, but guard defensively: degrade to
-        // the conventional path rather than stranding the view with no resource.
+        // the conventional record DOCUMENT (`${podRoot}health/record.ttl`, NOT the
+        // `health/` container — the data layer reads a single document) rather than
+        // stranding the view with no resource.
         if (!cancelled) {
-          setResource({ resourceUrl: `${session.podRoot}health/`, isFallback: true });
+          setResource({ resourceUrl: `${session.podRoot}health/record.ttl`, isFallback: true });
         }
       });
     return () => {
