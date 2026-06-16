@@ -237,6 +237,18 @@ export function hasAuthCodeParams(search: string): boolean {
 }
 
 /**
+ * True when the current URL carries an OAuth `?error` AND `?state` (a FAILED redirect
+ * return — e.g. `?error=login_required` / `?error=access_denied`: the broker declined
+ * silent SSO or the user declined). A redirect ERROR return, as opposed to the success
+ * return {@link hasAuthCodeParams} detects. The `state` is required so a stray `error`
+ * query unrelated to our flow is not mistaken for a redirect return.
+ */
+export function hasAuthErrorParams(search: string): boolean {
+  const params = new URLSearchParams(search);
+  return params.has("error") && params.has("state");
+}
+
+/**
  * Strip BOTH the query (`?code&state…`) and the fragment from a URL, leaving the
  * path. Used to clean the address bar after a redirect return / before a fresh
  * autologin redirect so a refresh / bounce cannot re-trigger and the WebID is not
@@ -572,20 +584,48 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       hasPendingRedirect: hasPendingRedirectLogin(),
       pendingRedirectWebId: consumePendingRedirectWebId(),
       hasCodeParams: hasAuthCodeParams(location.search),
+      hasErrorParams: hasAuthErrorParams(location.search),
       fragmentWebId: parseAutologinFragment(location.hash),
       sentinel: readAutologinSentinel(),
+      // The same WebID equality the rest of the auth seam uses, so a stale sentinel
+      // for a DIFFERENT WebID does not swallow a fresh deep-link (Finding 2).
+      webIdsEqual,
     });
     if (action.kind === "none" || !provider) return;
     // Any non-`none` action consumes the once-guard so a StrictMode double-mount
     // cannot fire a second redirect/complete.
     autologinEffectRan = true;
 
-    // LOOP GUARD (CASE B repeat): a second `#autologin` with the sentinel already set
-    // means we bounced back still unauthenticated. Do NOT re-attempt: clear the
-    // sentinel + fragment and fall through to the normal login screen.
+    // LOOP GUARD (CASE B repeat): a second `#autologin` for the SAME WebID with the
+    // sentinel already set means we bounced back still unauthenticated. Do NOT
+    // re-attempt: clear the sentinel + fragment and fall through to the login screen.
     if (action.kind === "clear-sentinel") {
       clearAutologinSentinel();
       history.replaceState(null, "", cleanedUrl(location.href));
+      return;
+    }
+
+    // ABORT — returning from the full-page redirect with an OAuth ERROR
+    // (?error&state: the broker declined silent SSO / the user declined). Without this
+    // the error return is ignored and the persisted record + DPoP key + sentinel + the
+    // error query all leak, BLOCKING future autologins. Clean EVERYTHING up and surface
+    // the error once — do NOT loop, do NOT spew.
+    if (action.kind === "abort-redirect") {
+      // Pull the OAuth error code BEFORE cleaning the URL, for a useful message.
+      const errParams = new URLSearchParams(location.search);
+      const oauthError = errParams.get("error");
+      // reset() clears the persisted redirect record + the DPoP key material + all
+      // in-memory session state; the sentinel is a distinct key, cleared separately.
+      provider.reset();
+      clearAutologinSentinel();
+      pendingWebIdHolder.current = null;
+      history.replaceState(null, "", cleanedUrl(location.href));
+      setAutologinPending(false);
+      setError(
+        `Automatic sign-in was declined or unavailable${
+          oauthError ? ` (${oauthError})` : ""
+        } — please sign in.`,
+      );
       return;
     }
 

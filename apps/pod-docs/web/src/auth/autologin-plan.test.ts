@@ -12,9 +12,16 @@
 //       NOT a re-begin.
 import { describe, expect, it } from "vitest";
 import { type AutologinInputs, planAutologin } from "./autologin-plan";
-import { cleanedUrl, hasAuthCodeParams, parseAutologinFragment } from "./SessionProvider";
+import {
+  cleanedUrl,
+  hasAuthCodeParams,
+  hasAuthErrorParams,
+  parseAutologinFragment,
+} from "./SessionProvider";
+import { webIdsEqual } from "./webid-token-provider";
 
 const WEBID = "https://alice.solid-test.jeswr.org/profile/card#me";
+const WEBID_B = "https://bob.solid-test.jeswr.org/profile/card#me";
 const ENCODED = encodeURIComponent(WEBID);
 
 /** A baseline "ready, not logged in, fresh page, nothing pending/seen" input. */
@@ -27,8 +34,12 @@ function base(overrides: Partial<AutologinInputs> = {}): AutologinInputs {
     hasPendingRedirect: false,
     pendingRedirectWebId: null,
     hasCodeParams: false,
+    hasErrorParams: false,
     fragmentWebId: null,
     sentinel: null,
+    // Use the SAME equality the SessionProvider injects, so the test pins the exact
+    // comparison the production code runs (mirrors decideSingleFlight's pattern).
+    webIdsEqual,
     ...overrides,
   };
 }
@@ -53,6 +64,21 @@ describe("hasAuthCodeParams", () => {
     expect(hasAuthCodeParams("?code=abc")).toBe(false);
     expect(hasAuthCodeParams("?state=xyz")).toBe(false);
     expect(hasAuthCodeParams("")).toBe(false);
+  });
+});
+
+describe("hasAuthErrorParams", () => {
+  it("is true only when BOTH error and state are present", () => {
+    expect(hasAuthErrorParams("?error=login_required&state=xyz")).toBe(true);
+    expect(hasAuthErrorParams("?error=access_denied&state=xyz")).toBe(true);
+    // error without state is NOT a redirect return (could be an unrelated query).
+    expect(hasAuthErrorParams("?error=login_required")).toBe(false);
+    expect(hasAuthErrorParams("?state=xyz")).toBe(false);
+    expect(hasAuthErrorParams("")).toBe(false);
+  });
+
+  it("does not conflate a success return (code&state) with an error return", () => {
+    expect(hasAuthErrorParams("?code=abc&state=xyz")).toBe(false);
   });
 });
 
@@ -102,7 +128,7 @@ describe("planAutologin — (b) a stored/active session takes precedence", () =>
 });
 
 describe("planAutologin — (c) a bounced-back autologin does NOT loop", () => {
-  it("with the sentinel already set, a repeat #autologin falls through to clear-sentinel (no re-begin)", () => {
+  it("with the sentinel set for the SAME WebID, a repeat #autologin falls through to clear-sentinel (no re-begin)", () => {
     const action = planAutologin(base({ fragmentWebId: WEBID, sentinel: WEBID }));
     // NOT a re-begin — the loop guard. The effect clears the sentinel + URL and shows login.
     expect(action.kind).toBe("clear-sentinel");
@@ -113,6 +139,62 @@ describe("planAutologin — (c) a bounced-back autologin does NOT loop", () => {
     // The fragment was already cleaned before the redirect, so on a no-code bounce
     // there is no fragment and no pending record → nothing re-triggers.
     expect(planAutologin(base({ sentinel: WEBID })).kind).toBe("none");
+  });
+});
+
+describe("planAutologin — (Finding 2) the loop guard is per-WebID, not blanket", () => {
+  it("a #autologin for a DIFFERENT WebID than the sentinel BEGINS a fresh login (not swallowed)", () => {
+    // The sentinel records a prior attempt for WEBID; a later deep-link in the SAME
+    // tab for WEBID_B must start a fresh login for WEBID_B, not be cleared away.
+    const action = planAutologin(base({ fragmentWebId: WEBID_B, sentinel: WEBID }));
+    expect(action).toEqual({ kind: "begin", webId: WEBID_B });
+  });
+
+  it("a #autologin for the SAME WebID as the sentinel is still the loop guard (clear-sentinel)", () => {
+    const action = planAutologin(base({ fragmentWebId: WEBID, sentinel: WEBID }));
+    expect(action.kind).toBe("clear-sentinel");
+  });
+
+  it("normalisation-tolerant: a sentinel that differs only by host case is the SAME WebID (loop guard)", () => {
+    // webIdsEqual lower-cases the host, so a case-variant sentinel still guards the loop.
+    const upperHost = WEBID.replace("alice.solid-test", "alice.SOLID-test");
+    const action = planAutologin(base({ fragmentWebId: WEBID, sentinel: upperHost }));
+    expect(action.kind).toBe("clear-sentinel");
+  });
+});
+
+describe("planAutologin — (Finding 1) an OAuth error redirect return is cleaned up", () => {
+  it("ABORTS (abort-redirect) when a pending record returns with ?error&state", () => {
+    const action = planAutologin(
+      base({ hasPendingRedirect: true, pendingRedirectWebId: WEBID, hasErrorParams: true }),
+    );
+    // A dedicated abort action — the effect resets the provider (clearing the persisted
+    // record + DPoP key), clears the sentinel, cleans the URL, and surfaces the error.
+    expect(action).toEqual({ kind: "abort-redirect" });
+  });
+
+  it("a code return still COMPLETES even if an error param is somehow also present (code wins)", () => {
+    // CASE A is evaluated before ABORT, so a code-bearing return is completed.
+    const action = planAutologin(
+      base({
+        hasPendingRedirect: true,
+        pendingRedirectWebId: WEBID,
+        hasCodeParams: true,
+        hasErrorParams: true,
+      }),
+    );
+    expect(action).toEqual({ kind: "complete", webId: WEBID });
+  });
+
+  it("an error param with NO pending record does not abort (nothing to clean up) — inert", () => {
+    expect(planAutologin(base({ hasErrorParams: true })).kind).toBe("none");
+  });
+
+  it("does NOT abort when already logged in (a session wins, like CASE A)", () => {
+    const action = planAutologin(
+      base({ loggedIn: true, hasPendingRedirect: true, hasErrorParams: true }),
+    );
+    expect(action.kind).toBe("none");
   });
 });
 
