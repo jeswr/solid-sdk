@@ -101,14 +101,18 @@ offline after first use.
   route HTML, else the configured `fallback` (the SPA single document / Next
   index), so the app boots and client routing takes over. Only a first-ever
   offline visit (nothing cached) surfaces the network error — there's genuinely
-  nothing to serve. **Only a CONFIGURED shell document (a `precache` entry or the
-  `fallback`) is ever WRITTEN to the shell cache** — an unknown same-origin route
-  (e.g. an authenticated server-rendered page) is served live but never cached, so
-  a private page can't leak into the logout-surviving public shell cache.
-- **A new deploy updates the shell.** Bump `version` (or re-send `appShell` with a
-  changed `precache`/`version`) and the worker replaces its shell config + re-runs
-  the precache on the next `config` message — the active worker never pins an old
-  shell — and the previous version's bucket is cleaned up at activate.
+  nothing to serve. **The shell cache holds + serves ONLY the app's declared public
+  shell docs:** a navigation is WRITTEN only on an EXACT configured-URL match (a
+  `precache` entry / the `fallback` — a personalizing query variant like
+  `/index.html?user=alice` is served live but never stored), and the offline READ is
+  keyed by the canonical configured URL (an unknown/poisoned route is never read from
+  cache — it goes straight to the public fallback). So a private/authenticated page
+  can't leak into the logout-surviving shell cache.
+- **A new deploy updates the shell — safely.** Bump `version` (or re-send `appShell`
+  with a changed `precache`/`version`) and the worker precaches the NEW version into
+  its own bucket FIRST, then promotes its shell config only once the new shell can
+  boot, then cleans up the old bucket — so the active worker never pins an old shell
+  AND a slow/partial precache never strands offline navigations on an empty cache.
 - **Precached assets = cache-first.** Hashed JS/CSS/fonts are immutable under a
   fixed URL (a new deploy emits new filenames), so a cache hit is authoritative
   and the network is never touched.

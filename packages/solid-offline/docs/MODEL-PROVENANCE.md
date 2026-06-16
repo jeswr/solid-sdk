@@ -221,21 +221,43 @@ Files modified for P4 (not newly authored, so no top-of-file marker):
 - `src/index.ts` — re-exports the P4 surface from the package root.
 - `README.md`, `docs/MODEL-PROVENANCE.md` — P4 documentation.
 
-**roborev (codex/gpt-5.5) Medium findings on the first P4 commit — both fixed in the
-same branch:**
+**roborev (codex/gpt-5.5) findings — two review rounds, all fixed in this branch.**
 
-- **Shell cache could store a private same-origin page (Medium).** `handleNavigation`
-  originally cached ANY `2xx text/html` navigation, so an authenticated/private
-  same-origin route could land in the identity-independent, logout-surviving shell
-  cache. FIXED: navigation responses are written ONLY for a CONFIGURED shell document
-  (`isConfiguredShellDoc` — a `precache` entry or the `fallback`); an unknown route is
-  served live but never cached. Covered by a new test.
-- **A config-message deploy never updated the shell (Medium).** The worker adopted
-  `appShell` only when it had none, so a new `version`/manifest sent via `config` was
-  ignored for the active worker's lifetime. FIXED: `adoptShellConfig` compares the
-  incoming resolved config (`sameShellConfig`, a new exported pure helper) and, on a
-  change, replaces `shellConfig`, resets the precache latch, and re-precaches (which
-  cleans up the stale bucket). `sameShellConfig` is unit-tested.
+Round 1 (2 Medium):
+
+- **Shell cache could STORE a private same-origin page.** `handleNavigation`
+  originally cached ANY `2xx text/html` navigation, so an authenticated/private route
+  could land in the identity-independent, logout-surviving shell cache.
+- **A config-message deploy never updated the shell.** The worker adopted `appShell`
+  only when it had none, pinning the old shell for the active worker's lifetime.
+
+Round 2 (on the round-1 fix — 1 High + 2 Medium): the write-gate alone left three
+paths open; all closed by a stronger, key-canonical design:
+
+- **Offline READ could still SERVE a poisoned/private entry (High).** The offline path
+  returned any `cache.match(request)` hit before checking it was a configured shell
+  doc. FIXED: the offline read is keyed by the CANONICAL configured URL
+  (`canonicalShellUrl`) — an unconfigured route is never read from cache, it skips
+  straight to the public `fallback`. New test seeds a poisoned `/account/secret` entry
+  and asserts it is NOT served.
+- **Query-variant path match could cache a private variant (Medium).** Pathname-only
+  matching treated `/index.html?user=alice` as the configured `/index.html`. FIXED:
+  the WRITE is gated on an EXACT path+query match (`isExactConfiguredShellUrl`) — a
+  personalizing query variant is served live but NEVER stored — while the offline READ
+  still resolves the canonical doc so client routes boot. Two new tests (online: not
+  stored; offline: canonical served).
+- **Config promoted BEFORE precache (Medium).** `adoptShellConfig` switched
+  `shellConfig` before the new bucket was populated, so a slow/partial precache could
+  strand offline navigations on an empty cache. FIXED: the new version is precached
+  into its OWN bucket (the old, still-serving bucket is untouched — buckets are
+  version-keyed) and `shellConfig` is PROMOTED only once the new bucket can boot
+  (its fallback is cached); the stale bucket is cleaned up only AFTER promotion. On a
+  precache failure the old working shell config is kept.
+
+The change-detection decision (`sameShellConfig`) and the URL classifiers
+(`canonicalShellUrl`/`isExactConfiguredShellUrl`, via `handleNavigation`) are pure,
+exported, and unit-tested; the worker's `adoptShellConfig` orchestration is the
+browser-only adapter (excluded from coverage, like the rest of `worker.ts`).
 
 ### P4 re-review focus areas
 

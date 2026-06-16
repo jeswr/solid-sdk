@@ -82,13 +82,30 @@ function shellDeps(config: ResolvedAppShellConfig): ShellDeps {
   };
 }
 
+/**
+ * Precache a given config's bucket WITHOUT touching any other bucket. Returns true
+ * if the precache succeeded enough to serve offline (the fallback document — the one
+ * a SPA boot depends on — is cached, or there is no configured fallback). Does NOT
+ * mutate `shellConfig`/`shellPrecached` and does NOT clean up old buckets; the caller
+ * promotes + cleans up only AFTER a successful precache, so the old working bucket is
+ * never dropped before the new one can boot.
+ */
+async function precacheConfig(config: ResolvedAppShellConfig): Promise<boolean> {
+  const { failed } = await precacheAppShell(shellCaches(), config);
+  // The fallback doc is the must-have for an offline SPA boot. If it failed, the
+  // new bucket can't serve a boot — the caller should keep the old config.
+  return !config.fallback || !failed.includes(config.fallback);
+}
+
 /** Run the install-time precache for the current shellConfig (idempotent). */
 async function runPrecache(): Promise<void> {
   if (!shellConfig || shellPrecached) return;
   shellPrecached = true;
   try {
-    await precacheAppShell(shellCaches(), shellConfig);
-    await cleanupOldShellCaches(shellCaches(), shellConfig.version);
+    await precacheConfig(shellConfig);
+    // Install path: shellConfig is already the active version, so cleaning up other
+    // (older) buckets here is safe — nothing else is serving.
+    await cleanupOldShellCaches(shellCaches(), shellConfig.version).catch(() => []);
   } catch {
     // A precache failure must never abort install — the app still works online.
     shellPrecached = false;
@@ -96,19 +113,47 @@ async function runPrecache(): Promise<void> {
 }
 
 /**
- * Adopt an app-shell config delivered by a `config` message (roborev Medium fix:
- * a new deploy's version/manifest must take effect, not be ignored for the active
- * worker's lifetime). On a CHANGE we replace `shellConfig`, reset the precache
- * latch, and re-run precache (which also cleans up the now-stale old version's
- * bucket). A no-op when the incoming config is byte-equivalent to the current one.
+ * Adopt an app-shell config delivered by a `config` message (roborev fix: a new
+ * deploy's version/manifest must take effect, not be ignored for the active
+ * worker's lifetime). A no-op when the incoming config is byte-equivalent.
+ *
+ * PROMOTE-AFTER-PRECACHE (roborev Medium): the new shell is precached into its OWN
+ * versioned bucket (buckets are version-keyed, so the old, still-serving bucket is
+ * untouched) BEFORE `shellConfig` is switched. We promote only once the new bucket
+ * can actually boot offline (its fallback is cached) — so a slow/partial precache
+ * never strands offline navigations on an empty new cache while the working old
+ * shell is dropped. If the new precache can't boot, we keep the old config serving.
  */
 function adoptShellConfig(next: AppShellConfig, event: ExtendableMessageEvent): void {
   if (next.precache.length === 0) return;
   const resolved = resolveAppShellConfig(next);
   if (shellConfig && sameShellConfig(shellConfig, resolved)) return; // unchanged
-  shellConfig = resolved;
-  shellPrecached = false; // a new manifest must be (re)precached
-  keepAlive(event, runPrecache);
+
+  // FIRST config (no current shell): promote immediately + precache (the SW had
+  // nothing to serve anyway, so there's no working shell to protect).
+  if (!shellConfig) {
+    shellConfig = resolved;
+    shellPrecached = false;
+    keepAlive(event, runPrecache);
+    return;
+  }
+
+  // CHANGE: precache the NEW version's bucket first (its own version key, so the
+  // old still-serving bucket is untouched); promote ONLY on success, and clean up
+  // the now-stale old bucket(s) AFTER promotion.
+  keepAlive(event, async () => {
+    try {
+      const canBoot = await precacheConfig(resolved);
+      if (canBoot) {
+        shellConfig = resolved;
+        shellPrecached = true;
+        await cleanupOldShellCaches(shellCaches(), resolved.version).catch(() => []);
+      }
+      // else: keep the old config + bucket serving; a later config message retries.
+    } catch {
+      // Keep the old, working shell config on any precache failure.
+    }
+  });
 }
 
 function getMeta(): Promise<MetadataStore> {

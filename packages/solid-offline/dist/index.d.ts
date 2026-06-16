@@ -644,17 +644,25 @@ interface ShellDeps {
  * A navigation request (`request.mode === 'navigate'`, i.e. the browser loading a
  * document) is served NETWORK-FIRST so a fresh deploy ships immediately; on a
  * network failure (offline, or the server is down) it falls back to:
- *   1. the cached HTML for THIS exact route (a Next per-route export), else
+ *   1. the cached HTML for THIS route — keyed by its CANONICAL configured shell URL
+ *      (a Next per-route export), else
  *   2. the configured `fallback` HTML (the vite SPA single document, or Next's
  *      index/404), which boots the app and lets client routing take over.
  * Only if NOTHING is cached does the network error surface (first-ever visit while
  * offline — unavoidable, the shell was never fetched).
  *
- * When online and the network succeeds, we refresh the cached copy of the route's
- * HTML — but ONLY for a CONFIGURED shell document (a precache entry / the
- * fallback), never an arbitrary same-origin route — so the offline fallback tracks
- * the latest deploy without ever caching a private/authenticated page (best-effort;
- * a put failure never affects the response).
+ * SECURITY (roborev): the shell cache holds — and serves — ONLY the app's declared
+ * public shell documents:
+ *   - WRITE is gated on an EXACT configured-URL match (`isExactConfiguredShellUrl`,
+ *     path+query): a personalizing query variant (`/index.html?user=alice`) or any
+ *     unconfigured route is NEVER stored, so a private/server-rendered page can't
+ *     enter the identity-independent, logout-surviving cache.
+ *   - READ (offline) is keyed by the CANONICAL configured URL (`canonicalShellUrl`),
+ *     never the live request, so client routes still boot AND a poisoned/unconfigured
+ *     cache entry is never served (an unknown route skips straight to the fallback).
+ * When online + the network succeeds for an exact shell doc, we refresh its cached
+ * copy so the offline fallback tracks the latest deploy (best-effort; a put failure
+ * never affects the response).
  */
 declare function handleNavigation(request: Request, deps: ShellDeps): Promise<ShellResult>;
 /**

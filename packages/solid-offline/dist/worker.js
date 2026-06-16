@@ -60,23 +60,41 @@ function isPrecachedAsset(requestUrl, config) {
   }
   return false;
 }
-function isConfiguredShellDoc(requestUrl, config) {
+function canonicalShellUrl(requestUrl, config) {
   const reqPath = pathOf(requestUrl);
-  if (!reqPath) return false;
-  if (config.fallback && pathOf(config.fallback) === reqPath) return true;
+  if (!reqPath) return void 0;
+  if (config.fallback && pathOf(config.fallback) === reqPath) return config.fallback;
   for (const url of config.precache) {
-    if (pathOf(url) === reqPath) return true;
+    if (pathOf(url) === reqPath) return url;
+  }
+  return void 0;
+}
+function pathAndSearchOf(url) {
+  try {
+    const u = new URL(url, "https://x.invalid/");
+    return `${u.pathname}${u.search}`.toLowerCase();
+  } catch {
+    return "";
+  }
+}
+function isExactConfiguredShellUrl(requestUrl, config) {
+  const reqPS = pathAndSearchOf(requestUrl);
+  if (!reqPS) return false;
+  if (config.fallback && pathAndSearchOf(config.fallback) === reqPS) return true;
+  for (const url of config.precache) {
+    if (pathAndSearchOf(url) === reqPS) return true;
   }
   return false;
 }
 async function handleNavigation(request, deps) {
   const cache = await deps.caches.open(shellCacheName(deps.config.version));
+  const canonical = canonicalShellUrl(request.url, deps.config);
   if (deps.isOnline()) {
     try {
       const fresh = await deps.fetch(request);
-      if (fresh.ok && isHtmlResponse(fresh) && isConfiguredShellDoc(request.url, deps.config)) {
+      if (canonical && isExactConfiguredShellUrl(request.url, deps.config) && fresh.ok && isHtmlResponse(fresh)) {
         try {
-          await cache.put(request, fresh.clone());
+          await cache.put(canonical, fresh.clone());
           return { response: fresh, source: "shell-network-cached" };
         } catch {
         }
@@ -85,8 +103,10 @@ async function handleNavigation(request, deps) {
     } catch {
     }
   }
-  const routeHit = await cache.match(request);
-  if (routeHit) return { response: routeHit, source: "shell-cache-offline" };
+  if (canonical) {
+    const routeHit = await cache.match(canonical);
+    if (routeHit) return { response: routeHit, source: "shell-cache-offline" };
+  }
   if (deps.config.fallback) {
     const fallbackHit = await cache.match(deps.config.fallback);
     if (fallbackHit) return { response: fallbackHit, source: "shell-cache-fallback" };
@@ -828,12 +848,16 @@ function shellDeps(config) {
     config
   };
 }
+async function precacheConfig(config) {
+  const { failed } = await precacheAppShell(shellCaches(), config);
+  return !config.fallback || !failed.includes(config.fallback);
+}
 async function runPrecache() {
   if (!shellConfig || shellPrecached) return;
   shellPrecached = true;
   try {
-    await precacheAppShell(shellCaches(), shellConfig);
-    await cleanupOldShellCaches(shellCaches(), shellConfig.version);
+    await precacheConfig(shellConfig);
+    await cleanupOldShellCaches(shellCaches(), shellConfig.version).catch(() => []);
   } catch {
     shellPrecached = false;
   }
@@ -842,9 +866,23 @@ function adoptShellConfig(next, event) {
   if (next.precache.length === 0) return;
   const resolved = resolveAppShellConfig(next);
   if (shellConfig && sameShellConfig(shellConfig, resolved)) return;
-  shellConfig = resolved;
-  shellPrecached = false;
-  keepAlive(event, runPrecache);
+  if (!shellConfig) {
+    shellConfig = resolved;
+    shellPrecached = false;
+    keepAlive(event, runPrecache);
+    return;
+  }
+  keepAlive(event, async () => {
+    try {
+      const canBoot = await precacheConfig(resolved);
+      if (canBoot) {
+        shellConfig = resolved;
+        shellPrecached = true;
+        await cleanupOldShellCaches(shellCaches(), resolved.version).catch(() => []);
+      }
+    } catch {
+    }
+  });
 }
 function getMeta() {
   if (!metaPromise) {

@@ -307,6 +307,45 @@ describe('handleNavigation — OFFLINE boot', () => {
       networkError,
     );
   });
+
+  it('OFFLINE: NEVER serves an unconfigured cached entry — a poisoned/private cache hit is skipped for the fallback', async () => {
+    const caches = new MockCacheStorage();
+    await precacheAppShell(caches, VITE_CONFIG);
+    // Simulate a poisoned entry: a private page that an older buggy version (or an
+    // attacker) cached under an UNCONFIGURED route in the shell bucket.
+    const bucket = caches.caches.get(shellCacheName('vite-1'));
+    bucket?.seed('https://app.example/account/secret', htmlResponse('<title>PRIVATE</title>'));
+    const fetchImpl = vi.fn(() =>
+      Promise.reject(new TypeError('offline')),
+    ) as unknown as typeof fetch;
+    const deps = shellDeps(caches, false, fetchImpl, VITE_CONFIG);
+
+    // The unconfigured route is NOT served from cache (no leak) — it routes to the
+    // public configured fallback instead.
+    const result = await handleNavigation(navRequest('https://app.example/account/secret'), deps);
+    expect(result.source).toBe('shell-cache-fallback');
+    const body = await result.response.text(); // a Response body reads only once
+    expect(body).toContain('/index.html');
+    expect(body).not.toContain('PRIVATE');
+  });
+
+  it('OFFLINE: serves the canonical configured doc for a QUERY-VARIANT of a configured route', async () => {
+    const caches = new MockCacheStorage();
+    await precacheAppShell(caches, NEXT_CONFIG); // includes /files/index.html
+    const fetchImpl = vi.fn(() =>
+      Promise.reject(new TypeError('offline')),
+    ) as unknown as typeof fetch;
+    const deps = shellDeps(caches, false, fetchImpl, NEXT_CONFIG);
+
+    // A query variant of a configured route resolves to the CANONICAL cached doc
+    // (keyed by /files/index.html), not a per-query cache entry.
+    const result = await handleNavigation(
+      navRequest('https://app.example/files/index.html?user=alice'),
+      deps,
+    );
+    expect(result.source).toBe('shell-cache-offline');
+    expect(await result.response.text()).toContain('/files/index.html');
+  });
 });
 
 describe('handleNavigation — ONLINE revalidate', () => {
@@ -368,6 +407,27 @@ describe('handleNavigation — ONLINE revalidate', () => {
     expect(result.source).toBe('shell-network'); // served live, NOT 'shell-network-cached'
     const bucket = caches.caches.get(shellCacheName('vite-1'));
     expect(await bucket?.match('https://app.example/account/secret')).toBeUndefined();
+  });
+
+  it('NEVER caches a QUERY-VARIANT of a configured route (a personalized ?user= page is not stored as the public shell)', async () => {
+    const caches = new MockCacheStorage();
+    await precacheAppShell(caches, VITE_CONFIG); // includes /index.html
+    // The server returns a PERSONALIZED variant for the query route.
+    const personalized = htmlResponse('<title>alice personalized index</title>');
+    const fetchImpl = vi.fn(async () => personalized) as unknown as typeof fetch;
+    const deps = shellDeps(caches, true, fetchImpl, VITE_CONFIG);
+
+    const result = await handleNavigation(
+      navRequest('https://app.example/index.html?user=alice'),
+      deps,
+    );
+    // Served live (not stored): NOT 'shell-network-cached'.
+    expect(result.source).toBe('shell-network');
+    const bucket = caches.caches.get(shellCacheName('vite-1'));
+    // The canonical /index.html still holds the ORIGINAL precached doc, not the
+    // personalized variant.
+    const canonical = await bucket?.match('https://app.example/index.html');
+    expect(await canonical?.text()).not.toContain('alice personalized');
   });
 });
 

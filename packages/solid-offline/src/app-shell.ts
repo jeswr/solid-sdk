@@ -213,23 +213,60 @@ export interface ShellDeps {
 }
 
 /**
- * Is this navigation URL one of the CONFIGURED shell documents (a precache entry
- * or the fallback)? Only configured shell docs may be WRITTEN to the shell cache.
+ * The CANONICAL configured shell URL whose pathname matches this navigation URL
+ * (ignoring query/hash), or `undefined` if the route is not a configured shell doc.
  *
- * SECURITY (roborev Medium): the shell cache is identity-independent and survives
- * logout, so it must hold ONLY the app's declared public shell documents. Without
- * this gate, `handleNavigation` would cache ANY successful same-origin `text/html`
- * navigation — including an authenticated/private server-rendered page — into a
- * cache the next user of the browser can read. We therefore match the navigation
- * URL's pathname against the precache list + the fallback (origin-agnostic, like
- * `isPrecachedAsset`); an unknown route is served live but NEVER cached.
+ * SECURITY (roborev): the shell cache is identity-independent and survives logout,
+ * so it must hold — and serve — ONLY the app's declared public shell documents. Two
+ * properties make that airtight, and this single resolver gives both:
+ *   1. We cache + read under the CANONICAL configured URL (e.g. `/index.html`),
+ *      NEVER the live request URL. So a navigation to `/index.html?user=alice`
+ *      (a private, server-rendered query variant) maps to the public `/index.html`
+ *      key — its private bytes are never stored, and an attacker can't seed a
+ *      per-query entry. The fallback (`/index.html`) is preferred over an arbitrary
+ *      precache entry so the canonical key is stable.
+ *   2. We match on pathname only (query/hash stripped) so client routes still
+ *      resolve, but the WRITE/READ key is the canonical URL, not the query variant.
+ * An unknown route returns `undefined`: it is served live but never cached, and on
+ * the offline path it is NOT read from the cache — it goes straight to the fallback.
  */
-function isConfiguredShellDoc(requestUrl: string, config: ResolvedAppShellConfig): boolean {
+function canonicalShellUrl(requestUrl: string, config: ResolvedAppShellConfig): string | undefined {
   const reqPath = pathOf(requestUrl);
-  if (!reqPath) return false;
-  if (config.fallback && pathOf(config.fallback) === reqPath) return true;
+  if (!reqPath) return undefined;
+  if (config.fallback && pathOf(config.fallback) === reqPath) return config.fallback;
   for (const url of config.precache) {
-    if (pathOf(url) === reqPath) return true;
+    if (pathOf(url) === reqPath) return url;
+  }
+  return undefined;
+}
+
+/** The path+search of a (possibly root-relative) URL, lowercased, '' on failure. */
+function pathAndSearchOf(url: string): string {
+  try {
+    const u = new URL(url, 'https://x.invalid/');
+    return `${u.pathname}${u.search}`.toLowerCase();
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Is this navigation an EXACT configured shell URL (same path AND query)? Only an
+ * exact match may be WRITTEN to the shell cache.
+ *
+ * SECURITY (roborev): configured shell URLs are static, public documents with no
+ * query. A navigation that carries a personalizing query (`/index.html?user=alice`)
+ * may be a server-rendered PRIVATE variant, so its response must NEVER be stored —
+ * even though it resolves to the canonical `/index.html` for the offline READ (so a
+ * client route still boots). We therefore gate the WRITE on an exact path+search
+ * match against a configured URL: a query variant fails it and is served live only.
+ */
+function isExactConfiguredShellUrl(requestUrl: string, config: ResolvedAppShellConfig): boolean {
+  const reqPS = pathAndSearchOf(requestUrl);
+  if (!reqPS) return false;
+  if (config.fallback && pathAndSearchOf(config.fallback) === reqPS) return true;
+  for (const url of config.precache) {
+    if (pathAndSearchOf(url) === reqPS) return true;
   }
   return false;
 }
@@ -240,30 +277,44 @@ function isConfiguredShellDoc(requestUrl: string, config: ResolvedAppShellConfig
  * A navigation request (`request.mode === 'navigate'`, i.e. the browser loading a
  * document) is served NETWORK-FIRST so a fresh deploy ships immediately; on a
  * network failure (offline, or the server is down) it falls back to:
- *   1. the cached HTML for THIS exact route (a Next per-route export), else
+ *   1. the cached HTML for THIS route — keyed by its CANONICAL configured shell URL
+ *      (a Next per-route export), else
  *   2. the configured `fallback` HTML (the vite SPA single document, or Next's
  *      index/404), which boots the app and lets client routing take over.
  * Only if NOTHING is cached does the network error surface (first-ever visit while
  * offline — unavoidable, the shell was never fetched).
  *
- * When online and the network succeeds, we refresh the cached copy of the route's
- * HTML — but ONLY for a CONFIGURED shell document (a precache entry / the
- * fallback), never an arbitrary same-origin route — so the offline fallback tracks
- * the latest deploy without ever caching a private/authenticated page (best-effort;
- * a put failure never affects the response).
+ * SECURITY (roborev): the shell cache holds — and serves — ONLY the app's declared
+ * public shell documents:
+ *   - WRITE is gated on an EXACT configured-URL match (`isExactConfiguredShellUrl`,
+ *     path+query): a personalizing query variant (`/index.html?user=alice`) or any
+ *     unconfigured route is NEVER stored, so a private/server-rendered page can't
+ *     enter the identity-independent, logout-surviving cache.
+ *   - READ (offline) is keyed by the CANONICAL configured URL (`canonicalShellUrl`),
+ *     never the live request, so client routes still boot AND a poisoned/unconfigured
+ *     cache entry is never served (an unknown route skips straight to the fallback).
+ * When online + the network succeeds for an exact shell doc, we refresh its cached
+ * copy so the offline fallback tracks the latest deploy (best-effort; a put failure
+ * never affects the response).
  */
 export async function handleNavigation(request: Request, deps: ShellDeps): Promise<ShellResult> {
   const cache = await deps.caches.open(shellCacheName(deps.config.version));
+  const canonical = canonicalShellUrl(request.url, deps.config);
 
   if (deps.isOnline()) {
     try {
       const fresh = await deps.fetch(request);
       // Refresh the cached copy of this route's document so the offline fallback
-      // stays current — but ONLY a real HTML doc that is a CONFIGURED shell URL
-      // (never an arbitrary same-origin, possibly-authenticated, navigation answer).
-      if (fresh.ok && isHtmlResponse(fresh) && isConfiguredShellDoc(request.url, deps.config)) {
+      // stays current — but ONLY a real HTML doc for an EXACT configured shell URL
+      // (a query variant is served live, never stored), keyed under its canonical URL.
+      if (
+        canonical &&
+        isExactConfiguredShellUrl(request.url, deps.config) &&
+        fresh.ok &&
+        isHtmlResponse(fresh)
+      ) {
         try {
-          await cache.put(request, fresh.clone());
+          await cache.put(canonical, fresh.clone());
           return { response: fresh, source: 'shell-network-cached' };
         } catch {
           /* cache write failed (quota) — still return the live response */
@@ -276,8 +327,13 @@ export async function handleNavigation(request: Request, deps: ShellDeps): Promi
   }
 
   // OFFLINE (or the network just failed): serve a cached document so the app boots.
-  const routeHit = await cache.match(request);
-  if (routeHit) return { response: routeHit, source: 'shell-cache-offline' };
+  // Read ONLY a configured shell doc, under its CANONICAL key — never an arbitrary
+  // (possibly poisoned/private) `cache.match(request)`. An unconfigured route skips
+  // straight to the public fallback below.
+  if (canonical) {
+    const routeHit = await cache.match(canonical);
+    if (routeHit) return { response: routeHit, source: 'shell-cache-offline' };
+  }
 
   if (deps.config.fallback) {
     const fallbackHit = await cache.match(deps.config.fallback);
