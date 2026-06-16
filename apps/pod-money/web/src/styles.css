@@ -1,0 +1,206 @@
+/* AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+   Host chrome + the pod-money-* classes the <AccountsView> emits (the component
+   ships no styles of its own — the host owns the look). */
+
+:root {
+  --bg: #f1f8f4;
+  --surface: #ffffff;
+  --ink: #14302a;
+  --muted: #57726a;
+  --accent: #0b8457;
+  --accent-ink: #ffffff;
+  --border: #d4e6dd;
+  --danger: #b02525;
+  --ok: #1a7a3f;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  color: var(--ink);
+  background: var(--bg);
+}
+
+a {
+  color: var(--accent);
+}
+
+/* ── Login ─────────────────────────────────────────────────────────────── */
+.login-screen {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 1.5rem;
+}
+.login-card {
+  width: 100%;
+  max-width: 28rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  padding: 2rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+.login-card h1 {
+  margin: 0 0 0.25rem;
+  font-size: 1.5rem;
+}
+.login-sub {
+  color: var(--muted);
+  margin: 0 0 1.25rem;
+  font-size: 0.95rem;
+}
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.login-form label {
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+.login-form input {
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  font-size: 0.95rem;
+}
+.login-error {
+  color: var(--danger);
+  font-size: 0.9rem;
+  margin-top: 0.75rem;
+}
+.login-hint {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin-top: 1rem;
+}
+
+button {
+  cursor: pointer;
+  border: none;
+  border-radius: 0.5rem;
+  padding: 0.6rem 0.9rem;
+  font-size: 0.95rem;
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* ── App shell ─────────────────────────────────────────────────────────── */
+.app-shell {
+  max-width: 56rem;
+  margin: 0 auto;
+  padding: 1.25rem;
+}
+.app-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+.app-brand {
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+.app-webid {
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin-left: auto;
+  max-width: 22rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.app-logout {
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--border);
+}
+.app-note {
+  background: #fff8e6;
+  border: 1px solid #f0e0b0;
+  border-radius: 0.5rem;
+  padding: 0.6rem 0.8rem;
+  font-size: 0.85rem;
+  margin: 0.75rem 0;
+}
+.app-main {
+  margin-top: 1rem;
+}
+
+/* ── AccountsView (pod-money-*) ────────────────────────────────────────── */
+.pod-money-title {
+  font-size: 1.25rem;
+  margin: 0 0 1rem;
+}
+
+.pod-money-loading,
+.pod-money-empty {
+  color: var(--muted);
+}
+.pod-money-error {
+  color: var(--danger);
+}
+.pod-money-error button {
+  margin-top: 0.5rem;
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--border);
+}
+
+.pod-money-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--surface);
+}
+.pod-money-table th,
+.pod-money-table td {
+  text-align: left;
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.92rem;
+}
+/* Amounts read more naturally right-aligned + tabular. */
+.pod-money-amount {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.pod-money-table th:last-child,
+.pod-money-table td.pod-money-amount {
+  text-align: right;
+}
+
+/* The account name is a button that drills into transactions. */
+.pod-money-account-link {
+  background: transparent;
+  color: var(--accent);
+  border: none;
+  padding: 0;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+/* The "← Accounts" breadcrumb back link. */
+.pod-money-back {
+  margin-bottom: 0.75rem;
+}
+.pod-money-back-link {
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--border);
+}
+.pod-money-account-heading {
+  font-size: 1.1rem;
+  margin: 0 0 1rem;
+}
