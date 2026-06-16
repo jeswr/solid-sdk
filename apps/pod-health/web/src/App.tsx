@@ -22,7 +22,7 @@ import { discoverHealthResource, type HealthResource } from "./health-resource";
 import { LoginScreen } from "./LoginScreen";
 
 export function App() {
-  const { webId, session, logout } = useSession();
+  const { webId, session, logout, autologinPending } = useSession();
   // The discovered health resource (Type Index → else conventional fallback).
   const [resource, setResource] = useState<HealthResource | null>(null);
 
@@ -55,6 +55,21 @@ export function App() {
   }, [session]);
 
   if (!webId || !session) {
+    // Autologin (a Pod-Manager deep-link or a redirect return) is silently signing
+    // the user in via a full-page redirect — show a brief restoring state rather than
+    // the interactive login form, since there is no gesture to prompt for.
+    if (autologinPending) {
+      return (
+        <main className="login-screen" aria-busy="true">
+          <section className="login-card">
+            <h1>Pod Health</h1>
+            <p className="login-sub" role="status">
+              Signing you in…
+            </p>
+          </section>
+        </main>
+      );
+    }
     return <LoginScreen />;
   }
 
