@@ -1,0 +1,58 @@
+/*
+ * @jeswr/app-shell — Tailwind v4 `@theme inline` mapping.
+ *
+ * AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+ *
+ * Maps the shadcn/OKLCH CSS variables (defined in `tokens.css`) onto Tailwind v4
+ * `--color-*` theme keys, so the `bg-background` / `text-foreground` /
+ * `border-border` (etc.) utilities the app-shell components use resolve to the
+ * suite palette. A Tailwind-v4 consumer imports `@jeswr/app-shell/styles.css`
+ * (which `@import`s this); a non-Tailwind consumer imports only `tokens.css`.
+ *
+ * The `dark` custom variant matches PM's globals.css: `.dark` on an ancestor
+ * (the `<html>` element the ThemeProvider toggles) flips every `dark:` utility.
+ */
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+}

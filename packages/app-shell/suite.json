@@ -1,0 +1,26 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jeswr/full-solid-ecosystem/main/tracking/schema/suite.schema.json",
+  "id": "app-shell",
+  "kind": "library",
+  "name": "@jeswr/app-shell",
+  "repo": "https://github.com/jeswr/app-shell",
+  "category": "ui",
+  "maturity": "alpha",
+  "visibility": "public",
+  "stack": {
+    "language": "TypeScript",
+    "runtime": "Node >=20.12",
+    "framework": "framework-agnostic React (Vite + Next.js)",
+    "ui": "Radix UI + Tailwind v4-compatible OKLCH tokens + lucide-react",
+    "test": "vitest ^4 + @testing-library/react"
+  },
+  "provides": [
+    "ThemeProvider",
+    "ThemeToggle",
+    "AccountMenu",
+    "OKLCH suite design tokens"
+  ],
+  "consumedBy": [
+    "pod-mail"
+  ]
+}
