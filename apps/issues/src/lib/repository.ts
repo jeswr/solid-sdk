@@ -796,6 +796,40 @@ export class Repository {
   }
 
   /**
+   * Administrative status migration (#75 P2-5): move an issue to `status`
+   * **bypassing the workflow transition rules**. This is NOT a user workflow move —
+   * it is the workflow editor relocating an issue OUT OF a state that is being
+   * deleted, so the issue is never orphaned onto a `#status-` class that is about
+   * to disappear. The transition `from → status` may legitimately not be a declared
+   * edge (e.g. moving a "won't fix" issue to "todo"), so {@link canTransition} is
+   * deliberately not consulted; the target's open/closed resolution and the
+   * append-only activity log are still applied exactly as {@link setStatus} does.
+   *
+   * The target MUST be a status declared in the tracker's workflow — migrating onto
+   * an undeclared slug would itself orphan the issue — so an unknown target throws.
+   */
+  async migrateStatus(url: string, status: StatusSlug): Promise<void> {
+    const workflow = await this.workflow();
+    if (!workflow.statuses.some((s) => s.slug === status)) {
+      throw new TransitionError("(migration)", status, `"${status}" is not a status in this tracker's workflow.`);
+    }
+    const { dataset, etag, issue } = await this.openIssue(url);
+    const from = issue.status;
+    // Set the status + its open/closed resolution, but skip the transition guard.
+    issue.setStatus(status, statusState(workflow, status) === "closed");
+    issue.modified = new Date();
+    await this.put(url, dataset, etag);
+    if (from !== status) {
+      await this.appendActivity(url, {
+        kind: "status",
+        at: new Date(),
+        used: this.statusClassOf(url, from),
+        generated: this.statusClassOf(url, status),
+      });
+    }
+  }
+
+  /**
    * Dependency enforcement (#75 P1-4): the AUTHORITATIVE open-blocker check for a
    * transition. Reads `issueUrl`'s `dct:requires` blockers and resolves EACH
    * blocker's *current* state from the pod (a fresh read, not stale in-memory

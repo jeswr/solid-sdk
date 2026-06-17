@@ -13,7 +13,7 @@ import { filterAndSort, facets, DEFAULT_QUERY, type IssueQuery, type SortKey } f
 import { SavedViews } from "@/lib/saved-views";
 import type { PodSavedView } from "@/lib/pod-saved-views";
 import { resolveView, viewHref, VIEW_KEY, type View } from "@/lib/view";
-import { DEFAULT_WORKFLOW, type ComponentDef, type FieldDef, type Priority, type RuleDef, type StatusSlug, type VersionDef, type WipLimits, type WorkflowDef } from "@/lib/issue";
+import { DEFAULT_WORKFLOW, safeHttpUrl, type ComponentDef, type FieldDef, type FieldValue, type Priority, type RuleDef, type StatusSlug, type VersionDef, type WipLimits, type WorkflowDef } from "@/lib/issue";
 import { dependencyWarning, type OpenBlocker } from "@/lib/dependencies";
 import { evaluateRules, type RuleAction, type TriggerEvent } from "@/lib/automation-engine";
 import { IssueFormDialog, type IssueFormSubmit } from "@/components/issue-form-dialog";
@@ -39,6 +39,7 @@ import { RulesDialog } from "@/components/rules-dialog";
 import { IssueCard, shortWebId, type IssueCardActions } from "@/components/issue-card";
 import { IssuesTable } from "@/components/issues-table";
 import { makeInlineEditController, type EditableField } from "@/lib/inline-edit";
+import type { IssueStatusRef } from "@/lib/workflow-editor";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -273,6 +274,11 @@ export function IssuesView() {
   // is view state, not persisted — a refresh brings them back if still relevant.
   const [archived, setArchived] = useState<Set<string>>(new Set());
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  // P1-6 (deferred): the custom field currently being bulk-set across the
+  // selection (the value dialog is open while non-undefined), plus the in-progress
+  // raw value the dialog edits.
+  const [bulkFieldTarget, setBulkFieldTarget] = useState<FieldDef | undefined>(undefined);
+  const [bulkFieldValue, setBulkFieldValue] = useState("");
   // Saved views are now pod-persisted (shareable, cross-device — Jira/Monday
   // saved filters). The localStorage store is kept only to MIGRATE any
   // device-local views the user saved before this change into their pod.
@@ -514,6 +520,12 @@ export function IssuesView() {
     }),
     [issues.issues],
   );
+  // The workflow editor's in-use-state guard (#75 P2-5) needs each issue's current
+  // status slug to know which states have issues in them.
+  const issueStatusRefs = useMemo(
+    () => issues.issues.map((i) => ({ url: i.url, status: i.status })),
+    [issues.issues],
+  );
   const fac = useMemo(() => facets(issues.issues), [issues.issues]);
   // Component / version slugs → human labels for display in the filter menu and
   // detail view (the issue carries slugs; the tracker config carries labels).
@@ -727,6 +739,98 @@ export function IssuesView() {
       });
       clearSelection();
     }, `Labeled “${label}”`);
+  // P1-6 (deferred): bulk set a custom field across the selected rows. Reuses the
+  // SAME `issues.batch` path bulk-assign/label use (optimistic via the hook's batch
+  // + revert-on-failure), persisting each through the existing `repository.update`
+  // `fields` map. `value === undefined` clears the field on every selected issue.
+  const bulkSetField = (def: FieldDef, value: FieldValue | undefined) =>
+    run(async () => {
+      await issues.batch(async (r) => {
+        for (const i of selectedVisible) await r.update(i.url, { fields: { [def.slug]: value } });
+      });
+      clearSelection();
+    }, value === undefined ? `Cleared ${def.label}` : `Set ${def.label}`);
+  // Workflow editor (#75 P2-5) in-use-state migration: move issues to a target
+  // status, bypassing the transition rules (an administrative relocation out of a
+  // state being deleted, never a user move) — `migrateStatus` keeps the open/closed
+  // resolution + activity log. Routed through `issues.batch` so the local list +
+  // save indicator stay consistent, exactly like the bulk actions.
+  const migrateIssues = useCallback(
+    (urls: string[], toStatus: StatusSlug) =>
+      issues.batch(async (r) => {
+        for (const url of urls) await r.migrateStatus(url, toStatus);
+      }),
+    // Depends only on the hook's stable `batch` useCallback (not the whole `issues`
+    // object, which `useIssues` rebuilds each render) — same convention as
+    // `runAutomations` above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [issues.batch],
+  );
+  // The LIVE issue→status refs, read synchronously at call time (not a render
+  // snapshot). The workflow editor calls this at SAVE time so its in-use-state
+  // reconciliation sees any issue that moved into a to-be-removed state AFTER the
+  // user clicked remove (the refs prop would be a stale render snapshot).
+  const getIssueStatusRefs = useCallback(
+    (): IssueStatusRef[] => issues.getIssues().map((i) => ({ url: i.url, status: i.status })),
+    // `getIssues` is the hook's stable synchronous reader (a ref under the hood).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [issues.getIssues],
+  );
+
+  // Open the bulk-set value dialog for a field (resetting the in-progress value).
+  const openBulkField = (def: FieldDef) => {
+    setBulkFieldTarget(def);
+    setBulkFieldValue("");
+  };
+  // Commit the bulk field set: parse the raw value for the field's type and apply
+  // it across the selection (or clear it when blank). A non-numeric number / an
+  // unsafe URL is rejected before any write. Closes the dialog on success.
+  const commitBulkField = (rawValue: string | undefined) => {
+    const def = bulkFieldTarget;
+    if (!def) return;
+    let value: FieldValue | undefined;
+    if (rawValue === undefined || rawValue.trim() === "") {
+      value = undefined; // clear the field on every selected issue
+    } else {
+      const raw = rawValue.trim();
+      switch (def.type) {
+        case "number": {
+          const n = Number(raw);
+          if (!Number.isFinite(n)) {
+            toast.error("Enter a valid number.");
+            return;
+          }
+          value = n;
+          break;
+        }
+        case "date": {
+          const d = new Date(raw);
+          if (Number.isNaN(d.getTime())) {
+            toast.error("Enter a valid date.");
+            return;
+          }
+          value = d;
+          break;
+        }
+        case "url": {
+          const safe = safeHttpUrl(raw);
+          if (!safe) {
+            toast.error("Enter a valid http(s) link.");
+            return;
+          }
+          value = safe;
+          break;
+        }
+        case "select":
+          value = raw; // an option IRI chosen from the select
+          break;
+        default:
+          value = raw; // text
+      }
+    }
+    setBulkFieldTarget(undefined);
+    void bulkSetField(def, value);
+  };
 
   // --- Inline cell editing (#75 P1-6, Monday-style) ---
   // The optimistic edit controller: a non-status field edit applies immediately,
@@ -807,6 +911,25 @@ export function IssuesView() {
             {fac.labels.map((l) => (
               <DropdownMenuItem key={l} onClick={() => bulkAddLabel(l)}>
                 {l}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
+      {/* P1-6 (deferred): bulk set a custom field across the selected rows. Picks a
+          field, then opens a value dialog (a select's options, or a typed input). */}
+      {fieldDefs.length > 0 && (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm" className="gap-1.5">
+              <SlidersHorizontal className="size-4" aria-hidden /> Set field
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="max-h-72 w-56 overflow-y-auto">
+            <DropdownMenuLabel>Set a field</DropdownMenuLabel>
+            {fieldDefs.map((f) => (
+              <DropdownMenuItem key={f.iri} onClick={() => openBulkField(f)}>
+                {f.label}
               </DropdownMenuItem>
             ))}
           </DropdownMenuContent>
@@ -1500,7 +1623,15 @@ export function IssuesView() {
       )}
 
       {isOwn && (
-        <FieldsDialog open={fieldsOpen} onOpenChange={setFieldsOpen} trackerUrl={tracker.trackerUrl} onSaved={loadTrackerInfo} />
+        <FieldsDialog
+          open={fieldsOpen}
+          onOpenChange={setFieldsOpen}
+          trackerUrl={tracker.trackerUrl}
+          issueStatusRefs={issueStatusRefs}
+          getIssueStatusRefs={getIssueStatusRefs}
+          migrateIssues={migrateIssues}
+          onSaved={loadTrackerInfo}
+        />
       )}
 
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} groups={paletteGroups} />
@@ -1636,6 +1767,63 @@ export function IssuesView() {
             </Button>
             <Button onClick={saveCurrentView} disabled={!viewName.trim()}>
               Save view
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* P1-6 (deferred): bulk set a custom field's value across the selection.
+          A select field offers its options; other types take a typed input. An
+          empty value clears the field on every selected issue. */}
+      <Dialog open={!!bulkFieldTarget} onOpenChange={(o) => !o && setBulkFieldTarget(undefined)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Set “{bulkFieldTarget?.label}”</DialogTitle>
+            <DialogDescription>
+              Apply a value for “{bulkFieldTarget?.label}” to the {selectedVisible.length} selected{" "}
+              {selectedVisible.length === 1 ? "issue" : "issues"}. Leave it blank to clear the field.
+            </DialogDescription>
+          </DialogHeader>
+          {bulkFieldTarget?.type === "select" ? (
+            <Select value={bulkFieldValue} onValueChange={setBulkFieldValue}>
+              <SelectTrigger aria-label={`Value for ${bulkFieldTarget.label}`}>
+                <SelectValue placeholder="Choose a value" />
+              </SelectTrigger>
+              <SelectContent>
+                {bulkFieldTarget.options.map((o) => (
+                  <SelectItem key={o.iri} value={o.iri}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : (
+            <Input
+              aria-label={`Value for ${bulkFieldTarget?.label ?? "field"}`}
+              type={
+                bulkFieldTarget?.type === "number"
+                  ? "number"
+                  : bulkFieldTarget?.type === "date"
+                    ? "date"
+                    : bulkFieldTarget?.type === "url"
+                      ? "url"
+                      : "text"
+              }
+              value={bulkFieldValue}
+              onChange={(e) => setBulkFieldValue(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && commitBulkField(bulkFieldValue)}
+              autoFocus
+            />
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBulkFieldTarget(undefined)}>
+              Cancel
+            </Button>
+            <Button variant="outline" onClick={() => commitBulkField(undefined)}>
+              Clear on all
+            </Button>
+            <Button onClick={() => commitBulkField(bulkFieldValue)} disabled={!bulkFieldValue.trim()}>
+              Set on all
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -148,6 +148,31 @@ describe("Repository (per-issue documents)", () => {
     expect(issues[0].fields).toEqual({});
   });
 
+  it("bulk-sets a custom field across many issues, then clears it (P1-6 deferred)", async () => {
+    const { impl } = fakePod();
+    const repo = new Repository(TRACKER, impl);
+    await repo.ensureTracker();
+    const stage = await repo.defineField("Stage", "select", ["Alpha", "Beta"]);
+
+    const a = await repo.create({ title: "A", creator: ME });
+    const b = await repo.create({ title: "B", creator: ME });
+    await repo.create({ title: "C", creator: ME }); // unselected control row
+
+    // The bulk-set path: the SAME `update({ fields })` write the bulk toolbar runs
+    // per selected row. Set Stage=Beta on A and B (not C).
+    for (const url of [a, b]) await repo.update(url, { fields: { stage: stage.options[1].iri } });
+    let byTitle = Object.fromEntries((await repo.list()).issues.map((i) => [i.title, i.fields]));
+    expect(byTitle["A"]).toEqual({ stage: stage.options[1].iri });
+    expect(byTitle["B"]).toEqual({ stage: stage.options[1].iri });
+    expect(byTitle["C"]).toEqual({}); // unselected row untouched
+
+    // Bulk clear (value === undefined) removes the field from the selection.
+    for (const url of [a, b]) await repo.update(url, { fields: { stage: undefined } });
+    byTitle = Object.fromEntries((await repo.list()).issues.map((i) => [i.title, i.fields]));
+    expect(byTitle["A"]).toEqual({});
+    expect(byTitle["B"]).toEqual({});
+  });
+
   it("round-trips components through create, update, list, and info (declared on use)", async () => {
     const { impl } = fakePod();
     const repo = new Repository(TRACKER, impl);
@@ -474,6 +499,74 @@ describe("F1: configurable workflow (repository)", () => {
 
     // "todo" is the built-in default but is NOT a status in CUSTOM.
     await expect(repo.create({ title: "Bad", creator: ME, status: "todo" })).rejects.toBeInstanceOf(TransitionError);
+  });
+});
+
+describe("P2-5: migrateStatus (workflow-editor in-use-state migration)", () => {
+  const CUSTOM: WorkflowDef = {
+    statuses: [
+      { slug: "backlog", label: "Backlog", terminal: false },
+      { slug: "doing", label: "Doing", terminal: false },
+      { slug: "shipped", label: "Shipped", terminal: true },
+    ],
+    transitions: { backlog: ["doing"], doing: ["shipped"], shipped: [] },
+  };
+
+  it("moves an issue across a DISALLOWED edge (bypassing the transition rules)", async () => {
+    const { impl } = fakePod();
+    const repo = new Repository(TRACKER, impl, ME);
+    await repo.ensureTracker();
+    await repo.defineWorkflow(CUSTOM);
+    const url = await repo.create({ title: "Stuck", creator: ME, status: "shipped" });
+
+    // shipped → backlog is NOT a declared transition (shipped is terminal, no
+    // outbound) — setStatus would reject it, but migrateStatus relocates anyway.
+    await expect(repo.setStatus(url, "backlog")).rejects.toBeInstanceOf(TransitionError);
+    await repo.migrateStatus(url, "backlog");
+
+    const rec = (await repo.list()).issues.find((i) => i.url === url)!;
+    expect(rec.status).toBe("backlog");
+    expect(rec.state).toBe("open"); // backlog is non-terminal → reopened
+  });
+
+  it("applies the target's open/closed resolution (terminal target closes the issue)", async () => {
+    const { impl } = fakePod();
+    const repo = new Repository(TRACKER, impl, ME);
+    await repo.ensureTracker();
+    await repo.defineWorkflow(CUSTOM);
+    const url = await repo.create({ title: "Move me", creator: ME, status: "backlog" });
+
+    await repo.migrateStatus(url, "shipped");
+    const rec = (await repo.list()).issues.find((i) => i.url === url)!;
+    expect(rec.status).toBe("shipped");
+    expect(rec.state).toBe("closed"); // terminal target → closed
+  });
+
+  it("records an append-only status activity entry for the migration", async () => {
+    const { impl } = fakePod();
+    const repo = new Repository(TRACKER, impl, ME);
+    await repo.ensureTracker();
+    await repo.defineWorkflow(CUSTOM);
+    const url = await repo.create({ title: "Logged", creator: ME, status: "shipped" });
+
+    await repo.migrateStatus(url, "doing");
+    const log = await repo.activityLog(url);
+    const statusEntries = log.filter((e) => e.kind === "status");
+    expect(statusEntries[0].generated).toBe(`${TRACKER}#status-doing`);
+    expect(statusEntries[0].used).toBe(`${TRACKER}#status-shipped`);
+  });
+
+  it("rejects a migration target that is not a declared status (never orphans onto an unknown slug)", async () => {
+    const { impl } = fakePod();
+    const repo = new Repository(TRACKER, impl, ME);
+    await repo.ensureTracker();
+    await repo.defineWorkflow(CUSTOM);
+    const url = await repo.create({ title: "Guarded", creator: ME, status: "backlog" });
+
+    await expect(repo.migrateStatus(url, "nope")).rejects.toBeInstanceOf(TransitionError);
+    // Status is unchanged after a rejected migration.
+    const rec = (await repo.list()).issues.find((i) => i.url === url)!;
+    expect(rec.status).toBe("backlog");
   });
 });
 
