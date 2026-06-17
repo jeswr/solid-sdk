@@ -8,7 +8,7 @@
  * logic can be unit-tested without React or Next.js.
  */
 
-export type View = "list" | "board" | "epics" | "dashboard" | "backlog" | "timeline" | "calendar" | "workload";
+export type View = "list" | "board" | "epics" | "dashboard" | "backlog" | "timeline" | "calendar" | "workload" | "inbox";
 
 export const VIEWS: readonly View[] = [
   "list",
@@ -19,6 +19,7 @@ export const VIEWS: readonly View[] = [
   "calendar",
   "dashboard",
   "workload",
+  "inbox",
 ] as const;
 
 export const VIEW_KEY = "solid-issues:view";

@@ -51,6 +51,20 @@ export const TIME = "http://www.w3.org/2006/time#";
  * type a subscription service implements, e.g. `notify:WebSocketChannel2023`).
  */
 export const NOTIFY = "http://www.w3.org/ns/solid/notifications#";
+/**
+ * W3C Linked Data Platform — `ldp:inbox` (the WebID → LDN inbox container link),
+ * `ldp:contains` (an LDP container → its members). The LDN inbox view reads
+ * `ldp:inbox` off the profile and lists the inbox container's `ldp:contains`
+ * members (Linked Data Notifications, https://www.w3.org/TR/ldn/).
+ */
+export const LDP = "http://www.w3.org/ns/ldp#";
+/**
+ * W3C ActivityStreams 2.0 — the notification model the LDN inbox holds. Each
+ * notification is an AS2 `Activity` (`as:Announce`, `as:Add`, `as:Create`, …)
+ * with `as:actor` (who), `as:object` (the issue/resource), `as:summary`/
+ * `as:content` (human text) and `as:published` (when).
+ */
+export const AS = "https://www.w3.org/ns/activitystreams#";
 
 export const wf = (local: string) => `${WF}${local}`;
 /**
@@ -76,6 +90,8 @@ export const skos = (local: string) => `${SKOS}${local}`;
 export const prov = (local: string) => `${PROV}${local}`;
 export const time = (local: string) => `${TIME}${local}`;
 export const notify = (local: string) => `${NOTIFY}${local}`;
+export const ldp = (local: string) => `${LDP}${local}`;
+export const as = (local: string) => `${AS}${local}`;
 
 /** The single canonical OWL-Time unit all logged durations are stored in. */
 export const TIME_UNIT_SECOND = time("unitSecond");
