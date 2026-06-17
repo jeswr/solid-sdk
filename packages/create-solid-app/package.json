@@ -23,7 +23,8 @@
     "lint:fix": "biome check --write bin.ts src test",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "build": "tsc --noEmit && node scripts/verify-package.mjs"
+    "check:lockfile-transport": "node scripts/check-lockfile-transport.mjs",
+    "build": "tsc --noEmit && node scripts/check-lockfile-transport.mjs && node scripts/verify-package.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.16",

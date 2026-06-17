@@ -93,6 +93,13 @@ describe("scaffold", () => {
     expect(result.files).toContain("package-lock.json");
   });
 
+  it("ships the lockfile-transport recurrence guard (#78) into every scaffolded app", () => {
+    // The guard is part of the new-repo checklist: every scaffolded app inherits a
+    // `check:lockfile-transport` gate so a stray `npm install` cannot silently rewrite a
+    // @jeswr github: dep back to the SSH transport (which breaks `npm ci` on Vercel/CI).
+    expect(result.files).toContain("scripts/check-lockfile-transport.mjs");
+  });
+
   it("substitutes the package.json name", async () => {
     const pkg = JSON.parse(await readFile(join(result.targetDir, "package.json"), "utf8")) as {
       name: string;

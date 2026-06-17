@@ -10,7 +10,8 @@
     "dev:app": "next dev -p 3200",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint",
+    "lint": "eslint && node scripts/check-lockfile-transport.mjs",
+    "check:lockfile-transport": "node scripts/check-lockfile-transport.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
