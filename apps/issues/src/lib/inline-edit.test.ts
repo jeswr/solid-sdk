@@ -432,6 +432,44 @@ describe("makeInlineEditController", () => {
     expect(seam.persist).toHaveBeenCalledTimes(2);
   });
 
+  it("rapid SAME-field edits: a later failed write reverts to the prior edit, not past it", () => {
+    // Edit priority low→high (succeeds), then high→medium (fails) before a render.
+    // The failed write must revert to HIGH (the prior optimistic value), NOT back
+    // to LOW — getIssues() is stale-until-render, so the controller's accumulator
+    // is the source of truth for the `original` of the second edit.
+    const issue = mk({ url: "a", priority: "low" });
+    let applied = [issue];
+    let secondReject!: (e: unknown) => void;
+    let call = 0;
+    const seam: InlineEditSeam = {
+      getIssues: () => [issue], // stale-until-render
+      setIssuesLocal: (updater) => {
+        applied = updater(applied);
+      },
+      persist: () => {
+        call += 1;
+        // First write resolves; second write stays pending until we reject it.
+        return call === 1 ? Promise.resolve() : new Promise<void>((_, reject) => (secondReject = reject));
+      },
+      refresh: vi.fn(async () => undefined),
+    };
+    toast.error.mockClear();
+    const { edit } = makeInlineEditController(seam, WF, toast, passThroughGuard);
+
+    edit(issue, "priority", "high"); // first (succeeds)
+    edit(issue, "priority", "medium"); // second (will fail)
+    expect(applied.find((i) => i.url === "a")!.priority).toBe("medium"); // optimistic
+
+    secondReject(new Error("write failed"));
+    return Promise.resolve()
+      .then(() => Promise.resolve())
+      .then(() => {
+        // Reverted to HIGH (the first edit), NOT past it to LOW.
+        expect(applied.find((i) => i.url === "a")!.priority).toBe("high");
+        expect(toast.error).toHaveBeenCalledWith("write failed");
+      });
+  });
+
   it("editStatus computes the optimistic edit against the LIVE list at confirmation time", () => {
     // A guard that DEFERS the write (captures proceed). Between editStatus() and
     // the user confirming, the live list changes (a refresh/another edit lands a

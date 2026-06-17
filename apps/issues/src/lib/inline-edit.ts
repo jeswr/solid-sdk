@@ -284,6 +284,10 @@ export function makeInlineEditController(
   editStatus: (issue: IssueRecord, status: StatusSlug) => void;
 } {
   const handleFailure = (field: EditableField, original: IssueRecord, optimistic: IssueRecord, e: unknown) => {
+    // Roll the field back to its true pre-edit value in the controller's
+    // accumulator too, so a later edit composed before the next render starts from
+    // reverted (not phantom-optimistic) state.
+    accumulator = revertEditIfCurrent(accumulator ?? seam.getIssues(), field, original, optimistic);
     seam.setIssuesLocal((list) => revertEditIfCurrent(list, field, original, optimistic));
     if (e instanceof ConflictError) {
       toast.error(e.message);
@@ -293,24 +297,29 @@ export function makeInlineEditController(
     }
   };
 
+  // A controller-local accumulator: the single SYNCHRONOUS source of truth for the
+  // optimistic list across rapid edits within this controller instance's lifetime.
+  // The controller is recreated each render with a fresh `seam.getIssues()`, so the
+  // accumulator is seeded lazily from the live ref and then carries the composed
+  // optimistic state between renders — where `getIssues()`'s ref is stale-until-
+  // render. Driving the persist decision, the revert metadata, AND the state update
+  // all from THIS one list keeps them consistent: two rapid same-field edits each
+  // see the prior optimistic value as their `original`, so a later failed write
+  // never reverts past an earlier (successful/pending) edit.
+  let accumulator: IssueRecord[] | undefined;
+
   /**
-   * Apply the optimistic edit + start the background write. Two distinct concerns,
-   * each handled so neither races the other:
+   * Apply the optimistic edit + start the background write, all driven by the
+   * synchronous {@link accumulator} (not the stale-until-render `getIssues()` ref):
    *
-   *  1. The PERSIST DECISION (and the revert metadata) is derived SYNCHRONOUSLY
-   *     from `seam.getIssues()` — the live current list read through a ref — so it
-   *     never depends on a (possibly batched/deferred) React state updater running.
-   *     A no-op (unchanged value / missing row) skips the write entirely; otherwise
-   *     `original`/`optimistic` carry the before/after field VALUES the revert path
-   *     compares against (it only reads `original.url` + the edited field on each).
-   *     Reading from a ref also means a deferred `editStatus` confirmation sees the
-   *     latest list, not a stale closure snapshot.
-   *
-   *  2. The STATE UPDATE is COMPOSITIONAL: the updater re-applies the edit to the
-   *     `current` list React hands it — which already includes any queued/batched
-   *     local change (a second rapid edit, a queued refresh) — instead of blindly
-   *     replacing it with a precomputed snapshot. So two inline edits before a
-   *     render compose rather than the later one dropping the earlier's change.
+   *  - PERSIST DECISION + REVERT METADATA: computed against the accumulator, so a
+   *    no-op (unchanged value / missing row) skips the write, and `original`/
+   *    `optimistic` reflect the value JUST BEFORE this edit (even when an earlier
+   *    rapid edit to the same field hasn't rendered yet). The decision is made
+   *    synchronously here — never inside a (batchable/deferrable) state updater —
+   *    so the write can't be silently skipped.
+   *  - STATE UPDATE: still compositional against React's `current` list (which
+   *    carries any queued change), reconciled with the accumulator so the two agree.
    */
   const applyAndPersist = (
     issue: IssueRecord,
@@ -318,13 +327,13 @@ export function makeInlineEditController(
     value: string | number | Date | undefined,
     write: (repo: Repository) => Promise<void>,
   ) => {
-    // (1) Synchronous persist decision + revert metadata from the live ref.
-    const snapshot = optimisticEdit(seam.getIssues(), issue.url, field, value, workflow);
-    if (!snapshot.original) return; // no-op (unchanged value / row gone)
-    const original = snapshot.original;
-    const optimistic = snapshot.next.find((i) => i.url === issue.url)!;
-    // (2) Compositional state update: re-apply against React's current list so a
-    // concurrent/queued local change isn't dropped.
+    const base = accumulator ?? seam.getIssues();
+    const { next, original } = optimisticEdit(base, issue.url, field, value, workflow);
+    if (!original) return; // no-op (unchanged value / row gone)
+    accumulator = next; // advance the synchronous source of truth
+    const optimistic = next.find((i) => i.url === issue.url)!;
+    // Compositional state update: re-apply against React's current list so a
+    // concurrent/queued change isn't dropped; the result matches the accumulator.
     seam.setIssuesLocal((current) => optimisticEdit(current, issue.url, field, value, workflow).next);
     void seam.persist(write).catch((e) => handleFailure(field, original, optimistic, e));
   };
