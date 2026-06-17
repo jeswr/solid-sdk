@@ -16,10 +16,26 @@
 //
 // Usage: node scripts/check-lockfile-transport.mjs
 
+import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 
-const ROOT = process.cwd();
+// Scan from the REPOSITORY ROOT, not the cwd. This script is wired through
+// web/package.json's `lint`, so a naive `process.cwd()` would only ever see
+// web/package-lock.json and silently miss the repo-root lockfile (the data-layer
+// core's), despite the docstring promising to guard "root or nested" lockfiles.
+// Resolve the git toplevel; fall back to cwd if git is unavailable (e.g. a tarball
+// build), so the guard still runs (just scoped to cwd) rather than crashing.
+const ROOT = (() => {
+  try {
+    return execFileSync("git", ["rev-parse", "--show-toplevel"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+  } catch {
+    return process.cwd();
+  }
+})();
 
 // Directories we never descend into when discovering lockfiles.
 const SKIP_DIRS = new Set([

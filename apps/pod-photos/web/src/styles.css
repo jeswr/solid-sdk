@@ -115,22 +115,30 @@ a {
   margin-top: 1rem;
 }
 
-/* CSS-ISOLATION RELAXATION (#80 / solid-elements pilot #115): a BARE global
-   `button {}` filled-button base again — the simpler, pre-workaround form.
+/* CSS-ISOLATION RELAXATION (#80 / solid-elements adoption #115): the host's
+   filled-button base, the simpler pre-workaround form — but SCOPED to
+   `:not([data-app-shell-control])` (the #121 safe form).
 
-   This bare element rule is UNLAYERED, so it out-ranks Tailwind's layered utilities
-   — historically that bled the host's filled look onto every app-shell control + the
-   portaled FeedbackDialog (#80), which forced the earlier adopter to hand-scope it to
-   `.login-form button`. @jeswr/app-shell #80 fixed this AT THE SOURCE: the shell tags
-   each of its controls with `[data-app-shell-control]` and re-asserts their look in
-   its own UNLAYERED reset (shipped in `@jeswr/app-shell/styles.css`), and an
-   attribute selector out-ranks a bare element selector — so the shell's controls keep
-   their look regardless of this rule. The solid-elements P0 components (<jeswr-loading>
-   etc.) are immune for a different reason: they live in shadow DOM, which this
-   light-DOM rule cannot pierce. So the hand-scoping is no longer needed; the host's
-   OWN outline buttons still override the fill below. Verified against app-shell
-   `5a7484d`. */
-button {
+   WHY THE `:not(...)` SCOPE (roborev Medium, addressed): this rule is UNLAYERED, so
+   it out-ranks Tailwind's layered utilities. @jeswr/app-shell #80 makes the shell
+   self-isolating for COLOUR — its UNLAYERED reset re-asserts each control's
+   background/border/text via `[data-app-shell-control]`, which out-ranks a bare
+   `button {}`. BUT that reset DELIBERATELY does NOT touch the BOX MODEL
+   (padding/border-radius/font-size/sizing) — the shell components set those per
+   instance via LAYERED `className` utilities (e.g. ThemeToggle's `size-9`,
+   AccountMenu's `h-auto px-2 py-1.5`), which an unlayered `button { padding;
+   border-radius; font-size }` WOULD clobber, distorting the icon/menu buttons. So a
+   bare `button {}` is NOT fully safe even under #80. The `:not([data-app-shell-control])`
+   scope excludes every app-shell control from the host base entirely, so the shell's
+   box model survives unimpeded — strictly safer than the bare form, while the host's
+   OWN buttons (and the pod-photos-* component buttons, which carry no app-shell
+   marker) still get the filled base + their outline overrides below.
+
+   The solid-elements P0 components (<jeswr-loading> etc.) are immune for a different
+   reason: they live in shadow DOM, which this light-DOM rule cannot pierce. The
+   css-isolation.test.tsx guard pins the colour-isolation contract; this `:not(...)`
+   scope additionally protects the box model. Verified against app-shell `5a7484d`. */
+button:not([data-app-shell-control]) {
   cursor: pointer;
   border: none;
   border-radius: 0.5rem;
@@ -139,7 +147,7 @@ button {
   background: var(--accent);
   color: var(--accent-ink);
 }
-button:disabled {
+button:not([data-app-shell-control]):disabled {
   opacity: 0.55;
   cursor: not-allowed;
 }
@@ -172,12 +180,13 @@ button:disabled {
   margin-left: auto;
 }
 /* The host's OWN outline buttons (the gallery breadcrumb / error retry / folder
-   tiles + the legacy logout): override the filled `button {}` base above with a
-   transparent, bordered look. They inherit cursor/radius/padding/font-size from the
-   base, so each only declares its override deltas. (The header replaced the bare
-   logout button with the app-shell AccountMenu; `.app-logout` remains for any
-   host-owned secondary action.) */
-.app-logout {
+   tiles + the legacy logout): override the filled `button:not([data-app-shell-control])`
+   base above with a transparent, bordered look. They inherit cursor/radius/padding/
+   font-size from the base, so each only declares its override deltas. (The header
+   replaced the bare logout button with the app-shell AccountMenu; `button.app-logout`
+   remains for any host-owned secondary action.) `button.app-logout` matches the
+   scoped base's specificity (0,1,1) and wins by source order. */
+button.app-logout {
   background: transparent;
   color: var(--accent);
   border: 1px solid var(--border);
@@ -229,8 +238,9 @@ button:disabled {
   color: var(--muted-text);
   margin-left: 0.35rem;
 }
-/* A link-style button: override the filled `button {}` base back to a bare inline
-   link (no fill, no border, no padding). */
+/* A link-style button: override the filled `button:not([data-app-shell-control])`
+   base back to a bare inline link (no fill, no border, no padding). Equal
+   specificity (0,1,1), wins by source order. */
 .pod-photos-breadcrumb button {
   background: transparent;
   color: var(--accent);
@@ -252,8 +262,9 @@ button:disabled {
 .pod-photos-error {
   color: var(--danger);
 }
-/* The retry button: override the filled `button {}` base to a transparent,
-   bordered outline (inheriting cursor/radius/padding/font-size from the base). */
+/* The retry button: override the filled `button:not([data-app-shell-control])`
+   base to a transparent, bordered outline (inheriting cursor/radius/padding/
+   font-size from the base). Equal specificity (0,1,1), wins by source order. */
 .pod-photos-error button {
   margin-top: 0.5rem;
   background: transparent;
@@ -270,9 +281,12 @@ button:disabled {
   flex-wrap: wrap;
   gap: 0.6rem;
 }
-/* A surface tile: override the filled `button {}` base to a bordered card look
-   (inheriting cursor from the base). */
-.pod-photos-folder-link {
+/* A surface tile: override the filled `button:not([data-app-shell-control])` base
+   to a bordered card look (inheriting cursor from the base). Selected as
+   `button.pod-photos-folder-link` to match the scoped base's specificity (0,1,1)
+   and win by source order — a bare `.pod-photos-folder-link` (0,1,0) would lose the
+   background/padding to the base. */
+button.pod-photos-folder-link {
   background: var(--surface);
   color: var(--accent);
   border: 1px solid var(--border);
