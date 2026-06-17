@@ -54,13 +54,14 @@ document.querySelector("jeswr-theme-toggle")
   .addEventListener("theme-change", (e) => console.log(e.detail)); // { theme, resolvedTheme }
 ```
 
-## Components (P0)
+## Components
 
 | Tag | Attributes / properties | Events |
 |---|---|---|
 | `jeswr-theme-toggle` | `theme` (reflected: `light` \| `dark` \| `system`), `resolved-theme` (reflected, read-only-ish) | `theme-change` → `{ theme, resolvedTheme }` |
 | `jeswr-account-menu` | `webid`, `name`, `avatar-url`; default `<slot>` for extra menu items | `sign-out` |
 | `jeswr-feedback-button` | `repo` (required, `owner/repo`), `app-name`, `app-version`, `webid`; **property** `submit: (payload) => Promise<{url,number}>` | `feedback-submit` → `FeedbackPayload` |
+| `jeswr-login-panel` | attrs `initial-webid`, `auto-restore` (default on), `heading`; **property** `controller: LoginController` (the auth seam); read-only props `.fetch`, `.publicFetch`, `.webId`; default `<slot>` for extra signed-in actions | `session-change` → `{ webId, loggedIn }`, `login` → `{ webId }`, `logout` |
 | `jeswr-empty-state` | `heading`, `description`; named slots `icon`, `title`, `description`, `action` | — |
 | `jeswr-error-state` | `heading`, `description`; named slots `icon`, `title`, `description`, `action` (destructive-styled, `role="alert"`) | — |
 | `jeswr-loading` | `label`; spinner + `role="status"` | — |
@@ -95,6 +96,126 @@ title/body/labels. The dialog is focus-trapped, `aria-modal`, and Escape-closabl
 
 Exported pure helpers (no DOM, unit-tested): `buildIssueUrl`, `composeIssueBody`,
 `composeIssueTitle`, `feedbackLabels`, `isValidRepo`.
+
+### `jeswr-login-panel` (the keystone login surface)
+
+The suite's Solid login surface: a WebID/issuer prompt + recent-accounts +
+**silent session restore on load**, wrapping
+[`@solid/reactive-authentication`](https://www.npmjs.com/package/@solid/reactive-authentication)'s
+authorization-code (DPoP) login + [`@jeswr/solid-session-restore`](https://github.com/jeswr/solid-session-restore)'s
+DPoP-bound refresh-token restore.
+
+**The auth seam (load-bearing — this is auth).** The panel is **presentation +
+events only**; the security-critical auth machinery is injected as a
+`LoginController` (the `.controller` property). It exposes three **read-only**
+properties — the credential-leak boundary:
+
+| Property | What it is | Use it for |
+|---|---|---|
+| `.fetch` | the **authenticated**, session-bound fetch (after login) — attaches the DPoP token **only** for an allowed resource origin | the user's OWN origin(s) |
+| `.publicFetch` | the **pristine** native fetch, captured BEFORE reactive-auth patches the global | **foreign-origin / public reads** — carries no session, never upgrades on 401 |
+| `.webId` | the authenticated WebID (`string \| null`) | rendering / app state |
+
+Before login both fetches are the pristine native fetch. After login, `.fetch`
+attaches the DPoP-bound token **only for requests whose origin is in the session's
+allowed-origins set** (the WebID's origin + the issuer's origin + any configured
+`allowedOrigins`); a 401 from a foreign origin is left **unauthenticated**, and
+`.publicFetch` **stays pristine** — so a session token can never leak cross-origin,
+even if a caller accidentally routes a foreign request through `.fetch`. The element
+authenticates only with its own session fetch; it never patches the global and never
+authenticates a foreign-origin request itself. When the access token reaches its
+expiry, the next allowed-origin request **transparently redeems the persisted
+refresh token** (a token-endpoint fetch; single-flight, rotation-aware) before
+attaching — so a long-lived session keeps working without a reload.
+
+**Events:** `session-change` (`{ webId, loggedIn }`), `login` (`{ webId }`),
+`logout`.
+
+**Silent restore (suite invariant #1).** On connect (with `auto-restore` on, the
+default) the panel shows a "Restoring…" state and asks the controller to silently
+re-establish the session from the persisted DPoP-bound refresh token — a
+token-endpoint `fetch`, never a redirect/popup/iframe. On success it lands
+logged-in; on a genuine restore failure it falls back to the login prompt
+(**fail-closed** — it never asserts a session it couldn't rebuild, and never flashes
+the prompt before the decision resolves). To disable restore, set `auto-restore="false"`
+(or the `.autoRestore` property to `false`).
+
+#### Wiring the auth seam — the `@jeswr/solid-elements/auth` subexport
+
+The core library has **zero auth runtime dependencies** (so the committed `dist/`
+stays self-contained for the GitHub-installable contract). The adapter that
+implements `LoginController` against the real stack lives in a **separate**
+subexport:
+
+```ts
+import "@jeswr/solid-elements";                  // registers <jeswr-login-panel>
+import "@solid/reactive-authentication";         // importing it registers <authorization-code-flow>
+import { createReactiveAuthController } from "@jeswr/solid-elements/auth";
+
+// Ensure an <authorization-code-flow> element exists on the page (the import above
+// defines the custom element; add the tag to your HTML, or create it dynamically).
+const authFlow = document.querySelector("authorization-code-flow")!;
+const panel = document.querySelector("jeswr-login-panel")!;
+panel.controller = createReactiveAuthController({
+  authFlow,                                            // drives the popup (getCode)
+  callbackUri: new URL("/callback.html", location.href).toString(),
+  clientId: "https://app.example/clientid.jsonld",     // optional: a Client Identifier Doc
+  dbName: "my-app:sessions",                           // unique per app on a shared origin
+  rememberedAccountsKey: "my-app.remembered-account",  // the silent-restore pointer (cleared on logout)
+  recentAccountsKey: "my-app.recent-accounts",         // the returning-user list (SURVIVES logout)
+  // The credential boundary: .fetch attaches the token ONLY to these origins (must
+  // be https — a cleartext http origin is dropped, unless it's a loopback host and
+  // allowInsecureLoopback is set). The WebID's + issuer's origins are included by
+  // default; list a pod on a DIFFERENT host here, or it won't be authenticated. Set
+  // includeWebIdOrigin/IssuerOrigin false to rely solely on this list.
+  allowedOrigins: ["https://storage.example"],
+  // allowInsecureLoopback: true,                       // dev CSS over HTTP only
+  // patchGlobalFetch: false (default) — keep the global pristine; .fetch is the authed path
+});
+```
+
+**`authFlow` is OPTIONAL — restore-only usage doesn't need it.** It drives the
+interactive login popup, so it is needed only by `login()`. A consumer that
+constructs the controller purely to silently restore a persisted session on load
+(calling `restore()`, never `login()`) may omit it entirely — no dummy popup driver
+required. Calling `login()` without an `authFlow` throws a targeted
+`MissingAuthFlowError` (exported from `@jeswr/solid-elements/auth`) so the
+misconfiguration is obvious.
+
+`/callback.html` contains `<script>opener.postMessage(location.href)</script>` (the
+reactive-auth popup contract). On login the adapter requests `offline_access`,
+persists the DPoP-bound refresh token + non-extractable ES256 key to IndexedDB
+(keyed by issuer, with the client_id actually used so the dynamic path stays
+restorable), and remembers the account; logout clears both. Issuer resolution
+reads `solid:oidcIssuer` from the WebID profile via `@jeswr/fetch-rdf` + `@solid/object`
+(**never** regex-scraping Turtle), throwing `AmbiguousIssuerError` when several
+issuers are advertised unless you pass a `chooseIssuer` callback.
+
+**WebIDs must be `https:`.** Because the WebID's origin is in the credential
+boundary, a login with a cleartext `http:` WebID is rejected by default (the token
+would ride over plaintext); `http:` is allowed only for a loopback dev host and only
+under `allowInsecureLoopback: true`. **`publicFetch` is snapshotted at module load**
+(before any patching) so it stays credential-free even if another controller later
+patches the global with `patchGlobalFetch: true`; if you construct the controller
+after the global was already patched, inject a known-pristine fetch via the
+`publicFetch` option.
+
+> **⚠️ Auth deps install caveat (the GitHub-installable contract).** The `/auth`
+> subexport's dependencies are declared as **optional peer dependencies** and are
+> NOT bundled into `dist/`. The core entry (and `<jeswr-login-panel>` with a
+> **custom** `LoginController`) install + import buildless with no extra deps. But a
+> consumer using `createReactiveAuthController` must install them explicitly —
+> including the **off-npm** `@jeswr/solid-session-restore` (github-installed,
+> committed `dist/`):
+> ```bash
+> npm install \
+>   @solid/reactive-authentication @solid/object @jeswr/fetch-rdf \
+>   oauth4webapi dpop n3 \
+>   github:jeswr/solid-session-restore#main
+> ```
+
+You can also supply your **own** `LoginController` (the interface is exported from
+the core entry) — e.g. to wire a different auth stack — with no auth deps at all.
 
 ## Theming token contract (shadow DOM)
 
@@ -136,15 +257,28 @@ Ergonomic, typed React wrappers built with [`@lit/react`](https://www.npmjs.com/
 
 ```tsx
 'use client';
-import { ThemeToggle, AccountMenu, FeedbackButton } from "@jeswr/solid-elements/react";
+import { useRef } from "react";
+import { ThemeToggle, AccountMenu, FeedbackButton, LoginPanel } from "@jeswr/solid-elements/react";
+import { createReactiveAuthController } from "@jeswr/solid-elements/auth";
 
 <ThemeToggle onThemeChange={(e) => console.log(e.detail)} />
 <AccountMenu name="Ada" webId="https://id.example/me" onSignOut={signOut} />
 <FeedbackButton repo="jeswr/pod-mail" appName="Pod Mail" onFeedbackSubmit={(e) => track(e.detail)} />
+
+// LoginPanel: set `controller`, read `.fetch`/`.publicFetch`/`.webId` via a ref.
+const ref = useRef<HTMLElement & { fetch: typeof fetch; webId: string | null }>(null);
+<LoginPanel
+  ref={ref}
+  controller={controller}                 // a LoginController (see /auth)
+  onSessionChange={(e) => setSession(e.detail)}   // { webId, loggedIn }
+  onLogin={(e) => console.log("logged in", e.detail.webId)}
+  onLogout={() => setSession(null)}
+/>
 ```
 
 Event-prop map: `onThemeChange` ← `theme-change`, `onSignOut` ← `sign-out`,
-`onFeedbackSubmit` ← `feedback-submit`.
+`onFeedbackSubmit` ← `feedback-submit`, `onSessionChange` ← `session-change`,
+`onLogin` ← `login`, `onLogout` ← `logout`.
 
 ### Next.js static-export caveat (client-only)
 

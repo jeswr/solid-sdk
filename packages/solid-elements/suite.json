@@ -18,6 +18,7 @@
     "jeswr-theme-toggle",
     "jeswr-account-menu",
     "jeswr-feedback-button",
+    "jeswr-login-panel",
     "jeswr-empty-state",
     "jeswr-error-state",
     "jeswr-loading",

@@ -26,6 +26,11 @@ import { JeswrEmptyState } from "../components/empty-state.js";
 import { JeswrErrorState } from "../components/error-state.js";
 import { JeswrFeedbackButton } from "../components/feedback-button.js";
 import { JeswrLoading } from "../components/loading.js";
+import {
+  JeswrLoginPanel,
+  type LoginDetail,
+  type SessionChangeDetail,
+} from "../components/login-panel.js";
 import { JeswrSavingIndicator } from "../components/saving-indicator.js";
 import { JeswrThemeToggle } from "../components/theme-toggle.js";
 import type { FeedbackPayload, ResolvedTheme, Theme } from "../index.js";
@@ -66,6 +71,27 @@ export const FeedbackButton = createComponent({
   },
 });
 
+/**
+ * React wrapper for `<jeswr-login-panel>`. Maps the element's events to props:
+ *   - `onSessionChange` ← `session-change` (detail `{ webId, loggedIn }`)
+ *   - `onLogin`         ← `login`          (detail `{ webId }`)
+ *   - `onLogout`        ← `logout`
+ * Set the auth seam via the `controller` prop (a LoginController — e.g. from
+ * `createReactiveAuthController()` in `@jeswr/solid-elements/auth`). After a
+ * `session-change`, read `.fetch` / `.publicFetch` / `.webId` off the element via
+ * a ref. CLIENT-ONLY (see the Next.js caveat at the top of this file).
+ */
+export const LoginPanel = createComponent({
+  react: React,
+  tagName: "jeswr-login-panel",
+  elementClass: JeswrLoginPanel,
+  events: {
+    onSessionChange: "session-change" as EventName<CustomEvent<SessionChangeDetail>>,
+    onLogin: "login" as EventName<CustomEvent<LoginDetail>>,
+    onLogout: "logout" as EventName<CustomEvent<void>>,
+  },
+});
+
 /** React wrapper for `<jeswr-empty-state>`. */
 export const EmptyState = createComponent({
   react: React,
@@ -94,6 +120,8 @@ export const SavingIndicator = createComponent({
   elementClass: JeswrSavingIndicator,
 });
 
+/** Re-export the login event-detail types for React consumers. */
+export type { LoginDetail, SessionChangeDetail } from "../components/login-panel.js";
 // Re-export the shared types + pure helpers so a React consumer can import
 // everything from the one `/react` entry point if they prefer.
 export type {
@@ -112,4 +140,12 @@ export {
   feedbackLabels,
   initials,
   isValidRepo,
+  sameWebId,
 } from "../index.js";
+/** Re-export the login auth seam contract (pure types) for React consumers. */
+export type {
+  LoginController,
+  LoginResult,
+  RecentLoginAccount,
+  RestoreOutcome,
+} from "../login-controller.js";

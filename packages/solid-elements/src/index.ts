@@ -13,6 +13,7 @@
 import "./components/theme-toggle.js";
 import "./components/account-menu.js";
 import "./components/feedback-button.js";
+import "./components/login-panel.js";
 import "./components/empty-state.js";
 import "./components/error-state.js";
 import "./components/loading.js";
@@ -24,6 +25,12 @@ export { JeswrEmptyState } from "./components/empty-state.js";
 export { JeswrErrorState } from "./components/error-state.js";
 export { JeswrFeedbackButton } from "./components/feedback-button.js";
 export { JeswrLoading } from "./components/loading.js";
+export {
+  initialsOf,
+  JeswrLoginPanel,
+  type LoginDetail,
+  type SessionChangeDetail,
+} from "./components/login-panel.js";
 export { JeswrSavingIndicator, type SavingState } from "./components/saving-indicator.js";
 export { JeswrThemeToggle } from "./components/theme-toggle.js";
 // Feedback pure helpers + types (re-implemented here; no app-shell dependency).
@@ -39,6 +46,17 @@ export {
   feedbackLabels,
   isValidRepo,
 } from "./feedback-core.js";
+// The login auth seam — the dependency-injection CONTRACT (pure types, no auth
+// dep). The optional adapter that implements it (createReactiveAuthController) is
+// in the separate `@jeswr/solid-elements/auth` subexport so the core stays
+// auth-dep-free + self-contained for the GitHub-installable build.
+export {
+  type LoginController,
+  type LoginResult,
+  type RecentLoginAccount,
+  type RestoreOutcome,
+  sameWebId,
+} from "./login-controller.js";
 // Theme primitives (the app-shell-co-operative contract).
 export {
   applyResolvedTheme,

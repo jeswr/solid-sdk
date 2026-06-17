@@ -14,6 +14,9 @@ import {
   ErrorState,
   FeedbackButton,
   Loading,
+  type LoginController,
+  LoginPanel,
+  type RestoreOutcome,
   SavingIndicator,
   ThemeToggle,
 } from "../src/react/index.js";
@@ -72,13 +75,35 @@ describe("React wrappers", () => {
     expect(typeof el.submit).toBe("function");
   });
 
-  it("event-prop wrappers expose their on* props (onSignOut / onThemeChange / onFeedbackSubmit)", () => {
+  it("LoginPanel forwards the `controller` prop to the element and renders", async () => {
+    const controller: LoginController = {
+      publicFetch: globalThis.fetch,
+      authenticatedFetch: globalThis.fetch,
+      webId: null,
+      recentAccounts: () => [],
+      restore: async (): Promise<RestoreOutcome> => ({ outcome: "login" }),
+      login: async () => ({ webId: "https://id.example/me" }),
+      logout: async () => {},
+    };
+    await act(async () => {
+      root.render(createElement(LoginPanel, { controller, autoRestore: false }));
+    });
+    const el = container.querySelector("jeswr-login-panel") as HTMLElement & {
+      controller?: LoginController;
+    };
+    expect(el).not.toBeNull();
+    await (el as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+    expect(el.controller).toBe(controller);
+  });
+
+  it("event-prop wrappers expose their on* props (onSignOut / onThemeChange / onFeedbackSubmit / onSessionChange)", () => {
     // The createComponent wrappers attach listeners for the configured events.
     // We assert the wrappers are usable React components (functions) — the
     // event mapping itself is exercised by the custom-element tests above.
     expect(typeof ThemeToggle).toBe("object");
     expect(typeof AccountMenu).toBe("object");
     expect(typeof FeedbackButton).toBe("object");
+    expect(typeof LoginPanel).toBe("object");
   });
 
   it("the state/loading wrappers render their elements", async () => {

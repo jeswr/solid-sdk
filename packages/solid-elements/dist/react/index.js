@@ -25,6 +25,7 @@ import { JeswrEmptyState } from "../components/empty-state.js";
 import { JeswrErrorState } from "../components/error-state.js";
 import { JeswrFeedbackButton } from "../components/feedback-button.js";
 import { JeswrLoading } from "../components/loading.js";
+import { JeswrLoginPanel, } from "../components/login-panel.js";
 import { JeswrSavingIndicator } from "../components/saving-indicator.js";
 import { JeswrThemeToggle } from "../components/theme-toggle.js";
 /** React wrapper for `<jeswr-theme-toggle>`. `onThemeChange` ← `theme-change`. */
@@ -54,6 +55,26 @@ export const FeedbackButton = createComponent({
         onFeedbackSubmit: "feedback-submit",
     },
 });
+/**
+ * React wrapper for `<jeswr-login-panel>`. Maps the element's events to props:
+ *   - `onSessionChange` ← `session-change` (detail `{ webId, loggedIn }`)
+ *   - `onLogin`         ← `login`          (detail `{ webId }`)
+ *   - `onLogout`        ← `logout`
+ * Set the auth seam via the `controller` prop (a LoginController — e.g. from
+ * `createReactiveAuthController()` in `@jeswr/solid-elements/auth`). After a
+ * `session-change`, read `.fetch` / `.publicFetch` / `.webId` off the element via
+ * a ref. CLIENT-ONLY (see the Next.js caveat at the top of this file).
+ */
+export const LoginPanel = createComponent({
+    react: React,
+    tagName: "jeswr-login-panel",
+    elementClass: JeswrLoginPanel,
+    events: {
+        onSessionChange: "session-change",
+        onLogin: "login",
+        onLogout: "logout",
+    },
+});
 /** React wrapper for `<jeswr-empty-state>`. */
 export const EmptyState = createComponent({
     react: React,
@@ -78,4 +99,4 @@ export const SavingIndicator = createComponent({
     tagName: "jeswr-saving-indicator",
     elementClass: JeswrSavingIndicator,
 });
-export { buildIssueUrl, composeIssueBody, composeIssueTitle, feedbackLabels, initials, isValidRepo, } from "../index.js";
+export { buildIssueUrl, composeIssueBody, composeIssueTitle, feedbackLabels, initials, isValidRepo, sameWebId, } from "../index.js";
