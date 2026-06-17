@@ -8,6 +8,28 @@
 // read/write carries the DPoP token automatically.
 import { AccountMenu, FeedbackButton, ThemeToggle } from "@jeswr/app-shell";
 import { ChatRooms } from "@jeswr/pod-chat/ui";
+// SOLID-ELEMENTS (#67/#68/#70 D-parity rollout): the framework-agnostic W3C Web
+// Component <jeswr-loading> — a Lit custom element (spinner + polite-live label,
+// prefers-reduced-motion aware). We import the package BARE entry for its
+// registration side-effect (`customElements.define("jeswr-loading", …)`), then render
+// the element DIRECTLY with `label` as a DOM ATTRIBUTE (typed in custom-elements.d.ts).
+//
+// WHY the raw element, not the @lit/react `Loading` wrapper: the wrapper forwards
+// `label` as a PROPERTY, and @lit/react classifies props at createComponent-time —
+// before Lit finalises the element class — so under React 19 the `label` property can
+// silently fail to land, dropping the VISIBLE + ANNOUNCED status copy (verified: the
+// wrapper renders no label text and the aria-label falls back to "Loading"). The Lit
+// reactive `label` property auto-observes the lowercased `label` ATTRIBUTE, and the
+// attribute path is environment-independent + verified — so it reliably shows AND
+// announces the message. (Upstream follow-up: make the wrapper reflect `label`.)
+//
+// The element themes itself from the SAME app-shell OKLCH tokens as the rest of the
+// chrome: its shadow-DOM styles read `--jeswr-*`, which fall back through the shadow
+// boundary to app-shell's `--primary` / `--border` / `--muted-foreground` (set by
+// styles.css, flipped by `.dark`), so it follows light/dark for free. (COMPLEMENTS
+// app-shell — it does not replace the React chrome above.) Plain Vite/CSR React has
+// no SSR step, so the client-only custom element needs no mount-gating here.
+import "@jeswr/solid-elements";
 import { useSession } from "./auth/SessionProvider";
 import { LoginScreen } from "./LoginScreen";
 
@@ -23,8 +45,13 @@ export function App() {
         <main className="login-screen" aria-busy="true">
           <section className="login-card">
             <h1>Pod Chat</h1>
-            <p className="login-sub" role="status">
-              Signing you in…
+            {/* SOLID-ELEMENTS: the <jeswr-loading> spinner + label. It carries its own
+                role="status" + aria-live (in its shadow root), so the label is
+                announced; we keep the .login-sub wrapper only for the existing
+                spacing/typography (the redundant role="status" is dropped). `label` is
+                passed as a DOM attribute — see the import note. */}
+            <p className="login-sub">
+              <jeswr-loading label="Signing you in…" />
             </p>
           </section>
         </main>
@@ -40,8 +67,12 @@ export function App() {
         <main className="login-screen" aria-busy="true">
           <section className="login-card">
             <h1>Pod Chat</h1>
-            <p className="login-sub" role="status">
-              Restoring your session…
+            {/* SOLID-ELEMENTS: the <jeswr-loading> spinner + label, replacing the bare
+                <p role="status">. The element owns role="status" + aria-live in its
+                shadow root; .login-sub stays for spacing parity. `label` is a DOM
+                attribute (see the import note). */}
+            <p className="login-sub">
+              <jeswr-loading label="Restoring your session…" />
             </p>
           </section>
         </main>

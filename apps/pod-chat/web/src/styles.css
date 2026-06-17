@@ -15,24 +15,50 @@
 @source "../node_modules/@jeswr/app-shell/dist";
 
 /* The host chrome below predates the shared tokens and uses its own variable
-   names. Map them onto the app-shell OKLCH tokens so the WHOLE pod-chat UI (login
-   card, header, room list, thread, composer) follows the theme — the `.dark` class
-   the ThemeProvider toggles on <html> flips the OKLCH vars, and these aliases
-   inherit it for free.
+   names (--bg / --ink / --accent / --muted / …). Map them onto the app-shell OKLCH
+   tokens so the WHOLE pod-chat UI (login card, header, room list, thread, composer)
+   follows the theme — the `.dark` class the ThemeProvider toggles on <html> flips
+   the OKLCH vars, and these aliases inherit it for free.
 
-   IMPORTANT (learned from pod-photos/drive): do NOT re-alias app-shell's OWN
-   tokens (`--accent`/`--muted`/`--border`) — re-pointing `--accent`/`--muted` at
-   different values would mis-theme the shell's own controls + the feedback dialog.
-   So the host uses DISTINCT names where it collides: `--host-accent` (was the host
-   `--accent`) and `--muted-text` (was the host `--muted`). `--border` keeps its
-   name but is simply pointed at the same OKLCH token (no collision — it IS the
-   shell's border token), so it is unified, not re-aliased to a foreign value. */
+   CSS-ISOLATION RELAXATION (#80 / solid-elements rollout #67/#68/#70): the host's
+   brand `--accent` now aliases DIRECTLY onto app-shell's OWN `--primary` token. The
+   EARLIER adopter workaround (carried by this app from the pod-photos/drive pilot)
+   renamed it to a host-only `--host-accent` to avoid CLOBBERING the shell components'
+   own tint — but @jeswr/app-shell #80 made the shell SELF-ISOLATING for its COLOUR
+   look: its controls (and the portaled feedback dialog) carry `[data-app-shell-control]`
+   and re-assert their fill/border/text in an UNLAYERED reset that reads SHELL-PRIVATE
+   `--as-*` tokens (mirrored from hardcoded OKLCH literals in the package's tokens.css,
+   NOT from these public `--accent`/`--muted`). An attribute selector out-ranks a bare
+   element selector, so re-aliasing `--accent` does NOT affect the shell's colour look —
+   that is the safe-to-relax part, and it is taken.
+
+   TWO things are deliberately NOT relaxed (each would be a real regression — confirmed
+   by roborev against app-shell 5a7484d):
+   (1) `--muted` stays the PUBLIC shadcn/app-shell muted SURFACE token (exposed to
+       Tailwind as `bg-muted` via `@theme inline --color-muted: var(--muted)`). The
+       host keeps a host-only `--muted-text` (→ `--muted-foreground`) for muted TEXT
+       rather than clobbering `--muted` with a text color, so any `bg-muted` surface a
+       current/future consumer uses still renders correctly.
+   (2) the filled-button base stays SCOPED to `.login-form button` (not a bare global
+       `button {}`): the shell's reset deliberately does NOT lock the BOX MODEL, so an
+       unlayered bare `button { padding/font-size/border-radius }` would still out-rank
+       the shell controls' layered Tailwind sizing and resize them (see the note below).
+
+   The solid-elements P0 components (<jeswr-loading> etc.) are immune regardless — they
+   live in shadow DOM, which a light-DOM rule cannot pierce. css-isolation.test.tsx
+   guards the colour-isolation contract. Verified against app-shell `5a7484d`. */
 :root {
   --bg: var(--background);
   --surface: var(--card);
   --ink: var(--foreground);
+  /* HOST-ONLY name for muted TEXT — pointed at the app-shell `--muted-foreground`
+     text token. We deliberately do NOT re-alias the PUBLIC `--muted` token (the
+     shadcn/app-shell muted SURFACE color, exposed to Tailwind as `bg-muted` via the
+     `@theme inline --color-muted: var(--muted)` mapping): clobbering it with a text
+     color would mis-render any `bg-muted` surface a current or future consumer uses.
+     pod-chat only ever needs muted TEXT, so a host-only name is the correct fit. */
   --muted-text: var(--muted-foreground);
-  --host-accent: var(--primary);
+  --accent: var(--primary);
   --accent-ink: var(--primary-foreground);
   /* NOTE: `--border` is intentionally NOT redefined here — it already IS the
      app-shell token (set by the imported tokens.css on :root), so the host's
@@ -54,7 +80,7 @@ body {
 }
 
 a {
-  color: var(--host-accent);
+  color: var(--accent);
 }
 
 /* ── Login ─────────────────────────────────────────────────────────────── */
@@ -108,19 +134,31 @@ a {
   margin-top: 1rem;
 }
 
-/* The host's filled-button style is SCOPED to the login form (and the host's own
-   `.app-*` buttons below) so it cannot leak onto the @jeswr/app-shell controls
-   (ThemeToggle / AccountMenu trigger / the FeedbackButton + its dialog buttons),
-   which bring their own Tailwind-utility styling. A bare global `button {}` here
-   would override the shell's chrome — exactly the leak the pod-photos/drive
-   adoption hit. */
+/* CSS-ISOLATION (#80 / solid-elements rollout #67/#68/#70): the host's filled-button
+   style stays SCOPED to the login form (+ the host's own `.pod-chat-*` buttons below),
+   NOT a bare global `button {}`. @jeswr/app-shell #80 made the shell self-isolating for
+   the COLOUR look (background/border/text via the `[data-app-shell-control]` unlayered
+   reset reading shell-private `--as-*`), so a bare `button {}` could no longer bleed the
+   host's FILL onto the shell controls — that part of the relaxation IS safe. BUT the
+   shell's reset DELIBERATELY does NOT re-assert the BOX MODEL (the reset.css comment:
+   "The BOX MODEL (width/height/padding/display/flex) is NOT touched … an app's
+   aggressive element reset that also relayouts every `button` is out of scope"). The
+   shell controls size themselves via LAYERED Tailwind utilities (e.g. the AccountMenu
+   trigger's `h-auto px-2 py-1.5`), which an UNLAYERED bare `button { padding / font-size
+   / border-radius }` would out-rank and resize. So a bare global rule would still
+   regress the shell controls' SIZING (roborev finding, app-shell 5a7484d). Keeping the
+   sizing scoped to pod-chat's own controls avoids that — the `--accent`→`--primary`
+   re-alias above is the part of the relaxation that is provably safe, and is kept. The
+   pod-chat component buttons (`.pod-chat-open` / `.pod-chat-back` / `.pod-chat-send` /
+   the retry button) bring their OWN explicit styles below. css-isolation.test.tsx pins
+   the colour-isolation contract. */
 .login-form button {
   cursor: pointer;
   border: none;
   border-radius: 0.5rem;
   padding: 0.6rem 0.9rem;
   font-size: 0.95rem;
-  background: var(--host-accent);
+  background: var(--accent);
   color: var(--accent-ink);
 }
 .login-form button:disabled {
@@ -193,7 +231,7 @@ a {
 }
 .pod-chat-open {
   background: transparent;
-  color: var(--host-accent);
+  color: var(--accent);
   border: none;
   padding: 0;
   text-align: left;
@@ -214,7 +252,7 @@ a {
 .pod-chat-back {
   align-self: flex-start;
   background: transparent;
-  color: var(--host-accent);
+  color: var(--accent);
   border: 1px solid var(--border);
   cursor: pointer;
   border-radius: 0.5rem;
@@ -276,8 +314,8 @@ a {
   border-color: var(--ok);
 }
 .pod-chat-task-open {
-  color: var(--host-accent);
-  border-color: var(--host-accent);
+  color: var(--accent);
+  border-color: var(--accent);
 }
 .pod-chat-assignee {
   margin: 0 0 0.4rem;
@@ -326,7 +364,7 @@ a {
   border-radius: 0.5rem;
   padding: 0.6rem 0.9rem;
   font-size: 0.95rem;
-  background: var(--host-accent);
+  background: var(--accent);
   color: var(--accent-ink);
 }
 .pod-chat-send:disabled {
@@ -362,7 +400,7 @@ a {
   margin-top: 0.5rem;
   cursor: pointer;
   background: transparent;
-  color: var(--host-accent);
+  color: var(--accent);
   border: 1px solid var(--border);
   border-radius: 0.5rem;
   padding: 0.5rem 0.8rem;
