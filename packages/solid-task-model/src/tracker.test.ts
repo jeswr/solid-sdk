@@ -92,6 +92,46 @@ describe("Tracker typed accessor", () => {
     expect(t.groupMembers).toEqual([ME]);
   });
 
+  it("groupMembers READ filters out non-http(s) members written by a foreign doc", () => {
+    // A malicious/foreign tracker doc that bypasses our write path and asserts
+    // dangerous vcard:hasMember URIs directly. The READ accessor must scheme-
+    // filter them the same way setGroupMembers does on write (the asymmetry G7
+    // Builder B flagged: write filtered, read did not) — a consumer rendering
+    // members as links must never receive a `javascript:`/`data:` URI.
+    const foreign = parseStore(`
+      @prefix wf: <http://www.w3.org/2005/01/wf/flow#> .
+      @prefix vcard: <http://www.w3.org/2006/vcard/ns#> .
+      <#this> a wf:Tracker ; wf:assigneeGroup <#team> .
+      <#team> a vcard:Group ;
+        vcard:hasMember <${ME}> ,
+          <${BOB}> ,
+          <javascript:alert(1)> ,
+          <data:text/html,evil> ,
+          <urn:agent:mallory> ,
+          <mailto:x@y.z> .
+    `);
+    const t = new Tracker(trackerSubject(DOC), foreign, DataFactory);
+    const members = t.groupMembers;
+    // Only the http(s) WebIDs survive the read.
+    expect(new Set(members)).toEqual(new Set([ME, BOB]));
+    // None of the dangerous / non-http(s) schemes leak through.
+    expect(members).not.toContain("javascript:alert(1)");
+    expect(members).not.toContain("data:text/html,evil");
+    expect(members).not.toContain("urn:agent:mallory");
+    expect(members).not.toContain("mailto:x@y.z");
+    // And parseTracker (the public entry point) surfaces only the clean set.
+    const parsed = parseTracker(DOC, foreign);
+    expect(new Set(parsed?.groupMembers)).toEqual(new Set([ME, BOB]));
+  });
+
+  it("groupMembers round-trip (setGroupMembers → groupMembers) still passes valid http(s) WebIDs through", () => {
+    const store = new Store();
+    const t = new Tracker(trackerSubject(DOC), store, DataFactory).mark();
+    const carol = "http://localhost:3000/carol/profile/card#me";
+    t.setGroupMembers([ME, BOB, carol]);
+    expect(new Set(t.groupMembers)).toEqual(new Set([ME, BOB, carol]));
+  });
+
   it("defineWorkflow + workflow round-trip with custom statuses and transitions", () => {
     const store = new Store();
     const t = new Tracker(trackerSubject(DOC), store, DataFactory).mark();

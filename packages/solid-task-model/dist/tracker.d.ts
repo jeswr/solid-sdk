@@ -134,7 +134,15 @@ export declare class Tracker extends TermWrapper {
     get assigneeGroup(): string | undefined;
     /** The conventional assignee-group node for this tracker doc (`#team`). */
     private get groupIri();
-    /** The assignee group's members (WebIDs), via `wf:assigneeGroup` → `vcard:hasMember`. */
+    /**
+     * The assignee group's members (WebIDs), via `wf:assigneeGroup` →
+     * `vcard:hasMember`. Non-http(s) entries are dropped on READ exactly as
+     * {@link setGroupMembers} drops them on WRITE — a foreign/malicious tracker
+     * doc may carry e.g. `vcard:hasMember <javascript:…>`, and a consumer that
+     * renders members as links must never surface such a URI (pod data is
+     * untrusted input). The read filter mirrors the write filter so the two sides
+     * are symmetric.
+     */
     get groupMembers(): string[];
     /**
      * Replace the assignee group's membership. Links a `vcard:Group` (`#team`) via

@@ -1,6 +1,6 @@
 {
   "name": "@jeswr/solid-task-model",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "The shared federated Task/Issue RDF model for the Solid app suite — typed read/write accessors over wf:Task (+ Dublin Core / schema.org / PROV-O) so a task written by one app reads identically in another, plus the SHACL shape that pins it.",
   "type": "module",
   "license": "MIT",
