@@ -61,11 +61,14 @@
 // pinning-capable fetch, e.g. an undici-`Agent`) — used unchanged so it pins the
 // connection. A generic auth/custom `fetch` does NOT satisfy the strict posture; only
 // `pinningFetch` does, so an ordinary fetch can never silently re-open the window.
-// Full closure is therefore a deliberate, opt-in caller choice; the default
-// best-effort posture documents the window rather than silently leaving it.
-// (#86 tracks adding undici socket-pinning to the NODE path for full rebinding closure;
-// do NOT implement undici here — it would re-introduce a Node-only dep into the browser
-// bundle and re-break the browser path #92 just fixed.)
+// Full closure is therefore a deliberate, opt-in caller choice for the default `.` entry;
+// the default best-effort posture documents the window rather than silently leaving it.
+// (#86 — FULL rebinding closure — is now IMPLEMENTED in the SEPARATE `./node` entry
+// (`src/node.ts`): a real undici-`Agent` pinningFetch that resolves-once → validates-all
+// → PINS the validated IP to the socket connect, wired in here as `pinningFetch` with
+// `requireDnsPinning: true`. It lives in its OWN Node-only module so `undici` / `node:`
+// builtins are NEVER imported into THIS module or the default `.` entry — the browser
+// path (#92) stays shim-free. Do NOT import undici here.)
 //
 // DNS-LESS-branch RESIDUAL + the edge/worker distinction (documented honestly, not
 // hidden). On the DNS-less branch there is NO DNS resolver and `fetch` exposes no socket,

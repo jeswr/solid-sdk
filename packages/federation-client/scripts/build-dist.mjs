@@ -56,6 +56,25 @@ const EXTERNAL = [
   "content-type",
 ];
 
+/**
+ * The Node entry (`./node` → dist/node.js) additionally keeps external:
+ *   - `undici` — an npm-published runtime `dependency` resolved by the consumer (NOT
+ *     inlined). The `./node` entry is the ONLY artifact that references `undici`, so the
+ *     default `.` entry (dist/index.js) is unaffected and the browser bundle never sees
+ *     it (task #92);
+ *   - `./index.js` — the package ROOT bundle. `node.ts` imports the SSRF guard +
+ *     `SsrfError` + `isPublicAddress`/`isLoopbackAddress` from `./index.js`, NOT a fresh
+ *     inline of `./ssrf.ts`. Keeping `./index.js` external makes `dist/node.js` reference
+ *     the SAME runtime `SsrfError` class as `dist/index.js`, so an error thrown by
+ *     `@jeswr/federation-client/node` satisfies `instanceof SsrfError` imported from
+ *     `@jeswr/federation-client` in published builds (roborev finding: avoid two split
+ *     `SsrfError` classes). At runtime `dist/node.js`'s `import "./index.js"` resolves to
+ *     the sibling `dist/index.js`;
+ *   - Node builtins (`node:dns`, `node:net`) — external on `platform:"node"` by default;
+ *     named for clarity.
+ */
+const NODE_EXTERNAL = [...EXTERNAL, "undici", "./index.js", "node:dns", "node:net"];
+
 async function main(buildDir = outdir) {
   // 1. Ensure @jeswr/fetch-rdf's dist exists in node_modules so esbuild can
   //    resolve + inline it (ignore-scripts skipped its prepare on install).
@@ -75,6 +94,22 @@ async function main(buildDir = outdir) {
     target: "node24",
     // Inline ONLY @jeswr/fetch-rdf; keep the npm-published deps external.
     external: EXTERNAL,
+    sourcemap: true,
+    legalComments: "none",
+    logLevel: "warning",
+  });
+
+  // 2b. Bundle the SEPARATE Node entry (dist/node.js). It keeps `undici` + node:
+  //     builtins external so they are NOT inlined (undici is a consumer-resolved npm
+  //     dependency); it shares the guard code from ./ssrf via the same source.
+  await build({
+    entryPoints: [join(root, "src", "node.ts")],
+    outfile: join(buildDir, "node.js"),
+    bundle: true,
+    format: "esm",
+    platform: "node",
+    target: "node24",
+    external: NODE_EXTERNAL,
     sourcemap: true,
     legalComments: "none",
     logLevel: "warning",

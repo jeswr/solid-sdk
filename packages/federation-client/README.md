@@ -278,21 +278,26 @@ private/loopback/metadata **literals**, `localhost`/`*.local` **names**, `http:`
 non-loopback name) and re-validates each redirect hop. On the **Node branch** you
 additionally get the full DNS-resolve + every-record-public check.
 
-**DNS-rebinding posture (Node branch).** With plain `fetch` the guard validates a
-hostname's resolved addresses but cannot pin the socket to them (no `undici` dependency
-— it would re-introduce a Node-only dep into the browser bundle and re-break #92), so a
-residual lookup→connect rebinding window remains in the default *best-effort* posture
+**DNS-rebinding posture (Node branch).** With plain `fetch` the default `.` guard
+validates a hostname's resolved addresses but cannot pin the socket to them, so a
+residual lookup→connect rebinding window remains in that default *best-effort* posture
 (DNS validation + redirect re-validation + absolute literal-IP blocking still apply). A
 hardened deployment sets `requireDnsPinning: true`, which **refuses a hostname target
 unless a distinct `pinningFetch` is supplied** — a separate, branded option the caller
-uses to attest "this fetch pins DNS" (e.g. an undici-`Agent` fetch). Crucially, a plain
-auth/custom `fetch` (the generic `fetch` option) does **not** satisfy the strict posture
-— only `pinningFetch` does — so an ordinary fetch can never silently re-open the window.
-IP-literal targets (no resolution, no rebinding window) are always allowed. On the
-browser branch, `requireDnsPinning` cannot be honoured (no resolver to pin), so it fails
-closed for a hostname unless the caller opts into the residual via `allowUnresolvedHosts`.
-Adding undici socket-pinning to the Node path for full rebinding closure is tracked as
-**#86** (it must stay Node-only — never imported into the browser branch).
+uses to attest "this fetch pins DNS". Crucially, a plain auth/custom `fetch` (the generic
+`fetch` option) does **not** satisfy the strict posture — only `pinningFetch` does — so
+an ordinary fetch can never silently re-open the window. IP-literal targets (no
+resolution, no rebinding window) are always allowed. On the browser branch,
+`requireDnsPinning` cannot be honoured (no resolver to pin), so it fails closed for a
+hostname unless the caller opts into the residual via `allowUnresolvedHosts`.
+
+**Full rebinding closure on Node — `@jeswr/federation-client/node` (#86).** The default
+`.` entry deliberately ships no `undici` dependency (it would re-introduce a Node-only
+dep into the browser bundle and re-break #92). Node consumers needing the rebinding
+window **fully closed** import the separate **`./node`** entry, which provides a real
+`undici`-backed `pinningFetch` — see [SSRF-safe Node entry](#ssrf-safe-node-entry----jeswrfederation-clientnode)
+below. It pins the validated IP through to the socket `connect`, so a concurrent DNS
+change cannot redirect the connection.
 
 The guard composes **under** any `fetch` you pass (an authenticated Solid fetch is
 threaded through unchanged). It is also exported directly for reuse:
@@ -306,12 +311,59 @@ const guarded = createGuardedFetch({ fetch: authFetch, timeoutMs: 8000 });
 
 > The IP-range classification (`isPublicAddress` / `isLoopbackAddress`) is ported from
 > the suite's vetted `@pss/guarded-fetch` package; the only deliberate divergence is the
-> browser-safe `node:net#isIP` replacement (#92). Unlike the server-side resolver, this
-> client library targets plain `fetch` (browser + Node) and does **not** pin the resolved
-> IP into the socket (no `undici` dependency), so on the Node branch a microsecond-scale
+> browser-safe `node:net#isIP` replacement (#92). The default `.` entry targets plain
+> `fetch` (browser + Node) and does **not** pin the resolved IP into the socket (no
+> `undici` dependency on the browser path), so on its Node branch a microsecond-scale
 > lookup→connect DNS-rebinding window remains (the redirect re-validation and literal-IP
-> blocking are absolute); a caller needing full closure passes a `pinningFetch` with
-> `requireDnsPinning: true`. On the browser branch the residual above applies.
+> blocking are absolute). **Node consumers close that window fully with the `./node`
+> entry** (below); on the browser branch the residual above is inherent.
+
+### SSRF-safe Node entry — `@jeswr/federation-client/node`
+
+The default `.` entry stays browser-safe by shipping **no `undici` dependency**, which
+leaves a residual DNS-rebinding (TOCTOU) window on its Node branch: it validates a
+hostname's resolved IPs up front, but plain `fetch` **re-resolves** the name at connect
+time, so a hostile DNS server can return a public IP during validation and a private one
+(`169.254.169.254`, `10.x`, `127.x`, `::1`, `fc00::/7`, …) microseconds later at connect.
+
+The **`./node`** entry closes that window completely. It is the **recommended fetch for
+Node** consumers of a registry / storage / verify endpoint:
+
+```ts
+import { discoverFromRegistry } from "@jeswr/federation-client";
+import { nodeGuardedFetch } from "@jeswr/federation-client/node";
+
+const result = await discoverFromRegistry(registryUrl, { fetch: nodeGuardedFetch });
+```
+
+`createNodeGuardedFetch(options)` returns the same thing with tunable
+`maxBytes` / `timeoutMs` / `maxRedirects` / `allowLoopback` (and an optional private-CA
+`ca`). How it closes the window — **resolve-once → validate-all → pin the IP to
+`connect`**:
+
+- it builds an `undici.Agent` whose `connect.lookup` resolves the hostname **once**
+  (`dns.lookup(host, { all: true })`) and validates **every** A/AAAA record against the
+  **same blocklist** the rest of the library uses (`isPublicAddress` — RFC1918, loopback,
+  link-local incl. cloud-metadata `169.254.169.254`, CGNAT, ULA `fc00::/7`, `::1`,
+  `0.0.0.0`, multicast, reserved, IPv4-mapped / 6to4 / NAT64-embedded private v4). **One**
+  private record fails the whole connection (a rebinding set is refused);
+- it then hands undici back **only** the pre-validated address(es); `net.connect` dials
+  exactly those IPs and **never re-resolves** the name — the socket is **pinned** to the
+  validated IP, so a concurrent DNS change cannot redirect it;
+- **TLS SNI + certificate validation stay against the original hostname** (undici's
+  connector sets `servername` to the request host; the cert is verified against that name,
+  not the pinned IP). Validation is never disabled — a private-CA `ca` may be supplied, but
+  there is no `rejectUnauthorized: false` escape hatch;
+- it composes **under** the shared guard with `requireDnsPinning: true` and supplies the
+  undici fetch as the branded `pinningFetch`, so the scheme/userinfo/IP-literal checks,
+  redirect re-validation (no auto-follow to a private host), and body + time caps all
+  apply — and **each redirect hop independently re-resolves, re-validates and re-pins** (a
+  30x to a private IP, literal or rebinding hostname, is blocked at the next hop).
+
+`./node` is the **only** artifact that imports `undici` / `node:*` builtins, so the
+browser bundle (#92) is unaffected — a browser consumer never imports it.
+`createPinningDispatcher(options)` is also exported for callers composing their own undici
+pipeline (use it only if you already apply the URL/redirect/body checks yourself).
 
 ### Vocabulary helpers
 
