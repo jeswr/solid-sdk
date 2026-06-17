@@ -144,6 +144,7 @@ npm run typecheck   # tsc --noEmit (builds @jeswr/fetch-rdf inline first)
 npm test            # vitest (exhaustive sign/verify + tamper/expiry/binding rejection)
 npm run build       # bundle the committed dist/ (fetch-rdf inlined)
 npm run check:dist  # guard the committed dist/ against src/ drift
+npm run check:lockfile-transport  # guard package-lock.json against the SSH git transport (#78: npm install rewrites @jeswr github: deps to git+ssh, breaking npm ci)
 ```
 
 [vcdm]: https://www.w3.org/TR/vc-data-model-2.0/
