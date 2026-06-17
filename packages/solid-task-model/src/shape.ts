@@ -28,8 +28,14 @@ export const TRACKER_SHAPE_PATH: string = fileURLToPath(
   new URL("../shapes/tracker.ttl", import.meta.url),
 );
 
+/** Filesystem path to the canonical contacts SHACL shape file. */
+export const CONTACTS_SHAPE_PATH: string = fileURLToPath(
+  new URL("../shapes/contacts.ttl", import.meta.url),
+);
+
 let cachedTask: string | undefined;
 let cachedTracker: string | undefined;
+let cachedContacts: string | undefined;
 
 /**
  * The canonical federated-task SHACL shape, as a Turtle string. Cached after the
@@ -49,4 +55,14 @@ export function taskShapeTtl(): string {
 export function trackerShapeTtl(): string {
   if (cachedTracker === undefined) cachedTracker = readFileSync(TRACKER_SHAPE_PATH, "utf8");
   return cachedTracker;
+}
+
+/**
+ * The canonical federated-contacts (`vcard:AddressBook`) SHACL shape, as a Turtle
+ * string. Cached after the first read. Pass it (with the data graph) to a SHACL
+ * validator — see `src/contacts.test.ts` for the `rdf-validate-shacl` pattern.
+ */
+export function addressBookShapeTtl(): string {
+  if (cachedContacts === undefined) cachedContacts = readFileSync(CONTACTS_SHAPE_PATH, "utf8");
+  return cachedContacts;
 }

@@ -2,6 +2,8 @@
 export declare const TASK_SHAPE_PATH: string;
 /** Filesystem path to the canonical tracker SHACL shape file. */
 export declare const TRACKER_SHAPE_PATH: string;
+/** Filesystem path to the canonical contacts SHACL shape file. */
+export declare const CONTACTS_SHAPE_PATH: string;
 /**
  * The canonical federated-task SHACL shape, as a Turtle string. Cached after the
  * first read. Pass it (with the data graph) to a SHACL validator — see the
@@ -14,4 +16,10 @@ export declare function taskShapeTtl(): string;
  * `src/tracker.test.ts` for the `rdf-validate-shacl` pattern.
  */
 export declare function trackerShapeTtl(): string;
+/**
+ * The canonical federated-contacts (`vcard:AddressBook`) SHACL shape, as a Turtle
+ * string. Cached after the first read. Pass it (with the data graph) to a SHACL
+ * validator — see `src/contacts.test.ts` for the `rdf-validate-shacl` pattern.
+ */
+export declare function addressBookShapeTtl(): string;
 //# sourceMappingURL=shape.d.ts.map

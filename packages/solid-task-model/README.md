@@ -122,6 +122,91 @@ the barrel (`.`) and the **client-safe `./tracker` subpath** — import from `./
 `trackerShapeTtl`. The tracker SHACL shape is `shapes/tracker.ttl`, also a string via
 `trackerShapeTtl()`.
 
+## Contacts (`./contacts`) — the SolidOS `vcard:AddressBook` model
+
+The same federation discipline applied to **contacts**: a person added in the Pod
+Manager's contacts view, in solid-issues, or in SolidOS itself is the SAME RDF, so every
+app (and SolidOS) reads it identically. `@jeswr/solid-task-model/contacts` carries the
+SolidOS `vcard:AddressBook` family — an address book, its people/groups **index
+documents**, individual contacts, and groups.
+
+**Three entities + two index documents:**
+
+| Entity | Subject | Key triples |
+|---|---|---|
+| Address book | `<book>#this` (`index.ttl`) | `a vcard:AddressBook`; `dc:title` **+** `vcard:fn`; `vcard:nameEmailIndex <people.ttl>`; `vcard:groupIndex <groups.ttl>`; `acl:owner <webid>` |
+| Individual | `<person>#this` (`Person/<uuid>/index.ttl`) | `a vcard:Individual`; `vcard:fn`; `vcard:hasUID "urn:uuid:…"`; `vcard:inAddressBook <book>`; structured `vcard:hasEmail`/`vcard:hasTelephone`/`vcard:url`; `vcard:note`; `dct:created` |
+| Group | `<group>#this` | `a vcard:Group`; `vcard:fn`; `vcard:hasMember <person>` |
+| people index | `people.ttl` | `<person> vcard:inAddressBook <book>; vcard:fn "name"` |
+| groups index | `groups.ttl` | `<book> vcard:includesGroup <group>; <group> a vcard:Group; vcard:fn "name"` |
+
+**The crux — email/phone modelling (parse BOTH forms).** SolidOS's contact form reads a
+**structured** value node, NOT a direct IRI. So:
+
+- `buildPerson` **always writes the structured form**:
+  `vcard:hasEmail [ a vcard:Home; vcard:value <mailto:…> ]` /
+  `vcard:hasTelephone [ a vcard:Cell; vcard:value <tel:…> ]` /
+  `vcard:url [ a vcard:WebId; vcard:value <webid> ]`.
+- `parsePerson` **accepts BOTH** the structured form **and** a legacy direct
+  `vcard:hasEmail <mailto:…>` IRI — for each `vcard:hasEmail` object: an IRI is used
+  directly; a structured node is followed to its `vcard:value`. So no producer's data is
+  dropped on a cross-app read. The value round-trips as the canonical `mailto:`/`tel:`
+  IRI. A contact may carry multiple emails/phones; malformed entries are dropped on write
+  (untrusted-input discipline).
+
+**SolidOS interop — two distinct vocabularies to get right:**
+
+- **SolidOS `vcard:` extension terms** (NOT in the published W3C vCard ontology, but the
+  live SolidOS contacts contract): `vcard:AddressBook`, `vcard:nameEmailIndex`,
+  `vcard:groupIndex`, `vcard:inAddressBook`, `vcard:includesGroup`. The model honours the
+  exact spelling.
+- **`dc:` vs `dct:` — two DIFFERENT namespaces.** The address-book title is `dc:title` (DC
+  **Elements 1.1**, `…/dc/elements/1.1/`), while a person doc's `dct:created` is DC
+  **Terms** (`…/dc/terms/`). They are not interchangeable; the model writes `dc:title` (so
+  SolidOS reads it) **and** `vcard:fn` (so the shape is satisfied).
+
+```ts
+import {
+  buildAddressBook,
+  buildPerson,
+  buildGroup,
+  buildPeopleIndex,
+  buildGroupsIndex,
+  parseAddressBook,
+  parsePerson,
+  parseGroup,
+  parsePersonTtl,
+  serializePerson,
+  addressBookSubject,
+  personSubject,
+  groupSubject,
+  type AddressBookData,
+  type ContactData,
+  type ContactGroupData,
+} from "@jeswr/solid-task-model/contacts"; // client-safe subpath (no node:fs)
+
+// Build a contact — the structured email/phone form SolidOS reads is written for you.
+const ttl = await serializePerson("https://alice.pod/contacts/Person/abc/index.ttl", {
+  name: "Bob Smith",
+  inAddressBook: "https://alice.pod/contacts/index.ttl#this",
+  emails: ["bob@example.com"],          // → vcard:hasEmail [ a vcard:Home; vcard:value <mailto:bob@example.com> ]
+  phones: ["+15551234"],                // → vcard:hasTelephone [ a vcard:Cell; vcard:value <tel:+15551234> ]
+  webId: "https://bob.pod/profile/card#me",
+});
+
+// parsePerson accepts BOTH the structured form AND a legacy direct mailto: IRI.
+const contact: ContactData | undefined = await parsePersonTtl(url, body, contentType);
+```
+
+The runtime `ContactBook` / `Contact` / `ContactGroup` accessors and the build/parse
+functions are exported from both the barrel (`.`) and the **client-safe `./contacts`
+subpath** — import from `./contacts` (like `./task`/`./tracker`) inside client components,
+since the barrel re-exports the `node:fs`-using `addressBookShapeTtl`. The contacts SHACL
+shape is `shapes/contacts.ttl`, also a string via `addressBookShapeTtl()`. It is
+**advisory** (it documents the contract and must not reject real-world contacts): a
+canonical book + person + group yields zero violations; the email/phone rule accepts both
+forms; missing `vcard:fn` is a `sh:Warning`, not a `sh:Violation`.
+
 ## Usage
 
 ```ts
