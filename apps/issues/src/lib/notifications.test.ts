@@ -181,6 +181,51 @@ describe("watchContainer (WebSocket live-sync, mocked)", () => {
     sync.close();
   });
 
+  it("does NOT open a socket when close() runs while the subscription POST is in flight", async () => {
+    // A POST that we resolve manually, so we can call close() mid-flight.
+    let resolvePost: (r: Response) => void = () => {};
+    const descTtl = `
+      @prefix notify: <http://www.w3.org/ns/solid/notifications#> .
+      <https://pod.example/alice/.well-known/solid>
+        notify:subscription <https://pod.example/alice/.notifications/WebSocketChannel2023/> .
+      <https://pod.example/alice/.notifications/WebSocketChannel2023/> notify:channelType notify:WebSocketChannel2023 .
+    `;
+    const doFetch = vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === "HEAD") {
+        return new Response(null, {
+          headers: { link: '</alice/.well-known/solid>; rel="http://www.w3.org/ns/solid/terms#storageDescription"' },
+        });
+      }
+      if (String(url).endsWith("/.well-known/solid")) {
+        return new Response(descTtl, { headers: { "content-type": "text/turtle" } });
+      }
+      if (init?.method === "POST") {
+        return new Promise<Response>((res) => {
+          resolvePost = res;
+        });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    }) as unknown as typeof fetch;
+
+    const sync = watchContainer(CONTAINER, vi.fn(), {
+      ownStorageUrls: OWN,
+      fetch: doFetch,
+      WebSocketImpl: MockWebSocket as unknown as typeof WebSocket,
+    });
+    await flush(); // let discovery + the POST start
+    // Tear down WHILE the POST is still pending, THEN resolve it.
+    sync.close();
+    resolvePost(
+      new Response(JSON.stringify({ receiveFrom: "wss://pod.example/socket" }), {
+        status: 201,
+        headers: { "content-type": "application/ld+json" },
+      }),
+    );
+    await flush();
+    // The watcher was closed before the socket would be created → no socket.
+    expect(MockWebSocket.instances.length).toBe(0);
+  });
+
   it("fail-closed: with NO own-storage allow-list it polls, never subscribes", async () => {
     vi.useFakeTimers();
     const doFetch = ownPodFetch("wss://pod.example/socket");

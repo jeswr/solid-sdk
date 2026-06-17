@@ -147,6 +147,28 @@ describe("readInbox (end to end, mocked fetch)", () => {
     expect(spy.mock.calls.some((c) => String(c[0]) === foreign)).toBe(false);
   });
 
+  it("sorts by published BEFORE applying the display cap (newest survive regardless of container order)", async () => {
+    // 60 members in OLDEST-first container order; only the newest 50 should show,
+    // and a member newer than the first-50-by-container-order must NOT be dropped.
+    const N = 60;
+    const members = Array.from({ length: N }, (_, i) => `${INBOX}n${i}.ttl`);
+    const ttl: Record<string, string> = {};
+    members.forEach((m, i) => {
+      // Published time increases with index (i hours from a base instant) ⇒ the
+      // LAST 50 (i=10..59) are the newest. Use a real instant per member so every
+      // timestamp is valid (a fixed calendar field would overflow past 31 days).
+      const published = new Date(Date.UTC(2026, 0, 1) + i * 3600_000).toISOString();
+      ttl[m] = `${PREFIXES}\n<${m}> a as:Announce ; as:summary "n${i}" ; as:published "${published}" .`;
+    });
+    const doFetch = inboxPod(members, ttl);
+    const { notifications } = await readInbox(WEBID, OWN, doFetch);
+    expect(notifications.length).toBe(50);
+    // Newest-first: n59 first, and the cut-off is n10 (the 50th newest); n0..n9 dropped.
+    expect(notifications[0].summary).toBe("n59");
+    expect(notifications.at(-1)?.summary).toBe("n10");
+    expect(notifications.some((n) => n.summary === "n0")).toBe(false);
+  });
+
   it("returns an empty list when the profile advertises no own-pod inbox", async () => {
     const doFetch = vi.fn(async (url: string) => {
       if (String(url) === WEBID) {

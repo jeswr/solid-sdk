@@ -138,6 +138,11 @@ export function watchContainer(
         startPolling();
         return;
       }
+      // Re-check `closed` once more: `close()` may have run while the POST / JSON
+      // parse was in flight. Without this a socket would be opened (and leak)
+      // AFTER the watcher was torn down, since `close()` only knows about a `ws`
+      // that already exists.
+      if (closed) return;
       ws = new WS(receiveFrom);
       onMessage = () => onChange();
       onError = startPolling;

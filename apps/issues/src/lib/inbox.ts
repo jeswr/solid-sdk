@@ -176,8 +176,42 @@ function byNewest(a: InboxNotification, b: InboxNotification): number {
   return vb - va;
 }
 
-/** A bounded cap on notifications fetched per inbox load (keeps the view snappy). */
-const MAX_NOTIFICATIONS = 50;
+/** How many notifications the view renders (applied AFTER fetch + newest-first sort). */
+const DISPLAY_LIMIT = 50;
+/**
+ * Hard ceiling on member resources FETCHED per load — a backstop against a
+ * pathologically large inbox, NOT the display cap. We must fetch enough to sort
+ * by `as:published` (LDP `ldp:contains` order is not guaranteed), so this is set
+ * well above the display limit; the newest `DISPLAY_LIMIT` survive the cut.
+ */
+const MAX_FETCH = 500;
+/** Max concurrent member fetches (keeps the fan-out bounded on a large inbox). */
+const FETCH_CONCURRENCY = 8;
+
+/**
+ * Map `fn` over `items` with at most `limit` in flight at once. A rejected `fn`
+ * surfaces as a rejected slot (callers use Promise-settled semantics to skip it).
+ */
+async function mapWithConcurrency<T, R>(
+  items: readonly T[],
+  limit: number,
+  fn: (item: T) => Promise<R>,
+): Promise<PromiseSettledResult<R>[]> {
+  const results: PromiseSettledResult<R>[] = new Array(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const i = next++;
+      try {
+        results[i] = { status: "fulfilled", value: await fn(items[i]) };
+      } catch (reason) {
+        results[i] = { status: "rejected", reason };
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
 
 /**
  * Read the user's LDN inbox: resolve `ldp:inbox` (own-pod-validated), list its
@@ -202,18 +236,23 @@ export async function readInbox(
     // Defence in depth: a member link could (maliciously or by misconfiguration)
     // point off-pod — only fetch members within the user's own storage.
     .filter((m) => m !== inboxUrl && isOwnPodUrl(m, ownStorageUrls))
-    .slice(0, MAX_NOTIFICATIONS);
+    // Fetch ceiling only (NOT the display cap): `ldp:contains` order is not
+    // guaranteed, so we must fetch a broad set, sort by `as:published`, and THEN
+    // cap — otherwise newer notifications past the first N could be hidden.
+    .slice(0, MAX_FETCH);
 
-  const settled = await Promise.allSettled(
-    memberUrls.map(async (m) => {
-      const { dataset } = await fetchRdf(m, opts);
-      return parseNotification(m, dataset);
-    }),
-  );
+  // Bounded-concurrency fan-out so a large inbox doesn't open hundreds of
+  // requests at once. A member that fails to fetch/parse is skipped.
+  const settled = await mapWithConcurrency(memberUrls, FETCH_CONCURRENCY, async (m) => {
+    const { dataset } = await fetchRdf(m, opts);
+    return parseNotification(m, dataset);
+  });
   const notifications = settled
     .filter((r): r is PromiseFulfilledResult<InboxNotification> => r.status === "fulfilled")
     .map((r) => r.value)
-    .sort(byNewest);
+    .sort(byNewest)
+    // Newest-first, THEN apply the display cap so the most recent survive.
+    .slice(0, DISPLAY_LIMIT);
 
   return { inboxUrl, notifications };
 }
