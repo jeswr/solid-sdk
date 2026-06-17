@@ -539,3 +539,45 @@ describe("F3: provenance activity log (repository)", () => {
     for (const e of log) expect(page).toContain(e.id);
   });
 });
+
+describe("dependency enforcement (#75 P1-4): authoritative openBlockers", () => {
+  it("reports an issue's open (not-closed) blockers, read fresh from the pod", async () => {
+    const { impl } = fakePod();
+    const repo = new Repository(TRACKER, impl, ME);
+    const blocker = await repo.create({ title: "Do me first", creator: ME });
+    const blocked = await repo.create({ title: "Needs the other", creator: ME, blockedBy: [blocker] });
+
+    const open = await repo.openBlockers(blocked);
+    expect(open.map((b) => b.url)).toEqual([blocker]);
+    expect(open[0].title).toBe("Do me first");
+  });
+
+  it("clears a blocker once it is CLOSED (a closed blocker no longer obstructs)", async () => {
+    const { impl } = fakePod();
+    const repo = new Repository(TRACKER, impl, ME);
+    const blocker = await repo.create({ title: "Prereq", creator: ME });
+    const blocked = await repo.create({ title: "Dependent", creator: ME, blockedBy: [blocker] });
+
+    expect(await repo.openBlockers(blocked)).toHaveLength(1);
+    await repo.setState(blocker, "closed");
+    expect(await repo.openBlockers(blocked)).toEqual([]);
+  });
+
+  it("returns nothing for an issue with no blockers", async () => {
+    const { impl } = fakePod();
+    const repo = new Repository(TRACKER, impl, ME);
+    const url = await repo.create({ title: "Standalone", creator: ME });
+    expect(await repo.openBlockers(url)).toEqual([]);
+  });
+
+  it("fails open: an unreadable / missing blocker is not reported", async () => {
+    const { impl } = fakePod();
+    const repo = new Repository(TRACKER, impl, ME);
+    const blocked = await repo.create({
+      title: "Points at nothing",
+      creator: ME,
+      blockedBy: [`${CONTAINER}does-not-exist.ttl`],
+    });
+    expect(await repo.openBlockers(blocked)).toEqual([]);
+  });
+});

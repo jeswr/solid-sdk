@@ -14,6 +14,7 @@ import { SavedViews } from "@/lib/saved-views";
 import type { PodSavedView } from "@/lib/pod-saved-views";
 import { resolveView, viewHref, VIEW_KEY, type View } from "@/lib/view";
 import { DEFAULT_WORKFLOW, type FieldDef, type Priority, type StatusSlug, type WorkflowDef } from "@/lib/issue";
+import { dependencyWarning, type OpenBlocker } from "@/lib/dependencies";
 import { IssueFormDialog, type IssueFormSubmit } from "@/components/issue-form-dialog";
 import { ShareDialog } from "@/components/share-dialog";
 import { OpenTrackerDialog } from "@/components/open-tracker-dialog";
@@ -63,6 +64,7 @@ import {
   AlertCircle,
   ArrowDownUp,
   ArrowLeft,
+  Ban,
   Bookmark,
   BookmarkPlus,
   CheckCircle2,
@@ -162,6 +164,12 @@ export function IssuesView() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<IssueRecord | undefined>(undefined);
   const [deleteTarget, setDeleteTarget] = useState<IssueRecord | undefined>(undefined);
+  // Dependency enforcement (#75 P1-4): a pending guarded transition awaiting the
+  // user's override confirmation because the issue has open blockers. WARN, never
+  // hard-block — `proceed` runs the original transition when the user confirms.
+  const [pendingTransition, setPendingTransition] = useState<
+    { issue: IssueRecord; verb: string; blockers: OpenBlocker[]; proceed: () => void } | undefined
+  >(undefined);
   const [commentsUrl, setCommentsUrl] = useState<string | undefined>(undefined);
   const [shareResource, setShareResource] = useState<{ url: string; extraUrls?: string[]; label: string } | undefined>(undefined);
   const [openTrackerOpen, setOpenTrackerOpen] = useState(false);
@@ -471,6 +479,22 @@ export function IssuesView() {
     }
   }
 
+  // Dependency enforcement (#75 P1-4): gate a status transition behind an
+  // open-blocker WARNING (never a hard block). If moving `issue` to
+  // `targetStatus` is a guarded transition (starting/completing) AND it has open
+  // `dct:requires` blockers, surface them and let the user proceed (override) or
+  // cancel. Otherwise the transition runs straight through. The check is the
+  // instant in-memory derivation over the loaded list (the board already has it);
+  // the authoritative pod-fresh equivalent is `issues.openBlockers`.
+  const guardedTransition = (issue: IssueRecord, targetStatus: StatusSlug, verb: string, proceed: () => void) => {
+    const warning = dependencyWarning(issue, targetStatus, issues.issues, workflow);
+    if (!warning.blocked) {
+      proceed();
+      return;
+    }
+    setPendingTransition({ issue, verb, blockers: warning.blockers, proceed });
+  };
+
   const [createDefaults, setCreateDefaults] = useState<{ parent?: string; status?: StatusSlug; sprint?: string }>({});
   const onCreate = (defaults: { parent?: string; status?: StatusSlug; sprint?: string } = {}) => {
     setEditing(undefined);
@@ -511,11 +535,21 @@ export function IssuesView() {
         () => setGroupAccess(issue.url, profile!.webId, group.iri!, { read: true, write: true, control: false }),
         "Shared with the team",
       ),
-    onToggle: () =>
-      run(
-        () => issues.setState(issue.url, issue.state === "open" ? "closed" : "open"),
-        issue.state === "open" ? "Issue closed" : "Issue reopened",
-      ),
+    onToggle: () => {
+      const closing = issue.state === "open";
+      const doToggle = () =>
+        run(
+          () => issues.setState(issue.url, closing ? "closed" : "open"),
+          closing ? "Issue closed" : "Issue reopened",
+        );
+      if (!closing) {
+        doToggle(); // reopening is never guarded (it's not forward progress)
+        return;
+      }
+      // Closing maps to the workflow's first terminal status — guard that target.
+      const target = workflow.statuses.find((s) => s.terminal)?.slug ?? "done";
+      guardedTransition(issue, target, "complete", doToggle);
+    },
     // Board-only: hide a finished card from the board (it stays closed in the
     // pod). The card only renders this when closed (pss-w29w), and it is supplied
     // only from the board path — never on a list/table card.
@@ -1027,31 +1061,41 @@ export function IssuesView() {
             epicOf={epicOf}
             groupOf={(i) => (groupBy === "status" ? i.status : (i.priority ?? "none"))}
             onMove={(url, key) => {
-              // Optimistic move (pss-w29w): slide the card immediately, persist in
-              // the background, revert + toast on failure.
               const move = moveForColumn(groupBy, key);
               const { next, original } = optimisticMove(issues.issues, url, move, groupBy, workflow);
               if (!original) return; // no-op drop (same column)
-              // The record this move optimistically wrote — used to detect whether a
-              // LATER move of the same card has since superseded it, so a stale
-              // failure never clobbers a newer move (revertMoveIfCurrent).
-              const optimistic = next.find((i) => i.url === url)!;
-              issues.setIssuesLocal(() => next);
-              void issues
-                .persist((r) =>
-                  move.kind === "status"
-                    ? r.setStatus(url, move.status)
-                    : r.update(url, { priority: move.priority }),
-                )
-                .catch((e) => {
-                  issues.setIssuesLocal((list) => revertMoveIfCurrent(list, original, optimistic, move));
-                  if (e instanceof ConflictError) {
-                    toast.error(e.message);
-                    void issues.refresh();
-                  } else {
-                    toast.error(e instanceof Error ? e.message : "Could not move the card.");
-                  }
-                });
+              // The optimistic move + background persist (pss-w29w): slide the card
+              // immediately, persist in the background, revert + toast on failure.
+              const performMove = () => {
+                // The record this move optimistically wrote — used to detect whether
+                // a LATER move of the same card has since superseded it, so a stale
+                // failure never clobbers a newer move (revertMoveIfCurrent).
+                const optimistic = next.find((i) => i.url === url)!;
+                issues.setIssuesLocal(() => next);
+                void issues
+                  .persist((r) =>
+                    move.kind === "status"
+                      ? r.setStatus(url, move.status)
+                      : r.update(url, { priority: move.priority }),
+                  )
+                  .catch((e) => {
+                    issues.setIssuesLocal((list) => revertMoveIfCurrent(list, original, optimistic, move));
+                    if (e instanceof ConflictError) {
+                      toast.error(e.message);
+                      void issues.refresh();
+                    } else {
+                      toast.error(e instanceof Error ? e.message : "Could not move the card.");
+                    }
+                  });
+              };
+              // Dependency enforcement (#75 P1-4): a status move that starts/completes
+              // a card with open blockers warns first (override allowed); a priority
+              // move or a non-guarded status move runs straight through.
+              if (move.kind === "status") {
+                guardedTransition(original, move.status, "move", performMove);
+              } else {
+                performMove();
+              }
             }}
             onAddToColumn={
               issues.canCreate && groupBy === "status"
@@ -1245,6 +1289,43 @@ export function IssuesView() {
               }}
             >
               Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dependency enforcement (#75 P1-4): WARN before starting/completing an
+          issue that still has open blockers — the user may proceed (override) or
+          cancel. Never a hard block. */}
+      <Dialog open={!!pendingTransition} onOpenChange={(o) => !o && setPendingTransition(undefined)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>This issue is still blocked</DialogTitle>
+            <DialogDescription>
+              “{pendingTransition?.issue.title}” is blocked by {pendingTransition?.blockers.length === 1 ? "an issue that is" : "issues that are"} not done yet. You can still proceed.
+            </DialogDescription>
+          </DialogHeader>
+          <ul className="space-y-1 text-sm">
+            {pendingTransition?.blockers.map((b) => (
+              <li key={b.url} className="flex items-center gap-2">
+                <Ban className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+                <span className="truncate">{b.title ?? b.url}</span>
+                <Badge variant="outline" className="shrink-0">open</Badge>
+              </li>
+            ))}
+          </ul>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPendingTransition(undefined)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                const pending = pendingTransition;
+                setPendingTransition(undefined);
+                pending?.proceed();
+              }}
+            >
+              Proceed anyway
             </Button>
           </DialogFooter>
         </DialogContent>

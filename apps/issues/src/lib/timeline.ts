@@ -57,6 +57,86 @@ export function buildTimeline(issues: IssueRecord[], now = new Date()): Timeline
   return { from, to, bars, ticks };
 }
 
+/**
+ * One dependency link to draw on the timeline (#75 P1-4): an arrow FROM a
+ * blocker's bar TO the bar of the issue it blocks. `kind` distinguishes a hard
+ * blocker (`dct:requires`, "blocks") from a soft relation (`dct:relation`,
+ * "relates"). Endpoints are row indices into a placed-bar list plus the 0–100
+ * horizontal anchor of each end, so the view can position an SVG path without
+ * re-deriving geometry.
+ */
+export interface TimelineDependency {
+  /** Source (blocker / one side of a relation) bar row index. */
+  fromRow: number;
+  /** Target (blocked / other side of a relation) bar row index. */
+  toRow: number;
+  /** Source horizontal anchor (0–100): the blocker bar's right edge. */
+  fromAt: number;
+  /** Target horizontal anchor (0–100): the blocked bar's left edge. */
+  toAt: number;
+  kind: "blocks" | "relates";
+  /** The blocker issue URL (source). */
+  fromUrl: string;
+  /** The blocked issue URL (target). */
+  toUrl: string;
+}
+
+/**
+ * Compute the dependency links to overlay on a built timeline (#75 P1-4). For
+ * each `dct:requires` edge (this issue is blocked by X), draw an arrow from X's
+ * bar to this issue's bar — but ONLY when BOTH issues are placed on the timeline
+ * (a bar exists for each); an edge to/from an undated, unplaced issue cannot be
+ * drawn. With `includeRelates`, symmetric `dct:relation` edges are added too,
+ * deduplicated so a reciprocal pair (A relates B, B relates A) yields one link.
+ *
+ * Pure derivation over the stored `blockedBy` / `relatesTo` link sets; nothing is
+ * written. Self-edges (an issue requiring/relating to itself, from malformed pod
+ * data) are skipped.
+ */
+export function timelineDependencies(
+  bars: TimelineBar[],
+  options: { includeRelates?: boolean } = {},
+): TimelineDependency[] {
+  const rowOf = new Map<string, number>();
+  bars.forEach((b, row) => rowOf.set(b.issue.url, row));
+  const out: TimelineDependency[] = [];
+
+  for (const bar of bars) {
+    const toUrl = bar.issue.url;
+    const toRow = rowOf.get(toUrl)!;
+    const toAt = bar.start; // arrow head lands at the blocked bar's left edge
+    for (const fromUrl of bar.issue.blockedBy) {
+      if (fromUrl === toUrl) continue; // self-edge from malformed data
+      const fromRow = rowOf.get(fromUrl);
+      if (fromRow === undefined) continue; // blocker not on the timeline
+      const src = bars[fromRow];
+      out.push({ fromRow, toRow, fromAt: src.start + src.width, toAt, kind: "blocks", fromUrl, toUrl });
+    }
+  }
+
+  if (options.includeRelates) {
+    const seen = new Set<string>();
+    for (const bar of bars) {
+      const aUrl = bar.issue.url;
+      const aRow = rowOf.get(aUrl)!;
+      for (const bUrl of bar.issue.relatesTo) {
+        if (bUrl === aUrl) continue;
+        const bRow = rowOf.get(bUrl);
+        if (bRow === undefined) continue;
+        // Dedupe the symmetric pair: key on the unordered {a,b} URL set.
+        const key = JSON.stringify(aUrl < bUrl ? [aUrl, bUrl] : [bUrl, aUrl]);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const a = bars[aRow];
+        const b = bars[bRow];
+        out.push({ fromRow: aRow, toRow: bRow, fromAt: a.start + a.width, toAt: b.start, kind: "relates", fromUrl: aUrl, toUrl: bUrl });
+      }
+    }
+  }
+
+  return out;
+}
+
 /** A month grid (6 weeks × 7 days) for the calendar view, with issues on due dates. */
 export interface CalendarDay {
   date: Date;
