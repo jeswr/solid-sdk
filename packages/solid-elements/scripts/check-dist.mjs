@@ -13,7 +13,12 @@
 //     touched, a build FAILURE leaves the working tree intact (no destructive
 //     delete-then-fail window).
 //   - `diff -r` compares the committed snapshot against the fresh build.
-import { execSync } from "node:child_process";
+//   - Both child processes are spawned via `execFileSync` with an ARGUMENT
+//     ARRAY (no shell). The temp dir comes from `tmpdir()`, which honours
+//     `TMPDIR`/`TMP`/`TEMP`, so its path could contain shell-special characters;
+//     passing it as a discrete argv element (never string-interpolated into a
+//     shell command line) means no quoting/expansion hazard regardless of path.
+import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -26,14 +31,15 @@ const freshDir = mkdtempSync(join(tmpdir(), "jeswr-solid-elements-dist-"));
 
 try {
   // Build into the FRESH temp dir (overriding outDir) — the committed dist/ is
-  // never modified, so a build failure here is non-destructive.
-  execSync(`npx tsc -p tsconfig.build.json --outDir "${freshDir}"`, {
+  // never modified, so a build failure here is non-destructive. argv array, no shell.
+  execFileSync("npx", ["tsc", "-p", "tsconfig.build.json", "--outDir", freshDir], {
     cwd: root,
     stdio: "inherit",
+    shell: false,
   });
-  // Compare the committed dist/ against the fresh build.
+  // Compare the committed dist/ against the fresh build. argv array, no shell.
   try {
-    execSync(`diff -r "${dist}" "${freshDir}"`, { stdio: "pipe" });
+    execFileSync("diff", ["-r", dist, freshDir], { stdio: "pipe", shell: false });
   } catch (e) {
     console.error("\n[check:dist] FAIL — committed dist/ differs from a fresh build.");
     console.error("Run `npm run build` and commit the result.\n");
