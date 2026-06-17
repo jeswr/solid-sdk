@@ -165,7 +165,10 @@ export declare class Contact extends TermWrapper {
     /**
      * The contact's emails as canonical `mailto:` IRIs. Reads BOTH a direct
      * `vcard:hasEmail <mailto:..>` and the structured `vcard:hasEmail [ vcard:value
-     * <mailto:..> ]` form (the crux behaviour).
+     * <mailto:..> ]` form (the crux behaviour). Only well-formed `mailto:` IRIs are
+     * returned: pod data is untrusted, so a `javascript:`/`http:`/literal value from a
+     * malicious or malformed contact is DROPPED rather than handed to UI as an email
+     * (the public contract is canonical `mailto:` values).
      */
     get emails(): string[];
     /**
@@ -178,7 +181,8 @@ export declare class Contact extends TermWrapper {
     /**
      * The contact's phones as canonical `tel:` IRIs. Reads BOTH a direct
      * `vcard:hasTelephone <tel:..>` and the structured `vcard:hasTelephone [ vcard:value
-     * <tel:..> ]` form.
+     * <tel:..> ]` form. Only well-formed `tel:` IRIs are returned: an untrusted/malformed
+     * value (e.g. `javascript:`) is DROPPED rather than handed to UI as a phone link.
      */
     get phones(): string[];
     /**

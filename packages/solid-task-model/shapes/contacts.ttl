@@ -90,21 +90,25 @@
   # Email — accept EITHER a direct mailto: IRI OR a structured node whose
   # vcard:value is a mailto: IRI. This mirrors the parser (reads both) and the
   # builder (writes the structured form). A bare literal email is non-conforming.
+  # The structured branch requires vcard:value to be an IRI (sh:nodeKind sh:IRI):
+  # parsePerson reads vcard:value via NamedNodeAs.string and IGNORES a literal, so a
+  # structured node with a literal vcard:value must NOT pass the shape either.
   sh:property [
     sh:path vcard:hasEmail ; sh:name "email" ;
     sh:or (
       [ sh:nodeKind sh:IRI ; sh:pattern "^mailto:" ]
-      [ sh:property [ sh:path vcard:value ; sh:pattern "^mailto:" ; sh:minCount 1 ] ]
+      [ sh:property [ sh:path vcard:value ; sh:nodeKind sh:IRI ; sh:pattern "^mailto:" ; sh:minCount 1 ] ]
     ) ;
   ] ;
 
   # Telephone — accept EITHER a direct tel: IRI OR a structured node whose
-  # vcard:value is a tel: IRI.
+  # vcard:value is a tel: IRI. The structured branch likewise requires an IRI
+  # vcard:value (parsePerson ignores a literal value).
   sh:property [
     sh:path vcard:hasTelephone ; sh:name "telephone" ;
     sh:or (
       [ sh:nodeKind sh:IRI ; sh:pattern "^tel:" ]
-      [ sh:property [ sh:path vcard:value ; sh:pattern "^tel:" ; sh:minCount 1 ] ]
+      [ sh:property [ sh:path vcard:value ; sh:nodeKind sh:IRI ; sh:pattern "^tel:" ; sh:minCount 1 ] ]
     ) ;
   ] .
 

@@ -248,6 +248,26 @@ describe("THE CRUX — parse accepts BOTH email/phone forms → same Contact", (
       expect(type.map((q) => q.object.value)).toContain(vcard("Home"));
     }
   });
+
+  it("the PARSER drops a non-mailto:/non-tel: value from untrusted RDF (direct + structured)", () => {
+    // A malicious/malformed contact: a javascript: / http: / literal value must NOT
+    // be surfaced as an email/phone to UI. Both the direct-IRI and structured forms
+    // are guarded; only well-formed mailto:/tel: values survive.
+    const ttl = `
+      @prefix vcard: <http://www.w3.org/2006/vcard/ns#> .
+      <#this> a vcard:Individual ; vcard:fn "Untrusted" ;
+        vcard:hasEmail <javascript:alert(1)> ;
+        vcard:hasEmail <https://evil.example/phish> ;
+        vcard:hasEmail [ a vcard:Home ; vcard:value <javascript:alert(2)> ] ;
+        vcard:hasEmail [ a vcard:Home ; vcard:value <mailto:ok@example.com> ] ;
+        vcard:hasTelephone <javascript:alert(3)> ;
+        vcard:hasTelephone [ a vcard:Cell ; vcard:value <sip:evil@x> ] ;
+        vcard:hasTelephone [ a vcard:Cell ; vcard:value <tel:+15559999> ] .
+    `;
+    const parsed = parsePerson(PERSON, parseStore(ttl, PERSON));
+    expect(parsed?.emails).toEqual(["mailto:ok@example.com"]);
+    expect(parsed?.phones).toEqual(["tel:+15559999"]);
+  });
 });
 
 describe("SolidOS-readable triples (the pane reads these)", () => {
@@ -551,6 +571,30 @@ describe("SHACL shape (shapes/contacts.ttl)", () => {
     `;
     expect((await validateTtl(directTtl, PERSON)).conforms).toBe(true);
     expect((await validateTtl(structTtl, PERSON)).conforms).toBe(true);
+  });
+
+  it("a structured node with a LITERAL vcard:value is non-conforming (parser ignores literals)", async () => {
+    // parsePerson reads vcard:value via NamedNodeAs.string and IGNORES a literal, so
+    // the shape must reject a structured node whose vcard:value is a literal — the
+    // sh:nodeKind sh:IRI guard on the nested vcard:value shape (email + phone).
+    const emailLiteral = `
+      @prefix vcard: <http://www.w3.org/2006/vcard/ns#> .
+      <#this> a vcard:Individual ; vcard:fn "Literal value" ;
+        vcard:hasEmail [ a vcard:Home ; vcard:value "mailto:x@example.com" ] .
+    `;
+    const phoneLiteral = `
+      @prefix vcard: <http://www.w3.org/2006/vcard/ns#> .
+      <#this> a vcard:Individual ; vcard:fn "Literal value" ;
+        vcard:hasTelephone [ a vcard:Cell ; vcard:value "tel:+15550000" ] .
+    `;
+    const emailReport = await validateTtl(emailLiteral, PERSON);
+    expect(emailReport.conforms).toBe(false);
+    expect(emailReport.results.some((r) => String(r.path?.value).endsWith("hasEmail"))).toBe(true);
+    const phoneReport = await validateTtl(phoneLiteral, PERSON);
+    expect(phoneReport.conforms).toBe(false);
+    expect(phoneReport.results.some((r) => String(r.path?.value).endsWith("hasTelephone"))).toBe(
+      true,
+    );
   });
 
   it("a group with NO vcard:fn is non-conforming (required)", async () => {
