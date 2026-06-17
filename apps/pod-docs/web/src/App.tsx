@@ -4,8 +4,9 @@
 // → a thin header (the shared app-shell chrome) over the LOCAL @jeswr/pod-docs
 // <DocumentBrowser> pointed at the user's pod. The browser receives NO `fetch`
 // prop — it uses the ambient global fetch, which the SessionProvider patched via
-// reactive-auth's registerGlobally(), so every read/write carries the DPoP token
-// automatically.
+// the @jeswr/solid-elements PROACTIVE auth-fetch seam (installProactiveAuthFetch,
+// task #123), so every read/write PROACTIVELY carries the DPoP token on the FIRST
+// request to an allowed origin — no per-resource 401-dance.
 import { AccountMenu, FeedbackButton, ThemeToggle } from "@jeswr/app-shell";
 import { DocumentBrowser } from "@jeswr/pod-docs/ui";
 // SOLID-ELEMENTS (#115 / D-parity rollout #67/#68/#70): the framework-agnostic W3C

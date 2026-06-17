@@ -94,6 +94,14 @@ export default defineConfig({
       // (transitive) deps of solid-elements; pin them to the host's single copy.
       "lit",
       "@lit/react",
+      // The @jeswr/solid-elements/auth seam (the proactive auth-fetch, task #123) and
+      // this host's login flow BOTH depend on oauth4webapi + dpop. Dedupe to ONE copy
+      // each so the seam and the host's provider share the same module — important
+      // because oauth4webapi keys its request options off module-level Symbols
+      // (allowInsecureRequests / customFetch); a second copy would mint distinct Symbols,
+      // so a customFetch pinned with one copy's Symbol would be invisible to the other.
+      "oauth4webapi",
+      "dpop",
     ],
   },
   // Let Vite read the library source one directory up from the host root.

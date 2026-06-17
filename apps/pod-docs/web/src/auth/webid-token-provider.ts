@@ -497,15 +497,32 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
     this.#profileFetch = options.profileFetch ?? globalThis.fetch.bind(globalThis);
   }
 
-  /** oauth4webapi request options, enabling insecure loopback per the policy. */
+  /** oauth4webapi request options, enabling insecure loopback per the policy.
+   *
+   * REENTRANCY GUARD (task #123): every oauth4webapi request (OIDC discovery, the
+   * token-endpoint grant, dynamic client registration) MUST run on the PRISTINE fetch
+   * (`#profileFetch`, captured before any global patch), NOT the patched `globalThis.fetch`.
+   * The proactive auth-fetch patch (@jeswr/solid-elements/auth) calls THIS provider's
+   * `upgrade()` for any allowed-origin request — and the OIDC endpoints live on the issuer
+   * origin, which IS in the credential boundary. Without pinning `customFetch`, an internal
+   * token-endpoint request would re-enter the patched global → call `upgrade()` again →
+   * recurse / deadlock login, and would clobber the token-endpoint's own `Authorization`
+   * (client-credentials / none) with the resource DPoP token. `#profileFetch` is the
+   * un-patched native fetch, so these requests never re-enter the wrapper.
+   */
   #httpOptions(
     issuer: URL,
     signal: AbortSignal,
-  ): { signal: AbortSignal; [oauth.allowInsecureRequests]?: true } {
+  ): {
+    signal: AbortSignal;
+    [oauth.customFetch]: typeof fetch;
+    [oauth.allowInsecureRequests]?: true;
+  } {
+    const base = { signal, [oauth.customFetch]: this.#profileFetch };
     if (this.#allowInsecureLoopback && isLoopback(issuer.hostname)) {
-      return { signal, [oauth.allowInsecureRequests]: true };
+      return { ...base, [oauth.allowInsecureRequests]: true };
     }
-    return { signal };
+    return base;
   }
 
   /**
@@ -935,7 +952,11 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
    */
   async #discover(
     issuer: URL,
-    http: { signal: AbortSignal; [oauth.allowInsecureRequests]?: true },
+    http: {
+      signal: AbortSignal;
+      [oauth.customFetch]: typeof fetch;
+      [oauth.allowInsecureRequests]?: true;
+    },
   ): Promise<oauth.AuthorizationServer> {
     const discoveryResponse = await oauth.discoveryRequest(issuer, http);
     return oauth.processDiscoveryResponse(issuer, discoveryResponse);
@@ -1216,7 +1237,11 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
    */
   async #resolveClient(
     authorizationServer: oauth.AuthorizationServer,
-    http: { signal: AbortSignal; [oauth.allowInsecureRequests]?: true },
+    http: {
+      signal: AbortSignal;
+      [oauth.customFetch]: typeof fetch;
+      [oauth.allowInsecureRequests]?: true;
+    },
   ): Promise<oauth.Client> {
     if (this.#clientId !== undefined) {
       // A public browser client identified by a dereferenceable URL. `oauth.Client`

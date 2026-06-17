@@ -3,26 +3,58 @@
 // SessionProvider — the ONE place auth is wired for the Pod Docs static host.
 // It mounts the browser-only <authorization-code-flow> popup element, builds a
 // WebID-driven DPoP token provider bound to THIS origin's static Client
-// Identifier Document, and calls registerGlobally() so EVERY plain `fetch()`
-// (including the ones inside @jeswr/fetch-rdf and the @jeswr/pod-docs data layer)
-// transparently upgrades on a 401 with a DPoP token. The library's
-// `fetch?:` seam can then be left as the ambient global — no per-call wiring.
+// Identifier Document, and installs the @jeswr/solid-elements PROACTIVE auth-fetch
+// patch (`installProactiveAuthFetch`) so EVERY plain `fetch()` (including the ones
+// inside @jeswr/fetch-rdf and the @jeswr/pod-docs data layer) PROACTIVELY carries
+// the DPoP token on the FIRST request to an allowed origin. The library's `fetch?:`
+// seam can then be left as the ambient global — no per-call wiring.
+//
+// WHY THE SEAM, NOT THE RAW `ReactiveFetchManager` (task #123): the raw upstream
+// manager sends every request UNAUTHENTICATED first and attaches the token only
+// REACTIVELY on a 401 — per resource, with no origin/storage cache — so every
+// distinct pod URL pays a wasted 401 → upgrade → retry. The DocumentBrowser load
+// reads the documents container AND THEN each `pd:Document` it lists (DocsStore.list
+// → read per child), so a container of N documents paid N+1 wasted 401s. The
+// seam-based proactive patch attaches up front for an allowed origin (zero wasted
+// 401s) AND enforces a real credential boundary (the provider's own `matches()` is
+// unconditional; `isOriginAllowed` is the gate), so the token never rides
+// cross-origin. The shared, generalized helper lives in @jeswr/solid-elements/auth
+// (pod-docs IMPORTS it — it is NOT a per-app copy).
 //
 // LOAD-BEARING HOUSE RULES (do not "simplify" away):
 //  1. @solid/reactive-authentication is pure-ESM + browser-only (custom elements,
-//     popups). It is loaded via a DYNAMIC import inside an effect so it NEVER
-//     evaluates at module-eval / SSR / prerender time. (This host has no SSR, but
-//     keeping the dynamic import means the bundle has no top-level reactive-auth
-//     evaluation — verified by the build gate.)
-//  2. The 0.1.3 ReactiveFetchManager CONSTRUCTOR DOES NOT PATCH fetch — you MUST
-//     call `manager.registerGlobally()`. Forgetting it is the #1 reactive-auth bug.
+//     popups), and the WebIdDPoPTokenProvider builds on it. The provider lives in
+//     ./webid-token-provider; the seam primitives are pure + tree-shakeable, so the
+//     proactive patch carries no browser-only top-level evaluation (verified by the
+//     build gate). The provider's login/autologin/logout/DPoP invariants are UNCHANGED
+//     by the #123 fetch-layer swap — only HOW the token is attached to fetches moved
+//     from reactive (ReactiveFetchManager) to proactive (the seam). The package is
+//     still loaded via a DYNAMIC import inside the runtime build so it never evaluates
+//     at module-eval / SSR / prerender time (it remains the home of the popup element).
+//  2. The proactive patch is installed EXACTLY ONCE per page (its own once-only guard,
+//     mirroring this file's auth-runtime singleton): a StrictMode double-mount re-uses
+//     the install and never stacks a second patch over the first.
 //  3. The client_id is the per-origin static Client Identifier Document at
 //     `${origin}/clientid.jsonld` (generated at build by scripts/gen-clientid.mjs),
 //     so the OP shows "Pod Docs" on the consent screen instead of a throwaway
 //     dynamic registration.
 //  4. `allowInsecureLoopback` is enabled ONLY for a localhost origin (dev against
-//     a local CSS over HTTP); a deployed HTTPS origin stays strict.
+//     a local CSS over HTTP); a deployed HTTPS origin stays strict. It also gates
+//     whether the proactive credential boundary admits an http:// loopback pod origin.
+//
+// NOTE (pod-docs delta): this host has NO silent-session-restore yet (the separate
+// #69 P0 task) — tokens are memory-only, so there is no `restoring` state and no
+// remembered-account / refresh-grant arming. The proactive boundary is armed only on
+// the login PROBE and in `establishSessionFor` (provisional → authoritative), and
+// dropped fail-closed on logout / identity-switch / every login + autologin failure
+// path. The `@jeswr/solid-session-restore` dependency is present only because the
+// @jeswr/solid-elements/auth seam statically imports it; pod-docs does not USE it.
 
+import {
+  deriveProactiveAllowedOrigins,
+  installProactiveAuthFetch,
+  type ProactiveFetchInstall,
+} from "@jeswr/solid-elements/auth";
 import type { AuthorizationCodeFlow, GetCodeCallback } from "@solid/reactive-authentication";
 import {
   createContext,
@@ -58,7 +90,7 @@ export interface SessionContextValue {
   loggingIn: boolean;
   /** Last login error, surfaced to the UI. */
   error: string | null;
-  /** True once the auth runtime has loaded and registerGlobally() ran. */
+  /** True once the auth runtime has loaded and the proactive auth-fetch patch installed. */
   ready: boolean;
   /**
    * True while a full-page-redirect (autologin) login is being initiated or
@@ -94,21 +126,30 @@ const isLoopbackOrigin = (origin: string): boolean => {
 
 /**
  * MODULE-LEVEL singleton for the auth runtime — the fix for the global-fetch
- * patch lifecycle bug (Finding 2). `ReactiveFetchManager.registerGlobally()`
- * monkey-patches `globalThis.fetch` and offers no idempotency guard or cleanup,
- * so a naive per-mount effect is unsafe: under React.StrictMode the mount effect
- * runs TWICE, and the second pass would (a) snapshot the ALREADY-PATCHED fetch as
- * if it were pristine, and (b) call `registerGlobally()` again, STACKING a second
- * patch over the first. Two stacked patches double-handle auth and break plain
- * reads. Hoisting the build+register out of React, behind a once-only guard,
- * makes it run exactly once for the lifetime of the page regardless of how many
- * times the effect mounts — the pristine fetch is captured once and the global is
- * patched once.
+ * patch lifecycle bug (Finding 2). The proactive patch (`installProactiveAuthFetch`)
+ * monkey-patches `globalThis.fetch`, so a naive per-mount effect would be unsafe:
+ * under React.StrictMode the mount effect runs TWICE, and a second pass could (a)
+ * snapshot the ALREADY-PATCHED fetch as if it were pristine, and (b) install a second
+ * patch, STACKING two patches that double-handle auth and break plain reads. Two
+ * guards make this safe: this auth-runtime singleton (one provider per page) AND
+ * `installProactiveAuthFetch`'s OWN once-only guard (one patch + one pristine-fetch
+ * capture per page). Hoisting the build+install out of React, behind both guards,
+ * makes it run exactly once for the lifetime of the page regardless of how many times
+ * the effect mounts.
  */
 interface AuthRuntime {
   provider: WebIdDPoPTokenProvider;
-  /** The original, un-upgrading fetch captured BEFORE registerGlobally patched it. */
+  /** The original, un-upgrading fetch captured BEFORE the proactive patch installed. */
   profileFetch: typeof fetch;
+  /**
+   * The proactive-auth-fetch install handle (the @jeswr/solid-elements seam-based
+   * replacement for `ReactiveFetchManager.registerGlobally()`). The SessionProvider
+   * calls `setState` on login (probe + establish) / logout to update the live
+   * credential boundary (the allowed-origins set + the provider), so the patched global
+   * fetch PROACTIVELY attaches the token on the FIRST request to an allowed origin — no
+   * per-resource 401-dance — and authenticates NOTHING when logged out.
+   */
+  fetchInstall: ProactiveFetchInstall;
 }
 
 interface AuthRuntimeConfig {
@@ -262,9 +303,9 @@ export function cleanedUrl(href: string): string {
 }
 
 /**
- * Build + globally-register the auth runtime EXACTLY ONCE per page. Repeated
- * calls (e.g. a StrictMode double-mount) return the same in-flight/settled
- * promise without re-snapshotting fetch or re-patching the global.
+ * Build the auth runtime + install the proactive auth-fetch patch EXACTLY ONCE per
+ * page. Repeated calls (e.g. a StrictMode double-mount) return the same
+ * in-flight/settled promise without re-snapshotting fetch or re-patching the global.
  *
  * The provider is given `getCodeThroughHolder`, NOT a `getCode` bound to one
  * element: the singleton outlives any single <authorization-code-flow> element, so
@@ -275,11 +316,28 @@ export function cleanedUrl(href: string): string {
 function getAuthRuntime(cfg: AuthRuntimeConfig): Promise<AuthRuntime> {
   if (authRuntimeSingleton) return authRuntimeSingleton;
   authRuntimeSingleton = (async () => {
-    // Snapshot the pristine global fetch BEFORE the manager patches it — captured
-    // here, inside the once-only guard, so a second effect pass can never grab the
-    // already-patched fetch as the "pristine" baseline.
-    const profileFetch = globalThis.fetch.bind(globalThis);
-    const { ReactiveFetchManager } = await import("@solid/reactive-authentication");
+    // PROACTIVE AUTH FETCH (task #123) — adopt the @jeswr/solid-elements auth seam
+    // instead of the raw `ReactiveFetchManager`. `installProactiveAuthFetch` snapshots
+    // the pristine global fetch (so `profileFetch` is provably un-upgrading) and patches
+    // the global EXACTLY ONCE behind its own once-only guard. Unlike the old reactive
+    // manager (token attached only REACTIVELY on a 401, per resource, no origin gate),
+    // the patched wrapper PROACTIVELY attaches the DPoP token on the FIRST request to an
+    // ALLOWED origin and fail-closes for foreign origins — eliminating the per-resource
+    // 401-dance. The credential boundary is provider-less/empty here (everything public)
+    // until a login calls `fetchInstall.setState` with the live session + allowed origins
+    // (see `establishSessionFor` / the doLogin probe / the logout teardown below).
+    const fetchInstall = installProactiveAuthFetch();
+    const profileFetch = fetchInstall.pristineFetch;
+    // REGISTER the <authorization-code-flow> custom element. Its definition runs as a
+    // module SIDE EFFECT of @solid/reactive-authentication (customElements.define in
+    // AuthorizationCodeFlow.js). We adopted the proactive seam instead of the package's
+    // ReactiveFetchManager (task #123), but the package is STILL the home of the popup
+    // element the WebIdDPoPTokenProvider drives via getCode — so we MUST keep a VALUE
+    // (side-effect) dynamic import here. A `import type {…}` is erased at compile and would
+    // NOT register the element, leaving interactive login hung on `customElements.whenDefined`.
+    // The dynamic import keeps the browser-only element OUT of module-eval / SSR (the
+    // original Rule 1); we just no longer construct a ReactiveFetchManager from it.
+    await import("@solid/reactive-authentication");
     const provider = new WebIdDPoPTokenProvider(
       cfg.callbackUri,
       // getCode reads the CURRENT mounted element from the module-level holder —
@@ -292,9 +350,7 @@ function getAuthRuntime(cfg: AuthRuntimeConfig): Promise<AuthRuntime> {
         profileFetch,
       },
     );
-    const manager = new ReactiveFetchManager([provider]);
-    manager.registerGlobally(); // patched exactly once for the page lifetime.
-    return { provider, profileFetch };
+    return { provider, profileFetch, fetchInstall };
   })().catch((e) => {
     // A failed build must not poison the singleton — allow a later retry.
     authRuntimeSingleton = null;
@@ -307,10 +363,21 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const flowRef = useRef<AuthorizationCodeFlow>(null);
   // The token provider + pristine fetch, resolved from the page-lifetime singleton.
   const providerRef = useRef<WebIdDPoPTokenProvider | null>(null);
-  // The original, un-upgrading fetch snapshotted BEFORE registerGlobally patches
-  // the global — used for the pre-popup public profile read so it can never
-  // recurse into the provider on a 401.
+  // The original, un-upgrading fetch snapshotted BEFORE the proactive patch installs —
+  // used for the pre-popup public profile read so it can never recurse into the
+  // provider on a 401.
   const profileFetchRef = useRef<typeof fetch | null>(null);
+  // The proactive-auth-fetch install handle (task #123). The session-establish /
+  // logout paths call `fetchInstallRef.current.setState(...)` to update the live
+  // credential boundary (the allowed-origins set + the provider) so the patched global
+  // fetch proactively attaches the token to allowed origins while logged in, and
+  // authenticates NOTHING when logged out.
+  const fetchInstallRef = useRef<ProactiveFetchInstall | null>(null);
+  // localhost / loopback → admit an http:// pod origin into the credential boundary
+  // (dev / test only). Computed once (the origin can't change for a page lifetime).
+  const allowInsecureLoopbackRef = useRef<boolean>(
+    typeof location !== "undefined" && isLoopbackOrigin(location.origin),
+  );
   const [ready, setReady] = useState(false);
   const [webId, setWebId] = useState<string | null>(null);
   const [session, setSession] = useState<DerivedSession | null>(null);
@@ -361,10 +428,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         return id;
       },
     })
-      .then(({ provider, profileFetch }) => {
+      .then(({ provider, profileFetch, fetchInstall }) => {
         if (cancelled) return;
         providerRef.current = provider;
         profileFetchRef.current = profileFetch;
+        fetchInstallRef.current = fetchInstall;
         setReady(true);
       })
       .catch((e) => {
@@ -377,6 +445,18 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       // out a newer element's getCode.
       if (authFlowHolder.current === getCode) authFlowHolder.current = null;
     };
+  }, []);
+
+  // PROACTIVE FETCH (task #123): drop the live credential boundary back to "authenticate
+  // nothing" (no provider + empty allowed-origins). Called on logout, at the start of an
+  // identity-switch login, and on the fail-closed login/autologin failure paths, so a
+  // request racing the teardown is fail-closed at the gate (the patched global fetch
+  // leaves it unauthenticated). A no-op until the runtime has installed the patch
+  // (fetchInstallRef set). Declared BEFORE the doLogin / logout / autologin effect that
+  // list it as a dependency, so a deps array never references it before its const
+  // initialisation (TDZ).
+  const clearProactiveBoundary = useCallback(() => {
+    fetchInstallRef.current?.setState({ provider: null, allowedOrigins: new Set() });
   }, []);
 
   // The SHARED post-authentication step, used by BOTH the popup login (doLogin) and
@@ -395,9 +475,44 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           `(${id}). For your security you were not logged in.`,
       );
     }
+    // PROACTIVE FETCH (task #123): arm a PROVISIONAL credential boundary (the WebID
+    // origin) BEFORE the authenticated profile re-read below, so that read actually
+    // carries the token. An autologin-completion reaches HERE without the popup-login
+    // flow's pre-probe arming, so without this the "now authenticated" profile re-read
+    // would be UNAUTHENTICATED. The pod-root boundary is the AUTHORITATIVE one re-armed
+    // once the profile yields derived.podRoot (below). The popup-login path has already
+    // armed an equivalent boundary via the probe; re-arming with the same origins is
+    // idempotent. pod-docs' provider exposes no `resolvedIssuer()` accessor (it has no
+    // silent-restore), so the issuer origin is omitted — it is NOT needed in the boundary
+    // because the OIDC endpoints ride the pristine fetch (the re-entrancy guard). The
+    // WebID origin is the load-bearing target for the profile re-read.
+    fetchInstallRef.current?.setState({
+      provider: providerRef.current,
+      allowedOrigins: deriveProactiveAllowedOrigins({
+        webId: id,
+        allowInsecureLoopback: allowInsecureLoopbackRef.current,
+      }),
+    });
     // Re-read the profile (now authenticated) and derive the session.
     const me = await readProfile(id);
     const derived = deriveSession(me);
+    // PROACTIVE FETCH (task #123): now that the session's pod root is known, wire the
+    // AUTHORITATIVE credential boundary so the patched global fetch PROACTIVELY attaches
+    // the DPoP token to the pod / WebID origins on the FIRST request (no per-resource
+    // 401-dance — the DocumentBrowser load no longer pays a wasted 401 per pod document
+    // it reads). The pod root is the primary target (a pod on a DIFFERENT host than the
+    // WebID is a valid Solid topology and MUST be listed); the WebID origin is folded in
+    // by the seam's default. The boundary is https-only (http allowed only for a loopback
+    // host under the dev/test opt-in), so the token can never ride cross-origin or over
+    // cleartext.
+    fetchInstallRef.current?.setState({
+      provider: providerRef.current,
+      allowedOrigins: deriveProactiveAllowedOrigins({
+        podRoot: derived.podRoot,
+        webId: id,
+        allowInsecureLoopback: allowInsecureLoopbackRef.current,
+      }),
+    });
     setWebId(id);
     setSession(derived);
   }, []);
@@ -415,6 +530,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       //  - clear session-derived React state (pod root, etc.) so nothing from WebID-A
       //    is rendered while authenticating as WebID-B.
       providerRef.current?.reset();
+      // PROACTIVE FETCH (task #123): clear the prior identity's credential boundary too,
+      // so a data fetch racing the identity switch (before the probe / establishSessionFor
+      // re-arm it for the new WebID) is fail-closed at the gate — WebID-A's token can never
+      // ride a request during the switch window.
+      clearProactiveBoundary();
       setWebId(null);
       setSession(null);
       pendingWebIdHolder.current = id;
@@ -454,6 +574,24 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         // so the pod still sees a plain GET to the storage root, no custom header, no
         // CORS preflight.
         const probeBase = pub.storages[0] ?? new URL("/", id).toString();
+        // PROACTIVE FETCH (task #123) — ARM the credential boundary for the login PROBE.
+        // The probe below goes through the PATCHED global fetch and MUST reach
+        // `provider.upgrade()` (which drives the popup → token mint) to prove login. The
+        // proactive patch only calls `upgrade()` for an ALLOWED origin, so we must admit
+        // the probe's origin BEFORE fetching it — otherwise the probe is left
+        // unauthenticated, the popup never opens, and login can never complete. We arm
+        // from the PUBLIC profile we just read (the WebID + its advertised storages).
+        // establishSessionFor RE-arms the authoritative boundary post-login; the catch
+        // below clears it on failure. Without this the proactive swap would break
+        // interactive login (caught by the 401-budget e2e).
+        fetchInstallRef.current?.setState({
+          provider: providerRef.current,
+          allowedOrigins: deriveProactiveAllowedOrigins({
+            podRoot: pub.storages[0],
+            webId: id,
+            allowInsecureLoopback: allowInsecureLoopbackRef.current,
+          }),
+        });
         const probeRequest = new Request(withProbeFragment(probeBase), { method: "GET" });
         providerRef.current?.beginLoginProbe(probeRequest);
         let res: Response;
@@ -490,6 +628,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         // state, so a half-established session can't leak into the next attempt.
         pendingWebIdHolder.current = null;
         providerRef.current?.reset();
+        // Drop any credential boundary the probe / a partially-completed
+        // establishSessionFor armed, so a failed login never leaves the patched fetch
+        // authenticating (task #123).
+        clearProactiveBoundary();
         const msg =
           e instanceof AmbiguousIssuerError
             ? "This WebID lists multiple identity providers — multi-issuer choice is not yet wired in this host."
@@ -502,7 +644,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         setLoggingIn(false);
       }
     },
-    [establishSessionFor],
+    [establishSessionFor, clearProactiveBoundary],
   );
 
   // SINGLE-FLIGHT login, WebID-SCOPED (round-4 + round-4b finding-1 fix). The gate
@@ -551,11 +693,18 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     // WebID cannot reuse this user's token/session and a login probe cannot look
     // authenticated with the stale token.
     providerRef.current?.reset();
+    // PROACTIVE FETCH (task #123): drop the credential boundary so the patched global
+    // fetch authenticates NOTHING after logout — every request is public again until a
+    // new login re-arms it. Belt-and-braces with `provider.reset()` (whose generation
+    // fence already makes a racing `upgrade()` reject): clearing the allowed-origins set
+    // means a foreign or post-logout request is fail-closed at the gate, never reaching
+    // the (now-reset) provider.
+    clearProactiveBoundary();
     pendingWebIdHolder.current = null;
     setWebId(null);
     setSession(null);
     setError(null);
-  }, []);
+  }, [clearProactiveBoundary]);
 
   // ── AUTOLOGIN mount effect (full-page redirect deep-link / return) ───────────
   //
@@ -617,6 +766,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       // reset() clears the persisted redirect record + the DPoP key material + all
       // in-memory session state; the sentinel is a distinct key, cleared separately.
       provider.reset();
+      // PROACTIVE FETCH (task #123): pair the boundary clear with reset() (defence-in-depth
+      // — this pre-completion error return never armed the boundary, but every reset path
+      // leaves it empty).
+      clearProactiveBoundary();
       clearAutologinSentinel();
       pendingWebIdHolder.current = null;
       history.replaceState(null, "", cleanedUrl(location.href));
@@ -652,6 +805,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           // Failure: drop any persisted record + the sentinel, fall back to the login
           // screen. Do NOT loop, do NOT spew — surface a single error.
           provider.reset(); // clears the persisted record too; leaves reset-clean.
+          // PROACTIVE FETCH (task #123): establishSessionFor may have armed a provisional
+          // credential boundary before throwing (e.g. its profile re-read failed). Clear
+          // it here — mirroring doLogin's failure path — so a failed autologin completion
+          // never leaves the patched fetch authenticating after we've fallen back to
+          // logged-out.
+          clearProactiveBoundary();
           clearAutologinSentinel();
           setError(e instanceof Error ? e.message : String(e));
         })
@@ -687,13 +846,17 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         clearAutologinSentinel();
         pendingWebIdHolder.current = null;
         provider.reset();
+        // PROACTIVE FETCH (task #123): defence-in-depth — CASE B doesn't arm the boundary
+        // (it never reaches establishSessionFor before the redirect), but pair the clear
+        // with reset() so every provider-reset failure path leaves the boundary empty too.
+        clearProactiveBoundary();
         setAutologinPending(false);
         setError(e instanceof Error ? e.message : String(e));
       });
     // `webId` is a dep so a logout (webId→null) does NOT re-trigger autologin — the
     // once-guard and the cleaned URL (no fragment / no code) keep it inert after the
     // first pass.
-  }, [ready, webId, establishSessionFor]);
+  }, [ready, webId, establishSessionFor, clearProactiveBoundary]);
 
   const value = useMemo<SessionContextValue>(
     () => ({ webId, session, loggingIn, autologinPending, error, ready, login, logout }),
