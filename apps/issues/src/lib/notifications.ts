@@ -1,3 +1,4 @@
+// AUTHORED-BY Claude Opus 4.8
 /**
  * Live-sync over the pod (Solid Notifications Protocol — WebSocketChannel2023),
  * with a polling fallback for servers that don't advertise a channel. Notifications
@@ -10,9 +11,21 @@
  *
  * `fetch` here is the @solid/reactive-authentication-patched global, so the
  * subscription POST is authenticated; the `wss://` socket carries its own token.
+ *
+ * SECURITY (own-pod SSRF guard, load-bearing): the discovered subscription
+ * endpoint AND the `receiveFrom` socket URL both come from server-controlled
+ * data, so before we POST our auth-patched `fetch` to the endpoint, or open the
+ * socket, we confirm each points at one of the user's OWN pod storages
+ * (`own-pod.ts`). A foreign URL is rejected fail-closed → we fall back to polling
+ * rather than attach the user's token to / open a socket against another origin.
+ * Callers without the user's storage roots (e.g. a context that can't supply
+ * them) get the same fail-closed behaviour: with no own-pod allow-list, EVERY
+ * URL fails the guard, so live-sync degrades to polling rather than connecting
+ * to an unvalidated origin.
  */
 
 import { discoverWebSocketSubscriptionEndpoint, WEBSOCKET_CHANNEL_TYPE } from "./notification-discovery";
+import { isOwnPodUrl, isOwnPodWebSocketUrl } from "./own-pod";
 
 const CONTEXT = "https://www.w3.org/ns/solid/notifications-context/v1";
 
@@ -42,16 +55,48 @@ export interface LiveSync {
   close(): void;
 }
 
+/** Options for {@link watchContainer}. */
+export interface WatchOptions {
+  /**
+   * The user's own pod storage roots (from their profile's `pim:storage`). The
+   * discovered subscription endpoint and socket URL are validated against these
+   * before any authenticated request / socket open (own-pod SSRF guard). Empty /
+   * omitted ⇒ EVERYTHING fails the guard ⇒ poll-only (fail-closed).
+   */
+  ownStorageUrls?: readonly string[];
+  /** Injected fetch (tests); production uses the auth-patched global. */
+  fetch?: typeof fetch;
+  /** Injected WebSocket constructor (tests); production uses the global. */
+  WebSocketImpl?: typeof WebSocket;
+}
+
 const POLL_MS = 25_000;
 
 /**
  * Watch a container for changes, calling `onChange` when it (or a member) changes.
- * Tries a WebSocketChannel2023 subscription; on any failure, falls back to polling.
+ * Tries a WebSocketChannel2023 subscription against the user's OWN pod; on any
+ * failure — including the own-pod SSRF guard rejecting a foreign subscription /
+ * socket URL — it falls back to polling. Graceful: a server that advertises no
+ * channel polls; a server that advertises a FOREIGN channel polls (never
+ * connects). Clean teardown: `close()` clears the poll timer, removes the socket
+ * listeners, and closes the socket — no leaked sockets/listeners on unmount.
  */
-export function watchContainer(containerUrl: string, onChange: () => void, doFetch: typeof fetch = fetch): LiveSync {
+export function watchContainer(
+  containerUrl: string,
+  onChange: () => void,
+  options: WatchOptions = {},
+): LiveSync {
+  const doFetch = options.fetch ?? fetch;
+  const WS = options.WebSocketImpl ?? (typeof WebSocket !== "undefined" ? WebSocket : undefined);
+  const ownStorageUrls = options.ownStorageUrls ?? [];
+
   let ws: WebSocket | undefined;
   let poll: ReturnType<typeof setInterval> | undefined;
   let closed = false;
+  // Named handlers so teardown removes EXACTLY what was added (no leaked listeners).
+  let onMessage: (() => void) | undefined;
+  let onError: (() => void) | undefined;
+  let onClose: (() => void) | undefined;
 
   const startPolling = () => {
     if (poll || closed) return;
@@ -65,7 +110,13 @@ export function watchContainer(containerUrl: string, onChange: () => void, doFet
       // poll. This replaces the old hard-coded CSS `/.notifications/…` path.
       const service = await discoverWebSocketSubscriptionEndpoint(containerUrl, doFetch);
       if (closed) return;
-      if (!service) {
+      if (!service || !WS) {
+        startPolling();
+        return;
+      }
+      // SSRF guard: the discovered endpoint is server-controlled — only POST our
+      // auth-patched fetch to it if it lives within the user's OWN pod.
+      if (!isOwnPodUrl(service, ownStorageUrls)) {
         startPolling();
         return;
       }
@@ -80,12 +131,22 @@ export function watchContainer(containerUrl: string, onChange: () => void, doFet
         startPolling();
         return;
       }
-      ws = new WebSocket(receiveFrom);
-      ws.addEventListener("message", () => onChange());
-      ws.addEventListener("error", startPolling);
-      ws.addEventListener("close", () => {
+      // SSRF guard: the socket URL comes from the subscription response — only
+      // open it if its origin is one of the user's own pod storages. A foreign
+      // `receiveFrom` falls back to polling (never opens a cross-origin socket).
+      if (!isOwnPodWebSocketUrl(receiveFrom, ownStorageUrls)) {
+        startPolling();
+        return;
+      }
+      ws = new WS(receiveFrom);
+      onMessage = () => onChange();
+      onError = startPolling;
+      onClose = () => {
         if (!closed) startPolling();
-      });
+      };
+      ws.addEventListener("message", onMessage);
+      ws.addEventListener("error", onError);
+      ws.addEventListener("close", onClose);
     } catch {
       startPolling();
     }
@@ -94,7 +155,12 @@ export function watchContainer(containerUrl: string, onChange: () => void, doFet
   return {
     close() {
       closed = true;
-      ws?.close();
+      if (ws) {
+        if (onMessage) ws.removeEventListener("message", onMessage);
+        if (onError) ws.removeEventListener("error", onError);
+        if (onClose) ws.removeEventListener("close", onClose);
+        ws.close();
+      }
       if (poll) clearInterval(poll);
     },
   };

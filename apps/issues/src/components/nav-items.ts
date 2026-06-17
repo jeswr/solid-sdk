@@ -9,6 +9,7 @@ import {
   CalendarDays,
   Users,
   Layers,
+  Bell,
 } from "lucide-react";
 
 export interface NavItem {
@@ -33,4 +34,5 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { href: "/?view=calendar", label: "Calendar", icon: CalendarDays },
   { href: "/?view=dashboard", label: "Dashboard", icon: BarChart3, primary: true },
   { href: "/?view=workload", label: "Workload", icon: Users },
+  { href: "/?view=inbox", label: "Inbox", icon: Bell, primary: true },
 ] as const;

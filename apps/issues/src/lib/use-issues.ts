@@ -146,7 +146,11 @@ function hydrate(webId: string | null, trackerUrl: string | null): TrackerSnapsh
   return { tracker: trackerUrl, creator: webId, issues: cached, sprints: [], canCreate: true, error: null };
 }
 
-export function useIssues(trackerUrl: string | null, creator: string | null): UseIssues {
+export function useIssues(
+  trackerUrl: string | null,
+  creator: string | null,
+  ownStorageUrls: readonly string[] = [],
+): UseIssues {
   // All fetched data lives in ONE snapshot tagged with its tracker, and the
   // render derives from it only when the tag matches the current tracker. A
   // read from a previously-open project can therefore never be rendered — or
@@ -237,20 +241,31 @@ export function useIssues(trackerUrl: string | null, creator: string | null): Us
     void fetchInto();
   }, [fetchInto]);
 
-  // Live-sync: refresh (debounced) when the tracker's container changes in the pod.
+  // Stable join of the own-storage roots so the live-sync effect doesn't re-run
+  // (and re-subscribe) when the caller passes a fresh array of the same values.
+  const ownStorageKey = ownStorageUrls.join("\n");
+
+  // Live-sync: refresh (debounced) when the tracker's container changes in the
+  // pod. The own-pod storage roots gate the WebSocket subscription's SSRF guard
+  // (notifications.ts) — a foreign subscription/socket URL degrades to polling.
   useEffect(() => {
     if (!trackerUrl) return;
     const containerUrl = new Repository(trackerUrl).containerUrl;
+    const ownStorage = ownStorageKey ? ownStorageKey.split("\n") : [];
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const sync = watchContainer(containerUrl, () => {
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(() => void fetchInto(), 800);
-    });
+    const sync = watchContainer(
+      containerUrl,
+      () => {
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(() => void fetchInto(), 800);
+      },
+      { ownStorageUrls: ownStorage },
+    );
     return () => {
       sync.close();
       if (timer) clearTimeout(timer);
     };
-  }, [trackerUrl, fetchInto]);
+  }, [trackerUrl, fetchInto, ownStorageKey]);
 
   const mutate = useCallback(
     async (apply: (r: Repository) => Promise<unknown>) => {

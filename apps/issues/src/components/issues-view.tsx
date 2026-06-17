@@ -30,6 +30,7 @@ import { createEpicAncestorResolver } from "@/lib/epics";
 import { EpicView } from "@/components/epic-view";
 import { DashboardView } from "@/components/dashboard-view";
 import { WorkloadView } from "@/components/workload-view";
+import { InboxView } from "@/components/inbox-view";
 import { BacklogView } from "@/components/backlog-view";
 import { TimelineView } from "@/components/timeline-view";
 import { CalendarView } from "@/components/calendar-view";
@@ -65,6 +66,7 @@ import {
   ArrowDownUp,
   ArrowLeft,
   Ban,
+  Bell,
   Bookmark,
   BookmarkPlus,
   CheckCircle2,
@@ -140,7 +142,12 @@ export function IssuesView() {
     [profile],
   );
   const isOwn = tracker.ownerWebId === profile?.webId;
-  const issues = useIssues(tracker.trackerUrl, profile?.webId ?? null);
+  // The user's own pod storage root — the live-sync SSRF allow-list. A live
+  // WebSocket subscription is only opened against the user's OWN pod (a foreign
+  // subscription/socket URL degrades to polling — own-pod.ts). Memoised so the
+  // live-sync effect identity is stable across renders.
+  const ownStorageUrls = useMemo(() => (storageUrl ? [storageUrl] : []), [storageUrl]);
+  const issues = useIssues(tracker.trackerUrl, profile?.webId ?? null, ownStorageUrls);
 
   const [query, setQuery] = useState<IssueQuery>(DEFAULT_QUERY);
 
@@ -364,6 +371,7 @@ export function IssuesView() {
       else if (e.key === "e") setView("epics");
       else if (e.key === "d") setView("dashboard");
       else if (e.key === "t") setView("timeline");
+      else if (e.key === "i") setView("inbox");
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -615,6 +623,7 @@ export function IssuesView() {
         { id: "timeline", label: "Timeline view", hint: "t", run: () => setView("timeline") },
         { id: "calendar", label: "Calendar view", run: () => setView("calendar") },
         { id: "workload", label: "Workload view", run: () => setView("workload") },
+        { id: "inbox", label: "Inbox", hint: "i", run: () => setView("inbox") },
         { id: "search", label: "Search issues", hint: "/", run: () => document.getElementById("issue-search")?.focus() },
         { id: "f-open", label: "Show open", run: () => patchQuery({ state: "open" }) },
         { id: "f-closed", label: "Show closed", run: () => patchQuery({ state: "closed" }) },
@@ -907,6 +916,7 @@ export function IssuesView() {
                 { key: "calendar", label: "Calendar", Icon: CalendarDays },
                 { key: "dashboard", label: "Dashboard", Icon: BarChart3 },
                 { key: "workload", label: "Workload", Icon: UsersRound },
+                { key: "inbox", label: "Inbox", Icon: Bell },
               ] as const).map(({ key, label, Icon }) => (
                 <button
                   key={key}
@@ -943,7 +953,14 @@ export function IssuesView() {
         </div>
 
         <div key={view} className="animate-view-in">
-        {issues.initialLoading ? (
+        {view === "inbox" ? (
+          // The LDN inbox is independent of the open tracker's issue list — it
+          // reads the signed-in user's own pod inbox, so it renders regardless of
+          // issue load/error state. `ownStorageUrls` is the own-pod SSRF allow-list.
+          profile ? (
+            <InboxView webId={profile.webId} ownStorageUrls={ownStorageUrls} />
+          ) : null
+        ) : issues.initialLoading ? (
           <ul className="space-y-3" aria-busy="true" aria-label="Loading issues">
             {[0, 1, 2].map((i) => (
               <li key={i}>
