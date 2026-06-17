@@ -17,7 +17,7 @@ import {
 // `Issue` model is used in client components (e.g. session-context), so it must
 // stay `node:fs`-free; `./task` carries only the runtime accessors.
 import { Task, type TaskPriority } from "@jeswr/solid-task-model/task";
-import { WF, DCT, RDF, STATE, wf, dct, rdf, rdfs, sioc, foaf, vcard, schema, xsd, skos, prov, time, TIME_UNIT_SECOND, SAVED_VIEW, VIEW_QUERY } from "./vocab";
+import { WF, DCT, RDF, STATE, wf, dct, rdf, rdfs, sioc, foaf, vcard, schema, xsd, skos, prov, time, TIME_UNIT_SECOND, SAVED_VIEW, VIEW_QUERY, RELEASED } from "./vocab";
 
 export type IssueState = "open" | "closed";
 /**
@@ -682,6 +682,68 @@ export class Issue extends TermWrapper {
     for (const s of slugs) types.add(`${prefix}${s}`);
   }
 
+  private componentPrefix(doc = this.trackerDoc()): string | undefined {
+    return doc ? `${doc}#component-` : undefined;
+  }
+  /**
+   * Component slugs applied to this issue (the class fragment after
+   * `#component-`). A second categorization dimension — areas/modules — carried by
+   * `rdf:type` exactly like {@link labels}, just under the `#Component` parent.
+   */
+  get components(): string[] {
+    const prefix = this.componentPrefix();
+    if (!prefix) return [];
+    return [...this.types].filter((t) => t.startsWith(prefix)).map((t) => t.slice(prefix.length));
+  }
+  set components(slugs: string[]) {
+    const prefix = this.componentPrefix();
+    if (!prefix) return;
+    const types = this.types;
+    for (const t of [...types]) if (t.startsWith(prefix)) types.delete(t);
+    for (const s of slugs) types.add(`${prefix}${s}`);
+  }
+
+  /**
+   * The version-class IRI for a slug, derived from the issue's own tracker link
+   * (same derivation as priority/label/component classes).
+   */
+  private versionIri(slug: string, doc = this.trackerDoc()): string | undefined {
+    return doc ? `${doc}#version-${slug}` : undefined;
+  }
+  /** Read the version slug carried by a single-valued version predicate. */
+  private readVersion(predicate: string, doc = this.trackerDoc()): string | undefined {
+    const prefix = doc ? `${doc}#version-` : undefined;
+    if (!prefix) return undefined;
+    const iri = OptionalFrom.subjectPredicate(this, predicate, NamedNodeAs.string);
+    return iri?.startsWith(prefix) ? iri.slice(prefix.length) : undefined;
+  }
+  /** Write (or clear, with undefined) a single-valued version predicate. */
+  private writeVersion(predicate: string, slug: string | undefined, doc = this.trackerDoc()): void {
+    if (!doc) return;
+    OptionalAs.object(this, predicate, slug === undefined ? undefined : this.versionIri(slug, doc), NamedNodeFrom.string);
+  }
+  /**
+   * The version in which the issue was observed (`wf:affectsVersion`). A single
+   * slug pointing at a `#version-*` `schema:SoftwareVersion` declared on the
+   * tracker, or undefined.
+   */
+  get affectsVersion(): string | undefined {
+    return this.readVersion(wf("affectsVersion"));
+  }
+  set affectsVersion(slug: string | undefined) {
+    this.writeVersion(wf("affectsVersion"), slug);
+  }
+  /**
+   * The version in which the issue is targeted to be fixed (`wf:fixVersion`,
+   * Jira's "fix version"). A single tracker-version slug, or undefined.
+   */
+  get fixVersion(): string | undefined {
+    return this.readVersion(wf("fixVersion"));
+  }
+  set fixVersion(slug: string | undefined) {
+    this.writeVersion(wf("fixVersion"), slug);
+  }
+
   /** Read a custom-field value (select fields yield the option IRI). */
   getField(def: FieldDef): FieldValue | undefined {
     switch (def.type) {
@@ -762,6 +824,34 @@ export class Issue extends TermWrapper {
 export interface LabelDef {
   slug: string;
   label: string;
+}
+
+/**
+ * A component definition on the tracker: slug + human label. The same shape as
+ * {@link LabelDef} — a component is just a second categorization dimension
+ * (areas/modules), declared identically (an `rdfs:Class` under `#Component`).
+ */
+export interface ComponentDef {
+  slug: string;
+  label: string;
+}
+
+/**
+ * A version (release) definition on the tracker. Each is a
+ * `schema:SoftwareVersion` fragment of the tracker doc, ordered by
+ * `schema:position` (lower sorts first — the declared release order), with an
+ * optional release date and a released/unreleased flag (Jira's "release" toggle).
+ */
+export interface VersionDef {
+  iri: string;
+  slug: string;
+  label: string;
+  /** Declared order (lower first). */
+  position: number;
+  /** The release date, if set. */
+  releaseDate?: Date;
+  /** Whether the version has been released (vs. an upcoming/unreleased one). */
+  released: boolean;
 }
 
 /** Custom-field value types (Jira/Monday column types). */
@@ -995,6 +1085,8 @@ export class Tracker extends TermWrapper {
     this.defineClass("priority-medium", "Medium", "Priority");
     this.defineClass("priority-low", "Low", "Priority");
     this.defineClass("Label", "Label");
+    // Component dimension (#Component parent — areas/modules, like #Label).
+    this.defineClass("Component", "Component");
     // Issue-type dimension (#Type parent + epic/story/task/bug).
     this.defineClass("Type", "Type");
     for (const t of ISSUE_TYPES) this.defineClass(`type-${t.slug}`, t.label, "Type");
@@ -1021,6 +1113,106 @@ export class Tracker extends TermWrapper {
     const slug = fragmentSlug(label);
     this.defineClass(`label-${slug}`, label, "Label");
     return slug;
+  }
+
+  /** Component definitions (subclasses of `#Component`), as slug + human label. */
+  get componentDefs(): ComponentDef[] {
+    const out: ComponentDef[] = [];
+    const prefix = `${this.doc}#component-`;
+    for (const iri of this.categories) {
+      if (iri.startsWith(prefix)) {
+        const klass = new TermWrapper(iri, this.dataset, this.factory);
+        out.push({
+          slug: iri.slice(prefix.length),
+          label: OptionalFrom.subjectPredicate(klass, rdfs("label"), LiteralAs.string) ?? iri.slice(prefix.length),
+        });
+      }
+    }
+    return out.sort((a, b) => a.label.localeCompare(b.label));
+  }
+
+  /** Define (or relabel) a component, returning its slug. */
+  defineComponent(label: string): string {
+    const slug = fragmentSlug(label);
+    this.defineClass(`component-${slug}`, label, "Component");
+    return slug;
+  }
+
+  /**
+   * Remove a component class. The category-link and the class triples are dropped;
+   * `rdf:type` quads on issues that reference it are left untouched (a stale
+   * component slug simply stops resolving, exactly like an undefined label).
+   */
+  removeComponent(slug: string): void {
+    const iri = `${this.doc}#component-${slug}`;
+    this.categories.delete(iri);
+    for (const q of [...this.dataset.match(this.factory.namedNode(iri))]) this.dataset.delete(q);
+  }
+
+  private versionIri(slug: string): string {
+    return `${this.doc}#version-${slug}`;
+  }
+
+  /**
+   * Version (release) definitions, ordered by `schema:position` (lower first —
+   * the declared release order), then by label. Each is a
+   * `schema:SoftwareVersion` fragment of the tracker doc.
+   */
+  get versionDefs(): VersionDef[] {
+    const prefix = `${this.doc}#version-`;
+    const nn = this.factory.namedNode.bind(this.factory);
+    const out: VersionDef[] = [];
+    for (const quad of this.dataset.match(null, nn(rdf("type")), nn(schema("SoftwareVersion")))) {
+      const iri = quad.subject.value;
+      if (!iri.startsWith(prefix)) continue;
+      const node = new TermWrapper(iri, this.dataset, this.factory);
+      out.push({
+        iri,
+        slug: iri.slice(prefix.length),
+        label: OptionalFrom.subjectPredicate(node, rdfs("label"), LiteralAs.string) ?? iri.slice(prefix.length),
+        position: OptionalFrom.subjectPredicate(node, schema("position"), LiteralAs.number) ?? Number.MAX_SAFE_INTEGER,
+        releaseDate: OptionalFrom.subjectPredicate(node, schema("releaseDate"), LiteralAs.date),
+        released: OptionalFrom.subjectPredicate(node, RELEASED, LiteralAs.boolean) ?? false,
+      });
+    }
+    return out.sort((a, b) => a.position - b.position || a.label.localeCompare(b.label));
+  }
+
+  /**
+   * Define (or redefine) a version. Redefining a slug clears the node first so a
+   * dropped release date / flag never lingers. `position` defaults to the end of
+   * the current ordered list (next slot) so a freshly-added version sorts last
+   * until reordered. Returns the stored definition.
+   */
+  defineVersion(
+    label: string,
+    opts: { position?: number; releaseDate?: Date; released?: boolean } = {},
+  ): VersionDef {
+    const slug = fragmentSlug(label);
+    const iri = this.versionIri(slug);
+    // Default position: append after the current highest declared position.
+    const existing = this.versionDefs;
+    const prior = existing.find((v) => v.slug === slug);
+    const maxPos = existing.reduce((m, v) => (v.position < Number.MAX_SAFE_INTEGER ? Math.max(m, v.position) : m), -1);
+    const position = opts.position ?? prior?.position ?? maxPos + 1;
+    // Idempotent overwrite: clear the node's prior triples.
+    for (const q of [...this.dataset.match(this.factory.namedNode(iri))]) this.dataset.delete(q);
+    const node = new TermWrapper(iri, this.dataset, this.factory);
+    SetFrom.subjectPredicate(node, rdf("type"), NamedNodeAs.string, NamedNodeFrom.string).add(schema("SoftwareVersion"));
+    OptionalAs.object(node, rdfs("label"), label, LiteralFrom.string);
+    OptionalAs.object(node, schema("position"), position, LiteralFrom.double);
+    OptionalAs.object(node, schema("releaseDate"), opts.releaseDate, LiteralFrom.dateTime);
+    OptionalAs.object(node, RELEASED, opts.released ?? false, LiteralFrom.boolean);
+    return { iri, slug, label, position, releaseDate: opts.releaseDate, released: opts.released ?? false };
+  }
+
+  /**
+   * Remove a version definition (its node triples). Issue
+   * `wf:affectsVersion`/`wf:fixVersion` links to it are left in place — a removed
+   * version simply stops resolving, like an undefined label/component.
+   */
+  removeVersion(slug: string): void {
+    for (const q of [...this.dataset.match(this.factory.namedNode(this.versionIri(slug)))]) this.dataset.delete(q);
   }
 
   /**

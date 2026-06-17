@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Repository } from "@/lib/repository";
-import { FIELD_TYPES, type FieldDef, type FieldType } from "@/lib/issue";
+import { FIELD_TYPES, type ComponentDef, type FieldDef, type FieldType, type VersionDef } from "@/lib/issue";
 import {
   Dialog,
   DialogContent,
@@ -22,7 +22,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2, Plus, SlidersHorizontal, X } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Boxes, Loader2, Milestone, Plus, SlidersHorizontal, X } from "lucide-react";
 
 /**
  * Manage the tracker's custom fields (Jira custom fields / Monday columns).
@@ -41,11 +42,17 @@ export function FieldsDialog({
   onSaved?: () => void;
 }) {
   const [fields, setFields] = useState<FieldDef[]>([]);
+  const [components, setComponents] = useState<ComponentDef[]>([]);
+  const [versions, setVersions] = useState<VersionDef[]>([]);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [name, setName] = useState("");
   const [type, setType] = useState<FieldType>("text");
   const [options, setOptions] = useState("");
+  const [componentName, setComponentName] = useState("");
+  const [versionName, setVersionName] = useState("");
+  const [versionDate, setVersionDate] = useState("");
+  const [versionReleased, setVersionReleased] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -53,9 +60,12 @@ export function FieldsDialog({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     new Repository(trackerUrl)
-      .fieldDefs()
-      .then((defs) => {
-        if (!cancelled) setFields(defs);
+      .info()
+      .then((info) => {
+        if (cancelled) return;
+        setFields(info.fields);
+        setComponents(info.components);
+        setVersions(info.versions);
       })
       .catch(() => {})
       .finally(() => {
@@ -105,18 +115,101 @@ export function FieldsDialog({
     }
   };
 
+  const addComponent = async () => {
+    const label = componentName.trim();
+    if (!label) return;
+    setBusy(true);
+    try {
+      const repo = new Repository(trackerUrl);
+      await repo.defineComponent(label);
+      setComponents(await repo.components());
+      setComponentName("");
+      onSaved?.();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not add the component.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const removeComponent = async (slug: string) => {
+    setBusy(true);
+    try {
+      const repo = new Repository(trackerUrl);
+      await repo.removeComponent(slug);
+      setComponents(await repo.components());
+      onSaved?.();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not remove the component.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const addVersion = async () => {
+    const label = versionName.trim();
+    if (!label) return;
+    setBusy(true);
+    try {
+      const repo = new Repository(trackerUrl);
+      await repo.defineVersion(label, {
+        releaseDate: versionDate ? new Date(versionDate) : undefined,
+        released: versionReleased,
+      });
+      setVersions(await repo.versions());
+      setVersionName("");
+      setVersionDate("");
+      setVersionReleased(false);
+      onSaved?.();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not add the version.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const toggleReleased = async (v: VersionDef) => {
+    setBusy(true);
+    try {
+      const repo = new Repository(trackerUrl);
+      // Redefining by the same label keeps the position; flips the released flag.
+      await repo.defineVersion(v.label, { position: v.position, releaseDate: v.releaseDate, released: !v.released });
+      setVersions(await repo.versions());
+      onSaved?.();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not update the version.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const removeVersion = async (slug: string) => {
+    setBusy(true);
+    try {
+      const repo = new Repository(trackerUrl);
+      await repo.removeVersion(slug);
+      setVersions(await repo.versions());
+      onSaved?.();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not remove the version.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const dateFmt = new Intl.DateTimeFormat(undefined, { dateStyle: "medium" });
   const typeLabel = (t: FieldType) => FIELD_TYPES.find((x) => x.slug === t)?.label ?? t;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <SlidersHorizontal className="size-4" aria-hidden /> Custom fields
+            <SlidersHorizontal className="size-4" aria-hidden /> Fields, components &amp; versions
           </DialogTitle>
           <DialogDescription>
-            Add your own typed fields to every issue in this project — text, numbers, dates, links, or
-            a fixed set of options.
+            Configure this project — custom typed fields, components (areas / modules), and versions
+            (releases) that issues can be filed against and fixed in.
           </DialogDescription>
         </DialogHeader>
 
@@ -204,6 +297,136 @@ export function FieldsDialog({
             Add field
           </Button>
         </form>
+
+        {/* Components — a second categorization dimension (areas / modules). */}
+        <section className="space-y-3 border-t pt-4">
+          <h3 className="flex items-center gap-2 text-sm font-semibold">
+            <Boxes className="size-4" aria-hidden /> Components
+          </h3>
+          {components.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No components yet.</p>
+          ) : (
+            <ul className="space-y-2">
+              {components.map((c) => (
+                <li key={c.slug} className="flex items-center gap-2 rounded-lg border px-3 py-2">
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium">{c.label}</span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-7"
+                    aria-label={`Remove component ${c.label}`}
+                    disabled={busy}
+                    onClick={() => void removeComponent(c.slug)}
+                  >
+                    <X className="size-4" aria-hidden />
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <form
+            className="flex items-end gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void addComponent();
+            }}
+          >
+            <div className="flex-1 space-y-1.5">
+              <Label htmlFor="new-component-name">Component name</Label>
+              <Input
+                id="new-component-name"
+                value={componentName}
+                onChange={(e) => setComponentName(e.target.value)}
+                placeholder="e.g. Auth Service"
+              />
+            </div>
+            <Button type="submit" className="gap-1.5" disabled={busy || !componentName.trim()}>
+              <Plus className="size-4" aria-hidden /> Add
+            </Button>
+          </form>
+        </section>
+
+        {/* Versions / releases — schema:position-ordered, with a release date + released flag. */}
+        <section className="space-y-3 border-t pt-4">
+          <h3 className="flex items-center gap-2 text-sm font-semibold">
+            <Milestone className="size-4" aria-hidden /> Versions
+          </h3>
+          {versions.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No versions yet.</p>
+          ) : (
+            <ul className="space-y-2">
+              {versions.map((v) => (
+                <li key={v.slug} className="flex items-center gap-2 rounded-lg border px-3 py-2">
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium">{v.label}</span>
+                    {v.releaseDate && (
+                      <span className="block truncate text-xs text-muted-foreground">{dateFmt.format(v.releaseDate)}</span>
+                    )}
+                  </span>
+                  <Badge variant={v.released ? "secondary" : "outline"}>{v.released ? "Released" : "Unreleased"}</Badge>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7"
+                    disabled={busy}
+                    onClick={() => void toggleReleased(v)}
+                  >
+                    {v.released ? "Mark unreleased" : "Mark released"}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-7"
+                    aria-label={`Remove version ${v.label}`}
+                    disabled={busy}
+                    onClick={() => void removeVersion(v.slug)}
+                  >
+                    <X className="size-4" aria-hidden />
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <form
+            className="space-y-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void addVersion();
+            }}
+          >
+            <div className="grid gap-3 sm:grid-cols-[1fr_11rem]">
+              <div className="space-y-1.5">
+                <Label htmlFor="new-version-name">Version name</Label>
+                <Input
+                  id="new-version-name"
+                  value={versionName}
+                  onChange={(e) => setVersionName(e.target.value)}
+                  placeholder="e.g. 1.0.0"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="new-version-date">Release date</Label>
+                <Input
+                  id="new-version-date"
+                  type="date"
+                  value={versionDate}
+                  onChange={(e) => setVersionDate(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="new-version-released"
+                checked={versionReleased}
+                onCheckedChange={(c) => setVersionReleased(c === true)}
+              />
+              <Label htmlFor="new-version-released" className="font-normal">Already released</Label>
+            </div>
+            <Button type="submit" className="gap-1.5" disabled={busy || !versionName.trim()}>
+              <Plus className="size-4" aria-hidden /> Add version
+            </Button>
+          </form>
+        </section>
       </DialogContent>
     </Dialog>
   );

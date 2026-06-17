@@ -48,6 +48,9 @@ describe("SHACL shape (shapes/issue.ttl)", () => {
     issue.assignee = ME;
     issue.priority = "high";
     issue.labels = ["bug", "ui"];
+    issue.components = ["auth", "ui"];
+    issue.affectsVersion = "v1-0";
+    issue.fixVersion = "v2-0";
     issue.dateDue = new Date("2026-07-01");
 
     const comment = new Comment(`${URL_}#msg-1`, ds, DataFactory);

@@ -10,6 +10,7 @@ const base: IssueRecord = {
   status: "todo",
   issueType: "task",
   labels: [],
+  components: [],
   blockedBy: [],
   relatesTo: [],
   attachments: [],
@@ -94,6 +95,31 @@ describe("matchesQuery", () => {
     const q = parseQuery("label:auth label:design");
     expect(matchesQuery(issue({ labels: ["auth", "design", "x"] }), q)).toBe(true);
     expect(matchesQuery(issue({ labels: ["auth"] }), q)).toBe(false);
+  });
+
+  it("ANDs multiple components (exactly like labels)", () => {
+    const q = parseQuery("component:api component:ui");
+    expect(q.components).toEqual(["api", "ui"]);
+    expect(matchesQuery(issue({ components: ["api", "ui", "db"] }), q)).toBe(true);
+    expect(matchesQuery(issue({ components: ["api"] }), q)).toBe(false);
+  });
+
+  it("matches version: against either affects- or fix-version", () => {
+    const q = parseQuery("version:v2");
+    expect(q.versions).toEqual(["v2"]);
+    expect(matchesQuery(issue({ affectsVersion: "v2" }), q)).toBe(true);
+    expect(matchesQuery(issue({ fixVersion: "v2" }), q)).toBe(true);
+    expect(matchesQuery(issue({ affectsVersion: "v1", fixVersion: "v3" }), q)).toBe(false);
+  });
+
+  it("matches fixversion: and affectsversion: against the specific predicate", () => {
+    const fix = parseQuery("fixversion:v2");
+    expect(matchesQuery(issue({ fixVersion: "v2" }), fix)).toBe(true);
+    expect(matchesQuery(issue({ affectsVersion: "v2" }), fix)).toBe(false);
+
+    const aff = parseQuery("affectsversion:v1");
+    expect(matchesQuery(issue({ affectsVersion: "v1" }), aff)).toBe(true);
+    expect(matchesQuery(issue({ fixVersion: "v1" }), aff)).toBe(false);
   });
 
   it("matches assignee by substring and assignee:none", () => {

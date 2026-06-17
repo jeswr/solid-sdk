@@ -9,6 +9,7 @@ const base: IssueRecord = {
   status: "todo",
   issueType: "task",
   labels: [],
+  components: [],
   blockedBy: [],
   relatesTo: [],
   attachments: [],
@@ -24,9 +25,9 @@ const ALICE = "http://localhost:3000/alice/profile/card#me";
 const BOB = "http://localhost:3000/bob/profile/card#me";
 
 const issues: IssueRecord[] = [
-  mk({ url: "1", title: "Login crashes", priority: "high", labels: ["bug"], assignee: ALICE, state: "open", created: new Date("2026-06-01"), dateDue: new Date("2026-06-20") }),
-  mk({ url: "2", title: "Add dark mode", priority: "low", labels: ["ui", "feature"], assignee: BOB, state: "open", created: new Date("2026-06-05") }),
-  mk({ url: "3", title: "Fix typo", priority: "medium", labels: ["ui"], state: "closed", created: new Date("2026-06-03"), dateDue: new Date("2026-06-10") }),
+  mk({ url: "1", title: "Login crashes", priority: "high", labels: ["bug"], components: ["auth"], affectsVersion: "v1", fixVersion: "v2", assignee: ALICE, state: "open", created: new Date("2026-06-01"), dateDue: new Date("2026-06-20") }),
+  mk({ url: "2", title: "Add dark mode", priority: "low", labels: ["ui", "feature"], components: ["ui"], fixVersion: "v1", assignee: BOB, state: "open", created: new Date("2026-06-05") }),
+  mk({ url: "3", title: "Fix typo", priority: "medium", labels: ["ui"], components: ["ui", "docs"], state: "closed", created: new Date("2026-06-03"), dateDue: new Date("2026-06-10") }),
 ];
 
 const q = (over: Partial<IssueQuery>): IssueQuery => ({ ...DEFAULT_QUERY, ...over });
@@ -57,9 +58,25 @@ describe("filterAndSort", () => {
     expect(filterAndSort(issues, q({ state: "all", sort: "due", sortDir: "asc" })).map((i) => i.url)).toEqual(["3", "1", "2"]);
   });
 
-  it("collects facets", () => {
+  it("filters by component (issue must carry at least one selected)", () => {
+    expect(filterAndSort(issues, q({ state: "all", components: ["ui"] })).map((i) => i.url).sort()).toEqual(["2", "3"]);
+    expect(filterAndSort(issues, q({ state: "all", components: ["auth"] })).map((i) => i.url)).toEqual(["1"]);
+    expect(filterAndSort(issues, q({ state: "all", components: ["docs", "auth"] })).map((i) => i.url).sort()).toEqual(["1", "3"]);
+  });
+
+  it("filters by version (matches affects- OR fix-version)", () => {
+    // v1: affects on #1, fix on #2 → both match.
+    expect(filterAndSort(issues, q({ state: "all", versions: ["v1"] })).map((i) => i.url).sort()).toEqual(["1", "2"]);
+    // v2: only #1's fix-version.
+    expect(filterAndSort(issues, q({ state: "all", versions: ["v2"] })).map((i) => i.url)).toEqual(["1"]);
+  });
+
+  it("collects facets (labels, components, versions, assignees)", () => {
     const f = facets(issues);
     expect(f.labels).toEqual(["bug", "feature", "ui"]);
+    expect(f.components).toEqual(["auth", "docs", "ui"]);
+    // Both affects- and fix-versions feed the version facet, deduped + sorted.
+    expect(f.versions).toEqual(["v1", "v2"]);
     expect(f.assignees.sort()).toEqual([ALICE, BOB].sort());
   });
 });

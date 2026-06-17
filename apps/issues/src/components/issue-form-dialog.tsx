@@ -25,7 +25,9 @@ import {
 } from "@/components/ui/select";
 import { Loader2 } from "lucide-react";
 import type { IssueRecord } from "@/lib/use-issues";
-import { ISSUE_TYPES, STATUSES, safeHttpUrl, type FieldDef, type FieldValue, type IssueType, type Priority, type StatusSlug } from "@/lib/issue";
+import { ISSUE_TYPES, STATUSES, safeHttpUrl, type ComponentDef, type FieldDef, type FieldValue, type IssueType, type Priority, type StatusSlug, type VersionDef } from "@/lib/issue";
+
+const VERSION_NONE = "none";
 
 const PRIORITY_NONE = "none";
 
@@ -50,6 +52,11 @@ const schema = z.object({
     .refine((v) => v === "" || (!Number.isNaN(Number(v)) && Number(v) >= 0), "Points must be a non-negative number")
     .optional(),
   labels: z.string().optional(),
+  // Comma-separated component display names (declared on the tracker on use, like labels).
+  components: z.string().optional(),
+  // A single tracker-version display name (or "" / "none" for unset).
+  affectsVersion: z.string().optional(),
+  fixVersion: z.string().optional(),
 });
 type FormValues = z.infer<typeof schema>;
 
@@ -63,6 +70,12 @@ export interface IssueFormSubmit {
   issueType: IssueType;
   estimate?: number;
   labels: string[];
+  /** Component display names (declared on the tracker on use, like labels). */
+  components: string[];
+  /** The affects-version display name; undefined clears it. */
+  affectsVersion?: string;
+  /** The fix-version display name; undefined clears it. */
+  fixVersion?: string;
   /** Custom-field values keyed by slug; undefined clears a value. */
   fields?: Record<string, FieldValue | undefined>;
 }
@@ -103,6 +116,8 @@ export function IssueFormDialog({
   onSubmit,
   assigneeSuggestions = [],
   fieldDefs = [],
+  componentDefs = [],
+  versionDefs = [],
   statuses = STATUSES,
 }: {
   open: boolean;
@@ -115,6 +130,10 @@ export function IssueFormDialog({
   assigneeSuggestions?: string[];
   /** The tracker's custom fields, rendered as typed inputs. */
   fieldDefs?: FieldDef[];
+  /** The tracker's component definitions (for slug→label display on edit). */
+  componentDefs?: ComponentDef[];
+  /** The tracker's version definitions, offered in the affects/fix-version selects. */
+  versionDefs?: VersionDef[];
   /** The tracker's workflow statuses (F1); defaults to the built-in three-column set. */
   statuses?: { slug: string; label: string }[];
 }) {
@@ -123,11 +142,13 @@ export function IssueFormDialog({
   const [fieldInputs, setFieldInputs] = useState<Record<string, string>>({});
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { title: "", description: "", dateDue: "", assignee: "", priority: "none", status: statuses[0]?.slug ?? "todo", issueType: "task", estimate: "", labels: "" },
+    defaultValues: { title: "", description: "", dateDue: "", assignee: "", priority: "none", status: statuses[0]?.slug ?? "todo", issueType: "task", estimate: "", labels: "", components: "", affectsVersion: "", fixVersion: "" },
   });
   const priority = useWatch({ control: form.control, name: "priority" });
   const status = useWatch({ control: form.control, name: "status" });
   const issueType = useWatch({ control: form.control, name: "issueType" });
+  const affectsVersion = useWatch({ control: form.control, name: "affectsVersion" });
+  const fixVersion = useWatch({ control: form.control, name: "fixVersion" });
 
   // Reset ONLY when the dialog transitions closed -> open. Dep changes while
   // it is open (e.g. a slow tracker-info load updating fieldDefs) must never
@@ -137,6 +158,10 @@ export function IssueFormDialog({
     const opening = open && !wasOpen.current;
     wasOpen.current = open;
     if (opening) {
+      // Component / version slugs ⇄ display labels (the issue carries slugs; the
+      // form edits display names, mirroring how labels are declared-on-use).
+      const componentLabel = (slug: string) => componentDefs.find((c) => c.slug === slug)?.label ?? slug;
+      const versionLabel = (slug?: string) => (slug ? versionDefs.find((v) => v.slug === slug)?.label ?? slug : "");
       form.reset({
         title: initial?.title ?? "",
         description: initial?.description ?? "",
@@ -147,14 +172,17 @@ export function IssueFormDialog({
         issueType: initial?.issueType ?? "task",
         estimate: initial?.estimate !== undefined ? String(initial.estimate) : "",
         labels: (initial?.labels ?? []).join(", "),
+        components: (initial?.components ?? []).map(componentLabel).join(", "),
+        affectsVersion: versionLabel(initial?.affectsVersion),
+        fixVersion: versionLabel(initial?.fixVersion),
       });
       // Dialog-open reset, same as form.reset above (custom fields live outside RHF).
-       
+
       setFieldInputs(
         Object.fromEntries(fieldDefs.map((d) => [d.slug, fieldToInput(d, initial?.fields[d.slug])])),
       );
     }
-  }, [open, initial, defaultStatus, form, fieldDefs, statuses]);
+  }, [open, initial, defaultStatus, form, fieldDefs, componentDefs, versionDefs, statuses]);
 
   // Field definitions can arrive AFTER the dialog opened (slow tracker-info
   // load). Backfill those inputs from the stored values so submitting doesn't
@@ -184,6 +212,9 @@ export function IssueFormDialog({
       issueType: values.issueType,
       estimate: values.estimate?.trim() ? Number(values.estimate) : undefined,
       labels: parseLabels(values.labels),
+      components: parseLabels(values.components),
+      affectsVersion: values.affectsVersion?.trim() || undefined,
+      fixVersion: values.fixVersion?.trim() || undefined,
       fields:
         fieldDefs.length > 0
           ? Object.fromEntries(fieldDefs.map((d) => [d.slug, inputToField(d, fieldInputs[d.slug] ?? "")]))
@@ -329,6 +360,55 @@ export function IssueFormDialog({
             <Input id="labels" placeholder="bug, ui, urgent" {...form.register("labels")} />
             <p className="text-xs text-muted-foreground">Comma-separated.</p>
           </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="components">Components</Label>
+            <Input id="components" placeholder="auth, ui, api" {...form.register("components")} />
+            <p className="text-xs text-muted-foreground">Comma-separated areas / modules.</p>
+          </div>
+
+          {versionDefs.length > 0 && (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="affectsVersion">Affects version</Label>
+                <Select
+                  value={affectsVersion || VERSION_NONE}
+                  onValueChange={(v) => form.setValue("affectsVersion", v === VERSION_NONE ? "" : v)}
+                >
+                  <SelectTrigger id="affectsVersion">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={VERSION_NONE}>None</SelectItem>
+                    {versionDefs.map((v) => (
+                      <SelectItem key={v.iri} value={v.label}>
+                        {v.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="fixVersion">Fix version</Label>
+                <Select
+                  value={fixVersion || VERSION_NONE}
+                  onValueChange={(v) => form.setValue("fixVersion", v === VERSION_NONE ? "" : v)}
+                >
+                  <SelectTrigger id="fixVersion">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={VERSION_NONE}>None</SelectItem>
+                    {versionDefs.map((v) => (
+                      <SelectItem key={v.iri} value={v.label}>
+                        {v.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
 
           <div className="space-y-1.5">
             <Label htmlFor="assignee">Assignee (WebID or group)</Label>

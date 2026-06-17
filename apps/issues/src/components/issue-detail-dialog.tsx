@@ -14,7 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { Ban, CalendarClock, CheckCircle2, CircleDot, Clock, Copy as CopyIcon, Download, GitBranch, Link2, Loader2, MessageSquare, Paperclip, Pencil, Plus, Tag, Upload, X } from "lucide-react";
+import { Ban, Boxes, CalendarClock, CheckCircle2, CircleDot, Clock, Copy as CopyIcon, Download, GitBranch, Link2, Loader2, MessageSquare, Milestone, Paperclip, Pencil, Plus, Tag, Upload, X } from "lucide-react";
 import { formatDuration, parseDuration } from "@/lib/dates";
 
 const fileName = (url: string) => {
@@ -39,7 +39,7 @@ const renderBody = (text: string) =>
     ),
   );
 import type { IssueRecord, ActivityRecord } from "@/lib/use-issues";
-import { STATUSES, safeHttpUrl, canNest, type FieldDef, type WorkflowStatus } from "@/lib/issue";
+import { STATUSES, safeHttpUrl, canNest, type ComponentDef, type FieldDef, type VersionDef, type WorkflowStatus } from "@/lib/issue";
 import { linksOf, rollupOf, descendantUrlsOf } from "@/lib/rollups";
 import { openBlockersOf } from "@/lib/dependencies";
 import { priorityVariant, shortWebId } from "@/components/issue-card";
@@ -65,6 +65,8 @@ export function IssueDetailDialog({
   people,
   groupIri,
   fieldDefs = [],
+  componentDefs = [],
+  versionDefs = [],
   activity = [],
   workflowStatuses = STATUSES,
   canComment,
@@ -83,6 +85,10 @@ export function IssueDetailDialog({
   groupIri?: string;
   /** Custom-field definitions, used to label and format `issue.fields`. */
   fieldDefs?: FieldDef[];
+  /** Component definitions, used to render component slugs with their human labels. */
+  componentDefs?: ComponentDef[];
+  /** Version definitions, used to render affects/fix-version slugs with their labels. */
+  versionDefs?: VersionDef[];
   /** The issue's provenance activity log (F3), newest first; merged into the timeline. */
   activity?: ActivityRecord[];
   /** The tracker's workflow statuses, used to label status transitions in the timeline. */
@@ -254,6 +260,11 @@ export function IssueDetailDialog({
               <Tag className="size-3" aria-hidden /> {l}
             </Badge>
           ))}
+          {issue.components.map((c) => (
+            <Badge key={c} variant="outline" className="gap-1">
+              <Boxes className="size-3" aria-hidden /> {componentDefs.find((d) => d.slug === c)?.label ?? c}
+            </Badge>
+          ))}
         </div>
 
         <dl className="grid grid-cols-2 gap-x-4 gap-y-2 border-y py-3 text-sm sm:grid-cols-3">
@@ -277,6 +288,22 @@ export function IssueDetailDialog({
             <div>
               <dt className="text-xs text-muted-foreground">Created</dt>
               <dd>{dateFmt.format(issue.created)}</dd>
+            </div>
+          )}
+          {issue.affectsVersion && (
+            <div>
+              <dt className="text-xs text-muted-foreground">Affects version</dt>
+              <dd className="flex items-center gap-1">
+                <Milestone className="size-3.5" aria-hidden /> {versionDefs.find((v) => v.slug === issue.affectsVersion)?.label ?? issue.affectsVersion}
+              </dd>
+            </div>
+          )}
+          {issue.fixVersion && (
+            <div>
+              <dt className="text-xs text-muted-foreground">Fix version</dt>
+              <dd className="flex items-center gap-1">
+                <Milestone className="size-3.5" aria-hidden /> {versionDefs.find((v) => v.slug === issue.fixVersion)?.label ?? issue.fixVersion}
+              </dd>
             </div>
           )}
           {fieldDefs

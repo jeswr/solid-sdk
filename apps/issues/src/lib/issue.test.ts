@@ -17,7 +17,7 @@ import {
   type IssueType,
   type WorkflowDef,
 } from "./issue";
-import { rdf, wf, dct, prov, rdfs } from "./vocab";
+import { rdf, wf, dct, prov, rdfs, schema } from "./vocab";
 
 const IRI = "http://localhost:3000/alice/issue-tracker/issues.ttl#issue-1";
 
@@ -314,6 +314,209 @@ describe("Custom fields", () => {
     expect(def?.options).toEqual([]);
     const skosQuads = [...store].filter((q) => q.predicate.value.includes("skos") || q.object.value.includes("skos"));
     expect(skosQuads).toEqual([]);
+  });
+});
+
+describe("Components (second categorization dimension, like labels)", () => {
+  const DOC = "http://localhost:3000/alice/issue-tracker/tracker.ttl";
+  const TRACKER = `${DOC}#this`;
+
+  function newTracker() {
+    const store = new Store();
+    const tracker = new Tracker(TRACKER, store, DataFactory);
+    tracker.configure("Issues");
+    return { tracker, store };
+  }
+
+  it("declares the #Component parent class on configure", () => {
+    const { store } = newTracker();
+    const ser = [...store].map((q) => `${q.subject.value} ${q.predicate.value} ${q.object.value}`).join("\n");
+    expect(ser).toContain(`${DOC}#Component`);
+  });
+
+  it("defines a component as a resolvable #component-* fragment under #Component", () => {
+    const { tracker, store } = newTracker();
+    const slug = tracker.defineComponent("Auth Service");
+    expect(slug).toBe("auth-service");
+    const iri = `${DOC}#component-auth-service`;
+    const parentLinks = [...store.match(DataFactory.namedNode(iri), DataFactory.namedNode(rdfs("subClassOf")))].map((q) => q.object.value);
+    expect(parentLinks).toContain(`${DOC}#Component`);
+    // Declared via wf:issueCategory, exactly like labels.
+    const categoryLinks = [...store.match(DataFactory.namedNode(TRACKER), DataFactory.namedNode(wf("issueCategory")))].map((q) => q.object.value);
+    expect(categoryLinks).toContain(iri);
+  });
+
+  it("round-trips componentDefs (slug + human label), label-sorted", () => {
+    const { tracker } = newTracker();
+    tracker.defineComponent("UI");
+    tracker.defineComponent("API");
+    expect(tracker.componentDefs.map((c) => c.label)).toEqual(["API", "UI"]);
+    expect(tracker.componentDefs.map((c) => c.slug)).toEqual(["api", "ui"]);
+  });
+
+  it("assigns and unassigns components on an issue (zero-or-more, like labels)", () => {
+    const { store } = newTracker();
+    const issue = new Issue(IRI, store, DataFactory);
+    issue.tracker = TRACKER;
+    expect(issue.components).toEqual([]);
+
+    issue.components = ["api", "ui"];
+    expect(issue.components.sort()).toEqual(["api", "ui"]);
+    // Carried by rdf:type via #component-* classes (the labels mechanism).
+    const types = [...store.match(DataFactory.namedNode(IRI), DataFactory.namedNode(rdf("type")))].map((q) => q.object.value);
+    expect(types).toContain(`${DOC}#component-api`);
+    expect(types).toContain(`${DOC}#component-ui`);
+
+    issue.components = ["ui"];
+    expect(issue.components).toEqual(["ui"]);
+    issue.components = [];
+    expect(issue.components).toEqual([]);
+  });
+
+  it("keeps components independent of labels (separate dimensions)", () => {
+    const { store } = newTracker();
+    const issue = new Issue(IRI, store, DataFactory);
+    issue.tracker = TRACKER;
+    issue.labels = ["bug"];
+    issue.components = ["api"];
+    expect(issue.labels).toEqual(["bug"]);
+    expect(issue.components).toEqual(["api"]);
+    // Clearing one leaves the other untouched.
+    issue.components = [];
+    expect(issue.labels).toEqual(["bug"]);
+    expect(issue.components).toEqual([]);
+  });
+
+  it("removes a component class (issue type-quads referencing it untouched)", () => {
+    const { tracker, store } = newTracker();
+    tracker.defineComponent("API");
+    tracker.defineComponent("UI");
+    const issue = new Issue(IRI, store, DataFactory);
+    issue.tracker = TRACKER;
+    issue.components = ["api"];
+
+    tracker.removeComponent("api");
+    expect(tracker.componentDefs.map((c) => c.slug)).toEqual(["ui"]);
+    // The issue's rdf:type quad is left in place — the slug just stops resolving.
+    expect(issue.components).toEqual(["api"]);
+  });
+
+  it("is readable from independently-parsed data", () => {
+    const store = new Store();
+    store.addQuad(DataFactory.namedNode(IRI), DataFactory.namedNode(wf("tracker")), DataFactory.namedNode(TRACKER));
+    store.addQuad(DataFactory.namedNode(IRI), DataFactory.namedNode(rdf("type")), DataFactory.namedNode(`${DOC}#component-api`));
+    const issue = new Issue(IRI, store, DataFactory);
+    expect(issue.components).toEqual(["api"]);
+  });
+});
+
+describe("Versions / fix-versions (tracker-defined, schema:position-ordered)", () => {
+  const DOC = "http://localhost:3000/alice/issue-tracker/tracker.ttl";
+  const TRACKER = `${DOC}#this`;
+
+  function newTracker() {
+    const store = new Store();
+    const tracker = new Tracker(TRACKER, store, DataFactory);
+    tracker.configure("Issues");
+    return { tracker, store };
+  }
+
+  it("defines a version as a schema:SoftwareVersion fragment of the tracker doc", () => {
+    const { tracker, store } = newTracker();
+    const def = tracker.defineVersion("v1.0");
+    expect(def.iri).toBe(`${DOC}#version-v1-0`);
+    expect(def.slug).toBe("v1-0");
+    expect(def.label).toBe("v1.0");
+    const types = [...store.match(DataFactory.namedNode(def.iri), DataFactory.namedNode(rdf("type")))].map((q) => q.object.value);
+    expect(types).toContain(schema("SoftwareVersion"));
+  });
+
+  it("orders versions by schema:position (lower first), then label", () => {
+    const { tracker } = newTracker();
+    tracker.defineVersion("v2.0", { position: 2 });
+    tracker.defineVersion("v1.0", { position: 1 });
+    tracker.defineVersion("v3.0", { position: 3 });
+    expect(tracker.versionDefs.map((v) => v.label)).toEqual(["v1.0", "v2.0", "v3.0"]);
+    expect(tracker.versionDefs.map((v) => v.position)).toEqual([1, 2, 3]);
+  });
+
+  it("auto-appends a new version at the next position when none is given", () => {
+    const { tracker } = newTracker();
+    expect(tracker.defineVersion("v1.0").position).toBe(0);
+    expect(tracker.defineVersion("v2.0").position).toBe(1);
+    expect(tracker.defineVersion("v3.0").position).toBe(2);
+  });
+
+  it("round-trips the release date and released flag", () => {
+    const { tracker } = newTracker();
+    const date = new Date("2026-07-01T00:00:00.000Z");
+    tracker.defineVersion("v1.0", { releaseDate: date, released: true });
+    tracker.defineVersion("v2.0"); // unreleased, no date
+    const v1 = tracker.versionDefs.find((v) => v.slug === "v1-0")!;
+    const v2 = tracker.versionDefs.find((v) => v.slug === "v2-0")!;
+    expect(v1.releaseDate!.toISOString()).toBe("2026-07-01T00:00:00.000Z");
+    expect(v1.released).toBe(true);
+    expect(v2.releaseDate).toBeUndefined();
+    expect(v2.released).toBe(false);
+  });
+
+  it("redefining a slug overwrites cleanly — a dropped date/flag does not linger", () => {
+    const { tracker } = newTracker();
+    tracker.defineVersion("v1.0", { releaseDate: new Date("2026-01-01T00:00:00.000Z"), released: true, position: 5 });
+    // Redefine with no date / unreleased; keeps its position by default.
+    tracker.defineVersion("v1.0");
+    const v1 = tracker.versionDefs.find((v) => v.slug === "v1-0")!;
+    expect(v1.releaseDate).toBeUndefined();
+    expect(v1.released).toBe(false);
+    expect(v1.position).toBe(5);
+  });
+
+  it("assigns an affects-version and a fix-version on an issue (single-valued each)", () => {
+    const { tracker, store } = newTracker();
+    tracker.defineVersion("v1.0");
+    tracker.defineVersion("v2.0");
+    const issue = new Issue(IRI, store, DataFactory);
+    issue.tracker = TRACKER;
+    expect(issue.affectsVersion).toBeUndefined();
+    expect(issue.fixVersion).toBeUndefined();
+
+    issue.affectsVersion = "v1-0";
+    issue.fixVersion = "v2-0";
+    expect(issue.affectsVersion).toBe("v1-0");
+    expect(issue.fixVersion).toBe("v2-0");
+    // The links land on the wf:affectsVersion / wf:fixVersion predicates as the
+    // version-class IRIs.
+    const obj = (pred: string) => [...store.match(DataFactory.namedNode(IRI), DataFactory.namedNode(pred))].map((q) => q.object.value);
+    expect(obj(wf("affectsVersion"))).toEqual([`${DOC}#version-v1-0`]);
+    expect(obj(wf("fixVersion"))).toEqual([`${DOC}#version-v2-0`]);
+
+    // Single-valued: reassigning replaces; undefined clears.
+    issue.fixVersion = "v1-0";
+    expect(issue.fixVersion).toBe("v1-0");
+    issue.affectsVersion = undefined;
+    expect(issue.affectsVersion).toBeUndefined();
+    expect(obj(wf("affectsVersion"))).toEqual([]);
+  });
+
+  it("removes a version (issue affects/fix links left in place)", () => {
+    const { tracker, store } = newTracker();
+    tracker.defineVersion("v1.0");
+    const issue = new Issue(IRI, store, DataFactory);
+    issue.tracker = TRACKER;
+    issue.fixVersion = "v1-0";
+
+    tracker.removeVersion("v1-0");
+    expect(tracker.versionDefs).toEqual([]);
+    // The issue's wf:fixVersion link survives — the slug just stops resolving.
+    expect(issue.fixVersion).toBe("v1-0");
+  });
+
+  it("is readable from independently-parsed data", () => {
+    const store = new Store();
+    store.addQuad(DataFactory.namedNode(IRI), DataFactory.namedNode(wf("tracker")), DataFactory.namedNode(TRACKER));
+    store.addQuad(DataFactory.namedNode(IRI), DataFactory.namedNode(wf("fixVersion")), DataFactory.namedNode(`${DOC}#version-v1-0`));
+    const issue = new Issue(IRI, store, DataFactory);
+    expect(issue.fixVersion).toBe("v1-0");
   });
 });
 
