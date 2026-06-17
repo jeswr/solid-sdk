@@ -394,6 +394,292 @@ export function computeCumulativeFlowBands(
   });
 }
 
+/** One closed issue's flow times, in whole days. */
+export interface ControlPoint {
+  /** Issue URL (stable key). */
+  url: string;
+  /** Issue title (for the tooltip). */
+  title: string;
+  /** When the issue resolved to closed (its completion date) — the chart's x. */
+  completedAt: Date;
+  /**
+   * Cycle time in days: first move INTO an in-progress state (open, past the
+   * workflow's initial status) within the issue's current active spell → the move
+   * into a closed state.
+   *  - **0** — the issue went straight from the initial status to closed without
+   *    ever being in-progress (no WIP); still plotted as the floor.
+   *  - **undefined** — the cycle is UNKNOWN because the start of the final active
+   *    spell was lost to the status-log page cap: the read pages end at a stale
+   *    closure but the `endedAt` anchor shows a LATER completion, so the issue was
+   *    reopened+reclosed in the unread gap and its restart is unrecoverable.
+   *    Plotting 0 there would be misleading, so such a point is omitted from the
+   *    cycle scatter / rolling average / percentiles (its lead time, which needs
+   *    only created → completion, is still valid and summarised).
+   */
+  cycleDays?: number;
+  /** Lead time in days: `dct:created` → closed. Undefined when `created` is absent. */
+  leadDays?: number;
+}
+
+export interface ControlChartStats {
+  /** Per-closed-issue points, ascending by completion date (ties by URL). */
+  points: ControlPoint[];
+  /** Median cycle time (days) across the plotted points; undefined when empty. */
+  medianCycle?: number;
+  /** 85th-percentile cycle time (days) — the SLE the chart's band targets. */
+  p85Cycle?: number;
+  /** Median lead time (days) across points that have a lead time. */
+  medianLead?: number;
+  /** 85th-percentile lead time (days). */
+  p85Lead?: number;
+}
+
+/**
+ * The percentile of a numeric sample using linear interpolation between the two
+ * nearest ranks (the same "C = 1 / inclusive" method as spreadsheets'
+ * PERCENTILE.INC and numpy's default). `p` is in [0, 1]. Returns undefined for an
+ * empty sample. The input need not be sorted — it is copied and sorted here, so
+ * callers never have their array mutated.
+ */
+export function percentile(values: number[], p: number): number | undefined {
+  if (values.length === 0) return undefined;
+  const sorted = [...values].sort((a, b) => a - b);
+  if (sorted.length === 1) return sorted[0];
+  const clamped = Math.min(1, Math.max(0, p));
+  const rank = clamped * (sorted.length - 1);
+  const lo = Math.floor(rank);
+  const hi = Math.ceil(rank);
+  if (lo === hi) return sorted[lo];
+  const frac = rank - lo;
+  return sorted[lo] + (sorted[hi] - sorted[lo]) * frac;
+}
+
+/** Median (50th percentile) of a numeric sample; undefined when empty. */
+export function median(values: number[]): number | undefined {
+  return percentile(values, 0.5);
+}
+
+/** Whole UTC-day count from `from` → `to`, floored at 0 (a same-or-earlier `to` ⇒ 0). */
+function dayDelta(from: Date, to: Date): number {
+  return Math.max(0, (to.getTime() - from.getTime()) / 86_400_000);
+}
+
+/**
+ * Control-chart data (P2-2): per **closed** issue, its cycle time and lead time,
+ * reconstructed by REPLAYING the SAME F3 provenance status-transition log the
+ * three-band CFD uses ({@link computeCumulativeFlowBands}). This is purely the
+ * same replay technique applied per issue rather than per day — no new vocab, no
+ * writes.
+ *
+ * For each issue whose current status resolves to *closed* (custom terminal
+ * statuses count, per {@link statusState}):
+ *  - **completed at** — the first recorded transition INTO a closed status; the
+ *    issue's `endedAt` (or, absent both, `modified`) is injected as an anchor
+ *    transition so a completion that lived past the log's page cap is still
+ *    counted (the SAME reconciliation the CFD does). An issue with no closed
+ *    timestamp at all (no log, no `endedAt`/`modified`) is skipped.
+ *  - **cycle time** — `completedAt − startedAt`, where `startedAt` is the FIRST
+ *    transition into an in-progress status (open AND past the workflow's initial
+ *    status). If the issue never recorded such a transition (e.g. it went straight
+ *    initial→closed, or has no log), `startedAt` is taken as the completion time,
+ *    giving a cycle time of **0** (documented on {@link ControlPoint.cycleDays}).
+ *  - **lead time** — `completedAt − created` (undefined when `created` is absent).
+ *
+ * Points are ascending by completion date (ties by URL) so a rolling average over
+ * the returned order is chronological. Summary stats (median + 85th-percentile
+ * cycle and lead time) are computed over the plotted points.
+ *
+ * @param statusHistory per-issue status transitions keyed by URL — the SAME map
+ *   {@link computeCumulativeFlowBands} consumes (read via
+ *   `Repository.dashboardStatusHistory`). A missing/empty entry means no recorded
+ *   transitions; the issue's current record then drives its timestamps.
+ */
+export function computeControlChart(
+  issues: IssueRecord[],
+  statusHistory: ReadonlyMap<string, StatusTransition[]>,
+  workflow: WorkflowDef = DEFAULT_WORKFLOW,
+): ControlChartStats {
+  const initial = workflow.statuses[0]?.slug ?? "todo";
+  const isClosedSlug = (slug: StatusSlug): boolean => statusState(workflow, slug) === "closed";
+
+  const points: ControlPoint[] = [];
+  for (const issue of issues) {
+    // Only closed issues have a completed cycle/lead time to plot.
+    if (statusState(workflow, issue.status) !== "closed") continue;
+
+    const logged = [...(statusHistory.get(issue.url) ?? [])]
+      .filter((t) => t.at !== undefined)
+      .sort((a, b) => a.at.getTime() - b.at.getTime());
+    // Reconcile the (possibly page-capped) log with the current record by appending
+    // an anchor transition at the issue's completion stamp — the SAME technique the
+    // CFD uses. The anchor only ever RECOVERS a completion the log is missing (a
+    // closure on an unread page); it must never OVERRIDE a real logged closure:
+    //  - `endedAt` is the true completion stamp (cleared on reopen, re-stamped on
+    //    re-close), so it is safe to inject always — for a logged closure it lands
+    //    at the same time, and for a page-capped one it recovers the date.
+    //  - `modified` is bumped by non-status edits (comments/labels), so it is NOT a
+    //    reliable completion time. Inject it ONLY when the log's CURRENT state is not
+    //    already closed — i.e. the latest logged transition is non-closed (the issue
+    //    was reopened after its last logged closure, OR never logged a closure) yet
+    //    the record's current status is closed, meaning the real final closure lives
+    //    past the page cap. Keying off the LAST logged state (not "any closure
+    //    exists") matters for a capped reopen like `in-progress → done →
+    //    in-progress`: a stale pre-reopen closure must NOT suppress the recovery, and
+    //    a genuinely-logged final closure must NOT be inflated by a post-close edit.
+    const lastLogged = logged.at(-1);
+    const logCurrentlyClosed = lastLogged !== undefined && isClosedSlug(lastLogged.to);
+    const transitions = [...logged];
+    if (issue.endedAt !== undefined) {
+      transitions.push({ to: issue.status, at: issue.endedAt });
+    } else if (issue.modified !== undefined && !logCurrentlyClosed) {
+      transitions.push({ to: issue.status, at: issue.modified });
+    }
+    const ordered = transitions.sort((a, b) => a.at.getTime() - b.at.getTime());
+
+    // Find the FINAL/current closure, not the first. The default workflow allows
+    // reopening (done → todo/in-progress), so a `done → in-progress → done` issue
+    // must be measured against its *latest* completion — measuring the first
+    // closure would underreport cycle/lead time, sort the point on the wrong date,
+    // and skew the percentiles. The `endedAt` anchor (the current completion stamp,
+    // cleared on reopen) participates in the ordered timeline, so the last closed
+    // transition is the current one. (roborev MEDIUM fix.)
+    let completedAt: Date | undefined;
+    for (let k = ordered.length - 1; k >= 0; k--) {
+      if (isClosedSlug(ordered[k].to)) {
+        completedAt = ordered[k].at;
+        break;
+      }
+    }
+
+    if (completedAt === undefined) continue; // no recoverable completion time → skip
+
+    // The start of active work for THIS (final) cycle is the FIRST move into an
+    // in-progress status (open AND past initial) within the issue's current active
+    // spell — i.e. since the last closure preceding the final one (or since
+    // creation if it was never reopened). Crossing a closed transition resets the
+    // candidate so an OLD pre-reopen active spell is never charged to this cycle:
+    // e.g. a fully-logged `in-progress → done → todo → done` has NO in-progress
+    // entry after the reopen, so its final cycle is 0, not the stale first spell.
+    let startedAt: Date | undefined;
+    for (const t of ordered) {
+      if (t.at.getTime() >= completedAt.getTime()) break; // only entries before this closure
+      if (isClosedSlug(t.to)) {
+        startedAt = undefined; // a closure ends the prior active spell
+      } else if (t.to !== initial && startedAt === undefined) {
+        startedAt = t.at; // first in-progress move of the current spell
+      }
+    }
+
+    // Whether the final completion was RECOVERED from the anchor rather than read
+    // from the log: it lands strictly AFTER the last logged transition (so the final
+    // closure itself is NOT in the log — it lived past the page cap). When the
+    // completion is recovered, the whole final spell — including any in-progress
+    // restart — is in the unread gap, so a missing start is genuinely unknowable. An
+    // empty log (lastLogged undefined) is NOT "recovered": there is no log to be
+    // strictly after, and an unlogged closed issue falls back to the cycle-0 best
+    // effort (matching legacy/unlogged data).
+    const completionRecovered = lastLogged !== undefined && completedAt.getTime() > lastLogged.at.getTime();
+
+    // Resolve the cycle time three ways:
+    //  - start found → the active-spell duration (start → completion).
+    //  - no start, but the completion was RECOVERED (final closure past the page
+    //    cap) → UNKNOWN (undefined): the final spell's content, including any
+    //    restart, is unreadable, so plotting 0 would misreport a real reopened
+    //    cycle. The point is dropped from the cycle scatter/percentiles, but its lead
+    //    time (created → completion) is still valid and summarised. This covers BOTH
+    //    a last-logged closure AND a last-logged reopen (todo/in-progress) before the
+    //    recovered close. (roborev MEDIUM fix.)
+    //  - no start, completion is LOGGED (or there is no log) → genuinely never
+    //    in-progress in the visible final spell: cycle 0 (the WIP floor), plotted.
+    let cycleDays: number | undefined;
+    if (startedAt !== undefined && startedAt.getTime() <= completedAt.getTime()) {
+      cycleDays = dayDelta(startedAt, completedAt);
+    } else if (completionRecovered) {
+      cycleDays = undefined;
+    } else {
+      cycleDays = 0;
+    }
+    const leadDays = issue.created !== undefined ? dayDelta(issue.created, completedAt) : undefined;
+
+    points.push({ url: issue.url, title: issue.title, completedAt, cycleDays, leadDays });
+  }
+
+  points.sort((a, b) => a.completedAt.getTime() - b.completedAt.getTime() || a.url.localeCompare(b.url));
+
+  // Cycle stats over points with a KNOWN cycle only (a truncated reopen contributes
+  // its lead time but no cycle); lead stats over points with a known lead time.
+  const cycles = points.map((p) => p.cycleDays).filter((d): d is number => d !== undefined);
+  const leads = points.map((p) => p.leadDays).filter((d): d is number => d !== undefined);
+  return {
+    points,
+    medianCycle: median(cycles),
+    p85Cycle: percentile(cycles, 0.85),
+    medianLead: median(leads),
+    p85Lead: percentile(leads, 0.85),
+  };
+}
+
+/**
+ * A control-chart scatter point enriched with a trailing rolling average of cycle
+ * time — the chart row shape. `completed` is the formatted completion-date label
+ * (chart x), `cycle` the y. `rolling` is the mean cycle time over the trailing
+ * `window` points (inclusive of this one), so the chart's average line tracks
+ * recent flow rather than the all-time mean.
+ */
+export interface ControlChartRow {
+  url: string;
+  title: string;
+  /** Completion-date label (e.g. "Jun 8"). */
+  completed: string;
+  /** Cycle time in days (the scatter y); undefined for a truncated-cycle point. */
+  cycle?: number;
+  /** Lead time in days, if known. */
+  lead?: number;
+  /** Trailing rolling-average cycle time (days), rounded to one decimal; undefined until a known cycle has been seen. */
+  rolling?: number;
+}
+
+/**
+ * Shape {@link computeControlChart} points into recharts rows with a trailing
+ * rolling average of cycle time over the last `window` points WITH A KNOWN CYCLE.
+ * The points are already ascending by completion date, so the window is
+ * chronological. A point whose cycle is unknown (a page-cap-truncated reopen) has
+ * no scatter `cycle` and does not contribute to the rolling average; the average
+ * is undefined until at least one known-cycle point has been seen.
+ */
+export function controlChartRows(points: ControlPoint[], window = 5): ControlChartRow[] {
+  const fmt = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", timeZone: "UTC" });
+  const size = Math.max(1, window);
+  // Running queue of the last `size` KNOWN cycle values. Unknown-cycle points
+  // (page-cap-truncated reopens) are skipped entirely — they must NOT consume a
+  // window slot, or the rolling line would jump exactly in the truncated cases this
+  // feature handles (e.g. window 2 over [2, undefined, 6] must average the last two
+  // KNOWN points [2, 6] = 4, not just [6]). The average is undefined for a row until
+  // at least one known-cycle point (this row or an earlier one) has been seen.
+  const recent: number[] = [];
+  return points.map((p) => {
+    if (p.cycleDays !== undefined) {
+      recent.push(p.cycleDays);
+      if (recent.length > size) recent.shift();
+    }
+    // The rolling value is only meaningful AT a known-cycle point: an unknown-cycle
+    // row carries NO rolling, so the average line skips that completion date (a gap)
+    // rather than being drawn across an x whose cycle is explicitly unknown.
+    const rolling =
+      p.cycleDays === undefined || recent.length === 0
+        ? undefined
+        : recent.reduce((sum, d) => sum + d, 0) / recent.length;
+    return {
+      url: p.url,
+      title: p.title,
+      completed: fmt.format(p.completedAt),
+      cycle: p.cycleDays === undefined ? undefined : Math.round(p.cycleDays * 10) / 10,
+      lead: p.leadDays === undefined ? undefined : Math.round(p.leadDays * 10) / 10,
+      rolling: rolling === undefined ? undefined : Math.round(rolling * 10) / 10,
+    };
+  });
+}
+
 export interface VelocityPoint {
   sprint: string;
   /** Story points completed (done members) in the sprint. */

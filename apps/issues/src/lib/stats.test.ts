@@ -1,11 +1,15 @@
 import { describe, it, expect } from "vitest";
 import {
   computeBurndown,
+  computeControlChart,
   computeCumulativeFlow,
   computeCumulativeFlowBands,
   computeStats,
   computeVelocity,
   computeWorkload,
+  controlChartRows,
+  median,
+  percentile,
   statusSlugFromClass,
   type StatusTransition,
 } from "./stats";
@@ -459,5 +463,512 @@ describe("computeCumulativeFlowBands", () => {
     // Jun 9 & 10: still done (anchor fired on Jun 8).
     expect(flow[1]).toMatchObject({ notStarted: 0, inProgress: 0, done: 1 });
     expect(flow[2]).toMatchObject({ notStarted: 0, inProgress: 0, done: 1 });
+  });
+});
+
+describe("percentile / median", () => {
+  it("interpolates linearly between nearest ranks (PERCENTILE.INC)", () => {
+    const v = [1, 2, 3, 4];
+    // p50 of [1,2,3,4]: rank = 0.5*3 = 1.5 → between 2 and 3 → 2.5.
+    expect(percentile(v, 0.5)).toBe(2.5);
+    expect(median(v)).toBe(2.5);
+    // p85: rank = 0.85*3 = 2.55 → 3 + 0.55*(4-3) = 3.55.
+    expect(percentile(v, 0.85)).toBeCloseTo(3.55, 10);
+  });
+
+  it("median of an odd sample is the middle value", () => {
+    expect(median([5, 1, 3])).toBe(3); // sorted [1,3,5] → 3
+  });
+
+  it("handles boundary p values and single/empty samples", () => {
+    expect(percentile([10, 20, 30], 0)).toBe(10);
+    expect(percentile([10, 20, 30], 1)).toBe(30);
+    expect(percentile([7], 0.85)).toBe(7);
+    expect(percentile([], 0.5)).toBeUndefined();
+    expect(median([])).toBeUndefined();
+  });
+
+  it("does not mutate the input array", () => {
+    const v = [3, 1, 2];
+    percentile(v, 0.5);
+    expect(v).toEqual([3, 1, 2]);
+  });
+
+  it("clamps out-of-range p into [0,1]", () => {
+    expect(percentile([1, 2, 3], -1)).toBe(1);
+    expect(percentile([1, 2, 3], 2)).toBe(3);
+  });
+});
+
+describe("computeControlChart", () => {
+  const tx = (to: string, iso: string): StatusTransition => ({ to, at: new Date(iso) });
+
+  it("computes cycle (in-progress→closed) and lead (created→closed) per closed issue", () => {
+    // Issue 1: created Jun 1, in-progress Jun 3, done Jun 8 → cycle 5d, lead 7d.
+    // Issue 2: created Jun 2, in-progress Jun 4, done Jun 6 → cycle 2d, lead 4d.
+    // Open issue 3 is excluded (no completion).
+    const issues = [
+      mk({
+        url: "1",
+        title: "One",
+        created: new Date("2026-06-01T00:00:00Z"),
+        state: "closed",
+        status: "done",
+        endedAt: new Date("2026-06-08T00:00:00Z"),
+      }),
+      mk({
+        url: "2",
+        title: "Two",
+        created: new Date("2026-06-02T00:00:00Z"),
+        state: "closed",
+        status: "done",
+        endedAt: new Date("2026-06-06T00:00:00Z"),
+      }),
+      mk({ url: "3", title: "Open", created: new Date("2026-06-03T00:00:00Z"), state: "open", status: "in-progress" }),
+    ];
+    const history = new Map<string, StatusTransition[]>([
+      ["1", [tx("in-progress", "2026-06-03T00:00:00Z"), tx("done", "2026-06-08T00:00:00Z")]],
+      ["2", [tx("in-progress", "2026-06-04T00:00:00Z"), tx("done", "2026-06-06T00:00:00Z")]],
+    ]);
+    const cc = computeControlChart(issues, history, DEFAULT_WORKFLOW);
+    expect(cc.points).toHaveLength(2);
+    // Ascending by completion date: Two (Jun 6) before One (Jun 8).
+    expect(cc.points.map((p) => p.url)).toEqual(["2", "1"]);
+    expect(cc.points.find((p) => p.url === "1")).toMatchObject({ cycleDays: 5, leadDays: 7 });
+    expect(cc.points.find((p) => p.url === "2")).toMatchObject({ cycleDays: 2, leadDays: 4 });
+  });
+
+  it("an issue closed without ever being in-progress has cycle time 0 but a real lead time", () => {
+    // Created Jun 1, went straight todo→done Jun 5 (no in-progress transition).
+    const issues = [
+      mk({
+        url: "1",
+        title: "Quick",
+        created: new Date("2026-06-01T00:00:00Z"),
+        state: "closed",
+        status: "done",
+        endedAt: new Date("2026-06-05T00:00:00Z"),
+      }),
+    ];
+    const history = new Map<string, StatusTransition[]>([["1", [tx("done", "2026-06-05T00:00:00Z")]]]);
+    const cc = computeControlChart(issues, history, DEFAULT_WORKFLOW);
+    expect(cc.points).toHaveLength(1);
+    expect(cc.points[0]).toMatchObject({ cycleDays: 0, leadDays: 4 });
+  });
+
+  it("falls back to the current record's endedAt when no log transitions exist", () => {
+    // No recorded history at all: completion comes from endedAt (anchor); no
+    // in-progress transition → cycle 0; lead from created.
+    const issues = [
+      mk({
+        url: "1",
+        title: "Legacy",
+        created: new Date("2026-06-01T00:00:00Z"),
+        state: "closed",
+        status: "done",
+        endedAt: new Date("2026-06-04T00:00:00Z"),
+      }),
+    ];
+    const cc = computeControlChart(issues, new Map(), DEFAULT_WORKFLOW);
+    expect(cc.points[0]).toMatchObject({ url: "1", cycleDays: 0, leadDays: 3 });
+  });
+
+  it("reconciles a completion past the log page cap via the endedAt anchor", () => {
+    // The truncated log only has the in-progress transition (oldest page); the
+    // done transition lived on an unread page. The endedAt anchor (Jun 9) recovers
+    // the completion → cycle = Jun 5 → Jun 9 = 4d.
+    const issues = [
+      mk({
+        url: "1",
+        title: "Capped",
+        created: new Date("2026-06-01T00:00:00Z"),
+        state: "closed",
+        status: "done",
+        endedAt: new Date("2026-06-09T00:00:00Z"),
+      }),
+    ];
+    const history = new Map<string, StatusTransition[]>([["1", [tx("in-progress", "2026-06-05T00:00:00Z")]]]);
+    const cc = computeControlChart(issues, history, DEFAULT_WORKFLOW);
+    expect(cc.points[0]).toMatchObject({ cycleDays: 4, leadDays: 8 });
+  });
+
+  it("omits a lead time when the issue has no created date", () => {
+    const issues = [
+      mk({ url: "1", title: "Undated", state: "closed", status: "done", endedAt: new Date("2026-06-05T00:00:00Z") }),
+    ];
+    const history = new Map<string, StatusTransition[]>([["1", [tx("in-progress", "2026-06-03T00:00:00Z"), tx("done", "2026-06-05T00:00:00Z")]]]);
+    const cc = computeControlChart(issues, history, DEFAULT_WORKFLOW);
+    expect(cc.points[0].cycleDays).toBe(2);
+    expect(cc.points[0].leadDays).toBeUndefined();
+    expect(cc.medianLead).toBeUndefined();
+  });
+
+  it("skips a closed issue with no recoverable completion timestamp", () => {
+    // Closed by status but no endedAt, no modified, and no closing transition in
+    // the log → no completion time → not plotted.
+    const issues = [mk({ url: "1", title: "No stamp", created: new Date("2026-06-01T00:00:00Z"), state: "closed", status: "done" })];
+    const cc = computeControlChart(issues, new Map(), DEFAULT_WORKFLOW);
+    expect(cc.points).toHaveLength(0);
+  });
+
+  it("is workflow-correct for a custom workflow (custom in-progress = open past initial)", () => {
+    // Triage(initial) → Building(in-progress) → Shipped(terminal).
+    const custom: WorkflowDef = {
+      statuses: [
+        { slug: "triage", label: "Triage", terminal: false },
+        { slug: "building", label: "Building", terminal: false },
+        { slug: "shipped", label: "Shipped", terminal: true },
+      ],
+      transitions: { triage: ["building"], building: ["shipped"], shipped: [] },
+    };
+    const issues = [
+      mk({
+        url: "1",
+        title: "Custom",
+        created: new Date("2026-06-01T00:00:00Z"),
+        state: "closed",
+        status: "shipped",
+        endedAt: new Date("2026-06-07T00:00:00Z"),
+      }),
+    ];
+    const history = new Map<string, StatusTransition[]>([["1", [tx("building", "2026-06-04T00:00:00Z"), tx("shipped", "2026-06-07T00:00:00Z")]]]);
+    const cc = computeControlChart(issues, history, custom);
+    // Building (Jun 4) is the in-progress start; shipped (Jun 7) the completion.
+    expect(cc.points[0]).toMatchObject({ cycleDays: 3, leadDays: 6 });
+  });
+
+  it("computes median and 85th-percentile cycle and lead summary stats", () => {
+    // Four closed issues with cycle times 1,2,3,4 and lead times 2,4,6,8.
+    const mkClosed = (url: string, cycle: number, lead: number): IssueRecord =>
+      mk({
+        url,
+        title: url,
+        created: new Date(Date.UTC(2026, 5, 10 - lead, 0, 0, 0)),
+        state: "closed",
+        status: "done",
+        endedAt: new Date("2026-06-10T00:00:00Z"),
+        modified: new Date("2026-06-10T00:00:00Z"),
+      });
+    const issues = [mkClosed("a", 1, 2), mkClosed("b", 2, 4), mkClosed("c", 3, 6), mkClosed("d", 4, 8)];
+    const history = new Map<string, StatusTransition[]>([
+      ["a", [tx("in-progress", "2026-06-09T00:00:00Z"), tx("done", "2026-06-10T00:00:00Z")]],
+      ["b", [tx("in-progress", "2026-06-08T00:00:00Z"), tx("done", "2026-06-10T00:00:00Z")]],
+      ["c", [tx("in-progress", "2026-06-07T00:00:00Z"), tx("done", "2026-06-10T00:00:00Z")]],
+      ["d", [tx("in-progress", "2026-06-06T00:00:00Z"), tx("done", "2026-06-10T00:00:00Z")]],
+    ]);
+    const cc = computeControlChart(issues, history, DEFAULT_WORKFLOW);
+    expect(cc.points.map((p) => p.cycleDays)).toEqual([1, 2, 3, 4]);
+    expect(cc.medianCycle).toBe(2.5);
+    expect(cc.p85Cycle).toBeCloseTo(3.55, 10);
+    expect(cc.medianLead).toBe(5);
+    expect(cc.p85Lead).toBeCloseTo(7.1, 10);
+  });
+
+  it("returns empty stats with no closed issues", () => {
+    const cc = computeControlChart([mk({ url: "1", state: "open", status: "todo" })], new Map(), DEFAULT_WORKFLOW);
+    expect(cc.points).toEqual([]);
+    expect(cc.medianCycle).toBeUndefined();
+    expect(cc.p85Cycle).toBeUndefined();
+  });
+
+  it("measures a reopened issue against its FINAL closure, not the first (roborev MEDIUM)", () => {
+    // Reopened-and-reclosed: in-progress Jun 2 → done Jun 4 → in-progress Jun 7 → done Jun 10.
+    // The control chart must measure the CURRENT (final) cycle: started Jun 7, completed
+    // Jun 10 → cycle 3d; lead = created Jun 1 → final completion Jun 10 = 9d. Measuring the
+    // first closure (Jun 4) would wrongly give cycle 2d / lead 3d and the wrong completion date.
+    const issues = [
+      mk({
+        url: "1",
+        title: "Reopened",
+        created: new Date("2026-06-01T00:00:00Z"),
+        state: "closed",
+        status: "done",
+        endedAt: new Date("2026-06-10T00:00:00Z"),
+        modified: new Date("2026-06-10T00:00:00Z"),
+      }),
+    ];
+    const history = new Map<string, StatusTransition[]>([
+      [
+        "1",
+        [
+          tx("in-progress", "2026-06-02T00:00:00Z"),
+          tx("done", "2026-06-04T00:00:00Z"),
+          tx("in-progress", "2026-06-07T00:00:00Z"),
+          tx("done", "2026-06-10T00:00:00Z"),
+        ],
+      ],
+    ]);
+    const cc = computeControlChart(issues, history, DEFAULT_WORKFLOW);
+    expect(cc.points).toHaveLength(1);
+    expect(cc.points[0]).toMatchObject({ cycleDays: 3, leadDays: 9 });
+    expect(cc.points[0].completedAt.toISOString()).toBe("2026-06-10T00:00:00.000Z");
+  });
+
+  it("a later non-status edit (modified) never inflates completion past a logged closure (roborev MEDIUM)", () => {
+    // No endedAt; the log carries a real done transition on Jun 5, but `modified`
+    // was bumped to Jun 10 by a comment/label edit AFTER closing. The completion
+    // must stay at the logged closure (Jun 5), NOT the modified anchor (Jun 10) —
+    // otherwise cycle (Jun 3 → ?) and lead inflate and the sort key is wrong.
+    const issues = [
+      mk({
+        url: "1",
+        title: "Edited after close",
+        created: new Date("2026-06-01T00:00:00Z"),
+        state: "closed",
+        status: "done",
+        modified: new Date("2026-06-10T00:00:00Z"), // later non-status edit, no endedAt
+      }),
+    ];
+    const history = new Map<string, StatusTransition[]>([
+      ["1", [tx("in-progress", "2026-06-03T00:00:00Z"), tx("done", "2026-06-05T00:00:00Z")]],
+    ]);
+    const cc = computeControlChart(issues, history, DEFAULT_WORKFLOW);
+    // Completion = Jun 5 (logged), cycle = Jun 3 → Jun 5 = 2d, lead = Jun 1 → Jun 5 = 4d.
+    expect(cc.points[0]).toMatchObject({ cycleDays: 2, leadDays: 4 });
+    expect(cc.points[0].completedAt.toISOString()).toBe("2026-06-05T00:00:00.000Z");
+  });
+
+  it("marks the cycle UNKNOWN (not 0) when a reopen's restart is lost to the page cap (roborev MEDIUM)", () => {
+    // statusHistory reads OLDEST pages first. Visible pages end at a STALE closure
+    // (in-progress Jun 3 → done Jun 5), but endedAt shows a LATER completion (Jun 12):
+    // the issue was reopened AND reclosed in the unread gap, so its restart is
+    // unrecoverable. Plotting cycle 0 would misreport a real reopened cycle, so the
+    // cycle is UNKNOWN (undefined) — but the lead time (created → Jun 12) is still valid.
+    const issues = [
+      mk({
+        url: "1",
+        title: "Truncated reopen",
+        created: new Date("2026-06-01T00:00:00Z"),
+        state: "closed",
+        status: "done",
+        endedAt: new Date("2026-06-12T00:00:00Z"), // final completion, past the cap
+      }),
+    ];
+    const history = new Map<string, StatusTransition[]>([
+      ["1", [tx("in-progress", "2026-06-03T00:00:00Z"), tx("done", "2026-06-05T00:00:00Z")]],
+    ]);
+    const cc = computeControlChart(issues, history, DEFAULT_WORKFLOW);
+    expect(cc.points).toHaveLength(1);
+    expect(cc.points[0].cycleDays).toBeUndefined(); // restart lost to truncation
+    expect(cc.points[0].leadDays).toBe(11); // Jun 1 → Jun 12
+    expect(cc.points[0].completedAt.toISOString()).toBe("2026-06-12T00:00:00.000Z");
+    // Cycle stats exclude the unknown-cycle point; lead stats still include it.
+    expect(cc.medianCycle).toBeUndefined();
+    expect(cc.p85Cycle).toBeUndefined();
+    expect(cc.medianLead).toBe(11);
+    // The row carries no scatter cycle / rolling for the truncated point.
+    const rows = controlChartRows(cc.points);
+    expect(rows[0].cycle).toBeUndefined();
+    expect(rows[0].rolling).toBeUndefined();
+    expect(rows[0].lead).toBe(11);
+  });
+
+  it("marks the cycle UNKNOWN when the last logged state is a reopen-to-initial and the final close is recovered (roborev MEDIUM)", () => {
+    // Visible log ends at a reopen to the initial status: in-progress Jun 3 →
+    // done Jun 5 → todo Jun 7, and `endedAt` (Jun 12) is LATER than the last logged
+    // `todo`. The final close — and any in-progress restart between Jun 7 and Jun 12
+    // — lived in the unread page-cap gap, so the final cycle is UNKNOWN, not a
+    // spurious 0 (the issue may well have been worked on in that gap).
+    const issues = [
+      mk({
+        url: "1",
+        title: "Truncated reopen-to-initial",
+        created: new Date("2026-06-01T00:00:00Z"),
+        state: "closed",
+        status: "done",
+        endedAt: new Date("2026-06-12T00:00:00Z"), // final close, past the cap
+      }),
+    ];
+    const history = new Map<string, StatusTransition[]>([
+      [
+        "1",
+        [
+          tx("in-progress", "2026-06-03T00:00:00Z"),
+          tx("done", "2026-06-05T00:00:00Z"),
+          tx("todo", "2026-06-07T00:00:00Z"),
+        ],
+      ],
+    ]);
+    const cc = computeControlChart(issues, history, DEFAULT_WORKFLOW);
+    expect(cc.points[0].cycleDays).toBeUndefined(); // restart/close lost to the cap
+    expect(cc.points[0].leadDays).toBe(11); // Jun 1 → Jun 12 still valid
+  });
+
+  it("a fully-logged reopen-to-initial is cycle 0, NOT unknown (the final done is in the log)", () => {
+    // Same as the reopen-to-initial case but emphasising it is NOT truncated: the
+    // final done IS a logged transition (the anchor coincides, not strictly after
+    // the last logged state), so the cycle is a genuine 0, never undefined.
+    const issues = [
+      mk({
+        url: "1",
+        title: "Fully logged reopen",
+        created: new Date("2026-06-01T00:00:00Z"),
+        state: "closed",
+        status: "done",
+        endedAt: new Date("2026-06-10T00:00:00Z"),
+      }),
+    ];
+    const history = new Map<string, StatusTransition[]>([
+      [
+        "1",
+        [
+          tx("in-progress", "2026-06-02T00:00:00Z"),
+          tx("done", "2026-06-04T00:00:00Z"),
+          tx("todo", "2026-06-07T00:00:00Z"),
+          tx("done", "2026-06-10T00:00:00Z"),
+        ],
+      ],
+    ]);
+    const cc = computeControlChart(issues, history, DEFAULT_WORKFLOW);
+    expect(cc.points[0].cycleDays).toBe(0); // genuine no-WIP final cycle, not unknown
+  });
+
+  it("recovers a capped reopen's final closure from modified even when a STALE logged closure exists (roborev MEDIUM)", () => {
+    // Page-capped reopen with no endedAt: log shows in-progress Jun 3 → done Jun 5
+    // (an EARLIER cycle) → in-progress Jun 7, but the FINAL done lived past the cap.
+    // The current record is closed with modified Jun 12. Because the log's LAST state
+    // is in-progress (not closed), the modified anchor must recover the current
+    // completion (Jun 12) rather than reporting the stale Jun 5 closure.
+    const issues = [
+      mk({
+        url: "1",
+        title: "Capped reopen",
+        created: new Date("2026-06-01T00:00:00Z"),
+        state: "closed",
+        status: "done",
+        modified: new Date("2026-06-12T00:00:00Z"), // current close (real close past the cap)
+      }),
+    ];
+    const history = new Map<string, StatusTransition[]>([
+      [
+        "1",
+        [
+          tx("in-progress", "2026-06-03T00:00:00Z"),
+          tx("done", "2026-06-05T00:00:00Z"),
+          tx("in-progress", "2026-06-07T00:00:00Z"),
+        ],
+      ],
+    ]);
+    const cc = computeControlChart(issues, history, DEFAULT_WORKFLOW);
+    // Completion = Jun 12 (recovered); current active spell started Jun 7 (after the
+    // stale Jun 5 closure) → cycle = Jun 7 → Jun 12 = 5d; lead = Jun 1 → Jun 12 = 11d.
+    expect(cc.points[0]).toMatchObject({ cycleDays: 5, leadDays: 11 });
+    expect(cc.points[0].completedAt.toISOString()).toBe("2026-06-12T00:00:00.000Z");
+  });
+
+  it("uses modified as a completion fallback only when no logged closure and no endedAt exist", () => {
+    // No endedAt and the log has NO closed transition (only an in-progress on a
+    // read page; the real closure lived past the page cap). `modified` then
+    // recovers the completion date so the closed issue is still plotted.
+    const issues = [
+      mk({
+        url: "1",
+        title: "Capped, no endedAt",
+        created: new Date("2026-06-01T00:00:00Z"),
+        state: "closed",
+        status: "done",
+        modified: new Date("2026-06-08T00:00:00Z"),
+      }),
+    ];
+    const history = new Map<string, StatusTransition[]>([["1", [tx("in-progress", "2026-06-04T00:00:00Z")]]]);
+    const cc = computeControlChart(issues, history, DEFAULT_WORKFLOW);
+    expect(cc.points[0]).toMatchObject({ cycleDays: 4, leadDays: 7 }); // Jun 4→8 = 4, Jun 1→8 = 7
+  });
+
+  it("a reopen to the initial status with no fresh in-progress move yields cycle 0 for the final cycle", () => {
+    // in-progress Jun 2 → done Jun 4 → todo Jun 7 (reopened to initial) → done Jun 10.
+    // No in-progress entry exists after the reopen, so the FINAL cycle spent no time in
+    // active work → cycle 0; lead = created Jun 1 → final completion Jun 10 = 9d. The OLD
+    // pre-reopen active spell (Jun 2–4) must NOT be charged to this cycle.
+    const issues = [
+      mk({
+        url: "1",
+        title: "Reopened to todo",
+        created: new Date("2026-06-01T00:00:00Z"),
+        state: "closed",
+        status: "done",
+        endedAt: new Date("2026-06-10T00:00:00Z"),
+      }),
+    ];
+    const history = new Map<string, StatusTransition[]>([
+      [
+        "1",
+        [
+          tx("in-progress", "2026-06-02T00:00:00Z"),
+          tx("done", "2026-06-04T00:00:00Z"),
+          tx("todo", "2026-06-07T00:00:00Z"),
+          tx("done", "2026-06-10T00:00:00Z"),
+        ],
+      ],
+    ]);
+    const cc = computeControlChart(issues, history, DEFAULT_WORKFLOW);
+    expect(cc.points[0]).toMatchObject({ cycleDays: 0, leadDays: 9 });
+  });
+});
+
+describe("controlChartRows", () => {
+  it("formats points and computes a trailing rolling average of cycle time", () => {
+    const points = [
+      { url: "1", title: "A", completedAt: new Date("2026-06-01T00:00:00Z"), cycleDays: 2, leadDays: 4 },
+      { url: "2", title: "B", completedAt: new Date("2026-06-02T00:00:00Z"), cycleDays: 4, leadDays: 6 },
+      { url: "3", title: "C", completedAt: new Date("2026-06-03T00:00:00Z"), cycleDays: 6, leadDays: undefined },
+    ];
+    const rows = controlChartRows(points, 2);
+    // Labels are locale-formatted month+day (matching the rest of the dashboard).
+    // Assert against the SAME formatter (locale-agnostic) rather than an English
+    // month string, and that they are non-empty and distinct.
+    const fmt = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", timeZone: "UTC" });
+    const expected = points.map((p) => fmt.format(p.completedAt));
+    expect(rows.map((r) => r.completed)).toEqual(expected);
+    expect(new Set(rows.map((r) => r.completed)).size).toBe(3);
+    for (const r of rows) expect(r.completed.length).toBeGreaterThan(0);
+    expect(rows.map((r) => r.cycle)).toEqual([2, 4, 6]);
+    // Rolling avg over a window of 2: [2], [2,4]→3, [4,6]→5.
+    expect(rows.map((r) => r.rolling)).toEqual([2, 3, 5]);
+    expect(rows[2].lead).toBeUndefined();
+    expect(rows[0].lead).toBe(4);
+  });
+
+  it("skips unknown-cycle points in the rolling window (they do not consume a slot) (roborev MEDIUM)", () => {
+    // window 2 over cycles [2, undefined, 6]: the unknown middle point must NOT
+    // consume a window slot, so the third row averages the last two KNOWN values
+    // [2, 6] = 4, not just [6]. The unknown row itself carries the previous rolling
+    // (only the known value 2 has been seen) and no scatter cycle.
+    const points = [
+      { url: "1", title: "A", completedAt: new Date("2026-06-01T00:00:00Z"), cycleDays: 2, leadDays: 4 },
+      { url: "2", title: "B", completedAt: new Date("2026-06-02T00:00:00Z"), cycleDays: undefined, leadDays: 6 },
+      { url: "3", title: "C", completedAt: new Date("2026-06-03T00:00:00Z"), cycleDays: 6, leadDays: 8 },
+    ];
+    const rows = controlChartRows(points, 2);
+    expect(rows[0]).toMatchObject({ cycle: 2, rolling: 2 });
+    // The unknown-cycle row carries NEITHER a scatter cycle NOR a rolling value, so
+    // the average line gaps over its completion date rather than crossing an
+    // explicitly-unknown x.
+    expect(rows[1].cycle).toBeUndefined();
+    expect(rows[1].rolling).toBeUndefined();
+    // The third row's rolling is the last two KNOWN cycles [2, 6] = 4 (NOT [6] = 6) —
+    // the unknown middle row did not consume a window slot.
+    expect(rows[2]).toMatchObject({ cycle: 6, rolling: 4 });
+  });
+
+  it("a leading unknown-cycle point yields an undefined rolling until a known cycle is seen", () => {
+    const points = [
+      { url: "1", title: "A", completedAt: new Date("2026-06-01T00:00:00Z"), cycleDays: undefined, leadDays: 3 },
+      { url: "2", title: "B", completedAt: new Date("2026-06-02T00:00:00Z"), cycleDays: 4, leadDays: 6 },
+    ];
+    const rows = controlChartRows(points, 5);
+    expect(rows[0].rolling).toBeUndefined();
+    expect(rows[0].cycle).toBeUndefined();
+    expect(rows[1]).toMatchObject({ cycle: 4, rolling: 4 });
+  });
+
+  it("rounds cycle, lead, and rolling to one decimal", () => {
+    const points = [
+      { url: "1", title: "A", completedAt: new Date("2026-06-01T12:00:00Z"), cycleDays: 1.25, leadDays: 2.349 },
+    ];
+    const rows = controlChartRows(points, 5);
+    expect(rows[0].cycle).toBe(1.3);
+    expect(rows[0].lead).toBe(2.3);
+    expect(rows[0].rolling).toBe(1.3);
   });
 });
