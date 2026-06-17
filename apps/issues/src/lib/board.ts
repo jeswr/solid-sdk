@@ -15,7 +15,7 @@
  * how a finished card later leaves the board.
  */
 import type { IssueRecord } from "./repository";
-import type { Priority, StatusSlug, WorkflowDef } from "./issue";
+import type { Priority, StatusSlug, WorkflowDef, WipLimit, WipLimits } from "./issue";
 
 /** How the board groups cards into columns. */
 export type GroupBy = "status" | "priority";
@@ -256,4 +256,84 @@ export function revertMoveIfCurrent(
       ? { ...current, status: original.status, state: original.state }
       : { ...current, priority: original.priority };
   return issues.map((i) => (i.url === original.url ? reverted : i));
+}
+
+// ---- WIP limits (#111 P1-1) -------------------------------------------------
+
+/**
+ * The WIP "open count" of a status column — the cards currently sitting in it that
+ * are NOT closed. WIP limits constrain in-flight work, so a terminal/done column's
+ * completed cards do NOT count toward its load (a Done column with a max would
+ * otherwise warn forever as work accumulates). A non-terminal column counts every
+ * card in it (they are open by construction). Computed over the board's CURRENTLY
+ * VISIBLE issues so the count matches what the user sees.
+ */
+export function columnOpenCount(issues: IssueRecord[], slug: StatusSlug): number {
+  return issues.filter((i) => i.status === slug && i.state !== "closed").length;
+}
+
+/** How a column's open-count sits against its WIP limit. */
+export type WipLevel = "ok" | "under" | "over";
+
+/** The WIP status of one column: its open count, its (optional) limit, and the level. */
+export interface ColumnWip {
+  count: number;
+  limit?: WipLimit;
+  /** `under` when below `min` (starved, amber); `over` when above `max` (overloaded, red). */
+  level: WipLevel;
+}
+
+/** Classify a column's open count against its WIP limit. No limit ⇒ always "ok". */
+export function wipLevel(count: number, limit: WipLimit | undefined): WipLevel {
+  if (!limit) return "ok";
+  if (limit.max !== undefined && count > limit.max) return "over";
+  if (limit.min !== undefined && count < limit.min) return "under";
+  return "ok";
+}
+
+/**
+ * The per-column WIP status for the whole board, keyed by status slug — for
+ * rendering each column header's "n / max" badge + amber/red warning. Only
+ * status-grouped boards have WIP columns; a priority-grouped board passes an empty
+ * `limits` map and every column resolves to "ok" (no badge).
+ */
+export function boardWip(issues: IssueRecord[], columns: BoardColumn[], limits: WipLimits): Record<string, ColumnWip> {
+  const out: Record<string, ColumnWip> = {};
+  for (const col of columns) {
+    const count = columnOpenCount(issues, col.key);
+    const limit = limits[col.key];
+    out[col.key] = { count, limit, level: wipLevel(count, limit) };
+  }
+  return out;
+}
+
+/**
+ * Whether moving a card INTO `targetSlug` would push that column over its `wipMax`
+ * — the move-guard warning (#111). Like the dependency guard this is advisory: the
+ * UI surfaces it and lets the user proceed (override), never a hard block. Returns
+ * the would-be count and the max when the move would breach it, else undefined.
+ *
+ * A move WITHIN the same column, or a card that is already in the target column, is
+ * never a breach (the count does not rise). A target with no `max`, or whose count
+ * is already at/over the max because of the move's own card already being counted,
+ * is handled by computing the count EXCLUDING the moving card then adding one.
+ */
+export function wipMoveBreach(
+  issues: IssueRecord[],
+  movingUrl: string,
+  targetSlug: StatusSlug,
+  limits: WipLimits,
+  workflow: WorkflowDef,
+): { count: number; max: number } | undefined {
+  const max = limits[targetSlug]?.max;
+  if (max === undefined) return undefined;
+  // A move into a terminal (done) column CLOSES the card, so it adds no in-flight
+  // work — a done column's max is never breached by completing a card.
+  if (workflow.statuses.find((s) => s.slug === targetSlug)?.terminal) return undefined;
+  const movingCard = issues.find((i) => i.url === movingUrl);
+  if (movingCard && movingCard.status === targetSlug) return undefined; // already there
+  // Count the target column's open cards EXCLUDING the moving one, then +1 for it.
+  const existing = issues.filter((i) => i.url !== movingUrl && i.status === targetSlug && i.state !== "closed").length;
+  const next = existing + 1;
+  return next > max ? { count: next, max } : undefined;
 }

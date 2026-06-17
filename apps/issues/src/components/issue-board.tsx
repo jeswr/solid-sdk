@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Plus as PlusIcon } from "lucide-react";
 import { IssueCard, type IssueCardActions } from "@/components/issue-card";
 import type { IssueRecord } from "@/lib/use-issues";
-import { swimlanes, UNGROUPED_LANE, type SwimlaneBy } from "@/lib/board";
+import { swimlanes, UNGROUPED_LANE, type ColumnWip, type SwimlaneBy } from "@/lib/board";
 
 export interface BoardColumn {
   key: string;
@@ -32,6 +32,7 @@ export function IssueBoard({
   swimlaneBy = "none",
   labelOf = (k) => k,
   epicOf,
+  columnWip,
 }: {
   issues: IssueRecord[];
   columns: BoardColumn[];
@@ -47,6 +48,14 @@ export function IssueBoard({
   labelOf?: (value: string) => string;
   /** For epic swimlanes: resolve a card to its nearest epic-ancestor URL. */
   epicOf?: (issue: IssueRecord) => string | undefined;
+  /**
+   * Per-column WIP status (#111), keyed by column key. When supplied, each column
+   * header shows its open-count vs its limit ("n / max") with an amber (under min)
+   * / red (over max) cue. Shown ONCE per column (on the flat board, or on the first
+   * lane of a swimlaned board) so the limit isn't double-counted across lanes — a
+   * WIP limit is per column across the whole board, not per lane.
+   */
+  columnWip?: Record<string, ColumnWip>;
 }) {
   const [dragOver, setDragOver] = useState<string | null>(null);
 
@@ -66,7 +75,7 @@ export function IssueBoard({
 
   return (
     <div className="flex flex-col gap-5">
-      {lanes.map((lane) => (
+      {lanes.map((lane, laneIndex) => (
         <div key={lane.key} className="flex flex-col gap-2">
           {showLaneHeadings && (
             <h2 className="flex items-center gap-2 px-1 text-sm font-semibold">
@@ -80,6 +89,11 @@ export function IssueBoard({
             {columns.map((col) => {
               const items = lane.issues.filter((i) => groupOf(i) === col.key);
               const k = dropKey(lane.key, col.key);
+              // The WIP cue is per COLUMN across the whole board, so render it once
+              // (on the flat board, or only the first lane of a swimlaned board).
+              const wip = laneIndex === 0 ? columnWip?.[col.key] : undefined;
+              const wipBadge =
+                wip?.limit && (wip.limit.min !== undefined || wip.limit.max !== undefined);
               return (
                 <section
                   key={col.key}
@@ -100,6 +114,29 @@ export function IssueBoard({
                     <span className="rounded-full bg-background px-1.5 py-px text-xs font-medium text-muted-foreground tabular-nums ring-1 ring-border">
                       {items.length}
                     </span>
+                    {/* WIP cue (#111): the column's open count vs its limit, amber
+                        when under the minimum / red when over the maximum. */}
+                    {wipBadge && (
+                      <span
+                        className={`rounded-full px-1.5 py-px text-xs font-medium tabular-nums ring-1 ${
+                          wip!.level === "over"
+                            ? "bg-destructive/10 text-destructive ring-destructive/30"
+                            : wip!.level === "under"
+                              ? "bg-amber-500/10 text-amber-600 ring-amber-500/30 dark:text-amber-400"
+                              : "bg-background text-muted-foreground ring-border"
+                        }`}
+                        title={
+                          wip!.level === "over"
+                            ? `Over the WIP limit (max ${wip!.limit!.max})`
+                            : wip!.level === "under"
+                              ? `Under the WIP minimum (min ${wip!.limit!.min})`
+                              : "Within WIP limits"
+                        }
+                      >
+                        WIP {wip!.count}
+                        {wip!.limit!.max !== undefined ? ` / ${wip!.limit!.max}` : ""}
+                      </span>
+                    )}
                     {/* Add-to-column only on the flat board: in a swimlane the new
                         card's lane (assignee/epic) is ambiguous from a column header. */}
                     {onAddToColumn && !showLaneHeadings && (

@@ -66,6 +66,34 @@ export const LDP = "http://www.w3.org/ns/ldp#";
  */
 export const AS = "https://www.w3.org/ns/activitystreams#";
 
+/**
+ * `@jeswr/solid-task-model` task vocabulary — canonical home
+ * `https://w3id.org/jeswr/task#` (prefix `tm:`), just published to
+ * `solid-federation-vocab`. Consumed here BY IRI (local TS constants, the same
+ * idiom this module already uses for `wf:`/`#status-*` terms) so solid-issues
+ * does not block on adding the terms to `@jeswr/solid-task-model`. Two extensions:
+ *
+ *  - **WIP limits (#111 P1-1).** `tm:wipMin`/`tm:wipMax` (rdfs:domain `wf:State`;
+ *    xsd:nonNegativeInteger) — per-column work-in-progress bounds carried on each
+ *    `#status-<slug>` `wf:State` class declared on the tracker.
+ *  - **Automation ECA rules (#112 P1-3).** A `tm:Rule` (linked from the tracker via
+ *    `tm:rule`, rdfs:domain `wf:Tracker`) is an event-condition-action rule: a
+ *    `tm:trigger` coded value, an optional `tm:condition` that REUSES an
+ *    `odrl:Constraint` (leftOperand/operator/rightOperand), a `tm:action` coded
+ *    value, and a `tm:actionValue` literal. Trigger + action coded values are the
+ *    `tm:On…`/`tm:Set…`/… individuals below.
+ */
+export const TM = "https://w3id.org/jeswr/task#";
+export const tm = (local: string) => `${TM}${local}`;
+/**
+ * W3C ODRL 2.2 — the real vocabulary at `http://www.w3.org/ns/odrl/2/`. A
+ * `tm:condition` reuses `odrl:Constraint` (and its `odrl:leftOperand`/
+ * `odrl:operator`/`odrl:rightOperand`), so the suite's `@jeswr/solid-odrl`
+ * client-side evaluator (`constraintSatisfied`) can evaluate it unchanged.
+ */
+export const ODRL = "http://www.w3.org/ns/odrl/2/";
+export const odrl = (local: string) => `${ODRL}${local}`;
+
 export const wf = (local: string) => `${WF}${local}`;
 /**
  * Saved-view predicates. A shareable saved view is persisted in the tracker

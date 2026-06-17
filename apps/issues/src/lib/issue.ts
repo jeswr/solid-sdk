@@ -17,7 +17,7 @@ import {
 // `Issue` model is used in client components (e.g. session-context), so it must
 // stay `node:fs`-free; `./task` carries only the runtime accessors.
 import { Task, type TaskPriority } from "@jeswr/solid-task-model/task";
-import { WF, DCT, RDF, STATE, wf, dct, rdf, rdfs, sioc, foaf, vcard, schema, xsd, skos, prov, time, TIME_UNIT_SECOND, SAVED_VIEW, VIEW_QUERY, RELEASED } from "./vocab";
+import { WF, DCT, RDF, STATE, TM, wf, dct, rdf, rdfs, sioc, foaf, vcard, schema, xsd, skos, prov, time, tm, odrl, TIME_UNIT_SECOND, SAVED_VIEW, VIEW_QUERY, RELEASED } from "./vocab";
 
 export type IssueState = "open" | "closed";
 /**
@@ -86,6 +86,80 @@ export {
  * model.
  */
 export const STATUSES: WorkflowStatus[] = DEFAULT_WORKFLOW.statuses;
+
+/**
+ * Automation trigger coded values (#112 P1-3) — `tm:Trigger` individuals. The
+ * EVENT half of an event-condition-action rule: WHEN does the rule consider firing.
+ *  - `OnStatusChange` — an issue's workflow status changed (incl. via a board move).
+ *  - `OnDueDatePassed` — an open issue is past its due date (evaluated on load).
+ *  - `OnAllSubtasksDone` — every sub-task of an issue is closed (evaluated on load).
+ *  - `OnAssigned` — an issue's assignee changed to a (non-empty) WebID.
+ *  - `OnCreated` — an issue was just created.
+ */
+export const TRIGGERS = [
+  "OnStatusChange",
+  "OnDueDatePassed",
+  "OnAllSubtasksDone",
+  "OnAssigned",
+  "OnCreated",
+] as const;
+export type TriggerKind = (typeof TRIGGERS)[number];
+
+/**
+ * Automation action coded values (#112 P1-3) — `tm:Action` individuals. The
+ * ACTION half: what to DO when a rule fires (and its condition holds). The
+ * `tm:actionValue` literal parameterises it (a status slug / priority / WebID /
+ * comment text); `CloseIssue` takes no value.
+ *  - `SetStatus` — move the issue to the `actionValue` status slug (workflow-guarded).
+ *  - `SetPriority` — set the issue's priority to the `actionValue` (high/medium/low).
+ *  - `Assign` — set the issue's assignee to the `actionValue` WebID.
+ *  - `AddComment` — append a comment with `actionValue` as its body.
+ *  - `CloseIssue` — close the issue (resolves to the workflow's terminal status).
+ */
+export const ACTIONS = [
+  "SetStatus",
+  "SetPriority",
+  "Assign",
+  "AddComment",
+  "CloseIssue",
+] as const;
+export type ActionKind = (typeof ACTIONS)[number];
+
+/**
+ * A render/eval-friendly snapshot of one automation rule (#112 P1-3), decoupled
+ * from the RDF wrapper — the shape the engine evaluates and the config UI edits.
+ * The optional `condition` is an `odrl:Constraint` (leftOperand/operator/
+ * rightOperand) evaluated by `@jeswr/solid-odrl`'s `constraintSatisfied`.
+ */
+export interface RuleDef {
+  /** The rule node IRI (a `#rule-<uuid>` fragment of the tracker doc). */
+  iri: string;
+  /** Whether the rule is active (a disabled rule is persisted but never fires). */
+  enabled: boolean;
+  trigger: TriggerKind;
+  action: ActionKind;
+  /** The action parameter (status slug / priority / WebID / comment text); none for CloseIssue. */
+  actionValue?: string;
+  /** Optional ODRL constraint gating the rule. Absent ⇒ the rule always applies on its trigger. */
+  condition?: RuleConditionDef;
+}
+
+/**
+ * The persisted form of a `tm:condition` — a single `odrl:Constraint`. Field names
+ * mirror `@jeswr/solid-odrl`'s `OdrlConstraint` so the engine can hand it straight
+ * to `constraintSatisfied`. `leftOperand`/`operator` are stored as ODRL IRIs;
+ * `rightOperand` as a literal (a single value — list operators are not surfaced in
+ * the issue-automation UI). For issue automations the constrained left-operands map
+ * to issue facts the engine supplies in the ODRL request `attributes`.
+ */
+export interface RuleConditionDef {
+  /** The ODRL left-operand IRI (e.g. `odrl:purpose`) — what about the issue is constrained. */
+  leftOperand: string;
+  /** The ODRL operator IRI (e.g. `odrl:eq`). */
+  operator: string;
+  /** The value the issue's fact is compared against (a single scalar). */
+  rightOperand: string;
+}
 
 export type IssueType = "initiative" | "epic" | "feature" | "story" | "task" | "bug";
 /**
@@ -854,6 +928,25 @@ export interface VersionDef {
   released: boolean;
 }
 
+/**
+ * WIP (work-in-progress) limits for one board column (#111 P1-1). Persisted on the
+ * column's `#status-<slug>` `wf:State` class as `tm:wipMin`/`tm:wipMax`
+ * (xsd:nonNegativeInteger). Both are optional: `min` is a soft floor (a column
+ * under it is starved), `max` a soft ceiling (over it is overloaded). The board
+ * surfaces these as advisory warnings and the move-guard warns (never blocks) on a
+ * drop that would push a column over its `max` — consistent with the dependency
+ * warn-don't-block stance.
+ */
+export interface WipLimit {
+  /** Soft minimum open count for the column (amber when under). */
+  min?: number;
+  /** Soft maximum open count for the column (red when over; warns on a move). */
+  max?: number;
+}
+
+/** Per-column WIP limits keyed by status slug (#111). Absent slug ⇒ no limit. */
+export type WipLimits = Record<string, WipLimit>;
+
 /** Custom-field value types (Jira/Monday column types). */
 export type FieldType = "text" | "number" | "date" | "url" | "select";
 export const FIELD_TYPES: { slug: FieldType; label: string }[] = [
@@ -931,6 +1024,125 @@ const fragmentSlug = (label: string): string =>
     .trim()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
+
+/** Whether `value` is one of the known trigger coded-value short names. */
+const isTrigger = (value: string): value is TriggerKind => (TRIGGERS as readonly string[]).includes(value);
+/** Whether `value` is one of the known action coded-value short names. */
+const isAction = (value: string): value is ActionKind => (ACTIONS as readonly string[]).includes(value);
+
+/**
+ * One automation rule (#112 P1-3): a `tm:Rule` node carrying a `tm:trigger` coded
+ * value, an optional `tm:condition` (an `odrl:Constraint`), a `tm:action` coded
+ * value, and a `tm:actionValue` literal. Trigger/action coded values are stored as
+ * `tm:`-namespace IRIs (`tm:OnStatusChange`, `tm:SetStatus`, …) and surfaced as
+ * their short names. The condition node is a fragment of the rule (`<rule>-cond`)
+ * so it is self-contained and removed with the rule. `enabled` defaults to true —
+ * a rule with no explicit flag is active.
+ */
+export class Rule extends TermWrapper {
+  get iri(): string {
+    return this.value;
+  }
+  private get types(): Set<string> {
+    return SetFrom.subjectPredicate(this, rdf("type"), NamedNodeAs.string, NamedNodeFrom.string);
+  }
+  /** The condition node IRI (a fragment of this rule). */
+  private get conditionIri(): string {
+    return `${this.value}-cond`;
+  }
+
+  markRule(): void {
+    this.types.add(tm("Rule"));
+  }
+
+  /** Whether the rule is active. Absent flag ⇒ active (the common case). */
+  get enabled(): boolean {
+    return OptionalFrom.subjectPredicate(this, tm("enabled"), LiteralAs.boolean) ?? true;
+  }
+  set enabled(value: boolean) {
+    OptionalAs.object(this, tm("enabled"), value, LiteralFrom.boolean);
+  }
+
+  /** The trigger coded value (short name), or undefined if unset/unknown. */
+  get trigger(): TriggerKind | undefined {
+    const iri = OptionalFrom.subjectPredicate(this, tm("trigger"), NamedNodeAs.string);
+    if (!iri || !iri.startsWith(TM)) return undefined;
+    const local = iri.slice(TM.length);
+    return isTrigger(local) ? local : undefined;
+  }
+  set trigger(value: TriggerKind | undefined) {
+    OptionalAs.object(this, tm("trigger"), value === undefined ? undefined : tm(value), NamedNodeFrom.string);
+  }
+
+  /** The action coded value (short name), or undefined if unset/unknown. */
+  get action(): ActionKind | undefined {
+    const iri = OptionalFrom.subjectPredicate(this, tm("action"), NamedNodeAs.string);
+    if (!iri || !iri.startsWith(TM)) return undefined;
+    const local = iri.slice(TM.length);
+    return isAction(local) ? local : undefined;
+  }
+  set action(value: ActionKind | undefined) {
+    OptionalAs.object(this, tm("action"), value === undefined ? undefined : tm(value), NamedNodeFrom.string);
+  }
+
+  /** The action parameter literal (status slug / priority / WebID / comment text). */
+  get actionValue(): string | undefined {
+    return OptionalFrom.subjectPredicate(this, tm("actionValue"), LiteralAs.string);
+  }
+  set actionValue(value: string | undefined) {
+    OptionalAs.object(this, tm("actionValue"), value, LiteralFrom.string);
+  }
+
+  /**
+   * The rule's ODRL constraint condition, or undefined. Read off the `tm:condition`
+   * node's `odrl:leftOperand`/`odrl:operator`/`odrl:rightOperand`. A partial
+   * condition (any of the three missing) is treated as absent (defensive against
+   * corrupt/hostile pod data — a half-written constraint never silently passes).
+   */
+  get condition(): RuleConditionDef | undefined {
+    const node = OptionalFrom.subjectPredicate(this, tm("condition"), NamedNodeAs.string);
+    if (!node) return undefined;
+    const cond = new TermWrapper(node, this.dataset, this.factory);
+    const leftOperand = OptionalFrom.subjectPredicate(cond, odrl("leftOperand"), NamedNodeAs.string);
+    const operator = OptionalFrom.subjectPredicate(cond, odrl("operator"), NamedNodeAs.string);
+    const rightOperand = OptionalFrom.subjectPredicate(cond, odrl("rightOperand"), LiteralAs.string);
+    if (!leftOperand || !operator || rightOperand === undefined) return undefined;
+    return { leftOperand, operator, rightOperand };
+  }
+  set condition(value: RuleConditionDef | undefined) {
+    // Clear any prior condition node + link first (idempotent overwrite).
+    for (const q of [...this.dataset.match(this.factory.namedNode(this.conditionIri))]) this.dataset.delete(q);
+    if (!value) {
+      OptionalAs.object(this, tm("condition"), undefined, NamedNodeFrom.string);
+      return;
+    }
+    const node = new TermWrapper(this.conditionIri, this.dataset, this.factory);
+    SetFrom.subjectPredicate(node, rdf("type"), NamedNodeAs.string, NamedNodeFrom.string).add(odrl("Constraint"));
+    OptionalAs.object(node, odrl("leftOperand"), value.leftOperand, NamedNodeFrom.string);
+    OptionalAs.object(node, odrl("operator"), value.operator, NamedNodeFrom.string);
+    OptionalAs.object(node, odrl("rightOperand"), value.rightOperand, LiteralFrom.string);
+    OptionalAs.object(this, tm("condition"), this.conditionIri, NamedNodeFrom.string);
+  }
+
+  /**
+   * Read the rule as a plain {@link RuleDef}, or undefined when it is not a
+   * well-formed rule (missing a trigger or action — a half-written rule never
+   * fires). A self-contained snapshot the engine + UI consume.
+   */
+  toDef(): RuleDef | undefined {
+    const trigger = this.trigger;
+    const action = this.action;
+    if (!trigger || !action) return undefined;
+    return {
+      iri: this.value,
+      enabled: this.enabled,
+      trigger,
+      action,
+      actionValue: this.actionValue,
+      condition: this.condition,
+    };
+  }
+}
 
 /**
  * The tracker configuration node (`wf:Tracker`). Holds the title, the priority and
@@ -1070,6 +1282,126 @@ export class Tracker extends TermWrapper {
       this.defineStatus(s.slug, s.label, s.terminal, i, workflow.transitions[s.slug] ?? []);
     });
     OptionalAs.object(this, wf("initialState"), this.statusIri(workflow.statuses[0].slug), NamedNodeFrom.string);
+  }
+
+  /**
+   * Per-column WIP limits (#111 P1-1), keyed by status slug. Read off each
+   * `#status-<slug>` `wf:State` class's `tm:wipMin`/`tm:wipMax`. A slug with
+   * neither bound is omitted entirely, so the map only carries columns the user
+   * has actually constrained. A negative or non-finite stored value is ignored
+   * (pod data is untrusted — a hostile/corrupt bound never reaches the UI).
+   */
+  get wipLimits(): WipLimits {
+    const out: WipLimits = {};
+    const prefix = `${this.doc}#status-`;
+    const nn = this.factory.namedNode.bind(this.factory);
+    for (const q of this.dataset.match(null, nn(rdf("type")), nn(wf("State")))) {
+      const iri = q.subject.value;
+      if (!iri.startsWith(prefix)) continue;
+      const klass = new TermWrapper(iri, this.dataset, this.factory);
+      const sane = (n: number | undefined): number | undefined =>
+        n !== undefined && Number.isFinite(n) && n >= 0 ? Math.floor(n) : undefined;
+      const min = sane(OptionalFrom.subjectPredicate(klass, tm("wipMin"), LiteralAs.number));
+      const max = sane(OptionalFrom.subjectPredicate(klass, tm("wipMax"), LiteralAs.number));
+      if (min === undefined && max === undefined) continue;
+      out[iri.slice(prefix.length)] = { ...(min !== undefined ? { min } : {}), ...(max !== undefined ? { max } : {}) };
+    }
+    return out;
+  }
+
+  /**
+   * Set (or clear) the WIP limits on one column's `#status-<slug>` `wf:State`
+   * class. `undefined`/negative/non-integer bounds clear that bound; a valid
+   * non-negative integer is floored and written as `tm:wipMin`/`tm:wipMax`. A
+   * no-op when the status class does not exist (a typo'd slug never mints a stray
+   * node). Idempotent — re-asserting the same bounds rewrites them in place.
+   */
+  setWipLimit(slug: string, limit: WipLimit): void {
+    const iri = this.statusIri(slug);
+    // Only constrain a column the workflow actually declares — guard against a
+    // stray slug minting a State-less node carrying only WIP bounds.
+    const klass = new TermWrapper(iri, this.dataset, this.factory);
+    const types = SetFrom.subjectPredicate(klass, rdf("type"), NamedNodeAs.string, NamedNodeFrom.string);
+    if (!types.has(wf("State"))) return;
+    const clean = (n: number | undefined): number | undefined =>
+      n !== undefined && Number.isFinite(n) && n >= 0 ? Math.floor(n) : undefined;
+    const min = clean(limit.min);
+    const max = clean(limit.max);
+    OptionalAs.object(klass, tm("wipMin"), min === undefined ? undefined : [xsd("nonNegativeInteger"), String(min)], LiteralFrom.datatypeTuple);
+    OptionalAs.object(klass, tm("wipMax"), max === undefined ? undefined : [xsd("nonNegativeInteger"), String(max)], LiteralFrom.datatypeTuple);
+  }
+
+  /** The trusted prefix for a rule node — a `#rule-` fragment of THIS tracker doc. */
+  private get rulePrefix(): string {
+    return `${this.doc}#rule-`;
+  }
+  /** Live set of automation-rule node IRIs declared on the tracker (`tm:rule`). */
+  private get ruleIris(): Set<string> {
+    return SetFrom.subjectPredicate(this, tm("rule"), NamedNodeAs.string, NamedNodeFrom.string);
+  }
+  /**
+   * Whether `iri` is a trusted rule node — a `#rule-` fragment of THIS tracker
+   * document. A `tm:rule` link is untrusted pod data; mutating/clearing a target
+   * outside this shape could wipe unrelated config (mirrors the saved-view guard),
+   * so define/remove operate ONLY on this trusted shape and read SKIPS anything else.
+   */
+  private isOwnRule(iri: string): boolean {
+    return iri.startsWith(this.rulePrefix);
+  }
+
+  /**
+   * The automation rules declared on the tracker (#112 P1-3), via `tm:rule` → a
+   * `tm:Rule` node. Only trusted `#rule-` fragments of this doc are read, and a
+   * malformed rule (no trigger/action) is skipped. Order is stable by IRI.
+   */
+  get rules(): RuleDef[] {
+    const out: RuleDef[] = [];
+    for (const iri of this.ruleIris) {
+      if (!this.isOwnRule(iri)) continue;
+      const def = new Rule(iri, this.dataset, this.factory).toDef();
+      if (def) out.push(def);
+    }
+    return out.sort((a, b) => a.iri.localeCompare(b.iri));
+  }
+
+  /**
+   * Define (or overwrite by IRI) an automation rule. With no `iri` a fresh
+   * `#rule-<uuid>` node is minted; an existing trusted IRI overwrites that rule
+   * (edit). A supplied IRI that is NOT a trusted `#rule-` fragment of this doc is
+   * ignored and a fresh one minted, so a caller can never coax this into clobbering
+   * the tracker node or another config node. The node's prior triples (incl. its
+   * condition fragment) are cleared first — idempotent overwrite. Returns the def.
+   */
+  defineRule(def: Omit<RuleDef, "iri"> & { iri?: string }): RuleDef {
+    const iri = def.iri && this.isOwnRule(def.iri) ? def.iri : `${this.rulePrefix}${crypto.randomUUID()}`;
+    const nn = this.factory.namedNode.bind(this.factory);
+    // Clear the rule node AND its condition fragment so an edit leaves no stale
+    // condition/value behind.
+    for (const q of [...this.dataset.match(nn(`${iri}-cond`))]) this.dataset.delete(q);
+    for (const q of [...this.dataset.match(nn(iri))]) this.dataset.delete(q);
+    const rule = new Rule(iri, this.dataset, this.factory);
+    rule.markRule();
+    rule.enabled = def.enabled;
+    rule.trigger = def.trigger;
+    rule.action = def.action;
+    rule.actionValue = def.actionValue;
+    rule.condition = def.condition;
+    this.ruleIris.add(iri);
+    return { ...def, iri };
+  }
+
+  /**
+   * Remove an automation rule (its node, its condition fragment, and the tracker's
+   * `tm:rule` link). The link is always dropped; the node's triples are cleared
+   * ONLY for a trusted `#rule-` fragment — so a hostile link can be unlinked
+   * without wiping the target's unrelated triples (mirrors {@link removeSavedView}).
+   */
+  removeRule(iri: string): void {
+    this.ruleIris.delete(iri);
+    if (!this.isOwnRule(iri)) return;
+    const nn = this.factory.namedNode.bind(this.factory);
+    for (const q of [...this.dataset.match(nn(`${iri}-cond`))]) this.dataset.delete(q);
+    for (const q of [...this.dataset.match(nn(iri))]) this.dataset.delete(q);
   }
 
   /** Write the fixed tracker configuration (type, issue class, statuses, priorities). */

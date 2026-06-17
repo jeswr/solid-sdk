@@ -279,6 +279,13 @@ export function makeInlineEditController(
   workflow: WorkflowDef,
   toast: InlineEditToast,
   guardedTransition: GuardedTransition,
+  /**
+   * Called when an inline edit's pod write SUCCEEDS, with the field that changed
+   * and the issue URL — so the caller can fire automation triggers (#112,
+   * OnStatusChange / OnAssigned) off an inline cell edit. Optional; a no-op when
+   * omitted (and for fields that drive no trigger).
+   */
+  onApplied?: (field: EditableField, url: string) => void,
 ): {
   edit: (issue: IssueRecord, field: EditableField, value: string | number | Date | undefined) => void;
   editStatus: (issue: IssueRecord, status: StatusSlug) => void;
@@ -352,7 +359,10 @@ export function makeInlineEditController(
     // Compositional state update: re-apply against React's current list so a
     // concurrent/queued change isn't dropped; the result matches the accumulator.
     seam.setIssuesLocal((current) => optimisticEdit(current, issue.url, field, value, workflow).next);
-    void seam.persist(write).catch((e) => handleFailure(field, original, optimistic, e));
+    void seam
+      .persist(write)
+      .then(() => onApplied?.(field, issue.url))
+      .catch((e) => handleFailure(field, original, optimistic, e));
   };
 
   const edit = (issue: IssueRecord, field: EditableField, value: string | number | Date | undefined) => {

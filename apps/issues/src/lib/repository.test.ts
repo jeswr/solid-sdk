@@ -675,3 +675,94 @@ describe("dependency enforcement (#75 P1-4): authoritative openBlockers", () => 
     expect(await repo.openBlockers(blocked)).toEqual([]);
   });
 });
+
+describe("WIP limits — repository round-trip through Turtle (#111)", () => {
+  it("persists and reads back per-column WIP limits via PUT/GET", async () => {
+    const { impl } = fakePod();
+    const repo = new Repository(TRACKER, impl);
+    await repo.ensureTracker();
+    await repo.setWipLimit("in-progress", { min: 1, max: 3 });
+    await repo.setWipLimit("todo", { max: 5 });
+
+    const limits = await repo.wipLimits();
+    expect(limits).toEqual({ "in-progress": { min: 1, max: 3 }, todo: { max: 5 } });
+    // Surfaced through info() too (the UI path).
+    expect((await repo.info()).wipLimits["in-progress"]).toEqual({ min: 1, max: 3 });
+  });
+
+  it("clearing a bound removes it across the round-trip", async () => {
+    const { impl } = fakePod();
+    const repo = new Repository(TRACKER, impl);
+    await repo.ensureTracker();
+    await repo.setWipLimit("in-progress", { min: 2, max: 4 });
+    await repo.setWipLimit("in-progress", { min: undefined, max: 4 });
+    expect(await repo.wipLimits()).toEqual({ "in-progress": { max: 4 } });
+  });
+});
+
+describe("automation rules — repository round-trip through Turtle (#112)", () => {
+  it("persists a rule (trigger + odrl condition + action) and reads it back", async () => {
+    const { impl } = fakePod();
+    const repo = new Repository(TRACKER, impl);
+    await repo.ensureTracker();
+    const def = await repo.defineRule({
+      enabled: true,
+      trigger: "OnStatusChange",
+      action: "SetPriority",
+      actionValue: "high",
+      condition: {
+        leftOperand: "http://www.w3.org/ns/odrl/2/purpose",
+        operator: "http://www.w3.org/ns/odrl/2/eq",
+        rightOperand: "medium",
+      },
+    });
+
+    const [read] = await repo.rules();
+    expect(read).toEqual({
+      iri: def.iri,
+      enabled: true,
+      trigger: "OnStatusChange",
+      action: "SetPriority",
+      actionValue: "high",
+      condition: {
+        leftOperand: "http://www.w3.org/ns/odrl/2/purpose",
+        operator: "http://www.w3.org/ns/odrl/2/eq",
+        rightOperand: "medium",
+      },
+    });
+    // Surfaced through info() (the UI path).
+    expect((await repo.info()).rules).toHaveLength(1);
+  });
+
+  it("overwrites by IRI and removes a rule across the round-trip", async () => {
+    const { impl } = fakePod();
+    const repo = new Repository(TRACKER, impl);
+    await repo.ensureTracker();
+    const def = await repo.defineRule({ enabled: true, trigger: "OnCreated", action: "AddComment", actionValue: "hi" });
+    await repo.defineRule({ iri: def.iri, enabled: false, trigger: "OnAssigned", action: "CloseIssue" });
+    let rules = await repo.rules();
+    expect(rules).toHaveLength(1);
+    expect(rules[0]).toMatchObject({ iri: def.iri, enabled: false, trigger: "OnAssigned", action: "CloseIssue" });
+
+    await repo.removeRule(def.iri);
+    rules = await repo.rules();
+    expect(rules).toHaveLength(0);
+  });
+
+  it("persists the two migrated built-in rules and round-trips their behaviour shape", async () => {
+    const { impl } = fakePod();
+    const repo = new Repository(TRACKER, impl);
+    await repo.ensureTracker();
+    // Mirror the RulesDialog seeding of BUILTIN_RULE_SEEDS.
+    await repo.defineRule({ enabled: false, trigger: "OnAllSubtasksDone", action: "CloseIssue" });
+    await repo.defineRule({ enabled: false, trigger: "OnDueDatePassed", action: "SetPriority", actionValue: "high" });
+
+    const rules = await repo.rules();
+    expect(rules).toHaveLength(2);
+    expect(rules.find((r) => r.trigger === "OnAllSubtasksDone")?.action).toBe("CloseIssue");
+    const overdue = rules.find((r) => r.trigger === "OnDueDatePassed");
+    expect(overdue?.action).toBe("SetPriority");
+    expect(overdue?.actionValue).toBe("high");
+    expect(rules.every((r) => r.enabled === false)).toBe(true); // seeded disabled (legacy default)
+  });
+});
