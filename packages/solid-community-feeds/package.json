@@ -18,8 +18,9 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "check:dist": "node scripts/check-dist-fresh.mjs",
+    "check:lockfile-transport": "node scripts/check-lockfile-transport.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "lint": "biome check src test scripts",
+    "lint": "biome check src test scripts && npm run check:lockfile-transport",
     "lint:fix": "biome check --write src test scripts",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
