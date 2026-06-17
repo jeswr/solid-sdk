@@ -117,3 +117,59 @@ describe("<jeswr-saving-indicator>", () => {
     expect(el.shadowRoot?.querySelector(".spinner")).toBeNull();
   });
 });
+
+// ── #122 regression: string props REFLECT to attributes ──────────────────────
+// Set the value as a PROPERTY (exactly how @lit/react's createComponent forwards
+// a React prop), then assert it (a) reflects to the attribute — the mechanism
+// that makes the @lit/react wrapper forward it reliably under React 19 — and (b)
+// reaches the shadow render. A non-reflected reactive string prop was being
+// dropped by the wrapper, rendering the generic fallback instead of the value.
+describe("string props reflect to attributes (#122)", () => {
+  async function mountWithProps<T extends HTMLElement>(tag: string, props: Record<string, string>) {
+    const el = document.createElement(tag) as T;
+    Object.assign(el, props); // set as PROPERTIES, not attributes
+    document.body.appendChild(el);
+    await (el as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+    return el;
+  }
+
+  it("jeswr-loading reflects `label` (property → attribute → render)", async () => {
+    const el = await mountWithProps<JeswrLoading>("jeswr-loading", { label: "Loading files" });
+    expect(el.getAttribute("label")).toBe("Loading files");
+    expect(el.shadowRoot?.querySelector('[role="status"]')?.getAttribute("aria-label")).toBe(
+      "Loading files",
+    );
+    expect(el.shadowRoot?.querySelector('[part="label"]')?.textContent).toBe("Loading files");
+  });
+
+  it("jeswr-empty-state reflects `heading` + `description`", async () => {
+    const el = await mountWithProps<JeswrEmptyState>("jeswr-empty-state", {
+      heading: "No files yet",
+      description: "Upload one.",
+    });
+    expect(el.getAttribute("heading")).toBe("No files yet");
+    expect(el.getAttribute("description")).toBe("Upload one.");
+    expect(el.shadowRoot?.querySelector(".title")?.textContent).toBe("No files yet");
+    expect(el.shadowRoot?.querySelector(".desc")?.textContent).toBe("Upload one.");
+  });
+
+  it("jeswr-error-state reflects `heading` + `description`", async () => {
+    const el = await mountWithProps<JeswrErrorState>("jeswr-error-state", {
+      heading: "Load failed",
+      description: "Try again.",
+    });
+    expect(el.getAttribute("heading")).toBe("Load failed");
+    expect(el.getAttribute("description")).toBe("Try again.");
+    expect(el.shadowRoot?.querySelector(".title")?.textContent).toBe("Load failed");
+    expect(el.shadowRoot?.querySelector(".desc")?.textContent).toBe("Try again.");
+  });
+
+  it("jeswr-saving-indicator reflects the custom labels", async () => {
+    const el = await mountWithProps<JeswrSavingIndicator>("jeswr-saving-indicator", {
+      state: "saving",
+      savingLabel: "Syncing…",
+    });
+    expect(el.getAttribute("saving-label")).toBe("Syncing…");
+    expect(el.shadowRoot?.querySelector('[part="label"]')?.textContent).toBe("Syncing…");
+  });
+});

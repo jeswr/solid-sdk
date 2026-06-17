@@ -18,10 +18,13 @@ const STATES: ReadonlySet<SavingState> = new Set(["idle", "saving", "saved", "er
 
 export class JeswrSavingIndicator extends LitElement {
   static properties = {
+    // String props reflect (#122): @lit/react's createComponent forwards a
+    // reflected string reliably under React 19; an un-reflected reactive prop
+    // can be dropped (the React host's custom label never reaches the render).
     state: { type: String, reflect: true },
-    savingLabel: { type: String, attribute: "saving-label" },
-    savedLabel: { type: String, attribute: "saved-label" },
-    errorLabel: { type: String, attribute: "error-label" },
+    savingLabel: { type: String, attribute: "saving-label", reflect: true },
+    savedLabel: { type: String, attribute: "saved-label", reflect: true },
+    errorLabel: { type: String, attribute: "error-label", reflect: true },
   };
 
   /** The current mutation state. Reflected to the `state` attribute. */

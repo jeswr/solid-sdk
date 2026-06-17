@@ -7,6 +7,7 @@ export declare class JeswrErrorState extends LitElement {
         };
         description: {
             type: StringConstructor;
+            reflect: boolean;
         };
     };
     /** Optional heading text (alternative to the `title` slot). */

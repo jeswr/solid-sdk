@@ -22,9 +22,12 @@ export function initials(name: string): string {
 
 export class JeswrAccountMenu extends LitElement {
   static properties = {
-    webId: { type: String, attribute: "webid" },
-    name: { type: String },
-    avatarUrl: { type: String, attribute: "avatar-url" },
+    // String props reflect (#122): @lit/react's createComponent forwards a
+    // reflected string reliably under React 19; an un-reflected reactive prop
+    // can be dropped (the React host's value never reaches the shadow render).
+    webId: { type: String, attribute: "webid", reflect: true },
+    name: { type: String, reflect: true },
+    avatarUrl: { type: String, attribute: "avatar-url", reflect: true },
     _open: { state: true },
   };
 

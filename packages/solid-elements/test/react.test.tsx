@@ -122,4 +122,93 @@ describe("React wrappers", () => {
     expect(container.querySelector("jeswr-loading")).not.toBeNull();
     expect(container.querySelector("jeswr-saving-indicator")).not.toBeNull();
   });
+
+  // ── #122 regression: string props must REFLECT so @lit/react forwards them ──
+  // The bug: under React 19, @lit/react's createComponent classifies props at
+  // creation time (before Lit finalizes the class), so a NON-reflected reactive
+  // string PROPERTY was silently dropped — `<Loading label="X">` rendered the
+  // generic "Loading" fallback instead of "X". Making the string props reflect
+  // fixes the forwarding. We assert the host string reaches the SHADOW render
+  // (the robust path noted in the brief: the reflected attribute + the rendered
+  // shadow text / aria-label), not just that the element mounted.
+
+  it("Loading: <Loading label='X'> forwards the label to the shadow render (#122)", async () => {
+    await act(async () => {
+      root.render(createElement(Loading, { label: "Loading files" }));
+    });
+    const el = container.querySelector("jeswr-loading") as HTMLElement & { label?: string };
+    expect(el).not.toBeNull();
+    await (el as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+    // The reactive property carries the value …
+    expect(el.label).toBe("Loading files");
+    // … it REFLECTS to the attribute (the forwarding mechanism) …
+    expect(el.getAttribute("label")).toBe("Loading files");
+    // … and it actually reaches the shadow render: the status region's
+    // accessible name is the label (NOT the generic "Loading" fallback) …
+    const status = el.shadowRoot?.querySelector('[role="status"]');
+    expect(status?.getAttribute("aria-label")).toBe("Loading files");
+    // … and the visible label node renders the text.
+    expect(el.shadowRoot?.querySelector('[part="label"]')?.textContent).toBe("Loading files");
+  });
+
+  it("EmptyState: heading + description forward to the shadow render (#122)", async () => {
+    await act(async () => {
+      root.render(
+        createElement(EmptyState, { heading: "No files yet", description: "Upload one." }),
+      );
+    });
+    const el = container.querySelector("jeswr-empty-state") as HTMLElement;
+    await (el as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+    expect(el.getAttribute("heading")).toBe("No files yet");
+    expect(el.getAttribute("description")).toBe("Upload one.");
+    expect(el.shadowRoot?.querySelector(".title")?.textContent).toBe("No files yet");
+    expect(el.shadowRoot?.querySelector(".desc")?.textContent).toBe("Upload one.");
+  });
+
+  it("ErrorState: heading + description forward to the shadow render (#122)", async () => {
+    await act(async () => {
+      root.render(createElement(ErrorState, { heading: "Load failed", description: "Try again." }));
+    });
+    const el = container.querySelector("jeswr-error-state") as HTMLElement;
+    await (el as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+    expect(el.getAttribute("heading")).toBe("Load failed");
+    expect(el.getAttribute("description")).toBe("Try again.");
+    expect(el.shadowRoot?.querySelector(".title")?.textContent).toBe("Load failed");
+    expect(el.shadowRoot?.querySelector(".desc")?.textContent).toBe("Try again.");
+  });
+
+  it("SavingIndicator: a custom saving-label forwards to the shadow render (#122)", async () => {
+    await act(async () => {
+      root.render(createElement(SavingIndicator, { state: "saving", savingLabel: "Syncing…" }));
+    });
+    const el = container.querySelector("jeswr-saving-indicator") as HTMLElement;
+    await (el as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+    expect(el.getAttribute("saving-label")).toBe("Syncing…");
+    expect(el.shadowRoot?.querySelector('[part="label"]')?.textContent).toBe("Syncing…");
+  });
+
+  it("AccountMenu: name + webId forward to the shadow render (#122)", async () => {
+    await act(async () => {
+      root.render(
+        createElement(AccountMenu, { name: "Ada Lovelace", webId: "https://id.example/me" }),
+      );
+    });
+    const el = container.querySelector("jeswr-account-menu") as HTMLElement;
+    await (el as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+    expect(el.getAttribute("name")).toBe("Ada Lovelace");
+    expect(el.getAttribute("webid")).toBe("https://id.example/me");
+    // The trigger shows the name (not the "Signed in" fallback).
+    expect(el.shadowRoot?.querySelector(".trigger-name")?.textContent?.trim()).toBe("Ada Lovelace");
+  });
+
+  it("FeedbackButton: the trigger label forwards to the shadow render (#122)", async () => {
+    await act(async () => {
+      root.render(createElement(FeedbackButton, { repo: "jeswr/x", label: "Report a bug" }));
+    });
+    const el = container.querySelector("jeswr-feedback-button") as HTMLElement;
+    await (el as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+    expect(el.getAttribute("label")).toBe("Report a bug");
+    // The trigger renders the host's label (not the "Feedback" default).
+    expect(el.shadowRoot?.querySelector('[part="label"]')?.textContent).toBe("Report a bug");
+  });
 });

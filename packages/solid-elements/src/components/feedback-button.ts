@@ -48,12 +48,15 @@ const FOCUSABLE_SELECTOR =
 
 export class JeswrFeedbackButton extends LitElement {
   static properties = {
-    repo: { type: String },
-    appName: { type: String, attribute: "app-name" },
-    appVersion: { type: String, attribute: "app-version" },
-    webId: { type: String, attribute: "webid" },
-    label: { type: String },
-    // function props (not attributes):
+    // String props reflect (#122): @lit/react's createComponent forwards a
+    // reflected string reliably under React 19; an un-reflected reactive prop
+    // can be dropped (the React host's value never reaches the shadow render).
+    repo: { type: String, reflect: true },
+    appName: { type: String, attribute: "app-name", reflect: true },
+    appVersion: { type: String, attribute: "app-version", reflect: true },
+    webId: { type: String, attribute: "webid", reflect: true },
+    label: { type: String, reflect: true },
+    // function props (not attributes) — NOT reflected (object/function props):
     submit: { attribute: false },
     _open: { state: true },
     _category: { state: true },

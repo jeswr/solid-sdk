@@ -11,8 +11,11 @@ import { css, html, LitElement, nothing } from "lit";
 import { tokenStyles } from "../theme-tokens.js";
 export class JeswrEmptyState extends LitElement {
     static properties = {
+        // String props reflect (#122): @lit/react's createComponent forwards a
+        // reflected string reliably under React 19; an un-reflected reactive prop
+        // can be dropped, rendering the fallback instead of the host's text.
         heading: { type: String, reflect: true },
-        description: { type: String },
+        description: { type: String, reflect: true },
     };
     static styles = [
         tokenStyles,

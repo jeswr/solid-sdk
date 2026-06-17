@@ -3,6 +3,7 @@ export declare class JeswrLoading extends LitElement {
     static properties: {
         label: {
             type: StringConstructor;
+            reflect: boolean;
         };
     };
     /** Optional text shown next to the spinner (also the accessible name). */

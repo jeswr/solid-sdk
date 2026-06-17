@@ -4,21 +4,26 @@ export declare class JeswrFeedbackButton extends LitElement {
     static properties: {
         repo: {
             type: StringConstructor;
+            reflect: boolean;
         };
         appName: {
             type: StringConstructor;
             attribute: string;
+            reflect: boolean;
         };
         appVersion: {
             type: StringConstructor;
             attribute: string;
+            reflect: boolean;
         };
         webId: {
             type: StringConstructor;
             attribute: string;
+            reflect: boolean;
         };
         label: {
             type: StringConstructor;
+            reflect: boolean;
         };
         submit: {
             attribute: boolean;

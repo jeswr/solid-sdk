@@ -8,7 +8,13 @@ import { css, html, LitElement, nothing } from "lit";
 import { tokenStyles } from "../theme-tokens.js";
 export class JeswrLoading extends LitElement {
     static properties = {
-        label: { type: String },
+        // `reflect: true` so the @lit/react wrapper reliably forwards `label` under
+        // React 19: @lit/react's createComponent classifies props at creation time
+        // (before Lit finalizes the class), so a non-reflected reactive PROPERTY can
+        // be dropped — the wrapper then renders the generic fallback instead of the
+        // label text (#122). Reflecting the string makes it forward as an attribute
+        // and also makes the rendered label assertable via the host attribute.
+        label: { type: String, reflect: true },
     };
     static styles = [
         tokenStyles,

@@ -9,14 +9,17 @@ export declare class JeswrSavingIndicator extends LitElement {
         savingLabel: {
             type: StringConstructor;
             attribute: string;
+            reflect: boolean;
         };
         savedLabel: {
             type: StringConstructor;
             attribute: string;
+            reflect: boolean;
         };
         errorLabel: {
             type: StringConstructor;
             attribute: string;
+            reflect: boolean;
         };
     };
     /** The current mutation state. Reflected to the `state` attribute. */

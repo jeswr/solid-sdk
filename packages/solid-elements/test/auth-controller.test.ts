@@ -2174,6 +2174,61 @@ describe("createReactiveAuthController — silent-restore pointer gated on a dur
     }
   });
 
+  it("restore() FAILS CLOSED to login AND CLEARS a CORRUPT remembered silent-restore pointer (#119)", async () => {
+    // #119 regression: a CORRUPT (non-JSON / unparseable) silent-restore pointer must not
+    // crash restore and must not be re-attempted next load. restore() must (a) return the
+    // fail-closed `{ outcome: "login" }` (the bad pointer can't drive a restore) AND (b)
+    // CLEAR the bad pointer so a later load doesn't keep tripping over it.
+    //
+    // The pointer is unparseable, so RememberedAccount.read() yields null → restore() has
+    // no last-active WebID → decideSilentRestore short-circuits to "no-account" → login,
+    // and the keep/drop matrix DROPS the (no-account) pointer. A store seeded with a
+    // credential confirms the credential is NOT redeemed: the corrupt pointer never names
+    // an issuer to restore, so the restore-grant path (restoreSession) is never entered.
+    const map = new Map<string, import("@jeswr/solid-session-restore").PersistedSession>();
+    map.set("https://idp.example/", {
+      issuer: "https://idp.example/",
+      webId: "https://alice.pod.example/profile/card#me",
+      refreshToken: "stored-refresh",
+      dpopKey: { publicKey: {}, privateKey: {} } as unknown as CryptoKeyPair,
+    });
+    const store: SessionStore = {
+      get: async (i) => map.get(i),
+      put: async (s) => {
+        map.set(s.issuer, s);
+      },
+      delete: async (i) => {
+        map.delete(i);
+      },
+    };
+    // The module-level restoreSession mock increments refreshGrantCalls when it actually
+    // redeems a token; a corrupt pointer must drive ZERO such grants.
+    refreshGrantCalls = 0;
+    const ls = installKeyedLocalStorage();
+    // Seed a CORRUPT (unparseable) value under the silent-restore pointer key.
+    ls.map.set(REMEMBERED_KEY, "{not-valid-json:::");
+    try {
+      const controller = createReactiveAuthController({
+        authFlow,
+        callbackUri: "https://app.example/callback",
+        clientId: "https://app.example/clientid.jsonld",
+        store,
+        rememberedAccountsKey: REMEMBERED_KEY,
+        recentAccountsKey: RECENT_KEY,
+      });
+      const outcome = await controller.restore();
+      // (a) FAIL CLOSED: no session is pinned; the outcome is login.
+      expect(outcome).toEqual({ outcome: "login" });
+      expect(controller.webId).toBeNull();
+      // No restore grant was attempted (the corrupt pointer yields no issuer/WebID).
+      expect(refreshGrantCalls).toBe(0);
+      // (b) The CORRUPT pointer is CLEARED so the next load won't re-attempt it.
+      expect(ls.map.get(REMEMBERED_KEY)).toBeUndefined();
+    } finally {
+      ls.restore();
+    }
+  });
+
   it("KEEPS the in-memory-written credential so the live session can STILL refresh after a SAME-ISSUER re-login (Medium fix)", async () => {
     // The roborev follow-up: with the in-memory fallback, a login's put is REAL for the
     // page lifetime (so `wrote`=true) even though it is non-durable (`durable`=false). The

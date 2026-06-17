@@ -6,13 +6,16 @@ export declare class JeswrAccountMenu extends LitElement {
         webId: {
             type: StringConstructor;
             attribute: string;
+            reflect: boolean;
         };
         name: {
             type: StringConstructor;
+            reflect: boolean;
         };
         avatarUrl: {
             type: StringConstructor;
             attribute: string;
+            reflect: boolean;
         };
         _open: {
             state: boolean;
