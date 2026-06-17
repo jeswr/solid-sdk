@@ -26,6 +26,7 @@ import {
 } from "./issue";
 import { wf, rdf, prov } from "./vocab";
 import { ConflictError, WriteError, TransitionError } from "./errors";
+import type { OpenBlocker } from "./dependencies";
 
 const TRACKER_FRAGMENT = "#this";
 // The issue subject fragment. `#it` is the SHARED federated canonical subject
@@ -605,6 +606,38 @@ export class Repository {
         generated: this.statusClassOf(url, status),
       });
     }
+  }
+
+  /**
+   * Dependency enforcement (#75 P1-4): the AUTHORITATIVE open-blocker check for a
+   * transition. Reads `issueUrl`'s `dct:requires` blockers and resolves EACH
+   * blocker's *current* state from the pod (a fresh read, not stale in-memory
+   * data), returning the ones that are not yet closed. This is a **warning**
+   * source — it never blocks or mutates anything; the transition still proceeds.
+   *
+   * Used by the UI to confirm before starting/completing a blocked issue. The
+   * synchronous {@link openBlockersOf} (in `dependencies.ts`) is the instant
+   * in-memory equivalent the board uses; this is the slower, server-fresh check.
+   *
+   * Fail-open: a blocker that cannot be read (deleted, cross-pod, no access) is
+   * NOT reported as blocking — we never obstruct on data we can't resolve.
+   */
+  async openBlockers(issueUrl: string): Promise<OpenBlocker[]> {
+    const { issue } = await this.openIssue(issueUrl);
+    const blockerUrls = [...issue.blockedBy];
+    const results = await Promise.all(
+      blockerUrls.map(async (url): Promise<OpenBlocker | null> => {
+        try {
+          const { issue: blocker } = await this.openIssue(url);
+          // A closed blocker no longer obstructs; an open one is surfaced.
+          if (blocker.state === "closed") return null;
+          return { url, title: blocker.title, status: blocker.status };
+        } catch {
+          return null; // unreadable blocker → fail-open (not reported)
+        }
+      }),
+    );
+    return results.filter((b): b is OpenBlocker => b !== null);
   }
 
   /** The `#status-<slug>` class IRI of a status, derived from the tracker doc. */

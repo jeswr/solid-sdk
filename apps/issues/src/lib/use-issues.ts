@@ -6,6 +6,7 @@ import { watchContainer } from "@/lib/notifications";
 import { ConflictError } from "@/lib/errors";
 import { RdfFetchError } from "@jeswr/fetch-rdf";
 import type { IssueState, StatusSlug } from "@/lib/issue";
+import type { OpenBlocker } from "@/lib/dependencies";
 import { readIssueCache, writeIssueCache } from "@/lib/issue-cache";
 import { PodSavedViews, type PodSavedView } from "@/lib/pod-saved-views";
 import type { IssueQuery } from "@/lib/filter";
@@ -78,6 +79,12 @@ export interface UseIssues {
   batch: (fn: (repo: Repository) => Promise<void>) => Promise<void>;
   /** Read an issue's provenance activity log (F3), newest first. */
   activityLog: (url: string) => Promise<ActivityRecord[]>;
+  /**
+   * Dependency enforcement (#75 P1-4): the AUTHORITATIVE open-blocker check for an
+   * issue, read fresh from the pod. Advisory only — used to warn before a guarded
+   * transition; the caller may still proceed (override).
+   */
+  openBlockers: (url: string) => Promise<OpenBlocker[]>;
   /**
    * Fan out bounded reads of the F3 status-transition history for the given issues
    * (for the three-band cumulative flow). Bounded: a few pages per issue, a few
@@ -309,6 +316,17 @@ export function useIssues(trackerUrl: string | null, creator: string | null): Us
     [trackerUrl, creator],
   );
 
+  // Dependency enforcement (#75 P1-4): authoritative open-blocker check, read
+  // fresh from the pod. Not part of the list snapshot — the transition path calls
+  // it on demand to warn (never block) before starting/completing a blocked issue.
+  const openBlockers = useCallback(
+    async (url: string) => {
+      if (!trackerUrl || !url) return [];
+      return new Repository(trackerUrl, undefined, creator ?? undefined).openBlockers(url);
+    },
+    [trackerUrl, creator],
+  );
+
   // Bounded fan-out of status-transition history for the three-band CFD.
   const statusHistory = useCallback(
     async (urls: string[]) => {
@@ -368,6 +386,7 @@ export function useIssues(trackerUrl: string | null, creator: string | null): Us
     completeSprint: (sprintIri, releaseUrls) => mutate((r) => r.completeSprint(sprintIri, releaseUrls)),
     batch: (fn) => mutate(fn),
     activityLog,
+    openBlockers,
     statusHistory,
     listSavedViews,
     saveView,

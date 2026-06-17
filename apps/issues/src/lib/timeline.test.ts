@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildTimeline, buildMonth } from "./timeline";
+import { buildTimeline, buildMonth, timelineDependencies } from "./timeline";
 import type { IssueRecord } from "./repository";
 
 const base: IssueRecord = {
@@ -65,5 +65,75 @@ describe("buildMonth", () => {
     const all = weeks.flat();
     expect(all.find((d) => d.isToday)?.date.getDate()).toBe(10);
     expect(all.find((d) => d.issues.length > 0)?.date.getDate()).toBe(15);
+  });
+});
+
+describe("timelineDependencies (#75 P1-4)", () => {
+  // Two dated issues so both get bars; `b` is blocked by `a`.
+  const dated = (url: string, p: Partial<IssueRecord> = {}) =>
+    mk({ url, created: new Date("2026-06-01"), dateDue: new Date("2026-06-11"), ...p });
+
+  it("draws an arrow from a blocker's bar to the bar it blocks", () => {
+    const a = dated("a");
+    const b = dated("b", { blockedBy: ["a"] });
+    const model = buildTimeline([a, b], NOW)!;
+    const deps = timelineDependencies(model.bars);
+    expect(deps).toHaveLength(1);
+    const d = deps[0];
+    expect(d.kind).toBe("blocks");
+    expect(d.fromUrl).toBe("a");
+    expect(d.toUrl).toBe("b");
+    // Row indices map into the placed-bar list.
+    expect(model.bars[d.fromRow].issue.url).toBe("a");
+    expect(model.bars[d.toRow].issue.url).toBe("b");
+    // The arrow starts at the blocker's right edge and lands at the target's left.
+    const src = model.bars[d.fromRow];
+    expect(d.fromAt).toBeCloseTo(src.start + src.width, 5);
+    expect(d.toAt).toBeCloseTo(model.bars[d.toRow].start, 5);
+  });
+
+  it("omits an edge whose blocker is not placed on the timeline", () => {
+    // `b` is blocked by `undated`, which has no dates → no bar → no arrow.
+    const b = dated("b", { blockedBy: ["undated"] });
+    const undated = mk({ url: "undated" });
+    const model = buildTimeline([b, undated], NOW)!;
+    expect(timelineDependencies(model.bars)).toEqual([]);
+  });
+
+  it("does not draw blocker arrows when no issues are linked", () => {
+    const model = buildTimeline([dated("a"), dated("b")], NOW)!;
+    expect(timelineDependencies(model.bars)).toEqual([]);
+  });
+
+  it("skips a self-edge from malformed data", () => {
+    const a = dated("a", { blockedBy: ["a"] });
+    const model = buildTimeline([a], NOW)!;
+    expect(timelineDependencies(model.bars)).toEqual([]);
+  });
+
+  it("adds dashed relates-to links once per symmetric pair when requested", () => {
+    // Reciprocal dct:relation (a↔b) must yield exactly ONE link, not two.
+    const a = dated("a", { relatesTo: ["b"] });
+    const b = dated("b", { relatesTo: ["a"] });
+    const model = buildTimeline([a, b], NOW)!;
+    const deps = timelineDependencies(model.bars, { includeRelates: true });
+    const relates = deps.filter((d) => d.kind === "relates");
+    expect(relates).toHaveLength(1);
+  });
+
+  it("includes BOTH a blocks arrow and a relates link for the same pair when both stored", () => {
+    const a = dated("a", { relatesTo: ["b"] });
+    const b = dated("b", { blockedBy: ["a"], relatesTo: ["a"] });
+    const model = buildTimeline([a, b], NOW)!;
+    const deps = timelineDependencies(model.bars, { includeRelates: true });
+    expect(deps.filter((d) => d.kind === "blocks")).toHaveLength(1);
+    expect(deps.filter((d) => d.kind === "relates")).toHaveLength(1);
+  });
+
+  it("excludes relates links by default (blocks only)", () => {
+    const a = dated("a", { relatesTo: ["b"] });
+    const b = dated("b", { relatesTo: ["a"] });
+    const model = buildTimeline([a, b], NOW)!;
+    expect(timelineDependencies(model.bars)).toEqual([]);
   });
 });

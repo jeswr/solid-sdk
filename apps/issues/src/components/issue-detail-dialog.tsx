@@ -41,6 +41,7 @@ const renderBody = (text: string) =>
 import type { IssueRecord, ActivityRecord } from "@/lib/use-issues";
 import { STATUSES, safeHttpUrl, canNest, type FieldDef, type WorkflowStatus } from "@/lib/issue";
 import { linksOf, rollupOf, descendantUrlsOf } from "@/lib/rollups";
+import { openBlockersOf } from "@/lib/dependencies";
 import { priorityVariant, shortWebId } from "@/components/issue-card";
 import { PersonChip } from "@/components/person";
 import { TypeBadge, typeLabel } from "@/components/type-badge";
@@ -203,6 +204,11 @@ export function IssueDetailDialog({
   const subTasks = allIssues.filter((i) => i.parent === self.url);
   const blocking = allIssues.filter((i) => i.blockedBy.includes(self.url));
   const addableBlockers = dependencyCandidates.filter((i) => !self.blockedBy.includes(i.url) && i.url !== self.parent);
+  // Dependency enforcement (#75 P1-4): which of this issue's blockers are still
+  // OPEN (not closed) — surfaced inline so the user sees, before they start or
+  // complete the issue, what is holding it up. Advisory; transitions still warn
+  // (not block) at the board / close action.
+  const openBlockerUrls = new Set(openBlockersOf(self, allIssues).map((b) => b.url));
   // F2: bidirectional links (relates is symmetric; duplicate/clone show inverses).
   const links = linksOf(self, allIssues);
   const addableRelated = dependencyCandidates.filter((i) => !links.relates.includes(i.url));
@@ -349,6 +355,13 @@ export function IssueDetailDialog({
               {issue.blockedBy.map((b) => (
                 <li key={b} className="flex items-center gap-2 text-sm">
                   <span className="truncate">{titleOf(b)}</span>
+                  {/* Dependency enforcement (#75 P1-4): flag a blocker that is still
+                      open, so the user sees what is holding this issue up. */}
+                  {openBlockerUrls.has(b) && (
+                    <Badge variant="outline" className="shrink-0 text-amber-600 dark:text-amber-500">
+                      open
+                    </Badge>
+                  )}
                   {canComment && (
                     <Button
                       variant="ghost"
