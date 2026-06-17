@@ -410,11 +410,13 @@ describe("makeInlineEditController", () => {
     // — applied against the updater's `current` (which carries the first edit) —
     // so editing priority then assignee keeps BOTH, not just the last one.
     const issue = mk({ url: "a", priority: "low", assignee: undefined });
-    // getIssues mimics the ref BEFORE a render: it does not yet reflect the first
-    // edit. setIssuesLocal applies the updater against the accumulated live list.
+    // getIssues mimics the ref BEFORE a render: a STABLE reference that does not yet
+    // reflect the first edit (a render would reassign it). setIssuesLocal applies
+    // the updater against the accumulated live list.
+    const refList = [issue]; // stable until a "render" — never reassigned in this test
     let applied = [issue];
     const seam: InlineEditSeam = {
-      getIssues: () => [issue], // stale-until-render ref
+      getIssues: () => refList, // stale-until-render ref (stable reference)
       setIssuesLocal: (updater) => {
         applied = updater(applied);
       },
@@ -438,11 +440,12 @@ describe("makeInlineEditController", () => {
     // to LOW — getIssues() is stale-until-render, so the controller's accumulator
     // is the source of truth for the `original` of the second edit.
     const issue = mk({ url: "a", priority: "low" });
+    const refList = [issue]; // stable stale-until-render ref
     let applied = [issue];
     let secondReject!: (e: unknown) => void;
     let call = 0;
     const seam: InlineEditSeam = {
-      getIssues: () => [issue], // stale-until-render
+      getIssues: () => refList, // stale-until-render (stable reference)
       setIssuesLocal: (updater) => {
         applied = updater(applied);
       },
@@ -468,6 +471,38 @@ describe("makeInlineEditController", () => {
         expect(applied.find((i) => i.url === "a")!.priority).toBe("high");
         expect(toast.error).toHaveBeenCalledWith("write failed");
       });
+  });
+
+  it("a deferred status edit NO-OPS when a render removed the row (stale accumulator discarded)", () => {
+    // A prior rapid edit seeds the accumulator; then editStatus is invoked but its
+    // guard DEFERS the confirmation. Before the user confirms, a render commits a
+    // NEW live list (a fresh reference) that no longer contains the row (removed by
+    // a refresh/live-sync). On confirmation the controller must re-read the live
+    // base, see the row is gone, and NOT start a write for the dead row.
+    const issue = mk({ url: "a", priority: "low", status: "todo", state: "open" });
+    let live: IssueRecord[] = [issue]; // reference #1
+    const persist = vi.fn(() => Promise.resolve());
+    let captured: (() => void) | undefined;
+    const deferGuard = vi.fn((_i: IssueRecord, _s: string, _v: string, proceed: () => void) => {
+      captured = proceed;
+    });
+    const seam: InlineEditSeam = {
+      getIssues: () => live,
+      setIssuesLocal: vi.fn(),
+      persist,
+      refresh: vi.fn(async () => undefined),
+    };
+    const { edit, editStatus } = makeInlineEditController(seam, WF, toast, deferGuard);
+
+    edit(issue, "priority", "high"); // seeds the accumulator (one persist)
+    expect(persist).toHaveBeenCalledTimes(1);
+
+    editStatus(issue, "in-progress"); // guard defers the write
+    // A render commits a new live list that removed the row.
+    live = []; // reference #2 (row gone)
+
+    captured!(); // user confirms — but the row is no longer live
+    expect(persist).toHaveBeenCalledTimes(1); // no new write for the dead row
   });
 
   it("editStatus computes the optimistic edit against the LIVE list at confirmation time", () => {

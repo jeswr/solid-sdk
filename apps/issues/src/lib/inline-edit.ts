@@ -283,11 +283,38 @@ export function makeInlineEditController(
   edit: (issue: IssueRecord, field: EditableField, value: string | number | Date | undefined) => void;
   editStatus: (issue: IssueRecord, status: StatusSlug) => void;
 } {
+  // A controller-local accumulator: the single SYNCHRONOUS source of truth for the
+  // optimistic list across RAPID edits (multiple edits within the same render, where
+  // `getIssues()`'s ref is stale-until-render). `accBase` records the exact
+  // `getIssues()` reference the accumulator was seeded from; the accumulator is
+  // trusted ONLY while `getIssues()` still returns that same reference — i.e. no
+  // render has committed since. The moment a render commits (the ref changes), the
+  // live list is the more-recent truth (it already reflects the committed
+  // optimistic edits AND any refresh/live-sync/row removal), so the accumulator is
+  // discarded and re-seeded from live. This keeps rapid same-field reverts correct
+  // WITHOUT letting a stale accumulator drive a deferred `editStatus` confirmation
+  // for a row/value that is no longer live.
+  let accumulator: IssueRecord[] | undefined;
+  let accBase: IssueRecord[] | undefined;
+
+  /** The current optimistic base: the accumulator if still valid, else the live list. */
+  const currentBase = (): IssueRecord[] => {
+    const live = seam.getIssues();
+    // A render committed since we seeded → live wins; drop the stale accumulator.
+    if (accumulator === undefined || accBase !== live) {
+      accumulator = undefined;
+      accBase = live;
+      return live;
+    }
+    return accumulator;
+  };
+
   const handleFailure = (field: EditableField, original: IssueRecord, optimistic: IssueRecord, e: unknown) => {
-    // Roll the field back to its true pre-edit value in the controller's
-    // accumulator too, so a later edit composed before the next render starts from
-    // reverted (not phantom-optimistic) state.
-    accumulator = revertEditIfCurrent(accumulator ?? seam.getIssues(), field, original, optimistic);
+    // Roll the field back to its pre-edit value in the accumulator too (when still
+    // valid), so a later rapid edit composed before the next render starts from
+    // reverted (not phantom-optimistic) state. currentBase() drops a stale
+    // accumulator first, so this never resurrects post-render state.
+    accumulator = revertEditIfCurrent(currentBase(), field, original, optimistic);
     seam.setIssuesLocal((list) => revertEditIfCurrent(list, field, original, optimistic));
     if (e instanceof ConflictError) {
       toast.error(e.message);
@@ -297,27 +324,18 @@ export function makeInlineEditController(
     }
   };
 
-  // A controller-local accumulator: the single SYNCHRONOUS source of truth for the
-  // optimistic list across rapid edits within this controller instance's lifetime.
-  // The controller is recreated each render with a fresh `seam.getIssues()`, so the
-  // accumulator is seeded lazily from the live ref and then carries the composed
-  // optimistic state between renders — where `getIssues()`'s ref is stale-until-
-  // render. Driving the persist decision, the revert metadata, AND the state update
-  // all from THIS one list keeps them consistent: two rapid same-field edits each
-  // see the prior optimistic value as their `original`, so a later failed write
-  // never reverts past an earlier (successful/pending) edit.
-  let accumulator: IssueRecord[] | undefined;
-
   /**
-   * Apply the optimistic edit + start the background write, all driven by the
-   * synchronous {@link accumulator} (not the stale-until-render `getIssues()` ref):
+   * Apply the optimistic edit + start the background write, driven by
+   * {@link currentBase} (the accumulator while no render has committed, else the
+   * live list):
    *
-   *  - PERSIST DECISION + REVERT METADATA: computed against the accumulator, so a
-   *    no-op (unchanged value / missing row) skips the write, and `original`/
+   *  - PERSIST DECISION + REVERT METADATA: computed synchronously against the base,
+   *    so a no-op (unchanged value / missing row) skips the write, and `original`/
    *    `optimistic` reflect the value JUST BEFORE this edit (even when an earlier
-   *    rapid edit to the same field hasn't rendered yet). The decision is made
-   *    synchronously here — never inside a (batchable/deferrable) state updater —
-   *    so the write can't be silently skipped.
+   *    rapid edit to the same field hasn't rendered yet). Made synchronously here —
+   *    never inside a (batchable/deferrable) state updater — so a write can't be
+   *    silently skipped. A deferred `editStatus` confirmation re-reads the base, so
+   *    if the row was removed / the list changed by a render, it no-ops correctly.
    *  - STATE UPDATE: still compositional against React's `current` list (which
    *    carries any queued change), reconciled with the accumulator so the two agree.
    */
@@ -327,10 +345,9 @@ export function makeInlineEditController(
     value: string | number | Date | undefined,
     write: (repo: Repository) => Promise<void>,
   ) => {
-    const base = accumulator ?? seam.getIssues();
-    const { next, original } = optimisticEdit(base, issue.url, field, value, workflow);
-    if (!original) return; // no-op (unchanged value / row gone)
-    accumulator = next; // advance the synchronous source of truth
+    const { next, original } = optimisticEdit(currentBase(), issue.url, field, value, workflow);
+    if (!original) return; // no-op (unchanged value / row gone from the live base)
+    accumulator = next; // advance the synchronous source of truth (accBase unchanged)
     const optimistic = next.find((i) => i.url === issue.url)!;
     // Compositional state update: re-apply against React's current list so a
     // concurrent/queued change isn't dropped; the result matches the accumulator.
