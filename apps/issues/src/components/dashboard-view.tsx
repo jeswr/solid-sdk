@@ -1,8 +1,16 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Line, LineChart, Pie, PieChart, XAxis, YAxis } from "recharts";
-import { computeBurndown, computeCumulativeFlowBands, computeStats, computeVelocity, type StatusTransition } from "@/lib/stats";
+import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, ComposedChart, Line, LineChart, Pie, PieChart, ReferenceLine, Scatter, XAxis, YAxis, ZAxis } from "recharts";
+import {
+  computeBurndown,
+  computeControlChart,
+  computeCumulativeFlowBands,
+  computeStats,
+  computeVelocity,
+  controlChartRows,
+  type StatusTransition,
+} from "@/lib/stats";
 import { DEFAULT_WORKFLOW, type WorkflowDef } from "@/lib/issue";
 import type { IssueRecord, SprintRecord } from "@/lib/use-issues";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -30,6 +38,23 @@ const PRIORITY_COLORS: Record<string, string> = {
 };
 
 const chartConfig: ChartConfig = { count: { label: "Issues" } };
+
+// Control chart series: cycle-time scatter + its rolling average.
+const controlConfig: ChartConfig = {
+  cycle: { label: "Cycle time (days)", color: "var(--chart-1)" },
+  rolling: { label: "Rolling avg", color: "var(--chart-4)" },
+};
+
+/** Round a day count to one decimal for compact display. */
+const days1 = (d: number): number => Math.round(d * 10) / 10;
+
+/**
+ * Sentinel "no load has resolved yet" loader identity. Distinct from any real
+ * loader AND from `undefined` (the no-loader prop), so the first render with issues
+ * reads as loading until the first fan-out resolves, instead of momentarily showing
+ * the empty initial map as if it were ready.
+ */
+const INITIAL_LOADER = Symbol("initial-loader");
 
 function StatCard({ label, value, icon, accent }: { label: string; value: number; icon: React.ReactNode; accent?: boolean }) {
   return (
@@ -83,7 +108,27 @@ export function DashboardView({
   // status-transition history, then replay it into not-started / in-progress /
   // done bands per day. Until the history loads, the bands are empty (the chart
   // hides itself when there is <2 days of data).
-  const [statusHistory, setStatusHistory] = useState<ReadonlyMap<string, StatusTransition[]>>(new Map());
+  // The status-history fan-out result, tagged with the EXACT inputs it resolved for
+  // — the issue-revision key AND the loader reference — plus whether that load
+  // failed. The control chart derives per-issue cycle times from this log and would
+  // otherwise paint MISLEADING cycle-0 points off the initially-empty (or stale)
+  // map, so it must wait for the current load. Tagging by inputs (rather than a
+  // synchronous "loading" setState in the effect, which the react-hooks rule
+  // forbids) lets the loading state be PURELY DERIVED during render: a load is
+  // pending whenever the result's (key, loader) ≠ the current (key, loader). Keying
+  // off BOTH inputs — not just the revision key — means a swapped `loadStatusHistory`
+  // (same issue set) correctly reads as loading instead of showing stale history. A
+  // sentinel initial loader (never equal to a real one) makes the first render with
+  // issues read as loading until the first load resolves. The CFD tolerates the
+  // empty/stale map (it self-hides under 2 days of data), so only the control chart
+  // consults the load state.
+  const [history, setHistory] = useState<{
+    key: string;
+    loader: typeof loadStatusHistory | symbol;
+    map: ReadonlyMap<string, StatusTransition[]>;
+    error: boolean;
+  }>({ key: "", loader: INITIAL_LOADER, map: new Map(), error: false });
+  const statusHistory = history.map;
   // Revision key: re-fetch history whenever the set of issue URLs changes OR
   // any issue's status/modification time changes. A URL-only key would leave
   // statusHistory stale after a status mutation (URL set unchanged, but
@@ -110,27 +155,57 @@ export function DashboardView({
   );
   useEffect(() => {
     let cancelled = false;
-    // Resolve through a promise (even the empty/no-loader case) so the state
-    // update is always asynchronous, never a synchronous cascade in the effect.
+    // Capture the inputs THIS run loads for, so the resolved state is tagged with
+    // them and the loading flag can be derived during render (no synchronous
+    // setState in the effect body — the react-hooks rule forbids it). Resolve
+    // through a promise in BOTH branches so every state update is asynchronous (in
+    // the .then/.catch). No loader / no URLs ⇒ the empty map is the final state.
+    const key = issueRevisionKey;
+    const loader = loadStatusHistory;
     const load =
       !loadStatusHistory || issueUrls.length === 0
         ? Promise.resolve(new Map<string, StatusTransition[]>())
         : loadStatusHistory(issueUrls);
     load
-      .then((history) => {
-        if (!cancelled) setStatusHistory(history);
+      .then((map) => {
+        if (!cancelled) setHistory({ key, loader, map, error: false });
       })
       .catch(() => {
-        if (!cancelled) setStatusHistory(new Map());
+        if (!cancelled) setHistory({ key, loader, map: new Map(), error: true });
       });
     return () => {
       cancelled = true;
     };
   }, [loadStatusHistory, issueRevisionKey, issueUrls]);
+  // Loading is PURELY DERIVED: a fan-out is pending whenever the history we hold did
+  // NOT resolve for the current inputs — the issue revision changed OR the loader
+  // reference swapped (keying off BOTH, not just the revision, is the stale-loader
+  // fix). The error flag is carried on the loaded state. "ready" = resolved for the
+  // current (key, loader), no error.
+  const historyStatus: "loading" | "ready" | "error" =
+    history.key !== issueRevisionKey || history.loader !== loadStatusHistory
+      ? "loading"
+      : history.error
+        ? "error"
+        : "ready";
   const flow = useMemo(
     () => computeCumulativeFlowBands(issues, statusHistory, workflow),
     [issues, statusHistory, workflow],
   );
+  // Control chart: cycle/lead time per closed issue, replayed from the SAME F3
+  // status-transition history the CFD uses. The scatter rows + rolling average are
+  // derived from the computed points; summary stats drive the reference band.
+  const control = useMemo(
+    () => computeControlChart(issues, statusHistory, workflow),
+    [issues, statusHistory, workflow],
+  );
+  const controlRows = useMemo(() => controlChartRows(control.points), [control.points]);
+  // Whether any issue is closed at all — drives showing the control-chart card
+  // (with a loading/error state while the history that feeds it is fetched) vs.
+  // hiding it entirely when there is nothing to chart. `state === "closed"` tracks
+  // the open/closed lifecycle for every workflow (custom terminal statuses keep
+  // wf:Closed in sync), so it is workflow-correct.
+  const hasClosedIssues = useMemo(() => issues.some((i) => i.state === "closed"), [issues]);
   const open = stats.byStatus.find((s) => s.status === "todo")?.count ?? 0;
   const inProgress = stats.byStatus.find((s) => s.status === "in-progress")?.count ?? 0;
   const done = stats.byStatus.find((s) => s.status === "done")?.count ?? 0;
@@ -313,6 +388,68 @@ export function DashboardView({
               </AreaChart>
             </ChartContainer>
             <p className="mt-1 text-center text-xs text-muted-foreground">Issues per day by disposition: not started · in progress · done</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/*
+        The control chart derives cycle times from the F3 status-history fan-out.
+        While that load is in flight (or if it fails) the chart would otherwise show
+        misleading cycle-0 points off the empty map, so the card is gated on
+        `historyStatus`: a loading state until the history resolves, an error state
+        if it rejects, and the chart only once the data is ready. The card itself
+        only appears when there are closed issues to chart.
+      */}
+      {hasClosedIssues && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Control chart — cycle time</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {historyStatus === "loading" ? (
+              <p className="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
+                <Loader2 className="size-4 animate-spin" aria-hidden /> Loading cycle-time history…
+              </p>
+            ) : historyStatus === "error" ? (
+              <p className="py-10 text-center text-sm text-destructive">
+                Unable to load the cycle-time history. Try refreshing.
+              </p>
+            ) : controlRows.length === 0 ? (
+              <p className="py-10 text-center text-sm text-muted-foreground">
+                No completion history recorded yet for closed issues.
+              </p>
+            ) : (
+              <>
+                <div className="mb-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground tabular-nums">
+                  {control.medianCycle !== undefined && <span>Median cycle: {days1(control.medianCycle)}d</span>}
+                  {control.p85Cycle !== undefined && <span>85th pct cycle: {days1(control.p85Cycle)}d</span>}
+                  {control.medianLead !== undefined && <span>Median lead: {days1(control.medianLead)}d</span>}
+                  {control.p85Lead !== undefined && <span>85th pct lead: {days1(control.p85Lead)}d</span>}
+                </div>
+                <ChartContainer config={controlConfig} className="max-h-56 w-full">
+                  <ComposedChart data={controlRows}>
+                    <CartesianGrid vertical={false} strokeDasharray="3 3" />
+                    <XAxis dataKey="completed" tickLine={false} axisLine={false} fontSize={11} />
+                    <YAxis allowDecimals={false} width={28} tickLine={false} axisLine={false} fontSize={12} />
+                    <ZAxis range={[60, 60]} />
+                    <ChartTooltip content={<ChartTooltipContent />} />
+                    {control.p85Cycle !== undefined && (
+                      <ReferenceLine
+                        y={days1(control.p85Cycle)}
+                        stroke="var(--chart-3)"
+                        strokeDasharray="5 5"
+                        label={{ value: "85th pct", position: "insideTopRight", fontSize: 10, fill: "var(--muted-foreground)" }}
+                      />
+                    )}
+                    <Scatter name="Cycle time (days)" dataKey="cycle" fill="var(--chart-1)" />
+                    <Line type="monotone" dataKey="rolling" name="Rolling avg" stroke="var(--chart-4)" strokeWidth={2} dot={false} legendType="line" />
+                  </ComposedChart>
+                </ChartContainer>
+                <p className="mt-1 text-center text-xs text-muted-foreground">
+                  Cycle time (in-progress → closed) per closed issue, by completion date · with a rolling average and the 85th-percentile line
+                </p>
+              </>
+            )}
           </CardContent>
         </Card>
       )}
