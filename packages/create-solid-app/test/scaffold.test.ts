@@ -128,6 +128,58 @@ describe("scaffold", () => {
     }
   });
 
+  it("ships the baked safe-form chrome (solid-elements + the #121/#78 guards)", () => {
+    // The proven safe-form recipe (#121 tail): the lockfile-transport guard (#78),
+    // the css-isolation regression guard (#121/#80), the solid-elements adoption
+    // test, and the <jeswr-loading> intrinsic typing must all be copied into a scaffold.
+    for (const f of [
+      "scripts/check-lockfile-transport.mjs",
+      "tests/css-isolation.test.ts",
+      "tests/solid-elements.test.ts",
+      "types/solid-elements.d.ts",
+      "next.config.ts",
+    ]) {
+      expect(result.files, `missing ${f}`).toContain(f);
+    }
+  });
+
+  it("bakes the pinned suite chrome deps + wires the lockfile-transport lint", async () => {
+    const pkg = JSON.parse(await readFile(join(result.targetDir, "package.json"), "utf8")) as {
+      dependencies: Record<string, string>;
+      scripts: Record<string, string>;
+    };
+    // app-shell + solid-elements are pinned git+https refs (keyless npm ci — #78).
+    expect(pkg.dependencies["@jeswr/app-shell"]).toMatch(
+      /^git\+https:\/\/github\.com\/jeswr\/app-shell\.git#/,
+    );
+    expect(pkg.dependencies["@jeswr/solid-elements"]).toMatch(
+      /^git\+https:\/\/github\.com\/jeswr\/solid-elements\.git#/,
+    );
+    // lit + @lit/react are DIRECT deps so npm hoists ONE copy (the dedupe intent).
+    expect(pkg.dependencies.lit).toBeDefined();
+    expect(pkg.dependencies["@lit/react"]).toBeDefined();
+    // The #78 guard is wired into lint.
+    expect(pkg.scripts.lint).toContain("check:lockfile-transport");
+    expect(pkg.scripts["check:lockfile-transport"]).toBe(
+      "node scripts/check-lockfile-transport.mjs",
+    );
+  });
+
+  it("bakes the safe-form host-button base into globals.css (not a leaky form)", async () => {
+    const css = await readFile(join(result.targetDir, "app", "globals.css"), "utf8");
+    // The proven zero-specificity scope is present...
+    expect(css).toMatch(/button:where\(:not\(\[data-app-shell-control\]\)\)/);
+    // ...and the leaky (0,1,1) bare form is NOT (the #121 regression).
+    expect(css).not.toMatch(/button:not\(\[data-app-shell-control\]\)\s*[{:]/);
+  });
+
+  it("uses the raw <jeswr-loading> wait-state form on the home page", async () => {
+    const page = await readFile(join(result.targetDir, "app", "page.tsx"), "utf8");
+    // Registration via the side-effect import + the raw-attribute label form.
+    expect(page).toContain('import "@jeswr/solid-elements/react"');
+    expect(page).toMatch(/<jeswr-loading\s+label=/);
+  });
+
   it("substitutes APP_NAME into lib/app-shell-config.ts", async () => {
     const config = await readFile(join(result.targetDir, "lib", "app-shell-config.ts"), "utf8");
     // The display name is baked in; the un-given repo keeps its placeholder token.

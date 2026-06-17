@@ -11,6 +11,11 @@
    class detection, not styles (the pod-photos/drive lesson: don't re-alias
    app-shell's own tokens; keep ONE token home). */
 @source "../node_modules/@jeswr/app-shell/dist";
+/* The @jeswr/solid-elements Web Components (<jeswr-loading> etc.) render into a
+   shadow root and bring their own styles, so they need no class scan — but the
+   `./react` (@lit/react) wrappers carry no extra utilities either. No @source is
+   required for them; this comment marks the suite UX stack as deliberate (app-shell
+   chrome + solid-elements wait-states), not an omission. */
 
 @custom-variant dark (&:is(.dark *));
 
@@ -140,5 +145,37 @@
   }
   html {
     @apply font-sans;
+  }
+
+  /* SUITE-STANDARD SAFE-FORM HOST BUTTON BASE (#121 / #80 — baked by create-solid-app).
+     A scaffolded app styles its controls with shadcn <Button>/Tailwind utilities, so
+     it does NOT need a bare-element button base. But the moment an app author adds a
+     plain HTML `<button>` and reaches for a global `button { … }` filled style, that
+     bare rule LEAKS onto every @jeswr/app-shell control too (the ThemeToggle/
+     AccountMenu/FeedbackButton triggers + the portaled FeedbackDialog's buttons),
+     distorting their look — the CSS-leak bug that bit the early pod-app adopters.
+
+     This base is the PROVEN safe form, so a new app inherits it instead of later
+     hand-fixing the leak:
+       • `:where(:not([data-app-shell-control]))` excludes every app-shell control
+         (they all carry `data-app-shell-control`, which app-shell #80's unlayered
+         reset keys off for COLOUR isolation; the reset deliberately does NOT touch
+         the BOX MODEL, so a base that set padding/radius/sizing WOULD clobber the
+         shell controls' per-instance sizing utilities — hence the exclusion).
+       • `:where()` carries ZERO specificity, so this stays at (0,0,1) — IDENTICAL to
+         a bare `button {}` — which keeps any class-only host override winning. A bare
+         `button:not([data-app-shell-control])` would leak (0,1,1) specificity (the
+         attribute selector's specificity escapes through `:not()`) and out-rank such
+         overrides — the known regression this scope exists to avoid. NEVER use that
+         bare `button:not(` form; the css-isolation guard test rejects it.
+       • The solid-elements <jeswr-loading> etc. live in shadow DOM, which this
+         light-DOM rule cannot pierce — immune for a second reason.
+     The base sets only the host's own filled look; comment it out if an app wants
+     bare buttons fully unstyled. */
+  button:where(:not([data-app-shell-control])) {
+    @apply cursor-pointer;
+  }
+  button:where(:not([data-app-shell-control])):disabled {
+    @apply cursor-not-allowed opacity-55;
   }
 }
