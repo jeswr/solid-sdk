@@ -8,10 +8,11 @@
  * logic can be unit-tested without React or Next.js.
  */
 
-export type View = "list" | "board" | "epics" | "dashboard" | "backlog" | "timeline" | "calendar" | "workload" | "inbox";
+export type View = "list" | "table" | "board" | "epics" | "dashboard" | "backlog" | "timeline" | "calendar" | "workload" | "inbox";
 
 export const VIEWS: readonly View[] = [
   "list",
+  "table",
   "board",
   "epics",
   "backlog",
