@@ -3,8 +3,10 @@
 // App — the host shell's router-free root: logged out → <LoginScreen>; logged in
 // → a thin header (WebID + logout) over the LOCAL @jeswr/pod-drive <FileBrowser>
 // pointed at the user's pod ROOT. The browser receives NO `fetch` prop — it uses
-// the ambient global fetch, which the SessionProvider patched via reactive-auth's
-// registerGlobally(), so every read carries the DPoP token automatically.
+// the ambient global fetch, which the SessionProvider patched via the
+// @jeswr/solid-elements PROACTIVE auth-fetch (task #123), so every read carries the
+// DPoP token automatically AND up front (the token is attached on the FIRST request
+// to the pod origin — no per-resource 401-dance; see auth/proactive-fetch.ts).
 //
 // rootUrl = the pod ROOT (storages[0], else the WebID-origin fallback). Pod
 // Drive's data layer (`listContainer`) GETs that container directly and lets the

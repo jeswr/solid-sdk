@@ -80,6 +80,10 @@ vi.mock("oauth4webapi", () => {
   }
   return {
     allowInsecureRequests,
+    // customFetch (task #123): the provider pins this to the pristine fetch so internal
+    // OIDC requests bypass the proactive-patched global (re-entrancy guard). The real
+    // oauth4webapi exports this symbol; the mock must too or the computed key is undefined.
+    customFetch: Symbol("customFetch"),
     None: () => () => {},
     ClientSecretBasic: () => () => {},
     expectNoNonce: Symbol("expectNoNonce"),
