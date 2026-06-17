@@ -18,19 +18,35 @@
    names (--bg/--ink/…). Map them onto the app-shell OKLCH tokens so the WHOLE
    pod-drive UI (login card, header, file table) follows the theme — the `.dark`
    class the ThemeProvider toggles on <html> flips the OKLCH vars, and these
-   aliases inherit it for free. */
+   aliases inherit it for free.
+
+   SOLID-ELEMENTS ADOPTION (#115 / D-parity rollout #67/#68/#70): the <Loading>
+   Web Component themes itself off these SAME app-shell tokens through its shadow
+   boundary (its `--jeswr-*` shadow vars fall back to `--primary`/`--border`/
+   `--muted-foreground`), so the host token mapping below also drives the element. */
 :root {
   --bg: var(--background);
   --surface: var(--card);
   --ink: var(--foreground);
   --muted: var(--muted-foreground);
   /* The host's "accent" is its action/brand colour (filled buttons + links), which
-     is the app-shell `--primary` token. We deliberately DO NOT reuse the name
-     `--accent` here: app-shell defines `--accent` as a DISTINCT soft hover/selection
-     tint (paired with `--accent-foreground`) that its ghost controls read via
-     `hover:bg-accent`. Re-aliasing `--accent` → `--primary` would corrupt that hover
-     state. So host action colours live under their own names (`--action` /
-     `--action-ink`) and app-shell's `--accent` is left untouched. */
+     is the app-shell `--primary` token. pod-drive keeps these under their OWN names
+     (`--action` / `--action-ink`) rather than re-aliasing app-shell's public
+     `--accent`/`--primary`.
+
+     CSS-ISOLATION (#80 / solid-elements adoption #115, D-parity rollout #67/#68/#70):
+     VERIFIED against the pinned app-shell `5a7484d` dist this app installs — the shell
+     is SELF-ISOLATING. Its controls re-assert their colour through an UNLAYERED
+     `[data-app-shell-control]` reset (reset.css) reading SHELL-PRIVATE `--as-*` tokens
+     (`--as-accent`/`--as-background`/`--as-foreground`/…), which are HARDCODED OKLCH
+     literals (flipped on `.dark`) INDEPENDENT of the public `--accent`/`--primary`. So
+     a host that re-aliased `--accent`→`--primary` would NOT affect the shell controls.
+     pod-drive nonetheless keeps the distinct `--action` names (no behavioural
+     difference, zero churn vs. its prior shape) — and, regardless, app-shell's
+     `--accent` is left untouched. `--action` (= `--primary`, the saturated brand
+     colour) is NOT the soft app-shell `--accent` hover tint. css-isolation.test.tsx
+     pins the shell's `--as-*`/`data-app-shell-control` isolation contract so a future
+     app-shell bump that regressed it would fail here, not in production. */
   --action: var(--primary);
   --action-ink: var(--primary-foreground);
   /* NOTE: the host's `--border` is the SAME name as the app-shell token, so it is
@@ -110,12 +126,25 @@ a {
 /* Host filled-button look — the ONLY two filled host buttons are the login submit
    (`.login-form button`) and the file-browser error/retry (`.pod-drive-error
    button`); every other host button (breadcrumb, folder-link) is explicitly
-   transparent below. We SCOPE this to those host-owned containers rather than a
-   global `button {…}` element rule: a global rule would override the @jeswr/app-shell
-   controls — the ghost header trio AND the feedback dialog's plain-`<button>` backdrop
-   (`bg-black/50`, no `data-variant`) — none of which live under a host class. The
-   filled colour is the host `--action` token (= app-shell `--primary`), not the soft
-   app-shell `--accent` hover tint. */
+   transparent below. We KEEP this HOST-SCOPED to those host-owned containers rather
+   than relaxing to a bare global `button {…}` element rule.
+
+   CSS-ISOLATION (#80 / solid-elements adoption #115, D-parity rollout #67/#68/#70):
+   app-shell `5a7484d` made the shell SELF-ISOLATING — its controls carry
+   `data-app-shell-control` + an UNLAYERED reset that re-asserts their COLOUR/border/
+   fill (via shell-private `--as-*` tokens), so a host's bare `button { background }`
+   no longer leaks the host fill onto them. BUT that reset DELIBERATELY does NOT lock
+   the BOX MODEL (padding / border-radius / font-size / width / height — see the
+   package's reset.css: "The BOX MODEL … is NOT touched … an app's aggressive element
+   reset that also relayouts every button is out of scope"). A bare unlayered
+   `button { padding; border-radius; font-size }` would therefore still out-rank the
+   shell controls' LAYERED Tailwind sizing utilities and distort the ghost header trio
+   (ThemeToggle / AccountMenu), the FeedbackButton trigger, AND the dialog's portaled
+   controls — none of which live under a host class. So pod-drive KEEPS the safer
+   host-scope (the strictly-safer form vs. the bare global `button {}` some siblings
+   adopted). The filled colour is the host `--action` token (= app-shell `--primary`),
+   not the soft app-shell `--accent` hover tint. css-isolation.test.tsx pins this
+   contract so a future app-shell bump can't regress it silently. */
 .login-form button,
 .pod-drive-error button {
   cursor: pointer;

@@ -30,7 +30,7 @@
 //    UI leaves "Restoring…". Removing `setRestoringFalse` (or the effect's use of it) fails
 //    both.
 import { RememberedAccount } from "@jeswr/solid-session-restore";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   decideRestoreEffect,
@@ -244,16 +244,31 @@ describe("FINDING 4 (implementation) — runtime-init rejection un-sticks the Re
     // UI is painted. This is the assertion that makes the test NON-VACUOUS: a test that
     // never entered the restoring state would fail HERE. (The runtime-init rejection is a
     // microtask-deferred chain off the dynamic import, so it has not yet propagated.)
-    expect(screen.getByText(/Restoring your session/i)).toBeInTheDocument();
+    //
+    // SOLID-ELEMENTS NOTE (#115 adoption): the restoring wait label is now rendered by the
+    // <jeswr-loading> Web Component (`<Loading label="Restoring your session…" />`), not a
+    // bare text <p>. @lit/react does NOT forward the `label` PROPERTY into reflected text
+    // under React 19 + jsdom (a documented adapter rough edge — see solid-elements.test.tsx),
+    // so the label string is NOT in the jsdom text content / accessible name. We therefore
+    // anchor the precondition on the LABEL-INDEPENDENT restoring-state signal: the
+    // `aria-busy="true"` restoring <main> with a mounted `<jeswr-loading>` inside it.
+    // autologin is NOT pending in this test (no #autologin hash), so the only restoring
+    // <main aria-busy> + <jeswr-loading> the App can render is the silent-restore one — the
+    // assertion stays specific to FINDING 4's state. (A real browser DOES show the label.)
+    const restoringMain = document.querySelector('main[aria-busy="true"]');
+    expect(restoringMain).not.toBeNull();
+    expect(restoringMain?.querySelector("jeswr-loading")).not.toBeNull();
 
     // POSTCONDITION — the catch flipped restoringSession off, so the restoring UI is
     // gone and the login/error UI renders. If `setRestoringSession(false)` is removed
     // from the production runtime-init `.catch`, `ready` stays false forever, the restore
-    // effect never runs, and the restoring text NEVER disappears → this waitFor times out
-    // and the test FAILS (the adversarial check).
+    // effect never runs, and the restoring UI NEVER disappears → this waitFor times out
+    // and the test FAILS (the adversarial check). We assert the restoring <main> (its
+    // mounted <jeswr-loading>) is gone — the same label-independent signal as the
+    // precondition, so it survives the @lit/react jsdom label rough edge.
     await waitFor(
       () => {
-        expect(screen.queryByText(/Restoring your session/i)).toBeNull();
+        expect(document.querySelector('main[aria-busy="true"] jeswr-loading')).toBeNull();
       },
       { timeout: 4000 },
     );
