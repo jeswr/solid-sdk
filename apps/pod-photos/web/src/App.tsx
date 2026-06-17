@@ -3,9 +3,11 @@
 // App — the host shell's router-free root: logged out → <LoginScreen>; logged in
 // → a thin header (WebID + logout) over the LOCAL @jeswr/pod-photos <PhotoGallery>
 // pointed at the user's photos container. The gallery receives NO `fetch` prop —
-// it uses the ambient global fetch, which the SessionProvider patched via
-// reactive-auth's registerGlobally(), so every read carries the DPoP token
-// automatically.
+// it uses the ambient global fetch, which the SessionProvider patched via the
+// @jeswr/solid-elements PROACTIVE auth-fetch (task #123), so every read carries the
+// DPoP token automatically AND up front (the token is attached on the FIRST request
+// to the pod origin — no per-resource 401-dance; the gallery reads N photo resources,
+// which previously paid N+1 wasted 401s. See auth/SessionProvider.tsx).
 //
 // The gallery's `rootUrl` is the PHOTOS container. The host derives the pod root
 // from the session (deriveSession — storages[0], else WebID origin) and then

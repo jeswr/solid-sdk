@@ -256,3 +256,105 @@ describe("decideAndApplyRestore — keep/drop pointer on a non-mismatch login ou
     expect(remembered.clear).toHaveBeenCalledOnce();
   });
 });
+
+// PROACTIVE FETCH (task #123) — the silent-restore credential-boundary arming. The
+// restore path threads an optional `armBoundary` (RestoreBoundaryArmer) into
+// decideAndApplyRestore; on a SUCCESSFUL restore it must be called TWICE — first
+// PROVISIONAL (WebID + restored issuer, BEFORE the cosmetic profile read so that read
+// carries the token) then AUTHORITATIVE (adding the resolved pod root, so the first
+// gallery read after restore is pre-authenticated, killing the per-resource 401-dance
+// after a silent restore). On a NON-restore outcome (webid-mismatch teardown, or a
+// no-credential login) it must NOT be called — a restore that did not establish a live
+// session must never arm the patched fetch (fail-closed: no stale boundary).
+describe("decideAndApplyRestore — proactive credential boundary arming (#123)", () => {
+  it("arms PROVISIONAL then AUTHORITATIVE on a successful restore", async () => {
+    const provider = fakeProvider({ restoreResult: { webId: ALICE } });
+    const remembered = fakeRemembered({ webId: ALICE, issuer: ISSUER });
+    const armBoundary = vi.fn();
+
+    const outcome = await decideAndApplyRestore(provider, remembered, armBoundary);
+
+    expect(outcome.kind).toBe("restored");
+    // Exactly two arms: provisional (no podRoot yet) then authoritative (podRoot known).
+    expect(armBoundary).toHaveBeenCalledTimes(2);
+    // 1) PROVISIONAL — WebID + restored issuer, BEFORE the profile read → no podRoot.
+    expect(armBoundary).toHaveBeenNthCalledWith(1, { webId: ALICE, issuer: ISSUER });
+    // 2) AUTHORITATIVE — adds the pod root derived from the (mocked) profile's
+    //    storages[0] = https://alice.example/ → asContainer → https://alice.example/.
+    expect(armBoundary).toHaveBeenNthCalledWith(2, {
+      webId: ALICE,
+      issuer: ISSUER,
+      podRoot: "https://alice.example/",
+    });
+    // Ordering: the provisional arm precedes the profile read which precedes the
+    // authoritative arm — so the authoritative call carries a podRoot the provisional
+    // one cannot have had.
+    expect(armBoundary.mock.calls[0][0].podRoot).toBeUndefined();
+    expect(armBoundary.mock.calls[1][0].podRoot).toBe("https://alice.example/");
+  });
+
+  it("does NOT arm the boundary on a WebID-MISMATCH teardown (fail-closed)", async () => {
+    // BOB's grant against ALICE's pointer → webid-mismatch → teardown, NOT a restore.
+    const provider = fakeProvider({ restoreResult: { webId: BOB } });
+    const remembered = fakeRemembered({ webId: ALICE, issuer: ISSUER });
+    const armBoundary = vi.fn();
+
+    const outcome = await decideAndApplyRestore(provider, remembered, armBoundary);
+
+    expect(outcome).toEqual({ kind: "login" });
+    // The boundary must stay empty — a mismatched restore tore the session down, so the
+    // patched fetch must authenticate NOTHING (no stale arming for the wrong WebID).
+    expect(armBoundary).not.toHaveBeenCalled();
+  });
+
+  it("does NOT arm the boundary when there is nothing to restore (login outcome)", async () => {
+    // No credential / no grant → login outcome → no live session → no arming.
+    const provider = fakeProvider({ restoreResult: undefined, presence: "absent" });
+    const remembered = fakeRemembered({ webId: ALICE, issuer: ISSUER });
+    const armBoundary = vi.fn();
+
+    const outcome = await decideAndApplyRestore(provider, remembered, armBoundary);
+
+    expect(outcome).toEqual({ kind: "login" });
+    expect(armBoundary).not.toHaveBeenCalled();
+  });
+
+  it("CLEARS the boundary fail-closed if arming succeeded but the restore then FAILS", async () => {
+    // The fail-OPEN gap (roborev MEDIUM): a restore that ARMS the boundary (provisional +
+    // authoritative) and then THROWS before returning `restored` — here `remembered.write`
+    // throws — lands in the outer catch and falls back to `login`. Without clearing, the
+    // patched global fetch would stay AUTHENTICATED for the restored credential while the
+    // app shows logged-out. The clearBoundary callback MUST fire so the boundary is dropped.
+    const provider = fakeProvider({ restoreResult: { webId: ALICE } });
+    const remembered = fakeRemembered({ webId: ALICE, issuer: ISSUER });
+    // Make the post-arming step (pointer re-confirm) throw, simulating a wiring fault AFTER
+    // the boundary was armed.
+    remembered.write.mockImplementation(() => {
+      throw new Error("simulated storage failure after boundary arming");
+    });
+    const armBoundary = vi.fn();
+    const clearBoundary = vi.fn();
+
+    const outcome = await decideAndApplyRestore(provider, remembered, armBoundary, clearBoundary);
+
+    // Fell back to login (the throw was caught), AND the boundary it had armed was cleared.
+    expect(outcome).toEqual({ kind: "login" });
+    expect(armBoundary).toHaveBeenCalled(); // it DID arm before the failure
+    expect(clearBoundary).toHaveBeenCalledOnce(); // …so it MUST clear, fail-closed
+  });
+
+  it("does NOT clear the boundary when nothing was armed (no spurious clear)", async () => {
+    // A login outcome (nothing restored) arms nothing, so the catch's armed-guard must keep
+    // clearBoundary from firing — proving the clear is scoped to the post-arm failure, not
+    // every login outcome.
+    const provider = fakeProvider({ restoreResult: undefined, presence: "absent" });
+    const remembered = fakeRemembered({ webId: ALICE, issuer: ISSUER });
+    const armBoundary = vi.fn();
+    const clearBoundary = vi.fn();
+
+    await decideAndApplyRestore(provider, remembered, armBoundary, clearBoundary);
+
+    expect(armBoundary).not.toHaveBeenCalled();
+    expect(clearBoundary).not.toHaveBeenCalled();
+  });
+});
