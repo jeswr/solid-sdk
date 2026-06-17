@@ -100,6 +100,30 @@ describe("dependency enforcement (#75 P1-4)", () => {
       expect(isGuardedTransition("backlog", "active", custom)).toBe(true); // started
       expect(isGuardedTransition("active", "backlog", custom)).toBe(false); // back to initial
     });
+
+    it("does NOT guard a move between two non-initial, non-terminal states", () => {
+      // A richer workflow with TWO active columns. Moving in-progress → review is
+      // forward progress but not a "start" (the blocker check already happened at
+      // start) and not a completion, so it must NOT warn (roborev #fix).
+      const rich: WorkflowDef = {
+        statuses: [
+          { slug: "todo", label: "To Do", terminal: false },
+          { slug: "in-progress", label: "In Progress", terminal: false },
+          { slug: "review", label: "In Review", terminal: false },
+          { slug: "done", label: "Done", terminal: true },
+        ],
+        transitions: {
+          todo: ["in-progress"],
+          "in-progress": ["review", "todo"],
+          review: ["done", "in-progress"],
+          done: [],
+        },
+      };
+      expect(isGuardedTransition("in-progress", "review", rich)).toBe(false); // mid-flow move
+      expect(isGuardedTransition("review", "in-progress", rich)).toBe(false); // backward, non-initial
+      expect(isGuardedTransition("todo", "in-progress", rich)).toBe(true); // start
+      expect(isGuardedTransition("review", "done", rich)).toBe(true); // complete
+    });
   });
 
   describe("dependencyWarning", () => {

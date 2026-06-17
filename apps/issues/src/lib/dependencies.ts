@@ -40,15 +40,18 @@ export const NO_WARNING: DependencyWarning = { blocked: false, blockers: [] };
 
 /**
  * Whether moving `issue` to `targetStatus` is a transition we guard — i.e. the
- * user is *starting* the work (leaving the initial/todo state for a non-initial
- * state) or *completing* it (entering a terminal/closed state). Re-asserting the
- * same status, or moving *back* to the initial state (un-starting), is not
- * guarded — only forward progress can be obstructed by an open blocker.
+ * user is *starting* the work (moving OUT of the initial/todo state for the first
+ * time) or *completing* it (entering a terminal/closed state). These are the two
+ * moments a not-yet-satisfied dependency matters: kicking work off, or marking it
+ * done. A move BETWEEN two already-active states (e.g. in-progress → in-review),
+ * a no-op re-assert, and moving back to the initial state (un-starting) are NOT
+ * guarded — the blocker check already happened at start, so warning again on
+ * every intermediate column move would be noise.
  *
- * Workflow-agnostic: "started" is "no longer the workflow's first status", and
- * "done" is the status' open/closed resolution under the active workflow — so a
- * custom workflow's terminal status (e.g. "shipped") counts as completion
- * without naming any slug.
+ * Workflow-agnostic: "starting" is `from === initialStatus && to !== initial`,
+ * and "completing" is the target status' open/closed resolution under the active
+ * workflow — so a custom workflow's terminal status (e.g. "shipped") counts as
+ * completion without naming any slug.
  */
 export function isGuardedTransition(
   fromStatus: StatusSlug,
@@ -57,13 +60,12 @@ export function isGuardedTransition(
 ): boolean {
   if (fromStatus === targetStatus) return false; // a no-op re-assert isn't a transition
   const initial = workflow.statuses[0]?.slug;
-  const enteringDone = statusState(workflow, targetStatus) === "closed";
-  // "Starting" = moving INTO a non-initial state from the initial one. Moving
-  // between two already-started states (e.g. in-progress → in-review) is also
-  // forward progress, so it is guarded too; only landing back ON the initial
-  // state is exempt.
-  const leavingInitial = targetStatus !== initial;
-  return enteringDone || leavingInitial;
+  // Completing: the target resolves to closed under this workflow.
+  const completing = statusState(workflow, targetStatus) === "closed";
+  // Starting: leaving the initial state for the first time. A move between two
+  // non-initial states is forward progress but NOT a "start", so it isn't guarded.
+  const starting = fromStatus === initial && targetStatus !== initial;
+  return completing || starting;
 }
 
 /**
