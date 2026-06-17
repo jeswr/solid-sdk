@@ -369,12 +369,36 @@ describe("makeInlineEditController", () => {
   it("does not persist a no-op edit (re-selecting the current value)", () => {
     const issue = mk({ url: "a", priority: "high" });
     const h = makeSeam([issue]);
-    const setSpy = vi.spyOn(h.seam, "setIssuesLocal");
     const persistSpy = vi.spyOn(h.seam, "persist");
     const { edit } = makeInlineEditController(h.seam, WF, toast, passThroughGuard);
 
     edit(issue, "priority", "high"); // unchanged
-    expect(setSpy).not.toHaveBeenCalled();
+    // The optimistic apply returns the SAME list (identity) for a no-op and never
+    // starts a pod write — so no Saving… and no pointless conditional PUT.
     expect(persistSpy).not.toHaveBeenCalled();
+    expect(h.get().find((i) => i.url === "a")!.priority).toBe("high");
+  });
+
+  it("editStatus computes the optimistic edit against the LIVE list at confirmation time", () => {
+    // A guard that DEFERS the write (captures proceed). Between editStatus() and
+    // the user confirming, the live list changes (a refresh/another edit lands a
+    // newer title). The deferred confirmation must apply onto the LIVE record, not
+    // a stale snapshot — so the newer title survives the status edit.
+    const issue = mk({ url: "a", status: "todo", state: "open", title: "Old" });
+    const h = makeSeam([issue]);
+    let captured: (() => void) | undefined;
+    const deferGuard = vi.fn((_i: IssueRecord, _s: string, _v: string, proceed: () => void) => {
+      captured = proceed;
+    });
+    const { editStatus } = makeInlineEditController(h.seam, WF, toast, deferGuard);
+
+    editStatus(issue, "in-progress");
+    // A concurrent change to the SAME row lands while the dialog is open.
+    h.seam.setIssuesLocal((list) => list.map((i) => (i.url === "a" ? { ...i, title: "Renamed concurrently" } : i)));
+
+    captured!(); // user confirms the override
+    const row = h.get().find((i) => i.url === "a")!;
+    expect(row.status).toBe("in-progress"); // status edit applied
+    expect(row.title).toBe("Renamed concurrently"); // newer concurrent edit preserved (no stale clobber)
   });
 });

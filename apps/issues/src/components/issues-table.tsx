@@ -201,10 +201,17 @@ export function IssuesTable({
   onEdit,
   onStatusEdit,
 }: IssuesTableProps) {
-  const assigneeOptions = assigneeSuggestions.map((a) => ({
-    value: a,
-    label: a === groupIri ? "Team" : shortWebId(a),
-  }));
+  const optionFor = (a: string) => ({ value: a, label: a === groupIri ? "Team" : shortWebId(a) });
+  const baseAssigneeOptions = assigneeSuggestions.map(optionFor);
+  // The assignee options for a given row ALWAYS include that issue's current
+  // assignee — even when it is outside the team/suggestion list (e.g. assigned by
+  // another app, or a since-removed member). Without this the controlled Select
+  // would have no matching item and render the cell blank/misleading while
+  // editing is enabled (roborev finding). The current assignee is appended once.
+  const assigneeOptionsFor = (assignee: string | undefined) =>
+    assignee && !assigneeSuggestions.includes(assignee)
+      ? [...baseAssigneeOptions, optionFor(assignee)]
+      : baseAssigneeOptions;
 
   return (
     <div className="overflow-x-auto rounded-lg border">
@@ -314,7 +321,7 @@ export function IssuesTable({
                     ariaLabel={`assignee of ${issue.title}`}
                     placeholder="Unassigned"
                     disabled={!canWrite}
-                    options={assigneeOptions}
+                    options={assigneeOptionsFor(issue.assignee)}
                     onCommit={(v) => onEdit(issue, "assignee", v)}
                   >
                     <span className={issue.assignee ? "" : "text-muted-foreground"}>
@@ -375,11 +382,17 @@ function CustomFieldCell({
 
   // text / number / date / url — a typed input. The committed string is parsed to
   // the field's value type before it reaches the parent's persist path.
-  const display = (): React.ReactNode => {
+  //
+  // `asLink` controls URL rendering: only the READ-ONLY (disabled) cell renders a
+  // clickable <a>. The EDITABLE cell renders the URL as plain text so it is NOT a
+  // nested interactive element inside the edit <button> (invalid HTML, and a click
+  // would otherwise open the link instead of entering edit mode) — the user opens
+  // the link from the read-only cell or the issue detail dialog.
+  const display = (asLink: boolean): React.ReactNode => {
     if (raw === undefined) return <span className="text-muted-foreground">—</span>;
     if (def.type === "date") return dateFmt.format(raw as Date);
     if (def.type === "url") {
-      const href = safeHttpUrl(String(raw));
+      const href = asLink ? safeHttpUrl(String(raw)) : undefined;
       return href ? (
         <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary underline-offset-2 hover:underline">
           {String(raw)}
@@ -400,7 +413,9 @@ function CustomFieldCell({
       disabled={disabled}
       type={def.type === "number" ? "number" : def.type === "date" ? "date" : def.type === "url" ? "url" : "text"}
       onCommit={(committed) => onEdit(issue, field, parseFieldValue(def.type, committed))}
-      render={display}
+      // Only the read-only cell (disabled) gets a clickable link; the editable
+      // cell shows plain text so the edit button has no nested anchor.
+      render={() => display(disabled === true)}
     />
   );
 }

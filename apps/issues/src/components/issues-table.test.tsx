@@ -147,4 +147,36 @@ describe("IssuesTable inline editing (#75 P1-6)", () => {
     renderTable({ selectable: false });
     expect(screen.queryByLabelText("Select all issues")).toBeNull();
   });
+
+  it("shows an assignee outside the suggestion list (no blank select; roborev fix)", () => {
+    // The issue is assigned to a WebID NOT in assigneeSuggestions — the cell must
+    // still render that assignee (its short host), not a blank value.
+    renderTable({
+      issues: [mk({ assignee: "https://stranger.example/profile/card#me" })],
+      assigneeSuggestions: ["https://team.example/bob#me"],
+    });
+    expect(screen.getByText("stranger.example")).toBeTruthy();
+  });
+
+  it("renders an editable URL custom field WITHOUT a nested anchor (roborev fix)", () => {
+    renderTable({
+      issues: [mk({ fields: { link: "https://example.com/spec" } })],
+      fieldDefs: [{ iri: "https://t/#field-link", slug: "link", label: "Link", type: "url", options: [] }],
+    });
+    // Editable (canWrite) → the URL is shown as plain text inside the edit button,
+    // NOT as a clickable <a> (which would be invalid nested-interactive HTML).
+    const editBtn = screen.getByLabelText("Edit Link of Original title");
+    expect(editBtn.querySelector("a")).toBeNull();
+    expect(editBtn.textContent).toContain("https://example.com/spec");
+  });
+
+  it("renders a read-only URL custom field AS a clickable link", () => {
+    renderTable({
+      issues: [mk({ canWrite: false, fields: { link: "https://example.com/spec" } })],
+      fieldDefs: [{ iri: "https://t/#field-link", slug: "link", label: "Link", type: "url", options: [] }],
+    });
+    const link = screen.getByRole("link", { name: "https://example.com/spec" }) as HTMLAnchorElement;
+    expect(link.getAttribute("href")).toBe("https://example.com/spec");
+    expect(link.getAttribute("rel")).toContain("noopener");
+  });
 });

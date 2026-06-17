@@ -285,30 +285,52 @@ export function makeInlineEditController(
     }
   };
 
+  /**
+   * Apply the optimistic edit + start the background write. The optimistic edit is
+   * computed INSIDE the `setIssuesLocal` updater from the CURRENT list (not a
+   * call-time snapshot), so a refresh / live-sync / another edit that landed
+   * between this handler being created and run can never be clobbered by a stale
+   * snapshot — important for `editStatus`, whose guard may defer the write behind a
+   * user confirmation dialog. `original`/`optimistic` are captured from that same
+   * live application so the revert-on-failure targets the right records.
+   */
+  const applyAndPersist = (
+    issue: IssueRecord,
+    field: EditableField,
+    value: string | number | Date | undefined,
+    write: (repo: Repository) => Promise<void>,
+  ) => {
+    let original: IssueRecord | undefined;
+    let optimistic: IssueRecord | undefined;
+    seam.setIssuesLocal((list) => {
+      const result = optimisticEdit(list, issue.url, field, value, workflow);
+      original = result.original;
+      optimistic = result.next.find((i) => i.url === issue.url);
+      return result.next;
+    });
+    if (!original || !optimistic) return; // no-op (unchanged value / row gone)
+    const o = original;
+    const opt = optimistic;
+    void seam.persist(write).catch((e) => handleFailure(field, o, opt, e));
+  };
+
   const edit = (issue: IssueRecord, field: EditableField, value: string | number | Date | undefined) => {
-    const { next, original } = optimisticEdit(seam.issues, issue.url, field, value, workflow);
-    if (!original) return; // no-op (unchanged value / row gone)
     const patch = patchForEdit(field, value);
     if (!patch) return; // status is routed through editStatus, never a raw patch
-    const optimistic = next.find((i) => i.url === issue.url)!;
-    seam.setIssuesLocal(() => next);
-    void seam.persist((r) => r.update(issue.url, patch)).catch((e) => handleFailure(field, original, optimistic, e));
+    applyAndPersist(issue, field, value, (r) => r.update(issue.url, patch));
   };
 
   const editStatus = (issue: IssueRecord, status: StatusSlug) => {
-    const performEdit = () => {
-      const { next, original } = optimisticEdit(seam.issues, issue.url, "status", status, workflow);
-      if (!original) return;
-      const optimistic = next.find((i) => i.url === issue.url)!;
-      seam.setIssuesLocal(() => next);
-      // setStatus enforces the workflow's transition rules at the data layer (a
-      // disallowed move throws), and couples wf:Open/Closed — so the inline status
-      // edit honours the SAME validation as the form/board path.
-      void seam.persist((r) => r.setStatus(issue.url, status)).catch((e) => handleFailure("status", original, optimistic, e));
-    };
     // Route through the dependency/workflow guard: starting/completing a blocked
-    // issue warns first (override allowed) before the optimistic write fires.
-    guardedTransition(issue, status, "set status", performEdit);
+    // issue warns first (override allowed) before the optimistic write fires. The
+    // optimistic edit is computed against the live list at confirmation time, so a
+    // deferred confirmation can't clobber newer local state. setStatus enforces the
+    // workflow's transition rules at the data layer (a disallowed move throws) and
+    // couples wf:Open/Closed — the inline status edit honours the SAME validation as
+    // the form/board path.
+    guardedTransition(issue, status, "set status", () =>
+      applyAndPersist(issue, "status", status, (r) => r.setStatus(issue.url, status)),
+    );
   };
 
   return { edit, editStatus };
