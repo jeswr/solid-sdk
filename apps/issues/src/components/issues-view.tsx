@@ -621,7 +621,7 @@ export function IssuesView() {
   // hands it the hook's optimistic seam. Created per render (cheap, holds no state)
   // — matching the codebase convention for these handlers (e.g. `cardActions`).
   const { edit: inlineEdit, editStatus: inlineStatusEdit } = makeInlineEditController(
-    { issues: issues.issues, setIssuesLocal: issues.setIssuesLocal, persist: issues.persist, refresh: issues.refresh },
+    { getIssues: issues.getIssues, setIssuesLocal: issues.setIssuesLocal, persist: issues.persist, refresh: issues.refresh },
     workflow,
     toast,
     guardedTransition,

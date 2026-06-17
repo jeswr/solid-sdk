@@ -239,9 +239,7 @@ describe("makeInlineEditController", () => {
     const refresh = vi.fn(async () => undefined);
     const holder: { persistArg?: (repo: Repository) => Promise<void> } = {};
     const seam: InlineEditSeam = {
-      get issues() {
-        return list;
-      },
+      getIssues: () => list,
       setIssuesLocal: (updater) => {
         list = updater(list);
       },
@@ -377,6 +375,33 @@ describe("makeInlineEditController", () => {
     // starts a pod write — so no Saving… and no pointless conditional PUT.
     expect(persistSpy).not.toHaveBeenCalled();
     expect(h.get().find((i) => i.url === "a")!.priority).toBe("high");
+  });
+
+  it("decides to persist from getIssues() — NOT from a (possibly deferred) state updater", () => {
+    // Regression for the persistence-race: the persist decision must be derived
+    // synchronously from getIssues(), so even if setIssuesLocal DEFERS its updater
+    // (React batching), the write is never skipped while the UI edit still applies.
+    const issue = mk({ url: "a", priority: "low" });
+    let live = [issue];
+    const persist = vi.fn(() => Promise.resolve());
+    const seam: InlineEditSeam = {
+      getIssues: () => live,
+      // A seam whose updater is NOT run synchronously (mimics a batched/deferred
+      // React functional update). The persist decision must not depend on it.
+      setIssuesLocal: vi.fn(),
+      persist,
+      refresh: vi.fn(async () => undefined),
+    };
+    const { edit } = makeInlineEditController(seam, WF, toast, passThroughGuard);
+
+    edit(issue, "priority", "high");
+    // Persist still fired (decision came from getIssues(), not the deferred updater).
+    expect(persist).toHaveBeenCalledTimes(1);
+    expect(seam.setIssuesLocal).toHaveBeenCalledTimes(1);
+    // And the corresponding no-op still does NOT persist.
+    live = [mk({ url: "a", priority: "high" })];
+    edit(live[0], "priority", "high");
+    expect(persist).toHaveBeenCalledTimes(1);
   });
 
   it("editStatus computes the optimistic edit against the LIVE list at confirmation time", () => {

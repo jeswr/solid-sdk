@@ -54,6 +54,13 @@ export interface UseIssues {
    */
   setIssuesLocal: (updater: (issues: IssueRecord[]) => IssueRecord[]) => void;
   /**
+   * Read the CURRENT rendered issue list synchronously (via a ref). For a
+   * deferred mutation (e.g. an inline status edit confirmed after a dependency
+   * warning) this returns the latest list, not a stale closure snapshot — so an
+   * optimistic edit is always computed against live state.
+   */
+  getIssues: () => IssueRecord[];
+  /**
    * Run a pod write with the save indicator, WITHOUT the blocking full refresh
    * that `update`/`setStatus` do — for optimistic board moves where the local
    * state is already correct. Reconciles in the background on success; on failure
@@ -183,6 +190,15 @@ export function useIssues(
   // cache-hydrated board is never treated as "loading" (pss-tvds).
   const hasData = current && (snapshot.issues.length > 0 || fetched);
   const initialLoading = !hasData && !error;
+
+  // A ref mirroring the CURRENT rendered issue list, so a deferred callback (e.g.
+  // an inline status edit confirmed after the dependency-warning dialog) can read
+  // the latest list SYNCHRONOUSLY rather than a stale closure snapshot. Updated in
+  // render so it always reflects what the user is looking at; `getIssues` exposes
+  // it without forcing callers to depend on the array identity.
+  const currentIssuesRef = useRef<IssueRecord[]>(issues);
+  currentIssuesRef.current = issues;
+  const getIssues = useCallback(() => currentIssuesRef.current, []);
 
   // Monotonic fetch sequence: a slow, older read (e.g. a live-sync refresh that
   // started before a mutation's PUT) must never clobber state written by a newer
@@ -384,6 +400,7 @@ export function useIssues(
     canCreate,
     saveState,
     setIssuesLocal,
+    getIssues,
     persist,
     refresh,
     create: (input) => mutate((r) => r.create({ ...input, creator: creator ?? undefined })),

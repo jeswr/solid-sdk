@@ -230,8 +230,16 @@ function sameValue(a: string | number | Date | undefined, b: string | number | D
  * unit-testable with a fake seam, no React/hook needed.
  */
 export interface InlineEditSeam {
-  /** The current loaded issue list (the optimistic source of truth). */
-  issues: IssueRecord[];
+  /**
+   * Read the CURRENT loaded issue list SYNCHRONOUSLY. Must reflect the latest
+   * rendered state even when called from a deferred callback (a guarded status
+   * edit confirmed after the warning dialog) — the hook backs this with a ref, so
+   * the optimistic edit is always computed against live state, never a stale
+   * closure snapshot. (Using a getter — not a captured array — is load-bearing:
+   * the metadata below is derived synchronously from it, NOT via side-effects
+   * inside the React state updater, which may be batched/deferred.)
+   */
+  getIssues: () => IssueRecord[];
   /** Optimistically replace the local list (slide the cell in immediately). */
   setIssuesLocal: (updater: (issues: IssueRecord[]) => IssueRecord[]) => void;
   /** Persist a pod write WITHOUT a blocking refresh (shows Saving…/Saved). */
@@ -287,12 +295,14 @@ export function makeInlineEditController(
 
   /**
    * Apply the optimistic edit + start the background write. The optimistic edit is
-   * computed INSIDE the `setIssuesLocal` updater from the CURRENT list (not a
-   * call-time snapshot), so a refresh / live-sync / another edit that landed
-   * between this handler being created and run can never be clobbered by a stale
-   * snapshot — important for `editStatus`, whose guard may defer the write behind a
-   * user confirmation dialog. `original`/`optimistic` are captured from that same
-   * live application so the revert-on-failure targets the right records.
+   * computed SYNCHRONOUSLY from `seam.getIssues()` — the live, current list read
+   * through a ref — so a refresh / live-sync / another edit that landed between
+   * this handler being created and run can never be clobbered by a stale snapshot
+   * (important for `editStatus`, whose guard may defer the write behind a user
+   * confirmation dialog). The metadata (`original`/`optimistic`) and the persist
+   * decision are derived BEFORE scheduling the state update — NOT via side-effects
+   * inside the React state updater (which may be batched/deferred), which would
+   * otherwise let an optimistic UI change apply while the write is skipped.
    */
   const applyAndPersist = (
     issue: IssueRecord,
@@ -300,18 +310,11 @@ export function makeInlineEditController(
     value: string | number | Date | undefined,
     write: (repo: Repository) => Promise<void>,
   ) => {
-    let original: IssueRecord | undefined;
-    let optimistic: IssueRecord | undefined;
-    seam.setIssuesLocal((list) => {
-      const result = optimisticEdit(list, issue.url, field, value, workflow);
-      original = result.original;
-      optimistic = result.next.find((i) => i.url === issue.url);
-      return result.next;
-    });
-    if (!original || !optimistic) return; // no-op (unchanged value / row gone)
-    const o = original;
-    const opt = optimistic;
-    void seam.persist(write).catch((e) => handleFailure(field, o, opt, e));
+    const { next, original } = optimisticEdit(seam.getIssues(), issue.url, field, value, workflow);
+    if (!original) return; // no-op (unchanged value / row gone)
+    const optimistic = next.find((i) => i.url === issue.url)!;
+    seam.setIssuesLocal(() => next);
+    void seam.persist(write).catch((e) => handleFailure(field, original, optimistic, e));
   };
 
   const edit = (issue: IssueRecord, field: EditableField, value: string | number | Date | undefined) => {
