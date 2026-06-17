@@ -9,6 +9,19 @@ permissions:
   contents: read
 
 jobs:
+  lockfile-transport:
+    # Recurrence guard for the #78 bug class: `npm install` (npm 11.x /
+    # hosted-git-info) silently rewrites @jeswr github: deps to the SSH git
+    # transport, which breaks `npm ci` in CI / Vercel without an SSH key.
+    # stdlib-only, so no install is needed.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm run check:lockfile-transport
+
   typecheck:
     runs-on: ubuntu-latest
     steps:
