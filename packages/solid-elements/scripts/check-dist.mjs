@@ -5,45 +5,84 @@
 // guards against `dist/` drifting from `src/`: it builds into a FRESH temporary
 // output directory and fails if the committed `dist/` differs. Run in the gate + CI.
 //
-// Design notes (both learned from review):
+// Design notes (each learned from review):
 //   - Build into a TEMP dir, never into the committed `dist/`. A fresh temp dir
 //     has no leftover outputs, so a deleted/renamed source module's stale
 //     `.js`/`.d.ts` cannot survive into the comparison and mask drift (tsc does
 //     not prune removed outputs). And because the committed `dist/` is never
 //     touched, a build FAILURE leaves the working tree intact (no destructive
 //     delete-then-fail window).
-//   - `diff -r` compares the committed snapshot against the fresh build.
-//   - Both child processes are spawned via `execFileSync` with an ARGUMENT
-//     ARRAY (no shell). The temp dir comes from `tmpdir()`, which honours
-//     `TMPDIR`/`TMP`/`TEMP`, so its path could contain shell-special characters;
-//     passing it as a discrete argv element (never string-interpolated into a
-//     shell command line) means no quoting/expansion hazard regardless of path.
+//   - The compiler is launched as `process.execPath` (this Node binary) running
+//     the LOCAL `typescript/bin/tsc` script, via `execFileSync` with an argv
+//     array (no shell). This is fully cross-platform: it does NOT depend on the
+//     `npx`/`npx.cmd` shim (which `shell:false` can't launch on Windows), and
+//     the temp path is a discrete argv element, so no shell quoting/expansion
+//     hazard regardless of what `tmpdir()` (TMPDIR/TMP/TEMP) resolves to.
+//   - The directory comparison is done in pure Node (no external `diff`), so the
+//     check has zero external-binary/shell dependencies and runs identically on
+//     every platform.
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, "..");
 const dist = join(root, "dist");
+const require = createRequire(import.meta.url);
+// The local TypeScript compiler entry script (a Node program) — resolved from
+// the installed `typescript` dependency, never via the `npx` shim.
+const tscBin = require.resolve("typescript/bin/tsc");
 const freshDir = mkdtempSync(join(tmpdir(), "jeswr-solid-elements-dist-"));
+
+/** Sorted relative paths of every FILE under `dir` (recursive). */
+function listFiles(dir) {
+  const out = [];
+  const walk = (abs) => {
+    for (const entry of readdirSync(abs, { withFileTypes: true })) {
+      const child = join(abs, entry.name);
+      if (entry.isDirectory()) walk(child);
+      else if (entry.isFile()) out.push(relative(dir, child));
+    }
+  };
+  walk(dir);
+  return out.sort();
+}
+
+/** Diff two directories by file set + byte content; returns a list of differences. */
+function diffDirs(a, b) {
+  const aFiles = listFiles(a);
+  const bFiles = listFiles(b);
+  const diffs = [];
+  const aSet = new Set(aFiles);
+  const bSet = new Set(bFiles);
+  for (const f of aFiles) if (!bSet.has(f)) diffs.push(`only in committed dist/: ${f}`);
+  for (const f of bFiles) if (!aSet.has(f)) diffs.push(`only in fresh build: ${f}`);
+  for (const f of aFiles) {
+    if (!bSet.has(f)) continue;
+    const ab = readFileSync(join(a, f));
+    const bb = readFileSync(join(b, f));
+    if (!ab.equals(bb)) diffs.push(`content differs: ${f}`);
+  }
+  return diffs;
+}
 
 try {
   // Build into the FRESH temp dir (overriding outDir) — the committed dist/ is
   // never modified, so a build failure here is non-destructive. argv array, no shell.
-  execFileSync("npx", ["tsc", "-p", "tsconfig.build.json", "--outDir", freshDir], {
+  execFileSync(process.execPath, [tscBin, "-p", "tsconfig.build.json", "--outDir", freshDir], {
     cwd: root,
     stdio: "inherit",
     shell: false,
   });
-  // Compare the committed dist/ against the fresh build. argv array, no shell.
-  try {
-    execFileSync("diff", ["-r", dist, freshDir], { stdio: "pipe", shell: false });
-  } catch (e) {
+  // Compare the committed dist/ against the fresh build (pure Node, no `diff`).
+  const diffs = diffDirs(dist, freshDir);
+  if (diffs.length > 0) {
     console.error("\n[check:dist] FAIL — committed dist/ differs from a fresh build.");
     console.error("Run `npm run build` and commit the result.\n");
-    console.error(String(e.stdout ?? ""));
+    for (const d of diffs) console.error(`  - ${d}`);
     process.exit(1);
   }
   console.log("[check:dist] OK — committed dist/ matches a fresh build.");
