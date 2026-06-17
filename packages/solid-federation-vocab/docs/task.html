@@ -29,7 +29,100 @@
       <tr><td><code>assignee</code></td><td>assignee</td><td>The WebID of the agent a task is assigned to. Drives the cross-app 'tasks assigned to me' federation query.</td></tr>
       <tr><td><code>Closed</code></td><td>Closed</td><td>Lifecycle state class: the task is closed. Asserted as rdf:type on the task subject (never a literal).</td></tr>
       <tr><td><code>Open</code></td><td>Open</td><td>Lifecycle state class: the task is open. Asserted as rdf:type on the task subject (never a literal).</td></tr>
+      <tr><td><code>State</code></td><td>Workflow State</td><td>The shared workflow-state / board-column class — re-used from the
+        W3C workflow ontology. solid-issues persists each tracker column as a
+        per-tracker #status-&lt;slug&gt; rdfs:Class typed wf:State (subclass of wf:Open or
+        wf:Closed), declares the entry column via wf:initialState, and the per-state
+        reachable columns via wf:allowedTransitions. It is restated here because it
+        is the domain of the tm: WIP-limit properties below.</td></tr>
       <tr><td><code>Task</code></td><td>Task</td><td>The shared task/issue class — one wf:Task per item, the SolidOS issue-pane model.</td></tr>
+      <tr><td><code>Tracker</code></td><td>Tracker</td><td>The W3C workflow ontology issue tracker — the container of issues
+        (wf:Task) and, here, the subject that carries its automation rules via
+        tm:rule. Re-used, restated because it is the domain of tm:rule.</td></tr>
+      <tr><td><code>http://www.w3.org/ns/odrl/2/Constraint</code></td><td>Constraint</td><td>ODRL 2.2 Constraint — a boolean condition `leftOperand operator
+        rightOperand`. Re-used as a tm:Rule's tm:condition guard so the suite's
+        existing @jeswr/solid-odrl constraint evaluator applies unchanged. Defined
+        by the W3C ODRL vocabulary.</td></tr>
+      <tr><td><code>http://www.w3.org/ns/odrl/2/leftOperand</code></td><td>left operand</td><td>ODRL 2.2 leftOperand — the subject of a condition (what about
+        the issue/event is being tested, e.g. the new status, the priority). Re-used
+        in a tm:condition odrl:Constraint.</td></tr>
+      <tr><td><code>http://www.w3.org/ns/odrl/2/operator</code></td><td>operator</td><td>ODRL 2.2 operator — the relational operator of a condition
+        (odrl:eq, odrl:neq, odrl:gt, …). Re-used in a tm:condition
+        odrl:Constraint.</td></tr>
+      <tr><td><code>http://www.w3.org/ns/odrl/2/rightOperand</code></td><td>right operand</td><td>ODRL 2.2 rightOperand — the value a condition's left-operand is
+        compared against. Re-used in a tm:condition odrl:Constraint.</td></tr>
+      <tr><td><code>action</code></td><td>action</td><td>An effect a tm:Rule performs when it fires and its conditions
+        hold (the 'THEN'). Its value is a tm:Action — one of the coded actions
+        (tm:SetStatus, tm:SetPriority, tm:Assign, tm:AddComment, tm:CloseIssue). A
+        rule may carry several actions, all applied client-side.</td></tr>
+      <tr><td><code>Action</code></td><td>Automation Action</td><td>The effect a tm:Rule performs when it fires and its conditions
+        hold — the 'THEN' of an ECA rule. The suite's coded-value actions are
+        instances of this class: tm:SetStatus, tm:SetPriority, tm:Assign,
+        tm:AddComment, tm:CloseIssue. An action carries its parameter via
+        tm:actionValue (e.g. the priority to set, the status slug, the assignee
+        WebID, the comment body). The mutation is applied client-side.</td></tr>
+      <tr><td><code>actionValue</code></td><td>action value</td><td>The parameter of a tm:Action — e.g. the priority literal for
+        tm:SetPriority, the status slug for tm:SetStatus, the assignee WebID (an IRI)
+        for tm:Assign, or the comment body literal for tm:AddComment. Its datatype /
+        whether it is an IRI or a literal depends on the action; carries no fixed
+        rdfs:range so it can hold either. Some actions (e.g. tm:CloseIssue) need no
+        value.</td></tr>
+      <tr><td><code>AddComment</code></td><td>add comment</td><td>Action: add a comment to the issue. The comment body literal is
+        carried on tm:actionValue.</td></tr>
+      <tr><td><code>Assign</code></td><td>assign</td><td>Action: set the issue's wf:assignee. The assignee WebID (an IRI)
+        is carried on tm:actionValue.</td></tr>
+      <tr><td><code>CloseIssue</code></td><td>close issue</td><td>Action: close the issue (move it to the workflow's terminal
+        status). Needs no tm:actionValue.</td></tr>
+      <tr><td><code>condition</code></td><td>condition</td><td>An optional guard on a tm:Rule (the 'IF') — its value is an
+        odrl:Constraint (odrl:leftOperand / odrl:operator / odrl:rightOperand), the
+        SAME constraint shape @jeswr/solid-odrl already evaluates, deliberately
+        reused rather than minting a parallel condition vocabulary. A rule may carry
+        several; the rule fires only when ALL its conditions are satisfied (a rule
+        with no condition fires whenever its trigger fires).</td></tr>
+      <tr><td><code>OnAllSubtasksDone</code></td><td>on all sub-tasks done</td><td>Trigger: every sub-task of a parent issue has reached a terminal
+        (closed) state. The basis for the built-in 'complete parents automatically'
+        automation.</td></tr>
+      <tr><td><code>OnAssigned</code></td><td>on assigned</td><td>Trigger: an issue was (re)assigned (its wf:assignee changed).</td></tr>
+      <tr><td><code>OnCreated</code></td><td>on created</td><td>Trigger: a new issue was created in the tracker.</td></tr>
+      <tr><td><code>OnDueDatePassed</code></td><td>on due date passed</td><td>Trigger: an open issue's due date has passed (it is overdue).
+        The basis for the built-in 'escalate overdue issues' automation.</td></tr>
+      <tr><td><code>OnStatusChange</code></td><td>on status change</td><td>Trigger: an issue's workflow status changed. Pair with a
+        tm:condition over the new status (an odrl:Constraint whose left-operand is
+        the issue's status) to fire only on a specific transition.</td></tr>
+      <tr><td><code>rule</code></td><td>rule</td><td>Links a wf:Tracker to one of its tm:Rule automation rules. The
+        set of rules a tracker's collaborators evaluate client-side.</td></tr>
+      <tr><td><code>Rule</code></td><td>Automation Rule</td><td>A tracker automation rule: an event-condition-action ('when X
+        then Y') rule attached to a wf:Tracker. It bundles exactly one tm:trigger
+        (the event that fires it), zero or more tm:condition guards (each an
+        odrl:Constraint that must hold), and one or more tm:action effects to apply.
+        Rules are persisted in the pod and evaluated CLIENT-side whenever fresh
+        issue state is observed (pods have no server-side compute). The Jira/Monday
+        automation model expressed in RDF.</td></tr>
+      <tr><td><code>SetPriority</code></td><td>set priority</td><td>Action: set the issue's priority. The target priority is carried
+        on tm:actionValue (e.g. &quot;high&quot;).</td></tr>
+      <tr><td><code>SetStatus</code></td><td>set status</td><td>Action: move the issue to a workflow status. The target status
+        slug is carried on tm:actionValue.</td></tr>
+      <tr><td><code>trigger</code></td><td>trigger</td><td>The event that fires a tm:Rule (the 'WHEN'). Its value is a
+        tm:Trigger — one of the coded triggers (tm:OnStatusChange, tm:OnDueDatePassed,
+        tm:OnAllSubtasksDone, tm:OnAssigned, tm:OnCreated). Exactly one per
+        rule.</td></tr>
+      <tr><td><code>Trigger</code></td><td>Automation Trigger</td><td>The event that fires a tm:Rule — the 'WHEN' of an ECA rule. The
+        suite's coded-value triggers are instances of this class: tm:OnStatusChange,
+        tm:OnDueDatePassed, tm:OnAllSubtasksDone, tm:OnAssigned, tm:OnCreated. A
+        trigger may carry refining data (e.g. the target status of a status-change)
+        on app-defined properties; the coded value identifies the event class.</td></tr>
+      <tr><td><code>wipMax</code></td><td>WIP maximum</td><td>The maximum number of work items (cards) allowed in a workflow
+        state / board column — the upper bound of a kanban WIP (work in progress)
+        limit (Jira's column 'Max', Trello/Monday's per-list cap). A client warns
+        (or blocks the move client-side) when adding a card would push the column
+        OVER this count, the core kanban mechanism for limiting work in progress so
+        bottlenecks surface. Optional; absent means no upper bound. A non-negative
+        integer.</td></tr>
+      <tr><td><code>wipMin</code></td><td>WIP minimum</td><td>The minimum number of work items (cards) that should be in a
+        workflow state / board column — the lower bound of a kanban WIP (work in
+        progress) limit. A client warns when the column holds FEWER than this many
+        open items (an under-filled column starves the flow). Optional; absent means
+        no lower bound. A non-negative integer.</td></tr>
       <tr><td><code>Announce</code></td><td>Announce</td><td>ActivityStreams 2.0 Announce — the activity an app POSTs to a peer's inbox to notify of a task event (assignment, state change). The cross-app notification verb.</td></tr>
     </table>
   </body>

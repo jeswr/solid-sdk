@@ -7,6 +7,7 @@
     "wf": "http://www.w3.org/2005/01/wf/flow#",
     "dct": "http://purl.org/dc/terms/",
     "as": "https://www.w3.org/ns/activitystreams#",
+    "odrl": "http://www.w3.org/ns/odrl/2/",
     "xsd": "http://www.w3.org/2001/XMLSchema#",
 
     "id": "@id",
@@ -15,6 +16,8 @@
     "Task": "wf:Task",
     "Open": "wf:Open",
     "Closed": "wf:Closed",
+    "State": "wf:State",
+    "Tracker": "wf:Tracker",
 
     "title": "dct:title",
     "description": "dct:description",
@@ -30,6 +33,34 @@
     "actor": { "@id": "as:actor", "@type": "@id" },
     "object": { "@id": "as:object", "@type": "@id" },
     "target": { "@id": "as:target", "@type": "@id" },
-    "published": { "@id": "as:published", "@type": "xsd:dateTime" }
+    "published": { "@id": "as:published", "@type": "xsd:dateTime" },
+
+    "wipMin": { "@id": "tm:wipMin", "@type": "xsd:nonNegativeInteger" },
+    "wipMax": { "@id": "tm:wipMax", "@type": "xsd:nonNegativeInteger" },
+
+    "Rule": "tm:Rule",
+    "Trigger": "tm:Trigger",
+    "Action": "tm:Action",
+    "rule": { "@id": "tm:rule", "@type": "@id", "@container": "@set" },
+    "trigger": { "@id": "tm:trigger", "@type": "@id" },
+    "condition": { "@id": "tm:condition", "@type": "@id", "@container": "@set" },
+    "action": { "@id": "tm:action", "@type": "@id", "@container": "@set" },
+    "actionValue": "tm:actionValue",
+
+    "OnStatusChange": "tm:OnStatusChange",
+    "OnDueDatePassed": "tm:OnDueDatePassed",
+    "OnAllSubtasksDone": "tm:OnAllSubtasksDone",
+    "OnAssigned": "tm:OnAssigned",
+    "OnCreated": "tm:OnCreated",
+    "SetStatus": "tm:SetStatus",
+    "SetPriority": "tm:SetPriority",
+    "Assign": "tm:Assign",
+    "AddComment": "tm:AddComment",
+    "CloseIssue": "tm:CloseIssue",
+
+    "Constraint": "odrl:Constraint",
+    "leftOperand": { "@id": "odrl:leftOperand", "@type": "@id" },
+    "operator": { "@id": "odrl:operator", "@type": "@id" },
+    "rightOperand": "odrl:rightOperand"
   }
 }

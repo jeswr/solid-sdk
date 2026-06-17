@@ -83,8 +83,8 @@ JSON-LD `@context`: [`fedreg-context.jsonld`](./fedreg-context.jsonld).
 
 ## The shared task / issue model (`tm:`)
 
-Not new terms — the **agreed re-use** that `solid-issues` and Pod Manager already
-write:
+Mostly **agreed re-use** that `solid-issues` and Pod Manager already write, plus
+**two minimal `tm:` extensions** (WIP limits + automation rules) minted below:
 
 - A task is **`wf:Task`** (the SolidOS issue-pane class).
 - State is **`rdf:type wf:Open`** / **`rdf:type wf:Closed`** — a type, never a
@@ -99,6 +99,96 @@ write:
 JSON-LD `@context`s:
 [`context.jsonld`](./context.jsonld) (fedapp + task) and
 [`task-context.jsonld`](./task-context.jsonld) (task only).
+
+### WIP (work-in-progress) limits on a board column
+
+A board column / workflow state in `solid-issues` is a per-tracker
+`#status-<slug>` `rdfs:Class` typed **`wf:State`**. The minimal pair below puts a
+[kanban WIP limit](https://support.atlassian.com/jira-software-cloud/docs/set-up-work-in-progress-limits/)
+(Jira's column Min/Max, Trello/Monday's per-list cap) on such a state:
+
+- **`tm:wipMin`** (`xsd:nonNegativeInteger`, domain `wf:State`) — the lower bound:
+  a client warns when the column holds *fewer* open items than this.
+- **`tm:wipMax`** (`xsd:nonNegativeInteger`, domain `wf:State`) — the upper bound:
+  a client warns (or blocks the move) when adding a card would push the column
+  *over* this count — the core "limit work in progress so bottlenecks surface"
+  mechanism.
+
+Both are optional; absent means no bound. The count enforcement is **client-side**
+(a pod has no server-side compute); the vocab only records the configured bound.
+
+```turtle
+@prefix tm: <https://w3id.org/jeswr/task#> .
+<#status-in-progress> a rdfs:Class, wf:State ;
+    rdfs:subClassOf wf:Open ;
+    tm:wipMax 3 .         # at most 3 cards in "In progress"
+```
+
+### Automation rules — event-condition-action ("when X then Y")
+
+A tracker automation is an **ECA rule**: *WHEN* an event fires, *IF* optional
+conditions hold, *THEN* perform an action. This is **not** an access-control /
+usage policy, so it is deliberately **not** ODRL (see the decision note below).
+The terms:
+
+- **`tm:Rule`** — a rule, linked from a `wf:Tracker` via **`tm:rule`**. Bundles
+  one **`tm:trigger`**, zero+ **`tm:condition`** guards, one+ **`tm:action`**
+  effects.
+- **`tm:trigger`** → a **`tm:Trigger`** coded value: `tm:OnStatusChange`,
+  `tm:OnDueDatePassed`, `tm:OnAllSubtasksDone`, `tm:OnAssigned`, `tm:OnCreated`.
+- **`tm:condition`** → an **`odrl:Constraint`** (`odrl:leftOperand` /
+  `odrl:operator` / `odrl:rightOperand`) — **re-used from W3C ODRL 2.2**, so the
+  suite's existing [`@jeswr/solid-odrl`](https://github.com/jeswr/solid-odrl)
+  constraint evaluator applies unchanged. The rule fires only when **all** its
+  conditions are satisfied.
+- **`tm:action`** → a **`tm:Action`** coded value: `tm:SetStatus`,
+  `tm:SetPriority`, `tm:Assign`, `tm:AddComment`, `tm:CloseIssue`, each carrying
+  its parameter on **`tm:actionValue`**.
+
+Rules are **pod-persisted** and **client-evaluated** (a pod has no server-side
+compute — the honest pure-Solid translation of an automation engine, the model
+`solid-issues`' built-in automations already use).
+
+```turtle
+@prefix tm:   <https://w3id.org/jeswr/task#> .
+@prefix odrl: <http://www.w3.org/ns/odrl/2/> .
+<#tracker> tm:rule [
+    a tm:Rule ;
+    tm:trigger tm:OnDueDatePassed ;
+    tm:condition [ a odrl:Constraint ;
+        odrl:leftOperand <#priority> ; odrl:operator odrl:neq ; odrl:rightOperand "high" ] ;
+    tm:action [ a tm:SetPriority ; tm:actionValue "high" ]
+] .   # "when an open issue passes its due date, escalate it to high priority"
+```
+
+#### Decision: mint a minimal `tm:` ECA vocab, **not** reuse ODRL for the rule
+
+The brief asked whether to express automations by **reusing `@jeswr/solid-odrl`**
+(ODRL `Rule`/`Permission`/`Duty` + constraint + action) or to **mint** a small
+`tm:Rule` vocab. The recommendation, implemented here, is **mint a minimal ECA
+vocab for the rule skeleton but reuse the ODRL *constraint* for the condition**:
+
+- **ODRL models usage control, not automation.** An ODRL rule grants/denies a
+  *party's use of an asset* and evaluates to **permit/deny**. A tracker
+  automation has **no party and no asset-use** — it **reacts to an event** and
+  **executes a side-effecting mutation** (close, set priority, assign). ODRL has
+  no concept of a *trigger* (the load-bearing "WHEN" of ECA), and its `action` is
+  a closed vocabulary of usage acts (`read`/`distribute`/`attribute`), not
+  arbitrary tracker mutations. Forcing automations onto ODRL would be a category
+  error and would mislead any ODRL-aware consumer.
+- **But the *condition* is exactly an ODRL constraint.** "if the new status is
+  `done`", "if priority ≠ high" is a `leftOperand operator rightOperand` boolean —
+  the precise shape `@jeswr/solid-odrl` already evaluates. So `tm:condition`
+  **re-uses `odrl:Constraint`** verbatim (zero new condition terms, reuse the
+  existing evaluator) rather than minting a parallel constraint vocabulary.
+
+Net new minted `tm:` terms: **3 classes** (`Rule`/`Trigger`/`Action`),
+**7 properties** (`wipMin`, `wipMax`, `rule`, `trigger`, `condition`, `action`,
+`actionValue` — `condition`'s *value* is the re-used `odrl:Constraint`), and
+**10 coded values** (5 triggers + 5 actions). `wf:State` / `wf:Tracker` (the WIP /
+rule domains) and the whole `odrl:Constraint` condition shape (incl. its operators)
+are **re-used**, not minted (restated with `rdfs:isDefinedBy` pointing at their
+owning vocabularies).
 
 ## The Solid Core + sector ontologies (`core:` + `sectors/<sector>#`)
 

@@ -16,6 +16,7 @@
 @prefix wf:      <http://www.w3.org/2005/01/wf/flow#> .
 @prefix dct:     <http://purl.org/dc/terms/> .
 @prefix as:      <https://www.w3.org/ns/activitystreams#> .
+@prefix odrl:    <http://www.w3.org/ns/odrl/2/> .
 @prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix owl:     <http://www.w3.org/2002/07/owl#> .
@@ -30,9 +31,15 @@
         that every app in the ecosystem reads/writes for tasks and issues. A
         task is a wf:Task; its lifecycle state is rdf:type wf:Open or wf:Closed;
         metadata is dct:; assignment is wf:assignee; cross-app updates are
-        announced with as:Announce."""@en ;
+        announced with as:Announce. Two minimal tm: extensions are minted here:
+        WIP (work-in-progress) limits on a board column (tm:wipMin / tm:wipMax on
+        a wf:State), and an event-condition-action automation model
+        (tm:Rule + tm:trigger / tm:condition / tm:action) for client-evaluated
+        'when X then Y' tracker rules, reusing odrl:Constraint for the
+        condition."""@en ;
     dct:creator "Claude Opus 4.8 (@jeswr PSS agent)" ;
     dct:issued "2026-06-15"^^xsd:date ;
+    dct:modified "2026-06-17"^^xsd:date ;
     vann:preferredNamespaceUri "https://w3id.org/jeswr/task#" ;
     vann:preferredNamespacePrefix "tm" ;
     rdfs:seeAlso <https://w3id.org/jeswr/fed> ;
@@ -93,3 +100,276 @@ as:Announce
     rdfs:label "Announce"@en ;
     rdfs:comment "ActivityStreams 2.0 Announce — the activity an app POSTs to a peer's inbox to notify of a task event (assignment, state change). The cross-app notification verb."@en ;
     rdfs:isDefinedBy as: .
+
+wf:State
+    a rdfs:Class ;
+    rdfs:label "Workflow State"@en ;
+    rdfs:comment """The shared workflow-state / board-column class — re-used from the
+        W3C workflow ontology. solid-issues persists each tracker column as a
+        per-tracker #status-<slug> rdfs:Class typed wf:State (subclass of wf:Open or
+        wf:Closed), declares the entry column via wf:initialState, and the per-state
+        reachable columns via wf:allowedTransitions. It is restated here because it
+        is the domain of the tm: WIP-limit properties below."""@en ;
+    rdfs:isDefinedBy wf: .
+
+# ===========================================================================
+#  tm: extension 1 — WIP (work-in-progress) limits on a board column
+#  (for solid-issues #75 P1-1). A kanban WIP limit caps (or floors) how many
+#  cards may sit in a workflow state/column at once — Jira's column "Min/Max"
+#  and Trello/Monday's per-list limit. These are the minimal pair to put that
+#  cap on a wf:State; the count enforcement is client-side (a pod has no
+#  server-side compute), the vocab just records the configured bound.
+#  See https://support.atlassian.com/jira-software-cloud/docs/set-up-work-in-progress-limits/
+# ===========================================================================
+
+tm:wipMin
+    a rdf:Property, owl:DatatypeProperty ;
+    rdfs:label "WIP minimum"@en ;
+    rdfs:comment """The minimum number of work items (cards) that should be in a
+        workflow state / board column — the lower bound of a kanban WIP (work in
+        progress) limit. A client warns when the column holds FEWER than this many
+        open items (an under-filled column starves the flow). Optional; absent means
+        no lower bound. A non-negative integer."""@en ;
+    rdfs:domain wf:State ;
+    rdfs:range xsd:nonNegativeInteger ;
+    rdfs:isDefinedBy <https://w3id.org/jeswr/task> .
+
+tm:wipMax
+    a rdf:Property, owl:DatatypeProperty ;
+    rdfs:label "WIP maximum"@en ;
+    rdfs:comment """The maximum number of work items (cards) allowed in a workflow
+        state / board column — the upper bound of a kanban WIP (work in progress)
+        limit (Jira's column 'Max', Trello/Monday's per-list cap). A client warns
+        (or blocks the move client-side) when adding a card would push the column
+        OVER this count, the core kanban mechanism for limiting work in progress so
+        bottlenecks surface. Optional; absent means no upper bound. A non-negative
+        integer."""@en ;
+    rdfs:domain wf:State ;
+    rdfs:range xsd:nonNegativeInteger ;
+    rdfs:isDefinedBy <https://w3id.org/jeswr/task> .
+
+# ===========================================================================
+#  tm: extension 2 — automation rules: event-condition-action ("when X then Y")
+#  (for solid-issues #75 P1-3). A tracker automation is an ECA rule: WHEN an
+#  event fires (a status change, a due date passing, a sub-task completing), IF
+#  optional conditions hold, THEN perform an action (set status, set priority,
+#  assign, comment). This is NOT an access-control / usage policy, so it is NOT
+#  ODRL: ODRL grants/denies a party's USE of an asset and has no event/trigger
+#  notion, whereas an automation reacts to an event and EXECUTES a mutation. The
+#  Rule/trigger/action terms are therefore minted minimally here; the CONDITION,
+#  however, re-uses the ODRL constraint shape (odrl:Constraint +
+#  odrl:leftOperand / odrl:operator / odrl:rightOperand) so the same constraint
+#  evaluator the suite already ships in @jeswr/solid-odrl is reused, not
+#  re-invented. Rules are pod-persisted and CLIENT-evaluated (a pod has no
+#  server-side compute), the honest pure-Solid translation of an automation
+#  engine — the same model solid-issues' built-in automations already use.
+#  See Jira/Monday automation ("trigger → condition → action").
+# ===========================================================================
+
+tm:Rule
+    a rdfs:Class, owl:Class ;
+    rdfs:label "Automation Rule"@en ;
+    rdfs:comment """A tracker automation rule: an event-condition-action ('when X
+        then Y') rule attached to a wf:Tracker. It bundles exactly one tm:trigger
+        (the event that fires it), zero or more tm:condition guards (each an
+        odrl:Constraint that must hold), and one or more tm:action effects to apply.
+        Rules are persisted in the pod and evaluated CLIENT-side whenever fresh
+        issue state is observed (pods have no server-side compute). The Jira/Monday
+        automation model expressed in RDF."""@en ;
+    rdfs:isDefinedBy <https://w3id.org/jeswr/task> .
+
+tm:Trigger
+    a rdfs:Class, owl:Class ;
+    rdfs:label "Automation Trigger"@en ;
+    rdfs:comment """The event that fires a tm:Rule — the 'WHEN' of an ECA rule. The
+        suite's coded-value triggers are instances of this class: tm:OnStatusChange,
+        tm:OnDueDatePassed, tm:OnAllSubtasksDone, tm:OnAssigned, tm:OnCreated. A
+        trigger may carry refining data (e.g. the target status of a status-change)
+        on app-defined properties; the coded value identifies the event class."""@en ;
+    rdfs:isDefinedBy <https://w3id.org/jeswr/task> .
+
+tm:Action
+    a rdfs:Class, owl:Class ;
+    rdfs:label "Automation Action"@en ;
+    rdfs:comment """The effect a tm:Rule performs when it fires and its conditions
+        hold — the 'THEN' of an ECA rule. The suite's coded-value actions are
+        instances of this class: tm:SetStatus, tm:SetPriority, tm:Assign,
+        tm:AddComment, tm:CloseIssue. An action carries its parameter via
+        tm:actionValue (e.g. the priority to set, the status slug, the assignee
+        WebID, the comment body). The mutation is applied client-side."""@en ;
+    rdfs:isDefinedBy <https://w3id.org/jeswr/task> .
+
+tm:rule
+    a rdf:Property, owl:ObjectProperty ;
+    rdfs:label "rule"@en ;
+    rdfs:comment """Links a wf:Tracker to one of its tm:Rule automation rules. The
+        set of rules a tracker's collaborators evaluate client-side."""@en ;
+    rdfs:domain wf:Tracker ;
+    rdfs:range tm:Rule ;
+    rdfs:isDefinedBy <https://w3id.org/jeswr/task> .
+
+tm:trigger
+    a rdf:Property, owl:ObjectProperty ;
+    rdfs:label "trigger"@en ;
+    rdfs:comment """The event that fires a tm:Rule (the 'WHEN'). Its value is a
+        tm:Trigger — one of the coded triggers (tm:OnStatusChange, tm:OnDueDatePassed,
+        tm:OnAllSubtasksDone, tm:OnAssigned, tm:OnCreated). Exactly one per
+        rule."""@en ;
+    rdfs:domain tm:Rule ;
+    rdfs:range tm:Trigger ;
+    rdfs:isDefinedBy <https://w3id.org/jeswr/task> .
+
+tm:condition
+    a rdf:Property, owl:ObjectProperty ;
+    rdfs:label "condition"@en ;
+    rdfs:comment """An optional guard on a tm:Rule (the 'IF') — its value is an
+        odrl:Constraint (odrl:leftOperand / odrl:operator / odrl:rightOperand), the
+        SAME constraint shape @jeswr/solid-odrl already evaluates, deliberately
+        reused rather than minting a parallel condition vocabulary. A rule may carry
+        several; the rule fires only when ALL its conditions are satisfied (a rule
+        with no condition fires whenever its trigger fires)."""@en ;
+    rdfs:domain tm:Rule ;
+    rdfs:range odrl:Constraint ;
+    rdfs:isDefinedBy <https://w3id.org/jeswr/task> .
+
+tm:action
+    a rdf:Property, owl:ObjectProperty ;
+    rdfs:label "action"@en ;
+    rdfs:comment """An effect a tm:Rule performs when it fires and its conditions
+        hold (the 'THEN'). Its value is a tm:Action — one of the coded actions
+        (tm:SetStatus, tm:SetPriority, tm:Assign, tm:AddComment, tm:CloseIssue). A
+        rule may carry several actions, all applied client-side."""@en ;
+    rdfs:domain tm:Rule ;
+    rdfs:range tm:Action ;
+    rdfs:isDefinedBy <https://w3id.org/jeswr/task> .
+
+tm:actionValue
+    a rdf:Property ;
+    rdfs:label "action value"@en ;
+    rdfs:comment """The parameter of a tm:Action — e.g. the priority literal for
+        tm:SetPriority, the status slug for tm:SetStatus, the assignee WebID (an IRI)
+        for tm:Assign, or the comment body literal for tm:AddComment. Its datatype /
+        whether it is an IRI or a literal depends on the action; carries no fixed
+        rdfs:range so it can hold either. Some actions (e.g. tm:CloseIssue) need no
+        value."""@en ;
+    rdfs:domain tm:Action ;
+    rdfs:isDefinedBy <https://w3id.org/jeswr/task> .
+
+# --- coded-value triggers (instances of tm:Trigger) -------------------------
+
+tm:OnStatusChange
+    a tm:Trigger ;
+    rdfs:label "on status change"@en ;
+    rdfs:comment """Trigger: an issue's workflow status changed. Pair with a
+        tm:condition over the new status (an odrl:Constraint whose left-operand is
+        the issue's status) to fire only on a specific transition."""@en ;
+    rdfs:isDefinedBy <https://w3id.org/jeswr/task> .
+
+tm:OnDueDatePassed
+    a tm:Trigger ;
+    rdfs:label "on due date passed"@en ;
+    rdfs:comment """Trigger: an open issue's due date has passed (it is overdue).
+        The basis for the built-in 'escalate overdue issues' automation."""@en ;
+    rdfs:isDefinedBy <https://w3id.org/jeswr/task> .
+
+tm:OnAllSubtasksDone
+    a tm:Trigger ;
+    rdfs:label "on all sub-tasks done"@en ;
+    rdfs:comment """Trigger: every sub-task of a parent issue has reached a terminal
+        (closed) state. The basis for the built-in 'complete parents automatically'
+        automation."""@en ;
+    rdfs:isDefinedBy <https://w3id.org/jeswr/task> .
+
+tm:OnAssigned
+    a tm:Trigger ;
+    rdfs:label "on assigned"@en ;
+    rdfs:comment """Trigger: an issue was (re)assigned (its wf:assignee changed)."""@en ;
+    rdfs:isDefinedBy <https://w3id.org/jeswr/task> .
+
+tm:OnCreated
+    a tm:Trigger ;
+    rdfs:label "on created"@en ;
+    rdfs:comment """Trigger: a new issue was created in the tracker."""@en ;
+    rdfs:isDefinedBy <https://w3id.org/jeswr/task> .
+
+# --- coded-value actions (instances of tm:Action) ---------------------------
+
+tm:SetStatus
+    a tm:Action ;
+    rdfs:label "set status"@en ;
+    rdfs:comment """Action: move the issue to a workflow status. The target status
+        slug is carried on tm:actionValue."""@en ;
+    rdfs:isDefinedBy <https://w3id.org/jeswr/task> .
+
+tm:SetPriority
+    a tm:Action ;
+    rdfs:label "set priority"@en ;
+    rdfs:comment """Action: set the issue's priority. The target priority is carried
+        on tm:actionValue (e.g. \"high\")."""@en ;
+    rdfs:isDefinedBy <https://w3id.org/jeswr/task> .
+
+tm:Assign
+    a tm:Action ;
+    rdfs:label "assign"@en ;
+    rdfs:comment """Action: set the issue's wf:assignee. The assignee WebID (an IRI)
+        is carried on tm:actionValue."""@en ;
+    rdfs:isDefinedBy <https://w3id.org/jeswr/task> .
+
+tm:AddComment
+    a tm:Action ;
+    rdfs:label "add comment"@en ;
+    rdfs:comment """Action: add a comment to the issue. The comment body literal is
+        carried on tm:actionValue."""@en ;
+    rdfs:isDefinedBy <https://w3id.org/jeswr/task> .
+
+tm:CloseIssue
+    a tm:Action ;
+    rdfs:label "close issue"@en ;
+    rdfs:comment """Action: close the issue (move it to the workflow's terminal
+        status). Needs no tm:actionValue."""@en ;
+    rdfs:isDefinedBy <https://w3id.org/jeswr/task> .
+
+# --- the re-used ODRL constraint shape (defined by odrl:, restated here) -----
+#  tm:condition's value is an odrl:Constraint. These are re-used, NOT minted —
+#  isDefinedBy points at the ODRL Rec. Restated so a reader sees the condition
+#  shape in one place; the suite's @jeswr/solid-odrl evaluator reads them.
+
+odrl:Constraint
+    a rdfs:Class ;
+    rdfs:label "Constraint"@en ;
+    rdfs:comment """ODRL 2.2 Constraint — a boolean condition `leftOperand operator
+        rightOperand`. Re-used as a tm:Rule's tm:condition guard so the suite's
+        existing @jeswr/solid-odrl constraint evaluator applies unchanged. Defined
+        by the W3C ODRL vocabulary."""@en ;
+    rdfs:isDefinedBy odrl: .
+
+odrl:leftOperand
+    a rdf:Property ;
+    rdfs:label "left operand"@en ;
+    rdfs:comment """ODRL 2.2 leftOperand — the subject of a condition (what about
+        the issue/event is being tested, e.g. the new status, the priority). Re-used
+        in a tm:condition odrl:Constraint."""@en ;
+    rdfs:isDefinedBy odrl: .
+
+odrl:operator
+    a rdf:Property ;
+    rdfs:label "operator"@en ;
+    rdfs:comment """ODRL 2.2 operator — the relational operator of a condition
+        (odrl:eq, odrl:neq, odrl:gt, …). Re-used in a tm:condition
+        odrl:Constraint."""@en ;
+    rdfs:isDefinedBy odrl: .
+
+odrl:rightOperand
+    a rdf:Property ;
+    rdfs:label "right operand"@en ;
+    rdfs:comment """ODRL 2.2 rightOperand — the value a condition's left-operand is
+        compared against. Re-used in a tm:condition odrl:Constraint."""@en ;
+    rdfs:isDefinedBy odrl: .
+
+wf:Tracker
+    a rdfs:Class ;
+    rdfs:label "Tracker"@en ;
+    rdfs:comment """The W3C workflow ontology issue tracker — the container of issues
+        (wf:Task) and, here, the subject that carries its automation rules via
+        tm:rule. Re-used, restated because it is the domain of tm:rule."""@en ;
+    rdfs:isDefinedBy wf: .
