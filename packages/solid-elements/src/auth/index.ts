@@ -2199,3 +2199,24 @@ export type {
   RecentLoginAccount,
   RestoreOutcome,
 } from "../login-controller.js";
+export type {
+  InstallProactiveAuthFetchOptions,
+  ProactiveAllowedOriginsInputs,
+  ProactiveFetchConfig,
+  ProactiveFetchInstall,
+  ProactiveFetchState,
+  ProactiveTokenProvider,
+} from "./proactive-fetch.js";
+// PROACTIVE AUTHENTICATED FETCH (task #123) — the generic, reusable installer that wraps an
+// EXTERNAL TokenProvider (the app keeps its own provider) and proactively attaches the
+// DPoP-bound token on the FIRST request to an allowed origin, eliminating the per-resource
+// 401-dance. Built on the pure seam primitives above (computeAllowedOrigins / isOriginAllowed
+// / isUseDpopNonceChallenge). Use this when you have your own token provider that
+// createReactiveAuthController cannot wrap. See ./proactive-fetch.ts.
+export {
+  __resetProactiveFetchForTests,
+  deriveProactiveAllowedOrigins,
+  installProactiveAuthFetch,
+  isReactiveAuthResetError,
+  proactiveAuthenticatedFetch,
+} from "./proactive-fetch.js";

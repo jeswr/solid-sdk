@@ -217,6 +217,75 @@ after the global was already patched, inject a known-pristine fetch via the
 You can also supply your **own** `LoginController` (the interface is exported from
 the core entry) — e.g. to wire a different auth stack — with no auth deps at all.
 
+#### Proactive authenticated `fetch` — `installProactiveAuthFetch` (no more 401-dance)
+
+When you keep your **own** token provider (so `createReactiveAuthController` — which
+builds its own provider — can't wrap it), use the generic **proactive-fetch installer**
+exported from `@jeswr/solid-elements/auth`. It replaces
+`@solid/reactive-authentication`'s `ReactiveFetchManager.registerGlobally()`: instead of
+sending every request UNAUTHENTICATED and attaching the DPoP token only REACTIVELY on a
+401 (per resource, with no origin cache — so a container listing of N children pays N
+wasted 401s), it **proactively attaches the token on the FIRST request to an allowed
+origin** (zero wasted 401s) and enforces a fail-closed credential boundary.
+
+```ts
+import {
+  installProactiveAuthFetch,
+  deriveProactiveAllowedOrigins,
+} from "@jeswr/solid-elements/auth";
+
+// Patch globalThis.fetch ONCE per page (idempotent). Captures the pristine fetch first.
+const install = installProactiveAuthFetch();
+
+// Your provider implements `upgrade(request): Promise<Request>` (attaches Authorization:
+// DPoP … + the DPoP proof). Its internal OIDC/token requests MUST use install.pristineFetch
+// (see the re-entrancy warning below).
+const provider = new MyTokenProvider({ customFetch: install.pristineFetch });
+
+// On login / silent-restore — arm the live credential boundary:
+install.setState({
+  provider,
+  allowedOrigins: deriveProactiveAllowedOrigins({
+    podRoot,                                // the pod/storage root (its origin is the primary target)
+    webId,                                  // its origin is included by default
+    issuer,                                 // its origin is included by default
+    // extraOrigins: ["https://media.example"],  // a media host / second pod on another host
+    // includeWebIdOrigin / includeIssuerOrigin: false  // to rely solely on the explicit list
+    allowInsecureLoopback,                  // dev CSS over HTTP only
+  }),
+});
+
+// On logout — drop the boundary so every request is public again:
+install.setState({ provider: null, allowedOrigins: new Set() });
+```
+
+Behaviour (preserved exactly from the pod-drive-proven implementation, adversarially
+tested): proactively attach on the first allowed-origin request; **one bounded 401
+re-upgrade** distinguishing an RFC 9449 `use_dpop_nonce` challenge (reuse the token) from a
+stale token (force a fresh proof); **transport errors propagate** (never silently
+downgraded to a second public request — that would duplicate a non-idempotent write); only
+a **superseded** upgrade (a logout/relogin reset-race, `ReactiveAuthResetError` by default —
+override via the `isSuperseded` config) downgrades to a public request.
+
+The **credential boundary is the same fail-closed seam** the controller uses
+(`computeAllowedOrigins`): https-only origins, loopback-http only under
+`allowInsecureLoopback`, an empty allowed-set authenticates **nothing**, and the token is
+**never** attached to a foreign origin even if your provider's `upgrade()` is unconditional.
+`isOriginAllowed` is re-checked on every request, so logout takes effect immediately.
+
+> **⚠️ Re-entrancy (this bit pod-drive).** If you opt into patching the **global** `fetch`
+> (the default), your token provider's internal OIDC / oauth4webapi token requests
+> (discovery, the refresh-token grant) **MUST** be pinned to `install.pristineFetch`, NOT
+> the patched global. Otherwise the provider's own token-endpoint `fetch` re-enters the
+> patch, which calls `provider.upgrade()` again, which issues another token request — a
+> self-deadlock / infinite re-entry. Wire your provider's `customFetch` (and any public
+> profile read) to `install.pristineFetch`. Pass `patchGlobal: false` if you'd rather route
+> only through the returned `install.fetch` handle and keep the global pristine.
+
+`proactiveAuthenticatedFetch` (the implementation run over an explicit `base` fetch) is also
+exported, so the boundary + bounded-retry behaviour are unit-testable without patching the
+global. **Origin-level only** — per-storage-prefix learning is a separate follow-on.
+
 ## Theming token contract (shadow DOM)
 
 Each component renders in **shadow DOM** and exposes styling hooks via `::part(...)`.
