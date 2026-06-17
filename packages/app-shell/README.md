@@ -150,25 +150,66 @@ too if you want to drive the open state yourself; the `FeedbackPayload` /
 
 ## Styling
 
-The components use shadcn token utility classes (`bg-popover`,
-`text-muted-foreground`, …). Bring the tokens in one of two ways:
+The components use shadcn-compatible token utility classes, but through a
+shell-PRIVATE `as-` namespace (`bg-as-popover`, `text-as-muted-foreground`, …)
+that resolves to the suite palette via the `--as-*` token mirror. Bring the
+tokens in one of two ways:
 
 - **Tailwind v4 app** — after your `@import "tailwindcss";`, add
   `@import "@jeswr/app-shell/styles.css";`. That ships the OKLCH `:root` / `.dark`
-  tokens **and** the `@theme inline` mapping so the utilities resolve. Make sure
+  tokens (public **and** the `--as-*` mirror), the `@theme inline` mapping so the
+  utilities resolve, **and** the defensive control reset (`reset.css`). Make sure
   Tailwind's content scan includes this package (e.g. `@source` the install path)
   so the classes are generated.
 - **Non-Tailwind app** — import just the raw variables
-  (`@jeswr/app-shell/tokens.css`) and provide your own utility CSS for
-  the few class names the components use; they reference the same `--background`
-  etc. so the palette stays consistent.
+  (`@jeswr/app-shell/tokens.css`) and provide your own utility CSS for the class
+  names the components use. Note the components reference the shell-PRIVATE `as-`
+  utilities — `bg-as-accent` / `bg-as-popover` / `bg-as-background`,
+  `text-as-accent-foreground` / `text-as-popover-foreground` /
+  `text-as-muted-foreground` / `text-as-destructive`, `border-as-border` /
+  `border-as-ring`, `ring-as-ring` — each of which should resolve to the matching
+  private `--as-*` token (e.g. `.bg-as-accent { background-color: var(--as-accent) }`).
+  Those `--as-*` tokens are defined in `tokens.css`. Also import
+  `@jeswr/app-shell/reset.css` to keep the CSS isolation below.
+
+### CSS isolation (no manual work in the consuming app)
+
+The shell is **immune to a consuming app's global CSS by design** — adopters no
+longer have to "scope your `button {}`" or "don't re-alias the tokens" by hand
+(the early-adopter footguns, #80):
+
+- **Global element styles** (a bare `button {}` / `input {}` / `textarea {}` in
+  the app's CSS) are *unlayered*, and in the cascade unlayered author rules
+  out-rank every `@layer`ed rule — including all of Tailwind's utilities. So a
+  host `button { background }` used to bleed onto the shell's ghost buttons + the
+  feedback dialog. The shell now tags each of its controls with
+  `[data-app-shell-control]` and re-asserts their look in `reset.css` (itself
+  unlayered; an attribute selector `0,1,1` beats a bare element selector `0,0,1`),
+  so the shell keeps its look no matter what the host's element CSS does.
+- **Token clobber** — an app re-aliasing its own vars onto the shell's public
+  token names (`--accent: var(--primary)`, …) no longer repaints the shell: the
+  components resolve their palette through the private `--as-*` mirror, which
+  holds literal values and is unaffected by a `:root`-level override of the public
+  tokens (it also reaches the *portaled* dropdown / dialog content, which a
+  subtree-scoped re-assertion could not).
+
+An app should still use the **public** tokens (`bg-background`,
+`text-muted-foreground`, `--accent`, …) for its own chrome — only the shell's
+internals use the `as-` namespace.
+
+**Escape hatch** — the defensive reset makes the ghost/outline `<Button>` fill
+shell-owned, so a consumer's `className` background/border on the exported
+`<Button>` primitive would lose to it. If you use the primitive to build your OWN
+chrome and want Tailwind classes to fully control it, pass `defensiveReset={false}`
+— that omits the marker, so `reset.css` no longer targets the button and your
+`className` wins. The shell's own controls keep the default (`true`).
 
 ## Gate
 
 ```bash
 npm run lint        # Biome
 npm run typecheck   # tsc --noEmit
-npm test            # vitest (theme persistence + account menu)
+npm test            # vitest (theme + account menu + feedback + CSS isolation)
 npm run build       # tsc → dist/ + copy CSS
 npm run check:dist  # guard committed dist/ against drift from src/
 ```

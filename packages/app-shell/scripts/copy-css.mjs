@@ -27,7 +27,8 @@ for (const file of readdirSync(srcStyles)) {
 const rootStyles = join(root, "dist", "styles.css");
 const rewritten = readFileSync(join(srcStyles, "styles.css"), "utf8")
   .replace('@import "./tokens.css";', '@import "./styles/tokens.css";')
-  .replace('@import "./theme.css";', '@import "./styles/theme.css";');
+  .replace('@import "./theme.css";', '@import "./styles/theme.css";')
+  .replace('@import "./reset.css";', '@import "./styles/reset.css";');
 writeFileSync(rootStyles, rewritten);
 
 console.log("[copy-css] CSS assets copied to dist/");

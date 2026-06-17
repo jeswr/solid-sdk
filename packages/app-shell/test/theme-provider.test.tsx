@@ -1,7 +1,9 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // ThemeProvider — persistence + the .dark class + system-preference resolution.
+
 import { act, render, screen } from "@testing-library/react";
+import { useEffect } from "react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { ThemeProvider, themeScript, useTheme } from "../src/components/theme-provider.js";
 import { mockMatchMedia } from "./setup.js";
@@ -139,6 +141,66 @@ describe("ThemeProvider", () => {
       const s = themeScript();
       expect(s).toContain('"app-shell-theme"');
       expect(s).toContain('"dark"');
+    });
+  });
+
+  // #80 — the apply runs as a (pre-paint) layout effect, so `resolvedTheme` and
+  // the `.dark` class are correct on the FIRST commit, with no deferred tick that
+  // would flash the wrong mode for content rendered off `resolvedTheme`. RTL's
+  // `render` flushes effects synchronously, so a correct value immediately after
+  // render (with no extra `act`/tick) demonstrates the before-paint resolution.
+  describe("pre-paint init (no flash)", () => {
+    it("a dark-OS user with no stored preference resolves to dark immediately", () => {
+      mockMatchMedia(true);
+      render(
+        <ThemeProvider>
+          <Probe />
+        </ThemeProvider>,
+      );
+      // No intervening act()/await: the value is already correct post-render.
+      expect(screen.getByTestId("resolved")).toHaveTextContent("dark");
+      expect(document.documentElement.classList.contains("dark")).toBe(true);
+      expect(document.documentElement.style.colorScheme).toBe("dark");
+    });
+
+    it("a stored 'dark' preference is adopted + applied immediately (no light frame)", () => {
+      mockMatchMedia(false); // OS prefers light — the stored override must still win.
+      localStorage.setItem(KEY, "dark");
+      render(
+        <ThemeProvider>
+          <Probe />
+        </ThemeProvider>,
+      );
+      expect(screen.getByTestId("theme")).toHaveTextContent("dark");
+      expect(screen.getByTestId("resolved")).toHaveTextContent("dark");
+      expect(document.documentElement.classList.contains("dark")).toBe(true);
+    });
+
+    // Discriminating test (roborev #80 Low): the apply MUST be a LAYOUT effect, not
+    // a passive one. React runs every LAYOUT effect in the committed tree before ANY
+    // PASSIVE effect, and runs passive effects child-FIRST (the parent provider's
+    // passive effect would run AFTER a child's). So a CHILD's passive `useEffect`
+    // observing the `.dark` class sees it ALREADY applied iff the provider applied it
+    // in a layout effect; if the provider regressed to `useEffect`, the child's
+    // passive effect would run first and observe the class NOT yet set. This fails on
+    // a regression to plain `useEffect`, which the prior render-only tests did not.
+    it("applies the .dark class in a LAYOUT effect (before a child's passive effect)", () => {
+      mockMatchMedia(true); // dark OS, no stored pref → should resolve dark on apply.
+      let darkClassSeenByChildPassiveEffect: boolean | null = null;
+      function ChildObserver() {
+        useEffect(() => {
+          darkClassSeenByChildPassiveEffect = document.documentElement.classList.contains("dark");
+        }, []);
+        return null;
+      }
+      render(
+        <ThemeProvider>
+          <ChildObserver />
+        </ThemeProvider>,
+      );
+      // If the apply were a passive effect, this would be `false` (child passive
+      // effect runs before the parent's). A layout-effect apply makes it `true`.
+      expect(darkClassSeenByChildPassiveEffect).toBe(true);
     });
   });
 });

@@ -1,0 +1,172 @@
+/*
+ * @jeswr/app-shell — defensive control reset (CSS isolation).
+ *
+ * AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+ *
+ * WHY THIS EXISTS — the cross-app CSS-leak class of bug (#80).
+ *
+ * A consuming app's GLOBAL ELEMENT styles — a bare `button {}`, `input {}`,
+ * `textarea {}`, etc. in the app's own stylesheet — are written UNLAYERED. In the
+ * CSS cascade, unlayered author rules out-rank EVERY `@layer`ed rule, and all of
+ * Tailwind's utilities live in `@layer utilities`. So a host `button { background:
+ * X; border: none }` beats the shell components' `hover:bg-accent` / `border-border`
+ * utilities REGARDLESS of specificity or source order, and bleeds the host's filled
+ * look onto the shell's ghost buttons + the portaled FeedbackDialog. Every early
+ * adopter (pod-mail/photos/drive/health) hit this and had to scope their own global
+ * `button {}` by hand — a recipe step that is easy to forget and re-bites each new app.
+ *
+ * THE FIX (here, once, for every adopter): app-shell tags each of its own controls
+ * with `[data-app-shell-control]` and re-asserts their intended look in THIS rule —
+ * which is itself UNLAYERED, so it sits in the same cascade origin as the host's
+ * global resets, and an attribute selector (specificity 0,1,1) beats a bare element
+ * selector (0,0,1). The shell's controls therefore keep their look no matter what
+ * the host's global element CSS does, and no app needs the "scope your button {}"
+ * recipe step any more. (The richer per-variant / interactive styling still comes
+ * from the components' Tailwind utilities; this only re-establishes the handful of
+ * properties a global element reset typically clobbers.)
+ *
+ * It is shipped from the `styles.css` barrel (so a Tailwind consumer importing
+ * `@jeswr/app-shell/styles.css` gets it automatically), and is deliberately NOT
+ * wrapped in an `@layer` — wrapping it would re-expose it to the very unlayered
+ * host rules it exists to out-rank.
+ */
+
+/* Base neutraliser — for every shell control, undo only the host-reset artefacts
+   that NO consumer would set via an intentional `className`: the native control
+   `appearance`, a stray `background-image`, and an inherited host `font-family`.
+   These are exactly the host-chrome bits that bled in (#80).
+
+   SCOPE (deliberate — addresses the className-override concern):
+   - The COLOUR look (background-color, border, text colour) is re-asserted in the
+     PER-VARIANT rules below, not here. That keeps the base from clobbering a
+     consumer's `className` text colour / arbitrary styling on an exported <Button>,
+     while still beating a bare host `button {}` for the shell's own ghost/outline
+     fill (the variant selectors out-rank a bare element selector). The fill of the
+     ghost/outline variants is intentionally shell-OWNED (a "ghost" button is
+     transparent by definition) — recolour by choosing a variant, not by a
+     `className` background.
+   - The BOX MODEL (width/height/padding/display/flex) is NOT touched: the
+     components vary it per instance via `className` (e.g. the AccountMenu trigger's
+     `h-auto px-2 py-1.5`), which is layered and would be clobbered by an unlayered
+     lock. So an app's *aggressive* element reset that also relayouts every `button`
+     is out of scope; the reported + common leak (the fill/border + portaled dialog)
+     is fully covered.
+
+   ACCESSIBILITY: we deliberately do NOT blanket `box-shadow: none` / `outline:
+   none` — doing so (unlayered) would out-rank the components' layered
+   `focus-visible:ring-*` utilities and erase the keyboard focus indicator. The
+   focus ring is instead re-asserted unlayered below so it survives a host reset. */
+[data-app-shell-control] {
+  appearance: none;
+  -webkit-appearance: none;
+  font-family: inherit;
+  background-image: none;
+}
+
+/* Re-assert the keyboard focus ring UNLAYERED for EVERY shell control so neither a
+   host element reset (`button { box-shadow:none; outline:none }`, `input { outline:
+   none }`) nor any neutralising can erase it. An outline (which the components
+   otherwise suppress with `outline-none`) is used so it cannot be wiped by a host
+   `box-shadow:none`; it mirrors the suite ring colour. The (sr-only) radios are
+   excluded — they are visually hidden, so the focus ring lives on their visible
+   label card via that label's own `focus-within:ring` utility. */
+button[data-app-shell-control]:focus-visible,
+textarea[data-app-shell-control]:focus-visible,
+input[type="checkbox"][data-app-shell-control]:focus-visible {
+  outline: 2px solid var(--as-ring);
+  outline-offset: 1px;
+}
+
+/* The ghost <Button> (the default — ThemeToggle / AccountMenu / FeedbackButton
+   triggers + the dialog Cancel button): transparent + borderless at rest, the
+   suite accent tint on hover/focus. Re-stated unlayered (the variant selector
+   out-ranks a bare host `button {}` / `button:hover {}`) and through the
+   shell-PRIVATE `--as-*` tokens so a consumer overriding `--accent` can't repaint
+   it either (CSS isolation, #80). The fill is shell-owned for this variant. */
+button[data-app-shell-control][data-variant="ghost"] {
+  background-color: transparent;
+  border-width: 0;
+  color: var(--as-foreground);
+}
+button[data-app-shell-control][data-variant="ghost"]:hover,
+button[data-app-shell-control][data-variant="ghost"]:focus-visible {
+  background-color: var(--as-accent);
+  color: var(--as-accent-foreground);
+}
+
+/* The outline <Button> (the dialog "Open issue on GitHub" / Close): a bordered,
+   subtly-filled discrete control. */
+button[data-app-shell-control][data-variant="outline"] {
+  border: 1px solid var(--as-border);
+  background-color: var(--as-background);
+  color: var(--as-foreground);
+}
+button[data-app-shell-control][data-variant="outline"]:hover,
+button[data-app-shell-control][data-variant="outline"]:focus-visible {
+  background-color: var(--as-accent);
+  color: var(--as-accent-foreground);
+}
+
+/* The dialog textarea: a bordered multi-line input on the background surface. */
+textarea[data-app-shell-control] {
+  border: 1px solid var(--as-border);
+  background-color: var(--as-background);
+  color: var(--as-foreground);
+}
+
+/* The WebID-consent checkbox: keep the NATIVE control look (the shell does not
+   restyle it) so a host `input { appearance:none }` reset can't blank it out. */
+input[type="checkbox"][data-app-shell-control] {
+  appearance: auto;
+  -webkit-appearance: auto;
+}
+
+/* The (sr-only) category radios: the visually-hidden styling otherwise comes from
+   a LAYERED utility, so re-assert the hide UNLAYERED — a host `input { position/
+   width/height/... }` reset must not reveal them or disturb the card layout. */
+input[type="radio"][data-app-shell-control] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* The feedback dialog's category cards are <label> controls — re-assert their
+   leak-prone look unlayered so a host `label { background/border/color }` reset
+   can't repaint the selector. Resting = bordered + transparent; the `data-selected`
+   card (and hover) takes the suite accent tint. (Visible focus comes from the
+   label's own `focus-within:ring` utility, plus the radio's outline-ring above.) */
+label[data-app-shell-control="card"] {
+  border: 1px solid var(--as-border);
+  background-color: transparent;
+  color: inherit;
+}
+label[data-app-shell-control="card"]:hover,
+label[data-app-shell-control="card"][data-selected] {
+  background-color: var(--as-accent);
+  color: var(--as-accent-foreground);
+}
+label[data-app-shell-control="card"][data-selected] {
+  border-color: var(--as-ring);
+}
+/* Keyboard focus on a card (the radio inside it is focused) — re-assert the ring
+   UNLAYERED so a host `label { box-shadow:none }` can't erase the focus indicator
+   (the card's own `focus-within:ring` utility is layered and could be out-ranked). */
+label[data-app-shell-control="card"]:focus-within {
+  outline: 2px solid var(--as-ring);
+  outline-offset: 1px;
+}
+
+/* The backdrop button: a full-bleed translucent scrim — explicit so a host
+   `button { background / border / padding / margin }` can't repaint or inset it. */
+button[data-app-shell-control="backdrop"] {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background-color: rgb(0 0 0 / 0.5);
+}

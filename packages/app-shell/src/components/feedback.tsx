@@ -379,6 +379,7 @@ export function FeedbackDialog({
         type="button"
         aria-label="Close feedback dialog"
         tabIndex={-1}
+        data-app-shell-control="backdrop"
         className="absolute inset-0 cursor-default bg-black/50"
         onClick={() => onOpenChange(false)}
       />
@@ -388,7 +389,7 @@ export function FeedbackDialog({
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-        className="relative w-full max-w-md rounded-lg border border-border bg-popover p-5 text-popover-foreground shadow-md outline-none"
+        className="relative w-full max-w-md rounded-lg border border-as-border bg-as-popover p-5 text-as-popover-foreground shadow-md outline-none"
       >
         <h2 id={titleId} className="text-base font-semibold">
           {phase === "success" ? "Thanks for the feedback" : `Feedback on ${appName}`}
@@ -428,12 +429,14 @@ export function FeedbackDialog({
                     <label
                       key={value}
                       htmlFor={id}
+                      data-app-shell-control="card"
+                      data-selected={selected ? "" : undefined}
                       className={[
                         "flex flex-1 cursor-pointer flex-col items-center gap-1 rounded-md border px-2 py-2 text-sm",
-                        "transition-colors focus-within:ring-2 focus-within:ring-ring",
+                        "transition-colors focus-within:ring-2 focus-within:ring-as-ring",
                         selected
-                          ? "border-ring bg-accent text-accent-foreground"
-                          : "border-border hover:bg-accent hover:text-accent-foreground",
+                          ? "border-as-ring bg-as-accent text-as-accent-foreground"
+                          : "border-as-border hover:bg-as-accent hover:text-as-accent-foreground",
                       ].join(" ")}
                     >
                       <input
@@ -443,6 +446,7 @@ export function FeedbackDialog({
                         value={value}
                         checked={selected}
                         onChange={() => setCategory(value)}
+                        data-app-shell-control=""
                         className="sr-only"
                       />
                       <Icon className="size-4" aria-hidden="true" />
@@ -468,7 +472,8 @@ export function FeedbackDialog({
                 onChange={(e) => setDescription(e.target.value)}
                 rows={4}
                 placeholder="Describe the bug, idea, or question…"
-                className="resize-y rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                data-app-shell-control=""
+                className="resize-y rounded-md border border-as-border bg-as-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-as-ring"
               />
             </div>
 
@@ -480,6 +485,7 @@ export function FeedbackDialog({
                   type="checkbox"
                   checked={includeWebId}
                   onChange={(e) => setIncludeWebId(e.target.checked)}
+                  data-app-shell-control=""
                   className="mt-0.5"
                 />
                 <span>Include my WebID so the maintainer can follow up</span>
@@ -487,13 +493,13 @@ export function FeedbackDialog({
             ) : null}
 
             {/* Diagnostics disclosure */}
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-as-muted-foreground">
               We attach basic diagnostics: app name + version ({appName}
               {versionLabel}) and the current page URL.
             </p>
 
             {phase === "error" && errorMessage ? (
-              <p role="alert" className="text-sm text-destructive">
+              <p role="alert" className="text-sm text-as-destructive">
                 {errorMessage}
               </p>
             ) : null}

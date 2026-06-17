@@ -19,7 +19,7 @@ import { jsx as _jsx } from "react/jsx-runtime";
 // provider renders harmlessly on the server (Next) and only touches the DOM in
 // the browser. Apply the no-flash inline script (see `themeScript`) in the
 // document <head> to avoid a light-mode flash before hydration.
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, } from "react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useState, } from "react";
 const ThemeContext = createContext(null);
 /** Read the theme state anywhere under a <ThemeProvider>. */
 export function useTheme() {
@@ -30,6 +30,18 @@ export function useTheme() {
     return ctx;
 }
 const isBrowser = typeof window !== "undefined" && typeof document !== "undefined";
+/**
+ * Run the "apply theme to <html>" effect SYNCHRONOUSLY before the browser paints,
+ * so `resolvedTheme` (and the `.dark` class, for an app loaded without the inline
+ * `themeScript`) is correct on the very first painted frame — no flash of the
+ * wrong mode for content that renders off `resolvedTheme`. `useLayoutEffect` is a
+ * no-op on the server and React warns if it is invoked during SSR, so we fall back
+ * to `useEffect` off-browser (the standard isomorphic-layout-effect pattern). The
+ * FIRST React render still uses the SSR-stable default (see below), so this does
+ * NOT introduce a hydration mismatch under Next; it only pulls the correction
+ * forward to before-paint on the client.
+ */
+const useIsomorphicLayoutEffect = isBrowser ? useLayoutEffect : useEffect;
 /** Read the OS colour-scheme preference (defaults to light off-browser). */
 function systemPrefersDark() {
     if (!isBrowser || typeof window.matchMedia !== "function")
@@ -78,17 +90,23 @@ export function ThemeProvider({ children, defaultTheme = "system", storageKey = 
     // `themeScript` sets the `.dark` class before paint), so there is no flash and
     // no hydration mismatch from a dark-OS client reading `resolvedTheme` early.
     const [resolvedTheme, setResolvedTheme] = useState(defaultTheme === "system" ? "light" : defaultTheme);
-    // On mount (and if the storageKey changes), adopt any persisted preference.
-    // `theme` is intentionally NOT a dep: a later setTheme must not re-read storage
-    // and clobber the user's just-made choice.
-    useEffect(() => {
+    // On mount (and if the storageKey changes), adopt any persisted preference,
+    // BEFORE paint (layout effect) so a returning user with a stored override never
+    // sees a frame of the default. `theme` is intentionally NOT a dep: a later
+    // setTheme must not re-read storage and clobber the user's just-made choice.
+    useIsomorphicLayoutEffect(() => {
         const stored = readStored(storageKey);
         if (stored)
             setThemeState(stored);
     }, [storageKey]);
-    // Apply the resolved mode to <html> + keep `resolvedTheme` in sync. Re-runs
-    // when the preference changes; for "system" it also subscribes to OS changes.
-    useEffect(() => {
+    // Apply the resolved mode to <html> + keep `resolvedTheme` in sync. Runs as a
+    // (pre-paint) LAYOUT effect on the client, so the first painted frame already
+    // reflects the real OS/stored mode — eliminating the one-frame flash for any
+    // content that renders off `resolvedTheme` (the `.dark` colour class is also
+    // set here, a belt-and-braces for an app that omitted the inline `themeScript`).
+    // Re-runs when the preference changes; for "system" it also subscribes to OS
+    // changes. SSR-SAFE: a no-op off-browser (the guard + the isomorphic fallback).
+    useIsomorphicLayoutEffect(() => {
         if (!isBrowser)
             return;
         const apply = () => {

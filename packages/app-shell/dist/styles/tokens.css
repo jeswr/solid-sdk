@@ -60,6 +60,31 @@
   --success-foreground: oklch(0.99 0.01 150);
   --warning: oklch(0.7 0.14 75);
   --warning-foreground: oklch(0.27 0.05 70);
+
+  /* ── Shell-PRIVATE token mirror (CSS isolation, #80) ──────────────────────
+   * The app-shell COMPONENTS resolve their colours through these `--as-*` names
+   * (via the `@theme inline` mapping in theme.css → the `bg-as-accent` etc.
+   * utilities), NOT the public `--accent` / `--muted` / … names directly. Why:
+   * an adopting app re-aliasing its OWN host vars onto the shell's public token
+   * names (`--accent: var(--primary)`, the classic recipe mistake — see the
+   * pod-mail/photos/drive/health adoptions) would otherwise repaint the shell's
+   * hover/selection tint. These private mirrors are NOT `var(--accent)` indirections
+   * (which would re-pick-up a consumer override at use-time, defeating the point):
+   * they hold the same LITERAL OKLCH values as the public tokens above, so the
+   * shell is isolated from any `:root`-level public-token override — and, unlike a
+   * subtree-scoped re-assertion, it also reaches the PORTALED DropdownMenu/Feedback
+   * dialog content. Keep each `--as-*` value identical to its public twin above
+   * (the only nine the components consume); `check:dist` guards the dist mirror. */
+  --as-accent: oklch(0.94 0.03 195);
+  --as-accent-foreground: oklch(0.31 0.05 215);
+  --as-background: oklch(0.992 0.003 210);
+  --as-foreground: oklch(0.21 0.022 235);
+  --as-popover: oklch(1 0 0);
+  --as-popover-foreground: oklch(0.21 0.022 235);
+  --as-muted-foreground: oklch(0.5 0.018 230);
+  --as-border: oklch(0.91 0.012 220);
+  --as-ring: oklch(0.52 0.094 205);
+  --as-destructive: oklch(0.55 0.2 27);
 }
 
 .dark {
@@ -100,4 +125,17 @@
   --success-foreground: oklch(0.17 0.03 150);
   --warning: oklch(0.8 0.13 80);
   --warning-foreground: oklch(0.2 0.04 70);
+
+  /* Shell-private mirror for dark mode (see the :root block). Literal twins of
+     the dark public tokens above — kept in lock-step with them. */
+  --as-accent: oklch(0.32 0.045 205);
+  --as-accent-foreground: oklch(0.94 0.02 200);
+  --as-background: oklch(0.17 0.018 235);
+  --as-foreground: oklch(0.96 0.006 210);
+  --as-popover: oklch(0.23 0.022 233);
+  --as-popover-foreground: oklch(0.96 0.006 210);
+  --as-muted-foreground: oklch(0.72 0.018 215);
+  --as-border: oklch(1 0 0 / 10%);
+  --as-ring: oklch(0.7 0.1 200);
+  --as-destructive: oklch(0.7 0.18 22);
 }

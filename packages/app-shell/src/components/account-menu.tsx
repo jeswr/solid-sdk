@@ -82,7 +82,7 @@ export function AccountMenu({
         <DropdownMenuLabel className="flex flex-col gap-0.5">
           <span className="truncate font-medium">{name}</span>
           {webId ? (
-            <span className="truncate text-xs font-normal text-muted-foreground">{webId}</span>
+            <span className="truncate text-xs font-normal text-as-muted-foreground">{webId}</span>
           ) : null}
         </DropdownMenuLabel>
         <DropdownMenuSeparator />

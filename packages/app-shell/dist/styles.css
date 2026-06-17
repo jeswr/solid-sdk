@@ -12,8 +12,16 @@
  *
  * NOTE: this file deliberately does NOT `@import "tailwindcss"` itself — the
  * consuming app owns the Tailwind import + content config (so its own utilities
- * are generated too). We only contribute the tokens + theme mapping.
+ * are generated too). We only contribute the tokens + theme mapping + the
+ * defensive control reset.
+ *
+ * `reset.css` is the UNLAYERED, `[data-app-shell-control]`-scoped defensive reset
+ * (CSS isolation, #80): it keeps the shell's own controls immune to a consuming
+ * app's global element styles (a bare `button {}` / `input {}` rule, which is
+ * unlayered and therefore out-ranks Tailwind's layered utilities). It is imported
+ * LAST so its rules sit after the token/theme declarations.
  */
 
 @import "./styles/tokens.css";
 @import "./styles/theme.css";
+@import "./styles/reset.css";

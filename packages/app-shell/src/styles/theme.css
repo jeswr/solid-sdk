@@ -51,6 +51,23 @@
   --color-success-foreground: var(--success-foreground);
   --color-warning: var(--warning);
   --color-warning-foreground: var(--warning-foreground);
+  /* Shell-PRIVATE colour keys (CSS isolation, #80). The app-shell components use
+     the `bg-as-accent` / `text-as-muted-foreground` / `border-as-border` (etc.)
+     utilities these generate, so the shell resolves its palette through the
+     `--as-*` mirror in tokens.css — isolated from a consumer overriding the public
+     `--accent` / `--muted` / … tokens. App authors keep using the PUBLIC keys
+     (`bg-background`, `text-muted-foreground`, …) for their OWN chrome; only the
+     shell's internals use the `as-` variants. */
+  --color-as-accent: var(--as-accent);
+  --color-as-accent-foreground: var(--as-accent-foreground);
+  --color-as-background: var(--as-background);
+  --color-as-foreground: var(--as-foreground);
+  --color-as-popover: var(--as-popover);
+  --color-as-popover-foreground: var(--as-popover-foreground);
+  --color-as-muted-foreground: var(--as-muted-foreground);
+  --color-as-border: var(--as-border);
+  --color-as-ring: var(--as-ring);
+  --color-as-destructive: var(--as-destructive);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
