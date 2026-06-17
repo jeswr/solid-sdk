@@ -29,70 +29,63 @@ export type Priority = TaskPriority;
 export const PRIORITIES: readonly Priority[] = ["high", "medium", "low"];
 
 /**
- * A workflow status. `slug` becomes the `#status-<slug>` class fragment of the
- * tracker doc; `terminal` is the open/closed **resolution** every status carries —
- * a terminal status resolves to `wf:Closed`, a non-terminal one to `wf:Open` — so
- * the SHACL exactly-one-of-{Open,Closed} rule and every state consumer still hold,
- * no matter how many custom statuses a tracker declares (F1).
+ * **Workflow primitives — single home in `@jeswr/solid-task-model` (G7).** These
+ * were lifted VERBATIM from this file (the former lines 38–95) into the shared
+ * federated tracker model, and are re-exported here from its client-safe
+ * `./tracker` subexport so solid-issues, the Pod Manager, and every other suite
+ * app share ONE definition (task #101 — the single-home requirement). The public
+ * names are kept identical, so every existing `@/lib/issue` import is unchanged.
+ *
+ * Imported from `@jeswr/solid-task-model/tracker` — the client-safe subexport,
+ * NOT the `.` barrel (the barrel re-exports the SHACL shape, which reads
+ * `node:fs`, and `Issue` is used in client components — same reason `Task` above
+ * is imported from `./task`).
+ *
+ * The shared copies tightened two behaviours over the former local ones; both are
+ * verified transparent here (the full test suite is the behaviour-preservation
+ * proof):
+ *  - `DEFAULT_WORKFLOW` is now **deep-frozen**, and the package's own
+ *    `Tracker.workflow` hands out a defensive copy. solid-issues never mutates
+ *    `DEFAULT_WORKFLOW`, `STATUSES`, or a returned workflow, so freezing is a no-op
+ *    at every call site.
+ *  - `canTransition` now also rejects an unknown `from` slug (the former local
+ *    copy only guarded `to`). Every solid-issues call site passes a `from` read
+ *    from the issue's own status under the active workflow, so the stricter guard
+ *    only ever rejects genuinely malformed inputs.
+ *
+ * `WorkflowStatus`/`WorkflowDef`/`StatusSlug` are byte-identical; `statusState`
+ * is byte-identical (it returns the `"open" | "closed"` union — exactly this
+ * file's {@link IssueState}).
  */
-export interface WorkflowStatus {
-  slug: string;
-  label: string;
-  terminal: boolean;
-}
-
-/**
- * A configurable workflow: an ordered list of {@link WorkflowStatus} plus the
- * allowed transition edges (`from slug → set of to slugs`). The first status is
- * the initial state. A status missing from `transitions` (or whose target set is
- * undefined) permits no outbound moves except staying put.
- */
-export interface WorkflowDef {
-  statuses: WorkflowStatus[];
-  /** Allowed transitions keyed by source slug; values are reachable target slugs. */
-  transitions: Record<string, string[]>;
-}
-
-export type StatusSlug = string;
-
-/**
- * The built-in workflow used when a tracker declares none: To Do → In Progress →
- * Done, the classic three-column Kanban. `done` is terminal (⇒ resolves to
- * `wf:Closed`). Kept as the default so existing trackers are unchanged.
- */
-export const DEFAULT_WORKFLOW: WorkflowDef = {
-  statuses: [
-    { slug: "todo", label: "To Do", terminal: false },
-    { slug: "in-progress", label: "In Progress", terminal: false },
-    { slug: "done", label: "Done", terminal: true },
-  ],
-  // A linear board with free backward moves: any column can reach any other.
-  transitions: {
-    todo: ["in-progress", "done"],
-    "in-progress": ["todo", "done"],
-    done: ["todo", "in-progress"],
-  },
+// Bring the shared primitives into this module's scope (the in-module accessors
+// below reference them: `statusState`/`DEFAULT_WORKFLOW` in `Issue.setStatus`,
+// the types in the `Tracker`/`Issue` signatures), AND re-export them so every
+// `@/lib/issue` consumer keeps importing them from here under the same name.
+import {
+  type WorkflowStatus,
+  type WorkflowDef,
+  type StatusSlug,
+  DEFAULT_WORKFLOW,
+  canTransition,
+  statusState,
+} from "@jeswr/solid-task-model/tracker";
+export {
+  type WorkflowStatus,
+  type WorkflowDef,
+  type StatusSlug,
+  DEFAULT_WORKFLOW,
+  canTransition,
+  statusState,
 };
 
 /**
  * The fixed built-in statuses. Retained as a convenience export (dashboards,
  * boards, and tests that predate configurable workflows read it); it is exactly
- * `DEFAULT_WORKFLOW.statuses`. For a tracker's *actual* statuses, read
- * {@link Tracker.workflow}.
+ * `DEFAULT_WORKFLOW.statuses` (the SAME array reference). For a tracker's *actual*
+ * statuses, read {@link Tracker.workflow}. App-local — not part of the shared
+ * model.
  */
 export const STATUSES: WorkflowStatus[] = DEFAULT_WORKFLOW.statuses;
-
-/** Whether `to` is reachable from `from` under `workflow` (same-status is always allowed). */
-export function canTransition(workflow: WorkflowDef, from: StatusSlug, to: StatusSlug): boolean {
-  if (from === to) return true;
-  if (!workflow.statuses.some((s) => s.slug === to)) return false;
-  return (workflow.transitions[from] ?? []).includes(to);
-}
-
-/** The slug a status of `terminal` disposition resolves to is "closed"; otherwise "open". */
-export function statusState(workflow: WorkflowDef, slug: StatusSlug): IssueState {
-  return workflow.statuses.find((s) => s.slug === slug)?.terminal ? "closed" : "open";
-}
 
 export type IssueType = "initiative" | "epic" | "feature" | "story" | "task" | "bug";
 /**
