@@ -74,7 +74,7 @@ export default defineConfig({
     ],
     // Guarantee a single React instance across the host + the bundled library +
     // the @jeswr/app-shell package. app-shell is a PUBLISHED dep
-    // (github:jeswr/app-shell#main, committed dist/) — but a package can still
+    // (git+https://github.com/jeswr/app-shell.git#<sha>, committed dist/) — but a package can still
     // resolve react/react-dom + Radix/lucide against its OWN nested node_modules,
     // pulling a SECOND copy (invalid-hook-call). Deduping these forces ONE copy
     // from the host's node_modules (where they are installed as direct deps).
@@ -85,6 +85,15 @@ export default defineConfig({
       "@radix-ui/react-avatar",
       "@radix-ui/react-dropdown-menu",
       "lucide-react",
+      // @jeswr/solid-elements ships W3C Web Components (Lit 3) consumed via its
+      // @lit/react adapter (`./react`). Dedupe `lit` + `@lit/react` to ONE copy
+      // each: a second `lit` instance means a second reactive-update scheduler
+      // (and a second customElements registry attempt — the components self-guard
+      // with `customElements.get`, but two Lit runtimes are still a foot-gun), and
+      // a second `@lit/react` would mint a distinct wrapper runtime. Both are
+      // (transitive) deps of solid-elements; pin them to the host's single copy.
+      "lit",
+      "@lit/react",
     ],
   },
   // Let Vite read the library source one directory up from the host root.

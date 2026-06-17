@@ -15,35 +15,36 @@
 @source "../node_modules/@jeswr/app-shell/dist";
 
 /* The host chrome below predates the shared tokens and uses its own variable
-   names (--bg/--ink/…). Map them onto the app-shell OKLCH tokens so the WHOLE
-   pod-photos UI (login card, header, gallery grid, breadcrumb) follows the theme
-   — the `.dark` class the ThemeProvider toggles on <html> flips the OKLCH vars,
-   and these aliases inherit it for free. */
+   names (--bg / --ink / --accent / …). Map them onto the app-shell OKLCH tokens so
+   the WHOLE pod-photos UI (login card, header, gallery grid, breadcrumb) follows
+   the theme — the `.dark` class the ThemeProvider toggles on <html> flips the OKLCH
+   vars, and these aliases inherit it for free.
+
+   CSS-ISOLATION RELAXATION (#80 / solid-elements pilot #115): the host's brand
+   `--accent` can now alias DIRECTLY onto app-shell's OWN `--accent` token again.
+   The earlier adopter workaround renamed it to a host-only `--host-accent` to avoid
+   CLOBBERING the shell components' subtle hover/selected SURFACE token — but
+   @jeswr/app-shell #80 made the shell self-isolating: its components read
+   SHELL-PRIVATE `--as-*` tokens (mirrored from hardcoded OKLCH literals in the
+   package's tokens.css, NOT from these public `--accent`/`--muted`), so re-aliasing
+   the public tokens no longer affects the shell at all. Verified against app-shell
+   `5a7484d` (the merged main with the #80 fix). `--border` is the SAME name as the
+   app-shell token, so it is already unified — do NOT re-alias it to itself.
+
+   POD-PHOTOS DEVIATION (intentional, kept): `--muted` is NOT re-aliased to the text
+   token. Unlike the other adopters, pod-photos legitimately consumes the app-shell
+   `--muted` SURFACE token directly for the thumbnail/placeholder backgrounds
+   (`.pod-photos-thumb*`), so the host keeps its OWN `--muted-text`
+   (→ `--muted-foreground`) for muted TEXT and leaves `--muted` as the shell's
+   surface token. This is correct semantic use of the surface token, NOT the old
+   isolation workaround. */
 :root {
   --bg: var(--background);
   --surface: var(--card);
   --ink: var(--foreground);
-  /* The host's "muted" historically meant muted TEXT, but the app-shell token
-     `--muted` is a muted SURFACE color (with `--muted-foreground` being the text).
-     Overriding `--muted` here would clobber that surface token for any app-shell
-     utility (e.g. `bg-muted`). So the host gets its OWN name `--muted-text`,
-     aliased to the app-shell `--muted-foreground` text token, and app-shell's
-     `--muted` surface token is left untouched. */
   --muted-text: var(--muted-foreground);
-  /* Same collision hazard as `--muted`: the host's "accent" is its BRAND/primary
-     action color (links, buttons), but the app-shell `--accent` token is a subtle
-     hover/selected SURFACE (paired with `--accent-foreground`) used by the shell
-     components (bg-accent / text-accent-foreground in dropdown hover, avatar
-     fallback, …). Overriding `--accent` would clobber that and produce
-     mismatched hover/selected pairs. So the host uses its OWN `--host-accent`
-     (the app-shell `--primary`), leaving app-shell's `--accent` untouched.
-     `--accent-ink` is a host-only name (no app-shell collision). */
-  --host-accent: var(--primary);
+  --accent: var(--primary);
   --accent-ink: var(--primary-foreground);
-  /* NOTE: the host's `--border` is the SAME name as the app-shell token, so it is
-     already unified — do NOT re-alias it to itself (that would self-reference to an
-     invalid value). Likewise `--muted` and `--accent` are NOT re-aliased — see
-     above. The other host vars below use distinct names, so they alias. */
   --danger: var(--destructive);
   --ok: var(--success);
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -60,7 +61,7 @@ body {
 }
 
 a {
-  color: var(--host-accent);
+  color: var(--accent);
 }
 
 /* ── Login ─────────────────────────────────────────────────────────────── */
@@ -114,25 +115,31 @@ a {
   margin-top: 1rem;
 }
 
-/* HOST buttons only — a SCOPED selector, never the bare `button` element.
-   The host CSS is UNLAYERED, and unlayered rules beat Tailwind's `@layer
-   utilities`, so a bare `button { … }` would override the app-shell components'
-   own utility styling (ThemeToggle, the FeedbackButton trigger + its portaled
-   dialog actions, the AccountMenu trigger) — forcing a primary background,
-   padding + radius onto controls that bring their own look. Scoping the brand
-   base to the host's OWN login submit (the only host button relying on the base;
-   the gallery's breadcrumb / error / folder buttons each carry their own class
-   below) keeps app-shell's button utilities authoritative. */
-.login-form button {
+/* CSS-ISOLATION RELAXATION (#80 / solid-elements pilot #115): a BARE global
+   `button {}` filled-button base again — the simpler, pre-workaround form.
+
+   This bare element rule is UNLAYERED, so it out-ranks Tailwind's layered utilities
+   — historically that bled the host's filled look onto every app-shell control + the
+   portaled FeedbackDialog (#80), which forced the earlier adopter to hand-scope it to
+   `.login-form button`. @jeswr/app-shell #80 fixed this AT THE SOURCE: the shell tags
+   each of its controls with `[data-app-shell-control]` and re-asserts their look in
+   its own UNLAYERED reset (shipped in `@jeswr/app-shell/styles.css`), and an
+   attribute selector out-ranks a bare element selector — so the shell's controls keep
+   their look regardless of this rule. The solid-elements P0 components (<jeswr-loading>
+   etc.) are immune for a different reason: they live in shadow DOM, which this
+   light-DOM rule cannot pierce. So the hand-scoping is no longer needed; the host's
+   OWN outline buttons still override the fill below. Verified against app-shell
+   `5a7484d`. */
+button {
   cursor: pointer;
   border: none;
   border-radius: 0.5rem;
   padding: 0.6rem 0.9rem;
   font-size: 0.95rem;
-  background: var(--host-accent);
+  background: var(--accent);
   color: var(--accent-ink);
 }
-.login-form button:disabled {
+button:disabled {
   opacity: 0.55;
   cursor: not-allowed;
 }
@@ -164,18 +171,16 @@ a {
   gap: 0.25rem;
   margin-left: auto;
 }
-/* `.app-logout` no longer relies on the (now-scoped) host button base, so it
-   carries its own cursor/radius/padding. (The header replaced the bare logout
-   button with the app-shell AccountMenu; this class remains for any host-owned
-   secondary action.) */
+/* The host's OWN outline buttons (the gallery breadcrumb / error retry / folder
+   tiles + the legacy logout): override the filled `button {}` base above with a
+   transparent, bordered look. They inherit cursor/radius/padding/font-size from the
+   base, so each only declares its override deltas. (The header replaced the bare
+   logout button with the app-shell AccountMenu; `.app-logout` remains for any
+   host-owned secondary action.) */
 .app-logout {
-  cursor: pointer;
   background: transparent;
-  color: var(--host-accent);
+  color: var(--accent);
   border: 1px solid var(--border);
-  border-radius: 0.5rem;
-  padding: 0.6rem 0.9rem;
-  font-size: 0.95rem;
 }
 /* The fallback banner is theme-aware: a soft tint derived from the suite
    `--warning` token (via color-mix over the card surface) with token-coloured
@@ -224,13 +229,15 @@ a {
   color: var(--muted-text);
   margin-left: 0.35rem;
 }
+/* A link-style button: override the filled `button {}` base back to a bare inline
+   link (no fill, no border, no padding). */
 .pod-photos-breadcrumb button {
   background: transparent;
-  color: var(--host-accent);
+  color: var(--accent);
   border: none;
   padding: 0;
+  border-radius: 0;
   font: inherit;
-  cursor: pointer;
 }
 .pod-photos-breadcrumb [aria-current="page"] {
   color: var(--ink);
@@ -245,17 +252,13 @@ a {
 .pod-photos-error {
   color: var(--danger);
 }
-/* Carries its own cursor/radius/padding (the host button base is now scoped to
-   `.login-form` only — see note there). */
+/* The retry button: override the filled `button {}` base to a transparent,
+   bordered outline (inheriting cursor/radius/padding/font-size from the base). */
 .pod-photos-error button {
   margin-top: 0.5rem;
-  cursor: pointer;
   background: transparent;
-  color: var(--host-accent);
+  color: var(--accent);
   border: 1px solid var(--border);
-  border-radius: 0.5rem;
-  padding: 0.6rem 0.9rem;
-  font-size: 0.95rem;
 }
 
 /* Folders */
@@ -267,14 +270,14 @@ a {
   flex-wrap: wrap;
   gap: 0.6rem;
 }
+/* A surface tile: override the filled `button {}` base to a bordered card look
+   (inheriting cursor from the base). */
 .pod-photos-folder-link {
   background: var(--surface);
-  color: var(--host-accent);
+  color: var(--accent);
   border: 1px solid var(--border);
-  border-radius: 0.5rem;
   padding: 0.5rem 0.8rem;
   font: inherit;
-  cursor: pointer;
 }
 
 /* Photo grid */
