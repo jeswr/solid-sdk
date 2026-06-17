@@ -138,9 +138,20 @@ a {
 
    The solid-elements P0 components (<jeswr-loading> etc.) are immune for a different
    reason: they live in shadow DOM, which this light-DOM rule cannot pierce. The
-   css-isolation.test.tsx guard pins the colour-isolation contract; this `:not(...)`
-   scope additionally protects the box model. Verified against app-shell `5a7484d`. */
-button:not([data-app-shell-control]) {
+   css-isolation.test.tsx guard pins the colour-isolation contract; this scope
+   additionally protects the box model. Verified against app-shell `5a7484d`.
+
+   SPECIFICITY FIX (roborev Medium, addressed — the pod-mail/pod-money `:where()`
+   form): the exclusion is wrapped in `:where(...)`, NOT a bare `:not(...)`. A bare
+   `button:not([data-app-shell-control])` has specificity (0,1,1) — the attribute
+   selector LEAKS its (0,1,0) through `:not()` — so it OUT-RANKS the host's OWN
+   class-only overrides below (`.pod-docs-open-link`, `.pod-docs-new-cancel`, both
+   class-only (0,1,0) <button> elements), repainting those transparent/outline
+   link+cancel buttons with this filled base — a real visual regression. `:where()`
+   carries ZERO specificity, so this base is (0,0,1) — identical to the unscoped
+   `button {}` it replaced — and the class-only host overrides (0,1,0) correctly win
+   again, while `[data-app-shell-control]` controls stay excluded exactly as before. */
+button:where(:not([data-app-shell-control])) {
   cursor: pointer;
   border: none;
   border-radius: 0.5rem;
@@ -149,7 +160,7 @@ button:not([data-app-shell-control]) {
   background: var(--accent);
   color: var(--accent-ink);
 }
-button:not([data-app-shell-control]):disabled {
+button:where(:not([data-app-shell-control])):disabled {
   opacity: 0.55;
   cursor: not-allowed;
 }
