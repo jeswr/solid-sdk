@@ -37,6 +37,8 @@ import { CalendarView } from "@/components/calendar-view";
 import { AutomationsDialog } from "@/components/automations-dialog";
 import { evaluateAutomations, loadAutomationSettings, type AutomationSettings } from "@/lib/automations";
 import { IssueCard, shortWebId, type IssueCardActions } from "@/components/issue-card";
+import { IssuesTable } from "@/components/issues-table";
+import { makeInlineEditController } from "@/lib/inline-edit";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -91,6 +93,7 @@ import {
   CalendarDays,
   ChartNoAxesGantt,
   ListTodo,
+  Table2,
 } from "lucide-react";
 
 const PROJECT_KEY = "solid-issues:project";
@@ -368,6 +371,7 @@ export function IssuesView() {
         setFormOpen(true);
       } else if (e.key === "b") setView("board");
       else if (e.key === "l") setView("list");
+      else if (e.key === "g") setView("table");
       else if (e.key === "e") setView("epics");
       else if (e.key === "d") setView("dashboard");
       else if (e.key === "t") setView("timeline");
@@ -605,6 +609,84 @@ export function IssuesView() {
       clearSelection();
     }, `Labeled “${label}”`);
 
+  // --- Inline cell editing (#75 P1-6, Monday-style) ---
+  // The optimistic edit controller: a non-status field edit applies immediately,
+  // persists via the EXISTING repository.update path (validation + the
+  // ETag-conditional write reused), shows the global Saving…/Saved indicator, and
+  // reverts the cell (preserving any concurrent edit) + surfaces an error on
+  // failure — with an ETag ConflictError reverting and reconciling from the pod
+  // rather than clobbering. A status edit routes through the SAME dependency/
+  // workflow guard (`guardedTransition`) + the workflow-validating `setStatus`.
+  // The flow lives in `makeInlineEditController` (pure + unit-tested); this just
+  // hands it the hook's optimistic seam. Created per render (cheap, holds no state)
+  // — matching the codebase convention for these handlers (e.g. `cardActions`).
+  const { edit: inlineEdit, editStatus: inlineStatusEdit } = makeInlineEditController(
+    { getIssues: issues.getIssues, setIssuesLocal: issues.setIssuesLocal, persist: issues.persist, refresh: issues.refresh },
+    workflow,
+    toast,
+    guardedTransition,
+  );
+
+  // The shared bulk-action toolbar (selected-rows close/reopen/assign/label/delete)
+  // — reused by BOTH the list and the inline-edit table so multi-select behaves
+  // identically in either layout. Rendered only when rows are selected.
+  const bulkToolbar = selectedVisible.length > 0 && (
+    <div className="sticky top-14 z-10 flex flex-wrap items-center gap-2 rounded-lg border bg-card p-2 shadow-sm">
+      <span className="px-1 text-sm font-medium">{selectedVisible.length} selected</span>
+      <Button variant="outline" size="sm" className="gap-1.5" onClick={() => bulk((r, u) => r.setState(u, "closed"), "Issues closed")}>
+        <CheckCircle2 className="size-4" aria-hidden /> Close
+      </Button>
+      <Button variant="outline" size="sm" className="gap-1.5" onClick={() => bulk((r, u) => r.setState(u, "open"), "Issues reopened")}>
+        <RotateCcw className="size-4" aria-hidden /> Reopen
+      </Button>
+      {/* F8: bulk assign */}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="outline" size="sm" className="gap-1.5">
+            <Users className="size-4" aria-hidden /> Assign
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="max-h-72 w-56 overflow-y-auto">
+          <DropdownMenuLabel>Assign to</DropdownMenuLabel>
+          {assigneeSuggestions.length === 0 && (
+            <DropdownMenuLabel className="font-normal text-muted-foreground">No team members yet</DropdownMenuLabel>
+          )}
+          {assigneeSuggestions.map((a) => (
+            <DropdownMenuItem key={a} onClick={() => bulkAssign(a)}>
+              {a === group.iri ? "Team" : shortWebId(a)}
+            </DropdownMenuItem>
+          ))}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={() => bulkAssign(undefined)}>Clear assignee</DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {/* F8: bulk label */}
+      {fac.labels.length > 0 && (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm" className="gap-1.5">
+              <Tag className="size-4" aria-hidden /> Label
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="max-h-72 w-56 overflow-y-auto">
+            <DropdownMenuLabel>Add label</DropdownMenuLabel>
+            {fac.labels.map((l) => (
+              <DropdownMenuItem key={l} onClick={() => bulkAddLabel(l)}>
+                {l}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
+      <Button variant="outline" size="sm" className="gap-1.5 text-destructive" onClick={() => setBulkDeleteOpen(true)}>
+        <Trash2 className="size-4" aria-hidden /> Delete
+      </Button>
+      <Button variant="ghost" size="sm" className="ml-auto gap-1.5" onClick={clearSelection}>
+        <X className="size-4" aria-hidden /> Clear
+      </Button>
+    </div>
+  );
+
   const paletteGroups: PaletteGroup[] = [
     {
       heading: "Create",
@@ -616,6 +698,7 @@ export function IssuesView() {
       heading: "View",
       items: [
         { id: "list", label: "List view", hint: "l", run: () => setView("list") },
+        { id: "table", label: "Table view (inline edit)", hint: "g", run: () => setView("table") },
         { id: "board", label: "Board view", hint: "b", run: () => setView("board") },
         { id: "epics", label: "Epics view", hint: "e", run: () => setView("epics") },
         { id: "dashboard", label: "Dashboard", hint: "d", run: () => setView("dashboard") },
@@ -909,6 +992,7 @@ export function IssuesView() {
             <div role="tablist" aria-label="View" className="flex max-w-full gap-1 overflow-x-auto rounded-lg bg-muted p-1">
               {([
                 { key: "list", label: "List", Icon: ListIcon },
+                { key: "table", label: "Table", Icon: Table2 },
                 { key: "board", label: "Board", Icon: LayoutGrid },
                 { key: "epics", label: "Epics", Icon: Zap },
                 { key: "backlog", label: "Backlog", Icon: ListTodo },
@@ -1063,6 +1147,30 @@ export function IssuesView() {
               </Button>
             )}
           </div>
+        ) : view === "table" ? (
+          // Monday/Jira-style inline-editable table (#75 P1-6): status / priority /
+          // assignee / title / custom-field cells edit in place. Edits are
+          // optimistic + persisted via the SAME repository.update / setStatus path
+          // (inlineEdit / inlineStatusEdit), with the global SaveIndicator and
+          // revert-on-failure. Multi-select + the shared bulk toolbar are reused.
+          <div className="space-y-3">
+            {bulkToolbar}
+            <IssuesTable
+              issues={visible}
+              statuses={workflow.statuses}
+              fieldDefs={fieldDefs}
+              assigneeSuggestions={assigneeSuggestions}
+              groupIri={group.iri}
+              selectable={issues.canCreate}
+              selected={selected}
+              allSelected={allSelected}
+              onToggleAll={toggleAll}
+              onToggleSelect={toggleSelect}
+              onOpen={(i) => setCommentsUrl(i.url)}
+              onEdit={inlineEdit}
+              onStatusEdit={inlineStatusEdit}
+            />
+          </div>
         ) : view === "board" ? (
           // The board shows open work AND completed cards in the Done column
           // (done-and-visible, pss-w29w); boardVisible applies the text/facet
@@ -1124,64 +1232,7 @@ export function IssuesView() {
           <div className="space-y-3">
             {issues.canCreate && (
               <>
-                {selectedVisible.length > 0 && (
-                  <div className="sticky top-14 z-10 flex flex-wrap items-center gap-2 rounded-lg border bg-card p-2 shadow-sm">
-                    <span className="px-1 text-sm font-medium">{selectedVisible.length} selected</span>
-                    <Button variant="outline" size="sm" className="gap-1.5" onClick={() => bulk((r, u) => r.setState(u, "closed"), "Issues closed")}>
-                      <CheckCircle2 className="size-4" aria-hidden /> Close
-                    </Button>
-                    <Button variant="outline" size="sm" className="gap-1.5" onClick={() => bulk((r, u) => r.setState(u, "open"), "Issues reopened")}>
-                      <RotateCcw className="size-4" aria-hidden /> Reopen
-                    </Button>
-                    {/* F8: bulk assign */}
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="outline" size="sm" className="gap-1.5">
-                          <Users className="size-4" aria-hidden /> Assign
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="start" className="max-h-72 w-56 overflow-y-auto">
-                        <DropdownMenuLabel>Assign to</DropdownMenuLabel>
-                        {assigneeSuggestions.length === 0 && (
-                          <DropdownMenuLabel className="font-normal text-muted-foreground">
-                            No team members yet
-                          </DropdownMenuLabel>
-                        )}
-                        {assigneeSuggestions.map((a) => (
-                          <DropdownMenuItem key={a} onClick={() => bulkAssign(a)}>
-                            {a === group.iri ? "Team" : shortWebId(a)}
-                          </DropdownMenuItem>
-                        ))}
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem onClick={() => bulkAssign(undefined)}>Clear assignee</DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                    {/* F8: bulk label */}
-                    {fac.labels.length > 0 && (
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="outline" size="sm" className="gap-1.5">
-                            <Tag className="size-4" aria-hidden /> Label
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="start" className="max-h-72 w-56 overflow-y-auto">
-                          <DropdownMenuLabel>Add label</DropdownMenuLabel>
-                          {fac.labels.map((l) => (
-                            <DropdownMenuItem key={l} onClick={() => bulkAddLabel(l)}>
-                              {l}
-                            </DropdownMenuItem>
-                          ))}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    )}
-                    <Button variant="outline" size="sm" className="gap-1.5 text-destructive" onClick={() => setBulkDeleteOpen(true)}>
-                      <Trash2 className="size-4" aria-hidden /> Delete
-                    </Button>
-                    <Button variant="ghost" size="sm" className="ml-auto gap-1.5" onClick={clearSelection}>
-                      <X className="size-4" aria-hidden /> Clear
-                    </Button>
-                  </div>
-                )}
+                {bulkToolbar}
                 <div className="flex items-center gap-2 px-1">
                   <Checkbox id="select-all" checked={allSelected} onCheckedChange={toggleAll} aria-label="Select all issues" />
                   <label htmlFor="select-all" className="cursor-pointer text-xs text-muted-foreground">
