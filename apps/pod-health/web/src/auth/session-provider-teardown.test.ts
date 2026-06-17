@@ -23,6 +23,7 @@ import { webIdsEqual as packageWebIdsEqual } from "@jeswr/solid-session-restore"
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   applyRememberedPointerAction,
+  establishStillCurrent,
   explicitFlowInProgress,
   isStalePendingRedirect,
   reconcileRememberedPointer,
@@ -618,5 +619,91 @@ describe("roborev Medium — applyRememberedPointerAction: pointer ops best-effo
       },
     });
     expect(events).toEqual([]);
+  });
+});
+
+// establishStillCurrent — the generation+identity fence guarding the AUTHORITATIVE
+// proactive-boundary arm + UI publish in establishSessionFor (roborev MEDIUM,
+// HEALTH-SENSITIVE). A logout()/new login() racing the awaits before the authoritative
+// arm advances the generation (reset()) AND clears the boundary; without this fence the
+// resumed establish would RE-ARM the boundary against a reset/stale provider AND publish a
+// stale logged-in session. These assertions are adversarial: each FAILS if the fence is
+// weakened (e.g. dropping the generation check, or the WebID check, would flip a case).
+describe("roborev MEDIUM — establishStillCurrent (fences the authoritative arm + publish)", () => {
+  const GEN = 7;
+  const A = "https://alice.example/profile/card#me";
+  const B = "https://bob.example/profile/card#me";
+  const base = {
+    establishGeneration: GEN,
+    requestedWebId: A,
+    webIdsEqual,
+  };
+
+  it("CURRENT — same generation AND same authenticated WebID → arm + publish proceed", () => {
+    expect(
+      establishStillCurrent({ ...base, currentGeneration: GEN, currentAuthenticatedWebId: A }),
+    ).toBe(true);
+  });
+
+  it("SUPERSEDED — a racing logout/new-login ADVANCED the generation → fail-closed (no arm/publish)", () => {
+    // The generation moved on even though the (stale) authenticated WebID still reads A:
+    // the fence must FAIL CLOSED on the generation mismatch alone. Without the generation
+    // check this would wrongly return true and re-arm against the superseded provider.
+    expect(
+      establishStillCurrent({ ...base, currentGeneration: GEN + 1, currentAuthenticatedWebId: A }),
+    ).toBe(false);
+  });
+
+  it("SUPERSEDED — identity SWITCHED to a different WebID at the same generation → fail-closed", () => {
+    // A re-login as B advanced+settled to B's identity: arming/publishing A here would
+    // republish a stale identity. The WebID check fails closed even if the generation matched.
+    expect(
+      establishStillCurrent({ ...base, currentGeneration: GEN, currentAuthenticatedWebId: B }),
+    ).toBe(false);
+  });
+
+  it("SUPERSEDED — provider was RESET (authenticated WebID cleared) → fail-closed", () => {
+    // A logout reset the provider: authenticatedWebId() is now undefined. The fence must not
+    // re-arm the boundary against the logged-out provider.
+    expect(
+      establishStillCurrent({
+        ...base,
+        currentGeneration: GEN,
+        currentAuthenticatedWebId: undefined,
+      }),
+    ).toBe(false);
+  });
+
+  it("NEVER equates two DIFFERENT users at the same generation (the fail-closed WebID guard)", () => {
+    // Defence-in-depth: even a same-generation race that swapped A→B must fail closed, and
+    // the reverse requested B with current A must too — the WebID binding is symmetric.
+    expect(
+      establishStillCurrent({
+        establishGeneration: GEN,
+        currentGeneration: GEN,
+        requestedWebId: B,
+        currentAuthenticatedWebId: A,
+        webIdsEqual,
+      }),
+    ).toBe(false);
+  });
+
+  it("LOGIN-A-RESUMES-AFTER-LOGIN-B (roborev MEDIUM 2nd round): A is superseded by B's higher generation", () => {
+    // The exact race the reviewer flagged: login A's establish snapshots generation GEN, then
+    // awaits; login B starts, advances the provider to GEN+1, and arms ITS OWN boundary +
+    // becomes the authenticated identity (B). When A resumes, establishStillCurrent MUST return
+    // false (B's generation supersedes A) — so A aborts WITHOUT publishing and, crucially,
+    // WITHOUT clearing the boundary (the superseded branch makes NO clearProactiveBoundary call,
+    // verified by inspection of SessionProvider.tsx). A clear here would wipe B's freshly-armed
+    // boundary and leave B's logged-in UI making unauthenticated reads — the bug this guards.
+    expect(
+      establishStillCurrent({
+        establishGeneration: GEN, // A's snapshot
+        currentGeneration: GEN + 1, // B advanced it
+        requestedWebId: A, // A's identity
+        currentAuthenticatedWebId: B, // but B is now authenticated
+        webIdsEqual,
+      }),
+    ).toBe(false);
   });
 });

@@ -3,9 +3,10 @@
 // App — the host shell's router-free root: logged out → <LoginScreen>; logged in
 // → a thin header (WebID + logout) over the LOCAL pod-health <HealthRecords>
 // pointed at the user's health resource. The view receives NO `fetch` prop — it
-// uses the ambient global fetch, which the SessionProvider patched via
-// reactive-auth's registerGlobally(), so every read carries the DPoP token
-// automatically.
+// uses the ambient global fetch, which the SessionProvider patched via the
+// @jeswr/solid-elements PROACTIVE auth-fetch (`installProactiveAuthFetch`, task
+// #123 — the seam that REPLACED reactive-auth's registerGlobally()), so every read
+// PROACTIVELY carries the DPoP token for an allowed origin (no per-resource 401-dance).
 //
 // RESOURCE DISCOVERY: unlike Pod Docs (whose DocsStore discovers its container
 // internally), pod-health's data layer reads a single record DOCUMENT URL handed

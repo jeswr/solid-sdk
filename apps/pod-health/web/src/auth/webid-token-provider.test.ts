@@ -71,8 +71,14 @@ vi.mock("dpop", () => ({
 
 vi.mock("oauth4webapi", () => {
   const allowInsecureRequests = Symbol("allowInsecureRequests");
+  // customFetch (task #123): the provider now pins oauth4webapi's customFetch to the
+  // pristine fetch so internal OIDC requests bypass the patched global (re-entrancy guard).
+  // The real oauth4webapi exports this symbol; the mock must too or the computed key would
+  // be `undefined`.
+  const customFetch = Symbol("customFetch");
   return {
     allowInsecureRequests,
+    customFetch,
     None: () => () => {},
     ClientSecretBasic: () => () => {},
     expectNoNonce: Symbol("expectNoNonce"),
@@ -327,6 +333,36 @@ describe("WebIdDPoPTokenProvider — no prior identity survives reset / re-login
     const reqStale = await provider.upgrade(new Request("https://alice.example/storage/"));
     expect(provider.authenticatedWebId()).toBe(WEBID_A); // leaked without reset
     expect(reqStale.headers.get("Authorization")).toBe("DPoP tok-A"); // A's token reused
+  });
+
+  it("pins oauth4webapi's customFetch to the INJECTED pristine fetch (re-entrancy guard, #123)", async () => {
+    const oauth = await import("oauth4webapi");
+    // A sentinel pristine fetch injected as profileFetch — every internal OIDC request
+    // MUST use THIS, never the (now proactive-patched) global, so a token-endpoint request
+    // can't re-enter the proactive wrapper → call upgrade() again → recurse / clobber its
+    // own Authorization with the resource DPoP token. This is the adversarial guard the
+    // recipe (task #123 step 3) requires: it FAILS if `#httpOptions` omits the customFetch
+    // pin (httpOpts[customFetch] would be undefined, not the injected pristine fetch).
+    const pristine = vi.fn(async () => new Response()) as unknown as typeof fetch;
+    const discovery = oauth.discoveryRequest as unknown as {
+      mock: { calls: [URL, Record<symbol, unknown>][] };
+      mockClear: () => void;
+    };
+    // Clear accumulated calls (the mock is shared across tests) so we assert on THIS
+    // upgrade's discovery call specifically.
+    discovery.mockClear();
+    const provider = new WebIdDPoPTokenProvider(
+      "https://app.example/callback.html",
+      async () => REDIRECT,
+      async () => authState.webId,
+      { clientId: "https://app.example/clientid.jsonld", profileFetch: pristine },
+    );
+    await provider.upgrade(new Request("https://alice.example/storage/"));
+    // OIDC discovery (the first oauth4webapi network step) must have been given the
+    // injected pristine fetch via oauth.customFetch.
+    expect(discovery.mock.calls.length).toBeGreaterThan(0);
+    const httpOpts = discovery.mock.calls[0][1];
+    expect(httpOpts[oauth.customFetch]).toBe(pristine);
   });
 });
 
