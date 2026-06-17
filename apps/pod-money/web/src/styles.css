@@ -109,23 +109,36 @@ a {
 }
 
 /* CSS-ISOLATION RELAXATION (#80 / solid-elements adoption #115, D-parity rollout
-   #67/#68/#70): a BARE global `button {}` filled-button base again — the simpler,
-   pre-workaround form. The earlier adopter wrapped this in `@layer base` so the
-   shell controls' Tailwind UTILITY classes (in the higher-priority `utilities`
-   layer) would out-rank it; that is no longer needed.
+   #67/#68/#70): the host's filled-button base, the simpler pre-workaround form —
+   but SCOPED to `:where(:not([data-app-shell-control]))`.
 
-   This bare element rule is UNLAYERED, so it out-ranks Tailwind's layered utilities
-   — historically that bled the host's filled look onto every app-shell control + the
-   portaled FeedbackDialog (#80). @jeswr/app-shell #80 fixed this AT THE SOURCE: the
-   shell tags each control with `[data-app-shell-control]` and re-asserts its look in
-   its own UNLAYERED reset (shipped in `@jeswr/app-shell/styles.css`), and an
-   attribute selector out-ranks a bare element selector — so the shell's controls keep
-   their look regardless of this rule. The solid-elements P0 components (<jeswr-loading>
-   etc.) are immune for a different reason: they live in shadow DOM, which this
-   light-DOM rule cannot pierce. So neither the `@layer` wrapper nor a hand-scope is
-   needed; the host's OWN outline/table buttons still override the fill below.
-   Verified against app-shell `5a7484d`; the css-isolation.test.tsx guard pins it. */
-button {
+   WHY THE EXCLUSION (roborev Medium, addressed): this rule is UNLAYERED, so it
+   out-ranks Tailwind's layered utilities. @jeswr/app-shell #80 makes the shell
+   self-isolating for COLOUR — its UNLAYERED reset re-asserts each control's
+   background/border/text via `[data-app-shell-control]`, which out-ranks a bare
+   `button {}`. BUT that reset DELIBERATELY does NOT touch the BOX MODEL
+   (padding/border-radius/font-size/sizing) — the shell components set those per
+   instance via LAYERED `className` utilities (e.g. ThemeToggle's `size-9`,
+   AccountMenu's `h-auto px-2 py-1.5`), which an unlayered `button { padding;
+   border-radius; font-size }` WOULD clobber, distorting the icon/menu buttons. So a
+   bare `button {}` is NOT fully safe even under #80. Excluding every app-shell
+   control from the host base entirely protects the shell's box model unimpeded.
+
+   WHY `:where(...)` NOT a bare `:not(...)`: `:where()` has ZERO specificity, so the
+   exclusion adds none — this base stays at specificity (0,0,1), IDENTICAL to the
+   original bare `button {}`. That matters: the host's CLASS-only overrides below
+   (`.pod-money-account-link` at (0,1,0): a transparent table link-button; the
+   `.pod-money-back-link` outline button) must keep WINNING for
+   background/border/padding. A bare `button:not([data-app-shell-control])` would
+   raise this base to (0,1,1) — an attribute selector's specificity leaks through
+   `:not()` — and REPAINT those overrides filled. `:where()` excludes the shell
+   controls while leaving the host overrides in charge.
+
+   The solid-elements P0 components (<jeswr-loading> etc.) are immune for a different
+   reason: they live in shadow DOM, which this light-DOM rule cannot pierce. The
+   css-isolation.test.tsx guard pins both the colour-isolation contract and this
+   zero-specificity selector form. Verified against app-shell `5a7484d`. */
+button:where(:not([data-app-shell-control])) {
   cursor: pointer;
   border: none;
   border-radius: 0.5rem;
@@ -134,7 +147,7 @@ button {
   background: var(--accent);
   color: var(--accent-ink);
 }
-button:disabled {
+button:where(:not([data-app-shell-control])):disabled {
   opacity: 0.55;
   cursor: not-allowed;
 }
