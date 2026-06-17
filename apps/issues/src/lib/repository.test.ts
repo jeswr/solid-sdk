@@ -500,6 +500,51 @@ describe("F1: configurable workflow (repository)", () => {
     // "todo" is the built-in default but is NOT a status in CUSTOM.
     await expect(repo.create({ title: "Bad", creator: ME, status: "todo" })).rejects.toBeInstanceOf(TransitionError);
   });
+
+  it("workflowStrict returns the persisted workflow, but THROWS on a missing tracker (no DEFAULT fallback)", async () => {
+    const { impl } = fakePod();
+    const repo = new Repository(TRACKER, impl, ME);
+
+    // No tracker yet → workflow() falls back to DEFAULT, but workflowStrict THROWS,
+    // so the editor's partial-save recovery never mistakes a failed re-read for a
+    // confirmed-fresh workflow.
+    expect((await repo.workflow()).statuses.map((s) => s.slug)).toEqual(["todo", "in-progress", "done"]);
+    await expect(repo.workflowStrict()).rejects.toBeTruthy();
+
+    // Once configured, workflowStrict returns the SAME persisted workflow as workflow().
+    await repo.ensureTracker();
+    await repo.defineWorkflow(CUSTOM);
+    expect((await repo.workflowStrict()).statuses.map((s) => s.slug)).toEqual(["backlog", "doing", "review", "shipped"]);
+  });
+
+  it("workflowStrict propagates a read error instead of returning DEFAULT", async () => {
+    // A fetch impl that errors on the tracker read (e.g. a network failure / 500).
+    const failing: typeof fetch = async () => {
+      throw new Error("network down");
+    };
+    const repo = new Repository(TRACKER, failing, ME);
+    // workflow() swallows → DEFAULT; workflowStrict() propagates the failure.
+    expect((await repo.workflow()).statuses.length).toBeGreaterThan(0);
+    await expect(repo.workflowStrict()).rejects.toBeTruthy();
+  });
+
+  it("workflowStrict throws for a configured tracker that declares NO workflow statuses", async () => {
+    // A malformed/legacy tracker doc: it exists and has a title, but declares no
+    // `#status-` wf:State classes. `workflow()`'s getter would fall back to
+    // DEFAULT_WORKFLOW; `workflowStrict()` must instead THROW, so recovery never
+    // unlocks with bogus default data (roborev job).
+    const statelessTracker = [
+      "@prefix dct: <http://purl.org/dc/terms/> .",
+      "@prefix wf: <http://www.w3.org/2005/01/wf/flow#> .",
+      `<${TRACKER}#this> a wf:Tracker ; dct:title "Stateless" .`,
+    ].join("\n");
+    const { impl } = fakePod({ [TRACKER]: statelessTracker });
+    const repo = new Repository(TRACKER, impl, ME);
+
+    // workflow() falls back to DEFAULT; workflowStrict() rejects.
+    expect((await repo.workflow()).statuses.length).toBeGreaterThan(0);
+    await expect(repo.workflowStrict()).rejects.toBeTruthy();
+  });
 });
 
 describe("P2-5: migrateStatus (workflow-editor in-use-state migration)", () => {

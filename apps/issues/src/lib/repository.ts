@@ -660,6 +660,39 @@ export class Repository {
     }
   }
 
+  /**
+   * STRICT workflow re-read for the workflow editor's partial-save recovery (#75
+   * P2-5). Unlike {@link workflow}, this NEVER substitutes {@link DEFAULT_WORKFLOW}:
+   * it propagates a read error (network / 401 / 403 / 500) AND throws if the tracker
+   * is missing/unconfigured. The recovery path must not mistake a failed re-read for
+   * a confirmed-fresh workflow — a fallback DEFAULT could clear the editor's dirty
+   * state and unlock it with bogus data (roborev job). The caller falls back to its
+   * own last-known baseline when this throws.
+   */
+  async workflowStrict(): Promise<WorkflowDef> {
+    const { dataset, tracker, exists } = await this.loadTracker(); // throws on a non-404 read error
+    if (!exists || !tracker.title) {
+      throw new WriteError(this.trackerUrl, 404, "Tracker is missing or unconfigured on re-read.");
+    }
+    // `tracker.workflow` falls back to DEFAULT_WORKFLOW when the doc declares NO
+    // `#status-` `wf:State` classes — that fallback would violate the strict contract
+    // (a configured-but-stateless tracker must not read back as the default workflow
+    // and unlock recovery with bogus data: roborev job). Detect that case and throw.
+    const statusPrefix = `${this.trackerIri.replace(/#.*$/, "")}#status-`;
+    const nn = DataFactory.namedNode.bind(DataFactory);
+    let hasState = false;
+    for (const q of dataset.match(null, nn(rdf("type")), nn(wf("State")))) {
+      if (q.subject.value.startsWith(statusPrefix)) {
+        hasState = true;
+        break;
+      }
+    }
+    if (!hasState) {
+      throw new WriteError(this.trackerUrl, 422, "Tracker declares no workflow statuses on re-read.");
+    }
+    return tracker.workflow;
+  }
+
   /** Declare (replacing any existing) a custom workflow on the tracker (F1). */
   async defineWorkflow(workflow: WorkflowDef): Promise<void> {
     await this.mutateTracker((dataset) => {
