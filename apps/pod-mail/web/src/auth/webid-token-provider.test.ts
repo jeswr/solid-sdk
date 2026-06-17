@@ -73,6 +73,11 @@ vi.mock("oauth4webapi", () => {
   const allowInsecureRequests = Symbol("allowInsecureRequests");
   return {
     allowInsecureRequests,
+    // The oauth4webapi `customFetch` request-option symbol (task #123 re-entrancy guard):
+    // `#httpOptions` now pins every OIDC request's fetch to the provider's pristine fetch
+    // via `[oauth.customFetch]`. The mock must export the symbol so that option key is the
+    // real one and not `[undefined]`.
+    customFetch: Symbol("customFetch"),
     None: () => () => {},
     ClientSecretBasic: () => () => {},
     expectNoNonce: Symbol("expectNoNonce"),
@@ -153,6 +158,15 @@ const {
   hasPendingRedirectLogin,
   consumePendingRedirectWebId,
 } = await import("./webid-token-provider");
+
+// The MOCKED oauth4webapi namespace (the vi.mock factory above) — so the re-entrancy
+// test can read the request options each oauth call received and assert `customFetch`
+// is pinned to the provider's pristine fetch (task #123).
+const oauthMock = (await import("oauth4webapi")) as unknown as {
+  customFetch: symbol;
+  discoveryRequest: { mock: { calls: unknown[][] } };
+  authorizationCodeGrantRequest: { mock: { calls: unknown[][] } };
+};
 
 const WEBID_A = "https://alice.example/profile/card#me";
 const WEBID_B = "https://bob.example/profile/card#me";
@@ -1120,5 +1134,72 @@ describe("AUTOLOGIN — two-phase full-page redirect login (beginRedirectLogin /
     // mismatched completion seeded nothing the upgrade could reuse.
     expect(upgraded.headers.get("Authorization")).toBe("DPoP tok-B");
     expect(provider.authenticatedWebId()).toBe(WEBID_B);
+  });
+});
+
+describe("task #123 re-entrancy guard — OIDC requests ride the PRISTINE customFetch, not the patched global", () => {
+  beforeEach(() => {
+    authState.webId = WEBID_A;
+    authState.accessToken = "tok-A";
+    oauthMock.discoveryRequest.mock.calls.length = 0;
+    oauthMock.authorizationCodeGrantRequest.mock.calls.length = 0;
+  });
+
+  it("pins oauth4webapi customFetch to the provider's profileFetch (so token-endpoint requests never re-enter the proactive patch)", async () => {
+    // A sentinel pristine fetch — the provider must route EVERY oauth4webapi request
+    // (discovery + the code grant) through THIS, never the ambient/patched global. This
+    // is the re-entrancy guard: under the proactive patch the issuer origin is INSIDE the
+    // credential boundary, so an OIDC request over the patched global would re-enter
+    // upgrade() (recurse / deadlock) and clobber the token-endpoint's own auth with the
+    // resource DPoP token. `#httpOptions` sets `[oauth.customFetch] = #profileFetch`.
+    const profileFetch = vi.fn(
+      async () => new Response("", { status: 200 }),
+    ) as unknown as typeof fetch;
+    const provider = new WebIdDPoPTokenProvider(
+      "https://app.example/callback.html",
+      async () => REDIRECT,
+      async () => authState.webId,
+      { clientId: "https://app.example/clientid.jsonld", profileFetch },
+    );
+
+    await provider.upgrade(new Request("https://alice.example/storage/"));
+
+    // Discovery ran with our pristine fetch as customFetch.
+    expect(oauthMock.discoveryRequest.mock.calls.length).toBeGreaterThanOrEqual(1);
+    const discoveryOpts = oauthMock.discoveryRequest.mock.calls[0][1] as Record<symbol, unknown>;
+    expect(discoveryOpts[oauthMock.customFetch]).toBe(profileFetch);
+
+    // The authorization-code (token-endpoint) grant ALSO ran with the pristine fetch.
+    expect(oauthMock.authorizationCodeGrantRequest.mock.calls.length).toBeGreaterThanOrEqual(1);
+    // The grant's http options are the LAST argument the provider spreads (`{ DPoP, ...http }`).
+    const grantCall = oauthMock.authorizationCodeGrantRequest.mock.calls[0] as Record<
+      symbol,
+      unknown
+    >[];
+    const grantOpts = grantCall[grantCall.length - 1];
+    expect(grantOpts[oauthMock.customFetch]).toBe(profileFetch);
+  });
+
+  it("ADVERSARIAL — without the guard the OIDC request would carry the ambient global, NOT the pristine fetch (proves the pin is load-bearing)", async () => {
+    // Build the provider with an explicit pristine fetch DISTINCT from globalThis.fetch.
+    // The guard MUST hand oauth the pristine one; were `customFetch` unset (or set to the
+    // global), this assertion would fail — which is exactly the recursion/clobber bug.
+    const pristine = vi.fn(
+      async () => new Response("", { status: 200 }),
+    ) as unknown as typeof fetch;
+    const provider = new WebIdDPoPTokenProvider(
+      "https://app.example/callback.html",
+      async () => REDIRECT,
+      async () => authState.webId,
+      { clientId: "https://app.example/clientid.jsonld", profileFetch: pristine },
+    );
+
+    await provider.upgrade(new Request("https://alice.example/storage/"));
+
+    const discoveryOpts = oauthMock.discoveryRequest.mock.calls[0][1] as Record<symbol, unknown>;
+    // The pinned fetch is the pristine one — and is NOT the ambient global (the patched
+    // fetch a proactive install would have swapped in).
+    expect(discoveryOpts[oauthMock.customFetch]).toBe(pristine);
+    expect(discoveryOpts[oauthMock.customFetch]).not.toBe(globalThis.fetch);
   });
 });

@@ -64,6 +64,10 @@ vi.mock("oauth4webapi", () => {
   const allowInsecureRequests = Symbol("allowInsecureRequests");
   return {
     allowInsecureRequests,
+    // The oauth4webapi `customFetch` request-option symbol (task #123 re-entrancy guard):
+    // `#httpOptions` pins every OIDC request's fetch to the provider's pristine fetch via
+    // `[oauth.customFetch]`. The mock must export the symbol so that option key is real.
+    customFetch: Symbol("customFetch"),
     None: () => () => {},
     ClientSecretBasic: () => () => {},
     expectNoNonce: Symbol("expectNoNonce"),
