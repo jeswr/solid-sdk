@@ -13,7 +13,9 @@ below are non-negotiable; the lint config and tests enforce most of them.
 | Package | Version | Role |
 |---|---|---|
 | `next` | 16.x (App Router, React 19) | framework |
-| `@jeswr/app-shell` | `git+https#cc86f78` | shared suite shell — `ThemeProvider`/`ThemeToggle`/`themeScript`, `AccountMenu`, `FeedbackButton`, primitives |
+| `@jeswr/app-shell` | `git+https#5a7484d` | shared suite shell — `ThemeProvider`/`ThemeToggle`/`themeScript`, `AccountMenu`, `FeedbackButton`, primitives |
+| `@jeswr/solid-elements` | `git+https#df0fbe4` | framework-agnostic W3C Web Components (Lit 3) — `<jeswr-loading>` wait-state spinner via the `./react` (@lit/react) adapter; themes from the same app-shell tokens |
+| `lit` / `@lit/react` | 3.x / 1.x | Lit runtime + React adapter for solid-elements (direct deps so npm hoists ONE copy; also deduped in `next.config.ts`) |
 | `@solid/reactive-authentication` | 0.1.3 | login — patches global `fetch` with DPoP tokens |
 | `@solid/object` | 0.6.0 | typed read wrappers (`WebIdDataset`, `Agent`, `ContainerDataset`, WAC/ACP) |
 | `@rdfjs/wrapper` | 0.34.0 | wrapper base (`OptionalFrom`, `LiteralAs`, `NamedNodeAs`) |
@@ -93,12 +95,33 @@ theme system or account menu.
   set `@jeswr/app-shell` ships) and `@source`s the app-shell `dist` so Tailwind
   generates the utility classes its components emit. Do NOT also import
   app-shell's `tokens.css`/`theme.css` — that would duplicate the token home.
-  Keep any bare element selectors scoped (`@layer base`), never a global
-  `button {}`, so the shadcn/app-shell button styling is not clobbered.
+- **Wait states.** Use the suite spinner `<jeswr-loading>` (from
+  `@jeswr/solid-elements`) for loading/restoring states — see `app/page.tsx`'s
+  autologin state. Register it with a side-effect `import "@jeswr/solid-elements/react"`
+  in the client component that uses it. Use the RAW-ATTRIBUTE form for a contextual
+  label — `<jeswr-loading label="Signing you in…" />` — NOT the @lit/react
+  `<Loading label>` wrapper: under @lit/react's `node` export mode (Vitest, Next
+  SSR/RSC) the wrapper drops the `label` PROPERTY, so the raw attribute is the
+  reliable label path (it reflects + renders; see `types/solid-elements.d.ts`).
+- **Safe-form button base (#121/#80) — DON'T break it.** `globals.css` ships the
+  PROVEN host-button base `button:where(:not([data-app-shell-control]))`. If you add
+  a global `button { … }` rule, KEEP this `:where(:not(...))` scope: `:where()` is
+  zero-specificity so the base stays at `(0,0,1)` (identical to a bare `button {}`)
+  and the `:not([data-app-shell-control])` excludes every app-shell control so a host
+  filled look never leaks onto / clobbers the box model of the ThemeToggle /
+  AccountMenu / FeedbackButton (incl. its portaled dialog). NEVER use a bare
+  `button {` (leaks onto the shell) or a bare `button:not([data-app-shell-control])`
+  (the attribute selector escapes `:not()` → `(0,1,1)`, out-ranking your class-only
+  overrides). `tests/css-isolation.test.ts` enforces this; `tests/solid-elements.test.ts`
+  pins the spinner's registration + theming + label contract.
+- **Lockfile transport (#78).** `npm run lint` runs `check:lockfile-transport`, which
+  fails if a stray `npm install` rewrites the `@jeswr` `git+https` deps to
+  `git+ssh://` in `package-lock.json` (that breaks keyless `npm ci` on CI/Vercel).
+  If it fires, rewrite each `resolved` back to `git+https://github.com/…`.
 
-The whole stack is from `@jeswr/app-shell` (a `git+https`-pinned dep that ships its
-own built `dist/`, so `npm install` is keyless). Don't fork these components into
-the app; if you need a behaviour change, contribute it upstream.
+The chrome is from `@jeswr/app-shell` + `@jeswr/solid-elements` (`git+https`-pinned
+deps that ship their own built `dist/`, so `npm install` / `npm ci` is keyless). Don't
+fork these components into the app; if you need a behaviour change, contribute it upstream.
 
 ## The data-layer contract (copy this pattern for every new feature)
 

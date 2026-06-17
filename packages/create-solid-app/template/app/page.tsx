@@ -1,6 +1,17 @@
 "use client";
 // Home: shows the LoginPanel when logged out, the ProfileCard when logged in.
 // Both read state from <SolidAuthProvider> via useSolidAuth().
+//
+// Side-effect import registers the @jeswr/solid-elements custom elements (each
+// component module self-`customElements.define`s, guarded against double-load), so
+// the raw <jeswr-loading> tag used below upgrades. The suite wait-state spinner
+// themes itself from the SAME app-shell OKLCH tokens as the rest of the chrome
+// (its shadow styles read --jeswr-* → app-shell --primary/--border/…), so it
+// follows light/dark for free. We use the RAW-ATTRIBUTE form (`label="…"`) rather
+// than the @lit/react `<Loading label>` wrapper because the wrapper drops the
+// `label` property in @lit/react's `node` export mode (SSR/Vitest) — see
+// types/solid-elements.d.ts.
+import "@jeswr/solid-elements/react";
 import { useSolidAuth } from "@/components/solid/SolidAuthProvider";
 import { LoginPanel } from "@/components/solid/LoginPanel";
 import { ProfileCard } from "@/components/solid/ProfileCard";
@@ -22,9 +33,9 @@ export default function Home() {
       {webId ? (
         <ProfileCard />
       ) : autologinPending ? (
-        <p className="text-muted-foreground" role="status">
-          Signing you in…
-        </p>
+        // Suite wait-state: the themed <jeswr-loading> spinner + a contextual,
+        // polite-live label (raw-attribute form — the reliable label path).
+        <jeswr-loading label="Signing you in…" />
       ) : (
         <LoginPanel />
       )}

@@ -25,11 +25,22 @@ Every scaffolded app is **born with the shared suite UX stack** baked in:
   WebID attached only on explicit consent). Installed keyless via a pinned
   `git+https` ref so a scaffolded app's `npm install` / `npm ci` works on
   Vercel/CI with no token.
+- **`@jeswr/solid-elements`** — the suite's framework-agnostic W3C Web Components
+  (Lit 3). The template uses `<jeswr-loading>` (a themed, accessible spinner) for
+  wait states (e.g. the autologin "Signing you in…"), registered via
+  `@jeswr/solid-elements/react` and rendered in the raw-attribute form so its
+  contextual label is reliable across SSR/Vitest. It themes itself from the SAME
+  app-shell OKLCH tokens, so it follows light/dark for free. Same keyless
+  `git+https` install.
 - **Deep-link AUTOLOGIN** (media-kraken#54) — an `#autologin/<webid>` hash
   triggers a silent full-page Solid-OIDC redirect login. Coexists with the
   theme system; the home page shows a "Signing you in…" state mid-redirect.
 - The **suite OKLCH theme tokens** (the same teal palette as Pod Manager and the
-  pod-* apps), so a new app shares ONE privacy-first identity out of the box.
+  pod-* apps), so a new app shares ONE privacy-first identity out of the box. A
+  baked **CSS-isolation guard** (`tests/css-isolation.test.ts`) + the proven
+  `button:where(:not([data-app-shell-control]))` safe-form host-button base keep an
+  app author's bare `button {}` from leaking onto the shared chrome (#121/#80), and
+  a `check:lockfile-transport` lint gate keeps the keyless install intact (#78).
 
 `create-solid-app my-app --repo owner/name` bakes the feedback button's target
 repo and the app's display name into `lib/app-shell-config.ts` (both editable
