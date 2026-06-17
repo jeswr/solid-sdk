@@ -23,7 +23,7 @@
   "dependencies": {
     "@jeswr/app-shell": "git+https://github.com/jeswr/app-shell.git#5a7484df818071e24adaf4833d92f836e1c8d6e2",
     "@jeswr/fetch-rdf": "^0.1.0",
-    "@jeswr/solid-elements": "git+https://github.com/jeswr/solid-elements.git#739da2ade3b54dc668db47acd670b47433a0da9d",
+    "@jeswr/solid-elements": "git+https://github.com/jeswr/solid-elements.git#df0fbe4639e2cf79ad28bb0410483fb5ca3eb24c",
     "@jeswr/solid-session-restore": "git+https://github.com/jeswr/solid-session-restore.git#f501aec",
     "@radix-ui/react-avatar": "^1.2.0",
     "@radix-ui/react-dropdown-menu": "^2.1.18",

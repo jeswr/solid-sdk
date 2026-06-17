@@ -20,6 +20,8 @@
 // does not run the cascade; the contract is what the unlayered reset keys off, and
 // app-shell's own suite tests the cascade math. The real-browser render is verified
 // at runtime in the pilot.)
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { AccountMenu, FeedbackButton, ThemeProvider, ThemeToggle } from "@jeswr/app-shell";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
@@ -71,5 +73,26 @@ describe("app-shell CSS isolation survives pod-mail's bare button {} (#80)", () 
     for (const btn of controls) {
       expect(btn).toHaveAttribute("data-app-shell-control");
     }
+  });
+
+  // THE BOX-MODEL EXCLUSION + ITS SPECIFICITY CONTRACT (roborev Medium, addressed).
+  // app-shell #80 isolates control COLOUR but NOT the box model, so the host's filled
+  // base must EXCLUDE app-shell controls to avoid clobbering their per-instance sizing
+  // utilities. We scope it with `:where(:not([data-app-shell-control]))`, NOT a bare
+  // `:not(...)`: a bare `:not([attr])` would raise the base from specificity (0,0,1)
+  // to (0,1,1), out-ranking the host's CLASS-only overrides (`.pod-mail-open`, the
+  // outline buttons) and repainting them filled. `:where()` carries ZERO specificity,
+  // so the base stays (0,0,1) — identical to the original bare `button {}` — and the
+  // host overrides keep winning. jsdom does not run the cascade, so we pin the
+  // selector form at the SOURCE (that is the contract the cascade math relies on).
+  it("scopes the host button base with zero-specificity :where() (box-model + overrides safe)", () => {
+    // Vitest runs with cwd at `web/`, so the source lives at `src/styles.css`.
+    const css = readFileSync(resolve(process.cwd(), "src/styles.css"), "utf8");
+    // The host filled-button base excludes app-shell controls via :where(:not(...)).
+    expect(css).toMatch(/button:where\(:not\(\[data-app-shell-control\]\)\)\s*\{/);
+    // And it is NOT the bare specificity-raising form (that would repaint
+    // .pod-mail-open). Match the SELECTOR position only (`button:not(...) {`), so the
+    // explanatory comment that names the rejected form does not trip this guard.
+    expect(css).not.toMatch(/button:not\(\[data-app-shell-control\]\)\s*\{/);
   });
 });

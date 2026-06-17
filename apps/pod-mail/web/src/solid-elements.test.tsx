@@ -10,17 +10,27 @@
 //      (`--jeswr-*` → app-shell `--primary` / `--border` / `--muted-foreground`),
 //      so it follows the host's light/dark theme with no extra wiring.
 //
-// NOTE (a rough edge surfaced by the pilot — see the report): @lit/react's `label`
-// PROPERTY forwarding does NOT land under React 19 + jsdom (the adapter classifies
-// props at createComponent time, before Lit finalises the element class, so `label`
-// is treated as a plain attr and React 19 + jsdom does not reflect it). The
-// component still RENDERS + THEMES correctly; real-browser prop forwarding is
-// validated at runtime. We therefore assert the element mounts + themes here, not
-// the jsdom-flaky property value.
+// THE `label` FORWARDING NOTE (root cause now understood — solid-elements df0fbe4 /
+// #122): the WC's `label` IS shown contextually in the real app. df0fbe4 made the
+// `label` reactive property `reflect: true`, so the custom element renders the text
+// (and mirrors it onto the host `label` attribute) — see the raw-element test below,
+// which exercises exactly the same property-set path the @lit/react wrapper uses in
+// a browser, and DOES assert the rendered label text under jsdom.
+//
+// The earlier "label doesn't land in jsdom" was NOT a component bug and NOT
+// jsdom-flakiness: under vitest the `@lit/react` package resolves its `node` export
+// condition (Vitest runs in Node), whose NODE_MODE build DELIBERATELY skips the
+// `useLayoutEffect` that sets non-attribute element PROPERTIES — so the React
+// wrapper never forwards `label` here regardless of the component. In a real browser
+// the `browser` condition selects the property-setting build and `label` forwards +
+// renders. We therefore assert the React-wrapper MOUNT + THEME contract (which holds
+// in NODE_MODE), and assert the df0fbe4 label RENDER on the raw element (the
+// component contract, independent of the React layer's NODE_MODE quirk).
 //
 // The deeper component behaviour (prefers-reduced-motion, ::part theming) is
 // exhaustively tested in @jeswr/solid-elements itself; this is the adoption-
 // mechanics test for THIS app, mirroring feedback-button.test.tsx.
+import "@jeswr/solid-elements";
 import { Loading } from "@jeswr/solid-elements/react";
 import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
@@ -61,5 +71,33 @@ describe("@jeswr/solid-elements <Loading> (pod-mail pilot adoption)", () => {
     expect(shadowCss).toContain("--jeswr-muted-fg: var(--muted-foreground");
     // The spinner reads those inherited tokens for its colours.
     expect(shadowCss).toContain("var(--jeswr-primary)");
+  });
+
+  // THE df0fbe4 CONTRACT (#122): the WC shows the CONTEXTUAL label text. We assert
+  // this on the RAW custom element — the same `el.label = …` property-set path the
+  // @lit/react wrapper takes in a real browser — because under vitest the React
+  // wrapper resolves @lit/react's NODE_MODE build, which skips property forwarding
+  // (see the file header). This exercises the component's own render contract:
+  // setting the `label` PROPERTY (1) renders the contextual text in the shadow DOM,
+  // (2) reflects onto the host `label` attribute (df0fbe4's `reflect: true`), and
+  // (3) sets the accessible name. With the PRE-df0fbe4 pin the property did NOT
+  // reflect and the contextual span was dropped, so this test genuinely pins the bump.
+  it("shows the contextual label text + reflects it (df0fbe4 reflect:true)", async () => {
+    const el = document.createElement("jeswr-loading") as HTMLElement & { label: string | null };
+    document.body.appendChild(el);
+    await customElements.whenDefined("jeswr-loading");
+    el.label = "Locating your mailbox…";
+    // Lit applies the property in a microtask; await the element's update.
+    await (el as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+    // (1) the contextual text renders in the shadow DOM (the `part="label"` span).
+    const labelSpan = el.shadowRoot?.querySelector('[part="label"]');
+    expect(labelSpan?.textContent).toBe("Locating your mailbox…");
+    // (2) df0fbe4 reflects the string property onto the host attribute.
+    expect(el.getAttribute("label")).toBe("Locating your mailbox…");
+    // (3) the accessible name is the contextual text, not the generic fallback.
+    expect(el.shadowRoot?.querySelector('[role="status"]')?.getAttribute("aria-label")).toBe(
+      "Locating your mailbox…",
+    );
+    el.remove();
   });
 });

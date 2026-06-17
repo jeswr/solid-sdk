@@ -16,10 +16,34 @@
 //
 // Usage: node scripts/check-lockfile-transport.mjs
 
-import { readdirSync, readFileSync } from "node:fs";
-import { join, relative } from "node:path";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { dirname, join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const ROOT = process.cwd();
+// Anchor the scan at the REPOSITORY ROOT, not `process.cwd()`. The npm script runs
+// this from `web/` (its package.json), so a cwd-based root would only ever scan the
+// `web/` subtree and silently miss a repo-ROOT `package-lock.json` (pod-health has
+// both a root data-layer lockfile and `web/`). Walk UP from this script's own dir to
+// the first directory containing a `.git` (the checkout root); fall back to two
+// levels up (`web/scripts` → repo root) if no `.git` is found (e.g. a worktree's
+// `.git` is a FILE, which existsSync still detects, but be defensive). This makes the
+// guard cover the ENTIRE checkout regardless of the invoking cwd, matching its
+// documented "root and nested lockfiles" contract.
+function findRepoRoot(startDir) {
+  let dir = startDir;
+  for (let i = 0; i < 12; i++) {
+    if (existsSync(join(dir, ".git"))) return dir;
+    const parent = dirname(dir);
+    if (parent === dir) break; // reached filesystem root
+    dir = parent;
+  }
+  // Fallback: this script lives at `<repo>/web/scripts/`, so two dirs up is the repo
+  // root. (Used only if no `.git` is found, e.g. an exported tarball.)
+  return dirname(dirname(startDir));
+}
+
+const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
+const ROOT = findRepoRoot(SCRIPT_DIR);
 
 // Directories we never descend into when discovering lockfiles.
 const SKIP_DIRS = new Set([
