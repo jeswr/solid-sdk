@@ -78,6 +78,17 @@ export const wf = (local: string) => `${WF}${local}`;
  */
 export const SAVED_VIEW = wf("savedView");
 export const VIEW_QUERY = wf("viewQuery");
+/**
+ * Version (release) predicate. A tracker-declared version is a
+ * `schema:SoftwareVersion` fragment of the tracker config doc, ordered by
+ * `schema:position` with a `schema:releaseDate`; its released/unreleased state
+ * (Jira's "release" toggle) is an app-local boolean on `wf:released` — the same
+ * `wf:`-namespace extension idiom as `wf:savedView`/`wf:allowedTransitions`/
+ * `wf:issueCategory` (no new vocab is minted). An issue points at a version via
+ * `wf:affectsVersion` (the version it was observed in) and `wf:fixVersion` (the
+ * version it is targeted to be fixed in).
+ */
+export const RELEASED = wf("released");
 export const dct = (local: string) => `${DCT}${local}`;
 export const rdf = (local: string) => `${RDF}${local}`;
 export const rdfs = (local: string) => `${RDFS}${local}`;

@@ -16,6 +16,14 @@ export interface StructuredQuery {
   statuses: StatusSlug[];
   priorities: (Priority | "none")[];
   labels: string[];
+  /** Component slugs; ANDs like {@link labels} ("carries all of these"). */
+  components: string[];
+  /** Fix-version slugs (`fixversion:`); ORs across repeats. */
+  fixVersions: string[];
+  /** Affects-version slugs (`affectsversion:`); ORs across repeats. */
+  affectsVersions: string[];
+  /** Either-version slugs (`version:`); matches affects OR fix; ORs across repeats. */
+  versions: string[];
   types: IssueType[];
   /** Assignee substrings; `none` means unassigned. */
   assignees: string[];
@@ -43,6 +51,7 @@ export function hasStructuredTokens(input: string): boolean {
 
 const KNOWN_KEYS = new Set([
   "is", "state", "status", "priority", "p", "label", "tag", "type",
+  "component", "version", "fixversion", "affectsversion",
   "assignee", "a", "due", "points", "estimate", "has", "sort",
 ]);
 
@@ -54,7 +63,7 @@ function tokenize(input: string): string[] {
 const unquote = (v: string) => (v.startsWith('"') && v.endsWith('"') ? v.slice(1, -1) : v);
 
 export function parseQuery(input: string): StructuredQuery {
-  const q: StructuredQuery = { text: [], statuses: [], priorities: [], labels: [], types: [], assignees: [], has: [] };
+  const q: StructuredQuery = { text: [], statuses: [], priorities: [], labels: [], components: [], fixVersions: [], affectsVersions: [], versions: [], types: [], assignees: [], has: [] };
 
   for (const token of tokenize(input)) {
     const m = KEY_TOKEN.exec(token);
@@ -90,6 +99,18 @@ export function parseQuery(input: string): StructuredQuery {
       case "label":
       case "tag":
         q.labels.push(value);
+        break;
+      case "component":
+        q.components.push(value);
+        break;
+      case "version":
+        q.versions.push(value);
+        break;
+      case "fixversion":
+        q.fixVersions.push(value);
+        break;
+      case "affectsversion":
+        q.affectsVersions.push(value);
         break;
       case "type":
         if (TYPE_SLUGS.has(value)) q.types.push(value as IssueType);
@@ -177,6 +198,15 @@ export function matchesQuery(issue: IssueRecord, q: StructuredQuery, now = new D
   // Labels AND: the issue must carry every requested label.
   const labels = issue.labels.map((l) => l.toLowerCase());
   if (q.labels.length && !q.labels.every((l) => labels.includes(l))) return false;
+  // Components AND, exactly like labels (carries all of these).
+  const components = issue.components.map((c) => c.toLowerCase());
+  if (q.components.length && !q.components.every((c) => components.includes(c))) return false;
+  // Versions OR across repeats; `version:` matches either affects- or fix-version.
+  const affects = issue.affectsVersion?.toLowerCase();
+  const fix = issue.fixVersion?.toLowerCase();
+  if (q.affectsVersions.length && !(affects && q.affectsVersions.includes(affects))) return false;
+  if (q.fixVersions.length && !(fix && q.fixVersions.includes(fix))) return false;
+  if (q.versions.length && !((affects && q.versions.includes(affects)) || (fix && q.versions.includes(fix)))) return false;
   if (q.assignees.length) {
     const ok = q.assignees.some((a) =>
       a === "none" || a === "unassigned"

@@ -24,6 +24,7 @@ const base: IssueRecord = {
   priority: "low",
   assignee: undefined,
   labels: [],
+  components: [],
   blockedBy: [],
   relatesTo: [],
   attachments: [],

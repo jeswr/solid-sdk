@@ -14,14 +14,17 @@ import {
   canTransition,
   statusState,
   type ActivityKind,
+  type ComponentDef,
   type FieldDef,
   type FieldValue,
   type FieldType,
   type IssueState,
   type IssueType,
+  type LabelDef,
   type Priority,
   type SavedViewDef,
   type StatusSlug,
+  type VersionDef,
   type WorkflowDef,
 } from "./issue";
 import { wf, rdf, prov } from "./vocab";
@@ -69,6 +72,12 @@ export interface IssueRecord {
   issueType: IssueType;
   priority?: Priority;
   labels: string[];
+  /** Component slugs (a second categorization dimension — areas/modules). */
+  components: string[];
+  /** The version this issue was observed in (a tracker-version slug), if any. */
+  affectsVersion?: string;
+  /** The version this issue is targeted to be fixed in (a tracker-version slug), if any. */
+  fixVersion?: string;
   assignee?: string;
   creator?: string;
   dateDue?: Date;
@@ -138,6 +147,12 @@ export interface NewIssueInput {
   status?: StatusSlug;
   issueType?: IssueType;
   labels?: string[];
+  /** Component display names (declared on the tracker on first use, like labels). */
+  components?: string[];
+  /** The version this issue was observed in — a display name (declared on use). */
+  affectsVersion?: string;
+  /** The version this issue is targeted to be fixed in — a display name (declared on use). */
+  fixVersion?: string;
   parent?: string;
   blockedBy?: string[];
   /** Issue URLs this one relates to (non-blocking, `dct:relation`). */
@@ -206,6 +221,9 @@ function toRecord(issue: Issue, url: string, canWrite: boolean, fieldDefs: Field
     issueType: issue.issueType,
     priority: issue.priority,
     labels: issue.labels,
+    components: issue.components,
+    affectsVersion: issue.affectsVersion,
+    fixVersion: issue.fixVersion,
     assignee: issue.assignee,
     creator: issue.creator,
     dateDue: issue.dateDue,
@@ -313,17 +331,108 @@ export class Repository {
   }
 
   /** All label definitions declared on the tracker. */
-  async labels(): Promise<{ slug: string; label: string }[]> {
+  async labels(): Promise<LabelDef[]> {
     const { tracker } = await this.loadTracker();
     return tracker.labelDefs;
   }
 
+  /**
+   * Ensure the tracker declares each given component (by display name) as a
+   * category class, returning their slugs. No-op for an empty list — mirrors
+   * {@link declareLabels}.
+   */
+  async declareComponents(displayLabels: string[]): Promise<string[]> {
+    if (displayLabels.length === 0) return [];
+    const { dataset, etag, tracker, exists } = await this.loadTracker();
+    if (!exists || !tracker.title) tracker.configure(DEFAULT_TITLE);
+    const known = new Map(tracker.componentDefs.map((d) => [d.label.toLowerCase(), d.slug]));
+    const slugs = displayLabels.map((l) => known.get(l.toLowerCase()) ?? tracker.defineComponent(l));
+    await this.put(this.trackerUrl, dataset, etag);
+    return slugs;
+  }
+
+  /**
+   * Ensure the tracker declares the given version (by display name), returning its
+   * slug, or undefined for an empty/absent name. A version absent from the tracker
+   * is appended (unreleased, no date); an existing one keeps its metadata.
+   */
+  async declareVersion(displayName: string | undefined): Promise<string | undefined> {
+    const name = displayName?.trim();
+    if (!name) return undefined;
+    const { dataset, etag, tracker, exists } = await this.loadTracker();
+    if (!exists || !tracker.title) tracker.configure(DEFAULT_TITLE);
+    const known = new Map(tracker.versionDefs.map((d) => [d.label.toLowerCase(), d.slug]));
+    const existing = known.get(name.toLowerCase());
+    if (existing) return existing;
+    const slug = tracker.defineVersion(name).slug;
+    await this.put(this.trackerUrl, dataset, etag);
+    return slug;
+  }
+
+  /** All component definitions declared on the tracker. */
+  async components(): Promise<ComponentDef[]> {
+    const { tracker } = await this.loadTracker();
+    return tracker.componentDefs;
+  }
+
+  /** Define (or relabel) a component on the tracker, returning its slug. */
+  async defineComponent(label: string): Promise<string> {
+    let slug = "";
+    await this.mutateTracker((dataset) => {
+      slug = new Tracker(this.trackerIri, dataset, DataFactory).defineComponent(label);
+    });
+    return slug;
+  }
+
+  /** Remove a component definition (issue type-quads referencing it are untouched). */
+  async removeComponent(slug: string): Promise<void> {
+    await this.mutateTracker((dataset) => {
+      new Tracker(this.trackerIri, dataset, DataFactory).removeComponent(slug);
+    });
+  }
+
+  /** All version (release) definitions declared on the tracker, in declared order. */
+  async versions(): Promise<VersionDef[]> {
+    const { tracker } = await this.loadTracker();
+    return tracker.versionDefs;
+  }
+
+  /** Define (or redefine) a version on the tracker. */
+  async defineVersion(
+    label: string,
+    opts: { position?: number; releaseDate?: Date; released?: boolean } = {},
+  ): Promise<VersionDef> {
+    let def: VersionDef | undefined;
+    await this.mutateTracker((dataset) => {
+      def = new Tracker(this.trackerIri, dataset, DataFactory).defineVersion(label, opts);
+    });
+    return def!;
+  }
+
+  /** Remove a version definition (issue affects/fix links are left in place). */
+  async removeVersion(slug: string): Promise<void> {
+    await this.mutateTracker((dataset) => {
+      new Tracker(this.trackerIri, dataset, DataFactory).removeVersion(slug);
+    });
+  }
+
   /** A snapshot of tracker-level config for the UI. */
-  async info(): Promise<{ title?: string; labels: { slug: string; label: string }[]; fields: FieldDef[]; groupMembers: string[]; assigneeGroup?: string; workflow: WorkflowDef }> {
+  async info(): Promise<{
+    title?: string;
+    labels: LabelDef[];
+    components: ComponentDef[];
+    versions: VersionDef[];
+    fields: FieldDef[];
+    groupMembers: string[];
+    assigneeGroup?: string;
+    workflow: WorkflowDef;
+  }> {
     const { tracker } = await this.loadTracker();
     return {
       title: tracker.title,
       labels: tracker.labelDefs,
+      components: tracker.componentDefs,
+      versions: tracker.versionDefs,
       fields: tracker.fieldDefs,
       groupMembers: tracker.groupMembers,
       assigneeGroup: tracker.assigneeGroup,
@@ -472,6 +581,9 @@ export class Repository {
     const fieldDefs = tracker.fieldDefs;
     const workflow = tracker.workflow;
     const labelSlugs = await this.declareLabels(input.labels ?? []);
+    const componentSlugs = await this.declareComponents(input.components ?? []);
+    const affectsVersionSlug = await this.declareVersion(input.affectsVersion);
+    const fixVersionSlug = await this.declareVersion(input.fixVersion);
     const url = `${this.containerUrl}${crypto.randomUUID()}.ttl`;
     const dataset: DatasetCore = new Store();
     const issue = new Issue(`${url}${ISSUE_FRAGMENT}`, dataset, DataFactory);
@@ -495,6 +607,9 @@ export class Repository {
     issue.creator = input.creator;
     issue.priority = input.priority;
     issue.labels = labelSlugs;
+    issue.components = componentSlugs;
+    issue.affectsVersion = affectsVersionSlug;
+    issue.fixVersion = fixVersionSlug;
     issue.parent = input.parent;
     issue.duplicateOf = input.duplicateOf;
     issue.clonedFrom = input.clonedFrom;
@@ -532,6 +647,12 @@ export class Repository {
 
   async update(url: string, patch: IssuePatch): Promise<void> {
     const labelSlugs = "labels" in patch && patch.labels ? await this.declareLabels(patch.labels) : undefined;
+    const componentSlugs = "components" in patch && patch.components ? await this.declareComponents(patch.components) : undefined;
+    // Versions are single-valued: an explicit `undefined` clears, so resolve the
+    // slug only when a (non-empty) name is supplied; the `"x" in patch` check
+    // below still drives whether the predicate is written/cleared.
+    const affectsVersionSlug = "affectsVersion" in patch ? await this.declareVersion(patch.affectsVersion) : undefined;
+    const fixVersionSlug = "fixVersion" in patch ? await this.declareVersion(patch.fixVersion) : undefined;
     const workflow = "status" in patch && patch.status ? await this.workflow() : undefined;
     const { dataset, etag, issue } = await this.openIssue(url);
     // Snapshot the change-tracked fields BEFORE mutating, so the activity log
@@ -545,6 +666,11 @@ export class Repository {
     if ("status" in patch && patch.status && workflow) this.applyStatus(issue, patch.status, workflow);
     if ("issueType" in patch && patch.issueType) issue.issueType = patch.issueType;
     if (labelSlugs) issue.labels = labelSlugs;
+    if (componentSlugs) issue.components = componentSlugs;
+    // Single-valued versions: present-in-patch ⇒ set (or clear when the resolved
+    // slug is undefined, i.e. the supplied name was empty).
+    if ("affectsVersion" in patch) issue.affectsVersion = affectsVersionSlug;
+    if ("fixVersion" in patch) issue.fixVersion = fixVersionSlug;
     if ("parent" in patch) issue.parent = patch.parent;
     if ("duplicateOf" in patch) issue.duplicateOf = patch.duplicateOf;
     if ("clonedFrom" in patch) issue.clonedFrom = patch.clonedFrom;

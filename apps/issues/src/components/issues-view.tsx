@@ -13,7 +13,7 @@ import { filterAndSort, facets, DEFAULT_QUERY, type IssueQuery, type SortKey } f
 import { SavedViews } from "@/lib/saved-views";
 import type { PodSavedView } from "@/lib/pod-saved-views";
 import { resolveView, viewHref, VIEW_KEY, type View } from "@/lib/view";
-import { DEFAULT_WORKFLOW, type FieldDef, type Priority, type StatusSlug, type WorkflowDef } from "@/lib/issue";
+import { DEFAULT_WORKFLOW, type ComponentDef, type FieldDef, type Priority, type StatusSlug, type VersionDef, type WorkflowDef } from "@/lib/issue";
 import { dependencyWarning, type OpenBlocker } from "@/lib/dependencies";
 import { IssueFormDialog, type IssueFormSubmit } from "@/components/issue-form-dialog";
 import { ShareDialog } from "@/components/share-dialog";
@@ -106,11 +106,13 @@ const SORTS: { key: SortKey; label: string }[] = [
 ];
 const PRIORITIES: Priority[] = ["high", "medium", "low"];
 
-/** Tracker config (title, custom fields, team), tagged with its tracker. */
+/** Tracker config (title, custom fields, components, versions, team), tagged with its tracker. */
 interface TrackerInfo {
   tracker: string;
   title?: string;
   fields: FieldDef[];
+  components: ComponentDef[];
+  versions: VersionDef[];
   group: { iri?: string; members: string[] };
   workflow: WorkflowDef;
 }
@@ -118,6 +120,8 @@ const EMPTY_GROUP: TrackerInfo["group"] = { members: [] };
 // Module-level so the derived fallbacks keep a stable identity across renders
 // (effects and memos downstream depend on them).
 const EMPTY_FIELDS: FieldDef[] = [];
+const EMPTY_COMPONENTS: ComponentDef[] = [];
+const EMPTY_VERSIONS: VersionDef[] = [];
 
 export function IssuesView() {
   const { profile, trackerUrl, storageUrl, logout } = useSolidSession();
@@ -190,6 +194,8 @@ export function IssuesView() {
   const [trackerInfo, setTrackerInfo] = useState<TrackerInfo | null>(null);
   const infoCurrent = trackerInfo !== null && trackerInfo.tracker === tracker.trackerUrl;
   const fieldDefs = infoCurrent ? trackerInfo.fields : EMPTY_FIELDS;
+  const componentDefs = infoCurrent ? trackerInfo.components : EMPTY_COMPONENTS;
+  const versionDefs = infoCurrent ? trackerInfo.versions : EMPTY_VERSIONS;
   const group = infoCurrent ? trackerInfo.group : EMPTY_GROUP;
   const trackerTitle = infoCurrent ? trackerInfo.title : undefined;
   const workflow = infoCurrent ? trackerInfo.workflow : DEFAULT_WORKFLOW;
@@ -235,6 +241,8 @@ export function IssuesView() {
         tracker: url,
         title: info.title,
         fields: info.fields,
+        components: info.components,
+        versions: info.versions,
         group: isOwn ? { iri: info.assigneeGroup, members: info.groupMembers } : EMPTY_GROUP,
         workflow: info.workflow,
       });
@@ -242,7 +250,7 @@ export function IssuesView() {
       if (seq !== infoSeq.current) return;
       // Config is optional sugar, but a failed load must still clear whatever
       // the previous project left behind.
-      setTrackerInfo({ tracker: url, fields: [], group: EMPTY_GROUP, workflow: DEFAULT_WORKFLOW });
+      setTrackerInfo({ tracker: url, fields: [], components: [], versions: [], group: EMPTY_GROUP, workflow: DEFAULT_WORKFLOW });
     }
   }, [isOwn, tracker.trackerUrl]);
 
@@ -428,6 +436,16 @@ export function IssuesView() {
     [issues.issues],
   );
   const fac = useMemo(() => facets(issues.issues), [issues.issues]);
+  // Component / version slugs → human labels for display in the filter menu and
+  // detail view (the issue carries slugs; the tracker config carries labels).
+  const componentLabel = useCallback(
+    (slug: string) => componentDefs.find((c) => c.slug === slug)?.label ?? slug,
+    [componentDefs],
+  );
+  const versionLabel = useCallback(
+    (slug: string) => versionDefs.find((v) => v.slug === slug)?.label ?? slug,
+    [versionDefs],
+  );
   const visible = useMemo(() => filterAndSort(issues.issues, query), [issues.issues, query]);
   // The board applies the same text/facet filters as the list, but its own state
   // visibility is owned by boardIssues (so the Done column keeps completed cards
@@ -475,7 +493,7 @@ export function IssuesView() {
       live = false;
     };
   }, [commentsUrl, loadActivityLog, issues.issues]);
-  const activeFilters = query.priorities.length + query.labels.length + query.assignees.length;
+  const activeFilters = query.priorities.length + query.labels.length + query.components.length + query.versions.length + query.assignees.length;
 
   async function run(action: () => Promise<void>, success: string) {
     try {
@@ -878,6 +896,28 @@ export function IssuesView() {
                     {l}
                   </DropdownMenuCheckboxItem>
                 ))}
+                {fac.components.length > 0 && <DropdownMenuLabel>Components</DropdownMenuLabel>}
+                {fac.components.map((c) => (
+                  <DropdownMenuCheckboxItem
+                    key={c}
+                    checked={query.components.includes(c)}
+                    onCheckedChange={() => patchQuery({ components: toggleIn(query.components, c) })}
+                    onSelect={(e) => e.preventDefault()}
+                  >
+                    {componentLabel(c)}
+                  </DropdownMenuCheckboxItem>
+                ))}
+                {fac.versions.length > 0 && <DropdownMenuLabel>Versions</DropdownMenuLabel>}
+                {fac.versions.map((v) => (
+                  <DropdownMenuCheckboxItem
+                    key={v}
+                    checked={query.versions.includes(v)}
+                    onCheckedChange={() => patchQuery({ versions: toggleIn(query.versions, v) })}
+                    onSelect={(e) => e.preventDefault()}
+                  >
+                    {versionLabel(v)}
+                  </DropdownMenuCheckboxItem>
+                ))}
                 {fac.assignees.length > 0 && <DropdownMenuLabel>Assignee</DropdownMenuLabel>}
                 {fac.assignees.map((a) => (
                   <DropdownMenuCheckboxItem
@@ -892,7 +932,7 @@ export function IssuesView() {
                 {activeFilters > 0 && (
                   <>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={() => patchQuery({ priorities: [], labels: [], assignees: [] })}>
+                    <DropdownMenuItem onClick={() => patchQuery({ priorities: [], labels: [], components: [], versions: [], assignees: [] })}>
                       Clear filters
                     </DropdownMenuItem>
                   </>
@@ -1273,6 +1313,8 @@ export function IssuesView() {
         onSubmit={onSubmitForm}
         assigneeSuggestions={assigneeSuggestions}
         fieldDefs={fieldDefs}
+        componentDefs={componentDefs}
+        versionDefs={versionDefs}
         statuses={workflow.statuses}
       />
 
@@ -1284,6 +1326,8 @@ export function IssuesView() {
         people={people}
         groupIri={group.iri}
         fieldDefs={fieldDefs}
+        componentDefs={componentDefs}
+        versionDefs={versionDefs}
         activity={activity}
         workflowStatuses={workflow.statuses}
         canComment={!!commentsIssue?.canWrite}

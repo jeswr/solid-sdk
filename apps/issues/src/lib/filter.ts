@@ -12,6 +12,8 @@ export interface IssueQuery {
   state: StateFilter;
   priorities: Priority[]; // empty ⇒ any
   labels: string[]; // empty ⇒ any (issue must carry at least one of these)
+  components: string[]; // empty ⇒ any (issue must carry at least one of these)
+  versions: string[]; // empty ⇒ any (issue's affects- OR fix-version must be one of these)
   assignees: string[]; // empty ⇒ any
   sort: SortKey;
   sortDir: SortDir;
@@ -22,6 +24,8 @@ export const DEFAULT_QUERY: IssueQuery = {
   state: "open",
   priorities: [],
   labels: [],
+  components: [],
+  versions: [],
   assignees: [],
   sort: "created",
   sortDir: "desc",
@@ -36,6 +40,9 @@ function matches(issue: IssueRecord, q: IssueQuery, structured?: StructuredQuery
   if (state !== "all" && issue.state !== state) return false;
   if (q.priorities.length && !(issue.priority && q.priorities.includes(issue.priority))) return false;
   if (q.labels.length && !issue.labels.some((l) => q.labels.includes(l))) return false;
+  if (q.components.length && !issue.components.some((c) => q.components.includes(c))) return false;
+  // A version filter matches an issue whose affects- OR fix-version is selected.
+  if (q.versions.length && !((issue.affectsVersion && q.versions.includes(issue.affectsVersion)) || (issue.fixVersion && q.versions.includes(issue.fixVersion)))) return false;
   if (q.assignees.length && !(issue.assignee && q.assignees.includes(issue.assignee))) return false;
   if (structured) return matchesQuery(issue, { ...structured, state: undefined });
   return q.text ? matchesFreeText(issue, q.text.toLowerCase()) : true;
@@ -81,13 +88,23 @@ export function filterAndSort(issues: IssueRecord[], q: IssueQuery): IssueRecord
   });
 }
 
-/** Distinct labels / assignees present across the issues, for filter menus. */
-export function facets(issues: IssueRecord[]): { labels: string[]; assignees: string[] } {
+/** Distinct labels / components / versions / assignees present across the issues, for filter menus. */
+export function facets(issues: IssueRecord[]): { labels: string[]; components: string[]; versions: string[]; assignees: string[] } {
   const labels = new Set<string>();
+  const components = new Set<string>();
+  const versions = new Set<string>();
   const assignees = new Set<string>();
   for (const i of issues) {
     i.labels.forEach((l) => labels.add(l));
+    i.components.forEach((c) => components.add(c));
+    if (i.affectsVersion) versions.add(i.affectsVersion);
+    if (i.fixVersion) versions.add(i.fixVersion);
     if (i.assignee) assignees.add(i.assignee);
   }
-  return { labels: [...labels].sort(), assignees: [...assignees].sort() };
+  return {
+    labels: [...labels].sort(),
+    components: [...components].sort(),
+    versions: [...versions].sort(),
+    assignees: [...assignees].sort(),
+  };
 }

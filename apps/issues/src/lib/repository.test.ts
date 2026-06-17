@@ -148,6 +148,68 @@ describe("Repository (per-issue documents)", () => {
     expect(issues[0].fields).toEqual({});
   });
 
+  it("round-trips components through create, update, list, and info (declared on use)", async () => {
+    const { impl } = fakePod();
+    const repo = new Repository(TRACKER, impl);
+
+    // Components are declared by display name on first use, exactly like labels.
+    const url = await repo.create({ title: "C", creator: ME, components: ["API", "UI"] });
+    let { issues } = await repo.list();
+    expect(issues[0].components.sort()).toEqual(["api", "ui"]);
+    // info() surfaces the tracker-level component definitions.
+    expect((await repo.info()).components.map((c) => c.label)).toEqual(["API", "UI"]);
+
+    // Updating replaces the set; an empty array clears it.
+    await repo.update(url, { components: ["API"] });
+    ({ issues } = await repo.list());
+    expect(issues[0].components).toEqual(["api"]);
+    await repo.update(url, { components: [] });
+    ({ issues } = await repo.list());
+    expect(issues[0].components).toEqual([]);
+
+    // Reusing a known display name does not duplicate the definition.
+    await repo.create({ title: "C2", creator: ME, components: ["api"] });
+    expect((await repo.info()).components.map((c) => c.slug)).toEqual(["api", "ui"]);
+  });
+
+  it("round-trips affects/fix versions through create, update, list, and info", async () => {
+    const { impl } = fakePod();
+    const repo = new Repository(TRACKER, impl);
+
+    const url = await repo.create({ title: "V", creator: ME, affectsVersion: "1.0", fixVersion: "2.0" });
+    let { issues } = await repo.list();
+    expect(issues[0].affectsVersion).toBe("1-0");
+    expect(issues[0].fixVersion).toBe("2-0");
+    // Both versions were declared on the tracker, ordered by schema:position.
+    expect((await repo.info()).versions.map((v) => v.label)).toEqual(["1.0", "2.0"]);
+
+    // Reassign the fix-version; clear the affects-version explicitly.
+    await repo.update(url, { fixVersion: "1.0", affectsVersion: undefined });
+    ({ issues } = await repo.list());
+    expect(issues[0].fixVersion).toBe("1-0");
+    expect(issues[0].affectsVersion).toBeUndefined();
+    // No new version definition was minted (1.0 already existed).
+    expect((await repo.info()).versions.map((v) => v.slug)).toEqual(["1-0", "2-0"]);
+  });
+
+  it("manages tracker-level version metadata (position, release date, released flag)", async () => {
+    const { impl } = fakePod();
+    const repo = new Repository(TRACKER, impl);
+    await repo.ensureTracker();
+    const date = new Date("2026-07-01T00:00:00.000Z");
+    await repo.defineVersion("2.0", { position: 2 });
+    await repo.defineVersion("1.0", { position: 1, releaseDate: date, released: true });
+
+    const versions = await repo.versions();
+    expect(versions.map((v) => v.label)).toEqual(["1.0", "2.0"]); // schema:position order
+    const v1 = versions.find((v) => v.slug === "1-0")!;
+    expect(v1.releaseDate!.toISOString()).toBe("2026-07-01T00:00:00.000Z");
+    expect(v1.released).toBe(true);
+
+    await repo.removeVersion("2-0");
+    expect((await repo.versions()).map((v) => v.slug)).toEqual(["1-0"]);
+  });
+
   it("rejects unsafe URL custom-field values at the data layer", async () => {
     const { impl } = fakePod();
     const repo = new Repository(TRACKER, impl);

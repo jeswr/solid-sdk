@@ -14,6 +14,8 @@ const QUERY: IssueQuery = {
   state: "all",
   priorities: ["high", "low"],
   labels: ["bug", "ui"],
+  components: ["api", "ui"],
+  versions: ["v1", "v2"],
   assignees: [ME],
   sort: "due",
   sortDir: "asc",
@@ -46,6 +48,8 @@ describe("pod-saved-views codec", () => {
         state: "deleted-everything", // not a StateFilter → default
         priorities: ["high", "urgent", 7], // keeps only valid priorities
         labels: ["ok", "", "ok"], // drops empty + dedupes
+        components: "not-an-array", // → []
+        versions: [42, "v1"], // keeps only the string
         assignees: "not-an-array", // → []
         sort: "evil", // → default
         sortDir: "sideways", // → default
@@ -56,6 +60,8 @@ describe("pod-saved-views codec", () => {
     expect(parsed.query.state).toBe(DEFAULT_QUERY.state);
     expect(parsed.query.priorities).toEqual(["high"]);
     expect(parsed.query.labels).toEqual(["ok"]);
+    expect(parsed.query.components).toEqual([]);
+    expect(parsed.query.versions).toEqual(["v1"]);
     expect(parsed.query.assignees).toEqual([]);
     expect(parsed.query.sort).toBe(DEFAULT_QUERY.sort);
     expect(parsed.query.sortDir).toBe(DEFAULT_QUERY.sortDir);
