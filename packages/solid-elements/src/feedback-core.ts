@@ -94,13 +94,24 @@ export function buildIssueUrl(args: {
  * repo names allow alphanumerics, hyphen, underscore, and dot; exactly ONE "/"
  * separator; no leading/trailing dot games beyond what GitHub itself permits.
  * Exported for tests. Used to fail closed before any URL is constructed.
+ *
+ * SECURITY: the repo segment is additionally rejected if it is exactly "." or
+ * ".." — those are valid against the character class but are URL dot-segments
+ * that would let `buildIssueUrl` emit a path like `github.com/owner/../issues/new`
+ * (which normalises to a DIFFERENT host path), defeating the fail-closed guard.
  */
 export function isValidRepo(repo: string): boolean {
   if (typeof repo !== "string") return false;
   // owner: 1–39 chars of [A-Za-z0-9-]; repo: 1–100 chars of [A-Za-z0-9._-].
   // (GitHub's real rules are a touch looser on owners, but this strict subset is
   // safe and covers every @jeswr suite repo.)
-  return /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\/[A-Za-z0-9._-]{1,100}$/.test(repo);
+  if (!/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\/[A-Za-z0-9._-]{1,100}$/.test(repo)) {
+    return false;
+  }
+  // Reject dot-only repo segments ("." / "..") — path-traversal dot-segments.
+  // (GitHub itself disallows a repo literally named "." or "..".)
+  const repoSegment = repo.slice(repo.indexOf("/") + 1);
+  return repoSegment !== "." && repoSegment !== "..";
 }
 
 /**

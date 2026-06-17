@@ -60,6 +60,16 @@ describe("buildIssueUrl", () => {
       buildIssueUrl({ repo: "owner/repo space", title: "t", body: "b", labels: [] }),
     ).toThrow();
   });
+
+  it("rejects dot-segment repo names that would normalise to a different host path", () => {
+    // Without the dot-segment guard these pass the character class but produce
+    // `github.com/owner/../issues/new`, which a URL normaliser collapses to a
+    // DIFFERENT path — a fail-closed bypass. They must throw.
+    expect(() => buildIssueUrl({ repo: "owner/..", title: "t", body: "b", labels: [] })).toThrow();
+    expect(() => buildIssueUrl({ repo: "owner/.", title: "t", body: "b", labels: [] })).toThrow();
+    // Sanity: confirm the normalisation hazard is real for the rejected value.
+    expect(new URL("https://github.com/owner/../issues/new").pathname).toBe("/issues/new");
+  });
 });
 
 describe("isValidRepo", () => {
@@ -78,6 +88,13 @@ describe("isValidRepo", () => {
     expect(isValidRepo("-bad/repo")).toBe(false);
     // @ts-expect-error — exercising a non-string guard at runtime.
     expect(isValidRepo(null)).toBe(false);
+  });
+  it("rejects dot-only repo segments (path-traversal dot-segments)", () => {
+    expect(isValidRepo("owner/..")).toBe(false);
+    expect(isValidRepo("owner/.")).toBe(false);
+    // A dot is still allowed WITHIN a repo name (e.g. a real "my.repo").
+    expect(isValidRepo("owner/.hidden")).toBe(true);
+    expect(isValidRepo("owner/a.b")).toBe(true);
   });
 });
 

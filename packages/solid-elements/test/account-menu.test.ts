@@ -1,5 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { initials, JeswrAccountMenu } from "../src/components/account-menu.js";
 
 async function mount(attrs: Record<string, string> = {}): Promise<JeswrAccountMenu> {
@@ -12,6 +12,10 @@ async function mount(attrs: Record<string, string> = {}): Promise<JeswrAccountMe
 
 beforeEach(() => {
   document.body.innerHTML = "";
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 
 describe("initials", () => {
@@ -78,6 +82,29 @@ describe("<jeswr-account-menu>", () => {
     const slot = el.shadowRoot?.querySelector("slot") as HTMLSlotElement;
     const assigned = slot.assignedElements();
     expect(assigned).toContain(item);
+  });
+
+  it("closes on an outside pointerdown AND removes the document listener (no leak)", async () => {
+    const el = await mount({ name: "Ada" });
+    const addSpy = vi.spyOn(document, "addEventListener");
+    const removeSpy = vi.spyOn(document, "removeEventListener");
+
+    // Open: registers exactly one document-level pointerdown listener.
+    (el.shadowRoot?.querySelector(".trigger") as HTMLButtonElement).click();
+    await el.updateComplete;
+    expect(el.shadowRoot?.querySelector(".menu")).not.toBeNull();
+    const pointerAdds = addSpy.mock.calls.filter(([type]) => type === "pointerdown");
+    expect(pointerAdds.length).toBe(1);
+
+    // Click OUTSIDE the element: closes the menu AND tears down the listener in
+    // the same branch (the leak the roborev finding flagged).
+    const outside = document.createElement("div");
+    document.body.appendChild(outside);
+    outside.dispatchEvent(new Event("pointerdown", { bubbles: true, composed: true }));
+    await el.updateComplete;
+    expect(el.shadowRoot?.querySelector(".menu")).toBeNull();
+    const pointerRemoves = removeSpy.mock.calls.filter(([type]) => type === "pointerdown");
+    expect(pointerRemoves.length).toBeGreaterThanOrEqual(1);
   });
 
   it("emits sign-out on the sign-out action and closes", async () => {

@@ -62,6 +62,11 @@ export declare function buildIssueUrl(args: {
  * repo names allow alphanumerics, hyphen, underscore, and dot; exactly ONE "/"
  * separator; no leading/trailing dot games beyond what GitHub itself permits.
  * Exported for tests. Used to fail closed before any URL is constructed.
+ *
+ * SECURITY: the repo segment is additionally rejected if it is exactly "." or
+ * ".." — those are valid against the character class but are URL dot-segments
+ * that would let `buildIssueUrl` emit a path like `github.com/owner/../issues/new`
+ * (which normalises to a DIFFERENT host path), defeating the fail-closed guard.
  */
 export declare function isValidRepo(repo: string): boolean;
 /**

@@ -27,9 +27,13 @@ export class JeswrAccountMenu extends LitElement {
         _open: { state: true },
     };
     onDocPointer = (e) => {
-        // Close when a click/tap lands outside this element.
-        if (!e.composedPath().includes(this))
+        // Close when a click/tap lands outside this element, and remove this
+        // document-level listener immediately so it does not leak while closed
+        // (it is re-added by `toggle` the next time the menu opens).
+        if (!e.composedPath().includes(this)) {
             this._open = false;
+            document.removeEventListener("pointerdown", this.onDocPointer, true);
+        }
     };
     static styles = [
         tokenStyles,

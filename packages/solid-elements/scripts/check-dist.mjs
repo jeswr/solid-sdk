@@ -18,6 +18,11 @@ rmSync(backup, { recursive: true, force: true });
 cpSync(dist, backup, { recursive: true });
 
 try {
+  // Clear dist/ BEFORE rebuilding so stale outputs from a deleted/renamed source
+  // module cannot survive into the rebuild and mask drift (a committed-but-orphan
+  // .js/.d.ts would otherwise be present in BOTH the backup and the rebuild, so
+  // `diff -r` would not flag it). tsc does not prune removed files on its own.
+  rmSync(dist, { recursive: true, force: true });
   execSync("npm run build", { cwd: root, stdio: "inherit" });
   // Compare freshly-built dist against the committed snapshot.
   try {
