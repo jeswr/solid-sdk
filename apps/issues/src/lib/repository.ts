@@ -345,8 +345,16 @@ export class Repository {
     if (displayLabels.length === 0) return [];
     const { dataset, etag, tracker, exists } = await this.loadTracker();
     if (!exists || !tracker.title) tracker.configure(DEFAULT_TITLE);
-    const known = new Map(tracker.componentDefs.map((d) => [d.label.toLowerCase(), d.slug]));
-    const slugs = displayLabels.map((l) => known.get(l.toLowerCase()) ?? tracker.defineComponent(l));
+    // Match an existing component by EITHER its label or its slug, so a caller
+    // that round-trips the stored slug (e.g. the edit form before the tracker
+    // defs have loaded) reuses the definition rather than re-minting it under
+    // the slug as a new display label.
+    const byLabel = new Map(tracker.componentDefs.map((d) => [d.label.toLowerCase(), d.slug]));
+    const bySlug = new Map(tracker.componentDefs.map((d) => [d.slug, d.slug]));
+    const slugs = displayLabels.map((l) => {
+      const key = l.toLowerCase();
+      return byLabel.get(key) ?? bySlug.get(key) ?? tracker.defineComponent(l);
+    });
     await this.put(this.trackerUrl, dataset, etag);
     return slugs;
   }
@@ -361,9 +369,14 @@ export class Repository {
     if (!name) return undefined;
     const { dataset, etag, tracker, exists } = await this.loadTracker();
     if (!exists || !tracker.title) tracker.configure(DEFAULT_TITLE);
-    const known = new Map(tracker.versionDefs.map((d) => [d.label.toLowerCase(), d.slug]));
-    const existing = known.get(name.toLowerCase());
-    if (existing) return existing;
+    // Match an existing version by EITHER its label or its slug, so re-submitting
+    // an unchanged issue that carries the stored slug (e.g. the edit form before
+    // the tracker defs loaded) does NOT redefine the version — which would
+    // overwrite its label with the slug and CLEAR its release date / released
+    // flag. Only a genuinely new name mints a definition.
+    const defs = tracker.versionDefs;
+    const existing = defs.find((d) => d.label.toLowerCase() === name.toLowerCase() || d.slug === name.toLowerCase());
+    if (existing) return existing.slug;
     const slug = tracker.defineVersion(name).slug;
     await this.put(this.trackerUrl, dataset, etag);
     return slug;

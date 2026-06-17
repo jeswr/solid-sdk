@@ -52,6 +52,10 @@ const OTHER = "https://bob.example/issue-tracker/tracker.ttl";
 const ALICE = "https://alice.example/profile/card#me";
 const BOB = "https://bob.example/profile/card#me";
 
+// Mirrors the production key (PREFIX + WebID + NUL + tracker) so a test can
+// hand-seed a forged/legacy envelope without re-deriving the NUL separator inline.
+const keyFor = (webId: string, tracker: string) => `solid-issues:cache:${webId}\u0000${tracker}`;
+
 let storage: MemStorage;
 beforeEach(() => {
   storage = new MemStorage();
@@ -160,9 +164,28 @@ describe("issue-cache — WebID scoping (cross-user leak guard)", () => {
   });
 
   it("ignores a legacy v1 (un-WebID-scoped) entry — it cannot leak", () => {
-    // A pre-upgrade entry has no webId and v:1; the v:2 reader must reject it.
+    // A pre-upgrade entry has no webId and v:1; the v:3 reader must reject it.
     const legacy = { v: 1, at: Date.now(), tracker: TRACKER, issues: [mk({ url: "old" })] };
     storage.setItem(`solid-issues:cache:${ALICE}\u0000${TRACKER}`, JSON.stringify(legacy));
     expect(readIssueCache(ALICE, TRACKER, storage)).toBeNull();
+  });
+
+  it("ignores a pre-v3 snapshot whose records lack the components array (no crash)", () => {
+    // A v2 record predates the components dimension — reviving it would yield
+    // `components === undefined` and crash facets/filter. The version bump makes
+    // it a clean miss rather than hydrating an unsafe record.
+    const stale = { v: 2, at: Date.now(), webId: ALICE, tracker: TRACKER, issues: [{ url: "old", title: "Old" }] };
+    storage.setItem(keyFor(ALICE, TRACKER), JSON.stringify(stale));
+    expect(readIssueCache(ALICE, TRACKER, storage)).toBeNull();
+  });
+
+  it("defensively backfills components: [] on read (defence-in-depth)", () => {
+    // Forge a current-version envelope whose record is missing `components`
+    // (a partial / forward-incompatible write). The reader must default it to []
+    // so downstream `.forEach`/`.some`/`.map` never throws.
+    const env = { v: 3, at: Date.now(), webId: ALICE, tracker: TRACKER, issues: [{ url: "x", title: "X" }] };
+    storage.setItem(keyFor(ALICE, TRACKER), JSON.stringify(env));
+    const out = readIssueCache(ALICE, TRACKER, storage);
+    expect(out?.[0].components).toEqual([]);
   });
 });

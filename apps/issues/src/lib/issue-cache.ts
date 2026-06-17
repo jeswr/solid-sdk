@@ -36,8 +36,14 @@ const PREFIX = "solid-issues:cache:";
  * Cache schema version — bump to invalidate all entries on a shape change.
  * Bumped to 2 when the cache became WebID-scoped (the key + envelope gained the
  * WebID): v1 entries (no WebID) are now unreadable, so they cannot leak.
+ * Bumped to 3 when `IssueRecord` gained the required `components` array (+ the
+ * optional affects/fix-version fields): a pre-v3 snapshot has no `components`,
+ * so reviving it would yield `components === undefined` and crash the facets /
+ * filter / detail code paths that call `.forEach`/`.some`/`.map` on it. The
+ * version bump makes those entries a clean miss; `reviveIssue` below also
+ * defaults the array on read as defence-in-depth.
  */
-const VERSION = 2;
+const VERSION = 3;
 /** Don't paint from a cache older than this (ms) — a week. Stale data still
  *  revalidates; this only bounds how old a first-paint may be. */
 const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
@@ -91,6 +97,18 @@ function reviveValue(value: unknown): unknown {
 }
 
 /**
+ * Backfill the required array fields of a revived record. JSON drops nothing on
+ * a forward-compatible read, but a record written by an older shape (or a partial
+ * write) can be missing `components` — default it to [] so downstream
+ * `.forEach`/`.some`/`.map` never throws. (The other required arrays —
+ * blockedBy/relatesTo/attachments/comments/worklog — predate the cache and are
+ * always present, but defaulting `components` here is the one this guards.)
+ */
+function normalizeIssue(issue: IssueRecord): IssueRecord {
+  return Array.isArray(issue.components) ? issue : { ...issue, components: [] };
+}
+
+/**
  * Read the cached issues for a (WebID, tracker) pair, or null when there is no
  * usable cache (absent, wrong version, WebID/tracker mismatch, too old, or
  * unparseable). A missing or mismatched WebID is treated as a MISS — a snapshot
@@ -114,7 +132,11 @@ export function readIssueCache(
     if (env.v !== VERSION || env.webId !== webId || env.tracker !== trackerUrl) return null;
     if (!Array.isArray(env.issues)) return null;
     if (now - env.at > MAX_AGE_MS) return null;
-    return env.issues;
+    // Defence-in-depth: the version gate already excludes pre-v3 snapshots that
+    // lacked `components`, but guarantee every required array field is present so
+    // a partially-written/forward-incompatible envelope can never crash the
+    // facets/filter/detail code that calls `.forEach`/`.some`/`.map` on it.
+    return env.issues.map(normalizeIssue);
   } catch {
     return null; // corrupt entry is not a blocker — just fetch fresh
   }

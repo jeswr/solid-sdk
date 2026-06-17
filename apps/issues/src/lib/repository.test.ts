@@ -210,6 +210,38 @@ describe("Repository (per-issue documents)", () => {
     expect((await repo.versions()).map((v) => v.slug)).toEqual(["1-0"]);
   });
 
+  it("re-declaring a version by its SLUG does not clobber its label / release metadata", async () => {
+    const { impl } = fakePod();
+    const repo = new Repository(TRACKER, impl);
+    await repo.ensureTracker();
+    const date = new Date("2026-07-01T00:00:00.000Z");
+    await repo.defineVersion("1.0", { releaseDate: date, released: true });
+
+    // Simulate the edit form re-submitting the STORED slug ("1-0") rather than
+    // the display label ("1.0") — e.g. before the tracker defs loaded. This must
+    // resolve to the same version WITHOUT redefining it (which would overwrite
+    // the label with "1-0" and clear the date / released flag).
+    const slug = await repo.declareVersion("1-0");
+    expect(slug).toBe("1-0");
+    const versions = await repo.versions();
+    expect(versions).toHaveLength(1);
+    expect(versions[0].label).toBe("1.0"); // label preserved (not overwritten with the slug)
+    expect(versions[0].releaseDate!.toISOString()).toBe("2026-07-01T00:00:00.000Z");
+    expect(versions[0].released).toBe(true);
+  });
+
+  it("re-declaring a component by its SLUG reuses it (no duplicate definition)", async () => {
+    const { impl } = fakePod();
+    const repo = new Repository(TRACKER, impl);
+    await repo.defineComponent("Auth Service"); // slug: auth-service
+
+    const slugs = await repo.declareComponents(["auth-service"]); // round-trip the slug
+    expect(slugs).toEqual(["auth-service"]);
+    const defs = await repo.components();
+    expect(defs).toHaveLength(1);
+    expect(defs[0].label).toBe("Auth Service"); // label preserved
+  });
+
   it("rejects unsafe URL custom-field values at the data layer", async () => {
     const { impl } = fakePod();
     const repo = new Repository(TRACKER, impl);
