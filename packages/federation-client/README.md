@@ -403,12 +403,22 @@ npm run typecheck   # tsc --noEmit
 npm test            # vitest
 npm run build       # esbuild: bundle src/ (+ inline @jeswr/fetch-rdf) → dist/index.js; tsc → dist/*.d.ts
 npm run check:dist  # fail if committed dist/ has drifted from src/
+npm run check:lockfile-transport  # fail if package-lock.json uses an SSH git transport
 ```
 
 `npm run build` produces the **committed, self-contained `dist/`** (esbuild inlines
 the off-npm `@jeswr/fetch-rdf`, keeps every npm-published dep external; tsc emits the
 `.d.ts`). After any change to `src/`, run `npm run build` and commit the regenerated
 `dist/` — `npm run check:dist` enforces that the artifact matches the source.
+
+`npm run check:lockfile-transport` is a recurrence guard for the `#78` bug class:
+`npm install` silently rewrites the `@jeswr` `github:` dependency `resolved` URLs in
+`package-lock.json` back to the SSH transport (`git+ssh://git@github.com/…`), which
+needs an SSH key and so breaks `npm ci` in CI / Vercel / any fresh checkout. The
+github pins are kept on the HTTPS transport (`git+https://github.com/…#<sha>`); this
+gate fails if a stray `npm install` re-introduces an SSH transport. Run it (and
+re-pin to HTTPS, preserving `#<sha>`) before committing any lockfile change — never
+hand-run `npm install` to "fix" it.
 
 ## License
 
