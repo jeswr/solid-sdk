@@ -268,7 +268,14 @@ npm run typecheck   # build:deps → tsc --noEmit
 npm test            # build:deps → vitest run
 npm run build       # esbuild (bundles @jeswr/fetch-rdf inline) + tsc (.d.ts) → committed dist/
 npm run check:dist  # guard the committed dist/ against drift from src/
+npm run check:lockfile-transport  # guard package-lock.json against the SSH git transport (#78)
 ```
+
+`check:lockfile-transport` is a recurrence guard for the [#78][i78] bug class: `npm install`
+silently rewrites the `@jeswr/fetch-rdf` github: dependency's `resolved` URL in `package-lock.json`
+to the SSH transport (`git+ssh://git@github.com/...`), which fails `npm ci` in CI / Vercel without
+an SSH key. The guard fails if any committed lockfile contains an SSH git transport — rewrite each
+to `git+https://github.com/...` and re-run.
 
 `@jeswr/fetch-rdf` is an off-npm git dependency that ships no usable `dist/` under
 `ignore-scripts=true`; `scripts/build-deps.mjs` builds it once after install (pinned to the exact
@@ -292,3 +299,4 @@ consumer resolves one shared copy.
 [rvs]: https://github.com/zazuko/rdf-validate-shacl
 [fetch-rdf]: https://github.com/jeswr/fetch-rdf
 [wrapper]: https://github.com/rdfjs-base/wrapper
+[i78]: https://github.com/jeswr/prod-solid-server/issues/78
