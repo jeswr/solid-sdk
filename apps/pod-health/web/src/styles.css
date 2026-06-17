@@ -20,18 +20,27 @@
    ThemeProvider toggles on <html> flips the OKLCH vars, and these aliases inherit
    it for free.
 
-   IMPORTANT (learned from pod-photos/drive): we do NOT re-alias app-shell's OWN
-   tokens (`--muted`/`--accent`/`--border`) to host values — that would clobber
-   the shell's palette. Instead the host uses DISTINCT names (`--muted-text`,
-   `--host-accent`, …); only `--border` is shared so the host references the
-   app-shell `--border` token directly (no re-alias). */
+   CSS-ISOLATION RELAXATION (#80 / solid-elements adoption #115, D-parity rollout
+   #67/#68/#70): the host vars now alias DIRECTLY onto app-shell's OWN tokens
+   (`--accent` / `--muted` / `--accent-ink`) again — relaxing the SAFER earlier
+   adopter workaround (which renamed them to host-only `--host-accent` / `--muted-text`
+   to avoid CLOBBERING the shell components' palette). @jeswr/app-shell #80 made the
+   shell SELF-ISOLATING: its components read SHELL-PRIVATE `--as-*` tokens (mirrored
+   from hardcoded OKLCH literals in the package's tokens.css, NOT from these public
+   `--accent`/`--muted`), so re-aliasing the public tokens no longer affects the shell
+   at all. This TOKEN re-alias is the genuine backward-relax here (verified safe by
+   css-isolation.test.tsx against app-shell `5a7484d`); the filled-button rule below
+   stays HOST-SCOPED (`.login-form button`), because app-shell's reset does NOT lock
+   the box model, so a bare `button {}` would still leak padding/sizing onto the shell
+   controls. `--border` is the SAME name as the app-shell token — already unified, do
+   NOT re-alias it. */
 :root {
   --bg: var(--background);
   --surface: var(--card);
   --ink: var(--foreground);
-  --muted-text: var(--muted-foreground);
-  --host-accent: var(--primary);
-  --host-accent-ink: var(--primary-foreground);
+  --muted: var(--muted-foreground);
+  --accent: var(--primary);
+  --accent-ink: var(--primary-foreground);
   --danger: var(--destructive);
   --ok: var(--success);
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -48,7 +57,7 @@ body {
 }
 
 a {
-  color: var(--host-accent);
+  color: var(--accent);
 }
 
 /* ── Login ─────────────────────────────────────────────────────────────── */
@@ -72,7 +81,7 @@ a {
   font-size: 1.5rem;
 }
 .login-sub {
-  color: var(--muted-text);
+  color: var(--muted);
   margin: 0 0 1.25rem;
   font-size: 0.95rem;
 }
@@ -97,23 +106,35 @@ a {
   margin-top: 0.75rem;
 }
 .login-hint {
-  color: var(--muted-text);
+  color: var(--muted);
   font-size: 0.85rem;
   margin-top: 1rem;
 }
 
-/* SCOPED filled-button style (learned from pod-photos/drive): scope the global
-   filled-button look to the app's OWN buttons (`.login-form button`) so it does
-   NOT leak onto the app-shell controls — the ThemeToggle, AccountMenu, and the
-   FeedbackButton dialog all bring their own Tailwind-utility styling. */
+/* HOST-SCOPED filled-button style — KEPT scoped to the app's OWN buttons
+   (`.login-form button`), NOT relaxed to a bare global `button {}`.
+
+   CSS-ISOLATION (#80): app-shell #80 self-isolates its controls' COLOUR/border/fill
+   via an UNLAYERED `[data-app-shell-control]` reset, so a bare `button { background }`
+   no longer leaks the host's fill onto them. BUT that reset deliberately does NOT lock
+   the BOX MODEL (padding / border-radius / font-size / sizing — see app-shell's
+   reset.css: "The BOX MODEL … is NOT touched … an app's aggressive element reset that
+   also relayouts every button is out of scope"). A bare unlayered `button { padding;
+   border-radius; font-size }` would therefore still out-rank the shell controls'
+   LAYERED Tailwind sizing utilities and distort the ThemeToggle / AccountMenu /
+   FeedbackButton + portaled-dialog controls. So pod-health intentionally KEEPS the
+   safer host-scope (a genuine, strictly-safer choice vs. the bare form some siblings
+   adopted) — the relaxation here is the TOKEN re-alias above (safe: the shell reads
+   shell-private `--as-*` tokens, independent of `--accent`/`--muted`), not the button
+   selector. css-isolation.test.tsx still pins the shell's isolation contract. */
 .login-form button {
   cursor: pointer;
   border: none;
   border-radius: 0.5rem;
   padding: 0.6rem 0.9rem;
   font-size: 0.95rem;
-  background: var(--host-accent);
-  color: var(--host-accent-ink);
+  background: var(--accent);
+  color: var(--accent-ink);
 }
 .login-form button:disabled {
   opacity: 0.55;
@@ -161,7 +182,7 @@ a {
   margin: 0.75rem 0;
 }
 .app-loading {
-  color: var(--muted-text);
+  color: var(--muted);
 }
 .app-main {
   margin-top: 1rem;
@@ -177,15 +198,17 @@ a {
 }
 .pod-health-loading,
 .pod-health-empty {
-  color: var(--muted-text);
+  color: var(--muted);
 }
 .pod-health-error {
   color: var(--danger);
 }
+/* The retry button: the host's OWN outline look. Self-contained (it lives outside
+   `.login-form`, so it does not inherit the host filled-button base above). */
 .pod-health-error button {
   margin-top: 0.5rem;
   background: transparent;
-  color: var(--host-accent);
+  color: var(--accent);
   border: 1px solid var(--border);
   cursor: pointer;
   border-radius: 0.5rem;
@@ -210,5 +233,5 @@ a {
 }
 .pod-health-cell-date,
 .pod-health-cell-value {
-  color: var(--muted-text);
+  color: var(--muted);
 }
