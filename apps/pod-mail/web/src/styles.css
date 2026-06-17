@@ -15,24 +15,28 @@
 @source "../node_modules/@jeswr/app-shell/dist";
 
 /* The host chrome below predates the shared tokens and uses its own variable
-   names. Map them onto the app-shell OKLCH tokens so the WHOLE pod-mail UI
-   (login card, header, inbox table, reader) follows the theme — the `.dark` class
-   the ThemeProvider toggles on <html> flips the OKLCH vars, and these aliases
-   inherit it for free.
+   names (--bg / --ink / --accent / --muted / …). Map them onto the app-shell OKLCH
+   tokens so the WHOLE pod-mail UI (login card, header, inbox table, reader) follows
+   the theme — the `.dark` class the ThemeProvider toggles on <html> flips the OKLCH
+   vars, and these aliases inherit it for free.
 
-   IMPORTANT (learned from pod-photos/drive/health): we do NOT re-alias app-shell's
-   OWN tokens (`--muted`/`--accent`/`--border`) to host values — that would clobber
-   the shell components' palette (their hover/selection tint reads `--accent` /
-   `--muted` directly). Instead the host uses DISTINCT names (`--muted-text`,
-   `--host-accent`, `--host-accent-ink`); only `--border` is shared, so the host
-   references the app-shell `--border` token directly (no re-alias). */
+   CSS-ISOLATION RELAXATION (#80 / solid-elements pilot #115): the host vars can now
+   alias DIRECTLY onto app-shell's OWN tokens (`--accent` / `--muted` / `--accent-ink`)
+   again. The earlier adopter workaround renamed them to host-only names
+   (`--host-accent` / `--muted-text`) to avoid CLOBBERING the shell components' palette
+   — but @jeswr/app-shell #80 made the shell self-isolating: its components read
+   SHELL-PRIVATE `--as-*` tokens (mirrored from hardcoded OKLCH literals in the
+   package's tokens.css, NOT from these public `--accent`/`--muted`), so re-aliasing
+   the public tokens no longer affects the shell at all. Verified against app-shell
+   `5a7484d` (the merged main with the #80 fix). `--border` is the SAME name as the
+   app-shell token, so it is already unified — do NOT re-alias it to itself. */
 :root {
   --bg: var(--background);
   --surface: var(--card);
   --ink: var(--foreground);
-  --muted-text: var(--muted-foreground);
-  --host-accent: var(--primary);
-  --host-accent-ink: var(--primary-foreground);
+  --muted: var(--muted-foreground);
+  --accent: var(--primary);
+  --accent-ink: var(--primary-foreground);
   --danger: var(--destructive);
   --ok: var(--success);
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -49,7 +53,7 @@ body {
 }
 
 a {
-  color: var(--host-accent);
+  color: var(--accent);
 }
 
 /* ── Login ─────────────────────────────────────────────────────────────── */
@@ -73,7 +77,7 @@ a {
   font-size: 1.5rem;
 }
 .login-sub {
-  color: var(--muted-text);
+  color: var(--muted);
   margin: 0 0 1.25rem;
   font-size: 0.95rem;
 }
@@ -98,41 +102,46 @@ a {
   margin-top: 0.75rem;
 }
 .login-hint {
-  color: var(--muted-text);
+  color: var(--muted);
   font-size: 0.85rem;
   margin-top: 1rem;
 }
 
-/* SCOPED filled-button style (learned from pod-photos/drive/health): the global
-   filled-button look is scoped to the app's OWN buttons (`.login-form button`) so it
-   does NOT leak onto every app-shell control or the portaled FeedbackDialog backdrop
-   — the ThemeToggle, AccountMenu, and the FeedbackButton dialog all bring their own
-   Tailwind-utility styling and must not be overridden by a bare `button {}` rule. */
-.login-form button {
+/* CSS-ISOLATION RELAXATION (#80 / solid-elements pilot #115): a BARE global
+   `button {}` filled-button base again — the simpler, pre-workaround form.
+
+   This bare element rule is UNLAYERED, so it out-ranks Tailwind's layered utilities
+   — historically that bled the host's filled look onto every app-shell control + the
+   portaled FeedbackDialog (#80), which forced the earlier adopters to hand-scope it
+   to `.login-form button`. @jeswr/app-shell #80 fixed this AT THE SOURCE: the shell
+   tags each of its controls with `[data-app-shell-control]` and re-asserts their look
+   in its own UNLAYERED reset (shipped in `@jeswr/app-shell/styles.css`), and an
+   attribute selector out-ranks a bare element selector — so the shell's controls keep
+   their look regardless of this rule. The solid-elements P0 components (<jeswr-loading>
+   etc.) are immune for a different reason: they live in shadow DOM, which this
+   light-DOM rule cannot pierce. So the hand-scoping is no longer needed; the host's
+   OWN outline buttons still override the fill below. Verified against app-shell
+   `5a7484d`. */
+button {
   cursor: pointer;
   border: none;
   border-radius: 0.5rem;
   padding: 0.6rem 0.9rem;
   font-size: 0.95rem;
-  background: var(--host-accent);
-  color: var(--host-accent-ink);
+  background: var(--accent);
+  color: var(--accent-ink);
 }
-.login-form button:disabled {
+button:disabled {
   opacity: 0.55;
   cursor: not-allowed;
 }
-/* The host's outline buttons (the reader's back button + the legacy logout). These
-   carry their OWN complete styling now that the global `button {}` base is gone, so
-   they never depend on a leaking base rule. */
+/* The host's OWN outline buttons (the reader's back button + the legacy logout):
+   override the filled base above with a transparent, bordered look. */
 button[type="button"].pod-mail-back,
 .app-logout {
-  cursor: pointer;
-  border: 1px solid var(--border);
-  border-radius: 0.5rem;
-  padding: 0.6rem 0.9rem;
-  font-size: 0.95rem;
   background: transparent;
-  color: var(--host-accent);
+  color: var(--accent);
+  border: 1px solid var(--border);
 }
 
 /* ── App shell ─────────────────────────────────────────────────────────── */
@@ -183,7 +192,7 @@ button[type="button"].pod-mail-back,
   margin-top: 1rem;
 }
 .app-loading {
-  color: var(--muted-text);
+  color: var(--muted);
 }
 
 /* ── Inbox (pod-mail-*) ───────────────────────────────────────────────── */
@@ -193,22 +202,15 @@ button[type="button"].pod-mail-back,
 }
 .pod-mail-loading,
 .pod-mail-empty {
-  color: var(--muted-text);
+  color: var(--muted);
 }
 .pod-mail-error {
   color: var(--danger);
 }
-/* The retry button carries its OWN complete (outline) styling — the global
-   `button {}` base is gone, so it must not depend on a leaking base rule. */
+/* The inbox retry button: inherits the filled `button {}` base above (restored as
+   part of the #80 relaxation) and only adds spacing. */
 .pod-mail-error button {
   margin-top: 0.5rem;
-  cursor: pointer;
-  border: 1px solid var(--border);
-  border-radius: 0.5rem;
-  padding: 0.6rem 0.9rem;
-  font-size: 0.95rem;
-  background: transparent;
-  color: var(--host-accent);
 }
 
 /* Screen-reader-only utility for the status column header + cell labels. */
@@ -238,11 +240,11 @@ button[type="button"].pod-mail-back,
 }
 .pod-mail-status {
   width: 1.5rem;
-  color: var(--host-accent);
+  color: var(--accent);
 }
 .pod-mail-open {
   background: transparent;
-  color: var(--host-accent);
+  color: var(--accent);
   border: none;
   padding: 0;
   text-align: left;
@@ -254,7 +256,7 @@ button[type="button"].pod-mail-back,
   font-weight: 700;
 }
 .pod-mail-cell-date {
-  color: var(--muted-text);
+  color: var(--muted);
   white-space: nowrap;
 }
 
@@ -273,7 +275,7 @@ button[type="button"].pod-mail-back,
   margin: 0 0 0.75rem;
 }
 .pod-mail-headers {
-  color: var(--muted-text);
+  color: var(--muted);
   font-size: 0.88rem;
   border-bottom: 1px solid var(--border);
   padding-bottom: 0.75rem;
@@ -288,7 +290,7 @@ button[type="button"].pod-mail-back,
   font-weight: 600;
 }
 .pod-mail-sender {
-  color: var(--host-accent);
+  color: var(--accent);
 }
 .pod-mail-body {
   white-space: pre-wrap;

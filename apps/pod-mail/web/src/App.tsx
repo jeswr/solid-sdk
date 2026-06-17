@@ -16,6 +16,17 @@
 import { AccountMenu, FeedbackButton, ThemeToggle } from "@jeswr/app-shell";
 import { fetchRdf } from "@jeswr/fetch-rdf";
 import { Inbox } from "@jeswr/pod-mail/ui";
+// SOLID-ELEMENTS PILOT (#115): the framework-agnostic W3C Web Components consumed
+// through the @lit/react adapter. <Loading> is a Lit custom element (spinner +
+// polite-live label, prefers-reduced-motion aware) wrapped by @lit/react's
+// createComponent. It themes itself from the SAME app-shell OKLCH tokens as the rest
+// of the chrome: its shadow-DOM styles read `--jeswr-*`, which fall back through the
+// shadow boundary to app-shell's `--primary` / `--border` / `--muted-foreground`
+// (set by styles.css and flipped by the `.dark` class), so it follows light/dark for
+// free with no extra wiring. (COMPLEMENTS app-shell — it does not replace the React
+// chrome components above.) Plain Vite/CSR React has no SSR step, so the client-only
+// custom elements need no mount-gating here.
+import { Loading } from "@jeswr/solid-elements/react";
 import { useEffect, useState } from "react";
 import { useSession } from "./auth/SessionProvider";
 import { LoginScreen } from "./LoginScreen";
@@ -73,8 +84,12 @@ export function App() {
         <main className="login-screen" aria-busy="true">
           <section className="login-card">
             <h1>Pod Mail</h1>
-            <p className="login-sub" role="status">
-              {autologinPending ? "Signing you in…" : "Restoring…"}
+            {/* SOLID-ELEMENTS: the <jeswr-loading> spinner + label (via @lit/react).
+                It carries its own role="status" + aria-live, so the label is
+                announced; we keep the .login-sub wrapper only for the existing
+                spacing/typography. */}
+            <p className="login-sub">
+              <Loading label={autologinPending ? "Signing you in…" : "Restoring…"} />
             </p>
           </section>
         </main>
@@ -153,8 +168,12 @@ export function App() {
           // so an authenticated user always gets an <Inbox> (never stranded).
           <Inbox mailboxUrl={mailbox.mailboxUrl} title="Your inbox" />
         ) : (
-          <p className="app-loading" role="status">
-            Locating your mailbox…
+          // SOLID-ELEMENTS: the host-level "locating your mailbox" wait, now the
+          // themed <jeswr-loading> spinner (via @lit/react) instead of a bare <p>.
+          // It owns role="status" + aria-live; .app-loading keeps the muted colour
+          // wrapper for layout parity.
+          <p className="app-loading">
+            <Loading label="Locating your mailbox…" />
           </p>
         )}
       </main>

@@ -85,6 +85,15 @@ export default defineConfig({
       "@radix-ui/react-avatar",
       "@radix-ui/react-dropdown-menu",
       "lucide-react",
+      // @jeswr/solid-elements ships W3C Web Components (Lit 3) consumed via its
+      // @lit/react adapter (`./react`). Dedupe `lit` + `@lit/react` to ONE copy
+      // each: a second `lit` instance means a second reactive-update scheduler
+      // (and a second customElements registry attempt — the components self-guard
+      // with `customElements.get`, but two Lit runtimes are still a foot-gun), and
+      // a second `@lit/react` would mint a distinct wrapper runtime. Both are
+      // (transitive) deps of solid-elements; pin them to the host's single copy.
+      "lit",
+      "@lit/react",
       // The @jeswr/solid-session-restore package (silent-restore CORE) and this host
       // BOTH depend on oauth4webapi + dpop. Dedupe to ONE copy each so the package's
       // restoreSession and the host's login flow share the same module — important
