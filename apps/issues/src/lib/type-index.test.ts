@@ -1,5 +1,25 @@
 import { describe, it, expect, vi } from "vitest";
+import { Store, Parser, DataFactory } from "n3";
 import { resolveTrackerFromTypeIndex, registerTracker, resolveTaskContainersFromTypeIndex } from "./type-index";
+
+const { namedNode } = DataFactory;
+
+/** Solid type-index vocabulary IRIs (parse-side mirror of the writer's). */
+const SOLID = "http://www.w3.org/ns/solid/terms#";
+const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+/**
+ * The federation discovery contract IRI: the `solid:forClass` value solid-issues
+ * WRITES for its `wf:Task` instanceContainer registration. This MUST stay
+ * byte-identical to the Pod Manager's `ISSUE_CLASS` constant
+ * (`solid-pod-manager/src/lib/issues.ts` → `ISSUE_CLASS = "${WF}Task"` with
+ * `WF = "http://www.w3.org/2005/01/wf/flow#"`), because PM's federated task
+ * reader (`solid-pod-manager/src/lib/federation-tasks.ts` → `taskLocations()`)
+ * filters cross-app registrations on `l.forClass === ISSUE_CLASS`. If either side
+ * changes this IRI or the predicate/visibility form, cross-app task discovery
+ * silently breaks — this test is the trip-wire. Do NOT import from the PM repo
+ * (separate package); the contract is pinned here as a literal with this citation.
+ */
+const PM_ISSUE_CLASS_CONTRACT = "http://www.w3.org/2005/01/wf/flow#Task";
 
 const WEBID = "http://localhost:3000/alice/profile/card#me";
 const PROFILE = "http://localhost:3000/alice/profile/card";
@@ -139,6 +159,68 @@ describe("type index", () => {
     const body = indexPut?.body ?? "";
     const taskMatches = [...body.matchAll(/flow#Task/g)];
     expect(taskMatches.length).toBe(1); // exactly one registration
+  });
+
+  // P0-3 (#75 federation linchpin): the END-TO-END cross-app discovery contract.
+  // The other tests assert the PARTS via string-contains on the serialised Turtle;
+  // this one PARSES the public type-index PUT body into a graph and pins, in a
+  // single assertion, the exact (forClass IRI + instanceContainer predicate +
+  // public/listed document type) tuple that the Pod Manager's federated task
+  // reader filters on. A change on EITHER side that breaks discovery fails here.
+  it("pins the wf:Task federation discovery contract the Pod Manager reads (P0-3, #75)", async () => {
+    const { impl, calls } = router({
+      // profile exists but has no publicTypeIndex; index 404s → created fresh.
+      [WEBID]: { body: `<${WEBID}> a <http://xmlns.com/foaf/0.1/Person>.`, etag: '"p1"' },
+    });
+    const ok = await registerTracker(WEBID, POD, TRACKER, impl);
+    expect(ok).toBe(true);
+
+    const indexPut = calls.filter((c) => c.method === "PUT").find((c) => c.url === INDEX);
+    expect(indexPut?.body, "the public type index must be PUT").toBeTruthy();
+
+    // Parse the PUT body into a graph — never regex/string-assert the Turtle
+    // (house rule: query the parsed RDF, do not hand-match serialised triples).
+    const store = new Store();
+    store.addQuads(new Parser({ baseIRI: INDEX }).parse(indexPut!.body as string));
+
+    // (1) The document subject is a PUBLIC, LISTED type index — so an assignee's
+    //     Pod Manager can read it (CSS makes new resources owner-only; the writer
+    //     also grants public read). Proves it is the PUBLIC index PM discovers.
+    const docTypes = store
+      .getQuads(namedNode(INDEX), namedNode(RDF_TYPE), null, null)
+      .map((q) => q.object.value);
+    expect(docTypes).toContain(`${SOLID}TypeIndex`);
+    expect(docTypes).toContain(`${SOLID}ListedDocument`);
+
+    // (2) There is a solid:TypeRegistration whose solid:forClass is EXACTLY PM's
+    //     ISSUE_CLASS contract IRI AND whose solid:instanceContainer is the
+    //     issues/ container. Resolve it by querying the parsed graph.
+    const taskRegistration = store
+      .getQuads(null, namedNode(`${SOLID}forClass`), namedNode(PM_ISSUE_CLASS_CONTRACT), null)
+      .map((q) => q.subject)
+      // keep only subjects actually typed as a TypeRegistration
+      .filter(
+        (subj) =>
+          store.getQuads(subj, namedNode(RDF_TYPE), namedNode(`${SOLID}TypeRegistration`), null)
+            .length > 0,
+      );
+    expect(
+      taskRegistration.length,
+      "expected one solid:TypeRegistration for wf:Task",
+    ).toBe(1);
+    const taskSubject = taskRegistration[0];
+
+    // forClass object string EQUALS PM's ISSUE_CLASS literal (the hard contract).
+    const forClassObjects = store
+      .getQuads(taskSubject, namedNode(`${SOLID}forClass`), null, null)
+      .map((q) => q.object.value);
+    expect(forClassObjects).toEqual([PM_ISSUE_CLASS_CONTRACT]);
+
+    // The instanceContainer predicate (NOT solid:instance) points at issues/.
+    const containers = store
+      .getQuads(taskSubject, namedNode(`${SOLID}instanceContainer`), null, null)
+      .map((q) => q.object.value);
+    expect(containers).toEqual([ISSUES_CONTAINER]);
   });
 
   it("does not rewrite the profile link when already registered", async () => {
