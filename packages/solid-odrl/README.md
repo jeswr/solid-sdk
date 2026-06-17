@@ -163,6 +163,7 @@ npm run typecheck   # tsc --noEmit
 npm test            # vitest
 npm run build       # esbuild bundles dist/index.js (inlining @jeswr/fetch-rdf) + tsc emits .d.ts
 npm run check:dist  # guard the committed dist/ against drift from src/
+npm run check:lockfile-transport  # guard package-lock.json against the SSH git transport (#78: npm install rewrites @jeswr github: deps to git+ssh, breaking npm ci)
 ```
 
 The committed `dist/` is kept in sync with `src/` by `scripts/check-dist-fresh.mjs` (the suite
