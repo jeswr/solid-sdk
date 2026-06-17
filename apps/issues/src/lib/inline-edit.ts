@@ -294,15 +294,23 @@ export function makeInlineEditController(
   };
 
   /**
-   * Apply the optimistic edit + start the background write. The optimistic edit is
-   * computed SYNCHRONOUSLY from `seam.getIssues()` — the live, current list read
-   * through a ref — so a refresh / live-sync / another edit that landed between
-   * this handler being created and run can never be clobbered by a stale snapshot
-   * (important for `editStatus`, whose guard may defer the write behind a user
-   * confirmation dialog). The metadata (`original`/`optimistic`) and the persist
-   * decision are derived BEFORE scheduling the state update — NOT via side-effects
-   * inside the React state updater (which may be batched/deferred), which would
-   * otherwise let an optimistic UI change apply while the write is skipped.
+   * Apply the optimistic edit + start the background write. Two distinct concerns,
+   * each handled so neither races the other:
+   *
+   *  1. The PERSIST DECISION (and the revert metadata) is derived SYNCHRONOUSLY
+   *     from `seam.getIssues()` — the live current list read through a ref — so it
+   *     never depends on a (possibly batched/deferred) React state updater running.
+   *     A no-op (unchanged value / missing row) skips the write entirely; otherwise
+   *     `original`/`optimistic` carry the before/after field VALUES the revert path
+   *     compares against (it only reads `original.url` + the edited field on each).
+   *     Reading from a ref also means a deferred `editStatus` confirmation sees the
+   *     latest list, not a stale closure snapshot.
+   *
+   *  2. The STATE UPDATE is COMPOSITIONAL: the updater re-applies the edit to the
+   *     `current` list React hands it — which already includes any queued/batched
+   *     local change (a second rapid edit, a queued refresh) — instead of blindly
+   *     replacing it with a precomputed snapshot. So two inline edits before a
+   *     render compose rather than the later one dropping the earlier's change.
    */
   const applyAndPersist = (
     issue: IssueRecord,
@@ -310,10 +318,14 @@ export function makeInlineEditController(
     value: string | number | Date | undefined,
     write: (repo: Repository) => Promise<void>,
   ) => {
-    const { next, original } = optimisticEdit(seam.getIssues(), issue.url, field, value, workflow);
-    if (!original) return; // no-op (unchanged value / row gone)
-    const optimistic = next.find((i) => i.url === issue.url)!;
-    seam.setIssuesLocal(() => next);
+    // (1) Synchronous persist decision + revert metadata from the live ref.
+    const snapshot = optimisticEdit(seam.getIssues(), issue.url, field, value, workflow);
+    if (!snapshot.original) return; // no-op (unchanged value / row gone)
+    const original = snapshot.original;
+    const optimistic = snapshot.next.find((i) => i.url === issue.url)!;
+    // (2) Compositional state update: re-apply against React's current list so a
+    // concurrent/queued local change isn't dropped.
+    seam.setIssuesLocal((current) => optimisticEdit(current, issue.url, field, value, workflow).next);
     void seam.persist(write).catch((e) => handleFailure(field, original, optimistic, e));
   };
 

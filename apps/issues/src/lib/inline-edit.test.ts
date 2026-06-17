@@ -404,6 +404,34 @@ describe("makeInlineEditController", () => {
     expect(persist).toHaveBeenCalledTimes(1);
   });
 
+  it("two rapid edits before a render COMPOSE (the later does not drop the earlier)", () => {
+    // Both edits fire before React re-renders, so the ref (getIssues) still holds
+    // the ORIGINAL list for the second call. The state update must be compositional
+    // — applied against the updater's `current` (which carries the first edit) —
+    // so editing priority then assignee keeps BOTH, not just the last one.
+    const issue = mk({ url: "a", priority: "low", assignee: undefined });
+    // getIssues mimics the ref BEFORE a render: it does not yet reflect the first
+    // edit. setIssuesLocal applies the updater against the accumulated live list.
+    let applied = [issue];
+    const seam: InlineEditSeam = {
+      getIssues: () => [issue], // stale-until-render ref
+      setIssuesLocal: (updater) => {
+        applied = updater(applied);
+      },
+      persist: vi.fn(() => Promise.resolve()),
+      refresh: vi.fn(async () => undefined),
+    };
+    const { edit } = makeInlineEditController(seam, WF, toast, passThroughGuard);
+
+    edit(issue, "priority", "high");
+    edit(issue, "assignee", "https://x/me");
+
+    const row = applied.find((i) => i.url === "a")!;
+    expect(row.priority).toBe("high"); // first edit preserved
+    expect(row.assignee).toBe("https://x/me"); // second edit applied
+    expect(seam.persist).toHaveBeenCalledTimes(2);
+  });
+
   it("editStatus computes the optimistic edit against the LIVE list at confirmation time", () => {
     // A guard that DEFERS the write (captures proceed). Between editStatus() and
     // the user confirming, the live list changes (a refresh/another edit lands a
