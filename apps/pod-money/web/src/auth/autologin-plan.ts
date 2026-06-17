@@ -60,7 +60,7 @@ export type AutologinAction =
   | { kind: "clear-sentinel" };
 
 export interface AutologinInputs {
-  /** The auth runtime is loaded + registerGlobally() has run. */
+  /** The auth runtime is loaded + the proactive auth-fetch patch has installed. */
   ready: boolean;
   /** The token provider singleton has resolved (mount has wired providerRef). */
   hasProvider: boolean;

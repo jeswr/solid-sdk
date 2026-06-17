@@ -3,15 +3,20 @@
 // App — the host shell's router-free root: logged out → <LoginScreen>; logged in
 // → a thin header (WebID + logout) over the LOCAL pod-money <AccountsView> pointed
 // at the user's finance ledger. AccountsView receives NO `fetch` prop — it uses
-// the ambient global fetch, which the SessionProvider patched via reactive-auth's
-// registerGlobally(), so every read carries the DPoP token automatically.
+// the ambient global fetch, which the SessionProvider patched via the @jeswr/
+// solid-elements PROACTIVE auth-fetch (task #123), so every read carries the DPoP
+// token automatically AND up front (the token is attached on the FIRST request to
+// the pod origin — no per-resource 401-dance). See auth/SessionProvider.tsx.
 //
 // LEDGER DISCOVERY: unlike pod-docs's <DocumentBrowser>, pod-money's <AccountsView>
 // takes the ledger FILE URL directly (not a pod root). The host therefore discovers
 // the ledger from the pod root via the user's public Type Index (pod-money's
 // `MoneyStore.discover(MoneyStore.primaryClass)` → fin:Transaction registration),
 // falling back to the conventional `${podRoot}finance/ledger.ttl` path when the
-// index (or the registration) is absent. The discovery runs through the same
+// index (or the registration) is absent. This DISCOVERY CHAIN (profile re-read →
+// type index → registration → ledger GET) is exactly the per-resource 401-dance the
+// proactive patch eliminates: each distinct pod URL previously paid a wasted 401 →
+// upgrade → retry under the reactive manager. The discovery runs through the same
 // auth-patched global fetch, so it carries the session token. See useLedgerUrl.
 import { AccountMenu, FeedbackButton, ThemeToggle } from "@jeswr/app-shell";
 import { MoneyStore } from "@jeswr/pod-money";

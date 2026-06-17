@@ -122,6 +122,10 @@ const oauthErrors = vi.hoisted(() => ({ throwOnAttempt: [] as number[] }));
 
 vi.mock("oauth4webapi", () => {
   const allowInsecureRequests = Symbol("allowInsecureRequests");
+  // customFetch (task #123): the provider pins oauth4webapi's customFetch to the pristine
+  // fetch (re-entrancy guard). The real package exports this symbol; the mock must too, or
+  // #httpOptions would compute an `[undefined]` key.
+  const customFetch = Symbol("customFetch");
   class AuthorizationResponseError extends Error {
     error: string;
     constructor(code: string) {
@@ -131,6 +135,7 @@ vi.mock("oauth4webapi", () => {
   }
   return {
     allowInsecureRequests,
+    customFetch,
     AuthorizationResponseError,
     None: () => () => {},
     ClientSecretBasic: () => () => {},
