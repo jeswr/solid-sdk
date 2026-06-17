@@ -83,9 +83,13 @@ try {
     console.error("\n[check:dist] FAIL — committed dist/ differs from a fresh build.");
     console.error("Run `npm run build` and commit the result.\n");
     for (const d of diffs) console.error(`  - ${d}`);
-    process.exit(1);
+    // Set the exit code and fall through naturally so the `finally` still runs
+    // (a bare `process.exit(1)` would terminate immediately and SKIP the temp
+    // dir cleanup below). The process exits non-zero once the script ends.
+    process.exitCode = 1;
+  } else {
+    console.log("[check:dist] OK — committed dist/ matches a fresh build.");
   }
-  console.log("[check:dist] OK — committed dist/ matches a fresh build.");
 } finally {
   rmSync(freshDir, { recursive: true, force: true });
 }
