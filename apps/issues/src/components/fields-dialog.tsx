@@ -11,8 +11,11 @@ import {
   type FieldType,
   type VersionDef,
   type WipLimits,
+  type WorkflowDef,
   type WorkflowStatus,
 } from "@/lib/issue";
+import { WorkflowEditorSection } from "@/components/workflow-editor-section";
+import type { IssueStatusRef } from "@/lib/workflow-editor";
 import {
   Dialog,
   DialogContent,
@@ -43,11 +46,26 @@ export function FieldsDialog({
   open,
   onOpenChange,
   trackerUrl,
+  issueStatusRefs = [],
+  migrateIssues,
   onSaved,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   trackerUrl: string;
+  /**
+   * The live status of each issue in the tracker (#75 P2-5) — the workflow
+   * editor's in-use-state removal guard reads this to block (and offer to
+   * migrate) removal of a state issues are currently in. Defaults to none.
+   */
+  issueStatusRefs?: IssueStatusRef[];
+  /**
+   * Migrate issues to a status (#75 P2-5), routed through the parent's
+   * workflow-validated `setStatus` batch. Required for the in-use-state migrate
+   * path; when omitted the workflow editor still renders but a migrate-on-remove
+   * cannot proceed.
+   */
+  migrateIssues?: (urls: string[], toStatus: string) => Promise<void>;
   onSaved?: () => void;
 }) {
   const [fields, setFields] = useState<FieldDef[]>([]);
@@ -55,6 +73,8 @@ export function FieldsDialog({
   const [versions, setVersions] = useState<VersionDef[]>([]);
   // WIP limits (#111): the tracker's workflow columns + their per-column min/max.
   const [statuses, setStatuses] = useState<WorkflowStatus[]>(DEFAULT_WORKFLOW.statuses);
+  // The configured workflow (#75 P2-5) — seeds the workflow editor below.
+  const [workflow, setWorkflow] = useState<WorkflowDef>(DEFAULT_WORKFLOW);
   const [wipLimits, setWipLimits] = useState<WipLimits>({});
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -65,6 +85,9 @@ export function FieldsDialog({
   const [versionName, setVersionName] = useState("");
   const [versionDate, setVersionDate] = useState("");
   const [versionReleased, setVersionReleased] = useState(false);
+  // Bumped to force a tracker-config reload (e.g. after the workflow editor saves
+  // — its new statuses must re-seed the WIP-limits + workflow sections).
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     if (!open) return;
@@ -79,6 +102,7 @@ export function FieldsDialog({
         setComponents(info.components);
         setVersions(info.versions);
         setStatuses(info.workflow.statuses);
+        setWorkflow(info.workflow);
         setWipLimits(info.wipLimits);
       })
       .catch(() => {})
@@ -88,7 +112,7 @@ export function FieldsDialog({
     return () => {
       cancelled = true;
     };
-  }, [open, trackerUrl]);
+  }, [open, trackerUrl, reloadKey]);
 
   const add = async () => {
     const optionLabels = options
@@ -477,6 +501,22 @@ export function FieldsDialog({
             </Button>
           </form>
         </section>
+
+        {/* Workflow editor — statuses, terminal flags, transitions, initial state
+            (#75 P2-5). Persists via Repository.defineWorkflow; the in-use-state
+            removal guard migrates affected issues first (never orphans them). */}
+        {migrateIssues && (
+          <WorkflowEditorSection
+            trackerUrl={trackerUrl}
+            workflow={workflow}
+            issueStatusRefs={issueStatusRefs}
+            migrateIssues={migrateIssues}
+            onSaved={() => {
+              setReloadKey((k) => k + 1);
+              onSaved?.();
+            }}
+          />
+        )}
 
         {/* WIP limits — per board column min / max (#111 P1-1). */}
         <section className="space-y-3 border-t pt-4">
