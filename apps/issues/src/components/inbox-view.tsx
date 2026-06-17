@@ -29,6 +29,7 @@ export function InboxView({
 }) {
   const [notifications, setNotifications] = useState<InboxNotification[]>([]);
   const [inboxUrl, setInboxUrl] = useState<string | undefined>(undefined);
+  const [truncated, setTruncated] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   // Monotonic load sequence: a slow earlier load must never clobber a newer one.
@@ -46,6 +47,7 @@ export function InboxView({
       if (seq !== loadSeq.current) return;
       setNotifications(result.notifications);
       setInboxUrl(result.inboxUrl);
+      setTruncated(result.truncated);
     } catch (e) {
       if (seq !== loadSeq.current) return;
       setError(e instanceof Error ? e.message : "Could not read your inbox.");
@@ -116,13 +118,24 @@ export function InboxView({
           </div>
         </div>
       ) : (
-        <ul className="space-y-3">
-          {notifications.map((n) => (
-            <li key={n.url}>
-              <NotificationCard notification={n} />
-            </li>
-          ))}
-        </ul>
+        <>
+          {truncated && (
+            <p
+              role="status"
+              className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground"
+            >
+              Your inbox is large — showing the most recent notifications. Some
+              older ones aren&apos;t listed here.
+            </p>
+          )}
+          <ul className="space-y-3">
+            {notifications.map((n) => (
+              <li key={n.url}>
+                <NotificationCard notification={n} />
+              </li>
+            ))}
+          </ul>
+        </>
       )}
     </section>
   );

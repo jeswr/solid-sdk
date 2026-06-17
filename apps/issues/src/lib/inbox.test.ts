@@ -169,6 +169,35 @@ describe("readInbox (end to end, mocked fetch)", () => {
     expect(notifications.some((n) => n.summary === "n0")).toBe(false);
   });
 
+  it("flags truncation EXPLICITLY when the container exceeds the fetch ceiling", async () => {
+    // 5 members, fetch ceiling of 3 → truncated, totalMembers reported, only 3 fetched.
+    const members = Array.from({ length: 5 }, (_, i) => `${INBOX}n${i}.ttl`);
+    const ttl: Record<string, string> = {};
+    members.forEach((m, i) => {
+      ttl[m] = `${PREFIXES}\n<${m}> a as:Announce ; as:summary "n${i}" .`;
+    });
+    const doFetch = inboxPod(members, ttl);
+    const result = await readInbox(WEBID, OWN, doFetch, /* maxFetch */ 3);
+    expect(result.truncated).toBe(true);
+    expect(result.totalMembers).toBe(5);
+    expect(result.notifications.length).toBe(3); // only the ceiling was fetched
+    // The foreign-member filter still feeds totalMembers (eligible only).
+    const spy = doFetch as unknown as ReturnType<typeof vi.fn>;
+    const fetchedMembers = spy.mock.calls.filter((c) => String(c[0]).startsWith(INBOX) && String(c[0]) !== INBOX);
+    expect(fetchedMembers.length).toBe(3);
+  });
+
+  it("does NOT flag truncation when the container fits within the ceiling", async () => {
+    const members = [`${INBOX}a.ttl`, `${INBOX}b.ttl`];
+    const doFetch = inboxPod(members, {
+      [`${INBOX}a.ttl`]: `${PREFIXES}\n<${INBOX}a.ttl> a as:Announce ; as:summary "a" .`,
+      [`${INBOX}b.ttl`]: `${PREFIXES}\n<${INBOX}b.ttl> a as:Announce ; as:summary "b" .`,
+    });
+    const result = await readInbox(WEBID, OWN, doFetch, 3);
+    expect(result.truncated).toBe(false);
+    expect(result.totalMembers).toBe(2);
+  });
+
   it("returns an empty list when the profile advertises no own-pod inbox", async () => {
     const doFetch = vi.fn(async (url: string) => {
       if (String(url) === WEBID) {

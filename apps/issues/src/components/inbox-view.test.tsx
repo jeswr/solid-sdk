@@ -38,7 +38,12 @@ describe("InboxView", () => {
         published: "2026-06-15T00:00:00Z",
       },
     ];
-    readInbox.mockResolvedValue({ inboxUrl: OWN[0] + "inbox/", notifications });
+    readInbox.mockResolvedValue({
+      inboxUrl: OWN[0] + "inbox/",
+      notifications,
+      totalMembers: 1,
+      truncated: false,
+    });
 
     render(<InboxView webId={WEBID} ownStorageUrls={OWN} />);
 
@@ -51,12 +56,28 @@ describe("InboxView", () => {
   });
 
   it("shows the empty state when the profile advertises no own-pod inbox", async () => {
-    readInbox.mockResolvedValue({ inboxUrl: undefined, notifications: [] });
+    readInbox.mockResolvedValue({ inboxUrl: undefined, notifications: [], totalMembers: 0, truncated: false });
 
     render(<InboxView webId={WEBID} ownStorageUrls={OWN} />);
 
     await waitFor(() => expect(screen.getByText("No notifications")).toBeTruthy());
     expect(screen.getByText(/doesn't advertise an inbox/)).toBeTruthy();
+  });
+
+  it("surfaces a truncation note when the inbox is larger than the fetch ceiling", async () => {
+    readInbox.mockResolvedValue({
+      inboxUrl: OWN[0] + "inbox/",
+      notifications: [
+        { url: "https://pod.example/alice/inbox/x.ttl", types: [`${AS}Announce`], summary: "One" },
+      ],
+      totalMembers: 600,
+      truncated: true,
+    });
+
+    render(<InboxView webId={WEBID} ownStorageUrls={OWN} />);
+
+    await waitFor(() => expect(screen.getByText("One")).toBeTruthy());
+    expect(screen.getByText(/inbox is large/i)).toBeTruthy();
   });
 
   it("shows an error state when the read fails", async () => {

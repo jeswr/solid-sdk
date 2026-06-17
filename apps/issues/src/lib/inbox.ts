@@ -213,33 +213,64 @@ async function mapWithConcurrency<T, R>(
   return results;
 }
 
+/** The result of reading the LDN inbox. */
+export interface InboxResult {
+  /** The own-pod inbox URL, or undefined when none is advertised. */
+  inboxUrl: string | undefined;
+  /** The notifications, newest-first, capped at the display limit. */
+  notifications: InboxNotification[];
+  /**
+   * Total eligible (own-pod) member count in the container — even when more than
+   * we fetched. Lets the view tell the user the inbox is large.
+   */
+  totalMembers: number;
+  /**
+   * True when the container held MORE eligible members than the fetch ceiling
+   * (`MAX_FETCH`): `ldp:contains` order is not guaranteed, so beyond this bound a
+   * newer notification COULD be hidden. EXPLICIT (the view surfaces it) rather
+   * than a silent drop. (LDN/LDP gives no portable server-side ordering or
+   * pagination, so an unbounded inbox cannot be made fully exhaustive
+   * client-side — this is the honest, bounded contract.)
+   */
+  truncated: boolean;
+}
+
 /**
  * Read the user's LDN inbox: resolve `ldp:inbox` (own-pod-validated), list its
  * members, fetch + parse each (own-pod-validated), and return them newest-first.
  *
  * Resilient: a member that fails to fetch/parse is skipped (one bad notification
- * never blanks the whole inbox). Returns `{ inboxUrl: undefined, notifications: [] }`
- * when the profile advertises no (own-pod) inbox — the view shows an empty state.
+ * never blanks the whole inbox). Returns `inboxUrl: undefined` when the profile
+ * advertises no (own-pod) inbox — the view shows an empty state.
+ *
+ * Bounded: at most `MAX_FETCH` members are fetched. When the container holds more
+ * than that, `truncated` is set so the view can tell the user some (possibly
+ * newer) notifications are not shown — an explicit, surfaced limit, not a silent
+ * drop (LDN/LDP gives no portable ordering/pagination to exhaust a huge inbox).
  */
 export async function readInbox(
   webId: string,
   ownStorageUrls: readonly string[],
   fetchImpl?: typeof fetch,
-): Promise<{ inboxUrl: string | undefined; notifications: InboxNotification[] }> {
+  /** Override the fetch ceiling (tests only); defaults to {@link MAX_FETCH}. */
+  maxFetch: number = MAX_FETCH,
+): Promise<InboxResult> {
   const inboxUrl = await resolveOwnInbox(webId, ownStorageUrls, fetchImpl);
-  if (!inboxUrl) return { inboxUrl: undefined, notifications: [] };
+  if (!inboxUrl) return { inboxUrl: undefined, notifications: [], totalMembers: 0, truncated: false };
 
   const opts = fetchImpl ? { fetch: fetchImpl } : undefined;
   const { dataset: containerDs } = await fetchRdf(inboxUrl, opts);
-  const memberUrls = new InboxContainer(containerDs, DataFactory)
+  const eligible = new InboxContainer(containerDs, DataFactory)
     .members(inboxUrl)
     // Defence in depth: a member link could (maliciously or by misconfiguration)
     // point off-pod — only fetch members within the user's own storage.
-    .filter((m) => m !== inboxUrl && isOwnPodUrl(m, ownStorageUrls))
-    // Fetch ceiling only (NOT the display cap): `ldp:contains` order is not
-    // guaranteed, so we must fetch a broad set, sort by `as:published`, and THEN
-    // cap — otherwise newer notifications past the first N could be hidden.
-    .slice(0, MAX_FETCH);
+    .filter((m) => m !== inboxUrl && isOwnPodUrl(m, ownStorageUrls));
+  const totalMembers = eligible.length;
+  const truncated = totalMembers > maxFetch;
+  // Fetch ceiling (NOT the display cap): `ldp:contains` order is not guaranteed,
+  // so we fetch a broad set, sort by `as:published`, and THEN cap. Beyond
+  // maxFetch we cannot guarantee the newest survive (hence `truncated`).
+  const memberUrls = eligible.slice(0, maxFetch);
 
   // Bounded-concurrency fan-out so a large inbox doesn't open hundreds of
   // requests at once. A member that fails to fetch/parse is skipped.
@@ -254,5 +285,5 @@ export async function readInbox(
     // Newest-first, THEN apply the display cap so the most recent survive.
     .slice(0, DISPLAY_LIMIT);
 
-  return { inboxUrl, notifications };
+  return { inboxUrl, notifications, totalMembers, truncated };
 }
