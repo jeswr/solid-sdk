@@ -222,11 +222,26 @@ function isEffective(kind: ActionKind, value: string | undefined, issue: IssueRe
 }
 
 /**
+ * The "open-work" action kinds — they only make sense on an issue that is still
+ * open. They are SUPPRESSED on an issue also being closed in the same pass (see
+ * {@link evaluateRules}), so an issue being auto-completed is not simultaneously
+ * re-prioritised / re-statused / re-assigned. `AddComment` is NOT open-work (a
+ * comment on a closing issue is harmless and may be desired — e.g. "auto-closed").
+ */
+const OPEN_WORK_ACTIONS = new Set<ActionKind>(["SetStatus", "SetPriority", "Assign"]);
+
+/**
  * Evaluate the enabled rules against the current issue list for one trigger event,
  * returning the concrete actions to take. PURE — no I/O, injectable `now`. The
  * caller executes the actions and re-invokes for cascades (bounded). An action that
  * would not change anything ({@link isEffective}) is dropped, so the result is
  * exactly the set of state-changing actions.
+ *
+ * Same-pass precedence (preserving the legacy `automations.ts` guard): an issue
+ * being CLOSED in this pass (a CloseIssue action, or a SetStatus into a terminal
+ * column) is no longer open work, so any open-work action ({@link OPEN_WORK_ACTIONS})
+ * on the SAME issue is suppressed — e.g. an overdue parent that is auto-completed
+ * is not also escalated to high priority. Closing wins.
  *
  * Rules with an unknown trigger/action (forward-compat / corrupt data) are skipped.
  */
@@ -238,6 +253,7 @@ export function evaluateRules(
   now: Date = new Date(),
 ): RuleAction[] {
   const actions: RuleAction[] = [];
+  const terminalSlugs = new Set(workflow.statuses.filter((s) => s.terminal).map((s) => s.slug));
   for (const rule of rules) {
     if (!rule.enabled) continue;
     if (!(TRIGGERS as readonly string[]).includes(rule.trigger)) continue;
@@ -262,7 +278,21 @@ export function evaluateRules(
       });
     }
   }
-  return actions;
+  // Same-pass precedence: any issue being CLOSED this pass (CloseIssue, or a
+  // SetStatus into a terminal column) is no longer open work — drop the open-work
+  // actions targeting it. This preserves the legacy "don't escalate an issue being
+  // auto-completed in the same pass" guard, generalised to all open-work actions.
+  const isClosingAction = (a: RuleAction): boolean =>
+    a.kind === "CloseIssue" || (a.kind === "SetStatus" && a.value !== undefined && terminalSlugs.has(a.value));
+  const closing = new Set(actions.filter(isClosingAction).map((a) => a.url));
+  if (closing.size === 0) return actions;
+  return actions.filter((a) => {
+    if (!closing.has(a.url)) return true; // not being closed — keep
+    if (isClosingAction(a)) return true; // the close action itself stays
+    // An open-work action (a non-terminal SetStatus, SetPriority, Assign) on an
+    // issue being closed this pass is pointless — suppress it. AddComment stays.
+    return !OPEN_WORK_ACTIONS.has(a.kind);
+  });
 }
 
 function isPriority(value: string | undefined): value is Priority {

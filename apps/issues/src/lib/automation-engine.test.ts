@@ -173,6 +173,42 @@ describe("evaluateRules — guards & effectiveness", () => {
     ];
     expect(evaluateRules(issues, [r], { type: "load" }, WF, NOW)).toEqual([]);
   });
+
+  it("same-pass precedence: an issue being auto-closed is NOT also escalated (legacy guard, roborev #ae294fb)", () => {
+    // An overdue parent whose sub-tasks are all done would, on one load pass, match
+    // BOTH OnAllSubtasksDone+CloseIssue AND OnDueDatePassed+SetPriority(high).
+    // Closing wins — the SetPriority on the closing issue is suppressed.
+    const closeRule = rule({ iri: "https://pod/t.ttl#rule-close", trigger: "OnAllSubtasksDone", action: "CloseIssue" });
+    const overdueRule = rule({ iri: "https://pod/t.ttl#rule-overdue", trigger: "OnDueDatePassed", action: "SetPriority", actionValue: "high" });
+    const issues = [
+      mk({ url: "p", title: "Overdue parent", dateDue: new Date("2026-06-01") }),
+      mk({ url: "c", parent: "p", state: "closed", status: "done" }),
+    ];
+    const actions = evaluateRules(issues, [closeRule, overdueRule], { type: "load" }, WF, NOW);
+    expect(actions).toEqual([
+      { ruleIri: closeRule.iri, kind: "CloseIssue", url: "p", title: "Overdue parent", value: undefined, reason: "all sub-tasks are done" },
+    ]);
+  });
+
+  it("same-pass precedence: a SetPriority on a DIFFERENT (not-closing) overdue issue still fires", () => {
+    const closeRule = rule({ iri: "https://pod/t.ttl#rule-close", trigger: "OnAllSubtasksDone", action: "CloseIssue" });
+    const overdueRule = rule({ iri: "https://pod/t.ttl#rule-overdue", trigger: "OnDueDatePassed", action: "SetPriority", actionValue: "high" });
+    const issues = [
+      mk({ url: "p", title: "Closing parent", dateDue: new Date("2026-06-01") }),
+      mk({ url: "c", parent: "p", state: "closed", status: "done" }),
+      mk({ url: "lone", title: "Lone overdue", dateDue: new Date("2026-06-01") }), // overdue, not closing
+    ];
+    const actions = evaluateRules(issues, [closeRule, overdueRule], { type: "load" }, WF, NOW);
+    expect(actions.map((a) => `${a.kind}:${a.url}`).sort()).toEqual(["CloseIssue:p", "SetPriority:lone"]);
+  });
+
+  it("same-pass precedence: a terminal SetStatus also suppresses other open-work actions on the same issue", () => {
+    const shipRule = rule({ iri: "https://pod/t.ttl#rule-ship", trigger: "OnStatusChange", action: "SetStatus", actionValue: "done" });
+    const escalate = rule({ iri: "https://pod/t.ttl#rule-esc", trigger: "OnStatusChange", action: "SetPriority", actionValue: "high" });
+    const issue = mk({ url: "a", title: "A", status: "in-progress", priority: "low" });
+    const actions = evaluateRules([issue], [shipRule, escalate], { type: "OnStatusChange", url: "a" }, WF, NOW);
+    expect(actions.map((a) => a.kind)).toEqual(["SetStatus"]); // SetPriority suppressed (issue is being closed)
+  });
 });
 
 describe("the two migrated built-in rules (behaviour preserved)", () => {
