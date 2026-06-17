@@ -124,8 +124,8 @@ export function InboxView({
               role="status"
               className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground"
             >
-              Your inbox is large — showing the most recent notifications. Some
-              older ones aren&apos;t listed here.
+              Your inbox is large — showing a limited set of notifications. Some,
+              possibly including recent ones, may not be listed here.
             </p>
           )}
           <ul className="space-y-3">
