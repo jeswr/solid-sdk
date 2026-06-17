@@ -39,13 +39,14 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "prepare": "npm run build",
-    "lint": "biome check .",
+    "lint": "biome check . && npm run check:lockfile-transport",
     "format": "biome format --write .",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "check:fetch": "node scripts/check-no-raw-fetch.mjs",
-    "check:dist": "node scripts/check-dist-fresh.mjs"
+    "check:dist": "node scripts/check-dist-fresh.mjs",
+    "check:lockfile-transport": "node scripts/check-lockfile-transport.mjs"
   },
   "dependencies": {
     "@jeswr/fetch-rdf": "^0.1.0",
