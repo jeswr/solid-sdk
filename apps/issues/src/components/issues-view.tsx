@@ -13,8 +13,9 @@ import { filterAndSort, facets, DEFAULT_QUERY, type IssueQuery, type SortKey } f
 import { SavedViews } from "@/lib/saved-views";
 import type { PodSavedView } from "@/lib/pod-saved-views";
 import { resolveView, viewHref, VIEW_KEY, type View } from "@/lib/view";
-import { DEFAULT_WORKFLOW, type ComponentDef, type FieldDef, type Priority, type StatusSlug, type VersionDef, type WorkflowDef } from "@/lib/issue";
+import { DEFAULT_WORKFLOW, type ComponentDef, type FieldDef, type Priority, type RuleDef, type StatusSlug, type VersionDef, type WipLimits, type WorkflowDef } from "@/lib/issue";
 import { dependencyWarning, type OpenBlocker } from "@/lib/dependencies";
+import { evaluateRules, type RuleAction, type TriggerEvent } from "@/lib/automation-engine";
 import { IssueFormDialog, type IssueFormSubmit } from "@/components/issue-form-dialog";
 import { ShareDialog } from "@/components/share-dialog";
 import { OpenTrackerDialog } from "@/components/open-tracker-dialog";
@@ -25,7 +26,7 @@ import { TeamDialog } from "@/components/team-dialog";
 import { FieldsDialog } from "@/components/fields-dialog";
 import { IssueBoard } from "@/components/issue-board";
 import { SaveIndicator } from "@/components/save-indicator";
-import { boardColumns, boardIssues, moveForColumn, optimisticMove, revertMoveIfCurrent, type SwimlaneBy } from "@/lib/board";
+import { boardColumns, boardIssues, boardWip, moveForColumn, optimisticMove, revertMoveIfCurrent, wipMoveBreach, type SwimlaneBy } from "@/lib/board";
 import { createEpicAncestorResolver } from "@/lib/epics";
 import { EpicView } from "@/components/epic-view";
 import { DashboardView } from "@/components/dashboard-view";
@@ -34,11 +35,10 @@ import { InboxView } from "@/components/inbox-view";
 import { BacklogView } from "@/components/backlog-view";
 import { TimelineView } from "@/components/timeline-view";
 import { CalendarView } from "@/components/calendar-view";
-import { AutomationsDialog } from "@/components/automations-dialog";
-import { evaluateAutomations, loadAutomationSettings, type AutomationSettings } from "@/lib/automations";
+import { RulesDialog } from "@/components/rules-dialog";
 import { IssueCard, shortWebId, type IssueCardActions } from "@/components/issue-card";
 import { IssuesTable } from "@/components/issues-table";
-import { makeInlineEditController } from "@/lib/inline-edit";
+import { makeInlineEditController, type EditableField } from "@/lib/inline-edit";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -115,6 +115,10 @@ interface TrackerInfo {
   versions: VersionDef[];
   group: { iri?: string; members: string[] };
   workflow: WorkflowDef;
+  /** Per-column WIP limits (#111), keyed by status slug. */
+  wipLimits: WipLimits;
+  /** Automation rules (#112) declared on the tracker. */
+  rules: RuleDef[];
 }
 const EMPTY_GROUP: TrackerInfo["group"] = { members: [] };
 // Module-level so the derived fallbacks keep a stable identity across renders
@@ -122,6 +126,61 @@ const EMPTY_GROUP: TrackerInfo["group"] = { members: [] };
 const EMPTY_FIELDS: FieldDef[] = [];
 const EMPTY_COMPONENTS: ComponentDef[] = [];
 const EMPTY_VERSIONS: VersionDef[] = [];
+const EMPTY_WIP: WipLimits = {};
+const EMPTY_RULES: RuleDef[] = [];
+
+/**
+ * Execute one automation-engine {@link RuleAction} through the EXISTING repository
+ * mutation path (#112) — so an automated change goes through the SAME validation
+ * the user's own edits do (the workflow transition rules for SetStatus/CloseIssue,
+ * the ETag-conditional write, the activity log). The engine has already verified
+ * the action is effective + the value valid; this only routes it.
+ *
+ *  - SetStatus → `setStatus` (workflow-guarded; a disallowed transition throws and
+ *    is surfaced as an automation failure, never a silent bad write).
+ *  - CloseIssue → `setState("closed")` (resolves the workflow's terminal status).
+ *  - SetPriority / Assign → `update`.
+ *  - AddComment → `addComment` (authored by the signed-in user).
+ */
+async function applyRuleAction(
+  repo: Repository,
+  action: RuleAction,
+  actorWebId: string | undefined,
+): Promise<void> {
+  switch (action.kind) {
+    case "SetStatus":
+      if (action.value) await repo.setStatus(action.url, action.value);
+      break;
+    case "CloseIssue":
+      await repo.setState(action.url, "closed");
+      break;
+    case "SetPriority":
+      await repo.update(action.url, { priority: action.value as Priority });
+      break;
+    case "Assign":
+      await repo.update(action.url, { assignee: action.value || undefined });
+      break;
+    case "AddComment":
+      if (action.value) await repo.addComment(action.url, action.value, actorWebId);
+      break;
+  }
+}
+
+/** A human "Automation: …" toast lead-in for an applied {@link RuleAction}. */
+function automationToast(a: RuleAction): string {
+  switch (a.kind) {
+    case "SetStatus":
+      return `Automation: moved “${a.title}” to ${a.value}`;
+    case "CloseIssue":
+      return `Automation: completed “${a.title}”`;
+    case "SetPriority":
+      return `Automation: set “${a.title}” to ${a.value} priority`;
+    case "Assign":
+      return `Automation: assigned “${a.title}”`;
+    case "AddComment":
+      return `Automation: commented on “${a.title}”`;
+  }
+}
 
 export function IssuesView() {
   const { profile, trackerUrl, storageUrl, logout } = useSolidSession();
@@ -184,6 +243,11 @@ export function IssuesView() {
   const [pendingTransition, setPendingTransition] = useState<
     { issue: IssueRecord; verb: string; blockers: OpenBlocker[]; proceed: () => void } | undefined
   >(undefined);
+  // WIP limits (#111 P1-1): a board move that would push the target column over its
+  // WIP maximum awaits the user's override confirmation — WARN, never hard-block.
+  const [pendingWipMove, setPendingWipMove] = useState<
+    { title: string; column: string; count: number; max: number; proceed: () => void } | undefined
+  >(undefined);
   const [commentsUrl, setCommentsUrl] = useState<string | undefined>(undefined);
   const [shareResource, setShareResource] = useState<{ url: string; extraUrls?: string[]; label: string } | undefined>(undefined);
   const [openTrackerOpen, setOpenTrackerOpen] = useState(false);
@@ -199,6 +263,8 @@ export function IssuesView() {
   const group = infoCurrent ? trackerInfo.group : EMPTY_GROUP;
   const trackerTitle = infoCurrent ? trackerInfo.title : undefined;
   const workflow = infoCurrent ? trackerInfo.workflow : DEFAULT_WORKFLOW;
+  const wipLimits = infoCurrent ? trackerInfo.wipLimits : EMPTY_WIP;
+  const rules = infoCurrent ? trackerInfo.rules : EMPTY_RULES;
   // F3: the open issue's provenance log, loaded on demand when the detail dialog opens.
   const [activity, setActivity] = useState<ActivityRecord[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -215,10 +281,11 @@ export function IssuesView() {
   const [viewName, setViewName] = useState("");
   const [groupBoardBy, setGroupBoardBy] = useState<SwimlaneBy>("none");
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const [automationsOpen, setAutomationsOpen] = useState(false);
-  const [automations, setAutomations] = useState<AutomationSettings | null>(null);
+  const [rulesOpen, setRulesOpen] = useState(false);
   const [fieldsOpen, setFieldsOpen] = useState(false);
-  // Actions applied this session (url+kind) — belt-and-braces against re-firing.
+  // Rule+issue pairs already actioned this session (`${ruleIri}:${kind}:${url}`) —
+  // belt-and-braces against re-firing the same automation on the same issue within
+  // a session (the engine's effectiveness check is the primary cascade guard).
   const appliedAutomations = useRef(new Set<string>());
 
   const patchQuery = (p: Partial<IssueQuery>) => setQuery((q) => ({ ...q, ...p }));
@@ -245,12 +312,14 @@ export function IssuesView() {
         versions: info.versions,
         group: isOwn ? { iri: info.assigneeGroup, members: info.groupMembers } : EMPTY_GROUP,
         workflow: info.workflow,
+        wipLimits: info.wipLimits,
+        rules: info.rules,
       });
     } catch {
       if (seq !== infoSeq.current) return;
       // Config is optional sugar, but a failed load must still clear whatever
       // the previous project left behind.
-      setTrackerInfo({ tracker: url, fields: [], components: [], versions: [], group: EMPTY_GROUP, workflow: DEFAULT_WORKFLOW });
+      setTrackerInfo({ tracker: url, fields: [], components: [], versions: [], group: EMPTY_GROUP, workflow: DEFAULT_WORKFLOW, wipLimits: {}, rules: [] });
     }
   }, [isOwn, tracker.trackerUrl]);
 
@@ -259,12 +328,6 @@ export function IssuesView() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadTrackerInfo();
   }, [loadTrackerInfo]);
-
-  useEffect(() => {
-    // Automations stay device-local for now (per-device toggles).
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setAutomations(loadAutomationSettings());
-  }, []);
 
   // Load the tracker's shareable saved views, MIGRATING any localStorage views
   // saved before pod-backing landed (one-time, only on a writable own tracker).
@@ -320,41 +383,57 @@ export function IssuesView() {
     void loadSavedViews();
   }, [loadSavedViews]);
 
-  // Built-in automations: evaluate whenever fresh issue state arrives; apply in
-  // one batch. State changes remove the trigger conditions, and the applied-set
-  // prevents re-firing on the same issue within a session.
-  useEffect(() => {
-    if (!automations || issues.loading || !isOwn) return;
-    const actions = evaluateAutomations(issues.issues, automations).filter(
-      (a) => !appliedAutomations.current.has(`${a.kind}:${a.url}`),
-    );
-    if (actions.length === 0) return;
-    for (const a of actions) appliedAutomations.current.add(`${a.kind}:${a.url}`);
-    void issues
-      .batch(async (r) => {
-        for (const a of actions) {
-          // Close via state (resolves the workflow's terminal status), not a
-          // literal "done" slug — that need not exist in a custom workflow.
-          if (a.kind === "close") await r.setState(a.url, "closed");
-          else if (a.kind === "set-priority-high") await r.update(a.url, { priority: "high" });
+  // Automation engine (#112 P1-3): pod-persisted ECA rules evaluated CLIENT-SIDE.
+  // `runAutomations` evaluates the enabled rules for one trigger event over the
+  // CURRENT issue list (read synchronously via getIssues so cascades see prior
+  // applied state), then applies each action through the EXISTING repository path
+  // (workflow/dep-guarded status, ETag-safe writes) in one batch. After a batch it
+  // re-evaluates a `load` pass so a closed parent can cascade to ITS parent —
+  // bounded by a depth counter so a self-/mutually-triggering rule never loops.
+  // The applied-set (`${ruleIri}:${kind}:${url}`) plus the engine's own
+  // effectiveness check (a no-op action is dropped) prevent re-firing.
+  const runningAutomations = useRef(false);
+  const runAutomations = useCallback(
+    async (event: TriggerEvent, depth = 0): Promise<void> => {
+      if (!isOwn || depth > 8) return; // depth cap = the cascade bound
+      // Serialise: a second pass while one is in flight would act on stale state.
+      if (depth === 0 && runningAutomations.current) return;
+      if (depth === 0) runningAutomations.current = true;
+      try {
+        const actions = evaluateRules(issues.getIssues(), rules, event, workflow).filter(
+          (a) => !appliedAutomations.current.has(`${a.ruleIri}:${a.kind}:${a.url}`),
+        );
+        if (actions.length === 0) return;
+        for (const a of actions) appliedAutomations.current.add(`${a.ruleIri}:${a.kind}:${a.url}`);
+        try {
+          await issues.batch(async (r) => {
+            for (const a of actions) await applyRuleAction(r, a, profile?.webId);
+          });
+          for (const a of actions) toast.info(`${automationToast(a)} — ${a.reason}`);
+          // A status/close change may satisfy a parent's OnAllSubtasksDone — cascade
+          // via a fresh load pass on the now-refreshed list (batch refreshed it).
+          await runAutomations({ type: "load" }, depth + 1);
+        } catch (e) {
+          for (const a of actions) appliedAutomations.current.delete(`${a.ruleIri}:${a.kind}:${a.url}`);
+          toast.error(e instanceof Error ? `Automation failed: ${e.message}` : "An automation failed.");
+          void issues.refresh(); // partial writes may have landed — show real state
         }
-      })
-      .then(() => {
-        for (const a of actions) {
-          toast.info(
-            a.kind === "close"
-              ? `Automation: completed “${a.title}” — ${a.reason}`
-              : `Automation: raised “${a.title}” to high priority — ${a.reason}`,
-          );
-        }
-      })
-      .catch((e) => {
-        for (const a of actions) appliedAutomations.current.delete(`${a.kind}:${a.url}`);
-        toast.error(e instanceof Error ? `Automation failed: ${e.message}` : "An automation failed.");
-        void issues.refresh(); // partial writes may have landed — show real state
-      });
+      } finally {
+        if (depth === 0) runningAutomations.current = false;
+      }
+    },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [issues.issues, issues.loading, automations, isOwn]);
+    [isOwn, rules, workflow, profile?.webId, issues.getIssues, issues.batch, issues.refresh],
+  );
+
+  // On-load / state-observed triggers (OnDueDatePassed, OnAllSubtasksDone): run a
+  // `load` pass whenever fresh issue state arrives. Mutation triggers
+  // (OnStatusChange/OnAssigned/OnCreated) are fired from their mutation handlers.
+  useEffect(() => {
+    if (issues.loading || !isOwn) return;
+    void runAutomations({ type: "load" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [issues.issues, issues.loading, isOwn, rules, workflow]);
 
   // Keyboard shortcuts: c = new, / = search, b/l = board/list (ignored while typing).
   useEffect(() => {
@@ -455,6 +534,13 @@ export function IssuesView() {
     () => boardIssues(filterAndSort(issues.issues, { ...query, state: "all" }), workflow, query.state, groupBy, archived),
     [issues.issues, query, workflow, groupBy, archived],
   );
+  // WIP per-column status (#111): computed over the board's visible cards so the
+  // "n / max" cue matches what the user sees. Only status-grouped boards have WIP
+  // columns; a priority board passes no limits and every column resolves to "ok".
+  const columnWip = useMemo(
+    () => boardWip(boardVisible, boardColumns(workflow, groupBy), groupBy === "status" ? wipLimits : {}),
+    [boardVisible, workflow, groupBy, wipLimits],
+  );
   const commentsIssue = useMemo(
     () => issues.issues.find((i) => i.url === commentsUrl),
     [issues.issues, commentsUrl],
@@ -533,17 +619,32 @@ export function IssuesView() {
   };
   const onSubmitForm = async (values: IssueFormSubmit) => {
     if (editing) {
-      await run(() => issues.update(editing.url, values), "Issue updated");
+      const url = editing.url;
+      const assigneeChanged = (values.assignee ?? undefined) !== (editing.assignee ?? undefined);
+      const statusChanged = values.status !== editing.status;
+      await run(() => issues.update(url, values), "Issue updated");
+      // Fire the mutation triggers the edit produced (#112) — the engine reads the
+      // refreshed list, so it sees the new status/assignee.
+      if (statusChanged) void runAutomations({ type: "OnStatusChange", url });
+      if (assigneeChanged) void runAutomations({ type: "OnAssigned", url });
     } else {
       const { parent, sprint } = createDefaults;
+      let createdUrl: string | undefined;
       await run(
         () =>
           issues.batch(async (r) => {
             const url = await r.create({ ...values, parent, creator: profile?.webId });
+            createdUrl = url;
             if (sprint) await r.setSprintMembership(sprint, url, true);
           }),
         "Issue created",
       );
+      // OnCreated (#112): the just-created issue is now in the refreshed list.
+      if (createdUrl) {
+        void runAutomations({ type: "OnCreated", url: createdUrl });
+        // A create that set an assignee also fires OnAssigned.
+        if (values.assignee) void runAutomations({ type: "OnAssigned", url: createdUrl });
+      }
     }
   };
 
@@ -638,11 +739,26 @@ export function IssuesView() {
   // The flow lives in `makeInlineEditController` (pure + unit-tested); this just
   // hands it the hook's optimistic seam. Created per render (cheap, holds no state)
   // — matching the codebase convention for these handlers (e.g. `cardActions`).
+  // Fire the automation triggers an inline cell edit produces (#112). Wrapped in a
+  // useCallback so it is a stable value — passing a fresh ref-reading closure into
+  // makeInlineEditController during render trips the refs lint.
+  const onInlineApplied = useCallback(
+    (field: EditableField, url: string) => {
+      if (field === "status") void runAutomations({ type: "OnStatusChange", url });
+      else if (field === "assignee") void runAutomations({ type: "OnAssigned", url });
+    },
+    [runAutomations],
+  );
   const { edit: inlineEdit, editStatus: inlineStatusEdit } = makeInlineEditController(
     { getIssues: issues.getIssues, setIssuesLocal: issues.setIssuesLocal, persist: issues.persist, refresh: issues.refresh },
     workflow,
     toast,
     guardedTransition,
+    // onInlineApplied transitively reads automation refs (the dedupe set + the
+    // re-entrancy guard), but ONLY inside the async runAutomations body / effects —
+    // never during render. The refs rule can't see that through the indirection.
+    // eslint-disable-next-line react-hooks/refs
+    onInlineApplied,
   );
 
   // The shared bulk-action toolbar (selected-rows close/reopen/assign/label/delete)
@@ -739,8 +855,8 @@ export function IssuesView() {
           ? [
               { id: "share", label: "Share tracker…", run: () => setShareResource({ url: repo.containerUrl, extraUrls: [tracker.trackerUrl], label: "this tracker" }) },
               { id: "team", label: "Manage team…", run: () => setTeamOpen(true) },
-              { id: "fields", label: "Custom fields…", run: () => setFieldsOpen(true) },
-              { id: "automations", label: "Automations…", run: () => setAutomationsOpen(true) },
+              { id: "fields", label: "Fields, components & WIP limits…", run: () => setFieldsOpen(true) },
+              { id: "automations", label: "Automations…", run: () => setRulesOpen(true) },
             ]
           : []),
         { id: "signout", label: "Sign out", run: logout },
@@ -806,7 +922,7 @@ export function IssuesView() {
             </Button>
           )}
           {isOwn && (
-            <Button variant="ghost" size="sm" className="gap-1.5" aria-label="Automations" onClick={() => setAutomationsOpen(true)}>
+            <Button variant="ghost" size="sm" className="gap-1.5" aria-label="Automations" onClick={() => setRulesOpen(true)}>
               <Zap className="size-4" aria-hidden />
               <span className="hidden lg:inline">Automations</span>
             </Button>
@@ -1221,6 +1337,7 @@ export function IssuesView() {
             cardActions={(issue) => cardActions(issue, "board")}
             canWrite={issues.canCreate}
             columns={boardColumns(workflow, groupBy)}
+            columnWip={groupBy === "status" ? columnWip : undefined}
             swimlaneBy={groupBoardBy}
             labelOf={swimlaneLabel}
             epicOf={epicOf}
@@ -1243,6 +1360,10 @@ export function IssuesView() {
                       ? r.setStatus(url, move.status)
                       : r.update(url, { priority: move.priority }),
                   )
+                  .then(() => {
+                    // OnStatusChange (#112): a successful status move may fire rules.
+                    if (move.kind === "status") void runAutomations({ type: "OnStatusChange", url });
+                  })
                   .catch((e) => {
                     issues.setIssuesLocal((list) => revertMoveIfCurrent(list, original, optimistic, move));
                     if (e instanceof ConflictError) {
@@ -1253,14 +1374,30 @@ export function IssuesView() {
                     }
                   });
               };
-              // Dependency enforcement (#75 P1-4): a status move that starts/completes
-              // a card with open blockers warns first (override allowed); a priority
-              // move or a non-guarded status move runs straight through.
+              // A status move into a column over its WIP max warns FIRST (#111) —
+              // advisory, override allowed (never a hard block); then the dependency
+              // guard. A priority move runs straight through.
+              const proceedAfterWip = () => {
+                if (move.kind === "status") {
+                  guardedTransition(original, move.status, "move", performMove);
+                } else {
+                  performMove();
+                }
+              };
               if (move.kind === "status") {
-                guardedTransition(original, move.status, "move", performMove);
-              } else {
-                performMove();
+                const breach = wipMoveBreach(issues.issues, url, move.status, wipLimits, workflow);
+                if (breach) {
+                  setPendingWipMove({
+                    title: original.title,
+                    column: boardColumns(workflow, groupBy).find((c) => c.key === move.status)?.label ?? move.status,
+                    count: breach.count,
+                    max: breach.max,
+                    proceed: proceedAfterWip,
+                  });
+                  return;
+                }
               }
+              proceedAfterWip();
             }}
             onAddToColumn={
               issues.canCreate && groupBy === "status"
@@ -1368,7 +1505,16 @@ export function IssuesView() {
 
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} groups={paletteGroups} />
 
-      <AutomationsDialog open={automationsOpen} onOpenChange={setAutomationsOpen} onChanged={setAutomations} />
+      {isOwn && (
+        <RulesDialog
+          open={rulesOpen}
+          onOpenChange={setRulesOpen}
+          trackerUrl={tracker.trackerUrl}
+          statuses={workflow.statuses}
+          teamMembers={group.members}
+          onSaved={loadTrackerInfo}
+        />
+      )}
 
       <OpenTrackerDialog
         open={openTrackerOpen}
@@ -1438,6 +1584,33 @@ export function IssuesView() {
               }}
             >
               Proceed anyway
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* WIP-limit move warning (#111 P1-1) — advisory, override allowed. */}
+      <Dialog open={!!pendingWipMove} onOpenChange={(o) => !o && setPendingWipMove(undefined)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Over the WIP limit</DialogTitle>
+            <DialogDescription>
+              Moving “{pendingWipMove?.title}” into “{pendingWipMove?.column}” would make {pendingWipMove?.count} cards
+              there — over the column&apos;s limit of {pendingWipMove?.max}. You can still proceed.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPendingWipMove(undefined)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                const pending = pendingWipMove;
+                setPendingWipMove(undefined);
+                pending?.proceed();
+              }}
+            >
+              Move anyway
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -17,6 +17,7 @@
     "@hookform/resolvers": "^5.4.0",
     "@jeswr/app-shell": "git+https://github.com/jeswr/app-shell.git#cc86f7851b5aeadcd7e59489fbd54845585920d9",
     "@jeswr/fetch-rdf": "^0.1.0",
+    "@jeswr/solid-odrl": "github:jeswr/solid-odrl#1d354c7",
     "@jeswr/solid-task-model": "github:jeswr/solid-task-model#e5ee9ee",
     "@rdfjs/wrapper": "^0.34.0",
     "@solid/object": "^0.6.0",

@@ -22,9 +22,12 @@ import {
   type IssueType,
   type LabelDef,
   type Priority,
+  type RuleDef,
   type SavedViewDef,
   type StatusSlug,
   type VersionDef,
+  type WipLimit,
+  type WipLimits,
   type WorkflowDef,
 } from "./issue";
 import { wf, rdf, prov } from "./vocab";
@@ -439,6 +442,10 @@ export class Repository {
     groupMembers: string[];
     assigneeGroup?: string;
     workflow: WorkflowDef;
+    /** Per-column WIP limits (#111), keyed by status slug. */
+    wipLimits: WipLimits;
+    /** Automation rules declared on the tracker (#112). */
+    rules: RuleDef[];
   }> {
     const { tracker } = await this.loadTracker();
     return {
@@ -450,6 +457,8 @@ export class Repository {
       groupMembers: tracker.groupMembers,
       assigneeGroup: tracker.assigneeGroup,
       workflow: tracker.workflow,
+      wipLimits: tracker.wipLimits,
+      rules: tracker.rules,
     };
   }
 
@@ -655,6 +664,45 @@ export class Repository {
   async defineWorkflow(workflow: WorkflowDef): Promise<void> {
     await this.mutateTracker((dataset) => {
       new Tracker(this.trackerIri, dataset, DataFactory).defineWorkflow(workflow);
+    });
+  }
+
+  // ---- WIP limits (#111 P1-1) ----
+
+  /** Per-column WIP limits declared on the tracker, keyed by status slug. */
+  async wipLimits(): Promise<WipLimits> {
+    const { tracker } = await this.loadTracker();
+    return tracker.wipLimits;
+  }
+
+  /** Set (or clear) the WIP min/max on one status column. */
+  async setWipLimit(slug: StatusSlug, limit: WipLimit): Promise<void> {
+    await this.mutateTracker((dataset) => {
+      new Tracker(this.trackerIri, dataset, DataFactory).setWipLimit(slug, limit);
+    });
+  }
+
+  // ---- Automation rules (#112 P1-3) ----
+
+  /** The automation rules declared on the tracker. */
+  async rules(): Promise<RuleDef[]> {
+    const { tracker } = await this.loadTracker();
+    return tracker.rules;
+  }
+
+  /** Define (or overwrite by IRI) an automation rule on the tracker. */
+  async defineRule(def: Omit<RuleDef, "iri"> & { iri?: string }): Promise<RuleDef> {
+    let stored: RuleDef | undefined;
+    await this.mutateTracker((dataset) => {
+      stored = new Tracker(this.trackerIri, dataset, DataFactory).defineRule(def);
+    });
+    return stored!;
+  }
+
+  /** Remove an automation rule from the tracker (by its IRI). */
+  async removeRule(iri: string): Promise<void> {
+    await this.mutateTracker((dataset) => {
+      new Tracker(this.trackerIri, dataset, DataFactory).removeRule(iri);
     });
   }
 

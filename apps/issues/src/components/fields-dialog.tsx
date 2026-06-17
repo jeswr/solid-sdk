@@ -3,7 +3,16 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Repository } from "@/lib/repository";
-import { FIELD_TYPES, type ComponentDef, type FieldDef, type FieldType, type VersionDef } from "@/lib/issue";
+import {
+  FIELD_TYPES,
+  DEFAULT_WORKFLOW,
+  type ComponentDef,
+  type FieldDef,
+  type FieldType,
+  type VersionDef,
+  type WipLimits,
+  type WorkflowStatus,
+} from "@/lib/issue";
 import {
   Dialog,
   DialogContent,
@@ -23,7 +32,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Boxes, Loader2, Milestone, Plus, SlidersHorizontal, X } from "lucide-react";
+import { Boxes, GaugeCircle, Loader2, Milestone, Plus, SlidersHorizontal, X } from "lucide-react";
 
 /**
  * Manage the tracker's custom fields (Jira custom fields / Monday columns).
@@ -44,6 +53,9 @@ export function FieldsDialog({
   const [fields, setFields] = useState<FieldDef[]>([]);
   const [components, setComponents] = useState<ComponentDef[]>([]);
   const [versions, setVersions] = useState<VersionDef[]>([]);
+  // WIP limits (#111): the tracker's workflow columns + their per-column min/max.
+  const [statuses, setStatuses] = useState<WorkflowStatus[]>(DEFAULT_WORKFLOW.statuses);
+  const [wipLimits, setWipLimits] = useState<WipLimits>({});
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [name, setName] = useState("");
@@ -66,6 +78,8 @@ export function FieldsDialog({
         setFields(info.fields);
         setComponents(info.components);
         setVersions(info.versions);
+        setStatuses(info.workflow.statuses);
+        setWipLimits(info.wipLimits);
       })
       .catch(() => {})
       .finally(() => {
@@ -192,6 +206,42 @@ export function FieldsDialog({
       onSaved?.();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not remove the version.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // WIP limit edit (#111): set a column's min OR max. An empty input clears that
+  // bound; a non-negative integer sets it. Persisted on the #status- wf:State class.
+  const setWip = async (slug: string, which: "min" | "max", raw: string) => {
+    const current = wipLimits[slug] ?? {};
+    const value = raw.trim() === "" ? undefined : Math.max(0, Math.floor(Number(raw)));
+    if (value !== undefined && !Number.isFinite(value)) {
+      toast.error("WIP limits must be whole numbers.");
+      return;
+    }
+    const next = { ...current, [which]: value };
+    // Optimistically reflect the edit; revert from the server result on failure.
+    setWipLimits((prev) => {
+      const updated = { ...prev };
+      if (next.min === undefined && next.max === undefined) delete updated[slug];
+      else updated[slug] = next;
+      return updated;
+    });
+    setBusy(true);
+    try {
+      const repo = new Repository(trackerUrl);
+      await repo.setWipLimit(slug, next);
+      setWipLimits(await repo.wipLimits());
+      onSaved?.();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not set the WIP limit.");
+      // Reconcile to the true stored state.
+      try {
+        setWipLimits(await new Repository(trackerUrl).wipLimits());
+      } catch {
+        /* keep optimistic value */
+      }
     } finally {
       setBusy(false);
     }
@@ -426,6 +476,58 @@ export function FieldsDialog({
               <Plus className="size-4" aria-hidden /> Add version
             </Button>
           </form>
+        </section>
+
+        {/* WIP limits — per board column min / max (#111 P1-1). */}
+        <section className="space-y-3 border-t pt-4">
+          <h3 className="flex items-center gap-2 text-sm font-semibold">
+            <GaugeCircle className="size-4" aria-hidden /> Column WIP limits
+          </h3>
+          <p className="text-sm text-muted-foreground">
+            Soft work-in-progress bounds per board column. The board warns (amber under the minimum, red
+            over the maximum) and warns on a drag that would push a column over its maximum — it never
+            blocks the move. Leave blank for no limit.
+          </p>
+          <ul className="space-y-2">
+            {statuses.map((s) => {
+              const limit = wipLimits[s.slug] ?? {};
+              return (
+                <li key={s.slug} className="flex items-center gap-2 rounded-lg border px-3 py-2">
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium">{s.label}</span>
+                  <div className="flex items-center gap-1.5">
+                    <Label htmlFor={`wip-min-${s.slug}`} className="text-xs text-muted-foreground">
+                      Min
+                    </Label>
+                    <Input
+                      id={`wip-min-${s.slug}`}
+                      type="number"
+                      min={0}
+                      inputMode="numeric"
+                      className="h-8 w-16"
+                      defaultValue={limit.min ?? ""}
+                      disabled={busy}
+                      aria-label={`Minimum WIP for ${s.label}`}
+                      onBlur={(e) => void setWip(s.slug, "min", e.target.value)}
+                    />
+                    <Label htmlFor={`wip-max-${s.slug}`} className="text-xs text-muted-foreground">
+                      Max
+                    </Label>
+                    <Input
+                      id={`wip-max-${s.slug}`}
+                      type="number"
+                      min={0}
+                      inputMode="numeric"
+                      className="h-8 w-16"
+                      defaultValue={limit.max ?? ""}
+                      disabled={busy}
+                      aria-label={`Maximum WIP for ${s.label}`}
+                      onBlur={(e) => void setWip(s.slug, "max", e.target.value)}
+                    />
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
         </section>
       </DialogContent>
     </Dialog>
