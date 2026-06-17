@@ -1,0 +1,27 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jeswr/full-solid-ecosystem/main/tracking/schema/suite.schema.json",
+  "id": "solid-elements",
+  "kind": "library",
+  "name": "@jeswr/solid-elements",
+  "repo": "https://github.com/jeswr/solid-elements",
+  "category": "ui",
+  "maturity": "alpha",
+  "visibility": "public",
+  "stack": {
+    "language": "TypeScript",
+    "runtime": "Node >=20.12",
+    "framework": "framework-agnostic Web Components (Lit 3)",
+    "ui": "Lit 3 + shadow DOM + app-shell OKLCH token contract",
+    "test": "vitest + jsdom"
+  },
+  "provides": [
+    "jeswr-theme-toggle",
+    "jeswr-account-menu",
+    "jeswr-feedback-button",
+    "jeswr-empty-state",
+    "jeswr-error-state",
+    "jeswr-loading",
+    "jeswr-saving-indicator"
+  ],
+  "consumedBy": []
+}
