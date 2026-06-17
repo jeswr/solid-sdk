@@ -20,26 +20,24 @@
    `.dark` class the ThemeProvider toggles on <html> flips the OKLCH vars, and
    these aliases inherit it for free.
 
-   TOKEN-NAMESPACE SAFETY: the host's brand/action colour is a DISTINCT name
-   (`--host-accent`/`--host-accent-ink`) — it must NOT clobber the app-shell
-   `--accent`/`--accent-foreground` tokens, which the shared components consume
-   for their SUBTLE hover/focus surfaces (the AccountMenu dropdown items + the
-   FeedbackButton use `bg-accent` / `hover:bg-accent` / `focus:bg-accent` +
-   `text-accent-foreground`). Aliasing `--accent` to the much darker `--primary`
-   here, while `--accent-foreground` stays dark, would render those shell controls
-   dark-on-dark. So the host action colour maps to `--primary` under its own name,
-   and `--accent` is left to the shell. (Cross-app: the pod-mail pilot still
-   overwrites `--accent` directly — same fix is owed there + in the shared recipe.) */
+   CSS-ISOLATION RELAXATION (#80 / solid-elements adoption #115, D-parity rollout
+   #67/#68/#70): the host vars can now alias DIRECTLY onto app-shell's OWN tokens
+   (`--accent`/`--accent-ink`→`--primary`) again. The earlier adopter workaround
+   renamed them to host-only names (`--host-accent`/`--host-accent-ink`) to avoid
+   CLOBBERING the shell components' hover/focus surfaces — but @jeswr/app-shell #80
+   made the shell self-isolating: its components' ghost/outline hover surfaces read
+   SHELL-PRIVATE `--as-accent`/`--as-accent-foreground` tokens (hardcoded OKLCH
+   literals in the package's tokens.css, NOT the public `--accent`), so re-aliasing
+   the public token no longer affects the shell at all. Verified against app-shell
+   `5a7484d` (the merged main with the #80 fix). `--border` is the SAME name as the
+   app-shell token, so it is already unified — do NOT re-alias it to itself. */
 :root {
   --bg: var(--background);
   --surface: var(--card);
   --ink: var(--foreground);
   --muted: var(--muted-foreground);
-  --host-accent: var(--primary);
-  --host-accent-ink: var(--primary-foreground);
-  /* NOTE: the host's `--border` is the SAME name as the app-shell token, so it is
-     already unified — do NOT re-alias it to itself (that would self-reference to an
-     invalid value). The other host vars below use distinct names, so they alias. */
+  --accent: var(--primary);
+  --accent-ink: var(--primary-foreground);
   --danger: var(--destructive);
   --ok: var(--success);
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -56,7 +54,7 @@ body {
 }
 
 a {
-  color: var(--host-accent);
+  color: var(--accent);
 }
 
 /* ── Login ─────────────────────────────────────────────────────────────── */
@@ -110,27 +108,35 @@ a {
   margin-top: 1rem;
 }
 
-/* Host base button styling, scoped to Tailwind's `base` layer so the app-shell
-   controls (FeedbackButton/ThemeToggle/AccountMenu — styled with Tailwind UTILITY
-   classes, which live in the higher-priority `utilities` layer) always win over
-   these defaults. Without the layer, this bare `button` rule — emitted after the
-   Tailwind import — would override the shell controls' padding/background/border/
-   radius and break their design. The host's own buttons (login submit, the
-   pod-money table links) carry no utility classes, so they still pick these up. */
-@layer base {
-  button {
-    cursor: pointer;
-    border: none;
-    border-radius: 0.5rem;
-    padding: 0.6rem 0.9rem;
-    font-size: 0.95rem;
-    background: var(--host-accent);
-    color: var(--host-accent-ink);
-  }
-  button:disabled {
-    opacity: 0.55;
-    cursor: not-allowed;
-  }
+/* CSS-ISOLATION RELAXATION (#80 / solid-elements adoption #115, D-parity rollout
+   #67/#68/#70): a BARE global `button {}` filled-button base again — the simpler,
+   pre-workaround form. The earlier adopter wrapped this in `@layer base` so the
+   shell controls' Tailwind UTILITY classes (in the higher-priority `utilities`
+   layer) would out-rank it; that is no longer needed.
+
+   This bare element rule is UNLAYERED, so it out-ranks Tailwind's layered utilities
+   — historically that bled the host's filled look onto every app-shell control + the
+   portaled FeedbackDialog (#80). @jeswr/app-shell #80 fixed this AT THE SOURCE: the
+   shell tags each control with `[data-app-shell-control]` and re-asserts its look in
+   its own UNLAYERED reset (shipped in `@jeswr/app-shell/styles.css`), and an
+   attribute selector out-ranks a bare element selector — so the shell's controls keep
+   their look regardless of this rule. The solid-elements P0 components (<jeswr-loading>
+   etc.) are immune for a different reason: they live in shadow DOM, which this
+   light-DOM rule cannot pierce. So neither the `@layer` wrapper nor a hand-scope is
+   needed; the host's OWN outline/table buttons still override the fill below.
+   Verified against app-shell `5a7484d`; the css-isolation.test.tsx guard pins it. */
+button {
+  cursor: pointer;
+  border: none;
+  border-radius: 0.5rem;
+  padding: 0.6rem 0.9rem;
+  font-size: 0.95rem;
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 /* ── App shell ─────────────────────────────────────────────────────────── */
@@ -193,7 +199,7 @@ a {
 .pod-money-error button {
   margin-top: 0.5rem;
   background: transparent;
-  color: var(--host-accent);
+  color: var(--accent);
   border: 1px solid var(--border);
 }
 
@@ -223,7 +229,7 @@ a {
 /* The account name is a button that drills into transactions. */
 .pod-money-account-link {
   background: transparent;
-  color: var(--host-accent);
+  color: var(--accent);
   border: none;
   padding: 0;
   text-align: left;
@@ -237,7 +243,7 @@ a {
 }
 .pod-money-back-link {
   background: transparent;
-  color: var(--host-accent);
+  color: var(--accent);
   border: 1px solid var(--border);
 }
 .pod-money-account-heading {

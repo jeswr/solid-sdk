@@ -16,6 +16,17 @@
 import { AccountMenu, FeedbackButton, ThemeToggle } from "@jeswr/app-shell";
 import { MoneyStore } from "@jeswr/pod-money";
 import { AccountsView } from "@jeswr/pod-money/ui";
+// SOLID-ELEMENTS (#115 / D-parity rollout #67/#68/#70): the framework-agnostic W3C
+// Web Components consumed through the @lit/react adapter. <Loading> is a Lit custom
+// element (spinner + polite-live label, prefers-reduced-motion aware) wrapped by
+// @lit/react's createComponent. It themes itself from the SAME app-shell OKLCH
+// tokens as the rest of the chrome: its shadow-DOM styles read `--jeswr-*`, which
+// fall back through the shadow boundary to app-shell's `--primary` / `--border` /
+// `--muted-foreground` (set by styles.css and flipped by the `.dark` class), so it
+// follows light/dark for free with no extra wiring. (COMPLEMENTS app-shell — it does
+// not replace the React chrome components above.) Plain Vite/CSR React has no SSR
+// step, so the client-only custom elements need no mount-gating here.
+import { Loading } from "@jeswr/solid-elements/react";
 import { useEffect, useState } from "react";
 import { useSession } from "./auth/SessionProvider";
 import { LoginScreen } from "./LoginScreen";
@@ -128,8 +139,12 @@ export function App() {
         <main className="login-screen" aria-busy="true">
           <section className="login-card">
             <h1>Pod Money</h1>
-            <p className="login-sub" role="status">
-              Signing you in…
+            {/* SOLID-ELEMENTS: the <jeswr-loading> spinner + label (via @lit/react).
+                It carries its own role="status" + aria-live, so the label is
+                announced; the .login-sub wrapper only keeps the existing
+                spacing/typography. */}
+            <p className="login-sub">
+              <Loading label="Signing you in…" />
             </p>
           </section>
         </main>
@@ -144,8 +159,10 @@ export function App() {
         <main className="login-screen" aria-busy="true">
           <section className="login-card">
             <h1>Pod Money</h1>
-            <p className="login-sub" role="status">
-              Restoring your session…
+            {/* SOLID-ELEMENTS: same themed <jeswr-loading> spinner + label for the
+                closed-tab silent-restore wait. */}
+            <p className="login-sub">
+              <Loading label="Restoring your session…" />
             </p>
           </section>
         </main>
@@ -237,8 +254,12 @@ function LoggedIn({
       ) : null}
       <main className="app-main">
         {source === "discovering" || !ledgerUrl ? (
-          <p className="pod-money-loading" role="status">
-            Finding your finance ledger…
+          // SOLID-ELEMENTS: the host-level "finding your finance ledger" wait, now
+          // the themed <jeswr-loading> spinner (via @lit/react) instead of a bare
+          // <p>. It owns role="status" + aria-live; .pod-money-loading keeps the
+          // muted-colour wrapper for layout parity.
+          <p className="pod-money-loading">
+            <Loading label="Finding your finance ledger…" />
           </p>
         ) : (
           // ledgerUrl only — AccountsView reads it via the auth-patched global
