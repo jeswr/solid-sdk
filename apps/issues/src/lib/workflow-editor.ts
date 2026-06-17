@@ -259,3 +259,106 @@ export function issuesInState(issues: IssueStatusRef[], slug: string): IssueStat
 export function migrationTargets(workflow: WorkflowDef, removingSlug: string): WorkflowStatus[] {
   return workflow.statuses.filter((s) => s.slug !== removingSlug);
 }
+
+/** One planned migration: the issues to move and the surviving target status. */
+export interface MigrationPlanEntry {
+  /** The removed source status the issues are currently in. */
+  fromSlug: string;
+  /** The surviving target status to move them to. */
+  toSlug: string;
+  /** The issue URLs to migrate. */
+  urls: string[];
+}
+
+/**
+ * The slugs REMOVED by an edit: statuses declared in `original` but no longer in
+ * `saved`. This is the precise set the save-time migration must reconcile — NOT
+ * "every status the saved workflow doesn't declare" (which would also sweep up a
+ * pre-existing unknown / imported / corrupt status the user never touched, silently
+ * relocating it — roborev job, Medium).
+ */
+export function removedStatuses(original: WorkflowDef, saved: WorkflowDef): string[] {
+  const survivors = new Set(saved.statuses.map((s) => s.slug));
+  return original.statuses.map((s) => s.slug).filter((slug) => !survivors.has(slug));
+}
+
+/**
+ * Plan the save-time migration of issues stranded by a workflow save (#75 P2-5),
+ * the consistency point that makes the removal/migration path race-free:
+ *
+ *  - `savedWorkflow` is the workflow about to be persisted — its statuses survive.
+ *  - `removedSlugs` is the set of statuses REMOVED by this edit (see
+ *    {@link removedStatuses}). ONLY issues in one of these are migrated — an issue
+ *    in some OTHER unknown status (pre-existing, imported, or corrupt; not touched
+ *    by this edit) is left exactly where it is (roborev job, Medium).
+ *  - `liveRefs` is the FRESHEST issue→status data, read at save time (NOT the
+ *    edit-time snapshot) — so an issue that moved into a to-be-removed status after
+ *    the user clicked remove is still caught.
+ *  - `removalTargets` is the user's recorded per-removed-state target (slug → slug).
+ *
+ * For every issue still in a removed status, the issue is migrated to that status'
+ * recorded target when it survives, else to the new INITIAL state
+ * (`savedWorkflow.statuses[0]`) as a safe surviving non-terminal default — never
+ * left orphaned. A removed status with no issues yields no entry.
+ *
+ * Pure + deterministic so the save-time reconciliation is unit-tested independently
+ * of React/the pod.
+ */
+export function planRemovalMigrations(
+  savedWorkflow: WorkflowDef,
+  removedSlugs: Iterable<string>,
+  liveRefs: IssueStatusRef[],
+  removalTargets: Record<string, string>,
+): MigrationPlanEntry[] {
+  const surviving = new Set(savedWorkflow.statuses.map((s) => s.slug));
+  const removed = new Set(removedSlugs);
+  const fallback = savedWorkflow.statuses[0]?.slug; // the new initial state
+  const plan: MigrationPlanEntry[] = [];
+  // Group the stranded issues by their (removed-this-edit) current status. An issue
+  // in a status that is neither surviving NOR removed-this-edit is ignored.
+  const strandedBySlug = new Map<string, string[]>();
+  for (const ref of liveRefs) {
+    if (!removed.has(ref.status)) continue; // only states removed by THIS edit
+    const urls = strandedBySlug.get(ref.status) ?? [];
+    urls.push(ref.url);
+    strandedBySlug.set(ref.status, urls);
+  }
+  for (const [fromSlug, urls] of strandedBySlug) {
+    const recorded = removalTargets[fromSlug];
+    const toSlug = recorded && surviving.has(recorded) ? recorded : fallback;
+    if (!toSlug) continue; // no surviving status at all (impossible: ≥1 always exists)
+    plan.push({ fromSlug, toSlug, urls });
+  }
+  return plan;
+}
+
+/**
+ * Build the INTERMEDIATE workflow persisted during an atomic removal-with-migration
+ * (#75 P2-5): the saved (final) workflow PLUS the removed source states that still
+ * have stranded issues, re-added from the ORIGINAL workflow's definitions (label,
+ * terminal flag) with no outbound transitions. Persisting this BEFORE migrating
+ * keeps BOTH the source columns and the migration targets present, so a partial
+ * migration failure (or a closed tab) can never leave an issue referencing a status
+ * the persisted workflow no longer declares (roborev job, Medium). The final
+ * workflow is persisted only after every migration succeeds.
+ *
+ * Returns the saved workflow unchanged when nothing stranded needs a temporary
+ * source column.
+ */
+export function buildIntermediateWorkflow(
+  savedWorkflow: WorkflowDef,
+  originalWorkflow: WorkflowDef,
+  strandedSourceSlugs: Iterable<string>,
+): WorkflowDef {
+  const survivors = new Set(savedWorkflow.statuses.map((s) => s.slug));
+  const originalBySlug = new Map(originalWorkflow.statuses.map((s) => [s.slug, s]));
+  const next = cloneWorkflow(savedWorkflow);
+  for (const slug of new Set(strandedSourceSlugs)) {
+    if (survivors.has(slug)) continue; // already present in the final workflow
+    const original = originalBySlug.get(slug);
+    if (!original) continue; // not an original status (corrupt/unknown) — never re-add
+    next.statuses.push({ ...original });
+    next.transitions[slug] = []; // no outbound edges; migration uses the bypass path
+  }
+  return next;
+}

@@ -23,6 +23,9 @@ import {
   isWorkflowValid,
   issuesInState,
   migrationTargets,
+  planRemovalMigrations,
+  removedStatuses,
+  buildIntermediateWorkflow,
 } from "./workflow-editor";
 
 /** A custom 4-state workflow with a directed transition graph. */
@@ -238,5 +241,151 @@ describe("workflow-editor: in-use-state guard", () => {
   it("offers every OTHER status as a migration target", () => {
     expect(migrationTargets(CUSTOM, "doing").map((s) => s.slug)).toEqual(["backlog", "review", "shipped"]);
     expect(migrationTargets(CUSTOM, "doing").map((s) => s.slug)).not.toContain("doing");
+  });
+});
+
+describe("workflow-editor: planRemovalMigrations (save-time consistency)", () => {
+  // The ORIGINAL workflow had backlog/doing/review/shipped.
+  const ORIGINAL: WorkflowDef = {
+    statuses: [
+      { slug: "backlog", label: "Backlog", terminal: false },
+      { slug: "doing", label: "Doing", terminal: false },
+      { slug: "review", label: "In Review", terminal: false },
+      { slug: "shipped", label: "Shipped", terminal: true },
+    ],
+    transitions: { backlog: ["doing"], doing: ["review"], review: ["shipped"], shipped: [] },
+  };
+  // The workflow AFTER a save that removed "review" and "shipped" (keeping backlog,
+  // doing + a new terminal "done"). "backlog" is the initial state (the fallback).
+  const SAVED: WorkflowDef = {
+    statuses: [
+      { slug: "backlog", label: "Backlog", terminal: false },
+      { slug: "doing", label: "Doing", terminal: false },
+      { slug: "done", label: "Done", terminal: true },
+    ],
+    transitions: { backlog: ["doing"], doing: ["done"], done: [] },
+  };
+  const REMOVED = removedStatuses(ORIGINAL, SAVED); // ["review", "shipped"]
+
+  it("migrates issues stranded in a removed state to its recorded target", () => {
+    const live = [
+      { url: "a", status: "backlog" }, // survives — no migration
+      { url: "b", status: "review" }, // removed → recorded target "doing"
+      { url: "c", status: "review" },
+    ];
+    const plan = planRemovalMigrations(SAVED, REMOVED, live, { review: "doing" });
+    expect(plan).toEqual([{ fromSlug: "review", toSlug: "doing", urls: ["b", "c"] }]);
+  });
+
+  it("falls back to the new initial state when a removed state has no recorded target", () => {
+    // An issue moved into "review" AFTER the user removed it (no recorded target) —
+    // the save-time re-read still catches it and routes it to the initial state.
+    const live = [{ url: "x", status: "review" }];
+    const plan = planRemovalMigrations(SAVED, REMOVED, live, {});
+    expect(plan).toEqual([{ fromSlug: "review", toSlug: "backlog", urls: ["x"] }]);
+  });
+
+  it("falls back to the initial state when the recorded target itself was removed", () => {
+    // Recorded target "shipped" was also removed in this save → use the initial state.
+    const live = [{ url: "y", status: "review" }];
+    const plan = planRemovalMigrations(SAVED, REMOVED, live, { review: "shipped" });
+    expect(plan).toEqual([{ fromSlug: "review", toSlug: "backlog", urls: ["y"] }]);
+  });
+
+  it("plans nothing when every issue is already in a surviving state", () => {
+    const live = [
+      { url: "a", status: "backlog" },
+      { url: "b", status: "doing" },
+      { url: "c", status: "done" },
+    ];
+    expect(planRemovalMigrations(SAVED, REMOVED, live, {})).toEqual([]);
+  });
+
+  it("groups multiple removed states, each to its own target", () => {
+    const live = [
+      { url: "a", status: "review" },
+      { url: "b", status: "shipped" },
+      { url: "c", status: "review" },
+    ];
+    const plan = planRemovalMigrations(SAVED, REMOVED, live, { review: "doing", shipped: "done" });
+    const byFrom = Object.fromEntries(plan.map((e) => [e.fromSlug, e]));
+    expect(byFrom["review"]).toEqual({ fromSlug: "review", toSlug: "doing", urls: ["a", "c"] });
+    expect(byFrom["shipped"]).toEqual({ fromSlug: "shipped", toSlug: "done", urls: ["b"] });
+  });
+
+  it("LEAVES an unrelated unknown/imported status untouched (only states removed by THIS edit move)", () => {
+    // An issue carries a status that was NEVER in the workflow (imported / corrupt /
+    // a foreign tracker's slug). A workflow save that did NOT remove it must not
+    // silently relocate it (roborev finding).
+    const live = [
+      { url: "a", status: "review" }, // removed THIS edit → migrates
+      { url: "z", status: "legacy-archived" }, // never declared, not removed this edit → left alone
+    ];
+    const plan = planRemovalMigrations(SAVED, REMOVED, live, { review: "doing" });
+    expect(plan).toEqual([{ fromSlug: "review", toSlug: "doing", urls: ["a"] }]);
+    expect(plan.some((e) => e.fromSlug === "legacy-archived")).toBe(false);
+  });
+});
+
+describe("workflow-editor: removedStatuses", () => {
+  const A: WorkflowDef = {
+    statuses: [
+      { slug: "todo", label: "To Do", terminal: false },
+      { slug: "doing", label: "Doing", terminal: false },
+      { slug: "done", label: "Done", terminal: true },
+    ],
+    transitions: { todo: ["doing"], doing: ["done"], done: [] },
+  };
+
+  it("returns exactly the slugs in the original but not the saved workflow", () => {
+    const saved = removeStatus(A, "doing"); // drops "doing"
+    expect(removedStatuses(A, saved)).toEqual(["doing"]);
+  });
+
+  it("returns [] when nothing was removed (rename/reorder/add only)", () => {
+    expect(removedStatuses(A, renameStatus(A, "doing", "Working"))).toEqual([]);
+    expect(removedStatuses(A, addStatus(A, "Blocked"))).toEqual([]);
+    expect(removedStatuses(A, moveStatus(A, "done", -1))).toEqual([]);
+  });
+});
+
+describe("workflow-editor: buildIntermediateWorkflow", () => {
+  const ORIGINAL: WorkflowDef = {
+    statuses: [
+      { slug: "backlog", label: "Backlog", terminal: false },
+      { slug: "review", label: "In Review", terminal: false },
+      { slug: "shipped", label: "Shipped", terminal: true },
+    ],
+    transitions: { backlog: ["review"], review: ["shipped"], shipped: [] },
+  };
+  const SAVED: WorkflowDef = {
+    statuses: [
+      { slug: "backlog", label: "Backlog", terminal: false },
+      { slug: "done", label: "Done", terminal: true },
+    ],
+    transitions: { backlog: ["done"], done: [] },
+  };
+
+  it("re-adds the stranded removed source states (from the original) with no transitions", () => {
+    const inter = buildIntermediateWorkflow(SAVED, ORIGINAL, ["review"]);
+    // Final statuses kept, plus "review" re-added from ORIGINAL (its label/terminal).
+    expect(inter.statuses.map((s) => s.slug)).toEqual(["backlog", "done", "review"]);
+    expect(inter.statuses.find((s) => s.slug === "review")).toEqual({ slug: "review", label: "In Review", terminal: false });
+    expect(inter.transitions["review"]).toEqual([]);
+    // Both the source ("review") and the target ("done") columns exist → no orphan.
+    const slugs = new Set(inter.statuses.map((s) => s.slug));
+    expect(slugs.has("review")).toBe(true);
+    expect(slugs.has("done")).toBe(true);
+  });
+
+  it("does not re-add a status that survives, nor one absent from the original (corrupt)", () => {
+    const inter = buildIntermediateWorkflow(SAVED, ORIGINAL, ["backlog", "ghost-imported"]);
+    // "backlog" survives (no dup); "ghost-imported" isn't in the original (never re-added).
+    expect(inter.statuses.map((s) => s.slug)).toEqual(["backlog", "done"]);
+  });
+
+  it("returns the saved workflow unchanged when nothing needs a temporary column", () => {
+    const inter = buildIntermediateWorkflow(SAVED, ORIGINAL, []);
+    expect(inter.statuses.map((s) => s.slug)).toEqual(["backlog", "done"]);
   });
 });

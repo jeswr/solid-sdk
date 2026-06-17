@@ -47,6 +47,7 @@ export function FieldsDialog({
   onOpenChange,
   trackerUrl,
   issueStatusRefs = [],
+  getIssueStatusRefs,
   migrateIssues,
   onSaved,
 }: {
@@ -54,16 +55,24 @@ export function FieldsDialog({
   onOpenChange: (open: boolean) => void;
   trackerUrl: string;
   /**
-   * The live status of each issue in the tracker (#75 P2-5) — the workflow
-   * editor's in-use-state removal guard reads this to block (and offer to
-   * migrate) removal of a state issues are currently in. Defaults to none.
+   * The render-snapshot status of each issue in the tracker (#75 P2-5) — the
+   * workflow editor's in-use-state removal guard reads this at edit time to surface
+   * (and offer to migrate) removal of a state issues are currently in. Defaults to
+   * none.
    */
   issueStatusRefs?: IssueStatusRef[];
   /**
+   * Read the LIVE issue→status refs synchronously at call time (#75 P2-5). The
+   * workflow editor calls this at SAVE time so removal reconciliation sees any
+   * issue that moved into a to-be-removed state after the edit-time check. Falls
+   * back to {@link issueStatusRefs} when omitted.
+   */
+  getIssueStatusRefs?: () => IssueStatusRef[];
+  /**
    * Migrate issues to a status (#75 P2-5), routed through the parent's
-   * workflow-validated `setStatus` batch. Required for the in-use-state migrate
-   * path; when omitted the workflow editor still renders but a migrate-on-remove
-   * cannot proceed.
+   * `migrateStatus` batch (which relocates out of a deleted state without the
+   * transition guard). Required for the in-use-state migrate path; when omitted the
+   * workflow editor still renders but a migrate-on-remove cannot proceed.
    */
   migrateIssues?: (urls: string[], toStatus: string) => Promise<void>;
   onSaved?: () => void;
@@ -510,6 +519,7 @@ export function FieldsDialog({
             trackerUrl={trackerUrl}
             workflow={workflow}
             issueStatusRefs={issueStatusRefs}
+            getIssueStatusRefs={getIssueStatusRefs}
             migrateIssues={migrateIssues}
             onSaved={() => {
               setReloadKey((k) => k + 1);

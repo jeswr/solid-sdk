@@ -16,6 +16,9 @@ import {
   isWorkflowValid,
   issuesInState,
   migrationTargets,
+  planRemovalMigrations,
+  removedStatuses,
+  buildIntermediateWorkflow,
   type IssueStatusRef,
 } from "@/lib/workflow-editor";
 import { Button } from "@/components/ui/button";
@@ -52,31 +55,49 @@ import { AlertTriangle, ArrowDown, ArrowUp, Check, GitBranch, Loader2, Plus, X }
  * open/closed (terminal) resolution + order, edit the allowed transitions between
  * states, and set the initial state (= the first status, reorderable to the top).
  *
- * Validation (save is disabled while any problem stands): ≥1 initial (non-terminal)
- * state + ≥1 terminal state + no transition referencing a removed state.
+ * Validation (save is disabled while any problem stands): every status named + ≥1
+ * initial (non-terminal) state + ≥1 terminal state + no transition referencing a
+ * removed state.
  *
- * In-use-state guard: removing a state that issues are currently IN is BLOCKED — the
- * editor surfaces a migrate-and-remove dialog that moves those issues to another
- * state FIRST (via the parent's `migrateIssues`, which routes through the same
- * workflow-validated `setStatus` batch the bulk toolbar uses), so issues are never
- * silently orphaned onto a `#status-` class no longer in the workflow.
+ * In-use-state guard (SAVE-TIME consistent): removing a state issues are currently
+ * IN prompts the user to pick a migration target, but NOTHING is migrated yet — the
+ * removal is a draft-only edit and the chosen target is recorded. All reconciliation
+ * happens atomically at SAVE:
+ *   1. the new workflow is persisted FIRST (so the migration targets exist with
+ *      their final terminal flags — `migrateStatus` resolves open/closed against the
+ *      PERSISTED workflow, so migrating before save could fail or write a stale
+ *      state — roborev job, Medium);
+ *   2. then, re-reading the LIVE issue→status refs (`getIssueStatusRefs`, not the
+ *      edit-time snapshot — an issue may have moved into a removed state after the
+ *      remove click, roborev job Medium), every issue still in a removed state is
+ *      migrated to that state's recorded target, defaulting safely to the new
+ *      workflow's initial state when none was recorded.
+ * So an issue is never orphaned onto a `#status-` class no longer in the workflow,
+ * even under concurrent moves.
  */
 export function WorkflowEditorSection({
   trackerUrl,
   workflow,
   issueStatusRefs,
+  getIssueStatusRefs,
   migrateIssues,
   onSaved,
 }: {
   trackerUrl: string;
   /** The loaded workflow (the editor seeds its editable copy from this). */
   workflow: WorkflowDef;
-  /** Live status of each issue in the tracker — the in-use-state guard's source. */
+  /** Render-snapshot status of each issue — the EDIT-TIME in-use guard's source. */
   issueStatusRefs: IssueStatusRef[];
   /**
-   * Migrate the given issues to a target status, via the parent's
-   * workflow-validated `setStatus` batch (so the move honours the SAME validation +
-   * ETag-safe write the bulk toolbar uses). Resolves when all have moved.
+   * Read the LIVE issue→status refs synchronously at call time — used at SAVE to
+   * reconcile removed states against the freshest data (an issue may have moved into
+   * a removed state since the edit-time check). Falls back to {@link issueStatusRefs}.
+   */
+  getIssueStatusRefs?: () => IssueStatusRef[];
+  /**
+   * Migrate the given issues to a target status, via the parent's `migrateStatus`
+   * batch (relocates out of a removed state WITHOUT the transition guard, keeping
+   * the target's open/closed resolution + activity log). Resolves when all moved.
    */
   migrateIssues: (urls: string[], toStatus: string) => Promise<void>;
   /** Called after a successful workflow save so the parent reloads tracker config. */
@@ -95,6 +116,11 @@ export function WorkflowEditorSection({
     { slug: string; label: string; affected: IssueStatusRef[] } | undefined
   >(undefined);
   const [migrateTo, setMigrateTo] = useState<string>("");
+  // Recorded migration targets for in-use states removed in the draft (slug →
+  // target slug). Applied at SAVE, after the new workflow is persisted — never
+  // eagerly. A removed state with no recorded target (e.g. it became in-use only
+  // after removal) falls back to the new initial state at save.
+  const [removalTargets, setRemovalTargets] = useState<Record<string, string>>({});
 
   useEffect(() => {
     // Re-seed the editable copy whenever the loaded workflow changes (dialog open
@@ -102,6 +128,7 @@ export function WorkflowEditorSection({
     /* eslint-disable react-hooks/set-state-in-effect */
     setDraft(workflow);
     setDirty(false);
+    setRemovalTargets({});
     /* eslint-enable react-hooks/set-state-in-effect */
   }, [workflow]);
 
@@ -123,8 +150,22 @@ export function WorkflowEditorSection({
     }
   };
 
-  // Removing a status: if issues are currently in it, BLOCK and open the
-  // migrate-and-remove dialog; otherwise remove immediately.
+  // Drop a status from the draft AND clear any recorded migration target keyed on
+  // it (a removed-then-readded state must not carry a stale plan).
+  const dropFromDraft = (slug: string) => {
+    apply(removeStatus(draft, slug));
+    setRemovalTargets((m) => {
+      if (!(slug in m)) return m;
+      const rest = { ...m };
+      delete rest[slug];
+      return rest;
+    });
+  };
+
+  // Removing a status: if issues are (per the edit-time snapshot) in it, prompt for
+  // a migration target before dropping it; otherwise drop it straight away. NOTHING
+  // is migrated here — the actual move happens atomically at save, after the new
+  // workflow is persisted and against the freshest issue data.
   const handleRemove = (slug: string, label: string) => {
     const affected = issuesInState(issueStatusRefs, slug);
     if (affected.length > 0) {
@@ -133,26 +174,18 @@ export function WorkflowEditorSection({
       setPendingRemoval({ slug, label, affected });
       return;
     }
-    apply(removeStatus(draft, slug));
+    dropFromDraft(slug);
   };
 
-  // Confirm the migrate-and-remove: move the affected issues to `migrateTo` in the
-  // pod FIRST (so nothing is orphaned), then drop the state from the draft. The
-  // migration target must be a status that survives the removal.
-  const confirmMigrateAndRemove = async () => {
+  // Confirm the in-use removal: RECORD the chosen target (not a pod write) and drop
+  // the state from the draft. The migration is deferred to save (so the target
+  // exists with its final terminal flag, and the live issue set is re-checked).
+  const confirmMigrateAndRemove = () => {
     const pending = pendingRemoval;
     if (!pending || !migrateTo) return;
-    setBusy(true);
-    try {
-      await migrateIssues(pending.affected.map((i) => i.url), migrateTo);
-      apply(removeStatus(draft, pending.slug));
-      setPendingRemoval(undefined);
-      toast.success(`Moved ${pending.affected.length} ${pending.affected.length === 1 ? "issue" : "issues"} and removed “${pending.label}”.`);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not migrate the issues.");
-    } finally {
-      setBusy(false);
-    }
+    apply(removeStatus(draft, pending.slug));
+    setRemovalTargets((m) => ({ ...m, [pending.slug]: migrateTo }));
+    setPendingRemoval(undefined);
   };
 
   const save = async () => {
@@ -166,10 +199,40 @@ export function WorkflowEditorSection({
         statuses: draft.statuses.map((s) => ({ ...s, label: s.label.trim() })),
         transitions: draft.transitions,
       };
-      await new Repository(trackerUrl).defineWorkflow(toSave);
+      const repo = new Repository(trackerUrl);
+      // Plan the migration against the FRESHEST issue data (re-read live refs here,
+      // not the edit-time snapshot — closing the moved-in-after-remove race) and
+      // ONLY for states removed by THIS edit (an unrelated unknown/imported status
+      // is left untouched — removedStatuses, not "anything not in the new workflow").
+      const liveRefs = getIssueStatusRefs ? getIssueStatusRefs() : issueStatusRefs;
+      const removedSlugs = removedStatuses(workflow, toSave);
+      const plan = planRemovalMigrations(toSave, removedSlugs, liveRefs, removalTargets);
+      const migratedCount = plan.reduce((n, e) => n + e.urls.length, 0);
+
+      if (plan.length === 0) {
+        // No issues to relocate → a single atomic workflow write.
+        await repo.defineWorkflow(toSave);
+      } else {
+        // Atomic removal-with-migration (compensating sequence): a partial migration
+        // failure (or a closed tab) must NEVER leave an issue referencing a status
+        // the persisted workflow no longer declares.
+        //   1) persist an INTERMEDIATE workflow keeping the removed source columns
+        //      AND the new targets — so both ends of every move exist on the pod;
+        //   2) migrate the stranded issues to their targets;
+        //   3) persist the FINAL workflow (dropping the now-empty source columns).
+        // If step 2 fails, the pod is left at the intermediate: every issue still
+        // references a declared status (no orphans), the editor stays dirty, and a
+        // retry re-plans against the (now partly-migrated) fresh state.
+        const intermediate = buildIntermediateWorkflow(toSave, workflow, plan.map((e) => e.fromSlug));
+        await repo.defineWorkflow(intermediate);
+        for (const entry of plan) await migrateIssues(entry.urls, entry.toSlug);
+        await repo.defineWorkflow(toSave);
+      }
+
       setDirty(false);
+      setRemovalTargets({});
       onSaved?.();
-      toast.success("Workflow saved.");
+      toast.success(migratedCount > 0 ? `Workflow saved; moved ${migratedCount} ${migratedCount === 1 ? "issue" : "issues"}.` : "Workflow saved.");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not save the workflow.");
     } finally {
@@ -337,7 +400,8 @@ export function WorkflowEditorSection({
                 ? "1 issue is"
                 : `${pendingRemoval?.affected.length} issues are`}{" "}
               currently in this status. Removing it would leave {pendingRemoval?.affected.length === 1 ? "it" : "them"}{" "}
-              with no column. Move {pendingRemoval?.affected.length === 1 ? "it" : "them"} to another status first.
+              with no column. Choose where to move {pendingRemoval?.affected.length === 1 ? "it" : "them"} — the move
+              happens when you save the workflow.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-1.5">
@@ -357,12 +421,11 @@ export function WorkflowEditorSection({
             </Select>
           </div>
           <DialogFooter>
-            <Button variant="outline" disabled={busy} onClick={() => setPendingRemoval(undefined)}>
+            <Button variant="outline" onClick={() => setPendingRemoval(undefined)}>
               Cancel
             </Button>
-            <Button disabled={busy || !migrateTo} className="gap-1.5" onClick={() => void confirmMigrateAndRemove()}>
-              {busy && <Loader2 className="size-4 animate-spin" aria-hidden />}
-              Move &amp; remove
+            <Button disabled={!migrateTo} onClick={confirmMigrateAndRemove}>
+              Remove &amp; move on save
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -39,6 +39,7 @@ import { RulesDialog } from "@/components/rules-dialog";
 import { IssueCard, shortWebId, type IssueCardActions } from "@/components/issue-card";
 import { IssuesTable } from "@/components/issues-table";
 import { makeInlineEditController, type EditableField } from "@/lib/inline-edit";
+import type { IssueStatusRef } from "@/lib/workflow-editor";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -764,6 +765,16 @@ export function IssuesView() {
     // `runAutomations` above.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [issues.batch],
+  );
+  // The LIVE issue→status refs, read synchronously at call time (not a render
+  // snapshot). The workflow editor calls this at SAVE time so its in-use-state
+  // reconciliation sees any issue that moved into a to-be-removed state AFTER the
+  // user clicked remove (the refs prop would be a stale render snapshot).
+  const getIssueStatusRefs = useCallback(
+    (): IssueStatusRef[] => issues.getIssues().map((i) => ({ url: i.url, status: i.status })),
+    // `getIssues` is the hook's stable synchronous reader (a ref under the hood).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [issues.getIssues],
   );
 
   // Open the bulk-set value dialog for a field (resetting the in-progress value).
@@ -1617,6 +1628,7 @@ export function IssuesView() {
           onOpenChange={setFieldsOpen}
           trackerUrl={tracker.trackerUrl}
           issueStatusRefs={issueStatusRefs}
+          getIssueStatusRefs={getIssueStatusRefs}
           migrateIssues={migrateIssues}
           onSaved={loadTrackerInfo}
         />
