@@ -207,6 +207,7 @@ npm run typecheck   # tsc --noEmit
 npm test            # vitest
 npm run build       # esbuild: bundle src/ (+ inline @jeswr/fetch-rdf) → dist/index.js; tsc → dist/*.d.ts
 npm run check:dist  # fail if committed dist/ has drifted from src/
+npm run check:lockfile-transport  # fail if a lockfile uses the SSH git transport (breaks `npm ci`)
 ```
 
 After any change to `src/`, run `npm run build` and commit the regenerated
