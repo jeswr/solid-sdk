@@ -169,6 +169,14 @@ export default async function globalSetup() {
   schema:dateSent "2026-06-1${k % 10}T12:00:00Z"^^xsd:dateTime.`,
     );
   }
+  // Pre-create the `mail/` + `mail/folders/` CONTAINERS before PUTting the inbox document into
+  // them (pod-health found the seed needs the container pre-created): CSS auto-creates
+  // intermediate containers on a resource PUT (so the e2e passes without this), but an explicit
+  // container PUT first makes the seed robust on a server that does NOT auto-create — and is
+  // idempotent/harmless on CSS. An LDP BasicContainer create is a PUT of `text/turtle` to the
+  // trailing-slash URL.
+  await authedPut(`${POD_ROOT}mail/`, "", "text/turtle");
+  await authedPut(`${POD_ROOT}mail/folders/`, "", "text/turtle");
   await authedPut(
     INBOX_DOC,
     `@prefix schema: <http://schema.org/>.

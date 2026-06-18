@@ -541,6 +541,37 @@ export function cleanedUrl(href: string): string {
 }
 
 /**
+ * Whether THIS `establishSessionFor` is STILL the current login by the time it is ready to
+ * arm the authoritative proactive boundary, write the remembered pointer, and publish the
+ * logged-in UI (roborev HIGH). Pure + exported so the race is unit-testable WITHOUT a React render.
+ *
+ * `establishSessionFor` awaits `readProfile(id)` after snapshotting its generation. A
+ * logout()/new login() racing that await advances the provider generation (via reset()) AND
+ * clears the boundary. If we re-armed + wrote the pointer + published UNCONDITIONALLY we would
+ * (a) re-enable authenticated fetches against a reset/stale provider behind a logged-out UI,
+ * (b) republish a stale session, or (c) RESURRECT the remembered pointer for an already-
+ * logged-out / different-identity session (a spurious silent restore next load). Returns true
+ * ONLY when the live generation still equals the snapshot AND the provider's authenticated
+ * WebID still equals the requested identity — fail-closed (false) on EITHER mismatch, so the
+ * caller bails WITHOUT touching the boundary or the pointer (clearing the boundary would wipe a
+ * newer login's freshly-armed one). NOTE the provider's own `#persist` is already
+ * generation-fenced internally, so the durable CREDENTIAL is safe; this fences the SessionProvider
+ * side effects (boundary + the localStorage pointer + the UI publish).
+ */
+export function establishStillCurrent(inputs: {
+  establishGeneration: number;
+  currentGeneration: number;
+  requestedWebId: string;
+  currentAuthenticatedWebId: string | undefined;
+  webIdsEqual: (a: string | undefined, b: string | undefined) => boolean;
+}): boolean {
+  return (
+    inputs.currentGeneration === inputs.establishGeneration &&
+    inputs.webIdsEqual(inputs.currentAuthenticatedWebId, inputs.requestedWebId)
+  );
+}
+
+/**
  * Build the auth runtime + install the proactive auth-fetch patch EXACTLY ONCE per
  * page. Repeated calls (e.g. a StrictMode double-mount) return the same
  * in-flight/settled promise without re-snapshotting fetch or re-patching the global.
@@ -795,6 +826,17 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           `(${id}). For your security you were not logged in.`,
       );
     }
+    // GENERATION FENCE (roborev HIGH): snapshot the provider's login generation up front. A
+    // logout() / new login() advances it (via reset()), so re-checking it (with the
+    // authenticated WebID) before the durable pointer write + the authoritative boundary arm +
+    // the UI publish below lets us BAIL if this establish was superseded MID-FLIGHT (during the
+    // `readProfile` await). Without the fence a racing logout/new-login could (a) re-arm the
+    // boundary against a reset/stale provider behind a logged-out UI, (b) republish a stale
+    // webId/session, or (c) RESURRECT the remembered pointer for an already-logged-out / wrong
+    // identity. The provider's own `#persist` is already generation-fenced internally, so the
+    // durable CREDENTIAL is safe; this fences the SessionProvider-side effects. -1 when no
+    // provider (defensive). See `establishStillCurrent`.
+    const establishGeneration = providerRef.current?.loginGeneration() ?? -1;
     // PROACTIVE FETCH (task #123): arm a PROVISIONAL credential boundary (the WebID +
     // the resolved issuer origins) BEFORE the authenticated profile re-read below, so
     // that read actually carries the token. An autologin-completion reaches HERE without
@@ -805,10 +847,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     // re-armed once the profile yields derived.podRoot (below). The popup-login path has
     // already armed an equivalent boundary via the probe; re-arming with the same origins
     // is idempotent. The issuer is folded in from the provider's already-resolved issuer
-    // (pod-mail's provider exposes it SYNCHRONOUSLY via `resolvedIssuer()` — no await). It
-    // is best-effort — the WebID origin is the load-bearing target for the profile re-read;
-    // the OIDC endpoints ride the pristine fetch (the re-entrancy guard), so they do not
-    // depend on this boundary.
+    // (pod-mail's provider exposes it SYNCHRONOUSLY via `resolvedIssuer()` — no await, so
+    // unlike pod-music there is no race window BEFORE this provisional arm; it runs in the
+    // same synchronous tick as the entry WebID check above). It is best-effort — the WebID
+    // origin is the load-bearing target for the profile re-read; the OIDC endpoints ride the
+    // pristine fetch (the re-entrancy guard), so they do not depend on this boundary.
     const provisionalIssuer = providerRef.current?.resolvedIssuer();
     fetchInstallRef.current?.setState({
       provider: providerRef.current,
@@ -821,6 +864,30 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     // Re-read the profile (now authenticated) and derive the session.
     const me = await readProfile(id);
     const derived = deriveSession(me);
+    // GENERATION FENCE for the durable pointer write + AUTHORITATIVE boundary-arm + UI publish
+    // (roborev HIGH). `readProfile` above is an await, during which a logout()/new login() can
+    // race: it advances the provider generation (via reset()) AND, for a logout, clears the
+    // boundary; a new login clears it then ARMS ITS OWN. Without re-checking, this function
+    // would then resume and (a) RE-ARM the boundary against a now-reset/stale provider —
+    // re-enabling authenticated fetches behind a logged-out UI, (b) publish a STALE logged-in
+    // session, or (c) re-write `rememberedAccount` for the superseded session — resurrecting a
+    // silent-restore pointer the logout just cleared / pointing at the wrong identity. So
+    // before the pointer write + authoritative arm + publish, re-check BOTH the generation and
+    // the authenticated WebID against this establish's snapshot. On the SUPERSEDED path do NOT
+    // clear the boundary — the superseding actor already manages it (a logout cleared it, a new
+    // login armed its own); clearing here would wipe the newer login's freshly-armed boundary
+    // and strand its logged-in UI making UNAUTHENTICATED reads.
+    if (
+      !establishStillCurrent({
+        establishGeneration,
+        currentGeneration: providerRef.current?.loginGeneration() ?? -1,
+        requestedWebId: id,
+        currentAuthenticatedWebId: providerRef.current?.authenticatedWebId(),
+        webIdsEqual,
+      })
+    ) {
+      return;
+    }
     // REMEMBER this account (WebID + the issuer it authenticated against) so a
     // later page load can attempt a silent refresh-token restore. The provider
     // persisted the DPoP-bound refresh token + key in IndexedDB during the login;
