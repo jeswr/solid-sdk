@@ -23,7 +23,7 @@
     "check:lockfile-transport": "node scripts/check-lockfile-transport.mjs",
     "check": "npm run check:dist && npm run check:lockfile-transport",
     "typecheck": "npm run build:deps && tsc -p tsconfig.json --noEmit",
-    "lint": "biome check src test scripts",
+    "lint": "biome check src test scripts && npm run check:lockfile-transport",
     "lint:fix": "biome check --write src test scripts",
     "test": "npm run build:deps && vitest run",
     "test:coverage": "npm run build:deps && vitest run --coverage",
