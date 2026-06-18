@@ -271,42 +271,104 @@ export function rememberedPointerAction(
 }
 
 /**
- * On a successful login, plan the remembered-pointer + durable-credential cleanup,
- * given the PRIOR remembered record, THIS login's WebID + resolved issuer, and whether
- * a durable credential for THIS WebID is persisted. PURE + exported so the
- * cross-account cleanup is unit-testable without a React harness.
- *
- * Returns:
- *  - `pointer` — `"write"` THIS login's pointer when a matching durable credential
- *    exists (silent restore genuinely available), else `"clear"` (no broken promise /
- *    no stale pointer survives).
- *  - `forgetIssuer` — the PRIOR account's issuer whose orphaned durable credential must
- *    be deleted, or `undefined`. Set when the prior record names a DIFFERENT account
- *    than the one we keep — so account-switching (esp. when the new login has no durable
- *    credential) does not leave the previous user's refresh token + key in IndexedDB
- *    forever (a later logout forgets only the CURRENT issuer). Never the issuer we are
- *    KEEPING (this login's own credential).
+ * The sentinel `readSessionFenced` returns when this establish was SUPERSEDED during (or after)
+ * the awaited profile read — the caller must BAIL silently (touch nothing) on this.
  */
-export function planLoginPointer(
-  prior: { webId: string; issuer?: string } | null,
-  thisLogin: { webId: string; issuer: string | undefined },
-  presence: CredentialPresence | undefined,
-  equal: (a: string | undefined, b: string | undefined) => boolean,
-): { pointer: "write" | "clear"; forgetIssuer?: string } {
-  const keepingThisLogin =
-    thisLogin.issuer !== undefined && rememberedPointerAction(presence) === "write";
-  const pointer: "write" | "clear" = keepingThisLogin ? "write" : "clear";
-  // The prior account is STALE iff there was a prior pointer AND it is not the account
-  // we are keeping (a different WebID, or we keep none).
-  const priorIsStale = prior !== null && !(keepingThisLogin && equal(prior.webId, thisLogin.webId));
-  let forgetIssuer: string | undefined;
-  if (priorIsStale && prior?.issuer) {
-    // Forget the prior issuer's orphaned credential — unless it is the very issuer this
-    // login is keeping its own (current) credential under.
-    const keepingSameIssuer = keepingThisLogin && thisLogin.issuer === prior.issuer;
-    if (!keepingSameIssuer) forgetIssuer = prior.issuer;
+export const SUPERSEDED = Symbol("establish-superseded");
+
+/**
+ * Read the (now-authenticated) profile + derive the session, with the FAILURE PATH FENCED against
+ * supersession (roborev HIGH). Extracted as a pure, injectable async helper so the
+ * profile-read-rejection race is unit-testable WITHOUT a React render / real provider.
+ *
+ * `establishSessionFor` awaits this profile read; a logout()/new login() can supersede the
+ * establish WHILE it is pending, and the read can then REJECT. If the rejection propagated
+ * unconditionally, the CALLER's catch (doLogin) would `reset()` the provider + clear the proactive
+ * boundary — clobbering the SUPERSEDING login's freshly-armed state on the error path. So on a
+ * read failure this re-checks currency: if SUPERSEDED it SWALLOWS the error and returns
+ * {@link SUPERSEDED} (the caller bails, touching nothing — the superseder owns the state); if STILL
+ * CURRENT it RE-THROWS (a genuine failure for THIS login the caller must surface). On success it
+ * returns the derived session (the post-read currency re-check stays at the call site, gating the
+ * authoritative arm + publish).
+ */
+export async function readSessionFenced(deps: {
+  readProfile: () => Promise<Awaited<ReturnType<typeof readProfile>>>;
+  deriveSession: (profile: Awaited<ReturnType<typeof readProfile>>) => DerivedSession;
+  stillCurrent: () => boolean;
+}): Promise<DerivedSession | typeof SUPERSEDED> {
+  try {
+    const me = await deps.readProfile();
+    return deps.deriveSession(me);
+  } catch (e) {
+    // SUPERSEDED during a REJECTING profile read → swallow + signal bail; the caller's catch must
+    // not reset/clear the superseding login's state. STILL CURRENT → a genuine failure; re-throw.
+    if (!deps.stillCurrent()) return SUPERSEDED;
+    throw e;
   }
-  return { pointer, forgetIssuer };
+}
+
+/**
+ * The FENCED post-login remembered-POINTER reconciliation, extracted as a pure, injectable
+ * async function so the security-critical SUPERSEDE fences (roborev HIGH, back-ported from
+ * pod-health becddf5) are unit-testable WITHOUT a React render / real provider — the same
+ * extract-as-testable-flow pattern as {@link rememberedPointerAction} / {@link applySilentRestoreDecision}.
+ *
+ * It awaits the durable-credential presence, then writes/clears the credential-FREE
+ * remembered-account pointer, re-checking `stillCurrent()` AFTER the await and BEFORE the
+ * (synchronous) pointer side effect. A logout()/new login() racing the presence read supersedes
+ * this establish; an unfenced pointer write/clear would clobber the WRONG account's pointer on
+ * behalf of a stale login (clearing the NEW login's freshly-written pointer). On supersession this
+ * BAILS without touching the pointer. A presence-read THROW falls back to a fenced pointer clear
+ * (fail-closed: never leave a possibly-wrong pointer), still skipped when superseded.
+ *
+ * NO DURABLE-CREDENTIAL DELETE FROM HERE (roborev HIGH — the read-then-delete race). An earlier
+ * revision forgot a stale PRIOR account's issuer-keyed durable credential here. But the
+ * {@link SessionStore} contract is non-transactional (separate `get`/`delete`), so ANY conditional
+ * "delete the slot iff it still belongs to the prior WebID" issued from this supersedable flow has
+ * a TOCTOU window: a racing same-issuer NEW login could `put` its credential between our read and
+ * delete, and the delete would clobber it. We therefore do NOT touch the durable store here at
+ * all. The cross-account orphan it cleaned up is HARMLESS + fail-closed: the credential-free
+ * pointer is already cleared/rewritten below (so nothing ever silently restores the orphan — it is
+ * never POINTED at), the orphan is a DPoP-bound refresh token useless without its non-extractable
+ * key, and it is forgotten RACE-FREELY at the proper points — `logout()` forgets the live issuer,
+ * a same-account re-login OVERWRITES the single issuer-keyed slot, and a `webid-mismatch` restore
+ * teardown forgets explicitly. (A truly atomic cross-account orphan delete needs a compare-and-
+ * delete primitive on `@jeswr/solid-session-restore`'s store — a tracked follow-up, not a thing to
+ * fake with a racy get+delete here.)
+ *
+ * Returns the pointer op it performed (for assertions) and whether it bailed because superseded.
+ */
+export async function applyFencedLoginPointer(args: {
+  thisLogin: { webId: string; issuer: string | undefined };
+  /** The durable-credential presence read (awaited — a supersede window). May throw. */
+  readPresence: () => Promise<CredentialPresence | undefined>;
+  writePointer: (webId: string, issuer: string) => void;
+  clearPointer: () => void;
+  /** Re-checked AFTER the await + BEFORE the pointer side effect; false ⇒ superseded ⇒ bail. */
+  stillCurrent: () => boolean;
+}): Promise<{ pointer: "write" | "clear" | "none"; superseded: boolean }> {
+  try {
+    const presence = await args.readPresence();
+    // SUPERSEDE FENCE (roborev HIGH): bail WITHOUT any pointer side effect — the superseder owns
+    // the pointer now (its own teardown/establish reconciles it).
+    if (!args.stillCurrent()) return { pointer: "none", superseded: true };
+    // Write THIS login's pointer iff a durable credential FOR THIS WebID is persisted; otherwise
+    // clear any stale pointer (no broken-promise pointer survives). `rememberedPointerAction`
+    // maps the tri-state presence to write/clear (a `"present"` credential ⇒ write).
+    if (rememberedPointerAction(presence) === "write" && args.thisLogin.issuer !== undefined) {
+      args.writePointer(args.thisLogin.webId, args.thisLogin.issuer);
+      return { pointer: "write", superseded: false };
+    }
+    args.clearPointer();
+    return { pointer: "clear", superseded: false };
+  } catch {
+    // A presence-read error must not block the login; on uncertainty DROP the pointer
+    // (fail-closed) — but still FENCE the clear: if a logout/new-login superseded us during the
+    // failed await, the pointer belongs to the superseder (clearing it would wipe the NEW login's).
+    if (!args.stillCurrent()) return { pointer: "none", superseded: true };
+    args.clearPointer();
+    return { pointer: "clear", superseded: false };
+  }
 }
 
 /** Parse a remembered issuer string to a URL, or undefined when absent/malformed. */
@@ -413,6 +475,83 @@ export type ArmProactiveBoundary = (input: {
   issuer?: string;
   podRoot?: string;
 }) => void;
+
+/**
+ * Whether THIS `establishSessionFor` is STILL the current login by the time it is ready to
+ * (re-)arm the AUTHORITATIVE proactive boundary + publish the logged-in UI (roborev HIGH,
+ * back-ported from pod-health becddf5). Pure + exported so the race is unit-testable WITHOUT
+ * a React render / auth runtime (the same testable-decision pattern as
+ * `rememberedPointerAction` / `single-flight`).
+ *
+ * `establishSessionFor` awaits several steps (`readProfile`, `hasPersistedForWebId`) after
+ * snapshotting its generation. A logout()/new login() racing those awaits advances the
+ * provider generation (via reset()) AND clears the boundary (logout) / arms its OWN (a new
+ * login). If we re-armed + published UNCONDITIONALLY we would re-enable authenticated fetches
+ * against a reset/stale provider behind a logged-out UI AND publish a stale webId/session — or
+ * clobber a NEWER login's freshly-armed boundary. Returns true ONLY when the live generation
+ * still equals the snapshot AND the provider's authenticated WebID still equals the requested
+ * identity — fail-closed (false) on either mismatch, so the caller BAILS (it does NOT clear the
+ * boundary on the superseded path: whoever superseded us — a logout that cleared it, or a new
+ * login that armed its own — owns it now, so touching it here would strand them).
+ */
+export function establishStillCurrent(inputs: {
+  establishGeneration: number;
+  currentGeneration: number;
+  requestedWebId: string;
+  currentAuthenticatedWebId: string | undefined;
+  webIdsEqual: (a: string | undefined, b: string | undefined) => boolean;
+}): boolean {
+  return (
+    inputs.currentGeneration === inputs.establishGeneration &&
+    inputs.webIdsEqual(inputs.currentAuthenticatedWebId, inputs.requestedWebId)
+  );
+}
+
+/**
+ * Whether the provider's login generation has ADVANCED past the owning flow's snapshot — i.e. a
+ * logout()/new login() has superseded this establish (roborev HIGH). Pure + exported. Used at the
+ * FIRST identity guard of `establishSessionFor`, where the WebID-arm of {@link establishStillCurrent}
+ * cannot be used (it would always fail on the very mismatch being triaged): a GENERATION advance is
+ * the unambiguous supersede signal, distinguishing "a racing logout/new-login changed the identity"
+ * (bail silently) from "the OP genuinely authenticated a different WebID for THIS login" (throw).
+ * Fail-OPEN to "not superseded" when the live generation is unreadable (undefined) so a genuine
+ * mismatch is never silently swallowed.
+ */
+export function establishGenerationSuperseded(
+  establishGeneration: number,
+  currentGeneration: number | undefined,
+): boolean {
+  if (currentGeneration === undefined) return false;
+  return currentGeneration !== establishGeneration;
+}
+
+/**
+ * The explicit OUTCOME of `establishSessionFor` (roborev Medium). A silent `return` on
+ * supersession must NOT be mistaken by the caller for a SUCCESS — `login()`'s contract is
+ * "resolves when authenticated", and a superseded establish published NO session for this login.
+ * The caller (doLogin) inspects this to skip the destructive reset/clear (the superseder owns the
+ * state) WITHOUT reporting success:
+ *  - `"established"` — the session for THIS login was armed + published; login truly succeeded.
+ *  - `"superseded"`  — a racing logout/new-login won; nothing was published for this login. The
+ *                       superseder owns the provider/boundary, so the caller must touch NOTHING.
+ */
+export type EstablishOutcome = "established" | "superseded";
+
+/**
+ * A BRANDED error thrown by `doLogin` when its `establishSessionFor` returned `"superseded"`
+ * (roborev Medium). It signals "this login was CANCELLED by a racing logout/new-login — it did
+ * NOT authenticate, but its failure is NOT a real error and the superseder owns the provider +
+ * boundary". `login()` still REJECTS with it (honouring "resolves only when authenticated"), but
+ * `doLogin`'s catch recognises it and SKIPS the destructive reset()/clearProactiveBoundary (which
+ * would clobber the superseding flow's freshly-armed state) and the user-facing error surface.
+ */
+export class SupersededLoginError extends Error {
+  readonly superseded = true as const;
+  constructor() {
+    super("Login was superseded by a newer sign-in or sign-out.");
+    this.name = "SupersededLoginError";
+  }
+}
 
 /**
  * Run the ONE silent restore (a refresh-token grant via the provider, then derive
@@ -867,9 +1006,34 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   // Finding-1 invariant), then re-read the (now authenticated) profile and derive
   // the session into React state. Throws (fail-closed) on a WebID mismatch.
   const establishSessionFor = useCallback(
-    async (id: string) => {
+    async (id: string, expectedGeneration?: number): Promise<EstablishOutcome> => {
+      // GENERATION FENCE (roborev HIGH, back-ported from pod-health becddf5). The OWNING FLOW
+      // (doLogin / autologin-complete) snapshots its `loginGeneration()` right after its own
+      // reset() and passes it as `expectedGeneration`. `establishSessionFor` is entered AFTER the
+      // caller's awaits (the probe / completeRedirectLogin), so a logout()/new login() can ALREADY
+      // have superseded this establish before the very first guard below — advancing the
+      // generation (via reset()) and replacing `authenticatedWebId`. Snapshot the live generation
+      // up front so the first identity guard can DISTINGUISH "superseded" from "the OP genuinely
+      // authenticated a different WebID". Falls back to the live generation when the caller passes
+      // none (defensive — then the first-guard supersede check is a no-op equality).
+      const establishGeneration =
+        expectedGeneration ?? providerRef.current?.loginGeneration() ?? -1;
       const authedWebId = providerRef.current?.authenticatedWebId();
       if (!webIdsEqual(authedWebId, id)) {
+        // SUPERSEDE-vs-MISMATCH (roborev HIGH): if the generation has ALREADY advanced past the
+        // owning flow's snapshot, a logout/new-login superseded us before entry — the identity no
+        // longer matching `id` is EXPECTED, not a security failure. BAIL SILENTLY: throwing here
+        // would reach the caller's catch (doLogin / autologin-complete) which reset()s the provider
+        // + clears the proactive boundary, clobbering the SUPERSEDING flow's freshly-armed state.
+        // The check is GENERATION-ONLY here (NOT establishStillCurrent, whose WebID arm would always
+        // fail on this very mismatch path): a generation advance is the unambiguous supersede signal.
+        // Only when the generation is UNCHANGED is a WebID mismatch a genuine "OP authenticated a
+        // different WebID" security failure — then throw (fail-closed) as before.
+        if (
+          establishGenerationSuperseded(establishGeneration, providerRef.current?.loginGeneration())
+        ) {
+          return "superseded"; // touch nothing; the superseder owns the provider/boundary.
+        }
         throw new Error(
           "Login did not complete — the identity provider authenticated a " +
             `different WebID (${authedWebId ?? "unknown"}) than the one requested ` +
@@ -891,10 +1055,75 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       // OIDC endpoints ride the pristine fetch (the re-entrancy guard), so they do not depend
       // on this boundary.
       const provisionalIssuer = providerRef.current?.resolvedIssuer();
+      // FENCE the PROVISIONAL arm too (roborev HIGH). Even though pod-money's `resolvedIssuer()`
+      // is SYNC (no await inside this function before this point), `establishSessionFor` is
+      // entered AFTER the CALLER's awaits (the autologin-completion / silent-restore paths await
+      // a refresh grant before calling here), so a logout/new-login can already have superseded
+      // this establish by the time it runs. Arming the provisional boundary unconditionally would
+      // set origins for THIS (now-stale) WebID against the CURRENT provider — which, after a new
+      // login, belongs to a DIFFERENT user (so the new user's token could ride the OLD user's
+      // origin) or, after a logout, re-enable authenticated fetches behind a logged-out UI. If
+      // superseded, BAIL without arming + without reading a stale profile (the superseder already
+      // cleared / armed its own boundary — clearing here would wipe the newer login's).
+      if (
+        !establishStillCurrent({
+          establishGeneration,
+          currentGeneration: providerRef.current?.loginGeneration() ?? -1,
+          requestedWebId: id,
+          currentAuthenticatedWebId: providerRef.current?.authenticatedWebId(),
+          webIdsEqual,
+        })
+      ) {
+        return "superseded";
+      }
       armProactiveBoundary({ webId: id, issuer: provisionalIssuer });
-      // Re-read the profile (now authenticated) and derive the session.
-      const me = await readProfile(id);
-      const derived = deriveSession(me);
+      // Re-read the profile (now authenticated) and derive the session, with the FAILURE PATH
+      // FENCED against supersession (roborev HIGH). A logout()/new login() can supersede this
+      // establish WHILE `readProfile` is pending and that read can then REJECT; an unconditionally
+      // propagated rejection would make the caller's catch (doLogin) reset() the provider + clear
+      // the boundary — clobbering the SUPERSEDING login's freshly-armed state on the error path.
+      // `readSessionFenced` swallows the error + returns SUPERSEDED when we've been superseded
+      // (we BAIL, touching nothing), and re-throws only when the failure is still genuinely OURS.
+      const readResult = await readSessionFenced({
+        readProfile: () => readProfile(id),
+        deriveSession,
+        stillCurrent: () =>
+          establishStillCurrent({
+            establishGeneration,
+            currentGeneration: providerRef.current?.loginGeneration() ?? -1,
+            requestedWebId: id,
+            currentAuthenticatedWebId: providerRef.current?.authenticatedWebId(),
+            webIdsEqual,
+          }),
+      });
+      if (readResult === SUPERSEDED) return "superseded"; // superseder owns it — touch nothing.
+      const derived = readResult;
+      // GENERATION FENCE for the AUTHORITATIVE boundary-arm + UI publish (roborev HIGH). The
+      // `await readProfile(id)` above (and the `hasPersistedForWebId` await below) give a
+      // racing logout()/new login() a window: it advances the provider generation (via reset())
+      // AND, for a logout, clears the boundary; a new login clears it then ARMS ITS OWN +
+      // becomes the authenticated identity. Without re-checking, this function would resume and
+      // (a) RE-ARM the authoritative boundary against a now-reset/stale provider — re-enabling
+      // authenticated fetches behind a logged-out UI, or clobbering a newer login's boundary —
+      // and (b) publish a STALE logged-in session (setWebId/setSession below). So before arming
+      // the authoritative boundary + the persist/pointer reconciliation + publish, re-check BOTH
+      // the generation and the authenticated WebID against this establish's snapshot. On the
+      // SUPERSEDED path BAIL WITHOUT clearing the boundary — the superseding actor (a logout that
+      // cleared it, a new login that armed its own) owns it now; clearing here would wipe the
+      // newer login's freshly-armed boundary and strand its logged-in UI making unauthenticated
+      // reads. We never armed the AUTHORITATIVE boundary on this resumed path (the provisional one
+      // was superseded by the racer's own clear/arm), so there is nothing of OURS to tear down.
+      if (
+        !establishStillCurrent({
+          establishGeneration,
+          currentGeneration: providerRef.current?.loginGeneration() ?? -1,
+          requestedWebId: id,
+          currentAuthenticatedWebId: providerRef.current?.authenticatedWebId(),
+          webIdsEqual,
+        })
+      ) {
+        return "superseded";
+      }
       // PROACTIVE FETCH (task #123): now that the session's pod root is known, wire the
       // AUTHORITATIVE boundary so the patched global fetch PROACTIVELY attaches the DPoP token
       // to the pod / WebID / issuer origins on the FIRST request — pod-money's ledger-discovery
@@ -929,38 +1158,53 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       // durable credential, and the NEXT reload would silently restore ALICE instead of
       // Bob. So: write Bob's pointer on "present", otherwise drop whatever pointer exists.
       //
-      // AND (roborev): account-switching must not ORPHAN the prior account's DURABLE
-      // credential. Capture the PRIOR remembered record FIRST; if it names a DIFFERENT
-      // account than the one we keep (different WebID, or we are clearing), forget its
-      // persisted refresh token + key too — clearing only the localStorage pointer would
-      // leave Alice's credential in IndexedDB forever (Bob's later logout forgets Bob's
-      // issuer, not Alice's). Skip forgetting the issuer we are KEEPING (this login's own
-      // credential, when we write our pointer on the same issuer).
+      // We do NOT forget a stale PRIOR account's DURABLE credential from here (roborev HIGH —
+      // the read-then-delete race). The SessionStore contract is non-transactional, so a
+      // conditional issuer-keyed delete issued from this supersedable flow has a TOCTOU window
+      // that could clobber a racing same-issuer NEW login's just-persisted credential. The orphan
+      // is harmless + fail-closed (never POINTED at — the pointer is cleared/rewritten below) and
+      // is forgotten RACE-FREELY at logout / same-account re-login / webid-mismatch restore. See
+      // applyFencedLoginPointer's doc for the full reasoning + the atomic-CAS follow-up.
       // Best-effort; never blocks landing the (already-established) session.
       const issuer = providerRef.current?.resolvedIssuer();
-      const prior = rememberedAccount.read();
-      try {
-        const presence = issuer
-          ? await providerRef.current?.hasPersistedForWebId(new URL(issuer), id)
-          : "absent";
-        const plan = planLoginPointer(prior, { webId: id, issuer }, presence, webIdsEqual);
-        // Drop the orphaned durable credential the stale prior pointer referenced.
-        const forgetIssuer = parseIssuer(plan.forgetIssuer);
-        if (forgetIssuer) await providerRef.current?.forgetPersisted(forgetIssuer);
-        if (plan.pointer === "write" && issuer) {
-          rememberedAccount.write(id, issuer);
-        } else {
-          // No durable credential for THIS login → ensure no stale pointer lingers.
-          rememberedAccount.clear();
-        }
-      } catch {
-        // A presence-check error must not block the login; on uncertainty we DROP the
-        // pointer (fail-closed: never leave a possibly-wrong pointer that could restore
-        // the wrong account) — a later successful login re-writes a correct one.
-        rememberedAccount.clear();
-      }
+      // A local re-check of THIS establish's currency, used to fence the pointer SIDE EFFECT
+      // below (roborev HIGH). The reconciliation awaits `hasPersistedForWebId`, and a
+      // logout()/new login() racing that await supersedes this establish — an unfenced pointer
+      // write/clear would then clobber the WRONG account's pointer. The fenced, EXTRACTED
+      // `applyFencedLoginPointer` re-checks AFTER the await + BEFORE the side effect and bails
+      // when superseded.
+      const stillCurrent = () =>
+        establishStillCurrent({
+          establishGeneration,
+          currentGeneration: providerRef.current?.loginGeneration() ?? -1,
+          requestedWebId: id,
+          currentAuthenticatedWebId: providerRef.current?.authenticatedWebId(),
+          webIdsEqual,
+        });
+      await applyFencedLoginPointer({
+        thisLogin: { webId: id, issuer },
+        readPresence: () =>
+          issuer
+            ? (providerRef.current?.hasPersistedForWebId(new URL(issuer), id) ??
+              Promise.resolve("absent" as const))
+            : Promise.resolve("absent" as const),
+        writePointer: (webId, iss) => rememberedAccount.write(webId, iss),
+        clearPointer: () => rememberedAccount.clear(),
+        stillCurrent,
+      });
+      // GENERATION FENCE for the UI PUBLISH (roborev HIGH). The pointer-reconciliation block
+      // above awaits AGAIN (`hasPersistedForWebId`), opening one more window in which a
+      // logout()/new login() can supersede this establish. Re-check before publishing so a
+      // superseded establish never flips the React UI to a STALE logged-in webId/session (which a
+      // logout had just cleared, or a new login had just replaced). On the SUPERSEDED path BAIL
+      // WITHOUT touching the boundary — the superseder owns it (see the authoritative arm fence
+      // above) — and (per the fenced pointer side effect above) without touching the pointer
+      // either. The load-bearing guard is not republishing a stale SESSION behind a logged-out /
+      // different-user UI.
+      if (!stillCurrent()) return "superseded";
       setWebId(id);
       setSession(derived);
+      return "established";
     },
     [armProactiveBoundary],
   );
@@ -1063,10 +1307,27 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         // PROVE the session authenticated AS the requested WebID — never infer
         // "logged in" from "a token is attached" (Finding 1) — then re-read the
         // profile and derive the session. Shared with the autologin completion path.
-        await establishSessionFor(id);
+        // Pass THIS login's generation snapshot so establishSessionFor's first identity guard
+        // can tell a racing-logout/new-login supersede (silent bail) from a genuine OP mismatch.
+        const outcome = await establishSessionFor(id, loginGeneration);
+        // SUPERSEDED (roborev Medium): establishSessionFor published NO session for THIS login (a
+        // racing logout/new-login won + owns the provider + boundary). We must NOT resolve `login()`
+        // as success — its contract is "resolves only when authenticated" — so throw a BRANDED
+        // SupersededLoginError. The catch below recognises it and SKIPS the destructive reset/clear
+        // (which would clobber the superseder) + the user-facing error surface.
+        if (outcome === "superseded") throw new SupersededLoginError();
       } catch (e) {
-        // The attempt failed — clear the pending WebID AND drop any partial provider
-        // state, so a half-established session can't leak into the next attempt.
+        // The attempt failed — clear the pending WebID AND drop any partial provider state, so a
+        // half-established session can't leak into the next attempt. BUT if we were SUPERSEDED (a
+        // branded SupersededLoginError), the superseding flow OWNS the provider + boundary: running
+        // reset()/clearProactiveBoundary here would clobber its freshly-armed state, and there is
+        // no user-facing error to show. So skip the destructive cleanup + the error surface and
+        // just propagate so `login()` rejects (it was not authenticated).
+        if (e instanceof SupersededLoginError) {
+          // Touch NOTHING — the superseder owns pendingWebIdHolder (it set its own), the provider,
+          // and the boundary. Just propagate so `login()` rejects (this login was not authenticated).
+          throw e;
+        }
         pendingWebIdHolder.current = null;
         providerRef.current?.reset();
         // Drop any credential boundary the probe / a partially-completed
@@ -1252,8 +1513,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           // derive the session. The persisted record told us which WebID to expect.
           const id = targetWebId ?? provider.authenticatedWebId();
           if (!id) throw new Error("Autologin completed without a target WebID.");
-          await establishSessionFor(id);
-          clearAutologinSentinel(); // success → clean slate for next time.
+          // Snapshot the generation NOW (the redirect login just established the session) so
+          // establishSessionFor's first identity guard can distinguish a racing-logout/new-login
+          // supersede (silent bail) from a genuine OP mismatch — same as the doLogin path.
+          const outcome = await establishSessionFor(id, provider.loginGeneration());
+          // SUPERSEDED: a racing logout/new-login owns the flow now — DON'T clear the sentinel (the
+          // superseder may still need it) and don't treat this as a completed autologin.
+          if (outcome === "established") clearAutologinSentinel(); // success → clean slate.
         })
         .catch((e) => {
           // Failure: drop any persisted record + the sentinel, fall back to the login

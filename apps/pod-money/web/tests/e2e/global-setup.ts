@@ -159,6 +159,19 @@ export default async function globalSetup() {
     }
   };
 
+  // PRE-CREATE the intermediate CONTAINER for a resource before PUTting into it (roborev
+  // MEDIUM, back-ported from pod-health becddf5). CSS auto-creates intermediate containers
+  // on a resource PUT — so the e2e passes WITHOUT this — but an explicit container PUT first
+  // makes the seed robust on a server that does NOT auto-create them, and keeps the seeded
+  // pod shape deterministic. A container is created with a PUT of `text/turtle` to the
+  // trailing-slash URL; an already-existing container returns 2xx/205, both accepted.
+  const ensureContainer = async (containerUrl: string) => {
+    await authedPut(containerUrl, "", "text/turtle");
+  };
+  // The type index lives under `settings/`; the ledger under `finance/`. Pre-create both.
+  await ensureContainer(`${POD_ROOT}settings/`);
+  await ensureContainer(`${POD_ROOT}finance/`);
+
   // 3. seed the bare profile (foaf:name + pim:storage so the app has a display name +
   //    a storage root).
   await authedPut(
