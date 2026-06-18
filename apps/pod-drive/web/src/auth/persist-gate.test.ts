@@ -301,3 +301,74 @@ describe("FINDING 2 — invalid_scope on offline_access retries once without it 
     await expect(provider.upgrade(new Request("https://alice.example/storage/"))).rejects.toThrow();
   });
 });
+
+// ── roborev HIGH — the durable-persist GENERATION RE-FENCE (resurrect-logged-out-credential) ────
+// The deepest arm of the establishSessionFor race: a logout() / new login() that wins MID-GRANT
+// (after the popup probe, while the token grant is in flight) advances the provider generation via
+// reset(). #persistSession captures the login's generation up front and RE-FENCES on it
+// (`if (generation !== this.#generation) return`) BEFORE writing to IndexedDB — so a credential
+// minted under a now-superseded login is NEVER resurrected into the durable store under the new
+// (or logged-out) state. The SessionProvider's establishSessionFor relies on THIS provider-internal
+// fence for the persist step (it has no SessionProvider-level persistSession await), so it is
+// asserted here. Adversarial: re-implementing the persist WITHOUT the generation re-check shows the
+// stale credential WOULD land — the failure the re-fence prevents.
+describe("roborev HIGH — #persistSession re-fences on the caller-captured generation (no resurrect-after-reset)", () => {
+  it("a reset() racing the token grant (generation advanced) persists NOTHING", async () => {
+    authState.requestedWebId = WEBID_A;
+    authState.authenticatedWebId = WEBID_A;
+    const store = new MemorySessionStore();
+    const provider = makeProvider(store);
+
+    // Win the race DURING the grant: hook the token-response processing (which runs just BEFORE
+    // #persistSession, after the captured generation snapshot) to reset() the provider — exactly
+    // what a logout / new login does. The captured generation is now stale vs this.#generation,
+    // so #persistSession's re-fence (`if (generation !== this.#generation) return`) bails BEFORE
+    // the store.put — and the downstream proof-step re-fence then rejects the whole upgrade as
+    // superseded (defence-in-depth). The load-bearing signal is the EMPTY store: had the persist
+    // re-fence not run, the credential would already be in the store before that later throw.
+    const oauth = await import("oauth4webapi");
+    vi.mocked(oauth.processAuthorizationCodeResponse).mockImplementationOnce(async () => {
+      provider.reset(); // logout / new login wins mid-grant → generation advances.
+      return {
+        access_token: authState.accessToken,
+        refresh_token: authState.refreshToken,
+        expires_in: 3600,
+      } as Awaited<ReturnType<typeof oauth.processAuthorizationCodeResponse>>;
+    });
+
+    // The superseded upgrade rejects (the proof-step re-fence) — expected; we assert the persist.
+    await expect(provider.upgrade(new Request("https://alice.example/storage/"))).rejects.toThrow();
+
+    // THE ASSERTION: the superseded login's credential was NOT resurrected into the store —
+    // #persistSession re-fenced on the captured generation before any store.put.
+    expect(await store.get(ISSUER)).toBeUndefined();
+    expect(store.map.size).toBe(0);
+  });
+
+  it("WITHOUT the generation re-fence the stale credential WOULD land (the failure the re-fence prevents)", async () => {
+    // Adversarial control: the un-fenced persist (missing `if (generation !== this.#generation)
+    // return;`) writes the credential regardless of a racing reset — the resurrection bug.
+    const leaked = new MemorySessionStore();
+    const dpopKey = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, false, [
+      "sign",
+      "verify",
+    ]);
+    const capturedGeneration = 0;
+    const liveGeneration = 1; // a reset() advanced it mid-grant.
+    async function ungatedPersist() {
+      // MISSING: if (capturedGeneration !== liveGeneration) return;  ← the re-fence.
+      await leaked.put({
+        issuer: ISSUER,
+        webId: WEBID_A,
+        refreshToken: "rt-A",
+        dpopKey,
+        clientId: CLIENT_ID,
+      });
+    }
+    await ungatedPersist();
+    // The un-fenced path RESURRECTS the superseded login's credential into the store.
+    expect(await leaked.get(ISSUER)).toBeDefined();
+    // (Sanity: the generations genuinely differ — the re-fence WOULD have bailed.)
+    expect(capturedGeneration).not.toBe(liveGeneration);
+  });
+});

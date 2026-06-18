@@ -543,6 +543,141 @@ export function invalidateSilentRestoreLatch(): void {
 }
 
 /**
+ * Whether THIS `establishSessionFor` is STILL the current login by the time it is ready to
+ * arm a proactive boundary, write the remembered pointer, or publish the logged-in UI
+ * (roborev HIGH). Pure + exported so the race is unit-testable WITHOUT a React render.
+ *
+ * `establishSessionFor` snapshots its generation up front, then AWAITS the now-authenticated
+ * profile re-read (`readProfile`). A logout()/new login() racing that await advances the provider
+ * generation (via reset()) AND clears the proactive boundary. If we re-armed the authoritative
+ * boundary + wrote the pointer + published the UI unconditionally, we would re-enable
+ * authenticated fetches against a reset/stale provider behind a logged-out UI, republish a stale
+ * webId/session, OR — for a NEW login — clobber the new login's freshly-armed boundary/pointer.
+ * Returns true ONLY when the live generation still equals the snapshot AND the provider's
+ * authenticated WebID still equals the requested identity — fail-closed (false) on EITHER
+ * mismatch, so the caller bails WITHOUT touching the boundary (clearing it would wipe a newer
+ * login's boundary; the superseding actor owns it). The deeper resurrect-logged-out-credential
+ * race at the durable-persist step is closed INSIDE `WebIdDPoPTokenProvider.#persistSession`
+ * (which re-fences on its own caller-captured generation before any IndexedDB put).
+ */
+export function establishStillCurrent(inputs: {
+  establishGeneration: number;
+  currentGeneration: number;
+  requestedWebId: string;
+  currentAuthenticatedWebId: string | undefined;
+  webIdsEqual: (a: string | undefined, b: string | undefined) => boolean;
+}): boolean {
+  return (
+    inputs.currentGeneration === inputs.establishGeneration &&
+    inputs.webIdsEqual(inputs.currentAuthenticatedWebId, inputs.requestedWebId)
+  );
+}
+
+/**
+ * The injected side effects + provider reads `runEstablishSession` orchestrates. Extracting the
+ * orchestration (the `runSilentRestore` pattern) makes the FENCE PLACEMENT unit-testable WITHOUT
+ * a React render or auth runtime: a test injects a controllable `readProfileAndDerive` promise and
+ * races a supersession at the await boundary, asserting NO authoritative arm, NO pointer write, and
+ * NO UI publish leak past a superseded fence (roborev HIGH — the fence placement, not just the pure
+ * decision).
+ *
+ * pod-drive's provider exposes a SYNCHRONOUS `currentIssuer()` (string href) and persists the
+ * durable credential INTERNALLY during `upgrade()`/`restoreSession()` (its own `#persistSession`
+ * re-fences on a caller-captured generation) — so unlike the pod-chat/pod-music shape there is no
+ * SessionProvider-level `persistSession` await here. The single async boundary is the authenticated
+ * profile re-read.
+ */
+export interface EstablishSessionDeps {
+  /** The WebID the OP authenticated AS, for the entry fail-closed identity check + each re-fence. */
+  authenticatedWebId: () => string | undefined;
+  /** The CURRENT provider login generation — re-read at the fence (advances on reset()). */
+  loginGeneration: () => number;
+  /** The provider's RESOLVED issuer href (synchronous in pod-drive), folded into the boundary. */
+  currentIssuer: () => string | undefined;
+  /**
+   * Read + derive the now-authenticated profile. `profileMayDegrade` (silent-restore only) makes a
+   * transient read failure NON-FATAL: the dep falls back to a WebID-origin session rather than
+   * throwing (a valid restored token still means logged-in). The popup/autologin paths leave it
+   * unset so a profile failure throws.
+   */
+  readProfileAndDerive: (id: string, profileMayDegrade: boolean) => Promise<DerivedSession>;
+  /** Arm the proactive credential boundary (provisional → authoritative). */
+  armBoundary: (inputs: { webId: string; issuer?: string; podRoot?: string }) => void;
+  /** Best-effort remembered-pointer write (WebID → issuer). */
+  writePointer: (webId: string, issuer: string) => void;
+  /** Publish the logged-in UI (setWebId + setSession) — the LAST step. */
+  publish: (webId: string, session: DerivedSession) => void;
+  /** Identity comparison (the fail-closed WebID guard). */
+  webIdsEqual: (a: string | undefined, b: string | undefined) => boolean;
+}
+
+/**
+ * The SHARED post-authentication establish ORCHESTRATION, extracted from `establishSessionFor` so
+ * its security-critical FENCE PLACEMENT is unit-testable with injected side effects (no React
+ * render / no auth runtime — the `runSilentRestore` pattern). Proves the authenticated identity
+ * matches `id` (fail-closed throw on mismatch), arms a PROVISIONAL boundary so the authenticated
+ * profile re-read carries the token, reads the profile, then arms the AUTHORITATIVE boundary,
+ * writes the remembered pointer, and publishes the UI — re-checking {@link establishStillCurrent}
+ * AFTER the `readProfile` await so a logout()/new login() racing it BAILS WITHOUT arming the
+ * authoritative boundary, writing the pointer, OR publishing a stale logged-in UI — and WITHOUT
+ * clearing the boundary (the superseding actor owns it). A profile-read failure under
+ * `profileMayDegrade` is NON-FATAL (the dep falls back to a WebID-origin session). The durable
+ * credential is persisted earlier, INSIDE the provider's `upgrade()`/`restoreSession()`, behind its
+ * own generation re-fence — so there is no separate persist await to fence here.
+ *
+ * B7P ORDERING: the provider persisted the credential (internally, fenced) BEFORE this runs; we
+ * then arm the live boundary, write the pointer, and publish LAST — persist → arm → point →
+ * publish. Publishing the logged-in UI is the final act, never before the boundary is armed.
+ */
+export async function runEstablishSession(
+  id: string,
+  profileMayDegrade: boolean,
+  deps: EstablishSessionDeps,
+): Promise<void> {
+  const authedWebId = deps.authenticatedWebId();
+  if (!deps.webIdsEqual(authedWebId, id)) {
+    throw new Error(
+      "Login did not complete — the identity provider authenticated a " +
+        `different WebID (${authedWebId ?? "unknown"}) than the one requested ` +
+        `(${id}). For your security you were not logged in.`,
+    );
+  }
+  // Snapshot THIS establish's generation up front; re-check it (+ the authenticated WebID) after
+  // the profile await. `currentIssuer()` is synchronous (no await before the provisional arm), so
+  // at this point the entry identity check above is the live guard for the provisional arm.
+  const establishGeneration = deps.loginGeneration();
+  const stillCurrent = (): boolean =>
+    establishStillCurrent({
+      establishGeneration,
+      currentGeneration: deps.loginGeneration(),
+      requestedWebId: id,
+      currentAuthenticatedWebId: deps.authenticatedWebId(),
+      webIdsEqual: deps.webIdsEqual,
+    });
+  const provisionalIssuer = deps.currentIssuer();
+  // PROVISIONAL arm — admit the WebID + issuer origins so the authenticated profile re-read below
+  // actually carries the token (the silent-restore path reaches here WITHOUT the login probe's
+  // pre-arming). No await preceded this, so the entry identity check still holds.
+  deps.armBoundary({ webId: id, issuer: provisionalIssuer });
+  // The single async boundary: re-read the now-authenticated profile (non-fatal under degrade).
+  const derived = await deps.readProfileAndDerive(id, profileMayDegrade);
+  // FENCE (roborev HIGH): a logout/new-login that won during the profile read advanced the
+  // generation (and cleared the boundary) — re-arming the authoritative boundary, writing the
+  // pointer, or publishing now would re-enable reads against a reset provider behind a logged-out
+  // UI, republish a stale session, or clobber a newer login. Bail WITHOUT clearing the boundary
+  // (the superseding actor owns it).
+  if (!stillCurrent()) return;
+  const issuer = deps.currentIssuer();
+  // AUTHORITATIVE arm — now the pod root is known, wire the live boundary (pod root + WebID +
+  // issuer origins). https-only (loopback http only under the dev opt-in, applied by the dep).
+  deps.armBoundary({ webId: id, issuer, podRoot: derived.podRoot });
+  // Remember this account → its issuer for a later silent restore (best-effort).
+  if (issuer) deps.writePointer(id, issuer);
+  // PUBLISH the logged-in UI LAST (B7P: persist → arm → point → publish).
+  deps.publish(id, derived);
+}
+
+/**
  * The actions a runtime-init FAILURE (the `getAuthRuntime().catch`) must perform
  * (FINDING 4). Pure data — the effect applies it. The load-bearing field is
  * `setRestoringFalse`: when `getAuthRuntime` REJECTS, `ready` stays false so the
@@ -772,77 +907,66 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   // back to a derived session computed from the WebID alone (the same fallback
   // deriveSession applies when a profile advertises no storage). The popup/autologin
   // paths keep the strict behaviour (throw on profile failure).
-  const establishSessionFor = useCallback(
-    async (id: string, opts?: { profileMayDegrade?: boolean }) => {
-      const authedWebId = providerRef.current?.authenticatedWebId();
-      if (!webIdsEqual(authedWebId, id)) {
-        throw new Error(
-          "Login did not complete — the identity provider authenticated a " +
-            `different WebID (${authedWebId ?? "unknown"}) than the one requested ` +
-            `(${id}). For your security you were not logged in.`,
-        );
-      }
-      // PROACTIVE FETCH (task #123): arm a PROVISIONAL credential boundary (the WebID +
-      // the resolved issuer origins) BEFORE the authenticated profile re-read below, so
-      // that read actually carries the token. The SILENT-RESTORE path reaches here
-      // WITHOUT the login flow's pre-probe arming, so without this the "now authenticated"
-      // profile re-read would be UNAUTHENTICATED — a private profile would fail (or, for a
-      // WebID whose storage lives on another origin, degrade to the wrong fallback pod
-      // root and restore a wrong session shape — the roborev MEDIUM finding). The pod-root
-      // boundary is the AUTHORITATIVE one re-armed once the profile yields storages[0]
-      // (below). The login path has already armed an equivalent boundary; re-arming with
-      // the same origins is idempotent.
-      const provisionalIssuer = providerRef.current?.currentIssuer();
+  // PROACTIVE FETCH (task #123): arm the live credential boundary for a set of origins. Shared by
+  // the PROVISIONAL arm (WebID + issuer, before the authenticated profile re-read so it carries the
+  // token) and the AUTHORITATIVE arm (+ pod root, once derived). The boundary is https-only (http
+  // admitted only for a loopback host under the dev/test opt-in), so the token can never ride
+  // cross-origin or over cleartext. A no-op until the runtime installed the patch.
+  const armProactiveBoundary = useCallback(
+    (inputs: { webId: string; issuer?: string; podRoot?: string }) => {
       fetchInstallRef.current?.setState({
         provider: providerRef.current,
         allowedOrigins: deriveProactiveAllowedOrigins({
-          webId: id,
-          issuer: provisionalIssuer,
-          allowInsecureLoopback: allowInsecureLoopbackRef.current,
-        }),
-      });
-      // Re-read the profile (now authenticated) and derive the session.
-      let derived: DerivedSession;
-      try {
-        derived = deriveSession(await readProfile(id));
-      } catch (e) {
-        if (!opts?.profileMayDegrade) throw e;
-        // RESTORED-BUT-PROFILE-DEGRADED: the token is valid (the WebID check above
-        // passed); a transient profile-read failure must not fail the restore. Derive
-        // a session from the WebID alone (the no-storage fallback path of deriveSession).
-        derived = deriveSession({
-          webId: id,
-          name: id,
-          storages: [],
-          oidcIssuers: [],
-        });
-      }
-      setWebId(id);
-      setSession(derived);
-      // Remember this now-active account → its resolved issuer, for a later silent
-      // restore. Best-effort: a storage fault degrades to in-memory-only (never a
-      // failed login). The issuer is the one the provider just resolved/pinned.
-      const issuer = providerRef.current?.currentIssuer();
-      if (issuer) remembered.write(id, issuer);
-      // PROACTIVE FETCH (task #123): now that the session's pod root + issuer are known,
-      // wire the live credential boundary so the patched global fetch PROACTIVELY
-      // attaches the DPoP token to the pod / WebID / issuer origins on the FIRST request
-      // (no per-resource 401-dance). The pod root is the primary target (a pod on a
-      // DIFFERENT host than the WebID is a valid Solid topology and MUST be listed);
-      // the WebID + issuer origins are folded in by the seam's default. The boundary is
-      // https-only (http allowed only for a loopback host under the dev/test opt-in), so
-      // the token can never ride cross-origin or over cleartext.
-      fetchInstallRef.current?.setState({
-        provider: providerRef.current,
-        allowedOrigins: deriveProactiveAllowedOrigins({
-          podRoot: derived.podRoot,
-          webId: id,
-          issuer,
+          ...(inputs.podRoot !== undefined ? { podRoot: inputs.podRoot } : {}),
+          webId: inputs.webId,
+          issuer: inputs.issuer,
           allowInsecureLoopback: allowInsecureLoopbackRef.current,
         }),
       });
     },
     [],
+  );
+
+  const establishSessionFor = useCallback(
+    async (id: string, opts?: { profileMayDegrade?: boolean }) => {
+      // Delegate to the extracted, unit-testable orchestration (runEstablishSession), wiring the
+      // REAL side effects + provider reads. The orchestration owns the security-critical FENCE
+      // PLACEMENT (roborev HIGH): it snapshots the login generation up front, arms a PROVISIONAL
+      // boundary so the authenticated profile re-read carries the token, then re-checks
+      // `establishStillCurrent` AFTER the `readProfile` await before arming the AUTHORITATIVE
+      // boundary, writing the remembered pointer, OR publishing the logged-in UI — so a
+      // logout()/new login() racing the await BAILS WITHOUT re-arming against a reset provider,
+      // republishing a stale session, or clobbering a newer login's boundary (and WITHOUT clearing
+      // the boundary, which the superseding actor owns). The fail-closed WebID-mismatch guard
+      // (Finding 1), the non-fatal profile read, and B7P persist→arm→point→publish ordering all
+      // live in the orchestration. The durable credential is persisted EARLIER, inside the
+      // provider's upgrade()/restoreSession(), behind its own generation re-fence — closing the
+      // deeper resurrect-logged-out-credential race.
+      await runEstablishSession(id, opts?.profileMayDegrade ?? false, {
+        authenticatedWebId: () => providerRef.current?.authenticatedWebId(),
+        loginGeneration: () => providerRef.current?.loginGeneration() ?? -1,
+        currentIssuer: () => providerRef.current?.currentIssuer(),
+        readProfileAndDerive: async (webId, profileMayDegrade) => {
+          try {
+            return deriveSession(await readProfile(webId));
+          } catch (e) {
+            if (!profileMayDegrade) throw e;
+            // RESTORED-BUT-PROFILE-DEGRADED: the token is valid (the WebID check passed); a
+            // transient profile-read failure must not fail the restore. Derive a session from the
+            // WebID alone (the no-storage fallback path of deriveSession).
+            return deriveSession({ webId, name: webId, storages: [], oidcIssuers: [] });
+          }
+        },
+        armBoundary: armProactiveBoundary,
+        writePointer: (webId, issuer) => remembered.write(webId, issuer),
+        publish: (webId, derived) => {
+          setWebId(webId);
+          setSession(derived);
+        },
+        webIdsEqual,
+      });
+    },
+    [armProactiveBoundary],
   );
 
   // The actual login body — run AT MOST ONCE concurrently via the module-level
@@ -886,14 +1010,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         // issuer is folded in once resolved. establishSessionFor RE-arms the authoritative
         // boundary post-login; a failure path clears it (the catch below). Without this
         // the proactive swap would break interactive login (caught by the e2e).
-        fetchInstallRef.current?.setState({
-          provider: providerRef.current,
-          allowedOrigins: deriveProactiveAllowedOrigins({
-            podRoot: pub.storages[0],
-            webId: id,
-            allowInsecureLoopback: allowInsecureLoopbackRef.current,
-          }),
-        });
+        armProactiveBoundary({ webId: id, podRoot: pub.storages[0] });
         // Defence-in-depth: the provider-wide attach-count delta (per-attempt, not a
         // sticky flag) is kept alongside the per-probe proof below.
         const tokensAttachedBefore = providerRef.current?.tokensAttachedCount() ?? 0;
@@ -951,6 +1068,17 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         // PROVE the session authenticated AS the requested WebID — never infer
         // "logged in" from "a token is attached" (Finding 1) — then re-read the
         // profile and derive the session. Shared with the autologin completion path.
+        //
+        // SUPERSESSION (roborev HIGH fence): establishSessionFor RESOLVES CLEANLY (does
+        // NOT throw) when a racing logout()/new login() superseded THIS establish during
+        // its profile read — it just doesn't publish a session (the superseding actor owns
+        // the boundary + UI). This is INTENTIONAL and must NOT be turned into a throw: a
+        // throw here runs the catch below (provider.reset() + clearProactiveBoundary()),
+        // which would WIPE the SUPERSEDING login's freshly-armed boundary and reset its
+        // provider. The SessionProvider's authenticated state is the reactive `webId`/
+        // `session` context — which after supersession correctly reflects the WINNER
+        // (the new login's WebID, or null after a logout), NOT this superseded attempt.
+        // So a clean resolve with no publish is the correct outcome, not a false login.
         await establishSessionFor(id);
       } catch (e) {
         // The attempt failed — clear the pending WebID AND drop any partial provider
@@ -972,7 +1100,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         setLoggingIn(false);
       }
     },
-    [establishSessionFor, clearProactiveBoundary],
+    [establishSessionFor, clearProactiveBoundary, armProactiveBoundary],
   );
 
   // SINGLE-FLIGHT login, WebID-SCOPED (round-4 + round-4b finding-1 fix). The gate
