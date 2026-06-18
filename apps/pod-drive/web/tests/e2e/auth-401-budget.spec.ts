@@ -87,7 +87,8 @@ async function login(page: Page, seeded: Seeded): Promise<boolean> {
   // instead, click its "Open new window" button. If NEITHER materialises in the budget we
   // return false → the caller skips-with-reason locally / FAILS in CI (so a genuine
   // regression — e.g. the custom element not registering — is never masked). The
-  // proactive-fetch behaviour itself is exhaustively covered by src/auth/proactive-fetch.test.ts.
+  // proactive-fetch behaviour itself is exhaustively covered by the shared helper's own
+  // unit suite in @jeswr/solid-elements/auth (proactive-fetch.test.ts there).
   const openWindowBtn = page.getByRole("button", { name: /open new window/i });
   let loginPopup: Page | undefined;
   try {
@@ -160,7 +161,7 @@ test.describe("401-budget — the proactive auth-fetch eliminates the 401-dance"
     // <authorization-code-flow> element failing to register), so we FAIL, never mask it.
     // Only OUTSIDE CI (a constrained local worktree where the headless popup is flaky) do
     // we skip-with-reason so a local run isn't falsely red. The proactive-fetch behaviour
-    // is independently covered by src/auth/proactive-fetch.test.ts either way.
+    // is independently covered by the shared @jeswr/solid-elements/auth unit suite either way.
     if (!loggedIn) {
       if (process.env.CI) {
         throw new Error(

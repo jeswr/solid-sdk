@@ -6,7 +6,8 @@
 // the ambient global fetch, which the SessionProvider patched via the
 // @jeswr/solid-elements PROACTIVE auth-fetch (task #123), so every read carries the
 // DPoP token automatically AND up front (the token is attached on the FIRST request
-// to the pod origin — no per-resource 401-dance; see auth/proactive-fetch.ts).
+// to the pod origin — no per-resource 401-dance; see @jeswr/solid-elements/auth's
+// installProactiveAuthFetch, wired in auth/SessionProvider.tsx).
 //
 // rootUrl = the pod ROOT (storages[0], else the WebID-origin fallback). Pod
 // Drive's data layer (`listContainer`) GETs that container directly and lets the

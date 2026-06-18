@@ -16,7 +16,9 @@
 // children paid N wasted 401s). The seam-based proactive patch attaches up front
 // for an allowed origin (zero wasted 401s) AND enforces a real credential boundary
 // (the provider's own `matches()` is unconditional; `isOriginAllowed` is the gate),
-// so the token never rides cross-origin. See ./proactive-fetch.ts.
+// so the token never rides cross-origin. See @jeswr/solid-elements/auth
+// (installProactiveAuthFetch / deriveProactiveAllowedOrigins — the shared helper this
+// app now imports instead of carrying a local copy).
 //
 // LOAD-BEARING HOUSE RULES (do not "simplify" away):
 //  1. @solid/reactive-authentication is pure-ESM + browser-only (custom elements,
@@ -37,6 +39,16 @@
 //     a local CSS over HTTP); a deployed HTTPS origin stays strict. It also gates
 //     whether the proactive credential boundary admits an http:// loopback pod origin.
 
+// PROACTIVE AUTH FETCH (task #123) — the GENERIC, reusable installer now lives in
+// @jeswr/solid-elements/auth (extracted + generalized from pod-drive's original local
+// copy, the FIRST #123 implementation). pod-drive now IMPORTS the shared helper instead
+// of carrying a divergent local copy — completing "fix the pattern once in a shared place".
+// The boundary + bounded-retry logic is the one exhaustively unit-tested in that package.
+import {
+  deriveProactiveAllowedOrigins,
+  installProactiveAuthFetch,
+  type ProactiveFetchInstall,
+} from "@jeswr/solid-elements/auth";
 import {
   decideSilentRestore,
   IndexedDbSessionStore,
@@ -59,11 +71,6 @@ import {
 import { authFlowHolder, getCodeThroughHolder, lazyElementGetCode } from "./auth-flow-holder";
 import { planAutologin } from "./autologin-plan";
 import { assessLoginProbe } from "./login-result";
-import {
-  deriveProactiveAllowedOrigins,
-  installProactiveAuthFetch,
-  type ProactiveFetchInstall,
-} from "./proactive-fetch";
 import { readProfile } from "./profile";
 import { type DerivedSession, deriveSession } from "./session-derivation";
 import { decideSingleFlight } from "./single-flight";
