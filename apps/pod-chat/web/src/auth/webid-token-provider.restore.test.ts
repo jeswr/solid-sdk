@@ -79,8 +79,13 @@ vi.mock("@jeswr/solid-session-restore", async (importOriginal) => {
 
 vi.mock("oauth4webapi", () => {
   const allowInsecureRequests = Symbol("allowInsecureRequests");
+  // task #123 re-entrancy pin: #httpOptions now sets [oauth.customFetch] on every
+  // oauth4webapi call (pristine fetch for internal token requests). The mock must
+  // export the symbol or the option-builder throws "No customFetch export".
+  const customFetch = Symbol("customFetch");
   return {
     allowInsecureRequests,
+    customFetch,
     None: () => () => {},
     ClientSecretBasic: () => () => {},
     expectNoNonce: Symbol("expectNoNonce"),

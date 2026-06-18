@@ -75,8 +75,15 @@ vi.mock("dpop", () => ({
 
 vi.mock("oauth4webapi", () => {
   const allowInsecureRequests = Symbol("allowInsecureRequests");
+  // task #123 re-entrancy pin: the provider's #httpOptions now sets
+  // [oauth.customFetch] on every oauth4webapi call so internal token-endpoint /
+  // discovery requests run on the PRISTINE fetch (never the patched global). The mock
+  // must export the symbol, or the provider's option-builder throws "No customFetch
+  // export" the instant it builds http options (see the re-entrancy guard test below).
+  const customFetch = Symbol("customFetch");
   return {
     allowInsecureRequests,
+    customFetch,
     None: () => () => {},
     ClientSecretBasic: () => () => {},
     expectNoNonce: Symbol("expectNoNonce"),
@@ -282,6 +289,44 @@ describe("WebIdDPoPTokenProvider — no prior identity survives reset / re-login
     expect(provider.tokensAttachedCount()).toBe(1);
     // The minted token (A's) is what got attached.
     expect(req.headers.get("Authorization")).toBe("DPoP tok-A");
+  });
+
+  it("pins oauth4webapi's customFetch to the INJECTED pristine fetch (re-entrancy guard, #123)", async () => {
+    // ADVERSARIAL RE-ENTRANCY GUARD (task #123): the proactive auth-fetch patch
+    // (@jeswr/solid-elements/auth) patches the GLOBAL fetch and calls THIS provider's
+    // `upgrade()` for any ALLOWED-origin request — and the OIDC issuer endpoints live on
+    // the issuer origin, which IS in the credential boundary during interactive login.
+    // So every internal oauth4webapi request (discovery, the token-endpoint grant, DCR)
+    // MUST run on the PRISTINE fetch (the injected `profileFetch`), NEVER the patched
+    // global — otherwise the token-endpoint POST re-enters the patch → `upgrade()` again
+    // → recurse/deadlock, and the resource DPoP token clobbers the token-endpoint's own
+    // Authorization (the roborev HIGH; the cause the e2e login hung). The fix is the
+    // `[oauth.customFetch] = this.#profileFetch` pin in `#httpOptions`. This test FAILS
+    // (the assertion below sees `undefined`, not `pristine`) if that pin is removed.
+    const oauth = await import("oauth4webapi");
+    // A sentinel pristine fetch injected as profileFetch — every internal OIDC request
+    // MUST use THIS exact reference.
+    const pristine = vi.fn(async () => new Response()) as unknown as typeof fetch;
+    const discovery = oauth.discoveryRequest as unknown as {
+      mock: { calls: [URL, Record<symbol, unknown>][] };
+      mockClear: () => void;
+    };
+    // Clear accumulated calls (the mock is shared across tests) so we assert on THIS
+    // upgrade's discovery call specifically.
+    discovery.mockClear();
+    const provider = new WebIdDPoPTokenProvider(
+      "https://app.example/callback.html",
+      async () => REDIRECT,
+      async () => authState.webId,
+      { clientId: "https://app.example/clientid.jsonld", profileFetch: pristine },
+    );
+    await provider.upgrade(new Request("https://alice.example/storage/"));
+    // OIDC discovery (the first oauth4webapi network step) must have been given the
+    // injected pristine fetch via oauth.customFetch — proving every internal token
+    // request bypasses the patched global.
+    expect(discovery.mock.calls.length).toBeGreaterThan(0);
+    const httpOpts = discovery.mock.calls[0][1];
+    expect(httpOpts[oauth.customFetch]).toBe(pristine);
   });
 
   it("reset() drops the cached issuer, session, authenticated WebID and attach count", async () => {

@@ -4,8 +4,9 @@
 // → a @jeswr/app-shell header (FeedbackButton + ThemeToggle + AccountMenu) over
 // the LOCAL @jeswr/pod-chat <ChatRooms> pointed at the user's pod. The view
 // receives NO `fetch` prop — it uses the ambient global fetch, which the
-// SessionProvider patched via reactive-auth's registerGlobally(), so every
-// read/write carries the DPoP token automatically.
+// SessionProvider patched via the @jeswr/solid-elements PROACTIVE auth-fetch seam
+// (`installProactiveAuthFetch`, task #123), so every read/write PROACTIVELY carries
+// the DPoP token on the first request to an allowed origin (no per-resource 401-dance).
 import { AccountMenu, FeedbackButton, ThemeToggle } from "@jeswr/app-shell";
 import { ChatRooms } from "@jeswr/pod-chat/ui";
 // SOLID-ELEMENTS (#67/#68/#70 D-parity rollout): the framework-agnostic W3C Web
