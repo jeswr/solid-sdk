@@ -686,12 +686,21 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
    * or wrong-identity login never writes a credential. Keyed by `issuer.href`.
    *
    * A no-op (resolves) when: no store is wired; the session for the issuer has no
-   * refresh token (the OP issued none — nothing restorable); or the store write
+   * refresh token (the OP issued none — nothing restorable); the establish was
+   * SUPERSEDED mid-flight (see the supersession fence below); or the store write
    * fails (best-effort — a persistence failure must not fail an otherwise-good
    * login; the user simply re-logs-in next reload). The refresh token is never
    * logged.
+   *
+   * `expectGeneration` (optional) is the login generation the CALLER snapshotted for
+   * THIS login. When supplied, it lets persistSession re-check the generation AFTER
+   * its own `await pending` (an await invisible to the caller) and refuse to write a
+   * credential if a racing logout/new-login advanced it — closing the
+   * resurrect-logged-out-credential race the caller's own fence cannot reach.
+   * Backwards-compatible: omit it ⇒ no generation check (the WebID re-check still
+   * applies), preserving pre-fence callers.
    */
-  async persistSession(issuer: URL, webId: string): Promise<void> {
+  async persistSession(issuer: URL, webId: string, expectGeneration?: number): Promise<void> {
     const store = this.#sessionStore;
     if (!store) return;
     const pending = this.#sessions.get(issuer.href);
@@ -702,6 +711,19 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
     } catch {
       return; // the session failed to establish — nothing to persist.
     }
+    // SUPERSESSION FENCE (roborev HIGH) — re-check AFTER the `await pending` above and
+    // BEFORE the durable put. `await pending` yields the microtask queue, so a
+    // logout()/new login() can `reset()` (which BUMPS #generation AND clears #sessions /
+    // #authenticatedWebId) WHILE this is parked. Without this re-check, a stale establish
+    // racing a logout would resume here and write a credential AFTER the logout's delete —
+    // RESURRECTING the logged-out credential on disk (a same-tick reload would then silently
+    // restore a session the user just signed out of). The caller passes the generation it
+    // snapshotted for THIS login; if it has advanced — or the live authenticated WebID is no
+    // longer the one we are persisting — we are superseded: refuse to write.
+    // (Backwards-compatible: `expectGeneration` omitted ⇒ no generation check, preserving the
+    // pre-fence callers; the WebID re-check still applies.)
+    if (expectGeneration !== undefined && this.#generation !== expectGeneration) return;
+    if (!webIdsEqual(this.#authenticatedWebId, webId)) return;
     // Only persist when there is actually a refresh credential AND the persisted
     // record's WebID is the one we confirmed (defence-in-depth — the caller already
     // proved this, but a credential store write must never record a mismatched id).

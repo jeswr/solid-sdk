@@ -370,6 +370,121 @@ export function cleanedUrl(href: string): string {
 }
 
 /**
+ * Whether THIS `establishSessionFor` is STILL the current login by the time it is ready to
+ * arm a proactive boundary, persist the durable credential, or publish the logged-in UI
+ * (roborev HIGH). Pure + exported so the race is unit-testable WITHOUT a React render.
+ *
+ * `establishSessionFor` awaits several steps (`resolvedIssuer`, `readProfile`,
+ * `persistSession`) after snapshotting its generation. A logout()/new login() racing those
+ * awaits advances the provider generation (via reset()) AND clears the boundary. If we re-armed
+ * + persisted + published unconditionally we would re-enable authenticated fetches against a
+ * reset/stale provider behind a logged-out UI, RESURRECT a logged-out durable credential, AND
+ * publish a stale session, or — for a NEW login — clobber the new login's freshly-armed
+ * boundary/credential. Returns true ONLY when the live generation still equals the snapshot AND
+ * the provider's authenticated WebID still equals the requested identity — fail-closed (false)
+ * on EITHER mismatch, so the caller bails WITHOUT touching the boundary (clearing it would wipe
+ * a newer login's boundary).
+ */
+export function establishStillCurrent(inputs: {
+  establishGeneration: number;
+  currentGeneration: number;
+  requestedWebId: string;
+  currentAuthenticatedWebId: string | undefined;
+  webIdsEqual: (a: string | undefined, b: string | undefined) => boolean;
+}): boolean {
+  return (
+    inputs.currentGeneration === inputs.establishGeneration &&
+    inputs.webIdsEqual(inputs.currentAuthenticatedWebId, inputs.requestedWebId)
+  );
+}
+
+/**
+ * The injected side effects + provider reads `runEstablishSession` orchestrates. Extracting the
+ * orchestration (the `runLogoutTeardown` / `runSilentRestore` pattern) makes the FENCE PLACEMENT
+ * unit-testable WITHOUT a React render or auth runtime: a test injects controllable
+ * `resolvedIssuer` / `readProfile` / `persistSession` promises and races a supersession at each
+ * await boundary, asserting NO boundary arm, NO pointer write, and NO UI publish leak past a
+ * superseded fence (roborev HIGH — the fence placement, not just the pure decision).
+ */
+export interface EstablishSessionDeps {
+  /** The WebID the OP authenticated AS, for the entry fail-closed identity check. */
+  authenticatedWebId: () => string | undefined;
+  /** The CURRENT provider login generation — re-read at each fence (advances on reset()). */
+  loginGeneration: () => number;
+  /** ASYNC issuer resolution (pod-chat's `resolvedIssuer()` is a Promise). */
+  resolvedIssuer: () => Promise<URL | undefined>;
+  /** Read + derive the (now-authenticated) profile; throws on a transient blip (caught). */
+  readProfileAndDerive: (id: string, issuer: URL | undefined) => Promise<DerivedSession>;
+  /** Arm the proactive credential boundary (provisional → authoritative). */
+  armBoundary: (inputs: { webId: string; issuer?: string; podRoot?: string }) => void;
+  /** Persist the durable refresh credential, fenced INTERNALLY by `expectGeneration`. */
+  persistSession: (issuer: URL, webId: string, expectGeneration: number) => Promise<void>;
+  /** Best-effort remembered-pointer write (WebID → issuer). */
+  writePointer: (webId: string, issuer: string) => void;
+  /** Publish the logged-in UI (setWebId + setSession) — the LAST step. */
+  publish: (webId: string, session: DerivedSession) => void;
+  /** Identity comparison (the fail-closed WebID guard). */
+  webIdsEqual: (a: string | undefined, b: string | undefined) => boolean;
+}
+
+/**
+ * The SHARED post-authentication establish ORCHESTRATION, extracted from
+ * `establishSessionFor` so its security-critical FENCE PLACEMENT is unit-testable with injected
+ * side effects (no React render / no auth runtime — the `runLogoutTeardown` pattern). Proves the
+ * authenticated identity matches `id` (fail-closed throw on mismatch), then arms the boundary,
+ * reads the profile, persists, points, and publishes — re-checking {@link establishStillCurrent}
+ * after EACH await (`resolvedIssuer`, `readProfile`, `persistSession`) so a logout()/new login()
+ * racing any of those awaits BAILS WITHOUT arming/persisting/pointing/publishing AND WITHOUT
+ * clearing the boundary (the superseding actor owns it). A profile-read failure is NON-FATAL
+ * (fall back to a WebID-origin session). Returns when the establish is complete or superseded.
+ */
+export async function runEstablishSession(id: string, deps: EstablishSessionDeps): Promise<void> {
+  const authedWebId = deps.authenticatedWebId();
+  if (!deps.webIdsEqual(authedWebId, id)) {
+    throw new Error(
+      "Login did not complete — the identity provider authenticated a " +
+        `different WebID (${authedWebId ?? "unknown"}) than the one requested ` +
+        `(${id}). For your security you were not logged in.`,
+    );
+  }
+  const establishGeneration = deps.loginGeneration();
+  const stillCurrent = (): boolean =>
+    establishStillCurrent({
+      establishGeneration,
+      currentGeneration: deps.loginGeneration(),
+      requestedWebId: id,
+      currentAuthenticatedWebId: deps.authenticatedWebId(),
+      webIdsEqual: deps.webIdsEqual,
+    });
+  // resolvedIssuer() is an await — fence the PROVISIONAL arm after it.
+  const issuer = await deps.resolvedIssuer();
+  if (!stillCurrent()) return;
+  deps.armBoundary({ webId: id, issuer: issuer?.href });
+  // readProfile is an await (non-fatal on failure) — fence the AUTHORITATIVE arm + persist after.
+  let derived: DerivedSession;
+  try {
+    derived = await deps.readProfileAndDerive(id, issuer);
+  } catch {
+    derived = deriveSession({
+      webId: id,
+      name: id,
+      storages: [],
+      oidcIssuers: issuer ? [issuer.href] : [],
+    });
+  }
+  if (!stillCurrent()) return;
+  deps.armBoundary({ webId: id, issuer: issuer?.href, podRoot: derived.podRoot });
+  if (issuer) {
+    // persistSession is an await, internally fenced by establishGeneration — fence the pointer
+    // write AND the UI publish after it (the post-persist race window).
+    await deps.persistSession(issuer, id, establishGeneration);
+    if (!stillCurrent()) return;
+    deps.writePointer(id, issuer.href);
+  }
+  deps.publish(id, derived);
+}
+
+/**
  * Build + globally-register the auth runtime EXACTLY ONCE per page. Repeated
  * calls (e.g. a StrictMode double-mount) return the same in-flight/settled
  * promise without re-snapshotting fetch or re-patching the global.
@@ -846,75 +961,33 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   // (fail-closed) ONLY on a WebID mismatch — never on a transient profile blip.
   const establishSessionFor = useCallback(
     async (id: string) => {
-      const authedWebId = providerRef.current?.authenticatedWebId();
-      if (!webIdsEqual(authedWebId, id)) {
-        throw new Error(
-          "Login did not complete — the identity provider authenticated a " +
-            `different WebID (${authedWebId ?? "unknown"}) than the one requested ` +
-            `(${id}). For your security you were not logged in.`,
-        );
-      }
-      // Resolve the issuer FIRST. pod-chat's `resolvedIssuer()` is ASYNC (Promise<URL |
-      // undefined>) — unlike pod-photos' synchronous href getter — so we await it once and
-      // pass `issuer.href` into the boundary arms + the persist below.
-      const issuer = await providerRef.current?.resolvedIssuer();
-      // PROACTIVE FETCH (task #123): arm a PROVISIONAL credential boundary (the WebID +
-      // the resolved issuer origins) BEFORE the authenticated profile re-read below, so
-      // that read actually carries the token. The autologin-completion path reaches HERE
-      // WITHOUT the popup login flow's pre-probe arming — so without this the "now
-      // authenticated" profile re-read would be UNAUTHENTICATED: a private profile would
-      // fail (or, for a WebID whose storage lives on another origin, degrade to the wrong
-      // fallback pod root and restore a wrong session shape — the roborev MEDIUM finding).
-      // The pod-root boundary is the AUTHORITATIVE one re-armed once the profile yields the
-      // derived pod root (below). The popup-login path has already armed an equivalent
-      // boundary via the probe; re-arming with the same origins is idempotent. The OIDC
-      // endpoints ride the pristine fetch (the re-entrancy guard), so they do not depend on
-      // this boundary.
-      armProactiveBoundary({ webId: id, issuer: issuer?.href });
-      // Re-read the (now authenticated) profile and derive the session. A profile read
-      // failure here is NON-FATAL: the OP already vouched for `id` (a token is attached),
-      // so the user IS logged in even if the cosmetic profile read degrades — fall back
-      // to a WebID-origin-derived session rather than throwing. This is load-bearing for
-      // the persistence cleanup below (roborev finding): if this threw AFTER persisting
-      // the durable credential, doLogin's catch would reset only the IN-MEMORY session,
-      // leaving an orphaned credential that silently restores a "failed" login next load.
-      // Making the read non-fatal (matching runSilentRestore's invariant) means a
-      // confirmed login is never reported as failed by a profile blip, so the persist
-      // below can never be orphaned.
-      let derived: DerivedSession;
-      try {
-        derived = deriveSession(await readProfile(id));
-      } catch {
-        derived = deriveSession({
-          webId: id,
-          name: id,
-          storages: [],
-          oidcIssuers: issuer ? [issuer.href] : [],
-        });
-      }
-      // PROACTIVE FETCH (task #123): now that the session's pod root + issuer are known,
-      // wire the AUTHORITATIVE credential boundary so the patched global fetch PROACTIVELY
-      // attaches the DPoP token to the pod / WebID / issuer origins on the FIRST request
-      // (no per-resource 401-dance — the room list no longer pays N+1 wasted 401s). The pod
-      // root is the primary target (a pod on a DIFFERENT host than the WebID is a valid
-      // Solid topology). Armed BEFORE persist + publishing the UI so the first room read is
-      // authenticated.
-      armProactiveBoundary({ webId: id, issuer: issuer?.href, podRoot: derived.podRoot });
-      // B7P ORDERING (task #91 / #123): PERSIST the DPoP-bound refresh credential for SILENT
-      // RESTORE on a later load, record the remembered WebID→issuer pointer, AND arm the
-      // authoritative boundary (above) — ALL before the logged-in UI is published
-      // (`setWebId`/`setSession`). A tab-close racing this step therefore can never leave a
-      // PUBLISHED-but-unpersisted/unpointered/unboundaried session. This happens AFTER the
-      // identity check proved the OP authenticated AS `id`, and AFTER the session is in hand
-      // (no throw can now orphan it). Best-effort: a persistence failure (no offline_access /
-      // IndexedDB error) must not fail an otherwise-good login — the user just re-logs-in
-      // next reload. Persist/point/arm → THEN publish; do not reorder.
-      if (issuer) {
-        await providerRef.current?.persistSession(issuer, id);
-        rememberedAccount.write(id, issuer.href);
-      }
-      setWebId(id);
-      setSession(derived);
+      // Delegate to the extracted, unit-testable orchestration (runEstablishSession), wiring the
+      // REAL side effects + provider reads. The orchestration owns the security-critical FENCE
+      // PLACEMENT (roborev HIGH): it snapshots the login generation up front and re-checks
+      // `establishStillCurrent` AFTER each await (`resolvedIssuer`, `readProfile`,
+      // `persistSession`), so a logout()/new login() racing any of those awaits BAILS WITHOUT
+      // arming the boundary, persisting/resurrecting a credential, writing the pointer, OR
+      // publishing a stale logged-in UI — and WITHOUT clearing the boundary (the superseding
+      // actor owns it). The throw on a WebID mismatch (the Finding-1 fail-closed guard), the
+      // non-fatal profile read, and B7P persist→point→arm→publish ordering all live in the
+      // orchestration. The provider's `persistSession` is ALSO internally fenced by
+      // `establishGeneration` (the deeper resurrect-logged-out-credential race).
+      await runEstablishSession(id, {
+        authenticatedWebId: () => providerRef.current?.authenticatedWebId(),
+        loginGeneration: () => providerRef.current?.loginGeneration() ?? -1,
+        resolvedIssuer: () => providerRef.current?.resolvedIssuer() ?? Promise.resolve(undefined),
+        readProfileAndDerive: async (webId) => deriveSession(await readProfile(webId)),
+        armBoundary: armProactiveBoundary,
+        persistSession: (issuer, webId, expectGeneration) =>
+          providerRef.current?.persistSession(issuer, webId, expectGeneration) ??
+          Promise.resolve(),
+        writePointer: (webId, issuerHref) => rememberedAccount.write(webId, issuerHref),
+        publish: (webId, derived) => {
+          setWebId(webId);
+          setSession(derived);
+        },
+        webIdsEqual,
+      });
     },
     [armProactiveBoundary],
   );
