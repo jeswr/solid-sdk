@@ -169,7 +169,7 @@ test.describe("401-budget — the proactive auth-fetch eliminates the 401-dance"
     // a non-completing popup is a genuine regression (e.g. the <authorization-code-flow>
     // element failing to register, or the popup never opening), so the DEFAULT — in CI AND
     // locally — is a HARD FAILURE: the test never silently provides zero coverage. The
-    // skip is OPT-IN ONLY, gated behind an explicit `ALLOW_AUTH_E2E_SKIP=1` AND never in
+    // skip is OPT-IN ONLY, gated behind an explicit `ALLOW_E2E_POPUP_SKIP=1` AND never in
     // CI, for the narrow case of a constrained local worktree where the headless
     // reactive-auth dialog→window.open flow is known-flaky and a developer has chosen to
     // tolerate a skip. Without that opt-in, a broken login fails the run — so the 401-budget
@@ -177,20 +177,20 @@ test.describe("401-budget — the proactive auth-fetch eliminates the 401-dance"
     // is also independently covered by @jeswr/solid-elements' own unit tests + this repo's
     // webid-token-provider re-entrancy guard test.)
     if (!loggedIn) {
-      const skipAllowed = !process.env.CI && process.env.ALLOW_AUTH_E2E_SKIP === "1";
+      const skipAllowed = !process.env.CI && process.env.ALLOW_E2E_POPUP_SKIP === "1";
       if (!skipAllowed) {
         throw new Error(
           "Interactive OIDC popup login did not complete — this is a genuine regression " +
             "(e.g. the <authorization-code-flow> custom element not registering, or the popup " +
             "never opening), NOT acceptable flakiness. Investigate before merge. (To tolerate " +
-            "a skip in a constrained LOCAL worktree only, re-run with ALLOW_AUTH_E2E_SKIP=1.)",
+            "a skip in a constrained LOCAL worktree only, re-run with ALLOW_E2E_POPUP_SKIP=1.)",
         );
       }
       test.skip(
         true,
         "Interactive OIDC popup login could not be driven under headless Chromium in this " +
           "local worktree (known reactive-auth dialog→window.open flakiness); skip explicitly " +
-          "opted into via ALLOW_AUTH_E2E_SKIP=1. Unset it (or set CI=1) to treat a " +
+          "opted into via ALLOW_E2E_POPUP_SKIP=1. Unset it (or set CI=1) to treat a " +
           "non-completing login as a FAILURE.",
       );
     }

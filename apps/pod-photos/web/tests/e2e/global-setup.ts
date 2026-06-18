@@ -125,6 +125,14 @@ export default async function globalSetup() {
     }
   };
 
+  // PRE-CREATE the intermediate `photos/` CONTAINER before PUTting the photo documents into it
+  // (roborev MEDIUM, back-ported from pod-health becddf5). CSS auto-creates intermediate
+  // containers on a resource PUT — so the e2e passes WITHOUT this — but an explicit container PUT
+  // first makes the seed robust on a server that does NOT auto-create them, and keeps the seeded
+  // pod shape deterministic. A container is created with a PUT of `text/turtle` to the
+  // trailing-slash URL; an already-existing container returns 2xx/205, both accepted by authedPut.
+  await authedPut(PHOTOS_CONTAINER, "", "text/turtle");
+
   // 3. seed the bare profile (foaf:name + pim:storage so the app has a display name +
   //    a storage root). NO solid:publicTypeIndex registration is seeded — the app then
   //    falls back to the conventional `${podRoot}photos/` container (and shows a "no
