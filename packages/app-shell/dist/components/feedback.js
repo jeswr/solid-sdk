@@ -23,17 +23,21 @@ import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-run
 import { Bug, HelpCircle, Lightbulb, MessageSquarePlus } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Button } from "./primitives.js";
-/** Per-category presentation: the GitHub label is the category id itself. */
+/**
+ * Short prefix prepended to the issue title, per category. An exhaustive
+ * `Record<FeedbackCategory, string>` so the lookup in `composeIssueTitle` is
+ * index-safe (a key of the closed union always resolves a value).
+ */
+const TITLE_PREFIX = {
+    bug: "[Bug]",
+    feedback: "[Feedback]",
+    help: "[Help]",
+};
+/** Per-category presentation (drives the dialog's category selector cards). */
 const CATEGORIES = [
-    { value: "bug", label: "Bug", emoji: "🐛", titlePrefix: "[Bug]", icon: Bug },
-    {
-        value: "feedback",
-        label: "Feedback",
-        emoji: "💡",
-        titlePrefix: "[Feedback]",
-        icon: Lightbulb,
-    },
-    { value: "help", label: "Help", emoji: "❓", titlePrefix: "[Help]", icon: HelpCircle },
+    { value: "bug", label: "Bug", emoji: "🐛", icon: Bug },
+    { value: "feedback", label: "Feedback", emoji: "💡", icon: Lightbulb },
+    { value: "help", label: "Help", emoji: "❓", icon: HelpCircle },
 ];
 // ── Pure, unit-testable helpers ────────────────────────────────────────────────
 /**
@@ -73,14 +77,16 @@ export function composeIssueBody(description, diagnostics) {
 }
 /** The category-prefixed title: "<prefix> <first non-empty line of description>". */
 export function composeIssueTitle(category, description) {
-    const meta = CATEGORIES.find((c) => c.value === category) ?? CATEGORIES[0];
+    // `category` is a closed union and TITLE_PREFIX covers every member, so the
+    // lookup never misses at runtime; `?? TITLE_PREFIX.bug` keeps it provably total.
+    const prefix = TITLE_PREFIX[category] ?? TITLE_PREFIX.bug;
     const firstLine = description
         .split("\n")
         .map((l) => l.trim())
         .find(Boolean) ?? "";
     const MAX = 80;
     const trimmed = firstLine.length > MAX ? `${firstLine.slice(0, MAX - 1)}…` : firstLine;
-    return trimmed ? `${meta.titlePrefix} ${trimmed}` : meta.titlePrefix;
+    return trimmed ? `${prefix} ${trimmed}` : prefix;
 }
 /** The GitHub labels for a category: always `user-feedback` + the category id. */
 export function feedbackLabels(category) {
@@ -183,14 +189,14 @@ export function FeedbackDialog({ repo, appName, appVersion, webId, submit, open,
             // focus would escape the modal. Collapse each radio group to its single
             // tabbable member to mirror the browser's real tab order.
             const focusable = tabbableElements(dialog, focusableSelector);
-            if (focusable.length === 0) {
+            const first = focusable[0];
+            const last = focusable[focusable.length - 1];
+            if (first === undefined || last === undefined) {
                 // Nothing focusable in the panel — keep focus on the dialog itself.
                 e.preventDefault();
                 dialog.focus();
                 return;
             }
-            const first = focusable[0];
-            const last = focusable[focusable.length - 1];
             const active = document.activeElement;
             // Wrap focus, and pull focus back in if it has escaped the dialog.
             if (e.shiftKey) {

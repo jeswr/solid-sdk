@@ -30,24 +30,27 @@ import { Button, type ButtonProps } from "./primitives.js";
 /** The three feedback categories. The value doubles as the GitHub label. */
 export type FeedbackCategory = "bug" | "feedback" | "help";
 
-/** Per-category presentation: the GitHub label is the category id itself. */
+/**
+ * Short prefix prepended to the issue title, per category. An exhaustive
+ * `Record<FeedbackCategory, string>` so the lookup in `composeIssueTitle` is
+ * index-safe (a key of the closed union always resolves a value).
+ */
+const TITLE_PREFIX: Record<FeedbackCategory, string> = {
+  bug: "[Bug]",
+  feedback: "[Feedback]",
+  help: "[Help]",
+};
+
+/** Per-category presentation (drives the dialog's category selector cards). */
 const CATEGORIES: ReadonlyArray<{
   value: FeedbackCategory;
   label: string;
   emoji: string;
-  /** Short prefix prepended to the issue title. */
-  titlePrefix: string;
   icon: typeof Bug;
 }> = [
-  { value: "bug", label: "Bug", emoji: "🐛", titlePrefix: "[Bug]", icon: Bug },
-  {
-    value: "feedback",
-    label: "Feedback",
-    emoji: "💡",
-    titlePrefix: "[Feedback]",
-    icon: Lightbulb,
-  },
-  { value: "help", label: "Help", emoji: "❓", titlePrefix: "[Help]", icon: HelpCircle },
+  { value: "bug", label: "Bug", emoji: "🐛", icon: Bug },
+  { value: "feedback", label: "Feedback", emoji: "💡", icon: Lightbulb },
+  { value: "help", label: "Help", emoji: "❓", icon: HelpCircle },
 ];
 
 /** The payload a `submit` hook receives (and the shape `composeIssueBody` reads). */
@@ -128,7 +131,9 @@ export function composeIssueBody(description: string, diagnostics: FeedbackDiagn
 
 /** The category-prefixed title: "<prefix> <first non-empty line of description>". */
 export function composeIssueTitle(category: FeedbackCategory, description: string): string {
-  const meta = CATEGORIES.find((c) => c.value === category) ?? CATEGORIES[0];
+  // `category` is a closed union and TITLE_PREFIX covers every member, so the
+  // lookup never misses at runtime; `?? TITLE_PREFIX.bug` keeps it provably total.
+  const prefix = TITLE_PREFIX[category] ?? TITLE_PREFIX.bug;
   const firstLine =
     description
       .split("\n")
@@ -136,7 +141,7 @@ export function composeIssueTitle(category: FeedbackCategory, description: strin
       .find(Boolean) ?? "";
   const MAX = 80;
   const trimmed = firstLine.length > MAX ? `${firstLine.slice(0, MAX - 1)}…` : firstLine;
-  return trimmed ? `${meta.titlePrefix} ${trimmed}` : meta.titlePrefix;
+  return trimmed ? `${prefix} ${trimmed}` : prefix;
 }
 
 /** The GitHub labels for a category: always `user-feedback` + the category id. */
@@ -279,14 +284,14 @@ export function FeedbackDialog({
       // focus would escape the modal. Collapse each radio group to its single
       // tabbable member to mirror the browser's real tab order.
       const focusable = tabbableElements(dialog, focusableSelector);
-      if (focusable.length === 0) {
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (first === undefined || last === undefined) {
         // Nothing focusable in the panel — keep focus on the dialog itself.
         e.preventDefault();
         dialog.focus();
         return;
       }
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
       const active = document.activeElement as HTMLElement | null;
       // Wrap focus, and pull focus back in if it has escaped the dialog.
       if (e.shiftKey) {

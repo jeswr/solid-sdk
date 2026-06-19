@@ -116,7 +116,8 @@ describe("FeedbackButton — submit hook (proxy) path", () => {
     await user.click(within(dialog).getByRole("button", { name: /send feedback/i }));
 
     expect(submit).toHaveBeenCalledTimes(1);
-    const payload = submit.mock.calls[0][0];
+    const payload = submit.mock.calls[0]?.[0];
+    if (!payload) throw new Error("submit was not called with a payload");
     expect(payload.repo).toBe("jeswr/pod-mail");
     expect(payload.category).toBe("bug");
     expect(payload.labels).toEqual(["user-feedback", "bug"]);
@@ -240,6 +241,7 @@ describe("FeedbackDialog — modal focus management (a11y)", () => {
     const focusable = Array.from(dialog.querySelectorAll<HTMLElement>(selector));
     const first = focusable[0];
     const last = focusable[focusable.length - 1];
+    if (!first || !last) throw new Error("the dialog has no focusable controls");
 
     // Forward Tab from the last focusable wraps to the first.
     last.focus();
@@ -299,6 +301,7 @@ describe("FeedbackDialog — modal focus management (a11y)", () => {
     const tabbable = tabbableElements(dialog, selector);
     expect(tabbable[0]).toBe(checkedRadio);
     const last = tabbable[tabbable.length - 1];
+    if (!last) throw new Error("the dialog has no focusable controls");
     // Exactly one radio of the category group is tabbable (the checked one).
     const radios = within(dialog).getAllByRole("radio");
     expect(radios.length).toBeGreaterThan(1);

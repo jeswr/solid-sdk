@@ -28,9 +28,14 @@ import {
 /** Initials from a display name, for the avatar fallback. Exported for tests. */
 export function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "?";
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  const first = parts[0];
+  if (first === undefined) return "?";
+  if (parts.length === 1) return first.slice(0, 2).toUpperCase();
+  // length >= 2 here, so the last element exists; `?? first` is an unreachable
+  // type-narrowing fallback (keeps the access provably safe without changing
+  // behaviour — the runtime always has a distinct last part).
+  const last = parts[parts.length - 1] ?? first;
+  return ((first[0] ?? "") + (last[0] ?? "")).toUpperCase();
 }
 
 export interface AccountMenuProps {
