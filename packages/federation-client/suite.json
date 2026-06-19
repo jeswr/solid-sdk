@@ -14,11 +14,12 @@
     "solid-object": "@solid/object ^0.6.x",
     "fetch-rdf": "@jeswr/fetch-rdf (git: jeswr/fetch-rdf#main)",
     "federation-registry": "@jeswr/federation-registry (git: jeswr/federation-registry, pinned sha)",
+    "ssrf-guard": "@jeswr/guarded-fetch (git: jeswr/guarded-fetch, pinned sha; inlined into dist)",
     "test": "vitest ^2.x",
     "lint": "@biomejs/biome ^2.x",
     "node": ">=24"
   },
-  "dependsOn": ["solid-federation-vocab", "federation-registry"],
+  "dependsOn": ["solid-federation-vocab", "federation-registry", "guarded-fetch"],
   "federation": {
     "sectors": ["identity", "productivity", "media", "finance", "health", "documents", "social"],
     "membershipTodo": "SDK (not an app) — it reads/writes fedapp:App registrations and CONSUMES a fedreg: federation registry rather than holding a membership of its own. verify() validates a registration against the fedapp vocab; list() discovers self-asserted registrations from a registry resource / app-registry container; selfDescribe() builds an app's own fedapp:App self-description. discoverFromRegistry() lists the registry-asserted fedreg:Membership records of a federation Catalogue/Registry (SSRF-guarded), and resolveStorageSpecVersion() reads a storage's advertised client-client spec-versions for schema-migration coordination."

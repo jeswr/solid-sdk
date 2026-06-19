@@ -31,16 +31,20 @@ npm install github:jeswr/federation-client#main
 ```
 
 This works with **no build step**, even under `ignore-scripts=true`: the
-committed `dist/` is self-contained. The package's two off-npm `@jeswr/*`
-dependencies, [`@jeswr/fetch-rdf`](https://github.com/jeswr/fetch-rdf) and
-[`@jeswr/federation-registry`](https://github.com/jeswr/federation-registry), are
-**bundled (inlined)** into `dist/index.js`; every other runtime dependency (`n3`,
-`@solid/object`, `@rdfjs/wrapper`, `@rdfjs/types`, and the inlined deps' own runtime
-deps `jsonld-streaming-parser` + `content-type`) is npm-published and resolves
-normally. So a consumer never needs to clone or build either off-npm package. (The
-runtime is fully inlined; `@jeswr/federation-registry` is also declared as a pinned
-git dependency so its TypeScript declarations resolve for `RegistryDiscovery` /
-`ResolvedStorageSpec` / `Membership` type imports.)
+committed `dist/` is self-contained. The package's three off-npm `@jeswr/*`
+dependencies, [`@jeswr/fetch-rdf`](https://github.com/jeswr/fetch-rdf),
+[`@jeswr/federation-registry`](https://github.com/jeswr/federation-registry), and
+[`@jeswr/guarded-fetch`](https://github.com/jeswr/guarded-fetch) (the consolidated
+SSRF guard), are **bundled (inlined)** into `dist/index.js` (guarded-fetch's own
+inlined `ipaddr.js` rides along, so no `ipaddr.js` dependency is needed); the `./node`
+entry inlines `@jeswr/guarded-fetch/node` while keeping `undici` external. Every other
+runtime dependency (`n3`, `@solid/object`, `@rdfjs/wrapper`, `@rdfjs/types`, the inlined
+deps' own runtime deps `jsonld-streaming-parser` + `content-type`, and `undici` for the
+`./node` entry) is npm-published and resolves normally. So a consumer never needs to
+clone or build any off-npm package. (The runtime is fully inlined;
+`@jeswr/federation-registry` is also declared as a pinned git dependency so its
+TypeScript declarations resolve for `RegistryDiscovery` / `ResolvedStorageSpec` /
+`Membership` type imports.)
 
 Peer runtime: Node ≥ 24 (a transitive requirement of `@solid/object`), ESM only.
 
@@ -309,14 +313,21 @@ const guarded = createGuardedFetch({ fetch: authFetch, timeoutMs: 8000 });
 // `guarded` has the standard `fetch` signature; pass it anywhere a fetch is wanted.
 ```
 
-> The IP-range classification (`isPublicAddress` / `isLoopbackAddress`) is ported from
-> the suite's vetted `@pss/guarded-fetch` package; the only deliberate divergence is the
-> browser-safe `node:net#isIP` replacement (#92). The default `.` entry targets plain
-> `fetch` (browser + Node) and does **not** pin the resolved IP into the socket (no
-> `undici` dependency on the browser path), so on its Node branch a microsecond-scale
-> lookup→connect DNS-rebinding window remains (the redirect re-validation and literal-IP
-> blocking are absolute). **Node consumers close that window fully with the `./node`
-> entry** (below); on the browser branch the residual above is inherent.
+> The SSRF guard is the consolidated, exhaustively-tested suite package
+> [`@jeswr/guarded-fetch`](https://github.com/jeswr/guarded-fetch) — there is ONE audited
+> guard for the whole suite, not a per-package copy. This package re-exports its
+> browser-safe default (`.`) entry for `createGuardedFetch` / `guardedFetch` / `SsrfError`
+> / `isPublicAddress` / `isLoopbackAddress` / `classifyIpLiteral` (the published surface
+> here is unchanged), and `@jeswr/guarded-fetch/node` for the `./node` pinning fetch. Its
+> IP-literal classification delegates to the vetted `ipaddr.js`; the adoption was proven
+> behaviour-preserving (and strictly stricter) by a differential oracle over an adversarial
+> address corpus — no address the prior inline guard blocked is now allowed. The default
+> `.` entry targets plain `fetch` (browser + Node) and does **not** pin the resolved IP
+> into the socket (no `undici` dependency on the browser path), so on its Node branch a
+> microsecond-scale lookup→connect DNS-rebinding window remains (the redirect
+> re-validation and literal-IP blocking are absolute). **Node consumers close that window
+> fully with the `./node` entry** (below); on the browser branch the residual above is
+> inherent.
 
 ### SSRF-safe Node entry — `@jeswr/federation-client/node`
 
