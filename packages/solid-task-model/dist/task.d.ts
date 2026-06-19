@@ -18,6 +18,7 @@
 import type { DatasetCore } from "@rdfjs/types";
 import { TermWrapper } from "@rdfjs/wrapper";
 import { Store } from "n3";
+export { isHttpIri } from "./iri.js";
 /**
  * The lifecycle state of a task. The wire model is a binary open/closed
  * (`rdf:type wf:Open` / `wf:Closed`) so it federates cleanly: any consumer maps a
@@ -71,8 +72,6 @@ export interface TaskData {
     /** `prov:wasDerivedFrom` — the single original this task was cloned from. */
     clonedFrom?: string;
 }
-/** True for an absolute http(s) URL usable as a WebID / IRI object. */
-export declare function isHttpIri(value: string | undefined): value is string;
 /**
  * Typed `@rdfjs/wrapper` view of a single task subject. Each accessor reads/writes
  * through the vetted mappers — no quad is ever hand-built. Construct it on the

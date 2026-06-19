@@ -44,6 +44,7 @@ import {
   TermWrapper,
 } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
+import { docOf, isHttpIri } from "./iri.js";
 import { storeToTurtle } from "./task.js";
 import {
   dct,
@@ -154,24 +155,6 @@ export function canTransition(workflow: WorkflowDef, from: StatusSlug, to: Statu
 /** A status of `terminal` disposition resolves to "closed"; otherwise "open". */
 export function statusState(workflow: WorkflowDef, slug: StatusSlug): "open" | "closed" {
   return workflow.statuses.find((s) => s.slug === slug)?.terminal ? "closed" : "open";
-}
-
-/** Strip the fragment from an IRI to get its document URL (the tracker doc). */
-function docOf(iri: string): string {
-  const u = new URL(iri);
-  u.hash = "";
-  return u.toString();
-}
-
-/** True for an absolute http(s) URL usable as an IRI object. */
-function isHttpIri(value: string | undefined): value is string {
-  if (!value) return false;
-  try {
-    const u = new URL(value);
-    return u.protocol === "http:" || u.protocol === "https:";
-  } catch {
-    return false;
-  }
 }
 
 /**

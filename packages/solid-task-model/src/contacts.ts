@@ -54,7 +54,8 @@ import {
   TermWrapper,
 } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
-import { isHttpIri, storeToTurtle } from "./task.js";
+import { docOf, isHttpIri } from "./iri.js";
+import { storeToTurtle } from "./task.js";
 import {
   acl,
   dc,
@@ -79,13 +80,6 @@ import {
   VCARD_VALUE,
   VCARD_WEB_ID,
 } from "./vocab.js";
-
-/** Strip the fragment from an IRI to get its document URL. */
-function docOf(iri: string): string {
-  const u = new URL(iri);
-  u.hash = "";
-  return u.toString();
-}
 
 /**
  * Resolve a possibly-relative reference (e.g. `"people.ttl"`) against a base

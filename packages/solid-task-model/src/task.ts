@@ -29,7 +29,13 @@ import {
   TermWrapper,
 } from "@rdfjs/wrapper";
 import { DataFactory, Store, Writer } from "n3";
+import { isHttpIri } from "./iri.js";
 import { dct, PREFIXES, prov, rdf, schema, TASK_CLASS, WF_CLOSED, WF_OPEN, wf } from "./vocab.js";
+
+// `isHttpIri` lives in the shared pure-IRI core (`./iri.ts`); re-exported here so
+// the `.` and `./task` public entry points keep exporting it unchanged (it was
+// originally defined in this module).
+export { isHttpIri } from "./iri.js";
 
 /**
  * The lifecycle state of a task. The wire model is a binary open/closed
@@ -86,17 +92,6 @@ export interface TaskData {
   duplicateOf?: string;
   /** `prov:wasDerivedFrom` — the single original this task was cloned from. */
   clonedFrom?: string;
-}
-
-/** True for an absolute http(s) URL usable as a WebID / IRI object. */
-export function isHttpIri(value: string | undefined): value is string {
-  if (!value) return false;
-  try {
-    const u = new URL(value);
-    return u.protocol === "http:" || u.protocol === "https:";
-  } catch {
-    return false;
-  }
 }
 
 /** A known priority, or undefined for any other string. */

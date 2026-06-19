@@ -33,6 +33,7 @@
  */
 import { LiteralAs, LiteralFrom, NamedNodeAs, NamedNodeFrom, OptionalAs, OptionalFrom, SetFrom, TermWrapper, } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
+import { docOf, isHttpIri } from "./iri.js";
 import { storeToTurtle } from "./task.js";
 import { dct, rdf, rdfs, schema, TASK_CLASS, vcard, WF_ALLOWED_TRANS, WF_ASSIGNEE_GROUP, WF_CLOSED, WF_INITIAL_STATE, WF_ISSUE_CATEGORY, WF_ISSUE_CLASS, WF_OPEN, WF_STATE, WF_STATE_STORE, WF_TRACKER, } from "./vocab.js";
 /** A fresh, independent copy of a workflow (no aliasing into a shared constant). */
@@ -94,24 +95,6 @@ export function canTransition(workflow, from, to) {
 /** A status of `terminal` disposition resolves to "closed"; otherwise "open". */
 export function statusState(workflow, slug) {
     return workflow.statuses.find((s) => s.slug === slug)?.terminal ? "closed" : "open";
-}
-/** Strip the fragment from an IRI to get its document URL (the tracker doc). */
-function docOf(iri) {
-    const u = new URL(iri);
-    u.hash = "";
-    return u.toString();
-}
-/** True for an absolute http(s) URL usable as an IRI object. */
-function isHttpIri(value) {
-    if (!value)
-        return false;
-    try {
-        const u = new URL(value);
-        return u.protocol === "http:" || u.protocol === "https:";
-    }
-    catch {
-        return false;
-    }
 }
 /**
  * Typed `@rdfjs/wrapper` view of a single tracker subject. Each accessor

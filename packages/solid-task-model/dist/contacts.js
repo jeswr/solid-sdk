@@ -42,14 +42,9 @@
  */
 import { BlankNodeFrom, LiteralAs, LiteralFrom, NamedNodeAs, NamedNodeFrom, OptionalAs, OptionalFrom, SetFrom, TermWrapper, } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
-import { isHttpIri, storeToTurtle } from "./task.js";
+import { docOf, isHttpIri } from "./iri.js";
+import { storeToTurtle } from "./task.js";
 import { acl, dc, dct, rdf, VCARD_ADDRESS_BOOK, VCARD_CELL, VCARD_FN, VCARD_GROUP, VCARD_GROUP_INDEX, VCARD_HAS_EMAIL, VCARD_HAS_MEMBER, VCARD_HAS_TELEPHONE, VCARD_HAS_UID, VCARD_HOME, VCARD_IN_ADDRESS_BOOK, VCARD_INCLUDES_GROUP, VCARD_INDIVIDUAL, VCARD_NAME_EMAIL_INDEX, VCARD_NOTE, VCARD_URL, VCARD_VALUE, VCARD_WEB_ID, } from "./vocab.js";
-/** Strip the fragment from an IRI to get its document URL. */
-function docOf(iri) {
-    const u = new URL(iri);
-    u.hash = "";
-    return u.toString();
-}
 /**
  * Resolve a possibly-relative reference (e.g. `"people.ttl"`) against a base
  * document URL, returning an absolute http(s) IRI, or `undefined` if the result is
