@@ -1,3 +1,30 @@
+/**
+ * ssrf.ts — THIN COMPATIBILITY SHIM over `@jeswr/guarded-fetch`.
+ *
+ * The SSRF mechanism (IP-literal classification, the public-address policy, the
+ * cloud-internal hostname denylist, alternate-IPv4-encoding normalisation, the
+ * DNS-resolve-all-records-then-validate rebinding check, and the connect-time
+ * DNS-pinning that closes the lookup→connect TOCTOU) now lives in the shared,
+ * single-reviewed `@jeswr/guarded-fetch` library — the consolidation of this
+ * package's former inline guard plus the federation-client / community-feeds /
+ * prod-solid-server copies. {@link guardedFetch} delegates straight to
+ * `@jeswr/guarded-fetch/node`'s `createNodeGuardedFetch`.
+ *
+ * This module exists ONLY to keep `solid-agent-notify`'s PUBLIC API + signatures
+ * unchanged after the rewire. The classifiers are RE-EXPORTED unchanged from
+ * guarded-fetch; the agent-notify-specific helpers ({@link assertNotSsrf},
+ * {@link isDeniedHostname} bound to this package's stricter denylist, the
+ * {@link LookupAddress} alias) are thin policy shims that reuse the SAME
+ * guarded-fetch primitives — they reimplement NO IP-classification logic. There
+ * is exactly one reviewed copy of the SSRF mechanism, in guarded-fetch.
+ *
+ * `assertNotSsrf` mirrors guarded-fetch's own `assertAllowed` URL/host check but
+ * RETURNS the first validated address (the pin), which the library's void
+ * `assertSafeUrl` does not — so the agent-notify contract (a vetted, pinned
+ * address) is preserved without re-deriving the classification.
+ */
+import { SsrfError, isLoopbackAddress, isPublicAddress, normalizeHostForClassification } from "@jeswr/guarded-fetch";
+export { isLoopbackAddress, isPublicAddress, normalizeHostForClassification, SsrfError, };
 /** The shape `node:dns/promises#lookup(host, { all: true })` returns (and what the pin uses). */
 export interface LookupAddress {
     readonly address: string;
@@ -5,12 +32,6 @@ export interface LookupAddress {
 }
 /** The DNS lookup shape; tests inject a stub. Defaults to `node:dns/promises`. */
 export type DnsLookup = (host: string) => Promise<LookupAddress[]>;
-/** Raised when a URL/host fails the SSRF guard. Consumers map this to their own domain error. */
-export declare class SsrfError extends Error {
-    constructor(message: string, options?: {
-        cause?: unknown;
-    });
-}
 export interface SsrfGuardOptions {
     /** Re-permit loopback (and loopback-only http). Default false. NEVER true in production. */
     readonly allowLoopback: boolean;
@@ -25,20 +46,14 @@ export interface SsrfGuardOptions {
     readonly enforceHttpsExceptLoopback?: boolean;
 }
 /**
- * Is `hostname` denied by the cloud-internal name denylist (exact match or dot-anchored suffix)?
- * Checked BEFORE DNS so a split-horizon resolver can never map an internal name to an endpoint we
- * connect to. `entry` starting with `.` is a suffix match (`.internal` matches `foo.internal`);
- * otherwise it is an exact match OR a `.entry` suffix match (`metadata.google.internal` also blocks
- * `x.metadata.google.internal`).
+ * Is `hostname` denied by `solid-agent-notify`'s cloud-internal name denylist
+ * (`FETCH_HOSTNAME_DENYLIST` from config.ts — which is STRICTER than guarded-fetch's
+ * `DEFAULT_HOSTNAME_DENYLIST`, additionally refusing `localhost` / `*.localhost` /
+ * `*.local` unconditionally)? Delegates the matching algorithm to guarded-fetch's
+ * `isDeniedHostname`, supplying this package's stricter list — so there is one
+ * reviewed match implementation and one source-of-truth denylist (config.ts).
  */
 export declare function isDeniedHostname(hostname: string): boolean;
-/**
- * Normalise a URL hostname to a canonical IP literal for classification, covering alternate IPv4
- * encodings. WHATWG `new URL()` already does this for us — but we re-run it defensively so the
- * value the classifier sees is always a form `isIP` recognises. A bracketed IPv6 literal has its
- * brackets stripped. Returns the canonical form (or the input lowercased if it is not an IP).
- */
-export declare function normalizeHostForClassification(hostname: string): string;
 /**
  * Assert that `rawUrl`'s host resolves only to public addresses (or loopback under `allowLoopback`),
  * returning the **pinned** address the fetch must connect to. Throws {@link SsrfError} on a
@@ -46,19 +61,12 @@ export declare function normalizeHostForClassification(hostname: string): string
  * non-public record.
  *
  * DNS-rebinding mitigation: every record must pass; the first validated record is returned to pin.
+ *
+ * The host-shape + address policy is the SAME one guarded-fetch enforces (we call its
+ * `classifyIpLiteral` / `normalizeHostForClassification` / `isDeniedHostname` /
+ * `isPublicAddress` / `isLoopbackAddress`), so this stays in lock-step with the chokepoint and
+ * adds NO independent classification logic — it only returns the pin the library's void
+ * `assertSafeUrl` omits.
  */
 export declare function assertNotSsrf(rawUrl: string, opts: SsrfGuardOptions): Promise<LookupAddress>;
-/**
- * The Node `dns.lookup`-shaped callback that pins every connection to a single validated address —
- * fed into undici's `Agent({ connect: { lookup } })`. Returning the pre-validated IP (no second DNS
- * query) makes the SSRF guard and the fetch see the **same** address, closing the rebinding TOCTOU.
- *
- * Honours `options.all`: undici v7 invokes `lookup` with `{ all: true }` and expects the ARRAY form
- * `cb(null, [{ address, family }])`; the classic 3-arg form is `cb(null, address, family)`. Calling
- * the wrong form makes undici throw `ERR_INVALID_IP_ADDRESS`, surfacing as a generic "fetch failed".
- */
-export declare function pinnedLookup(pinned: LookupAddress): (hostname: string, options: unknown, cb: PinnedLookupCallback) => void;
-/** Either lookup-callback contract: classic `(err, address, family)` or undici v7's `(err, [..])`. */
-type PinnedLookupCallback = ((err: NodeJS.ErrnoException | null, address: string, family: number) => void) | ((err: NodeJS.ErrnoException | null, addresses: LookupAddress[]) => void);
-export {};
 //# sourceMappingURL=ssrf.d.ts.map

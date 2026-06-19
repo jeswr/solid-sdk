@@ -9,11 +9,14 @@
  * through `src/security/guardedFetch.ts`.
  *
  * Allowlist (files permitted to reference the raw primitives):
- *   - src/security/guardedFetch.ts  (the chokepoint — imports undici fetch/Agent)
- *   - src/security/ssrf.ts          (vendored SSRF guard — node:dns, no undici)
- *   - src/security/body.ts          (vendored bounded reader)
- * Test files (*.test.ts) are exempt — they spin up fixture servers and exercise
- * the guard directly.
+ *   - src/security/guardedFetch.ts  (the chokepoint — wraps @jeswr/guarded-fetch/node)
+ *   - src/security/ssrf.ts          (SSRF shim over @jeswr/guarded-fetch — node:dns only)
+ *   - src/security/body.ts          (bounded body reader)
+ * The SSRF mechanism (undici DNS-pinning) is delegated to `@jeswr/guarded-fetch`;
+ * its `./node` import does not match these patterns (they match bare `undici` /
+ * global `fetch(`), so the chokepoint files no longer reference a raw primitive —
+ * they stay allowlisted as the designated egress layer. Test files (*.test.ts) are
+ * exempt — they spin up fixture servers and exercise the guard directly.
  *
  * Pure helper functions (stripLineComment, stripBlockComments, isScannable,
  * PATTERNS) are exported so the unit-test suite can cover them without spawning
@@ -28,6 +31,8 @@ export const ALLOWLIST = new Set([
   "src/security/ssrf.ts",
   "src/security/body.ts",
 ]);
+// NOTE: src/security/addresses.ts was removed in the @jeswr/guarded-fetch rewire
+// (IP classification now lives in the shared library), so it is no longer listed.
 
 /** Patterns that indicate a raw external-fetch call. Comment-only segments are skipped. */
 export const PATTERNS = [

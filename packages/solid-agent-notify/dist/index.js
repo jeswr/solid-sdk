@@ -25,6 +25,5 @@ export { TaskDoc, writeTask, buildTaskNotification, parseTask, parseTaskFromNoti
 export { AgentNotifyError, NoInboxError, NotificationSendError, InboxScopeError, } from "./errors.js";
 // ── The egress chokepoint + its guard-layer errors (for advanced callers/tests) ──
 export { guardedFetch, GuardedFetchError, SsrfError, BodyTooLargeError, } from "./security/guardedFetch.js";
-export { isPublicAddress, isLoopbackAddress } from "./security/addresses.js";
-export { assertNotSsrf, isDeniedHostname, normalizeHostForClassification, } from "./security/ssrf.js";
+export { assertNotSsrf, isDeniedHostname, isLoopbackAddress, isPublicAddress, normalizeHostForClassification, } from "./security/ssrf.js";
 //# sourceMappingURL=index.js.map

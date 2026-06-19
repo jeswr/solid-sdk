@@ -1,72 +1,49 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 /**
- * SSRF guard: resolve a host once, classify EVERY A/AAAA record as public-or-refused, and return
- * the validated address to **pin** into the connecting socket so the guard and the connection see
- * the same IP (closing the DNS-rebinding TOCTOU). Paired with {@link pinnedLookup}, the callback the
- * consumer feeds into its own undici `Agent({ connect: { lookup } })`.
+ * ssrf.ts — THIN COMPATIBILITY SHIM over `@jeswr/guarded-fetch`.
  *
- * VENDORED from `solid-webid-index` `src/lib/security/ssrf.ts` (prod-solid-server lineage), with:
- *  - a hostname denylist for cloud-internal names (checked BEFORE DNS); and
- *  - explicit alternate-IP-encoding normalisation (decimal/octal/hex/short-form) before classifying.
- *    WHATWG `new URL()` already canonicalises every numeric IPv4 encoding to dotted-decimal, but we
- *    re-normalise belt-and-braces so a host literal can never reach the classifier in a form `isIP`
- *    fails to recognise.
+ * The SSRF mechanism (IP-literal classification, the public-address policy, the
+ * cloud-internal hostname denylist, alternate-IPv4-encoding normalisation, the
+ * DNS-resolve-all-records-then-validate rebinding check, and the connect-time
+ * DNS-pinning that closes the lookup→connect TOCTOU) now lives in the shared,
+ * single-reviewed `@jeswr/guarded-fetch` library — the consolidation of this
+ * package's former inline guard plus the federation-client / community-feeds /
+ * prod-solid-server copies. {@link guardedFetch} delegates straight to
+ * `@jeswr/guarded-fetch/node`'s `createNodeGuardedFetch`.
+ *
+ * This module exists ONLY to keep `solid-agent-notify`'s PUBLIC API + signatures
+ * unchanged after the rewire. The classifiers are RE-EXPORTED unchanged from
+ * guarded-fetch; the agent-notify-specific helpers ({@link assertNotSsrf},
+ * {@link isDeniedHostname} bound to this package's stricter denylist, the
+ * {@link LookupAddress} alias) are thin policy shims that reuse the SAME
+ * guarded-fetch primitives — they reimplement NO IP-classification logic. There
+ * is exactly one reviewed copy of the SSRF mechanism, in guarded-fetch.
+ *
+ * `assertNotSsrf` mirrors guarded-fetch's own `assertAllowed` URL/host check but
+ * RETURNS the first validated address (the pin), which the library's void
+ * `assertSafeUrl` does not — so the agent-notify contract (a vetted, pinned
+ * address) is preserved without re-deriving the classification.
  */
-import { lookup as dnsLookup } from "node:dns/promises";
-import { isIP } from "node:net";
+import { SsrfError, classifyIpLiteral, isDeniedHostname as gfIsDeniedHostname, isLoopbackAddress, isPublicAddress, normalizeHostForClassification, } from "@jeswr/guarded-fetch";
 import { FETCH_HOSTNAME_DENYLIST } from "../config.js";
-import { isLoopbackAddress, isPublicAddress } from "./addresses.js";
-/** Raised when a URL/host fails the SSRF guard. Consumers map this to their own domain error. */
-export class SsrfError extends Error {
-    constructor(message, options) {
-        super(message, options);
-        this.name = "SsrfError";
-    }
-}
+// Re-export the classifiers + SsrfError UNCHANGED from guarded-fetch (single shared
+// implementation + single shared SsrfError class so `instanceof` holds across the seam).
+export { isLoopbackAddress, isPublicAddress, normalizeHostForClassification, SsrfError, };
 /**
- * Is `hostname` denied by the cloud-internal name denylist (exact match or dot-anchored suffix)?
- * Checked BEFORE DNS so a split-horizon resolver can never map an internal name to an endpoint we
- * connect to. `entry` starting with `.` is a suffix match (`.internal` matches `foo.internal`);
- * otherwise it is an exact match OR a `.entry` suffix match (`metadata.google.internal` also blocks
- * `x.metadata.google.internal`).
+ * Is `hostname` denied by `solid-agent-notify`'s cloud-internal name denylist
+ * (`FETCH_HOSTNAME_DENYLIST` from config.ts — which is STRICTER than guarded-fetch's
+ * `DEFAULT_HOSTNAME_DENYLIST`, additionally refusing `localhost` / `*.localhost` /
+ * `*.local` unconditionally)? Delegates the matching algorithm to guarded-fetch's
+ * `isDeniedHostname`, supplying this package's stricter list — so there is one
+ * reviewed match implementation and one source-of-truth denylist (config.ts).
  */
 export function isDeniedHostname(hostname) {
-    const host = hostname.toLowerCase().replace(/\.$/, "");
-    for (const raw of FETCH_HOSTNAME_DENYLIST) {
-        const entry = raw.toLowerCase();
-        if (entry.startsWith(".")) {
-            if (host === entry.slice(1) || host.endsWith(entry)) {
-                return true;
-            }
-        }
-        else if (host === entry || host.endsWith(`.${entry}`)) {
-            return true;
-        }
-    }
-    return false;
+    return gfIsDeniedHostname(hostname, FETCH_HOSTNAME_DENYLIST);
 }
-/**
- * Normalise a URL hostname to a canonical IP literal for classification, covering alternate IPv4
- * encodings. WHATWG `new URL()` already does this for us — but we re-run it defensively so the
- * value the classifier sees is always a form `isIP` recognises. A bracketed IPv6 literal has its
- * brackets stripped. Returns the canonical form (or the input lowercased if it is not an IP).
- */
-export function normalizeHostForClassification(hostname) {
-    const stripped = hostname.replace(/^\[|\]$/g, "");
-    // Already a recognised IP literal — return as-is.
-    if (isIP(stripped) !== 0) {
-        return stripped;
-    }
-    // Re-feed through WHATWG URL: this canonicalises decimal (2130706433), hex (0x7f000001),
-    // octal (0177.0.0.1), and short-form (127.1) IPv4 encodings to dotted-decimal. If URL rejects
-    // it or it round-trips unchanged, it is a real hostname → DNS.
-    try {
-        const reparsed = new URL(`http://${stripped}/`).hostname.replace(/^\[|\]$/g, "");
-        return reparsed.toLowerCase();
-    }
-    catch {
-        return stripped.toLowerCase();
-    }
+/** Promise form of `node:dns/promises.lookup(host, { all: true })` (the default resolver). */
+async function defaultDnsLookup(host) {
+    const { lookup } = await import("node:dns/promises");
+    return lookup(host, { all: true });
 }
 /**
  * Assert that `rawUrl`'s host resolves only to public addresses (or loopback under `allowLoopback`),
@@ -75,6 +52,12 @@ export function normalizeHostForClassification(hostname) {
  * non-public record.
  *
  * DNS-rebinding mitigation: every record must pass; the first validated record is returned to pin.
+ *
+ * The host-shape + address policy is the SAME one guarded-fetch enforces (we call its
+ * `classifyIpLiteral` / `normalizeHostForClassification` / `isDeniedHostname` /
+ * `isPublicAddress` / `isLoopbackAddress`), so this stays in lock-step with the chokepoint and
+ * adds NO independent classification logic — it only returns the pin the library's void
+ * `assertSafeUrl` omits.
  */
 export async function assertNotSsrf(rawUrl, opts) {
     let url;
@@ -106,13 +89,13 @@ export async function assertNotSsrf(rawUrl, opts) {
     if (isDeniedHostname(hostname)) {
         throw new SsrfError(`Host is on the cloud-internal denylist: ${hostname}.`);
     }
-    const literalKind = isIP(hostname);
+    const literalKind = classifyIpLiteral(hostname);
     let resolved;
     if (literalKind !== 0) {
         resolved = [{ address: hostname, family: literalKind }];
     }
     else {
-        const lookup = opts.dnsLookup ?? ((host) => dnsLookup(host, { all: true }));
+        const lookup = opts.dnsLookup ?? defaultDnsLookup;
         try {
             resolved = await lookup(hostname);
         }
@@ -140,30 +123,6 @@ export async function assertNotSsrf(rawUrl, opts) {
         }
     }
     return resolved[0];
-}
-/**
- * The Node `dns.lookup`-shaped callback that pins every connection to a single validated address —
- * fed into undici's `Agent({ connect: { lookup } })`. Returning the pre-validated IP (no second DNS
- * query) makes the SSRF guard and the fetch see the **same** address, closing the rebinding TOCTOU.
- *
- * Honours `options.all`: undici v7 invokes `lookup` with `{ all: true }` and expects the ARRAY form
- * `cb(null, [{ address, family }])`; the classic 3-arg form is `cb(null, address, family)`. Calling
- * the wrong form makes undici throw `ERR_INVALID_IP_ADDRESS`, surfacing as a generic "fetch failed".
- */
-export function pinnedLookup(pinned) {
-    return (_hostname, options, cb) => {
-        const wantsAll = typeof options === "object" &&
-            options !== null &&
-            options.all === true;
-        if (wantsAll) {
-            cb(null, [
-                { address: pinned.address, family: pinned.family },
-            ]);
-        }
-        else {
-            cb(null, pinned.address, pinned.family);
-        }
-    };
 }
 function reason(error) {
     return error instanceof Error ? error.message : "unknown error";

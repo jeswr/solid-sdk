@@ -34,7 +34,7 @@
   },
   "files": ["dist", "README.md", "LICENSE"],
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=22.19.0"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
@@ -53,8 +53,7 @@
     "@jeswr/guarded-fetch": "git+https://github.com/jeswr/guarded-fetch.git#021a1e55bdf1cfefc36c2120177c26bdcb9304c2",
     "@rdfjs/wrapper": "^0.34.0",
     "@solid/object": "^0.6.0",
-    "n3": "^2.0.3",
-    "undici": "^7.27.2"
+    "n3": "^2.0.3"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",

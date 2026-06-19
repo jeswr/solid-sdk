@@ -1,6 +1,7 @@
 import { BodyTooLargeError } from "./body.js";
-import { type LookupAddress } from "./ssrf.js";
-export { SsrfError } from "./ssrf.js";
+import type { LookupAddress } from "./ssrf.js";
+import { SsrfError } from "./ssrf.js";
+export { SsrfError };
 export { BodyTooLargeError };
 /** Raised by guardedFetch for non-SSRF failures (bad scheme/port, disallowed content-type, redirect
  * cap, redirect loop, scheme downgrade, a refused POST redirect, network error). SSRF failures
@@ -60,10 +61,6 @@ export interface GuardedFetchResult {
     /** HTTP status of the final response. */
     readonly status: number;
 }
-/** Per-hop scheme + port gate. 443 always; 80 only under loopback (dev/tests). `prevWasHttps`
- * rejects a downgrade redirect (https → http). Exported for exhaustive unit testing of the
- * scheme/port/downgrade branches. */
-export declare function assertSchemeAndPort(url: URL, allowLoopback: boolean, prevWasHttps: boolean): void;
 /**
  * Fetch an attacker-influenced URL with full SSRF defence-in-depth. Returns the final response, the
  * resolved URL, the content-type, and the bounded body. Throws {@link SsrfError} for an SSRF refusal
@@ -72,4 +69,34 @@ export declare function assertSchemeAndPort(url: URL, allowLoopback: boolean, pr
  * network/timeout), or {@link BodyTooLargeError} for an over-cap body.
  */
 export declare function guardedFetch(rawUrl: string, opts?: GuardedFetchOptions): Promise<GuardedFetchResult>;
+/**
+ * Per-hop scheme + port + userinfo + downgrade gate, throwing {@link GuardedFetchError} (the policy
+ * error, not the SSRF security boundary). Mirrors the historical agent-notify gate (same 3-arg
+ * signature) so the public error TAXONOMY is unchanged: https-only (http: only under
+ * `allowLoopback`); a scheme-downgrade redirect (https → http) rejected when `prevWasHttps`; no
+ * userinfo; 443 always, any port under loopback (a fixture binds an ephemeral port).
+ *
+ * `guardedFetch` calls this ONLY on the FIRST URL (so `prevWasHttps` is false there); the per-hop
+ * redirect re-validation — including the downgrade refusal — is owned end-to-end by
+ * `@jeswr/guarded-fetch` (this is belt-and-braces, not the sole enforcement). The `prevWasHttps`
+ * parameter + the downgrade branch are retained so the helper stays a faithful, exhaustively
+ * unit-testable front gate (it is exported for that purpose; it is NOT part of the package's public
+ * `.` entry — the only declared `exports` subpath).
+ */
+export declare function assertSchemeAndPort(url: URL, allowLoopback: boolean, prevWasHttps?: boolean): void;
+/**
+ * Map a thrown guarded-fetch error to agent-notify's public error taxonomy:
+ *  - a BODY-CAP `SsrfError` → {@link BodyTooLargeError} (the public over-cap type, FIRST so it wins
+ *    regardless of method/status);
+ *  - a TIMEOUT or redirect-management `SsrfError` → {@link GuardedFetchError} (policy/non-SSRF);
+ *  - for a POST, a redirect-management `SsrfError` → the confused-deputy {@link GuardedFetchError}
+ *    (a POST refuses to follow ANY 3xx, so the `maxRedirects:0` cap firing IS the refusal);
+ *  - any other `SsrfError` (private/loopback/denied/rebinding TARGET) → re-thrown UNCHANGED so
+ *    `instanceof SsrfError` still holds at the call site;
+ *  - anything else (a genuine network error) → {@link GuardedFetchError}.
+ *
+ * Exported for exhaustive unit testing of the error-taxonomy mapping (it is NOT part of the
+ * package's public `.` entry — the only declared `exports` subpath).
+ */
+export declare function classifyGuardError(error: unknown, rawUrl: string, method: "GET" | "POST"): Error;
 //# sourceMappingURL=guardedFetch.d.ts.map

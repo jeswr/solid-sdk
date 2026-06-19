@@ -23,17 +23,19 @@ import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { MAX_REDIRECTS } from "../config.js";
-import { isLoopbackAddress, isPublicAddress } from "./addresses.js";
 import {
   BodyTooLargeError,
   GuardedFetchError,
   SsrfError,
   assertSchemeAndPort,
+  classifyGuardError,
   guardedFetch,
 } from "./guardedFetch.js";
 import {
   assertNotSsrf,
   isDeniedHostname,
+  isLoopbackAddress,
+  isPublicAddress,
   normalizeHostForClassification,
 } from "./ssrf.js";
 
@@ -479,18 +481,26 @@ describe("guardedFetch — happy path (loopback test hook)", () => {
     expect(r.contentType).toBe("application/ld+json");
   });
 
-  it("PIN PROOF: connects to the guard-validated IP, not a re-resolution", async () => {
+  it("PIN PROOF: connects to the guard-validated IP via the injected resolver (defeats rebinding)", async () => {
     const port = (server.address() as AddressInfo).port;
     routes.set("/pinned", (_req, res) => {
       res.writeHead(200, { "content-type": "text/turtle" });
       res.end(TTL);
     });
+    // The hostname `pinned.test` is NOT in DNS; it reaches 127.0.0.1 ONLY because the injected
+    // resolver returns 127.0.0.1 and guarded-fetch PINS the connecting socket to that validated
+    // address (undici Agent connect.lookup). If the connect re-resolved the name through the OS,
+    // `pinned.test` would not resolve and this would fail. The injected resolver is consulted (the
+    // guarded-fetch/node path resolves at URL-classification AND at connect-time pin — both through
+    // the same stub, both validating every record), so a rebinding flip is caught at whichever
+    // resolve sees a private record. Here we assert the SECURITY PROPERTY: the request lands on the
+    // pinned validated IP and returns the fixture body.
     const dns = stubDns({ address: "127.0.0.1", family: 4 });
     const r = await guardedFetch(`http://pinned.test:${port}/pinned`, {
       allowLoopback: true,
       dnsLookup: dns,
     });
-    expect(dns).toHaveBeenCalledTimes(1);
+    expect(dns).toHaveBeenCalled();
     expect(r.status).toBe(200);
     expect(r.text).toBe(TTL);
   });
@@ -667,6 +677,49 @@ describe("guardedFetch — body cap", () => {
       guardedFetch(`${base}/biglen`, { allowLoopback: true, maxBytes: 1000 })
     ).rejects.toBeInstanceOf(BodyTooLargeError);
   });
+
+  it("a normal-size error body (<= cap) still returns the status with an empty body", async () => {
+    // The body-cap defence does not change the OLD short-circuit for a normal-size error page: a
+    // 404 with a small body returns { status: 404, text: "" } (the body is cancelled, not surfaced).
+    routes.set("/smallerr", (_req, res) => {
+      res.writeHead(404, { "content-type": "text/plain" });
+      res.end("nope");
+    });
+    const r = await guardedFetch(`${base}/smallerr`, {
+      allowLoopback: true,
+      maxBytes: 1000,
+    });
+    expect(r.status).toBe(404);
+    expect(r.text).toBe("");
+  });
+
+  it("REFINEMENT: an OVER-cap >=400 error body now throws BodyTooLargeError (was empty-return)", async () => {
+    // Post-rewire characterisation (the @jeswr/guarded-fetch body reader caps BEFORE the wrapper's
+    // >=400 short-circuit): a 503 with a body exceeding the cap fails CLOSED with BodyTooLargeError
+    // rather than returning { status: 503, text: "" }. Strictly safer, and consumer-invisible
+    // (read/discover/send treat a thrown error and a non-2xx identically). Pinned so the behaviour
+    // is intentional, not accidental.
+    routes.set("/bigerr", (_req, res) => {
+      res.writeHead(503, { "content-type": "text/plain" });
+      res.end("E".repeat(5000));
+    });
+    await expect(
+      guardedFetch(`${base}/bigerr`, { allowLoopback: true, maxBytes: 1000 })
+    ).rejects.toBeInstanceOf(BodyTooLargeError);
+  });
+
+  it("REFINEMENT: an OVER-cap disallowed-content-type body throws BodyTooLargeError (was content-type GuardedFetchError)", async () => {
+    // Same refinement on the content-type path: an over-cap text/html body fails with
+    // BodyTooLargeError (body capped before the wrapper's allowlist check). A SMALL disallowed
+    // content-type still throws the content-type GuardedFetchError (covered above).
+    routes.set("/bightml", (_req, res) => {
+      res.writeHead(200, { "content-type": "text/html" });
+      res.end("H".repeat(5000));
+    });
+    await expect(
+      guardedFetch(`${base}/bightml`, { allowLoopback: true, maxBytes: 1000 })
+    ).rejects.toBeInstanceOf(BodyTooLargeError);
+  });
 });
 
 describe("guardedFetch — timeout", () => {
@@ -778,6 +831,37 @@ describe("guardedFetch — redirects (each GET hop re-validated)", () => {
     expect(r.status).toBe(302);
     expect(r.text).toBe(TTL);
   });
+
+  it("classifyGuardError maps a guarded-fetch scheme-downgrade SsrfError → GuardedFetchError (taxonomy preserved)", () => {
+    // The https→http downgrade refusal lives in @jeswr/guarded-fetch's per-hop redirect loop, which
+    // throws SsrfError. The pre-rewire wrapper threw GuardedFetchError for a downgrade hop (via
+    // assertSchemeAndPort in its loop), so the wrapper's classifyGuardError maps guarded-fetch's
+    // downgrade SsrfError back to GuardedFetchError to keep the public taxonomy stable. We pin that
+    // mapping directly (the end-to-end downgrade enforcement itself is covered in guarded-fetch's
+    // own suite + the assertSchemeAndPort front-gate unit test below).
+    const downgrade = new SsrfError(
+      "Refusing redirect scheme downgrade (https → http): example.com."
+    );
+    const mapped = classifyGuardError(downgrade, "https://example.com/", "GET");
+    expect(mapped).toBeInstanceOf(GuardedFetchError);
+    expect(mapped).not.toBeInstanceOf(SsrfError);
+
+    // Sanity: a TRUE SSRF-boundary refusal (private target) is NOT reclassified — still SsrfError.
+    const privateTarget = new SsrfError(
+      "URL refused — host.example resolves to a non-public address (10.0.0.1)."
+    );
+    expect(
+      classifyGuardError(privateTarget, "https://host.example/", "GET")
+    ).toBeInstanceOf(SsrfError);
+
+    // Sanity: a body-cap SsrfError maps to BodyTooLargeError (the public over-cap type).
+    const overCap = new SsrfError(
+      "Response body for https://x/ exceeds cap (5000 bytes > 1000)."
+    );
+    expect(classifyGuardError(overCap, "https://x/", "GET")).toBeInstanceOf(
+      BodyTooLargeError
+    );
+  });
 });
 
 describe("guardedFetch — POST refuses ALL redirects (confused-deputy)", () => {
@@ -818,10 +902,15 @@ describe("guardedFetch — POST refuses ALL redirects (confused-deputy)", () => 
   });
 });
 
-// ════════════════════════════════ 7. scheme / port / downgrade gate (unit) ════════════════════════════════
+// ════════════════════════════════ 7. scheme / port / downgrade gate ════════════════════════════════
+//
+// The per-hop SSRF re-validation (incl. scheme downgrade) is owned end-to-end by @jeswr/guarded-fetch;
+// the wrapper's `assertSchemeAndPort` is a faithful belt-and-braces FRONT gate (3-arg, retained from
+// the pre-rewire helper) exercised directly below for the scheme/port/userinfo/downgrade branches,
+// AND end-to-end through the chokepoint + assertNotSsrf shim. SSRF coverage is preserved.
 
-describe("assertSchemeAndPort — scheme, port, and downgrade branches", () => {
-  it("accepts https on the default port", () => {
+describe("assertSchemeAndPort — scheme, port, userinfo, downgrade branches (front gate)", () => {
+  it("accepts https on the default port (and explicit :443)", () => {
     expect(() =>
       assertSchemeAndPort(new URL("https://example.com/"), false, false)
     ).not.toThrow();
@@ -836,22 +925,35 @@ describe("assertSchemeAndPort — scheme, port, and downgrade branches", () => {
     ).toThrow(GuardedFetchError);
   });
 
-  it("accepts http: on port 80 ONLY under allowLoopback", () => {
+  it("accepts http: ONLY under allowLoopback (port 80 and ephemeral)", () => {
     expect(() =>
       assertSchemeAndPort(new URL("http://127.0.0.1/"), true, false)
     ).not.toThrow();
     expect(() =>
       assertSchemeAndPort(new URL("http://127.0.0.1:80/"), true, false)
     ).not.toThrow();
+    expect(() =>
+      assertSchemeAndPort(new URL("http://127.0.0.1:54321/"), true, false)
+    ).not.toThrow();
   });
 
-  it("rejects a non-default https port (8080, 8443)", () => {
+  it("rejects a non-default https port in production (8080, 8443)", () => {
     expect(() =>
       assertSchemeAndPort(new URL("https://example.com:8080/"), false, false)
     ).toThrow(GuardedFetchError);
     expect(() =>
       assertSchemeAndPort(new URL("https://example.com:8443/"), false, false)
     ).toThrow(GuardedFetchError);
+  });
+
+  it("rejects userinfo", () => {
+    expect(() =>
+      assertSchemeAndPort(
+        new URL("https://user:pass@example.com/"),
+        false,
+        false
+      )
+    ).toThrow(/userinfo/i);
   });
 
   it("REJECTS a scheme-downgrade redirect (prevWasHttps && http target)", () => {
@@ -864,5 +966,69 @@ describe("assertSchemeAndPort — scheme, port, and downgrade branches", () => {
     expect(() =>
       assertSchemeAndPort(new URL("ftp://example.com/"), true, false)
     ).toThrow(GuardedFetchError);
+  });
+});
+
+describe("guardedFetch — scheme / port / downgrade gate (end-to-end)", () => {
+  // guardedFetch() throws GuardedFetchError (the policy error) for scheme/port/userinfo refusals on
+  // the ENTRY URL — the historical taxonomy (distinct from the SsrfError security boundary). The
+  // shared guarded-fetch library re-enforces every one of these per hop too (the SSRF refusals
+  // below stay SsrfError); this front gate only fixes which public error class fires.
+  it("rejects http: without allowLoopback (https-only in prod) → GuardedFetchError", async () => {
+    await expect(
+      guardedFetch("http://example.com/", {
+        dnsLookup: stubDns({ address: "8.8.8.8", family: 4 }),
+      })
+    ).rejects.toBeInstanceOf(GuardedFetchError);
+  });
+
+  it("rejects a non-http(s) scheme → GuardedFetchError", async () => {
+    await expect(guardedFetch("ftp://example.com/")).rejects.toBeInstanceOf(
+      GuardedFetchError
+    );
+  });
+
+  it("rejects userinfo in the URL → GuardedFetchError", async () => {
+    await expect(
+      guardedFetch("https://user:pass@8.8.8.8/", {
+        dnsLookup: stubDns({ address: "8.8.8.8", family: 4 }),
+      })
+    ).rejects.toBeInstanceOf(GuardedFetchError);
+  });
+
+  it("rejects a non-default https port in production (8080, 8443) → GuardedFetchError", async () => {
+    for (const port of [8080, 8443]) {
+      await expect(
+        guardedFetch(`https://8.8.8.8:${port}/`, {
+          dnsLookup: stubDns({ address: "8.8.8.8", family: 4 }),
+        })
+      ).rejects.toBeInstanceOf(GuardedFetchError);
+    }
+  });
+
+  it("REJECTS http: in prod via assertNotSsrf (the scheme-downgrade gate, SsrfError)", async () => {
+    // The per-hop https→http downgrade refusal lives in @jeswr/guarded-fetch (exhaustively covered
+    // there). At this layer assertNotSsrf enforces the same scheme gate (http: refused in prod) and
+    // throws the SSRF-boundary SsrfError; the redirect-private/rebind tests above prove per-hop
+    // re-validation end-to-end.
+    await expect(
+      assertNotSsrf("http://downgrade.example/", {
+        allowLoopback: false,
+        enforceHttpsExceptLoopback: true,
+        dnsLookup: stubDns({ address: "8.8.8.8", family: 4 }),
+      })
+    ).rejects.toBeInstanceOf(SsrfError);
+  });
+
+  it("accepts https on the default port (public literal, no socket via assertNotSsrf)", async () => {
+    const pin = await assertNotSsrf("https://8.8.8.8/", {
+      allowLoopback: false,
+    });
+    expect(pin).toEqual({ address: "8.8.8.8", family: 4 });
+    // Explicit :443 is also accepted (the scheme-default port).
+    const pin443 = await assertNotSsrf("https://8.8.8.8:443/", {
+      allowLoopback: false,
+    });
+    expect(pin443).toEqual({ address: "8.8.8.8", family: 4 });
   });
 });

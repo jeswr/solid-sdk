@@ -23,7 +23,6 @@ export type { TaskNotification, TaskState, NotifyTaskArgs, } from "./task.js";
 export { AgentNotifyError, NoInboxError, NotificationSendError, InboxScopeError, } from "./errors.js";
 export { guardedFetch, GuardedFetchError, SsrfError, BodyTooLargeError, } from "./security/guardedFetch.js";
 export type { GuardedFetchOptions, GuardedFetchResult, } from "./security/guardedFetch.js";
-export { isPublicAddress, isLoopbackAddress } from "./security/addresses.js";
-export { assertNotSsrf, isDeniedHostname, normalizeHostForClassification, } from "./security/ssrf.js";
+export { assertNotSsrf, isDeniedHostname, isLoopbackAddress, isPublicAddress, normalizeHostForClassification, } from "./security/ssrf.js";
 export type { LookupAddress } from "./security/ssrf.js";
 //# sourceMappingURL=index.d.ts.map

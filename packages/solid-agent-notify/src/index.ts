@@ -73,10 +73,11 @@ export type {
   GuardedFetchOptions,
   GuardedFetchResult,
 } from "./security/guardedFetch.js";
-export { isPublicAddress, isLoopbackAddress } from "./security/addresses.js";
 export {
   assertNotSsrf,
   isDeniedHostname,
+  isLoopbackAddress,
+  isPublicAddress,
   normalizeHostForClassification,
 } from "./security/ssrf.js";
 export type { LookupAddress } from "./security/ssrf.js";
