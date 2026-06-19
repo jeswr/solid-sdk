@@ -57,16 +57,6 @@ function createValidatingLookup(resolveAll, allowLoopback, requireLoopbackOnly) 
     );
   };
 }
-function createPinningDispatcher(options = {}) {
-  const allowLoopback = options.allowLoopback ?? false;
-  const resolveAll = options.resolveAll ?? defaultResolveAll;
-  const lookup = createValidatingLookup(resolveAll, allowLoopback, false);
-  const connect = { lookup };
-  if (options.ca !== void 0) {
-    connect.ca = options.ca;
-  }
-  return new Agent({ connect });
-}
 function createNodeGuardedFetch(options = {}) {
   const allowLoopback = options.allowLoopback ?? false;
   const resolveAll = options.resolveAll ?? defaultResolveAll;
@@ -114,6 +104,51 @@ function safeIsHttp(u) {
   } catch {
     return false;
   }
+}
+
+// src/node.ts
+import { Agent as Agent2, buildConnector } from "undici";
+var defaultResolveAll2 = (hostname) => (
+  // Lazy-require node:dns so this stays a node-only concern (the module is the `./node`
+  // entry, already node-only). We mirror guarded-fetch's own default resolver.
+  import("node:dns").then(
+    (dns) => new Promise((resolve, reject) => {
+      dns.lookup(hostname, { all: true }, (err, addresses) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+        resolve(addresses);
+      });
+    })
+  )
+);
+function createPinningDispatcher(options = {}) {
+  const allowLoopback = options.allowLoopback ?? false;
+  const connectTimeout = options.timeoutMs ?? 1e4;
+  const resolveAll = options.resolveAll ?? defaultResolveAll2;
+  const makeLookup = (requireLoopbackOnly) => createValidatingLookup(resolveAll, allowLoopback, requireLoopbackOnly);
+  const tlsBase = {
+    timeout: connectTimeout,
+    ...options.ca !== void 0 ? { ca: options.ca } : {}
+  };
+  const httpsConnector = buildConnector({ ...tlsBase, lookup: makeLookup(false) });
+  const loopbackOnlyConnector = buildConnector({
+    ...tlsBase,
+    lookup: makeLookup(true)
+  });
+  return new Agent2({
+    // Custom connect (function form): undici hands us the full connect `Options`, INCLUDING
+    // `protocol`, so we pick the loopback-only connector for an `http:` hop and the standard
+    // public connector for `https:`. undici sets `opts.servername` to the request hostname, so
+    // TLS SNI + cert validation stay against the original host while our lookup steers the
+    // (pinned) IP. The Agent does NOT follow redirects on its own — the shared guard re-pins
+    // each hop through a fresh request — so a 30x to a private IP is blocked at the next hop.
+    connect(opts, cb) {
+      const connector = opts.protocol === "http:" ? loopbackOnlyConnector : httpsConnector;
+      connector(opts, cb);
+    }
+  });
 }
 export {
   createNodeGuardedFetch,

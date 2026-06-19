@@ -28,10 +28,12 @@ import { type AddressInfo, createServer, type Server } from "node:http";
 import { createServer as createHttpsServer, type Server as HttpsServer } from "node:https";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fetch as undiciFetch } from "undici";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { SsrfError } from "../src/index.js";
 import {
   createNodeGuardedFetch,
+  createPinningDispatcher,
   createValidatingLookup,
   nodeGuardedFetch,
   type ResolveAll,
@@ -509,5 +511,77 @@ describe("createNodeGuardedFetch — TLS servername preserved under IP pin", () 
     // so the hostname path's success above is real cert validation, not a no-op.
     const fetchImpl = createNodeGuardedFetch({ allowLoopback: true, ca: creds.cert });
     await expect(fetchImpl(`https://127.0.0.1:${port}/registry`)).rejects.toBeInstanceOf(SsrfError);
+  });
+});
+
+describe("createPinningDispatcher — protocol-aware http-loopback-only (parity guard, roborev Medium)", () => {
+  // This package OWNS createPinningDispatcher (rather than re-exporting guarded-fetch's) to
+  // preserve its prior, stricter posture on this low-level escape hatch: an http: connect must
+  // use a LOOPBACK-ONLY validating lookup, so even under allowLoopback:true a plaintext http:
+  // request can NEVER reach a PUBLIC host at connect time. These tests drive the bare dispatcher
+  // through undici.fetch (no shared guard) — the exact path a regression would surface on.
+
+  /** The connect-error message undici surfaces in `.cause` (it wraps it as "fetch failed"). */
+  async function connectError(fn: () => Promise<unknown>): Promise<string> {
+    try {
+      await fn();
+      return "(no error — request was ALLOWED)";
+    } catch (e) {
+      const cause = (e as { cause?: unknown }).cause;
+      const causeMsg = cause instanceof Error ? cause.message : "";
+      return causeMsg || (e as Error).message;
+    }
+  }
+
+  it("REFUSES http: to a PUBLIC-resolving host at connect, even with allowLoopback:true", async () => {
+    // The regression case: guarded-fetch's bare dispatcher (loopback-only nuance only in
+    // createNodeGuardedFetch) would ALLOW this; our protocol-aware dispatcher must REFUSE it.
+    // undici wraps the connect refusal as "fetch failed" with the real reason in `.cause`.
+    const resolveAll: ResolveAll = async () => [{ address: "93.184.216.34", family: 4 }];
+    const dispatcher = createPinningDispatcher({ allowLoopback: true, resolveAll });
+    try {
+      const msg = await connectError(() =>
+        undiciFetch("http://public.example/x", { dispatcher, redirect: "manual" } as never),
+      );
+      expect(msg).toMatch(/loopback-only|not loopback/i);
+    } finally {
+      await dispatcher.close().catch(() => {});
+    }
+  });
+
+  it("REFUSES https: to a PRIVATE-resolving host at connect (no allowLoopback)", async () => {
+    const resolveAll: ResolveAll = async () => [{ address: "10.0.0.1", family: 4 }];
+    const dispatcher = createPinningDispatcher({ resolveAll });
+    try {
+      const msg = await connectError(() =>
+        undiciFetch("https://private.example/x", { dispatcher, redirect: "manual" } as never),
+      );
+      expect(msg).toMatch(/non-public address|not loopback/i);
+    } finally {
+      await dispatcher.close().catch(() => {});
+    }
+  });
+
+  it("ALLOWS http: to a LOOPBACK host at connect under allowLoopback (the legitimate dev path)", async () => {
+    // A real local http server on 127.0.0.1: the loopback-only http: connector permits it.
+    const server = createServer((_req, res) => {
+      res.writeHead(200, { "content-type": "text/turtle" });
+      res.end(goodBody);
+    });
+    await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+    const port = (server.address() as AddressInfo).port;
+    const resolveAll: ResolveAll = async () => [{ address: "127.0.0.1", family: 4 }];
+    const dispatcher = createPinningDispatcher({ allowLoopback: true, resolveAll });
+    try {
+      const res = await undiciFetch(`http://localhost:${port}/registry`, {
+        dispatcher,
+        redirect: "manual",
+      } as never);
+      expect(res.status).toBe(200);
+      expect(await res.text()).toBe(goodBody);
+    } finally {
+      await dispatcher.close().catch(() => {});
+      await new Promise<void>((r) => server.close(() => r()));
+    }
   });
 });
