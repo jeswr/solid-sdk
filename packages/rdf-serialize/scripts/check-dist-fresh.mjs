@@ -1,6 +1,6 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 /**
- * check-dist-fresh — guard against the COMMITTED `dist/` drifting from `src/`.
+ * check-dist-fresh — guard against the committed `dist/` drifting from `src/`.
  *
  * `dist/` is committed (not gitignored) so the package installs directly from a
  * GitHub branch without a build step — consumers run under `ignore-scripts=true`
@@ -12,35 +12,38 @@
  * npm-published `n3` + `@rdfjs/types`, so its `dist/` is a plain `tsc` build with
  * no inlining.
  *
- * The check is ENTIRELY HEAD-based, in BOTH directions, so it is independent of
- * the working tree:
- *  - It materialises the COMMITTED `src/` (+ the two tsconfigs) from git HEAD
- *    into a scratch checkout via `git archive HEAD`, builds THAT with
- *    `tsc -p tsconfig.build.json`, and
- *  - diffs the emitted JavaScript + declarations against the COMMITTED `dist/`
- *    blobs at `HEAD:dist/<path>`.
+ * The check operates on the STAGED tree (the git index) — i.e. exactly the tree
+ * that is about to be committed — in BOTH directions, so it is independent of the
+ * unstaged working tree:
+ *  - It snapshots the index with `git write-tree`, materialises the STAGED `src/`
+ *    + tsconfigs + package.json from that tree via `git archive <tree> | tar -x`
+ *    into a scratch checkout (symlinking node_modules for module resolution),
+ *    builds THAT with `tsc -p tsconfig.build.json`, and
+ *  - diffs the emitted JavaScript + declarations against the STAGED `dist/`
+ *    blobs (`git show :dist/<path>` reads the index, not the working tree).
  *
- * Why HEAD-based on both sides (not the working tree):
- *  - The property that actually keeps the GitHub-installable artifact correct is
- *    "does the COMMITTED `dist/` match a fresh build of the COMMITTED `src/`?".
- *    Building from `HEAD:src` (not the working tree) means this check answers
- *    exactly that question and NOTHING else.
+ * Why the staged/index tree (not the working tree, not plain HEAD):
+ *  - The property that keeps the GitHub-installable artifact correct is "does the
+ *    `dist/` that will be committed match a fresh build of the `src/` that will be
+ *    committed?". The git index IS that tree, so checking it answers exactly that
+ *    question for the commit being prepared.
  *  - Reading the working-tree `dist/` would make a post-`build` run always equal
- *    (it just overwrote the working tree), so a STALE *committed* `dist/` would
- *    never be caught.
- *  - Building from the working-tree `src/` would make the check fail on
- *    legitimate UNCOMMITTED `src/` edits (the normal "preparing a commit" state),
- *    a false positive that would break the documented local workflow. Because the
- *    artifact is only ever published from a commit, gating against HEAD is both
- *    correct and ergonomic: edit src + dist freely, then commit src+dist together
- *    and this check confirms they agree at the commit that will be installed.
+ *    (it just overwrote the working tree), so a stale *to-be-committed* `dist/`
+ *    would never be caught; and building from the working-tree `src/` would FALSE
+ *    POSITIVE on legitimate unstaged-and-uncommitted `src/` edits (the normal
+ *    "still editing" state) — both wrong (the two roborev findings this resolves).
+ *  - Plain HEAD would MISS a commit-in-preparation that stages a `src/` change but
+ *    forgets to re-stage `dist/`: HEAD still agrees with itself. The index does
+ *    not — it carries the staged `src/` against the (unchanged) staged `dist/`, so
+ *    the drift is caught before the commit lands. After committing, the index
+ *    equals HEAD, so a post-commit re-run is consistent.
  *
  * It deliberately ignores the `*.map` sourcemap files: their byte content can
  * vary with absolute paths / tooling versions (the scratch outDir differs from
  * the committed build's cwd), and they are not load-bearing for a consumer
  * importing the package. Code (`.js`) and types (`.d.ts`) are what matter.
  *
- * Exit 0 = in sync; exit 1 = drift (run `npm run build` and commit `dist/`).
+ * Exit 0 = in sync; exit 1 = drift (run `npm run build` and stage/commit `dist/`).
  */
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync } from "node:fs";
@@ -75,12 +78,19 @@ function toKey(base, abs) {
 }
 
 /**
- * The set of `.js`/`.d.ts` artifacts committed under `dist/` at git HEAD,
- * keyed by their path RELATIVE to `dist/` (matching `toKey(freshDist, …)`).
- * Uses `git ls-tree` so it reads the COMMITTED tree, never the working copy.
+ * Snapshot the current git index as a tree object and return its SHA. Operates
+ * on the STAGED tree without mutating HEAD or the working directory.
  */
-function committedDistKeysAtHead() {
-  const out = execFileSync("git", ["ls-tree", "-r", "--name-only", "HEAD", "dist"], {
+function writeIndexTree() {
+  return execFileSync("git", ["write-tree"], { cwd: root, encoding: "utf8" }).trim();
+}
+
+/**
+ * The set of `.js`/`.d.ts` artifacts under `dist/` in the given tree, keyed by
+ * their path RELATIVE to `dist/` (matching `toKey(freshDist, …)`).
+ */
+function distKeysInTree(tree) {
+  const out = execFileSync("git", ["ls-tree", "-r", "--name-only", tree, "dist"], {
     cwd: root,
     encoding: "utf8",
   });
@@ -96,11 +106,12 @@ function committedDistKeysAtHead() {
 }
 
 /**
- * Read a committed `dist/<key>` blob from git HEAD, or `null` if absent.
+ * Read a STAGED `dist/<key>` blob from the git index, or `null` if absent.
+ * `git show :<path>` reads stage 0 of the index (the to-be-committed content).
  */
-function readCommittedDist(key) {
+function readStagedDist(key) {
   try {
-    return execFileSync("git", ["show", `HEAD:dist/${key}`], {
+    return execFileSync("git", ["show", `:dist/${key}`], {
       cwd: root,
       encoding: "utf8",
     });
@@ -111,16 +122,19 @@ function readCommittedDist(key) {
 
 let scratch;
 try {
+  const indexTree = writeIndexTree();
+
   scratch = mkdtempSync(join(tmpdir(), "rdf-serialize-dist-"));
-  // Materialise the COMMITTED src/ + tsconfigs + package.json from git HEAD into
-  // the scratch checkout, so the build input is the committed tree, not the
-  // working tree. `git archive HEAD <paths> | tar -x` writes the blobs verbatim.
-  // package.json is REQUIRED: with `module: nodenext`, tsc derives the emitted
-  // module format (ESM vs CJS) from the nearest package.json `"type"` — omit it
-  // and the scratch build wrongly emits CommonJS, spuriously failing the check.
+  // Materialise the STAGED src/ + tsconfigs + package.json from the index tree
+  // into the scratch checkout, so the build input is the to-be-committed tree,
+  // not the unstaged working tree. `git archive <tree> <paths> | tar -x` writes
+  // the staged blobs verbatim. package.json is REQUIRED: with `module: nodenext`,
+  // tsc derives the emitted module format (ESM vs CJS) from the nearest
+  // package.json `"type"` — omit it and the scratch build wrongly emits CommonJS,
+  // spuriously failing the check.
   const archive = execFileSync(
     "git",
-    ["archive", "HEAD", "src", "tsconfig.json", "tsconfig.build.json", "package.json"],
+    ["archive", indexTree, "src", "tsconfig.json", "tsconfig.build.json", "package.json"],
     { cwd: root, maxBuffer: 64 * 1024 * 1024 },
   );
   execFileSync("tar", ["-x", "-C", scratch], { input: archive });
@@ -130,9 +144,9 @@ try {
   symlinkSync(join(root, "node_modules"), join(scratch, "node_modules"), "dir");
 
   const freshDist = join(scratch, "dist");
-  // Build the committed src with the SAME plain-tsc pipeline `npm run build`
-  // uses (`tsc -p tsconfig.build.json`), from the scratch checkout, into dist/.
-  // The toolchain (typescript) is resolved from THIS repo's node_modules.
+  // Build the staged src with the SAME plain-tsc pipeline `npm run build` uses
+  // (`tsc -p tsconfig.build.json`), from the scratch checkout, into dist/. The
+  // toolchain (typescript) is resolved from THIS repo's node_modules.
   execFileSync(
     "node",
     [
@@ -149,34 +163,34 @@ try {
   );
 
   const freshFiles = new Map(listArtifacts(freshDist).map((p) => [toKey(freshDist, p), p]));
-  const committedKeys = new Set(committedDistKeysAtHead());
+  const stagedKeys = new Set(distKeysInTree(indexTree));
 
   const drift = [];
   for (const [key, freshPath] of freshFiles) {
-    const committed = readCommittedDist(key);
-    if (committed === null) {
-      drift.push(`missing in committed dist/: ${key}`);
+    const staged = readStagedDist(key);
+    if (staged === null) {
+      drift.push(`missing in staged dist/: ${key}`);
       continue;
     }
-    if (readFileSync(freshPath, "utf8") !== committed) {
+    if (readFileSync(freshPath, "utf8") !== staged) {
       drift.push(`out of date: ${key}`);
     }
   }
-  for (const key of committedKeys) {
+  for (const key of stagedKeys) {
     if (!freshFiles.has(key)) {
       drift.push(`stale (no longer emitted): dist/${key}`);
     }
   }
 
   if (drift.length > 0) {
-    console.error("committed dist/ is out of sync with src/:");
+    console.error("staged dist/ is out of sync with src/:");
     for (const d of drift) {
       console.error(`  - ${d}`);
     }
-    console.error("\nRun `npm run build` and commit dist/.");
+    console.error("\nRun `npm run build` and stage dist/ (git add dist).");
     process.exit(1);
   }
-  console.log(`committed dist/ matches src/ (${freshFiles.size} artifacts).`);
+  console.log(`staged dist/ matches src/ (${freshFiles.size} artifacts).`);
 } finally {
   if (scratch) {
     rmSync(scratch, { recursive: true, force: true });
