@@ -632,7 +632,7 @@ function waitForDrain(parser) {
 }
 
 // src/serialize.ts
-import { Writer } from "n3";
+import { legacySerialize } from "@jeswr/rdf-serialize";
 var PREFIXES = {
   odrl: ODRL,
   acl: ACL,
@@ -643,20 +643,7 @@ var PREFIXES = {
   rdfs: RDFS
 };
 function serialize(quads, format = "text/turtle") {
-  if (quads.length === 0) {
-    return Promise.resolve("");
-  }
-  return new Promise((resolve, reject) => {
-    const writer = new Writer({ format, prefixes: PREFIXES });
-    writer.addQuads(quads);
-    writer.end((error, result2) => {
-      if (error) {
-        reject(error);
-      } else {
-        resolve(result2);
-      }
-    });
-  });
+  return legacySerialize(quads, format, PREFIXES);
 }
 
 // src/wrappers.ts
