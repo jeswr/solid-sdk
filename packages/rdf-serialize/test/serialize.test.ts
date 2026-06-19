@@ -6,7 +6,7 @@
 
 import type { Quad } from "@rdfjs/types";
 import * as n3 from "n3";
-import { DataFactory } from "n3";
+import { DataFactory, type ErrorCallback } from "n3";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_FORMAT, legacySerialize, type SerializeOptions, serialize } from "../src/index.js";
 
@@ -102,23 +102,17 @@ describe("serialize — error rejection path", () => {
     // error, serialize() must reject with that exact error (not resolve). Stub
     // Writer#end to invoke its callback with an error.
     const boom = new Error("n3 writer failure");
-    vi.spyOn(n3.Writer.prototype, "end").mockImplementation(function mockEnd(
-      this: unknown,
-      cb?: (err: Error | null, res: string) => void,
-    ) {
+    vi.spyOn(n3.Writer.prototype, "end").mockImplementation((cb?: ErrorCallback) => {
       cb?.(boom, "");
-      return undefined as never;
     });
     await expect(serialize(sampleQuads())).rejects.toBe(boom);
   });
 
   it("resolves with the result n3.Writer surfaces on success", async () => {
-    vi.spyOn(n3.Writer.prototype, "end").mockImplementation(function mockEnd(
-      this: unknown,
-      cb?: (err: Error | null, res: string) => void,
-    ) {
-      cb?.(null, "STUB_RESULT");
-      return undefined as never;
+    vi.spyOn(n3.Writer.prototype, "end").mockImplementation((cb?: ErrorCallback) => {
+      // n3 calls the success callback with a null error; ErrorCallback's `err`
+      // is typed `Error`, so cast the runtime null the production code handles.
+      cb?.(null as unknown as Error, "STUB_RESULT");
     });
     await expect(serialize(sampleQuads())).resolves.toBe("STUB_RESULT");
   });
