@@ -368,6 +368,20 @@ cache cannot back.
 | `npm run lint` | Biome |
 | `npm test` | Vitest (headless) |
 | `npm run test:coverage` | Vitest + v8 coverage |
+| `npm run check:dist` | the committed `dist/` matches a fresh build |
+| `npm run api:report` | regenerate `etc/solid-offline.api.md` (after `build`) |
+| `npm run api:check` | fail if the committed API report is stale (part of `gate`) |
+| `npm run gate` | lint → typecheck → test → check:dist → build → api:check |
+
+## Public API surface
+
+The full public type surface of every entry point (`.`, `./worker`, `./react`) is
+snapshotted in [`etc/solid-offline.api.md`](etc/solid-offline.api.md) — generated from
+the built `dist/*.d.ts`. "What is the API?" is a one-file read, and any change to the
+public contract (a new/removed/renamed export, a changed signature) shows up as a diff
+in that file. `npm run gate` runs `api:check`, which fails if the committed report is
+stale; after an intended API change, regenerate it with `npm run build && npm run api:report`
+and commit the diff.
 
 ## License
 
