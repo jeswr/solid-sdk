@@ -1,0 +1,271 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`characterization — A2A Agent Card (full) > emits the exact card object (minimal) 1`] = `
+{
+  "name": "A",
+  "preferredTransport": "JSONRPC",
+  "protocolVersion": "0.3.0",
+  "url": "https://a/agent",
+  "x-solid": {
+    "agentDescription": "https://a/agent#ad",
+  },
+}
+`;
+
+exports[`characterization — A2A Agent Card (full) > emits the exact card object 1`] = `
+{
+  "description": "Represents Alice.",
+  "name": "Alice's Agent",
+  "preferredTransport": "JSONRPC",
+  "protocolVersion": "0.3.0",
+  "securitySchemes": {
+    "public": {
+      "type": "public",
+    },
+    "solid-oidc": {
+      "description": "Solid-OIDC + DPoP",
+      "openIdConnectUrl": "https://idp.example/",
+      "type": "solid-oidc",
+    },
+  },
+  "skills": [
+    {
+      "description": "Negotiate meetings",
+      "id": "schedule",
+      "name": "Scheduling",
+      "tags": [
+        "calendar",
+        "time",
+      ],
+    },
+    {
+      "id": "contacts",
+      "name": "Contacts",
+    },
+  ],
+  "url": "https://alice.pod.example/agent/endpoint",
+  "x-solid": {
+    "agentDescription": "https://alice.pod.example/agent#ad",
+    "owner": "https://alice.pod.example/profile/card#me",
+    "protocolSources": [
+      "https://alice.pod.example/protocols/exchange#v1",
+    ],
+  },
+}
+`;
+
+exports[`characterization — ANP Agent Description RDF (canonical N-Quads) > pins the JSON-LD projection (full) 1`] = `
+{
+  "@context": {
+    "AgentDescription": "https://w3id.org/agent-description#AgentDescription",
+    "SecurityScheme": "https://w3id.org/agent-description#SecurityScheme",
+    "Skill": "https://w3id.org/agent-description#Skill",
+    "ad": "https://w3id.org/agent-description#",
+    "description": "https://w3id.org/agent-description#description",
+    "did": "https://w3id.org/agent-description#did",
+    "name": "https://w3id.org/agent-description#name",
+    "owner": {
+      "@id": "https://w3id.org/agent-description#owner",
+      "@type": "@id",
+    },
+    "protocolSource": {
+      "@id": "https://w3id.org/agent-description#protocolSource",
+      "@type": "@id",
+    },
+    "schemeType": "https://w3id.org/agent-description#schemeType",
+    "securityScheme": {
+      "@id": "https://w3id.org/agent-description#securityScheme",
+      "@type": "@id",
+    },
+    "skill": {
+      "@id": "https://w3id.org/agent-description#skill",
+      "@type": "@id",
+    },
+    "skillId": "https://w3id.org/agent-description#skillId",
+    "url": {
+      "@id": "https://w3id.org/agent-description#url",
+      "@type": "@id",
+    },
+  },
+  "@id": "https://alice.pod.example/agent",
+  "@type": "AgentDescription",
+  "description": "Represents Alice.",
+  "did": "did:web:alice.pod.example",
+  "name": "Alice's Agent",
+  "owner": {
+    "@id": "https://alice.pod.example/profile/card#me",
+  },
+  "protocolSource": [
+    {
+      "@id": "https://alice.pod.example/protocols/exchange#v1",
+    },
+  ],
+  "securityScheme": [
+    {
+      "@type": "SecurityScheme",
+      "description": "Solid-OIDC + DPoP",
+      "schemeType": "solid-oidc",
+      "url": {
+        "@id": "https://idp.example/",
+      },
+    },
+    {
+      "@type": "SecurityScheme",
+      "schemeType": "public",
+    },
+  ],
+  "skill": [
+    {
+      "@type": "Skill",
+      "description": "Negotiate meetings",
+      "name": "Scheduling",
+      "skillId": "schedule",
+    },
+    {
+      "@type": "Skill",
+      "name": "Contacts",
+      "skillId": "contacts",
+    },
+  ],
+  "url": "https://alice.pod.example/agent/endpoint",
+}
+`;
+
+exports[`characterization — ANP Agent Description RDF (canonical N-Quads) > pins the JSON-LD projection (minimal) 1`] = `
+{
+  "@context": {
+    "AgentDescription": "https://w3id.org/agent-description#AgentDescription",
+    "SecurityScheme": "https://w3id.org/agent-description#SecurityScheme",
+    "Skill": "https://w3id.org/agent-description#Skill",
+    "ad": "https://w3id.org/agent-description#",
+    "description": "https://w3id.org/agent-description#description",
+    "did": "https://w3id.org/agent-description#did",
+    "name": "https://w3id.org/agent-description#name",
+    "owner": {
+      "@id": "https://w3id.org/agent-description#owner",
+      "@type": "@id",
+    },
+    "protocolSource": {
+      "@id": "https://w3id.org/agent-description#protocolSource",
+      "@type": "@id",
+    },
+    "schemeType": "https://w3id.org/agent-description#schemeType",
+    "securityScheme": {
+      "@id": "https://w3id.org/agent-description#securityScheme",
+      "@type": "@id",
+    },
+    "skill": {
+      "@id": "https://w3id.org/agent-description#skill",
+      "@type": "@id",
+    },
+    "skillId": "https://w3id.org/agent-description#skillId",
+    "url": {
+      "@id": "https://w3id.org/agent-description#url",
+      "@type": "@id",
+    },
+  },
+  "@id": "https://a/agent",
+  "@type": "AgentDescription",
+  "name": "A",
+  "url": "https://a/agent",
+}
+`;
+
+exports[`characterization — ANP Agent Description RDF (canonical N-Quads) > pins the full descriptor graph 1`] = `
+"<https://alice.pod.example/agent> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/agent-description#AgentDescription>
+<https://alice.pod.example/agent> <https://w3id.org/agent-description#description> "Represents Alice."^^<http://www.w3.org/2001/XMLSchema#string>
+<https://alice.pod.example/agent> <https://w3id.org/agent-description#did> "did:web:alice.pod.example"^^<http://www.w3.org/2001/XMLSchema#string>
+<https://alice.pod.example/agent> <https://w3id.org/agent-description#name> "Alice's Agent"^^<http://www.w3.org/2001/XMLSchema#string>
+<https://alice.pod.example/agent> <https://w3id.org/agent-description#owner> <https://alice.pod.example/profile/card#me>
+<https://alice.pod.example/agent> <https://w3id.org/agent-description#protocolSource> <https://alice.pod.example/protocols/exchange#v1>
+<https://alice.pod.example/agent> <https://w3id.org/agent-description#securityScheme> _:[<http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/agent-description#SecurityScheme> | <https://w3id.org/agent-description#description> "Solid-OIDC + DPoP"^^<http://www.w3.org/2001/XMLSchema#string> | <https://w3id.org/agent-description#schemeType> "solid-oidc"^^<http://www.w3.org/2001/XMLSchema#string> | <https://w3id.org/agent-description#url> <https://idp.example/>]
+<https://alice.pod.example/agent> <https://w3id.org/agent-description#securityScheme> _:[<http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/agent-description#SecurityScheme> | <https://w3id.org/agent-description#schemeType> "public"^^<http://www.w3.org/2001/XMLSchema#string>]
+<https://alice.pod.example/agent> <https://w3id.org/agent-description#skill> _:[<http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/agent-description#Skill> | <https://w3id.org/agent-description#description> "Negotiate meetings"^^<http://www.w3.org/2001/XMLSchema#string> | <https://w3id.org/agent-description#name> "Scheduling"^^<http://www.w3.org/2001/XMLSchema#string> | <https://w3id.org/agent-description#skillId> "schedule"^^<http://www.w3.org/2001/XMLSchema#string>]
+<https://alice.pod.example/agent> <https://w3id.org/agent-description#skill> _:[<http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/agent-description#Skill> | <https://w3id.org/agent-description#name> "Contacts"^^<http://www.w3.org/2001/XMLSchema#string> | <https://w3id.org/agent-description#skillId> "contacts"^^<http://www.w3.org/2001/XMLSchema#string>]
+<https://alice.pod.example/agent> <https://w3id.org/agent-description#url> <https://alice.pod.example/agent/endpoint>
+_:[<http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/agent-description#SecurityScheme> | <https://w3id.org/agent-description#description> "Solid-OIDC + DPoP"^^<http://www.w3.org/2001/XMLSchema#string> | <https://w3id.org/agent-description#schemeType> "solid-oidc"^^<http://www.w3.org/2001/XMLSchema#string> | <https://w3id.org/agent-description#url> <https://idp.example/>] <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/agent-description#SecurityScheme>
+_:[<http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/agent-description#SecurityScheme> | <https://w3id.org/agent-description#description> "Solid-OIDC + DPoP"^^<http://www.w3.org/2001/XMLSchema#string> | <https://w3id.org/agent-description#schemeType> "solid-oidc"^^<http://www.w3.org/2001/XMLSchema#string> | <https://w3id.org/agent-description#url> <https://idp.example/>] <https://w3id.org/agent-description#description> "Solid-OIDC + DPoP"^^<http://www.w3.org/2001/XMLSchema#string>
+_:[<http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/agent-description#SecurityScheme> | <https://w3id.org/agent-description#description> "Solid-OIDC + DPoP"^^<http://www.w3.org/2001/XMLSchema#string> | <https://w3id.org/agent-description#schemeType> "solid-oidc"^^<http://www.w3.org/2001/XMLSchema#string> | <https://w3id.org/agent-description#url> <https://idp.example/>] <https://w3id.org/agent-description#schemeType> "solid-oidc"^^<http://www.w3.org/2001/XMLSchema#string>
+_:[<http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/agent-description#SecurityScheme> | <https://w3id.org/agent-description#description> "Solid-OIDC + DPoP"^^<http://www.w3.org/2001/XMLSchema#string> | <https://w3id.org/agent-description#schemeType> "solid-oidc"^^<http://www.w3.org/2001/XMLSchema#string> | <https://w3id.org/agent-description#url> <https://idp.example/>] <https://w3id.org/agent-description#url> <https://idp.example/>
+_:[<http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/agent-description#SecurityScheme> | <https://w3id.org/agent-description#schemeType> "public"^^<http://www.w3.org/2001/XMLSchema#string>] <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/agent-description#SecurityScheme>
+_:[<http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/agent-description#SecurityScheme> | <https://w3id.org/agent-description#schemeType> "public"^^<http://www.w3.org/2001/XMLSchema#string>] <https://w3id.org/agent-description#schemeType> "public"^^<http://www.w3.org/2001/XMLSchema#string>
+_:[<http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/agent-description#Skill> | <https://w3id.org/agent-description#description> "Negotiate meetings"^^<http://www.w3.org/2001/XMLSchema#string> | <https://w3id.org/agent-description#name> "Scheduling"^^<http://www.w3.org/2001/XMLSchema#string> | <https://w3id.org/agent-description#skillId> "schedule"^^<http://www.w3.org/2001/XMLSchema#string>] <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/agent-description#Skill>
+_:[<http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/agent-description#Skill> | <https://w3id.org/agent-description#description> "Negotiate meetings"^^<http://www.w3.org/2001/XMLSchema#string> | <https://w3id.org/agent-description#name> "Scheduling"^^<http://www.w3.org/2001/XMLSchema#string> | <https://w3id.org/agent-description#skillId> "schedule"^^<http://www.w3.org/2001/XMLSchema#string>] <https://w3id.org/agent-description#description> "Negotiate meetings"^^<http://www.w3.org/2001/XMLSchema#string>
+_:[<http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/agent-description#Skill> | <https://w3id.org/agent-description#description> "Negotiate meetings"^^<http://www.w3.org/2001/XMLSchema#string> | <https://w3id.org/agent-description#name> "Scheduling"^^<http://www.w3.org/2001/XMLSchema#string> | <https://w3id.org/agent-description#skillId> "schedule"^^<http://www.w3.org/2001/XMLSchema#string>] <https://w3id.org/agent-description#name> "Scheduling"^^<http://www.w3.org/2001/XMLSchema#string>
+_:[<http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/agent-description#Skill> | <https://w3id.org/agent-description#description> "Negotiate meetings"^^<http://www.w3.org/2001/XMLSchema#string> | <https://w3id.org/agent-description#name> "Scheduling"^^<http://www.w3.org/2001/XMLSchema#string> | <https://w3id.org/agent-description#skillId> "schedule"^^<http://www.w3.org/2001/XMLSchema#string>] <https://w3id.org/agent-description#skillId> "schedule"^^<http://www.w3.org/2001/XMLSchema#string>
+_:[<http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/agent-description#Skill> | <https://w3id.org/agent-description#name> "Contacts"^^<http://www.w3.org/2001/XMLSchema#string> | <https://w3id.org/agent-description#skillId> "contacts"^^<http://www.w3.org/2001/XMLSchema#string>] <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/agent-description#Skill>
+_:[<http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/agent-description#Skill> | <https://w3id.org/agent-description#name> "Contacts"^^<http://www.w3.org/2001/XMLSchema#string> | <https://w3id.org/agent-description#skillId> "contacts"^^<http://www.w3.org/2001/XMLSchema#string>] <https://w3id.org/agent-description#name> "Contacts"^^<http://www.w3.org/2001/XMLSchema#string>
+_:[<http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/agent-description#Skill> | <https://w3id.org/agent-description#name> "Contacts"^^<http://www.w3.org/2001/XMLSchema#string> | <https://w3id.org/agent-description#skillId> "contacts"^^<http://www.w3.org/2001/XMLSchema#string>] <https://w3id.org/agent-description#skillId> "contacts"^^<http://www.w3.org/2001/XMLSchema#string>"
+`;
+
+exports[`characterization — ANP Agent Description RDF (canonical N-Quads) > pins the minimal descriptor graph 1`] = `
+"<https://a/agent> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/agent-description#AgentDescription>
+<https://a/agent> <https://w3id.org/agent-description#name> "A"^^<http://www.w3.org/2001/XMLSchema#string>
+<https://a/agent> <https://w3id.org/agent-description#url> <https://a/agent>"
+`;
+
+exports[`characterization — person→agent pointer triples > pins both-predicate pointer graph 1`] = `
+"<https://alice.pod.example/profile/card#me> <http://www.w3.org/ns/solid/interop#hasAuthorizationAgent> <https://alice.pod.example/agent>
+<https://alice.pod.example/profile/card#me> <https://schema.org/agent> <https://alice.pod.example/agent>"
+`;
+
+exports[`characterization — person→agent pointer triples > pins the default (interop) pointer graph 1`] = `"<https://alice.pod.example/profile/card#me> <http://www.w3.org/ns/solid/interop#hasAuthorizationAgent> <https://alice.pod.example/agent>"`;
+
+exports[`characterization — verify round-trip (emit → verify) > pins the issue set for a malformed descriptor 1`] = `
+{
+  "codes": [
+    "duplicate-skill-id",
+    "invalid-owner",
+    "invalid-security-scheme",
+    "missing-name",
+    "missing-url",
+  ],
+  "valid": false,
+}
+`;
+
+exports[`characterization — verify round-trip (emit → verify) > round-trips the emitted Turtle back to a valid descriptor 1`] = `
+{
+  "descriptor": {
+    "description": "Represents Alice.",
+    "did": "did:web:alice.pod.example",
+    "id": "https://alice.pod.example/agent",
+    "name": "Alice's Agent",
+    "owner": "https://alice.pod.example/profile/card#me",
+    "protocolSources": [
+      "https://alice.pod.example/protocols/exchange#v1",
+    ],
+    "securitySchemes": [
+      {
+        "description": "Solid-OIDC + DPoP",
+        "issuer": "https://idp.example/",
+        "type": "solid-oidc",
+      },
+      {
+        "type": "public",
+      },
+    ],
+    "skills": [
+      {
+        "description": "Negotiate meetings",
+        "id": "schedule",
+        "name": "Scheduling",
+      },
+      {
+        "id": "contacts",
+        "name": "Contacts",
+      },
+    ],
+    "url": "https://alice.pod.example/agent/endpoint",
+  },
+  "issues": [],
+  "valid": true,
+}
+`;
+
+exports[`characterization — well-known URLs > pins the ANP + A2A discovery URLs 1`] = `
+{
+  "a2a": "https://alice.pod.example/.well-known/agent-card.json",
+  "anp": "https://alice.pod.example/.well-known/agent-descriptions",
+}
+`;
