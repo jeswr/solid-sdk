@@ -39,6 +39,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "check:dist": "node scripts/check-dist.mjs",
+    "api:report": "node scripts/api-report.mjs --local",
+    "api:check": "node scripts/api-report.mjs",
     "prepublishOnly": "npm run build"
   },
   "peerDependencies": {
