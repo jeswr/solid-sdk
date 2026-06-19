@@ -1,6 +1,6 @@
-// src/node.ts
+// node_modules/@jeswr/guarded-fetch/dist/node.js
 import { lookup as dnsLookupCb } from "node:dns";
-import { Agent, buildConnector, fetch as undiciFetch } from "undici";
+import { Agent, fetch as undiciFetch } from "undici";
 import {
   createGuardedFetch,
   isLoopbackAddress,
@@ -40,18 +40,17 @@ function createValidatingLookup(resolveAll, allowLoopback, requireLoopbackOnly) 
             return;
           }
         }
-        const first = addresses[0];
-        if (lookupOptions?.all === true) {
+        const wantsAll = lookupOptions?.all === true;
+        if (wantsAll) {
           callback(null, addresses);
-          return;
+        } else {
+          const first = addresses[0];
+          callback(null, first.address, first.family);
         }
-        callback(null, first.address, first.family);
       },
       (err) => {
         callback(
-          new SsrfError(`Host did not resolve: ${hostname}: ${message(err)}`, {
-            cause: err
-          }),
+          err instanceof Error ? err : new SsrfError(`Host did not resolve: ${hostname}.`),
           []
         );
       }
@@ -60,70 +59,61 @@ function createValidatingLookup(resolveAll, allowLoopback, requireLoopbackOnly) 
 }
 function createPinningDispatcher(options = {}) {
   const allowLoopback = options.allowLoopback ?? false;
-  const connectTimeout = options.timeoutMs ?? 1e4;
   const resolveAll = options.resolveAll ?? defaultResolveAll;
-  const makeLookup = (requireLoopbackOnly) => createValidatingLookup(resolveAll, allowLoopback, requireLoopbackOnly);
-  const tlsBase = {
-    timeout: connectTimeout,
-    ...options.ca !== void 0 ? { ca: options.ca } : {}
-  };
-  const httpsConnector = buildConnector({ ...tlsBase, lookup: makeLookup(false) });
-  const loopbackOnlyConnector = buildConnector({
-    ...tlsBase,
-    lookup: makeLookup(true)
-  });
-  return new Agent({
-    // NOTE on redirects: the Agent dispatcher does NOT follow redirects on its own —
-    // undici's `fetch` honours the request `redirect` mode, and the shared guard sets
-    // `redirect: "manual"` on every request it issues through us, then re-validates +
-    // re-pins each `Location` hop as a fresh request through this same dispatcher. So a
-    // 30x to a private IP is blocked at the next hop's lookup, never auto-followed.
-    //
-    // Custom connect (function form): undici hands us the full connect `Options`,
-    // INCLUDING `protocol`, so we pick the loopback-only connector for an `http:` hop and
-    // the standard public connector for `https:`. undici sets `opts.servername` to the
-    // request hostname, so TLS SNI + cert validation stay against the original host while
-    // our lookup steers the (pinned) IP.
-    connect(opts, cb) {
-      const connector = opts.protocol === "http:" ? loopbackOnlyConnector : httpsConnector;
-      connector(opts, cb);
-    }
-  });
+  const lookup = createValidatingLookup(resolveAll, allowLoopback, false);
+  const connect = { lookup };
+  if (options.ca !== void 0) {
+    connect.ca = options.ca;
+  }
+  return new Agent({ connect });
 }
 function createNodeGuardedFetch(options = {}) {
+  const allowLoopback = options.allowLoopback ?? false;
   const resolveAll = options.resolveAll ?? defaultResolveAll;
-  const dispatcher = createPinningDispatcher({ ...options, resolveAll });
-  const pinningFetch = (input, init) => {
-    const undiciInit = {
-      ...init,
-      dispatcher
-    };
-    return undiciFetch(
-      input,
-      undiciInit
-    );
+  const ca = options.ca;
+  const pinningFetch = async (input, init) => {
+    const urlStr = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+    const requireLoopbackOnly = safeIsHttp(urlStr) && allowLoopback;
+    const lookup = createValidatingLookup(resolveAll, allowLoopback, requireLoopbackOnly);
+    const connect = { lookup };
+    if (ca !== void 0) {
+      connect.ca = ca;
+    }
+    const agent = new Agent({ connect });
+    try {
+      const undiciInit = {
+        ...init ?? {},
+        // The guard already set redirect:"manual"; reinforce + forbid undici-level redirects.
+        redirect: "manual",
+        maxRedirections: 0,
+        dispatcher: agent
+      };
+      return await undiciFetch(input, undiciInit);
+    } finally {
+      void agent.close().catch(() => {
+      });
+    }
   };
+  const dnsLookup = (host) => resolveAll(host);
   return createGuardedFetch({
-    ...options,
-    // Share ONE resolver across both layers: the guard's URL-level DNS classification AND
-    // the connect-time pin use the same `resolveAll`, so the host the guard validated is
-    // the host the socket pins to (no divergent resolver could disagree). Defaults to
-    // `node:dns` — identical to the guard's own Node branch — and is injectable for tests.
-    dnsLookup: resolveAll,
-    // The guard re-resolves + re-classifies the host on the initial request AND each
-    // redirect hop, then issues the validated request through `pinningFetch`, which
-    // re-resolves + validates + PINS at connect time. Two independent resolutions, both
-    // validated — the second one pins, closing the gap the first cannot.
+    ...stripNodeOnlyOptions(options),
     pinningFetch,
-    // Strict posture: a hostname is allowed ONLY because we supplied a branded
-    // pinningFetch. A plain fetch could never satisfy this — so the rebinding window can
-    // never be silently re-opened by swapping the fetch.
-    requireDnsPinning: true
+    requireDnsPinning: true,
+    dnsLookup,
+    allowLoopback
   });
 }
 var nodeGuardedFetch = createNodeGuardedFetch();
-function message(cause) {
-  return cause instanceof Error ? cause.message : String(cause);
+function stripNodeOnlyOptions(options) {
+  const { resolveAll: _r, ca: _ca, allowLoopback: _al, ...rest } = options;
+  return rest;
+}
+function safeIsHttp(u) {
+  try {
+    return new URL(u).protocol === "http:";
+  } catch {
+    return false;
+  }
 }
 export {
   createNodeGuardedFetch,

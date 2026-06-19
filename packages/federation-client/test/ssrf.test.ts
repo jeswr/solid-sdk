@@ -9,6 +9,11 @@
 // must never reach the underlying fetch.
 
 import { isIP } from "node:net";
+// `GuardError` is the non-SSRF policy-refusal error @jeswr/guarded-fetch raises (a
+// disallowed port / content-type). It is NOT part of THIS package's published surface (we
+// kept the public API identical to the pre-adoption one), so the test imports it directly
+// from the underlying guard to assert the new, STRICTER port-gate refusal.
+import { GuardError } from "@jeswr/guarded-fetch";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createGuardedFetch,
@@ -563,7 +568,6 @@ describe("SSRF guard — BROWSER branch (no node:dns, #92)", () => {
     const { guarded, calls } = browserGuard();
     for (const url of [
       "https://localhost/doc",
-      "https://localhost:8443/doc",
       "https://api.localhost/doc",
       "https://printer.local/doc",
       "https://LOCALHOST/doc", // case-insensitive
@@ -572,6 +576,18 @@ describe("SSRF guard — BROWSER branch (no node:dns, #92)", () => {
       await expect(guarded(url)).rejects.toBeInstanceOf(SsrfError);
     }
     expect(calls).toEqual([]); // never reached the underlying fetch
+  });
+
+  it("STILL refuses a localhost name carrying a non-default port (port gate fires first)", async () => {
+    // After adopting @jeswr/guarded-fetch the production port gate refuses a non-443 port
+    // with a `GuardError` BEFORE the localhost-name classification — so `localhost:8443` is
+    // refused with `GuardError`, not `SsrfError`. Either way the request is BLOCKED (never
+    // reaches the underlying fetch): guarded-fetch is STRICTER here than the old guard, which
+    // had no port gate. (A consumer that needs a non-default public port opts out via
+    // `guard.enforcePortGate: false`.)
+    const { guarded, calls } = browserGuard();
+    await expect(guarded("https://localhost:8443/doc")).rejects.toBeInstanceOf(GuardError);
+    expect(calls).toEqual([]);
   });
 
   it("rejects private / loopback / link-local / metadata IP LITERALS in the host", async () => {
