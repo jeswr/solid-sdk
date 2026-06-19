@@ -195,12 +195,15 @@ export declare function isUseDpopNonceChallenge(response: Response): boolean;
  * The grammar (RFC 9110 §11.6.1) is comma-ambiguous: commas separate BOTH auth-params
  * within a challenge AND challenges from each other; auth-params allow optional whitespace
  * around `=` (BWS); and a quoted value may itself contain commas/`=`/scheme-like words. We
- * scan character-by-character into ATOMS (a bare word, a quoted string, or a standalone
- * `=`), tracking quoted strings (with `\`-escapes), then walk the atoms: a `word [=] value`
- * triple (tolerating BWS) is an auth-param attributed to the current challenge; a lone word
- * NOT followed by `=` starts a NEW challenge (a scheme / token68). Param VALUES are unquoted
- * (quotes stripped, escapes resolved). Odd input degrades safely (the caller is
- * conservative — only an UNAMBIGUOUS DPoP `error="use_dpop_nonce"` is acted on).
+ * tokenise character-by-character into atoms (a bare word, a quoted string, or a standalone
+ * `=`), then walk those atoms into challenges (see the internal `tokenizeChallengeHeader`
+ * and `walkChallengeAtoms` helpers). Param VALUES are unquoted (quotes stripped, escapes
+ * resolved). Odd input degrades safely (the caller is conservative — only an UNAMBIGUOUS
+ * DPoP `error="use_dpop_nonce"` is acted on).
+ *
+ * The return type is written as the INLINE structural shape (not the internal `Challenge`
+ * alias) so the published `.d.ts` — and the api-extractor report — stay byte-identical to
+ * the pre-refactor signature: this decomposition changes structure, never the contract.
  */
 export declare function parseWwwAuthenticate(header: string): {
     scheme: string;
