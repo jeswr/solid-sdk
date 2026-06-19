@@ -4,6 +4,15 @@
 > type contract). Do NOT edit by hand: run `npm run build && npm run api:report`. A diff here
 > is a deliberate, reviewed PUBLIC-API change. Chunk-hash filenames are normalized.
 
+### Public exports per `package.json` subpath
+
+> Parsed from each entry `.d.ts` `export { … }` set (alias/`type`-modifier resolved). A
+> removed or renamed export shows as a diff here, independent of the chunk bodies below.
+
+- `.` (`dist/index.d.ts`): `ANONYMOUS_SCOPE`, `AppShellConfig`, `CACHE_PREFIX`, `CacheMetadata`, `CacheStorageLike`, `DB_PREFIX`, `DEFAULT_CACHE_NAME`, `DEFAULT_DB_NAME`, `DEFAULT_WARM_BUDGET`, `InvalidateDeps`, `InvalidateOutcome`, `NotificationActivityType`, `NotificationFrame`, `NotificationsClient`, `NotificationsClientConfig`, `NotificationsConfig`, `NotificationsDeps`, `OfflineClient`, `OfflineClientConfig`, `OfflineStatusSnapshot`, `OfflineStatusSurface`, `PageToWorkerMessage`, `PurgeDeps`, `PurgeResult`, `ResolvedAppShellConfig`, `ResolvedWarmBudget`, `ResourceFreshness`, `ShellCache`, `ShellCacheStorage`, `ShellDeps`, `ShellResult`, `ShellServeSource`, `SocketFactory`, `SocketLike`, `StatusListener`, `StatusSurfaceOptions`, `SweepResult`, `UpdatedEvent`, `UpdatedListener`, `WarmBudget`, `WarmConfig`, `WarmController`, `WarmDeps`, `WarmResult`, `WarmVisit`, `assetConfigCandidates`, `backoffDelay`, `cacheNameForWebId`, `cleanupOldShellCaches`, `containerChildren`, `createNotificationsClient`, `createOfflineClient`, `createStatusSurface`, `createWarmController`, `dbNameForWebId`, `deriveSeeds`, `discoverSubscriptionUrl`, `handleNavigation`, `handleNotification`, `handlePrecachedAsset`, `isPrecachedAsset`, `isScopeChange`, `onIdle`, `parseFrame`, `parseWacAllow`, `precacheAppShell`, `purgeForWebId`, `resolveAppShellConfig`, `resolveAssetShellConfig`, `resolveBudget`, `resolveServingShellConfig`, `resyncSweep`, `sameShellConfig`, `scopeFor`, `scopeHash`, `shellBucketComplete`, `shellCacheName`, `storageDescriptionFromLink`, `subscribe`, `typeIndexTargets`, `userCanRead`, `warm`
+- `./worker` (`dist/worker.d.ts`): _(no named exports)_
+- `./react` (`dist/react.d.ts`): `OfflineStatusSnapshot`, `OfflineStatusSurface`, `ResourceFreshness`, `ResourceState`, `UseOfflineResourceOptions`, `UseOfflineResourceResult`, `useOfflineResource`, `useOfflineStatus`
+
 ### `dist/index.d.ts`
 
 ```ts
