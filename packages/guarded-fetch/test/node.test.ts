@@ -413,6 +413,98 @@ describe("createPinningDispatcher — protocol-aware connect (bare dispatcher)",
   });
 });
 
+describe("createPinningDispatcher — http: refused unless allowLoopback (bare dispatcher)", () => {
+  let server: Server;
+  let port: number;
+  beforeEach(async () => {
+    server = createServer((_req, res) => {
+      res.writeHead(200, { "content-type": "text/plain" });
+      res.end("REACHED-LOOPBACK");
+    });
+    await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+    port = (server.address() as AddressInfo).port;
+  });
+  afterEach(async () => {
+    await new Promise<void>((r) => server.close(() => r()));
+  });
+
+  // The CORE weakness: the BARE dispatcher at the DEFAULT (production) options reached
+  // `http://localhost` / `http://127.0.0.1`. undici's connector dials an IP LITERAL directly
+  // (skipping the validating lookup), so the previous lookup-only posture could NOT block an
+  // `http://127.0.0.1` target — only the scheme gate in `connect()` (which fires for every
+  // connection) does. Both forms must be refused at allowLoopback=false and reachable at true.
+  it("REFUSES http://127.0.0.1 (IP literal) at the default allowLoopback=false", async () => {
+    const dispatcher = createPinningDispatcher(); // default: allowLoopback=false
+    const err = await undiciFetch(`http://127.0.0.1:${port}/x`, {
+      dispatcher: dispatcher as unknown as UndiciAgent,
+      redirect: "manual",
+    }).then(
+      () => undefined,
+      (e: unknown) => e,
+    );
+    await dispatcher.close().catch(() => {});
+    expect(err).toBeInstanceOf(Error);
+    expect(causeChainText(err)).toContain("permitted only under allowLoopback");
+  });
+
+  it("REFUSES http://localhost (hostname) at the default allowLoopback=false", async () => {
+    // A loopback-resolving hostname — even so, http: is refused by the scheme gate BEFORE the
+    // lookup, in the default posture.
+    const loopback: ResolveAll = async () => [{ address: "127.0.0.1", family: 4 }];
+    const dispatcher = createPinningDispatcher({ resolveAll: loopback }); // allowLoopback=false
+    const err = await undiciFetch(`http://localhost:${port}/x`, {
+      dispatcher: dispatcher as unknown as UndiciAgent,
+      redirect: "manual",
+    }).then(
+      () => undefined,
+      (e: unknown) => e,
+    );
+    await dispatcher.close().catch(() => {});
+    expect(err).toBeInstanceOf(Error);
+    expect(causeChainText(err)).toContain("permitted only under allowLoopback");
+  });
+
+  it("ALLOWS http://127.0.0.1 (IP literal) when allowLoopback=true", async () => {
+    const dispatcher = createPinningDispatcher({ allowLoopback: true });
+    const res = await undiciFetch(`http://127.0.0.1:${port}/x`, {
+      dispatcher: dispatcher as unknown as UndiciAgent,
+      redirect: "manual",
+    });
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("REACHED-LOOPBACK");
+    await dispatcher.close().catch(() => {});
+  });
+
+  it("ALLOWS http://localhost (hostname → loopback) when allowLoopback=true", async () => {
+    const loopback: ResolveAll = async () => [{ address: "127.0.0.1", family: 4 }];
+    const dispatcher = createPinningDispatcher({ allowLoopback: true, resolveAll: loopback });
+    const res = await undiciFetch(`http://localhost:${port}/x`, {
+      dispatcher: dispatcher as unknown as UndiciAgent,
+      redirect: "manual",
+    });
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("REACHED-LOOPBACK");
+    await dispatcher.close().catch(() => {});
+  });
+
+  it("https: is unaffected by the http gate (still uses the public-address rule)", async () => {
+    // A resolver returning a private address must still be refused for https: (the public rule),
+    // proving the http gate did not change the https path.
+    const priv: ResolveAll = async () => [{ address: "10.0.0.5", family: 4 }];
+    const dispatcher = createPinningDispatcher({ resolveAll: priv }); // allowLoopback=false
+    const err = await undiciFetch("https://innocent.example/x", {
+      dispatcher: dispatcher as unknown as UndiciAgent,
+      redirect: "manual",
+    }).then(
+      () => undefined,
+      (e: unknown) => e,
+    );
+    await dispatcher.close().catch(() => {});
+    expect(err).toBeInstanceOf(Error);
+    expect(causeChainText(err)).toContain("non-public");
+  });
+});
+
 // ---------------------------------------------------------------------------
 // TLS: pinning the IP must NOT weaken certificate validation. The cert is verified against
 // the ORIGINAL hostname (the connector's servername), never the pinned IP.

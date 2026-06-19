@@ -191,14 +191,23 @@ export function createValidatingLookup(
  * PROTOCOL-AWARE (the safe bare-dispatcher posture). undici calls our `connect(opts, cb)` with
  * the request's `protocol`, so the dispatcher applies the SAME per-scheme address rule the
  * guard's `assertResolvedAddressesAllowed` enforces, without needing the guard wired in:
- *   - `https:`  → the standard public-address lookup (`isPublicAddress(addr, allowLoopback)`).
- *   - `http:`   → a LOOPBACK-ONLY lookup. An `http:` connection (reachable only under
- *                `allowLoopback`) must resolve to loopback addresses ONLY — a flip to a public
- *                address at connect time is refused, so a plaintext request can never leak to a
- *                public host. (A single non-loopback record fails the whole connection.)
- * Previously a single non-loopback-only lookup served every protocol, so a bare-dispatcher
- * `http:` hop validated only against the https rule — strictly weaker. This makes the bare
- * dispatcher match the posture {@link createNodeGuardedFetch} already applies per request.
+ *   - `http:` when `allowLoopback` is FALSE → REFUSED outright, before any socket. `http:` is a
+ *                plaintext scheme permitted only under the dev `allowLoopback` hatch; the bare
+ *                dispatcher must not reach `http://localhost` / `http://127.0.0.1` (a connection
+ *                undici's connector would otherwise dial DIRECTLY for an IP literal, skipping the
+ *                validating lookup) in the default / production posture. The refusal lives in
+ *                `connect()` (which fires for EVERY connection, literal or hostname) rather than
+ *                the lookup (which undici skips for an IP literal), so it cannot be bypassed by an
+ *                `http://127.0.0.1` literal target.
+ *   - `http:` when `allowLoopback` is TRUE → a LOOPBACK-ONLY lookup. The `http:` dev connection
+ *                must resolve to loopback addresses ONLY — a flip to a public address at connect
+ *                time is refused, so a plaintext request can never leak to a public host. (A
+ *                single non-loopback record fails the whole connection.)
+ *   - `https:` → the standard public-address lookup (`isPublicAddress(addr, allowLoopback)`).
+ * Previously a single non-loopback-only lookup served every protocol AND the bare dispatcher had
+ * no scheme gate, so it reached `http://localhost` / `http://127.0.0.1` even at the default
+ * `allowLoopback=false` — strictly weaker. This makes the bare dispatcher match the posture
+ * {@link createNodeGuardedFetch} (and the guard's URL-level scheme gate) already apply.
  */
 export function createPinningDispatcher(options: NodePinningOptions = {}): Agent {
   const allowLoopback = options.allowLoopback ?? false;
@@ -206,7 +215,8 @@ export function createPinningDispatcher(options: NodePinningOptions = {}): Agent
 
   // Two connectors that differ ONLY in the protocol-aware validating lookup. Both keep TLS
   // certificate validation ON (we never pass `rejectUnauthorized:false`) and carry the optional
-  // private CA. `https:` uses the public-address rule; `http:` uses the loopback-only rule.
+  // private CA. `https:` uses the public-address rule; `http:` (only reached under allowLoopback)
+  // uses the loopback-only rule.
   const tlsBase: Record<string, unknown> = {};
   if (options.ca !== undefined) {
     tlsBase.ca = options.ca;
@@ -222,12 +232,23 @@ export function createPinningDispatcher(options: NodePinningOptions = {}): Agent
 
   return new Agent({
     // Custom connect (function form): undici hands us the full connect `Options`, INCLUDING
-    // `protocol`, so we pick the loopback-only connector for an `http:` hop and the standard
+    // `protocol`, so we (a) REFUSE `http:` outright unless allowLoopback — the scheme gate that
+    // fires for every connection incl. an IP-literal target undici would dial without a lookup —
+    // and (b) pick the loopback-only connector for a permitted `http:` hop and the standard
     // public connector for `https:`. undici sets `opts.servername` to the request hostname, so
     // TLS SNI + cert validation stay against the original host while our lookup steers the
     // (pinned) IP. The dispatcher never follows redirects itself — the shared guard re-validates
     // + re-pins each `Location` hop as a fresh request through this same dispatcher.
     connect(opts: buildConnector.Options, cb: buildConnector.Callback) {
+      if (opts.protocol === "http:" && !allowLoopback) {
+        cb(
+          new SsrfError(
+            `Connection refused — http: is permitted only under allowLoopback (dev); ${opts.hostname} is plaintext and not reachable in the default posture.`,
+          ),
+          null,
+        );
+        return;
+      }
       const connector = opts.protocol === "http:" ? httpLoopbackConnector : httpsConnector;
       connector(opts, cb);
     },

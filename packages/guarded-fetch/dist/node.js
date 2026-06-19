@@ -74,12 +74,23 @@ function createPinningDispatcher(options = {}) {
   });
   return new Agent({
     // Custom connect (function form): undici hands us the full connect `Options`, INCLUDING
-    // `protocol`, so we pick the loopback-only connector for an `http:` hop and the standard
+    // `protocol`, so we (a) REFUSE `http:` outright unless allowLoopback — the scheme gate that
+    // fires for every connection incl. an IP-literal target undici would dial without a lookup —
+    // and (b) pick the loopback-only connector for a permitted `http:` hop and the standard
     // public connector for `https:`. undici sets `opts.servername` to the request hostname, so
     // TLS SNI + cert validation stay against the original host while our lookup steers the
     // (pinned) IP. The dispatcher never follows redirects itself — the shared guard re-validates
     // + re-pins each `Location` hop as a fresh request through this same dispatcher.
     connect(opts, cb) {
+      if (opts.protocol === "http:" && !allowLoopback) {
+        cb(
+          new SsrfError(
+            `Connection refused \u2014 http: is permitted only under allowLoopback (dev); ${opts.hostname} is plaintext and not reachable in the default posture.`
+          ),
+          null
+        );
+        return;
+      }
       const connector = opts.protocol === "http:" ? httpLoopbackConnector : httpsConnector;
       connector(opts, cb);
     }

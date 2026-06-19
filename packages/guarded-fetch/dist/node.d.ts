@@ -104,14 +104,23 @@ export declare function createValidatingLookup(resolveAll: ResolveAll, allowLoop
  * PROTOCOL-AWARE (the safe bare-dispatcher posture). undici calls our `connect(opts, cb)` with
  * the request's `protocol`, so the dispatcher applies the SAME per-scheme address rule the
  * guard's `assertResolvedAddressesAllowed` enforces, without needing the guard wired in:
- *   - `https:`  → the standard public-address lookup (`isPublicAddress(addr, allowLoopback)`).
- *   - `http:`   → a LOOPBACK-ONLY lookup. An `http:` connection (reachable only under
- *                `allowLoopback`) must resolve to loopback addresses ONLY — a flip to a public
- *                address at connect time is refused, so a plaintext request can never leak to a
- *                public host. (A single non-loopback record fails the whole connection.)
- * Previously a single non-loopback-only lookup served every protocol, so a bare-dispatcher
- * `http:` hop validated only against the https rule — strictly weaker. This makes the bare
- * dispatcher match the posture {@link createNodeGuardedFetch} already applies per request.
+ *   - `http:` when `allowLoopback` is FALSE → REFUSED outright, before any socket. `http:` is a
+ *                plaintext scheme permitted only under the dev `allowLoopback` hatch; the bare
+ *                dispatcher must not reach `http://localhost` / `http://127.0.0.1` (a connection
+ *                undici's connector would otherwise dial DIRECTLY for an IP literal, skipping the
+ *                validating lookup) in the default / production posture. The refusal lives in
+ *                `connect()` (which fires for EVERY connection, literal or hostname) rather than
+ *                the lookup (which undici skips for an IP literal), so it cannot be bypassed by an
+ *                `http://127.0.0.1` literal target.
+ *   - `http:` when `allowLoopback` is TRUE → a LOOPBACK-ONLY lookup. The `http:` dev connection
+ *                must resolve to loopback addresses ONLY — a flip to a public address at connect
+ *                time is refused, so a plaintext request can never leak to a public host. (A
+ *                single non-loopback record fails the whole connection.)
+ *   - `https:` → the standard public-address lookup (`isPublicAddress(addr, allowLoopback)`).
+ * Previously a single non-loopback-only lookup served every protocol AND the bare dispatcher had
+ * no scheme gate, so it reached `http://localhost` / `http://127.0.0.1` even at the default
+ * `allowLoopback=false` — strictly weaker. This makes the bare dispatcher match the posture
+ * {@link createNodeGuardedFetch} (and the guard's URL-level scheme gate) already apply.
  */
 export declare function createPinningDispatcher(options?: NodePinningOptions): Agent;
 /**
