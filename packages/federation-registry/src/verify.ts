@@ -59,15 +59,15 @@ function validIris(
 }
 
 /**
- * Project a {@link MembershipNode} into a plain {@link Membership}, recording
- * issues. Exposed so a registry walk can verify each membership independently.
+ * Validate the `fedreg:app` cardinality: a membership names EXACTLY one app
+ * (its client_id). Pushes `membership-missing-app` (none) or
+ * `membership-multiple-apps` (more than one).
  */
-export function membershipNodeToView(node: MembershipNode, issues: RegistryIssue[]): Membership {
-  const id = node.value;
-  const apps = validIris(node.apps, id, FEDREG_APP, issues);
-  const statusIris = validIris(node.statuses, id, FEDREG_STATUS, issues);
-  const assertedBy = validIris(node.assertedBy, id, FEDREG_ASSERTED_BY, issues);
-
+function validateAppCardinality(
+  apps: readonly string[],
+  id: string,
+  issues: RegistryIssue[],
+): void {
   if (apps.length === 0) {
     issues.push({
       code: "membership-missing-app",
@@ -81,7 +81,17 @@ export function membershipNodeToView(node: MembershipNode, issues: RegistryIssue
       subject: id,
     });
   }
+}
 
+/**
+ * Validate `fedreg:status`: a membership has EXACTLY one lifecycle state, and that
+ * state must be a known coded value. Pushes (in this order) the cardinality issue
+ * — `membership-missing-status` (none) / `membership-multiple-statuses` (more than
+ * one; ambiguous, since which one "wins" would depend on RDF iteration order) —
+ * then an `unknown-status` for EVERY status IRI not in the coded set (every one, so
+ * an unknown anywhere in the set is flagged regardless of iteration order).
+ */
+function validateStatus(statusIris: readonly string[], id: string, issues: RegistryIssue[]): void {
   if (statusIris.length === 0) {
     issues.push({
       code: "membership-missing-status",
@@ -89,17 +99,12 @@ export function membershipNodeToView(node: MembershipNode, issues: RegistryIssue
       subject: id,
     });
   } else if (statusIris.length > 1) {
-    // A membership has exactly one lifecycle state; multiple fedreg:status values
-    // (e.g. both Active and Revoked) are ambiguous and MUST NOT validate — which
-    // one "wins" would otherwise depend on RDF iteration order.
     issues.push({
       code: "membership-multiple-statuses",
       message: `fedreg:Membership has ${statusIris.length} fedreg:status values; expected exactly one. (${statusIris.join(", ")})`,
       subject: id,
     });
   }
-  // Validate EVERY status IRI (not just the first) so an unknown status anywhere
-  // in the set is flagged regardless of iteration order.
   for (const s of statusIris) {
     if (!VALID_STATUS_IRIS.has(s)) {
       issues.push({
@@ -110,8 +115,18 @@ export function membershipNodeToView(node: MembershipNode, issues: RegistryIssue
       });
     }
   }
-  const statusIri = statusIris[0];
+}
 
+/**
+ * Validate `fedreg:assertedBy`: a registry assertion MUST name the authority that
+ * vouches for it (else it is indistinguishable from a self-asserted claim). Pushes
+ * `membership-missing-asserted-by` when none is present.
+ */
+function validateAssertedBy(
+  assertedBy: readonly string[],
+  id: string,
+  issues: RegistryIssue[],
+): void {
   if (assertedBy.length === 0) {
     issues.push({
       code: "membership-missing-asserted-by",
@@ -120,15 +135,35 @@ export function membershipNodeToView(node: MembershipNode, issues: RegistryIssue
       subject: id,
     });
   }
+}
 
-  const membership: Membership = {
+/**
+ * Project a {@link MembershipNode} into a plain {@link Membership}, recording
+ * issues. Exposed so a registry walk can verify each membership independently. The
+ * per-field validators run in a fixed order (term-type → app → status → assertedBy)
+ * so the recorded issue ORDER is stable.
+ */
+export function membershipNodeToView(node: MembershipNode, issues: RegistryIssue[]): Membership {
+  const id = node.value;
+  // validIris pushes any `invalid-term-type` issue first (before the cardinality /
+  // value checks), so a literal where an IRI is required is flagged ahead of the
+  // resulting "missing" issue — see the MEMBERSHIP_LITERAL_APP characterization.
+  const apps = validIris(node.apps, id, FEDREG_APP, issues);
+  const statusIris = validIris(node.statuses, id, FEDREG_STATUS, issues);
+  const assertedBy = validIris(node.assertedBy, id, FEDREG_ASSERTED_BY, issues);
+
+  validateAppCardinality(apps, id, issues);
+  validateStatus(statusIris, id, issues);
+  validateAssertedBy(assertedBy, id, issues);
+
+  const statusIri = statusIris[0];
+  return {
     id,
     app: apps[0] ?? "",
     ...(statusIri !== undefined ? { statusIri, status: statusName(statusIri) } : {}),
     ...(assertedBy.length > 0 ? { assertedBy } : {}),
     ...(node.asserted !== undefined ? { asserted: node.asserted } : {}),
   };
-  return membership;
 }
 
 /** Verify a single {@link MembershipNode} in isolation. */

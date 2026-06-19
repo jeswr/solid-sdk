@@ -2,7 +2,9 @@ import type { Membership, MembershipVerification, RegistryIssue, StorageDescript
 import type { MembershipNode, StorageNode } from "./wrappers.js";
 /**
  * Project a {@link MembershipNode} into a plain {@link Membership}, recording
- * issues. Exposed so a registry walk can verify each membership independently.
+ * issues. Exposed so a registry walk can verify each membership independently. The
+ * per-field validators run in a fixed order (term-type → app → status → assertedBy)
+ * so the recorded issue ORDER is stable.
  */
 export declare function membershipNodeToView(node: MembershipNode, issues: RegistryIssue[]): Membership;
 /** Verify a single {@link MembershipNode} in isolation. */

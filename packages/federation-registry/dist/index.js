@@ -301,11 +301,7 @@ function validIris(terms, subject, predicate, issues) {
   }
   return out;
 }
-function membershipNodeToView(node, issues) {
-  const id = node.value;
-  const apps = validIris(node.apps, id, FEDREG_APP, issues);
-  const statusIris = validIris(node.statuses, id, FEDREG_STATUS, issues);
-  const assertedBy = validIris(node.assertedBy, id, FEDREG_ASSERTED_BY, issues);
+function validateAppCardinality(apps, id, issues) {
   if (apps.length === 0) {
     issues.push({
       code: "membership-missing-app",
@@ -319,6 +315,8 @@ function membershipNodeToView(node, issues) {
       subject: id
     });
   }
+}
+function validateStatus(statusIris, id, issues) {
   if (statusIris.length === 0) {
     issues.push({
       code: "membership-missing-status",
@@ -342,7 +340,8 @@ function membershipNodeToView(node, issues) {
       });
     }
   }
-  const statusIri = statusIris[0];
+}
+function validateAssertedBy(assertedBy, id, issues) {
   if (assertedBy.length === 0) {
     issues.push({
       code: "membership-missing-asserted-by",
@@ -350,14 +349,23 @@ function membershipNodeToView(node, issues) {
       subject: id
     });
   }
-  const membership = {
+}
+function membershipNodeToView(node, issues) {
+  const id = node.value;
+  const apps = validIris(node.apps, id, FEDREG_APP, issues);
+  const statusIris = validIris(node.statuses, id, FEDREG_STATUS, issues);
+  const assertedBy = validIris(node.assertedBy, id, FEDREG_ASSERTED_BY, issues);
+  validateAppCardinality(apps, id, issues);
+  validateStatus(statusIris, id, issues);
+  validateAssertedBy(assertedBy, id, issues);
+  const statusIri = statusIris[0];
+  return {
     id,
     app: apps[0] ?? "",
     ...statusIri !== void 0 ? { statusIri, status: statusName(statusIri) } : {},
     ...assertedBy.length > 0 ? { assertedBy } : {},
     ...node.asserted !== void 0 ? { asserted: node.asserted } : {}
   };
-  return membership;
 }
 function verifyMembershipNode(node) {
   const issues = [];
