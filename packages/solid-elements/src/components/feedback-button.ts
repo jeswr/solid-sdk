@@ -477,6 +477,125 @@ export class JeswrFeedbackButton extends LitElement {
     this.closeDialog();
   };
 
+  /** The success body (shown once the proxy `submit` resolved): the issue link + Close. */
+  private renderSuccessBody(result: FeedbackSubmitResult) {
+    return html`
+      <div style="margin-top:0.75rem; display:flex; flex-direction:column; gap:0.75rem; font-size:0.875rem;">
+        <p style="margin:0;">
+          Thanks — tracked as
+          <a href=${result.url} target="_blank" rel="noopener noreferrer">#${result.number}</a>.
+        </p>
+        <div class="actions">
+          <button class="btn" type="button" @click=${this.closeDialog}>Close</button>
+        </div>
+      </div>
+    `;
+  }
+
+  /** The category radio group (one selectable card per FEEDBACK_CATEGORY). */
+  private renderCategoryChooser() {
+    return html`
+      <fieldset>
+        <legend>What is this about?</legend>
+        <div class="cats">
+          ${FEEDBACK_CATEGORIES.map((c) => {
+            const selected = this._category === c.value;
+            return html`
+              <label class=${selected ? "cat selected" : "cat"}>
+                <input
+                  class="sr-only"
+                  type="radio"
+                  name="jeswr-feedback-category"
+                  .value=${c.value}
+                  .checked=${selected}
+                  @change=${() => {
+                    this._category = c.value;
+                  }}
+                />
+                <span aria-hidden="true">${c.emoji}</span>
+                <span>${c.label}</span>
+              </label>
+            `;
+          })}
+        </div>
+      </fieldset>
+    `;
+  }
+
+  /** The feedback form (category + description + optional consent + actions). */
+  private renderForm(versionLabel: string) {
+    const submitLabel =
+      this._phase === "submitting"
+        ? "Sending…"
+        : this.submit
+          ? "Send feedback"
+          : "Open issue on GitHub";
+    return html`
+      <form @submit=${this.handleSubmit}>
+        ${this.renderCategoryChooser()}
+
+        <label class="field">
+          Tell us more
+          <textarea
+            required
+            rows="4"
+            placeholder="Describe the bug, idea, or question…"
+            .value=${this._description}
+            @input=${(ev: Event) => {
+              this._description = (ev.target as HTMLTextAreaElement).value;
+            }}
+          ></textarea>
+        </label>
+
+        ${
+          this.webId
+            ? html`
+                <label class="consent">
+                  <input
+                    type="checkbox"
+                    .checked=${this._includeWebId}
+                    @change=${(ev: Event) => {
+                      this._includeWebId = (ev.target as HTMLInputElement).checked;
+                    }}
+                  />
+                  <span>Include my WebID so the maintainer can follow up</span>
+                </label>
+              `
+            : nothing
+        }
+
+        <p class="diag">
+          We attach basic diagnostics: app name + version (${this.appName || "this app"}${versionLabel})
+          and the current page URL.
+        </p>
+
+        ${
+          this._phase === "error" && this._errorMessage
+            ? html`<p class="err" role="alert">${this._errorMessage}</p>`
+            : nothing
+        }
+
+        <div class="actions">
+          <button
+            class="btn ghost"
+            type="button"
+            @click=${this.closeDialog}
+            ?disabled=${this._phase === "submitting"}
+          >
+            Cancel
+          </button>
+          <button
+            class="btn"
+            type="submit"
+            ?disabled=${!this._description.trim() || this._phase === "submitting"}
+          >
+            ${submitLabel}
+          </button>
+        </div>
+      </form>
+    `;
+  }
+
   private renderDialog() {
     const versionLabel = this.appVersion ? ` ${this.appVersion}` : "";
     return html`
@@ -506,113 +625,8 @@ export class JeswrFeedbackButton extends LitElement {
           </h2>
           ${
             this._phase === "success" && this._result
-              ? html`
-                  <div style="margin-top:0.75rem; display:flex; flex-direction:column; gap:0.75rem; font-size:0.875rem;">
-                    <p style="margin:0;">
-                      Thanks — tracked as
-                      <a href=${this._result.url} target="_blank" rel="noopener noreferrer"
-                        >#${this._result.number}</a
-                      >.
-                    </p>
-                    <div class="actions">
-                      <button class="btn" type="button" @click=${this.closeDialog}>Close</button>
-                    </div>
-                  </div>
-                `
-              : html`
-                  <form @submit=${this.handleSubmit}>
-                    <fieldset>
-                      <legend>What is this about?</legend>
-                      <div class="cats">
-                        ${FEEDBACK_CATEGORIES.map((c) => {
-                          const selected = this._category === c.value;
-                          return html`
-                            <label class=${selected ? "cat selected" : "cat"}>
-                              <input
-                                class="sr-only"
-                                type="radio"
-                                name="jeswr-feedback-category"
-                                .value=${c.value}
-                                .checked=${selected}
-                                @change=${() => {
-                                  this._category = c.value;
-                                }}
-                              />
-                              <span aria-hidden="true">${c.emoji}</span>
-                              <span>${c.label}</span>
-                            </label>
-                          `;
-                        })}
-                      </div>
-                    </fieldset>
-
-                    <label class="field">
-                      Tell us more
-                      <textarea
-                        required
-                        rows="4"
-                        placeholder="Describe the bug, idea, or question…"
-                        .value=${this._description}
-                        @input=${(ev: Event) => {
-                          this._description = (ev.target as HTMLTextAreaElement).value;
-                        }}
-                      ></textarea>
-                    </label>
-
-                    ${
-                      this.webId
-                        ? html`
-                            <label class="consent">
-                              <input
-                                type="checkbox"
-                                .checked=${this._includeWebId}
-                                @change=${(ev: Event) => {
-                                  this._includeWebId = (ev.target as HTMLInputElement).checked;
-                                }}
-                              />
-                              <span>Include my WebID so the maintainer can follow up</span>
-                            </label>
-                          `
-                        : nothing
-                    }
-
-                    <p class="diag">
-                      We attach basic diagnostics: app name + version (${
-                        this.appName || "this app"
-                      }${versionLabel}) and the current page URL.
-                    </p>
-
-                    ${
-                      this._phase === "error" && this._errorMessage
-                        ? html`<p class="err" role="alert">${this._errorMessage}</p>`
-                        : nothing
-                    }
-
-                    <div class="actions">
-                      <button
-                        class="btn ghost"
-                        type="button"
-                        @click=${this.closeDialog}
-                        ?disabled=${this._phase === "submitting"}
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        class="btn"
-                        type="submit"
-                        ?disabled=${!this._description.trim() || this._phase === "submitting"}
-                      >
-                        ${
-                          this._phase === "submitting"
-                            ? "Sending…"
-                            : this.submit
-                              ? "Send feedback"
-                              : "Open issue on GitHub"
-                        }
-                      </button>
-                    </div>
-                  </form>
-                `
+              ? this.renderSuccessBody(this._result)
+              : this.renderForm(versionLabel)
           }
         </div>
       </div>

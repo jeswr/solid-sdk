@@ -86,6 +86,12 @@ export declare class JeswrFeedbackButton extends LitElement {
     private tabbable;
     private buildPayload;
     private handleSubmit;
+    /** The success body (shown once the proxy `submit` resolved): the issue link + Close. */
+    private renderSuccessBody;
+    /** The category radio group (one selectable card per FEEDBACK_CATEGORY). */
+    private renderCategoryChooser;
+    /** The feedback form (category + description + optional consent + actions). */
+    private renderForm;
     private renderDialog;
     render(): import("lit-html").TemplateResult<1>;
 }
