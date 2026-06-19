@@ -647,6 +647,15 @@ class ReactiveAuthController {
                 this.#restoreInFlightPromise = undefined;
         }
     }
+    // ESSENTIAL COMPLEXITY (intentionally over the cognitive-complexity warn threshold —
+    // the linter flags it; that flag is a "review this carefully" signal, not a cleanup
+    // target): every branch here guards a fail-closed silent-restore invariant — the
+    // generation supersession fence around the awaited grant, the webid-mismatch teardown,
+    // the tri-state credential-presence pointer decision. Each maps to an externally-
+    // observable security property (never expose the wrong account, never restore a
+    // logged-out pointer); collapsing one would change behaviour. Per the Brooks
+    // essential-vs-accidental rule we PRESERVE + document + test it (the characterization +
+    // auth-controller suites) rather than flatten it.
     async #doRestore() {
         // Fail-closed wrapper around the pure decision: ANY throw → login. Capture the
         // generation at entry: a newer login/logout that STARTS during this (awaited)
@@ -968,6 +977,18 @@ class ReactiveAuthController {
         }
         return this.#provider;
     }
+    // ESSENTIAL COMPLEXITY (intentionally over the cognitive-complexity warn threshold —
+    // the linter flags it; that flag is a "review this carefully" signal, not a cleanup
+    // target): login() is the credential-establishment epoch fence. Its branches enforce
+    // the generation-supersession contract (a slower earlier attempt must never overwrite a
+    // newer login's session / persisted credential / remembered pointer), the
+    // drain-before-bump refresh-token-rotation lifecycle, the account-switch credential
+    // cleanup (same- and cross-issuer), and the fail-closed re-sync of a survivor session
+    // on a failed switch. Every branch maps to an observable cross-account credential-leak
+    // / fail-closed property — collapsing one is a CVE, not a cleanup. Per the Brooks rule
+    // it is PRESERVED + documented + exhaustively tested (the auth-controller suite), not
+    // flattened. (Decomposition would only relocate the branches; the interleaved post-await
+    // generation re-checks must stay co-located to be reviewable as one fence.)
     async login(webId) {
         // Abort any prior in-flight login's popup immediately (this attempt supersedes it).
         this.#abortActiveLogin();
