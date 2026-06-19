@@ -34,9 +34,7 @@ const SH_MIN_COUNT = `${SH}minCount` as const;
 const SH_MAX_COUNT = `${SH}maxCount` as const;
 const SH_NODE_KIND = `${SH}nodeKind` as const;
 const SH_IRI = `${SH}IRI` as const;
-const SH_CLASS = `${SH}class` as const;
 const SH_HAS_VALUE = `${SH}hasValue` as const;
-const SH_IN = `${SH}in` as const;
 const SH_NODE = `${SH}node` as const;
 const SH_NAME = `${SH}name` as const;
 const XSD_INTEGER = "http://www.w3.org/2001/XMLSchema#integer" as const;
@@ -156,14 +154,3 @@ export function buildResponseShape(responseClassIri: string, shapeId?: string): 
   b.addLiteral(typeProp, SH_MIN_COUNT, "1", XSD_INTEGER);
   return b.quads();
 }
-
-// Re-export the SHACL term constants a few helpers / tests reference.
-export {
-  SH_CLASS,
-  SH_IN,
-  SH_MIN_COUNT,
-  SH_NODE_SHAPE,
-  SH_PATH,
-  SH_PROPERTY_SHAPE,
-  SH_TARGET_CLASS,
-};

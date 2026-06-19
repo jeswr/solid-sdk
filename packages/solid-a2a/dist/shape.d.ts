@@ -1,12 +1,5 @@
 import type { Quad } from "@rdfjs/types";
 import { type IntentAction } from "./vocab.js";
-declare const SH_NODE_SHAPE: "http://www.w3.org/ns/shacl#NodeShape";
-declare const SH_PROPERTY_SHAPE: "http://www.w3.org/ns/shacl#PropertyShape";
-declare const SH_TARGET_CLASS: "http://www.w3.org/ns/shacl#targetClass";
-declare const SH_PATH: "http://www.w3.org/ns/shacl#path";
-declare const SH_MIN_COUNT: "http://www.w3.org/ns/shacl#minCount";
-declare const SH_CLASS: "http://www.w3.org/ns/shacl#class";
-declare const SH_IN: "http://www.w3.org/ns/shacl#in";
 /** Options for {@link buildShapeForIntent}. */
 export interface BuildShapeOptions {
     /**
@@ -41,5 +34,4 @@ export declare function shapeToTurtle(quads: readonly Quad[], format?: string): 
  * @param responseClassIri - the rdf:type a conforming response subject must carry.
  */
 export declare function buildResponseShape(responseClassIri: string, shapeId?: string): Quad[];
-export { SH_CLASS, SH_IN, SH_MIN_COUNT, SH_NODE_SHAPE, SH_PATH, SH_PROPERTY_SHAPE, SH_TARGET_CLASS, };
 //# sourceMappingURL=shape.d.ts.map

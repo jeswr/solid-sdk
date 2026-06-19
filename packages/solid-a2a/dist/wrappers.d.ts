@@ -93,8 +93,6 @@ export type NodeRef = {
     readonly kind: "blank";
     readonly value: string;
 };
-/** A {@link NodeRef} for an IRI subject. */
-export declare function iriRef(iri: string): NodeRef;
 /**
  * A low-level, GENERIC quad builder over a fresh `N3.Store`, used by the SHACL
  * shape + Protocol-Document builders (which assemble standard sh:/dcterms: graphs).
@@ -118,8 +116,6 @@ export declare class GraphBuilder {
      * unambiguously as a blank, never as an IRI).
      */
     linkBlankNode(subject: NodeRef | string, predicate: string): NodeRef;
-    /** The underlying store (a DatasetCore). */
-    dataset(): DatasetCore;
     /** The accumulated quads. */
     quads(): Quad[];
 }

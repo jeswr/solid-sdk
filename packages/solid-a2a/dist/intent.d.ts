@@ -1,6 +1,5 @@
 import type { DatasetCore, Quad } from "@rdfjs/types";
 import type { Intent } from "./types.js";
-import { IRI_TO_ACTION } from "./vocab.js";
 /**
  * Lower a structured {@link Intent} to RDF quads (an `a2a:Intent` graph) through
  * the typed wrapper write path.
@@ -32,5 +31,4 @@ export declare function intentFromRdf(dataset: DatasetCore): Intent | undefined;
  * @param baseIRI - base IRI for relative IRIs when parsing text.
  */
 export declare function parseIntentGraph(input: string | DatasetCore, contentType?: string, baseIRI?: string): Promise<Intent | undefined>;
-export { IRI_TO_ACTION };
 //# sourceMappingURL=intent.d.ts.map

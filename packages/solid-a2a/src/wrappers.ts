@@ -283,11 +283,6 @@ export type NodeRef =
       readonly value: string;
     };
 
-/** A {@link NodeRef} for an IRI subject. */
-export function iriRef(iri: string): NodeRef {
-  return { kind: "iri", value: iri };
-}
-
 /**
  * A low-level, GENERIC quad builder over a fresh `N3.Store`, used by the SHACL
  * shape + Protocol-Document builders (which assemble standard sh:/dcterms: graphs).
@@ -345,11 +340,6 @@ export class GraphBuilder {
     const p = NamedNodeFrom.string(predicate, this.factory);
     this.store.add(this.factory.quad(s as never, p as never, blank as never) as Quad);
     return { kind: "blank", value: (blank as { value: string }).value };
-  }
-
-  /** The underlying store (a DatasetCore). */
-  dataset(): DatasetCore {
-    return this.store as unknown as DatasetCore;
   }
 
   /** The accumulated quads. */

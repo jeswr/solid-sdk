@@ -14,7 +14,6 @@ import {
   A2A_INLINE_CONTEXT,
   ACL_MODE_IRI,
   type AclMode,
-  IRI_TO_ACTION,
   VALID_ACL_MODE_IRIS,
   VALID_INTENT_ACTIONS,
 } from "./vocab.js";
@@ -222,6 +221,3 @@ function aclModeFromIri(iri: string): AclMode {
   // Unreachable — caller pre-checks VALID_ACL_MODE_IRIS.
   return "Read";
 }
-
-// Re-export so consumers reading raw IRIs don't reach into vocab for the reverse map.
-export { IRI_TO_ACTION };

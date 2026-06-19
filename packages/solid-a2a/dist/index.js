@@ -636,10 +636,6 @@ var GraphBuilder = class {
     this.store.add(this.factory.quad(s, p, blank));
     return { kind: "blank", value: blank.value };
   }
-  /** The underlying store (a DatasetCore). */
-  dataset() {
-    return this.store;
-  }
   /** The accumulated quads. */
   quads() {
     return [...this.store];
@@ -1126,9 +1122,7 @@ var SH_MIN_COUNT = `${SH}minCount`;
 var SH_MAX_COUNT = `${SH}maxCount`;
 var SH_NODE_KIND = `${SH}nodeKind`;
 var SH_IRI = `${SH}IRI`;
-var SH_CLASS = `${SH}class`;
 var SH_HAS_VALUE = `${SH}hasValue`;
-var SH_IN = `${SH}in`;
 var SH_NODE = `${SH}node`;
 var SH_NAME = `${SH}name`;
 var XSD_INTEGER = "http://www.w3.org/2001/XMLSchema#integer";
