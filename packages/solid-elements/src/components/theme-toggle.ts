@@ -27,6 +27,7 @@ import { css, html, LitElement, type PropertyValues } from "lit";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import {
   applyResolvedTheme,
+  nextTheme,
   persistTheme,
   type ResolvedTheme,
   readStoredTheme,
@@ -164,9 +165,9 @@ export class JeswrThemeToggle extends LitElement {
   }
 
   private onClick = (): void => {
-    // Cycle light → dark → system → light, persisting the user's choice.
-    const order: Record<Theme, Theme> = { light: "dark", dark: "system", system: "light" };
-    this.applyTheme(order[this.theme], true);
+    // Cycle light → dark → system → light via the shared `nextTheme` (theme-core's
+    // single source of truth for the cycle order), persisting the user's choice.
+    this.applyTheme(nextTheme(this.theme), true);
   };
 
   override render() {

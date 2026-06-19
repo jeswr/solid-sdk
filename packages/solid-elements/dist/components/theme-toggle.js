@@ -24,7 +24,7 @@
 // entirely — verified by the reactivity tests.
 import { css, html, LitElement } from "lit";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
-import { applyResolvedTheme, persistTheme, readStoredTheme, resolveTheme, } from "../theme-core.js";
+import { applyResolvedTheme, nextTheme, persistTheme, readStoredTheme, resolveTheme, } from "../theme-core.js";
 import { tokenStyles } from "../theme-tokens.js";
 const SUN = svgIcon('<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>');
 const MOON = svgIcon('<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>');
@@ -134,9 +134,9 @@ export class JeswrThemeToggle extends LitElement {
         }
     }
     onClick = () => {
-        // Cycle light → dark → system → light, persisting the user's choice.
-        const order = { light: "dark", dark: "system", system: "light" };
-        this.applyTheme(order[this.theme], true);
+        // Cycle light → dark → system → light via the shared `nextTheme` (theme-core's
+        // single source of truth for the cycle order), persisting the user's choice.
+        this.applyTheme(nextTheme(this.theme), true);
     };
     render() {
         const icon = this.theme === "dark" ? MOON : this.theme === "light" ? SUN : MONITOR;
