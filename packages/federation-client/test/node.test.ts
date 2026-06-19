@@ -684,4 +684,21 @@ describe("createPinningDispatcher — protocol-aware http-loopback-only (re-pin 
       await new Promise<void>((r) => server.close(() => r()));
     }
   });
+
+  it("REJECTS a `timeoutMs` option at COMPILE TIME — not silently ignored (roborev Medium)", async () => {
+    // The bare dispatcher does NOT apply a connect timeout (guarded-fetch's createPinningDispatcher
+    // wires none; its timeoutMs is a guard whole-operation deadline used only by
+    // createNodeGuardedFetch). To avoid SILENTLY ignoring a caller's timeoutMs (a hidden behaviour
+    // regression vs this package's prior dispatcher), fed-client's option type OMITS timeoutMs, so
+    // passing it is a TYPE ERROR. The @ts-expect-error below FAILS the typecheck if the option is
+    // ever (re-)accepted — the compile-time guard. The supported options still build a dispatcher.
+    const resolveAll: ResolveAll = async () => [{ address: "127.0.0.1", family: 4 }];
+    // @ts-expect-error timeoutMs is intentionally not accepted by createPinningDispatcher (omitted)
+    const rejected = createPinningDispatcher({ allowLoopback: true, resolveAll, timeoutMs: 1234 });
+    await rejected.close().catch(() => {});
+
+    const ok = createPinningDispatcher({ allowLoopback: true, resolveAll });
+    expect(typeof ok.dispatch).toBe("function"); // it is a real undici Agent (Dispatcher)
+    await ok.close().catch(() => {});
+  });
 });

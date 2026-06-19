@@ -157,9 +157,14 @@ function safeIsHttp(u) {
     return false;
   }
 }
+
+// src/node.ts
+function createPinningDispatcher2(options = {}) {
+  return createPinningDispatcher(options);
+}
 export {
   createNodeGuardedFetch,
-  createPinningDispatcher,
+  createPinningDispatcher2 as createPinningDispatcher,
   createValidatingLookup,
   nodeGuardedFetch
 };

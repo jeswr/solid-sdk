@@ -4,14 +4,15 @@
 // DNS-rebinding (TOCTOU) hole on the server side. The undici DNS-pinning machinery is the
 // consolidated suite implementation `@jeswr/guarded-fetch/node`: this module is now a THIN
 // RE-EXPORT of it — the recommended fetches (`createNodeGuardedFetch` / `nodeGuardedFetch`),
-// the low-level `createPinningDispatcher` escape hatch, the `createValidatingLookup` building
-// block, and the `ConnectLookup` / `NodePinningOptions` / `ResolveAll` types — with NO
-// fed-client-owned wrapper. (Previously this package kept its OWN `createPinningDispatcher` to
-// preserve a stricter http-loopback-only posture on that escape hatch; guarded-fetch's
-// `createPinningDispatcher` is now itself protocol-aware — refuse `http:` unless allowLoopback,
-// loopback-only lookup for a permitted `http:` hop, public-address lookup for `https:`, AND a
-// direct per-scheme classification of IP-LITERAL targets the lookup never sees — so the override
-// became redundant and was removed at guarded-fetch sha 92f75f7. See the parity note below.)
+// the low-level `createPinningDispatcher` escape hatch (delegated verbatim — see the
+// timeoutMs note for the ONLY wrapper detail), the `createValidatingLookup` building block, and
+// the `ConnectLookup` / `NodePinningOptions` / `ResolveAll` types. (Previously this package kept
+// its OWN protocol-aware `createPinningDispatcher` to preserve a stricter http-loopback-only
+// posture on that escape hatch; guarded-fetch's `createPinningDispatcher` is now itself
+// protocol-aware — refuse `http:` unless allowLoopback, loopback-only lookup for a permitted
+// `http:` hop, public-address lookup for `https:`, AND a direct per-scheme classification of
+// IP-LITERAL targets the lookup never sees — so the SSRF-posture override became redundant and
+// the connect logic is delegated to guarded-fetch at sha 92f75f7. See the parity note below.)
 //
 // WHAT it gives a Node consumer: `createNodeGuardedFetch` / `nodeGuardedFetch` — a
 // `fetch`-shaped function that resolves a hostname ONCE, validates EVERY A/AAAA record
@@ -51,17 +52,63 @@
 //   - AND, STRICTER than the old override, it classifies an IP-LITERAL `opts.hostname` directly
 //     in `connect()` (the validating lookup is skipped for a literal target), refusing a
 //     private / loopback / link-local / metadata IP-literal the old override never validated.
-// So re-exporting it verbatim does NOT weaken fed-client's posture; it strengthens the
-// IP-literal case. The dispatcher's prior `timeoutMs` → undici-connect-timeout wiring is gone,
-// but that was a resource/DoS knob, never an SSRF gate (and undici applies its own default
-// connect timeout), so the SSRF posture is unchanged.
+// So re-exporting it does NOT weaken fed-client's posture; it strengthens the IP-literal case.
+//
+// `timeoutMs` IS NOT SILENTLY DROPPED (roborev Medium). This package's PRIOR bare dispatcher
+// applied `options.timeoutMs ?? 10_000` as the undici CONNECT timeout. guarded-fetch's
+// `createPinningDispatcher` does NOT wire a connect timeout (its `timeoutMs` is a guard
+// whole-operation deadline, applied only by `createNodeGuardedFetch`'s fetch, not by the bare
+// dispatcher's Agent). If we re-exported it raw, a caller doing
+// `createPinningDispatcher({ timeoutMs })` would COMPILE (the option is inherited from the shared
+// `NodePinningOptions`) but its connect timeout would be SILENTLY IGNORED — a hidden behaviour
+// regression. To keep the change honest WITHOUT forking guarded-fetch's audited connect posture,
+// fed-client re-exports the dispatcher under an option type that OMITS `timeoutMs`
+// (`PinningDispatcherOptions`), so passing it is now a COMPILE-TIME ERROR rather than a silent
+// no-op. Callers that need a connect/operation timeout should use {@link createNodeGuardedFetch}
+// (it honours `timeoutMs` as the whole-fetch deadline) — the recommended path anyway, since the
+// bare dispatcher is a low-level escape hatch that bypasses the shared guard. (Connect-timeout
+// support belongs upstream in guarded-fetch's bare dispatcher — filed as a follow-up; once it
+// lands, widen this back to the full `NodePinningOptions`.)
+
+import {
+  createPinningDispatcher as guardedCreatePinningDispatcher,
+  type NodePinningOptions,
+} from "@jeswr/guarded-fetch/node";
+import type { Agent } from "undici";
 
 export {
   type ConnectLookup,
   createNodeGuardedFetch,
-  createPinningDispatcher,
   createValidatingLookup,
   type NodePinningOptions,
   nodeGuardedFetch,
   type ResolveAll,
 } from "@jeswr/guarded-fetch/node";
+
+/**
+ * Options for {@link createPinningDispatcher}. Identical to guarded-fetch's
+ * {@link NodePinningOptions} EXCEPT `timeoutMs` is omitted: the bare dispatcher does not apply a
+ * connect timeout (see the module header) — passing one would be silently ignored, so it is a
+ * type error here. Use {@link createNodeGuardedFetch} for a timeout-bounded fetch.
+ */
+export type PinningDispatcherOptions = Omit<NodePinningOptions, "timeoutMs">;
+
+/**
+ * Build an `undici.Agent` that PINS each connection to a freshly-resolved, validated IP — the
+ * rebinding-closing dispatcher, delegated verbatim to the consolidated, audited
+ * `@jeswr/guarded-fetch/node` implementation (protocol-aware: `http:` refused unless
+ * allowLoopback; loopback-only validating lookup for a permitted `http:` hop; public-address
+ * lookup for `https:`; direct per-scheme classification of IP-LITERAL targets the lookup is
+ * skipped for). Prefer {@link createNodeGuardedFetch}, which wires this together with the full
+ * SSRF guard (scheme/userinfo/literal checks, redirect re-validation, body + time caps); use
+ * this directly only when composing your own request pipeline and already applying those checks.
+ *
+ * NOTE: unlike this package's pre-consolidation dispatcher, `timeoutMs` is NOT accepted (it would
+ * have no effect on the connect timeout) — see {@link PinningDispatcherOptions}.
+ */
+export function createPinningDispatcher(options: PinningDispatcherOptions = {}): Agent {
+  // Delegate the entire SSRF connect posture to guarded-fetch's audited dispatcher. The option
+  // type already excludes `timeoutMs`; the spread carries only the supported fields
+  // (`allowLoopback`, `resolveAll`, `ca`).
+  return guardedCreatePinningDispatcher(options);
+}
