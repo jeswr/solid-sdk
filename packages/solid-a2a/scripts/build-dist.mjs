@@ -92,7 +92,9 @@ function externals() {
 
 async function main(buildDir = outdir) {
   // 1. Ensure @jeswr/fetch-rdf's dist exists in node_modules so esbuild can
-  //    resolve + inline it (ignore-scripts skipped its prepare on install).
+  //    resolve + inline it (ignore-scripts skipped its prepare on install). The
+  //    other inlined @jeswr dep, @jeswr/rdf-serialize, already ships a committed
+  //    dist (its `prepare` is not needed), so it is resolvable as-is.
   execFileSync("node", [join(root, "scripts", "build-deps.mjs")], {
     cwd: root,
     stdio: ["ignore", "ignore", "inherit"],
@@ -107,7 +109,8 @@ async function main(buildDir = outdir) {
     format: "esm",
     platform: "node",
     target: "node24",
-    // Inline ONLY @jeswr/fetch-rdf; keep the npm-published deps external.
+    // Inline ONLY the off-npm @jeswr deps (@jeswr/fetch-rdf + @jeswr/rdf-serialize,
+    // the INLINE set); keep every npm-published dep external.
     external: externals(),
     sourcemap: true,
     legalComments: "none",
