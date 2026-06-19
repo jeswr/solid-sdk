@@ -8,10 +8,21 @@ import { Monitor, Moon, Sun } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, } from "./primitives.js";
 import { useTheme } from "./theme-provider.js";
+/**
+ * The icon per preference. An exhaustive `Record<Theme, …>` (index-safe by the
+ * closed `Theme` union) — the single source of truth for both the trigger icon
+ * and the menu items below. It replaces a chained ternary; if `Theme` ever gains
+ * a member, the compiler requires an entry here.
+ */
+const THEME_ICON = {
+    light: Sun,
+    dark: Moon,
+    system: Monitor,
+};
 const OPTIONS = [
-    { value: "light", label: "Light", icon: Sun },
-    { value: "dark", label: "Dark", icon: Moon },
-    { value: "system", label: "System", icon: Monitor },
+    { value: "light", label: "Light", icon: THEME_ICON.light },
+    { value: "dark", label: "Dark", icon: THEME_ICON.dark },
+    { value: "system", label: "System", icon: THEME_ICON.system },
 ];
 /** Theme switcher (light / dark / system). Header-level, low-profile. */
 export function ThemeToggle() {
@@ -20,6 +31,8 @@ export function ThemeToggle() {
     // real preference after mount, exactly as PM did with next-themes.
     const [mounted, setMounted] = useState(false);
     useEffect(() => setMounted(true), []);
-    const Icon = !mounted ? Monitor : theme === "dark" ? Moon : theme === "light" ? Sun : Monitor;
+    // Before mount the icon is the SSR-stable "system" icon (Monitor); after mount
+    // it follows the resolved preference. (system → Monitor, dark → Moon, light → Sun.)
+    const Icon = mounted ? THEME_ICON[theme] : THEME_ICON.system;
     return (_jsxs(DropdownMenu, { children: [_jsx(DropdownMenuTrigger, { asChild: true, children: _jsx(Button, { variant: "ghost", size: "icon", "aria-label": "Change colour theme", children: _jsx(Icon, { className: "size-5", "aria-hidden": "true" }) }) }), _jsx(DropdownMenuContent, { align: "end", children: OPTIONS.map(({ value, label, icon: ItemIcon }) => (_jsxs(DropdownMenuItem, { onClick: () => setTheme(value), "aria-current": mounted && theme === value ? "true" : undefined, children: [_jsx(ItemIcon, { className: "size-4", "aria-hidden": "true" }), label] }, value))) })] }));
 }

@@ -15,10 +15,22 @@ import {
 } from "./primitives.js";
 import { type Theme, useTheme } from "./theme-provider.js";
 
+/**
+ * The icon per preference. An exhaustive `Record<Theme, …>` (index-safe by the
+ * closed `Theme` union) — the single source of truth for both the trigger icon
+ * and the menu items below. It replaces a chained ternary; if `Theme` ever gains
+ * a member, the compiler requires an entry here.
+ */
+const THEME_ICON: Record<Theme, typeof Sun> = {
+  light: Sun,
+  dark: Moon,
+  system: Monitor,
+};
+
 const OPTIONS: ReadonlyArray<{ value: Theme; label: string; icon: typeof Sun }> = [
-  { value: "light", label: "Light", icon: Sun },
-  { value: "dark", label: "Dark", icon: Moon },
-  { value: "system", label: "System", icon: Monitor },
+  { value: "light", label: "Light", icon: THEME_ICON.light },
+  { value: "dark", label: "Dark", icon: THEME_ICON.dark },
+  { value: "system", label: "System", icon: THEME_ICON.system },
 ];
 
 /** Theme switcher (light / dark / system). Header-level, low-profile. */
@@ -29,7 +41,9 @@ export function ThemeToggle() {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
-  const Icon = !mounted ? Monitor : theme === "dark" ? Moon : theme === "light" ? Sun : Monitor;
+  // Before mount the icon is the SSR-stable "system" icon (Monitor); after mount
+  // it follows the resolved preference. (system → Monitor, dark → Moon, light → Sun.)
+  const Icon = mounted ? THEME_ICON[theme] : THEME_ICON.system;
 
   return (
     <DropdownMenu>
