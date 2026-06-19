@@ -3,12 +3,20 @@
     "target": "es2022",
     "module": "nodenext",
     "moduleResolution": "nodenext",
-    "lib": ["es2022", "dom", "dom.asynciterable"],
+    // Pure-core enforcement: this serialiser is a function over plain RDF data +
+    // n3 — it touches NO DOM/browser global. Omitting `dom` from `lib` makes any
+    // future reach for `document`/`window`/`fetch`/`caches` a COMPILE error, so
+    // the "no hidden platform globals" reviewability invariant is mechanically
+    // enforced rather than honour-system (was: ["es2022","dom","dom.asynciterable"]).
+    "lib": ["es2022"],
     "outDir": "./dist",
     "rootDir": "./src",
     "strict": true,
     "noUncheckedIndexedAccess": true,
-    "exactOptionalPropertyTypes": false,
+    // Strict opt-in: forbids assigning an explicit `undefined` to an optional
+    // property, so the optional SerializeOptions fields can only be present-or-
+    // absent — closing the present-but-undefined ambiguity at the n3 boundary.
+    "exactOptionalPropertyTypes": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
