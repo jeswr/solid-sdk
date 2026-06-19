@@ -7,6 +7,23 @@ function canonicalNQuads(quads) {
   return lines.join("\n");
 }
 function canonicalBlankLabels(quads) {
+  const blanks = collectBlankNodes(quads);
+  let colour = /* @__PURE__ */ new Map();
+  for (const b of blanks) {
+    colour.set(b, "_:b");
+  }
+  const rounds = Math.min(blanks.size + 2, 16);
+  for (let r = 0; r < rounds; r++) {
+    const next = refineRound(blanks, quads, colour);
+    const stable = coloursStable(blanks, colour, next);
+    colour = next;
+    if (stable) {
+      break;
+    }
+  }
+  return assignLabels(blanks, colour);
+}
+function collectBlankNodes(quads) {
   const blanks = /* @__PURE__ */ new Set();
   for (const q of quads) {
     if (q.subject.termType === "BlankNode") {
@@ -19,59 +36,66 @@ function canonicalBlankLabels(quads) {
       blanks.add(q.graph.value);
     }
   }
-  let colour = /* @__PURE__ */ new Map();
+  return blanks;
+}
+function refineRound(blanks, quads, colour) {
+  const next = /* @__PURE__ */ new Map();
   for (const b of blanks) {
-    colour.set(b, "_:b");
-  }
-  const rounds = Math.min(blanks.size + 2, 16);
-  for (let r = 0; r < rounds; r++) {
-    const next = /* @__PURE__ */ new Map();
-    for (const b of blanks) {
-      const signals = [];
-      for (const q of quads) {
-        const sub = q.subject.termType === "BlankNode" ? q.subject.value : void 0;
-        const obj = q.object.termType === "BlankNode" ? q.object.value : void 0;
-        const grp = q.graph?.termType === "BlankNode" ? q.graph.value : void 0;
-        const graphSig = q.graph ? termColour(q.graph, colour) : "";
-        if (sub === b) {
-          signals.push(`s|${q.predicate.value}|${termColour(q.object, colour)}|${graphSig}`);
-        }
-        if (obj === b) {
-          signals.push(`o|${q.predicate.value}|${termColour(q.subject, colour)}|${graphSig}`);
-        }
-        if (grp === b) {
-          signals.push(
-            `g|${q.predicate.value}|${termColour(q.subject, colour)}|${termColour(q.object, colour)}`
-          );
-        }
-      }
-      signals.sort();
-      const h = createHash("sha256").update(`${colour.get(b)}
+    const signals = blankNodeSignals(b, quads, colour);
+    const h = createHash("sha256").update(`${colour.get(b)}
 ${signals.join("\n")}`, "utf8").digest("hex");
-      next.set(b, h);
+    next.set(b, h);
+  }
+  return next;
+}
+function blankNodeSignals(b, quads, colour) {
+  const signals = [];
+  for (const q of quads) {
+    const sub = q.subject.termType === "BlankNode" ? q.subject.value : void 0;
+    const obj = q.object.termType === "BlankNode" ? q.object.value : void 0;
+    const grp = q.graph?.termType === "BlankNode" ? q.graph.value : void 0;
+    const graphSig = q.graph ? termColour(q.graph, colour) : "";
+    if (sub === b) {
+      signals.push(`s|${q.predicate.value}|${termColour(q.object, colour)}|${graphSig}`);
     }
-    let stable = true;
-    for (const b of blanks) {
-      if (next.get(b) !== colour.get(b)) {
-        stable = false;
-        break;
-      }
+    if (obj === b) {
+      signals.push(`o|${q.predicate.value}|${termColour(q.subject, colour)}|${graphSig}`);
     }
-    colour = next;
-    if (stable) {
-      break;
+    if (grp === b) {
+      signals.push(
+        `g|${q.predicate.value}|${termColour(q.subject, colour)}|${termColour(q.object, colour)}`
+      );
     }
   }
-  const ordered = [...blanks].sort((a, b) => {
-    const ca = colour.get(a) ?? "";
-    const cb = colour.get(b) ?? "";
-    return ca < cb ? -1 : ca > cb ? 1 : a < b ? -1 : a > b ? 1 : 0;
-  });
+  signals.sort();
+  return signals;
+}
+function coloursStable(blanks, prev, next) {
+  for (const b of blanks) {
+    if (next.get(b) !== prev.get(b)) {
+      return false;
+    }
+  }
+  return true;
+}
+function assignLabels(blanks, colour) {
+  const ordered = [...blanks].sort(
+    (a, b) => compareStrings(colour.get(a) ?? "", colour.get(b) ?? "") || compareStrings(a, b)
+  );
   const labels = /* @__PURE__ */ new Map();
   for (let i = 0; i < ordered.length; i++) {
     labels.set(ordered[i], `c14n-${i}`);
   }
   return labels;
+}
+function compareStrings(a, b) {
+  if (a < b) {
+    return -1;
+  }
+  if (a > b) {
+    return 1;
+  }
+  return 0;
 }
 function termColour(term, colour) {
   if (term.termType === "BlankNode") {

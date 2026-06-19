@@ -38,8 +38,37 @@ export function canonicalNQuads(quads: readonly Quad[]): string {
  *   - Iterate until colours stabilise (or a bounded number of rounds).
  *   - Assign final labels by sorting blank nodes on (final-colour, then a stable
  *     tiebreak), so two isomorphic graphs get identical labels.
+ *
+ * Decomposed into the four named pure steps below so the algorithm reads as its
+ * own spec; the per-step logic (signal strings, hash input, round bound, sort
+ * order) is byte-for-byte the same as the original single-function form, so the
+ * assigned labels — and therefore the content hash — are unchanged.
  */
 function canonicalBlankLabels(quads: readonly Quad[]): Map<string, string> {
+  const blanks = collectBlankNodes(quads);
+
+  // Colour of every blank: seeded identical (so graph STRUCTURE, not the original
+  // id, drives the refinement) and refined across bounded rounds.
+  let colour = new Map<string, string>();
+  for (const b of blanks) {
+    colour.set(b, "_:b");
+  }
+
+  const rounds = Math.min(blanks.size + 2, 16);
+  for (let r = 0; r < rounds; r++) {
+    const next = refineRound(blanks, quads, colour);
+    const stable = coloursStable(blanks, colour, next);
+    colour = next;
+    if (stable) {
+      break;
+    }
+  }
+
+  return assignLabels(blanks, colour);
+}
+
+/** Every blank-node id appearing in any subject / object / (named-)graph position. */
+function collectBlankNodes(quads: readonly Quad[]): Set<string> {
   const blanks = new Set<string>();
   for (const q of quads) {
     if (q.subject.termType === "BlankNode") {
@@ -54,68 +83,90 @@ function canonicalBlankLabels(quads: readonly Quad[]): Map<string, string> {
       blanks.add(q.graph.value);
     }
   }
+  return blanks;
+}
 
-  // Colour of every term: ground terms by their N-Quads form; blanks by a colour
-  // that is refined across rounds (seeded identical so structure drives it).
-  let colour = new Map<string, string>();
+/** Recolour every blank node once: its new colour = hash of its neighbourhood signals. */
+function refineRound(
+  blanks: ReadonlySet<string>,
+  quads: readonly Quad[],
+  colour: ReadonlyMap<string, string>,
+): Map<string, string> {
+  const next = new Map<string, string>();
   for (const b of blanks) {
-    colour.set(b, "_:b");
+    const signals = blankNodeSignals(b, quads, colour);
+    const h = createHash("sha256")
+      .update(`${colour.get(b)}\n${signals.join("\n")}`, "utf8")
+      .digest("hex");
+    next.set(b, h);
   }
+  return next;
+}
 
-  const rounds = Math.min(blanks.size + 2, 16);
-  for (let r = 0; r < rounds; r++) {
-    const next = new Map<string, string>();
-    for (const b of blanks) {
-      const signals: string[] = [];
-      for (const q of quads) {
-        const sub = q.subject.termType === "BlankNode" ? q.subject.value : undefined;
-        const obj = q.object.termType === "BlankNode" ? q.object.value : undefined;
-        const grp = q.graph?.termType === "BlankNode" ? q.graph.value : undefined;
-        // The graph term participates in every position's signal so that two
-        // quads differing only by their named graph produce distinct signals.
-        const graphSig = q.graph ? termColour(q.graph, colour) : "";
-        if (sub === b) {
-          signals.push(`s|${q.predicate.value}|${termColour(q.object, colour)}|${graphSig}`);
-        }
-        if (obj === b) {
-          signals.push(`o|${q.predicate.value}|${termColour(q.subject, colour)}|${graphSig}`);
-        }
-        if (grp === b) {
-          signals.push(
-            `g|${q.predicate.value}|${termColour(q.subject, colour)}|${termColour(q.object, colour)}`,
-          );
-        }
-      }
-      signals.sort();
-      const h = createHash("sha256")
-        .update(`${colour.get(b)}\n${signals.join("\n")}`, "utf8")
-        .digest("hex");
-      next.set(b, h);
+/**
+ * The sorted multiset of neighbourhood signals for blank node `b`: one signal per
+ * quad position (subject / object / named-graph) in which `b` appears, encoding the
+ * predicate + the colour of the other terms (so structure, not the original blank
+ * id, distinguishes nodes). Sorted so the multiset is order-independent.
+ */
+function blankNodeSignals(
+  b: string,
+  quads: readonly Quad[],
+  colour: ReadonlyMap<string, string>,
+): string[] {
+  const signals: string[] = [];
+  for (const q of quads) {
+    const sub = q.subject.termType === "BlankNode" ? q.subject.value : undefined;
+    const obj = q.object.termType === "BlankNode" ? q.object.value : undefined;
+    const grp = q.graph?.termType === "BlankNode" ? q.graph.value : undefined;
+    // The graph term participates in every position's signal so that two quads
+    // differing only by their named graph produce distinct signals.
+    const graphSig = q.graph ? termColour(q.graph, colour) : "";
+    if (sub === b) {
+      signals.push(`s|${q.predicate.value}|${termColour(q.object, colour)}|${graphSig}`);
     }
-    // Stop early if colours stopped changing.
-    let stable = true;
-    for (const b of blanks) {
-      if (next.get(b) !== colour.get(b)) {
-        stable = false;
-        break;
-      }
+    if (obj === b) {
+      signals.push(`o|${q.predicate.value}|${termColour(q.subject, colour)}|${graphSig}`);
     }
-    colour = next;
-    if (stable) {
-      break;
+    if (grp === b) {
+      signals.push(
+        `g|${q.predicate.value}|${termColour(q.subject, colour)}|${termColour(q.object, colour)}`,
+      );
     }
   }
+  signals.sort();
+  return signals;
+}
 
-  // Final labels: sort blanks by (colour, original-id) for a stable, total order,
-  // then number them c14n-0, c14n-1, … The original-id tiebreak keeps the output
-  // reproducible even when two blanks share a colour (a hash collision in the
-  // refinement); it is stable within a single build, and the colour prefix makes
-  // it isomorphism-stable across builds for the distinguishable cases.
-  const ordered = [...blanks].sort((a, b) => {
-    const ca = colour.get(a) ?? "";
-    const cb = colour.get(b) ?? "";
-    return ca < cb ? -1 : ca > cb ? 1 : a < b ? -1 : a > b ? 1 : 0;
-  });
+/** True iff no blank node's colour changed between the two rounds (a fixed point). */
+function coloursStable(
+  blanks: ReadonlySet<string>,
+  prev: ReadonlyMap<string, string>,
+  next: ReadonlyMap<string, string>,
+): boolean {
+  for (const b of blanks) {
+    if (next.get(b) !== prev.get(b)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Final labels: sort blanks by (final-colour, original-id) for a stable total
+ * order, then number them c14n-0, c14n-1, … The original-id tiebreak keeps the
+ * output reproducible even when two blanks share a colour (a hash collision in the
+ * refinement); it is stable within a single build, and the colour prefix makes it
+ * isomorphism-stable across builds for the distinguishable cases.
+ */
+function assignLabels(
+  blanks: ReadonlySet<string>,
+  colour: ReadonlyMap<string, string>,
+): Map<string, string> {
+  // Order by final colour, then by the original blank id as a stable tiebreak.
+  const ordered = [...blanks].sort(
+    (a, b) => compareStrings(colour.get(a) ?? "", colour.get(b) ?? "") || compareStrings(a, b),
+  );
   const labels = new Map<string, string>();
   for (let i = 0; i < ordered.length; i++) {
     labels.set(ordered[i] as string, `c14n-${i}`);
@@ -123,8 +174,19 @@ function canonicalBlankLabels(quads: readonly Quad[]): Map<string, string> {
   return labels;
 }
 
+/** A total, locale-independent string comparator (-1 / 0 / 1) for stable sorting. */
+function compareStrings(a: string, b: string): number {
+  if (a < b) {
+    return -1;
+  }
+  if (a > b) {
+    return 1;
+  }
+  return 0;
+}
+
 /** The colour of a term in the current round: ground terms by value, blanks by colour. */
-function termColour(term: Term, colour: Map<string, string>): string {
+function termColour(term: Term, colour: ReadonlyMap<string, string>): string {
   if (term.termType === "BlankNode") {
     return colour.get(term.value) ?? "_:b";
   }
