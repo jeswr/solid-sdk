@@ -474,13 +474,28 @@ describe("replace-vs-harden evidence — undici Dispatcher vs http.Agent (README
   });
 
   it("undici fetch REJECTS an http.Agent passed as { dispatcher } (agent.dispatch is not a function)", async () => {
+    // A REAL ephemeral loopback port that we then CLOSE — a valid-but-closed port. undici throws
+    // at the dispatcher CONTRACT check (agent.dispatch is not a function) BEFORE any socket is
+    // opened, so this test makes NO outbound request even if undici's behaviour changed — at
+    // worst it would hit a closed loopback port, never the public internet. (A bogus literal
+    // port like `:1` is rejected by undici as "bad port" before the dispatcher check, masking
+    // the contract failure — hence a real, then-closed, ephemeral port.) We assert the failure
+    // is the dispatcher-contract one so the test stays a precise contract proof.
+    const probe = createServer();
+    await new Promise<void>((r) => probe.listen(0, "127.0.0.1", () => r()));
+    const closedPort = (probe.address() as AddressInfo).port;
+    await new Promise<void>((r) => probe.close(() => r()));
+
     const httpAgent = new HttpAgent();
-    // example.com is never actually dialled: undici throws at the dispatcher contract check.
-    await expect(
-      undiciFetch("https://example.com/", {
-        dispatcher: httpAgent as unknown as UndiciAgent,
-      }),
-    ).rejects.toMatchObject({ cause: { message: expect.stringContaining("dispatch") } });
+    const err = await undiciFetch(`http://127.0.0.1:${closedPort}/`, {
+      dispatcher: httpAgent as unknown as UndiciAgent,
+    }).then(
+      () => undefined,
+      (e: unknown) => e,
+    );
+    expect(err).toBeInstanceOf(Error);
+    const cause = (err as { cause?: { message?: string } }).cause;
+    expect(cause?.message ?? (err as Error).message).toContain("dispatch");
   });
 
   it("OUR pinning dispatcher IS a real undici Dispatcher (has .dispatch) — the adoptable seam", () => {
