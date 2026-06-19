@@ -3,6 +3,15 @@
 // <jeswr-error-state> — the error sibling of <jeswr-empty-state>. Same named
 // slots (icon / title / description / action) but styled with the destructive
 // token and `role="alert"` so assistive tech announces it. Presentation-only.
+//
+// DELIBERATE DUPLICATION (do not "DRY" away — jscpd flags the shared shape): this
+// and <jeswr-empty-state> are SAME-SHAPE / DIFFERENT-INTENT. Two distinct PUBLIC
+// custom-element tags (consumers register `jeswr-empty-state` AND `jeswr-error-state`
+// verbatim), with different semantics (destructive token + `role="alert"` + a default
+// alert icon here; muted/neutral there) that are expected to DIVERGE independently.
+// Merging them into one generic element would remove a public tag and couple two
+// intents — making future change HARDER, not easier. The overlap is a few CSS idioms
+// (the wrong abstraction is costlier than the duplication).
 import { css, html, LitElement, nothing } from "lit";
 import { tokenStyles } from "../theme-tokens.js";
 export class JeswrErrorState extends LitElement {

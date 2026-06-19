@@ -7,6 +7,13 @@
 // (*) Reactive prop is named `heading` and reflected to the `heading` attribute;
 // `title` is a global HTML attribute that browsers turn into a tooltip, so we do
 // NOT reuse it for the visible heading — use `heading` or the `title` SLOT.
+//
+// DELIBERATE DUPLICATION (do not "DRY" away — jscpd flags the shared shape): this
+// and <jeswr-error-state> are SAME-SHAPE / DIFFERENT-INTENT — two distinct PUBLIC
+// custom-element tags with different semantics (neutral/muted here; destructive +
+// `role="alert"` there) that are expected to DIVERGE. See error-state.ts for the full
+// rationale. The overlap is a few CSS idioms; merging would remove a public tag and
+// couple two intents.
 import { css, html, LitElement, nothing } from "lit";
 import { tokenStyles } from "../theme-tokens.js";
 export class JeswrEmptyState extends LitElement {
