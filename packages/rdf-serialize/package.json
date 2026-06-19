@@ -1,0 +1,78 @@
+{
+  "name": "@jeswr/rdf-serialize",
+  "version": "0.1.0",
+  "description": "The single sanctioned n3.Writer RDF serialiser for the @jeswr suite — consolidated from the near-identical src/serialize.ts copies in @jeswr/solid-vc, @jeswr/solid-odrl, @jeswr/solid-a2a, @jeswr/federation-client and @jeswr/solid-agent-card. Serialise a readonly Quad[] to Turtle / N-Triples / N-Quads / TriG via n3.Writer (never hand-concatenated RDF). Vocab-agnostic: the caller supplies its own prefix map. Configurable empty-graph behaviour (the 4-of-5 majority short-circuits a zero-quad input to \"\"; federation-client's preamble behaviour is reproduced with emptyAsEmptyString:false). Self-contained dist/ (plain tsc, no esbuild inlining — depends only on the npm-published n3 + @rdfjs/types) so it installs from GitHub under ignore-scripts=true with no build step. Experimental, AI-agent-generated.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "check:dist": "node scripts/check-dist-fresh.mjs",
+    "check:lockfile-transport": "node scripts/check-lockfile-transport.mjs",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check src test scripts && npm run check:lockfile-transport",
+    "lint:fix": "biome check --write src test scripts",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "api:check": "api-extractor run --local",
+    "publint": "publint --strict",
+    "attw": "attw --pack",
+    "gate": "npm run lint && npm run typecheck && npm run test && npm run build && npm run check:dist",
+    "prepare": "npm run build"
+  },
+  "keywords": [
+    "solid",
+    "rdf",
+    "serialize",
+    "serialise",
+    "n3",
+    "turtle",
+    "n-triples",
+    "n-quads",
+    "trig",
+    "jsonld",
+    "linked-data",
+    "quads"
+  ],
+  "author": "Jesse Wright <jwrightwho@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jeswr/rdf-serialize.git"
+  },
+  "bugs": {
+    "url": "https://github.com/jeswr/rdf-serialize/issues"
+  },
+  "homepage": "https://github.com/jeswr/rdf-serialize#readme",
+  "dependencies": {
+    "@rdfjs/types": "^2.0.1",
+    "n3": "^2.0.3"
+  },
+  "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.0",
+    "@biomejs/biome": "^2.0.0",
+    "@microsoft/api-extractor": "^7.0.0",
+    "@types/n3": "^1.16.0",
+    "@types/node": "^22.0.0",
+    "@vitest/coverage-v8": "^2.1.0",
+    "publint": "^0.3.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
