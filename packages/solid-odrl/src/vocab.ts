@@ -141,9 +141,30 @@ export const ODRL_INFORM = `${ODRL}inform` as const;
 export const ODRL_ANONYMIZE = `${ODRL}anonymize` as const;
 /** `odrl:delete` is reused as a duty action (delete-after-use). */
 
+// --- ACL-mode action concepts (Solid-resource binding, NOT data-use actions) ---
+// ODRL has NO native action faithful to Solid's `acl:Append` (a STRICT subclass of
+// `acl:Write` — add-only, never modify/delete; WAC spec) or `acl:Control` (which
+// governs the resource's ACL DOCUMENT, NOT data use; "Having acl:Control does not
+// imply acl:Read or acl:Write to the resource itself" — WAC spec). Following the
+// OAC profile's practice (https://w3id.org/oac — it does NOT mint per-mode ODRL
+// actions, it uses the standard `acl:` mode IRIs as the `odrl:action` value), we
+// expose `append`/`control` as DISTINCT action concepts backed by the standard
+// `acl:Append`/`acl:Control` IRIs. Nothing is minted. Critically these do NOT
+// collapse onto the data-use actions: `append` is NOT `modify`/`write`, and
+// `control` is NOT `use` — see ACL_MODE_TO_ACTION + ACTION_IMPLIED_BY for why this
+// is strictly safe (never broadens an Append/Control request into a wider grant).
+/** `acl:Append` as an action concept — add-only access (a STRICT subclass of write). */
+export const ACTION_APPEND_IRI = `${ACL}Append` as const;
+/** `acl:Control` as an action concept — access to the ACL document, NOT data use. */
+export const ACTION_CONTROL_IRI = `${ACL}Control` as const;
+
 /**
  * The closed set of ODRL action short names the evaluator + builder understand.
  * A stable machine-readable enum independent of the (verbose) IRIs.
+ *
+ * `append` + `control` are the Solid-resource access concepts (see above): they are
+ * NOT ODRL data-use actions and are deliberately narrow — see {@link ACTION_IMPLIED_BY}
+ * ( `control` is NOT covered by the `use` umbrella) and {@link ACL_MODE_TO_ACTION}.
  */
 export const ODRL_ACTIONS = [
   "use",
@@ -159,6 +180,8 @@ export const ODRL_ACTIONS = [
   "compensate",
   "inform",
   "anonymize",
+  "append",
+  "control",
 ] as const;
 /** An ODRL action short name. */
 export type OdrlActionName = (typeof ODRL_ACTIONS)[number];
@@ -177,6 +200,10 @@ export const ACTION_IRI: Readonly<Record<OdrlActionName, string>> = {
   compensate: ODRL_COMPENSATE,
   inform: ODRL_INFORM,
   anonymize: ODRL_ANONYMIZE,
+  // Solid-resource access concepts — backed by the standard acl: mode IRIs (OAC
+  // practice), NOT minted, and deliberately distinct from the ODRL data-use actions.
+  append: ACTION_APPEND_IRI,
+  control: ACTION_CONTROL_IRI,
 };
 /** Reverse: ODRL action IRI → short action name (for round-trip read). */
 export const IRI_TO_ACTION: Readonly<Record<string, OdrlActionName>> = Object.fromEntries(
@@ -186,16 +213,37 @@ export const IRI_TO_ACTION: Readonly<Record<string, OdrlActionName>> = Object.fr
 export const VALID_ACTION_IRIS: ReadonlySet<string> = new Set(Object.values(ACTION_IRI));
 
 /**
- * `odrl:use` is the broad umbrella action: an ODRL permission/prohibition on
- * `odrl:use` covers any more-specific action. This map records, for a requested
- * concrete action, the set of policy action names that IMPLY it (the requested
- * action itself, plus `use`). Used by the evaluator to match a `use` rule against
- * a concrete `read`/`write`/… request (ODRL action-hierarchy semantics — the
+ * Actions that are NOT covered by the `odrl:use` data-use umbrella. `control`
+ * (= `acl:Control`) governs the resource's ACL DOCUMENT, not data use — the WAC
+ * spec is explicit that "Having acl:Control does not imply acl:Read or acl:Write to
+ * the resource itself". So a broad `odrl:use` (data-use) permission must NOT match a
+ * `control` request — otherwise a "permit use" policy would silently grant the power
+ * to rewrite the ACL. `control` is therefore implied ONLY by an explicit `control`
+ * rule (fail-closed / never-broaden). All data-access actions (`read`/`write`/
+ * `modify`/`append`/…) remain under the `use` umbrella as ODRL models them.
+ */
+const NOT_UNDER_USE: ReadonlySet<OdrlActionName> = new Set<OdrlActionName>(["control"]);
+
+/**
+ * `odrl:use` is the broad umbrella DATA-USE action: an ODRL permission/prohibition
+ * on `odrl:use` covers any more-specific data-use action. This map records, for a
+ * requested concrete action, the set of policy action names that IMPLY it (the
+ * requested action itself, plus `use` UNLESS the action is not a data-use action —
+ * see {@link NOT_UNDER_USE}). Used by the evaluator to match a `use` rule against a
+ * concrete `read`/`write`/… request (ODRL action-hierarchy semantics — the
  * Vocabulary models `odrl:use` as the parent via `skos:broader`).
  */
 export const ACTION_IMPLIED_BY: Readonly<Record<OdrlActionName, ReadonlySet<OdrlActionName>>> =
   Object.fromEntries(
-    ODRL_ACTIONS.map((a) => [a, new Set<OdrlActionName>(a === "use" ? ["use"] : [a, "use"])]),
+    ODRL_ACTIONS.map((a) => {
+      const implied = new Set<OdrlActionName>([a]);
+      // `use` is the umbrella over the data-use actions; it does not imply itself
+      // via the umbrella (it is itself), and it does not cover non-data-use actions.
+      if (a !== "use" && !NOT_UNDER_USE.has(a)) {
+        implied.add("use");
+      }
+      return [a, implied];
+    }),
   ) as unknown as Readonly<Record<OdrlActionName, ReadonlySet<OdrlActionName>>>;
 
 // --- ACL / WAC modes (standard) — the Solid-resource binding ---------------
@@ -213,16 +261,38 @@ export const ACL_MODES = ["Read", "Write", "Append", "Control"] as const;
 export type AclMode = (typeof ACL_MODES)[number];
 
 /**
- * Map a Solid WAC access mode to the ODRL action(s) it corresponds to, so an ODRL
+ * Map a Solid WAC access mode to the ODRL action it corresponds to, so an ODRL
  * usage-control policy can be evaluated against a WAC-style request. This is the
  * roadmap's "an ODRL policy attaches to a Solid resource" binding (the OAC profile
  * derives WAC from ODRL — here we go the other direction for evaluation).
+ *
+ * STRICTLY-SAFE mapping (each mode → its FAITHFUL, non-broadening action):
+ *  - `Read`    → `read`    (faithful)
+ *  - `Write`   → `write`   (faithful)
+ *  - `Append`  → `append`  — NOT `modify`. `acl:Append` is a STRICT subclass of
+ *    `acl:Write` (add-only; never modify/delete — WAC spec). The previous
+ *    `Append → modify` was an OVER-GRANT: it conflated add-only access with full
+ *    data mutation, so an append-only intent compiled to `modify` and a `modify`
+ *    rule wrongly matched an Append request. `append` is its own narrow action
+ *    (backed by `acl:Append`); it is covered by the `use` umbrella (it IS a data
+ *    access mode) but never by a `modify`/`write` rule.
+ *  - `Control` → `control` — NOT `use`. `acl:Control` governs the ACL DOCUMENT, not
+ *    data use ("Having acl:Control does not imply acl:Read or acl:Write to the
+ *    resource itself" — WAC spec). The previous `Control → use` was a serious
+ *    OVER-GRANT: a Control request matched ANY data-use permission, and a Control
+ *    grant compiled to the broad data-use umbrella. `control` is its own action
+ *    (backed by `acl:Control`) and is deliberately OUTSIDE the `use` umbrella (see
+ *    {@link ACTION_IMPLIED_BY} / {@link NOT_UNDER_USE}) — a "permit use" data policy
+ *    can never grant ACL control.
+ *
+ * Net effect: every mode now maps to a STRICTLY NARROWER-or-equal action than
+ * before — this mapping NEVER broadens an Append/Control request into a wider grant.
  */
 export const ACL_MODE_TO_ACTION: Readonly<Record<AclMode, OdrlActionName>> = {
   Read: "read",
   Write: "write",
-  Append: "modify",
-  Control: "use",
+  Append: "append",
+  Control: "control",
 };
 
 // --- ODRL constraint left-operands (standard) -----------------------------

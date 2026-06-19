@@ -41,7 +41,11 @@ export const A2A_ACTION_TO_ODRL: Readonly<Record<string, OdrlActionName>> = {
   read: "read",
   create: "write",
   update: "modify",
-  append: "modify",
+  // `append` is add-only — a STRICT subclass of write (WAC `acl:Append`). Mapping it
+  // to `modify` was an OVER-GRANT (an append-only intent compiled to full data
+  // mutation). Map to the narrow `append` action instead — never broadens. See
+  // ACL_MODE_TO_ACTION in vocab.ts for the same tightening on the WAC side.
+  append: "append",
   delete: "delete",
   list: "read",
   grant: "use",

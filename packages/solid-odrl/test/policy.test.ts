@@ -14,7 +14,7 @@ import {
   policyToTurtle,
 } from "../src/policy.js";
 import type { OdrlPolicy } from "../src/types.js";
-import { ODRL } from "../src/vocab.js";
+import { ACL, ODRL } from "../src/vocab.js";
 
 const OWNER = "https://alice.example/profile/card#me";
 const AGENT = "https://bob.example/profile/card#me";
@@ -118,6 +118,31 @@ describe("Turtle round-trip", () => {
     expect(parsed?.permissions?.[0]?.duties?.[0]?.action).toBe("attribute");
     expect(parsed?.prohibitions?.[0]?.action).toBe("distribute");
     expect(parsed?.obligations?.[0]?.action).toBe("inform");
+  });
+
+  // SECURITY TIGHTENING (jeswr/sparq#890): the `append`/`control` actions are backed
+  // by the standard acl: mode IRIs (OAC practice) and must round-trip losslessly.
+  it("round-trips the `append` + `control` actions via the standard acl: IRIs", async () => {
+    const policy: OdrlPolicy = {
+      id: "https://alice.example/policies/acl",
+      permissions: [
+        { type: "permission", action: "append", target: RESOURCE, assignee: AGENT },
+        { type: "permission", action: "control", target: RESOURCE, assignee: OWNER },
+      ],
+    };
+    // Express: the action object IRIs are the real acl:Append / acl:Control, NOT odrl:.
+    const quads = policyToRdf(policy);
+    const actionObjs = quads
+      .filter((q) => q.predicate.value === `${ODRL}action`)
+      .map((q) => q.object.value);
+    expect(actionObjs).toContain(`${ACL}Append`);
+    expect(actionObjs).toContain(`${ACL}Control`);
+    expect(actionObjs).not.toContain(`${ODRL}modify`);
+    expect(actionObjs).not.toContain(`${ODRL}use`);
+    // Parse back: the short names survive.
+    const parsed = await parsePolicy(await policyToTurtle(policy));
+    const actions = (parsed?.permissions ?? []).map((p) => p.action).sort();
+    expect(actions).toEqual(["append", "control"]);
   });
 
   it("preserves a numeric (count) constraint as a number", async () => {

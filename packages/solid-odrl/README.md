@@ -132,9 +132,11 @@ result.conflict;            // was the perm-vs-prohibit conflict strategy invoke
 ## Evaluation semantics (per ODRL 2.2 + the Formal Semantics CG draft)
 
 - **Rule match.** A rule applies when its action *implies* the requested action (`odrl:use` is the
-  umbrella that covers any concrete action), its `target` equals the requested target (or it has no
-  target), its `assignee` equals the requesting agent (or it has no assignee), and **every** one of
-  its constraints is **satisfied**.
+  umbrella that covers any concrete **data-use** action), its `target` equals the requested target
+  (or it has no target), its `assignee` equals the requesting agent (or it has no assignee), and
+  **every** one of its constraints is **satisfied**. The `control` action (ACL-document access) is
+  deliberately **outside** the `use` umbrella — a broad "permit use" data policy never grants ACL
+  control (see "Solid / WAC mode mapping" below).
 - **Fail-closed.** A constraint whose left-operand the request context does not supply is
   **unsatisfied** — a constrained permission never silently grants. (`dateTime` falls back to the
   injected `now`.)
@@ -148,6 +150,31 @@ result.conflict;            // was the perm-vs-prohibit conflict strategy invoke
 - **Operators.** `eq` `neq` `gt` `gteq` `lt` `lteq` `isAnyOf` `isAllOf` `isNoneOf`, with type-aware
   comparison (numeric / temporal / lexical).
 - **Left-operands.** `dateTime` `purpose` `recipient` `count` `spatial` `elapsedTime` `systemDevice`.
+
+## Solid / WAC mode mapping
+
+`requestContextFromWac()` (and the A2A verb map) translate a WAC access mode to an ODRL action
+**conservatively — never broadening**. ODRL has no native action faithful to `acl:Append` or
+`acl:Control`, so (following the [OAC profile][oac], which reuses the standard `acl:` mode IRIs as
+the `odrl:action` value rather than minting new terms) those two map to **distinct, narrow** actions
+backed by the standard ACL IRIs:
+
+| WAC mode | ODRL action | action IRI | note |
+|---|---|---|---|
+| `Read` | `read` | `odrl:read` | faithful |
+| `Write` | `write` | `odrl:write` | faithful |
+| `Append` | `append` | `acl:Append` | add-only — a **strict subclass** of `acl:Write`; **not** `modify` |
+| `Control` | `control` | `acl:Control` | governs the **ACL document**, not data use; **outside** the `use` umbrella |
+
+This is a deliberate **security tightening** ([jeswr/sparq#890][sparq890]): previously `Append → modify`
+and `Control → use` over-granted (an append-only intent compiled to full mutation; a Control request
+matched any data-use permission). The mapping now maps each mode to a strictly narrower-or-equal
+action, so an Append/Control request can never be widened into a broader grant. A policy written with
+the correct action for a mode is unaffected; a policy that *relied* on the old over-grant (writing
+`modify`/`use` to mean append/control) must now use the explicit `append`/`control` action.
+
+[oac]: https://w3id.org/oac
+[sparq890]: https://github.com/jeswr/sparq/issues/890
 
 ## RDF discipline
 

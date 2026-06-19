@@ -5,7 +5,10 @@
 
 import { describe, expect, it } from "vitest";
 import * as api from "../src/index.js";
-import { ODRL } from "../src/vocab.js";
+import { ACL, ODRL } from "../src/vocab.js";
+
+/** The Solid-resource access concepts backed by the standard `acl:` mode IRIs. */
+const ACL_BACKED_ACTIONS = new Set(["append", "control"]);
 
 describe("public API surface", () => {
   it("exports the express / parse / evaluate / compose entry points", () => {
@@ -37,9 +40,21 @@ describe("public API surface", () => {
     expect(api.CONFLICT_STRATEGIES).toEqual(["perm", "prohibit", "invalid"]);
   });
 
-  it("maps every ODRL action short name to a real ODRL IRI", () => {
+  it("maps every action short name to a real standard IRI (ODRL, or acl: for the Solid access concepts)", () => {
     for (const a of api.ODRL_ACTIONS) {
-      expect(api.ACTION_IRI[a]).toContain(ODRL);
+      if (ACL_BACKED_ACTIONS.has(a)) {
+        // `append`/`control` reuse the standard `acl:` mode IRIs (OAC practice;
+        // nothing minted) — they are NOT in the ODRL namespace, deliberately.
+        expect(api.ACTION_IRI[a]).toContain(ACL);
+        expect(api.ACTION_IRI[a]).not.toContain(ODRL);
+      } else {
+        expect(api.ACTION_IRI[a]).toContain(ODRL);
+      }
     }
+  });
+
+  it("backs `append`/`control` with the exact standard acl: mode IRIs (not minted)", () => {
+    expect(api.ACTION_IRI.append).toBe(`${ACL}Append`);
+    expect(api.ACTION_IRI.control).toBe(`${ACL}Control`);
   });
 });

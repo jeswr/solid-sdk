@@ -56,6 +56,8 @@ var ODRL_ATTRIBUTE = `${ODRL}attribute`;
 var ODRL_COMPENSATE = `${ODRL}compensate`;
 var ODRL_INFORM = `${ODRL}inform`;
 var ODRL_ANONYMIZE = `${ODRL}anonymize`;
+var ACTION_APPEND_IRI = `${ACL}Append`;
+var ACTION_CONTROL_IRI = `${ACL}Control`;
 var ODRL_ACTIONS = [
   "use",
   "read",
@@ -69,7 +71,9 @@ var ODRL_ACTIONS = [
   "attribute",
   "compensate",
   "inform",
-  "anonymize"
+  "anonymize",
+  "append",
+  "control"
 ];
 var ACTION_IRI = {
   use: ODRL_USE,
@@ -84,14 +88,25 @@ var ACTION_IRI = {
   attribute: ODRL_ATTRIBUTE,
   compensate: ODRL_COMPENSATE,
   inform: ODRL_INFORM,
-  anonymize: ODRL_ANONYMIZE
+  anonymize: ODRL_ANONYMIZE,
+  // Solid-resource access concepts — backed by the standard acl: mode IRIs (OAC
+  // practice), NOT minted, and deliberately distinct from the ODRL data-use actions.
+  append: ACTION_APPEND_IRI,
+  control: ACTION_CONTROL_IRI
 };
 var IRI_TO_ACTION = Object.fromEntries(
   Object.entries(ACTION_IRI).map(([k, v]) => [v, k])
 );
 var VALID_ACTION_IRIS = new Set(Object.values(ACTION_IRI));
+var NOT_UNDER_USE = /* @__PURE__ */ new Set(["control"]);
 var ACTION_IMPLIED_BY = Object.fromEntries(
-  ODRL_ACTIONS.map((a) => [a, new Set(a === "use" ? ["use"] : [a, "use"])])
+  ODRL_ACTIONS.map((a) => {
+    const implied = /* @__PURE__ */ new Set([a]);
+    if (a !== "use" && !NOT_UNDER_USE.has(a)) {
+      implied.add("use");
+    }
+    return [a, implied];
+  })
 );
 var ACL_READ = `${ACL}Read`;
 var ACL_WRITE = `${ACL}Write`;
@@ -101,8 +116,8 @@ var ACL_MODES = ["Read", "Write", "Append", "Control"];
 var ACL_MODE_TO_ACTION = {
   Read: "read",
   Write: "write",
-  Append: "modify",
-  Control: "use"
+  Append: "append",
+  Control: "control"
 };
 var ODRL_DATETIME = `${ODRL}dateTime`;
 var ODRL_PURPOSE = `${ODRL}purpose`;
@@ -192,7 +207,11 @@ var A2A_ACTION_TO_ODRL = {
   read: "read",
   create: "write",
   update: "modify",
-  append: "modify",
+  // `append` is add-only — a STRICT subclass of write (WAC `acl:Append`). Mapping it
+  // to `modify` was an OVER-GRANT (an append-only intent compiled to full data
+  // mutation). Map to the narrow `append` action instead — never broadens. See
+  // ACL_MODE_TO_ACTION in vocab.ts for the same tightening on the WAC side.
+  append: "append",
   delete: "delete",
   list: "read",
   grant: "use",
@@ -477,12 +496,12 @@ function isFiniteNumber(v) {
   return Number.isFinite(Number(s));
 }
 
-// node_modules/@jeswr/fetch-rdf/dist/parse.js
+// ../solid-odrl/node_modules/@jeswr/fetch-rdf/dist/parse.js
 import contentType from "content-type";
 import { Store, StreamParser } from "n3";
 import { JsonLdParser } from "jsonld-streaming-parser";
 
-// node_modules/@jeswr/fetch-rdf/dist/errors.js
+// ../solid-odrl/node_modules/@jeswr/fetch-rdf/dist/errors.js
 var RdfFetchError = class extends Error {
   /** The original cause, if any (e.g. a network error or parser exception). */
   cause;
@@ -506,7 +525,7 @@ var RdfFetchError = class extends Error {
   }
 };
 
-// node_modules/@jeswr/fetch-rdf/dist/parse.js
+// ../solid-odrl/node_modules/@jeswr/fetch-rdf/dist/parse.js
 var SUPPORTED_RDF_MEDIA_TYPES = [
   "text/turtle",
   "application/n-triples",
