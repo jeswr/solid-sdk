@@ -108,6 +108,7 @@ function safeIsHttp(u) {
 
 // src/node.ts
 import { Agent as Agent2, buildConnector } from "undici";
+import { SsrfError as SsrfError2 } from "./index.js";
 var defaultResolveAll2 = (hostname) => (
   // Lazy-require node:dns so this stays a node-only concern (the module is the `./node`
   // entry, already node-only). We mirror guarded-fetch's own default resolver.
@@ -145,6 +146,10 @@ function createPinningDispatcher(options = {}) {
     // (pinned) IP. The Agent does NOT follow redirects on its own — the shared guard re-pins
     // each hop through a fresh request — so a 30x to a private IP is blocked at the next hop.
     connect(opts, cb) {
+      if (opts.protocol === "http:" && !allowLoopback) {
+        cb(new SsrfError2("http: is refused unless allowLoopback is set (dev only)."), null);
+        return;
+      }
       const connector = opts.protocol === "http:" ? loopbackOnlyConnector : httpsConnector;
       connector(opts, cb);
     }

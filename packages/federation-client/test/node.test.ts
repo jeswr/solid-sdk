@@ -533,6 +533,25 @@ describe("createPinningDispatcher — protocol-aware http-loopback-only (parity 
     }
   }
 
+  it("REFUSES http: OUTRIGHT under DEFAULT options (allowLoopback=false) — no loopback service reach (roborev High)", async () => {
+    // roborev High: the loopback-only connector accepts loopback addresses regardless of
+    // allowLoopback, so selecting it for http: when allowLoopback is FALSE would let a
+    // bare-dispatcher consumer reach http://localhost / 127.x / ::1 with the DEFAULT
+    // (production) options. The dispatcher must refuse http: OUTRIGHT unless allowLoopback is
+    // set — stricter than even the prior dispatcher. We drive a loopback-resolving host so the
+    // ONLY thing that can block it is the http:+!allowLoopback gate.
+    const resolveAll: ResolveAll = async () => [{ address: "127.0.0.1", family: 4 }];
+    const dispatcher = createPinningDispatcher({ resolveAll }); // allowLoopback defaults false
+    try {
+      const msg = await connectError(() =>
+        undiciFetch("http://localhost/x", { dispatcher, redirect: "manual" } as never),
+      );
+      expect(msg).toMatch(/http:.*allowLoopback|allowLoopback.*http:|dev only/i);
+    } finally {
+      await dispatcher.close().catch(() => {});
+    }
+  });
+
   it("REFUSES http: to a PUBLIC-resolving host at connect, even with allowLoopback:true", async () => {
     // The regression case: guarded-fetch's bare dispatcher (loopback-only nuance only in
     // createNodeGuardedFetch) would ALLOW this; our protocol-aware dispatcher must REFUSE it.

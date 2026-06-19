@@ -55,6 +55,11 @@ import {
   type ResolveAll,
 } from "@jeswr/guarded-fetch/node";
 import { Agent, buildConnector, type Dispatcher } from "undici";
+// SsrfError from THIS package's ROOT (./index.js) — the SAME class the rest of the guard
+// throws, so the dispatcher's own refusal is `instanceof SsrfError` for a consumer too. The
+// build keeps `./index.js` external in the node bundle, so this resolves to the sibling
+// dist/index.js (the sole inlined guarded-fetch root) at runtime.
+import { SsrfError } from "./index.js";
 
 export {
   type ConnectLookup,
@@ -126,6 +131,20 @@ export function createPinningDispatcher(options: NodePinningOptions = {}): Dispa
     // (pinned) IP. The Agent does NOT follow redirects on its own — the shared guard re-pins
     // each hop through a fresh request — so a 30x to a private IP is blocked at the next hop.
     connect(opts: buildConnector.Options, cb: buildConnector.Callback) {
+      // `http:` is DEV-ONLY: refuse it OUTRIGHT unless allowLoopback is set (roborev High).
+      // The loopback-only connector accepts loopback addresses regardless of `allowLoopback`
+      // (that is what loopback-only MEANS), so selecting it for http: when allowLoopback is
+      // FALSE would let a bare-dispatcher consumer reach `http://localhost` / a 127.x / ::1
+      // service with the DEFAULT (production) options. Gating http: on allowLoopback here
+      // (before any connector runs, so no socket opens) makes the dispatcher refuse plaintext
+      // http: in production — STRICTER than both this package's prior dispatcher and
+      // guarded-fetch's. https: is unaffected; the shared guard's createNodeGuardedFetch
+      // already refuses http: at the URL layer when allowLoopback is false, so this only
+      // hardens the low-level escape-hatch path that bypasses the guard.
+      if (opts.protocol === "http:" && !allowLoopback) {
+        cb(new SsrfError("http: is refused unless allowLoopback is set (dev only)."), null);
+        return;
+      }
       const connector = opts.protocol === "http:" ? loopbackOnlyConnector : httpsConnector;
       connector(opts, cb);
     },
