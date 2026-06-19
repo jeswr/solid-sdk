@@ -47,5 +47,14 @@ export declare class CommunityFeed {
      * `errors` rather than thrown, so a Matrix outage never blanks the forum feed.
      */
     getFeed(subscriptions: FeedSubscriptions, marker?: ReadMarker): Promise<FeedResult>;
+    /** Each subscribed Matrix room → one thread (its timeline). */
+    private collectMatrixRooms;
+    /** Each subscribed Discourse topic → one thread (with its posts). */
+    private collectDiscourseTopics;
+    /**
+     * The forum's site-wide latest topics, folded in as message-less thread
+     * headers — skipping any topic already pulled in full by an earlier block.
+     */
+    private collectDiscourseLatest;
 }
 //# sourceMappingURL=feed.d.ts.map
