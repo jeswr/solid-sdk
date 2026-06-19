@@ -1051,7 +1051,7 @@ function keepAlive(event, task) {
   const p = task().catch(() => void 0);
   if (typeof event.waitUntil === "function") event.waitUntil(p);
 }
-async function invalidateDeps() {
+async function baseDeps() {
   const cache = await self.caches.open(cacheName());
   const meta = await getMeta();
   return {
@@ -1061,6 +1061,9 @@ async function invalidateDeps() {
     broadcast: getChannel(),
     now: () => Date.now()
   };
+}
+function invalidateDeps() {
+  return baseDeps();
 }
 self.addEventListener("fetch", (event) => {
   const { request } = event;
@@ -1124,14 +1127,8 @@ async function respondShellAsset(event) {
   }
 }
 async function respond(event) {
-  const cache = await self.caches.open(cacheName());
-  const meta = await getMeta();
   const deps = {
-    cache,
-    meta,
-    fetch: (input, init) => self.fetch(input, init),
-    broadcast: getChannel(),
-    now: () => Date.now(),
+    ...await baseDeps(),
     isOnline: () => self.navigator.onLine
   };
   try {

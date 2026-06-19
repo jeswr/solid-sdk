@@ -322,8 +322,13 @@ function keepAlive(event: ExtendableMessageEvent, task: () => Promise<void>): vo
   if (typeof event.waitUntil === 'function') event.waitUntil(p);
 }
 
-/** Build the invalidation deps (the SW's OWN, unauthenticated fetch — see invalidation.ts). */
-async function invalidateDeps(): Promise<InvalidateDeps> {
+/**
+ * The deps shared by the SWR engine and the invalidation pipeline (the SW's OWN,
+ * unauthenticated fetch — see invalidation.ts): the WebID-scoped byte cache + the
+ * scoped metadata store + the SW fetch + the broadcast channel + the clock. The
+ * SWR path adds `isOnline` on top (see `respond`).
+ */
+async function baseDeps(): Promise<InvalidateDeps> {
   const cache = await self.caches.open(cacheName());
   const meta = await getMeta();
   return {
@@ -333,6 +338,11 @@ async function invalidateDeps(): Promise<InvalidateDeps> {
     broadcast: getChannel() as unknown as Broadcaster,
     now: () => Date.now(),
   };
+}
+
+/** Build the invalidation deps (the SW's OWN, unauthenticated fetch — see invalidation.ts). */
+function invalidateDeps(): Promise<InvalidateDeps> {
+  return baseDeps();
 }
 
 self.addEventListener('fetch', (event: FetchEvent) => {
@@ -477,14 +487,10 @@ async function respondShellAsset(event: FetchEvent): Promise<Response> {
 }
 
 async function respond(event: FetchEvent): Promise<Response> {
-  const cache = await self.caches.open(cacheName());
-  const meta = await getMeta();
+  // The SWR engine's deps are the shared base + the online flag (the only field
+  // the invalidation pipeline doesn't need).
   const deps: SwrDeps = {
-    cache: cache as unknown as ByteCache,
-    meta,
-    fetch: (input, init) => self.fetch(input as RequestInfo, init),
-    broadcast: getChannel() as unknown as Broadcaster,
-    now: () => Date.now(),
+    ...(await baseDeps()),
     isOnline: () => self.navigator.onLine,
   };
 
