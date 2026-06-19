@@ -54,6 +54,7 @@
   },
   "homepage": "https://github.com/jeswr/solid-a2a#readme",
   "dependencies": {
+    "@jeswr/rdf-serialize": "git+https://github.com/jeswr/rdf-serialize.git#eed2c11ceaf4de5e1f79132353744a5d1e3d6c48",
     "@rdfjs/wrapper": "^0.34.0",
     "@solid/object": "^0.6.0",
     "content-type": "^1.0.5",
