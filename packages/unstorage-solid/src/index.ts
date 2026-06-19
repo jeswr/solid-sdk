@@ -388,11 +388,33 @@ const solidDriver = defineDriver<SolidDriverOptions, undefined>((options) => {
         return () => {};
       }
       // Apply the driver `headers` to the notification discovery/subscribe
-      // requests too (the option is documented as merged into EVERY request).
+      // requests too (the option is documented as merged into EVERY request) —
+      // BUT only for requests that stay within the base origin. Watch discovery
+      // follows pod-controlled URLs (a Link header, then RDF in the description
+      // doc); `startWatch` already constrains those to same-origin, and this is
+      // defence in depth: even if a foreign URL reached this fetch, the driver
+      // headers (which may include `Authorization`) are NOT sent off-origin.
+      // Same-origin URLs get the merged headers; anything else gets none.
+      const baseOrigin = new URL(base).origin;
+      const isSameOrigin = (input: RequestInfo | URL): boolean => {
+        const raw =
+          typeof input === "string"
+            ? input
+            : input instanceof URL
+              ? input.toString()
+              : input.url;
+        try {
+          return new URL(raw, base).origin === baseOrigin;
+        } catch {
+          return false;
+        }
+      };
       const watchFetch: typeof globalThis.fetch = (input, init) =>
         fetchImpl(input, {
           ...init,
-          headers: { ...options.headers, ...(init?.headers as object) },
+          headers: isSameOrigin(input)
+            ? { ...options.headers, ...(init?.headers as object) }
+            : (init?.headers as Record<string, string> | undefined) ?? {},
         });
       const startOpts = {
         base,

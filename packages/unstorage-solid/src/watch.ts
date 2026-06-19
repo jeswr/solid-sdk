@@ -74,6 +74,36 @@ export interface ActiveWatch {
   unwatch: () => void;
 }
 
+/**
+ * Resolve `raw` against `base` and return it ONLY if it is same-origin as
+ * `base`; otherwise `undefined`.
+ *
+ * This is the watch path's SSRF / credential-leak guard. Notification discovery
+ * follows pod-CONTROLLED URLs (a `Link` header, then RDF subjects/objects in the
+ * storage-description doc). Without this guard a malicious or compromised pod
+ * could point the storage-description or subscription-service URL at a foreign
+ * origin and harvest the caller-supplied request headers (e.g. `Authorization`),
+ * or coerce a credentialed request to an arbitrary host. The storage description
+ * and subscription service for a pod are same-origin as the pod, so requiring
+ * same-origin is both spec-reasonable and fail-closed: an anomalous cross-origin
+ * advertisement degrades the watch to a no-op rather than leaking credentials.
+ * (The `receiveFrom` WebSocket may legitimately be a different host and carries
+ * its OWN short-lived token; we open it with no headers, so it is not guarded
+ * here.)
+ */
+function sameOriginUrl(base: string, raw: string): string | undefined {
+  let resolved: URL;
+  try {
+    resolved = new URL(raw, base);
+  } catch {
+    return undefined;
+  }
+  if (resolved.origin !== new URL(base).origin) {
+    return undefined;
+  }
+  return resolved.toString();
+}
+
 /** Parse RFC 8288 `Link` header values into {rel -> url} (first wins per rel). */
 function parseLinkHeader(value: string | null): Map<string, string> {
   const out = new Map<string, string>();
@@ -120,7 +150,13 @@ async function discoverSubscriptionService(
   if (!descUrlRaw) {
     return undefined;
   }
-  const descUrl = new URL(descUrlRaw, base).toString();
+  // SSRF / credential-leak guard: the storage-description doc must be same-origin
+  // as the pod. A pod-supplied cross-origin description URL degrades the watch
+  // rather than fetching it with the caller's (possibly credentialed) headers.
+  const descUrl = sameOriginUrl(base, descUrlRaw);
+  if (!descUrl) {
+    return undefined;
+  }
 
   const descRes = await fetchImpl(descUrl, {
     method: "GET",
@@ -142,12 +178,18 @@ async function discoverSubscriptionService(
   // Walking these two specific predicates on the parsed dataset (NOT hand-parsing
   // text) keeps us within the typed-RDF discipline while staying tolerant of the
   // exact shape a given server emits.
+  // The subscription service we POST to (with the caller's headers) must also be
+  // same-origin as the pod (the SSRF / credential-leak guard) — a pod cannot
+  // point us at a foreign subscription endpoint and harvest credentials.
   const channelTypeQuads = [
     ...dataset.match(null, DataFactory.namedNode(NOTIFY_CHANNEL_TYPE), null),
   ];
   for (const q of channelTypeQuads) {
     if (q.object.value === WEBSOCKET_CHANNEL_2023 && q.subject.termType === "NamedNode") {
-      return q.subject.value;
+      const safe = sameOriginUrl(base, q.subject.value);
+      if (safe) {
+        return safe;
+      }
     }
   }
   // Fall back: any object of notify:subscription (server advertises one service).
@@ -156,7 +198,10 @@ async function discoverSubscriptionService(
   ];
   for (const q of subscriptionQuads) {
     if (q.object.termType === "NamedNode") {
-      return q.object.value;
+      const safe = sameOriginUrl(base, q.object.value);
+      if (safe) {
+        return safe;
+      }
     }
   }
   return undefined;

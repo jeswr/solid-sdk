@@ -101,6 +101,84 @@ function discoveryFetch(opts: {
   }) as typeof globalThis.fetch;
 }
 
+describe("startWatch SSRF / credential-leak guard (same-origin)", () => {
+  it("degrades (no request) when the storage-description URL is cross-origin", async () => {
+    const onDegrade = vi.fn();
+    const fetched: string[] = [];
+    // The HEAD advertises a FOREIGN description URL — discovery must refuse it.
+    const FOREIGN_DESC = "https://attacker.example/desc";
+    const fetchImpl: typeof globalThis.fetch = (async (input, init) => {
+      const url = typeof input === "string" ? input : (input as URL).toString();
+      const method = (init?.method ?? "GET").toUpperCase();
+      fetched.push(`${method} ${url}`);
+      if (method === "HEAD" && url === BASE) {
+        const headers = new Headers();
+        headers.set(
+          "link",
+          `<${FOREIGN_DESC}>; rel="http://www.w3.org/ns/solid/terms#storageDescription"`,
+        );
+        return new Response(null, { status: 200, headers });
+      }
+      return new Response(null, { status: 200 });
+    }) as typeof globalThis.fetch;
+    await startWatch({
+      base: BASE,
+      fetch: fetchImpl,
+      callback: () => {},
+      wsFactory: (u) => new FakeSocket(u),
+      onDegrade,
+    });
+    expect(onDegrade).toHaveBeenCalledWith(expect.stringContaining("no WebSocketChannel2023"));
+    // We must NOT have fetched the foreign description doc.
+    expect(fetched.some((f) => f.includes("attacker.example"))).toBe(false);
+  });
+
+  it("degrades when the subscription service URL is cross-origin", async () => {
+    const onDegrade = vi.fn();
+    const fetched: string[] = [];
+    const FOREIGN_SERVICE = "https://attacker.example/sub";
+    // The description doc advertises a FOREIGN subscription service.
+    const foreignDesc = async () => {
+      const w = new Writer({ format: "text/turtle" });
+      w.addQuad(
+        quad(
+          namedNode(FOREIGN_SERVICE),
+          namedNode("http://www.w3.org/ns/solid/notifications#channelType"),
+          namedNode("http://www.w3.org/ns/solid/notifications#WebSocketChannel2023"),
+        ),
+      );
+      return new Promise<string>((res, rej) => w.end((e, r) => (e ? rej(e) : res(r))));
+    };
+    const fetchImpl: typeof globalThis.fetch = (async (input, init) => {
+      const url = typeof input === "string" ? input : (input as URL).toString();
+      const method = (init?.method ?? "GET").toUpperCase();
+      fetched.push(`${method} ${url}`);
+      if (method === "HEAD" && url === BASE) {
+        const headers = new Headers();
+        headers.set("link", `<${DESC}>; rel="http://www.w3.org/ns/solid/terms#storageDescription"`);
+        return new Response(null, { status: 200, headers });
+      }
+      if (method === "GET" && url === DESC) {
+        return new Response(await foreignDesc(), {
+          status: 200,
+          headers: new Headers({ "content-type": "text/turtle" }),
+        });
+      }
+      return new Response(null, { status: 404 });
+    }) as typeof globalThis.fetch;
+    await startWatch({
+      base: BASE,
+      fetch: fetchImpl,
+      callback: () => {},
+      wsFactory: (u) => new FakeSocket(u),
+      onDegrade,
+    });
+    expect(onDegrade).toHaveBeenCalledWith(expect.stringContaining("no WebSocketChannel2023"));
+    // We must NOT have POSTed to the foreign subscription service.
+    expect(fetched.some((f) => f.startsWith("POST") && f.includes("attacker.example"))).toBe(false);
+  });
+});
+
 describe("startWatch discovery", () => {
   it("uses the describedby rel as a fallback", async () => {
     const w = await startWatch({

@@ -331,6 +331,18 @@ var WEBSOCKET_CHANNEL_2023 = "http://www.w3.org/ns/solid/notifications#WebSocket
 var NOTIFY_SUBSCRIPTION = "http://www.w3.org/ns/solid/notifications#subscription";
 var NOTIFY_CHANNEL_TYPE = "http://www.w3.org/ns/solid/notifications#channelType";
 var NOTIFICATIONS_CONTEXT = "https://www.w3.org/ns/solid/notifications-context/v1";
+function sameOriginUrl(base, raw) {
+  let resolved;
+  try {
+    resolved = new URL(raw, base);
+  } catch {
+    return void 0;
+  }
+  if (resolved.origin !== new URL(base).origin) {
+    return void 0;
+  }
+  return resolved.toString();
+}
 function parseLinkHeader(value) {
   const out = /* @__PURE__ */ new Map();
   if (!value) {
@@ -365,7 +377,10 @@ async function discoverSubscriptionService(base, fetchImpl) {
   if (!descUrlRaw) {
     return void 0;
   }
-  const descUrl = new URL(descUrlRaw, base).toString();
+  const descUrl = sameOriginUrl(base, descUrlRaw);
+  if (!descUrl) {
+    return void 0;
+  }
   const descRes = await fetchImpl(descUrl, {
     method: "GET",
     headers: { accept: "text/turtle, application/ld+json;q=0.9" }
@@ -382,7 +397,10 @@ async function discoverSubscriptionService(base, fetchImpl) {
   ];
   for (const q of channelTypeQuads) {
     if (q.object.value === WEBSOCKET_CHANNEL_2023 && q.subject.termType === "NamedNode") {
-      return q.subject.value;
+      const safe = sameOriginUrl(base, q.subject.value);
+      if (safe) {
+        return safe;
+      }
     }
   }
   const subscriptionQuads = [
@@ -390,7 +408,10 @@ async function discoverSubscriptionService(base, fetchImpl) {
   ];
   for (const q of subscriptionQuads) {
     if (q.object.termType === "NamedNode") {
-      return q.object.value;
+      const safe = sameOriginUrl(base, q.object.value);
+      if (safe) {
+        return safe;
+      }
     }
   }
   return void 0;
@@ -740,9 +761,18 @@ var solidDriver = defineDriver((options) => {
         return () => {
         };
       }
+      const baseOrigin = new URL(base).origin;
+      const isSameOrigin = (input) => {
+        const raw = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+        try {
+          return new URL(raw, base).origin === baseOrigin;
+        } catch {
+          return false;
+        }
+      };
       const watchFetch = (input, init) => fetchImpl(input, {
         ...init,
-        headers: { ...options.headers, ...init?.headers }
+        headers: isSameOrigin(input) ? { ...options.headers, ...init?.headers } : init?.headers ?? {}
       });
       const startOpts = {
         base,
