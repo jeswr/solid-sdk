@@ -21,7 +21,8 @@ npm install solid-agent-notify
 npm install github:jeswr/solid-agent-notify#main
 ```
 
-Node ≥ 20, ESM-only.
+Node ≥ 22.19.0, ESM-only. (The SSRF egress uses `@jeswr/guarded-fetch`'s undici
+DNS-pinning path, which requires Node ≥ 22.19.0.)
 
 > **`dist/` is committed** so the package installs directly from a GitHub branch
 > (`npm install github:jeswr/solid-agent-notify#main`) **without a build step** —
@@ -142,39 +143,49 @@ are exported for advanced callers and tests.
 
 ## The DNS-pinned SSRF guard (the only egress path)
 
-`guardedFetch` is the single chokepoint. It is ported from the canonical DNS-pinned
-guard in [`solid-webid-index`](https://github.com/jeswr/solid-webid-index)
-(prod-solid-server lineage) and extended so the **same** guard serves both the RDF
-`GET` path (profile / inbox / member reads) and the LDN `POST` path (delivery).
-Defence-in-depth, every step fails closed:
+`guardedFetch` is the single chokepoint. The SSRF **mechanism** is delegated to the
+shared, single-reviewed [`@jeswr/guarded-fetch`](https://github.com/jeswr/guarded-fetch)
+library (its `./node` `createNodeGuardedFetch`) — the consolidation of this package's
+former inline guard plus the federation-client / community-feeds / prod-solid-server
+copies. `guardedFetch` is a thin wrapper that adds agent-notify's own **posture** on
+top and serves both the RDF `GET` path (profile / inbox / member reads) and the LDN
+`POST` path (delivery). Defence-in-depth, every step fails closed:
 
-1. **Boot assertion** — requires a Node runtime with `node:net#isIP` (DNS-pinning
-   needs `node:dns`); fails at load otherwise.
-2. **Scheme gate** — `https:` only in production (`http:` only under the TEST-only
+1. **Scheme gate** — `https:` only in production (`http:` only under the TEST-only
    `allowLoopback` hook).
-3. **Port gate** — `443` only in production; **reject userinfo**.
-4. **Hostname denylist** — cloud-internal names (`metadata.google.internal`,
+2. **Port gate** — `443` only in production; **reject userinfo**.
+3. **Hostname denylist** — cloud-internal names (`metadata.google.internal`,
    `*.internal`, `*.svc.cluster.local`, `localhost`, `*.local`, …) refused
    **before** DNS, closing split-horizon-DNS gaps; alternate IPv4 encodings
-   (decimal / hex / octal / short-form) normalised first.
-5. **DNS resolve ALL records** → classify **every** A/AAAA as public (refusing
+   (decimal / hex / octal / short-form) normalised first. (agent-notify passes its
+   STRICTER denylist — incl. `localhost` / `*.localhost` / `*.local` — to the library.)
+4. **DNS resolve ALL records** → classify **every** A/AAAA as public (refusing
    loopback, RFC-1918, link-local incl. `169.254.169.254`, CGNAT, multicast,
    reserved/TEST-NET, IPv6 ULA/link-local, IPv4-mapped, 6to4- and NAT64-embedded
-   private v4); **pin the first validated IP**.
-6. **Pin into the socket** — an undici `Agent({ connect: { lookup: pinnedLookup(ip) } })`
-   makes the connection use the **validated** IP, closing the DNS-rebinding TOCTOU
-   (a hostile resolver cannot swap the address between the guard and the connect).
-7. **One timeout** over fetch + redirects + body.
-8. **`redirect: "manual"`** — a **GET** re-classifies + re-pins **each hop** and
+   private v4).
+5. **Pin into the socket** — the library's undici `Agent({ connect: { lookup } })`
+   validates every connect-time record and pins the connection to the **validated**
+   IP, closing the DNS-rebinding lookup→connect TOCTOU (a hostile resolver cannot
+   swap the address between the guard and the connect).
+6. **One timeout** over fetch + redirects + body.
+7. **`redirect: "manual"`** — a **GET** re-classifies + re-pins **each hop** and
    rejects a scheme downgrade / a redirect loop / the redirect cap; a **POST**
    refuses to follow **any** 3xx (an authenticated POST must never be transparently
    bounced to a private/metadata origin — the confused-deputy this layer prevents).
-9. **Content-type allowlist** on a final GET (the RDF set; `text/html`/RDFa
-   excluded); a POST receipt is bounded but not allowlisted.
-10. **Bounded body read** — streams up to a byte cap, aborting past it.
+8. **Content-type allowlist** on a final GET (the RDF set; `text/html`/RDFa
+   excluded); a POST receipt is bounded but not allowlisted. (agent-notify's wrapper.)
+9. **Bounded body read** — capped at the per-call byte limit; an over-cap body is
+   refused (`BodyTooLargeError`).
 
-The invariant is enforced in CI: `npm run check:fetch` fails the build if any source
-file outside the guard references a raw `fetch(` / `undici`.
+`guardedFetch`'s public surface is unchanged: the bespoke `GuardedFetchResult` shape,
+the `GuardedFetchError` / `SsrfError` / `BodyTooLargeError` error taxonomy, and the
+`isPublicAddress` / `isLoopbackAddress` / `assertNotSsrf` / `isDeniedHostname` /
+`normalizeHostForClassification` primitives are all preserved (the classifiers now
+re-export from `@jeswr/guarded-fetch`). The egress invariant is enforced in CI:
+`npm run check:fetch` fails the build if any source file outside the guard references
+a raw `fetch(` / `undici` (the `@jeswr/guarded-fetch/node` import is the designated
+egress layer). Because the library's `./node` path uses undici, this package requires
+**Node ≥ 22.19.0**.
 
 > **Why this replaces a host-string validator.** A name-only validator (e.g. the
 > one originally in the Pod Manager) inspects the host *string*: a public DNS name
