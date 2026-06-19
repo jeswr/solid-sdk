@@ -2,6 +2,7 @@
 import { lookup as dnsLookupCb } from "node:dns";
 import { Agent, buildConnector, fetch as undiciFetch } from "undici";
 import {
+  classifyIpLiteral,
   createGuardedFetch,
   isLoopbackAddress,
   isPublicAddress,
@@ -76,11 +77,12 @@ function createPinningDispatcher(options = {}) {
     // Custom connect (function form): undici hands us the full connect `Options`, INCLUDING
     // `protocol`, so we (a) REFUSE `http:` outright unless allowLoopback — the scheme gate that
     // fires for every connection incl. an IP-literal target undici would dial without a lookup —
-    // and (b) pick the loopback-only connector for a permitted `http:` hop and the standard
-    // public connector for `https:`. undici sets `opts.servername` to the request hostname, so
-    // TLS SNI + cert validation stay against the original host while our lookup steers the
-    // (pinned) IP. The dispatcher never follows redirects itself — the shared guard re-validates
-    // + re-pins each `Location` hop as a fresh request through this same dispatcher.
+    // (b) validate an IP-LITERAL host directly (the lookup is skipped for a literal), and
+    // (c) pick the loopback-only connector for a permitted `http:` hop and the standard public
+    // connector for `https:`. undici sets `opts.servername` to the request hostname, so TLS SNI +
+    // cert validation stay against the original host while our lookup steers the (pinned) IP. The
+    // dispatcher never follows redirects itself — the shared guard re-validates + re-pins each
+    // `Location` hop as a fresh request through this same dispatcher.
     connect(opts, cb) {
       if (opts.protocol === "http:" && !allowLoopback) {
         cb(
@@ -90,6 +92,17 @@ function createPinningDispatcher(options = {}) {
           null
         );
         return;
+      }
+      if (classifyIpLiteral(opts.hostname) !== 0) {
+        const literalOk = opts.protocol === "http:" ? isLoopbackAddress(opts.hostname) : isPublicAddress(opts.hostname, allowLoopback);
+        if (!literalOk) {
+          const why = opts.protocol === "http:" ? "is not loopback (http: requires loopback-only)" : "is a non-public address";
+          cb(
+            new SsrfError(`Connection refused \u2014 ${opts.hostname} ${why} (IP-literal target).`),
+            null
+          );
+          return;
+        }
       }
       const connector = opts.protocol === "http:" ? httpLoopbackConnector : httpsConnector;
       connector(opts, cb);

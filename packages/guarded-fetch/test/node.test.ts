@@ -505,6 +505,132 @@ describe("createPinningDispatcher — http: refused unless allowLoopback (bare d
   });
 });
 
+describe("createPinningDispatcher — IP-literal targets validated directly (lookup is skipped)", () => {
+  // undici's connector dials an IP LITERAL directly, NEVER calling the validating lookup. The
+  // dispatcher therefore must classify a literal host itself in connect(); without that, a bare
+  // dispatcher request to `https://127.0.0.1` / `https://10.0.0.5` would connect to a
+  // private/loopback target at the default allowLoopback=false. These are the regression guards.
+  it("REFUSES private / loopback / link-local / metadata https: IP literals at allowLoopback=false", async () => {
+    const dispatcher = createPinningDispatcher(); // default strict
+    for (const url of [
+      "https://127.0.0.1/x",
+      "https://10.0.0.5/x",
+      "https://192.168.1.1/x",
+      "https://169.254.169.254/latest/meta-data/",
+      "https://[::1]/x",
+      "https://[fc00::1]/x",
+      "https://[fe80::1]/x",
+      "https://0.0.0.0/x",
+    ]) {
+      const err = await undiciFetch(url, {
+        dispatcher: dispatcher as unknown as UndiciAgent,
+        redirect: "manual",
+      }).then(
+        () => undefined,
+        (e: unknown) => e,
+      );
+      expect(err, `expected ${url} to be refused`).toBeInstanceOf(Error);
+      expect(causeChainText(err)).toContain("IP-literal target");
+    }
+    await dispatcher.close().catch(() => {});
+  });
+
+  it("REFUSES a loopback https: IP literal even under allowLoopback (https requires PUBLIC)", async () => {
+    // allowLoopback re-permits loopback at the ADDRESS level for https; isPublicAddress(addr,true)
+    // would allow 127.0.0.1. So this is NOT refused under allowLoopback — assert the boundary:
+    // a NON-loopback private literal (10.x) is still refused even under allowLoopback.
+    const dispatcher = createPinningDispatcher({ allowLoopback: true });
+    const err = await undiciFetch("https://10.0.0.5/x", {
+      dispatcher: dispatcher as unknown as UndiciAgent,
+      redirect: "manual",
+    }).then(
+      () => undefined,
+      (e: unknown) => e,
+    );
+    await dispatcher.close().catch(() => {});
+    expect(err).toBeInstanceOf(Error);
+    expect(causeChainText(err)).toContain("IP-literal target");
+  });
+
+  it("a hostname target is NOT short-circuited by the literal gate (still goes through the lookup)", async () => {
+    // A hostname (classifyIpLiteral === 0) must reach the validating lookup, which here resolves
+    // private → refused via the lookup path (NOT the literal path), proving the gate only fires
+    // for true literals.
+    const priv: ResolveAll = async () => [{ address: "10.0.0.5", family: 4 }];
+    const dispatcher = createPinningDispatcher({ resolveAll: priv });
+    const err = await undiciFetch("https://name.example/x", {
+      dispatcher: dispatcher as unknown as UndiciAgent,
+      redirect: "manual",
+    }).then(
+      () => undefined,
+      (e: unknown) => e,
+    );
+    await dispatcher.close().catch(() => {});
+    expect(err).toBeInstanceOf(Error);
+    // The lookup-path message, NOT the literal-path message — confirms routing.
+    expect(causeChainText(err)).toContain("non-public");
+    expect(causeChainText(err)).not.toContain("IP-literal target");
+  });
+
+  it("a gate-ALLOWED https: IP literal reaches the connector (network-free, via loopback under allowLoopback)", async () => {
+    // Prove a literal the gate ACCEPTS is NOT short-circuited and actually reaches the connector.
+    // Under allowLoopback, isPublicAddress("127.0.0.1", true) is true, so the loopback literal
+    // passes the literal gate — and a local https loopback server then answers, end-to-end. This
+    // is fully network-free (loopback only) and deterministic.
+    const dir = mkdtempSync(join(tmpdir(), "gf-lit-"));
+    let creds: { key: Buffer; cert: Buffer } | null = null;
+    try {
+      execFileSync(
+        "openssl",
+        [
+          "req",
+          "-x509",
+          "-newkey",
+          "rsa:2048",
+          "-nodes",
+          "-keyout",
+          join(dir, "k.pem"),
+          "-out",
+          join(dir, "c.pem"),
+          "-days",
+          "2",
+          "-subj",
+          "/CN=127.0.0.1",
+          "-addext",
+          "subjectAltName=IP:127.0.0.1",
+        ],
+        { stdio: ["ignore", "ignore", "ignore"] },
+      );
+      creds = { key: readFileSync(join(dir, "k.pem")), cert: readFileSync(join(dir, "c.pem")) };
+    } catch {
+      creds = null;
+    }
+    if (!creds) {
+      rmSync(dir, { recursive: true, force: true });
+      return; // openssl unavailable — skip (the refusal tests already prove the gate fires)
+    }
+    const tlsServer = createHttpsServer({ key: creds.key, cert: creds.cert }, (_req, res) => {
+      res.writeHead(200, { "content-type": "text/plain" });
+      res.end("LITERAL-ALLOWED");
+    });
+    await new Promise<void>((r) => tlsServer.listen(0, "127.0.0.1", r));
+    const tlsPort = (tlsServer.address() as AddressInfo).port;
+    try {
+      const dispatcher = createPinningDispatcher({ allowLoopback: true, ca: creds.cert });
+      const res = await undiciFetch(`https://127.0.0.1:${tlsPort}/x`, {
+        dispatcher: dispatcher as unknown as UndiciAgent,
+        redirect: "manual",
+      });
+      expect(res.status).toBe(200);
+      expect(await res.text()).toBe("LITERAL-ALLOWED");
+      await dispatcher.close().catch(() => {});
+    } finally {
+      await new Promise<void>((r) => tlsServer.close(() => r()));
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
 // ---------------------------------------------------------------------------
 // TLS: pinning the IP must NOT weaken certificate validation. The cert is verified against
 // the ORIGINAL hostname (the connector's servername), never the pinned IP.

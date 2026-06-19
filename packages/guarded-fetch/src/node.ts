@@ -49,6 +49,7 @@ import { Agent, buildConnector, fetch as undiciFetch } from "undici";
 // by `@jeswr/guarded-fetch/node` therefore satisfies `instanceof SsrfError` imported from
 // `@jeswr/guarded-fetch` in published builds (a single shared SsrfError class).
 import {
+  classifyIpLiteral,
   createGuardedFetch,
   type GuardOptions,
   isLoopbackAddress,
@@ -204,10 +205,21 @@ export function createValidatingLookup(
  *                time is refused, so a plaintext request can never leak to a public host. (A
  *                single non-loopback record fails the whole connection.)
  *   - `https:` → the standard public-address lookup (`isPublicAddress(addr, allowLoopback)`).
- * Previously a single non-loopback-only lookup served every protocol AND the bare dispatcher had
- * no scheme gate, so it reached `http://localhost` / `http://127.0.0.1` even at the default
- * `allowLoopback=false` — strictly weaker. This makes the bare dispatcher match the posture
- * {@link createNodeGuardedFetch} (and the guard's URL-level scheme gate) already apply.
+ *
+ * IP-LITERAL targets (e.g. `https://10.0.0.5`, `https://127.0.0.1`). undici's connector dials an
+ * IP literal DIRECTLY, never calling our validating `lookup` — so the per-record address rule
+ * would be SKIPPED for a literal target. `connect()` therefore classifies an IP-literal
+ * `opts.hostname` itself and applies the SAME per-scheme rule (https → `isPublicAddress`;
+ * http-under-allowLoopback → loopback-only) BEFORE selecting a connector, refusing a private /
+ * loopback / link-local / metadata literal the lookup never sees. A hostname target (literal
+ * kind 0) is left to the connector's validating lookup as before.
+ *
+ * Previously a single non-loopback-only lookup served every protocol, the bare dispatcher had no
+ * scheme gate (so it reached `http://localhost` / `http://127.0.0.1` at the default
+ * `allowLoopback=false`), and an IP-literal target bypassed address validation entirely (so it
+ * reached `https://127.0.0.1` / `https://10.0.0.5`) — strictly weaker. This makes the bare
+ * dispatcher match the posture {@link createNodeGuardedFetch} (and the guard's URL-level scheme +
+ * literal-IP checks) already apply.
  */
 export function createPinningDispatcher(options: NodePinningOptions = {}): Agent {
   const allowLoopback = options.allowLoopback ?? false;
@@ -234,11 +246,12 @@ export function createPinningDispatcher(options: NodePinningOptions = {}): Agent
     // Custom connect (function form): undici hands us the full connect `Options`, INCLUDING
     // `protocol`, so we (a) REFUSE `http:` outright unless allowLoopback — the scheme gate that
     // fires for every connection incl. an IP-literal target undici would dial without a lookup —
-    // and (b) pick the loopback-only connector for a permitted `http:` hop and the standard
-    // public connector for `https:`. undici sets `opts.servername` to the request hostname, so
-    // TLS SNI + cert validation stay against the original host while our lookup steers the
-    // (pinned) IP. The dispatcher never follows redirects itself — the shared guard re-validates
-    // + re-pins each `Location` hop as a fresh request through this same dispatcher.
+    // (b) validate an IP-LITERAL host directly (the lookup is skipped for a literal), and
+    // (c) pick the loopback-only connector for a permitted `http:` hop and the standard public
+    // connector for `https:`. undici sets `opts.servername` to the request hostname, so TLS SNI +
+    // cert validation stay against the original host while our lookup steers the (pinned) IP. The
+    // dispatcher never follows redirects itself — the shared guard re-validates + re-pins each
+    // `Location` hop as a fresh request through this same dispatcher.
     connect(opts: buildConnector.Options, cb: buildConnector.Callback) {
       if (opts.protocol === "http:" && !allowLoopback) {
         cb(
@@ -248,6 +261,27 @@ export function createPinningDispatcher(options: NodePinningOptions = {}): Agent
           null,
         );
         return;
+      }
+      // IP-LITERAL host: undici dials it directly and SKIPS the validating lookup, so classify it
+      // here against the same per-scheme rule. http: (reached only under allowLoopback) is
+      // loopback-only; https: uses the public-address rule. A hostname (literal kind 0) is left to
+      // the connector's validating lookup. `opts.hostname` is already bracket-free for IPv6.
+      if (classifyIpLiteral(opts.hostname) !== 0) {
+        const literalOk =
+          opts.protocol === "http:"
+            ? isLoopbackAddress(opts.hostname)
+            : isPublicAddress(opts.hostname, allowLoopback);
+        if (!literalOk) {
+          const why =
+            opts.protocol === "http:"
+              ? "is not loopback (http: requires loopback-only)"
+              : "is a non-public address";
+          cb(
+            new SsrfError(`Connection refused — ${opts.hostname} ${why} (IP-literal target).`),
+            null,
+          );
+          return;
+        }
       }
       const connector = opts.protocol === "http:" ? httpLoopbackConnector : httpsConnector;
       connector(opts, cb);

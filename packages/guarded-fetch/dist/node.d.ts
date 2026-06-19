@@ -117,10 +117,21 @@ export declare function createValidatingLookup(resolveAll: ResolveAll, allowLoop
  *                time is refused, so a plaintext request can never leak to a public host. (A
  *                single non-loopback record fails the whole connection.)
  *   - `https:` → the standard public-address lookup (`isPublicAddress(addr, allowLoopback)`).
- * Previously a single non-loopback-only lookup served every protocol AND the bare dispatcher had
- * no scheme gate, so it reached `http://localhost` / `http://127.0.0.1` even at the default
- * `allowLoopback=false` — strictly weaker. This makes the bare dispatcher match the posture
- * {@link createNodeGuardedFetch} (and the guard's URL-level scheme gate) already apply.
+ *
+ * IP-LITERAL targets (e.g. `https://10.0.0.5`, `https://127.0.0.1`). undici's connector dials an
+ * IP literal DIRECTLY, never calling our validating `lookup` — so the per-record address rule
+ * would be SKIPPED for a literal target. `connect()` therefore classifies an IP-literal
+ * `opts.hostname` itself and applies the SAME per-scheme rule (https → `isPublicAddress`;
+ * http-under-allowLoopback → loopback-only) BEFORE selecting a connector, refusing a private /
+ * loopback / link-local / metadata literal the lookup never sees. A hostname target (literal
+ * kind 0) is left to the connector's validating lookup as before.
+ *
+ * Previously a single non-loopback-only lookup served every protocol, the bare dispatcher had no
+ * scheme gate (so it reached `http://localhost` / `http://127.0.0.1` at the default
+ * `allowLoopback=false`), and an IP-literal target bypassed address validation entirely (so it
+ * reached `https://127.0.0.1` / `https://10.0.0.5`) — strictly weaker. This makes the bare
+ * dispatcher match the posture {@link createNodeGuardedFetch} (and the guard's URL-level scheme +
+ * literal-IP checks) already apply.
  */
 export declare function createPinningDispatcher(options?: NodePinningOptions): Agent;
 /**
