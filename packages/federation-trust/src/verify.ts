@@ -30,6 +30,7 @@ import type { JWK } from "jose";
 import type {
   DelegationLink,
   MembershipClaim,
+  MembershipStatusName,
   MembershipVerificationResult,
   TrustAnchor,
   TrustError,
@@ -373,11 +374,129 @@ function readMembershipClaim(vc: VerifiableCredential): {
   };
 }
 
+/** The trust establishment (Gate 3) outcome: which key(s) may check the membership
+ *  signature, whether trust was established at all, and any chain/binding errors. */
+interface TrustEstablishment {
+  /** The (verificationMethod → key) map the membership signature is checked against.
+   *  EMPTY when trust was not established, so the signature gate fails closed too. */
+  readonly resolutions: Map<string, CryptoKey>;
+  /** `true` IFF the issuer is a direct anchor or a valid chain proved its key. */
+  readonly trustEstablished: boolean;
+  /** Chain / binding failures (BROKEN_CHAIN) collected while establishing trust. */
+  readonly errors: TrustError[];
+}
+
+/**
+ * Gate 3: TRUST — establish, FAIL-CLOSED, the single public key the membership
+ * signature is allowed to be checked against. Trust is established in exactly one
+ * of two ways:
+ *   (a) the issuer is a DIRECT trust anchor → use that anchor's PINNED key; or
+ *   (b) a delegation CHAIN from a trust anchor down to the issuer verifies — the
+ *       chain is self-certifying (root verified with the anchor's pinned key, each
+ *       link carrying the next delegate's signed key), and its leaf yields the
+ *       issuer's CRYPTOGRAPHICALLY-PROVEN key. No caller-supplied key is trusted: a
+ *       presenter cannot forge a link with a key of their choosing.
+ * The membership proof's verificationMethod must be controlled by the issuer, and
+ * the returned map resolves ONLY that method → the established key, so an untrusted
+ * issuer can never satisfy the signature gate even if its proof is internally valid.
+ *
+ * Extracted verbatim from the verify pipeline (no behaviour change): same two-way
+ * trust, same controlledBy guards, same BROKEN_CHAIN messages, same fail-closed
+ * empty resolver when neither path establishes trust.
+ */
+async function establishTrust(
+  vc: VerifiableCredential & { issuer: string },
+  claim: MembershipClaim | undefined,
+  anchors: readonly TrustAnchor[],
+  chain: readonly DelegationLink[] | undefined,
+  now: Date,
+): Promise<TrustEstablishment> {
+  const errors: TrustError[] = [];
+  const resolutions = new Map<string, CryptoKey>();
+  const directAnchor = anchors.find((a) => a.authority === vc.issuer);
+  // Safely extracted (string | undefined) — a malformed proof yields undefined, so
+  // the controlledBy guards below treat it as untrusted rather than throwing.
+  const membershipMethod = proofVerificationMethod(vc);
+
+  if (directAnchor !== undefined) {
+    // Resolve the anchor's pinned key under the membership proof's own method (when
+    // that method is controlled by the issuer) — so the anchor's key checks the sig
+    // regardless of whether the anchor was registered by WebID or by key id.
+    resolutions.set(anchorMethod(directAnchor), directAnchor.publicKey);
+    if (membershipMethod !== undefined && controlledBy(membershipMethod, vc.issuer)) {
+      resolutions.set(membershipMethod, directAnchor.publicKey);
+    }
+    return { resolutions, trustEstablished: true, errors };
+  }
+
+  if (chain !== undefined && claim !== undefined) {
+    const chainResult = await verifyChain(vc.issuer, claim.federation, chain, anchors, now);
+    if (chainResult.errors.length > 0) {
+      errors.push(...chainResult.errors);
+    } else if (chainResult.issuerKey !== undefined) {
+      // The chain cryptographically proved the issuer's key. Bind it to the
+      // membership proof's method (only if that method is controlled by the issuer).
+      if (membershipMethod !== undefined && controlledBy(membershipMethod, vc.issuer)) {
+        resolutions.set(membershipMethod, chainResult.issuerKey.publicKey);
+        return { resolutions, trustEstablished: true, errors };
+      }
+      errors.push({
+        code: "BROKEN_CHAIN",
+        message: `membership proof verificationMethod ${membershipMethod ?? "(none)"} is not controlled by the chain-proven issuer ${vc.issuer}`,
+      });
+    }
+  }
+
+  return { resolutions, trustEstablished: false, errors };
+}
+
+/**
+ * Gates 5 & 6: the membership's status must be in the accepted set (default
+ * {Active}) and, when the verifier pins them, the federation / app must match
+ * (anti-replay). Pure: same checks, same STATUS_NOT_TRUSTED / FEDERATION_MISMATCH /
+ * APP_MISMATCH codes and messages as the inline gates they replace.
+ */
+function checkClaimExpectations(
+  claim: MembershipClaim,
+  accept: readonly MembershipStatusName[],
+  options: VerifyMembershipOptions,
+): TrustError[] {
+  const errors: TrustError[] = [];
+  if (!accept.includes(claim.status)) {
+    errors.push({
+      code: "STATUS_NOT_TRUSTED",
+      message: `membership status ${claim.status} is not in the accepted set [${accept.join(", ")}]`,
+    });
+  }
+  if (options.expectedFederation !== undefined && claim.federation !== options.expectedFederation) {
+    errors.push({
+      code: "FEDERATION_MISMATCH",
+      message: `membership is for federation ${claim.federation}, expected ${options.expectedFederation}`,
+    });
+  }
+  if (options.expectedApp !== undefined && claim.app !== options.expectedApp) {
+    errors.push({
+      code: "APP_MISMATCH",
+      message: `membership is for app ${claim.app}, expected ${options.expectedApp}`,
+    });
+  }
+  return errors;
+}
+
 /**
  * VERIFY a signed membership credential against the verifier's trust anchors and
  * expectations. Returns a {@link MembershipVerificationResult} whose `verified` is
  * `true` IFF every gate passed; on failure `errors` lists every distinct reason.
  * Never throws on an invalid credential.
+ *
+ * The gates run in order; each appends its distinct failure reason(s) so the result
+ * reports EVERY way the credential failed, never just the first:
+ *   0. trust anchors present                    → NO_TRUST_ANCHOR (early return)
+ *   1. well-formed VC + MembershipCredential     → MALFORMED
+ *   2. {@link readMembershipClaim}               → MISSING_CLAIM / UNKNOWN_STATUS / ASSERTED_BY_MISMATCH
+ *   3. {@link establishTrust}                    → BROKEN_CHAIN / UNTRUSTED_AUTHORITY
+ *   4. signature (solid-vc, against the trusted key only)
+ *   5/6. {@link checkClaimExpectations}          → STATUS_NOT_TRUSTED / FEDERATION_MISMATCH / APP_MISMATCH
  */
 export async function verifyMembershipCredential(
   vc: VerifiableCredential,
@@ -416,54 +535,11 @@ export async function verifyMembershipCredential(
   const { claim, errors: claimErrors } = readMembershipClaim(vc);
   errors.push(...claimErrors);
 
-  // Gate 3: TRUST — establish, FAIL-CLOSED, the single public key the membership
-  // signature is allowed to be checked against. Trust is established in exactly one
-  // of two ways:
-  //   (a) the issuer is a DIRECT trust anchor → use that anchor's PINNED key; or
-  //   (b) a delegation CHAIN from a trust anchor down to the issuer verifies — the
-  //       chain is self-certifying (root verified with the anchor's pinned key,
-  //       each link carrying the next delegate's signed key), and its leaf yields
-  //       the issuer's CRYPTOGRAPHICALLY-PROVEN key. No caller-supplied key is
-  //       trusted: a presenter cannot forge a link with a key of their choosing.
-  // The membership proof's verificationMethod must be controlled by the issuer, and
-  // we resolve ONLY that method → the established key, so an untrusted issuer can
-  // never satisfy the signature gate even if its proof is internally valid.
-  const directAnchor = anchors.find((a) => a.authority === vc.issuer);
-  const resolutions = new Map<string, CryptoKey>();
-  let trustEstablished = false;
-  // Safely extracted (string | undefined) — a malformed proof yields undefined, so
-  // the controlledBy guards below treat it as untrusted rather than throwing.
-  const membershipMethod = proofVerificationMethod(vc);
-
-  if (directAnchor !== undefined) {
-    // Resolve the anchor's pinned key under the membership proof's own method (when
-    // that method is controlled by the issuer) — so the anchor's key checks the sig
-    // regardless of whether the anchor was registered by WebID or by key id.
-    resolutions.set(anchorMethod(directAnchor), directAnchor.publicKey);
-    if (membershipMethod !== undefined && controlledBy(membershipMethod, vc.issuer)) {
-      resolutions.set(membershipMethod, directAnchor.publicKey);
-    }
-    trustEstablished = true;
-  } else if (options.chain !== undefined && claim !== undefined) {
-    const chainResult = await verifyChain(vc.issuer, claim.federation, options.chain, anchors, now);
-    if (chainResult.errors.length > 0) {
-      errors.push(...chainResult.errors);
-    } else if (chainResult.issuerKey !== undefined) {
-      // The chain cryptographically proved the issuer's key. Bind it to the
-      // membership proof's method (only if that method is controlled by the issuer).
-      if (membershipMethod !== undefined && controlledBy(membershipMethod, vc.issuer)) {
-        resolutions.set(membershipMethod, chainResult.issuerKey.publicKey);
-        trustEstablished = true;
-      } else {
-        errors.push({
-          code: "BROKEN_CHAIN",
-          message: `membership proof verificationMethod ${membershipMethod ?? "(none)"} is not controlled by the chain-proven issuer ${vc.issuer}`,
-        });
-      }
-    }
-  }
-
-  if (!trustEstablished) {
+  // Gate 3: TRUST — which single key may check the membership signature (direct
+  // anchor or self-certifying chain), fail-closed (empty resolver) otherwise.
+  const trust = await establishTrust(vc, claim, anchors, options.chain, now);
+  errors.push(...trust.errors);
+  if (!trust.trustEstablished) {
     errors.push({
       code: "UNTRUSTED_AUTHORITY",
       message: `issuer ${vc.issuer} is not a trust anchor and no valid delegation chain proves it`,
@@ -476,9 +552,9 @@ export async function verifyMembershipCredential(
   // depth beside the UNTRUSTED_AUTHORITY above). We de-dupe INVALID_SIGNATURE in
   // that case so an untrusted-issuer credential does not double-report a signature
   // failure that is really "we hold no key for it".
-  const vcResult = await verifyVcAgainstKeys(vc, resolutions, now);
+  const vcResult = await verifyVcAgainstKeys(vc, trust.resolutions, now);
   for (const e of vcResult.errors) {
-    if (!trustEstablished && e.code === "INVALID_SIGNATURE") {
+    if (!trust.trustEstablished && e.code === "INVALID_SIGNATURE") {
       // The empty resolver guarantees INVALID_SIGNATURE here; UNTRUSTED_AUTHORITY
       // already explains it. Skip the redundant signature error.
       continue;
@@ -486,34 +562,10 @@ export async function verifyMembershipCredential(
     errors.push({ code: relayErrorCode(e.code), message: e.message });
   }
 
-  // Gate 5: status must be in the accepted set (default {Active}).
-  if (claim !== undefined && !accept.includes(claim.status)) {
-    errors.push({
-      code: "STATUS_NOT_TRUSTED",
-      message: `membership status ${claim.status} is not in the accepted set [${accept.join(", ")}]`,
-    });
-  }
-
-  // Gate 6: federation / app must match the verifier's expectation (anti-replay).
-  if (
-    claim !== undefined &&
-    options.expectedFederation !== undefined &&
-    claim.federation !== options.expectedFederation
-  ) {
-    errors.push({
-      code: "FEDERATION_MISMATCH",
-      message: `membership is for federation ${claim.federation}, expected ${options.expectedFederation}`,
-    });
-  }
-  if (
-    claim !== undefined &&
-    options.expectedApp !== undefined &&
-    claim.app !== options.expectedApp
-  ) {
-    errors.push({
-      code: "APP_MISMATCH",
-      message: `membership is for app ${claim.app}, expected ${options.expectedApp}`,
-    });
+  // Gates 5 & 6: status must be in the accepted set (default {Active}) and the
+  // federation / app must match the verifier's expectation (anti-replay).
+  if (claim !== undefined) {
+    errors.push(...checkClaimExpectations(claim, accept, options));
   }
 
   return errors.length === 0

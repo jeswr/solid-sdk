@@ -825,6 +825,57 @@ function readMembershipClaim(vc) {
     errors
   };
 }
+async function establishTrust(vc, claim, anchors, chain, now) {
+  const errors = [];
+  const resolutions = /* @__PURE__ */ new Map();
+  const directAnchor = anchors.find((a) => a.authority === vc.issuer);
+  const membershipMethod = proofVerificationMethod(vc);
+  if (directAnchor !== void 0) {
+    resolutions.set(anchorMethod(directAnchor), directAnchor.publicKey);
+    if (membershipMethod !== void 0 && controlledBy(membershipMethod, vc.issuer)) {
+      resolutions.set(membershipMethod, directAnchor.publicKey);
+    }
+    return { resolutions, trustEstablished: true, errors };
+  }
+  if (chain !== void 0 && claim !== void 0) {
+    const chainResult = await verifyChain(vc.issuer, claim.federation, chain, anchors, now);
+    if (chainResult.errors.length > 0) {
+      errors.push(...chainResult.errors);
+    } else if (chainResult.issuerKey !== void 0) {
+      if (membershipMethod !== void 0 && controlledBy(membershipMethod, vc.issuer)) {
+        resolutions.set(membershipMethod, chainResult.issuerKey.publicKey);
+        return { resolutions, trustEstablished: true, errors };
+      }
+      errors.push({
+        code: "BROKEN_CHAIN",
+        message: `membership proof verificationMethod ${membershipMethod ?? "(none)"} is not controlled by the chain-proven issuer ${vc.issuer}`
+      });
+    }
+  }
+  return { resolutions, trustEstablished: false, errors };
+}
+function checkClaimExpectations(claim, accept, options) {
+  const errors = [];
+  if (!accept.includes(claim.status)) {
+    errors.push({
+      code: "STATUS_NOT_TRUSTED",
+      message: `membership status ${claim.status} is not in the accepted set [${accept.join(", ")}]`
+    });
+  }
+  if (options.expectedFederation !== void 0 && claim.federation !== options.expectedFederation) {
+    errors.push({
+      code: "FEDERATION_MISMATCH",
+      message: `membership is for federation ${claim.federation}, expected ${options.expectedFederation}`
+    });
+  }
+  if (options.expectedApp !== void 0 && claim.app !== options.expectedApp) {
+    errors.push({
+      code: "APP_MISMATCH",
+      message: `membership is for app ${claim.app}, expected ${options.expectedApp}`
+    });
+  }
+  return errors;
+}
 async function verifyMembershipCredential(vc, options) {
   const errors = [];
   const now = options.now ?? /* @__PURE__ */ new Date();
@@ -850,62 +901,23 @@ async function verifyMembershipCredential(vc, options) {
   }
   const { claim, errors: claimErrors } = readMembershipClaim(vc);
   errors.push(...claimErrors);
-  const directAnchor = anchors.find((a) => a.authority === vc.issuer);
-  const resolutions = /* @__PURE__ */ new Map();
-  let trustEstablished = false;
-  const membershipMethod = proofVerificationMethod(vc);
-  if (directAnchor !== void 0) {
-    resolutions.set(anchorMethod(directAnchor), directAnchor.publicKey);
-    if (membershipMethod !== void 0 && controlledBy(membershipMethod, vc.issuer)) {
-      resolutions.set(membershipMethod, directAnchor.publicKey);
-    }
-    trustEstablished = true;
-  } else if (options.chain !== void 0 && claim !== void 0) {
-    const chainResult = await verifyChain(vc.issuer, claim.federation, options.chain, anchors, now);
-    if (chainResult.errors.length > 0) {
-      errors.push(...chainResult.errors);
-    } else if (chainResult.issuerKey !== void 0) {
-      if (membershipMethod !== void 0 && controlledBy(membershipMethod, vc.issuer)) {
-        resolutions.set(membershipMethod, chainResult.issuerKey.publicKey);
-        trustEstablished = true;
-      } else {
-        errors.push({
-          code: "BROKEN_CHAIN",
-          message: `membership proof verificationMethod ${membershipMethod ?? "(none)"} is not controlled by the chain-proven issuer ${vc.issuer}`
-        });
-      }
-    }
-  }
-  if (!trustEstablished) {
+  const trust = await establishTrust(vc, claim, anchors, options.chain, now);
+  errors.push(...trust.errors);
+  if (!trust.trustEstablished) {
     errors.push({
       code: "UNTRUSTED_AUTHORITY",
       message: `issuer ${vc.issuer} is not a trust anchor and no valid delegation chain proves it`
     });
   }
-  const vcResult = await verifyVcAgainstKeys(vc, resolutions, now);
+  const vcResult = await verifyVcAgainstKeys(vc, trust.resolutions, now);
   for (const e of vcResult.errors) {
-    if (!trustEstablished && e.code === "INVALID_SIGNATURE") {
+    if (!trust.trustEstablished && e.code === "INVALID_SIGNATURE") {
       continue;
     }
     errors.push({ code: relayErrorCode(e.code), message: e.message });
   }
-  if (claim !== void 0 && !accept.includes(claim.status)) {
-    errors.push({
-      code: "STATUS_NOT_TRUSTED",
-      message: `membership status ${claim.status} is not in the accepted set [${accept.join(", ")}]`
-    });
-  }
-  if (claim !== void 0 && options.expectedFederation !== void 0 && claim.federation !== options.expectedFederation) {
-    errors.push({
-      code: "FEDERATION_MISMATCH",
-      message: `membership is for federation ${claim.federation}, expected ${options.expectedFederation}`
-    });
-  }
-  if (claim !== void 0 && options.expectedApp !== void 0 && claim.app !== options.expectedApp) {
-    errors.push({
-      code: "APP_MISMATCH",
-      message: `membership is for app ${claim.app}, expected ${options.expectedApp}`
-    });
+  if (claim !== void 0) {
+    errors.push(...checkClaimExpectations(claim, accept, options));
   }
   return errors.length === 0 ? { verified: true, errors: [], ...claim !== void 0 ? { claim } : {} } : { verified: false, errors, ...claim !== void 0 ? { claim } : {} };
 }
