@@ -24,6 +24,14 @@
  */
 export declare function isHttpIri(value: string | undefined): value is string;
 /**
+ * The value if it is an absolute http(s) IRI ({@link isHttpIri}), else
+ * `undefined` — i.e. `isHttpIri(v) ? v : undefined`, the recurring untrusted-
+ * input filter for an OPTIONAL object-property write (drop a non-http(s) value
+ * rather than coerce it into a malformed `NamedNode`). Named once here instead of
+ * repeating the ternary at every optional-IRI write site.
+ */
+export declare function httpIriOrUndefined(value: string | undefined): string | undefined;
+/**
  * Strip the fragment from an IRI to get its document URL (e.g. the tracker /
  * contact-book document that a `#this` / `#it` subject lives in). Throws on a
  * non-parseable IRI (the callers only ever pass an absolute subject IRI they

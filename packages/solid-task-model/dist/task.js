@@ -18,7 +18,7 @@
  */
 import { LiteralAs, LiteralFrom, NamedNodeAs, NamedNodeFrom, OptionalAs, OptionalFrom, SetFrom, TermWrapper, } from "@rdfjs/wrapper";
 import { DataFactory, Store, Writer } from "n3";
-import { isHttpIri } from "./iri.js";
+import { httpIriOrUndefined, isHttpIri } from "./iri.js";
 import { dct, PREFIXES, prov, rdf, schema, TASK_CLASS, WF_CLOSED, WF_OPEN, wf } from "./vocab.js";
 // `isHttpIri` lives in the shared pure-IRI core (`./iri.ts`); re-exported here so
 // the `.` and `./task` public entry points keep exporting it unchanged (it was
@@ -30,6 +30,17 @@ export const PRIORITIES = ["high", "medium", "low"];
 function normalizePriority(value) {
     const v = (value ?? "").toLowerCase().trim();
     return PRIORITIES.includes(v) ? v : undefined;
+}
+/**
+ * Assign `target[key] = value` ONLY when `value` is defined — the "copy an
+ * optional field through, omitting it when absent" pattern, named once so a plain
+ * data projection reads as a flat list of field copies rather than a wall of
+ * `if (x !== undefined)` branches. Typed so each call still binds a single named
+ * field of `T` to a value of that field's exact type (no widening, no `any`).
+ */
+function setIfDefined(target, key, value) {
+    if (value !== undefined)
+        target[key] = value;
 }
 /**
  * Typed `@rdfjs/wrapper` view of a single task subject. Each accessor reads/writes
@@ -213,38 +224,27 @@ export function parseTask(resourceUrl, dataset) {
     const doc = new Task(taskSubject(resourceUrl), dataset, DataFactory);
     if (!doc.isTask)
         return undefined;
+    // title + state are the two always-present fields; every other field is copied
+    // through only when the accessor returned a value (setIfDefined), so the result
+    // omits absent fields exactly as before.
+    const data = { title: doc.title ?? "", state: doc.state };
+    setIfDefined(data, "description", doc.description);
+    setIfDefined(data, "created", doc.created);
+    setIfDefined(data, "modified", doc.modified);
+    setIfDefined(data, "endedAt", doc.endedAt);
+    setIfDefined(data, "creator", doc.creator);
+    setIfDefined(data, "assignee", doc.assignee);
+    setIfDefined(data, "project", doc.project);
+    setIfDefined(data, "dueDate", doc.dueDate);
+    setIfDefined(data, "priority", doc.priority);
+    setIfDefined(data, "rank", doc.rank);
+    setIfDefined(data, "parent", doc.parent);
+    setIfDefined(data, "duplicateOf", doc.duplicateOf);
+    setIfDefined(data, "clonedFrom", doc.clonedFrom);
+    // The two set-valued relations are omitted when empty (their absence vs an
+    // empty array is observable to consumers, so this is kept explicit).
     const blockedBy = [...doc.blockedBy];
     const relatesTo = [...doc.relatesTo];
-    const data = {
-        title: doc.title ?? "",
-        state: doc.state,
-    };
-    if (doc.description !== undefined)
-        data.description = doc.description;
-    if (doc.created !== undefined)
-        data.created = doc.created;
-    if (doc.modified !== undefined)
-        data.modified = doc.modified;
-    if (doc.endedAt !== undefined)
-        data.endedAt = doc.endedAt;
-    if (doc.creator !== undefined)
-        data.creator = doc.creator;
-    if (doc.assignee !== undefined)
-        data.assignee = doc.assignee;
-    if (doc.project !== undefined)
-        data.project = doc.project;
-    if (doc.dueDate !== undefined)
-        data.dueDate = doc.dueDate;
-    if (doc.priority !== undefined)
-        data.priority = doc.priority;
-    if (doc.rank !== undefined)
-        data.rank = doc.rank;
-    if (doc.parent !== undefined)
-        data.parent = doc.parent;
-    if (doc.duplicateOf !== undefined)
-        data.duplicateOf = doc.duplicateOf;
-    if (doc.clonedFrom !== undefined)
-        data.clonedFrom = doc.clonedFrom;
     if (blockedBy.length > 0)
         data.blockedBy = blockedBy;
     if (relatesTo.length > 0)
@@ -271,12 +271,14 @@ export function buildTask(resourceUrl, data) {
     doc.state = data.state;
     if (data.state === "closed")
         doc.endedAt = data.endedAt ?? doc.endedAt ?? new Date();
-    doc.creator = isHttpIri(data.creator) ? data.creator : undefined;
-    doc.assignee = isHttpIri(data.assignee) ? data.assignee : undefined;
-    doc.project = isHttpIri(data.project) ? data.project : undefined;
-    doc.parent = isHttpIri(data.parent) ? data.parent : undefined;
-    doc.duplicateOf = isHttpIri(data.duplicateOf) ? data.duplicateOf : undefined;
-    doc.clonedFrom = isHttpIri(data.clonedFrom) ? data.clonedFrom : undefined;
+    // Drop any object-property value that is not an absolute http(s) IRI (untrusted
+    // pod input) rather than coerce it into a malformed NamedNode.
+    doc.creator = httpIriOrUndefined(data.creator);
+    doc.assignee = httpIriOrUndefined(data.assignee);
+    doc.project = httpIriOrUndefined(data.project);
+    doc.parent = httpIriOrUndefined(data.parent);
+    doc.duplicateOf = httpIriOrUndefined(data.duplicateOf);
+    doc.clonedFrom = httpIriOrUndefined(data.clonedFrom);
     doc.dueDate = data.dueDate;
     doc.priority = data.priority;
     doc.rank = data.rank;
