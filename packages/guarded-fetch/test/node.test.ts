@@ -357,6 +357,63 @@ describe("createValidatingLookup — dns.lookup callback contract", () => {
 });
 
 // ---------------------------------------------------------------------------
+// The BARE pinning dispatcher's own safe posture (used directly as
+// `fetch(url, { dispatcher })`, without the full guard wired in). Two properties:
+//   1. PROTOCOL-AWARE — an `http:` hop is validated against the loopback-ONLY rule, an
+//      `https:` hop against the public-address rule. A bare-dispatcher `http:` request that
+//      flips to a PUBLIC address at connect time is refused (no plaintext leak to a public
+//      host), where the previous single-rule dispatcher would have accepted it.
+//   2. (covered in the dedicated block below) `http:` is refused outright unless allowLoopback.
+// These run undici's REAL connector against a local loopback server.
+// ---------------------------------------------------------------------------
+describe("createPinningDispatcher — protocol-aware connect (bare dispatcher)", () => {
+  let server: Server;
+  let port: number;
+  beforeEach(async () => {
+    server = createServer((_req, res) => {
+      res.writeHead(200, { "content-type": "text/plain" });
+      res.end("REACHED");
+    });
+    await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+    port = (server.address() as AddressInfo).port;
+  });
+  afterEach(async () => {
+    await new Promise<void>((r) => server.close(() => r()));
+  });
+
+  it("http: is validated loopback-ONLY — a public-flipping address is refused at connect (allowLoopback)", async () => {
+    // Under allowLoopback an http: dev URL is permitted, but EVERY connect-time record must be
+    // loopback. A resolver returning a PUBLIC address must be refused for http: — that is the
+    // protocol-aware rule. The previous single (non-loopback-only) lookup served http: too, so
+    // it would have ACCEPTED this public address: this test is the regression guard for that.
+    const publicResolver: ResolveAll = async () => [{ address: "93.184.216.34", family: 4 }];
+    const dispatcher = createPinningDispatcher({ allowLoopback: true, resolveAll: publicResolver });
+    const err = await undiciFetch(`http://rebind.example:${port}/x`, {
+      dispatcher: dispatcher as unknown as UndiciAgent,
+      redirect: "manual",
+    }).then(
+      () => undefined,
+      (e: unknown) => e,
+    );
+    await dispatcher.close().catch(() => {});
+    expect(err).toBeInstanceOf(Error);
+    expect(causeChainText(err)).toContain("requires loopback-only");
+  });
+
+  it("http: to a loopback address IS reachable under allowLoopback (safe case preserved)", async () => {
+    const loopback: ResolveAll = async () => [{ address: "127.0.0.1", family: 4 }];
+    const dispatcher = createPinningDispatcher({ allowLoopback: true, resolveAll: loopback });
+    const res = await undiciFetch(`http://localhost:${port}/x`, {
+      dispatcher: dispatcher as unknown as UndiciAgent,
+      redirect: "manual",
+    });
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("REACHED");
+    await dispatcher.close().catch(() => {});
+  });
+});
+
+// ---------------------------------------------------------------------------
 // TLS: pinning the IP must NOT weaken certificate validation. The cert is verified against
 // the ORIGINAL hostname (the connector's servername), never the pinned IP.
 // ---------------------------------------------------------------------------

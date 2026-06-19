@@ -1,6 +1,6 @@
 // src/node.ts
 import { lookup as dnsLookupCb } from "node:dns";
-import { Agent, fetch as undiciFetch } from "undici";
+import { Agent, buildConnector, fetch as undiciFetch } from "undici";
 import {
   createGuardedFetch,
   isLoopbackAddress,
@@ -60,12 +60,30 @@ function createValidatingLookup(resolveAll, allowLoopback, requireLoopbackOnly) 
 function createPinningDispatcher(options = {}) {
   const allowLoopback = options.allowLoopback ?? false;
   const resolveAll = options.resolveAll ?? defaultResolveAll;
-  const lookup = createValidatingLookup(resolveAll, allowLoopback, false);
-  const connect = { lookup };
+  const tlsBase = {};
   if (options.ca !== void 0) {
-    connect.ca = options.ca;
+    tlsBase.ca = options.ca;
   }
-  return new Agent({ connect });
+  const httpsConnector = buildConnector({
+    ...tlsBase,
+    lookup: createValidatingLookup(resolveAll, allowLoopback, false)
+  });
+  const httpLoopbackConnector = buildConnector({
+    ...tlsBase,
+    lookup: createValidatingLookup(resolveAll, allowLoopback, true)
+  });
+  return new Agent({
+    // Custom connect (function form): undici hands us the full connect `Options`, INCLUDING
+    // `protocol`, so we pick the loopback-only connector for an `http:` hop and the standard
+    // public connector for `https:`. undici sets `opts.servername` to the request hostname, so
+    // TLS SNI + cert validation stay against the original host while our lookup steers the
+    // (pinned) IP. The dispatcher never follows redirects itself — the shared guard re-validates
+    // + re-pins each `Location` hop as a fresh request through this same dispatcher.
+    connect(opts, cb) {
+      const connector = opts.protocol === "http:" ? httpLoopbackConnector : httpsConnector;
+      connector(opts, cb);
+    }
+  });
 }
 function createNodeGuardedFetch(options = {}) {
   const allowLoopback = options.allowLoopback ?? false;

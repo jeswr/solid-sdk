@@ -100,6 +100,18 @@ export declare function createValidatingLookup(resolveAll: ResolveAll, allowLoop
  * `fetch(url, { dispatcher })` (undici), but prefer {@link createNodeGuardedFetch}, which
  * wires this together with the full SSRF guard. The Agent never re-resolves a hostname: our
  * `lookup` is the sole resolver and returns only pre-validated addresses.
+ *
+ * PROTOCOL-AWARE (the safe bare-dispatcher posture). undici calls our `connect(opts, cb)` with
+ * the request's `protocol`, so the dispatcher applies the SAME per-scheme address rule the
+ * guard's `assertResolvedAddressesAllowed` enforces, without needing the guard wired in:
+ *   - `https:`  → the standard public-address lookup (`isPublicAddress(addr, allowLoopback)`).
+ *   - `http:`   → a LOOPBACK-ONLY lookup. An `http:` connection (reachable only under
+ *                `allowLoopback`) must resolve to loopback addresses ONLY — a flip to a public
+ *                address at connect time is refused, so a plaintext request can never leak to a
+ *                public host. (A single non-loopback record fails the whole connection.)
+ * Previously a single non-loopback-only lookup served every protocol, so a bare-dispatcher
+ * `http:` hop validated only against the https rule — strictly weaker. This makes the bare
+ * dispatcher match the posture {@link createNodeGuardedFetch} already applies per request.
  */
 export declare function createPinningDispatcher(options?: NodePinningOptions): Agent;
 /**

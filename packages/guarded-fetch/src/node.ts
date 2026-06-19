@@ -42,7 +42,7 @@
  */
 import type { LookupAddress } from "node:dns";
 import { lookup as dnsLookupCb } from "node:dns";
-import { Agent, fetch as undiciFetch } from "undici";
+import { Agent, buildConnector, fetch as undiciFetch } from "undici";
 // Import the guard + SsrfError + classifiers from the package ROOT entry (NOT directly from
 // ./guard.js). The build keeps `./index.js` EXTERNAL for the node bundle, so `dist/node.js`
 // references the SAME runtime `SsrfError` class + guard as `dist/index.js` — an error thrown
@@ -187,19 +187,51 @@ export function createValidatingLookup(
  * `fetch(url, { dispatcher })` (undici), but prefer {@link createNodeGuardedFetch}, which
  * wires this together with the full SSRF guard. The Agent never re-resolves a hostname: our
  * `lookup` is the sole resolver and returns only pre-validated addresses.
+ *
+ * PROTOCOL-AWARE (the safe bare-dispatcher posture). undici calls our `connect(opts, cb)` with
+ * the request's `protocol`, so the dispatcher applies the SAME per-scheme address rule the
+ * guard's `assertResolvedAddressesAllowed` enforces, without needing the guard wired in:
+ *   - `https:`  → the standard public-address lookup (`isPublicAddress(addr, allowLoopback)`).
+ *   - `http:`   → a LOOPBACK-ONLY lookup. An `http:` connection (reachable only under
+ *                `allowLoopback`) must resolve to loopback addresses ONLY — a flip to a public
+ *                address at connect time is refused, so a plaintext request can never leak to a
+ *                public host. (A single non-loopback record fails the whole connection.)
+ * Previously a single non-loopback-only lookup served every protocol, so a bare-dispatcher
+ * `http:` hop validated only against the https rule — strictly weaker. This makes the bare
+ * dispatcher match the posture {@link createNodeGuardedFetch} already applies per request.
  */
 export function createPinningDispatcher(options: NodePinningOptions = {}): Agent {
   const allowLoopback = options.allowLoopback ?? false;
   const resolveAll = options.resolveAll ?? defaultResolveAll;
-  // The dispatcher is reused across hops; an http: hop's loopback-only nuance is applied per
-  // request below, so the dispatcher itself uses the https rule (loopback-only is opt-in via
-  // a per-protocol dispatcher in createNodeGuardedFetch).
-  const lookup = createValidatingLookup(resolveAll, allowLoopback, false);
-  const connect: Record<string, unknown> = { lookup };
+
+  // Two connectors that differ ONLY in the protocol-aware validating lookup. Both keep TLS
+  // certificate validation ON (we never pass `rejectUnauthorized:false`) and carry the optional
+  // private CA. `https:` uses the public-address rule; `http:` uses the loopback-only rule.
+  const tlsBase: Record<string, unknown> = {};
   if (options.ca !== undefined) {
-    connect.ca = options.ca;
+    tlsBase.ca = options.ca;
   }
-  return new Agent({ connect });
+  const httpsConnector = buildConnector({
+    ...tlsBase,
+    lookup: createValidatingLookup(resolveAll, allowLoopback, false) as never,
+  });
+  const httpLoopbackConnector = buildConnector({
+    ...tlsBase,
+    lookup: createValidatingLookup(resolveAll, allowLoopback, true) as never,
+  });
+
+  return new Agent({
+    // Custom connect (function form): undici hands us the full connect `Options`, INCLUDING
+    // `protocol`, so we pick the loopback-only connector for an `http:` hop and the standard
+    // public connector for `https:`. undici sets `opts.servername` to the request hostname, so
+    // TLS SNI + cert validation stay against the original host while our lookup steers the
+    // (pinned) IP. The dispatcher never follows redirects itself — the shared guard re-validates
+    // + re-pins each `Location` hop as a fresh request through this same dispatcher.
+    connect(opts: buildConnector.Options, cb: buildConnector.Callback) {
+      const connector = opts.protocol === "http:" ? httpLoopbackConnector : httpsConnector;
+      connector(opts, cb);
+    },
+  });
 }
 
 /**
