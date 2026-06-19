@@ -64,7 +64,9 @@
     "test:watch": "vitest",
     "gate": "npm run lint && npm run typecheck && npm run test && npm run build && npm run check:dist && npm run check:lockfile-transport",
     "check:dist": "node scripts/check-dist.mjs",
-    "check:lockfile-transport": "node scripts/check-lockfile-transport.mjs"
+    "check:lockfile-transport": "node scripts/check-lockfile-transport.mjs",
+    "api:report": "npm run build && npx --yes @microsoft/api-extractor@7 run --local",
+    "api:check": "npm run build && npx --yes @microsoft/api-extractor@7 run"
   },
   "dependencies": {
     "@jeswr/fetch-rdf": "^0.1.0",

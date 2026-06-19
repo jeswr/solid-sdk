@@ -1,0 +1,143 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`emitted RDF golden master (canonical N-Quads, timestamps/uuids normalised) > a closed task serialises with wf:Closed + prov:endedAtTime 1`] = `
+"<http://localhost:3000/alice/issues/x#it> <http://purl.org/dc/terms/created> "<<DATETIME>>"^^<http://www.w3.org/2001/XMLSchema#dateTime> .
+<http://localhost:3000/alice/issues/x#it> <http://purl.org/dc/terms/title> "Done thing" .
+<http://localhost:3000/alice/issues/x#it> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2005/01/wf/flow#Closed> .
+<http://localhost:3000/alice/issues/x#it> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2005/01/wf/flow#Task> .
+<http://localhost:3000/alice/issues/x#it> <http://www.w3.org/ns/prov#endedAtTime> "<<DATETIME>>"^^<http://www.w3.org/2001/XMLSchema#dateTime> ."
+`;
+
+exports[`emitted RDF golden master (canonical N-Quads, timestamps/uuids normalised) > a contact group serialises to the pinned graph 1`] = `
+"<http://localhost:3000/alice/contacts/Group/friends.ttl#this> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2006/vcard/ns#Group> .
+<http://localhost:3000/alice/contacts/Group/friends.ttl#this> <http://www.w3.org/2006/vcard/ns#fn> "Friends" .
+<http://localhost:3000/alice/contacts/Group/friends.ttl#this> <http://www.w3.org/2006/vcard/ns#hasMember> <http://localhost:3000/alice/contacts/Group/friends.ttl-other> .
+<http://localhost:3000/alice/contacts/Group/friends.ttl#this> <http://www.w3.org/2006/vcard/ns#hasMember> <http://localhost:3000/alice/contacts/Person/abc/index.ttl> .
+<http://localhost:3000/alice/contacts/Group/friends.ttl#this> <http://www.w3.org/2006/vcard/ns#inAddressBook> <http://localhost:3000/alice/contacts/index.ttl#this> ."
+`;
+
+exports[`emitted RDF golden master (canonical N-Quads, timestamps/uuids normalised) > a custom-workflow tracker serialises to the pinned graph 1`] = `
+"<http://localhost:3000/alice/issues/tracker.ttl#status-backlog> <http://schema.org/position> "0"^^<http://www.w3.org/2001/XMLSchema#double> .
+<http://localhost:3000/alice/issues/tracker.ttl#status-backlog> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2000/01/rdf-schema#Class> .
+<http://localhost:3000/alice/issues/tracker.ttl#status-backlog> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2005/01/wf/flow#State> .
+<http://localhost:3000/alice/issues/tracker.ttl#status-backlog> <http://www.w3.org/2000/01/rdf-schema#label> "Backlog" .
+<http://localhost:3000/alice/issues/tracker.ttl#status-backlog> <http://www.w3.org/2000/01/rdf-schema#subClassOf> <http://www.w3.org/2005/01/wf/flow#Open> .
+<http://localhost:3000/alice/issues/tracker.ttl#status-backlog> <http://www.w3.org/2005/01/wf/flow#allowedTransitions> <http://localhost:3000/alice/issues/tracker.ttl#status-shipped> .
+<http://localhost:3000/alice/issues/tracker.ttl#status-shipped> <http://schema.org/position> "1"^^<http://www.w3.org/2001/XMLSchema#double> .
+<http://localhost:3000/alice/issues/tracker.ttl#status-shipped> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2000/01/rdf-schema#Class> .
+<http://localhost:3000/alice/issues/tracker.ttl#status-shipped> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2005/01/wf/flow#State> .
+<http://localhost:3000/alice/issues/tracker.ttl#status-shipped> <http://www.w3.org/2000/01/rdf-schema#label> "Shipped" .
+<http://localhost:3000/alice/issues/tracker.ttl#status-shipped> <http://www.w3.org/2000/01/rdf-schema#subClassOf> <http://www.w3.org/2005/01/wf/flow#Closed> .
+<http://localhost:3000/alice/issues/tracker.ttl#this> <http://purl.org/dc/terms/title> "Custom" .
+<http://localhost:3000/alice/issues/tracker.ttl#this> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2005/01/wf/flow#Tracker> .
+<http://localhost:3000/alice/issues/tracker.ttl#this> <http://www.w3.org/2005/01/wf/flow#initialState> <http://localhost:3000/alice/issues/tracker.ttl#status-backlog> .
+<http://localhost:3000/alice/issues/tracker.ttl#this> <http://www.w3.org/2005/01/wf/flow#issueClass> <http://www.w3.org/2005/01/wf/flow#Task> ."
+`;
+
+exports[`emitted RDF golden master (canonical N-Quads, timestamps/uuids normalised) > a default tracker serialises to the pinned SolidOS-readable graph 1`] = `
+"<http://localhost:3000/alice/issues/tracker.ttl#status-done> <http://schema.org/position> "2"^^<http://www.w3.org/2001/XMLSchema#double> .
+<http://localhost:3000/alice/issues/tracker.ttl#status-done> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2000/01/rdf-schema#Class> .
+<http://localhost:3000/alice/issues/tracker.ttl#status-done> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2005/01/wf/flow#State> .
+<http://localhost:3000/alice/issues/tracker.ttl#status-done> <http://www.w3.org/2000/01/rdf-schema#label> "Done" .
+<http://localhost:3000/alice/issues/tracker.ttl#status-done> <http://www.w3.org/2000/01/rdf-schema#subClassOf> <http://www.w3.org/2005/01/wf/flow#Closed> .
+<http://localhost:3000/alice/issues/tracker.ttl#status-done> <http://www.w3.org/2005/01/wf/flow#allowedTransitions> <http://localhost:3000/alice/issues/tracker.ttl#status-in-progress> .
+<http://localhost:3000/alice/issues/tracker.ttl#status-done> <http://www.w3.org/2005/01/wf/flow#allowedTransitions> <http://localhost:3000/alice/issues/tracker.ttl#status-todo> .
+<http://localhost:3000/alice/issues/tracker.ttl#status-in-progress> <http://schema.org/position> "1"^^<http://www.w3.org/2001/XMLSchema#double> .
+<http://localhost:3000/alice/issues/tracker.ttl#status-in-progress> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2000/01/rdf-schema#Class> .
+<http://localhost:3000/alice/issues/tracker.ttl#status-in-progress> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2005/01/wf/flow#State> .
+<http://localhost:3000/alice/issues/tracker.ttl#status-in-progress> <http://www.w3.org/2000/01/rdf-schema#label> "In Progress" .
+<http://localhost:3000/alice/issues/tracker.ttl#status-in-progress> <http://www.w3.org/2000/01/rdf-schema#subClassOf> <http://www.w3.org/2005/01/wf/flow#Open> .
+<http://localhost:3000/alice/issues/tracker.ttl#status-in-progress> <http://www.w3.org/2005/01/wf/flow#allowedTransitions> <http://localhost:3000/alice/issues/tracker.ttl#status-done> .
+<http://localhost:3000/alice/issues/tracker.ttl#status-in-progress> <http://www.w3.org/2005/01/wf/flow#allowedTransitions> <http://localhost:3000/alice/issues/tracker.ttl#status-todo> .
+<http://localhost:3000/alice/issues/tracker.ttl#status-todo> <http://schema.org/position> "0"^^<http://www.w3.org/2001/XMLSchema#double> .
+<http://localhost:3000/alice/issues/tracker.ttl#status-todo> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2000/01/rdf-schema#Class> .
+<http://localhost:3000/alice/issues/tracker.ttl#status-todo> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2005/01/wf/flow#State> .
+<http://localhost:3000/alice/issues/tracker.ttl#status-todo> <http://www.w3.org/2000/01/rdf-schema#label> "To Do" .
+<http://localhost:3000/alice/issues/tracker.ttl#status-todo> <http://www.w3.org/2000/01/rdf-schema#subClassOf> <http://www.w3.org/2005/01/wf/flow#Open> .
+<http://localhost:3000/alice/issues/tracker.ttl#status-todo> <http://www.w3.org/2005/01/wf/flow#allowedTransitions> <http://localhost:3000/alice/issues/tracker.ttl#status-done> .
+<http://localhost:3000/alice/issues/tracker.ttl#status-todo> <http://www.w3.org/2005/01/wf/flow#allowedTransitions> <http://localhost:3000/alice/issues/tracker.ttl#status-in-progress> .
+<http://localhost:3000/alice/issues/tracker.ttl#team> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2006/vcard/ns#Group> .
+<http://localhost:3000/alice/issues/tracker.ttl#team> <http://www.w3.org/2006/vcard/ns#hasMember> <http://localhost:3000/alice/profile/card#me> .
+<http://localhost:3000/alice/issues/tracker.ttl#team> <http://www.w3.org/2006/vcard/ns#hasMember> <http://localhost:3000/bob/profile/card#me> .
+<http://localhost:3000/alice/issues/tracker.ttl#this> <http://purl.org/dc/terms/title> "Project Alpha" .
+<http://localhost:3000/alice/issues/tracker.ttl#this> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2005/01/wf/flow#Tracker> .
+<http://localhost:3000/alice/issues/tracker.ttl#this> <http://www.w3.org/2005/01/wf/flow#assigneeGroup> <http://localhost:3000/alice/issues/tracker.ttl#team> .
+<http://localhost:3000/alice/issues/tracker.ttl#this> <http://www.w3.org/2005/01/wf/flow#initialState> <http://localhost:3000/alice/issues/tracker.ttl#status-todo> .
+<http://localhost:3000/alice/issues/tracker.ttl#this> <http://www.w3.org/2005/01/wf/flow#issueCategory> <http://localhost:3000/alice/issues/tracker.ttl#priority> .
+<http://localhost:3000/alice/issues/tracker.ttl#this> <http://www.w3.org/2005/01/wf/flow#issueClass> <http://www.w3.org/2005/01/wf/flow#Task> .
+<http://localhost:3000/alice/issues/tracker.ttl#this> <http://www.w3.org/2005/01/wf/flow#stateStore> <http://localhost:3000/alice/issues/> ."
+`;
+
+exports[`emitted RDF golden master (canonical N-Quads, timestamps/uuids normalised) > a fully-populated task serialises to the pinned graph 1`] = `
+"<http://localhost:3000/alice/issues/x#it> <http://purl.org/dc/terms/created> "<<DATETIME>>"^^<http://www.w3.org/2001/XMLSchema#dateTime> .
+<http://localhost:3000/alice/issues/x#it> <http://purl.org/dc/terms/creator> <http://localhost:3000/alice/profile/card#me> .
+<http://localhost:3000/alice/issues/x#it> <http://purl.org/dc/terms/description> "Repro steps included." .
+<http://localhost:3000/alice/issues/x#it> <http://purl.org/dc/terms/isPartOf> <http://localhost:3000/alice/issues/x-parent> .
+<http://localhost:3000/alice/issues/x#it> <http://purl.org/dc/terms/isReplacedBy> <http://localhost:3000/alice/issues/x-dup> .
+<http://localhost:3000/alice/issues/x#it> <http://purl.org/dc/terms/modified> "<<DATETIME>>"^^<http://www.w3.org/2001/XMLSchema#dateTime> .
+<http://localhost:3000/alice/issues/x#it> <http://purl.org/dc/terms/relation> <http://localhost:3000/alice/issues/x-c> .
+<http://localhost:3000/alice/issues/x#it> <http://purl.org/dc/terms/requires> <http://localhost:3000/alice/issues/x-a> .
+<http://localhost:3000/alice/issues/x#it> <http://purl.org/dc/terms/requires> <http://localhost:3000/alice/issues/x-b> .
+<http://localhost:3000/alice/issues/x#it> <http://purl.org/dc/terms/title> "Login button overflows on mobile" .
+<http://localhost:3000/alice/issues/x#it> <http://schema.org/position> "12.5"^^<http://www.w3.org/2001/XMLSchema#double> .
+<http://localhost:3000/alice/issues/x#it> <http://schema.org/priority> "high" .
+<http://localhost:3000/alice/issues/x#it> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2005/01/wf/flow#Open> .
+<http://localhost:3000/alice/issues/x#it> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2005/01/wf/flow#Task> .
+<http://localhost:3000/alice/issues/x#it> <http://www.w3.org/2005/01/wf/flow#assignee> <http://localhost:3000/bob/profile/card#me> .
+<http://localhost:3000/alice/issues/x#it> <http://www.w3.org/2005/01/wf/flow#dateDue> "<<DATETIME>>"^^<http://www.w3.org/2001/XMLSchema#dateTime> .
+<http://localhost:3000/alice/issues/x#it> <http://www.w3.org/2005/01/wf/flow#description> "Repro steps included." .
+<http://localhost:3000/alice/issues/x#it> <http://www.w3.org/2005/01/wf/flow#tracker> <http://localhost:3000/alice/issues/tracker.ttl#this> .
+<http://localhost:3000/alice/issues/x#it> <http://www.w3.org/ns/prov#wasDerivedFrom> <http://localhost:3000/alice/issues/x-orig> ."
+`;
+
+exports[`emitted RDF golden master (canonical N-Quads, timestamps/uuids normalised) > a groups index serialises to the pinned graph 1`] = `
+"<http://localhost:3000/alice/contacts/Group/friends.ttl#this> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2006/vcard/ns#Group> .
+<http://localhost:3000/alice/contacts/Group/friends.ttl#this> <http://www.w3.org/2006/vcard/ns#fn> "Friends" .
+<http://localhost:3000/alice/contacts/index.ttl#this> <http://www.w3.org/2006/vcard/ns#includesGroup> <http://localhost:3000/alice/contacts/Group/friends.ttl#this> ."
+`;
+
+exports[`emitted RDF golden master (canonical N-Quads, timestamps/uuids normalised) > a people index serialises to the pinned graph 1`] = `
+"<http://localhost:3000/alice/contacts/Person/abc/index.ttl#this> <http://www.w3.org/2006/vcard/ns#fn> "Bob Smith" .
+<http://localhost:3000/alice/contacts/Person/abc/index.ttl#this> <http://www.w3.org/2006/vcard/ns#inAddressBook> <http://localhost:3000/alice/contacts/index.ttl#this> ."
+`;
+
+exports[`emitted RDF golden master (canonical N-Quads, timestamps/uuids normalised) > a person serialises with structured email/phone/webId nodes 1`] = `
+"<http://localhost:3000/alice/contacts/Person/abc/index.ttl#this> <http://purl.org/dc/terms/created> "<<DATETIME>>"^^<http://www.w3.org/2001/XMLSchema#dateTime> .
+<http://localhost:3000/alice/contacts/Person/abc/index.ttl#this> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2006/vcard/ns#Individual> .
+<http://localhost:3000/alice/contacts/Person/abc/index.ttl#this> <http://www.w3.org/2006/vcard/ns#fn> "Bob Smith" .
+<http://localhost:3000/alice/contacts/Person/abc/index.ttl#this> <http://www.w3.org/2006/vcard/ns#hasEmail> _:b .
+<http://localhost:3000/alice/contacts/Person/abc/index.ttl#this> <http://www.w3.org/2006/vcard/ns#hasEmail> _:b .
+<http://localhost:3000/alice/contacts/Person/abc/index.ttl#this> <http://www.w3.org/2006/vcard/ns#hasTelephone> _:b .
+<http://localhost:3000/alice/contacts/Person/abc/index.ttl#this> <http://www.w3.org/2006/vcard/ns#hasTelephone> _:b .
+<http://localhost:3000/alice/contacts/Person/abc/index.ttl#this> <http://www.w3.org/2006/vcard/ns#hasUID> "urn:uuid:<<UUID>>" .
+<http://localhost:3000/alice/contacts/Person/abc/index.ttl#this> <http://www.w3.org/2006/vcard/ns#inAddressBook> <http://localhost:3000/alice/contacts/index.ttl#this> .
+<http://localhost:3000/alice/contacts/Person/abc/index.ttl#this> <http://www.w3.org/2006/vcard/ns#note> "A friend." .
+<http://localhost:3000/alice/contacts/Person/abc/index.ttl#this> <http://www.w3.org/2006/vcard/ns#url> _:b .
+_:b <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2006/vcard/ns#Cell> .
+_:b <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2006/vcard/ns#Cell> .
+_:b <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2006/vcard/ns#Home> .
+_:b <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2006/vcard/ns#Home> .
+_:b <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2006/vcard/ns#WebId> .
+_:b <http://www.w3.org/2006/vcard/ns#value> <http://localhost:3000/bob/profile/card#me> .
+_:b <http://www.w3.org/2006/vcard/ns#value> <mailto:bob2@example.com> .
+_:b <http://www.w3.org/2006/vcard/ns#value> <mailto:bob@example.com> .
+_:b <http://www.w3.org/2006/vcard/ns#value> <tel:+15551234567> .
+_:b <http://www.w3.org/2006/vcard/ns#value> <tel:+15559999999> ."
+`;
+
+exports[`emitted RDF golden master (canonical N-Quads, timestamps/uuids normalised) > an address book serialises to the pinned graph 1`] = `
+"<http://localhost:3000/alice/contacts/index.ttl#this> <http://purl.org/dc/elements/1.1/title> "My Contacts" .
+<http://localhost:3000/alice/contacts/index.ttl#this> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2006/vcard/ns#AddressBook> .
+<http://localhost:3000/alice/contacts/index.ttl#this> <http://www.w3.org/2006/vcard/ns#fn> "My Contacts" .
+<http://localhost:3000/alice/contacts/index.ttl#this> <http://www.w3.org/2006/vcard/ns#groupIndex> <http://localhost:3000/alice/contacts/groups.ttl> .
+<http://localhost:3000/alice/contacts/index.ttl#this> <http://www.w3.org/2006/vcard/ns#nameEmailIndex> <http://localhost:3000/alice/contacts/people.ttl> .
+<http://localhost:3000/alice/contacts/index.ttl#this> <http://www.w3.org/ns/auth/acl#owner> <http://localhost:3000/alice/profile/card#me> ."
+`;
+
+exports[`emitted RDF golden master (canonical N-Quads, timestamps/uuids normalised) > untrusted non-http(s) object fields are dropped from the task graph 1`] = `
+"<http://localhost:3000/alice/issues/x#it> <http://purl.org/dc/terms/created> "<<DATETIME>>"^^<http://www.w3.org/2001/XMLSchema#dateTime> .
+<http://localhost:3000/alice/issues/x#it> <http://purl.org/dc/terms/requires> <http://ok/1> .
+<http://localhost:3000/alice/issues/x#it> <http://purl.org/dc/terms/title> "X" .
+<http://localhost:3000/alice/issues/x#it> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2005/01/wf/flow#Open> .
+<http://localhost:3000/alice/issues/x#it> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2005/01/wf/flow#Task> ."
+`;
