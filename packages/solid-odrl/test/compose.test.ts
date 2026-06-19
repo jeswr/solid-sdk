@@ -57,6 +57,48 @@ describe("requestContextFromA2AIntent", () => {
     expect(evaluate(policy, ctx).decision).toBe("permit");
   });
 
+  // SECURITY TIGHTENING (jeswr/sparq#890, surfaced by roborev): an A2A `grant` intent
+  // CHANGES ACCESS CONTROL — it must not be authorized by a broad data-`use` policy.
+  it("maps the A2A grant verb to `control`, NOT `use` (no ACL over-grant)", () => {
+    expect(A2A_ACTION_TO_ODRL.grant).toBe("control");
+    expect(A2A_ACTION_TO_ODRL.grant).not.toBe("use");
+  });
+
+  it("a broad `use` data-use permission does NOT authorize an A2A grant intent", () => {
+    const policy: OdrlPolicy = {
+      id: "p",
+      // a broad "permit all data use" permission.
+      permissions: [{ type: "permission", action: "use", target: RES, assignee: BOB }],
+    };
+    const grantCtx = requestContextFromA2AIntent({
+      action: "grant",
+      target: RES,
+      agent: BOB,
+      recipient: OWNER,
+    });
+    // Pre-tightening: grant → use → permit (WRONG — a data policy authorizing an ACL
+    // grant). Now: grant → control, outside the use umbrella → notApplicable.
+    expect(grantCtx.action).toBe("control");
+    expect(evaluate(policy, grantCtx).decision).toBe("notApplicable");
+    // A genuine data-use request (read) IS still covered by `use`.
+    const readCtx = requestContextFromA2AIntent({ action: "read", target: RES, agent: BOB });
+    expect(evaluate(policy, readCtx).decision).toBe("permit");
+  });
+
+  it("an A2A grant intent IS matched by an explicit `control` permission", () => {
+    const policy: OdrlPolicy = {
+      id: "p",
+      permissions: [{ type: "permission", action: "control", target: RES, assignee: BOB }],
+    };
+    const ctx = requestContextFromA2AIntent({
+      action: "grant",
+      target: RES,
+      agent: BOB,
+      recipient: OWNER,
+    });
+    expect(evaluate(policy, ctx).decision).toBe("permit");
+  });
+
   it("falls back to the use umbrella for an unknown verb", () => {
     const ctx = requestContextFromA2AIntent({ action: "frobnicate", target: RES, agent: BOB });
     expect(ctx.action).toBe("use");
@@ -137,6 +179,35 @@ describe("requestContextFromWac", () => {
       permissions: [{ type: "permission", action: "append", target: RES, assignee: BOB }],
     };
     expect(evaluate(policy, requestContextFromWac(BOB, "Append", RES)).decision).toBe("permit");
+  });
+
+  // WAC subsumption (roborev finding 2): acl:Append IS a subclass of acl:Write, so a
+  // `write` permission must also satisfy an Append request (a STRONGER grant covers
+  // the WEAKER request — strictly safe; the reverse is NOT true).
+  it("a WAC Append request IS matched by a `write` permission (write ⊇ append)", () => {
+    const policy: OdrlPolicy = {
+      id: "p",
+      permissions: [{ type: "permission", action: "write", target: RES, assignee: BOB }],
+    };
+    expect(evaluate(policy, requestContextFromWac(BOB, "Append", RES)).decision).toBe("permit");
+  });
+
+  it("an `append` permission does NOT cover a WAC Write request (subsumption is one-way)", () => {
+    const policy: OdrlPolicy = {
+      id: "p",
+      permissions: [{ type: "permission", action: "append", target: RES, assignee: BOB }],
+    };
+    // append must NEVER cover write/modify — that was the original over-grant.
+    expect(evaluate(policy, requestContextFromWac(BOB, "Write", RES)).decision).toBe(
+      "notApplicable",
+    );
+    const modifyPolicy: OdrlPolicy = {
+      id: "p2",
+      permissions: [{ type: "permission", action: "append", target: RES, assignee: BOB }],
+    };
+    expect(evaluate(modifyPolicy, { action: "modify", target: RES, agent: BOB }).decision).toBe(
+      "notApplicable",
+    );
   });
 
   it("a WAC Control request does NOT match a broad `use` data-use permission (no over-grant)", () => {

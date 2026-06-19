@@ -173,6 +173,14 @@ action, so an Append/Control request can never be widened into a broader grant. 
 the correct action for a mode is unaffected; a policy that *relied* on the old over-grant (writing
 `modify`/`use` to mean append/control) must now use the explicit `append`/`control` action.
 
+The same tightening applies to the **A2A verb map** (`A2A_ACTION_TO_ODRL`): the `grant` verb (which
+*changes access control*) maps to `control`, **not** `use` — a broad data-`use` policy can no longer
+authorize an ACL grant. The `append` verb maps to `append`, not `modify`.
+
+**Action subsumption (WAC-faithful, one-way).** A `write` permission also satisfies an `append`
+request, because `acl:Append` is a subclass of `acl:Write` (a stronger grant covers the weaker
+request). The reverse never holds: an `append` permission never covers a `write`/`modify` request.
+
 [oac]: https://w3id.org/oac
 [sparq890]: https://github.com/jeswr/sparq/issues/890
 

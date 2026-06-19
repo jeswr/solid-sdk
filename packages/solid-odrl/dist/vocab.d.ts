@@ -129,9 +129,10 @@ export declare const VALID_ACTION_IRIS: ReadonlySet<string>;
  * on `odrl:use` covers any more-specific data-use action. This map records, for a
  * requested concrete action, the set of policy action names that IMPLY it (the
  * requested action itself, plus `use` UNLESS the action is not a data-use action —
- * see {@link NOT_UNDER_USE}). Used by the evaluator to match a `use` rule against a
- * concrete `read`/`write`/… request (ODRL action-hierarchy semantics — the
- * Vocabulary models `odrl:use` as the parent via `skos:broader`).
+ * see {@link NOT_UNDER_USE}, plus any {@link EXTRA_IMPLIED_BY} subsumption). Used by
+ * the evaluator to match a `use` rule against a concrete `read`/`write`/… request
+ * (ODRL action-hierarchy semantics — the Vocabulary models `odrl:use` as the parent
+ * via `skos:broader`).
  */
 export declare const ACTION_IMPLIED_BY: Readonly<Record<OdrlActionName, ReadonlySet<OdrlActionName>>>;
 /** `acl:Read`. */
@@ -160,8 +161,11 @@ export type AclMode = (typeof ACL_MODES)[number];
  *    `Append → modify` was an OVER-GRANT: it conflated add-only access with full
  *    data mutation, so an append-only intent compiled to `modify` and a `modify`
  *    rule wrongly matched an Append request. `append` is its own narrow action
- *    (backed by `acl:Append`); it is covered by the `use` umbrella (it IS a data
- *    access mode) but never by a `modify`/`write` rule.
+ *    (backed by `acl:Append`); an Append request is covered by the `use` umbrella
+ *    (it IS a data-access mode) and by a `write` rule (WAC: `acl:Append` is a
+ *    subclass of `acl:Write`, so granting Write satisfies Append — see
+ *    {@link ACTION_IMPLIED_BY}), but NEVER by a `modify` rule, and an `append` grant
+ *    NEVER covers a `write`/`modify` request.
  *  - `Control` → `control` — NOT `use`. `acl:Control` governs the ACL DOCUMENT, not
  *    data use ("Having acl:Control does not imply acl:Read or acl:Write to the
  *    resource itself" — WAC spec). The previous `Control → use` was a serious

@@ -48,7 +48,15 @@ export const A2A_ACTION_TO_ODRL: Readonly<Record<string, OdrlActionName>> = {
   append: "append",
   delete: "delete",
   list: "read",
-  grant: "use",
+  // `grant` CHANGES ACCESS CONTROL (grants a recipient access to the resource) — it
+  // is an ACL-document operation, exactly what `acl:Control` governs. Mapping it to
+  // the broad data-use `use` was an OVER-GRANT (a "permit use" data policy would
+  // authorize granting access to others). Map to the narrow `control` action — which
+  // is OUTSIDE the `use` umbrella (vocab.ts) — so only an explicit `control` policy
+  // can authorize a grant. (Same class of over-grant as the WAC `Control` fix.)
+  grant: "control",
+  // `subscribe` is a read-class data operation (notifications require Read on the
+  // resource), not an ACL operation — it stays under the data-use umbrella.
   subscribe: "use",
   query: "read",
 };

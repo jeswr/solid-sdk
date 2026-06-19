@@ -225,13 +225,30 @@ export const VALID_ACTION_IRIS: ReadonlySet<string> = new Set(Object.values(ACTI
 const NOT_UNDER_USE: ReadonlySet<OdrlActionName> = new Set<OdrlActionName>(["control"]);
 
 /**
+ * Extra (non-umbrella) implications from the ACL/WAC action hierarchy. Each entry
+ * `requested → [implying…]` says "a rule on any of `implying` also covers a request
+ * for `requested`". This is the SUBSUMPTION direction (a STRONGER grant covers a
+ * WEAKER request) — strictly safe (it never lets a weaker grant cover a stronger
+ * request):
+ *  - `append ← write`: `acl:Append` is a STRICT SUBCLASS of `acl:Write` (WAC spec —
+ *    "acl:Append is a subclass of acl:Write"; granting Write implicitly satisfies
+ *    Append). So a `write` permission must also permit an `append` request. The
+ *    reverse is NOT added (an `append` grant must never cover a `write`/`modify`
+ *    request — that was the over-grant this whole change removes).
+ */
+const EXTRA_IMPLIED_BY: Partial<Record<OdrlActionName, readonly OdrlActionName[]>> = {
+  append: ["write"],
+};
+
+/**
  * `odrl:use` is the broad umbrella DATA-USE action: an ODRL permission/prohibition
  * on `odrl:use` covers any more-specific data-use action. This map records, for a
  * requested concrete action, the set of policy action names that IMPLY it (the
  * requested action itself, plus `use` UNLESS the action is not a data-use action —
- * see {@link NOT_UNDER_USE}). Used by the evaluator to match a `use` rule against a
- * concrete `read`/`write`/… request (ODRL action-hierarchy semantics — the
- * Vocabulary models `odrl:use` as the parent via `skos:broader`).
+ * see {@link NOT_UNDER_USE}, plus any {@link EXTRA_IMPLIED_BY} subsumption). Used by
+ * the evaluator to match a `use` rule against a concrete `read`/`write`/… request
+ * (ODRL action-hierarchy semantics — the Vocabulary models `odrl:use` as the parent
+ * via `skos:broader`).
  */
 export const ACTION_IMPLIED_BY: Readonly<Record<OdrlActionName, ReadonlySet<OdrlActionName>>> =
   Object.fromEntries(
@@ -241,6 +258,10 @@ export const ACTION_IMPLIED_BY: Readonly<Record<OdrlActionName, ReadonlySet<Odrl
       // via the umbrella (it is itself), and it does not cover non-data-use actions.
       if (a !== "use" && !NOT_UNDER_USE.has(a)) {
         implied.add("use");
+      }
+      // ACL/WAC subsumption: a stronger grant covers this weaker request.
+      for (const stronger of EXTRA_IMPLIED_BY[a] ?? []) {
+        implied.add(stronger);
       }
       return [a, implied];
     }),
@@ -274,8 +295,11 @@ export type AclMode = (typeof ACL_MODES)[number];
  *    `Append → modify` was an OVER-GRANT: it conflated add-only access with full
  *    data mutation, so an append-only intent compiled to `modify` and a `modify`
  *    rule wrongly matched an Append request. `append` is its own narrow action
- *    (backed by `acl:Append`); it is covered by the `use` umbrella (it IS a data
- *    access mode) but never by a `modify`/`write` rule.
+ *    (backed by `acl:Append`); an Append request is covered by the `use` umbrella
+ *    (it IS a data-access mode) and by a `write` rule (WAC: `acl:Append` is a
+ *    subclass of `acl:Write`, so granting Write satisfies Append — see
+ *    {@link ACTION_IMPLIED_BY}), but NEVER by a `modify` rule, and an `append` grant
+ *    NEVER covers a `write`/`modify` request.
  *  - `Control` → `control` — NOT `use`. `acl:Control` governs the ACL DOCUMENT, not
  *    data use ("Having acl:Control does not imply acl:Read or acl:Write to the
  *    resource itself" — WAC spec). The previous `Control → use` was a serious
