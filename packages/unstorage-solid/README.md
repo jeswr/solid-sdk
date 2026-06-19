@@ -45,8 +45,28 @@ const v = await storage.getItem("foo:bar"); // "hello"
 await storage.setItem("config:flags", { dark: true }); // JSON round-trips
 const keys = await storage.getKeys("foo"); // ["foo:bar"]
 await storage.removeItem("foo:bar");
-await storage.clear("foo"); // delete everything under foo/
+await storage.clear(); // delete everything under the driver base
 ```
+
+### Clearing a sub-prefix
+
+`storage.clear()` (no argument) deletes everything under the driver `base`.
+
+`storage.clear("foo")` on a **root-mounted** driver does **not** clear `foo/` —
+this is unstorage routing, not the driver: unstorage's `clear(prefix)` dispatches
+to the mounts whose mountpoint is *under* `prefix` (`getMounts(prefix, false)`),
+and the root mount (`""`) is a *parent* of `"foo:"`, so it is excluded and the
+call is a no-op. To clear only a sub-tree, **mount the driver under that prefix**
+and clear the mountpoint:
+
+```ts
+storage.mount("foo", solidDriver({ base: "https://alice.pod.example/kv/foo/", fetch }));
+await storage.clear("foo"); // dispatches to the "foo" mount → deletes everything under foo/
+```
+
+(The driver's own `clear(relativeBase)` honours a sub-prefix — that is what
+unstorage invokes for a mounted prefix — so prefix-clear works exactly when
+unstorage actually routes the prefix to the driver.)
 
 ### Nitro / Nuxt `useStorage()`
 

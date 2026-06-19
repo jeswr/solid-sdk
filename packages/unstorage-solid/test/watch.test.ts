@@ -172,6 +172,35 @@ describe("watch", () => {
     expect(onDegrade).toHaveBeenCalledWith(expect.stringContaining("watch disabled"));
   });
 
+  it("applies driver `headers` to notification discovery + subscribe requests", async () => {
+    const seen: Record<string, string | null>[] = [];
+    const fetchImpl: typeof globalThis.fetch = (async (input, init) => {
+      const url = typeof input === "string" ? input : (input as URL).toString();
+      const method = (init?.method ?? "GET").toUpperCase();
+      seen.push({
+        method: `${method} ${url}`,
+        auth: new Headers(init?.headers).get("authorization"),
+      });
+      return notificationFetch({ advertise: true })(input, init);
+    }) as typeof globalThis.fetch;
+    const driver = solidDriver({
+      base: BASE,
+      fetch: fetchImpl,
+      headers: { authorization: "Bearer tok" },
+      watch: true,
+      wsFactory: (url) => new FakeSocket(url),
+    });
+    await driver.watch?.(() => {});
+    // The HEAD (discovery), GET (description) and POST (subscribe) all carry the
+    // driver header.
+    const methods = seen.map((s) => s.method);
+    expect(methods.some((m) => m.startsWith("HEAD"))).toBe(true);
+    expect(methods.some((m) => m.startsWith("POST"))).toBe(true);
+    for (const s of seen) {
+      expect(s.auth).toBe("Bearer tok");
+    }
+  });
+
   it("dispose() closes open sockets", async () => {
     const driver = solidDriver({
       base: BASE,

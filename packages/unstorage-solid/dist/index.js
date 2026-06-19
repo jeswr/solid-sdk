@@ -161,6 +161,10 @@ import { DataFactory } from "n3";
 
 // src/keys.ts
 var TRAVERSAL_SEGMENTS = /* @__PURE__ */ new Set([".", ".."]);
+function urlSegmentToKeySegment(urlSegment) {
+  const decoded = decodeURIComponent(urlSegment);
+  return decoded.replace(/%/g, "%25").replace(/:/g, "%3A").replace(/\//g, "%2F").replace(/\\/g, "%5C");
+}
 function normalizeBase(base) {
   let url;
   try {
@@ -268,7 +272,11 @@ function urlToKey(base, memberUrl) {
   if (segments.length === 0) {
     return void 0;
   }
-  return segments.map((s) => decodeURIComponent(s)).join(":");
+  try {
+    return segments.map((s) => urlSegmentToKeySegment(s)).join(":");
+  } catch {
+    return void 0;
+  }
 }
 function isContainerUrl(memberUrl) {
   try {
@@ -732,9 +740,13 @@ var solidDriver = defineDriver((options) => {
         return () => {
         };
       }
+      const watchFetch = (input, init) => fetchImpl(input, {
+        ...init,
+        headers: { ...options.headers, ...init?.headers }
+      });
       const startOpts = {
         base,
-        fetch: fetchImpl,
+        fetch: watchFetch,
         callback,
         ...options.wsFactory ? { wsFactory: options.wsFactory } : {},
         ...options.onWatchDegrade ? { onDegrade: options.onWatchDegrade } : {}

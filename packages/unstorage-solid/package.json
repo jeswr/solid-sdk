@@ -60,7 +60,6 @@
     "unstorage": "^1.10.0"
   },
   "dependencies": {
-    "@jeswr/fetch-rdf": "github:jeswr/fetch-rdf#main",
     "@rdfjs/types": "^2.0.1",
     "@rdfjs/wrapper": "^0.34.0",
     "@solid/object": "^0.6.0",
@@ -71,6 +70,7 @@
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.3",
     "@biomejs/biome": "^2.0.0",
+    "@jeswr/fetch-rdf": "github:jeswr/fetch-rdf#main",
     "@microsoft/api-extractor": "^7.47.0",
     "@types/content-type": "^1.1.8",
     "@types/n3": "^1.16.0",

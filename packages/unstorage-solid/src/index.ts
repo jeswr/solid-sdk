@@ -387,9 +387,16 @@ const solidDriver = defineDriver<SolidDriverOptions, undefined>((options) => {
         options.onWatchDegrade?.("watch disabled (set `watch: true` in driver options)");
         return () => {};
       }
+      // Apply the driver `headers` to the notification discovery/subscribe
+      // requests too (the option is documented as merged into EVERY request).
+      const watchFetch: typeof globalThis.fetch = (input, init) =>
+        fetchImpl(input, {
+          ...init,
+          headers: { ...options.headers, ...(init?.headers as object) },
+        });
       const startOpts = {
         base,
-        fetch: fetchImpl,
+        fetch: watchFetch,
         callback,
         ...(options.wsFactory ? { wsFactory: options.wsFactory } : {}),
         ...(options.onWatchDegrade ? { onDegrade: options.onWatchDegrade } : {}),

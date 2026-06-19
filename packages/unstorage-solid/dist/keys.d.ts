@@ -28,9 +28,14 @@ export declare function assertWithinBase(base: string, url: string): void;
  * itself or does not lie under `base` (defence in depth — a hostile/buggy server
  * cannot inject a foreign URL into the key space).
  *
- * The returned key is `:`-delimited with each path segment decoded, so it
- * round-trips exactly through {@link keyToUrl}. A trailing slash (container
- * member) is stripped before mapping — callers track container-ness separately.
+ * The returned key is `:`-delimited; each path segment is decoded for
+ * readability but its key-level meta-characters (`%`, `:`, `/`, `\`) are
+ * re-escaped (see {@link urlSegmentToKeySegment}) so the key round-trips exactly
+ * through {@link keyToUrl} — `keyToUrl(base, urlToKey(base, url)) === url`. A
+ * trailing slash (container member) is stripped before mapping — callers track
+ * container-ness separately. Returns `undefined` if any segment is not
+ * well-formed percent-encoding (a hostile/buggy server cannot inject a malformed
+ * member into the key space).
  */
 export declare function urlToKey(base: string, memberUrl: string): string | undefined;
 /** True iff `memberUrl` is a container (LDP convention: a trailing slash). */

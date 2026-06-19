@@ -26,6 +26,35 @@
 const TRAVERSAL_SEGMENTS = new Set([".", ".."]);
 
 /**
+ * Map a single URL path segment back to a KEY segment that round-trips exactly
+ * through {@link keyToUrl}.
+ *
+ * The segment is decoded for readability (so a space stays a space, `#`/`?` stay
+ * literal), BUT the four characters that carry meaning at the KEY level — `%`
+ * (escape introducer), `:` (the key separator), and `/`/`\` (rejected as raw
+ * traversal vectors) — are re-escaped so the produced key segment:
+ *   - contains no raw `:`/`/`/`\` (cannot introduce a false separator or be
+ *     rejected by the raw-slash guard), and
+ *   - decodes cleanly back to the original value (escaping `%` first keeps any
+ *     literal `%` in the decoded value a well-formed `%25`).
+ *
+ * So a single URL segment always maps to a single key segment, and
+ * `keyToUrl(base, urlToKey(base, url)) === url` for every member URL we emit.
+ * (A "nice" segment with none of those four characters is returned decoded
+ * verbatim — the human-readable canonical form.)
+ */
+function urlSegmentToKeySegment(urlSegment: string): string {
+  const decoded = decodeURIComponent(urlSegment);
+  // Escape `%` FIRST (so an already-literal `%` becomes `%25` and the result is
+  // well-formed), then the key-level separators `:`, `/`, `\`.
+  return decoded
+    .replace(/%/g, "%25")
+    .replace(/:/g, "%3A")
+    .replace(/\//g, "%2F")
+    .replace(/\\/g, "%5C");
+}
+
+/**
  * Normalise a base container URL to exactly one trailing slash. Throws if the
  * base is not an absolute http(s) URL.
  */
@@ -152,9 +181,14 @@ export function assertWithinBase(base: string, url: string): void {
  * itself or does not lie under `base` (defence in depth — a hostile/buggy server
  * cannot inject a foreign URL into the key space).
  *
- * The returned key is `:`-delimited with each path segment decoded, so it
- * round-trips exactly through {@link keyToUrl}. A trailing slash (container
- * member) is stripped before mapping — callers track container-ness separately.
+ * The returned key is `:`-delimited; each path segment is decoded for
+ * readability but its key-level meta-characters (`%`, `:`, `/`, `\`) are
+ * re-escaped (see {@link urlSegmentToKeySegment}) so the key round-trips exactly
+ * through {@link keyToUrl} — `keyToUrl(base, urlToKey(base, url)) === url`. A
+ * trailing slash (container member) is stripped before mapping — callers track
+ * container-ness separately. Returns `undefined` if any segment is not
+ * well-formed percent-encoding (a hostile/buggy server cannot inject a malformed
+ * member into the key space).
  */
 export function urlToKey(base: string, memberUrl: string): string | undefined {
   const b = new URL(base);
@@ -184,7 +218,13 @@ export function urlToKey(base: string, memberUrl: string): string | undefined {
   if (segments.length === 0) {
     return undefined;
   }
-  return segments.map((s) => decodeURIComponent(s)).join(":");
+  try {
+    return segments.map((s) => urlSegmentToKeySegment(s)).join(":");
+  } catch {
+    // A malformed percent-escape in a member URL (decodeURIComponent threw) —
+    // refuse it rather than surface a corrupt key (defence in depth).
+    return undefined;
+  }
 }
 
 /** True iff `memberUrl` is a container (LDP convention: a trailing slash). */

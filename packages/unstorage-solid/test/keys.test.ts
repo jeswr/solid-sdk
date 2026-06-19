@@ -52,19 +52,50 @@ describe("keyToUrl / urlToKey round-trip", () => {
     expect(url).toContain("%3Fdraft");
     expect(urlToKey(BASE, url)).toBe(key);
   });
-  it("a pre-encoded `%2F` in a segment is decoded once then re-encoded (idempotent, never a separator)", () => {
-    // A caller may pass either the decoded form (`weird/seg` — but that contains a
-    // raw slash and is rejected) or the pre-encoded form (`weird%2Fseg`). The
-    // pre-encoded form is accepted: it is decoded to `weird/seg` for the segment
-    // value then re-encoded, so the URL keeps `%2F` (it can never become a path
-    // separator) and the key round-trips to its DECODED canonical form.
+  it("a pre-encoded `%2F` in a segment stays encoded and round-trips losslessly", () => {
+    // A caller passes the pre-encoded form (`weird%2Fseg`) to put a literal `/`
+    // INSIDE a single key segment (a raw `/` key is rejected by design). It is
+    // decoded to `weird/seg` for the value then re-encoded, so the URL keeps
+    // `%2F` (the `/` can never become a path separator).
     const url = keyToUrl(BASE, "weird%2Fseg");
     expect(url).toBe("https://pod.example/kv/weird%2Fseg");
-    // urlToKey decodes the segment -> the canonical key is the decoded form.
-    expect(urlToKey(BASE, url)).toBe("weird/seg");
-    // And the canonical decoded key, if it could be re-supplied, maps to the same
-    // URL (idempotent) — but note a raw `/` key is rejected by design, so the
-    // canonical round-trip entry point is the pre-encoded form above.
+    // urlToKey must round-trip EXACTLY: it re-escapes the key-level separator `/`
+    // so the returned key maps back to the same URL (a raw `/` would not).
+    const key = urlToKey(BASE, url);
+    expect(key).toBe("weird%2Fseg");
+    expect(keyToUrl(BASE, key as string)).toBe(url);
+  });
+
+  it("round-trips a key segment containing an encoded `:` / `/` / `\\` losslessly", () => {
+    // These four chars carry KEY-level meaning (`:` separator, `/`/`\` rejected,
+    // `%` escape introducer). A single URL segment carrying them must map back to
+    // a SINGLE key segment that re-maps to the identical URL.
+    for (const literal of ["a:b", "a/b", "a\\b", "100%done", "x:y/z\\w%q"]) {
+      const urlSeg = encodeURIComponent(literal); // e.g. "a%3Ab"
+      const url = `${BASE}${urlSeg}`;
+      const key = urlToKey(BASE, url);
+      expect(key).toBeDefined();
+      // The key has no RAW separator char (so it is one segment, not several).
+      expect((key as string).includes(":")).toBe(false);
+      expect((key as string).includes("/")).toBe(false);
+      expect((key as string).includes("\\")).toBe(false);
+      // …and it maps back to the EXACT same URL.
+      expect(keyToUrl(BASE, key as string)).toBe(url);
+    }
+  });
+
+  it("getKeys-style nested members with encoded separators round-trip", () => {
+    // A two-segment path where each segment carries an encoded separator: the key
+    // must split into exactly two `:`-delimited segments and re-map to the URL.
+    const url = `${BASE}${encodeURIComponent("a:b")}/${encodeURIComponent("c/d")}`;
+    const key = urlToKey(BASE, url);
+    expect(key).toBe("a%3Ab:c%2Fd");
+    expect(keyToUrl(BASE, key as string)).toBe(url);
+  });
+
+  it("returns undefined for a member URL with a malformed percent-escape", () => {
+    // `%zz` is not valid percent-encoding — decodeURIComponent throws; we refuse.
+    expect(urlToKey(BASE, `${BASE}bad%zzseg`)).toBeUndefined();
   });
 });
 

@@ -204,6 +204,42 @@ describe("clear", () => {
     // The dir/ container itself was removed too.
     expect(mock.resources.has(`${BASE}dir/`)).toBe(false);
   });
+
+  it("clears a sub-prefix via the SUPPORTED public path (driver mounted under a prefix)", async () => {
+    // The README's supported sub-prefix-clear pattern: mount the driver UNDER a
+    // mountpoint and clear that mountpoint — unstorage then routes the prefix to
+    // driver.clear with relativeBase "". This is the public-API equivalent of the
+    // direct driver.clear test above (which exists because storage.clear("foo")
+    // on a ROOT mount is a unstorage-level no-op — documented in the README).
+    const rootMock = new MockLdp({ base: BASE });
+    const podMock = new MockLdp({ base: `${BASE}pod/` });
+    const storage = createStorage();
+    storage.mount("root", solidDriver({ base: BASE, fetch: rootMock.fetch }));
+    storage.mount("root:pod", solidDriver({ base: `${BASE}pod/`, fetch: podMock.fetch }));
+    await storage.setItem("root:keep", "1");
+    await storage.setItem("root:pod:gone", "2");
+    await storage.setItem("root:pod:deep:also-gone", "3");
+
+    await storage.clear("root:pod");
+
+    // Everything under the pod mount is gone; the sibling key is untouched.
+    // (unstorage's destr() parses the stored "1" back to the number 1 on read.)
+    expect(await storage.getItem("root:pod:gone")).toBeNull();
+    expect(await storage.getItem("root:pod:deep:also-gone")).toBeNull();
+    expect(await storage.getItem("root:keep")).toBe(1);
+  });
+
+  it("clear-all (no prefix) is the supported root-mount path and empties the base", async () => {
+    const mock = new MockLdp({ base: BASE });
+    const storage = makeStorage(mock);
+    await storage.setItem("a", "1");
+    await storage.setItem("dir:b", "2");
+    // The whole-mount clear is the supported public path for a root mount.
+    await storage.clear();
+    expect(await storage.getKeys()).toEqual([]);
+    // The driver base container is preserved (never deleted).
+    expect(mock.resources.has(BASE)).toBe(true);
+  });
 });
 
 describe("getMeta", () => {
