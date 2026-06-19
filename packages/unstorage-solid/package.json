@@ -1,0 +1,91 @@
+{
+  "name": "@jeswr/unstorage-solid",
+  "version": "0.1.0",
+  "description": "An unstorage defineDriver() driver that backs unstorage's KV API with a Solid pod over LDP. Keys map to LDP resource paths; values are opaque KV blobs; container listings parsed via @jeswr/fetch-rdf. Experimental, AI-agent-generated.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build:deps": "node scripts/build-deps.mjs",
+    "build": "node scripts/build-dist.mjs",
+    "build:dev": "npm run build:deps && tsc -p tsconfig.build.json",
+    "check:dist": "node scripts/check-dist-fresh.mjs",
+    "check:lockfile-transport": "node scripts/check-lockfile-transport.mjs",
+    "typecheck": "npm run build:deps && tsc -p tsconfig.json --noEmit",
+    "lint": "biome check src test scripts && npm run check:lockfile-transport",
+    "lint:fix": "biome check --write src test scripts",
+    "test": "npm run build:deps && vitest run",
+    "test:coverage": "npm run build:deps && vitest run --coverage",
+    "api": "api-extractor run --local",
+    "check:api": "api-extractor run",
+    "publint": "publint",
+    "attw": "attw --pack . --ignore-rules cjs-resolves-to-esm",
+    "prepare": "npm run build"
+  },
+  "keywords": [
+    "unstorage",
+    "solid",
+    "ldp",
+    "driver",
+    "kv",
+    "key-value",
+    "pod",
+    "rdf",
+    "linked-data",
+    "nitro",
+    "nuxt"
+  ],
+  "author": "Jesse Wright <jwrightwho@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jeswr/unstorage-solid.git"
+  },
+  "bugs": {
+    "url": "https://github.com/jeswr/unstorage-solid/issues"
+  },
+  "homepage": "https://github.com/jeswr/unstorage-solid#readme",
+  "peerDependencies": {
+    "unstorage": "^1.10.0"
+  },
+  "dependencies": {
+    "@jeswr/fetch-rdf": "github:jeswr/fetch-rdf#main",
+    "@rdfjs/types": "^2.0.1",
+    "@rdfjs/wrapper": "^0.34.0",
+    "@solid/object": "^0.6.0",
+    "content-type": "^1.0.5",
+    "jsonld-streaming-parser": "^5.0.0",
+    "n3": "^2.0.3"
+  },
+  "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.3",
+    "@biomejs/biome": "^2.0.0",
+    "@microsoft/api-extractor": "^7.47.0",
+    "@types/content-type": "^1.1.8",
+    "@types/n3": "^1.16.0",
+    "@types/node": "^22.0.0",
+    "@vitest/coverage-v8": "^2.1.0",
+    "esbuild": "^0.21.5",
+    "publint": "^0.2.0",
+    "typescript": "^5.6.0",
+    "unstorage": "^1.10.0",
+    "vitest": "^2.1.0"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

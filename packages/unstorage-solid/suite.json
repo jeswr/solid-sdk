@@ -1,0 +1,27 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jeswr/full-solid-ecosystem/main/tracking/schema/suite.schema.json",
+  "id": "unstorage-solid",
+  "kind": "sdk",
+  "name": "Unstorage Solid Driver",
+  "repo": "https://github.com/jeswr/unstorage-solid",
+  "category": "infrastructure",
+  "maturity": "prototype",
+  "visibility": "public",
+  "stack": {
+    "lang": "TypeScript (ESM, NodeNext)",
+    "unstorage": "unstorage ^1.10.0 (peerDependency — the KV API this driver backs)",
+    "rdf": "n3 ^2.x (container listing only)",
+    "rdf-wrapper": "@rdfjs/wrapper ^0.34.x",
+    "solid-object": "@solid/object ^0.6.x (ContainerDataset for ldp:contains)",
+    "fetch-rdf": "@jeswr/fetch-rdf (git: jeswr/fetch-rdf#main; inlined into dist)",
+    "test": "vitest ^2.x",
+    "lint": "@biomejs/biome ^2.x",
+    "api": "@microsoft/api-extractor + publint + @arethetypeswrong/cli",
+    "node": ">=20"
+  },
+  "dependsOn": ["fetch-rdf"],
+  "federation": {
+    "sectors": [],
+    "membershipTodo": "SDK (not an app). An unstorage `defineDriver()` driver that backs unstorage's KV API with a Solid pod over LDP: keys map to LDP resource paths under a base container, values are opaque KV blobs (text/json/binary), and getKeys reads ldp:contains container listings via @jeswr/fetch-rdf + @solid/object. Watch uses Solid Notifications WebSocketChannel2023 with graceful degradation. No federation membership of its own — it is storage glue."
+  }
+}
