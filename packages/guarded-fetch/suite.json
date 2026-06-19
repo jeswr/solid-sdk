@@ -1,0 +1,30 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jeswr/full-solid-ecosystem/main/tracking/schema/suite.schema.json",
+  "id": "guarded-fetch",
+  "kind": "sdk",
+  "name": "Guarded Fetch (SSRF / DNS-rebinding guard)",
+  "repo": "https://github.com/jeswr/guarded-fetch",
+  "category": "infrastructure",
+  "maturity": "prototype",
+  "visibility": "public",
+  "stack": {
+    "lang": "TypeScript (ESM, NodeNext)",
+    "ip-classification": "ipaddr.js 2.4.0 (bundled into dist)",
+    "node-pin": "undici 8.5.0 (./node entry only, consumer-resolved)",
+    "test": "vitest ^2.x",
+    "lint": "@biomejs/biome ^2.x",
+    "api-report": "@microsoft/api-extractor (etc/guarded-fetch.api.md)",
+    "publish-checks": "publint --strict + @arethetypeswrong/cli",
+    "node": ">=22"
+  },
+  "dependsOn": [],
+  "consolidates": [
+    "federation-client/src/ssrf.ts",
+    "solid-community-feeds/src/safeFetch.ts",
+    "solid-agent-notify/src/security/ssrf.ts",
+    "prod-solid-server/packages/guarded-fetch (reference, @pss/guarded-fetch)"
+  ],
+  "federation": {
+    "membershipTodo": "SDK (not an app) — a security primitive consumed by suite packages that dereference an attacker-influenceable URL (federation registry/storage discovery, community feed sources, LDN cross-pod delivery). It holds no federation membership of its own; it provides the SSRF / DNS-rebinding egress guard those consumers route every outbound external fetch through."
+  }
+}

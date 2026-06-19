@@ -1,0 +1,78 @@
+{
+  "name": "@jeswr/guarded-fetch",
+  "version": "0.1.0",
+  "description": "SSRF / DNS-rebinding-guarded fetch for the @jeswr Solid suite: a public-address-only IP classifier (RFC1918 / CGNAT / link-local incl. cloud-metadata / IPv4-mapped IPv6 / ULA / 6to4 / NAT64 embedded-v4 / TEST-NET), an https-only no-userinfo policy core with per-resolved-record rebinding re-check, a manual-redirect re-validation loop (cross-origin credential + body strip), a response-size cap + timeout, and an injectable-fetch seam. Browser-safe by default (no node: import); an opt-in ./node entry adds a full undici DNS-pinning fetch (closes the lookup->connect TOCTOU). Consolidated from the suite's three divergent copies. Experimental, AI-agent-generated.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./node": {
+      "types": "./dist/node.d.ts",
+      "import": "./dist/node.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "node scripts/build-dist.mjs",
+    "check:dist": "node scripts/check-dist-fresh.mjs",
+    "check:lockfile-transport": "node scripts/check-lockfile-transport.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "biome check src test scripts && npm run check:lockfile-transport",
+    "lint:fix": "biome check --write src test scripts",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "api": "api-extractor run --local && api-extractor run --local --config api-extractor.node.json",
+    "check:api": "api-extractor run && api-extractor run --config api-extractor.node.json",
+    "publint": "publint --strict",
+    "attw": "attw --pack . --profile node16 --ignore-rules cjs-resolves-to-esm",
+    "gate": "npm run lint && npm run typecheck && npm run test && npm run build && npm run check:dist && npm run check:api && npm run publint && npm run attw",
+    "prepare": "npm run build"
+  },
+  "keywords": [
+    "ssrf",
+    "dns-rebinding",
+    "fetch",
+    "security",
+    "solid",
+    "ip-classification",
+    "undici"
+  ],
+  "author": "Jesse Wright <jwrightwho@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jeswr/guarded-fetch.git"
+  },
+  "bugs": {
+    "url": "https://github.com/jeswr/guarded-fetch/issues"
+  },
+  "homepage": "https://github.com/jeswr/guarded-fetch#readme",
+  "dependencies": {
+    "undici": "8.5.0"
+  },
+  "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.0",
+    "@biomejs/biome": "^2.0.0",
+    "@microsoft/api-extractor": "^7.47.0",
+    "@types/node": "^22.0.0",
+    "@vitest/coverage-v8": "^2.1.0",
+    "esbuild": "^0.21.5",
+    "ipaddr.js": "2.4.0",
+    "publint": "^0.3.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
