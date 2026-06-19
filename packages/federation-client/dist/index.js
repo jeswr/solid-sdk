@@ -1103,13 +1103,7 @@ function describeError22(err) {
   return err instanceof Error ? err.message : String(err);
 }
 
-// src/ssrf.ts
-var SsrfError = class extends Error {
-  constructor(message2, options) {
-    super(message2, options);
-    this.name = "SsrfError";
-  }
-};
+// src/ip.ts
 var IPV4_OCTET = /^(?:0|[1-9]\d{0,2})$/;
 function classifyIpLiteral(value) {
   if (isIpv4Literal(value)) {
@@ -1198,6 +1192,192 @@ function isIpv6Literal(value) {
 function isHextet(group) {
   return /^[0-9a-fA-F]{1,4}$/.test(group);
 }
+function isPublicAddress(address, allowLoopback) {
+  const family = classifyIpLiteral(address);
+  if (family === 4) {
+    return isPublicIpv4(address, allowLoopback);
+  }
+  if (family === 6) {
+    return isPublicIpv6(address, allowLoopback);
+  }
+  return false;
+}
+function isLoopbackAddress(address) {
+  const family = classifyIpLiteral(address);
+  if (family === 4) {
+    return address.startsWith("127.");
+  }
+  if (family === 6) {
+    const lower = address.toLowerCase();
+    if (lower === "::1" || lower === "0:0:0:0:0:0:0:1") {
+      return true;
+    }
+    if (lower.startsWith("::ffff:")) {
+      const v4 = lower.slice("::ffff:".length);
+      return classifyIpLiteral(v4) === 4 && v4.startsWith("127.");
+    }
+  }
+  return false;
+}
+function isPublicIpv4(address, allowLoopback) {
+  const parts = address.split(".").map((p) => Number.parseInt(p, 10));
+  if (parts.length !== 4 || parts.some((p) => Number.isNaN(p) || p < 0 || p > 255)) {
+    return false;
+  }
+  const [a, b, c] = parts;
+  if (a === 0) {
+    return false;
+  }
+  if (a === 127) {
+    return allowLoopback;
+  }
+  if (a === 10) {
+    return false;
+  }
+  if (a === 172 && b >= 16 && b <= 31) {
+    return false;
+  }
+  if (a === 192 && b === 168) {
+    return false;
+  }
+  if (a === 169 && b === 254) {
+    return false;
+  }
+  if (a === 100 && b >= 64 && b <= 127) {
+    return false;
+  }
+  if (a >= 224 && a <= 239) {
+    return false;
+  }
+  if (a >= 240) {
+    return false;
+  }
+  if (a === 192 && b === 0 && c === 2) {
+    return false;
+  }
+  if (a === 198 && (b === 18 || b === 19)) {
+    return false;
+  }
+  if (a === 198 && b === 51 && c === 100) {
+    return false;
+  }
+  if (a === 203 && b === 0 && c === 113) {
+    return false;
+  }
+  return true;
+}
+function extractEmbeddedV4(hextets, startHextet) {
+  const h1 = hextets[startHextet];
+  const h2 = hextets[startHextet + 1];
+  if (!h1 || !h2) {
+    return void 0;
+  }
+  const w1 = Number.parseInt(h1, 16);
+  const w2 = Number.parseInt(h2, 16);
+  if (Number.isNaN(w1) || Number.isNaN(w2) || w1 < 0 || w1 > 65535 || w2 < 0 || w2 > 65535) {
+    return void 0;
+  }
+  return `${w1 >> 8 & 255}.${w1 & 255}.${w2 >> 8 & 255}.${w2 & 255}`;
+}
+function isPublicIpv6(address, allowLoopback) {
+  const lower = address.toLowerCase();
+  if (lower === "::1" || lower === "0:0:0:0:0:0:0:1") {
+    return allowLoopback;
+  }
+  if (lower === "::" || lower === "0:0:0:0:0:0:0:0") {
+    return false;
+  }
+  const mappedExpanded = expandIpv6(lower);
+  if (mappedExpanded && mappedExpanded[0] === "0" && mappedExpanded[1] === "0" && mappedExpanded[2] === "0" && mappedExpanded[3] === "0" && mappedExpanded[4] === "0" && mappedExpanded[5] === "ffff") {
+    const v4 = extractEmbeddedV4(mappedExpanded, 6);
+    return v4 !== void 0 && isPublicIpv4(v4, allowLoopback);
+  }
+  const head = lower.split(":")[0] ?? "";
+  const high = Number.parseInt(head, 16);
+  if (Number.isNaN(high)) {
+    return false;
+  }
+  if ((high & 65472) === 65152) {
+    return false;
+  }
+  if ((high & 65024) === 64512) {
+    return false;
+  }
+  if ((high & 65280) === 65280) {
+    return false;
+  }
+  if (high === 8194) {
+    const expanded = expandIpv6(lower);
+    if (expanded) {
+      const v4 = extractEmbeddedV4(expanded, 1);
+      if (v4 && !isPublicIpv4(v4, allowLoopback)) {
+        return false;
+      }
+    } else {
+      return false;
+    }
+  }
+  if (high === 100) {
+    const expanded = expandIpv6(lower);
+    if (expanded && expanded[0] === "64" && expanded[1] === "ff9b" && expanded[2] === "0" && expanded[3] === "0" && expanded[4] === "0" && expanded[5] === "0") {
+      const v4 = extractEmbeddedV4(expanded, 6);
+      if (v4 && !isPublicIpv4(v4, allowLoopback)) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+function expandIpv6(addr) {
+  let s = addr;
+  const dot = s.lastIndexOf(".");
+  if (dot !== -1) {
+    const colon = s.lastIndexOf(":", dot);
+    if (colon === -1) {
+      return void 0;
+    }
+    const v4 = s.slice(colon + 1);
+    if (classifyIpLiteral(v4) !== 4) {
+      return void 0;
+    }
+    const [a, b, c, d] = v4.split(".").map((p) => Number.parseInt(p, 10));
+    if (a === void 0 || b === void 0 || c === void 0 || d === void 0) {
+      return void 0;
+    }
+    s = `${s.slice(0, colon)}:${(a << 8 | b).toString(16)}:${(c << 8 | d).toString(16)}`;
+  }
+  const doubleColon = s.indexOf("::");
+  let hextets;
+  if (doubleColon === -1) {
+    hextets = s.split(":");
+  } else {
+    const head = s.slice(0, doubleColon) === "" ? [] : s.slice(0, doubleColon).split(":");
+    const tail = s.slice(doubleColon + 2) === "" ? [] : s.slice(doubleColon + 2).split(":");
+    const fill = 8 - head.length - tail.length;
+    if (fill < 0) {
+      return void 0;
+    }
+    hextets = [...head, ...Array(fill).fill("0"), ...tail];
+  }
+  if (hextets.length !== 8) {
+    return void 0;
+  }
+  return hextets.map((h) => {
+    const n = Number.parseInt(h, 16);
+    if (Number.isNaN(n) || n < 0 || n > 65535) {
+      return "BAD";
+    }
+    return n.toString(16);
+  });
+}
+
+// src/ssrf.ts
+var SsrfError = class extends Error {
+  constructor(message2, options) {
+    super(message2, options);
+    this.name = "SsrfError";
+  }
+};
 var DEFAULT_MAX_BYTES = 1024 * 1024;
 var DEFAULT_TIMEOUT_MS = 1e4;
 var DEFAULT_MAX_REDIRECTS = 5;
@@ -1583,184 +1763,6 @@ var SsrfGuard = class {
     }
   }
 };
-function isPublicAddress(address, allowLoopback) {
-  const family = classifyIpLiteral(address);
-  if (family === 4) {
-    return isPublicIpv4(address, allowLoopback);
-  }
-  if (family === 6) {
-    return isPublicIpv6(address, allowLoopback);
-  }
-  return false;
-}
-function isLoopbackAddress(address) {
-  const family = classifyIpLiteral(address);
-  if (family === 4) {
-    return address.startsWith("127.");
-  }
-  if (family === 6) {
-    const lower = address.toLowerCase();
-    if (lower === "::1" || lower === "0:0:0:0:0:0:0:1") {
-      return true;
-    }
-    if (lower.startsWith("::ffff:")) {
-      const v4 = lower.slice("::ffff:".length);
-      return classifyIpLiteral(v4) === 4 && v4.startsWith("127.");
-    }
-  }
-  return false;
-}
-function isPublicIpv4(address, allowLoopback) {
-  const parts = address.split(".").map((p) => Number.parseInt(p, 10));
-  if (parts.length !== 4 || parts.some((p) => Number.isNaN(p) || p < 0 || p > 255)) {
-    return false;
-  }
-  const [a, b, c] = parts;
-  if (a === 0) {
-    return false;
-  }
-  if (a === 127) {
-    return allowLoopback;
-  }
-  if (a === 10) {
-    return false;
-  }
-  if (a === 172 && b >= 16 && b <= 31) {
-    return false;
-  }
-  if (a === 192 && b === 168) {
-    return false;
-  }
-  if (a === 169 && b === 254) {
-    return false;
-  }
-  if (a === 100 && b >= 64 && b <= 127) {
-    return false;
-  }
-  if (a >= 224 && a <= 239) {
-    return false;
-  }
-  if (a >= 240) {
-    return false;
-  }
-  if (a === 192 && b === 0 && c === 2) {
-    return false;
-  }
-  if (a === 198 && (b === 18 || b === 19)) {
-    return false;
-  }
-  if (a === 198 && b === 51 && c === 100) {
-    return false;
-  }
-  if (a === 203 && b === 0 && c === 113) {
-    return false;
-  }
-  return true;
-}
-function extractEmbeddedV4(hextets, startHextet) {
-  const h1 = hextets[startHextet];
-  const h2 = hextets[startHextet + 1];
-  if (!h1 || !h2) {
-    return void 0;
-  }
-  const w1 = Number.parseInt(h1, 16);
-  const w2 = Number.parseInt(h2, 16);
-  if (Number.isNaN(w1) || Number.isNaN(w2) || w1 < 0 || w1 > 65535 || w2 < 0 || w2 > 65535) {
-    return void 0;
-  }
-  return `${w1 >> 8 & 255}.${w1 & 255}.${w2 >> 8 & 255}.${w2 & 255}`;
-}
-function isPublicIpv6(address, allowLoopback) {
-  const lower = address.toLowerCase();
-  if (lower === "::1" || lower === "0:0:0:0:0:0:0:1") {
-    return allowLoopback;
-  }
-  if (lower === "::" || lower === "0:0:0:0:0:0:0:0") {
-    return false;
-  }
-  const mappedExpanded = expandIpv6(lower);
-  if (mappedExpanded && mappedExpanded[0] === "0" && mappedExpanded[1] === "0" && mappedExpanded[2] === "0" && mappedExpanded[3] === "0" && mappedExpanded[4] === "0" && mappedExpanded[5] === "ffff") {
-    const v4 = extractEmbeddedV4(mappedExpanded, 6);
-    return v4 !== void 0 && isPublicIpv4(v4, allowLoopback);
-  }
-  const head = lower.split(":")[0] ?? "";
-  const high = Number.parseInt(head, 16);
-  if (Number.isNaN(high)) {
-    return false;
-  }
-  if ((high & 65472) === 65152) {
-    return false;
-  }
-  if ((high & 65024) === 64512) {
-    return false;
-  }
-  if ((high & 65280) === 65280) {
-    return false;
-  }
-  if (high === 8194) {
-    const expanded = expandIpv6(lower);
-    if (expanded) {
-      const v4 = extractEmbeddedV4(expanded, 1);
-      if (v4 && !isPublicIpv4(v4, allowLoopback)) {
-        return false;
-      }
-    } else {
-      return false;
-    }
-  }
-  if (high === 100) {
-    const expanded = expandIpv6(lower);
-    if (expanded && expanded[0] === "64" && expanded[1] === "ff9b" && expanded[2] === "0" && expanded[3] === "0" && expanded[4] === "0" && expanded[5] === "0") {
-      const v4 = extractEmbeddedV4(expanded, 6);
-      if (v4 && !isPublicIpv4(v4, allowLoopback)) {
-        return false;
-      }
-    }
-  }
-  return true;
-}
-function expandIpv6(addr) {
-  let s = addr;
-  const dot = s.lastIndexOf(".");
-  if (dot !== -1) {
-    const colon = s.lastIndexOf(":", dot);
-    if (colon === -1) {
-      return void 0;
-    }
-    const v4 = s.slice(colon + 1);
-    if (classifyIpLiteral(v4) !== 4) {
-      return void 0;
-    }
-    const [a, b, c, d] = v4.split(".").map((p) => Number.parseInt(p, 10));
-    if (a === void 0 || b === void 0 || c === void 0 || d === void 0) {
-      return void 0;
-    }
-    s = `${s.slice(0, colon)}:${(a << 8 | b).toString(16)}:${(c << 8 | d).toString(16)}`;
-  }
-  const doubleColon = s.indexOf("::");
-  let hextets;
-  if (doubleColon === -1) {
-    hextets = s.split(":");
-  } else {
-    const head = s.slice(0, doubleColon) === "" ? [] : s.slice(0, doubleColon).split(":");
-    const tail = s.slice(doubleColon + 2) === "" ? [] : s.slice(doubleColon + 2).split(":");
-    const fill = 8 - head.length - tail.length;
-    if (fill < 0) {
-      return void 0;
-    }
-    hextets = [...head, ...Array(fill).fill("0"), ...tail];
-  }
-  if (hextets.length !== 8) {
-    return void 0;
-  }
-  return hextets.map((h) => {
-    const n = Number.parseInt(h, 16);
-    if (Number.isNaN(n) || n < 0 || n > 65535) {
-      return "BAD";
-    }
-    return n.toString(16);
-  });
-}
 function isRedirect(status) {
   return status === 301 || status === 302 || status === 303 || status === 307 || status === 308;
 }
