@@ -35,6 +35,7 @@ import {
   createNodeGuardedFetch,
   createPinningDispatcher,
   createValidatingLookup,
+  type NodePinningOptions,
   nodeGuardedFetch,
   type ResolveAll,
 } from "../src/node.js";
@@ -696,6 +697,15 @@ describe("createPinningDispatcher — protocol-aware http-loopback-only (re-pin 
     // @ts-expect-error timeoutMs is intentionally not accepted by createPinningDispatcher (omitted)
     const rejected = createPinningDispatcher({ allowLoopback: true, resolveAll, timeoutMs: 1234 });
     await rejected.close().catch(() => {});
+
+    // The harder case (roborev Medium): a value ALREADY typed as NodePinningOptions (with a real
+    // `timeoutMs?: number`) must ALSO be rejected — a bare Omit would let it slip through via
+    // structural assignability. The `timeoutMs?: never` intersection in PinningDispatcherOptions
+    // makes this a type error; @ts-expect-error proves it (FAILS the typecheck if it ever compiles).
+    const preTyped: NodePinningOptions = { allowLoopback: true, resolveAll, timeoutMs: 1234 };
+    // @ts-expect-error a pre-typed NodePinningOptions carrying timeoutMs is not assignable
+    const rejected2 = createPinningDispatcher(preTyped);
+    await rejected2.close().catch(() => {});
 
     const ok = createPinningDispatcher({ allowLoopback: true, resolveAll });
     expect(typeof ok.dispatch).toBe("function"); // it is a real undici Agent (Dispatcher)

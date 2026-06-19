@@ -87,11 +87,20 @@ export {
 
 /**
  * Options for {@link createPinningDispatcher}. Identical to guarded-fetch's
- * {@link NodePinningOptions} EXCEPT `timeoutMs` is omitted: the bare dispatcher does not apply a
+ * {@link NodePinningOptions} EXCEPT `timeoutMs` is forbidden: the bare dispatcher does not apply a
  * connect timeout (see the module header) — passing one would be silently ignored, so it is a
  * type error here. Use {@link createNodeGuardedFetch} for a timeout-bounded fetch.
+ *
+ * The `timeoutMs?: never` intersection (NOT a bare `Omit`) makes the ban NEGATIVE: a plain
+ * `Omit<NodePinningOptions, "timeoutMs">` only rejects a fresh object LITERAL carrying `timeoutMs`
+ * (excess-property check) — a variable already typed as `NodePinningOptions` (with a real
+ * `timeoutMs?: number`) would still be structurally assignable to the omit and slip through
+ * silently. `timeoutMs?: never` rejects ANY value whose `timeoutMs` is not `undefined`/absent,
+ * including such a pre-typed variable (roborev Medium).
  */
-export type PinningDispatcherOptions = Omit<NodePinningOptions, "timeoutMs">;
+export type PinningDispatcherOptions = Omit<NodePinningOptions, "timeoutMs"> & {
+  readonly timeoutMs?: never;
+};
 
 /**
  * Build an `undici.Agent` that PINS each connection to a freshly-resolved, validated IP — the
