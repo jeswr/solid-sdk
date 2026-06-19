@@ -221,7 +221,7 @@ function aclUrlFor(resourceUrl, linkHeader) {
   try {
     const u = new URL(resourceUrl);
     if (u.pathname.endsWith(".acl")) return void 0;
-    return `${resourceUrl}${resourceUrl.endsWith("/") ? "" : ""}.acl`;
+    return `${resourceUrl}.acl`;
   } catch {
     return void 0;
   }

@@ -219,7 +219,9 @@ export function aclUrlFor(resourceUrl: string, linkHeader?: string | null): stri
   try {
     const u = new URL(resourceUrl);
     if (u.pathname.endsWith('.acl')) return undefined; // don't recurse on ACLs
-    return `${resourceUrl}${resourceUrl.endsWith('/') ? '' : ''}.acl`;
+    // WAC convention: append `.acl` to the resource URL. This covers both a plain
+    // resource (`…/r` → `…/r.acl`) and a container (`…/c/` → `…/c/.acl`).
+    return `${resourceUrl}.acl`;
   } catch {
     return undefined;
   }
