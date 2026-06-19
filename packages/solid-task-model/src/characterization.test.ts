@@ -288,11 +288,22 @@ function canonical(ttl: string, base: string): string {
     return lit(term);
   };
   // Stable bnode label = a hash-free deterministic digest of its outgoing edges.
-  const bnodeKey = new Map<string, string>();
+  // The edges are collected per node then SORTED before joining, so the digest is
+  // genuinely order-INDEPENDENT (a set): a behaviour-preserving refactor that
+  // emits the same blank-node triples in a different order yields the same digest
+  // (and hence the same snapshot), instead of the golden master being spuriously
+  // sensitive to bnode emission order.
+  const bnodeEdges = new Map<string, string[]>();
   for (const q of quads) {
     if (q.subject.termType !== "BlankNode") continue;
     const edge = `${leaf(q.predicate)} ${leaf(q.object)}`;
-    bnodeKey.set(q.subject.value, `${bnodeKey.get(q.subject.value) ?? ""}|${edge}`);
+    const edges = bnodeEdges.get(q.subject.value) ?? [];
+    edges.push(edge);
+    bnodeEdges.set(q.subject.value, edges);
+  }
+  const bnodeKey = new Map<string, string>();
+  for (const [label, edges] of bnodeEdges) {
+    bnodeKey.set(label, [...edges].sort().join("|"));
   }
   // Map each distinct digest to a small stable index, so labels are short + the
   // snapshot stays readable while remaining structurally faithful.
