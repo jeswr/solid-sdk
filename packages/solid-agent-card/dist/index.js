@@ -1,5 +1,28 @@
-// src/serialize.ts
+// node_modules/@jeswr/rdf-serialize/dist/serialize.js
 import { Writer } from "n3";
+var DEFAULT_FORMAT = "text/turtle";
+function serialize(quads, options) {
+  const format = options?.format ?? DEFAULT_FORMAT;
+  const prefixes = options?.prefixes ?? {};
+  const emptyAsEmptyString = options?.emptyAsEmptyString ?? true;
+  if (emptyAsEmptyString && quads.length === 0) {
+    return Promise.resolve("");
+  }
+  return new Promise((resolve, reject) => {
+    const writer = new Writer({ format, prefixes });
+    writer.addQuads(quads);
+    writer.end((error, result) => {
+      if (error) {
+        reject(error);
+      } else {
+        resolve(result);
+      }
+    });
+  });
+}
+function legacySerialize(quads, format = DEFAULT_FORMAT, prefixes = {}, emptyAsEmptyString = true) {
+  return serialize(quads, { format, prefixes, emptyAsEmptyString });
+}
 
 // src/vocab.ts
 var SCHEMA = "https://schema.org/";
@@ -65,21 +88,8 @@ var PREFIXES = {
   rdf: RDF,
   rdfs: RDFS
 };
-function serialize(quads, format = "text/turtle") {
-  if (quads.length === 0) {
-    return Promise.resolve("");
-  }
-  return new Promise((resolve, reject) => {
-    const writer = new Writer({ format, prefixes: PREFIXES });
-    writer.addQuads(quads);
-    writer.end((error, result) => {
-      if (error) {
-        reject(error);
-      } else {
-        resolve(result);
-      }
-    });
-  });
+function serialize2(quads, format = "text/turtle") {
+  return legacySerialize(quads, format, PREFIXES);
 }
 
 // src/wrappers.ts
@@ -405,7 +415,7 @@ function buildAgentDescription(descriptor) {
   const quads = builder.quads();
   return {
     quads,
-    toTurtle: (format) => serialize(quads, format),
+    toTurtle: (format) => serialize2(quads, format),
     toJsonLd: () => Promise.resolve(buildJsonLd(descriptor))
   };
 }
@@ -961,7 +971,7 @@ function buildAgentPointer(webId, agent, predicates = "interop:hasAuthorizationA
   const quads = builder.quads();
   return {
     quads,
-    toString: (format) => serialize(quads, format)
+    toString: (format) => serialize2(quads, format)
   };
 }
 export {
@@ -981,7 +991,7 @@ export {
   buildAgentPointer,
   describeAgent,
   discoverAgent,
-  serialize,
+  serialize2 as serialize,
   verifyDataset,
   verifyDescriptor
 };

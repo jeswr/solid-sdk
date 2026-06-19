@@ -14,13 +14,18 @@
  * `@jeswr/fetch-rdf`'s compiled code into our `dist/index.js`.
  *
  * Externalisation contract (the load-bearing part):
- *   - INLINED  (bundled into dist): `@jeswr/fetch-rdf` only — the one off-npm dep.
+ *   - INLINED  (bundled into dist): the off-npm `@jeswr` suite deps —
+ *       `@jeswr/fetch-rdf` (ships no usable dist) AND `@jeswr/rdf-serialize`
+ *       (the shared serialiser; a git dep not on npm). Both are absent from the
+ *       EXTERNAL list below, so esbuild bundles them into the self-contained dist.
  *   - EXTERNAL (resolved from npm by the consumer): everything else —
  *       `n3`, `@solid/object`, `@rdfjs/wrapper`, `@rdfjs/types`, AND
  *       fetch-rdf's OWN runtime deps `jsonld-streaming-parser` + `content-type`
  *       (all npm-published; we add them to our `dependencies` so the consumer
- *       resolves them). We deliberately do NOT bundle these — keeping them
- *       external means a single shared copy + normal npm dedupe/audit.
+ *       resolves them). `@jeswr/rdf-serialize`'s only runtime dep, `n3`, is
+ *       already in this list, so inlining it pulls in nothing new. We deliberately
+ *       do NOT bundle these — keeping them external means a single shared copy +
+ *       normal npm dedupe/audit.
  *
  * `tsc` still emits the `.d.ts` declarations (declarations carry no fetch-rdf
  * type import — verified — so they are already self-contained). esbuild owns the
@@ -38,9 +43,11 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const outdir = join(root, "dist");
 
 /**
- * Everything that must stay EXTERNAL (resolved from npm, not inlined). The ONLY
- * package bundled in is `@jeswr/fetch-rdf` — by virtue of being absent from this
- * list. fetch-rdf's own runtime deps stay external too (they are on npm).
+ * Everything that must stay EXTERNAL (resolved from npm, not inlined). The
+ * packages bundled in are the off-npm `@jeswr` suite deps `@jeswr/fetch-rdf` and
+ * `@jeswr/rdf-serialize` — by virtue of being absent from this list. Their own
+ * npm-published runtime deps (fetch-rdf's `jsonld-streaming-parser`/`content-type`,
+ * rdf-serialize's `n3`) stay external.
  */
 const EXTERNAL = [
   "n3",
