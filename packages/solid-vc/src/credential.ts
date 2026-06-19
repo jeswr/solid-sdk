@@ -32,7 +32,6 @@ import {
   GraphBuilder,
   iriRef,
   type NodeRef,
-  type TermWrapperType,
   wrapVc,
 } from "./wrappers.js";
 
@@ -172,11 +171,6 @@ export function credentialToJsonLd(credential: Credential): Record<string, unkno
   return doc;
 }
 
-/** First xsd:dateTime literal value for a predicate set, or `undefined`. */
-function firstDateTime(terms: ReadonlySet<TermWrapperType>): string | undefined {
-  return firstLiteral(terms);
-}
-
 /**
  * Read the credential METADATA (issuer / validity / types / id) back from a
  * parsed credential node. The full `credentialSubject` claim graph is intentionally
@@ -198,8 +192,9 @@ export function credentialMetaFromNode(node: CredentialNode): {
   return {
     id: node.value,
     issuer: firstIri(node.issuers),
-    validFrom: firstDateTime(node.validFroms),
-    validUntil: firstDateTime(node.validUntils),
+    // validFrom / validUntil are xsd:dateTime literals — read as the first literal.
+    validFrom: firstLiteral(node.validFroms),
+    validUntil: firstLiteral(node.validUntils),
     types,
   };
 }

@@ -537,9 +537,6 @@ function credentialToJsonLd(credential) {
   doc.credentialSubject = subjects.length === 1 ? subjects[0] : subjects;
   return doc;
 }
-function firstDateTime(terms) {
-  return firstLiteral(terms);
-}
 function credentialMetaFromNode(node) {
   const types = [];
   for (const t of node.types) {
@@ -548,8 +545,9 @@ function credentialMetaFromNode(node) {
   return {
     id: node.value,
     issuer: firstIri(node.issuers),
-    validFrom: firstDateTime(node.validFroms),
-    validUntil: firstDateTime(node.validUntils),
+    // validFrom / validUntil are xsd:dateTime literals — read as the first literal.
+    validFrom: firstLiteral(node.validFroms),
+    validUntil: firstLiteral(node.validUntils),
     types
   };
 }
