@@ -7,10 +7,9 @@
 // claim. Parsing is via @jeswr/fetch-rdf (Turtle/JSON-LD conneg); extraction via
 // the typed wrappers; serialisation via n3.Writer.
 
-import { fetchRdf, parseRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 import type { DatasetCore, Quad } from "@rdfjs/types";
-import { classifyFetchError } from "./errors.js";
-import { serialize } from "./serialize.js";
+import { loadDataset } from "./load.js";
+import { built } from "./serialize.js";
 import type { Membership, MembershipVerification, Registry, RegistryIssue } from "./types.js";
 import { membershipNodeToView, verifyMembershipNode } from "./verify.js";
 import { MEMBERSHIP_STATUS, type MembershipStatusName } from "./vocab.js";
@@ -69,8 +68,7 @@ export function buildRegistry(input: RegistryInput): BuiltGraph {
   for (const m of input.members) {
     writeMembership(registry.linkMember(m.id), m);
   }
-  const quads = builder.quads();
-  return { quads, toString: (format?: string) => serialize(quads, format) };
+  return built(builder.quads());
 }
 
 /**
@@ -86,8 +84,7 @@ export function buildMembership(input: MembershipInput & { id: string }): BuiltG
   }
   const builder = new RegistryBuilder();
   writeMembership(builder.membership(input.id), input);
-  const quads = builder.quads();
-  return { quads, toString: (format?: string) => serialize(quads, format) };
+  return built(builder.quads());
 }
 
 /** Shared writer for a membership node (used by both build paths). */
@@ -127,32 +124,8 @@ export interface FetchOptions {
   readonly baseIRI?: string;
 }
 
-async function loadDataset(
-  input: string,
-  options: FetchOptions,
-): Promise<{ dataset: DatasetCore } | { issue: RegistryIssue }> {
-  // A body in hand is a PARSE operation (no network); a URL is a FETCH operation.
-  // Classify the error by the operation that threw — never collapse a network
-  // failure into `parse-failed` just because it lacks an HTTP status.
-  if (options.body !== undefined) {
-    try {
-      const dataset = await parseRdf(options.body, options.bodyContentType ?? "text/turtle", {
-        baseIRI: options.baseIRI ?? input,
-      });
-      return { dataset };
-    } catch (err) {
-      return { issue: { code: "parse-failed", message: describeError(err), subject: input } };
-    }
-  }
-  try {
-    const fetched = await fetchRdf(input, options.fetch ? { fetch: options.fetch } : {});
-    return { dataset: fetched.dataset };
-  } catch (err) {
-    return {
-      issue: { code: classifyFetchError(err), message: describeError(err), subject: input },
-    };
-  }
-}
+/** The document noun used in the registry path's load-error messages. */
+const REGISTRY_NOUN = "registry document";
 
 /**
  * Fetch (or accept) a `fedreg:Registry` document, parse it, and verify each
@@ -162,7 +135,7 @@ export async function parseRegistry(
   input: string,
   options: FetchOptions = {},
 ): Promise<ParsedRegistry> {
-  const loaded = await loadDataset(input, options);
+  const loaded = await loadDataset(input, options, REGISTRY_NOUN);
   if ("issue" in loaded) {
     return { members: [], valid: false, issues: [loaded.issue] };
   }
@@ -223,7 +196,7 @@ export async function listMembers(
   // Load the dataset ONCE; reuse it for both the registry parse and the
   // bare-membership fallback (never fetch the same resource twice — a second
   // fetch could observe a changed resource and adds avoidable network cost).
-  const loaded = await loadDataset(input, options);
+  const loaded = await loadDataset(input, options, REGISTRY_NOUN);
   if ("issue" in loaded) {
     return [];
   }
@@ -247,7 +220,7 @@ export async function verifyMembership(
   input: string,
   options: FetchOptions = {},
 ): Promise<MembershipVerification> {
-  const loaded = await loadDataset(input, options);
+  const loaded = await loadDataset(input, options, REGISTRY_NOUN);
   if ("issue" in loaded) {
     return { valid: false, issues: [loaded.issue] };
   }
@@ -285,13 +258,4 @@ export function verifyMembershipDataset(dataset: DatasetCore): MembershipVerific
   const issues: RegistryIssue[] = [];
   const membership = membershipNodeToView(memberships[0] as MembershipNode, issues);
   return { valid: issues.length === 0, membership, issues };
-}
-
-function describeError(err: unknown): string {
-  if (err instanceof RdfFetchError) {
-    return err.status
-      ? `Failed to fetch registry document (HTTP ${err.status}): ${err.message}`
-      : `Failed to parse registry document: ${err.message}`;
-  }
-  return err instanceof Error ? err.message : String(err);
 }

@@ -6,10 +6,9 @@
 // drives asynchronous schema migration — an app asks "does this storage accept the
 // spec-version I'm about to write?" before writing, rather than assuming.
 
-import { fetchRdf, parseRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 import type { DatasetCore, Quad } from "@rdfjs/types";
-import { classifyFetchError } from "./errors.js";
-import { serialize } from "./serialize.js";
+import { loadDataset } from "./load.js";
+import { built } from "./serialize.js";
 import type { StorageDescription, StorageVerification } from "./types.js";
 import { verifyStorageNode } from "./verify.js";
 import { RegistryBuilder, type StorageNode, wrap } from "./wrappers.js";
@@ -54,8 +53,7 @@ export function describeStorage(input: StorageInput): BuiltStorage {
   for (const sector of input.supportsSector ?? []) {
     node.addSupportsSector(sector);
   }
-  const quads = builder.quads();
-  return { quads, toString: (format?: string) => serialize(quads, format) };
+  return built(builder.quads());
 }
 
 /** Options for the fetch-backed storage entry points. */
@@ -79,33 +77,11 @@ export async function parseStorage(
   input: string,
   options: StorageFetchOptions = {},
 ): Promise<StorageVerification> {
-  // A body in hand is a PARSE operation (no network); a URL is a FETCH operation.
-  // Classify the error by the operation that threw — never collapse a network
-  // failure into `parse-failed` just because it lacks an HTTP status.
-  let dataset: DatasetCore;
-  if (options.body !== undefined) {
-    try {
-      dataset = await parseRdf(options.body, options.bodyContentType ?? "text/turtle", {
-        baseIRI: options.baseIRI ?? input,
-      });
-    } catch (err) {
-      return {
-        valid: false,
-        issues: [{ code: "parse-failed", message: describeError(err), subject: input }],
-      };
-    }
-  } else {
-    try {
-      const fetched = await fetchRdf(input, options.fetch ? { fetch: options.fetch } : {});
-      dataset = fetched.dataset;
-    } catch (err) {
-      return {
-        valid: false,
-        issues: [{ code: classifyFetchError(err), message: describeError(err), subject: input }],
-      };
-    }
+  const loaded = await loadDataset(input, options, "storage description");
+  if ("issue" in loaded) {
+    return { valid: false, issues: [loaded.issue] };
   }
-  return parseStorageDataset(dataset, input);
+  return parseStorageDataset(loaded.dataset, input);
 }
 
 /** Verify an already-parsed dataset as a storage description. */
@@ -161,13 +137,4 @@ export function unsupportedSpecs(
 ): string[] {
   const accepted = new Set(storage.acceptsSpec);
   return wanted.filter((w) => !accepted.has(w));
-}
-
-function describeError(err: unknown): string {
-  if (err instanceof RdfFetchError) {
-    return err.status
-      ? `Failed to fetch storage description (HTTP ${err.status}): ${err.message}`
-      : `Failed to parse storage description: ${err.message}`;
-  }
-  return err instanceof Error ? err.message : String(err);
 }

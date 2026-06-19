@@ -191,6 +191,34 @@ function classifyFetchError(err) {
   return "fetch-failed";
 }
 
+// src/load.ts
+async function loadDataset(input, options, noun) {
+  if (options.body !== void 0) {
+    try {
+      const dataset = await parseRdf(options.body, options.bodyContentType ?? "text/turtle", {
+        baseIRI: options.baseIRI ?? input
+      });
+      return { dataset };
+    } catch (err) {
+      return { issue: { code: "parse-failed", message: describeError(err, noun), subject: input } };
+    }
+  }
+  try {
+    const fetched = await fetchRdf(input, options.fetch ? { fetch: options.fetch } : {});
+    return { dataset: fetched.dataset };
+  } catch (err) {
+    return {
+      issue: { code: classifyFetchError(err), message: describeError(err, noun), subject: input }
+    };
+  }
+}
+function describeError(err, noun) {
+  if (err instanceof RdfFetchError) {
+    return err.status ? `Failed to fetch ${noun} (HTTP ${err.status}): ${err.message}` : `Failed to parse ${noun}: ${err.message}`;
+  }
+  return err instanceof Error ? err.message : String(err);
+}
+
 // src/serialize.ts
 import { Writer } from "n3";
 
@@ -251,6 +279,9 @@ function serialize(quads, format = "text/turtle") {
       }
     });
   });
+}
+function built(quads) {
+  return { quads, toString: (format) => serialize(quads, format) };
 }
 
 // src/verify.ts
@@ -539,8 +570,7 @@ function buildRegistry(input) {
   for (const m of input.members) {
     writeMembership(registry.linkMember(m.id), m);
   }
-  const quads = builder.quads();
-  return { quads, toString: (format) => serialize(quads, format) };
+  return built(builder.quads());
 }
 function buildMembership(input) {
   if (!input.id) {
@@ -550,8 +580,7 @@ function buildMembership(input) {
   }
   const builder = new RegistryBuilder();
   writeMembership(builder.membership(input.id), input);
-  const quads = builder.quads();
-  return { quads, toString: (format) => serialize(quads, format) };
+  return built(builder.quads());
 }
 function writeMembership(node, m) {
   node.addApp(m.app);
@@ -561,28 +590,9 @@ function writeMembership(node, m) {
   }
   node.addAsserted(m.asserted ?? (/* @__PURE__ */ new Date()).toISOString());
 }
-async function loadDataset(input, options) {
-  if (options.body !== void 0) {
-    try {
-      const dataset = await parseRdf(options.body, options.bodyContentType ?? "text/turtle", {
-        baseIRI: options.baseIRI ?? input
-      });
-      return { dataset };
-    } catch (err) {
-      return { issue: { code: "parse-failed", message: describeError(err), subject: input } };
-    }
-  }
-  try {
-    const fetched = await fetchRdf(input, options.fetch ? { fetch: options.fetch } : {});
-    return { dataset: fetched.dataset };
-  } catch (err) {
-    return {
-      issue: { code: classifyFetchError(err), message: describeError(err), subject: input }
-    };
-  }
-}
+var REGISTRY_NOUN = "registry document";
 async function parseRegistry(input, options = {}) {
-  const loaded = await loadDataset(input, options);
+  const loaded = await loadDataset(input, options, REGISTRY_NOUN);
   if ("issue" in loaded) {
     return { members: [], valid: false, issues: [loaded.issue] };
   }
@@ -625,7 +635,7 @@ function parseRegistryDataset(dataset, expectedId) {
   return { registry, members, valid, issues };
 }
 async function listMembers(input, options = {}) {
-  const loaded = await loadDataset(input, options);
+  const loaded = await loadDataset(input, options, REGISTRY_NOUN);
   if ("issue" in loaded) {
     return [];
   }
@@ -636,7 +646,7 @@ async function listMembers(input, options = {}) {
   return wrap(loaded.dataset).memberships().map((node) => verifyMembershipNode(node));
 }
 async function verifyMembership(input, options = {}) {
-  const loaded = await loadDataset(input, options);
+  const loaded = await loadDataset(input, options, REGISTRY_NOUN);
   if ("issue" in loaded) {
     return { valid: false, issues: [loaded.issue] };
   }
@@ -670,12 +680,6 @@ function verifyMembershipDataset(dataset) {
   const membership = membershipNodeToView(memberships[0], issues);
   return { valid: issues.length === 0, membership, issues };
 }
-function describeError(err) {
-  if (err instanceof RdfFetchError) {
-    return err.status ? `Failed to fetch registry document (HTTP ${err.status}): ${err.message}` : `Failed to parse registry document: ${err.message}`;
-  }
-  return err instanceof Error ? err.message : String(err);
-}
 
 // src/storage.ts
 function describeStorage(input) {
@@ -693,34 +697,14 @@ function describeStorage(input) {
   for (const sector of input.supportsSector ?? []) {
     node.addSupportsSector(sector);
   }
-  const quads = builder.quads();
-  return { quads, toString: (format) => serialize(quads, format) };
+  return built(builder.quads());
 }
 async function parseStorage(input, options = {}) {
-  let dataset;
-  if (options.body !== void 0) {
-    try {
-      dataset = await parseRdf(options.body, options.bodyContentType ?? "text/turtle", {
-        baseIRI: options.baseIRI ?? input
-      });
-    } catch (err) {
-      return {
-        valid: false,
-        issues: [{ code: "parse-failed", message: describeError2(err), subject: input }]
-      };
-    }
-  } else {
-    try {
-      const fetched = await fetchRdf(input, options.fetch ? { fetch: options.fetch } : {});
-      dataset = fetched.dataset;
-    } catch (err) {
-      return {
-        valid: false,
-        issues: [{ code: classifyFetchError(err), message: describeError2(err), subject: input }]
-      };
-    }
+  const loaded = await loadDataset(input, options, "storage description");
+  if ("issue" in loaded) {
+    return { valid: false, issues: [loaded.issue] };
   }
-  return parseStorageDataset(dataset, input);
+  return parseStorageDataset(loaded.dataset, input);
 }
 function parseStorageDataset(dataset, expectedId) {
   const fed = wrap(dataset);
@@ -745,12 +729,6 @@ function acceptsSpec(storage, specVersionIri) {
 function unsupportedSpecs(storage, wanted) {
   const accepted = new Set(storage.acceptsSpec);
   return wanted.filter((w) => !accepted.has(w));
-}
-function describeError2(err) {
-  if (err instanceof RdfFetchError) {
-    return err.status ? `Failed to fetch storage description (HTTP ${err.status}): ${err.message}` : `Failed to parse storage description: ${err.message}`;
-  }
-  return err instanceof Error ? err.message : String(err);
 }
 export {
   DCAT,
