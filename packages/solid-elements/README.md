@@ -374,16 +374,35 @@ client-only. (Plain Vite/CSR React has no SSR step, so no gating is needed.)
 
 ```sh
 npm install
-npm run lint        # Biome over src test scripts
+npm run lint        # Biome over src test scripts (incl. a cognitive-complexity warn @15)
 npm run typecheck   # tsc --noEmit
 npm test            # vitest (jsdom)
 npm run build       # tsc -> dist/ (committed)
 npm run check:dist  # fails if committed dist/ drifts from a fresh build
+npm run api:check   # fails if the committed API report drifts from dist (run build first)
 ```
 
 `dist/` is **intentionally committed** so the package is GitHub-installable under
 `ignore-scripts=true` with no build step. Rebuild + commit `dist/` alongside any
 `src/` change — the `check:dist` gate guards against drift.
+
+### The public-API snapshot (`etc/*.api.md`)
+
+The full public surface of each entry point is snapshotted as a committed, diffable
+[api-extractor](https://api-extractor.com/) report, so "what is the API?" — and "did a
+change perturb it?" — is a one-file diff rather than a code read:
+
+| Entry | Report |
+|---|---|
+| `@jeswr/solid-elements`         | `etc/solid-elements.api.md` |
+| `@jeswr/solid-elements/react`   | `etc/solid-elements.react.api.md` |
+| `@jeswr/solid-elements/auth`    | `etc/solid-elements.auth.api.md` |
+
+After an **intended** API change, regenerate + commit the reports with
+`npm run build && npm run api:report`; the resulting `etc/` diff is the reviewed,
+semver-mappable record of the change. `npm run api:check` gates against accidental
+drift. api-extractor is run dev-only via `npx` (it is not a dependency of the package,
+so it never reaches the committed `dist/`).
 
 ## License
 
