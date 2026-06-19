@@ -50,6 +50,7 @@
   },
   "dependencies": {
     "@jeswr/fetch-rdf": "^0.1.0",
+    "@jeswr/guarded-fetch": "git+https://github.com/jeswr/guarded-fetch.git#021a1e55bdf1cfefc36c2120177c26bdcb9304c2",
     "@rdfjs/wrapper": "^0.34.0",
     "@solid/object": "^0.6.0",
     "n3": "^2.0.3",
