@@ -5,3 +5,5 @@
 node_modules/
 coverage/
 .roborev/
+# api-extractor scratch output (the committed report lives in etc/).
+temp/

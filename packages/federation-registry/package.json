@@ -22,6 +22,8 @@
     "check:dist": "node scripts/check-dist-fresh.mjs",
     "check:lockfile-transport": "node scripts/check-lockfile-transport.mjs",
     "typecheck": "npm run build:deps && tsc -p tsconfig.json --noEmit",
+    "api:report": "npm run build && api-extractor run --local",
+    "api:check": "npm run build && api-extractor run --local && git diff --exit-code -- etc/",
     "lint": "biome check src test scripts && npm run check:lockfile-transport",
     "lint:fix": "biome check --write src test scripts",
     "test": "npm run build:deps && vitest run",
@@ -60,6 +62,7 @@
   "devDependencies": {
     "@biomejs/biome": "^2.0.0",
     "@jeswr/fetch-rdf": "github:jeswr/fetch-rdf#main",
+    "@microsoft/api-extractor": "^7.58.9",
     "@types/n3": "^1.16.0",
     "@types/node": "^22.0.0",
     "@vitest/coverage-v8": "^2.1.0",
