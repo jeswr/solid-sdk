@@ -751,18 +751,14 @@ export {
   buildRegistry,
   describeStorage,
   listMembers,
-  membershipNodeToView,
   parseRegistry,
   parseRegistryDataset,
   parseStorage,
   parseStorageDataset,
   serialize,
   statusName,
-  storageNodeToView,
   unsupportedSpecs,
   verifyMembership,
-  verifyMembershipDataset,
-  verifyMembershipNode,
-  verifyStorageNode
+  verifyMembershipDataset
 };
 //# sourceMappingURL=index.js.map

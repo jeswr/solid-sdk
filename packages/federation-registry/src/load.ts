@@ -70,7 +70,7 @@ export async function loadDataset(
  * {@link RdfFetchError} with a `status` is an HTTP failure; without one it is a
  * parse-of-response failure. `noun` names the document (e.g. "registry document").
  */
-export function describeError(err: unknown, noun: string): string {
+function describeError(err: unknown, noun: string): string {
   if (err instanceof RdfFetchError) {
     return err.status
       ? `Failed to fetch ${noun} (HTTP ${err.status}): ${err.message}`

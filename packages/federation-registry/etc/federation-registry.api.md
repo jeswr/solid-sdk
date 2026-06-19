@@ -6,7 +6,6 @@
 
 import type { DatasetCore } from '@rdfjs/types';
 import type { Quad } from '@rdfjs/types';
-import { TermWrapper } from '@rdfjs/wrapper';
 
 // @public
 export function acceptsSpec(storage: Pick<StorageDescription, "acceptsSpec">, specVersionIri: string): boolean;
@@ -80,11 +79,6 @@ export interface MembershipInput {
     readonly id?: string;
     readonly status?: MembershipStatusName;
 }
-
-// Warning: (ae-forgotten-export) The symbol "MembershipNode" needs to be exported by the entry point index.d.ts
-//
-// @public
-export function membershipNodeToView(node: MembershipNode, issues: RegistryIssue[]): Membership;
 
 // @public
 export type MembershipStatusName = keyof typeof MEMBERSHIP_STATUS;
@@ -172,11 +166,6 @@ export interface StorageInput {
     readonly supportsSector?: readonly string[];
 }
 
-// Warning: (ae-forgotten-export) The symbol "StorageNode" needs to be exported by the entry point index.d.ts
-//
-// @public
-export function storageNodeToView(node: StorageNode, issues: RegistryIssue[]): StorageDescription;
-
 // @public
 export interface StorageVerification {
     readonly issues: readonly RegistryIssue[];
@@ -198,11 +187,5 @@ export function verifyMembership(input: string, options?: FetchOptions): Promise
 
 // @public
 export function verifyMembershipDataset(dataset: DatasetCore): MembershipVerification;
-
-// @public
-export function verifyMembershipNode(node: MembershipNode): MembershipVerification;
-
-// @public
-export function verifyStorageNode(node: StorageNode): StorageVerification;
 
 ```

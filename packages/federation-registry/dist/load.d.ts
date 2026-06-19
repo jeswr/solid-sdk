@@ -25,10 +25,4 @@ export type LoadResult = {
  * in the human-readable message (e.g. "registry document" / "storage description").
  */
 export declare function loadDataset(input: string, options: LoadOptions, noun: string): Promise<LoadResult>;
-/**
- * Render an error from the load path into a human-readable message. An
- * {@link RdfFetchError} with a `status` is an HTTP failure; without one it is a
- * parse-of-response failure. `noun` names the document (e.g. "registry document").
- */
-export declare function describeError(err: unknown, noun: string): string;
 //# sourceMappingURL=load.d.ts.map

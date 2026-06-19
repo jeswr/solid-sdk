@@ -30,6 +30,5 @@ export { type BuiltGraph, buildMembership, buildRegistry, type FetchOptions, lis
 export { serialize } from "./serialize.js";
 export { acceptsSpec, type BuiltStorage, describeStorage, parseStorage, parseStorageDataset, type StorageFetchOptions, type StorageInput, unsupportedSpecs, } from "./storage.js";
 export type { Membership, MembershipVerification, Registry, RegistryIssue, RegistryIssueCode, StorageDescription, StorageVerification, } from "./types.js";
-export { membershipNodeToView, storageNodeToView, verifyMembershipNode, verifyStorageNode, } from "./verify.js";
 export { DCAT, FEDAPP, FEDREG, MEMBERSHIP_STATUS, type MembershipStatusName, SECTOR_BASE, statusName, TRUSTED_STATUS, VALID_STATUS_IRIS, } from "./vocab.js";
 //# sourceMappingURL=index.d.ts.map

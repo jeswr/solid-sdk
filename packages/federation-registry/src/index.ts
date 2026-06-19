@@ -62,12 +62,13 @@ export type {
   StorageDescription,
   StorageVerification,
 } from "./types.js";
-export {
-  membershipNodeToView,
-  storageNodeToView,
-  verifyMembershipNode,
-  verifyStorageNode,
-} from "./verify.js";
+// NB: the node-level projectors/verifiers (membershipNodeToView / storageNodeToView
+// / verifyMembershipNode / verifyStorageNode) are deliberately NOT re-exported: they
+// take MembershipNode / StorageNode parameters — internal @rdfjs/wrapper types this
+// package does not (and should not) export — so an external consumer can neither name
+// nor construct the argument. They are internal to the parse/verify path; the public
+// surface for "verify a thing" is verifyMembership / verifyMembershipDataset /
+// parseStorage (dataset/string in, plain view + issues out).
 export {
   DCAT,
   FEDAPP,

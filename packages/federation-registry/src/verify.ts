@@ -173,8 +173,8 @@ export function verifyMembershipNode(node: MembershipNode): MembershipVerificati
   return { valid: issues.length === 0, membership, issues };
 }
 
-/** Project a {@link StorageNode} into a plain {@link StorageDescription}. */
-export function storageNodeToView(node: StorageNode, issues: RegistryIssue[]): StorageDescription {
+/** Project a {@link StorageNode} into a plain {@link StorageDescription}. Internal. */
+function storageNodeToView(node: StorageNode, issues: RegistryIssue[]): StorageDescription {
   const id = node.value;
   const acceptsSpec = validIris(node.acceptsSpec, id, FEDREG_ACCEPTS_SPEC, issues);
   const supportsSector = validIris(node.supportsSector, id, FEDREG_SUPPORTS_SECTOR, issues);

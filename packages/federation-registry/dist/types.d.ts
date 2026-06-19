@@ -45,7 +45,7 @@ export interface StorageDescription {
     /** Data sector IRIs the storage supports (`fedreg:supportsSector`). */
     readonly supportsSector: readonly string[];
 }
-/** A single validation problem found by {@link verifyMembership} / {@link verifyStorage}. */
+/** A single validation problem found by {@link verifyMembership} / {@link parseStorage}. */
 export interface RegistryIssue {
     /** Machine-readable code. */
     readonly code: RegistryIssueCode;
