@@ -9,8 +9,9 @@
 // well-known serving pattern where the URL ≠ the agent IRI it describes —
 // otherwise to the URL it was served from.
 
-import { fetchRdf, parseRdf, RdfFetchError } from "@jeswr/fetch-rdf";
+import { fetchRdf, parseRdf } from "@jeswr/fetch-rdf";
 import type { DatasetCore } from "@rdfjs/types";
+import { classifyFetchError, describeError } from "./internal/errors.js";
 import type {
   AgentDescriptor,
   AgentSkill,
@@ -323,37 +324,4 @@ function isHttpUrl(value: string): boolean {
   } catch {
     return false;
   }
-}
-
-/**
- * Classify a fetch/parse error into the right issue code. An {@link RdfFetchError}
- * carries discriminator fields: an HTTP `status` ⇒ the request reached the server
- * but it answered non-2xx (`fetch-failed`); a `contentType` WITHOUT a status ⇒ we
- * received a response but could not parse that media type (`parse-failed`); neither
- * ⇒ a transport/network failure (`fetch-failed`). A non-RdfFetchError is treated as
- * a parse failure (it surfaced from the parser, not the transport).
- */
-export function classifyFetchError(err: unknown): "fetch-failed" | "parse-failed" {
-  if (err instanceof RdfFetchError) {
-    if (err.status !== undefined) {
-      return "fetch-failed";
-    }
-    return err.contentType !== undefined ? "parse-failed" : "fetch-failed";
-  }
-  return "parse-failed";
-}
-
-function describeError(err: unknown): string {
-  if (err instanceof RdfFetchError) {
-    if (err.status !== undefined) {
-      return `Failed to fetch agent description (HTTP ${err.status}): ${err.message}`;
-    }
-    // Mirror classifyFetchError: a content-type without a status is a parse
-    // failure (server answered, body unparseable); neither is a transport
-    // failure — so the message matches the code rather than always saying "parse".
-    return classifyFetchError(err) === "parse-failed"
-      ? `Failed to parse agent description: ${err.message}`
-      : `Failed to fetch agent description: ${err.message}`;
-  }
-  return err instanceof Error ? err.message : String(err);
 }

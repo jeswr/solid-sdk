@@ -8,9 +8,10 @@
 // A2A path as a pinned constant). Parsing via @jeswr/fetch-rdf; extraction via the
 // typed wrappers.
 
-import { fetchRdf, RdfFetchError } from "@jeswr/fetch-rdf";
+import { fetchRdf } from "@jeswr/fetch-rdf";
+import { classifyFetchError, describeError } from "./internal/errors.js";
 import type { AgentDiscovery, AgentPointer } from "./types.js";
-import { classifyFetchError, verifyDataset } from "./verify.js";
+import { verifyDataset } from "./verify.js";
 import { WELL_KNOWN_AGENT_CARD, WELL_KNOWN_AGENT_DESCRIPTIONS } from "./vocab.js";
 import { wrapProfile } from "./wrappers.js";
 
@@ -125,13 +126,4 @@ export function agentCardUrl(origin: string): string {
 function originOf(url: string): string {
   const u = new URL(url);
   return `${u.protocol}//${u.host}/`;
-}
-
-function describeError(err: unknown): string {
-  if (err instanceof RdfFetchError) {
-    return err.status
-      ? `Failed to fetch agent description (HTTP ${err.status}): ${err.message}`
-      : `Failed to parse agent description: ${err.message}`;
-  }
-  return err instanceof Error ? err.message : String(err);
 }

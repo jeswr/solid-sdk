@@ -667,6 +667,26 @@ function errorMessage(cause) {
   return String(cause);
 }
 
+// src/internal/errors.ts
+function classifyFetchError(err) {
+  if (err instanceof RdfFetchError) {
+    if (err.status !== void 0) {
+      return "fetch-failed";
+    }
+    return err.contentType !== void 0 ? "parse-failed" : "fetch-failed";
+  }
+  return "parse-failed";
+}
+function describeError(err) {
+  if (err instanceof RdfFetchError) {
+    if (err.status !== void 0) {
+      return `Failed to fetch agent description (HTTP ${err.status}): ${err.message}`;
+    }
+    return classifyFetchError(err) === "parse-failed" ? `Failed to parse agent description: ${err.message}` : `Failed to fetch agent description: ${err.message}`;
+  }
+  return err instanceof Error ? err.message : String(err);
+}
+
 // src/verify.ts
 async function verifyDescriptor(input, options = {}) {
   const isBody = options.body !== void 0;
@@ -873,24 +893,6 @@ function isHttpUrl(value) {
     return false;
   }
 }
-function classifyFetchError(err) {
-  if (err instanceof RdfFetchError) {
-    if (err.status !== void 0) {
-      return "fetch-failed";
-    }
-    return err.contentType !== void 0 ? "parse-failed" : "fetch-failed";
-  }
-  return "parse-failed";
-}
-function describeError(err) {
-  if (err instanceof RdfFetchError) {
-    if (err.status !== void 0) {
-      return `Failed to fetch agent description (HTTP ${err.status}): ${err.message}`;
-    }
-    return classifyFetchError(err) === "parse-failed" ? `Failed to parse agent description: ${err.message}` : `Failed to fetch agent description: ${err.message}`;
-  }
-  return err instanceof Error ? err.message : String(err);
-}
 
 // src/discover.ts
 async function discoverAgent(webId, options = {}) {
@@ -928,7 +930,7 @@ async function discoverAgent(webId, options = {}) {
       pointers,
       verification: {
         valid: false,
-        issues: [{ code: classifyFetchError(err), message: describeError2(err), subject: agentIri }]
+        issues: [{ code: classifyFetchError(err), message: describeError(err), subject: agentIri }]
       }
     };
   }
@@ -949,12 +951,6 @@ function agentCardUrl(origin) {
 function originOf(url) {
   const u = new URL(url);
   return `${u.protocol}//${u.host}/`;
-}
-function describeError2(err) {
-  if (err instanceof RdfFetchError) {
-    return err.status ? `Failed to fetch agent description (HTTP ${err.status}): ${err.message}` : `Failed to parse agent description: ${err.message}`;
-  }
-  return err instanceof Error ? err.message : String(err);
 }
 
 // src/pointer.ts

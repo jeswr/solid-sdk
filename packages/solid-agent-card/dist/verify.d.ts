@@ -46,13 +46,4 @@ export declare function verifyDescriptor(input: string, options?: VerifyOptions)
  * second fetch.
  */
 export declare function verifyDataset(dataset: DatasetCore, expectedId?: string, options?: VerifyDatasetOptions): VerificationResult;
-/**
- * Classify a fetch/parse error into the right issue code. An {@link RdfFetchError}
- * carries discriminator fields: an HTTP `status` ⇒ the request reached the server
- * but it answered non-2xx (`fetch-failed`); a `contentType` WITHOUT a status ⇒ we
- * received a response but could not parse that media type (`parse-failed`); neither
- * ⇒ a transport/network failure (`fetch-failed`). A non-RdfFetchError is treated as
- * a parse failure (it surfaced from the parser, not the transport).
- */
-export declare function classifyFetchError(err: unknown): "fetch-failed" | "parse-failed";
 //# sourceMappingURL=verify.d.ts.map

@@ -131,6 +131,25 @@ describe("discoverAgent — descriptor resolution failures", () => {
     expect(r.verification?.valid).toBe(false);
     expect(r.verification?.issues.map((i) => i.code)).toContain("subject-mismatch");
   });
+
+  it("classifies a transport failure as fetch-failed AND the message mirrors the code", async () => {
+    // The pointer fetch succeeds; the descriptor fetch fails at the transport
+    // (no HTTP response) → fetch-failed, and (regression: this used to mislabel
+    // as "parse") the human-readable message must say "fetch", matching the code.
+    const pointer = await buildAgentPointer(WEBID, AGENT).toString();
+    const fetch = (async (url: string | URL) => {
+      const u = String(url);
+      if (u === WEBID) {
+        return new Response(pointer, { status: 200, headers: { "content-type": "text/turtle" } });
+      }
+      throw new TypeError("network down");
+    }) as unknown as typeof globalThis.fetch;
+    const r = await discoverAgent(WEBID, { fetch });
+    expect(r.pointers).toHaveLength(1);
+    expect(r.verification?.issues[0]?.code).toBe("fetch-failed");
+    expect(r.verification?.issues[0]?.message).toMatch(/fetch/i);
+    expect(r.verification?.issues[0]?.message).not.toMatch(/parse/i);
+  });
 });
 
 describe("well-known URL helpers", () => {
