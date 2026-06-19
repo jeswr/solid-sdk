@@ -535,10 +535,10 @@ describe("createPinningDispatcher — IP-literal targets validated directly (loo
     await dispatcher.close().catch(() => {});
   });
 
-  it("REFUSES a loopback https: IP literal even under allowLoopback (https requires PUBLIC)", async () => {
-    // allowLoopback re-permits loopback at the ADDRESS level for https; isPublicAddress(addr,true)
-    // would allow 127.0.0.1. So this is NOT refused under allowLoopback — assert the boundary:
-    // a NON-loopback private literal (10.x) is still refused even under allowLoopback.
+  it("REFUSES a NON-loopback private https: IP literal (10.x) even under allowLoopback", async () => {
+    // allowLoopback re-permits LOOPBACK only at the address level (isPublicAddress(127.0.0.1,true)
+    // is true), NOT other private ranges. So a NON-loopback private literal (10.x) is still refused
+    // even under allowLoopback — this asserts that boundary (allowLoopback does not widen to RFC1918).
     const dispatcher = createPinningDispatcher({ allowLoopback: true });
     const err = await undiciFetch("https://10.0.0.5/x", {
       dispatcher: dispatcher as unknown as UndiciAgent,
