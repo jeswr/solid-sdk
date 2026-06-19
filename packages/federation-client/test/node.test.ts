@@ -686,29 +686,40 @@ describe("createPinningDispatcher — protocol-aware http-loopback-only (re-pin 
     }
   });
 
-  it("REJECTS a `timeoutMs` option at COMPILE TIME — not silently ignored (roborev Medium)", async () => {
+  it("THROWS on a `timeoutMs` option — fail loud, never silently ignored (roborev Medium)", async () => {
     // The bare dispatcher does NOT apply a connect timeout (guarded-fetch's createPinningDispatcher
     // wires none; its timeoutMs is a guard whole-operation deadline used only by
     // createNodeGuardedFetch). To avoid SILENTLY ignoring a caller's timeoutMs (a hidden behaviour
-    // regression vs this package's prior dispatcher), fed-client's option type OMITS timeoutMs, so
-    // passing it is a TYPE ERROR. The @ts-expect-error below FAILS the typecheck if the option is
-    // ever (re-)accepted — the compile-time guard. The supported options still build a dispatcher.
+    // regression vs this package's prior dispatcher) WITHOUT over-rejecting timeout-free option
+    // variables at the type level, fed-client keeps the full NodePinningOptions parameter type and
+    // THROWS at runtime when timeoutMs is present.
     const resolveAll: ResolveAll = async () => [{ address: "127.0.0.1", family: 4 }];
-    // @ts-expect-error timeoutMs is intentionally not accepted by createPinningDispatcher (omitted)
-    const rejected = createPinningDispatcher({ allowLoopback: true, resolveAll, timeoutMs: 1234 });
-    await rejected.close().catch(() => {});
+    expect(() =>
+      createPinningDispatcher({ allowLoopback: true, resolveAll, timeoutMs: 1234 }),
+    ).toThrow(/timeoutMs/i);
 
-    // The harder case (roborev Medium): a value ALREADY typed as NodePinningOptions (with a real
-    // `timeoutMs?: number`) must ALSO be rejected — a bare Omit would let it slip through via
-    // structural assignability. The `timeoutMs?: never` intersection in PinningDispatcherOptions
-    // makes this a type error; @ts-expect-error proves it (FAILS the typecheck if it ever compiles).
-    const preTyped: NodePinningOptions = { allowLoopback: true, resolveAll, timeoutMs: 1234 };
-    // @ts-expect-error a pre-typed NodePinningOptions carrying timeoutMs is not assignable
-    const rejected2 = createPinningDispatcher(preTyped);
-    await rejected2.close().catch(() => {});
+    // The harder case (roborev Medium): a value ALREADY typed as NodePinningOptions carrying a real
+    // timeoutMs must ALSO be rejected — the runtime guard catches it regardless of how it was typed.
+    const preTypedWithTimeout: NodePinningOptions = {
+      allowLoopback: true,
+      resolveAll,
+      timeoutMs: 1234,
+    };
+    expect(() => createPinningDispatcher(preTypedWithTimeout)).toThrow(/timeoutMs/i);
+  });
 
-    const ok = createPinningDispatcher({ allowLoopback: true, resolveAll });
+  it("ACCEPTS a timeout-FREE NodePinningOptions value — no over-rejection (roborev Medium)", async () => {
+    // The other half of the same finding: a value statically typed as NodePinningOptions that does
+    // NOT carry timeoutMs must remain assignable (a `timeoutMs?: never` type would have rejected it
+    // even with no timeout). It builds a real undici Agent and runs.
+    const resolveAll: ResolveAll = async () => [{ address: "127.0.0.1", family: 4 }];
+    const preTypedNoTimeout: NodePinningOptions = { allowLoopback: true, resolveAll };
+    const ok = createPinningDispatcher(preTypedNoTimeout);
     expect(typeof ok.dispatch).toBe("function"); // it is a real undici Agent (Dispatcher)
     await ok.close().catch(() => {});
+
+    const okLiteral = createPinningDispatcher({ allowLoopback: true, resolveAll });
+    expect(typeof okLiteral.dispatch).toBe("function");
+    await okLiteral.close().catch(() => {});
   });
 });

@@ -160,6 +160,11 @@ function safeIsHttp(u) {
 
 // src/node.ts
 function createPinningDispatcher2(options = {}) {
+  if (options.timeoutMs !== void 0) {
+    throw new Error(
+      "createPinningDispatcher does not support `timeoutMs` (the bare dispatcher applies no connect timeout). Use createNodeGuardedFetch({ timeoutMs }) for a timeout-bounded fetch."
+    );
+  }
   return createPinningDispatcher(options);
 }
 export {
