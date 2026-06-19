@@ -331,16 +331,7 @@ async function readStreamCapped(
     parts.push(decoder.decode()); // flush any multi-byte remainder
     return parts.join("");
   } catch (err) {
-    if (err instanceof SafeFetchError) {
-      throw err;
-    }
-    if (controller.signal.aborted) {
-      throw new SafeFetchError("timeout", `reading response body timed out after ${timeoutMs}ms`);
-    }
-    throw new SafeFetchError(
-      "network",
-      `error reading body: ${err instanceof Error ? err.message : String(err)}`,
-    );
+    throw mapBodyReadError(err, controller, timeoutMs);
   }
 }
 
@@ -355,18 +346,33 @@ async function readTextCapped(
   try {
     text = await res.text();
   } catch (err) {
-    if (controller.signal.aborted) {
-      throw new SafeFetchError("timeout", `reading response body timed out after ${timeoutMs}ms`);
-    }
-    throw new SafeFetchError(
-      "network",
-      `error reading body: ${err instanceof Error ? err.message : String(err)}`,
-    );
+    throw mapBodyReadError(err, controller, timeoutMs);
   }
   if (Buffer.byteLength(text, "utf8") > maxBytes) {
     throw new SafeFetchError("too-large", `response body exceeds cap of ${maxBytes} bytes`);
   }
   return text;
+}
+
+/**
+ * Map a body-read failure to a typed {@link SafeFetchError}, the ONE place that
+ * decides timeout-vs-network for a read. A `SafeFetchError` already raised inside
+ * the read (e.g. the streaming `too-large` guard) is re-thrown unchanged; an abort
+ * means the request timer fired (the timer stays active through the body read);
+ * anything else is a network error. Returns `never` (always throws) so callers
+ * read as `throw mapBodyReadError(...)`.
+ */
+function mapBodyReadError(err: unknown, controller: AbortController, timeoutMs: number): never {
+  if (err instanceof SafeFetchError) {
+    throw err;
+  }
+  if (controller.signal.aborted) {
+    throw new SafeFetchError("timeout", `reading response body timed out after ${timeoutMs}ms`);
+  }
+  throw new SafeFetchError(
+    "network",
+    `error reading body: ${err instanceof Error ? err.message : String(err)}`,
+  );
 }
 
 /** Parse a safe-fetched JSON body, throwing a typed error on malformed JSON. */
