@@ -398,11 +398,7 @@ const solidDriver = defineDriver<SolidDriverOptions, undefined>((options) => {
       const baseOrigin = new URL(base).origin;
       const isSameOrigin = (input: RequestInfo | URL): boolean => {
         const raw =
-          typeof input === "string"
-            ? input
-            : input instanceof URL
-              ? input.toString()
-              : input.url;
+          typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
         try {
           return new URL(raw, base).origin === baseOrigin;
         } catch {
@@ -414,7 +410,7 @@ const solidDriver = defineDriver<SolidDriverOptions, undefined>((options) => {
           ...init,
           headers: isSameOrigin(input)
             ? { ...options.headers, ...(init?.headers as object) }
-            : (init?.headers as Record<string, string> | undefined) ?? {},
+            : ((init?.headers as Record<string, string> | undefined) ?? {}),
         });
       const startOpts = {
         base,

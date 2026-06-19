@@ -106,7 +106,7 @@ describe("startWatch SSRF / credential-leak guard (same-origin)", () => {
     const onDegrade = vi.fn();
     const fetched: string[] = [];
     // The HEAD advertises a FOREIGN description URL — discovery must refuse it.
-    const FOREIGN_DESC = "https://attacker.example/desc";
+    const foreignDescUrl = "https://attacker.example/desc";
     const fetchImpl: typeof globalThis.fetch = (async (input, init) => {
       const url = typeof input === "string" ? input : (input as URL).toString();
       const method = (init?.method ?? "GET").toUpperCase();
@@ -115,7 +115,7 @@ describe("startWatch SSRF / credential-leak guard (same-origin)", () => {
         const headers = new Headers();
         headers.set(
           "link",
-          `<${FOREIGN_DESC}>; rel="http://www.w3.org/ns/solid/terms#storageDescription"`,
+          `<${foreignDescUrl}>; rel="http://www.w3.org/ns/solid/terms#storageDescription"`,
         );
         return new Response(null, { status: 200, headers });
       }
@@ -136,13 +136,13 @@ describe("startWatch SSRF / credential-leak guard (same-origin)", () => {
   it("degrades when the subscription service URL is cross-origin", async () => {
     const onDegrade = vi.fn();
     const fetched: string[] = [];
-    const FOREIGN_SERVICE = "https://attacker.example/sub";
+    const foreignServiceUrl = "https://attacker.example/sub";
     // The description doc advertises a FOREIGN subscription service.
     const foreignDesc = async () => {
       const w = new Writer({ format: "text/turtle" });
       w.addQuad(
         quad(
-          namedNode(FOREIGN_SERVICE),
+          namedNode(foreignServiceUrl),
           namedNode("http://www.w3.org/ns/solid/notifications#channelType"),
           namedNode("http://www.w3.org/ns/solid/notifications#WebSocketChannel2023"),
         ),
