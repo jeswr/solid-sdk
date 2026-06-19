@@ -298,8 +298,32 @@ npm install github:jeswr/solid-task-model#main
 ## Develop
 
 ```sh
-npm run gate   # lint (Biome) + typecheck (tsc) + test (vitest) + build + check:dist
+npm run gate   # lint (Biome) + typecheck (tsc) + test (vitest) + build + check:dist + check:lockfile-transport
 ```
+
+### Reviewing changes — the contract artifacts
+
+Two committed, diffable artifacts let a reviewer confirm a change did not silently alter
+the package's contract:
+
+- **The emitted RDF + the export set — gated.** `src/characterization.test.ts` is a
+  golden-master suite that runs in `npm test` (hence `npm run gate`), no extra dep. It pins:
+  (a) the **exact runtime named-export set** of every entry point (`.`, `./task`,
+  `./tracker`, `./contacts`, `./shape`) — a removed/renamed/added runtime export fails it;
+  (b) the **presence + shape of each named type-only export** (`TaskData`, `WorkflowDef`,
+  `AddressBookData`, …) via compile-time assertions — a renamed/removed subpath type fails
+  `tsc` (these are type-erased, so they can't be in the runtime set above; the assertions
+  don't catch a *newly-added* type-only export); and (c) the **canonical, normalised
+  N-Quads** each `serialize*` emits. A refactor that changes one IRI / predicate / class, or
+  an export, fails the gate. Snapshots are never `--update`d to force a red test green — an
+  unexpected diff is stop-the-line.
+- **The public API report — a separate command (NOT in `npm run gate`).** `etc/solid-task-model.api.md`
+  is the [api-extractor](https://api-extractor.com/) report of the main entry's public
+  surface. Run `npm run api:check` to fail on drift of `dist/index.d.ts` from it, or
+  `npm run api:report` to regenerate it after an intended change. (It is kept out of the
+  default gate because it fetches api-extractor via `npx`; the export-set half of the
+  contract is already gated by the golden master above.) A pure internal refactor leaves
+  this file byte-identical; an API change shows up as a one-file diff.
 
 Authored by Claude Opus 4.8 (Fable unavailable). See commit trailers / `AUTHORED-BY`
 markers.

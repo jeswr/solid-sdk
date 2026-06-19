@@ -4,11 +4,14 @@
 // behaviour BEFORE any refactor, so a structural change is proven not to alter
 // behaviour. Two axes:
 //
-//   1. The PUBLIC API contract — the exact named-export set of every entry point
-//      (`.`, `./task`, `./tracker`, `./contacts`, `./shape`). An export that is
-//      added, removed or renamed here is a deliberate, reviewed CONTRACT change;
-//      an accidental one fails this test. (Mirrors what api-extractor's
-//      `etc/solid-task-model.api.md` snapshots, in-repo, with no extra dep.)
+//   1. The PUBLIC API contract — the exact RUNTIME named-export set of every
+//      entry point (`.`, `./task`, `./tracker`, `./contacts`, `./shape`), plus
+//      compile-time assertions for the presence + shape of each named type-only
+//      export (which is type-erased, so it can't be in the runtime set). A
+//      runtime export added/removed/renamed, or a named type removed/renamed,
+//      fails; a deliberate change is a reviewed CONTRACT diff. (Mirrors what
+//      api-extractor's `etc/solid-task-model.api.md` snapshots — the full main
+//      entry, types included — in-repo, with no extra dep.)
 //
 //   2. The EMITTED RDF — canonical sorted N-Quads for a representative build of
 //      every serialisable entity, with the only non-deterministic fields
