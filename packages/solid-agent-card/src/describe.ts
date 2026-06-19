@@ -98,11 +98,35 @@ function buildSolidExtension(descriptor: AgentDescriptor): NonNullable<AgentCard
   return ext;
 }
 
-/** Project a descriptor into an ANP Agent Description (RDF, via typed wrappers). */
+/** The writable agent-description node `AgentBuilder.agent` opens (kept internal). */
+type AgentNode = ReturnType<AgentBuilder["agent"]>;
+
+/**
+ * Project a descriptor into an ANP Agent Description (RDF, via typed wrappers).
+ *
+ * The write itself is delegated to three small, single-concern helpers (scalars,
+ * skills, schemes) so the body reads as a spec rather than a long guard ladder —
+ * each helper owns exactly one part of the SAME graph, in the SAME order, so the
+ * emitted quads are byte-identical to the prior inline form.
+ */
 function buildAgentDescription(descriptor: AgentDescriptor): AgentDescriptionDocument {
   const builder = new AgentBuilder();
   const node = builder.agent(descriptor.id);
 
+  writeScalarFields(node, descriptor);
+  writeSkills(node, descriptor.skills);
+  writeSecuritySchemes(node, descriptor.securitySchemes);
+
+  const quads = builder.quads();
+  return {
+    quads,
+    toTurtle: (format?: string) => serialize(quads, format),
+    toJsonLd: () => Promise.resolve(buildJsonLd(descriptor)),
+  };
+}
+
+/** Write the scalar agent fields + protocol-source links onto the node. */
+function writeScalarFields(node: AgentNode, descriptor: AgentDescriptor): void {
   node.setName(descriptor.name);
   if (descriptor.description !== undefined) {
     node.setDescription(descriptor.description);
@@ -117,8 +141,11 @@ function buildAgentDescription(descriptor: AgentDescriptor): AgentDescriptionDoc
   for (const source of descriptor.protocolSources ?? []) {
     node.addProtocolSource(source);
   }
+}
 
-  for (const skill of descriptor.skills ?? []) {
+/** Link + populate one `ad:Skill` blank node per advertised skill. */
+function writeSkills(node: AgentNode, skills: AgentDescriptor["skills"]): void {
+  for (const skill of skills ?? []) {
     const sk = node.linkSkill();
     sk.setId(skill.id);
     sk.setName(skill.name);
@@ -126,8 +153,11 @@ function buildAgentDescription(descriptor: AgentDescriptor): AgentDescriptionDoc
       sk.setDescription(skill.description);
     }
   }
+}
 
-  for (const scheme of descriptor.securitySchemes ?? []) {
+/** Link + populate one `ad:SecurityScheme` blank node per scheme. */
+function writeSecuritySchemes(node: AgentNode, schemes: AgentDescriptor["securitySchemes"]): void {
+  for (const scheme of schemes ?? []) {
     const sc = node.linkSecurityScheme();
     sc.setType(scheme.type);
     if (scheme.description !== undefined) {
@@ -137,13 +167,6 @@ function buildAgentDescription(descriptor: AgentDescriptor): AgentDescriptionDoc
       sc.setIssuer(scheme.issuer);
     }
   }
-
-  const quads = builder.quads();
-  return {
-    quads,
-    toTurtle: (format?: string) => serialize(quads, format),
-    toJsonLd: () => Promise.resolve(buildJsonLd(descriptor)),
-  };
 }
 
 /**

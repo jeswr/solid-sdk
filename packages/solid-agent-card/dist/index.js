@@ -380,6 +380,17 @@ function buildSolidExtension(descriptor) {
 function buildAgentDescription(descriptor) {
   const builder = new AgentBuilder();
   const node = builder.agent(descriptor.id);
+  writeScalarFields(node, descriptor);
+  writeSkills(node, descriptor.skills);
+  writeSecuritySchemes(node, descriptor.securitySchemes);
+  const quads = builder.quads();
+  return {
+    quads,
+    toTurtle: (format) => serialize2(quads, format),
+    toJsonLd: () => Promise.resolve(buildJsonLd(descriptor))
+  };
+}
+function writeScalarFields(node, descriptor) {
   node.setName(descriptor.name);
   if (descriptor.description !== void 0) {
     node.setDescription(descriptor.description);
@@ -394,7 +405,9 @@ function buildAgentDescription(descriptor) {
   for (const source of descriptor.protocolSources ?? []) {
     node.addProtocolSource(source);
   }
-  for (const skill of descriptor.skills ?? []) {
+}
+function writeSkills(node, skills) {
+  for (const skill of skills ?? []) {
     const sk = node.linkSkill();
     sk.setId(skill.id);
     sk.setName(skill.name);
@@ -402,7 +415,9 @@ function buildAgentDescription(descriptor) {
       sk.setDescription(skill.description);
     }
   }
-  for (const scheme of descriptor.securitySchemes ?? []) {
+}
+function writeSecuritySchemes(node, schemes) {
+  for (const scheme of schemes ?? []) {
     const sc = node.linkSecurityScheme();
     sc.setType(scheme.type);
     if (scheme.description !== void 0) {
@@ -412,12 +427,6 @@ function buildAgentDescription(descriptor) {
       sc.setIssuer(scheme.issuer);
     }
   }
-  const quads = builder.quads();
-  return {
-    quads,
-    toTurtle: (format) => serialize2(quads, format),
-    toJsonLd: () => Promise.resolve(buildJsonLd(descriptor))
-  };
 }
 function buildJsonLd(descriptor) {
   const doc = {
