@@ -9,15 +9,15 @@
 // `initials(name)` fallback. Emits a `sign-out` CustomEvent on the sign-out
 // action; the host wires its own session teardown to that.
 import { css, html, LitElement, nothing } from "lit";
+import { initialsFromName } from "../internal/initials.js";
 import { tokenStyles } from "../theme-tokens.js";
-/** Initials from a display name, for the avatar fallback. Exported for tests. */
+/**
+ * Initials from a display name, for the avatar fallback. Exported for tests + as
+ * part of the public API. Delegates to the shared internal `initialsFromName` (the
+ * one reviewed implementation, also used by <jeswr-login-panel>'s `initialsOf`).
+ */
 export function initials(name) {
-    const parts = name.trim().split(/\s+/).filter(Boolean);
-    if (parts.length === 0)
-        return "?";
-    if (parts.length === 1)
-        return parts[0].slice(0, 2).toUpperCase();
-    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    return initialsFromName(name);
 }
 export class JeswrAccountMenu extends LitElement {
     static properties = {

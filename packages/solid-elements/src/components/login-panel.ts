@@ -33,6 +33,7 @@
 // subexport's createReactiveAuthController, or a custom LoginController).
 
 import { css, html, LitElement, nothing, type TemplateResult } from "lit";
+import { initialsFromName } from "../internal/initials.js";
 import type { LoginController, RecentLoginAccount } from "../login-controller.js";
 import { tokenStyles } from "../theme-tokens.js";
 
@@ -807,12 +808,10 @@ export function initialsOf(value: string): string {
     const seg = host.split(".").filter(Boolean)[0] ?? host;
     return (seg.slice(0, 2) || "?").toUpperCase();
   } catch {
-    // Not a URL: treat as a name.
+    // Not a URL: treat as a name, via the shared name→initials helper (the one
+    // reviewed implementation, also wrapped by <jeswr-account-menu>'s `initials`).
+    return initialsFromName(trimmed);
   }
-  const parts = trimmed.split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "?";
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
 if (typeof customElements !== "undefined" && !customElements.get("jeswr-login-panel")) {

@@ -1,5 +1,9 @@
 import { LitElement } from "lit";
-/** Initials from a display name, for the avatar fallback. Exported for tests. */
+/**
+ * Initials from a display name, for the avatar fallback. Exported for tests + as
+ * part of the public API. Delegates to the shared internal `initialsFromName` (the
+ * one reviewed implementation, also used by <jeswr-login-panel>'s `initialsOf`).
+ */
 export declare function initials(name: string): string;
 export declare class JeswrAccountMenu extends LitElement {
     static properties: {
