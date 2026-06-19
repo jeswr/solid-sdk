@@ -133,9 +133,16 @@ npm install
 npm run lint
 npm run typecheck
 npm test
-npm run build      # emits the committed dist/
-npm run check:dist # verifies the committed dist/ matches src/
+npm run build       # emits the committed dist/
+npm run check:dist  # verifies the committed dist/ matches src/
+npm run api:check   # fails if the public API drifts from etc/solid-community-feeds.api.md
+npm run api:report  # regenerates the committed API report after an INTENDED API change
 ```
+
+The public API surface is snapshotted (api-extractor) in
+[`etc/solid-community-feeds.api.md`](etc/solid-community-feeds.api.md) so any
+contract change is a one-file diff. Regenerate it with `npm run api:report` only
+when the change is intended.
 
 ## License
 
