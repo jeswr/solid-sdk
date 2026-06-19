@@ -1,11 +1,11 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
 exports[`emitted RDF golden master (canonical N-Quads, timestamps/uuids normalised) > a closed task serialises with wf:Closed + prov:endedAtTime 1`] = `
-"<http://localhost:3000/alice/issues/x#it> <http://purl.org/dc/terms/created> "<<DATETIME>>"^^<http://www.w3.org/2001/XMLSchema#dateTime> .
+"<http://localhost:3000/alice/issues/x#it> <http://purl.org/dc/terms/created> "2026-06-09T10:00:00.000Z"^^<http://www.w3.org/2001/XMLSchema#dateTime> .
 <http://localhost:3000/alice/issues/x#it> <http://purl.org/dc/terms/title> "Done thing" .
 <http://localhost:3000/alice/issues/x#it> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2005/01/wf/flow#Closed> .
 <http://localhost:3000/alice/issues/x#it> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2005/01/wf/flow#Task> .
-<http://localhost:3000/alice/issues/x#it> <http://www.w3.org/ns/prov#endedAtTime> "<<DATETIME>>"^^<http://www.w3.org/2001/XMLSchema#dateTime> ."
+<http://localhost:3000/alice/issues/x#it> <http://www.w3.org/ns/prov#endedAtTime> "2026-06-10T12:00:00.000Z"^^<http://www.w3.org/2001/XMLSchema#dateTime> ."
 `;
 
 exports[`emitted RDF golden master (canonical N-Quads, timestamps/uuids normalised) > a contact group serialises to the pinned graph 1`] = `
@@ -69,12 +69,12 @@ exports[`emitted RDF golden master (canonical N-Quads, timestamps/uuids normalis
 `;
 
 exports[`emitted RDF golden master (canonical N-Quads, timestamps/uuids normalised) > a fully-populated task serialises to the pinned graph 1`] = `
-"<http://localhost:3000/alice/issues/x#it> <http://purl.org/dc/terms/created> "<<DATETIME>>"^^<http://www.w3.org/2001/XMLSchema#dateTime> .
+"<http://localhost:3000/alice/issues/x#it> <http://purl.org/dc/terms/created> "2026-06-09T10:00:00.000Z"^^<http://www.w3.org/2001/XMLSchema#dateTime> .
 <http://localhost:3000/alice/issues/x#it> <http://purl.org/dc/terms/creator> <http://localhost:3000/alice/profile/card#me> .
 <http://localhost:3000/alice/issues/x#it> <http://purl.org/dc/terms/description> "Repro steps included." .
 <http://localhost:3000/alice/issues/x#it> <http://purl.org/dc/terms/isPartOf> <http://localhost:3000/alice/issues/x-parent> .
 <http://localhost:3000/alice/issues/x#it> <http://purl.org/dc/terms/isReplacedBy> <http://localhost:3000/alice/issues/x-dup> .
-<http://localhost:3000/alice/issues/x#it> <http://purl.org/dc/terms/modified> "<<DATETIME>>"^^<http://www.w3.org/2001/XMLSchema#dateTime> .
+<http://localhost:3000/alice/issues/x#it> <http://purl.org/dc/terms/modified> "2026-06-09T11:00:00.000Z"^^<http://www.w3.org/2001/XMLSchema#dateTime> .
 <http://localhost:3000/alice/issues/x#it> <http://purl.org/dc/terms/relation> <http://localhost:3000/alice/issues/x-c> .
 <http://localhost:3000/alice/issues/x#it> <http://purl.org/dc/terms/requires> <http://localhost:3000/alice/issues/x-a> .
 <http://localhost:3000/alice/issues/x#it> <http://purl.org/dc/terms/requires> <http://localhost:3000/alice/issues/x-b> .
@@ -84,7 +84,7 @@ exports[`emitted RDF golden master (canonical N-Quads, timestamps/uuids normalis
 <http://localhost:3000/alice/issues/x#it> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2005/01/wf/flow#Open> .
 <http://localhost:3000/alice/issues/x#it> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2005/01/wf/flow#Task> .
 <http://localhost:3000/alice/issues/x#it> <http://www.w3.org/2005/01/wf/flow#assignee> <http://localhost:3000/bob/profile/card#me> .
-<http://localhost:3000/alice/issues/x#it> <http://www.w3.org/2005/01/wf/flow#dateDue> "<<DATETIME>>"^^<http://www.w3.org/2001/XMLSchema#dateTime> .
+<http://localhost:3000/alice/issues/x#it> <http://www.w3.org/2005/01/wf/flow#dateDue> "2026-07-01T00:00:00.000Z"^^<http://www.w3.org/2001/XMLSchema#dateTime> .
 <http://localhost:3000/alice/issues/x#it> <http://www.w3.org/2005/01/wf/flow#description> "Repro steps included." .
 <http://localhost:3000/alice/issues/x#it> <http://www.w3.org/2005/01/wf/flow#tracker> <http://localhost:3000/alice/issues/tracker.ttl#this> .
 <http://localhost:3000/alice/issues/x#it> <http://www.w3.org/ns/prov#wasDerivedFrom> <http://localhost:3000/alice/issues/x-orig> ."
@@ -102,27 +102,27 @@ exports[`emitted RDF golden master (canonical N-Quads, timestamps/uuids normalis
 `;
 
 exports[`emitted RDF golden master (canonical N-Quads, timestamps/uuids normalised) > a person serialises with structured email/phone/webId nodes 1`] = `
-"<http://localhost:3000/alice/contacts/Person/abc/index.ttl#this> <http://purl.org/dc/terms/created> "<<DATETIME>>"^^<http://www.w3.org/2001/XMLSchema#dateTime> .
+"<http://localhost:3000/alice/contacts/Person/abc/index.ttl#this> <http://purl.org/dc/terms/created> "2026-06-09T10:00:00.000Z"^^<http://www.w3.org/2001/XMLSchema#dateTime> .
 <http://localhost:3000/alice/contacts/Person/abc/index.ttl#this> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2006/vcard/ns#Individual> .
 <http://localhost:3000/alice/contacts/Person/abc/index.ttl#this> <http://www.w3.org/2006/vcard/ns#fn> "Bob Smith" .
-<http://localhost:3000/alice/contacts/Person/abc/index.ttl#this> <http://www.w3.org/2006/vcard/ns#hasEmail> _:b .
-<http://localhost:3000/alice/contacts/Person/abc/index.ttl#this> <http://www.w3.org/2006/vcard/ns#hasEmail> _:b .
-<http://localhost:3000/alice/contacts/Person/abc/index.ttl#this> <http://www.w3.org/2006/vcard/ns#hasTelephone> _:b .
-<http://localhost:3000/alice/contacts/Person/abc/index.ttl#this> <http://www.w3.org/2006/vcard/ns#hasTelephone> _:b .
+<http://localhost:3000/alice/contacts/Person/abc/index.ttl#this> <http://www.w3.org/2006/vcard/ns#hasEmail> _:b2 .
+<http://localhost:3000/alice/contacts/Person/abc/index.ttl#this> <http://www.w3.org/2006/vcard/ns#hasEmail> _:b3 .
+<http://localhost:3000/alice/contacts/Person/abc/index.ttl#this> <http://www.w3.org/2006/vcard/ns#hasTelephone> _:b0 .
+<http://localhost:3000/alice/contacts/Person/abc/index.ttl#this> <http://www.w3.org/2006/vcard/ns#hasTelephone> _:b1 .
 <http://localhost:3000/alice/contacts/Person/abc/index.ttl#this> <http://www.w3.org/2006/vcard/ns#hasUID> "urn:uuid:<<UUID>>" .
 <http://localhost:3000/alice/contacts/Person/abc/index.ttl#this> <http://www.w3.org/2006/vcard/ns#inAddressBook> <http://localhost:3000/alice/contacts/index.ttl#this> .
 <http://localhost:3000/alice/contacts/Person/abc/index.ttl#this> <http://www.w3.org/2006/vcard/ns#note> "A friend." .
-<http://localhost:3000/alice/contacts/Person/abc/index.ttl#this> <http://www.w3.org/2006/vcard/ns#url> _:b .
-_:b <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2006/vcard/ns#Cell> .
-_:b <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2006/vcard/ns#Cell> .
-_:b <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2006/vcard/ns#Home> .
-_:b <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2006/vcard/ns#Home> .
-_:b <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2006/vcard/ns#WebId> .
-_:b <http://www.w3.org/2006/vcard/ns#value> <http://localhost:3000/bob/profile/card#me> .
-_:b <http://www.w3.org/2006/vcard/ns#value> <mailto:bob2@example.com> .
-_:b <http://www.w3.org/2006/vcard/ns#value> <mailto:bob@example.com> .
-_:b <http://www.w3.org/2006/vcard/ns#value> <tel:+15551234567> .
-_:b <http://www.w3.org/2006/vcard/ns#value> <tel:+15559999999> ."
+<http://localhost:3000/alice/contacts/Person/abc/index.ttl#this> <http://www.w3.org/2006/vcard/ns#url> _:b4 .
+_:b0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2006/vcard/ns#Cell> .
+_:b0 <http://www.w3.org/2006/vcard/ns#value> <tel:+15551234567> .
+_:b1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2006/vcard/ns#Cell> .
+_:b1 <http://www.w3.org/2006/vcard/ns#value> <tel:+15559999999> .
+_:b2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2006/vcard/ns#Home> .
+_:b2 <http://www.w3.org/2006/vcard/ns#value> <mailto:bob2@example.com> .
+_:b3 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2006/vcard/ns#Home> .
+_:b3 <http://www.w3.org/2006/vcard/ns#value> <mailto:bob@example.com> .
+_:b4 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2006/vcard/ns#WebId> .
+_:b4 <http://www.w3.org/2006/vcard/ns#value> <http://localhost:3000/bob/profile/card#me> ."
 `;
 
 exports[`emitted RDF golden master (canonical N-Quads, timestamps/uuids normalised) > an address book serialises to the pinned graph 1`] = `
@@ -135,7 +135,7 @@ exports[`emitted RDF golden master (canonical N-Quads, timestamps/uuids normalis
 `;
 
 exports[`emitted RDF golden master (canonical N-Quads, timestamps/uuids normalised) > untrusted non-http(s) object fields are dropped from the task graph 1`] = `
-"<http://localhost:3000/alice/issues/x#it> <http://purl.org/dc/terms/created> "<<DATETIME>>"^^<http://www.w3.org/2001/XMLSchema#dateTime> .
+"<http://localhost:3000/alice/issues/x#it> <http://purl.org/dc/terms/created> "2026-06-09T10:00:00.000Z"^^<http://www.w3.org/2001/XMLSchema#dateTime> .
 <http://localhost:3000/alice/issues/x#it> <http://purl.org/dc/terms/requires> <http://ok/1> .
 <http://localhost:3000/alice/issues/x#it> <http://purl.org/dc/terms/title> "X" .
 <http://localhost:3000/alice/issues/x#it> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2005/01/wf/flow#Open> .

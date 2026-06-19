@@ -21,13 +21,50 @@
 // Snapshots are NEVER `--update`d to make a red test green mid-refactor — an
 // unexpected diff here is stop-the-line.
 
+import type { Term } from "@rdfjs/types";
 import { Parser, Store } from "n3";
 import { describe, expect, it } from "vitest";
+import type { AddressBookData, ContactData, ContactGroupData } from "./contacts.js";
 import * as contactsEntry from "./contacts.js";
 import * as mainEntry from "./index.js";
 import * as shapeEntry from "./shape.js";
+import type { TaskData, TaskPriority, TaskState } from "./task.js";
 import * as taskEntry from "./task.js";
+import type { StatusSlug, TrackerData, WorkflowDef, WorkflowStatus } from "./tracker.js";
 import * as trackerEntry from "./tracker.js";
+
+// --- 0. Type-only export contract (compile-time) ------------------------------
+//
+// The runtime `Object.keys` export-set checks below cannot see TYPE-only exports
+// (interfaces / type aliases erase at runtime), and api-extractor snapshots only
+// the main `dist/index.d.ts` — so a type-only drift on a SUBPATH entry (`./task`,
+// `./tracker`, `./contacts`) would go uncaught. These imports are the compile-
+// time contract: if a subpath stops exporting one of these named types (rename /
+// removal), `tsc` fails. The values pin the type SHAPE the consumers rely on.
+const _taskData: TaskData = { title: "t", state: "open" };
+const _taskPriority: TaskPriority = "high";
+const _taskState: TaskState = "closed";
+const _workflowStatus: WorkflowStatus = { slug: "s", label: "S", terminal: false };
+const _workflowDef: WorkflowDef = { statuses: [_workflowStatus], transitions: {} };
+const _statusSlug: StatusSlug = "s";
+const _trackerData: TrackerData = { title: "t" };
+const _addressBookData: AddressBookData = { title: "b" };
+const _contactData: ContactData = { name: "n" };
+const _contactGroupData: ContactGroupData = { name: "g" };
+// Reference them so noUnusedLocals (if ever enabled) and the reader both see the
+// assertion is intentional, not dead.
+void [
+  _taskData,
+  _taskPriority,
+  _taskState,
+  _workflowStatus,
+  _workflowDef,
+  _statusSlug,
+  _trackerData,
+  _addressBookData,
+  _contactData,
+  _contactGroupData,
+];
 
 // --- 1. Public-API contract ----------------------------------------------------
 
@@ -221,34 +258,55 @@ const PERSON = "http://localhost:3000/alice/contacts/Person/abc/index.ttl";
 const GROUP = "http://localhost:3000/alice/contacts/Group/friends.ttl";
 
 /**
- * Reduce a Turtle string to a CANONICAL, normalised, stable representation:
- * re-parse to quads, blank-node labels collapsed to a positional `_:b`,
- * non-deterministic literals (xsd:dateTime timestamps, urn:uuid values) replaced
- * with fixed placeholders, then sorted N-Quad lines. Two emissions that carry the
- * same RDF (modulo timestamps/uuids/bnode-naming) produce the same string here,
- * so a refactor that preserves the wire model produces a byte-identical snapshot.
+ * Reduce a Turtle string to a CANONICAL, non-lossy, stable representation:
+ * re-parse to quads, relabel each blank node with a STABLE key derived from its
+ * own outgoing triples (so the structured value nodes keep their distinct
+ * identity — a swap of which node owns which `rdf:type` / `vcard:value` IS
+ * detected), normalise ONLY the genuinely-generated `urn:uuid:` value to a fixed
+ * placeholder (every supplied `xsd:dateTime` is kept verbatim so a wrong written
+ * date fails the snapshot), then emit sorted N-Quad lines.
+ *
+ * The bnode key is the sorted set of the node's outgoing `predicate object`
+ * pairs (objects being IRIs/literals here — the value nodes are leaves). That
+ * fully captures a structured `[ a vcard:Home; vcard:value <mailto:..> ]` node,
+ * so two emissions with the same structured-node SET produce the same string,
+ * while a node whose type or value changed produces a different one.
  */
 function canonical(ttl: string, base: string): string {
   const quads = new Parser({ baseIRI: base }).parse(ttl);
-  // Stable blank-node relabelling: first-seen order within the sorted output is
-  // unstable, so map each bnode label to a deterministic id keyed by the sorted
-  // position of the (subject,predicate) edge that introduces it. Simpler + stable:
-  // collapse every blank node to the single label `_:b` — the structured value
-  // nodes are anonymous and never cross-referenced, so the predicate+value pins
-  // them without needing distinct ids.
-  const norm = (term: {
-    termType: string;
-    value: string;
-    datatype?: { value: string };
-  }): string => {
-    if (term.termType === "BlankNode") return "_:b";
-    if (term.termType === "NamedNode") return `<${term.value}>`;
-    // Literal
-    const dt = term.datatype?.value;
-    if (dt === "http://www.w3.org/2001/XMLSchema#dateTime") return `"<<DATETIME>>"^^<${dt}>`;
-    let v = term.value;
-    if (/^urn:uuid:/.test(v)) v = "urn:uuid:<<UUID>>";
+
+  const lit = (term: Term): string => {
+    const dt = (term as { datatype?: { value: string } }).datatype?.value;
+    const v = /^urn:uuid:/.test(term.value) ? "urn:uuid:<<UUID>>" : term.value;
     return dt && dt !== "http://www.w3.org/2001/XMLSchema#string" ? `"${v}"^^<${dt}>` : `"${v}"`;
+  };
+  // Render a term WITHOUT resolving a blank node (used to build the bnode key
+  // from its leaf objects — the value nodes never point at another bnode).
+  const leaf = (term: Term): string => {
+    if (term.termType === "NamedNode") return `<${term.value}>`;
+    if (term.termType === "BlankNode") return `_:?`; // not expected for leaves here
+    return lit(term);
+  };
+  // Stable bnode label = a hash-free deterministic digest of its outgoing edges.
+  const bnodeKey = new Map<string, string>();
+  for (const q of quads) {
+    if (q.subject.termType !== "BlankNode") continue;
+    const edge = `${leaf(q.predicate)} ${leaf(q.object)}`;
+    bnodeKey.set(q.subject.value, `${bnodeKey.get(q.subject.value) ?? ""}|${edge}`);
+  }
+  // Map each distinct digest to a small stable index, so labels are short + the
+  // snapshot stays readable while remaining structurally faithful.
+  const digestIndex = new Map<string, number>();
+  for (const digest of [...new Set(bnodeKey.values())].sort()) {
+    digestIndex.set(digest, digestIndex.size);
+  }
+  const norm = (term: Term): string => {
+    if (term.termType === "BlankNode") {
+      const digest = bnodeKey.get(term.value);
+      return digest === undefined ? "_:orphan" : `_:b${digestIndex.get(digest)}`;
+    }
+    if (term.termType === "NamedNode") return `<${term.value}>`;
+    return lit(term);
   };
   return quads
     .map((q) => `${norm(q.subject)} ${norm(q.predicate)} ${norm(q.object)} .`)
@@ -280,7 +338,14 @@ describe("emitted RDF golden master (canonical N-Quads, timestamps/uuids normali
   });
 
   it("a closed task serialises with wf:Closed + prov:endedAtTime", async () => {
-    const ttl = await taskEntry.serializeTask(RES, { title: "Done thing", state: "closed" });
+    // Supply BOTH dates so nothing is generated — the snapshot then pins the
+    // exact dct:created + prov:endedAtTime literals (a wrong written date fails).
+    const ttl = await taskEntry.serializeTask(RES, {
+      title: "Done thing",
+      state: "closed",
+      created: new Date("2026-06-09T10:00:00.000Z"),
+      endedAt: new Date("2026-06-10T12:00:00.000Z"),
+    });
     expect(canonical(ttl, RES)).toMatchSnapshot();
   });
 
@@ -357,6 +422,7 @@ describe("emitted RDF golden master (canonical N-Quads, timestamps/uuids normali
     const ttl = await taskEntry.serializeTask(RES, {
       title: "X",
       state: "open",
+      created: new Date("2026-06-09T10:00:00.000Z"), // explicit ⇒ nothing generated
       assignee: "javascript:alert(1)",
       creator: "mailto:bob@example.com",
       project: "not a url",
