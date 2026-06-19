@@ -713,134 +713,143 @@ function enqueue(state, frontier, url, kind, depth) {
 }
 async function visit(item, state, deps, budget) {
   const discovered = [];
-  let head;
-  try {
-    head = await deps.fetch(headRequest(item.url));
-  } catch {
-    head = void 0;
-  }
-  if (head?.ok) {
-    const ct = head.headers.get("content-type");
-    const cl = head.headers.get("content-length");
-    const probedLarge = bodyBytes(null, cl) > LARGE_RESOURCE_BYTES;
-    const probedBinary = isBinaryType(ct);
-    if (probedBinary || probedLarge) {
-      state.visited += 1;
-      recordVisit(state, deps, {
-        url: item.url,
-        kind: item.kind,
-        depth: item.depth,
-        status: head.status,
-        bytes: bodyBytes(null, cl),
-        skipped: probedBinary ? "large-binary" : "large-resource"
-      });
-      return discovered;
-    }
-  }
-  if (state.reserved >= budget.maxResources) {
-    state.budgetHit = true;
-    return discovered;
-  }
-  state.reserved += 1;
-  let res;
-  try {
-    res = await deps.fetch(rdfRequest(item.url));
-  } catch {
-    recordVisit(state, deps, {
-      url: item.url,
-      kind: item.kind,
-      depth: item.depth,
-      status: 0,
-      bytes: 0,
-      skipped: "fetch-error"
-    });
-    return discovered;
-  }
+  if (await probeHeadForSkip(item, state, deps)) return discovered;
+  if (!reserveSlot(state, budget)) return discovered;
+  const res = await fetchOrRecordError(item, state, deps);
+  if (!res) return discovered;
   state.visited += 1;
   if (res.status === 403 || res.status === 404) {
     return pruneForbidden(item, res.status, state, deps, discovered);
   }
   if (!res.ok) {
-    recordVisit(state, deps, {
-      url: item.url,
-      kind: item.kind,
-      depth: item.depth,
-      status: res.status,
-      bytes: 0,
-      skipped: "fetch-error"
-    });
+    recordVisit(state, deps, errorVisit(item, res.status));
     return discovered;
   }
-  const wacAllow = res.headers.get("wac-allow");
-  const canRead = userCanRead(wacAllow);
+  return warmGetResponse(item, res, state, deps, budget, discovered);
+}
+async function probeHeadForSkip(item, state, deps) {
+  let head;
+  try {
+    head = await deps.fetch(headRequest(item.url));
+  } catch {
+    return false;
+  }
+  if (!head.ok) return false;
+  const skipped = sizeSkipReason(
+    head.headers.get("content-type"),
+    head.headers.get("content-length")
+  );
+  if (!skipped) return false;
+  state.visited += 1;
+  recordVisit(state, deps, {
+    url: item.url,
+    kind: item.kind,
+    depth: item.depth,
+    status: head.status,
+    bytes: bodyBytes(null, head.headers.get("content-length")),
+    skipped
+  });
+  return true;
+}
+function reserveSlot(state, budget) {
+  if (state.reserved >= budget.maxResources) {
+    state.budgetHit = true;
+    return false;
+  }
+  state.reserved += 1;
+  return true;
+}
+async function fetchOrRecordError(item, state, deps) {
+  try {
+    return await deps.fetch(rdfRequest(item.url));
+  } catch {
+    recordVisit(state, deps, errorVisit(item, 0));
+    return void 0;
+  }
+}
+async function warmGetResponse(item, res, state, deps, budget, discovered) {
+  const canRead = userCanRead(res.headers.get("wac-allow"));
   const contentType = res.headers.get("content-type");
   const contentLength = res.headers.get("content-length");
-  const container = isContainer(item.url) || contentType?.toLowerCase().includes("text/turtle") && wantsContainerEnumeration(item.kind);
-  const declaredLarge = bodyBytes(null, contentLength) > LARGE_RESOURCE_BYTES;
-  const binary = isBinaryType(contentType);
-  let bytes = 0;
-  let skipped;
-  if (binary) {
-    skipped = "large-binary";
-    bytes = bodyBytes(null, contentLength);
-  } else if (declaredLarge) {
-    skipped = "large-resource";
-    bytes = bodyBytes(null, contentLength);
-  } else {
-    const buf = await safeArrayBuffer(res);
-    bytes = bodyBytes(buf, contentLength);
-    if (state.bytes + bytes > budget.maxBytes) {
-      state.budgetHit = true;
-      recordVisit(state, deps, {
-        url: item.url,
-        kind: item.kind,
-        depth: item.depth,
-        status: res.status,
-        bytes,
-        skipped: "large-resource"
-      });
-      if (container && canRead) {
-        const body = buf ? new TextDecoder().decode(buf) : "";
-        enumerateContainer(item, body, discovered);
-      }
-      return discovered;
-    }
-    state.warmed += 1;
-    state.bytes += bytes;
-    if (canRead) {
-      const body = buf ? new TextDecoder().decode(buf) : "";
-      if (item.kind === "typeIndex") {
-        for (const t of typeIndexTargets(item.url, body)) {
-          discovered.push({ url: t, kind: "child", depth: item.depth + 1 });
-        }
-      }
-      if (container || wantsContainerEnumeration(item.kind)) {
-        enumerateContainer(item, body, discovered);
-      }
-    }
+  const container = isContainerListing(item, contentType);
+  const skipReason = sizeSkipReason(contentType, contentLength);
+  if (skipReason) {
     recordVisit(state, deps, {
       url: item.url,
       kind: item.kind,
       depth: item.depth,
       status: res.status,
-      bytes
+      bytes: bodyBytes(null, contentLength),
+      skipped: skipReason
     });
-    const acl = aclUrlFor(item.url, res.headers.get("link"));
-    if (acl && !state.enqueued.has(acl) && !state.negative.has(acl)) {
-      discovered.push({ url: acl, kind: "acl", depth: item.depth + 1 });
-    }
     return discovered;
   }
-  state.bytes += 0;
+  const buf = await safeArrayBuffer(res);
+  const bytes = bodyBytes(buf, contentLength);
+  if (state.bytes + bytes > budget.maxBytes) {
+    state.budgetHit = true;
+    recordVisit(state, deps, {
+      url: item.url,
+      kind: item.kind,
+      depth: item.depth,
+      status: res.status,
+      bytes,
+      skipped: "large-resource"
+    });
+    if (container && canRead) enumerateContainer(item, decodeBody(buf), discovered);
+    return discovered;
+  }
+  state.warmed += 1;
+  state.bytes += bytes;
+  if (canRead) enumerateChildren(item, decodeBody(buf), container, discovered);
   recordVisit(state, deps, {
     url: item.url,
     kind: item.kind,
     depth: item.depth,
     status: res.status,
-    bytes,
-    skipped
+    bytes
   });
+  enqueueAcl(item, res.headers.get("link"), state, discovered);
   return discovered;
+}
+function sizeSkipReason(contentType, contentLength) {
+  if (isBinaryType(contentType)) return "large-binary";
+  if (bodyBytes(null, contentLength) > LARGE_RESOURCE_BYTES) return "large-resource";
+  return void 0;
+}
+function isContainerListing(item, contentType) {
+  return isContainer(item.url) || Boolean(
+    contentType?.toLowerCase().includes("text/turtle") && wantsContainerEnumeration(item.kind)
+  );
+}
+function enumerateChildren(item, body, container, discovered) {
+  if (item.kind === "typeIndex") {
+    for (const t of typeIndexTargets(item.url, body)) {
+      discovered.push({ url: t, kind: "child", depth: item.depth + 1 });
+    }
+  }
+  if (container || wantsContainerEnumeration(item.kind)) {
+    enumerateContainer(item, body, discovered);
+  }
+}
+function enqueueAcl(item, linkHeader, state, discovered) {
+  const acl = aclUrlFor(item.url, linkHeader);
+  if (acl && !state.enqueued.has(acl) && !state.negative.has(acl)) {
+    discovered.push({ url: acl, kind: "acl", depth: item.depth + 1 });
+  }
+}
+function decodeBody(buf) {
+  return buf ? new TextDecoder().decode(buf) : "";
+}
+function errorVisit(item, status) {
+  return {
+    url: item.url,
+    kind: item.kind,
+    depth: item.depth,
+    status,
+    bytes: 0,
+    skipped: "fetch-error"
+  };
 }
 function pruneForbidden(item, status, state, deps, discovered) {
   state.negative.add(item.url);

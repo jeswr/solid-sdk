@@ -282,6 +282,12 @@ function enqueue(
  * ACL pruning on 403/404, decide whether to pull bytes, and enumerate children.
  * Returns the next-level items discovered (container members, type-index targets,
  * ACL doc).
+ *
+ * The body reads as a short pipeline of guard clauses + named steps; the
+ * non-obvious INVARIANT it preserves is the #10 byte-budget reservation (the
+ * synchronous slot reserved AFTER the HEAD probe rules out binary/large but
+ * BEFORE the byte-warming GET — see `reserveSlot`). Each step is its own helper so
+ * the control flow here stays flat.
  */
 async function visit(
   item: FrontierItem,
@@ -291,182 +297,236 @@ async function visit(
 ): Promise<FrontierItem[]> {
   const discovered: FrontierItem[] = [];
 
-  // #9: PROBE with a HEAD first. A large binary fetched with a normal GET makes the
-  // SW download AND byte-cache the full response before we ever reach the "metadata
-  // only" skip decision. A HEAD lets us learn content-type/length cheaply; if the
-  // resource is a binary / declared-large, we record metadata from the HEAD and
-  // NEVER issue the byte-pulling GET. RDF / small resources fall through to a GET.
+  // #9: HEAD-probe first. A binary / declared-large resource is recorded
+  // metadata-only and short-circuits here, so the byte-pulling GET is never issued.
+  if (await probeHeadForSkip(item, state, deps)) return discovered;
+
+  // #10: reserve the byte-budget slot synchronously BEFORE the GET (the GET is what
+  // flows through the SW + caches bytes), so concurrent workers can't overshoot.
+  if (!reserveSlot(state, budget)) return discovered;
+
+  const res = await fetchOrRecordError(item, state, deps);
+  if (!res) return discovered;
+
+  state.visited += 1;
+
+  // ACL pruning: a genuine 403/404 (the authoritative signal, unlike the HEAD
+  // probe) is negative-cached and the subtree pruned — never surfaced as an error.
+  if (res.status === 403 || res.status === 404) {
+    return pruneForbidden(item, res.status, state, deps, discovered);
+  }
+  if (!res.ok) {
+    recordVisit(state, deps, errorVisit(item, res.status));
+    return discovered;
+  }
+
+  // GET succeeded. A binary / declared-large response (the HEAD probe missed it, or
+  // there was no usable HEAD) is metadata-only; otherwise pull bytes + enumerate.
+  return warmGetResponse(item, res, state, deps, budget, discovered);
+}
+
+/**
+ * HEAD-probe the resource and, if it is a binary / declared-large file, record it
+ * metadata-only (NO byte-pulling GET) and report it as handled (caller returns).
+ * Returns `false` (continue to the GET) for RDF/small resources, an unreadable
+ * HEAD, or a HEAD error — and crucially for a HEAD 403/404, which is INCONCLUSIVE
+ * (a server may only honour credentials on the GET path), so the real GET is the
+ * authoritative ACL signal (`pruneForbidden` runs there).
+ */
+async function probeHeadForSkip(
+  item: FrontierItem,
+  state: CrawlState,
+  deps: WarmDeps,
+): Promise<boolean> {
   let head: Response | undefined;
   try {
     head = await deps.fetch(headRequest(item.url));
   } catch {
-    head = undefined; // HEAD unsupported / errored → fall back to the GET path.
+    return false; // HEAD unsupported / errored → fall back to the GET path.
   }
+  if (!head.ok) return false;
 
-  // A HEAD 403/404 is INCONCLUSIVE here (re-review corrective): the warmer builds
-  // a bare HEAD request, and a server / auth layer that only honours credentials on
-  // the GET path may 403 the probe even when the authenticated GET would succeed.
-  // So we DON'T prune on a HEAD 403/404 — we fall through to the real GET, which is
-  // the authoritative ACL signal (`pruneForbidden` runs there on a genuine 403/404).
-  if (head?.ok) {
-    const ct = head.headers.get('content-type');
-    const cl = head.headers.get('content-length');
-    const probedLarge = bodyBytes(null, cl) > LARGE_RESOURCE_BYTES;
-    const probedBinary = isBinaryType(ct);
-    if (probedBinary || probedLarge) {
-      // Metadata-only: record what the HEAD told us; do NOT GET the bytes.
-      state.visited += 1;
-      recordVisit(state, deps, {
-        url: item.url,
-        kind: item.kind,
-        depth: item.depth,
-        status: head.status,
-        bytes: bodyBytes(null, cl),
-        skipped: probedBinary ? 'large-binary' : 'large-resource',
-      });
-      return discovered;
-    }
-  }
-
-  // #10 (re-review corrective): RESERVE the resource slot SYNCHRONOUSLY here —
-  // AFTER the HEAD probe ruled out binary/large, and BEFORE the byte-warming GET.
-  // The GET is what flows through the SW and downloads/caches bytes, so the budget
-  // must be committed before it is issued; reserving only after the GET (as the
-  // first pass did) let concurrent workers all fire GETs and overshoot the cache.
-  // `reserved` is a conservative upper bound (a GET that later 403s or busts the
-  // byte budget still consumed a slot — the safe direction for a cap).
-  if (state.reserved >= budget.maxResources) {
-    state.budgetHit = true;
-    return discovered;
-  }
-  state.reserved += 1;
-
-  let res: Response;
-  try {
-    res = await deps.fetch(rdfRequest(item.url));
-  } catch {
-    recordVisit(state, deps, {
-      url: item.url,
-      kind: item.kind,
-      depth: item.depth,
-      status: 0,
-      bytes: 0,
-      skipped: 'fetch-error',
-    });
-    return discovered;
-  }
+  const skipped = sizeSkipReason(
+    head.headers.get('content-type'),
+    head.headers.get('content-length'),
+  );
+  if (!skipped) return false;
 
   state.visited += 1;
+  recordVisit(state, deps, {
+    url: item.url,
+    kind: item.kind,
+    depth: item.depth,
+    status: head.status,
+    bytes: bodyBytes(null, head.headers.get('content-length')),
+    skipped,
+  });
+  return true;
+}
 
-  // ACL pruning: a 403/404 is negative-cached and the subtree is pruned. Never
-  // surfaced as an error (§3). The SW also negative-caches what it sees; we mark
-  // it here so re-warm skips the subtree and tests can assert it.
-  if (res.status === 403 || res.status === 404) {
-    return pruneForbidden(item, res.status, state, deps, discovered);
+/**
+ * Reserve one byte-budget slot synchronously (#10). Returns `false` (and flags
+ * `budgetHit`) when the cap is already reached — the caller then skips the GET.
+ * `reserved` is a conservative upper bound: a GET that later 403s or busts the
+ * byte budget still consumed a slot (the safe direction for a cap).
+ */
+function reserveSlot(state: CrawlState, budget: ResolvedWarmBudget): boolean {
+  if (state.reserved >= budget.maxResources) {
+    state.budgetHit = true;
+    return false;
   }
+  state.reserved += 1;
+  return true;
+}
 
-  if (!res.ok) {
+/** GET the resource; on a network error record a `fetch-error` visit + return undefined. */
+async function fetchOrRecordError(
+  item: FrontierItem,
+  state: CrawlState,
+  deps: WarmDeps,
+): Promise<Response | undefined> {
+  try {
+    return await deps.fetch(rdfRequest(item.url));
+  } catch {
+    recordVisit(state, deps, errorVisit(item, 0));
+    return undefined;
+  }
+}
+
+/**
+ * Process a successful (2xx) GET: metadata-only for a binary / declared-large file,
+ * else pull the bytes (within the byte budget) and enumerate children. Returns the
+ * discovered frontier items (mutating `discovered` in place + returning it).
+ */
+async function warmGetResponse(
+  item: FrontierItem,
+  res: Response,
+  state: CrawlState,
+  deps: WarmDeps,
+  budget: ResolvedWarmBudget,
+  discovered: FrontierItem[],
+): Promise<FrontierItem[]> {
+  // ACL-aware descent: no read on the listing ⇒ don't enumerate its subtree.
+  // Absent header ⇒ proceed (a child 403 prunes later).
+  const canRead = userCanRead(res.headers.get('wac-allow'));
+  const contentType = res.headers.get('content-type');
+  const contentLength = res.headers.get('content-length');
+  const container = isContainerListing(item, contentType);
+
+  // Binary / declared-large: record metadata only, never pull the bytes.
+  const skipReason = sizeSkipReason(contentType, contentLength);
+  if (skipReason) {
     recordVisit(state, deps, {
       url: item.url,
       kind: item.kind,
       depth: item.depth,
       status: res.status,
-      bytes: 0,
-      skipped: 'fetch-error',
+      bytes: bodyBytes(null, contentLength),
+      skipped: skipReason,
     });
     return discovered;
   }
 
-  // ACL-aware descent: read WAC-Allow on the listing. If the authenticated user
-  // has no read on this resource, prune its subtree (avoid wasting fetches that
-  // would 403). Absent header ⇒ proceed (a child 403 will prune later).
-  const wacAllow = res.headers.get('wac-allow');
-  const canRead = userCanRead(wacAllow);
+  // RDF / small resource: pull the bytes (this is what populates the SW cache).
+  // The slot was already reserved before the GET (#10).
+  const buf = await safeArrayBuffer(res);
+  const bytes = bodyBytes(buf, contentLength);
 
-  const contentType = res.headers.get('content-type');
-  const contentLength = res.headers.get('content-length');
-  const container =
-    isContainer(item.url) ||
-    (contentType?.toLowerCase().includes('text/turtle') && wantsContainerEnumeration(item.kind));
-
-  // Decide whether to pull bytes. Large binaries / large resources: metadata only.
-  const declaredLarge = bodyBytes(null, contentLength) > LARGE_RESOURCE_BYTES;
-  const binary = isBinaryType(contentType);
-  let bytes = 0;
-  let skipped: WarmVisit['skipped'];
-
-  if (binary) {
-    skipped = 'large-binary';
-    bytes = bodyBytes(null, contentLength);
-  } else if (declaredLarge) {
-    skipped = 'large-resource';
-    bytes = bodyBytes(null, contentLength);
-  } else {
-    // The resource slot was already reserved before the GET (#10). Pull bytes
-    // (RDF / small resources). This is what populates the SW cache.
-    const buf = await safeArrayBuffer(res);
-    bytes = bodyBytes(buf, contentLength);
-    if (state.bytes + bytes > budget.maxBytes) {
-      // Over the byte budget — count it as visited but don't credit it as warmed.
-      state.budgetHit = true;
-      recordVisit(state, deps, {
-        url: item.url,
-        kind: item.kind,
-        depth: item.depth,
-        status: res.status,
-        bytes,
-        skipped: 'large-resource',
-      });
-      // Still enumerate children if this was a readable container listing.
-      if (container && canRead) {
-        const body = buf ? new TextDecoder().decode(buf) : '';
-        enumerateContainer(item, body, discovered);
-      }
-      return discovered;
-    }
-    state.warmed += 1;
-    state.bytes += bytes;
-
-    // Enumerate children from the body (we already have the bytes).
-    if (canRead) {
-      const body = buf ? new TextDecoder().decode(buf) : '';
-      if (item.kind === 'typeIndex') {
-        for (const t of typeIndexTargets(item.url, body)) {
-          discovered.push({ url: t, kind: 'child', depth: item.depth + 1 });
-        }
-      }
-      if (container || wantsContainerEnumeration(item.kind)) {
-        enumerateContainer(item, body, discovered);
-      }
-    }
-
+  // Over the byte budget — count it visited but not warmed; still enumerate a
+  // readable container listing (we already have the body).
+  if (state.bytes + bytes > budget.maxBytes) {
+    state.budgetHit = true;
     recordVisit(state, deps, {
       url: item.url,
       kind: item.kind,
       depth: item.depth,
       status: res.status,
       bytes,
+      skipped: 'large-resource',
     });
-
-    // Enqueue the ACL document for this resource (read its WAC; cheap, RDF).
-    const acl = aclUrlFor(item.url, res.headers.get('link'));
-    if (acl && !state.enqueued.has(acl) && !state.negative.has(acl)) {
-      discovered.push({ url: acl, kind: 'acl', depth: item.depth + 1 });
-    }
+    if (container && canRead) enumerateContainer(item, decodeBody(buf), discovered);
     return discovered;
   }
 
-  // Skipped-for-size path (binary / declared-large): we still recorded metadata.
-  state.bytes += 0; // bytes were never pulled
+  state.warmed += 1;
+  state.bytes += bytes;
+  if (canRead) enumerateChildren(item, decodeBody(buf), container, discovered);
   recordVisit(state, deps, {
     url: item.url,
     kind: item.kind,
     depth: item.depth,
     status: res.status,
     bytes,
-    skipped,
   });
+  enqueueAcl(item, res.headers.get('link'), state, discovered);
   return discovered;
+}
+
+/** The size-skip reason for a response, or `undefined` to pull its bytes. */
+function sizeSkipReason(
+  contentType: string | null,
+  contentLength: string | null,
+): 'large-binary' | 'large-resource' | undefined {
+  if (isBinaryType(contentType)) return 'large-binary';
+  if (bodyBytes(null, contentLength) > LARGE_RESOURCE_BYTES) return 'large-resource';
+  return undefined;
+}
+
+/** Whether to treat a fetched resource's body as a container listing to enumerate. */
+function isContainerListing(item: FrontierItem, contentType: string | null): boolean {
+  return (
+    isContainer(item.url) ||
+    Boolean(
+      contentType?.toLowerCase().includes('text/turtle') && wantsContainerEnumeration(item.kind),
+    )
+  );
+}
+
+/** Enumerate the children of a warmed resource body (type-index targets + container members). */
+function enumerateChildren(
+  item: FrontierItem,
+  body: string,
+  container: boolean,
+  discovered: FrontierItem[],
+): void {
+  if (item.kind === 'typeIndex') {
+    for (const t of typeIndexTargets(item.url, body)) {
+      discovered.push({ url: t, kind: 'child', depth: item.depth + 1 });
+    }
+  }
+  if (container || wantsContainerEnumeration(item.kind)) {
+    enumerateContainer(item, body, discovered);
+  }
+}
+
+/** Enqueue the ACL document for a warmed resource (read its WAC; cheap, RDF). */
+function enqueueAcl(
+  item: FrontierItem,
+  linkHeader: string | null,
+  state: CrawlState,
+  discovered: FrontierItem[],
+): void {
+  const acl = aclUrlFor(item.url, linkHeader);
+  if (acl && !state.enqueued.has(acl) && !state.negative.has(acl)) {
+    discovered.push({ url: acl, kind: 'acl', depth: item.depth + 1 });
+  }
+}
+
+/** Decode a fetched body buffer to text (empty string when the buffer is null). */
+function decodeBody(buf: ArrayBuffer | null): string {
+  return buf ? new TextDecoder().decode(buf) : '';
+}
+
+/** A `fetch-error` visit record (a network error or a non-2xx non-403/404 status). */
+function errorVisit(item: FrontierItem, status: number): WarmVisit {
+  return {
+    url: item.url,
+    kind: item.kind,
+    depth: item.depth,
+    status,
+    bytes: 0,
+    skipped: 'fetch-error',
+  };
 }
 
 /** Record a 403/404 as negative-cached + pruned, and stop descent. */
