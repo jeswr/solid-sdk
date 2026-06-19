@@ -694,39 +694,43 @@ async function handleFetch(request, deps) {
     const response = await deps.fetch(request);
     return { response, source: "network-no-cache" };
   }
-  const now = deps.now();
   if (rl.method.toUpperCase() === "HEAD") {
-    const response = await deps.fetch(request);
-    const headEtag = response.headers.get("etag") ?? void 0;
-    if (response.status >= 200 && response.status < 300 && headEtag !== void 0) {
-      const existing = await lookupRecord(rl, deps);
-      if (existing && headEtag === existing.etag) {
-        await deps.meta.touch(existing.key, deps.now());
-      }
-    }
-    return { response, source: "network-no-cache" };
+    return handleHead(request, rl, deps);
   }
   const directive = requestCacheDirective(rl);
   if (deps.isOnline() && directive !== "default") {
-    if (directive === "no-store") {
-      const passthrough = new Request(request, { method: "GET", cache: "no-store" });
-      const response = await deps.fetch(passthrough);
-      return { response, source: "request-no-store" };
-    }
-    return forcedRevalidate(request, rl, deps);
+    return handleDirective(directive, request, rl, deps);
   }
+  return handleCachePath(request, rl, deps);
+}
+async function handleHead(request, rl, deps) {
+  const response = await deps.fetch(request);
+  const headEtag = response.headers.get("etag") ?? void 0;
+  if (response.status >= 200 && response.status < 300 && headEtag !== void 0) {
+    const existing = await lookupRecord(rl, deps);
+    if (existing && headEtag === existing.etag) {
+      await deps.meta.touch(existing.key, deps.now());
+    }
+  }
+  return { response, source: "network-no-cache" };
+}
+async function handleDirective(directive, request, rl, deps) {
+  if (directive === "no-store") {
+    const passthrough = new Request(request, { method: "GET", cache: "no-store" });
+    const response = await deps.fetch(passthrough);
+    return { response, source: "request-no-store" };
+  }
+  return forcedRevalidate(request, rl, deps);
+}
+async function handleCachePath(request, rl, deps) {
   const record = await lookupRecord(rl, deps);
   const keyReq = record ? keyRequest(rl.url, record.varyKey) : keyRequest(rl.url, varyKeyForRequest(rl));
   if (!record) {
     await deps.cache.delete(keyReq, IGNORE_VARY).catch(() => false);
-    if (!deps.isOnline()) {
-      const response = await deps.fetch(request);
-      return { response, source: "offline-miss" };
-    }
-    return networkAndMaybeStore(request, rl, deps);
+    return missOrFetch(request, rl, deps);
   }
   if (record.status === 403 || record.status === 404) {
-    if (record.negativeUntil && now < record.negativeUntil) {
+    if (record.negativeUntil && deps.now() < record.negativeUntil) {
       const negBytes = await deps.cache.match(keyReq, IGNORE_VARY);
       const response = negBytes ? negBytes.clone() : new Response(null, { status: record.status });
       return { response, source: "cache-hit-negative" };
@@ -735,19 +739,11 @@ async function handleFetch(request, deps) {
   }
   const cached = await deps.cache.match(keyReq, IGNORE_VARY);
   if (!cached) {
-    if (!deps.isOnline()) {
-      const response = await deps.fetch(request);
-      return { response, source: "offline-miss" };
-    }
-    return networkAndMaybeStore(request, rl, deps);
+    return missOrFetch(request, rl, deps);
   }
   if (deps.isOnline()) {
     const revalidation = revalidate(request, rl, record, deps);
-    return {
-      response: cached.clone(),
-      source: "cache-hit-online",
-      revalidation
-    };
+    return { response: cached.clone(), source: "cache-hit-online", revalidation };
   }
   return { response: withOfflineStale(cached.clone()), source: "cache-hit-offline" };
 }
@@ -843,6 +839,13 @@ async function purgeAllVariants(url, deps) {
   for (const row of rows) {
     await deps.meta.delete(row.key);
   }
+}
+async function missOrFetch(request, rl, deps) {
+  if (!deps.isOnline()) {
+    const response = await deps.fetch(request);
+    return { response, source: "offline-miss" };
+  }
+  return networkAndMaybeStore(request, rl, deps);
 }
 async function networkAndMaybeStore(request, rl, deps, _origin) {
   const response = await deps.fetch(request);

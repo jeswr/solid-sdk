@@ -102,79 +102,111 @@ function withOfflineStale(response: Response): Response {
  * The main entry: decide how to serve a GET/HEAD request and (for hits) fire the
  * never-authoritative revalidation. Caller is the SW `fetch` handler; tests call
  * it directly with mocked deps.
+ *
+ * Reads as a dispatcher of the distinct serving modes; each mode is its own named
+ * function (so each security branch is independently readable):
+ *   1. never-cache endpoint → straight passthrough;
+ *   2. HEAD → non-destructive passthrough (`handleHead`);
+ *   3. an online `Cache-Control: no-store`/`no-cache` request → `handleDirective`;
+ *   4. otherwise the metadata-first SWR cache path (`handleCachePath`).
  */
 export async function handleFetch(request: Request, deps: SwrDeps): Promise<HandleResult> {
   const rl = reqLike(request);
 
-  // Never-cache endpoints (auth/OIDC/.well-known/subscription/WS): straight passthrough.
-  // We can decide this from the request alone — no need to consult the cache.
+  // 1. Never-cache endpoints (auth/OIDC/.well-known/subscription/WS): straight
+  //    passthrough — decidable from the request alone, no cache consulted.
   if (!isPotentiallyCacheable(rl)) {
     const response = await deps.fetch(request);
     return { response, source: 'network-no-cache' };
   }
 
-  const now = deps.now();
-
-  // HEAD is a NON-DESTRUCTIVE network passthrough (the #6 corrective, hardened
-  // across re-review). A HEAD has no body, and the byte cache holds GET bodies
-  // under the SAME canonical (url, varyKey) key, so a HEAD must NEVER serve a
-  // cached GET body, NEVER fabricate a body-backed metadata row, and — crucially —
-  // NEVER PURGE. A HEAD result is not authoritative enough to evict GET bytes:
-  //   - a warmer HEAD probe is unauthenticated relative to the GET, so a 403/404
-  //     (or an ETag mismatch on a probe) does NOT mean the user lost access;
-  //   - the SW forwards the warmer's HEAD through this very path, so purging here
-  //     would evict valid offline bytes the authenticated GET would have kept.
-  // Revocation/change is handled authoritatively by GET revalidation + notification
-  // invalidation. The ONLY thing a HEAD does is CONFIRM freshness when its explicit
-  // ETag matches the stored variant (a safe, additive touch).
+  // 2. HEAD is a non-destructive passthrough (never serves/evicts GET bytes).
   if (rl.method.toUpperCase() === 'HEAD') {
-    const response = await deps.fetch(request);
-    const headEtag = response.headers.get('etag') ?? undefined;
-    if (response.status >= 200 && response.status < 300 && headEtag !== undefined) {
-      const existing = await lookupRecord(rl, deps);
-      if (existing && headEtag === existing.etag) {
-        await deps.meta.touch(existing.key, deps.now()); // confirm freshness only
-      }
-    }
-    return { response, source: 'network-no-cache' };
+    return handleHead(request, rl, deps);
   }
 
-  // REQUEST-DIRECTED FRESHNESS (security-critical, no-stale-ACL-for-mutations).
-  // A caller can opt a single GET out of the stale-while-revalidate fast path:
-  //   - `Cache-Control: no-store`  → pure network bypass: never read OR write the
-  //     cache for this request (the caller wants nothing to do with the cache).
-  //   - `Cache-Control: no-cache`  → forced SYNCHRONOUS revalidation: if we hold a
-  //     record with an ETag, conditionally GET and only serve once confirmed; a
-  //     200 replaces + broadcasts, a 304 serves the (now-confirmed) cached bytes.
-  //     Never hand back a provisional/stale body. This is exactly how Solid
-  //     clients defeat heuristic HTTP caching before a read-modify-write on a
-  //     security-sensitive doc (e.g. an `.acl` ahead of a grant/revoke), so the SW
-  //     must not undercut it by serving a stale ACL.
-  // Online only — offline these directives can't be satisfied, so fall through to
-  // the normal path (which serves stale-with-`X-Offline` or surfaces the error).
+  // 3. An online request-directive (no-store/no-cache) opts out of the SWR fast
+  //    path (offline they can't be satisfied → fall through to the cache path).
   const directive = requestCacheDirective(rl);
   if (deps.isOnline() && directive !== 'default') {
-    if (directive === 'no-store') {
-      // Forward with `cache: 'no-store'` so the SW's own fetch cannot satisfy the
-      // read from the browser/intermediary HTTP cache either (roborev Medium): the
-      // caller wants nothing cache-derived. We never read or write OUR cache here.
-      const passthrough = new Request(request, { method: 'GET', cache: 'no-store' });
-      const response = await deps.fetch(passthrough);
-      return { response, source: 'request-no-store' };
-    }
-    // no-cache: forced synchronous revalidation before serving.
-    return forcedRevalidate(request, rl, deps);
+    return handleDirective(directive, request, rl, deps);
   }
 
-  // METADATA-FIRST (the #1 fix). The metadata store — not the byte cache — is the
-  // authority on what we hold and for whom: it is opened against the WebID-scoped
-  // DB, and the byte cache is opened against the WebID-scoped Cache (`scope.ts`).
-  // We find the metadata record whose stored `vary` the live request matches, and
-  // ONLY then look at the bytes under THAT record's canonical (url, varyKey) key.
-  // Deriving the key from the stored record (not from an assumed `Vary: Accept`)
-  // means a resource that varies on some other header — e.g. `Accept-Language` —
-  // is looked up under the same key it was stored under (no permanent miss /
-  // orphan bytes). A byte-cache entry with no matching metadata is never served.
+  // 4. The normal metadata-first stale-while-revalidate cache path.
+  return handleCachePath(request, rl, deps);
+}
+
+/**
+ * HEAD is a NON-DESTRUCTIVE network passthrough (the #6 corrective, hardened
+ * across re-review). A HEAD has no body, and the byte cache holds GET bodies under
+ * the SAME canonical (url, varyKey) key, so a HEAD must NEVER serve a cached GET
+ * body, NEVER fabricate a body-backed metadata row, and — crucially — NEVER PURGE.
+ * A HEAD result is not authoritative enough to evict GET bytes:
+ *   - a warmer HEAD probe is unauthenticated relative to the GET, so a 403/404 (or
+ *     an ETag mismatch on a probe) does NOT mean the user lost access;
+ *   - the SW forwards the warmer's HEAD through this very path, so purging here
+ *     would evict valid offline bytes the authenticated GET would have kept.
+ * Revocation/change is handled authoritatively by GET revalidation + notification
+ * invalidation. The ONLY thing a HEAD does is CONFIRM freshness when its explicit
+ * ETag matches the stored variant (a safe, additive touch).
+ */
+async function handleHead(request: Request, rl: RequestLike, deps: SwrDeps): Promise<HandleResult> {
+  const response = await deps.fetch(request);
+  const headEtag = response.headers.get('etag') ?? undefined;
+  if (response.status >= 200 && response.status < 300 && headEtag !== undefined) {
+    const existing = await lookupRecord(rl, deps);
+    if (existing && headEtag === existing.etag) {
+      await deps.meta.touch(existing.key, deps.now()); // confirm freshness only
+    }
+  }
+  return { response, source: 'network-no-cache' };
+}
+
+/**
+ * REQUEST-DIRECTED FRESHNESS (security-critical, no-stale-ACL-for-mutations). A
+ * caller opts a single GET out of the stale-while-revalidate fast path:
+ *   - `no-store` → pure network bypass: never read OR write the cache. Forward
+ *     with `cache: 'no-store'` so the SW's own fetch can't satisfy the read from
+ *     the browser/intermediary HTTP cache either (roborev Medium) — the caller
+ *     wants nothing cache-derived.
+ *   - `no-cache` → forced SYNCHRONOUS revalidation before serving (never a
+ *     provisional/stale body). This is exactly how Solid clients defeat heuristic
+ *     HTTP caching before a read-modify-write on a security-sensitive doc (e.g. an
+ *     `.acl` ahead of a grant/revoke), so the SW must not undercut it.
+ * Only reached when online (the caller gates `directive !== 'default'` on online).
+ */
+async function handleDirective(
+  directive: 'no-store' | 'no-cache',
+  request: Request,
+  rl: RequestLike,
+  deps: SwrDeps,
+): Promise<HandleResult> {
+  if (directive === 'no-store') {
+    const passthrough = new Request(request, { method: 'GET', cache: 'no-store' });
+    const response = await deps.fetch(passthrough);
+    return { response, source: 'request-no-store' };
+  }
+  // no-cache: forced synchronous revalidation before serving.
+  return forcedRevalidate(request, rl, deps);
+}
+
+/**
+ * The metadata-first stale-while-revalidate cache path (the #1 fix). The metadata
+ * store — not the byte cache — is the authority on what we hold and for whom: it
+ * is opened against the WebID-scoped DB, and the byte cache against the
+ * WebID-scoped Cache (`scope.ts`). We find the metadata record whose stored `vary`
+ * the live request matches, and ONLY then look at the bytes under THAT record's
+ * canonical (url, varyKey) key. Deriving the key from the stored record (not an
+ * assumed `Vary: Accept`) means a resource that varies on some other header (e.g.
+ * `Accept-Language`) is looked up under the same key it was stored under (no
+ * permanent miss / orphan bytes). A byte-cache entry with no matching metadata is
+ * never served.
+ */
+async function handleCachePath(
+  request: Request,
+  rl: RequestLike,
+  deps: SwrDeps,
+): Promise<HandleResult> {
   const record = await lookupRecord(rl, deps);
   const keyReq = record
     ? keyRequest(rl.url, record.varyKey)
@@ -184,17 +216,13 @@ export async function handleFetch(request: Request, deps: SwrDeps): Promise<Hand
     // No metadata: even if bytes somehow exist under this key, do NOT serve them.
     // Delete any orphan bytes (no-leak) and fall through to the network.
     await deps.cache.delete(keyReq, IGNORE_VARY).catch(() => false);
-    if (!deps.isOnline()) {
-      const response = await deps.fetch(request);
-      return { response, source: 'offline-miss' };
-    }
-    return networkAndMaybeStore(request, rl, deps, 'miss');
+    return missOrFetch(request, rl, deps);
   }
 
   // Negative cache (403/404): honour within TTL for no-leak parity; otherwise
   // fall through to a fresh network attempt.
   if (record.status === 403 || record.status === 404) {
-    if (record.negativeUntil && now < record.negativeUntil) {
+    if (record.negativeUntil && deps.now() < record.negativeUntil) {
       const negBytes = await deps.cache.match(keyReq, IGNORE_VARY);
       // Serve the cached negative bytes if we kept them (#8); else synthesize the
       // bare status so offline/within-TTL reads are uniform.
@@ -209,21 +237,13 @@ export async function handleFetch(request: Request, deps: SwrDeps): Promise<Hand
   if (!cached) {
     // Metadata says we hold this, but the bytes are gone (evicted / partial write).
     // Re-fetch rather than serve nothing.
-    if (!deps.isOnline()) {
-      const response = await deps.fetch(request);
-      return { response, source: 'offline-miss' };
-    }
-    return networkAndMaybeStore(request, rl, deps, 'miss');
+    return missOrFetch(request, rl, deps);
   }
 
   if (deps.isOnline()) {
     // HIT + ONLINE: serve provisional bytes NOW, revalidate in background.
     const revalidation = revalidate(request, rl, record, deps);
-    return {
-      response: cached.clone(),
-      source: 'cache-hit-online',
-      revalidation,
-    };
+    return { response: cached.clone(), source: 'cache-hit-online', revalidation };
   }
 
   // HIT + OFFLINE: serve provisional bytes, mark them stale/unconfirmed.
@@ -428,6 +448,23 @@ async function purgeAllVariants(url: string, deps: SwrDeps): Promise<void> {
   for (const row of rows) {
     await deps.meta.delete(row.key);
   }
+}
+
+/**
+ * A cache MISS (no usable metadata, or metadata but evicted bytes): offline →
+ * passthrough the network error as `offline-miss`; online → fetch and store iff
+ * cacheable. The two miss sites in `handleCachePath` share this exact behaviour.
+ */
+async function missOrFetch(
+  request: Request,
+  rl: RequestLike,
+  deps: SwrDeps,
+): Promise<HandleResult> {
+  if (!deps.isOnline()) {
+    const response = await deps.fetch(request);
+    return { response, source: 'offline-miss' };
+  }
+  return networkAndMaybeStore(request, rl, deps, 'miss');
 }
 
 /** Cache miss → fetch from network and store iff cacheable. */
