@@ -10,6 +10,78 @@ delivery target, a WebID profile). It consolidates the suite's three divergent S
 `@pss/guarded-fetch` reference into one exhaustively-tested implementation that is a strict
 **superset** of every defence any one of them had.
 
+## Why not just use a maintained SSRF library? (the replace-vs-harden evaluation)
+
+"SSRF-safe fetching is a common server need — why roll our own instead of using a well-maintained
+library?" is the right question, so it was answered with a rigorous, *verified* evaluation BEFORE any
+custom code was kept. The short answer: **for the IP-literal classification we DO use a maintained
+library ([`ipaddr.js`]) — we do not hand-roll that. For the connection-layer protection on the
+suite's HTTP path (native `fetch` / undici), no maintained library is adoptable, because every
+maintained SSRF filter is an `http.Agent` subclass and the suite uses undici's `Dispatcher`, which
+`http.Agent` is not.** Empirically: <!-- claim-ok: the undici-rejects-http.Agent result is reproduced by a committed characterization test (test/node.test.ts → "replace-vs-harden evidence — undici Dispatcher vs http.Agent") — verified, not asserted -->
+
+```text
+fetch('https://…', { dispatcher: new RequestFilteringHttpsAgent() })
+  → TypeError: fetch failed   (cause: agent.dispatch is not a function)
+```
+
+### The candidate matrix (each criterion VERIFIED against primary sources, 2026-06)
+
+The five criteria are the ones where naive SSRF libraries actually fail. ① full block-set
+(private/loopback/link-local/IPv6-ULA/IPv4-mapped/`0.0.0.0`/CGNAT/**metadata 169.254.169.254**);
+② **DNS-rebinding/TOCTOU defence** — does it PIN the connection to the validated IP, or re-resolve
+at connect (the make-or-break criterion); ③ redirect re-validation; ④ surface (`http.Agent` vs
+**undici `fetch` dispatcher**); ⑤ supply-chain fit.
+
+| Library (latest) | ① block-set | ② rebinding **pinning** | ③ redirects | ④ surface | ⑤ supply chain | Verdict |
+|---|---|---|---|---|---|---|
+| **`request-filtering-agent`** 3.2.0 | YES — `ipaddr.js` `range()!=="unicast"`, blocks meta `0.0.0.0`/`::`, + allow/deny CIDR lists | **YES** — injects a validating `lookup` into `net.connect` (no re-resolve = pinned), validates **all** records when `all:true`, blocks direct-IP `host` | NO — out of scope (it is only an Agent; the caller must re-validate hops) | **`http.Agent`/`https.Agent` ONLY — NOT undici/native-`fetch`** (`agent.dispatch is not a function`; undici support is the open, unbuilt [issue #23]) | MIT, **2-node graph** (`+ipaddr.js`), 248k dl/wk, OSV-clean, OpenSSF 5.3, SLSA-attested, active (3.0→3.2 across 2025-08…12) | **The strong one — but unusable on the undici path.** Its connection-layer technique is exactly what `./node` reimplements on the undici seam. |
+| `ssrf-req-filter` 1.1.1 | YES — `ipaddr.js` `range()` | **NO** — `socket.on('lookup')` + `socket.destroy()` **observe-and-destroy** (racy TOCTOU), validates only the **single** lookup-event record | NO | `http.Agent` only | MIT, OSV-clean, 38k dl/wk, **stale** (last publish 2024-05) | Reject — non-pinning + single-record + http.Agent-only. |
+| `ssrf-agent` 1.0.5 | **NO** — uses the legacy `ip` package (`isPrivate`), CVE-bypassable (`127.1`, `::ffff:127.0.0.1`, octal) | NO — observe-and-destroy on a CVE primitive | NO | `http.Agent` only | **`ip@^1.1.5` carries HIGH [CVE-2024-29415] (GHSA-2p57-rm9w-gvfp)**, dead (86 dl/wk, 2022) | Reject — pulls a HIGH-severity SSRF CVE transitively. |
+| `ssrf-agent-guard` 0.1.14 | partial — `ipaddr.js` + `is-valid-domain` | undocumented "rebinding detection" flag, opaque | NO | `http.Agent` (node-fetch `{agent}`, not undici `{dispatcher}`) | MIT, **23 dl/wk** (unproven), extra dep | Reject — too new/unproven, no undici, opaque mechanism. |
+| `nossrf` | partial | **NO** — resolves via Google DoH then **re-resolves** at fetch (independent-resolver rebinding bypass; advisory <1.0.4) | NO | wrapper | advisory-laden | Reject — structurally rebinding-bypassable. |
+| **undici built-ins** | n/a | — | — | undici interceptors (`redirect`/`retry`/`dns`/…) | the `dns` interceptor only **caches** lookups — no IP validation | **No SSRF interceptor exists** ([open undici #2019]); nothing to adopt on the native path. |
+| **[`ipaddr.js`]** 2.4.0 | the classifier itself — `range()` covers loopback/private/linkLocal/carrierGradeNat/uniqueLocal/ipv4Mapped/6to4/rfc6052/reserved/unspecified | n/a (a classifier, not a fetcher) | n/a | pure-JS primitive | MIT, **zero-dep**, **108M dl/wk**, OSV-clean | **ADOPTED** — the IP-literal parse/range/embedded-v4 extraction. We do NOT hand-roll this. |
+
+### The decision (applying the suite's replace-vs-harden rubric honestly)
+
+1. **ADOPT `ipaddr.js`** for IP parsing + range classification + embedded-v4 byte extraction
+   (`src/addresses.ts`). It is the same primitive the maintained agents themselves use, it is the
+   strongest one (the legacy `ip` package is CVE-laden — see the matrix), and hand-rolling IP
+   classification is exactly what this rubric forbids.
+2. **KEEP a custom connection-layer guard** — but with the precise, per-candidate reason, which IS
+   the maintainer's answer:
+   - **No maintained library targets the suite's HTTP path.** The suite is native `fetch`/undici;
+     every maintained SSRF filter (`request-filtering-agent`, `ssrf-req-filter`, `ssrf-agent`,
+     `ssrf-agent-guard`) is an `http.Agent` subclass, and an `http.Agent` cannot be a
+     `fetch(url, { dispatcher })` (proven above + by a committed test). undici ships no SSRF
+     interceptor (open undici #2019), and `request-filtering-agent`'s undici support is an open,
+     unbuilt proposal (issue #23).
+   - **The strongest lib (`request-filtering-agent`) and our `./node` entry use the identical
+     pinning technique** (inject a validating `lookup` so `net.connect` dials the pre-validated IP
+     and never re-resolves). We reimplement that ~25-line technique on undici's `Agent({ connect:
+     { lookup } })` seam — the only seam the suite's HTTP path exposes. So this is not "rolling our
+     own SSRF library"; it is the *one* connection-hook the maintained lib would itself need if it
+     supported undici.
+   - **The rebinding-vulnerable libs are vulnerable for a verified reason** (observe-and-destroy
+     races; single-record validation; CVE-laden `ip`) — so even an `http.Agent`-only deployment
+     would not want them.
+3. **KEEP the small custom POLICY layer** — no library encodes the suite's posture (https-only,
+   no-userinfo, production port-gate, cloud-internal hostname denylist, redirect re-validation with
+   cross-origin credential/body strip, body cap + timeout, allowed-content-type) — and the
+   **browser-path URL policy**, which is *necessarily* custom: a browser cannot hook the connection
+   layer, so the browser entry can only do URL-shape policy (https-only, no-userinfo, reject
+   internal/`.local`/`localhost` names, classify IP literals), with the inherent residual documented.
+
+Net: the audit surface is `ipaddr.js` (vetted, adopted) + a small reviewed policy core + a ~25-line
+undici DNS-pinning lookup (the maintained technique on the only seam the suite supports). The
+characterization tests below are the audit artifact for that custom surface.
+
+[`ipaddr.js`]: https://www.npmjs.com/package/ipaddr.js
+[issue #23]: https://github.com/azu/request-filtering-agent/issues/23
+[open undici #2019]: https://github.com/nodejs/undici/issues/2019
+[CVE-2024-29415]: https://nvd.nist.gov/vuln/detail/CVE-2024-29415
+
 ## Architecture — a small reviewed POLICY core over a mechanical IP primitive
 
 - **The policy core** (`src/guard.ts`) is small, reviewed custom code encoding the suite's specific

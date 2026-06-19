@@ -21,14 +21,16 @@
  */
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { type AddressInfo, createServer, type Server } from "node:http";
+import { type AddressInfo, createServer, Agent as HttpAgent, type Server } from "node:http";
 import { createServer as createHttpsServer, type Server as HttpsServer } from "node:https";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Agent as UndiciAgent, fetch as undiciFetch } from "undici";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { SsrfError } from "../src/index.js";
 import {
   createNodeGuardedFetch,
+  createPinningDispatcher,
   createValidatingLookup,
   nodeGuardedFetch,
   type ResolveAll,
@@ -437,5 +439,82 @@ describe("createNodeGuardedFetch — TLS servername preserved under IP pin", () 
     }
     const fetchImpl = createNodeGuardedFetch({ allowLoopback: true, ca: creds.cert });
     await expect(fetchImpl(`https://127.0.0.1:${port}/registry`)).rejects.toBeInstanceOf(SsrfError);
+  });
+});
+
+/**
+ * The REPLACE-VS-HARDEN evidence (the maintainer's answer, as executable proof, not prose).
+ *
+ * The README's library-evaluation matrix rests on two load-bearing architectural facts. These
+ * tests REPRODUCE them so the README's "verified, not asserted" claim is backed by the suite
+ * (and so a future undici/Node change that invalidates the decision FAILS the gate, forcing a
+ * re-evaluation rather than a silently-stale README):
+ *
+ *   (A) Every maintained Node SSRF filter (`request-filtering-agent`, `ssrf-req-filter`,
+ *       `ssrf-agent`, `ssrf-agent-guard`) is a `node:http`/`node:https` `Agent` subclass. An
+ *       `http.Agent` is NOT an undici `Dispatcher` — it has no `.dispatch` — so it cannot be
+ *       `fetch(url, { dispatcher })` on the suite's native-`fetch`/undici HTTP path. We assert
+ *       this against the BASE class (`node:http.Agent`) every such filter extends, so the proof
+ *       holds for all of them with no extra dependency.
+ *
+ *   (B) The strong maintained lib (`request-filtering-agent`) and our `./node` entry use the
+ *       IDENTICAL pinning technique: inject a validating `lookup` so the connector dials the
+ *       pre-validated IP and never re-resolves. We prove OUR dispatcher (`createPinningDispatcher`)
+ *       drives undici's `connect.lookup` exactly that way — the ~25-line technique on the only
+ *       seam the suite's HTTP path exposes. (`request-filtering-agent` does the same on the
+ *       `http.Agent.createConnection` seam; it just cannot be wired to undici.)
+ */
+describe("replace-vs-harden evidence — undici Dispatcher vs http.Agent (README matrix ④)", () => {
+  it("a node:http.Agent (the base class of every maintained SSRF filter) has NO undici .dispatch", () => {
+    const httpAgent = new HttpAgent();
+    // The seam the maintained filters override (http.Agent path)…
+    expect(typeof httpAgent.createConnection).toBe("function");
+    // …is NOT the seam undici fetch needs (Dispatcher path).
+    expect((httpAgent as unknown as { dispatch?: unknown }).dispatch).toBeUndefined();
+  });
+
+  it("undici fetch REJECTS an http.Agent passed as { dispatcher } (agent.dispatch is not a function)", async () => {
+    const httpAgent = new HttpAgent();
+    // example.com is never actually dialled: undici throws at the dispatcher contract check.
+    await expect(
+      undiciFetch("https://example.com/", {
+        dispatcher: httpAgent as unknown as UndiciAgent,
+      }),
+    ).rejects.toMatchObject({ cause: { message: expect.stringContaining("dispatch") } });
+  });
+
+  it("OUR pinning dispatcher IS a real undici Dispatcher (has .dispatch) — the adoptable seam", () => {
+    const dispatcher = createPinningDispatcher();
+    expect(typeof (dispatcher as unknown as { dispatch?: unknown }).dispatch).toBe("function");
+    expect(dispatcher).toBeInstanceOf(UndiciAgent);
+    void dispatcher.close().catch(() => {});
+  });
+});
+
+describe("replace-vs-harden evidence — our lookup pins like request-filtering-agent (README matrix ②)", () => {
+  it("validates EVERY record (all:true) and refuses a rebinding set with one private record", async () => {
+    // request-filtering-agent iterates all records and fails on the first private one; ours does too.
+    const flip: ResolveAll = async () => [
+      { address: "93.184.216.34", family: 4 }, // public
+      { address: "169.254.169.254", family: 4 }, // cloud metadata — must fail the whole set
+    ];
+    const lookup = createValidatingLookup(flip, false, false);
+    const result = await runLookup(lookup, "rebind.example", { all: true });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBeInstanceOf(SsrfError);
+      expect(result.error.message).toContain("169.254.169.254");
+    }
+  });
+
+  it("hands undici back ONLY the pre-validated addresses (the pin — no re-resolution path)", async () => {
+    const resolveAll: ResolveAll = async () => [{ address: "93.184.216.34", family: 4 }];
+    const lookup = createValidatingLookup(resolveAll, false, false);
+    const result = await runLookup(lookup, "ok.example", { all: true });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      // The exact validated record(s) are returned for net.connect to dial — pinned.
+      expect(result.address).toEqual([{ address: "93.184.216.34", family: 4 }]);
+    }
   });
 });
