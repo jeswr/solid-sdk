@@ -699,76 +699,96 @@ async function importDelegateKey(jwkString) {
     return void 0;
   }
 }
+function brokenChain(message) {
+  return { errors: [{ code: "BROKEN_CHAIN", message }] };
+}
+async function verifyChainLink(index, link, state, federation, now) {
+  const vc = link.credential;
+  if (!hasType(vc, FEDTRUST_DELEGATION_CREDENTIAL)) {
+    return brokenChain(`chain link ${index} is not a fedtrust:DelegationCredential`);
+  }
+  if (vc.issuer !== state.expectedDelegator) {
+    return brokenChain(
+      `chain link ${index} issuer ${vc.issuer} != expected delegator ${state.expectedDelegator}`
+    );
+  }
+  const linkMethod = proofVerificationMethod(vc);
+  if (linkMethod === void 0 || !controlledBy(linkMethod, vc.issuer)) {
+    return brokenChain(
+      `chain link ${index} verificationMethod not controlled by delegator ${vc.issuer}`
+    );
+  }
+  const res = await verifyVcAgainstKeys(vc, /* @__PURE__ */ new Map([[linkMethod, state.trustedKey]]), now);
+  if (!res.verified) {
+    return brokenChain(
+      `chain link ${index} signature/validity invalid against the trusted delegator key (${state.trustedMethod}): ${res.errors.map((e) => e.code).join(",")}`
+    );
+  }
+  const subject = firstSubject(vc);
+  if (subject === void 0) {
+    return brokenChain(`chain link ${index} has no credentialSubject`);
+  }
+  const delegate = strClaim(subject, FEDTRUST_DELEGATE);
+  const linkFederation = strClaim(subject, FEDTRUST_FEDERATION);
+  const delegateKeyJwk = strClaim(subject, FEDTRUST_DELEGATE_KEY);
+  if (delegate === void 0) {
+    return brokenChain(`chain link ${index} names no fedtrust:delegate`);
+  }
+  if (linkFederation !== federation) {
+    return brokenChain(
+      `chain link ${index} federation ${linkFederation ?? "(none)"} != ${federation}`
+    );
+  }
+  if (delegateKeyJwk === void 0) {
+    return brokenChain(
+      `chain link ${index} carries no fedtrust:delegateKey (chain not self-certifying)`
+    );
+  }
+  const delegateKey = await importDelegateKey(delegateKeyJwk);
+  if (delegateKey === void 0) {
+    return brokenChain(`chain link ${index} has an unparseable fedtrust:delegateKey`);
+  }
+  return {
+    next: { expectedDelegator: delegate, trustedMethod: delegate, trustedKey: delegateKey }
+  };
+}
 async function verifyChain(issuer, federation, chain, anchors, now) {
-  const fail = (message) => ({
-    errors: [{ code: "BROKEN_CHAIN", message }]
-  });
   if (chain.length === 0) {
-    return fail("delegation chain is empty");
+    return brokenChain("delegation chain is empty");
   }
   const rootVc = chain[0]?.credential;
   if (rootVc === void 0 || typeof rootVc.issuer !== "string") {
-    return fail("first chain link is malformed");
+    return brokenChain("first chain link is malformed");
   }
   const rootAnchor = anchors.find((a) => a.authority === rootVc.issuer);
   if (rootAnchor === void 0) {
-    return fail(`first chain link issuer ${rootVc.issuer} is not a trust anchor`);
+    return brokenChain(`first chain link issuer ${rootVc.issuer} is not a trust anchor`);
   }
-  let trustedMethod = anchorMethod(rootAnchor);
-  let trustedKey = rootAnchor.publicKey;
-  let expectedDelegator = rootAnchor.authority;
+  let state = {
+    expectedDelegator: rootAnchor.authority,
+    trustedMethod: anchorMethod(rootAnchor),
+    trustedKey: rootAnchor.publicKey
+  };
   for (let i = 0; i < chain.length; i++) {
     const link = chain[i];
     if (link === void 0) {
-      return fail(`chain link ${i} is missing`);
+      return brokenChain(`chain link ${i} is missing`);
     }
-    const vc = link.credential;
-    if (!hasType(vc, FEDTRUST_DELEGATION_CREDENTIAL)) {
-      return fail(`chain link ${i} is not a fedtrust:DelegationCredential`);
+    const step = await verifyChainLink(i, link, state, federation, now);
+    if ("errors" in step) {
+      return step;
     }
-    if (vc.issuer !== expectedDelegator) {
-      return fail(`chain link ${i} issuer ${vc.issuer} != expected delegator ${expectedDelegator}`);
-    }
-    const linkMethod = proofVerificationMethod(vc);
-    if (linkMethod === void 0 || !controlledBy(linkMethod, vc.issuer)) {
-      return fail(`chain link ${i} verificationMethod not controlled by delegator ${vc.issuer}`);
-    }
-    const res = await verifyVcAgainstKeys(vc, /* @__PURE__ */ new Map([[linkMethod, trustedKey]]), now);
-    if (!res.verified) {
-      return fail(
-        `chain link ${i} signature/validity invalid against the trusted delegator key (${trustedMethod}): ${res.errors.map((e) => e.code).join(",")}`
-      );
-    }
-    const subject = firstSubject(vc);
-    if (subject === void 0) {
-      return fail(`chain link ${i} has no credentialSubject`);
-    }
-    const delegate = strClaim(subject, FEDTRUST_DELEGATE);
-    const linkFederation = strClaim(subject, FEDTRUST_FEDERATION);
-    const delegateKeyJwk = strClaim(subject, FEDTRUST_DELEGATE_KEY);
-    if (delegate === void 0) {
-      return fail(`chain link ${i} names no fedtrust:delegate`);
-    }
-    if (linkFederation !== federation) {
-      return fail(`chain link ${i} federation ${linkFederation ?? "(none)"} != ${federation}`);
-    }
-    if (delegateKeyJwk === void 0) {
-      return fail(`chain link ${i} carries no fedtrust:delegateKey (chain not self-certifying)`);
-    }
-    const delegateKey = await importDelegateKey(delegateKeyJwk);
-    if (delegateKey === void 0) {
-      return fail(`chain link ${i} has an unparseable fedtrust:delegateKey`);
-    }
-    expectedDelegator = delegate;
-    trustedKey = delegateKey;
-    trustedMethod = delegate;
+    state = step.next;
   }
-  if (expectedDelegator !== issuer) {
-    return fail(
-      `chain leaf delegates to ${expectedDelegator}, not the membership issuer ${issuer}`
+  if (state.expectedDelegator !== issuer) {
+    return brokenChain(
+      `chain leaf delegates to ${state.expectedDelegator}, not the membership issuer ${issuer}`
     );
   }
-  return { errors: [], issuerKey: { verificationMethod: trustedMethod, publicKey: trustedKey } };
+  return {
+    errors: [],
+    issuerKey: { verificationMethod: state.trustedMethod, publicKey: state.trustedKey }
+  };
 }
 function controlledBy(verificationMethod, issuer) {
   if (verificationMethod === issuer) return true;

@@ -168,6 +168,112 @@ interface ChainResult {
   readonly issuerKey?: { verificationMethod: string; publicKey: CryptoKey };
 }
 
+/** Build a single-reason BROKEN_CHAIN result (the chain fails closed on the first defect). */
+function brokenChain(message: string): ChainResult {
+  return { errors: [{ code: "BROKEN_CHAIN", message }] };
+}
+
+/**
+ * The threaded trust state carried from one delegation link to the next as the
+ * chain is walked. It starts at the trust anchor (its pinned key) and, after each
+ * verified link, advances to the delegate that link signed over.
+ */
+interface ChainState {
+  /** The IRI the NEXT link's `issuer` (delegator) must equal. */
+  readonly expectedDelegator: string;
+  /** The verificationMethod the trusted key answers to (the anchor's, or the
+   *  previous delegate's IRI). Carried so a failure message can name it. */
+  readonly trustedMethod: string;
+  /** The key the NEXT link's signature is checked against (never caller-supplied). */
+  readonly trustedKey: CryptoKey;
+}
+
+/**
+ * Verify ONE delegation link against the threaded trust state and return either a
+ * fail-closed {@link ChainResult} (BROKEN_CHAIN) or the advanced {@link ChainState}
+ * for the next link. The checks run in the SAME ORDER as the original inline loop
+ * body, so the first-failing reason is identical:
+ *   1. the link IS a fedtrust:DelegationCredential;
+ *   2. its issuer equals the expected delegator (ordering / from-anchor);
+ *   3. its proof verificationMethod is well-formed + controlled by the delegator;
+ *   4. its signature verifies against EXACTLY the trusted key (no other key);
+ *   5. it names a delegate, is scoped to `federation`, and carries a parseable
+ *      signed delegateKey (self-certifying).
+ * On success the delegate's SIGNED key becomes the next link's trusted key.
+ */
+async function verifyChainLink(
+  index: number,
+  link: DelegationLink,
+  state: ChainState,
+  federation: string,
+  now: Date,
+): Promise<ChainResult | { next: ChainState }> {
+  const vc = link.credential;
+
+  if (!hasType(vc, FEDTRUST_DELEGATION_CREDENTIAL)) {
+    return brokenChain(`chain link ${index} is not a fedtrust:DelegationCredential`);
+  }
+  if (vc.issuer !== state.expectedDelegator) {
+    return brokenChain(
+      `chain link ${index} issuer ${vc.issuer} != expected delegator ${state.expectedDelegator}`,
+    );
+  }
+  // The signing method must be a well-formed string controlled by the delegator AND
+  // we resolve ONLY that method → the trusted key, so a link signed by any other key
+  // fails closed. A malformed proof (null / non-string method) yields a structured
+  // BROKEN_CHAIN, not a throw.
+  const linkMethod = proofVerificationMethod(vc);
+  if (linkMethod === undefined || !controlledBy(linkMethod, vc.issuer)) {
+    return brokenChain(
+      `chain link ${index} verificationMethod not controlled by delegator ${vc.issuer}`,
+    );
+  }
+
+  // Verify the link's signature against EXACTLY the trusted key, resolved under the
+  // proof's verificationMethod (so the pinned/previous key is what checks it).
+  const res = await verifyVcAgainstKeys(vc, new Map([[linkMethod, state.trustedKey]]), now);
+  if (!res.verified) {
+    return brokenChain(
+      `chain link ${index} signature/validity invalid against the trusted delegator key (${state.trustedMethod}): ${res.errors
+        .map((e) => e.code)
+        .join(",")}`,
+    );
+  }
+
+  // Read the delegated authority, federation scope, and the delegate's signed public
+  // key from the SIGNED subject.
+  const subject = firstSubject(vc);
+  if (subject === undefined) {
+    return brokenChain(`chain link ${index} has no credentialSubject`);
+  }
+  const delegate = strClaim(subject, FEDTRUST_DELEGATE);
+  const linkFederation = strClaim(subject, FEDTRUST_FEDERATION);
+  const delegateKeyJwk = strClaim(subject, FEDTRUST_DELEGATE_KEY);
+  if (delegate === undefined) {
+    return brokenChain(`chain link ${index} names no fedtrust:delegate`);
+  }
+  if (linkFederation !== federation) {
+    return brokenChain(
+      `chain link ${index} federation ${linkFederation ?? "(none)"} != ${federation}`,
+    );
+  }
+  if (delegateKeyJwk === undefined) {
+    return brokenChain(
+      `chain link ${index} carries no fedtrust:delegateKey (chain not self-certifying)`,
+    );
+  }
+  const delegateKey = await importDelegateKey(delegateKeyJwk);
+  if (delegateKey === undefined) {
+    return brokenChain(`chain link ${index} has an unparseable fedtrust:delegateKey`);
+  }
+
+  // Advance: the delegate becomes the next link's delegator, and the delegate's
+  // SIGNED key becomes the next link's trusted key (signed under the delegate's IRI).
+  return {
+    next: { expectedDelegator: delegate, trustedMethod: delegate, trustedKey: delegateKey },
+  };
+}
+
 /**
  * Walk a delegation CHAIN and decide whether it proves a trust anchor authorized
  * `issuer` to assert memberships for `federation`. FAIL-CLOSED: any structural
@@ -185,6 +291,8 @@ interface ChainResult {
  * Chain shape (root → leaf): link[0].delegator MUST be a trust anchor; each link
  * delegates `delegator → delegate`; link[i].delegate MUST be link[i+1].delegator;
  * the final link's delegate MUST be `issuer`; every link is scoped to `federation`.
+ * The per-link checks live in {@link verifyChainLink}; this walks the chain and
+ * threads the trust state forward.
  */
 async function verifyChain(
   issuer: string,
@@ -193,107 +301,53 @@ async function verifyChain(
   anchors: readonly TrustAnchor[],
   now: Date,
 ): Promise<ChainResult> {
-  const fail = (message: string): ChainResult => ({
-    errors: [{ code: "BROKEN_CHAIN", message }],
-  });
-
   if (chain.length === 0) {
-    return fail("delegation chain is empty");
+    return brokenChain("delegation chain is empty");
   }
 
   // The first link's issuer (delegator) must be a trust anchor; we verify it with
   // the anchor's PINNED key, NOT any key carried alongside the link.
   const rootVc = chain[0]?.credential;
   if (rootVc === undefined || typeof rootVc.issuer !== "string") {
-    return fail("first chain link is malformed");
+    return brokenChain("first chain link is malformed");
   }
   const rootAnchor = anchors.find((a) => a.authority === rootVc.issuer);
   if (rootAnchor === undefined) {
-    return fail(`first chain link issuer ${rootVc.issuer} is not a trust anchor`);
+    return brokenChain(`first chain link issuer ${rootVc.issuer} is not a trust anchor`);
   }
 
-  // The trusted key for the CURRENT link starts as the anchor's pinned key, then
-  // becomes the delegate key the previous link signed over.
-  let trustedMethod = anchorMethod(rootAnchor);
-  let trustedKey: CryptoKey = rootAnchor.publicKey;
-  // The expected delegator (issuer) of the current link, threaded forward.
-  let expectedDelegator: string = rootAnchor.authority;
+  // State starts at the anchor: its pinned key checks the first link's signature, and
+  // the anchor's authority is the first link's expected delegator.
+  let state: ChainState = {
+    expectedDelegator: rootAnchor.authority,
+    trustedMethod: anchorMethod(rootAnchor),
+    trustedKey: rootAnchor.publicKey,
+  };
 
   for (let i = 0; i < chain.length; i++) {
     const link = chain[i];
     if (link === undefined) {
-      return fail(`chain link ${i} is missing`);
+      return brokenChain(`chain link ${i} is missing`);
     }
-    const vc = link.credential;
-
-    if (!hasType(vc, FEDTRUST_DELEGATION_CREDENTIAL)) {
-      return fail(`chain link ${i} is not a fedtrust:DelegationCredential`);
+    const step = await verifyChainLink(i, link, state, federation, now);
+    if ("errors" in step) {
+      return step; // BROKEN_CHAIN — fail closed on the first defective link.
     }
-    if (vc.issuer !== expectedDelegator) {
-      return fail(`chain link ${i} issuer ${vc.issuer} != expected delegator ${expectedDelegator}`);
-    }
-    // The signing method must be a well-formed string controlled by the delegator
-    // AND must be exactly the trusted method we hold the key for (the anchor's, or
-    // the previous link's signed delegate method). We resolve ONLY that method →
-    // the trusted key, so a link signed by any other key fails closed. A malformed
-    // proof (null / non-string method) yields a structured BROKEN_CHAIN, not a throw.
-    const linkMethod = proofVerificationMethod(vc);
-    if (linkMethod === undefined || !controlledBy(linkMethod, vc.issuer)) {
-      return fail(`chain link ${i} verificationMethod not controlled by delegator ${vc.issuer}`);
-    }
-
-    // Verify the link's signature against EXACTLY the trusted key, resolved under
-    // the proof's verificationMethod (so the pinned/previous key is what checks it).
-    const res = await verifyVcAgainstKeys(vc, new Map([[linkMethod, trustedKey]]), now);
-    if (!res.verified) {
-      return fail(
-        `chain link ${i} signature/validity invalid against the trusted delegator key (${trustedMethod}): ${res.errors
-          .map((e) => e.code)
-          .join(",")}`,
-      );
-    }
-
-    // Read the delegated authority, federation scope, and the delegate's signed
-    // public key from the SIGNED subject.
-    const subject = firstSubject(vc);
-    if (subject === undefined) {
-      return fail(`chain link ${i} has no credentialSubject`);
-    }
-    const delegate = strClaim(subject, FEDTRUST_DELEGATE);
-    const linkFederation = strClaim(subject, FEDTRUST_FEDERATION);
-    const delegateKeyJwk = strClaim(subject, FEDTRUST_DELEGATE_KEY);
-    if (delegate === undefined) {
-      return fail(`chain link ${i} names no fedtrust:delegate`);
-    }
-    if (linkFederation !== federation) {
-      return fail(`chain link ${i} federation ${linkFederation ?? "(none)"} != ${federation}`);
-    }
-    if (delegateKeyJwk === undefined) {
-      return fail(`chain link ${i} carries no fedtrust:delegateKey (chain not self-certifying)`);
-    }
-    const delegateKey = await importDelegateKey(delegateKeyJwk);
-    if (delegateKey === undefined) {
-      return fail(`chain link ${i} has an unparseable fedtrust:delegateKey`);
-    }
-
-    // Thread forward: the delegate becomes the next link's delegator, and the
-    // delegate's SIGNED key becomes the next link's trusted key.
-    expectedDelegator = delegate;
-    trustedKey = delegateKey;
-    // The delegate signs with a method controlled by its own IRI; record it for the
-    // next link's resolution (and, at the leaf, for the membership credential).
-    trustedMethod = delegate;
+    state = step.next;
   }
 
   // After walking, the leaf's delegate must be the membership credential's issuer.
-  if (expectedDelegator !== issuer) {
-    return fail(
-      `chain leaf delegates to ${expectedDelegator}, not the membership issuer ${issuer}`,
+  if (state.expectedDelegator !== issuer) {
+    return brokenChain(
+      `chain leaf delegates to ${state.expectedDelegator}, not the membership issuer ${issuer}`,
     );
   }
   // The leaf's signed delegate key IS the membership issuer's key — return it so the
   // membership signature is checked against a key the chain cryptographically proved.
-  return { errors: [], issuerKey: { verificationMethod: trustedMethod, publicKey: trustedKey } };
+  return {
+    errors: [],
+    issuerKey: { verificationMethod: state.trustedMethod, publicKey: state.trustedKey },
+  };
 }
 
 /** Default issuer-binding: the method is the issuer or a `#`/`/` fragment/path of it. */
