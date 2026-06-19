@@ -68,6 +68,7 @@
   "devDependencies": {
     "@biomejs/biome": "^2.0.0",
     "@jeswr/fetch-rdf": "github:jeswr/fetch-rdf#main",
+    "@jeswr/rdf-serialize": "git+https://github.com/jeswr/rdf-serialize.git#eed2c11ceaf4de5e1f79132353744a5d1e3d6c48",
     "@rdfjs/types": "^2.0.1",
     "@types/n3": "^1.16.0",
     "@types/node": "^22.0.0",

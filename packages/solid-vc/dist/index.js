@@ -178,8 +178,31 @@ function waitForDrain(parser) {
   });
 }
 
-// src/serialize.ts
+// node_modules/@jeswr/rdf-serialize/dist/serialize.js
 import { Writer } from "n3";
+var DEFAULT_FORMAT = "text/turtle";
+function serialize(quads, options) {
+  const format = options?.format ?? DEFAULT_FORMAT;
+  const prefixes = options?.prefixes ?? {};
+  const emptyAsEmptyString = options?.emptyAsEmptyString ?? true;
+  if (emptyAsEmptyString && quads.length === 0) {
+    return Promise.resolve("");
+  }
+  return new Promise((resolve, reject) => {
+    const writer = new Writer({ format, prefixes });
+    writer.addQuads(quads);
+    writer.end((error, result) => {
+      if (error) {
+        reject(error);
+      } else {
+        resolve(result);
+      }
+    });
+  });
+}
+function legacySerialize(quads, format = DEFAULT_FORMAT, prefixes = {}, emptyAsEmptyString = true) {
+  return serialize(quads, { format, prefixes, emptyAsEmptyString });
+}
 
 // src/vocab.ts
 var VC = "https://www.w3.org/2018/credentials#";
@@ -243,21 +266,8 @@ var PREFIXES = {
   rdfs: RDFS,
   dcterms: DC_CREATED.replace("created", "")
 };
-function serialize(quads, format = "text/turtle") {
-  if (quads.length === 0) {
-    return Promise.resolve("");
-  }
-  return new Promise((resolve, reject) => {
-    const writer = new Writer({ format, prefixes: PREFIXES });
-    writer.addQuads(quads);
-    writer.end((error, result) => {
-      if (error) {
-        reject(error);
-      } else {
-        resolve(result);
-      }
-    });
-  });
+function serialize2(quads, format = "text/turtle") {
+  return legacySerialize(quads, format, PREFIXES);
 }
 
 // src/wrappers.ts
@@ -510,7 +520,7 @@ function credentialToRdf(credential) {
   return b.quads();
 }
 function credentialToTurtle(credential, format) {
-  return serialize(credentialToRdf(credential), format);
+  return serialize2(credentialToRdf(credential), format);
 }
 function credentialToJsonLd(credential) {
   const id = credential.id ?? `urn:uuid:${randomUUID()}`;
@@ -933,7 +943,7 @@ export {
   issueAgentAuthorization,
   parseCredentialRdf,
   proofOptionsQuads,
-  serialize,
+  serialize2 as serialize,
   verifyCredential,
   wrapVc
 };

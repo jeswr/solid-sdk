@@ -5,23 +5,27 @@
  *
  * WHY a bundler (esbuild) instead of plain `tsc`:
  *
- * `@jeswr/solid-vc` depends on `@jeswr/fetch-rdf`, which is NOT on npm and ships
- * no usable `dist/` (a git dep that needs its own build). A consumer running
+ * `@jeswr/solid-vc` depends on the off-npm git packages `@jeswr/fetch-rdf` (which
+ * ships no usable `dist/` — a git dep that needs its own build) and
+ * `@jeswr/rdf-serialize` (the shared n3.Writer serialiser; ships a committed
+ * `dist/` but is still off-npm). A consumer running
  * `npm install github:jeswr/solid-vc#main` under the suite's `ignore-scripts=true`
  * invariant will NOT run our `build:deps`/`prepare`, so `@jeswr/fetch-rdf` would
- * never get built and the import would fail. The fix is to make the committed
- * artifact self-contained re: that off-npm dep by INLINING `@jeswr/fetch-rdf`'s
- * compiled code into our `dist/index.js`.
+ * never get built. The fix is to make the committed artifact self-contained re:
+ * those off-npm deps by INLINING their compiled code into our `dist/index.js`.
  *
  * Externalisation contract (the load-bearing part):
- *   - INLINED  (bundled into dist): `@jeswr/fetch-rdf` ONLY — the one off-npm dep.
+ *   - INLINED  (bundled into dist): the off-npm git deps `@jeswr/fetch-rdf` and
+ *       `@jeswr/rdf-serialize` ONLY — so the committed artifact never depends on a
+ *       consumer resolving/building an off-npm package under ignore-scripts.
  *   - EXTERNAL (resolved from npm by the consumer): EVERYTHING ELSE. We compute the
- *       external set as `package.json` {dependencies ∪ devDependencies} MINUS
- *       `@jeswr/fetch-rdf`, plus the known transitive deps that `@jeswr/fetch-rdf`
+ *       external set as `package.json` {dependencies ∪ devDependencies} MINUS the
+ *       inlined set, plus the known transitive deps that `@jeswr/fetch-rdf`
  *       pulls in (`jsonld-streaming-parser`, `content-type`, the `@rdfjs/*` tree,
  *       …). All are npm-published, so a single shared copy + normal npm
  *       dedupe/audit is correct — bundling them would duplicate the whole `@rdfjs`
- *       tree into our dist.
+ *       tree into our dist. (`@jeswr/rdf-serialize`'s only runtime dep is `n3`,
+ *       already external, so inlining it adds just its tiny wrapper, not n3.)
  *   esbuild treats a parent package name in `external` as covering its subpaths,
  *   so listing e.g. `@rdfjs/dataset` externalises `@rdfjs/dataset/...` too.
  *
@@ -40,8 +44,8 @@ import { build } from "esbuild";
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const outdir = join(root, "dist");
 
-/** The ONE off-npm dependency we INLINE; everything else stays external. */
-const INLINE = "@jeswr/fetch-rdf";
+/** The off-npm git dependencies we INLINE; everything else stays external. */
+const INLINE = ["@jeswr/fetch-rdf", "@jeswr/rdf-serialize"];
 
 /**
  * Transitive deps that are NOT direct entries in our `package.json` but are
@@ -66,22 +70,26 @@ const EXTERNAL_TRANSITIVE = [
 
 /**
  * The full EXTERNAL set: every `package.json` dependency + devDependency EXCEPT
- * the inlined `@jeswr/fetch-rdf`, plus the known transitive externals. Computed
- * from `package.json` so adding a dep automatically keeps it external (the
- * inline-only-fetch-rdf contract holds without editing this list).
+ * the inlined off-npm git deps (the `INLINE` set: `@jeswr/fetch-rdf` and
+ * `@jeswr/rdf-serialize`), plus the known transitive externals. Computed from
+ * `package.json` so adding a dep automatically keeps it external (the
+ * inline-only-the-off-npm-deps contract holds without editing this list).
  */
 function externals() {
   const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+  const inline = new Set(INLINE);
   const declared = [
     ...Object.keys(pkg.dependencies ?? {}),
     ...Object.keys(pkg.devDependencies ?? {}),
-  ].filter((name) => name !== INLINE);
+  ].filter((name) => !inline.has(name));
   return [...new Set([...declared, ...EXTERNAL_TRANSITIVE])];
 }
 
 async function main(buildDir = outdir) {
   // 1. Ensure @jeswr/fetch-rdf's dist exists in node_modules so esbuild can
   //    resolve + inline it (ignore-scripts skipped its prepare on install).
+  //    @jeswr/rdf-serialize ships a committed dist/ already, so it needs no
+  //    build step here — esbuild resolves + inlines it straight from node_modules.
   execFileSync("node", [join(root, "scripts", "build-deps.mjs")], {
     cwd: root,
     stdio: ["ignore", "ignore", "inherit"],
@@ -96,7 +104,8 @@ async function main(buildDir = outdir) {
     format: "esm",
     platform: "node",
     target: "node24",
-    // Inline ONLY @jeswr/fetch-rdf; keep the npm-published deps external.
+    // Inline ONLY the off-npm git deps (@jeswr/fetch-rdf + @jeswr/rdf-serialize,
+    // the INLINE set); keep the npm-published deps external.
     external: externals(),
     sourcemap: true,
     legalComments: "none",
