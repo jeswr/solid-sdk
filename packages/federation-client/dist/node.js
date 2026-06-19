@@ -1,7 +1,8 @@
 // node_modules/@jeswr/guarded-fetch/dist/node.js
 import { lookup as dnsLookupCb } from "node:dns";
-import { Agent, fetch as undiciFetch } from "undici";
+import { Agent, buildConnector, fetch as undiciFetch } from "undici";
 import {
+  classifyIpLiteral,
   createGuardedFetch,
   isLoopbackAddress,
   isPublicAddress,
@@ -57,6 +58,57 @@ function createValidatingLookup(resolveAll, allowLoopback, requireLoopbackOnly) 
     );
   };
 }
+function createPinningDispatcher(options = {}) {
+  const allowLoopback = options.allowLoopback ?? false;
+  const resolveAll = options.resolveAll ?? defaultResolveAll;
+  const tlsBase = {};
+  if (options.ca !== void 0) {
+    tlsBase.ca = options.ca;
+  }
+  const httpsConnector = buildConnector({
+    ...tlsBase,
+    lookup: createValidatingLookup(resolveAll, allowLoopback, false)
+  });
+  const httpLoopbackConnector = buildConnector({
+    ...tlsBase,
+    lookup: createValidatingLookup(resolveAll, allowLoopback, true)
+  });
+  return new Agent({
+    // Custom connect (function form): undici hands us the full connect `Options`, INCLUDING
+    // `protocol`, so we (a) REFUSE `http:` outright unless allowLoopback — the scheme gate that
+    // fires for every connection incl. an IP-literal target undici would dial without a lookup —
+    // (b) validate an IP-LITERAL host directly (the lookup is skipped for a literal), and
+    // (c) pick the loopback-only connector for a permitted `http:` hop and the standard public
+    // connector for `https:`. undici sets `opts.servername` to the request hostname, so TLS SNI +
+    // cert validation stay against the original host while our lookup steers the (pinned) IP. The
+    // dispatcher never follows redirects itself — the shared guard re-validates + re-pins each
+    // `Location` hop as a fresh request through this same dispatcher.
+    connect(opts, cb) {
+      if (opts.protocol === "http:" && !allowLoopback) {
+        cb(
+          new SsrfError(
+            `Connection refused \u2014 http: is permitted only under allowLoopback (dev); ${opts.hostname} is plaintext and not reachable in the default posture.`
+          ),
+          null
+        );
+        return;
+      }
+      if (classifyIpLiteral(opts.hostname) !== 0) {
+        const literalOk = opts.protocol === "http:" ? isLoopbackAddress(opts.hostname) : isPublicAddress(opts.hostname, allowLoopback);
+        if (!literalOk) {
+          const why = opts.protocol === "http:" ? "is not loopback (http: requires loopback-only)" : "is a non-public address";
+          cb(
+            new SsrfError(`Connection refused \u2014 ${opts.hostname} ${why} (IP-literal target).`),
+            null
+          );
+          return;
+        }
+      }
+      const connector = opts.protocol === "http:" ? httpLoopbackConnector : httpsConnector;
+      connector(opts, cb);
+    }
+  });
+}
 function createNodeGuardedFetch(options = {}) {
   const allowLoopback = options.allowLoopback ?? false;
   const resolveAll = options.resolveAll ?? defaultResolveAll;
@@ -104,56 +156,6 @@ function safeIsHttp(u) {
   } catch {
     return false;
   }
-}
-
-// src/node.ts
-import { Agent as Agent2, buildConnector } from "undici";
-import { SsrfError as SsrfError2 } from "./index.js";
-var defaultResolveAll2 = (hostname) => (
-  // Lazy-require node:dns so this stays a node-only concern (the module is the `./node`
-  // entry, already node-only). We mirror guarded-fetch's own default resolver.
-  import("node:dns").then(
-    (dns) => new Promise((resolve, reject) => {
-      dns.lookup(hostname, { all: true }, (err, addresses) => {
-        if (err) {
-          reject(err);
-          return;
-        }
-        resolve(addresses);
-      });
-    })
-  )
-);
-function createPinningDispatcher(options = {}) {
-  const allowLoopback = options.allowLoopback ?? false;
-  const connectTimeout = options.timeoutMs ?? 1e4;
-  const resolveAll = options.resolveAll ?? defaultResolveAll2;
-  const makeLookup = (requireLoopbackOnly) => createValidatingLookup(resolveAll, allowLoopback, requireLoopbackOnly);
-  const tlsBase = {
-    timeout: connectTimeout,
-    ...options.ca !== void 0 ? { ca: options.ca } : {}
-  };
-  const httpsConnector = buildConnector({ ...tlsBase, lookup: makeLookup(false) });
-  const loopbackOnlyConnector = buildConnector({
-    ...tlsBase,
-    lookup: makeLookup(true)
-  });
-  return new Agent2({
-    // Custom connect (function form): undici hands us the full connect `Options`, INCLUDING
-    // `protocol`, so we pick the loopback-only connector for an `http:` hop and the standard
-    // public connector for `https:`. undici sets `opts.servername` to the request hostname, so
-    // TLS SNI + cert validation stay against the original host while our lookup steers the
-    // (pinned) IP. The Agent does NOT follow redirects on its own — the shared guard re-pins
-    // each hop through a fresh request — so a 30x to a private IP is blocked at the next hop.
-    connect(opts, cb) {
-      if (opts.protocol === "http:" && !allowLoopback) {
-        cb(new SsrfError2("http: is refused unless allowLoopback is set (dev only)."), null);
-        return;
-      }
-      const connector = opts.protocol === "http:" ? loopbackOnlyConnector : httpsConnector;
-      connector(opts, cb);
-    }
-  });
 }
 export {
   createNodeGuardedFetch,

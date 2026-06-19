@@ -514,12 +514,18 @@ describe("createNodeGuardedFetch — TLS servername preserved under IP pin", () 
   });
 });
 
-describe("createPinningDispatcher — protocol-aware http-loopback-only (parity guard, roborev Medium)", () => {
-  // This package OWNS createPinningDispatcher (rather than re-exporting guarded-fetch's) to
-  // preserve its prior, stricter posture on this low-level escape hatch: an http: connect must
-  // use a LOOPBACK-ONLY validating lookup, so even under allowLoopback:true a plaintext http:
-  // request can NEVER reach a PUBLIC host at connect time. These tests drive the bare dispatcher
-  // through undici.fetch (no shared guard) — the exact path a regression would surface on.
+describe("createPinningDispatcher — protocol-aware http-loopback-only (re-pin parity oracle)", () => {
+  // This package now RE-EXPORTS guarded-fetch's createPinningDispatcher (the prior
+  // fed-client-owned override was dropped at guarded-fetch sha 92f75f7, where guarded-fetch's
+  // own dispatcher became protocol-aware). These tests are the DIFFERENTIAL ORACLE proving the
+  // re-exported dispatcher gives the IDENTICAL (stricter-or-equal) SSRF posture the override
+  // gave: an http: connect refused outright under the default allowLoopback=false; under
+  // allowLoopback:true an http: connect uses a LOOPBACK-ONLY validating lookup so a plaintext
+  // http: request can NEVER reach a PUBLIC host at connect time; a private https: resolution is
+  // refused; and — STRICTER than the old override — an IP-LITERAL private/loopback/metadata
+  // target (which undici dials directly, skipping the validating lookup) is refused in connect()
+  // too. These drive the bare dispatcher through undici.fetch (no shared guard) — the exact path
+  // a regression would surface on.
 
   /** The connect-error message undici surfaces in `.cause` (it wraps it as "fetch failed"). */
   async function connectError(fn: () => Promise<unknown>): Promise<string> {
@@ -576,6 +582,81 @@ describe("createPinningDispatcher — protocol-aware http-loopback-only (parity 
         undiciFetch("https://private.example/x", { dispatcher, redirect: "manual" } as never),
       );
       expect(msg).toMatch(/non-public address|not loopback/i);
+    } finally {
+      await dispatcher.close().catch(() => {});
+    }
+  });
+
+  it("REFUSES http://127.0.0.1 (IP-literal loopback) under DEFAULT options — the http: scheme gate", async () => {
+    // An IP-literal http: target: undici dials it DIRECTLY (skipping the validating lookup), so
+    // the only thing that can stop it is the connect()-level http:+!allowLoopback scheme gate.
+    // The re-exported dispatcher must refuse it with the default (production) options.
+    const dispatcher = createPinningDispatcher(); // allowLoopback defaults false
+    try {
+      const msg = await connectError(() =>
+        undiciFetch("http://127.0.0.1/x", { dispatcher, redirect: "manual" } as never),
+      );
+      expect(msg).toMatch(/http:.*allowLoopback|allowLoopback.*http:|dev|plaintext/i);
+      expect(msg).not.toMatch(/no error — request was ALLOWED/);
+    } finally {
+      await dispatcher.close().catch(() => {});
+    }
+  });
+
+  it("REFUSES http://10.0.0.5 (IP-literal private) under DEFAULT options — the http: scheme gate", async () => {
+    const dispatcher = createPinningDispatcher(); // allowLoopback defaults false
+    try {
+      const msg = await connectError(() =>
+        undiciFetch("http://10.0.0.5/x", { dispatcher, redirect: "manual" } as never),
+      );
+      expect(msg).toMatch(/http:.*allowLoopback|allowLoopback.*http:|dev|plaintext/i);
+      expect(msg).not.toMatch(/no error — request was ALLOWED/);
+    } finally {
+      await dispatcher.close().catch(() => {});
+    }
+  });
+
+  it("REFUSES https://10.0.0.5 (IP-literal private) at connect — STRICTER than the old override (lookup is skipped for a literal)", async () => {
+    // The old fed-client override did NOT classify an IP-literal target in connect() (it relied
+    // on the validating lookup, which undici SKIPS for a literal), so this would have leaked.
+    // The re-exported dispatcher classifies the literal directly and refuses it. No resolveAll is
+    // set — proving the refusal is the literal classification, not a resolver result.
+    const dispatcher = createPinningDispatcher();
+    try {
+      const msg = await connectError(() =>
+        undiciFetch("https://10.0.0.5/x", { dispatcher, redirect: "manual" } as never),
+      );
+      expect(msg).toMatch(/non-public address|IP-literal/i);
+      expect(msg).not.toMatch(/no error — request was ALLOWED/);
+    } finally {
+      await dispatcher.close().catch(() => {});
+    }
+  });
+
+  it("REFUSES https://169.254.169.254 (IP-literal cloud-metadata) at connect — STRICTER than the old override", async () => {
+    const dispatcher = createPinningDispatcher();
+    try {
+      const msg = await connectError(() =>
+        undiciFetch("https://169.254.169.254/latest/meta-data/", {
+          dispatcher,
+          redirect: "manual",
+        } as never),
+      );
+      expect(msg).toMatch(/non-public address|IP-literal/i);
+      expect(msg).not.toMatch(/no error — request was ALLOWED/);
+    } finally {
+      await dispatcher.close().catch(() => {});
+    }
+  });
+
+  it("REFUSES https://127.0.0.1 (IP-literal loopback) at connect under DEFAULT options", async () => {
+    const dispatcher = createPinningDispatcher(); // allowLoopback defaults false
+    try {
+      const msg = await connectError(() =>
+        undiciFetch("https://127.0.0.1/x", { dispatcher, redirect: "manual" } as never),
+      );
+      expect(msg).toMatch(/non-public address|IP-literal/i);
+      expect(msg).not.toMatch(/no error — request was ALLOWED/);
     } finally {
       await dispatcher.close().catch(() => {});
     }

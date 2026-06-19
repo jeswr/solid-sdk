@@ -2,10 +2,16 @@
 //
 // `@jeswr/federation-client/node` — the SSRF-safe NODE fetch path that fully closes the
 // DNS-rebinding (TOCTOU) hole on the server side. The undici DNS-pinning machinery is the
-// consolidated suite implementation `@jeswr/guarded-fetch/node`: this module re-exports the
-// recommended fetches + building blocks from it, and keeps ONE fed-client-OWNED wrapper —
-// `createPinningDispatcher` — to PRESERVE this package's prior, stricter http-loopback-only
-// behaviour on that low-level escape hatch (see the dedicated note below).
+// consolidated suite implementation `@jeswr/guarded-fetch/node`: this module is now a THIN
+// RE-EXPORT of it — the recommended fetches (`createNodeGuardedFetch` / `nodeGuardedFetch`),
+// the low-level `createPinningDispatcher` escape hatch, the `createValidatingLookup` building
+// block, and the `ConnectLookup` / `NodePinningOptions` / `ResolveAll` types — with NO
+// fed-client-owned wrapper. (Previously this package kept its OWN `createPinningDispatcher` to
+// preserve a stricter http-loopback-only posture on that escape hatch; guarded-fetch's
+// `createPinningDispatcher` is now itself protocol-aware — refuse `http:` unless allowLoopback,
+// loopback-only lookup for a permitted `http:` hop, public-address lookup for `https:`, AND a
+// direct per-scheme classification of IP-LITERAL targets the lookup never sees — so the override
+// became redundant and was removed at guarded-fetch sha 92f75f7. See the parity note below.)
 //
 // WHAT it gives a Node consumer: `createNodeGuardedFetch` / `nodeGuardedFetch` — a
 // `fetch`-shaped function that resolves a hostname ONCE, validates EVERY A/AAAA record
@@ -21,9 +27,9 @@
 // `./ssrf.ts` → `@jeswr/guarded-fetch`) imports the browser-safe ROOT entry only, so the
 // browser bundle never sees `undici`. The committed `dist/node.js` keeps `undici` external
 // (a consumer-resolved npm dep) and references the SAME runtime `SsrfError` class as
-// `dist/index.js` (both resolve to the inlined guarded-fetch root), so an error thrown by
-// `@jeswr/federation-client/node` still satisfies `instanceof SsrfError` imported from
-// `@jeswr/federation-client`.
+// `dist/index.js` (both resolve to the inlined guarded-fetch root via the build's
+// share-guarded-fetch-root plugin), so an error thrown by `@jeswr/federation-client/node`
+// still satisfies `instanceof SsrfError` imported from `@jeswr/federation-client`.
 //
 // SsrfError IDENTITY. `SsrfError` is re-exported from THIS package's root (`./index.ts`),
 // not separately from `@jeswr/guarded-fetch/node`, so the class a consumer catches from the
@@ -31,122 +37,31 @@
 // shared between dist/index.js and dist/node.js by the build keeping `./index.js` external
 // in the node bundle).
 //
-// WHY a fed-client-OWNED `createPinningDispatcher` (parity guard — roborev Medium). The
-// RECOMMENDED path (`createNodeGuardedFetch` / `nodeGuardedFetch`) is wrapped by the shared
-// SSRF guard, which refuses `http:` to a non-loopback host AND applies the http-loopback-only
-// pin per request — so it is fully safe regardless of the dispatcher below. But the LOW-LEVEL
-// `createPinningDispatcher` is an escape hatch a consumer may pass straight to `undici.fetch`
-// WITHOUT the shared guard. This package's PRIOR `createPinningDispatcher` was protocol-aware:
-// an `http:` connect used a LOOPBACK-ONLY validating lookup, so even under `allowLoopback: true`
-// it could never send plaintext `http:` to a PUBLIC host. `@jeswr/guarded-fetch`'s current
-// `createPinningDispatcher` builds a single non-loopback-only lookup for ALL protocols (its
-// loopback-only nuance lives only in `createNodeGuardedFetch`'s per-request fetch), so
-// re-exporting it verbatim would REGRESS this surface: `createPinningDispatcher({ allowLoopback:
-// true })` + `undici.fetch('http://public-host')` would be permitted. To stay AT LEAST AS STRICT
-// as before (and avoid weakening fed-client), we keep our own protocol-aware dispatcher built on
-// guarded-fetch's audited `createValidatingLookup` primitive — restoring the exact prior posture
-// without forking the guard. (Filed upstream: guarded-fetch's bare `createPinningDispatcher`
-// should itself be protocol-aware — see the task report.)
-
-import {
-  type ConnectLookup,
-  createValidatingLookup,
-  type NodePinningOptions,
-  type ResolveAll,
-} from "@jeswr/guarded-fetch/node";
-import { Agent, buildConnector, type Dispatcher } from "undici";
-// SsrfError from THIS package's ROOT (./index.js) — the SAME class the rest of the guard
-// throws, so the dispatcher's own refusal is `instanceof SsrfError` for a consumer too. The
-// build keeps `./index.js` external in the node bundle, so this resolves to the sibling
-// dist/index.js (the sole inlined guarded-fetch root) at runtime.
-import { SsrfError } from "./index.js";
+// PARITY of the bare `createPinningDispatcher` (the reason the override could be dropped).
+// guarded-fetch's `createPinningDispatcher` is now at least as strict as this package's prior
+// fed-client-owned override on every axis that override guarded:
+//   - `http:` + `allowLoopback === false` → REFUSED outright in `connect()`, before any socket
+//     (so the bare dispatcher can never reach `http://localhost` / `http://127.0.0.1` /
+//     `http://10.0.0.5` with the default/production options);
+//   - a permitted `http:` hop (allowLoopback) uses a LOOPBACK-ONLY validating lookup, so a flip
+//     to a public address at connect time is refused — a plaintext request can never leak to a
+//     public host;
+//   - `https:` uses the standard `isPublicAddress`-based validating lookup, refusing a
+//     private / metadata resolution (DNS-pinning / TOCTOU preserved);
+//   - AND, STRICTER than the old override, it classifies an IP-LITERAL `opts.hostname` directly
+//     in `connect()` (the validating lookup is skipped for a literal target), refusing a
+//     private / loopback / link-local / metadata IP-literal the old override never validated.
+// So re-exporting it verbatim does NOT weaken fed-client's posture; it strengthens the
+// IP-literal case. The dispatcher's prior `timeoutMs` → undici-connect-timeout wiring is gone,
+// but that was a resource/DoS knob, never an SSRF gate (and undici applies its own default
+// connect timeout), so the SSRF posture is unchanged.
 
 export {
   type ConnectLookup,
   createNodeGuardedFetch,
+  createPinningDispatcher,
   createValidatingLookup,
   type NodePinningOptions,
   nodeGuardedFetch,
   type ResolveAll,
 } from "@jeswr/guarded-fetch/node";
-
-/** Promise form of `dns.lookup(host, { all: true })`, returning every A/AAAA record. */
-const defaultResolveAll: ResolveAll = (hostname) =>
-  // Lazy-require node:dns so this stays a node-only concern (the module is the `./node`
-  // entry, already node-only). We mirror guarded-fetch's own default resolver.
-  import("node:dns").then(
-    (dns) =>
-      new Promise((resolve, reject) => {
-        dns.lookup(hostname, { all: true }, (err, addresses) => {
-          if (err) {
-            reject(err);
-            return;
-          }
-          resolve(addresses);
-        });
-      }),
-  );
-
-/**
- * Build an `undici.Agent` that PINS each connection to a freshly-resolved, validated IP — the
- * rebinding-closing dispatcher. PROTOCOL-AWARE, restoring this package's prior posture
- * (roborev Medium): an `http:` connect uses a LOOPBACK-ONLY validating lookup so that, even
- * under `allowLoopback: true`, a plaintext `http:` request can only ever reach a loopback IP at
- * connect time — never a public host; an `https:` connect uses the standard
- * `isPublicAddress`-based lookup. Both keep TLS cert validation ON (we never pass
- * `rejectUnauthorized: false`) and forward the optional private-`ca`.
- *
- * The returned dispatcher is suitable to pass as `fetch(url, { dispatcher })` (undici), but
- * prefer {@link createNodeGuardedFetch}, which wires this together with the full SSRF guard
- * (scheme/userinfo/literal checks, redirect re-validation, body + time caps). Use this directly
- * only if you are composing your own request pipeline and already apply those checks. The Agent
- * never re-resolves a hostname for connection: our `lookup` is the sole resolver and returns
- * only pre-validated addresses, so the socket is pinned to the validated IP.
- */
-export function createPinningDispatcher(options: NodePinningOptions = {}): Dispatcher {
-  const allowLoopback = options.allowLoopback ?? false;
-  const connectTimeout = options.timeoutMs ?? 10_000;
-  const resolveAll = options.resolveAll ?? defaultResolveAll;
-
-  const makeLookup = (requireLoopbackOnly: boolean): ConnectLookup =>
-    createValidatingLookup(resolveAll, allowLoopback, requireLoopbackOnly);
-
-  // Two base connectors, differing ONLY in the protocol-aware lookup. Both keep TLS cert
-  // validation ON and the optional private-CA.
-  const tlsBase = {
-    timeout: connectTimeout,
-    ...(options.ca !== undefined ? { ca: options.ca } : {}),
-  };
-  const httpsConnector = buildConnector({ ...tlsBase, lookup: makeLookup(false) as never });
-  const loopbackOnlyConnector = buildConnector({
-    ...tlsBase,
-    lookup: makeLookup(true) as never,
-  });
-
-  return new Agent({
-    // Custom connect (function form): undici hands us the full connect `Options`, INCLUDING
-    // `protocol`, so we pick the loopback-only connector for an `http:` hop and the standard
-    // public connector for `https:`. undici sets `opts.servername` to the request hostname, so
-    // TLS SNI + cert validation stay against the original host while our lookup steers the
-    // (pinned) IP. The Agent does NOT follow redirects on its own — the shared guard re-pins
-    // each hop through a fresh request — so a 30x to a private IP is blocked at the next hop.
-    connect(opts: buildConnector.Options, cb: buildConnector.Callback) {
-      // `http:` is DEV-ONLY: refuse it OUTRIGHT unless allowLoopback is set (roborev High).
-      // The loopback-only connector accepts loopback addresses regardless of `allowLoopback`
-      // (that is what loopback-only MEANS), so selecting it for http: when allowLoopback is
-      // FALSE would let a bare-dispatcher consumer reach `http://localhost` / a 127.x / ::1
-      // service with the DEFAULT (production) options. Gating http: on allowLoopback here
-      // (before any connector runs, so no socket opens) makes the dispatcher refuse plaintext
-      // http: in production — STRICTER than both this package's prior dispatcher and
-      // guarded-fetch's. https: is unaffected; the shared guard's createNodeGuardedFetch
-      // already refuses http: at the URL layer when allowLoopback is false, so this only
-      // hardens the low-level escape-hatch path that bypasses the guard.
-      if (opts.protocol === "http:" && !allowLoopback) {
-        cb(new SsrfError("http: is refused unless allowLoopback is set (dev only)."), null);
-        return;
-      }
-      const connector = opts.protocol === "http:" ? loopbackOnlyConnector : httpsConnector;
-      connector(opts, cb);
-    },
-  });
-}
