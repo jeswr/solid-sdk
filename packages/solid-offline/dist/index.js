@@ -1569,6 +1569,15 @@ function createOfflineClient(config = {}) {
   let onControllerChange;
   let closed = false;
   const listeners = /* @__PURE__ */ new Set();
+  function resolvePageFetch() {
+    return config.fetch ?? (typeof fetch !== "undefined" ? fetch.bind(globalThis) : void 0);
+  }
+  function notificationsConfig() {
+    return config.notifications === true || !config.notifications ? {} : config.notifications;
+  }
+  function hasExplicitNotificationTopics(nCfg) {
+    return Boolean(nCfg.containers?.length) || Boolean(nCfg.resources?.length);
+  }
   function postToWorker(message) {
     if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
     const target = registration?.active ?? navigator.serviceWorker.controller;
@@ -1579,9 +1588,9 @@ function createOfflineClient(config = {}) {
     if (notifications) return notifications;
     if (!config.notifications) return void 0;
     if (typeof WebSocket === "undefined") return void 0;
-    const pageFetch = config.fetch ?? (typeof fetch !== "undefined" ? fetch.bind(globalThis) : void 0);
+    const pageFetch = resolvePageFetch();
     if (!pageFetch) return void 0;
-    const nCfg = config.notifications === true ? {} : config.notifications;
+    const nCfg = notificationsConfig();
     const topics = nCfg.containers ?? containers;
     if (topics.length === 0 && !nCfg.resources?.length) return void 0;
     notifications = createNotificationsClient(
@@ -1610,7 +1619,7 @@ function createOfflineClient(config = {}) {
     if (warmer) return warmer;
     if (config.warm === false || config.warm === void 0) return void 0;
     if (!config.webId) return void 0;
-    const pageFetch = config.fetch ?? (typeof fetch !== "undefined" ? fetch.bind(globalThis) : void 0);
+    const pageFetch = resolvePageFetch();
     if (!pageFetch) return void 0;
     const warmCfg = config.warm === true ? {} : config.warm;
     warmer = createWarmController({
@@ -1677,9 +1686,8 @@ function createOfflineClient(config = {}) {
     }
     startWarmer();
     if (config.notifications) {
-      const nCfg = config.notifications === true ? {} : config.notifications;
-      const hasExplicitTopics = nCfg.containers && nCfg.containers.length > 0 || nCfg.resources && nCfg.resources.length > 0;
-      if (hasExplicitTopics) {
+      const nCfg = notificationsConfig();
+      if (hasExplicitNotificationTopics(nCfg)) {
         startNotifications(nCfg.containers ?? []);
       } else {
         const w = startWarmer();
@@ -1709,9 +1717,7 @@ function createOfflineClient(config = {}) {
     if (!w) return void 0;
     const result = await w.run();
     if (config.notifications && !notifications) {
-      const nCfg = config.notifications === true ? {} : config.notifications;
-      const hasExplicitTopics = nCfg.containers && nCfg.containers.length > 0 || nCfg.resources && nCfg.resources.length > 0;
-      if (!hasExplicitTopics) {
+      if (!hasExplicitNotificationTopics(notificationsConfig())) {
         startNotifications(containersFromWarm(result));
       }
     }

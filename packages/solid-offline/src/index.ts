@@ -20,6 +20,7 @@ import { type NotificationsClient, createNotificationsClient } from './notificat
 import { type OfflineStatusSurface, createStatusSurface } from './status.js';
 import type {
   NotificationFrame,
+  NotificationsClientConfig,
   OfflineClient,
   OfflineClientConfig,
   PageToWorkerMessage,
@@ -176,6 +177,26 @@ export function createOfflineClient(config: OfflineClientConfig = {}): OfflineCl
   let closed = false;
   const listeners = new Set<UpdatedListener>();
 
+  /**
+   * The page's fetch the warmer + notifications client should use: `config.fetch`
+   * (typically the app's DPoP-decorated/authenticated fetch) if supplied, else the
+   * global `fetch`, else undefined (no usable fetch in this context). The SW still
+   * authenticates nothing (decision 1) — only these page-side reads carry auth.
+   */
+  function resolvePageFetch(): typeof fetch | undefined {
+    return config.fetch ?? (typeof fetch !== 'undefined' ? fetch.bind(globalThis) : undefined);
+  }
+
+  /** The notifications config object (`{}` when `notifications: true`, else the given config). */
+  function notificationsConfig(): NotificationsClientConfig {
+    return config.notifications === true || !config.notifications ? {} : config.notifications;
+  }
+
+  /** True if the notifications config names explicit topics (containers and/or resources). */
+  function hasExplicitNotificationTopics(nCfg: NotificationsClientConfig): boolean {
+    return Boolean(nCfg.containers?.length) || Boolean(nCfg.resources?.length);
+  }
+
   /** Post a control message to the active service worker (P3 invalidation path). */
   function postToWorker(message: PageToWorkerMessage): void {
     if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
@@ -194,10 +215,9 @@ export function createOfflineClient(config: OfflineClientConfig = {}): OfflineCl
     if (notifications) return notifications;
     if (!config.notifications) return undefined;
     if (typeof WebSocket === 'undefined') return undefined; // non-browser context
-    const pageFetch =
-      config.fetch ?? (typeof fetch !== 'undefined' ? fetch.bind(globalThis) : undefined);
+    const pageFetch = resolvePageFetch();
     if (!pageFetch) return undefined;
-    const nCfg = config.notifications === true ? {} : config.notifications;
+    const nCfg = notificationsConfig();
     const topics = nCfg.containers ?? containers;
     if (topics.length === 0 && !nCfg.resources?.length) return undefined;
     notifications = createNotificationsClient(
@@ -233,8 +253,7 @@ export function createOfflineClient(config: OfflineClientConfig = {}): OfflineCl
     if (warmer) return warmer;
     if (config.warm === false || config.warm === undefined) return undefined;
     if (!config.webId) return undefined; // no identity → nothing to warm
-    const pageFetch =
-      config.fetch ?? (typeof fetch !== 'undefined' ? fetch.bind(globalThis) : undefined);
+    const pageFetch = resolvePageFetch();
     if (!pageFetch) return undefined;
     const warmCfg = config.warm === true ? {} : config.warm;
     warmer = createWarmController({
@@ -340,11 +359,8 @@ export function createOfflineClient(config: OfflineClientConfig = {}): OfflineCl
     // If explicit containers are configured, start immediately; otherwise derive
     // the container set from a warm pass.
     if (config.notifications) {
-      const nCfg = config.notifications === true ? {} : config.notifications;
-      const hasExplicitTopics =
-        (nCfg.containers && nCfg.containers.length > 0) ||
-        (nCfg.resources && nCfg.resources.length > 0);
-      if (hasExplicitTopics) {
+      const nCfg = notificationsConfig();
+      if (hasExplicitNotificationTopics(nCfg)) {
         // Explicit topics (containers AND/OR resources) → start immediately. Pass
         // whatever containers were configured (possibly none — `startNotifications`
         // + the client still subscribe the explicit `resources`). This is the fix
@@ -405,11 +421,7 @@ export function createOfflineClient(config: OfflineClientConfig = {}): OfflineCl
     // manual-warm users: `register()` doesn't auto-warm when `warmOnLogin: false`,
     // so the only signal to derive topics is this manual `warm()`).
     if (config.notifications && !notifications) {
-      const nCfg = config.notifications === true ? {} : config.notifications;
-      const hasExplicitTopics =
-        (nCfg.containers && nCfg.containers.length > 0) ||
-        (nCfg.resources && nCfg.resources.length > 0);
-      if (!hasExplicitTopics) {
+      if (!hasExplicitNotificationTopics(notificationsConfig())) {
         startNotifications(containersFromWarm(result));
       }
     }
