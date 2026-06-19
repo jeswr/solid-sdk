@@ -1130,64 +1130,74 @@ function isIpv4Literal(value) {
   return true;
 }
 function isIpv6Literal(value) {
+  const withoutZone = stripIpv6Zone(value);
+  if (withoutZone === void 0) {
+    return false;
+  }
+  if (withoutZone.length === 0 || /[^0-9a-fA-F:.]/.test(withoutZone)) {
+    return false;
+  }
+  if ((withoutZone.match(/::/g)?.length ?? 0) > 1) {
+    return false;
+  }
+  const stripped = stripEmbeddedV4(withoutZone);
+  if (stripped === void 0) {
+    return false;
+  }
+  return validateHextetGroups(
+    stripped.core,
+    8 - stripped.embeddedV4Groups,
+    stripped.embeddedV4Groups > 0
+  );
+}
+function stripIpv6Zone(value) {
   const pct = value.indexOf("%");
-  if (pct !== -1) {
-    const zone = value.slice(pct + 1);
-    if (zone.length === 0 || zone.includes("%")) {
-      return false;
-    }
-    return isIpv6Literal(value.slice(0, pct));
+  if (pct === -1) {
+    return value;
   }
-  if (value.length === 0 || /[^0-9a-fA-F:.]/.test(value)) {
-    return false;
+  const zone = value.slice(pct + 1);
+  if (zone.length === 0 || zone.includes("%")) {
+    return void 0;
   }
-  const compressionMatches = value.match(/::/g);
-  if (compressionMatches && compressionMatches.length > 1) {
-    return false;
-  }
-  const hasCompression = value.includes("::");
-  let core = value;
-  let embeddedV4Groups = 0;
-  const lastColon = value.lastIndexOf(":");
+  return value.slice(0, pct);
+}
+function stripEmbeddedV4(value) {
   const dot = value.indexOf(".");
-  if (dot !== -1) {
-    if (lastColon === -1 || lastColon > dot) {
-      return false;
-    }
-    const v4 = value.slice(lastColon + 1);
-    if (!isIpv4Literal(v4)) {
-      return false;
-    }
-    core = value.slice(0, lastColon + 1);
-    embeddedV4Groups = 2;
+  if (dot === -1) {
+    return { core: value, embeddedV4Groups: 0 };
   }
-  const requiredGroups = 8 - embeddedV4Groups;
-  if (hasCompression) {
-    const idx = core.indexOf("::");
-    const headStr = core.slice(0, idx);
-    let tailStr = core.slice(idx + 2);
-    if (embeddedV4Groups > 0 && tailStr.endsWith(":")) {
+  const lastColon = value.lastIndexOf(":");
+  if (lastColon === -1 || lastColon > dot) {
+    return void 0;
+  }
+  if (!isIpv4Literal(value.slice(lastColon + 1))) {
+    return void 0;
+  }
+  return { core: value.slice(0, lastColon + 1), embeddedV4Groups: 2 };
+}
+function validateHextetGroups(core, requiredGroups, hadEmbeddedV4) {
+  const compressionIdx = core.indexOf("::");
+  if (compressionIdx !== -1) {
+    const head = splitHextets(core.slice(0, compressionIdx));
+    let tailStr = core.slice(compressionIdx + 2);
+    if (hadEmbeddedV4 && tailStr.endsWith(":")) {
       tailStr = tailStr.slice(0, -1);
     }
-    const head = headStr === "" ? [] : headStr.split(":");
-    const tail = tailStr === "" ? [] : tailStr.split(":");
+    const tail = splitHextets(tailStr);
     if (!head.every(isHextet) || !tail.every(isHextet)) {
       return false;
     }
-    if (head.length + tail.length >= requiredGroups) {
-      return false;
-    }
-    return true;
+    return head.length + tail.length < requiredGroups;
   }
   let groupsStr = core;
-  if (embeddedV4Groups > 0 && groupsStr.endsWith(":")) {
+  if (hadEmbeddedV4 && groupsStr.endsWith(":")) {
     groupsStr = groupsStr.slice(0, -1);
   }
-  const groups = groupsStr === "" ? [] : groupsStr.split(":");
-  if (groups.length !== requiredGroups) {
-    return false;
-  }
-  return groups.every(isHextet);
+  const groups = splitHextets(groupsStr);
+  return groups.length === requiredGroups && groups.every(isHextet);
+}
+function splitHextets(s) {
+  return s === "" ? [] : s.split(":");
 }
 function isHextet(group) {
   return /^[0-9a-fA-F]{1,4}$/.test(group);
@@ -1219,49 +1229,30 @@ function isLoopbackAddress(address) {
   }
   return false;
 }
+var BLOCKED_IPV4_RANGES = [
+  { label: "0.0.0.0/8", matches: (a) => a === 0 },
+  { label: "RFC1918 10.0.0.0/8", matches: (a) => a === 10 },
+  { label: "RFC1918 172.16.0.0/12", matches: (a, b) => a === 172 && b >= 16 && b <= 31 },
+  { label: "RFC1918 192.168.0.0/16", matches: (a, b) => a === 192 && b === 168 },
+  { label: "link-local 169.254.0.0/16", matches: (a, b) => a === 169 && b === 254 },
+  { label: "CGNAT 100.64.0.0/10", matches: (a, b) => a === 100 && b >= 64 && b <= 127 },
+  { label: "multicast 224.0.0.0/4", matches: (a) => a >= 224 && a <= 239 },
+  { label: "reserved/broadcast 240.0.0.0/4", matches: (a) => a >= 240 },
+  { label: "TEST-NET-1 192.0.2.0/24", matches: (a, b, c) => a === 192 && b === 0 && c === 2 },
+  { label: "benchmarking 198.18.0.0/15", matches: (a, b) => a === 198 && (b === 18 || b === 19) },
+  { label: "TEST-NET-2 198.51.100.0/24", matches: (a, b, c) => a === 198 && b === 51 && c === 100 },
+  { label: "TEST-NET-3 203.0.113.0/24", matches: (a, b, c) => a === 203 && b === 0 && c === 113 }
+];
 function isPublicIpv4(address, allowLoopback) {
   const parts = address.split(".").map((p) => Number.parseInt(p, 10));
   if (parts.length !== 4 || parts.some((p) => Number.isNaN(p) || p < 0 || p > 255)) {
     return false;
   }
   const [a, b, c] = parts;
-  if (a === 0) {
-    return false;
-  }
   if (a === 127) {
     return allowLoopback;
   }
-  if (a === 10) {
-    return false;
-  }
-  if (a === 172 && b >= 16 && b <= 31) {
-    return false;
-  }
-  if (a === 192 && b === 168) {
-    return false;
-  }
-  if (a === 169 && b === 254) {
-    return false;
-  }
-  if (a === 100 && b >= 64 && b <= 127) {
-    return false;
-  }
-  if (a >= 224 && a <= 239) {
-    return false;
-  }
-  if (a >= 240) {
-    return false;
-  }
-  if (a === 192 && b === 0 && c === 2) {
-    return false;
-  }
-  if (a === 198 && (b === 18 || b === 19)) {
-    return false;
-  }
-  if (a === 198 && b === 51 && c === 100) {
-    return false;
-  }
-  if (a === 203 && b === 0 && c === 113) {
+  if (BLOCKED_IPV4_RANGES.some((range) => range.matches(a, b, c))) {
     return false;
   }
   return true;
@@ -1279,6 +1270,22 @@ function extractEmbeddedV4(hextets, startHextet) {
   }
   return `${w1 >> 8 & 255}.${w1 & 255}.${w2 >> 8 & 255}.${w2 & 255}`;
 }
+function hextetsMatchPrefix(hextets, prefix) {
+  return prefix.every((value, i) => hextets[i] === value);
+}
+var BLOCKED_IPV6_HIGH_MASKS = [
+  { label: "fe80::/10 link-local", mask: 65472, value: 65152 },
+  { label: "fc00::/7 unique-local", mask: 65024, value: 64512 },
+  { label: "ff00::/8 multicast", mask: 65280, value: 65280 }
+];
+function embeddedV4IsPublic(hextets, startHextet, allowLoopback) {
+  const v4 = extractEmbeddedV4(hextets, startHextet);
+  return v4 !== void 0 && isPublicIpv4(v4, allowLoopback);
+}
+function embeddedTunnelV4IsBlocked(hextets, startHextet, allowLoopback) {
+  const v4 = extractEmbeddedV4(hextets, startHextet);
+  return v4 !== void 0 && !isPublicIpv4(v4, allowLoopback);
+}
 function isPublicIpv6(address, allowLoopback) {
   const lower = address.toLowerCase();
   if (lower === "::1" || lower === "0:0:0:0:0:0:0:1") {
@@ -1287,88 +1294,81 @@ function isPublicIpv6(address, allowLoopback) {
   if (lower === "::" || lower === "0:0:0:0:0:0:0:0") {
     return false;
   }
-  const mappedExpanded = expandIpv6(lower);
-  if (mappedExpanded && mappedExpanded[0] === "0" && mappedExpanded[1] === "0" && mappedExpanded[2] === "0" && mappedExpanded[3] === "0" && mappedExpanded[4] === "0" && mappedExpanded[5] === "ffff") {
-    const v4 = extractEmbeddedV4(mappedExpanded, 6);
-    return v4 !== void 0 && isPublicIpv4(v4, allowLoopback);
+  const expanded = expandIpv6(lower);
+  if (expanded && hextetsMatchPrefix(expanded, ["0", "0", "0", "0", "0", "ffff"])) {
+    return embeddedV4IsPublic(expanded, 6, allowLoopback);
   }
   const head = lower.split(":")[0] ?? "";
   const high = Number.parseInt(head, 16);
   if (Number.isNaN(high)) {
     return false;
   }
-  if ((high & 65472) === 65152) {
+  if (BLOCKED_IPV6_HIGH_MASKS.some((m) => (high & m.mask) === m.value)) {
     return false;
   }
-  if ((high & 65024) === 64512) {
+  if (tunnellingPrefixIsBlocked(high, expanded, allowLoopback)) {
     return false;
-  }
-  if ((high & 65280) === 65280) {
-    return false;
-  }
-  if (high === 8194) {
-    const expanded = expandIpv6(lower);
-    if (expanded) {
-      const v4 = extractEmbeddedV4(expanded, 1);
-      if (v4 && !isPublicIpv4(v4, allowLoopback)) {
-        return false;
-      }
-    } else {
-      return false;
-    }
-  }
-  if (high === 100) {
-    const expanded = expandIpv6(lower);
-    if (expanded && expanded[0] === "64" && expanded[1] === "ff9b" && expanded[2] === "0" && expanded[3] === "0" && expanded[4] === "0" && expanded[5] === "0") {
-      const v4 = extractEmbeddedV4(expanded, 6);
-      if (v4 && !isPublicIpv4(v4, allowLoopback)) {
-        return false;
-      }
-    }
   }
   return true;
 }
+function tunnellingPrefixIsBlocked(high, expanded, allowLoopback) {
+  if (high === 8194) {
+    return !expanded || embeddedTunnelV4IsBlocked(expanded, 1, allowLoopback);
+  }
+  if (high === 100) {
+    return expanded !== void 0 && hextetsMatchPrefix(expanded, ["64", "ff9b", "0", "0", "0", "0"]) && embeddedTunnelV4IsBlocked(expanded, 6, allowLoopback);
+  }
+  return false;
+}
 function expandIpv6(addr) {
-  let s = addr;
-  const dot = s.lastIndexOf(".");
-  if (dot !== -1) {
-    const colon = s.lastIndexOf(":", dot);
-    if (colon === -1) {
-      return void 0;
-    }
-    const v4 = s.slice(colon + 1);
-    if (classifyIpLiteral(v4) !== 4) {
-      return void 0;
-    }
-    const [a, b, c, d] = v4.split(".").map((p) => Number.parseInt(p, 10));
-    if (a === void 0 || b === void 0 || c === void 0 || d === void 0) {
-      return void 0;
-    }
-    s = `${s.slice(0, colon)}:${(a << 8 | b).toString(16)}:${(c << 8 | d).toString(16)}`;
-  }
-  const doubleColon = s.indexOf("::");
-  let hextets;
-  if (doubleColon === -1) {
-    hextets = s.split(":");
-  } else {
-    const head = s.slice(0, doubleColon) === "" ? [] : s.slice(0, doubleColon).split(":");
-    const tail = s.slice(doubleColon + 2) === "" ? [] : s.slice(doubleColon + 2).split(":");
-    const fill = 8 - head.length - tail.length;
-    if (fill < 0) {
-      return void 0;
-    }
-    hextets = [...head, ...Array(fill).fill("0"), ...tail];
-  }
-  if (hextets.length !== 8) {
+  const folded = foldTrailingV4ToHextets(addr);
+  if (folded === void 0) {
     return void 0;
   }
-  return hextets.map((h) => {
-    const n = Number.parseInt(h, 16);
-    if (Number.isNaN(n) || n < 0 || n > 65535) {
-      return "BAD";
-    }
-    return n.toString(16);
-  });
+  const hextets = splitAndFillHextets(folded);
+  if (hextets === void 0 || hextets.length !== 8) {
+    return void 0;
+  }
+  return hextets.map(normalizeHextet);
+}
+function foldTrailingV4ToHextets(addr) {
+  const dot = addr.lastIndexOf(".");
+  if (dot === -1) {
+    return addr;
+  }
+  const colon = addr.lastIndexOf(":", dot);
+  if (colon === -1) {
+    return void 0;
+  }
+  const v4 = addr.slice(colon + 1);
+  if (classifyIpLiteral(v4) !== 4) {
+    return void 0;
+  }
+  const [a, b, c, d] = v4.split(".").map((p) => Number.parseInt(p, 10));
+  if (a === void 0 || b === void 0 || c === void 0 || d === void 0) {
+    return void 0;
+  }
+  return `${addr.slice(0, colon)}:${(a << 8 | b).toString(16)}:${(c << 8 | d).toString(16)}`;
+}
+function splitAndFillHextets(s) {
+  const doubleColon = s.indexOf("::");
+  if (doubleColon === -1) {
+    return s.split(":");
+  }
+  const head = splitHextets(s.slice(0, doubleColon));
+  const tail = splitHextets(s.slice(doubleColon + 2));
+  const fill = 8 - head.length - tail.length;
+  if (fill < 0) {
+    return void 0;
+  }
+  return [...head, ...Array(fill).fill("0"), ...tail];
+}
+function normalizeHextet(h) {
+  const n = Number.parseInt(h, 16);
+  if (Number.isNaN(n) || n < 0 || n > 65535) {
+    return "BAD";
+  }
+  return n.toString(16);
 }
 
 // src/ssrf.ts

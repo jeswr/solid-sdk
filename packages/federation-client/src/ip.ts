@@ -70,81 +70,114 @@ function isIpv4Literal(value: string): boolean {
  * forms, zone ids, double `::`, over-/under-length, and whitespace.
  */
 function isIpv6Literal(value: string): boolean {
-  // Match `node:net#isIP`'s acceptance of a scoped/zone id (`fe80::1%eth0`): the part
-  // before `%` must be a valid IPv6 and the zone after `%` must be NON-EMPTY. Strip a
-  // well-formed zone, then validate the address proper. (WHATWG `new URL` rejects a
-  // bracketed zone-id host outright, so this only matters for the exported helpers
-  // called with a raw address — keeping them in lock-step with `isIP`.) A `%` with an
-  // empty zone, or a leading `%`, is NOT a valid literal.
-  const pct = value.indexOf("%");
-  if (pct !== -1) {
-    const zone = value.slice(pct + 1);
-    // The zone must be NON-EMPTY and contain no further `%` (matching `node:net#isIP`,
-    // which rejects `fe80::1%` and `fe80::1%eth0%more`).
-    if (zone.length === 0 || zone.includes("%")) {
-      return false;
-    }
-    return isIpv6Literal(value.slice(0, pct));
+  const withoutZone = stripIpv6Zone(value);
+  if (withoutZone === undefined) {
+    return false; // malformed zone id (empty / doubled `%`)
   }
-  if (value.length === 0 || /[^0-9a-fA-F:.]/.test(value)) {
-    return false;
+  if (withoutZone.length === 0 || /[^0-9a-fA-F:.]/.test(withoutZone)) {
+    return false; // empty, or a character outside the IPv6 alphabet
   }
   // At most one "::" compression marker.
-  const compressionMatches = value.match(/::/g);
-  if (compressionMatches && compressionMatches.length > 1) {
+  if ((withoutZone.match(/::/g)?.length ?? 0) > 1) {
     return false;
   }
-  const hasCompression = value.includes("::");
-
-  // A trailing embedded IPv4 (e.g. `::ffff:1.2.3.4`) occupies the final two hextets.
-  let core = value;
-  let embeddedV4Groups = 0;
-  const lastColon = value.lastIndexOf(":");
-  const dot = value.indexOf(".");
-  if (dot !== -1) {
-    // The dotted part must be the suffix after the final colon, and a valid IPv4.
-    if (lastColon === -1 || lastColon > dot) {
-      return false;
-    }
-    const v4 = value.slice(lastColon + 1);
-    if (!isIpv4Literal(v4)) {
-      return false;
-    }
-    core = value.slice(0, lastColon + 1); // keep the trailing ':' so split logic is uniform
-    embeddedV4Groups = 2; // an embedded v4 fills two 16-bit groups
+  // A trailing embedded IPv4 (e.g. `::ffff:1.2.3.4`) fills the last two hextets.
+  const stripped = stripEmbeddedV4(withoutZone);
+  if (stripped === undefined) {
+    return false; // a `.` present but not a valid trailing-IPv4 suffix
   }
+  return validateHextetGroups(
+    stripped.core,
+    8 - stripped.embeddedV4Groups,
+    stripped.embeddedV4Groups > 0,
+  );
+}
 
-  // Split the (v4-stripped) core into groups around the optional "::".
-  const requiredGroups = 8 - embeddedV4Groups;
-  if (hasCompression) {
-    const idx = core.indexOf("::");
-    const headStr = core.slice(0, idx);
-    // For the embedded-v4 case `core` ends with a ':'; drop the trailing empty token.
-    let tailStr = core.slice(idx + 2);
-    if (embeddedV4Groups > 0 && tailStr.endsWith(":")) {
+/**
+ * Strip a scoped/zone id (`fe80::1%eth0`), returning the address part before `%`, or the
+ * input unchanged when there is no `%`. Returns `undefined` for a MALFORMED zone — an
+ * empty zone (`fe80::1%`) or a doubled `%` (`fe80::1%eth0%more`) — matching
+ * `node:net#isIP`. (WHATWG `new URL` rejects a bracketed zone-id host outright, so this
+ * only matters for the exported helpers called with a raw address.)
+ */
+function stripIpv6Zone(value: string): string | undefined {
+  const pct = value.indexOf("%");
+  if (pct === -1) {
+    return value;
+  }
+  const zone = value.slice(pct + 1);
+  if (zone.length === 0 || zone.includes("%")) {
+    return undefined;
+  }
+  return value.slice(0, pct);
+}
+
+/**
+ * Recognise + strip a trailing embedded IPv4 suffix (the `a.b.c.d` after the final
+ * colon). Returns the colon-`core` to validate as hextet groups plus how many of the 8
+ * groups the embedded v4 consumes (2 when present, 0 otherwise). Returns `undefined`
+ * when a `.` is present but the suffix is NOT a valid trailing IPv4 (so the whole
+ * literal is rejected). The returned `core` keeps the trailing `:` so the group-split is
+ * uniform with the no-embedded-v4 case.
+ */
+function stripEmbeddedV4(value: string): { core: string; embeddedV4Groups: number } | undefined {
+  const dot = value.indexOf(".");
+  if (dot === -1) {
+    return { core: value, embeddedV4Groups: 0 };
+  }
+  const lastColon = value.lastIndexOf(":");
+  if (lastColon === -1 || lastColon > dot) {
+    return undefined; // the dotted part is not the suffix after the final colon
+  }
+  if (!isIpv4Literal(value.slice(lastColon + 1))) {
+    return undefined;
+  }
+  return { core: value.slice(0, lastColon + 1), embeddedV4Groups: 2 };
+}
+
+/**
+ * Validate the colon-separated hextet `core` (already stripped of any embedded v4 and
+ * zone) against the required group count. Handles the compressed (`::`) and
+ * uncompressed forms: with `::` the head+tail groups must be valid hextets and number
+ * STRICTLY FEWER than `requiredGroups` (the `::` stands in for ≥1 zero group); without
+ * `::` there must be EXACTLY `requiredGroups` valid hextets.
+ *
+ * `hadEmbeddedV4` reproduces the original's exact trailing-`:` handling: a `core` ending
+ * in `:` is only the legitimate separator left BY an embedded-v4 strip, so the trailing
+ * empty token is dropped ONLY then. Without an embedded v4, a trailing `:` is a genuine
+ * malformed group and is left in place (so it fails as an empty hextet / wrong count) —
+ * dropping it unconditionally would wrongly ACCEPT e.g. `1:2:3:4:5:6:7:8:`.
+ */
+function validateHextetGroups(
+  core: string,
+  requiredGroups: number,
+  hadEmbeddedV4: boolean,
+): boolean {
+  const compressionIdx = core.indexOf("::");
+  if (compressionIdx !== -1) {
+    const head = splitHextets(core.slice(0, compressionIdx));
+    let tailStr = core.slice(compressionIdx + 2);
+    if (hadEmbeddedV4 && tailStr.endsWith(":")) {
       tailStr = tailStr.slice(0, -1);
     }
-    const head = headStr === "" ? [] : headStr.split(":");
-    const tail = tailStr === "" ? [] : tailStr.split(":");
+    const tail = splitHextets(tailStr);
     if (!head.every(isHextet) || !tail.every(isHextet)) {
       return false;
     }
     // "::" must stand in for AT LEAST ONE zero group, so head+tail must be < required.
-    if (head.length + tail.length >= requiredGroups) {
-      return false;
-    }
-    return true;
+    return head.length + tail.length < requiredGroups;
   }
-  // No compression: exactly `requiredGroups` groups, each a valid hextet.
   let groupsStr = core;
-  if (embeddedV4Groups > 0 && groupsStr.endsWith(":")) {
+  if (hadEmbeddedV4 && groupsStr.endsWith(":")) {
     groupsStr = groupsStr.slice(0, -1);
   }
-  const groups = groupsStr === "" ? [] : groupsStr.split(":");
-  if (groups.length !== requiredGroups) {
-    return false;
-  }
-  return groups.every(isHextet);
+  const groups = splitHextets(groupsStr);
+  return groups.length === requiredGroups && groups.every(isHextet);
+}
+
+/** Split a colon-joined hextet run, treating the empty string as zero groups. */
+function splitHextets(s: string): string[] {
+  return s === "" ? [] : s.split(":");
 }
 
 /** A single IPv6 hextet: 1–4 hex digits. */
@@ -193,50 +226,45 @@ export function isLoopbackAddress(address: string): boolean {
   return false;
 }
 
+/**
+ * The non-public IPv4 ranges — the SSRF block-list, as a reviewable data table of
+ * `(label, matches)` predicates over the four octets. A literal whose octets match ANY
+ * entry is refused. This is the same set the previous if-ladder enforced (loopback
+ * 127/8 is handled separately by {@link isPublicIpv4} because it is re-permittable under
+ * `allowLoopback`); expressing it as a table lets a reviewer read the block-list as a
+ * list rather than tracing branch flow. Keep in lock-step with `@pss/guarded-fetch`.
+ */
+const BLOCKED_IPV4_RANGES: ReadonlyArray<{
+  readonly label: string;
+  readonly matches: (a: number, b: number, c: number) => boolean;
+}> = [
+  { label: "0.0.0.0/8", matches: (a) => a === 0 },
+  { label: "RFC1918 10.0.0.0/8", matches: (a) => a === 10 },
+  { label: "RFC1918 172.16.0.0/12", matches: (a, b) => a === 172 && b >= 16 && b <= 31 },
+  { label: "RFC1918 192.168.0.0/16", matches: (a, b) => a === 192 && b === 168 },
+  { label: "link-local 169.254.0.0/16", matches: (a, b) => a === 169 && b === 254 },
+  { label: "CGNAT 100.64.0.0/10", matches: (a, b) => a === 100 && b >= 64 && b <= 127 },
+  { label: "multicast 224.0.0.0/4", matches: (a) => a >= 224 && a <= 239 },
+  { label: "reserved/broadcast 240.0.0.0/4", matches: (a) => a >= 240 },
+  { label: "TEST-NET-1 192.0.2.0/24", matches: (a, b, c) => a === 192 && b === 0 && c === 2 },
+  { label: "benchmarking 198.18.0.0/15", matches: (a, b) => a === 198 && (b === 18 || b === 19) },
+  { label: "TEST-NET-2 198.51.100.0/24", matches: (a, b, c) => a === 198 && b === 51 && c === 100 },
+  { label: "TEST-NET-3 203.0.113.0/24", matches: (a, b, c) => a === 203 && b === 0 && c === 113 },
+];
+
 function isPublicIpv4(address: string, allowLoopback: boolean): boolean {
   const parts = address.split(".").map((p) => Number.parseInt(p, 10));
   if (parts.length !== 4 || parts.some((p) => Number.isNaN(p) || p < 0 || p > 255)) {
     return false;
   }
   const [a, b, c] = parts as [number, number, number, number];
-  if (a === 0) {
-    return false; // 0.0.0.0/8
-  }
+  // Loopback 127/8 is the one range a caller may re-permit (dev `allowLoopback`); every
+  // other non-public range is an unconditional refusal.
   if (a === 127) {
     return allowLoopback;
   }
-  if (a === 10) {
-    return false; // RFC 1918
-  }
-  if (a === 172 && b >= 16 && b <= 31) {
-    return false; // RFC 1918
-  }
-  if (a === 192 && b === 168) {
-    return false; // RFC 1918
-  }
-  if (a === 169 && b === 254) {
-    return false; // Link-local
-  }
-  if (a === 100 && b >= 64 && b <= 127) {
-    return false; // CGNAT 100.64.0.0/10
-  }
-  if (a >= 224 && a <= 239) {
-    return false; // Multicast 224.0.0.0/4
-  }
-  if (a >= 240) {
-    return false; // Reserved / broadcast
-  }
-  if (a === 192 && b === 0 && c === 2) {
-    return false; // TEST-NET-1
-  }
-  if (a === 198 && (b === 18 || b === 19)) {
-    return false; // Benchmarking
-  }
-  if (a === 198 && b === 51 && c === 100) {
-    return false; // TEST-NET-2
-  }
-  if (a === 203 && b === 0 && c === 113) {
-    return false; // TEST-NET-3
+  if (BLOCKED_IPV4_RANGES.some((range) => range.matches(a, b, c))) {
+    return false;
   }
   return true;
 }
@@ -260,76 +288,124 @@ function extractEmbeddedV4(hextets: string[], startHextet: number): string | und
   return `${(w1 >> 8) & 0xff}.${w1 & 0xff}.${(w2 >> 8) & 0xff}.${w2 & 0xff}`;
 }
 
+/**
+ * Whether the expanded hextets begin with the given literal-hextet prefix (each a
+ * lower-case no-leading-zero hextet string, exactly as {@link expandIpv6} emits). Used
+ * to recognise the IPv4-mapped / NAT64 prefixes positionally.
+ */
+function hextetsMatchPrefix(hextets: string[], prefix: readonly string[]): boolean {
+  return prefix.every((value, i) => hextets[i] === value);
+}
+
+/**
+ * The non-public IPv6 "high hextet" masks — link-local / ULA / multicast — keyed on the
+ * FIRST hextet's value masked by `mask`. A literal whose high hextet matches ANY entry
+ * is refused. (Loopback, unspecified, IPv4-mapped, 6to4 and NAT64 are handled out of
+ * band in {@link isPublicIpv6} because they need the embedded-v4 recursion or are
+ * re-permittable.) Keep in lock-step with `@pss/guarded-fetch`.
+ */
+const BLOCKED_IPV6_HIGH_MASKS: ReadonlyArray<{
+  readonly label: string;
+  readonly mask: number;
+  readonly value: number;
+}> = [
+  { label: "fe80::/10 link-local", mask: 0xffc0, value: 0xfe80 },
+  { label: "fc00::/7 unique-local", mask: 0xfe00, value: 0xfc00 },
+  { label: "ff00::/8 multicast", mask: 0xff00, value: 0xff00 },
+];
+
+/**
+ * Whether the v4 embedded at `startHextet` is present AND PUBLIC. Used for the
+ * IPv4-mapped case, where a v4 that cannot be extracted is treated as NON-public
+ * (fail closed): `false` ⇒ refuse.
+ */
+function embeddedV4IsPublic(
+  hextets: string[],
+  startHextet: number,
+  allowLoopback: boolean,
+): boolean {
+  const v4 = extractEmbeddedV4(hextets, startHextet);
+  return v4 !== undefined && isPublicIpv4(v4, allowLoopback);
+}
+
+/**
+ * Whether the v4 embedded at `startHextet` is present AND NON-public — the refusal
+ * condition for an IPv6 TUNNELLING prefix (6to4 / NAT64). NOTE the deliberate asymmetry
+ * vs {@link embeddedV4IsPublic}: when the embedded v4 cannot be extracted this returns
+ * `false` (do NOT refuse), exactly matching the original tunnelling branches' `if (v4 &&
+ * !isPublicIpv4(v4)) refuse` — an unextractable tunnel suffix is left to fall through,
+ * not blocked. (The 6to4 branch separately fails closed when expansion ITSELF fails.)
+ */
+function embeddedTunnelV4IsBlocked(
+  hextets: string[],
+  startHextet: number,
+  allowLoopback: boolean,
+): boolean {
+  const v4 = extractEmbeddedV4(hextets, startHextet);
+  return v4 !== undefined && !isPublicIpv4(v4, allowLoopback);
+}
+
 function isPublicIpv6(address: string, allowLoopback: boolean): boolean {
   const lower = address.toLowerCase();
   if (lower === "::1" || lower === "0:0:0:0:0:0:0:1") {
-    return allowLoopback;
+    return allowLoopback; // loopback — re-permittable
   }
   if (lower === "::" || lower === "0:0:0:0:0:0:0:0") {
     return false; // Unspecified
   }
-  // IPv4-mapped IPv6 (`::ffff:a.b.c.d`) — classify per the embedded v4. Detect via
-  // FULL EXPANSION so both the compressed `::ffff:...` and the expanded
+
+  // IPv4-mapped IPv6 (`::ffff:a.b.c.d`) — classify per the embedded v4. Detect via FULL
+  // EXPANSION so both the compressed `::ffff:...` and the expanded
   // `0:0:0:0:0:ffff:HHHH:HHHH` forms are covered (a naive startsWith misses the latter,
   // letting `0:0:0:0:0:ffff:0a00:0001` = 10.0.0.1 pass as public).
-  const mappedExpanded = expandIpv6(lower);
-  if (
-    mappedExpanded &&
-    mappedExpanded[0] === "0" &&
-    mappedExpanded[1] === "0" &&
-    mappedExpanded[2] === "0" &&
-    mappedExpanded[3] === "0" &&
-    mappedExpanded[4] === "0" &&
-    mappedExpanded[5] === "ffff"
-  ) {
-    const v4 = extractEmbeddedV4(mappedExpanded, 6);
-    return v4 !== undefined && isPublicIpv4(v4, allowLoopback);
+  const expanded = expandIpv6(lower);
+  if (expanded && hextetsMatchPrefix(expanded, ["0", "0", "0", "0", "0", "ffff"])) {
+    return embeddedV4IsPublic(expanded, 6, allowLoopback);
   }
+
+  // Link-local / ULA / multicast — a high-hextet bitmask block-list.
   const head = lower.split(":")[0] ?? "";
   const high = Number.parseInt(head, 16);
   if (Number.isNaN(high)) {
     return false;
   }
-  if ((high & 0xffc0) === 0xfe80) {
-    return false; // fe80::/10 link-local
+  if (BLOCKED_IPV6_HIGH_MASKS.some((m) => (high & m.mask) === m.value)) {
+    return false;
   }
-  if ((high & 0xfe00) === 0xfc00) {
-    return false; // fc00::/7 unique-local
+
+  // 6to4 / NAT64 tunnelling prefixes that smuggle a v4 — refuse a non-public embedded v4.
+  if (tunnellingPrefixIsBlocked(high, expanded, allowLoopback)) {
+    return false;
   }
-  if ((high & 0xff00) === 0xff00) {
-    return false; // ff00::/8 multicast
-  }
+
+  return true;
+}
+
+/**
+ * Whether an IPv6 TUNNELLING prefix that embeds an IPv4 address must be refused:
+ *   - `2002::/16` 6to4 — the v4 is in hextets [1..2]; refuse a non-public embedded v4,
+ *     and FAIL CLOSED when the address cannot be expanded at all;
+ *   - `64:ff9b::/96` NAT64 (RFC 6052) — the v4 is the last 32 bits; refuse a non-public
+ *     embedded v4.
+ * `false` for any non-tunnelling `high` (the address is then judged by the other rules).
+ */
+function tunnellingPrefixIsBlocked(
+  high: number,
+  expanded: string[] | undefined,
+  allowLoopback: boolean,
+): boolean {
   if (high === 0x2002) {
-    // 2002::/16 6to4 — encodes a v4 in hextets [1..2]. Block embedded non-public v4.
-    const expanded = expandIpv6(lower);
-    if (expanded) {
-      const v4 = extractEmbeddedV4(expanded, 1);
-      if (v4 && !isPublicIpv4(v4, allowLoopback)) {
-        return false;
-      }
-    } else {
-      return false; // fail closed
-    }
+    // 6to4 fails closed if it cannot be expanded; else refuse a non-public embedded v4.
+    return !expanded || embeddedTunnelV4IsBlocked(expanded, 1, allowLoopback);
   }
   if (high === 0x0064) {
-    // 64:ff9b::/96 NAT64 well-known prefix (RFC 6052) — last 32 bits are a v4 address.
-    const expanded = expandIpv6(lower);
-    if (
-      expanded &&
-      expanded[0] === "64" &&
-      expanded[1] === "ff9b" &&
-      expanded[2] === "0" &&
-      expanded[3] === "0" &&
-      expanded[4] === "0" &&
-      expanded[5] === "0"
-    ) {
-      const v4 = extractEmbeddedV4(expanded, 6);
-      if (v4 && !isPublicIpv4(v4, allowLoopback)) {
-        return false;
-      }
-    }
+    return (
+      expanded !== undefined &&
+      hextetsMatchPrefix(expanded, ["64", "ff9b", "0", "0", "0", "0"]) &&
+      embeddedTunnelV4IsBlocked(expanded, 6, allowLoopback)
+    );
   }
-  return true;
+  return false;
 }
 
 /**
@@ -337,44 +413,67 @@ function isPublicIpv6(address: string, allowLoopback: boolean): boolean {
  * Returns lower-cased hextet strings (no leading zeros), or `undefined` if malformed.
  */
 function expandIpv6(addr: string): string[] | undefined {
-  let s = addr;
-  const dot = s.lastIndexOf(".");
-  if (dot !== -1) {
-    const colon = s.lastIndexOf(":", dot);
-    if (colon === -1) {
-      return undefined;
-    }
-    const v4 = s.slice(colon + 1);
-    if (classifyIpLiteral(v4) !== 4) {
-      return undefined;
-    }
-    const [a, b, c, d] = v4.split(".").map((p) => Number.parseInt(p, 10));
-    if (a === undefined || b === undefined || c === undefined || d === undefined) {
-      return undefined;
-    }
-    s = `${s.slice(0, colon)}:${((a << 8) | b).toString(16)}:${((c << 8) | d).toString(16)}`;
+  const folded = foldTrailingV4ToHextets(addr);
+  if (folded === undefined) {
+    return undefined; // a trailing `.` that is not a valid embedded IPv4
   }
-  const doubleColon = s.indexOf("::");
-  let hextets: string[];
-  if (doubleColon === -1) {
-    hextets = s.split(":");
-  } else {
-    const head = s.slice(0, doubleColon) === "" ? [] : s.slice(0, doubleColon).split(":");
-    const tail = s.slice(doubleColon + 2) === "" ? [] : s.slice(doubleColon + 2).split(":");
-    const fill = 8 - head.length - tail.length;
-    if (fill < 0) {
-      return undefined;
-    }
-    hextets = [...head, ...Array<string>(fill).fill("0"), ...tail];
-  }
-  if (hextets.length !== 8) {
+  const hextets = splitAndFillHextets(folded);
+  if (hextets === undefined || hextets.length !== 8) {
     return undefined;
   }
-  return hextets.map((h) => {
-    const n = Number.parseInt(h, 16);
-    if (Number.isNaN(n) || n < 0 || n > 0xffff) {
-      return "BAD";
-    }
-    return n.toString(16);
-  });
+  return hextets.map(normalizeHextet);
+}
+
+/**
+ * Fold a trailing embedded IPv4 (`…:a.b.c.d`) into two colon-joined hextets so the rest
+ * of {@link expandIpv6} sees a pure colon-hex string. Returns the input unchanged when
+ * there is no `.`; `undefined` when a `.` is present but the suffix is not a valid
+ * trailing IPv4.
+ */
+function foldTrailingV4ToHextets(addr: string): string | undefined {
+  const dot = addr.lastIndexOf(".");
+  if (dot === -1) {
+    return addr;
+  }
+  const colon = addr.lastIndexOf(":", dot);
+  if (colon === -1) {
+    return undefined;
+  }
+  const v4 = addr.slice(colon + 1);
+  if (classifyIpLiteral(v4) !== 4) {
+    return undefined;
+  }
+  const [a, b, c, d] = v4.split(".").map((p) => Number.parseInt(p, 10));
+  if (a === undefined || b === undefined || c === undefined || d === undefined) {
+    return undefined;
+  }
+  return `${addr.slice(0, colon)}:${((a << 8) | b).toString(16)}:${((c << 8) | d).toString(16)}`;
+}
+
+/**
+ * Split a pure colon-hex IPv6 string into hextet tokens, expanding a single `::` to the
+ * zero groups it stands for. Returns the token array (NOT yet length-checked or
+ * normalised), or `undefined` when the `::` fill would be negative (too many groups).
+ */
+function splitAndFillHextets(s: string): string[] | undefined {
+  const doubleColon = s.indexOf("::");
+  if (doubleColon === -1) {
+    return s.split(":");
+  }
+  const head = splitHextets(s.slice(0, doubleColon));
+  const tail = splitHextets(s.slice(doubleColon + 2));
+  const fill = 8 - head.length - tail.length;
+  if (fill < 0) {
+    return undefined;
+  }
+  return [...head, ...Array<string>(fill).fill("0"), ...tail];
+}
+
+/** Normalise one hextet to its lower-case no-leading-zero hex value, or `"BAD"` if out of range. */
+function normalizeHextet(h: string): string {
+  const n = Number.parseInt(h, 16);
+  if (Number.isNaN(n) || n < 0 || n > 0xffff) {
+    return "BAD";
+  }
+  return n.toString(16);
 }
