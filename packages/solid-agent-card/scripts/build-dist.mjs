@@ -76,7 +76,8 @@ async function main(buildDir = outdir) {
     format: "esm",
     platform: "node",
     target: "node24",
-    // Inline ONLY @jeswr/fetch-rdf; keep the npm-published deps external.
+    // Inline the off-npm @jeswr suite deps (@jeswr/fetch-rdf + @jeswr/rdf-serialize)
+    // by their absence from EXTERNAL; keep the npm-published deps external.
     external: EXTERNAL,
     sourcemap: true,
     legalComments: "none",
