@@ -804,17 +804,16 @@ function readMembershipClaim(vc) {
   const app = strClaim(subject, FEDREG_APP2) ?? strClaim(subject, "id");
   const assertedBy = strClaim(subject, FEDREG_ASSERTED_BY2);
   const statusIri2 = strClaim(subject, FEDREG_STATUS2);
-  if (federation === void 0) {
-    errors.push({ code: "MISSING_CLAIM", message: "membership names no fedtrust:federation" });
-  }
-  if (app === void 0) {
-    errors.push({ code: "MISSING_CLAIM", message: "membership names no fedreg:app" });
-  }
-  if (assertedBy === void 0) {
-    errors.push({ code: "MISSING_CLAIM", message: "membership names no fedreg:assertedBy" });
-  }
-  if (statusIri2 === void 0) {
-    errors.push({ code: "MISSING_CLAIM", message: "membership names no fedreg:status" });
+  const required = [
+    [federation, "membership names no fedtrust:federation"],
+    [app, "membership names no fedreg:app"],
+    [assertedBy, "membership names no fedreg:assertedBy"],
+    [statusIri2, "membership names no fedreg:status"]
+  ];
+  for (const [value, message] of required) {
+    if (value === void 0) {
+      errors.push({ code: "MISSING_CLAIM", message });
+    }
   }
   const status = statusIri2 !== void 0 ? statusName(statusIri2) : void 0;
   if (statusIri2 !== void 0 && status === void 0) {

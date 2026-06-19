@@ -376,17 +376,19 @@ function readMembershipClaim(vc: VerifiableCredential): {
   const assertedBy = strClaim(subject, FEDREG_ASSERTED_BY);
   const statusIri = strClaim(subject, FEDREG_STATUS);
 
-  if (federation === undefined) {
-    errors.push({ code: "MISSING_CLAIM", message: "membership names no fedtrust:federation" });
-  }
-  if (app === undefined) {
-    errors.push({ code: "MISSING_CLAIM", message: "membership names no fedreg:app" });
-  }
-  if (assertedBy === undefined) {
-    errors.push({ code: "MISSING_CLAIM", message: "membership names no fedreg:assertedBy" });
-  }
-  if (statusIri === undefined) {
-    errors.push({ code: "MISSING_CLAIM", message: "membership names no fedreg:status" });
+  // The four required string claims, in the SAME ORDER + with the SAME MISSING_CLAIM
+  // messages as before — a data-driven table replaces four near-identical `if`s so
+  // the "these are required" intent is explicit and adding/removing one is one row.
+  const required: ReadonlyArray<readonly [string | undefined, string]> = [
+    [federation, "membership names no fedtrust:federation"],
+    [app, "membership names no fedreg:app"],
+    [assertedBy, "membership names no fedreg:assertedBy"],
+    [statusIri, "membership names no fedreg:status"],
+  ];
+  for (const [value, message] of required) {
+    if (value === undefined) {
+      errors.push({ code: "MISSING_CLAIM", message });
+    }
   }
 
   const status = statusIri !== undefined ? statusName(statusIri) : undefined;
