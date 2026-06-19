@@ -44,7 +44,7 @@ import {
   TermWrapper,
 } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
-import { docOf, isHttpIri } from "./iri.js";
+import { docOf, httpIriOrUndefined, isHttpIri } from "./iri.js";
 import { storeToTurtle } from "./task.js";
 import {
   dct,
@@ -501,7 +501,7 @@ export function buildTracker(docUrl: string, data: TrackerData): Store {
   doc.title = data.title || undefined;
   // issueClass: a non-http(s) value falls back to wf:Task (the required default).
   doc.issueClass = isHttpIri(data.issueClass) ? data.issueClass : TASK_CLASS;
-  doc.stateStore = isHttpIri(data.stateStore) ? data.stateStore : undefined;
+  doc.stateStore = httpIriOrUndefined(data.stateStore);
   // Workflow (+ wf:initialState) — defaults to the To Do → In Progress → Done board.
   doc.defineWorkflow(data.workflow ?? DEFAULT_WORKFLOW);
   for (const iri of data.categories ?? []) if (isHttpIri(iri)) doc.categories.add(iri);

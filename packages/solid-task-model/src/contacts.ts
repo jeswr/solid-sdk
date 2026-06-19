@@ -54,7 +54,7 @@ import {
   TermWrapper,
 } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
-import { docOf, isHttpIri } from "./iri.js";
+import { docOf, httpIriOrUndefined, isHttpIri } from "./iri.js";
 import { storeToTurtle } from "./task.js";
 import {
   acl,
@@ -89,8 +89,7 @@ import {
  */
 function resolveAgainst(base: string, ref: string): string | undefined {
   try {
-    const resolved = new URL(ref, base).toString();
-    return isHttpIri(resolved) ? resolved : undefined;
+    return httpIriOrUndefined(new URL(ref, base).toString());
   } catch {
     return undefined;
   }
@@ -581,7 +580,7 @@ export function buildAddressBook(bookDocUrl: string, data: AddressBookData): Sto
   const book = new ContactBook(addressBookSubject(bookDocUrl), store, DataFactory).mark();
   book.title = data.title || undefined;
   book.setIndexes(data.nameEmailIndex, data.groupIndex);
-  book.owner = isHttpIri(data.owner) ? data.owner : undefined;
+  book.owner = httpIriOrUndefined(data.owner);
   return store;
 }
 
@@ -646,7 +645,7 @@ export function buildPerson(personDocUrl: string, data: ContactData): Store {
   const person = new Contact(personSubject(personDocUrl), store, DataFactory).mark();
   person.name = data.name || undefined;
   person.uid = `urn:uuid:${crypto.randomUUID()}`;
-  person.inAddressBook = isHttpIri(data.inAddressBook) ? data.inAddressBook : undefined;
+  person.inAddressBook = httpIriOrUndefined(data.inAddressBook);
   person.setEmails(data.emails ?? []);
   person.setPhones(data.phones ?? []);
   person.setWebId(data.webId);
@@ -706,7 +705,7 @@ export function buildGroup(groupDocUrl: string, data: ContactGroupData): Store {
   const store = new Store();
   const group = new ContactGroup(groupSubject(groupDocUrl), store, DataFactory).mark();
   group.name = data.name || undefined;
-  group.inAddressBook = isHttpIri(data.inAddressBook) ? data.inAddressBook : undefined;
+  group.inAddressBook = httpIriOrUndefined(data.inAddressBook);
   group.setMembers(data.members ?? []);
   return store;
 }
@@ -748,7 +747,7 @@ export function buildPeopleIndex(
   for (const { person, name } of entries) {
     if (!isHttpIri(person)) continue;
     const p = new Contact(person, store, DataFactory);
-    p.inAddressBook = isHttpIri(bookSubjectIri) ? bookSubjectIri : undefined;
+    p.inAddressBook = httpIriOrUndefined(bookSubjectIri);
     p.name = name || undefined;
   }
   return store;

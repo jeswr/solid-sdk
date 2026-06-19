@@ -33,7 +33,7 @@
  */
 import { LiteralAs, LiteralFrom, NamedNodeAs, NamedNodeFrom, OptionalAs, OptionalFrom, SetFrom, TermWrapper, } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
-import { docOf, isHttpIri } from "./iri.js";
+import { docOf, httpIriOrUndefined, isHttpIri } from "./iri.js";
 import { storeToTurtle } from "./task.js";
 import { dct, rdf, rdfs, schema, TASK_CLASS, vcard, WF_ALLOWED_TRANS, WF_ASSIGNEE_GROUP, WF_CLOSED, WF_INITIAL_STATE, WF_ISSUE_CATEGORY, WF_ISSUE_CLASS, WF_OPEN, WF_STATE, WF_STATE_STORE, WF_TRACKER, } from "./vocab.js";
 /** A fresh, independent copy of a workflow (no aliasing into a shared constant). */
@@ -361,7 +361,7 @@ export function buildTracker(docUrl, data) {
     doc.title = data.title || undefined;
     // issueClass: a non-http(s) value falls back to wf:Task (the required default).
     doc.issueClass = isHttpIri(data.issueClass) ? data.issueClass : TASK_CLASS;
-    doc.stateStore = isHttpIri(data.stateStore) ? data.stateStore : undefined;
+    doc.stateStore = httpIriOrUndefined(data.stateStore);
     // Workflow (+ wf:initialState) — defaults to the To Do → In Progress → Done board.
     doc.defineWorkflow(data.workflow ?? DEFAULT_WORKFLOW);
     for (const iri of data.categories ?? [])
