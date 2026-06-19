@@ -1906,17 +1906,18 @@ function guardedFetchFor(options) {
   });
 }
 
-// src/serialize.ts
+// node_modules/@jeswr/rdf-serialize/dist/serialize.js
 import { Writer as Writer2 } from "n3";
-var PREFIXES = {
-  fedapp: FEDAPP,
-  acl: ACL,
-  sh: SHACL,
-  rdf: "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
-};
-function serialize(quads, format = "text/turtle") {
+var DEFAULT_FORMAT = "text/turtle";
+function serialize(quads, options) {
+  const format = options?.format ?? DEFAULT_FORMAT;
+  const prefixes = options?.prefixes ?? {};
+  const emptyAsEmptyString = options?.emptyAsEmptyString ?? true;
+  if (emptyAsEmptyString && quads.length === 0) {
+    return Promise.resolve("");
+  }
   return new Promise((resolve, reject) => {
-    const writer = new Writer2({ format, prefixes: PREFIXES });
+    const writer = new Writer2({ format, prefixes });
     writer.addQuads(quads);
     writer.end((error, result) => {
       if (error) {
@@ -1926,6 +1927,20 @@ function serialize(quads, format = "text/turtle") {
       }
     });
   });
+}
+function legacySerialize(quads, format = DEFAULT_FORMAT, prefixes = {}, emptyAsEmptyString = true) {
+  return serialize(quads, { format, prefixes, emptyAsEmptyString });
+}
+
+// src/serialize.ts
+var PREFIXES = {
+  fedapp: FEDAPP,
+  acl: ACL,
+  sh: SHACL,
+  rdf: "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+};
+function serialize2(quads, format = "text/turtle") {
+  return legacySerialize(quads, format, PREFIXES, false);
 }
 
 // src/selfDescribe.ts
@@ -1966,7 +1981,7 @@ function selfDescribe(app) {
   const quads = builder.quads();
   return {
     quads,
-    toString: (format) => serialize(quads, format)
+    toString: (format) => serialize2(quads, format)
   };
 }
 export {
@@ -1985,7 +2000,7 @@ export {
   resolveStorageSpecVersion,
   sectorIri,
   selfDescribe,
-  serialize,
+  serialize2 as serialize,
   verify,
   verifyDataset
 };
