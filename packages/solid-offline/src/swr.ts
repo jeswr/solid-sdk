@@ -18,12 +18,15 @@
  */
 
 import {
-  NEGATIVE_CACHE_TTL_MS,
+  IGNORE_VARY,
+  deleteVariantBytes,
+  metadataFromResponse,
+  putCanonicalBytes,
+  resLike,
+} from './cache-coherence.js';
+import {
   type RequestLike,
-  type ResponseLike,
-  aclStatusFor,
   classifyResponse,
-  computeCacheKey,
   computeVaryKey,
   keyRequest,
   requestCacheDirective,
@@ -37,14 +40,6 @@ export interface ByteCache {
   put(request: Request, response: Response): Promise<void>;
   delete(request: Request, options?: CacheQueryOptions): Promise<boolean>;
 }
-
-/**
- * We key the byte cache on our own synthetic canonical Request (`keyRequest`), so
- * the stored response's own `Vary` must NOT cause the Cache API to re-apply header
- * matching on top. We pass `ignoreVary` on every match/delete instead of mutating
- * the stored response — preserving its metadata (`url`, `redirected`, `type`).
- */
-const IGNORE_VARY: CacheQueryOptions = { ignoreVary: true };
 
 /** Minimal BroadcastChannel surface. */
 export interface Broadcaster {
@@ -92,10 +87,6 @@ function reqLike(request: Request): RequestLike {
   return { url: request.url, method: request.method, headers: request.headers };
 }
 
-function resLike(response: Response): ResponseLike {
-  return { status: response.status, headers: response.headers, type: response.type };
-}
-
 /** Add `X-Offline: stale` to a response without consuming its body. */
 function withOfflineStale(response: Response): Response {
   const headers = new Headers(response.headers);
@@ -105,27 +96,6 @@ function withOfflineStale(response: Response): Response {
     statusText: response.statusText,
     headers,
   });
-}
-
-function metadataFromResponse(
-  req: RequestLike,
-  res: ResponseLike,
-  now: number,
-  negative: boolean,
-): CacheMetadata {
-  const varyKey = computeVaryKey(req, res);
-  return {
-    key: computeCacheKey(req, res),
-    url: req.url,
-    varyKey,
-    etag: res.headers.get('etag') ?? undefined,
-    contentType: res.headers.get('content-type') ?? undefined,
-    fetchedAt: now,
-    vary: res.headers.get('vary') ?? undefined,
-    aclStatus: aclStatusFor(res.status),
-    status: res.status,
-    ...(negative ? { negativeUntil: now + NEGATIVE_CACHE_TTL_MS } : {}),
-  };
 }
 
 /**
@@ -449,16 +419,14 @@ function varyHeaders(vary: string | undefined): Headers {
  */
 async function purgeAllVariants(url: string, deps: SwrDeps): Promise<void> {
   const rows = await deps.meta.getByUrl(url);
-  const seen = new Set<string>();
+  // Drop EVERY variant's bytes (+ the defensive canonical-Turtle orphan sweep).
+  await deleteVariantBytes(
+    deps.cache,
+    url,
+    rows.map((row) => row.varyKey),
+  );
   for (const row of rows) {
-    seen.add(row.varyKey);
-    await deps.cache.delete(keyRequest(url, row.varyKey), IGNORE_VARY).catch(() => false);
     await deps.meta.delete(row.key);
-  }
-  // Defensive: also drop the canonical Turtle variant in case a byte entry exists
-  // with no metadata row (orphan from a partial write).
-  if (!seen.has('accept=text/turtle')) {
-    await deps.cache.delete(keyRequest(url, 'accept=text/turtle'), IGNORE_VARY).catch(() => false);
   }
 }
 
@@ -499,13 +467,10 @@ async function store(
   negative: boolean,
 ): Promise<void> {
   const now = deps.now();
-  const res = resLike(response);
-  const varyKey = computeVaryKey(rl, res);
-  const keyReq = keyRequest(rl.url, varyKey);
-  // Store a clone (so the caller still gets a live body) UN-mutated; reads use
-  // `ignoreVary` rather than stripping the response's `Vary`.
-  await deps.cache.put(keyReq, response.clone());
-  await deps.meta.put(metadataFromResponse(rl, res, now, negative));
+  // Store the bytes UN-mutated under the canonical (url, varyKey) key + the 1:1
+  // metadata row (the shared coherence primitives — see `cache-coherence.ts`).
+  await putCanonicalBytes(deps.cache, rl, response);
+  await deps.meta.put(metadataFromResponse(rl, resLike(response), now, negative));
 }
 
 /**

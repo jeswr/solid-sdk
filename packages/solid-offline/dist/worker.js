@@ -356,11 +356,9 @@ function aclStatusFor(status) {
   return "ok";
 }
 
-// src/invalidation.ts
+// src/cache-coherence.ts
 var IGNORE_VARY = { ignoreVary: true };
-function rdfRequest(url) {
-  return new Request(url, { method: "GET", headers: { accept: "text/turtle" } });
-}
+var CANONICAL_TURTLE_VARY_KEY = "accept=text/turtle";
 function resLike(response) {
   return { status: response.status, headers: response.headers, type: response.type };
 }
@@ -376,8 +374,27 @@ function metadataFromResponse(req, res, now, negative, lastState) {
     aclStatus: aclStatusFor(res.status),
     status: res.status,
     ...lastState !== void 0 ? { lastState } : {},
-    ...negative ? { negativeUntil: now + 3e4 } : {}
+    ...negative ? { negativeUntil: now + NEGATIVE_CACHE_TTL_MS } : {}
   };
+}
+async function putCanonicalBytes(cache, rl, response) {
+  const varyKey = computeVaryKey(rl, resLike(response));
+  await cache.put(keyRequest(rl.url, varyKey), response.clone());
+}
+async function deleteVariantBytes(cache, url, varyKeys) {
+  let sawTurtle = false;
+  for (const varyKey of varyKeys) {
+    if (varyKey === CANONICAL_TURTLE_VARY_KEY) sawTurtle = true;
+    await cache.delete(keyRequest(url, varyKey), IGNORE_VARY).catch(() => false);
+  }
+  if (!sawTurtle) {
+    await cache.delete(keyRequest(url, CANONICAL_TURTLE_VARY_KEY), IGNORE_VARY).catch(() => false);
+  }
+}
+
+// src/invalidation.ts
+function rdfRequest(url) {
+  return new Request(url, { method: "GET", headers: { accept: "text/turtle" } });
 }
 async function handleNotification(frame, deps) {
   try {
@@ -407,23 +424,16 @@ async function invalidateResource(url, state, deps, opts) {
   return revalidateResource(url, records, state, deps);
 }
 async function purge(url, records, deps) {
-  const seenKeys = /* @__PURE__ */ new Set();
-  for (const record of records) {
-    seenKeys.add(record.varyKey);
-    await deps.cache.delete(keyRequest(url, record.varyKey), IGNORE_VARY).catch(() => false);
-  }
-  if (!seenKeys.has("accept=text/turtle")) {
-    await deps.cache.delete(keyRequest(url, "accept=text/turtle"), IGNORE_VARY).catch(() => false);
-  }
+  await deleteVariantBytes(
+    deps.cache,
+    url,
+    records.map((record) => record.varyKey)
+  );
   for (const record of records) {
     await deps.meta.delete(record.key);
   }
   deps.broadcast.postMessage({ url, event: "updated" });
   return { kind: "deleted" };
-}
-async function putCanonical(rl, response, deps) {
-  const varyKey = computeVaryKey(rl, resLike(response));
-  await deps.cache.put(keyRequest(rl.url, varyKey), response.clone());
 }
 async function purgeStaleVariants(url, records, keepVaryKey, deps) {
   for (const record of records) {
@@ -454,7 +464,7 @@ async function revalidateResource(url, records, state, deps) {
     const newEtag = fresh.headers.get("etag") ?? void 0;
     if (decision.cacheable) {
       await purgeStaleVariants(url, records, computeVaryKey(rl, resLike(fresh)), deps);
-      await putCanonical(rl, fresh, deps);
+      await putCanonicalBytes(deps.cache, rl, fresh);
       await deps.meta.put(
         metadataFromResponse(rl, resLike(fresh), deps.now(), decision.negative, state ?? newEtag)
       );
@@ -483,7 +493,7 @@ async function refreshListing(frame, deps) {
       return purge(container, records, deps);
     }
     await purgeStaleVariants(container, records, computeVaryKey(rl, resLike(fresh)), deps);
-    await putCanonical(rl, fresh, deps);
+    await putCanonicalBytes(deps.cache, rl, fresh);
     await deps.meta.put(
       metadataFromResponse(
         rl,
@@ -666,12 +676,8 @@ function txDone(tx) {
 }
 
 // src/swr.ts
-var IGNORE_VARY2 = { ignoreVary: true };
 function reqLike(request) {
   return { url: request.url, method: request.method, headers: request.headers };
-}
-function resLike2(response) {
-  return { status: response.status, headers: response.headers, type: response.type };
 }
 function withOfflineStale(response) {
   const headers = new Headers(response.headers);
@@ -681,21 +687,6 @@ function withOfflineStale(response) {
     statusText: response.statusText,
     headers
   });
-}
-function metadataFromResponse2(req, res, now, negative) {
-  const varyKey = computeVaryKey(req, res);
-  return {
-    key: computeCacheKey(req, res),
-    url: req.url,
-    varyKey,
-    etag: res.headers.get("etag") ?? void 0,
-    contentType: res.headers.get("content-type") ?? void 0,
-    fetchedAt: now,
-    vary: res.headers.get("vary") ?? void 0,
-    aclStatus: aclStatusFor(res.status),
-    status: res.status,
-    ...negative ? { negativeUntil: now + NEGATIVE_CACHE_TTL_MS } : {}
-  };
 }
 async function handleFetch(request, deps) {
   const rl = reqLike(request);
@@ -727,7 +718,7 @@ async function handleFetch(request, deps) {
   const record = await lookupRecord(rl, deps);
   const keyReq = record ? keyRequest(rl.url, record.varyKey) : keyRequest(rl.url, varyKeyForRequest(rl));
   if (!record) {
-    await deps.cache.delete(keyReq, IGNORE_VARY2).catch(() => false);
+    await deps.cache.delete(keyReq, IGNORE_VARY).catch(() => false);
     if (!deps.isOnline()) {
       const response = await deps.fetch(request);
       return { response, source: "offline-miss" };
@@ -736,13 +727,13 @@ async function handleFetch(request, deps) {
   }
   if (record.status === 403 || record.status === 404) {
     if (record.negativeUntil && now < record.negativeUntil) {
-      const negBytes = await deps.cache.match(keyReq, IGNORE_VARY2);
+      const negBytes = await deps.cache.match(keyReq, IGNORE_VARY);
       const response = negBytes ? negBytes.clone() : new Response(null, { status: record.status });
       return { response, source: "cache-hit-negative" };
     }
     return networkAndMaybeStore(request, rl, deps);
   }
-  const cached = await deps.cache.match(keyReq, IGNORE_VARY2);
+  const cached = await deps.cache.match(keyReq, IGNORE_VARY);
   if (!cached) {
     if (!deps.isOnline()) {
       const response = await deps.fetch(request);
@@ -773,7 +764,7 @@ async function forcedRevalidate(request, rl, deps) {
   const fresh = await deps.fetch(condRequest);
   if (fresh.status === 304 && record?.etag) {
     const keyReq = keyRequest(rl.url, record.varyKey);
-    const cached = await deps.cache.match(keyReq, IGNORE_VARY2);
+    const cached = await deps.cache.match(keyReq, IGNORE_VARY);
     await deps.meta.touch(record.key, deps.now());
     if (cached) {
       return { response: cached.clone(), source: "request-no-cache-revalidated" };
@@ -800,7 +791,7 @@ async function finalizeForced(rl, fresh, deps) {
   if (!authoritative) {
     return { response: fresh, source: "request-no-cache-revalidated" };
   }
-  const decision = classifyResponse(rl, resLike2(fresh));
+  const decision = classifyResponse(rl, resLike(fresh));
   await purgeAllVariants(rl.url, deps);
   if (decision.cacheable) await store(rl, fresh, deps, decision.negative);
   deps.broadcast.postMessage({
@@ -844,19 +835,18 @@ function varyHeaders(vary) {
 }
 async function purgeAllVariants(url, deps) {
   const rows = await deps.meta.getByUrl(url);
-  const seen = /* @__PURE__ */ new Set();
+  await deleteVariantBytes(
+    deps.cache,
+    url,
+    rows.map((row) => row.varyKey)
+  );
   for (const row of rows) {
-    seen.add(row.varyKey);
-    await deps.cache.delete(keyRequest(url, row.varyKey), IGNORE_VARY2).catch(() => false);
     await deps.meta.delete(row.key);
-  }
-  if (!seen.has("accept=text/turtle")) {
-    await deps.cache.delete(keyRequest(url, "accept=text/turtle"), IGNORE_VARY2).catch(() => false);
   }
 }
 async function networkAndMaybeStore(request, rl, deps, _origin) {
   const response = await deps.fetch(request);
-  const decision = classifyResponse(rl, resLike2(response));
+  const decision = classifyResponse(rl, resLike(response));
   if (!decision.cacheable) {
     return { response, source: "network-miss-nostore" };
   }
@@ -865,11 +855,8 @@ async function networkAndMaybeStore(request, rl, deps, _origin) {
 }
 async function store(rl, response, deps, negative) {
   const now = deps.now();
-  const res = resLike2(response);
-  const varyKey = computeVaryKey(rl, res);
-  const keyReq = keyRequest(rl.url, varyKey);
-  await deps.cache.put(keyReq, response.clone());
-  await deps.meta.put(metadataFromResponse2(rl, res, now, negative));
+  await putCanonicalBytes(deps.cache, rl, response);
+  await deps.meta.put(metadataFromResponse(rl, resLike(response), now, negative));
 }
 async function revalidate(request, rl, record, deps) {
   if (!record || !record.etag) {
@@ -886,7 +873,7 @@ async function revalidate(request, rl, record, deps) {
       return { kind: "304-confirmed" };
     }
     if (fresh.status >= 200 && fresh.status < 300) {
-      const decision = classifyResponse(rl, resLike2(fresh));
+      const decision = classifyResponse(rl, resLike(fresh));
       if (decision.cacheable) {
         await purgeAllVariants(rl.url, deps);
         await store(rl, fresh, deps, decision.negative);
@@ -898,7 +885,7 @@ async function revalidate(request, rl, record, deps) {
       return { kind: "200-replaced", etag: newEtag };
     }
     if (fresh.status === 403 || fresh.status === 404) {
-      const decision = classifyResponse(rl, resLike2(fresh));
+      const decision = classifyResponse(rl, resLike(fresh));
       await purgeAllVariants(rl.url, deps);
       if (decision.cacheable) {
         await store(rl, fresh, deps, decision.negative);

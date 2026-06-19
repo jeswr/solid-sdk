@@ -28,24 +28,16 @@
  */
 
 import {
-  type RequestLike,
-  type ResponseLike,
-  aclStatusFor,
-  classifyResponse,
-  computeCacheKey,
-  computeVaryKey,
-  keyRequest,
-} from './cache-policy.js';
+  IGNORE_VARY,
+  deleteVariantBytes,
+  metadataFromResponse,
+  putCanonicalBytes,
+  resLike,
+} from './cache-coherence.js';
+import { type RequestLike, classifyResponse, computeVaryKey, keyRequest } from './cache-policy.js';
 import type { MetadataStore } from './metadata-store.js';
 import type { Broadcaster, ByteCache } from './swr.js';
 import type { CacheMetadata, NotificationFrame } from './types.js';
-
-/**
- * We key the byte cache on our synthetic canonical Request, so reads/deletes pass
- * `ignoreVary` to stop the stored response's own `Vary` re-applying header matching
- * (mirrors `swr.ts`). This lets us keep the response UN-mutated (metadata preserved).
- */
-const IGNORE_VARY: CacheQueryOptions = { ignoreVary: true };
 
 /** Dependencies for the invalidation pipeline (all mockable). */
 export interface InvalidateDeps {
@@ -70,32 +62,6 @@ export type InvalidateOutcome =
 
 function rdfRequest(url: string): Request {
   return new Request(url, { method: 'GET', headers: { accept: 'text/turtle' } });
-}
-
-function resLike(response: Response): ResponseLike {
-  return { status: response.status, headers: response.headers, type: response.type };
-}
-
-function metadataFromResponse(
-  req: RequestLike,
-  res: ResponseLike,
-  now: number,
-  negative: boolean,
-  lastState?: string,
-): CacheMetadata {
-  return {
-    key: computeCacheKey(req, res),
-    url: req.url,
-    varyKey: computeVaryKey(req, res),
-    etag: res.headers.get('etag') ?? undefined,
-    contentType: res.headers.get('content-type') ?? undefined,
-    fetchedAt: now,
-    vary: res.headers.get('vary') ?? undefined,
-    aclStatus: aclStatusFor(res.status),
-    status: res.status,
-    ...(lastState !== undefined ? { lastState } : {}),
-    ...(negative ? { negativeUntil: now + 30_000 } : {}),
-  };
 }
 
 /**
@@ -165,39 +131,20 @@ async function purge(
   records: CacheMetadata[],
   deps: InvalidateDeps,
 ): Promise<InvalidateOutcome> {
-  // Delete EVERY cached variant for this URL (the #3 fix). Bytes are keyed on the
-  // canonical `(url, varyKey)` Request, one per metadata record, so we must drop
-  // each — deleting only a single synthetic `Accept: text/turtle` key would leave
-  // other variants' bytes behind with no metadata (a no-leak hole).
-  const seenKeys = new Set<string>();
-  for (const record of records) {
-    seenKeys.add(record.varyKey);
-    await deps.cache.delete(keyRequest(url, record.varyKey), IGNORE_VARY).catch(() => false);
-  }
-  // Belt-and-braces: also drop the canonical Turtle variant in case a byte entry
-  // exists with no metadata row (orphan from a partial write).
-  if (!seenKeys.has('accept=text/turtle')) {
-    await deps.cache.delete(keyRequest(url, 'accept=text/turtle'), IGNORE_VARY).catch(() => false);
-  }
+  // Delete EVERY cached variant's bytes for this URL (the #3 fix) + the defensive
+  // canonical-Turtle orphan sweep — the shared coherence primitive (deleting only
+  // a single synthetic key would leave other variants' bytes behind with no
+  // metadata, a no-leak hole). Then drop the metadata rows + broadcast.
+  await deleteVariantBytes(
+    deps.cache,
+    url,
+    records.map((record) => record.varyKey),
+  );
   for (const record of records) {
     await deps.meta.delete(record.key);
   }
   deps.broadcast.postMessage({ url, event: 'updated' });
   return { kind: 'deleted' };
-}
-
-/**
- * Store bytes under the canonical key WITHOUT mutating the response (mirrors
- * `swr.ts#store`): reads pass `ignoreVary` so the stored `Vary` can't re-apply
- * header matching, while the response's metadata (`url`/`type`/…) is preserved.
- */
-async function putCanonical(
-  rl: RequestLike,
-  response: Response,
-  deps: InvalidateDeps,
-): Promise<void> {
-  const varyKey = computeVaryKey(rl, resLike(response));
-  await deps.cache.put(keyRequest(rl.url, varyKey), response.clone());
 }
 
 /**
@@ -261,7 +208,7 @@ async function revalidateResource(
       // Replace the whole resource: drop stale OTHER variants before writing the
       // new canonical one (so lookup can't keep matching an old Vary row).
       await purgeStaleVariants(url, records, computeVaryKey(rl, resLike(fresh)), deps);
-      await putCanonical(rl, fresh, deps);
+      await putCanonicalBytes(deps.cache, rl, fresh);
       await deps.meta.put(
         metadataFromResponse(rl, resLike(fresh), deps.now(), decision.negative, state ?? newEtag),
       );
@@ -314,7 +261,7 @@ async function refreshListing(
     // Replace the whole listing: drop stale OTHER variants before writing the new
     // canonical one.
     await purgeStaleVariants(container, records, computeVaryKey(rl, resLike(fresh)), deps);
-    await putCanonical(rl, fresh, deps);
+    await putCanonicalBytes(deps.cache, rl, fresh);
     await deps.meta.put(
       metadataFromResponse(
         rl,

@@ -1224,6 +1224,7 @@ function isHtmlResponse(response) {
 
 // src/cache-policy.ts
 var CANONICAL_RDF_ACCEPT = "text/turtle";
+var NEGATIVE_CACHE_TTL_MS = 3e4;
 var RDF_ACCEPT_HINTS = [
   "text/turtle",
   "application/ld+json",
@@ -1353,11 +1354,9 @@ function aclStatusFor(status) {
   return "ok";
 }
 
-// src/invalidation.ts
+// src/cache-coherence.ts
 var IGNORE_VARY = { ignoreVary: true };
-function rdfRequest2(url) {
-  return new Request(url, { method: "GET", headers: { accept: "text/turtle" } });
-}
+var CANONICAL_TURTLE_VARY_KEY = "accept=text/turtle";
 function resLike(response) {
   return { status: response.status, headers: response.headers, type: response.type };
 }
@@ -1373,8 +1372,27 @@ function metadataFromResponse(req, res, now, negative, lastState) {
     aclStatus: aclStatusFor(res.status),
     status: res.status,
     ...lastState !== void 0 ? { lastState } : {},
-    ...negative ? { negativeUntil: now + 3e4 } : {}
+    ...negative ? { negativeUntil: now + NEGATIVE_CACHE_TTL_MS } : {}
   };
+}
+async function putCanonicalBytes(cache, rl, response) {
+  const varyKey = computeVaryKey(rl, resLike(response));
+  await cache.put(keyRequest(rl.url, varyKey), response.clone());
+}
+async function deleteVariantBytes(cache, url, varyKeys) {
+  let sawTurtle = false;
+  for (const varyKey of varyKeys) {
+    if (varyKey === CANONICAL_TURTLE_VARY_KEY) sawTurtle = true;
+    await cache.delete(keyRequest(url, varyKey), IGNORE_VARY).catch(() => false);
+  }
+  if (!sawTurtle) {
+    await cache.delete(keyRequest(url, CANONICAL_TURTLE_VARY_KEY), IGNORE_VARY).catch(() => false);
+  }
+}
+
+// src/invalidation.ts
+function rdfRequest2(url) {
+  return new Request(url, { method: "GET", headers: { accept: "text/turtle" } });
 }
 async function handleNotification(frame, deps) {
   try {
@@ -1404,23 +1422,16 @@ async function invalidateResource(url, state, deps, opts) {
   return revalidateResource(url, records, state, deps);
 }
 async function purge(url, records, deps) {
-  const seenKeys = /* @__PURE__ */ new Set();
-  for (const record of records) {
-    seenKeys.add(record.varyKey);
-    await deps.cache.delete(keyRequest(url, record.varyKey), IGNORE_VARY).catch(() => false);
-  }
-  if (!seenKeys.has("accept=text/turtle")) {
-    await deps.cache.delete(keyRequest(url, "accept=text/turtle"), IGNORE_VARY).catch(() => false);
-  }
+  await deleteVariantBytes(
+    deps.cache,
+    url,
+    records.map((record) => record.varyKey)
+  );
   for (const record of records) {
     await deps.meta.delete(record.key);
   }
   deps.broadcast.postMessage({ url, event: "updated" });
   return { kind: "deleted" };
-}
-async function putCanonical(rl, response, deps) {
-  const varyKey = computeVaryKey(rl, resLike(response));
-  await deps.cache.put(keyRequest(rl.url, varyKey), response.clone());
 }
 async function purgeStaleVariants(url, records, keepVaryKey, deps) {
   for (const record of records) {
@@ -1451,7 +1462,7 @@ async function revalidateResource(url, records, state, deps) {
     const newEtag = fresh.headers.get("etag") ?? void 0;
     if (decision.cacheable) {
       await purgeStaleVariants(url, records, computeVaryKey(rl, resLike(fresh)), deps);
-      await putCanonical(rl, fresh, deps);
+      await putCanonicalBytes(deps.cache, rl, fresh);
       await deps.meta.put(
         metadataFromResponse(rl, resLike(fresh), deps.now(), decision.negative, state ?? newEtag)
       );
@@ -1480,7 +1491,7 @@ async function refreshListing(frame, deps) {
       return purge(container, records, deps);
     }
     await purgeStaleVariants(container, records, computeVaryKey(rl, resLike(fresh)), deps);
-    await putCanonical(rl, fresh, deps);
+    await putCanonicalBytes(deps.cache, rl, fresh);
     await deps.meta.put(
       metadataFromResponse(
         rl,
