@@ -5,6 +5,9 @@
 node_modules/
 coverage/
 .roborev/
+# api-extractor scratch working dir (the committed report lives in etc/).
+# Root-scoped so it never hides a nested source/fixture dir named `temp`.
+/temp/
 # NOTE: package-lock.json is intentionally NOT committed yet. It currently pins
 # @jeswr/solid-vc to a local `file:../solid-vc` path because solid-vc is not yet
 # published to GitHub. Once the orchestrator publishes github:jeswr/solid-vc#main,
