@@ -438,27 +438,63 @@ function isValidDraft(draft: StructuredIntentDraft): boolean {
   if (!optionalStringOk(draft.agent)) {
     return false;
   }
-  if (draft.parameters !== undefined) {
-    if (!Array.isArray(draft.parameters)) {
+  if (!parametersFieldOk(draft.parameters)) {
+    return false;
+  }
+  if (!modesFieldOk(draft.modes)) {
+    return false;
+  }
+  return true;
+}
+
+/**
+ * The optional `parameters` field is valid iff it is absent, OR an array in which
+ * every entry has a string `key` and a string `value`. Anything else (a non-array,
+ * or an entry with a non-string/missing key/value) is malformed model output → the
+ * draft is rejected.
+ *
+ * Uses a `for...of` loop, NOT `Array.prototype.every`: `every` SKIPS holes in a
+ * SPARSE array, so `new Array(1)` would pass; `for...of` visits each hole as
+ * `undefined` and rejects it (`typeof undefined?.key !== "string"`). The hole-
+ * rejecting behaviour is a security guarantee — never weaken it to `every`.
+ */
+function parametersFieldOk(parameters: StructuredIntentDraft["parameters"]): boolean {
+  if (parameters === undefined) {
+    return true;
+  }
+  if (!Array.isArray(parameters)) {
+    return false;
+  }
+  for (const p of parameters) {
+    if (typeof p?.key !== "string" || typeof p?.value !== "string") {
       return false;
-    }
-    for (const p of draft.parameters) {
-      if (typeof p?.key !== "string" || typeof p?.value !== "string") {
-        return false;
-      }
     }
   }
-  if (draft.modes !== undefined) {
-    if (!Array.isArray(draft.modes)) {
+  return true;
+}
+
+/**
+ * The optional `modes` field is valid iff it is absent, OR an array in which every
+ * entry is a string that is an OWN key of the closed `ACL_MODE_IRI` map. The own-key
+ * check uses `Object.hasOwn` — NOT `m in ACL_MODE_IRI`, which walks the prototype
+ * chain and would accept inherited keys (`toString`, `constructor`, …). Anything
+ * else is malformed model output → the draft is rejected.
+ *
+ * Uses a `for...of` loop, NOT `Array.prototype.every`: `every` SKIPS holes in a
+ * SPARSE array, so `new Array(1)` would pass; `for...of` visits each hole as
+ * `undefined` and rejects it. The hole-rejecting behaviour is a security
+ * guarantee — never weaken it to `every`.
+ */
+function modesFieldOk(modes: StructuredIntentDraft["modes"]): boolean {
+  if (modes === undefined) {
+    return true;
+  }
+  if (!Array.isArray(modes)) {
+    return false;
+  }
+  for (const m of modes) {
+    if (typeof m !== "string" || !Object.hasOwn(ACL_MODE_IRI, m)) {
       return false;
-    }
-    for (const m of draft.modes) {
-      // OWN-KEY allowlist via Object.hasOwn — NOT `m in ACL_MODE_IRI`, which would
-      // accept inherited prototype keys (`toString`, `constructor`, …). A mode must
-      // be a string that is an own key of the closed ACL_MODE_IRI map.
-      if (typeof m !== "string" || !Object.hasOwn(ACL_MODE_IRI, m)) {
-        return false;
-      }
     }
   }
   return true;

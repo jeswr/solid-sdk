@@ -299,6 +299,24 @@ describe("injected-translate seam", () => {
     expect(r.resolved).toBe(false);
   });
 
+  it("rejects a SPARSE modes/parameters array (a hole is an undefined entry)", async () => {
+    // Regression guard: the field validators must visit holes as `undefined` and
+    // reject them. Array.prototype.every SKIPS holes (so `new Array(1)` would pass)
+    // — the validators use for...of, which does NOT. A sparse array is malformed
+    // model output and must yield an unresolved result, never invalid RDF.
+    const sparseModes = vi.fn<TranslateFn>(
+      // biome-ignore lint/suspicious/noSparseArray: deliberately constructing a hole to test rejection
+      async () => ({ action: "grant", modes: [, "Read"] }) as unknown as StructuredIntentDraft,
+    );
+    expect((await parseIntent("zorp", { translate: sparseModes })).resolved).toBe(false);
+
+    const sparseParams = vi.fn<TranslateFn>(
+      async () =>
+        ({ action: "read", parameters: new Array(1) }) as unknown as StructuredIntentDraft,
+    );
+    expect((await parseIntent("zorp", { translate: sparseParams })).resolved).toBe(false);
+  });
+
   it("still resolves a fully-valid translated draft (recipient + agent + modes)", async () => {
     const translate = vi.fn<TranslateFn>(async () => ({
       action: "grant",

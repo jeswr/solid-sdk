@@ -1474,24 +1474,38 @@ function isValidDraft(draft) {
   if (!optionalStringOk(draft.agent)) {
     return false;
   }
-  if (draft.parameters !== void 0) {
-    if (!Array.isArray(draft.parameters)) {
+  if (!parametersFieldOk(draft.parameters)) {
+    return false;
+  }
+  if (!modesFieldOk(draft.modes)) {
+    return false;
+  }
+  return true;
+}
+function parametersFieldOk(parameters) {
+  if (parameters === void 0) {
+    return true;
+  }
+  if (!Array.isArray(parameters)) {
+    return false;
+  }
+  for (const p of parameters) {
+    if (typeof p?.key !== "string" || typeof p?.value !== "string") {
       return false;
-    }
-    for (const p of draft.parameters) {
-      if (typeof p?.key !== "string" || typeof p?.value !== "string") {
-        return false;
-      }
     }
   }
-  if (draft.modes !== void 0) {
-    if (!Array.isArray(draft.modes)) {
+  return true;
+}
+function modesFieldOk(modes) {
+  if (modes === void 0) {
+    return true;
+  }
+  if (!Array.isArray(modes)) {
+    return false;
+  }
+  for (const m of modes) {
+    if (typeof m !== "string" || !Object.hasOwn(ACL_MODE_IRI, m)) {
       return false;
-    }
-    for (const m of draft.modes) {
-      if (typeof m !== "string" || !Object.hasOwn(ACL_MODE_IRI, m)) {
-        return false;
-      }
     }
   }
   return true;
