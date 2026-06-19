@@ -42,7 +42,9 @@
     "test:coverage": "vitest run --coverage",
     "check:dist": "node scripts/check-dist-fresh.mjs",
     "check:lockfile-transport": "node scripts/check-lockfile-transport.mjs",
-    "gate": "npm run lint && npm run typecheck && npm run test && npm run check:dist && npm run build && npm run check:lockfile-transport"
+    "api:report": "node scripts/api-report.mjs",
+    "api:check": "node scripts/api-report.mjs --check",
+    "gate": "npm run lint && npm run typecheck && npm run test && npm run check:dist && npm run build && npm run check:lockfile-transport && npm run api:check"
   },
   "dependencies": {
     "n3": "^1.21.0"
