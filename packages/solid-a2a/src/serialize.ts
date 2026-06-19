@@ -1,12 +1,20 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // Turtle / N-Triples serialisation of an intent / SHACL-shape / Protocol-Document
-// graph via n3.Writer — the single sanctioned serialiser (never hand-concatenated
-// RDF). Copied from M1 (@jeswr/solid-agent-card) with the prefix set adapted to
-// the M2 vocabularies.
+// graph — a thin adapter over the shared `@jeswr/rdf-serialize` package (the single
+// audited n3.Writer serialiser for the @jeswr suite; never hand-concatenated RDF).
+//
+// Phase-2 consolidation: the previous inline n3.Writer copy here was one of five
+// near-identical `serialize.ts` files across the suite, from which
+// `@jeswr/rdf-serialize` was extracted. This adapter preserves this package's exact
+// public surface (`serialize(quads, format)`) and observable output — it keeps the
+// M2 prefix map and the empty-graph-to-`""` short-circuit (the shared package's
+// default `emptyAsEmptyString = true`, the behaviour 4 of the 5 copies — including
+// this one — had) — while delegating the actual quad→string work to the one
+// audited serialiser.
 
+import { legacySerialize } from "@jeswr/rdf-serialize";
 import type { Quad } from "@rdfjs/types";
-import { Writer } from "n3";
 import { A2A, ACL, DCTERMS, LDP, RDF, RDFS, SCHEMA, SH, XSD } from "./vocab.js";
 
 /** Prefixes emitted in the serialised Turtle for readability. */
@@ -23,26 +31,15 @@ const PREFIXES = {
 } as const;
 
 /**
- * Serialise quads to a string with `n3.Writer`. Defaults to Turtle; pass an RDF
- * media type (`text/turtle`, `application/n-triples`, `application/n-quads`,
- * `application/trig`) to choose another n3 format.
+ * Serialise quads to a string with `@jeswr/rdf-serialize` (n3.Writer under the
+ * hood). Defaults to Turtle; pass an RDF media type (`text/turtle`,
+ * `application/n-triples`, `application/n-quads`, `application/trig`) to choose
+ * another n3 format.
+ *
+ * An empty graph serialises to an empty string (the shared serialiser's default
+ * `emptyAsEmptyString` behaviour) — n3.Writer otherwise emits the prefix preamble
+ * even with no statements, so a zero-quad input round-trips as truly empty.
  */
 export function serialize(quads: readonly Quad[], format = "text/turtle"): Promise<string> {
-  // An empty graph serialises to an empty string. n3.Writer otherwise emits the
-  // prefix preamble even with no statements, producing a non-empty, content-free
-  // document — short-circuit so a zero-quad input round-trips as truly empty.
-  if (quads.length === 0) {
-    return Promise.resolve("");
-  }
-  return new Promise((resolve, reject) => {
-    const writer = new Writer({ format, prefixes: PREFIXES });
-    writer.addQuads(quads as Quad[]);
-    writer.end((error: Error | null, result: string) => {
-      if (error) {
-        reject(error);
-      } else {
-        resolve(result);
-      }
-    });
-  });
+  return legacySerialize(quads, format, PREFIXES);
 }

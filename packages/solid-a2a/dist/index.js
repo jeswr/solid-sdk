@@ -271,8 +271,31 @@ function waitForDrain(parser) {
   });
 }
 
-// src/serialize.ts
+// node_modules/@jeswr/rdf-serialize/dist/serialize.js
 import { Writer } from "n3";
+var DEFAULT_FORMAT = "text/turtle";
+function serialize(quads, options) {
+  const format = options?.format ?? DEFAULT_FORMAT;
+  const prefixes = options?.prefixes ?? {};
+  const emptyAsEmptyString = options?.emptyAsEmptyString ?? true;
+  if (emptyAsEmptyString && quads.length === 0) {
+    return Promise.resolve("");
+  }
+  return new Promise((resolve, reject) => {
+    const writer = new Writer({ format, prefixes });
+    writer.addQuads(quads);
+    writer.end((error, result) => {
+      if (error) {
+        reject(error);
+      } else {
+        resolve(result);
+      }
+    });
+  });
+}
+function legacySerialize(quads, format = DEFAULT_FORMAT, prefixes = {}, emptyAsEmptyString = true) {
+  return serialize(quads, { format, prefixes, emptyAsEmptyString });
+}
 
 // src/vocab.ts
 var SCHEMA = "https://schema.org/";
@@ -377,21 +400,8 @@ var PREFIXES = {
   rdf: RDF,
   rdfs: RDFS
 };
-function serialize(quads, format = "text/turtle") {
-  if (quads.length === 0) {
-    return Promise.resolve("");
-  }
-  return new Promise((resolve, reject) => {
-    const writer = new Writer({ format, prefixes: PREFIXES });
-    writer.addQuads(quads);
-    writer.end((error, result) => {
-      if (error) {
-        reject(error);
-      } else {
-        resolve(result);
-      }
-    });
-  });
+function serialize2(quads, format = "text/turtle") {
+  return legacySerialize(quads, format, PREFIXES);
 }
 
 // src/wrappers.ts
@@ -750,7 +760,7 @@ function handshakeToRdf(message) {
   return b.quads();
 }
 function handshakeToTurtle(message, format) {
-  return serialize(handshakeToRdf(message), format);
+  return serialize2(handshakeToRdf(message), format);
 }
 async function handshakeFromRdf(input, contentType2 = "text/turtle") {
   let quads;
@@ -863,7 +873,7 @@ function intentToRdf(intent) {
   return builder.quads();
 }
 function intentToTurtle(intent, format) {
-  return serialize(intentToRdf(intent), format);
+  return serialize2(intentToRdf(intent), format);
 }
 function intentToJsonLd(intent) {
   const action = {
@@ -1015,7 +1025,7 @@ function buildProtocolDocument(input) {
     quads,
     requestShapeQuads,
     hash,
-    toTurtle: (format) => serialize(quads, format),
+    toTurtle: (format) => serialize2(quads, format),
     toJsonLd: () => Promise.resolve(buildPdJsonLd(quads, frozenMeta))
   };
 }
@@ -1170,7 +1180,7 @@ function defaultShapeId(action) {
   return `${A2A}${titled}IntentShape`;
 }
 function shapeToTurtle(quads, format) {
-  return serialize(quads, format);
+  return serialize2(quads, format);
 }
 function buildResponseShape(responseClassIri, shapeId) {
   const b = new GraphBuilder();
@@ -1561,7 +1571,7 @@ export {
   mayDowngradeToNl,
   parseIntent,
   parseIntentGraph,
-  serialize,
+  serialize2 as serialize,
   shapeToTurtle,
   validateIntent,
   verifyProtocolDocument
