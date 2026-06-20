@@ -76,6 +76,20 @@ describe("parseContentLine", () => {
     const cl = parseContentLine("X;broken;K=v:val");
     expect(cl?.params).toEqual({ K: "v" });
   });
+  it("strips a vCard property GROUP prefix (RFC 6350 §3.3) into `group`", () => {
+    const cl = parseContentLine("item1.EMAIL;TYPE=work:grace@example.com");
+    expect(cl?.name).toBe("EMAIL");
+    expect(cl?.group).toBe("ITEM1");
+    expect(cl?.value).toBe("grace@example.com");
+    expect(cl?.params).toEqual({ TYPE: "work" });
+  });
+  it("does not split a value with a dot, only the head name", () => {
+    // a dot in the VALUE (after the colon) must not be mistaken for a group
+    const cl = parseContentLine("URL:https://x.example/a.b.c");
+    expect(cl?.name).toBe("URL");
+    expect(cl?.group).toBeUndefined();
+    expect(cl?.value).toBe("https://x.example/a.b.c");
+  });
 });
 
 describe("unescapeText", () => {

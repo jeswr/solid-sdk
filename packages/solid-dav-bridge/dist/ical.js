@@ -102,9 +102,26 @@ export function parseContentLine(line) {
         }
     }
     parts.push(buf);
-    const name = (parts[0] ?? "").trim().toUpperCase();
+    let name = (parts[0] ?? "").trim().toUpperCase();
     if (name.length === 0)
         return undefined;
+    // RFC 6350 §3.3: a vCard property may carry a `group "."` prefix (e.g.
+    // `item1.EMAIL`). The group is a 1*(ALPHA/DIGIT/"-") token; if the name
+    // contains a `.`, split off the LAST segment as the bare property name and
+    // keep the prefix as the group. (BEGIN/END/VERSION never carry a group, and a
+    // value like a URL never reaches here because the value is after the colon.)
+    let group;
+    const dot = name.lastIndexOf(".");
+    if (dot > 0 && dot < name.length - 1) {
+        const candidateGroup = name.slice(0, dot);
+        const bareName = name.slice(dot + 1);
+        // Only treat it as a group prefix if the group token is the vCard group
+        // grammar (ALPHA/DIGIT/"-") and the bare name is a plausible property token.
+        if (/^[A-Z0-9-]+$/.test(candidateGroup) && /^[A-Z0-9-]+$/.test(bareName)) {
+            group = candidateGroup;
+            name = bareName;
+        }
+    }
     const params = {};
     for (let i = 1; i < parts.length; i++) {
         const p = parts[i] ?? "";
@@ -120,7 +137,7 @@ export function parseContentLine(line) {
         if (pname.length > 0)
             params[pname] = pvalue;
     }
-    return { name, params, value };
+    return group !== undefined ? { name, group, params, value } : { name, params, value };
 }
 /**
  * Unescape an iCalendar TEXT value (RFC 5545 §3.3.11): `\\n`/`\\N` → newline,

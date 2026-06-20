@@ -19,10 +19,19 @@
  * lines (a line without a `:` is skipped), and it imposes hard caps on line
  * length, line count and total size so a hostile file cannot exhaust memory.
  */
-/** A parsed content line: `NAME;param=value:VALUE`. */
+/** A parsed content line: `[group "."] NAME;param=value:VALUE`. */
 export interface ContentLine {
-    /** The property name, upper-cased (e.g. `SUMMARY`, `DTSTART`). */
+    /**
+     * The property name, upper-cased and with any vCard property-group prefix
+     * stripped (e.g. `SUMMARY`, `DTSTART`; `item1.EMAIL` → `EMAIL`). RFC 6350 §3.3
+     * lets a vCard property carry a `group "."` prefix (iCloud/macOS emit
+     * `item1.EMAIL`, `item1.X-ABLabel`, …); the bare property name is what callers
+     * look up, so the prefix is moved to {@link group} rather than kept in the name
+     * (which would otherwise silently hide grouped EMAIL/TEL/URL fields).
+     */
     readonly name: string;
+    /** The vCard property group (the part before the `.`), upper-cased, if any. */
+    readonly group?: string;
     /** Parameters, names upper-cased; a multi-valued param keeps the raw comma string. */
     readonly params: Record<string, string>;
     /** The raw (still-escaped) property value text. */

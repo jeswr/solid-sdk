@@ -156,6 +156,35 @@ export const vcardHostile = [
   "END:VCARD",
 ].join("\r\n");
 
+/**
+ * A vCard using RFC 6350 §3.3 property GROUPS (`item1.EMAIL`, `item1.X-ABLabel`) —
+ * the shape iCloud / macOS Contacts export. The grouped EMAIL/TEL/URL MUST still be
+ * read (the group prefix is stripped from the property name).
+ */
+export const vcardGrouped = [
+  "BEGIN:VCARD",
+  "VERSION:3.0",
+  "FN:Grace Grouped",
+  "item1.EMAIL;type=INTERNET;type=pref:grace@example.com",
+  "item1.X-ABLabel:_$!<Work>!$_",
+  "item2.TEL;type=pref:+1-555-987-6543",
+  "item2.X-ABLabel:_$!<Mobile>!$_",
+  "item3.URL:https://grace.example/profile/card#me",
+  "UID:urn:uuid:dddd0000-0000-0000-0000-000000000004",
+  "END:VCARD",
+].join("\r\n");
+
+/** A vCard with an EMAIL containing IRI-illegal characters — must be dropped. */
+export const vcardBadEmailChars = [
+  "BEGIN:VCARD",
+  "VERSION:4.0",
+  "FN:Mallory",
+  "EMAIL:bad<inject>@example.com",
+  "EMAIL:also bad@example.com",
+  "EMAIL:fine@example.com",
+  "END:VCARD",
+].join("\r\n");
+
 /** A vCard stream with junk between two valid cards. */
 export const vcardMessy = [
   "garbage line with no begin",

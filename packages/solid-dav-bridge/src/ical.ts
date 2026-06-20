@@ -21,10 +21,19 @@
  * length, line count and total size so a hostile file cannot exhaust memory.
  */
 
-/** A parsed content line: `NAME;param=value:VALUE`. */
+/** A parsed content line: `[group "."] NAME;param=value:VALUE`. */
 export interface ContentLine {
-  /** The property name, upper-cased (e.g. `SUMMARY`, `DTSTART`). */
+  /**
+   * The property name, upper-cased and with any vCard property-group prefix
+   * stripped (e.g. `SUMMARY`, `DTSTART`; `item1.EMAIL` → `EMAIL`). RFC 6350 §3.3
+   * lets a vCard property carry a `group "."` prefix (iCloud/macOS emit
+   * `item1.EMAIL`, `item1.X-ABLabel`, …); the bare property name is what callers
+   * look up, so the prefix is moved to {@link group} rather than kept in the name
+   * (which would otherwise silently hide grouped EMAIL/TEL/URL fields).
+   */
   readonly name: string;
+  /** The vCard property group (the part before the `.`), upper-cased, if any. */
+  readonly group?: string;
   /** Parameters, names upper-cased; a multi-valued param keeps the raw comma string. */
   readonly params: Record<string, string>;
   /** The raw (still-escaped) property value text. */
@@ -122,8 +131,26 @@ export function parseContentLine(line: string): ContentLine | undefined {
   }
   parts.push(buf);
 
-  const name = (parts[0] ?? "").trim().toUpperCase();
+  let name = (parts[0] ?? "").trim().toUpperCase();
   if (name.length === 0) return undefined;
+
+  // RFC 6350 §3.3: a vCard property may carry a `group "."` prefix (e.g.
+  // `item1.EMAIL`). The group is a 1*(ALPHA/DIGIT/"-") token; if the name
+  // contains a `.`, split off the LAST segment as the bare property name and
+  // keep the prefix as the group. (BEGIN/END/VERSION never carry a group, and a
+  // value like a URL never reaches here because the value is after the colon.)
+  let group: string | undefined;
+  const dot = name.lastIndexOf(".");
+  if (dot > 0 && dot < name.length - 1) {
+    const candidateGroup = name.slice(0, dot);
+    const bareName = name.slice(dot + 1);
+    // Only treat it as a group prefix if the group token is the vCard group
+    // grammar (ALPHA/DIGIT/"-") and the bare name is a plausible property token.
+    if (/^[A-Z0-9-]+$/.test(candidateGroup) && /^[A-Z0-9-]+$/.test(bareName)) {
+      group = candidateGroup;
+      name = bareName;
+    }
+  }
 
   const params: Record<string, string> = {};
   for (let i = 1; i < parts.length; i++) {
@@ -139,7 +166,7 @@ export function parseContentLine(line: string): ContentLine | undefined {
     if (pname.length > 0) params[pname] = pvalue;
   }
 
-  return { name, params, value };
+  return group !== undefined ? { name, group, params, value } : { name, params, value };
 }
 
 /**

@@ -39,8 +39,25 @@ const DATE_RE = /^(\d{4})(\d{2})(\d{2})$/;
 /** `19970714T173000` or `...Z` (DATE-TIME). The trailing `Z` marks UTC. */
 const DATE_TIME_RE = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(Z)?$/;
 
-/** True if (m,d,h,mi,s) are within calendar/clock bounds (no leap-second). */
+/** Days in a given (1-based) month of a given year, with leap-year handling. */
+function daysInMonth(year: number, month: number): number {
+  // Feb: 29 in a leap year (div by 4, not by 100 unless also by 400), else 28.
+  if (month === 2) {
+    const leap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+    return leap ? 29 : 28;
+  }
+  // Apr, Jun, Sep, Nov have 30; the rest 31.
+  return month === 4 || month === 6 || month === 9 || month === 11 ? 30 : 31;
+}
+
+/**
+ * True if (y,m,d,h,mi,s) form a real calendar date + clock time (no leap-second).
+ * The day is validated against the ACTUAL number of days in the parsed month
+ * (incl. leap years), so impossible dates like `20260231` / non-leap `20250229`
+ * are rejected (and then dropped) rather than emitted as typed literals.
+ */
 function inBounds(
+  year: number,
   month: number,
   day: number,
   hour: number,
@@ -48,7 +65,7 @@ function inBounds(
   second: number,
 ): boolean {
   if (month < 1 || month > 12) return false;
-  if (day < 1 || day > 31) return false;
+  if (day < 1 || day > daysInMonth(year, month)) return false;
   if (hour > 23 || minute > 59 || second > 59) return false;
   return true;
 }
@@ -71,9 +88,7 @@ export function parseICalDate(raw: unknown, isDate = false): RdfDateLiteral | un
     const m = DATE_RE.exec(text);
     if (!m) return undefined;
     const [, y, mo, d] = m;
-    const month = Number(mo);
-    const day = Number(d);
-    if (!inBounds(month, day, 0, 0, 0)) return undefined;
+    if (!inBounds(Number(y), Number(mo), Number(d), 0, 0, 0)) return undefined;
     return { value: `${y}-${mo}-${d}`, datatype: XSD_DATE };
   }
 
@@ -81,7 +96,8 @@ export function parseICalDate(raw: unknown, isDate = false): RdfDateLiteral | un
   const m = DATE_TIME_RE.exec(text);
   if (!m) return undefined;
   const [, y, mo, d, h, mi, s, z] = m;
-  if (!inBounds(Number(mo), Number(d), Number(h), Number(mi), Number(s))) return undefined;
+  if (!inBounds(Number(y), Number(mo), Number(d), Number(h), Number(mi), Number(s)))
+    return undefined;
   // Emit the wall-clock; append `Z` only when the source explicitly marked UTC.
   // A floating / TZID-local value gets NO offset (its zone, if any, is carried
   // separately as ical:tzid so no information is lost and no instant is faked).

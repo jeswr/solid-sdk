@@ -49,6 +49,16 @@ describe("parseICalDate", () => {
     expect(parseICalDate("20260622T096100Z")).toBeUndefined(); // minute 61
   });
 
+  it("REGRESSION: drops impossible calendar dates (days-in-month + leap year)", () => {
+    expect(parseICalDate("20260231")).toBeUndefined(); // Feb 31 never exists
+    expect(parseICalDate("20250229")).toBeUndefined(); // 2025 is NOT a leap year
+    expect(parseICalDate("20260431")).toBeUndefined(); // April has 30 days
+    expect(parseICalDate("20260229")).toBeUndefined(); // 2026 is NOT a leap year
+    // ...but a real leap day IS accepted
+    expect(parseICalDate("20240229")?.value).toBe("2024-02-29"); // 2024 IS a leap year
+    expect(parseICalDate("20000229")?.value).toBe("2000-02-29"); // div-by-400 leap year
+  });
+
   it("trims surrounding whitespace", () => {
     expect(parseICalDate("  20261225  ")?.value).toBe("2026-12-25");
   });

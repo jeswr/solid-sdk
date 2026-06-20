@@ -183,14 +183,26 @@ export function veventToEvent(component: Component, options: VeventToEventOption
 
 // --- vCard → ContactData ---
 
+/**
+ * A conservative email-address allowlist for the `mailto:` IRI value: a local
+ * part of common atom characters, exactly one `@`, and a dotted domain of
+ * letters/digits/hyphens. This deliberately REJECTS characters that are illegal
+ * in a `mailto:` URI (e.g. `<`, `>`, `"`, `(`, `)`, `[`, `]`, `,`, `;`, `:`,
+ * whitespace, control chars) so a malformed/hostile address is dropped rather
+ * than passed through as a malformed IRI to the contact serializer. It does not
+ * try to be a full RFC 5322 validator — it errs on the side of dropping the
+ * unusual rather than emitting an invalid IRI.
+ */
+const EMAIL_RE =
+  /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?)+$/;
+
 /** Normalise a raw email address to a canonical `mailto:` IRI, or `undefined`. */
 function toMailto(raw: string): string | undefined {
   const addr = raw
     .trim()
     .replace(/^mailto:/i, "")
     .trim();
-  // A minimal sanity check — exactly one `@`, non-empty local + domain, no spaces.
-  if (!/^[^\s@]+@[^\s@]+$/.test(addr)) return undefined;
+  if (!EMAIL_RE.test(addr)) return undefined;
   return `mailto:${addr}`;
 }
 

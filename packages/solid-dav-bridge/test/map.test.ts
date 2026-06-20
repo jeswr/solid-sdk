@@ -15,7 +15,9 @@ import {
   SCHEMA_URL,
 } from "../src/vocab.js";
 import {
+  vcardBadEmailChars,
   vcardBasic,
+  vcardGrouped,
   vcardHostile,
   vcardWebId,
   veventAllDay,
@@ -167,5 +169,23 @@ describe("vcardToContact", () => {
     const vcf = "BEGIN:VCARD\r\nFN:Dup\r\nEMAIL:a@x.com\r\nEMAIL:a@x.com\r\nEND:VCARD";
     const { data } = vcardToContact(firstVcard(vcf));
     expect(data.emails).toEqual(["mailto:a@x.com"]);
+  });
+
+  it("REGRESSION: reads grouped vCard properties (item1.EMAIL / item2.TEL / item3.URL)", () => {
+    // iCloud/macOS export property groups; the EMAIL/TEL/URL must NOT be silently
+    // dropped just because they carry an `itemN.` prefix.
+    const { data } = vcardToContact(firstVcard(vcardGrouped));
+    expect(data.name).toBe("Grace Grouped");
+    expect(data.emails).toEqual(["mailto:grace@example.com"]);
+    expect(data.phones).toEqual(["tel:+15559876543"]);
+    expect(data.webId).toBe("https://grace.example/profile/card#me");
+  });
+
+  it("REGRESSION: drops an email containing IRI-illegal chars, keeps the valid one", () => {
+    const { data } = vcardToContact(firstVcard(vcardBadEmailChars));
+    // "bad<inject>@..." and "also bad@..." are dropped; only "fine@..." survives.
+    expect(data.emails).toEqual(["mailto:fine@example.com"]);
+    expect(JSON.stringify(data)).not.toContain("<inject>");
+    expect(JSON.stringify(data)).not.toContain(" ");
   });
 });
