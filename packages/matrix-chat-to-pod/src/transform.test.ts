@@ -86,16 +86,38 @@ describe("matrixEventToCanonical — plain message", () => {
   });
 });
 
-describe("matrixEventToCanonical — HTML message", () => {
-  it("uses formatted_body + text/html when format is org.matrix.custom.html", () => {
+describe("matrixEventToCanonical — HTML message (no stored-XSS)", () => {
+  it("NEVER persists untrusted formatted_body: writes plain text/plain, surfaces HTML only on the result", () => {
     const r = matrixEventToCanonical(htmlMessage, ctx);
     if (r.kind !== "message") throw new Error("expected message");
-    expect(r.message.content).toBe("<strong>Bold text</strong>");
-    expect(r.message.mediaType).toBe("text/html");
+    // The pod-written content is the PLAIN body as text/plain — never the HTML.
+    expect(r.message.content).toBe("Bold text");
+    expect(r.message.mediaType).toBe("text/plain");
+    // The raw (untrusted) HTML is surfaced on the result for a caller to sanitize.
     expect(r.formatted).toBe("<strong>Bold text</strong>");
   });
 
-  it("ignores formatted_body when the format is unknown (keeps plain text)", () => {
+  it("a hostile formatted_body (script tag) is never written into the canonical content", () => {
+    const xss = {
+      ...htmlMessage,
+      content: {
+        msgtype: "m.text",
+        body: "harmless plain text",
+        format: "org.matrix.custom.html",
+        formatted_body: "<img src=x onerror=alert(1)><script>steal()</script>",
+      },
+    };
+    const r = matrixEventToCanonical(xss, ctx);
+    if (r.kind !== "message") throw new Error("expected message");
+    expect(r.message.content).toBe("harmless plain text");
+    expect(r.message.mediaType).toBe("text/plain");
+    expect(r.message.content).not.toContain("<script>");
+    expect(r.message.content).not.toContain("onerror");
+    // surfaced raw on the result (the caller's responsibility to sanitize if used)
+    expect(r.formatted).toContain("<script>");
+  });
+
+  it("ignores formatted_body when the format is unknown (keeps plain text, no formatted)", () => {
     const r = matrixEventToCanonical(
       { ...htmlMessage, content: { ...htmlMessage.content, format: "text/markdown" } },
       ctx,

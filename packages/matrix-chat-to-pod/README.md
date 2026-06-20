@@ -81,7 +81,7 @@ const result = await importRoom({
 
 | Matrix | Canonical | Notes |
 |---|---|---|
-| `content.body` / `content.formatted_body` (HTML) | `content` (+ `mediaType` `text/html` when HTML) | for an edit, the body is read from `content['m.new_content']` |
+| `content.body` (plain text) | `content` (`mediaType` `text/plain`) | for an edit, the body is read from `content['m.new_content']`. The untrusted `formatted_body` HTML is **never** written into the pod (stored-XSS guard); it is surfaced on the transform result as `formatted` for a caller that sanitizes + renders it itself |
 | `sender` (`@user:server`) | `author` | **only** when a `webIdFor` resolver yields an http(s) WebID; the raw matrix id is preserved as `matrixSender` for audit, never as an RDF IRI |
 | `origin_server_ts` (ms epoch) | `published` (ISO-8601) | an out-of-range/garbage timestamp is dropped, never thrown |
 | `room_id` | `room` | via `roomIriFor` (the in-pod container IRI) |
@@ -105,7 +105,12 @@ phase 1; `m.image`/`m.file`/`m.audio`/`m.video`/`m.location` are skipped (media 
   (`acl:Read`/`acl:Write`/`acl:Control` for the owner over the container + descendants), written
   **before** any message lands. Nothing is auto-shared; the importer never widens an existing ACL.
 - **Source edits and redactions are honoured on re-sync** — re-running rewrites the same stable
-  resource per event id, applies new edits, and clears redacted bodies.
+  resource per event id (a reversible base64url slug, so distinct event ids never collide), applies
+  new edits, and clears redacted bodies.
+- **Order-independent import** — the Matrix `/messages?dir=b` API returns events newest-first, so an
+  edit/redaction can arrive before its target. The importer folds all results into final per-event
+  state (latest edit by timestamp wins; a redaction is terminal) and writes each resource exactly
+  once, so a redacted/edited message is never overwritten by an older original.
 - **Untrusted-input discipline** — every Matrix field is read defensively; a missing or wrong-typed
   field is dropped (never coerced, never thrown). Non-http(s) IRIs are filtered by the canonical
   model on read and write.

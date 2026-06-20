@@ -33,7 +33,12 @@ import {
   serializeLongChat,
 } from "@jeswr/solid-chat-interop";
 import type { MatrixEvent, MatrixMessagesResponse } from "./matrix.js";
-import { type MatrixContext, matrixEventToCanonical } from "./transform.js";
+import {
+  type MatrixContext,
+  type MatrixEventResult,
+  matrixEventToCanonical,
+  type SkipResult,
+} from "./transform.js";
 
 /** Options for {@link importRoom}. */
 export interface ImportRoomOptions {
@@ -102,12 +107,18 @@ export interface ImportRoomResult {
 /** A conservative max for a single Matrix `/messages` page. */
 const MAX_PAGE_SIZE = 1000;
 
-/** Slugify a Matrix event id into a safe, collision-free path segment. */
+/**
+ * Slugify a Matrix event id into a safe, COLLISION-FREE path segment. A naive
+ * "replace every non-URL-safe char with `_`" is NOT injective — `$a:b` and `$a/b`
+ * would collide onto the same resource and overwrite each other. We instead
+ * base64url-encode the full event id (a reversible, total, collision-free encoding)
+ * and prefix `m-` so the name is a valid, non-`$`/`-`-leading segment.
+ */
 function eventSlug(eventId: string): string {
-  // Matrix event ids look like `$base64url` or `$opaque:server`. Keep only
-  // URL-safe chars; everything else → `_`. Prefix `m-` to keep it a valid name and
-  // avoid a leading `$`/`-`.
-  return `m-${eventId.replace(/[^A-Za-z0-9._-]/g, "_")}`;
+  const b64 = Buffer.from(eventId, "utf8").toString("base64");
+  // base64url: + → -, / → _, strip `=` padding (not needed for a one-way name).
+  const b64url = b64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  return `m-${b64url}`;
 }
 
 /**
@@ -277,11 +288,19 @@ export async function importRoom(options: ImportRoomOptions): Promise<ImportRoom
     await writeOwnerOnlyAcl(writeFetch, container, ownerWebId);
   }
 
-  let written = 0;
-  let redacted = 0;
   let skipped = 0;
   let pages = 0;
   let from: string | undefined;
+
+  // ORDER-INDEPENDENT FOLD. The Matrix `/messages?dir=b` API returns events
+  // NEWEST-FIRST, so an edit or redaction can be seen BEFORE the original message
+  // it targets (within a page or across pages). Writing as-we-go would let the
+  // older original later OVERWRITE a newer edit/redaction, restoring stale or
+  // redacted content. We therefore fold every result into final per-event state
+  // FIRST (latest edit wins by timestamp; a redaction is terminal regardless of
+  // order), then write each resource exactly ONCE in a deterministic order. This
+  // makes the outcome independent of the page/chunk order entirely.
+  const states = new Map<string, EventState>();
 
   while (pages < maxPages) {
     const url = messagesUrl(homeserverUrl, roomId, pageSize, from);
@@ -302,34 +321,11 @@ export async function importRoom(options: ImportRoomOptions): Promise<ImportRoom
 
     for (const event of chunk) {
       const result = matrixEventToCanonical(event as MatrixEvent, ctx);
-      switch (result.kind) {
-        case "message": {
-          await putLongChat(writeFetch, messageUrlFor(result.eventId), result.message);
-          written++;
-          break;
-        }
-        case "replace": {
-          // Apply the edit to the TARGET resource and set the edit pointer.
-          const targetUrl = messageUrlFor(result.targetEventId);
-          const editUrl = messageUrlFor(result.eventId);
-          const replaced: CanonicalMessage = {
-            ...result.message,
-            id: longChatMessageSubject(targetUrl),
-            replacedBy: longChatMessageSubject(editUrl),
-          };
-          await putLongChat(writeFetch, targetUrl, replaced);
-          written++;
-          break;
-        }
-        case "redaction": {
-          await applyRedaction(writeFetch, messageUrlFor, result.targetEventId, result.deletedAt);
-          redacted++;
-          break;
-        }
-        case "skip":
-          skipped++;
-          break;
+      if (result.kind === "skip") {
+        skipped++;
+        continue;
       }
+      foldResult(states, result);
     }
 
     const end = typeof body.end === "string" ? body.end : undefined;
@@ -339,7 +335,100 @@ export async function importRoom(options: ImportRoomOptions): Promise<ImportRoom
     from = end;
   }
 
+  // Materialise the folded state to the pod — each target resource written once.
+  // Sorting the keys keeps the write order deterministic (helps tests + diffs).
+  let written = 0;
+  let redacted = 0;
+  for (const eventId of [...states.keys()].sort()) {
+    const state = states.get(eventId);
+    if (state === undefined) continue;
+    const targetUrl = messageUrlFor(eventId);
+
+    if (state.redactedAt !== undefined) {
+      // A redaction is terminal: tombstone the resource, clearing any body.
+      await applyRedaction(writeFetch, messageUrlFor, eventId, state.redactedAt);
+      redacted++;
+      continue;
+    }
+
+    // The effective message is the latest edit's content (if any) over the base
+    // message; an orphan edit (target not in range) still gets written so data is
+    // not lost. A base message with no edit writes as-is.
+    const base = state.edit?.message ?? state.message;
+    if (base === undefined) continue; // nothing to write (shouldn't happen)
+    const subject = longChatMessageSubject(targetUrl);
+    const out: CanonicalMessage = { ...base, id: subject };
+    if (state.edit !== undefined) {
+      // Preserve the original message's timestamps/author where the edit lacked
+      // them, but the edit's CONTENT wins; set the dct:isReplacedBy edit pointer.
+      out.replacedBy = longChatMessageSubject(messageUrlFor(state.edit.editEventId));
+      if (state.message?.published !== undefined && out.published === undefined) {
+        out.published = state.message.published;
+      }
+      if (state.message?.author !== undefined && out.author === undefined) {
+        out.author = state.message.author;
+      }
+    }
+    await putLongChat(writeFetch, targetUrl, out);
+    written++;
+  }
+
   return { written, redacted, skipped, pages };
+}
+
+/** The folded final state for one target event id (order-independent). */
+interface EventState {
+  /** The base message (from the original `m.room.message`), if seen. */
+  message?: CanonicalMessage;
+  /** The latest edit (by timestamp) applied to this target, if any. */
+  edit?: { message: CanonicalMessage; editEventId: string; ts: number };
+  /** The redaction timestamp (ISO) — terminal; set ⇒ the resource is a tombstone. */
+  redactedAt?: string;
+}
+
+/** Parse an ISO timestamp to ms for edit-recency comparison; missing → -Infinity. */
+function tsMs(iso: string | undefined): number {
+  if (iso === undefined) return Number.NEGATIVE_INFINITY;
+  const ms = Date.parse(iso);
+  return Number.isNaN(ms) ? Number.NEGATIVE_INFINITY : ms;
+}
+
+/**
+ * Fold one non-skip transform result into the per-event state map (the
+ * order-independent merge). `message` sets the base; `replace` keeps the
+ * LATEST-by-timestamp edit; `redaction` marks the target terminal (and a redaction
+ * is never un-set by a later/earlier message or edit).
+ */
+function foldResult(
+  states: Map<string, EventState>,
+  result: Exclude<MatrixEventResult, SkipResult>,
+): void {
+  switch (result.kind) {
+    case "message": {
+      const s = states.get(result.eventId) ?? {};
+      s.message = result.message;
+      states.set(result.eventId, s);
+      break;
+    }
+    case "replace": {
+      const s = states.get(result.targetEventId) ?? {};
+      const ts = tsMs(result.message.published);
+      if (s.edit === undefined || ts >= s.edit.ts) {
+        s.edit = { message: result.message, editEventId: result.eventId, ts };
+      }
+      states.set(result.targetEventId, s);
+      break;
+    }
+    case "redaction": {
+      const s = states.get(result.targetEventId) ?? {};
+      // Terminal + idempotent: keep the first redaction stamp we see.
+      if (s.redactedAt === undefined) {
+        s.redactedAt = result.deletedAt ?? new Date().toISOString();
+      }
+      states.set(result.targetEventId, s);
+      break;
+    }
+  }
 }
 
 /**

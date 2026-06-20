@@ -85,11 +85,21 @@ function fakeGuardedFetch(pages: MatrixMessagesResponse[]): {
   return { fetch, reads };
 }
 
-const slug = (eventId: string) => `m-${eventId.replace(/[^A-Za-z0-9._-]/g, "_")}.ttl`;
+// Mirror the importer's reversible base64url event-id slug (see eventSlug in import.ts).
+const slug = (eventId: string) => {
+  const b64url = Buffer.from(eventId, "utf8")
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+  return `m-${b64url}.ttl`;
+};
 const resourceUrl = (eventId: string) => `${CONTAINER}${slug(eventId)}`;
 
 describe("importRoom — happy path", () => {
-  it("writes the owner-only ACL first, then messages, and pages to the end", async () => {
+  it("writes the owner-only ACL first, folds each resource once, and pages to the end", async () => {
+    // page1 (newest-first): the original $plain1 + a reply.
+    // page2: an edit of $plain1, a redaction of $plain1, and an image (skipped).
     const page1: MatrixMessagesResponse = {
       chunk: [plainMessage, replyMessage] as MatrixEvent[],
       end: "t1",
@@ -112,10 +122,11 @@ describe("importRoom — happy path", () => {
       webIdFor: () => OWNER,
     });
 
-    // 2 plain messages (plain + reply) + 1 edit applied = 3 writes; 1 redaction; 1 skip (image).
-    expect(result.written).toBe(3);
-    expect(result.redacted).toBe(1);
-    expect(result.skipped).toBe(1);
+    // The fold collapses $plain1's message+edit+redaction into a SINGLE terminal
+    // tombstone (redaction wins). $reply1 writes once. Image skipped.
+    expect(result.written).toBe(1); // $reply1
+    expect(result.redacted).toBe(1); // $plain1 tombstone
+    expect(result.skipped).toBe(1); // image
     expect(result.pages).toBe(2);
 
     // ACL is the FIRST write and is owner-only.
@@ -125,25 +136,158 @@ describe("importRoom — happy path", () => {
     expect(writes[0]?.body).not.toContain("Public");
     expect(writes[0]?.body).not.toContain("foaf:Agent");
 
-    // The plain message landed at its stable resource.
-    const plainWrite = writes.find((w) => w.url === resourceUrl("$plain1:example.org"));
-    expect(plainWrite).toBeDefined();
-    expect(plainWrite?.method).toBe("PUT");
-
-    // The $plain1 resource is rewritten in place across its lifecycle: the
-    // original message (page 1), then the edit (page 2, sets dct:isReplacedBy),
-    // then the redaction (page 2, redacts $plain1 → schema:dateDeleted tombstone).
+    // $plain1 is written EXACTLY once (the fold), as a tombstone — not 3 times.
     const plain1Writes = writes.filter((w) => w.url === resourceUrl("$plain1:example.org"));
-    expect(plain1Writes.length).toBe(3);
-    // the edit is the 2nd write and carries the isReplacedBy edge
-    expect(plain1Writes[1]?.body).toContain("isReplacedBy");
-    // the redaction is the 3rd write and tombstones the resource
-    expect(plain1Writes[2]?.body).toContain("dateDeleted");
+    expect(plain1Writes.length).toBe(1);
+    expect(plain1Writes[0]?.body).toContain("dateDeleted");
+
+    // $reply1 written once as a normal message.
+    const reply1Writes = writes.filter((w) => w.url === resourceUrl("$reply1:example.org"));
+    expect(reply1Writes.length).toBe(1);
+    expect(reply1Writes[0]?.body).not.toContain("dateDeleted");
 
     // Two homeserver reads (one per page); first has no `from`, second carries t1.
     expect(reads.length).toBe(2);
     expect(reads[0]?.url).not.toContain("from=");
     expect(reads[1]?.url).toContain("from=t1");
+  });
+});
+
+describe("importRoom — order-independence (the dir=b newest-first hazard)", () => {
+  it("an edit seen BEFORE its target still wins (no stale-content overwrite)", async () => {
+    // dir=b: the EDIT arrives first, then the original. The final write must carry
+    // the EDITED content, not the original — regardless of arrival order.
+    const { fetch: writeFetch, writes } = fakeWriteFetch();
+    const { fetch: guardedFetch } = fakeGuardedFetch([
+      { chunk: [editMessage, plainMessage] as MatrixEvent[] },
+    ]);
+
+    await importRoom({
+      homeserverUrl: HOMESERVER,
+      accessToken: TOKEN,
+      roomId: ROOM,
+      writeFetch,
+      container: CONTAINER,
+      ownerWebId: OWNER,
+      guardedFetch,
+    });
+
+    const url = resourceUrl("$plain1:example.org");
+    const plain1Writes = writes.filter((w) => w.url === url);
+    expect(plain1Writes.length).toBe(1);
+    const dataset = await parseRdf(plain1Writes[0]?.body ?? "", "text/turtle", { baseIRI: url });
+    const msg = longChatToCanonical(dataset, `${url}#it`);
+    expect(msg?.content).toBe("Hello, world (edited)!"); // the EDIT, not "Hello, world!"
+    expect(msg?.replacedBy).toBeDefined();
+  });
+
+  it("a redaction seen BEFORE its target still tombstones (no restore of redacted content)", async () => {
+    // dir=b: the REDACTION arrives first, then the original message. The final write
+    // must be a tombstone with no content — the original must NOT restore the body.
+    const { fetch: writeFetch, writes } = fakeWriteFetch();
+    const { fetch: guardedFetch } = fakeGuardedFetch([
+      { chunk: [redactionEvent, plainMessage] as MatrixEvent[] },
+    ]);
+
+    const result = await importRoom({
+      homeserverUrl: HOMESERVER,
+      accessToken: TOKEN,
+      roomId: ROOM,
+      writeFetch,
+      container: CONTAINER,
+      ownerWebId: OWNER,
+      guardedFetch,
+    });
+
+    expect(result.redacted).toBe(1);
+    const url = resourceUrl("$plain1:example.org");
+    const plain1Writes = writes.filter((w) => w.url === url);
+    expect(plain1Writes.length).toBe(1);
+    const dataset = await parseRdf(plain1Writes[0]?.body ?? "", "text/turtle", { baseIRI: url });
+    const msg = longChatToCanonical(dataset, `${url}#it`);
+    expect(msg?.content).toBe(""); // no restored content
+    expect(msg?.deletedAt).toBeDefined();
+  });
+
+  it("the latest edit by timestamp wins even when an older edit is seen later", async () => {
+    const olderEdit = {
+      ...editMessage,
+      event_id: "$editOld:example.org",
+      origin_server_ts: 1_700_000_002_500,
+      content: {
+        msgtype: "m.text",
+        body: "* older",
+        "m.new_content": { msgtype: "m.text", body: "OLDER edit" },
+        "m.relates_to": { rel_type: "m.replace", event_id: "$plain1:example.org" },
+      },
+    };
+    const newerEdit = {
+      ...editMessage,
+      event_id: "$editNew:example.org",
+      origin_server_ts: 1_700_000_009_999,
+      content: {
+        msgtype: "m.text",
+        body: "* newer",
+        "m.new_content": { msgtype: "m.text", body: "NEWER edit" },
+        "m.relates_to": { rel_type: "m.replace", event_id: "$plain1:example.org" },
+      },
+    };
+    const { fetch: writeFetch, writes } = fakeWriteFetch();
+    // newer arrives first (dir=b), then older, then the base.
+    const { fetch: guardedFetch } = fakeGuardedFetch([
+      { chunk: [newerEdit, olderEdit, plainMessage] as MatrixEvent[] },
+    ]);
+
+    await importRoom({
+      homeserverUrl: HOMESERVER,
+      accessToken: TOKEN,
+      roomId: ROOM,
+      writeFetch,
+      container: CONTAINER,
+      ownerWebId: OWNER,
+      guardedFetch,
+    });
+
+    const url = resourceUrl("$plain1:example.org");
+    const body = writes.filter((w) => w.url === url)[0]?.body ?? "";
+    const dataset = await parseRdf(body, "text/turtle", { baseIRI: url });
+    const msg = longChatToCanonical(dataset, `${url}#it`);
+    expect(msg?.content).toBe("NEWER edit");
+  });
+});
+
+describe("importRoom — event-id slug is collision-free", () => {
+  it("distinct event ids that a naive _-replace would collide map to distinct resources", async () => {
+    // `$a:b` and `$a/b` both → `m-_a_b.ttl` under the old lossy slug. base64url
+    // keeps them distinct.
+    const ev = (id: string): MatrixEvent =>
+      ({
+        type: "m.room.message",
+        event_id: id,
+        sender: "@alice:example.org",
+        room_id: ROOM,
+        origin_server_ts: 1_700_000_000_000,
+        content: { msgtype: "m.text", body: `body ${id}` },
+      }) as MatrixEvent;
+    const { fetch: writeFetch, writes } = fakeWriteFetch();
+    const { fetch: guardedFetch } = fakeGuardedFetch([
+      { chunk: [ev("$a:b"), ev("$a/b")] as MatrixEvent[] },
+    ]);
+
+    const result = await importRoom({
+      homeserverUrl: HOMESERVER,
+      accessToken: TOKEN,
+      roomId: ROOM,
+      writeFetch,
+      container: CONTAINER,
+      ownerWebId: OWNER,
+      guardedFetch,
+    });
+
+    expect(result.written).toBe(2);
+    const messageWrites = writes.filter((w) => w.url !== `${CONTAINER}.acl`);
+    const urls = new Set(messageWrites.map((w) => w.url));
+    expect(urls.size).toBe(2); // distinct resources, no collision
   });
 });
 
