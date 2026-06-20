@@ -186,8 +186,27 @@ export function longChatMessageSubject(resourceUrl: string): string {
   return `${resourceUrl}#it`;
 }
 
-function readTask(doc: LongChatMessageDoc): MessageTask | undefined {
-  const types = tryRead(() => doc.types) ?? new Set<string>();
+/**
+ * Read the subject's `rdf:type` IRIs PER OBJECT, skipping any malformed (non-IRI)
+ * type term. Built directly off the dataset rather than the wrapper's `types`
+ * getter because `SetFrom` + `NamedNodeAs.string` is ALL-OR-NOTHING: a single
+ * literal-valued `rdf:type` would throw and drop EVERY type, so a valid
+ * `sioc:Note`/`as:Note` carrying one garbage type triple would fail to parse
+ * (untrusted input). Filtering per object keeps the valid type IRIs.
+ */
+function readTypeSet(subject: string, dataset: DatasetCore): Set<string> {
+  const types = new Set<string>();
+  for (const q of dataset.match(
+    DataFactory.namedNode(subject),
+    DataFactory.namedNode(RDF_TYPE),
+    null,
+  )) {
+    if (q.object.termType === "NamedNode") types.add(q.object.value);
+  }
+  return types;
+}
+
+function readTask(doc: LongChatMessageDoc, types: Set<string>): MessageTask | undefined {
   if (!types.has(TASK_CLASS)) return undefined;
   const state: TaskState = types.has(WF_CLOSED) ? "closed" : "open";
   const task: MessageTask = { state };
@@ -226,7 +245,7 @@ export function parseLongChatMessage(
   dataset: DatasetCore,
 ): CanonicalMessage | undefined {
   const doc = new LongChatMessageDoc(subject, dataset, DataFactory);
-  const types = tryRead(() => doc.types) ?? new Set<string>();
+  const types = readTypeSet(subject, dataset);
   if (!types.has(SIOC_NOTE) && !types.has(AS_NOTE)) return undefined;
 
   const msg: CanonicalMessage = {
@@ -247,7 +266,7 @@ export function parseLongChatMessage(
   if (deletedAt !== undefined) msg.deletedAt = deletedAt;
   const provenance = readProvenance(doc);
   if (provenance !== undefined) msg.provenance = provenance;
-  const task = readTask(doc);
+  const task = readTask(doc, types);
   if (task !== undefined) msg.task = task;
   return msg;
 }

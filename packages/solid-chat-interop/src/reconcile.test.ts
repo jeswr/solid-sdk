@@ -292,4 +292,23 @@ describe("roborev-medium regressions", () => {
     expect(parsed?.content).toBe("real body");
     expect(parsed?.author).toBe(ALICE);
   });
+
+  it("a valid note with an extra MALFORMED rdf:type still parses (per-object type filter, Medium follow-up)", async () => {
+    // A literal-valued rdf:type alongside the valid type must NOT drop the WHOLE
+    // type set (an all-or-nothing SetFrom read would, leaving the message
+    // unrecognized). Per-object filtering keeps the valid type IRI and ignores the
+    // garbage term — for BOTH the LongChat (sioc:Note) and AS2.0 (as:Note) readers.
+    const lc = `@prefix as: <https://www.w3.org/ns/activitystreams#> .
+@prefix sioc: <http://rdfs.org/sioc/ns#> .
+<${SUBJECT}> a sioc:Note, "garbage-type-literal" ; sioc:content "still here" .`;
+    const fromLc = await parseLongChat(SUBJECT, lc, "text/turtle", SUBJECT);
+    expect(fromLc).toBeDefined();
+    expect(fromLc?.content).toBe("still here");
+
+    const as2 = `@prefix as: <https://www.w3.org/ns/activitystreams#> .
+<${SUBJECT}> a as:Note, "garbage-type-literal" ; as:content "still here" .`;
+    const fromAs2 = await parseAs2(SUBJECT, as2, "text/turtle", SUBJECT);
+    expect(fromAs2).toBeDefined();
+    expect(fromAs2?.content).toBe("still here");
+  });
 });
