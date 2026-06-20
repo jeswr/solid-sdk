@@ -36,6 +36,17 @@ const MAX_PAGE_SIZE = 1000;
  * would collide onto the same resource and overwrite each other. We instead
  * base64url-encode the full event id (a reversible, total, collision-free encoding)
  * and prefix `m-` so the name is a valid, non-`$`/`-`-leading segment.
+ *
+ * STABILITY CONTRACT (load-bearing): this slug is the DURABLE mapping from a Matrix
+ * event id to its in-pod resource, and re-sync relies on it being STABLE — an
+ * import overwrites / edits / tombstones the SAME resource it wrote before. Do NOT
+ * change this encoding without a migration step (tombstone or move the old-slug
+ * resource), or a re-sync after the change would write to a new URL and leave the
+ * old resource orphaned with stale/redacted content. This is the initial release
+ * (v0.0.1, no prior published/run version), so there are NO legacy slugs to migrate
+ * today; the constraint exists to prevent a FUTURE breaking change. A caller that
+ * needs a different layout supplies {@link ImportRoomOptions.messageUrlFor} (and
+ * must keep IT stable for the same reason).
  */
 function eventSlug(eventId) {
     const b64 = Buffer.from(eventId, "utf8").toString("base64");

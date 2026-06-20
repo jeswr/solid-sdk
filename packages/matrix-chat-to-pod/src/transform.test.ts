@@ -127,6 +127,16 @@ describe("matrixEventToCanonical — HTML message (no stored-XSS)", () => {
     expect(r.message.mediaType).toBe("text/plain");
     expect(r.formatted).toBeUndefined();
   });
+
+  it("mediaType is ALWAYS text/plain for a message — no caller override (HTML can't be re-introduced)", () => {
+    // There is intentionally no defaultMediaType option; every message body is
+    // text/plain so an untrusted Matrix body can never be labelled text/html.
+    const ctxNoExtra: MatrixContext = { messageIriFor };
+    expect(matrixEventToCanonical(plainMessage, ctxNoExtra).kind).toBe("message");
+    const r = matrixEventToCanonical(plainMessage, ctxNoExtra);
+    if (r.kind !== "message") throw new Error("expected message");
+    expect(r.message.mediaType).toBe("text/plain");
+  });
 });
 
 describe("matrixEventToCanonical — reply", () => {

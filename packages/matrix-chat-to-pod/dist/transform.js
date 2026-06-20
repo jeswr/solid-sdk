@@ -139,18 +139,18 @@ function readBody(content) {
 }
 /** Build the canonical message common to a plain message and an edit's new content. */
 function buildCanonical(event, body, ctx, eventId) {
-    const defaultMediaType = ctx.defaultMediaType ?? "text/plain";
-    // SECURITY: we write the PLAIN-TEXT `body` as `text/plain` and NEVER persist the
-    // untrusted `formatted_body` HTML into the pod. A Matrix `formatted_body` is
-    // arbitrary remote HTML; persisting it as `text/html` would be a STORED-XSS
-    // vector for any LongChat reader that renders the field. This package has no HTML
-    // sanitizer dependency, so the safe phase-1 behaviour is plain text only. The raw
-    // HTML is still surfaced on the RESULT object as `formatted` (clearly untrusted)
-    // for a caller that wants to sanitize + render it itself — it is never written.
+    // SECURITY: a Matrix message body is UNTRUSTED remote content, so it is written
+    // as `text/plain` UNCONDITIONALLY — there is deliberately NO caller-supplied
+    // media-type override. Labelling untrusted Matrix text as `text/html` (or any
+    // HTML-rendered type) would re-open the stored-XSS path for a LongChat reader
+    // that renders by media type, so the type is hard-coded here, not configurable.
+    // The untrusted `formatted_body` HTML is NEVER written into the pod; it is only
+    // surfaced on the RESULT object as `formatted` (clearly untrusted) for a caller
+    // that sanitizes + renders it itself.
     const msg = {
         id: ctx.messageIriFor(eventId),
         content: body.body,
-        mediaType: defaultMediaType,
+        mediaType: "text/plain",
     };
     // Author: only a real http(s) WebID resolved from the Matrix sender; never the
     // bare @user:server (the canonical model filters non-http(s) IRIs).

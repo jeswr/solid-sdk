@@ -70,12 +70,6 @@ export interface MatrixContext {
      * dropped if not http(s).
      */
     readonly derivedFrom?: string;
-    /**
-     * The default body media type when an event carries only a plain `body`.
-     * Defaults to `text/plain`. (An event with a `formatted_body` is mapped to
-     * `text/html`.)
-     */
-    readonly defaultMediaType?: string;
 }
 /** A canonical message produced from an `m.room.message`. */
 export interface MessageResult {
