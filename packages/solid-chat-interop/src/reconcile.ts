@@ -45,7 +45,6 @@ import {
   PROV_WAS_GENERATED_BY,
   SCHEMA_DATE_DELETED,
   SIOC_CONTENT,
-  SIOC_HAS_REPLY,
   WF_ASSIGNEE,
 } from "./vocab.js";
 
@@ -104,8 +103,8 @@ export const MAPPING_TABLE: readonly MappingRow[] = [
   {
     canonical: "inReplyTo",
     as2: AS_IN_REPLY_TO,
-    longChat: SIOC_HAS_REPLY,
-    note: "Reply target (an IRI). LongChat writes BOTH as:inReplyTo and sioc:has_reply; AS2.0 uses as:inReplyTo.",
+    longChat: AS_IN_REPLY_TO,
+    note: "Reply target (an IRI). Both AS2.0 and SolidOS LongChat use as:inReplyTo on the message (reply→parent). sioc:has_reply is the INVERSE (parent→reply) and is deliberately NOT written (it would reverse the thread).",
   },
   {
     canonical: "replacedBy",

@@ -48,6 +48,42 @@ export function httpIriOrUndefined(value) {
  */
 export const safeIri = httpIriOrUndefined;
 /**
+ * Serialise an UNTRUSTED date to an ISO-8601 string, or `undefined` if it is
+ * absent or invalid. A `Date` parsed from a malformed RDF literal (e.g.
+ * `as:published "not-a-date"`) is an `Invalid Date`, and `Invalid Date.toISOString()`
+ * THROWS (RangeError) — which would abort the whole parse instead of dropping the
+ * bad field like we drop non-http IRIs. Funnel every read→canonical date through
+ * this so a hostile/garbage date literal is filtered, never fatal. (Mirrors the
+ * existing `Number.isNaN(d.getTime())` guard in the LibreChat adapter.)
+ */
+export function toIsoOrUndefined(d) {
+    return d !== undefined && !Number.isNaN(d.getTime()) ? d.toISOString() : undefined;
+}
+/**
+ * Read an UNTRUSTED date-valued property off a `@rdfjs/wrapper` doc and serialise
+ * it to ISO-8601, or `undefined` if it is absent or malformed. TWO failure modes
+ * from a hostile/garbage RDF literal are both caught here:
+ *  1. `@rdfjs/wrapper`'s `LiteralAs.date` mapping **THROWS** (`LiteralDatatypeError`)
+ *     when the literal's datatype is not `xsd:date`/`xsd:dateTime` — e.g. a plain
+ *     `as:published "not-a-date"` string literal — so the getter call itself must be
+ *     guarded (the throw fires before {@link toIsoOrUndefined} ever sees a value); and
+ *  2. a well-typed but garbage value parses to an `Invalid Date`, whose
+ *     `.toISOString()` throws (`RangeError`) — handled by {@link toIsoOrUndefined}.
+ * Pass the getter as a thunk (`() => doc.published`) so the read happens inside the
+ * guard. A bad date literal is then DROPPED like a non-http IRI, never fatal to the
+ * whole parse.
+ */
+export function readIsoDate(read) {
+    let value;
+    try {
+        value = read();
+    }
+    catch {
+        return undefined;
+    }
+    return toIsoOrUndefined(value);
+}
+/**
  * Strip the fragment from an IRI to get its document URL (e.g. the chat resource
  * a `#this` / `#it` message subject lives in). Throws on a non-parseable IRI (the
  * callers only ever pass an absolute subject IRI they minted, so a throw here is a

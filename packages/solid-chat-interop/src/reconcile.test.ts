@@ -132,14 +132,17 @@ describe("AS2.0 ↔ LongChat round-trip", () => {
 });
 
 describe("LongChat write shape", () => {
-  it("stamps sioc:Note + as:Note + schema:Message, and BOTH reply predicates", async () => {
+  it("stamps sioc:Note + as:Note + schema:Message, and the as:inReplyTo reply edge", async () => {
     const ttl = await serializeLongChat(baseMessage(), SUBJECT);
     expect(ttl).toContain("sioc:Note");
     expect(ttl).toContain("as:Note");
     expect(ttl).toContain("schema:Message");
-    // Reply written in both forms so either an AS2.0 or a sioc reader finds it.
+    // The reply edge is written ONLY as as:inReplyTo (reply→parent) — the direction
+    // AS2.0 and SolidOS LongChat both use on the message itself. sioc:has_reply is the
+    // INVERSE (parent→reply), so writing it here would reverse the thread (roborev
+    // Medium #1) — see the "roborev-medium regressions" block below.
     expect(ttl).toContain("as:inReplyTo");
-    expect(ttl).toContain("sioc:has_reply");
+    expect(ttl).not.toMatch(/has_reply/i);
     expect(ttl).toContain("foaf:maker");
     expect(ttl).toContain("sioc:content");
   });
@@ -228,5 +231,28 @@ describe("MAPPING_TABLE", () => {
     const room = MAPPING_TABLE.find((r) => r.canonical === "room");
     expect(room?.longChat).toBeNull();
     expect(room?.as2).not.toBeNull();
+  });
+});
+
+describe("roborev-medium regressions", () => {
+  it("reply edge uses as:inReplyTo and NEVER the backwards sioc:has_reply (Medium #1)", async () => {
+    // sioc:has_reply is the INVERSE (parent → reply); writing it on the reply pointing
+    // at its parent reverses the thread for sioc readers. We emit only as:inReplyTo
+    // (reply → parent), which AS2.0 and SolidOS LongChat both use on the message itself.
+    const ttl = await serializeLongChat(baseMessage(), SUBJECT);
+    expect(ttl).toContain("inReplyTo");
+    expect(ttl).not.toMatch(/has_reply/i);
+    const parsed = await parseLongChat(SUBJECT, ttl, "text/turtle", SUBJECT);
+    expect(parsed?.inReplyTo).toBe(REPLY);
+  });
+
+  it("drops a MALFORMED date literal instead of throwing on parse (Medium #2, untrusted input)", async () => {
+    // An Invalid Date from a garbage RDF literal must be FILTERED (like a non-http IRI),
+    // not abort the whole parse via Invalid-Date.toISOString() throwing.
+    const ttl = `@prefix as: <https://www.w3.org/ns/activitystreams#> .\n<${SUBJECT}> a as:Note ; as:content "hi" ; as:published "not-a-date" .`;
+    const parsed = await parseAs2(SUBJECT, ttl, "text/turtle", SUBJECT);
+    expect(parsed).toBeDefined();
+    expect(parsed?.content).toBe("hi");
+    expect(parsed?.published).toBeUndefined();
   });
 });

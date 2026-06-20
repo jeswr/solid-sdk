@@ -21,7 +21,7 @@
 import { Writer } from "n3";
 import { as2MessageSubject, buildAs2Message, parseAs2Message } from "./as2.js";
 import { buildLongChatMessage, longChatMessageSubject, parseLongChatMessage, } from "./longchat.js";
-import { AS_ATTRIBUTED_TO, AS_CONTENT, AS_CONTEXT, AS_IN_REPLY_TO, AS_MEDIA_TYPE, AS_PUBLISHED, DCT_CREATED, DCT_IS_REPLACED_BY, FOAF_MAKER, PREFIXES, PROV_WAS_ATTRIBUTED_TO, PROV_WAS_DERIVED_FROM, PROV_WAS_GENERATED_BY, SCHEMA_DATE_DELETED, SIOC_CONTENT, SIOC_HAS_REPLY, WF_ASSIGNEE, } from "./vocab.js";
+import { AS_ATTRIBUTED_TO, AS_CONTENT, AS_CONTEXT, AS_IN_REPLY_TO, AS_MEDIA_TYPE, AS_PUBLISHED, DCT_CREATED, DCT_IS_REPLACED_BY, FOAF_MAKER, PREFIXES, PROV_WAS_ATTRIBUTED_TO, PROV_WAS_DERIVED_FROM, PROV_WAS_GENERATED_BY, SCHEMA_DATE_DELETED, SIOC_CONTENT, WF_ASSIGNEE, } from "./vocab.js";
 /**
  * The canonical ↔ AS2.0 ↔ LongChat field mapping, as data (the documented
  * contract). Mirrors the solid-oss-integration-targets report (§3). This is the
@@ -61,8 +61,8 @@ export const MAPPING_TABLE = [
     {
         canonical: "inReplyTo",
         as2: AS_IN_REPLY_TO,
-        longChat: SIOC_HAS_REPLY,
-        note: "Reply target (an IRI). LongChat writes BOTH as:inReplyTo and sioc:has_reply; AS2.0 uses as:inReplyTo.",
+        longChat: AS_IN_REPLY_TO,
+        note: "Reply target (an IRI). Both AS2.0 and SolidOS LongChat use as:inReplyTo on the message (reply→parent). sioc:has_reply is the INVERSE (parent→reply) and is deliberately NOT written (it would reverse the thread).",
     },
     {
         canonical: "replacedBy",

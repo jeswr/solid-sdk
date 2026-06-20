@@ -20,8 +20,8 @@
  */
 import { LiteralAs, LiteralFrom, NamedNodeAs, NamedNodeFrom, OptionalAs, OptionalFrom, SetFrom, TermWrapper, } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
-import { httpIriOrUndefined } from "./iri.js";
-import { AS_IN_REPLY_TO, AS_NOTE, DCT_CREATED, DCT_IS_REPLACED_BY, DCT_TITLE, DEFAULT_MEDIA_TYPE, FOAF_MAKER, PROV_WAS_ATTRIBUTED_TO, PROV_WAS_DERIVED_FROM, PROV_WAS_GENERATED_BY, RDF_TYPE, SCHEMA_DATE_DELETED, SCHEMA_MESSAGE, SIOC_CONTENT, SIOC_HAS_REPLY, SIOC_NOTE, TASK_CLASS, WF_ASSIGNEE, WF_CLOSED, WF_OPEN, } from "./vocab.js";
+import { httpIriOrUndefined, readIsoDate } from "./iri.js";
+import { AS_ATTRIBUTED_TO, AS_CONTENT, AS_IN_REPLY_TO, AS_NOTE, AS_PUBLISHED, DCT_CREATED, DCT_IS_REPLACED_BY, DCT_TITLE, DEFAULT_MEDIA_TYPE, FOAF_MAKER, PROV_WAS_ATTRIBUTED_TO, PROV_WAS_DERIVED_FROM, PROV_WAS_GENERATED_BY, RDF_TYPE, SCHEMA_DATE_DELETED, SCHEMA_MESSAGE, SIOC_CONTENT, SIOC_HAS_REPLY, SIOC_NOTE, TASK_CLASS, WF_ASSIGNEE, WF_CLOSED, WF_OPEN, } from "./vocab.js";
 /** Typed `@rdfjs/wrapper` view of a single SolidOS LongChat message subject. */
 export class LongChatMessageDoc extends TermWrapper {
     get types() {
@@ -38,37 +38,52 @@ export class LongChatMessageDoc extends TermWrapper {
         this.types.add(SCHEMA_MESSAGE);
         return this;
     }
+    /**
+     * Body text. Read prefers `sioc:content` (the SolidOS form) and falls back to
+     * `as:content` (an AS2-only message). The setter writes BOTH so the resource is a
+     * COMPLETE message to a sioc reader AND to an AS2.0-only reader (the doc is
+     * stamped `sioc:Note` + `as:Note`; writing only sioc would leave the `as:Note`
+     * blank for an AS2 reader).
+     */
     get content() {
-        return OptionalFrom.subjectPredicate(this, SIOC_CONTENT, LiteralAs.string);
+        return (OptionalFrom.subjectPredicate(this, SIOC_CONTENT, LiteralAs.string) ??
+            OptionalFrom.subjectPredicate(this, AS_CONTENT, LiteralAs.string));
     }
     set content(v) {
         OptionalAs.object(this, SIOC_CONTENT, v, LiteralFrom.string);
+        OptionalAs.object(this, AS_CONTENT, v, LiteralFrom.string);
     }
+    /** Author WebID — read prefers `foaf:maker` (SolidOS), falls back to `as:attributedTo`; writes BOTH. */
     get author() {
-        return OptionalFrom.subjectPredicate(this, FOAF_MAKER, NamedNodeAs.string);
+        return (OptionalFrom.subjectPredicate(this, FOAF_MAKER, NamedNodeAs.string) ??
+            OptionalFrom.subjectPredicate(this, AS_ATTRIBUTED_TO, NamedNodeAs.string));
     }
     set author(v) {
         OptionalAs.object(this, FOAF_MAKER, v, NamedNodeFrom.string);
+        OptionalAs.object(this, AS_ATTRIBUTED_TO, v, NamedNodeFrom.string);
     }
+    /** Created stamp — read prefers `dct:created` (SolidOS), falls back to `as:published`; writes BOTH. */
     get created() {
-        return OptionalFrom.subjectPredicate(this, DCT_CREATED, LiteralAs.date);
+        return (OptionalFrom.subjectPredicate(this, DCT_CREATED, LiteralAs.date) ??
+            OptionalFrom.subjectPredicate(this, AS_PUBLISHED, LiteralAs.date));
     }
     set created(v) {
         OptionalAs.object(this, DCT_CREATED, v, LiteralFrom.dateTime);
+        OptionalAs.object(this, AS_PUBLISHED, v, LiteralFrom.dateTime);
     }
     /**
-     * The reply target. SolidOS/sioc uses `sioc:has_reply`; AS2.0 uses
-     * `as:inReplyTo`. The getter prefers `as:inReplyTo` (the canonical form) and
-     * falls back to `sioc:has_reply`; the setter writes BOTH so either reader finds
-     * it. Both are filtered http(s)-only by the reconciler.
+     * The reply target — this message replies TO `inReplyTo`. The reply→parent edge
+     * is `as:inReplyTo` (used by AS2.0 AND by SolidOS LongChat on the message
+     * itself). We deliberately do NOT use `sioc:has_reply` here: `sioc:has_reply` is
+     * the INVERSE (parent→reply) direction, so writing it on this message pointing at
+     * its parent would reverse the thread edge for sioc readers. Filtered http(s)-only
+     * by the reconciler.
      */
     get inReplyTo() {
-        return (OptionalFrom.subjectPredicate(this, AS_IN_REPLY_TO, NamedNodeAs.string) ??
-            OptionalFrom.subjectPredicate(this, SIOC_HAS_REPLY, NamedNodeAs.string));
+        return OptionalFrom.subjectPredicate(this, AS_IN_REPLY_TO, NamedNodeAs.string);
     }
     set inReplyTo(v) {
         OptionalAs.object(this, AS_IN_REPLY_TO, v, NamedNodeFrom.string);
-        OptionalAs.object(this, SIOC_HAS_REPLY, v, NamedNodeFrom.string);
     }
     get replacedBy() {
         return OptionalFrom.subjectPredicate(this, DCT_IS_REPLACED_BY, NamedNodeAs.string);
@@ -171,7 +186,7 @@ export function parseLongChatMessage(subject, dataset) {
     const author = httpIriOrUndefined(doc.author);
     if (author !== undefined)
         msg.author = author;
-    const published = doc.created?.toISOString();
+    const published = readIsoDate(() => doc.created);
     if (published !== undefined)
         msg.published = published;
     const inReplyTo = httpIriOrUndefined(doc.inReplyTo);
@@ -180,7 +195,7 @@ export function parseLongChatMessage(subject, dataset) {
     const replacedBy = httpIriOrUndefined(doc.replacedBy);
     if (replacedBy !== undefined)
         msg.replacedBy = replacedBy;
-    const deletedAt = doc.deletedAt?.toISOString();
+    const deletedAt = readIsoDate(() => doc.deletedAt);
     if (deletedAt !== undefined)
         msg.deletedAt = deletedAt;
     const provenance = readProvenance(doc);

@@ -30,7 +30,7 @@ import {
 } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
 import type { CanonicalMessage, MessageProvenance, MessageTask, TaskState } from "./canonical.js";
-import { httpIriOrUndefined } from "./iri.js";
+import { httpIriOrUndefined, readIsoDate } from "./iri.js";
 import {
   AS_ATTRIBUTED_TO,
   AS_CONTENT,
@@ -206,7 +206,7 @@ export function parseAs2Message(
   };
   const author = httpIriOrUndefined(doc.author);
   if (author !== undefined) msg.author = author;
-  const published = doc.published?.toISOString();
+  const published = readIsoDate(() => doc.published);
   if (published !== undefined) msg.published = published;
   const room = httpIriOrUndefined(doc.room);
   if (room !== undefined) msg.room = room;
@@ -214,7 +214,7 @@ export function parseAs2Message(
   if (inReplyTo !== undefined) msg.inReplyTo = inReplyTo;
   const replacedBy = httpIriOrUndefined(doc.replacedBy);
   if (replacedBy !== undefined) msg.replacedBy = replacedBy;
-  const deletedAt = doc.deletedAt?.toISOString();
+  const deletedAt = readIsoDate(() => doc.deletedAt);
   if (deletedAt !== undefined) msg.deletedAt = deletedAt;
   const provenance = readProvenance(doc);
   if (provenance !== undefined) msg.provenance = provenance;

@@ -30,17 +30,28 @@ export declare class LongChatMessageDoc extends TermWrapper {
      * it too) — exactly how PM's `chat.ts` marks a message.
      */
     mark(): this;
+    /**
+     * Body text. Read prefers `sioc:content` (the SolidOS form) and falls back to
+     * `as:content` (an AS2-only message). The setter writes BOTH so the resource is a
+     * COMPLETE message to a sioc reader AND to an AS2.0-only reader (the doc is
+     * stamped `sioc:Note` + `as:Note`; writing only sioc would leave the `as:Note`
+     * blank for an AS2 reader).
+     */
     get content(): string | undefined;
     set content(v: string | undefined);
+    /** Author WebID — read prefers `foaf:maker` (SolidOS), falls back to `as:attributedTo`; writes BOTH. */
     get author(): string | undefined;
     set author(v: string | undefined);
+    /** Created stamp — read prefers `dct:created` (SolidOS), falls back to `as:published`; writes BOTH. */
     get created(): Date | undefined;
     set created(v: Date | undefined);
     /**
-     * The reply target. SolidOS/sioc uses `sioc:has_reply`; AS2.0 uses
-     * `as:inReplyTo`. The getter prefers `as:inReplyTo` (the canonical form) and
-     * falls back to `sioc:has_reply`; the setter writes BOTH so either reader finds
-     * it. Both are filtered http(s)-only by the reconciler.
+     * The reply target — this message replies TO `inReplyTo`. The reply→parent edge
+     * is `as:inReplyTo` (used by AS2.0 AND by SolidOS LongChat on the message
+     * itself). We deliberately do NOT use `sioc:has_reply` here: `sioc:has_reply` is
+     * the INVERSE (parent→reply) direction, so writing it on this message pointing at
+     * its parent would reverse the thread edge for sioc readers. Filtered http(s)-only
+     * by the reconciler.
      */
     get inReplyTo(): string | undefined;
     set inReplyTo(v: string | undefined);

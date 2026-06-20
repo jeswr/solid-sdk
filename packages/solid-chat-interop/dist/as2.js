@@ -18,7 +18,7 @@
  */
 import { LiteralAs, LiteralFrom, NamedNodeAs, NamedNodeFrom, OptionalAs, OptionalFrom, SetFrom, TermWrapper, } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
-import { httpIriOrUndefined } from "./iri.js";
+import { httpIriOrUndefined, readIsoDate } from "./iri.js";
 import { AS_ATTRIBUTED_TO, AS_CONTENT, AS_CONTEXT, AS_IN_REPLY_TO, AS_MEDIA_TYPE, AS_NOTE, AS_PUBLISHED, DCT_IS_REPLACED_BY, DCT_TITLE, DEFAULT_MEDIA_TYPE, PROV_WAS_ATTRIBUTED_TO, PROV_WAS_DERIVED_FROM, PROV_WAS_GENERATED_BY, RDF_TYPE, SCHEMA_DATE_DELETED, TASK_CLASS, WF_ASSIGNEE, WF_CLOSED, WF_OPEN, } from "./vocab.js";
 /** Typed `@rdfjs/wrapper` view of a single AS2.0 message subject (`as:Note`). */
 export class As2MessageDoc extends TermWrapper {
@@ -173,7 +173,7 @@ export function parseAs2Message(subject, dataset) {
     const author = httpIriOrUndefined(doc.author);
     if (author !== undefined)
         msg.author = author;
-    const published = doc.published?.toISOString();
+    const published = readIsoDate(() => doc.published);
     if (published !== undefined)
         msg.published = published;
     const room = httpIriOrUndefined(doc.room);
@@ -185,7 +185,7 @@ export function parseAs2Message(subject, dataset) {
     const replacedBy = httpIriOrUndefined(doc.replacedBy);
     if (replacedBy !== undefined)
         msg.replacedBy = replacedBy;
-    const deletedAt = doc.deletedAt?.toISOString();
+    const deletedAt = readIsoDate(() => doc.deletedAt);
     if (deletedAt !== undefined)
         msg.deletedAt = deletedAt;
     const provenance = readProvenance(doc);
