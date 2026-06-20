@@ -1,0 +1,31 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jeswr/full-solid-ecosystem/main/tracking/schema/suite.schema.json",
+  "id": "solid-granary",
+  "kind": "package",
+  "name": "Solid Granary",
+  "repo": "https://github.com/jeswr/solid-granary",
+  "category": "interop",
+  "maturity": "alpha",
+  "visibility": "public",
+  "stack": {
+    "lang": "TypeScript (ESM, NodeNext)",
+    "runtime": "Node >=20",
+    "chat-interop": "@jeswr/solid-chat-interop (git, committed dist)",
+    "fetch-rdf": "@jeswr/fetch-rdf ^0.1",
+    "guarded-fetch": "@jeswr/guarded-fetch (git, committed dist)",
+    "test": "vitest ^4.x",
+    "lint": "@biomejs/biome ^2.x",
+    "node": ">=20"
+  },
+  "dependsOn": [
+    "solid-chat-interop",
+    "fetch-rdf",
+    "guarded-fetch"
+  ],
+  "federation": {
+    "sectors": ["communication", "social", "feed"],
+    "produces": ["chat"],
+    "consumes": [],
+    "note": "OSS-integration capture-multiplier #4 — a THIN adapter from granary (snarfed/granary, CC0) social-post/feed AS2 output (format=as2: FB/IG/Twitter/Mastodon/Bluesky/Nostr/Farcaster/GitHub/Flickr + RSS/Atom/JSON-Feed/mf2) to the suite's canonical chat-message model (@jeswr/solid-chat-interop), written to a Solid pod as owner-private resources. Because granary already emits AS2 — the suite's canonical chat vocabulary — the map is near-free: NO re-implemented AS2 parsing, NO hand-built RDF, NO bespoke parser. ingestGranary handles a single AS2 object OR an AS2 Collection of items; injectable authed write-fetch (unit-testable, no live server). Imported data lands OWNER-ONLY by default (never auto-shares, never writes a broadening ACL — inherits the required owner-private container). Untrusted-input hardened: every imported IRI http(s)-filtered (safeIri), every date parse-validated, a malformed/hostile object drops the bad field rather than aborting the feed. Optional fetchGranary remote helper routes a user-configured granary URL through @jeswr/guarded-fetch (https-only, block private/loopback/metadata, DNS-pin, cap+timeout, no auto-redirect). Source edits honoured on re-sync via a stable per-post slug + dct:isReplacedBy/schema:dateDeleted in the canonical model. GitHub-installable now (committed dist/, ignore-scripts=true); npm publish deferred."
+  }
+}

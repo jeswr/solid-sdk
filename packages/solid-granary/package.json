@@ -1,0 +1,71 @@
+{
+  "name": "@jeswr/solid-granary",
+  "version": "0.0.1",
+  "description": "granary (snarfed/granary, CC0) → Solid pod. A THIN adapter that maps granary's ActivityStreams 2.0 output (format=as2 — FB/IG/Twitter/Mastodon/Bluesky/Nostr/Farcaster/GitHub/Flickr + RSS/Atom/JSON-Feed/mf2) to the suite's canonical chat message model (@jeswr/solid-chat-interop) and writes each as an owner-private pod resource. Handles a single AS2 object or an AS2 Collection of items; untrusted IRIs filtered http(s)-only; optional SSRF-guarded fetch-from-granary helper. Pure-RDF, non-server-touching, typed accessors only.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Jesse Wright",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jeswr/solid-granary.git"
+  },
+  "homepage": "https://github.com/jeswr/solid-granary#readme",
+  "bugs": {
+    "url": "https://github.com/jeswr/solid-granary/issues"
+  },
+  "keywords": [
+    "solid",
+    "rdf",
+    "granary",
+    "activitystreams",
+    "as2",
+    "social",
+    "feed",
+    "rss",
+    "atom",
+    "import",
+    "interop",
+    "ssrf"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "check:dist": "node scripts/check-dist.mjs",
+    "check:lockfile-transport": "node scripts/check-lockfile-transport.mjs",
+    "lint": "biome check src test scripts && npm run check:lockfile-transport",
+    "lint:fix": "biome check --write src test scripts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "gate": "npm run lint && npm run typecheck && npm run test && npm run build && npm run check:dist && npm run check:lockfile-transport"
+  },
+  "dependencies": {
+    "@jeswr/fetch-rdf": "^0.1.0",
+    "@jeswr/guarded-fetch": "git+https://github.com/jeswr/guarded-fetch.git#main",
+    "@jeswr/solid-chat-interop": "git+https://github.com/jeswr/solid-chat-interop.git#main"
+  },
+  "peerDependencies": {
+    "@rdfjs/types": "^2.0.1"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.0.0",
+    "@rdfjs/types": "^2.0.1",
+    "@types/node": "^20",
+    "typescript": "^5",
+    "vitest": "^4.1.8"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
