@@ -500,4 +500,16 @@ describe("parse-error detection walks a wrapped cause chain but stays narrow", (
     const adapter = adapterWhoseGetThrows(sneaky);
     await expect(adapter.list()).rejects.toThrow();
   });
+
+  it("RE-THROWS a 5xx whose statusText contains 'Failed to parse' (roborev Medium)", async () => {
+    // MemoryStore.get folds HTTP statusText into the error message, so a real outage
+    // like `503 Failed to parse upstream response` MUST be re-thrown — it is NOT an
+    // RdfFetchError. A bare `msg.includes("Failed to parse")` (the bug) would have
+    // mis-dropped it; matching the typed name only is the fix.
+    const serverErr = new Error("503 Failed to parse upstream response");
+    serverErr.name = "FetchError";
+    const adapter = adapterWhoseGetThrows(serverErr);
+    await expect(adapter.list()).rejects.toThrow();
+    await expect(adapter.get(`${CONTAINER}m1`)).rejects.toThrow();
+  });
 });

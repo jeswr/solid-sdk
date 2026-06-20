@@ -295,8 +295,9 @@ function isScopeError(err) {
  * Detection is deliberately NARROW so it never swallows a genuine network / server
  * failure (which `get` / `allResilient` must re-throw):
  * - each error in the chain is matched ONLY by the typed `RdfFetchError` name (the
- *   stable contract of `@jeswr/fetch-rdf`), its exact "Failed to parse" wrapper
- *   message, or a raw N3 `SyntaxError` carrying the lexer's `"…on line N"` wording;
+ *   stable contract of `@jeswr/fetch-rdf`), or a raw N3 `SyntaxError` carrying the
+ *   lexer's `"…on line N"` wording — NOT a bare "Failed to parse" substring, which a
+ *   server error's `statusText` could coincidentally carry;
  * - we do NOT broad-match generic words ("Unexpected" / "syntax") — a server /
  *   network error message could coincidentally contain those, and broad-matching is
  *   what would let a real outage be silently dropped.
@@ -313,8 +314,13 @@ function isParseError(err) {
             return false;
         const name = e.name ?? "";
         const msg = e.message ?? "";
-        // The typed, stable signal: @jeswr/fetch-rdf's RdfFetchError wrapper.
-        if (name === "RdfFetchError" || msg.includes("Failed to parse"))
+        // The typed, stable signal: @jeswr/fetch-rdf's RdfFetchError wrapper — matched
+        // ONLY by the typed name. A bare `msg.includes("Failed to parse")` is NOT used:
+        // MemoryStore.get folds HTTP `statusText` into non-ok error messages, so a real
+        // 5xx like `503 Failed to parse upstream response` would be mis-classified as a
+        // parse failure and silently dropped (roborev Medium). The cause-chain walk below
+        // still catches a WRAPPED RdfFetchError by its name on the inner link.
+        if (name === "RdfFetchError")
             return true;
         // The raw N3 syntax error (if surfaced directly): narrow N3-syntax wording with
         // the lexer's line-number pattern, NOT a generic substring — a network error
