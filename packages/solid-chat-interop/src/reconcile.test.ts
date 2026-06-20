@@ -255,4 +255,41 @@ describe("roborev-medium regressions", () => {
     expect(parsed?.content).toBe("hi");
     expect(parsed?.published).toBeUndefined();
   });
+
+  it("recovers as:published when the preferred dct:created is malformed (date fallback not masked, Medium follow-up)", async () => {
+    // The LongChat `created` getter prefers dct:created, falling back to as:published.
+    // A naive `dct:created ?? as:published` THROWS on the malformed dct:created and
+    // never reaches the valid fallback, wrongly dropping the date. Per-predicate
+    // guarding must let the valid as:published through.
+    const ttl = `@prefix as: <https://www.w3.org/ns/activitystreams#> .
+@prefix sioc: <http://rdfs.org/sioc/ns#> .
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+<${SUBJECT}> a sioc:Note ; sioc:content "hi" ;
+  dct:created "not-a-date" ;
+  as:published "2026-06-20T10:00:00.000Z"^^xsd:dateTime .`;
+    const parsed = await parseLongChat(SUBJECT, ttl, "text/turtle", SUBJECT);
+    expect(parsed).toBeDefined();
+    expect(parsed?.published).toBe("2026-06-20T10:00:00.000Z");
+  });
+
+  it("a malformed foaf:maker literal falls back to as:attributedTo, never aborts the parse (untrusted-input class)", async () => {
+    // foaf:maker pointing at a LITERAL (not an IRI) where the preferred read expects a
+    // NamedNode must NOT abort the parse: the guarded read drops it and the valid
+    // as:attributedTo fallback is used, and the rest of the message still parses.
+    // (LiteralAs.string is lenient — it coerces a non-string literal to its lexical
+    // form rather than throwing — so the malformed-literal THROW the tryRead guard
+    // catches is the date case, covered by the two tests above.)
+    const ttl = `@prefix as: <https://www.w3.org/ns/activitystreams#> .
+@prefix sioc: <http://rdfs.org/sioc/ns#> .
+@prefix foaf: <http://xmlns.com/foaf/0.1/> .
+<${SUBJECT}> a sioc:Note ;
+  sioc:content "real body" ;
+  foaf:maker "not-an-iri" ;
+  as:attributedTo <${ALICE}> .`;
+    const parsed = await parseLongChat(SUBJECT, ttl, "text/turtle", SUBJECT);
+    expect(parsed).toBeDefined();
+    expect(parsed?.content).toBe("real body");
+    expect(parsed?.author).toBe(ALICE);
+  });
 });

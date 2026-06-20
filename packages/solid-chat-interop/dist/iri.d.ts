@@ -45,13 +45,26 @@ export declare const safeIri: typeof httpIriOrUndefined;
  */
 export declare function toIsoOrUndefined(d: Date | undefined): string | undefined;
 /**
+ * Guard a single typed `@rdfjs/wrapper` read against a malformed-term THROW,
+ * returning `undefined` on absence OR malformation. The `LiteralAs.*` /
+ * `NamedNodeAs.*` mappings THROW on an untrusted RDF term of the wrong
+ * datatype/kind — `LiteralAs.date`/`LiteralAs.string` raise `LiteralDatatypeError`
+ * for a literal whose datatype is not the expected one, and `NamedNodeAs.string`
+ * raises for a term that is a Literal where a NamedNode was expected. A foreign
+ * chat document is UNTRUSTED input, so such a throw must never abort the whole
+ * parse: pass each predicate read as a thunk (`() => OptionalFrom.subjectPredicate(
+ * this, P, As)`) and a bad value is dropped like a non-http IRI. Guarding PER
+ * PREDICATE also stops a malformed preferred predicate in an `a ?? b` fallback
+ * chain (e.g. a garbage `dct:created`) from masking a valid fallback (`as:published`).
+ */
+export declare function tryRead<T>(read: () => T | undefined): T | undefined;
+/**
  * Read an UNTRUSTED date-valued property off a `@rdfjs/wrapper` doc and serialise
  * it to ISO-8601, or `undefined` if it is absent or malformed. TWO failure modes
  * from a hostile/garbage RDF literal are both caught here:
  *  1. `@rdfjs/wrapper`'s `LiteralAs.date` mapping **THROWS** (`LiteralDatatypeError`)
  *     when the literal's datatype is not `xsd:date`/`xsd:dateTime` — e.g. a plain
- *     `as:published "not-a-date"` string literal — so the getter call itself must be
- *     guarded (the throw fires before {@link toIsoOrUndefined} ever sees a value); and
+ *     `as:published "not-a-date"` string literal — caught by {@link tryRead}; and
  *  2. a well-typed but garbage value parses to an `Invalid Date`, whose
  *     `.toISOString()` throws (`RangeError`) — handled by {@link toIsoOrUndefined}.
  * Pass the getter as a thunk (`() => doc.published`) so the read happens inside the

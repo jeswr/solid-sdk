@@ -32,7 +32,7 @@ import {
 } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
 import type { CanonicalMessage, MessageProvenance, MessageTask, TaskState } from "./canonical.js";
-import { httpIriOrUndefined, readIsoDate } from "./iri.js";
+import { httpIriOrUndefined, readIsoDate, tryRead } from "./iri.js";
 import {
   AS_ATTRIBUTED_TO,
   AS_CONTENT,
@@ -83,9 +83,11 @@ export class LongChatMessageDoc extends TermWrapper {
    * blank for an AS2 reader).
    */
   get content(): string | undefined {
+    // Per-predicate guard: a malformed `sioc:content` literal must not throw past
+    // the valid `as:content` fallback (untrusted input — see iri.ts `tryRead`).
     return (
-      OptionalFrom.subjectPredicate(this, SIOC_CONTENT, LiteralAs.string) ??
-      OptionalFrom.subjectPredicate(this, AS_CONTENT, LiteralAs.string)
+      tryRead(() => OptionalFrom.subjectPredicate(this, SIOC_CONTENT, LiteralAs.string)) ??
+      tryRead(() => OptionalFrom.subjectPredicate(this, AS_CONTENT, LiteralAs.string))
     );
   }
   set content(v: string | undefined) {
@@ -94,9 +96,11 @@ export class LongChatMessageDoc extends TermWrapper {
   }
   /** Author WebID — read prefers `foaf:maker` (SolidOS), falls back to `as:attributedTo`; writes BOTH. */
   get author(): string | undefined {
+    // Per-predicate guard: a `foaf:maker` that is a Literal (not a NamedNode) must
+    // not throw past the valid `as:attributedTo` fallback (untrusted input).
     return (
-      OptionalFrom.subjectPredicate(this, FOAF_MAKER, NamedNodeAs.string) ??
-      OptionalFrom.subjectPredicate(this, AS_ATTRIBUTED_TO, NamedNodeAs.string)
+      tryRead(() => OptionalFrom.subjectPredicate(this, FOAF_MAKER, NamedNodeAs.string)) ??
+      tryRead(() => OptionalFrom.subjectPredicate(this, AS_ATTRIBUTED_TO, NamedNodeAs.string))
     );
   }
   set author(v: string | undefined) {
@@ -105,9 +109,12 @@ export class LongChatMessageDoc extends TermWrapper {
   }
   /** Created stamp — read prefers `dct:created` (SolidOS), falls back to `as:published`; writes BOTH. */
   get created(): Date | undefined {
+    // Per-predicate guard: a malformed `dct:created` literal (the preferred read)
+    // must not throw past a VALID `as:published` fallback — otherwise the date is
+    // wrongly dropped (untrusted input — see iri.ts `tryRead`).
     return (
-      OptionalFrom.subjectPredicate(this, DCT_CREATED, LiteralAs.date) ??
-      OptionalFrom.subjectPredicate(this, AS_PUBLISHED, LiteralAs.date)
+      tryRead(() => OptionalFrom.subjectPredicate(this, DCT_CREATED, LiteralAs.date)) ??
+      tryRead(() => OptionalFrom.subjectPredicate(this, AS_PUBLISHED, LiteralAs.date))
     );
   }
   set created(v: Date | undefined) {
@@ -180,20 +187,21 @@ export function longChatMessageSubject(resourceUrl: string): string {
 }
 
 function readTask(doc: LongChatMessageDoc): MessageTask | undefined {
-  const types = doc.types;
+  const types = tryRead(() => doc.types) ?? new Set<string>();
   if (!types.has(TASK_CLASS)) return undefined;
   const state: TaskState = types.has(WF_CLOSED) ? "closed" : "open";
   const task: MessageTask = { state };
-  if (doc.taskTitle !== undefined) task.title = doc.taskTitle;
-  const assignee = httpIriOrUndefined(doc.assignee);
+  const title = tryRead(() => doc.taskTitle);
+  if (title !== undefined) task.title = title;
+  const assignee = httpIriOrUndefined(tryRead(() => doc.assignee));
   if (assignee !== undefined) task.assignee = assignee;
   return task;
 }
 
 function readProvenance(doc: LongChatMessageDoc): MessageProvenance | undefined {
-  const attributedTo = httpIriOrUndefined(doc.provAttributedTo);
-  const generatedBy = httpIriOrUndefined(doc.provGeneratedBy);
-  const derivedFrom = httpIriOrUndefined(doc.provDerivedFrom);
+  const attributedTo = httpIriOrUndefined(tryRead(() => doc.provAttributedTo));
+  const generatedBy = httpIriOrUndefined(tryRead(() => doc.provGeneratedBy));
+  const derivedFrom = httpIriOrUndefined(tryRead(() => doc.provDerivedFrom));
   if (attributedTo === undefined && generatedBy === undefined && derivedFrom === undefined) {
     return undefined;
   }
@@ -218,7 +226,7 @@ export function parseLongChatMessage(
   dataset: DatasetCore,
 ): CanonicalMessage | undefined {
   const doc = new LongChatMessageDoc(subject, dataset, DataFactory);
-  const types = doc.types;
+  const types = tryRead(() => doc.types) ?? new Set<string>();
   if (!types.has(SIOC_NOTE) && !types.has(AS_NOTE)) return undefined;
 
   const msg: CanonicalMessage = {
@@ -231,9 +239,9 @@ export function parseLongChatMessage(
   if (author !== undefined) msg.author = author;
   const published = readIsoDate(() => doc.created);
   if (published !== undefined) msg.published = published;
-  const inReplyTo = httpIriOrUndefined(doc.inReplyTo);
+  const inReplyTo = httpIriOrUndefined(tryRead(() => doc.inReplyTo));
   if (inReplyTo !== undefined) msg.inReplyTo = inReplyTo;
-  const replacedBy = httpIriOrUndefined(doc.replacedBy);
+  const replacedBy = httpIriOrUndefined(tryRead(() => doc.replacedBy));
   if (replacedBy !== undefined) msg.replacedBy = replacedBy;
   const deletedAt = readIsoDate(() => doc.deletedAt);
   if (deletedAt !== undefined) msg.deletedAt = deletedAt;

@@ -18,7 +18,7 @@
  */
 import { LiteralAs, LiteralFrom, NamedNodeAs, NamedNodeFrom, OptionalAs, OptionalFrom, SetFrom, TermWrapper, } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
-import { httpIriOrUndefined, readIsoDate } from "./iri.js";
+import { httpIriOrUndefined, readIsoDate, tryRead } from "./iri.js";
 import { AS_ATTRIBUTED_TO, AS_CONTENT, AS_CONTEXT, AS_IN_REPLY_TO, AS_MEDIA_TYPE, AS_NOTE, AS_PUBLISHED, DCT_IS_REPLACED_BY, DCT_TITLE, DEFAULT_MEDIA_TYPE, PROV_WAS_ATTRIBUTED_TO, PROV_WAS_DERIVED_FROM, PROV_WAS_GENERATED_BY, RDF_TYPE, SCHEMA_DATE_DELETED, TASK_CLASS, WF_ASSIGNEE, WF_CLOSED, WF_OPEN, } from "./vocab.js";
 /** Typed `@rdfjs/wrapper` view of a single AS2.0 message subject (`as:Note`). */
 export class As2MessageDoc extends TermWrapper {
@@ -122,23 +122,24 @@ export function as2MessageSubject(resourceUrl) {
  * matching pod-chat's `readTask`.
  */
 function readTask(doc) {
-    const types = doc.types;
+    const types = tryRead(() => doc.types) ?? new Set();
     if (!types.has(TASK_CLASS))
         return undefined;
     const state = types.has(WF_CLOSED) ? "closed" : "open";
     const task = { state };
-    if (doc.taskTitle !== undefined)
-        task.title = doc.taskTitle;
-    const assignee = httpIriOrUndefined(doc.assignee);
+    const title = tryRead(() => doc.taskTitle);
+    if (title !== undefined)
+        task.title = title;
+    const assignee = httpIriOrUndefined(tryRead(() => doc.assignee));
     if (assignee !== undefined)
         task.assignee = assignee;
     return task;
 }
 /** Read the PROV-O provenance off a subject, or `undefined` if it carries none. */
 function readProvenance(doc) {
-    const attributedTo = httpIriOrUndefined(doc.provAttributedTo);
-    const generatedBy = httpIriOrUndefined(doc.provGeneratedBy);
-    const derivedFrom = httpIriOrUndefined(doc.provDerivedFrom);
+    const attributedTo = httpIriOrUndefined(tryRead(() => doc.provAttributedTo));
+    const generatedBy = httpIriOrUndefined(tryRead(() => doc.provGeneratedBy));
+    const derivedFrom = httpIriOrUndefined(tryRead(() => doc.provDerivedFrom));
     if (attributedTo === undefined && generatedBy === undefined && derivedFrom === undefined) {
         return undefined;
     }
@@ -163,26 +164,29 @@ function readProvenance(doc) {
  */
 export function parseAs2Message(subject, dataset) {
     const doc = new As2MessageDoc(subject, dataset, DataFactory);
-    if (!doc.types.has(AS_NOTE))
+    const types = tryRead(() => doc.types) ?? new Set();
+    if (!types.has(AS_NOTE))
         return undefined;
+    // Every typed read below is guarded against a malformed-literal THROW (an
+    // untrusted foreign document must never abort the parse — see iri.ts `tryRead`).
     const msg = {
         id: subject,
-        content: doc.content ?? "",
-        mediaType: doc.mediaType ?? DEFAULT_MEDIA_TYPE,
+        content: tryRead(() => doc.content) ?? "",
+        mediaType: tryRead(() => doc.mediaType) ?? DEFAULT_MEDIA_TYPE,
     };
-    const author = httpIriOrUndefined(doc.author);
+    const author = httpIriOrUndefined(tryRead(() => doc.author));
     if (author !== undefined)
         msg.author = author;
     const published = readIsoDate(() => doc.published);
     if (published !== undefined)
         msg.published = published;
-    const room = httpIriOrUndefined(doc.room);
+    const room = httpIriOrUndefined(tryRead(() => doc.room));
     if (room !== undefined)
         msg.room = room;
-    const inReplyTo = httpIriOrUndefined(doc.inReplyTo);
+    const inReplyTo = httpIriOrUndefined(tryRead(() => doc.inReplyTo));
     if (inReplyTo !== undefined)
         msg.inReplyTo = inReplyTo;
-    const replacedBy = httpIriOrUndefined(doc.replacedBy);
+    const replacedBy = httpIriOrUndefined(tryRead(() => doc.replacedBy));
     if (replacedBy !== undefined)
         msg.replacedBy = replacedBy;
     const deletedAt = readIsoDate(() => doc.deletedAt);
