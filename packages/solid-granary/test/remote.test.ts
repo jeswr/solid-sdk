@@ -61,7 +61,7 @@ describe("fetchGranary", () => {
     // two (100) must REJECT — proving we measure bytes, not code units.
     const emoji = "😀".repeat(60);
     const body = JSON.stringify({ type: "Note", content: emoji });
-    expect(body.length).toBeLessThan(Buffer.byteLength(body, "utf8"));
+    expect(body.length).toBeLessThan(new TextEncoder().encode(body).length);
     await expect(
       fetchGranary("https://granary.io/x", { fetch: jsonFetch(body), maxBytes: 150 }),
     ).rejects.toMatchObject({ message: expect.stringContaining("exceeds") });

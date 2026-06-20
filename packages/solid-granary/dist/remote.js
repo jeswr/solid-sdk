@@ -78,8 +78,9 @@ export async function fetchGranary(url, options = {}) {
     }
     const text = await res.text();
     // Count ENCODED UTF-8 bytes, not UTF-16 code units (`text.length`): a multi-byte
-    // payload could otherwise slip past a byte-named cap.
-    if (Buffer.byteLength(text, "utf8") > maxBytes) {
+    // payload could otherwise slip past a byte-named cap. `TextEncoder` is a WHATWG
+    // global (Node + browser), so this stays portable (no Node-only `Buffer`).
+    if (new TextEncoder().encode(text).length > maxBytes) {
         throw new GranaryFetchError(`granary payload exceeds ${maxBytes} bytes`, url, {
             status: res.status,
         });
