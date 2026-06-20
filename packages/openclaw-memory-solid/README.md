@@ -207,8 +207,15 @@ See [`SECURITY.md`](./SECURITY.md). In brief:
   configured WebID) and `prov:wasGeneratedBy` (the conversation) — provenance is threaded, not
   stripped.
 - **Untrusted record drop-not-fatal.** A pod member that is not a valid `mem:MemoryItem`, or that
-  stores a hostile non-http(s) IRI, is dropped by `@jeswr/solid-memory`; `recall` / `list` / `get`
-  skip it gracefully and never surface the hostile value.
+  stores a hostile non-http(s) IRI, is dropped; `recall` / `list` / `get` skip it gracefully and
+  never surface the hostile value. A non-memory body and a hostile IRI are dropped by
+  `@jeswr/solid-memory` (it returns `null` / filters non-http(s) IRIs). An **un-parseable** body is
+  handled by THIS adapter's own resilient member walk: `@jeswr/solid-memory`'s `MemoryStore.all()`
+  re-throws a parse error (one poisoned member would abort the whole listing — an availability hole),
+  so the adapter does not delegate bulk reads to `all()`; it lists members and parses each
+  individually, dropping a member whose body fails to parse while **re-throwing a genuine network /
+  server error**. Making `MemoryStore.all()` itself parse-error-resilient is a tracked
+  `@jeswr/solid-memory` follow-up.
 - **No remote fetch / no SSRF surface.** The adapter introduces no network call of its own — the
   only egress is the injected, already-authenticated pod `fetch` — so `@jeswr/guarded-fetch` is not
   needed (there is no outbound URL the adapter chooses).

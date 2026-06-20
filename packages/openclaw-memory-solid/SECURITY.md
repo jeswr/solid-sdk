@@ -47,16 +47,26 @@ than an invented one.
 
 ### Untrusted record drop-not-fatal
 Pod contents are untrusted input (a hostile or buggy server, or another app, can write anything
-into the container). `@jeswr/solid-memory` hardens reads:
-- A member that is not a valid `mem:MemoryItem` (garbage Turtle, wrong type) parses to `null` and is
-  **skipped** by `all()` / `list()` — never aborting the listing.
-- An object-property value (e.g. `prov:wasAttributedTo`) that is **not** an absolute http(s) IRI
-  (`javascript:`, `mailto:`, a relative ref) is **dropped on read**, so a hostile IRI is never
-  surfaced to a consumer that might render it as a link.
+into the container). Two distinct failure modes, with two homes:
 
-The adapter relies on and re-asserts this: `recall` / `list` / `get` never throw out of a listing
-for a bad member, and never surface a hostile IRI. This is regression-tested (a container holding a
-good memory + a garbage member + a member with a `javascript:` attribution).
+- **Wrong-type / hostile-IRI body — handled by `@jeswr/solid-memory`.** A member whose body parses
+  but is not a `mem:MemoryItem` reads as `null` and is skipped; an object-property value (e.g.
+  `prov:wasAttributedTo`) that is **not** an absolute http(s) IRI (`javascript:`, `mailto:`, a
+  relative ref) is **dropped on read**, so a hostile IRI is never surfaced to a consumer that might
+  render it as a link.
+- **Un-parseable body — handled by THIS adapter.** A member whose body fails to parse (garbage
+  Turtle / a syntax error) makes `@jeswr/solid-memory`'s `MemoryStore.get()` **throw**, and its
+  `all()` does not guard per-member — so one poisoned member would abort an entire `recall` / `list`
+  (an availability hole: any writer to the container could deny an agent all recall). The adapter
+  therefore does **not** delegate bulk reads to `all()`; its `recall` / `list` list members and parse
+  each individually, **dropping** a member that throws a parse error while **re-throwing a genuine
+  network / server error** (a real outage must not be silently swallowed). `get(id)` of a single
+  un-parseable resource likewise returns `null`, never a crash.
+
+Both are regression-tested: a container holding a good memory + a garbage (un-parseable) member + a
+member with a `javascript:` attribution; recall/list return only the good memory and never surface
+the hostile IRI; and a member that 5xxes is asserted to re-throw (not silently drop). Making
+`MemoryStore.all()` itself parse-error-resilient is a tracked `@jeswr/solid-memory` follow-up.
 
 ### Hard delete (no tombstone yet)
 `forget` is a hard `DELETE`. `@jeswr/solid-memory` has no `prov:invalidatedAt` tombstone write API
