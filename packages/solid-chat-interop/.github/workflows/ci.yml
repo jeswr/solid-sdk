@@ -1,0 +1,32 @@
+# AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+# CI gate mirroring the suite pattern: lint + typecheck + test + build + the two
+# drift guards (check:dist, check:lockfile-transport). NOTE: GitHub Actions is
+# account-billing-blocked across the suite right now, so this won't run yet — we
+# gate locally + roborev and commit anyway, so it's live the moment billing is
+# restored.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      # ignore-scripts is set in .npmrc; `npm ci` installs the committed lockfile
+      # exactly. The off-npm @jeswr/solid-task-model dep ships a committed dist/
+      # so it needs no build step.
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run test
+      - run: npm run build
+      - run: npm run check:dist
+      - run: npm run check:lockfile-transport

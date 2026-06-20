@@ -1,0 +1,31 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jeswr/full-solid-ecosystem/main/tracking/schema/suite.schema.json",
+  "id": "solid-chat-interop",
+  "kind": "package",
+  "name": "Solid Chat Interop",
+  "repo": "https://github.com/jeswr/solid-chat-interop",
+  "category": "interop",
+  "maturity": "alpha",
+  "visibility": "public",
+  "stack": {
+    "lang": "TypeScript (ESM, NodeNext)",
+    "runtime": "Node >=20",
+    "rdf": "n3 ^2.x",
+    "rdf-wrapper": "@rdfjs/wrapper ^0.34.x",
+    "fetch-rdf": "@jeswr/fetch-rdf ^0.1",
+    "task-model": "@jeswr/solid-task-model (git, pinned)",
+    "test": "vitest ^4.x",
+    "lint": "@biomejs/biome ^2.x",
+    "node": ">=20"
+  },
+  "dependsOn": [
+    "pod-chat",
+    "solid-task-model"
+  ],
+  "federation": {
+    "sectors": ["communication", "chat"],
+    "produces": ["chat"],
+    "consumes": ["chat"],
+    "note": "The chat/conversation interop RECONCILER between the suite's three chat shapes — ActivityStreams 2.0 (the canonical write model, exactly what @jeswr/pod-chat produces: as:Note/as:Collection/as:attributedTo/as:published/as:inReplyTo/as:mediaType, the wf:Task actionable overlay carried through), SolidOS meeting:LongChat (the installed-base read: sioc:content/foaf:maker/dct:created, dct:isReplacedBy edit, schema:dateDeleted delete), and an external-schema adapter seam with one concrete LibreChat adapter (text/createdAt/sender/conversationId/parentMessageId/model → AS2.0, AI messages → prov: attribution, no LibreChat-private field leaks). Mints NO new chat predicate; reuses pod-chat's pc:ChatRoom and the @jeswr/solid-task-model wf:Task overlay so an actionable message is the SAME shape solid-issues/PM read. Pure-RDF, non-server-touching; untrusted IRIs filtered http(s)-only on read AND write. GitHub-installable now (committed dist/, ignore-scripts=true); npm publish is a deferred migration."
+  }
+}
