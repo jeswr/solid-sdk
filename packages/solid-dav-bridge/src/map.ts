@@ -184,26 +184,65 @@ export function veventToEvent(component: Component, options: VeventToEventOption
 // --- vCard → ContactData ---
 
 /**
- * A conservative email-address allowlist for the `mailto:` IRI value: a local
- * part of common atom characters, exactly one `@`, and a dotted domain of
- * letters/digits/hyphens. This deliberately REJECTS characters that are illegal
- * in a `mailto:` URI (e.g. `<`, `>`, `"`, `(`, `)`, `[`, `]`, `,`, `;`, `:`,
- * whitespace, control chars) so a malformed/hostile address is dropped rather
- * than passed through as a malformed IRI to the contact serializer. It does not
- * try to be a full RFC 5322 validator — it errs on the side of dropping the
- * unusual rather than emitting an invalid IRI.
+ * A conservative email-address allowlist: an RFC 5322 `atext` local part (the
+ * common atom characters), exactly one `@`, and a dotted domain of
+ * letters/digits/hyphens. This REJECTS characters that cannot appear in an email
+ * at all (e.g. `<`, `>`, `"`, `(`, `)`, `[`, `]`, `,`, `;`, `:`, whitespace,
+ * control chars) so a malformed/hostile address is dropped rather than handed on.
+ * It is intentionally not a full RFC 5322 validator — it errs on the side of
+ * dropping the unusual.
+ *
+ * NOTE: some atext characters that are LEGAL in an email (`#`, `%`, `` ` ``, `{`,
+ * `|`, `}`, `/`, `?`, `&`, `=`, `+`) are NOT safe UNESCAPED in a `mailto:` IRI, so
+ * {@link toMailto} percent-encodes the local part for the IRI — the address passes
+ * the allowlist, but the emitted IRI is always well-formed (no raw IRI-illegal char
+ * ever reaches the serializer).
  */
 const EMAIL_RE =
   /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?)+$/;
 
-/** Normalise a raw email address to a canonical `mailto:` IRI, or `undefined`. */
+/**
+ * The characters RFC 6068 §2 allows UNESCAPED in a `mailto:` addr-spec local part
+ * (`unreserved` + the `some-delims` subset that does not break URI parsing). Any
+ * other (still email-legal) atext char — `#`, `%`, `/`, `?`, `&`, `=`, `+`,
+ * `` ` ``, `{`, `|`, `}` — is percent-encoded. (`@` is the separator and is never
+ * in the local part here; the domain is hostname-restricted by EMAIL_RE.)
+ */
+const MAILTO_LOCAL_SAFE = /[A-Za-z0-9!$'*\-.^_~]/;
+
+/** Percent-encode one character (its UTF-8 bytes) for a URI. */
+function pctEncodeChar(ch: string): string {
+  let out = "";
+  const bytes = new TextEncoder().encode(ch);
+  for (const b of bytes) out += `%${b.toString(16).toUpperCase().padStart(2, "0")}`;
+  return out;
+}
+
+/** Percent-encode any non-{@link MAILTO_LOCAL_SAFE} char in a mailto local part. */
+function encodeMailtoLocal(local: string): string {
+  let out = "";
+  for (const ch of local) out += MAILTO_LOCAL_SAFE.test(ch) ? ch : pctEncodeChar(ch);
+  return out;
+}
+
+/**
+ * Normalise a raw email address to a WELL-FORMED canonical `mailto:` IRI, or
+ * `undefined`. The address must pass {@link EMAIL_RE}; the local part is then
+ * percent-encoded for the IRI so no IRI-illegal character (e.g. `#`, `%`, `` ` ``)
+ * is ever emitted unescaped (the domain is already hostname-restricted).
+ */
 function toMailto(raw: string): string | undefined {
   const addr = raw
     .trim()
     .replace(/^mailto:/i, "")
     .trim();
   if (!EMAIL_RE.test(addr)) return undefined;
-  return `mailto:${addr}`;
+  // Split on the LAST '@' (the local part of EMAIL_RE has no '@', so there is
+  // exactly one, but be defensive).
+  const at = addr.lastIndexOf("@");
+  const local = addr.slice(0, at);
+  const domain = addr.slice(at + 1);
+  return `mailto:${encodeMailtoLocal(local)}@${domain}`;
 }
 
 /**

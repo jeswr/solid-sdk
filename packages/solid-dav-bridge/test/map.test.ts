@@ -188,4 +188,31 @@ describe("vcardToContact", () => {
     expect(JSON.stringify(data)).not.toContain("<inject>");
     expect(JSON.stringify(data)).not.toContain(" ");
   });
+
+  it("REGRESSION: percent-encodes email-legal-but-IRI-unsafe local chars in the mailto IRI", () => {
+    // `#`, `%`, `` ` ``, `{`, `|`, `}`, `?`, `&`, `=`, `/`, `+` are valid in an email
+    // local part but NOT safe unescaped in a mailto: IRI — they must be percent-encoded,
+    // never emitted raw (which would be a malformed/ambiguous IRI).
+    const vcf = "BEGIN:VCARD\r\nFN:Hash\r\nEMAIL:a#b%c`d{e|f}g?h@example.com\r\nEND:VCARD";
+    const { data } = vcardToContact(firstVcard(vcf));
+    const email = data.emails?.[0] ?? "";
+    expect(email.startsWith("mailto:")).toBe(true);
+    // the raw special chars do not appear after `mailto:`
+    for (const bad of ["#", "%c", "`", "{", "|", "}", "?"]) {
+      // (note: `%c` not `%` alone, since `%` becomes the literal `%25`)
+      expect(email).not.toContain(bad);
+    }
+    // they were percent-encoded (e.g. # → %23, % → %25, ? → %3F)
+    expect(email).toContain("%23"); // #
+    expect(email).toContain("%25"); // %
+    expect(email).toContain("%3F"); // ?
+    // the domain is untouched
+    expect(email.endsWith("@example.com")).toBe(true);
+  });
+
+  it("a plain email is NOT encoded (round-trips cleanly)", () => {
+    const vcf = "BEGIN:VCARD\r\nFN:Plain\r\nEMAIL:first.last@sub.example.com\r\nEND:VCARD";
+    const { data } = vcardToContact(firstVcard(vcf));
+    expect(data.emails).toEqual(["mailto:first.last@sub.example.com"]);
+  });
 });
