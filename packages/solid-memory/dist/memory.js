@@ -141,14 +141,22 @@ export function parseMemory(resourceUrl, dataset) {
     const data = { text: doc.text ?? "" };
     setIfDefined(data, "created", doc.created);
     setIfDefined(data, "modified", doc.modified);
-    setIfDefined(data, "about", doc.about);
-    setIfDefined(data, "attributedTo", doc.attributedTo);
-    setIfDefined(data, "generatedBy", doc.generatedBy);
-    setIfDefined(data, "embeddingRef", doc.embeddingRef);
+    // Object-property fields are filtered the SAME way on READ as on write
+    // (httpIriOrUndefined): pod data is untrusted input, so a hostile resource that
+    // stores a `javascript:` / `mailto:` / `urn:` IRI as a NamedNode object on
+    // about/attributedTo/generatedBy/embeddingRef must not surface it to a consumer
+    // (which might render it as a link). A non-http(s) value is dropped, matching
+    // buildMemory's write-side filter so the read/write trust boundary is symmetric.
+    setIfDefined(data, "about", httpIriOrUndefined(doc.about));
+    setIfDefined(data, "attributedTo", httpIriOrUndefined(doc.attributedTo));
+    setIfDefined(data, "generatedBy", httpIriOrUndefined(doc.generatedBy));
+    setIfDefined(data, "embeddingRef", httpIriOrUndefined(doc.embeddingRef));
     // The two set-valued fields are omitted when empty (their absence vs an empty
-    // array is observable to consumers, so this is kept explicit).
+    // array is observable to consumers, so this is kept explicit). Categories are
+    // IRIs, so a non-http(s) category read from a hostile pod is dropped too;
+    // keywords are free-text literals and are kept verbatim.
     const keywords = [...doc.keywords];
-    const categories = [...doc.categories];
+    const categories = [...doc.categories].filter(isHttpIri);
     if (keywords.length > 0)
         data.keywords = keywords;
     if (categories.length > 0)

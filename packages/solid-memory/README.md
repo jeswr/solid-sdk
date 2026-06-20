@@ -170,9 +170,11 @@ time-window filter.
   ACL is the **consumer's** job — this library carries data only (it does NOT set ACLs,
   hold credentials, or talk crypto). Consumers should default new memory containers to
   owner-only and expose a "see / delete / forget" view.
-- **Untrusted-input IRI filtering.** Object-property values that aren't absolute
-  `http(s)` IRIs are dropped on write (no `javascript:` / `mailto:` / bare strings ever
-  reach a `NamedNode` or a UI link).
+- **Untrusted-input IRI filtering — symmetric on read AND write.** Object-property
+  values that aren't absolute `http(s)` IRIs are dropped both when building/serialising
+  a memory **and** when parsing one read back from the pod, so a hostile resource that
+  stores a `javascript:` / `mailto:` / `urn:` IRI as a NamedNode can never surface it to
+  a consumer (which might render it as a link).
 - **Scope guard.** The store can never touch a foreign origin or escape its container,
   even if a hostile/buggy server injects a foreign URL into a listing.
 - **Never hand-built triples.** All RDF goes through the model (typed `@rdfjs/wrapper`

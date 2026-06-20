@@ -1,4 +1,6 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import type { MemoryData } from "./memory.js";
 import { serializeMemory } from "./memory.js";
@@ -76,6 +78,16 @@ function makePod() {
 
   return { store, fetchImpl };
 }
+
+describe("browser-safety", () => {
+  it("does not import any node: module (usable in a browser Solid client)", () => {
+    const src = readFileSync(fileURLToPath(new URL("./store.ts", import.meta.url)), "utf8");
+    // crypto.randomUUID() is the WHATWG Web Crypto global, present in Node >=20 and
+    // every browser; a `node:` import would break a browser bundle.
+    expect(src).not.toMatch(/from\s+["']node:/);
+    expect(src).toContain("crypto.randomUUID()");
+  });
+});
 
 describe("MemoryStore constructor", () => {
   it("rejects a non-http(s) container", () => {
@@ -181,6 +193,28 @@ describe("update", () => {
     const { url, etag } = await s.create({ text: "v1" });
     const res = await s.update(url, { text: "v2" }, { ifMatch: etag });
     expect(res.etag).toBeDefined();
+  });
+
+  it("preserves the original dct:created when the caller omits it", async () => {
+    const { fetchImpl } = makePod();
+    const s = new MemoryStore({ container: CONTAINER, fetch: fetchImpl });
+    const created = new Date("2020-01-02T03:04:05.000Z");
+    const { url } = await s.create({ text: "v1", created });
+    await s.update(url, { text: "v2" }); // no `created` supplied
+    const got = await s.get(url);
+    expect(got?.data.created?.toISOString()).toBe(created.toISOString());
+    // modified moved forward; created did not.
+    expect(got?.data.modified?.getTime()).toBeGreaterThan(created.getTime());
+  });
+
+  it("an explicit created on update wins (caller is authoritative)", async () => {
+    const { fetchImpl } = makePod();
+    const s = new MemoryStore({ container: CONTAINER, fetch: fetchImpl });
+    const { url } = await s.create({ text: "v1", created: new Date("2020-01-01T00:00:00.000Z") });
+    const newCreated = new Date("2021-06-06T00:00:00.000Z");
+    await s.update(url, { text: "v2", created: newCreated });
+    const got = await s.get(url);
+    expect(got?.data.created?.toISOString()).toBe(newCreated.toISOString());
   });
 });
 

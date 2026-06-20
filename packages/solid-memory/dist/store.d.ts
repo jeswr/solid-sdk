@@ -81,6 +81,12 @@ export declare class MemoryStore {
      * (an optimistic-concurrency conditional write — fails if the resource changed
      * since that ETag).
      *
+     * **Preserves the original `dct:created`.** A PUT replaces the whole resource, and
+     * `buildMemory` defaults a missing `created` to now — so if the caller omits
+     * `created`, the store reads the existing resource first and carries its original
+     * `created` forward, rather than silently rewriting the creation timestamp to the
+     * update time. An explicit `data.created` always wins (the caller is authoritative).
+     *
      * @throws if the target is outside the container, or on any non-ok response
      *   (incl. a 412 precondition failure).
      */

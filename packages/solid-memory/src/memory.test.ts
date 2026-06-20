@@ -88,6 +88,32 @@ describe("http(s)-IRI scope filtering on object properties", () => {
     const parsed = await parseMemoryTtl(URL_, ttl, "text/turtle");
     expect(new Set(parsed?.keywords)).toEqual(new Set(data.keywords));
   });
+
+  it("drops non-http(s) object-property IRIs stored by a HOSTILE pod on READ", async () => {
+    // A hostile resource that puts non-http(s) NamedNode objects directly into the
+    // graph (bypassing buildMemory's write-side filter). parseMemory must apply the
+    // SAME http(s)-only filter on read so it never surfaces a javascript:/mailto:/urn:
+    // IRI to a consumer (which might render it as a link).
+    const body = `@prefix mem: <https://w3id.org/jeswr/memory#> .
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix schema: <http://schema.org/> .
+<${URL_}#it> a mem:MemoryItem ;
+  schema:text "hostile" ;
+  dct:subject <javascript:alert(1)> ;
+  prov:wasAttributedTo <mailto:evil@x.y> ;
+  prov:wasGeneratedBy <urn:uuid:abc> ;
+  mem:embeddingRef <javascript:steal()> ;
+  schema:about <https://ok.example/cat>, <javascript:bad>, <mailto:c@d.e> .`;
+    const parsed = await parseMemoryTtl(URL_, body, "text/turtle");
+    expect(parsed).toBeDefined();
+    expect(parsed?.about).toBeUndefined();
+    expect(parsed?.attributedTo).toBeUndefined();
+    expect(parsed?.generatedBy).toBeUndefined();
+    expect(parsed?.embeddingRef).toBeUndefined();
+    // Only the single valid http(s) category survives.
+    expect(parsed?.categories).toEqual(["https://ok.example/cat"]);
+  });
 });
 
 describe("the not-siloed memory↔chat link", () => {

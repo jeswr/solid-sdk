@@ -19,7 +19,6 @@
  * Type-Index registration (the typed `TermWrapper` below). NEVER hand-built triples.
  */
 
-import { randomUUID } from "node:crypto";
 import { parseRdf } from "@jeswr/fetch-rdf";
 import {
   NamedNodeAs,
@@ -124,7 +123,11 @@ export class MemoryStore {
    * @throws if the server rejects the write (incl. a 412 collision).
    */
   async create(data: MemoryData): Promise<{ url: string; etag?: string }> {
-    const url = `${this.container}${randomUUID()}`;
+    // Use the WHATWG Web Crypto global `crypto.randomUUID()` (present in Node >=20
+    // and every browser) rather than `node:crypto` — so the store entry point stays
+    // usable in browser Solid clients, matching its fetch-injected, pure-LDP-client
+    // contract.
+    const url = `${this.container}${crypto.randomUUID()}`;
     // Defence in depth: a minted URL is always under the container, but assert it.
     assertWithinBase(this.container, url);
     const body = await this.serialize(url, data);
@@ -173,6 +176,12 @@ export class MemoryStore {
    * (an optimistic-concurrency conditional write — fails if the resource changed
    * since that ETag).
    *
+   * **Preserves the original `dct:created`.** A PUT replaces the whole resource, and
+   * `buildMemory` defaults a missing `created` to now — so if the caller omits
+   * `created`, the store reads the existing resource first and carries its original
+   * `created` forward, rather than silently rewriting the creation timestamp to the
+   * update time. An explicit `data.created` always wins (the caller is authoritative).
+   *
    * @throws if the target is outside the container, or on any non-ok response
    *   (incl. a 412 precondition failure).
    */
@@ -182,7 +191,14 @@ export class MemoryStore {
     opts?: { ifMatch?: string },
   ): Promise<{ etag?: string }> {
     assertWithinBase(this.container, url);
-    const withModified: MemoryData = { ...data, modified: new Date() };
+    // Preserve the original creation timestamp when the caller doesn't supply one,
+    // so a PUT-based update only changes `modified`, never `created`.
+    let created = data.created;
+    if (created === undefined) {
+      const existing = await this.get(url);
+      created = existing?.data.created;
+    }
+    const withModified: MemoryData = { ...data, created, modified: new Date() };
     const body = await this.serialize(url, withModified);
     const headers: Record<string, string> = { "content-type": "text/turtle" };
     if (opts?.ifMatch) headers["if-match"] = opts.ifMatch;
