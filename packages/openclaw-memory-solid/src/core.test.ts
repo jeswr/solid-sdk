@@ -448,3 +448,56 @@ describe("un-parseable body is drop-not-fatal (regression: MemoryStore.all() abo
     await expect(adapter.recall("anything")).rejects.toThrow();
   });
 });
+
+describe("parse-error detection walks a wrapped cause chain but stays narrow", () => {
+  // A minimal MemoryStore-shaped stub whose `get` throws a chosen error, so we can
+  // exercise the adapter's cause-chain parse-error classification directly.
+  function adapterWhoseGetThrows(err: unknown): SolidMemoryAdapter {
+    const member = `${CONTAINER}m1`;
+    const stub = {
+      container: CONTAINER,
+      async list() {
+        return [{ url: member, container: false }];
+      },
+      async get() {
+        throw err;
+      },
+      async delete() {
+        throw err;
+      },
+    } as unknown as MemoryStore;
+    return new SolidMemoryAdapter({ memoryStore: stub });
+  }
+
+  it("DROPS a WRAPPED RdfFetchError (cause chain), so list/get survive", async () => {
+    const rdfErr = new Error(
+      "Failed to parse text/turtle body at https://alice.pod/agent/memories/m1.",
+    );
+    rdfErr.name = "RdfFetchError";
+    const wrapped = new Error("reading member failed", { cause: rdfErr });
+    const adapter = adapterWhoseGetThrows(wrapped);
+    // The wrapped parse error is recognised and dropped: list() does not throw.
+    expect(await adapter.list()).toEqual([]);
+    // get() of that resource collapses to null (drop-not-fatal), never a crash.
+    expect(await adapter.get(`${CONTAINER}m1`)).toBeNull();
+  });
+
+  it("RE-THROWS a wrapped GENUINE network error (no parse link anywhere in the chain)", async () => {
+    const netErr = new Error("getaddrinfo ENOTFOUND alice.pod");
+    netErr.name = "FetchError";
+    const wrapped = new Error("request failed", { cause: netErr });
+    const adapter = adapterWhoseGetThrows(wrapped);
+    // No parse-typed link in the chain → the outage is surfaced, not swallowed.
+    await expect(adapter.list()).rejects.toThrow();
+    await expect(adapter.get(`${CONTAINER}m1`)).rejects.toThrow();
+  });
+
+  it("does NOT broad-match a network error that merely contains the word 'syntax'", async () => {
+    // A network/server error whose message coincidentally contains "syntax" must
+    // NOT be misclassified as a parse error (the Finding-2 regression guard).
+    const sneaky = new Error("upstream 500: gateway syntax check service unavailable");
+    sneaky.name = "FetchError";
+    const adapter = adapterWhoseGetThrows(sneaky);
+    await expect(adapter.list()).rejects.toThrow();
+  });
+});

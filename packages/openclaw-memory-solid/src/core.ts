@@ -415,25 +415,38 @@ function isScopeError(err: unknown): boolean {
  * (drop-not-fatal), never crash a `recall` / `list` / `get`.
  *
  * Detection is deliberately NARROW so it never swallows a genuine network / server
- * failure (which `get` / `allResilient` must re-throw): we match ONLY the typed
- * `RdfFetchError` (by name, the stable contract of `@jeswr/fetch-rdf`) or its exact
- * "Failed to parse" wrapper message. We do NOT broad-match generic N3 wording
- * ("Unexpected" / "syntax") on the TOP-LEVEL error — a server/network error message
- * could coincidentally contain those words. The N3 lexer wording is only consulted
- * on the `cause` of an already-identified parse wrapper, which is purely defensive
- * (a future `@jeswr/fetch-rdf` that surfaces the raw N3 error directly is still
- * caught) and cannot reach a network error (a network error has no parse `cause`).
+ * failure (which `get` / `allResilient` must re-throw):
+ * - each error in the chain is matched ONLY by the typed `RdfFetchError` name (the
+ *   stable contract of `@jeswr/fetch-rdf`), its exact "Failed to parse" wrapper
+ *   message, or a raw N3 `SyntaxError` carrying the lexer's `"…on line N"` wording;
+ * - we do NOT broad-match generic words ("Unexpected" / "syntax") — a server /
+ *   network error message could coincidentally contain those, and broad-matching is
+ *   what would let a real outage be silently dropped.
+ *
+ * The chain is walked because the parse error may be WRAPPED: `MemoryStore.get`
+ * surfaces the `RdfFetchError` directly today, but a caller could wrap it (its
+ * `cause` being the `RdfFetchError`, whose own `cause` is the N3 error). Walking a
+ * bounded `cause` chain keeps the drop robust to wrapping while staying narrow — a
+ * network error has no parse-typed link anywhere in its chain.
  */
 function isParseError(err: unknown): boolean {
-  if (!(err instanceof Error)) return false;
-  const name = err.name ?? "";
-  const msg = err.message ?? "";
-  // The typed, stable signal: @jeswr/fetch-rdf's RdfFetchError wrapper.
-  if (name === "RdfFetchError" || msg.includes("Failed to parse")) return true;
-  // Defensive only: if @jeswr/fetch-rdf ever throws the raw N3 syntax error
-  // (name "SyntaxError" or an "...on line N" lexer message) directly rather than
-  // wrapping it, still recognise it. This is narrow N3-syntax wording, NOT a
-  // generic substring match, and a network error never carries it.
-  if (name === "SyntaxError" && /\bon line \d+\b/.test(msg)) return true;
+  const isNarrowParse = (e: unknown): boolean => {
+    if (!(e instanceof Error)) return false;
+    const name = e.name ?? "";
+    const msg = e.message ?? "";
+    // The typed, stable signal: @jeswr/fetch-rdf's RdfFetchError wrapper.
+    if (name === "RdfFetchError" || msg.includes("Failed to parse")) return true;
+    // The raw N3 syntax error (if surfaced directly): narrow N3-syntax wording with
+    // the lexer's line-number pattern, NOT a generic substring — a network error
+    // never carries it.
+    if (name === "SyntaxError" && /\bon line \d+\b/.test(msg)) return true;
+    return false;
+  };
+  // Walk a bounded cause chain (depth cap guards a cyclic `cause`).
+  let cursor: unknown = err;
+  for (let depth = 0; depth < 5 && cursor instanceof Error; depth++) {
+    if (isNarrowParse(cursor)) return true;
+    cursor = (cursor as { cause?: unknown }).cause;
+  }
   return false;
 }
