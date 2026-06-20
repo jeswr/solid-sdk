@@ -189,25 +189,22 @@ describe("vcardToContact", () => {
     expect(JSON.stringify(data)).not.toContain(" ");
   });
 
-  it("REGRESSION: percent-encodes email-legal-but-IRI-unsafe local chars in the mailto IRI", () => {
-    // `#`, `%`, `` ` ``, `{`, `|`, `}`, `?`, `&`, `=`, `/`, `+` are valid in an email
-    // local part but NOT safe unescaped in a mailto: IRI — they must be percent-encoded,
-    // never emitted raw (which would be a malformed/ambiguous IRI).
-    const vcf = "BEGIN:VCARD\r\nFN:Hash\r\nEMAIL:a#b%c`d{e|f}g?h@example.com\r\nEND:VCARD";
+  it("REGRESSION: percent-encodes EVERY email-legal-but-IRI-unsafe local char", () => {
+    // Each of these is valid in an RFC 5322 email local part but NOT safe unescaped
+    // in a mailto: IRI, so each MUST be percent-encoded (never emitted raw). The
+    // fixture includes the full set the doc-comment claims (#, %, `, {, |, }, ?, &,
+    // =, /, +) and the test asserts the EXACT resulting mailto: value, so a future
+    // change that stops encoding any one of them fails here.
+    const local = "a#b%c`d{e|f}g?h&i=j/k+l";
+    const vcf = `BEGIN:VCARD\r\nFN:Hash\r\nEMAIL:${local}@example.com\r\nEND:VCARD`;
     const { data } = vcardToContact(firstVcard(vcf));
-    const email = data.emails?.[0] ?? "";
-    expect(email.startsWith("mailto:")).toBe(true);
-    // the raw special chars do not appear after `mailto:`
-    for (const bad of ["#", "%c", "`", "{", "|", "}", "?"]) {
-      // (note: `%c` not `%` alone, since `%` becomes the literal `%25`)
-      expect(email).not.toContain(bad);
+    // expected: every unsafe char → its %HH, the safe ones (a..l, .) left intact.
+    const expected = "mailto:a%23b%25c%60d%7Be%7Cf%7Dg%3Fh%26i%3Dj%2Fk%2Bl@example.com";
+    expect(data.emails).toEqual([expected]);
+    // none of the raw unsafe chars survive after `mailto:`
+    for (const bad of ["#", "`", "{", "|", "}", "?", "&", "=", "/", "+"]) {
+      expect(data.emails?.[0]).not.toContain(bad);
     }
-    // they were percent-encoded (e.g. # → %23, % → %25, ? → %3F)
-    expect(email).toContain("%23"); // #
-    expect(email).toContain("%25"); // %
-    expect(email).toContain("%3F"); // ?
-    // the domain is untouched
-    expect(email.endsWith("@example.com")).toBe(true);
   });
 
   it("a plain email is NOT encoded (round-trips cleanly)", () => {
