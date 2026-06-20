@@ -132,23 +132,36 @@ export class MemoryStore {
      * (an optimistic-concurrency conditional write — fails if the resource changed
      * since that ETag).
      *
-     * **Preserves the original `dct:created`.** A PUT replaces the whole resource, and
-     * `buildMemory` defaults a missing `created` to now — so if the caller omits
-     * `created`, the store reads the existing resource first and carries its original
-     * `created` forward, rather than silently rewriting the creation timestamp to the
-     * update time. An explicit `data.created` always wins (the caller is authoritative).
+     * **Best-effort `dct:created` preservation.** A PUT replaces the whole resource, and
+     * `buildMemory` defaults a missing `created` to now — so when the caller omits
+     * `created`, the store makes a BEST-EFFORT read of the existing resource to carry its
+     * original `created` forward (rather than rewriting it to the update time). The read
+     * is best-effort by design: if it fails — no read permission (a write-only caller),
+     * a missing/malformed/410 resource — the PUT still proceeds, and `created` defaults
+     * to now (the documented `buildMemory` behaviour). For a read-restricted context
+     * where preservation MUST be guaranteed, pass `data.created` explicitly — an explicit
+     * value always wins and skips the pre-read entirely (the caller is authoritative).
      *
-     * @throws if the target is outside the container, or on any non-ok response
-     *   (incl. a 412 precondition failure).
+     * @throws if the target is outside the container, or on the PUT's own non-ok
+     *   response (incl. a 412 precondition failure). A failing best-effort pre-read does
+     *   NOT throw — it never blocks the write.
      */
     async update(url, data, opts) {
         assertWithinBase(this.container, url);
-        // Preserve the original creation timestamp when the caller doesn't supply one,
-        // so a PUT-based update only changes `modified`, never `created`.
+        // Best-effort preservation of the original creation timestamp when the caller
+        // doesn't supply one. NEVER block the PUT on the read: a write-only caller, or an
+        // unreadable/malformed existing resource, must still be able to update.
         let created = data.created;
         if (created === undefined) {
-            const existing = await this.get(url);
-            created = existing?.data.created;
+            try {
+                const existing = await this.get(url);
+                created = existing?.data.created;
+            }
+            catch {
+                // No read permission / unreadable resource — fall through; `created` will
+                // default to now in buildMemory (documented). Pass `created` explicitly to
+                // guarantee preservation in a read-restricted context.
+            }
         }
         const withModified = { ...data, created, modified: new Date() };
         const body = await this.serialize(url, withModified);

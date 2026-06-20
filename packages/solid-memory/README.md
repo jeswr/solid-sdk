@@ -117,6 +117,12 @@ const hits = await store.search({ text: "dark" });                   // all() + 
 - **Conditional writes.** `create` is a conditional create (`If-None-Match: *` — a 412
   collision surfaces as a thrown error). `update`/`delete` accept `{ ifMatch }` for
   optimistic concurrency (a stale ETag → a thrown 412).
+- **`update` preserves `created` (best-effort).** A PUT replaces the whole resource, so
+  when you omit `created`, `update` makes a *best-effort* read of the existing resource
+  to carry its original `dct:created` forward rather than rewriting it to now. The read
+  never blocks the write — a write-only caller or an unreadable resource still updates
+  (then `created` defaults to now). Pass `created` explicitly to guarantee preservation
+  in a read-restricted context; an explicit value always wins.
 - **Scope guard on every op.** Every target URL (and every listed member) is asserted
   to lie under `container` *before* any request — a foreign-origin / escaping URL throws
   and issues **no** network request. Defence in depth against a hostile / buggy server.

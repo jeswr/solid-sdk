@@ -81,14 +81,19 @@ export declare class MemoryStore {
      * (an optimistic-concurrency conditional write — fails if the resource changed
      * since that ETag).
      *
-     * **Preserves the original `dct:created`.** A PUT replaces the whole resource, and
-     * `buildMemory` defaults a missing `created` to now — so if the caller omits
-     * `created`, the store reads the existing resource first and carries its original
-     * `created` forward, rather than silently rewriting the creation timestamp to the
-     * update time. An explicit `data.created` always wins (the caller is authoritative).
+     * **Best-effort `dct:created` preservation.** A PUT replaces the whole resource, and
+     * `buildMemory` defaults a missing `created` to now — so when the caller omits
+     * `created`, the store makes a BEST-EFFORT read of the existing resource to carry its
+     * original `created` forward (rather than rewriting it to the update time). The read
+     * is best-effort by design: if it fails — no read permission (a write-only caller),
+     * a missing/malformed/410 resource — the PUT still proceeds, and `created` defaults
+     * to now (the documented `buildMemory` behaviour). For a read-restricted context
+     * where preservation MUST be guaranteed, pass `data.created` explicitly — an explicit
+     * value always wins and skips the pre-read entirely (the caller is authoritative).
      *
-     * @throws if the target is outside the container, or on any non-ok response
-     *   (incl. a 412 precondition failure).
+     * @throws if the target is outside the container, or on the PUT's own non-ok
+     *   response (incl. a 412 precondition failure). A failing best-effort pre-read does
+     *   NOT throw — it never blocks the write.
      */
     update(url: string, data: MemoryData, opts?: {
         ifMatch?: string;

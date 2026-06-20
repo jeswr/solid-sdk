@@ -216,6 +216,38 @@ describe("update", () => {
     const got = await s.get(url);
     expect(got?.data.created?.toISOString()).toBe(newCreated.toISOString());
   });
+
+  it("the best-effort pre-read NEVER blocks the PUT (write-only / unreadable resource)", async () => {
+    // A pod where GET is forbidden (403) but PUT succeeds — a write-only caller.
+    const written = new Map<string, string>();
+    const writeOnly: typeof globalThis.fetch = async (input, init) => {
+      const url = typeof input === "string" ? input : input.toString();
+      const method = (init?.method ?? "GET").toUpperCase();
+      if (method === "GET") return new Response(null, { status: 403 });
+      if (method === "PUT") {
+        written.set(url, typeof init?.body === "string" ? init.body : "");
+        return new Response(null, { status: 205, headers: { etag: '"e"' } });
+      }
+      return new Response(null, { status: 405 });
+    };
+    const s = new MemoryStore({ container: CONTAINER, fetch: writeOnly });
+    const url = `${CONTAINER}x`;
+    // No created supplied → the pre-read 403s; the update must still proceed.
+    const res = await s.update(url, { text: "v2" });
+    expect(res.etag).toBe('"e"');
+    expect(written.has(url)).toBe(true);
+  });
+
+  it("the best-effort pre-read tolerates a missing (404) resource without throwing", async () => {
+    const { fetchImpl } = makePod();
+    const s = new MemoryStore({ container: CONTAINER, fetch: fetchImpl });
+    const url = `${CONTAINER}never-created`;
+    // get() returns null (404); update must still PUT (created defaults to now).
+    await expect(s.update(url, { text: "fresh" })).resolves.toBeDefined();
+    const got = await s.get(url);
+    expect(got?.data.text).toBe("fresh");
+    expect(got?.data.created).toBeInstanceOf(Date);
+  });
 });
 
 describe("delete", () => {
