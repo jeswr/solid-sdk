@@ -108,6 +108,21 @@ describe("ingestGranary", () => {
     }
   });
 
+  it("rejects a slug that resolves to the container itself (no PUT to the container)", async () => {
+    for (const evil of ["", ".", "/", "//"]) {
+      const { fetchFn, calls } = recordingFetch();
+      await expect(
+        ingestGranary(mastodonNote, {
+          writeFetch: fetchFn,
+          container: CONTAINER,
+          slug: () => evil,
+        }),
+      ).rejects.toThrow(/slug/);
+      // never issued a PUT to the container
+      expect(calls).toHaveLength(0);
+    }
+  });
+
   it("writes the LongChat shape when format=longchat", async () => {
     const { fetchFn, calls } = recordingFetch();
     await ingestGranary(mastodonNote, {

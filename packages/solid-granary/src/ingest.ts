@@ -140,12 +140,17 @@ function resourceUrl(container: string, slug: string): string {
   // Resolve relative to the container so a slug cannot escape it (`..`/absolute);
   // strip any leading `/` to keep it container-relative.
   const cleaned = slug.replace(/^\/+/, "").replace(UNSAFE_SLUG, "-");
-  const resolved = new URL(cleaned, base);
-  // Defence-in-depth: the resolved URL MUST stay under the container.
-  if (!resolved.toString().startsWith(base)) {
-    throw new Error(`slug "${slug}" resolves outside the container ${base}`);
+  if (cleaned.length === 0) {
+    throw new Error(`slug "${slug}" is empty after sanitisation (would target the container)`);
   }
-  return resolved.toString();
+  const resolved = new URL(cleaned, base).toString();
+  // Defence-in-depth: the resolved URL MUST stay STRICTLY under the container — a
+  // slug of "" / "." / "/" / "./" resolves to the container URL itself, which would
+  // PUT to the container rather than a child resource; reject it.
+  if (!resolved.startsWith(base) || resolved === base) {
+    throw new Error(`slug "${slug}" does not resolve to a child of the container ${base}`);
+  }
+  return resolved;
 }
 
 /** Serialise a canonical message into the requested on-pod RDF shape (Turtle). */

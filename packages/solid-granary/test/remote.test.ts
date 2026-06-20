@@ -56,6 +56,17 @@ describe("fetchGranary", () => {
     ).rejects.toMatchObject({ message: expect.stringContaining("exceeds") });
   });
 
+  it("the byte cap counts ENCODED utf-8 bytes, not utf-16 code units", async () => {
+    // 60 emoji = 60 code units (text.length) but 240 utf-8 bytes. A cap between the
+    // two (100) must REJECT — proving we measure bytes, not code units.
+    const emoji = "😀".repeat(60);
+    const body = JSON.stringify({ type: "Note", content: emoji });
+    expect(body.length).toBeLessThan(Buffer.byteLength(body, "utf8"));
+    await expect(
+      fetchGranary("https://granary.io/x", { fetch: jsonFetch(body), maxBytes: 150 }),
+    ).rejects.toMatchObject({ message: expect.stringContaining("exceeds") });
+  });
+
   it("wraps a thrown network error as GranaryFetchError", async () => {
     const f = vi.fn(async () => {
       throw new Error("boom");

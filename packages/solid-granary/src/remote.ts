@@ -105,7 +105,9 @@ export async function fetchGranary(
   }
 
   const text = await res.text();
-  if (text.length > maxBytes) {
+  // Count ENCODED UTF-8 bytes, not UTF-16 code units (`text.length`): a multi-byte
+  // payload could otherwise slip past a byte-named cap.
+  if (Buffer.byteLength(text, "utf8") > maxBytes) {
     throw new GranaryFetchError(`granary payload exceeds ${maxBytes} bytes`, url, {
       status: res.status,
     });
