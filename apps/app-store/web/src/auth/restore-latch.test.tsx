@@ -178,31 +178,30 @@ describe("FINDING 4 (decision) — decideRuntimeInitFailure clears restoringSess
 // PRESENT (restore state entered) → THEN absent (the catch cleared it).
 //
 // REJECTION TIMING — why the present-then-absent transition is observable: production
-// `getAuthRuntime` does `const { ReactiveFetchManager } = await import(...)` then
-// `new ReactiveFetchManager([provider])`. The mock constructor throws SYNCHRONOUSLY, but
-// only AFTER the `await import(...)` resolves — i.e. on a later microtask. RTL's synchronous
-// `render(...)` paints the lazy `restoringSession=true` initializer FIRST (it read the
-// seeded pointer), so there is a render frame where the restoring text is on screen BEFORE
-// the deferred rejection propagates through the runtime-init `.catch`. The test asserts that
-// frame (PRESENT), then `waitFor`s the catch to clear it (ABSENT). With
+// `getAuthRuntime` (SessionProvider) calls `installProactiveAuthFetch()` then does a
+// SIDE-EFFECT `await import("@solid/reactive-authentication")` (task #123 swapped to the
+// proactive seam — it NO LONGER constructs a `ReactiveFetchManager`). Mocking that module
+// with a factory that THROWS makes the dynamic `import(...)` REJECT — a REAL production call
+// — so the runtime-init promise rejects on a microtask AFTER the synchronous render. RTL's
+// synchronous `render(...)` paints the lazy `restoringSession=true` initializer FIRST (it
+// read the seeded pointer), so there is a render frame where the restoring text is on screen
+// BEFORE the deferred rejection propagates through the runtime-init `.catch`. The test
+// asserts that frame (PRESENT), then `waitFor`s the catch to clear it (ABSENT). With
 // `setRestoringSession(false)` removed from production, `ready` stays false forever, the
 // restore effect never runs, and the restoring text NEVER disappears → the final `waitFor`
 // times out and the test FAILS — so it genuinely guards the fix (the adversarial check).
+// (Mocking the now-dead `ReactiveFetchManager` CONSTRUCTOR was vacuous — production never
+// constructs it, so that throw was unreachable; roborev Low. Forcing the dynamic IMPORT to
+// reject is the real production failure path.)
 //
 // We seed a remembered pointer FIRST so restoringSession initialises TRUE (otherwise it
 // starts false and there is nothing to clear — the test must observe the catch doing work).
-vi.mock("@solid/reactive-authentication", () => ({
-  ReactiveFetchManager: class {
-    constructor() {
-      // Throwing synchronously in the constructor rejects production's runtime-init
-      // IIFE (`new ReactiveFetchManager(...)` is awaited inside it). Because the throw is
-      // downstream of the `await import(...)`, it propagates on a microtask AFTER the
-      // synchronous render — leaving the observable restoring-text frame the test asserts.
-      throw new Error("runtime build failed (forced for the finding-4 test)");
-    }
-    registerGlobally() {}
-  },
-}));
+// SAFETY: @solid/reactive-authentication is ONLY dynamically imported in production, never
+// statically, so a throwing factory affects ONLY that import — WebIdDPoPTokenProvider
+// (`./webid-token-provider`) and installProactiveAuthFetch (`@jeswr/solid-elements`) are untouched.
+vi.mock("@solid/reactive-authentication", () => {
+  throw new Error("runtime build failed (forced for the finding-4 test)");
+});
 
 describe("FINDING 4 (implementation) — runtime-init rejection un-sticks the Restoring UI", () => {
   afterEach(() => {

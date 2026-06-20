@@ -12,7 +12,7 @@
 // TARGET, so it never handles an inbound `#autologin/` deep-link of its own.
 import { AccountMenu, FeedbackButton, ThemeToggle } from "@jeswr/app-shell";
 import { Loading } from "@jeswr/solid-elements/react";
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import appsData from "../data/apps.json";
 import { useSession } from "./auth/SessionProvider";
 import { CatalogView } from "./components/CatalogView";
@@ -22,16 +22,30 @@ import { type AppEntry, isLive } from "./lib/catalog";
 
 const APPS = appsData as AppEntry[];
 
-/** Whether the URL fragment requests the human catalog (LD) view. */
+/** Whether the URL requests the human catalog (LD) view. */
 function isCatalogRoute(): boolean {
-  return typeof window !== "undefined" && window.location.hash.replace(/^#/, "") === "/catalog";
+  if (typeof window === "undefined") return false;
+  // Reachable two ways, both must render CatalogView: the hash route (#/catalog) AND the
+  // server-routed text/html path (/catalog or /catalog/) the static host rewrites to the SPA.
+  if (window.location.hash.replace(/^#/, "") === "/catalog") return true;
+  return /^\/catalog\/?$/.test(window.location.pathname);
 }
 
 export function App() {
   const { webId, session, logout, login, loggingIn, error, ready, restoringSession } = useSession();
   const [signInOpen, setSignInOpen] = useState(false);
-  // Read once at mount; the catalog route is a static deep-link, not a live router.
-  const catalogRoute = useMemo(() => isCatalogRoute(), []);
+  // Track the catalog route LIVE — re-render on #/catalog ⇄ #/ and on back/forward,
+  // rather than reading once at mount (so the in-app catalog links actually navigate).
+  const [catalogRoute, setCatalogRoute] = useState(isCatalogRoute);
+  useEffect(() => {
+    const sync = () => setCatalogRoute(isCatalogRoute());
+    window.addEventListener("hashchange", sync);
+    window.addEventListener("popstate", sync);
+    return () => {
+      window.removeEventListener("hashchange", sync);
+      window.removeEventListener("popstate", sync);
+    };
+  }, []);
 
   return (
     <div className="store">
