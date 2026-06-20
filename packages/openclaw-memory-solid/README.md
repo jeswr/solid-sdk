@@ -94,10 +94,15 @@ carries the OpenClaw convention field:
 "openclaw": { "extensions": ["./dist/plugin.js"] }
 ```
 
-> The `package.json` `openclaw.extensions` points at the **built** `dist/plugin.js` (the package's
-> plugin module). Because the authenticated `fetch` must be injected in code, the actual runnable
-> extension you place in `~/.openclaw/extensions/` is the tiny wrapper above that injects your fetch
-> and default-exports `createOpenClawMemoryPlugin(...)`.
+> The `package.json` `openclaw.extensions` points at the **built** `dist/plugin.js`, which
+> **default-exports a ready plugin object** (so it is a valid extension module on its own). That
+> default plugin's `register(api)` resolves the authenticated pod `fetch` from the **host**
+> (`api.fetch` / `api.podFetch`) — a seam that is **ASSUMED** (see "VERIFIED vs ASSUMED" below). If
+> your host does **not** surface an authenticated fetch, place the tiny **code wrapper** shown above
+> in `~/.openclaw/extensions/` instead — it injects your own `fetch` and default-exports
+> `createOpenClawMemoryPlugin(...)`. Either path produces the same plugin; the wrapper is the
+> portable one. (The default export throws a clear error at `register` time if no fetch is
+> available, naming the wrapper.)
 
 ## API
 
@@ -189,9 +194,12 @@ the **slot + tools** contract and honestly scopes its claims:
 - The `before_agent_start` (auto-recall) / `agent_end` (auto-capture) event payloads — this plugin
   registers ONLY the verified tool surface and does **not** wire auto-recall/-capture yet (it is a
   follow-up pending a live-instance check of those payloads).
-- That OpenClaw passes the plugin's `pluginConfig` exactly as the config block shown above, and how
-  the host surfaces the user's authenticated pod `fetch` to a memory plugin (hence the explicit
-  fetch-injection seam).
+- That OpenClaw passes the plugin's `pluginConfig` exactly as the config block shown above.
+- **How the host surfaces the user's authenticated pod `fetch` to a memory plugin.** The default
+  export's `register(api)` probes `api.fetch` / `api.podFetch` as the host seam; the exact name (or
+  whether the host provides one at all) is unconfirmed. The portable, always-works path is the code
+  wrapper that injects your own `fetch` via `createOpenClawMemoryPlugin({ fetch })` — independent of
+  any host seam.
 
 ## Security
 

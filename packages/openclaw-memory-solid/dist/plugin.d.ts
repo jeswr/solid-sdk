@@ -73,6 +73,17 @@ export interface OpenClawPluginApi {
     on?(event: string, handler: (...args: unknown[]) => unknown): void;
     /** The raw plugin config OpenClaw passes for this slot (unknown until parsed). */
     pluginConfig?: unknown;
+    /**
+     * An authenticated pod `fetch` the host MAY surface to a memory plugin (ASSUMED
+     * — only used as a fallback when the factory was not given a `fetch`/`adapter`).
+     * This is the seam the bare `dist/plugin.js` default-export extension relies on:
+     * a host that provides `api.fetch` (or `api.podFetch`) lets the default plugin
+     * authenticate without a user-written wrapper. Exact name is ASSUMED; both are
+     * probed. See the README "VERIFIED vs ASSUMED" section.
+     */
+    fetch?: typeof globalThis.fetch;
+    /** Alternative name for the host-provided authenticated pod fetch (ASSUMED). */
+    podFetch?: typeof globalThis.fetch;
 }
 /** The parsed, defaulted config for the Solid memory plugin. */
 export interface SolidMemoryPluginConfig {
@@ -147,4 +158,21 @@ export interface CreateOpenClawMemoryPluginOptions {
  * envelope.
  */
 export declare function createOpenClawMemoryPlugin(opts?: CreateOpenClawMemoryPluginOptions): OpenClawMemoryPlugin;
+/**
+ * The DEFAULT export — the plugin object an OpenClaw extension module exposes. The
+ * `package.json` `openclaw.extensions` field points at the built `dist/plugin.js`,
+ * and OpenClaw loads an extension by reading its default export, so this module is
+ * a valid extension on its own.
+ *
+ * It is built with NO injected `fetch`, so its `register(api)` resolves the
+ * authenticated pod fetch from the host (`api.fetch` / `api.podFetch`) and the
+ * container/agent from the plugin config in `openclaw.json`. If the host does not
+ * surface an authenticated fetch (the seam is ASSUMED — see "VERIFIED vs ASSUMED"
+ * in the README), `register` throws a clear error directing the user to the
+ * code-injection wrapper (`examples/index.ts`), which calls
+ * {@link createOpenClawMemoryPlugin} with an explicit `fetch`. Either path yields
+ * the same plugin; the wrapper is the portable one when the host has no fetch seam.
+ */
+declare const plugin: OpenClawMemoryPlugin;
+export default plugin;
 //# sourceMappingURL=plugin.d.ts.map

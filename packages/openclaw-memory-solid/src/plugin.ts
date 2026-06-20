@@ -80,6 +80,17 @@ export interface OpenClawPluginApi {
   on?(event: string, handler: (...args: unknown[]) => unknown): void;
   /** The raw plugin config OpenClaw passes for this slot (unknown until parsed). */
   pluginConfig?: unknown;
+  /**
+   * An authenticated pod `fetch` the host MAY surface to a memory plugin (ASSUMED
+   * — only used as a fallback when the factory was not given a `fetch`/`adapter`).
+   * This is the seam the bare `dist/plugin.js` default-export extension relies on:
+   * a host that provides `api.fetch` (or `api.podFetch`) lets the default plugin
+   * authenticate without a user-written wrapper. Exact name is ASSUMED; both are
+   * probed. See the README "VERIFIED vs ASSUMED" section.
+   */
+  fetch?: typeof globalThis.fetch;
+  /** Alternative name for the host-provided authenticated pod fetch (ASSUMED). */
+  podFetch?: typeof globalThis.fetch;
 }
 
 /** The parsed, defaulted config for the Solid memory plugin. */
@@ -160,6 +171,28 @@ function strOf(obj: Record<string, unknown>, key: string): string | undefined {
 }
 
 /**
+ * Assert `value` is an absolute http(s) URL, throwing a clear config error
+ * otherwise. (Defence in depth: `MemoryStore` re-validates + normalises the
+ * container too, but validating at config-parse time gives a clearer, earlier
+ * error and satisfies the documented `configSchema.parse` contract.)
+ */
+function assertHttpUrl(value: string, field: string): void {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error(
+      `[openclaw-memory-solid] config \`${field}\` must be an absolute URL, got: ${value}`,
+    );
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new Error(
+      `[openclaw-memory-solid] config \`${field}\` must be an http(s) URL, got protocol: ${url.protocol}`,
+    );
+  }
+}
+
+/**
  * Build the OpenClaw memory-slot plugin object backed by a Solid pod.
  *
  * The returned object's `configSchema.parse` normalises the raw plugin config
@@ -182,6 +215,11 @@ export function createOpenClawMemoryPlugin(
           "[openclaw-memory-solid] plugin config is missing `container` (the absolute http(s) Solid container URL memories live under).",
         );
       }
+      // Validate the container is an absolute http(s) URL HERE (the documented
+      // `configSchema.parse` contract — the README / manifest say so), rather than
+      // deferring to `MemoryStore`'s constructor at `register` time. This makes
+      // validation timing consistent: a bad container fails at config parse.
+      assertHttpUrl(container, "container");
       const rawLimit = raw.defaultLimit;
       const defaultLimit =
         typeof rawLimit === "number" && Number.isFinite(rawLimit) && rawLimit >= 0
@@ -208,19 +246,22 @@ export function createOpenClawMemoryPlugin(
       const config = configSchema.parse(api.pluginConfig);
 
       // Build the adapter. A supplied adapter is authoritative; otherwise we need
-      // an injected authenticated fetch.
+      // an authenticated fetch — preferring the factory `opts.fetch`, falling back
+      // to a host-provided `api.fetch` / `api.podFetch` (the seam the bare
+      // default-export extension relies on; ASSUMED, only used if present).
       let adapter: SolidMemoryAdapter;
       if (opts.adapter) {
         adapter = opts.adapter;
       } else {
-        if (!opts.fetch) {
+        const authFetch = opts.fetch ?? api.fetch ?? api.podFetch;
+        if (typeof authFetch !== "function") {
           throw new Error(
-            "[openclaw-memory-solid] createOpenClawMemoryPlugin requires either `fetch` (an authenticated pod fetch) or a pre-built `adapter`.",
+            "[openclaw-memory-solid] no authenticated pod fetch available: pass `fetch` (or a pre-built `adapter`) to createOpenClawMemoryPlugin, or have the host provide `api.fetch`/`api.podFetch`. See the README OpenClaw configuration section.",
           );
         }
         const adapterOptions: SolidMemoryAdapterOptions = {
           container: config.container,
-          fetch: opts.fetch,
+          fetch: authFetch,
           agentWebId: config.agentWebId,
           defaultGeneratedBy: config.defaultGeneratedBy,
         };
@@ -375,3 +416,21 @@ function textResult(
 function errorResult(message: string): OpenClawToolResult {
   return { content: [{ type: "text", text: message }], isError: true };
 }
+
+/**
+ * The DEFAULT export — the plugin object an OpenClaw extension module exposes. The
+ * `package.json` `openclaw.extensions` field points at the built `dist/plugin.js`,
+ * and OpenClaw loads an extension by reading its default export, so this module is
+ * a valid extension on its own.
+ *
+ * It is built with NO injected `fetch`, so its `register(api)` resolves the
+ * authenticated pod fetch from the host (`api.fetch` / `api.podFetch`) and the
+ * container/agent from the plugin config in `openclaw.json`. If the host does not
+ * surface an authenticated fetch (the seam is ASSUMED — see "VERIFIED vs ASSUMED"
+ * in the README), `register` throws a clear error directing the user to the
+ * code-injection wrapper (`examples/index.ts`), which calls
+ * {@link createOpenClawMemoryPlugin} with an explicit `fetch`. Either path yields
+ * the same plugin; the wrapper is the portable one when the host has no fetch seam.
+ */
+const plugin: OpenClawMemoryPlugin = createOpenClawMemoryPlugin();
+export default plugin;

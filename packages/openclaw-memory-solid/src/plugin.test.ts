@@ -5,7 +5,7 @@
 // through a REAL MemoryStore over an in-memory fake-LDP fetch (no mocked store).
 
 import { describe, expect, it } from "vitest";
-import {
+import defaultPlugin, {
   createOpenClawMemoryPlugin,
   type OpenClawPluginApi,
   type OpenClawTool,
@@ -124,6 +124,12 @@ describe("configSchema.parse", () => {
     const plugin = createOpenClawMemoryPlugin({ fetch: makePod().fetchImpl, container: CONTAINER });
     expect(plugin.configSchema.parse({}).container).toBe(CONTAINER);
   });
+
+  it("rejects a non-http(s) container at parse time (documented contract)", () => {
+    const plugin = createOpenClawMemoryPlugin({ fetch: makePod().fetchImpl });
+    expect(() => plugin.configSchema.parse({ container: "ftp://x/" })).toThrow(/http/);
+    expect(() => plugin.configSchema.parse({ container: "not a url" })).toThrow(/absolute URL/);
+  });
 });
 
 describe("plugin identity + shape", () => {
@@ -141,6 +147,31 @@ describe("plugin identity + shape", () => {
     const plugin = createOpenClawMemoryPlugin({}); // no fetch, no adapter
     const { api } = makeApi({ container: CONTAINER });
     expect(() => plugin.register(api)).toThrow(/fetch|adapter/);
+  });
+});
+
+describe("default export (the openclaw.extensions entry)", () => {
+  it("is a valid plugin object with the verified shape", () => {
+    expect(defaultPlugin.kind).toBe("memory");
+    expect(typeof defaultPlugin.register).toBe("function");
+    expect(typeof defaultPlugin.configSchema.parse).toBe("function");
+  });
+
+  it("register(api) resolves an authenticated fetch surfaced by the host (api.fetch)", async () => {
+    const { fetchImpl } = makePod();
+    // The host (api) provides the authenticated pod fetch — the default export has none.
+    const { api, getTool } = makeApi({ container: CONTAINER });
+    (api as { fetch?: typeof globalThis.fetch }).fetch = fetchImpl;
+    defaultPlugin.register(api);
+    const stored = parseResult(
+      await getTool("memory_store").execute("c", { content: "via host fetch seam" }),
+    ) as { id: string };
+    expect(stored.id.startsWith(CONTAINER)).toBe(true);
+  });
+
+  it("register(api) throws a clear error when the host surfaces no fetch", () => {
+    const { api } = makeApi({ container: CONTAINER }); // no api.fetch / podFetch
+    expect(() => defaultPlugin.register(api)).toThrow(/authenticated pod fetch/);
   });
 });
 
