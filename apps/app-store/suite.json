@@ -1,0 +1,28 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jeswr/full-solid-ecosystem/main/tracking/schema/suite.schema.json",
+  "id": "solid-app-store",
+  "kind": "app",
+  "name": "Solid App Store",
+  "repo": "https://github.com/jeswr/solid-app-store",
+  "category": "infrastructure",
+  "maturity": "prototype",
+  "visibility": "public",
+  "stack": {
+    "ui": "vite + react ^19 + typescript",
+    "chrome": "@jeswr/app-shell + @jeswr/solid-elements",
+    "auth": "@solid/reactive-authentication + @jeswr/solid-session-restore",
+    "rdf": "n3 ^2.x",
+    "jsonld": "jsonld ^8.x",
+    "test": "vitest ^4.x",
+    "lint": "@biomejs/biome ^2.x",
+    "node": ">=20.12"
+  },
+  "dependsOn": [
+    "app-shell",
+    "solid-elements",
+    "solid-session-restore",
+    "create-solid-app",
+    "solid-federation-vocab",
+    "federation-registry"
+  ]
+}

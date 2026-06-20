@@ -1,0 +1,18 @@
+/node_modules
+/dist
+*.tsbuildinfo
+
+# Generated at build from APP_ORIGIN by scripts/gen-clientid.mjs — never committed
+# (per-origin artifacts; the source of truth is the script + APP_ORIGIN env).
+/public/clientid.jsonld
+/public/callback.html
+
+# Generated at build by scripts/gen-catalog.mjs from data/apps.json — never committed
+# (the source of truth is apps.json + the serializer; origin-stamped IRIs).
+/public/catalog.ttl
+/public/catalog.jsonld
+/src/generated/catalog.json
+
+# Local env overrides
+.env
+.env.local

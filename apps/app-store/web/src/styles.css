@@ -1,0 +1,412 @@
+/* AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+   Solid App Store host chrome.
+
+   THEME: Tailwind v4 + the shared @jeswr/app-shell tokens drive light/dark. The
+   import order is load-bearing — `@import "tailwindcss"` FIRST, then the suite OKLCH
+   tokens + the `@theme inline` mapping (`@jeswr/app-shell/styles.css`) so the shell
+   components' utilities (bg-popover, text-muted-foreground, the `dark:` variant, …)
+   resolve to the suite palette. `@source` makes Tailwind scan the app-shell package so
+   the classes its <ThemeToggle/> + <AccountMenu/> + <FeedbackButton/> emit are
+   generated. The path is relative to THIS file. */
+@import "tailwindcss";
+@import "@jeswr/app-shell/styles.css";
+@source "../node_modules/@jeswr/app-shell/dist";
+
+/* Host chrome uses its OWN var names (--host-*, --muted-text) aliased onto the
+   app-shell OKLCH tokens, so the whole store follows the theme — the `.dark` class the
+   ThemeProvider toggles on <html> flips the OKLCH vars and these aliases inherit it.
+   We do NOT re-alias app-shell's own `--accent`/`--muted`/`--border` tokens (that would
+   clobber the shell components' tint — the early-adopter CSS-leak bug). */
+:root {
+  --host-bg: var(--background);
+  --host-surface: var(--card);
+  --host-ink: var(--foreground);
+  --muted-text: var(--muted-foreground);
+  --host-accent: var(--primary);
+  --host-accent-ink: var(--primary-foreground);
+  --host-danger: var(--destructive);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  color: var(--host-ink);
+  background: var(--host-bg);
+}
+
+a {
+  color: var(--host-accent);
+}
+
+/* ── Header ────────────────────────────────────────────────────────────── */
+.store-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  background: color-mix(in oklab, var(--host-bg) 92%, transparent);
+  backdrop-filter: blur(8px);
+  z-index: 10;
+}
+.store-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 700;
+  font-size: 1.1rem;
+  color: var(--host-ink);
+  text-decoration: none;
+}
+.store-brand-mark {
+  color: var(--host-accent);
+}
+.store-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-left: auto;
+}
+.store-restoring {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* ── Main / hero ───────────────────────────────────────────────────────── */
+.store-main {
+  max-width: 64rem;
+  margin: 0 auto;
+  padding: 1.5rem 1.25rem 3rem;
+}
+.store-hero {
+  padding: 2rem 0 1.5rem;
+  max-width: 44rem;
+}
+.store-hero h1 {
+  margin: 0 0 0.6rem;
+  font-size: 2rem;
+  line-height: 1.15;
+}
+.store-hero p {
+  margin: 0 0 1rem;
+  color: var(--muted-text);
+  font-size: 1.02rem;
+  line-height: 1.5;
+}
+.store-hero-cta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+}
+.store-cta-secondary {
+  font-size: 0.92rem;
+}
+
+/* ── Search / filter controls ──────────────────────────────────────────── */
+.store-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 1rem;
+  margin: 0.5rem 0 1.5rem;
+}
+.store-search {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  flex: 1 1 18rem;
+}
+.store-search label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--muted-text);
+}
+.store-search input {
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  font-size: 0.95rem;
+  background: var(--host-surface);
+  color: var(--host-ink);
+}
+.store-livetoggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.9rem;
+  color: var(--host-ink);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+/* ── Category sections + card grid ─────────────────────────────────────── */
+.store-category {
+  margin: 0 0 2rem;
+}
+.store-category-title {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  font-size: 1.05rem;
+  margin: 0 0 0.85rem;
+  color: var(--host-ink);
+}
+.store-category-count {
+  font-size: 0.78rem;
+  color: var(--muted-text);
+  background: color-mix(in oklab, var(--muted-text) 16%, var(--host-surface));
+  border-radius: 999px;
+  padding: 0.05rem 0.5rem;
+}
+.store-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+  gap: 1rem;
+}
+.store-empty {
+  color: var(--muted-text);
+  padding: 2rem 0;
+}
+
+/* ── App card ──────────────────────────────────────────────────────────── */
+.app-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  padding: 1rem;
+  background: var(--host-surface);
+  transition:
+    border-color 0.15s ease,
+    transform 0.15s ease;
+}
+.app-card:hover {
+  border-color: color-mix(in oklab, var(--host-accent) 45%, var(--border));
+  transform: translateY(-1px);
+}
+.app-card-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.app-card-icon {
+  font-size: 1.25rem;
+}
+.app-card-name {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 650;
+  flex: 1;
+}
+.app-card-chip {
+  font-size: 0.7rem;
+  font-weight: 600;
+  border-radius: 999px;
+  padding: 0.1rem 0.5rem;
+  white-space: nowrap;
+}
+.app-card-chip-live {
+  background: color-mix(in oklab, var(--success, oklch(0.7 0.15 150)) 20%, var(--host-surface));
+  color: var(--success, oklch(0.5 0.15 150));
+}
+.app-card-chip-soon {
+  background: color-mix(in oklab, var(--muted-text) 18%, var(--host-surface));
+  color: var(--muted-text);
+}
+.app-card-desc {
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  color: var(--muted-text);
+  flex: 1;
+}
+.app-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.25rem;
+}
+.app-card-launch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+  text-decoration: none;
+  color: var(--host-accent-ink);
+  background: var(--host-accent);
+  border-radius: 0.5rem;
+  padding: 0.45rem 0.8rem;
+}
+.app-card-launch:hover {
+  filter: brightness(1.05);
+}
+.app-card-soon {
+  font-size: 0.85rem;
+  color: var(--muted-text);
+  font-style: italic;
+}
+.app-card-repo {
+  font-size: 0.85rem;
+  margin-left: auto;
+}
+
+/* ── Footer ────────────────────────────────────────────────────────────── */
+.store-footer {
+  margin-top: 2rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.85rem;
+  color: var(--muted-text);
+}
+
+/* ── Sign-in dialog ────────────────────────────────────────────────────── */
+.signin-dialog {
+  border: 1px solid var(--border);
+  border-radius: 0.85rem;
+  padding: 0;
+  max-width: 28rem;
+  width: calc(100% - 2rem);
+  background: var(--host-surface);
+  color: var(--host-ink);
+}
+.signin-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(2px);
+}
+.signin-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1.75rem;
+}
+.signin-form h2 {
+  margin: 0;
+  font-size: 1.3rem;
+}
+.signin-sub {
+  color: var(--muted-text);
+  font-size: 0.92rem;
+  margin: 0 0 0.5rem;
+  line-height: 1.45;
+}
+.signin-form label {
+  font-weight: 600;
+  font-size: 0.82rem;
+}
+.signin-form input {
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  font-size: 0.95rem;
+  background: var(--host-bg);
+  color: var(--host-ink);
+}
+.signin-error {
+  color: var(--host-danger);
+  font-size: 0.9rem;
+  margin: 0.25rem 0 0;
+}
+.signin-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.6rem;
+  margin-top: 0.75rem;
+}
+.signin-hint {
+  color: var(--muted-text);
+  font-size: 0.82rem;
+  margin-top: 0.75rem;
+}
+
+/* ── Catalog (LD) view ─────────────────────────────────────────────────── */
+.catalog-view {
+  max-width: 60rem;
+  margin: 0 auto;
+  padding: 1.5rem 1.25rem 3rem;
+}
+.catalog-intro {
+  color: var(--muted-text);
+  line-height: 1.5;
+  max-width: 44rem;
+}
+.catalog-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 1.5rem;
+  font-size: 0.9rem;
+}
+.catalog-table th,
+.catalog-table td {
+  text-align: left;
+  padding: 0.55rem 0.7rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.catalog-status {
+  font-size: 0.78rem;
+  border-radius: 999px;
+  padding: 0.05rem 0.5rem;
+  background: color-mix(in oklab, var(--muted-text) 16%, var(--host-surface));
+  color: var(--muted-text);
+}
+.catalog-status-live {
+  background: color-mix(in oklab, var(--success, oklch(0.7 0.15 150)) 20%, var(--host-surface));
+  color: var(--success, oklch(0.5 0.15 150));
+}
+.catalog-links {
+  display: flex;
+  gap: 0.75rem;
+}
+.catalog-back {
+  margin-top: 1.5rem;
+}
+
+/* ── HOST-SCOPED filled buttons ─────────────────────────────────────────
+   Scope every bare filled-button style to the store's OWN buttons so it never
+   leaks onto app-shell controls (ThemeToggle / AccountMenu / FeedbackButton trigger)
+   or the portaled FeedbackDialog — the early-adopter CSS-leak bug. We list the
+   store's own button classes explicitly rather than a bare global `button {}`. */
+.store-signin,
+.store-cta,
+.signin-actions button,
+.signin-cancel {
+  cursor: pointer;
+  border: none;
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.9rem;
+  font-size: 0.92rem;
+  font-weight: 600;
+  background: var(--host-accent);
+  color: var(--host-accent-ink);
+}
+.store-cta {
+  padding: 0.65rem 1.1rem;
+  font-size: 1rem;
+}
+/* The secondary/cancel buttons are ghost, not filled — override the fill above. */
+.signin-cancel {
+  background: transparent;
+  color: var(--host-ink);
+  border: 1px solid var(--border);
+}
+.store-signin,
+.store-cta,
+.signin-actions button:disabled,
+.signin-cancel:disabled {
+  /* keep */
+}
+.store-signin:disabled,
+.store-cta:disabled,
+.signin-actions button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
