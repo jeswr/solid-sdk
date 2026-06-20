@@ -12,10 +12,12 @@
  *
  * Field mapping (Matrix → canonical → the suite chat shapes via
  * `@jeswr/solid-chat-interop`):
- *  - `content.body` (plain text) → `content`; `content.formatted_body` (HTML) →
- *    carried as `formatted` + reflected in `mediaType` `text/html` when present, so
- *    a LongChat/AS2 reader gets the richer body. For an EDIT, the replacement body
- *    is read from `content['m.new_content']` (per the spec, the top-level body of an
+ *  - `content.body` (plain text) → `content`, written ALWAYS as `text/plain`. The
+ *    untrusted `content.formatted_body` (HTML) is NEVER written into the pod (it
+ *    would be a stored-XSS vector for an HTML-rendering LongChat reader); it is only
+ *    surfaced on the transform RESULT as `formatted` (clearly untrusted) for a
+ *    caller that sanitizes + renders it itself. For an EDIT, the replacement body is
+ *    read from `content['m.new_content']` (per the spec, the top-level body of an
  *    edit event is a fallback/notice, not the new content).
  *  - `sender` (`@user:server`) → `author`. A Matrix user id is NOT a WebID; we map
  *    it to a deterministic synthetic IRI ONLY when a {@link MatrixContext.webIdFor}
