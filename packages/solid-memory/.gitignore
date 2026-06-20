@@ -1,0 +1,9 @@
+node_modules/
+*.log
+.DS_Store
+coverage/
+*.tsbuildinfo
+# jscpd duplication report (advisory measurement output)
+report/
+# api-extractor scratch (the committed contract lives in etc/, not here)
+temp/

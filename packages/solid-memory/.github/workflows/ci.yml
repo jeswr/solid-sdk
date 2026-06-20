@@ -1,0 +1,22 @@
+# AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+# The single gate, run on a clean checkout: lint (Biome) + typecheck (tsc) +
+# test (vitest) + build + check:dist + check:lockfile-transport.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci
+      - run: npm run gate
