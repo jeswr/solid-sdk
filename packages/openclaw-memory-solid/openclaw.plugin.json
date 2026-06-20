@@ -1,0 +1,34 @@
+{
+  "id": "memory-solid",
+  "name": "Solid Pod Memory",
+  "description": "Store agent memory in the user's own Solid pod (RDF-native, portable, owner-owned, cross-agent) via @jeswr/solid-memory.",
+  "version": "0.1.0",
+  "kind": "memory",
+  "author": "Jesse Wright",
+  "configSchema": {
+    "container": {
+      "type": "string",
+      "description": "Absolute http(s) Solid container URL the memories live under. REQUIRED."
+    },
+    "agentWebId": {
+      "type": "string",
+      "description": "The producing agent's WebID — prov:wasAttributedTo on every stored memory (NOT anonymized). Optional."
+    },
+    "defaultGeneratedBy": {
+      "type": "string",
+      "description": "A default generating-conversation IRI (prov:wasGeneratedBy) for a store that omits its own. Optional."
+    },
+    "defaultLimit": {
+      "type": "number",
+      "default": 10,
+      "description": "Default recall result cap when a tool call omits `limit`."
+    }
+  },
+  "tools": [
+    { "name": "memory_store", "description": "Store a memory in the user's Solid pod." },
+    { "name": "memory_recall", "description": "Recall stored memories matching a free-text query." },
+    { "name": "memory_search", "description": "Alias of memory_recall (documented)." },
+    { "name": "memory_get", "description": "Fetch a single memory by its id (pod URL)." },
+    { "name": "memory_forget", "description": "Forget (delete) a memory by its id (pod URL)." }
+  ]
+}
