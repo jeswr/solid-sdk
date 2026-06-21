@@ -24,16 +24,28 @@ const here = dirname(fileURLToPath(import.meta.url));
  *
  * THE PUBLISH-SAFE-DOTFILE GOTCHA: `npm publish` STRIPS certain dotfiles from the
  * tarball — most importantly `.npmrc` (it can hold registry auth tokens) and a
- * nested `.gitignore`. A literal `template/.npmrc` would therefore never reach a
- * scaffolded app. The fix (the same one create-next-app uses for `gitignore` ->
- * `.gitignore`) is to ship the file under a non-dotfile name in the template and
- * rename it during scaffold. Verified: `template/.npmrc` is dropped from
- * `npm pack`, `template/npmrc` survives.
+ * nested `.gitignore` (npm always drops a nested `.gitignore`). Additionally, the
+ * CLI package's OWN root `.gitignore` carries a `.env.*` secrets rule that
+ * `npm pack` honours, which silently excludes `template/.env.example` too. A
+ * literal `template/.npmrc` / `template/.gitignore` / `template/.env.example`
+ * would therefore never reach a scaffolded app. The fix (the same one
+ * create-next-app uses for `gitignore` -> `.gitignore`) is to ship each file
+ * under a non-dotfile name in the template and rename it during scaffold.
+ * Verified via `npm pack`: the literal dotfiles are dropped; the shims survive.
  *
  *  - `npmrc` -> `.npmrc`: supply-chain hardening (`ignore-scripts=true`), matching
  *    the suite-wide rule, so every scaffolded app is hardened out of the box.
+ *  - `gitignore` -> `.gitignore`: the scaffolded app's VCS-ignore rules (deps,
+ *    `.next`, env files, build output) — npm always strips a nested `.gitignore`.
+ *  - `env.example` -> `.env.example`: the scaffolded app's env documentation
+ *    (which the user copies to `.env.local`) — excluded by the CLI's own root
+ *    `.env.*` rule during pack.
  */
-const DOTFILE_RENAMES: ReadonlyArray<readonly [from: string, to: string]> = [["npmrc", ".npmrc"]];
+const DOTFILE_RENAMES: ReadonlyArray<readonly [from: string, to: string]> = [
+  ["npmrc", ".npmrc"],
+  ["gitignore", ".gitignore"],
+  ["env.example", ".env.example"],
+];
 
 /**
  * Directories that must NEVER be copied from the template (build artefacts and

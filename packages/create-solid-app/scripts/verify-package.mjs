@@ -80,28 +80,53 @@ for (const artefact of ["node_modules", ".next", "tsconfig.tsbuildinfo"]) {
   }
 }
 
-// Supply-chain hardening must reach scaffolds: the template ships an `npmrc` shim
-// (NOT `.npmrc` — npm STRIPS `.npmrc` from a published tarball, so a literal
-// `template/.npmrc` would never reach a scaffolded app). scaffold.ts renames it to
-// `.npmrc`. Guard both halves so a refactor can't silently break the publish path.
-const templateNpmrcShim = join(templateDir, "npmrc");
-if (!existsSync(templateNpmrcShim)) {
-  fail(
-    "template/npmrc is missing — the supply-chain `ignore-scripts=true` hardening " +
-      "would not reach scaffolded apps (it is renamed to .npmrc at scaffold time).",
-  );
-}
-// Match the actual config DIRECTIVE line, not the substring — the shim's rationale
-// comment also mentions `ignore-scripts=true`, so `.includes()` would pass even if the
-// real directive were deleted (a vacuous guard). Require a non-comment `ignore-scripts=true` line.
-if (!/^\s*ignore-scripts\s*=\s*true\s*$/m.test(readFileSync(templateNpmrcShim, "utf8"))) {
-  fail("template/npmrc must declare ignore-scripts=true (supply-chain hardening).");
-}
-if (existsSync(join(templateDir, ".npmrc"))) {
-  fail(
-    "template/.npmrc must NOT exist — npm strips a published .npmrc, so the shim must " +
-      "ship as template/npmrc and be renamed to .npmrc at scaffold time.",
-  );
+// The publish-safe dotfile shims must reach scaffolds. npm STRIPS certain dotfiles
+// from a published tarball: `.npmrc` (it can hold registry auth tokens) and a nested
+// `.gitignore`; additionally this CLI's own root `.gitignore` `.env.*` rule excludes
+// `template/.env.example` from `npm pack`. So each ships under a NON-dotfile name and
+// scaffold.ts renames it to the real dotfile (DOTFILE_RENAMES). Guard BOTH halves per
+// shim — the shim is present + content-correct (so it actually survives pack), and the
+// literal dotfile does NOT exist (regression guard) — so a refactor can't silently
+// break the publish path. The content checks match an actual DIRECTIVE/content LINE,
+// not a substring, so a guard can't be vacuously satisfied by a rationale comment.
+//
+// Each entry: [shimName, dotfileName, /content-line regex/, humanRationale].
+const dotfileShims = [
+  [
+    "npmrc",
+    ".npmrc",
+    /^\s*ignore-scripts\s*=\s*true\s*$/m,
+    "supply-chain `ignore-scripts=true` hardening",
+  ],
+  // The scaffold's VCS-ignore must drop env files and node_modules; assert a real
+  // ignore-rule LINE so a stripped-to-comments shim can't satisfy the guard.
+  ["gitignore", ".gitignore", /^\s*\.env\*?\s*$/m, "the scaffolded app's .gitignore rules"],
+  // The env documentation must carry the dev-pod var as a real assignment LINE,
+  // not just mention it in a comment.
+  [
+    "env.example",
+    ".env.example",
+    /^\s*NEXT_PUBLIC_DEV_POD\s*=/m,
+    "the scaffolded app's .env.example documentation",
+  ],
+];
+for (const [shim, dotfile, contentRe, rationale] of dotfileShims) {
+  const shimPath = join(templateDir, shim);
+  if (!existsSync(shimPath)) {
+    fail(
+      `template/${shim} is missing — ${rationale} would not reach scaffolded apps ` +
+        `(it is renamed to ${dotfile} at scaffold time; npm strips a literal ${dotfile}).`,
+    );
+  }
+  if (!contentRe.test(readFileSync(shimPath, "utf8"))) {
+    fail(`template/${shim} must carry its real ${dotfile} content line (${rationale}).`);
+  }
+  if (existsSync(join(templateDir, dotfile))) {
+    fail(
+      `template/${dotfile} must NOT exist — npm strips a published ${dotfile}, so the ` +
+        `shim must ship as template/${shim} and be renamed to ${dotfile} at scaffold time.`,
+    );
+  }
 }
 
 // `files` must carry everything `npx create-solid-app` resolves at runtime.

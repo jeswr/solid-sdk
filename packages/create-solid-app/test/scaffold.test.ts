@@ -112,6 +112,33 @@ describe("scaffold", () => {
     expect(npmrc).toMatch(/^\s*ignore-scripts\s*=\s*true\s*$/m);
   });
 
+  it("ships .gitignore into every scaffolded app (publish-safe shim)", async () => {
+    // npm always STRIPS a nested `.gitignore` from a published tarball, so the
+    // template ships it as the non-dotfile `gitignore` shim, renamed to `.gitignore`
+    // here. Without this an `npm publish`ed scaffold would commit node_modules/.env/etc.
+    expect(result.files, "scaffold must contain .gitignore").toContain(".gitignore");
+    // The non-dotfile shim must NOT be left behind — it is renamed, not copied.
+    expect(result.files, "the gitignore shim must be renamed, not left").not.toContain("gitignore");
+    const gitignore = await readFile(join(result.targetDir, ".gitignore"), "utf8");
+    // Assert real ignore-rule content lines (not a substring a comment could satisfy).
+    expect(gitignore).toMatch(/^\s*\.env\*?\s*$/m);
+    expect(gitignore).toMatch(/^\s*\/node_modules\s*$/m);
+  });
+
+  it("ships .env.example into every scaffolded app (publish-safe shim)", async () => {
+    // The CLI's own root `.gitignore` `.env.*` rule excludes `template/.env.example`
+    // from `npm pack`, so it ships as the non-dotfile `env.example` shim, renamed to
+    // `.env.example` here. Without this a published scaffold has no env documentation.
+    expect(result.files, "scaffold must contain .env.example").toContain(".env.example");
+    // The non-dotfile shim must NOT be left behind — it is renamed, not copied.
+    expect(result.files, "the env.example shim must be renamed, not left").not.toContain(
+      "env.example",
+    );
+    const envExample = await readFile(join(result.targetDir, ".env.example"), "utf8");
+    // Assert a real assignment line (not a mention in a comment).
+    expect(envExample).toMatch(/^\s*NEXT_PUBLIC_DEV_POD\s*=/m);
+  });
+
   it("substitutes the package.json name", async () => {
     const pkg = JSON.parse(await readFile(join(result.targetDir, "package.json"), "utf8")) as {
       name: string;
