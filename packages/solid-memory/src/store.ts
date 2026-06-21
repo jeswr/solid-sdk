@@ -413,15 +413,21 @@ export class MemoryStore {
       return [];
     }
     const members: ContainerMember[] = [];
+    // The container lists ITSELF as a member; skip it. Compare on the normalised
+    // origin + pathname (ignoring any query/fragment) so a root ALIAS a hostile or
+    // buggy server might list — `…/memories/?x=1`, `…/memories/#frag` — is skipped
+    // too, never surfaced as a phantom member. (allowRoot below would otherwise let
+    // such an alias slip past the scope guard, since it shares the container path.)
+    const base = new URL(this.container);
     for (const resource of container.contains) {
       // resource.id may be relative; resolve against the container URL to be safe.
       const absolute = new URL(resource.id, this.container).toString();
-      // Skip the container listing itself (it lists itself as a member).
-      if (absolute === this.container) {
+      const member = new URL(absolute);
+      if (member.origin === base.origin && member.pathname === base.pathname) {
         continue;
       }
       // Defence in depth: never surface a member that escapes the container.
-      // `allowRoot` is irrelevant here (the root is already skipped above), but the
+      // `allowRoot` is irrelevant here (every root alias is skipped above), but the
       // guard's whole point in a listing is to drop non-root escapers.
       try {
         assertWithinBase(this.container, absolute, { allowRoot: true });

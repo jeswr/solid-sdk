@@ -548,6 +548,34 @@ describe("list + all", () => {
     expect(members).toEqual([`${CONTAINER}ok`]);
     expect(members.some((u) => u.includes("evil.example"))).toBe(false);
   });
+
+  it("list skips a root ALIAS (query/fragment) injected by a hostile listing", async () => {
+    // A buggy/hostile server lists the container ROOT back as a member under a
+    // query/fragment ALIAS. These resolve to the same origin+path as the container
+    // (so the scope guard's allowRoot path would let them through), but they are NOT
+    // real members — list() must skip every root alias, not just the exact root string.
+    // (Against the pre-fix exact-string skip these aliases slipped through and were
+    // surfaced as phantom members.)
+    const evil: typeof globalThis.fetch = async (input) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url === CONTAINER) {
+        const body = `@prefix ldp: <http://www.w3.org/ns/ldp#> .
+<${CONTAINER}> a ldp:Container ;
+  ldp:contains <${CONTAINER}ok>, <${CONTAINER}?x=1>, <${CONTAINER}#frag>, <${CONTAINER}> .`;
+        return new Response(body, { status: 200, headers: { "content-type": "text/turtle" } });
+      }
+      return new Response(null, { status: 404 });
+    };
+    const s = new MemoryStore({ container: CONTAINER, fetch: evil });
+    const members = (await s.list()).map((m) => m.url);
+    // Only the genuine member survives; every root alias is dropped.
+    expect(members).toEqual([`${CONTAINER}ok`]);
+    expect(
+      members.some(
+        (u) => u === CONTAINER || u.startsWith(`${CONTAINER}?`) || u.startsWith(`${CONTAINER}#`),
+      ),
+    ).toBe(false);
+  });
 });
 
 describe("scope guard rejects foreign URLs on every op", () => {
