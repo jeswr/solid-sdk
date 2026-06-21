@@ -143,6 +143,36 @@ Notes:
 - **LibreChat private fields** (`_id`, `__v`, `tokenCount`, `error`, `files`,
   `finish_reason`, raw endpoint internals, …) never leak into the canonical model.
 
+## The SHACL shape — `./shape`
+
+The package ships a SHACL `NodeShape` (`shapes/message.shacl.ttl`) for the
+canonical message model. Its `sh:targetClass` is `as:Note` (the canonical message
+class `parseAs2Message` keys on), and its property paths are the **exact**
+predicates `As2MessageDoc` reads and writes — so a message round-tripped through
+this package is shape-conformant by construction. It covers the fields a message
+component renders (**author**, **content** as text, **timestamp**, **inReplyTo**)
+plus the full canonicalised AS2.0 + LongChat surface (room, edit pointer,
+soft-delete tombstone, PROV-O provenance, and the `wf:Task` actionable overlay).
+
+This shape **drives the codegen framework's shape-driven message components**
+(`jeswr-message-list`, `jeswr-shacl-view` / `jeswr-shacl-form`): the components
+render a chat message *from its shape* rather than from hand-written field code, so
+the rendered fields stay in lock-step with the canonical chat model. It is also a
+validator for untrusted foreign chat data (feed it to `rdf-validate-shacl` or any
+SHACL engine).
+
+```ts
+import { messageShapeTtl, MESSAGE_SHAPE_PATH } from "@jeswr/solid-chat-interop/shape";
+
+const shapeTurtle = messageShapeTtl();   // the shape as a Turtle string
+// MESSAGE_SHAPE_PATH — filesystem path to shapes/message.shacl.ttl
+```
+
+The `.ttl` is also resolvable directly as a package subpath:
+`@jeswr/solid-chat-interop/shapes/message.shacl.ttl`. The shape is **anonymous**
+(a blank node) — like the sibling `@jeswr/solid-task-model` shapes, it mints
+nothing at a non-resolving domain. Mirrors that package's `./shape` export exactly.
+
 ## Public API
 
 ### The reconciler
@@ -158,6 +188,13 @@ Notes:
 - **Round-trip helper:** `roundTripAs2ToLongChat(msg, subject, { lossy? })` —
   AS2.0 → canonical → LongChat → canonical, for shared-field verification.
 - **`MAPPING_TABLE`** — the table above as data (`MappingRow[]`).
+
+### The SHACL shape
+
+- **`messageShapeTtl()`** — the canonical message shape as a Turtle string (cached).
+- **`MESSAGE_SHAPE_PATH`** — filesystem path to `shapes/message.shacl.ttl`.
+- Both are re-exported from the package root and from the `./shape` subpath; the
+  raw `.ttl` is also resolvable as `./shapes/message.shacl.ttl`.
 
 ### The adapter seam
 

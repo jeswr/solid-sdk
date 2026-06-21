@@ -35,10 +35,16 @@
     "./adapter": {
       "types": "./dist/adapter.d.ts",
       "import": "./dist/adapter.js"
-    }
+    },
+    "./shape": {
+      "types": "./dist/shape.d.ts",
+      "import": "./dist/shape.js"
+    },
+    "./shapes/message.shacl.ttl": "./shapes/message.shacl.ttl"
   },
   "files": [
     "dist",
+    "shapes",
     "README.md"
   ],
   "scripts": {
@@ -66,6 +72,8 @@
     "@rdfjs/types": "^2.0.1",
     "@types/n3": "^1.26.1",
     "@types/node": "^20",
+    "@zazuko/env-node": "^3.0.0",
+    "rdf-validate-shacl": "^0.6.5",
     "typescript": "^5",
     "vitest": "^4.1.8"
   },

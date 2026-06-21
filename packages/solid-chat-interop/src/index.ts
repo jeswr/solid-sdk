@@ -65,6 +65,8 @@ export {
   serializeLongChat,
   storeToTurtle,
 } from "./reconcile.js";
+// --- the canonical message SHACL shape (drives the solid-components message components) ---
+export { MESSAGE_SHAPE_PATH, messageShapeTtl } from "./shape.js";
 
 // --- vocabulary (IRI constants + prefixes) ---
 export {

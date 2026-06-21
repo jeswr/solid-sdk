@@ -1,0 +1,163 @@
+# SHACL shape for the CANONICAL CHAT MESSAGE model (@jeswr/solid-chat-interop).
+#
+# The single contract an AS2.0 chat message (`as:Note`) written through this
+# package's canonical write path (`buildAs2Message`) satisfies — so the codegen
+# framework's shape-driven message components (`jeswr-message-list`,
+# `jeswr-shacl-view` / `-form`) can render a message FROM ITS SHAPE: author,
+# content (text), timestamp, reply edge, and the AS2.0 + LongChat-reconciled
+# fields the package canonicalises.
+#
+# The canonical message class is `as:Note` — exactly what `@jeswr/pod-chat`
+# produces and what `parseAs2Message` keys on (`sh:targetClass as:Note`). The
+# property paths below are the EXACT predicates `As2MessageDoc` reads and writes
+# (src/as2.ts), so a message that round-trips through this package is
+# shape-conformant by construction.
+#
+# **Mint NOTHING.** Every IRI here is an EXISTING, dereferenceable term from a
+# vocabulary the suite already speaks (matching src/vocab.ts):
+#  - ActivityStreams 2.0 (`as:` = https://www.w3.org/ns/activitystreams#) — the
+#    canonical chat write model. NB the `https` scheme: this is the IRI the
+#    package's writer emits, so the shape MUST use it (an `http://…` AS namespace
+#    would not match a single written triple).
+#  - Dublin Core Terms (`dct:`) — the `dct:isReplacedBy` edit pointer + the
+#    `dct:title` of the actionable task overlay.
+#  - schema.org (`schema:`) — the `schema:dateDeleted` soft-delete tombstone.
+#  - W3C PROV-O (`prov:`) — AI / external-source attribution.
+#  - W3C SolidOS workflow ontology (`wf:`) — the `wf:assignee` of the re-used
+#    `@jeswr/solid-task-model` `wf:Task` actionable overlay + its `wf:Open` /
+#    `wf:Closed` lifecycle-state classes.
+#
+# The shape is ANONYMOUS (a blank node), so this package mints nothing at a
+# non-resolving domain — the cross-shape common denominator of the canonical
+# message model. Validate a message document's typed-accessor output before write,
+# and on read of untrusted foreign data (rdf-validate-shacl; see
+# src/message-shape.test.ts).
+
+@prefix sh:     <http://www.w3.org/ns/shacl#> .
+@prefix as:     <https://www.w3.org/ns/activitystreams#> .
+@prefix dct:    <http://purl.org/dc/terms/> .
+@prefix schema: <http://schema.org/> .
+@prefix prov:   <http://www.w3.org/ns/prov#> .
+@prefix wf:     <http://www.w3.org/2005/01/wf/flow#> .
+@prefix rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd:    <http://www.w3.org/2001/XMLSchema#> .
+
+# --- A canonical chat message (as:Note) ---
+[] a sh:NodeShape ;
+  sh:targetClass as:Note ;
+
+  # Content — the message body TEXT (never markup), exactly one string. The field
+  # every message component renders as the message text. Expected: minCount 1.
+  # (`buildAs2Message` always writes `as:content`; an empty body is written as the
+  # empty string, so the triple is present.) A producer that drops the body is not
+  # a renderable canonical message.
+  sh:property [
+    sh:path as:content ; sh:name "content" ;
+    sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ;
+  ] ;
+
+  # Media type — the body content type (defaults to text/plain). At most one string.
+  # The components render `as:content` as TEXT, so this advertises the body is text.
+  sh:property [
+    sh:path as:mediaType ; sh:name "media type" ;
+    sh:datatype xsd:string ; sh:maxCount 1 ;
+  ] ;
+
+  # Timestamp — when the message was posted (xsd:dateTime). Expected (minCount 1):
+  # the writer defaults `as:published` to `now` when omitted, so a canonical
+  # message always carries one — the components sort/group by it. At most one.
+  sh:property [
+    sh:path as:published ; sh:name "published" ;
+    sh:datatype xsd:dateTime ; sh:minCount 1 ; sh:maxCount 1 ;
+  ] ;
+
+  # Author — the human author WebID: an IRI (nodeKind) AND http(s)-schemed
+  # (pattern, matching the node's lexical value, which for an IRI constrains the
+  # scheme — a urn:/mailto: author is rejected, mirroring the package's
+  # http(s)-only IRI filter). OPTIONAL (no minCount): an AI / system / imported
+  # message may carry PROV-O attribution instead of a human author. At most one —
+  # a message has one author.
+  sh:property [
+    sh:path as:attributedTo ; sh:name "author" ;
+    sh:nodeKind sh:IRI ; sh:maxCount 1 ;
+    sh:pattern "^https?://" ;
+  ] ;
+
+  # Room / context the message belongs to — an IRI, at most one. Optional.
+  sh:property [
+    sh:path as:context ; sh:name "room" ;
+    sh:nodeKind sh:IRI ; sh:maxCount 1 ;
+    sh:pattern "^https?://" ;
+  ] ;
+
+  # In-reply-to — the message this one replies to (an IRI), at most one. OPTIONAL:
+  # a top-level message has no parent; a reply carries exactly one. Drives the
+  # threaded rendering in the message-list component.
+  sh:property [
+    sh:path as:inReplyTo ; sh:name "in reply to" ;
+    sh:nodeKind sh:IRI ; sh:maxCount 1 ;
+    sh:pattern "^https?://" ;
+  ] ;
+
+  # Edit pointer — the resource that supersedes this message (an edit). An IRI, at
+  # most one. The reconciler reads `dct:isReplacedBy` as the edit edge.
+  sh:property [
+    sh:path dct:isReplacedBy ; sh:name "replaced by" ;
+    sh:nodeKind sh:IRI ; sh:maxCount 1 ;
+  ] ;
+
+  # Soft-delete tombstone — the deletion timestamp (xsd:dateTime), at most one.
+  # When present the components render the message as deleted.
+  sh:property [
+    sh:path schema:dateDeleted ; sh:name "deleted at" ;
+    sh:datatype xsd:dateTime ; sh:maxCount 1 ;
+  ] ;
+
+  # --- PROV-O provenance (AI / external-source attribution) ---
+  # All IRIs, at most one each. Lets an AI-authored / imported message render with
+  # honest attribution rather than a faked human author.
+  sh:property [
+    sh:path prov:wasAttributedTo ; sh:name "attributed to (agent)" ;
+    sh:nodeKind sh:IRI ; sh:maxCount 1 ;
+    sh:pattern "^https?://" ;
+  ] ;
+  sh:property [
+    sh:path prov:wasGeneratedBy ; sh:name "generated by (model/endpoint)" ;
+    sh:nodeKind sh:IRI ; sh:maxCount 1 ;
+    sh:pattern "^https?://" ;
+  ] ;
+  sh:property [
+    sh:path prov:wasDerivedFrom ; sh:name "derived from (source)" ;
+    sh:nodeKind sh:IRI ; sh:maxCount 1 ;
+    sh:pattern "^https?://" ;
+  ] ;
+
+  # --- wf:Task actionable overlay (the @jeswr/solid-task-model facet) ---
+  # When the message is actionable, the SAME subject is ALSO typed `wf:Task` and
+  # carries a `dct:title` (the task summary, distinct from the chat body) and an
+  # optional `wf:assignee` WebID — the SAME shape solid-issues / the Pod Manager
+  # read. Both at most one; both OPTIONAL (a plain message carries neither).
+  sh:property [
+    sh:path dct:title ; sh:name "task title" ;
+    sh:datatype xsd:string ; sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path wf:assignee ; sh:name "task assignee" ;
+    sh:nodeKind sh:IRI ; sh:maxCount 1 ;
+    sh:pattern "^https?://" ;
+  ] ;
+
+  # State of the actionable overlay — rdf:type carries `wf:Open` / `wf:Closed`
+  # (the SolidOS task model) when (and only when) the message is also a `wf:Task`.
+  # A node typed `wf:Task` should carry exactly one of the two state classes; a
+  # PLAIN message (no `wf:Task`) carries neither. Expressed on the rdf:type path
+  # via sh:qualifiedValueShape [ sh:in ( wf:Open wf:Closed ) ] with qualifiedMax 1
+  # (at most one of the two), and severity sh:Warning — a plain message has zero
+  # (conforming), and a malformed actionable message carrying BOTH is advisory, not
+  # fatal (untrusted read data may be mid-migration; each consumer decides).
+  sh:property [
+    sh:path rdf:type ; sh:name "task state" ;
+    sh:qualifiedValueShape [ sh:in ( wf:Open wf:Closed ) ] ;
+    sh:qualifiedMaxCount 1 ;
+    sh:severity sh:Warning ;
+  ] .
