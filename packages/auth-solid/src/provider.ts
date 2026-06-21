@@ -165,8 +165,15 @@ export async function Solid(config: SolidProviderConfig): Promise<SolidProvider>
     issuer: config.issuer,
     clientId: config.clientId,
     // A public client (Client Identifier Document) has no secret; only set it for a confidential
-    // client. Auth.js treats a missing secret as a public client (token_endpoint_auth_method none).
+    // client.
     ...(hasSecret ? { clientSecret: config.clientSecret } : {}),
+    // SECURITY (token-endpoint client auth): Auth.js does NOT default a public client to `none` — an
+    // UNDEFINED `token_endpoint_auth_method` falls into its `client_secret_basic` branch, which would
+    // send `Authorization: Basic base64(clientId:undefined)` and break a public Solid client (Client
+    // Identifier Document). So we set the method EXPLICITLY: `none` for a public client (no secret),
+    // and `client_secret_basic` for a confidential one (Auth.js's effective default, made explicit so
+    // an `undefined` never silently selects basic-with-no-secret). A roborev (High) finding.
+    client: { token_endpoint_auth_method: hasSecret ? "client_secret_basic" : "none" },
     // PKCE S256 + state + nonce — ALL mandatory for Solid-OIDC.
     checks: [...SOLID_CHECKS],
     authorization: { params: { scope } },

@@ -348,6 +348,42 @@ describe("solidDpopFetch — pod (resource) requests", () => {
     expect(captured?.body).toBe("<a> <b> <c> .");
   });
 
+  it("does NOT drop the body when a Request with its own body is passed (regression)", async () => {
+    const op = await createMockOp({ issuer: ISSUER, clientId: CLIENT_ID, webId: WEBID });
+    const st = await stateFor();
+    const f = buildSolidDpopFetch(
+      { accessToken: st.accessToken, dpopKeyJwk: st.dpopKeyJwk },
+      { fetch: op.fetch },
+    );
+    const req = new Request(POD, {
+      method: "PUT",
+      headers: { "content-type": "text/turtle" },
+      body: "<x> <y> <z> .",
+    });
+    const res = await f(req);
+    expect(res.status).toBe(200);
+    expect(op.lastResourceDpop()?.payload.htm).toBe("PUT");
+    const captured = op.captured.find((c) => c.url === POD && c.method === "PUT");
+    expect(captured?.body).toBe("<x> <y> <z> ."); // the Request body was forwarded, not dropped
+  });
+
+  it("replays the Request body across the §8 DPoP-Nonce retry (not consumed by the first attempt)", async () => {
+    const op = await createMockOp({ issuer: ISSUER, clientId: CLIENT_ID, webId: WEBID });
+    op.challengeNextResourceWithNonce("res-nonce-body");
+    const st = await stateFor();
+    const f = buildSolidDpopFetch(
+      { accessToken: st.accessToken, dpopKeyJwk: st.dpopKeyJwk },
+      { fetch: op.fetch },
+    );
+    const req = new Request(POD, { method: "PUT", body: "replay-me" });
+    const res = await f(req);
+    expect(res.status).toBe(200);
+    // The successful (retried) request must still carry the body.
+    const captured = op.captured.filter((c) => c.url === POD && c.method === "PUT");
+    expect(captured.length).toBeGreaterThanOrEqual(2);
+    expect(captured[captured.length - 1]?.body).toBe("replay-me");
+  });
+
   it("rejects an http: pod URL when allowInsecure is false (token never sent in clear)", async () => {
     const underlying = vi.fn(async () => new Response("{}", { status: 200 }));
     const st = await stateFor();

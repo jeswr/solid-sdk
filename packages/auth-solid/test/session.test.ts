@@ -25,6 +25,7 @@ describe("persistSolidTokensIntoJwt", () => {
         refresh_token: "rt",
         id_token: "it",
         expires_at: 12345,
+        token_type: "DPoP",
       },
       dpopKeyJwk: jwk,
       webid: WEBID,
@@ -67,11 +68,43 @@ describe("persistSolidTokensIntoJwt", () => {
   it("omits optional fields that are absent", async () => {
     const kp = await generateDpopKeyPair();
     const jwk = await exportDpopKeyPairJwk(kp);
-    const state = persistSolidTokensIntoJwt({ account: { access_token: "at" }, dpopKeyJwk: jwk });
+    const state = persistSolidTokensIntoJwt({
+      account: { access_token: "at", token_type: "DPoP" },
+      dpopKeyJwk: jwk,
+    });
     expect("refreshToken" in state).toBe(false);
     expect("idToken" in state).toBe(false);
     expect("expiresAt" in state).toBe(false);
     expect("webid" in state).toBe(false);
+  });
+
+  it("FAILS CLOSED on a non-DPoP token_type (DPoP-downgrade guard)", async () => {
+    const kp = await generateDpopKeyPair();
+    const jwk = await exportDpopKeyPairJwk(kp);
+    expect(() =>
+      persistSolidTokensIntoJwt({
+        account: { access_token: "at", token_type: "Bearer" },
+        dpopKeyJwk: jwk,
+      }),
+    ).toThrow(/DPoP|fail-closed/i);
+  });
+
+  it("FAILS CLOSED when token_type is absent (a Solid token MUST be DPoP-bound)", async () => {
+    const kp = await generateDpopKeyPair();
+    const jwk = await exportDpopKeyPairJwk(kp);
+    expect(() =>
+      persistSolidTokensIntoJwt({ account: { access_token: "at" }, dpopKeyJwk: jwk }),
+    ).toThrow(/DPoP|fail-closed/i);
+  });
+
+  it("accepts a case-insensitive `dpop` token_type", async () => {
+    const kp = await generateDpopKeyPair();
+    const jwk = await exportDpopKeyPairJwk(kp);
+    const state = persistSolidTokensIntoJwt({
+      account: { access_token: "at", token_type: "dpop" },
+      dpopKeyJwk: jwk,
+    });
+    expect(state.accessToken).toBe("at");
   });
 });
 
@@ -118,7 +151,7 @@ describe("DPoP key round-trip — the restart-survival property", () => {
     const kp = await generateDpopKeyPair();
     const jwk = await exportDpopKeyPairJwk(kp);
     const persisted = persistSolidTokensIntoJwt({
-      account: { access_token: "at" },
+      account: { access_token: "at", token_type: "DPoP" },
       dpopKeyJwk: jwk,
     });
     // Simulate JSON serialization through the JWT.
@@ -134,7 +167,7 @@ describe("DPoP key round-trip — the restart-survival property", () => {
     const kp = await generateDpopKeyPair();
     const jwk = await exportDpopKeyPairJwk(kp);
     const persisted = persistSolidTokensIntoJwt({
-      account: { access_token: "pod-at" },
+      account: { access_token: "pod-at", token_type: "DPoP" },
       dpopKeyJwk: jwk,
     });
     const roundTripped = JSON.parse(JSON.stringify({ [SOLID_JWT_KEY]: persisted }));

@@ -240,6 +240,43 @@ function resolveResourceUrl(input) {
     );
   }
 }
+async function bufferStream(stream) {
+  const reader = stream.getReader();
+  const chunks = [];
+  let total = 0;
+  try {
+    for (; ; ) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+      chunks.push(value);
+      total += value.byteLength;
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return out.buffer.slice(0, total);
+}
+function requestTransportFields(req) {
+  return {
+    redirect: req.redirect,
+    cache: req.cache,
+    credentials: req.credentials,
+    integrity: req.integrity,
+    keepalive: req.keepalive,
+    mode: req.mode,
+    referrer: req.referrer,
+    referrerPolicy: req.referrerPolicy,
+    ...req.signal ? { signal: req.signal } : {}
+  };
+}
 function buildSolidDpopFetch(state, options = {}) {
   const underlying = options.fetch ?? globalThis.fetch;
   const allowInsecure = options.allowInsecure === true;
@@ -268,6 +305,13 @@ function buildSolidDpopFetch(state, options = {}) {
     const method = effectiveMethod(input, init);
     const keyPair = await getKeyPair();
     const reqInput = typeof input !== "string" && !(input instanceof URL) ? input : void 0;
+    let bufferedBody;
+    if (init && "body" in init) {
+      const b = init.body ?? void 0;
+      bufferedBody = b instanceof ReadableStream ? await bufferStream(b) : b;
+    } else if (reqInput && reqInput.body !== null) {
+      bufferedBody = await bufferStream(reqInput.clone().body);
+    }
     const send = async (nonce) => {
       const proof = await createDpopProof(
         nonce === void 0 ? { keyPair, htm: method, htu: url, accessToken } : { keyPair, htm: method, htu: url, accessToken, nonce }
@@ -280,7 +324,16 @@ function buildSolidDpopFetch(state, options = {}) {
       }
       headers.set("authorization", `DPoP ${accessToken}`);
       headers.set("dpop", proof);
-      const reqInit = { ...init ?? {}, method, headers };
+      const reqInit = {
+        ...reqInput ? requestTransportFields(reqInput) : {},
+        ...init ?? {},
+        method,
+        headers
+      };
+      delete reqInit.body;
+      if (bufferedBody !== void 0) {
+        reqInit.body = bufferedBody;
+      }
       return underlying(url, reqInit);
     };
     const res = await send();
@@ -353,8 +406,15 @@ async function Solid(config) {
     issuer: config.issuer,
     clientId: config.clientId,
     // A public client (Client Identifier Document) has no secret; only set it for a confidential
-    // client. Auth.js treats a missing secret as a public client (token_endpoint_auth_method none).
+    // client.
     ...hasSecret ? { clientSecret: config.clientSecret } : {},
+    // SECURITY (token-endpoint client auth): Auth.js does NOT default a public client to `none` — an
+    // UNDEFINED `token_endpoint_auth_method` falls into its `client_secret_basic` branch, which would
+    // send `Authorization: Basic base64(clientId:undefined)` and break a public Solid client (Client
+    // Identifier Document). So we set the method EXPLICITLY: `none` for a public client (no secret),
+    // and `client_secret_basic` for a confidential one (Auth.js's effective default, made explicit so
+    // an `undefined` never silently selects basic-with-no-secret). A roborev (High) finding.
+    client: { token_endpoint_auth_method: hasSecret ? "client_secret_basic" : "none" },
     // PKCE S256 + state + nonce — ALL mandatory for Solid-OIDC.
     checks: [...SOLID_CHECKS],
     authorization: { params: { scope } },
@@ -418,6 +478,12 @@ function persistSolidTokensIntoJwt(input) {
   if (typeof dpopKeyJwk.d !== "string" || dpopKeyJwk.d.length === 0) {
     throw new Error(
       "persistSolidTokensIntoJwt: `dpopKeyJwk` has no private component (`d`); a public-only JWK cannot sign DPoP proofs after a restart (fail-closed)."
+    );
+  }
+  const tokenType = account.token_type;
+  if (typeof tokenType !== "string" || tokenType.toLowerCase() !== "dpop") {
+    throw new Error(
+      `persistSolidTokensIntoJwt: Solid-OIDC requires DPoP-bound (sender-constrained) tokens, but the account token_type is "${tokenType ?? "none"}". Refusing to persist a non-DPoP token (fail-closed).`
     );
   }
   return {

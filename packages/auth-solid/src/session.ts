@@ -105,6 +105,19 @@ export function persistSolidTokensIntoJwt(input: PersistSolidTokensInput): Solid
         "cannot sign DPoP proofs after a restart (fail-closed).",
     );
   }
+  // SECURITY (DPoP-downgrade guard): Solid-OIDC tokens are sender-constrained via DPoP. An OP that
+  // (mistakenly or maliciously) returned a plain `bearer` token to our DPoP-bound request would
+  // otherwise be persisted and used with a DPoP proof against the pod — silently dropping the
+  // proof-of-possession guarantee. We FAIL CLOSED: persist only when `token_type` is present and
+  // case-insensitively equals `DPoP` (RFC 9449). A roborev finding.
+  const tokenType = account.token_type;
+  if (typeof tokenType !== "string" || tokenType.toLowerCase() !== "dpop") {
+    throw new Error(
+      `persistSolidTokensIntoJwt: Solid-OIDC requires DPoP-bound (sender-constrained) tokens, but ` +
+        `the account token_type is "${tokenType ?? "none"}". Refusing to persist a non-DPoP token ` +
+        "(fail-closed).",
+    );
+  }
   return {
     accessToken,
     dpopKeyJwk,

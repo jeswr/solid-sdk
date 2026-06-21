@@ -37,9 +37,23 @@ describe("Solid() provider factory — config shape", () => {
     expect("clientSecret" in p).toBe(false);
   });
 
+  it("sets token_endpoint_auth_method `none` for a public client (so Auth.js does NOT default to basic-with-no-secret)", async () => {
+    const p = await Solid({ issuer: ISSUER, clientId: CLIENT_ID });
+    expect((p.client as { token_endpoint_auth_method?: string })?.token_endpoint_auth_method).toBe(
+      "none",
+    );
+  });
+
   it("sets a clientSecret for a confidential client", async () => {
     const p = await Solid({ issuer: ISSUER, clientId: "static-client", clientSecret: "s3cret" });
     expect(p.clientSecret).toBe("s3cret");
+  });
+
+  it("sets token_endpoint_auth_method explicitly for a confidential client (never undefined)", async () => {
+    const p = await Solid({ issuer: ISSUER, clientId: "static-client", clientSecret: "s3cret" });
+    expect((p.client as { token_endpoint_auth_method?: string })?.token_endpoint_auth_method).toBe(
+      "client_secret_basic",
+    );
   });
 
   it("honours id/name overrides", async () => {

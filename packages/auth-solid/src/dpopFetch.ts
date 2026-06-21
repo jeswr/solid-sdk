@@ -284,6 +284,56 @@ function resolveResourceUrl(input: string | URL | Request): string {
   }
 }
 
+/**
+ * Drain a `ReadableStream<Uint8Array>` to an `ArrayBuffer` so a body can be REPLAYED across the
+ * original + §8 nonce-retry attempts (a stream is single-use and would otherwise be consumed by the
+ * first attempt). Used only for stream bodies; already-replayable bodies pass through unbuffered.
+ */
+async function bufferStream(stream: ReadableStream<Uint8Array>): Promise<ArrayBuffer> {
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+      chunks.push(value);
+      total += value.byteLength;
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return out.buffer.slice(0, total);
+}
+
+/**
+ * Extract the transport-relevant fields of a `Request` into a `RequestInit`, so replacing the
+ * Request with `underlying(url, init)` does not silently drop fetch semantics (credentials, mode,
+ * cache, redirect, integrity, keepalive, referrer, referrerPolicy, signal). `body`/`method`/
+ * `headers` are handled separately by the buffering + header-merge logic.
+ */
+function requestTransportFields(req: Request): RequestInit {
+  return {
+    redirect: req.redirect,
+    cache: req.cache,
+    credentials: req.credentials,
+    integrity: req.integrity,
+    keepalive: req.keepalive,
+    mode: req.mode,
+    referrer: req.referrer,
+    referrerPolicy: req.referrerPolicy,
+    ...(req.signal ? { signal: req.signal } : {}),
+  };
+}
+
 /** Options for {@link buildSolidDpopFetch}. */
 export interface SolidDpopFetchOptions {
   /** The base fetch for the actual network call (global `fetch`, or an SSRF-guarded / test fetch). */
@@ -340,10 +390,23 @@ export function buildSolidDpopFetch(
     const method = effectiveMethod(input, init);
     const keyPair = await getKeyPair();
 
-    // Carry over the Request's headers + body where present (init overrides headers). The body is a
-    // resource write — strings/Uint8Array/Blob/URLSearchParams are already replayable for the §8
-    // retry; we forward the same `init.body` reference unchanged.
     const reqInput = typeof input !== "string" && !(input instanceof URL) ? input : undefined;
+
+    // BODY: carry over the request body across the original + §8 retry attempts. Precedence matches
+    // `fetch`: an explicit `init.body` wins over a `Request`'s own body. A non-replayable stream
+    // (a `Request` body, or a `ReadableStream` in `init.body`) is BUFFERED once to an ArrayBuffer so
+    // the nonce retry can resend it — otherwise a `Request`/stream body would be DROPPED on the
+    // built request (a roborev finding) or consumed by the first attempt. Already-replayable bodies
+    // (string / Uint8Array / Blob / URLSearchParams / FormData / ArrayBuffer) pass through.
+    let bufferedBody: BodyInit | undefined;
+    if (init && "body" in init) {
+      const b = init.body ?? undefined;
+      bufferedBody =
+        b instanceof ReadableStream ? await bufferStream(b) : (b as BodyInit | undefined);
+    } else if (reqInput && reqInput.body !== null) {
+      // A Request body is a stream — buffer it (clone first so the original is untouched).
+      bufferedBody = await bufferStream(reqInput.clone().body as ReadableStream<Uint8Array>);
+    }
 
     const send = async (nonce?: string): Promise<Response> => {
       const proof = await createDpopProof(
@@ -351,6 +414,7 @@ export function buildSolidDpopFetch(
           ? { keyPair, htm: method, htu: url, accessToken }
           : { keyPair, htm: method, htu: url, accessToken, nonce },
       );
+      // Merge headers: the Request's first, then init overrides.
       const headers = new Headers(reqInput?.headers ?? undefined);
       if (init?.headers) {
         new Headers(init.headers).forEach((v, k) => {
@@ -359,7 +423,18 @@ export function buildSolidDpopFetch(
       }
       headers.set("authorization", `DPoP ${accessToken}`);
       headers.set("dpop", proof);
-      const reqInit: RequestInit = { ...(init ?? {}), method, headers };
+      // Build the per-attempt init from the Request's transport fields first, then init overrides;
+      // `body` is owned by the buffering above (never leak a consumed/original stream).
+      const reqInit: RequestInit = {
+        ...(reqInput ? requestTransportFields(reqInput) : {}),
+        ...(init ?? {}),
+        method,
+        headers,
+      };
+      delete (reqInit as { body?: unknown }).body;
+      if (bufferedBody !== undefined) {
+        reqInit.body = bufferedBody;
+      }
       return underlying(url, reqInit);
     };
 
