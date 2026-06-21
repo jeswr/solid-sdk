@@ -16,6 +16,7 @@
 export {
   buildDpopCustomFetch,
   buildSolidDpopFetch as solidDpopFetch,
+  DEFAULT_MAX_REPLAY_BODY_BYTES,
   DPOP_NONCE_RETRY_LIMIT,
   isLoopbackHost,
   type SolidDpopFetchOptions,

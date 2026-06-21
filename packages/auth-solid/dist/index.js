@@ -240,20 +240,49 @@ function resolveResourceUrl(input) {
     );
   }
 }
-async function bufferStream(stream) {
+var DEFAULT_MAX_REPLAY_BODY_BYTES = 10 * 1024 * 1024;
+function abortReason(signal) {
+  const reason = signal.reason;
+  if (reason !== void 0) {
+    return reason;
+  }
+  return new DOMException("The operation was aborted.", "AbortError");
+}
+async function bufferStream(stream, signal, maxBytes) {
   const reader = stream.getReader();
+  let removeAbortListener;
+  const abortRace = signal === void 0 ? void 0 : new Promise((_resolve, reject) => {
+    const onAbort = () => reject(abortReason(signal));
+    signal.addEventListener("abort", onAbort, { once: true });
+    removeAbortListener = () => signal.removeEventListener("abort", onAbort);
+  });
+  abortRace?.catch(() => {
+  });
   const chunks = [];
   let total = 0;
   try {
+    if (signal?.aborted) {
+      throw abortReason(signal);
+    }
     for (; ; ) {
-      const { done, value } = await reader.read();
-      if (done) {
+      const result = abortRace ? await Promise.race([reader.read(), abortRace]) : await reader.read();
+      if (result.done) {
         break;
       }
-      chunks.push(value);
-      total += value.byteLength;
+      total += result.value.byteLength;
+      if (total > maxBytes) {
+        throw new Error(
+          `solidDpopFetch: request stream body exceeds the ${maxBytes}-byte replay buffer cap. Raise \`maxReplayBodyBytes\` to upload a larger body (it is buffered so the \xA78 DPoP-nonce retry can replay it), or pass an already-replayable body (string / Uint8Array / Blob).`
+        );
+      }
+      chunks.push(result.value);
     }
+  } catch (err) {
+    await reader.cancel(err).catch(() => {
+    });
+    throw err;
   } finally {
+    removeAbortListener?.();
     reader.releaseLock();
   }
   const out = new Uint8Array(total);
@@ -280,6 +309,7 @@ function requestTransportFields(req) {
 function buildSolidDpopFetch(state, options = {}) {
   const underlying = options.fetch ?? globalThis.fetch;
   const allowInsecure = options.allowInsecure === true;
+  const maxReplayBodyBytes = options.maxReplayBodyBytes ?? DEFAULT_MAX_REPLAY_BODY_BYTES;
   const accessToken = state.accessToken;
   if (typeof accessToken !== "string" || accessToken.length === 0) {
     throw new Error("solidDpopFetch: SolidAuthState.accessToken is missing/empty.");
@@ -305,12 +335,17 @@ function buildSolidDpopFetch(state, options = {}) {
     const method = effectiveMethod(input, init);
     const keyPair = await getKeyPair();
     const reqInput = typeof input !== "string" && !(input instanceof URL) ? input : void 0;
+    const effectiveSignal = init && "signal" in init ? init.signal ?? void 0 : reqInput?.signal ?? void 0;
     let bufferedBody;
     if (init && "body" in init) {
       const b = init.body ?? void 0;
-      bufferedBody = b instanceof ReadableStream ? await bufferStream(b) : b;
+      bufferedBody = b instanceof ReadableStream ? await bufferStream(b, effectiveSignal, maxReplayBodyBytes) : b;
     } else if (reqInput && reqInput.body !== null) {
-      bufferedBody = await bufferStream(reqInput.clone().body);
+      bufferedBody = await bufferStream(
+        reqInput.clone().body,
+        effectiveSignal,
+        maxReplayBodyBytes
+      );
     }
     const send = async (nonce) => {
       const proof = await createDpopProof(
@@ -522,6 +557,7 @@ function extractSolidAuthState(source) {
   };
 }
 export {
+  DEFAULT_MAX_REPLAY_BODY_BYTES,
   DEFAULT_SCOPE2 as DEFAULT_SCOPE,
   DPOP_NONCE_RETRY_LIMIT,
   SOLID_CHECKS,

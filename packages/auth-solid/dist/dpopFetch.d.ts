@@ -46,12 +46,26 @@ export declare function assertSecureTransport(rawUrl: string, allowInsecure: boo
  * @param allowInsecure permit http: on loopback (dev OP). Default false (https-only).
  */
 export declare function buildDpopCustomFetch(keyPair: DpopKeyPair, underlying: FetchLike, allowInsecure: boolean): typeof fetch;
+/**
+ * Default cap (bytes) on a STREAM request body buffered for replay across the §8 nonce retry. A
+ * stream body larger than this is REJECTED rather than buffered, so an upload (or a proxied untrusted
+ * body) cannot exhaust memory. 10 MiB — generous for typical Solid resource writes; raise via
+ * `maxReplayBodyBytes`.
+ */
+export declare const DEFAULT_MAX_REPLAY_BODY_BYTES: number;
 /** Options for {@link buildSolidDpopFetch}. */
 export interface SolidDpopFetchOptions {
     /** The base fetch for the actual network call (global `fetch`, or an SSRF-guarded / test fetch). */
     readonly fetch?: FetchLike;
     /** Permit http: on loopback (dev pod). Default false (https-only). */
     readonly allowInsecure?: boolean;
+    /**
+     * Cap (bytes) on a STREAM request body buffered for the §8 DPoP-nonce retry. A stream body larger
+     * than this is REJECTED rather than buffered (memory-safety). Default {@link DEFAULT_MAX_REPLAY_BODY_BYTES}
+     * (10 MiB). Non-stream bodies (string / Uint8Array / Blob / …) are already replayable and not
+     * buffered, so the cap does not apply to them.
+     */
+    readonly maxReplayBodyBytes?: number;
 }
 /**
  * Build a DPoP-attaching authed `fetch` for POD (resource-server) requests, from a persisted

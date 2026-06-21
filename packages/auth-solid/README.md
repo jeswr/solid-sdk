@@ -130,6 +130,7 @@ const res = await fetch("https://alice.example/private/notes.ttl");
 | `buildDpopCustomFetch(keyPair, underlying, allowInsecure)` | (Advanced) the token-leg DPoP customFetch builder. |
 | `SOLID_CHECKS` / `DEFAULT_SCOPE` | `["pkce","state","nonce"]` / `"openid webid offline_access"`. |
 | `isLoopbackHost` / `DPOP_NONCE_RETRY_LIMIT` | Transport helper / the §8 retry cap (`1`). |
+| `DEFAULT_MAX_REPLAY_BODY_BYTES` | Default cap (10 MiB) on a stream body buffered for the §8 retry (override via `solidDpopFetch(state, { maxReplayBodyBytes })`). |
 | types | `SolidProviderConfig`, `SolidProfile`, `SolidAuthState`, `SolidJwtState`, `SolidProvider`, `SolidDpopFetchOptions`, `AccountLike`, `PersistSolidTokensInput`, `FetchLike` |
 
 ### `Solid(config)` configuration
@@ -173,6 +174,10 @@ This is an auth package; the security posture is non-negotiable:
   token/proof is never sent in the clear) unless `allowInsecure` permits a loopback host.
 - **§8 nonce retry capped at exactly one** — no retry loop, for both the token endpoint and the
   resource server.
+- **Bounded, abort-cancellable replay buffering.** A `Request`/stream pod body is buffered once so
+  the §8 retry can replay it — capped at `maxReplayBodyBytes` (default 10 MiB; an oversized stream is
+  rejected, not buffered) and cancelled promptly on the request's `AbortSignal`, so a large or
+  untrusted upload cannot exhaust memory.
 - **No token / proof / key / request body is ever logged**, and none appears in any thrown error.
 
 ### The DPoP-key-in-JWT tradeoff (read this)

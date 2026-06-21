@@ -285,24 +285,82 @@ function resolveResourceUrl(input: string | URL | Request): string {
 }
 
 /**
+ * Default cap (bytes) on a STREAM request body buffered for replay across the §8 nonce retry. A
+ * stream body larger than this is REJECTED rather than buffered, so an upload (or a proxied untrusted
+ * body) cannot exhaust memory. 10 MiB — generous for typical Solid resource writes; raise via
+ * `maxReplayBodyBytes`.
+ */
+export const DEFAULT_MAX_REPLAY_BODY_BYTES = 10 * 1024 * 1024;
+
+/** The abort reason if the signal supplies one, else a standard `AbortError`. */
+function abortReason(signal: AbortSignal): unknown {
+  const reason = (signal as { reason?: unknown }).reason;
+  if (reason !== undefined) {
+    return reason;
+  }
+  return new DOMException("The operation was aborted.", "AbortError");
+}
+
+/**
  * Drain a `ReadableStream<Uint8Array>` to an `ArrayBuffer` so a body can be REPLAYED across the
  * original + §8 nonce-retry attempts (a stream is single-use and would otherwise be consumed by the
  * first attempt). Used only for stream bodies; already-replayable bodies pass through unbuffered.
+ *
+ * BOUNDED + CANCELLABLE (a roborev finding): the read is capped at `maxBytes` — a larger body is
+ * rejected (cancelling the reader) rather than buffered, so a large/unbounded upload or a proxied
+ * untrusted stream cannot exhaust memory. We read MANUALLY via `getReader()` (not
+ * `new Response(stream).arrayBuffer()`, which locks the stream so `cancel()` cannot stop an in-flight
+ * read), racing each `read()` against the optional `AbortSignal` so an abort mid-drain rejects
+ * promptly and stops the source.
  */
-async function bufferStream(stream: ReadableStream<Uint8Array>): Promise<ArrayBuffer> {
+async function bufferStream(
+  stream: ReadableStream<Uint8Array>,
+  signal: AbortSignal | undefined,
+  maxBytes: number,
+): Promise<ArrayBuffer> {
   const reader = stream.getReader();
+
+  // ONE abort listener for the whole read (not one per chunk), removed in `finally`.
+  let removeAbortListener: (() => void) | undefined;
+  const abortRace: Promise<never> | undefined =
+    signal === undefined
+      ? undefined
+      : new Promise<never>((_resolve, reject) => {
+          const onAbort = () => reject(abortReason(signal));
+          signal.addEventListener("abort", onAbort, { once: true });
+          removeAbortListener = () => signal.removeEventListener("abort", onAbort);
+        });
+  // Swallow the abortRace rejection if it never wins (avoids an unhandled rejection).
+  abortRace?.catch(() => {});
+
   const chunks: Uint8Array[] = [];
   let total = 0;
   try {
+    if (signal?.aborted) {
+      throw abortReason(signal);
+    }
     for (;;) {
-      const { done, value } = await reader.read();
-      if (done) {
+      const result = abortRace
+        ? await Promise.race([reader.read(), abortRace])
+        : await reader.read();
+      if (result.done) {
         break;
       }
-      chunks.push(value);
-      total += value.byteLength;
+      total += result.value.byteLength;
+      if (total > maxBytes) {
+        throw new Error(
+          `solidDpopFetch: request stream body exceeds the ${maxBytes}-byte replay buffer cap. ` +
+            "Raise `maxReplayBodyBytes` to upload a larger body (it is buffered so the §8 DPoP-nonce " +
+            "retry can replay it), or pass an already-replayable body (string / Uint8Array / Blob).",
+        );
+      }
+      chunks.push(result.value);
     }
+  } catch (err) {
+    await reader.cancel(err).catch(() => {});
+    throw err;
   } finally {
+    removeAbortListener?.();
     reader.releaseLock();
   }
   const out = new Uint8Array(total);
@@ -340,6 +398,13 @@ export interface SolidDpopFetchOptions {
   readonly fetch?: FetchLike;
   /** Permit http: on loopback (dev pod). Default false (https-only). */
   readonly allowInsecure?: boolean;
+  /**
+   * Cap (bytes) on a STREAM request body buffered for the §8 DPoP-nonce retry. A stream body larger
+   * than this is REJECTED rather than buffered (memory-safety). Default {@link DEFAULT_MAX_REPLAY_BODY_BYTES}
+   * (10 MiB). Non-stream bodies (string / Uint8Array / Blob / …) are already replayable and not
+   * buffered, so the cap does not apply to them.
+   */
+  readonly maxReplayBodyBytes?: number;
 }
 
 /**
@@ -360,6 +425,7 @@ export function buildSolidDpopFetch(
 ): FetchLike {
   const underlying: FetchLike = options.fetch ?? (globalThis.fetch as FetchLike);
   const allowInsecure = options.allowInsecure === true;
+  const maxReplayBodyBytes = options.maxReplayBodyBytes ?? DEFAULT_MAX_REPLAY_BODY_BYTES;
   const accessToken = state.accessToken;
   if (typeof accessToken !== "string" || accessToken.length === 0) {
     throw new Error("solidDpopFetch: SolidAuthState.accessToken is missing/empty.");
@@ -392,20 +458,32 @@ export function buildSolidDpopFetch(
 
     const reqInput = typeof input !== "string" && !(input instanceof URL) ? input : undefined;
 
+    // The effective abort signal (explicit init wins, else the Request's) — honoured while BUFFERING
+    // a stream body so an abort during the drain rejects promptly and stops the source.
+    const effectiveSignal: AbortSignal | undefined =
+      init && "signal" in init ? (init.signal ?? undefined) : (reqInput?.signal ?? undefined);
+
     // BODY: carry over the request body across the original + §8 retry attempts. Precedence matches
     // `fetch`: an explicit `init.body` wins over a `Request`'s own body. A non-replayable stream
     // (a `Request` body, or a `ReadableStream` in `init.body`) is BUFFERED once to an ArrayBuffer so
     // the nonce retry can resend it — otherwise a `Request`/stream body would be DROPPED on the
-    // built request (a roborev finding) or consumed by the first attempt. Already-replayable bodies
-    // (string / Uint8Array / Blob / URLSearchParams / FormData / ArrayBuffer) pass through.
+    // built request or consumed by the first attempt. The buffering is BOUNDED (maxReplayBodyBytes)
+    // and ABORT-CANCELLABLE (a roborev finding). Already-replayable bodies (string / Uint8Array /
+    // Blob / URLSearchParams / FormData / ArrayBuffer) pass through unbuffered.
     let bufferedBody: BodyInit | undefined;
     if (init && "body" in init) {
       const b = init.body ?? undefined;
       bufferedBody =
-        b instanceof ReadableStream ? await bufferStream(b) : (b as BodyInit | undefined);
+        b instanceof ReadableStream
+          ? await bufferStream(b, effectiveSignal, maxReplayBodyBytes)
+          : (b as BodyInit | undefined);
     } else if (reqInput && reqInput.body !== null) {
       // A Request body is a stream — buffer it (clone first so the original is untouched).
-      bufferedBody = await bufferStream(reqInput.clone().body as ReadableStream<Uint8Array>);
+      bufferedBody = await bufferStream(
+        reqInput.clone().body as ReadableStream<Uint8Array>,
+        effectiveSignal,
+        maxReplayBodyBytes,
+      );
     }
 
     const send = async (nonce?: string): Promise<Response> => {

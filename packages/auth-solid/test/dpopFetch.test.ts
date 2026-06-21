@@ -411,6 +411,96 @@ describe("solidDpopFetch — pod (resource) requests", () => {
   });
 });
 
+describe("solidDpopFetch — bounded + cancellable replay buffering", () => {
+  async function stateFor() {
+    const kp = await generateDpopKeyPair();
+    const dpopKeyJwk = await exportJWK(kp.privateKey);
+    return { accessToken: "pod-access-token-cap", dpopKeyJwk };
+  }
+
+  function streamOf(chunks: Uint8Array[]): ReadableStream<Uint8Array> {
+    let i = 0;
+    return new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (i < chunks.length) {
+          controller.enqueue(chunks[i++] as Uint8Array);
+        } else {
+          controller.close();
+        }
+      },
+    });
+  }
+
+  it("REJECTS a stream body larger than maxReplayBodyBytes (memory-safety) and never sends", async () => {
+    const underlying = vi.fn(async () => new Response("{}", { status: 200 }));
+    const st = await stateFor();
+    const f = buildSolidDpopFetch(
+      { accessToken: st.accessToken, dpopKeyJwk: st.dpopKeyJwk },
+      { fetch: underlying as never, maxReplayBodyBytes: 8 },
+    );
+    const body = streamOf([new Uint8Array(4), new Uint8Array(4), new Uint8Array(4)]); // 12 > 8
+    await expect(f(POD, { method: "PUT", body } as RequestInit)).rejects.toThrow(
+      /replay buffer cap|maxReplayBodyBytes/,
+    );
+    expect(underlying).not.toHaveBeenCalled();
+  });
+
+  it("allows a stream body within the cap", async () => {
+    const op = await createMockOp({ issuer: ISSUER, clientId: CLIENT_ID, webId: WEBID });
+    const st = await stateFor();
+    const f = buildSolidDpopFetch(
+      { accessToken: st.accessToken, dpopKeyJwk: st.dpopKeyJwk },
+      { fetch: op.fetch, maxReplayBodyBytes: 1024 },
+    );
+    const body = streamOf([new TextEncoder().encode("small")]);
+    const res = await f(POD, { method: "PUT", body } as RequestInit);
+    expect(res.status).toBe(200);
+    const captured = op.captured.find((c) => c.url === POD && c.method === "PUT");
+    expect(captured?.body).toBe("small");
+  });
+
+  it("aborts the pre-send buffering promptly when the signal fires (does not drain forever)", async () => {
+    const underlying = vi.fn(async () => new Response("{}", { status: 200 }));
+    const st = await stateFor();
+    const controller = new AbortController();
+    // An infinite stream — if buffering were not abort-aware, this would never resolve.
+    let pulls = 0;
+    const infinite = new ReadableStream<Uint8Array>({
+      pull(c) {
+        pulls += 1;
+        c.enqueue(new Uint8Array(1));
+        if (pulls === 3) {
+          controller.abort();
+        }
+      },
+    });
+    const f = buildSolidDpopFetch(
+      { accessToken: st.accessToken, dpopKeyJwk: st.dpopKeyJwk },
+      { fetch: underlying as never, maxReplayBodyBytes: 1024 * 1024 },
+    );
+    await expect(
+      f(POD, { method: "PUT", body: infinite, signal: controller.signal } as RequestInit),
+    ).rejects.toThrow();
+    expect(underlying).not.toHaveBeenCalled();
+  });
+
+  it("rejects immediately if the signal is already aborted before buffering", async () => {
+    const underlying = vi.fn(async () => new Response("{}", { status: 200 }));
+    const st = await stateFor();
+    const controller = new AbortController();
+    controller.abort();
+    const body = streamOf([new Uint8Array(4)]);
+    const f = buildSolidDpopFetch(
+      { accessToken: st.accessToken, dpopKeyJwk: st.dpopKeyJwk },
+      { fetch: underlying as never },
+    );
+    await expect(
+      f(POD, { method: "PUT", body, signal: controller.signal } as RequestInit),
+    ).rejects.toThrow();
+    expect(underlying).not.toHaveBeenCalled();
+  });
+});
+
 describe("no secret leak in errors/messages", () => {
   it("a transport-rejection error never contains the access token or the private key", async () => {
     const kp = await generateDpopKeyPair();
