@@ -6,6 +6,8 @@
  * against the faithful mock OP (real DPoP proof verification + §8 nonce retry).
  */
 
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { customFetch } from "@auth/core";
 import { calculateJwkThumbprint } from "jose";
 import { describe, expect, it } from "vitest";
@@ -247,5 +249,29 @@ describe("Solid() — token exchange end-to-end through the customFetch", () => 
     } finally {
       globalThis.fetch = realFetch;
     }
+  });
+});
+
+describe("@auth/core peer contract (github-install regression)", () => {
+  // REGRESSION (caught on a clean github: install): the `customFetch` symbol this package imports
+  // is a NAMED export of @auth/core only from 0.37.0 — and npm's `latest` dist-tag lagged at 0.34.3
+  // (no such export), so a bare `npm install @auth/core` pulled an export-less version and the
+  // import failed at load. The peer floor MUST stay >=0.37 so the declared contract matches the
+  // symbol's actual availability.
+  it("the imported `customFetch` symbol is present (the export exists in the installed @auth/core)", () => {
+    expect(typeof customFetch).toBe("symbol");
+  });
+
+  it("the declared @auth/core peer floor is >=0.37 (where the customFetch export landed)", () => {
+    const pkgPath = fileURLToPath(new URL("../package.json", import.meta.url));
+    const pkg = JSON.parse(readFileSync(pkgPath, "utf8")) as {
+      peerDependencies?: Record<string, string>;
+    };
+    const range = pkg.peerDependencies?.["@auth/core"] ?? "";
+    const floor = range.match(/(\d+)\.(\d+)\.(\d+)/);
+    expect(floor, `unexpected @auth/core peer range: ${range}`).not.toBeNull();
+    const [, major, minor] = floor as RegExpMatchArray;
+    const ge037 = Number(major) > 0 || (Number(major) === 0 && Number(minor) >= 37);
+    expect(ge037, `@auth/core peer floor must be >=0.37, got ${range}`).toBe(true);
   });
 });

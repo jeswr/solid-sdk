@@ -61,7 +61,7 @@
     "prepare": "npm run build"
   },
   "peerDependencies": {
-    "@auth/core": ">=0.34.0 <1"
+    "@auth/core": ">=0.37.0 <1"
   },
   "dependencies": {
     "@jeswr/solid-dpop": "github:jeswr/solid-dpop#main",

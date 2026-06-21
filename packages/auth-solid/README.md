@@ -37,9 +37,17 @@ requests** from a persisted session.
 
 ```sh
 # GitHub install (committed self-contained dist/ — works under ignore-scripts, no build step):
-npm install github:jeswr/auth-solid#main @auth/core
+npm install github:jeswr/auth-solid#main "@auth/core@^0.37"
 # @auth/core is a PEER dependency. next-auth v5 also works (it re-exports @auth/core's customFetch).
 ```
+
+> **Pin `@auth/core@^0.37` (or newer) explicitly.** The `customFetch` symbol this package depends
+> on is a NAMED export of `@auth/core` only from **0.37.0** onward — and at time of writing npm's
+> `latest` dist-tag for `@auth/core` lags at `0.34.3`, which does **not** export `customFetch`. A
+> bare `npm install @auth/core` therefore pulls a version that breaks the import with
+> `does not provide an export named 'customFetch'`. Install `@auth/core@^0.37` (the peer floor is
+> `>=0.37.0`), or just install `next-auth@^5` (its bundled `@auth/core` is recent and re-exports
+> `customFetch`).
 
 `@jeswr/solid-dpop` is bundled into the committed `dist/`; `jose` and `@auth/core` are resolved by
 you (peer/dep). Node `>=20`, ESM only (matching the Auth.js v5 ecosystem).

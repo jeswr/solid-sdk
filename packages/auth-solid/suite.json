@@ -9,7 +9,7 @@
   "visibility": "public",
   "stack": {
     "lang": "TypeScript (ESM, NodeNext)",
-    "authjs": "@auth/core >=0.34 (PEER dependency, consumer-resolved; next-auth v5 re-exports customFetch)",
+    "authjs": "@auth/core >=0.37 (PEER dependency, consumer-resolved; the customFetch named export exists only from 0.37.0 — npm latest dist-tag lags at 0.34.3; next-auth v5 re-exports customFetch)",
     "dpop": "@jeswr/solid-dpop (git: jeswr/solid-dpop#main — RFC 9449 proofs; bundled into dist)",
     "crypto": "jose ^6.x via @jeswr/solid-dpop (asymmetric-only ES256; consumer-resolved external)",
     "flow": "Solid-OIDC authorization-code + PKCE (S256) + state + nonce + DPoP, via the Auth.js customFetch seam",
