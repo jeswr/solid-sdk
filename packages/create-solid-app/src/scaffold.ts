@@ -12,11 +12,28 @@
  */
 
 import { existsSync } from "node:fs";
-import { cp, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { cp, mkdir, readdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
+
+/**
+ * Template files shipped under a NON-dotfile name that must be renamed to their
+ * real dotfile name in the generated app.
+ *
+ * THE PUBLISH-SAFE-DOTFILE GOTCHA: `npm publish` STRIPS certain dotfiles from the
+ * tarball — most importantly `.npmrc` (it can hold registry auth tokens) and a
+ * nested `.gitignore`. A literal `template/.npmrc` would therefore never reach a
+ * scaffolded app. The fix (the same one create-next-app uses for `gitignore` ->
+ * `.gitignore`) is to ship the file under a non-dotfile name in the template and
+ * rename it during scaffold. Verified: `template/.npmrc` is dropped from
+ * `npm pack`, `template/npmrc` survives.
+ *
+ *  - `npmrc` -> `.npmrc`: supply-chain hardening (`ignore-scripts=true`), matching
+ *    the suite-wide rule, so every scaffolded app is hardened out of the box.
+ */
+const DOTFILE_RENAMES: ReadonlyArray<readonly [from: string, to: string]> = [["npmrc", ".npmrc"]];
 
 /**
  * Directories that must NEVER be copied from the template (build artefacts and
@@ -252,6 +269,18 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
     appName: opts.appName,
     repo: normalizeRepo(opts.repo),
   });
+
+  // Substitution 4: rename the publish-safe non-dotfile shims to their real
+  // dotfile names (e.g. `npmrc` -> `.npmrc`). These ship under a non-dotfile name
+  // because npm strips the real dotfile from a published tarball — see
+  // DOTFILE_RENAMES. Done after the verbatim copy so the generated app ends up
+  // with the actual dotfile.
+  for (const [from, to] of DOTFILE_RENAMES) {
+    const fromPath = join(targetDir, from);
+    if (existsSync(fromPath)) {
+      await rename(fromPath, join(targetDir, to));
+    }
+  }
 
   const files = (await walk(targetDir)).sort();
   return { targetDir, appName: opts.appName, templateDir, files };

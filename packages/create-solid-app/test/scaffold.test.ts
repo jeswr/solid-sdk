@@ -100,6 +100,17 @@ describe("scaffold", () => {
     expect(result.files).toContain("scripts/check-lockfile-transport.mjs");
   });
 
+  it("hardens the scaffold with .npmrc ignore-scripts=true (supply-chain)", async () => {
+    // The suite-wide supply-chain rule (`ignore-scripts=true`) must reach every
+    // scaffolded app out of the box. The template ships it as the non-dotfile
+    // `npmrc` shim (npm STRIPS a published `.npmrc`), renamed to `.npmrc` here.
+    expect(result.files, "scaffold must contain .npmrc").toContain(".npmrc");
+    // The non-dotfile shim must NOT be left behind — it is renamed, not copied.
+    expect(result.files, "the npmrc shim must be renamed, not left").not.toContain("npmrc");
+    const npmrc = await readFile(join(result.targetDir, ".npmrc"), "utf8");
+    expect(npmrc).toContain("ignore-scripts=true");
+  });
+
   it("substitutes the package.json name", async () => {
     const pkg = JSON.parse(await readFile(join(result.targetDir, "package.json"), "utf8")) as {
       name: string;

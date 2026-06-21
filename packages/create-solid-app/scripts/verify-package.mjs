@@ -80,6 +80,27 @@ for (const artefact of ["node_modules", ".next", "tsconfig.tsbuildinfo"]) {
   }
 }
 
+// Supply-chain hardening must reach scaffolds: the template ships an `npmrc` shim
+// (NOT `.npmrc` — npm STRIPS `.npmrc` from a published tarball, so a literal
+// `template/.npmrc` would never reach a scaffolded app). scaffold.ts renames it to
+// `.npmrc`. Guard both halves so a refactor can't silently break the publish path.
+const templateNpmrcShim = join(templateDir, "npmrc");
+if (!existsSync(templateNpmrcShim)) {
+  fail(
+    "template/npmrc is missing — the supply-chain `ignore-scripts=true` hardening " +
+      "would not reach scaffolded apps (it is renamed to .npmrc at scaffold time).",
+  );
+}
+if (!readFileSync(templateNpmrcShim, "utf8").includes("ignore-scripts=true")) {
+  fail("template/npmrc must declare ignore-scripts=true (supply-chain hardening).");
+}
+if (existsSync(join(templateDir, ".npmrc"))) {
+  fail(
+    "template/.npmrc must NOT exist — npm strips a published .npmrc, so the shim must " +
+      "ship as template/npmrc and be renamed to .npmrc at scaffold time.",
+  );
+}
+
 // `files` must carry everything `npx create-solid-app` resolves at runtime.
 const pkg = JSON.parse(readFileSync(join(pkgRoot, "package.json"), "utf8"));
 for (const required of ["bin.ts", "src", "template"]) {

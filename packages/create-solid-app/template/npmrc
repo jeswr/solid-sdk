@@ -1,0 +1,11 @@
+# Supply-chain hardening: NO npm lifecycle hook runs on install. A malicious or
+# compromised dependency cannot run arbitrary code via a `postinstall`/`preinstall`
+# script. This matches the suite-wide `ignore-scripts=true` rule.
+#
+# Shipped in the create-solid-app template as `npmrc` (NOT `.npmrc`): npm STRIPS a
+# `.npmrc` from every published tarball (it can contain registry auth tokens), so a
+# literal `template/.npmrc` would never reach a scaffolded app. The scaffolder
+# renames this file to `.npmrc` in the generated app (see src/scaffold.ts
+# DOTFILE_RENAMES) — the same publish-safe pattern create-next-app uses for
+# `gitignore` -> `.gitignore`.
+ignore-scripts=true
