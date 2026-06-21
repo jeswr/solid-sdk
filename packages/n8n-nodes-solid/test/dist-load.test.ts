@@ -58,6 +58,7 @@ describe("packaged dist loads as CommonJS", () => {
       "isContainerUrl",
       "normalizePodBase",
       "parseContainerListing",
+      "redactUserinfo",
       "resolveTarget",
     ]);
   });

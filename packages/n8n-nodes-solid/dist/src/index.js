@@ -34,6 +34,7 @@ __export(src_exports, {
   isContainerUrl: () => isContainerUrl,
   normalizePodBase: () => normalizePodBase,
   parseContainerListing: () => parseContainerListing,
+  redactUserinfo: () => redactUserinfo,
   resolveTarget: () => resolveTarget
 });
 module.exports = __toCommonJS(src_exports);
@@ -1466,6 +1467,12 @@ var ContainerDataset = class extends DatasetWrapper {
 var import_n32 = require("n3");
 
 // src/scope.ts
+function redactUserinfo(value) {
+  if (typeof value !== "string") {
+    return String(value);
+  }
+  return value.replace(/\/\/[^/?#@\s]*@/g, "//<redacted>@");
+}
 function normalizePodBase(base) {
   if (typeof base !== "string" || base.trim().length === 0) {
     throw new Error("[n8n-nodes-solid] pod base URL must be a non-empty string");
@@ -1474,7 +1481,9 @@ function normalizePodBase(base) {
   try {
     url = new URL(base.trim());
   } catch {
-    throw new Error(`[n8n-nodes-solid] pod base URL must be absolute, got: ${base}`);
+    throw new Error(
+      `[n8n-nodes-solid] pod base URL must be absolute, got: ${redactUserinfo(base)}`
+    );
   }
   if (url.protocol !== "http:" && url.protocol !== "https:") {
     throw new Error(
@@ -1494,7 +1503,7 @@ function assertWithinPod(base, url) {
   try {
     u = new URL(url);
   } catch {
-    throw new Error(`[n8n-nodes-solid] target URL is invalid: ${url}`);
+    throw new Error(`[n8n-nodes-solid] target URL is invalid: ${redactUserinfo(url)}`);
   }
   if (u.protocol !== "http:" && u.protocol !== "https:") {
     throw new Error(
@@ -1502,10 +1511,14 @@ function assertWithinPod(base, url) {
     );
   }
   if (u.origin !== b.origin) {
-    throw new Error(`[n8n-nodes-solid] target URL ${url} escapes pod origin ${b.origin} (refused)`);
+    throw new Error(
+      `[n8n-nodes-solid] target URL ${redactUserinfo(url)} escapes pod origin ${b.origin} (refused)`
+    );
   }
   if (!u.pathname.startsWith(b.pathname)) {
-    throw new Error(`[n8n-nodes-solid] target URL ${url} escapes pod path ${b.pathname} (refused)`);
+    throw new Error(
+      `[n8n-nodes-solid] target URL ${redactUserinfo(url)} escapes pod path ${b.pathname} (refused)`
+    );
   }
 }
 function resolveTarget(base, target) {
@@ -1515,7 +1528,7 @@ function resolveTarget(base, target) {
   const trimmed = target.trim();
   if (trimmed.startsWith("//")) {
     throw new Error(
-      `[n8n-nodes-solid] target must not be scheme-relative ("//..."): ${target} (refused)`
+      `[n8n-nodes-solid] target must not be scheme-relative ("//..."): ${redactUserinfo(target)} (refused)`
     );
   }
   let resolved;
@@ -1523,7 +1536,7 @@ function resolveTarget(base, target) {
     const ref = /^https?:\/\//i.test(trimmed) ? trimmed : trimmed.replace(/^\/+/, "");
     resolved = new URL(ref, base);
   } catch {
-    throw new Error(`[n8n-nodes-solid] target URL is invalid: ${target}`);
+    throw new Error(`[n8n-nodes-solid] target URL is invalid: ${redactUserinfo(target)}`);
   }
   if (resolved.username !== "" || resolved.password !== "") {
     throw new Error(
@@ -1570,6 +1583,7 @@ async function parseContainerListing(body, contentType2, containerUrl, base) {
   isContainerUrl,
   normalizePodBase,
   parseContainerListing,
+  redactUserinfo,
   resolveTarget
 });
 //# sourceMappingURL=index.js.map

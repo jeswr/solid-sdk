@@ -32,6 +32,30 @@ export interface ResolvedTarget {
 }
 
 /**
+ * Redact any embedded userinfo (`scheme://user:pass@host…` or a scheme-relative
+ * `//user:pass@host…`) from a URL-ish string BEFORE it is interpolated into an
+ * error message. Every validation error here echoes a user-controlled value, and
+ * the node surfaces those messages as item JSON under `continueOnFail` (and into
+ * logs) — so a target like `https://u:p@host/x` must never leak its credentials
+ * through an error.
+ *
+ * This is a deliberately BROAD, best-effort textual scrub that also works on
+ * MALFORMED input (where `new URL` threw, so we cannot trust the parser — and a
+ * value like `ht!tp://u:p@host/` has no RFC-valid scheme yet still carries a
+ * secret). It replaces the `user[:pass]@` of EVERY `//…@host` authority in the
+ * string (global, scheme-prefix-agnostic) with `<redacted>@`. Over-redaction is
+ * safe here (these are error strings, not requests); under-redaction would leak —
+ * so the rule errs toward redacting. The userinfo (RFC 3986) excludes `/?#@`, so
+ * a `//` not followed by userinfo-then-`@` (e.g. a `//a/b` path) is left alone.
+ */
+export function redactUserinfo(value: string): string {
+  if (typeof value !== "string") {
+    return String(value);
+  }
+  return value.replace(/\/\/[^/?#@\s]*@/g, "//<redacted>@");
+}
+
+/**
  * Normalise a pod base URL to exactly one trailing slash. Throws if the base is
  * not an absolute http(s) URL.
  */
@@ -43,7 +67,9 @@ export function normalizePodBase(base: string): string {
   try {
     url = new URL(base.trim());
   } catch {
-    throw new Error(`[n8n-nodes-solid] pod base URL must be absolute, got: ${base}`);
+    throw new Error(
+      `[n8n-nodes-solid] pod base URL must be absolute, got: ${redactUserinfo(base)}`,
+    );
   }
   if (url.protocol !== "http:" && url.protocol !== "https:") {
     throw new Error(
@@ -72,7 +98,7 @@ export function assertWithinPod(base: string, url: string): void {
   try {
     u = new URL(url);
   } catch {
-    throw new Error(`[n8n-nodes-solid] target URL is invalid: ${url}`);
+    throw new Error(`[n8n-nodes-solid] target URL is invalid: ${redactUserinfo(url)}`);
   }
   if (u.protocol !== "http:" && u.protocol !== "https:") {
     throw new Error(
@@ -80,10 +106,14 @@ export function assertWithinPod(base: string, url: string): void {
     );
   }
   if (u.origin !== b.origin) {
-    throw new Error(`[n8n-nodes-solid] target URL ${url} escapes pod origin ${b.origin} (refused)`);
+    throw new Error(
+      `[n8n-nodes-solid] target URL ${redactUserinfo(url)} escapes pod origin ${b.origin} (refused)`,
+    );
   }
   if (!u.pathname.startsWith(b.pathname)) {
-    throw new Error(`[n8n-nodes-solid] target URL ${url} escapes pod path ${b.pathname} (refused)`);
+    throw new Error(
+      `[n8n-nodes-solid] target URL ${redactUserinfo(url)} escapes pod path ${b.pathname} (refused)`,
+    );
   }
 }
 
@@ -110,7 +140,7 @@ export function resolveTarget(base: string, target: string): ResolvedTarget {
   // relative-looking input can never change origin.
   if (trimmed.startsWith("//")) {
     throw new Error(
-      `[n8n-nodes-solid] target must not be scheme-relative ("//..."): ${target} (refused)`,
+      `[n8n-nodes-solid] target must not be scheme-relative ("//..."): ${redactUserinfo(target)} (refused)`,
     );
   }
   let resolved: URL;
@@ -122,7 +152,7 @@ export function resolveTarget(base: string, target: string): ResolvedTarget {
     const ref = /^https?:\/\//i.test(trimmed) ? trimmed : trimmed.replace(/^\/+/, "");
     resolved = new URL(ref, base);
   } catch {
-    throw new Error(`[n8n-nodes-solid] target URL is invalid: ${target}`);
+    throw new Error(`[n8n-nodes-solid] target URL is invalid: ${redactUserinfo(target)}`);
   }
   // Embedded userinfo (`https://user:pass@host/…`) does NOT change the origin, so
   // it would slip past the same-origin check — but a pod resource address never

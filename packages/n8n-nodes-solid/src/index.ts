@@ -11,5 +11,6 @@ export {
   isContainerUrl,
   normalizePodBase,
   type ResolvedTarget,
+  redactUserinfo,
   resolveTarget,
 } from "./scope.js";

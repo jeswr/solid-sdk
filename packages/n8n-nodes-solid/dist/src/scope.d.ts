@@ -6,6 +6,24 @@ export interface ResolvedTarget {
     readonly container: boolean;
 }
 /**
+ * Redact any embedded userinfo (`scheme://user:pass@host…` or a scheme-relative
+ * `//user:pass@host…`) from a URL-ish string BEFORE it is interpolated into an
+ * error message. Every validation error here echoes a user-controlled value, and
+ * the node surfaces those messages as item JSON under `continueOnFail` (and into
+ * logs) — so a target like `https://u:p@host/x` must never leak its credentials
+ * through an error.
+ *
+ * This is a deliberately BROAD, best-effort textual scrub that also works on
+ * MALFORMED input (where `new URL` threw, so we cannot trust the parser — and a
+ * value like `ht!tp://u:p@host/` has no RFC-valid scheme yet still carries a
+ * secret). It replaces the `user[:pass]@` of EVERY `//…@host` authority in the
+ * string (global, scheme-prefix-agnostic) with `<redacted>@`. Over-redaction is
+ * safe here (these are error strings, not requests); under-redaction would leak —
+ * so the rule errs toward redacting. The userinfo (RFC 3986) excludes `/?#@`, so
+ * a `//` not followed by userinfo-then-`@` (e.g. a `//a/b` path) is left alone.
+ */
+export declare function redactUserinfo(value: string): string;
+/**
  * Normalise a pod base URL to exactly one trailing slash. Throws if the base is
  * not an absolute http(s) URL.
  */
