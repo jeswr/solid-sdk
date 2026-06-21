@@ -108,7 +108,8 @@ describe("scaffold", () => {
     // The non-dotfile shim must NOT be left behind — it is renamed, not copied.
     expect(result.files, "the npmrc shim must be renamed, not left").not.toContain("npmrc");
     const npmrc = await readFile(join(result.targetDir, ".npmrc"), "utf8");
-    expect(npmrc).toContain("ignore-scripts=true");
+    // Assert the actual config DIRECTIVE line (not the substring, which a comment also satisfies).
+    expect(npmrc).toMatch(/^\s*ignore-scripts\s*=\s*true\s*$/m);
   });
 
   it("substitutes the package.json name", async () => {

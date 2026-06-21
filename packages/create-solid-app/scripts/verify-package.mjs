@@ -91,7 +91,10 @@ if (!existsSync(templateNpmrcShim)) {
       "would not reach scaffolded apps (it is renamed to .npmrc at scaffold time).",
   );
 }
-if (!readFileSync(templateNpmrcShim, "utf8").includes("ignore-scripts=true")) {
+// Match the actual config DIRECTIVE line, not the substring — the shim's rationale
+// comment also mentions `ignore-scripts=true`, so `.includes()` would pass even if the
+// real directive were deleted (a vacuous guard). Require a non-comment `ignore-scripts=true` line.
+if (!/^\s*ignore-scripts\s*=\s*true\s*$/m.test(readFileSync(templateNpmrcShim, "utf8"))) {
   fail("template/npmrc must declare ignore-scripts=true (supply-chain hardening).");
 }
 if (existsSync(join(templateDir, ".npmrc"))) {
