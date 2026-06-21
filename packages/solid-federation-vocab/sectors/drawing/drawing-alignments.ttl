@@ -30,11 +30,14 @@
 
 # --- Scene <-> draw:Scene (the forthcoming detail vocab) + schema:CreativeWork ---
 # draw:Scene rdfs:subClassOf schema:CreativeWork ships in @jeswr/solid-drawing;
-# here the sector's Scene closeMatches it, and exactMatches the schema.org root it
+# here the sector's Scene closeMatches it, and broadMatches the schema.org root it
 # specialises. closeMatch (not exact) to draw:Scene: the detail vocab may carry
-# element-level structure this thin sector class does not.
+# element-level structure this thin sector class does not. broadMatch (NOT exact)
+# to schema:CreativeWork: a Scene is NARROWER than all creative works, so its
+# broader concept is schema:CreativeWork (an exact match would wrongly let any
+# schema:CreativeWork reconcile as a drawing scene).
 drawing:Scene          skos:closeMatch draw:Scene ;
-                       skos:exactMatch schema:CreativeWork .
+                       skos:broadMatch schema:CreativeWork .
 
 # --- the round-trip properties <-> the forthcoming draw: terms + schema.org ---
 drawing:sceneDocument  skos:closeMatch draw:sceneDocument .

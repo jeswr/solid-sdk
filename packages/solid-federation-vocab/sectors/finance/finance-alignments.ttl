@@ -66,8 +66,11 @@ fin:Holding              skos:closeMatch fibo-fbc-fi-fi:FinancialInstrument ;
 core:hasAccountHolder    skos:closeMatch fibo-fnd-rel-rel:isHeldBy .
 
 # --- v1.1.0 personal budgeting (Actual Budget) — schema.org Mode-A bridges ---
-# schema.org has no envelope-budget term; the closest are the MoneyTransfer /
-# MonetaryAmount family + DefinedTerm for the category taxonomy. Annotation only.
-fin:Budget               skos:closeMatch schema:MonetaryAmount .
+# schema.org has no envelope-budget term. fin:Budget is a PLAN information object,
+# NOT a monetary value — so it is deliberately NOT aligned to schema:MonetaryAmount
+# (that would conflate the plan with an amount and mislead semantic consumers).
+# Only the allocation AMOUNT and the category taxonomy term get a schema bridge;
+# the closest schema term for the per-envelope allocation value is schema:amount.
+# Annotation only.
 fin:allocated            skos:closeMatch schema:amount .
 fin:categoryConcept      skos:closeMatch schema:category .
