@@ -60,11 +60,14 @@ describe("<jeswr-shacl-view> §9 SSRF discipline", () => {
 
     // Inline strings are present.
     expect(form.getAttribute("data-shapes")).toContain("NodeShape");
-    // The data graph is NEUTRALISED (§9 fix 2): the `a ex:Person` (rdf:type →
-    // http(s) IRI) quad is DROPPED as a potential auto-import target, but the
-    // literal data (`ex:name "Alice"`) is preserved verbatim.
+    // The data graph is NEUTRALISED (§9 fix 2) — but NARROWLY: only a
+    // `dct:conformsTo` → http(s) quad is dropped. `rdf:type` is KEPT (it is load-
+    // bearing for shacl-form's shape-selection; the earlier rdf:type strip blanked
+    // benign instances — the HIGH this round fixes). So both the literal data
+    // (`ex:name "Alice"`) AND the `a ex:Person` type triple survive here (there is
+    // no conformsTo in this graph to strip).
     expect(form.getAttribute("data-values")).toContain("Alice");
-    expect(form.getAttribute("data-values")).not.toContain("Person");
+    expect(form.getAttribute("data-values")).toContain("Person");
 
     // The view/owl-imports discipline attributes are ALWAYS set.
     expect(form.hasAttribute("data-view")).toBe(true);
@@ -297,7 +300,7 @@ describe("<jeswr-shacl-view> §9 SSRF discipline", () => {
     }
   });
 
-  it("a HOSTILE data graph with a NON-empty shapes graph triggers ZERO unguarded fetches AND drops the import targets", async () => {
+  it("a HOSTILE data graph with a NON-empty shapes graph triggers ZERO unguarded fetches (fix 1 closes it; the conformsTo→http target is also stripped, rdf:type kept)", async () => {
     const globalSpy = vi
       .spyOn(globalThis, "fetch")
       .mockImplementation(
@@ -313,14 +316,20 @@ describe("<jeswr-shacl-view> §9 SSRF discipline", () => {
         await Promise.resolve();
         await new Promise((r) => setTimeout(r, 0));
       }
-      // No unguarded fetch fired (no auto-import).
+      // No unguarded fetch fired — fix (1) is the closer: a NON-empty shapes graph
+      // means the upstream auto-import branch's `countQuads(loaded-shapes) === 0`
+      // precondition is false, so it never fetches regardless of the data graph.
       expect(globalSpy).not.toHaveBeenCalled();
-      // Fix (2): the inlined data has had its conformsTo + rdf:type→http(s) quads
-      // DROPPED — the SSRF import targets are gone, the literal data preserved.
       const values = form.getAttribute("data-values") ?? "";
+      // Fix (2) NARROW: the `dct:conformsTo` → http(s) import vector IS dropped …
       expect(values).not.toContain("169.254.169.254");
-      expect(values).not.toContain("192.168.0.1");
       expect(values).not.toContain("conformsTo");
+      // … but `rdf:type` is KEPT (load-bearing for shape-selection — the High fix),
+      // so the `a <http://192.168.0.1/...>` quad survives. That is SAFE: with a non-
+      // empty shapes graph the auto-import never runs (asserted above), so the kept
+      // rdf:type→http is never fetched. (Were the shapes graph empty, fix 1 fail-
+      // closes — see the empty-shapes test above.)
+      expect(values).toContain("192.168.0.1");
       expect(values).toContain("ok"); // the benign literal survives.
     } finally {
       globalSpy.mockRestore();
@@ -380,6 +389,67 @@ describe("<jeswr-shacl-view> §9 SSRF discipline", () => {
     }
     expect(el.querySelector("shacl-form")).toBeNull();
     expect(el.querySelector('[part="error"]')).not.toBeNull();
+  });
+
+  // ── REGRESSION GUARD for the HIGH (rdf:type over-strip) ────────────────────
+  //
+  // The earlier build's neutralisation dropped EVERY `rdf:type` → http(s) quad,
+  // which is load-bearing for shacl-form's view-mode shape-selection
+  // (`findRootShaclShapeSubject` follows the values subject's `rdf:type` to pick
+  // the matching `sh:targetClass` node shape). Stripping it rendered a benign
+  // instance BLANK. This test proves the fix: a benign instance whose `rdf:type`
+  // is kept RENDERS through <jeswr-shacl-view> (the inner <shacl-form> binds the
+  // instance and shows its property value), i.e. the view is NOT blank.
+  //
+  // The instance declares `dct:conformsTo <urn:…>` (a non-http profile reference,
+  // NOT stripped) so shacl-form auto-derives the values subject — the wrapper does
+  // not pin one (fix 3) — and the kept `rdf:type` selects the shape. (Without a
+  // derived/pinned values subject, shacl-form view mode binds to a fresh blank
+  // node and shows nothing — a pre-existing wrapper limitation, not the High.)
+  it("RENDERS a benign instance (rdf:type survives → view is NOT blank) — the HIGH regression guard", async () => {
+    const PERSON_SHAPES = `
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix ex: <https://ex.example/> .
+ex:PersonShape a sh:NodeShape ;
+  sh:targetClass ex:Person ;
+  sh:property [ sh:path ex:name ; sh:name "Name" ; sh:datatype <http://www.w3.org/2001/XMLSchema#string> ] .
+`;
+    // Benign data: `a ex:Person` (the type triple that MUST survive) + a non-http
+    // conformsTo profile reference (kept, derives the values subject) + a literal.
+    const PERSON_DATA = `
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix ex: <https://ex.example/> .
+ex:alice dct:conformsTo <urn:profile:person> ; a ex:Person ; ex:name "Alice" .
+`;
+    const el = await mount();
+    el.shapes = { kind: "inline", text: PERSON_SHAPES };
+    el.values = { kind: "inline", text: PERSON_DATA };
+    const form = await waitForForm(el);
+
+    // 1. The rdf:type triple SURVIVES neutralisation in the inlined data-values
+    //    (the direct High guard: it is no longer stripped).
+    const inlined = form.getAttribute("data-values") ?? "";
+    expect(inlined).toContain("https://ex.example/Person");
+    expect(inlined).toContain("Alice");
+
+    // 2. The view is NOT blank: shacl-form binds the actual instance subject (a
+    //    NamedNode `ex:alice`, not a fresh blank node) and renders its name value.
+    //    (Wait for shacl-form's debounced async render into its shadow root.)
+    let bound = false;
+    for (let i = 0; i < 200; i++) {
+      await Promise.resolve();
+      await new Promise((r) => setTimeout(r, 5));
+      const root = (form.shadowRoot as unknown as ParentNode | null) ?? form;
+      const node = root.querySelector("shacl-node") as HTMLElement | null;
+      const renderedAliceValue = Array.from(root.querySelectorAll("[data-value]")).some((e) =>
+        (e.getAttribute("data-value") ?? "").includes("Alice"),
+      );
+      if (node?.getAttribute("data-node-id") === "https://ex.example/alice" && renderedAliceValue) {
+        bound = true;
+        break;
+      }
+    }
+    expect(bound).toBe(true);
   });
 
   it("does NOT pin a values-subject sentinel that would blank a normal view (fix 3 rationale)", async () => {

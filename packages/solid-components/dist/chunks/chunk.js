@@ -19352,13 +19352,17 @@ async function readStreamToText(stream) {
 }
 
 // src/shacl-view-fetch.ts
-var RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 var DCT_CONFORMS_TO = "http://purl.org/dc/terms/conformsTo";
-var AUTO_IMPORT_PREDICATES = /* @__PURE__ */ new Set([RDF_TYPE, DCT_CONFORMS_TO]);
+var AUTO_IMPORT_PREDICATES = /* @__PURE__ */ new Set([DCT_CONFORMS_TO]);
 function isHttpNamedNode(object) {
   if (object.termType !== "NamedNode") return false;
-  const v5 = object.value;
-  return v5.startsWith("http://") || v5.startsWith("https://");
+  let protocol;
+  try {
+    protocol = new URL(object.value).protocol;
+  } catch {
+    return false;
+  }
+  return protocol === "http:" || protocol === "https:";
 }
 async function neutraliseValuesTurtle(turtle) {
   const store = await parseToStore(turtle, "text/turtle");
@@ -25988,7 +25992,7 @@ function numericStatus(error) {
 
 // src/data-controller.ts
 var LDP_CONTAINS = "http://www.w3.org/ns/ldp#contains";
-var RDF_TYPE2 = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+var RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 var LDP_CONTAINER = "http://www.w3.org/ns/ldp#Container";
 var LDP_BASIC_CONTAINER = "http://www.w3.org/ns/ldp#BasicContainer";
 var RDF_ACCEPT = "text/turtle, application/ld+json;q=0.9";
@@ -26117,7 +26121,7 @@ function iterContains(dataset2) {
   return dataset2.getQuads(null, namedNode4(LDP_CONTAINS), null, null);
 }
 function isContainerChild(dataset2, child, childUrl) {
-  for (const t5 of dataset2.getQuads(child, namedNode4(RDF_TYPE2), null, null)) {
+  for (const t5 of dataset2.getQuads(child, namedNode4(RDF_TYPE), null, null)) {
     const typeValue = t5.object.value;
     if (typeValue === LDP_CONTAINER || typeValue === LDP_BASIC_CONTAINER) return true;
   }

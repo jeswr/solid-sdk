@@ -41,74 +41,129 @@ import { serializeTurtle } from "./serialize.js";
 // @ulb-darmstadt/shacl-form's two remote-fetch paths. It does NOT close the
 // SECOND: shacl-form's `loadGraphs()` auto-derives a "values subject" from the
 // DATA graph (`findConformsToValuesSubject` — any single NamedNode subject
-// bearing `dct:conformsTo`), and when the loaded SHAPES graph is EMPTY
-// (`countQuads(loaded-shapes) === 0`) it issues an UNGUARDED `globalThis.fetch`
-// to every http(s) IRI that subject points at via `rdf:type` / `dct:conformsTo`
-// (including prefix-expanded IRIs), parsing the body into the rendered graph.
+// bearing `dct:conformsTo`, regardless of that quad's OBJECT), and ONLY when the
+// loaded SHAPES graph is EMPTY (`countQuads(loaded-shapes) === 0`) it issues an
+// UNGUARDED `globalThis.fetch` to every http(s) IRI that subject points at via
+// `rdf:type` / `dct:conformsTo` (incl. prefix-expanded IRIs), parsing the body
+// into the rendered graph.
+//
+// THE EMPTY-SHAPES PRECONDITION IS THE WHOLE ATTACK SURFACE. Execution-verified
+// against the real upstream `loadGraphs` (test/shacl-view-fetch.test.ts §9
+// EXECUTION PROOF + the element tests): with a NON-empty loaded-shapes graph the
+// auto-import branch never runs — its `countQuads(loaded-shapes) === 0` guard is
+// false — so NO unguarded fetch fires no matter what the data graph contains. So:
+//
+//   *** fix (1) — FAIL-CLOSED on an empty resolved SHAPES graph — is the SSRF
+//       CLOSER. *** The element parses the resolved shapes Turtle and, if it has
+//       zero quads, renders the error state and NEVER mounts <shacl-form>, so the
+//       `countQuads(loaded-shapes) === 0` precondition can never hold for a mounted
+//       form. This single measure closes the auto-import SSRF on its own.
 //
 // `data-ignore-owl-imports` is unrelated to this branch — it only guards the
-// `owl:imports` predicate during `importRDF`. So the wrapper closes the second
-// path itself, defence-in-depth, with THREE independent measures (any one of
-// which removes a precondition of the auto-import):
-//   (1) FAIL-CLOSED on an empty resolved SHAPES graph → never mount <shacl-form>
-//       (removes the `countQuads(loaded-shapes) === 0` precondition).
-//   (2) NEUTRALISE the untrusted VALUES graph → drop every `rdf:type` /
-//       `dct:conformsTo` quad whose object is an http(s) IRI shacl-form could
-//       treat as a fetchable shape source (removes the import TARGETS — AND,
-//       because `findConformsToValuesSubject` keys on `dct:conformsTo`, the
-//       auto-DERIVATION source too, so no subject is derived at all).
-//   (3) the no-auto-derive guarantee (3) was meant to give is ALREADY delivered
-//       by (2) — `findConformsToValuesSubject` returns nothing once the
-//       conformsTo quads are stripped. We deliberately do NOT pin a foreign
-//       `data-values-subject` sentinel on the element, because shacl-form renders
-//       the shape BOUND to that subject, so a sentinel not present in the data
-//       would render an EMPTY view (verified against the shacl-form source). The
-//       sentinel is exported (`VALUES_SUBJECT_SENTINEL`) for callers who want it
-//       on a deliberately-empty/placeholder view. See shacl-view.ts render().
+// `owl:imports` predicate during `importRDF`.
 //
-// These predicates are the two shacl-form's loadGraphs reads off the values
-// subject. We hard-code the canonical IRIs (n3 has no bundled vocab constant for
+// The values-graph NEUTRALISATION below is a NARROW, defence-in-depth SECOND layer,
+// NOT an independent closer (the empty-shapes precondition fix-1 removes is what
+// actually closes it):
+//
+//   (2) NEUTRALISE the untrusted VALUES graph — drop every `dct:conformsTo` quad
+//       whose OBJECT is an http(s) IRI. This removes shacl-form's auto-DERIVATION
+//       source when ALL conformsTo objects are http(s) (`findConformsToValuesSubject`
+//       then finds no subject), and removes the http(s) conformsTo import TARGET.
+//
+//       We DELIBERATELY DO NOT strip `rdf:type` quads (the earlier build did, and
+//       it was a correctness REGRESSION — the High). `rdf:type` is load-bearing for
+//       legitimate rendering: shacl-form's view-mode shape-selection
+//       (`findRootShaclShapeSubject`) follows the values subject's `rdf:type` to
+//       pick the matching `sh:targetClass` node shape. Dropping `rdf:type` makes a
+//       benign instance render BLANK (execution-verified). The `rdf:type` strip was
+//       also REDUNDANT: fix (1) already closes the SSRF, and stripping `conformsTo`
+//       already removes the only auto-DERIVATION source the auto-import needs — once
+//       no values subject is derived, the branch reads no `rdf:type` at all.
+//
+//       We also DO NOT strip `dct:conformsTo` whose object is a NON-http term (e.g.
+//       a `urn:` profile reference). A `conformsTo` to a non-fetchable IRI is a
+//       legitimate, non-SSRF shape-profile hint that shacl-form uses to DERIVE the
+//       values subject so the instance renders against its data (execution-verified:
+//       a `conformsTo <urn:…>` + `rdf:type` instance renders non-blank). Stripping
+//       it would re-introduce the exact blank-render regression the High flags.
+//
+//   NOTE — the conformsTo→http strip is NOT independently complete for one edge: a
+//   data graph carrying BOTH a (kept) `conformsTo` → non-http AND an `rdf:type` →
+//   http on an EMPTY shapes graph would still let upstream fetch the `rdf:type`
+//   target, because the non-http conformsTo derives a values subject. That edge is
+//   covered by fix (1) (empty shapes never mount), not by (2). This is the
+//   "fix 1 is the closer" reconciliation: (2) is belt-and-braces, fix (1) is load-
+//   bearing. The §9 EXECUTION PROOF asserts the full closure on the real loader.
+//
+//   (3) We deliberately do NOT pin a foreign `data-values-subject` sentinel on the
+//       element, because shacl-form renders the shape BOUND to that subject, so a
+//       sentinel not present in the data would render an EMPTY view (verified
+//       against the shacl-form source). The sentinel is exported
+//       (`VALUES_SUBJECT_SENTINEL`) for callers who want it on a deliberately-
+//       empty/placeholder view. See shacl-view.ts render().
+//
+// We hard-code the canonical conformsTo IRI (n3 has no bundled vocab constant for
 // dct).
 
-/** `http://www.w3.org/1999/02/22-rdf-syntax-ns#type`. */
-const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 /** `http://purl.org/dc/terms/conformsTo`. */
 const DCT_CONFORMS_TO = "http://purl.org/dc/terms/conformsTo";
 
 /**
- * The two predicates shacl-form's `loadGraphs()` follows off the auto-derived
- * values subject to FETCH a shape source when the loaded-shapes graph is empty.
+ * The predicate shacl-form's `loadGraphs()` keys its auto-DERIVATION on
+ * (`findConformsToValuesSubject`) AND one of the two it follows off the derived
+ * subject to FETCH a shape source when the loaded-shapes graph is empty. We strip
+ * its http(s)-IRI objects as the narrow defence-in-depth layer; the empty-shapes
+ * fail-closed (fix 1) is the actual SSRF closer.
  */
-const AUTO_IMPORT_PREDICATES = new Set([RDF_TYPE, DCT_CONFORMS_TO]);
+const AUTO_IMPORT_PREDICATES = new Set([DCT_CONFORMS_TO]);
 
 /**
  * Does this object term denote an http(s) IRI shacl-form would fetch? shacl-form
- * accepts both an ABSOLUTE http(s) IRI and a PREFIXED name whose prefix expands
- * to an http(s) IRI (its `je()` helper prefix-expands then re-checks the
- * protocol). A NamedNode object is already absolute (n3 expanded any prefix at
- * parse time), so an http(s)-scheme NamedNode is the fetchable case. A literal /
- * blank node is never fetched. We therefore drop any http(s)-scheme NamedNode
- * object under the two auto-import predicates — that is exactly the set
- * shacl-form's `je()` would resolve to a fetchable URL.
+ * accepts both an ABSOLUTE http(s) IRI and a PREFIXED name whose prefix expands to
+ * an http(s) IRI; in BOTH cases its classifier is `j()`:
+ * `new URL(value).protocol === "http:" || === "https:"` — which is CASE-INSENSITIVE
+ * (`new URL("HTTP://…").protocol` normalises to `"http:"`) and tolerant of edge
+ * forms (leading/trailing whitespace, mixed-case scheme). A `String.startsWith`
+ * check is case-SENSITIVE, so `HTTP://169.254.169.254/…` / `Https://…` would EVADE
+ * it while still being fetched by upstream. We therefore MIRROR upstream's `j()`
+ * exactly: parse with `new URL` and test the normalised protocol. An un-parseable
+ * IRI (one `new URL` rejects) is one upstream's `j()` also rejects → never fetched
+ * → not a target, so we leave it in place. A NamedNode object is already absolute
+ * (n3 expanded any prefix at parse time); a literal / blank node is never fetched.
  */
 function isHttpNamedNode(object: Quad_Object): boolean {
   if (object.termType !== "NamedNode") return false;
-  const v = object.value;
-  return v.startsWith("http://") || v.startsWith("https://");
+  let protocol: string;
+  try {
+    protocol = new URL(object.value).protocol;
+  } catch {
+    // Un-parseable IRI — upstream's `j()` (`new URL(...)`) rejects it too, so it is
+    // never fetched; not an import target, leave it untouched.
+    return false;
+  }
+  return protocol === "http:" || protocol === "https:";
 }
 
 /**
- * Neutralise an untrusted VALUES graph before it is inlined into shacl-form:
- * drop every `(s, rdf:type|dct:conformsTo, <http(s) IRI>)` quad — the exact
- * triples shacl-form's empty-shapes auto-import would turn into an unguarded
- * fetch. Works on the parsed n3 Store (NEVER hand-edits Turtle text) and
- * re-serialises via `n3.Writer`. Returns the cleaned Turtle.
+ * Neutralise an untrusted VALUES graph before it is inlined into shacl-form: drop
+ * every `(s, dct:conformsTo, <http(s) IRI>)` quad — the auto-import ROOT-SHAPE
+ * trigger (and, when ALL conformsTo are http, the auto-DERIVATION source too).
+ * Works on the parsed n3 Store (NEVER hand-edits Turtle text) and re-serialises
+ * via `n3.Writer`. Returns the cleaned Turtle.
  *
- * Non-http objects (literals, blank nodes) and all other predicates are
- * preserved verbatim, so the rendered view is unchanged except for the removal
- * of the SSRF import vectors. (A removed `rdf:type`/`conformsTo` IRI is purely a
- * shacl-form shape-discovery hint here — the view renders against the explicit
- * shapes graph, never an auto-fetched one.)
+ * This is a NARROW defence-in-depth layer, NOT the SSRF closer — the empty-shapes
+ * fail-closed (fix 1 in shacl-view.ts) is what actually closes the auto-import
+ * (its `countQuads(loaded-shapes) === 0` precondition can never hold for a mounted
+ * form). See the block comment above.
+ *
+ * It deliberately PRESERVES `rdf:type` quads (load-bearing for shacl-form's
+ * view-mode shape-selection — stripping them blanks a benign instance: the High)
+ * and `dct:conformsTo` quads with a NON-http object (a legitimate `urn:` profile
+ * reference shacl-form uses to derive the values subject so the instance renders).
+ * Literals, blank nodes, and all other predicates are preserved verbatim, so the
+ * rendered view is unchanged except for the removal of the http(s) conformsTo
+ * import vector.
  */
 export async function neutraliseValuesTurtle(turtle: string): Promise<string> {
   const store = await parseToStore(turtle, "text/turtle");

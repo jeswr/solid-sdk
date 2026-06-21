@@ -238,8 +238,15 @@ describe("resolveGraphToTurtle — §9 fix(4) no-network RDF types (inline + tru
   });
 });
 
-// ── §9 fix (2): neutralise the untrusted values graph ────────────────────────
-describe("neutraliseValuesTurtle — drops rdf:type / dct:conformsTo http(s) import targets", () => {
+// ── §9 fix (2): neutralise the untrusted values graph — NARROWED ─────────────
+//
+// NARROW, defence-in-depth: drop ONLY `dct:conformsTo` → http(s) quads. fix (1)
+// (empty-shapes fail-closed, in shacl-view.ts) is the actual SSRF closer. The
+// neutralisation deliberately KEEPS `rdf:type` (load-bearing for shacl-form's
+// shape-selection — stripping it blanked benign instances: the HIGH) and KEEPS
+// `dct:conformsTo` → a non-http (urn:) profile reference (legit, derives the
+// values subject so data renders).
+describe("neutraliseValuesTurtle — drops ONLY dct:conformsTo http(s) import targets (NARROWED)", () => {
   const HOSTILE = `
 @prefix dct: <http://purl.org/dc/terms/> .
 @prefix ex: <https://ex.example/> .
@@ -250,28 +257,48 @@ describe("neutraliseValuesTurtle — drops rdf:type / dct:conformsTo http(s) imp
   ex:name "Alice" .
 `;
 
-  it("drops conformsTo→http(s) and rdf:type→http(s), keeps literals + non-http types", async () => {
+  it("drops conformsTo→http(s) but KEEPS rdf:type (incl. http) — the HIGH fix", async () => {
     const out = await neutraliseValuesTurtle(HOSTILE);
-    // Import targets gone.
+    // The conformsTo → http import vector is gone.
     expect(out).not.toContain("169.254.169.254");
-    expect(out).not.toContain("192.168.0.1");
     expect(out).not.toContain("conformsTo");
-    // Benign data preserved: the literal name AND the http(s) rdf:type to a
-    // legitimate vocab is ALSO an http(s) IRI, so per the rule it is dropped too —
-    // confirm the literal survives (the view's actual content).
+    // rdf:type is now KEPT — it is load-bearing for shacl-form shape-selection, and
+    // the earlier strip of it was a correctness regression (the High). The SSRF is
+    // closed by fix (1) (empty-shapes fail-closed), so keeping rdf:type is safe.
+    expect(out).toContain("192.168.0.1"); // the http rdf:type object survives.
+    expect(out).toContain("https://ex.example/LocalType"); // the local rdf:type survives.
+    // Benign literal preserved (the view's actual content).
     expect(out).toContain("Alice");
   });
 
-  it("a non-http rdf:type (blank node / urn) is PRESERVED (not an import target)", async () => {
+  it("a non-http dct:conformsTo (urn) is PRESERVED — a legit profile reference that derives the values subject", async () => {
     const data = `
 @prefix dct: <http://purl.org/dc/terms/> .
 <https://victim.example/x> a <urn:my:type> ; dct:conformsTo <urn:my:profile> ; <https://ex.example/p> "v" .
 `;
     const out = await neutraliseValuesTurtle(data);
-    // urn: objects are NOT http(s) fetch targets, so they stay.
+    // urn: objects are NOT http(s) fetch targets, and a urn: conformsTo is a legit
+    // shape-profile hint shacl-form uses to derive the values subject — so it stays.
     expect(out).toContain("urn:my:type");
     expect(out).toContain("urn:my:profile");
+    expect(out).toContain("conformsTo");
     expect(out).toContain('"v"');
+  });
+
+  it("strips a CASE-VARIANT scheme (HTTP:// / Https://) dct:conformsTo — mirrors upstream's case-insensitive `j()` (the MEDIUM/LOW)", async () => {
+    // Upstream's `j()` classifier is `new URL(value).protocol === "http:|https:"`,
+    // which is CASE-INSENSITIVE, so an uppercase-scheme conformsTo would be FETCHED
+    // by upstream but EVADE a `startsWith("http://")` check. The neutraliser now
+    // mirrors `j()` exactly (parses the protocol), so these are stripped too.
+    const data = `
+@prefix dct: <http://purl.org/dc/terms/> .
+<https://victim.example/a> dct:conformsTo <HTTP://169.254.169.254/upper> .
+<https://victim.example/b> dct:conformsTo <Https://evil.example/mixed> .
+`;
+    const out = await neutraliseValuesTurtle(data);
+    expect(out).not.toContain("169.254.169.254");
+    expect(out).not.toContain("evil.example");
+    expect(out).not.toContain("conformsTo");
   });
 
   it("leaves an entirely benign data graph unchanged in content", async () => {
@@ -333,11 +360,66 @@ describe("§9 EXECUTION PROOF — upstream loadGraphs auto-import (the HIGH)", (
     }
   });
 
-  it("NEUTRALISED data + empty shapes → the upstream auto-import fetches NOTHING (proves fix 2 closes it)", async () => {
+  it("NEUTRALISED data + empty shapes → the upstream auto-import fetches NOTHING (the narrowed conformsTo strip removes the auto-DERIVATION source, so the kept rdf:type→http is never followed)", async () => {
     const neutralised = await neutraliseValuesTurtle(HOSTILE);
+    // Sanity: the narrowed neutralisation KEEPS the rdf:type→http object (the High
+    // fix) but DROPS conformsTo. Without a conformsTo, upstream's
+    // `findConformsToValuesSubject` derives NO values subject, so the auto-import
+    // branch's `valuesSubject &&` guard is false and the kept rdf:type→http is
+    // never fetched — even on an empty shapes graph.
+    expect(neutralised).toContain("192.168.0.1"); // rdf:type→http KEPT.
+    expect(neutralised).not.toContain("conformsTo"); // conformsTo→http DROPPED.
     const { spy, calls } = spyFetch();
     try {
       await loadGraphs({ shapes: "", values: neutralised, loadOwlImports: false } as never);
+      expect(calls).toHaveLength(0);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  // ── RECONCILIATION: fix (1) (non-empty shapes) is THE closer ───────────────
+  //
+  // The narrowed neutralisation is defence-in-depth, NOT independently complete:
+  // a data graph carrying a (kept) `conformsTo` → NON-http profile + a (kept)
+  // `rdf:type` → http on an EMPTY shapes graph would still let upstream derive a
+  // subject (off the urn conformsTo) and fetch the rdf:type→http target. fix (1)
+  // (empty-shapes fail-closed) is what closes THAT edge — proven here by showing
+  // (a) the edge fires on EMPTY shapes (the threat is real), and (b) the IDENTICAL
+  // data with a NON-empty shapes graph fetches NOTHING (fix 1 removes the
+  // `countQuads(loaded-shapes) === 0` precondition).
+  const CONFORMS_URN_TYPE_HTTP = `
+@prefix dct: <http://purl.org/dc/terms/> .
+<https://victim.example/x>
+  dct:conformsTo <urn:benign:profile> ;
+  a <http://169.254.169.254/internal-shape> .
+`;
+
+  it("the conformsTo→urn + rdf:type→http edge DOES fetch on EMPTY shapes (neutralise alone is not complete — the urn conformsTo survives + derives a subject)", async () => {
+    // This graph survives the narrowed neutralisation unchanged (urn conformsTo
+    // kept, rdf:type kept), so it isolates the edge fix (1) must cover.
+    const neutralised = await neutraliseValuesTurtle(CONFORMS_URN_TYPE_HTTP);
+    expect(neutralised).toContain("urn:benign:profile");
+    expect(neutralised).toContain("169.254.169.254");
+    const { spy, calls } = spyFetch();
+    try {
+      await loadGraphs({ shapes: "", values: neutralised, loadOwlImports: false } as never);
+      // On EMPTY shapes the urn conformsTo derives the subject and the rdf:type→http
+      // target IS fetched — demonstrating neutralise(2) alone does not cover it.
+      expect(calls).toContain("http://169.254.169.254/internal-shape");
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("the SAME edge with a NON-empty shapes graph fetches NOTHING — fix (1) is the closer", async () => {
+    const neutralised = await neutraliseValuesTurtle(CONFORMS_URN_TYPE_HTTP);
+    const { spy, calls } = spyFetch();
+    try {
+      // Identical hostile data, but a NON-empty shapes graph (what the element ALWAYS
+      // mounts with — fix 1 fail-closes on empty). The auto-import precondition
+      // `countQuads(loaded-shapes) === 0` is now false, so NOTHING is fetched.
+      await loadGraphs({ shapes: SHAPES, values: neutralised, loadOwlImports: false } as never);
       expect(calls).toHaveLength(0);
     } finally {
       spy.mockRestore();

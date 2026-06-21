@@ -26,23 +26,35 @@
 // SHACL-FORM'S SECOND, NON-OBVIOUS FETCH PATH (the auto-import — `data-ignore-
 // owl-imports` does NOT cover it): shacl-form's `loadGraphs()` auto-derives a
 // "values subject" from the DATA graph (`findConformsToValuesSubject` — any
-// single NamedNode subject bearing `dct:conformsTo`) and, when the loaded SHAPES
-// graph is EMPTY (`countQuads(loaded-shapes) === 0`), issues an UNGUARDED
+// single NamedNode subject bearing `dct:conformsTo`) and, ONLY when the loaded
+// SHAPES graph is EMPTY (`countQuads(loaded-shapes) === 0`), issues an UNGUARDED
 // `globalThis.fetch` to every http(s) IRI that subject points at via `rdf:type`
 // and `dct:conformsTo` (incl. prefix-expanded IRIs), parsing the body into the
-// rendered graph. We close it with THREE independent measures (any one removes a
-// precondition; together = defence-in-depth):
-//   (1) FAIL-CLOSED on an empty resolved SHAPES graph — parse it (n3) and if it
-//       has zero quads, render the error state and NEVER mount <shacl-form>
-//       (removes the `countQuads(loaded-shapes) === 0` precondition).
-//   (2) NEUTRALISE the untrusted VALUES graph — drop every `rdf:type` /
-//       `dct:conformsTo` quad whose object is an http(s) IRI before inlining
-//       (removes the import TARGETS + the conformsTo auto-derivation source).
-//   (3) SUPPRESS auto-DERIVATION of a values subject — already guaranteed by (2)
-//       (findConformsToValuesSubject keys on dct:conformsTo, which (2) strips).
-//       We do NOT pin a foreign `data-values-subject` sentinel: shacl-form binds
-//       the rendered shape to that subject, so a sentinel absent from the data
-//       would blank the view (verified vs the shacl-form source). See render().
+// rendered graph.
+//
+// The EMPTY-SHAPES precondition is the whole surface — with a NON-empty loaded-
+// shapes graph the auto-import branch never runs (execution-verified against the
+// real upstream `loadGraphs`). So fix (1) is the SSRF CLOSER; (2) is a narrow
+// defence-in-depth second layer, NOT an independent closer:
+//   (1) *** THE CLOSER *** FAIL-CLOSED on an empty resolved SHAPES graph — parse
+//       it (n3) and if it has zero quads, render the error state and NEVER mount
+//       <shacl-form> (so `countQuads(loaded-shapes) === 0` can never hold for a
+//       mounted form). This alone closes the auto-import SSRF.
+//   (2) NEUTRALISE the untrusted VALUES graph — drop every `dct:conformsTo` quad
+//       whose object is an http(s) IRI before inlining (removes the http(s)
+//       conformsTo import target + the auto-derivation source when all conformsTo
+//       are http). It deliberately KEEPS `rdf:type` (load-bearing for shacl-form's
+//       view-mode shape-selection — stripping it blanks a benign instance: the
+//       High) and KEEPS `dct:conformsTo` → a non-http (`urn:`) profile reference
+//       (legit, non-SSRF, used to derive the values subject so data renders). (2)
+//       is NOT independently complete for the (conformsTo→urn KEPT + rdf:type→http)
+//       edge on empty shapes — that edge is covered by (1), not (2).
+//   (3) SUPPRESS auto-DERIVATION of a values subject — handled by (1): the auto-
+//       import branch never runs for a mounted form (non-empty shapes), so the
+//       derived subject is never followed. We do NOT pin a foreign
+//       `data-values-subject` sentinel: shacl-form binds the rendered shape to that
+//       subject, so a sentinel absent from the data would blank the view (verified
+//       vs the shacl-form source). See render().
 //
 // NO-NETWORK RDF TYPES ONLY (§9 fix 4): the pre-fetch refuses a JSON-LD / RDF-XML
 // body for EVERY source kind (inline/trusted/remote) — the canonical parser's
@@ -247,10 +259,14 @@ export class JeswrShaclView extends LitElement {
       }
 
       // §9 fix (2) — NEUTRALISE the untrusted VALUES graph before it is inlined:
-      // drop every `(s, rdf:type|dct:conformsTo, <http(s) IRI>)` quad — the exact
-      // triples shacl-form would turn into an unguarded fetch were the shapes
-      // graph ever empty. Belt-and-braces with fix (1); also removes the
-      // `findConformsToValuesSubject` auto-derivation source (no conformsTo left).
+      // drop every `(s, dct:conformsTo, <http(s) IRI>)` quad — the auto-import
+      // root-shape trigger (and the auto-derivation source when all conformsTo are
+      // http). Narrow, defence-in-depth ONLY: fix (1) above is the actual SSRF
+      // closer (the auto-import branch can't run for a mounted, non-empty-shapes
+      // form). KEEPS `rdf:type` (load-bearing for shacl-form's shape-selection —
+      // stripping it blanked benign instances: the High) and conformsTo→non-http
+      // (a legit urn: profile reference that derives the values subject so data
+      // renders). See neutraliseValuesTurtle's docblock.
       const valuesTurtle = await neutraliseValuesTurtle(valuesTurtleRaw);
       if (token !== this.#renderToken) return; // a newer resolve superseded us.
 
@@ -284,20 +300,22 @@ export class JeswrShaclView extends LitElement {
     // `data-ignore-owl-imports` are ALWAYS present (empty string ⇒ non-null ⇒
     // "set" to shacl-form). `data-shape-subject` (a plain IRI string) is applied
     // in updated() after render, never as a fetch URL.
-    // §9 fix (3) — suppress shacl-form's auto-DERIVATION of a values subject from
-    // the (untrusted) data graph. shacl-form computes
-    // `valuesSubject ||= findConformsToValuesSubject(store)`, and
-    // `findConformsToValuesSubject` keys ENTIRELY on `dct:conformsTo` — which fix
-    // (2) has already STRIPPED from the inlined data. So no subject is auto-derived
-    // and the auto-import branch's `valuesSubject &&` guard is false regardless of
-    // the (already non-empty, fix 1) shapes graph. We DELIBERATELY do NOT pin a
-    // foreign `data-values-subject` SENTINEL here: shacl-form renders the shape
+    // §9 fix (3) — the auto-import branch (which follows a derived values subject)
+    // is closed by fix (1): for a MOUNTED form the shapes graph is non-empty
+    // (fix 1 fail-closes otherwise), so the auto-import branch's
+    // `countQuads(loaded-shapes) === 0` precondition is false and the derived
+    // subject is never FOLLOWED to an unguarded fetch. (Execution-verified vs the
+    // real upstream `loadGraphs`.) shacl-form may still auto-DERIVE a values
+    // subject from a benign `dct:conformsTo` (e.g. a `urn:` profile reference) — and
+    // that is DESIRABLE: it lets the instance render against its own data (its
+    // `rdf:type`, which we keep, selects the matching shape). We DELIBERATELY do NOT
+    // pin a foreign `data-values-subject` SENTINEL here: shacl-form renders the shape
     // bound to `valuesSubject` (`new ShapeTemplate(root, namedNode(valuesSubject))`),
     // so a sentinel that is not a real subject in the data would render an EMPTY
     // view (verified against the shacl-form source). Leaving it UNSET lets
-    // shacl-form render against `void 0` = all target nodes (the correct view),
-    // while fix (2) provides the equivalent no-auto-derive guarantee the sentinel
-    // was meant to give. (`VALUES_SUBJECT_SENTINEL` is exported from
+    // shacl-form render against the derived subject (or `void 0` = all target nodes
+    // when none is derived). fix (2) still strips the http(s) `conformsTo` import
+    // vector as defence-in-depth. (`VALUES_SUBJECT_SENTINEL` is exported from
     // shacl-view-fetch for callers who want to pin it on an empty/placeholder view.)
     return html`
       <shacl-form

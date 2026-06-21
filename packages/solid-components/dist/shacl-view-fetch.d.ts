@@ -1,15 +1,22 @@
 /**
- * Neutralise an untrusted VALUES graph before it is inlined into shacl-form:
- * drop every `(s, rdf:type|dct:conformsTo, <http(s) IRI>)` quad — the exact
- * triples shacl-form's empty-shapes auto-import would turn into an unguarded
- * fetch. Works on the parsed n3 Store (NEVER hand-edits Turtle text) and
- * re-serialises via `n3.Writer`. Returns the cleaned Turtle.
+ * Neutralise an untrusted VALUES graph before it is inlined into shacl-form: drop
+ * every `(s, dct:conformsTo, <http(s) IRI>)` quad — the auto-import ROOT-SHAPE
+ * trigger (and, when ALL conformsTo are http, the auto-DERIVATION source too).
+ * Works on the parsed n3 Store (NEVER hand-edits Turtle text) and re-serialises
+ * via `n3.Writer`. Returns the cleaned Turtle.
  *
- * Non-http objects (literals, blank nodes) and all other predicates are
- * preserved verbatim, so the rendered view is unchanged except for the removal
- * of the SSRF import vectors. (A removed `rdf:type`/`conformsTo` IRI is purely a
- * shacl-form shape-discovery hint here — the view renders against the explicit
- * shapes graph, never an auto-fetched one.)
+ * This is a NARROW defence-in-depth layer, NOT the SSRF closer — the empty-shapes
+ * fail-closed (fix 1 in shacl-view.ts) is what actually closes the auto-import
+ * (its `countQuads(loaded-shapes) === 0` precondition can never hold for a mounted
+ * form). See the block comment above.
+ *
+ * It deliberately PRESERVES `rdf:type` quads (load-bearing for shacl-form's
+ * view-mode shape-selection — stripping them blanks a benign instance: the High)
+ * and `dct:conformsTo` quads with a NON-http object (a legitimate `urn:` profile
+ * reference shacl-form uses to derive the values subject so the instance renders).
+ * Literals, blank nodes, and all other predicates are preserved verbatim, so the
+ * rendered view is unchanged except for the removal of the http(s) conformsTo
+ * import vector.
  */
 export declare function neutraliseValuesTurtle(turtle: string): Promise<string>;
 /**
