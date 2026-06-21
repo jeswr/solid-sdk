@@ -357,7 +357,10 @@ async function bufferStream(
       chunks.push(result.value);
     }
   } catch (err) {
-    await reader.cancel(err).catch(() => {});
+    // Cancel the reader BEST-EFFORT (fire-and-forget): do NOT await it, because a stream whose
+    // `cancel()` never resolves would otherwise hang `solidDpopFetch` instead of propagating the
+    // abort/oversize error promptly (a roborev finding). Swallow any cancel rejection.
+    void reader.cancel(err).catch(() => {});
     throw err;
   } finally {
     removeAbortListener?.();
@@ -425,7 +428,17 @@ export function buildSolidDpopFetch(
 ): FetchLike {
   const underlying: FetchLike = options.fetch ?? (globalThis.fetch as FetchLike);
   const allowInsecure = options.allowInsecure === true;
+  // Validate the cap: a non-finite (NaN/Infinity) or negative value would silently remove the
+  // memory bound (`total > NaN` is always false; `Infinity` is unbounded). Reject it (a roborev
+  // finding) so the advertised bound always holds.
   const maxReplayBodyBytes = options.maxReplayBodyBytes ?? DEFAULT_MAX_REPLAY_BODY_BYTES;
+  if (!Number.isFinite(maxReplayBodyBytes) || maxReplayBodyBytes < 0) {
+    throw new Error(
+      `solidDpopFetch: \`maxReplayBodyBytes\` must be a finite, non-negative number (got ${String(
+        options.maxReplayBodyBytes,
+      )}).`,
+    );
+  }
   const accessToken = state.accessToken;
   if (typeof accessToken !== "string" || accessToken.length === 0) {
     throw new Error("solidDpopFetch: SolidAuthState.accessToken is missing/empty.");

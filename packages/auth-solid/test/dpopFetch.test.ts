@@ -499,6 +499,42 @@ describe("solidDpopFetch — bounded + cancellable replay buffering", () => {
     ).rejects.toThrow();
     expect(underlying).not.toHaveBeenCalled();
   });
+
+  it("propagates the oversize error promptly even when the stream's cancel() never resolves", async () => {
+    // A stream whose cancel() hangs forever — the oversize rejection must NOT await it.
+    const underlying = vi.fn(async () => new Response("{}", { status: 200 }));
+    const st = await stateFor();
+    const hangingCancel = new ReadableStream<Uint8Array>({
+      pull(c) {
+        c.enqueue(new Uint8Array(16)); // each pull is already over the 8-byte cap
+      },
+      cancel() {
+        // never resolves
+        return new Promise<void>(() => {});
+      },
+    });
+    const f = buildSolidDpopFetch(
+      { accessToken: st.accessToken, dpopKeyJwk: st.dpopKeyJwk },
+      { fetch: underlying as never, maxReplayBodyBytes: 8 },
+    );
+    // If the impl awaited cancel(), this would hang; the test timeout would fire instead of throwing.
+    await expect(f(POD, { method: "PUT", body: hangingCancel } as RequestInit)).rejects.toThrow(
+      /replay buffer cap/,
+    );
+    expect(underlying).not.toHaveBeenCalled();
+  });
+
+  it("throws on an invalid maxReplayBodyBytes (NaN / Infinity / negative)", async () => {
+    const st = await stateFor();
+    for (const bad of [Number.NaN, Number.POSITIVE_INFINITY, -1]) {
+      expect(() =>
+        buildSolidDpopFetch(
+          { accessToken: st.accessToken, dpopKeyJwk: st.dpopKeyJwk },
+          { maxReplayBodyBytes: bad },
+        ),
+      ).toThrow(/maxReplayBodyBytes/);
+    }
+  });
 });
 
 describe("no secret leak in errors/messages", () => {

@@ -278,7 +278,7 @@ async function bufferStream(stream, signal, maxBytes) {
       chunks.push(result.value);
     }
   } catch (err) {
-    await reader.cancel(err).catch(() => {
+    void reader.cancel(err).catch(() => {
     });
     throw err;
   } finally {
@@ -310,6 +310,13 @@ function buildSolidDpopFetch(state, options = {}) {
   const underlying = options.fetch ?? globalThis.fetch;
   const allowInsecure = options.allowInsecure === true;
   const maxReplayBodyBytes = options.maxReplayBodyBytes ?? DEFAULT_MAX_REPLAY_BODY_BYTES;
+  if (!Number.isFinite(maxReplayBodyBytes) || maxReplayBodyBytes < 0) {
+    throw new Error(
+      `solidDpopFetch: \`maxReplayBodyBytes\` must be a finite, non-negative number (got ${String(
+        options.maxReplayBodyBytes
+      )}).`
+    );
+  }
   const accessToken = state.accessToken;
   if (typeof accessToken !== "string" || accessToken.length === 0) {
     throw new Error("solidDpopFetch: SolidAuthState.accessToken is missing/empty.");
