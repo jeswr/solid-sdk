@@ -286,6 +286,44 @@ The **credential boundary is the same fail-closed seam** the controller uses
 exported, so the boundary + bounded-retry behaviour are unit-testable without patching the
 global. **Origin-level only** — per-storage-prefix learning is a separate follow-on.
 
+##### Optional seams: shared-issuer OAuth bypass + a session-liveness gate
+
+Two **optional** live fields on `ProactiveFetchState` cover the patterns Pod Manager needs
+(both default OFF — omit them and behaviour is byte-identical to the pod-drive path above):
+
+- **`issuerOrigins?: ReadonlySet<string>`** — a second line of defence against the
+  re-entrancy problem for apps whose provider routes its OWN OAuth calls (discovery / token /
+  refresh) over the **patched global** on a **shared issuer/pod origin** (the common CSS
+  topology where the pod and the OP share a host). When supplied, the wrapper leaves a
+  provider-internal OAuth request to an issuer origin **unauthenticated** so it does not clobber
+  oauth4webapi's own headers or recurse. A request is treated as provider-internal only when it
+  is on an issuer origin AND it either carries a `DPoP` proof header or has a `/.well-known/` or
+  `/.oidc/` path — a plain pod resource read on that same origin keeps the full auth path. The
+  pure predicate `isProviderOAuthRequest(request, issuerOrigins)` is exported and tested. (The
+  default re-entrancy guard remains **pinning your provider's `customFetch` to
+  `install.pristineFetch`** — pod-drive's approach; this seam is for when that is not enough.)
+- **`canAttachNonInteractively?: (request: Request) => boolean`** — a per-request liveness gate
+  read fresh each call (and on the 401 retry). Return `false` when a token can only be obtained
+  via user interaction (a dead refresh token), and the request is left **unauthenticated** so a
+  **passive on-load read does not trigger the interactive code-flow popup** from a background
+  fetch. Omitted ⇒ always attempt the upgrade on an allowed origin (correct for a provider whose
+  every armed session is non-interactively renewable, e.g. pod-drive's).
+
+```ts
+install.setState({
+  provider,
+  allowedOrigins: deriveProactiveAllowedOrigins({ podRoot, webId, issuer, allowInsecureLoopback }),
+  // PM-parity opt-ins (omit for the pod-drive path):
+  issuerOrigins: new Set([new URL(issuer).origin]),
+  canAttachNonInteractively: (req) => sessionStore.isRefreshable(),
+});
+```
+
+This covers **both** the pod-drive pattern (no extra fields) and Pod Manager's pattern (both
+fields) from one shared helper. The single `shouldAttachToken` gate that funnels every decision
+is also the documented **#123 P2** extension point for later per-storage-prefix learning,
+without an API churn.
+
 ## Theming token contract (shadow DOM)
 
 Each component renders in **shadow DOM** and exposes styling hooks via `::part(...)`.

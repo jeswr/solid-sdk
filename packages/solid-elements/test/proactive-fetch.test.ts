@@ -21,6 +21,7 @@ import {
   __resetProactiveFetchForTests,
   deriveProactiveAllowedOrigins,
   installProactiveAuthFetch,
+  isProviderOAuthRequest,
   isReactiveAuthResetError,
   type ProactiveFetchState,
   type ProactiveTokenProvider,
@@ -589,5 +590,229 @@ describe("isReactiveAuthResetError — the default supersession predicate", () =
     expect(isReactiveAuthResetError({ name: "ReactiveAuthResetError" })).toBe(false); // not an Error
     expect(isReactiveAuthResetError(null)).toBe(false);
     expect(isReactiveAuthResetError("ReactiveAuthResetError")).toBe(false);
+  });
+});
+
+// ─── #123 PM PARITY — capability 1: provider-internal OAuth bypass (issuer-scoped) ─────────
+
+const ISSUER = "https://idp.example"; // a shared CSS topology: pod + IdP on ONE origin
+const issuerSet = new Set([ISSUER]);
+
+/** Build a Request to a URL with optional headers (so we can stamp a DPoP proof header). */
+function req(url: string, headers?: Record<string, string>): Request {
+  return new Request(url, headers ? { headers } : undefined);
+}
+
+describe("isProviderOAuthRequest — the provider-internal OAuth bypass (PURE, adversarial)", () => {
+  it("TRUE for an issuer-origin request carrying a DPoP PROOF header (token/refresh call)", () => {
+    // oauth4webapi stamps a `DPoP` proof on every token/refresh request.
+    expect(isProviderOAuthRequest(req(`${ISSUER}/token`, { DPoP: "proof-jwt" }), issuerSet)).toBe(
+      true,
+    );
+  });
+
+  it("TRUE for an issuer-origin /.well-known/ path (header-less discovery GET)", () => {
+    expect(
+      isProviderOAuthRequest(req(`${ISSUER}/.well-known/openid-configuration`), issuerSet),
+    ).toBe(true);
+  });
+
+  it("TRUE for an issuer-origin /.oidc/ path", () => {
+    expect(isProviderOAuthRequest(req(`${ISSUER}/.oidc/jwks`), issuerSet)).toBe(true);
+  });
+
+  it("FALSE for a RESOURCE request on the issuer origin WITHOUT a DPoP/well-known signal", () => {
+    // A pod write to a resource that happens to share the IdP origin is NOT provider-internal —
+    // it must keep the full auth path (the roborev finding: do not bypass on Authorization alone).
+    expect(isProviderOAuthRequest(req(`${ISSUER}/alice/notes/n1`), issuerSet)).toBe(false);
+    // Even with an Authorization header pre-set by the caller, it is still a resource request.
+    expect(
+      isProviderOAuthRequest(
+        req(`${ISSUER}/alice/notes/n1`, { Authorization: "DPoP caller-token" }),
+        issuerSet,
+      ),
+    ).toBe(false);
+  });
+
+  it("FALSE for a NON-issuer origin even with a DPoP header or a well-known path", () => {
+    expect(isProviderOAuthRequest(req(`${POD}/token`, { DPoP: "proof-jwt" }), issuerSet)).toBe(
+      false,
+    );
+    expect(isProviderOAuthRequest(req(`${POD}/.well-known/openid-configuration`), issuerSet)).toBe(
+      false,
+    );
+  });
+
+  it("FALSE when the issuer set is empty (logged out → nothing is provider-internal)", () => {
+    expect(isProviderOAuthRequest(req(`${ISSUER}/token`, { DPoP: "proof-jwt" }), new Set())).toBe(
+      false,
+    );
+  });
+
+  it("FAIL-CLOSED on an unparseable URL (not treated as provider-internal)", () => {
+    // A Request whose url getter throws / is unparseable must not be classified as OAuth.
+    const broken = { url: "::::not a url::::", headers: new Headers() } as unknown as Request;
+    expect(isProviderOAuthRequest(broken, issuerSet)).toBe(false);
+  });
+});
+
+describe("proactiveAuthenticatedFetch — issuerOrigins OAuth bypass (#123 PM parity)", () => {
+  it("leaves a provider-internal OAuth request on the issuer origin UNAUTHENTICATED", async () => {
+    const provider = fakeProvider();
+    const base = scriptedBase([200]);
+    // The issuer origin is ALSO an allowed (resource) origin — the shared-CSS topology.
+    const state: ProactiveFetchState = {
+      provider,
+      allowedOrigins: new Set([ISSUER, POD]),
+      issuerOrigins: issuerSet,
+    };
+    // A token/refresh call (DPoP proof header) to the issuer origin must NOT be wrapped.
+    await proactiveAuthenticatedFetch(state, base.fetch, `${ISSUER}/token`, {
+      headers: { DPoP: "oauth4webapi-proof" },
+    });
+    expect(provider.upgradeCalls).toEqual([]); // provider.upgrade NEVER called on it
+    // The request still went out (it carries only oauth4webapi's own DPoP, no wrapper token).
+    expect(base.authHeaders[0]).toBeNull();
+  });
+
+  it("STILL upgrades a pod resource request on a DIFFERENT allowed origin", async () => {
+    const provider = fakeProvider();
+    const base = scriptedBase([200]);
+    const state: ProactiveFetchState = {
+      provider,
+      allowedOrigins: new Set([ISSUER, POD]),
+      issuerOrigins: issuerSet,
+    };
+    await proactiveAuthenticatedFetch(state, base.fetch, `${POD}/c/file1`);
+    expect(base.authHeaders[0]).toBe("DPoP tok-abc");
+    expect(provider.upgradeCalls).toEqual([`${POD}/c/file1`]);
+  });
+
+  it("STILL upgrades a RESOURCE request on the issuer origin (no DPoP/well-known signal)", async () => {
+    // Pod served from the IdP origin: a plain resource read there is NOT provider-internal.
+    const provider = fakeProvider();
+    const base = scriptedBase([200]);
+    const state: ProactiveFetchState = {
+      provider,
+      allowedOrigins: new Set([ISSUER]),
+      issuerOrigins: issuerSet,
+    };
+    await proactiveAuthenticatedFetch(state, base.fetch, `${ISSUER}/alice/notes/n1`);
+    expect(base.authHeaders[0]).toBe("DPoP tok-abc");
+    expect(provider.upgradeCalls).toEqual([`${ISSUER}/alice/notes/n1`]);
+  });
+
+  it("re-checks the OAuth bypass on the 401 retry (a header-less resource request is retried)", async () => {
+    // A resource request on the issuer origin 401s then 200s — the bypass must NOT kick in on the
+    // retry (the retry source is the pristine header-less request, still a resource request).
+    const provider = fakeProvider();
+    const base = scriptedBase([401, 200]);
+    const state: ProactiveFetchState = {
+      provider,
+      allowedOrigins: new Set([ISSUER]),
+      issuerOrigins: issuerSet,
+    };
+    const res = await proactiveAuthenticatedFetch(state, base.fetch, `${ISSUER}/alice/notes/n1`);
+    expect(res.status).toBe(200);
+    expect(base.calls).toBe(2);
+    expect(provider.upgradeCalls.length).toBe(2); // proactive + retry, both authenticated
+  });
+});
+
+// ─── #123 PM PARITY — capability 2: session-liveness gate (canAttachNonInteractively) ──────
+
+describe("proactiveAuthenticatedFetch — canAttachNonInteractively gate (#123 PM parity)", () => {
+  it("leaves an allowed-origin request UNAUTHENTICATED when the gate returns false (dead session)", async () => {
+    // A passive on-load read for an account whose refresh token is DEAD must NOT call upgrade()
+    // (which would start the interactive code flow / popup from a background fetch).
+    const provider = fakeProvider();
+    const base = scriptedBase([200]);
+    const state: ProactiveFetchState = {
+      provider,
+      allowedOrigins: new Set([POD]),
+      canAttachNonInteractively: () => false,
+    };
+    const res = await proactiveAuthenticatedFetch(state, base.fetch, `${POD}/c/file1`);
+    expect(res.status).toBe(200);
+    expect(base.authHeaders[0]).toBeNull();
+    expect(provider.upgradeCalls).toEqual([]); // NEVER upgraded → no popup
+  });
+
+  it("upgrades as today when the gate returns true (renewable / explicit login)", async () => {
+    const provider = fakeProvider();
+    const base = scriptedBase([200]);
+    const state: ProactiveFetchState = {
+      provider,
+      allowedOrigins: new Set([POD]),
+      canAttachNonInteractively: () => true,
+    };
+    await proactiveAuthenticatedFetch(state, base.fetch, `${POD}/c/file1`);
+    expect(base.authHeaders[0]).toBe("DPoP tok-abc");
+    expect(provider.upgradeCalls).toEqual([`${POD}/c/file1`]);
+  });
+
+  it("is read FRESH per request (a session that dies between requests stops authenticating)", async () => {
+    const provider = fakeProvider();
+    const base = scriptedBase([200]);
+    let alive = true;
+    const state: ProactiveFetchState = {
+      provider,
+      allowedOrigins: new Set([POD]),
+      canAttachNonInteractively: () => alive,
+    };
+    await proactiveAuthenticatedFetch(state, base.fetch, `${POD}/a`);
+    expect(base.authHeaders[0]).toBe("DPoP tok-abc");
+    alive = false; // the refresh token dies
+    await proactiveAuthenticatedFetch(state, base.fetch, `${POD}/b`);
+    expect(base.authHeaders[1]).toBeNull(); // next request is unauthenticated
+  });
+
+  it("re-checks the liveness gate on the 401 retry (session dies mid-flight → public retry)", async () => {
+    const provider = fakeProvider();
+    const base = scriptedBase([401, 200]);
+    let alive = true;
+    const state: ProactiveFetchState = {
+      provider,
+      allowedOrigins: new Set([POD]),
+      canAttachNonInteractively: () => alive,
+    };
+    // Kill the session right after the first (401) attempt, before the retry.
+    let calls = 0;
+    const racingBase = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const r = await base.fetch(input, init);
+      calls += 1;
+      if (calls === 1) alive = false;
+      return r;
+    }) as unknown as typeof fetch;
+    const res = await proactiveAuthenticatedFetch(state, racingBase, `${POD}/c/file1`);
+    expect(res.status).toBe(200);
+    expect(base.authHeaders[0]).toBe("DPoP tok-abc"); // proactive attach authenticated
+    expect(base.authHeaders[1]).toBeNull(); // retry left public (gate now false)
+    expect(provider.upgradeCalls.length).toBe(1); // no second upgrade
+  });
+});
+
+describe("backward compat — omitting both new seams is identical to before (pod-drive path)", () => {
+  it("with NO issuerOrigins and NO liveness gate, an allowed-origin request upgrades as today", async () => {
+    const provider = fakeProvider();
+    const base = scriptedBase([200]);
+    // The pod-drive-style state — only provider + allowedOrigins, the two new fields omitted.
+    const state: ProactiveFetchState = { provider, allowedOrigins: new Set([POD]) };
+    await proactiveAuthenticatedFetch(state, base.fetch, `${POD}/c/file1`);
+    expect(base.authHeaders[0]).toBe("DPoP tok-abc");
+    expect(provider.upgradeCalls).toEqual([`${POD}/c/file1`]);
+  });
+
+  it("an empty issuerOrigins set is equivalent to omitting it (no bypass)", async () => {
+    const provider = fakeProvider();
+    const base = scriptedBase([200]);
+    const state: ProactiveFetchState = {
+      provider,
+      allowedOrigins: new Set([ISSUER]),
+      issuerOrigins: new Set(), // empty → nothing treated as provider-internal
+    };
+    // Even a DPoP-header request to the issuer origin is upgraded (empty issuer set ⇒ no bypass).
+    await proactiveAuthenticatedFetch(state, base.fetch, `${ISSUER}/alice/notes/n1`);
+    expect(base.authHeaders[0]).toBe("DPoP tok-abc");
   });
 });

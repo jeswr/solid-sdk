@@ -227,4 +227,4 @@ export declare function createReactiveAuthController(options: ReactiveAuthContro
 export declare function validateWebId(input: string, allowInsecureLoopback?: boolean): string;
 export type { LoginController, LoginResult, RecentLoginAccount, RestoreOutcome, } from "../login-controller.js";
 export type { InstallProactiveAuthFetchOptions, ProactiveAllowedOriginsInputs, ProactiveFetchConfig, ProactiveFetchInstall, ProactiveFetchState, ProactiveTokenProvider, } from "./proactive-fetch.js";
-export { __resetProactiveFetchForTests, deriveProactiveAllowedOrigins, installProactiveAuthFetch, isReactiveAuthResetError, proactiveAuthenticatedFetch, } from "./proactive-fetch.js";
+export { __resetProactiveFetchForTests, deriveProactiveAllowedOrigins, installProactiveAuthFetch, isProviderOAuthRequest, isReactiveAuthResetError, proactiveAuthenticatedFetch, } from "./proactive-fetch.js";

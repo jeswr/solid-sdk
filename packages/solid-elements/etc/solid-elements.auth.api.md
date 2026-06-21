@@ -64,6 +64,9 @@ export class InvalidWebIdError extends Error {
 export function isOriginAllowed(allowed: ReadonlySet<string>, requestUrl: string): boolean;
 
 // @public
+export function isProviderOAuthRequest(request: Request, issuerOrigins: ReadonlySet<string>): boolean;
+
+// @public
 export function isReactiveAuthResetError(e: unknown): boolean;
 
 // @public
@@ -133,6 +136,8 @@ export interface ProactiveFetchInstall {
 // @public
 export interface ProactiveFetchState {
     allowedOrigins: ReadonlySet<string>;
+    canAttachNonInteractively?: (request: Request) => boolean;
+    issuerOrigins?: ReadonlySet<string>;
     provider: ProactiveTokenProvider | null;
 }
 

@@ -23,6 +23,47 @@ export interface ProactiveTokenProvider {
  */
 export declare function isReactiveAuthResetError(e: unknown): boolean;
 /**
+ * Whether a request is the token provider's OWN OAuth-infrastructure call (OIDC discovery /
+ * token / refresh) that the proactive wrapper must NOT touch — SCOPED to the issuer origins.
+ *
+ * WHY (the PM topology this covers — #123 PM parity): when a pod is served from its IdP's
+ * origin (the common CSS topology where the pod and the OP share a host), the issuer origin is
+ * ALSO a resource origin, so it is in the allowed set. Without this guard a provider-internal
+ * OAuth request (made via `oauth4webapi` over the patched global fetch) would be routed through
+ * the wrapper, which would call `provider.upgrade()` on it — OVERWRITING oauth4webapi's own
+ * client-auth `Authorization` / DPoP-proof `DPoP` headers, and potentially RECURSING (a
+ * token-endpoint request triggering another upgrade → refresh-grant → another token request …).
+ *
+ * pod-drive avoids this DIFFERENTLY — by pinning oauth4webapi's `customFetch` to the pristine
+ * fetch ({@link ProactiveFetchInstall.pristineFetch}), so the provider's own token requests
+ * never reach the patched global at all (the re-entrancy note at the top of this module). That
+ * pristine-pinning path stays the DEFAULT and is unchanged. This function is the OPTIONAL
+ * SECOND line of defence for an app (like Pod Manager) whose provider routes its OAuth calls
+ * over the global on a shared issuer/pod origin: supply {@link ProactiveFetchState.issuerOrigins}
+ * and the wrapper additionally leaves these provider-internal calls unauthenticated.
+ *
+ * Scoping to the issuer origins is the first precision gate; a request elsewhere is never
+ * provider-internal (so a resource write to the pod keeps the full auth path). On an issuer
+ * origin, a request is treated as OAuth infrastructure ONLY when it ALSO looks like an OAuth
+ * call — either (a) it carries a `DPoP` PROOF header (oauth4webapi stamps a DPoP proof on every
+ * token/refresh request, and a Solid RESOURCE request routed through this wrapper never pre-sets
+ * one — the wrapper is what ADDS it), or (b) its path is a well-known OIDC mount (`/.well-known/…`
+ * or `/.oidc/…`, covering the header-less discovery GET).
+ *
+ * We deliberately do NOT key off `Authorization` alone: on a SHARED CSS origin (pod + IdP), a
+ * caller that pre-authed a pod resource request with its own `Authorization` would then be
+ * wrongly bypassed and lose the bounded 401 retry. The `DPoP`-proof signal is specific to the
+ * provider's own OAuth calls. Fail-SAFE regardless: a false positive merely leaves a request
+ * unauthenticated, which an OAuth endpoint never needs; an unparseable URL fails CLOSED (not
+ * treated as provider-internal, so it still flows through the origin gate which itself
+ * fail-closes an unparseable URL).
+ *
+ * @param request       the request being routed through the wrapper
+ * @param issuerOrigins the live set of issuer origins that host OAuth infrastructure (empty
+ *                      when logged out → nothing is treated as provider-internal)
+ */
+export declare function isProviderOAuthRequest(request: Request, issuerOrigins: ReadonlySet<string>): boolean;
+/**
  * Inputs to {@link deriveProactiveAllowedOrigins}: the post-login resource origins the
  * token may ride to. The WebID + issuer origins are folded in by the seam's
  * `computeAllowedOrigins` default (toggle with {@link includeWebIdOrigin} /
@@ -67,6 +108,44 @@ export interface ProactiveFetchState {
     provider: ProactiveTokenProvider | null;
     /** The current credential boundary (empty when logged out → authenticate nothing). */
     allowedOrigins: ReadonlySet<string>;
+    /**
+     * OPTIONAL (#123 PM parity). The live set of issuer origins that host the OAuth
+     * infrastructure (OIDC discovery / token / refresh). When supplied, a provider-internal
+     * OAuth request to one of these origins is left UNAUTHENTICATED (the wrapper does NOT call
+     * `provider.upgrade()` on it) — see {@link isProviderOAuthRequest}. This is needed when a
+     * pod is served from its IdP's origin (the common CSS topology) AND the provider routes its
+     * own oauth4webapi calls over the patched global fetch. Read FRESH every request (and on the
+     * 401 retry) so a re-login that changes the issuer is reflected immediately.
+     *
+     * DEFAULT (omitted / undefined): behaviour is EXACTLY as before — no OAuth bypass; the
+     * pristine-pinning path (pod-drive's approach — pin the provider's `customFetch` to
+     * {@link ProactiveFetchInstall.pristineFetch}) remains the recommended re-entrancy guard. An
+     * empty set is equivalent to omitting it (nothing is treated as provider-internal).
+     */
+    issuerOrigins?: ReadonlySet<string>;
+    /**
+     * OPTIONAL (#123 PM parity). A SESSION-LIVENESS gate read FRESH per request: it returns
+     * `true` only when the provider can attach a token to this request WITHOUT any user
+     * interaction (a live access token, or a refresh token that renews via a plain fetch). When
+     * it returns `false`, an allowed-origin request is left UNAUTHENTICATED even though a session
+     * exists — so a PASSIVE on-load read for an account whose refresh token is DEAD does NOT
+     * trigger the interactive code flow (a popup) from a background fetch.
+     *
+     * WHY (the PM behaviour this covers): the reactive providers' `matches()` / unconditional
+     * `upgrade()` is NOT a liveness check — it was the manager's "is this my provider" probe. If
+     * the wrapper proactively upgrades whenever a session is armed, a passive read (e.g. the
+     * on-load silent-restore profile fetch) for a dead-refresh-token account would start the
+     * INTERACTIVE code flow from a background fetch — popping a window during restore, breaking
+     * the fail-closed silent-restore invariant. Gating on non-interactive renewability keeps such
+     * a passive read UNAUTHENTICATED when the only way to get a token would be a popup; an
+     * EXPLICIT login flow (a fresh session) passes the gate and is proactively authenticated.
+     *
+     * Re-checked on the 401 retry too (the live state may have changed mid-flight). DEFAULT
+     * (omitted / undefined): behaviour is EXACTLY as before — always attempt the upgrade on an
+     * allowed origin (correct for a provider whose every armed session IS non-interactively
+     * renewable, e.g. pod-drive's).
+     */
+    canAttachNonInteractively?: (request: Request) => boolean;
 }
 /**
  * Static (per-install) configuration for the proactive fetch — distinct from the live
@@ -99,7 +178,16 @@ export interface ProactiveFetchConfig {
  * For a NON-allowed origin OR no live provider: the request is left UNAUTHENTICATED — the
  * foreign-origin / public-read boundary (fail-closed).
  *
- * @param state  the live provider + credential boundary (read fresh on every request)
+ * #123 PM-PARITY SEAMS (optional, default off — behaviour is identical to before when both are
+ * omitted). When {@link ProactiveFetchState.issuerOrigins} is set, a provider-internal OAuth
+ * request to an issuer origin is also left unauthenticated (see {@link isProviderOAuthRequest});
+ * when {@link ProactiveFetchState.canAttachNonInteractively} is set and returns false, an
+ * allowed-origin request is left unauthenticated so a passive dead-session read never starts the
+ * interactive popup. Both are re-checked on the bounded 401 retry (the live state may have
+ * changed). All gate decisions funnel through `shouldAttachToken`.
+ *
+ * @param state  the live provider + credential boundary + optional PM-parity seams (read fresh
+ *               on every request AND the retry)
  * @param base   the pristine fetch the request is ultimately issued over
  * @param config optional per-install config (the supersession predicate)
  */

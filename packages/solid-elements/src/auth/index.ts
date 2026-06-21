@@ -2264,6 +2264,7 @@ export {
   __resetProactiveFetchForTests,
   deriveProactiveAllowedOrigins,
   installProactiveAuthFetch,
+  isProviderOAuthRequest,
   isReactiveAuthResetError,
   proactiveAuthenticatedFetch,
 } from "./proactive-fetch.js";

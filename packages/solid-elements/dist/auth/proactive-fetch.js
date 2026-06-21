@@ -85,6 +85,63 @@ export function isReactiveAuthResetError(e) {
     return e instanceof Error && e.name === "ReactiveAuthResetError";
 }
 /**
+ * Whether a request is the token provider's OWN OAuth-infrastructure call (OIDC discovery /
+ * token / refresh) that the proactive wrapper must NOT touch — SCOPED to the issuer origins.
+ *
+ * WHY (the PM topology this covers — #123 PM parity): when a pod is served from its IdP's
+ * origin (the common CSS topology where the pod and the OP share a host), the issuer origin is
+ * ALSO a resource origin, so it is in the allowed set. Without this guard a provider-internal
+ * OAuth request (made via `oauth4webapi` over the patched global fetch) would be routed through
+ * the wrapper, which would call `provider.upgrade()` on it — OVERWRITING oauth4webapi's own
+ * client-auth `Authorization` / DPoP-proof `DPoP` headers, and potentially RECURSING (a
+ * token-endpoint request triggering another upgrade → refresh-grant → another token request …).
+ *
+ * pod-drive avoids this DIFFERENTLY — by pinning oauth4webapi's `customFetch` to the pristine
+ * fetch ({@link ProactiveFetchInstall.pristineFetch}), so the provider's own token requests
+ * never reach the patched global at all (the re-entrancy note at the top of this module). That
+ * pristine-pinning path stays the DEFAULT and is unchanged. This function is the OPTIONAL
+ * SECOND line of defence for an app (like Pod Manager) whose provider routes its OAuth calls
+ * over the global on a shared issuer/pod origin: supply {@link ProactiveFetchState.issuerOrigins}
+ * and the wrapper additionally leaves these provider-internal calls unauthenticated.
+ *
+ * Scoping to the issuer origins is the first precision gate; a request elsewhere is never
+ * provider-internal (so a resource write to the pod keeps the full auth path). On an issuer
+ * origin, a request is treated as OAuth infrastructure ONLY when it ALSO looks like an OAuth
+ * call — either (a) it carries a `DPoP` PROOF header (oauth4webapi stamps a DPoP proof on every
+ * token/refresh request, and a Solid RESOURCE request routed through this wrapper never pre-sets
+ * one — the wrapper is what ADDS it), or (b) its path is a well-known OIDC mount (`/.well-known/…`
+ * or `/.oidc/…`, covering the header-less discovery GET).
+ *
+ * We deliberately do NOT key off `Authorization` alone: on a SHARED CSS origin (pod + IdP), a
+ * caller that pre-authed a pod resource request with its own `Authorization` would then be
+ * wrongly bypassed and lose the bounded 401 retry. The `DPoP`-proof signal is specific to the
+ * provider's own OAuth calls. Fail-SAFE regardless: a false positive merely leaves a request
+ * unauthenticated, which an OAuth endpoint never needs; an unparseable URL fails CLOSED (not
+ * treated as provider-internal, so it still flows through the origin gate which itself
+ * fail-closes an unparseable URL).
+ *
+ * @param request       the request being routed through the wrapper
+ * @param issuerOrigins the live set of issuer origins that host OAuth infrastructure (empty
+ *                      when logged out → nothing is treated as provider-internal)
+ */
+export function isProviderOAuthRequest(request, issuerOrigins) {
+    let url;
+    try {
+        url = new URL(request.url);
+    }
+    catch {
+        return false; // fail-closed: not treated as provider-internal (the origin gate fails closed too)
+    }
+    // Only the issuer's own origins host OAuth infrastructure — a request elsewhere is never
+    // treated as provider-internal (so resource writes keep the full auth path).
+    if (!issuerOrigins.has(url.origin))
+        return false;
+    if (request.headers.has("dpop"))
+        return true; // oauth4webapi's token/refresh DPoP proof
+    const path = url.pathname.toLowerCase();
+    return path.startsWith("/.well-known/") || path.startsWith("/.oidc/");
+}
+/**
  * The credential boundary for the proactive fetch — the set of resource origins the
  * session token may be attached to. Delegates ENTIRELY to the seam's pure
  * {@link computeAllowedOrigins} (https-only + loopback-http-under-opt-in; fail-closed), so
@@ -115,6 +172,41 @@ export function deriveProactiveAllowedOrigins(inputs) {
     });
 }
 /**
+ * The COMPLETE per-request credential gate, evaluated LIVE off the current {@link
+ * ProactiveFetchState}. The token is attached ONLY when ALL hold (fail-closed — any false
+ * leaves the request unauthenticated):
+ *   1. `isOriginAllowed` — the foreign-origin / cleartext boundary (token never leaves the
+ *      allowed set; fail-closed for an empty set or an unparseable URL). ALWAYS applied.
+ *   2. NOT a provider-internal OAuth request — only when {@link ProactiveFetchState.issuerOrigins}
+ *      is supplied (#123 PM parity). Omitted ⇒ this clause is vacuously true (no bypass), so the
+ *      gate reduces to the prior pod-drive behaviour.
+ *   3. The session-liveness gate — only when {@link ProactiveFetchState.canAttachNonInteractively}
+ *      is supplied (#123 PM parity). Omitted ⇒ vacuously true (always attempt the upgrade).
+ *
+ * Used at BOTH the first attempt and the bounded 401 retry so all three clauses are re-checked
+ * live (a logout / re-login / now-dead refresh token between rounds is reflected). Note the
+ * caller still checks `provider` separately; this gate is the origin+seam half.
+ *
+ * #123 P2 EXTENSION POINT (per-storage-prefix learning — DO NOT implement here): a future P2
+ * can learn which storage PREFIXES require auth and refine this single predicate (e.g. an
+ * optional `requiresAuth?: (request) => boolean | undefined` on the state, defaulting to the
+ * current origin-level decision) WITHOUT an API churn — every gate decision already funnels
+ * through this one function, so the learning hook plugs in here.
+ */
+function shouldAttachToken(state, request) {
+    if (!isOriginAllowed(state.allowedOrigins, request.url))
+        return false;
+    // OPTIONAL OAuth bypass (#123 PM parity): when issuer origins are supplied, never wrap the
+    // provider's OWN discovery/token/refresh calls (would clobber oauth4webapi's headers / recurse).
+    if (state.issuerOrigins && isProviderOAuthRequest(request, state.issuerOrigins))
+        return false;
+    // OPTIONAL session-liveness gate (#123 PM parity): when supplied and false, leave the request
+    // unauthenticated so a passive dead-session read never triggers the interactive popup.
+    if (state.canAttachNonInteractively && !state.canAttachNonInteractively(request))
+        return false;
+    return true;
+}
+/**
  * The proactive authenticated-fetch implementation, run over an explicit `base` fetch (the
  * pristine global). Exported (not just the installer) so the credential boundary + the
  * bounded-retry behaviour are unit-testable WITHOUT patching the global.
@@ -131,17 +223,28 @@ export function deriveProactiveAllowedOrigins(inputs) {
  * For a NON-allowed origin OR no live provider: the request is left UNAUTHENTICATED — the
  * foreign-origin / public-read boundary (fail-closed).
  *
- * @param state  the live provider + credential boundary (read fresh on every request)
+ * #123 PM-PARITY SEAMS (optional, default off — behaviour is identical to before when both are
+ * omitted). When {@link ProactiveFetchState.issuerOrigins} is set, a provider-internal OAuth
+ * request to an issuer origin is also left unauthenticated (see {@link isProviderOAuthRequest});
+ * when {@link ProactiveFetchState.canAttachNonInteractively} is set and returns false, an
+ * allowed-origin request is left unauthenticated so a passive dead-session read never starts the
+ * interactive popup. Both are re-checked on the bounded 401 retry (the live state may have
+ * changed). All gate decisions funnel through `shouldAttachToken`.
+ *
+ * @param state  the live provider + credential boundary + optional PM-parity seams (read fresh
+ *               on every request AND the retry)
  * @param base   the pristine fetch the request is ultimately issued over
  * @param config optional per-install config (the supersession predicate)
  */
 export async function proactiveAuthenticatedFetch(state, base, input, init, config) {
     const isSuperseded = config?.isSuperseded ?? isReactiveAuthResetError;
     const request = new Request(input, init);
-    const { provider, allowedOrigins } = state;
+    const { provider } = state;
     // The credential gate — re-evaluated live every request, fail-closed for an empty set or
-    // an unparseable URL (delegated to the seam's `isOriginAllowed`).
-    if (!provider || !isOriginAllowed(allowedOrigins, request.url)) {
+    // an unparseable URL (delegated to the seam's `isOriginAllowed`), plus the two OPTIONAL
+    // #123-PM seams (the provider-internal-OAuth bypass + the session-liveness gate). When
+    // neither optional seam is supplied this is EXACTLY the prior pod-drive gate.
+    if (!provider || !shouldAttachToken(state, request)) {
         return base(request);
     }
     // Clone BEFORE the first fetch consumes the body: a 401 retry must replay the body, but
@@ -178,8 +281,12 @@ export async function proactiveAuthenticatedFetch(state, base, input, init, conf
     // to expose those (the stock providers do not today) — `pureNonce` is surfaced so that
     // wiring can branch on it without a churn here.
     const pureNonce = isUseDpopNonceChallenge(response);
-    // Re-check the gate: a logout during the first round may have emptied the boundary.
-    if (!isOriginAllowed(state.allowedOrigins, retrySource.url) || !state.provider) {
+    // Re-check the FULL gate (live): a logout during the first round may have emptied the
+    // boundary, the issuer may have changed, or the session-liveness gate may now report the
+    // refresh token dead. The same `shouldAttachToken` used on the first attempt — so the OAuth
+    // bypass + the liveness gate are re-evaluated on the retry too (the live state may have
+    // changed mid-flight). `retrySource` carries the same URL/headers as the original request.
+    if (!state.provider || !shouldAttachToken(state, retrySource)) {
         return base(retrySource);
     }
     // Tee the body ONCE MORE before the retry upgrade: `upgrade` builds a new Request from its

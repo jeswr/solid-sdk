@@ -1917,4 +1917,4 @@ export function validateWebId(input, allowInsecureLoopback = false) {
 // 401-dance. Built on the pure seam primitives above (computeAllowedOrigins / isOriginAllowed
 // / isUseDpopNonceChallenge). Use this when you have your own token provider that
 // createReactiveAuthController cannot wrap. See ./proactive-fetch.ts.
-export { __resetProactiveFetchForTests, deriveProactiveAllowedOrigins, installProactiveAuthFetch, isReactiveAuthResetError, proactiveAuthenticatedFetch, } from "./proactive-fetch.js";
+export { __resetProactiveFetchForTests, deriveProactiveAllowedOrigins, installProactiveAuthFetch, isProviderOAuthRequest, isReactiveAuthResetError, proactiveAuthenticatedFetch, } from "./proactive-fetch.js";
