@@ -1,0 +1,26 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jeswr/full-solid-ecosystem/main/tracking/schema/suite.schema.json",
+  "id": "auth-solid",
+  "kind": "sdk",
+  "name": "Auth.js Solid-OIDC Provider (@jeswr/auth-solid)",
+  "repo": "https://github.com/jeswr/auth-solid",
+  "category": "identity",
+  "maturity": "alpha",
+  "visibility": "public",
+  "stack": {
+    "lang": "TypeScript (ESM, NodeNext)",
+    "authjs": "@auth/core >=0.34 (PEER dependency, consumer-resolved; next-auth v5 re-exports customFetch)",
+    "dpop": "@jeswr/solid-dpop (git: jeswr/solid-dpop#main — RFC 9449 proofs; bundled into dist)",
+    "crypto": "jose ^6.x via @jeswr/solid-dpop (asymmetric-only ES256; consumer-resolved external)",
+    "flow": "Solid-OIDC authorization-code + PKCE (S256) + state + nonce + DPoP, via the Auth.js customFetch seam",
+    "modules": "ESM (committed self-contained dist/ for github: installs)",
+    "test": "vitest ^4.x (faithful Map-backed mock OP — real ES256 DPoP-proof verification + §8 nonce, no live IdP)",
+    "lint": "@biomejs/biome ^2.x",
+    "node": ">=20"
+  },
+  "dependsOn": ["solid-dpop"],
+  "consolidates": [],
+  "federation": {
+    "membershipTodo": "SDK (not an app). `Solid(config)` returns an Auth.js `OIDCConfig<SolidProfile>` for next-auth v5 / @auth/core: Solid-OIDC discovery + PKCE(S256) + state + nonce + DPoP-bound (sender-constrained) tokens, injecting the RFC 9449 DPoP proof on the token endpoint via the Auth.js `customFetch` seam (Auth.js does not do DPoP itself). Composes @jeswr/solid-dpop for the proofs (ES256, asymmetric-only) — reimplements neither DPoP nor OIDC; Auth.js owns the OAuth orchestration (deliberately NOT @jeswr/solid-openid-client, which would fight Auth.js's own flow). Verified-WebID-only (fail-closed). Also exports `solidDpopFetch` for DPoP-attaching pod requests from a persisted session + the jwt/session persistence helpers. It is a login SDK, not a federation member; it holds no federation membership of its own."
+  }
+}
