@@ -1,0 +1,25 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jeswr/full-solid-ecosystem/main/tracking/schema/suite.schema.json",
+  "id": "n8n-nodes-solid",
+  "kind": "sdk",
+  "name": "n8n Solid Node",
+  "repo": "https://github.com/jeswr/n8n-nodes-solid",
+  "category": "integration",
+  "maturity": "prototype",
+  "visibility": "public",
+  "stack": {
+    "lang": "TypeScript (ESM, NodeNext)",
+    "n8n": "n8n-workflow ^1.82 (peerDependency — the INodeType/ICredentialType contract)",
+    "rdf": "n3 ^2.x (container listing only)",
+    "solid-object": "@solid/object ^0.6.x (ContainerDataset for ldp:contains)",
+    "fetch-rdf": "@jeswr/fetch-rdf (git: jeswr/fetch-rdf#main; inlined into dist)",
+    "test": "vitest ^2.x",
+    "lint": "@biomejs/biome ^2.x",
+    "node": ">=20"
+  },
+  "dependsOn": ["fetch-rdf"],
+  "federation": {
+    "sectors": [],
+    "membershipTodo": "OSS-integration SDK (not an app). An n8n community node (programmatic INodeType) that reads/writes a Solid pod over LDP from inside n8n automation workflows: Resource Read/Create/Update/Delete + Container List (ldp:contains parsed via @jeswr/fetch-rdf + @solid/object ContainerDataset). A SolidApi credential carries the pod base URL + an OIDC/bearer access token; full DPoP-bound Solid-OIDC is a documented follow-up seam. Writes are confined to the configured pod base (scope guard); http(s) only; the token is never logged. No federation membership of its own — it is workflow-automation glue reaching every n8n user."
+  }
+}

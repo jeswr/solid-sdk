@@ -1,0 +1,1 @@
+{"version":3,"file":"Solid.node.d.ts","sourceRoot":"","sources":["../../../nodes/Solid/Solid.node.ts"],"names":[],"mappings":"AAkBA,OAAO,KAAK,EAEV,iBAAiB,EAEjB,kBAAkB,EAClB,SAAS,EACT,oBAAoB,EACrB,MAAM,cAAc,CAAC;AActB,qBAAa,KAAM,YAAW,SAAS;IACrC,WAAW,EAAE,oBAAoB,CA0H/B;IAEI,OAAO,CAAC,IAAI,EAAE,iBAAiB,GAAG,OAAO,CAAC,kBAAkB,EAAE,EAAE,CAAC;CAyHxE"}
