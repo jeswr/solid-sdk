@@ -29,8 +29,10 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { AccountMenu, FeedbackButton, ThemeProvider, ThemeToggle } from "@jeswr/app-shell";
-import { fireEvent, render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { afterEach, beforeAll, describe, expect, it } from "vitest";
+
+afterEach(cleanup);
 
 // The host stylesheet source — read statically so we can assert its selector text.
 // (jsdom does not run the cascade, so a computed-style check would not catch a scope
@@ -41,6 +43,29 @@ const STYLES_CSS = readFileSync(
 );
 
 describe("app-shell CSS isolation survives pod-photos's host button base (#80 / #121)", () => {
+  // STALE-INSTALL GUARD. The `data-app-shell-control` contract is satisfied by the
+  // @jeswr/app-shell build pinned in package.json (5a7484d ships the unlayered reset
+  // primitive that stamps the attribute). A LOCAL node_modules holding an OLDER
+  // app-shell build than the lockfile resolves (a build-skew stale install) renders the
+  // controls WITHOUT the attribute, making the render assertions below fail with a
+  // cryptic `received: null`. Probe the installed build once and, if the hook is absent,
+  // fail with the actionable cause instead — a clean reinstall fixes it. (`npm ci`
+  // rebuilds the git dep from the pinned SHA; CI is always clean, so this only bites
+  // stale local checkouts.) This does NOT replace the contract assertions below — it
+  // disambiguates a stale-install failure from a genuine app-shell isolation regression.
+  beforeAll(() => {
+    const { container } = render(<FeedbackButton repo="jeswr/pod-photos" appName="Pod Photos" />);
+    const probe = container.querySelector("button");
+    if (probe && !probe.hasAttribute("data-app-shell-control")) {
+      throw new Error(
+        "Installed @jeswr/app-shell build does NOT emit data-app-shell-control — " +
+          "this is a STALE/build-skew node_modules, not a CSS-isolation regression. " +
+          "Run `npm ci` to rebuild the git dep from the pinned SHA, then re-run.",
+      );
+    }
+    cleanup();
+  });
+
   it("scopes the host button base with :not([data-app-shell-control]) (#121 box-model guard)", () => {
     // The #121 SAFE FORM: the host filled-button base MUST be scoped so it never
     // applies to app-shell controls (which would clobber their box model — app-shell
