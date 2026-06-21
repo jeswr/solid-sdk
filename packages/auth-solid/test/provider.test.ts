@@ -262,16 +262,15 @@ describe("@auth/core peer contract (github-install regression)", () => {
     expect(typeof customFetch).toBe("symbol");
   });
 
-  it("the declared @auth/core peer floor is >=0.37 (where the customFetch export landed)", () => {
+  it("the declared @auth/core peer range is exactly >=0.37.0 <1 (no compound clause re-admits <0.37)", () => {
+    // Assert the EXACT intended range string rather than the first x.y.z substring: a regex that
+    // only reads the first version would let a compound range like `>=0.37.0 || >=0.34.0` pass while
+    // still admitting unsupported (<0.37) @auth/core versions (a roborev finding). Pinning the exact
+    // string is the strongest check that needs no `semver` dependency in the test.
     const pkgPath = fileURLToPath(new URL("../package.json", import.meta.url));
     const pkg = JSON.parse(readFileSync(pkgPath, "utf8")) as {
       peerDependencies?: Record<string, string>;
     };
-    const range = pkg.peerDependencies?.["@auth/core"] ?? "";
-    const floor = range.match(/(\d+)\.(\d+)\.(\d+)/);
-    expect(floor, `unexpected @auth/core peer range: ${range}`).not.toBeNull();
-    const [, major, minor] = floor as RegExpMatchArray;
-    const ge037 = Number(major) > 0 || (Number(major) === 0 && Number(minor) >= 37);
-    expect(ge037, `@auth/core peer floor must be >=0.37, got ${range}`).toBe(true);
+    expect(pkg.peerDependencies?.["@auth/core"]).toBe(">=0.37.0 <1");
   });
 });
