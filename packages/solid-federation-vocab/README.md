@@ -12,7 +12,7 @@ suite, served under the persistent namespace **`https://w3id.org/jeswr/`**
 | `https://w3id.org/jeswr/fedreg#` | `fedreg:` | **Federation Catalogue / Registry** — the discovery axis. A `fedreg:Registry` (a `dcat:Catalog`) listing member apps with a **registry-asserted** `fedreg:Membership` (lifecycle status + `assertedBy` authority — distinct from the app's self-asserted `fedapp:App`), and a `fedreg:StorageDescription` advertising **which client-client spec-versions a resource server accepts** (`acceptsSpec`) and which sectors it supports — the substrate for asynchronous schema migration. Consumed by [`@jeswr/federation-registry`](https://github.com/jeswr/federation-registry). |
 | `https://w3id.org/jeswr/task#` | `tm:` | The **shared cross-app task / issue model** — the canonical, dereferenceable re-use of the W3C workflow ontology (`wf:`), Dublin Core Terms (`dct:`) and ActivityStreams 2.0 (`as:`) every suite app reads/writes for tasks and issues. |
 | `https://w3id.org/jeswr/core#` | `core:` | The **gUFO-based Solid Core** — the foundational ontology every sector imports and constrains-but-never-forks. Every cross-sector root (Agent, Account, Identifier, Record, Relationship, Quantity, …) carries a gUFO meta-type (Kind / Relator / Role(Mixin) / Phase / EventType / …). |
-| `https://w3id.org/jeswr/sectors/<sector>#` | per-sector | The **sector ontologies** (`identity`, `finance`, `health`, `media`, `scheduling`, `contacts`) — the domain models a `fedapp:sector` references. Each imports `core:` and reuses real vocabularies (see below). |
+| `https://w3id.org/jeswr/sectors/<sector>#` | per-sector | The **sector ontologies** (`identity`, `finance`, `health`, `media`, `scheduling`, `contacts`, `drawing`, `social`, `bookmarks`) — the domain models a `fedapp:sector` references. Each imports `core:` and reuses real vocabularies (see below). |
 
 The IRIs resolve via a permanent `w3id.org` redirect to a GitHub Pages target
 under this repo (`docs/`), so they survive a host move and stay under `@jeswr`
@@ -207,21 +207,27 @@ independently-authored sectors stay non-overlapping. Imports gUFO; reaches
 external vocabularies (PROV/FOAF/Org/vCard/schema.org/gist) only via the optional
 `core-alignments.ttl`.
 
-**The six sectors** — each `rdfs:subClassOf`-roots every class in a `core:` class,
+**The nine sectors** — each `rdfs:subClassOf`-roots every class in a `core:` class,
 carries its own gUFO meta-type, **constrains but never forks** the Core, and
 reuses a real domain vocabulary:
 
 | Sector | Prefix | gUFO highlights | External reuse |
 |---|---|---|---|
 | `sectors/identity#` | `id:` | NaturalPerson SubKind; VerifiableAttribute; HL7 Gender-Harmony five slots | eIDAS PID, ISO 3166, vCard, schema:Person |
-| `sectors/finance#` | `fin:` | Account=Relator(+Phase status); Transaction=Event; Counterparty=RoleMixin | FIBO (version-pinned slim MIREOT), ISO 4217/20022 |
+| `sectors/finance#` | `fin:` | Account=Relator(+Phase status); Transaction=Event; Counterparty=RoleMixin; Budget/BudgetCategory(envelope)+CRDT-sync (Actual Budget) | FIBO (version-pinned slim MIREOT), ISO 4217/20022 |
 | `sectors/health#` | `health:` | Patient=RoleMixin of Person; Observation=Record+Quantity; record-vs-act split | FHIR (Mode A, no fhir.ttl), SNOMED CT/LOINC, QUDT/UCUM units |
 | `sectors/media#` | `media:` | CreativeWork=InformationResource+Asset; Artist=RoleMixin; PlaybackEvent | schema.org CreativeWork/MusicRecording, ODRL |
 | `sectors/scheduling#` | `sched:` | CalendarEvent=Event; Attendance=Relator mediating an Attendee role; RSVP coded values | iCalendar RFC 5545, schema.org, OWL-Time |
 | `sectors/contacts#` | `contact:` | Contact=Record about an agent; ContactPoint=Identifier; ContactRelationship=Relator | vCard, schema:ContactPoint/PostalAddress |
+| `sectors/drawing#` | `drawing:` | Scene=InformationResource (a creative work) + the round-trip spine (opaque scene document, schema version, thumbnail) — for Excalidraw | schema:CreativeWork; the forthcoming `@jeswr/solid-drawing` `draw:` (Mode A) |
+| `sectors/social#` | `social:` | Note=InformationResource (as:Note/sioc:Note); Feed=InformationResource (as:Collection) — for Elk + Miniflux + pod-chat | ActivityStreams 2.0, SIOC, `@jeswr/solid-chat-interop` CanonicalMessage |
+| `sectors/bookmarks#` | `bookmark:` | Bookmark=InformationResource (a saved reference) + archived/notes/tags(skos) — for Linkding | schema:url/BookmarkAction, DCT, SKOS; the forthcoming `@jeswr/solid-bookmark` `book:` (Mode A) |
 
 Each sector declares a `…/sectors/<sector>#sector` marker (a `skos:Concept`) —
-that is the IRI an app names in `fedapp:sector`.
+that is the IRI an app names in `fedapp:sector`. (`drawing`, `social` and
+`bookmarks` are the FOUNDATION sectors for the 5-OSS-fork initiative — Excalidraw,
+Elk + Miniflux, and Linkding; the per-app `fedapp:`/`fedreg:` registration blocks
+land later with each app build, which need the app `client_id` IRIs.)
 
 Each ontology ships a **SHACL profile** (`<x>.shacl.ttl`, the closed-world
 MUST/SHOULD contract; the ontology is open-world) and a **Mode-A alignments file**
@@ -232,14 +238,22 @@ named term carries a label + definition, and — when ROBOT/HermiT is available 
 reasons each ontology over its `owl:imports` closure (resolved offline via the
 per-dir `catalog-v001.xml`) for **zero unsatisfiable classes**.
 
-> **Provenance + scope.** These ontologies were modelled as OntoUML and
-> transformed to gUFO-OWL upstream in
+> **Provenance + scope.** The first six sectors (identity / finance / health /
+> media / scheduling / contacts) were modelled as OntoUML and transformed to
+> gUFO-OWL upstream in
 > [`full-solid-ecosystem`](https://github.com/jeswr/full-solid-ecosystem)'s
 > federation tree, then **re-namespaced** here from the upstream placeholder IRIs
-> to the persistent `https://w3id.org/jeswr/` home. Re-sync with
-> `node scripts/import-sectors.mjs <federation/ontologies path>`. Four further
-> sectors (work / mobility / documents / social) are **not yet authored** — a
-> separate decision.
+> to the persistent `https://w3id.org/jeswr/` home. Re-sync those with
+> `node scripts/import-sectors.mjs <federation/ontologies path>`. The three
+> 5-OSS-fork FOUNDATION sectors (`drawing` / `social` / `bookmarks`) were authored
+> directly here, gUFO-rooted from the outset (not an OntoUML re-base) — they are
+> thin DOMAIN MARKERS that root one or two classes in the Core and align (Mode A)
+> to the detailed external/forthcoming vocabularies, so the re-sync script does not
+> own them. `social` also REPAIRS the previously-dangling `fedapp:sector`
+> reference in `@jeswr/pod-chat`'s clientid. The remaining unauthored sectors
+> (work / mobility / documents) are a separate decision. The detail vocabularies
+> `@jeswr/solid-drawing` (`draw:`) and `@jeswr/solid-bookmark` (`book:`) ship in
+> their own repos (Phase B), referenced here only via the Mode-A alignment hooks.
 
 ## How an app references the vocabulary in its Client-ID document
 
@@ -360,7 +374,7 @@ RewriteCond %{HTTP_ACCEPT} application/json
 RewriteRule ^core$ https://jeswr.github.io/solid-federation-vocab/core-context.jsonld [R=302,L]
 RewriteRule ^core$ https://jeswr.github.io/solid-federation-vocab/core.html [R=302,L]
 
-# --- sectors/<sector> (the 6 sector ontologies; $1 = identity|finance|… ) ---
+# --- sectors/<sector> (the 9 sector ontologies; $1 = identity|finance|drawing|… ) ---
 RewriteCond %{HTTP_ACCEPT} text/turtle [OR]
 RewriteCond %{HTTP_ACCEPT} application/x-turtle
 RewriteRule ^sectors/([a-z]+)$ https://jeswr.github.io/solid-federation-vocab/sectors/$1.ttl [R=302,L]
@@ -395,7 +409,7 @@ The gate, in order:
 - **`test`** (`validate.mjs`) — parses the root vocabs (`fed.ttl` / `task.ttl`)
   with **n3** (well-formedness + `rdfs:label`/`rdfs:comment`/`rdfs:isDefinedBy`
   per term) and expands the `@context`s with **jsonld**.
-- **`ontology`** (`ontology-gate.mjs`) — for the Core + 6 sectors: n3
+- **`ontology`** (`ontology-gate.mjs`) — for the Core + 9 sectors: n3
   well-formedness, term hygiene (`rdfs:label`|`skos:prefLabel` + a definition per
   named term), and — when ROBOT/HermiT is discoverable — a **reasoner-consistency
   pass** (`robot reason --reasoner HermiT` over each `owl:imports` closure, 0

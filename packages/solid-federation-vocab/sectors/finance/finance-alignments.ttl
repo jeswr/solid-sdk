@@ -16,6 +16,7 @@
 @prefix fibo-fnd-rel-rel:  <https://spec.edmcouncil.org/fibo/ontology/FND/Relations/Relations/> .
 # ISO 20022 financial-messaging business concepts (UNIFI e-Repository).
 @prefix iso20022:          <https://www.iso20022.org/standardsrepository/type/> .
+@prefix schema:            <http://schema.org/> .
 
 # =============================================================================
 # Finance Sector Ontology — ALIGNMENTS (Mode A: annotation-only bridges)
@@ -63,3 +64,10 @@ fin:Holding              skos:closeMatch fibo-fbc-fi-fi:FinancialInstrument ;
 # Core's account-holder mediation; annotation only — the Core mediation property
 # is never widened.
 core:hasAccountHolder    skos:closeMatch fibo-fnd-rel-rel:isHeldBy .
+
+# --- v1.1.0 personal budgeting (Actual Budget) — schema.org Mode-A bridges ---
+# schema.org has no envelope-budget term; the closest are the MoneyTransfer /
+# MonetaryAmount family + DefinedTerm for the category taxonomy. Annotation only.
+fin:Budget               skos:closeMatch schema:MonetaryAmount .
+fin:allocated            skos:closeMatch schema:amount .
+fin:categoryConcept      skos:closeMatch schema:category .

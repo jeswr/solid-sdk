@@ -58,17 +58,21 @@
     vann:preferredNamespaceUri "https://w3id.org/jeswr/sectors/finance#" ;
     owl:imports <https://w3id.org/jeswr/core> ,
                 <https://w3id.org/jeswr/sectors/finance/imports/fibo-slim> ;
-    owl:versionInfo "1.0.0" ;
-    owl:versionIRI <https://w3id.org/jeswr/sectors/finance/1.0.0> ;
+    owl:versionInfo "1.1.0" ;
+    owl:versionIRI <https://w3id.org/jeswr/sectors/finance/1.1.0> ;
     dcterms:description """Personal-finance terms (accounts, transactions,
         holdings, payments) for the EDMA lending/banking use cases, re-based onto
         the gUFO Solid Core. Account=Relator(+Phase status); transactions/payments
         =Event; institutions/instruments=Kind; counterparty roles=RoleMixin. Reuses
         FIBO via a version-pinned slim MIREOT module (Mode B); ISO 4217 as data,
         ISO 20022 as Mode-A alignment (finance-alignments.ttl). v1 is a BREAKING
-        re-base of v0 (meta-types change meaning), so a new MAJOR version."""@en ;
-    dcterms:modified "2026-06-13"^^xsd:date ;
-    rdfs:comment "Re-based per R11 §4.2."@en .
+        re-base of v0 (meta-types change meaning), so a new MAJOR version. v1.1.0
+        ADDITIVE: personal envelope/zero-based budgeting (fin:Budget,
+        fin:BudgetCategory, allocation + category-assignment props) + a CRDT-sync
+        pointer pair (fin:syncLog/fin:snapshot) for the Actual Budget use case; no
+        existing term changed."""@en ;
+    dcterms:modified "2026-06-21"^^xsd:date ;
+    rdfs:comment "Re-based per R11 §4.2. v1.1.0 ADDITIVE: envelope budgeting + CRDT-sync pointers (Actual Budget)."@en .
 
 # -----------------------------------------------------------------------------
 # Annotation-property declarations (F5 DL hygiene — match the Core pattern).
@@ -344,6 +348,72 @@ fin:heldInAccount a owl:ObjectProperty ;
     rdfs:domain fin:Holding ;
     rdfs:range fin:InvestmentAccount ;
     skos:definition "The investment account a holding is custodied within."@en .
+
+# =============================================================================
+# 7. PERSONAL BUDGETING — envelope / zero-based budgeting (the Actual Budget
+#    use case). v1.1.0 ADDITIVE: a Budget is a plan information object for a
+#    period; a BudgetCategory is an "envelope" bucket holding an allocated
+#    MonetaryAmount; a Transaction is assigned to an envelope. Categories'
+#    grouping/classification reuses SKOS (skos:Concept), not a new term.
+#    fin:Payee already exists (a Counterparty RoleMixin, §5) — NOT re-minted.
+# =============================================================================
+
+fin:Budget a owl:Class, gufo:Kind ;
+    rdfs:subClassOf core:InformationResource ;
+    rdfs:label "Budget"@en ;
+    skos:definition "A personal budget plan for a period — the envelope/zero-based budget an app like Actual Budget maintains. An information object aggregating its BudgetCategory envelopes (via core:hasPart) over a covered period (core:validFrom/core:validUntil)."@en ;
+    skos:scopeNote "gufo:Kind (information object) under core:InformationResource. Owner via core:owns/core:custodian; envelopes via fin:hasCategory."@en .
+
+fin:BudgetCategory a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf core:InformationResource ;
+    rdfs:label "Budget Category"@en ;
+    skos:definition "An envelope budgeting bucket within a Budget — a named category (\"Groceries\", \"Rent\") holding a planned allocation (fin:allocated, a MonetaryAmount) against which transactions are spent. An information object (the allocation record), distinct from the money itself. Its grouping/classification reuses skos:Concept (skos:broader for category groups); aligns to schema (alignments file)."@en ;
+    skos:scopeNote "gufo:SubKind under core:InformationResource. The \"envelope\". Allocation via fin:allocated; classified by a skos:Concept via fin:categoryConcept; part of a Budget via fin:hasCategory."@en .
+
+fin:hasCategory a owl:ObjectProperty ;
+    rdfs:subPropertyOf core:hasPart ;
+    rdfs:domain fin:Budget ;
+    rdfs:range fin:BudgetCategory ;
+    rdfs:label "has category"@en ;
+    skos:definition "An envelope category that is part of a budget. A sub-property of core:hasPart (the budget aggregates its envelopes)."@en .
+
+fin:allocated a owl:ObjectProperty ;
+    rdfs:subPropertyOf fin:hasMonetaryAmount ;
+    rdfs:domain fin:BudgetCategory ;
+    rdfs:range fin:MonetaryAmount ;
+    rdfs:label "allocated"@en ;
+    skos:definition "The amount of money planned/allocated to a budget envelope for the period. A sub-property of fin:hasMonetaryAmount narrowed to the envelope allocation."@en .
+
+fin:categoryConcept a owl:ObjectProperty ;
+    rdfs:domain fin:BudgetCategory ;
+    rdfs:range skos:Concept ;
+    rdfs:label "category concept"@en ;
+    skos:definition "The skos:Concept classifying this envelope (the reusable category taxonomy term — \"Groceries\", a child of a \"Food\" group via skos:broader). Reuses SKOS for the category hierarchy rather than minting a parallel category-tree vocabulary."@en .
+
+fin:inCategory a owl:ObjectProperty ;
+    rdfs:domain fin:Transaction ;
+    rdfs:range fin:BudgetCategory ;
+    rdfs:label "in category"@en ;
+    skos:definition "The budget envelope a transaction is assigned to (the spend that draws down the envelope's allocation). A plain object property (the Transaction is a gufo:Event; this is not a part-whole link)."@en .
+
+# --- CRDT-sync pointer pair (the Actual Budget append-only sync model) ---
+# Actual Budget syncs via an append-only CRDT message log + periodic snapshots;
+# the honest pure-Solid translation is a pod CONTAINER of append-only sync
+# messages plus a snapshot resource. The Budget points at both; the byte payloads
+# are opaque to RDF (the sync messages are a binary/JSON log, like @jeswr/y-solid's
+# update log) — these are pointers ONLY.
+
+fin:syncLog a owl:ObjectProperty ;
+    rdfs:domain fin:Budget ;
+    rdfs:range core:InformationResource ;
+    rdfs:label "sync log"@en ;
+    skos:definition "The append-only CRDT-sync container this budget's mutations are logged to (an LDP container of opaque sync-message resources). The pointer to the CRDT message log — its byte payloads are opaque to RDF. A plain object property (the pointed-at container is a core:InformationResource)."@en .
+
+fin:snapshot a owl:ObjectProperty ;
+    rdfs:domain fin:Budget ;
+    rdfs:range core:InformationResource ;
+    rdfs:label "snapshot"@en ;
+    skos:definition "A periodic compacted snapshot resource of the budget's CRDT state, so a fresh client need not replay the whole sync log. The pointer to the snapshot resource (an opaque byte payload). A plain object property."@en .
 
 # =============================================================================
 # SECTOR MARKER — the IRI an app's fedapp:sector points at to declare it operates

@@ -58,6 +58,9 @@ const ONTOLOGIES = [
   { dir: "media", file: "media.ttl", ns: "https://w3id.org/jeswr/sectors/media#" },
   { dir: "scheduling", file: "scheduling.ttl", ns: "https://w3id.org/jeswr/sectors/scheduling#" },
   { dir: "contacts", file: "contacts.ttl", ns: "https://w3id.org/jeswr/sectors/contacts#" },
+  { dir: "drawing", file: "drawing.ttl", ns: "https://w3id.org/jeswr/sectors/drawing#" },
+  { dir: "social", file: "social.ttl", ns: "https://w3id.org/jeswr/sectors/social#" },
+  { dir: "bookmarks", file: "bookmarks.ttl", ns: "https://w3id.org/jeswr/sectors/bookmarks#" },
 ];
 
 // =============================================================================

@@ -8,6 +8,7 @@
 @prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
 @prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix skos:    <http://www.w3.org/2004/02/skos/core#> .
 @prefix prof:    <http://www.w3.org/ns/dx/prof/> .
 
 # =============================================================================
@@ -24,8 +25,9 @@
 
 <https://w3id.org/jeswr/sectors/finance/profile> a prof:Profile ;
     dcterms:title "Solid Finance data-model profile (version-independent)"@en ;
-    dcterms:hasVersion <https://w3id.org/jeswr/sectors/finance/profile/1.0.0> ;
-    rdfs:comment "Version-independent IRI resolving to the current Finance profile. "@en .
+    dcterms:hasVersion <https://w3id.org/jeswr/sectors/finance/profile/1.0.0> ,
+                       <https://w3id.org/jeswr/sectors/finance/profile/1.1.0> ;
+    rdfs:comment "Version-independent IRI resolving to the current Finance profile (latest: 1.1.0). "@en .
 
 <https://w3id.org/jeswr/sectors/finance/profile/1.0.0> a prof:Profile ;
     dcterms:title "Solid Finance data-model profile 1.0.0"@en ;
@@ -34,6 +36,14 @@
     prof:isProfileOf <https://w3id.org/jeswr/sectors/finance> ;
     prof:hasToken "finance-1.0.0" ;
     rdfs:comment "IMMUTABLE version IRI. Open shapes; sh:Violation=MUST, sh:Warning=SHOULD. "@en .
+
+<https://w3id.org/jeswr/sectors/finance/profile/1.1.0> a prof:Profile ;
+    dcterms:title "Solid Finance data-model profile 1.1.0"@en ;
+    dcterms:isVersionOf <https://w3id.org/jeswr/sectors/finance/profile> ;
+    owl:versionInfo "1.1.0" ;
+    prof:isProfileOf <https://w3id.org/jeswr/sectors/finance> ;
+    prof:hasToken "finance-1.1.0" ;
+    rdfs:comment "IMMUTABLE version IRI. ADDITIVE over 1.0.0: adds the Budget + BudgetCategory (envelope) shapes for the Actual Budget use case. Open shapes; sh:Violation=MUST, sh:Warning=SHOULD. "@en .
 
 # -----------------------------------------------------------------------------
 # MonetaryAmount — a value MUST have an amount and an ISO 4217 currency code.
@@ -275,3 +285,41 @@ finsh:FinancialInstrumentShape a sh:NodeShape ;
 
 finsh:SecurityShape a sh:NodeShape ;
     sh:targetClass fin:Security ; rdfs:label "Security shape"@en .
+
+# =============================================================================
+# v1.1.0 — PERSONAL BUDGETING shapes (envelope/zero-based; Actual Budget).
+# =============================================================================
+
+# --- Budget — MUST have a title; SHOULD cover a period and aggregate envelopes;
+#     MAY point at its CRDT sync log + snapshot. ---
+finsh:BudgetShape a sh:NodeShape ;
+    sh:targetClass fin:Budget ; rdfs:label "Budget shape"@en ;
+    sh:property [ sh:path dcterms:title ; sh:datatype xsd:string ; sh:minCount 1 ;
+        sh:severity sh:Violation ;
+        sh:message "A budget MUST have a dcterms:title."@en ] ;
+    sh:property [ sh:path fin:hasCategory ; sh:class fin:BudgetCategory ;
+        sh:minCount 1 ; sh:severity sh:Warning ;
+        sh:message "A budget SHOULD aggregate at least one fin:BudgetCategory envelope via fin:hasCategory."@en ] ;
+    sh:property [ sh:path core:validFrom ; sh:datatype xsd:dateTime ; sh:maxCount 1 ;
+        sh:severity sh:Info ;
+        sh:message "core:validFrom, if present, MUST be a single xsd:dateTime (the period start)."@en ] ;
+    sh:property [ sh:path fin:syncLog ; sh:nodeKind sh:IRI ; sh:maxCount 1 ;
+        sh:severity sh:Info ;
+        sh:message "fin:syncLog, if present, MUST be a single IRI (the append-only CRDT-sync container)."@en ] ;
+    sh:property [ sh:path fin:snapshot ; sh:nodeKind sh:IRI ; sh:maxCount 1 ;
+        sh:severity sh:Info ;
+        sh:message "fin:snapshot, if present, MUST be a single IRI (the CRDT snapshot resource)."@en ] .
+
+# --- BudgetCategory (envelope) — MUST carry an allocation; SHOULD have a title
+#     and a classifying concept. ---
+finsh:BudgetCategoryShape a sh:NodeShape ;
+    sh:targetClass fin:BudgetCategory ; rdfs:label "Budget Category shape"@en ;
+    sh:property [ sh:path fin:allocated ; sh:class fin:MonetaryAmount ;
+        sh:minCount 1 ; sh:maxCount 1 ; sh:severity sh:Violation ;
+        sh:message "A budget category (envelope) MUST carry exactly one fin:allocated amount (a fin:MonetaryAmount)."@en ] ;
+    sh:property [ sh:path dcterms:title ; sh:datatype xsd:string ; sh:minCount 1 ;
+        sh:severity sh:Warning ;
+        sh:message "A budget category SHOULD have a dcterms:title (its envelope name)."@en ] ;
+    sh:property [ sh:path fin:categoryConcept ; sh:class skos:Concept ; sh:maxCount 1 ;
+        sh:severity sh:Warning ;
+        sh:message "A budget category SHOULD name its classifying fin:categoryConcept (a skos:Concept)."@en ] .

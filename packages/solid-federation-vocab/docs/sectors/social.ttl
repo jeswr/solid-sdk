@@ -1,0 +1,159 @@
+# AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+#
+@prefix social:  <https://w3id.org/jeswr/sectors/social#> .
+@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix skos:    <http://www.w3.org/2004/02/skos/core#> .
+@prefix vann:    <http://purl.org/vocab/vann/> .
+@prefix gufo:    <http://purl.org/nemo/gufo#> .
+
+# =============================================================================
+# Solid Social, Fediverse & Feed sector ontology (KEY=social).
+#
+# The social / fediverse / feed domain — the sector a federated Elk
+# (Mastodon/ActivityPub) client and a Miniflux (RSS/Atom feed reader) fork
+# declare they operate in (fedapp:sector). v1.0.0, authored gUFO-rooted from the
+# outset (the 5-OSS-fork FOUNDATION).
+#
+# THIS SECTOR ALSO REPAIRS A DANGLING REFERENCE: @jeswr/pod-chat's
+# clientid.jsonld already names fedapp:sector
+# <https://w3id.org/jeswr/sectors/social#sector>, which until now did not resolve
+# (the sector was flagged "not yet authored" in the README). Authoring it here
+# fixes that reference.
+#
+# BUILT ON ActivityStreams 2.0 (as:Note / as:Collection,
+# https://www.w3.org/ns/activitystreams#) + SIOC (sioc:Note,
+# http://rdfs.org/sioc/ns#), and ALIGNED to @jeswr/solid-chat-interop's
+# CanonicalMessage content model (whose content model IS AS2 — see
+# social-alignments.ttl). The detailed AS2 vocabulary is REUSED (Mode A,
+# annotation-only); this sector authors the gUFO-rooted domain marker + the
+# message/feed classes + the round-trip property spine.
+#
+# CONTRACT (R8 §4): imports the gUFO Core; roots every domain class transitively
+# in a Core class and carries its gUFO meta-type; CONSTRAINS, never forks; reuses
+# AS2/sioc/schema in the companion alignments; ships social.shacl.ttl; carries
+# owl:versionInfo + a version IRI. Open-world by default; the SHACL profile carries
+# the closed-world MUST/SHOULD.
+# =============================================================================
+
+<https://w3id.org/jeswr/sectors/social> a owl:Ontology ;
+    dcterms:title "Solid Social, Fediverse & Feed Sector Ontology"@en ;
+    rdfs:label "Solid Social, Fediverse & Feed Sector Ontology"@en ;
+    vann:preferredNamespacePrefix "social" ;
+    vann:preferredNamespaceUri "https://w3id.org/jeswr/sectors/social#" ;
+    owl:imports <https://w3id.org/jeswr/core> ;
+    owl:versionInfo "1.0.0" ;
+    owl:versionIRI <https://w3id.org/jeswr/sectors/social/1.0.0> ;
+    dcterms:description """The social / fediverse / feed data sector — the domain a
+        federated Elk (Mastodon/ActivityPub) client, a Miniflux (RSS/Atom) reader,
+        and @jeswr/pod-chat operate in. Authors the sector marker and gUFO-rooted
+        social:Note (a posted message/feed item, a core:InformationResource) and
+        social:Feed (a timeline/room/feed collection) with the round-trip property
+        spine. Built on ActivityStreams 2.0 (as:Note/as:Collection) + SIOC and
+        aligned to @jeswr/solid-chat-interop's CanonicalMessage (whose content model
+        is AS2) in the companion alignments file. Authoring this sector also repairs
+        the dangling fedapp:sector reference in @jeswr/pod-chat's clientid."""@en ;
+    dcterms:modified "2026-06-21"^^xsd:date ;
+    rdfs:comment "Foundation sector for the 5-OSS-fork initiative (Elk + Miniflux); repairs the pod-chat dangling reference."@en .
+
+# -----------------------------------------------------------------------------
+# Annotation-property declarations (F5 DL hygiene — match the Core pattern).
+# -----------------------------------------------------------------------------
+dcterms:title       a owl:AnnotationProperty .
+dcterms:description a owl:AnnotationProperty .
+dcterms:modified    a owl:AnnotationProperty .
+vann:preferredNamespacePrefix a owl:AnnotationProperty .
+vann:preferredNamespaceUri    a owl:AnnotationProperty .
+skos:definition     a owl:AnnotationProperty .
+skos:scopeNote      a owl:AnnotationProperty .
+
+# =============================================================================
+# 1. NOTE  (gufo:SubKind rooting in core:InformationResource)
+# A posted social message / feed item — a toot, a forum post, a chat message, an
+# RSS entry. An information object. Aligns to as:Note / sioc:Note and to
+# @jeswr/solid-chat-interop's CanonicalMessage (its content model IS AS2).
+# =============================================================================
+
+social:Note a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf core:InformationResource ;
+    rdfs:label "Note"@en ;
+    skos:definition "A posted social message or feed item — a Mastodon toot, a forum/Discourse post, a chat message, or an RSS/Atom entry. An information object authored by an agent and posted to a feed. Aligns to as:Note / sioc:Note and to @jeswr/solid-chat-interop's CanonicalMessage (whose content model is AS2)."@en ;
+    skos:scopeNote "gufo:SubKind under core:InformationResource (its identity principle). The canonical chat/feed-item shape; reuses AS2/sioc in social-alignments.ttl."@en .
+
+# =============================================================================
+# 2. FEED  (gufo:SubKind rooting in core:InformationResource — a collection whole)
+# A timeline / chat room / RSS feed: an ordered collection whose notes are
+# core:hasPart of it. Aligns to as:Collection (and CanonicalRoom).
+# =============================================================================
+
+social:Feed a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf core:InformationResource ;
+    rdfs:label "Feed"@en ;
+    skos:definition "A collection of notes — a Mastodon timeline, a chat room/thread, or an RSS/Atom feed; its notes are core:hasPart of it. A curated/ordered collection whole. Aligns to as:Collection and to @jeswr/solid-chat-interop's CanonicalRoom."@en ;
+    skos:scopeNote "gufo:SubKind under core:InformationResource (collection whole)."@en .
+
+# =============================================================================
+# Properties — the round-trip spine, matching CanonicalMessage's AS2 mapping.
+# Endurant-domain "about/part" links sub-property the Core where one fits
+# (constrain, never widen); the author link is a plain attribution property.
+# =============================================================================
+
+# --- the author of a note (an agent the note is attributed to) ---
+social:attributedTo a owl:ObjectProperty ;
+    rdfs:domain social:Note ;
+    rdfs:range core:Agent ;
+    rdfs:label "attributed to"@en ;
+    skos:definition "The agent a note is attributed to (its author — a WebID, or an AI agent for an AI-authored message). A plain object property. Aligns to as:attributedTo / CanonicalMessage.author; AI/external attribution is carried additionally via PROV-O (prov:wasAttributedTo), per chat-interop's MessageProvenance."@en .
+
+# --- the feed a note belongs to (membership: sub-property of core:partOf) ---
+social:inFeed a owl:ObjectProperty ;
+    rdfs:subPropertyOf core:partOf ;
+    rdfs:domain social:Note ;
+    rdfs:range social:Feed ;
+    rdfs:label "in feed"@en ;
+    skos:definition "The feed / timeline / room a note belongs to. A sub-property of core:partOf. Aligns to as:context / CanonicalMessage.room."@en .
+
+# --- the note this one replies to (the reply edge, AS2 direction only) ---
+social:inReplyTo a owl:ObjectProperty ;
+    rdfs:domain social:Note ;
+    rdfs:range social:Note ;
+    rdfs:label "in reply to"@en ;
+    skos:definition "The note this note is a reply to. Modelled in the as:inReplyTo direction ONLY (never the inverse sioc:has_reply), matching @jeswr/solid-chat-interop's reply-edge discipline. A plain object property."@en .
+
+# --- datatype properties (the literal body + metadata) ---
+social:content a owl:DatatypeProperty ;
+    rdfs:domain social:Note ;
+    rdfs:range xsd:string ;
+    rdfs:label "content"@en ;
+    skos:definition "The body text of a note. Aligns to as:content / sioc:content / CanonicalMessage.content. Untrusted formatted bodies SHOULD be stored as text/plain (see social:mediaType) per the suite stored-XSS guard."@en .
+
+social:mediaType a owl:DatatypeProperty ;
+    rdfs:domain social:Note ;
+    rdfs:range xsd:string ;
+    rdfs:label "media type"@en ;
+    skos:definition "The content type of the note body (defaults to \"text/plain\"). Aligns to as:mediaType / CanonicalMessage.mediaType."@en .
+
+social:published a owl:DatatypeProperty ;
+    rdfs:subPropertyOf core:timestamp ;
+    rdfs:domain social:Note ;
+    rdfs:range xsd:dateTime ;
+    rdfs:label "published"@en ;
+    skos:definition "When the note was posted. A sub-property of core:timestamp. Aligns to as:published / dct:created / CanonicalMessage.published."@en .
+
+# =============================================================================
+# SECTOR MARKER — the IRI an app's fedapp:sector points at to declare it operates
+# in this sector (https://w3id.org/jeswr/fed#sector). A skos:Concept in the
+# federation sector register; dereferences to this ontology. THIS is the IRI
+# @jeswr/pod-chat's clientid.jsonld already references.
+# =============================================================================
+
+<https://w3id.org/jeswr/sectors/social#sector>
+    a <http://www.w3.org/2004/02/skos/core#Concept> ;
+    rdfs:label "Social, Fediverse & Feed sector"@en ;
+    rdfs:comment "The Social, Fediverse & Feed data sector. The value an app's fedapp:sector names in its Client Identifier Document to declare it operates over social / fediverse / feed data (toots, posts, chat messages, RSS entries). Backed by this sector ontology. Already referenced by @jeswr/pod-chat's clientid."@en ;
+    rdfs:isDefinedBy <https://w3id.org/jeswr/sectors/social> ;
+    skos:prefLabel "Social, Fediverse & Feed"@en .

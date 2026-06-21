@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<!-- OASIS XML catalog for the finance sector's owl:imports closure, for the
+<!-- OASIS XML catalog for the bookmarks sector's owl:imports closure, for the
      ROBOT/HermiT consistency gate (scripts/ontology-gate.mjs F6). Maps every
      import IRI to a local Turtle file so no network dereference is needed. -->
 <catalog prefer="public" xmlns="urn:oasis:names:tc:entity:xmlns:xml:catalog">
@@ -26,10 +26,7 @@
   <uri name="https://w3id.org/jeswr/core#" uri="../core/core.ttl"/>
   <uri name="https://w3id.org/jeswr/core/1.0.1" uri="../core/core.ttl"/>
   <!-- This sector (self, for the alignments file's import) -->
-  <uri name="https://w3id.org/jeswr/sectors/finance" uri="finance.ttl"/>
-  <uri name="https://w3id.org/jeswr/sectors/finance#" uri="finance.ttl"/>
-  <uri name="https://w3id.org/jeswr/sectors/finance/1.0.0" uri="finance.ttl"/>
-  <uri name="https://w3id.org/jeswr/sectors/finance/1.1.0" uri="finance.ttl"/>
-  <!-- FIBO slim MIREOT module (sector-local import) -->
-  <uri name="https://w3id.org/jeswr/sectors/finance/imports/fibo-slim" uri="imports/fibo-slim.ttl"/>
+  <uri name="https://w3id.org/jeswr/sectors/bookmarks" uri="bookmarks.ttl"/>
+  <uri name="https://w3id.org/jeswr/sectors/bookmarks#" uri="bookmarks.ttl"/>
+  <uri name="https://w3id.org/jeswr/sectors/bookmarks/1.0.0" uri="bookmarks.ttl"/>
 </catalog>

@@ -140,7 +140,7 @@ for (const [file, slug, ctx] of [
 }
 
 // =============================================================================
-// 5 — SECTOR ONTOLOGIES (gUFO Core + the 6 sectors). Served from docs/sectors/
+// 5 — SECTOR ONTOLOGIES (gUFO Core + the 9 sectors). Served from docs/sectors/
 // (+ docs/core.*) so the w3id routes …/core and …/sectors/<x> resolve by conneg:
 //   text/turtle        -> <slug>.ttl
 //   application/ld+json -> <slug>-context.jsonld
@@ -161,6 +161,9 @@ const ONTOS = [
   ["sectors/media/media.ttl", "sectors/media", "media", "https://w3id.org/jeswr/sectors/media#"],
   ["sectors/scheduling/scheduling.ttl", "sectors/scheduling", "sched", "https://w3id.org/jeswr/sectors/scheduling#"],
   ["sectors/contacts/contacts.ttl", "sectors/contacts", "contact", "https://w3id.org/jeswr/sectors/contacts#"],
+  ["sectors/drawing/drawing.ttl", "sectors/drawing", "drawing", "https://w3id.org/jeswr/sectors/drawing#"],
+  ["sectors/social/social.ttl", "sectors/social", "social", "https://w3id.org/jeswr/sectors/social#"],
+  ["sectors/bookmarks/bookmarks.ttl", "sectors/bookmarks", "bookmark", "https://w3id.org/jeswr/sectors/bookmarks#"],
 ];
 
 const RDF_LABEL = `${RDFS}label`;

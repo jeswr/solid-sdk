@@ -10,13 +10,23 @@
     "type": "@type",
     "AccountCustodian": "fin:AccountCustodian",
     "ActiveFinancialAccount": "fin:ActiveFinancialAccount",
+    "allocated": {
+      "@id": "fin:allocated",
+      "@type": "@id"
+    },
     "amount": {
       "@id": "fin:amount",
       "@type": "xsd:decimal"
     },
     "Balance": "fin:Balance",
     "Bank": "fin:Bank",
+    "Budget": "fin:Budget",
+    "BudgetCategory": "fin:BudgetCategory",
     "CardPayment": "fin:CardPayment",
+    "categoryConcept": {
+      "@id": "fin:categoryConcept",
+      "@type": "@id"
+    },
     "ClosedFinancialAccount": "fin:ClosedFinancialAccount",
     "Counterparty": "fin:Counterparty",
     "creditAccount": {
@@ -37,6 +47,10 @@
     "FinancialInstitution": "fin:FinancialInstitution",
     "FinancialInstrument": "fin:FinancialInstrument",
     "FrozenFinancialAccount": "fin:FrozenFinancialAccount",
+    "hasCategory": {
+      "@id": "fin:hasCategory",
+      "@type": "@id"
+    },
     "hasCounterparty": {
       "@id": "fin:hasCounterparty",
       "@type": "@id"
@@ -50,6 +64,10 @@
       "@type": "@id"
     },
     "Holding": "fin:Holding",
+    "inCategory": {
+      "@id": "fin:inCategory",
+      "@type": "@id"
+    },
     "InvestmentAccount": "fin:InvestmentAccount",
     "MonetaryAmount": "fin:MonetaryAmount",
     "ofInstrument": {
@@ -78,6 +96,14 @@
     "SavingsAccount": "fin:SavingsAccount",
     "sector": "fin:sector",
     "Security": "fin:Security",
+    "snapshot": {
+      "@id": "fin:snapshot",
+      "@type": "@id"
+    },
+    "syncLog": {
+      "@id": "fin:syncLog",
+      "@type": "@id"
+    },
     "Transaction": "fin:Transaction",
     "TransactionRecord": "fin:TransactionRecord",
     "Transfer": "fin:Transfer"
