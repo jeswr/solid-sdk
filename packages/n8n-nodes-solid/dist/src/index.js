@@ -1527,7 +1527,7 @@ function resolveTarget(base, target) {
   }
   if (resolved.username !== "" || resolved.password !== "") {
     throw new Error(
-      `[n8n-nodes-solid] target URL must not embed credentials (user:pass@): ${target} (refused)`
+      "[n8n-nodes-solid] target URL must not embed credentials (user:pass@) (refused)"
     );
   }
   const url = resolved.toString();

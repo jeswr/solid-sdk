@@ -127,10 +127,13 @@ export function resolveTarget(base: string, target: string): ResolvedTarget {
   // Embedded userinfo (`https://user:pass@host/…`) does NOT change the origin, so
   // it would slip past the same-origin check — but a pod resource address never
   // carries credentials, and forwarding them on the request would be confusing /
-  // credential-leaking. Refuse it outright (defence in depth).
+  // credential-leaking. Refuse it outright (defence in depth). The error message
+  // deliberately does NOT echo the target: it embeds the very credentials we are
+  // refusing, and the node surfaces this message as item JSON under
+  // `continueOnFail` (and into logs) — echoing it would leak the secret.
   if (resolved.username !== "" || resolved.password !== "") {
     throw new Error(
-      `[n8n-nodes-solid] target URL must not embed credentials (user:pass@): ${target} (refused)`,
+      "[n8n-nodes-solid] target URL must not embed credentials (user:pass@) (refused)",
     );
   }
   const url = resolved.toString();

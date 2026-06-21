@@ -107,6 +107,22 @@ describe("resolveTarget — refused targets (scope guard)", () => {
       /must not embed credentials/,
     );
   });
+
+  it("does NOT leak the embedded credentials into the thrown error message", () => {
+    // The error is surfaced as item JSON under continueOnFail (and into logs), so
+    // it must NOT echo the target — which contains the very secret we refuse.
+    const secret = "https://alice:s3cr3t-p4ss@alice.pod.example/data/x.ttl";
+    let message = "";
+    try {
+      resolveTarget(BASE, secret);
+    } catch (e) {
+      message = (e as Error).message;
+    }
+    expect(message).toMatch(/must not embed credentials/);
+    expect(message).not.toContain("s3cr3t-p4ss");
+    expect(message).not.toContain("alice:");
+    expect(message).not.toContain("@alice.pod.example");
+  });
 });
 
 describe("assertWithinPod", () => {
