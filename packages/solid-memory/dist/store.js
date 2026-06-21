@@ -132,38 +132,83 @@ export class MemoryStore {
      * (an optimistic-concurrency conditional write — fails if the resource changed
      * since that ETag).
      *
-     * **Best-effort `dct:created` preservation.** A PUT replaces the whole resource, and
-     * `buildMemory` defaults a missing `created` to now — so when the caller omits
-     * `created`, the store makes a BEST-EFFORT read of the existing resource to carry its
-     * original `created` forward (rather than rewriting it to the update time). The read
-     * is best-effort by design: if it fails — no read permission (a write-only caller),
-     * a missing/malformed/410 resource — the PUT still proceeds, and `created` defaults
-     * to now (the documented `buildMemory` behaviour). For a read-restricted context
-     * where preservation MUST be guaranteed, pass `data.created` explicitly — an explicit
-     * value always wins and skips the pre-read entirely (the caller is authoritative).
+     * **STICKY-field preservation (`dct:created`, `prov:invalidatedAtTime`) — `created`
+     * best-effort, the tombstone FAIL-CLOSED.** A PUT replaces the whole resource, and
+     * `buildMemory` writes only the fields it is given (defaulting a missing `created` to
+     * now, omitting a missing `invalidatedAt`). So when the caller omits these fields, the
+     * store makes ONE read of the existing resource to carry them forward. The two fields
+     * have DIFFERENT failure semantics, deliberately:
+     * - **`created`** is cosmetic, so its preservation is BEST-EFFORT: if the read fails
+     *   (no read permission — a write-only caller — or a network error), the PUT still
+     *   proceeds and `created` defaults to now.
+     * - **`invalidatedAt` (the soft-forget tombstone)** is a SAFETY property — dropping it
+     *   would silently RESURRECT a forgotten memory (a right-to-be-forgotten violation), so
+     *   when it is omitted its preservation is FAIL-CLOSED: if the read FAILS (throws),
+     *   `update` REJECTS rather than risk a resurrection. (A clean "resource absent" 404/410
+     *   is NOT a failure — there is no tombstone to drop on a non-existent resource, so the
+     *   PUT proceeds.) To update in a read-restricted context, pass `invalidatedAt`
+     *   explicitly (an explicit value — including `undefined` only via {@link unforget}'s
+     *   path — is authoritative and skips the read for that field).
      *
-     * @throws if the target is outside the container, or on the PUT's own non-ok
-     *   response (incl. a 412 precondition failure). A failing best-effort pre-read does
-     *   NOT throw — it never blocks the write.
+     * An explicitly-supplied value always wins and is NOT overridden by the pre-read (the
+     * caller is authoritative). Because an OMITTED `invalidatedAt` is sticky, a routine
+     * update never resurrects a forgotten memory; there is no way through `update` to
+     * *clear* a tombstone — to deliberately **un-forget**, call {@link unforget}.
+     *
+     * **Escape hatch for a write-only caller.** Since `invalidatedAt: undefined` is
+     * indistinguishable from omitted (so it cannot mean "assert live"), a read-restricted
+     * caller that KNOWS the memory is not forgotten passes `opts.assumeNotForgotten: true`
+     * — an explicit, audited acknowledgement that skips the tombstone pre-read and writes
+     * NO tombstone. Use it deliberately: it CAN drop a tombstone, so only when the caller
+     * is certain the target is live (or genuinely intends to clear it without a read).
+     *
+     * @throws if the target is outside the container; on the PUT's own non-ok response
+     *   (incl. a 412 precondition failure); or — the fail-closed tombstone guard — if
+     *   `invalidatedAt` is omitted (and `assumeNotForgotten` is not set) and the
+     *   existence/tombstone pre-read could not be completed (so the tombstone status is
+     *   unknown). A failing `created`-only pre-read does NOT throw.
      */
     async update(url, data, opts) {
         assertWithinBase(this.container, url);
-        // Best-effort preservation of the original creation timestamp when the caller
-        // doesn't supply one. NEVER block the PUT on the read: a write-only caller, or an
-        // unreadable/malformed existing resource, must still be able to update.
+        // Preserve the STICKY fields the caller omitted from ONE read of the existing
+        // resource. The caller distinguishes "preserve" (omit) from "set" (provide a value)
+        // per field; an explicit value is authoritative and is never overridden by the read.
         let created = data.created;
-        if (created === undefined) {
+        let invalidatedAt = data.invalidatedAt;
+        // `assumeNotForgotten` is the explicit write-only escape hatch: the caller asserts
+        // the target carries no tombstone, so we neither read nor preserve one (it is treated
+        // as already-resolved, like an explicit invalidatedAt).
+        const tombstoneResolved = invalidatedAt !== undefined || opts?.assumeNotForgotten === true;
+        if (created === undefined || !tombstoneResolved) {
+            let existing;
             try {
-                const existing = await this.get(url);
-                created = existing?.data.created;
+                existing = await this.get(url);
             }
-            catch {
-                // No read permission / unreadable resource — fall through; `created` will
-                // default to now in buildMemory (documented). Pass `created` explicitly to
-                // guarantee preservation in a read-restricted context.
+            catch (cause) {
+                // The read FAILED (read-denied / network error — NOT a clean 404/410, which
+                // get() returns as null). `created` preservation is best-effort, but the
+                // tombstone is FAIL-CLOSED: if the tombstone status is unresolved we cannot
+                // confirm whether the memory is forgotten, so refuse rather than risk dropping
+                // a tombstone and resurrecting a forgotten memory.
+                if (!tombstoneResolved) {
+                    throw new Error(`[solid-memory] update ${url} refused: could not read the existing resource to ` +
+                        "preserve its prov:invalidatedAtTime tombstone (fail-closed — a routine update must " +
+                        "not risk resurrecting a forgotten memory). Pass `invalidatedAt` explicitly, set " +
+                        `opts.assumeNotForgotten, or use unforget()/delete().${cause instanceof Error ? ` Cause: ${cause.message}` : ""}`);
+                }
+                // created-only: best-effort, fall through with created defaulting to now.
+                existing = null;
+            }
+            if (created === undefined)
+                created = existing?.data.created;
+            // existing is null for a clean 404/410 (no tombstone to preserve) — leaving
+            // invalidatedAt undefined is correct: a non-existent resource cannot be forgotten.
+            // When assumeNotForgotten is set, we intentionally do NOT carry a tombstone forward.
+            if (invalidatedAt === undefined && !opts?.assumeNotForgotten) {
+                invalidatedAt = existing?.data.invalidatedAt;
             }
         }
-        const withModified = { ...data, created, modified: new Date() };
+        const withModified = { ...data, created, invalidatedAt, modified: new Date() };
         const body = await this.serialize(url, withModified);
         const headers = { "content-type": "text/turtle" };
         if (opts?.ifMatch)
@@ -189,6 +234,95 @@ export class MemoryStore {
         if (!res.ok) {
             throw new Error(`[solid-memory] delete ${url} failed: ${res.status} ${res.statusText}`);
         }
+    }
+    /**
+     * **Soft-forget** the memory at `url` — the right-to-be-forgotten path WITH an
+     * audit trail. Unlike {@link delete} (a hard DELETE that erases the resource),
+     * `forget` KEEPS the resource and writes a `prov:invalidatedAtTime` TOMBSTONE
+     * timestamp onto it, so a consumer (an agent-memory view, `openclaw-memory`) can
+     * tombstone a memory rather than destroy it: the entry shows as forgotten + when,
+     * and is excluded from {@link search} / `searchMemories` by default.
+     *
+     * Implementation: it READS the existing memory (the tombstone is written over the
+     * existing data, so the rest of the fields must be carried forward) then PUTs it
+     * back with `invalidatedAt` set. The read is REQUIRED — a soft-forget cannot
+     * preserve data it cannot read; if you only have write access (or want true
+     * erasure), use {@link delete} instead. The tombstone time is `opts.at` if given,
+     * else now.
+     *
+     * **Idempotent.** Forgetting an already-forgotten memory keeps the ORIGINAL
+     * tombstone time (it does not slide the audit timestamp forward) unless an
+     * explicit `opts.at` is supplied — an explicit value always wins.
+     *
+     * @returns the new ETag (if the server sent one) and the tombstone time written.
+     * @throws if the target is outside the container, the resource is missing / not a
+     *   `mem:MemoryItem` / unreadable, or the PUT is rejected (incl. a 412).
+     */
+    async forget(url, opts) {
+        assertWithinBase(this.container, url);
+        const existing = await this.get(url);
+        if (!existing) {
+            throw new Error(`[solid-memory] forget ${url} failed: no mem:MemoryItem to forget (missing or not a memory) — use delete() for a hard remove`);
+        }
+        // Idempotent: keep the original tombstone unless the caller supplies an explicit
+        // `at` (which always wins). A fresh forget stamps now.
+        const invalidatedAt = opts?.at ?? existing.data.invalidatedAt ?? new Date();
+        // Carry every existing field forward; only set the tombstone. Pass `created`
+        // explicitly so update() does NOT re-read (we already hold the data) and the
+        // original creation time is preserved.
+        const tombstoned = {
+            ...existing.data,
+            created: existing.data.created,
+            invalidatedAt,
+        };
+        // Default the optimistic-concurrency guard to the ETag we just read, so a
+        // concurrent writer between our read and PUT is detected (a stale read can't
+        // silently clobber a newer version). A caller can override or omit via opts.
+        const ifMatch = opts?.ifMatch ?? existing.etag;
+        const res = await this.update(url, tombstoned, ifMatch ? { ifMatch } : undefined);
+        return { etag: res.etag, invalidatedAt };
+    }
+    /**
+     * **Un-forget** the memory at `url` — the explicit inverse of {@link forget}: clear
+     * its `prov:invalidatedAtTime` tombstone so it becomes a live, searchable memory
+     * again, KEEPING the resource + every other field. Needed because `invalidatedAt` is
+     * OMITTED-IS-STICKY in {@link update} (so a routine update can't accidentally
+     * resurrect a memory), which also means `update` can't be used to *clear* it.
+     *
+     * It READS the existing memory then PUTs it back with the tombstone removed (and
+     * `dct:modified` bumped). The read is REQUIRED (it preserves the rest of the data);
+     * it does NOT go through `update`'s sticky preservation, so the tombstone is genuinely
+     * dropped. Defaults `If-Match` to the just-read ETag for optimistic-concurrency safety.
+     *
+     * Idempotent: un-forgetting an already-live memory is a no-op rewrite (still bumps
+     * `dct:modified`).
+     *
+     * @returns the new ETag (if the server sent one).
+     * @throws if the target is outside the container, the resource is missing / not a
+     *   `mem:MemoryItem` / unreadable, or the PUT is rejected (incl. a 412).
+     */
+    async unforget(url, opts) {
+        assertWithinBase(this.container, url);
+        const existing = await this.get(url);
+        if (!existing) {
+            throw new Error(`[solid-memory] unforget ${url} failed: no mem:MemoryItem to un-forget (missing or not a memory)`);
+        }
+        // Build the cleared form directly (NOT via update, whose omitted-is-sticky logic
+        // would carry the tombstone forward). Preserve created + every field; drop only
+        // invalidatedAt (spread then delete the key, so it is genuinely absent and
+        // buildMemory writes no prov:invalidatedAtTime); bump modified.
+        const cleared = { ...existing.data, modified: new Date() };
+        delete cleared.invalidatedAt;
+        const body = await this.serialize(url, cleared);
+        const headers = { "content-type": "text/turtle" };
+        const ifMatch = opts?.ifMatch ?? existing.etag;
+        if (ifMatch)
+            headers["if-match"] = ifMatch;
+        const res = await this.fetch(url, { method: "PUT", headers, body });
+        if (!res.ok) {
+            throw new Error(`[solid-memory] unforget ${url} failed: ${res.status} ${res.statusText}`);
+        }
+        return { etag: res.headers.get("etag") ?? undefined };
     }
     /**
      * List the direct `ldp:contains` members of the container. Returns an empty

@@ -45,6 +45,18 @@ export interface MemoryData {
     generatedBy?: string;
     /** `mem:embeddingRef` — a sidecar embedding resource IRI (the M2 vector-search seam). */
     embeddingRef?: string;
+    /**
+     * `prov:invalidatedAtTime` — the soft-forget TOMBSTONE timestamp. When set, the
+     * memory has been *forgotten* (right-to-be-forgotten with an audit trail) but is NOT
+     * hard-deleted: the resource still exists, carrying the time it ceased to be valid.
+     * The RDF predicate is the STANDARD PROV-O term `prov:invalidatedAtTime` (the
+     * invalidation counterpart of `prov:generatedAtTime`) — reused, not minted; the
+     * friendly TS field name is `invalidatedAt`. A tombstoned memory is excluded from
+     * {@link searchMemories} by default (pass the search query's `includeForgotten`
+     * flag to surface it). Write it with {@link MemoryStore.forget} (soft-forget)
+     * rather than {@link MemoryStore.delete} (a hard DELETE).
+     */
+    invalidatedAt?: Date;
 }
 /**
  * Typed `@rdfjs/wrapper` view of a single memory subject. Each accessor reads/writes
@@ -79,6 +91,21 @@ export declare class MemoryItem extends TermWrapper {
     /** `mem:embeddingRef` — a sidecar embedding resource IRI (the M2 vector-search seam). */
     get embeddingRef(): string | undefined;
     set embeddingRef(value: string | undefined);
+    /**
+     * `prov:invalidatedAtTime` — the soft-forget tombstone timestamp (right-to-be-
+     * forgotten with an audit trail). A non-`undefined` value marks the memory as
+     * forgotten while KEEPING the resource (a soft delete, not a hard DELETE).
+     *
+     * The RDF predicate is the standard PROV-O datatype property
+     * `prov:invalidatedAtTime` (`http://www.w3.org/ns/prov#invalidatedAtTime`, the
+     * invalidation counterpart of `prov:generatedAtTime`) — a REUSED PROV-O term, NOT
+     * minted; the friendly TS field name stays `invalidatedAt`. Using the standard IRI
+     * keeps the tombstone interoperable with any PROV-O-compliant client.
+     */
+    get invalidatedAt(): Date | undefined;
+    set invalidatedAt(value: Date | undefined);
+    /** Whether this subject has been soft-forgotten (carries a `prov:invalidatedAtTime`). */
+    get isForgotten(): boolean;
     /** `schema:keywords` — free-text tags (live set of string literals). */
     get keywords(): Set<string>;
     /** `schema:about` — category/topic class IRIs (live set of IRIs). */

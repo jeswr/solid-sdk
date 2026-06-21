@@ -63,6 +63,18 @@ export interface MemoryData {
   generatedBy?: string;
   /** `mem:embeddingRef` — a sidecar embedding resource IRI (the M2 vector-search seam). */
   embeddingRef?: string;
+  /**
+   * `prov:invalidatedAtTime` — the soft-forget TOMBSTONE timestamp. When set, the
+   * memory has been *forgotten* (right-to-be-forgotten with an audit trail) but is NOT
+   * hard-deleted: the resource still exists, carrying the time it ceased to be valid.
+   * The RDF predicate is the STANDARD PROV-O term `prov:invalidatedAtTime` (the
+   * invalidation counterpart of `prov:generatedAtTime`) — reused, not minted; the
+   * friendly TS field name is `invalidatedAt`. A tombstoned memory is excluded from
+   * {@link searchMemories} by default (pass the search query's `includeForgotten`
+   * flag to surface it). Write it with {@link MemoryStore.forget} (soft-forget)
+   * rather than {@link MemoryStore.delete} (a hard DELETE).
+   */
+  invalidatedAt?: Date;
 }
 
 /**
@@ -157,6 +169,29 @@ export class MemoryItem extends TermWrapper {
     OptionalAs.object(this, MEM_EMBEDDING_REF, value, NamedNodeFrom.string);
   }
 
+  /**
+   * `prov:invalidatedAtTime` — the soft-forget tombstone timestamp (right-to-be-
+   * forgotten with an audit trail). A non-`undefined` value marks the memory as
+   * forgotten while KEEPING the resource (a soft delete, not a hard DELETE).
+   *
+   * The RDF predicate is the standard PROV-O datatype property
+   * `prov:invalidatedAtTime` (`http://www.w3.org/ns/prov#invalidatedAtTime`, the
+   * invalidation counterpart of `prov:generatedAtTime`) — a REUSED PROV-O term, NOT
+   * minted; the friendly TS field name stays `invalidatedAt`. Using the standard IRI
+   * keeps the tombstone interoperable with any PROV-O-compliant client.
+   */
+  get invalidatedAt(): Date | undefined {
+    return OptionalFrom.subjectPredicate(this, prov("invalidatedAtTime"), LiteralAs.date);
+  }
+  set invalidatedAt(value: Date | undefined) {
+    OptionalAs.object(this, prov("invalidatedAtTime"), value, LiteralFrom.dateTime);
+  }
+
+  /** Whether this subject has been soft-forgotten (carries a `prov:invalidatedAtTime`). */
+  get isForgotten(): boolean {
+    return this.invalidatedAt !== undefined;
+  }
+
   /** `schema:keywords` — free-text tags (live set of string literals). */
   get keywords(): Set<string> {
     return SetFrom.subjectPredicate(this, schema("keywords"), LiteralAs.string, LiteralFrom.string);
@@ -200,6 +235,9 @@ export function parseMemory(resourceUrl: string, dataset: DatasetCore): MemoryDa
   const data: MemoryData = { text: doc.text ?? "" };
   setIfDefined(data, "created", doc.created);
   setIfDefined(data, "modified", doc.modified);
+  // The soft-forget tombstone (prov:invalidatedAtTime) — a literal datetime, so no
+  // IRI filtering applies; absent unless the memory was forgotten.
+  setIfDefined(data, "invalidatedAt", doc.invalidatedAt);
   // Object-property fields are filtered the SAME way on READ as on write
   // (httpIriOrUndefined): pod data is untrusted input, so a hostile resource that
   // stores a `javascript:` / `mailto:` / `urn:` IRI as a NamedNode object on
@@ -238,6 +276,9 @@ export function buildMemory(resourceUrl: string, data: MemoryData): Store {
   doc.text = data.text || undefined;
   doc.created = data.created ?? new Date();
   doc.modified = data.modified;
+  // The soft-forget tombstone (prov:invalidatedAtTime). Written only when supplied —
+  // a live (un-forgotten) memory carries no tombstone. Set via MemoryStore.forget.
+  doc.invalidatedAt = data.invalidatedAt;
 
   // Drop any object-property value that is not an absolute http(s) IRI (untrusted
   // pod input) rather than coerce it into a malformed NamedNode.

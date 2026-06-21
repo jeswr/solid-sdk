@@ -114,6 +114,45 @@ describe("since/until time window (created, fallback modified)", () => {
   });
 });
 
+describe("soft-forget (prov:invalidatedAtTime) filtering", () => {
+  const live: MemoryData = { text: "live memory", created: new Date("2026-06-01T00:00:00.000Z") };
+  const forgotten: MemoryData = {
+    text: "forgotten memory",
+    created: new Date("2026-06-01T00:00:00.000Z"),
+    invalidatedAt: new Date("2026-06-02T00:00:00.000Z"),
+  };
+  const set = [live, forgotten];
+
+  it("excludes a tombstoned memory by default", () => {
+    expect(texts(searchMemories(set, {}))).toEqual(["live memory"]);
+    // The forgotten one is excluded even when it would otherwise match a filter.
+    expect(texts(searchMemories(set, { text: "memory" }))).toEqual(["live memory"]);
+  });
+
+  it("surfaces tombstoned memories with includeForgotten: true", () => {
+    expect(texts(searchMemories(set, { includeForgotten: true }))).toEqual([
+      "live memory",
+      "forgotten memory",
+    ]);
+  });
+
+  it("still applies the other filters when includeForgotten is true", () => {
+    // includeForgotten lifts the tombstone exclusion but does NOT bypass other filters.
+    expect(texts(searchMemories(set, { includeForgotten: true, text: "forgotten" }))).toEqual([
+      "forgotten memory",
+    ]);
+    // A since bound after both created times excludes both even when forgotten is included.
+    expect(
+      texts(
+        searchMemories(set, {
+          includeForgotten: true,
+          since: new Date("2026-06-01T12:00:00.000Z"),
+        }),
+      ),
+    ).toEqual([]);
+  });
+});
+
 describe("combined AND + empty query", () => {
   it("ANDs every provided filter", () => {
     expect(

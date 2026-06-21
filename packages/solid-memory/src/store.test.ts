@@ -217,8 +217,10 @@ describe("update", () => {
     expect(got?.data.created?.toISOString()).toBe(newCreated.toISOString());
   });
 
-  it("the best-effort pre-read NEVER blocks the PUT (write-only / unreadable resource)", async () => {
+  it("created-preservation is best-effort: a write-only caller updates with opts.assumeNotForgotten", async () => {
     // A pod where GET is forbidden (403) but PUT succeeds — a write-only caller.
+    // The created pre-read is best-effort; opts.assumeNotForgotten is the explicit escape
+    // hatch that satisfies the FAIL-CLOSED tombstone guard, so the PUT proceeds.
     const written = new Map<string, string>();
     const writeOnly: typeof globalThis.fetch = async (input, init) => {
       const url = typeof input === "string" ? input : input.toString();
@@ -232,10 +234,53 @@ describe("update", () => {
     };
     const s = new MemoryStore({ container: CONTAINER, fetch: writeOnly });
     const url = `${CONTAINER}x`;
-    // No created supplied → the pre-read 403s; the update must still proceed.
-    const res = await s.update(url, { text: "v2" });
+    const res = await s.update(url, { text: "v2" }, { assumeNotForgotten: true });
     expect(res.etag).toBe('"e"');
     expect(written.has(url)).toBe(true);
+    // The written body carries no tombstone (assumed live).
+    expect(written.get(url)).not.toContain("invalidatedAtTime");
+  });
+
+  it("a setting invalidatedAt explicitly (a Date) lets a write-only caller update without a read", async () => {
+    // The other escape hatch: passing invalidatedAt as a Date resolves the tombstone
+    // without a read (the caller is authoritative), so a read-denied PUT proceeds.
+    const written = new Map<string, string>();
+    const writeOnly: typeof globalThis.fetch = async (input, init) => {
+      const url = typeof input === "string" ? input : input.toString();
+      const method = (init?.method ?? "GET").toUpperCase();
+      if (method === "GET") return new Response(null, { status: 403 });
+      if (method === "PUT") {
+        written.set(url, typeof init?.body === "string" ? init.body : "");
+        return new Response(null, { status: 205, headers: { etag: '"e"' } });
+      }
+      return new Response(null, { status: 405 });
+    };
+    const s = new MemoryStore({ container: CONTAINER, fetch: writeOnly });
+    const url = `${CONTAINER}x`;
+    const at = new Date("2023-03-03T00:00:00.000Z");
+    const res = await s.update(url, { text: "v2", invalidatedAt: at });
+    expect(res.etag).toBe('"e"');
+    expect(written.get(url)).toContain("invalidatedAtTime");
+  });
+
+  it("FAIL-CLOSED: a routine update REFUSES when the tombstone pre-read fails (read-denied)", async () => {
+    // Regression for the resurrection risk: if the caller omits invalidatedAt and the
+    // existence/tombstone read FAILS (403), update must throw — never silently drop a
+    // possibly-present prov:invalidatedAtTime tombstone (right-to-be-forgotten).
+    let putAttempted = false;
+    const readDenied: typeof globalThis.fetch = async (_input, init) => {
+      const method = (init?.method ?? "GET").toUpperCase();
+      if (method === "GET") return new Response(null, { status: 403 });
+      if (method === "PUT") {
+        putAttempted = true;
+        return new Response(null, { status: 205, headers: { etag: '"e"' } });
+      }
+      return new Response(null, { status: 405 });
+    };
+    const s = new MemoryStore({ container: CONTAINER, fetch: readDenied });
+    await expect(s.update(`${CONTAINER}x`, { text: "v2" })).rejects.toThrow(/fail-closed/);
+    // And it must NOT have issued the PUT.
+    expect(putAttempted).toBe(false);
   });
 
   it("the best-effort pre-read tolerates a missing (404) resource without throwing", async () => {
@@ -247,6 +292,24 @@ describe("update", () => {
     const got = await s.get(url);
     expect(got?.data.text).toBe("fresh");
     expect(got?.data.created).toBeInstanceOf(Date);
+  });
+
+  it("an ordinary update does NOT resurrect a forgotten memory (invalidatedAt is sticky)", async () => {
+    // Regression: a routine full-resource update that omits invalidatedAt must carry
+    // the existing tombstone forward — never silently un-forget + make it searchable.
+    const { fetchImpl } = makePod();
+    const s = new MemoryStore({ container: CONTAINER, fetch: fetchImpl });
+    const { url } = await s.create({ text: "v1" });
+    const { invalidatedAt } = await s.forget(url, { at: new Date("2021-01-01T00:00:00.000Z") });
+    // Edit the body via update, omitting invalidatedAt.
+    await s.update(url, { text: "v2 edited" });
+    const got = await s.get(url);
+    expect(got?.data.text).toBe("v2 edited");
+    // The tombstone survives — same time, still forgotten.
+    expect(got?.data.invalidatedAt?.toISOString()).toBe(invalidatedAt.toISOString());
+    // And it stays excluded from the default search.
+    expect((await s.search({})).map((m) => m.text)).toEqual([]);
+    expect((await s.search({ includeForgotten: true })).map((m) => m.text)).toEqual(["v2 edited"]);
   });
 });
 
@@ -264,6 +327,180 @@ describe("delete", () => {
     const s = new MemoryStore({ container: CONTAINER, fetch: fetchImpl });
     const { url } = await s.create({ text: "x" });
     await expect(s.delete(url, { ifMatch: '"stale"' })).rejects.toThrow(/412/);
+  });
+});
+
+describe("forget (soft-delete / prov:invalidatedAtTime tombstone)", () => {
+  it("writes a tombstone, KEEPS the resource, and preserves the body + created", async () => {
+    const { store, fetchImpl } = makePod();
+    const s = new MemoryStore({ container: CONTAINER, fetch: fetchImpl });
+    const created = new Date("2020-01-02T03:04:05.000Z");
+    const { url } = await s.create({ text: "remember me", keywords: ["k"], created });
+    const before = Date.now();
+    const res = await s.forget(url);
+    expect(res.invalidatedAt).toBeInstanceOf(Date);
+    expect(res.invalidatedAt.getTime()).toBeGreaterThanOrEqual(before - 1000);
+    // The resource still exists (soft, not hard, delete).
+    expect(store.has(url)).toBe(true);
+    const got = await s.get(url);
+    expect(got).not.toBeNull();
+    expect(got?.data.text).toBe("remember me");
+    expect(new Set(got?.data.keywords)).toEqual(new Set(["k"]));
+    expect(got?.data.created?.toISOString()).toBe(created.toISOString());
+    expect(got?.data.invalidatedAt?.toISOString()).toBe(res.invalidatedAt.toISOString());
+  });
+
+  it("excludes a forgotten memory from search() by default, surfaces it with includeForgotten", async () => {
+    const { fetchImpl } = makePod();
+    const s = new MemoryStore({ container: CONTAINER, fetch: fetchImpl });
+    const { url } = await s.create({ text: "secret to forget" });
+    await s.create({ text: "keep this one" });
+    await s.forget(url);
+    // Default search omits the tombstoned memory.
+    const visible = await s.search({});
+    expect(visible.map((m) => m.text)).toEqual(["keep this one"]);
+    // all() still returns it (audit), and includeForgotten surfaces it in search.
+    expect((await s.all()).length).toBe(2);
+    const withForgotten = await s.search({ includeForgotten: true });
+    expect(withForgotten.map((m) => m.text).sort()).toEqual(["keep this one", "secret to forget"]);
+  });
+
+  it("uses a caller-supplied tombstone time when given", async () => {
+    const { fetchImpl } = makePod();
+    const s = new MemoryStore({ container: CONTAINER, fetch: fetchImpl });
+    const { url } = await s.create({ text: "x" });
+    const at = new Date("2021-07-08T00:00:00.000Z");
+    const res = await s.forget(url, { at });
+    expect(res.invalidatedAt.toISOString()).toBe(at.toISOString());
+    const got = await s.get(url);
+    expect(got?.data.invalidatedAt?.toISOString()).toBe(at.toISOString());
+  });
+
+  it("is idempotent — re-forgetting keeps the ORIGINAL tombstone time", async () => {
+    const { fetchImpl } = makePod();
+    const s = new MemoryStore({ container: CONTAINER, fetch: fetchImpl });
+    const { url } = await s.create({ text: "x" });
+    const first = await s.forget(url, { at: new Date("2021-01-01T00:00:00.000Z") });
+    const second = await s.forget(url); // no `at` → must keep the original
+    expect(second.invalidatedAt.toISOString()).toBe(first.invalidatedAt.toISOString());
+    const got = await s.get(url);
+    expect(got?.data.invalidatedAt?.toISOString()).toBe(first.invalidatedAt.toISOString());
+  });
+
+  it("an explicit `at` overrides a prior tombstone (caller is authoritative)", async () => {
+    const { fetchImpl } = makePod();
+    const s = new MemoryStore({ container: CONTAINER, fetch: fetchImpl });
+    const { url } = await s.create({ text: "x" });
+    await s.forget(url, { at: new Date("2021-01-01T00:00:00.000Z") });
+    const override = new Date("2022-02-02T00:00:00.000Z");
+    const res = await s.forget(url, { at: override });
+    expect(res.invalidatedAt.toISOString()).toBe(override.toISOString());
+  });
+
+  it("throws for a missing resource (use delete() for a hard remove)", async () => {
+    const { fetchImpl } = makePod();
+    const s = new MemoryStore({ container: CONTAINER, fetch: fetchImpl });
+    await expect(s.forget(`${CONTAINER}never`)).rejects.toThrow(/no mem:MemoryItem to forget/);
+  });
+
+  it("throws for a non-memory resource", async () => {
+    const { store, fetchImpl } = makePod();
+    const url = `${CONTAINER}other`;
+    store.set(url, { body: `<${url}#it> <http://schema.org/text> "x" .`, etag: '"e"' });
+    const s = new MemoryStore({ container: CONTAINER, fetch: fetchImpl });
+    await expect(s.forget(url)).rejects.toThrow(/no mem:MemoryItem to forget/);
+  });
+
+  it("refuses an out-of-scope target with no network request", async () => {
+    let called = false;
+    const counting: typeof globalThis.fetch = async (...args) => {
+      called = true;
+      const { fetchImpl } = makePod();
+      return fetchImpl(...args);
+    };
+    const s = new MemoryStore({ container: CONTAINER, fetch: counting });
+    await expect(s.forget("https://evil.example/x")).rejects.toThrow(/escapes container/);
+    expect(called).toBe(false);
+  });
+
+  it("guards concurrency by default — a stale resource between read+PUT surfaces as 412", async () => {
+    // forget defaults If-Match to the etag it just read; a writer that bumps the
+    // stored etag before our PUT lands must trigger a 412 (we never silently clobber).
+    const { fetchImpl, store } = makePod();
+    const s = new MemoryStore({ container: CONTAINER, fetch: fetchImpl });
+    const { url } = await s.create({ text: "x" });
+    let sawGet = false;
+    const racingFetch: typeof globalThis.fetch = async (input, init) => {
+      const method = (init?.method ?? "GET").toUpperCase();
+      const u = typeof input === "string" ? input : input.toString();
+      const res = await fetchImpl(input, init);
+      if (method === "GET" && u === url && !sawGet) {
+        sawGet = true;
+        // Simulate a concurrent overwrite that changes the etag after our read.
+        const entry = store.get(url);
+        if (entry) store.set(url, { body: entry.body, etag: '"concurrently-bumped"' });
+      }
+      return res;
+    };
+    const racing = new MemoryStore({ container: CONTAINER, fetch: racingFetch });
+    await expect(racing.forget(url)).rejects.toThrow(/412/);
+  });
+
+  it("a caller-supplied ifMatch overrides the auto-guard", async () => {
+    const { fetchImpl } = makePod();
+    const s = new MemoryStore({ container: CONTAINER, fetch: fetchImpl });
+    const { url } = await s.create({ text: "x" });
+    // A deliberately stale ifMatch is honoured (and fails), proving the override path.
+    await expect(s.forget(url, { ifMatch: '"stale"' })).rejects.toThrow(/412/);
+  });
+});
+
+describe("unforget (clear the tombstone — inverse of forget)", () => {
+  it("clears prov:invalidatedAtTime and makes the memory live + searchable again", async () => {
+    const { fetchImpl } = makePod();
+    const s = new MemoryStore({ container: CONTAINER, fetch: fetchImpl });
+    const created = new Date("2020-05-05T00:00:00.000Z");
+    const { url } = await s.create({ text: "remember again", keywords: ["k"], created });
+    await s.forget(url);
+    expect((await s.get(url))?.data.invalidatedAt).toBeInstanceOf(Date);
+    await s.unforget(url);
+    const got = await s.get(url);
+    expect(got?.data.invalidatedAt).toBeUndefined();
+    // The rest of the data is preserved, and created is unchanged.
+    expect(got?.data.text).toBe("remember again");
+    expect(new Set(got?.data.keywords)).toEqual(new Set(["k"]));
+    expect(got?.data.created?.toISOString()).toBe(created.toISOString());
+    // Visible in the default search once more.
+    expect((await s.search({})).map((m) => m.text)).toEqual(["remember again"]);
+  });
+
+  it("is idempotent on an already-live memory (no-op rewrite, no tombstone introduced)", async () => {
+    const { fetchImpl } = makePod();
+    const s = new MemoryStore({ container: CONTAINER, fetch: fetchImpl });
+    const { url } = await s.create({ text: "never forgotten" });
+    await expect(s.unforget(url)).resolves.toBeDefined();
+    expect((await s.get(url))?.data.invalidatedAt).toBeUndefined();
+  });
+
+  it("throws for a missing / non-memory resource", async () => {
+    const { store, fetchImpl } = makePod();
+    const s = new MemoryStore({ container: CONTAINER, fetch: fetchImpl });
+    await expect(s.unforget(`${CONTAINER}never`)).rejects.toThrow(/no mem:MemoryItem to un-forget/);
+    const other = `${CONTAINER}other`;
+    store.set(other, { body: `<${other}#it> <http://schema.org/text> "x" .`, etag: '"e"' });
+    await expect(s.unforget(other)).rejects.toThrow(/no mem:MemoryItem to un-forget/);
+  });
+
+  it("refuses an out-of-scope target with no network request", async () => {
+    let called = false;
+    const counting: typeof globalThis.fetch = async (...args) => {
+      called = true;
+      const { fetchImpl } = makePod();
+      return fetchImpl(...args);
+    };
+    const s = new MemoryStore({ container: CONTAINER, fetch: counting });
+    await expect(s.unforget("https://evil.example/x")).rejects.toThrow(/escapes container/);
+    expect(called).toBe(false);
   });
 });
 

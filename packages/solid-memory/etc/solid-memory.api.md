@@ -64,6 +64,7 @@ export interface MemoryData {
     created?: Date;
     embeddingRef?: string;
     generatedBy?: string;
+    invalidatedAt?: Date;
     keywords?: string[];
     modified?: Date;
     text: string;
@@ -84,6 +85,9 @@ export class MemoryItem extends TermWrapper {
     get generatedBy(): string | undefined;
     set generatedBy(value: string | undefined);
     get id(): string;
+    get invalidatedAt(): Date | undefined;
+    set invalidatedAt(value: Date | undefined);
+    get isForgotten(): boolean;
     get isMemory(): boolean;
     get keywords(): Set<string>;
     mark(): this;
@@ -100,6 +104,7 @@ export interface MemorySearchQuery {
     attributedTo?: string;
     categories?: string[];
     generatedBy?: string;
+    includeForgotten?: boolean;
     keywords?: string[];
     since?: Date;
     text?: string;
@@ -123,6 +128,13 @@ export class MemoryStore {
     delete(url: string, opts?: {
         ifMatch?: string;
     }): Promise<void>;
+    forget(url: string, opts?: {
+        ifMatch?: string;
+        at?: Date;
+    }): Promise<{
+        etag?: string;
+        invalidatedAt: Date;
+    }>;
     get(url: string): Promise<{
         data: MemoryData;
         etag?: string;
@@ -131,8 +143,14 @@ export class MemoryStore {
     search(query: MemorySearchQuery): Promise<MemoryData[]>;
     serializeTypeRegistration(): Promise<string>;
     typeIndexRegistration(): TypeRegistration;
+    unforget(url: string, opts?: {
+        ifMatch?: string;
+    }): Promise<{
+        etag?: string;
+    }>;
     update(url: string, data: MemoryData, opts?: {
         ifMatch?: string;
+        assumeNotForgotten?: boolean;
     }): Promise<{
         etag?: string;
     }>;

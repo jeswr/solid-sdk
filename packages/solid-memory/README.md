@@ -43,6 +43,7 @@ established, dereferenceable vocabularies for every field:
 | **about** (single topic IRI) | `dct:subject` | Dublin Core Terms |
 | producing agent | `prov:wasAttributedTo` (WebID / agent-card IRI) | W3C PROV-O |
 | generating conversation | `prov:wasGeneratedBy` (→ `as:Note` / `pc:ChatRoom`) | W3C PROV-O |
+| **soft-forget tombstone** | `prov:invalidatedAtTime` (set ⇒ forgotten) | W3C PROV-O |
 
 > **`about` vs `categories` — two DISTINCT reused predicates (deliberate).** A memory
 > may carry ONE subject/topic IRI **and** a SET of category IRIs. Using `schema:about`
@@ -84,7 +85,9 @@ const memory: MemoryData | undefined = await parseMemoryTtl(url, body, contentTy
 
 `MemoryData` fields: `text` (required), `created?`, `modified?`, `keywords?` (string[]),
 `categories?` (IRI[]), `about?` (topic IRI), `attributedTo?` (agent WebID), `generatedBy?`
-(conversation IRI), `embeddingRef?` (sidecar IRI).
+(conversation IRI), `embeddingRef?` (sidecar IRI), `invalidatedAt?` (the soft-forget
+tombstone — see `forget` in the Store API). The `MemoryItem` accessor additionally exposes
+`isForgotten` (true iff a `prov:invalidatedAtTime` is present).
 
 The `MemoryItem` `@rdfjs/wrapper` accessor (for incremental edits) exposes typed
 getters/setters for each field plus `types`, `mark()` (stamps `mem:MemoryItem`), and
@@ -106,10 +109,12 @@ const store = new MemoryStore({
 const { url, etag } = await store.create({ text: "remember this" }); // PUT If-None-Match: *
 const got = await store.get(url);                                     // null if missing / not a memory
 await store.update(url, { text: "updated" }, { ifMatch: got!.etag }); // PUT If-Match (sets dct:modified)
-await store.delete(url, { ifMatch: etag });                           // DELETE If-Match
+await store.forget(url);                                              // SOFT-forget: write prov:invalidatedAtTime (keeps the resource)
+await store.unforget(url);                                            // clear the tombstone (inverse of forget)
+await store.delete(url, { ifMatch: etag });                           // HARD delete: DELETE If-Match
 const members = await store.list();                                  // ldp:contains members
-const all = await store.all();                                       // every mem:MemoryItem under the container
-const hits = await store.search({ text: "dark" });                   // all() + searchMemories
+const all = await store.all();                                       // every mem:MemoryItem (incl. forgotten — audit)
+const hits = await store.search({ text: "dark" });                   // all() + searchMemories (forgotten excluded by default)
 ```
 
 - **Injectable authenticated fetch.** The store does **no** crypto / DPoP — the caller
@@ -123,6 +128,27 @@ const hits = await store.search({ text: "dark" });                   // all() + 
   never blocks the write — a write-only caller or an unreadable resource still updates
   (then `created` defaults to now). Pass `created` explicitly to guarantee preservation
   in a read-restricted context; an explicit value always wins.
+- **`forget` — soft-delete with an audit trail (right-to-be-forgotten).** `forget(url)`
+  writes a `prov:invalidatedAtTime` TOMBSTONE onto the memory (keeping the resource + the rest
+  of its data) instead of hard-deleting it, so a consumer can show *what* was forgotten and
+  *when*. A forgotten memory is **excluded from `search` / `searchMemories` by default**
+  (pass `includeForgotten: true` to surface it; `all()` always returns it for an audit
+  view). `forget` is **idempotent** — re-forgetting keeps the original tombstone time unless
+  you pass an explicit `{ at }`. It reads the existing memory first (so it can preserve the
+  data), defaults `If-Match` to the just-read ETag for optimistic-concurrency safety, and
+  throws on a missing / non-memory / unreadable resource (use `delete` for a hard erase).
+- **`invalidatedAt` is OMITTED-IS-STICKY + FAIL-CLOSED in `update`.** A routine `update`
+  that omits `invalidatedAt` carries the existing tombstone forward (same as `created`), so
+  an ordinary edit can **never** silently resurrect a forgotten memory. The two sticky
+  fields differ on read failure, deliberately: `created` preservation is **best-effort**
+  (a failed pre-read just defaults it to now), but tombstone preservation is **fail-closed**
+  — if `invalidatedAt` is omitted and the pre-read FAILS (read-denied / network error, *not*
+  a clean 404/410), `update` **throws** rather than risk dropping a tombstone (a
+  right-to-be-forgotten violation). A read-restricted caller that knows the memory is live
+  passes `{ assumeNotForgotten: true }` (an explicit, audited escape hatch that writes no
+  tombstone), or passes `invalidatedAt` as a `Date`. To deliberately clear a tombstone, call
+  **`unforget(url)`** — the explicit inverse of `forget` (reads the memory, drops
+  `prov:invalidatedAtTime`, rewrites it; idempotent on a live memory).
 - **Scope guard on every op.** Every target URL (and every listed member) is asserted
   to lie under `container` *before* any request — a foreign-origin / escaping URL throws
   and issues **no** network request. Defence in depth against a hostile / buggy server.
@@ -145,6 +171,7 @@ const hits = searchMemories(items, {
   generatedBy: "https://alice.pod/chat/room1#it",     // exact conversation IRI
   since: new Date("2026-06-01"),  // over created, falling back to modified
   until: new Date("2026-07-01"),
+  includeForgotten: true,         // surface soft-forgotten (tombstoned) memories (default false)
 });
 ```
 
@@ -152,7 +179,10 @@ const hits = searchMemories(items, {
 an absent filter is not applied; an empty query returns all. `keywords` and `categories`
 are **match-ALL** (every given value must be present). `since`/`until` apply over
 `created`, falling back to `modified`; a memory with no timestamp can't satisfy a
-time-window filter.
+time-window filter. **Soft-forgotten memories (those carrying `prov:invalidatedAtTime`) are
+EXCLUDED by default** — so an agent never recalls a memory the user asked to forget; pass
+`includeForgotten: true` for an audit / "forgotten items" view (the other filters still
+apply).
 
 > **Vector / embedding search is M2 — NOT implemented here.** The model carries
 > `embeddingRef` (a pointer to an opaque, WAC-scoped sidecar embedding resource) so an
@@ -221,8 +251,10 @@ api-extractor via `npx`): `npm run api:report` regenerates `etc/solid-memory.api
 - **A `solid-mcp` memory Tool surface** so an MCP client can read/store memories.
 - **Type-Index *linking*** into the profile / preferences file (this lib only emits the
   registration triples).
-- **A Pod Manager "Agent Memory" view** to see / delete / forget memories
-  (`DELETE` + `prov:invalidatedAt`).
+- **A Pod Manager "Agent Memory" view** to see / forget / delete memories — both the
+  hard `delete` (DELETE) and the soft `forget` (`prov:invalidatedAtTime` tombstone) are now in
+  the Store API; the view consumes them (plus `search({ includeForgotten })` for the audit
+  list of forgotten items).
 
 Authored by Claude Opus 4.8 (Fable unavailable). See commit trailers / `AUTHORED-BY`
 markers.

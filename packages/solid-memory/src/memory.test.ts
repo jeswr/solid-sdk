@@ -32,6 +32,7 @@ describe("round-trip (build → serialize → parseMemoryTtl)", () => {
       attributedTo: "https://agent.pod/profile/card#me",
       generatedBy: "https://alice.pod/chat/room1#it",
       embeddingRef: "https://alice.pod/memories/m1.embedding",
+      invalidatedAt: new Date("2026-06-03T09:15:00.000Z"),
     };
     const ttl = await serializeMemory(URL_, data);
     const parsed = await parseMemoryTtl(URL_, ttl, "text/turtle");
@@ -46,6 +47,80 @@ describe("round-trip (build → serialize → parseMemoryTtl)", () => {
     expect(parsed.attributedTo).toBe(data.attributedTo);
     expect(parsed.generatedBy).toBe(data.generatedBy);
     expect(parsed.embeddingRef).toBe(data.embeddingRef);
+    expect(parsed.invalidatedAt?.toISOString()).toBe(data.invalidatedAt?.toISOString());
+  });
+});
+
+describe("prov:invalidatedAtTime soft-forget tombstone (model layer)", () => {
+  it("uses the STANDARD PROV-O predicate prov:invalidatedAtTime (not a minted prov:invalidatedAt)", async () => {
+    const at = new Date("2026-06-03T09:15:00.000Z");
+    const ttl = await serializeMemory(URL_, { text: "x", invalidatedAt: at });
+    expect(ttl).toContain("prov:invalidatedAtTime");
+    // The full IRI must be the dereferenceable PROV-O term — guard against any
+    // non-standard `prov:invalidatedAt` predicate (PROV-O has no such property).
+    expect(ttl).toContain("http://www.w3.org/ns/prov#");
+    // A pod body that uses the WRONG predicate (prov:invalidatedAt) must NOT be read
+    // as a tombstone — only the standard term counts.
+    const wrong = `@prefix mem: <https://w3id.org/jeswr/memory#> .
+@prefix schema: <http://schema.org/> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+<${URL_}#it> a mem:MemoryItem ;
+  schema:text "wrong predicate" ;
+  prov:invalidatedAt "2026-06-05T12:00:00.000Z"^^xsd:dateTime .`;
+    const parsedWrong = await parseMemoryTtl(URL_, wrong, "text/turtle");
+    expect(parsedWrong?.invalidatedAt).toBeUndefined();
+  });
+
+  it("a live memory carries no tombstone (invalidatedAt undefined, isForgotten false)", async () => {
+    const ttl = await serializeMemory(URL_, { text: "live" });
+    expect(ttl).not.toContain("invalidatedAtTime");
+    const parsed = await parseMemoryTtl(URL_, ttl, "text/turtle");
+    expect(parsed?.invalidatedAt).toBeUndefined();
+    const doc = new MemoryItem(
+      memorySubject(URL_),
+      buildMemory(URL_, { text: "live" }),
+      DataFactory,
+    );
+    expect(doc.isForgotten).toBe(false);
+    expect(doc.invalidatedAt).toBeUndefined();
+  });
+
+  it("buildMemory writes prov:invalidatedAtTime when supplied; isForgotten flips true", () => {
+    const at = new Date("2026-06-03T09:15:00.000Z");
+    const store = buildMemory(URL_, { text: "forgotten", invalidatedAt: at });
+    const doc = new MemoryItem(memorySubject(URL_), store, DataFactory);
+    expect(doc.isForgotten).toBe(true);
+    expect(doc.invalidatedAt?.toISOString()).toBe(at.toISOString());
+  });
+
+  it("the MemoryItem accessor sets/clears the tombstone via the typed wrapper (no hand-built triples)", async () => {
+    const store = buildMemory(URL_, { text: "x" });
+    const doc = new MemoryItem(memorySubject(URL_), store, DataFactory);
+    expect(doc.isForgotten).toBe(false);
+    const at = new Date("2026-06-04T00:00:00.000Z");
+    doc.invalidatedAt = at;
+    expect(doc.isForgotten).toBe(true);
+    // It serialises through n3.Writer with the prov: prefix + standard predicate.
+    const ttl = await serializeMemory(URL_, { text: "x", invalidatedAt: at });
+    expect(ttl).toContain("prov:invalidatedAtTime");
+    // Clearing it removes the tombstone.
+    doc.invalidatedAt = undefined;
+    expect(doc.isForgotten).toBe(false);
+    expect(doc.invalidatedAt).toBeUndefined();
+  });
+
+  it("round-trips a tombstone read back from a pod body", async () => {
+    const body = `@prefix mem: <https://w3id.org/jeswr/memory#> .
+@prefix schema: <http://schema.org/> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+<${URL_}#it> a mem:MemoryItem ;
+  schema:text "forgotten body" ;
+  prov:invalidatedAtTime "2026-06-05T12:00:00.000Z"^^xsd:dateTime .`;
+    const parsed = await parseMemoryTtl(URL_, body, "text/turtle");
+    expect(parsed?.text).toBe("forgotten body");
+    expect(parsed?.invalidatedAt?.toISOString()).toBe("2026-06-05T12:00:00.000Z");
   });
 });
 
