@@ -11186,12 +11186,12 @@ var DataWriter = class {
     } catch (cause) {
       throw new WriteFailedError(url, { cause });
     }
-    if (response.status === 404 || response.status === 410) return { kind: "missing" };
-    if (!response.ok) {
-      throw new WriteFailedError(response.url || url, { status: response.status });
-    }
     const finalUrl = response.url || url;
     this.#assertWithinScope(finalUrl);
+    if (response.status === 404 || response.status === 410) return { kind: "missing" };
+    if (!response.ok) {
+      throw new WriteFailedError(finalUrl, { status: response.status });
+    }
     const contentType = response.headers.get("Content-Type");
     let graph;
     try {

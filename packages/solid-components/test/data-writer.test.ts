@@ -212,6 +212,35 @@ describe("DataWriter.saveMerged — conditional, merge-not-replace", () => {
     expect(fetch.mock.calls.filter((c) => (c[1] as RequestInit)?.method === "PUT")).toHaveLength(0);
   });
 
+  it("an OFF-SCOPE 404 pre-read FAILS CLOSED (not treated as 'missing' → create)", async () => {
+    // roborev round-2 MEDIUM: a redirected GET that 404s at a FOREIGN origin must not
+    // be read as "the scoped resource is absent" and proceed to a create-only PUT —
+    // the scope re-check must precede the 404/410 branch.
+    const fetch = vi.fn(async (_u: string, init?: RequestInit) => {
+      if ((init?.method ?? "GET") === "GET") {
+        const headers = new Headers();
+        return {
+          status: 404,
+          ok: false,
+          url: "https://evil.example/tasks/1", // off-scope final URL on a 404.
+          headers,
+          body: null,
+          text: async () => "",
+        } as unknown as Response;
+      }
+      return statusRes(201, '"new"');
+    });
+    const dw = new DataWriter({
+      fetch: fetch as unknown as typeof globalThis.fetch,
+      base: "https://alice.example/tasks/",
+    });
+    await expect(
+      dw.saveMerged("https://alice.example/tasks/1", setTitle("X")),
+    ).rejects.toBeInstanceOf(WriteScopeError);
+    // No create-only PUT fired.
+    expect(fetch.mock.calls.filter((c) => (c[1] as RequestInit)?.method === "PUT")).toHaveLength(0);
+  });
+
   it("delete sets redirect:error too", async () => {
     let deleteRedirect: string | undefined;
     const fetch = vi.fn(async (_u: string, init?: RequestInit) => {

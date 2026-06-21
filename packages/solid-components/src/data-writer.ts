@@ -399,15 +399,18 @@ export class DataWriter {
     } catch (cause) {
       throw new WriteFailedError(url, { cause });
     }
+    // Belt-and-braces: re-assert the post-read URL is within scope BEFORE any status
+    // branch (even with `redirect: "error"`, a non-spec/injected fetch might follow a
+    // redirect and surface a foreign final URL). This MUST precede the 404/410 branch:
+    // an OFF-SCOPE 404/410 (a redirect to a foreign origin that 404s) must FAIL CLOSED,
+    // not be read as "the scoped resource is missing" → a create-only PUT. So a
+    // foreign final URL is refused regardless of the status it returned.
+    const finalUrl = response.url || url;
+    this.#assertWithinScope(finalUrl);
     if (response.status === 404 || response.status === 410) return { kind: "missing" };
     if (!response.ok) {
-      throw new WriteFailedError(response.url || url, { status: response.status });
+      throw new WriteFailedError(finalUrl, { status: response.status });
     }
-    const finalUrl = response.url || url;
-    // Belt-and-braces: even with `redirect: "error"`, re-assert the post-read URL is
-    // within scope (a non-spec fetch impl might surface a different final URL). A
-    // foreign final URL must never become the merge base.
-    this.#assertWithinScope(finalUrl);
     const contentType = response.headers.get("Content-Type");
     let graph: Store;
     try {
