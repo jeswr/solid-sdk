@@ -8,12 +8,12 @@
   "maturity": "prototype",
   "visibility": "public",
   "stack": {
-    "lang": "TypeScript (ESM, NodeNext)",
-    "n8n": "n8n-workflow ^1.82 (peerDependency — the INodeType/ICredentialType contract)",
-    "rdf": "n3 ^2.x (container listing only)",
-    "solid-object": "@solid/object ^0.6.x (ContainerDataset for ldp:contains)",
-    "fetch-rdf": "@jeswr/fetch-rdf (git: jeswr/fetch-rdf#main; inlined into dist)",
-    "test": "vitest ^2.x",
+    "lang": "TypeScript source (NodeNext ESM); dist emitted as CommonJS (n8n require()s it)",
+    "n8n": "n8n-workflow ^1.82 (peerDependency — the INodeType/ICredentialType contract; provided by the n8n runtime, never bundled)",
+    "rdf": "n3 ^2.x (container listing only; external CJS dep)",
+    "solid-object": "@solid/object ^0.6.x + @rdfjs/wrapper (ContainerDataset for ldp:contains; ESM-only, so INLINED into the CJS dist)",
+    "fetch-rdf": "@jeswr/fetch-rdf (git: jeswr/fetch-rdf#main; off-npm, INLINED into the CJS dist)",
+    "test": "vitest ^2.x (incl. a packaged-dist require() load smoke test)",
     "lint": "@biomejs/biome ^2.x",
     "node": ">=20"
   },

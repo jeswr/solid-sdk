@@ -23,7 +23,14 @@
   "bugs": {
     "url": "https://github.com/jeswr/n8n-nodes-solid/issues"
   },
-  "main": "index.js",
+  "main": "dist/src/index.js",
+  "types": "dist/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "default": "./dist/src/index.js"
+    }
+  },
   "files": [
     "dist",
     "README.md",
@@ -55,7 +62,6 @@
   },
   "dependencies": {
     "@rdfjs/types": "^2.0.1",
-    "@solid/object": "^0.6.0",
     "content-type": "^1.0.5",
     "jsonld-streaming-parser": "^5.0.0",
     "n3": "^2.0.3"
@@ -63,6 +69,8 @@
   "devDependencies": {
     "@biomejs/biome": "^2.0.0",
     "@jeswr/fetch-rdf": "github:jeswr/fetch-rdf#main",
+    "@rdfjs/wrapper": "^0.34.0",
+    "@solid/object": "^0.6.0",
     "@types/content-type": "^1.1.8",
     "@types/n3": "^1.16.0",
     "@types/node": "^22.0.0",
