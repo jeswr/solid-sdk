@@ -48,6 +48,21 @@ function svgIcon(inner: string): string {
   return `<svg part="icon" class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${inner}</svg>`;
 }
 
+/**
+ * A framework-agnostic light/dark/system colour-theme switcher. Co-operative with
+ * `@jeswr/app-shell`'s React ThemeProvider (same storage key + `.dark` class).
+ * Presentation/behaviour chrome — no RDF data model.
+ *
+ * @summary Light/dark/system theme toggle button.
+ * @csspart button - The clickable toggle button.
+ * @csspart icon - The sun/moon/monitor SVG icon.
+ * @csspart label - The current-mode text label ("Light"/"Dark"/"System").
+ * @fires theme-change - The theme changed; `detail: { theme, resolvedTheme }`.
+ * @cssprop [--jeswr-accent] - Hover background (inherits app-shell `--accent`).
+ * @cssprop [--jeswr-accent-fg] - Hover foreground (inherits `--accent-foreground`).
+ * @cssprop [--jeswr-radius] - Corner radius (inherits `--radius`).
+ * @cssprop [--jeswr-ring] - Focus-ring colour (inherits `--ring`).
+ */
 export class JeswrThemeToggle extends LitElement {
   static properties = {
     theme: { type: String, reflect: true },

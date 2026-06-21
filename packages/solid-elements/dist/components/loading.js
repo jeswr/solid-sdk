@@ -6,6 +6,18 @@
 // asked to reduce motion). Presentation-only.
 import { css, html, LitElement, nothing } from "lit";
 import { tokenStyles } from "../theme-tokens.js";
+/**
+ * A spinner with an optional label, announced via `role="status"` and respecting
+ * `prefers-reduced-motion`. Presentation chrome — no RDF data model.
+ *
+ * @summary Loading spinner with optional label.
+ * @csspart status - The `role="status"` wrapper.
+ * @csspart spinner - The animated spinner.
+ * @csspart label - The optional label text.
+ * @cssprop [--jeswr-border] - Spinner track colour.
+ * @cssprop [--jeswr-primary] - Spinner active-arc colour.
+ * @cssprop [--jeswr-muted-fg] - Label colour.
+ */
 export class JeswrLoading extends LitElement {
     static properties = {
         // `reflect: true` so the @lit/react wrapper reliably forwards `label` under

@@ -18,6 +18,21 @@
 import { css, html, LitElement, nothing } from "lit";
 import { tokenStyles } from "../theme-tokens.js";
 
+/**
+ * A centred "nothing here yet" placeholder with named slots for an icon, title,
+ * description, and an action. Presentation chrome — no RDF data model.
+ *
+ * @summary Empty-state placeholder.
+ * @slot icon - An icon shown above the heading.
+ * @slot title - The heading (alternative to the `heading` attribute).
+ * @slot description - The description (alternative to the `description` attribute).
+ * @slot action - An action, e.g. a button.
+ * @csspart wrap - The centred wrapper.
+ * @csspart title - The rendered heading (when set via the `heading` attribute).
+ * @csspart description - The rendered description (when set via the attribute).
+ * @csspart action - The action slot container.
+ * @cssprop [--jeswr-muted-fg] - Icon + description colour.
+ */
 export class JeswrEmptyState extends LitElement {
   static properties = {
     // String props reflect (#122): @lit/react's createComponent forwards a

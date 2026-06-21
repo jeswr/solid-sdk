@@ -46,6 +46,33 @@ type Phase = "idle" | "submitting" | "success" | "error";
 const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
+/**
+ * The suite's shared "report issue / give feedback / request help" control. Either
+ * files the issue via an injected `submit` proxy (no GitHub account needed) or
+ * opens GitHub's prefilled new-issue page. Presentation chrome — no RDF data model.
+ *
+ * @summary Feedback dialog that files a GitHub issue.
+ * @csspart trigger - The button that opens the feedback dialog.
+ * @csspart icon - The trigger's chat-bubble icon.
+ * @csspart label - The trigger's text label.
+ * @csspart overlay - The full-screen modal overlay.
+ * @csspart backdrop - The dimmed, click-to-close backdrop.
+ * @csspart dialog - The dialog surface.
+ * @csspart title - The dialog heading.
+ * @fires feedback-submit - Submitted; `detail` is the FeedbackPayload (fires for both mechanisms).
+ * @cssprop [--jeswr-accent] - Hover background.
+ * @cssprop [--jeswr-accent-fg] - Hover foreground.
+ * @cssprop [--jeswr-bg] - Textarea background.
+ * @cssprop [--jeswr-border] - Field + card borders.
+ * @cssprop [--jeswr-destructive] - Error-message colour.
+ * @cssprop [--jeswr-fg] - Textarea text colour.
+ * @cssprop [--jeswr-muted-fg] - Diagnostics note colour.
+ * @cssprop [--jeswr-popover] - Dialog background.
+ * @cssprop [--jeswr-popover-fg] - Dialog foreground.
+ * @cssprop [--jeswr-primary] - Issue-link colour.
+ * @cssprop [--jeswr-radius] - Corner radius.
+ * @cssprop [--jeswr-ring] - Focus-ring + selected-category colour.
+ */
 export class JeswrFeedbackButton extends LitElement {
   static properties = {
     // String props reflect (#122): @lit/react's createComponent forwards a

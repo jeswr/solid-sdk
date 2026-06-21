@@ -19,6 +19,30 @@ import { tokenStyles } from "../theme-tokens.js";
 export function initials(name) {
     return initialsFromName(name);
 }
+/**
+ * The top-right account control: avatar + display name, opening a dropdown with
+ * the WebID and a Sign out action. Decoupled via attributes; presentation chrome.
+ * No RDF data model (the host supplies `webid`/`name`/`avatar-url`).
+ *
+ * @summary Account avatar + dropdown with WebID and sign-out.
+ * @slot - Extra menu items injected above "Sign out".
+ * @csspart trigger - The avatar+name button that opens the menu.
+ * @csspart avatar - The circular avatar (image or initials).
+ * @csspart trigger-name - The name shown next to the avatar in the trigger.
+ * @csspart menu - The dropdown menu container.
+ * @csspart identity - The name+WebID block at the top of the menu.
+ * @csspart webid - The WebID line in the identity block.
+ * @csspart sign-out - The "Sign out" menu item button.
+ * @fires sign-out - The user activated "Sign out" (no detail); host tears down the session.
+ * @cssprop [--jeswr-accent] - Hover background.
+ * @cssprop [--jeswr-accent-fg] - Hover/avatar foreground.
+ * @cssprop [--jeswr-border] - Menu + separator border colour.
+ * @cssprop [--jeswr-muted-fg] - WebID line colour.
+ * @cssprop [--jeswr-popover] - Menu background.
+ * @cssprop [--jeswr-popover-fg] - Menu foreground.
+ * @cssprop [--jeswr-radius] - Corner radius.
+ * @cssprop [--jeswr-ring] - Focus-ring colour.
+ */
 export class JeswrAccountMenu extends LitElement {
     static properties = {
         // String props reflect (#122): @lit/react's createComponent forwards a

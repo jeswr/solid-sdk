@@ -16,6 +16,23 @@
 import { css, html, LitElement, nothing } from "lit";
 import { tokenStyles } from "../theme-tokens.js";
 
+/**
+ * The error sibling of `<jeswr-empty-state>`: same named slots, styled with the
+ * destructive token and `role="alert"`. Presentation chrome — no RDF data model.
+ *
+ * @summary Error-state placeholder with `role="alert"`.
+ * @slot icon - Override the default alert icon.
+ * @slot title - The heading (alternative to the `heading` attribute).
+ * @slot description - The description (alternative to the `description` attribute).
+ * @slot action - An action, e.g. a "Retry" button.
+ * @csspart wrap - The centred wrapper (carries `role="alert"`).
+ * @csspart icon - The default alert icon (when no `icon` slot content is supplied).
+ * @csspart title - The rendered heading (when set via the `heading` attribute).
+ * @csspart description - The rendered description (when set via the attribute).
+ * @csspart action - The action slot container.
+ * @cssprop [--jeswr-destructive] - Icon + heading colour.
+ * @cssprop [--jeswr-muted-fg] - Description colour.
+ */
 export class JeswrErrorState extends LitElement {
   static properties = {
     // String props reflect (#122): @lit/react's createComponent forwards a

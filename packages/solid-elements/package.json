@@ -5,6 +5,7 @@
   "author": "Claude Opus 4.8 (@jeswr PSS agent)",
   "license": "MIT",
   "type": "module",
+  "customElements": "custom-elements.json",
   "sideEffects": [
     "./dist/index.js",
     "./dist/components/*.js"
@@ -26,6 +27,7 @@
   "files": [
     "dist",
     "src",
+    "custom-elements.json",
     "README.md",
     "LICENSE"
   ],
@@ -34,10 +36,12 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "lint": "biome check src test scripts",
+    "lint": "biome check src test scripts && npm run check:manifest",
     "lint:fix": "biome check --write src test scripts",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "vitest run && npm run check:manifest",
+    "manifest": "cem analyze",
+    "check:manifest": "node scripts/check-manifest.mjs",
     "check:dist": "node scripts/check-dist.mjs",
     "api:report": "node scripts/api-report.mjs --local",
     "api:check": "node scripts/api-report.mjs",
@@ -89,6 +93,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.0",
+    "@custom-elements-manifest/analyzer": "^0.11.0",
     "@jeswr/fetch-rdf": "^0.1.0",
     "@jeswr/solid-session-restore": "github:jeswr/solid-session-restore#main",
     "@solid/object": "^0.6.0",

@@ -80,7 +80,7 @@ export function initialsOf(value: string): string;
 // @public
 export function isValidRepo(repo: string): boolean;
 
-// @public (undocumented)
+// @public
 export class JeswrAccountMenu extends LitElement {
     constructor();
     avatarUrl: string | null;
@@ -114,7 +114,7 @@ export class JeswrAccountMenu extends LitElement {
     webId: string | null;
 }
 
-// @public (undocumented)
+// @public
 export class JeswrEmptyState extends LitElement {
     constructor();
     description: string | null;
@@ -136,7 +136,7 @@ export class JeswrEmptyState extends LitElement {
     static styles: CSSResult[];
 }
 
-// @public (undocumented)
+// @public
 export class JeswrErrorState extends LitElement {
     constructor();
     description: string | null;
@@ -158,7 +158,7 @@ export class JeswrErrorState extends LitElement {
     static styles: CSSResult[];
 }
 
-// @public (undocumented)
+// @public
 export class JeswrFeedbackButton extends LitElement {
     constructor();
     appName: string;
@@ -227,7 +227,7 @@ export class JeswrFeedbackButton extends LitElement {
     webId: string | null;
 }
 
-// @public (undocumented)
+// @public
 export class JeswrLoading extends LitElement {
     constructor();
     label: string | null;
@@ -244,7 +244,7 @@ export class JeswrLoading extends LitElement {
     static styles: CSSResult[];
 }
 
-// @public (undocumented)
+// @public
 export class JeswrLoginPanel extends LitElement {
     constructor();
     autoRestore: boolean;
@@ -299,7 +299,7 @@ export class JeswrLoginPanel extends LitElement {
     protected willUpdate(changed: Map<PropertyKey, unknown>): void;
 }
 
-// @public (undocumented)
+// @public
 export class JeswrSavingIndicator extends LitElement {
     constructor();
     // (undocumented)
@@ -337,7 +337,7 @@ export class JeswrSavingIndicator extends LitElement {
     static styles: CSSResult[];
 }
 
-// @public (undocumented)
+// @public
 export class JeswrThemeToggle extends LitElement {
     constructor();
     // (undocumented)
