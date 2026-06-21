@@ -44,6 +44,17 @@ const MUST_BE_INLINED = [
   "leaflet",
   "@ro-kit/ui-widgets",
   "uuid",
+  // The Phase-1 data-model bindings — off-npm @jeswr packages + @solid/object —
+  // must ALSO be inlined so a `github:jeswr/solid-components#main` install loads with
+  // NO data-model dep installed (they are devDeps, bundled into dist, not declared
+  // runtime deps a consumer resolves).
+  "@jeswr/solid-task-model",
+  "@jeswr/solid-task-model/task",
+  "@jeswr/solid-task-model/contacts",
+  "@jeswr/solid-bookmark",
+  "@solid/object",
+  "@solid/object/webid",
+  "@rdfjs/wrapper",
 ];
 
 /**
@@ -123,11 +134,30 @@ describe("§8 packaged-dist load smoke test", () => {
     expect(typeof mod.JeswrShaclView).toBe("function");
     expect(typeof mod.NotFoundError).toBe("function");
     expect(typeof mod.resolveGraphToTurtle).toBe("function");
+    // The Phase-1 per-class elements + the composer + the resolver are all present.
+    expect(typeof mod.JeswrTaskList).toBe("function");
+    expect(typeof mod.JeswrContactList).toBe("function");
+    expect(typeof mod.JeswrProfileCard).toBe("function");
+    expect(typeof mod.JeswrBookmarkList).toBe("function");
+    expect(typeof mod.JeswrCollection).toBe("function");
+    expect(typeof mod.SolidView).toBe("function");
+    expect(typeof mod.resolveComponent).toBe("function");
+    expect(Array.isArray(mod.RESOLVER_ENTRIES)).toBe(true);
   });
 
-  it("the dist registers the custom element + DataController works end-to-end", async () => {
+  it("the dist registers EVERY custom element + DataController works end-to-end", async () => {
     await import(distIndexUrl);
-    expect(customElements.get("jeswr-shacl-view")).toBeDefined();
+    for (const tag of [
+      "jeswr-shacl-view",
+      "jeswr-task-list",
+      "jeswr-contact-list",
+      "jeswr-profile-card",
+      "jeswr-bookmark-list",
+      "jeswr-collection",
+      "solid-view",
+    ]) {
+      expect(customElements.get(tag), `${tag} must be registered by the dist`).toBeDefined();
+    }
 
     const { DataController } = await import(distIndexUrl);
     const fetchStub = async () =>

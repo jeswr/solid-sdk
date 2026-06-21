@@ -12,9 +12,24 @@ It **complements** [`@jeswr/solid-elements`](https://github.com/jeswr/solid-elem
 (the chrome + auth web components). `solid-elements` owns login + theme + account
 chrome; `solid-components` owns the **data** surface (read controller + SHACL view).
 
-## Phase 1 — the foundation (this release)
+## Phase 1 — read components + binding + CEM (this release)
 
-Two pieces, both READ-ONLY. The write path + an editable form are Phase 2.
+Everything here is **READ-ONLY**. The write path + an editable form are Phase 2.
+
+This release adds, on top of the foundation (`DataController` + `<jeswr-shacl-view>`):
+
+- **Per-class read elements**, each binding a data model through the `DataController`
+  and the model's typed accessors: `<jeswr-task-list>` (`wf:Task`),
+  `<jeswr-contact-list>` (`vcard:Individual`), `<jeswr-profile-card>` (a WebID profile,
+  via `@solid/object`'s `Agent`), `<jeswr-bookmark-list>` (`book:Bookmark`), and
+  `<jeswr-collection>` (a generic LDP container listing + a type-index labelling seam).
+- **`<solid-view>`** — the composition element: point it at a resource, it reads the
+  `rdf:type`, resolves the matching element, and mounts it.
+- **`resolveComponent` + a committed static resolver map** (`targetClass → element`),
+  consistent with the generated Custom Elements Manifest.
+- **The Custom Elements Manifest pipeline** (`custom-elements.json` + a `check:manifest`
+  gate), reused from `@jeswr/solid-elements` Phase 0, with the suite `@solid-*` JSDoc
+  binding tags on each element so the manifest is an accurate codegen contract.
 
 ### 1. `DataController` — the injectable read seam
 
@@ -152,6 +167,94 @@ un-guarded fetch leaves the wrapper for a remote source, and — calling shacl-f
 raw input but **zero** fetches after neutralisation, plus that an empty shapes
 graph fails closed.
 
+### 3. Per-class read elements
+
+Each element is driven by a `src` URL + the injectable fetch seam (or a pre-parsed
+`store` for the no-network / codegen / test path), reads through the `DataController`,
+and renders the model's **typed accessors**. The only direct quad read in any of them
+is the `rdf:type` subject scan (which subjects are of the bound class) — every field is
+read through the data model's wrapper; no triple is ever hand-built.
+
+```ts
+import "@jeswr/solid-components"; // registers all elements
+
+const tasks = document.createElement("jeswr-task-list");
+tasks.fetch = session.fetch;
+tasks.src = "https://alice.example/tasks/";   // lists every wf:Task in the graph
+document.body.append(tasks);
+
+// …or render a graph you already hold, with no fetch:
+const card = document.createElement("jeswr-profile-card");
+card.src = "https://alice.example/profile/card#me";
+card.store = alreadyParsedStore;              // the codegen/test seam
+```
+
+| Element | Binds | Model | Renders |
+|---|---|---|---|
+| `<jeswr-task-list>` | `wf:Task` | `@jeswr/solid-task-model` `Task` | title, open/closed state, assignee, priority, due date |
+| `<jeswr-contact-list>` | `vcard:Individual` | `@jeswr/solid-task-model/contacts` `Contact` | name, org, emails (`mailto:`), phones (`tel:`), WebID, note |
+| `<jeswr-profile-card>` | a WebID profile | `@solid/object` `Agent` | name, photo, org/role, homepage, WebID, OIDC issuer (one, not a list) |
+| `<jeswr-bookmark-list>` | `book:Bookmark` | `@jeswr/solid-bookmark` `Bookmark` | title→url link, description, tags, archived |
+| `<jeswr-collection>` | `ldp:Container` | `DataController.listContainer` | the `ldp:contains` children (+ a type-index label seam) |
+
+Each element renders into the **light DOM** (so an app can `::part`-style its output)
+and exposes `idle` / `loading` / `ready` / `error` slots + parts. Untrusted literals
+reach the DOM only through escaped Lit text interpolation; every IRI bound to an `href`
+/ `src` is http(s)-filtered (a `javascript:`/`data:` url is dropped or rendered as
+text). The bookmark list drops a bookmark whose `schema:url` is not http(s) (matching
+the model's `parseBookmark`); the profile card reads `@solid/object`'s `Agent`
+accessors defensively (a single malformed field never aborts the card — the suite's
+"drop the field, never abort" rule, with a tolerant graph fallback for fields whose
+predicate/term-type the Agent's pinned accessor does not match).
+
+> `<jeswr-message-list>` (`@jeswr/solid-chat-interop`) is **deferred**: that package
+> ships no SHACL shape yet, so it is a separate bead — see *Out of scope*.
+
+### 4. `<solid-view>` — the composition element + `resolveComponent`
+
+Point `<solid-view>` at a resource and it picks the right element for you: it reads the
+resource's `rdf:type` (`collectTypes` — a direct `rdf:type` scan), consults the
+committed `resolveComponent` static map, lazy-imports + mounts the matching element, and
+forwards the fetch seam + `src`. An untyped LDP container falls back to
+`<jeswr-collection>`; an unbound type shows a neutral "no typed view" state.
+
+```ts
+import "@jeswr/solid-components";
+
+const v = document.createElement("solid-view");
+v.fetch = session.fetch;
+v.src = "https://alice.example/contacts/";   // probes rdf:type → mounts <jeswr-contact-list>
+document.body.append(v);
+
+// Pinned class IRI skips the network probe (the "I already know the class" path):
+v.classIri = "http://www.w3.org/2005/01/wf/flow#Task";
+```
+
+The **selection logic is extracted from Pod-Manager's** `selectTypedViewer`
+(`src/lib/typed-views/select.ts`), thinned over a static map: among the entries whose
+`targetClass` is in the resource's type set, take the highest `priority`; ties break by
+earliest registration; no match ⇒ `undefined` (the caller falls back). `<solid-view>`
+is a thin driver over this one resolver — it does **not** stand up a parallel
+typed-views registry.
+
+`resolveComponent(types, { mode })` and `resolveComponentForClass(classIri, { mode })`
+are exported for direct use (codegen). `RESOLVER_ENTRIES` is the committed
+`{ targetClass, tagName, importSpec, mode, priority }` map — the **runtime source of
+truth** (zero network). The optional `solidcomp:` RDF projection of the map is deferred.
+
+### 5. The Custom Elements Manifest — the codegen contract
+
+`custom-elements.json` is **committed** (like `dist/`) so an LLM codegen tool can read
+the element ↔ RDF-class binding straight from a GitHub install with no build step. It is
+generated by `@custom-elements-manifest/analyzer` with the **reused** `@jeswr/solid-elements`
+Phase-0 `solidBindingPlugin` (no divergent CEM setup): the plugin lifts the suite
+`@solid-class` / `@solid-mode` / `@solid-cardinality` JSDoc tags off each element into a
+`solid` block, strips Lit `state: true` internal props, and excludes `export type`
+re-exports from the `kind: js` export list. A `check:manifest` gate (mirroring
+`check:dist`) fails if the committed manifest drifts from a fresh run, and a test asserts
+the manifest's `@solid-class` edges agree with `RESOLVER_ENTRIES` and that every
+`kind: js` export is a real `dist` runtime export.
+
 ## Installation — GitHub-installable now (buildless, `ignore-scripts=true`)
 
 ```sh
@@ -160,12 +263,15 @@ npm install github:jeswr/solid-components#main
 
 The committed `dist/` is **self-contained**: `@ulb-darmstadt/shacl-form` + `n3` +
 `shacl-engine` (+ shacl-form's required peers `@ro-kit/ui-widgets`, `uuid`) + the
-canonical `@jeswr/fetch-rdf` parser + `lit` are **esbuild-inlined** into it, so the
-package imports with no build step under the suite's `ignore-scripts=true` invariant.
+canonical `@jeswr/fetch-rdf` parser + `lit` + the data-model bindings
+(`@jeswr/solid-task-model`, `@jeswr/solid-bookmark`, `@solid/object`, `@rdfjs/wrapper`)
+are **esbuild-inlined** into it, so the package imports with no build step under the
+suite's `ignore-scripts=true` invariant — a consumer installs NO data-model dep by hand.
 The optional shacl-form widget peers (`jsonld`, `rdfxml-streaming-parser`, `leaflet`)
 are deliberately **stubbed out** of the base — the view always passes inline Turtle,
 so their code paths are unreachable. `@jeswr/guarded-fetch` is an optional peer loaded
-by dynamic import only for a `remote` source.
+by dynamic import only for a `remote` source. A `packaged-dist` smoke test proves the
+committed artifact imports + registers every element with only those allowed externals.
 
 npm publish is a deferred migration; consume via the GitHub install for now.
 
@@ -199,34 +305,65 @@ export const VALUES_SUBJECT_SENTINEL: string                          // for an 
 
 // Serialiser (n3.Writer-based)
 export function serializeTurtle(quads): Promise<string>
+
+// Per-class read elements (light-DOM Lit; src | store + the fetch seam)
+export class JeswrTaskList     extends LitElement // <jeswr-task-list>     wf:Task
+export class JeswrContactList  extends LitElement // <jeswr-contact-list>  vcard:Individual
+export class JeswrProfileCard  extends LitElement // <jeswr-profile-card>  a WebID profile
+export class JeswrBookmarkList extends LitElement // <jeswr-bookmark-list> book:Bookmark
+export class JeswrCollection   extends LitElement // <jeswr-collection>    ldp:Container (+ typeIndex seam)
+export interface TypeIndexEntry { class; instanceContainer }
+export class AbstractReadElement extends LitElement // the shared read-element base
+export function safeHref / safeMailto / safeTel / stripScheme / formatDate // DOM-boundary helpers
+
+// Composition + resolver
+export class SolidView extends LitElement // <solid-view> (src | class-iri + the seam)
+export const RESOLVER_ENTRIES: readonly ComponentEntry[] // the committed static map
+export interface ComponentEntry { targetClass; tagName; importSpec; mode; priority }
+export type ComponentMode = "view" | "edit"
+export function resolveComponent(types, { mode? }): ComponentEntry | undefined
+export function resolveComponentForClass(classIri, { mode? }): ComponentEntry | undefined
+export function collectTypes(dataset, subject?): Set<string> // the rdf:type scan
+// The bound class IRIs (resolver-map keys):
+export const TASK_CLASS / VCARD_INDIVIDUAL / VCARD_ADDRESS_BOOK / BOOKMARK_CLASS / LDP_CONTAINER / …
 ```
 
-A `./react` subexport is a **Phase-1 placeholder** that re-exports the element class
-+ the `DataController` (both usable from React today); typed `@lit/react` wrappers
-land alongside the first per-class components in a later phase.
+A `./react` subexport currently re-exports the element classes + the `DataController`
+(all usable from React today via a ref / `createComponent`); the auto-generated
+`@lit/react` wrappers are a follow-up.
 
 ## Development
 
 ```sh
-npm run lint        # Biome
-npm run typecheck   # tsc --noEmit
-npm test            # vitest (incl. the packaged-dist smoke test + the §9 no-url test)
-npm run build       # esbuild bundle + inline → dist/, tsc → .d.ts
-npm run check:dist  # fails if committed dist/ drifts from a fresh build
-npm run gate        # all of the above
+npm run lint           # Biome
+npm run typecheck      # tsc --noEmit
+npm test               # vitest (incl. the packaged-dist smoke + CEM-accuracy + §9 tests)
+npm run build          # esbuild bundle + inline → dist/, tsc → .d.ts
+npm run check:dist     # fails if committed dist/ drifts from a fresh build
+npm run manifest       # regenerate custom-elements.json
+npm run check:manifest # fails if the committed manifest drifts from a fresh run
+npm run gate           # all of the above
 ```
 
-`dist/` is **committed** (not gitignored) — the GitHub-installable contract. Rebuild
-+ commit `dist/` alongside any `src/` change; `check:dist` guards the drift.
+`dist/` **and** `custom-elements.json` are **committed** (not gitignored) — the
+GitHub-installable + codegen-contract artifacts. Rebuild + regenerate + commit both
+alongside any `src/` change; `check:dist` / `check:manifest` guard the drift.
 
-## Out of scope (Phase 1)
+## Out of scope (this phase)
 
-Explicitly **not** in this foundation (deferred to later phases):
+Explicitly **not** in this release (deferred to later phases / separate beads):
 
-- The Custom Elements Manifest / analyzer plugin — reused from the in-flight
-  `@jeswr/solid-elements` Phase 0, not re-set-up here (no divergent CEM).
-- The **write path** / editable SHACL form (Phase 2).
-- Per-class components beyond the one read-only view above.
+- The **write path** / editable SHACL form + edit-mode elements (Phase 2 — the resolver
+  map already carries a `mode` field, currently `view`-only).
+- **`<jeswr-message-list>` (`@jeswr/solid-chat-interop`)** — `@jeswr/solid-chat-interop`
+  ships no SHACL shape yet, so the message element is a **separate bead** (skipped this
+  round). Add it once the chat interop shape lands.
+- **`create-solid-app` integration** — wiring these elements into the scaffolder's
+  template is a follow-up.
+- **Auto-generated `@lit/react` wrappers** from the CEM (the `./react` subexport
+  currently re-exports the element classes for manual `createComponent`).
+- The **`solidcomp:` RDF projection** of the resolver map (the committed static map is
+  the runtime source of truth; the RDF projection is optional/deferred).
 
 ## Follow-ups / notes
 
@@ -250,6 +387,17 @@ Explicitly **not** in this foundation (deferred to later phases):
   auto-import should be gated behind `loadOwlImports` (or its own opt-in flag) and
   should not run against an untrusted data graph by default. **A real upstream gap
   to file** against `@ulb-darmstadt/shacl-form`.
+
+- **UPSTREAM (`@solid/object`): `Agent` accessors pin a fixed term type + predicate.**
+  `Agent.organization` / `role` / `title` read their `vcard:*` predicate as a
+  **NamedNode** and throw `TermTypeError` when a pod stores the value as a **string
+  literal** (a common, valid shape); `photoUrl` reads ONLY `vcard:hasPhoto` (not
+  `foaf:img` / `foaf:depiction` / `schema:image`), and `website`/`homepage` read a
+  **literal** where many pods store an IRI. `<jeswr-profile-card>` works around this with
+  a `tryRead` guard (drop the field, don't abort) + a tolerant graph fallback that
+  accepts either a literal or a NamedNode across the common image/homepage/name/org
+  predicates. The durable fix is upstream: the `Agent` accessors should tolerate either
+  term type and cover the common predicate synonyms. **A candidate `@solid/object` PR.**
 
 - **`@jeswr/fetch-rdf`'s JSON-LD parse path is not SSRF-safe.** `parseRdf` builds
   `jsonld-streaming-parser` with no `documentLoader`, so a remote `@context` IRI in

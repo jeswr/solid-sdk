@@ -22,11 +22,38 @@
 // (jsonld / rdfxml-streaming-parser / leaflet) are NOT bundled; @jeswr/guarded-
 // fetch is loaded by dynamic import only for a user-configured remote source.
 
-// Side-effect import: register the custom element.
+// Side-effect imports: register the custom elements. Importing the package root
+// registers EVERY element (each module self-`customElements.define`s), so a consumer
+// `import "@jeswr/solid-components"` gets <jeswr-shacl-view>, the per-class read
+// elements, and the <solid-view> composer all defined.
 import "./components/shacl-view.js";
+import "./components/task-list.js";
+import "./components/contact-list.js";
+import "./components/profile-card.js";
+import "./components/bookmark-list.js";
+import "./components/collection.js";
+import "./components/solid-view.js";
 
+export { JeswrBookmarkList } from "./components/bookmark-list.js";
+export { JeswrCollection, type TypeIndexEntry } from "./components/collection.js";
+export { JeswrContactList } from "./components/contact-list.js";
+export { JeswrProfileCard } from "./components/profile-card.js";
 // The read-only SHACL view element + its source/seam types.
 export { JeswrShaclView } from "./components/shacl-view.js";
+// The shared read-element base + DOM-boundary helpers (for custom elements).
+export {
+  AbstractReadElement,
+  formatDate,
+  type ReadStatus,
+  safeHref,
+  safeMailto,
+  safeTel,
+  stripScheme,
+} from "./components/shared.js";
+// The composition element.
+export { SolidView } from "./components/solid-view.js";
+// The per-class read elements.
+export { JeswrTaskList } from "./components/task-list.js";
 // The read-path controller + its seam/result types.
 export {
   type ContainerChild,
@@ -46,6 +73,17 @@ export {
   NetworkError,
   NotFoundError,
 } from "./errors.js";
+// The component resolver: the committed static map + the selection function.
+export {
+  type ComponentEntry,
+  type ComponentMode,
+  collectTypes,
+  RESOLVER_ENTRIES,
+  type ResolveComponentOptions,
+  resolveComponent,
+  resolveComponentForClass,
+  type TypeScanDataset,
+} from "./resolver.js";
 // The Turtle serialiser helper (n3.Writer-based; never hand-built triples).
 export { serializeTurtle } from "./serialize.js";
 export {
@@ -57,3 +95,13 @@ export {
   resolveGraphToTurtle,
   VALUES_SUBJECT_SENTINEL,
 } from "./shacl-view-fetch.js";
+// The RDF class IRIs the components bind to (the resolver-map keys).
+export {
+  BOOKMARK_CLASS,
+  LDP_BASIC_CONTAINER,
+  LDP_CONTAINER,
+  RDF_TYPE,
+  TASK_CLASS,
+  VCARD_ADDRESS_BOOK,
+  VCARD_INDIVIDUAL,
+} from "./vocab.js";

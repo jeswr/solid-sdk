@@ -118,9 +118,14 @@ async function main(buildDir = outdir) {
     sourcemap: false,
     legalComments: "none",
     logLevel: "warning",
-    // Deterministic chunk names so the committed dist/ is stable across rebuilds
-    // (no content-hash in the chunk filename → check-dist-fresh stays meaningful).
-    chunkNames: "chunks/[name]",
+    // Chunk names: `[name]-[hash]`. The bundled graph now produces MORE THAN ONE
+    // shared chunk (the inlined RDF stack + the @jeswr data models), and a bare
+    // `[name]` collides ("Two output files share the same path"). esbuild's `[hash]`
+    // is CONTENT-derived, so it is still DETERMINISTIC across rebuilds for identical
+    // input — check-dist-fresh stays meaningful (a changed chunk changes its hash →
+    // a new committed filename → drift is caught), while distinct chunks no longer
+    // collide.
+    chunkNames: "chunks/[name]-[hash]",
   });
 
   // Emit the .d.ts declarations (declaration-only — esbuild already wrote the JS).
