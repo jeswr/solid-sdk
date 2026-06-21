@@ -28,10 +28,35 @@
 // app-shell's own suite tests the cascade math. The real-browser render is verified
 // at runtime in the rollout.)
 import { AccountMenu, FeedbackButton, ThemeProvider, ThemeToggle } from "@jeswr/app-shell";
-import { fireEvent, render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { afterEach, beforeAll, describe, expect, it } from "vitest";
+
+afterEach(cleanup);
 
 describe("app-shell CSS isolation survives pod-chat's bare button {} (#80)", () => {
+  // STALE-INSTALL GUARD. The `data-app-shell-control` contract is satisfied by the
+  // @jeswr/app-shell build pinned in package.json (5a7484d ships the unlayered reset
+  // primitive that stamps the attribute). A LOCAL node_modules holding an OLDER
+  // app-shell build than the lockfile resolves (a build-skew stale install) renders the
+  // controls WITHOUT the attribute, making every assertion below fail with a cryptic
+  // `received: null`. Probe the installed build once and, if the hook is absent, fail
+  // with the actionable cause instead — a clean reinstall fixes it. (`npm ci` rebuilds
+  // the git dep from the pinned SHA; CI is always clean, so this only bites stale local
+  // checkouts.) This does NOT replace the contract assertions below — it disambiguates a
+  // stale-install failure from a genuine app-shell isolation regression.
+  beforeAll(() => {
+    const { container } = render(<FeedbackButton repo="jeswr/pod-chat" appName="Pod Chat" />);
+    const probe = container.querySelector("button");
+    if (probe && !probe.hasAttribute("data-app-shell-control")) {
+      throw new Error(
+        "Installed @jeswr/app-shell build does NOT emit data-app-shell-control — " +
+          "this is a STALE/build-skew node_modules, not a CSS-isolation regression. " +
+          "Run `npm ci` to rebuild the git dep from the pinned SHA, then re-run.",
+      );
+    }
+    cleanup();
+  });
+
   it("every header control App renders is isolation-tagged", () => {
     // Render the SAME app-shell header trio App.tsx mounts (FeedbackButton +
     // ThemeToggle + AccountMenu), so the guard covers ALL the chrome the bare

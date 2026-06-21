@@ -979,8 +979,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         readProfileAndDerive: async (webId) => deriveSession(await readProfile(webId)),
         armBoundary: armProactiveBoundary,
         persistSession: (issuer, webId, expectGeneration) =>
-          providerRef.current?.persistSession(issuer, webId, expectGeneration) ??
-          Promise.resolve(),
+          providerRef.current?.persistSession(issuer, webId, expectGeneration) ?? Promise.resolve(),
         writePointer: (webId, issuerHref) => rememberedAccount.write(webId, issuerHref),
         publish: (webId, derived) => {
           setWebId(webId);

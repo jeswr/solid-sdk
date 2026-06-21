@@ -272,10 +272,7 @@ describe("buildClientAuth — FAIL-CLOSED on unsupported / missing-secret (weakn
       ),
     ).toThrow(/Unsupported token_endpoint_auth_method/);
     expect(() =>
-      buildClientAuth(
-        "https://issuer.example",
-        client({ token_endpoint_auth_method: null }),
-      ),
+      buildClientAuth("https://issuer.example", client({ token_endpoint_auth_method: null })),
     ).toThrow(/Unsupported token_endpoint_auth_method/);
   });
 
