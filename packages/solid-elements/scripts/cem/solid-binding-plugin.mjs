@@ -27,6 +27,21 @@
 // and strip them in the link phase, so the manifest advertises only the real
 // public surface. (Manifest accuracy only — no runtime is touched.)
 //
+// IT ALSO drops TYPE-ONLY re-exports from a module's `exports` list. The barrel
+// (`src/index.ts`) re-exports interfaces / type aliases with TypeScript's inline
+// `export { type LoginDetail }` (or a whole `export type { … }`) form. These have
+// NO runtime existence — `tsc` erases them, so they are ABSENT from the emitted
+// `dist/*.js` — yet the core analyzer emits each as a `"kind": "js"` export,
+// indistinguishable from a real value export. A codegen tool reading the manifest
+// would then emit an invalid VALUE import (`import { LoginDetail } from …`) for a
+// type-only symbol (roborev Medium). We read the SAME `isTypeOnly` flags the TS
+// compiler uses to erase them (`ExportDeclaration.isTypeOnly` for
+// `export type { … }`, and each `ExportSpecifier.isTypeOnly` for the inline
+// `export { type X }` form), collect those names during analysis, and strip the
+// matching `kind: js` exports in the link phase — so a symbol survives as
+// `kind: js` ONLY when it is a real runtime export in `dist/`. (Manifest accuracy
+// only — no runtime is touched.)
+//
 // HOW IT HOOKS IN: the analyzer's core FEATURES + framework plugins create the
 // classDoc during the ANALYZE phase BEFORE any user plugin runs (create.js merges
 // `[...FEATURES, ...frameworkPlugins, ...userPlugins]`), so by the time THIS
@@ -187,6 +202,37 @@ function stripStateFromDeclaration(decl, stateNames) {
 }
 
 /**
+ * Collect the LOCAL exported names that an `export … from "…"` / `export { … }`
+ * declaration introduces as TYPE-ONLY (so they are erased by `tsc` and absent
+ * from the emitted JS). Two shapes are recognised, exactly as the compiler does:
+ *   - a whole type-only declaration: `export type { A, B } from "…"` /
+ *     `export type { A }` — `node.isTypeOnly === true`, so EVERY specifier is
+ *     type-only; and
+ *   - an inline type-only specifier inside a value declaration:
+ *     `export { value, type A } from "…"` — `specifier.isTypeOnly === true`.
+ * The local exported name is the specifier's `name` (the alias after `as`, or the
+ * sole identifier), which is what lands in `moduleDoc.exports[].name`.
+ *
+ * @param {import('typescript')} ts
+ * @param {any} node an ExportDeclaration AST node
+ * @returns {string[]} the type-only export names this declaration contributes
+ */
+function collectTypeOnlyExportNames(ts, node) {
+  if (!ts.isExportDeclaration(node)) return [];
+  // `export * from "…"` (no named clause) carries no individual type-only names.
+  const clause = node.exportClause;
+  if (!clause || !ts.isNamedExports(clause)) return [];
+  const declTypeOnly = node.isTypeOnly === true;
+  const names = [];
+  for (const spec of clause.elements) {
+    if (declTypeOnly || spec.isTypeOnly === true) {
+      names.push(spec.name.getText());
+    }
+  }
+  return names;
+}
+
+/**
  * The plugin. Registered AFTER the framework (lit) plugin in the analyzer config,
  * so it runs once the classDoc exists. Stable, deterministic, side-effect-free
  * apart from enriching/cleaning the classDoc it owns.
@@ -195,6 +241,11 @@ export function solidBindingPlugin() {
   // Per-module map: className → Set of `state: true` property names to strip in
   // the link phase. Keyed by module path so concurrent modules don't collide.
   const stateNamesByModule = new Map();
+
+  // Per-module Set of TYPE-ONLY exported names (erased by `tsc`, absent from the
+  // emitted JS) to strip from `moduleDoc.exports` in the link phase. Keyed by
+  // module path for the same reason.
+  const typeOnlyExportsByModule = new Map();
 
   /** Record this class's `state: true` props for the link-phase cleanup. */
   const recordStateNames = (ts, node, moduleDoc, className) => {
@@ -208,10 +259,26 @@ export function solidBindingPlugin() {
     perModule.set(className, stateNames);
   };
 
+  /** Record this declaration's type-only export names for the link-phase cleanup. */
+  const recordTypeOnlyExports = (ts, node, moduleDoc) => {
+    const names = collectTypeOnlyExportNames(ts, node);
+    if (names.length === 0) return;
+    let set = typeOnlyExportsByModule.get(moduleDoc.path);
+    if (!set) {
+      set = new Set();
+      typeOnlyExportsByModule.set(moduleDoc.path, set);
+    }
+    for (const name of names) set.add(name);
+  };
+
   return {
     name: "jeswr-solid-binding",
 
     analyzePhase({ ts, node, moduleDoc }) {
+      // Type-only re-exports never reach `dist/*.js` — record them for the link
+      // phase so they are not advertised as runtime (`kind: js`) exports.
+      recordTypeOnlyExports(ts, node, moduleDoc);
+
       // Only class declarations/expressions carry element bindings.
       if (!ts.isClassDeclaration(node) && !ts.isClassExpression(node)) return;
       const className = node.name?.getText() ?? "";
@@ -230,6 +297,16 @@ export function solidBindingPlugin() {
     },
 
     moduleLinkPhase({ moduleDoc }) {
+      // Strip type-only re-exports from the runtime (`kind: js`) export list, so
+      // the manifest advertises a symbol as `kind: js` ONLY when it is a real
+      // runtime export in `dist/`.
+      const typeOnly = typeOnlyExportsByModule.get(moduleDoc.path);
+      if (typeOnly && typeOnly.size > 0 && Array.isArray(moduleDoc.exports)) {
+        moduleDoc.exports = moduleDoc.exports.filter(
+          (e) => !(e.kind === "js" && typeOnly.has(e.name)),
+        );
+      }
+
       const perModule = stateNamesByModule.get(moduleDoc.path);
       if (!perModule) return;
       for (const decl of moduleDoc.declarations ?? []) {

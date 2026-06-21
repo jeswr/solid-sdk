@@ -1766,33 +1766,9 @@
         },
         {
           "kind": "js",
-          "name": "LoginDetail",
-          "declaration": {
-            "name": "LoginDetail",
-            "module": "./components/login-panel.js"
-          }
-        },
-        {
-          "kind": "js",
-          "name": "SessionChangeDetail",
-          "declaration": {
-            "name": "SessionChangeDetail",
-            "module": "./components/login-panel.js"
-          }
-        },
-        {
-          "kind": "js",
           "name": "JeswrSavingIndicator",
           "declaration": {
             "name": "JeswrSavingIndicator",
-            "module": "./components/saving-indicator.js"
-          }
-        },
-        {
-          "kind": "js",
-          "name": "SavingState",
-          "declaration": {
-            "name": "SavingState",
             "module": "./components/saving-indicator.js"
           }
         },
@@ -1838,38 +1814,6 @@
         },
         {
           "kind": "js",
-          "name": "FeedbackCategory",
-          "declaration": {
-            "name": "FeedbackCategory",
-            "module": "./feedback-core.js"
-          }
-        },
-        {
-          "kind": "js",
-          "name": "FeedbackDiagnostics",
-          "declaration": {
-            "name": "FeedbackDiagnostics",
-            "module": "./feedback-core.js"
-          }
-        },
-        {
-          "kind": "js",
-          "name": "FeedbackPayload",
-          "declaration": {
-            "name": "FeedbackPayload",
-            "module": "./feedback-core.js"
-          }
-        },
-        {
-          "kind": "js",
-          "name": "FeedbackSubmitResult",
-          "declaration": {
-            "name": "FeedbackSubmitResult",
-            "module": "./feedback-core.js"
-          }
-        },
-        {
-          "kind": "js",
           "name": "feedbackLabels",
           "declaration": {
             "name": "feedbackLabels",
@@ -1882,38 +1826,6 @@
           "declaration": {
             "name": "isValidRepo",
             "module": "./feedback-core.js"
-          }
-        },
-        {
-          "kind": "js",
-          "name": "LoginController",
-          "declaration": {
-            "name": "LoginController",
-            "module": "./login-controller.js"
-          }
-        },
-        {
-          "kind": "js",
-          "name": "LoginResult",
-          "declaration": {
-            "name": "LoginResult",
-            "module": "./login-controller.js"
-          }
-        },
-        {
-          "kind": "js",
-          "name": "RecentLoginAccount",
-          "declaration": {
-            "name": "RecentLoginAccount",
-            "module": "./login-controller.js"
-          }
-        },
-        {
-          "kind": "js",
-          "name": "RestoreOutcome",
-          "declaration": {
-            "name": "RestoreOutcome",
-            "module": "./login-controller.js"
           }
         },
         {
@@ -1945,14 +1857,6 @@
           "name": "persistTheme",
           "declaration": {
             "name": "persistTheme",
-            "module": "./theme-core.js"
-          }
-        },
-        {
-          "kind": "js",
-          "name": "ResolvedTheme",
-          "declaration": {
-            "name": "ResolvedTheme",
             "module": "./theme-core.js"
           }
         },
@@ -1993,14 +1897,6 @@
           "name": "THEME_STORAGE_KEY",
           "declaration": {
             "name": "THEME_STORAGE_KEY",
-            "module": "./theme-core.js"
-          }
-        },
-        {
-          "kind": "js",
-          "name": "Theme",
-          "declaration": {
-            "name": "Theme",
             "module": "./theme-core.js"
           }
         },
