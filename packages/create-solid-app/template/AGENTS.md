@@ -15,6 +15,7 @@ below are non-negotiable; the lint config and tests enforce most of them.
 | `next` | 16.x (App Router, React 19) | framework |
 | `@jeswr/app-shell` | `git+https#5a7484d` | shared suite shell — `ThemeProvider`/`ThemeToggle`/`themeScript`, `AccountMenu`, `FeedbackButton`, primitives |
 | `@jeswr/solid-elements` | `git+https#df0fbe4` | framework-agnostic W3C Web Components (Lit 3) — `<jeswr-loading>` wait-state spinner via the `./react` (@lit/react) adapter; themes from the same app-shell tokens |
+| `@jeswr/solid-components` | `git+https#5e999c0` | declarative, data-bound Solid Web Components (Lit 3) — `<solid-view>` resolve-by-type composer + per-class read elements (`<jeswr-task-list>`/`<jeswr-contact-list>`/`<jeswr-profile-card>`/`<jeswr-bookmark-list>`/`<jeswr-collection>`); injectable `.fetch`/`.publicFetch` seam. **READ-ONLY (Phase 1); edit mode is Phase 2.** |
 | `lit` / `@lit/react` | 3.x / 1.x | Lit runtime + React adapter for solid-elements (direct deps so npm hoists ONE copy; also deduped in `next.config.ts`) |
 | `@solid/reactive-authentication` | 0.1.3 | login — patches global `fetch` with DPoP tokens |
 | `@solid/object` | 0.6.0 | typed read wrappers (`WebIdDataset`, `Agent`, `ContainerDataset`, WAC/ACP) |
@@ -166,6 +167,50 @@ console.log(me?.name, [...(me?.storageUrls ?? [])]);
    `lib/solid/`**, 3. conditional `PUT`/`PATCH` with the `etag` from `fetchRdf` as `If-Match`.
    Keep the ETag from the read for safe writes. Containers list via `ContainerDataset` /
    `Container` / `Resource`; access via `AclResource`.
+
+## Declarative data-bound components (`@jeswr/solid-components`) — already wired
+
+This app is born with the suite's **declarative data layer**. Alongside the
+hand-written `lib/solid/*.ts` data functions above, you can render a pod resource
+with a **data-bound Web Component** — no hand-rolled LDP listing or RDF parsing in
+app code. `components/solid/PodDataView.tsx` is the worked example (shown on the home
+page once signed in).
+
+- **`<solid-view src>`** — the composer. Point it at a resource; it reads the
+  `rdf:type`, resolves the matching element, and mounts it (an untyped LDP container
+  falls back to `<jeswr-collection>`). This is the "render whatever is at this URL"
+  element.
+- **Per-class read elements** bind one RDF class each: `<jeswr-task-list>` (`wf:Task`),
+  `<jeswr-contact-list>` (`vcard:Individual`), `<jeswr-profile-card>` (a WebID profile),
+  `<jeswr-bookmark-list>` (`book:Bookmark`), `<jeswr-collection>` (`ldp:Container`).
+
+**How to use one (the load-bearing rules):**
+
+1. **Register them with a side-effect import in a CLIENT component:**
+   `import "@jeswr/solid-components"`. They are browser-only Lit elements
+   (`customElements.define`) — never import in a server component (breaks `next build`).
+2. **The fetch seam is an object PROPERTY, set via a ref** — not an attribute. Pass the
+   app's authenticated fetch: `registerGlobally()` has patched `globalThis.fetch`, so
+   handing the element `(...a) => fetch(...a)` gives it the user's DPoP-authed reads.
+   `PodDataView.tsx` shows the `useSeamRef` pattern. The `src` is a plain attribute.
+3. **JSX typing** for the tags lives in `types/solid-components.d.ts` (so no
+   `@ts-expect-error`). Add a new tag there in the same change you first use it.
+4. **Credential boundary (fail-closed).** Pass `.fetch` (authed, same-origin) for the
+   user's own pod. A foreign/public read needs `.publicFetch` — a PRISTINE fetch
+   captured BEFORE `registerGlobally()` patched the global — or the read throws rather
+   than leak the DPoP token cross-origin. Don't wire `.publicFetch` to the patched global.
+
+**READ-ONLY (Phase 1).** These elements only READ today. The edit/write path (an
+editable SHACL form + edit-mode elements) is `@jeswr/solid-components` **Phase 2** —
+until it ships, use the `lib/solid/` write pattern below for mutations. The resolver
+map already carries a `mode` field (`view`-only for now).
+
+**Scaffold-time model choice.** `create-solid-app --data-model <task|contact|bookmark|profile|collection|solid-view>`
+emits the matching bound element in `PodDataView.tsx` at generation time (default
+`solid-view`). After scaffold it's plain source you edit freely.
+
+Don't fork these components into the app; a behaviour change is contributed upstream
+to `@jeswr/solid-components`.
 
 ## Add a feature — the loop
 

@@ -219,6 +219,62 @@ describe("scaffold", () => {
     expect(page).toMatch(/<jeswr-loading\s+label=/);
   });
 
+  it("ships the @jeswr/solid-components data-bound example + its JSX typing", () => {
+    // The declarative data layer: the worked example component + the intrinsic-element
+    // typing for the custom tags (so they're usable in TSX with no @ts-expect-error).
+    for (const f of ["components/solid/PodDataView.tsx", "types/solid-components.d.ts"]) {
+      expect(result.files, `missing ${f}`).toContain(f);
+    }
+  });
+
+  it("bakes @jeswr/solid-components as a pinned git+https dep (keyless npm ci — #78)", async () => {
+    const pkg = JSON.parse(await readFile(join(result.targetDir, "package.json"), "utf8")) as {
+      dependencies: Record<string, string>;
+    };
+    expect(pkg.dependencies["@jeswr/solid-components"]).toMatch(
+      /^git\+https:\/\/github\.com\/jeswr\/solid-components\.git#[0-9a-f]{40}$/,
+    );
+  });
+
+  it("bakes @jeswr/guarded-fetch (solid-components' optional remote-SHACL peer) so next build resolves it", async () => {
+    // @jeswr/solid-components dynamic-imports @jeswr/guarded-fetch for the SSRF-safe
+    // `remote` SHACL-view source. Even though the default example never triggers that
+    // path, the bundler (Turbopack/webpack) must be able to RESOLVE the import target
+    // or `next build` fails "Module not found: @jeswr/guarded-fetch". Shipping it as a
+    // pinned dep makes the whole solid-components surface build out of the box.
+    const pkg = JSON.parse(await readFile(join(result.targetDir, "package.json"), "utf8")) as {
+      dependencies: Record<string, string>;
+    };
+    expect(pkg.dependencies["@jeswr/guarded-fetch"]).toMatch(
+      /^git\+https:\/\/github\.com\/jeswr\/guarded-fetch\.git#[0-9a-f]{40}$/,
+    );
+  });
+
+  it("the shipped lockfile resolves @jeswr/solid-components over git+https (not SSH)", async () => {
+    const lock = JSON.parse(
+      await readFile(join(result.targetDir, "package-lock.json"), "utf8"),
+    ) as { packages: Record<string, { resolved?: string }> };
+    const node = lock.packages["node_modules/@jeswr/solid-components"];
+    expect(node, "solid-components missing from lockfile").toBeDefined();
+    // Must be the HTTPS transport (the #78 guard) — npm rewrites it to SSH on install.
+    expect(node?.resolved).toMatch(
+      /^git\+https:\/\/github\.com\/jeswr\/solid-components\.git#[0-9a-f]{40}$/,
+    );
+  });
+
+  it("wires the default <solid-view> data-bound element into PodDataView + the home page", async () => {
+    const view = await readFile(
+      join(result.targetDir, "components", "solid", "PodDataView.tsx"),
+      "utf8",
+    );
+    // Registered via the side-effect import; renders the resolve-by-type composer by default.
+    expect(view).toContain('import "@jeswr/solid-components"');
+    expect(view).toMatch(/<solid-view\s+ref=\{seamRef\}\s+src=\{storage\}/);
+    // The home page renders the example once signed in.
+    const page = await readFile(join(result.targetDir, "app", "page.tsx"), "utf8");
+    expect(page).toContain("PodDataView");
+  });
+
   it("substitutes APP_NAME into lib/app-shell-config.ts", async () => {
     const config = await readFile(join(result.targetDir, "lib", "app-shell-config.ts"), "utf8");
     // The display name is baked in; the un-given repo keeps its placeholder token.
@@ -256,5 +312,91 @@ describe("scaffold with --repo", () => {
     expect(config).toContain('"jeswr/repo-app"');
     expect(config).not.toContain("__CSA_REPO__");
     expect(config).not.toContain("__CSA_APP_NAME__");
+  });
+});
+
+describe("scaffold with --data-model", () => {
+  let workDir: string;
+
+  beforeAll(async () => {
+    workDir = await mkdtemp(join(tmpdir(), "csa-model-"));
+  });
+
+  afterAll(async () => {
+    await rm(workDir, { recursive: true, force: true });
+  });
+
+  async function scaffoldModel(name: string, dataModel?: string) {
+    const prevCwd = process.cwd();
+    process.chdir(workDir);
+    try {
+      return await scaffold({ targetDir: name, appName: name, dataModel });
+    } finally {
+      process.chdir(prevCwd);
+    }
+  }
+
+  it("swaps the bound element for a specific model (task → <jeswr-task-list>)", async () => {
+    const r = await scaffoldModel("task-app", "task");
+    const view = await readFile(
+      join(r.targetDir, "components", "solid", "PodDataView.tsx"),
+      "utf8",
+    );
+    // The chosen element replaces the default <solid-view> in the bound region.
+    expect(view).toMatch(/<jeswr-task-list\s+ref=\{seamRef\}\s+src=\{storage\}/);
+    expect(view).not.toMatch(/<solid-view\s+ref=\{seamRef\}/);
+    // The sentinels survive (so the file remains re-substitutable / re-findable).
+    expect(view).toContain("CSA:DATA-VIEW-EL:BEGIN");
+    expect(view).toContain("CSA:DATA-VIEW-EL:END");
+    // The description mentions the chosen element.
+    expect(view).toContain("jeswr-task-list");
+  });
+
+  it("swaps for contact / bookmark / profile / collection models", async () => {
+    const cases: ReadonlyArray<[string, string]> = [
+      ["contact", "jeswr-contact-list"],
+      ["bookmark", "jeswr-bookmark-list"],
+      ["profile", "jeswr-profile-card"],
+      ["collection", "jeswr-collection"],
+    ];
+    for (const [model, tag] of cases) {
+      const r = await scaffoldModel(`${model}-app`, model);
+      const view = await readFile(
+        join(r.targetDir, "components", "solid", "PodDataView.tsx"),
+        "utf8",
+      );
+      expect(view, `${model} → <${tag}>`).toMatch(
+        new RegExp(`<${tag}\\s+ref=\\{seamRef\\}\\s+src=\\{storage\\}`),
+      );
+    }
+  });
+
+  it("the default (solid-view) leaves the template element verbatim", async () => {
+    const r = await scaffoldModel("default-app", "solid-view");
+    const view = await readFile(
+      join(r.targetDir, "components", "solid", "PodDataView.tsx"),
+      "utf8",
+    );
+    expect(view).toMatch(/<solid-view\s+ref=\{seamRef\}\s+src=\{storage\}/);
+  });
+
+  it("an OMITTED dataModel defaults to <solid-view>", async () => {
+    const r = await scaffoldModel("omitted-app");
+    const view = await readFile(
+      join(r.targetDir, "components", "solid", "PodDataView.tsx"),
+      "utf8",
+    );
+    expect(view).toMatch(/<solid-view\s+ref=\{seamRef\}\s+src=\{storage\}/);
+  });
+
+  it("an UNKNOWN dataModel falls back to the template default (never a broken file)", async () => {
+    // scaffold() is belt-and-braces: bin.ts validates the key first, but a bad value
+    // reaching scaffold() must not corrupt the file — it leaves the default <solid-view>.
+    const r = await scaffoldModel("bogus-app", "not-a-model");
+    const view = await readFile(
+      join(r.targetDir, "components", "solid", "PodDataView.tsx"),
+      "utf8",
+    );
+    expect(view).toMatch(/<solid-view\s+ref=\{seamRef\}\s+src=\{storage\}/);
   });
 });

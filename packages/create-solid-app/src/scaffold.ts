@@ -15,6 +15,7 @@ import { existsSync } from "node:fs";
 import { cp, mkdir, readdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { DEFAULT_DATA_MODEL, findDataModel } from "./data-models.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -103,6 +104,16 @@ export interface ScaffoldOptions {
    * `lib/app-shell-config.ts`). When given it is substituted in at scaffold time.
    */
   repo?: string;
+  /**
+   * The data model to bind in the generated starter page (the "pick a data model
+   * → bound component" path). One of the {@link DATA_MODELS} keys
+   * (`task` / `contact` / `bookmark` / `profile` / `collection` / `solid-view`).
+   * Defaults to `solid-view` — the resolve-by-type composer that reads the
+   * resource's `rdf:type` and mounts the right element itself (so the default
+   * works for any resource). A specific key swaps the bound element in
+   * `components/solid/PodDataView.tsx` for that model's element.
+   */
+  dataModel?: string;
   /** Override template location (tests). Defaults to resolveTemplateDir(). */
   templateDir?: string;
 }
@@ -166,6 +177,35 @@ seeded local pod).
 - All RDF through the object mapper: \`@solid/object\` + \`@rdfjs/wrapper\`, fetch
   via \`@jeswr/fetch-rdf\`. Never inline \`rdf-parse\` / regex Turtle.
 - Local dev pod: in-memory CSS, seeded with \`foaf:name\` + \`pim:storage\`.
+
+## Declarative data-bound components (\`@jeswr/solid-components\`)
+
+The starter page renders your pod data with **declarative Web Components** from
+[\`@jeswr/solid-components\`](https://github.com/jeswr/solid-components) — a few
+lines of markup bind a URL + the auth fetch seam, and the component reads the
+graph, picks the typed view, and renders it. **No hand-rolled LDP listing or RDF
+parsing in app code.**
+
+\`components/solid/PodDataView.tsx\` is the worked example. The default uses
+\`<solid-view>\` — the resolve-by-type composer: point it at a resource and it reads
+the \`rdf:type\`, resolves the matching element, and mounts it (falling back to a
+plain container listing). You can swap in a specific element directly:
+
+\`\`\`tsx
+// task list (wf:Task) — .fetch is the authed seam, set via a ref
+<jeswr-task-list ref={seamRef} src={tasksContainerUrl} />
+// or: <jeswr-contact-list>, <jeswr-bookmark-list>, <jeswr-profile-card>, <jeswr-collection>
+\`\`\`
+
+These elements are **READ-ONLY** today; the edit/write path (an editable SHACL
+form + edit-mode elements) is the package's Phase 2.
+
+You can also pick the bound model **at scaffold time**:
+
+\`\`\`sh
+create-solid-app my-app --data-model task   # emits <jeswr-task-list> in the starter
+# models: solid-view (default) | task | contact | bookmark | profile | collection
+\`\`\`
 
 See \`AGENTS.md\` for the agent-extension guide and the bundled house-rule stack.
 
@@ -236,10 +276,95 @@ function jsStringEscape(value: string): string {
 }
 
 /**
+ * Sentinel-delimited regions in `components/solid/PodDataView.tsx` that the
+ * data-model substitution rewrites. The template SHIPS the default `<solid-view>`
+ * (the resolve-by-type composer), so a verbatim copy / the default model needs no
+ * rewrite. A specific `--data-model` swaps the bound element + its card
+ * description for the chosen model's element. The sentinels are JSX block
+ * comments, so the file always compiles whether or not a swap happens.
+ */
+const DATA_VIEW_EL_BEGIN = "{/* CSA:DATA-VIEW-EL:BEGIN";
+const DATA_VIEW_EL_END = "{/* CSA:DATA-VIEW-EL:END */}";
+const DATA_VIEW_DESC_BEGIN = "{/* CSA:DATA-VIEW-DESC:BEGIN";
+const DATA_VIEW_DESC_END = "{/* CSA:DATA-VIEW-DESC:END */}";
+
+/**
+ * Replace the text BETWEEN a begin-comment line and the end-comment marker with
+ * `replacement`, preserving the begin/end sentinels (so a re-run / a later tool
+ * can find them again). Returns the source unchanged if either sentinel is
+ * absent — defensive, so a template edit that drops a sentinel degrades to "no
+ * swap" rather than throwing. The begin sentinel is a comment whose line runs to
+ * the next newline; we splice after that newline up to the end marker.
+ */
+function replaceSentinelRegion(
+  src: string,
+  beginSentinel: string,
+  endSentinel: string,
+  replacement: string,
+): string {
+  const beginIdx = src.indexOf(beginSentinel);
+  const endIdx = src.indexOf(endSentinel);
+  if (beginIdx === -1 || endIdx === -1 || endIdx < beginIdx) return src;
+  // Keep the begin-comment LINE intact (splice from the newline after it), and
+  // keep the end sentinel. Indent the replacement to the begin line's indent.
+  const beginLineEnd = src.indexOf("\n", beginIdx);
+  if (beginLineEnd === -1 || beginLineEnd > endIdx) return src;
+  const indent = src.slice(src.lastIndexOf("\n", beginIdx) + 1, beginIdx);
+  return src.slice(0, beginLineEnd + 1) + `${indent}${replacement}\n` + src.slice(endIdx);
+}
+
+/**
+ * Swap the bound data element + its description in the scaffolded
+ * `components/solid/PodDataView.tsx` for the chosen `--data-model`. The DEFAULT
+ * (`solid-view`, the resolve-by-type composer) is what the template already
+ * ships, so it is a no-op — only a specific model rewrites the sentinel regions.
+ * An unknown key is treated as the default (the caller validates first; this is
+ * belt-and-braces so a bad value never produces a broken file).
+ */
+async function substituteDataModel(targetDir: string, dataModel: string): Promise<void> {
+  const entry = findDataModel(dataModel);
+  // Default / unknown → leave the template's <solid-view> verbatim.
+  if (!entry || entry.key === DEFAULT_DATA_MODEL) return;
+  const viewPath = join(targetDir, "components", "solid", "PodDataView.tsx");
+  if (!existsSync(viewPath)) return; // a template without the example — nothing to do.
+  let src = await readFile(viewPath, "utf8");
+  // The bound element: same `ref`/`src`/`part` seam, just the chosen tag. The
+  // tag is from the committed catalog (never user input), so no escaping needed.
+  src = replaceSentinelRegion(
+    src,
+    DATA_VIEW_EL_BEGIN,
+    DATA_VIEW_EL_END,
+    `<${entry.tag} ref={seamRef} src={storage} part="data-view" />`,
+  );
+  // The card description: the catalog's plain-text line. Escape any JSX-significant
+  // characters so untrusted-looking punctuation (`<`, `>`, `{`, `}`) can never break
+  // the JSX (the catalog is trusted, but this keeps the emitted file robust).
+  src = replaceSentinelRegion(
+    src,
+    DATA_VIEW_DESC_BEGIN,
+    DATA_VIEW_DESC_END,
+    jsxTextEscape(entry.description),
+  );
+  await writeFile(viewPath, src, "utf8");
+}
+
+/** Escape text for safe embedding as JSX text content (no element/expression breakout). */
+function jsxTextEscape(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\{/g, "&#123;")
+    .replace(/\}/g, "&#125;");
+}
+
+/**
  * Copy the template into `targetDir`, then apply substitutions:
  *  - package.json `name` -> toPackageName(appName)
  *  - generate README.md with the app title (template ships none)
  *  - bake the app-shell FeedbackButton config (APP_NAME + optional repo)
+ *  - swap the data-bound starter element for the chosen `--data-model`
+ *    (default `solid-view`, the resolve-by-type composer)
  */
 export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
   const templateDir = opts.templateDir ?? resolveTemplateDir();
@@ -282,7 +407,14 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
     repo: normalizeRepo(opts.repo),
   });
 
-  // Substitution 4: rename the publish-safe non-dotfile shims to their real
+  // Substitution 4: the "pick a data model → bound component" path. Swap the
+  // declarative data element + its description in the starter PodDataView for the
+  // chosen `--data-model` (task / contact / bookmark / profile / collection).
+  // The DEFAULT (`solid-view`, the resolve-by-type composer) is what the template
+  // ships, so it is a no-op — only a specific model rewrites the sentinel regions.
+  await substituteDataModel(targetDir, opts.dataModel ?? DEFAULT_DATA_MODEL);
+
+  // Substitution 5: rename the publish-safe non-dotfile shims to their real
   // dotfile names (e.g. `npmrc` -> `.npmrc`). These ship under a non-dotfile name
   // because npm strips the real dotfile from a published tarball — see
   // DOTFILE_RENAMES. Done after the verbatim copy so the generated app ends up

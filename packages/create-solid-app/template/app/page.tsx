@@ -15,6 +15,10 @@ import "@jeswr/solid-elements/react";
 import { useSolidAuth } from "@/components/solid/SolidAuthProvider";
 import { LoginPanel } from "@/components/solid/LoginPanel";
 import { ProfileCard } from "@/components/solid/ProfileCard";
+// The DECLARATIVE data-bound example: render a pod resource through
+// @jeswr/solid-components' read Web Components (no hand-rolled LDP/RDF). Shown
+// once signed in, below the profile. READ-ONLY today (edit mode is Phase 2).
+import { PodDataView } from "@/components/solid/PodDataView";
 
 export default function Home() {
   const { webId, autologinPending } = useSolidAuth();
@@ -31,7 +35,13 @@ export default function Home() {
           show a "Signing you in…" state instead of the login panel so the silent SSO
           doesn't flash the login form. */}
       {webId ? (
-        <ProfileCard />
+        <>
+          <ProfileCard />
+          {/* Declarative, data-bound pod-data view — the @jeswr/solid-components
+              value: a few lines of markup bind a URL + the auth fetch seam, the
+              component reads + renders the typed view. */}
+          <PodDataView />
+        </>
       ) : autologinPending ? (
         // Suite wait-state: the themed <jeswr-loading> spinner + a contextual,
         // polite-live label (raw-attribute form — the reliable label path).

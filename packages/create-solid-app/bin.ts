@@ -22,6 +22,7 @@
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { DEFAULT_DATA_MODEL, dataModelKeys, findDataModel } from "./src/data-models.ts";
 import { scaffold } from "./src/scaffold.ts";
 import { requestClientCredentialsToken, seedPod } from "./src/seed-pod.ts";
 
@@ -32,8 +33,29 @@ interface ParsedArgs {
   help: boolean;
   /** GitHub `owner/repo` the baked-in FeedbackButton files issues against (--repo). */
   repo?: string;
+  /**
+   * The data model to bind in the generated starter page (`--data-model`). One of
+   * the @jeswr/solid-components keys (task / contact / bookmark / profile /
+   * collection / solid-view). Defaults to `solid-view` (resolve-by-type).
+   */
+  dataModel?: string;
   /** A usage error (unknown flag / extra positional). Non-null means abort with this message. */
   error?: string;
+}
+
+/**
+ * Validate + record a `--data-model` value. Returns an error message string for an
+ * UNKNOWN key (so the caller sets `out.error`), or `undefined` on success (having
+ * set `out.dataModel`). Trims the value; the model catalog is the single source of
+ * truth for the valid keys (src/data-models.ts).
+ */
+function setDataModel(out: ParsedArgs, raw: string): string | undefined {
+  const value = raw.trim();
+  if (!findDataModel(value)) {
+    return `unknown data model: ${value} (one of: ${dataModelKeys().join(", ")})`;
+  }
+  out.dataModel = value;
+  return undefined;
 }
 
 export function parseArgs(argv: string[]): ParsedArgs {
@@ -65,6 +87,28 @@ export function parseArgs(argv: string[]): ParsedArgs {
       const value = arg.slice("--repo=".length);
       if (value.trim().length === 0) out.error ??= "--repo requires a value (owner/repo)";
       else out.repo = value;
+    } else if (arg === "--data-model") {
+      // `--data-model <key>` — the next token is the value. Reject a missing value,
+      // another flag, an empty value, OR an UNKNOWN model key (so a typo'd model
+      // name fails loudly rather than silently scaffolding the default view).
+      const value = argv[i + 1];
+      if (value === undefined || value.startsWith("-") || value.trim().length === 0) {
+        out.error ??= `--data-model requires a value (one of: ${dataModelKeys().join(", ")})`;
+        if (value !== undefined && !value.startsWith("-")) i++; // consume the empty value
+      } else {
+        const err = setDataModel(out, value);
+        if (err) out.error ??= err;
+        i++; // consume the value
+      }
+    } else if (arg.startsWith("--data-model=")) {
+      // `--data-model=<key>`. An empty value, or an unknown model key, is a usage error.
+      const value = arg.slice("--data-model=".length);
+      if (value.trim().length === 0) {
+        out.error ??= `--data-model requires a value (one of: ${dataModelKeys().join(", ")})`;
+      } else {
+        const err = setDataModel(out, value);
+        if (err) out.error ??= err;
+      }
     } else if (arg.startsWith("-")) {
       // Unknown flag — fail rather than silently ignore (a typo'd flag would otherwise no-op).
       out.error ??= `unknown flag: ${arg}`;
@@ -81,17 +125,21 @@ export function parseArgs(argv: string[]): ParsedArgs {
 const HELP = `create-solid-app (prototype)
 
 Usage:
-  node dx/create-solid-app/bin.ts <app-name> [--no-install] [--seed-pod] [--repo owner/repo]
-  create-solid-app <app-name> [--no-install] [--seed-pod] [--repo owner/repo]   # after npm link
+  node dx/create-solid-app/bin.ts <app-name> [--no-install] [--seed-pod] [--repo owner/repo] [--data-model <model>]
+  create-solid-app <app-name> [--no-install] [--seed-pod] [--repo owner/repo] [--data-model <model>]   # after npm link
 
 Flags:
-  --no-install   Skip running npm install in the scaffolded directory.
-  --seed-pod     Boot a local in-memory CSS on :3088 + seed an account and print
-                 the issuer + client credentials for instant login.
-  --repo <o/r>   GitHub owner/repo the baked-in feedback button files issues
-                 against (e.g. --repo jeswr/my-app). Defaults to a placeholder
-                 you edit in lib/app-shell-config.ts.
-  -h, --help     Show this help.
+  --no-install         Skip running npm install in the scaffolded directory.
+  --seed-pod           Boot a local in-memory CSS on :3088 + seed an account and
+                       print the issuer + client credentials for instant login.
+  --repo <o/r>         GitHub owner/repo the baked-in feedback button files issues
+                       against (e.g. --repo jeswr/my-app). Defaults to a placeholder
+                       you edit in lib/app-shell-config.ts.
+  --data-model <m>     The @jeswr/solid-components data model bound in the starter
+                       page (read-only; edit mode is Phase 2). One of:
+                         ${dataModelKeys().join(", ")}
+                       Default: ${DEFAULT_DATA_MODEL} (resolve-by-type composer).
+  -h, --help           Show this help.
 `;
 
 async function main(): Promise<void> {
@@ -115,9 +163,16 @@ async function main(): Promise<void> {
   }
 
   const appName = args.appName as string;
+  const dataModel = args.dataModel ?? DEFAULT_DATA_MODEL;
   process.stdout.write(`Scaffolding "${appName}" from the app-builder template…\n`);
-  const result = await scaffold({ targetDir: appName, appName, repo: args.repo });
+  const result = await scaffold({ targetDir: appName, appName, repo: args.repo, dataModel });
   process.stdout.write(`✔ Created ${result.targetDir} (${result.files.length} files)\n`);
+  const modelEntry = findDataModel(dataModel);
+  if (modelEntry) {
+    process.stdout.write(
+      `  • Data model: ${modelEntry.label}\n    (bound via <${modelEntry.tag}> in components/solid/PodDataView.tsx)\n`,
+    );
+  }
 
   if (args.install) {
     // The scaffold ships the template lockfile (see scaffold.ts SKIP_ENTRIES), so this

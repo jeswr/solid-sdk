@@ -78,4 +78,44 @@ describe("parseArgs", () => {
     expect(a.repo).toBeUndefined();
     expect(a.error).toMatch(/--repo requires a value/);
   });
+
+  it("parses --data-model task (space form)", () => {
+    const a = parseArgs(["my-app", "--data-model", "task"]);
+    expect(a.dataModel).toBe("task");
+    expect(a.error).toBeUndefined();
+  });
+
+  it("parses --data-model=contact (equals form)", () => {
+    const a = parseArgs(["my-app", "--data-model=contact"]);
+    expect(a.dataModel).toBe("contact");
+    expect(a.error).toBeUndefined();
+  });
+
+  it("trims a --data-model value", () => {
+    const a = parseArgs(["my-app", "--data-model", " bookmark "]);
+    expect(a.dataModel).toBe("bookmark");
+    expect(a.error).toBeUndefined();
+  });
+
+  it("rejects an UNKNOWN data model (loud, not a silent default)", () => {
+    const a = parseArgs(["my-app", "--data-model", "frobnicate"]);
+    expect(a.dataModel).toBeUndefined();
+    expect(a.error).toMatch(/unknown data model: frobnicate/);
+  });
+
+  it("rejects --data-model with no value", () => {
+    const a = parseArgs(["my-app", "--data-model"]);
+    expect(a.error).toMatch(/--data-model requires a value/);
+  });
+
+  it("rejects --data-model immediately followed by another flag", () => {
+    const a = parseArgs(["my-app", "--data-model", "--seed-pod"]);
+    expect(a.error).toMatch(/--data-model requires a value/);
+  });
+
+  it("rejects an empty --data-model= value", () => {
+    const a = parseArgs(["my-app", "--data-model="]);
+    expect(a.dataModel).toBeUndefined();
+    expect(a.error).toMatch(/--data-model requires a value/);
+  });
 });
