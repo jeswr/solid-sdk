@@ -319,6 +319,9 @@ export class DataWriter {
       response = await this.#fetch(url, {
         method: "DELETE",
         headers: { "If-Match": options.ifMatch },
+        // SCOPE GUARD (redirect-SSRF) — see #put: refuse a redirect rather than
+        // delete an off-scope resource via a 307/308 to another origin/path.
+        redirect: "error",
         ...(options.signal ? { signal: options.signal } : {}),
       });
     } catch (cause) {
@@ -347,6 +350,13 @@ export class DataWriter {
         method: "PUT",
         headers,
         body: turtle,
+        // SCOPE GUARD (redirect-SSRF): `fetch` follows redirects by DEFAULT, so a
+        // scoped target that 307/308-redirects to a DIFFERENT origin/path would do
+        // the AUTHENTICATED write OUTSIDE the guarded scope (the `#assertWithinScope`
+        // check only saw the original URL). `redirect: "error"` makes a redirected
+        // write REJECT rather than silently follow it off-scope. (A Solid PUT to your
+        // own pod is never legitimately redirected cross-origin.)
+        redirect: "error",
         ...(options.signal ? { signal: options.signal } : {}),
       });
     } catch (cause) {
@@ -380,6 +390,10 @@ export class DataWriter {
       response = await this.#fetch(url, {
         method: "GET",
         headers: { Accept: RDF_ACCEPT },
+        // SCOPE GUARD (redirect-SSRF): refuse a redirected pre-read too — a 307/308 to
+        // a foreign origin would merge that origin's body + ETag, which we'd then
+        // conditionally PUT back. The merge base must be the EXACT scoped resource.
+        redirect: "error",
         ...(signal ? { signal } : {}),
       });
     } catch (cause) {
@@ -390,6 +404,10 @@ export class DataWriter {
       throw new WriteFailedError(response.url || url, { status: response.status });
     }
     const finalUrl = response.url || url;
+    // Belt-and-braces: even with `redirect: "error"`, re-assert the post-read URL is
+    // within scope (a non-spec fetch impl might surface a different final URL). A
+    // foreign final URL must never become the merge base.
+    this.#assertWithinScope(finalUrl);
     const contentType = response.headers.get("Content-Type");
     let graph: Store;
     try {

@@ -36,6 +36,7 @@ export const BASE_FORM_INPUT_PROPS = [
   "fetch",
   "publicFetch",
   "base",
+  "publicRead",
   "resolveOptions",
 ] as const;
 
@@ -62,6 +63,15 @@ export abstract class AbstractFormElement extends LitElement {
    * resource's container.
    */
   declare base: string | undefined;
+  /**
+   * Read the DATA graph with the credential-free `publicFetch` (a foreign/public
+   * resource) instead of the authenticated `fetch`. The credential boundary still
+   * applies: with `publicRead` set, `publicFetch` MUST be provided (the resolver
+   * fails closed otherwise). NOTE this affects only the data READ that POPULATES the
+   * form — a SAVE is always an authenticated own-origin write (there is no public
+   * write), so editing a public-read resource still needs `fetch` set to save.
+   */
+  declare publicRead: boolean;
   /** Resolver options forwarded to the §9 pre-fetch (max bytes / timeout / test stub). */
   declare resolveOptions: ResolveOptions | undefined;
 
@@ -72,6 +82,7 @@ export abstract class AbstractFormElement extends LitElement {
     fetch: { attribute: false },
     publicFetch: { attribute: false },
     base: {},
+    publicRead: { type: Boolean, attribute: "public-read" },
     resolveOptions: { attribute: false },
     saveStatus: { state: true },
   };
@@ -82,6 +93,7 @@ export abstract class AbstractFormElement extends LitElement {
     this.fetch = undefined;
     this.publicFetch = undefined;
     this.base = undefined;
+    this.publicRead = false;
     this.resolveOptions = undefined;
     this.saveStatus = "idle";
   }
@@ -134,9 +146,16 @@ export abstract class AbstractFormElement extends LitElement {
     };
   }
 
-  /** Build the data-graph source for the inner form: the resource, read with `fetch`. */
+  /**
+   * Build the data-graph source for the inner form: the resource at `src`, read with
+   * the authenticated `fetch` — OR, when `publicRead` is set, with the credential-free
+   * `publicFetch` (the resolver fails closed if `publicFetch` is then missing, so the
+   * session token never leaks to a foreign read). Honours the same `public-read`
+   * contract as the read elements.
+   */
   protected dataSource(): GraphSource | undefined {
-    return this.src ? { kind: "trusted", url: this.src, seam: "auth" } : undefined;
+    if (!this.src) return undefined;
+    return { kind: "trusted", url: this.src, seam: this.publicRead ? "public" : "auth" };
   }
 
   /** Forward a child <jeswr-shacl-form>'s save state up so this element can reflect it. */
@@ -177,8 +196,15 @@ export abstract class AbstractFormElement extends LitElement {
     `;
   }
 
-  /** Re-emit the inner form's save as this element's own event + mirror the state. */
+  /**
+   * Re-emit the inner form's save as THIS element's own event (so a consumer listens
+   * on the per-class form, with this element as the event target) + mirror the state.
+   * STOP the child's bubbling event first so a consumer listening on this element or
+   * an ancestor does NOT receive a DUPLICATE `jeswr-save` (the inner event bubbles +
+   * composes; we replace it with one re-targeted to this element).
+   */
   #onSave(e: CustomEvent<SaveEventDetail>): void {
+    e.stopPropagation();
     this.#onChildState();
     this.dispatchEvent(
       new CustomEvent("jeswr-save", { detail: e.detail, bubbles: true, composed: true }),

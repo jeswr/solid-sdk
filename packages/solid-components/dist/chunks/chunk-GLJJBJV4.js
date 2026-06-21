@@ -11115,6 +11115,9 @@ var DataWriter = class {
       response = await this.#fetch(url, {
         method: "DELETE",
         headers: { "If-Match": options.ifMatch },
+        // SCOPE GUARD (redirect-SSRF) — see #put: refuse a redirect rather than
+        // delete an off-scope resource via a 307/308 to another origin/path.
+        redirect: "error",
         ...options.signal ? { signal: options.signal } : {}
       });
     } catch (cause) {
@@ -11141,6 +11144,13 @@ var DataWriter = class {
         method: "PUT",
         headers,
         body: turtle,
+        // SCOPE GUARD (redirect-SSRF): `fetch` follows redirects by DEFAULT, so a
+        // scoped target that 307/308-redirects to a DIFFERENT origin/path would do
+        // the AUTHENTICATED write OUTSIDE the guarded scope (the `#assertWithinScope`
+        // check only saw the original URL). `redirect: "error"` makes a redirected
+        // write REJECT rather than silently follow it off-scope. (A Solid PUT to your
+        // own pod is never legitimately redirected cross-origin.)
+        redirect: "error",
         ...options.signal ? { signal: options.signal } : {}
       });
     } catch (cause) {
@@ -11167,6 +11177,10 @@ var DataWriter = class {
       response = await this.#fetch(url, {
         method: "GET",
         headers: { Accept: RDF_ACCEPT2 },
+        // SCOPE GUARD (redirect-SSRF): refuse a redirected pre-read too — a 307/308 to
+        // a foreign origin would merge that origin's body + ETag, which we'd then
+        // conditionally PUT back. The merge base must be the EXACT scoped resource.
+        redirect: "error",
         ...signal ? { signal } : {}
       });
     } catch (cause) {
@@ -11177,6 +11191,7 @@ var DataWriter = class {
       throw new WriteFailedError(response.url || url, { status: response.status });
     }
     const finalUrl = response.url || url;
+    this.#assertWithinScope(finalUrl);
     const contentType = response.headers.get("Content-Type");
     let graph;
     try {
@@ -11236,6 +11251,7 @@ var AbstractFormElement = class extends i4 {
     fetch: { attribute: false },
     publicFetch: { attribute: false },
     base: {},
+    publicRead: { type: Boolean, attribute: "public-read" },
     resolveOptions: { attribute: false },
     saveStatus: { state: true }
   };
@@ -11245,6 +11261,7 @@ var AbstractFormElement = class extends i4 {
     this.fetch = void 0;
     this.publicFetch = void 0;
     this.base = void 0;
+    this.publicRead = false;
     this.resolveOptions = void 0;
     this.saveStatus = "idle";
   }
@@ -11274,9 +11291,16 @@ var AbstractFormElement = class extends i4 {
       });
     };
   }
-  /** Build the data-graph source for the inner form: the resource, read with `fetch`. */
+  /**
+   * Build the data-graph source for the inner form: the resource at `src`, read with
+   * the authenticated `fetch` — OR, when `publicRead` is set, with the credential-free
+   * `publicFetch` (the resolver fails closed if `publicFetch` is then missing, so the
+   * session token never leaks to a foreign read). Honours the same `public-read`
+   * contract as the read elements.
+   */
   dataSource() {
-    return this.src ? { kind: "trusted", url: this.src, seam: "auth" } : void 0;
+    if (!this.src) return void 0;
+    return { kind: "trusted", url: this.src, seam: this.publicRead ? "public" : "auth" };
   }
   /** Forward a child <jeswr-shacl-form>'s save state up so this element can reflect it. */
   #onChildState = () => {
@@ -11311,8 +11335,15 @@ var AbstractFormElement = class extends i4 {
       ></jeswr-shacl-form>
     `;
   }
-  /** Re-emit the inner form's save as this element's own event + mirror the state. */
+  /**
+   * Re-emit the inner form's save as THIS element's own event (so a consumer listens
+   * on the per-class form, with this element as the event target) + mirror the state.
+   * STOP the child's bubbling event first so a consumer listening on this element or
+   * an ancestor does NOT receive a DUPLICATE `jeswr-save` (the inner event bubbles +
+   * composes; we replace it with one re-targeted to this element).
+   */
   #onSave(e6) {
+    e6.stopPropagation();
     this.#onChildState();
     this.dispatchEvent(
       new CustomEvent("jeswr-save", { detail: e6.detail, bubbles: true, composed: true })

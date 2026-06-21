@@ -131,6 +131,21 @@
             },
             {
               "kind": "field",
+              "name": "publicRead",
+              "privacy": "public",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "Read the DATA graph with the credential-free `publicFetch` (a foreign/public\nresource) instead of the authenticated `fetch`. The credential boundary still\napplies: with `publicRead` set, `publicFetch` MUST be provided (the resolver\nfails closed otherwise). NOTE this affects only the data READ that POPULATES the\nform — a SAVE is always an authenticated own-origin write (there is no public\nwrite), so editing a public-read resource still needs `fetch` set to save.",
+              "default": "false",
+              "attribute": "public-read",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "field",
               "name": "resolveOptions",
               "privacy": "public",
               "type": {
@@ -167,7 +182,7 @@
                   "text": "GraphSource | undefined"
                 }
               },
-              "description": "Build the data-graph source for the inner form: the resource, read with `fetch`.",
+              "description": "Build the data-graph source for the inner form: the resource at `src`, read with\nthe authenticated `fetch` — OR, when `publicRead` is set, with the credential-free\n`publicFetch` (the resolver fails closed if `publicFetch` is then missing, so the\nsession token never leaks to a foreign read). Honours the same `public-read`\ncontract as the read elements.",
               "inheritedFrom": {
                 "name": "AbstractFormElement",
                 "module": "src/components/form-base.ts"
@@ -214,7 +229,7 @@
                   }
                 }
               ],
-              "description": "Re-emit the inner form's save as this element's own event + mirror the state.",
+              "description": "Re-emit the inner form's save as THIS element's own event (so a consumer listens\non the per-class form, with this element as the event target) + mirror the state.\nSTOP the child's bubbling event first so a consumer listening on this element or\nan ancestor does NOT receive a DUPLICATE `jeswr-save` (the inner event bubbles +\ncomposes; we replace it with one re-targeted to this element).",
               "inheritedFrom": {
                 "name": "AbstractFormElement",
                 "module": "src/components/form-base.ts"
@@ -254,6 +269,19 @@
               "description": "The base URL writes are confined to (the DataWriter scope guard). Defaults to\nthe resource's own directory when unset, so a save can never leave the edited\nresource's container.",
               "default": "undefined",
               "fieldName": "base",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "name": "public-read",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "Read the DATA graph with the credential-free `publicFetch` (a foreign/public\nresource) instead of the authenticated `fetch`. The credential boundary still\napplies: with `publicRead` set, `publicFetch` MUST be provided (the resolver\nfails closed otherwise). NOTE this affects only the data READ that POPULATES the\nform — a SAVE is always an authenticated own-origin write (there is no public\nwrite), so editing a public-read resource still needs `fetch` set to save.",
+              "default": "false",
+              "fieldName": "publicRead",
               "inheritedFrom": {
                 "name": "AbstractFormElement",
                 "module": "src/components/form-base.ts"
@@ -1072,6 +1100,21 @@
             },
             {
               "kind": "field",
+              "name": "publicRead",
+              "privacy": "public",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "Read the DATA graph with the credential-free `publicFetch` (a foreign/public\nresource) instead of the authenticated `fetch`. The credential boundary still\napplies: with `publicRead` set, `publicFetch` MUST be provided (the resolver\nfails closed otherwise). NOTE this affects only the data READ that POPULATES the\nform — a SAVE is always an authenticated own-origin write (there is no public\nwrite), so editing a public-read resource still needs `fetch` set to save.",
+              "default": "false",
+              "attribute": "public-read",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "field",
               "name": "resolveOptions",
               "privacy": "public",
               "type": {
@@ -1108,7 +1151,7 @@
                   "text": "GraphSource | undefined"
                 }
               },
-              "description": "Build the data-graph source for the inner form: the resource, read with `fetch`.",
+              "description": "Build the data-graph source for the inner form: the resource at `src`, read with\nthe authenticated `fetch` — OR, when `publicRead` is set, with the credential-free\n`publicFetch` (the resolver fails closed if `publicFetch` is then missing, so the\nsession token never leaks to a foreign read). Honours the same `public-read`\ncontract as the read elements.",
               "inheritedFrom": {
                 "name": "AbstractFormElement",
                 "module": "src/components/form-base.ts"
@@ -1155,7 +1198,7 @@
                   }
                 }
               ],
-              "description": "Re-emit the inner form's save as this element's own event + mirror the state.",
+              "description": "Re-emit the inner form's save as THIS element's own event (so a consumer listens\non the per-class form, with this element as the event target) + mirror the state.\nSTOP the child's bubbling event first so a consumer listening on this element or\nan ancestor does NOT receive a DUPLICATE `jeswr-save` (the inner event bubbles +\ncomposes; we replace it with one re-targeted to this element).",
               "inheritedFrom": {
                 "name": "AbstractFormElement",
                 "module": "src/components/form-base.ts"
@@ -1195,6 +1238,19 @@
               "description": "The base URL writes are confined to (the DataWriter scope guard). Defaults to\nthe resource's own directory when unset, so a save can never leave the edited\nresource's container.",
               "default": "undefined",
               "fieldName": "base",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "name": "public-read",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "Read the DATA graph with the credential-free `publicFetch` (a foreign/public\nresource) instead of the authenticated `fetch`. The credential boundary still\napplies: with `publicRead` set, `publicFetch` MUST be provided (the resolver\nfails closed otherwise). NOTE this affects only the data READ that POPULATES the\nform — a SAVE is always an authenticated own-origin write (there is no public\nwrite), so editing a public-read resource still needs `fetch` set to save.",
+              "default": "false",
+              "fieldName": "publicRead",
               "inheritedFrom": {
                 "name": "AbstractFormElement",
                 "module": "src/components/form-base.ts"
@@ -1593,9 +1649,9 @@
           "kind": "variable",
           "name": "BASE_FORM_INPUT_PROPS",
           "type": {
-            "text": "[\n  \"src\",\n  \"fetch\",\n  \"publicFetch\",\n  \"base\",\n  \"resolveOptions\",\n]"
+            "text": "[\n  \"src\",\n  \"fetch\",\n  \"publicFetch\",\n  \"base\",\n  \"publicRead\",\n  \"resolveOptions\",\n]"
           },
-          "default": "[ \"src\", \"fetch\", \"publicFetch\", \"base\", \"resolveOptions\", ]",
+          "default": "[ \"src\", \"fetch\", \"publicFetch\", \"base\", \"publicRead\", \"resolveOptions\", ]",
           "description": "The input props the base re-renders the editable form on."
         },
         {
@@ -1644,6 +1700,17 @@
               "description": "The base URL writes are confined to (the DataWriter scope guard). Defaults to\nthe resource's own directory when unset, so a save can never leave the edited\nresource's container.",
               "default": "undefined",
               "attribute": "base"
+            },
+            {
+              "kind": "field",
+              "name": "publicRead",
+              "privacy": "public",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "Read the DATA graph with the credential-free `publicFetch` (a foreign/public\nresource) instead of the authenticated `fetch`. The credential boundary still\napplies: with `publicRead` set, `publicFetch` MUST be provided (the resolver\nfails closed otherwise). NOTE this affects only the data READ that POPULATES the\nform — a SAVE is always an authenticated own-origin write (there is no public\nwrite), so editing a public-read resource still needs `fetch` set to save.",
+              "default": "false",
+              "attribute": "public-read"
             },
             {
               "kind": "field",
@@ -1717,7 +1784,7 @@
                   "text": "GraphSource | undefined"
                 }
               },
-              "description": "Build the data-graph source for the inner form: the resource, read with `fetch`."
+              "description": "Build the data-graph source for the inner form: the resource at `src`, read with\nthe authenticated `fetch` — OR, when `publicRead` is set, with the credential-free\n`publicFetch` (the resolver fails closed if `publicFetch` is then missing, so the\nsession token never leaks to a foreign read). Honours the same `public-read`\ncontract as the read elements."
             },
             {
               "kind": "field",
@@ -1752,7 +1819,7 @@
                   }
                 }
               ],
-              "description": "Re-emit the inner form's save as this element's own event + mirror the state."
+              "description": "Re-emit the inner form's save as THIS element's own event (so a consumer listens\non the per-class form, with this element as the event target) + mirror the state.\nSTOP the child's bubbling event first so a consumer listening on this element or\nan ancestor does NOT receive a DUPLICATE `jeswr-save` (the inner event bubbles +\ncomposes; we replace it with one re-targeted to this element)."
             }
           ],
           "events": [
@@ -1781,6 +1848,15 @@
               "description": "The base URL writes are confined to (the DataWriter scope guard). Defaults to\nthe resource's own directory when unset, so a save can never leave the edited\nresource's container.",
               "default": "undefined",
               "fieldName": "base"
+            },
+            {
+              "name": "public-read",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "Read the DATA graph with the credential-free `publicFetch` (a foreign/public\nresource) instead of the authenticated `fetch`. The credential boundary still\napplies: with `publicRead` set, `publicFetch` MUST be provided (the resolver\nfails closed otherwise). NOTE this affects only the data READ that POPULATES the\nform — a SAVE is always an authenticated own-origin write (there is no public\nwrite), so editing a public-read resource still needs `fetch` set to save.",
+              "default": "false",
+              "fieldName": "publicRead"
             }
           ],
           "superclass": {
@@ -3352,6 +3428,21 @@
             },
             {
               "kind": "field",
+              "name": "publicRead",
+              "privacy": "public",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "Read the DATA graph with the credential-free `publicFetch` (a foreign/public\nresource) instead of the authenticated `fetch`. The credential boundary still\napplies: with `publicRead` set, `publicFetch` MUST be provided (the resolver\nfails closed otherwise). NOTE this affects only the data READ that POPULATES the\nform — a SAVE is always an authenticated own-origin write (there is no public\nwrite), so editing a public-read resource still needs `fetch` set to save.",
+              "default": "false",
+              "attribute": "public-read",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "field",
               "name": "resolveOptions",
               "privacy": "public",
               "type": {
@@ -3388,7 +3479,7 @@
                   "text": "GraphSource | undefined"
                 }
               },
-              "description": "Build the data-graph source for the inner form: the resource, read with `fetch`.",
+              "description": "Build the data-graph source for the inner form: the resource at `src`, read with\nthe authenticated `fetch` — OR, when `publicRead` is set, with the credential-free\n`publicFetch` (the resolver fails closed if `publicFetch` is then missing, so the\nsession token never leaks to a foreign read). Honours the same `public-read`\ncontract as the read elements.",
               "inheritedFrom": {
                 "name": "AbstractFormElement",
                 "module": "src/components/form-base.ts"
@@ -3435,7 +3526,7 @@
                   }
                 }
               ],
-              "description": "Re-emit the inner form's save as this element's own event + mirror the state.",
+              "description": "Re-emit the inner form's save as THIS element's own event (so a consumer listens\non the per-class form, with this element as the event target) + mirror the state.\nSTOP the child's bubbling event first so a consumer listening on this element or\nan ancestor does NOT receive a DUPLICATE `jeswr-save` (the inner event bubbles +\ncomposes; we replace it with one re-targeted to this element).",
               "inheritedFrom": {
                 "name": "AbstractFormElement",
                 "module": "src/components/form-base.ts"
@@ -3475,6 +3566,19 @@
               "description": "The base URL writes are confined to (the DataWriter scope guard). Defaults to\nthe resource's own directory when unset, so a save can never leave the edited\nresource's container.",
               "default": "undefined",
               "fieldName": "base",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "name": "public-read",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "Read the DATA graph with the credential-free `publicFetch` (a foreign/public\nresource) instead of the authenticated `fetch`. The credential boundary still\napplies: with `publicRead` set, `publicFetch` MUST be provided (the resolver\nfails closed otherwise). NOTE this affects only the data READ that POPULATES the\nform — a SAVE is always an authenticated own-origin write (there is no public\nwrite), so editing a public-read resource still needs `fetch` set to save.",
+              "default": "false",
+              "fieldName": "publicRead",
               "inheritedFrom": {
                 "name": "AbstractFormElement",
                 "module": "src/components/form-base.ts"

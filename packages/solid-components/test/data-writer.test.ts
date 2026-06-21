@@ -163,6 +163,65 @@ describe("DataWriter.saveMerged — conditional, merge-not-replace", () => {
       dw.saveMerged("https://alice.example/tasks/x", setTitle("X"), { createIfAbsent: false }),
     ).rejects.toBeInstanceOf(WriteFailedError);
   });
+
+  it("sets redirect:error on the pre-read GET AND the PUT (redirect-SSRF guard)", async () => {
+    // roborev HIGH regression: `fetch` follows redirects by default, so a scoped write
+    // could be 307/308-redirected off-scope. Every writer fetch must set redirect:error.
+    const seen: { method: string; redirect?: string }[] = [];
+    const fetch = vi.fn(async (_u: string, init?: RequestInit) => {
+      seen.push({ method: init?.method ?? "GET", redirect: init?.redirect });
+      if ((init?.method ?? "GET") === "GET") return ttlRes(TASK_BODY, '"v1"');
+      return statusRes(205, '"v2"');
+    });
+    const dw = new DataWriter({ fetch: fetch as unknown as typeof globalThis.fetch });
+    await dw.saveMerged("https://alice.example/tasks/1", setTitle("X"));
+    const get = seen.find((s) => s.method === "GET");
+    const put = seen.find((s) => s.method === "PUT");
+    expect(get?.redirect).toBe("error");
+    expect(put?.redirect).toBe("error");
+  });
+
+  it("a redirected pre-read whose final URL is off-scope is REFUSED (belt-and-braces)", async () => {
+    // A non-spec fetch impl that doesn't honour redirect:error but surfaces a foreign
+    // response.url must still be rejected — the merge base can't be off-scope.
+    const fetch = vi.fn(async (_u: string, init?: RequestInit) => {
+      if ((init?.method ?? "GET") === "GET") {
+        // A 200 whose final URL is a DIFFERENT origin (a followed redirect).
+        const headers = new Headers();
+        headers.set("Content-Type", TURTLE);
+        headers.set("ETag", '"v1"');
+        return {
+          status: 200,
+          ok: true,
+          url: "https://evil.example/tasks/1",
+          headers,
+          body: null,
+          text: async () => TASK_BODY,
+        } as unknown as Response;
+      }
+      return statusRes(205, '"v2"');
+    });
+    const dw = new DataWriter({
+      fetch: fetch as unknown as typeof globalThis.fetch,
+      base: "https://alice.example/tasks/",
+    });
+    await expect(
+      dw.saveMerged("https://alice.example/tasks/1", setTitle("X")),
+    ).rejects.toBeInstanceOf(WriteScopeError);
+    // The PUT never fired (the off-scope final URL was caught after the read).
+    expect(fetch.mock.calls.filter((c) => (c[1] as RequestInit)?.method === "PUT")).toHaveLength(0);
+  });
+
+  it("delete sets redirect:error too", async () => {
+    let deleteRedirect: string | undefined;
+    const fetch = vi.fn(async (_u: string, init?: RequestInit) => {
+      if (init?.method === "DELETE") deleteRedirect = init?.redirect;
+      return statusRes(205);
+    });
+    const dw = new DataWriter({ fetch: fetch as unknown as typeof globalThis.fetch });
+    await dw.delete("https://alice.example/x", { ifMatch: '"v1"' });
+    expect(deleteRedirect).toBe("error");
+  });
 });
 
 describe("DataWriter.putTurtle — the explicit conditional write", () => {

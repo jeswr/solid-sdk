@@ -89,6 +89,36 @@ describe("per-class forms register + mount the editable form", () => {
     await (el as unknown as { updateComplete: Promise<unknown> }).updateComplete;
     expect(el.querySelector('[part="empty"]')).not.toBeNull();
   });
+
+  it("publicRead reads the data with the credential-free publicFetch, not the auth fetch", async () => {
+    // roborev MEDIUM regression: a public-read form must read `src` with publicFetch,
+    // never the authenticated fetch (the credential boundary).
+    const authFetch = vi.fn(
+      async () =>
+        ttlRes(
+          `@prefix wf: <http://www.w3.org/2005/01/wf/flow#> . @prefix dct: <http://purl.org/dc/terms/> . <https://foreign.example/tasks/1#it> a wf:Task ; dct:title "T" .`,
+        ) as unknown as Response,
+    );
+    const publicFetch = vi.fn(
+      async () =>
+        ttlRes(
+          `@prefix wf: <http://www.w3.org/2005/01/wf/flow#> . @prefix dct: <http://purl.org/dc/terms/> . <https://foreign.example/tasks/1#it> a wf:Task ; dct:title "T" .`,
+        ) as unknown as Response,
+    );
+    const el = document.createElement("jeswr-task-form") as JeswrTaskForm;
+    el.fetch = authFetch as unknown as typeof globalThis.fetch;
+    el.publicFetch = publicFetch as unknown as typeof globalThis.fetch;
+    el.publicRead = true;
+    el.src = "https://foreign.example/tasks/1";
+    document.body.appendChild(el);
+    for (let i = 0; i < 50; i++) {
+      await el.updateComplete;
+      await Promise.resolve();
+      if (el.querySelector("shacl-form")) break;
+    }
+    expect(publicFetch).toHaveBeenCalled();
+    expect(authFetch).not.toHaveBeenCalled();
+  });
 });
 
 describe("per-class form §10 end-to-end save (conditional merge write)", () => {
@@ -166,5 +196,28 @@ describe("per-class form §10 end-to-end save (conditional merge write)", () => 
     const formGraph = new Store();
     await expect(el.callback()(formGraph)).rejects.toThrow(/Refusing to write/i);
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("a successful save fires EXACTLY ONE jeswr-save on the per-class form (no duplicate)", async () => {
+    // roborev LOW regression: the parent stops the child's bubbling event before
+    // re-emitting its own, so a listener on the per-class form gets ONE event.
+    const existing = `@prefix wf: <http://www.w3.org/2005/01/wf/flow#> . @prefix dct: <http://purl.org/dc/terms/> . <https://pod.example/tasks/1#it> a wf:Task ; dct:title "T" .`;
+    const fetch = vi.fn(async (_u: string, init?: RequestInit) => {
+      if ((init?.method ?? "GET") === "GET") return ttlRes(existing, '"v1"');
+      return statusRes(205, '"v2"');
+    });
+    const el = document.createElement("jeswr-task-form") as JeswrTaskForm;
+    el.fetch = fetch as unknown as typeof globalThis.fetch;
+    el.src = "https://pod.example/tasks/1";
+    document.body.appendChild(el);
+    for (let i = 0; i < 50; i++) {
+      await el.updateComplete;
+      await Promise.resolve();
+      if (el.querySelector("shacl-form")) break;
+    }
+    const events: unknown[] = [];
+    el.addEventListener("jeswr-save", (e) => events.push((e as CustomEvent).detail));
+    await el.save();
+    expect(events).toHaveLength(1);
   });
 });

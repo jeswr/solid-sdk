@@ -5,7 +5,7 @@ import type { GraphSource, ResolveOptions } from "../shacl-view-fetch.js";
 import "./shacl-form-edit.js";
 import type { MergeSaveCallback } from "./shacl-form-edit.js";
 /** The input props the base re-renders the editable form on. */
-export declare const BASE_FORM_INPUT_PROPS: readonly ["src", "fetch", "publicFetch", "base", "resolveOptions"];
+export declare const BASE_FORM_INPUT_PROPS: readonly ["src", "fetch", "publicFetch", "base", "publicRead", "resolveOptions"];
 /**
  * Base class for the per-class editable form elements. It mounts the inner
  * <jeswr-shacl-form> (the §9-hardened editable wrapper) bound to the model's shape +
@@ -30,6 +30,15 @@ export declare abstract class AbstractFormElement extends LitElement {
      * resource's container.
      */
     base: string | undefined;
+    /**
+     * Read the DATA graph with the credential-free `publicFetch` (a foreign/public
+     * resource) instead of the authenticated `fetch`. The credential boundary still
+     * applies: with `publicRead` set, `publicFetch` MUST be provided (the resolver
+     * fails closed otherwise). NOTE this affects only the data READ that POPULATES the
+     * form — a SAVE is always an authenticated own-origin write (there is no public
+     * write), so editing a public-read resource still needs `fetch` set to save.
+     */
+    publicRead: boolean;
     /** Resolver options forwarded to the §9 pre-fetch (max bytes / timeout / test stub). */
     resolveOptions: ResolveOptions | undefined;
     protected saveStatus: SaveStatus;
@@ -42,6 +51,10 @@ export declare abstract class AbstractFormElement extends LitElement {
             attribute: boolean;
         };
         base: {};
+        publicRead: {
+            type: BooleanConstructor;
+            attribute: string;
+        };
         resolveOptions: {
             attribute: boolean;
         };
@@ -70,7 +83,13 @@ export declare abstract class AbstractFormElement extends LitElement {
      * delegates to the subclass's {@link applyFormDeltaToExisting} on the LOADED graph.
      */
     protected mergeSaveCallback(): MergeSaveCallback;
-    /** Build the data-graph source for the inner form: the resource, read with `fetch`. */
+    /**
+     * Build the data-graph source for the inner form: the resource at `src`, read with
+     * the authenticated `fetch` — OR, when `publicRead` is set, with the credential-free
+     * `publicFetch` (the resolver fails closed if `publicFetch` is then missing, so the
+     * session token never leaks to a foreign read). Honours the same `public-read`
+     * contract as the read elements.
+     */
     protected dataSource(): GraphSource | undefined;
     /** Imperatively trigger a save on the inner editable form. */
     save(): Promise<boolean>;

@@ -47,7 +47,7 @@ import {
   safeTel,
   serializeTurtle,
   stripScheme
-} from "./chunks/chunk-XHVWBVOR.js";
+} from "./chunks/chunk-GLJJBJV4.js";
 import "./chunks/chunk-BNRDLDVI.js";
 
 // src/vocab.ts
