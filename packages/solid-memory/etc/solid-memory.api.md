@@ -15,7 +15,9 @@ export const AS = "https://www.w3.org/ns/activitystreams#";
 export const as: (local: string) => string;
 
 // @public
-export function assertWithinBase(container: string, url: string): void;
+export function assertWithinBase(container: string, url: string, opts?: {
+    allowRoot?: boolean;
+}): void;
 
 // @public
 export function buildMemory(resourceUrl: string, data: MemoryData): Store;

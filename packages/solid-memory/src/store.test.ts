@@ -575,6 +575,83 @@ describe("scope guard rejects foreign URLs on every op", () => {
   });
 });
 
+describe("scope guard rejects the container ROOT as a resource CRUD target", () => {
+  // Defence-in-depth footgun: assertWithinBase(container, container) used to pass
+  // (the root path trivially prefixes itself), so a caller bug that passed the
+  // store's OWN container root to a resource CRUD method would PUT/DELETE/GET the
+  // container document itself. The root is NOT a managed mem:MemoryItem resource;
+  // every resource-CRUD op must REFUSE it AND issue no network request.
+  // (These tests FAIL against the pre-guard code, where the root slipped through.)
+  // Forms that resolve to the container root itself (same origin + same path,
+  // ignoring query/fragment) — these must trip the explicit container-root guard.
+  const exactRootForms = [
+    CONTAINER, // exact normalised root
+    "https://alice.pod/memories/?x=1", // root with a query
+    "https://alice.pod/memories/#frag", // root with a fragment
+  ];
+
+  for (const root of exactRootForms) {
+    it(`get/update/delete/forget/unforget refuse the root form ${root} with no network request`, async () => {
+      let called = false;
+      const counting: typeof globalThis.fetch = async (...args) => {
+        called = true;
+        const { fetchImpl } = makePod();
+        return fetchImpl(...args);
+      };
+      const s = new MemoryStore({ container: CONTAINER, fetch: counting });
+      await expect(s.get(root)).rejects.toThrow(/container root/);
+      await expect(s.update(root, { text: "x" })).rejects.toThrow(/container root/);
+      await expect(s.delete(root)).rejects.toThrow(/container root/);
+      await expect(s.forget(root)).rejects.toThrow(/container root/);
+      await expect(s.unforget(root)).rejects.toThrow(/container root/);
+      // The decisive assertion: the guard tripped BEFORE any request reached the pod.
+      expect(called).toBe(false);
+    });
+  }
+
+  it("refuses the slash-less container path with no network request (escapes-path guard)", async () => {
+    // The non-trailing-slash form `.../memories` is not the normalised root path
+    // `.../memories/`, so it is caught by the existing escapes-path check — still
+    // refused, still no request (a different message, but the same fail-closed result).
+    let called = false;
+    const counting: typeof globalThis.fetch = async (...args) => {
+      called = true;
+      const { fetchImpl } = makePod();
+      return fetchImpl(...args);
+    };
+    const s = new MemoryStore({ container: CONTAINER, fetch: counting });
+    const slashless = "https://alice.pod/memories";
+    await expect(s.get(slashless)).rejects.toThrow(/escapes container path/);
+    await expect(s.delete(slashless)).rejects.toThrow(/escapes container path/);
+    expect(called).toBe(false);
+  });
+
+  it("rejects the store's OWN container property passed straight back in", async () => {
+    // The most direct expression of the bug: store.delete(store.container).
+    let called = false;
+    const counting: typeof globalThis.fetch = async (...args) => {
+      called = true;
+      const { fetchImpl } = makePod();
+      return fetchImpl(...args);
+    };
+    const s = new MemoryStore({ container: CONTAINER, fetch: counting });
+    await expect(s.delete(s.container)).rejects.toThrow(/container root/);
+    await expect(s.update(s.container, { text: "x" })).rejects.toThrow(/container root/);
+    await expect(s.get(s.container)).rejects.toThrow(/container root/);
+    expect(called).toBe(false);
+  });
+
+  it("still lists the container (the root read path is unaffected by the CRUD root-guard)", async () => {
+    // Regression guard: rejecting the root for CRUD must NOT break list(), whose
+    // legitimate root read does not go through the resource scope guard.
+    const { fetchImpl } = makePod();
+    const s = new MemoryStore({ container: CONTAINER, fetch: fetchImpl });
+    const a = await s.create({ text: "a" });
+    const members = (await s.list()).map((m) => m.url);
+    expect(members).toEqual([a.url]);
+  });
+});
+
 describe("type-index registration", () => {
   it("typeIndexRegistration returns the descriptor", () => {
     const { fetchImpl } = makePod();

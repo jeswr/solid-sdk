@@ -358,15 +358,17 @@ export class MemoryStore {
         for (const resource of container.contains) {
             // resource.id may be relative; resolve against the container URL to be safe.
             const absolute = new URL(resource.id, this.container).toString();
-            // Defence in depth: never surface a member that escapes the container.
-            try {
-                assertWithinBase(this.container, absolute);
-            }
-            catch {
+            // Skip the container listing itself (it lists itself as a member).
+            if (absolute === this.container) {
                 continue;
             }
-            // Skip the container listing itself.
-            if (absolute === this.container) {
+            // Defence in depth: never surface a member that escapes the container.
+            // `allowRoot` is irrelevant here (the root is already skipped above), but the
+            // guard's whole point in a listing is to drop non-root escapers.
+            try {
+                assertWithinBase(this.container, absolute, { allowRoot: true });
+            }
+            catch {
                 continue;
             }
             members.push({ url: absolute, container: isContainerUrl(absolute) });

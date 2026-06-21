@@ -37,12 +37,23 @@ export function normalizeContainer(container) {
     return url.toString();
 }
 /**
- * Fail-closed assertion that `url` is `container` itself or a strict descendant of
- * it (same origin, path prefixed by the container path). Guards against any
- * encoding/normalisation trick producing a URL outside the pod sub-tree the store
- * owns.
+ * Fail-closed assertion that `url` is within the store's container sub-tree:
+ * same origin and a path prefixed by the container path.
+ *
+ * **The container ROOT itself is rejected by default.** A `MemoryStore`'s CRUD
+ * operations (`get`/`update`/`delete`/`forget`/`unforget` and the minted `create`
+ * URL) act on individual `mem:MemoryItem` RESOURCES — the container root is never
+ * one of them. A caller (or a bug) that passes the store's own container root must
+ * NOT be allowed to PUT/DELETE/GET it as if it were a managed resource (a footgun
+ * that could clobber or read the container itself), so by default `url === container`
+ * (after trailing-slash normalisation) is REFUSED. Pass `{ allowRoot: true }` for
+ * the one legitimate case — validating a member URL that may *be* the container in a
+ * listing — where the caller skips/handles the root separately.
+ *
+ * Guards against any encoding/normalisation trick producing a URL outside the pod
+ * sub-tree the store owns.
  */
-export function assertWithinBase(container, url) {
+export function assertWithinBase(container, url, opts) {
     const b = new URL(container);
     let u;
     try {
@@ -56,6 +67,14 @@ export function assertWithinBase(container, url) {
     }
     if (!u.pathname.startsWith(b.pathname)) {
         throw new Error(`[solid-memory] target URL ${url} escapes container path ${b.pathname} (refused)`);
+    }
+    // Reject the container ROOT itself for resource CRUD — it is not a managed
+    // mem:MemoryItem resource, and acting on it (PUT/DELETE/GET) would target the
+    // container document. Compare on the normalised path+origin (ignoring any
+    // query/fragment, which a target never carries) so trailing-slash / `?`/`#`
+    // variants of the root cannot slip through.
+    if (opts?.allowRoot !== true && u.origin === b.origin && u.pathname === b.pathname) {
+        throw new Error(`[solid-memory] target URL ${url} is the container root, not a managed resource (refused)`);
     }
 }
 /** True iff `url` is a container (LDP convention: a trailing slash on the path). */
