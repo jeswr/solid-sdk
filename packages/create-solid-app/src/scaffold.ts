@@ -328,13 +328,17 @@ async function substituteDataModel(targetDir: string, dataModel: string): Promis
   const viewPath = join(targetDir, "components", "solid", "PodDataView.tsx");
   if (!existsSync(viewPath)) return; // a template without the example — nothing to do.
   let src = await readFile(viewPath, "utf8");
-  // The bound element: same `ref`/`src`/`part` seam, just the chosen tag. The
-  // tag is from the committed catalog (never user input), so no escaping needed.
+  // The bound element: same `ref`/`part` seam + the chosen tag, with the `src` bound
+  // to the model's source local (a profile card reads `webId`, every other element
+  // reads the pod `storage` root). Both the tag AND the src-expr are fixed tokens
+  // from the committed catalog (never user input), so no escaping is needed; the
+  // src-expr names a local the template's PodDataView already destructures + narrows
+  // to non-null before render (`webId` / `storage`).
   src = replaceSentinelRegion(
     src,
     DATA_VIEW_EL_BEGIN,
     DATA_VIEW_EL_END,
-    `<${entry.tag} ref={seamRef} src={storage} part="data-view" />`,
+    `<${entry.tag} ref={seamRef} src={${entry.srcExpr}} part="data-view" />`,
   );
   // The card description: the catalog's plain-text line. Escape any JSX-significant
   // characters so untrusted-looking punctuation (`<`, `>`, `{`, `}`) can never break

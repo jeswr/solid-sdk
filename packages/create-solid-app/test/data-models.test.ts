@@ -15,12 +15,21 @@ import {
 } from "../src/data-models.ts";
 
 describe("data-models catalog", () => {
-  it("every entry has key / tag / label / description", () => {
+  it("every entry has key / tag / label / description / srcExpr", () => {
     for (const m of DATA_MODELS) {
       expect(m.key, "key").toBeTruthy();
       expect(m.tag, `tag for ${m.key}`).toBeTruthy();
       expect(m.label, `label for ${m.key}`).toBeTruthy();
       expect(m.description, `description for ${m.key}`).toBeTruthy();
+      // srcExpr is a fixed token spliced into `src={…}` — only the two known locals.
+      expect(["storage", "webId"], `srcExpr for ${m.key}`).toContain(m.srcExpr);
+    }
+  });
+
+  it("the profile model binds the WebID (src={webId}); every other binds storage", () => {
+    // <jeswr-profile-card> reads a WebID profile doc; the rest read a pod container.
+    for (const m of DATA_MODELS) {
+      expect(m.srcExpr, `${m.key} src`).toBe(m.key === "profile" ? "webId" : "storage");
     }
   });
 

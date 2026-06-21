@@ -186,9 +186,13 @@ page once signed in).
 
 **How to use one (the load-bearing rules):**
 
-1. **Register them with a side-effect import in a CLIENT component:**
-   `import "@jeswr/solid-components"`. They are browser-only Lit elements
-   (`customElements.define`) — never import in a server component (breaks `next build`).
+1. **Register them with a side-effect import in a BROWSER-ONLY component:**
+   `import "@jeswr/solid-components"`. They are browser-only Lit elements that
+   `customElements.define(...)` at module top level — so the importing module must
+   never be EVALUATED on the server. A client component is not enough on its own
+   (Next can still evaluate a client module during build / page-data collection);
+   load it through `next/dynamic(() => import("…"), { ssr: false })` (as `app/page.tsx`
+   does for `PodDataView`), the same boundary `providers.tsx` uses for the auth provider.
 2. **The fetch seam is an object PROPERTY, set via a ref** — not an attribute. Pass the
    app's authenticated fetch: `registerGlobally()` has patched `globalThis.fetch`, so
    handing the element `(...a) => fetch(...a)` gives it the user's DPoP-authed reads.

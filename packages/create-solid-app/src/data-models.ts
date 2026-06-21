@@ -34,6 +34,15 @@ export interface DataModelEntry {
    * embedded as JSX text), referencing the chosen element so the value is clear.
    */
   readonly description: string;
+  /**
+   * The JSX expression the generated element's `src` is bound to. A profile card
+   * binds a WebID PROFILE document, so it reads `webId`; every other element reads
+   * a container/resource off the pod, so it reads the pod `storage` root. This is a
+   * fixed token from the trusted catalog (one of `"storage"` / `"webId"`), spliced
+   * verbatim into `src={…}` — never user input. The values it names are the locals
+   * the template's `PodDataView` already destructures (`storage`, `webId`).
+   */
+  readonly srcExpr: "storage" | "webId";
 }
 
 /**
@@ -48,6 +57,7 @@ export const DATA_MODELS: readonly DataModelEntry[] = [
     label: "Generic resolve-by-type view (reads rdf:type, picks the right element)",
     description:
       "Rendered declaratively with <solid-view> — it reads the resource's rdf:type and mounts the matching typed element (or a plain container listing for an untyped container). No hand-rolled LDP or RDF.",
+    srcExpr: "storage",
   },
   {
     key: "task",
@@ -55,6 +65,7 @@ export const DATA_MODELS: readonly DataModelEntry[] = [
     label: "Task list (wf:Task — title, state, assignee, priority, due date)",
     description:
       "Rendered declaratively with <jeswr-task-list> — every wf:Task in the resource (title, open/closed, assignee, priority, due date). No hand-rolled LDP or RDF.",
+    srcExpr: "storage",
   },
   {
     key: "contact",
@@ -62,6 +73,7 @@ export const DATA_MODELS: readonly DataModelEntry[] = [
     label: "Contact list (vcard:Individual — name, org, emails, phones, WebID)",
     description:
       "Rendered declaratively with <jeswr-contact-list> — every vcard:Individual in the resource (name, org, emails, phones, WebID, note). No hand-rolled LDP or RDF.",
+    srcExpr: "storage",
   },
   {
     key: "bookmark",
@@ -69,6 +81,7 @@ export const DATA_MODELS: readonly DataModelEntry[] = [
     label: "Bookmark list (book:Bookmark — title→url link, description, tags)",
     description:
       "Rendered declaratively with <jeswr-bookmark-list> — every book:Bookmark in the resource (title→url link, description, tags, archived). No hand-rolled LDP or RDF.",
+    srcExpr: "storage",
   },
   {
     key: "profile",
@@ -76,6 +89,8 @@ export const DATA_MODELS: readonly DataModelEntry[] = [
     label: "Profile card (a WebID profile — name, photo, org/role, homepage)",
     description:
       "Rendered declaratively with <jeswr-profile-card> — a WebID profile (name, photo, org/role, homepage, WebID, OIDC issuer). No hand-rolled LDP or RDF.",
+    // A profile card binds the WebID PROFILE document, not the pod storage container.
+    srcExpr: "webId",
   },
   {
     key: "collection",
@@ -83,6 +98,7 @@ export const DATA_MODELS: readonly DataModelEntry[] = [
     label: "Container listing (ldp:Container — the ldp:contains children)",
     description:
       "Rendered declaratively with <jeswr-collection> — the ldp:contains children of an LDP container (with an optional type-index label seam). No hand-rolled LDP or RDF.",
+    srcExpr: "storage",
   },
 ] as const;
 

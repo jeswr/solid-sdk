@@ -12,13 +12,26 @@
 // `label` property in @lit/react's `node` export mode (SSR/Vitest) — see
 // types/solid-elements.d.ts.
 import "@jeswr/solid-elements/react";
+import dynamic from "next/dynamic";
 import { useSolidAuth } from "@/components/solid/SolidAuthProvider";
 import { LoginPanel } from "@/components/solid/LoginPanel";
 import { ProfileCard } from "@/components/solid/ProfileCard";
+
 // The DECLARATIVE data-bound example: render a pod resource through
 // @jeswr/solid-components' read Web Components (no hand-rolled LDP/RDF). Shown
 // once signed in, below the profile. READ-ONLY today (edit mode is Phase 2).
-import { PodDataView } from "@/components/solid/PodDataView";
+//
+// CLIENT-ONLY (ssr: false) — the load-bearing reason: PodDataView side-effect-imports
+// `@jeswr/solid-components`, whose component modules call `customElements.define(...)`
+// at module top level (a browser-only global). A client component module CAN still be
+// EVALUATED on the server during Next's build / page-data collection, which would throw
+// on the missing browser global. Loading it through `next/dynamic({ ssr: false })` keeps
+// the package (and its `customElements` registration) strictly in the browser bundle —
+// the same boundary `providers.tsx` uses for the browser-only auth provider.
+const PodDataView = dynamic(
+  () => import("@/components/solid/PodDataView").then((m) => m.PodDataView),
+  { ssr: false },
+);
 
 export default function Home() {
   const { webId, autologinPending } = useSolidAuth();

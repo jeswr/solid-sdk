@@ -352,23 +352,38 @@ describe("scaffold with --data-model", () => {
     expect(view).toContain("jeswr-task-list");
   });
 
-  it("swaps for contact / bookmark / profile / collection models", async () => {
-    const cases: ReadonlyArray<[string, string]> = [
-      ["contact", "jeswr-contact-list"],
-      ["bookmark", "jeswr-bookmark-list"],
-      ["profile", "jeswr-profile-card"],
-      ["collection", "jeswr-collection"],
+  it("swaps for contact / bookmark / profile / collection models (with the right src)", async () => {
+    // [model, tag, srcLocal] — a profile card binds the WebID PROFILE document, so it
+    // must read `webId`, NOT the pod `storage` container (the roborev Medium fix).
+    const cases: ReadonlyArray<[string, string, string]> = [
+      ["contact", "jeswr-contact-list", "storage"],
+      ["bookmark", "jeswr-bookmark-list", "storage"],
+      ["profile", "jeswr-profile-card", "webId"],
+      ["collection", "jeswr-collection", "storage"],
     ];
-    for (const [model, tag] of cases) {
+    for (const [model, tag, src] of cases) {
       const r = await scaffoldModel(`${model}-app`, model);
       const view = await readFile(
         join(r.targetDir, "components", "solid", "PodDataView.tsx"),
         "utf8",
       );
-      expect(view, `${model} → <${tag}>`).toMatch(
-        new RegExp(`<${tag}\\s+ref=\\{seamRef\\}\\s+src=\\{storage\\}`),
+      expect(view, `${model} → <${tag} src={${src}}>`).toMatch(
+        new RegExp(`<${tag}\\s+ref=\\{seamRef\\}\\s+src=\\{${src}\\}`),
       );
     }
+  });
+
+  it("the profile model binds the WebID profile doc (src={webId}), never the storage container", async () => {
+    // Explicit guard for the roborev Medium: <jeswr-profile-card> reads a WebID
+    // profile, so a profile scaffold must point at `webId` — pointing it at the pod
+    // `storage` container would render the wrong resource.
+    const r = await scaffoldModel("profile-src-app", "profile");
+    const view = await readFile(
+      join(r.targetDir, "components", "solid", "PodDataView.tsx"),
+      "utf8",
+    );
+    expect(view).toMatch(/<jeswr-profile-card\s+ref=\{seamRef\}\s+src=\{webId\}/);
+    expect(view).not.toMatch(/<jeswr-profile-card\s+ref=\{seamRef\}\s+src=\{storage\}/);
   });
 
   it("the default (solid-view) leaves the template element verbatim", async () => {
