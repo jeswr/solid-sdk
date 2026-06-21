@@ -4,10 +4,14 @@ import { DataController } from "../data-controller.js";
 /** The status of a read element's current load. */
 export type ReadStatus = "idle" | "loading" | "ready" | "error";
 /**
- * The set of property names whose change should (re)trigger a read. A subclass adds
- * its own input props to this list; the base watches `src` / `fetch` / `publicFetch`.
+ * The set of property names whose change should (re)trigger a read. A subclass
+ * EXTENDS this list (spread it, never duplicate it) so it inherits every base input
+ * and cannot silently drift. The base watches `src` / `fetch` / `publicFetch` /
+ * `publicRead`: `publicRead` MUST be here — it selects which fetch (`publicFetch` vs
+ * the authed `fetch`) `loadFrom` reads with, so toggling `public-read` after the
+ * initial load has to re-read through the now-correct credential path.
  */
-export declare const BASE_INPUT_PROPS: readonly ["src", "fetch", "publicFetch"];
+export declare const BASE_INPUT_PROPS: readonly ["src", "fetch", "publicFetch", "publicRead"];
 /**
  * Base class for the read-only data-binding elements. Holds the DataController seam,
  * the load lifecycle (idle/loading/ready/error with a supersede token), and the

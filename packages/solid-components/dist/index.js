@@ -1347,7 +1347,7 @@ var LDP_BASIC_CONTAINER = "http://www.w3.org/ns/ldp#BasicContainer";
 var RDF_TYPE2 = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 
 // src/components/shared.ts
-var BASE_INPUT_PROPS = ["src", "fetch", "publicFetch"];
+var BASE_INPUT_PROPS = ["src", "fetch", "publicFetch", "publicRead"];
 var AbstractReadElement = class extends i {
   /** A monotonically increasing token to drop the result of a superseded read. */
   #readToken = 0;
@@ -2144,7 +2144,7 @@ var JeswrCollection = class extends AbstractReadElement {
     this.typeIndex = void 0;
   }
   inputProps() {
-    return ["src", "fetch", "publicFetch", "typeIndex"];
+    return [...BASE_INPUT_PROPS, "typeIndex"];
   }
   async loadFrom(controller, src, publicRead) {
     const listing = await controller.listContainer(src, publicRead ? { public: true } : {});

@@ -54,6 +54,52 @@ describe("<jeswr-contact-list>", () => {
     expect(el.querySelector('[part="empty"]')?.textContent).toContain("No contacts");
   });
 
+  it("re-reads via publicFetch (not the authed fetch) when public-read is toggled after load", async () => {
+    // Two DISTINCT fetch seams. The authed `fetch` carries credentials (it must NOT
+    // be used for a public read); `publicFetch` is credential-free. We track which is
+    // called so toggling `public-read` after the initial authed load proves the
+    // re-read went through the PUBLIC credential path (the Medium reactivity fix:
+    // `publicRead` is now a read-trigger input).
+    const authedCalls: string[] = [];
+    const publicCalls: string[] = [];
+    const authedFetch = (async (url: string) => {
+      authedCalls.push(String(url));
+      return new Response(CONTACTS_TTL, {
+        status: 200,
+        headers: { "Content-Type": "text/turtle" },
+      });
+    }) as unknown as typeof fetch;
+    const publicFetch = (async (url: string) => {
+      publicCalls.push(String(url));
+      return new Response(CONTACTS_TTL, {
+        status: 200,
+        headers: { "Content-Type": "text/turtle" },
+      });
+    }) as unknown as typeof fetch;
+
+    const el = await mount<JeswrContactList>("jeswr-contact-list");
+    el.fetch = authedFetch;
+    el.publicFetch = publicFetch;
+    el.src = "https://pod.example/contacts/";
+    // Initial load (public-read defaults to false) → the AUTHED fetch.
+    await waitFor(el, (e) => e.querySelectorAll('[part="contact"]').length === 2, "authed load");
+    expect(authedCalls.length).toBe(1);
+    expect(publicCalls.length).toBe(0);
+
+    // Toggle public-read AFTER the initial load. Because `publicRead` is in the
+    // base read-trigger inputs, this MUST re-read — and through `publicFetch`.
+    el.publicRead = true;
+    await waitFor(
+      el,
+      () => publicCalls.length === 1,
+      "public-read toggle re-reads via publicFetch",
+    );
+    expect(publicCalls.length).toBe(1);
+    expect(publicCalls[0]).toBe("https://pod.example/contacts/");
+    // The authed fetch was NOT used for the public re-read (no credential leak).
+    expect(authedCalls.length).toBe(1);
+  });
+
   it("never renders a hostile email/webId as a link, and escapes a hostile name", async () => {
     const el = await mount<JeswrContactList>("jeswr-contact-list");
     el.store = parseTurtle(HOSTILE_CONTACT_TTL);

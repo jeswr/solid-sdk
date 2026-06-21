@@ -7,16 +7,26 @@
 // The mechanism that makes this meaningful: the dist/ is built (build-dist.mjs)
 // with @ulb-darmstadt/shacl-form + n3 + shacl-engine + @jeswr/fetch-rdf esbuild-
 // INLINED, and jsonld + rdfxml-streaming-parser + leaflet STUBBED out. So importing
-// dist/index.js must NOT reach for any of those packages. To PROVE that, this test:
-//   1. (re)builds dist/ so we test the real committed pipeline,
-//   2. asserts the built JS has NO bare import of an optional peer
+// dist/index.js must NOT reach for any of those packages. To PROVE that, this test
+// works against the COMMITTED dist AS-IS:
+//   1. asserts the committed JS has NO bare import of an optional peer
 //      (jsonld / rdfxml-streaming-parser / leaflet / n3 / shacl-form / lit) —
-//      they must all be inlined, not externalised,
-//   3. imports the built dist/index.js and dist/react/index.js and asserts the
+//      they must all be inlined, not externalised (via dist-imports.mjs's esbuild
+//      import-graph over the committed dist files),
+//   2. imports the committed dist/index.js and dist/react/index.js and asserts the
 //      public API loads + the custom element registers.
 //
+// GATE-INTEGRITY (roborev HIGH, round 2): this test does NOT rebuild `dist/`. An
+// earlier version ran `scripts/build-dist.mjs` (no out-dir arg ⇒ it overwrites the
+// repo's committed `dist/`) in a `beforeAll`. Because `npm run gate` runs `test`
+// BEFORE `check:dist`, that rebuild silently refreshed a stale/missing committed
+// `dist/` before the drift guard ran, masking committed-dist drift. The COMMITTED
+// artifact is exactly what a consumer installs, and `npm run check:dist`
+// independently proves it equals a fresh build — so exercising it as-is is both
+// correct AND leaves the working tree clean (no test mutates `dist/`).
+//
 // This runs in vitest (Node + jsdom). testTimeout is bumped in vitest.config.ts
-// because step 1 does a cold esbuild + tsc build.
+// because step 1 shells out to esbuild in a clean subprocess.
 
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
@@ -83,17 +93,11 @@ function isAllowedExternal(spec: string): boolean {
 let distExternals: Set<string>;
 
 beforeAll(() => {
-  // Build the real committed pipeline into the working-tree dist/ so the import +
-  // e2e assertions below load the freshly built artifact (check-dist-fresh
-  // separately guards committed-vs-fresh drift).
-  execFileSync(process.execPath, ["scripts/build-dist.mjs"], {
-    cwd: root,
-    stdio: ["ignore", "ignore", "inherit"],
-  });
-
-  // Compute the dist's REAL external import graph via esbuild — in a clean Node
-  // SUBPROCESS, because esbuild refuses to run inside vitest's jsdom environment
-  // (jsdom's TextEncoder trips esbuild's TextEncoder invariant).
+  // Compute the COMMITTED dist's REAL external import graph via esbuild — in a clean
+  // Node SUBPROCESS, because esbuild refuses to run inside vitest's jsdom environment
+  // (jsdom's TextEncoder trips esbuild's TextEncoder invariant). `dist-imports.mjs`
+  // reads the committed `dist/index.js` + `dist/react/index.js` files on disk; we do
+  // NOT rebuild first (see the GATE-INTEGRITY note above — `check:dist` guards drift).
   const json = execFileSync(process.execPath, ["scripts/dist-imports.mjs"], {
     cwd: root,
     encoding: "utf8",

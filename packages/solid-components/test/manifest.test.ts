@@ -12,18 +12,28 @@
 // The manifest itself is regenerated + drift-checked by `npm run check:manifest`; this
 // test asserts its CONTENT is consistent with the code, not just non-drifting.
 
-import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { ComponentEntry } from "../src/resolver.js";
 
-// We read RESOLVER_ENTRIES + the dist export names from the BUILT dist/index.js (a
+// We read RESOLVER_ENTRIES + the dist export names from the COMMITTED dist/index.js (a
 // single import), NOT from `../src/index.js`. Importing both src AND dist in one file
 // double-loads the inlined <shacl-form> element (dist carries its own copy), which
 // throws "already registered". The dist is the artifact the manifest must agree with
 // anyway, so reading from it is the right source.
+//
+// GATE-INTEGRITY (roborev HIGH, round 2): this test reads the COMMITTED `dist/` +
+// `custom-elements.json` AS-IS — it does NOT rebuild `dist/`. An earlier version ran
+// `scripts/build-dist.mjs` (no out-dir arg ⇒ it writes the repo's `dist/`) in a
+// `beforeAll`. Because `npm run gate` runs `test` BEFORE `check:dist`, that rebuild
+// silently refreshed a stale/missing committed `dist/` before the drift guard ran, so
+// `check:dist` could never catch committed-dist drift. The committed artifact is the
+// thing under test here, and `npm run check:dist` independently proves it equals a
+// fresh build — so reading it as-is loses nothing and stops the masking. No test in
+// the suite may mutate the committed `dist/` / `custom-elements.json` (the gate must
+// leave the tree clean).
 const root = process.cwd();
 const manifestPath = join(root, "custom-elements.json");
 const distIndexUrl = pathToFileURL(join(root, "dist", "index.js")).href;
@@ -52,17 +62,12 @@ interface Cem {
 
 let cem: Cem;
 
-beforeAll(() => {
-  // Build the dist once so we read the REAL committed pipeline's runtime exports +
-  // the committed RESOLVER_ENTRIES from a single artifact import.
-  execFileSync(process.execPath, ["scripts/build-dist.mjs"], {
-    cwd: root,
-    stdio: ["ignore", "ignore", "inherit"],
-  });
-  cem = JSON.parse(readFileSync(manifestPath, "utf8")) as Cem;
-}, 120_000);
-
 beforeAll(async () => {
+  // Read the COMMITTED manifest + import the COMMITTED dist AS-IS — no rebuild (see
+  // the GATE-INTEGRITY note above). `check:dist` separately guarantees the committed
+  // dist matches a fresh build, so the runtime exports + RESOLVER_ENTRIES we read here
+  // are the real committed pipeline's, with no mutation of the working tree.
+  cem = JSON.parse(readFileSync(manifestPath, "utf8")) as Cem;
   const mod = await import(distIndexUrl);
   RESOLVER_ENTRIES = mod.RESOLVER_ENTRIES as readonly ComponentEntry[];
   distExportNames = new Set(Object.keys(mod));

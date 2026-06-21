@@ -22,7 +22,7 @@
 import { html, type TemplateResult } from "lit";
 import type { Store } from "n3";
 import type { ContainerChild, DataController } from "../data-controller.js";
-import { AbstractReadElement, safeHref } from "./shared.js";
+import { AbstractReadElement, BASE_INPUT_PROPS, safeHref } from "./shared.js";
 
 /** A Solid Type Index registration (the seam a consumer injects). */
 export interface TypeIndexEntry {
@@ -76,7 +76,9 @@ export class JeswrCollection extends AbstractReadElement {
   }
 
   protected override inputProps(): readonly string[] {
-    return ["src", "fetch", "publicFetch", "typeIndex"];
+    // EXTEND the base set (spread it) so this element inherits every base input —
+    // incl. `publicRead` — and cannot drift from it; add only `typeIndex` here.
+    return [...BASE_INPUT_PROPS, "typeIndex"];
   }
 
   protected override async loadFrom(

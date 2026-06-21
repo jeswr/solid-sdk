@@ -59,6 +59,47 @@ describe("<jeswr-collection>", () => {
     expect(el.querySelector('[part="empty"]')?.textContent).toContain("Empty container");
   });
 
+  it("re-reads via publicFetch when public-read is toggled after load (inherits BASE_INPUT_PROPS)", async () => {
+    // <jeswr-collection> EXTENDS the base read-trigger inputs (spreads
+    // BASE_INPUT_PROPS) rather than duplicating them, so it inherits `publicRead`.
+    // Toggling `public-read` after the initial authed listing must re-list through
+    // the credential-free `publicFetch`, not the authed `fetch`.
+    const authedCalls: string[] = [];
+    const publicCalls: string[] = [];
+    const authedFetch = (async (url: string) => {
+      authedCalls.push(String(url));
+      return new Response(CONTAINER_TTL, {
+        status: 200,
+        headers: { "Content-Type": "text/turtle" },
+      });
+    }) as unknown as typeof fetch;
+    const publicFetch = (async (url: string) => {
+      publicCalls.push(String(url));
+      return new Response(CONTAINER_TTL, {
+        status: 200,
+        headers: { "Content-Type": "text/turtle" },
+      });
+    }) as unknown as typeof fetch;
+
+    const el = await mount<JeswrCollection>("jeswr-collection");
+    el.fetch = authedFetch;
+    el.publicFetch = publicFetch;
+    el.src = "https://pod.example/data/";
+    await waitFor(el, (e) => e.querySelectorAll('[part="child"]').length === 2, "authed listing");
+    expect(authedCalls.length).toBe(1);
+    expect(publicCalls.length).toBe(0);
+
+    el.publicRead = true;
+    await waitFor(
+      el,
+      () => publicCalls.length === 1,
+      "public-read toggle re-lists via publicFetch",
+    );
+    expect(publicCalls.length).toBe(1);
+    expect(publicCalls[0]).toBe("https://pod.example/data/");
+    expect(authedCalls.length).toBe(1);
+  });
+
   it("labels a child container from the injected type-index seam", async () => {
     const el = await mount<JeswrCollection>("jeswr-collection");
     el.fetch = ttlFetch(CONTAINER_TTL);

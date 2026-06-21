@@ -1461,10 +1461,10 @@
           "kind": "variable",
           "name": "BASE_INPUT_PROPS",
           "type": {
-            "text": "[\"src\", \"fetch\", \"publicFetch\"]"
+            "text": "[\"src\", \"fetch\", \"publicFetch\", \"publicRead\"]"
           },
-          "default": "[\"src\", \"fetch\", \"publicFetch\"]",
-          "description": "The set of property names whose change should (re)trigger a read. A subclass adds\nits own input props to this list; the base watches `src` / `fetch` / `publicFetch`."
+          "default": "[\"src\", \"fetch\", \"publicFetch\", \"publicRead\"]",
+          "description": "The set of property names whose change should (re)trigger a read. A subclass\nEXTENDS this list (spread it, never duplicate it) so it inherits every base input\nand cannot silently drift. The base watches `src` / `fetch` / `publicFetch` /\n`publicRead`: `publicRead` MUST be here — it selects which fetch (`publicFetch` vs\nthe authed `fetch`) `loadFrom` reads with, so toggling `public-read` after the\ninitial load has to re-read through the now-correct credential path."
         },
         {
           "kind": "class",
