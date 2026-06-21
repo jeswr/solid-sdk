@@ -16,11 +16,18 @@ export interface ResolvedTarget {
  * This is a deliberately BROAD, best-effort textual scrub that also works on
  * MALFORMED input (where `new URL` threw, so we cannot trust the parser — and a
  * value like `ht!tp://u:p@host/` has no RFC-valid scheme yet still carries a
- * secret). It replaces the `user[:pass]@` of EVERY `//…@host` authority in the
- * string (global, scheme-prefix-agnostic) with `<redacted>@`. Over-redaction is
- * safe here (these are error strings, not requests); under-redaction would leak —
- * so the rule errs toward redacting. The userinfo (RFC 3986) excludes `/?#@`, so
- * a `//` not followed by userinfo-then-`@` (e.g. a `//a/b` path) is left alone.
+ * secret). It replaces EVERY `//…@` authority-userinfo span in the string
+ * (global, scheme-prefix-agnostic) with `//<redacted>@`.
+ *
+ * The userinfo is taken as ALL characters from `//` up to the last `@` that
+ * occurs BEFORE the first authority terminator (`/`, `?`, `#`). Crucially the
+ * span is `[^/?#]` (NOT `[^/?#@\s]`): it must include whitespace and control
+ * chars and even an embedded `@`, because a malformed target like
+ * `https://alice:s3 cr3t@ho st/x` (space in the password) would otherwise slip
+ * the scrub and leak the credential through the invalid-target error path. Over-
+ * redaction is safe here (these are error strings, not requests); under-redaction
+ * would leak — so the rule errs toward redacting. A `//` not followed by
+ * userinfo-then-`@` before a terminator (e.g. a `//a/b` path) is left alone.
  */
 export declare function redactUserinfo(value: string): string;
 /**

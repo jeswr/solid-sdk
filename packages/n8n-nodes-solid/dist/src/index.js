@@ -1471,7 +1471,7 @@ function redactUserinfo(value) {
   if (typeof value !== "string") {
     return String(value);
   }
-  return value.replace(/\/\/[^/?#@\s]*@/g, "//<redacted>@");
+  return value.replace(/\/\/[^/?#]*@/g, "//<redacted>@");
 }
 function normalizePodBase(base) {
   if (typeof base !== "string" || base.trim().length === 0) {
