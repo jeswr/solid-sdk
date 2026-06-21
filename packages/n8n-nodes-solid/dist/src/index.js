@@ -1525,6 +1525,11 @@ function resolveTarget(base, target) {
   } catch {
     throw new Error(`[n8n-nodes-solid] target URL is invalid: ${target}`);
   }
+  if (resolved.username !== "" || resolved.password !== "") {
+    throw new Error(
+      `[n8n-nodes-solid] target URL must not embed credentials (user:pass@): ${target} (refused)`
+    );
+  }
   const url = resolved.toString();
   assertWithinPod(base, url);
   return { url, container: isContainerUrl(url) };

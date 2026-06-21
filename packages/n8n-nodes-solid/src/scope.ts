@@ -124,6 +124,15 @@ export function resolveTarget(base: string, target: string): ResolvedTarget {
   } catch {
     throw new Error(`[n8n-nodes-solid] target URL is invalid: ${target}`);
   }
+  // Embedded userinfo (`https://user:pass@host/…`) does NOT change the origin, so
+  // it would slip past the same-origin check — but a pod resource address never
+  // carries credentials, and forwarding them on the request would be confusing /
+  // credential-leaking. Refuse it outright (defence in depth).
+  if (resolved.username !== "" || resolved.password !== "") {
+    throw new Error(
+      `[n8n-nodes-solid] target URL must not embed credentials (user:pass@): ${target} (refused)`,
+    );
+  }
   const url = resolved.toString();
   assertWithinPod(base, url);
   return { url, container: isContainerUrl(url) };

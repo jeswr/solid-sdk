@@ -96,6 +96,17 @@ describe("resolveTarget — refused targets (scope guard)", () => {
     expect(() => resolveTarget(BASE, "")).toThrow(/non-empty/);
     expect(() => resolveTarget(BASE, "   ")).toThrow(/non-empty/);
   });
+
+  it("refuses a same-origin target that embeds credentials (user:pass@)", () => {
+    // Userinfo does not change the origin, so it would otherwise pass the
+    // same-origin + path checks — but a pod address never carries credentials.
+    expect(() => resolveTarget(BASE, "https://attacker@alice.pod.example/data/x.ttl")).toThrow(
+      /must not embed credentials/,
+    );
+    expect(() => resolveTarget(BASE, "https://u:p@alice.pod.example/data/x.ttl")).toThrow(
+      /must not embed credentials/,
+    );
+  });
 });
 
 describe("assertWithinPod", () => {
