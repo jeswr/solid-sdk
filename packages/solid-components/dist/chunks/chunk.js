@@ -19352,12 +19352,50 @@ async function readStreamToText(stream) {
 }
 
 // src/shacl-view-fetch.ts
+var RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+var DCT_CONFORMS_TO = "http://purl.org/dc/terms/conformsTo";
+var AUTO_IMPORT_PREDICATES = /* @__PURE__ */ new Set([RDF_TYPE, DCT_CONFORMS_TO]);
+function isHttpNamedNode(object) {
+  if (object.termType !== "NamedNode") return false;
+  const v5 = object.value;
+  return v5.startsWith("http://") || v5.startsWith("https://");
+}
+async function neutraliseValuesTurtle(turtle) {
+  const store = await parseToStore(turtle, "text/turtle");
+  const toRemove = [];
+  for (const quad4 of store.getQuads(null, null, null, null)) {
+    if (AUTO_IMPORT_PREDICATES.has(quad4.predicate.value) && isHttpNamedNode(quad4.object)) {
+      toRemove.push(quad4);
+    }
+  }
+  for (const quad4 of toRemove) store.removeQuad(quad4);
+  return serializeTurtle(store);
+}
+async function countTurtleQuads(turtle) {
+  const store = await parseToStore(turtle, "text/turtle");
+  return store.size;
+}
+var VALUES_SUBJECT_SENTINEL = "urn:jeswr:solid-components:shacl-view:values-subject";
 var DEFAULT_MAX_BYTES = 2 * 1024 * 1024;
 var DEFAULT_TIMEOUT_MS = 1e4;
-var RDF_ACCEPT = "text/turtle, application/ld+json;q=0.9";
+var NO_NETWORK_RDF_TYPES = /* @__PURE__ */ new Set([
+  "text/turtle",
+  "application/n-triples",
+  "application/n-quads",
+  "application/trig"
+]);
+function assertNoNetworkRdfType(mediaType, context) {
+  if (!NO_NETWORK_RDF_TYPES.has(mediaType)) {
+    throw new Error(
+      `Refusing ${context}: content-type "${mediaType}" is not a no-network RDF type (Turtle/N-Triples/N-Quads/TriG). JSON-LD/RDF-XML are rejected because the parser would resolve a remote @context/import through an unguarded fetch (an SSRF surface).`
+    );
+  }
+}
 async function resolveGraphToTurtle(source, seam, options = {}) {
   if (source.kind === "inline") {
-    const store = await parseToStore(source.text, source.contentType ?? "text/turtle");
+    const declaredType = (source.contentType ?? "text/turtle").split(";")[0].trim().toLowerCase();
+    assertNoNetworkRdfType(declaredType, "inline source");
+    const store = await parseToStore(source.text, declaredType);
     return serializeTurtle(store);
   }
   if (source.kind === "trusted") {
@@ -19372,27 +19410,20 @@ async function resolveGraphToTurtle(source, seam, options = {}) {
     } else {
       doFetch = seam.fetch;
     }
-    return fetchAndSerialise(source.url, doFetch, { signal: options.signal, turtleOnly: false });
+    return fetchAndSerialise(source.url, doFetch, { signal: options.signal });
   }
   const guarded = await loadGuarded(options);
   return fetchAndSerialise(source.url, guarded, {
     signal: options.signal,
-    turtleOnly: true,
     maxBytes: options.maxBytes ?? DEFAULT_MAX_BYTES,
     timeoutMs: options.timeoutMs ?? DEFAULT_TIMEOUT_MS
   });
 }
-var NO_NETWORK_RDF_TYPES = /* @__PURE__ */ new Set([
-  "text/turtle",
-  "application/n-triples",
-  "application/n-quads",
-  "application/trig"
-]);
 async function fetchAndSerialise(url, doFetch, opts) {
   const response = await doFetch(url, {
     method: "GET",
-    // For an untrusted source ask for Turtle ONLY (no JSON-LD remote-@context surface).
-    headers: { Accept: opts.turtleOnly ? "text/turtle" : RDF_ACCEPT },
+    // Ask for Turtle ONLY — never JSON-LD (no remote-@context fetch surface).
+    headers: { Accept: "text/turtle" },
     ...opts.signal ? { signal: opts.signal } : {},
     // These two are honoured by the guarded fetch (a plain fetch ignores unknown
     // init keys); the guard reads them from its own GuardOptions, but we also pass
@@ -19404,14 +19435,8 @@ async function fetchAndSerialise(url, doFetch, opts) {
     throw new Error(`Failed to fetch graph ${url}: HTTP ${response.status}`);
   }
   const contentType2 = response.headers.get("Content-Type");
-  if (opts.turtleOnly) {
-    const mediaType = (contentType2 ?? "text/turtle").split(";")[0].trim().toLowerCase();
-    if (!NO_NETWORK_RDF_TYPES.has(mediaType)) {
-      throw new Error(
-        `Refusing untrusted remote graph ${url}: content-type "${mediaType}" is not a no-network RDF type (Turtle/N-Triples/N-Quads/TriG). JSON-LD/RDF-XML are rejected for remote sources to avoid an unguarded remote-context/import fetch.`
-      );
-    }
-  }
+  const mediaType = (contentType2 ?? "text/turtle").split(";")[0].trim().toLowerCase();
+  assertNoNetworkRdfType(mediaType, `graph ${url}`);
   const finalUrl = response.url || url;
   const body = response.body ?? await response.text();
   const store = await parseToStore(body, contentType2, { baseIRI: finalUrl });
@@ -25763,7 +25788,10 @@ var ALLOWED_DATASET_KEYS = /* @__PURE__ */ new Set([
   "ignoreOwlImports",
   "shapes",
   "values",
-  "shapeSubject"
+  "shapeSubject",
+  // `data-values-subject` (camelCase `valuesSubject`): the auto-import suppressant
+  // — pinning it stops shacl-form auto-deriving a fetchable subject from the data.
+  "valuesSubject"
 ]);
 var INPUT_PROPS = ["shapes", "values", "shapeSubject", "fetch", "publicFetch", "resolveOptions"];
 var JeswrShaclView = class extends i4 {
@@ -25828,10 +25856,20 @@ var JeswrShaclView = class extends i4 {
     };
     const opts = this.resolveOptions ?? {};
     try {
-      const [shapesTurtle, valuesTurtle] = await Promise.all([
+      const [shapesTurtle, valuesTurtleRaw] = await Promise.all([
         resolveGraphToTurtle(shapes, seam, opts),
         resolveGraphToTurtle(values, seam, opts)
       ]);
+      const shapesQuadCount = await countTurtleQuads(shapesTurtle);
+      if (token2 !== this.#renderToken) return;
+      if (shapesQuadCount === 0) {
+        this.shapesTurtle = "";
+        this.valuesTurtle = "";
+        this.errorMessage = "The SHACL shapes graph is empty (zero triples) \u2014 nothing to view, and an empty shapes graph is refused (it would enable shacl-form's auto-import fetch path).";
+        this.status = "error";
+        return;
+      }
+      const valuesTurtle = await neutraliseValuesTurtle(valuesTurtleRaw);
       if (token2 !== this.#renderToken) return;
       this.shapesTurtle = shapesTurtle;
       this.valuesTurtle = valuesTurtle;
@@ -25950,10 +25988,10 @@ function numericStatus(error) {
 
 // src/data-controller.ts
 var LDP_CONTAINS = "http://www.w3.org/ns/ldp#contains";
-var RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+var RDF_TYPE2 = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 var LDP_CONTAINER = "http://www.w3.org/ns/ldp#Container";
 var LDP_BASIC_CONTAINER = "http://www.w3.org/ns/ldp#BasicContainer";
-var RDF_ACCEPT2 = "text/turtle, application/ld+json;q=0.9";
+var RDF_ACCEPT = "text/turtle, application/ld+json;q=0.9";
 var DataController = class {
   #fetch;
   /** The injected credential-free fetch, or `undefined` (a public read fails closed). */
@@ -26001,7 +26039,7 @@ var DataController = class {
     }
     const headers = {
       ...options.headers,
-      Accept: RDF_ACCEPT2
+      Accept: RDF_ACCEPT
     };
     if (options.etag) headers["If-None-Match"] = options.etag;
     let response;
@@ -26079,7 +26117,7 @@ function iterContains(dataset2) {
   return dataset2.getQuads(null, namedNode4(LDP_CONTAINS), null, null);
 }
 function isContainerChild(dataset2, child, childUrl) {
-  for (const t5 of dataset2.getQuads(child, namedNode4(RDF_TYPE), null, null)) {
+  for (const t5 of dataset2.getQuads(child, namedNode4(RDF_TYPE2), null, null)) {
     const typeValue = t5.object.value;
     if (typeValue === LDP_CONTAINER || typeValue === LDP_BASIC_CONTAINER) return true;
   }
@@ -26094,6 +26132,9 @@ function termEquals(other) {
 
 export {
   serializeTurtle,
+  neutraliseValuesTurtle,
+  countTurtleQuads,
+  VALUES_SUBJECT_SENTINEL,
   resolveGraphToTurtle,
   JeswrShaclView,
   DataControllerError,

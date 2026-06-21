@@ -49,8 +49,11 @@ export {
 // The Turtle serialiser helper (n3.Writer-based; never hand-built triples).
 export { serializeTurtle } from "./serialize.js";
 export {
+  countTurtleQuads,
   type FetchSeam,
   type GraphSource,
+  neutraliseValuesTurtle,
   type ResolveOptions,
   resolveGraphToTurtle,
+  VALUES_SUBJECT_SENTINEL,
 } from "./shacl-view-fetch.js";

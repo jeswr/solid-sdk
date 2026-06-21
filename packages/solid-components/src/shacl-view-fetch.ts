@@ -8,7 +8,7 @@
 // hands shacl-form INLINE Turtle strings.
 //
 // THE THREE FETCH MODES, in increasing trust:
-//   1. inline string  — the caller already has the Turtle/JSON-LD text. No fetch.
+//   1. inline string  — the caller already has the RDF text. No fetch.
 //   2. same-trust URL  — fetched with the injected auth seam (`fetch` for the
 //      user's own origin, `publicFetch` for a public/foreign read). These are the
 //      app's own trusted fetches; the app chose the URL.
@@ -23,13 +23,139 @@
 // never a hand-rolled parser) and re-serialised to a Turtle string by `n3.Writer`
 // before it reaches shacl-form. So shacl-form only ever sees inline Turtle text it
 // did not fetch — there is no path by which shacl-form issues a network request.
+//
+// NO-NETWORK RDF TYPES ONLY, IN EVERY MODE (§9 fix 4): the canonical parser's
+// JSON-LD path (jsonld-streaming-parser) uses a default `FetchDocumentLoader`
+// that resolves a remote `@context` IRI via an UNGUARDED `globalThis.fetch`. So a
+// JSON-LD / RDF-XML body is REFUSED for ALL three modes — inline, trusted and
+// remote — leaving only Turtle/N-Triples/N-Quads/TriG, which have no second-fetch
+// surface. (This is uniform; an earlier version guarded only the `remote` mode.)
 
+import type { Quad, Quad_Object } from "n3";
 import { parseToStore } from "./rdf.js";
 import { serializeTurtle } from "./serialize.js";
 
+// ── §9 shacl-form auto-import hardening ──────────────────────────────────────
+//
+// `data-ignore-owl-imports` (which the element always sets) closes ONE of
+// @ulb-darmstadt/shacl-form's two remote-fetch paths. It does NOT close the
+// SECOND: shacl-form's `loadGraphs()` auto-derives a "values subject" from the
+// DATA graph (`findConformsToValuesSubject` — any single NamedNode subject
+// bearing `dct:conformsTo`), and when the loaded SHAPES graph is EMPTY
+// (`countQuads(loaded-shapes) === 0`) it issues an UNGUARDED `globalThis.fetch`
+// to every http(s) IRI that subject points at via `rdf:type` / `dct:conformsTo`
+// (including prefix-expanded IRIs), parsing the body into the rendered graph.
+//
+// `data-ignore-owl-imports` is unrelated to this branch — it only guards the
+// `owl:imports` predicate during `importRDF`. So the wrapper closes the second
+// path itself, defence-in-depth, with THREE independent measures (any one of
+// which removes a precondition of the auto-import):
+//   (1) FAIL-CLOSED on an empty resolved SHAPES graph → never mount <shacl-form>
+//       (removes the `countQuads(loaded-shapes) === 0` precondition).
+//   (2) NEUTRALISE the untrusted VALUES graph → drop every `rdf:type` /
+//       `dct:conformsTo` quad whose object is an http(s) IRI shacl-form could
+//       treat as a fetchable shape source (removes the import TARGETS — AND,
+//       because `findConformsToValuesSubject` keys on `dct:conformsTo`, the
+//       auto-DERIVATION source too, so no subject is derived at all).
+//   (3) the no-auto-derive guarantee (3) was meant to give is ALREADY delivered
+//       by (2) — `findConformsToValuesSubject` returns nothing once the
+//       conformsTo quads are stripped. We deliberately do NOT pin a foreign
+//       `data-values-subject` sentinel on the element, because shacl-form renders
+//       the shape BOUND to that subject, so a sentinel not present in the data
+//       would render an EMPTY view (verified against the shacl-form source). The
+//       sentinel is exported (`VALUES_SUBJECT_SENTINEL`) for callers who want it
+//       on a deliberately-empty/placeholder view. See shacl-view.ts render().
+//
+// These predicates are the two shacl-form's loadGraphs reads off the values
+// subject. We hard-code the canonical IRIs (n3 has no bundled vocab constant for
+// dct).
+
+/** `http://www.w3.org/1999/02/22-rdf-syntax-ns#type`. */
+const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+/** `http://purl.org/dc/terms/conformsTo`. */
+const DCT_CONFORMS_TO = "http://purl.org/dc/terms/conformsTo";
+
+/**
+ * The two predicates shacl-form's `loadGraphs()` follows off the auto-derived
+ * values subject to FETCH a shape source when the loaded-shapes graph is empty.
+ */
+const AUTO_IMPORT_PREDICATES = new Set([RDF_TYPE, DCT_CONFORMS_TO]);
+
+/**
+ * Does this object term denote an http(s) IRI shacl-form would fetch? shacl-form
+ * accepts both an ABSOLUTE http(s) IRI and a PREFIXED name whose prefix expands
+ * to an http(s) IRI (its `je()` helper prefix-expands then re-checks the
+ * protocol). A NamedNode object is already absolute (n3 expanded any prefix at
+ * parse time), so an http(s)-scheme NamedNode is the fetchable case. A literal /
+ * blank node is never fetched. We therefore drop any http(s)-scheme NamedNode
+ * object under the two auto-import predicates — that is exactly the set
+ * shacl-form's `je()` would resolve to a fetchable URL.
+ */
+function isHttpNamedNode(object: Quad_Object): boolean {
+  if (object.termType !== "NamedNode") return false;
+  const v = object.value;
+  return v.startsWith("http://") || v.startsWith("https://");
+}
+
+/**
+ * Neutralise an untrusted VALUES graph before it is inlined into shacl-form:
+ * drop every `(s, rdf:type|dct:conformsTo, <http(s) IRI>)` quad — the exact
+ * triples shacl-form's empty-shapes auto-import would turn into an unguarded
+ * fetch. Works on the parsed n3 Store (NEVER hand-edits Turtle text) and
+ * re-serialises via `n3.Writer`. Returns the cleaned Turtle.
+ *
+ * Non-http objects (literals, blank nodes) and all other predicates are
+ * preserved verbatim, so the rendered view is unchanged except for the removal
+ * of the SSRF import vectors. (A removed `rdf:type`/`conformsTo` IRI is purely a
+ * shacl-form shape-discovery hint here — the view renders against the explicit
+ * shapes graph, never an auto-fetched one.)
+ */
+export async function neutraliseValuesTurtle(turtle: string): Promise<string> {
+  const store = await parseToStore(turtle, "text/turtle");
+  const toRemove: Quad[] = [];
+  for (const quad of store.getQuads(null, null, null, null)) {
+    if (AUTO_IMPORT_PREDICATES.has(quad.predicate.value) && isHttpNamedNode(quad.object)) {
+      toRemove.push(quad);
+    }
+  }
+  for (const quad of toRemove) store.removeQuad(quad);
+  return serializeTurtle(store);
+}
+
+/**
+ * Parse a resolved SHAPES Turtle string and return its quad count. The element
+ * uses this to FAIL CLOSED when the count is zero: an empty loaded-shapes graph
+ * is the precondition for shacl-form's auto-import path, so a zero-quad shapes
+ * graph must NEVER reach a mounted <shacl-form>.
+ */
+export async function countTurtleQuads(turtle: string): Promise<number> {
+  const store = await parseToStore(turtle, "text/turtle");
+  return store.size;
+}
+
+/**
+ * A non-IRI sentinel set as `data-values-subject` so shacl-form does not
+ * auto-DERIVE a values subject from the untrusted data graph (its
+ * `valuesSubject ||= findConformsToValuesSubject(store)` is short-circuited by
+ * any truthy value). A `urn:` subject is never an http(s) fetch target, and
+ * shacl-form only fetches a `urn:` subject's imports when a `proxy` is set —
+ * which this element never sets — so even the sentinel itself is fetch-inert.
+ */
+export const VALUES_SUBJECT_SENTINEL = "urn:jeswr:solid-components:shacl-view:values-subject";
+
 /** A graph source for the view: an already-in-hand string, or a URL to pre-fetch. */
 export type GraphSource =
-  | { readonly kind: "inline"; readonly text: string; readonly contentType?: string }
+  | {
+      readonly kind: "inline";
+      readonly text: string;
+      /**
+       * The RDF media type of `text`. MUST be a no-network RDF type
+       * (Turtle/N-Triples/N-Quads/TriG); defaults to `text/turtle`. JSON-LD /
+       * RDF-XML are REJECTED (§9 fix 4) — their parser resolves a remote
+       * `@context`/import through an unguarded fetch.
+       */
+      readonly contentType?: string;
+    }
   | {
       /**
        * A URL the APP trusts (it chose it). Fetched with the injected seam:
@@ -82,7 +208,36 @@ export interface ResolveOptions {
 
 const DEFAULT_MAX_BYTES = 2 * 1024 * 1024;
 const DEFAULT_TIMEOUT_MS = 10_000;
-const RDF_ACCEPT = "text/turtle, application/ld+json;q=0.9";
+
+/**
+ * Media types whose parsing never triggers a FURTHER network fetch (no remote
+ * `@context` / no schema import). §9 fix (4): the wrapper accepts ONLY these —
+ * for `inline`, `trusted` AND `remote` sources — because the canonical parser's
+ * JSON-LD path uses `jsonld-streaming-parser`'s default `FetchDocumentLoader`,
+ * which fetches a remote `@context` IRI through an UNGUARDED `globalThis.fetch`.
+ * Turtle/N-Triples/N-Quads/TriG have no such second-fetch surface.
+ */
+const NO_NETWORK_RDF_TYPES = new Set([
+  "text/turtle",
+  "application/n-triples",
+  "application/n-quads",
+  "application/trig",
+]);
+
+/**
+ * Throw unless `mediaType` is a no-network RDF type. Used uniformly so a JSON-LD
+ * / RDF-XML body can never reach the parser (and its unguarded remote-`@context`
+ * fetch) regardless of the source kind.
+ */
+function assertNoNetworkRdfType(mediaType: string, context: string): void {
+  if (!NO_NETWORK_RDF_TYPES.has(mediaType)) {
+    throw new Error(
+      `Refusing ${context}: content-type "${mediaType}" is not a no-network RDF type ` +
+        "(Turtle/N-Triples/N-Quads/TriG). JSON-LD/RDF-XML are rejected because the parser " +
+        "would resolve a remote @context/import through an unguarded fetch (an SSRF surface).",
+    );
+  }
+}
 
 /**
  * Resolve a {@link GraphSource} to a Turtle STRING ready to inline into
@@ -98,10 +253,18 @@ export async function resolveGraphToTurtle(
   options: ResolveOptions = {},
 ): Promise<string> {
   if (source.kind === "inline") {
+    // §9 fix (4) — NO-NETWORK RDF TYPES ONLY, uniformly (not just for `remote`).
+    // The canonical parser (@jeswr/fetch-rdf `parseRdf`) parses JSON-LD with the
+    // default `jsonld-streaming-parser`, which has NO SSRF-safe documentLoader: a
+    // remote `@context` IRI in a JSON-LD body triggers an UNGUARDED `globalThis.
+    // fetch`. So an inline source must declare a no-network RDF type (default
+    // Turtle); JSON-LD / RDF-XML are refused even inline.
+    const declaredType = (source.contentType ?? "text/turtle").split(";")[0].trim().toLowerCase();
+    assertNoNetworkRdfType(declaredType, "inline source");
     // Re-parse + re-serialise so what reaches shacl-form is normalised Turtle from
     // the canonical parser, not an arbitrary string. (Also catches malformed input
     // up front rather than inside shacl-form.)
-    const store = await parseToStore(source.text, source.contentType ?? "text/turtle");
+    const store = await parseToStore(source.text, declaredType);
     return serializeTurtle(store);
   }
 
@@ -122,42 +285,38 @@ export async function resolveGraphToTurtle(
     } else {
       doFetch = seam.fetch;
     }
-    // Trusted (app-chosen) URLs may negotiate JSON-LD — the app vouches for them.
-    return fetchAndSerialise(source.url, doFetch, { signal: options.signal, turtleOnly: false });
+    // §9 fix (4) — a `trusted` URL is app-chosen but the BODY at it may not be:
+    // a trusted-but-foreign resource (or a redirected one) could serve JSON-LD
+    // whose remote `@context` triggers an unguarded parser fetch (see the inline
+    // note). So `trusted` is ALSO no-network-only now — a JSON-LD body is
+    // refused, closing the §9 Low that previously left this path JSON-LD-open.
+    return fetchAndSerialise(source.url, doFetch, { signal: options.signal });
   }
 
   // source.kind === "remote" — the untrusted path. NEVER the app seam, ALWAYS the
   // SSRF guard. The guard itself is dynamically imported so it (and undici on
-  // Node) stays out of the base bundle. TURTLE-ONLY: a JSON-LD document's remote
-  // `@context` can trigger a SECOND, UNGUARDED network fetch inside the JSON-LD
-  // parser — that would defeat the SSRF guard. Turtle has no remote-fetch surface,
-  // so for an untrusted source we ask for Turtle only and REJECT a JSON-LD body.
+  // Node) stays out of the base bundle. No-network-only: a JSON-LD document's
+  // remote `@context` can trigger a SECOND, UNGUARDED network fetch inside the
+  // parser — that would defeat the SSRF guard. Turtle has no remote-fetch surface.
   const guarded = await loadGuarded(options);
   return fetchAndSerialise(source.url, guarded, {
     signal: options.signal,
-    turtleOnly: true,
     maxBytes: options.maxBytes ?? DEFAULT_MAX_BYTES,
     timeoutMs: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
   });
 }
 
-/** Media types whose parsing never triggers a further network fetch (no @context). */
-const NO_NETWORK_RDF_TYPES = new Set([
-  "text/turtle",
-  "application/n-triples",
-  "application/n-quads",
-  "application/trig",
-]);
-
 interface FetchAndSerialiseOptions {
   readonly signal?: AbortSignal;
-  /** When true (untrusted/remote), accept Turtle only + reject a JSON-LD body. */
-  readonly turtleOnly: boolean;
   readonly maxBytes?: number;
   readonly timeoutMs?: number;
 }
 
-/** Fetch a URL with the given fetch, parse + re-serialise to Turtle. */
+/**
+ * Fetch a URL with the given fetch, parse + re-serialise to Turtle. NO-NETWORK
+ * ONLY (§9 fix 4): asks for Turtle and REFUSES any response whose content-type is
+ * not a no-network RDF type, so the parser never resolves a remote @context.
+ */
 async function fetchAndSerialise(
   url: string,
   doFetch: typeof fetch,
@@ -165,8 +324,8 @@ async function fetchAndSerialise(
 ): Promise<string> {
   const response = await doFetch(url, {
     method: "GET",
-    // For an untrusted source ask for Turtle ONLY (no JSON-LD remote-@context surface).
-    headers: { Accept: opts.turtleOnly ? "text/turtle" : RDF_ACCEPT },
+    // Ask for Turtle ONLY — never JSON-LD (no remote-@context fetch surface).
+    headers: { Accept: "text/turtle" },
     ...(opts.signal ? { signal: opts.signal } : {}),
     // These two are honoured by the guarded fetch (a plain fetch ignores unknown
     // init keys); the guard reads them from its own GuardOptions, but we also pass
@@ -178,19 +337,11 @@ async function fetchAndSerialise(
     throw new Error(`Failed to fetch graph ${url}: HTTP ${response.status}`);
   }
   const contentType = response.headers.get("Content-Type");
-  // SSRF defence for untrusted sources: a JSON-LD body could pull a remote
-  // @context through an UNGUARDED parser fetch. We asked for Turtle only; if the
-  // server replied with anything that is not a no-network RDF type, refuse it.
-  if (opts.turtleOnly) {
-    const mediaType = (contentType ?? "text/turtle").split(";")[0].trim().toLowerCase();
-    if (!NO_NETWORK_RDF_TYPES.has(mediaType)) {
-      throw new Error(
-        `Refusing untrusted remote graph ${url}: content-type "${mediaType}" is not a ` +
-          "no-network RDF type (Turtle/N-Triples/N-Quads/TriG). JSON-LD/RDF-XML are " +
-          "rejected for remote sources to avoid an unguarded remote-context/import fetch.",
-      );
-    }
-  }
+  // SSRF defence: a JSON-LD body could pull a remote @context through an
+  // UNGUARDED parser fetch. We asked for Turtle only; if the server replied with
+  // anything that is not a no-network RDF type, refuse it.
+  const mediaType = (contentType ?? "text/turtle").split(";")[0].trim().toLowerCase();
+  assertNoNetworkRdfType(mediaType, `graph ${url}`);
   // Parse against the FINAL URL after any redirects so relative IRIs in the
   // shapes/data resolve correctly (mirrors DataController.read).
   const finalUrl = response.url || url;

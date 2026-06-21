@@ -123,8 +123,34 @@ names — an SSRF surface. This wrapper refuses to expose it:
 - untrusted RDF literals reach the DOM only as shacl-form's text content; this
   element's own error display uses escaped Lit text interpolation, never `innerHTML`.
 
-A test asserts no `*-url` attribute is ever set on the inner `<shacl-form>` and that
-no un-guarded fetch leaves the wrapper for a remote source.
+**shacl-form has a SECOND fetch path `data-ignore-owl-imports` does NOT cover** —
+its `loadGraphs()` auto-derives a values subject from the **data** graph (any
+subject with `dct:conformsTo`) and, when the loaded **shapes** graph is **empty**,
+issues an **unguarded** `fetch` to every http(s) IRI that subject points at via
+`rdf:type` / `dct:conformsTo` (including prefix-expanded IRIs). The wrapper closes
+it with three independent measures:
+
+- **fail-closed on an empty shapes graph** — a shapes graph that parses to zero
+  triples is refused and **no `<shacl-form>` is mounted** (removes the
+  empty-shapes precondition);
+- **neutralises the untrusted data graph** — drops every `rdf:type` /
+  `dct:conformsTo` quad whose object is an http(s) IRI before inlining (removes the
+  import targets **and** the `dct:conformsTo` auto-derivation source);
+- it therefore does **not** auto-derive a fetchable subject; it deliberately does
+  not pin a foreign `data-values-subject` sentinel, which would blank the view.
+
+**No-network RDF types only, in every mode.** A JSON-LD / RDF-XML body is **refused**
+for `inline`, `trusted` **and** `remote` sources — only Turtle / N-Triples /
+N-Quads / TriG are accepted. The canonical parser's JSON-LD path
+(`jsonld-streaming-parser`) uses a default `FetchDocumentLoader` that resolves a
+remote `@context` IRI through an **unguarded** `fetch`, so JSON-LD is never parsed
+here regardless of how trusted the URL is.
+
+Tests assert no `*-url` attribute is ever set on the inner `<shacl-form>`, that no
+un-guarded fetch leaves the wrapper for a remote source, and — calling shacl-form's
+**real** `loadGraphs()` — that a hostile data graph fires the auto-import fetch on
+raw input but **zero** fetches after neutralisation, plus that an empty shapes
+graph fails closed.
 
 ## Installation — GitHub-installable now (buildless, `ignore-scripts=true`)
 
@@ -162,10 +188,14 @@ export function classifyReadError(url, error, hints?): DataControllerError
 
 // SHACL view element + its sources
 export class JeswrShaclView extends LitElement // <jeswr-shacl-view>
-export type GraphSource = inline | trusted | remote
+export type GraphSource = inline | trusted | remote   // Turtle/N-Triples/N-Quads/TriG only
 export interface FetchSeam { fetch; publicFetch }
 export interface ResolveOptions { signal?; loadGuardedFetch?; maxBytes?; timeoutMs? }
 export async function resolveGraphToTurtle(source, seam, options?): Promise<string>
+// §9 SSRF helpers (also used internally by the element):
+export async function neutraliseValuesTurtle(turtle): Promise<string> // drop rdf:type/conformsTo→http(s)
+export async function countTurtleQuads(turtle): Promise<number>       // 0 ⇒ fail-closed on shapes
+export const VALUES_SUBJECT_SENTINEL: string                          // for an empty/placeholder view
 
 // Serialiser (n3.Writer-based)
 export function serializeTurtle(quads): Promise<string>
@@ -205,6 +235,29 @@ Explicitly **not** in this foundation (deferred to later phases):
   source, which accepts a stream + returns an n3 `Store`). `src/rdf.ts` normalises
   this once: it materialises a stream body to text and constructs a real n3 `Store`
   from the parsed dataset. Candidate for an upstream type fix (`jeswr/fetch-rdf`).
+
+- **UPSTREAM (`@ulb-darmstadt/shacl-form`): `data-ignore-owl-imports` does NOT
+  cover the `dct:conformsTo` / `rdf:type` auto-import.** `shacl-form`'s
+  `loadGraphs()` auto-derives a values subject from the **data** graph
+  (`findConformsToValuesSubject`) and, when the loaded **shapes** graph is empty
+  (`countQuads(loadedShapes) === 0`), fetches that subject's `rdf:type` /
+  `dct:conformsTo` http(s) IRIs with a **bare, unguarded `fetch`** — even with
+  `data-ignore-owl-imports` set (that flag only guards the `owl:imports` predicate
+  in `importRDF`, a different code path). This is execution-proven by our
+  `loadGraphs` test (raw hostile graph → real fetches to `169.254.169.254` /
+  `192.168.x`; neutralised graph → zero). We mitigate it locally (fail-closed on
+  empty shapes + neutralise the data graph); the durable fix is upstream: the
+  auto-import should be gated behind `loadOwlImports` (or its own opt-in flag) and
+  should not run against an untrusted data graph by default. **A real upstream gap
+  to file** against `@ulb-darmstadt/shacl-form`.
+
+- **`@jeswr/fetch-rdf`'s JSON-LD parse path is not SSRF-safe.** `parseRdf` builds
+  `jsonld-streaming-parser` with no `documentLoader`, so a remote `@context` IRI in
+  a JSON-LD body is resolved via the default `FetchDocumentLoader` (an unguarded
+  `globalThis.fetch`). This wrapper therefore refuses JSON-LD/RDF-XML for **all**
+  source kinds (Turtle-only). The durable fix is an SSRF-safe `documentLoader`
+  option on `parseRdf` upstream (`jeswr/fetch-rdf`) — at which point `trusted`
+  JSON-LD could be re-enabled here.
 
 ## License
 

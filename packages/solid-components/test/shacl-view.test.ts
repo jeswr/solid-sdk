@@ -60,7 +60,11 @@ describe("<jeswr-shacl-view> §9 SSRF discipline", () => {
 
     // Inline strings are present.
     expect(form.getAttribute("data-shapes")).toContain("NodeShape");
-    expect(form.getAttribute("data-values")).toContain("Person");
+    // The data graph is NEUTRALISED (§9 fix 2): the `a ex:Person` (rdf:type →
+    // http(s) IRI) quad is DROPPED as a potential auto-import target, but the
+    // literal data (`ex:name "Alice"`) is preserved verbatim.
+    expect(form.getAttribute("data-values")).toContain("Alice");
+    expect(form.getAttribute("data-values")).not.toContain("Person");
 
     // The view/owl-imports discipline attributes are ALWAYS set.
     expect(form.hasAttribute("data-view")).toBe(true);
@@ -234,5 +238,159 @@ describe("<jeswr-shacl-view> §9 SSRF discipline", () => {
     expect(form.dataset.shapeSubject).toBe("https://ex.example/PersonShape");
     // It is NOT a *-url key.
     expect(form.getAttribute("data-shape-subject-url")).toBeNull();
+  });
+
+  // ── §9 auto-import (the SECOND fetch path) regression tests ────────────────
+  //
+  // @ulb-darmstadt/shacl-form's `loadGraphs()` auto-derives a values subject from
+  // the DATA graph (any subject with `dct:conformsTo`) and, when the loaded SHAPES
+  // graph is EMPTY, fetches every http(s) IRI that subject points at via
+  // `rdf:type` / `dct:conformsTo` with an UNGUARDED `globalThis.fetch`. These two
+  // tests prove the wrapper closes that path. They are the assertions whose
+  // ABSENCE let the original build pass with the latent HIGH.
+
+  /** A hostile data graph: a conformsTo + rdf:type pointing at SSRF targets. */
+  const HOSTILE_DATA = `
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix ex: <https://attacker.example/> .
+<https://victim.example/x>
+  dct:conformsTo <http://169.254.169.254/latest/meta-data/iam/security-credentials/> ;
+  a <http://192.168.0.1/internal-shape> ;
+  ex:something "ok" .
+`;
+
+  /** Same idea but the import target is a PREFIXED IRI (shacl-form expands it). */
+  const HOSTILE_DATA_PREFIXED = `
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix internal: <http://10.0.0.5/> .
+<https://victim.example/y> dct:conformsTo internal:shape ; a internal:Type .
+`;
+
+  it("a HOSTILE data graph + an EMPTY shapes graph triggers ZERO unguarded fetches (the auto-import SSRF)", async () => {
+    // Spy on the global fetch — the bare fetch shacl-form's auto-import uses. ANY
+    // call to it (other than ones we deliberately inject — there are none here, all
+    // sources are inline) is the SSRF firing.
+    const globalSpy = vi.spyOn(globalThis, "fetch").mockImplementation(
+      async (input) =>
+        new Response(`<x> <y> "leaked-from ${String(input)}" .`, {
+          headers: { "Content-Type": "text/turtle" },
+        }),
+    );
+    try {
+      const el = await mount();
+      // EMPTY shapes graph (the auto-import precondition) + the hostile data graph.
+      el.shapes = { kind: "inline", text: "" };
+      el.values = { kind: "inline", text: HOSTILE_DATA };
+      // Let the element resolve + (try to) render + let any shacl-form async load run.
+      for (let i = 0; i < 60; i++) {
+        await el.updateComplete;
+        await Promise.resolve();
+        await new Promise((r) => setTimeout(r, 0));
+      }
+      // ZERO unguarded fetches — to the metadata endpoint, the internal IP, or
+      // ANYTHING. (Inline sources fetch nothing at all.)
+      expect(globalSpy).not.toHaveBeenCalled();
+      // And it failed closed (empty shapes) — no <shacl-form> mounted.
+      expect(el.querySelector("shacl-form")).toBeNull();
+    } finally {
+      globalSpy.mockRestore();
+    }
+  });
+
+  it("a HOSTILE data graph with a NON-empty shapes graph triggers ZERO unguarded fetches AND drops the import targets", async () => {
+    const globalSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(
+        async () => new Response("", { headers: { "Content-Type": "text/turtle" } }),
+      );
+    try {
+      const el = await mount();
+      // A VALID, non-empty shapes graph this time (so it mounts) + hostile data.
+      el.shapes = { kind: "inline", text: SHAPES };
+      el.values = { kind: "inline", text: HOSTILE_DATA };
+      const form = await waitForForm(el);
+      for (let i = 0; i < 60; i++) {
+        await Promise.resolve();
+        await new Promise((r) => setTimeout(r, 0));
+      }
+      // No unguarded fetch fired (no auto-import).
+      expect(globalSpy).not.toHaveBeenCalled();
+      // Fix (2): the inlined data has had its conformsTo + rdf:type→http(s) quads
+      // DROPPED — the SSRF import targets are gone, the literal data preserved.
+      const values = form.getAttribute("data-values") ?? "";
+      expect(values).not.toContain("169.254.169.254");
+      expect(values).not.toContain("192.168.0.1");
+      expect(values).not.toContain("conformsTo");
+      expect(values).toContain("ok"); // the benign literal survives.
+    } finally {
+      globalSpy.mockRestore();
+    }
+  });
+
+  it("a HOSTILE data graph using a PREFIXED import IRI is also neutralised (no unguarded fetch)", async () => {
+    const globalSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(
+        async () => new Response("", { headers: { "Content-Type": "text/turtle" } }),
+      );
+    try {
+      const el = await mount();
+      el.shapes = { kind: "inline", text: "" }; // empty → auto-import precondition.
+      el.values = { kind: "inline", text: HOSTILE_DATA_PREFIXED };
+      for (let i = 0; i < 60; i++) {
+        await el.updateComplete;
+        await Promise.resolve();
+        await new Promise((r) => setTimeout(r, 0));
+      }
+      expect(globalSpy).not.toHaveBeenCalled();
+      expect(el.querySelector("shacl-form")).toBeNull(); // fail-closed on empty shapes.
+    } finally {
+      globalSpy.mockRestore();
+    }
+  });
+
+  it("FAILS CLOSED on an empty shapes graph — never mounts <shacl-form> (fix 1)", async () => {
+    const el = await mount();
+    el.shapes = { kind: "inline", text: "" };
+    el.values = { kind: "inline", text: DATA };
+    for (let i = 0; i < 50; i++) {
+      await el.updateComplete;
+      await Promise.resolve();
+      if (el.querySelector('[part="error"]')) break;
+    }
+    const err = el.querySelector('[part="error"]');
+    expect(err).not.toBeNull();
+    expect(err?.textContent ?? "").toMatch(/empty|shapes/i);
+    // The load-bearing assertion: NO inner <shacl-form> with an empty shapes graph.
+    expect(el.querySelector("shacl-form")).toBeNull();
+  });
+
+  it("FAILS CLOSED on a comment-/prefix-only shapes graph (zero quads → no <shacl-form>)", async () => {
+    const el = await mount();
+    // Parses without error but yields ZERO quads — still the auto-import precondition.
+    el.shapes = {
+      kind: "inline",
+      text: "# just a comment\n@prefix ex: <https://ex.example/> .\n",
+    };
+    el.values = { kind: "inline", text: DATA };
+    for (let i = 0; i < 50; i++) {
+      await el.updateComplete;
+      await Promise.resolve();
+      if (el.querySelector('[part="error"]')) break;
+    }
+    expect(el.querySelector("shacl-form")).toBeNull();
+    expect(el.querySelector('[part="error"]')).not.toBeNull();
+  });
+
+  it("does NOT pin a values-subject sentinel that would blank a normal view (fix 3 rationale)", async () => {
+    // We chose NOT to set `data-values-subject` to a foreign sentinel (it would
+    // render an empty view). Confirm the attribute is absent so shacl-form renders
+    // against all target nodes; auto-derivation is already neutralised by fix (2).
+    const el = await mount();
+    el.shapes = { kind: "inline", text: SHAPES };
+    el.values = { kind: "inline", text: DATA };
+    const form = await waitForForm(el);
+    expect(form.hasAttribute("data-values-subject")).toBe(false);
+    expect(form.dataset.valuesSubject).toBeUndefined();
   });
 });

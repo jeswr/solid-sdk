@@ -23,8 +23,35 @@
 //     this element's own error display uses Lit text interpolation (escaped),
 //     never innerHTML.
 //
-// A test asserts NO `*-url` attribute is ever set on the inner <shacl-form> and
-// that no un-guarded fetch leaves the wrapper for a `remote` source.
+// SHACL-FORM'S SECOND, NON-OBVIOUS FETCH PATH (the auto-import — `data-ignore-
+// owl-imports` does NOT cover it): shacl-form's `loadGraphs()` auto-derives a
+// "values subject" from the DATA graph (`findConformsToValuesSubject` — any
+// single NamedNode subject bearing `dct:conformsTo`) and, when the loaded SHAPES
+// graph is EMPTY (`countQuads(loaded-shapes) === 0`), issues an UNGUARDED
+// `globalThis.fetch` to every http(s) IRI that subject points at via `rdf:type`
+// and `dct:conformsTo` (incl. prefix-expanded IRIs), parsing the body into the
+// rendered graph. We close it with THREE independent measures (any one removes a
+// precondition; together = defence-in-depth):
+//   (1) FAIL-CLOSED on an empty resolved SHAPES graph — parse it (n3) and if it
+//       has zero quads, render the error state and NEVER mount <shacl-form>
+//       (removes the `countQuads(loaded-shapes) === 0` precondition).
+//   (2) NEUTRALISE the untrusted VALUES graph — drop every `rdf:type` /
+//       `dct:conformsTo` quad whose object is an http(s) IRI before inlining
+//       (removes the import TARGETS + the conformsTo auto-derivation source).
+//   (3) SUPPRESS auto-DERIVATION of a values subject — already guaranteed by (2)
+//       (findConformsToValuesSubject keys on dct:conformsTo, which (2) strips).
+//       We do NOT pin a foreign `data-values-subject` sentinel: shacl-form binds
+//       the rendered shape to that subject, so a sentinel absent from the data
+//       would blank the view (verified vs the shacl-form source). See render().
+//
+// NO-NETWORK RDF TYPES ONLY (§9 fix 4): the pre-fetch refuses a JSON-LD / RDF-XML
+// body for EVERY source kind (inline/trusted/remote) — the canonical parser's
+// JSON-LD path uses an unguarded `FetchDocumentLoader` for a remote `@context`.
+//
+// Tests assert NO `*-url` attribute is ever set on the inner <shacl-form>, that
+// no un-guarded fetch leaves the wrapper for a `remote` source, that a hostile
+// data graph + an EMPTY shapes graph triggers ZERO fetches, and that an empty
+// shapes graph fails closed (no <shacl-form> mounted).
 //
 // NO DECORATORS: reactive props are declared via `static properties` + `declare`
 // + constructor assignment (the suite convention from @jeswr/solid-elements). With
@@ -38,8 +65,10 @@
 import "@ulb-darmstadt/shacl-form";
 import { html, LitElement, nothing, type PropertyValues } from "lit";
 import {
+  countTurtleQuads,
   type FetchSeam,
   type GraphSource,
+  neutraliseValuesTurtle,
   type ResolveOptions,
   resolveGraphToTurtle,
 } from "../shacl-view-fetch.js";
@@ -54,6 +83,9 @@ const ALLOWED_DATASET_KEYS = new Set([
   "shapes",
   "values",
   "shapeSubject",
+  // `data-values-subject` (camelCase `valuesSubject`): the auto-import suppressant
+  // — pinning it stops shacl-form auto-deriving a fetchable subject from the data.
+  "valuesSubject",
 ]);
 
 /** The reactive INPUT properties (changing any re-resolves the graphs). */
@@ -190,11 +222,38 @@ export class JeswrShaclView extends LitElement {
 
     try {
       // Resolve in parallel; both go through the SSRF-disciplined resolver.
-      const [shapesTurtle, valuesTurtle] = await Promise.all([
+      const [shapesTurtle, valuesTurtleRaw] = await Promise.all([
         resolveGraphToTurtle(shapes, seam, opts),
         resolveGraphToTurtle(values, seam, opts),
       ]);
+
+      // §9 fix (1) — FAIL CLOSED on an empty SHAPES graph. An empty loaded-shapes
+      // graph (zero quads) is the precondition for @ulb-darmstadt/shacl-form's
+      // auto-import path: with `countQuads(loaded-shapes) === 0` it fetches the
+      // data subject's `rdf:type`/`dct:conformsTo` http(s) IRIs UNGUARDED. So a
+      // shapes graph that parses to zero quads (empty / comment-/prefix-only /
+      // empty remote body) must NEVER reach a mounted <shacl-form>. Render the
+      // empty/error state instead — there is nothing to view without a shape.
+      const shapesQuadCount = await countTurtleQuads(shapesTurtle);
       if (token !== this.#renderToken) return; // a newer resolve superseded us.
+      if (shapesQuadCount === 0) {
+        this.shapesTurtle = "";
+        this.valuesTurtle = "";
+        this.errorMessage =
+          "The SHACL shapes graph is empty (zero triples) — nothing to view, and an empty " +
+          "shapes graph is refused (it would enable shacl-form's auto-import fetch path).";
+        this.status = "error";
+        return;
+      }
+
+      // §9 fix (2) — NEUTRALISE the untrusted VALUES graph before it is inlined:
+      // drop every `(s, rdf:type|dct:conformsTo, <http(s) IRI>)` quad — the exact
+      // triples shacl-form would turn into an unguarded fetch were the shapes
+      // graph ever empty. Belt-and-braces with fix (1); also removes the
+      // `findConformsToValuesSubject` auto-derivation source (no conformsTo left).
+      const valuesTurtle = await neutraliseValuesTurtle(valuesTurtleRaw);
+      if (token !== this.#renderToken) return; // a newer resolve superseded us.
+
       this.shapesTurtle = shapesTurtle;
       this.valuesTurtle = valuesTurtle;
       this.status = "ready";
@@ -225,6 +284,21 @@ export class JeswrShaclView extends LitElement {
     // `data-ignore-owl-imports` are ALWAYS present (empty string ⇒ non-null ⇒
     // "set" to shacl-form). `data-shape-subject` (a plain IRI string) is applied
     // in updated() after render, never as a fetch URL.
+    // §9 fix (3) — suppress shacl-form's auto-DERIVATION of a values subject from
+    // the (untrusted) data graph. shacl-form computes
+    // `valuesSubject ||= findConformsToValuesSubject(store)`, and
+    // `findConformsToValuesSubject` keys ENTIRELY on `dct:conformsTo` — which fix
+    // (2) has already STRIPPED from the inlined data. So no subject is auto-derived
+    // and the auto-import branch's `valuesSubject &&` guard is false regardless of
+    // the (already non-empty, fix 1) shapes graph. We DELIBERATELY do NOT pin a
+    // foreign `data-values-subject` SENTINEL here: shacl-form renders the shape
+    // bound to `valuesSubject` (`new ShapeTemplate(root, namedNode(valuesSubject))`),
+    // so a sentinel that is not a real subject in the data would render an EMPTY
+    // view (verified against the shacl-form source). Leaving it UNSET lets
+    // shacl-form render against `void 0` = all target nodes (the correct view),
+    // while fix (2) provides the equivalent no-auto-derive guarantee the sentinel
+    // was meant to give. (`VALUES_SUBJECT_SENTINEL` is exported from
+    // shacl-view-fetch for callers who want to pin it on an empty/placeholder view.)
     return html`
       <shacl-form
         part="form"
