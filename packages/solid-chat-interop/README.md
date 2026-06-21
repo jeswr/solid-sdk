@@ -193,8 +193,12 @@ nothing at a non-resolving domain. Mirrors that package's `./shape` export exact
 
 - **`messageShapeTtl()`** — the canonical message shape as a Turtle string (cached).
 - **`MESSAGE_SHAPE_PATH`** — filesystem path to `shapes/message.shacl.ttl`.
-- Both are re-exported from the package root and from the `./shape` subpath; the
-  raw `.ttl` is also resolvable as `./shapes/message.shacl.ttl`.
+- Both are exported from the **`./shape` subpath ONLY** (`@jeswr/solid-chat-interop/shape`),
+  **not** from the package root: `./shape` reads the `.ttl` via `node:fs` (a Node-only
+  capability), and the root is imported by browser consumers for pure-RDF helpers, so
+  re-exporting from the root would drag `node:fs` into every root import. Browser code
+  that needs the raw shape uses the asset subpath `./shapes/message.shacl.ttl`, which is
+  just a file (no `node:fs`).
 
 ### The adapter seam
 

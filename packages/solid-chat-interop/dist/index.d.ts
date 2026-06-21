@@ -24,6 +24,5 @@ export { docOf, httpIriOrUndefined, isHttpIri, safeIri } from "./iri.js";
 export { LibreChatAdapter, type LibreChatAdapterOptions, type LibreChatMessage, } from "./librechat.js";
 export { buildLongChatMessage, LongChatMessageDoc, longChatMessageSubject, parseLongChatMessage, } from "./longchat.js";
 export { as2ToCanonical, canonicalToAs2, canonicalToLongChat, longChatToCanonical, MAPPING_TABLE, type MappingRow, parseAs2, parseLongChat, roundTripAs2ToLongChat, serializeAs2, serializeLongChat, storeToTurtle, } from "./reconcile.js";
-export { MESSAGE_SHAPE_PATH, messageShapeTtl } from "./shape.js";
 export { AS, AS_ATTRIBUTED_TO, AS_COLLECTION, AS_CONTENT, AS_CONTEXT, AS_IN_REPLY_TO, AS_ITEMS, AS_MEDIA_TYPE, AS_NAME, AS_NOTE, AS_PERSON, AS_PUBLISHED, DCT, DCT_CREATED, DCT_CREATOR, DCT_IS_REPLACED_BY, DCT_TITLE, DEFAULT_MEDIA_TYPE, FOAF, FOAF_MAKER, MEETING, MEETING_LONG_CHAT, PC, PC_CHAT_ROOM, PREFIXES, PROV, PROV_WAS_ATTRIBUTED_TO, PROV_WAS_DERIVED_FROM, PROV_WAS_GENERATED_BY, RDF, RDF_TYPE, SCHEMA, SCHEMA_DATE_DELETED, SCHEMA_MESSAGE, SIOC, SIOC_CONTENT, SIOC_HAS_REPLY, SIOC_NOTE, TASK_CLASS, WF, WF_ASSIGNEE, WF_CLOSED, WF_OPEN, wf, XSD, } from "./vocab.js";
 //# sourceMappingURL=index.d.ts.map

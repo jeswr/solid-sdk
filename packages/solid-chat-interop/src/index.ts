@@ -65,8 +65,13 @@ export {
   serializeLongChat,
   storeToTurtle,
 } from "./reconcile.js";
-// --- the canonical message SHACL shape (drives the solid-components message components) ---
-export { MESSAGE_SHAPE_PATH, messageShapeTtl } from "./shape.js";
+// --- the canonical message SHACL shape (`MESSAGE_SHAPE_PATH` / `messageShapeTtl`)
+//     is deliberately NOT re-exported here: `./shape` reads the `.ttl` via `node:fs`,
+//     and the package ROOT is imported by BROWSER consumers (PM `/chat`, the
+//     solid-components message components) for pure-RDF helpers. Re-exporting it would
+//     drag `node:fs` into every root import and break those bundles. The fs-backed
+//     accessor lives on the Node-only `./shape` subpath; the raw shape file is
+//     available browser-side via the `./shapes/message.shacl.ttl` asset export. ---
 
 // --- vocabulary (IRI constants + prefixes) ---
 export {

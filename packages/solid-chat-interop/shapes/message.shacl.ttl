@@ -99,11 +99,16 @@
     sh:pattern "^https?://" ;
   ] ;
 
-  # Edit pointer — the resource that supersedes this message (an edit). An IRI, at
-  # most one. The reconciler reads `dct:isReplacedBy` as the edit edge.
+  # Edit pointer — the resource that supersedes this message (an edit). An IRI AND
+  # http(s)-schemed (pattern), at most one. The reconciler reads `dct:isReplacedBy`
+  # as the edit edge and filters it http(s)-only on read/write (src/as2.ts,
+  # src/longchat.ts → httpIriOrUndefined), so the shape enforces the SAME constraint
+  # as the sibling IRI fields (author/room/inReplyTo/provenance/assignee) — a
+  # non-http(s) edit pointer is rejected.
   sh:property [
     sh:path dct:isReplacedBy ; sh:name "replaced by" ;
     sh:nodeKind sh:IRI ; sh:maxCount 1 ;
+    sh:pattern "^https?://" ;
   ] ;
 
   # Soft-delete tombstone — the deletion timestamp (xsd:dateTime), at most one.

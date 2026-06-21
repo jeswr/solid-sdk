@@ -168,6 +168,36 @@ describe("SHACL shape (shapes/message.shacl.ttl)", () => {
     expect(report.results.some((r) => String(r.path?.value).endsWith("attributedTo"))).toBe(true);
   });
 
+  it("a non-http(s) dct:isReplacedBy is rejected by the sh:pattern", async () => {
+    // Regression: the edit pointer must be http(s)-only like the sibling IRI fields
+    // and the canonical reader/writer (httpIriOrUndefined filters replacedBy).
+    const ttl = `
+      @prefix as: <https://www.w3.org/ns/activitystreams#> .
+      @prefix dct: <http://purl.org/dc/terms/> .
+      @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+      <#it> a as:Note ;
+        as:content "edited message" ;
+        as:published "2026-06-09T10:00:00.000Z"^^xsd:dateTime ;
+        dct:isReplacedBy <urn:msg:next> .
+    `;
+    const report = await validateTtl(ttl);
+    expect(report.conforms).toBe(false);
+    expect(report.results.some((r) => String(r.path?.value).endsWith("isReplacedBy"))).toBe(true);
+  });
+
+  it("an http(s) dct:isReplacedBy conforms", async () => {
+    const ttl = `
+      @prefix as: <https://www.w3.org/ns/activitystreams#> .
+      @prefix dct: <http://purl.org/dc/terms/> .
+      @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+      <#it> a as:Note ;
+        as:content "edited message" ;
+        as:published "2026-06-09T10:00:00.000Z"^^xsd:dateTime ;
+        dct:isReplacedBy <http://localhost:3000/alice/chat/msg-2.ttl#it> .
+    `;
+    expect((await validateTtl(ttl)).conforms).toBe(true);
+  });
+
   it("two as:content values are non-conforming (maxCount 1 on the body)", async () => {
     const ttl = `
       @prefix as: <https://www.w3.org/ns/activitystreams#> .
