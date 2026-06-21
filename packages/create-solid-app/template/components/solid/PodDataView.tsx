@@ -77,14 +77,22 @@ function useSeamRef(): (el: HTMLElement | null) => void {
 
 export function PodDataView() {
   const { webId, profile } = useSolidAuth();
-  // Resolve the resource to render: the user's first advertised pod storage root
-  // (a container). `<solid-view>` lists it via `<jeswr-collection>` when it is an
-  // untyped container, or mounts a typed element when the resource declares a class.
-  const storage = profile?.storages[0];
   const seamRef = useSeamRef();
+  // The user's first advertised pod storage root (a container) — the source for the
+  // default container/list models.
+  const storage = profile?.storages[0];
 
-  // Only render once signed in AND we know a resource to read.
-  if (!webId || !storage) return null;
+  // THE SOURCE the bound element reads. ONE local, so the readiness guard, the label,
+  // and the element `src` always agree. The scaffold swaps this single line per model:
+  // a <jeswr-profile-card> reads the WebID profile DOCUMENT (`webId`), every other
+  // element reads the pod `storage` container. Keeping it one local is the
+  // roborev-round-2 fix — a per-model `src` must not diverge from the guard/label.
+  // CSA:DATA-VIEW-SRC:BEGIN — the generator swaps this line for the chosen model
+  const dataSrc = storage;
+  // CSA:DATA-VIEW-SRC:END
+
+  // Only render once signed in AND we have the resource this model reads.
+  if (!webId || !dataSrc) return null;
 
   return (
     <Card className="w-full max-w-md">
@@ -96,7 +104,7 @@ export function PodDataView() {
           reads the resource&apos;s <code>rdf:type</code>, picks the matching
           typed element, and renders it. No hand-rolled LDP or RDF.
           {/* CSA:DATA-VIEW-DESC:END */}{" "}
-          Reading <span className="break-all">{storage}</span> (read-only; edit
+          Reading <span className="break-all">{dataSrc}</span> (read-only; edit
           mode is coming).
         </CardDescription>
       </CardHeader>
@@ -108,7 +116,7 @@ export function PodDataView() {
             with `create-solid-app --data-model <task|contact|bookmark|profile|collection>`.
             Renders into the light DOM, so ::part-styleable. */}
         {/* CSA:DATA-VIEW-EL:BEGIN — the generator swaps this element for the chosen model */}
-        <solid-view ref={seamRef} src={storage} part="data-view" />
+        <solid-view ref={seamRef} src={dataSrc} part="data-view" />
         {/* CSA:DATA-VIEW-EL:END */}
       </CardContent>
     </Card>

@@ -279,14 +279,20 @@ function jsStringEscape(value: string): string {
  * Sentinel-delimited regions in `components/solid/PodDataView.tsx` that the
  * data-model substitution rewrites. The template SHIPS the default `<solid-view>`
  * (the resolve-by-type composer), so a verbatim copy / the default model needs no
- * rewrite. A specific `--data-model` swaps the bound element + its card
- * description for the chosen model's element. The sentinels are JSX block
- * comments, so the file always compiles whether or not a swap happens.
+ * rewrite. A specific `--data-model` swaps three regions: the single `dataSrc`
+ * local (the source the guard, label, and element all read — so they can't
+ * diverge), the bound element tag, and the card description. The EL/DESC regions
+ * are JSX block comments; the SRC region is a body line comment. Each sentinel pair
+ * stays valid whether or not a swap happens, so the file always compiles.
  */
 const DATA_VIEW_EL_BEGIN = "{/* CSA:DATA-VIEW-EL:BEGIN";
 const DATA_VIEW_EL_END = "{/* CSA:DATA-VIEW-EL:END */}";
 const DATA_VIEW_DESC_BEGIN = "{/* CSA:DATA-VIEW-DESC:BEGIN";
 const DATA_VIEW_DESC_END = "{/* CSA:DATA-VIEW-DESC:END */}";
+// The single `dataSrc` local — line-COMMENT sentinels (not JSX block comments),
+// since this region is in component body code, not JSX.
+const DATA_VIEW_SRC_BEGIN = "// CSA:DATA-VIEW-SRC:BEGIN";
+const DATA_VIEW_SRC_END = "// CSA:DATA-VIEW-SRC:END";
 
 /**
  * Replace the text BETWEEN a begin-comment line and the end-comment marker with
@@ -305,12 +311,15 @@ function replaceSentinelRegion(
   const beginIdx = src.indexOf(beginSentinel);
   const endIdx = src.indexOf(endSentinel);
   if (beginIdx === -1 || endIdx === -1 || endIdx < beginIdx) return src;
-  // Keep the begin-comment LINE intact (splice from the newline after it), and
-  // keep the end sentinel. Indent the replacement to the begin line's indent.
+  // Keep the begin-comment LINE intact (splice from the newline after it), and keep
+  // the end sentinel WITH its own line indentation. Indent the replacement to the
+  // begin line's indent.
   const beginLineEnd = src.indexOf("\n", beginIdx);
   if (beginLineEnd === -1 || beginLineEnd > endIdx) return src;
   const indent = src.slice(src.lastIndexOf("\n", beginIdx) + 1, beginIdx);
-  return src.slice(0, beginLineEnd + 1) + `${indent}${replacement}\n` + src.slice(endIdx);
+  // Splice up to the START of the end sentinel's LINE so its leading indent survives.
+  const endLineStart = src.lastIndexOf("\n", endIdx) + 1;
+  return src.slice(0, beginLineEnd + 1) + `${indent}${replacement}\n` + src.slice(endLineStart);
 }
 
 /**
@@ -328,17 +337,26 @@ async function substituteDataModel(targetDir: string, dataModel: string): Promis
   const viewPath = join(targetDir, "components", "solid", "PodDataView.tsx");
   if (!existsSync(viewPath)) return; // a template without the example — nothing to do.
   let src = await readFile(viewPath, "utf8");
-  // The bound element: same `ref`/`part` seam + the chosen tag, with the `src` bound
-  // to the model's source local (a profile card reads `webId`, every other element
-  // reads the pod `storage` root). Both the tag AND the src-expr are fixed tokens
-  // from the committed catalog (never user input), so no escaping is needed; the
-  // src-expr names a local the template's PodDataView already destructures + narrows
-  // to non-null before render (`webId` / `storage`).
+  // The SINGLE source local (`dataSrc`): a profile card reads the WebID profile
+  // document (`webId`), every other element reads the pod `storage` container. Swapping
+  // this ONE line keeps the readiness guard, the label, and the element `src` in sync
+  // (the roborev-round-2 fix — they must never diverge). `srcExpr` is a fixed token
+  // from the committed catalog (`"storage"` / `"webId"`), never user input, and names a
+  // local the template already destructures + narrows to non-null before render.
+  src = replaceSentinelRegion(
+    src,
+    DATA_VIEW_SRC_BEGIN,
+    DATA_VIEW_SRC_END,
+    `const dataSrc = ${entry.srcExpr};`,
+  );
+  // The bound element: same `ref`/`part` seam + the chosen tag, `src` always bound to
+  // the single `dataSrc` local (so the element, guard, and label can't diverge). The
+  // tag is a fixed catalog token, so no escaping is needed.
   src = replaceSentinelRegion(
     src,
     DATA_VIEW_EL_BEGIN,
     DATA_VIEW_EL_END,
-    `<${entry.tag} ref={seamRef} src={${entry.srcExpr}} part="data-view" />`,
+    `<${entry.tag} ref={seamRef} src={dataSrc} part="data-view" />`,
   );
   // The card description: the catalog's plain-text line. Escape any JSX-significant
   // characters so untrusted-looking punctuation (`<`, `>`, `{`, `}`) can never break

@@ -267,12 +267,18 @@ describe("scaffold", () => {
       join(result.targetDir, "components", "solid", "PodDataView.tsx"),
       "utf8",
     );
-    // Registered via the side-effect import; renders the resolve-by-type composer by default.
+    // Registered via the side-effect import; renders the resolve-by-type composer by
+    // default, binding the single dataSrc local.
     expect(view).toContain('import "@jeswr/solid-components"');
-    expect(view).toMatch(/<solid-view\s+ref=\{seamRef\}\s+src=\{storage\}/);
-    // The home page renders the example once signed in.
+    expect(view).toMatch(/<solid-view\s+ref=\{seamRef\}\s+src=\{dataSrc\}/);
+    // The home page renders the example once signed in — loaded CLIENT-ONLY
+    // (ssr: false), because PodDataView side-effect-imports the browser-only
+    // custom-element package (roborev HIGH fix: must not be SSR-evaluated).
     const page = await readFile(join(result.targetDir, "app", "page.tsx"), "utf8");
     expect(page).toContain("PodDataView");
+    expect(page).toMatch(/dynamic\(/);
+    expect(page).toMatch(/ssr:\s*false/);
+    expect(page).toContain('import("@/components/solid/PodDataView")');
   });
 
   it("substitutes APP_NAME into lib/app-shell-config.ts", async () => {
@@ -342,8 +348,8 @@ describe("scaffold with --data-model", () => {
       join(r.targetDir, "components", "solid", "PodDataView.tsx"),
       "utf8",
     );
-    // The chosen element replaces the default <solid-view> in the bound region.
-    expect(view).toMatch(/<jeswr-task-list\s+ref=\{seamRef\}\s+src=\{storage\}/);
+    // The chosen element replaces the default <solid-view>; `src` is the single dataSrc.
+    expect(view).toMatch(/<jeswr-task-list\s+ref=\{seamRef\}\s+src=\{dataSrc\}/);
     expect(view).not.toMatch(/<solid-view\s+ref=\{seamRef\}/);
     // The sentinels survive (so the file remains re-substitutable / re-findable).
     expect(view).toContain("CSA:DATA-VIEW-EL:BEGIN");
@@ -352,56 +358,69 @@ describe("scaffold with --data-model", () => {
     expect(view).toContain("jeswr-task-list");
   });
 
-  it("swaps for contact / bookmark / profile / collection models (with the right src)", async () => {
-    // [model, tag, srcLocal] — a profile card binds the WebID PROFILE document, so it
-    // must read `webId`, NOT the pod `storage` container (the roborev Medium fix).
+  it("swaps for contact / bookmark / profile / collection models (element + dataSrc)", async () => {
+    // [model, tag, dataSrcLocal] — a profile card binds the WebID PROFILE document, so
+    // its dataSrc is `webId`, NOT the pod `storage` container (the roborev fix). The
+    // element `src` is ALWAYS {dataSrc} (one source local — guard/label/element agree).
     const cases: ReadonlyArray<[string, string, string]> = [
       ["contact", "jeswr-contact-list", "storage"],
       ["bookmark", "jeswr-bookmark-list", "storage"],
       ["profile", "jeswr-profile-card", "webId"],
       ["collection", "jeswr-collection", "storage"],
     ];
-    for (const [model, tag, src] of cases) {
+    for (const [model, tag, dataSrc] of cases) {
       const r = await scaffoldModel(`${model}-app`, model);
       const view = await readFile(
         join(r.targetDir, "components", "solid", "PodDataView.tsx"),
         "utf8",
       );
-      expect(view, `${model} → <${tag} src={${src}}>`).toMatch(
-        new RegExp(`<${tag}\\s+ref=\\{seamRef\\}\\s+src=\\{${src}\\}`),
+      // The element always binds the single dataSrc local.
+      expect(view, `${model} → <${tag} src={dataSrc}>`).toMatch(
+        new RegExp(`<${tag}\\s+ref=\\{seamRef\\}\\s+src=\\{dataSrc\\}`),
+      );
+      // The dataSrc local is the model's source (storage / webId).
+      expect(view, `${model} dataSrc = ${dataSrc}`).toMatch(
+        new RegExp(`const dataSrc = ${dataSrc};`),
       );
     }
   });
 
-  it("the profile model binds the WebID profile doc (src={webId}), never the storage container", async () => {
-    // Explicit guard for the roborev Medium: <jeswr-profile-card> reads a WebID
-    // profile, so a profile scaffold must point at `webId` — pointing it at the pod
-    // `storage` container would render the wrong resource.
+  it("the profile model's dataSrc is webId (guard+label+element all read it), never storage", async () => {
+    // Explicit guard for the roborev finding: <jeswr-profile-card> reads a WebID
+    // profile, so the SINGLE dataSrc local must be `webId` — so the readiness guard,
+    // the "Reading …" label, and the element `src` all point at the WebID, never the
+    // pod storage container (which would render the wrong resource / mis-gate render).
     const r = await scaffoldModel("profile-src-app", "profile");
     const view = await readFile(
       join(r.targetDir, "components", "solid", "PodDataView.tsx"),
       "utf8",
     );
-    expect(view).toMatch(/<jeswr-profile-card\s+ref=\{seamRef\}\s+src=\{webId\}/);
-    expect(view).not.toMatch(/<jeswr-profile-card\s+ref=\{seamRef\}\s+src=\{storage\}/);
+    expect(view).toMatch(/const dataSrc = webId;/);
+    expect(view).not.toMatch(/const dataSrc = storage;/);
+    // The element + guard + label all read the one local, so they can't diverge.
+    expect(view).toMatch(/<jeswr-profile-card\s+ref=\{seamRef\}\s+src=\{dataSrc\}/);
+    expect(view).toMatch(/if \(!webId \|\| !dataSrc\) return null;/);
+    expect(view).toMatch(/Reading <span className="break-all">\{dataSrc\}<\/span>/);
   });
 
-  it("the default (solid-view) leaves the template element verbatim", async () => {
+  it("the default (solid-view) leaves the template element + dataSrc verbatim", async () => {
     const r = await scaffoldModel("default-app", "solid-view");
     const view = await readFile(
       join(r.targetDir, "components", "solid", "PodDataView.tsx"),
       "utf8",
     );
-    expect(view).toMatch(/<solid-view\s+ref=\{seamRef\}\s+src=\{storage\}/);
+    expect(view).toMatch(/<solid-view\s+ref=\{seamRef\}\s+src=\{dataSrc\}/);
+    expect(view).toMatch(/const dataSrc = storage;/);
   });
 
-  it("an OMITTED dataModel defaults to <solid-view>", async () => {
+  it("an OMITTED dataModel defaults to <solid-view> with dataSrc = storage", async () => {
     const r = await scaffoldModel("omitted-app");
     const view = await readFile(
       join(r.targetDir, "components", "solid", "PodDataView.tsx"),
       "utf8",
     );
-    expect(view).toMatch(/<solid-view\s+ref=\{seamRef\}\s+src=\{storage\}/);
+    expect(view).toMatch(/<solid-view\s+ref=\{seamRef\}\s+src=\{dataSrc\}/);
+    expect(view).toMatch(/const dataSrc = storage;/);
   });
 
   it("an UNKNOWN dataModel falls back to the template default (never a broken file)", async () => {
@@ -412,6 +431,7 @@ describe("scaffold with --data-model", () => {
       join(r.targetDir, "components", "solid", "PodDataView.tsx"),
       "utf8",
     );
-    expect(view).toMatch(/<solid-view\s+ref=\{seamRef\}\s+src=\{storage\}/);
+    expect(view).toMatch(/<solid-view\s+ref=\{seamRef\}\s+src=\{dataSrc\}/);
+    expect(view).toMatch(/const dataSrc = storage;/);
   });
 });
