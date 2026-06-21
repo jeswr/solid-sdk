@@ -147,6 +147,16 @@ describe("§8 packaged-dist load smoke test", () => {
     expect(typeof mod.SolidView).toBe("function");
     expect(typeof mod.resolveComponent).toBe("function");
     expect(Array.isArray(mod.RESOLVER_ENTRIES)).toBe(true);
+    // Phase-2 WRITE path: the DataWriter + the editable form base + the per-class forms.
+    expect(typeof mod.DataWriter).toBe("function");
+    expect(typeof mod.WriteScopeError).toBe("function");
+    expect(typeof mod.UnconditionalOverwriteError).toBe("function");
+    expect(typeof mod.WriteConflictError).toBe("function");
+    expect(typeof mod.resolveAndHarden).toBe("function");
+    expect(typeof mod.JeswrShaclForm).toBe("function");
+    expect(typeof mod.JeswrTaskForm).toBe("function");
+    expect(typeof mod.JeswrContactForm).toBe("function");
+    expect(typeof mod.JeswrBookmarkForm).toBe("function");
   });
 
   it("the dist registers EVERY custom element + DataController works end-to-end", async () => {
@@ -159,6 +169,11 @@ describe("§8 packaged-dist load smoke test", () => {
       "jeswr-bookmark-list",
       "jeswr-collection",
       "solid-view",
+      // Phase-2 editable elements.
+      "jeswr-shacl-form",
+      "jeswr-task-form",
+      "jeswr-contact-form",
+      "jeswr-bookmark-form",
     ]) {
       expect(customElements.get(tag), `${tag} must be registered by the dist`).toBeDefined();
     }

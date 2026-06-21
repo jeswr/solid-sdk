@@ -101,3 +101,33 @@ export interface ResolveOptions {
  * @throws on a parse failure or a guard rejection (the element renders the error).
  */
 export declare function resolveGraphToTurtle(source: GraphSource, seam: FetchSeam, options?: ResolveOptions): Promise<string>;
+/** The outcome of {@link resolveAndHarden} — exactly one of three shapes. */
+export type HardenedGraphs = {
+    /** Both graphs resolved + hardened; mount shacl-form with these inline strings. */
+    readonly kind: "ready";
+    readonly shapesTurtle: string;
+    readonly valuesTurtle: string;
+} | {
+    /** The shapes graph is empty (fix 1) — render the empty/error state, never mount. */
+    readonly kind: "empty-shapes";
+    readonly message: string;
+} | {
+    /** A resolve/parse/guard failure — render the error state, never mount. */
+    readonly kind: "error";
+    readonly message: string;
+};
+/** The error message used when the resolved shapes graph has zero quads (fix 1). */
+export declare const EMPTY_SHAPES_MESSAGE: string;
+/**
+ * Resolve + §9-harden a shapes + values source pair into the inline Turtle strings
+ * to hand shacl-form. The ONE place the view + the edit form share, so the edit
+ * form can never drift from the view's SSRF guarantees. NEVER throws — every
+ * failure is reported as a `kind` so the caller renders a fail-closed state and
+ * never mounts a form on bad/empty input.
+ *
+ * @param shapes - the SHACL shapes source.
+ * @param values - the data source to render/edit against the shapes.
+ * @param seam   - the credential-boundary fetch seam (auth + optional public).
+ * @param options - resolver options (maxBytes/timeout/test guarded-fetch loader).
+ */
+export declare function resolveAndHarden(shapes: GraphSource, values: GraphSource, seam: FetchSeam, options?: ResolveOptions): Promise<HardenedGraphs>;

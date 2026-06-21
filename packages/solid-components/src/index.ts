@@ -33,11 +33,30 @@ import "./components/profile-card.js";
 import "./components/bookmark-list.js";
 import "./components/collection.js";
 import "./components/solid-view.js";
+// Phase-2 EDIT path: the editable SHACL form base + the per-class form elements.
+import "./components/shacl-form-edit.js";
+import "./components/task-form.js";
+import "./components/contact-form.js";
+import "./components/bookmark-form.js";
 
+export { JeswrBookmarkForm } from "./components/bookmark-form.js";
 export { JeswrBookmarkList } from "./components/bookmark-list.js";
 export { JeswrCollection, type TypeIndexEntry } from "./components/collection.js";
+export { JeswrContactForm } from "./components/contact-form.js";
 export { JeswrContactList } from "./components/contact-list.js";
+// The Phase-2 editable form base + its merge-save callback / event types.
+export {
+  AbstractFormElement,
+  defaultBaseFor,
+  findEditedSubject,
+} from "./components/form-base.js";
 export { JeswrProfileCard } from "./components/profile-card.js";
+// The Phase-2 editable SHACL form element + its save callback / event types.
+export {
+  JeswrShaclForm,
+  type MergeSaveCallback,
+  type SaveEventDetail,
+} from "./components/shacl-form-edit.js";
 // The read-only SHACL view element + its source/seam types.
 export { JeswrShaclView } from "./components/shacl-view.js";
 // The shared read-element base + DOM-boundary helpers (for custom elements).
@@ -52,6 +71,7 @@ export {
 } from "./components/shared.js";
 // The composition element.
 export { SolidView } from "./components/solid-view.js";
+export { JeswrTaskForm } from "./components/task-form.js";
 // The per-class read elements.
 export { JeswrTaskList } from "./components/task-list.js";
 // The read-path controller + its seam/result types.
@@ -64,6 +84,21 @@ export {
   type ReadOptions,
   type ReadResult,
 } from "./data-controller.js";
+// Phase-2 WRITE-path controller + its seam/result/error types.
+export {
+  type ConditionalWriteOptions,
+  DataWriter,
+  type MutatorResult,
+  type SaveMergedOptions,
+  type SaveStatus,
+  type ShapedNodeMutator,
+  UnconditionalOverwriteError,
+  WriteConflictError,
+  WriteFailedError,
+  type WriteResult,
+  WriteScopeError,
+  type WriteSeam,
+} from "./data-writer.js";
 // The 4-class read-error taxonomy.
 export {
   AccessDeniedError,
@@ -88,10 +123,13 @@ export {
 export { serializeTurtle } from "./serialize.js";
 export {
   countTurtleQuads,
+  EMPTY_SHAPES_MESSAGE,
   type FetchSeam,
   type GraphSource,
+  type HardenedGraphs,
   neutraliseValuesTurtle,
   type ResolveOptions,
+  resolveAndHarden,
   resolveGraphToTurtle,
   VALUES_SUBJECT_SENTINEL,
 } from "./shacl-view-fetch.js";

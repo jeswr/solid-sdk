@@ -4,6 +4,297 @@
   "modules": [
     {
       "kind": "javascript-module",
+      "path": "src/components/bookmark-form.ts",
+      "declarations": [
+        {
+          "kind": "class",
+          "description": "An editable `book:Bookmark` form element.",
+          "name": "JeswrBookmarkForm",
+          "cssParts": [
+            {
+              "description": "The inner editable <jeswr-shacl-form>.",
+              "name": "form"
+            },
+            {
+              "description": "Placeholder when no `src` is set.",
+              "name": "empty"
+            }
+          ],
+          "members": [
+            {
+              "kind": "method",
+              "name": "shapeTurtle",
+              "privacy": "protected",
+              "return": {
+                "type": {
+                  "text": "string"
+                }
+              },
+              "description": "The model's SHACL shape graph as inline Turtle.",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "applyFormDeltaToExisting",
+              "privacy": "protected",
+              "return": {
+                "type": {
+                  "text": "void"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "formGraph",
+                  "type": {
+                    "text": "Store"
+                  }
+                },
+                {
+                  "name": "existing",
+                  "type": {
+                    "text": "Store"
+                  }
+                },
+                {
+                  "name": "resourceUrl",
+                  "type": {
+                    "text": "string"
+                  }
+                }
+              ],
+              "description": "Apply the form's edited values to the LOADED existing graph through the model's\nTYPED accessors. `formGraph` is shacl-form's `toRDF()` output (only the shaped\nnode's triples); `existing` is the loaded resource graph (every existing triple\nintact). Read the edited values from `formGraph` via the model's `parse*`, then\nwrite them onto `existing` via the model's typed setters — so only the shape's\npredicates change, dual-predicate writes happen, and untouched triples survive.\nMUST NOT hand-build a quad. Mutates `existing` in place (return is optional).",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "src",
+              "privacy": "public",
+              "type": {
+                "text": "string | undefined"
+              },
+              "description": "The resource URL to edit. Setting it (re)renders the bound form.",
+              "default": "undefined",
+              "attribute": "src",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "fetch",
+              "privacy": "public",
+              "type": {
+                "text": "typeof fetch | undefined"
+              },
+              "description": "The session-bound authenticated fetch (used for BOTH the read + the §10 write).",
+              "default": "undefined",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "publicFetch",
+              "privacy": "public",
+              "type": {
+                "text": "typeof fetch | undefined"
+              },
+              "description": "The credential-free fetch for a public/foreign DATA read (rare for an editor).",
+              "default": "undefined",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "base",
+              "privacy": "public",
+              "type": {
+                "text": "string | undefined"
+              },
+              "description": "The base URL writes are confined to (the DataWriter scope guard). Defaults to\nthe resource's own directory when unset, so a save can never leave the edited\nresource's container.",
+              "default": "undefined",
+              "attribute": "base",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "resolveOptions",
+              "privacy": "public",
+              "type": {
+                "text": "ResolveOptions | undefined"
+              },
+              "description": "Resolver options forwarded to the §9 pre-fetch (max bytes / timeout / test stub).",
+              "default": "undefined",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "mergeSaveCallback",
+              "privacy": "protected",
+              "return": {
+                "type": {
+                  "text": "MergeSaveCallback"
+                }
+              },
+              "description": "The §10 merge-save callback handed to <jeswr-shacl-form>. Builds a DataWriter\nscoped to `base` (or the resource directory) and runs `saveMerged`, whose mutator\ndelegates to the subclass's applyFormDeltaToExisting on the LOADED graph.",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "dataSource",
+              "privacy": "protected",
+              "return": {
+                "type": {
+                  "text": "GraphSource | undefined"
+                }
+              },
+              "description": "Build the data-graph source for the inner form: the resource, read with `fetch`.",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "#onChildState",
+              "privacy": "private",
+              "description": "Forward a child <jeswr-shacl-form>'s save state up so this element can reflect it.",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "save",
+              "return": {
+                "type": {
+                  "text": "Promise<boolean>"
+                }
+              },
+              "description": "Imperatively trigger a save on the inner editable form.",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "#onSave",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "void"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "e",
+                  "type": {
+                    "text": "CustomEvent<SaveEventDetail>"
+                  }
+                }
+              ],
+              "description": "Re-emit the inner form's save as this element's own event + mirror the state.",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            }
+          ],
+          "superclass": {
+            "name": "AbstractFormElement",
+            "module": "/src/components/form-base.js"
+          },
+          "solid": {
+            "class": "https://w3id.org/jeswr/bookmark#Bookmark",
+            "mode": "edit",
+            "cardinality": "one"
+          },
+          "tagName": "jeswr-bookmark-form",
+          "customElement": true,
+          "attributes": [
+            {
+              "name": "src",
+              "type": {
+                "text": "string | undefined"
+              },
+              "description": "The resource URL to edit. Setting it (re)renders the bound form.",
+              "default": "undefined",
+              "fieldName": "src",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "name": "base",
+              "type": {
+                "text": "string | undefined"
+              },
+              "description": "The base URL writes are confined to (the DataWriter scope guard). Defaults to\nthe resource's own directory when unset, so a save can never leave the edited\nresource's container.",
+              "default": "undefined",
+              "fieldName": "base",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            }
+          ],
+          "events": [
+            {
+              "name": "jeswr-save",
+              "type": {
+                "text": "CustomEvent"
+              },
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            }
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "kind": "js",
+          "name": "JeswrBookmarkForm",
+          "declaration": {
+            "name": "JeswrBookmarkForm",
+            "module": "src/components/bookmark-form.ts"
+          }
+        },
+        {
+          "kind": "custom-element-definition",
+          "name": "jeswr-bookmark-form",
+          "declaration": {
+            "name": "JeswrBookmarkForm",
+            "module": "src/components/bookmark-form.ts"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "javascript-module",
       "path": "src/components/bookmark-list.ts",
       "declarations": [
         {
@@ -654,6 +945,297 @@
     },
     {
       "kind": "javascript-module",
+      "path": "src/components/contact-form.ts",
+      "declarations": [
+        {
+          "kind": "class",
+          "description": "An editable `vcard:Individual` contact form element.",
+          "name": "JeswrContactForm",
+          "cssParts": [
+            {
+              "description": "The inner editable <jeswr-shacl-form>.",
+              "name": "form"
+            },
+            {
+              "description": "Placeholder when no `src` is set.",
+              "name": "empty"
+            }
+          ],
+          "members": [
+            {
+              "kind": "method",
+              "name": "shapeTurtle",
+              "privacy": "protected",
+              "return": {
+                "type": {
+                  "text": "string"
+                }
+              },
+              "description": "The model's SHACL shape graph as inline Turtle.",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "applyFormDeltaToExisting",
+              "privacy": "protected",
+              "return": {
+                "type": {
+                  "text": "void"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "formGraph",
+                  "type": {
+                    "text": "Store"
+                  }
+                },
+                {
+                  "name": "existing",
+                  "type": {
+                    "text": "Store"
+                  }
+                },
+                {
+                  "name": "resourceUrl",
+                  "type": {
+                    "text": "string"
+                  }
+                }
+              ],
+              "description": "Apply the form's edited values to the LOADED existing graph through the model's\nTYPED accessors. `formGraph` is shacl-form's `toRDF()` output (only the shaped\nnode's triples); `existing` is the loaded resource graph (every existing triple\nintact). Read the edited values from `formGraph` via the model's `parse*`, then\nwrite them onto `existing` via the model's typed setters — so only the shape's\npredicates change, dual-predicate writes happen, and untouched triples survive.\nMUST NOT hand-build a quad. Mutates `existing` in place (return is optional).",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "src",
+              "privacy": "public",
+              "type": {
+                "text": "string | undefined"
+              },
+              "description": "The resource URL to edit. Setting it (re)renders the bound form.",
+              "default": "undefined",
+              "attribute": "src",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "fetch",
+              "privacy": "public",
+              "type": {
+                "text": "typeof fetch | undefined"
+              },
+              "description": "The session-bound authenticated fetch (used for BOTH the read + the §10 write).",
+              "default": "undefined",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "publicFetch",
+              "privacy": "public",
+              "type": {
+                "text": "typeof fetch | undefined"
+              },
+              "description": "The credential-free fetch for a public/foreign DATA read (rare for an editor).",
+              "default": "undefined",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "base",
+              "privacy": "public",
+              "type": {
+                "text": "string | undefined"
+              },
+              "description": "The base URL writes are confined to (the DataWriter scope guard). Defaults to\nthe resource's own directory when unset, so a save can never leave the edited\nresource's container.",
+              "default": "undefined",
+              "attribute": "base",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "resolveOptions",
+              "privacy": "public",
+              "type": {
+                "text": "ResolveOptions | undefined"
+              },
+              "description": "Resolver options forwarded to the §9 pre-fetch (max bytes / timeout / test stub).",
+              "default": "undefined",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "mergeSaveCallback",
+              "privacy": "protected",
+              "return": {
+                "type": {
+                  "text": "MergeSaveCallback"
+                }
+              },
+              "description": "The §10 merge-save callback handed to <jeswr-shacl-form>. Builds a DataWriter\nscoped to `base` (or the resource directory) and runs `saveMerged`, whose mutator\ndelegates to the subclass's applyFormDeltaToExisting on the LOADED graph.",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "dataSource",
+              "privacy": "protected",
+              "return": {
+                "type": {
+                  "text": "GraphSource | undefined"
+                }
+              },
+              "description": "Build the data-graph source for the inner form: the resource, read with `fetch`.",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "#onChildState",
+              "privacy": "private",
+              "description": "Forward a child <jeswr-shacl-form>'s save state up so this element can reflect it.",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "save",
+              "return": {
+                "type": {
+                  "text": "Promise<boolean>"
+                }
+              },
+              "description": "Imperatively trigger a save on the inner editable form.",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "#onSave",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "void"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "e",
+                  "type": {
+                    "text": "CustomEvent<SaveEventDetail>"
+                  }
+                }
+              ],
+              "description": "Re-emit the inner form's save as this element's own event + mirror the state.",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            }
+          ],
+          "superclass": {
+            "name": "AbstractFormElement",
+            "module": "/src/components/form-base.js"
+          },
+          "solid": {
+            "class": "http://www.w3.org/2006/vcard/ns#Individual",
+            "mode": "edit",
+            "cardinality": "one"
+          },
+          "tagName": "jeswr-contact-form",
+          "customElement": true,
+          "attributes": [
+            {
+              "name": "src",
+              "type": {
+                "text": "string | undefined"
+              },
+              "description": "The resource URL to edit. Setting it (re)renders the bound form.",
+              "default": "undefined",
+              "fieldName": "src",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "name": "base",
+              "type": {
+                "text": "string | undefined"
+              },
+              "description": "The base URL writes are confined to (the DataWriter scope guard). Defaults to\nthe resource's own directory when unset, so a save can never leave the edited\nresource's container.",
+              "default": "undefined",
+              "fieldName": "base",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            }
+          ],
+          "events": [
+            {
+              "name": "jeswr-save",
+              "type": {
+                "text": "CustomEvent"
+              },
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            }
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "kind": "js",
+          "name": "JeswrContactForm",
+          "declaration": {
+            "name": "JeswrContactForm",
+            "module": "src/components/contact-form.ts"
+          }
+        },
+        {
+          "kind": "custom-element-definition",
+          "name": "jeswr-contact-form",
+          "declaration": {
+            "name": "JeswrContactForm",
+            "module": "src/components/contact-form.ts"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "javascript-module",
       "path": "src/components/contact-list.ts",
       "declarations": [
         {
@@ -1005,6 +1587,304 @@
     },
     {
       "kind": "javascript-module",
+      "path": "src/components/form-base.ts",
+      "declarations": [
+        {
+          "kind": "variable",
+          "name": "BASE_FORM_INPUT_PROPS",
+          "type": {
+            "text": "[\n  \"src\",\n  \"fetch\",\n  \"publicFetch\",\n  \"base\",\n  \"resolveOptions\",\n]"
+          },
+          "default": "[ \"src\", \"fetch\", \"publicFetch\", \"base\", \"resolveOptions\", ]",
+          "description": "The input props the base re-renders the editable form on."
+        },
+        {
+          "kind": "class",
+          "description": "Base class for the per-class editable form elements. It mounts the inner\n<jeswr-shacl-form> (the §9-hardened editable wrapper) bound to the model's shape +\nthe resource at `src`, and wires the §10 merge save. A subclass implements:\n  - shapeTurtle: the model's SHACL shape, as inline Turtle.\n  - applyFormDeltaToExisting: read the edited values from the form graph\n    (via the model's `parse*`) and apply them to the LOADED existing graph (via the\n    model's typed setters). MUST go through the model's typed accessors — no quad\n    hand-built. Mutates the existing graph in place (or returns a Store).",
+          "name": "AbstractFormElement",
+          "members": [
+            {
+              "kind": "field",
+              "name": "src",
+              "privacy": "public",
+              "type": {
+                "text": "string | undefined"
+              },
+              "description": "The resource URL to edit. Setting it (re)renders the bound form.",
+              "default": "undefined",
+              "attribute": "src"
+            },
+            {
+              "kind": "field",
+              "name": "fetch",
+              "privacy": "public",
+              "type": {
+                "text": "typeof fetch | undefined"
+              },
+              "description": "The session-bound authenticated fetch (used for BOTH the read + the §10 write).",
+              "default": "undefined"
+            },
+            {
+              "kind": "field",
+              "name": "publicFetch",
+              "privacy": "public",
+              "type": {
+                "text": "typeof fetch | undefined"
+              },
+              "description": "The credential-free fetch for a public/foreign DATA read (rare for an editor).",
+              "default": "undefined"
+            },
+            {
+              "kind": "field",
+              "name": "base",
+              "privacy": "public",
+              "type": {
+                "text": "string | undefined"
+              },
+              "description": "The base URL writes are confined to (the DataWriter scope guard). Defaults to\nthe resource's own directory when unset, so a save can never leave the edited\nresource's container.",
+              "default": "undefined",
+              "attribute": "base"
+            },
+            {
+              "kind": "field",
+              "name": "resolveOptions",
+              "privacy": "public",
+              "type": {
+                "text": "ResolveOptions | undefined"
+              },
+              "description": "Resolver options forwarded to the §9 pre-fetch (max bytes / timeout / test stub).",
+              "default": "undefined"
+            },
+            {
+              "kind": "method",
+              "name": "shapeTurtle",
+              "privacy": "protected",
+              "return": {
+                "type": {
+                  "text": "string"
+                }
+              },
+              "description": "The model's SHACL shape graph as inline Turtle."
+            },
+            {
+              "kind": "method",
+              "name": "applyFormDeltaToExisting",
+              "privacy": "protected",
+              "return": {
+                "type": {
+                  "text": "void | Promise<void>"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "formGraph",
+                  "type": {
+                    "text": "Store"
+                  }
+                },
+                {
+                  "name": "existing",
+                  "type": {
+                    "text": "Store"
+                  }
+                },
+                {
+                  "name": "resourceUrl",
+                  "type": {
+                    "text": "string"
+                  }
+                }
+              ],
+              "description": "Apply the form's edited values to the LOADED existing graph through the model's\nTYPED accessors. `formGraph` is shacl-form's `toRDF()` output (only the shaped\nnode's triples); `existing` is the loaded resource graph (every existing triple\nintact). Read the edited values from `formGraph` via the model's `parse*`, then\nwrite them onto `existing` via the model's typed setters — so only the shape's\npredicates change, dual-predicate writes happen, and untouched triples survive.\nMUST NOT hand-build a quad. Mutates `existing` in place (return is optional)."
+            },
+            {
+              "kind": "method",
+              "name": "mergeSaveCallback",
+              "privacy": "protected",
+              "return": {
+                "type": {
+                  "text": "MergeSaveCallback"
+                }
+              },
+              "description": "The §10 merge-save callback handed to <jeswr-shacl-form>. Builds a DataWriter\nscoped to `base` (or the resource directory) and runs `saveMerged`, whose mutator\ndelegates to the subclass's applyFormDeltaToExisting on the LOADED graph."
+            },
+            {
+              "kind": "method",
+              "name": "dataSource",
+              "privacy": "protected",
+              "return": {
+                "type": {
+                  "text": "GraphSource | undefined"
+                }
+              },
+              "description": "Build the data-graph source for the inner form: the resource, read with `fetch`."
+            },
+            {
+              "kind": "field",
+              "name": "#onChildState",
+              "privacy": "private",
+              "description": "Forward a child <jeswr-shacl-form>'s save state up so this element can reflect it."
+            },
+            {
+              "kind": "method",
+              "name": "save",
+              "return": {
+                "type": {
+                  "text": "Promise<boolean>"
+                }
+              },
+              "description": "Imperatively trigger a save on the inner editable form."
+            },
+            {
+              "kind": "method",
+              "name": "#onSave",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "void"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "e",
+                  "type": {
+                    "text": "CustomEvent<SaveEventDetail>"
+                  }
+                }
+              ],
+              "description": "Re-emit the inner form's save as this element's own event + mirror the state."
+            }
+          ],
+          "events": [
+            {
+              "name": "jeswr-save",
+              "type": {
+                "text": "CustomEvent"
+              }
+            }
+          ],
+          "attributes": [
+            {
+              "name": "src",
+              "type": {
+                "text": "string | undefined"
+              },
+              "description": "The resource URL to edit. Setting it (re)renders the bound form.",
+              "default": "undefined",
+              "fieldName": "src"
+            },
+            {
+              "name": "base",
+              "type": {
+                "text": "string | undefined"
+              },
+              "description": "The base URL writes are confined to (the DataWriter scope guard). Defaults to\nthe resource's own directory when unset, so a save can never leave the edited\nresource's container.",
+              "default": "undefined",
+              "fieldName": "base"
+            }
+          ],
+          "superclass": {
+            "name": "LitElement",
+            "package": "lit"
+          },
+          "customElement": true
+        },
+        {
+          "kind": "function",
+          "name": "defaultBaseFor",
+          "return": {
+            "type": {
+              "text": "string"
+            }
+          },
+          "parameters": [
+            {
+              "name": "resourceUrl",
+              "type": {
+                "text": "string"
+              }
+            }
+          ],
+          "description": "The default DataWriter scope base for a resource: its containing directory (the\npath up to + including the last `/`). So a save of `…/tasks/1` is confined to\n`…/tasks/`. Falls back to the resource origin on a parse failure (still\nsame-origin-confined). Pure; no network."
+        },
+        {
+          "kind": "function",
+          "name": "findEditedSubject",
+          "return": {
+            "type": {
+              "text": "string"
+            }
+          },
+          "parameters": [
+            {
+              "name": "formGraph",
+              "type": {
+                "text": "QuadScanStore"
+              },
+              "description": "shacl-form's toRDF() output."
+            },
+            {
+              "name": "typeIri",
+              "type": {
+                "text": "string"
+              },
+              "description": "the model class IRI (wf:Task / vcard:Individual / book:Bookmark)."
+            },
+            {
+              "name": "conventional",
+              "type": {
+                "text": "string"
+              },
+              "description": "the model's conventional subject for `src` (`#it` / `#this`)."
+            },
+            {
+              "name": "namedNode",
+              "type": {
+                "text": "(value: string) => unknown"
+              },
+              "description": "the n3 DataFactory.namedNode (passed in by the subclass)."
+            }
+          ],
+          "description": "Find the EDITED subject in shacl-form's `toRDF()` form graph — the node whose\nfield values the merge reads. shacl-form in EDIT mode binds the form to a subject\nthat is NOT necessarily the resource's conventional subject (it commonly MINTS a\nfresh IRI, observed under the real upstream), so we must locate the form's typed\nsubject rather than assume `${url}#it`. Returns the first NamedNode subject typed\nwith `typeIri` in the form graph, preferring `conventional` if IT is the typed one,\nelse `conventional` as a last resort (an empty form graph). A direct quad scan\n(existence query — no triple built), via a `namedNode` factory so the n3 term\nconstruction lives at the call site (each form imports n3's DataFactory once).\n\nIMPORTANT — this is the READ subject (in the form graph). The merge WRITES onto the\nresource's `conventional` subject in the EXISTING graph (so the saved triples land\non `${url}#it`/`#this`, not on shacl-form's minted IRI). See each per-class form."
+        }
+      ],
+      "exports": [
+        {
+          "kind": "js",
+          "name": "BASE_FORM_INPUT_PROPS",
+          "declaration": {
+            "name": "BASE_FORM_INPUT_PROPS",
+            "module": "src/components/form-base.ts"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "AbstractFormElement",
+          "declaration": {
+            "name": "AbstractFormElement",
+            "module": "src/components/form-base.ts"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "defaultBaseFor",
+          "declaration": {
+            "name": "defaultBaseFor",
+            "module": "src/components/form-base.ts"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "findEditedSubject",
+          "declaration": {
+            "name": "findEditedSubject",
+            "module": "src/components/form-base.ts"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "javascript-module",
       "path": "src/components/profile-card.ts",
       "declarations": [
         {
@@ -1307,6 +2187,273 @@
     },
     {
       "kind": "javascript-module",
+      "path": "src/components/shacl-form-edit.ts",
+      "declarations": [
+        {
+          "kind": "class",
+          "description": "An EDITABLE SHACL form. Drive it imperatively:\n\n  const el = document.createElement(\"jeswr-shacl-form\");\n  el.fetch = session.fetch;          // the user's authenticated fetch\n  el.shapes = { kind: \"inline\", text: shapesTurtle };\n  el.values = { kind: \"trusted\", url: resourceUrl, seam: \"auth\" };\n  el.mergeSave = async (formGraph) => { ...§10 merge write... };\n  document.body.append(el);\n  // user edits, then:\n  await el.save();",
+          "name": "JeswrShaclForm",
+          "cssParts": [
+            {
+              "description": "The inner editable <shacl-form>.",
+              "name": "form"
+            },
+            {
+              "description": "The save-button row.",
+              "name": "actions"
+            },
+            {
+              "description": "The save <button>.",
+              "name": "save"
+            },
+            {
+              "description": "The saving/saved/error indicator.",
+              "name": "status"
+            },
+            {
+              "description": "The advisory client-validation warning.",
+              "name": "warning"
+            },
+            {
+              "description": "The error message shown when a graph fails to load/parse.",
+              "name": "error"
+            },
+            {
+              "description": "Placeholder shown when no shape/data is set.",
+              "name": "empty"
+            },
+            {
+              "description": "Placeholder shown while graphs are being pre-fetched.",
+              "name": "loading"
+            }
+          ],
+          "members": [
+            {
+              "kind": "field",
+              "name": "shapes",
+              "privacy": "public",
+              "type": {
+                "text": "GraphSource | undefined"
+              },
+              "description": "The SHACL shapes graph source. Required before anything renders.",
+              "default": "undefined"
+            },
+            {
+              "kind": "field",
+              "name": "values",
+              "privacy": "public",
+              "type": {
+                "text": "GraphSource | undefined"
+              },
+              "description": "The data graph source to edit against the shapes. Required to render.",
+              "default": "undefined"
+            },
+            {
+              "kind": "field",
+              "name": "shapeSubject",
+              "privacy": "public",
+              "type": {
+                "text": "string | undefined"
+              },
+              "description": "Optionally pin which node shape to edit (shacl-form's `data-shape-subject`).",
+              "default": "undefined",
+              "attribute": "shape-subject"
+            },
+            {
+              "kind": "field",
+              "name": "fetch",
+              "privacy": "public",
+              "type": {
+                "text": "typeof fetch | undefined"
+              },
+              "description": "The session-bound authenticated fetch (for `trusted`+`auth` sources).",
+              "default": "undefined"
+            },
+            {
+              "kind": "field",
+              "name": "publicFetch",
+              "privacy": "public",
+              "type": {
+                "text": "typeof fetch | undefined"
+              },
+              "description": "The pristine credential-free fetch (for `trusted`+`public` sources).",
+              "default": "undefined"
+            },
+            {
+              "kind": "field",
+              "name": "resolveOptions",
+              "privacy": "public",
+              "type": {
+                "text": "ResolveOptions | undefined"
+              },
+              "description": "Resolver options forwarded to the pre-fetch (max bytes / timeout / test stub).",
+              "default": "undefined"
+            },
+            {
+              "kind": "field",
+              "name": "mergeSave",
+              "privacy": "public",
+              "type": {
+                "text": "MergeSaveCallback | undefined"
+              },
+              "description": "The §10 merge-save callback. When set, JeswrShaclForm.save delegates to\nit (the per-class forms wire it to a DataWriter merge). When UNSET, `save()`\nthrows — this base element refuses to do a naive write itself.",
+              "default": "undefined"
+            },
+            {
+              "kind": "field",
+              "name": "showSaveButton",
+              "privacy": "public",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "Whether to render the built-in save button (default true).",
+              "default": "true",
+              "attribute": "show-save-button"
+            },
+            {
+              "kind": "field",
+              "name": "#renderToken",
+              "privacy": "private",
+              "type": {
+                "text": "number"
+              },
+              "default": "0",
+              "description": "A monotonically increasing token to drop the result of a superseded resolve."
+            },
+            {
+              "kind": "field",
+              "name": "#saveToken",
+              "privacy": "private",
+              "type": {
+                "text": "number"
+              },
+              "default": "0",
+              "description": "A monotonically increasing token so a stale save can't flip a newer one's state."
+            },
+            {
+              "kind": "method",
+              "name": "#resolve",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "Promise<void>"
+                }
+              },
+              "description": "Pre-fetch + §9-harden both graphs through the SHARED pipeline (the SAME one the\nread view uses). Fail-closed: empty shapes / any error → the error view with no\npartially-applied inline graph, so a mounted <shacl-form> never sees bad input."
+            },
+            {
+              "kind": "method",
+              "name": "save",
+              "return": {
+                "type": {
+                  "text": ""
+                }
+              },
+              "description": "SAVE — the §10 merge write. Reads the edited graph from shacl-form (`toRDF()` —\nonly the shaped node's triples), runs an ADVISORY client validation (warn,\nnever block), then delegates the actual write to JeswrShaclForm.mergeSave\n(the per-class forms wire a DataWriter §10 merge). Optimistic state:\nsaving → saved on success, → error + a surfaced message on failure (revert)."
+            },
+            {
+              "kind": "method",
+              "name": "#emit",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "void"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "type",
+                  "type": {
+                    "text": "string"
+                  }
+                },
+                {
+                  "name": "detail",
+                  "type": {
+                    "text": "unknown"
+                  }
+                }
+              ],
+              "description": "Fire a CustomEvent (composed so a consuming app outside the light DOM hears it)."
+            },
+            {
+              "kind": "method",
+              "name": "#renderActions",
+              "privacy": "private",
+              "description": "The save button + the saving/saved/error indicator."
+            },
+            {
+              "kind": "method",
+              "name": "#statusIndicator",
+              "privacy": "private",
+              "description": "The non-button saving/saved/error text (escaped — Lit text interpolation)."
+            }
+          ],
+          "events": [
+            {
+              "name": "type",
+              "type": {
+                "text": "CustomEvent"
+              }
+            },
+            {
+              "description": "after a successful save (detail: SaveEventDetail).",
+              "name": "jeswr-save"
+            },
+            {
+              "description": "after a failed save (detail: { error }).",
+              "name": "jeswr-save-error"
+            }
+          ],
+          "attributes": [
+            {
+              "name": "shape-subject",
+              "type": {
+                "text": "string | undefined"
+              },
+              "description": "Optionally pin which node shape to edit (shacl-form's `data-shape-subject`).",
+              "default": "undefined",
+              "fieldName": "shapeSubject"
+            },
+            {
+              "name": "show-save-button",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "Whether to render the built-in save button (default true).",
+              "default": "true",
+              "fieldName": "showSaveButton"
+            }
+          ],
+          "superclass": {
+            "name": "LitElement",
+            "package": "lit"
+          },
+          "tagName": "jeswr-shacl-form",
+          "customElement": true
+        }
+      ],
+      "exports": [
+        {
+          "kind": "js",
+          "name": "JeswrShaclForm",
+          "declaration": {
+            "name": "JeswrShaclForm",
+            "module": "src/components/shacl-form-edit.ts"
+          }
+        },
+        {
+          "kind": "custom-element-definition",
+          "name": "jeswr-shacl-form",
+          "declaration": {
+            "name": "JeswrShaclForm",
+            "module": "src/components/shacl-form-edit.ts"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "javascript-module",
       "path": "src/components/shacl-view.ts",
       "declarations": [
         {
@@ -1449,6 +2596,56 @@
           "declaration": {
             "name": "JeswrShaclView",
             "module": "src/components/shacl-view.ts"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "javascript-module",
+      "path": "src/components/shapes.ts",
+      "declarations": [
+        {
+          "kind": "variable",
+          "name": "TASK_SHAPE_TTL",
+          "default": "` @prefix sh: <http://www.w3.org/ns/shacl#> . @prefix wf: <http://www.w3.org/2005/01/wf/flow#> . @prefix dct: <http://purl.org/dc/terms/> . @prefix schema: <http://schema.org/> . @prefix xsd: <http://www.w3.org/2001/XMLSchema#> . [] a sh:NodeShape ; sh:targetClass wf:Task ; sh:property [ sh:path dct:title ; sh:name \"Title\" ; sh:order 1 ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ; sh:property [ sh:path wf:description ; sh:name \"Description\" ; sh:order 2 ; sh:datatype xsd:string ; sh:maxCount 1 ] ; sh:property [ sh:path wf:assignee ; sh:name \"Assignee\" ; sh:order 3 ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:pattern \"^https?://\" ] ; sh:property [ sh:path wf:dateDue ; sh:name \"Due date\" ; sh:order 4 ; sh:datatype xsd:dateTime ; sh:maxCount 1 ] ; sh:property [ sh:path schema:priority ; sh:name \"Priority\" ; sh:order 5 ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:in ( \"high\" \"medium\" \"low\" ) ] . `",
+          "description": "The editable `wf:Task` shape (a subset of"
+        },
+        {
+          "kind": "variable",
+          "name": "BOOKMARK_SHAPE_TTL",
+          "default": "` @prefix sh: <http://www.w3.org/ns/shacl#> . @prefix book: <https://w3id.org/jeswr/bookmark#> . @prefix schema: <http://schema.org/> . @prefix dct: <http://purl.org/dc/terms/> . @prefix xsd: <http://www.w3.org/2001/XMLSchema#> . [] a sh:NodeShape ; sh:targetClass book:Bookmark ; sh:property [ sh:path schema:url ; sh:name \"URL\" ; sh:order 1 ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ; sh:pattern \"^https?://\" ] ; sh:property [ sh:path dct:title ; sh:name \"Title\" ; sh:order 2 ; sh:datatype xsd:string ; sh:maxCount 1 ] ; sh:property [ sh:path dct:description ; sh:name \"Description\" ; sh:order 3 ; sh:datatype xsd:string ; sh:maxCount 1 ] ; sh:property [ sh:path book:notes ; sh:name \"Notes\" ; sh:order 4 ; sh:datatype xsd:string ; sh:maxCount 1 ] ; sh:property [ sh:path book:archived ; sh:name \"Archived\" ; sh:order 5 ; sh:datatype xsd:boolean ; sh:maxCount 1 ] ; sh:property [ sh:path schema:keywords ; sh:name \"Tags\" ; sh:order 6 ; sh:datatype xsd:string ] . `",
+          "description": "The editable `book:Bookmark` shape (aligned to"
+        },
+        {
+          "kind": "variable",
+          "name": "CONTACT_SHAPE_TTL",
+          "default": "` @prefix sh: <http://www.w3.org/ns/shacl#> . @prefix vcard: <http://www.w3.org/2006/vcard/ns#> . @prefix xsd: <http://www.w3.org/2001/XMLSchema#> . [] a sh:NodeShape ; sh:targetClass vcard:Individual ; sh:property [ sh:path vcard:fn ; sh:name \"Name\" ; sh:order 1 ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ; sh:property [ sh:path vcard:organization-name ; sh:name \"Organisation\" ; sh:order 2 ; sh:datatype xsd:string ; sh:maxCount 1 ] ; sh:property [ sh:path vcard:note ; sh:name \"Note\" ; sh:order 3 ; sh:datatype xsd:string ; sh:maxCount 1 ] . `",
+          "description": "`vcard:fn` etc. — the editable `vcard:Individual` shape (FLAT string fields)."
+        }
+      ],
+      "exports": [
+        {
+          "kind": "js",
+          "name": "TASK_SHAPE_TTL",
+          "declaration": {
+            "name": "TASK_SHAPE_TTL",
+            "module": "src/components/shapes.ts"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "BOOKMARK_SHAPE_TTL",
+          "declaration": {
+            "name": "BOOKMARK_SHAPE_TTL",
+            "module": "src/components/shapes.ts"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "CONTACT_SHAPE_TTL",
+          "declaration": {
+            "name": "CONTACT_SHAPE_TTL",
+            "module": "src/components/shapes.ts"
           }
         }
       ]
@@ -2028,6 +3225,297 @@
     },
     {
       "kind": "javascript-module",
+      "path": "src/components/task-form.ts",
+      "declarations": [
+        {
+          "kind": "class",
+          "description": "An editable `wf:Task` form element.",
+          "name": "JeswrTaskForm",
+          "cssParts": [
+            {
+              "description": "The inner editable <jeswr-shacl-form>.",
+              "name": "form"
+            },
+            {
+              "description": "Placeholder when no `src` is set.",
+              "name": "empty"
+            }
+          ],
+          "members": [
+            {
+              "kind": "method",
+              "name": "shapeTurtle",
+              "privacy": "protected",
+              "return": {
+                "type": {
+                  "text": "string"
+                }
+              },
+              "description": "The model's SHACL shape graph as inline Turtle.",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "applyFormDeltaToExisting",
+              "privacy": "protected",
+              "return": {
+                "type": {
+                  "text": "void"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "formGraph",
+                  "type": {
+                    "text": "Store"
+                  }
+                },
+                {
+                  "name": "existing",
+                  "type": {
+                    "text": "Store"
+                  }
+                },
+                {
+                  "name": "resourceUrl",
+                  "type": {
+                    "text": "string"
+                  }
+                }
+              ],
+              "description": "Apply the edited task fields from the form graph onto the existing graph, via the\nmodel's typed `Task` accessor on each. Reads through `new Task(readSubject,\nformGraph)` (the form's edited node, which shacl-form may have minted) and writes\nthrough `new Task(writeSubject, existing)` (the resource's conventional `#it`) —\nso the saved triples land on `${url}#it` regardless of shacl-form's minted IRI.\nOnly the shape's predicates change; the `description` setter writes BOTH\nwf:description + dct:description (the dual-predicate contract); every untouched\ntriple on `existing` (and on OTHER subjects) is preserved.",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "src",
+              "privacy": "public",
+              "type": {
+                "text": "string | undefined"
+              },
+              "description": "The resource URL to edit. Setting it (re)renders the bound form.",
+              "default": "undefined",
+              "attribute": "src",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "fetch",
+              "privacy": "public",
+              "type": {
+                "text": "typeof fetch | undefined"
+              },
+              "description": "The session-bound authenticated fetch (used for BOTH the read + the §10 write).",
+              "default": "undefined",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "publicFetch",
+              "privacy": "public",
+              "type": {
+                "text": "typeof fetch | undefined"
+              },
+              "description": "The credential-free fetch for a public/foreign DATA read (rare for an editor).",
+              "default": "undefined",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "base",
+              "privacy": "public",
+              "type": {
+                "text": "string | undefined"
+              },
+              "description": "The base URL writes are confined to (the DataWriter scope guard). Defaults to\nthe resource's own directory when unset, so a save can never leave the edited\nresource's container.",
+              "default": "undefined",
+              "attribute": "base",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "resolveOptions",
+              "privacy": "public",
+              "type": {
+                "text": "ResolveOptions | undefined"
+              },
+              "description": "Resolver options forwarded to the §9 pre-fetch (max bytes / timeout / test stub).",
+              "default": "undefined",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "mergeSaveCallback",
+              "privacy": "protected",
+              "return": {
+                "type": {
+                  "text": "MergeSaveCallback"
+                }
+              },
+              "description": "The §10 merge-save callback handed to <jeswr-shacl-form>. Builds a DataWriter\nscoped to `base` (or the resource directory) and runs `saveMerged`, whose mutator\ndelegates to the subclass's applyFormDeltaToExisting on the LOADED graph.",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "dataSource",
+              "privacy": "protected",
+              "return": {
+                "type": {
+                  "text": "GraphSource | undefined"
+                }
+              },
+              "description": "Build the data-graph source for the inner form: the resource, read with `fetch`.",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "#onChildState",
+              "privacy": "private",
+              "description": "Forward a child <jeswr-shacl-form>'s save state up so this element can reflect it.",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "save",
+              "return": {
+                "type": {
+                  "text": "Promise<boolean>"
+                }
+              },
+              "description": "Imperatively trigger a save on the inner editable form.",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "#onSave",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "void"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "e",
+                  "type": {
+                    "text": "CustomEvent<SaveEventDetail>"
+                  }
+                }
+              ],
+              "description": "Re-emit the inner form's save as this element's own event + mirror the state.",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            }
+          ],
+          "superclass": {
+            "name": "AbstractFormElement",
+            "module": "/src/components/form-base.js"
+          },
+          "solid": {
+            "class": "http://www.w3.org/2005/01/wf/flow#Task",
+            "mode": "edit",
+            "cardinality": "one"
+          },
+          "tagName": "jeswr-task-form",
+          "customElement": true,
+          "attributes": [
+            {
+              "name": "src",
+              "type": {
+                "text": "string | undefined"
+              },
+              "description": "The resource URL to edit. Setting it (re)renders the bound form.",
+              "default": "undefined",
+              "fieldName": "src",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "name": "base",
+              "type": {
+                "text": "string | undefined"
+              },
+              "description": "The base URL writes are confined to (the DataWriter scope guard). Defaults to\nthe resource's own directory when unset, so a save can never leave the edited\nresource's container.",
+              "default": "undefined",
+              "fieldName": "base",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            }
+          ],
+          "events": [
+            {
+              "name": "jeswr-save",
+              "type": {
+                "text": "CustomEvent"
+              },
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            }
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "kind": "js",
+          "name": "JeswrTaskForm",
+          "declaration": {
+            "name": "JeswrTaskForm",
+            "module": "src/components/task-form.ts"
+          }
+        },
+        {
+          "kind": "custom-element-definition",
+          "name": "jeswr-task-form",
+          "declaration": {
+            "name": "JeswrTaskForm",
+            "module": "src/components/task-form.ts"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "javascript-module",
       "path": "src/components/task-list.ts",
       "declarations": [
         {
@@ -2344,6 +3832,14 @@
       "exports": [
         {
           "kind": "js",
+          "name": "JeswrBookmarkForm",
+          "declaration": {
+            "name": "JeswrBookmarkForm",
+            "module": "./components/bookmark-form.js"
+          }
+        },
+        {
+          "kind": "js",
           "name": "JeswrBookmarkList",
           "declaration": {
             "name": "JeswrBookmarkList",
@@ -2360,6 +3856,14 @@
         },
         {
           "kind": "js",
+          "name": "JeswrContactForm",
+          "declaration": {
+            "name": "JeswrContactForm",
+            "module": "./components/contact-form.js"
+          }
+        },
+        {
+          "kind": "js",
           "name": "JeswrContactList",
           "declaration": {
             "name": "JeswrContactList",
@@ -2368,10 +3872,42 @@
         },
         {
           "kind": "js",
+          "name": "AbstractFormElement",
+          "declaration": {
+            "name": "AbstractFormElement",
+            "module": "./components/form-base.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "defaultBaseFor",
+          "declaration": {
+            "name": "defaultBaseFor",
+            "module": "./components/form-base.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "findEditedSubject",
+          "declaration": {
+            "name": "findEditedSubject",
+            "module": "./components/form-base.js"
+          }
+        },
+        {
+          "kind": "js",
           "name": "JeswrProfileCard",
           "declaration": {
             "name": "JeswrProfileCard",
             "module": "./components/profile-card.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "JeswrShaclForm",
+          "declaration": {
+            "name": "JeswrShaclForm",
+            "module": "./components/shacl-form-edit.js"
           }
         },
         {
@@ -2440,6 +3976,14 @@
         },
         {
           "kind": "js",
+          "name": "JeswrTaskForm",
+          "declaration": {
+            "name": "JeswrTaskForm",
+            "module": "./components/task-form.js"
+          }
+        },
+        {
+          "kind": "js",
           "name": "JeswrTaskList",
           "declaration": {
             "name": "JeswrTaskList",
@@ -2452,6 +3996,46 @@
           "declaration": {
             "name": "DataController",
             "module": "./data-controller.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "DataWriter",
+          "declaration": {
+            "name": "DataWriter",
+            "module": "./data-writer.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "UnconditionalOverwriteError",
+          "declaration": {
+            "name": "UnconditionalOverwriteError",
+            "module": "./data-writer.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "WriteConflictError",
+          "declaration": {
+            "name": "WriteConflictError",
+            "module": "./data-writer.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "WriteFailedError",
+          "declaration": {
+            "name": "WriteFailedError",
+            "module": "./data-writer.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "WriteScopeError",
+          "declaration": {
+            "name": "WriteScopeError",
+            "module": "./data-writer.js"
           }
         },
         {
@@ -2552,9 +4136,25 @@
         },
         {
           "kind": "js",
+          "name": "EMPTY_SHAPES_MESSAGE",
+          "declaration": {
+            "name": "EMPTY_SHAPES_MESSAGE",
+            "module": "./shacl-view-fetch.js"
+          }
+        },
+        {
+          "kind": "js",
           "name": "neutraliseValuesTurtle",
           "declaration": {
             "name": "neutraliseValuesTurtle",
+            "module": "./shacl-view-fetch.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "resolveAndHarden",
+          "declaration": {
+            "name": "resolveAndHarden",
             "module": "./shacl-view-fetch.js"
           }
         },

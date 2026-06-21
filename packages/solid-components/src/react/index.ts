@@ -15,7 +15,12 @@
 // wrapper here exists to remove that ref boilerplate; it is intentionally minimal
 // in Phase 1.
 
+export { JeswrBookmarkForm } from "../components/bookmark-form.js";
+export { JeswrContactForm } from "../components/contact-form.js";
+export type { MergeSaveCallback, SaveEventDetail } from "../components/shacl-form-edit.js";
+export { JeswrShaclForm } from "../components/shacl-form-edit.js";
 export { JeswrShaclView } from "../components/shacl-view.js";
+export { JeswrTaskForm } from "../components/task-form.js";
 export {
   type ContainerChild,
   type ContainerListing,
@@ -25,6 +30,20 @@ export {
   type ReadOptions,
   type ReadResult,
 } from "../data-controller.js";
+// Phase-2 WRITE-path controller + its types (framework-agnostic, usable from React).
+export {
+  type ConditionalWriteOptions,
+  DataWriter,
+  type SaveMergedOptions,
+  type SaveStatus,
+  type ShapedNodeMutator,
+  UnconditionalOverwriteError,
+  WriteConflictError,
+  WriteFailedError,
+  type WriteResult,
+  WriteScopeError,
+  type WriteSeam,
+} from "../data-writer.js";
 export {
   AccessDeniedError,
   classifyReadError,

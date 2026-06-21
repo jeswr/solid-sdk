@@ -12,11 +12,13 @@ It **complements** [`@jeswr/solid-elements`](https://github.com/jeswr/solid-elem
 (the chrome + auth web components). `solid-elements` owns login + theme + account
 chrome; `solid-components` owns the **data** surface (read controller + SHACL view).
 
-## Phase 1 — read components + binding + CEM (this release)
+## Phase 1 — read components + binding + CEM
 
-Everything here is **READ-ONLY**. The write path + an editable form are Phase 2.
+The read layer. (The **write path + editable forms** are Phase 2 — see the
+[Phase 2 section](#phase-2--the-write-path--editable-forms) below: `DataWriter`,
+`<jeswr-shacl-form>`, and the per-class `*-form` elements.)
 
-This release adds, on top of the foundation (`DataController` + `<jeswr-shacl-view>`):
+This layer adds, on top of the foundation (`DataController` + `<jeswr-shacl-view>`):
 
 - **Per-class read elements**, each binding a data model through the `DataController`
   and the model's typed accessors: `<jeswr-task-list>` (`wf:Task`),
@@ -255,6 +257,79 @@ re-exports from the `kind: js` export list. A `check:manifest` gate (mirroring
 the manifest's `@solid-class` edges agree with `RESOLVER_ENTRIES` and that every
 `kind: js` export is a real `dist` runtime export.
 
+## Phase 2 — the write path + editable forms
+
+Phase 2 adds the **write** surface, with the same dependency-injectable seam +
+fail-closed discipline as the read path:
+
+### `DataWriter` — the injectable write seam (conditional + scope-guarded)
+
+```ts
+import { DataWriter } from "@jeswr/solid-components";
+
+const dw = new DataWriter({
+  fetch: session.fetch,                 // the OWN-ORIGIN authenticated fetch (no public write)
+  base: "https://alice.example/tasks/", // the scope guard: every write must stay under this
+});
+
+// §10 MERGE-NOT-REPLACE save: load the existing graph (keep its ETag) → apply the
+// delta through the model's typed accessors → conditional If-Match PUT of the MERGED
+// graph. Never a naive toRDF()→PUT (which would drop untouched triples + break the
+// dual-predicate contract).
+await dw.saveMerged(resourceUrl, (existingGraph, url) => {
+  // apply the edited values via the model's TYPED setters on the loaded graph …
+});
+```
+
+Three load-bearing invariants:
+
+- **Conditional writes (the lost-update guard).** An update of an existing,
+  ETag-bearing resource is a conditional `If-Match: <etag>` PUT — never an
+  unconditional overwrite. `DataWriter` **refuses** an unconditional overwrite of an
+  existing resource (`UnconditionalOverwriteError`, fail-closed). A 404 pre-read → a
+  create-only `If-None-Match: "*"` write. A 412/409/428 → `WriteConflictError`.
+- **§10 merge-not-replace (the correctness invariant).** `saveMerged` loads the
+  existing resource graph, applies the form's delta through the **model's typed
+  accessors**, preserves every untouched triple, then conditionally PUTs. So editing
+  one field never drops an unrelated triple, and the dual-predicate federation compat
+  (a task writes BOTH `wf:description` + `dct:description`) is preserved.
+- **Scope guard (fail-closed, before any fetch).** A write outside the configured
+  base — a different origin, a path-escape (a sibling-prefix trick), a non-http(s)
+  scheme, or embedded credentials — throws a `WriteScopeError` before any network.
+
+### `<jeswr-shacl-form>` — the editable SHACL form
+
+The write-path sibling of `<jeswr-shacl-view>`. It wraps the SAME
+`@ulb-darmstadt/shacl-form` in **edit mode** (the only difference from the view: no
+`data-view`), and **reuses the EXACT §9 SSRF hardening** — both elements call ONE
+shared `resolveAndHarden` pipeline (empty-shapes fail-close + values-graph
+neutralisation + no-network-RDF-types-only + no `*-url` attr), so the edit form can
+never drift from the view's guarantees. Its `save()` reads the edited graph from
+shacl-form's `toRDF()` and delegates the actual write to a `mergeSave` callback (the
+§10 merge); it surfaces an optimistic saving/saved/error state and reverts on
+failure. **Client SHACL validation is advisory** (UX, not authz — the server's WAC +
+SHACL are authoritative): a failing validation warns but never blocks the save.
+
+### Per-class editable forms
+
+```ts
+const el = document.createElement("jeswr-task-form");
+el.fetch = session.fetch;
+el.src = "https://alice.example/tasks/1";   // the resource to edit
+document.body.append(el);
+await el.save();                            // §10 conditional merge write
+```
+
+`<jeswr-task-form>` (`wf:Task`), `<jeswr-contact-form>` (`vcard:Individual`) and
+`<jeswr-bookmark-form>` (`book:Bookmark`) each render the editable form bound to their
+model's shape + the resource at `src`, and wire the §10 merge through the model's
+typed setters. They carry `@solid-mode edit` in the manifest and add `mode: "edit"`
+entries to `resolveComponent`, so `resolveComponent(types, { mode: "edit" })` selects
+the form for a class. **Filter-on-write**: a security-surface IRI (a bookmark `url`, a
+task `assignee` WebID) is dropped if it is not http(s) before the typed setter — the
+model setters do not filter, and client SHACL is advisory, so this code-level filter
+is the real guard.
+
 ## Installation — GitHub-installable now (buildless, `ignore-scripts=true`)
 
 ```sh
@@ -306,6 +381,28 @@ export const VALUES_SUBJECT_SENTINEL: string                          // for an 
 // Serialiser (n3.Writer-based)
 export function serializeTurtle(quads): Promise<string>
 
+// §9 shared resolve+harden pipeline (the view AND the edit form call it)
+export async function resolveAndHarden(shapes, values, seam, options?): Promise<HardenedGraphs>
+export type HardenedGraphs = { kind: "ready"; shapesTurtle; valuesTurtle } | { kind: "empty-shapes"; message } | { kind: "error"; message }
+
+// Phase-2 write seam (conditional + §10 merge-not-replace + scope-guarded)
+export class DataWriter { /* saveMerged, putTurtle, delete; base scope guard */ }
+export interface WriteSeam { fetch?; base? }                 // OWN-ORIGIN authed fetch only (no public write)
+export type ShapedNodeMutator = (graph, url) => MutatorResult | Promise<MutatorResult>
+export interface ConditionalWriteOptions { ifMatch?; ifNoneMatch?; signal?; headers? }
+export interface SaveMergedOptions { signal?; createIfAbsent? }
+export interface WriteResult { url; etag? }
+export type SaveStatus = "idle" | "saving" | "saved" | "error"
+export class WriteScopeError / UnconditionalOverwriteError / WriteConflictError / WriteFailedError
+
+// Phase-2 editable elements
+export class JeswrShaclForm   extends LitElement // <jeswr-shacl-form> editable (mergeSave callback)
+export type MergeSaveCallback = (formGraph) => Promise<void>
+export class JeswrTaskForm    extends LitElement // <jeswr-task-form>    wf:Task          (mode edit)
+export class JeswrContactForm extends LitElement // <jeswr-contact-form> vcard:Individual (mode edit)
+export class JeswrBookmarkForm extends LitElement // <jeswr-bookmark-form> book:Bookmark   (mode edit)
+export class AbstractFormElement extends LitElement // the shared editable-form base
+
 // Per-class read elements (light-DOM Lit; src | store + the fetch seam)
 export class JeswrTaskList     extends LitElement // <jeswr-task-list>     wf:Task
 export class JeswrContactList  extends LitElement // <jeswr-contact-list>  vcard:Individual
@@ -353,8 +450,10 @@ alongside any `src/` change; `check:dist` / `check:manifest` guard the drift.
 
 Explicitly **not** in this release (deferred to later phases / separate beads):
 
-- The **write path** / editable SHACL form + edit-mode elements (Phase 2 — the resolver
-  map already carries a `mode` field, currently `view`-only).
+- A **richer per-class editor** — the Phase-2 forms edit the core shape-covered fields
+  (and the contact form edits the flat string fields, preserving the structured
+  email/phone nodes untouched); a full email/phone/relationship editor + a task
+  state/tracker editor are documented follow-ups.
 - **`<jeswr-message-list>` (`@jeswr/solid-chat-interop`)** — `@jeswr/solid-chat-interop`
   ships no SHACL shape yet, so the message element is a **separate bead** (skipped this
   round). Add it once the chat interop shape lands.

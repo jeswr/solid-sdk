@@ -108,6 +108,33 @@ export const RESOLVER_ENTRIES: readonly ComponentEntry[] = [
     mode: "view",
     priority: 10,
   },
+
+  // ── Phase-2 EDIT-mode entries — the per-class editable forms. A consumer asks
+  // the resolver for `{ mode: "edit" }` to get the FORM element for a class (e.g.
+  // <solid-view mode="edit">). Same target classes as the view entries; the `mode`
+  // filter selects between the read element + the form. Priorities mirror the view
+  // entries so the same specificity ordering applies within the edit mode.
+  {
+    targetClass: "http://www.w3.org/2005/01/wf/flow#Task",
+    tagName: "jeswr-task-form",
+    importSpec: "@jeswr/solid-components",
+    mode: "edit",
+    priority: 70,
+  },
+  {
+    targetClass: "http://www.w3.org/2006/vcard/ns#Individual",
+    tagName: "jeswr-contact-form",
+    importSpec: "@jeswr/solid-components",
+    mode: "edit",
+    priority: 65,
+  },
+  {
+    targetClass: "https://w3id.org/jeswr/bookmark#Bookmark",
+    tagName: "jeswr-bookmark-form",
+    importSpec: "@jeswr/solid-components",
+    mode: "edit",
+    priority: 70,
+  },
 ];
 
 /** A fast `targetClass -> entry` index over {@link RESOLVER_ENTRIES} (first wins). */

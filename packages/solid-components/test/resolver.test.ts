@@ -50,13 +50,28 @@ describe("resolveComponent", () => {
     expect(entry?.tagName).toBe("jeswr-task-list");
   });
 
-  it("honours the mode filter (no edit elements in Phase-1)", () => {
+  it("honours the mode filter — view → read list, edit → the Phase-2 form", () => {
     expect(resolveComponent([TASK], { mode: "view" })?.tagName).toBe("jeswr-task-list");
-    expect(resolveComponent([TASK], { mode: "edit" })).toBeUndefined();
+    // Phase-2: the same class resolves to the EDIT element under { mode: "edit" }.
+    expect(resolveComponent([TASK], { mode: "edit" })?.tagName).toBe("jeswr-task-form");
+    expect(resolveComponent([INDIVIDUAL], { mode: "edit" })?.tagName).toBe("jeswr-contact-form");
+    expect(resolveComponent([BOOKMARK], { mode: "edit" })?.tagName).toBe("jeswr-bookmark-form");
   });
 
-  it("every entry in the static map is mode:view in Phase-1", () => {
-    for (const e of RESOLVER_ENTRIES) expect(e.mode).toBe("view");
+  it("an unbound class has no edit element either", () => {
+    expect(resolveComponent(["http://schema.org/Recipe"], { mode: "edit" })).toBeUndefined();
+    // The generic container listing is view-only — there is no edit form for it.
+    expect(resolveComponent([LDP_CONTAINER], { mode: "edit" })).toBeUndefined();
+  });
+
+  it("every map entry is mode:view or mode:edit; the edit entries are the per-class forms", () => {
+    const editTags = new Set(
+      RESOLVER_ENTRIES.filter((e) => e.mode === "edit").map((e) => e.tagName),
+    );
+    for (const e of RESOLVER_ENTRIES) expect(["view", "edit"]).toContain(e.mode);
+    expect(editTags).toEqual(
+      new Set(["jeswr-task-form", "jeswr-contact-form", "jeswr-bookmark-form"]),
+    );
   });
 });
 
@@ -66,8 +81,14 @@ describe("resolveComponentForClass", () => {
     expect(resolveComponentForClass("urn:nope")).toBeUndefined();
   });
 
-  it("honours the mode filter", () => {
-    expect(resolveComponentForClass(TASK, { mode: "edit" })).toBeUndefined();
+  it("honours the mode filter — edit selects the Phase-2 form for the same class", () => {
+    expect(resolveComponentForClass(TASK, { mode: "view" })?.tagName).toBe("jeswr-task-list");
+    expect(resolveComponentForClass(TASK, { mode: "edit" })?.tagName).toBe("jeswr-task-form");
+    expect(resolveComponentForClass(BOOKMARK, { mode: "edit" })?.tagName).toBe(
+      "jeswr-bookmark-form",
+    );
+    // An unbound class still has no edit element.
+    expect(resolveComponentForClass("urn:nope", { mode: "edit" })).toBeUndefined();
   });
 });
 

@@ -11,17 +11,22 @@
     "language": "TypeScript",
     "runtime": "Node >=20.12",
     "framework": "framework-agnostic Web Components (Lit 3)",
-    "ui": "Lit 3 + @ulb-darmstadt/shacl-form (view mode)",
+    "ui": "Lit 3 + @ulb-darmstadt/shacl-form (view + edit modes)",
     "test": "vitest + jsdom"
   },
   "provides": [
     "DataController",
+    "DataWriter",
     "jeswr-shacl-view",
+    "jeswr-shacl-form",
     "jeswr-task-list",
     "jeswr-contact-list",
     "jeswr-profile-card",
     "jeswr-bookmark-list",
     "jeswr-collection",
+    "jeswr-task-form",
+    "jeswr-contact-form",
+    "jeswr-bookmark-form",
     "solid-view",
     "resolveComponent"
   ],

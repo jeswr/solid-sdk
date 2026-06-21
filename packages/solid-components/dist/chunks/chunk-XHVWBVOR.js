@@ -3929,6 +3929,22 @@ async function loadGuarded(options) {
     timeoutMs: options.timeoutMs ?? DEFAULT_TIMEOUT_MS
   });
 }
+var EMPTY_SHAPES_MESSAGE = "The SHACL shapes graph is empty (zero triples) \u2014 nothing to render, and an empty shapes graph is refused (it would enable shacl-form's auto-import fetch path).";
+async function resolveAndHarden(shapes, values, seam, options = {}) {
+  try {
+    const [shapesTurtle, valuesTurtleRaw] = await Promise.all([
+      resolveGraphToTurtle(shapes, seam, options),
+      resolveGraphToTurtle(values, seam, options)
+    ]);
+    if (await countTurtleQuads(shapesTurtle) === 0) {
+      return { kind: "empty-shapes", message: EMPTY_SHAPES_MESSAGE };
+    }
+    const valuesTurtle = await neutraliseValuesTurtle(valuesTurtleRaw);
+    return { kind: "ready", shapesTurtle, valuesTurtle };
+  } catch (error) {
+    return { kind: "error", message: error instanceof Error ? error.message : String(error) };
+  }
+}
 
 // scripts/stubs/rdfxml-streaming-parser.mjs
 var RdfXmlParser = class {
@@ -10334,32 +10350,18 @@ var JeswrShaclView = class extends i4 {
       ...this.publicFetch ? { publicFetch: this.publicFetch } : {}
     };
     const opts = this.resolveOptions ?? {};
-    try {
-      const [shapesTurtle, valuesTurtleRaw] = await Promise.all([
-        resolveGraphToTurtle(shapes, seam, opts),
-        resolveGraphToTurtle(values, seam, opts)
-      ]);
-      const shapesQuadCount = await countTurtleQuads(shapesTurtle);
-      if (token2 !== this.#renderToken) return;
-      if (shapesQuadCount === 0) {
-        this.shapesTurtle = "";
-        this.valuesTurtle = "";
-        this.errorMessage = "The SHACL shapes graph is empty (zero triples) \u2014 nothing to view, and an empty shapes graph is refused (it would enable shacl-form's auto-import fetch path).";
-        this.status = "error";
-        return;
-      }
-      const valuesTurtle = await neutraliseValuesTurtle(valuesTurtleRaw);
-      if (token2 !== this.#renderToken) return;
-      this.shapesTurtle = shapesTurtle;
-      this.valuesTurtle = valuesTurtle;
+    const result = await resolveAndHarden(shapes, values, seam, opts);
+    if (token2 !== this.#renderToken) return;
+    if (result.kind === "ready") {
+      this.shapesTurtle = result.shapesTurtle;
+      this.valuesTurtle = result.valuesTurtle;
       this.status = "ready";
-    } catch (error) {
-      if (token2 !== this.#renderToken) return;
-      this.shapesTurtle = "";
-      this.valuesTurtle = "";
-      this.errorMessage = error instanceof Error ? error.message : String(error);
-      this.status = "error";
+      return;
     }
+    this.shapesTurtle = "";
+    this.valuesTurtle = "";
+    this.errorMessage = result.message;
+    this.status = "error";
   }
   render() {
     if (this.status === "idle") {
@@ -10609,6 +10611,2486 @@ function termEquals(other) {
   return other != null && typeof other === "object" && other.termType === this.termType && other.value === this.value;
 }
 
+// src/components/shared.ts
+var BASE_INPUT_PROPS = ["src", "fetch", "publicFetch", "publicRead"];
+var AbstractReadElement = class extends i4 {
+  /** A monotonically increasing token to drop the result of a superseded read. */
+  #readToken = 0;
+  static properties = {
+    src: {},
+    fetch: { attribute: false },
+    publicFetch: { attribute: false },
+    publicRead: { type: Boolean, attribute: "public-read" },
+    store: { attribute: false },
+    status: { state: true },
+    errorMessage: { state: true },
+    graph: { state: true },
+    baseUrl: { state: true }
+  };
+  constructor() {
+    super();
+    this.src = void 0;
+    this.fetch = void 0;
+    this.publicFetch = void 0;
+    this.publicRead = false;
+    this.store = void 0;
+    this.status = "idle";
+    this.errorMessage = "";
+    this.graph = void 0;
+    this.baseUrl = void 0;
+  }
+  /** Render into the light DOM so a consuming app can `::part`/style the output. */
+  createRenderRoot() {
+    return this;
+  }
+  /** The input prop names this element re-reads on. Override to extend the base set. */
+  inputProps() {
+    return BASE_INPUT_PROPS;
+  }
+  willUpdate(changed) {
+    const changedKeys = changed;
+    if (changedKeys.has("store")) {
+      void this.#applyDirectStore();
+      return;
+    }
+    if (this.inputProps().some((k4) => changedKeys.has(k4))) {
+      void this.#read();
+    }
+  }
+  /** Render the directly-set `store` (no network), or fall back to idle when cleared. */
+  async #applyDirectStore() {
+    const token2 = ++this.#readToken;
+    const ds = this.store;
+    if (!ds) {
+      this.graph = void 0;
+      this.baseUrl = void 0;
+      this.status = this.src ? this.status : "idle";
+      if (this.src) void this.#read();
+      return;
+    }
+    this.graph = ds;
+    this.baseUrl = this.src ?? "";
+    this.errorMessage = "";
+    if (token2 === this.#readToken) this.status = "ready";
+  }
+  /** Read `src` through a DataController, classify any failure, drop a superseded result. */
+  async #read() {
+    const token2 = ++this.#readToken;
+    if (this.store) return;
+    const src = this.src;
+    if (!src) {
+      this.graph = void 0;
+      this.baseUrl = void 0;
+      this.errorMessage = "";
+      this.status = "idle";
+      return;
+    }
+    this.status = "loading";
+    this.errorMessage = "";
+    const seam = {
+      ...this.fetch ? { fetch: this.fetch } : {},
+      ...this.publicFetch ? { publicFetch: this.publicFetch } : {}
+    };
+    const controller = new DataController(seam);
+    try {
+      const { graph, baseUrl } = await this.loadFrom(controller, src, this.publicRead);
+      if (token2 !== this.#readToken) return;
+      this.graph = graph;
+      this.baseUrl = baseUrl;
+      this.status = "ready";
+    } catch (error) {
+      if (token2 !== this.#readToken) return;
+      this.graph = void 0;
+      this.baseUrl = void 0;
+      this.errorMessage = errorMessageOf(error);
+      this.status = "error";
+    }
+  }
+  render() {
+    switch (this.status) {
+      case "idle":
+        return b2`<slot name="empty"><p part="empty">Nothing to display.</p></slot>`;
+      case "loading":
+        return b2`<slot name="loading"><p part="loading">Loading…</p></slot>`;
+      case "error":
+        return b2`<p part="error" role="alert">${this.errorMessage}</p>`;
+      default:
+        return this.graph !== void 0 && this.baseUrl !== void 0 ? this.renderReady(this.graph, this.baseUrl) : b2`<slot name="empty"><p part="empty">Nothing to display.</p></slot>`;
+    }
+  }
+};
+function errorMessageOf(error) {
+  if (error instanceof DataControllerError) return error.message;
+  return error instanceof Error ? error.message : String(error);
+}
+function safeHref(value) {
+  if (!value) return void 0;
+  try {
+    const u3 = new URL(value);
+    return u3.protocol === "https:" || u3.protocol === "http:" ? value : void 0;
+  } catch {
+    return void 0;
+  }
+}
+function safeMailto(value) {
+  return value && /^mailto:[^\s]+@?[^\s]*$/i.test(value) ? value : void 0;
+}
+function safeTel(value) {
+  return value && /^tel:[^\s]+$/i.test(value) ? value : void 0;
+}
+function stripScheme(value) {
+  return value.replace(/^(mailto:|tel:)/i, "");
+}
+function formatDate(date2) {
+  if (!date2) return "";
+  try {
+    return date2.toLocaleDateString();
+  } catch {
+    return "";
+  }
+}
+
+// src/components/shacl-form-edit.ts
+var ALLOWED_DATASET_KEYS2 = /* @__PURE__ */ new Set([
+  // NOTE: NO "view" key here — its ABSENCE is what makes shacl-form editable.
+  "ignoreOwlImports",
+  "shapes",
+  "values",
+  "shapeSubject",
+  "valuesSubject"
+]);
+var INPUT_PROPS2 = ["shapes", "values", "shapeSubject", "fetch", "publicFetch", "resolveOptions"];
+var JeswrShaclForm = class extends i4 {
+  static properties = {
+    shapes: { attribute: false },
+    values: { attribute: false },
+    shapeSubject: { attribute: "shape-subject" },
+    fetch: { attribute: false },
+    publicFetch: { attribute: false },
+    resolveOptions: { attribute: false },
+    mergeSave: { attribute: false },
+    showSaveButton: { type: Boolean, attribute: "show-save-button" },
+    status: { state: true },
+    saveStatus: { state: true },
+    errorMessage: { state: true },
+    saveErrorMessage: { state: true },
+    validationWarning: { state: true },
+    shapesTurtle: { state: true },
+    valuesTurtle: { state: true }
+  };
+  /** A monotonically increasing token to drop the result of a superseded resolve. */
+  #renderToken = 0;
+  /** A monotonically increasing token so a stale save can't flip a newer one's state. */
+  #saveToken = 0;
+  constructor() {
+    super();
+    this.shapes = void 0;
+    this.values = void 0;
+    this.shapeSubject = void 0;
+    this.fetch = void 0;
+    this.publicFetch = void 0;
+    this.resolveOptions = void 0;
+    this.mergeSave = void 0;
+    this.showSaveButton = true;
+    this.status = "idle";
+    this.saveStatus = "idle";
+    this.errorMessage = "";
+    this.saveErrorMessage = "";
+    this.validationWarning = "";
+    this.shapesTurtle = "";
+    this.valuesTurtle = "";
+  }
+  /** Light DOM so a consuming app can `::part`/style the inner form. */
+  createRenderRoot() {
+    return this;
+  }
+  willUpdate(changed) {
+    const changedKeys = changed;
+    if (INPUT_PROPS2.some((k4) => changedKeys.has(k4))) {
+      void this.#resolve();
+    }
+  }
+  /**
+   * Pre-fetch + §9-harden both graphs through the SHARED pipeline (the SAME one the
+   * read view uses). Fail-closed: empty shapes / any error → the error view with no
+   * partially-applied inline graph, so a mounted <shacl-form> never sees bad input.
+   */
+  async #resolve() {
+    const token2 = ++this.#renderToken;
+    const shapes = this.shapes;
+    const values = this.values;
+    if (!shapes || !values) {
+      this.shapesTurtle = "";
+      this.valuesTurtle = "";
+      this.errorMessage = "";
+      this.status = "idle";
+      return;
+    }
+    this.status = "loading";
+    this.errorMessage = "";
+    this.validationWarning = "";
+    const seam = {
+      fetch: this.fetch ?? globalThis.fetch.bind(globalThis),
+      ...this.publicFetch ? { publicFetch: this.publicFetch } : {}
+    };
+    const opts = this.resolveOptions ?? {};
+    const result = await resolveAndHarden(shapes, values, seam, opts);
+    if (token2 !== this.#renderToken) return;
+    if (result.kind === "ready") {
+      this.shapesTurtle = result.shapesTurtle;
+      this.valuesTurtle = result.valuesTurtle;
+      this.status = "ready";
+      return;
+    }
+    this.shapesTurtle = "";
+    this.valuesTurtle = "";
+    this.errorMessage = result.message;
+    this.status = "error";
+  }
+  /**
+   * SAVE — the §10 merge write. Reads the edited graph from shacl-form (`toRDF()` —
+   * only the shaped node's triples), runs an ADVISORY client validation (warn,
+   * never block), then delegates the actual write to {@link JeswrShaclForm.mergeSave}
+   * (the per-class forms wire a DataWriter §10 merge). Optimistic state:
+   * saving → saved on success, → error + a surfaced message on failure (revert).
+   *
+   * @returns `true` on a successful save, `false` on failure (the error is on the
+   *   element's status + the `jeswr-save-error` event).
+   * @throws if there is no mounted form, or no `mergeSave` callback (the base element
+   *   refuses to do a naive write — that would drop triples / break dual-predicate).
+   */
+  async save() {
+    const form = this.querySelector("shacl-form");
+    if (!form) {
+      throw new Error("Cannot save: the editable form is not ready (no inner <shacl-form>).");
+    }
+    if (!this.mergeSave) {
+      throw new Error(
+        "Cannot save: no `mergeSave` callback is set. The editable form refuses a naive write (it would drop triples outside the shape + break dual-predicate compat). Use a per-class form (jeswr-task-form/\u2026) or set `.mergeSave` to a DataWriter \xA710 merge."
+      );
+    }
+    const formGraph = form.toRDF();
+    let conforms = true;
+    try {
+      const report = await form.validate(true);
+      conforms = report.conforms;
+      this.validationWarning = report.conforms ? "" : "Some fields don't satisfy the shape. Saving anyway (validation is advisory).";
+    } catch {
+      this.validationWarning = "";
+    }
+    const token2 = ++this.#saveToken;
+    this.saveStatus = "saving";
+    this.saveErrorMessage = "";
+    try {
+      await this.mergeSave(formGraph);
+      if (token2 !== this.#saveToken) return true;
+      this.saveStatus = "saved";
+      this.#emit("jeswr-save", { formGraph, conforms });
+      return true;
+    } catch (error) {
+      if (token2 !== this.#saveToken) return false;
+      this.saveStatus = "error";
+      this.saveErrorMessage = error instanceof Error ? error.message : String(error);
+      this.#emit("jeswr-save-error", { error });
+      return false;
+    }
+  }
+  /** Fire a CustomEvent (composed so a consuming app outside the light DOM hears it). */
+  #emit(type, detail) {
+    this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
+  }
+  render() {
+    if (this.status === "idle") {
+      return b2`<slot name="empty"><p part="empty">No shape or data to edit.</p></slot>`;
+    }
+    if (this.status === "loading") {
+      return b2`<slot name="loading"><p part="loading">Loading…</p></slot>`;
+    }
+    if (this.status === "error") {
+      return b2`<p part="error" role="alert">${this.errorMessage}</p>`;
+    }
+    return b2`
+      <shacl-form
+        part="form"
+        data-ignore-owl-imports=""
+        data-shapes=${this.shapesTurtle}
+        data-values=${this.valuesTurtle}
+        data-shape-subject=${this.shapeSubject ?? A}
+      ></shacl-form>
+      ${this.validationWarning ? b2`<p part="warning" role="status">${this.validationWarning}</p>` : null}
+      ${this.#renderActions()}
+    `;
+  }
+  /** The save button + the saving/saved/error indicator. */
+  #renderActions() {
+    if (!this.showSaveButton) {
+      return this.saveStatus === "idle" ? null : this.#statusIndicator();
+    }
+    return b2`
+      <div part="actions">
+        <button
+          part="save"
+          type="button"
+          ?disabled=${this.saveStatus === "saving"}
+          @click=${() => void this.save()}
+        >
+          ${this.saveStatus === "saving" ? "Saving\u2026" : "Save"}
+        </button>
+        ${this.#statusIndicator()}
+      </div>
+    `;
+  }
+  /** The non-button saving/saved/error text (escaped — Lit text interpolation). */
+  #statusIndicator() {
+    if (this.saveStatus === "saved") {
+      return b2`<span part="status" data-state="saved" role="status">Saved</span>`;
+    }
+    if (this.saveStatus === "error") {
+      return b2`<span part="status" data-state="error" role="alert"
+        >${this.saveErrorMessage || "Save failed"}</span
+      >`;
+    }
+    if (this.saveStatus === "saving") {
+      return b2`<span part="status" data-state="saving" role="status">Saving…</span>`;
+    }
+    return null;
+  }
+  /**
+   * Belt-and-braces (identical to the view): after every render, REMOVE any `*-url`
+   * dataset key or any key off the allow-list from the inner <shacl-form>, so a
+   * future template edit can never silently re-introduce a fetch-URL surface. ALSO
+   * asserts data-view is never set here (the edit form must stay editable).
+   */
+  updated(_changed) {
+    const form = this.querySelector("shacl-form");
+    if (!form) return;
+    for (const key of Object.keys(form.dataset)) {
+      const lower = key.toLowerCase();
+      if (lower.endsWith("url") || key === "view" || !ALLOWED_DATASET_KEYS2.has(key)) {
+        delete form.dataset[key];
+      }
+    }
+  }
+};
+if (!customElements.get("jeswr-shacl-form")) {
+  customElements.define("jeswr-shacl-form", JeswrShaclForm);
+}
+
+// src/data-writer.ts
+var TURTLE = "text/turtle";
+var RDF_ACCEPT2 = "text/turtle, application/ld+json;q=0.9";
+var WriteScopeError = class _WriteScopeError extends Error {
+  /** The offending target URL. */
+  url;
+  constructor(url, reason) {
+    super(`Refusing to write ${url}: ${reason}`);
+    this.name = "WriteScopeError";
+    this.url = url;
+    Object.setPrototypeOf(this, _WriteScopeError.prototype);
+  }
+};
+var UnconditionalOverwriteError = class _UnconditionalOverwriteError extends Error {
+  /** The resource URL the unconditional overwrite targeted. */
+  url;
+  constructor(url) {
+    super(
+      `Refusing an UNCONDITIONAL overwrite of ${url}: a write that replaces an existing resource requires an \`If-Match\` etag (the lost-update guard), or \`If-None-Match: "*"\` to create-if-absent. Pass the etag you read, or use saveMerged() which reads it for you.`
+    );
+    this.name = "UnconditionalOverwriteError";
+    this.url = url;
+    Object.setPrototypeOf(this, _UnconditionalOverwriteError.prototype);
+  }
+};
+var WriteConflictError = class _WriteConflictError extends Error {
+  /** The resource URL the conflicting write targeted. */
+  url;
+  /** The HTTP status the server returned (412 / 409 / 428). */
+  status;
+  constructor(url, status) {
+    super(
+      `Write to ${url} conflicted (HTTP ${status}): the resource changed since you read it (lost-update guard fired) or already exists. Re-read it and retry.`
+    );
+    this.name = "WriteConflictError";
+    this.url = url;
+    this.status = status;
+    Object.setPrototypeOf(this, _WriteConflictError.prototype);
+  }
+};
+var WriteFailedError = class _WriteFailedError extends Error {
+  /** The resource URL. */
+  url;
+  /** The HTTP status, when the failure came from a response. */
+  status;
+  constructor(url, options) {
+    super(
+      options?.status !== void 0 ? `Write to ${url} failed with status ${options.status}` : `Write to ${url} failed`,
+      options?.cause !== void 0 ? { cause: options.cause } : void 0
+    );
+    this.name = "WriteFailedError";
+    this.url = url;
+    this.status = options?.status;
+    Object.setPrototypeOf(this, _WriteFailedError.prototype);
+  }
+};
+var DataWriter = class {
+  #fetch;
+  #base;
+  constructor(seam = {}) {
+    this.#fetch = seam.fetch ?? globalThis.fetch.bind(globalThis);
+    this.#base = seam.base;
+  }
+  /** The base every write is confined to, or `undefined` (no path-prefix check). */
+  get base() {
+    return this.#base;
+  }
+  /**
+   * §10 MERGE-NOT-REPLACE save (THE correctness invariant). Loads the existing
+   * resource graph (keeping its ETag), applies the form's edited values via the
+   * MODEL's typed-accessor mutator onto that loaded graph (so only the shape-covered
+   * predicates change — incl. dual-predicate writes — and every untouched triple is
+   * preserved), then conditionally `If-Match` PUTs the merged graph.
+   *
+   * If the resource does not exist yet (404 on the pre-read) and
+   * `createIfAbsent` (default true), the mutator is applied to an EMPTY graph and
+   * the result is CREATE-ONLY written (`If-None-Match: "*"`) so a concurrent
+   * creation cannot be clobbered.
+   *
+   * @param url     - the resource to save (scope-guarded against the base).
+   * @param mutate  - applies the form delta through the model's typed setters.
+   * @param options - see {@link SaveMergedOptions}.
+   * @throws {@link WriteScopeError} if `url` is outside the base.
+   * @throws {@link WriteConflictError} on a 412/409/428 (lost-update / exists).
+   * @throws {@link WriteFailedError} on any other write failure.
+   */
+  async saveMerged(url, mutate, options = {}) {
+    this.#assertWithinScope(url);
+    const createIfAbsent = options.createIfAbsent ?? true;
+    const pre = await this.#readForMerge(url, options.signal);
+    if (pre.kind === "missing") {
+      if (!createIfAbsent) {
+        throw new WriteFailedError(url, { status: 404 });
+      }
+      const created = await applyMutator(new N3Store(), url, mutate);
+      const turtle2 = await serializeTurtle(created);
+      return this.#put(url, turtle2, { ifNoneMatch: "*", signal: options.signal });
+    }
+    const merged = await applyMutator(pre.graph, url, mutate);
+    const turtle = await serializeTurtle(merged);
+    if (!pre.etag) {
+      throw new UnconditionalOverwriteError(url);
+    }
+    return this.#put(url, turtle, { ifMatch: pre.etag, signal: options.signal });
+  }
+  /**
+   * Conditional PUT of a Turtle body. ENFORCES the lost-update guard: overwriting an
+   * existing resource requires `ifMatch`; `ifNoneMatch: "*"` is the create-only
+   * alternative. An UNCONDITIONAL PUT (neither set) is REFUSED unless
+   * `allowUnconditional` is explicitly passed (used only for a brand-new resource a
+   * caller has already proven absent some other way — `saveMerged` never uses it).
+   *
+   * @throws {@link UnconditionalOverwriteError} if neither conditional is set.
+   * @throws {@link WriteScopeError} if `url` is outside the base.
+   * @throws {@link WriteConflictError} / {@link WriteFailedError} on a failure.
+   */
+  async putTurtle(url, turtle, options = {}) {
+    this.#assertWithinScope(url);
+    if (options.ifMatch && options.ifNoneMatch) {
+      throw new Error("Pass at most one of ifMatch / ifNoneMatch.");
+    }
+    if (!options.ifMatch && !options.ifNoneMatch && !options.allowUnconditional) {
+      throw new UnconditionalOverwriteError(url);
+    }
+    return this.#put(url, turtle, options);
+  }
+  /**
+   * Conditional DELETE. Requires `ifMatch` (the lost-update guard) — an
+   * unconditional delete of an existing resource is refused, mirroring the write
+   * discipline. Scope-guarded.
+   */
+  async delete(url, options) {
+    this.#assertWithinScope(url);
+    if (!options.ifMatch) throw new UnconditionalOverwriteError(url);
+    let response;
+    try {
+      response = await this.#fetch(url, {
+        method: "DELETE",
+        headers: { "If-Match": options.ifMatch },
+        ...options.signal ? { signal: options.signal } : {}
+      });
+    } catch (cause) {
+      throw new WriteFailedError(url, { cause });
+    }
+    if (response.status === 412 || response.status === 409 || response.status === 428) {
+      throw new WriteConflictError(url, response.status);
+    }
+    if (!response.ok && response.status !== 404) {
+      throw new WriteFailedError(url, { status: response.status });
+    }
+  }
+  /** The low-level conditional PUT (after the scope + conditional checks). */
+  async #put(url, turtle, options) {
+    const headers = {
+      ...options.headers,
+      "Content-Type": TURTLE
+    };
+    if (options.ifMatch) headers["If-Match"] = options.ifMatch;
+    if (options.ifNoneMatch) headers["If-None-Match"] = options.ifNoneMatch;
+    let response;
+    try {
+      response = await this.#fetch(url, {
+        method: "PUT",
+        headers,
+        body: turtle,
+        ...options.signal ? { signal: options.signal } : {}
+      });
+    } catch (cause) {
+      throw new WriteFailedError(url, { cause });
+    }
+    const finalUrl = response.url || url;
+    if (response.status === 412 || response.status === 409 || response.status === 428) {
+      throw new WriteConflictError(finalUrl, response.status);
+    }
+    if (!response.ok) {
+      throw new WriteFailedError(finalUrl, { status: response.status });
+    }
+    const etag = response.headers.get("ETag");
+    return { url: finalUrl, ...etag ? { etag } : {} };
+  }
+  /**
+   * Read the existing resource for a merge: parse it to a Store + keep its ETag, OR
+   * report it MISSING (404/410). Any other read failure throws a WriteFailedError so
+   * a save never silently proceeds on a transport error.
+   */
+  async #readForMerge(url, signal) {
+    let response;
+    try {
+      response = await this.#fetch(url, {
+        method: "GET",
+        headers: { Accept: RDF_ACCEPT2 },
+        ...signal ? { signal } : {}
+      });
+    } catch (cause) {
+      throw new WriteFailedError(url, { cause });
+    }
+    if (response.status === 404 || response.status === 410) return { kind: "missing" };
+    if (!response.ok) {
+      throw new WriteFailedError(response.url || url, { status: response.status });
+    }
+    const finalUrl = response.url || url;
+    const contentType = response.headers.get("Content-Type");
+    let graph;
+    try {
+      const body = response.body ?? await response.text();
+      graph = await parseToStore(body, contentType, { baseIRI: finalUrl });
+    } catch (cause) {
+      throw new WriteFailedError(finalUrl, { cause });
+    }
+    const etag = response.headers.get("ETag");
+    return { kind: "present", graph, ...etag ? { etag } : {} };
+  }
+  /**
+   * SCOPE GUARD (fail-closed). Throw a {@link WriteScopeError} unless `target` is a
+   * safe write target: an absolute http(s) URL, no embedded credentials, and — when
+   * a base is configured — same origin + a path under the base's directory. Mirrors
+   * the suite forks' `assertWithinBase`. Run BEFORE any fetch.
+   */
+  #assertWithinScope(target) {
+    let url;
+    try {
+      url = new URL(target);
+    } catch {
+      throw new WriteScopeError(target, "not an absolute URL");
+    }
+    const scheme = url.protocol.toLowerCase();
+    if (scheme !== "http:" && scheme !== "https:") {
+      throw new WriteScopeError(target, `non-http(s) scheme "${url.protocol}"`);
+    }
+    if (url.username || url.password) {
+      throw new WriteScopeError(target, "embedded credentials in the URL");
+    }
+    if (this.#base === void 0) return;
+    let base;
+    try {
+      base = new URL(this.#base);
+    } catch {
+      throw new WriteScopeError(target, `the configured base "${this.#base}" is not a valid URL`);
+    }
+    if (url.origin !== base.origin) {
+      throw new WriteScopeError(target, `different origin from the base (${base.origin})`);
+    }
+    const baseDir = base.pathname.endsWith("/") ? base.pathname : base.pathname.slice(0, base.pathname.lastIndexOf("/") + 1);
+    if (!url.pathname.startsWith(baseDir)) {
+      throw new WriteScopeError(target, `path is outside the base directory (${baseDir})`);
+    }
+  }
+};
+async function applyMutator(graph, resourceUrl, mutate) {
+  const returned = await mutate(graph, resourceUrl);
+  return returned instanceof N3Store ? returned : graph;
+}
+
+// src/components/form-base.ts
+var AbstractFormElement = class extends i4 {
+  static properties = {
+    src: {},
+    fetch: { attribute: false },
+    publicFetch: { attribute: false },
+    base: {},
+    resolveOptions: { attribute: false },
+    saveStatus: { state: true }
+  };
+  constructor() {
+    super();
+    this.src = void 0;
+    this.fetch = void 0;
+    this.publicFetch = void 0;
+    this.base = void 0;
+    this.resolveOptions = void 0;
+    this.saveStatus = "idle";
+  }
+  /** Light DOM so a consuming app can `::part`/style the inner editable form. */
+  createRenderRoot() {
+    return this;
+  }
+  /**
+   * The §10 merge-save callback handed to <jeswr-shacl-form>. Builds a DataWriter
+   * scoped to `base` (or the resource directory) and runs `saveMerged`, whose mutator
+   * delegates to the subclass's {@link applyFormDeltaToExisting} on the LOADED graph.
+   */
+  mergeSaveCallback() {
+    return async (formGraph) => {
+      const src = this.src;
+      if (!src) throw new Error("Cannot save: no `src` resource is set.");
+      const seam = {
+        ...this.fetch ? { fetch: this.fetch } : {},
+        // Default the scope-guard base to the resource's own directory so a save can
+        // never leave the edited resource's container even if `base` is unset.
+        base: this.base ?? defaultBaseFor(src)
+      };
+      const writer = new DataWriter(seam);
+      await writer.saveMerged(src, async (existing, resourceUrl) => {
+        await this.applyFormDeltaToExisting(formGraph, existing, resourceUrl);
+        return void 0;
+      });
+    };
+  }
+  /** Build the data-graph source for the inner form: the resource, read with `fetch`. */
+  dataSource() {
+    return this.src ? { kind: "trusted", url: this.src, seam: "auth" } : void 0;
+  }
+  /** Forward a child <jeswr-shacl-form>'s save state up so this element can reflect it. */
+  #onChildState = () => {
+    const form = this.querySelector("jeswr-shacl-form");
+    if (form)
+      this.saveStatus = form.saveStatus ?? "idle";
+  };
+  /** Imperatively trigger a save on the inner editable form. */
+  async save() {
+    const form = this.querySelector("jeswr-shacl-form");
+    if (!form) throw new Error("Cannot save: the editable form is not ready.");
+    const ok = await form.save();
+    this.#onChildState();
+    return ok;
+  }
+  render() {
+    if (!this.src) {
+      return b2`<slot name="empty"><p part="empty">No resource to edit.</p></slot>`;
+    }
+    const dataSource = this.dataSource();
+    return b2`
+      <jeswr-shacl-form
+        part="form"
+        .shapes=${{ kind: "inline", text: this.shapeTurtle() }}
+        .values=${dataSource}
+        .fetch=${this.fetch}
+        .publicFetch=${this.publicFetch}
+        .resolveOptions=${this.resolveOptions}
+        .mergeSave=${this.mergeSaveCallback()}
+        @jeswr-save=${(e6) => this.#onSave(e6)}
+        @jeswr-save-error=${() => this.#onChildState()}
+      ></jeswr-shacl-form>
+    `;
+  }
+  /** Re-emit the inner form's save as this element's own event + mirror the state. */
+  #onSave(e6) {
+    this.#onChildState();
+    this.dispatchEvent(
+      new CustomEvent("jeswr-save", { detail: e6.detail, bubbles: true, composed: true })
+    );
+  }
+};
+function defaultBaseFor(resourceUrl) {
+  try {
+    const u3 = new URL(resourceUrl);
+    const dir = u3.pathname.slice(0, u3.pathname.lastIndexOf("/") + 1) || "/";
+    return `${u3.origin}${dir}`;
+  } catch {
+    return resourceUrl;
+  }
+}
+var RDF_TYPE2 = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+function findEditedSubject(formGraph, typeIri, conventional, namedNode4) {
+  const rdfType = namedNode4(RDF_TYPE2);
+  const typeNode = namedNode4(typeIri);
+  if (formGraph.getQuads(namedNode4(conventional), rdfType, typeNode, null).length > 0) {
+    return conventional;
+  }
+  for (const q3 of formGraph.getQuads(null, rdfType, typeNode, null)) {
+    if (q3.subject.termType === "NamedNode") return q3.subject.value;
+  }
+  return conventional;
+}
+
+// node_modules/@rdfjs/wrapper/dist/TermWrapper.js
+var TermWrapper = class {
+  original;
+  _dataset;
+  _factory;
+  constructor(term, dataset2, factory2) {
+    this.original = typeof term === "string" ? factory2.namedNode(term) : term;
+    this._dataset = dataset2;
+    this._factory = factory2;
+  }
+  /**
+   * The dataset that contains this term.
+   *
+   * This accessor provides access to the underlying RDF graph that is the containing context of a node mapped to JavaScript by instances of this class.
+   *
+   * @remarks
+   * RDF/JS, like many other RDF frameworks, keeps terms and datasets separate. This means that terms do not hold a reference to a dataset they reside in (or were found in). This, in turn, means that a dataset must always be available, separate from the term, if either changes to the underlying data or further traversal of the underlying data is called for. In an object-oriented context however, where property chaining is idiomatic (i.e. `instance.property1.property2`), there is no way to supply the dataset when dereferencing a link in the chain.
+   *
+   * This property solves the problem by keeping a reference to the dataset.
+   *
+   * @exmaple
+   * Using the dataset to modify information related to this node in the underlying data:
+   * ```ts
+   * class Book extends TermWrapper {
+   *   set author(value: string) {
+   *     const subject = this as Quad_Subject
+   *     const predicate = this.factory.namedNode("http://example.com/author")
+   *     const object = this.factory.literal(value)
+   *     const oldAuthors = this.factory.quad(subject, predicate)
+   *     const newAuthor = this.factory.quad(subject, predicate, object)
+   *
+   *     this.dataset.delete(oldAuthors)
+   *     this.dataset.add(newAuthor)
+   *   }
+   * }
+   * ```
+   * Note: The above example operates on a low level to explain this property. Library users are more likely to interact with {@link OptionalAs}, {@link RequiredAs} and {@link LiteralFrom} for a better experience.
+   *
+   * @exmaple
+   * Using the dataset to modify data related to this node in the underlying data:
+   * ```ts
+   * class Container extends TermWrapper {
+   *   add(something: string) {
+   *     const subject = this as Quad_Subject
+   *     const predicate = this.factory.namedNode("http://example.com/contains")
+   *     const object = this.factory.literal(something)
+   *     const quad = this.factory.quad(subject, predicate, object)
+   *
+   *     this.dataset.add(quad)
+   *   }
+   * }
+   * ```
+   */
+  get dataset() {
+    return this._dataset;
+  }
+  /**
+   * The data factory this instance was instantiated with. A collection of methods that can be used to create terms by this or subsequent wrappers.
+   *
+   * @exmaple
+   * Using the factory to create a literal term from the current date and time:
+   * ```ts
+   * class Calendar extends TermWrapper {
+   *   get currentDate(): Literal {
+   *     const date = new Date().toISOString()
+   *     const xsdDateTime = this.factory.namedNode("http://www.w3.org/2001/XMLSchema#dateTime")
+   *
+   *     return this.factory.literal(date, xsdDateTime)
+   *   }
+   * }
+   * ```
+   *
+   * @exmaple
+   * Using the factory to create a quad:
+   * ```ts
+   * class Container extends TermWrapper {
+   *   add(something: string) {
+   *     const subject = this as Quad_Subject
+   *     const predicate = this.factory.namedNode("http://example.com/contains")
+   *     const object = this.factory.literal(something)
+   *     const quad = this.factory.quad(subject, predicate, object)
+   *
+   *     this.dataset.add(quad)
+   *   }
+   * }
+   * ```
+   */
+  get factory() {
+    return this._factory;
+  }
+  /**
+   * The well-known property containing a string that represents the type of this object.
+   */
+  get [Symbol.toStringTag]() {
+    return this.constructor.name;
+  }
+  //#region Implementation of RDF/JS Term
+  get termType() {
+    return this.original.termType;
+  }
+  get value() {
+    return this.original.value;
+  }
+  equals(other) {
+    return this.original.equals(other);
+  }
+  //#region Implementation of RDF/JS Literal
+  get language() {
+    return this.original.language;
+  }
+  get direction() {
+    return this.original.direction;
+  }
+  get datatype() {
+    return this.original.datatype;
+  }
+  //#endregion
+  //#region Implementation of RDF/JS Quad
+  get subject() {
+    return this.original.subject;
+  }
+  get predicate() {
+    return this.original.predicate;
+  }
+  get object() {
+    return this.original.object;
+  }
+  get graph() {
+    return this.original.graph;
+  }
+};
+
+// node_modules/@rdfjs/wrapper/dist/IndexerInterceptor.js
+var IndexerInterceptor = class {
+  get(target, property, receiver) {
+    if (notNumeric(property)) {
+      return Reflect.get(target, property, receiver);
+    }
+    return target.at(Number.parseInt(property));
+  }
+  set(target, property, value, receiver) {
+    if (notNumeric(property)) {
+      return Reflect.set(target, property, value, receiver);
+    }
+    const i5 = Number.parseInt(property);
+    target.fill(value, i5, i5 + 1);
+    return true;
+  }
+  deleteProperty(target, property) {
+    if (notNumeric(property)) {
+      return Reflect.deleteProperty(target, property);
+    }
+    return false;
+  }
+};
+function notNumeric(property) {
+  return typeof property === "symbol" || isNaN(parseInt(property));
+}
+
+// node_modules/@rdfjs/wrapper/dist/vocabulary/RDF.js
+var RDF2 = {
+  langString: "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString",
+  type: "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+  first: "http://www.w3.org/1999/02/22-rdf-syntax-ns#first",
+  rest: "http://www.w3.org/1999/02/22-rdf-syntax-ns#rest",
+  nil: "http://www.w3.org/1999/02/22-rdf-syntax-ns#nil"
+};
+
+// node_modules/@rdfjs/wrapper/dist/mapping/TermFrom.js
+var TermFrom;
+(function(TermFrom2) {
+  function instance(value, factory2) {
+    return itself(value, factory2);
+  }
+  TermFrom2.instance = instance;
+  function itself(value, _3) {
+    return value;
+  }
+  TermFrom2.itself = itself;
+})(TermFrom || (TermFrom = {}));
+
+// node_modules/@rdfjs/wrapper/dist/mapping/RequiredFrom.js
+var RequiredFrom;
+(function(RequiredFrom2) {
+  function subjectPredicate(anchor1, p4, termAs) {
+    if (termAs === void 0) {
+      throw new Error();
+    }
+    const anchor2 = anchor1.factory.namedNode(p4);
+    const matches = anchor1.dataset.match(anchor1, anchor2)[Symbol.iterator]();
+    const { value: first, done: none } = matches.next();
+    if (none) {
+      throw new Error(`No value found for predicate ${p4} on term ${anchor1.value}`);
+    }
+    if (!matches.next().done) {
+      throw new Error(`More than one value for predicate ${p4} on term ${anchor1.value}`);
+    }
+    return termAs(new TermWrapper(first.object, anchor1.dataset, anchor1.factory));
+  }
+  RequiredFrom2.subjectPredicate = subjectPredicate;
+})(RequiredFrom || (RequiredFrom = {}));
+
+// node_modules/@rdfjs/wrapper/dist/mapping/OptionalFrom.js
+var OptionalFrom;
+(function(OptionalFrom2) {
+  function subjectPredicate(anchor, p4, termAs) {
+    if (termAs === void 0) {
+      throw new Error();
+    }
+    const predicate = anchor.factory.namedNode(p4);
+    for (const q3 of anchor.dataset.match(anchor, predicate)) {
+      return termAs(new TermWrapper(q3.object, anchor.dataset, anchor.factory));
+    }
+    return void 0;
+  }
+  OptionalFrom2.subjectPredicate = subjectPredicate;
+})(OptionalFrom || (OptionalFrom = {}));
+
+// node_modules/@rdfjs/wrapper/dist/mapping/OptionalAs.js
+var OptionalAs;
+(function(OptionalAs2) {
+  function object(anchor, p4, value, termFrom) {
+    if (termFrom === void 0) {
+      throw new Error();
+    }
+    const predicate = anchor.factory.namedNode(p4);
+    for (const q4 of anchor.dataset.match(anchor, predicate)) {
+      anchor.dataset.delete(q4);
+    }
+    if (value === void 0) {
+      return;
+    }
+    if (!isQuadSubject(anchor)) {
+      return;
+    }
+    const o6 = termFrom(value, anchor.factory);
+    if (o6 === void 0) {
+      return;
+    }
+    if (!isQuadObject(o6)) {
+      return;
+    }
+    const q3 = anchor.factory.quad(anchor, predicate, o6);
+    anchor.dataset.add(q3);
+  }
+  OptionalAs2.object = object;
+})(OptionalAs || (OptionalAs = {}));
+function isQuadSubject(term) {
+  return ["NamedNode", "BlankNode", "Quad", "Variable"].includes(term.termType);
+}
+function isQuadObject(term) {
+  return ["NamedNode", "Literal", "BlankNode", "Quad", "Variable"].includes(term.termType);
+}
+
+// node_modules/@rdfjs/wrapper/dist/mapping/RequiredAs.js
+var RequiredAs;
+(function(RequiredAs2) {
+  function object(anchor, p4, value, termFrom) {
+    if (value === void 0) {
+      throw new Error("value cannot be undefined");
+    }
+    OptionalAs.object(anchor, p4, value, termFrom);
+  }
+  RequiredAs2.object = object;
+})(RequiredAs || (RequiredAs = {}));
+
+// node_modules/@rdfjs/wrapper/dist/ListItem.js
+var ListItem = class _ListItem extends TermWrapper {
+  termAs;
+  termFrom;
+  constructor(term, dataset2, factory2, termAs, termFrom) {
+    super(term, dataset2, factory2);
+    this.termAs = termAs;
+    this.termFrom = termFrom;
+  }
+  get firstRaw() {
+    return OptionalFrom.subjectPredicate(this, RDF2.first, TermAs.term);
+  }
+  set firstRaw(value) {
+    OptionalAs.object(this, RDF2.first, value, TermFrom.itself);
+  }
+  get restRaw() {
+    return OptionalFrom.subjectPredicate(this, RDF2.rest, TermAs.term);
+  }
+  set restRaw(value) {
+    OptionalAs.object(this, RDF2.rest, value, TermFrom.itself);
+  }
+  get isListItem() {
+    return this.firstRaw !== void 0 && this.restRaw !== void 0;
+  }
+  get isNil() {
+    return this.equals(this.factory.namedNode(RDF2.nil));
+  }
+  get first() {
+    return RequiredFrom.subjectPredicate(this, RDF2.first, this.termAs);
+  }
+  set first(value) {
+    RequiredAs.object(this, RDF2.first, value, this.termFrom);
+  }
+  get rest() {
+    return RequiredFrom.subjectPredicate(this, RDF2.rest, (w4) => new _ListItem(w4, w4.dataset, w4.factory, this.termAs, this.termFrom));
+  }
+  set rest(value) {
+    RequiredAs.object(this, RDF2.rest, value, TermFrom.instance);
+  }
+  pop() {
+    try {
+      return this.first;
+    } finally {
+      this.firstRaw = void 0;
+      this.restRaw = this.factory.namedNode(RDF2.nil);
+    }
+  }
+  *items() {
+    if (this.firstRaw === void 0) {
+      return;
+    }
+    yield this;
+    for (const more of this.rest.items()) {
+      yield more;
+    }
+  }
+};
+
+// node_modules/@rdfjs/wrapper/dist/Overwriter.js
+var Overwriter = class extends TermWrapper {
+  p;
+  constructor(subject, p4) {
+    super(subject, subject.dataset, subject.factory);
+    this.p = p4;
+  }
+  set listNode(object) {
+    RequiredAs.object(this, this.p, object, TermFrom.instance);
+  }
+};
+
+// node_modules/@rdfjs/wrapper/dist/RdfList.js
+var RdfList = class {
+  subject;
+  predicate;
+  termAs;
+  termFrom;
+  root;
+  constructor(root, subject, predicate, termAs, termFrom) {
+    this.subject = subject;
+    this.predicate = predicate;
+    this.termAs = termAs;
+    this.termFrom = termFrom;
+    this.root = new ListItem(root, this.subject.dataset, this.subject.factory, termAs, termFrom);
+    return new Proxy(this, new IndexerInterceptor());
+  }
+  get [Symbol.unscopables]() {
+    return Array.prototype[Symbol.unscopables];
+  }
+  get length() {
+    return [...this.items].length;
+  }
+  set length(_3) {
+    throw new Error("this array is based on an RDF Collection. Its length cannot be modified like this.");
+  }
+  [Symbol.iterator]() {
+    return this.values();
+  }
+  at(index) {
+    return [...this.items].at(index)?.first;
+  }
+  concat(...items) {
+    return [...this].concat(...items);
+  }
+  copyWithin(target, start, end) {
+    throw new Error("not implemented");
+  }
+  entries() {
+    return [...this].entries();
+  }
+  every(predicate, thisArg) {
+    return [...this].every(predicate, thisArg);
+  }
+  fill(value, start, end) {
+    throw new Error("not implemented");
+  }
+  filter(predicate, thisArg) {
+    return [...this].filter(predicate, thisArg);
+  }
+  find(predicate, thisArg) {
+    return [...this].find(predicate, thisArg);
+  }
+  findIndex(predicate, thisArg) {
+    return [...this].findIndex(predicate, thisArg);
+  }
+  flat(depth) {
+    throw new Error("not implemented");
+  }
+  flatMap(callback, thisArg) {
+    return [...this].flatMap(callback, thisArg);
+  }
+  forEach(callback, thisArg) {
+    [...this].forEach(callback, thisArg);
+  }
+  includes(searchElement, fromIndex) {
+    return [...this].includes(searchElement, fromIndex);
+  }
+  indexOf(searchElement, fromIndex) {
+    return [...this].indexOf(searchElement, fromIndex);
+  }
+  join(separator) {
+    return [...this].join(separator);
+  }
+  keys() {
+    return [...this.items].keys();
+  }
+  lastIndexOf(searchElement, fromIndex) {
+    return [...this].lastIndexOf(searchElement, fromIndex);
+  }
+  map(callback, thisArg) {
+    return [...this].map(callback, thisArg);
+  }
+  pop() {
+    return [...this.items].at(-1)?.pop();
+  }
+  push(...items) {
+    const nil = this.subject.factory.namedNode(RDF2.nil);
+    for (const item of items) {
+      const newNode = new ListItem(this.subject.factory.blankNode(), this.subject.dataset, this.subject.factory, this.termAs, this.termFrom);
+      const lastNode = this.root.isNil ? (
+        // The statement representing an empty list is replaced by a new one whose object is the new node
+        // The representation of the first item (root, currently rdf:nil, the empty list) is overwritten by the new node
+        this.root = new Overwriter(this.subject, this.predicate).listNode = newNode
+      ) : (
+        // replace rest of current last with new and return is because it's the new last
+        [...this.items].at(-1).rest = newNode
+      );
+      lastNode.first = item;
+      lastNode.restRaw = nil;
+    }
+    return this.length;
+  }
+  reduce(callback, initialValue) {
+    return [...this].reduce(callback, initialValue);
+  }
+  reduceRight(callback, initialValue) {
+    return [...this].reduceRight(callback, initialValue);
+  }
+  reverse() {
+    throw new Error("not implemented");
+  }
+  shift() {
+    if (this.root.isNil) {
+      return void 0;
+    }
+    const value = this.root.first;
+    if (this.root.rest.isNil) {
+      new Overwriter(this.subject, this.predicate).listNode = this.root.rest;
+      this.root.firstRaw = void 0;
+      this.root.restRaw = void 0;
+    } else {
+      this.root.firstRaw = this.root.rest.firstRaw;
+      this.root.restRaw = this.root.rest.restRaw;
+    }
+    return value;
+  }
+  slice(start, end) {
+    return [...this].slice(start, end);
+  }
+  some(predicate, thisArg) {
+    return [...this].some(predicate, thisArg);
+  }
+  sort(compareFn) {
+    throw new Error("not implemented");
+  }
+  splice(start, deleteCount, ...items) {
+    throw new Error("not implemented");
+  }
+  unshift(...items) {
+    for (const item of items.reverse()) {
+      const firstNode = this.root;
+      this.root = new Overwriter(this.subject, this.predicate).listNode = new ListItem(this.subject.factory.blankNode(), this.subject.dataset, this.subject.factory, this.termAs, this.termFrom);
+      this.root.first = item;
+      this.root.rest = firstNode;
+    }
+    return this.length;
+  }
+  *values() {
+    for (const item of this.items) {
+      yield item.first;
+    }
+  }
+  get [Symbol.toStringTag]() {
+    return this.constructor.name;
+  }
+  get items() {
+    return this.root.items();
+  }
+};
+
+// node_modules/@rdfjs/wrapper/dist/errors/WrapperError.js
+var WrapperError = class extends Error {
+  /**
+   * Creates a new instance of {@link WrapperError}.
+   *
+   * @param message - A human-readable description of the error.
+   * @param cause - The specific original cause of the error.
+   */
+  constructor(message, cause) {
+    super(message);
+    this.name = this.constructor.name;
+    this.cause = cause;
+  }
+  //#region Ignore in documentation
+  /** @ignore */
+  static captureStackTrace(targetObject, constructorOpt) {
+    super.captureStackTrace(targetObject, constructorOpt);
+  }
+  /** @ignore */
+  static prepareStackTrace(err, stackTraces) {
+    super.prepareStackTrace(err, stackTraces);
+  }
+  /** @ignore */
+  static get stackTraceLimit() {
+    return super.stackTraceLimit;
+  }
+  /** @ignore */
+  static set stackTraceLimit(value) {
+    super.stackTraceLimit = value;
+  }
+};
+
+// node_modules/@rdfjs/wrapper/dist/errors/TermError.js
+var TermError = class extends WrapperError {
+  term;
+  /**
+   * Creates a new instance of {@link TermError}.
+   *
+   * @param term - The term associated with this error.
+   * @param message - A human-readable description of the error.
+   * @param cause - The specific original cause of the error.
+   */
+  constructor(term, message, cause) {
+    super(message, cause);
+    this.term = term;
+  }
+};
+
+// node_modules/@rdfjs/wrapper/dist/errors/TermTypeError.js
+var TermTypeError = class extends TermError {
+  termType;
+  /**
+   * Creates a new instance of {@link TermTypeError}.
+   *
+   * @param term - The term associated with this error.
+   * @param termType - The expected term type.
+   * @param cause - The specific original cause of the error.
+   */
+  constructor(term, termType, cause) {
+    super(term, `Term type must be ${termType} but was ${term.termType}`, cause);
+    this.termType = termType;
+  }
+};
+
+// node_modules/@rdfjs/wrapper/dist/errors/LiteralDatatypeError.js
+var LiteralDatatypeError = class extends TermError {
+  datatypes;
+  /**
+   * Creates a new instance of {@link LiteralDatatypeError}.
+   *
+   * @param literal - The literal associated with this error.
+   * @param datatypes - The expected datatypes.
+   * @param cause - The specific original cause of the error.
+   */
+  constructor(literal3, datatypes, cause) {
+    super(literal3, `Datatype must be one of ${[...datatypes].join()} but was ${literal3.datatype}`, cause);
+    this.datatypes = datatypes;
+  }
+};
+
+// node_modules/@rdfjs/wrapper/dist/errors/ListRootError.js
+var ListRootError = class extends TermError {
+  constructor(term, cause) {
+    super(term, `List root must be rdf:nil or a BlankNode but was ${term.value}`, cause);
+  }
+};
+
+// node_modules/@rdfjs/wrapper/dist/ensure.js
+function ensurePresent(object) {
+  if (object !== void 0 && object !== null) {
+    return;
+  }
+  throw new ReferenceError("Object must not be undefined or null");
+}
+function ensureIs(object, type) {
+  if (object instanceof type) {
+    return;
+  }
+  throw new TypeError(`Object must be a ${type}`);
+}
+function ensureTermType(term, type) {
+  if (term.termType === type) {
+    return;
+  }
+  throw new TermTypeError(term, type);
+}
+function ensureDatatype(term, ...datatypes) {
+  if (datatypes.includes(term.datatype.value)) {
+    return;
+  }
+  throw new LiteralDatatypeError(term, datatypes);
+}
+function ensureListRoot(term) {
+  if (term.termType === "NamedNode" && term.value === RDF2.nil) {
+    return;
+  }
+  if (term.termType === "BlankNode") {
+    return;
+  }
+  throw new ListRootError(term);
+}
+
+// node_modules/@rdfjs/wrapper/dist/mapping/TermAs.js
+var TermAs;
+(function(TermAs2) {
+  function instance(constructor) {
+    return (term2) => {
+      ensurePresent(term2);
+      ensureIs(term2, TermWrapper);
+      return new constructor(term2, term2.dataset, term2.factory);
+    };
+  }
+  TermAs2.instance = instance;
+  function is(term2) {
+    return term2;
+  }
+  TermAs2.is = is;
+  function list(subject, predicate, termAs, termFrom) {
+    return (term2) => {
+      ensurePresent(term2);
+      ensureIs(term2, TermWrapper);
+      ensureListRoot(term2);
+      return new RdfList(term2, subject, predicate, termAs, termFrom);
+    };
+  }
+  TermAs2.list = list;
+  function term(term2) {
+    return term2;
+  }
+  TermAs2.term = term;
+})(TermAs || (TermAs = {}));
+
+// node_modules/@rdfjs/wrapper/dist/vocabulary/XSD.js
+var XSD2 = {
+  anyURI: "http://www.w3.org/2001/XMLSchema#anyURI",
+  base64Binary: "http://www.w3.org/2001/XMLSchema#base64Binary",
+  boolean: "http://www.w3.org/2001/XMLSchema#boolean",
+  byte: "http://www.w3.org/2001/XMLSchema#byte",
+  date: "http://www.w3.org/2001/XMLSchema#date",
+  dateTime: "http://www.w3.org/2001/XMLSchema#dateTime",
+  decimal: "http://www.w3.org/2001/XMLSchema#decimal",
+  double: "http://www.w3.org/2001/XMLSchema#double",
+  float: "http://www.w3.org/2001/XMLSchema#float",
+  hexBinary: "http://www.w3.org/2001/XMLSchema#hexBinary",
+  int: "http://www.w3.org/2001/XMLSchema#int",
+  integer: "http://www.w3.org/2001/XMLSchema#integer",
+  long: "http://www.w3.org/2001/XMLSchema#long",
+  negativeInteger: "http://www.w3.org/2001/XMLSchema#negativeInteger",
+  nonNegativeInteger: "http://www.w3.org/2001/XMLSchema#nonNegativeInteger",
+  nonPositiveInteger: "http://www.w3.org/2001/XMLSchema#nonPositiveInteger",
+  positiveInteger: "http://www.w3.org/2001/XMLSchema#positiveInteger",
+  short: "http://www.w3.org/2001/XMLSchema#short",
+  string: "http://www.w3.org/2001/XMLSchema#string",
+  unsignedByte: "http://www.w3.org/2001/XMLSchema#unsignedByte",
+  unsignedInt: "http://www.w3.org/2001/XMLSchema#unsignedInt",
+  unsignedLong: "http://www.w3.org/2001/XMLSchema#unsignedLong",
+  unsignedShort: "http://www.w3.org/2001/XMLSchema#unsignedShort"
+};
+
+// node_modules/@rdfjs/wrapper/dist/mapping/LiteralAs.js
+var LiteralAs;
+(function(LiteralAs2) {
+  function bigint(term) {
+    ensurePresent(term);
+    ensureIs(term, TermWrapper);
+    ensureTermType(term, "Literal");
+    ensureDatatype(term, ...integerDatatypes);
+    return BigInt(term.value);
+  }
+  LiteralAs2.bigint = bigint;
+  function boolean2(term) {
+    ensurePresent(term);
+    ensureIs(term, TermWrapper);
+    ensureTermType(term, "Literal");
+    ensureDatatype(term, XSD2.boolean);
+    return term.value === "true" || term.value === "1";
+  }
+  LiteralAs2.boolean = boolean2;
+  function date2(term) {
+    ensurePresent(term);
+    ensureIs(term, TermWrapper);
+    ensureTermType(term, "Literal");
+    ensureDatatype(term, ...dateDatatypes);
+    return new Date(term.value);
+  }
+  LiteralAs2.date = date2;
+  function langString(term) {
+    ensurePresent(term);
+    ensureIs(term, TermWrapper);
+    ensureTermType(term, "Literal");
+    ensureDatatype(term, RDF2.langString);
+    return { lang: term.language, string: term.value };
+  }
+  LiteralAs2.langString = langString;
+  function number(term) {
+    ensurePresent(term);
+    ensureIs(term, TermWrapper);
+    ensureTermType(term, "Literal");
+    ensureDatatype(term, ...numericDatatypes);
+    if (term.value === "INF") {
+      return Number.POSITIVE_INFINITY;
+    }
+    if (term.value === "-INF") {
+      return Number.NEGATIVE_INFINITY;
+    }
+    if (term.value === "NaN") {
+      return Number.NaN;
+    }
+    return Number(term.value);
+  }
+  LiteralAs2.number = number;
+  function string2(term) {
+    ensurePresent(term);
+    ensureIs(term, TermWrapper);
+    return term.value;
+  }
+  LiteralAs2.string = string2;
+  function symbol(term) {
+    ensurePresent(term);
+    ensureIs(term, TermWrapper);
+    return Symbol.for(term.value);
+  }
+  LiteralAs2.symbol = symbol;
+  function uInt8Array(term) {
+    ensurePresent(term);
+    ensureIs(term, TermWrapper);
+    ensureTermType(term, "Literal");
+    ensureDatatype(term, ...byteArrayDatatypes);
+    switch (term.datatype.value) {
+      case XSD2.hexBinary:
+        return Uint8Array.from(Buffer.from(term.value, "hex"));
+      default:
+      case XSD2.base64Binary:
+        return Uint8Array.from(Buffer.from(term.value, "base64"));
+    }
+  }
+  LiteralAs2.uInt8Array = uInt8Array;
+  function url(term) {
+    ensurePresent(term);
+    ensureIs(term, TermWrapper);
+    ensureTermType(term, "Literal");
+    ensureDatatype(term, XSD2.anyURI);
+    return new URL(term.value);
+  }
+  LiteralAs2.url = url;
+  function langTuple(term) {
+    ensurePresent(term);
+    ensureIs(term, TermWrapper);
+    ensureTermType(term, "Literal");
+    ensureDatatype(term, RDF2.langString);
+    return [term.language, term.value];
+  }
+  LiteralAs2.langTuple = langTuple;
+  function datatypeTuple(term) {
+    ensurePresent(term);
+    ensureIs(term, TermWrapper);
+    ensureTermType(term, "Literal");
+    return [term.datatype.value, term.value];
+  }
+  LiteralAs2.datatypeTuple = datatypeTuple;
+})(LiteralAs || (LiteralAs = {}));
+var byteArrayDatatypes = [
+  XSD2.base64Binary,
+  XSD2.hexBinary
+];
+var integerDatatypes = [
+  XSD2.integer,
+  XSD2.nonPositiveInteger,
+  XSD2.long,
+  XSD2.nonNegativeInteger,
+  XSD2.negativeInteger,
+  XSD2.int,
+  XSD2.unsignedLong,
+  XSD2.positiveInteger,
+  XSD2.short,
+  XSD2.unsignedInt,
+  XSD2.byte,
+  XSD2.unsignedShort,
+  XSD2.unsignedByte
+];
+var numericDatatypes = integerDatatypes.concat([
+  XSD2.decimal,
+  XSD2.float,
+  XSD2.double
+]);
+var dateDatatypes = [
+  XSD2.date,
+  XSD2.dateTime
+];
+
+// node_modules/@rdfjs/wrapper/dist/mapping/LiteralFrom.js
+var LiteralFrom;
+(function(LiteralFrom2) {
+  function anyUriString(value, factory2) {
+    return factory2.literal(value, factory2.namedNode(XSD2.anyURI));
+  }
+  LiteralFrom2.anyUriString = anyUriString;
+  function anyUriUrl(value, factory2) {
+    return anyUriString(value.toString(), factory2);
+  }
+  LiteralFrom2.anyUriUrl = anyUriUrl;
+  function base64(value, factory2) {
+    return factory2.literal(value.toBase64(), factory2.namedNode(XSD2.base64Binary));
+  }
+  LiteralFrom2.base64 = base64;
+  function boolean2(value, factory2) {
+    return factory2.literal(value.toString(), factory2.namedNode(XSD2.boolean));
+  }
+  LiteralFrom2.boolean = boolean2;
+  function date2(value, factory2) {
+    return factory2.literal(value.toISOString(), factory2.namedNode(XSD2.date));
+  }
+  LiteralFrom2.date = date2;
+  function dateTime2(value, factory2) {
+    return factory2.literal(value.toISOString(), factory2.namedNode(XSD2.dateTime));
+  }
+  LiteralFrom2.dateTime = dateTime2;
+  function double2(value, factory2) {
+    return factory2.literal(value.toString(), factory2.namedNode(XSD2.double));
+  }
+  LiteralFrom2.double = double2;
+  function integer2(value, factory2) {
+    return factory2.literal(value.toString(), factory2.namedNode(XSD2.integer));
+  }
+  LiteralFrom2.integer = integer2;
+  function hex(value, factory2) {
+    return factory2.literal(value.toHex(), factory2.namedNode(XSD2.hexBinary));
+  }
+  LiteralFrom2.hex = hex;
+  function langString(value, factory2) {
+    return factory2.literal(value.string, { language: value.lang });
+  }
+  LiteralFrom2.langString = langString;
+  function string2(value, factory2) {
+    return factory2.literal(value);
+  }
+  LiteralFrom2.string = string2;
+  function langTuple([key, value], factory2) {
+    return factory2.literal(value, key);
+  }
+  LiteralFrom2.langTuple = langTuple;
+  function datatypeTuple([key, value], factory2) {
+    return factory2.literal(value, factory2.namedNode(key));
+  }
+  LiteralFrom2.datatypeTuple = datatypeTuple;
+})(LiteralFrom || (LiteralFrom = {}));
+
+// node_modules/@rdfjs/wrapper/dist/mapping/NamedNodeFrom.js
+var NamedNodeFrom;
+(function(NamedNodeFrom2) {
+  function string2(value, factory2) {
+    return factory2.namedNode(value);
+  }
+  NamedNodeFrom2.string = string2;
+  function url(value, factory2) {
+    return string2(value.toString(), factory2);
+  }
+  NamedNodeFrom2.url = url;
+})(NamedNodeFrom || (NamedNodeFrom = {}));
+
+// node_modules/@rdfjs/wrapper/dist/mapping/NamedNodeAs.js
+var NamedNodeAs;
+(function(NamedNodeAs2) {
+  function string2(term) {
+    ensurePresent(term);
+    ensureIs(term, TermWrapper);
+    ensureTermType(term, "NamedNode");
+    return term.value;
+  }
+  NamedNodeAs2.string = string2;
+  function url(term) {
+    ensurePresent(term);
+    ensureIs(term, TermWrapper);
+    ensureTermType(term, "NamedNode");
+    return new URL(term.value);
+  }
+  NamedNodeAs2.url = url;
+})(NamedNodeAs || (NamedNodeAs = {}));
+
+// node_modules/@rdfjs/wrapper/dist/mapping/BlankNodeFrom.js
+var BlankNodeFrom;
+(function(BlankNodeFrom2) {
+  function string2(value, factory2) {
+    return factory2.blankNode(value);
+  }
+  BlankNodeFrom2.string = string2;
+})(BlankNodeFrom || (BlankNodeFrom = {}));
+
+// node_modules/@rdfjs/wrapper/dist/WrappingMap.js
+var WrappingMap = class {
+  subject;
+  predicate;
+  termAs;
+  termFrom;
+  constructor(subject, predicate, termAs, termFrom) {
+    this.subject = subject;
+    this.predicate = predicate;
+    this.termAs = termAs;
+    this.termFrom = termFrom;
+  }
+  clear() {
+    for (const q3 of this.matches) {
+      this.subject.dataset.delete(q3);
+    }
+  }
+  delete(k4) {
+    const p4 = this.subject.factory.namedNode(this.predicate);
+    for (const entry of this) {
+      if (entry[0] !== k4) {
+        continue;
+      }
+      this.subject.dataset.delete(this.subject.factory.quad(this.subject, p4, this.termFrom(entry, this.subject.factory)));
+      return true;
+    }
+    return false;
+  }
+  forEach(callback, thisArg) {
+    for (const [key, value] of this) {
+      callback.call(thisArg, value, key, this);
+    }
+  }
+  get(k4) {
+    for (const [key, value] of this) {
+      if (key !== k4) {
+        continue;
+      }
+      return value;
+    }
+    return void 0;
+  }
+  has(k4) {
+    return this.get(k4) !== void 0;
+  }
+  set(k4, v5) {
+    this.delete(k4);
+    this.add(k4, v5);
+    return this;
+  }
+  get size() {
+    return [...this.matches].length;
+  }
+  set size(_3) {
+    throw new Error("not supported");
+  }
+  *entries() {
+    for (const quad3 of this.matches) {
+      yield this.termAs(new TermWrapper(quad3.object, this.subject.dataset, this.subject.factory));
+    }
+  }
+  *keys() {
+    for (const [key] of this) {
+      yield key;
+    }
+  }
+  *values() {
+    for (const [, value] of this) {
+      yield value;
+    }
+  }
+  [Symbol.iterator]() {
+    return this.entries();
+  }
+  get [Symbol.toStringTag]() {
+    return this.constructor.name;
+  }
+  get matches() {
+    const p4 = this.subject.factory.namedNode(this.predicate);
+    return this.subject.dataset.match(this.subject, p4);
+  }
+  add(k4, v5) {
+    const p4 = this.subject.factory.namedNode(this.predicate);
+    this.subject.dataset.add(this.subject.factory.quad(this.subject, p4, this.termFrom([k4, v5], this.subject.factory)));
+  }
+};
+
+// node_modules/@rdfjs/wrapper/dist/mapping/Mapping.js
+var Mapping;
+(function(Mapping2) {
+  function languageDictionary(anchor, p4, termAs, termFrom) {
+    if (termAs === void 0) {
+      throw new Error();
+    }
+    if (termFrom === void 0) {
+      throw new Error();
+    }
+    return new WrappingMap(anchor, p4, termAs, termFrom);
+  }
+  Mapping2.languageDictionary = languageDictionary;
+})(Mapping || (Mapping = {}));
+
+// node_modules/@rdfjs/wrapper/dist/WrappingSet.js
+var WrappingSet = class {
+  subject;
+  predicate;
+  termAs;
+  termFrom;
+  // TODO: Direction
+  constructor(subject, predicate, termAs, termFrom) {
+    this.subject = subject;
+    this.predicate = predicate;
+    this.termAs = termAs;
+    this.termFrom = termFrom;
+  }
+  add(value) {
+    this.subject.dataset.add(this.quad(value));
+    return this;
+  }
+  clear() {
+    for (const q3 of this.matches) {
+      this.subject.dataset.delete(q3);
+    }
+  }
+  delete(value) {
+    if (!this.has(value)) {
+      return false;
+    }
+    const o6 = this.termFrom(value, this.subject.factory);
+    const p4 = this.subject.factory.namedNode(this.predicate);
+    for (const q3 of this.subject.dataset.match(this.subject, p4, o6)) {
+      this.subject.dataset.delete(q3);
+    }
+    return true;
+  }
+  forEach(cb, thisArg) {
+    for (const item of this) {
+      cb.call(thisArg, item, item, this);
+    }
+  }
+  has(value) {
+    return this.subject.dataset.has(this.quad(value));
+  }
+  get size() {
+    return this.matches.size;
+  }
+  [Symbol.iterator]() {
+    return this.values();
+  }
+  *entries() {
+    for (const v5 of this) {
+      yield [v5, v5];
+    }
+  }
+  keys() {
+    return this.values();
+  }
+  *values() {
+    for (const q3 of this.matches) {
+      yield this.termAs(new TermWrapper(q3.object, this.subject.dataset, this.subject.factory));
+    }
+  }
+  get [Symbol.toStringTag]() {
+    return this.constructor.name;
+  }
+  quad(value) {
+    const s4 = this.subject;
+    const p4 = this.subject.factory.namedNode(this.predicate);
+    const o6 = this.termFrom(value, this.subject.factory);
+    const q3 = this.subject.factory.quad(s4, p4, o6);
+    return q3;
+  }
+  get matches() {
+    const p4 = this.subject.factory.namedNode(this.predicate);
+    return this.subject.dataset.match(this.subject, p4);
+  }
+};
+
+// node_modules/@rdfjs/wrapper/dist/mapping/SetFrom.js
+var SetFrom;
+(function(SetFrom2) {
+  function subjectPredicate(anchor, p4, termAs, termFrom) {
+    if (termAs === void 0) {
+      throw new Error();
+    }
+    if (termFrom === void 0) {
+      throw new Error();
+    }
+    return new WrappingSet(anchor, p4, termAs, termFrom);
+  }
+  SetFrom2.subjectPredicate = subjectPredicate;
+})(SetFrom || (SetFrom = {}));
+
+// node_modules/@jeswr/solid-task-model/dist/iri.js
+function httpIriOrUndefined(value) {
+  if (!value)
+    return void 0;
+  try {
+    const u3 = new URL(value);
+    return u3.protocol === "http:" || u3.protocol === "https:" ? u3.href : void 0;
+  } catch {
+    return void 0;
+  }
+}
+function isHttpIri(value) {
+  return value !== void 0 && httpIriOrUndefined(value) === value;
+}
+
+// node_modules/@jeswr/solid-task-model/dist/vocab.js
+var WF = "http://www.w3.org/2005/01/wf/flow#";
+var DCT = "http://purl.org/dc/terms/";
+var RDF3 = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
+var SCHEMA = "http://schema.org/";
+var PROV = "http://www.w3.org/ns/prov#";
+var VCARD = "http://www.w3.org/2006/vcard/ns#";
+var wf = (local) => `${WF}${local}`;
+var dct = (local) => `${DCT}${local}`;
+var rdf4 = (local) => `${RDF3}${local}`;
+var schema = (local) => `${SCHEMA}${local}`;
+var prov = (local) => `${PROV}${local}`;
+var vcard = (local) => `${VCARD}${local}`;
+var TASK_CLASS = wf("Task");
+var WF_OPEN = wf("Open");
+var WF_CLOSED = wf("Closed");
+var RDF_TYPE3 = rdf4("type");
+var WF_TRACKER = wf("Tracker");
+var WF_ISSUE_CLASS = wf("issueClass");
+var WF_ISSUE_CATEGORY = wf("issueCategory");
+var WF_STATE = wf("State");
+var WF_INITIAL_STATE = wf("initialState");
+var WF_ALLOWED_TRANS = wf("allowedTransitions");
+var WF_STATE_STORE = wf("stateStore");
+var WF_ASSIGNEE_GROUP = wf("assigneeGroup");
+var VCARD_ADDRESS_BOOK = vcard("AddressBook");
+var VCARD_NAME_EMAIL_INDEX = vcard("nameEmailIndex");
+var VCARD_GROUP_INDEX = vcard("groupIndex");
+var VCARD_IN_ADDRESS_BOOK = vcard("inAddressBook");
+var VCARD_INCLUDES_GROUP = vcard("includesGroup");
+var VCARD_INDIVIDUAL = vcard("Individual");
+var VCARD_GROUP = vcard("Group");
+var VCARD_FN = vcard("fn");
+var VCARD_HAS_EMAIL = vcard("hasEmail");
+var VCARD_HAS_TELEPHONE = vcard("hasTelephone");
+var VCARD_HAS_UID = vcard("hasUID");
+var VCARD_URL = vcard("url");
+var VCARD_NOTE = vcard("note");
+var VCARD_ORGANIZATION_NAME = vcard("organization-name");
+var VCARD_VALUE = vcard("value");
+var VCARD_HAS_MEMBER = vcard("hasMember");
+var VCARD_HOME = vcard("Home");
+var VCARD_CELL = vcard("Cell");
+var VCARD_WEB_ID = vcard("WebId");
+
+// node_modules/@jeswr/solid-task-model/dist/task.js
+var PRIORITIES = ["high", "medium", "low"];
+function normalizePriority(value) {
+  const v5 = (value ?? "").toLowerCase().trim();
+  return PRIORITIES.includes(v5) ? v5 : void 0;
+}
+var Task = class extends TermWrapper {
+  /** The task subject IRI. */
+  get id() {
+    return this.value;
+  }
+  /** The `rdf:type` set as a live set of IRI strings. */
+  get types() {
+    return SetFrom.subjectPredicate(this, rdf4("type"), NamedNodeAs.string, NamedNodeFrom.string);
+  }
+  /** Stamp this subject as a `wf:Task`. Idempotent; returns `this` for chaining. */
+  mark() {
+    this.types.add(TASK_CLASS);
+    return this;
+  }
+  /** Whether this subject is a `wf:Task`. */
+  get isTask() {
+    return this.types.has(TASK_CLASS);
+  }
+  get title() {
+    return OptionalFrom.subjectPredicate(this, dct("title"), LiteralAs.string);
+  }
+  set title(value) {
+    OptionalAs.object(this, dct("title"), value, LiteralFrom.string);
+  }
+  /**
+   * The body. The two existing producers DIVERGE on the predicate — solid-issues
+   * writes `wf:description`, the Pod Manager writes `dct:description` — so the
+   * shared model must read BOTH or it would silently drop a PM-written body on a
+   * cross-app read. The getter prefers `wf:description` and falls back to
+   * `dct:description`; the setter writes BOTH (and clears both on undefined) so a
+   * consumer querying either predicate finds it. This is the convergence point:
+   * once apps adopt this package they all read/write the same pair.
+   */
+  get description() {
+    return OptionalFrom.subjectPredicate(this, wf("description"), LiteralAs.string) ?? OptionalFrom.subjectPredicate(this, dct("description"), LiteralAs.string);
+  }
+  set description(value) {
+    OptionalAs.object(this, wf("description"), value, LiteralFrom.string);
+    OptionalAs.object(this, dct("description"), value, LiteralFrom.string);
+  }
+  get created() {
+    return OptionalFrom.subjectPredicate(this, dct("created"), LiteralAs.date);
+  }
+  set created(value) {
+    OptionalAs.object(this, dct("created"), value, LiteralFrom.dateTime);
+  }
+  get modified() {
+    return OptionalFrom.subjectPredicate(this, dct("modified"), LiteralAs.date);
+  }
+  set modified(value) {
+    OptionalAs.object(this, dct("modified"), value, LiteralFrom.dateTime);
+  }
+  /** `prov:endedAtTime` — completion time. Set automatically by {@link state}. */
+  get endedAt() {
+    return OptionalFrom.subjectPredicate(this, prov("endedAtTime"), LiteralAs.date);
+  }
+  set endedAt(value) {
+    OptionalAs.object(this, prov("endedAtTime"), value, LiteralFrom.dateTime);
+  }
+  get creator() {
+    return OptionalFrom.subjectPredicate(this, dct("creator"), NamedNodeAs.string);
+  }
+  set creator(value) {
+    OptionalAs.object(this, dct("creator"), value, NamedNodeFrom.string);
+  }
+  /** `wf:assignee` — the assigned agent's WebID. */
+  get assignee() {
+    return OptionalFrom.subjectPredicate(this, wf("assignee"), NamedNodeAs.string);
+  }
+  set assignee(value) {
+    OptionalAs.object(this, wf("assignee"), value, NamedNodeFrom.string);
+  }
+  /** `wf:tracker` — the project / tracker document. */
+  get project() {
+    return OptionalFrom.subjectPredicate(this, wf("tracker"), NamedNodeAs.string);
+  }
+  set project(value) {
+    OptionalAs.object(this, wf("tracker"), value, NamedNodeFrom.string);
+  }
+  /** `wf:dateDue` — the due date (stored as xsd:dateTime; well-formed + round-trips). */
+  get dueDate() {
+    return OptionalFrom.subjectPredicate(this, wf("dateDue"), LiteralAs.date);
+  }
+  set dueDate(value) {
+    OptionalAs.object(this, wf("dateDue"), value, LiteralFrom.dateTime);
+  }
+  /** `schema:priority` — high/medium/low, as a string literal. */
+  get priority() {
+    return normalizePriority(OptionalFrom.subjectPredicate(this, schema("priority"), LiteralAs.string));
+  }
+  set priority(value) {
+    OptionalAs.object(this, schema("priority"), value, LiteralFrom.string);
+  }
+  /** `schema:position` — backlog rank; lower sorts first. */
+  get rank() {
+    return OptionalFrom.subjectPredicate(this, schema("position"), LiteralAs.number);
+  }
+  set rank(value) {
+    OptionalAs.object(this, schema("position"), value, LiteralFrom.double);
+  }
+  /** `dct:isPartOf` — the parent issue. */
+  get parent() {
+    return OptionalFrom.subjectPredicate(this, dct("isPartOf"), NamedNodeAs.string);
+  }
+  set parent(value) {
+    OptionalAs.object(this, dct("isPartOf"), value, NamedNodeFrom.string);
+  }
+  /** `dct:isReplacedBy` — the canonical successor (close-as-duplicate). */
+  get duplicateOf() {
+    return OptionalFrom.subjectPredicate(this, dct("isReplacedBy"), NamedNodeAs.string);
+  }
+  set duplicateOf(value) {
+    OptionalAs.object(this, dct("isReplacedBy"), value, NamedNodeFrom.string);
+  }
+  /** `prov:wasDerivedFrom` — the single original this task was cloned from. */
+  get clonedFrom() {
+    return OptionalFrom.subjectPredicate(this, prov("wasDerivedFrom"), NamedNodeAs.string);
+  }
+  set clonedFrom(value) {
+    OptionalAs.object(this, prov("wasDerivedFrom"), value, NamedNodeFrom.string);
+  }
+  /** `dct:requires` — issues this one is blocked by (live set of IRIs). */
+  get blockedBy() {
+    return SetFrom.subjectPredicate(this, dct("requires"), NamedNodeAs.string, NamedNodeFrom.string);
+  }
+  /** `dct:relation` — non-blocking, symmetric relates-to links (live set of IRIs). */
+  get relatesTo() {
+    return SetFrom.subjectPredicate(this, dct("relation"), NamedNodeAs.string, NamedNodeFrom.string);
+  }
+  /**
+   * Lifecycle state, read from / written to `rdf:type wf:Open` / `wf:Closed`.
+   * Setting `closed` stamps `prov:endedAtTime` (once — preserved on re-close);
+   * setting `open` clears it. Always keeps `wf:Task` typed.
+   */
+  get state() {
+    return this.types.has(WF_CLOSED) ? "closed" : "open";
+  }
+  set state(value) {
+    const types = this.types;
+    types.add(TASK_CLASS);
+    if (value === "closed") {
+      types.add(WF_CLOSED);
+      types.delete(WF_OPEN);
+      this.endedAt ??= /* @__PURE__ */ new Date();
+    } else {
+      types.add(WF_OPEN);
+      types.delete(WF_CLOSED);
+      this.endedAt = void 0;
+    }
+  }
+  /** Convenience: is this task open? */
+  get isOpen() {
+    return this.state === "open";
+  }
+};
+function taskSubject(resourceUrl) {
+  return `${resourceUrl}#it`;
+}
+
+// src/components/shapes.ts
+var TASK_SHAPE_TTL = `
+@prefix sh:     <http://www.w3.org/ns/shacl#> .
+@prefix wf:     <http://www.w3.org/2005/01/wf/flow#> .
+@prefix dct:    <http://purl.org/dc/terms/> .
+@prefix schema: <http://schema.org/> .
+@prefix xsd:    <http://www.w3.org/2001/XMLSchema#> .
+
+[] a sh:NodeShape ;
+  sh:targetClass wf:Task ;
+  sh:property [ sh:path dct:title ;       sh:name "Title" ;       sh:order 1 ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path wf:description ;  sh:name "Description" ; sh:order 2 ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+  sh:property [ sh:path wf:assignee ;     sh:name "Assignee" ;    sh:order 3 ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:pattern "^https?://" ] ;
+  sh:property [ sh:path wf:dateDue ;      sh:name "Due date" ;    sh:order 4 ; sh:datatype xsd:dateTime ; sh:maxCount 1 ] ;
+  sh:property [ sh:path schema:priority ; sh:name "Priority" ;    sh:order 5 ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:in ( "high" "medium" "low" ) ] .
+`;
+var BOOKMARK_SHAPE_TTL = `
+@prefix sh:     <http://www.w3.org/ns/shacl#> .
+@prefix book:   <https://w3id.org/jeswr/bookmark#> .
+@prefix schema: <http://schema.org/> .
+@prefix dct:    <http://purl.org/dc/terms/> .
+@prefix xsd:    <http://www.w3.org/2001/XMLSchema#> .
+
+[] a sh:NodeShape ;
+  sh:targetClass book:Bookmark ;
+  sh:property [ sh:path schema:url ;         sh:name "URL" ;         sh:order 1 ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ; sh:pattern "^https?://" ] ;
+  sh:property [ sh:path dct:title ;          sh:name "Title" ;       sh:order 2 ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+  sh:property [ sh:path dct:description ;    sh:name "Description" ; sh:order 3 ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+  sh:property [ sh:path book:notes ;         sh:name "Notes" ;       sh:order 4 ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+  sh:property [ sh:path book:archived ;      sh:name "Archived" ;    sh:order 5 ; sh:datatype xsd:boolean ; sh:maxCount 1 ] ;
+  sh:property [ sh:path schema:keywords ;    sh:name "Tags" ;        sh:order 6 ; sh:datatype xsd:string ] .
+`;
+var CONTACT_SHAPE_TTL = `
+@prefix sh:     <http://www.w3.org/ns/shacl#> .
+@prefix vcard:  <http://www.w3.org/2006/vcard/ns#> .
+@prefix xsd:    <http://www.w3.org/2001/XMLSchema#> .
+
+[] a sh:NodeShape ;
+  sh:targetClass vcard:Individual ;
+  sh:property [ sh:path vcard:fn ;                sh:name "Name" ;         sh:order 1 ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path vcard:organization-name ; sh:name "Organisation" ; sh:order 2 ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+  sh:property [ sh:path vcard:note ;              sh:name "Note" ;         sh:order 3 ; sh:datatype xsd:string ; sh:maxCount 1 ] .
+`;
+
+// src/components/task-form.ts
+var TASK_TYPE = "http://www.w3.org/2005/01/wf/flow#Task";
+var JeswrTaskForm = class extends AbstractFormElement {
+  shapeTurtle() {
+    return TASK_SHAPE_TTL;
+  }
+  /**
+   * Apply the edited task fields from the form graph onto the existing graph, via the
+   * model's typed `Task` accessor on each. Reads through `new Task(readSubject,
+   * formGraph)` (the form's edited node, which shacl-form may have minted) and writes
+   * through `new Task(writeSubject, existing)` (the resource's conventional `#it`) —
+   * so the saved triples land on `${url}#it` regardless of shacl-form's minted IRI.
+   * Only the shape's predicates change; the `description` setter writes BOTH
+   * wf:description + dct:description (the dual-predicate contract); every untouched
+   * triple on `existing` (and on OTHER subjects) is preserved.
+   */
+  applyFormDeltaToExisting(formGraph, existing, resourceUrl) {
+    const writeSubject = taskSubject(resourceUrl);
+    const readSubject = findEditedSubject(
+      formGraph,
+      TASK_TYPE,
+      writeSubject,
+      N3DataFactory_default.namedNode
+    );
+    const edited = new Task(readSubject, formGraph, N3DataFactory_default);
+    const target = new Task(writeSubject, existing, N3DataFactory_default).mark();
+    target.title = edited.title;
+    target.description = edited.description;
+    target.assignee = safeHref(edited.assignee);
+    target.dueDate = edited.dueDate;
+    target.priority = edited.priority;
+    target.modified = /* @__PURE__ */ new Date();
+  }
+};
+if (!customElements.get("jeswr-task-form")) {
+  customElements.define("jeswr-task-form", JeswrTaskForm);
+}
+
+// node_modules/@jeswr/solid-task-model/dist/contacts.js
+function isMailto(value) {
+  return /^mailto:.+/.test(value);
+}
+function isTel(value) {
+  return /^tel:.+/.test(value);
+}
+var blankNodeLabel = (term) => term.value;
+function addStructuredValue(parent, predicate, kind, iriValue) {
+  const bnode = parent.factory.blankNode();
+  SetFrom.subjectPredicate(parent, predicate, blankNodeLabel, BlankNodeFrom.string).add(bnode.value);
+  const child = new TermWrapper(bnode, parent.dataset, parent.factory);
+  SetFrom.subjectPredicate(child, rdf4("type"), NamedNodeAs.string, NamedNodeFrom.string).add(kind);
+  OptionalAs.object(child, VCARD_VALUE, iriValue, NamedNodeFrom.string);
+}
+function readStructuredValues(parent, predicate) {
+  const out = [];
+  const seen = /* @__PURE__ */ new Set();
+  const p4 = parent.factory.namedNode(predicate);
+  for (const q3 of parent.dataset.match(parent, p4)) {
+    const obj = q3.object;
+    if (obj.termType === "NamedNode") {
+      if (!seen.has(obj.value)) {
+        seen.add(obj.value);
+        out.push(obj.value);
+      }
+      continue;
+    }
+    if (obj.termType === "BlankNode") {
+      const child = new TermWrapper(obj, parent.dataset, parent.factory);
+      const value = OptionalFrom.subjectPredicate(child, VCARD_VALUE, NamedNodeAs.string);
+      if (value !== void 0 && !seen.has(value)) {
+        seen.add(value);
+        out.push(value);
+      }
+    }
+  }
+  return out;
+}
+var Contact = class extends TermWrapper {
+  /** The individual subject IRI (`<person>#this`). */
+  get id() {
+    return this.value;
+  }
+  /** The `rdf:type` set as a live set of IRI strings. */
+  get types() {
+    return SetFrom.subjectPredicate(this, rdf4("type"), NamedNodeAs.string, NamedNodeFrom.string);
+  }
+  /** Stamp this subject as a `vcard:Individual`. Idempotent; returns `this`. */
+  mark() {
+    this.types.add(VCARD_INDIVIDUAL);
+    return this;
+  }
+  /** Whether this subject is a `vcard:Individual`. */
+  get isIndividual() {
+    return this.types.has(VCARD_INDIVIDUAL);
+  }
+  /** `vcard:fn` — the formatted/display name. */
+  get name() {
+    return OptionalFrom.subjectPredicate(this, VCARD_FN, LiteralAs.string);
+  }
+  set name(value) {
+    OptionalAs.object(this, VCARD_FN, value, LiteralFrom.string);
+  }
+  /** `vcard:inAddressBook` — the owning address book IRI. */
+  get inAddressBook() {
+    return OptionalFrom.subjectPredicate(this, VCARD_IN_ADDRESS_BOOK, NamedNodeAs.string);
+  }
+  set inAddressBook(value) {
+    OptionalAs.object(this, VCARD_IN_ADDRESS_BOOK, value, NamedNodeFrom.string);
+  }
+  /** `vcard:hasUID` — a stable unique id literal (the model writes `urn:uuid:<v4>`). */
+  get uid() {
+    return OptionalFrom.subjectPredicate(this, VCARD_HAS_UID, LiteralAs.string);
+  }
+  set uid(value) {
+    OptionalAs.object(this, VCARD_HAS_UID, value, LiteralFrom.string);
+  }
+  /** `dct:created` (DC Terms) — the person document's creation time. */
+  get created() {
+    return OptionalFrom.subjectPredicate(this, dct("created"), LiteralAs.date);
+  }
+  set created(value) {
+    OptionalAs.object(this, dct("created"), value, LiteralFrom.dateTime);
+  }
+  /** `vcard:note` — a free-text note. */
+  get note() {
+    return OptionalFrom.subjectPredicate(this, VCARD_NOTE, LiteralAs.string);
+  }
+  set note(value) {
+    OptionalAs.object(this, VCARD_NOTE, value, LiteralFrom.string);
+  }
+  /**
+   * `vcard:organization-name` — the contact's organisation/company name (the standard
+   * W3C vCard `ORG` term). A plain string literal; clears the triple on `undefined`.
+   */
+  get organization() {
+    return OptionalFrom.subjectPredicate(this, VCARD_ORGANIZATION_NAME, LiteralAs.string);
+  }
+  set organization(value) {
+    OptionalAs.object(this, VCARD_ORGANIZATION_NAME, value, LiteralFrom.string);
+  }
+  /**
+   * The contact's emails as canonical `mailto:` IRIs. Reads BOTH a direct
+   * `vcard:hasEmail <mailto:..>` and the structured `vcard:hasEmail [ vcard:value
+   * <mailto:..> ]` form (the crux behaviour). Only well-formed `mailto:` IRIs are
+   * returned: pod data is untrusted, so a `javascript:`/`http:`/literal value from a
+   * malicious or malformed contact is DROPPED rather than handed to UI as an email
+   * (the public contract is canonical `mailto:` values).
+   */
+  get emails() {
+    return readStructuredValues(this, VCARD_HAS_EMAIL).filter(isMailto);
+  }
+  /**
+   * Replace the contact's emails. Clears any prior `vcard:hasEmail` (structured nodes
+   * and direct IRIs), then writes each as the STRUCTURED `[ a vcard:Home; vcard:value
+   * <mailto:..> ]` form SolidOS reads. Non-`mailto:` entries are dropped (untrusted
+   * input). Accepts either a bare address or a full `mailto:` IRI.
+   */
+  setEmails(emails) {
+    this.clearStructured(VCARD_HAS_EMAIL);
+    for (const raw of emails) {
+      const iri = raw.startsWith("mailto:") ? raw : `mailto:${raw}`;
+      if (isMailto(iri))
+        addStructuredValue(this, VCARD_HAS_EMAIL, VCARD_HOME, iri);
+    }
+  }
+  /**
+   * The contact's phones as canonical `tel:` IRIs. Reads BOTH a direct
+   * `vcard:hasTelephone <tel:..>` and the structured `vcard:hasTelephone [ vcard:value
+   * <tel:..> ]` form. Only well-formed `tel:` IRIs are returned: an untrusted/malformed
+   * value (e.g. `javascript:`) is DROPPED rather than handed to UI as a phone link.
+   */
+  get phones() {
+    return readStructuredValues(this, VCARD_HAS_TELEPHONE).filter(isTel);
+  }
+  /**
+   * Replace the contact's phones. Clears any prior `vcard:hasTelephone`, then writes
+   * each as the STRUCTURED `[ a vcard:Cell; vcard:value <tel:..> ]` form. Non-`tel:`
+   * entries are dropped. Accepts either a bare number or a full `tel:` IRI.
+   */
+  setPhones(phones) {
+    this.clearStructured(VCARD_HAS_TELEPHONE);
+    for (const raw of phones) {
+      const iri = raw.startsWith("tel:") ? raw : `tel:${raw}`;
+      if (isTel(iri))
+        addStructuredValue(this, VCARD_HAS_TELEPHONE, VCARD_CELL, iri);
+    }
+  }
+  /**
+   * The contact's WebID, read from the structured `vcard:url [ a vcard:WebId;
+   * vcard:value <webid> ]` form (or a direct `vcard:url <webid>`). Only http(s) IRIs.
+   */
+  get webId() {
+    return readStructuredValues(this, VCARD_URL).find(isHttpIri);
+  }
+  /**
+   * Replace the contact's WebID. Clears any prior `vcard:url`, then writes the
+   * structured `[ a vcard:WebId; vcard:value <webid> ]` form. A non-http(s) value is
+   * dropped (untrusted input).
+   */
+  setWebId(webId) {
+    this.clearStructured(VCARD_URL);
+    if (isHttpIri(webId))
+      addStructuredValue(this, VCARD_URL, VCARD_WEB_ID, webId);
+  }
+  /**
+   * Remove every `predicate` edge AND any blank-node value node it pointed at, so a
+   * replace leaves no orphan structured node behind. Direct-IRI objects are removed by
+   * the edge deletion alone; blank-node objects have their own triples cleared too.
+   */
+  clearStructured(predicate) {
+    const p4 = this.factory.namedNode(predicate);
+    const edges = [...this.dataset.match(this, p4)];
+    for (const q3 of edges) {
+      if (q3.object.termType === "BlankNode") {
+        for (const inner of [...this.dataset.match(q3.object)])
+          this.dataset.delete(inner);
+      }
+      this.dataset.delete(q3);
+    }
+  }
+};
+function personSubject(personDocUrl) {
+  return `${personDocUrl}#this`;
+}
+
+// src/components/contact-form.ts
+var CONTACT_TYPE = "http://www.w3.org/2006/vcard/ns#Individual";
+var JeswrContactForm = class extends AbstractFormElement {
+  shapeTurtle() {
+    return CONTACT_SHAPE_TTL;
+  }
+  applyFormDeltaToExisting(formGraph, existing, resourceUrl) {
+    const writeSubject = personSubject(resourceUrl);
+    const readSubject = findEditedSubject(
+      formGraph,
+      CONTACT_TYPE,
+      writeSubject,
+      N3DataFactory_default.namedNode
+    );
+    const edited = new Contact(readSubject, formGraph, N3DataFactory_default);
+    const target = new Contact(writeSubject, existing, N3DataFactory_default).mark();
+    target.name = edited.name;
+    target.organization = edited.organization;
+    target.note = edited.note;
+  }
+};
+if (!customElements.get("jeswr-contact-form")) {
+  customElements.define("jeswr-contact-form", JeswrContactForm);
+}
+
+// node_modules/@jeswr/solid-bookmark/dist/vocab.js
+var BOOK = "https://w3id.org/jeswr/bookmark#";
+var SCHEMA2 = "http://schema.org/";
+var DCT2 = "http://purl.org/dc/terms/";
+var RDF4 = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
+var book = (local) => `${BOOK}${local}`;
+var schema2 = (local) => `${SCHEMA2}${local}`;
+var dct2 = (local) => `${DCT2}${local}`;
+var rdf5 = (local) => `${RDF4}${local}`;
+var BOOKMARK_CLASS = book("Bookmark");
+var BOOK_ARCHIVED = book("archived");
+var BOOK_NOTES = book("notes");
+var SCHEMA_URL = schema2("url");
+var SCHEMA_KEYWORDS = schema2("keywords");
+var DCT_TITLE = dct2("title");
+var DCT_DESCRIPTION = dct2("description");
+var DCT_CREATED = dct2("created");
+var DCT_MODIFIED = dct2("modified");
+var RDF_TYPE4 = rdf5("type");
+
+// node_modules/@jeswr/solid-bookmark/dist/bookmark.js
+function bookmarkSubject(resourceUrl) {
+  return `${resourceUrl}#it`;
+}
+var Bookmark = class extends TermWrapper {
+  /** The bookmark subject IRI. */
+  get id() {
+    return this.value;
+  }
+  /** The `rdf:type` set as a live set of IRI strings. */
+  get types() {
+    return SetFrom.subjectPredicate(this, RDF_TYPE4, NamedNodeAs.string, NamedNodeFrom.string);
+  }
+  /** Stamp this subject as a `book:Bookmark`. Idempotent; returns `this` for chaining. */
+  mark() {
+    this.types.add(BOOKMARK_CLASS);
+    return this;
+  }
+  /** Whether this subject is a `book:Bookmark`. */
+  get isBookmark() {
+    return this.types.has(BOOKMARK_CLASS);
+  }
+  /** `schema:url` — the bookmarked URL (an http(s) IRI). */
+  get url() {
+    return OptionalFrom.subjectPredicate(this, SCHEMA_URL, NamedNodeAs.string);
+  }
+  set url(value) {
+    OptionalAs.object(this, SCHEMA_URL, value, NamedNodeFrom.string);
+  }
+  /** `dct:title`. */
+  get title() {
+    return OptionalFrom.subjectPredicate(this, DCT_TITLE, LiteralAs.string);
+  }
+  set title(value) {
+    OptionalAs.object(this, DCT_TITLE, value, LiteralFrom.string);
+  }
+  /** `dct:description` — the short summary / blurb. */
+  get description() {
+    return OptionalFrom.subjectPredicate(this, DCT_DESCRIPTION, LiteralAs.string);
+  }
+  set description(value) {
+    OptionalAs.object(this, DCT_DESCRIPTION, value, LiteralFrom.string);
+  }
+  /** `book:notes` — the user's markdown notes. */
+  get notes() {
+    return OptionalFrom.subjectPredicate(this, BOOK_NOTES, LiteralAs.string);
+  }
+  set notes(value) {
+    OptionalAs.object(this, BOOK_NOTES, value, LiteralFrom.string);
+  }
+  /**
+   * `book:archived` — `xsd:boolean`. Absent triple reads as `false` (a bookmark
+   * is not archived until explicitly so). The setter writes `false` explicitly
+   * too, so the boolean is always observable on the wire rather than relying on
+   * absence — except `undefined` clears it.
+   */
+  get archived() {
+    return OptionalFrom.subjectPredicate(this, BOOK_ARCHIVED, LiteralAs.boolean) ?? false;
+  }
+  set archived(value) {
+    OptionalAs.object(this, BOOK_ARCHIVED, value, LiteralFrom.boolean);
+  }
+  /** `dct:created`. */
+  get created() {
+    return OptionalFrom.subjectPredicate(this, DCT_CREATED, LiteralAs.date);
+  }
+  set created(value) {
+    OptionalAs.object(this, DCT_CREATED, value, LiteralFrom.dateTime);
+  }
+  /** `dct:modified`. */
+  get modified() {
+    return OptionalFrom.subjectPredicate(this, DCT_MODIFIED, LiteralAs.date);
+  }
+  set modified(value) {
+    OptionalAs.object(this, DCT_MODIFIED, value, LiteralFrom.dateTime);
+  }
+  /**
+   * `schema:keywords` — the tags, as a live set of free-text labels (one triple
+   * per tag). A `Set` rather than a list because tags are unordered + unique.
+   */
+  get tags() {
+    return SetFrom.subjectPredicate(this, SCHEMA_KEYWORDS, LiteralAs.string, LiteralFrom.string);
+  }
+};
+
+// src/components/bookmark-form.ts
+var BOOKMARK_TYPE = "https://w3id.org/jeswr/bookmark#Bookmark";
+var JeswrBookmarkForm = class extends AbstractFormElement {
+  shapeTurtle() {
+    return BOOKMARK_SHAPE_TTL;
+  }
+  applyFormDeltaToExisting(formGraph, existing, resourceUrl) {
+    const writeSubject = bookmarkSubject(resourceUrl);
+    const readSubject = findEditedSubject(
+      formGraph,
+      BOOKMARK_TYPE,
+      writeSubject,
+      N3DataFactory_default.namedNode
+    );
+    const edited = new Bookmark(readSubject, formGraph, N3DataFactory_default);
+    const target = new Bookmark(writeSubject, existing, N3DataFactory_default).mark();
+    target.url = safeHref(edited.url);
+    target.title = edited.title;
+    target.description = edited.description;
+    target.notes = edited.notes;
+    target.archived = edited.archived;
+    for (const t5 of [...target.tags]) target.tags.delete(t5);
+    for (const t5 of edited.tags) target.tags.add(t5);
+    target.modified = /* @__PURE__ */ new Date();
+  }
+};
+if (!customElements.get("jeswr-bookmark-form")) {
+  customElements.define("jeswr-bookmark-form", JeswrBookmarkForm);
+}
+
 export {
   N3DataFactory_default,
   N3Store,
@@ -10619,12 +13101,43 @@ export {
   countTurtleQuads,
   VALUES_SUBJECT_SENTINEL,
   resolveGraphToTurtle,
+  EMPTY_SHAPES_MESSAGE,
+  resolveAndHarden,
   JeswrShaclView,
+  TermWrapper,
+  OptionalFrom,
+  TermAs,
+  LiteralAs,
+  NamedNodeFrom,
+  NamedNodeAs,
+  SetFrom,
+  Task,
   DataControllerError,
   NotFoundError,
   AccessDeniedError,
   NetworkError,
   DataFormatError,
   classifyReadError,
-  DataController
+  DataController,
+  BASE_INPUT_PROPS,
+  AbstractReadElement,
+  safeHref,
+  safeMailto,
+  safeTel,
+  stripScheme,
+  formatDate,
+  Contact,
+  Bookmark,
+  JeswrShaclForm,
+  WriteScopeError,
+  UnconditionalOverwriteError,
+  WriteConflictError,
+  WriteFailedError,
+  DataWriter,
+  AbstractFormElement,
+  defaultBaseFor,
+  findEditedSubject,
+  JeswrTaskForm,
+  JeswrContactForm,
+  JeswrBookmarkForm
 };

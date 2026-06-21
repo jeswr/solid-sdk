@@ -77,12 +77,10 @@
 import "@ulb-darmstadt/shacl-form";
 import { html, LitElement, nothing, type PropertyValues } from "lit";
 import {
-  countTurtleQuads,
   type FetchSeam,
   type GraphSource,
-  neutraliseValuesTurtle,
   type ResolveOptions,
-  resolveGraphToTurtle,
+  resolveAndHarden,
 } from "../shacl-view-fetch.js";
 
 /** The status of the view's current render attempt. */
@@ -232,54 +230,28 @@ export class JeswrShaclView extends LitElement {
     };
     const opts = this.resolveOptions ?? {};
 
-    try {
-      // Resolve in parallel; both go through the SSRF-disciplined resolver.
-      const [shapesTurtle, valuesTurtleRaw] = await Promise.all([
-        resolveGraphToTurtle(shapes, seam, opts),
-        resolveGraphToTurtle(values, seam, opts),
-      ]);
+    // §9 — resolve + harden through the SHARED pipeline (the SAME function the
+    // editable <jeswr-shacl-form> calls, so the view + edit form cannot drift on the
+    // SSRF discipline). It NEVER throws: it returns a `kind` for each outcome —
+    // `ready` (mount with the inline strings), `empty-shapes` (fix 1, fail closed),
+    // or `error`. fix (1) empty-shapes fail-close + fix (2) values-neutralisation
+    // happen inside it; this element keeps the `data-view` / no-`*-url` discipline
+    // (its template + updated()), which is element-specific.
+    const result = await resolveAndHarden(shapes, values, seam, opts);
+    if (token !== this.#renderToken) return; // a newer resolve superseded us.
 
-      // §9 fix (1) — FAIL CLOSED on an empty SHAPES graph. An empty loaded-shapes
-      // graph (zero quads) is the precondition for @ulb-darmstadt/shacl-form's
-      // auto-import path: with `countQuads(loaded-shapes) === 0` it fetches the
-      // data subject's `rdf:type`/`dct:conformsTo` http(s) IRIs UNGUARDED. So a
-      // shapes graph that parses to zero quads (empty / comment-/prefix-only /
-      // empty remote body) must NEVER reach a mounted <shacl-form>. Render the
-      // empty/error state instead — there is nothing to view without a shape.
-      const shapesQuadCount = await countTurtleQuads(shapesTurtle);
-      if (token !== this.#renderToken) return; // a newer resolve superseded us.
-      if (shapesQuadCount === 0) {
-        this.shapesTurtle = "";
-        this.valuesTurtle = "";
-        this.errorMessage =
-          "The SHACL shapes graph is empty (zero triples) — nothing to view, and an empty " +
-          "shapes graph is refused (it would enable shacl-form's auto-import fetch path).";
-        this.status = "error";
-        return;
-      }
-
-      // §9 fix (2) — NEUTRALISE the untrusted VALUES graph before it is inlined:
-      // drop every `(s, dct:conformsTo, <http(s) IRI>)` quad — the auto-import
-      // root-shape trigger (and the auto-derivation source when all conformsTo are
-      // http). Narrow, defence-in-depth ONLY: fix (1) above is the actual SSRF
-      // closer (the auto-import branch can't run for a mounted, non-empty-shapes
-      // form). KEEPS `rdf:type` (load-bearing for shacl-form's shape-selection —
-      // stripping it blanked benign instances: the High) and conformsTo→non-http
-      // (a legit urn: profile reference that derives the values subject so data
-      // renders). See neutraliseValuesTurtle's docblock.
-      const valuesTurtle = await neutraliseValuesTurtle(valuesTurtleRaw);
-      if (token !== this.#renderToken) return; // a newer resolve superseded us.
-
-      this.shapesTurtle = shapesTurtle;
-      this.valuesTurtle = valuesTurtle;
+    if (result.kind === "ready") {
+      this.shapesTurtle = result.shapesTurtle;
+      this.valuesTurtle = result.valuesTurtle;
       this.status = "ready";
-    } catch (error) {
-      if (token !== this.#renderToken) return;
-      this.shapesTurtle = "";
-      this.valuesTurtle = "";
-      this.errorMessage = error instanceof Error ? error.message : String(error);
-      this.status = "error";
+      return;
     }
+    // empty-shapes (fix 1) + error both render the error state with NO inline graph,
+    // so a mounted <shacl-form> never sees an empty shapes graph or partial data.
+    this.shapesTurtle = "";
+    this.valuesTurtle = "";
+    this.errorMessage = result.message;
+    this.status = "error";
   }
 
   protected override render() {
