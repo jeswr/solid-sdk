@@ -1,0 +1,108 @@
+{
+  "name": "@jeswr/solid-components",
+  "version": "0.0.1",
+  "description": "Codegen-friendly, framework-agnostic Solid Web Components (Lit 3). Phase-1 foundation: an injectable read-only DataController (typed read + container listing + conditional GET + a 4-class error taxonomy) and a SSRF-disciplined read-only <jeswr-shacl-view> that wraps @ulb-darmstadt/shacl-form in view mode, pre-fetching + inlining shapes/data (never the -url attrs). Self-contained committed dist/ (shacl-form + n3 + shacl-engine esbuild-inlined) so it installs from a GitHub branch with no build step under ignore-scripts=true. Experimental, AI-agent-generated.",
+  "author": "Claude Opus 4.8 (@jeswr PSS agent)",
+  "license": "MIT",
+  "type": "module",
+  "homepage": "https://github.com/jeswr/solid-components#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jeswr/solid-components.git"
+  },
+  "bugs": {
+    "url": "https://github.com/jeswr/solid-components/issues"
+  },
+  "sideEffects": [
+    "./dist/index.js",
+    "./dist/components/*.js",
+    "./src/index.ts",
+    "./src/components/*.ts"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./react": {
+      "types": "./dist/react/index.d.ts",
+      "import": "./dist/react/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20.12"
+  },
+  "scripts": {
+    "build": "node scripts/build-dist.mjs",
+    "check:dist": "node scripts/check-dist-fresh.mjs",
+    "lint": "biome check src test scripts",
+    "lint:fix": "biome check --write src test scripts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "gate": "npm run lint && npm run typecheck && npm run test && npm run build && npm run check:dist",
+    "prepare": "npm run build"
+  },
+  "keywords": [
+    "solid",
+    "web-components",
+    "lit",
+    "shacl",
+    "shacl-form",
+    "rdf",
+    "linked-data",
+    "codegen",
+    "framework-agnostic"
+  ],
+  "dependencies": {
+    "@types/n3": "^1.26.1",
+    "lit": "^3.3.1",
+    "n3": "^1.17.0"
+  },
+  "peerDependencies": {
+    "@jeswr/guarded-fetch": "*",
+    "@lit/react": "^1.0.8",
+    "react": ">=18",
+    "react-dom": ">=18"
+  },
+  "peerDependenciesMeta": {
+    "@jeswr/guarded-fetch": {
+      "optional": true
+    },
+    "@lit/react": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    },
+    "react-dom": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.0",
+    "@jeswr/fetch-rdf": "^0.1.0",
+    "@jeswr/guarded-fetch": "github:jeswr/guarded-fetch#main",
+    "@lit/react": "^1.0.8",
+    "@rdfjs/types": "^2.0.1",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@ulb-darmstadt/shacl-form": "^3.0.7",
+    "@ro-kit/ui-widgets": "^1.0.44",
+    "esbuild": "^0.25.0",
+    "jsdom": "^26.1.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "shacl-engine": "^1.1.0",
+    "typescript": "^5.9.0",
+    "uuid": "^13.0.0",
+    "vitest": "^4.1.8"
+  }
+}
