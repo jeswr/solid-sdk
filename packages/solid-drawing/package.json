@@ -1,7 +1,7 @@
 {
   "name": "@jeswr/solid-drawing",
   "version": "0.1.0",
-  "description": "RDF vocabulary + typed term constants for vector drawings / whiteboards \u2014 the data model for an Excalidraw\u2192Solid fork (a draw:Scene points at a byte-exact .excalidraw JSON blob; the canvas is NOT shredded into triples). Ships the ontology TTL, a SHACL shape, and a committed self-contained dist/.",
+  "description": "RDF vocabulary + typed term constants for vector drawings / whiteboards — the data model for an Excalidraw→Solid fork (a draw:Scene points at a byte-exact .excalidraw JSON blob; the canvas is NOT shredded into triples). Ships the ontology TTL, a SHACL shape, and a committed self-contained dist/.",
   "type": "module",
   "license": "MIT",
   "author": "Jesse Wright",
@@ -52,22 +52,19 @@
     "README.md"
   ],
   "scripts": {
-    "build:deps": "node scripts/build-deps.mjs",
-    "build": "node scripts/build-dist.mjs",
-    "build:dev": "npm run build:deps && tsc -p tsconfig.build.json",
-    "lint": "biome check src && npm run check:lockfile-transport",
-    "lint:fix": "biome check --write src",
-    "typecheck": "npm run build:deps && tsc --noEmit",
-    "test": "npm run build:deps && vitest run",
-    "test:watch": "npm run build:deps && vitest",
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "biome check src scripts && npm run check:lockfile-transport",
+    "lint:fix": "biome check --write src scripts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "gate": "npm run lint && npm run typecheck && npm run test && npm run build && npm run check:dist",
-    "check:dist": "node scripts/check-dist-fresh.mjs",
+    "check:dist": "node scripts/check-dist.mjs",
     "check:lockfile-transport": "node scripts/check-lockfile-transport.mjs"
   },
   "dependencies": {
+    "@jeswr/fetch-rdf": "^0.1.0",
     "@rdfjs/wrapper": "^0.34.0",
-    "content-type": "^1.0.5",
-    "jsonld-streaming-parser": "^5.0.0",
     "n3": "^2.0.3"
   },
   "peerDependencies": {
@@ -75,12 +72,10 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.0.0",
-    "@jeswr/fetch-rdf": "github:jeswr/fetch-rdf#main",
     "@rdfjs/types": "^2.0.1",
     "@types/n3": "^1.26.1",
     "@types/node": "^20",
     "@zazuko/env-node": "^3.0.0",
-    "esbuild": "^0.27.0",
     "rdf-validate-shacl": "^0.6.5",
     "typescript": "^5",
     "vitest": "^3.2.6"

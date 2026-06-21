@@ -18,7 +18,7 @@ Standing rule while Fable is unavailable: everything authored by **Claude Opus
 | `src/index.ts` | Claude Opus 4.8 | Public API surface. |
 | `drawing.ttl` | Claude Opus 4.8 | The ontology — `draw:Scene` rdfs:subClassOf schema:CreativeWork + gufo:SubKind of core:InformationResource. |
 | `drawing.shacl.ttl` | Claude Opus 4.8 | The `draw:Scene` SHACL validation contract. |
-| `scripts/*.mjs` | Claude Opus 4.8 | build-deps (fetch-rdf inline build), build-dist (esbuild bundle), check-dist-fresh, check-lockfile-transport. |
+| `scripts/*.mjs` | Claude Opus 4.8 | check-dist (committed-dist drift guard — plain tsc rebuild vs the git index), check-lockfile-transport (#78 SSH-transport guard). |
 | Tests (`src/*.test.ts`) | Claude Opus 4.8 | vocab presence, SHACL validity, serialize→parse round-trip. |
 
 The package is **experimental, AI-agent-generated** — under active development,

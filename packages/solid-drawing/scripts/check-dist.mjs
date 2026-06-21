@@ -1,15 +1,15 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 /**
- * check-dist-fresh — guard against the COMMITTED `dist/` drifting from `src/`.
+ * check-dist — guard against the COMMITTED `dist/` drifting from `src/`.
  *
  * `dist/` is committed (not gitignored) so the package installs directly from a
  * GitHub branch without a build step — consumers run under `ignore-scripts=true`
  * and never execute this package's `prepare`/`build`. That only stays correct if
  * the committed artifact matches the source. This script rebuilds into a scratch
- * dir (the SAME bundled build as `npm run build` — esbuild bundles `index.js`
- * with `@jeswr/fetch-rdf` inlined; tsc emits the `.d.ts`) and diffs the emitted
- * JavaScript + declarations against the version of `dist/` in the git INDEX
- * (the staged tree = what the next commit will contain).
+ * dir (the SAME plain `tsc` build as `npm run build` — `@jeswr/fetch-rdf` is a
+ * NORMAL npm dependency resolved by the consumer, NOT inlined) and diffs the
+ * emitted JavaScript + declarations against the version of `dist/` in the git
+ * INDEX (the staged tree = what the next commit will contain).
  *
  * Why compare against the staged index, not the working tree nor HEAD:
  *  - `npm run build` overwrites the working-tree `dist/`. If this check read the
@@ -38,10 +38,6 @@ import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 
-/**
- * Recursively list relative paths of emitted `.js`/`.d.ts` files under `dir`,
- * skipping `*.map` sourcemaps (vary with absolute paths, not load-bearing).
- */
 function listArtifacts(dir) {
   const out = [];
   const walk = (d) => {
@@ -62,12 +58,6 @@ function toKey(base, abs) {
   return relative(base, abs).split(sep).join("/");
 }
 
-/**
- * The set of `.js`/`.d.ts` artifacts under `dist/` in the git INDEX (the staged
- * tree = what the next commit will contain), keyed by their path RELATIVE to
- * `dist/`. Uses `git ls-files` so it reads the staged tree, never just HEAD nor
- * the un-staged working copy.
- */
 function stagedDistKeys() {
   const out = execFileSync("git", ["ls-files", "--", "dist"], {
     cwd: root,
@@ -81,7 +71,6 @@ function stagedDistKeys() {
     .map((p) => p.replace(/^dist\//, ""));
 }
 
-/** Read a staged `dist/<key>` blob from the git index, or `null` if absent. */
 function readStagedDist(key) {
   try {
     return execFileSync("git", ["show", `:dist/${key}`], {
@@ -97,11 +86,17 @@ let scratch;
 try {
   scratch = mkdtempSync(join(tmpdir(), "solid-drawing-dist-"));
   const freshDist = join(scratch, "dist");
-  // Rebuild into a scratch outDir using the SAME bundled build pipeline.
-  execFileSync("node", [join(root, "scripts", "build-dist.mjs"), freshDist], {
-    cwd: root,
-    stdio: ["ignore", "ignore", "inherit"],
-  });
+  execFileSync(
+    "node",
+    [
+      join(root, "node_modules", "typescript", "bin", "tsc"),
+      "-p",
+      join(root, "tsconfig.build.json"),
+      "--outDir",
+      freshDist,
+    ],
+    { cwd: root, stdio: ["ignore", "ignore", "inherit"] },
+  );
 
   const freshFiles = new Map(listArtifacts(freshDist).map((p) => [toKey(freshDist, p), p]));
   const stagedKeys = new Set(stagedDistKeys());
