@@ -76,6 +76,7 @@ import {
   VCARD_INDIVIDUAL,
   VCARD_NAME_EMAIL_INDEX,
   VCARD_NOTE,
+  VCARD_ORGANIZATION_NAME,
   VCARD_URL,
   VCARD_VALUE,
   VCARD_WEB_ID,
@@ -145,6 +146,12 @@ export interface ContactData {
   webId?: string;
   /** `vcard:note` — a free-text note. */
   note?: string;
+  /**
+   * `vcard:organization-name` — the contact's organisation/company name. Mapped to
+   * the standard W3C vCard `ORG` term so a CardDAV/DAV import (and PM contacts) carry
+   * it losslessly, instead of folding it into the free-text {@link note}.
+   */
+  organization?: string;
   /** `dct:created` (DC Terms) — when the person document was created. */
   created?: Date;
 }
@@ -381,6 +388,17 @@ export class Contact extends TermWrapper {
   }
   set note(value: string | undefined) {
     OptionalAs.object(this, VCARD_NOTE, value, LiteralFrom.string);
+  }
+
+  /**
+   * `vcard:organization-name` — the contact's organisation/company name (the standard
+   * W3C vCard `ORG` term). A plain string literal; clears the triple on `undefined`.
+   */
+  get organization(): string | undefined {
+    return OptionalFrom.subjectPredicate(this, VCARD_ORGANIZATION_NAME, LiteralAs.string);
+  }
+  set organization(value: string | undefined) {
+    OptionalAs.object(this, VCARD_ORGANIZATION_NAME, value, LiteralFrom.string);
   }
 
   /**
@@ -625,6 +643,7 @@ export function parsePerson(personDocUrl: string, dataset: DatasetCore): Contact
   if (phones.length > 0) data.phones = phones;
   if (person.webId !== undefined) data.webId = person.webId;
   if (person.note !== undefined) data.note = person.note;
+  if (person.organization !== undefined) data.organization = person.organization;
   if (person.created !== undefined) data.created = person.created;
   return data;
 }
@@ -637,8 +656,9 @@ export function parsePerson(personDocUrl: string, dataset: DatasetCore): Contact
  * global — client-safe), `vcard:inAddressBook`, the STRUCTURED `vcard:hasEmail [ a
  * vcard:Home; vcard:value <mailto:..> ]` / `vcard:hasTelephone [ a vcard:Cell;
  * vcard:value <tel:..> ]` / `vcard:url [ a vcard:WebId; vcard:value <webid> ]` nodes,
- * `vcard:note`, and `dct:created` (defaulting to now). Malformed emails/phones and a
- * non-http(s) WebID / inAddressBook are dropped (untrusted input).
+ * `vcard:note`, `vcard:organization-name`, and `dct:created` (defaulting to now).
+ * Malformed emails/phones and a non-http(s) WebID / inAddressBook are dropped
+ * (untrusted input).
  */
 export function buildPerson(personDocUrl: string, data: ContactData): Store {
   const store = new Store();
@@ -650,6 +670,7 @@ export function buildPerson(personDocUrl: string, data: ContactData): Store {
   person.setPhones(data.phones ?? []);
   person.setWebId(data.webId);
   person.note = data.note || undefined;
+  person.organization = data.organization || undefined;
   person.created = data.created ?? new Date();
   return store;
 }

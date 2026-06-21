@@ -25,7 +25,7 @@ import {
   serializePerson,
 } from "./contacts.js";
 import { addressBookShapeTtl } from "./shape.js";
-import { dc, dct, vcard } from "./vocab.js";
+import { dc, dct, VCARD_ORGANIZATION_NAME, vcard } from "./vocab.js";
 
 const BOOK = "http://localhost:3000/alice/contacts/index.ttl";
 const BOOK_SUBJECT = `${BOOK}#this`;
@@ -120,6 +120,7 @@ describe("buildPerson / parsePerson round-trip", () => {
       phones: ["+15551234", "tel:+15555678"],
       webId: BOB,
       note: "Met at the conference.",
+      organization: "Acme Corp",
     };
     const store = buildPerson(PERSON, data);
     const parsed = parsePerson(PERSON, store);
@@ -132,6 +133,7 @@ describe("buildPerson / parsePerson round-trip", () => {
     expect(new Set(parsed?.phones)).toEqual(new Set(["tel:+15551234", "tel:+15555678"]));
     expect(parsed?.webId).toBe(BOB);
     expect(parsed?.note).toBe("Met at the conference.");
+    expect(parsed?.organization).toBe("Acme Corp");
     expect(parsed?.created).toBeInstanceOf(Date);
   });
 
@@ -170,6 +172,73 @@ describe("buildPerson / parsePerson round-trip", () => {
     const parsed = parsePerson(PERSON, store);
     expect(parsed?.webId).toBeUndefined();
     expect(parsed?.inAddressBook).toBeUndefined();
+  });
+});
+
+describe("organization (vcard:organization-name) — vCard ORG carried losslessly", () => {
+  it("round-trips a person's organization", () => {
+    const store = buildPerson(PERSON, { name: "Org Person", organization: "Globex" });
+    const parsed = parsePerson(PERSON, store);
+    expect(parsed?.organization).toBe("Globex");
+  });
+
+  it("writes a vcard:organization-name string literal (NOT folded into vcard:note)", () => {
+    const store = buildPerson(PERSON, { name: "Carol", organization: "Initech" });
+    const sub = personSubject(PERSON);
+    const org = store.getQuads(
+      DataFactory.namedNode(sub),
+      DataFactory.namedNode(vcard("organization-name")),
+      null,
+      null,
+    );
+    expect(org).toHaveLength(1);
+    expect(org[0]?.object.termType).toBe("Literal");
+    expect(org[0]?.object.value).toBe("Initech");
+    // The organization is NOT written to vcard:note (it is its own dedicated field).
+    expect(
+      store.getQuads(DataFactory.namedNode(sub), DataFactory.namedNode(vcard("note")), null, null),
+    ).toHaveLength(0);
+  });
+
+  it("omits organization from the parsed data when absent", () => {
+    const store = buildPerson(PERSON, { name: "No Org" });
+    const parsed = parsePerson(PERSON, store);
+    expect(parsed?.organization).toBeUndefined();
+    // The triple is not written at all (no empty literal).
+    expect(
+      store.getQuads(
+        DataFactory.namedNode(personSubject(PERSON)),
+        DataFactory.namedNode(vcard("organization-name")),
+        null,
+        null,
+      ),
+    ).toHaveLength(0);
+  });
+
+  it("treats an empty-string organization as absent (cleared, not written)", () => {
+    const store = buildPerson(PERSON, { name: "Empty Org", organization: "" });
+    const parsed = parsePerson(PERSON, store);
+    expect(parsed?.organization).toBeUndefined();
+  });
+
+  it("parses a raw vcard:organization-name from untrusted Turtle", () => {
+    const ttl = `
+      @prefix vcard: <http://www.w3.org/2006/vcard/ns#> .
+      <#this> a vcard:Individual ;
+        vcard:fn "Org From Ttl" ;
+        vcard:organization-name "Stark Industries" .
+    `;
+    const parsed = parsePerson(PERSON, parseStore(ttl, PERSON));
+    expect(parsed?.organization).toBe("Stark Industries");
+  });
+
+  it("round-trips organization through serialize/parse (Turtle)", async () => {
+    const ttl = await serializePerson(PERSON, {
+      name: "Serialised Org",
+      organization: "Wayne Enterprises",
+    });
+    const parsed = await parsePersonTtl(PERSON, ttl, "text/turtle");
+    expect(parsed?.organization).toBe("Wayne Enterprises");
   });
 });
 
@@ -374,6 +443,11 @@ describe("namespace-spelling lock (a refactor must not silently break the contra
     expect(vcard("groupIndex")).toBe("http://www.w3.org/2006/vcard/ns#groupIndex");
     expect(vcard("inAddressBook")).toBe("http://www.w3.org/2006/vcard/ns#inAddressBook");
     expect(vcard("includesGroup")).toBe("http://www.w3.org/2006/vcard/ns#includesGroup");
+  });
+
+  it("the vcard:organization-name term (vCard ORG) is spelled exactly", () => {
+    expect(vcard("organization-name")).toBe("http://www.w3.org/2006/vcard/ns#organization-name");
+    expect(VCARD_ORGANIZATION_NAME).toBe("http://www.w3.org/2006/vcard/ns#organization-name");
   });
 
   it("dc:title (DC Elements) and dct:created (DC Terms) are DISTINCT namespaces", () => {

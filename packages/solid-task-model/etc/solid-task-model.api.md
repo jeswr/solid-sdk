@@ -72,6 +72,8 @@ export class Contact extends TermWrapper {
     set name(value: string | undefined);
     get note(): string | undefined;
     set note(value: string | undefined);
+    get organization(): string | undefined;
+    set organization(value: string | undefined);
     get phones(): string[];
     setEmails(emails: string[]): void;
     setPhones(phones: string[]): void;
@@ -107,6 +109,7 @@ export interface ContactData {
     inAddressBook?: string;
     name: string;
     note?: string;
+    organization?: string;
     phones?: string[];
     webId?: string;
 }
@@ -448,6 +451,9 @@ export const VCARD_NAME_EMAIL_INDEX: string;
 
 // @public
 export const VCARD_NOTE: string;
+
+// @public
+export const VCARD_ORGANIZATION_NAME: string;
 
 // @public
 export const VCARD_URL: string;

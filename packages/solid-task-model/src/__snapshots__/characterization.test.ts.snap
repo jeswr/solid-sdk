@@ -112,6 +112,7 @@ exports[`emitted RDF golden master (canonical N-Quads, timestamps/uuids normalis
 <http://localhost:3000/alice/contacts/Person/abc/index.ttl#this> <http://www.w3.org/2006/vcard/ns#hasUID> "urn:uuid:<<UUID>>" .
 <http://localhost:3000/alice/contacts/Person/abc/index.ttl#this> <http://www.w3.org/2006/vcard/ns#inAddressBook> <http://localhost:3000/alice/contacts/index.ttl#this> .
 <http://localhost:3000/alice/contacts/Person/abc/index.ttl#this> <http://www.w3.org/2006/vcard/ns#note> "A friend." .
+<http://localhost:3000/alice/contacts/Person/abc/index.ttl#this> <http://www.w3.org/2006/vcard/ns#organization-name> "Acme Corp" .
 <http://localhost:3000/alice/contacts/Person/abc/index.ttl#this> <http://www.w3.org/2006/vcard/ns#url> _:b4 .
 _:b0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2006/vcard/ns#Cell> .
 _:b0 <http://www.w3.org/2006/vcard/ns#value> <tel:+15551234567> .

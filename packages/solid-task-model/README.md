@@ -135,7 +135,7 @@ documents**, individual contacts, and groups.
 | Entity | Subject | Key triples |
 |---|---|---|
 | Address book | `<book>#this` (`index.ttl`) | `a vcard:AddressBook`; `dc:title` **+** `vcard:fn`; `vcard:nameEmailIndex <people.ttl>`; `vcard:groupIndex <groups.ttl>`; `acl:owner <webid>` |
-| Individual | `<person>#this` (`Person/<uuid>/index.ttl`) | `a vcard:Individual`; `vcard:fn`; `vcard:hasUID "urn:uuid:…"`; `vcard:inAddressBook <book>`; structured `vcard:hasEmail`/`vcard:hasTelephone`/`vcard:url`; `vcard:note`; `dct:created` |
+| Individual | `<person>#this` (`Person/<uuid>/index.ttl`) | `a vcard:Individual`; `vcard:fn`; `vcard:hasUID "urn:uuid:…"`; `vcard:inAddressBook <book>`; structured `vcard:hasEmail`/`vcard:hasTelephone`/`vcard:url`; `vcard:note`; `vcard:organization-name` (vCard `ORG`); `dct:created` |
 | Group | `<group>#this` | `a vcard:Group`; `vcard:fn`; `vcard:hasMember <person>` |
 | people index | `people.ttl` | `<person> vcard:inAddressBook <book>; vcard:fn "name"` |
 | groups index | `groups.ttl` | `<book> vcard:includesGroup <group>; <group> a vcard:Group; vcard:fn "name"` |

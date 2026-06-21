@@ -115,6 +115,7 @@ describe("public API contract (golden export set per entry point)", () => {
       "VCARD_IN_ADDRESS_BOOK",
       "VCARD_NAME_EMAIL_INDEX",
       "VCARD_NOTE",
+      "VCARD_ORGANIZATION_NAME",
       "VCARD_URL",
       "VCARD_VALUE",
       "VCARD_WEB_ID",
@@ -403,6 +404,7 @@ describe("emitted RDF golden master (canonical N-Quads, timestamps/uuids normali
       phones: ["+15551234567", "tel:+15559999999"],
       webId: BOB,
       note: "A friend.",
+      organization: "Acme Corp",
       created: new Date("2026-06-09T10:00:00.000Z"),
     });
     expect(canonical(ttl, PERSON)).toMatchSnapshot();

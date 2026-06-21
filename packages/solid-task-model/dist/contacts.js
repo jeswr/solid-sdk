@@ -44,7 +44,7 @@ import { BlankNodeFrom, LiteralAs, LiteralFrom, NamedNodeAs, NamedNodeFrom, Opti
 import { DataFactory, Store } from "n3";
 import { docOf, httpIriOrUndefined, isHttpIri } from "./iri.js";
 import { storeToTurtle } from "./task.js";
-import { acl, dc, dct, rdf, VCARD_ADDRESS_BOOK, VCARD_CELL, VCARD_FN, VCARD_GROUP, VCARD_GROUP_INDEX, VCARD_HAS_EMAIL, VCARD_HAS_MEMBER, VCARD_HAS_TELEPHONE, VCARD_HAS_UID, VCARD_HOME, VCARD_IN_ADDRESS_BOOK, VCARD_INCLUDES_GROUP, VCARD_INDIVIDUAL, VCARD_NAME_EMAIL_INDEX, VCARD_NOTE, VCARD_URL, VCARD_VALUE, VCARD_WEB_ID, } from "./vocab.js";
+import { acl, dc, dct, rdf, VCARD_ADDRESS_BOOK, VCARD_CELL, VCARD_FN, VCARD_GROUP, VCARD_GROUP_INDEX, VCARD_HAS_EMAIL, VCARD_HAS_MEMBER, VCARD_HAS_TELEPHONE, VCARD_HAS_UID, VCARD_HOME, VCARD_IN_ADDRESS_BOOK, VCARD_INCLUDES_GROUP, VCARD_INDIVIDUAL, VCARD_NAME_EMAIL_INDEX, VCARD_NOTE, VCARD_ORGANIZATION_NAME, VCARD_URL, VCARD_VALUE, VCARD_WEB_ID, } from "./vocab.js";
 /**
  * Resolve a possibly-relative reference (e.g. `"people.ttl"`) against a base
  * document URL, returning an absolute http(s) IRI, or `undefined` if the result is
@@ -252,6 +252,16 @@ export class Contact extends TermWrapper {
     }
     set note(value) {
         OptionalAs.object(this, VCARD_NOTE, value, LiteralFrom.string);
+    }
+    /**
+     * `vcard:organization-name` — the contact's organisation/company name (the standard
+     * W3C vCard `ORG` term). A plain string literal; clears the triple on `undefined`.
+     */
+    get organization() {
+        return OptionalFrom.subjectPredicate(this, VCARD_ORGANIZATION_NAME, LiteralAs.string);
+    }
+    set organization(value) {
+        OptionalAs.object(this, VCARD_ORGANIZATION_NAME, value, LiteralFrom.string);
     }
     /**
      * The contact's emails as canonical `mailto:` IRIs. Reads BOTH a direct
@@ -472,6 +482,8 @@ export function parsePerson(personDocUrl, dataset) {
         data.webId = person.webId;
     if (person.note !== undefined)
         data.note = person.note;
+    if (person.organization !== undefined)
+        data.organization = person.organization;
     if (person.created !== undefined)
         data.created = person.created;
     return data;
@@ -484,8 +496,9 @@ export function parsePerson(personDocUrl, dataset) {
  * global — client-safe), `vcard:inAddressBook`, the STRUCTURED `vcard:hasEmail [ a
  * vcard:Home; vcard:value <mailto:..> ]` / `vcard:hasTelephone [ a vcard:Cell;
  * vcard:value <tel:..> ]` / `vcard:url [ a vcard:WebId; vcard:value <webid> ]` nodes,
- * `vcard:note`, and `dct:created` (defaulting to now). Malformed emails/phones and a
- * non-http(s) WebID / inAddressBook are dropped (untrusted input).
+ * `vcard:note`, `vcard:organization-name`, and `dct:created` (defaulting to now).
+ * Malformed emails/phones and a non-http(s) WebID / inAddressBook are dropped
+ * (untrusted input).
  */
 export function buildPerson(personDocUrl, data) {
     const store = new Store();
@@ -497,6 +510,7 @@ export function buildPerson(personDocUrl, data) {
     person.setPhones(data.phones ?? []);
     person.setWebId(data.webId);
     person.note = data.note || undefined;
+    person.organization = data.organization || undefined;
     person.created = data.created ?? new Date();
     return store;
 }

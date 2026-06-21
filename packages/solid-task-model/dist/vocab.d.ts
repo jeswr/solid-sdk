@@ -148,6 +148,14 @@ export declare const VCARD_HAS_UID: string;
 export declare const VCARD_URL: string;
 /** `vcard:note` — a free-text note (standard W3C vCard). */
 export declare const VCARD_NOTE: string;
+/**
+ * `vcard:organization-name` — the contact's organisation/company name (standard W3C
+ * vCard; the ontology term for the vCard `ORG` property's organisation-name part). A
+ * plain string literal, like {@link VCARD_NOTE}. The model maps a contact's
+ * organisation to THIS term so a CardDAV/DAV import (and PM contacts) carries `ORG`
+ * losslessly rather than folding it into the free-text note.
+ */
+export declare const VCARD_ORGANIZATION_NAME: string;
 /** `vcard:value` — the value carried by a structured email/phone/url node (standard W3C vCard). */
 export declare const VCARD_VALUE: string;
 /** `vcard:hasMember` — a member of a `vcard:Group` (standard W3C vCard; also used by the tracker). */

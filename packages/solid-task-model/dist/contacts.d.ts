@@ -76,6 +76,12 @@ export interface ContactData {
     webId?: string;
     /** `vcard:note` — a free-text note. */
     note?: string;
+    /**
+     * `vcard:organization-name` — the contact's organisation/company name. Mapped to
+     * the standard W3C vCard `ORG` term so a CardDAV/DAV import (and PM contacts) carry
+     * it losslessly, instead of folding it into the free-text {@link note}.
+     */
+    organization?: string;
     /** `dct:created` (DC Terms) — when the person document was created. */
     created?: Date;
 }
@@ -162,6 +168,12 @@ export declare class Contact extends TermWrapper {
     /** `vcard:note` — a free-text note. */
     get note(): string | undefined;
     set note(value: string | undefined);
+    /**
+     * `vcard:organization-name` — the contact's organisation/company name (the standard
+     * W3C vCard `ORG` term). A plain string literal; clears the triple on `undefined`.
+     */
+    get organization(): string | undefined;
+    set organization(value: string | undefined);
     /**
      * The contact's emails as canonical `mailto:` IRIs. Reads BOTH a direct
      * `vcard:hasEmail <mailto:..>` and the structured `vcard:hasEmail [ vcard:value
@@ -278,8 +290,9 @@ export declare function parsePerson(personDocUrl: string, dataset: DatasetCore):
  * global — client-safe), `vcard:inAddressBook`, the STRUCTURED `vcard:hasEmail [ a
  * vcard:Home; vcard:value <mailto:..> ]` / `vcard:hasTelephone [ a vcard:Cell;
  * vcard:value <tel:..> ]` / `vcard:url [ a vcard:WebId; vcard:value <webid> ]` nodes,
- * `vcard:note`, and `dct:created` (defaulting to now). Malformed emails/phones and a
- * non-http(s) WebID / inAddressBook are dropped (untrusted input).
+ * `vcard:note`, `vcard:organization-name`, and `dct:created` (defaulting to now).
+ * Malformed emails/phones and a non-http(s) WebID / inAddressBook are dropped
+ * (untrusted input).
  */
 export declare function buildPerson(personDocUrl: string, data: ContactData): Store;
 /** Serialise a contact to Turtle (via `n3.Writer`). */
