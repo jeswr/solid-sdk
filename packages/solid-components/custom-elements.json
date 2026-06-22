@@ -1961,6 +1961,321 @@
     },
     {
       "kind": "javascript-module",
+      "path": "src/components/message-list.ts",
+      "declarations": [
+        {
+          "kind": "class",
+          "description": "A read-only `as:Note` chat-message list element.\n\n(No `@solid-shape`: the chat-interop SHACL shape is an anonymous `sh:NodeShape`\nwith `sh:targetClass as:Note`, so there is no canonical shape IRI to advertise.\nThe `@solid-class` target class is the binding key the resolver maps on.)",
+          "name": "JeswrMessageList",
+          "cssParts": [
+            {
+              "description": "The <ul> wrapping the messages.",
+              "name": "list"
+            },
+            {
+              "description": "One message <li>.",
+              "name": "message"
+            },
+            {
+              "description": "A message's body text (escaped — never markup).",
+              "name": "content"
+            },
+            {
+              "description": "A message's author (a WebID link when http(s), else text).",
+              "name": "author"
+            },
+            {
+              "description": "A message's published timestamp.",
+              "name": "time"
+            },
+            {
+              "description": "A message's \"in reply to\" indicator.",
+              "name": "reply"
+            },
+            {
+              "description": "Placeholder when the graph holds no messages.",
+              "name": "empty"
+            },
+            {
+              "description": "The error message when the read fails.",
+              "name": "error"
+            },
+            {
+              "description": "Placeholder shown while reading.",
+              "name": "loading"
+            }
+          ],
+          "members": [
+            {
+              "kind": "method",
+              "name": "loadFrom",
+              "privacy": "protected",
+              "return": {
+                "type": {
+                  "text": "Promise<{ graph: Store; baseUrl: string }>"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "controller",
+                  "type": {
+                    "text": "DataController"
+                  }
+                },
+                {
+                  "name": "src",
+                  "type": {
+                    "text": "string"
+                  }
+                },
+                {
+                  "name": "publicRead",
+                  "type": {
+                    "text": "boolean"
+                  }
+                }
+              ],
+              "description": "Read this element's resource through the controller and return the parsed graph\nplus the base URL its subjects resolve against. A single-resource element calls\n`controller.read`; a container element calls `controller.listContainer`.",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "renderReady",
+              "privacy": "protected",
+              "return": {
+                "type": {
+                  "text": "TemplateResult"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "graph",
+                  "type": {
+                    "text": "Store"
+                  }
+                }
+              ],
+              "description": "Render the parsed model once `status === \"ready\"` (the subject graph in `graph`).",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "#renderMessage",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "TemplateResult"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "message",
+                  "type": {
+                    "text": "CanonicalMessage"
+                  }
+                }
+              ]
+            },
+            {
+              "kind": "field",
+              "name": "src",
+              "privacy": "public",
+              "type": {
+                "text": "string | undefined"
+              },
+              "description": "The resource / container URL to read. Setting it (re)reads through the seam.",
+              "default": "undefined",
+              "attribute": "src",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "fetch",
+              "privacy": "public",
+              "type": {
+                "text": "typeof fetch | undefined"
+              },
+              "description": "The session-bound authenticated fetch (the user's origin).",
+              "default": "undefined",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "publicFetch",
+              "privacy": "public",
+              "type": {
+                "text": "typeof fetch | undefined"
+              },
+              "description": "The credential-free fetch for foreign/public reads (no fallback — see DataSeam).",
+              "default": "undefined",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "publicRead",
+              "privacy": "public",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "Read with the public (credential-free) fetch — for a foreign-origin `src`.",
+              "default": "false",
+              "attribute": "public-read",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "store",
+              "privacy": "public",
+              "type": {
+                "text": "Store | undefined"
+              },
+              "description": "A pre-parsed n3 Store to render directly, bypassing the network. When set it\ntakes precedence over `src` for the NEXT render. (The codegen/test seam — render\na graph already in hand with no fetch.) NOTE: deliberately named `store`, NOT\n`dataset`, because `HTMLElement.dataset` is a reserved DOM property (a\n`DOMStringMap`); shadowing it with an n3 Store would break the element type.",
+              "default": "undefined",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "#readToken",
+              "privacy": "private",
+              "type": {
+                "text": "number"
+              },
+              "default": "0",
+              "description": "A monotonically increasing token to drop the result of a superseded read.",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "inputProps",
+              "privacy": "protected",
+              "return": {
+                "type": {
+                  "text": "readonly string[]"
+                }
+              },
+              "description": "The input prop names this element re-reads on. Override to extend the base set.",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "#applyDirectStore",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "Promise<void>"
+                }
+              },
+              "description": "Render the directly-set `store` (no network), or fall back to idle when cleared.",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "#read",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "Promise<void>"
+                }
+              },
+              "description": "Read `src` through a DataController, classify any failure, drop a superseded result.",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            }
+          ],
+          "superclass": {
+            "name": "AbstractReadElement",
+            "module": "/src/components/shared.js"
+          },
+          "solid": {
+            "class": "https://www.w3.org/ns/activitystreams#Note",
+            "mode": "view",
+            "cardinality": "container"
+          },
+          "tagName": "jeswr-message-list",
+          "customElement": true,
+          "attributes": [
+            {
+              "name": "src",
+              "type": {
+                "text": "string | undefined"
+              },
+              "description": "The resource / container URL to read. Setting it (re)reads through the seam.",
+              "default": "undefined",
+              "fieldName": "src",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "name": "public-read",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "Read with the public (credential-free) fetch — for a foreign-origin `src`.",
+              "default": "false",
+              "fieldName": "publicRead",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            }
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "kind": "js",
+          "name": "JeswrMessageList",
+          "declaration": {
+            "name": "JeswrMessageList",
+            "module": "src/components/message-list.ts"
+          }
+        },
+        {
+          "kind": "custom-element-definition",
+          "name": "jeswr-message-list",
+          "declaration": {
+            "name": "JeswrMessageList",
+            "module": "src/components/message-list.ts"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "javascript-module",
       "path": "src/components/profile-card.ts",
       "declarations": [
         {
@@ -4000,6 +4315,14 @@
         },
         {
           "kind": "js",
+          "name": "JeswrMessageList",
+          "declaration": {
+            "name": "JeswrMessageList",
+            "module": "./components/message-list.js"
+          }
+        },
+        {
+          "kind": "js",
           "name": "JeswrProfileCard",
           "declaration": {
             "name": "JeswrProfileCard",
@@ -4276,6 +4599,14 @@
           "declaration": {
             "name": "VALUES_SUBJECT_SENTINEL",
             "module": "./shacl-view-fetch.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "AS_NOTE",
+          "declaration": {
+            "name": "AS_NOTE",
+            "module": "./vocab.js"
           }
         },
         {

@@ -22,6 +22,7 @@
 //   - vcard:Individual   @jeswr/solid-task-model `vocab.VCARD_INDIVIDUAL`
 //   - vcard:AddressBook  @jeswr/solid-task-model `vocab.VCARD_ADDRESS_BOOK`
 //   - book:Bookmark      @jeswr/solid-bookmark   `vocab.BOOKMARK_CLASS`
+//   - as:Note            @jeswr/solid-chat-interop `vocab.AS_NOTE` (the canonical message class)
 //   - ldp:Container / ldp:BasicContainer — the LDP spec (generic container listing)
 
 /** `wf:Task` — the federated task/issue class (`@jeswr/solid-task-model`). */
@@ -35,6 +36,9 @@ export const VCARD_ADDRESS_BOOK = "http://www.w3.org/2006/vcard/ns#AddressBook";
 
 /** `book:Bookmark` — a bookmark / read-it-later item (`@jeswr/solid-bookmark`). */
 export const BOOKMARK_CLASS = "https://w3id.org/jeswr/bookmark#Bookmark";
+
+/** `as:Note` — the canonical chat message class (`@jeswr/solid-chat-interop`). */
+export const AS_NOTE = "https://www.w3.org/ns/activitystreams#Note";
 
 /** `ldp:Container` — a generic LDP container (the `<jeswr-collection>` listing). */
 export const LDP_CONTAINER = "http://www.w3.org/ns/ldp#Container";

@@ -1,8 +1,10 @@
 import {
+  AS_NOTE,
   AbstractFormElement,
   AbstractReadElement,
   AccessDeniedError,
   BASE_INPUT_PROPS,
+  BOOKMARK_CLASS,
   Bookmark,
   Contact,
   DataController,
@@ -12,9 +14,12 @@ import {
   EMPTY_SHAPES_MESSAGE,
   JeswrBookmarkForm,
   JeswrContactForm,
+  JeswrMessageList,
   JeswrShaclForm,
   JeswrShaclView,
   JeswrTaskForm,
+  LDP_BASIC_CONTAINER,
+  LDP_CONTAINER,
   LiteralAs,
   N3DataFactory_default,
   N3Store,
@@ -23,12 +28,16 @@ import {
   NetworkError,
   NotFoundError,
   OptionalFrom,
+  RDF_TYPE,
   SetFrom,
+  TASK_CLASS,
   Task,
   TermAs,
   TermWrapper,
   UnconditionalOverwriteError,
   VALUES_SUBJECT_SENTINEL,
+  VCARD_ADDRESS_BOOK,
+  VCARD_INDIVIDUAL,
   WriteConflictError,
   WriteFailedError,
   WriteScopeError,
@@ -47,17 +56,8 @@ import {
   safeTel,
   serializeTurtle,
   stripScheme
-} from "./chunks/chunk-2QY2TDIE.js";
+} from "./chunks/chunk-PMTCOEOZ.js";
 import "./chunks/chunk-BNRDLDVI.js";
-
-// src/vocab.ts
-var TASK_CLASS = "http://www.w3.org/2005/01/wf/flow#Task";
-var VCARD_INDIVIDUAL = "http://www.w3.org/2006/vcard/ns#Individual";
-var VCARD_ADDRESS_BOOK = "http://www.w3.org/2006/vcard/ns#AddressBook";
-var BOOKMARK_CLASS = "https://w3id.org/jeswr/bookmark#Bookmark";
-var LDP_CONTAINER = "http://www.w3.org/ns/ldp#Container";
-var LDP_BASIC_CONTAINER = "http://www.w3.org/ns/ldp#BasicContainer";
-var RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 
 // src/components/task-list.ts
 var JeswrTaskList = class extends AbstractReadElement {
@@ -522,6 +522,15 @@ var RESOLVER_ENTRIES = [
     mode: "view",
     priority: 70
   },
+  {
+    // `as:Note` — the canonical chat-message class (@jeswr/solid-chat-interop). A
+    // message thread / container of notes renders with the message list.
+    targetClass: "https://www.w3.org/ns/activitystreams#Note",
+    tagName: "jeswr-message-list",
+    importSpec: "@jeswr/solid-components",
+    mode: "view",
+    priority: 70
+  },
   // The generic LDP container listing — LOWEST priority so a typed container (an
   // AddressBook, a bookmarks container that ALSO types ldp:Container) renders with
   // its typed element, and only an UNtyped container falls through to the listing.
@@ -755,6 +764,7 @@ if (!customElements.get("solid-view")) {
   customElements.define("solid-view", SolidView);
 }
 export {
+  AS_NOTE,
   AbstractFormElement,
   AbstractReadElement,
   AccessDeniedError,
@@ -769,6 +779,7 @@ export {
   JeswrCollection,
   JeswrContactForm,
   JeswrContactList,
+  JeswrMessageList,
   JeswrProfileCard,
   JeswrShaclForm,
   JeswrShaclView,

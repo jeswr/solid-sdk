@@ -90,6 +90,49 @@ const STUB_ALIAS = {
  */
 const EXTERNAL = ["@jeswr/guarded-fetch", "react", "react-dom", "react/jsx-runtime", "@lit/react"];
 
+/**
+ * BROWSER-SAFE re-route of the `@jeswr/solid-task-model` BARE-ROOT specifier to its
+ * `vocab` module.
+ *
+ * `@jeswr/solid-chat-interop`'s `vocab.js` re-exports ONLY the four stable `wf:Task`
+ * vocabulary consts (`TASK_CLASS` / `WF_OPEN` / `WF_CLOSED` / `wf`) from the
+ * task-model's BARE ROOT (`@jeswr/solid-task-model`). That root index, however,
+ * also re-exports the task-model's `./shape` module, which reads its `.ttl` shape
+ * files off disk via `node:fs` / `node:url` at module load — Node-only code that a
+ * `platform:"browser"` bundle cannot resolve (the build fails on `node:fs`). None of
+ * those four consts touch the shape module, so we alias the bare root to the
+ * task-model's own browser-safe `vocab.js`, which exports all four. This is an
+ * EXACT-specifier alias: it matches ONLY the bare `@jeswr/solid-task-model` import
+ * (chat-interop's), NOT the `@jeswr/solid-task-model/contacts` / `/task` SUBPATH
+ * imports our own components use (those are already browser-safe and stay as-is).
+ * `src/` never imports the bare root, so this affects only the inlined chat-interop.
+ */
+// Resolve the task-model's `dist/vocab.js`. Its `exports` map intentionally does
+// not expose `./dist/*` (nor `./package.json`), and the `.` entry defines only the
+// ESM `import` condition (no CJS `require`), so we resolve the exported `.` entry
+// via `import.meta.resolve` (which honours the exports map + `import` condition) and
+// swap the filename for the sibling, browser-safe `vocab.js` in the same `dist/`.
+const taskModelRoot = fileURLToPath(import.meta.resolve("@jeswr/solid-task-model"));
+const taskModelVocab = join(dirname(taskModelRoot), "vocab.js");
+
+/**
+ * esbuild's `alias` option is a PREFIX match (it rewrites `<pkg>/sub` too), so it
+ * cannot express "alias ONLY the bare root, leave the subpaths". We need exactly
+ * that: re-route the bare `@jeswr/solid-task-model` (chat-interop's vocab import)
+ * to the browser-safe `vocab.js`, while letting `@jeswr/solid-task-model/contacts`
+ * and `/task` (our components' imports) resolve normally. A resolve plugin with an
+ * EXACT-specifier filter does it.
+ */
+const taskModelRootOnlyPlugin = {
+  name: "task-model-root-to-vocab",
+  setup(pluginBuild) {
+    // Anchored regex → matches the bare package specifier ONLY, never a subpath.
+    pluginBuild.onResolve({ filter: /^@jeswr\/solid-task-model$/ }, () => ({
+      path: taskModelVocab,
+    }));
+  },
+};
+
 async function main(buildDir = outdir) {
   rmSync(buildDir, { recursive: true, force: true });
 
@@ -111,6 +154,7 @@ async function main(buildDir = outdir) {
     conditions: ["browser", "import", "module", "default"],
     external: EXTERNAL,
     alias: STUB_ALIAS,
+    plugins: [taskModelRootOnlyPlugin],
     // No sourcemaps in the committed artifact: they would embed machine-specific
     // ABSOLUTE source paths (non-deterministic across machines → check-dist churn,
     // and a minor info leak) and add weight a consumer never needs. The src/ is in

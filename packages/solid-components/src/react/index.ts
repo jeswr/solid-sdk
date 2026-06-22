@@ -17,6 +17,9 @@
 
 export { JeswrBookmarkForm } from "../components/bookmark-form.js";
 export { JeswrContactForm } from "../components/contact-form.js";
+// The read-only chat-message list element (registered by the package root; exposed
+// here so a React app can `@lit/react` `createComponent` it without ref boilerplate).
+export { JeswrMessageList } from "../components/message-list.js";
 export type { MergeSaveCallback, SaveEventDetail } from "../components/shacl-form-edit.js";
 export { JeswrShaclForm } from "../components/shacl-form-edit.js";
 export { JeswrShaclView } from "../components/shacl-view.js";

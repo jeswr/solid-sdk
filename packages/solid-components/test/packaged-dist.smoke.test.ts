@@ -62,6 +62,7 @@ const MUST_BE_INLINED = [
   "@jeswr/solid-task-model/task",
   "@jeswr/solid-task-model/contacts",
   "@jeswr/solid-bookmark",
+  "@jeswr/solid-chat-interop",
   "@solid/object",
   "@solid/object/webid",
   "@rdfjs/wrapper",
@@ -143,6 +144,7 @@ describe("§8 packaged-dist load smoke test", () => {
     expect(typeof mod.JeswrContactList).toBe("function");
     expect(typeof mod.JeswrProfileCard).toBe("function");
     expect(typeof mod.JeswrBookmarkList).toBe("function");
+    expect(typeof mod.JeswrMessageList).toBe("function");
     expect(typeof mod.JeswrCollection).toBe("function");
     expect(typeof mod.SolidView).toBe("function");
     expect(typeof mod.resolveComponent).toBe("function");
@@ -167,6 +169,7 @@ describe("§8 packaged-dist load smoke test", () => {
       "jeswr-contact-list",
       "jeswr-profile-card",
       "jeswr-bookmark-list",
+      "jeswr-message-list",
       "jeswr-collection",
       "solid-view",
       // Phase-2 editable elements.

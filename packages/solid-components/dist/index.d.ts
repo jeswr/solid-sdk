@@ -3,6 +3,7 @@ import "./components/task-list.js";
 import "./components/contact-list.js";
 import "./components/profile-card.js";
 import "./components/bookmark-list.js";
+import "./components/message-list.js";
 import "./components/collection.js";
 import "./components/solid-view.js";
 import "./components/shacl-form-edit.js";
@@ -15,6 +16,7 @@ export { JeswrCollection, type TypeIndexEntry } from "./components/collection.js
 export { JeswrContactForm } from "./components/contact-form.js";
 export { JeswrContactList } from "./components/contact-list.js";
 export { AbstractFormElement, defaultBaseFor, findEditedSubject, } from "./components/form-base.js";
+export { JeswrMessageList } from "./components/message-list.js";
 export { JeswrProfileCard } from "./components/profile-card.js";
 export { JeswrShaclForm, type MergeSaveCallback, type SaveEventDetail, } from "./components/shacl-form-edit.js";
 export { JeswrShaclView } from "./components/shacl-view.js";
@@ -28,4 +30,4 @@ export { AccessDeniedError, classifyReadError, DataControllerError, DataFormatEr
 export { type ComponentEntry, type ComponentMode, collectTypes, RESOLVER_ENTRIES, type ResolveComponentOptions, resolveComponent, resolveComponentForClass, type TypeScanDataset, } from "./resolver.js";
 export { serializeTurtle } from "./serialize.js";
 export { countTurtleQuads, EMPTY_SHAPES_MESSAGE, type FetchSeam, type GraphSource, type HardenedGraphs, neutraliseValuesTurtle, type ResolveOptions, resolveAndHarden, resolveGraphToTurtle, VALUES_SUBJECT_SENTINEL, } from "./shacl-view-fetch.js";
-export { BOOKMARK_CLASS, LDP_BASIC_CONTAINER, LDP_CONTAINER, RDF_TYPE, TASK_CLASS, VCARD_ADDRESS_BOOK, VCARD_INDIVIDUAL, } from "./vocab.js";
+export { AS_NOTE, BOOKMARK_CLASS, LDP_BASIC_CONTAINER, LDP_CONTAINER, RDF_TYPE, TASK_CLASS, VCARD_ADDRESS_BOOK, VCARD_INDIVIDUAL, } from "./vocab.js";

@@ -91,6 +91,15 @@ export const RESOLVER_ENTRIES: readonly ComponentEntry[] = [
     mode: "view",
     priority: 70,
   },
+  {
+    // `as:Note` — the canonical chat-message class (@jeswr/solid-chat-interop). A
+    // message thread / container of notes renders with the message list.
+    targetClass: "https://www.w3.org/ns/activitystreams#Note",
+    tagName: "jeswr-message-list",
+    importSpec: "@jeswr/solid-components",
+    mode: "view",
+    priority: 70,
+  },
   // The generic LDP container listing — LOWEST priority so a typed container (an
   // AddressBook, a bookmarks container that ALSO types ldp:Container) renders with
   // its typed element, and only an UNtyped container falls through to the listing.

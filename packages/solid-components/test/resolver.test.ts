@@ -17,6 +17,7 @@ const TASK = "http://www.w3.org/2005/01/wf/flow#Task";
 const INDIVIDUAL = "http://www.w3.org/2006/vcard/ns#Individual";
 const ADDRESS_BOOK = "http://www.w3.org/2006/vcard/ns#AddressBook";
 const BOOKMARK = "https://w3id.org/jeswr/bookmark#Bookmark";
+const NOTE = "https://www.w3.org/ns/activitystreams#Note";
 const LDP_CONTAINER = "http://www.w3.org/ns/ldp#Container";
 
 describe("resolveComponent", () => {
@@ -25,6 +26,7 @@ describe("resolveComponent", () => {
     expect(resolveComponent([INDIVIDUAL])?.tagName).toBe("jeswr-contact-list");
     expect(resolveComponent([ADDRESS_BOOK])?.tagName).toBe("jeswr-contact-list");
     expect(resolveComponent([BOOKMARK])?.tagName).toBe("jeswr-bookmark-list");
+    expect(resolveComponent([NOTE])?.tagName).toBe("jeswr-message-list");
     expect(resolveComponent([LDP_CONTAINER])?.tagName).toBe("jeswr-collection");
   });
 
@@ -78,6 +80,7 @@ describe("resolveComponent", () => {
 describe("resolveComponentForClass", () => {
   it("looks up a single class directly", () => {
     expect(resolveComponentForClass(BOOKMARK)?.tagName).toBe("jeswr-bookmark-list");
+    expect(resolveComponentForClass(NOTE)?.tagName).toBe("jeswr-message-list");
     expect(resolveComponentForClass("urn:nope")).toBeUndefined();
   });
 

@@ -71,6 +71,9 @@
     "lit": "^3.3.1",
     "n3": "^1.17.0"
   },
+  "overrides": {
+    "@jeswr/solid-task-model": "$@jeswr/solid-task-model"
+  },
   "peerDependencies": {
     "@jeswr/guarded-fetch": "*",
     "@lit/react": "^1.0.8",
@@ -97,7 +100,8 @@
     "@jeswr/fetch-rdf": "^0.1.0",
     "@jeswr/guarded-fetch": "github:jeswr/guarded-fetch#main",
     "@jeswr/solid-bookmark": "github:jeswr/solid-bookmark#main",
-    "@jeswr/solid-task-model": "github:jeswr/solid-task-model#main",
+    "@jeswr/solid-chat-interop": "github:jeswr/solid-chat-interop#4661d3fddf970e6f35d1fb4f2b1ae44531d62d80",
+    "@jeswr/solid-task-model": "github:jeswr/solid-task-model#be4fcab356554ada7dd7e94e9d15f224c964da0b",
     "@lit/react": "^1.0.8",
     "@rdfjs/types": "^2.0.1",
     "@ro-kit/ui-widgets": "^1.0.44",

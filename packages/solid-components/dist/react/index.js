@@ -6,6 +6,7 @@ import {
   DataWriter,
   JeswrBookmarkForm,
   JeswrContactForm,
+  JeswrMessageList,
   JeswrShaclForm,
   JeswrShaclView,
   JeswrTaskForm,
@@ -16,7 +17,7 @@ import {
   WriteFailedError,
   WriteScopeError,
   classifyReadError
-} from "../chunks/chunk-2QY2TDIE.js";
+} from "../chunks/chunk-PMTCOEOZ.js";
 import "../chunks/chunk-BNRDLDVI.js";
 export {
   AccessDeniedError,
@@ -26,6 +27,7 @@ export {
   DataWriter,
   JeswrBookmarkForm,
   JeswrContactForm,
+  JeswrMessageList,
   JeswrShaclForm,
   JeswrShaclView,
   JeswrTaskForm,

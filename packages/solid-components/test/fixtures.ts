@@ -117,6 +117,25 @@ export const BOOKMARKS_TTL = `
   book:archived true .
 `;
 
+// --- as:Note message fixtures (read via @jeswr/solid-chat-interop) ----------
+
+export const MESSAGES_TTL = `
+@prefix as: <https://www.w3.org/ns/activitystreams#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<https://pod.example/chat/1#it> a as:Note ;
+  as:content "Hello, world" ;
+  as:attributedTo <https://alice.example/profile/card#me> ;
+  as:published "2026-06-01T09:00:00Z"^^xsd:dateTime ;
+  as:context <https://pod.example/chat/room#it> .
+
+<https://pod.example/chat/2#it> a as:Note ;
+  as:content "Replying to you" ;
+  as:attributedTo <https://bob.example/profile/card#me> ;
+  as:published "2026-06-01T09:05:00Z"^^xsd:dateTime ;
+  as:inReplyTo <https://pod.example/chat/1#it> .
+`;
+
 // --- LDP container fixtures -------------------------------------------------
 
 export const CONTAINER_TTL = `
@@ -147,6 +166,19 @@ export const XSS_TASK_TTL = `
 <https://pod.example/tasks/x#it> a wf:Task ;
   dct:title "<img src=x onerror=alert(1)>" ;
   a wf:Open .
+`;
+
+/**
+ * A message whose body carries script-like markup AND a hostile (`javascript:`)
+ * author IRI — the body must render as escaped TEXT (never live markup) and the
+ * author must NOT become an href. (`parseAs2Message` already drops the non-http(s)
+ * author; safeHref re-checks at the DOM boundary.)
+ */
+export const XSS_MESSAGE_TTL = `
+@prefix as: <https://www.w3.org/ns/activitystreams#> .
+<https://pod.example/chat/evil#it> a as:Note ;
+  as:content "<img src=x onerror=alert(1)><script>alert(2)</script>" ;
+  as:attributedTo <javascript:alert(3)> .
 `;
 
 /** A contact whose email/webId are hostile schemes — must not become links. */

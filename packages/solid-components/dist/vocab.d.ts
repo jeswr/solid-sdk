@@ -6,6 +6,8 @@ export declare const VCARD_INDIVIDUAL = "http://www.w3.org/2006/vcard/ns#Individ
 export declare const VCARD_ADDRESS_BOOK = "http://www.w3.org/2006/vcard/ns#AddressBook";
 /** `book:Bookmark` — a bookmark / read-it-later item (`@jeswr/solid-bookmark`). */
 export declare const BOOKMARK_CLASS = "https://w3id.org/jeswr/bookmark#Bookmark";
+/** `as:Note` — the canonical chat message class (`@jeswr/solid-chat-interop`). */
+export declare const AS_NOTE = "https://www.w3.org/ns/activitystreams#Note";
 /** `ldp:Container` — a generic LDP container (the `<jeswr-collection>` listing). */
 export declare const LDP_CONTAINER = "http://www.w3.org/ns/ldp#Container";
 /** `ldp:BasicContainer` — a basic LDP container (sub-type of `ldp:Container`). */

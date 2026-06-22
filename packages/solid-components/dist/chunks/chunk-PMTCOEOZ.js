@@ -269,8 +269,8 @@ var require_Translator = __commonJS({
         this.fromRdfHandlers = {};
         this.toRdfHandlers = {};
       }
-      static incorrectRdfDataType(literal3) {
-        throw new Error(`Invalid RDF ${literal3.datatype.value} value: '${literal3.value}'`);
+      static incorrectRdfDataType(literal4) {
+        throw new Error(`Invalid RDF ${literal4.datatype.value} value: '${literal4.value}'`);
       }
       registerHandler(handler2, rdfDatatypes, javaScriptDataTypes) {
         for (const rdfDatatype of rdfDatatypes) {
@@ -285,12 +285,12 @@ var require_Translator = __commonJS({
           existingToRdfHandlers.push(handler2);
         }
       }
-      fromRdf(literal3, validate) {
-        const handler2 = this.fromRdfHandlers[literal3.datatype.value];
+      fromRdf(literal4, validate) {
+        const handler2 = this.fromRdfHandlers[literal4.datatype.value];
         if (handler2) {
-          return handler2.fromRdf(literal3, validate);
+          return handler2.fromRdf(literal4, validate);
         } else {
-          return literal3.value;
+          return literal4.value;
         }
       }
       toRdf(value, options) {
@@ -330,8 +330,8 @@ var require_TypeHandlerBoolean = __commonJS({
     exports.TypeHandlerBoolean = void 0;
     var Translator_1 = require_Translator();
     var TypeHandlerBoolean = class _TypeHandlerBoolean {
-      fromRdf(literal3, validate) {
-        switch (literal3.value) {
+      fromRdf(literal4, validate) {
+        switch (literal4.value) {
           case "true":
             return true;
           case "false":
@@ -342,7 +342,7 @@ var require_TypeHandlerBoolean = __commonJS({
             return false;
         }
         if (validate) {
-          Translator_1.Translator.incorrectRdfDataType(literal3);
+          Translator_1.Translator.incorrectRdfDataType(literal4);
         }
         return false;
       }
@@ -363,22 +363,22 @@ var require_TypeHandlerDate = __commonJS({
     exports.TypeHandlerDate = void 0;
     var Translator_1 = require_Translator();
     var TypeHandlerDate = class _TypeHandlerDate {
-      fromRdf(literal3, validate) {
-        if (validate && !literal3.value.match(_TypeHandlerDate.VALIDATORS[literal3.datatype.value.substr(33, literal3.datatype.value.length)])) {
-          Translator_1.Translator.incorrectRdfDataType(literal3);
+      fromRdf(literal4, validate) {
+        if (validate && !literal4.value.match(_TypeHandlerDate.VALIDATORS[literal4.datatype.value.substr(33, literal4.datatype.value.length)])) {
+          Translator_1.Translator.incorrectRdfDataType(literal4);
         }
-        switch (literal3.datatype.value) {
+        switch (literal4.datatype.value) {
           case "http://www.w3.org/2001/XMLSchema#gDay":
-            return new Date(0, 0, parseInt(literal3.value, 10));
+            return new Date(0, 0, parseInt(literal4.value, 10));
           case "http://www.w3.org/2001/XMLSchema#gMonthDay":
-            const partsMonthDay = literal3.value.split("-");
+            const partsMonthDay = literal4.value.split("-");
             return new Date(0, parseInt(partsMonthDay[0], 10) - 1, parseInt(partsMonthDay[1], 10));
           case "http://www.w3.org/2001/XMLSchema#gYear":
-            return /* @__PURE__ */ new Date(literal3.value + "-01-01");
+            return /* @__PURE__ */ new Date(literal4.value + "-01-01");
           case "http://www.w3.org/2001/XMLSchema#gYearMonth":
-            return /* @__PURE__ */ new Date(literal3.value + "-01");
+            return /* @__PURE__ */ new Date(literal4.value + "-01");
           default:
-            return new Date(literal3.value);
+            return new Date(literal4.value);
         }
       }
       toRdf(value, { datatype, dataFactory }) {
@@ -438,11 +438,11 @@ var require_TypeHandlerNumberDouble = __commonJS({
     exports.TypeHandlerNumberDouble = void 0;
     var Translator_1 = require_Translator();
     var TypeHandlerNumberDouble = class _TypeHandlerNumberDouble {
-      fromRdf(literal3, validate) {
-        const parsed = parseFloat(literal3.value);
+      fromRdf(literal4, validate) {
+        const parsed = parseFloat(literal4.value);
         if (validate) {
           if (isNaN(parsed)) {
-            Translator_1.Translator.incorrectRdfDataType(literal3);
+            Translator_1.Translator.incorrectRdfDataType(literal4);
           }
         }
         return parsed;
@@ -478,11 +478,11 @@ var require_TypeHandlerNumberInteger = __commonJS({
     exports.TypeHandlerNumberInteger = void 0;
     var Translator_1 = require_Translator();
     var TypeHandlerNumberInteger = class _TypeHandlerNumberInteger {
-      fromRdf(literal3, validate) {
-        const parsed = parseInt(literal3.value, 10);
+      fromRdf(literal4, validate) {
+        const parsed = parseInt(literal4.value, 10);
         if (validate) {
-          if (isNaN(parsed) || literal3.value.indexOf(".") >= 0) {
-            Translator_1.Translator.incorrectRdfDataType(literal3);
+          if (isNaN(parsed) || literal4.value.indexOf(".") >= 0) {
+            Translator_1.Translator.incorrectRdfDataType(literal4);
           }
         }
         return parsed;
@@ -519,8 +519,8 @@ var require_TypeHandlerString = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.TypeHandlerString = void 0;
     var TypeHandlerString = class {
-      fromRdf(literal3) {
-        return literal3.value;
+      fromRdf(literal4) {
+        return literal4.value;
       }
       toRdf(value, { datatype, dataFactory }) {
         return dataFactory.literal(value, datatype);
@@ -622,8 +622,8 @@ var require_rdf_literal = __commonJS({
     translator.registerHandler(new handler_1.TypeHandlerNumberDouble(), handler_1.TypeHandlerNumberDouble.TYPES.map((t5) => DF.namedNode(t5)), ["number"]);
     translator.registerHandler(new handler_1.TypeHandlerNumberInteger(), handler_1.TypeHandlerNumberInteger.TYPES.map((t5) => DF.namedNode(t5)), ["number"]);
     translator.registerHandler(new handler_1.TypeHandlerDate(), handler_1.TypeHandlerDate.TYPES.map((t5) => DF.namedNode(t5)), ["object"]);
-    function fromRdf5(literal3, validate) {
-      return translator.fromRdf(literal3, validate);
+    function fromRdf5(literal4, validate) {
+      return translator.fromRdf(literal4, validate);
     }
     function toRdf(value, options) {
       if (options && "namedNode" in options) {
@@ -1848,23 +1848,23 @@ var N3Parser = class {
   }
   // ### `_completeLiteral` completes a literal with an optional datatype or language
   _completeLiteral(token2) {
-    let literal3 = this._factory.literal(this._literalValue);
+    let literal4 = this._factory.literal(this._literalValue);
     switch (token2.type) {
       // Create a datatyped literal
       case "type":
       case "typeIRI":
         const datatype = this._readEntity(token2);
         if (datatype === void 0) return;
-        literal3 = this._factory.literal(this._literalValue, datatype);
+        literal4 = this._factory.literal(this._literalValue, datatype);
         token2 = null;
         break;
       // Create a language-tagged string
       case "langcode":
-        literal3 = this._factory.literal(this._literalValue, token2.value);
+        literal4 = this._factory.literal(this._literalValue, token2.value);
         token2 = null;
         break;
     }
-    return { token: token2, literal: literal3 };
+    return { token: token2, literal: literal4 };
   }
   // Completes a literal in subject position
   _completeSubjectLiteral(token2) {
@@ -2139,7 +2139,7 @@ var N3Parser = class {
   _readRDFStarTail(token2) {
     if (token2.type !== ">>")
       return this._error(`Expected >> but got ${token2.type}`, token2);
-    const quad3 = this._factory.quad(
+    const quad4 = this._factory.quad(
       this._subject,
       this._predicate,
       this._object,
@@ -2147,10 +2147,10 @@ var N3Parser = class {
     );
     this._restoreContext("<<", token2);
     if (this._subject === null) {
-      this._subject = quad3;
+      this._subject = quad4;
       return this._readPredicate;
     } else {
-      this._object = quad3;
+      this._object = quad4;
       return this._getContextEndReader();
     }
   }
@@ -2520,8 +2520,8 @@ var N3Writer = class {
   // ### `quadsToString` serializes an array of quads as a string
   quadsToString(quads) {
     let quadsString = "";
-    for (const quad3 of quads)
-      quadsString += this.quadToString(quad3.subject, quad3.predicate, quad3.object, quad3.graph);
+    for (const quad4 of quads)
+      quadsString += this.quadToString(quad4.subject, quad4.predicate, quad4.object, quad4.graph);
     return quadsString;
   }
   // ### `_encodeSubject` represents a subject
@@ -2545,17 +2545,17 @@ var N3Writer = class {
     return !prefixMatch ? `<${iri}>` : !prefixMatch[1] ? iri : this._prefixIRIs[prefixMatch[1]] + prefixMatch[2];
   }
   // ### `_encodeLiteral` represents a literal
-  _encodeLiteral(literal3) {
-    let value = literal3.value;
+  _encodeLiteral(literal4) {
+    let value = literal4.value;
     if (escape.test(value))
       value = value.replace(escapeAll, characterReplacer);
-    if (literal3.language)
-      return `"${value}"@${literal3.language}`;
+    if (literal4.language)
+      return `"${value}"@${literal4.language}`;
     if (this._lineMode) {
-      if (literal3.datatype.value === xsd3.string)
+      if (literal4.datatype.value === xsd3.string)
         return `"${value}"`;
     } else {
-      switch (literal3.datatype.value) {
+      switch (literal4.datatype.value) {
         case xsd3.string:
           return `"${value}"`;
         case xsd3.boolean:
@@ -2576,7 +2576,7 @@ var N3Writer = class {
           break;
       }
     }
-    return `"${value}"^^${this._encodeIriOrBlank(literal3.datatype)}`;
+    return `"${value}"^^${this._encodeIriOrBlank(literal4.datatype)}`;
   }
   // ### `_encodePredicate` represents a predicate
   _encodePredicate(predicate) {
@@ -2970,8 +2970,8 @@ var N3Store = class _N3Store {
   // ### `add` adds the specified quad to the dataset.
   // Returns the dataset instance it was called on.
   // Existing quads, as defined in Quad.equals, will be ignored.
-  add(quad3) {
-    this.addQuad(quad3);
+  add(quad4) {
+    this.addQuad(quad4);
     return this;
   }
   // ### `addQuad` adds a new quad to the store.
@@ -3002,8 +3002,8 @@ var N3Store = class _N3Store {
   }
   // ### `delete` removes the specified quad from the dataset.
   // Returns the dataset instance it was called on.
-  delete(quad3) {
-    this.removeQuad(quad3);
+  delete(quad4) {
+    this.removeQuad(quad4);
     return this;
   }
   // ### `has` determines whether a dataset includes a certain quad or quad pattern.
@@ -3014,8 +3014,8 @@ var N3Store = class _N3Store {
   }
   // ### `import` adds a stream of quads to the store
   import(stream) {
-    stream.on("data", (quad3) => {
-      this.addQuad(quad3);
+    stream.on("data", (quad4) => {
+      this.addQuad(quad4);
     });
     return stream;
   }
@@ -3043,8 +3043,8 @@ var N3Store = class _N3Store {
   }
   // ### `remove` removes a stream of quads from the store
   remove(stream) {
-    stream.on("data", (quad3) => {
-      this.removeQuad(quad3);
+    stream.on("data", (quad4) => {
+      this.removeQuad(quad4);
     });
     return stream;
   }
@@ -3180,8 +3180,8 @@ var N3Store = class _N3Store {
   // ### `forEach` executes the callback on all quads.
   // Setting any field to `undefined` or `null` indicates a wildcard.
   forEach(callback, subject, predicate, object, graph) {
-    this.some((quad3) => {
-      callback(quad3, this);
+    this.some((quad4) => {
+      callback(quad4, this);
       return false;
     }, subject, predicate, object, graph);
   }
@@ -3189,14 +3189,14 @@ var N3Store = class _N3Store {
   // and returns `true` if it returns truthy for all them.
   // Setting any field to `undefined` or `null` indicates a wildcard.
   every(callback, subject, predicate, object, graph) {
-    return !this.some((quad3) => !callback(quad3, this), subject, predicate, object, graph);
+    return !this.some((quad4) => !callback(quad4, this), subject, predicate, object, graph);
   }
   // ### `some` executes the callback on all quads,
   // and returns `true` if it returns truthy for any of them.
   // Setting any field to `undefined` or `null` indicates a wildcard.
   some(callback, subject, predicate, object, graph) {
-    for (const quad3 of this.readQuads(subject, predicate, object, graph))
-      if (callback(quad3, this))
+    for (const quad4 of this.readQuads(subject, predicate, object, graph))
+      if (callback(quad4, this))
         return true;
     return false;
   }
@@ -3306,8 +3306,8 @@ var N3Store = class _N3Store {
   // Setting any field to `undefined` or `null` indicates a wildcard.
   forGraphs(callback, subject, predicate, object) {
     for (const graph in this._graphs) {
-      this.some((quad3) => {
-        callback(quad3.graph);
+      this.some((quad4) => {
+        callback(quad4.graph);
         return true;
       }, subject, predicate, object, this._termFromId(this._entities[graph]));
     }
@@ -3335,41 +3335,41 @@ var N3Store = class _N3Store {
       while (current && !malformed) {
         const objectQuads = this.getQuads(null, null, current, null);
         const subjectQuads = this.getQuads(current, null, null, null);
-        let quad3, first = null, rest = null, parent = null;
+        let quad4, first = null, rest = null, parent = null;
         for (let i5 = 0; i5 < subjectQuads.length && !malformed; i5++) {
-          quad3 = subjectQuads[i5];
-          if (!quad3.graph.equals(graph))
+          quad4 = subjectQuads[i5];
+          if (!quad4.graph.equals(graph))
             malformed = onError(current, "not confined to single graph");
           else if (head)
             malformed = onError(current, "has non-list arcs out");
-          else if (quad3.predicate.value === IRIs_default.rdf.first) {
+          else if (quad4.predicate.value === IRIs_default.rdf.first) {
             if (first)
               malformed = onError(current, "has multiple rdf:first arcs");
             else
-              toRemove.push(first = quad3);
-          } else if (quad3.predicate.value === IRIs_default.rdf.rest) {
+              toRemove.push(first = quad4);
+          } else if (quad4.predicate.value === IRIs_default.rdf.rest) {
             if (rest)
               malformed = onError(current, "has multiple rdf:rest arcs");
             else
-              toRemove.push(rest = quad3);
+              toRemove.push(rest = quad4);
           } else if (objectQuads.length)
             malformed = onError(current, "can't be subject and object");
           else {
-            head = quad3;
+            head = quad4;
             headPos = "subject";
           }
         }
         for (let i5 = 0; i5 < objectQuads.length && !malformed; ++i5) {
-          quad3 = objectQuads[i5];
+          quad4 = objectQuads[i5];
           if (head)
             malformed = onError(current, "can't have coreferences");
-          else if (quad3.predicate.value === IRIs_default.rdf.rest) {
+          else if (quad4.predicate.value === IRIs_default.rdf.rest) {
             if (parent)
               malformed = onError(current, "has incoming rdf:rest arcs");
             else
-              parent = quad3;
+              parent = quad4;
           } else {
-            head = quad3;
+            head = quad4;
             headPos = "object";
           }
         }
@@ -3405,8 +3405,8 @@ var N3Store = class _N3Store {
         this._size = null;
       }
     } else {
-      for (const quad3 of quads)
-        this.add(quad3);
+      for (const quad4 of quads)
+        this.add(quad4);
     }
     return this;
   }
@@ -3422,7 +3422,7 @@ var N3Store = class _N3Store {
     if (other === this)
       return true;
     if (!(other instanceof _N3Store) || this._entityIndex !== other._entityIndex)
-      return other.every((quad3) => this.has(quad3));
+      return other.every((quad4) => this.has(quad4));
     const g1 = this._graphs, g22 = other._graphs;
     let s1, s22, p1, p22, o1;
     for (const graph in g22) {
@@ -3451,8 +3451,8 @@ var N3Store = class _N3Store {
    * @param graph     The optional exact graph to match.
    */
   deleteMatches(subject, predicate, object, graph) {
-    for (const quad3 of this.match(subject, predicate, object, graph))
-      this.removeQuad(quad3);
+    for (const quad4 of this.match(subject, predicate, object, graph))
+      this.removeQuad(quad4);
     return this;
   }
   /**
@@ -3472,7 +3472,7 @@ var N3Store = class _N3Store {
       }
       return store;
     }
-    return this.filter((quad3) => !other.has(quad3));
+    return this.filter((quad4) => !other.has(quad4));
   }
   /**
    * Returns true if the current dataset contains the same graph structure as the given dataset.
@@ -3491,9 +3491,9 @@ var N3Store = class _N3Store {
    */
   filter(iteratee) {
     const store = new _N3Store({ entityIndex: this._entityIndex });
-    for (const quad3 of this)
-      if (iteratee(quad3, this))
-        store.add(quad3);
+    for (const quad4 of this)
+      if (iteratee(quad4, this))
+        store.add(quad4);
     return store;
   }
   /**
@@ -3516,15 +3516,15 @@ var N3Store = class _N3Store {
       }
       return store;
     }
-    return this.filter((quad3) => other.has(quad3));
+    return this.filter((quad4) => other.has(quad4));
   }
   /**
    * Returns a new dataset containing all quads returned by applying `iteratee` to each quad in the current dataset.
    */
   map(iteratee) {
     const store = new _N3Store({ entityIndex: this._entityIndex });
-    for (const quad3 of this)
-      store.add(iteratee(quad3, this));
+    for (const quad4 of this)
+      store.add(iteratee(quad4, this));
     return store;
   }
   /**
@@ -3539,8 +3539,8 @@ var N3Store = class _N3Store {
   reduce(callback, initialValue) {
     const iter = this.readQuads();
     let accumulator = initialValue === void 0 ? iter.next().value : initialValue;
-    for (const quad3 of iter)
-      accumulator = callback(accumulator, quad3, this);
+    for (const quad4 of iter)
+      accumulator = callback(accumulator, quad4, this);
     return accumulator;
   }
   /**
@@ -3713,14 +3713,14 @@ var DatasetCoreAndReadableStream = class _DatasetCoreAndReadableStream extends i
   toString() {
     return new N3Writer().quadsToString(this);
   }
-  add(quad3) {
-    return this.filtered.add(quad3);
+  add(quad4) {
+    return this.filtered.add(quad4);
   }
-  delete(quad3) {
-    return this.filtered.delete(quad3);
+  delete(quad4) {
+    return this.filtered.delete(quad4);
   }
-  has(quad3) {
-    return this.filtered.has(quad3);
+  has(quad4) {
+    return this.filtered.has(quad4);
   }
   match(subject, predicate, object, graph) {
     return new _DatasetCoreAndReadableStream(this.filtered, subject, predicate, object, graph, this.options);
@@ -3740,8 +3740,8 @@ var N3StreamParser = class extends import_readable_stream2.Transform {
     let onData, onEnd;
     const callbacks = {
       // Handle quads by pushing them down the pipeline
-      onQuad: (error, quad3) => {
-        error && this.emit("error", error) || quad3 && this.push(quad3);
+      onQuad: (error, quad4) => {
+        error && this.emit("error", error) || quad4 && this.push(quad4);
       },
       // Emit prefixes through the `prefix` event
       onPrefix: (prefix, uri) => {
@@ -3793,8 +3793,8 @@ function serializeTurtle(quads) {
   const store = quads instanceof N3Store ? quads : new N3Store([...quads]);
   return new Promise((resolve, reject) => {
     const writer = new N3Writer({ format: "text/turtle" });
-    for (const quad3 of store.getQuads(null, null, null, null)) {
-      writer.addQuad(quad3.subject, quad3.predicate, quad3.object);
+    for (const quad4 of store.getQuads(null, null, null, null)) {
+      writer.addQuad(quad4.subject, quad4.predicate, quad4.object);
     }
     writer.end((error, result) => {
       if (error) reject(error);
@@ -3842,12 +3842,12 @@ function isHttpNamedNode(object) {
 async function neutraliseValuesTurtle(turtle) {
   const store = await parseToStore(turtle, "text/turtle");
   const toRemove = [];
-  for (const quad3 of store.getQuads(null, null, null, null)) {
-    if (AUTO_IMPORT_PREDICATES.has(quad3.predicate.value) && isHttpNamedNode(quad3.object)) {
-      toRemove.push(quad3);
+  for (const quad4 of store.getQuads(null, null, null, null)) {
+    if (AUTO_IMPORT_PREDICATES.has(quad4.predicate.value) && isHttpNamedNode(quad4.object)) {
+      toRemove.push(quad4);
     }
   }
-  for (const quad3 of toRemove) store.removeQuad(quad3);
+  for (const quad4 of toRemove) store.removeQuad(quad4);
   return serializeTurtle(store);
 }
 async function countTurtleQuads(turtle) {
@@ -5985,14 +5985,14 @@ function v4(options, buf, offset) {
 var v4_default = v4;
 
 // node_modules/@rdfjs/to-ntriples/lib/blankNode.js
-function blankNode2(blankNode3) {
-  return "_:" + blankNode3.value;
+function blankNode2(blankNode4) {
+  return "_:" + blankNode4.value;
 }
 var blankNode_default = blankNode2;
 
 // node_modules/@rdfjs/to-ntriples/lib/dataset.js
 function dataset(dataset2, toNT2) {
-  return [...dataset2].map((quad3) => toNT2(quad3)).join("\n") + "\n";
+  return [...dataset2].map((quad4) => toNT2(quad4)).join("\n") + "\n";
 }
 var dataset_default = dataset;
 
@@ -6003,8 +6003,8 @@ function defaultGraph2() {
 var defaultGraph_default = defaultGraph2;
 
 // node_modules/@rdfjs/to-ntriples/lib/namedNode.js
-function namedNode2(namedNode4) {
-  return "<" + namedNode4.value + ">";
+function namedNode2(namedNode5) {
+  return "<" + namedNode5.value + ">";
 }
 var namedNode_default = namedNode2;
 
@@ -6026,31 +6026,31 @@ function escapeValue(value) {
   }
   return value;
 }
-function literal2(literal3) {
-  const escapedValue = escapeValue(literal3.value);
-  if (literal3.datatype.value === "http://www.w3.org/2001/XMLSchema#string") {
+function literal2(literal4) {
+  const escapedValue = escapeValue(literal4.value);
+  if (literal4.datatype.value === "http://www.w3.org/2001/XMLSchema#string") {
     return '"' + escapedValue + '"';
   }
-  if (literal3.datatype.value === "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString") {
-    return '"' + escapedValue + '"@' + literal3.language;
+  if (literal4.datatype.value === "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString") {
+    return '"' + escapedValue + '"@' + literal4.language;
   }
-  return '"' + escapedValue + '"^^' + namedNode_default(literal3.datatype);
+  return '"' + escapedValue + '"^^' + namedNode_default(literal4.datatype);
 }
 var literal_default = literal2;
 
 // node_modules/@rdfjs/to-ntriples/lib/quad.js
-function quad2(quad3, toNT2) {
-  const subjectString = toNT2(quad3.subject);
-  const predicateString = toNT2(quad3.predicate);
-  const objectString = toNT2(quad3.object);
-  const graphString = toNT2(quad3.graph);
+function quad2(quad4, toNT2) {
+  const subjectString = toNT2(quad4.subject);
+  const predicateString = toNT2(quad4.predicate);
+  const objectString = toNT2(quad4.object);
+  const graphString = toNT2(quad4.graph);
   return `${subjectString} ${predicateString} ${objectString} ${graphString ? graphString + " " : ""}.`;
 }
 var quad_default = quad2;
 
 // node_modules/@rdfjs/to-ntriples/lib/variable.js
-function variable2(variable3) {
-  return "?" + variable3.value;
+function variable2(variable4) {
+  return "?" + variable4.value;
 }
 var variable_default = variable2;
 
@@ -6143,10 +6143,10 @@ var TermMap_default = TermMap;
 
 // node_modules/grapoi/Edge.js
 var Edge = class {
-  constructor({ dataset: dataset2, end, quad: quad3, start }) {
+  constructor({ dataset: dataset2, end, quad: quad4, start }) {
     this.dataset = dataset2;
     this.end = end;
-    this.quad = quad3;
+    this.quad = quad4;
     this.start = start;
   }
   get term() {
@@ -6421,8 +6421,8 @@ var Processor = class _Processor {
     let edgeCallback = () => {
     };
     if (callback) {
-      edgeCallback = (quad3) => {
-        callback(new Edge_default({ dataset: ptr.dataset, start, end, quad: quad3 }));
+      edgeCallback = (quad4) => {
+        callback(new Edge_default({ dataset: ptr.dataset, start, end, quad: quad4 }));
       };
     }
     for (const subject of subjects) {
@@ -6431,14 +6431,14 @@ var Processor = class _Processor {
           for (const graph of graphs) {
             const pattern = { subject, predicate, object, graph };
             pattern[start] = ptr.term;
-            const quad3 = ptr.factory.quad(
+            const quad4 = ptr.factory.quad(
               pattern.subject,
               pattern.predicate,
               pattern.object,
               pattern.graph
             );
-            ptr.dataset.add(quad3);
-            edgeCallback(quad3);
+            ptr.dataset.add(quad4);
+            edgeCallback(quad4);
           }
         }
       }
@@ -6474,8 +6474,8 @@ var Processor = class _Processor {
           const pattern = { subject, predicate, object };
           pattern[start] = ptr.term;
           const matches = ptr.dataset.match(pattern.subject, pattern.predicate, pattern.object);
-          for (const quad3 of matches) {
-            ptr.dataset.delete(quad3);
+          for (const quad4 of matches) {
+            ptr.dataset.delete(quad4);
           }
         }
       }
@@ -6485,23 +6485,23 @@ var Processor = class _Processor {
   static deleteList({ ptr, predicates }) {
     const toDelete = [];
     for (const predicate of predicates) {
-      for (const quad3 of ptr.dataset.match(ptr.term, predicate)) {
-        let link = quad3.object;
-        toDelete.push(quad3);
+      for (const quad4 of ptr.dataset.match(ptr.term, predicate)) {
+        let link = quad4.object;
+        toDelete.push(quad4);
         while (!rdfns.nil.equals(link)) {
           link = toDelete[toDelete.length - 1].object;
           const matches = ptr.dataset.match(link);
           if (matches.size === 0) {
             break;
           }
-          for (const quad4 of matches) {
-            toDelete.push(quad4);
+          for (const quad5 of matches) {
+            toDelete.push(quad5);
           }
         }
       }
     }
-    for (const quad3 of toDelete) {
-      ptr.dataset.delete(quad3);
+    for (const quad4 of toDelete) {
+      ptr.dataset.delete(quad4);
     }
     return ptr;
   }
@@ -6635,8 +6635,8 @@ var Processor = class _Processor {
           for (const graph of graphs) {
             const pattern = { subject, predicate, object, graph };
             pattern[start] = ptr.term;
-            for (const quad3 of ptr.dataset.match(pattern.subject, pattern.predicate, pattern.object, pattern.graph)) {
-              results.push(callback(new Edge_default({ dataset: ptr.dataset, end, quad: quad3, start }), ptr));
+            for (const quad4 of ptr.dataset.match(pattern.subject, pattern.predicate, pattern.object, pattern.graph)) {
+              results.push(callback(new Edge_default({ dataset: ptr.dataset, end, quad: quad4, start }), ptr));
             }
           }
         }
@@ -6845,8 +6845,8 @@ var Path = class {
     });
   }
   *quads() {
-    for (const { quad: quad3 } of this.edges) {
-      yield quad3;
+    for (const { quad: quad4 } of this.edges) {
+      yield quad4;
     }
   }
   trim() {
@@ -7198,8 +7198,8 @@ var PathList = class {
    */
   *quads() {
     for (const { edges } of this.ptrs) {
-      for (const { quad: quad3 } of edges) {
-        yield quad3;
+      for (const { quad: quad4 } of edges) {
+        yield quad4;
       }
     }
   }
@@ -7237,7 +7237,7 @@ function pathToString(path) {
   if (!path) {
     return "{}";
   }
-  return `{${[...path.quads()].map((quad3) => to_ntriples_default(quad3)).join(" ")}}`;
+  return `{${[...path.quads()].map((quad4) => to_ntriples_default(quad4)).join(" ")}}`;
 }
 function pathsToString(paths) {
   if (!paths) {
@@ -10406,6 +10406,16 @@ if (!customElements.get("jeswr-shacl-view")) {
   customElements.define("jeswr-shacl-view", JeswrShaclView);
 }
 
+// src/vocab.ts
+var TASK_CLASS = "http://www.w3.org/2005/01/wf/flow#Task";
+var VCARD_INDIVIDUAL = "http://www.w3.org/2006/vcard/ns#Individual";
+var VCARD_ADDRESS_BOOK = "http://www.w3.org/2006/vcard/ns#AddressBook";
+var BOOKMARK_CLASS = "https://w3id.org/jeswr/bookmark#Bookmark";
+var AS_NOTE = "https://www.w3.org/ns/activitystreams#Note";
+var LDP_CONTAINER = "http://www.w3.org/ns/ldp#Container";
+var LDP_BASIC_CONTAINER = "http://www.w3.org/ns/ldp#BasicContainer";
+var RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+
 // src/errors.ts
 var DataControllerError = class extends Error {
   /** The resource URL the failing read targeted. */
@@ -10469,9 +10479,9 @@ function numericStatus(error) {
 
 // src/data-controller.ts
 var LDP_CONTAINS = "http://www.w3.org/ns/ldp#contains";
-var RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
-var LDP_CONTAINER = "http://www.w3.org/ns/ldp#Container";
-var LDP_BASIC_CONTAINER = "http://www.w3.org/ns/ldp#BasicContainer";
+var RDF_TYPE2 = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+var LDP_CONTAINER2 = "http://www.w3.org/ns/ldp#Container";
+var LDP_BASIC_CONTAINER2 = "http://www.w3.org/ns/ldp#BasicContainer";
 var RDF_ACCEPT = "text/turtle, application/ld+json;q=0.9";
 var DataController = class {
   #fetch;
@@ -10585,12 +10595,12 @@ function statusError(url, status) {
 function childrenOf(dataset2, containerUrl) {
   const seen = /* @__PURE__ */ new Set();
   const out = [];
-  for (const quad3 of iterContains(dataset2)) {
-    const childUrl = quad3.object.value;
-    if (quad3.subject.value !== containerUrl) continue;
+  for (const quad4 of iterContains(dataset2)) {
+    const childUrl = quad4.object.value;
+    if (quad4.subject.value !== containerUrl) continue;
     if (seen.has(childUrl)) continue;
     seen.add(childUrl);
-    out.push({ url: childUrl, isContainer: isContainerChild(dataset2, quad3.object, childUrl) });
+    out.push({ url: childUrl, isContainer: isContainerChild(dataset2, quad4.object, childUrl) });
   }
   return out;
 }
@@ -10598,9 +10608,9 @@ function iterContains(dataset2) {
   return dataset2.getQuads(null, namedNode3(LDP_CONTAINS), null, null);
 }
 function isContainerChild(dataset2, child, childUrl) {
-  for (const t5 of dataset2.getQuads(child, namedNode3(RDF_TYPE), null, null)) {
+  for (const t5 of dataset2.getQuads(child, namedNode3(RDF_TYPE2), null, null)) {
     const typeValue = t5.object.value;
-    if (typeValue === LDP_CONTAINER || typeValue === LDP_BASIC_CONTAINER) return true;
+    if (typeValue === LDP_CONTAINER2 || typeValue === LDP_BASIC_CONTAINER2) return true;
   }
   return childUrl.endsWith("/");
 }
@@ -10748,6 +10758,1723 @@ function formatDate(date2) {
   } catch {
     return "";
   }
+}
+
+// node_modules/@rdfjs/wrapper/dist/TermWrapper.js
+var TermWrapper = class {
+  original;
+  _dataset;
+  _factory;
+  constructor(term, dataset2, factory2) {
+    this.original = typeof term === "string" ? factory2.namedNode(term) : term;
+    this._dataset = dataset2;
+    this._factory = factory2;
+  }
+  /**
+   * The dataset that contains this term.
+   *
+   * This accessor provides access to the underlying RDF graph that is the containing context of a node mapped to JavaScript by instances of this class.
+   *
+   * @remarks
+   * RDF/JS, like many other RDF frameworks, keeps terms and datasets separate. This means that terms do not hold a reference to a dataset they reside in (or were found in). This, in turn, means that a dataset must always be available, separate from the term, if either changes to the underlying data or further traversal of the underlying data is called for. In an object-oriented context however, where property chaining is idiomatic (i.e. `instance.property1.property2`), there is no way to supply the dataset when dereferencing a link in the chain.
+   *
+   * This property solves the problem by keeping a reference to the dataset.
+   *
+   * @exmaple
+   * Using the dataset to modify information related to this node in the underlying data:
+   * ```ts
+   * class Book extends TermWrapper {
+   *   set author(value: string) {
+   *     const subject = this as Quad_Subject
+   *     const predicate = this.factory.namedNode("http://example.com/author")
+   *     const object = this.factory.literal(value)
+   *     const oldAuthors = this.factory.quad(subject, predicate)
+   *     const newAuthor = this.factory.quad(subject, predicate, object)
+   *
+   *     this.dataset.delete(oldAuthors)
+   *     this.dataset.add(newAuthor)
+   *   }
+   * }
+   * ```
+   * Note: The above example operates on a low level to explain this property. Library users are more likely to interact with {@link OptionalAs}, {@link RequiredAs} and {@link LiteralFrom} for a better experience.
+   *
+   * @exmaple
+   * Using the dataset to modify data related to this node in the underlying data:
+   * ```ts
+   * class Container extends TermWrapper {
+   *   add(something: string) {
+   *     const subject = this as Quad_Subject
+   *     const predicate = this.factory.namedNode("http://example.com/contains")
+   *     const object = this.factory.literal(something)
+   *     const quad = this.factory.quad(subject, predicate, object)
+   *
+   *     this.dataset.add(quad)
+   *   }
+   * }
+   * ```
+   */
+  get dataset() {
+    return this._dataset;
+  }
+  /**
+   * The data factory this instance was instantiated with. A collection of methods that can be used to create terms by this or subsequent wrappers.
+   *
+   * @exmaple
+   * Using the factory to create a literal term from the current date and time:
+   * ```ts
+   * class Calendar extends TermWrapper {
+   *   get currentDate(): Literal {
+   *     const date = new Date().toISOString()
+   *     const xsdDateTime = this.factory.namedNode("http://www.w3.org/2001/XMLSchema#dateTime")
+   *
+   *     return this.factory.literal(date, xsdDateTime)
+   *   }
+   * }
+   * ```
+   *
+   * @exmaple
+   * Using the factory to create a quad:
+   * ```ts
+   * class Container extends TermWrapper {
+   *   add(something: string) {
+   *     const subject = this as Quad_Subject
+   *     const predicate = this.factory.namedNode("http://example.com/contains")
+   *     const object = this.factory.literal(something)
+   *     const quad = this.factory.quad(subject, predicate, object)
+   *
+   *     this.dataset.add(quad)
+   *   }
+   * }
+   * ```
+   */
+  get factory() {
+    return this._factory;
+  }
+  /**
+   * The well-known property containing a string that represents the type of this object.
+   */
+  get [Symbol.toStringTag]() {
+    return this.constructor.name;
+  }
+  //#region Implementation of RDF/JS Term
+  get termType() {
+    return this.original.termType;
+  }
+  get value() {
+    return this.original.value;
+  }
+  equals(other) {
+    return this.original.equals(other);
+  }
+  //#region Implementation of RDF/JS Literal
+  get language() {
+    return this.original.language;
+  }
+  get direction() {
+    return this.original.direction;
+  }
+  get datatype() {
+    return this.original.datatype;
+  }
+  //#endregion
+  //#region Implementation of RDF/JS Quad
+  get subject() {
+    return this.original.subject;
+  }
+  get predicate() {
+    return this.original.predicate;
+  }
+  get object() {
+    return this.original.object;
+  }
+  get graph() {
+    return this.original.graph;
+  }
+};
+
+// node_modules/@rdfjs/wrapper/dist/IndexerInterceptor.js
+var IndexerInterceptor = class {
+  get(target, property, receiver) {
+    if (notNumeric(property)) {
+      return Reflect.get(target, property, receiver);
+    }
+    return target.at(Number.parseInt(property));
+  }
+  set(target, property, value, receiver) {
+    if (notNumeric(property)) {
+      return Reflect.set(target, property, value, receiver);
+    }
+    const i5 = Number.parseInt(property);
+    target.fill(value, i5, i5 + 1);
+    return true;
+  }
+  deleteProperty(target, property) {
+    if (notNumeric(property)) {
+      return Reflect.deleteProperty(target, property);
+    }
+    return false;
+  }
+};
+function notNumeric(property) {
+  return typeof property === "symbol" || isNaN(parseInt(property));
+}
+
+// node_modules/@rdfjs/wrapper/dist/vocabulary/RDF.js
+var RDF2 = {
+  langString: "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString",
+  type: "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+  first: "http://www.w3.org/1999/02/22-rdf-syntax-ns#first",
+  rest: "http://www.w3.org/1999/02/22-rdf-syntax-ns#rest",
+  nil: "http://www.w3.org/1999/02/22-rdf-syntax-ns#nil"
+};
+
+// node_modules/@rdfjs/wrapper/dist/mapping/TermFrom.js
+var TermFrom;
+(function(TermFrom2) {
+  function instance(value, factory2) {
+    return itself(value, factory2);
+  }
+  TermFrom2.instance = instance;
+  function itself(value, _3) {
+    return value;
+  }
+  TermFrom2.itself = itself;
+})(TermFrom || (TermFrom = {}));
+
+// node_modules/@rdfjs/wrapper/dist/mapping/RequiredFrom.js
+var RequiredFrom;
+(function(RequiredFrom2) {
+  function subjectPredicate(anchor1, p4, termAs) {
+    if (termAs === void 0) {
+      throw new Error();
+    }
+    const anchor2 = anchor1.factory.namedNode(p4);
+    const matches = anchor1.dataset.match(anchor1, anchor2)[Symbol.iterator]();
+    const { value: first, done: none } = matches.next();
+    if (none) {
+      throw new Error(`No value found for predicate ${p4} on term ${anchor1.value}`);
+    }
+    if (!matches.next().done) {
+      throw new Error(`More than one value for predicate ${p4} on term ${anchor1.value}`);
+    }
+    return termAs(new TermWrapper(first.object, anchor1.dataset, anchor1.factory));
+  }
+  RequiredFrom2.subjectPredicate = subjectPredicate;
+})(RequiredFrom || (RequiredFrom = {}));
+
+// node_modules/@rdfjs/wrapper/dist/mapping/OptionalFrom.js
+var OptionalFrom;
+(function(OptionalFrom2) {
+  function subjectPredicate(anchor, p4, termAs) {
+    if (termAs === void 0) {
+      throw new Error();
+    }
+    const predicate = anchor.factory.namedNode(p4);
+    for (const q3 of anchor.dataset.match(anchor, predicate)) {
+      return termAs(new TermWrapper(q3.object, anchor.dataset, anchor.factory));
+    }
+    return void 0;
+  }
+  OptionalFrom2.subjectPredicate = subjectPredicate;
+})(OptionalFrom || (OptionalFrom = {}));
+
+// node_modules/@rdfjs/wrapper/dist/mapping/OptionalAs.js
+var OptionalAs;
+(function(OptionalAs2) {
+  function object(anchor, p4, value, termFrom) {
+    if (termFrom === void 0) {
+      throw new Error();
+    }
+    const predicate = anchor.factory.namedNode(p4);
+    for (const q4 of anchor.dataset.match(anchor, predicate)) {
+      anchor.dataset.delete(q4);
+    }
+    if (value === void 0) {
+      return;
+    }
+    if (!isQuadSubject(anchor)) {
+      return;
+    }
+    const o6 = termFrom(value, anchor.factory);
+    if (o6 === void 0) {
+      return;
+    }
+    if (!isQuadObject(o6)) {
+      return;
+    }
+    const q3 = anchor.factory.quad(anchor, predicate, o6);
+    anchor.dataset.add(q3);
+  }
+  OptionalAs2.object = object;
+})(OptionalAs || (OptionalAs = {}));
+function isQuadSubject(term) {
+  return ["NamedNode", "BlankNode", "Quad", "Variable"].includes(term.termType);
+}
+function isQuadObject(term) {
+  return ["NamedNode", "Literal", "BlankNode", "Quad", "Variable"].includes(term.termType);
+}
+
+// node_modules/@rdfjs/wrapper/dist/mapping/RequiredAs.js
+var RequiredAs;
+(function(RequiredAs2) {
+  function object(anchor, p4, value, termFrom) {
+    if (value === void 0) {
+      throw new Error("value cannot be undefined");
+    }
+    OptionalAs.object(anchor, p4, value, termFrom);
+  }
+  RequiredAs2.object = object;
+})(RequiredAs || (RequiredAs = {}));
+
+// node_modules/@rdfjs/wrapper/dist/ListItem.js
+var ListItem = class _ListItem extends TermWrapper {
+  termAs;
+  termFrom;
+  constructor(term, dataset2, factory2, termAs, termFrom) {
+    super(term, dataset2, factory2);
+    this.termAs = termAs;
+    this.termFrom = termFrom;
+  }
+  get firstRaw() {
+    return OptionalFrom.subjectPredicate(this, RDF2.first, TermAs.term);
+  }
+  set firstRaw(value) {
+    OptionalAs.object(this, RDF2.first, value, TermFrom.itself);
+  }
+  get restRaw() {
+    return OptionalFrom.subjectPredicate(this, RDF2.rest, TermAs.term);
+  }
+  set restRaw(value) {
+    OptionalAs.object(this, RDF2.rest, value, TermFrom.itself);
+  }
+  get isListItem() {
+    return this.firstRaw !== void 0 && this.restRaw !== void 0;
+  }
+  get isNil() {
+    return this.equals(this.factory.namedNode(RDF2.nil));
+  }
+  get first() {
+    return RequiredFrom.subjectPredicate(this, RDF2.first, this.termAs);
+  }
+  set first(value) {
+    RequiredAs.object(this, RDF2.first, value, this.termFrom);
+  }
+  get rest() {
+    return RequiredFrom.subjectPredicate(this, RDF2.rest, (w4) => new _ListItem(w4, w4.dataset, w4.factory, this.termAs, this.termFrom));
+  }
+  set rest(value) {
+    RequiredAs.object(this, RDF2.rest, value, TermFrom.instance);
+  }
+  pop() {
+    try {
+      return this.first;
+    } finally {
+      this.firstRaw = void 0;
+      this.restRaw = this.factory.namedNode(RDF2.nil);
+    }
+  }
+  *items() {
+    if (this.firstRaw === void 0) {
+      return;
+    }
+    yield this;
+    for (const more of this.rest.items()) {
+      yield more;
+    }
+  }
+};
+
+// node_modules/@rdfjs/wrapper/dist/Overwriter.js
+var Overwriter = class extends TermWrapper {
+  p;
+  constructor(subject, p4) {
+    super(subject, subject.dataset, subject.factory);
+    this.p = p4;
+  }
+  set listNode(object) {
+    RequiredAs.object(this, this.p, object, TermFrom.instance);
+  }
+};
+
+// node_modules/@rdfjs/wrapper/dist/RdfList.js
+var RdfList = class {
+  subject;
+  predicate;
+  termAs;
+  termFrom;
+  root;
+  constructor(root, subject, predicate, termAs, termFrom) {
+    this.subject = subject;
+    this.predicate = predicate;
+    this.termAs = termAs;
+    this.termFrom = termFrom;
+    this.root = new ListItem(root, this.subject.dataset, this.subject.factory, termAs, termFrom);
+    return new Proxy(this, new IndexerInterceptor());
+  }
+  get [Symbol.unscopables]() {
+    return Array.prototype[Symbol.unscopables];
+  }
+  get length() {
+    return [...this.items].length;
+  }
+  set length(_3) {
+    throw new Error("this array is based on an RDF Collection. Its length cannot be modified like this.");
+  }
+  [Symbol.iterator]() {
+    return this.values();
+  }
+  at(index) {
+    return [...this.items].at(index)?.first;
+  }
+  concat(...items) {
+    return [...this].concat(...items);
+  }
+  copyWithin(target, start, end) {
+    throw new Error("not implemented");
+  }
+  entries() {
+    return [...this].entries();
+  }
+  every(predicate, thisArg) {
+    return [...this].every(predicate, thisArg);
+  }
+  fill(value, start, end) {
+    throw new Error("not implemented");
+  }
+  filter(predicate, thisArg) {
+    return [...this].filter(predicate, thisArg);
+  }
+  find(predicate, thisArg) {
+    return [...this].find(predicate, thisArg);
+  }
+  findIndex(predicate, thisArg) {
+    return [...this].findIndex(predicate, thisArg);
+  }
+  flat(depth) {
+    throw new Error("not implemented");
+  }
+  flatMap(callback, thisArg) {
+    return [...this].flatMap(callback, thisArg);
+  }
+  forEach(callback, thisArg) {
+    [...this].forEach(callback, thisArg);
+  }
+  includes(searchElement, fromIndex) {
+    return [...this].includes(searchElement, fromIndex);
+  }
+  indexOf(searchElement, fromIndex) {
+    return [...this].indexOf(searchElement, fromIndex);
+  }
+  join(separator) {
+    return [...this].join(separator);
+  }
+  keys() {
+    return [...this.items].keys();
+  }
+  lastIndexOf(searchElement, fromIndex) {
+    return [...this].lastIndexOf(searchElement, fromIndex);
+  }
+  map(callback, thisArg) {
+    return [...this].map(callback, thisArg);
+  }
+  pop() {
+    return [...this.items].at(-1)?.pop();
+  }
+  push(...items) {
+    const nil = this.subject.factory.namedNode(RDF2.nil);
+    for (const item of items) {
+      const newNode = new ListItem(this.subject.factory.blankNode(), this.subject.dataset, this.subject.factory, this.termAs, this.termFrom);
+      const lastNode = this.root.isNil ? (
+        // The statement representing an empty list is replaced by a new one whose object is the new node
+        // The representation of the first item (root, currently rdf:nil, the empty list) is overwritten by the new node
+        this.root = new Overwriter(this.subject, this.predicate).listNode = newNode
+      ) : (
+        // replace rest of current last with new and return is because it's the new last
+        [...this.items].at(-1).rest = newNode
+      );
+      lastNode.first = item;
+      lastNode.restRaw = nil;
+    }
+    return this.length;
+  }
+  reduce(callback, initialValue) {
+    return [...this].reduce(callback, initialValue);
+  }
+  reduceRight(callback, initialValue) {
+    return [...this].reduceRight(callback, initialValue);
+  }
+  reverse() {
+    throw new Error("not implemented");
+  }
+  shift() {
+    if (this.root.isNil) {
+      return void 0;
+    }
+    const value = this.root.first;
+    if (this.root.rest.isNil) {
+      new Overwriter(this.subject, this.predicate).listNode = this.root.rest;
+      this.root.firstRaw = void 0;
+      this.root.restRaw = void 0;
+    } else {
+      this.root.firstRaw = this.root.rest.firstRaw;
+      this.root.restRaw = this.root.rest.restRaw;
+    }
+    return value;
+  }
+  slice(start, end) {
+    return [...this].slice(start, end);
+  }
+  some(predicate, thisArg) {
+    return [...this].some(predicate, thisArg);
+  }
+  sort(compareFn) {
+    throw new Error("not implemented");
+  }
+  splice(start, deleteCount, ...items) {
+    throw new Error("not implemented");
+  }
+  unshift(...items) {
+    for (const item of items.reverse()) {
+      const firstNode = this.root;
+      this.root = new Overwriter(this.subject, this.predicate).listNode = new ListItem(this.subject.factory.blankNode(), this.subject.dataset, this.subject.factory, this.termAs, this.termFrom);
+      this.root.first = item;
+      this.root.rest = firstNode;
+    }
+    return this.length;
+  }
+  *values() {
+    for (const item of this.items) {
+      yield item.first;
+    }
+  }
+  get [Symbol.toStringTag]() {
+    return this.constructor.name;
+  }
+  get items() {
+    return this.root.items();
+  }
+};
+
+// node_modules/@rdfjs/wrapper/dist/errors/WrapperError.js
+var WrapperError = class extends Error {
+  /**
+   * Creates a new instance of {@link WrapperError}.
+   *
+   * @param message - A human-readable description of the error.
+   * @param cause - The specific original cause of the error.
+   */
+  constructor(message, cause) {
+    super(message);
+    this.name = this.constructor.name;
+    this.cause = cause;
+  }
+  //#region Ignore in documentation
+  /** @ignore */
+  static captureStackTrace(targetObject, constructorOpt) {
+    super.captureStackTrace(targetObject, constructorOpt);
+  }
+  /** @ignore */
+  static prepareStackTrace(err, stackTraces) {
+    super.prepareStackTrace(err, stackTraces);
+  }
+  /** @ignore */
+  static get stackTraceLimit() {
+    return super.stackTraceLimit;
+  }
+  /** @ignore */
+  static set stackTraceLimit(value) {
+    super.stackTraceLimit = value;
+  }
+};
+
+// node_modules/@rdfjs/wrapper/dist/errors/TermError.js
+var TermError = class extends WrapperError {
+  term;
+  /**
+   * Creates a new instance of {@link TermError}.
+   *
+   * @param term - The term associated with this error.
+   * @param message - A human-readable description of the error.
+   * @param cause - The specific original cause of the error.
+   */
+  constructor(term, message, cause) {
+    super(message, cause);
+    this.term = term;
+  }
+};
+
+// node_modules/@rdfjs/wrapper/dist/errors/TermTypeError.js
+var TermTypeError = class extends TermError {
+  termType;
+  /**
+   * Creates a new instance of {@link TermTypeError}.
+   *
+   * @param term - The term associated with this error.
+   * @param termType - The expected term type.
+   * @param cause - The specific original cause of the error.
+   */
+  constructor(term, termType, cause) {
+    super(term, `Term type must be ${termType} but was ${term.termType}`, cause);
+    this.termType = termType;
+  }
+};
+
+// node_modules/@rdfjs/wrapper/dist/errors/LiteralDatatypeError.js
+var LiteralDatatypeError = class extends TermError {
+  datatypes;
+  /**
+   * Creates a new instance of {@link LiteralDatatypeError}.
+   *
+   * @param literal - The literal associated with this error.
+   * @param datatypes - The expected datatypes.
+   * @param cause - The specific original cause of the error.
+   */
+  constructor(literal4, datatypes, cause) {
+    super(literal4, `Datatype must be one of ${[...datatypes].join()} but was ${literal4.datatype}`, cause);
+    this.datatypes = datatypes;
+  }
+};
+
+// node_modules/@rdfjs/wrapper/dist/errors/ListRootError.js
+var ListRootError = class extends TermError {
+  constructor(term, cause) {
+    super(term, `List root must be rdf:nil or a BlankNode but was ${term.value}`, cause);
+  }
+};
+
+// node_modules/@rdfjs/wrapper/dist/ensure.js
+function ensurePresent(object) {
+  if (object !== void 0 && object !== null) {
+    return;
+  }
+  throw new ReferenceError("Object must not be undefined or null");
+}
+function ensureIs(object, type) {
+  if (object instanceof type) {
+    return;
+  }
+  throw new TypeError(`Object must be a ${type}`);
+}
+function ensureTermType(term, type) {
+  if (term.termType === type) {
+    return;
+  }
+  throw new TermTypeError(term, type);
+}
+function ensureDatatype(term, ...datatypes) {
+  if (datatypes.includes(term.datatype.value)) {
+    return;
+  }
+  throw new LiteralDatatypeError(term, datatypes);
+}
+function ensureListRoot(term) {
+  if (term.termType === "NamedNode" && term.value === RDF2.nil) {
+    return;
+  }
+  if (term.termType === "BlankNode") {
+    return;
+  }
+  throw new ListRootError(term);
+}
+
+// node_modules/@rdfjs/wrapper/dist/mapping/TermAs.js
+var TermAs;
+(function(TermAs2) {
+  function instance(constructor) {
+    return (term2) => {
+      ensurePresent(term2);
+      ensureIs(term2, TermWrapper);
+      return new constructor(term2, term2.dataset, term2.factory);
+    };
+  }
+  TermAs2.instance = instance;
+  function is(term2) {
+    return term2;
+  }
+  TermAs2.is = is;
+  function list(subject, predicate, termAs, termFrom) {
+    return (term2) => {
+      ensurePresent(term2);
+      ensureIs(term2, TermWrapper);
+      ensureListRoot(term2);
+      return new RdfList(term2, subject, predicate, termAs, termFrom);
+    };
+  }
+  TermAs2.list = list;
+  function term(term2) {
+    return term2;
+  }
+  TermAs2.term = term;
+})(TermAs || (TermAs = {}));
+
+// node_modules/@rdfjs/wrapper/dist/vocabulary/XSD.js
+var XSD2 = {
+  anyURI: "http://www.w3.org/2001/XMLSchema#anyURI",
+  base64Binary: "http://www.w3.org/2001/XMLSchema#base64Binary",
+  boolean: "http://www.w3.org/2001/XMLSchema#boolean",
+  byte: "http://www.w3.org/2001/XMLSchema#byte",
+  date: "http://www.w3.org/2001/XMLSchema#date",
+  dateTime: "http://www.w3.org/2001/XMLSchema#dateTime",
+  decimal: "http://www.w3.org/2001/XMLSchema#decimal",
+  double: "http://www.w3.org/2001/XMLSchema#double",
+  float: "http://www.w3.org/2001/XMLSchema#float",
+  hexBinary: "http://www.w3.org/2001/XMLSchema#hexBinary",
+  int: "http://www.w3.org/2001/XMLSchema#int",
+  integer: "http://www.w3.org/2001/XMLSchema#integer",
+  long: "http://www.w3.org/2001/XMLSchema#long",
+  negativeInteger: "http://www.w3.org/2001/XMLSchema#negativeInteger",
+  nonNegativeInteger: "http://www.w3.org/2001/XMLSchema#nonNegativeInteger",
+  nonPositiveInteger: "http://www.w3.org/2001/XMLSchema#nonPositiveInteger",
+  positiveInteger: "http://www.w3.org/2001/XMLSchema#positiveInteger",
+  short: "http://www.w3.org/2001/XMLSchema#short",
+  string: "http://www.w3.org/2001/XMLSchema#string",
+  unsignedByte: "http://www.w3.org/2001/XMLSchema#unsignedByte",
+  unsignedInt: "http://www.w3.org/2001/XMLSchema#unsignedInt",
+  unsignedLong: "http://www.w3.org/2001/XMLSchema#unsignedLong",
+  unsignedShort: "http://www.w3.org/2001/XMLSchema#unsignedShort"
+};
+
+// node_modules/@rdfjs/wrapper/dist/mapping/LiteralAs.js
+var LiteralAs;
+(function(LiteralAs2) {
+  function bigint(term) {
+    ensurePresent(term);
+    ensureIs(term, TermWrapper);
+    ensureTermType(term, "Literal");
+    ensureDatatype(term, ...integerDatatypes);
+    return BigInt(term.value);
+  }
+  LiteralAs2.bigint = bigint;
+  function boolean2(term) {
+    ensurePresent(term);
+    ensureIs(term, TermWrapper);
+    ensureTermType(term, "Literal");
+    ensureDatatype(term, XSD2.boolean);
+    return term.value === "true" || term.value === "1";
+  }
+  LiteralAs2.boolean = boolean2;
+  function date2(term) {
+    ensurePresent(term);
+    ensureIs(term, TermWrapper);
+    ensureTermType(term, "Literal");
+    ensureDatatype(term, ...dateDatatypes);
+    return new Date(term.value);
+  }
+  LiteralAs2.date = date2;
+  function langString(term) {
+    ensurePresent(term);
+    ensureIs(term, TermWrapper);
+    ensureTermType(term, "Literal");
+    ensureDatatype(term, RDF2.langString);
+    return { lang: term.language, string: term.value };
+  }
+  LiteralAs2.langString = langString;
+  function number(term) {
+    ensurePresent(term);
+    ensureIs(term, TermWrapper);
+    ensureTermType(term, "Literal");
+    ensureDatatype(term, ...numericDatatypes);
+    if (term.value === "INF") {
+      return Number.POSITIVE_INFINITY;
+    }
+    if (term.value === "-INF") {
+      return Number.NEGATIVE_INFINITY;
+    }
+    if (term.value === "NaN") {
+      return Number.NaN;
+    }
+    return Number(term.value);
+  }
+  LiteralAs2.number = number;
+  function string2(term) {
+    ensurePresent(term);
+    ensureIs(term, TermWrapper);
+    return term.value;
+  }
+  LiteralAs2.string = string2;
+  function symbol(term) {
+    ensurePresent(term);
+    ensureIs(term, TermWrapper);
+    return Symbol.for(term.value);
+  }
+  LiteralAs2.symbol = symbol;
+  function uInt8Array(term) {
+    ensurePresent(term);
+    ensureIs(term, TermWrapper);
+    ensureTermType(term, "Literal");
+    ensureDatatype(term, ...byteArrayDatatypes);
+    switch (term.datatype.value) {
+      case XSD2.hexBinary:
+        return Uint8Array.from(Buffer.from(term.value, "hex"));
+      default:
+      case XSD2.base64Binary:
+        return Uint8Array.from(Buffer.from(term.value, "base64"));
+    }
+  }
+  LiteralAs2.uInt8Array = uInt8Array;
+  function url(term) {
+    ensurePresent(term);
+    ensureIs(term, TermWrapper);
+    ensureTermType(term, "Literal");
+    ensureDatatype(term, XSD2.anyURI);
+    return new URL(term.value);
+  }
+  LiteralAs2.url = url;
+  function langTuple(term) {
+    ensurePresent(term);
+    ensureIs(term, TermWrapper);
+    ensureTermType(term, "Literal");
+    ensureDatatype(term, RDF2.langString);
+    return [term.language, term.value];
+  }
+  LiteralAs2.langTuple = langTuple;
+  function datatypeTuple(term) {
+    ensurePresent(term);
+    ensureIs(term, TermWrapper);
+    ensureTermType(term, "Literal");
+    return [term.datatype.value, term.value];
+  }
+  LiteralAs2.datatypeTuple = datatypeTuple;
+})(LiteralAs || (LiteralAs = {}));
+var byteArrayDatatypes = [
+  XSD2.base64Binary,
+  XSD2.hexBinary
+];
+var integerDatatypes = [
+  XSD2.integer,
+  XSD2.nonPositiveInteger,
+  XSD2.long,
+  XSD2.nonNegativeInteger,
+  XSD2.negativeInteger,
+  XSD2.int,
+  XSD2.unsignedLong,
+  XSD2.positiveInteger,
+  XSD2.short,
+  XSD2.unsignedInt,
+  XSD2.byte,
+  XSD2.unsignedShort,
+  XSD2.unsignedByte
+];
+var numericDatatypes = integerDatatypes.concat([
+  XSD2.decimal,
+  XSD2.float,
+  XSD2.double
+]);
+var dateDatatypes = [
+  XSD2.date,
+  XSD2.dateTime
+];
+
+// node_modules/@rdfjs/wrapper/dist/mapping/LiteralFrom.js
+var LiteralFrom;
+(function(LiteralFrom2) {
+  function anyUriString(value, factory2) {
+    return factory2.literal(value, factory2.namedNode(XSD2.anyURI));
+  }
+  LiteralFrom2.anyUriString = anyUriString;
+  function anyUriUrl(value, factory2) {
+    return anyUriString(value.toString(), factory2);
+  }
+  LiteralFrom2.anyUriUrl = anyUriUrl;
+  function base64(value, factory2) {
+    return factory2.literal(value.toBase64(), factory2.namedNode(XSD2.base64Binary));
+  }
+  LiteralFrom2.base64 = base64;
+  function boolean2(value, factory2) {
+    return factory2.literal(value.toString(), factory2.namedNode(XSD2.boolean));
+  }
+  LiteralFrom2.boolean = boolean2;
+  function date2(value, factory2) {
+    return factory2.literal(value.toISOString(), factory2.namedNode(XSD2.date));
+  }
+  LiteralFrom2.date = date2;
+  function dateTime2(value, factory2) {
+    return factory2.literal(value.toISOString(), factory2.namedNode(XSD2.dateTime));
+  }
+  LiteralFrom2.dateTime = dateTime2;
+  function double2(value, factory2) {
+    return factory2.literal(value.toString(), factory2.namedNode(XSD2.double));
+  }
+  LiteralFrom2.double = double2;
+  function integer2(value, factory2) {
+    return factory2.literal(value.toString(), factory2.namedNode(XSD2.integer));
+  }
+  LiteralFrom2.integer = integer2;
+  function hex(value, factory2) {
+    return factory2.literal(value.toHex(), factory2.namedNode(XSD2.hexBinary));
+  }
+  LiteralFrom2.hex = hex;
+  function langString(value, factory2) {
+    return factory2.literal(value.string, { language: value.lang });
+  }
+  LiteralFrom2.langString = langString;
+  function string2(value, factory2) {
+    return factory2.literal(value);
+  }
+  LiteralFrom2.string = string2;
+  function langTuple([key, value], factory2) {
+    return factory2.literal(value, key);
+  }
+  LiteralFrom2.langTuple = langTuple;
+  function datatypeTuple([key, value], factory2) {
+    return factory2.literal(value, factory2.namedNode(key));
+  }
+  LiteralFrom2.datatypeTuple = datatypeTuple;
+})(LiteralFrom || (LiteralFrom = {}));
+
+// node_modules/@rdfjs/wrapper/dist/mapping/NamedNodeFrom.js
+var NamedNodeFrom;
+(function(NamedNodeFrom2) {
+  function string2(value, factory2) {
+    return factory2.namedNode(value);
+  }
+  NamedNodeFrom2.string = string2;
+  function url(value, factory2) {
+    return string2(value.toString(), factory2);
+  }
+  NamedNodeFrom2.url = url;
+})(NamedNodeFrom || (NamedNodeFrom = {}));
+
+// node_modules/@rdfjs/wrapper/dist/mapping/NamedNodeAs.js
+var NamedNodeAs;
+(function(NamedNodeAs2) {
+  function string2(term) {
+    ensurePresent(term);
+    ensureIs(term, TermWrapper);
+    ensureTermType(term, "NamedNode");
+    return term.value;
+  }
+  NamedNodeAs2.string = string2;
+  function url(term) {
+    ensurePresent(term);
+    ensureIs(term, TermWrapper);
+    ensureTermType(term, "NamedNode");
+    return new URL(term.value);
+  }
+  NamedNodeAs2.url = url;
+})(NamedNodeAs || (NamedNodeAs = {}));
+
+// node_modules/@rdfjs/wrapper/dist/mapping/BlankNodeFrom.js
+var BlankNodeFrom;
+(function(BlankNodeFrom2) {
+  function string2(value, factory2) {
+    return factory2.blankNode(value);
+  }
+  BlankNodeFrom2.string = string2;
+})(BlankNodeFrom || (BlankNodeFrom = {}));
+
+// node_modules/@rdfjs/wrapper/dist/WrappingMap.js
+var WrappingMap = class {
+  subject;
+  predicate;
+  termAs;
+  termFrom;
+  constructor(subject, predicate, termAs, termFrom) {
+    this.subject = subject;
+    this.predicate = predicate;
+    this.termAs = termAs;
+    this.termFrom = termFrom;
+  }
+  clear() {
+    for (const q3 of this.matches) {
+      this.subject.dataset.delete(q3);
+    }
+  }
+  delete(k4) {
+    const p4 = this.subject.factory.namedNode(this.predicate);
+    for (const entry of this) {
+      if (entry[0] !== k4) {
+        continue;
+      }
+      this.subject.dataset.delete(this.subject.factory.quad(this.subject, p4, this.termFrom(entry, this.subject.factory)));
+      return true;
+    }
+    return false;
+  }
+  forEach(callback, thisArg) {
+    for (const [key, value] of this) {
+      callback.call(thisArg, value, key, this);
+    }
+  }
+  get(k4) {
+    for (const [key, value] of this) {
+      if (key !== k4) {
+        continue;
+      }
+      return value;
+    }
+    return void 0;
+  }
+  has(k4) {
+    return this.get(k4) !== void 0;
+  }
+  set(k4, v5) {
+    this.delete(k4);
+    this.add(k4, v5);
+    return this;
+  }
+  get size() {
+    return [...this.matches].length;
+  }
+  set size(_3) {
+    throw new Error("not supported");
+  }
+  *entries() {
+    for (const quad4 of this.matches) {
+      yield this.termAs(new TermWrapper(quad4.object, this.subject.dataset, this.subject.factory));
+    }
+  }
+  *keys() {
+    for (const [key] of this) {
+      yield key;
+    }
+  }
+  *values() {
+    for (const [, value] of this) {
+      yield value;
+    }
+  }
+  [Symbol.iterator]() {
+    return this.entries();
+  }
+  get [Symbol.toStringTag]() {
+    return this.constructor.name;
+  }
+  get matches() {
+    const p4 = this.subject.factory.namedNode(this.predicate);
+    return this.subject.dataset.match(this.subject, p4);
+  }
+  add(k4, v5) {
+    const p4 = this.subject.factory.namedNode(this.predicate);
+    this.subject.dataset.add(this.subject.factory.quad(this.subject, p4, this.termFrom([k4, v5], this.subject.factory)));
+  }
+};
+
+// node_modules/@rdfjs/wrapper/dist/mapping/Mapping.js
+var Mapping;
+(function(Mapping2) {
+  function languageDictionary(anchor, p4, termAs, termFrom) {
+    if (termAs === void 0) {
+      throw new Error();
+    }
+    if (termFrom === void 0) {
+      throw new Error();
+    }
+    return new WrappingMap(anchor, p4, termAs, termFrom);
+  }
+  Mapping2.languageDictionary = languageDictionary;
+})(Mapping || (Mapping = {}));
+
+// node_modules/@rdfjs/wrapper/dist/WrappingSet.js
+var WrappingSet = class {
+  subject;
+  predicate;
+  termAs;
+  termFrom;
+  // TODO: Direction
+  constructor(subject, predicate, termAs, termFrom) {
+    this.subject = subject;
+    this.predicate = predicate;
+    this.termAs = termAs;
+    this.termFrom = termFrom;
+  }
+  add(value) {
+    this.subject.dataset.add(this.quad(value));
+    return this;
+  }
+  clear() {
+    for (const q3 of this.matches) {
+      this.subject.dataset.delete(q3);
+    }
+  }
+  delete(value) {
+    if (!this.has(value)) {
+      return false;
+    }
+    const o6 = this.termFrom(value, this.subject.factory);
+    const p4 = this.subject.factory.namedNode(this.predicate);
+    for (const q3 of this.subject.dataset.match(this.subject, p4, o6)) {
+      this.subject.dataset.delete(q3);
+    }
+    return true;
+  }
+  forEach(cb, thisArg) {
+    for (const item of this) {
+      cb.call(thisArg, item, item, this);
+    }
+  }
+  has(value) {
+    return this.subject.dataset.has(this.quad(value));
+  }
+  get size() {
+    return this.matches.size;
+  }
+  [Symbol.iterator]() {
+    return this.values();
+  }
+  *entries() {
+    for (const v5 of this) {
+      yield [v5, v5];
+    }
+  }
+  keys() {
+    return this.values();
+  }
+  *values() {
+    for (const q3 of this.matches) {
+      yield this.termAs(new TermWrapper(q3.object, this.subject.dataset, this.subject.factory));
+    }
+  }
+  get [Symbol.toStringTag]() {
+    return this.constructor.name;
+  }
+  quad(value) {
+    const s4 = this.subject;
+    const p4 = this.subject.factory.namedNode(this.predicate);
+    const o6 = this.termFrom(value, this.subject.factory);
+    const q3 = this.subject.factory.quad(s4, p4, o6);
+    return q3;
+  }
+  get matches() {
+    const p4 = this.subject.factory.namedNode(this.predicate);
+    return this.subject.dataset.match(this.subject, p4);
+  }
+};
+
+// node_modules/@rdfjs/wrapper/dist/mapping/SetFrom.js
+var SetFrom;
+(function(SetFrom2) {
+  function subjectPredicate(anchor, p4, termAs, termFrom) {
+    if (termAs === void 0) {
+      throw new Error();
+    }
+    if (termFrom === void 0) {
+      throw new Error();
+    }
+    return new WrappingSet(anchor, p4, termAs, termFrom);
+  }
+  SetFrom2.subjectPredicate = subjectPredicate;
+})(SetFrom || (SetFrom = {}));
+
+// node_modules/@jeswr/solid-chat-interop/node_modules/n3/src/IRIs.js
+var RDF3 = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
+var XSD3 = "http://www.w3.org/2001/XMLSchema#";
+var SWAP2 = "http://www.w3.org/2000/10/swap/";
+var IRIs_default2 = {
+  xsd: {
+    decimal: `${XSD3}decimal`,
+    boolean: `${XSD3}boolean`,
+    double: `${XSD3}double`,
+    integer: `${XSD3}integer`,
+    string: `${XSD3}string`
+  },
+  rdf: {
+    type: `${RDF3}type`,
+    nil: `${RDF3}nil`,
+    first: `${RDF3}first`,
+    rest: `${RDF3}rest`,
+    langString: `${RDF3}langString`,
+    dirLangString: `${RDF3}dirLangString`,
+    reifies: `${RDF3}reifies`
+  },
+  owl: {
+    sameAs: "http://www.w3.org/2002/07/owl#sameAs"
+  },
+  r: {
+    forSome: `${SWAP2}reify#forSome`,
+    forAll: `${SWAP2}reify#forAll`
+  },
+  log: {
+    implies: `${SWAP2}log#implies`,
+    isImpliedBy: `${SWAP2}log#isImpliedBy`
+  }
+};
+
+// node_modules/@jeswr/solid-chat-interop/node_modules/n3/src/N3DataFactory.js
+var { rdf: rdf4, xsd: xsd6 } = IRIs_default2;
+var DEFAULTGRAPH3;
+var _blankNodeCounter2 = 0;
+var DataFactory3 = {
+  namedNode: namedNode4,
+  blankNode: blankNode3,
+  variable: variable3,
+  literal: literal3,
+  defaultGraph: defaultGraph3,
+  quad: quad3,
+  triple: quad3,
+  fromTerm: fromTerm3,
+  fromQuad: fromQuad2
+};
+var N3DataFactory_default2 = DataFactory3;
+var Term2 = class _Term {
+  constructor(id) {
+    this.id = id;
+  }
+  // ### The value of this term
+  get value() {
+    return this.id;
+  }
+  // ### Returns whether this object represents the same term as the other
+  equals(other) {
+    if (other instanceof _Term)
+      return this.id === other.id;
+    return !!other && this.termType === other.termType && this.value === other.value;
+  }
+  // ### Implement hashCode for Immutable.js, since we implement `equals`
+  // https://immutable-js.com/docs/v4.0.0/ValueObject/#hashCode()
+  hashCode() {
+    return 0;
+  }
+  // ### Returns a plain object representation of this term
+  toJSON() {
+    return {
+      termType: this.termType,
+      value: this.value
+    };
+  }
+};
+var NamedNode3 = class extends Term2 {
+  // ### The term type of this term
+  get termType() {
+    return "NamedNode";
+  }
+};
+var Literal3 = class _Literal extends Term2 {
+  // ### The term type of this term
+  get termType() {
+    return "Literal";
+  }
+  // ### The text value of this literal
+  get value() {
+    return this.id.substring(1, this.id.lastIndexOf('"'));
+  }
+  // ### The language of this literal
+  get language() {
+    const id = this.id;
+    let atPos = id.lastIndexOf('"') + 1;
+    const dirPos = id.lastIndexOf("--");
+    return atPos < id.length && id[atPos++] === "@" ? (dirPos > atPos ? id.substr(0, dirPos) : id).substr(atPos).toLowerCase() : "";
+  }
+  // ### The direction of this literal
+  get direction() {
+    const id = this.id;
+    const endPos = id.lastIndexOf('"');
+    const dirPos = id.lastIndexOf("--");
+    return dirPos > endPos && dirPos + 2 < id.length ? id.substr(dirPos + 2).toLowerCase() : "";
+  }
+  // ### The datatype IRI of this literal
+  get datatype() {
+    return new NamedNode3(this.datatypeString);
+  }
+  // ### The datatype string of this literal
+  get datatypeString() {
+    const id = this.id, dtPos = id.lastIndexOf('"') + 1;
+    const char = dtPos < id.length ? id[dtPos] : "";
+    return char === "^" ? id.substr(dtPos + 2) : (
+      // If "@" follows, return rdf:langString or rdf:dirLangString; xsd:string otherwise
+      char !== "@" ? xsd6.string : id.indexOf("--", dtPos) > 0 ? rdf4.dirLangString : rdf4.langString
+    );
+  }
+  // ### Returns whether this object represents the same term as the other
+  equals(other) {
+    if (other instanceof _Literal)
+      return this.id === other.id;
+    return !!other && !!other.datatype && this.termType === other.termType && this.value === other.value && this.language === other.language && (this.direction === other.direction || this.direction === "" && !other.direction) && this.datatype.value === other.datatype.value;
+  }
+  toJSON() {
+    return {
+      termType: this.termType,
+      value: this.value,
+      language: this.language,
+      direction: this.direction,
+      datatype: { termType: "NamedNode", value: this.datatypeString }
+    };
+  }
+};
+var BlankNode3 = class extends Term2 {
+  constructor(name) {
+    super(`_:${name}`);
+  }
+  // ### The term type of this term
+  get termType() {
+    return "BlankNode";
+  }
+  // ### The name of this blank node
+  get value() {
+    return this.id.substr(2);
+  }
+};
+var Variable3 = class extends Term2 {
+  constructor(name) {
+    super(`?${name}`);
+  }
+  // ### The term type of this term
+  get termType() {
+    return "Variable";
+  }
+  // ### The name of this variable
+  get value() {
+    return this.id.substr(1);
+  }
+};
+var DefaultGraph3 = class extends Term2 {
+  constructor() {
+    super("");
+    return DEFAULTGRAPH3 || this;
+  }
+  // ### The term type of this term
+  get termType() {
+    return "DefaultGraph";
+  }
+  // ### Returns whether this object represents the same term as the other
+  equals(other) {
+    return this === other || !!other && this.termType === other.termType;
+  }
+};
+DEFAULTGRAPH3 = new DefaultGraph3();
+var Quad3 = class extends Term2 {
+  constructor(subject, predicate, object, graph) {
+    super("");
+    this._subject = subject;
+    this._predicate = predicate;
+    this._object = object;
+    this._graph = graph || DEFAULTGRAPH3;
+  }
+  // ### The term type of this term
+  get termType() {
+    return "Quad";
+  }
+  get subject() {
+    return this._subject;
+  }
+  get predicate() {
+    return this._predicate;
+  }
+  get object() {
+    return this._object;
+  }
+  get graph() {
+    return this._graph;
+  }
+  // ### Returns a plain object representation of this quad
+  toJSON() {
+    return {
+      termType: this.termType,
+      subject: this._subject.toJSON(),
+      predicate: this._predicate.toJSON(),
+      object: this._object.toJSON(),
+      graph: this._graph.toJSON()
+    };
+  }
+  // ### Returns whether this object represents the same quad as the other
+  equals(other) {
+    return !!other && this._subject.equals(other.subject) && this._predicate.equals(other.predicate) && this._object.equals(other.object) && this._graph.equals(other.graph);
+  }
+};
+function namedNode4(iri) {
+  return new NamedNode3(iri);
+}
+function blankNode3(name) {
+  return new BlankNode3(name || `n3-${_blankNodeCounter2++}`);
+}
+function literal3(value, languageOrDataType) {
+  if (typeof languageOrDataType === "string")
+    return new Literal3(`"${value}"@${languageOrDataType.toLowerCase()}`);
+  if (languageOrDataType !== void 0 && !("termType" in languageOrDataType)) {
+    return new Literal3(`"${value}"@${languageOrDataType.language.toLowerCase()}${languageOrDataType.direction ? `--${languageOrDataType.direction.toLowerCase()}` : ""}`);
+  }
+  let datatype = languageOrDataType ? languageOrDataType.value : "";
+  if (datatype === "") {
+    if (typeof value === "boolean")
+      datatype = xsd6.boolean;
+    else if (typeof value === "number") {
+      if (Number.isFinite(value))
+        datatype = Number.isInteger(value) ? xsd6.integer : xsd6.double;
+      else {
+        datatype = xsd6.double;
+        if (!Number.isNaN(value))
+          value = value > 0 ? "INF" : "-INF";
+      }
+    }
+  }
+  return datatype === "" || datatype === xsd6.string ? new Literal3(`"${value}"`) : new Literal3(`"${value}"^^${datatype}`);
+}
+function variable3(name) {
+  return new Variable3(name);
+}
+function defaultGraph3() {
+  return DEFAULTGRAPH3;
+}
+function quad3(subject, predicate, object, graph) {
+  return new Quad3(subject, predicate, object, graph);
+}
+function fromTerm3(term) {
+  if (term instanceof Term2)
+    return term;
+  switch (term.termType) {
+    case "NamedNode":
+      return namedNode4(term.value);
+    case "BlankNode":
+      return blankNode3(term.value);
+    case "Variable":
+      return variable3(term.value);
+    case "DefaultGraph":
+      return DEFAULTGRAPH3;
+    case "Literal":
+      return literal3(term.value, term.language || term.datatype);
+    case "Quad":
+      return fromQuad2(term);
+    default:
+      throw new Error(`Unexpected termType: ${term.termType}`);
+  }
+}
+function fromQuad2(inQuad) {
+  if (inQuad instanceof Quad3)
+    return inQuad;
+  if (inQuad.termType !== "Quad")
+    throw new Error(`Unexpected termType: ${inQuad.termType}`);
+  return quad3(fromTerm3(inQuad.subject), fromTerm3(inQuad.predicate), fromTerm3(inQuad.object), fromTerm3(inQuad.graph));
+}
+
+// node_modules/@jeswr/solid-chat-interop/dist/iri.js
+function isHttpIri(value) {
+  if (!value)
+    return false;
+  try {
+    const u3 = new URL(value);
+    return u3.protocol === "http:" || u3.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+function httpIriOrUndefined(value) {
+  return isHttpIri(value) ? value : void 0;
+}
+function toIsoOrUndefined(d4) {
+  return d4 !== void 0 && !Number.isNaN(d4.getTime()) ? d4.toISOString() : void 0;
+}
+function tryRead(read) {
+  try {
+    return read();
+  } catch {
+    return void 0;
+  }
+}
+function readIsoDate(read) {
+  return toIsoOrUndefined(tryRead(read));
+}
+
+// node_modules/@jeswr/solid-task-model/dist/vocab.js
+var WF = "http://www.w3.org/2005/01/wf/flow#";
+var DCT = "http://purl.org/dc/terms/";
+var RDF4 = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
+var SCHEMA = "http://schema.org/";
+var PROV = "http://www.w3.org/ns/prov#";
+var VCARD = "http://www.w3.org/2006/vcard/ns#";
+var wf = (local) => `${WF}${local}`;
+var dct = (local) => `${DCT}${local}`;
+var rdf5 = (local) => `${RDF4}${local}`;
+var schema = (local) => `${SCHEMA}${local}`;
+var prov = (local) => `${PROV}${local}`;
+var vcard = (local) => `${VCARD}${local}`;
+var TASK_CLASS2 = wf("Task");
+var WF_OPEN = wf("Open");
+var WF_CLOSED = wf("Closed");
+var RDF_TYPE3 = rdf5("type");
+var WF_TRACKER = wf("Tracker");
+var WF_ISSUE_CLASS = wf("issueClass");
+var WF_ISSUE_CATEGORY = wf("issueCategory");
+var WF_STATE = wf("State");
+var WF_INITIAL_STATE = wf("initialState");
+var WF_ALLOWED_TRANS = wf("allowedTransitions");
+var WF_STATE_STORE = wf("stateStore");
+var WF_ASSIGNEE_GROUP = wf("assigneeGroup");
+var VCARD_ADDRESS_BOOK2 = vcard("AddressBook");
+var VCARD_NAME_EMAIL_INDEX = vcard("nameEmailIndex");
+var VCARD_GROUP_INDEX = vcard("groupIndex");
+var VCARD_IN_ADDRESS_BOOK = vcard("inAddressBook");
+var VCARD_INCLUDES_GROUP = vcard("includesGroup");
+var VCARD_INDIVIDUAL2 = vcard("Individual");
+var VCARD_GROUP = vcard("Group");
+var VCARD_FN = vcard("fn");
+var VCARD_HAS_EMAIL = vcard("hasEmail");
+var VCARD_HAS_TELEPHONE = vcard("hasTelephone");
+var VCARD_HAS_UID = vcard("hasUID");
+var VCARD_URL = vcard("url");
+var VCARD_NOTE = vcard("note");
+var VCARD_ORGANIZATION_NAME = vcard("organization-name");
+var VCARD_VALUE = vcard("value");
+var VCARD_HAS_MEMBER = vcard("hasMember");
+var VCARD_HOME = vcard("Home");
+var VCARD_CELL = vcard("Cell");
+var VCARD_WEB_ID = vcard("WebId");
+
+// node_modules/@jeswr/solid-chat-interop/dist/vocab.js
+var AS = "https://www.w3.org/ns/activitystreams#";
+var PC = "https://w3id.org/jeswr/pod-chat#";
+var SIOC = "http://rdfs.org/sioc/ns#";
+var FOAF = "http://xmlns.com/foaf/0.1/";
+var DCT2 = "http://purl.org/dc/terms/";
+var SCHEMA2 = "http://schema.org/";
+var PROV2 = "http://www.w3.org/ns/prov#";
+var MEETING = "http://www.w3.org/ns/pim/meeting#";
+var WF2 = "http://www.w3.org/2005/01/wf/flow#";
+var RDF5 = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
+var RDF_TYPE4 = `${RDF5}type`;
+var AS_NOTE2 = `${AS}Note`;
+var AS_COLLECTION = `${AS}Collection`;
+var AS_PERSON = `${AS}Person`;
+var AS_CONTENT = `${AS}content`;
+var AS_MEDIA_TYPE = `${AS}mediaType`;
+var AS_ATTRIBUTED_TO = `${AS}attributedTo`;
+var AS_PUBLISHED = `${AS}published`;
+var AS_CONTEXT = `${AS}context`;
+var AS_IN_REPLY_TO = `${AS}inReplyTo`;
+var AS_ITEMS = `${AS}items`;
+var AS_NAME = `${AS}name`;
+var PC_CHAT_ROOM = `${PC}ChatRoom`;
+var SIOC_NOTE = `${SIOC}Note`;
+var SIOC_CONTENT = `${SIOC}content`;
+var SIOC_HAS_REPLY = `${SIOC}has_reply`;
+var FOAF_MAKER = `${FOAF}maker`;
+var MEETING_LONG_CHAT = `${MEETING}LongChat`;
+var SCHEMA_MESSAGE = `${SCHEMA2}Message`;
+var SCHEMA_DATE_DELETED = `${SCHEMA2}dateDeleted`;
+var DCT_CREATED = `${DCT2}created`;
+var DCT_CREATOR = `${DCT2}creator`;
+var DCT_TITLE = `${DCT2}title`;
+var DCT_IS_REPLACED_BY = `${DCT2}isReplacedBy`;
+var PROV_WAS_ATTRIBUTED_TO = `${PROV2}wasAttributedTo`;
+var PROV_WAS_GENERATED_BY = `${PROV2}wasGeneratedBy`;
+var PROV_WAS_DERIVED_FROM = `${PROV2}wasDerivedFrom`;
+var WF_ASSIGNEE = `${WF2}assignee`;
+var DEFAULT_MEDIA_TYPE = "text/plain";
+
+// node_modules/@jeswr/solid-chat-interop/dist/as2.js
+var As2MessageDoc = class extends TermWrapper {
+  get types() {
+    return SetFrom.subjectPredicate(this, RDF_TYPE4, NamedNodeAs.string, NamedNodeFrom.string);
+  }
+  /** Stamp the subject as an `as:Note`. */
+  markNote() {
+    this.types.add(AS_NOTE2);
+    return this;
+  }
+  get content() {
+    return OptionalFrom.subjectPredicate(this, AS_CONTENT, LiteralAs.string);
+  }
+  set content(v5) {
+    OptionalAs.object(this, AS_CONTENT, v5, LiteralFrom.string);
+  }
+  get mediaType() {
+    return OptionalFrom.subjectPredicate(this, AS_MEDIA_TYPE, LiteralAs.string);
+  }
+  set mediaType(v5) {
+    OptionalAs.object(this, AS_MEDIA_TYPE, v5, LiteralFrom.string);
+  }
+  get author() {
+    return OptionalFrom.subjectPredicate(this, AS_ATTRIBUTED_TO, NamedNodeAs.string);
+  }
+  set author(v5) {
+    OptionalAs.object(this, AS_ATTRIBUTED_TO, v5, NamedNodeFrom.string);
+  }
+  get published() {
+    return OptionalFrom.subjectPredicate(this, AS_PUBLISHED, LiteralAs.date);
+  }
+  set published(v5) {
+    OptionalAs.object(this, AS_PUBLISHED, v5, LiteralFrom.dateTime);
+  }
+  get room() {
+    return OptionalFrom.subjectPredicate(this, AS_CONTEXT, NamedNodeAs.string);
+  }
+  set room(v5) {
+    OptionalAs.object(this, AS_CONTEXT, v5, NamedNodeFrom.string);
+  }
+  get inReplyTo() {
+    return OptionalFrom.subjectPredicate(this, AS_IN_REPLY_TO, NamedNodeAs.string);
+  }
+  set inReplyTo(v5) {
+    OptionalAs.object(this, AS_IN_REPLY_TO, v5, NamedNodeFrom.string);
+  }
+  get replacedBy() {
+    return OptionalFrom.subjectPredicate(this, DCT_IS_REPLACED_BY, NamedNodeAs.string);
+  }
+  set replacedBy(v5) {
+    OptionalAs.object(this, DCT_IS_REPLACED_BY, v5, NamedNodeFrom.string);
+  }
+  get deletedAt() {
+    return OptionalFrom.subjectPredicate(this, SCHEMA_DATE_DELETED, LiteralAs.date);
+  }
+  set deletedAt(v5) {
+    OptionalAs.object(this, SCHEMA_DATE_DELETED, v5, LiteralFrom.dateTime);
+  }
+  // --- PROV-O provenance (AI / external-source attribution) ---
+  get provAttributedTo() {
+    return OptionalFrom.subjectPredicate(this, PROV_WAS_ATTRIBUTED_TO, NamedNodeAs.string);
+  }
+  set provAttributedTo(v5) {
+    OptionalAs.object(this, PROV_WAS_ATTRIBUTED_TO, v5, NamedNodeFrom.string);
+  }
+  get provGeneratedBy() {
+    return OptionalFrom.subjectPredicate(this, PROV_WAS_GENERATED_BY, NamedNodeAs.string);
+  }
+  set provGeneratedBy(v5) {
+    OptionalAs.object(this, PROV_WAS_GENERATED_BY, v5, NamedNodeFrom.string);
+  }
+  get provDerivedFrom() {
+    return OptionalFrom.subjectPredicate(this, PROV_WAS_DERIVED_FROM, NamedNodeAs.string);
+  }
+  set provDerivedFrom(v5) {
+    OptionalAs.object(this, PROV_WAS_DERIVED_FROM, v5, NamedNodeFrom.string);
+  }
+  // --- wf:Task overlay (the actionable facet, identical to pod-chat) ---
+  get taskTitle() {
+    return OptionalFrom.subjectPredicate(this, DCT_TITLE, LiteralAs.string);
+  }
+  set taskTitle(v5) {
+    OptionalAs.object(this, DCT_TITLE, v5, LiteralFrom.string);
+  }
+  get assignee() {
+    return OptionalFrom.subjectPredicate(this, WF_ASSIGNEE, NamedNodeAs.string);
+  }
+  set assignee(v5) {
+    OptionalAs.object(this, WF_ASSIGNEE, v5, NamedNodeFrom.string);
+  }
+};
+function readTypeSet(subject, dataset2) {
+  const types = /* @__PURE__ */ new Set();
+  for (const q3 of dataset2.match(N3DataFactory_default2.namedNode(subject), N3DataFactory_default2.namedNode(RDF_TYPE4), null)) {
+    if (q3.object.termType === "NamedNode")
+      types.add(q3.object.value);
+  }
+  return types;
+}
+function readTask(doc, types) {
+  if (!types.has(TASK_CLASS2))
+    return void 0;
+  const state = types.has(WF_CLOSED) ? "closed" : "open";
+  const task = { state };
+  const title = tryRead(() => doc.taskTitle);
+  if (title !== void 0)
+    task.title = title;
+  const assignee = httpIriOrUndefined(tryRead(() => doc.assignee));
+  if (assignee !== void 0)
+    task.assignee = assignee;
+  return task;
+}
+function readProvenance(doc) {
+  const attributedTo = httpIriOrUndefined(tryRead(() => doc.provAttributedTo));
+  const generatedBy = httpIriOrUndefined(tryRead(() => doc.provGeneratedBy));
+  const derivedFrom = httpIriOrUndefined(tryRead(() => doc.provDerivedFrom));
+  if (attributedTo === void 0 && generatedBy === void 0 && derivedFrom === void 0) {
+    return void 0;
+  }
+  const prov2 = {};
+  if (attributedTo !== void 0)
+    prov2.attributedTo = attributedTo;
+  if (generatedBy !== void 0)
+    prov2.generatedBy = generatedBy;
+  if (derivedFrom !== void 0)
+    prov2.derivedFrom = derivedFrom;
+  return prov2;
+}
+function parseAs2Message(subject, dataset2) {
+  const doc = new As2MessageDoc(subject, dataset2, N3DataFactory_default2);
+  const types = readTypeSet(subject, dataset2);
+  if (!types.has(AS_NOTE2))
+    return void 0;
+  const msg = {
+    id: subject,
+    content: tryRead(() => doc.content) ?? "",
+    mediaType: tryRead(() => doc.mediaType) ?? DEFAULT_MEDIA_TYPE
+  };
+  const author = httpIriOrUndefined(tryRead(() => doc.author));
+  if (author !== void 0)
+    msg.author = author;
+  const published = readIsoDate(() => doc.published);
+  if (published !== void 0)
+    msg.published = published;
+  const room = httpIriOrUndefined(tryRead(() => doc.room));
+  if (room !== void 0)
+    msg.room = room;
+  const inReplyTo = httpIriOrUndefined(tryRead(() => doc.inReplyTo));
+  if (inReplyTo !== void 0)
+    msg.inReplyTo = inReplyTo;
+  const replacedBy = httpIriOrUndefined(tryRead(() => doc.replacedBy));
+  if (replacedBy !== void 0)
+    msg.replacedBy = replacedBy;
+  const deletedAt = readIsoDate(() => doc.deletedAt);
+  if (deletedAt !== void 0)
+    msg.deletedAt = deletedAt;
+  const provenance = readProvenance(doc);
+  if (provenance !== void 0)
+    msg.provenance = provenance;
+  const task = readTask(doc, types);
+  if (task !== void 0)
+    msg.task = task;
+  return msg;
+}
+
+// src/components/message-list.ts
+var JeswrMessageList = class extends AbstractReadElement {
+  async loadFrom(controller, src, publicRead) {
+    const result = await controller.read(src, publicRead ? { public: true } : {});
+    return { graph: result.dataset ?? new N3Store(), baseUrl: result.url };
+  }
+  renderReady(graph) {
+    const messages = collectMessages(graph);
+    if (messages.length === 0) {
+      return b2`<slot name="empty"><p part="empty">No messages.</p></slot>`;
+    }
+    return b2`
+      <ul part="list">
+        ${messages.map((m3) => this.#renderMessage(m3))}
+      </ul>
+    `;
+  }
+  #renderMessage(message) {
+    const authorHref = safeHref(message.author);
+    const time2 = formatDateTime(message.published);
+    return b2`
+      <li part="message">
+        ${message.author ? authorHref ? b2`<a part="author" href=${authorHref} rel="noopener noreferrer"
+                  >${message.author}</a
+                >` : b2`<span part="author">${message.author}</span>` : null}
+        ${time2 ? b2`<time part="time" datetime=${message.published ?? ""}>${time2}</time>` : null}
+        <!-- The message body is untrusted: Lit text interpolation escapes it (no
+             unsafeHTML), so script/markup in the body renders as inert TEXT. -->
+        <p part="content">${message.content}</p>
+        ${message.inReplyTo ? b2`<small part="reply">In reply to a message</small>` : null}
+      </li>
+    `;
+  }
+};
+function collectMessages(graph) {
+  const seen = /* @__PURE__ */ new Set();
+  const out = [];
+  for (const quad4 of graph.getQuads(null, N3DataFactory_default.namedNode(RDF_TYPE), null, null)) {
+    if (quad4.object.value !== AS_NOTE) continue;
+    const subject = quad4.subject.value;
+    if (seen.has(subject)) continue;
+    seen.add(subject);
+    const message = parseAs2Message(subject, graph);
+    if (message === void 0) continue;
+    out.push(message);
+  }
+  return out;
+}
+function formatDateTime(iso) {
+  if (!iso) return "";
+  const date2 = new Date(iso);
+  if (Number.isNaN(date2.getTime())) return "";
+  try {
+    return date2.toLocaleString();
+  } catch {
+    return "";
+  }
+}
+if (!customElements.get("jeswr-message-list")) {
+  customElements.define("jeswr-message-list", JeswrMessageList);
 }
 
 // src/components/shacl-form-edit.ts
@@ -11359,11 +13086,11 @@ function defaultBaseFor(resourceUrl) {
     return resourceUrl;
   }
 }
-var RDF_TYPE2 = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
-function findEditedSubject(formGraph, typeIri, conventional, namedNode4) {
-  const rdfType = namedNode4(RDF_TYPE2);
-  const typeNode = namedNode4(typeIri);
-  if (formGraph.getQuads(namedNode4(conventional), rdfType, typeNode, null).length > 0) {
+var RDF_TYPE5 = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+function findEditedSubject(formGraph, typeIri, conventional, namedNode5) {
+  const rdfType = namedNode5(RDF_TYPE5);
+  const typeNode = namedNode5(typeIri);
+  if (formGraph.getQuads(namedNode5(conventional), rdfType, typeNode, null).length > 0) {
     return conventional;
   }
   for (const q3 of formGraph.getQuads(null, rdfType, typeNode, null)) {
@@ -11372,1104 +13099,8 @@ function findEditedSubject(formGraph, typeIri, conventional, namedNode4) {
   return conventional;
 }
 
-// node_modules/@rdfjs/wrapper/dist/TermWrapper.js
-var TermWrapper = class {
-  original;
-  _dataset;
-  _factory;
-  constructor(term, dataset2, factory2) {
-    this.original = typeof term === "string" ? factory2.namedNode(term) : term;
-    this._dataset = dataset2;
-    this._factory = factory2;
-  }
-  /**
-   * The dataset that contains this term.
-   *
-   * This accessor provides access to the underlying RDF graph that is the containing context of a node mapped to JavaScript by instances of this class.
-   *
-   * @remarks
-   * RDF/JS, like many other RDF frameworks, keeps terms and datasets separate. This means that terms do not hold a reference to a dataset they reside in (or were found in). This, in turn, means that a dataset must always be available, separate from the term, if either changes to the underlying data or further traversal of the underlying data is called for. In an object-oriented context however, where property chaining is idiomatic (i.e. `instance.property1.property2`), there is no way to supply the dataset when dereferencing a link in the chain.
-   *
-   * This property solves the problem by keeping a reference to the dataset.
-   *
-   * @exmaple
-   * Using the dataset to modify information related to this node in the underlying data:
-   * ```ts
-   * class Book extends TermWrapper {
-   *   set author(value: string) {
-   *     const subject = this as Quad_Subject
-   *     const predicate = this.factory.namedNode("http://example.com/author")
-   *     const object = this.factory.literal(value)
-   *     const oldAuthors = this.factory.quad(subject, predicate)
-   *     const newAuthor = this.factory.quad(subject, predicate, object)
-   *
-   *     this.dataset.delete(oldAuthors)
-   *     this.dataset.add(newAuthor)
-   *   }
-   * }
-   * ```
-   * Note: The above example operates on a low level to explain this property. Library users are more likely to interact with {@link OptionalAs}, {@link RequiredAs} and {@link LiteralFrom} for a better experience.
-   *
-   * @exmaple
-   * Using the dataset to modify data related to this node in the underlying data:
-   * ```ts
-   * class Container extends TermWrapper {
-   *   add(something: string) {
-   *     const subject = this as Quad_Subject
-   *     const predicate = this.factory.namedNode("http://example.com/contains")
-   *     const object = this.factory.literal(something)
-   *     const quad = this.factory.quad(subject, predicate, object)
-   *
-   *     this.dataset.add(quad)
-   *   }
-   * }
-   * ```
-   */
-  get dataset() {
-    return this._dataset;
-  }
-  /**
-   * The data factory this instance was instantiated with. A collection of methods that can be used to create terms by this or subsequent wrappers.
-   *
-   * @exmaple
-   * Using the factory to create a literal term from the current date and time:
-   * ```ts
-   * class Calendar extends TermWrapper {
-   *   get currentDate(): Literal {
-   *     const date = new Date().toISOString()
-   *     const xsdDateTime = this.factory.namedNode("http://www.w3.org/2001/XMLSchema#dateTime")
-   *
-   *     return this.factory.literal(date, xsdDateTime)
-   *   }
-   * }
-   * ```
-   *
-   * @exmaple
-   * Using the factory to create a quad:
-   * ```ts
-   * class Container extends TermWrapper {
-   *   add(something: string) {
-   *     const subject = this as Quad_Subject
-   *     const predicate = this.factory.namedNode("http://example.com/contains")
-   *     const object = this.factory.literal(something)
-   *     const quad = this.factory.quad(subject, predicate, object)
-   *
-   *     this.dataset.add(quad)
-   *   }
-   * }
-   * ```
-   */
-  get factory() {
-    return this._factory;
-  }
-  /**
-   * The well-known property containing a string that represents the type of this object.
-   */
-  get [Symbol.toStringTag]() {
-    return this.constructor.name;
-  }
-  //#region Implementation of RDF/JS Term
-  get termType() {
-    return this.original.termType;
-  }
-  get value() {
-    return this.original.value;
-  }
-  equals(other) {
-    return this.original.equals(other);
-  }
-  //#region Implementation of RDF/JS Literal
-  get language() {
-    return this.original.language;
-  }
-  get direction() {
-    return this.original.direction;
-  }
-  get datatype() {
-    return this.original.datatype;
-  }
-  //#endregion
-  //#region Implementation of RDF/JS Quad
-  get subject() {
-    return this.original.subject;
-  }
-  get predicate() {
-    return this.original.predicate;
-  }
-  get object() {
-    return this.original.object;
-  }
-  get graph() {
-    return this.original.graph;
-  }
-};
-
-// node_modules/@rdfjs/wrapper/dist/IndexerInterceptor.js
-var IndexerInterceptor = class {
-  get(target, property, receiver) {
-    if (notNumeric(property)) {
-      return Reflect.get(target, property, receiver);
-    }
-    return target.at(Number.parseInt(property));
-  }
-  set(target, property, value, receiver) {
-    if (notNumeric(property)) {
-      return Reflect.set(target, property, value, receiver);
-    }
-    const i5 = Number.parseInt(property);
-    target.fill(value, i5, i5 + 1);
-    return true;
-  }
-  deleteProperty(target, property) {
-    if (notNumeric(property)) {
-      return Reflect.deleteProperty(target, property);
-    }
-    return false;
-  }
-};
-function notNumeric(property) {
-  return typeof property === "symbol" || isNaN(parseInt(property));
-}
-
-// node_modules/@rdfjs/wrapper/dist/vocabulary/RDF.js
-var RDF2 = {
-  langString: "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString",
-  type: "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
-  first: "http://www.w3.org/1999/02/22-rdf-syntax-ns#first",
-  rest: "http://www.w3.org/1999/02/22-rdf-syntax-ns#rest",
-  nil: "http://www.w3.org/1999/02/22-rdf-syntax-ns#nil"
-};
-
-// node_modules/@rdfjs/wrapper/dist/mapping/TermFrom.js
-var TermFrom;
-(function(TermFrom2) {
-  function instance(value, factory2) {
-    return itself(value, factory2);
-  }
-  TermFrom2.instance = instance;
-  function itself(value, _3) {
-    return value;
-  }
-  TermFrom2.itself = itself;
-})(TermFrom || (TermFrom = {}));
-
-// node_modules/@rdfjs/wrapper/dist/mapping/RequiredFrom.js
-var RequiredFrom;
-(function(RequiredFrom2) {
-  function subjectPredicate(anchor1, p4, termAs) {
-    if (termAs === void 0) {
-      throw new Error();
-    }
-    const anchor2 = anchor1.factory.namedNode(p4);
-    const matches = anchor1.dataset.match(anchor1, anchor2)[Symbol.iterator]();
-    const { value: first, done: none } = matches.next();
-    if (none) {
-      throw new Error(`No value found for predicate ${p4} on term ${anchor1.value}`);
-    }
-    if (!matches.next().done) {
-      throw new Error(`More than one value for predicate ${p4} on term ${anchor1.value}`);
-    }
-    return termAs(new TermWrapper(first.object, anchor1.dataset, anchor1.factory));
-  }
-  RequiredFrom2.subjectPredicate = subjectPredicate;
-})(RequiredFrom || (RequiredFrom = {}));
-
-// node_modules/@rdfjs/wrapper/dist/mapping/OptionalFrom.js
-var OptionalFrom;
-(function(OptionalFrom2) {
-  function subjectPredicate(anchor, p4, termAs) {
-    if (termAs === void 0) {
-      throw new Error();
-    }
-    const predicate = anchor.factory.namedNode(p4);
-    for (const q3 of anchor.dataset.match(anchor, predicate)) {
-      return termAs(new TermWrapper(q3.object, anchor.dataset, anchor.factory));
-    }
-    return void 0;
-  }
-  OptionalFrom2.subjectPredicate = subjectPredicate;
-})(OptionalFrom || (OptionalFrom = {}));
-
-// node_modules/@rdfjs/wrapper/dist/mapping/OptionalAs.js
-var OptionalAs;
-(function(OptionalAs2) {
-  function object(anchor, p4, value, termFrom) {
-    if (termFrom === void 0) {
-      throw new Error();
-    }
-    const predicate = anchor.factory.namedNode(p4);
-    for (const q4 of anchor.dataset.match(anchor, predicate)) {
-      anchor.dataset.delete(q4);
-    }
-    if (value === void 0) {
-      return;
-    }
-    if (!isQuadSubject(anchor)) {
-      return;
-    }
-    const o6 = termFrom(value, anchor.factory);
-    if (o6 === void 0) {
-      return;
-    }
-    if (!isQuadObject(o6)) {
-      return;
-    }
-    const q3 = anchor.factory.quad(anchor, predicate, o6);
-    anchor.dataset.add(q3);
-  }
-  OptionalAs2.object = object;
-})(OptionalAs || (OptionalAs = {}));
-function isQuadSubject(term) {
-  return ["NamedNode", "BlankNode", "Quad", "Variable"].includes(term.termType);
-}
-function isQuadObject(term) {
-  return ["NamedNode", "Literal", "BlankNode", "Quad", "Variable"].includes(term.termType);
-}
-
-// node_modules/@rdfjs/wrapper/dist/mapping/RequiredAs.js
-var RequiredAs;
-(function(RequiredAs2) {
-  function object(anchor, p4, value, termFrom) {
-    if (value === void 0) {
-      throw new Error("value cannot be undefined");
-    }
-    OptionalAs.object(anchor, p4, value, termFrom);
-  }
-  RequiredAs2.object = object;
-})(RequiredAs || (RequiredAs = {}));
-
-// node_modules/@rdfjs/wrapper/dist/ListItem.js
-var ListItem = class _ListItem extends TermWrapper {
-  termAs;
-  termFrom;
-  constructor(term, dataset2, factory2, termAs, termFrom) {
-    super(term, dataset2, factory2);
-    this.termAs = termAs;
-    this.termFrom = termFrom;
-  }
-  get firstRaw() {
-    return OptionalFrom.subjectPredicate(this, RDF2.first, TermAs.term);
-  }
-  set firstRaw(value) {
-    OptionalAs.object(this, RDF2.first, value, TermFrom.itself);
-  }
-  get restRaw() {
-    return OptionalFrom.subjectPredicate(this, RDF2.rest, TermAs.term);
-  }
-  set restRaw(value) {
-    OptionalAs.object(this, RDF2.rest, value, TermFrom.itself);
-  }
-  get isListItem() {
-    return this.firstRaw !== void 0 && this.restRaw !== void 0;
-  }
-  get isNil() {
-    return this.equals(this.factory.namedNode(RDF2.nil));
-  }
-  get first() {
-    return RequiredFrom.subjectPredicate(this, RDF2.first, this.termAs);
-  }
-  set first(value) {
-    RequiredAs.object(this, RDF2.first, value, this.termFrom);
-  }
-  get rest() {
-    return RequiredFrom.subjectPredicate(this, RDF2.rest, (w4) => new _ListItem(w4, w4.dataset, w4.factory, this.termAs, this.termFrom));
-  }
-  set rest(value) {
-    RequiredAs.object(this, RDF2.rest, value, TermFrom.instance);
-  }
-  pop() {
-    try {
-      return this.first;
-    } finally {
-      this.firstRaw = void 0;
-      this.restRaw = this.factory.namedNode(RDF2.nil);
-    }
-  }
-  *items() {
-    if (this.firstRaw === void 0) {
-      return;
-    }
-    yield this;
-    for (const more of this.rest.items()) {
-      yield more;
-    }
-  }
-};
-
-// node_modules/@rdfjs/wrapper/dist/Overwriter.js
-var Overwriter = class extends TermWrapper {
-  p;
-  constructor(subject, p4) {
-    super(subject, subject.dataset, subject.factory);
-    this.p = p4;
-  }
-  set listNode(object) {
-    RequiredAs.object(this, this.p, object, TermFrom.instance);
-  }
-};
-
-// node_modules/@rdfjs/wrapper/dist/RdfList.js
-var RdfList = class {
-  subject;
-  predicate;
-  termAs;
-  termFrom;
-  root;
-  constructor(root, subject, predicate, termAs, termFrom) {
-    this.subject = subject;
-    this.predicate = predicate;
-    this.termAs = termAs;
-    this.termFrom = termFrom;
-    this.root = new ListItem(root, this.subject.dataset, this.subject.factory, termAs, termFrom);
-    return new Proxy(this, new IndexerInterceptor());
-  }
-  get [Symbol.unscopables]() {
-    return Array.prototype[Symbol.unscopables];
-  }
-  get length() {
-    return [...this.items].length;
-  }
-  set length(_3) {
-    throw new Error("this array is based on an RDF Collection. Its length cannot be modified like this.");
-  }
-  [Symbol.iterator]() {
-    return this.values();
-  }
-  at(index) {
-    return [...this.items].at(index)?.first;
-  }
-  concat(...items) {
-    return [...this].concat(...items);
-  }
-  copyWithin(target, start, end) {
-    throw new Error("not implemented");
-  }
-  entries() {
-    return [...this].entries();
-  }
-  every(predicate, thisArg) {
-    return [...this].every(predicate, thisArg);
-  }
-  fill(value, start, end) {
-    throw new Error("not implemented");
-  }
-  filter(predicate, thisArg) {
-    return [...this].filter(predicate, thisArg);
-  }
-  find(predicate, thisArg) {
-    return [...this].find(predicate, thisArg);
-  }
-  findIndex(predicate, thisArg) {
-    return [...this].findIndex(predicate, thisArg);
-  }
-  flat(depth) {
-    throw new Error("not implemented");
-  }
-  flatMap(callback, thisArg) {
-    return [...this].flatMap(callback, thisArg);
-  }
-  forEach(callback, thisArg) {
-    [...this].forEach(callback, thisArg);
-  }
-  includes(searchElement, fromIndex) {
-    return [...this].includes(searchElement, fromIndex);
-  }
-  indexOf(searchElement, fromIndex) {
-    return [...this].indexOf(searchElement, fromIndex);
-  }
-  join(separator) {
-    return [...this].join(separator);
-  }
-  keys() {
-    return [...this.items].keys();
-  }
-  lastIndexOf(searchElement, fromIndex) {
-    return [...this].lastIndexOf(searchElement, fromIndex);
-  }
-  map(callback, thisArg) {
-    return [...this].map(callback, thisArg);
-  }
-  pop() {
-    return [...this.items].at(-1)?.pop();
-  }
-  push(...items) {
-    const nil = this.subject.factory.namedNode(RDF2.nil);
-    for (const item of items) {
-      const newNode = new ListItem(this.subject.factory.blankNode(), this.subject.dataset, this.subject.factory, this.termAs, this.termFrom);
-      const lastNode = this.root.isNil ? (
-        // The statement representing an empty list is replaced by a new one whose object is the new node
-        // The representation of the first item (root, currently rdf:nil, the empty list) is overwritten by the new node
-        this.root = new Overwriter(this.subject, this.predicate).listNode = newNode
-      ) : (
-        // replace rest of current last with new and return is because it's the new last
-        [...this.items].at(-1).rest = newNode
-      );
-      lastNode.first = item;
-      lastNode.restRaw = nil;
-    }
-    return this.length;
-  }
-  reduce(callback, initialValue) {
-    return [...this].reduce(callback, initialValue);
-  }
-  reduceRight(callback, initialValue) {
-    return [...this].reduceRight(callback, initialValue);
-  }
-  reverse() {
-    throw new Error("not implemented");
-  }
-  shift() {
-    if (this.root.isNil) {
-      return void 0;
-    }
-    const value = this.root.first;
-    if (this.root.rest.isNil) {
-      new Overwriter(this.subject, this.predicate).listNode = this.root.rest;
-      this.root.firstRaw = void 0;
-      this.root.restRaw = void 0;
-    } else {
-      this.root.firstRaw = this.root.rest.firstRaw;
-      this.root.restRaw = this.root.rest.restRaw;
-    }
-    return value;
-  }
-  slice(start, end) {
-    return [...this].slice(start, end);
-  }
-  some(predicate, thisArg) {
-    return [...this].some(predicate, thisArg);
-  }
-  sort(compareFn) {
-    throw new Error("not implemented");
-  }
-  splice(start, deleteCount, ...items) {
-    throw new Error("not implemented");
-  }
-  unshift(...items) {
-    for (const item of items.reverse()) {
-      const firstNode = this.root;
-      this.root = new Overwriter(this.subject, this.predicate).listNode = new ListItem(this.subject.factory.blankNode(), this.subject.dataset, this.subject.factory, this.termAs, this.termFrom);
-      this.root.first = item;
-      this.root.rest = firstNode;
-    }
-    return this.length;
-  }
-  *values() {
-    for (const item of this.items) {
-      yield item.first;
-    }
-  }
-  get [Symbol.toStringTag]() {
-    return this.constructor.name;
-  }
-  get items() {
-    return this.root.items();
-  }
-};
-
-// node_modules/@rdfjs/wrapper/dist/errors/WrapperError.js
-var WrapperError = class extends Error {
-  /**
-   * Creates a new instance of {@link WrapperError}.
-   *
-   * @param message - A human-readable description of the error.
-   * @param cause - The specific original cause of the error.
-   */
-  constructor(message, cause) {
-    super(message);
-    this.name = this.constructor.name;
-    this.cause = cause;
-  }
-  //#region Ignore in documentation
-  /** @ignore */
-  static captureStackTrace(targetObject, constructorOpt) {
-    super.captureStackTrace(targetObject, constructorOpt);
-  }
-  /** @ignore */
-  static prepareStackTrace(err, stackTraces) {
-    super.prepareStackTrace(err, stackTraces);
-  }
-  /** @ignore */
-  static get stackTraceLimit() {
-    return super.stackTraceLimit;
-  }
-  /** @ignore */
-  static set stackTraceLimit(value) {
-    super.stackTraceLimit = value;
-  }
-};
-
-// node_modules/@rdfjs/wrapper/dist/errors/TermError.js
-var TermError = class extends WrapperError {
-  term;
-  /**
-   * Creates a new instance of {@link TermError}.
-   *
-   * @param term - The term associated with this error.
-   * @param message - A human-readable description of the error.
-   * @param cause - The specific original cause of the error.
-   */
-  constructor(term, message, cause) {
-    super(message, cause);
-    this.term = term;
-  }
-};
-
-// node_modules/@rdfjs/wrapper/dist/errors/TermTypeError.js
-var TermTypeError = class extends TermError {
-  termType;
-  /**
-   * Creates a new instance of {@link TermTypeError}.
-   *
-   * @param term - The term associated with this error.
-   * @param termType - The expected term type.
-   * @param cause - The specific original cause of the error.
-   */
-  constructor(term, termType, cause) {
-    super(term, `Term type must be ${termType} but was ${term.termType}`, cause);
-    this.termType = termType;
-  }
-};
-
-// node_modules/@rdfjs/wrapper/dist/errors/LiteralDatatypeError.js
-var LiteralDatatypeError = class extends TermError {
-  datatypes;
-  /**
-   * Creates a new instance of {@link LiteralDatatypeError}.
-   *
-   * @param literal - The literal associated with this error.
-   * @param datatypes - The expected datatypes.
-   * @param cause - The specific original cause of the error.
-   */
-  constructor(literal3, datatypes, cause) {
-    super(literal3, `Datatype must be one of ${[...datatypes].join()} but was ${literal3.datatype}`, cause);
-    this.datatypes = datatypes;
-  }
-};
-
-// node_modules/@rdfjs/wrapper/dist/errors/ListRootError.js
-var ListRootError = class extends TermError {
-  constructor(term, cause) {
-    super(term, `List root must be rdf:nil or a BlankNode but was ${term.value}`, cause);
-  }
-};
-
-// node_modules/@rdfjs/wrapper/dist/ensure.js
-function ensurePresent(object) {
-  if (object !== void 0 && object !== null) {
-    return;
-  }
-  throw new ReferenceError("Object must not be undefined or null");
-}
-function ensureIs(object, type) {
-  if (object instanceof type) {
-    return;
-  }
-  throw new TypeError(`Object must be a ${type}`);
-}
-function ensureTermType(term, type) {
-  if (term.termType === type) {
-    return;
-  }
-  throw new TermTypeError(term, type);
-}
-function ensureDatatype(term, ...datatypes) {
-  if (datatypes.includes(term.datatype.value)) {
-    return;
-  }
-  throw new LiteralDatatypeError(term, datatypes);
-}
-function ensureListRoot(term) {
-  if (term.termType === "NamedNode" && term.value === RDF2.nil) {
-    return;
-  }
-  if (term.termType === "BlankNode") {
-    return;
-  }
-  throw new ListRootError(term);
-}
-
-// node_modules/@rdfjs/wrapper/dist/mapping/TermAs.js
-var TermAs;
-(function(TermAs2) {
-  function instance(constructor) {
-    return (term2) => {
-      ensurePresent(term2);
-      ensureIs(term2, TermWrapper);
-      return new constructor(term2, term2.dataset, term2.factory);
-    };
-  }
-  TermAs2.instance = instance;
-  function is(term2) {
-    return term2;
-  }
-  TermAs2.is = is;
-  function list(subject, predicate, termAs, termFrom) {
-    return (term2) => {
-      ensurePresent(term2);
-      ensureIs(term2, TermWrapper);
-      ensureListRoot(term2);
-      return new RdfList(term2, subject, predicate, termAs, termFrom);
-    };
-  }
-  TermAs2.list = list;
-  function term(term2) {
-    return term2;
-  }
-  TermAs2.term = term;
-})(TermAs || (TermAs = {}));
-
-// node_modules/@rdfjs/wrapper/dist/vocabulary/XSD.js
-var XSD2 = {
-  anyURI: "http://www.w3.org/2001/XMLSchema#anyURI",
-  base64Binary: "http://www.w3.org/2001/XMLSchema#base64Binary",
-  boolean: "http://www.w3.org/2001/XMLSchema#boolean",
-  byte: "http://www.w3.org/2001/XMLSchema#byte",
-  date: "http://www.w3.org/2001/XMLSchema#date",
-  dateTime: "http://www.w3.org/2001/XMLSchema#dateTime",
-  decimal: "http://www.w3.org/2001/XMLSchema#decimal",
-  double: "http://www.w3.org/2001/XMLSchema#double",
-  float: "http://www.w3.org/2001/XMLSchema#float",
-  hexBinary: "http://www.w3.org/2001/XMLSchema#hexBinary",
-  int: "http://www.w3.org/2001/XMLSchema#int",
-  integer: "http://www.w3.org/2001/XMLSchema#integer",
-  long: "http://www.w3.org/2001/XMLSchema#long",
-  negativeInteger: "http://www.w3.org/2001/XMLSchema#negativeInteger",
-  nonNegativeInteger: "http://www.w3.org/2001/XMLSchema#nonNegativeInteger",
-  nonPositiveInteger: "http://www.w3.org/2001/XMLSchema#nonPositiveInteger",
-  positiveInteger: "http://www.w3.org/2001/XMLSchema#positiveInteger",
-  short: "http://www.w3.org/2001/XMLSchema#short",
-  string: "http://www.w3.org/2001/XMLSchema#string",
-  unsignedByte: "http://www.w3.org/2001/XMLSchema#unsignedByte",
-  unsignedInt: "http://www.w3.org/2001/XMLSchema#unsignedInt",
-  unsignedLong: "http://www.w3.org/2001/XMLSchema#unsignedLong",
-  unsignedShort: "http://www.w3.org/2001/XMLSchema#unsignedShort"
-};
-
-// node_modules/@rdfjs/wrapper/dist/mapping/LiteralAs.js
-var LiteralAs;
-(function(LiteralAs2) {
-  function bigint(term) {
-    ensurePresent(term);
-    ensureIs(term, TermWrapper);
-    ensureTermType(term, "Literal");
-    ensureDatatype(term, ...integerDatatypes);
-    return BigInt(term.value);
-  }
-  LiteralAs2.bigint = bigint;
-  function boolean2(term) {
-    ensurePresent(term);
-    ensureIs(term, TermWrapper);
-    ensureTermType(term, "Literal");
-    ensureDatatype(term, XSD2.boolean);
-    return term.value === "true" || term.value === "1";
-  }
-  LiteralAs2.boolean = boolean2;
-  function date2(term) {
-    ensurePresent(term);
-    ensureIs(term, TermWrapper);
-    ensureTermType(term, "Literal");
-    ensureDatatype(term, ...dateDatatypes);
-    return new Date(term.value);
-  }
-  LiteralAs2.date = date2;
-  function langString(term) {
-    ensurePresent(term);
-    ensureIs(term, TermWrapper);
-    ensureTermType(term, "Literal");
-    ensureDatatype(term, RDF2.langString);
-    return { lang: term.language, string: term.value };
-  }
-  LiteralAs2.langString = langString;
-  function number(term) {
-    ensurePresent(term);
-    ensureIs(term, TermWrapper);
-    ensureTermType(term, "Literal");
-    ensureDatatype(term, ...numericDatatypes);
-    if (term.value === "INF") {
-      return Number.POSITIVE_INFINITY;
-    }
-    if (term.value === "-INF") {
-      return Number.NEGATIVE_INFINITY;
-    }
-    if (term.value === "NaN") {
-      return Number.NaN;
-    }
-    return Number(term.value);
-  }
-  LiteralAs2.number = number;
-  function string2(term) {
-    ensurePresent(term);
-    ensureIs(term, TermWrapper);
-    return term.value;
-  }
-  LiteralAs2.string = string2;
-  function symbol(term) {
-    ensurePresent(term);
-    ensureIs(term, TermWrapper);
-    return Symbol.for(term.value);
-  }
-  LiteralAs2.symbol = symbol;
-  function uInt8Array(term) {
-    ensurePresent(term);
-    ensureIs(term, TermWrapper);
-    ensureTermType(term, "Literal");
-    ensureDatatype(term, ...byteArrayDatatypes);
-    switch (term.datatype.value) {
-      case XSD2.hexBinary:
-        return Uint8Array.from(Buffer.from(term.value, "hex"));
-      default:
-      case XSD2.base64Binary:
-        return Uint8Array.from(Buffer.from(term.value, "base64"));
-    }
-  }
-  LiteralAs2.uInt8Array = uInt8Array;
-  function url(term) {
-    ensurePresent(term);
-    ensureIs(term, TermWrapper);
-    ensureTermType(term, "Literal");
-    ensureDatatype(term, XSD2.anyURI);
-    return new URL(term.value);
-  }
-  LiteralAs2.url = url;
-  function langTuple(term) {
-    ensurePresent(term);
-    ensureIs(term, TermWrapper);
-    ensureTermType(term, "Literal");
-    ensureDatatype(term, RDF2.langString);
-    return [term.language, term.value];
-  }
-  LiteralAs2.langTuple = langTuple;
-  function datatypeTuple(term) {
-    ensurePresent(term);
-    ensureIs(term, TermWrapper);
-    ensureTermType(term, "Literal");
-    return [term.datatype.value, term.value];
-  }
-  LiteralAs2.datatypeTuple = datatypeTuple;
-})(LiteralAs || (LiteralAs = {}));
-var byteArrayDatatypes = [
-  XSD2.base64Binary,
-  XSD2.hexBinary
-];
-var integerDatatypes = [
-  XSD2.integer,
-  XSD2.nonPositiveInteger,
-  XSD2.long,
-  XSD2.nonNegativeInteger,
-  XSD2.negativeInteger,
-  XSD2.int,
-  XSD2.unsignedLong,
-  XSD2.positiveInteger,
-  XSD2.short,
-  XSD2.unsignedInt,
-  XSD2.byte,
-  XSD2.unsignedShort,
-  XSD2.unsignedByte
-];
-var numericDatatypes = integerDatatypes.concat([
-  XSD2.decimal,
-  XSD2.float,
-  XSD2.double
-]);
-var dateDatatypes = [
-  XSD2.date,
-  XSD2.dateTime
-];
-
-// node_modules/@rdfjs/wrapper/dist/mapping/LiteralFrom.js
-var LiteralFrom;
-(function(LiteralFrom2) {
-  function anyUriString(value, factory2) {
-    return factory2.literal(value, factory2.namedNode(XSD2.anyURI));
-  }
-  LiteralFrom2.anyUriString = anyUriString;
-  function anyUriUrl(value, factory2) {
-    return anyUriString(value.toString(), factory2);
-  }
-  LiteralFrom2.anyUriUrl = anyUriUrl;
-  function base64(value, factory2) {
-    return factory2.literal(value.toBase64(), factory2.namedNode(XSD2.base64Binary));
-  }
-  LiteralFrom2.base64 = base64;
-  function boolean2(value, factory2) {
-    return factory2.literal(value.toString(), factory2.namedNode(XSD2.boolean));
-  }
-  LiteralFrom2.boolean = boolean2;
-  function date2(value, factory2) {
-    return factory2.literal(value.toISOString(), factory2.namedNode(XSD2.date));
-  }
-  LiteralFrom2.date = date2;
-  function dateTime2(value, factory2) {
-    return factory2.literal(value.toISOString(), factory2.namedNode(XSD2.dateTime));
-  }
-  LiteralFrom2.dateTime = dateTime2;
-  function double2(value, factory2) {
-    return factory2.literal(value.toString(), factory2.namedNode(XSD2.double));
-  }
-  LiteralFrom2.double = double2;
-  function integer2(value, factory2) {
-    return factory2.literal(value.toString(), factory2.namedNode(XSD2.integer));
-  }
-  LiteralFrom2.integer = integer2;
-  function hex(value, factory2) {
-    return factory2.literal(value.toHex(), factory2.namedNode(XSD2.hexBinary));
-  }
-  LiteralFrom2.hex = hex;
-  function langString(value, factory2) {
-    return factory2.literal(value.string, { language: value.lang });
-  }
-  LiteralFrom2.langString = langString;
-  function string2(value, factory2) {
-    return factory2.literal(value);
-  }
-  LiteralFrom2.string = string2;
-  function langTuple([key, value], factory2) {
-    return factory2.literal(value, key);
-  }
-  LiteralFrom2.langTuple = langTuple;
-  function datatypeTuple([key, value], factory2) {
-    return factory2.literal(value, factory2.namedNode(key));
-  }
-  LiteralFrom2.datatypeTuple = datatypeTuple;
-})(LiteralFrom || (LiteralFrom = {}));
-
-// node_modules/@rdfjs/wrapper/dist/mapping/NamedNodeFrom.js
-var NamedNodeFrom;
-(function(NamedNodeFrom2) {
-  function string2(value, factory2) {
-    return factory2.namedNode(value);
-  }
-  NamedNodeFrom2.string = string2;
-  function url(value, factory2) {
-    return string2(value.toString(), factory2);
-  }
-  NamedNodeFrom2.url = url;
-})(NamedNodeFrom || (NamedNodeFrom = {}));
-
-// node_modules/@rdfjs/wrapper/dist/mapping/NamedNodeAs.js
-var NamedNodeAs;
-(function(NamedNodeAs2) {
-  function string2(term) {
-    ensurePresent(term);
-    ensureIs(term, TermWrapper);
-    ensureTermType(term, "NamedNode");
-    return term.value;
-  }
-  NamedNodeAs2.string = string2;
-  function url(term) {
-    ensurePresent(term);
-    ensureIs(term, TermWrapper);
-    ensureTermType(term, "NamedNode");
-    return new URL(term.value);
-  }
-  NamedNodeAs2.url = url;
-})(NamedNodeAs || (NamedNodeAs = {}));
-
-// node_modules/@rdfjs/wrapper/dist/mapping/BlankNodeFrom.js
-var BlankNodeFrom;
-(function(BlankNodeFrom2) {
-  function string2(value, factory2) {
-    return factory2.blankNode(value);
-  }
-  BlankNodeFrom2.string = string2;
-})(BlankNodeFrom || (BlankNodeFrom = {}));
-
-// node_modules/@rdfjs/wrapper/dist/WrappingMap.js
-var WrappingMap = class {
-  subject;
-  predicate;
-  termAs;
-  termFrom;
-  constructor(subject, predicate, termAs, termFrom) {
-    this.subject = subject;
-    this.predicate = predicate;
-    this.termAs = termAs;
-    this.termFrom = termFrom;
-  }
-  clear() {
-    for (const q3 of this.matches) {
-      this.subject.dataset.delete(q3);
-    }
-  }
-  delete(k4) {
-    const p4 = this.subject.factory.namedNode(this.predicate);
-    for (const entry of this) {
-      if (entry[0] !== k4) {
-        continue;
-      }
-      this.subject.dataset.delete(this.subject.factory.quad(this.subject, p4, this.termFrom(entry, this.subject.factory)));
-      return true;
-    }
-    return false;
-  }
-  forEach(callback, thisArg) {
-    for (const [key, value] of this) {
-      callback.call(thisArg, value, key, this);
-    }
-  }
-  get(k4) {
-    for (const [key, value] of this) {
-      if (key !== k4) {
-        continue;
-      }
-      return value;
-    }
-    return void 0;
-  }
-  has(k4) {
-    return this.get(k4) !== void 0;
-  }
-  set(k4, v5) {
-    this.delete(k4);
-    this.add(k4, v5);
-    return this;
-  }
-  get size() {
-    return [...this.matches].length;
-  }
-  set size(_3) {
-    throw new Error("not supported");
-  }
-  *entries() {
-    for (const quad3 of this.matches) {
-      yield this.termAs(new TermWrapper(quad3.object, this.subject.dataset, this.subject.factory));
-    }
-  }
-  *keys() {
-    for (const [key] of this) {
-      yield key;
-    }
-  }
-  *values() {
-    for (const [, value] of this) {
-      yield value;
-    }
-  }
-  [Symbol.iterator]() {
-    return this.entries();
-  }
-  get [Symbol.toStringTag]() {
-    return this.constructor.name;
-  }
-  get matches() {
-    const p4 = this.subject.factory.namedNode(this.predicate);
-    return this.subject.dataset.match(this.subject, p4);
-  }
-  add(k4, v5) {
-    const p4 = this.subject.factory.namedNode(this.predicate);
-    this.subject.dataset.add(this.subject.factory.quad(this.subject, p4, this.termFrom([k4, v5], this.subject.factory)));
-  }
-};
-
-// node_modules/@rdfjs/wrapper/dist/mapping/Mapping.js
-var Mapping;
-(function(Mapping2) {
-  function languageDictionary(anchor, p4, termAs, termFrom) {
-    if (termAs === void 0) {
-      throw new Error();
-    }
-    if (termFrom === void 0) {
-      throw new Error();
-    }
-    return new WrappingMap(anchor, p4, termAs, termFrom);
-  }
-  Mapping2.languageDictionary = languageDictionary;
-})(Mapping || (Mapping = {}));
-
-// node_modules/@rdfjs/wrapper/dist/WrappingSet.js
-var WrappingSet = class {
-  subject;
-  predicate;
-  termAs;
-  termFrom;
-  // TODO: Direction
-  constructor(subject, predicate, termAs, termFrom) {
-    this.subject = subject;
-    this.predicate = predicate;
-    this.termAs = termAs;
-    this.termFrom = termFrom;
-  }
-  add(value) {
-    this.subject.dataset.add(this.quad(value));
-    return this;
-  }
-  clear() {
-    for (const q3 of this.matches) {
-      this.subject.dataset.delete(q3);
-    }
-  }
-  delete(value) {
-    if (!this.has(value)) {
-      return false;
-    }
-    const o6 = this.termFrom(value, this.subject.factory);
-    const p4 = this.subject.factory.namedNode(this.predicate);
-    for (const q3 of this.subject.dataset.match(this.subject, p4, o6)) {
-      this.subject.dataset.delete(q3);
-    }
-    return true;
-  }
-  forEach(cb, thisArg) {
-    for (const item of this) {
-      cb.call(thisArg, item, item, this);
-    }
-  }
-  has(value) {
-    return this.subject.dataset.has(this.quad(value));
-  }
-  get size() {
-    return this.matches.size;
-  }
-  [Symbol.iterator]() {
-    return this.values();
-  }
-  *entries() {
-    for (const v5 of this) {
-      yield [v5, v5];
-    }
-  }
-  keys() {
-    return this.values();
-  }
-  *values() {
-    for (const q3 of this.matches) {
-      yield this.termAs(new TermWrapper(q3.object, this.subject.dataset, this.subject.factory));
-    }
-  }
-  get [Symbol.toStringTag]() {
-    return this.constructor.name;
-  }
-  quad(value) {
-    const s4 = this.subject;
-    const p4 = this.subject.factory.namedNode(this.predicate);
-    const o6 = this.termFrom(value, this.subject.factory);
-    const q3 = this.subject.factory.quad(s4, p4, o6);
-    return q3;
-  }
-  get matches() {
-    const p4 = this.subject.factory.namedNode(this.predicate);
-    return this.subject.dataset.match(this.subject, p4);
-  }
-};
-
-// node_modules/@rdfjs/wrapper/dist/mapping/SetFrom.js
-var SetFrom;
-(function(SetFrom2) {
-  function subjectPredicate(anchor, p4, termAs, termFrom) {
-    if (termAs === void 0) {
-      throw new Error();
-    }
-    if (termFrom === void 0) {
-      throw new Error();
-    }
-    return new WrappingSet(anchor, p4, termAs, termFrom);
-  }
-  SetFrom2.subjectPredicate = subjectPredicate;
-})(SetFrom || (SetFrom = {}));
-
 // node_modules/@jeswr/solid-task-model/dist/iri.js
-function httpIriOrUndefined(value) {
+function httpIriOrUndefined2(value) {
   if (!value)
     return void 0;
   try {
@@ -12479,54 +13110,9 @@ function httpIriOrUndefined(value) {
     return void 0;
   }
 }
-function isHttpIri(value) {
-  return value !== void 0 && httpIriOrUndefined(value) === value;
+function isHttpIri2(value) {
+  return value !== void 0 && httpIriOrUndefined2(value) === value;
 }
-
-// node_modules/@jeswr/solid-task-model/dist/vocab.js
-var WF = "http://www.w3.org/2005/01/wf/flow#";
-var DCT = "http://purl.org/dc/terms/";
-var RDF3 = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
-var SCHEMA = "http://schema.org/";
-var PROV = "http://www.w3.org/ns/prov#";
-var VCARD = "http://www.w3.org/2006/vcard/ns#";
-var wf = (local) => `${WF}${local}`;
-var dct = (local) => `${DCT}${local}`;
-var rdf4 = (local) => `${RDF3}${local}`;
-var schema = (local) => `${SCHEMA}${local}`;
-var prov = (local) => `${PROV}${local}`;
-var vcard = (local) => `${VCARD}${local}`;
-var TASK_CLASS = wf("Task");
-var WF_OPEN = wf("Open");
-var WF_CLOSED = wf("Closed");
-var RDF_TYPE3 = rdf4("type");
-var WF_TRACKER = wf("Tracker");
-var WF_ISSUE_CLASS = wf("issueClass");
-var WF_ISSUE_CATEGORY = wf("issueCategory");
-var WF_STATE = wf("State");
-var WF_INITIAL_STATE = wf("initialState");
-var WF_ALLOWED_TRANS = wf("allowedTransitions");
-var WF_STATE_STORE = wf("stateStore");
-var WF_ASSIGNEE_GROUP = wf("assigneeGroup");
-var VCARD_ADDRESS_BOOK = vcard("AddressBook");
-var VCARD_NAME_EMAIL_INDEX = vcard("nameEmailIndex");
-var VCARD_GROUP_INDEX = vcard("groupIndex");
-var VCARD_IN_ADDRESS_BOOK = vcard("inAddressBook");
-var VCARD_INCLUDES_GROUP = vcard("includesGroup");
-var VCARD_INDIVIDUAL = vcard("Individual");
-var VCARD_GROUP = vcard("Group");
-var VCARD_FN = vcard("fn");
-var VCARD_HAS_EMAIL = vcard("hasEmail");
-var VCARD_HAS_TELEPHONE = vcard("hasTelephone");
-var VCARD_HAS_UID = vcard("hasUID");
-var VCARD_URL = vcard("url");
-var VCARD_NOTE = vcard("note");
-var VCARD_ORGANIZATION_NAME = vcard("organization-name");
-var VCARD_VALUE = vcard("value");
-var VCARD_HAS_MEMBER = vcard("hasMember");
-var VCARD_HOME = vcard("Home");
-var VCARD_CELL = vcard("Cell");
-var VCARD_WEB_ID = vcard("WebId");
 
 // node_modules/@jeswr/solid-task-model/dist/task.js
 var PRIORITIES = ["high", "medium", "low"];
@@ -12541,16 +13127,16 @@ var Task = class extends TermWrapper {
   }
   /** The `rdf:type` set as a live set of IRI strings. */
   get types() {
-    return SetFrom.subjectPredicate(this, rdf4("type"), NamedNodeAs.string, NamedNodeFrom.string);
+    return SetFrom.subjectPredicate(this, rdf5("type"), NamedNodeAs.string, NamedNodeFrom.string);
   }
   /** Stamp this subject as a `wf:Task`. Idempotent; returns `this` for chaining. */
   mark() {
-    this.types.add(TASK_CLASS);
+    this.types.add(TASK_CLASS2);
     return this;
   }
   /** Whether this subject is a `wf:Task`. */
   get isTask() {
-    return this.types.has(TASK_CLASS);
+    return this.types.has(TASK_CLASS2);
   }
   get title() {
     return OptionalFrom.subjectPredicate(this, dct("title"), LiteralAs.string);
@@ -12673,7 +13259,7 @@ var Task = class extends TermWrapper {
   }
   set state(value) {
     const types = this.types;
-    types.add(TASK_CLASS);
+    types.add(TASK_CLASS2);
     if (value === "closed") {
       types.add(WF_CLOSED);
       types.delete(WF_OPEN);
@@ -12787,7 +13373,7 @@ function addStructuredValue(parent, predicate, kind, iriValue) {
   const bnode = parent.factory.blankNode();
   SetFrom.subjectPredicate(parent, predicate, blankNodeLabel, BlankNodeFrom.string).add(bnode.value);
   const child = new TermWrapper(bnode, parent.dataset, parent.factory);
-  SetFrom.subjectPredicate(child, rdf4("type"), NamedNodeAs.string, NamedNodeFrom.string).add(kind);
+  SetFrom.subjectPredicate(child, rdf5("type"), NamedNodeAs.string, NamedNodeFrom.string).add(kind);
   OptionalAs.object(child, VCARD_VALUE, iriValue, NamedNodeFrom.string);
 }
 function readStructuredValues(parent, predicate) {
@@ -12821,16 +13407,16 @@ var Contact = class extends TermWrapper {
   }
   /** The `rdf:type` set as a live set of IRI strings. */
   get types() {
-    return SetFrom.subjectPredicate(this, rdf4("type"), NamedNodeAs.string, NamedNodeFrom.string);
+    return SetFrom.subjectPredicate(this, rdf5("type"), NamedNodeAs.string, NamedNodeFrom.string);
   }
   /** Stamp this subject as a `vcard:Individual`. Idempotent; returns `this`. */
   mark() {
-    this.types.add(VCARD_INDIVIDUAL);
+    this.types.add(VCARD_INDIVIDUAL2);
     return this;
   }
   /** Whether this subject is a `vcard:Individual`. */
   get isIndividual() {
-    return this.types.has(VCARD_INDIVIDUAL);
+    return this.types.has(VCARD_INDIVIDUAL2);
   }
   /** `vcard:fn` — the formatted/display name. */
   get name() {
@@ -12929,7 +13515,7 @@ var Contact = class extends TermWrapper {
    * vcard:value <webid> ]` form (or a direct `vcard:url <webid>`). Only http(s) IRIs.
    */
   get webId() {
-    return readStructuredValues(this, VCARD_URL).find(isHttpIri);
+    return readStructuredValues(this, VCARD_URL).find(isHttpIri2);
   }
   /**
    * Replace the contact's WebID. Clears any prior `vcard:url`, then writes the
@@ -12938,7 +13524,7 @@ var Contact = class extends TermWrapper {
    */
   setWebId(webId) {
     this.clearStructured(VCARD_URL);
-    if (isHttpIri(webId))
+    if (isHttpIri2(webId))
       addStructuredValue(this, VCARD_URL, VCARD_WEB_ID, webId);
   }
   /**
@@ -12989,23 +13575,23 @@ if (!customElements.get("jeswr-contact-form")) {
 
 // node_modules/@jeswr/solid-bookmark/dist/vocab.js
 var BOOK = "https://w3id.org/jeswr/bookmark#";
-var SCHEMA2 = "http://schema.org/";
-var DCT2 = "http://purl.org/dc/terms/";
-var RDF4 = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
+var SCHEMA3 = "http://schema.org/";
+var DCT3 = "http://purl.org/dc/terms/";
+var RDF6 = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
 var book = (local) => `${BOOK}${local}`;
-var schema2 = (local) => `${SCHEMA2}${local}`;
-var dct2 = (local) => `${DCT2}${local}`;
-var rdf5 = (local) => `${RDF4}${local}`;
-var BOOKMARK_CLASS = book("Bookmark");
+var schema2 = (local) => `${SCHEMA3}${local}`;
+var dct2 = (local) => `${DCT3}${local}`;
+var rdf6 = (local) => `${RDF6}${local}`;
+var BOOKMARK_CLASS2 = book("Bookmark");
 var BOOK_ARCHIVED = book("archived");
 var BOOK_NOTES = book("notes");
 var SCHEMA_URL = schema2("url");
 var SCHEMA_KEYWORDS = schema2("keywords");
-var DCT_TITLE = dct2("title");
+var DCT_TITLE2 = dct2("title");
 var DCT_DESCRIPTION = dct2("description");
-var DCT_CREATED = dct2("created");
+var DCT_CREATED2 = dct2("created");
 var DCT_MODIFIED = dct2("modified");
-var RDF_TYPE4 = rdf5("type");
+var RDF_TYPE6 = rdf6("type");
 
 // node_modules/@jeswr/solid-bookmark/dist/bookmark.js
 function bookmarkSubject(resourceUrl) {
@@ -13018,16 +13604,16 @@ var Bookmark = class extends TermWrapper {
   }
   /** The `rdf:type` set as a live set of IRI strings. */
   get types() {
-    return SetFrom.subjectPredicate(this, RDF_TYPE4, NamedNodeAs.string, NamedNodeFrom.string);
+    return SetFrom.subjectPredicate(this, RDF_TYPE6, NamedNodeAs.string, NamedNodeFrom.string);
   }
   /** Stamp this subject as a `book:Bookmark`. Idempotent; returns `this` for chaining. */
   mark() {
-    this.types.add(BOOKMARK_CLASS);
+    this.types.add(BOOKMARK_CLASS2);
     return this;
   }
   /** Whether this subject is a `book:Bookmark`. */
   get isBookmark() {
-    return this.types.has(BOOKMARK_CLASS);
+    return this.types.has(BOOKMARK_CLASS2);
   }
   /** `schema:url` — the bookmarked URL (an http(s) IRI). */
   get url() {
@@ -13038,10 +13624,10 @@ var Bookmark = class extends TermWrapper {
   }
   /** `dct:title`. */
   get title() {
-    return OptionalFrom.subjectPredicate(this, DCT_TITLE, LiteralAs.string);
+    return OptionalFrom.subjectPredicate(this, DCT_TITLE2, LiteralAs.string);
   }
   set title(value) {
-    OptionalAs.object(this, DCT_TITLE, value, LiteralFrom.string);
+    OptionalAs.object(this, DCT_TITLE2, value, LiteralFrom.string);
   }
   /** `dct:description` — the short summary / blurb. */
   get description() {
@@ -13071,10 +13657,10 @@ var Bookmark = class extends TermWrapper {
   }
   /** `dct:created`. */
   get created() {
-    return OptionalFrom.subjectPredicate(this, DCT_CREATED, LiteralAs.date);
+    return OptionalFrom.subjectPredicate(this, DCT_CREATED2, LiteralAs.date);
   }
   set created(value) {
-    OptionalAs.object(this, DCT_CREATED, value, LiteralFrom.dateTime);
+    OptionalAs.object(this, DCT_CREATED2, value, LiteralFrom.dateTime);
   }
   /** `dct:modified`. */
   get modified() {
@@ -13143,6 +13729,14 @@ export {
   NamedNodeAs,
   SetFrom,
   Task,
+  TASK_CLASS,
+  VCARD_INDIVIDUAL,
+  VCARD_ADDRESS_BOOK,
+  BOOKMARK_CLASS,
+  AS_NOTE,
+  LDP_CONTAINER,
+  LDP_BASIC_CONTAINER,
+  RDF_TYPE,
   DataControllerError,
   NotFoundError,
   AccessDeniedError,
@@ -13159,6 +13753,7 @@ export {
   formatDate,
   Contact,
   Bookmark,
+  JeswrMessageList,
   JeswrShaclForm,
   WriteScopeError,
   UnconditionalOverwriteError,

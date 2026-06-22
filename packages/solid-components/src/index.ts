@@ -31,6 +31,7 @@ import "./components/task-list.js";
 import "./components/contact-list.js";
 import "./components/profile-card.js";
 import "./components/bookmark-list.js";
+import "./components/message-list.js";
 import "./components/collection.js";
 import "./components/solid-view.js";
 // Phase-2 EDIT path: the editable SHACL form base + the per-class form elements.
@@ -50,6 +51,7 @@ export {
   defaultBaseFor,
   findEditedSubject,
 } from "./components/form-base.js";
+export { JeswrMessageList } from "./components/message-list.js";
 export { JeswrProfileCard } from "./components/profile-card.js";
 // The Phase-2 editable SHACL form element + its save callback / event types.
 export {
@@ -135,6 +137,7 @@ export {
 } from "./shacl-view-fetch.js";
 // The RDF class IRIs the components bind to (the resolver-map keys).
 export {
+  AS_NOTE,
   BOOKMARK_CLASS,
   LDP_BASIC_CONTAINER,
   LDP_CONTAINER,
