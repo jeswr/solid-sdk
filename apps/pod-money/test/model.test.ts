@@ -335,7 +335,7 @@ describe("FinanceDocument listing + amount resolution", () => {
 
   it("reads a hand-written ledger parsed from Turtle", () => {
     const turtle = `
-      @prefix fin: <https://TBD.example/solid/finance#> .
+      @prefix fin: <https://w3id.org/jeswr/sectors/finance#> .
       @prefix skos: <http://www.w3.org/2004/02/skos/core#> .
       <#acc> a fin:FinancialAccount, fin:SavingsAccount, fin:ActiveFinancialAccount ;
         skos:prefLabel "Rainy Day" .

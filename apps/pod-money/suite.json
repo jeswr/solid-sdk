@@ -21,6 +21,6 @@
     "accessModes": ["Read", "Write", "Append"],
     "produces": ["finance"],
     "consumes": ["finance"],
-    "membershipTodo": "TODO(O1-gated): Pod Money consumes and produces fin:FinancialAccount / fin:Transaction / fin:Balance / fin:Holding on the finance sector. The fedapp: namespace and the finance sector namespace (currently https://TBD.example/solid/finance#, pending fse namespace decision #2) must be frozen before membership is asserted; membership remains the registry's job after a signed challenge."
+    "membershipTodo": "O1-gated: Pod Money consumes and produces fin:FinancialAccount / fin:Transaction / fin:Balance / fin:Holding on the finance sector (canonical namespace https://w3id.org/jeswr/sectors/finance#, from jeswr/solid-federation-vocab). Membership is asserted once the fedapp: namespace is frozen; it remains the registry's job after a signed challenge."
   }
 }

@@ -44,7 +44,7 @@ const POD_ROOT = `${BASE}/${POD}/`;
 const TYPE_INDEX = `${POD_ROOT}settings/publicTypeIndex.ttl`;
 const LEDGER = `${POD_ROOT}finance/ledger.ttl`;
 // The data layer's RDF namespaces (src/vocab.ts), restated here (inlined-setup rule).
-const FIN = "https://TBD.example/solid/finance#";
+const FIN = "https://w3id.org/jeswr/sectors/finance#";
 const PM = "https://w3id.org/jeswr/pod-money#";
 // The transaction COUNT is the regression knob: the 401 count must not scale with it.
 const TXN_COUNT = 12;

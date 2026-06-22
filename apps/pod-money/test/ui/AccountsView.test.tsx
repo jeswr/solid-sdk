@@ -19,7 +19,7 @@ afterEach(() => {
 const LEDGER = "https://pod.example/finance/ledger.ttl";
 
 const FULL = `
-@prefix fin: <https://TBD.example/solid/finance#> .
+@prefix fin: <https://w3id.org/jeswr/sectors/finance#> .
 @prefix pm: <https://w3id.org/jeswr/pod-money#> .
 @prefix skos: <http://www.w3.org/2004/02/skos/core#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
@@ -36,13 +36,13 @@ const FULL = `
 `;
 
 const EMPTY = `
-@prefix fin: <https://TBD.example/solid/finance#> .
+@prefix fin: <https://w3id.org/jeswr/sectors/finance#> .
 `;
 
 // An account whose transactions exercise the defensive paths: one with NO payee
 // and NO posting time, and one with an INVALID posting time + missing amount.
 const DEFENSIVE = `
-@prefix fin: <https://TBD.example/solid/finance#> .
+@prefix fin: <https://w3id.org/jeswr/sectors/finance#> .
 @prefix pm: <https://w3id.org/jeswr/pod-money#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 <${LEDGER}#a> a fin:FinancialAccount .

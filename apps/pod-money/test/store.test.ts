@@ -19,7 +19,7 @@ const LEDGER = `${POD}finance/ledger.ttl`;
 const INDEX = `${POD}settings/publicTypeIndex.ttl`;
 
 const SEED_LEDGER = `
-  @prefix fin: <https://TBD.example/solid/finance#> .
+  @prefix fin: <https://w3id.org/jeswr/sectors/finance#> .
   @prefix pm: <https://w3id.org/jeswr/pod-money#> .
   @prefix skos: <http://www.w3.org/2004/02/skos/core#> .
   <#acc> a fin:FinancialAccount, fin:CurrentAccount, fin:ActiveFinancialAccount ;
@@ -295,7 +295,7 @@ describe("MoneyStore type-index registration + discovery", () => {
   it("discovers a registered class location", async () => {
     const idx = `
       @prefix solid: <http://www.w3.org/ns/solid/terms#> .
-      @prefix fin: <https://TBD.example/solid/finance#> .
+      @prefix fin: <https://w3id.org/jeswr/sectors/finance#> .
       <> a solid:TypeIndex, solid:ListedDocument .
       <#r> a solid:TypeRegistration ;
         solid:forClass fin:Transaction ;

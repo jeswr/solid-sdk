@@ -87,7 +87,7 @@ describe("TypeIndexDataset", () => {
   it("reads a hand-written index parsed from Turtle", () => {
     const turtle = `
       @prefix solid: <http://www.w3.org/ns/solid/terms#> .
-      @prefix fin: <https://TBD.example/solid/finance#> .
+      @prefix fin: <https://w3id.org/jeswr/sectors/finance#> .
       <> a solid:TypeIndex, solid:ListedDocument .
       <#r> a solid:TypeRegistration ;
         solid:forClass fin:Transaction ;

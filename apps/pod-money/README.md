@@ -27,13 +27,13 @@ MIREOT module. The typed accessors cover:
 | Holding | `fin:Holding` | a position in a `fin:FinancialInstrument` within an investment account |
 | Category | `pm:Category` | user-defined spending category (an app-local concept) |
 
-### Interim namespace
+### Sector namespace
 
-The finance sector ontology currently publishes under the **placeholder base**
-`https://TBD.example/solid/finance#`, pending the fse "namespace decision #2". Pod Money builds
-against that interim IRI verbatim, with every term centralised in
-[`src/vocab.ts`](src/vocab.ts) — so re-pointing the whole data layer once the namespace is frozen
-is a one-line change. (Tracked: see the sector-vocab ADR follow-up.)
+The finance sector ontology publishes under its canonical `w3id.org` base
+`https://w3id.org/jeswr/sectors/finance#` (the `vann:preferredNamespaceUri` declared in
+[`jeswr/solid-federation-vocab`](https://github.com/jeswr/solid-federation-vocab) →
+`sectors/finance/finance.ttl`). Pod Money reads and writes that base, with every term
+centralised in [`src/vocab.ts`](src/vocab.ts) — so the base is a one-line change if it ever moves.
 
 ## The RDF stack — never a bespoke parser
 
@@ -123,9 +123,9 @@ work):
   read / write / list / type-index against a real pod.
 - **Coverage ratchet.** A CI gate that asserts the cross-server matrix passes against all
   well-known servers and that the unit-coverage floor never regresses.
-- **Sector-vocab ADR.** Decide and freeze the finance sector namespace (today the placeholder
-  `https://TBD.example/solid/finance#`), then re-point `src/vocab.ts` and the `clientid.jsonld`
-  fedapp block in one change.
+- **Federation membership.** Assert Pod Money's `fedreg` membership on the finance sector once the
+  `fedapp:` namespace is frozen — the finance sector namespace is now the canonical
+  `https://w3id.org/jeswr/sectors/finance#` (`src/vocab.ts` + the `clientid.jsonld` fedapp block).
 
 ## License
 

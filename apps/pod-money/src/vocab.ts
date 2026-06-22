@@ -9,17 +9,16 @@
 /**
  * Finance sector ontology namespace.
  *
- * INTERIM: the fse finance sector ontology
- * (full-solid-ecosystem/federation/ontologies/sectors/finance/finance.ttl)
- * currently uses the PLACEHOLDER base `https://TBD.example/solid/finance#`,
- * pending fse "namespace decision #2". Pod Money builds against this interim
- * IRI verbatim so a single edit here re-points the whole data layer once the
- * namespace is frozen. See README + the tracked sector-vocab ADR follow-up.
+ * The canonical finance sector ontology
+ * (`jeswr/solid-federation-vocab` → `sectors/finance/finance.ttl`,
+ * `vann:preferredNamespaceUri "https://w3id.org/jeswr/sectors/finance#"`)
+ * publishes under this `w3id.org` base. Every finance term Pod Money reads or
+ * writes is centralised here so the base is a one-line edit if it ever moves.
  */
-export const FIN = "https://TBD.example/solid/finance#" as const;
+export const FIN = "https://w3id.org/jeswr/sectors/finance#" as const;
 
 /** Solid Core ontology namespace (the gUFO Core the finance sector re-bases onto). */
-export const CORE = "https://TBD.example/solid/core#" as const;
+export const CORE = "https://w3id.org/jeswr/core#" as const;
 
 /** RDF, RDFS. */
 export const RDF = "http://www.w3.org/1999/02/22-rdf-syntax-ns#" as const;

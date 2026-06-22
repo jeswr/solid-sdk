@@ -44,13 +44,13 @@
     "http://www.w3.org/ns/auth/acl#Append"
   ],
   "fedapp:consumes": [
-    "https://TBD.example/solid/finance#Transaction",
-    "https://TBD.example/solid/finance#FinancialAccount"
+    "https://w3id.org/jeswr/sectors/finance#Transaction",
+    "https://w3id.org/jeswr/sectors/finance#FinancialAccount"
   ],
   "fedapp:produces": [
-    "https://TBD.example/solid/finance#Transaction",
-    "https://TBD.example/solid/finance#FinancialAccount",
-    "https://TBD.example/solid/finance#Balance"
+    "https://w3id.org/jeswr/sectors/finance#Transaction",
+    "https://w3id.org/jeswr/sectors/finance#FinancialAccount",
+    "https://w3id.org/jeswr/sectors/finance#Balance"
   ],
   "client_uri": "https://money.solid.example/",
   "logo_uri": "https://money.solid.example/logo.svg"
