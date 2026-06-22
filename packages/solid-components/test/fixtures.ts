@@ -136,6 +136,51 @@ export const MESSAGES_TTL = `
   as:inReplyTo <https://pod.example/chat/1#it> .
 `;
 
+// --- as:Note chat-container fixtures (one message per ldp:contains child) ----
+
+/**
+ * A chat CONTAINER whose messages are SEPARATE resources linked via `ldp:contains`
+ * (the suite's pod-chat per-resource layout) — the case the container-walk renders.
+ * The container doc itself carries NO `as:Note`; each child resource holds one.
+ */
+export const CHAT_CONTAINER_TTL = `
+@prefix ldp: <http://www.w3.org/ns/ldp#> .
+
+<https://pod.example/chat/> a ldp:Container, ldp:BasicContainer ;
+  ldp:contains <https://pod.example/chat/m1.ttl>,
+               <https://pod.example/chat/m2.ttl>,
+               <https://pod.example/chat/m3.ttl> .
+`;
+
+/** Child message resources for {@link CHAT_CONTAINER_TTL}, keyed by their URL. */
+export const CHAT_CHILD_TTL: Record<string, string> = {
+  "https://pod.example/chat/m1.ttl": `
+@prefix as: <https://www.w3.org/ns/activitystreams#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+<https://pod.example/chat/m1.ttl#it> a as:Note ;
+  as:content "First message" ;
+  as:attributedTo <https://alice.example/profile/card#me> ;
+  as:published "2026-06-01T08:00:00Z"^^xsd:dateTime .
+`,
+  "https://pod.example/chat/m2.ttl": `
+@prefix as: <https://www.w3.org/ns/activitystreams#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+<https://pod.example/chat/m2.ttl#it> a as:Note ;
+  as:content "Second message" ;
+  as:attributedTo <https://bob.example/profile/card#me> ;
+  as:published "2026-06-01T09:00:00Z"^^xsd:dateTime ;
+  as:inReplyTo <https://pod.example/chat/m1.ttl#it> .
+`,
+  "https://pod.example/chat/m3.ttl": `
+@prefix as: <https://www.w3.org/ns/activitystreams#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+<https://pod.example/chat/m3.ttl#it> a as:Note ;
+  as:content "Third message" ;
+  as:attributedTo <https://alice.example/profile/card#me> ;
+  as:published "2026-06-01T10:00:00Z"^^xsd:dateTime .
+`,
+};
+
 // --- LDP container fixtures -------------------------------------------------
 
 export const CONTAINER_TTL = `

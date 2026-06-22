@@ -12416,10 +12416,19 @@ function parseAs2Message(subject, dataset2) {
 }
 
 // src/components/message-list.ts
+var MAX_CHILDREN = 500;
+var FETCH_CONCURRENCY = 6;
 var JeswrMessageList = class extends AbstractReadElement {
   async loadFrom(controller, src, publicRead) {
-    const result = await controller.read(src, publicRead ? { public: true } : {});
-    return { graph: result.dataset ?? new N3Store(), baseUrl: result.url };
+    const listing = await controller.listContainer(src, publicRead ? { public: true } : {});
+    const merged = new N3Store();
+    addQuads(merged, listing.dataset);
+    const children = listing.children.slice(0, MAX_CHILDREN);
+    if (children.length > 0) {
+      const childGraphs = await fetchChildGraphs(controller, children, publicRead);
+      for (const g4 of childGraphs) addQuads(merged, g4);
+    }
+    return { graph: merged, baseUrl: listing.url };
   }
   renderReady(graph) {
     const messages = collectMessages(graph);
@@ -12449,6 +12458,32 @@ var JeswrMessageList = class extends AbstractReadElement {
     `;
   }
 };
+async function fetchChildGraphs(controller, children, publicRead) {
+  const graphs = [];
+  let cursor = 0;
+  const worker = async () => {
+    while (cursor < children.length) {
+      const child = children[cursor++];
+      if (child.isContainer) continue;
+      const graph = await readChild(controller, child.url, publicRead);
+      if (graph) graphs.push(graph);
+    }
+  };
+  const pool = Math.min(FETCH_CONCURRENCY, children.length);
+  await Promise.all(Array.from({ length: pool }, () => worker()));
+  return graphs;
+}
+async function readChild(controller, url, publicRead) {
+  try {
+    const result = await controller.read(url, publicRead ? { public: true } : {});
+    return result.dataset;
+  } catch {
+    return void 0;
+  }
+}
+function addQuads(into, from) {
+  into.addQuads(from.getQuads(null, null, null, null));
+}
 function collectMessages(graph) {
   const seen = /* @__PURE__ */ new Set();
   const out = [];
@@ -12461,7 +12496,15 @@ function collectMessages(graph) {
     if (message === void 0) continue;
     out.push(message);
   }
-  return out;
+  return sortByPublished(out);
+}
+function sortByPublished(messages) {
+  return messages.map((m3, i5) => ({ m: m3, i: i5, t: publishedMillis(m3.published) })).sort((a3, b5) => a3.t - b5.t || a3.i - b5.i).map((x3) => x3.m);
+}
+function publishedMillis(iso) {
+  if (!iso) return Number.POSITIVE_INFINITY;
+  const ms = Date.parse(iso);
+  return Number.isNaN(ms) ? Number.POSITIVE_INFINITY : ms;
 }
 function formatDateTime(iso) {
   if (!iso) return "";

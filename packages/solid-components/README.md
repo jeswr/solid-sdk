@@ -197,6 +197,7 @@ card.store = alreadyParsedStore;              // the codegen/test seam
 | `<jeswr-contact-list>` | `vcard:Individual` | `@jeswr/solid-task-model/contacts` `Contact` | name, org, emails (`mailto:`), phones (`tel:`), WebID, note |
 | `<jeswr-profile-card>` | a WebID profile | `@solid/object` `Agent` | name, photo, org/role, homepage, WebID, OIDC issuer (one, not a list) |
 | `<jeswr-bookmark-list>` | `book:Bookmark` | `@jeswr/solid-bookmark` `Bookmark` | title→url link, description, tags, archived |
+| `<jeswr-message-list>` | `as:Note` | `@jeswr/solid-chat-interop` `CanonicalMessage` | author (WebID), body (escaped text), timestamp, reply edge — sorted chronologically |
 | `<jeswr-collection>` | `ldp:Container` | `DataController.listContainer` | the `ldp:contains` children (+ a type-index label seam) |
 
 Each element renders into the **light DOM** (so an app can `::part`-style its output)
@@ -209,8 +210,18 @@ accessors defensively (a single malformed field never aborts the card — the su
 "drop the field, never abort" rule, with a tolerant graph fallback for fields whose
 predicate/term-type the Agent's pinned accessor does not match).
 
-> `<jeswr-message-list>` (`@jeswr/solid-chat-interop`) is **deferred**: that package
-> ships no SHACL shape yet, so it is a separate bead — see *Out of scope*.
+`<jeswr-message-list>` LISTS A CONTAINER: a chat is normally an LDP container whose
+messages are **separate resources** linked by `ldp:contains` (the suite's pod-chat
+per-resource layout), so the element walks the container — it lists the children (via
+`DataController.listContainer`, exactly how `<jeswr-collection>` walks a container),
+fetches each child through the **same credential seam** (concurrency-bounded; a
+failed/denied child is **dropped**, never aborting the list), parses each child's
+`as:Note` via the model's `parseAs2Message`, and merges them sorted by `published`. It
+**also** renders the **inline** single-document case (every `as:Note` in one doc — a
+thread document or a single message resource). (It carries no `@solid-shape`: the
+chat-interop SHACL shape is an anonymous `sh:NodeShape` with `sh:targetClass as:Note`,
+so there is no canonical shape IRI to advertise — the `@solid-class` target class is
+the resolver binding key.)
 
 ### 4. `<solid-view>` — the composition element + `resolveComponent`
 
@@ -454,9 +465,11 @@ Explicitly **not** in this release (deferred to later phases / separate beads):
   (and the contact form edits the flat string fields, preserving the structured
   email/phone nodes untouched); a full email/phone/relationship editor + a task
   state/tracker editor are documented follow-ups.
-- **`<jeswr-message-list>` (`@jeswr/solid-chat-interop`)** — `@jeswr/solid-chat-interop`
-  ships no SHACL shape yet, so the message element is a **separate bead** (skipped this
-  round). Add it once the chat interop shape lands.
+- **A multi-level / recursive container walk for `<jeswr-message-list>`** — the walk is
+  one level deep (the container's direct `ldp:contains` message resources, capped); a
+  nested sub-container is listed but NOT recursed into (recursing unbounded is a
+  resource-exhaustion surface). A consumer windows a large room by pointing `src` at a
+  sub-container (the pod-chat per-day/-month layout). Deeper paging is a follow-up.
 - **`create-solid-app` integration** — wiring these elements into the scaffolder's
   template is a follow-up.
 - **Auto-generated `@lit/react` wrappers** from the CEM (the `./react` subexport

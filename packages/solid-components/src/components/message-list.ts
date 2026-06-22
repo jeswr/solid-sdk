@@ -1,21 +1,33 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // <jeswr-message-list> — a READ-ONLY list of `as:Note` chat messages, bound to
-// `@jeswr/solid-chat-interop` (the suite's CANONICAL message shape). It reads a
-// document / container through the Phase-1 DataController and renders every
-// `as:Note` subject via the model's TYPED `parseAs2Message` accessor — content
-// (text) / published (timestamp) / author (WebID) / inReplyTo (reply edge) —
-// never a hand-built quad query for the fields.
+// `@jeswr/solid-chat-interop` (the suite's CANONICAL message shape). It renders
+// every `as:Note` subject via the model's TYPED `parseAs2Message` accessor —
+// content (text) / published (timestamp) / author (WebID) / inReplyTo (reply edge)
+// — never a hand-built quad query for the fields.
 //
-// RDF DISCIPLINE: the only direct quad read is the `as:Note` subject scan (an
-// existence query — no triple built), exactly mirroring the sibling
-// <jeswr-task-list>/<jeswr-bookmark-list> subject discovery (PM's typed-views
-// selection). Every FIELD is read through the model's `parseAs2Message`
+// A MESSAGE LIST LISTS A CONTAINER (the @solid-cardinality the CEM advertises). A
+// chat is normally an LDP container whose messages are SEPARATE resources linked by
+// `ldp:contains` (one resource per message, the suite's pod-chat layout), so the
+// element WALKS the container: it lists `ldp:contains` children (via the Phase-1
+// DataController's `listContainer` — exactly how <jeswr-collection> walks a
+// container), fetches each child through the SAME credential seam, parses each
+// child's `as:Note` via `parseAs2Message`, and merges them into one graph. It STILL
+// supports the inline single-document case (every `as:Note` in one doc — a thread
+// document or a single message resource), so both layouts render. The child fetches
+// are concurrency-bounded and a failed/denied child is DROPPED, never aborting the
+// whole list.
+//
+// RDF DISCIPLINE: the container walk reads `ldp:contains` through the
+// DataController's `listContainer` (a read query — no triple built), mirroring
+// <jeswr-collection>. The `as:Note` subject scan is the only other direct quad read
+// (an existence query — no triple built), mirroring <jeswr-task-list>/
+// <jeswr-bookmark-list>. Every FIELD is read through the model's `parseAs2Message`
 // (`@rdfjs/wrapper`-backed typed accessors), so the field mapping is the single
-// shared chat model, not a re-implementation. `parseAs2Message` itself is
-// defensive (every typed read is THROW-guarded — a malformed foreign literal
-// drops the field rather than aborting the parse) and filters every IRI-valued
-// field (author / room / inReplyTo) http(s)-only on read.
+// shared chat model, not a re-implementation. `parseAs2Message` itself is defensive
+// (every typed read is THROW-guarded — a malformed foreign literal drops the field
+// rather than aborting the parse) and filters every IRI-valued field (author / room
+// / inReplyTo) http(s)-only on read.
 //
 // XSS: the message BODY (`content`) is the primary untrusted, stored-XSS surface —
 // it is rendered via Lit text interpolation (`html\`${value}\``), which escapes, so
@@ -26,9 +38,19 @@
 import { type CanonicalMessage, parseAs2Message } from "@jeswr/solid-chat-interop";
 import { html, type TemplateResult } from "lit";
 import { DataFactory, Store } from "n3";
-import type { DataController } from "../data-controller.js";
+import type { ContainerChild, DataController } from "../data-controller.js";
 import { AS_NOTE, RDF_TYPE } from "../vocab.js";
 import { AbstractReadElement, safeHref } from "./shared.js";
+
+/**
+ * The maximum number of `ldp:contains` children fetched while walking a chat
+ * container, and the number fetched at a time. A large room is bounded so a single
+ * mount cannot fan out an unbounded number of concurrent requests (a self-inflicted
+ * DoS / resource-exhaustion surface). A consumer needing a deeper window paginates
+ * by pointing `src` at a sub-container (the pod-chat per-day/-month layout).
+ */
+const MAX_CHILDREN = 500;
+const FETCH_CONCURRENCY = 6;
 
 /**
  * A read-only `as:Note` chat-message list element.
@@ -57,13 +79,23 @@ export class JeswrMessageList extends AbstractReadElement {
     src: string,
     publicRead: boolean,
   ): Promise<{ graph: Store; baseUrl: string }> {
-    // A message list reads the document / container as a single graph (messages may
-    // be inline in a thread document, or this may be one message resource). We read
-    // the whole graph and enumerate `as:Note` subjects from it — no per-child fetch
-    // in Phase-1 (a deep listing that fetches each child is a documented follow-up),
-    // mirroring the sibling list elements.
-    const result = await controller.read(src, publicRead ? { public: true } : {});
-    return { graph: result.dataset ?? new Store(), baseUrl: result.url };
+    // Read the target. If it is an LDP container with `ldp:contains` children, this
+    // is the per-resource chat layout (one `as:Note` per child resource) — WALK it:
+    // fetch each child and merge its messages. Either way we KEEP the target graph's
+    // own quads too, so an inline thread document (every `as:Note` in one doc) and a
+    // single message resource still render (`ldp:contains` is then empty).
+    const listing = await controller.listContainer(src, publicRead ? { public: true } : {});
+    const merged = new Store();
+    addQuads(merged, listing.dataset);
+
+    // Walk the (capped) child resources, fetching through the SAME credential seam
+    // and dropping any that fail/deny — a broken child must never abort the list.
+    const children = listing.children.slice(0, MAX_CHILDREN);
+    if (children.length > 0) {
+      const childGraphs = await fetchChildGraphs(controller, children, publicRead);
+      for (const g of childGraphs) addQuads(merged, g);
+    }
+    return { graph: merged, baseUrl: listing.url };
   }
 
   protected override renderReady(graph: Store): TemplateResult {
@@ -105,11 +137,70 @@ export class JeswrMessageList extends AbstractReadElement {
 }
 
 /**
- * Collect every `as:Note`-typed subject in the graph as a typed
- * {@link CanonicalMessage} (via the model's `parseAs2Message` accessor). The
- * subject scan is the ONLY direct quad read (existence query — no triple built),
- * mirroring the sibling list elements. De-duplicated by subject IRI, first-seen
- * order.
+ * Fetch each child resource's graph through the controller (the SAME credential
+ * boundary / 4-class error taxonomy as the parent read), bounded to
+ * {@link FETCH_CONCURRENCY} in flight at a time. A child that fails to read (404 /
+ * access-denied / network / unparseable) is DROPPED — its slot resolves to
+ * `undefined` and is filtered out — so one broken message resource never aborts the
+ * whole list. Order of the returned graphs is not significant: messages are sorted
+ * by `published` at render time.
+ */
+async function fetchChildGraphs(
+  controller: DataController,
+  children: readonly ContainerChild[],
+  publicRead: boolean,
+): Promise<Store[]> {
+  const graphs: Store[] = [];
+  // A simple fixed-size worker pool over a shared cursor: at most FETCH_CONCURRENCY
+  // reads are in flight, so a large room cannot fan out unbounded concurrency.
+  let cursor = 0;
+  const worker = async (): Promise<void> => {
+    while (cursor < children.length) {
+      const child = children[cursor++];
+      // A nested container is not a message resource — skip it (don't recurse: a
+      // deep multi-level walk is a documented follow-up, and recursing unbounded is
+      // a resource-exhaustion surface). Its own `as:Note`s, if any, are not reached.
+      if (child.isContainer) continue;
+      const graph = await readChild(controller, child.url, publicRead);
+      if (graph) graphs.push(graph);
+    }
+  };
+  const pool = Math.min(FETCH_CONCURRENCY, children.length);
+  await Promise.all(Array.from({ length: pool }, () => worker()));
+  return graphs;
+}
+
+/**
+ * Read one child resource into a graph, returning `undefined` (DROP) on any failure
+ * — the controller throws the 4-class taxonomy error, which we swallow here so a
+ * single broken/denied child never aborts the list. A 304 cannot occur (no etag is
+ * sent), but a dataset-less result is also dropped defensively.
+ */
+async function readChild(
+  controller: DataController,
+  url: string,
+  publicRead: boolean,
+): Promise<Store | undefined> {
+  try {
+    const result = await controller.read(url, publicRead ? { public: true } : {});
+    return result.dataset;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Copy every quad of `from` into `into` (n3 de-duplicates identical quads). */
+function addQuads(into: Store, from: Store): void {
+  into.addQuads(from.getQuads(null, null, null, null));
+}
+
+/**
+ * Collect every `as:Note`-typed subject across the (merged) graph as a typed
+ * {@link CanonicalMessage} (via the model's `parseAs2Message` accessor), sorted by
+ * `published` ascending (chronological — oldest first, the conventional chat order;
+ * messages with no timestamp sort last, stable in first-seen order). The subject
+ * scan is the ONLY direct quad read here (existence query — no triple built),
+ * mirroring the sibling list elements. De-duplicated by subject IRI.
  *
  * Each subject is parsed through `parseAs2Message` (the shared chat model's typed
  * read), which: (a) is internally THROW-guarded so a malformed foreign literal
@@ -130,7 +221,26 @@ function collectMessages(graph: Store): CanonicalMessage[] {
     if (message === undefined) continue;
     out.push(message);
   }
-  return out;
+  return sortByPublished(out);
+}
+
+/**
+ * Sort messages by `published` ascending (oldest first). A message with no/unparseable
+ * timestamp sorts AFTER timestamped ones, keeping their relative first-seen order
+ * (the sort is stable, and we map an absent/NaN time to `+Infinity`).
+ */
+function sortByPublished(messages: CanonicalMessage[]): CanonicalMessage[] {
+  return messages
+    .map((m, i) => ({ m, i, t: publishedMillis(m.published) }))
+    .sort((a, b) => a.t - b.t || a.i - b.i)
+    .map((x) => x.m);
+}
+
+/** The epoch-millis of an ISO `published`, or `+Infinity` when absent/unparseable. */
+function publishedMillis(iso: string | undefined): number {
+  if (!iso) return Number.POSITIVE_INFINITY;
+  const ms = Date.parse(iso);
+  return Number.isNaN(ms) ? Number.POSITIVE_INFINITY : ms;
 }
 
 /**

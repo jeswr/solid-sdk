@@ -9,7 +9,15 @@
 import "../src/index.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { JeswrMessageList } from "../src/index.js";
-import { MESSAGES_TTL, mount, parseTurtle, waitFor, XSS_MESSAGE_TTL } from "./fixtures.js";
+import {
+  CHAT_CHILD_TTL,
+  CHAT_CONTAINER_TTL,
+  MESSAGES_TTL,
+  mount,
+  parseTurtle,
+  waitFor,
+  XSS_MESSAGE_TTL,
+} from "./fixtures.js";
 
 afterEach(() => {
   document.body.innerHTML = "";
@@ -23,6 +31,41 @@ function ttlFetch(body: string, status = 200): typeof fetch {
       status,
       headers: { "Content-Type": "text/turtle" },
     })) as unknown as typeof fetch;
+}
+
+/**
+ * A fetch stub that serves a body per URL from a lookup map. A URL absent from the
+ * map resolves to a 404, so a test controls exactly which child reads succeed/fail.
+ * Records the URLs requested (for concurrency/assertion).
+ */
+function mapFetch(
+  responses: Record<string, { body: string; status?: number }>,
+  calls?: string[],
+): typeof fetch {
+  return (async (input: string | URL) => {
+    const url = String(input);
+    calls?.push(url);
+    const r = responses[url];
+    if (!r) return new Response("", { status: 404 });
+    return new Response(r.body, {
+      status: r.status ?? 200,
+      headers: { "Content-Type": "text/turtle" },
+    });
+  }) as unknown as typeof fetch;
+}
+
+/** The per-URL response map for the chat-container fixture (container + 3 children). */
+function chatContainerResponses(): Record<string, { body: string; status?: number }> {
+  const map: Record<string, { body: string; status?: number }> = {
+    "https://pod.example/chat/": { body: CHAT_CONTAINER_TTL },
+  };
+  for (const [url, body] of Object.entries(CHAT_CHILD_TTL)) map[url] = { body };
+  return map;
+}
+
+/** Ordered message body texts as rendered. */
+function renderedBodies(el: HTMLElement): (string | undefined)[] {
+  return [...el.querySelectorAll('[part="content"]')].map((n) => n.textContent?.trim());
 }
 
 describe("<jeswr-message-list>", () => {
@@ -111,5 +154,92 @@ describe("<jeswr-message-list>", () => {
     const link = el.querySelector('a[part="author"]');
     expect(link).toBeNull();
     expect(el.querySelector('a[href^="javascript:"]')).toBeNull();
+  });
+
+  describe("container walk (ldp:contains children — one message per resource)", () => {
+    it("walks a container whose messages are SEPARATE resources and renders all N, sorted", async () => {
+      // The container doc itself carries NO as:Note; the three messages live in
+      // separate ldp:contains child resources. The element must fetch each child and
+      // merge them — rendering all three (the per-resource pod-chat layout).
+      const calls: string[] = [];
+      const el = await mount<JeswrMessageList>("jeswr-message-list");
+      el.fetch = mapFetch(chatContainerResponses(), calls);
+      el.src = "https://pod.example/chat/";
+      await waitFor(
+        el,
+        (e) => e.querySelectorAll('[part="message"]').length === 3,
+        "three child messages render",
+      );
+
+      // All three child bodies are present, in chronological (published-ascending) order.
+      expect(renderedBodies(el)).toEqual(["First message", "Second message", "Third message"]);
+
+      // Each child resource WAS fetched (plus the container itself).
+      expect(calls).toContain("https://pod.example/chat/");
+      expect(calls).toContain("https://pod.example/chat/m1.ttl");
+      expect(calls).toContain("https://pod.example/chat/m2.ttl");
+      expect(calls).toContain("https://pod.example/chat/m3.ttl");
+
+      // The reply edge from the second child still renders (cross-resource inReplyTo).
+      expect(el.querySelectorAll('[part="reply"]').length).toBe(1);
+    });
+
+    it("still renders the INLINE single-document case (all as:Note in one doc)", async () => {
+      // A thread document with every as:Note inline and NO ldp:contains — the
+      // container walk must keep rendering it from the target graph alone.
+      const el = await mount<JeswrMessageList>("jeswr-message-list");
+      el.fetch = ttlFetch(MESSAGES_TTL);
+      el.src = "https://pod.example/chat/thread.ttl";
+      await waitFor(
+        el,
+        (e) => e.querySelectorAll('[part="message"]').length === 2,
+        "two inline messages render",
+      );
+      expect(renderedBodies(el)).toEqual(["Hello, world", "Replying to you"]);
+    });
+
+    it("skips a malformed/failing child — it is dropped, never aborting the list", async () => {
+      // m2 fails to read (a 500). The other two children must still render — a broken
+      // message resource drops, it does not abort the whole list.
+      const responses = chatContainerResponses();
+      responses["https://pod.example/chat/m2.ttl"] = { body: "", status: 500 };
+      const el = await mount<JeswrMessageList>("jeswr-message-list");
+      el.fetch = mapFetch(responses);
+      el.src = "https://pod.example/chat/";
+      await waitFor(
+        el,
+        (e) => e.querySelectorAll('[part="message"]').length === 2,
+        "two surviving messages render",
+      );
+      const bodies = renderedBodies(el);
+      expect(bodies).toEqual(["First message", "Third message"]);
+      expect(bodies).not.toContain("Second message");
+    });
+
+    it("skips a child whose body is unparseable RDF — dropped, not fatal", async () => {
+      // m3's body is garbage that parseRdf rejects. m1/m2 still render.
+      const responses = chatContainerResponses();
+      responses["https://pod.example/chat/m3.ttl"] = { body: "this is not turtle <<<<" };
+      const el = await mount<JeswrMessageList>("jeswr-message-list");
+      el.fetch = mapFetch(responses);
+      el.src = "https://pod.example/chat/";
+      await waitFor(
+        el,
+        (e) => e.querySelectorAll('[part="message"]').length === 2,
+        "two parseable messages render",
+      );
+      expect(renderedBodies(el)).toEqual(["First message", "Second message"]);
+    });
+
+    it("shows the empty state for a container with no message children", async () => {
+      // A container whose only children are non-message resources / no as:Note.
+      const empty = `@prefix ldp: <http://www.w3.org/ns/ldp#> .
+<https://pod.example/chat/> a ldp:Container .`;
+      const el = await mount<JeswrMessageList>("jeswr-message-list");
+      el.fetch = ttlFetch(empty);
+      el.src = "https://pod.example/chat/";
+      await waitFor(el, (e) => !!e.querySelector('[part="empty"]'), "empty state renders");
+      expect(el.querySelector('[part="empty"]')?.textContent).toContain("No messages");
+    });
   });
 });
