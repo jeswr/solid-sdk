@@ -64,8 +64,6 @@ own `/clientid.jsonld` too.
 ```caddy
 	@appstore host apps.solid-test.jeswr.org
 	handle @appstore {
-		root * /srv/podapps/app-store
-
 		# Content negotiation for the ONE catalog IRI (/catalog): RDF clients get
 		# Turtle/JSON-LD; an explicit text/html request gets the SPA (which deep-links to
 		# the #/catalog HTML view). A bare */* and Accept: text/turtle fall through to RDF.
@@ -74,6 +72,7 @@ own `/clientid.jsonld` too.
 			header Accept *application/ld+json*
 		}
 		handle @catalog_jsonld {
+			root * /srv/podapps/app-store
 			rewrite * /catalog.jsonld
 			header Content-Type application/ld+json
 			file_server
@@ -83,30 +82,45 @@ own `/clientid.jsonld` too.
 			header Accept *text/html*
 		}
 		handle @catalog_html {
+			root * /srv/podapps/app-store
 			rewrite * /index.html
 			file_server
 		}
 		@catalog_ttl path /catalog
 		handle @catalog_ttl {
+			root * /srv/podapps/app-store
 			rewrite * /catalog.ttl
 			header Content-Type text/turtle
 			file_server
 		}
 
-		# Content-Type for the directly-fetched LD files.
-		@catalog_files path /catalog.ttl
-		header @catalog_files Content-Type text/turtle
-		@catalog_jsonld_file path /catalog.jsonld
-		header @catalog_jsonld_file Content-Type application/ld+json
-
-		try_files {path} /index.html
-		file_server
+		# SPA fallback (mutually exclusive with the /catalog handles above). This is the
+		# sibling pod-app handler form — root + try_files {path} /index.html + file_server —
+		# wrapped in a bare `handle {}` so the matched-above /catalog requests do NOT also
+		# fall through here (Caddy `handle` blocks at one level are mutually exclusive; bare
+		# terminal directives are NOT, so the SPA fallback MUST itself be a `handle {}`).
+		# The directly-fetched LD files (/catalog.ttl, /catalog.jsonld) are served here, so
+		# their Content-Type overrides live in this same handle.
+		handle {
+			root * /srv/podapps/app-store
+			@catalog_files path /catalog.ttl
+			header @catalog_files Content-Type text/turtle
+			@catalog_jsonld_file path /catalog.jsonld
+			header @catalog_jsonld_file Content-Type application/ld+json
+			try_files {path} /index.html
+			file_server
+		}
 	}
 ```
 
-> Caddy matcher ordering: more specific `path`+`header` matchers must precede the bare
-> `try_files`/`file_server` so `/catalog` is intercepted before the SPA fallback. Keep this handler's
-> hostname in lockstep with the vhost below.
+> Caddy `handle` semantics: `handle` blocks at the same nesting level are **mutually exclusive**
+> (only the first matching one runs), so the SPA fallback is its own bare `handle {}` rather than
+> bare `try_files`/`file_server` directives — otherwise a matched `/catalog` request would run its
+> catalog handle *and* fall through to the SPA file_server (double-handling). This is the canonical
+> Caddy SPA-with-extra-routes pattern, and structurally identical to each sibling pod-app block (a
+> single self-contained `handle @app { root *; try_files {path} /index.html; file_server }`), just
+> with the `/catalog` content-negotiation handles added. Keep this handler's hostname in lockstep
+> with the vhost below.
 
 ## 4. The main-Caddy vhost (`Caddyfile.single`)
 
