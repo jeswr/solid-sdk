@@ -1,0 +1,55 @@
+{
+  "name": "solid-access-manager",
+  "version": "0.0.1",
+  "private": true,
+  "description": "The suite's access-management app — see, review, grant, and revoke access to your Solid pod in data-class + purpose terms: grant dashboard, access-request inbox, CAS-pinned approve/deny pipeline, DPV consent receipts.",
+  "license": "MIT",
+  "author": "Claude Fable 5 (@jeswr PSS agent)",
+  "type": "module",
+  "engines": {
+    "node": ">=20.12"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -p tsconfig.build.json && vite build",
+    "preview": "vite preview",
+    "lint": "biome check src test vite.config.ts vitest.config.ts && node scripts/check-lockfile-transport.mjs",
+    "lint:fix": "biome check --write src test vite.config.ts vitest.config.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "gate": "npm run lint && npm run typecheck && npm run test && npm run build"
+  },
+  "dependencies": {
+    "@jeswr/app-shell": "git+https://github.com/jeswr/app-shell.git#b44b2639c6ef41f5b7d6b992f265cf5f34505d54",
+    "@jeswr/fetch-rdf": "0.1.0",
+    "@jeswr/solid-elements": "git+https://github.com/jeswr/solid-elements.git#2c00745d3b834a7f645b1ca17b6ff8ffac3b1a8e",
+    "@jeswr/solid-odrl": "git+https://github.com/jeswr/solid-odrl.git#47772c8df29147289a922766dba77835c8f32e38",
+    "@jeswr/solid-session-restore": "git+https://github.com/jeswr/solid-session-restore.git#38e78dbececbf0dd12c9ceac288a6eef6c624377",
+    "@rdfjs/wrapper": "0.34.0",
+    "@solid/object": "0.6.0",
+    "@solid/reactive-authentication": "0.1.3",
+    "dpop": "2.1.1",
+    "n3": "2.0.3",
+    "oauth4webapi": "3.8.6",
+    "react": "19.2.7",
+    "react-dom": "19.2.7"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.0",
+    "@rdfjs/types": "2.0.1",
+    "@tailwindcss/vite": "4.3.1",
+    "@testing-library/jest-dom": "6.9.1",
+    "@testing-library/react": "16.3.2",
+    "@types/n3": "1.26.1",
+    "@types/node": "22.19.3",
+    "@types/react": "19.0.0",
+    "@types/react-dom": "19.0.0",
+    "@vitejs/plugin-react": "5.2.0",
+    "jsdom": "26.1.0",
+    "tailwindcss": "4.3.1",
+    "typescript": "5.7.3",
+    "vite": "7.3.5",
+    "vitest": "4.1.9"
+  }
+}

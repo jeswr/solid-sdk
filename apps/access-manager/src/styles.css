@@ -1,0 +1,230 @@
+/* AUTHORED-BY Claude Fable 5
+ *
+ * Theme: Tailwind v4 + the shared @jeswr/app-shell OKLCH tokens (the suite
+ * light/dark convention). @source scans the app-shell dist so the classes its
+ * ThemeToggle / AccountMenu / FeedbackButton emit are generated.
+ */
+@import "tailwindcss";
+@import "@jeswr/app-shell/styles.css";
+@source "../node_modules/@jeswr/app-shell/dist";
+
+body {
+  margin: 0;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  background: var(--background);
+  color: var(--foreground);
+}
+
+.login-screen {
+  max-width: 28rem;
+  margin: 10vh auto;
+  padding: 1rem;
+  text-align: center;
+}
+.login-screen .tagline {
+  color: var(--muted-foreground);
+}
+
+.app-shell {
+  max-width: 64rem;
+  margin: 0 auto;
+  padding: 0 1rem 4rem;
+}
+.app-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--border);
+}
+.app-header h1 {
+  font-size: 1.1rem;
+  margin: 0;
+  margin-right: auto;
+}
+.app-header nav[role="tablist"] {
+  display: flex;
+  gap: 0.25rem;
+}
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+button {
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--background);
+  color: var(--foreground);
+  border-radius: var(--radius, 0.5rem);
+  padding: 0.35rem 0.75rem;
+}
+button[aria-selected="true"] {
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+button.danger {
+  color: var(--destructive);
+  border-color: var(--destructive);
+}
+
+.view-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin: 1rem 0;
+}
+.walking {
+  color: var(--muted-foreground);
+  font-size: 0.9rem;
+}
+.saving-indicator {
+  font-size: 0.9rem;
+}
+.saving-saving {
+  color: var(--muted-foreground);
+}
+.saving-saved {
+  color: var(--primary);
+}
+.saving-error {
+  color: var(--destructive);
+}
+
+.empty,
+.notice {
+  color: var(--muted-foreground);
+}
+.notice.error {
+  color: var(--destructive);
+}
+
+ul.resource-list,
+ul.agent-list,
+ul.request-list,
+ul.grant-list,
+ul.share-lines {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+li.resource,
+li.agent-holding,
+li.request,
+li.grant {
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 0.5rem);
+  padding: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+li.resource.public {
+  border-color: var(--destructive);
+}
+.resource-head,
+.agent-head,
+.request-head {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-weight: 600;
+}
+.public-flag,
+.public-agent {
+  color: var(--destructive);
+  font-weight: 700;
+}
+.acl-error {
+  color: var(--destructive);
+  font-size: 0.85rem;
+}
+.share-line {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.3rem 0;
+}
+.mode-badges {
+  display: inline-flex;
+  gap: 0.25rem;
+}
+.mode-badge {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 0.75rem;
+  padding: 0 0.5rem;
+}
+.mode-badge.mode-control,
+.mode-badge.mode-write {
+  border-color: var(--destructive);
+}
+.origin-badge {
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+}
+.status-badge {
+  font-size: 0.8rem;
+  border-radius: 999px;
+  padding: 0 0.5rem;
+  border: 1px solid var(--border);
+}
+.status-badge.approved {
+  color: var(--primary);
+}
+.status-badge.denied {
+  color: var(--destructive);
+}
+.request-fields {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.25rem 1rem;
+  margin: 0.5rem 0;
+}
+.request-fields dt {
+  color: var(--muted-foreground);
+}
+.request-fields dd {
+  margin: 0;
+}
+.request-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+.approve-preview {
+  border: 1px dashed var(--border);
+  border-radius: var(--radius, 0.5rem);
+  padding: 0.75rem;
+  margin-top: 0.5rem;
+}
+.pin-note {
+  font-size: 0.85rem;
+  color: var(--muted-foreground);
+}
+.data-class {
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 0.5rem);
+  padding: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+.data-class .visibility {
+  font-weight: 400;
+  font-size: 0.8rem;
+  color: var(--muted-foreground);
+  margin-left: 0.5rem;
+}
+.receipt-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.receipt-table th,
+.receipt-table td {
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  padding: 0.4rem 0.6rem;
+}
+.when {
+  color: var(--muted-foreground);
+  font-size: 0.85rem;
+}

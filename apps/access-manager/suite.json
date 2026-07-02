@@ -1,0 +1,27 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jeswr/full-solid-ecosystem/main/tracking/schema/suite.schema.json",
+  "id": "solid-access-manager",
+  "kind": "app",
+  "name": "Solid Access Manager",
+  "repo": "https://github.com/jeswr/solid-access-manager",
+  "category": "access-management",
+  "maturity": "prototype",
+  "visibility": "public",
+  "securityCritical": true,
+  "stack": {
+    "language": "typescript",
+    "runtime": "node>=20.12",
+    "ui": "vite + react + @jeswr/app-shell + @jeswr/solid-elements",
+    "rdf": "@jeswr/fetch-rdf + @solid/object + @rdfjs/wrapper + @jeswr/solid-odrl + n3",
+    "test": "vitest",
+    "lint": "biome"
+  },
+  "dependsOn": [
+    "full-solid-ecosystem",
+    "app-shell",
+    "solid-elements",
+    "solid-session-restore",
+    "solid-odrl"
+  ],
+  "notes": "Phase 1 (P2 of full-solid-ecosystem docs/design/access-management-proposal.md @ 8a069f4): standalone owner console over EXISTING pod surfaces — grant dashboard (by-resource/by-agent), revoke/edit with If-Match CAS, data-class view via type indexes, ODRL access-request inbox, client-side CAS-pinned approve/deny pipeline with deterministic grantIds + DPV consent receipts. It AUTHORS ACLs — security-critical; every ACL write goes through @solid/object typed accessors, never hand-built triples."
+}
