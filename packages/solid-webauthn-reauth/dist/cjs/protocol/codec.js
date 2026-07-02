@@ -77,18 +77,35 @@ function decodeAssertionBundle(token) {
 /** Unpadded base64url alphabet (the WebAuthn JSON serialization, §5.8.1). */
 const BASE64URL = /^[A-Za-z0-9_-]+$/u;
 /**
- * Canonical structural check for a non-empty **unpadded base64url** string.
+ * Canonical check for a non-empty **unpadded base64url** string.
  *
- * Beyond the alphabet, this rejects impossible *lengths*: unpadded base64url
- * packs 4 characters into 3 bytes, so a group with a remainder of exactly **1**
- * character can never be produced by any encoder. Accepting a `length % 4 === 1`
- * string would let a value that no valid authenticator emits through the
- * fail-closed boundary and into downstream decode/crypto (roborev Medium,
- * `codec.ts`). Padding (`=`) is not in the alphabet, so padded input is rejected
- * by the alphabet test.
+ * A WebAuthn binary field must be the *canonical* base64url an encoder emits.
+ * Two malformed classes are alphabet-valid yet no encoder produces them, so both
+ * are rejected here at the fail-closed, verifier-facing boundary (roborev
+ * Medium, `codec.ts`):
+ *
+ *  1. **Impossible length** — unpadded base64url packs 4 chars into 3 bytes, so a
+ *     remainder of exactly **1** char (`length % 4 === 1`) can never occur.
+ *  2. **Non-canonical unused bits** — for a remainder of 2 the final sextet's low
+ *     4 bits, and for a remainder of 3 the final sextet's low 2 bits, are unused
+ *     and MUST be zero; a value like `"AB"` or `"AAB"` decodes to the same bytes
+ *     as its canonical form but is a distinct string (an aliasing / malleability
+ *     hazard for a string-keyed credential lookup).
+ *
+ * Both are caught in one step by a **decode → re-encode round-trip**: only a
+ * canonical string re-encodes to itself. (Padding `=` is outside the alphabet,
+ * so padded input is rejected by the alphabet test first.)
  */
 function isBase64url(value) {
-    return value.length > 0 && value.length % 4 !== 1 && BASE64URL.test(value);
+    if (value.length === 0 || value.length % 4 === 1 || !BASE64URL.test(value)) {
+        return false;
+    }
+    try {
+        return (0, base64url_js_1.bytesToBase64url)((0, base64url_js_1.base64urlToBytes)(value)) === value;
+    }
+    catch {
+        return false;
+    }
 }
 /** Assert a string field is present and non-empty on `obj`, else throw. */
 function requireString(obj, field) {

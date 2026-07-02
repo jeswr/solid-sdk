@@ -157,6 +157,32 @@ describe("assertion bundle codec", () => {
       expect(() => decodeAssertionBundle(token)).toThrow(/base64url/);
     });
 
+    it("rejects a non-canonical credential.id (remainder-2 unused bits set)", () => {
+      // "AB" is alphabet-valid and a valid length, but 'B' leaves non-zero unused
+      // pad bits — it decodes to the same byte as canonical "AA". No encoder emits it.
+      expect(() => decodeAssertionBundle(tokenWith({ id: "AB" }))).toThrow(/base64url/);
+    });
+
+    it("rejects a non-canonical response.signature (remainder-3 unused bits set)", () => {
+      // "AAB" decodes to the same 2 bytes as canonical "AAA" but is a distinct string.
+      const token = encodeBase64url(
+        JSON.stringify({
+          version: BUNDLE_VERSION,
+          credential: {
+            ...credential,
+            response: { ...credential.response, signature: "AAB" },
+          },
+        }),
+      );
+      expect(() => decodeAssertionBundle(token)).toThrow(/base64url/);
+    });
+
+    it("accepts canonical remainder-2 and remainder-3 fields", () => {
+      // "AA" (1 byte, 0x00) and "AAA" (2 bytes) are canonical (unused bits zero).
+      expect(() => decodeAssertionBundle(tokenWith({ id: "AA" }))).not.toThrow();
+      expect(() => decodeAssertionBundle(tokenWith({ id: "AAA" }))).not.toThrow();
+    });
+
     it("rejects a non-base64url response.signature", () => {
       const token = encodeBase64url(
         JSON.stringify({
