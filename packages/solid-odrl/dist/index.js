@@ -902,9 +902,15 @@ function checkDelegationEdge(parent, child, remainingDepth, req, now) {
   for (const rule of candidates) {
     const failure = checkGrantUseRule(rule, child, remainingDepth);
     if (failure === void 0) {
+      const dutySource = {
+        id: parent.id,
+        permissions: [rule],
+        ...parent.obligations !== void 0 && { obligations: parent.obligations }
+      };
+      const edgeDuties = evaluate(dutySource, authRequest, { now }).duties;
       return {
         ok: true,
-        duties: auth.duties.filter((d) => d.action !== "nextPolicy")
+        duties: edgeDuties.filter((d) => d.action !== "nextPolicy")
       };
     }
     failures.push(failure);

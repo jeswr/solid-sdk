@@ -14,8 +14,9 @@ export interface DelegationEvaluateOptions extends EvaluateOptions {
      *
      * Typed as an array/Set — NOT `Iterable<string>` — because a bare string IS an
      * `Iterable<string>`, so `revoked: oneIri` would typecheck yet silently become
-     * a set of CHARACTERS and never match a policy id (a fail-open foot-gun). A
-     * bare string is also rejected at runtime for plain-JS callers.
+     * a set of CHARACTERS and never match a policy id (a fail-open foot-gun). For
+     * plain-JS callers a bare string is NORMALISED at runtime to a one-element
+     * revoked set (never iterated as characters).
      */
     readonly revoked?: readonly string[] | ReadonlySet<string>;
     /**

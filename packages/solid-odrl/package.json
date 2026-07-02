@@ -23,7 +23,7 @@
     "check:lockfile-transport": "node scripts/check-lockfile-transport.mjs",
     "api:report": "npm run build && api-extractor run --local -c config/api-extractor.json",
     "api:check": "npm run build && api-extractor run -c config/api-extractor.json",
-    "typecheck": "npm run build:deps && tsc -p tsconfig.json --noEmit",
+    "typecheck": "npm run build:deps && tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
     "lint": "biome check src test scripts && npm run check:lockfile-transport",
     "lint:fix": "biome check --write src test scripts",
     "test": "npm run build:deps && vitest run",

@@ -554,6 +554,18 @@ describe("evaluateDelegated: revocation + duties", () => {
     expect(r.reason).toMatch(/revoked/);
   });
 
+  it("a bare-string revoked value is a TYPE error (guards against re-widening to Iterable<string>)", () => {
+    // Type-level regression, enforced by the typecheck gate (tsconfig.test.json):
+    // if `revoked` were ever widened back to Iterable<string>, the bare string
+    // below would start to typecheck and this @ts-expect-error would FAIL.
+    const r = evaluateDelegated([root(), hop1()], READ_B, {
+      now: NOW,
+      // @ts-expect-error — a bare string must not satisfy the revoked type
+      revoked: HOP1_ID,
+    });
+    expect(r.decision).toBe("deny");
+  });
+
   it("revoked accepts a ReadonlySet", () => {
     const r = evaluateDelegated([root(), hop1()], READ_B, {
       now: NOW,
@@ -614,6 +626,36 @@ describe("evaluateDelegated: revocation + duties", () => {
       { now: NOW, requireDuties: true },
     );
     expect(discharged.decision).toBe("permit");
+  });
+
+  it("duties of a NON-authorizing grantUse candidate never leak into the aggregate (roborev Medium)", () => {
+    // Two grantUse rules for the same delegate: X mandates a nextPolicy that
+    // was NOT delegated (fails) and carries an inform duty; Y is duty-free and
+    // authorises. X's duty must not surface — under requireDuties it would
+    // wrongly deny a chain whose actual authorizing rule is unconditioned.
+    const twoCandidates: OdrlPolicy = {
+      ...root(),
+      permissions: [
+        { type: "permission", action: "read", target: RES, assignee: AGENT_A },
+        {
+          type: "permission",
+          action: "grantUse",
+          target: RES,
+          assignee: AGENT_A,
+          duties: [
+            { action: "nextPolicy", target: "https://alice.example/policies/unused" },
+            { action: "inform", target: OWNER },
+          ],
+        },
+        { type: "permission", action: "grantUse", target: RES, assignee: AGENT_A },
+      ],
+    };
+    const r = evaluateDelegated([twoCandidates, hop1()], READ_B, {
+      now: NOW,
+      requireDuties: true,
+    });
+    expect(r.decision).toBe("permit");
+    expect(r.duties.map((d) => d.action)).not.toContain("inform");
   });
 
   it("nextPolicy duties never enter the aggregate (structurally enforced, not dischargeable)", () => {

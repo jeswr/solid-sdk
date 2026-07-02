@@ -61,8 +61,9 @@ export interface DelegationEvaluateOptions extends EvaluateOptions {
    *
    * Typed as an array/Set — NOT `Iterable<string>` — because a bare string IS an
    * `Iterable<string>`, so `revoked: oneIri` would typecheck yet silently become
-   * a set of CHARACTERS and never match a policy id (a fail-open foot-gun). A
-   * bare string is also rejected at runtime for plain-JS callers.
+   * a set of CHARACTERS and never match a policy id (a fail-open foot-gun). For
+   * plain-JS callers a bare string is NORMALISED at runtime to a one-element
+   * revoked set (never iterated as characters).
    */
   readonly revoked?: readonly string[] | ReadonlySet<string>;
   /**
@@ -358,17 +359,27 @@ function checkDelegationEdge(
   for (const rule of candidates) {
     const failure = checkGrantUseRule(rule, child, remainingDepth);
     if (failure === undefined) {
-      // This rule authorises the edge. Its own duties condition the delegated
-      // grant (e.g. "inform the owner when delegating") — surface them so the
-      // chain aggregates + `requireDuties` gates on them. The `nextPolicy`
-      // duties are enforced STRUCTURALLY above (the mandated-policy identity
-      // check), not dischargeable via context flags, so they are excluded.
-      // `auth.duties` carries the matched rules' duties + the parent's
-      // policy-level obligations, already projected to ActiveDuty against the
-      // request context.
+      // This rule authorises the edge. ONLY ITS OWN duties (plus the parent's
+      // policy-level obligations) condition the delegated grant — duties of
+      // OTHER matched grantUse rules that did NOT authorise the edge (failed
+      // depth/nextPolicy, or lacked the explicit assignee) must not surface,
+      // or they would wrongly deny under `requireDuties`. Project them through
+      // evaluate() on a synthetic policy holding just the selected (already
+      // effective + matched) rule and the obligations, so the ActiveDuty
+      // projection (constraints + fulfilled:<action> discharge flags) is the
+      // core evaluator's own. `nextPolicy` duties are enforced STRUCTURALLY
+      // above (the mandated-policy identity check) and excluded. When several
+      // candidates authorise, the first (policy order) supplies the duties —
+      // deterministic; permissions are disjunctive.
+      const dutySource: OdrlPolicy = {
+        id: parent.id,
+        permissions: [rule],
+        ...(parent.obligations !== undefined && { obligations: parent.obligations }),
+      };
+      const edgeDuties = evaluate(dutySource, authRequest, { now }).duties;
       return {
         ok: true,
-        duties: auth.duties.filter((d) => d.action !== "nextPolicy"),
+        duties: edgeDuties.filter((d) => d.action !== "nextPolicy"),
       };
     }
     failures.push(failure);
