@@ -150,17 +150,6 @@ export function firstLiteral(terms: ReadonlySet<TermWrapperType>): string | unde
   return undefined;
 }
 
-/** Every NamedNode IRI value in a term set. */
-export function allIris(terms: ReadonlySet<TermWrapperType>): string[] {
-  const out: string[] = [];
-  for (const term of terms) {
-    if (term.termType === "NamedNode") {
-      out.push(term.value);
-    }
-  }
-  return out;
-}
-
 // --- the write path (GraphBuilder) ----------------------------------------
 
 /**
@@ -175,11 +164,6 @@ export type NodeRef =
 /** A {@link NodeRef} for an IRI subject. */
 export function iriRef(iri: string): NodeRef {
   return { kind: "iri", value: iri };
-}
-
-/** A {@link NodeRef} for an existing blank node id. */
-export function blankRef(id: string): NodeRef {
-  return { kind: "blank", value: id };
 }
 
 /** Coerce a bare IRI string to a {@link NodeRef} (a plain string is an IRI). */
@@ -247,18 +231,6 @@ export class GraphBuilder {
     const p = NamedNodeFrom.string(predicate, this.factory);
     this.store.add(this.factory.quad(s as never, p as never, blank as never) as Quad);
     return { kind: "blank", value: (blank as { value: string }).value };
-  }
-
-  /**
-   * Link a CHILD node (a named IRI child if provided, else a fresh blank) from
-   * `subject` via `predicate`, and return its {@link NodeRef}.
-   */
-  linkChild(subject: NodeRef | string, predicate: string, childIri?: string): NodeRef {
-    if (childIri !== undefined) {
-      this.addIri(subject, predicate, childIri);
-      return iriRef(childIri);
-    }
-    return this.linkBlankNode(subject, predicate);
   }
 
   /** The underlying store (a DatasetCore). */

@@ -419,17 +419,6 @@ var GraphBuilder = class {
     this.store.add(this.factory.quad(s, p, blank));
     return { kind: "blank", value: blank.value };
   }
-  /**
-   * Link a CHILD node (a named IRI child if provided, else a fresh blank) from
-   * `subject` via `predicate`, and return its {@link NodeRef}.
-   */
-  linkChild(subject, predicate, childIri) {
-    if (childIri !== void 0) {
-      this.addIri(subject, predicate, childIri);
-      return iriRef(childIri);
-    }
-    return this.linkBlankNode(subject, predicate);
-  }
   /** The underlying store (a DatasetCore). */
   dataset() {
     return this.store;

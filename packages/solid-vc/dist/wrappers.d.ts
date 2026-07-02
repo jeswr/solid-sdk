@@ -38,8 +38,6 @@ export declare function wrapVc(dataset: DatasetCore): VcDataset;
 export declare function firstIri(terms: ReadonlySet<TermWrapperType>): string | undefined;
 /** The first Literal value in a term set, or `undefined`. */
 export declare function firstLiteral(terms: ReadonlySet<TermWrapperType>): string | undefined;
-/** Every NamedNode IRI value in a term set. */
-export declare function allIris(terms: ReadonlySet<TermWrapperType>): string[];
 /**
  * A reference to a subject node: either a named IRI or a minted blank node, tagged
  * so the builder never has to GUESS whether a `string` subject is an IRI or a
@@ -54,8 +52,6 @@ export type NodeRef = {
 };
 /** A {@link NodeRef} for an IRI subject. */
 export declare function iriRef(iri: string): NodeRef;
-/** A {@link NodeRef} for an existing blank node id. */
-export declare function blankRef(id: string): NodeRef;
 /**
  * A low-level quad builder over a fresh `N3.Store`. Goes through the RDF/JS factory
  * — never a hand-concatenated triple — and exposes the primitives the VC builder
@@ -79,11 +75,6 @@ export declare class GraphBuilder {
      * unambiguously as a blank, never as an IRI).
      */
     linkBlankNode(subject: NodeRef | string, predicate: string): NodeRef;
-    /**
-     * Link a CHILD node (a named IRI child if provided, else a fresh blank) from
-     * `subject` via `predicate`, and return its {@link NodeRef}.
-     */
-    linkChild(subject: NodeRef | string, predicate: string, childIri?: string): NodeRef;
     /** The underlying store (a DatasetCore). */
     dataset(): DatasetCore;
     /** The accumulated quads. */
