@@ -42,6 +42,7 @@
 import type { LookupAddress } from "node:dns";
 import { Agent } from "undici";
 import { type GuardOptions } from "./index.js";
+export type { DnsLookup, GuardOptions, ResolvedAddress } from "./index.js";
 /** The `net.connect`-style lookup callback undici's connector invokes. */
 export type ConnectLookup = (hostname: string, options: {
     all?: boolean;

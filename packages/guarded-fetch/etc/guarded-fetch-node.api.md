@@ -24,10 +24,27 @@ export function createPinningDispatcher(options?: NodePinningOptions): Agent;
 export function createValidatingLookup(resolveAll: ResolveAll, allowLoopback: boolean, requireLoopbackOnly: boolean): ConnectLookup;
 
 // @public
+export type DnsLookup = (host: string) => Promise<ResolvedAddress[]>;
+
+// @public
+export interface GuardOptions {
+    readonly allowedContentTypes?: readonly string[];
+    readonly allowLoopback?: boolean;
+    readonly allowUnresolvedHosts?: boolean;
+    readonly dnsLookup?: DnsLookup | null;
+    readonly enforcePortGate?: boolean;
+    readonly fetch?: typeof globalThis.fetch;
+    readonly hostnameDenylist?: readonly string[];
+    readonly maxBytes?: number;
+    readonly maxRedirects?: number;
+    readonly pinningFetch?: typeof globalThis.fetch;
+    readonly requireDnsPinning?: boolean;
+    readonly timeoutMs?: number;
+}
+
+// @public
 export const nodeGuardedFetch: typeof globalThis.fetch;
 
-// Warning: (ae-forgotten-export) The symbol "GuardOptions" needs to be exported by the entry point node.d.ts
-//
 // @public
 export interface NodePinningOptions extends Omit<GuardOptions, "fetch" | "pinningFetch" | "dnsLookup"> {
     readonly allowLoopback?: boolean;
@@ -37,6 +54,14 @@ export interface NodePinningOptions extends Omit<GuardOptions, "fetch" | "pinnin
 
 // @public
 export type ResolveAll = (hostname: string) => Promise<LookupAddress[]>;
+
+// @public
+export interface ResolvedAddress {
+    // (undocumented)
+    readonly address: string;
+    // (undocumented)
+    readonly family: number;
+}
 
 // (No @packageDocumentation comment for this package)
 

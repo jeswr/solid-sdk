@@ -57,6 +57,17 @@ import {
   SsrfError,
 } from "./index.js";
 
+// Re-export `GuardOptions` (+ its own transitive public members `DnsLookup` / `ResolvedAddress`)
+// from THIS entry point. `NodePinningOptions extends Omit<GuardOptions, …>` below, so
+// `GuardOptions` is part of the `./node` public type surface — a consumer resolving types purely
+// off `@jeswr/guarded-fetch/node`'s own `.d.ts` must be able to reach it, and `GuardOptions`
+// itself references `DnsLookup` (`dnsLookup?: DnsLookup | null`) which references
+// `ResolvedAddress`, so the whole closure must be reachable or api-extractor's
+// `ae-forgotten-export` fires (now promoted to `error`). Type-only, so it erases to zero runtime
+// JS. The `type GuardOptions` import above is kept for local use (an `export type … from` gives
+// no local binding).
+export type { DnsLookup, GuardOptions, ResolvedAddress } from "./index.js";
+
 /** The `net.connect`-style lookup callback undici's connector invokes. */
 export type ConnectLookup = (
   hostname: string,
