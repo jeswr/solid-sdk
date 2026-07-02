@@ -72,7 +72,6 @@ export type {
   IssueDelegationInput,
   IssueMembershipInput,
   KeyPair,
-  KeyResolution,
   MembershipClaim,
   MembershipStatusName,
   MembershipVerificationResult,

@@ -97,12 +97,6 @@ export interface IssueMembershipInput {
 
 export { KeyPair }
 
-// @public
-export interface KeyResolution {
-    readonly publicKey: CryptoKey;
-    readonly verificationMethod: string;
-}
-
 export { MEMBERSHIP_STATUS }
 
 // @public

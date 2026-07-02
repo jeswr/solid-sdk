@@ -89,13 +89,6 @@ export interface DelegationLink {
      */
     readonly credential: VerifiableCredential;
 }
-/** A resolved verification key for one authority/method. */
-export interface KeyResolution {
-    /** The `verificationMethod` IRI this key answers to. */
-    readonly verificationMethod: string;
-    /** The public verification key (WebCrypto). */
-    readonly publicKey: CryptoKey;
-}
 /** Options for {@link verifyMembershipCredential}. */
 export interface VerifyMembershipOptions {
     /**
@@ -150,8 +143,8 @@ export interface IssueDelegationInput {
      * The delegate's PUBLIC key — embedded as a SIGNED `fedtrust:delegateKey` claim
      * (a JWK) so the chain is self-certifying: a verifier checks the NEXT link (or
      * the membership) with this key, which the delegator signed over. WebCrypto
-     * `CryptoKey` (it is exported to a public JWK). Pass the delegate's
-     * {@link KeyResolution} public key, NOT its private key.
+     * `CryptoKey` (it is exported to a public JWK). Pass the delegate's PUBLIC
+     * key, NOT its private key.
      */
     readonly delegateKey: CryptoKey;
     /** The federation the delegation is scoped to (signed; checked on chain walk). */
