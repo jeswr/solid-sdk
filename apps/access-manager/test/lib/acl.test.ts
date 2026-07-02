@@ -359,3 +359,42 @@ describe("grantOnResource", () => {
     expect(ownerHasControl(effective.dataset, OWNER)).toBe(true); // winner's doc kept
   });
 });
+
+describe("removeAuthenticatedFromEntry (roborev: class access is agentClass, not agent)", () => {
+  it("removes acl:AuthenticatedAgent from the node; named agents survive", async () => {
+    const pod = buildPod();
+    pod.seed(
+      REPORT_ACL,
+      `${PREFIXES}
+<${REPORT_ACL}#owner> a acl:Authorization ; acl:agent <${OWNER}> ;
+  acl:accessTo <${REPORT}> ; acl:mode acl:Read, acl:Write, acl:Control .
+<${REPORT_ACL}#auth> a acl:Authorization ; acl:agent <${BOB}> ;
+  acl:agentClass acl:AuthenticatedAgent ;
+  acl:accessTo <${REPORT}> ; acl:mode acl:Read .`,
+    );
+    const { read } = await entriesAt(pod, REPORT_ACL);
+    const { removeAuthenticatedFromEntry } = await import("../../src/lib/acl.js");
+    removeAuthenticatedFromEntry(read.dataset, `${REPORT_ACL}#auth`);
+    const entries = projectEntries(read.dataset);
+    const entry = entries.find((e) => e.authIri.endsWith("#auth"));
+    expect(entry?.isAuthenticated).toBe(false);
+    expect(entry?.agents).toEqual([BOB]); // named access untouched
+  });
+
+  it("drops the node entirely when only the class remained", async () => {
+    const pod = buildPod();
+    pod.seed(
+      REPORT_ACL,
+      `${PREFIXES}
+<${REPORT_ACL}#owner> a acl:Authorization ; acl:agent <${OWNER}> ;
+  acl:accessTo <${REPORT}> ; acl:mode acl:Read, acl:Write, acl:Control .
+<${REPORT_ACL}#auth> a acl:Authorization ;
+  acl:agentClass acl:AuthenticatedAgent ;
+  acl:accessTo <${REPORT}> ; acl:mode acl:Read .`,
+    );
+    const { read } = await entriesAt(pod, REPORT_ACL);
+    const { removeAuthenticatedFromEntry } = await import("../../src/lib/acl.js");
+    removeAuthenticatedFromEntry(read.dataset, `${REPORT_ACL}#auth`);
+    expect(projectEntries(read.dataset).some((e) => e.authIri.endsWith("#auth"))).toBe(false);
+  });
+});

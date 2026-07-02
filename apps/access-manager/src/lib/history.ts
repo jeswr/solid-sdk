@@ -170,33 +170,52 @@ export async function listReceipts(
   return out;
 }
 
+function sameModeSet(a: readonly WacMode[], b: readonly WacMode[]): boolean {
+  return [...a].sort().join(",") === [...b].sort().join(",");
+}
+
 /**
- * Remove EVERY authorization line naming `agent` in the ACL that governs
- * `target` (direct or inherited — the edit lands in the GOVERNING document,
- * where the authorization actually lives). Lockout-guarded via the entry-level
- * removal. A target with no ACL anywhere is skipped (nothing to retract).
+ * Retract EXACTLY what a grant materialised on one pinned target — no more.
+ * The approval pipeline only ever writes agent-scoped `acl:accessTo` entries
+ * into the target's OWN ACL (materialising one first when needed), with the
+ * grant's pinned mode set. So revocation removes the agent ONLY from entries
+ * in the target's own ACL that match that exact shape (accessTo == target,
+ * not public/authenticated, mode set == the grant's). Unrelated access —
+ * manual shares with other modes, ancestor `acl:default` entries, other
+ * agents — is never touched (the roborev High: a broad "remove the agent
+ * everywhere" retraction would revoke access this grant never granted).
+ * A target with no governing ACL is skipped (nothing to retract).
  */
-export async function retractAgentFromTarget(
+export async function retractGrantFromTarget(
   target: string,
   storageRoot: string,
   agent: string,
+  modes: readonly WacMode[],
   ownerWebId: string,
   fetchFn: SolidFetch,
 ): Promise<void> {
-  let aclUrl: string;
+  let effective: Awaited<ReturnType<typeof readEffectiveAcl>>;
   try {
-    const effective = await readEffectiveAcl(target, storageRoot, fetchFn);
-    aclUrl = effective.aclUrl;
+    effective = await readEffectiveAcl(target, storageRoot, fetchFn);
   } catch (e) {
     if (e instanceof NoAclFoundError) return;
     throw e;
   }
-  await updateAclWithRetry(aclUrl, fetchFn, (dataset) => {
+  // The pipeline wrote into the target's OWN ACL; an inherited-only target
+  // means this grant's entry no longer exists (or never did) — nothing to do.
+  if (!effective.owned) return;
+  await updateAclWithRetry(effective.aclUrl, fetchFn, (dataset) => {
     const acl = new AclResource(dataset, DataFactory);
     const authIris = [...acl.authorizations].map((a) => a.value);
     for (const authIri of authIris) {
       const entry = projectEntries(dataset).find((e) => e.authIri === authIri);
-      if (entry?.agents.includes(agent)) {
+      if (
+        entry?.agents.includes(agent) === true &&
+        !entry.isPublic &&
+        !entry.isAuthenticated &&
+        entry.accessTo.some((t) => t === target) &&
+        sameModeSet(entry.modes, modes)
+      ) {
         removeAgentFromEntry(dataset, authIri, agent, ownerWebId);
       }
     }
@@ -222,7 +241,14 @@ export async function revokeGrant(
   const agent = grant.agent;
   if (agent !== undefined) {
     for (const target of grant.targets) {
-      await retractAgentFromTarget(target, ctx.storageRoot, agent, ctx.ownerWebId, ctx.fetch);
+      await retractGrantFromTarget(
+        target,
+        ctx.storageRoot,
+        agent,
+        grant.modes,
+        ctx.ownerWebId,
+        ctx.fetch,
+      );
     }
   }
   // Mark the grant record revoked (CAS; tolerate concurrent revokers).

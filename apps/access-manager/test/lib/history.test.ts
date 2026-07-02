@@ -8,13 +8,23 @@ import {
   listGrants,
   listReceipts,
   readGrantRecord,
-  retractAgentFromTarget,
+  retractGrantFromTarget,
   revokeGrant,
 } from "../../src/lib/history.js";
 import { readAccessRequest } from "../../src/lib/inbox.js";
 import { readTypeRegistrations } from "../../src/lib/type-index.js";
 import { DPV } from "../../src/lib/vocab.js";
-import { BOB, buildPod, GRANTS, INBOX, OWNER, POD, RECEIPTS, REQUESTER } from "../fixtures.js";
+import {
+  BOB,
+  buildPod,
+  GRANTS,
+  INBOX,
+  OWNER,
+  POD,
+  PREFIXES,
+  RECEIPTS,
+  REQUESTER,
+} from "../fixtures.js";
 import type { PodStub } from "../pod-stub.js";
 
 const REQUEST = `${INBOX}request-1.ttl`;
@@ -68,18 +78,32 @@ describe("listGrants + listReceipts", () => {
   });
 });
 
-describe("retractAgentFromTarget", () => {
-  it("removes the agent from a DIRECT acl", async () => {
-    await retractAgentFromTarget(REPORT, POD, BOB, OWNER, pod.fetch);
+describe("retractGrantFromTarget (precise — only what the grant materialised)", () => {
+  it("removes ONLY the exact-shape entry: same agent, accessTo target, same mode set", async () => {
+    // The grant shape: bob, Read, accessTo REPORT — plus an UNRELATED manual
+    // Write share for bob that must survive.
+    pod.seed(
+      `${REPORT}.acl`,
+      `${PREFIXES}
+<${REPORT}.acl#owner> a acl:Authorization ; acl:agent <${OWNER}> ;
+  acl:accessTo <${REPORT}> ; acl:mode acl:Read, acl:Write, acl:Control .
+<${REPORT}.acl#grant> a acl:Authorization ; acl:agent <${BOB}> ;
+  acl:accessTo <${REPORT}> ; acl:mode acl:Read .
+<${REPORT}.acl#manual> a acl:Authorization ; acl:agent <${BOB}> ;
+  acl:accessTo <${REPORT}> ; acl:mode acl:Read, acl:Write .`,
+    );
+    await retractGrantFromTarget(REPORT, POD, BOB, ["Read"], OWNER, pod.fetch);
     const effective = await readEffectiveAcl(REPORT, POD, pod.fetch);
-    expect(effective.entries.some((e) => e.agents.includes(BOB))).toBe(false);
-    // Public + owner lines survive.
-    expect(effective.entries.some((e) => e.isPublic)).toBe(true);
+    // The Read-only grant entry is gone; the manual Read+Write share survives.
+    const bobLines = effective.entries.filter((e) => e.agents.includes(BOB));
+    expect(bobLines).toHaveLength(1);
+    expect(bobLines[0]?.modes.sort()).toEqual(["Read", "Write"]);
     expect(effective.entries.some((e) => e.agents.includes(OWNER))).toBe(true);
   });
 
-  it("edits the GOVERNING (ancestor) document for an inherited grant", async () => {
-    // Give bob inherited access via the root default.
+  it("NEVER touches an ancestor acl:default entry (inherited access is not the grant's)", async () => {
+    // Bob has broad inherited access via the root default — revoking a
+    // narrow per-resource grant must not remove it.
     pod.seed(
       `${POD}.acl`,
       `${pod.body(`${POD}.acl`) ?? ""}
@@ -88,16 +112,28 @@ describe("retractAgentFromTarget", () => {
   <http://www.w3.org/ns/auth/acl#default> <${POD}> ;
   <http://www.w3.org/ns/auth/acl#mode> <http://www.w3.org/ns/auth/acl#Read> .`,
     );
-    await retractAgentFromTarget(ALICE, POD, BOB, OWNER, pod.fetch);
-    // The edit landed in the ROOT acl (where the authorization lives).
-    expect(pod.body(`${POD}.acl`)).not.toContain(BOB);
-    expect(pod.has(`${ALICE}.acl`)).toBe(false); // no stray own-acl minted
+    await retractGrantFromTarget(ALICE, POD, BOB, ["Read"], OWNER, pod.fetch);
+    // The root default entry survives; no own-acl is minted on the target.
+    expect(pod.body(`${POD}.acl`)).toContain(BOB);
+    expect(pod.has(`${ALICE}.acl`)).toBe(false);
+  });
+
+  it("skips entries carrying public/authenticated class access entirely", async () => {
+    // #shared names bob AND the public with Read. The pipeline never writes
+    // into a class-bearing node (addAgentGrant refuses them), so that entry
+    // is NOT the grant's — the retraction must leave it fully intact.
+    await retractGrantFromTarget(REPORT, POD, BOB, ["Read"], OWNER, pod.fetch);
+    const effective = await readEffectiveAcl(REPORT, POD, pod.fetch);
+    const shared = effective.entries.find((e) => e.isPublic);
+    expect(shared).toBeDefined();
+    expect(shared?.agents).toContain(BOB);
   });
 
   it("is a no-op for a target with no ACL anywhere", async () => {
     pod.delete(`${POD}.acl`);
+    pod.delete(`${REPORT}.acl`);
     await expect(
-      retractAgentFromTarget(ALICE, POD, BOB, OWNER, pod.fetch),
+      retractGrantFromTarget(ALICE, POD, BOB, ["Read"], OWNER, pod.fetch),
     ).resolves.toBeUndefined();
   });
 });

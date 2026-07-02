@@ -10,6 +10,7 @@ import { useMemo, useState } from "react";
 import { useSession } from "../auth/SessionContext.js";
 import {
   removeAgentFromEntry,
+  removeAuthenticatedFromEntry,
   removePublicFromEntry,
   setAgentModes,
   updateAclWithRetry,
@@ -68,7 +69,7 @@ export function DashboardView({
           if (line.agent === PUBLIC_AGENT) {
             removePublicFromEntry(dataset, line.authIri);
           } else if (line.agent === AUTHENTICATED_AGENT) {
-            setAgentModes(dataset, aclUrl, line.authIri, line.agent, [], session.webId);
+            removeAuthenticatedFromEntry(dataset, line.authIri);
           } else {
             removeAgentFromEntry(dataset, line.authIri, line.agent, session.webId);
           }

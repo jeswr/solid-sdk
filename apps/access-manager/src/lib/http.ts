@@ -62,6 +62,23 @@ export function isHttpUrl(value: string): boolean {
 }
 
 /**
+ * STRICT storage-containment check (the confused-deputy boundary): `target` is
+ * within `root` iff both parse as http(s) URLs, share an origin, and the
+ * root's path (with a guaranteed trailing "/") is a path-segment prefix of the
+ * target's. A raw `startsWith` is NOT sufficient — a root without a trailing
+ * slash would treat `https://pod.example.evil/...` or a sibling
+ * `https://pod.example/foo-bar` as in-scope (the roborev finding).
+ */
+export function isWithinStorage(target: string, root: string): boolean {
+  if (!isHttpUrl(target) || !isHttpUrl(root)) return false;
+  const t = new URL(target);
+  const r = new URL(root);
+  if (t.origin !== r.origin) return false;
+  const rootPath = r.pathname.endsWith("/") ? r.pathname : `${r.pathname}/`;
+  return t.pathname === r.pathname || t.pathname.startsWith(rootPath);
+}
+
+/**
  * GET + parse an RDF resource, keeping the ETag for a later `If-Match` write.
  * Returns `null` on 404 (a first-class "does not exist" for ACL discovery and
  * create-only flows); every other failure propagates as `RdfFetchError`.

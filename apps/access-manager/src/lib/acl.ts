@@ -283,6 +283,18 @@ export function removePublicFromEntry(dataset: DatasetCore, authIri: string): vo
   dropIfSubjectless(dataset, authIri);
 }
 
+/**
+ * MUTATION: remove any-authenticated (acl:AuthenticatedAgent) access from ONE
+ * authorization — the class-specific analogue of {@link removePublicFromEntry}
+ * (agent-class access is an acl:agentClass triple, NOT an acl:agent one, so
+ * agent-removal paths cannot touch it).
+ */
+export function removeAuthenticatedFromEntry(dataset: DatasetCore, authIri: string): void {
+  const auth = authAt(dataset, authIri);
+  auth.agentClass.delete(ACL.AuthenticatedAgent);
+  dropIfSubjectless(dataset, authIri);
+}
+
 /** MUTATION: remove public (foaf:Agent) access from every authorization. */
 export function removePublicAccess(dataset: DatasetCore): void {
   const acl = new AclResource(dataset, DataFactory);

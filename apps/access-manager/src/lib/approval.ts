@@ -29,7 +29,13 @@ import { policyToRdf } from "@jeswr/solid-odrl";
 import type { DatasetCore } from "@rdfjs/types";
 import { DataFactory, Store } from "n3";
 import { grantOnResource, MODE_IRI, type WacMode } from "./acl.js";
-import { PreconditionFailedError, putIfMatch, putIfNoneMatch, type SolidFetch } from "./http.js";
+import {
+  isWithinStorage,
+  PreconditionFailedError,
+  putIfMatch,
+  putIfNoneMatch,
+  type SolidFetch,
+} from "./http.js";
 import type { ParsedAccessRequest, RequestSnapshot } from "./inbox.js";
 import { readAccessRequest } from "./inbox.js";
 import { toTurtle } from "./rdf.js";
@@ -130,7 +136,7 @@ export function resolveTargets(
       }
     }
   }
-  return [...out].filter((t) => t.startsWith(storageRoot)).sort();
+  return [...out].filter((t) => isWithinStorage(t, storageRoot)).sort();
 }
 
 /** Preview for the consent UI: what approving would concretely share (§3.4 step 2). */
@@ -359,11 +365,18 @@ async function completeFromSnapshot(
 
   // Final CAS: Approving → Approved (+ grantRef). Re-read for a fresh ETag; a
   // 412 here means another resumer finished — re-read and accept Approved.
-  // ONLY an Approving request is ever flipped — any other observed state
-  // (Approved: done; anything else: unexpected, leave it alone) stops the loop.
+  // ONLY an Approving request is ever flipped — and success is VERIFIED, not
+  // assumed: exhausting the retries (or observing any state other than
+  // Approved at the end) throws, so a request can never be silently left
+  // stuck in Approving after the grant + ACLs were applied (roborev finding).
+  let finalStatus: string = "unknown";
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const current = await readAccessRequest(requestUrl, ctx.fetch);
-    if (!current) break;
+    if (!current) {
+      finalStatus = "gone";
+      break;
+    }
+    finalStatus = current.status;
     if (current.status !== "Approving") break;
     const record = new AccmRecord(current.url, current.dataset, DataFactory);
     record.status = "Approved";
@@ -375,11 +388,17 @@ async function completeFromSnapshot(
         current.etag,
         ctx.fetch,
       );
+      finalStatus = "Approved";
       break;
     } catch (e) {
       if (e instanceof PreconditionFailedError) continue;
       throw e;
     }
+  }
+  if (finalStatus !== "Approved") {
+    // The grant record / receipt / ACLs are applied and idempotent — a retry
+    // (resumeApproval) converges. Surface the incomplete transition honestly.
+    throw new ApprovalStateError(requestUrl, "Approved after the final CAS", finalStatus);
   }
   return { grantUrl: gUrl, receiptUrl: rUrl };
 }

@@ -329,3 +329,39 @@ describe("buildGrantRecordTurtle", () => {
     expect(turtle).toContain("2027-01-01");
   });
 });
+
+describe("final CAS verification (roborev: never silently stuck in Approving)", () => {
+  it("throws when the Approving→Approved CAS keeps losing, and a later resume converges", async () => {
+    const request = await readAccessRequest(REQUEST, pod.fetch);
+    if (!request) throw new Error("missing request");
+    const c = await ctx();
+
+    // Fail ONLY the final transition: a PUT to the request whose body carries
+    // the Approved status keeps losing with 412.
+    pod.intercept = (method, url, init) => {
+      const body = typeof init?.body === "string" ? init.body : "";
+      if (method === "PUT" && url === REQUEST && body.includes("accm#Approved")) {
+        return new Response("precondition failed", { status: 412 });
+      }
+      return undefined;
+    };
+    let err: unknown;
+    try {
+      await approveRequest(request, c);
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toBeInstanceOf(ApprovalStateError);
+    expect((err as Error).message).toMatch(/Approving/);
+
+    // Ground truth: grant + ACLs applied, request honestly still Approving.
+    const stuck = await readAccessRequest(REQUEST, pod.fetch);
+    expect(stuck?.status).toBe("Approving");
+
+    // Recovery: the idempotent resume completes once the contention clears.
+    pod.intercept = undefined;
+    await resumeApproval(REQUEST, c);
+    const after = await readAccessRequest(REQUEST, pod.fetch);
+    expect(after?.status).toBe("Approved");
+  });
+});

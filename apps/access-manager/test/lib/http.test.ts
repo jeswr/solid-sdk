@@ -77,3 +77,25 @@ describe("putIfNoneMatch (create-only)", () => {
     expect(pod.body(URL_A)).toContain("x.example/s"); // first write survives
   });
 });
+
+describe("isWithinStorage (roborev: startsWith is not containment)", () => {
+  it("accepts genuine descendants", async () => {
+    const { isWithinStorage } = await import("../../src/lib/http.js");
+    expect(isWithinStorage("https://pod.example/a/b.ttl", "https://pod.example/")).toBe(true);
+    expect(isWithinStorage("https://pod.example/foo/x", "https://pod.example/foo/")).toBe(true);
+    expect(isWithinStorage("https://pod.example/foo/", "https://pod.example/foo")).toBe(true);
+  });
+
+  it("rejects sibling-prefix and cross-origin tricks", async () => {
+    const { isWithinStorage } = await import("../../src/lib/http.js");
+    // Root missing its trailing slash must NOT match a sibling path prefix…
+    expect(isWithinStorage("https://pod.example/foo-bar/x", "https://pod.example/foo")).toBe(false);
+    // …nor a hostname-prefix attack…
+    expect(isWithinStorage("https://pod.example.evil/x", "https://pod.example/")).toBe(false);
+    // …nor another origin, port, or scheme.
+    expect(isWithinStorage("https://other.example/x", "https://pod.example/")).toBe(false);
+    expect(isWithinStorage("https://pod.example:8443/x", "https://pod.example/")).toBe(false);
+    expect(isWithinStorage("file:///etc/passwd", "https://pod.example/")).toBe(false);
+    expect(isWithinStorage("not a url", "https://pod.example/")).toBe(false);
+  });
+});
