@@ -140,6 +140,24 @@ w3id redirect for `accm:` is a standing needs:user item.
 back-refs. The full ISO/IEC TS 27560 profile (dpv-27560 schema) is a Phase-2
 upgrade; the fields chosen are a strict subset so records upgrade in place.
 
+## D15 — Grant revocation is EXACT-SHAPE, dashboard revocation is per-line
+
+Two revocation surfaces with deliberately different scopes (out of roborev
+round 1's High finding):
+
+- **Revoking a GRANT** (History view / `revokeGrant`) retracts only what the
+  approval pipeline materialised: agent-scoped `acl:accessTo` entries in the
+  pinned target's OWN ACL whose mode set equals the grant's. Ancestor
+  `acl:default` entries, class-bearing (public/authenticated) entries, and
+  manual shares with a different mode set are never touched — they are not
+  the grant's to revoke. (An identical manual agent-only entry is
+  indistinguishable by construction — `addAgentGrant` would have reused it —
+  so exact-shape removal is the correct semantic, documented here.)
+- **Revoking a dashboard LINE** (`removeAgentFromEntry` on the line's
+  specific `authIri`) edits exactly the authorization the user pointed at,
+  in the document where it lives (the ancestor's, for an inherited line —
+  D7). That is the "stop this agent here" intent and is inherently per-line.
+
 ## Upstream findings (for the maintainer / library owners)
 
 - `@solid/object` `Authorization.conforms` requires BOTH `accessTo` AND
