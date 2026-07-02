@@ -160,6 +160,11 @@ round 1's High finding):
 
 ## Upstream findings (for the maintainer / library owners)
 
+- `@solid/object` `Authorization.accessTo` / `.default` are single-valued
+  (`OptionalFrom`), but WAC allows several values per authorization; this app
+  ships a `ScopedAuthorization` extension with `SetFrom`-mapped `accessToAll`
+  / `defaultForAll` (roborev round 5). Multi-valued upstream accessors would
+  remove the need.
 - `@solid/object` `Authorization.conforms` requires BOTH `accessTo` AND
   `default` to be defined (`Authorization.js`: `if (this.accessTo === undefined
   || this.default === undefined) return false`); WAC requires accessTo OR
