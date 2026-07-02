@@ -2699,39 +2699,33 @@ function serialize2(quads, format = "text/turtle") {
 }
 
 // src/selfDescribe.ts
+function applyCommon(node, sectors, access, consumes, produces) {
+  for (const sector of sectors) {
+    node.addSector(sector);
+  }
+  for (const mode of access) {
+    node.addAccess(ACL_MODES[mode]);
+  }
+  for (const shape of consumes) {
+    node.addConsumes(shape);
+  }
+  for (const shape of produces) {
+    node.addProduces(shape);
+  }
+}
 function selfDescribe(app) {
   if (!app.id) {
     throw new TypeError("selfDescribe: AppRegistration.id (the client_id IRI) is required.");
   }
   const builder = new FederationBuilder();
   const node = builder.app(app.id);
-  for (const sector of app.sectors ?? []) {
-    node.addSector(sector);
-  }
-  for (const mode of app.access ?? []) {
-    node.addAccess(ACL_MODES[mode]);
-  }
-  for (const shape of app.consumes ?? []) {
-    node.addConsumes(shape);
-  }
-  for (const shape of app.produces ?? []) {
-    node.addProduces(shape);
-  }
+  applyCommon(node, app.sectors ?? [], app.access ?? [], app.consumes ?? [], app.produces ?? []);
   for (const shape of app.declaresShape ?? []) {
     node.addDeclaresShape(shape);
   }
   for (const su of app.sectorUse ?? []) {
     const suNode = node.linkSectorUse();
-    suNode.addSector(su.sector);
-    for (const mode of su.access) {
-      suNode.addAccess(ACL_MODES[mode]);
-    }
-    for (const shape of su.consumes ?? []) {
-      suNode.addConsumes(shape);
-    }
-    for (const shape of su.produces ?? []) {
-      suNode.addProduces(shape);
-    }
+    applyCommon(suNode, [su.sector], su.access, su.consumes ?? [], su.produces ?? []);
   }
   const quads = builder.quads();
   return {
