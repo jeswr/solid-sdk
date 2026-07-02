@@ -367,10 +367,14 @@ export function detachResourceScope(
     // removed (roborev round 7). What CAN be protected are accessTo scopes
     // OUTSIDE every default subtree: those are detached onto a faithful
     // clone first, so the subtree-wide mutation cannot leak onto them.
+    // "Inside" a default subtree is STRICT containment — acl:default governs
+    // descendants only, so an accessTo naming the default container ITSELF is
+    // an independent scope and must be preserved (roborev round 8, matching
+    // the round-4 entryAppliesTo semantics).
     const outside = entry.accessTo.filter(
       (t) =>
         !sameResource(t, resource) &&
-        !entry.defaultFor.some((d) => sameResource(t, d) || isWithinStorage(t, d)),
+        !entry.defaultFor.some((d) => !sameResource(t, d) && isWithinStorage(t, d)),
     );
     if (outside.length > 0) {
       const cloneIri = cloneNodeWithoutScopes(dataset, authIri);

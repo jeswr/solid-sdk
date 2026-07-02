@@ -701,3 +701,29 @@ describe("mixed accessTo+default nodes (roborev round 7)", () => {
     expect(publics.some((e) => e.accessTo.includes(OUTSIDE))).toBe(true);
   });
 });
+
+describe("container's own accessTo vs its default subtree (roborev round 8)", () => {
+  it("removal for a child preserves the CONTAINER's own accessTo access", async () => {
+    const pod = buildPod();
+    const DOCS = `${POD}docs/`;
+    const DOCS_ACL = `${DOCS}.acl`;
+    pod.seed(
+      DOCS_ACL,
+      `${PREFIXES}
+<${DOCS_ACL}#owner> a acl:Authorization ; acl:agent <${OWNER}> ;
+  acl:accessTo <${DOCS}> ; acl:default <${DOCS}> ;
+  acl:mode acl:Read, acl:Write, acl:Control .
+<${DOCS_ACL}#pub> a acl:Authorization ; acl:agentClass foaf:Agent ;
+  acl:accessTo <${DOCS}> ; acl:default <${DOCS}> ; acl:mode acl:Read .`,
+    );
+    const { read } = await entriesAt(pod, DOCS_ACL);
+    const { removePublicFromEntry, entryAppliesTo } = await import("../../src/lib/acl.js");
+    removePublicFromEntry(read.dataset, `${DOCS_ACL}#pub`, OWNER, REPORT);
+    const publics = projectEntries(read.dataset).filter((e) => e.isPublic);
+    // The child (default subtree) lost public access…
+    expect(publics.some((e) => entryAppliesTo(e, REPORT))).toBe(false);
+    // …but the container's OWN listing access (accessTo <docs/>) survives —
+    // acl:default governs descendants only, so it is an independent scope.
+    expect(publics.some((e) => e.accessTo.includes(DOCS))).toBe(true);
+  });
+});
