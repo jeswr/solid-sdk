@@ -322,9 +322,61 @@ function dropIfSubjectless(dataset: DatasetCore, authIri: string): void {
   }
 }
 
+/** Mint a fresh `#grant-N` fragment IRI in the ACL document. */
+function freshAuthIri(dataset: DatasetCore, docUrl: string): string {
+  const base = docUrl.split("#")[0] ?? docUrl;
+  let n = 0;
+  let authIri = `${base}#grant-${n}`;
+  while (dataset.match(DataFactory.namedNode(authIri), null, null).size > 0) {
+    n += 1;
+    authIri = `${base}#grant-${n}`;
+  }
+  return authIri;
+}
+
 /**
- * MUTATION: remove an agent from one authorization. Drops the node if it names
- * nobody afterwards. Lockout-guarded for the owner.
+ * SPLIT a multi-scope authorization before a per-resource mutation, so an edit
+ * "for `resource`" can never change the node's OTHER resources (roborev round
+ * 6: authorizations are indivisible nodes — removing foaf:Agent from a node
+ * scoped to two resources would revoke public access on both). When the node
+ * names `resource` via acl:accessTo AND carries additional scopes (other
+ * accessTo values and/or acl:default values), `resource` is detached: it is
+ * removed from the original node, and a FAITHFUL clone (every predicate copied
+ * — agents, classes, groups, modes) scoped to `resource` alone is created.
+ * Returns the authIri the mutation should target (the clone, or the original
+ * when no split is needed). A node applying only via acl:default is returned
+ * unchanged — default scopes are subtree-wide edits by design (D7).
+ */
+export function detachResourceScope(
+  dataset: DatasetCore,
+  authIri: string,
+  resource: string,
+): string {
+  const entry = projectEntries(dataset).find((e) => e.authIri === authIri);
+  if (!entry) return authIri;
+  const matching = entry.accessTo.filter((t) => sameResource(t, resource));
+  if (matching.length === 0) return authIri; // default-only scope: subtree-wide edit
+  const otherAccessTo = entry.accessTo.filter((t) => !sameResource(t, resource));
+  if (otherAccessTo.length === 0 && entry.defaultFor.length === 0) return authIri;
+
+  const cloneIri = freshAuthIri(dataset, authIri);
+  const orig = DataFactory.namedNode(authIri);
+  const clone = DataFactory.namedNode(cloneIri);
+  for (const q of [...dataset.match(orig, null, null)]) {
+    if (q.predicate.value === ACL.accessTo || q.predicate.value === ACL.default) continue;
+    dataset.add(DataFactory.quad(clone, q.predicate, q.object));
+  }
+  const scopedClone = new ScopedAuthorization(cloneIri, dataset, DataFactory);
+  scopedClone.accessToAll.add(resource);
+  const scopedOrig = new ScopedAuthorization(authIri, dataset, DataFactory);
+  for (const t of matching) scopedOrig.accessToAll.delete(t);
+  return cloneIri;
+}
+
+/**
+ * MUTATION: remove an agent from one authorization, scoped to `resource`
+ * (multi-scope nodes are split first — see {@link detachResourceScope}).
+ * Drops the node if it names nobody afterwards. Lockout-guarded for the owner.
  */
 export function removeAgentFromEntry(
   dataset: DatasetCore,
@@ -333,11 +385,12 @@ export function removeAgentFromEntry(
   ownerWebId: string,
   resource: string,
 ): void {
-  const auth = authAt(dataset, authIri);
+  const target = detachResourceScope(dataset, authIri, resource);
+  const auth = authAt(dataset, target);
   auth.agent.delete(agentWebId);
-  dropIfSubjectless(dataset, authIri);
+  dropIfSubjectless(dataset, target);
   if (agentWebId === ownerWebId && !ownerRetainsAnyControl(dataset, ownerWebId, resource)) {
-    throw new LockoutError(authIri);
+    throw new LockoutError(target);
   }
 }
 
@@ -352,10 +405,11 @@ export function removePublicFromEntry(
   ownerWebId: string,
   resource: string,
 ): void {
-  const auth = authAt(dataset, authIri);
+  const target = detachResourceScope(dataset, authIri, resource);
+  const auth = authAt(dataset, target);
   auth.agentClass.delete(FOAF.Agent);
-  dropIfSubjectless(dataset, authIri);
-  if (!ownerRetainsAnyControl(dataset, ownerWebId, resource)) throw new LockoutError(authIri);
+  dropIfSubjectless(dataset, target);
+  if (!ownerRetainsAnyControl(dataset, ownerWebId, resource)) throw new LockoutError(target);
 }
 
 /**
@@ -370,10 +424,11 @@ export function removeAuthenticatedFromEntry(
   ownerWebId: string,
   resource: string,
 ): void {
-  const auth = authAt(dataset, authIri);
+  const target = detachResourceScope(dataset, authIri, resource);
+  const auth = authAt(dataset, target);
   auth.agentClass.delete(ACL.AuthenticatedAgent);
-  dropIfSubjectless(dataset, authIri);
-  if (!ownerRetainsAnyControl(dataset, ownerWebId, resource)) throw new LockoutError(authIri);
+  dropIfSubjectless(dataset, target);
+  if (!ownerRetainsAnyControl(dataset, ownerWebId, resource)) throw new LockoutError(target);
 }
 
 /**
@@ -392,9 +447,12 @@ export function removePublicAccess(
   // resource's last public Control path unchecked).
   for (const entry of projectEntries(dataset)) {
     if (entry.isPublic && entryAppliesTo(entry, resource)) {
-      const auth = authAt(dataset, entry.authIri);
+      // Multi-scope nodes are split first so OTHER resources keep their
+      // public access (roborev round 6 — a node is otherwise indivisible).
+      const target = detachResourceScope(dataset, entry.authIri, resource);
+      const auth = authAt(dataset, target);
       auth.agentClass.delete(FOAF.Agent);
-      dropIfSubjectless(dataset, entry.authIri);
+      dropIfSubjectless(dataset, target);
     }
   }
   if (!ownerRetainsAnyControl(dataset, ownerWebId, resource))
@@ -420,7 +478,10 @@ export function setAgentModes(
     removeAgentFromEntry(dataset, authIri, agentWebId, ownerWebId, resource);
     return;
   }
-  const auth = authAt(dataset, authIri);
+  // Multi-scope nodes are split first so the mode change cannot leak onto the
+  // node's OTHER resources (roborev round 6).
+  const target = detachResourceScope(dataset, authIri, resource);
+  const auth = authAt(dataset, target);
   const agents = tryRead(() => [...auth.agent]) ?? [];
   const classes = tryRead(() => auth.agentClass.size) ?? 0;
   const group = tryRead(() => auth.agentGroup);
@@ -430,11 +491,13 @@ export function setAgentModes(
     auth.mode.clear();
     for (const m of modes) auth.mode.add(MODE_IRI[m]);
   } else {
-    // Split: remove from the shared node, re-grant alone with the new modes.
+    // Split by SUBJECT: remove from the shared node, re-grant alone with the
+    // new modes (scope carried over — post-detach it is resource-only, or the
+    // default subtree for an inherited line).
     const accessTo = tryRead(() => auth.accessTo);
     const dflt = tryRead(() => auth.default);
     auth.agent.delete(agentWebId);
-    dropIfSubjectless(dataset, authIri);
+    dropIfSubjectless(dataset, target);
     createAuthorization(dataset, aclUrl, {
       agents: [agentWebId],
       modes,
@@ -443,7 +506,7 @@ export function setAgentModes(
     });
   }
   if (agentWebId === ownerWebId && !ownerRetainsAnyControl(dataset, ownerWebId, resource)) {
-    throw new LockoutError(authIri);
+    throw new LockoutError(target);
   }
 }
 
@@ -464,13 +527,7 @@ export function createAuthorization(
   aclUrl: string,
   spec: NewAuthorization,
 ): string {
-  const base = aclUrl.split("#")[0] ?? aclUrl;
-  let n = 0;
-  let authIri = `${base}#grant-${n}`;
-  while (dataset.match(DataFactory.namedNode(authIri), null, null).size > 0) {
-    n += 1;
-    authIri = `${base}#grant-${n}`;
-  }
+  const authIri = freshAuthIri(dataset, aclUrl);
   const auth = authAt(dataset, authIri);
   auth.type.add(ACL.Authorization);
   for (const a of spec.agents ?? []) auth.agent.add(a);

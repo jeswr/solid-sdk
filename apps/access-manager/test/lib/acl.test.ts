@@ -568,9 +568,12 @@ describe("multi-scope authorizations (roborev round 5)", () => {
     const { read } = await entriesAt(pod, REPORT_ACL);
     const pub = projectEntries(read.dataset).find((e) => e.authIri.endsWith("#pub"));
     expect(pub?.accessTo.sort()).toEqual([OTHER, REPORT].sort()); // both scopes projected
-    // The scoped removal now matches via the second scope too.
+    // The scoped removal matches via the second scope too — and (round 6) the
+    // node is SPLIT so the OTHER resource keeps its public access.
     removePublicAccess(read.dataset, OWNER, REPORT);
-    expect(projectEntries(read.dataset).some((e) => e.isPublic)).toBe(false);
+    const after = projectEntries(read.dataset);
+    expect(after.some((e) => e.isPublic && e.accessTo.includes(REPORT))).toBe(false);
+    expect(after.some((e) => e.isPublic && e.accessTo.includes(OTHER))).toBe(true);
   });
 
   it("inherited resolution matches the governing container even as a NON-FIRST default value", async () => {
@@ -587,5 +590,66 @@ describe("multi-scope authorizations (roborev round 5)", () => {
     );
     const effective = await readEffectiveAcl(`${POD}contacts/alice.ttl`, POD, pod.fetch);
     expect(effective.entries).toHaveLength(1);
+  });
+});
+
+describe("multi-scope node SPLIT on per-resource mutation (roborev round 6)", () => {
+  const OTHER = `${POD}docs/other.ttl`;
+  function seedShared(pod: ReturnType<typeof buildPod>) {
+    pod.seed(
+      REPORT_ACL,
+      `${PREFIXES}
+<${REPORT_ACL}#owner> a acl:Authorization ; acl:agent <${OWNER}> ;
+  acl:accessTo <${OTHER}>, <${REPORT}> ; acl:mode acl:Read, acl:Write, acl:Control .
+<${REPORT_ACL}#shared> a acl:Authorization ; acl:agent <${BOB}> ;
+  acl:agentClass foaf:Agent ;
+  acl:accessTo <${OTHER}>, <${REPORT}> ; acl:mode acl:Read .`,
+    );
+  }
+
+  it("removing PUBLIC for one resource preserves it (and bob) on the node's other resource", async () => {
+    const pod = buildPod();
+    seedShared(pod);
+    const { read } = await entriesAt(pod, REPORT_ACL);
+    const { removePublicFromEntry } = await import("../../src/lib/acl.js");
+    removePublicFromEntry(read.dataset, `${REPORT_ACL}#shared`, OWNER, REPORT);
+    const entries = projectEntries(read.dataset);
+    // REPORT: public gone, bob kept (the faithful clone carried him).
+    expect(entries.some((e) => e.isPublic && e.accessTo.includes(REPORT))).toBe(false);
+    expect(entries.some((e) => e.agents.includes(BOB) && e.accessTo.includes(REPORT))).toBe(true);
+    // OTHER: fully untouched — public AND bob.
+    expect(entries.some((e) => e.isPublic && e.accessTo.includes(OTHER))).toBe(true);
+    expect(entries.some((e) => e.agents.includes(BOB) && e.accessTo.includes(OTHER))).toBe(true);
+  });
+
+  it("removing an AGENT for one resource keeps their access to the node's other resource", async () => {
+    const pod = buildPod();
+    seedShared(pod);
+    const { read } = await entriesAt(pod, REPORT_ACL);
+    removeAgentFromEntry(read.dataset, `${REPORT_ACL}#shared`, BOB, OWNER, REPORT);
+    const entries = projectEntries(read.dataset);
+    expect(entries.some((e) => e.agents.includes(BOB) && e.accessTo.includes(REPORT))).toBe(false);
+    expect(entries.some((e) => e.agents.includes(BOB) && e.accessTo.includes(OTHER))).toBe(true);
+    // Public survives on BOTH (only bob was removed, only for REPORT).
+    expect(entries.some((e) => e.isPublic && e.accessTo.includes(REPORT))).toBe(true);
+  });
+
+  it("mode changes for one resource do not leak onto the node's other resource", async () => {
+    const pod = buildPod();
+    pod.seed(
+      REPORT_ACL,
+      `${PREFIXES}
+<${REPORT_ACL}#owner> a acl:Authorization ; acl:agent <${OWNER}> ;
+  acl:accessTo <${OTHER}>, <${REPORT}> ; acl:mode acl:Read, acl:Write, acl:Control .
+<${REPORT_ACL}#bob> a acl:Authorization ; acl:agent <${BOB}> ;
+  acl:accessTo <${OTHER}>, <${REPORT}> ; acl:mode acl:Read, acl:Write .`,
+    );
+    const { read } = await entriesAt(pod, REPORT_ACL);
+    setAgentModes(read.dataset, REPORT_ACL, `${REPORT_ACL}#bob`, BOB, ["Read"], OWNER, REPORT);
+    const entries = projectEntries(read.dataset);
+    const onReport = entries.find((e) => e.agents.includes(BOB) && e.accessTo.includes(REPORT));
+    const onOther = entries.find((e) => e.agents.includes(BOB) && e.accessTo.includes(OTHER));
+    expect(onReport?.modes).toEqual(["Read"]); // downgraded here
+    expect(onOther?.modes.sort()).toEqual(["Read", "Write"]); // untouched there
   });
 });
