@@ -16,10 +16,13 @@
 //    type-only exports, which erase at runtime and cannot be enumerated from the
 //    module object — fails the test.
 //
-// Why a vitest contract guard (not api-extractor): the suite ships a committed,
-// self-contained `dist/` consumed under `ignore-scripts=true` with NO build step,
-// and we minimise the dev-dependency audit surface. A stdlib/vitest snapshot over
-// the committed `dist/` needs no new dependency and runs in the existing gate.
+// Why a vitest contract guard ALONGSIDE api-extractor: `etc/solid-vc.api.md`
+// (api-extractor / `api:check`) snapshots the full TYPE signatures from
+// `dist/index.d.ts`, but it never LOADS the module. This test complements it by
+// asserting against the RUNTIME `dist/index.js` a consumer actually imports — so a
+// `.d.ts` ↔ `.js` disagreement (a stale committed `dist/` where the emitted JS and
+// the declarations drift apart) is caught here even though api-extractor, reading
+// only the `.d.ts`, would pass. The two guards are deliberately kept in lock-step.
 //
 // MAINTENANCE RULE: a change to either frozen list is a DELIBERATE, semver-aware
 // contract change — update the list IN THE SAME COMMIT as the export change (and
