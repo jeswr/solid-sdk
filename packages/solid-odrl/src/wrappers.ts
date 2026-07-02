@@ -39,6 +39,7 @@ import {
   ODRL_SET,
   ODRL_TARGET,
   ODRL_UID,
+  ODRLD_DELEGATED_UNDER,
   RDF_TYPE,
 } from "./vocab.js";
 
@@ -129,6 +130,10 @@ export class PolicyNode extends TermWrapper {
   }
   get conflicts(): Set<TermWrapperType> {
     return objectTerms(this, ODRL_CONFLICT);
+  }
+  /** Delegation profile: the `odrld:delegatedUnder` parent-policy edge(s). */
+  get delegatedUnders(): Set<TermWrapperType> {
+    return objectTerms(this, ODRLD_DELEGATED_UNDER);
   }
   get permissions(): Set<RuleNode> {
     return SetFrom.subjectPredicate(

@@ -45,6 +45,8 @@ import {
   ODRL_SET,
   ODRL_TARGET,
   ODRL_UID,
+  ODRLD_DELEGATED_UNDER,
+  ODRLD_INLINE_CONTEXT_EXTENSION,
   type OdrlActionName,
   OPERATOR_IRI,
   type OperatorName,
@@ -197,6 +199,9 @@ export function policyToRdf(policy: OdrlPolicy): Quad[] {
   if (policy.conflict !== undefined) {
     b.addIri(subject, ODRL_CONFLICT, CONFLICT_IRI[policy.conflict]);
   }
+  if (policy.delegatedUnder !== undefined) {
+    b.addIri(subject, ODRLD_DELEGATED_UNDER, policy.delegatedUnder);
+  }
   for (const rule of policy.permissions ?? []) {
     writeRule(b, subject, { ...rule, type: "permission" }, policy.assigner, policy.assignee);
   }
@@ -227,8 +232,15 @@ export function policyToTurtle(policy: OdrlPolicy, format?: string): Promise<str
  * — see {@link parsePolicy}.
  */
 export function policyToJsonLd(policy: OdrlPolicy): Record<string, unknown> {
+  // The delegation-profile context terms are added ONLY when the policy uses one,
+  // so a plain ODRL policy's document (incl. its @context) is unchanged by the
+  // profile's existence.
+  const context =
+    policy.delegatedUnder !== undefined
+      ? { ...ODRL_INLINE_CONTEXT, ...ODRLD_INLINE_CONTEXT_EXTENSION }
+      : ODRL_INLINE_CONTEXT;
   const doc: Record<string, unknown> = {
-    "@context": ODRL_INLINE_CONTEXT,
+    "@context": context,
     "@id": policy.id,
     "@type": `odrl:${policy.type ?? "Set"}`,
     uid: { "@id": policy.id },
@@ -240,6 +252,7 @@ export function policyToJsonLd(policy: OdrlPolicy): Record<string, unknown> {
   if (policy.assigner !== undefined) doc.assigner = { "@id": policy.assigner };
   if (policy.assignee !== undefined) doc.assignee = { "@id": policy.assignee };
   if (policy.conflict !== undefined) doc.conflict = { "@id": CONFLICT_IRI[policy.conflict] };
+  if (policy.delegatedUnder !== undefined) doc.delegatedUnder = { "@id": policy.delegatedUnder };
   if (policy.permissions && policy.permissions.length > 0) {
     doc.permission = policy.permissions.map((r) => ruleJsonLd(r, policy));
   }
@@ -361,6 +374,7 @@ function projectPolicy(node: PolicyNode): OdrlPolicy | undefined {
 
   const conflictIri = firstIri(node.conflicts);
   const conflict = conflictIri !== undefined ? IRI_TO_CONFLICT[conflictIri] : undefined;
+  const delegatedUnder = firstIri(node.delegatedUnders);
 
   const permissions = [...node.permissions]
     .map((r) => projectRule(r, "permission"))
@@ -379,6 +393,7 @@ function projectPolicy(node: PolicyNode): OdrlPolicy | undefined {
     ...(assigner !== undefined && { assigner }),
     ...(assignee !== undefined && { assignee }),
     ...(conflict !== undefined && { conflict }),
+    ...(delegatedUnder !== undefined && { delegatedUnder }),
     ...(permissions.length > 0 && { permissions }),
     ...(prohibitions.length > 0 && { prohibitions }),
     ...(obligations.length > 0 && { obligations }),

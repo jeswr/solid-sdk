@@ -74,10 +74,42 @@ export interface DecisionRule {
 }
 
 // @public
+export const DEFAULT_MAX_CHAIN_LENGTH = 8;
+
+// @public
+export interface DelegatedEvaluationResult {
+    readonly decision: "permit" | "deny";
+    readonly duties: readonly ActiveDuty[];
+    readonly hops: readonly DelegationHopTrace[];
+    readonly leaf?: EvaluationResult;
+    readonly reason: string;
+}
+
+// @public
+export interface DelegationEvaluateOptions extends EvaluateOptions {
+    readonly maxChainLength?: number;
+    readonly revoked?: Iterable<string>;
+}
+
+// @public
+export interface DelegationHopTrace {
+    readonly index: number;
+    readonly ok: boolean;
+    readonly policyId: string;
+    readonly reason: string;
+}
+
+// @public
+export function delegationProvenance(chain: readonly OdrlPolicy[]): Quad[];
+
+// @public
 export const DPV: "https://w3id.org/dpv#";
 
 // @public
 export function evaluate(policy: OdrlPolicy, request: RequestContext, options?: EvaluateOptions): EvaluationResult;
+
+// @public
+export function evaluateDelegated(chain: readonly OdrlPolicy[], request: RequestContext, options?: DelegationEvaluateOptions): DelegatedEvaluationResult;
 
 // @public
 export interface EvaluateOptions {
@@ -108,19 +140,31 @@ export const IRI_TO_OPERATOR: Readonly<Record<string, OperatorName>>;
 export const LEFT_OPERAND_IRI: Readonly<Record<LeftOperandName, string>>;
 
 // @public
-export const LEFT_OPERANDS: readonly ["dateTime", "purpose", "recipient", "count", "spatial", "elapsedTime", "systemDevice"];
+export const LEFT_OPERANDS: readonly ["dateTime", "purpose", "recipient", "count", "spatial", "elapsedTime", "systemDevice", "delegationDepth"];
 
 // @public
 export type LeftOperandName = (typeof LEFT_OPERANDS)[number];
 
 // @public
+export function matchingPermissions(policy: OdrlPolicy, request: RequestContext, options?: EvaluateOptions): OdrlRule[];
+
+// @public
 export const ODRL: "http://www.w3.org/ns/odrl/2/";
 
 // @public
-export const ODRL_ACTIONS: readonly ["use", "read", "write", "modify", "delete", "distribute", "aggregate", "index", "archive", "attribute", "compensate", "inform", "anonymize", "append", "control"];
+export const ODRL_ACTIONS: readonly ["use", "read", "write", "modify", "delete", "distribute", "aggregate", "index", "archive", "attribute", "compensate", "inform", "anonymize", "append", "control", "grantUse", "nextPolicy", "transfer"];
+
+// @public
+export const ODRL_GRANT_USE: "http://www.w3.org/ns/odrl/2/grantUse";
 
 // @public
 export const ODRL_INLINE_CONTEXT: Readonly<Record<string, unknown>>;
+
+// @public
+export const ODRL_NEXT_POLICY: "http://www.w3.org/ns/odrl/2/nextPolicy";
+
+// @public
+export const ODRL_TRANSFER: "http://www.w3.org/ns/odrl/2/transfer";
 
 // @public
 export type OdrlActionName = (typeof ODRL_ACTIONS)[number];
@@ -132,6 +176,27 @@ export interface OdrlConstraint {
     readonly operator: OperatorName;
     readonly rightOperand: string | number | ReadonlyArray<string | number>;
 }
+
+// @public
+export const ODRLD: "https://w3id.org/jeswr/odrl-delegation#";
+
+// @public
+export const ODRLD_DELEGATED_UNDER: "https://w3id.org/jeswr/odrl-delegation#delegatedUnder";
+
+// @public
+export const ODRLD_DELEGATION_DEPTH: "https://w3id.org/jeswr/odrl-delegation#delegationDepth";
+
+// @public
+export const ODRLD_INLINE_CONTEXT_EXTENSION: Readonly<Record<string, unknown>>;
+
+// @public
+export const ODRLD_PROFILE_IRI: "https://w3id.org/jeswr/odrl-delegation";
+
+// @public
+export const ODRLD_REVOCATION_CLASS: "https://w3id.org/jeswr/odrl-delegation#Revocation";
+
+// @public
+export const ODRLD_REVOKED_POLICY: "https://w3id.org/jeswr/odrl-delegation#revokedPolicy";
 
 // @public
 export interface OdrlDuty {
@@ -146,6 +211,7 @@ export interface OdrlPolicy {
     readonly assignee?: string;
     readonly assigner?: string;
     readonly conflict?: ConflictStrategy;
+    readonly delegatedUnder?: string;
     readonly id: string;
     readonly obligations?: readonly OdrlDuty[];
     readonly permissions?: readonly OdrlRule[];
@@ -193,6 +259,18 @@ export function policyToTurtle(policy: OdrlPolicy, format?: string): Promise<str
 
 // @public
 export type PolicyType = "Set" | "Offer" | "Agreement";
+
+// @public
+export const PROV: "http://www.w3.org/ns/prov#";
+
+// @public
+export const PROV_ACTED_ON_BEHALF_OF: "http://www.w3.org/ns/prov#actedOnBehalfOf";
+
+// @public
+export const PROV_WAS_ATTRIBUTED_TO: "http://www.w3.org/ns/prov#wasAttributedTo";
+
+// @public
+export const PROV_WAS_DERIVED_FROM: "http://www.w3.org/ns/prov#wasDerivedFrom";
 
 // @public
 export interface RequestContext {

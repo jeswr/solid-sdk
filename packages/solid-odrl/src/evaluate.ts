@@ -57,12 +57,11 @@ export function evaluate(
   // assignee when it omits its own (the documented inheritance — and exactly what
   // policyToRdf writes onto each serialised rule, so in-memory and round-tripped
   // policies evaluate identically). Match on the effective rules.
-  const effectivePermissions = (policy.permissions ?? []).map((r) => effectiveRule(r, policy));
   const effectiveProhibitions = (policy.prohibitions ?? []).map((r) => effectiveRule(r, policy));
 
   // Keep the matched effective RULE OBJECTS (not just their trace) so duty
   // collection can match by object identity, never by action-only fallback.
-  const matchedPermissionRules = effectivePermissions.filter((r) => ruleMatches(r, request, now));
+  const matchedPermissionRules = matchingPermissions(policy, request, { now });
   const matchedProhibitionRules = effectiveProhibitions.filter((r) => ruleMatches(r, request, now));
 
   const matchedPermissions = matchedPermissionRules.map((r) => toDecisionRule(r, "permission"));
@@ -141,6 +140,27 @@ export function evaluate(
     "A permission matches the request.",
     false,
   );
+}
+
+/**
+ * The EFFECTIVE permission rules of `policy` (policy-level assigner/assignee
+ * inherited, exactly as {@link evaluate} matches them) that MATCH `request` —
+ * action implication + target + assignee + every constraint, fail-closed on a
+ * missing context value. This is {@link evaluate}'s own permission-matching step,
+ * exposed so a profile walker (the agent-delegation chain evaluator) can inspect
+ * the matched RULE OBJECTS (constraints, duties) rather than only the
+ * {@link DecisionRule} trace. It reports matching only — it does NOT consider
+ * prohibitions, conflict strategy, or duties; use {@link evaluate} for a decision.
+ */
+export function matchingPermissions(
+  policy: OdrlPolicy,
+  request: RequestContext,
+  options: EvaluateOptions = {},
+): OdrlRule[] {
+  const now = options.now ?? new Date();
+  return (policy.permissions ?? [])
+    .map((r) => effectiveRule(r, policy))
+    .filter((r) => ruleMatches(r, request, now));
 }
 
 /** Decide a permit (honour `requireDuties`: an unfulfilled required duty → deny). */

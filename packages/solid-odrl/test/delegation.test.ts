@@ -1,0 +1,621 @@
+// AUTHORED-BY Claude Fable 5
+//
+// Unit tests for the agent-delegation profile chain evaluator
+// (src/delegation.ts) + the PROV-O provenance overlay + the delegation-term
+// round-trip. Adversarial by design: every fail-closed branch (malformed, cyclic,
+// over-broad, expired, revoked, depth-exceeded, assignee-free, umbrella-escalation,
+// injected-attribute) is exercised as a DENY, and the valid 1-/2-/3-hop chains as
+// the only PERMITs.
+
+import { describe, expect, it } from "vitest";
+import { delegationProvenance, evaluateDelegated } from "../src/delegation.js";
+import { evaluate } from "../src/evaluate.js";
+import { parsePolicy, policyFromRdf, policyToJsonLd, policyToTurtle } from "../src/policy.js";
+import type { OdrlPolicy, RequestContext } from "../src/types.js";
+import {
+  ODRLD_DELEGATED_UNDER,
+  PROV_ACTED_ON_BEHALF_OF,
+  PROV_WAS_ATTRIBUTED_TO,
+  PROV_WAS_DERIVED_FROM,
+} from "../src/vocab.js";
+
+const OWNER = "https://alice.example/profile/card#me";
+const AGENT_A = "https://agent-a.example/id#it";
+const AGENT_B = "https://agent-b.example/id#it";
+const AGENT_C = "https://agent-c.example/id#it";
+const RES = "https://alice.example/data/records.ttl";
+const NOW = new Date("2026-07-01T12:00:00Z");
+const PAST = "2026-01-01T00:00:00Z";
+const FUTURE = "2027-01-01T00:00:00Z";
+
+const ROOT_ID = "https://alice.example/policies/root";
+const HOP1_ID = "https://agent-a.example/policies/to-b";
+const HOP2_ID = "https://agent-b.example/policies/to-c";
+
+/** Root grant O→A: read on RES + explicit grantUse (depth budget as given). */
+function root(opts: { depth?: number; grantUse?: boolean; nextPolicy?: string } = {}): OdrlPolicy {
+  const { depth, grantUse = true, nextPolicy } = opts;
+  return {
+    id: ROOT_ID,
+    type: "Agreement",
+    assigner: OWNER,
+    permissions: [
+      { type: "permission", action: "read", target: RES, assignee: AGENT_A },
+      ...(grantUse
+        ? [
+            {
+              type: "permission" as const,
+              action: "grantUse" as const,
+              target: RES,
+              assignee: AGENT_A,
+              ...(depth !== undefined && {
+                constraints: [
+                  {
+                    leftOperand: "delegationDepth" as const,
+                    operator: "lteq" as const,
+                    rightOperand: depth,
+                  },
+                ],
+              }),
+              ...(nextPolicy !== undefined && {
+                duties: [{ action: "nextPolicy" as const, target: nextPolicy }],
+              }),
+            },
+          ]
+        : []),
+    ],
+  };
+}
+
+/** Delegated hop A→B: read on RES, declared under the root. */
+function hop1(overrides: Partial<OdrlPolicy> = {}): OdrlPolicy {
+  return {
+    id: HOP1_ID,
+    type: "Agreement",
+    assigner: AGENT_A,
+    assignee: AGENT_B,
+    delegatedUnder: ROOT_ID,
+    permissions: [{ type: "permission", action: "read", target: RES, assignee: AGENT_B }],
+    ...overrides,
+  };
+}
+
+/** Second delegated hop B→C: read on RES, declared under hop 1. */
+function hop2(overrides: Partial<OdrlPolicy> = {}): OdrlPolicy {
+  return {
+    id: HOP2_ID,
+    type: "Agreement",
+    assigner: AGENT_B,
+    assignee: AGENT_C,
+    delegatedUnder: HOP1_ID,
+    permissions: [{ type: "permission", action: "read", target: RES, assignee: AGENT_C }],
+    ...overrides,
+  };
+}
+
+const READ_B: RequestContext = { agent: AGENT_B, action: "read", target: RES };
+const READ_C: RequestContext = { agent: AGENT_C, action: "read", target: RES };
+
+describe("evaluateDelegated: chain shape (fail-closed)", () => {
+  it("denies an empty chain", () => {
+    const r = evaluateDelegated([], READ_B, { now: NOW });
+    expect(r.decision).toBe("deny");
+    expect(r.reason).toMatch(/empty/i);
+  });
+
+  it("denies a chain exceeding maxChainLength", () => {
+    const r = evaluateDelegated([root({ depth: 5 }), hop1(), hop2()], READ_C, {
+      now: NOW,
+      maxChainLength: 2,
+    });
+    expect(r.decision).toBe("deny");
+    expect(r.reason).toMatch(/exceeds the maximum/);
+  });
+
+  it("denies an invalid maxChainLength (0, negative, non-integer)", () => {
+    for (const maxChainLength of [0, -1, 1.5]) {
+      const r = evaluateDelegated(
+        [root()],
+        { agent: AGENT_A, action: "read", target: RES },
+        {
+          now: NOW,
+          maxChainLength,
+        },
+      );
+      expect(r.decision).toBe("deny");
+    }
+  });
+
+  it("denies a hop with no id", () => {
+    const bad = { ...hop1(), id: "" };
+    const r = evaluateDelegated([root(), bad], READ_B, { now: NOW });
+    expect(r.decision).toBe("deny");
+    expect(r.reason).toMatch(/no policy id/);
+  });
+
+  it("denies a cyclic chain (a policy repeated)", () => {
+    const r = evaluateDelegated([root({ depth: 5 }), hop1(), root({ depth: 5 })], READ_B, {
+      now: NOW,
+    });
+    expect(r.decision).toBe("deny");
+    expect(r.reason).toMatch(/[Cc]ycl/);
+  });
+
+  it("denies a delegated hop that is not an Agreement", () => {
+    for (const type of ["Offer", "Set", undefined] as const) {
+      const r = evaluateDelegated([root(), hop1({ type })], READ_B, { now: NOW });
+      expect(r.decision).toBe("deny");
+      expect(r.reason).toMatch(/must be an odrl:Agreement/);
+    }
+  });
+
+  it("denies a delegated hop missing assigner or assignee", () => {
+    const noAssigner = evaluateDelegated([root(), hop1({ assigner: undefined })], READ_B, {
+      now: NOW,
+    });
+    expect(noAssigner.decision).toBe("deny");
+    const noAssignee = evaluateDelegated([root(), hop1({ assignee: undefined })], READ_B, {
+      now: NOW,
+    });
+    expect(noAssignee.decision).toBe("deny");
+  });
+
+  it("denies a hop missing (or mis-stating) delegatedUnder", () => {
+    const missing = evaluateDelegated([root(), hop1({ delegatedUnder: undefined })], READ_B, {
+      now: NOW,
+    });
+    expect(missing.decision).toBe("deny");
+    expect(missing.reason).toMatch(/delegatedUnder/);
+    const wrong = evaluateDelegated(
+      [root(), hop1({ delegatedUnder: "https://evil.example/policies/other" })],
+      READ_B,
+      { now: NOW },
+    );
+    expect(wrong.decision).toBe("deny");
+  });
+});
+
+describe("evaluateDelegated: authorization (grantUse)", () => {
+  it("permits a valid single-hop delegation", () => {
+    const r = evaluateDelegated([root(), hop1()], READ_B, { now: NOW });
+    expect(r.decision).toBe("permit");
+    expect(r.hops).toEqual([{ index: 1, policyId: HOP1_ID, ok: true, reason: "ok" }]);
+    expect(r.leaf?.decision).toBe("permit");
+  });
+
+  it("a single-policy chain degenerates to evaluate()", () => {
+    const direct: RequestContext = { agent: AGENT_A, action: "read", target: RES };
+    expect(evaluateDelegated([root()], direct, { now: NOW }).decision).toBe("permit");
+    // …but never yields notApplicable: an unmatched request is a deny.
+    const r = evaluateDelegated(
+      [root()],
+      { agent: AGENT_B, action: "read", target: RES },
+      {
+        now: NOW,
+      },
+    );
+    expect(r.decision).toBe("deny");
+  });
+
+  it("denies when the parent has NO grantUse permission at all", () => {
+    const r = evaluateDelegated([root({ grantUse: false }), hop1()], READ_B, { now: NOW });
+    expect(r.decision).toBe("deny");
+    expect(r.reason).toMatch(/does not authorise delegation/);
+  });
+
+  it("a broad `use` permission does NOT authorise delegation (profile restriction)", () => {
+    const broadRoot: OdrlPolicy = {
+      id: ROOT_ID,
+      type: "Agreement",
+      assigner: OWNER,
+      permissions: [{ type: "permission", action: "use", target: RES, assignee: AGENT_A }],
+    };
+    const r = evaluateDelegated([broadRoot, hop1()], READ_B, { now: NOW });
+    expect(r.decision).toBe("deny");
+  });
+
+  it("an assignee-FREE grantUse does not authorise delegation (explicit-assignee rule)", () => {
+    const anyoneMayDelegate: OdrlPolicy = {
+      id: ROOT_ID,
+      type: "Agreement",
+      assigner: OWNER,
+      permissions: [
+        { type: "permission", action: "read", target: RES, assignee: AGENT_A },
+        { type: "permission", action: "grantUse", target: RES }, // no assignee
+      ],
+    };
+    const r = evaluateDelegated([anyoneMayDelegate, hop1()], READ_B, { now: NOW });
+    expect(r.decision).toBe("deny");
+    expect(r.reason).toMatch(/explicitly naming/);
+  });
+
+  it("a grantUse permission for a DIFFERENT agent does not authorise the edge", () => {
+    const wrongDelegate: OdrlPolicy = {
+      ...root(),
+      permissions: [
+        { type: "permission", action: "read", target: RES, assignee: AGENT_A },
+        { type: "permission", action: "grantUse", target: RES, assignee: AGENT_C },
+      ],
+    };
+    const r = evaluateDelegated([wrongDelegate, hop1()], READ_B, { now: NOW });
+    expect(r.decision).toBe("deny");
+  });
+
+  it("a prohibition on grantUse defeats the grant (default prohibit conflict)", () => {
+    const conflicted: OdrlPolicy = {
+      ...root(),
+      prohibitions: [{ type: "prohibition", action: "grantUse", target: RES, assignee: AGENT_A }],
+    };
+    const r = evaluateDelegated([conflicted, hop1()], READ_B, { now: NOW });
+    expect(r.decision).toBe("deny");
+  });
+
+  it("an EXPIRED grantUse (temporal constraint in the past) denies the edge", () => {
+    const expiredGrant: OdrlPolicy = {
+      ...root(),
+      permissions: [
+        { type: "permission", action: "read", target: RES, assignee: AGENT_A },
+        {
+          type: "permission",
+          action: "grantUse",
+          target: RES,
+          assignee: AGENT_A,
+          constraints: [{ leftOperand: "dateTime", operator: "lteq", rightOperand: PAST }],
+        },
+      ],
+    };
+    const r = evaluateDelegated([expiredGrant, hop1()], READ_B, { now: NOW });
+    expect(r.decision).toBe("deny");
+  });
+});
+
+describe("evaluateDelegated: depth bounding", () => {
+  it("permits a 2-hop chain when the root grantUse budget covers it (lteq 2)", () => {
+    const chain = [
+      root({ depth: 2 }),
+      hop1({
+        permissions: [
+          { type: "permission", action: "read", target: RES, assignee: AGENT_B },
+          { type: "permission", action: "grantUse", target: RES, assignee: AGENT_B },
+        ],
+      }),
+      hop2(),
+    ];
+    const r = evaluateDelegated(chain, READ_C, { now: NOW });
+    expect(r.decision).toBe("permit");
+    expect(r.hops.every((h) => h.ok)).toBe(true);
+  });
+
+  it("denies a 2-hop chain under the profile DEFAULT budget of 1 (no constraint)", () => {
+    const chain = [
+      root(), // grantUse without a delegationDepth constraint → budget 1
+      hop1({
+        permissions: [
+          { type: "permission", action: "read", target: RES, assignee: AGENT_B },
+          { type: "permission", action: "grantUse", target: RES, assignee: AGENT_B },
+        ],
+      }),
+      hop2(),
+    ];
+    const r = evaluateDelegated(chain, READ_C, { now: NOW });
+    expect(r.decision).toBe("deny");
+    expect(r.reason).toMatch(/default of 1 hop/);
+  });
+
+  it("denies a 2-hop chain when the explicit budget is lteq 1", () => {
+    const chain = [
+      root({ depth: 1 }),
+      hop1({
+        permissions: [
+          { type: "permission", action: "read", target: RES, assignee: AGENT_B },
+          { type: "permission", action: "grantUse", target: RES, assignee: AGENT_B },
+        ],
+      }),
+      hop2(),
+    ];
+    const r = evaluateDelegated(chain, READ_C, { now: NOW });
+    expect(r.decision).toBe("deny");
+  });
+
+  it("a caller-asserted delegationDepth attribute cannot bypass the budget", () => {
+    const chain = [
+      root(), // budget 1
+      hop1({
+        permissions: [
+          { type: "permission", action: "read", target: RES, assignee: AGENT_B },
+          { type: "permission", action: "grantUse", target: RES, assignee: AGENT_B },
+        ],
+      }),
+      hop2(),
+    ];
+    const r = evaluateDelegated(
+      chain,
+      { ...READ_C, attributes: { delegationDepth: 0 } },
+      { now: NOW },
+    );
+    expect(r.decision).toBe("deny");
+  });
+
+  it("evaluate() alone never satisfies a delegationDepth constraint (reserved operand)", () => {
+    // Outside the walker nothing supplies the operand — fail-closed.
+    const r = evaluate(
+      root({ depth: 3 }),
+      { agent: AGENT_A, action: "grantUse", target: RES },
+      { now: NOW },
+    );
+    expect(r.decision).toBe("notApplicable");
+  });
+});
+
+describe("evaluateDelegated: scope intersection (conservative subset)", () => {
+  it("denies an OVER-BROAD hop: the delegate cannot exceed the delegator's grant", () => {
+    const overBroadLeaf = hop1({
+      permissions: [{ type: "permission", action: "write", target: RES, assignee: AGENT_B }],
+    });
+    const r = evaluateDelegated(
+      [root(), overBroadLeaf],
+      { ...READ_B, action: "write" },
+      {
+        now: NOW,
+      },
+    );
+    expect(r.decision).toBe("deny");
+    expect(r.reason).toMatch(/cannot receive more than the delegator holds/);
+  });
+
+  it("permits the in-scope part of a partially over-broad hop", () => {
+    const mixedLeaf = hop1({
+      permissions: [
+        { type: "permission", action: "read", target: RES, assignee: AGENT_B },
+        { type: "permission", action: "write", target: RES, assignee: AGENT_B },
+      ],
+    });
+    // read is inside the root grant → permit; write is outside → deny.
+    expect(evaluateDelegated([root(), mixedLeaf], READ_B, { now: NOW }).decision).toBe("permit");
+    expect(
+      evaluateDelegated([root(), mixedLeaf], { ...READ_B, action: "write" }, { now: NOW }).decision,
+    ).toBe("deny");
+  });
+
+  it("action subsumption flows through the intersection (root write covers leaf append)", () => {
+    const writeRoot: OdrlPolicy = {
+      ...root(),
+      permissions: [
+        { type: "permission", action: "write", target: RES, assignee: AGENT_A },
+        { type: "permission", action: "grantUse", target: RES, assignee: AGENT_A },
+      ],
+    };
+    const appendLeaf = hop1({
+      permissions: [{ type: "permission", action: "append", target: RES, assignee: AGENT_B }],
+    });
+    const r = evaluateDelegated(
+      [writeRoot, appendLeaf],
+      { ...READ_B, action: "append" },
+      {
+        now: NOW,
+      },
+    );
+    expect(r.decision).toBe("permit");
+  });
+
+  it("denies when an EXPIRED mid-chain hop no longer grants the capability", () => {
+    const expiredMid = hop1({
+      permissions: [
+        {
+          type: "permission",
+          action: "read",
+          target: RES,
+          assignee: AGENT_B,
+          constraints: [{ leftOperand: "dateTime", operator: "lteq", rightOperand: PAST }],
+        },
+        { type: "permission", action: "grantUse", target: RES, assignee: AGENT_B },
+      ],
+    });
+    const chain = [root({ depth: 2 }), expiredMid, hop2()];
+    const r = evaluateDelegated(chain, READ_C, { now: NOW });
+    expect(r.decision).toBe("deny");
+  });
+
+  it("permits while every hop is within its validity window", () => {
+    const windowed = hop1({
+      permissions: [
+        {
+          type: "permission",
+          action: "read",
+          target: RES,
+          assignee: AGENT_B,
+          constraints: [{ leftOperand: "dateTime", operator: "lteq", rightOperand: FUTURE }],
+        },
+      ],
+    });
+    expect(evaluateDelegated([root(), windowed], READ_B, { now: NOW }).decision).toBe("permit");
+  });
+
+  it("an ancestor prohibition against the ACTUAL agent denies (no laundering)", () => {
+    const prohibitingRoot: OdrlPolicy = {
+      ...root(),
+      prohibitions: [{ type: "prohibition", action: "read", target: RES, assignee: AGENT_B }],
+    };
+    const r = evaluateDelegated([prohibitingRoot, hop1()], READ_B, { now: NOW });
+    expect(r.decision).toBe("deny");
+    expect(r.reason).toMatch(/prohibits the request directly/);
+  });
+});
+
+describe("evaluateDelegated: nextPolicy (mandated downstream policy)", () => {
+  it("permits when the delegated hop IS the mandated nextPolicy", () => {
+    const r = evaluateDelegated([root({ nextPolicy: HOP1_ID }), hop1()], READ_B, { now: NOW });
+    expect(r.decision).toBe("permit");
+  });
+
+  it("denies when the delegated hop is NOT the mandated nextPolicy", () => {
+    const other = hop1({ id: "https://agent-a.example/policies/rogue", delegatedUnder: ROOT_ID });
+    const r = evaluateDelegated([root({ nextPolicy: HOP1_ID }), other], READ_B, { now: NOW });
+    expect(r.decision).toBe("deny");
+    expect(r.reason).toMatch(/mandates nextPolicy/);
+  });
+
+  it("denies a malformed nextPolicy duty (no target)", () => {
+    const malformed: OdrlPolicy = {
+      ...root(),
+      permissions: [
+        { type: "permission", action: "read", target: RES, assignee: AGENT_A },
+        {
+          type: "permission",
+          action: "grantUse",
+          target: RES,
+          assignee: AGENT_A,
+          duties: [{ action: "nextPolicy" }],
+        },
+      ],
+    };
+    const r = evaluateDelegated([malformed, hop1()], READ_B, { now: NOW });
+    expect(r.decision).toBe("deny");
+    expect(r.reason).toMatch(/no target policy/);
+  });
+
+  it("the mandated nextPolicy still narrows: out-of-scope requests deny", () => {
+    // The mandated hop grants read only; a write request fails on the leaf even
+    // though the chain shape is exactly as mandated.
+    const r = evaluateDelegated(
+      [root({ nextPolicy: HOP1_ID }), hop1()],
+      { ...READ_B, action: "write" },
+      { now: NOW },
+    );
+    expect(r.decision).toBe("deny");
+  });
+});
+
+describe("evaluateDelegated: revocation + duties", () => {
+  it("denies when any hop is revoked", () => {
+    for (const revokedId of [ROOT_ID, HOP1_ID]) {
+      const r = evaluateDelegated([root(), hop1()], READ_B, { now: NOW, revoked: [revokedId] });
+      expect(r.decision).toBe("deny");
+      expect(r.reason).toMatch(/revoked/);
+    }
+  });
+
+  it("aggregates duties down the chain (delegation never sheds a duty)", () => {
+    const dutifulRoot: OdrlPolicy = {
+      ...root(),
+      permissions: [
+        {
+          type: "permission",
+          action: "read",
+          target: RES,
+          assignee: AGENT_A,
+          duties: [{ action: "attribute", target: OWNER }],
+        },
+        { type: "permission", action: "grantUse", target: RES, assignee: AGENT_A },
+      ],
+    };
+    const r = evaluateDelegated([dutifulRoot, hop1()], READ_B, { now: NOW });
+    expect(r.decision).toBe("permit");
+    expect(r.duties.map((d) => d.action)).toContain("attribute");
+  });
+
+  it("requireDuties gates on the AGGREGATE chain duties", () => {
+    const dutifulRoot: OdrlPolicy = {
+      ...root(),
+      permissions: [
+        {
+          type: "permission",
+          action: "read",
+          target: RES,
+          assignee: AGENT_A,
+          duties: [{ action: "attribute", target: OWNER }],
+        },
+        { type: "permission", action: "grantUse", target: RES, assignee: AGENT_A },
+      ],
+    };
+    const undischarged = evaluateDelegated([dutifulRoot, hop1()], READ_B, {
+      now: NOW,
+      requireDuties: true,
+    });
+    expect(undischarged.decision).toBe("deny");
+    expect(undischarged.duties.length).toBeGreaterThan(0);
+
+    const discharged = evaluateDelegated(
+      [dutifulRoot, hop1()],
+      { ...READ_B, attributes: { "fulfilled:attribute": true } },
+      { now: NOW, requireDuties: true },
+    );
+    expect(discharged.decision).toBe("permit");
+  });
+});
+
+describe("delegationProvenance", () => {
+  it("emits the attribution + authority-edge + acted-on-behalf-of overlay", () => {
+    const quads = delegationProvenance([root(), hop1()]);
+    const triples = quads.map((q) => `${q.subject.value} ${q.predicate.value} ${q.object.value}`);
+    expect(triples).toContain(`${ROOT_ID} ${PROV_WAS_ATTRIBUTED_TO} ${OWNER}`);
+    expect(triples).toContain(`${HOP1_ID} ${PROV_WAS_ATTRIBUTED_TO} ${AGENT_A}`);
+    expect(triples).toContain(`${HOP1_ID} ${ODRLD_DELEGATED_UNDER} ${ROOT_ID}`);
+    expect(triples).toContain(`${HOP1_ID} ${PROV_WAS_DERIVED_FROM} ${ROOT_ID}`);
+    expect(triples).toContain(`${AGENT_B} ${PROV_ACTED_ON_BEHALF_OF} ${AGENT_A}`);
+  });
+
+  it("skips triples whose parties are absent and returns [] for an empty chain", () => {
+    expect(delegationProvenance([])).toEqual([]);
+    const quads = delegationProvenance([{ id: ROOT_ID }, hop1({ assigner: undefined })]);
+    const preds = new Set(quads.map((q) => q.predicate.value));
+    expect(preds.has(PROV_ACTED_ON_BEHALF_OF)).toBe(false);
+  });
+});
+
+describe("delegation terms: RDF round-trip", () => {
+  const delegated: OdrlPolicy = {
+    id: HOP1_ID,
+    type: "Agreement",
+    assigner: AGENT_A,
+    assignee: AGENT_B,
+    delegatedUnder: ROOT_ID,
+    permissions: [
+      { type: "permission", action: "read", target: RES, assignee: AGENT_B },
+      {
+        type: "permission",
+        action: "grantUse",
+        target: RES,
+        assignee: AGENT_B,
+        constraints: [{ leftOperand: "delegationDepth", operator: "lteq", rightOperand: 1 }],
+        duties: [{ action: "nextPolicy", target: HOP2_ID }],
+      },
+    ],
+  };
+
+  it("round-trips grantUse / nextPolicy / delegationDepth / delegatedUnder via Turtle", async () => {
+    const turtle = await policyToTurtle(delegated);
+    // The n3 writer prefixes odrl: terms; the odrld: terms appear as full IRIs.
+    expect(turtle).toContain("odrl:grantUse");
+    expect(turtle).toContain("odrl:nextPolicy");
+    expect(turtle).toContain(ODRLD_DELEGATED_UNDER);
+    const parsed = await parsePolicy(turtle);
+    expect(parsed).toBeDefined();
+    expect(parsed?.delegatedUnder).toBe(ROOT_ID);
+    const grant = parsed?.permissions?.find((p) => p.action === "grantUse");
+    expect(grant?.constraints?.[0]).toEqual({
+      leftOperand: "delegationDepth",
+      operator: "lteq",
+      rightOperand: 1,
+      // The parser preserves the typed-literal datatype on read (existing
+      // behaviour for numeric operands — same as odrl:count).
+      datatype: "http://www.w3.org/2001/XMLSchema#integer",
+    });
+    expect(grant?.duties?.[0]).toEqual({ action: "nextPolicy", target: HOP2_ID });
+  });
+
+  it("round-trips via JSON-LD, with the profile @context only when used", async () => {
+    const doc = policyToJsonLd(delegated);
+    const context = doc["@context"] as Record<string, unknown>;
+    expect(context.delegatedUnder).toBeDefined();
+    // A policy WITHOUT delegation fields keeps the unextended base context.
+    const plainContext = policyToJsonLd({ id: ROOT_ID })["@context"] as Record<string, unknown>;
+    expect(plainContext.delegatedUnder).toBeUndefined();
+
+    const { parseRdf } = await import("@jeswr/fetch-rdf");
+    const dataset = await parseRdf(JSON.stringify(doc), "application/ld+json");
+    const parsed = policyFromRdf(dataset);
+    expect(parsed?.delegatedUnder).toBe(ROOT_ID);
+    expect(parsed?.permissions?.some((p) => p.action === "grantUse")).toBe(true);
+  });
+});

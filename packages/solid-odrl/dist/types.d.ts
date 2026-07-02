@@ -72,6 +72,14 @@ export interface OdrlPolicy {
     readonly assignee?: string;
     /** The conflict-resolution strategy (default `prohibit` — deny wins; see eval). */
     readonly conflict?: ConflictStrategy;
+    /**
+     * Agent-delegation profile (`docs/delegation-profile.md`): the IRI of the policy
+     * UNDER WHOSE AUTHORITY this policy was issued (`odrld:delegatedUnder`, a
+     * subproperty of `prov:wasDerivedFrom`). A delegated Agreement MUST declare its
+     * parent here; the chain evaluator ({@link evaluateDelegated}) verifies the edge
+     * fail-closed. Absent on a root/ordinary policy.
+     */
+    readonly delegatedUnder?: string;
     /** The rules. Convenience: split out by kind for ergonomic construction. */
     readonly permissions?: readonly OdrlRule[];
     readonly prohibitions?: readonly OdrlRule[];

@@ -3,6 +3,9 @@ var ODRL = "http://www.w3.org/ns/odrl/2/";
 var ACL = "http://www.w3.org/ns/auth/acl#";
 var DPV = "https://w3id.org/dpv#";
 var XSD = "http://www.w3.org/2001/XMLSchema#";
+var PROV = "http://www.w3.org/ns/prov#";
+var ODRLD = "https://w3id.org/jeswr/odrl-delegation#";
+var ODRLD_PROFILE_IRI = "https://w3id.org/jeswr/odrl-delegation";
 var RDF = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
 var RDFS = "http://www.w3.org/2000/01/rdf-schema#";
 var DCTERMS = "http://purl.org/dc/terms/";
@@ -56,6 +59,9 @@ var ODRL_ATTRIBUTE = `${ODRL}attribute`;
 var ODRL_COMPENSATE = `${ODRL}compensate`;
 var ODRL_INFORM = `${ODRL}inform`;
 var ODRL_ANONYMIZE = `${ODRL}anonymize`;
+var ODRL_GRANT_USE = `${ODRL}grantUse`;
+var ODRL_NEXT_POLICY = `${ODRL}nextPolicy`;
+var ODRL_TRANSFER = `${ODRL}transfer`;
 var ACTION_APPEND_IRI = `${ACL}Append`;
 var ACTION_CONTROL_IRI = `${ACL}Control`;
 var ODRL_ACTIONS = [
@@ -73,7 +79,10 @@ var ODRL_ACTIONS = [
   "inform",
   "anonymize",
   "append",
-  "control"
+  "control",
+  "grantUse",
+  "nextPolicy",
+  "transfer"
 ];
 var ACTION_IRI = {
   use: ODRL_USE,
@@ -92,13 +101,22 @@ var ACTION_IRI = {
   // Solid-resource access concepts — backed by the standard acl: mode IRIs (OAC
   // practice), NOT minted, and deliberately distinct from the ODRL data-use actions.
   append: ACTION_APPEND_IRI,
-  control: ACTION_CONTROL_IRI
+  control: ACTION_CONTROL_IRI,
+  // Delegation concepts — standard ODRL 2.2 IRIs (see the constants above).
+  grantUse: ODRL_GRANT_USE,
+  nextPolicy: ODRL_NEXT_POLICY,
+  transfer: ODRL_TRANSFER
 };
 var IRI_TO_ACTION = Object.fromEntries(
   Object.entries(ACTION_IRI).map(([k, v]) => [v, k])
 );
 var VALID_ACTION_IRIS = new Set(Object.values(ACTION_IRI));
-var NOT_UNDER_USE = /* @__PURE__ */ new Set(["control"]);
+var NOT_UNDER_USE = /* @__PURE__ */ new Set([
+  "control",
+  "grantUse",
+  "nextPolicy",
+  "transfer"
+]);
 var EXTRA_IMPLIED_BY = {
   append: ["write"]
 };
@@ -132,6 +150,7 @@ var ODRL_COUNT = `${ODRL}count`;
 var ODRL_SPATIAL = `${ODRL}spatial`;
 var ODRL_ELAPSED_TIME = `${ODRL}elapsedTime`;
 var ODRL_SYSTEM_DEVICE = `${ODRL}systemDevice`;
+var ODRLD_DELEGATION_DEPTH = `${ODRLD}delegationDepth`;
 var LEFT_OPERANDS = [
   "dateTime",
   "purpose",
@@ -139,7 +158,8 @@ var LEFT_OPERANDS = [
   "count",
   "spatial",
   "elapsedTime",
-  "systemDevice"
+  "systemDevice",
+  "delegationDepth"
 ];
 var LEFT_OPERAND_IRI = {
   dateTime: ODRL_DATETIME,
@@ -148,7 +168,8 @@ var LEFT_OPERAND_IRI = {
   count: ODRL_COUNT,
   spatial: ODRL_SPATIAL,
   elapsedTime: ODRL_ELAPSED_TIME,
-  systemDevice: ODRL_SYSTEM_DEVICE
+  systemDevice: ODRL_SYSTEM_DEVICE,
+  delegationDepth: ODRLD_DELEGATION_DEPTH
 };
 var IRI_TO_LEFT_OPERAND = Object.fromEntries(
   Object.entries(LEFT_OPERAND_IRI).map(([k, v]) => [v, k])
@@ -187,6 +208,12 @@ var OPERATOR_IRI = {
 var IRI_TO_OPERATOR = Object.fromEntries(
   Object.entries(OPERATOR_IRI).map(([k, v]) => [v, k])
 );
+var ODRLD_DELEGATED_UNDER = `${ODRLD}delegatedUnder`;
+var ODRLD_REVOCATION_CLASS = `${ODRLD}Revocation`;
+var ODRLD_REVOKED_POLICY = `${ODRLD}revokedPolicy`;
+var PROV_WAS_ATTRIBUTED_TO = `${PROV}wasAttributedTo`;
+var PROV_ACTED_ON_BEHALF_OF = `${PROV}actedOnBehalfOf`;
+var PROV_WAS_DERIVED_FROM = `${PROV}wasDerivedFrom`;
 var ODRL_INLINE_CONTEXT = {
   odrl: ODRL,
   acl: ACL,
@@ -206,6 +233,10 @@ var ODRL_INLINE_CONTEXT = {
   leftOperand: { "@id": ODRL_LEFT_OPERAND, "@type": "@id" },
   operator: { "@id": ODRL_OPERATOR, "@type": "@id" },
   rightOperand: ODRL_RIGHT_OPERAND
+};
+var ODRLD_INLINE_CONTEXT_EXTENSION = {
+  odrld: ODRLD,
+  delegatedUnder: { "@id": ODRLD_DELEGATED_UNDER, "@type": "@id" }
 };
 
 // src/compose.ts
@@ -259,9 +290,8 @@ function requestContextFromWac(agent, mode, target, attributes) {
 // src/evaluate.ts
 function evaluate(policy, request, options = {}) {
   const now = options.now ?? /* @__PURE__ */ new Date();
-  const effectivePermissions = (policy.permissions ?? []).map((r) => effectiveRule(r, policy));
   const effectiveProhibitions = (policy.prohibitions ?? []).map((r) => effectiveRule(r, policy));
-  const matchedPermissionRules = effectivePermissions.filter((r) => ruleMatches(r, request, now));
+  const matchedPermissionRules = matchingPermissions(policy, request, { now });
   const matchedProhibitionRules = effectiveProhibitions.filter((r) => ruleMatches(r, request, now));
   const matchedPermissions = matchedPermissionRules.map((r) => toDecisionRule(r, "permission"));
   const matchedProhibitions = matchedProhibitionRules.map((r) => toDecisionRule(r, "prohibition"));
@@ -328,6 +358,10 @@ function evaluate(policy, request, options = {}) {
     "A permission matches the request.",
     false
   );
+}
+function matchingPermissions(policy, request, options = {}) {
+  const now = options.now ?? /* @__PURE__ */ new Date();
+  return (policy.permissions ?? []).map((r) => effectiveRule(r, policy)).filter((r) => ruleMatches(r, request, now));
 }
 function decidePermit(perms, prohibits, duties, options, reason, conflict) {
   if (options.requireDuties) {
@@ -506,12 +540,429 @@ function isFiniteNumber(v) {
   return Number.isFinite(Number(s));
 }
 
-// ../solid-odrl/node_modules/@jeswr/fetch-rdf/dist/parse.js
+// src/wrappers.ts
+import {
+  BlankNodeFrom,
+  DatasetWrapper,
+  LiteralFrom,
+  NamedNodeFrom,
+  SetFrom,
+  TermAs,
+  TermFrom,
+  TermWrapper
+} from "@rdfjs/wrapper";
+import { DataFactory, Store } from "n3";
+function objectTerms(node, predicate) {
+  return SetFrom.subjectPredicate(node, predicate, TermAs.instance(TermWrapper), TermFrom.instance);
+}
+var ConstraintNode = class extends TermWrapper {
+  get leftOperands() {
+    return objectTerms(this, ODRL_LEFT_OPERAND);
+  }
+  get operators() {
+    return objectTerms(this, ODRL_OPERATOR);
+  }
+  get rightOperands() {
+    return objectTerms(this, ODRL_RIGHT_OPERAND);
+  }
+};
+var DutyNode = class extends TermWrapper {
+  get actions() {
+    return objectTerms(this, ODRL_ACTION);
+  }
+  get targets() {
+    return objectTerms(this, ODRL_TARGET);
+  }
+  get constraints() {
+    return SetFrom.subjectPredicate(
+      this,
+      ODRL_CONSTRAINT,
+      TermAs.instance(ConstraintNode),
+      TermFrom.instance
+    );
+  }
+};
+var RuleNode = class extends TermWrapper {
+  get actions() {
+    return objectTerms(this, ODRL_ACTION);
+  }
+  get targets() {
+    return objectTerms(this, ODRL_TARGET);
+  }
+  get assignees() {
+    return objectTerms(this, ODRL_ASSIGNEE);
+  }
+  get assigners() {
+    return objectTerms(this, ODRL_ASSIGNER);
+  }
+  get constraints() {
+    return SetFrom.subjectPredicate(
+      this,
+      ODRL_CONSTRAINT,
+      TermAs.instance(ConstraintNode),
+      TermFrom.instance
+    );
+  }
+  get duties() {
+    return SetFrom.subjectPredicate(this, ODRL_DUTY, TermAs.instance(DutyNode), TermFrom.instance);
+  }
+};
+var PolicyNode = class extends TermWrapper {
+  get types() {
+    return objectTerms(this, RDF_TYPE);
+  }
+  get uids() {
+    return objectTerms(this, ODRL_UID);
+  }
+  get profiles() {
+    return objectTerms(this, ODRL_PROFILE);
+  }
+  get assigners() {
+    return objectTerms(this, ODRL_ASSIGNER);
+  }
+  get assignees() {
+    return objectTerms(this, ODRL_ASSIGNEE);
+  }
+  get conflicts() {
+    return objectTerms(this, ODRL_CONFLICT);
+  }
+  /** Delegation profile: the `odrld:delegatedUnder` parent-policy edge(s). */
+  get delegatedUnders() {
+    return objectTerms(this, ODRLD_DELEGATED_UNDER);
+  }
+  get permissions() {
+    return SetFrom.subjectPredicate(
+      this,
+      ODRL_PERMISSION,
+      TermAs.instance(RuleNode),
+      TermFrom.instance
+    );
+  }
+  get prohibitions() {
+    return SetFrom.subjectPredicate(
+      this,
+      ODRL_PROHIBITION,
+      TermAs.instance(RuleNode),
+      TermFrom.instance
+    );
+  }
+  get obligations() {
+    return SetFrom.subjectPredicate(
+      this,
+      ODRL_OBLIGATION,
+      TermAs.instance(DutyNode),
+      TermFrom.instance
+    );
+  }
+};
+var PolicyDataset = class extends DatasetWrapper {
+  /** Every `odrl:Policy` (or Set/Offer/Agreement) subject in the dataset. */
+  policies() {
+    const seen = /* @__PURE__ */ new Map();
+    for (const cls of [ODRL_POLICY, ODRL_SET, ODRL_OFFER, ODRL_AGREEMENT]) {
+      for (const node of this.instancesOf(cls, PolicyNode)) {
+        seen.set(node.value, node);
+      }
+    }
+    return [...seen.values()];
+  }
+};
+function wrapPolicy(dataset) {
+  return new PolicyDataset(dataset, DataFactory);
+}
+function firstIri(terms) {
+  for (const term of terms) {
+    if (term.termType === "NamedNode") {
+      return term.value;
+    }
+  }
+  return void 0;
+}
+function allValues(terms) {
+  const out = [];
+  for (const term of terms) {
+    if (term.termType === "Literal") {
+      const dt = term.datatype?.value;
+      out.push(
+        dt !== void 0 ? { value: term.value, isIri: false, datatype: dt } : { value: term.value, isIri: false }
+      );
+    } else if (term.termType === "NamedNode") {
+      out.push({ value: term.value, isIri: true });
+    }
+  }
+  return out;
+}
+function iriRef(iri) {
+  return { kind: "iri", value: iri };
+}
+function normalize(subject) {
+  return typeof subject === "string" ? { kind: "iri", value: subject } : subject;
+}
+var GraphBuilder = class {
+  store = new Store();
+  factory = DataFactory;
+  /** Materialise a {@link NodeRef} to its RDF/JS term. */
+  subjectTerm(ref) {
+    return ref.kind === "iri" ? NamedNodeFrom.string(ref.value, this.factory) : BlankNodeFrom.string(ref.value, this.factory);
+  }
+  /** Add `(subject, predicate, object-IRI)`. */
+  addIri(subject, predicate, objectIri) {
+    const s = this.subjectTerm(normalize(subject));
+    const p = NamedNodeFrom.string(predicate, this.factory);
+    const o = NamedNodeFrom.string(objectIri, this.factory);
+    this.store.add(this.factory.quad(s, p, o));
+  }
+  /** Add `(subject, predicate, literal)` with an optional datatype IRI. */
+  addLiteral(subject, predicate, value, datatypeIri) {
+    const s = this.subjectTerm(normalize(subject));
+    const p = NamedNodeFrom.string(predicate, this.factory);
+    const o = datatypeIri === void 0 ? LiteralFrom.string(value, this.factory) : this.factory.literal(
+      value,
+      NamedNodeFrom.string(datatypeIri, this.factory)
+    );
+    this.store.add(this.factory.quad(s, p, o));
+  }
+  /**
+   * Mint a fresh blank node, link it `(subject, predicate, _:b)`, and return a
+   * {@link NodeRef} to the new blank node (so subsequent writes target it
+   * unambiguously as a blank, never as an IRI).
+   */
+  linkBlankNode(subject, predicate) {
+    const s = this.subjectTerm(normalize(subject));
+    const blank = BlankNodeFrom.string(void 0, this.factory);
+    const p = NamedNodeFrom.string(predicate, this.factory);
+    this.store.add(this.factory.quad(s, p, blank));
+    return { kind: "blank", value: blank.value };
+  }
+  /**
+   * Link a CHILD node (a named IRI child if provided, else a fresh blank) from
+   * `subject` via `predicate`, and return its {@link NodeRef}. Used for rule/duty/
+   * constraint nodes which may carry their own IRI or be anonymous.
+   */
+  linkChild(subject, predicate, childIri) {
+    if (childIri !== void 0) {
+      this.addIri(subject, predicate, childIri);
+      return iriRef(childIri);
+    }
+    return this.linkBlankNode(subject, predicate);
+  }
+  /** The underlying store (a DatasetCore). */
+  dataset() {
+    return this.store;
+  }
+  /** The accumulated quads. */
+  quads() {
+    return [...this.store];
+  }
+};
+
+// src/delegation.ts
+var DEFAULT_MAX_CHAIN_LENGTH = 8;
+function evaluateDelegated(chain, request, options = {}) {
+  const now = options.now ?? /* @__PURE__ */ new Date();
+  const maxLen = options.maxChainLength ?? DEFAULT_MAX_CHAIN_LENGTH;
+  const hops = [];
+  if (chain.length === 0) {
+    return denied("Empty delegation chain \u2014 nothing grants the request.", hops);
+  }
+  if (!Number.isInteger(maxLen) || maxLen < 1) {
+    return denied(`Invalid maxChainLength ${String(maxLen)} \u2014 must be a positive integer.`, hops);
+  }
+  if (chain.length > maxLen) {
+    return denied(
+      `Chain length ${chain.length} exceeds the maximum ${maxLen} (maxChainLength).`,
+      hops
+    );
+  }
+  const req = stripDelegationDepth(request);
+  const seen = /* @__PURE__ */ new Set();
+  for (const [i, policy] of chain.entries()) {
+    if (policy.id === void 0 || policy.id === "") {
+      return denied(`Hop ${i} has no policy id \u2014 the chain edge cannot be verified.`, hops);
+    }
+    if (seen.has(policy.id)) {
+      return denied(`Cyclic chain: policy <${policy.id}> appears more than once.`, hops);
+    }
+    seen.add(policy.id);
+  }
+  const revoked = new Set(options.revoked ?? []);
+  for (const [i, policy] of chain.entries()) {
+    if (revoked.has(policy.id)) {
+      return denied(`Hop ${i} (<${policy.id}>) has been revoked.`, hops);
+    }
+  }
+  for (let i = 1; i < chain.length; i++) {
+    const parent = chain[i - 1];
+    const child = chain[i];
+    const remainingDepth = chain.length - i;
+    const failure = checkDelegationEdge(parent, child, remainingDepth, req, now);
+    if (failure !== void 0) {
+      hops.push({ index: i, policyId: child.id, ok: false, reason: failure });
+      return denied(`Hop ${i} (<${child.id}>): ${failure}`, hops);
+    }
+    hops.push({ index: i, policyId: child.id, ok: true, reason: "ok" });
+  }
+  const aggregateDuties = [];
+  for (let i = 0; i < chain.length - 1; i++) {
+    const ancestor = chain[i];
+    const delegator = chain[i + 1].assigner;
+    const scope = evaluate(ancestor, { ...req, agent: delegator }, { now });
+    if (scope.decision !== "permit") {
+      return denied(
+        `Hop ${i} (<${ancestor.id}>) does not grant the requested capability to its delegate <${delegator}> (${scope.decision}: ${scope.reason}) \u2014 a delegate cannot receive more than the delegator holds.`,
+        hops
+      );
+    }
+    const direct = evaluate(ancestor, req, { now });
+    if (direct.decision === "deny") {
+      return denied(
+        `Hop ${i} (<${ancestor.id}>) prohibits the request directly (${direct.reason}).`,
+        hops
+      );
+    }
+    aggregateDuties.push(...scope.duties);
+  }
+  const leafPolicy = chain[chain.length - 1];
+  const leaf = evaluate(leafPolicy, req, { now });
+  if (leaf.decision !== "permit") {
+    return {
+      ...denied(`Leaf policy <${leafPolicy.id}> does not permit: ${leaf.reason}`, hops),
+      leaf
+    };
+  }
+  aggregateDuties.push(...leaf.duties);
+  const duties = dedupeDuties(aggregateDuties);
+  if (options.requireDuties) {
+    const outstanding = duties.filter((d) => !d.fulfilled);
+    if (outstanding.length > 0) {
+      const names = outstanding.map((d) => d.action).join(", ");
+      return {
+        ...denied(
+          `Chain permits, but requireDuties is set and these chain duties are unfulfilled: ${names}.`,
+          hops
+        ),
+        leaf,
+        duties
+      };
+    }
+  }
+  return {
+    decision: "permit",
+    reason: chain.length === 1 ? "The policy permits the request (single-policy chain)." : `Every hop of the ${chain.length - 1}-hop delegation chain is valid and the request is within the chain intersection.`,
+    hops,
+    leaf,
+    duties
+  };
+}
+function checkDelegationEdge(parent, child, remainingDepth, req, now) {
+  if (child.type !== "Agreement") {
+    return `a delegated hop must be an odrl:Agreement (got ${child.type ?? "Set"}).`;
+  }
+  if (child.assigner === void 0 || child.assignee === void 0) {
+    return "a delegated hop must name both assigner (the delegator) and assignee (the delegate).";
+  }
+  if (child.delegatedUnder !== parent.id) {
+    return `the hop must declare odrld:delegatedUnder <${parent.id}> (got ${child.delegatedUnder === void 0 ? "none" : `<${child.delegatedUnder}>`}).`;
+  }
+  const authRequest = {
+    agent: child.assigner,
+    action: "grantUse",
+    ...req.target !== void 0 && { target: req.target },
+    attributes: { ...req.attributes ?? {}, delegationDepth: remainingDepth }
+  };
+  const auth = evaluate(parent, authRequest, { now });
+  if (auth.decision !== "permit") {
+    return `the parent policy does not authorise delegation by <${child.assigner}> (${auth.decision}: ${auth.reason}).`;
+  }
+  const candidates = matchingPermissions(parent, authRequest, { now }).filter(
+    (r) => r.action === "grantUse" && r.assignee === child.assigner
+  );
+  if (candidates.length === 0) {
+    return `the parent policy has no grantUse permission explicitly naming <${child.assigner}> as assignee (an assignee-free grantUse does not authorise delegation).`;
+  }
+  const failures = [];
+  for (const rule of candidates) {
+    const failure = checkGrantUseRule(rule, child, remainingDepth);
+    if (failure === void 0) {
+      return void 0;
+    }
+    failures.push(failure);
+  }
+  return failures.join(" / ");
+}
+function checkGrantUseRule(rule, child, remainingDepth) {
+  const hasDepthConstraint = (rule.constraints ?? []).some(
+    (c) => c.leftOperand === "delegationDepth"
+  );
+  if (!hasDepthConstraint && remainingDepth > 1) {
+    return `grantUse permission carries no delegationDepth constraint, so its budget is the profile default of 1 hop \u2014 ${remainingDepth} remaining hops exceed it`;
+  }
+  for (const duty of rule.duties ?? []) {
+    if (duty.action !== "nextPolicy") {
+      continue;
+    }
+    if (duty.target === void 0) {
+      return "grantUse permission carries a nextPolicy duty with no target policy (malformed)";
+    }
+    if (duty.target !== child.id) {
+      return `grantUse permission mandates nextPolicy <${duty.target}> but the delegated hop is <${child.id}>`;
+    }
+  }
+  return void 0;
+}
+function denied(reason, hops) {
+  return { decision: "deny", reason, hops, duties: [] };
+}
+function stripDelegationDepth(request) {
+  if (request.attributes === void 0 || !("delegationDepth" in request.attributes)) {
+    return request;
+  }
+  const { delegationDepth: _reserved, ...rest } = request.attributes;
+  const { attributes: _dropped, ...requestWithout } = request;
+  return Object.keys(rest).length > 0 ? { ...requestWithout, attributes: rest } : requestWithout;
+}
+function dedupeDuties(duties) {
+  const seen = /* @__PURE__ */ new Set();
+  const out = [];
+  for (const d of duties) {
+    const key = `${d.action}\0${d.target ?? ""}\0${d.id ?? ""}\0${d.fulfilled}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      out.push(d);
+    }
+  }
+  return out;
+}
+function delegationProvenance(chain) {
+  const b = new GraphBuilder();
+  for (const [i, policy] of chain.entries()) {
+    if (policy.id === void 0 || policy.id === "") {
+      continue;
+    }
+    const subject = iriRef(policy.id);
+    if (policy.assigner !== void 0) {
+      b.addIri(subject, PROV_WAS_ATTRIBUTED_TO, policy.assigner);
+    }
+    if (i > 0) {
+      const parent = chain[i - 1];
+      if (parent.id !== void 0 && parent.id !== "") {
+        b.addIri(subject, ODRLD_DELEGATED_UNDER, parent.id);
+        b.addIri(subject, PROV_WAS_DERIVED_FROM, parent.id);
+      }
+      if (policy.assignee !== void 0 && policy.assigner !== void 0) {
+        b.addIri(iriRef(policy.assignee), PROV_ACTED_ON_BEHALF_OF, policy.assigner);
+      }
+    }
+  }
+  return b.quads();
+}
+
+// node_modules/@jeswr/fetch-rdf/dist/parse.js
 import contentType from "content-type";
-import { Store, StreamParser } from "n3";
+import { Store as Store2, StreamParser } from "n3";
 import { JsonLdParser } from "jsonld-streaming-parser";
 
-// ../solid-odrl/node_modules/@jeswr/fetch-rdf/dist/errors.js
+// node_modules/@jeswr/fetch-rdf/dist/errors.js
 var RdfFetchError = class extends Error {
   /** The original cause, if any (e.g. a network error or parser exception). */
   cause;
@@ -535,7 +986,7 @@ var RdfFetchError = class extends Error {
   }
 };
 
-// ../solid-odrl/node_modules/@jeswr/fetch-rdf/dist/parse.js
+// node_modules/@jeswr/fetch-rdf/dist/parse.js
 var SUPPORTED_RDF_MEDIA_TYPES = [
   "text/turtle",
   "application/n-triples",
@@ -586,7 +1037,7 @@ async function parseRdf(body, contentTypeHeader, options = {}) {
 }
 function collectIntoStore(parser) {
   return new Promise((resolve, reject) => {
-    const store = new Store();
+    const store = new Store2();
     parser.on("data", (quad) => {
       store.addQuad(quad);
     });
@@ -674,218 +1125,6 @@ var PREFIXES = {
 function serialize(quads, format = "text/turtle") {
   return legacySerialize(quads, format, PREFIXES);
 }
-
-// src/wrappers.ts
-import {
-  BlankNodeFrom,
-  DatasetWrapper,
-  LiteralFrom,
-  NamedNodeFrom,
-  SetFrom,
-  TermAs,
-  TermFrom,
-  TermWrapper
-} from "@rdfjs/wrapper";
-import { DataFactory, Store as Store2 } from "n3";
-function objectTerms(node, predicate) {
-  return SetFrom.subjectPredicate(node, predicate, TermAs.instance(TermWrapper), TermFrom.instance);
-}
-var ConstraintNode = class extends TermWrapper {
-  get leftOperands() {
-    return objectTerms(this, ODRL_LEFT_OPERAND);
-  }
-  get operators() {
-    return objectTerms(this, ODRL_OPERATOR);
-  }
-  get rightOperands() {
-    return objectTerms(this, ODRL_RIGHT_OPERAND);
-  }
-};
-var DutyNode = class extends TermWrapper {
-  get actions() {
-    return objectTerms(this, ODRL_ACTION);
-  }
-  get targets() {
-    return objectTerms(this, ODRL_TARGET);
-  }
-  get constraints() {
-    return SetFrom.subjectPredicate(
-      this,
-      ODRL_CONSTRAINT,
-      TermAs.instance(ConstraintNode),
-      TermFrom.instance
-    );
-  }
-};
-var RuleNode = class extends TermWrapper {
-  get actions() {
-    return objectTerms(this, ODRL_ACTION);
-  }
-  get targets() {
-    return objectTerms(this, ODRL_TARGET);
-  }
-  get assignees() {
-    return objectTerms(this, ODRL_ASSIGNEE);
-  }
-  get assigners() {
-    return objectTerms(this, ODRL_ASSIGNER);
-  }
-  get constraints() {
-    return SetFrom.subjectPredicate(
-      this,
-      ODRL_CONSTRAINT,
-      TermAs.instance(ConstraintNode),
-      TermFrom.instance
-    );
-  }
-  get duties() {
-    return SetFrom.subjectPredicate(this, ODRL_DUTY, TermAs.instance(DutyNode), TermFrom.instance);
-  }
-};
-var PolicyNode = class extends TermWrapper {
-  get types() {
-    return objectTerms(this, RDF_TYPE);
-  }
-  get uids() {
-    return objectTerms(this, ODRL_UID);
-  }
-  get profiles() {
-    return objectTerms(this, ODRL_PROFILE);
-  }
-  get assigners() {
-    return objectTerms(this, ODRL_ASSIGNER);
-  }
-  get assignees() {
-    return objectTerms(this, ODRL_ASSIGNEE);
-  }
-  get conflicts() {
-    return objectTerms(this, ODRL_CONFLICT);
-  }
-  get permissions() {
-    return SetFrom.subjectPredicate(
-      this,
-      ODRL_PERMISSION,
-      TermAs.instance(RuleNode),
-      TermFrom.instance
-    );
-  }
-  get prohibitions() {
-    return SetFrom.subjectPredicate(
-      this,
-      ODRL_PROHIBITION,
-      TermAs.instance(RuleNode),
-      TermFrom.instance
-    );
-  }
-  get obligations() {
-    return SetFrom.subjectPredicate(
-      this,
-      ODRL_OBLIGATION,
-      TermAs.instance(DutyNode),
-      TermFrom.instance
-    );
-  }
-};
-var PolicyDataset = class extends DatasetWrapper {
-  /** Every `odrl:Policy` (or Set/Offer/Agreement) subject in the dataset. */
-  policies() {
-    const seen = /* @__PURE__ */ new Map();
-    for (const cls of [ODRL_POLICY, ODRL_SET, ODRL_OFFER, ODRL_AGREEMENT]) {
-      for (const node of this.instancesOf(cls, PolicyNode)) {
-        seen.set(node.value, node);
-      }
-    }
-    return [...seen.values()];
-  }
-};
-function wrapPolicy(dataset) {
-  return new PolicyDataset(dataset, DataFactory);
-}
-function firstIri(terms) {
-  for (const term of terms) {
-    if (term.termType === "NamedNode") {
-      return term.value;
-    }
-  }
-  return void 0;
-}
-function allValues(terms) {
-  const out = [];
-  for (const term of terms) {
-    if (term.termType === "Literal") {
-      const dt = term.datatype?.value;
-      out.push(
-        dt !== void 0 ? { value: term.value, isIri: false, datatype: dt } : { value: term.value, isIri: false }
-      );
-    } else if (term.termType === "NamedNode") {
-      out.push({ value: term.value, isIri: true });
-    }
-  }
-  return out;
-}
-function iriRef(iri) {
-  return { kind: "iri", value: iri };
-}
-function normalize(subject) {
-  return typeof subject === "string" ? { kind: "iri", value: subject } : subject;
-}
-var GraphBuilder = class {
-  store = new Store2();
-  factory = DataFactory;
-  /** Materialise a {@link NodeRef} to its RDF/JS term. */
-  subjectTerm(ref) {
-    return ref.kind === "iri" ? NamedNodeFrom.string(ref.value, this.factory) : BlankNodeFrom.string(ref.value, this.factory);
-  }
-  /** Add `(subject, predicate, object-IRI)`. */
-  addIri(subject, predicate, objectIri) {
-    const s = this.subjectTerm(normalize(subject));
-    const p = NamedNodeFrom.string(predicate, this.factory);
-    const o = NamedNodeFrom.string(objectIri, this.factory);
-    this.store.add(this.factory.quad(s, p, o));
-  }
-  /** Add `(subject, predicate, literal)` with an optional datatype IRI. */
-  addLiteral(subject, predicate, value, datatypeIri) {
-    const s = this.subjectTerm(normalize(subject));
-    const p = NamedNodeFrom.string(predicate, this.factory);
-    const o = datatypeIri === void 0 ? LiteralFrom.string(value, this.factory) : this.factory.literal(
-      value,
-      NamedNodeFrom.string(datatypeIri, this.factory)
-    );
-    this.store.add(this.factory.quad(s, p, o));
-  }
-  /**
-   * Mint a fresh blank node, link it `(subject, predicate, _:b)`, and return a
-   * {@link NodeRef} to the new blank node (so subsequent writes target it
-   * unambiguously as a blank, never as an IRI).
-   */
-  linkBlankNode(subject, predicate) {
-    const s = this.subjectTerm(normalize(subject));
-    const blank = BlankNodeFrom.string(void 0, this.factory);
-    const p = NamedNodeFrom.string(predicate, this.factory);
-    this.store.add(this.factory.quad(s, p, blank));
-    return { kind: "blank", value: blank.value };
-  }
-  /**
-   * Link a CHILD node (a named IRI child if provided, else a fresh blank) from
-   * `subject` via `predicate`, and return its {@link NodeRef}. Used for rule/duty/
-   * constraint nodes which may carry their own IRI or be anonymous.
-   */
-  linkChild(subject, predicate, childIri) {
-    if (childIri !== void 0) {
-      this.addIri(subject, predicate, childIri);
-      return iriRef(childIri);
-    }
-    return this.linkBlankNode(subject, predicate);
-  }
-  /** The underlying store (a DatasetCore). */
-  dataset() {
-    return this.store;
-  }
-  /** The accumulated quads. */
-  quads() {
-    return [...this.store];
-  }
-};
 
 // src/policy.ts
 function policyTypeIri(type) {
@@ -987,6 +1226,9 @@ function policyToRdf(policy) {
   if (policy.conflict !== void 0) {
     b.addIri(subject, ODRL_CONFLICT, CONFLICT_IRI[policy.conflict]);
   }
+  if (policy.delegatedUnder !== void 0) {
+    b.addIri(subject, ODRLD_DELEGATED_UNDER, policy.delegatedUnder);
+  }
   for (const rule of policy.permissions ?? []) {
     writeRule(b, subject, { ...rule, type: "permission" }, policy.assigner, policy.assignee);
   }
@@ -1006,8 +1248,9 @@ function policyToTurtle(policy, format) {
   return serialize(policyToRdf(policy), format);
 }
 function policyToJsonLd(policy) {
+  const context = policy.delegatedUnder !== void 0 ? { ...ODRL_INLINE_CONTEXT, ...ODRLD_INLINE_CONTEXT_EXTENSION } : ODRL_INLINE_CONTEXT;
   const doc = {
-    "@context": ODRL_INLINE_CONTEXT,
+    "@context": context,
     "@id": policy.id,
     "@type": `odrl:${policy.type ?? "Set"}`,
     uid: { "@id": policy.id }
@@ -1019,6 +1262,7 @@ function policyToJsonLd(policy) {
   if (policy.assigner !== void 0) doc.assigner = { "@id": policy.assigner };
   if (policy.assignee !== void 0) doc.assignee = { "@id": policy.assignee };
   if (policy.conflict !== void 0) doc.conflict = { "@id": CONFLICT_IRI[policy.conflict] };
+  if (policy.delegatedUnder !== void 0) doc.delegatedUnder = { "@id": policy.delegatedUnder };
   if (policy.permissions && policy.permissions.length > 0) {
     doc.permission = policy.permissions.map((r) => ruleJsonLd(r, policy));
   }
@@ -1110,6 +1354,7 @@ function projectPolicy(node) {
   const assignee = firstIri(node.assignees);
   const conflictIri = firstIri(node.conflicts);
   const conflict = conflictIri !== void 0 ? IRI_TO_CONFLICT[conflictIri] : void 0;
+  const delegatedUnder = firstIri(node.delegatedUnders);
   const permissions = [...node.permissions].map((r) => projectRule(r, "permission")).filter((r) => r !== void 0);
   const prohibitions = [...node.prohibitions].map((r) => projectRule(r, "prohibition")).filter((r) => r !== void 0);
   const obligations = [...node.obligations].map((d) => projectDuty(d)).filter((d) => d !== void 0);
@@ -1120,6 +1365,7 @@ function projectPolicy(node) {
     ...assigner !== void 0 && { assigner },
     ...assignee !== void 0 && { assignee },
     ...conflict !== void 0 && { conflict },
+    ...delegatedUnder !== void 0 && { delegatedUnder },
     ...permissions.length > 0 && { permissions },
     ...prohibitions.length > 0 && { prohibitions },
     ...obligations.length > 0 && { obligations }
@@ -1216,6 +1462,7 @@ export {
   ACTION_IRI,
   CONFLICT_IRI,
   CONFLICT_STRATEGIES,
+  DEFAULT_MAX_CHAIN_LENGTH,
   DPV,
   IRI_TO_ACTION,
   IRI_TO_LEFT_OPERAND,
@@ -1223,13 +1470,30 @@ export {
   LEFT_OPERANDS,
   LEFT_OPERAND_IRI,
   ODRL,
+  ODRLD,
+  ODRLD_DELEGATED_UNDER,
+  ODRLD_DELEGATION_DEPTH,
+  ODRLD_INLINE_CONTEXT_EXTENSION,
+  ODRLD_PROFILE_IRI,
+  ODRLD_REVOCATION_CLASS,
+  ODRLD_REVOKED_POLICY,
   ODRL_ACTIONS,
+  ODRL_GRANT_USE,
   ODRL_INLINE_CONTEXT,
+  ODRL_NEXT_POLICY,
+  ODRL_TRANSFER,
   OPERATORS,
   OPERATOR_IRI,
+  PROV,
+  PROV_ACTED_ON_BEHALF_OF,
+  PROV_WAS_ATTRIBUTED_TO,
+  PROV_WAS_DERIVED_FROM,
   VALID_ACTION_IRIS,
   constraintSatisfied,
+  delegationProvenance,
   evaluate,
+  evaluateDelegated,
+  matchingPermissions,
   parsePolicy,
   policyFromRdf,
   policyToJsonLd,

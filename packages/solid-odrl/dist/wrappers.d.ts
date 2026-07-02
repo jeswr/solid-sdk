@@ -29,6 +29,8 @@ export declare class PolicyNode extends TermWrapper {
     get assigners(): Set<TermWrapperType>;
     get assignees(): Set<TermWrapperType>;
     get conflicts(): Set<TermWrapperType>;
+    /** Delegation profile: the `odrld:delegatedUnder` parent-policy edge(s). */
+    get delegatedUnders(): Set<TermWrapperType>;
     get permissions(): Set<RuleNode>;
     get prohibitions(): Set<RuleNode>;
     get obligations(): Set<DutyNode>;

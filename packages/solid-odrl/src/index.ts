@@ -21,6 +21,14 @@
  *    active duties. PURE + DETERMINISTIC (injectable `now`), so it is exhaustively
  *    testable and does NO I/O.
  *
+ * 4. **Delegate** — the AGENT-DELEGATION PROFILE (`docs/delegation-profile.md`,
+ *    profile IRI {@link ODRLD_PROFILE_IRI}): an agent grants a sub-agent a SUBSET
+ *    of its own permissions via `odrl:grantUse` Agreements chained with
+ *    `odrld:delegatedUnder`; {@link evaluateDelegated} walks the chain FAIL-CLOSED
+ *    (in-scope intersection, unexpired, unrevoked, depth-bounded, acyclic) and
+ *    {@link delegationProvenance} emits the PROV-O audit overlay that traces every
+ *    delegated action to the delegating principal.
+ *
  * Composition (the roadmap's "a policy attaches to an agent interaction / a
  * resource"): {@link requestContextFromA2AIntent} turns an `@jeswr/solid-a2a`
  * intent into an ODRL request context (gate an A2A action with a policy), and
@@ -44,7 +52,17 @@ export {
   requestContextFromA2AIntent,
   requestContextFromWac,
 } from "./compose.js";
-export { constraintSatisfied, evaluate } from "./evaluate.js";
+export type {
+  DelegatedEvaluationResult,
+  DelegationEvaluateOptions,
+  DelegationHopTrace,
+} from "./delegation.js";
+export {
+  DEFAULT_MAX_CHAIN_LENGTH,
+  delegationProvenance,
+  evaluateDelegated,
+} from "./delegation.js";
+export { constraintSatisfied, evaluate, matchingPermissions } from "./evaluate.js";
 export {
   IRI_TO_ACTION,
   IRI_TO_LEFT_OPERAND,
@@ -85,10 +103,24 @@ export {
   type LeftOperandName,
   ODRL,
   ODRL_ACTIONS,
+  ODRL_GRANT_USE,
   ODRL_INLINE_CONTEXT,
+  ODRL_NEXT_POLICY,
+  ODRL_TRANSFER,
+  ODRLD,
+  ODRLD_DELEGATED_UNDER,
+  ODRLD_DELEGATION_DEPTH,
+  ODRLD_INLINE_CONTEXT_EXTENSION,
+  ODRLD_PROFILE_IRI,
+  ODRLD_REVOCATION_CLASS,
+  ODRLD_REVOKED_POLICY,
   type OdrlActionName,
   OPERATOR_IRI,
   OPERATORS,
   type OperatorName,
+  PROV,
+  PROV_ACTED_ON_BEHALF_OF,
+  PROV_WAS_ATTRIBUTED_TO,
+  PROV_WAS_DERIVED_FROM,
   VALID_ACTION_IRIS,
 } from "./vocab.js";
