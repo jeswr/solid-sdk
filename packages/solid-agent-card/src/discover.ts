@@ -26,9 +26,12 @@ export interface DiscoverOptions {
    * SSRF-guarded, so a hostile profile could point the second fetch at an
    * internal address (e.g. cloud metadata). Callers resolving UNTRUSTED WebIDs on
    * a server SHOULD inject an SSRF-guarded fetch (e.g. `@jeswr/guarded-fetch`'s
-   * node fetch, with DNS-pinning). In a browser the platform fetch (CORS) is the
-   * boundary. (This is distinct from the subject-binding spoofing guard, which
-   * prevents a descriptor from *claiming* a different agent IRI, not SSRF.)
+   * node fetch, with DNS-pinning). In a browser, CORS only limits which
+   * cross-origin RESPONSES your code can read — it does not stop the request
+   * being issued to an internal target — so treat untrusted browser-side
+   * discovery as only partially guarded. (This is distinct from the
+   * subject-binding spoofing guard, which prevents a descriptor from *claiming* a
+   * different agent IRI, not SSRF.)
    */
   readonly fetch?: typeof globalThis.fetch;
   /**

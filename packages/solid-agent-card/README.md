@@ -111,12 +111,17 @@ private-range-blocking):
 await discoverAgent(untrustedWebId, { fetch: guardedNodeFetch });
 ```
 
-In a browser the platform `fetch` (CORS) is the boundary. Two other guarantees are
-independent of the fetch seam and always on: the **subject-binding spoofing guard**
-(a document served at URL A may not describe a different agent B) and the
-**self-contained inline JSON-LD `@context`** the emitter uses (no remote-context
-dereference on parse). Prefer the in-hand `verifyDescriptor({ body })` /
-`verifyDataset` paths when you already have the RDF — they never touch the network.
+In a browser, CORS only limits which cross-origin *responses* your code can read —
+it does **not** stop the request being *issued* to an internal target, and a
+permissively-CORS internal endpoint could still be read. So treat untrusted
+browser-side discovery as only partially guarded, and prefer allowlisting or
+guarded resolution of the pointer IRI in any privileged context. Two other
+guarantees are independent of the fetch seam and always on: the **subject-binding
+spoofing guard** (a document served at URL A may not describe a different agent B)
+and the **self-contained inline JSON-LD `@context`** the emitter uses (no
+remote-context dereference on parse). Prefer the in-hand
+`verifyDescriptor(input, { body })` / `verifyDataset` paths when you already have
+the RDF — they never touch the network.
 
 ## Descriptor shape
 
