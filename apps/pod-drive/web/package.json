@@ -19,7 +19,8 @@
     "check:lockfile-transport": "node scripts/check-lockfile-transport.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:e2e:extension": "playwright test --config tests/extension/playwright.config.ts"
   },
   "dependencies": {
     "@jeswr/app-shell": "git+https://github.com/jeswr/app-shell.git#5a7484df818071e24adaf4833d92f836e1c8d6e2",
