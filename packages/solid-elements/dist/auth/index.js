@@ -55,6 +55,7 @@ import * as DPoP from "dpop";
 import { DataFactory } from "n3";
 import * as oauth from "oauth4webapi";
 import { AmbiguousIssuerError, InvalidWebIdError, MissingAuthFlowError, NoSolidIssuerError, } from "./errors.js";
+import { computeAllowedOrigins, htuOf, isLoopback, isOriginAllowed, validateWebId, } from "./origin.js";
 import { isUseDpopNonceChallenge, parseWwwAuthenticate } from "./www-authenticate.js";
 /**
  * The PRISTINE native fetch, snapshotted ONCE at MODULE LOAD — before any
@@ -73,83 +74,16 @@ const MODULE_PRISTINE_FETCH = typeof globalThis !== "undefined" && typeof global
 // The typed error taxonomy the LoginController throws lives in its own pure module
 // (imported at the top). Re-exported unchanged (the `/auth` contract is byte-stable).
 export { AmbiguousIssuerError, InvalidWebIdError, MissingAuthFlowError, NoSolidIssuerError };
-const isLoopback = (host) => host === "localhost" || host === "127.0.0.1" || host === "[::1]";
 /** Refresh this far before the reported expiry, to absorb clock skew + RTT. */
 const EXPIRY_SKEW_MS = 30_000;
 /** Epoch ms the access token should be treated as expired, or undefined when none. */
 function expiresAtFrom(expiresIn) {
     return expiresIn === undefined ? undefined : Date.now() + expiresIn * 1000 - EXPIRY_SKEW_MS;
 }
-/**
- * The set of resource origins a session token may be attached to — the credential
- * boundary the token provider enforces. PURE + exported so the boundary is
- * unit-tested. CLEARTEXT GUARD: a non-`https:` origin is DROPPED (so a configured
- * `http:` allowedOrigin can't make the DPoP token ride over cleartext), EXCEPT a
- * loopback `http:` origin when `allowInsecureLoopback` is set (dev). Fail-closed: an
- * unparseable entry is skipped; an empty result means the token is attached to NOTHING.
- */
-export function computeAllowedOrigins(inputs) {
-    const origins = new Set();
-    const add = (value) => {
-        if (!value)
-            return;
-        let url;
-        try {
-            url = new URL(value);
-        }
-        catch {
-            return; // unparseable → not allowed (fail-closed)
-        }
-        if (url.protocol === "https:") {
-            origins.add(url.origin);
-        }
-        else if (url.protocol === "http:" &&
-            inputs.allowInsecureLoopback &&
-            isLoopback(url.hostname)) {
-            origins.add(url.origin); // dev loopback only, under the explicit opt-in
-        }
-        // every other scheme (incl. non-loopback http) is dropped — no cleartext token
-    };
-    for (const o of inputs.allowedOrigins ?? [])
-        add(o);
-    if (inputs.includeWebIdOrigin !== false)
-        add(inputs.webId);
-    if (inputs.includeIssuerOrigin !== false)
-        add(inputs.issuer);
-    return origins;
-}
-/**
- * Whether a request URL targets an allowed origin (the per-request credential
- * gate). PURE + exported. Fail-closed: an unparseable URL is never allowed.
- */
-export function isOriginAllowed(allowed, requestUrl) {
-    try {
-        return allowed.has(new URL(requestUrl).origin);
-    }
-    catch {
-        return false;
-    }
-}
-/**
- * The DPoP `htu` claim for a request URL — the request URI WITHOUT its query and
- * fragment (RFC 9449 §4.2). PURE + exported. If the URL is unparseable it is
- * returned unchanged (the proof generator then sees the raw string).
- */
-export function htuOf(requestUrl) {
-    try {
-        const u = new URL(requestUrl);
-        u.search = "";
-        u.hash = "";
-        return u.toString();
-    }
-    catch {
-        return requestUrl;
-    }
-}
 // The RFC 9110 §11.6.1 `WWW-Authenticate` challenge parser + the RFC 9449 §8 pure-nonce
 // predicate live in their own pure module (imported at the top) so the security-sensitive
 // parse reads as a spec in isolation. Re-exported unchanged (the `/auth` contract is byte-stable).
-export { isUseDpopNonceChallenge, parseWwwAuthenticate };
+export { computeAllowedOrigins, htuOf, isOriginAllowed, isUseDpopNonceChallenge, parseWwwAuthenticate, validateWebId, };
 /** An in-memory SessionStore fallback so the controller works with no IndexedDB. */
 class MemorySessionStore {
     /**
@@ -1704,31 +1638,6 @@ function webIdFromClaims(claims) {
     if (typeof claims.sub === "string" && claims.sub.length > 0)
         return claims.sub;
     return undefined;
-}
-/**
- * Validate user input as a WebID: it must parse as a URL and be **`https:`** —
- * because the WebID's origin is added to the credential boundary (the session's
- * DPoP token may be attached to it), so a cleartext `http:` WebID would let the
- * token be sent over plaintext. `http:` is allowed ONLY for a loopback host
- * (`localhost`/`127.0.0.1`/`[::1]`) and ONLY when `allowInsecureLoopback` is set
- * (dev CSS over HTTP) — every other `http:` WebID is rejected.
- */
-export function validateWebId(input, allowInsecureLoopback = false) {
-    let url;
-    try {
-        url = new URL(input.trim());
-    }
-    catch {
-        throw new InvalidWebIdError(input, "not a URL");
-    }
-    if (url.protocol === "https:")
-        return url.toString();
-    if (url.protocol === "http:") {
-        if (allowInsecureLoopback && isLoopback(url.hostname))
-            return url.toString();
-        throw new InvalidWebIdError(input, "must be https (http is allowed only for a loopback dev host with allowInsecureLoopback)");
-    }
-    throw new InvalidWebIdError(input, "scheme must be https");
 }
 // PROACTIVE AUTHENTICATED FETCH (task #123) — the generic, reusable installer that wraps an
 // EXTERNAL TokenProvider (the app keeps its own provider) and proactively attaches the
