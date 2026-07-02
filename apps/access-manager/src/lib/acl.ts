@@ -354,11 +354,53 @@ export function detachResourceScope(
 ): string {
   const entry = projectEntries(dataset).find((e) => e.authIri === authIri);
   if (!entry) return authIri;
-  const matching = entry.accessTo.filter((t) => sameResource(t, resource));
-  if (matching.length === 0) return authIri; // default-only scope: subtree-wide edit
-  const otherAccessTo = entry.accessTo.filter((t) => !sameResource(t, resource));
-  if (otherAccessTo.length === 0 && entry.defaultFor.length === 0) return authIri;
+  const matchingAccessTo = entry.accessTo.filter((t) => sameResource(t, resource));
+  const coveredByDefault = entry.defaultFor.some(
+    (d) => !sameResource(d, resource) && isWithinStorage(resource, d),
+  );
 
+  if (coveredByDefault) {
+    // WAC cannot express "acl:default except this one resource", so when a
+    // retained default scope covers the resource the mutation MUST be
+    // SUBTREE-WIDE on this node (D7) — splitting the resource onto a clone
+    // would leave the retained default still granting the access being
+    // removed (roborev round 7). What CAN be protected are accessTo scopes
+    // OUTSIDE every default subtree: those are detached onto a faithful
+    // clone first, so the subtree-wide mutation cannot leak onto them.
+    const outside = entry.accessTo.filter(
+      (t) =>
+        !sameResource(t, resource) &&
+        !entry.defaultFor.some((d) => sameResource(t, d) || isWithinStorage(t, d)),
+    );
+    if (outside.length > 0) {
+      const cloneIri = cloneNodeWithoutScopes(dataset, authIri);
+      const scopedClone = new ScopedAuthorization(cloneIri, dataset, DataFactory);
+      const scopedOrig = new ScopedAuthorization(authIri, dataset, DataFactory);
+      for (const t of outside) {
+        scopedClone.accessToAll.add(t);
+        scopedOrig.accessToAll.delete(t);
+      }
+    }
+    return authIri; // mutate the original: the default subtree + the resource
+  }
+
+  if (matchingAccessTo.length === 0) return authIri; // no scope match
+  const otherScopes =
+    entry.accessTo.some((t) => !sameResource(t, resource)) || entry.defaultFor.length > 0;
+  if (!otherScopes) return authIri;
+
+  // accessTo-only coverage: detach the resource onto a faithful clone; the
+  // original keeps its other scopes untouched (roborev round 6).
+  const cloneIri = cloneNodeWithoutScopes(dataset, authIri);
+  const scopedClone = new ScopedAuthorization(cloneIri, dataset, DataFactory);
+  scopedClone.accessToAll.add(resource);
+  const scopedOrig = new ScopedAuthorization(authIri, dataset, DataFactory);
+  for (const t of matchingAccessTo) scopedOrig.accessToAll.delete(t);
+  return cloneIri;
+}
+
+/** Faithful clone of a node (all predicates except the scope ones). */
+function cloneNodeWithoutScopes(dataset: DatasetCore, authIri: string): string {
   const cloneIri = freshAuthIri(dataset, authIri);
   const orig = DataFactory.namedNode(authIri);
   const clone = DataFactory.namedNode(cloneIri);
@@ -366,10 +408,6 @@ export function detachResourceScope(
     if (q.predicate.value === ACL.accessTo || q.predicate.value === ACL.default) continue;
     dataset.add(DataFactory.quad(clone, q.predicate, q.object));
   }
-  const scopedClone = new ScopedAuthorization(cloneIri, dataset, DataFactory);
-  scopedClone.accessToAll.add(resource);
-  const scopedOrig = new ScopedAuthorization(authIri, dataset, DataFactory);
-  for (const t of matching) scopedOrig.accessToAll.delete(t);
   return cloneIri;
 }
 

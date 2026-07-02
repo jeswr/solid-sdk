@@ -653,3 +653,51 @@ describe("multi-scope node SPLIT on per-resource mutation (roborev round 6)", ()
     expect(onOther?.modes.sort()).toEqual(["Read", "Write"]); // untouched there
   });
 });
+
+describe("mixed accessTo+default nodes (roborev round 7)", () => {
+  const DOCS = `${POD}docs/`;
+  const DOCS_ACL = `${DOCS}.acl`;
+  const OUTSIDE = `${POD}settings/prefs.ttl`;
+
+  it("removing public for a resource ALSO covered by a retained default edits subtree-wide (no clone keeps it)", async () => {
+    const pod = buildPod();
+    pod.seed(
+      DOCS_ACL,
+      `${PREFIXES}
+<${DOCS_ACL}#owner> a acl:Authorization ; acl:agent <${OWNER}> ;
+  acl:accessTo <${DOCS}> ; acl:default <${DOCS}> ;
+  acl:mode acl:Read, acl:Write, acl:Control .
+<${DOCS_ACL}#pub> a acl:Authorization ; acl:agentClass foaf:Agent ;
+  acl:accessTo <${REPORT}> ; acl:default <${DOCS}> ; acl:mode acl:Read .`,
+    );
+    const { read } = await entriesAt(pod, DOCS_ACL);
+    const { removePublicFromEntry, entryAppliesTo } = await import("../../src/lib/acl.js");
+    removePublicFromEntry(read.dataset, `${DOCS_ACL}#pub`, OWNER, REPORT);
+    // NO surviving public entry applies to REPORT — neither via accessTo nor
+    // via the default subtree (the round-7 leak was a retained default).
+    const survivors = projectEntries(read.dataset).filter((e) => e.isPublic);
+    expect(survivors.some((e) => entryAppliesTo(e, REPORT))).toBe(false);
+  });
+
+  it("accessTo scopes OUTSIDE the default subtree are detached and preserved", async () => {
+    const pod = buildPod();
+    pod.seed(
+      DOCS_ACL,
+      `${PREFIXES}
+<${DOCS_ACL}#owner> a acl:Authorization ; acl:agent <${OWNER}> ;
+  acl:accessTo <${DOCS}> ; acl:default <${DOCS}> ;
+  acl:mode acl:Read, acl:Write, acl:Control .
+<${DOCS_ACL}#pub> a acl:Authorization ; acl:agentClass foaf:Agent ;
+  acl:accessTo <${REPORT}>, <${OUTSIDE}> ; acl:default <${DOCS}> ; acl:mode acl:Read .`,
+    );
+    const { read } = await entriesAt(pod, DOCS_ACL);
+    const { removePublicFromEntry, entryAppliesTo } = await import("../../src/lib/acl.js");
+    removePublicFromEntry(read.dataset, `${DOCS_ACL}#pub`, OWNER, REPORT);
+    const entries = projectEntries(read.dataset);
+    const publics = entries.filter((e) => e.isPublic);
+    // REPORT (accessTo + default subtree): public fully gone.
+    expect(publics.some((e) => entryAppliesTo(e, REPORT))).toBe(false);
+    // The OUTSIDE-the-subtree resource keeps its public access via the clone.
+    expect(publics.some((e) => e.accessTo.includes(OUTSIDE))).toBe(true);
+  });
+});
