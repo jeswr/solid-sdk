@@ -14,7 +14,13 @@
 // user descend the whole LDP container tree from there — it has NO Type-Index
 // discovery step (unlike pod-docs's DocsStore), so the host hands it the pod root
 // and the file tree starts there.
-import { AccountMenu, Button, FeedbackButton, ThemeToggle } from "@jeswr/app-shell";
+import {
+  AccountMenu,
+  Button,
+  FeedbackButton,
+  ThemeToggle,
+  useSolidExtensionPresent,
+} from "@jeswr/app-shell";
 import { FileBrowser } from "@jeswr/pod-drive/ui";
 // SOLID-ELEMENTS (#115 / D-parity rollout #67/#68/#70): the framework-agnostic W3C
 // Web Components consumed through the @lit/react adapter. <Loading> is a Lit custom
@@ -29,7 +35,6 @@ import { FileBrowser } from "@jeswr/pod-drive/ui";
 import { Loading } from "@jeswr/solid-elements/react";
 import { useSession } from "./auth/SessionProvider";
 import { LoginScreen } from "./LoginScreen";
-import { useExtensionPresent } from "./useExtensionPresent";
 
 export function App() {
   const { webId, session, logout, autologinPending, restoringSession } = useSession();
@@ -37,7 +42,7 @@ export function App() {
   // account menu (avatar + WebID + sign-out), so rendering the app's <AccountMenu/> too is
   // duplicate chrome — hide ours when the extension is present (bead suite-tracker-lpo). The
   // ThemeToggle + FeedbackButton are NOT duplicated by the extension, so they stay.
-  const extensionPresent = useExtensionPresent();
+  const extensionPresent = useSolidExtensionPresent();
 
   if (!webId || !session) {
     // Autologin (a Pod-Manager deep-link or a redirect return) is silently signing

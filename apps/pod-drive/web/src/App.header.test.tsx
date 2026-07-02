@@ -15,8 +15,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 let extensionPresent = false;
 const logout = vi.fn();
 
-vi.mock("./useExtensionPresent", () => ({
-  useExtensionPresent: () => extensionPresent,
+// The extension-presence hook now lives in @jeswr/app-shell (useSolidExtensionPresent).
+// Keep the real app-shell chrome components; override only the presence hook per test.
+vi.mock("@jeswr/app-shell", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@jeswr/app-shell")>()),
+  useSolidExtensionPresent: () => extensionPresent,
 }));
 
 vi.mock("./auth/SessionProvider", () => ({
