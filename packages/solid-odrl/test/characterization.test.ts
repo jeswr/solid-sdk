@@ -23,9 +23,10 @@ import { parseRdf } from "@jeswr/fetch-rdf";
 import type { Quad } from "@rdfjs/types";
 import { describe, expect, it } from "vitest";
 import { requestContextFromA2AIntent, requestContextFromWac } from "../src/compose.js";
+import { delegationProvenance, evaluateDelegated } from "../src/delegation.js";
 import { evaluate } from "../src/evaluate.js";
 import { parsePolicy, policyToJsonLd, policyToRdf, policyToTurtle } from "../src/policy.js";
-import type { OdrlPolicy, RequestContext } from "../src/types.js";
+import type { OdrlPolicy, OdrlRule, RequestContext } from "../src/types.js";
 
 const OWNER = "https://alice.example/profile/card#me";
 const BOB = "https://bob.example/profile/card#me";
@@ -34,6 +35,22 @@ const RES = "https://alice.example/notes/private.ttl";
 const OTHER = "https://alice.example/notes/other.ttl";
 const NOW = new Date("2026-06-16T12:00:00Z");
 const RND = "https://w3id.org/dpv#ResearchAndDevelopment";
+
+// Fixtures for the delegation decision matrix (below).
+const AGENT_A = "https://agent-a.example/id#it";
+const AGENT_B = "https://agent-b.example/id#it";
+const AGENT_C = "https://agent-c.example/id#it";
+const ROOT_ID = "https://alice.example/policies/root";
+const HOP1_ID = "https://agent-a.example/policies/to-b";
+const HOP2_ID = "https://agent-b.example/policies/to-c";
+const PAST = "2026-01-01T00:00:00Z";
+const DEPTH_2 = {
+  constraints: [
+    { leftOperand: "delegationDepth" as const, operator: "lteq" as const, rightOperand: 2 },
+  ],
+};
+const READ_B: RequestContext = { agent: AGENT_B, action: "read", target: RES };
+const READ_C: RequestContext = { agent: AGENT_C, action: "read", target: RES };
 
 /**
  * A blank-node-label-INDEPENDENT, TOPOLOGY-PRESERVING canonical serialisation of a
@@ -345,6 +362,173 @@ describe("characterization: evaluate decision matrix", () => {
       expect(r).toMatchSnapshot();
     });
   }
+});
+
+// The DELEGATION decision matrix (the agent-delegation profile,
+// docs/delegation-profile.md): the full explainable DelegatedEvaluationResult is
+// pinned for every fail-closed branch of the chain walker — valid 1-/2-hop chains
+// are the ONLY permits; over-broad, expired-mid-chain, cyclic, depth-exceeded,
+// wrong-nextPolicy and revoked chains are all denies. The BASE matrix above is
+// untouched by the profile (its snapshots must stay byte-identical — the profile
+// must not change any non-delegation evaluation).
+describe("characterization: delegation decision matrix", () => {
+  const rootPolicy = (grantUse: Partial<OdrlRule> = {}): OdrlPolicy => ({
+    id: ROOT_ID,
+    type: "Agreement",
+    assigner: OWNER,
+    permissions: [
+      { type: "permission", action: "read", target: RES, assignee: AGENT_A },
+      {
+        type: "permission",
+        action: "grantUse",
+        target: RES,
+        assignee: AGENT_A,
+        ...grantUse,
+      },
+    ],
+  });
+  const hop1Policy = (overrides: Partial<OdrlPolicy> = {}): OdrlPolicy => ({
+    id: HOP1_ID,
+    type: "Agreement",
+    assigner: AGENT_A,
+    assignee: AGENT_B,
+    delegatedUnder: ROOT_ID,
+    permissions: [{ type: "permission", action: "read", target: RES, assignee: AGENT_B }],
+    ...overrides,
+  });
+  const hop1WithGrant = hop1Policy({
+    permissions: [
+      { type: "permission", action: "read", target: RES, assignee: AGENT_B },
+      { type: "permission", action: "grantUse", target: RES, assignee: AGENT_B },
+    ],
+  });
+  const hop2Policy: OdrlPolicy = {
+    id: HOP2_ID,
+    type: "Agreement",
+    assigner: AGENT_B,
+    assignee: AGENT_C,
+    delegatedUnder: HOP1_ID,
+    permissions: [{ type: "permission", action: "read", target: RES, assignee: AGENT_C }],
+  };
+
+  const cases: Array<{
+    name: string;
+    chain: readonly OdrlPolicy[];
+    request: RequestContext;
+    revoked?: readonly string[];
+  }> = [
+    { name: "valid 1-hop chain → permit", chain: [rootPolicy(), hop1Policy()], request: READ_B },
+    {
+      name: "valid 2-hop chain (root depth 2) → permit",
+      chain: [rootPolicy(DEPTH_2), hop1WithGrant, hop2Policy],
+      request: READ_C,
+    },
+    {
+      name: "over-broad hop (delegate granted write the delegator lacks) → deny",
+      chain: [
+        rootPolicy(),
+        hop1Policy({
+          permissions: [{ type: "permission", action: "write", target: RES, assignee: AGENT_B }],
+        }),
+      ],
+      request: { ...READ_B, action: "write" },
+    },
+    {
+      name: "expired mid-chain hop → deny",
+      chain: [
+        rootPolicy(DEPTH_2),
+        hop1Policy({
+          permissions: [
+            {
+              type: "permission",
+              action: "read",
+              target: RES,
+              assignee: AGENT_B,
+              constraints: [{ leftOperand: "dateTime", operator: "lteq", rightOperand: PAST }],
+            },
+            { type: "permission", action: "grantUse", target: RES, assignee: AGENT_B },
+          ],
+        }),
+        hop2Policy,
+      ],
+      request: READ_C,
+    },
+    {
+      name: "cyclic chain (root repeated) → deny",
+      chain: [rootPolicy(DEPTH_2), hop1WithGrant, rootPolicy(DEPTH_2)],
+      request: READ_B,
+    },
+    {
+      name: "depth exceeded (2 hops under the default budget of 1) → deny",
+      chain: [rootPolicy(), hop1WithGrant, hop2Policy],
+      request: READ_C,
+    },
+    {
+      name: "depth exceeded (2 hops under an explicit lteq 1) → deny",
+      chain: [
+        rootPolicy({
+          constraints: [{ leftOperand: "delegationDepth", operator: "lteq", rightOperand: 1 }],
+        }),
+        hop1WithGrant,
+        hop2Policy,
+      ],
+      request: READ_C,
+    },
+    {
+      name: "nextPolicy narrows: the mandated hop is granted, in-scope request → permit",
+      chain: [rootPolicy({ duties: [{ action: "nextPolicy", target: HOP1_ID }] }), hop1Policy()],
+      request: READ_B,
+    },
+    {
+      name: "nextPolicy narrows: out-of-scope request against the mandated hop → deny",
+      chain: [rootPolicy({ duties: [{ action: "nextPolicy", target: HOP1_ID }] }), hop1Policy()],
+      request: { ...READ_B, action: "write" },
+    },
+    {
+      name: "nextPolicy violated (a different policy was delegated) → deny",
+      chain: [rootPolicy({ duties: [{ action: "nextPolicy", target: HOP2_ID }] }), hop1Policy()],
+      request: READ_B,
+    },
+    {
+      name: "revoked hop → deny",
+      chain: [rootPolicy(), hop1Policy()],
+      request: READ_B,
+      revoked: [HOP1_ID],
+    },
+  ];
+
+  for (const c of cases) {
+    it(c.name, () => {
+      const r = evaluateDelegated(c.chain, c.request, {
+        now: NOW,
+        ...(c.revoked !== undefined && { revoked: c.revoked }),
+      });
+      expect(r).toMatchSnapshot();
+    });
+  }
+
+  it("delegationProvenance emits a stable PROV-O overlay for the 2-hop chain", () => {
+    const quads = delegationProvenance([rootPolicy(DEPTH_2), hop1WithGrant, hop2Policy]);
+    expect(canonicalGraph(quads)).toMatchSnapshot();
+  });
+
+  it("a delegated Agreement's express graph is stable (delegatedUnder + grantUse + nextPolicy)", () => {
+    const policy = hop1Policy({
+      permissions: [
+        { type: "permission", action: "read", target: RES, assignee: AGENT_B },
+        {
+          type: "permission",
+          action: "grantUse",
+          target: RES,
+          assignee: AGENT_B,
+          constraints: [{ leftOperand: "delegationDepth", operator: "lteq", rightOperand: 1 }],
+          duties: [{ action: "nextPolicy", target: HOP2_ID }],
+        },
+      ],
+    });
+    expect(canonicalGraph(policyToRdf(policy))).toMatchSnapshot();
+    expect(policyToJsonLd(policy)).toMatchSnapshot();
+  });
 });
 
 describe("characterization: compose adapters", () => {
