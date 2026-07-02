@@ -47,6 +47,8 @@ const PUBLIC_EXPORTS = [
   "ThemeToggle",
   "themeScript",
   "useTheme",
+  // Solid browser-extension presence
+  "useSolidExtensionPresent",
   // class-name joiner
   "cn",
 ].sort();

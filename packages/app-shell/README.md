@@ -148,6 +148,42 @@ diagnostics)`, `composeIssueTitle(category, description)`, and
 too if you want to drive the open state yourself; the `FeedbackPayload` /
 `FeedbackDiagnostics` / `FeedbackSubmitResult` types are exported for the proxy.
 
+## Solid browser-extension presence
+
+`useSolidExtensionPresent()` returns `true` when the [@jeswr Solid browser
+extension](https://github.com/jeswr/solid-browser-extension) is installed on the
+page. Use it to drop an app's OWN account chrome (`<AccountMenu />`) when the
+extension already renders a pinned account menu — rendering both is duplicate
+chrome.
+
+```tsx
+import { useSolidExtensionPresent, AccountMenu } from "@jeswr/app-shell";
+
+function Header() {
+  const extensionPresent = useSolidExtensionPresent();
+  // The extension owns the account surface when present — keep a minimal
+  // Sign-out control in its place while the app still owns its own session.
+  return extensionPresent ? <SignOutButton /> : <AccountMenu {...accountProps} />;
+}
+```
+
+It reads three signals the extension's main-world inject announces, so detection
+is race-free whether the hook mounts before or after the inject ran: a sticky
+`<html data-solid-extension="1">` marker (read **synchronously** on the first
+*client* render — no flash in the Vite CSR apps), the `window.solid` object
+(belt-and-braces sync signal), and a one-shot `solid-extension:ready` event (for a
+late inject, observed together with a `MutationObserver` on the marker). Built on
+`useSyncExternalStore` for concurrent-render correctness, and SSR-safe: the server
+snapshot is always `false`, so under Next.js SSR + hydration the first paint
+matches the server (`false`) and flips to `true` immediately after hydration
+rechecks the marker — an unavoidable one-frame settle inherent to hydration, not a
+flash the hook can pre-empt (the server has no extension to detect).
+
+**Presence is deliberately not identity** — none of these signals carry the user's
+WebID (that lives on `window.solid.webId`, `null` until the user authenticates
+through the extension). Hiding the app's own menu on mere presence is intended: the
+extension owns the account surface whether or not the user has signed in there yet.
+
 ## Styling
 
 The components use shadcn-compatible token utility classes, but through a
@@ -209,7 +245,7 @@ chrome and want Tailwind classes to fully control it, pass `defensiveReset={fals
 ```bash
 npm run lint        # Biome
 npm run typecheck   # tsc --noEmit
-npm test            # vitest (theme + account menu + feedback + CSS isolation)
+npm test            # vitest (theme + account menu + feedback + CSS isolation + extension presence)
 npm run build       # tsc → dist/ + copy CSS
 npm run check:dist  # guard committed dist/ against drift from src/
 ```
