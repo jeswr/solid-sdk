@@ -11,8 +11,13 @@ export interface DelegationEvaluateOptions extends EvaluateOptions {
      * caller assembles this set (e.g. from the assigners' published
      * `odrld:Revocation` statements); the evaluator itself performs no I/O. Any
      * chain hop whose id is in this set → deny.
+     *
+     * Typed as an array/Set — NOT `Iterable<string>` — because a bare string IS an
+     * `Iterable<string>`, so `revoked: oneIri` would typecheck yet silently become
+     * a set of CHARACTERS and never match a policy id (a fail-open foot-gun). A
+     * bare string is also rejected at runtime for plain-JS callers.
      */
-    readonly revoked?: Iterable<string>;
+    readonly revoked?: readonly string[] | ReadonlySet<string>;
     /**
      * Absolute cap on the chain length (root + delegation hops), independent of any
      * policy-declared depth budget — a structural guard against pathological input.

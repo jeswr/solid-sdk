@@ -495,6 +495,25 @@ describe("evaluateDelegated: revocation + duties", () => {
     }
   });
 
+  it("a bare-string revoked value still revokes (not a character set)", () => {
+    // A plain-JS caller passing one IRI instead of an array must not silently
+    // disable revocation (a string is an Iterable<string> of CHARACTERS).
+    const r = evaluateDelegated([root(), hop1()], READ_B, {
+      now: NOW,
+      revoked: HOP1_ID as unknown as readonly string[],
+    });
+    expect(r.decision).toBe("deny");
+    expect(r.reason).toMatch(/revoked/);
+  });
+
+  it("revoked accepts a ReadonlySet", () => {
+    const r = evaluateDelegated([root(), hop1()], READ_B, {
+      now: NOW,
+      revoked: new Set([HOP1_ID]),
+    });
+    expect(r.decision).toBe("deny");
+  });
+
   it("aggregates duties down the chain (delegation never sheds a duty)", () => {
     const dutifulRoot: OdrlPolicy = {
       ...root(),

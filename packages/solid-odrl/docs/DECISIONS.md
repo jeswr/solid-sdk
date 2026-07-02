@@ -143,3 +143,14 @@ only when the policy actually uses one (currently `delegatedUnder`).
 **Why:** keeps every pre-profile policy's JSON-LD projection — including its
 `@context` — byte-identical (the golden master proves it), and honours the
 "the profile must not change any non-delegation output" contract.
+
+### D14. `revoked` typed as array/Set, never `Iterable<string>`
+
+**Chosen:** `DelegationEvaluateOptions.revoked` is `readonly string[] |
+ReadonlySet<string>`, with a runtime bare-string guard.
+**Alternatives:** the looser `Iterable<string>`.
+**Why:** a bare string IS an `Iterable<string>`, so `revoked: oneIri` would
+typecheck yet iterate as CHARACTERS — silently disabling revocation
+(fail-open). Excluding strings at the type level plus a runtime guard for
+plain-JS callers keeps the misuse impossible; found in adversarial self-review,
+regression-tested.

@@ -88,7 +88,7 @@ export interface DelegatedEvaluationResult {
 // @public
 export interface DelegationEvaluateOptions extends EvaluateOptions {
     readonly maxChainLength?: number;
-    readonly revoked?: Iterable<string>;
+    readonly revoked?: readonly string[] | ReadonlySet<string>;
 }
 
 // @public

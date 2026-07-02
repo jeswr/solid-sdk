@@ -162,6 +162,16 @@ policy it withdraws). See [§7](#7-expiry-and-revocation) for the trust rule.
 
 ## 5. Chain validity
 
+**Trust anchoring precedes evaluation.** The evaluator decides *validity and
+scope* GIVEN a chain the caller has already authenticated: the caller MUST
+establish that `chain[0]` is the trusted root (e.g. fetched from a location the
+resource owner controls) and that each hop is genuinely attributable to its
+`odrl:assigner` — the evaluator has no signatures to check. Cryptographic
+issuance/integrity proof is the credential half of the design
+([§10](#10-relationship-to-verifiable-credentials-the-phase-2-standards-pairing));
+without it, presenting a syntactically valid chain proves nothing about who
+authored it.
+
 A conforming evaluator (implemented as `evaluateDelegated(chain, request,
 options)`) MUST evaluate **fail-closed**: the decision is `permit` only if every
 check below affirmatively passes; any malformed, ambiguous or unverifiable

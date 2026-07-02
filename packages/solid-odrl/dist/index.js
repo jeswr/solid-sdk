@@ -785,7 +785,9 @@ function evaluateDelegated(chain, request, options = {}) {
     }
     seen.add(policy.id);
   }
-  const revoked = new Set(options.revoked ?? []);
+  const revoked = new Set(
+    typeof options.revoked === "string" ? [options.revoked] : options.revoked ?? []
+  );
   for (const [i, policy] of chain.entries()) {
     if (revoked.has(policy.id)) {
       return denied(`Hop ${i} (<${policy.id}>) has been revoked.`, hops);
