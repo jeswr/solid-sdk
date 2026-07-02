@@ -16,7 +16,13 @@
 // `${podRoot}health/record.ttl` DOCUMENT (NOT the `health/` container) and
 // surfacing a banner when it does.
 
-import { AccountMenu, FeedbackButton, ThemeToggle } from "@jeswr/app-shell";
+import {
+  AccountMenu,
+  Button,
+  FeedbackButton,
+  ThemeToggle,
+  useSolidExtensionPresent,
+} from "@jeswr/app-shell";
 // SOLID-ELEMENTS (#115 / D-parity rollout #67/#68/#70): the framework-agnostic W3C
 // Web Components consumed through the @lit/react adapter. <Loading> is a Lit custom
 // element (spinner + polite-live label, prefers-reduced-motion aware) wrapped by
@@ -36,6 +42,10 @@ import { LoginScreen } from "./LoginScreen";
 
 export function App() {
   const { webId, session, logout, autologinPending, restorePending } = useSession();
+  // Whether the Solid browser extension is present (shared @jeswr/app-shell hook).
+  // When present it OWNS the account surface, so the app's <AccountMenu/> duplicates
+  // it — see the header below where we swap it for a minimal Sign-out.
+  const extensionPresent = useSolidExtensionPresent();
   // The discovered health resource (Type Index → else conventional fallback).
   const [resource, setResource] = useState<HealthResource | null>(null);
 
@@ -122,12 +132,26 @@ export function App() {
             webId={webId}
           />
           <ThemeToggle />
-          <AccountMenu
-            webId={webId}
-            displayName={session.displayName}
-            avatarUrl={session.avatarUrl}
-            onSignOut={logout}
-          />
+          {/* When the browser extension is present it owns the account surface (its pinned
+              avatar menu shows identity + sign-out), so the app's full <AccountMenu/> — avatar,
+              display name, WebID — would DUPLICATE it. We drop that duplicated profile display.
+              But pod-health still holds its OWN independent SessionProvider session here (it has
+              not yet been wired to consume the extension's identity — the bead's "skip own login
+              when extension present" follow-up), so we must NOT strand the user: keep a minimal
+              Sign-out control that calls this app's own logout. Once the app consumes the
+              extension's identity (no independent session to sign out of), even this goes. */}
+          {extensionPresent ? (
+            <Button variant="ghost" onClick={logout}>
+              Sign out
+            </Button>
+          ) : (
+            <AccountMenu
+              webId={webId}
+              displayName={session.displayName}
+              avatarUrl={session.avatarUrl}
+              onSignOut={logout}
+            />
+          )}
         </div>
       </header>
       {session.podRootIsFallback ? (
