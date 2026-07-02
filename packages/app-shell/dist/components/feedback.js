@@ -23,6 +23,7 @@ import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-run
 import { Bug, HelpCircle, Lightbulb, MessageSquarePlus } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { buildIssueUrl, composeIssueBody, composeIssueTitle, feedbackLabels, } from "../lib/feedback-core.js";
+import { FOCUSABLE_SELECTOR, tabbableElements } from "../lib/focus-trap.js";
 import { Button } from "./primitives.js";
 // ── Presentation data ──────────────────────────────────────────────────────────
 /** Per-category presentation (drives the dialog's category selector cards). */
@@ -31,39 +32,6 @@ const CATEGORIES = [
     { value: "feedback", label: "Feedback", emoji: "💡", icon: Lightbulb },
     { value: "help", label: "Help", emoji: "❓", icon: HelpCircle },
 ];
-/**
- * The list of ACTUALLY tabbable elements inside `root`, in DOM order, mirroring
- * the browser's real Tab sequence. `selector` matches focusable candidates
- * (already excluding disabled / `tabindex=-1`); the one nuance the raw selector
- * misses is the **radio group**: native tab order visits only ONE radio per
- * named group — the CHECKED radio, or the FIRST radio if none in the group is
- * checked — never every radio. We therefore drop the non-tabbable members of
- * each radio group. PURE (DOM in, array out) + exported for unit tests.
- *
- * Radios without a `name` are NOT grouped (each is its own control), matching
- * the platform. Radios in a `<form>` group by (form, name); loose radios group
- * by name within the document — for a single modal panel, grouping by `name`
- * alone is the correct, sufficient model.
- */
-export function tabbableElements(root, selector) {
-    const candidates = Array.from(root.querySelectorAll(selector));
-    // Per radio-group name, find the single member that participates in tab order:
-    // the checked radio always wins; otherwise the first-seen (DOM order) radio.
-    const groupTabbable = new Map();
-    for (const el of candidates) {
-        if (el instanceof HTMLInputElement && el.type === "radio" && el.name) {
-            const existing = groupTabbable.get(el.name);
-            if (existing === undefined || el.checked)
-                groupTabbable.set(el.name, el);
-        }
-    }
-    return candidates.filter((el) => {
-        if (el instanceof HTMLInputElement && el.type === "radio" && el.name) {
-            return groupTabbable.get(el.name) === el;
-        }
-        return true;
-    });
-}
 /**
  * The feedback modal: category selector, description, an optional WebID-consent
  * checkbox (default OFF), a diagnostics note, and submit. Self-contained (no
@@ -104,7 +72,6 @@ export function FeedbackDialog({ repo, appName, appVersion, webId, submit, open,
         const previouslyFocused = (typeof document !== "undefined" ? document.activeElement : null);
         // Focus the description after the dialog has mounted.
         const focusTimer = setTimeout(() => textareaRef.current?.focus(), 0);
-        const focusableSelector = 'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
         const onKeyDown = (e) => {
             if (e.key === "Escape") {
                 onOpenChange(false);
@@ -127,7 +94,7 @@ export function FeedbackDialog({ repo, appName, appVersion, webId, submit, open,
             // checked radio differ from `first`, so Shift+Tab from it would NOT wrap and
             // focus would escape the modal. Collapse each radio group to its single
             // tabbable member to mirror the browser's real tab order.
-            const focusable = tabbableElements(dialog, focusableSelector);
+            const focusable = tabbableElements(dialog, FOCUSABLE_SELECTOR);
             const first = focusable[0];
             const last = focusable[focusable.length - 1];
             if (first === undefined || last === undefined) {

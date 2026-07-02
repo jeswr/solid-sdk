@@ -7,7 +7,7 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { FeedbackButton, tabbableElements } from "../src/components/feedback.js";
+import { FeedbackButton } from "../src/components/feedback.js";
 import {
   buildIssueUrl,
   composeIssueBody,
@@ -15,6 +15,7 @@ import {
   type FeedbackDiagnostics,
   feedbackLabels,
 } from "../src/lib/feedback-core.js";
+import { FOCUSABLE_SELECTOR, tabbableElements } from "../src/lib/focus-trap.js";
 
 const user = userEvent.setup({ pointerEventsCheck: 0 });
 
@@ -235,8 +236,7 @@ describe("FeedbackDialog — modal focus management (a11y)", () => {
 
     // The trap considers the dialog's visible focusables in DOM order — query the
     // same selector the component uses so the test mirrors the trap's view.
-    const selector =
-      'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+    const selector = FOCUSABLE_SELECTOR;
     const focusable = Array.from(dialog.querySelectorAll<HTMLElement>(selector));
     const first = focusable[0];
     const last = focusable[focusable.length - 1];
@@ -295,8 +295,7 @@ describe("FeedbackDialog — modal focus management (a11y)", () => {
 
     // The trap's tabbable list mirrors the browser: the group yields ONLY the
     // checked radio, so it is `first`. The last focusable is the submit button.
-    const selector =
-      'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+    const selector = FOCUSABLE_SELECTOR;
     const tabbable = tabbableElements(dialog, selector);
     expect(tabbable[0]).toBe(checkedRadio);
     const last = tabbable[tabbable.length - 1];
@@ -325,8 +324,7 @@ describe("FeedbackDialog — modal focus management (a11y)", () => {
 });
 
 describe("tabbableElements (radio-group tab-order helper)", () => {
-  const selector =
-    'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+  const selector = FOCUSABLE_SELECTOR;
 
   const mount = (html: string): HTMLElement => {
     const root = document.createElement("div");
