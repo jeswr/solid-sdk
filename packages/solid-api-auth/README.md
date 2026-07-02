@@ -144,12 +144,28 @@ API is snapshotted by api-extractor (`etc/solid-api-auth.api.md`, `etc/solid-api
 
 ## Divergence from the AccessRadar reference
 
-Behaviour parity is the acceptance bar. The one deliberate change: the request surface is a
-framework-free `RequestLike` (`{ headers, method, url }`) and the top-level entry is
-`verifyRequest(headers, method, url, opts)` instead of a hard-wired web `Request` — a web
-`Request` still satisfies `RequestLike`, so existing call sites are unaffected. The rate limiter
-now sits behind a `RateLimiter` interface (was a concrete class); `TokenBucketRateLimiter`
-implements it unchanged. The entire 53-case adversarial test suite was ported verbatim.
+Behaviour parity is the acceptance bar. The deliberate changes:
+
+1. **Framework-free request surface.** The request is a `RequestLike` (`{ headers, method, url }`)
+   and the top-level entry is `verifyRequest(headers, method, url, opts)` instead of a hard-wired
+   web `Request` — a web `Request` still satisfies `RequestLike`, so existing call sites are
+   unaffected. The rate limiter sits behind a `RateLimiter` interface (was a concrete class);
+   `TokenBucketRateLimiter` implements it unchanged.
+2. **`X-Forwarded-*` is NOT trusted by default (security hardening).** The reference always
+   honoured `X-Forwarded-Proto` / `X-Forwarded-Host` when reconstructing the `htu` origin. On a
+   directly-reachable server those headers are attacker-controlled, so this package IGNORES them
+   unless `trustForwardedHeaders: true` (env `PSS_TRUST_FORWARDED_HEADERS=1`) is set — which the
+   Vercel / proxied deployments MUST set to keep working. **Migration note for AccessRadar (and
+   the fan-out apps):** when adopting this package on Vercel, set `PSS_TRUST_FORWARDED_HEADERS=1`
+   (Vercel authoritatively sets the forwarded headers).
+3. **A malformed `htu` is a 401 `htu` mismatch, not a 500.** The reference let an unparseable
+   `htu` throw a raw `TypeError` (surfacing as a 500 in the route); here it is a normal
+   invalid-token challenge.
+4. **`optionsFromEnv` takes `Record<string, string | undefined>`** (not `NodeJS.ProcessEnv`) so
+   the public declaration does not require ambient Node types.
+
+The entire 53-case adversarial test suite was ported verbatim (39 `it`-blocks; every threat case
+survives) and extended with the extraction-specific + regression coverage above.
 
 ## License
 

@@ -17,6 +17,7 @@ export type {
   RateLimiter,
   ReplayStore,
   RequestLike,
+  RequestUrlOptions,
   ResolveIssuer,
   VerifyRequestOptions,
 } from "./core.js";

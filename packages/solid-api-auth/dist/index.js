@@ -1864,6 +1864,13 @@ var DpopApiVerifier = class {
   clockToleranceSec;
   bidirectionalMode;
   allowInsecureLoopback;
+  /**
+   * Whether `X-Forwarded-*` headers are trusted when reconstructing the request URL (see
+   * {@link DpopApiVerifierOptions.trustForwardedHeaders}). Public + readonly so a caller wiring
+   * the same-origin CSRF check (e.g. {@link verifyRequest}) uses the SAME posture as the `htu`
+   * binding does.
+   */
+  trustForwardedHeaders;
   resolveIssuer;
   replayStore;
   injectedWebidFetch;
@@ -1882,6 +1889,7 @@ var DpopApiVerifier = class {
     this.webidClaim = options.webidClaim ?? "webid";
     this.clockToleranceSec = options.clockToleranceSec ?? DEFAULT_CLOCK_TOLERANCE_SEC;
     this.allowInsecureLoopback = options.allowInsecureLoopback ?? false;
+    this.trustForwardedHeaders = options.trustForwardedHeaders ?? false;
     this.resolveIssuer = options.resolveIssuer ?? ((issuer) => this.discoverIssuer(issuer));
     this.replayStore = options.replayStore ?? new InProcessReplayStore({ now: options.now });
     this.injectedWebidFetch = options.webidFetch;
@@ -2028,7 +2036,9 @@ var DpopApiVerifier = class {
     if (payload.htm !== request.method) {
       throw this.challenge("invalid_token", "DPoP proof htm mismatch.", true);
     }
-    const expectedHtu = reconstructRequestUrl(request);
+    const expectedHtu = reconstructRequestUrl(request, {
+      trustForwardedHeaders: this.trustForwardedHeaders
+    });
     if (typeof payload.htu !== "string" || normalizeHtu(payload.htu) !== expectedHtu) {
       throw this.challenge("invalid_token", "DPoP proof htu mismatch.", true);
     }
@@ -2212,7 +2222,7 @@ var DpopApiVerifier = class {
 async function verifyRequest(headers, method, url, opts) {
   const request = { headers, method, url };
   if (opts.assertSameOrigin === true) {
-    assertSameOrigin(request);
+    assertSameOrigin(request, { trustForwardedHeaders: opts.verifier.trustForwardedHeaders });
   }
   const credentials = opts.requireOwner === false ? await opts.verifier.authenticate(request) : await opts.verifier.authorizeOwner(request);
   if (opts.rateLimiter) {
@@ -2239,11 +2249,12 @@ function parseAuthorization(header) {
   }
   return { scheme, token };
 }
-function reconstructRequestUrl(request) {
+function reconstructRequestUrl(request, opts = {}) {
   const normalized = normalizeRequest2(request);
   const raw = new URL(normalized.url);
-  const forwardedProto = firstForwardedValue(normalized.headers.get("x-forwarded-proto"));
-  const forwardedHost = firstForwardedValue(normalized.headers.get("x-forwarded-host"));
+  const trustForwarded = opts.trustForwardedHeaders === true;
+  const forwardedProto = trustForwarded ? firstForwardedValue(normalized.headers.get("x-forwarded-proto")) : void 0;
+  const forwardedHost = trustForwarded ? firstForwardedValue(normalized.headers.get("x-forwarded-host")) : void 0;
   const hostHeader = normalized.headers.get("host") ?? void 0;
   const proto = forwardedProto ?? raw.protocol.replace(/:$/, "");
   const host = forwardedHost ?? hostHeader ?? raw.host;
@@ -2260,9 +2271,9 @@ function firstForwardedValue(header) {
   const first = header.split(",")[0]?.trim();
   return first && first.length > 0 ? first : void 0;
 }
-function assertSameOrigin(request) {
+function assertSameOrigin(request, opts = {}) {
   const normalized = normalizeRequest2(request);
-  const expectedOrigin = new URL(reconstructRequestUrl(normalized)).origin;
+  const expectedOrigin = new URL(reconstructRequestUrl(normalized, opts)).origin;
   const origin = normalized.headers.get("origin");
   if (origin !== null && origin !== "null") {
     if (safeOrigin(origin) !== expectedOrigin) {
@@ -2316,7 +2327,12 @@ function extractCnfJkt(claims) {
   return typeof jkt === "string" && jkt.length > 0 ? jkt : void 0;
 }
 function normalizeHtu(htu) {
-  const url = new URL(htu);
+  let url;
+  try {
+    url = new URL(htu);
+  } catch {
+    return void 0;
+  }
   url.search = "";
   url.hash = "";
   return url.href;
@@ -2356,6 +2372,7 @@ function optionsFromEnv(env = process.env) {
     webidClaim: env.PSS_WEBID_CLAIM || "webid",
     ...bidirectionalMode ? { bidirectionalMode } : {},
     allowInsecureLoopback: env.PSS_AUTH_ALLOW_INSECURE_LOOPBACK === "1" || env.PSS_AUTH_ALLOW_INSECURE_LOOPBACK === "true",
+    trustForwardedHeaders: env.PSS_TRUST_FORWARDED_HEADERS === "1" || env.PSS_TRUST_FORWARDED_HEADERS === "true",
     ...Number.isFinite(tolerance) && tolerance >= 0 ? { clockToleranceSec: tolerance } : {},
     log: { warn: (o, m) => console.warn(m ?? "", o) }
   };

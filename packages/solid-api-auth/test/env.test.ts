@@ -45,20 +45,27 @@ describe("optionsFromEnv", () => {
       PSS_BIDIRECTIONAL_WEBID_MODE: "strict",
       PSS_AUTH_ALLOW_INSECURE_LOOPBACK: "1",
       PSS_CLOCK_TOLERANCE_SEC: "10",
-    } as NodeJS.ProcessEnv);
+      PSS_TRUST_FORWARDED_HEADERS: "true",
+    });
     expect(opts.trustedIssuers).toEqual(["https://issuer.example"]);
     expect(opts.ownerWebId).toBe("https://owner.example/card#me");
     expect(opts.webidClaim).toBe("webid");
     expect(opts.bidirectionalMode).toBe("strict");
     expect(opts.allowInsecureLoopback).toBe(true);
     expect(opts.clockToleranceSec).toBe(10);
+    expect(opts.trustForwardedHeaders).toBe(true);
+  });
+
+  it("defaults trustForwardedHeaders to false (forwarded headers untrusted unless opted in)", () => {
+    const opts = optionsFromEnv({ PSS_TRUSTED_ISSUERS: "https://issuer.example" });
+    expect(opts.trustForwardedHeaders).toBe(false);
   });
 
   it("defaults webidClaim to 'webid' and omits an invalid bidirectional mode", () => {
     const opts = optionsFromEnv({
       PSS_TRUSTED_ISSUERS: "https://issuer.example",
       PSS_BIDIRECTIONAL_WEBID_MODE: "bogus",
-    } as NodeJS.ProcessEnv);
+    });
     expect(opts.webidClaim).toBe("webid");
     expect(opts.bidirectionalMode).toBeUndefined();
     expect(opts.allowInsecureLoopback).toBe(false);
@@ -68,12 +75,12 @@ describe("optionsFromEnv", () => {
     const neg = optionsFromEnv({
       PSS_TRUSTED_ISSUERS: "https://issuer.example",
       PSS_CLOCK_TOLERANCE_SEC: "-5",
-    } as NodeJS.ProcessEnv);
+    });
     expect(neg.clockToleranceSec).toBeUndefined();
     const nan = optionsFromEnv({
       PSS_TRUSTED_ISSUERS: "https://issuer.example",
       PSS_CLOCK_TOLERANCE_SEC: "abc",
-    } as NodeJS.ProcessEnv);
+    });
     expect(nan.clockToleranceSec).toBeUndefined();
   });
 });

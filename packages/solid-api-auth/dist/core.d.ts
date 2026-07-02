@@ -148,6 +148,16 @@ export interface DpopApiVerifierOptions {
     readonly bidirectionalMode?: BidirectionalMode;
     /** Allow loopback-HTTP issuers + WebID hosts (dev/CI only). Default false. */
     readonly allowInsecureLoopback?: boolean;
+    /**
+     * Trust `X-Forwarded-Proto` / `X-Forwarded-Host` when reconstructing the request URL for the
+     * DPoP `htu` binding + the same-origin check. Default `false` (SECURITY): forwarded headers
+     * are ATTACKER-CONTROLLED unless a trusted TLS-terminating reverse proxy sets them, so honoring
+     * them by default would let a direct client redefine the `htu` origin being verified. Enable
+     * ONLY when the app is deployed behind a proxy that authoritatively sets these headers (e.g.
+     * Vercel / a TLS-terminating load balancer) — then the internal request URL is not the public
+     * one and the forwarded headers carry the real external origin.
+     */
+    readonly trustForwardedHeaders?: boolean;
     /** Issuer→keys resolver. Default: OIDC discovery + remote JWKS (issuer-agnostic). */
     readonly resolveIssuer?: ResolveIssuer;
     /** Replay store. Default: a fresh {@link InProcessReplayStore}. */
@@ -177,6 +187,13 @@ export declare class DpopApiVerifier {
     private readonly clockToleranceSec;
     private readonly bidirectionalMode;
     private readonly allowInsecureLoopback;
+    /**
+     * Whether `X-Forwarded-*` headers are trusted when reconstructing the request URL (see
+     * {@link DpopApiVerifierOptions.trustForwardedHeaders}). Public + readonly so a caller wiring
+     * the same-origin CSRF check (e.g. {@link verifyRequest}) uses the SAME posture as the `htu`
+     * binding does.
+     */
+    readonly trustForwardedHeaders: boolean;
     private readonly resolveIssuer;
     private readonly replayStore;
     private readonly injectedWebidFetch;
@@ -285,14 +302,26 @@ export declare function parseAuthorization(header: string | undefined): {
     scheme: string;
     token: string;
 } | undefined;
+/** Options for {@link reconstructRequestUrl} + {@link assertSameOrigin}. */
+export interface RequestUrlOptions {
+    /**
+     * Trust `X-Forwarded-Proto` / `X-Forwarded-Host`. Default `false` (SECURITY): these headers are
+     * attacker-controlled on a directly-reachable server, so honoring them would let a client
+     * redefine the origin the `htu` binding is checked against. Enable only behind a trusted proxy
+     * that sets them authoritatively (see {@link DpopApiVerifierOptions.trustForwardedHeaders}).
+     */
+    readonly trustForwardedHeaders?: boolean;
+}
 /**
- * Reconstruct the exact request URL the client signed into the DPoP proof's `htu`: scheme +
- * host + (non-default) port + path, query/fragment stripped. PROXY-AWARE — honours
- * `X-Forwarded-Proto` / `X-Forwarded-Host` (a TLS-terminating proxy / Vercel fronts the Node
- * process), falling back to the `Host` header and the raw request URL. This must match what the
- * browser signed (its absolute request URL). Accepts any {@link RequestLike}.
+ * Reconstruct the exact request URL the client signed into the DPoP proof's `htu`: scheme + host
+ * + (non-default) port + path, query/fragment stripped. Built from the `Host` header + the raw
+ * request URL. When {@link RequestUrlOptions.trustForwardedHeaders} is set (the app is behind a
+ * trusted TLS-terminating proxy / Vercel), `X-Forwarded-Proto` / `X-Forwarded-Host` take
+ * precedence; by DEFAULT they are IGNORED (they are attacker-controlled on a directly-reachable
+ * server). This must match what the browser signed (its absolute request URL). Accepts any
+ * {@link RequestLike}.
  */
-export declare function reconstructRequestUrl(request: RequestLike): string;
+export declare function reconstructRequestUrl(request: RequestLike, opts?: RequestUrlOptions): string;
 /**
  * Same-origin CSRF check (defence-in-depth alongside the DPoP `htu` binding). Rejects a request
  * whose `Origin` (or, as a fallback, `Referer`) is present but does NOT match the request's own
@@ -301,7 +330,7 @@ export declare function reconstructRequestUrl(request: RequestLike): string;
  * forged cross-site browser POST carries the attacker origin and is refused here. Throws
  * {@link ApiAuthError} (403) on mismatch. Accepts any {@link RequestLike}.
  */
-export declare function assertSameOrigin(request: RequestLike): void;
+export declare function assertSameOrigin(request: RequestLike, opts?: RequestUrlOptions): void;
 /**
  * Parse a trusted-issuer list (comma/space/newline-separated) into a trimmed array. Exported
  * for the fan-out apps + tests.
@@ -316,8 +345,15 @@ export declare function parseTrustedIssuers(raw: string | undefined): string[];
  *  - `PSS_BIDIRECTIONAL_WEBID_MODE`     — `strict` | `warn` | `off`.
  *  - `PSS_AUTH_ALLOW_INSECURE_LOOPBACK` — `1`/`true` to allow loopback-HTTP (dev/CI).
  *  - `PSS_CLOCK_TOLERANCE_SEC`          — clock skew seconds (default 5).
+ *  - `PSS_TRUST_FORWARDED_HEADERS`      — `1`/`true` behind a trusted proxy (Vercel / a TLS-
+ *                                         terminating LB); default false (see
+ *                                         {@link DpopApiVerifierOptions.trustForwardedHeaders}).
+ *
+ * The `env` param is a plain `Record<string, string | undefined>` (NOT `NodeJS.ProcessEnv`) so a
+ * consumer without ambient Node globals still type-checks against the public declaration;
+ * `process.env` satisfies it.
  */
-export declare function optionsFromEnv(env?: NodeJS.ProcessEnv): DpopApiVerifierOptions;
+export declare function optionsFromEnv(env?: Record<string, string | undefined>): DpopApiVerifierOptions;
 /**
  * A process-wide verifier built from the environment via {@link optionsFromEnv}. Constructed
  * once and reused so issuer discovery + JWKS + the replay store persist across requests. Throws

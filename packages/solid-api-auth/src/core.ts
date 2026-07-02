@@ -384,6 +384,16 @@ export interface DpopApiVerifierOptions {
   readonly bidirectionalMode?: BidirectionalMode;
   /** Allow loopback-HTTP issuers + WebID hosts (dev/CI only). Default false. */
   readonly allowInsecureLoopback?: boolean;
+  /**
+   * Trust `X-Forwarded-Proto` / `X-Forwarded-Host` when reconstructing the request URL for the
+   * DPoP `htu` binding + the same-origin check. Default `false` (SECURITY): forwarded headers
+   * are ATTACKER-CONTROLLED unless a trusted TLS-terminating reverse proxy sets them, so honoring
+   * them by default would let a direct client redefine the `htu` origin being verified. Enable
+   * ONLY when the app is deployed behind a proxy that authoritatively sets these headers (e.g.
+   * Vercel / a TLS-terminating load balancer) — then the internal request URL is not the public
+   * one and the forwarded headers carry the real external origin.
+   */
+  readonly trustForwardedHeaders?: boolean;
   /** Issuer→keys resolver. Default: OIDC discovery + remote JWKS (issuer-agnostic). */
   readonly resolveIssuer?: ResolveIssuer;
   /** Replay store. Default: a fresh {@link InProcessReplayStore}. */
@@ -427,6 +437,13 @@ export class DpopApiVerifier {
   private readonly clockToleranceSec: number;
   private readonly bidirectionalMode: BidirectionalMode;
   private readonly allowInsecureLoopback: boolean;
+  /**
+   * Whether `X-Forwarded-*` headers are trusted when reconstructing the request URL (see
+   * {@link DpopApiVerifierOptions.trustForwardedHeaders}). Public + readonly so a caller wiring
+   * the same-origin CSRF check (e.g. {@link verifyRequest}) uses the SAME posture as the `htu`
+   * binding does.
+   */
+  readonly trustForwardedHeaders: boolean;
   private readonly resolveIssuer: ResolveIssuer;
   private readonly replayStore: ReplayStore;
   private readonly injectedWebidFetch: typeof fetch | undefined;
@@ -447,6 +464,7 @@ export class DpopApiVerifier {
     this.webidClaim = options.webidClaim ?? "webid";
     this.clockToleranceSec = options.clockToleranceSec ?? DEFAULT_CLOCK_TOLERANCE_SEC;
     this.allowInsecureLoopback = options.allowInsecureLoopback ?? false;
+    this.trustForwardedHeaders = options.trustForwardedHeaders ?? false;
     this.resolveIssuer = options.resolveIssuer ?? ((issuer) => this.discoverIssuer(issuer));
     this.replayStore = options.replayStore ?? new InProcessReplayStore({ now: options.now });
     this.injectedWebidFetch = options.webidFetch;
@@ -628,8 +646,12 @@ export class DpopApiVerifier {
     if (payload.htm !== request.method) {
       throw this.challenge("invalid_token", "DPoP proof htm mismatch.", true);
     }
-    // `htu` — must equal the reconstructed request URL (query/fragment stripped both sides).
-    const expectedHtu = reconstructRequestUrl(request);
+    // `htu` — must equal the reconstructed request URL (query/fragment stripped both sides). An
+    // unparseable `htu` is a mismatch (a 401 challenge), NOT an unhandled `TypeError` (which
+    // would surface as a 500) — `normalizeHtu` returns undefined rather than throwing.
+    const expectedHtu = reconstructRequestUrl(request, {
+      trustForwardedHeaders: this.trustForwardedHeaders,
+    });
     if (typeof payload.htu !== "string" || normalizeHtu(payload.htu) !== expectedHtu) {
       throw this.challenge("invalid_token", "DPoP proof htu mismatch.", true);
     }
@@ -875,8 +897,10 @@ export async function verifyRequest(
 ): Promise<ApiCredentials> {
   const request: RequestLike = { headers, method, url };
   // CSRF check first (cheap, rejects a forged cross-site browser POST before any crypto work).
+  // Use the verifier's forwarded-header posture so the origin is reconstructed identically to
+  // the `htu` binding (a mismatch here would otherwise be an inconsistent trust boundary).
   if (opts.assertSameOrigin === true) {
-    assertSameOrigin(request);
+    assertSameOrigin(request, { trustForwardedHeaders: opts.verifier.trustForwardedHeaders });
   }
   const credentials =
     opts.requireOwner === false
@@ -913,18 +937,36 @@ export function parseAuthorization(
   return { scheme, token };
 }
 
+/** Options for {@link reconstructRequestUrl} + {@link assertSameOrigin}. */
+export interface RequestUrlOptions {
+  /**
+   * Trust `X-Forwarded-Proto` / `X-Forwarded-Host`. Default `false` (SECURITY): these headers are
+   * attacker-controlled on a directly-reachable server, so honoring them would let a client
+   * redefine the origin the `htu` binding is checked against. Enable only behind a trusted proxy
+   * that sets them authoritatively (see {@link DpopApiVerifierOptions.trustForwardedHeaders}).
+   */
+  readonly trustForwardedHeaders?: boolean;
+}
+
 /**
- * Reconstruct the exact request URL the client signed into the DPoP proof's `htu`: scheme +
- * host + (non-default) port + path, query/fragment stripped. PROXY-AWARE — honours
- * `X-Forwarded-Proto` / `X-Forwarded-Host` (a TLS-terminating proxy / Vercel fronts the Node
- * process), falling back to the `Host` header and the raw request URL. This must match what the
- * browser signed (its absolute request URL). Accepts any {@link RequestLike}.
+ * Reconstruct the exact request URL the client signed into the DPoP proof's `htu`: scheme + host
+ * + (non-default) port + path, query/fragment stripped. Built from the `Host` header + the raw
+ * request URL. When {@link RequestUrlOptions.trustForwardedHeaders} is set (the app is behind a
+ * trusted TLS-terminating proxy / Vercel), `X-Forwarded-Proto` / `X-Forwarded-Host` take
+ * precedence; by DEFAULT they are IGNORED (they are attacker-controlled on a directly-reachable
+ * server). This must match what the browser signed (its absolute request URL). Accepts any
+ * {@link RequestLike}.
  */
-export function reconstructRequestUrl(request: RequestLike): string {
+export function reconstructRequestUrl(request: RequestLike, opts: RequestUrlOptions = {}): string {
   const normalized = normalizeRequest(request);
   const raw = new URL(normalized.url);
-  const forwardedProto = firstForwardedValue(normalized.headers.get("x-forwarded-proto"));
-  const forwardedHost = firstForwardedValue(normalized.headers.get("x-forwarded-host"));
+  const trustForwarded = opts.trustForwardedHeaders === true;
+  const forwardedProto = trustForwarded
+    ? firstForwardedValue(normalized.headers.get("x-forwarded-proto"))
+    : undefined;
+  const forwardedHost = trustForwarded
+    ? firstForwardedValue(normalized.headers.get("x-forwarded-host"))
+    : undefined;
   const hostHeader = normalized.headers.get("host") ?? undefined;
   const proto = forwardedProto ?? raw.protocol.replace(/:$/, "");
   const host = forwardedHost ?? hostHeader ?? raw.host;
@@ -952,9 +994,9 @@ function firstForwardedValue(header: string | null): string | undefined {
  * forged cross-site browser POST carries the attacker origin and is refused here. Throws
  * {@link ApiAuthError} (403) on mismatch. Accepts any {@link RequestLike}.
  */
-export function assertSameOrigin(request: RequestLike): void {
+export function assertSameOrigin(request: RequestLike, opts: RequestUrlOptions = {}): void {
   const normalized = normalizeRequest(request);
-  const expectedOrigin = new URL(reconstructRequestUrl(normalized)).origin;
+  const expectedOrigin = new URL(reconstructRequestUrl(normalized, opts)).origin;
   const origin = normalized.headers.get("origin");
   if (origin !== null && origin !== "null") {
     if (safeOrigin(origin) !== expectedOrigin) {
@@ -1017,9 +1059,18 @@ function extractCnfJkt(claims: oauth.JWTAccessTokenClaims): string | undefined {
   return typeof jkt === "string" && jkt.length > 0 ? jkt : undefined;
 }
 
-/** Normalise an `htu` for comparison: strip query + fragment (RFC 9449 §4.2). */
-function normalizeHtu(htu: string): string {
-  const url = new URL(htu);
+/**
+ * Normalise an `htu` for comparison: strip query + fragment (RFC 9449 §4.2). Returns `undefined`
+ * for an UNPARSEABLE `htu` (never throws) so a malformed proof surfaces as an `htu` mismatch (a
+ * 401 challenge) rather than an unhandled `TypeError` escaping as a 500.
+ */
+function normalizeHtu(htu: string): string | undefined {
+  let url: URL;
+  try {
+    url = new URL(htu);
+  } catch {
+    return undefined;
+  }
   url.search = "";
   url.hash = "";
   return url.href;
@@ -1078,8 +1129,17 @@ export function parseTrustedIssuers(raw: string | undefined): string[] {
  *  - `PSS_BIDIRECTIONAL_WEBID_MODE`     — `strict` | `warn` | `off`.
  *  - `PSS_AUTH_ALLOW_INSECURE_LOOPBACK` — `1`/`true` to allow loopback-HTTP (dev/CI).
  *  - `PSS_CLOCK_TOLERANCE_SEC`          — clock skew seconds (default 5).
+ *  - `PSS_TRUST_FORWARDED_HEADERS`      — `1`/`true` behind a trusted proxy (Vercel / a TLS-
+ *                                         terminating LB); default false (see
+ *                                         {@link DpopApiVerifierOptions.trustForwardedHeaders}).
+ *
+ * The `env` param is a plain `Record<string, string | undefined>` (NOT `NodeJS.ProcessEnv`) so a
+ * consumer without ambient Node globals still type-checks against the public declaration;
+ * `process.env` satisfies it.
  */
-export function optionsFromEnv(env: NodeJS.ProcessEnv = process.env): DpopApiVerifierOptions {
+export function optionsFromEnv(
+  env: Record<string, string | undefined> = process.env,
+): DpopApiVerifierOptions {
   const mode = env.PSS_BIDIRECTIONAL_WEBID_MODE;
   const bidirectionalMode: BidirectionalMode | undefined =
     mode === "strict" || mode === "warn" || mode === "off" ? mode : undefined;
@@ -1092,6 +1152,8 @@ export function optionsFromEnv(env: NodeJS.ProcessEnv = process.env): DpopApiVer
     allowInsecureLoopback:
       env.PSS_AUTH_ALLOW_INSECURE_LOOPBACK === "1" ||
       env.PSS_AUTH_ALLOW_INSECURE_LOOPBACK === "true",
+    trustForwardedHeaders:
+      env.PSS_TRUST_FORWARDED_HEADERS === "1" || env.PSS_TRUST_FORWARDED_HEADERS === "true",
     ...(Number.isFinite(tolerance) && tolerance >= 0 ? { clockToleranceSec: tolerance } : {}),
     log: { warn: (o, m) => console.warn(m ?? "", o) },
   };

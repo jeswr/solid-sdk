@@ -623,11 +623,71 @@ describe("helpers", () => {
     expect(parseAuthorization("DPoP")).toBeUndefined();
   });
 
-  it("reconstructRequestUrl strips the query and honours X-Forwarded-*", () => {
+  it("reconstructRequestUrl strips the query; IGNORES X-Forwarded-* by default (security)", () => {
     const req = new Request("http://internal-host/api/scan?x=1", {
       method: "POST",
       headers: { "x-forwarded-proto": "https", "x-forwarded-host": "app.example" },
     });
-    expect(reconstructRequestUrl(req)).toBe("https://app.example/api/scan");
+    // Default: forwarded headers are attacker-controlled → NOT trusted; the real host/proto win.
+    expect(reconstructRequestUrl(req)).toBe("http://internal-host/api/scan");
+    // Opt-in (behind a trusted proxy): the forwarded external origin is honoured.
+    expect(reconstructRequestUrl(req, { trustForwardedHeaders: true })).toBe(
+      "https://app.example/api/scan",
+    );
+  });
+});
+
+describe("htu trust boundary — X-Forwarded-* spoofing (High finding regression)", () => {
+  /** Build a request to a REAL host, carrying a spoofed X-Forwarded-Host for a different host. */
+  function spoofedRequest(realUrl: string, forwardedHost: string, auth: string, dpop: string) {
+    return new Request(realUrl, {
+      method: "POST",
+      headers: {
+        authorization: auth,
+        dpop,
+        "x-forwarded-proto": "https",
+        "x-forwarded-host": forwardedHost,
+      },
+    });
+  }
+
+  it("401: a proof for host A replayed to host B with X-Forwarded-Host:A is REJECTED by default", async () => {
+    // The proof binds htu = https://app.example/api/scan (the owner's real app).
+    const token = await mintAccessToken();
+    const proof = await mintProof({ accessToken: token, htu: "https://app.example/api/scan" });
+    // The attacker sends it to their OWN server (https://evil.example/api/scan) but forges
+    // X-Forwarded-Host: app.example to try to make the htu check pass. Default verifier does not
+    // trust forwarded headers → reconstruct = evil.example → htu mismatch → 401.
+    const req = spoofedRequest(
+      "https://evil.example/api/scan",
+      "app.example",
+      `DPoP ${token}`,
+      proof,
+    );
+    const err = await expectStatus(makeVerifier().authorizeOwner(req), 401);
+    expect(err.message).toMatch(/htu/i);
+  });
+
+  it("200: the SAME forwarded request is accepted when trustForwardedHeaders is enabled (proxy)", async () => {
+    const token = await mintAccessToken();
+    const proof = await mintProof({ accessToken: token, htu: "https://app.example/api/scan" });
+    const req = spoofedRequest(
+      "https://internal.local/api/scan",
+      "app.example",
+      `DPoP ${token}`,
+      proof,
+    );
+    const creds = await makeVerifier({ trustForwardedHeaders: true }).authorizeOwner(req);
+    expect(creds.webId).toBe(OWNER);
+  });
+
+  it("401 (not 500): a malformed, unparseable htu is an htu mismatch, never an unhandled throw", async () => {
+    const token = await mintAccessToken();
+    const proof = await mintProof({ accessToken: token, htu: "::::not a url::::" });
+    const err = await expectStatus(
+      makeVerifier().authorizeOwner(mkRequest({ authorization: `DPoP ${token}`, dpop: proof })),
+      401,
+    );
+    expect(err.message).toMatch(/htu/i);
   });
 });

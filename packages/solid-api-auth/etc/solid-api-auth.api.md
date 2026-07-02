@@ -28,7 +28,7 @@ export interface ApiCredentials {
 }
 
 // @public
-export function assertSameOrigin(request: RequestLike): void;
+export function assertSameOrigin(request: RequestLike, opts?: RequestUrlOptions): void;
 
 // @public
 export interface AuthLogger {
@@ -46,6 +46,7 @@ export class DpopApiVerifier {
     constructor(options: DpopApiVerifierOptions);
     authenticate(request: RequestLike): Promise<ApiCredentials>;
     authorizeOwner(request: RequestLike): Promise<ApiCredentials>;
+    readonly trustForwardedHeaders: boolean;
 }
 
 // @public
@@ -59,6 +60,7 @@ export interface DpopApiVerifierOptions {
     readonly replayStore?: ReplayStore;
     readonly resolveIssuer?: ResolveIssuer;
     readonly trustedIssuers: readonly string[];
+    readonly trustForwardedHeaders?: boolean;
     readonly webidClaim?: string;
     readonly webidFetch?: typeof fetch;
 }
@@ -92,7 +94,7 @@ export interface IssuerKeys {
 }
 
 // @public
-export function optionsFromEnv(env?: NodeJS.ProcessEnv): DpopApiVerifierOptions;
+export function optionsFromEnv(env?: Record<string, string | undefined>): DpopApiVerifierOptions;
 
 // @public
 export function parseAuthorization(header: string | undefined): {
@@ -109,7 +111,7 @@ export interface RateLimiter {
 }
 
 // @public
-export function reconstructRequestUrl(request: RequestLike): string;
+export function reconstructRequestUrl(request: RequestLike, opts?: RequestUrlOptions): string;
 
 // @public
 export interface ReplayStore {
@@ -124,6 +126,11 @@ export interface RequestLike {
     readonly method: string;
     // (undocumented)
     readonly url: string;
+}
+
+// @public
+export interface RequestUrlOptions {
+    readonly trustForwardedHeaders?: boolean;
 }
 
 // @public
