@@ -5,38 +5,27 @@
 ```ts
 
 import type { Agent } from 'undici';
-import type { LookupAddress } from 'node:dns';
+import { ConnectLookup } from '@jeswr/guarded-fetch/node';
+import { createNodeGuardedFetch } from '@jeswr/guarded-fetch/node';
+import { createValidatingLookup } from '@jeswr/guarded-fetch/node';
+import { nodeGuardedFetch } from '@jeswr/guarded-fetch/node';
+import { NodePinningOptions } from '@jeswr/guarded-fetch/node';
+import { ResolveAll } from '@jeswr/guarded-fetch/node';
 
-// @public
-export type ConnectLookup = (hostname: string, options: {
-    all?: boolean;
-    family?: number;
-    [k: string]: unknown;
-}, callback: (err: NodeJS.ErrnoException | null, address: string | LookupAddress[], family?: number) => void) => void;
+export { ConnectLookup }
 
-// @public
-export function createNodeGuardedFetch(options?: NodePinningOptions): typeof globalThis.fetch;
+export { createNodeGuardedFetch }
 
 // @public
 export function createPinningDispatcher(options?: NodePinningOptions): Agent;
 
-// @public
-export function createValidatingLookup(resolveAll: ResolveAll, allowLoopback: boolean, requireLoopbackOnly: boolean): ConnectLookup;
+export { createValidatingLookup }
 
-// @public
-export const nodeGuardedFetch: typeof globalThis.fetch;
+export { nodeGuardedFetch }
 
-// Warning: (ae-forgotten-export) The symbol "GuardOptions" needs to be exported by the entry point node.d.ts
-//
-// @public
-export interface NodePinningOptions extends Omit<GuardOptions, "fetch" | "pinningFetch" | "dnsLookup"> {
-    readonly allowLoopback?: boolean;
-    readonly ca?: string | Buffer | Array<string | Buffer>;
-    readonly resolveAll?: ResolveAll;
-}
+export { NodePinningOptions }
 
-// @public
-export type ResolveAll = (hostname: string) => Promise<LookupAddress[]>;
+export { ResolveAll }
 
 // (No @packageDocumentation comment for this package)
 

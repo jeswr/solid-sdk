@@ -1,7 +1,7 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/api-extractor/v7/api-extractor.schema.json",
   "mainEntryPointFilePath": "<projectFolder>/dist/node.d.ts",
-  "bundledPackages": ["@jeswr/guarded-fetch"],
+  "bundledPackages": [],
   "compiler": {
     "tsconfigFilePath": "<projectFolder>/tsconfig.json"
   },
@@ -10,21 +10,39 @@
     "reportFolder": "<projectFolder>/etc/",
     "reportFileName": "federation-client.node.api.md"
   },
-  "docModel": { "enabled": false },
-  "dtsRollup": { "enabled": false },
-  "tsdocMetadata": { "enabled": false },
+  "docModel": {
+    "enabled": false
+  },
+  "dtsRollup": {
+    "enabled": false
+  },
+  "tsdocMetadata": {
+    "enabled": false
+  },
   "messages": {
     "compilerMessageReporting": {
-      "default": { "logLevel": "warning" }
+      "default": {
+        "logLevel": "warning"
+      }
     },
     "extractorMessageReporting": {
-      "default": { "logLevel": "warning" },
-      "ae-missing-release-tag": { "logLevel": "none" },
-      "ae-unresolved-link": { "logLevel": "none" },
-      "ae-forgotten-export": { "logLevel": "warning" }
+      "default": {
+        "logLevel": "warning"
+      },
+      "ae-missing-release-tag": {
+        "logLevel": "none"
+      },
+      "ae-unresolved-link": {
+        "logLevel": "none"
+      },
+      "ae-forgotten-export": {
+        "logLevel": "error"
+      }
     },
     "tsdocMessageReporting": {
-      "default": { "logLevel": "none" }
+      "default": {
+        "logLevel": "none"
+      }
     }
   }
 }

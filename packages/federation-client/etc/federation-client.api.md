@@ -4,8 +4,20 @@
 
 ```ts
 
+import { createGuardedFetch } from '@jeswr/guarded-fetch';
 import type { DatasetCore } from '@rdfjs/types';
+import { DnsLookup } from '@jeswr/guarded-fetch';
+import { guardedFetch } from '@jeswr/guarded-fetch';
+import { GuardOptions } from '@jeswr/guarded-fetch';
+import { isLoopbackAddress } from '@jeswr/guarded-fetch';
+import { isPublicAddress } from '@jeswr/guarded-fetch';
+import { Membership } from '@jeswr/federation-registry';
+import { MembershipStatusName } from '@jeswr/federation-registry';
 import type { Quad } from '@rdfjs/types';
+import { RegistryIssue } from '@jeswr/federation-registry';
+import { ResolvedAddress } from '@jeswr/guarded-fetch';
+import { SsrfError } from '@jeswr/guarded-fetch';
+import { StorageDescription } from '@jeswr/federation-registry';
 
 // @public
 export type AccessMode = keyof typeof ACL_MODES;
@@ -32,8 +44,7 @@ export interface AppRegistration {
     readonly sectorUse?: readonly SectorUse[];
 }
 
-// @public
-export function createGuardedFetch(options?: GuardOptions): typeof globalThis.fetch;
+export { createGuardedFetch }
 
 // @public
 export interface DiscoveredMember {
@@ -49,36 +60,18 @@ export interface DiscoveredMember {
 // @public
 export function discoverFromRegistry(registryUrl: string, options?: RegistryOptions): Promise<RegistryDiscovery>;
 
-// @public
-export type DnsLookup = (host: string) => Promise<ResolvedAddress[]>;
+export { DnsLookup }
 
 // @public
 export const FEDAPP: "https://w3id.org/jeswr/fed#";
 
-// @public
-export function guardedFetch(input: RequestInfo | URL, init?: RequestInit & GuardOptions): Promise<Response>;
+export { guardedFetch }
 
-// @public
-export interface GuardOptions {
-    readonly allowedContentTypes?: readonly string[];
-    readonly allowLoopback?: boolean;
-    readonly allowUnresolvedHosts?: boolean;
-    readonly dnsLookup?: DnsLookup | null;
-    readonly enforcePortGate?: boolean;
-    readonly fetch?: typeof globalThis.fetch;
-    readonly hostnameDenylist?: readonly string[];
-    readonly maxBytes?: number;
-    readonly maxRedirects?: number;
-    readonly pinningFetch?: typeof globalThis.fetch;
-    readonly requireDnsPinning?: boolean;
-    readonly timeoutMs?: number;
-}
+export { GuardOptions }
 
-// @public
-export function isLoopbackAddress(address: string): boolean;
+export { isLoopbackAddress }
 
-// @public
-export function isPublicAddress(address: string, allowLoopback: boolean): boolean;
+export { isPublicAddress }
 
 // @public
 export const KNOWN_SECTOR_SLUGS: readonly ["identity", "contacts", "media", "finance", "health", "scheduling", "core"];
@@ -101,20 +94,9 @@ export interface ListOptions {
     readonly followContainer?: boolean | "auto";
 }
 
-// @public
-export interface Membership {
-    readonly app: string;
-    readonly asserted?: string;
-    readonly assertedBy?: readonly string[];
-    readonly id?: string;
-    readonly status?: MembershipStatusName;
-    readonly statusIri?: string;
-}
+export { Membership }
 
-// Warning: (ae-forgotten-export) The symbol "MEMBERSHIP_STATUS" needs to be exported by the entry point index.d.ts
-//
-// @public
-export type MembershipStatusName = keyof typeof MEMBERSHIP_STATUS;
+export { MembershipStatusName }
 
 // @public
 export interface RegistryDiscovery {
@@ -123,14 +105,7 @@ export interface RegistryDiscovery {
     readonly valid: boolean;
 }
 
-// @public
-export interface RegistryIssue {
-    // Warning: (ae-forgotten-export) The symbol "RegistryIssueCode" needs to be exported by the entry point index.d.ts
-    readonly code: RegistryIssueCode;
-    readonly message: string;
-    readonly subject?: string;
-    readonly value?: string;
-}
+export { RegistryIssue }
 
 // @public
 export interface RegistryOptions {
@@ -138,13 +113,7 @@ export interface RegistryOptions {
     readonly guard?: Omit<GuardOptions, "fetch">;
 }
 
-// @public
-export interface ResolvedAddress {
-    // (undocumented)
-    readonly address: string;
-    // (undocumented)
-    readonly family: number;
-}
+export { ResolvedAddress }
 
 // @public
 export interface ResolvedStorageSpec {
@@ -188,20 +157,9 @@ export interface SelfDescription {
 // @public
 export function serialize(quads: readonly Quad[], format?: string): Promise<string>;
 
-// @public
-export class SsrfError extends Error {
-    constructor(message: string, options?: {
-        cause?: unknown;
-    });
-}
+export { SsrfError }
 
-// @public
-export interface StorageDescription {
-    readonly acceptsSpec: readonly string[];
-    readonly id: string;
-    readonly storage: string;
-    readonly supportsSector: readonly string[];
-}
+export { StorageDescription }
 
 // @public
 export const VALID_ACCESS_MODE_IRIS: ReadonlySet<string>;
