@@ -415,7 +415,19 @@ npm test            # vitest
 npm run build       # esbuild: bundle src/ (+ inline @jeswr/fetch-rdf) → dist/index.js; tsc → dist/*.d.ts
 npm run check:dist  # fail if committed dist/ has drifted from src/
 npm run check:lockfile-transport  # fail if package-lock.json uses an SSH git transport
+npm run api:check   # fail if the public API drifted from the committed etc/*.api.md snapshot
+npm run api:report  # regenerate etc/*.api.md after an INTENDED public-API change
 ```
+
+The full public API surface is snapshotted, one file per entry point, in
+[`etc/federation-client.api.md`](etc/federation-client.api.md) (the `.` entry) and
+[`etc/federation-client.node.api.md`](etc/federation-client.node.api.md) (the `./node`
+entry) by [API Extractor](https://api-extractor.com/) (configs under `config/`). This
+makes "what is the public API?" a single-file diff rather than a code-reading exercise,
+and `npm run api:check` fails the gate on any un-snapshotted contract change. After an
+INTENDED API change, run `npm run api:report` and commit the updated `etc/*.api.md` in
+the same change (map the diff to a semver bump). The `etc/` and `config/` folders are
+review artifacts only — they are not shipped (`files` is `dist` + `README.md`).
 
 `npm run build` produces the **committed, self-contained `dist/`** (esbuild inlines
 the off-npm `@jeswr/fetch-rdf`, keeps every npm-published dep external; tsc emits the
