@@ -10,8 +10,9 @@
 // The shadcn-compatible primitives are exported too for apps that want to build
 // their own header chrome on the same Radix + token base.
 export { AccountMenu, initials } from "./components/account-menu.js";
-export { buildIssueUrl, composeIssueBody, composeIssueTitle, FeedbackButton, FeedbackDialog, feedbackLabels, } from "./components/feedback.js";
+export { FeedbackButton, FeedbackDialog, } from "./components/feedback.js";
 export { Avatar, AvatarFallback, AvatarImage, Button, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger, } from "./components/primitives.js";
 export { ThemeProvider, themeScript, useTheme, } from "./components/theme-provider.js";
 export { ThemeToggle } from "./components/theme-toggle.js";
 export { cn } from "./lib/cn.js";
+export { buildIssueUrl, composeIssueBody, composeIssueTitle, feedbackLabels, } from "./lib/feedback-core.js";

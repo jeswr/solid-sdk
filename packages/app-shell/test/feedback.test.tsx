@@ -7,15 +7,14 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { FeedbackButton, tabbableElements } from "../src/components/feedback.js";
 import {
   buildIssueUrl,
   composeIssueBody,
   composeIssueTitle,
-  FeedbackButton,
   type FeedbackDiagnostics,
   feedbackLabels,
-  tabbableElements,
-} from "../src/components/feedback.js";
+} from "../src/lib/feedback-core.js";
 
 const user = userEvent.setup({ pointerEventsCheck: 0 });
 

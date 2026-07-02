@@ -12,18 +12,10 @@
 
 export { AccountMenu, type AccountMenuProps, initials } from "./components/account-menu.js";
 export {
-  buildIssueUrl,
-  composeIssueBody,
-  composeIssueTitle,
   FeedbackButton,
   type FeedbackButtonProps,
-  type FeedbackCategory,
-  type FeedbackDiagnostics,
   FeedbackDialog,
   type FeedbackDialogProps,
-  type FeedbackPayload,
-  type FeedbackSubmitResult,
-  feedbackLabels,
 } from "./components/feedback.js";
 export {
   Avatar,
@@ -49,3 +41,13 @@ export {
 } from "./components/theme-provider.js";
 export { ThemeToggle } from "./components/theme-toggle.js";
 export { cn } from "./lib/cn.js";
+export {
+  buildIssueUrl,
+  composeIssueBody,
+  composeIssueTitle,
+  type FeedbackCategory,
+  type FeedbackDiagnostics,
+  type FeedbackPayload,
+  type FeedbackSubmitResult,
+  feedbackLabels,
+} from "./lib/feedback-core.js";
