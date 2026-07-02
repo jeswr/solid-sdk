@@ -301,7 +301,7 @@ async function completeFromSnapshot(
   // never an automatic sweep.
   if (
     snapshot.targets.length === 0 ||
-    !snapshot.targets.every((t) => t.startsWith(ctx.storageRoot))
+    !snapshot.targets.every((t) => isWithinStorage(t, ctx.storageRoot))
   ) {
     throw new ApprovalStateError(
       requestUrl,

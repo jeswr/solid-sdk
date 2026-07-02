@@ -135,7 +135,7 @@ describe("removePublicAccess", () => {
   it("removes foaf:Agent from every node; named agents unaffected", async () => {
     const pod = buildPod();
     const { read } = await entriesAt(pod, REPORT_ACL);
-    removePublicAccess(read.dataset);
+    removePublicAccess(read.dataset, OWNER);
     const entries = projectEntries(read.dataset);
     expect(entries.some((e) => e.isPublic)).toBe(false);
     expect(entries.find((e) => e.authIri.endsWith("#shared"))?.agents).toEqual([BOB]);
@@ -264,7 +264,7 @@ describe("updateAclWithRetry (CAS loop)", () => {
   it("writes with If-Match from the fresh read", async () => {
     const pod = buildPod();
     await updateAclWithRetry(REPORT_ACL, pod.fetch, (dataset) => {
-      removePublicAccess(dataset);
+      removePublicAccess(dataset, OWNER);
     });
     const { entries } = await entriesAt(pod, REPORT_ACL);
     expect(entries.some((e) => e.isPublic)).toBe(false);
@@ -283,7 +283,7 @@ describe("updateAclWithRetry (CAS loop)", () => {
       return undefined;
     };
     await updateAclWithRetry(REPORT_ACL, pod.fetch, (dataset) => {
-      removePublicAccess(dataset);
+      removePublicAccess(dataset, OWNER);
     });
     const { entries } = await entriesAt(pod, REPORT_ACL);
     expect(entries.some((e) => e.isPublic)).toBe(false);
@@ -299,7 +299,7 @@ describe("updateAclWithRetry (CAS loop)", () => {
       return undefined;
     };
     await expect(
-      updateAclWithRetry(REPORT_ACL, pod.fetch, (dataset) => removePublicAccess(dataset)),
+      updateAclWithRetry(REPORT_ACL, pod.fetch, (dataset) => removePublicAccess(dataset, OWNER)),
     ).rejects.toBeInstanceOf(AclConflictError);
   });
 
@@ -374,7 +374,7 @@ describe("removeAuthenticatedFromEntry (roborev: class access is agentClass, not
     );
     const { read } = await entriesAt(pod, REPORT_ACL);
     const { removeAuthenticatedFromEntry } = await import("../../src/lib/acl.js");
-    removeAuthenticatedFromEntry(read.dataset, `${REPORT_ACL}#auth`);
+    removeAuthenticatedFromEntry(read.dataset, `${REPORT_ACL}#auth`, OWNER);
     const entries = projectEntries(read.dataset);
     const entry = entries.find((e) => e.authIri.endsWith("#auth"));
     expect(entry?.isAuthenticated).toBe(false);
@@ -394,7 +394,50 @@ describe("removeAuthenticatedFromEntry (roborev: class access is agentClass, not
     );
     const { read } = await entriesAt(pod, REPORT_ACL);
     const { removeAuthenticatedFromEntry } = await import("../../src/lib/acl.js");
-    removeAuthenticatedFromEntry(read.dataset, `${REPORT_ACL}#auth`);
+    removeAuthenticatedFromEntry(read.dataset, `${REPORT_ACL}#auth`, OWNER);
     expect(projectEntries(read.dataset).some((e) => e.authIri.endsWith("#auth"))).toBe(false);
+  });
+});
+
+describe("class-removal lockout guard (roborev round 2 Medium)", () => {
+  it("refuses removing the class entry that is the owner's ONLY Control path", async () => {
+    const pod = buildPod();
+    // The owner's control comes ONLY through the authenticated class.
+    pod.seed(
+      REPORT_ACL,
+      `${PREFIXES}
+<${REPORT_ACL}#auth> a acl:Authorization ;
+  acl:agentClass acl:AuthenticatedAgent ;
+  acl:accessTo <${REPORT}> ; acl:mode acl:Read, acl:Write, acl:Control .`,
+    );
+    const { read } = await entriesAt(pod, REPORT_ACL);
+    const { removeAuthenticatedFromEntry, removePublicFromEntry, removePublicAccess } =
+      await import("../../src/lib/acl.js");
+    expect(() => removeAuthenticatedFromEntry(read.dataset, `${REPORT_ACL}#auth`, OWNER)).toThrow(
+      LockoutError,
+    );
+
+    // Same rule for the public paths.
+    pod.seed(
+      REPORT_ACL,
+      `${PREFIXES}
+<${REPORT_ACL}#pub> a acl:Authorization ;
+  acl:agentClass foaf:Agent ;
+  acl:accessTo <${REPORT}> ; acl:mode acl:Read, acl:Write, acl:Control .`,
+    );
+    const second = await entriesAt(pod, REPORT_ACL);
+    expect(() => removePublicFromEntry(second.read.dataset, `${REPORT_ACL}#pub`, OWNER)).toThrow(
+      LockoutError,
+    );
+    const third = await entriesAt(pod, REPORT_ACL);
+    expect(() => removePublicAccess(third.read.dataset, OWNER)).toThrow(LockoutError);
+  });
+
+  it("allows class removal when the owner keeps direct Control", async () => {
+    const pod = buildPod(); // #owner has direct Control; #shared is public Read
+    const { read } = await entriesAt(pod, REPORT_ACL);
+    const { removePublicFromEntry } = await import("../../src/lib/acl.js");
+    removePublicFromEntry(read.dataset, `${REPORT_ACL}#shared`, OWNER);
+    expect(projectEntries(read.dataset).some((e) => e.isPublic)).toBe(false);
   });
 });

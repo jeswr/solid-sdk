@@ -239,6 +239,23 @@ export function ownerHasControl(dataset: DatasetCore, ownerWebId: string): boole
   return false;
 }
 
+/**
+ * Whether the owner retains acl:Control via ANY path — a direct acl:agent
+ * entry, OR a class entry (foaf:Agent / acl:AuthenticatedAgent) that includes
+ * them. The class-removal lockout guard uses this WIDER predicate: an owner
+ * whose only Control comes through a class entry must not be able to delete
+ * it (the direct-only predicate would wrongly refuse even safe removals when
+ * control is class-based, and — worse — the class removals previously had no
+ * guard at all, the roborev finding).
+ */
+export function ownerRetainsAnyControl(dataset: DatasetCore, ownerWebId: string): boolean {
+  for (const entry of projectEntries(dataset)) {
+    if (!entry.modes.includes("Control")) continue;
+    if (entry.agents.includes(ownerWebId) || entry.isPublic || entry.isAuthenticated) return true;
+  }
+  return false;
+}
+
 function authAt(dataset: DatasetCore, authIri: string): Authorization {
   return new Authorization(authIri, dataset, DataFactory);
 }
@@ -276,27 +293,44 @@ export function removeAgentFromEntry(
   }
 }
 
-/** MUTATION: remove public (foaf:Agent) access from ONE authorization. */
-export function removePublicFromEntry(dataset: DatasetCore, authIri: string): void {
+/**
+ * MUTATION: remove public (foaf:Agent) access from ONE authorization.
+ * Lockout-guarded: refuses when the removed class entry was the owner's LAST
+ * Control path (class entries include the owner too).
+ */
+export function removePublicFromEntry(
+  dataset: DatasetCore,
+  authIri: string,
+  ownerWebId: string,
+): void {
   const auth = authAt(dataset, authIri);
   auth.agentClass.delete(FOAF.Agent);
   dropIfSubjectless(dataset, authIri);
+  if (!ownerRetainsAnyControl(dataset, ownerWebId)) throw new LockoutError(authIri);
 }
 
 /**
  * MUTATION: remove any-authenticated (acl:AuthenticatedAgent) access from ONE
  * authorization — the class-specific analogue of {@link removePublicFromEntry}
  * (agent-class access is an acl:agentClass triple, NOT an acl:agent one, so
- * agent-removal paths cannot touch it).
+ * agent-removal paths cannot touch it). Lockout-guarded like the public path.
  */
-export function removeAuthenticatedFromEntry(dataset: DatasetCore, authIri: string): void {
+export function removeAuthenticatedFromEntry(
+  dataset: DatasetCore,
+  authIri: string,
+  ownerWebId: string,
+): void {
   const auth = authAt(dataset, authIri);
   auth.agentClass.delete(ACL.AuthenticatedAgent);
   dropIfSubjectless(dataset, authIri);
+  if (!ownerRetainsAnyControl(dataset, ownerWebId)) throw new LockoutError(authIri);
 }
 
-/** MUTATION: remove public (foaf:Agent) access from every authorization. */
-export function removePublicAccess(dataset: DatasetCore): void {
+/**
+ * MUTATION: remove public (foaf:Agent) access from every authorization.
+ * Lockout-guarded (same rule as the per-entry class removals).
+ */
+export function removePublicAccess(dataset: DatasetCore, ownerWebId: string): void {
   const acl = new AclResource(dataset, DataFactory);
   const authIris = [...acl.authorizations].map((a) => a.value);
   for (const authIri of authIris) {
@@ -306,6 +340,7 @@ export function removePublicAccess(dataset: DatasetCore): void {
       dropIfSubjectless(dataset, authIri);
     }
   }
+  if (!ownerRetainsAnyControl(dataset, ownerWebId)) throw new LockoutError("public access");
 }
 
 /**

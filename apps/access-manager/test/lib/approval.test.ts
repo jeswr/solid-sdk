@@ -365,3 +365,44 @@ describe("final CAS verification (roborev: never silently stuck in Approving)", 
     expect(after?.status).toBe("Approved");
   });
 });
+
+describe("resume-path snapshot confinement (roborev round 2 High)", () => {
+  async function forgeApproving(targets: string[], root = POD) {
+    // A forged/tampered Approving request whose snapshot names the given
+    // targets, with a grantId that RECOMPUTES (a determined attacker can).
+    const url = `${INBOX}forged.ttl`;
+    const grantId = await deriveGrantId(url, targets, OWNER, "1");
+    const targetLines = targets.map((t) => `accm:resolvesTo <${t}> ;`).join("\n  ");
+    pod.seed(
+      url,
+      `@prefix accm: <https://w3id.org/jeswr/accm#> .
+<${url}> accm:status accm:Approving ;
+  accm:grantId "${grantId}" ;
+  accm:schemaVersion "1" ;
+  accm:agent <${REQUESTER}> ;
+  accm:mode <http://www.w3.org/ns/auth/acl#Read> ;
+  ${targetLines}
+  accm:dataClass <${url}#c> .`,
+    );
+    return { url, root };
+  }
+
+  it("rejects a sibling-path-prefix target when the root lacks a trailing slash", async () => {
+    // storageRoot configured WITHOUT the trailing slash: /contacts vs /contacts-evil
+    const { url } = await forgeApproving(
+      ["https://pod.example/contacts-evil/x.ttl"],
+      "https://pod.example/contacts",
+    );
+    const putsBefore = pod.log.filter((l) => l.method === "PUT").length;
+    await expect(
+      resumeApproval(url, await ctx({ storageRoot: "https://pod.example/contacts" })),
+    ).rejects.toBeInstanceOf(ApprovalStateError);
+    expect(pod.log.filter((l) => l.method === "PUT").length).toBe(putsBefore); // zero writes
+  });
+
+  it("rejects a hostname-prefix target (pod.example.evil)", async () => {
+    const { url } = await forgeApproving(["https://pod.example.evil/x.ttl"]);
+    await expect(resumeApproval(url, await ctx())).rejects.toBeInstanceOf(ApprovalStateError);
+    expect(pod.has("https://pod.example.evil/x.ttl.acl")).toBe(false);
+  });
+});

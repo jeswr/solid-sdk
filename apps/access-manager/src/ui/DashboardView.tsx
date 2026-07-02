@@ -67,9 +67,9 @@ export function DashboardView({
       persist: async () => {
         await updateAclWithRetry(aclUrl, session.fetch, (dataset) => {
           if (line.agent === PUBLIC_AGENT) {
-            removePublicFromEntry(dataset, line.authIri);
+            removePublicFromEntry(dataset, line.authIri, session.webId);
           } else if (line.agent === AUTHENTICATED_AGENT) {
-            removeAuthenticatedFromEntry(dataset, line.authIri);
+            removeAuthenticatedFromEntry(dataset, line.authIri, session.webId);
           } else {
             removeAgentFromEntry(dataset, line.authIri, line.agent, session.webId);
           }
