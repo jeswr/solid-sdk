@@ -18,7 +18,13 @@
 // proactive patch eliminates: each distinct pod URL previously paid a wasted 401 →
 // upgrade → retry under the reactive manager. The discovery runs through the same
 // auth-patched global fetch, so it carries the session token. See useLedgerUrl.
-import { AccountMenu, FeedbackButton, ThemeToggle } from "@jeswr/app-shell";
+import {
+  AccountMenu,
+  Button,
+  FeedbackButton,
+  ThemeToggle,
+  useSolidExtensionPresent,
+} from "@jeswr/app-shell";
 import { MoneyStore } from "@jeswr/pod-money";
 import { AccountsView } from "@jeswr/pod-money/ui";
 // SOLID-ELEMENTS (#115 / D-parity rollout #67/#68/#70): the framework-agnostic W3C
@@ -193,7 +199,7 @@ export function App() {
  * its discovery effect) only mount once a session exists — hooks cannot be called
  * conditionally in `App` above.
  */
-function LoggedIn({
+export function LoggedIn({
   podRoot,
   podRootIsFallback,
   webId,
@@ -209,6 +215,16 @@ function LoggedIn({
   onLogout: () => void;
 }) {
   const { ledgerUrl, source } = useLedgerUrl(podRoot);
+  // When the @jeswr Solid browser extension is installed it owns the account surface
+  // (its pinned top-right avatar menu already shows identity + sign-out), so the app's
+  // full <AccountMenu/> — avatar, display name, WebID — would DUPLICATE it; we drop that
+  // duplicated profile display. But pod-money still holds its OWN independent
+  // SessionProvider session here (it has not yet been wired to consume the extension's
+  // identity — the "skip own login when extension present" follow-up), so we must NOT
+  // strand the user: keep a minimal Sign-out control that calls this app's own logout.
+  // Once the app consumes the extension's identity (no independent session to sign out
+  // of), even this goes. (Cross-app parity with pod-drive — bead suite-tracker-lpo.)
+  const extensionPresent = useSolidExtensionPresent();
 
   return (
     <div className="app-shell">
@@ -237,12 +253,18 @@ function LoggedIn({
             webId={webId}
           />
           <ThemeToggle />
-          <AccountMenu
-            webId={webId}
-            displayName={displayName}
-            avatarUrl={avatarUrl}
-            onSignOut={onLogout}
-          />
+          {extensionPresent ? (
+            <Button variant="ghost" onClick={onLogout}>
+              Sign out
+            </Button>
+          ) : (
+            <AccountMenu
+              webId={webId}
+              displayName={displayName}
+              avatarUrl={avatarUrl}
+              onSignOut={onLogout}
+            />
+          )}
         </div>
       </header>
       {podRootIsFallback ? (
