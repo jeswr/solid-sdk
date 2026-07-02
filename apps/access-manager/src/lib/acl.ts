@@ -19,6 +19,7 @@
 //     acl:Control on the governing resource is refused (LockoutError).
 
 import type { DatasetCore } from "@rdfjs/types";
+import { NamedNodeAs, NamedNodeFrom, SetFrom } from "@rdfjs/wrapper";
 import { AclResource, Authorization } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import {
@@ -157,27 +158,40 @@ function normalize(url: string): string {
 }
 
 /** Project every authorization in an ACL document (untrusted RDF — guarded). */
+/**
+ * `Authorization` extended with MULTI-VALUED scope accessors. The upstream
+ * wrapper's `accessTo`/`default` are single-valued (`OptionalFrom`), but WAC
+ * allows an authorization to name SEVERAL resources/containers — projecting
+ * only the first value made every scope decision (applicability, the lockout
+ * guards, scoped public removal) blind to the others (roborev round 5). Same
+ * `SetFrom` mapping pattern the upstream class uses for `agent`/`mode`.
+ */
+class ScopedAuthorization extends Authorization {
+  get accessToAll(): Set<string> {
+    return SetFrom.subjectPredicate(this, ACL.accessTo, NamedNodeAs.string, NamedNodeFrom.string);
+  }
+  get defaultForAll(): Set<string> {
+    return SetFrom.subjectPredicate(this, ACL.default, NamedNodeAs.string, NamedNodeFrom.string);
+  }
+}
+
 export function projectEntries(dataset: DatasetCore): AclEntry[] {
   const acl = new AclResource(dataset, DataFactory);
   const out: AclEntry[] = [];
   for (const auth of acl.authorizations) {
     const authIri = auth.value;
+    const scoped = new ScopedAuthorization(authIri, dataset, DataFactory);
     const agents = tryRead(() => [...auth.agent]) ?? [];
     const agentClasses = tryRead(() => [...auth.agentClass]) ?? [];
     const modeIris = tryRead(() => [...auth.mode]) ?? [];
-    const accessTo = tryRead(() => auth.accessTo);
-    const dflt = tryRead(() => auth.default);
-    // accessTo/default are single-valued in the wrapper; collect the full sets
-    // from the dataset via extra wrappers is unnecessary — WAC docs in practice
-    // use one value; multi-valued docs still project their first value each.
     out.push({
       authIri,
       agents,
       isPublic: agentClasses.includes(FOAF.Agent),
       isAuthenticated: agentClasses.includes(ACL.AuthenticatedAgent),
       modes: modeIris.map((m) => IRI_MODE[m]).filter((m): m is WacMode => m !== undefined),
-      accessTo: accessTo !== undefined ? [accessTo] : [],
-      defaultFor: dflt !== undefined ? [dflt] : [],
+      accessTo: tryRead(() => [...scoped.accessToAll]) ?? [],
+      defaultFor: tryRead(() => [...scoped.defaultForAll]) ?? [],
     });
   }
   return out;

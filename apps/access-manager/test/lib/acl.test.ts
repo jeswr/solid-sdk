@@ -550,3 +550,42 @@ describe("default-scope + bulk public removal (roborev round 4)", () => {
     expect(entries.find((e) => e.authIri.endsWith("#pub-other"))?.isPublic).toBe(true);
   });
 });
+
+describe("multi-scope authorizations (roborev round 5)", () => {
+  it("projects ALL acl:accessTo / acl:default values, and scoped removal sees non-first scopes", async () => {
+    const pod = buildPod();
+    const OTHER = `${POD}docs/other.ttl`;
+    // One public authorization scoped to TWO resources; REPORT is deliberately
+    // placed as the LAST object so a first-value-only projection would miss it.
+    pod.seed(
+      REPORT_ACL,
+      `${PREFIXES}
+<${REPORT_ACL}#owner> a acl:Authorization ; acl:agent <${OWNER}> ;
+  acl:accessTo <${OTHER}>, <${REPORT}> ; acl:mode acl:Read, acl:Write, acl:Control .
+<${REPORT_ACL}#pub> a acl:Authorization ; acl:agentClass foaf:Agent ;
+  acl:accessTo <${OTHER}>, <${REPORT}> ; acl:mode acl:Read .`,
+    );
+    const { read } = await entriesAt(pod, REPORT_ACL);
+    const pub = projectEntries(read.dataset).find((e) => e.authIri.endsWith("#pub"));
+    expect(pub?.accessTo.sort()).toEqual([OTHER, REPORT].sort()); // both scopes projected
+    // The scoped removal now matches via the second scope too.
+    removePublicAccess(read.dataset, OWNER, REPORT);
+    expect(projectEntries(read.dataset).some((e) => e.isPublic)).toBe(false);
+  });
+
+  it("inherited resolution matches the governing container even as a NON-FIRST default value", async () => {
+    const pod = buildPod();
+    // acl:default names another container FIRST and the governing root SECOND —
+    // a first-value-only projection would miss the root and resolve nothing.
+    pod.seed(
+      `${POD}.acl`,
+      `${PREFIXES}
+<${POD}.acl#owner> a acl:Authorization ; acl:agent <${OWNER}> ;
+  acl:accessTo <${POD}> ;
+  acl:default <${POD}settings/>, <${POD}> ;
+  acl:mode acl:Read, acl:Write, acl:Control .`,
+    );
+    const effective = await readEffectiveAcl(`${POD}contacts/alice.ttl`, POD, pod.fetch);
+    expect(effective.entries).toHaveLength(1);
+  });
+});
