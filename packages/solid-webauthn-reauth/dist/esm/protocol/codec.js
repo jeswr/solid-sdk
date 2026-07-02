@@ -70,6 +70,20 @@ export function decodeAssertionBundle(token) {
 }
 /** Unpadded base64url alphabet (the WebAuthn JSON serialization, §5.8.1). */
 const BASE64URL = /^[A-Za-z0-9_-]+$/u;
+/**
+ * Canonical structural check for a non-empty **unpadded base64url** string.
+ *
+ * Beyond the alphabet, this rejects impossible *lengths*: unpadded base64url
+ * packs 4 characters into 3 bytes, so a group with a remainder of exactly **1**
+ * character can never be produced by any encoder. Accepting a `length % 4 === 1`
+ * string would let a value that no valid authenticator emits through the
+ * fail-closed boundary and into downstream decode/crypto (roborev Medium,
+ * `codec.ts`). Padding (`=`) is not in the alphabet, so padded input is rejected
+ * by the alphabet test.
+ */
+function isBase64url(value) {
+    return value.length > 0 && value.length % 4 !== 1 && BASE64URL.test(value);
+}
 /** Assert a string field is present and non-empty on `obj`, else throw. */
 function requireString(obj, field) {
     const value = obj[field];
@@ -77,18 +91,19 @@ function requireString(obj, field) {
         throw new MalformedBundleError(`assertion bundle credential is missing string \`${field}\``);
     }
 }
-/** Assert a field is a non-empty base64url string (no padding), else throw. */
+/** Assert a field is a valid, non-empty unpadded base64url string, else throw. */
 function requireBase64url(obj, field) {
     requireString(obj, field);
-    if (!BASE64URL.test(obj[field])) {
-        throw new MalformedBundleError(`assertion bundle credential \`${field}\` is not base64url`);
+    if (!isBase64url(obj[field])) {
+        throw new MalformedBundleError(`assertion bundle credential \`${field}\` is not valid base64url`);
     }
 }
 /**
  * Validate the inner `AuthenticatorAssertionResponseJSON` envelope: a base64url
  * `id`/`rawId`, `type === "public-key"`, and a `response` object carrying the
  * base64url `clientDataJSON`, `authenticatorData`, and `signature` the verifier
- * needs. `userHandle` is optional (absent for non-resident credentials).
+ * needs. `userHandle` is optional (absent for non-resident credentials) but, when
+ * present and non-null, is itself a base64url string.
  */
 function validateAssertionCredential(credential) {
     requireBase64url(credential, "id");
@@ -104,8 +119,13 @@ function validateAssertionCredential(credential) {
     requireBase64url(r, "clientDataJSON");
     requireBase64url(r, "authenticatorData");
     requireBase64url(r, "signature");
-    if (r.userHandle !== undefined && r.userHandle !== null && typeof r.userHandle !== "string") {
-        throw new MalformedBundleError("assertion bundle credential.response.userHandle must be a string when present");
+    // `userHandle` is optional (Base64URLString | null). When present and non-null
+    // it must be a valid base64url string too — not merely "a string" (roborev
+    // Medium): a malformed userHandle otherwise reaches the OP's user-lookup path.
+    if (r.userHandle !== undefined && r.userHandle !== null) {
+        if (typeof r.userHandle !== "string" || !isBase64url(r.userHandle)) {
+            throw new MalformedBundleError("assertion bundle credential.response.userHandle must be a base64url string when present");
+        }
     }
 }
 //# sourceMappingURL=codec.js.map

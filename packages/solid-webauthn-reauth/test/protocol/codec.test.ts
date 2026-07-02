@@ -137,6 +137,26 @@ describe("assertion bundle codec", () => {
       expect(() => decodeAssertionBundle(tokenWith({ rawId: undefined }))).toThrow(/rawId/);
     });
 
+    it("rejects an impossible-length credential.id (length % 4 === 1)", () => {
+      // "A" (len 1) and "AAAAA" (len 5) are alphabet-valid but no encoder emits
+      // a base64url group with a remainder of exactly 1 char.
+      expect(() => decodeAssertionBundle(tokenWith({ id: "A" }))).toThrow(/base64url/);
+      expect(() => decodeAssertionBundle(tokenWith({ id: "AAAAA" }))).toThrow(/base64url/);
+    });
+
+    it("rejects an impossible-length response.signature", () => {
+      const token = encodeBase64url(
+        JSON.stringify({
+          version: BUNDLE_VERSION,
+          credential: {
+            ...credential,
+            response: { ...credential.response, signature: "AAAAA" },
+          },
+        }),
+      );
+      expect(() => decodeAssertionBundle(token)).toThrow(/base64url/);
+    });
+
     it("rejects a non-base64url response.signature", () => {
       const token = encodeBase64url(
         JSON.stringify({
@@ -187,6 +207,32 @@ describe("assertion bundle codec", () => {
           credential: {
             ...credential,
             response: { ...credential.response, userHandle: 42 },
+          },
+        }),
+      );
+      expect(() => decodeAssertionBundle(token)).toThrow(/userHandle/);
+    });
+
+    it("rejects a non-base64url userHandle string", () => {
+      const token = encodeBase64url(
+        JSON.stringify({
+          version: BUNDLE_VERSION,
+          credential: {
+            ...credential,
+            response: { ...credential.response, userHandle: "has spaces!" },
+          },
+        }),
+      );
+      expect(() => decodeAssertionBundle(token)).toThrow(/userHandle/);
+    });
+
+    it("rejects an impossible-length userHandle", () => {
+      const token = encodeBase64url(
+        JSON.stringify({
+          version: BUNDLE_VERSION,
+          credential: {
+            ...credential,
+            response: { ...credential.response, userHandle: "AAAAA" },
           },
         }),
       );
