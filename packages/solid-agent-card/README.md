@@ -93,6 +93,31 @@ if (result.verification?.valid) {
 Agent Description — including a **subject-binding spoofing guard** (a document served at URL A may
 not describe a different agent B). Pass `{ resolveDescriptor: false }` to read pointers only.
 
+## Security — the fetch seam is the SSRF boundary
+
+`discoverAgent` and `verifyDescriptor` fetch remote documents: `discoverAgent`
+follows the agent-pointer IRI read from a (possibly untrusted) WebID profile, and
+`verifyDescriptor` fetches the URL it is given. **The injected `fetch` is the SSRF
+boundary.** In a **server / Node** context the default `globalThis.fetch` is *not*
+SSRF-guarded, so a hostile profile could point the second fetch at an internal
+address (e.g. cloud metadata). When resolving **untrusted** WebIDs/URLs on a
+server, inject an SSRF-guarded fetch — e.g. the suite's
+[`@jeswr/guarded-fetch`][guarded-fetch] node fetch (DNS-pinned,
+private-range-blocking):
+
+```ts
+// pass a guarded `fetch` (an SSRF-guarded node fetch, or your authed Solid fetch
+// wrapped by one) — its exact export is that package's concern:
+await discoverAgent(untrustedWebId, { fetch: guardedNodeFetch });
+```
+
+In a browser the platform `fetch` (CORS) is the boundary. Two other guarantees are
+independent of the fetch seam and always on: the **subject-binding spoofing guard**
+(a document served at URL A may not describe a different agent B) and the
+**self-contained inline JSON-LD `@context`** the emitter uses (no remote-context
+dereference on parse). Prefer the in-hand `verifyDescriptor({ body })` /
+`verifyDataset` paths when you already have the RDF — they never touch the network.
+
 ## Descriptor shape
 
 The descriptor uses **standard external vocabularies only** — no bespoke `@jeswr/…` agent vocab is
@@ -162,5 +187,6 @@ lockfile-resolved commit), and `scripts/build-dist.mjs` **inlines** it into the 
 [a2a]: https://a2a-protocol.org/latest/specification/
 [anp]: https://w3c-cg.github.io/ai-agent-protocol/
 [fetch-rdf]: https://github.com/jeswr/fetch-rdf
+[guarded-fetch]: https://github.com/jeswr/guarded-fetch
 [wrapper]: https://github.com/rdfjs-base/wrapper
 [i78]: https://github.com/jeswr/prod-solid-server/issues/78

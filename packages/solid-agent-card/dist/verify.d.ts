@@ -2,7 +2,16 @@ import type { DatasetCore } from "@rdfjs/types";
 import type { VerificationResult } from "./types.js";
 /** Options for {@link verifyDescriptor}. */
 export interface VerifyOptions {
-    /** A `fetch` implementation (e.g. an authenticated Solid fetch). */
+    /**
+     * A `fetch` implementation (e.g. an authenticated Solid fetch).
+     *
+     * SECURITY — this fetch is the SSRF boundary when verifying by URL. In a
+     * **server / Node** context the default `globalThis.fetch` is NOT SSRF-guarded;
+     * when `input` is an UNTRUSTED URL, inject an SSRF-guarded fetch (e.g.
+     * `@jeswr/guarded-fetch`'s node fetch, DNS-pinned). Prefer the `body` /
+     * {@link verifyDataset} paths when the RDF is already in hand — they never
+     * touch the network.
+     */
     readonly fetch?: typeof globalThis.fetch;
     /**
      * Skip the network and verify an RDF body already in hand. When set, `input`
