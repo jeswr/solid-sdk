@@ -154,3 +154,31 @@ typecheck yet iterate as CHARACTERS — silently disabling revocation
 (fail-open). Excluding strings at the type level plus a runtime guard for
 plain-JS callers keeps the misuse impossible; found in adversarial self-review,
 regression-tested.
+
+### D15. Prohibitions are STRICT in a delegation chain (perm-conflict override ignored)
+
+**Chosen:** in a chain of ≥ 2 policies, a MATCHED prohibition at any hop (scope
+check, direct check, grantUse authorization, leaf) denies — even where that
+hop's own `conflict: "perm"` strategy would override it for direct use. A
+single-policy chain keeps the policy's declared conflict semantics.
+**Alternatives:** honour each hop's conflict strategy uniformly (the original
+behaviour — flagged as a High by roborev/codex: the documented "never launder
+around an upstream prohibition" rule was weaker than stated under
+`odrl:perm`).
+**Why:** the profile's posture is deny-biased; strictness here costs nothing a
+policy author is entitled to (an agent whose direct access is genuinely
+perm-permitted can still act DIRECTLY via `evaluate()`), and it removes the
+one path where a prohibited request could succeed by being routed through a
+delegation chain.
+
+### D16. grantUse-edge duties join the aggregate duty set
+
+**Chosen:** the duties of the authorising `grantUse` evaluation (minus the
+structurally-enforced `nextPolicy` duties) are aggregated with the scope + leaf
+duties, so `requireDuties` gates on them and callers see them.
+**Alternatives:** discard them (the original behaviour — flagged as a Medium by
+roborev/codex: a "duty-conditioned" delegation authority was silently
+unconditioned).
+**Why:** a duty on the delegation authority (e.g. *inform the owner when
+delegating*) conditions everything delegated under it; dropping it sheds a
+condition, violating the §6.3 duties-accumulate rule.

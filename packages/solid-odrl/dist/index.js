@@ -793,30 +793,32 @@ function evaluateDelegated(chain, request, options = {}) {
       return denied(`Hop ${i} (<${policy.id}>) has been revoked.`, hops);
     }
   }
+  const strictProhibitions = chain.length > 1;
+  const aggregateDuties = [];
   for (let i = 1; i < chain.length; i++) {
     const parent = chain[i - 1];
     const child = chain[i];
     const remainingDepth = chain.length - i;
-    const failure = checkDelegationEdge(parent, child, remainingDepth, req, now);
-    if (failure !== void 0) {
-      hops.push({ index: i, policyId: child.id, ok: false, reason: failure });
-      return denied(`Hop ${i} (<${child.id}>): ${failure}`, hops);
+    const edge = checkDelegationEdge(parent, child, remainingDepth, req, now);
+    if (!edge.ok) {
+      hops.push({ index: i, policyId: child.id, ok: false, reason: edge.reason });
+      return denied(`Hop ${i} (<${child.id}>): ${edge.reason}`, hops);
     }
     hops.push({ index: i, policyId: child.id, ok: true, reason: "ok" });
+    aggregateDuties.push(...edge.duties);
   }
-  const aggregateDuties = [];
   for (let i = 0; i < chain.length - 1; i++) {
     const ancestor = chain[i];
     const delegator = chain[i + 1].assigner;
     const scope = evaluate(ancestor, { ...req, agent: delegator }, { now });
-    if (scope.decision !== "permit") {
+    if (scope.decision !== "permit" || scope.matchedProhibitions.length > 0) {
       return denied(
-        `Hop ${i} (<${ancestor.id}>) does not grant the requested capability to its delegate <${delegator}> (${scope.decision}: ${scope.reason}) \u2014 a delegate cannot receive more than the delegator holds.`,
+        `Hop ${i} (<${ancestor.id}>) does not cleanly grant the requested capability to its delegate <${delegator}> (${scope.decision}${scope.matchedProhibitions.length > 0 ? ", with a matched prohibition" : ""}: ${scope.reason}) \u2014 a delegate cannot receive more than the delegator holds.`,
         hops
       );
     }
     const direct = evaluate(ancestor, req, { now });
-    if (direct.decision === "deny") {
+    if (direct.decision === "deny" || direct.matchedProhibitions.length > 0) {
       return denied(
         `Hop ${i} (<${ancestor.id}>) prohibits the request directly (${direct.reason}).`,
         hops
@@ -826,9 +828,12 @@ function evaluateDelegated(chain, request, options = {}) {
   }
   const leafPolicy = chain[chain.length - 1];
   const leaf = evaluate(leafPolicy, req, { now });
-  if (leaf.decision !== "permit") {
+  if (leaf.decision !== "permit" || strictProhibitions && leaf.matchedProhibitions.length > 0) {
     return {
-      ...denied(`Leaf policy <${leafPolicy.id}> does not permit: ${leaf.reason}`, hops),
+      ...denied(
+        leaf.decision !== "permit" ? `Leaf policy <${leafPolicy.id}> does not permit: ${leaf.reason}` : `Leaf policy <${leafPolicy.id}> permits only via its odrl:perm conflict strategy over a matched prohibition \u2014 prohibitions are strict in a delegation chain.`,
+        hops
+      ),
       leaf
     };
   }
@@ -856,15 +861,22 @@ function evaluateDelegated(chain, request, options = {}) {
     duties
   };
 }
+function edgeFailure(reason) {
+  return { ok: false, reason };
+}
 function checkDelegationEdge(parent, child, remainingDepth, req, now) {
   if (child.type !== "Agreement") {
-    return `a delegated hop must be an odrl:Agreement (got ${child.type ?? "Set"}).`;
+    return edgeFailure(`a delegated hop must be an odrl:Agreement (got ${child.type ?? "Set"}).`);
   }
   if (child.assigner === void 0 || child.assignee === void 0) {
-    return "a delegated hop must name both assigner (the delegator) and assignee (the delegate).";
+    return edgeFailure(
+      "a delegated hop must name both assigner (the delegator) and assignee (the delegate)."
+    );
   }
   if (child.delegatedUnder !== parent.id) {
-    return `the hop must declare odrld:delegatedUnder <${parent.id}> (got ${child.delegatedUnder === void 0 ? "none" : `<${child.delegatedUnder}>`}).`;
+    return edgeFailure(
+      `the hop must declare odrld:delegatedUnder <${parent.id}> (got ${child.delegatedUnder === void 0 ? "none" : `<${child.delegatedUnder}>`}).`
+    );
   }
   const authRequest = {
     agent: child.assigner,
@@ -873,24 +885,31 @@ function checkDelegationEdge(parent, child, remainingDepth, req, now) {
     attributes: { ...req.attributes ?? {}, delegationDepth: remainingDepth }
   };
   const auth = evaluate(parent, authRequest, { now });
-  if (auth.decision !== "permit") {
-    return `the parent policy does not authorise delegation by <${child.assigner}> (${auth.decision}: ${auth.reason}).`;
+  if (auth.decision !== "permit" || auth.matchedProhibitions.length > 0) {
+    return edgeFailure(
+      `the parent policy does not cleanly authorise delegation by <${child.assigner}> (${auth.decision}${auth.matchedProhibitions.length > 0 ? ", with a matched prohibition" : ""}: ${auth.reason}).`
+    );
   }
   const candidates = matchingPermissions(parent, authRequest, { now }).filter(
     (r) => r.action === "grantUse" && r.assignee === child.assigner
   );
   if (candidates.length === 0) {
-    return `the parent policy has no grantUse permission explicitly naming <${child.assigner}> as assignee (an assignee-free grantUse does not authorise delegation).`;
+    return edgeFailure(
+      `the parent policy has no grantUse permission explicitly naming <${child.assigner}> as assignee (an assignee-free grantUse does not authorise delegation).`
+    );
   }
   const failures = [];
   for (const rule of candidates) {
     const failure = checkGrantUseRule(rule, child, remainingDepth);
     if (failure === void 0) {
-      return void 0;
+      return {
+        ok: true,
+        duties: auth.duties.filter((d) => d.action !== "nextPolicy")
+      };
     }
     failures.push(failure);
   }
-  return failures.join(" / ");
+  return edgeFailure(failures.join(" / "));
 }
 function checkGrantUseRule(rule, child, remainingDepth) {
   const hasDepthConstraint = (rule.constraints ?? []).some(

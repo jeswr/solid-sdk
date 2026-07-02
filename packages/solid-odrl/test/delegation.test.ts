@@ -200,7 +200,7 @@ describe("evaluateDelegated: authorization (grantUse)", () => {
   it("denies when the parent has NO grantUse permission at all", () => {
     const r = evaluateDelegated([root({ grantUse: false }), hop1()], READ_B, { now: NOW });
     expect(r.decision).toBe("deny");
-    expect(r.reason).toMatch(/does not authorise delegation/);
+    expect(r.reason).toMatch(/does not cleanly authorise delegation/);
   });
 
   it("a broad `use` permission does NOT authorise delegation (profile restriction)", () => {
@@ -440,6 +440,54 @@ describe("evaluateDelegated: scope intersection (conservative subset)", () => {
     expect(r.decision).toBe("deny");
     expect(r.reason).toMatch(/prohibits the request directly/);
   });
+
+  it("prohibitions are STRICT in a chain: an ancestor's conflict:perm cannot override (roborev High)", () => {
+    // The root PERMITS read to anyone AND prohibits read by B, with
+    // conflict:"perm" — direct evaluation would permit B (perm overrides), but
+    // a DELEGATED request must still deny: delegation never launders a request
+    // around a matched prohibition.
+    const permConflictRoot: OdrlPolicy = {
+      ...root(),
+      conflict: "perm",
+      permissions: [
+        { type: "permission", action: "read", target: RES },
+        { type: "permission", action: "grantUse", target: RES, assignee: AGENT_A },
+      ],
+      prohibitions: [{ type: "prohibition", action: "read", target: RES, assignee: AGENT_B }],
+    };
+    // Sanity: DIRECT evaluation honours the policy's own conflict strategy.
+    expect(evaluate(permConflictRoot, READ_B, { now: NOW }).decision).toBe("permit");
+    // But the delegated chain is strict.
+    const r = evaluateDelegated([permConflictRoot, hop1()], READ_B, { now: NOW });
+    expect(r.decision).toBe("deny");
+  });
+
+  it("prohibitions are STRICT on the grantUse edge under conflict:perm", () => {
+    const permConflictGrant: OdrlPolicy = {
+      ...root(),
+      conflict: "perm",
+      prohibitions: [{ type: "prohibition", action: "grantUse", target: RES, assignee: AGENT_A }],
+    };
+    const r = evaluateDelegated([permConflictGrant, hop1()], READ_B, { now: NOW });
+    expect(r.decision).toBe("deny");
+    expect(r.reason).toMatch(/does not cleanly authorise/);
+  });
+
+  it("prohibitions are STRICT in the leaf under conflict:perm (multi-policy chain only)", () => {
+    const permConflictLeaf = hop1({
+      conflict: "perm",
+      permissions: [{ type: "permission", action: "read", target: RES, assignee: AGENT_B }],
+      prohibitions: [{ type: "prohibition", action: "read", target: RES, assignee: AGENT_B }],
+    });
+    const chained = evaluateDelegated([root(), permConflictLeaf], READ_B, { now: NOW });
+    expect(chained.decision).toBe("deny");
+    expect(chained.reason).toMatch(/prohibitions are strict/);
+    // A SINGLE-policy chain keeps the policy's declared conflict semantics.
+    const single = evaluateDelegated([{ ...permConflictLeaf, delegatedUnder: undefined }], READ_B, {
+      now: NOW,
+    });
+    expect(single.decision).toBe("permit");
+  });
 });
 
 describe("evaluateDelegated: nextPolicy (mandated downstream policy)", () => {
@@ -531,6 +579,52 @@ describe("evaluateDelegated: revocation + duties", () => {
     const r = evaluateDelegated([dutifulRoot, hop1()], READ_B, { now: NOW });
     expect(r.decision).toBe("permit");
     expect(r.duties.map((d) => d.action)).toContain("attribute");
+  });
+
+  it("grantUse-edge duties join the aggregate and gate requireDuties (roborev Medium)", () => {
+    // The delegation AUTHORITY itself is duty-conditioned: A must inform the
+    // owner when delegating. The duty must surface in the chain result and
+    // gate requireDuties — never be silently dropped.
+    const dutyConditionedGrant: OdrlPolicy = {
+      ...root(),
+      permissions: [
+        { type: "permission", action: "read", target: RES, assignee: AGENT_A },
+        {
+          type: "permission",
+          action: "grantUse",
+          target: RES,
+          assignee: AGENT_A,
+          duties: [{ action: "inform", target: OWNER }],
+        },
+      ],
+    };
+    const advisory = evaluateDelegated([dutyConditionedGrant, hop1()], READ_B, { now: NOW });
+    expect(advisory.decision).toBe("permit");
+    expect(advisory.duties.map((d) => d.action)).toContain("inform");
+
+    const gated = evaluateDelegated([dutyConditionedGrant, hop1()], READ_B, {
+      now: NOW,
+      requireDuties: true,
+    });
+    expect(gated.decision).toBe("deny");
+
+    const discharged = evaluateDelegated(
+      [dutyConditionedGrant, hop1()],
+      { ...READ_B, attributes: { "fulfilled:inform": true } },
+      { now: NOW, requireDuties: true },
+    );
+    expect(discharged.decision).toBe("permit");
+  });
+
+  it("nextPolicy duties never enter the aggregate (structurally enforced, not dischargeable)", () => {
+    const r = evaluateDelegated([root({ nextPolicy: HOP1_ID }), hop1()], READ_B, {
+      now: NOW,
+      requireDuties: true,
+    });
+    // The nextPolicy duty is satisfied structurally (the mandated hop WAS
+    // delegated); it must not surface as an undischargeable required duty.
+    expect(r.decision).toBe("permit");
+    expect(r.duties.map((d) => d.action)).not.toContain("nextPolicy");
   });
 
   it("requireDuties gates on the AGGREGATE chain duties", () => {

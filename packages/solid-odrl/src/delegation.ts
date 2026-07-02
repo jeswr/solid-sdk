@@ -170,7 +170,16 @@ export function evaluateDelegated(
     }
   }
 
+  // In a DELEGATION chain (two or more policies) prohibitions are STRICT: a
+  // matched prohibition at any hop denies, even where that hop's own
+  // `odrl:perm` conflict strategy would override it for direct use (spec §6.2 —
+  // delegation must never launder a request around a prohibition; the agent can
+  // still exercise a genuine perm-conflict permit DIRECTLY via evaluate()). A
+  // single-policy chain retains the policy's declared conflict semantics.
+  const strictProhibitions = chain.length > 1;
+
   // --- per-edge checks: structure + delegation authorization ----------------
+  const aggregateDuties: ActiveDuty[] = [];
   for (let i = 1; i < chain.length; i++) {
     // biome-ignore lint/style/noNonNullAssertion: i bounded by chain.length
     const parent = chain[i - 1]!;
@@ -179,33 +188,39 @@ export function evaluateDelegated(
     // The number of delegation hops at-or-below this edge (the edge itself plus
     // every descendant edge) — the depth this edge's grantUse budget must cover.
     const remainingDepth = chain.length - i;
-    const failure = checkDelegationEdge(parent, child, remainingDepth, req, now);
-    if (failure !== undefined) {
-      hops.push({ index: i, policyId: child.id, ok: false, reason: failure });
-      return denied(`Hop ${i} (<${child.id}>): ${failure}`, hops);
+    const edge = checkDelegationEdge(parent, child, remainingDepth, req, now);
+    if (!edge.ok) {
+      hops.push({ index: i, policyId: child.id, ok: false, reason: edge.reason });
+      return denied(`Hop ${i} (<${child.id}>): ${edge.reason}`, hops);
     }
     hops.push({ index: i, policyId: child.id, ok: true, reason: "ok" });
+    // The authorizing grantUse edge's own duties (e.g. "inform the owner when
+    // delegating") condition the delegated grant too — they join the aggregate
+    // so requireDuties gates on them (nextPolicy duties are enforced
+    // structurally in the edge check and excluded there).
+    aggregateDuties.push(...edge.duties);
   }
 
   // --- scope intersection: every ancestor must grant the REQUESTED capability
   // to its own delegate (conservative subset semantics, spec §6) --------------
-  const aggregateDuties: ActiveDuty[] = [];
   for (let i = 0; i < chain.length - 1; i++) {
     // biome-ignore lint/style/noNonNullAssertion: i bounded by chain.length
     const ancestor = chain[i]!;
     // biome-ignore lint/style/noNonNullAssertion: i+1 bounded by chain.length
     const delegator = chain[i + 1]!.assigner as string; // defined — checked per edge
     const scope = evaluate(ancestor, { ...req, agent: delegator }, { now });
-    if (scope.decision !== "permit") {
+    if (scope.decision !== "permit" || scope.matchedProhibitions.length > 0) {
       return denied(
-        `Hop ${i} (<${ancestor.id}>) does not grant the requested capability to its delegate <${delegator}> (${scope.decision}: ${scope.reason}) — a delegate cannot receive more than the delegator holds.`,
+        `Hop ${i} (<${ancestor.id}>) does not cleanly grant the requested capability to its delegate <${delegator}> (${scope.decision}${scope.matchedProhibitions.length > 0 ? ", with a matched prohibition" : ""}: ${scope.reason}) — a delegate cannot receive more than the delegator holds.`,
         hops,
       );
     }
     // An ancestor PROHIBITION against the actual requesting agent also denies —
     // delegation must never launder a request around an upstream prohibition.
+    // STRICT: a matched prohibition denies even when the ancestor's own
+    // `odrl:perm` conflict strategy would override it for direct use.
     const direct = evaluate(ancestor, req, { now });
-    if (direct.decision === "deny") {
+    if (direct.decision === "deny" || direct.matchedProhibitions.length > 0) {
       return denied(
         `Hop ${i} (<${ancestor.id}>) prohibits the request directly (${direct.reason}).`,
         hops,
@@ -218,9 +233,14 @@ export function evaluateDelegated(
   // biome-ignore lint/style/noNonNullAssertion: non-empty checked above
   const leafPolicy = chain[chain.length - 1]!;
   const leaf = evaluate(leafPolicy, req, { now });
-  if (leaf.decision !== "permit") {
+  if (leaf.decision !== "permit" || (strictProhibitions && leaf.matchedProhibitions.length > 0)) {
     return {
-      ...denied(`Leaf policy <${leafPolicy.id}> does not permit: ${leaf.reason}`, hops),
+      ...denied(
+        leaf.decision !== "permit"
+          ? `Leaf policy <${leafPolicy.id}> does not permit: ${leaf.reason}`
+          : `Leaf policy <${leafPolicy.id}> permits only via its odrl:perm conflict strategy over a matched prohibition — prohibitions are strict in a delegation chain.`,
+        hops,
+      ),
       leaf,
     };
   }
@@ -256,11 +276,22 @@ export function evaluateDelegated(
   };
 }
 
+/** The outcome of one delegation-edge check. */
+type EdgeCheck =
+  | { readonly ok: true; readonly duties: readonly ActiveDuty[] }
+  | { readonly ok: false; readonly reason: string };
+
+/** An edge-check failure. */
+function edgeFailure(reason: string): EdgeCheck {
+  return { ok: false, reason };
+}
+
 /**
  * Check one delegation edge parent→child (spec §5.2): the child's structural form,
  * the `odrld:delegatedUnder` back-edge, and the parent's `grantUse` authorization
- * (explicit assignee, depth budget, mandated `nextPolicy`). Returns the failure
- * reason, or `undefined` when the edge is valid.
+ * (explicit assignee, depth budget, mandated `nextPolicy`). On success, returns
+ * the authorization's own duties (minus the structurally-enforced `nextPolicy`
+ * ones) so they join the chain's aggregate duty set.
  */
 function checkDelegationEdge(
   parent: OdrlPolicy,
@@ -268,18 +299,22 @@ function checkDelegationEdge(
   remainingDepth: number,
   req: RequestContext,
   now: Date,
-): string | undefined {
+): EdgeCheck {
   // Structural profile requirements on a delegated hop.
   if (child.type !== "Agreement") {
-    return `a delegated hop must be an odrl:Agreement (got ${child.type ?? "Set"}).`;
+    return edgeFailure(`a delegated hop must be an odrl:Agreement (got ${child.type ?? "Set"}).`);
   }
   if (child.assigner === undefined || child.assignee === undefined) {
-    return "a delegated hop must name both assigner (the delegator) and assignee (the delegate).";
+    return edgeFailure(
+      "a delegated hop must name both assigner (the delegator) and assignee (the delegate).",
+    );
   }
   if (child.delegatedUnder !== parent.id) {
-    return `the hop must declare odrld:delegatedUnder <${parent.id}> (got ${
-      child.delegatedUnder === undefined ? "none" : `<${child.delegatedUnder}>`
-    }).`;
+    return edgeFailure(
+      `the hop must declare odrld:delegatedUnder <${parent.id}> (got ${
+        child.delegatedUnder === undefined ? "none" : `<${child.delegatedUnder}>`
+      }).`,
+    );
   }
 
   // The delegation-authorization request: "may `child.assigner` grantUse this
@@ -295,11 +330,14 @@ function checkDelegationEdge(
   };
 
   // Full evaluation first, so prohibitions on grantUse and the policy's conflict
-  // strategy are honoured (a "permit grantUse + prohibit grantUse" parent denies
-  // under the default prohibit strategy).
+  // strategy are honoured. STRICT in a chain: a matched prohibition on grantUse
+  // denies the edge even where the parent's own `odrl:perm` conflict strategy
+  // would override it (spec §6.2 — prohibitions are strict in a delegation chain).
   const auth = evaluate(parent, authRequest, { now });
-  if (auth.decision !== "permit") {
-    return `the parent policy does not authorise delegation by <${child.assigner}> (${auth.decision}: ${auth.reason}).`;
+  if (auth.decision !== "permit" || auth.matchedProhibitions.length > 0) {
+    return edgeFailure(
+      `the parent policy does not cleanly authorise delegation by <${child.assigner}> (${auth.decision}${auth.matchedProhibitions.length > 0 ? ", with a matched prohibition" : ""}: ${auth.reason}).`,
+    );
   }
 
   // Candidate authorizing rules: explicit `grantUse` action AND an explicit
@@ -310,7 +348,9 @@ function checkDelegationEdge(
     (r) => r.action === "grantUse" && r.assignee === child.assigner,
   );
   if (candidates.length === 0) {
-    return `the parent policy has no grantUse permission explicitly naming <${child.assigner}> as assignee (an assignee-free grantUse does not authorise delegation).`;
+    return edgeFailure(
+      `the parent policy has no grantUse permission explicitly naming <${child.assigner}> as assignee (an assignee-free grantUse does not authorise delegation).`,
+    );
   }
 
   // At least one candidate must clear the depth budget + any mandated nextPolicy.
@@ -318,11 +358,22 @@ function checkDelegationEdge(
   for (const rule of candidates) {
     const failure = checkGrantUseRule(rule, child, remainingDepth);
     if (failure === undefined) {
-      return undefined; // this rule authorises the edge.
+      // This rule authorises the edge. Its own duties condition the delegated
+      // grant (e.g. "inform the owner when delegating") — surface them so the
+      // chain aggregates + `requireDuties` gates on them. The `nextPolicy`
+      // duties are enforced STRUCTURALLY above (the mandated-policy identity
+      // check), not dischargeable via context flags, so they are excluded.
+      // `auth.duties` carries the matched rules' duties + the parent's
+      // policy-level obligations, already projected to ActiveDuty against the
+      // request context.
+      return {
+        ok: true,
+        duties: auth.duties.filter((d) => d.action !== "nextPolicy"),
+      };
     }
     failures.push(failure);
   }
-  return failures.join(" / ");
+  return edgeFailure(failures.join(" / "));
 }
 
 /**

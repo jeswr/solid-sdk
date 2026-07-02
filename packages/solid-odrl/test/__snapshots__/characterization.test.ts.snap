@@ -475,10 +475,10 @@ exports[`characterization: delegation decision matrix > depth exceeded (2 hops u
       "index": 1,
       "ok": false,
       "policyId": "https://agent-a.example/policies/to-b",
-      "reason": "the parent policy does not authorise delegation by <https://agent-a.example/id#it> (notApplicable: No permission or prohibition matches the request.).",
+      "reason": "the parent policy does not cleanly authorise delegation by <https://agent-a.example/id#it> (notApplicable: No permission or prohibition matches the request.).",
     },
   ],
-  "reason": "Hop 1 (<https://agent-a.example/policies/to-b>): the parent policy does not authorise delegation by <https://agent-a.example/id#it> (notApplicable: No permission or prohibition matches the request.).",
+  "reason": "Hop 1 (<https://agent-a.example/policies/to-b>): the parent policy does not cleanly authorise delegation by <https://agent-a.example/id#it> (notApplicable: No permission or prohibition matches the request.).",
 }
 `;
 
@@ -516,7 +516,7 @@ exports[`characterization: delegation decision matrix > expired mid-chain hop �
       "reason": "ok",
     },
   ],
-  "reason": "Hop 1 (<https://agent-a.example/policies/to-b>) does not grant the requested capability to its delegate <https://agent-b.example/id#it> (notApplicable: No permission or prohibition matches the request.) — a delegate cannot receive more than the delegator holds.",
+  "reason": "Hop 1 (<https://agent-a.example/policies/to-b>) does not cleanly grant the requested capability to its delegate <https://agent-b.example/id#it> (notApplicable: No permission or prohibition matches the request.) — a delegate cannot receive more than the delegator holds.",
 }
 `;
 
@@ -532,7 +532,7 @@ exports[`characterization: delegation decision matrix > nextPolicy narrows: out-
       "reason": "ok",
     },
   ],
-  "reason": "Hop 0 (<https://alice.example/policies/root>) does not grant the requested capability to its delegate <https://agent-a.example/id#it> (notApplicable: No permission or prohibition matches the request.) — a delegate cannot receive more than the delegator holds.",
+  "reason": "Hop 0 (<https://alice.example/policies/root>) does not cleanly grant the requested capability to its delegate <https://agent-a.example/id#it> (notApplicable: No permission or prohibition matches the request.) — a delegate cannot receive more than the delegator holds.",
 }
 `;
 
@@ -595,7 +595,7 @@ exports[`characterization: delegation decision matrix > over-broad hop (delegate
       "reason": "ok",
     },
   ],
-  "reason": "Hop 0 (<https://alice.example/policies/root>) does not grant the requested capability to its delegate <https://agent-a.example/id#it> (notApplicable: No permission or prohibition matches the request.) — a delegate cannot receive more than the delegator holds.",
+  "reason": "Hop 0 (<https://alice.example/policies/root>) does not cleanly grant the requested capability to its delegate <https://agent-a.example/id#it> (notApplicable: No permission or prohibition matches the request.) — a delegate cannot receive more than the delegator holds.",
 }
 `;
 

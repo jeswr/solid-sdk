@@ -233,13 +233,20 @@ and can never over-grant):
    never granted the capability cannot have delegated it). Action subsumption
    applies as in the core evaluator (e.g. an ancestor `write` grant covers a
    delegated `append` request; the reverse never holds).
-2. **Prohibitions:** additionally, an ancestor that *directly prohibits* the
-   actual request (evaluated with the real requesting agent) fails the chain —
-   delegation must never launder a request around an upstream prohibition.
-3. **Duties accumulate:** the duties imposed by every matched ancestor grant
-   plus the leaf's are aggregated into the result — delegation never sheds a
-   duty. Under `requireDuties`, the aggregate must be discharged for the permit
-   to stand.
+2. **Prohibitions are STRICT in a chain:** a *matched* prohibition at any hop —
+   against the actual requesting agent, against a hop's delegate in the scope
+   check, on the `grantUse` authorization, or in the leaf — fails the chain,
+   **even where that hop's own `odrl:perm` conflict strategy would override the
+   prohibition for direct use**. Delegation must never launder a request around
+   a prohibition; an agent whose direct access is genuinely permitted by a
+   perm-conflict policy can still exercise it directly (single-policy
+   evaluation retains the policy's declared conflict semantics).
+3. **Duties accumulate:** the duties imposed by every matched ancestor grant,
+   by each authorising `grantUse` edge (e.g. *inform the owner when
+   delegating*; the structurally-enforced `nextPolicy` duties excepted), plus
+   the leaf's, are aggregated into the result — delegation never sheds a duty.
+   Under `requireDuties`, the aggregate must be discharged for the permit to
+   stand.
 
 Finally the **leaf** policy itself must permit the actual request (the
 delegate's own grant, with its own constraints, at evaluation time).
