@@ -59,6 +59,8 @@ describe("scaffold", () => {
       "tsconfig.json",
       "next.config.ts",
       "AGENTS.md",
+      "CONTRIBUTING.md",
+      "SECURITY.md",
       "README.md",
       "public/callback.html",
       "app/layout.tsx",
@@ -149,6 +151,36 @@ describe("scaffold", () => {
   it("generates a README titled with the app name", async () => {
     const readme = await readFile(join(result.targetDir, "README.md"), "utf8");
     expect(readme.startsWith("# My App")).toBe(true);
+  });
+
+  it("ships a CONTRIBUTING.md (gate + supply-chain + issues) with tokens filled in", async () => {
+    const contributing = await readFile(join(result.targetDir, "CONTRIBUTING.md"), "utf8");
+    expect(contributing.length).toBeGreaterThan(0);
+    // The app name is baked into the title (the __CSA_APP_NAME__ token).
+    expect(contributing).toContain("# Contributing to My App");
+    // Names the actual gate scripts.
+    for (const script of ["npm run lint", "npm run typecheck", "npm test", "npm run build"]) {
+      expect(contributing, `CONTRIBUTING.md must name ${script}`).toContain(script);
+    }
+    // Covers the supply-chain rule.
+    expect(contributing).toContain("ignore-scripts=true");
+    // No un-substituted placeholder token survives into a scaffolded app.
+    expect(contributing).not.toContain("__CSA_");
+    // No repo was given → the your-org/your-repo placeholder is used.
+    expect(contributing).toContain("your-org/your-repo");
+  });
+
+  it("ships a SECURITY.md (private advisory reporting, non-promissory) with tokens filled in", async () => {
+    const security = await readFile(join(result.targetDir, "SECURITY.md"), "utf8");
+    expect(security.length).toBeGreaterThan(0);
+    // The private-reporting channel is GitHub Security Advisories.
+    expect(security).toContain("Security Advisories");
+    expect(security.toLowerCase()).toContain("vulnerability");
+    // Response expectations are NON-promissory (no hard SLA guarantee).
+    expect(security).toMatch(/not guaranteed/i);
+    // No un-substituted placeholder token survives; the placeholder repo is used.
+    expect(security).not.toContain("__CSA_");
+    expect(security).toContain("your-org/your-repo");
   });
 
   it("refuses a non-empty target dir", async () => {
@@ -318,6 +350,20 @@ describe("scaffold with --repo", () => {
     expect(config).toContain('"jeswr/repo-app"');
     expect(config).not.toContain("__CSA_REPO__");
     expect(config).not.toContain("__CSA_APP_NAME__");
+  });
+
+  it("bakes the normalised repo into CONTRIBUTING.md + SECURITY.md (no placeholder)", async () => {
+    for (const doc of ["CONTRIBUTING.md", "SECURITY.md"]) {
+      const src = await readFile(join(result.targetDir, doc), "utf8");
+      expect(src, `${doc} must use the given repo`).toContain("jeswr/repo-app");
+      // With --repo given, the your-org/your-repo placeholder is NOT left behind,
+      // and no raw token survives.
+      expect(src, `${doc} must not keep the placeholder`).not.toContain("your-org/your-repo");
+      expect(src, `${doc} must not keep a raw token`).not.toContain("__CSA_");
+    }
+    // The app name token is filled in too.
+    const contributing = await readFile(join(result.targetDir, "CONTRIBUTING.md"), "utf8");
+    expect(contributing).toContain("# Contributing to Repo App");
   });
 });
 

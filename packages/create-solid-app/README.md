@@ -81,8 +81,11 @@ Flags:
 What it does: copies the bundled template (minus `node_modules`/`.next`/`tsconfig.tsbuildinfo`
 — the committed `package-lock.json` IS copied, for a resolution-free first install),
 substitutes `package.json` `name`, the app-shell `APP_NAME` + (with `--repo`) the
-feedback `FEEDBACK_REPO` in `lib/app-shell-config.ts`, generates a `README.md`
-titled with the app name, optionally installs deps, optionally boots a seeded dev pod.
+feedback `FEEDBACK_REPO` in `lib/app-shell-config.ts`, fills the app-name / repo
+tokens in the shipped `CONTRIBUTING.md` + `SECURITY.md` (the gate + supply-chain
+rules and the private GitHub-Security-Advisories reporting channel — editable
+afterwards), generates a `README.md` titled with the app name, optionally installs
+deps, optionally boots a seeded dev pod.
 
 ## What works standalone (S0–S1)
 

@@ -266,6 +266,41 @@ async function substituteAppShellConfig(
   await writeFile(configPath, src, "utf8");
 }
 
+/**
+ * Template docs shipped verbatim (NOT dotfiles, so no DOTFILE_RENAMES shim — a
+ * `npm pack --dry-run` confirms both survive the published tarball) that carry the
+ * `__CSA_APP_NAME__` / `__CSA_REPO__` placeholder tokens, filled in at scaffold
+ * time so a generated app never shows a raw token.
+ */
+const DOC_TOKEN_FILES: ReadonlyArray<string> = ["CONTRIBUTING.md", "SECURITY.md"];
+
+/**
+ * Fill the `__CSA_APP_NAME__` / `__CSA_REPO__` tokens in the shipped
+ * CONTRIBUTING.md / SECURITY.md, reusing the SAME token convention as
+ * `lib/app-shell-config.ts` (rather than inventing a new one). Unlike the config
+ * — which is CODE with a runtime `startsWith("__CSA_")` fallback so the verbatim
+ * template still compiles — these are prose read by a human, so we ALWAYS
+ * substitute: `__CSA_APP_NAME__` -> the app name, and `__CSA_REPO__` -> the
+ * normalised `owner/repo` when `--repo` was given, else the documented
+ * `your-org/your-repo` placeholder (the same fallback the app-shell config uses),
+ * which the app author edits. `appName` is interpolated raw (matching the README
+ * generation); `repo` is already validated to a safe `owner/repo` charset by
+ * normalizeRepo, so both are safe in the emitted markdown/URLs.
+ */
+async function substituteDocTokens(
+  targetDir: string,
+  values: { appName: string; repo?: string },
+): Promise<void> {
+  const repo = values.repo ?? "your-org/your-repo";
+  for (const rel of DOC_TOKEN_FILES) {
+    const docPath = join(targetDir, rel);
+    if (!existsSync(docPath)) continue; // a template without the doc — nothing to do.
+    let src = await readFile(docPath, "utf8");
+    src = src.replaceAll("__CSA_APP_NAME__", values.appName).replaceAll("__CSA_REPO__", repo);
+    await writeFile(docPath, src, "utf8");
+  }
+}
+
 /** Escape a value for embedding inside a double-quoted JS/TS string literal. */
 function jsStringEscape(value: string): string {
   return value
@@ -424,9 +459,10 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
   // NOT substituted (so the verbatim template still builds), so we only rewrite
   // the tokens we actually have a value for — a missing repo leaves the
   // `your-org/your-repo` placeholder for the user to edit.
+  const repo = normalizeRepo(opts.repo);
   await substituteAppShellConfig(targetDir, {
     appName: opts.appName,
-    repo: normalizeRepo(opts.repo),
+    repo,
   });
 
   // Substitution 4: the "pick a data model → bound component" path. Swap the
@@ -436,7 +472,14 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
   // ships, so it is a no-op — only a specific model rewrites the sentinel regions.
   await substituteDataModel(targetDir, opts.dataModel ?? DEFAULT_DATA_MODEL);
 
-  // Substitution 5: rename the publish-safe non-dotfile shims to their real
+  // Substitution 5: fill the CONTRIBUTING.md / SECURITY.md doc tokens
+  // (`__CSA_APP_NAME__` / `__CSA_REPO__`) — the app name always, and the repo
+  // (`owner/repo`) when `--repo` was given, else the `your-org/your-repo`
+  // placeholder the app author edits. Reuses the app-shell-config token
+  // convention; these docs are non-dotfiles copied verbatim (no rename shim).
+  await substituteDocTokens(targetDir, { appName: opts.appName, repo });
+
+  // Substitution 6: rename the publish-safe non-dotfile shims to their real
   // dotfile names (e.g. `npmrc` -> `.npmrc`). These ship under a non-dotfile name
   // because npm strips the real dotfile from a published tarball — see
   // DOTFILE_RENAMES. Done after the verbatim copy so the generated app ends up
