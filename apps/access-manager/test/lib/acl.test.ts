@@ -100,7 +100,7 @@ describe("removeAgentFromEntry", () => {
   it("removes only the named agent; public access on the node survives", async () => {
     const pod = buildPod();
     const { read } = await entriesAt(pod, REPORT_ACL);
-    removeAgentFromEntry(read.dataset, `${REPORT_ACL}#shared`, BOB, OWNER);
+    removeAgentFromEntry(read.dataset, `${REPORT_ACL}#shared`, BOB, OWNER, REPORT);
     const entries = projectEntries(read.dataset);
     const shared = entries.find((e) => e.authIri === `${REPORT_ACL}#shared`);
     expect(shared?.agents).toEqual([]);
@@ -118,16 +118,16 @@ describe("removeAgentFromEntry", () => {
   acl:accessTo <${REPORT}> ; acl:mode acl:Read .`,
     );
     const { read } = await entriesAt(pod, REPORT_ACL);
-    removeAgentFromEntry(read.dataset, `${REPORT_ACL}#only-bob`, BOB, OWNER);
+    removeAgentFromEntry(read.dataset, `${REPORT_ACL}#only-bob`, BOB, OWNER, REPORT);
     expect(projectEntries(read.dataset).some((e) => e.authIri.endsWith("#only-bob"))).toBe(false);
   });
 
   it("REFUSES to strip the owner's last Control (self-lockout guard)", async () => {
     const pod = buildPod();
     const { read } = await entriesAt(pod, REPORT_ACL);
-    expect(() => removeAgentFromEntry(read.dataset, `${REPORT_ACL}#owner`, OWNER, OWNER)).toThrow(
-      LockoutError,
-    );
+    expect(() =>
+      removeAgentFromEntry(read.dataset, `${REPORT_ACL}#owner`, OWNER, OWNER, REPORT),
+    ).toThrow(LockoutError);
   });
 });
 
@@ -135,7 +135,7 @@ describe("removePublicAccess", () => {
   it("removes foaf:Agent from every node; named agents unaffected", async () => {
     const pod = buildPod();
     const { read } = await entriesAt(pod, REPORT_ACL);
-    removePublicAccess(read.dataset, OWNER);
+    removePublicAccess(read.dataset, OWNER, REPORT);
     const entries = projectEntries(read.dataset);
     expect(entries.some((e) => e.isPublic)).toBe(false);
     expect(entries.find((e) => e.authIri.endsWith("#shared"))?.agents).toEqual([BOB]);
@@ -154,7 +154,7 @@ describe("setAgentModes", () => {
   acl:accessTo <${REPORT}> ; acl:mode acl:Read, acl:Write .`,
     );
     const { read } = await entriesAt(pod, REPORT_ACL);
-    setAgentModes(read.dataset, REPORT_ACL, `${REPORT_ACL}#bob`, BOB, ["Read"], OWNER);
+    setAgentModes(read.dataset, REPORT_ACL, `${REPORT_ACL}#bob`, BOB, ["Read"], OWNER, REPORT);
     const bob = projectEntries(read.dataset).find((e) => e.agents.includes(BOB));
     expect(bob?.modes).toEqual(["Read"]); // downgraded Write → gone
   });
@@ -162,7 +162,15 @@ describe("setAgentModes", () => {
   it("SPLITS the agent out of a shared node so others keep their access", async () => {
     const pod = buildPod();
     const { read } = await entriesAt(pod, REPORT_ACL); // #shared = bob + public, Read
-    setAgentModes(read.dataset, REPORT_ACL, `${REPORT_ACL}#shared`, BOB, ["Read", "Write"], OWNER);
+    setAgentModes(
+      read.dataset,
+      REPORT_ACL,
+      `${REPORT_ACL}#shared`,
+      BOB,
+      ["Read", "Write"],
+      OWNER,
+      REPORT,
+    );
     const entries = projectEntries(read.dataset);
     const publicEntry = entries.find((e) => e.isPublic);
     expect(publicEntry?.modes).toEqual(["Read"]); // public unchanged
@@ -175,7 +183,7 @@ describe("setAgentModes", () => {
   it("empty modes = removal (delegates to the lockout-guarded remove)", async () => {
     const pod = buildPod();
     const { read } = await entriesAt(pod, REPORT_ACL);
-    setAgentModes(read.dataset, REPORT_ACL, `${REPORT_ACL}#shared`, BOB, [], OWNER);
+    setAgentModes(read.dataset, REPORT_ACL, `${REPORT_ACL}#shared`, BOB, [], OWNER, REPORT);
     expect(projectEntries(read.dataset).some((e) => e.agents.includes(BOB))).toBe(false);
   });
 });
@@ -255,8 +263,8 @@ describe("ownerHasControl", () => {
   it("true only for a DIRECT agent Control entry", async () => {
     const pod = buildPod();
     const { read } = await entriesAt(pod, REPORT_ACL);
-    expect(ownerHasControl(read.dataset, OWNER)).toBe(true);
-    expect(ownerHasControl(read.dataset, BOB)).toBe(false);
+    expect(ownerHasControl(read.dataset, OWNER, REPORT)).toBe(true);
+    expect(ownerHasControl(read.dataset, BOB, REPORT)).toBe(false);
   });
 });
 
@@ -264,7 +272,7 @@ describe("updateAclWithRetry (CAS loop)", () => {
   it("writes with If-Match from the fresh read", async () => {
     const pod = buildPod();
     await updateAclWithRetry(REPORT_ACL, pod.fetch, (dataset) => {
-      removePublicAccess(dataset, OWNER);
+      removePublicAccess(dataset, OWNER, REPORT);
     });
     const { entries } = await entriesAt(pod, REPORT_ACL);
     expect(entries.some((e) => e.isPublic)).toBe(false);
@@ -283,7 +291,7 @@ describe("updateAclWithRetry (CAS loop)", () => {
       return undefined;
     };
     await updateAclWithRetry(REPORT_ACL, pod.fetch, (dataset) => {
-      removePublicAccess(dataset, OWNER);
+      removePublicAccess(dataset, OWNER, REPORT);
     });
     const { entries } = await entriesAt(pod, REPORT_ACL);
     expect(entries.some((e) => e.isPublic)).toBe(false);
@@ -299,7 +307,9 @@ describe("updateAclWithRetry (CAS loop)", () => {
       return undefined;
     };
     await expect(
-      updateAclWithRetry(REPORT_ACL, pod.fetch, (dataset) => removePublicAccess(dataset, OWNER)),
+      updateAclWithRetry(REPORT_ACL, pod.fetch, (dataset) =>
+        removePublicAccess(dataset, OWNER, REPORT),
+      ),
     ).rejects.toBeInstanceOf(AclConflictError);
   });
 
@@ -308,7 +318,7 @@ describe("updateAclWithRetry (CAS loop)", () => {
     const before = pod.etag(REPORT_ACL);
     await expect(
       updateAclWithRetry(REPORT_ACL, pod.fetch, (dataset) => {
-        removeAgentFromEntry(dataset, `${REPORT_ACL}#owner`, OWNER, OWNER);
+        removeAgentFromEntry(dataset, `${REPORT_ACL}#owner`, OWNER, OWNER, REPORT);
       }),
     ).rejects.toBeInstanceOf(LockoutError);
     expect(pod.etag(REPORT_ACL)).toBe(before); // nothing written
@@ -330,7 +340,7 @@ describe("grantOnResource", () => {
     const effective = await readEffectiveAcl(target, POD, pod.fetch);
     expect(effective.owned).toBe(true); // now has its own ACL
     expect(effective.entries.some((e) => e.agents.includes(REQUESTER))).toBe(true);
-    expect(ownerHasControl(effective.dataset, OWNER)).toBe(true); // no lock-out
+    expect(ownerHasControl(effective.dataset, OWNER, target)).toBe(true); // no lock-out
   });
 
   it("loses the create race gracefully and falls through to the CAS update path", async () => {
@@ -356,7 +366,7 @@ describe("grantOnResource", () => {
     await grantOnResource(target, POD, OWNER, REQUESTER, ["Read"], pod.fetch);
     const effective = await readEffectiveAcl(target, POD, pod.fetch);
     expect(effective.entries.some((e) => e.agents.includes(REQUESTER))).toBe(true);
-    expect(ownerHasControl(effective.dataset, OWNER)).toBe(true); // winner's doc kept
+    expect(ownerHasControl(effective.dataset, OWNER, target)).toBe(true); // winner's doc kept
   });
 });
 
@@ -374,7 +384,7 @@ describe("removeAuthenticatedFromEntry (roborev: class access is agentClass, not
     );
     const { read } = await entriesAt(pod, REPORT_ACL);
     const { removeAuthenticatedFromEntry } = await import("../../src/lib/acl.js");
-    removeAuthenticatedFromEntry(read.dataset, `${REPORT_ACL}#auth`, OWNER);
+    removeAuthenticatedFromEntry(read.dataset, `${REPORT_ACL}#auth`, OWNER, REPORT);
     const entries = projectEntries(read.dataset);
     const entry = entries.find((e) => e.authIri.endsWith("#auth"));
     expect(entry?.isAuthenticated).toBe(false);
@@ -394,7 +404,7 @@ describe("removeAuthenticatedFromEntry (roborev: class access is agentClass, not
     );
     const { read } = await entriesAt(pod, REPORT_ACL);
     const { removeAuthenticatedFromEntry } = await import("../../src/lib/acl.js");
-    removeAuthenticatedFromEntry(read.dataset, `${REPORT_ACL}#auth`, OWNER);
+    removeAuthenticatedFromEntry(read.dataset, `${REPORT_ACL}#auth`, OWNER, REPORT);
     expect(projectEntries(read.dataset).some((e) => e.authIri.endsWith("#auth"))).toBe(false);
   });
 });
@@ -413,9 +423,9 @@ describe("class-removal lockout guard (roborev round 2 Medium)", () => {
     const { read } = await entriesAt(pod, REPORT_ACL);
     const { removeAuthenticatedFromEntry, removePublicFromEntry, removePublicAccess } =
       await import("../../src/lib/acl.js");
-    expect(() => removeAuthenticatedFromEntry(read.dataset, `${REPORT_ACL}#auth`, OWNER)).toThrow(
-      LockoutError,
-    );
+    expect(() =>
+      removeAuthenticatedFromEntry(read.dataset, `${REPORT_ACL}#auth`, OWNER, REPORT),
+    ).toThrow(LockoutError);
 
     // Same rule for the public paths.
     pod.seed(
@@ -426,18 +436,63 @@ describe("class-removal lockout guard (roborev round 2 Medium)", () => {
   acl:accessTo <${REPORT}> ; acl:mode acl:Read, acl:Write, acl:Control .`,
     );
     const second = await entriesAt(pod, REPORT_ACL);
-    expect(() => removePublicFromEntry(second.read.dataset, `${REPORT_ACL}#pub`, OWNER)).toThrow(
-      LockoutError,
-    );
+    expect(() =>
+      removePublicFromEntry(second.read.dataset, `${REPORT_ACL}#pub`, OWNER, REPORT),
+    ).toThrow(LockoutError);
     const third = await entriesAt(pod, REPORT_ACL);
-    expect(() => removePublicAccess(third.read.dataset, OWNER)).toThrow(LockoutError);
+    expect(() => removePublicAccess(third.read.dataset, OWNER, REPORT)).toThrow(LockoutError);
   });
 
   it("allows class removal when the owner keeps direct Control", async () => {
     const pod = buildPod(); // #owner has direct Control; #shared is public Read
     const { read } = await entriesAt(pod, REPORT_ACL);
     const { removePublicFromEntry } = await import("../../src/lib/acl.js");
-    removePublicFromEntry(read.dataset, `${REPORT_ACL}#shared`, OWNER);
+    removePublicFromEntry(read.dataset, `${REPORT_ACL}#shared`, OWNER, REPORT);
     expect(projectEntries(read.dataset).some((e) => e.isPublic)).toBe(false);
+  });
+});
+
+describe("scope-aware lockout guard (roborev round 3 Medium)", () => {
+  it("an unrelated-resource Control entry in the SAME document does not satisfy the guard", async () => {
+    const pod = buildPod();
+    const OTHER = `${POD}docs/other.ttl`;
+    // The owner's only Control APPLYING TO REPORT is the authenticated-class
+    // entry; the direct Control entry in the same doc names a DIFFERENT
+    // resource, so it must not count.
+    pod.seed(
+      REPORT_ACL,
+      `${PREFIXES}
+<${REPORT_ACL}#other> a acl:Authorization ; acl:agent <${OWNER}> ;
+  acl:accessTo <${OTHER}> ; acl:mode acl:Read, acl:Write, acl:Control .
+<${REPORT_ACL}#auth> a acl:Authorization ;
+  acl:agentClass acl:AuthenticatedAgent ;
+  acl:accessTo <${REPORT}> ; acl:mode acl:Read, acl:Write, acl:Control .`,
+    );
+    const { read } = await entriesAt(pod, REPORT_ACL);
+    const { removeAuthenticatedFromEntry, ownerRetainsAnyControl } = await import(
+      "../../src/lib/acl.js"
+    );
+    expect(ownerRetainsAnyControl(read.dataset, OWNER, OTHER)).toBe(true);
+    expect(() =>
+      removeAuthenticatedFromEntry(read.dataset, `${REPORT_ACL}#auth`, OWNER, REPORT),
+    ).toThrow(LockoutError);
+  });
+
+  it("an ancestor acl:default Control entry DOES apply to descendants", async () => {
+    const pod = buildPod();
+    // Root ACL: owner Control via acl:default over the whole pod. Removing a
+    // public class entry for a descendant is then safe.
+    pod.seed(
+      `${POD}.acl`,
+      `${pod.body(`${POD}.acl`) ?? ""}
+<${POD}.acl#pub> a <http://www.w3.org/ns/auth/acl#Authorization> ;
+  <http://www.w3.org/ns/auth/acl#agentClass> <http://xmlns.com/foaf/0.1/Agent> ;
+  <http://www.w3.org/ns/auth/acl#default> <${POD}> ;
+  <http://www.w3.org/ns/auth/acl#mode> <http://www.w3.org/ns/auth/acl#Read> .`,
+    );
+    const read = await entriesAt(pod, `${POD}.acl`);
+    const { removePublicFromEntry } = await import("../../src/lib/acl.js");
+    removePublicFromEntry(read.read.dataset, `${POD}.acl#pub`, OWNER, `${POD}contacts/alice.ttl`);
+    expect(projectEntries(read.read.dataset).some((e) => e.isPublic)).toBe(false);
   });
 });

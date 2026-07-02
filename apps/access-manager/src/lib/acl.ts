@@ -22,6 +22,7 @@ import type { DatasetCore } from "@rdfjs/types";
 import { AclResource, Authorization } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import {
+  isWithinStorage,
   PreconditionFailedError,
   putIfMatch,
   putIfNoneMatch,
@@ -231,10 +232,35 @@ export async function readEffectiveAcl(
   throw new NoAclFoundError(resourceUrl);
 }
 
-/** Whether the owner retains acl:Control via a DIRECT acl:agent entry. */
-export function ownerHasControl(dataset: DatasetCore, ownerWebId: string): boolean {
+/**
+ * Whether an entry APPLIES to a resource: it names the resource directly
+ * (acl:accessTo) or covers it via acl:default on the resource itself or an
+ * ancestor container. Used to keep the lockout guards SCOPE-AWARE — a Control
+ * entry for an unrelated resource in the same ACL document must not count.
+ */
+export function entryAppliesTo(entry: AclEntry, resource: string): boolean {
+  if (entry.accessTo.some((t) => sameResource(t, resource))) return true;
+  return entry.defaultFor.some((d) => sameResource(d, resource) || isWithinStorage(resource, d));
+}
+
+/**
+ * Whether the owner retains acl:Control OVER `resource` via a DIRECT
+ * acl:agent entry in this document (scope-aware — entries for unrelated
+ * resources do not count).
+ */
+export function ownerHasControl(
+  dataset: DatasetCore,
+  ownerWebId: string,
+  resource: string,
+): boolean {
   for (const entry of projectEntries(dataset)) {
-    if (entry.agents.includes(ownerWebId) && entry.modes.includes("Control")) return true;
+    if (
+      entry.agents.includes(ownerWebId) &&
+      entry.modes.includes("Control") &&
+      entryAppliesTo(entry, resource)
+    ) {
+      return true;
+    }
   }
   return false;
 }
@@ -248,9 +274,13 @@ export function ownerHasControl(dataset: DatasetCore, ownerWebId: string): boole
  * control is class-based, and — worse — the class removals previously had no
  * guard at all, the roborev finding).
  */
-export function ownerRetainsAnyControl(dataset: DatasetCore, ownerWebId: string): boolean {
+export function ownerRetainsAnyControl(
+  dataset: DatasetCore,
+  ownerWebId: string,
+  resource: string,
+): boolean {
   for (const entry of projectEntries(dataset)) {
-    if (!entry.modes.includes("Control")) continue;
+    if (!entry.modes.includes("Control") || !entryAppliesTo(entry, resource)) continue;
     if (entry.agents.includes(ownerWebId) || entry.isPublic || entry.isAuthenticated) return true;
   }
   return false;
@@ -284,11 +314,12 @@ export function removeAgentFromEntry(
   authIri: string,
   agentWebId: string,
   ownerWebId: string,
+  resource: string,
 ): void {
   const auth = authAt(dataset, authIri);
   auth.agent.delete(agentWebId);
   dropIfSubjectless(dataset, authIri);
-  if (agentWebId === ownerWebId && !ownerHasControl(dataset, ownerWebId)) {
+  if (agentWebId === ownerWebId && !ownerRetainsAnyControl(dataset, ownerWebId, resource)) {
     throw new LockoutError(authIri);
   }
 }
@@ -302,11 +333,12 @@ export function removePublicFromEntry(
   dataset: DatasetCore,
   authIri: string,
   ownerWebId: string,
+  resource: string,
 ): void {
   const auth = authAt(dataset, authIri);
   auth.agentClass.delete(FOAF.Agent);
   dropIfSubjectless(dataset, authIri);
-  if (!ownerRetainsAnyControl(dataset, ownerWebId)) throw new LockoutError(authIri);
+  if (!ownerRetainsAnyControl(dataset, ownerWebId, resource)) throw new LockoutError(authIri);
 }
 
 /**
@@ -319,18 +351,23 @@ export function removeAuthenticatedFromEntry(
   dataset: DatasetCore,
   authIri: string,
   ownerWebId: string,
+  resource: string,
 ): void {
   const auth = authAt(dataset, authIri);
   auth.agentClass.delete(ACL.AuthenticatedAgent);
   dropIfSubjectless(dataset, authIri);
-  if (!ownerRetainsAnyControl(dataset, ownerWebId)) throw new LockoutError(authIri);
+  if (!ownerRetainsAnyControl(dataset, ownerWebId, resource)) throw new LockoutError(authIri);
 }
 
 /**
  * MUTATION: remove public (foaf:Agent) access from every authorization.
  * Lockout-guarded (same rule as the per-entry class removals).
  */
-export function removePublicAccess(dataset: DatasetCore, ownerWebId: string): void {
+export function removePublicAccess(
+  dataset: DatasetCore,
+  ownerWebId: string,
+  resource: string,
+): void {
   const acl = new AclResource(dataset, DataFactory);
   const authIris = [...acl.authorizations].map((a) => a.value);
   for (const authIri of authIris) {
@@ -340,7 +377,8 @@ export function removePublicAccess(dataset: DatasetCore, ownerWebId: string): vo
       dropIfSubjectless(dataset, authIri);
     }
   }
-  if (!ownerRetainsAnyControl(dataset, ownerWebId)) throw new LockoutError("public access");
+  if (!ownerRetainsAnyControl(dataset, ownerWebId, resource))
+    throw new LockoutError("public access");
 }
 
 /**
@@ -356,9 +394,10 @@ export function setAgentModes(
   agentWebId: string,
   modes: readonly WacMode[],
   ownerWebId: string,
+  resource: string,
 ): void {
   if (modes.length === 0) {
-    removeAgentFromEntry(dataset, authIri, agentWebId, ownerWebId);
+    removeAgentFromEntry(dataset, authIri, agentWebId, ownerWebId, resource);
     return;
   }
   const auth = authAt(dataset, authIri);
@@ -383,7 +422,7 @@ export function setAgentModes(
       ...(dflt !== undefined ? { defaultFor: dflt } : {}),
     });
   }
-  if (agentWebId === ownerWebId && !ownerHasControl(dataset, ownerWebId)) {
+  if (agentWebId === ownerWebId && !ownerRetainsAnyControl(dataset, ownerWebId, resource)) {
     throw new LockoutError(authIri);
   }
 }
@@ -522,7 +561,7 @@ export async function grantOnResource(
     const aclUrl = await discoverAclUrl(resourceUrl, fetchFn);
     // Belt-and-braces: a fresh own ACL must NEVER omit the owner's Control
     // (the inherited entries normally carry it; if they don't, add it).
-    if (!ownerHasControl(materialized, ownerWebId)) {
+    if (!ownerHasControl(materialized, ownerWebId, resourceUrl)) {
       createAuthorization(materialized, aclUrl, {
         agents: [ownerWebId],
         modes: ALL_MODES,

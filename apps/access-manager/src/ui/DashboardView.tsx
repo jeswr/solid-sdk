@@ -67,11 +67,11 @@ export function DashboardView({
       persist: async () => {
         await updateAclWithRetry(aclUrl, session.fetch, (dataset) => {
           if (line.agent === PUBLIC_AGENT) {
-            removePublicFromEntry(dataset, line.authIri, session.webId);
+            removePublicFromEntry(dataset, line.authIri, session.webId, url);
           } else if (line.agent === AUTHENTICATED_AGENT) {
-            removeAuthenticatedFromEntry(dataset, line.authIri, session.webId);
+            removeAuthenticatedFromEntry(dataset, line.authIri, session.webId, url);
           } else {
-            removeAgentFromEntry(dataset, line.authIri, line.agent, session.webId);
+            removeAgentFromEntry(dataset, line.authIri, line.agent, session.webId, url);
           }
         });
         onChanged();
@@ -92,7 +92,7 @@ export function DashboardView({
         }),
       persist: async () => {
         await updateAclWithRetry(aclUrl, session.fetch, (dataset) => {
-          setAgentModes(dataset, aclUrl, line.authIri, line.agent, ["Read"], session.webId);
+          setAgentModes(dataset, aclUrl, line.authIri, line.agent, ["Read"], session.webId, url);
         });
         onChanged();
       },

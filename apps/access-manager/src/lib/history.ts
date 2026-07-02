@@ -216,7 +216,7 @@ export async function retractGrantFromTarget(
         entry.accessTo.some((t) => t === target) &&
         sameModeSet(entry.modes, modes)
       ) {
-        removeAgentFromEntry(dataset, authIri, agent, ownerWebId);
+        removeAgentFromEntry(dataset, authIri, agent, ownerWebId, target);
       }
     }
   });
