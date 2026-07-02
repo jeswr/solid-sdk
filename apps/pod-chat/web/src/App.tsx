@@ -7,7 +7,13 @@
 // SessionProvider patched via the @jeswr/solid-elements PROACTIVE auth-fetch seam
 // (`installProactiveAuthFetch`, task #123), so every read/write PROACTIVELY carries
 // the DPoP token on the first request to an allowed origin (no per-resource 401-dance).
-import { AccountMenu, FeedbackButton, ThemeToggle } from "@jeswr/app-shell";
+import {
+  AccountMenu,
+  Button,
+  FeedbackButton,
+  ThemeToggle,
+  useSolidExtensionPresent,
+} from "@jeswr/app-shell";
 import { ChatRooms } from "@jeswr/pod-chat/ui";
 // SOLID-ELEMENTS (#67/#68/#70 D-parity rollout): the framework-agnostic W3C Web
 // Component <jeswr-loading> — a Lit custom element (spinner + polite-live label,
@@ -36,6 +42,12 @@ import { LoginScreen } from "./LoginScreen";
 
 export function App() {
   const { webId, session, logout, autologinPending, restoring } = useSession();
+  // Cross-app parity (bead suite-tracker-lpo, rolled out from pod-drive): when the
+  // Solid browser extension is present it OWNS the account surface (its pinned avatar
+  // menu shows identity + sign-out), so this app's full <AccountMenu/> would DUPLICATE
+  // it. We hide the AccountMenu in that case — but keep a minimal Sign-out, since
+  // pod-chat still holds its OWN independent SessionProvider session here.
+  const extensionPresent = useSolidExtensionPresent();
 
   if (!webId || !session) {
     // Autologin (a Pod-Manager deep-link or a redirect return) is silently signing
@@ -109,12 +121,26 @@ export function App() {
             webId={webId}
           />
           <ThemeToggle />
-          <AccountMenu
-            webId={webId}
-            displayName={session.displayName}
-            avatarUrl={session.avatarUrl}
-            onSignOut={logout}
-          />
+          {/* When the browser extension is present it owns the account surface (its pinned
+              avatar menu shows identity + sign-out), so the app's full <AccountMenu/> — avatar,
+              display name, WebID — would DUPLICATE it. We drop that duplicated profile display.
+              But pod-chat still holds its OWN independent SessionProvider session here (it has
+              not yet been wired to consume the extension's identity), so we must NOT strand the
+              user: keep a minimal Sign-out control that calls this app's own logout. Once the app
+              consumes the extension's identity (no independent session to sign out of), even this
+              goes. */}
+          {extensionPresent ? (
+            <Button variant="ghost" onClick={logout}>
+              Sign out
+            </Button>
+          ) : (
+            <AccountMenu
+              webId={webId}
+              displayName={session.displayName}
+              avatarUrl={session.avatarUrl}
+              onSignOut={logout}
+            />
+          )}
         </div>
       </header>
       {session.podRootIsFallback ? (
