@@ -359,10 +359,12 @@ async function completeFromSnapshot(
 
   // Final CAS: Approving → Approved (+ grantRef). Re-read for a fresh ETag; a
   // 412 here means another resumer finished — re-read and accept Approved.
+  // ONLY an Approving request is ever flipped — any other observed state
+  // (Approved: done; anything else: unexpected, leave it alone) stops the loop.
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const current = await readAccessRequest(requestUrl, ctx.fetch);
     if (!current) break;
-    if (current.status === "Approved") break;
+    if (current.status !== "Approving") break;
     const record = new AccmRecord(current.url, current.dataset, DataFactory);
     record.status = "Approved";
     record.grantRef = gUrl;
