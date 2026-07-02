@@ -15,7 +15,13 @@
 // discovery (resolvePhotosRoot — schema:Photograph instanceContainer, else
 // ${podRoot}photos/). Discovery is async, so we show a brief "finding your
 // photos…" state and surface a banner when either fallback is used.
-import { AccountMenu, FeedbackButton, ThemeToggle } from "@jeswr/app-shell";
+import {
+  AccountMenu,
+  Button,
+  FeedbackButton,
+  ThemeToggle,
+  useSolidExtensionPresent,
+} from "@jeswr/app-shell";
 import { PhotoGallery } from "@jeswr/pod-photos/ui";
 // SOLID-ELEMENTS PILOT (#115): the framework-agnostic W3C Web Components consumed
 // through the @lit/react adapter. <Loading> is a Lit custom element (spinner +
@@ -36,6 +42,9 @@ import { type PhotosRoot, resolvePhotosRoot } from "./photos-root";
 export function App() {
   const { webId, session, logout, autologinPending, restoring } = useSession();
   const [photosRoot, setPhotosRoot] = useState<PhotosRoot | null>(null);
+  // Cross-app parity (bead suite-tracker-lpo): when the Solid browser extension is
+  // present it owns the account surface, so the app's <AccountMenu/> would duplicate it.
+  const extensionPresent = useSolidExtensionPresent();
 
   // Resolve the photos container under the derived pod root once a session
   // exists. Best-effort + cancellation-safe: a logout/identity change clears the
@@ -118,12 +127,26 @@ export function App() {
             webId={webId}
           />
           <ThemeToggle />
-          <AccountMenu
-            webId={webId}
-            displayName={session.displayName}
-            avatarUrl={session.avatarUrl}
-            onSignOut={logout}
-          />
+          {/* When the browser extension is present it owns the account surface (its pinned
+              avatar menu shows identity + sign-out), so the app's full <AccountMenu/> — avatar,
+              display name, WebID — would DUPLICATE it. We drop that duplicated profile display.
+              But pod-photos still holds its OWN independent SessionProvider session here (it has
+              not yet been wired to consume the extension's identity — the bead's "skip own login
+              when extension present" follow-up), so we must NOT strand the user: keep a minimal
+              Sign-out control that calls this app's own logout. Once the app consumes the
+              extension's identity (no independent session to sign out of), even this goes. */}
+          {extensionPresent ? (
+            <Button variant="ghost" onClick={logout}>
+              Sign out
+            </Button>
+          ) : (
+            <AccountMenu
+              webId={webId}
+              displayName={session.displayName}
+              avatarUrl={session.avatarUrl}
+              onSignOut={logout}
+            />
+          )}
         </div>
       </header>
       {session.podRootIsFallback ? (
