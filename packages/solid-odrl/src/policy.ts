@@ -20,7 +20,6 @@ import type {
 import {
   ACTION_IRI,
   CONFLICT_IRI,
-  type ConflictStrategy,
   IRI_TO_ACTION,
   IRI_TO_CONFLICT,
   IRI_TO_LEFT_OPERAND,
@@ -330,29 +329,38 @@ export async function parsePolicy(
   return policyFromRdf(dataset);
 }
 
-/** Project a {@link PolicyNode} to a plain {@link OdrlPolicy}, or `undefined`. */
-function projectPolicy(node: PolicyNode): OdrlPolicy | undefined {
-  // Determine the subtype from rdf:type (first recognised), default Set.
-  let type: PolicyType | undefined;
-  for (const t of node.types) {
+/** The first recognised ODRL policy subtype among a node's rdf:type terms. */
+function firstPolicyType(
+  types: ReadonlySet<{ termType: string; value: string }>,
+): PolicyType | undefined {
+  for (const t of types) {
     if (t.termType === "NamedNode") {
       const pt = policyTypeOf(t.value);
       if (pt !== undefined) {
-        type = pt;
-        break;
+        return pt;
       }
     }
   }
+  return undefined;
+}
 
+/** Project the `profile` field: omitted (none), a scalar (one), or an array (many). */
+function profileField(profiles: readonly string[]): { profile?: string | readonly string[] } {
+  if (profiles.length === 0) {
+    return {};
+  }
+  return { profile: profiles.length === 1 ? profiles[0] : profiles };
+}
+
+/** Project a {@link PolicyNode} to a plain {@link OdrlPolicy}, or `undefined`. */
+function projectPolicy(node: PolicyNode): OdrlPolicy | undefined {
+  const type = firstPolicyType(node.types);
   const profiles = [...node.profiles].filter((t) => t.termType === "NamedNode").map((t) => t.value);
   const assigner = firstIri(node.assigners);
   const assignee = firstIri(node.assignees);
 
-  let conflict: ConflictStrategy | undefined;
   const conflictIri = firstIri(node.conflicts);
-  if (conflictIri !== undefined) {
-    conflict = IRI_TO_CONFLICT[conflictIri];
-  }
+  const conflict = conflictIri !== undefined ? IRI_TO_CONFLICT[conflictIri] : undefined;
 
   const permissions = [...node.permissions]
     .map((r) => projectRule(r, "permission"))
@@ -367,11 +375,7 @@ function projectPolicy(node: PolicyNode): OdrlPolicy | undefined {
   return {
     id: node.value,
     ...(type !== undefined && { type }),
-    ...(profiles.length === 1
-      ? { profile: profiles[0] }
-      : profiles.length > 1
-        ? { profile: profiles }
-        : {}),
+    ...profileField(profiles),
     ...(assigner !== undefined && { assigner }),
     ...(assignee !== undefined && { assignee }),
     ...(conflict !== undefined && { conflict }),

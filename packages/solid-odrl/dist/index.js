@@ -1086,32 +1086,37 @@ async function parsePolicy(input, contentType2 = "text/turtle", baseIRI) {
   const dataset = typeof input === "string" ? await parseRdf(input, contentType2, baseIRI ? { baseIRI } : {}) : input;
   return policyFromRdf(dataset);
 }
-function projectPolicy(node) {
-  let type;
-  for (const t of node.types) {
+function firstPolicyType(types) {
+  for (const t of types) {
     if (t.termType === "NamedNode") {
       const pt = policyTypeOf(t.value);
       if (pt !== void 0) {
-        type = pt;
-        break;
+        return pt;
       }
     }
   }
+  return void 0;
+}
+function profileField(profiles) {
+  if (profiles.length === 0) {
+    return {};
+  }
+  return { profile: profiles.length === 1 ? profiles[0] : profiles };
+}
+function projectPolicy(node) {
+  const type = firstPolicyType(node.types);
   const profiles = [...node.profiles].filter((t) => t.termType === "NamedNode").map((t) => t.value);
   const assigner = firstIri(node.assigners);
   const assignee = firstIri(node.assignees);
-  let conflict;
   const conflictIri = firstIri(node.conflicts);
-  if (conflictIri !== void 0) {
-    conflict = IRI_TO_CONFLICT[conflictIri];
-  }
+  const conflict = conflictIri !== void 0 ? IRI_TO_CONFLICT[conflictIri] : void 0;
   const permissions = [...node.permissions].map((r) => projectRule(r, "permission")).filter((r) => r !== void 0);
   const prohibitions = [...node.prohibitions].map((r) => projectRule(r, "prohibition")).filter((r) => r !== void 0);
   const obligations = [...node.obligations].map((d) => projectDuty(d)).filter((d) => d !== void 0);
   return {
     id: node.value,
     ...type !== void 0 && { type },
-    ...profiles.length === 1 ? { profile: profiles[0] } : profiles.length > 1 ? { profile: profiles } : {},
+    ...profileField(profiles),
     ...assigner !== void 0 && { assigner },
     ...assignee !== void 0 && { assignee },
     ...conflict !== void 0 && { conflict },
