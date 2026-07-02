@@ -355,36 +355,42 @@ function checkDelegationEdge(
   }
 
   // At least one candidate must clear the depth budget + any mandated nextPolicy.
+  const authorizing: OdrlRule[] = [];
   const failures: string[] = [];
   for (const rule of candidates) {
     const failure = checkGrantUseRule(rule, child, remainingDepth);
     if (failure === undefined) {
-      // This rule authorises the edge. ONLY ITS OWN duties (plus the parent's
-      // policy-level obligations) condition the delegated grant — duties of
-      // OTHER matched grantUse rules that did NOT authorise the edge (failed
-      // depth/nextPolicy, or lacked the explicit assignee) must not surface,
-      // or they would wrongly deny under `requireDuties`. Project them through
-      // evaluate() on a synthetic policy holding just the selected (already
-      // effective + matched) rule and the obligations, so the ActiveDuty
-      // projection (constraints + fulfilled:<action> discharge flags) is the
-      // core evaluator's own. `nextPolicy` duties are enforced STRUCTURALLY
-      // above (the mandated-policy identity check) and excluded. When several
-      // candidates authorise, the first (policy order) supplies the duties —
-      // deterministic; permissions are disjunctive.
-      const dutySource: OdrlPolicy = {
-        id: parent.id,
-        permissions: [rule],
-        ...(parent.obligations !== undefined && { obligations: parent.obligations }),
-      };
-      const edgeDuties = evaluate(dutySource, authRequest, { now }).duties;
-      return {
-        ok: true,
-        duties: edgeDuties.filter((d) => d.action !== "nextPolicy"),
-      };
+      authorizing.push(rule);
+    } else {
+      failures.push(failure);
     }
-    failures.push(failure);
   }
-  return edgeFailure(failures.join(" / "));
+  if (authorizing.length === 0) {
+    return edgeFailure(failures.join(" / "));
+  }
+
+  // The duties conditioning this edge are those of EVERY VALID authorizing
+  // candidate (plus the parent's policy-level obligations) — matching the core
+  // evaluator's semantics, where the duties of ALL matched permissions
+  // aggregate and `requireDuties` gates on each (deny-biased). Duties of
+  // candidates that FAILED the profile checks (wrong nextPolicy / depth) or of
+  // non-candidate matched rules (assignee-free) are excluded — a rule that did
+  // not authorise the edge cannot condition it. Projection goes through
+  // evaluate() on a synthetic policy holding exactly the authorizing (already
+  // effective + matched) rules and the obligations, so the ActiveDuty
+  // projection (duty constraints + fulfilled:<action> discharge flags) is the
+  // core evaluator's own. `nextPolicy` duties are enforced STRUCTURALLY above
+  // (the mandated-policy identity check) and excluded.
+  const dutySource: OdrlPolicy = {
+    id: parent.id,
+    permissions: authorizing,
+    ...(parent.obligations !== undefined && { obligations: parent.obligations }),
+  };
+  const edgeDuties = evaluate(dutySource, authRequest, { now }).duties;
+  return {
+    ok: true,
+    duties: edgeDuties.filter((d) => d.action !== "nextPolicy"),
+  };
 }
 
 /**

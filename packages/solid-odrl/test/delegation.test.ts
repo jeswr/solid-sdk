@@ -658,6 +658,41 @@ describe("evaluateDelegated: revocation + duties", () => {
     expect(r.duties.map((d) => d.action)).not.toContain("inform");
   });
 
+  it("duties of EVERY valid authorizing grantUse rule aggregate (roborev round-3 Medium)", () => {
+    // Two grantUse rules BOTH authorise the edge; the second carries an inform
+    // duty. The duty must still gate requireDuties — the profile matches the
+    // core evaluator's conjunctive duty semantics over matched permissions
+    // (deny-biased), so an authorizing rule's duty is never dropped just
+    // because a duty-free sibling also authorises.
+    const twoValid: OdrlPolicy = {
+      ...root(),
+      permissions: [
+        { type: "permission", action: "read", target: RES, assignee: AGENT_A },
+        { type: "permission", action: "grantUse", target: RES, assignee: AGENT_A },
+        {
+          type: "permission",
+          action: "grantUse",
+          target: RES,
+          assignee: AGENT_A,
+          duties: [{ action: "inform", target: OWNER }],
+        },
+      ],
+    };
+    const gated = evaluateDelegated([twoValid, hop1()], READ_B, {
+      now: NOW,
+      requireDuties: true,
+    });
+    expect(gated.decision).toBe("deny");
+    expect(gated.duties.map((d) => d.action)).toContain("inform");
+
+    const discharged = evaluateDelegated(
+      [twoValid, hop1()],
+      { ...READ_B, attributes: { "fulfilled:inform": true } },
+      { now: NOW, requireDuties: true },
+    );
+    expect(discharged.decision).toBe("permit");
+  });
+
   it("nextPolicy duties never enter the aggregate (structurally enforced, not dischargeable)", () => {
     const r = evaluateDelegated([root({ nextPolicy: HOP1_ID }), hop1()], READ_B, {
       now: NOW,

@@ -182,3 +182,18 @@ unconditioned).
 **Why:** a duty on the delegation authority (e.g. *inform the owner when
 delegating*) conditions everything delegated under it; dropping it sheds a
 condition, violating the §6.3 duties-accumulate rule.
+
+### D17. Edge duties come from ALL valid authorizing candidates (conjunctive)
+
+**Chosen:** when several `grantUse` rules validly authorise the same edge, the
+duties of EVERY one of them aggregate (candidates that failed the profile
+checks, and non-candidate matched rules, still contribute nothing).
+**Alternatives:** (a) aggregate `auth.duties` wholesale (round-2 state —
+leaked failed candidates' duties, roborev Medium); (b) only the first passing
+candidate's duties (round-2 fix — dropped later valid candidates' duties,
+roborev round-3 Medium).
+**Why:** (b) was inconsistent with the core evaluator's pinned semantics,
+where the duties of ALL matched permissions aggregate and `requireDuties`
+gates on each; matching it is deny-biased and gives policy authors one mental
+model for duty conjunction. Regression tests pin all three behaviours (failed
+candidate excluded; every valid candidate included; `nextPolicy` structural).

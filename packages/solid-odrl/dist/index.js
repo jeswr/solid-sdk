@@ -898,24 +898,29 @@ function checkDelegationEdge(parent, child, remainingDepth, req, now) {
       `the parent policy has no grantUse permission explicitly naming <${child.assigner}> as assignee (an assignee-free grantUse does not authorise delegation).`
     );
   }
+  const authorizing = [];
   const failures = [];
   for (const rule of candidates) {
     const failure = checkGrantUseRule(rule, child, remainingDepth);
     if (failure === void 0) {
-      const dutySource = {
-        id: parent.id,
-        permissions: [rule],
-        ...parent.obligations !== void 0 && { obligations: parent.obligations }
-      };
-      const edgeDuties = evaluate(dutySource, authRequest, { now }).duties;
-      return {
-        ok: true,
-        duties: edgeDuties.filter((d) => d.action !== "nextPolicy")
-      };
+      authorizing.push(rule);
+    } else {
+      failures.push(failure);
     }
-    failures.push(failure);
   }
-  return edgeFailure(failures.join(" / "));
+  if (authorizing.length === 0) {
+    return edgeFailure(failures.join(" / "));
+  }
+  const dutySource = {
+    id: parent.id,
+    permissions: authorizing,
+    ...parent.obligations !== void 0 && { obligations: parent.obligations }
+  };
+  const edgeDuties = evaluate(dutySource, authRequest, { now }).duties;
+  return {
+    ok: true,
+    duties: edgeDuties.filter((d) => d.action !== "nextPolicy")
+  };
 }
 function checkGrantUseRule(rule, child, remainingDepth) {
   const hasDepthConstraint = (rule.constraints ?? []).some(
