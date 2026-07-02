@@ -117,10 +117,10 @@ const tracker: TrackerData | undefined = await parseTrackerTtl(url, body, conten
 
 The runtime `Tracker` accessor (incremental edits) and the workflow helpers
 (`WorkflowDef` / `DEFAULT_WORKFLOW` / `canTransition` / `statusState`) are exported from both
-the barrel (`.`) and the **client-safe `./tracker` subpath** — import from `./tracker` (like
-`./task`) inside client components, since the barrel re-exports the `node:fs`-using
-`trackerShapeTtl`. The tracker SHACL shape is `shapes/tracker.ttl`, also a string via
-`trackerShapeTtl()`.
+the barrel (`.`) and the **client-safe `./tracker` subpath**. The barrel itself is
+browser-safe (see "Browser/client bundles" below) — `./tracker` is a smaller-surface
+alternative, not a requirement. `trackerShapeTtl()` (which reads `shapes/tracker.ttl` via
+`node:fs`) lives ONLY behind the `./shape` subpath.
 
 ## Contacts (`./contacts`) — the SolidOS `vcard:AddressBook` model
 
@@ -200,9 +200,10 @@ const contact: ContactData | undefined = await parsePersonTtl(url, body, content
 
 The runtime `ContactBook` / `Contact` / `ContactGroup` accessors and the build/parse
 functions are exported from both the barrel (`.`) and the **client-safe `./contacts`
-subpath** — import from `./contacts` (like `./task`/`./tracker`) inside client components,
-since the barrel re-exports the `node:fs`-using `addressBookShapeTtl`. The contacts SHACL
-shape is `shapes/contacts.ttl`, also a string via `addressBookShapeTtl()`. It is
+subpath**. The barrel itself is browser-safe (see "Browser/client bundles" below) —
+`./contacts` is a smaller-surface alternative, not a requirement.
+`addressBookShapeTtl()` (which reads `shapes/contacts.ttl` via `node:fs`) lives ONLY
+behind the `./shape` subpath. The contacts SHACL shape is
 **advisory** (it documents the contract and must not reject real-world contacts): a
 canonical book + person + group yields zero violations; the email/phone rule accepts both
 forms; missing `vcard:fn` is a `sh:Warning`, not a `sh:Violation`.
@@ -215,7 +216,6 @@ import {
   parseTask,
   parseTaskTtl,
   serializeTask,
-  taskShapeTtl,
   type TaskData,
 } from "@jeswr/solid-task-model";
 
@@ -249,32 +249,34 @@ task.state = "closed";        // sets wf:Closed + prov:endedAtTime
 task.assignee = myWebId;       // wf:assignee
 ```
 
-#### Browser/client bundles: import from `./task`
+#### Browser/client bundles
 
-The main entry (`.`) re-exports `taskShapeTtl`, which reads the shape file via
-`node:fs` — fine on the server, but a **client bundler** (Next.js / Turbopack)
-cannot bundle `node:fs` into a browser chunk, so importing `Task` from `.` inside a
-client component fails (`the chunking context does not support external modules
-(request: node:fs)`). Import the runtime model from the **`./task` subpath**, which
-never touches `node:fs`:
+The main entry (`.`) is **browser-safe**: it never imports `node:fs` / `node:url`, so
+`import { Task, buildTask } from "@jeswr/solid-task-model"` bundles cleanly in a client
+component (Next.js/Turbopack, Vite, esbuild `--platform=browser`, …) —
+`src/browser-bundle.test.ts` gates this with an esbuild browser-bundle smoke test on every
+`npm test` run. The only Node-only pieces are the `node:fs`/`node:url`-using shape helpers
+(`taskShapeTtl` / `trackerShapeTtl` / `addressBookShapeTtl` / `TASK_SHAPE_PATH` /
+`TRACKER_SHAPE_PATH` / `CONTACTS_SHAPE_PATH`), which live ONLY behind the **`./shape`
+subpath** — never import `./shape` from a client component. The `./task` / `./tracker` /
+`./contacts` subpaths remain available as a smaller, more explicit surface than the full
+barrel, but importing from `.` is no longer a browser-bundling hazard:
 
 ```ts
 import { Task, parseTask, buildTask, type TaskData } from "@jeswr/solid-task-model/task";
 ```
 
-The `./shape` subpath (`taskShapeTtl` / `TASK_SHAPE_PATH`) is the `node:fs`-using
-half — keep it on server-only / test code, never a client component.
-
 ### SHACL validation
 
-The canonical shape is `shapes/task.ttl` (also exported as a string via `taskShapeTtl()`).
-Validate with whatever SHACL engine you depend on — the suite uses `rdf-validate-shacl`:
+The canonical shape is `shapes/task.ttl` (also exported as a string via `taskShapeTtl()`
+from the **`./shape`** subpath — server-only, not the root barrel). Validate with whatever
+SHACL engine you depend on — the suite uses `rdf-validate-shacl`:
 
 ```ts
 import env from "@zazuko/env-node";
 import { Parser } from "n3";
 import SHACLValidator from "rdf-validate-shacl";
-import { taskShapeTtl } from "@jeswr/solid-task-model";
+import { taskShapeTtl } from "@jeswr/solid-task-model/shape";
 
 const toDs = (quads) => { const ds = env.dataset(); for (const q of quads) ds.add(q); return ds; };
 const shapes = toDs(new Parser().parse(taskShapeTtl()));

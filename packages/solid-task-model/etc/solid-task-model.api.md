@@ -23,9 +23,6 @@ export interface AddressBookData {
 }
 
 // @public
-export function addressBookShapeTtl(): string;
-
-// @public
 export function addressBookSubject(bookDocUrl: string): string;
 
 // @public
@@ -134,9 +131,6 @@ export interface ContactGroupData {
     members?: string[];
     name: string;
 }
-
-// @public
-export const CONTACTS_SHAPE_PATH: string;
 
 // @public
 export const DC = "http://purl.org/dc/elements/1.1/";
@@ -326,9 +320,6 @@ export class Task extends TermWrapper {
 export const TASK_CLASS: string;
 
 // @public
-export const TASK_SHAPE_PATH: string;
-
-// @public
 export interface TaskData {
     assignee?: string;
     blockedBy?: string[];
@@ -351,9 +342,6 @@ export interface TaskData {
 
 // @public
 export type TaskPriority = "high" | "medium" | "low";
-
-// @public
-export function taskShapeTtl(): string;
 
 // @public
 export type TaskState = "open" | "closed";
@@ -383,9 +371,6 @@ export class Tracker extends TermWrapper {
 }
 
 // @public
-export const TRACKER_SHAPE_PATH: string;
-
-// @public
 export interface TrackerData {
     categories?: string[];
     groupMembers?: string[];
@@ -394,9 +379,6 @@ export interface TrackerData {
     title: string;
     workflow?: WorkflowDef;
 }
-
-// @public
-export function trackerShapeTtl(): string;
 
 // @public
 export function trackerSubject(docUrl: string): string;

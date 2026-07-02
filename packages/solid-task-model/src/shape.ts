@@ -14,6 +14,13 @@
  * (`dist/shape.js` → `shapes/task.ttl`), because both `src/` and `dist/` sit one
  * level below the package root next to `shapes/`. The `shapes/` directory is
  * shipped in the package `files` allow-list, so it is present after install.
+ *
+ * **Node-only — the `./shape` subpath is the SOLE home for this module.** It
+ * imports `node:fs`/`node:url`, so nothing here is re-exported from the root
+ * (`.`) entry — a browser bundler cannot resolve those specifiers. Import
+ * `taskShapeTtl` / `TASK_SHAPE_PATH` etc. from `@jeswr/solid-task-model/shape`
+ * in server-only or test code; a browser/client component wants `./task`,
+ * `./tracker`, or `./contacts` instead.
  */
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";

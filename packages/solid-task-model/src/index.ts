@@ -39,14 +39,18 @@ export {
   serializePeopleIndex,
   serializePerson,
 } from "./contacts.js";
-export {
-  addressBookShapeTtl,
-  CONTACTS_SHAPE_PATH,
-  TASK_SHAPE_PATH,
-  TRACKER_SHAPE_PATH,
-  taskShapeTtl,
-  trackerShapeTtl,
-} from "./shape.js";
+// NOTE: the `node:fs`/`node:url`-using shape helpers (`taskShapeTtl`,
+// `trackerShapeTtl`, `addressBookShapeTtl`, `TASK_SHAPE_PATH`,
+// `TRACKER_SHAPE_PATH`, `CONTACTS_SHAPE_PATH`) live ONLY behind the `./shape`
+// subpath, never here. This barrel must stay bundlable by a browser bundler
+// (Vite/Turbopack/esbuild) with `platform: "browser"` — re-exporting even one
+// Node-only symbol here would poison EVERY consumer of the root entry with a
+// `node:fs`/`node:url` import, including one that only wants a pure vocab
+// const (this happened via `@jeswr/solid-chat-interop`'s `vocab.ts`, which
+// re-exports `TASK_CLASS`/`WF_CLOSED`/`WF_OPEN`/`wf` from here — a transitive
+// consumer's browser build broke even though it never touched a shape
+// helper). See `src/browser-bundle.test.ts` for the regression test and
+// `./shape`'s module doc for the server-only half.
 export {
   buildTask,
   isAssignedTo,

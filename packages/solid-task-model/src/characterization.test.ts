@@ -77,10 +77,9 @@ function exportNames(mod: Record<string, unknown>): string[] {
 }
 
 describe("public API contract (golden export set per entry point)", () => {
-  it("`.` (the main entry) exports exactly this set", () => {
+  it("`.` (the main entry) exports exactly this set (browser-safe; no node:fs/node:url reachable — see src/browser-bundle.test.ts)", () => {
     expect(exportNames(mainEntry)).toEqual([
       "ACL",
-      "CONTACTS_SHAPE_PATH",
       "Contact",
       "ContactBook",
       "ContactGroup",
@@ -95,8 +94,6 @@ describe("public API contract (golden export set per entry point)", () => {
       "RDF_TYPE",
       "SCHEMA",
       "TASK_CLASS",
-      "TASK_SHAPE_PATH",
-      "TRACKER_SHAPE_PATH",
       "Task",
       "Tracker",
       "VCARD",
@@ -132,7 +129,6 @@ describe("public API contract (golden export set per entry point)", () => {
       "WF_TRACKER",
       "XSD",
       "acl",
-      "addressBookShapeTtl",
       "addressBookSubject",
       "buildAddressBook",
       "buildGroup",
@@ -172,9 +168,7 @@ describe("public API contract (golden export set per entry point)", () => {
       "sortTasks",
       "statusState",
       "storeToTurtle",
-      "taskShapeTtl",
       "taskSubject",
-      "trackerShapeTtl",
       "trackerSubject",
       "vcard",
       "wf",
