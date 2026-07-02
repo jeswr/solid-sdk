@@ -1,0 +1,24 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jeswr/full-solid-ecosystem/main/tracking/schema/suite.schema.json",
+  "id": "solid-webauthn-reauth",
+  "kind": "package",
+  "name": "Solid WebAuthn Re-Auth",
+  "repo": "https://github.com/jeswr/solid-webauthn-reauth",
+  "category": "identity",
+  "maturity": "alpha",
+  "visibility": "public",
+  "stack": {
+    "language": "TypeScript",
+    "runtime": "Node >=20 / browser",
+    "crypto": "platform WebAuthn API (@simplewebauthn/browser) + RFC 9449 DPoP (oauth4webapi); no hand-rolled crypto",
+    "auth": "Solid-OIDC redirect-free re-auth: app-as-RP WebAuthn assertion + RFC 8693 token-exchange + DPoP",
+    "modules": "ESM client (.) + ESM/CJS pure protocol subexport (./protocol)",
+    "test": "vitest",
+    "lint": "@biomejs/biome"
+  },
+  "dependsOn": [
+    "@jeswr/solid-dpop",
+    "@jeswr/solid-session-restore"
+  ],
+  "federation": null
+}

@@ -1,0 +1,117 @@
+"use strict";
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Samu Lang
+// Copyright (c) 2026 Jesse Wright
+// AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate; see docs/MODEL-PROVENANCE.md
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.MalformedBundleError = void 0;
+exports.encodeAssertionBundle = encodeAssertionBundle;
+exports.decodeAssertionBundle = decodeAssertionBundle;
+/**
+ * Codec for the assertion bundle carried as the token-exchange `subject_token`.
+ * Base64url of the UTF-8 JSON envelope.
+ *
+ * The decode path is a **security surface**: an IdP verifier calls
+ * {@link decodeAssertionBundle} on the untrusted `subject_token` before any
+ * crypto. It is deliberately fail-closed and structural-only — cryptographic
+ * verification of the inner WebAuthn assertion is the verifier's job.
+ */
+const base64url_js_1 = require("./base64url.js");
+const constants_js_1 = require("./constants.js");
+/** Error thrown when a presented assertion bundle cannot be decoded/validated. */
+class MalformedBundleError extends Error {
+    constructor(message) {
+        super(message);
+        this.name = "MalformedBundleError";
+    }
+}
+exports.MalformedBundleError = MalformedBundleError;
+/** Encode an assertion bundle to its on-the-wire `subject_token` form. */
+function encodeAssertionBundle(bundle) {
+    return (0, base64url_js_1.encodeBase64url)(JSON.stringify(bundle));
+}
+/**
+ * Decode and validate a `subject_token` into an {@link AssertionBundle}.
+ *
+ * Validation here is structural only — it guards the parse and the envelope
+ * version. Cryptographic verification of the inner WebAuthn assertion is the
+ * verifier's job.
+ *
+ * @throws {MalformedBundleError} on bad base64url, non-JSON, wrong shape, or an
+ *   unknown `version` (maps to `invalid_request`).
+ */
+function decodeAssertionBundle(token) {
+    let json;
+    try {
+        json = (0, base64url_js_1.decodeBase64url)(token);
+    }
+    catch {
+        throw new MalformedBundleError("subject_token is not valid base64url");
+    }
+    let parsed;
+    try {
+        parsed = JSON.parse(json);
+    }
+    catch {
+        throw new MalformedBundleError("subject_token is not valid JSON");
+    }
+    if (typeof parsed !== "object" || parsed === null) {
+        throw new MalformedBundleError("assertion bundle must be an object");
+    }
+    const bundle = parsed;
+    if (bundle.version !== constants_js_1.BUNDLE_VERSION) {
+        throw new MalformedBundleError(`unsupported assertion bundle version: ${String(bundle.version)}`);
+    }
+    if (typeof bundle.credential !== "object" || bundle.credential === null) {
+        throw new MalformedBundleError("assertion bundle is missing `credential`");
+    }
+    // Structurally validate the inner AuthenticatorAssertionResponseJSON. Without
+    // this the bundle would be returned `as unknown` and fail safe only via a
+    // downstream crypto catch; validate the shape here so a malformed credential
+    // is a clean `invalid_request`, not a deeper exception. We check
+    // presence/type of the fields the verifier reads — not their contents (the
+    // signature re-authenticates the bytes).
+    validateAssertionCredential(bundle.credential);
+    return bundle;
+}
+/** Unpadded base64url alphabet (the WebAuthn JSON serialization, §5.8.1). */
+const BASE64URL = /^[A-Za-z0-9_-]+$/u;
+/** Assert a string field is present and non-empty on `obj`, else throw. */
+function requireString(obj, field) {
+    const value = obj[field];
+    if (typeof value !== "string" || value.length === 0) {
+        throw new MalformedBundleError(`assertion bundle credential is missing string \`${field}\``);
+    }
+}
+/** Assert a field is a non-empty base64url string (no padding), else throw. */
+function requireBase64url(obj, field) {
+    requireString(obj, field);
+    if (!BASE64URL.test(obj[field])) {
+        throw new MalformedBundleError(`assertion bundle credential \`${field}\` is not base64url`);
+    }
+}
+/**
+ * Validate the inner `AuthenticatorAssertionResponseJSON` envelope: a base64url
+ * `id`/`rawId`, `type === "public-key"`, and a `response` object carrying the
+ * base64url `clientDataJSON`, `authenticatorData`, and `signature` the verifier
+ * needs. `userHandle` is optional (absent for non-resident credentials).
+ */
+function validateAssertionCredential(credential) {
+    requireBase64url(credential, "id");
+    requireBase64url(credential, "rawId");
+    if (credential.type !== "public-key") {
+        throw new MalformedBundleError('assertion bundle credential.type must be "public-key"');
+    }
+    const response = credential.response;
+    if (typeof response !== "object" || response === null) {
+        throw new MalformedBundleError("assertion bundle credential is missing `response`");
+    }
+    const r = response;
+    requireBase64url(r, "clientDataJSON");
+    requireBase64url(r, "authenticatorData");
+    requireBase64url(r, "signature");
+    if (r.userHandle !== undefined && r.userHandle !== null && typeof r.userHandle !== "string") {
+        throw new MalformedBundleError("assertion bundle credential.response.userHandle must be a string when present");
+    }
+}
+//# sourceMappingURL=codec.js.map
