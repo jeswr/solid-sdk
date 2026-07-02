@@ -1,0 +1,342 @@
+// AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+//
+// GOLDEN-MASTER / characterization tests. These pin the PUBLIC API's observable
+// outputs as committed snapshots BEFORE any structural refactor, so a later
+// behaviour-preserving change is provably behaviour-preserving: the snapshots must
+// stay byte-identical (never `--update` a snapshot to make a red test green — that
+// launders a behaviour change).
+//
+// What is pinned:
+//   1. The EXPRESS graph — a blank-node-label-INDEPENDENT canonical fingerprint of
+//      policyToRdf's quads (sorted `predicate → object` lines; blanks normalised),
+//      so a serialisation change is caught without depending on n3's non-stable
+//      blank-node counter.
+//   2. The PARSE round-trip — the structured OdrlPolicy recovered from Turtle +
+//      JSON-LD (blank-node-label-free by construction).
+//   3. The JSON-LD document — deterministic projection with the pinned @context.
+//   4. The EVALUATE decision + full explainable result for a matrix of requests,
+//      INCLUDING the security-essential fail-closed / conflict / subsumption paths.
+
+import { parseRdf } from "@jeswr/fetch-rdf";
+import type { Quad } from "@rdfjs/types";
+import { describe, expect, it } from "vitest";
+import { requestContextFromA2AIntent, requestContextFromWac } from "../src/compose.js";
+import { evaluate } from "../src/evaluate.js";
+import { parsePolicy, policyToJsonLd, policyToRdf, policyToTurtle } from "../src/policy.js";
+import type { OdrlPolicy, RequestContext } from "../src/types.js";
+
+const OWNER = "https://alice.example/profile/card#me";
+const BOB = "https://bob.example/profile/card#me";
+const CAROL = "https://carol.example/profile/card#me";
+const RES = "https://alice.example/notes/private.ttl";
+const OTHER = "https://alice.example/notes/other.ttl";
+const NOW = new Date("2026-06-16T12:00:00Z");
+const RND = "https://w3id.org/dpv#ResearchAndDevelopment";
+
+/**
+ * A blank-node-label-INDEPENDENT canonical fingerprint of a quad set: one sorted
+ * line per quad, `subjectKind subject → predicate → objectKind object[^datatype]`,
+ * with every blank node collapsed to `_:B` (n3's blank-node counter is not stable
+ * across test ordering, so the raw labels can't be snapshotted). This captures
+ * every predicate + IRI/literal object + datatype — enough to catch a
+ * serialisation-shape regression — while staying deterministic.
+ */
+function fingerprint(quads: readonly Quad[]): string {
+  const norm = (t: Quad["subject"] | Quad["object"]): string => {
+    if (t.termType === "BlankNode") return "_:B";
+    if (t.termType === "Literal") {
+      const dt = t.datatype?.value ? `^^${t.datatype.value}` : "";
+      return `"${t.value}"${dt}`;
+    }
+    return `<${t.value}>`;
+  };
+  return quads
+    .map((q) => `${norm(q.subject)} ${q.predicate.value} ${norm(q.object)}`)
+    .sort()
+    .join("\n");
+}
+
+const RICH_POLICY: OdrlPolicy = {
+  id: "https://alice.example/policies/p1",
+  type: "Offer",
+  profile: "https://w3id.org/oac#",
+  assigner: OWNER,
+  conflict: "prohibit",
+  permissions: [
+    {
+      type: "permission",
+      action: "read",
+      target: RES,
+      assignee: BOB,
+      constraints: [
+        { leftOperand: "purpose", operator: "eq", rightOperand: RND },
+        { leftOperand: "dateTime", operator: "lteq", rightOperand: "2027-01-01T00:00:00Z" },
+        { leftOperand: "count", operator: "lteq", rightOperand: 5 },
+      ],
+      duties: [
+        {
+          action: "attribute",
+          constraints: [{ leftOperand: "recipient", operator: "eq", rightOperand: OWNER }],
+        },
+      ],
+    },
+  ],
+  prohibitions: [{ type: "prohibition", action: "distribute", target: RES }],
+  obligations: [{ action: "inform", target: OWNER }],
+};
+
+describe("characterization: express graph fingerprint", () => {
+  it("policyToRdf emits a stable canonical graph for the rich policy", () => {
+    expect(fingerprint(policyToRdf(RICH_POLICY))).toMatchSnapshot();
+  });
+
+  it("policyToRdf emits a stable graph for the append/control acl-mode policy", () => {
+    const policy: OdrlPolicy = {
+      id: "https://alice.example/policies/acl",
+      permissions: [
+        { type: "permission", action: "append", target: RES, assignee: BOB },
+        { type: "permission", action: "control", target: RES, assignee: OWNER },
+      ],
+      prohibitions: [{ type: "prohibition", action: "delete", target: RES }],
+    };
+    expect(fingerprint(policyToRdf(policy))).toMatchSnapshot();
+  });
+});
+
+describe("characterization: JSON-LD projection", () => {
+  it("policyToJsonLd is a stable document for the rich policy", () => {
+    expect(policyToJsonLd(RICH_POLICY)).toMatchSnapshot();
+  });
+});
+
+describe("characterization: parse round-trip structure", () => {
+  it("Turtle round-trip recovers a stable OdrlPolicy", async () => {
+    const parsed = await parsePolicy(await policyToTurtle(RICH_POLICY));
+    expect(parsed).toMatchSnapshot();
+  });
+
+  it("JSON-LD round-trip recovers a stable OdrlPolicy", async () => {
+    const doc = JSON.stringify(policyToJsonLd(RICH_POLICY));
+    const dataset = await parseRdf(doc, "application/ld+json");
+    const parsed = (await import("../src/policy.js")).policyFromRdf(dataset);
+    expect(parsed).toMatchSnapshot();
+  });
+});
+
+// The security-essential decision matrix: every branch of the evaluator's
+// permit/deny/notApplicable + conflict + fail-closed + subsumption semantics,
+// pinned as a full explainable result so a "simplification" that changes an
+// edge-case evaluation is caught as a snapshot diff (= a policy-bypass bug).
+describe("characterization: evaluate decision matrix", () => {
+  const cases: Array<{
+    name: string;
+    policy: OdrlPolicy;
+    request: RequestContext;
+    requireDuties?: boolean;
+  }> = [
+    {
+      name: "permit: matching permission only",
+      policy: {
+        id: "p",
+        permissions: [{ type: "permission", action: "read", target: RES, assignee: BOB }],
+      },
+      request: { agent: BOB, action: "read", target: RES },
+    },
+    {
+      name: "deny: matching prohibition only",
+      policy: { id: "p", prohibitions: [{ type: "prohibition", action: "read", target: RES }] },
+      request: { agent: BOB, action: "read", target: RES },
+    },
+    {
+      name: "notApplicable: no rule matches",
+      policy: {
+        id: "p",
+        permissions: [{ type: "permission", action: "read", target: RES, assignee: BOB }],
+      },
+      request: { agent: CAROL, action: "read", target: OTHER },
+    },
+    {
+      name: "conflict default (no strategy) → deny (fail-closed prohibit)",
+      policy: {
+        id: "p",
+        permissions: [{ type: "permission", action: "read", target: RES }],
+        prohibitions: [{ type: "prohibition", action: "read", target: RES }],
+      },
+      request: { action: "read", target: RES },
+    },
+    {
+      name: "conflict perm → permit",
+      policy: {
+        id: "p",
+        conflict: "perm",
+        permissions: [{ type: "permission", action: "read", target: RES }],
+        prohibitions: [{ type: "prohibition", action: "read", target: RES }],
+      },
+      request: { action: "read", target: RES },
+    },
+    {
+      name: "conflict invalid → deny",
+      policy: {
+        id: "p",
+        conflict: "invalid",
+        permissions: [{ type: "permission", action: "read", target: RES }],
+        prohibitions: [{ type: "prohibition", action: "read", target: RES }],
+      },
+      request: { action: "read", target: RES },
+    },
+    {
+      name: "use umbrella covers a read request",
+      policy: { id: "p", permissions: [{ type: "permission", action: "use", target: RES }] },
+      request: { action: "read", target: RES },
+    },
+    {
+      name: "use umbrella does NOT cover a control request (fail-closed)",
+      policy: { id: "p", permissions: [{ type: "permission", action: "use", target: RES }] },
+      request: { action: "control", target: RES },
+    },
+    {
+      name: "write subsumes an append request",
+      policy: { id: "p", permissions: [{ type: "permission", action: "write", target: RES }] },
+      request: { action: "append", target: RES },
+    },
+    {
+      name: "append does NOT cover a write request (no over-grant)",
+      policy: { id: "p", permissions: [{ type: "permission", action: "append", target: RES }] },
+      request: { action: "write", target: RES },
+    },
+    {
+      name: "constraint fail-closed: missing purpose in context → notApplicable",
+      policy: {
+        id: "p",
+        permissions: [
+          {
+            type: "permission",
+            action: "read",
+            target: RES,
+            constraints: [{ leftOperand: "purpose", operator: "eq", rightOperand: RND }],
+          },
+        ],
+      },
+      request: { action: "read", target: RES },
+    },
+    {
+      name: "constraint satisfied: purpose supplied → permit",
+      policy: {
+        id: "p",
+        permissions: [
+          {
+            type: "permission",
+            action: "read",
+            target: RES,
+            constraints: [{ leftOperand: "purpose", operator: "eq", rightOperand: RND }],
+          },
+        ],
+      },
+      request: { action: "read", target: RES, attributes: { purpose: RND } },
+    },
+    {
+      name: "dateTime lteq against injected now → permit",
+      policy: {
+        id: "p",
+        permissions: [
+          {
+            type: "permission",
+            action: "read",
+            target: RES,
+            constraints: [
+              { leftOperand: "dateTime", operator: "lteq", rightOperand: "2027-01-01T00:00:00Z" },
+            ],
+          },
+        ],
+      },
+      request: { action: "read", target: RES },
+    },
+    {
+      name: "permit with unfulfilled duty (advisory) → permit, duty reported",
+      policy: {
+        id: "p",
+        permissions: [
+          { type: "permission", action: "read", target: RES, duties: [{ action: "attribute" }] },
+        ],
+      },
+      request: { action: "read", target: RES },
+    },
+    {
+      name: "requireDuties with unfulfilled duty → deny",
+      policy: {
+        id: "p",
+        permissions: [
+          { type: "permission", action: "read", target: RES, duties: [{ action: "attribute" }] },
+        ],
+      },
+      request: { action: "read", target: RES },
+      requireDuties: true,
+    },
+    {
+      name: "requireDuties with discharged duty → permit",
+      policy: {
+        id: "p",
+        permissions: [
+          { type: "permission", action: "read", target: RES, duties: [{ action: "attribute" }] },
+        ],
+      },
+      request: { action: "read", target: RES, attributes: { "fulfilled:attribute": true } },
+      requireDuties: true,
+    },
+    {
+      name: "isAnyOf set membership → permit",
+      policy: {
+        id: "p",
+        permissions: [
+          {
+            type: "permission",
+            action: "read",
+            target: RES,
+            constraints: [
+              { leftOperand: "recipient", operator: "isAnyOf", rightOperand: [OWNER, BOB] },
+            ],
+          },
+        ],
+      },
+      request: { action: "read", target: RES, attributes: { recipient: BOB } },
+    },
+  ];
+
+  for (const c of cases) {
+    it(c.name, () => {
+      const r = evaluate(c.policy, c.request, {
+        now: NOW,
+        requireDuties: c.requireDuties ?? false,
+      });
+      expect(r).toMatchSnapshot();
+    });
+  }
+});
+
+describe("characterization: compose adapters", () => {
+  it("requestContextFromA2AIntent maps the verb table stably", () => {
+    const verbs = [
+      "read",
+      "create",
+      "update",
+      "append",
+      "delete",
+      "list",
+      "grant",
+      "subscribe",
+      "query",
+      "unknownverb",
+    ];
+    const out = verbs.map((action) =>
+      requestContextFromA2AIntent({ action, target: RES, agent: BOB, recipient: CAROL }),
+    );
+    expect(out).toMatchSnapshot();
+  });
+
+  it("requestContextFromWac maps each ACL mode stably", () => {
+    const out = (["Read", "Write", "Append", "Control"] as const).map((mode) =>
+      requestContextFromWac(BOB, mode, RES),
+    );
+    expect(out).toMatchSnapshot();
+  });
+});

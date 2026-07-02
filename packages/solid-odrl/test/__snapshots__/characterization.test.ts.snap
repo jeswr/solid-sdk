@@ -1,0 +1,771 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`characterization: JSON-LD projection > policyToJsonLd is a stable document for the rich policy 1`] = `
+{
+  "@context": {
+    "acl": "http://www.w3.org/ns/auth/acl#",
+    "action": {
+      "@id": "http://www.w3.org/ns/odrl/2/action",
+      "@type": "@id",
+    },
+    "assignee": {
+      "@id": "http://www.w3.org/ns/odrl/2/assignee",
+      "@type": "@id",
+    },
+    "assigner": {
+      "@id": "http://www.w3.org/ns/odrl/2/assigner",
+      "@type": "@id",
+    },
+    "conflict": {
+      "@id": "http://www.w3.org/ns/odrl/2/conflict",
+      "@type": "@id",
+    },
+    "constraint": {
+      "@id": "http://www.w3.org/ns/odrl/2/constraint",
+      "@type": "@id",
+    },
+    "dpv": "https://w3id.org/dpv#",
+    "duty": {
+      "@id": "http://www.w3.org/ns/odrl/2/duty",
+      "@type": "@id",
+    },
+    "leftOperand": {
+      "@id": "http://www.w3.org/ns/odrl/2/leftOperand",
+      "@type": "@id",
+    },
+    "obligation": {
+      "@id": "http://www.w3.org/ns/odrl/2/obligation",
+      "@type": "@id",
+    },
+    "odrl": "http://www.w3.org/ns/odrl/2/",
+    "operator": {
+      "@id": "http://www.w3.org/ns/odrl/2/operator",
+      "@type": "@id",
+    },
+    "permission": {
+      "@id": "http://www.w3.org/ns/odrl/2/permission",
+      "@type": "@id",
+    },
+    "profile": {
+      "@id": "http://www.w3.org/ns/odrl/2/profile",
+      "@type": "@id",
+    },
+    "prohibition": {
+      "@id": "http://www.w3.org/ns/odrl/2/prohibition",
+      "@type": "@id",
+    },
+    "rightOperand": "http://www.w3.org/ns/odrl/2/rightOperand",
+    "target": {
+      "@id": "http://www.w3.org/ns/odrl/2/target",
+      "@type": "@id",
+    },
+    "uid": {
+      "@id": "http://www.w3.org/ns/odrl/2/uid",
+      "@type": "@id",
+    },
+  },
+  "@id": "https://alice.example/policies/p1",
+  "@type": "odrl:Offer",
+  "assigner": {
+    "@id": "https://alice.example/profile/card#me",
+  },
+  "conflict": {
+    "@id": "http://www.w3.org/ns/odrl/2/prohibit",
+  },
+  "obligation": [
+    {
+      "action": {
+        "@id": "http://www.w3.org/ns/odrl/2/inform",
+      },
+      "target": {
+        "@id": "https://alice.example/profile/card#me",
+      },
+    },
+  ],
+  "permission": [
+    {
+      "action": {
+        "@id": "http://www.w3.org/ns/odrl/2/read",
+      },
+      "assignee": {
+        "@id": "https://bob.example/profile/card#me",
+      },
+      "assigner": {
+        "@id": "https://alice.example/profile/card#me",
+      },
+      "constraint": [
+        {
+          "leftOperand": {
+            "@id": "http://www.w3.org/ns/odrl/2/purpose",
+          },
+          "operator": {
+            "@id": "http://www.w3.org/ns/odrl/2/eq",
+          },
+          "rightOperand": {
+            "@id": "https://w3id.org/dpv#ResearchAndDevelopment",
+          },
+        },
+        {
+          "leftOperand": {
+            "@id": "http://www.w3.org/ns/odrl/2/dateTime",
+          },
+          "operator": {
+            "@id": "http://www.w3.org/ns/odrl/2/lteq",
+          },
+          "rightOperand": {
+            "@type": "http://www.w3.org/2001/XMLSchema#dateTime",
+            "@value": "2027-01-01T00:00:00Z",
+          },
+        },
+        {
+          "leftOperand": {
+            "@id": "http://www.w3.org/ns/odrl/2/count",
+          },
+          "operator": {
+            "@id": "http://www.w3.org/ns/odrl/2/lteq",
+          },
+          "rightOperand": {
+            "@type": "http://www.w3.org/2001/XMLSchema#integer",
+            "@value": "5",
+          },
+        },
+      ],
+      "duty": [
+        {
+          "action": {
+            "@id": "http://www.w3.org/ns/odrl/2/attribute",
+          },
+          "constraint": [
+            {
+              "leftOperand": {
+                "@id": "http://www.w3.org/ns/odrl/2/recipient",
+              },
+              "operator": {
+                "@id": "http://www.w3.org/ns/odrl/2/eq",
+              },
+              "rightOperand": {
+                "@id": "https://alice.example/profile/card#me",
+              },
+            },
+          ],
+        },
+      ],
+      "target": {
+        "@id": "https://alice.example/notes/private.ttl",
+      },
+    },
+  ],
+  "profile": [
+    {
+      "@id": "https://w3id.org/oac#",
+    },
+  ],
+  "prohibition": [
+    {
+      "action": {
+        "@id": "http://www.w3.org/ns/odrl/2/distribute",
+      },
+      "assigner": {
+        "@id": "https://alice.example/profile/card#me",
+      },
+      "target": {
+        "@id": "https://alice.example/notes/private.ttl",
+      },
+    },
+  ],
+  "uid": {
+    "@id": "https://alice.example/policies/p1",
+  },
+}
+`;
+
+exports[`characterization: compose adapters > requestContextFromA2AIntent maps the verb table stably 1`] = `
+[
+  {
+    "action": "read",
+    "agent": "https://bob.example/profile/card#me",
+    "attributes": {
+      "recipient": "https://carol.example/profile/card#me",
+    },
+    "target": "https://alice.example/notes/private.ttl",
+  },
+  {
+    "action": "write",
+    "agent": "https://bob.example/profile/card#me",
+    "attributes": {
+      "recipient": "https://carol.example/profile/card#me",
+    },
+    "target": "https://alice.example/notes/private.ttl",
+  },
+  {
+    "action": "modify",
+    "agent": "https://bob.example/profile/card#me",
+    "attributes": {
+      "recipient": "https://carol.example/profile/card#me",
+    },
+    "target": "https://alice.example/notes/private.ttl",
+  },
+  {
+    "action": "append",
+    "agent": "https://bob.example/profile/card#me",
+    "attributes": {
+      "recipient": "https://carol.example/profile/card#me",
+    },
+    "target": "https://alice.example/notes/private.ttl",
+  },
+  {
+    "action": "delete",
+    "agent": "https://bob.example/profile/card#me",
+    "attributes": {
+      "recipient": "https://carol.example/profile/card#me",
+    },
+    "target": "https://alice.example/notes/private.ttl",
+  },
+  {
+    "action": "read",
+    "agent": "https://bob.example/profile/card#me",
+    "attributes": {
+      "recipient": "https://carol.example/profile/card#me",
+    },
+    "target": "https://alice.example/notes/private.ttl",
+  },
+  {
+    "action": "control",
+    "agent": "https://bob.example/profile/card#me",
+    "attributes": {
+      "recipient": "https://carol.example/profile/card#me",
+    },
+    "target": "https://alice.example/notes/private.ttl",
+  },
+  {
+    "action": "use",
+    "agent": "https://bob.example/profile/card#me",
+    "attributes": {
+      "recipient": "https://carol.example/profile/card#me",
+    },
+    "target": "https://alice.example/notes/private.ttl",
+  },
+  {
+    "action": "read",
+    "agent": "https://bob.example/profile/card#me",
+    "attributes": {
+      "recipient": "https://carol.example/profile/card#me",
+    },
+    "target": "https://alice.example/notes/private.ttl",
+  },
+  {
+    "action": "use",
+    "agent": "https://bob.example/profile/card#me",
+    "attributes": {
+      "recipient": "https://carol.example/profile/card#me",
+    },
+    "target": "https://alice.example/notes/private.ttl",
+  },
+]
+`;
+
+exports[`characterization: compose adapters > requestContextFromWac maps each ACL mode stably 1`] = `
+[
+  {
+    "action": "read",
+    "agent": "https://bob.example/profile/card#me",
+    "target": "https://alice.example/notes/private.ttl",
+  },
+  {
+    "action": "write",
+    "agent": "https://bob.example/profile/card#me",
+    "target": "https://alice.example/notes/private.ttl",
+  },
+  {
+    "action": "append",
+    "agent": "https://bob.example/profile/card#me",
+    "target": "https://alice.example/notes/private.ttl",
+  },
+  {
+    "action": "control",
+    "agent": "https://bob.example/profile/card#me",
+    "target": "https://alice.example/notes/private.ttl",
+  },
+]
+`;
+
+exports[`characterization: evaluate decision matrix > append does NOT cover a write request (no over-grant) 1`] = `
+{
+  "conflict": false,
+  "decision": "notApplicable",
+  "duties": [],
+  "matchedPermissions": [],
+  "matchedProhibitions": [],
+  "reason": "No permission or prohibition matches the request.",
+}
+`;
+
+exports[`characterization: evaluate decision matrix > conflict default (no strategy) → deny (fail-closed prohibit) 1`] = `
+{
+  "conflict": true,
+  "decision": "deny",
+  "duties": [],
+  "matchedPermissions": [
+    {
+      "action": "read",
+      "target": "https://alice.example/notes/private.ttl",
+      "type": "permission",
+    },
+  ],
+  "matchedProhibitions": [
+    {
+      "action": "read",
+      "target": "https://alice.example/notes/private.ttl",
+      "type": "prohibition",
+    },
+  ],
+  "reason": "Conflict resolved by odrl:prohibit — prohibition overrides permission.",
+}
+`;
+
+exports[`characterization: evaluate decision matrix > conflict invalid → deny 1`] = `
+{
+  "conflict": true,
+  "decision": "deny",
+  "duties": [],
+  "matchedPermissions": [
+    {
+      "action": "read",
+      "target": "https://alice.example/notes/private.ttl",
+      "type": "permission",
+    },
+  ],
+  "matchedProhibitions": [
+    {
+      "action": "read",
+      "target": "https://alice.example/notes/private.ttl",
+      "type": "prohibition",
+    },
+  ],
+  "reason": "Conflict resolved by odrl:invalid — the policy is void; denying (fail-closed).",
+}
+`;
+
+exports[`characterization: evaluate decision matrix > conflict perm → permit 1`] = `
+{
+  "conflict": true,
+  "decision": "permit",
+  "duties": [],
+  "matchedPermissions": [
+    {
+      "action": "read",
+      "target": "https://alice.example/notes/private.ttl",
+      "type": "permission",
+    },
+  ],
+  "matchedProhibitions": [
+    {
+      "action": "read",
+      "target": "https://alice.example/notes/private.ttl",
+      "type": "prohibition",
+    },
+  ],
+  "reason": "Conflict resolved by odrl:perm — permission overrides prohibition.",
+}
+`;
+
+exports[`characterization: evaluate decision matrix > constraint fail-closed: missing purpose in context → notApplicable 1`] = `
+{
+  "conflict": false,
+  "decision": "notApplicable",
+  "duties": [],
+  "matchedPermissions": [],
+  "matchedProhibitions": [],
+  "reason": "No permission or prohibition matches the request.",
+}
+`;
+
+exports[`characterization: evaluate decision matrix > constraint satisfied: purpose supplied → permit 1`] = `
+{
+  "conflict": false,
+  "decision": "permit",
+  "duties": [],
+  "matchedPermissions": [
+    {
+      "action": "read",
+      "target": "https://alice.example/notes/private.ttl",
+      "type": "permission",
+    },
+  ],
+  "matchedProhibitions": [],
+  "reason": "A permission matches the request.",
+}
+`;
+
+exports[`characterization: evaluate decision matrix > dateTime lteq against injected now → permit 1`] = `
+{
+  "conflict": false,
+  "decision": "permit",
+  "duties": [],
+  "matchedPermissions": [
+    {
+      "action": "read",
+      "target": "https://alice.example/notes/private.ttl",
+      "type": "permission",
+    },
+  ],
+  "matchedProhibitions": [],
+  "reason": "A permission matches the request.",
+}
+`;
+
+exports[`characterization: evaluate decision matrix > deny: matching prohibition only 1`] = `
+{
+  "conflict": false,
+  "decision": "deny",
+  "duties": [],
+  "matchedPermissions": [],
+  "matchedProhibitions": [
+    {
+      "action": "read",
+      "target": "https://alice.example/notes/private.ttl",
+      "type": "prohibition",
+    },
+  ],
+  "reason": "A prohibition matches the request.",
+}
+`;
+
+exports[`characterization: evaluate decision matrix > isAnyOf set membership → permit 1`] = `
+{
+  "conflict": false,
+  "decision": "permit",
+  "duties": [],
+  "matchedPermissions": [
+    {
+      "action": "read",
+      "target": "https://alice.example/notes/private.ttl",
+      "type": "permission",
+    },
+  ],
+  "matchedProhibitions": [],
+  "reason": "A permission matches the request.",
+}
+`;
+
+exports[`characterization: evaluate decision matrix > notApplicable: no rule matches 1`] = `
+{
+  "conflict": false,
+  "decision": "notApplicable",
+  "duties": [],
+  "matchedPermissions": [],
+  "matchedProhibitions": [],
+  "reason": "No permission or prohibition matches the request.",
+}
+`;
+
+exports[`characterization: evaluate decision matrix > permit with unfulfilled duty (advisory) → permit, duty reported 1`] = `
+{
+  "conflict": false,
+  "decision": "permit",
+  "duties": [
+    {
+      "action": "attribute",
+      "fulfilled": false,
+    },
+  ],
+  "matchedPermissions": [
+    {
+      "action": "read",
+      "target": "https://alice.example/notes/private.ttl",
+      "type": "permission",
+    },
+  ],
+  "matchedProhibitions": [],
+  "reason": "A permission matches the request.",
+}
+`;
+
+exports[`characterization: evaluate decision matrix > permit: matching permission only 1`] = `
+{
+  "conflict": false,
+  "decision": "permit",
+  "duties": [],
+  "matchedPermissions": [
+    {
+      "action": "read",
+      "assignee": "https://bob.example/profile/card#me",
+      "target": "https://alice.example/notes/private.ttl",
+      "type": "permission",
+    },
+  ],
+  "matchedProhibitions": [],
+  "reason": "A permission matches the request.",
+}
+`;
+
+exports[`characterization: evaluate decision matrix > requireDuties with discharged duty → permit 1`] = `
+{
+  "conflict": false,
+  "decision": "permit",
+  "duties": [
+    {
+      "action": "attribute",
+      "fulfilled": true,
+    },
+  ],
+  "matchedPermissions": [
+    {
+      "action": "read",
+      "target": "https://alice.example/notes/private.ttl",
+      "type": "permission",
+    },
+  ],
+  "matchedProhibitions": [],
+  "reason": "A permission matches the request.",
+}
+`;
+
+exports[`characterization: evaluate decision matrix > requireDuties with unfulfilled duty → deny 1`] = `
+{
+  "conflict": false,
+  "decision": "deny",
+  "duties": [
+    {
+      "action": "attribute",
+      "fulfilled": false,
+    },
+  ],
+  "matchedPermissions": [
+    {
+      "action": "read",
+      "target": "https://alice.example/notes/private.ttl",
+      "type": "permission",
+    },
+  ],
+  "matchedProhibitions": [],
+  "reason": "A permission matches the request. But requireDuties is set and these duties are unfulfilled: attribute.",
+}
+`;
+
+exports[`characterization: evaluate decision matrix > use umbrella covers a read request 1`] = `
+{
+  "conflict": false,
+  "decision": "permit",
+  "duties": [],
+  "matchedPermissions": [
+    {
+      "action": "use",
+      "target": "https://alice.example/notes/private.ttl",
+      "type": "permission",
+    },
+  ],
+  "matchedProhibitions": [],
+  "reason": "A permission matches the request.",
+}
+`;
+
+exports[`characterization: evaluate decision matrix > use umbrella does NOT cover a control request (fail-closed) 1`] = `
+{
+  "conflict": false,
+  "decision": "notApplicable",
+  "duties": [],
+  "matchedPermissions": [],
+  "matchedProhibitions": [],
+  "reason": "No permission or prohibition matches the request.",
+}
+`;
+
+exports[`characterization: evaluate decision matrix > write subsumes an append request 1`] = `
+{
+  "conflict": false,
+  "decision": "permit",
+  "duties": [],
+  "matchedPermissions": [
+    {
+      "action": "write",
+      "target": "https://alice.example/notes/private.ttl",
+      "type": "permission",
+    },
+  ],
+  "matchedProhibitions": [],
+  "reason": "A permission matches the request.",
+}
+`;
+
+exports[`characterization: express graph fingerprint > policyToRdf emits a stable canonical graph for the rich policy 1`] = `
+"<https://alice.example/policies/p1> http://www.w3.org/1999/02/22-rdf-syntax-ns#type <http://www.w3.org/ns/odrl/2/Offer>
+<https://alice.example/policies/p1> http://www.w3.org/ns/odrl/2/assigner <https://alice.example/profile/card#me>
+<https://alice.example/policies/p1> http://www.w3.org/ns/odrl/2/conflict <http://www.w3.org/ns/odrl/2/prohibit>
+<https://alice.example/policies/p1> http://www.w3.org/ns/odrl/2/obligation _:B
+<https://alice.example/policies/p1> http://www.w3.org/ns/odrl/2/permission _:B
+<https://alice.example/policies/p1> http://www.w3.org/ns/odrl/2/profile <https://w3id.org/oac#>
+<https://alice.example/policies/p1> http://www.w3.org/ns/odrl/2/prohibition _:B
+<https://alice.example/policies/p1> http://www.w3.org/ns/odrl/2/uid <https://alice.example/policies/p1>
+_:B http://www.w3.org/ns/odrl/2/action <http://www.w3.org/ns/odrl/2/attribute>
+_:B http://www.w3.org/ns/odrl/2/action <http://www.w3.org/ns/odrl/2/distribute>
+_:B http://www.w3.org/ns/odrl/2/action <http://www.w3.org/ns/odrl/2/inform>
+_:B http://www.w3.org/ns/odrl/2/action <http://www.w3.org/ns/odrl/2/read>
+_:B http://www.w3.org/ns/odrl/2/assignee <https://bob.example/profile/card#me>
+_:B http://www.w3.org/ns/odrl/2/assigner <https://alice.example/profile/card#me>
+_:B http://www.w3.org/ns/odrl/2/assigner <https://alice.example/profile/card#me>
+_:B http://www.w3.org/ns/odrl/2/constraint _:B
+_:B http://www.w3.org/ns/odrl/2/constraint _:B
+_:B http://www.w3.org/ns/odrl/2/constraint _:B
+_:B http://www.w3.org/ns/odrl/2/constraint _:B
+_:B http://www.w3.org/ns/odrl/2/duty _:B
+_:B http://www.w3.org/ns/odrl/2/leftOperand <http://www.w3.org/ns/odrl/2/count>
+_:B http://www.w3.org/ns/odrl/2/leftOperand <http://www.w3.org/ns/odrl/2/dateTime>
+_:B http://www.w3.org/ns/odrl/2/leftOperand <http://www.w3.org/ns/odrl/2/purpose>
+_:B http://www.w3.org/ns/odrl/2/leftOperand <http://www.w3.org/ns/odrl/2/recipient>
+_:B http://www.w3.org/ns/odrl/2/operator <http://www.w3.org/ns/odrl/2/eq>
+_:B http://www.w3.org/ns/odrl/2/operator <http://www.w3.org/ns/odrl/2/eq>
+_:B http://www.w3.org/ns/odrl/2/operator <http://www.w3.org/ns/odrl/2/lteq>
+_:B http://www.w3.org/ns/odrl/2/operator <http://www.w3.org/ns/odrl/2/lteq>
+_:B http://www.w3.org/ns/odrl/2/rightOperand "2027-01-01T00:00:00Z"^^http://www.w3.org/2001/XMLSchema#dateTime
+_:B http://www.w3.org/ns/odrl/2/rightOperand "5"^^http://www.w3.org/2001/XMLSchema#integer
+_:B http://www.w3.org/ns/odrl/2/rightOperand <https://alice.example/profile/card#me>
+_:B http://www.w3.org/ns/odrl/2/rightOperand <https://w3id.org/dpv#ResearchAndDevelopment>
+_:B http://www.w3.org/ns/odrl/2/target <https://alice.example/notes/private.ttl>
+_:B http://www.w3.org/ns/odrl/2/target <https://alice.example/notes/private.ttl>
+_:B http://www.w3.org/ns/odrl/2/target <https://alice.example/profile/card#me>"
+`;
+
+exports[`characterization: express graph fingerprint > policyToRdf emits a stable graph for the append/control acl-mode policy 1`] = `
+"<https://alice.example/policies/acl> http://www.w3.org/1999/02/22-rdf-syntax-ns#type <http://www.w3.org/ns/odrl/2/Set>
+<https://alice.example/policies/acl> http://www.w3.org/ns/odrl/2/permission _:B
+<https://alice.example/policies/acl> http://www.w3.org/ns/odrl/2/permission _:B
+<https://alice.example/policies/acl> http://www.w3.org/ns/odrl/2/prohibition _:B
+<https://alice.example/policies/acl> http://www.w3.org/ns/odrl/2/uid <https://alice.example/policies/acl>
+_:B http://www.w3.org/ns/odrl/2/action <http://www.w3.org/ns/auth/acl#Append>
+_:B http://www.w3.org/ns/odrl/2/action <http://www.w3.org/ns/auth/acl#Control>
+_:B http://www.w3.org/ns/odrl/2/action <http://www.w3.org/ns/odrl/2/delete>
+_:B http://www.w3.org/ns/odrl/2/assignee <https://alice.example/profile/card#me>
+_:B http://www.w3.org/ns/odrl/2/assignee <https://bob.example/profile/card#me>
+_:B http://www.w3.org/ns/odrl/2/target <https://alice.example/notes/private.ttl>
+_:B http://www.w3.org/ns/odrl/2/target <https://alice.example/notes/private.ttl>
+_:B http://www.w3.org/ns/odrl/2/target <https://alice.example/notes/private.ttl>"
+`;
+
+exports[`characterization: parse round-trip structure > JSON-LD round-trip recovers a stable OdrlPolicy 1`] = `
+{
+  "assigner": "https://alice.example/profile/card#me",
+  "conflict": "prohibit",
+  "id": "https://alice.example/policies/p1",
+  "obligations": [
+    {
+      "action": "inform",
+      "target": "https://alice.example/profile/card#me",
+    },
+  ],
+  "permissions": [
+    {
+      "action": "read",
+      "assignee": "https://bob.example/profile/card#me",
+      "assigner": "https://alice.example/profile/card#me",
+      "constraints": [
+        {
+          "leftOperand": "purpose",
+          "operator": "eq",
+          "rightOperand": "https://w3id.org/dpv#ResearchAndDevelopment",
+        },
+        {
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "leftOperand": "dateTime",
+          "operator": "lteq",
+          "rightOperand": "2027-01-01T00:00:00Z",
+        },
+        {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "leftOperand": "count",
+          "operator": "lteq",
+          "rightOperand": 5,
+        },
+      ],
+      "duties": [
+        {
+          "action": "attribute",
+          "constraints": [
+            {
+              "leftOperand": "recipient",
+              "operator": "eq",
+              "rightOperand": "https://alice.example/profile/card#me",
+            },
+          ],
+        },
+      ],
+      "target": "https://alice.example/notes/private.ttl",
+      "type": "permission",
+    },
+  ],
+  "profile": "https://w3id.org/oac#",
+  "prohibitions": [
+    {
+      "action": "distribute",
+      "assigner": "https://alice.example/profile/card#me",
+      "target": "https://alice.example/notes/private.ttl",
+      "type": "prohibition",
+    },
+  ],
+  "type": "Offer",
+}
+`;
+
+exports[`characterization: parse round-trip structure > Turtle round-trip recovers a stable OdrlPolicy 1`] = `
+{
+  "assigner": "https://alice.example/profile/card#me",
+  "conflict": "prohibit",
+  "id": "https://alice.example/policies/p1",
+  "obligations": [
+    {
+      "action": "inform",
+      "target": "https://alice.example/profile/card#me",
+    },
+  ],
+  "permissions": [
+    {
+      "action": "read",
+      "assignee": "https://bob.example/profile/card#me",
+      "assigner": "https://alice.example/profile/card#me",
+      "constraints": [
+        {
+          "leftOperand": "purpose",
+          "operator": "eq",
+          "rightOperand": "https://w3id.org/dpv#ResearchAndDevelopment",
+        },
+        {
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "leftOperand": "dateTime",
+          "operator": "lteq",
+          "rightOperand": "2027-01-01T00:00:00Z",
+        },
+        {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "leftOperand": "count",
+          "operator": "lteq",
+          "rightOperand": 5,
+        },
+      ],
+      "duties": [
+        {
+          "action": "attribute",
+          "constraints": [
+            {
+              "leftOperand": "recipient",
+              "operator": "eq",
+              "rightOperand": "https://alice.example/profile/card#me",
+            },
+          ],
+        },
+      ],
+      "target": "https://alice.example/notes/private.ttl",
+      "type": "permission",
+    },
+  ],
+  "profile": "https://w3id.org/oac#",
+  "prohibitions": [
+    {
+      "action": "distribute",
+      "assigner": "https://alice.example/profile/card#me",
+      "target": "https://alice.example/notes/private.ttl",
+      "type": "prohibition",
+    },
+  ],
+  "type": "Offer",
+}
+`;
