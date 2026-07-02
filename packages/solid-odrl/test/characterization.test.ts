@@ -7,10 +7,12 @@
 // launders a behaviour change).
 //
 // What is pinned:
-//   1. The EXPRESS graph — a blank-node-label-INDEPENDENT canonical fingerprint of
-//      policyToRdf's quads (sorted `predicate → object` lines; blanks normalised),
-//      so a serialisation change is caught without depending on n3's non-stable
-//      blank-node counter.
+//   1. The EXPRESS graph — a blank-node-label-INDEPENDENT, TOPOLOGY-PRESERVING
+//      canonical serialisation of policyToRdf's quads (blanks inlined as nested
+//      sorted `[ … ]` blocks under their parent), so a serialisation change —
+//      INCLUDING a constraint attached to the wrong rule or contents swapped
+//      between permission/prohibition — is caught, without depending on n3's
+//      non-stable blank-node counter.
 //   2. The PARSE round-trip — the structured OdrlPolicy recovered from Turtle +
 //      JSON-LD (blank-node-label-free by construction).
 //   3. The JSON-LD document — deterministic projection with the pinned @context.
@@ -34,25 +36,57 @@ const NOW = new Date("2026-06-16T12:00:00Z");
 const RND = "https://w3id.org/dpv#ResearchAndDevelopment";
 
 /**
- * A blank-node-label-INDEPENDENT canonical fingerprint of a quad set: one sorted
- * line per quad, `subjectKind subject → predicate → objectKind object[^datatype]`,
- * with every blank node collapsed to `_:B` (n3's blank-node counter is not stable
- * across test ordering, so the raw labels can't be snapshotted). This captures
- * every predicate + IRI/literal object + datatype — enough to catch a
- * serialisation-shape regression — while staying deterministic.
+ * A blank-node-label-INDEPENDENT, TOPOLOGY-PRESERVING canonical serialisation of a
+ * quad set. n3's blank-node counter is not stable across test ordering, so the raw
+ * labels can't be snapshotted — but collapsing every blank to one marker would lose
+ * graph structure (a constraint attached to the WRONG rule, or contents swapped
+ * between permission/prohibition, could still fingerprint the same). Instead every
+ * blank node is INLINED under its parent as a nested, recursively-canonicalised
+ * `[ pred obj ; … ]` block (Turtle-blank style), with each level's properties
+ * sorted. This pins the full tree shape — which predicate sits on which node, and
+ * which rule owns which constraint/duty — while staying deterministic and label-
+ * free. The ODRL policy graphs here are trees (no blank-node cycles); a `seen`
+ * guard bounds any pathological input.
  */
-function fingerprint(quads: readonly Quad[]): string {
-  const norm = (t: Quad["subject"] | Quad["object"]): string => {
-    if (t.termType === "BlankNode") return "_:B";
+function canonicalGraph(quads: readonly Quad[]): string {
+  const bySubject = new Map<string, Quad[]>();
+  const key = (t: Quad["subject"] | Quad["object"]): string => {
+    if (t.termType === "BlankNode") return `_:${t.value}`;
     if (t.termType === "Literal") {
       const dt = t.datatype?.value ? `^^${t.datatype.value}` : "";
       return `"${t.value}"${dt}`;
     }
     return `<${t.value}>`;
   };
-  return quads
-    .map((q) => `${norm(q.subject)} ${q.predicate.value} ${norm(q.object)}`)
+  for (const q of quads) {
+    const k = key(q.subject);
+    (bySubject.get(k) ?? bySubject.set(k, []).get(k)!).push(q);
+  }
+  const renderNode = (k: string, seen: ReadonlySet<string>): string => {
+    const lines = (bySubject.get(k) ?? [])
+      .map((q) => `${q.predicate.value} ${renderObject(q.object, seen)}`)
+      .sort();
+    return `[ ${lines.join(" ; ")} ]`;
+  };
+  const renderObject = (o: Quad["object"], seen: ReadonlySet<string>): string => {
+    const k = key(o);
+    if (o.termType === "BlankNode") {
+      if (seen.has(k)) return "_:CYCLE";
+      return renderNode(k, new Set([...seen, k]));
+    }
+    return k;
+  };
+  // Top-level subjects are the NAMED nodes (the policy IRI + any named rule); blank
+  // subjects are reached by inlining. Emit each named subject's sorted properties.
+  return [...bySubject.keys()]
+    .filter((k) => k.startsWith("<"))
     .sort()
+    .map((k) => {
+      const lines = (bySubject.get(k) ?? [])
+        .map((q) => `${q.predicate.value} ${renderObject(q.object, new Set([k]))}`)
+        .sort();
+      return `${k}\n  ${lines.join("\n  ")}`;
+    })
     .join("\n");
 }
 
@@ -87,7 +121,7 @@ const RICH_POLICY: OdrlPolicy = {
 
 describe("characterization: express graph fingerprint", () => {
   it("policyToRdf emits a stable canonical graph for the rich policy", () => {
-    expect(fingerprint(policyToRdf(RICH_POLICY))).toMatchSnapshot();
+    expect(canonicalGraph(policyToRdf(RICH_POLICY))).toMatchSnapshot();
   });
 
   it("policyToRdf emits a stable graph for the append/control acl-mode policy", () => {
@@ -99,7 +133,7 @@ describe("characterization: express graph fingerprint", () => {
       ],
       prohibitions: [{ type: "prohibition", action: "delete", target: RES }],
     };
-    expect(fingerprint(policyToRdf(policy))).toMatchSnapshot();
+    expect(canonicalGraph(policyToRdf(policy))).toMatchSnapshot();
   });
 });
 

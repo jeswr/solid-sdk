@@ -589,57 +589,24 @@ exports[`characterization: evaluate decision matrix > write subsumes an append r
 `;
 
 exports[`characterization: express graph fingerprint > policyToRdf emits a stable canonical graph for the rich policy 1`] = `
-"<https://alice.example/policies/p1> http://www.w3.org/1999/02/22-rdf-syntax-ns#type <http://www.w3.org/ns/odrl/2/Offer>
-<https://alice.example/policies/p1> http://www.w3.org/ns/odrl/2/assigner <https://alice.example/profile/card#me>
-<https://alice.example/policies/p1> http://www.w3.org/ns/odrl/2/conflict <http://www.w3.org/ns/odrl/2/prohibit>
-<https://alice.example/policies/p1> http://www.w3.org/ns/odrl/2/obligation _:B
-<https://alice.example/policies/p1> http://www.w3.org/ns/odrl/2/permission _:B
-<https://alice.example/policies/p1> http://www.w3.org/ns/odrl/2/profile <https://w3id.org/oac#>
-<https://alice.example/policies/p1> http://www.w3.org/ns/odrl/2/prohibition _:B
-<https://alice.example/policies/p1> http://www.w3.org/ns/odrl/2/uid <https://alice.example/policies/p1>
-_:B http://www.w3.org/ns/odrl/2/action <http://www.w3.org/ns/odrl/2/attribute>
-_:B http://www.w3.org/ns/odrl/2/action <http://www.w3.org/ns/odrl/2/distribute>
-_:B http://www.w3.org/ns/odrl/2/action <http://www.w3.org/ns/odrl/2/inform>
-_:B http://www.w3.org/ns/odrl/2/action <http://www.w3.org/ns/odrl/2/read>
-_:B http://www.w3.org/ns/odrl/2/assignee <https://bob.example/profile/card#me>
-_:B http://www.w3.org/ns/odrl/2/assigner <https://alice.example/profile/card#me>
-_:B http://www.w3.org/ns/odrl/2/assigner <https://alice.example/profile/card#me>
-_:B http://www.w3.org/ns/odrl/2/constraint _:B
-_:B http://www.w3.org/ns/odrl/2/constraint _:B
-_:B http://www.w3.org/ns/odrl/2/constraint _:B
-_:B http://www.w3.org/ns/odrl/2/constraint _:B
-_:B http://www.w3.org/ns/odrl/2/duty _:B
-_:B http://www.w3.org/ns/odrl/2/leftOperand <http://www.w3.org/ns/odrl/2/count>
-_:B http://www.w3.org/ns/odrl/2/leftOperand <http://www.w3.org/ns/odrl/2/dateTime>
-_:B http://www.w3.org/ns/odrl/2/leftOperand <http://www.w3.org/ns/odrl/2/purpose>
-_:B http://www.w3.org/ns/odrl/2/leftOperand <http://www.w3.org/ns/odrl/2/recipient>
-_:B http://www.w3.org/ns/odrl/2/operator <http://www.w3.org/ns/odrl/2/eq>
-_:B http://www.w3.org/ns/odrl/2/operator <http://www.w3.org/ns/odrl/2/eq>
-_:B http://www.w3.org/ns/odrl/2/operator <http://www.w3.org/ns/odrl/2/lteq>
-_:B http://www.w3.org/ns/odrl/2/operator <http://www.w3.org/ns/odrl/2/lteq>
-_:B http://www.w3.org/ns/odrl/2/rightOperand "2027-01-01T00:00:00Z"^^http://www.w3.org/2001/XMLSchema#dateTime
-_:B http://www.w3.org/ns/odrl/2/rightOperand "5"^^http://www.w3.org/2001/XMLSchema#integer
-_:B http://www.w3.org/ns/odrl/2/rightOperand <https://alice.example/profile/card#me>
-_:B http://www.w3.org/ns/odrl/2/rightOperand <https://w3id.org/dpv#ResearchAndDevelopment>
-_:B http://www.w3.org/ns/odrl/2/target <https://alice.example/notes/private.ttl>
-_:B http://www.w3.org/ns/odrl/2/target <https://alice.example/notes/private.ttl>
-_:B http://www.w3.org/ns/odrl/2/target <https://alice.example/profile/card#me>"
+"<https://alice.example/policies/p1>
+  http://www.w3.org/1999/02/22-rdf-syntax-ns#type <http://www.w3.org/ns/odrl/2/Offer>
+  http://www.w3.org/ns/odrl/2/assigner <https://alice.example/profile/card#me>
+  http://www.w3.org/ns/odrl/2/conflict <http://www.w3.org/ns/odrl/2/prohibit>
+  http://www.w3.org/ns/odrl/2/obligation [ http://www.w3.org/ns/odrl/2/action <http://www.w3.org/ns/odrl/2/inform> ; http://www.w3.org/ns/odrl/2/target <https://alice.example/profile/card#me> ]
+  http://www.w3.org/ns/odrl/2/permission [ http://www.w3.org/ns/odrl/2/action <http://www.w3.org/ns/odrl/2/read> ; http://www.w3.org/ns/odrl/2/assignee <https://bob.example/profile/card#me> ; http://www.w3.org/ns/odrl/2/assigner <https://alice.example/profile/card#me> ; http://www.w3.org/ns/odrl/2/constraint [ http://www.w3.org/ns/odrl/2/leftOperand <http://www.w3.org/ns/odrl/2/count> ; http://www.w3.org/ns/odrl/2/operator <http://www.w3.org/ns/odrl/2/lteq> ; http://www.w3.org/ns/odrl/2/rightOperand "5"^^http://www.w3.org/2001/XMLSchema#integer ] ; http://www.w3.org/ns/odrl/2/constraint [ http://www.w3.org/ns/odrl/2/leftOperand <http://www.w3.org/ns/odrl/2/dateTime> ; http://www.w3.org/ns/odrl/2/operator <http://www.w3.org/ns/odrl/2/lteq> ; http://www.w3.org/ns/odrl/2/rightOperand "2027-01-01T00:00:00Z"^^http://www.w3.org/2001/XMLSchema#dateTime ] ; http://www.w3.org/ns/odrl/2/constraint [ http://www.w3.org/ns/odrl/2/leftOperand <http://www.w3.org/ns/odrl/2/purpose> ; http://www.w3.org/ns/odrl/2/operator <http://www.w3.org/ns/odrl/2/eq> ; http://www.w3.org/ns/odrl/2/rightOperand <https://w3id.org/dpv#ResearchAndDevelopment> ] ; http://www.w3.org/ns/odrl/2/duty [ http://www.w3.org/ns/odrl/2/action <http://www.w3.org/ns/odrl/2/attribute> ; http://www.w3.org/ns/odrl/2/constraint [ http://www.w3.org/ns/odrl/2/leftOperand <http://www.w3.org/ns/odrl/2/recipient> ; http://www.w3.org/ns/odrl/2/operator <http://www.w3.org/ns/odrl/2/eq> ; http://www.w3.org/ns/odrl/2/rightOperand <https://alice.example/profile/card#me> ] ] ; http://www.w3.org/ns/odrl/2/target <https://alice.example/notes/private.ttl> ]
+  http://www.w3.org/ns/odrl/2/profile <https://w3id.org/oac#>
+  http://www.w3.org/ns/odrl/2/prohibition [ http://www.w3.org/ns/odrl/2/action <http://www.w3.org/ns/odrl/2/distribute> ; http://www.w3.org/ns/odrl/2/assigner <https://alice.example/profile/card#me> ; http://www.w3.org/ns/odrl/2/target <https://alice.example/notes/private.ttl> ]
+  http://www.w3.org/ns/odrl/2/uid <https://alice.example/policies/p1>"
 `;
 
 exports[`characterization: express graph fingerprint > policyToRdf emits a stable graph for the append/control acl-mode policy 1`] = `
-"<https://alice.example/policies/acl> http://www.w3.org/1999/02/22-rdf-syntax-ns#type <http://www.w3.org/ns/odrl/2/Set>
-<https://alice.example/policies/acl> http://www.w3.org/ns/odrl/2/permission _:B
-<https://alice.example/policies/acl> http://www.w3.org/ns/odrl/2/permission _:B
-<https://alice.example/policies/acl> http://www.w3.org/ns/odrl/2/prohibition _:B
-<https://alice.example/policies/acl> http://www.w3.org/ns/odrl/2/uid <https://alice.example/policies/acl>
-_:B http://www.w3.org/ns/odrl/2/action <http://www.w3.org/ns/auth/acl#Append>
-_:B http://www.w3.org/ns/odrl/2/action <http://www.w3.org/ns/auth/acl#Control>
-_:B http://www.w3.org/ns/odrl/2/action <http://www.w3.org/ns/odrl/2/delete>
-_:B http://www.w3.org/ns/odrl/2/assignee <https://alice.example/profile/card#me>
-_:B http://www.w3.org/ns/odrl/2/assignee <https://bob.example/profile/card#me>
-_:B http://www.w3.org/ns/odrl/2/target <https://alice.example/notes/private.ttl>
-_:B http://www.w3.org/ns/odrl/2/target <https://alice.example/notes/private.ttl>
-_:B http://www.w3.org/ns/odrl/2/target <https://alice.example/notes/private.ttl>"
+"<https://alice.example/policies/acl>
+  http://www.w3.org/1999/02/22-rdf-syntax-ns#type <http://www.w3.org/ns/odrl/2/Set>
+  http://www.w3.org/ns/odrl/2/permission [ http://www.w3.org/ns/odrl/2/action <http://www.w3.org/ns/auth/acl#Append> ; http://www.w3.org/ns/odrl/2/assignee <https://bob.example/profile/card#me> ; http://www.w3.org/ns/odrl/2/target <https://alice.example/notes/private.ttl> ]
+  http://www.w3.org/ns/odrl/2/permission [ http://www.w3.org/ns/odrl/2/action <http://www.w3.org/ns/auth/acl#Control> ; http://www.w3.org/ns/odrl/2/assignee <https://alice.example/profile/card#me> ; http://www.w3.org/ns/odrl/2/target <https://alice.example/notes/private.ttl> ]
+  http://www.w3.org/ns/odrl/2/prohibition [ http://www.w3.org/ns/odrl/2/action <http://www.w3.org/ns/odrl/2/delete> ; http://www.w3.org/ns/odrl/2/target <https://alice.example/notes/private.ttl> ]
+  http://www.w3.org/ns/odrl/2/uid <https://alice.example/policies/acl>"
 `;
 
 exports[`characterization: parse round-trip structure > JSON-LD round-trip recovers a stable OdrlPolicy 1`] = `
