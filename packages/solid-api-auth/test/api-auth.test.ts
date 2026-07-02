@@ -690,4 +690,33 @@ describe("htu trust boundary — X-Forwarded-* spoofing (High finding regression
     );
     expect(err.message).toMatch(/htu/i);
   });
+
+  it("reconstructRequestUrl: authority comes from url ONLY — a raw Host header cannot override it", () => {
+    // request.url says app.example; a client-supplied Host says victim.example. The url wins.
+    const req = {
+      headers: { host: "victim.example" },
+      method: "POST",
+      url: "https://app.example/api/scan?y=2",
+    };
+    expect(reconstructRequestUrl(req)).toBe("https://app.example/api/scan");
+    // Even in trusted-proxy mode, a bare Host (no X-Forwarded-Host) does not override the url.
+    expect(reconstructRequestUrl(req, { trustForwardedHeaders: true })).toBe(
+      "https://app.example/api/scan",
+    );
+  });
+
+  it("401: a Host-header swap (no X-Forwarded-*) cannot redefine the htu origin", async () => {
+    // Proof binds htu = victim's host; the request really targets app.example but forges a
+    // Host: victim.example. Authority is taken from request.url (app.example) → htu mismatch.
+    const token = await mintAccessToken();
+    const proof = await mintProof({ accessToken: token, htu: "https://victim.example/api/scan" });
+    // A spoofed Host via a plain RequestLike (a web Request forbids setting Host directly).
+    const spoofed = {
+      headers: { host: "victim.example", authorization: `DPoP ${token}`, dpop: proof },
+      method: "POST",
+      url: "https://app.example/api/scan",
+    };
+    const err = await expectStatus(makeVerifier().authorizeOwner(spoofed), 401);
+    expect(err.message).toMatch(/htu/i);
+  });
 });

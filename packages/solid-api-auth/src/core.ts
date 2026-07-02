@@ -950,12 +950,17 @@ export interface RequestUrlOptions {
 
 /**
  * Reconstruct the exact request URL the client signed into the DPoP proof's `htu`: scheme + host
- * + (non-default) port + path, query/fragment stripped. Built from the `Host` header + the raw
- * request URL. When {@link RequestUrlOptions.trustForwardedHeaders} is set (the app is behind a
- * trusted TLS-terminating proxy / Vercel), `X-Forwarded-Proto` / `X-Forwarded-Host` take
- * precedence; by DEFAULT they are IGNORED (they are attacker-controlled on a directly-reachable
- * server). This must match what the browser signed (its absolute request URL). Accepts any
- * {@link RequestLike}.
+ * + (non-default) port + path, query/fragment stripped.
+ *
+ * The authority (scheme + host) is derived SOLELY from `request.url` — the canonical absolute URL
+ * the framework/runtime resolved for the request. A raw `Host` header is DELIBERATELY NOT
+ * consulted: it is client-controlled and letting it override `request.url` would be an equivalent
+ * `htu`-origin spoofing path (a replay could set `Host` to redefine the verified origin). When
+ * {@link RequestUrlOptions.trustForwardedHeaders} is set (the app is behind a trusted
+ * TLS-terminating proxy / Vercel, where `request.url` is the INTERNAL address), `X-Forwarded-Proto`
+ * / `X-Forwarded-Host` take precedence over `request.url`; by DEFAULT they are IGNORED (they are
+ * attacker-controlled on a directly-reachable server). `request.url` MUST be the absolute request
+ * URL (the {@link RequestLike} contract). Accepts any {@link RequestLike}.
  */
 export function reconstructRequestUrl(request: RequestLike, opts: RequestUrlOptions = {}): string {
   const normalized = normalizeRequest(request);
@@ -967,9 +972,10 @@ export function reconstructRequestUrl(request: RequestLike, opts: RequestUrlOpti
   const forwardedHost = trustForwarded
     ? firstForwardedValue(normalized.headers.get("x-forwarded-host"))
     : undefined;
-  const hostHeader = normalized.headers.get("host") ?? undefined;
+  // Authority from request.url only (never a client-supplied Host header); forwarded headers
+  // override it exclusively in trusted-proxy mode.
   const proto = forwardedProto ?? raw.protocol.replace(/:$/, "");
-  const host = forwardedHost ?? hostHeader ?? raw.host;
+  const host = forwardedHost ?? raw.host;
   const rebuilt = new URL(`${proto}://${host}`);
   rebuilt.pathname = raw.pathname;
   rebuilt.search = "";

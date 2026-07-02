@@ -314,12 +314,17 @@ export interface RequestUrlOptions {
 }
 /**
  * Reconstruct the exact request URL the client signed into the DPoP proof's `htu`: scheme + host
- * + (non-default) port + path, query/fragment stripped. Built from the `Host` header + the raw
- * request URL. When {@link RequestUrlOptions.trustForwardedHeaders} is set (the app is behind a
- * trusted TLS-terminating proxy / Vercel), `X-Forwarded-Proto` / `X-Forwarded-Host` take
- * precedence; by DEFAULT they are IGNORED (they are attacker-controlled on a directly-reachable
- * server). This must match what the browser signed (its absolute request URL). Accepts any
- * {@link RequestLike}.
+ * + (non-default) port + path, query/fragment stripped.
+ *
+ * The authority (scheme + host) is derived SOLELY from `request.url` — the canonical absolute URL
+ * the framework/runtime resolved for the request. A raw `Host` header is DELIBERATELY NOT
+ * consulted: it is client-controlled and letting it override `request.url` would be an equivalent
+ * `htu`-origin spoofing path (a replay could set `Host` to redefine the verified origin). When
+ * {@link RequestUrlOptions.trustForwardedHeaders} is set (the app is behind a trusted
+ * TLS-terminating proxy / Vercel, where `request.url` is the INTERNAL address), `X-Forwarded-Proto`
+ * / `X-Forwarded-Host` take precedence over `request.url`; by DEFAULT they are IGNORED (they are
+ * attacker-controlled on a directly-reachable server). `request.url` MUST be the absolute request
+ * URL (the {@link RequestLike} contract). Accepts any {@link RequestLike}.
  */
 export declare function reconstructRequestUrl(request: RequestLike, opts?: RequestUrlOptions): string;
 /**

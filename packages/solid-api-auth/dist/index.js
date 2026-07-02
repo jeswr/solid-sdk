@@ -2255,9 +2255,8 @@ function reconstructRequestUrl(request, opts = {}) {
   const trustForwarded = opts.trustForwardedHeaders === true;
   const forwardedProto = trustForwarded ? firstForwardedValue(normalized.headers.get("x-forwarded-proto")) : void 0;
   const forwardedHost = trustForwarded ? firstForwardedValue(normalized.headers.get("x-forwarded-host")) : void 0;
-  const hostHeader = normalized.headers.get("host") ?? void 0;
   const proto = forwardedProto ?? raw.protocol.replace(/:$/, "");
-  const host = forwardedHost ?? hostHeader ?? raw.host;
+  const host = forwardedHost ?? raw.host;
   const rebuilt = new URL(`${proto}://${host}`);
   rebuilt.pathname = raw.pathname;
   rebuilt.search = "";
