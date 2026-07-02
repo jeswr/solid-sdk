@@ -392,6 +392,11 @@ function scalarsEqual(a: string | number, b: string | number, c: OdrlConstraint)
   return String(a) === String(b);
 }
 
+/** A 3-way sign compare (-1, 0, +1) over already-typed, comparable primitives. */
+function cmp3<T extends string | number>(a: T, b: T): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
 /**
  * A 3-way compare (<0, 0, >0) treating the values as numbers when both parse as
  * numbers, as instants when the left-operand is `dateTime`, else lexically. Used by
@@ -406,9 +411,7 @@ function numericOrTemporalCompare(
   if (typed !== undefined) {
     return typed;
   }
-  const sa = String(a);
-  const sb = String(b);
-  return sa < sb ? -1 : sa > sb ? 1 : 0;
+  return cmp3(String(a), String(b));
 }
 
 /**
@@ -427,19 +430,15 @@ function tryNumericOrTemporal(
   if (isTemporal) {
     const ta = Date.parse(String(a));
     const tb = Date.parse(String(b));
-    if (!Number.isNaN(ta) && !Number.isNaN(tb)) {
-      return ta < tb ? -1 : ta > tb ? 1 : 0;
-    }
-    return undefined;
+    // Both sides must parse to a valid instant, else fall back to lexical (undefined).
+    return Number.isNaN(ta) || Number.isNaN(tb) ? undefined : cmp3(ta, tb);
   }
-  const na = typeof a === "number" ? a : Number(a);
-  const nb = typeof b === "number" ? b : Number(b);
   // Only treat as numeric when BOTH parse to a finite number and the strings were
   // genuinely numeric (avoid "" → 0). Guard empty/whitespace.
-  if (isFiniteNumber(a) && isFiniteNumber(b) && !Number.isNaN(na) && !Number.isNaN(nb)) {
-    return na < nb ? -1 : na > nb ? 1 : 0;
+  if (!isFiniteNumber(a) || !isFiniteNumber(b)) {
+    return undefined;
   }
-  return undefined;
+  return cmp3(Number(a), Number(b));
 }
 
 /** True if the value is a number, or a non-empty string that parses to a finite number. */

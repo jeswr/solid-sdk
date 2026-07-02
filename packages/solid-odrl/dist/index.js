@@ -473,31 +473,27 @@ function scalarsEqual(a, b, c) {
   }
   return String(a) === String(b);
 }
+function cmp3(a, b) {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
 function numericOrTemporalCompare(a, b, c) {
   const typed = tryNumericOrTemporal(a, b, c);
   if (typed !== void 0) {
     return typed;
   }
-  const sa = String(a);
-  const sb = String(b);
-  return sa < sb ? -1 : sa > sb ? 1 : 0;
+  return cmp3(String(a), String(b));
 }
 function tryNumericOrTemporal(a, b, c) {
   const isTemporal = c.leftOperand === "dateTime" || c.datatype === `${XSD}dateTime` || c.datatype === `${XSD}date`;
   if (isTemporal) {
     const ta = Date.parse(String(a));
     const tb = Date.parse(String(b));
-    if (!Number.isNaN(ta) && !Number.isNaN(tb)) {
-      return ta < tb ? -1 : ta > tb ? 1 : 0;
-    }
+    return Number.isNaN(ta) || Number.isNaN(tb) ? void 0 : cmp3(ta, tb);
+  }
+  if (!isFiniteNumber(a) || !isFiniteNumber(b)) {
     return void 0;
   }
-  const na = typeof a === "number" ? a : Number(a);
-  const nb = typeof b === "number" ? b : Number(b);
-  if (isFiniteNumber(a) && isFiniteNumber(b) && !Number.isNaN(na) && !Number.isNaN(nb)) {
-    return na < nb ? -1 : na > nb ? 1 : 0;
-  }
-  return void 0;
+  return cmp3(Number(a), Number(b));
 }
 function isFiniteNumber(v) {
   if (typeof v === "number") {
