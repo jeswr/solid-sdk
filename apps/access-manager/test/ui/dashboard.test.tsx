@@ -86,3 +86,28 @@ describe("DashboardView", () => {
     expect(screen.getAllByText("/docs/report.ttl").length).toBeGreaterThan(0);
   });
 });
+
+describe("DashboardView — authenticated-class revoke (roborev regression)", () => {
+  it("revoking the any-logged-in line removes the acl:agentClass triple", async () => {
+    const pod = buildPod();
+    pod.seed(
+      `${POD}docs/report.ttl.acl`,
+      `@prefix acl: <http://www.w3.org/ns/auth/acl#> .
+@prefix foaf: <http://xmlns.com/foaf/0.1/> .
+<${POD}docs/report.ttl.acl#owner> a acl:Authorization ; acl:agent <${OWNER}> ;
+  acl:accessTo <${POD}docs/report.ttl> ; acl:mode acl:Read, acl:Write, acl:Control .
+<${POD}docs/report.ttl.acl#auth> a acl:Authorization ;
+  acl:agentClass acl:AuthenticatedAgent ;
+  acl:accessTo <${POD}docs/report.ttl> ; acl:mode acl:Read .`,
+    );
+    renderDashboard(pod, await walkAll(pod));
+    fireEvent.click(screen.getByTestId("revoke-authenticated"));
+    await waitFor(async () => {
+      const effective = await readEffectiveAcl(`${POD}docs/report.ttl`, POD, pod.fetch);
+      expect(effective.entries.some((e) => e.isAuthenticated)).toBe(false);
+    });
+    // Owner access untouched.
+    const effective = await readEffectiveAcl(`${POD}docs/report.ttl`, POD, pod.fetch);
+    expect(effective.entries.some((e) => e.agents.includes(OWNER))).toBe(true);
+  });
+});
