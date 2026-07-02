@@ -234,13 +234,16 @@ export async function readEffectiveAcl(
 
 /**
  * Whether an entry APPLIES to a resource: it names the resource directly
- * (acl:accessTo) or covers it via acl:default on the resource itself or an
- * ancestor container. Used to keep the lockout guards SCOPE-AWARE — a Control
- * entry for an unrelated resource in the same ACL document must not count.
+ * (acl:accessTo), or covers it via acl:default on a STRICT ancestor. Per the
+ * WAC model, `acl:default <C>` governs C's DESCENDANTS only — the container
+ * itself is governed by acl:accessTo — so a default-only Control entry must
+ * NOT count as Control over the container itself (roborev round 4). Used to
+ * keep the lockout guards SCOPE-AWARE — a Control entry for an unrelated
+ * resource in the same ACL document must not count either.
  */
 export function entryAppliesTo(entry: AclEntry, resource: string): boolean {
   if (entry.accessTo.some((t) => sameResource(t, resource))) return true;
-  return entry.defaultFor.some((d) => sameResource(d, resource) || isWithinStorage(resource, d));
+  return entry.defaultFor.some((d) => !sameResource(d, resource) && isWithinStorage(resource, d));
 }
 
 /**
@@ -368,13 +371,16 @@ export function removePublicAccess(
   ownerWebId: string,
   resource: string,
 ): void {
-  const acl = new AclResource(dataset, DataFactory);
-  const authIris = [...acl.authorizations].map((a) => a.value);
-  for (const authIri of authIris) {
-    const auth = authAt(dataset, authIri);
-    if (tryRead(() => auth.accessibleToAny) === true) {
+  // Scope the removal to entries that APPLY to `resource` — a multi-scope ACL
+  // document may carry public entries for OTHER resources whose lockout this
+  // guard cannot validate, so those entries are left alone (roborev round 4:
+  // a doc-wide sweep with a single-resource guard could strip another
+  // resource's last public Control path unchecked).
+  for (const entry of projectEntries(dataset)) {
+    if (entry.isPublic && entryAppliesTo(entry, resource)) {
+      const auth = authAt(dataset, entry.authIri);
       auth.agentClass.delete(FOAF.Agent);
-      dropIfSubjectless(dataset, authIri);
+      dropIfSubjectless(dataset, entry.authIri);
     }
   }
   if (!ownerRetainsAnyControl(dataset, ownerWebId, resource))

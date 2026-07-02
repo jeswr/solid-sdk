@@ -496,3 +496,57 @@ describe("scope-aware lockout guard (roborev round 3 Medium)", () => {
     expect(projectEntries(read.read.dataset).some((e) => e.isPublic)).toBe(false);
   });
 });
+
+describe("default-scope + bulk public removal (roborev round 4)", () => {
+  it("acl:default on the container does NOT count as Control over the container itself", async () => {
+    const pod = buildPod();
+    const CONTAINER = `${POD}docs/`;
+    const CACL = `${CONTAINER}.acl`;
+    // Owner's ONLY Control on the container doc is default-scoped (descendants
+    // only, per WAC); the container's own Control comes via the public class.
+    pod.seed(
+      CACL,
+      `${PREFIXES}
+<${CACL}#owner-default> a acl:Authorization ; acl:agent <${OWNER}> ;
+  acl:default <${CONTAINER}> ; acl:mode acl:Read, acl:Write, acl:Control .
+<${CACL}#pub> a acl:Authorization ; acl:agentClass foaf:Agent ;
+  acl:accessTo <${CONTAINER}> ; acl:mode acl:Read, acl:Write, acl:Control .`,
+    );
+    const { read } = await entriesAt(pod, CACL);
+    const {
+      removePublicFromEntry,
+      entryAppliesTo,
+      projectEntries: project,
+    } = await import("../../src/lib/acl.js");
+    // The default-only entry applies to a DESCENDANT but not the container itself.
+    const defaultEntry = project(read.dataset).find((e) => e.authIri.endsWith("#owner-default"));
+    if (!defaultEntry) throw new Error("missing entry");
+    expect(entryAppliesTo(defaultEntry, `${CONTAINER}x.ttl`)).toBe(true);
+    expect(entryAppliesTo(defaultEntry, CONTAINER)).toBe(false);
+    // So stripping the public entry (the container's last Control path) throws.
+    expect(() => removePublicFromEntry(read.dataset, `${CACL}#pub`, OWNER, CONTAINER)).toThrow(
+      LockoutError,
+    );
+  });
+
+  it("removePublicAccess leaves public entries for OTHER resources in the same doc alone", async () => {
+    const pod = buildPod();
+    const OTHER = `${POD}docs/other.ttl`;
+    pod.seed(
+      REPORT_ACL,
+      `${PREFIXES}
+<${REPORT_ACL}#owner> a acl:Authorization ; acl:agent <${OWNER}> ;
+  acl:accessTo <${REPORT}> ; acl:mode acl:Read, acl:Write, acl:Control .
+<${REPORT_ACL}#pub-report> a acl:Authorization ; acl:agentClass foaf:Agent ;
+  acl:accessTo <${REPORT}> ; acl:mode acl:Read .
+<${REPORT_ACL}#pub-other> a acl:Authorization ; acl:agentClass foaf:Agent ;
+  acl:accessTo <${OTHER}> ; acl:mode acl:Read, acl:Write, acl:Control .`,
+    );
+    const { read } = await entriesAt(pod, REPORT_ACL);
+    removePublicAccess(read.dataset, OWNER, REPORT);
+    const entries = projectEntries(read.dataset);
+    expect(entries.find((e) => e.authIri.endsWith("#pub-report"))).toBeUndefined();
+    // The other resource's public entry (its only Control path) is untouched.
+    expect(entries.find((e) => e.authIri.endsWith("#pub-other"))?.isPublic).toBe(true);
+  });
+});
