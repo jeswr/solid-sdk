@@ -9,6 +9,7 @@
 import { randomUUID } from "node:crypto";
 import { parseRdf } from "@jeswr/fetch-rdf";
 import type { DatasetCore, Quad } from "@rdfjs/types";
+import { safeObjectIri } from "./iri.js";
 import { serialize } from "./serialize.js";
 import type { AgentAuthorization, Credential, CredentialSubject, JsonValue } from "./types.js";
 import {
@@ -125,9 +126,18 @@ export function credentialToRdf(credential: Credential): Quad[] {
   b.addType(subject, VC_CREDENTIAL);
   for (const t of credential.type ?? []) {
     const iri = typeIri(t);
-    if (iri !== VC_CREDENTIAL) b.addType(subject, iri);
+    if (iri === VC_CREDENTIAL) continue;
+    // A type is an object-position IRI: canonicalise an http(s) type, escape a
+    // non-http absolute type in place, and DROP a malformed one (never emit a
+    // type IRI that could break out of the serialised `<…>`).
+    const safe = safeObjectIri(iri);
+    if (safe !== undefined) b.addType(subject, safe);
   }
-  b.addIri(subject, VC_ISSUER, credential.issuer);
+  // The issuer is an object-position IRI (a WebID, or a DID/URN — all legitimate).
+  // Route it through the object-IRI guard: canonicalise http(s), escape a DID/URN,
+  // and DROP a non-absolute / malformed issuer rather than write a broken triple.
+  const issuerIri = safeObjectIri(credential.issuer);
+  if (issuerIri !== undefined) b.addIri(subject, VC_ISSUER, issuerIri);
   if (credential.validFrom !== undefined) {
     b.addLiteral(subject, VC_VALID_FROM, credential.validFrom, `${XSD}dateTime`);
   }

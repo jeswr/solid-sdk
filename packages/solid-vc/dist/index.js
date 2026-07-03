@@ -24,12 +24,12 @@ async function dataIntegrityHash(documentQuads, proofOptionsQuads2) {
 // src/credential.ts
 import { randomUUID } from "node:crypto";
 
-// node_modules/@jeswr/fetch-rdf/dist/parse.js
+// ../../../../../../../../Users/jesght/Documents/GitHub/jeswr/solid-vc/node_modules/@jeswr/fetch-rdf/dist/parse.js
 import contentType from "content-type";
 import { Store, StreamParser } from "n3";
 import { JsonLdParser } from "jsonld-streaming-parser";
 
-// node_modules/@jeswr/fetch-rdf/dist/errors.js
+// ../../../../../../../../Users/jesght/Documents/GitHub/jeswr/solid-vc/node_modules/@jeswr/fetch-rdf/dist/errors.js
 var RdfFetchError = class extends Error {
   /** The original cause, if any (e.g. a network error or parser exception). */
   cause;
@@ -53,7 +53,7 @@ var RdfFetchError = class extends Error {
   }
 };
 
-// node_modules/@jeswr/fetch-rdf/dist/parse.js
+// ../../../../../../../../Users/jesght/Documents/GitHub/jeswr/solid-vc/node_modules/@jeswr/fetch-rdf/dist/parse.js
 var SUPPORTED_RDF_MEDIA_TYPES = [
   "text/turtle",
   "application/n-triples",
@@ -178,7 +178,36 @@ function waitForDrain(parser) {
   });
 }
 
-// node_modules/@jeswr/rdf-serialize/dist/serialize.js
+// src/iri.ts
+var IRI_FORBIDDEN = /[\u0000-\u0020<>"{}|^`\\]/g;
+function percentEncode(ch) {
+  return `%${ch.charCodeAt(0).toString(16).toUpperCase().padStart(2, "0")}`;
+}
+function escapeIri(value) {
+  return value.replace(IRI_FORBIDDEN, percentEncode);
+}
+function safeHttpIri(value) {
+  if (typeof value !== "string") return void 0;
+  let u;
+  try {
+    u = new URL(value);
+  } catch {
+    return void 0;
+  }
+  if (u.protocol !== "http:" && u.protocol !== "https:") return void 0;
+  return u.href.replace(/\|/g, "%7C").replace(/\^/g, "%5E").replace(/`/g, "%60");
+}
+function isAbsoluteIri(value) {
+  return /^[A-Za-z][A-Za-z0-9+.-]*:/.test(value);
+}
+function safeObjectIri(value) {
+  if (typeof value !== "string") return void 0;
+  const http = safeHttpIri(value);
+  if (http !== void 0) return http;
+  return isAbsoluteIri(value) ? escapeIri(value) : void 0;
+}
+
+// ../../../../../../../../Users/jesght/Documents/GitHub/jeswr/solid-vc/node_modules/@jeswr/rdf-serialize/dist/serialize.js
 import { Writer } from "n3";
 var DEFAULT_FORMAT = "text/turtle";
 function serialize(quads, options) {
@@ -382,28 +411,38 @@ function normalize(subject) {
 var GraphBuilder = class {
   store = new Store2();
   factory = DataFactory;
-  /** Materialise a {@link NodeRef} to its RDF/JS term. */
+  /**
+   * Materialise a {@link NodeRef} to its RDF/JS term. An IRI subject is passed
+   * through {@link escapeIri} FIRST so an untrusted subject id cannot break out of
+   * the `<…>` when the graph is serialised (n3.Writer does not escape IRIs). This
+   * is scheme-agnostic, so a `urn:uuid:` / `did:` subject is preserved unchanged.
+   */
   subjectTerm(ref) {
-    return ref.kind === "iri" ? NamedNodeFrom.string(ref.value, this.factory) : BlankNodeFrom.string(ref.value, this.factory);
+    return ref.kind === "iri" ? NamedNodeFrom.string(escapeIri(ref.value), this.factory) : BlankNodeFrom.string(ref.value, this.factory);
   }
   /** Add `(subject, rdf:type, classIri)`. */
   addType(subject, classIri) {
     this.addIri(subject, RDF_TYPE, classIri);
   }
-  /** Add `(subject, predicate, object-IRI)`. */
+  /**
+   * Add `(subject, predicate, object-IRI)`. The predicate and object IRIs are
+   * passed through {@link escapeIri} so neither an untrusted claim-key predicate
+   * nor an untrusted object IRI can break out of the serialised `<…>` — the
+   * low-level chokepoint that closes the injection for EVERY object-IRI write.
+   */
   addIri(subject, predicate, objectIri) {
     const s = this.subjectTerm(normalize(subject));
-    const p = NamedNodeFrom.string(predicate, this.factory);
-    const o = NamedNodeFrom.string(objectIri, this.factory);
+    const p = NamedNodeFrom.string(escapeIri(predicate), this.factory);
+    const o = NamedNodeFrom.string(escapeIri(objectIri), this.factory);
     this.store.add(this.factory.quad(s, p, o));
   }
   /** Add `(subject, predicate, literal)` with an optional datatype IRI. */
   addLiteral(subject, predicate, value, datatypeIri) {
     const s = this.subjectTerm(normalize(subject));
-    const p = NamedNodeFrom.string(predicate, this.factory);
+    const p = NamedNodeFrom.string(escapeIri(predicate), this.factory);
     const o = datatypeIri === void 0 ? LiteralFrom.string(value, this.factory) : this.factory.literal(
       value,
-      NamedNodeFrom.string(datatypeIri, this.factory)
+      NamedNodeFrom.string(escapeIri(datatypeIri), this.factory)
     );
     this.store.add(this.factory.quad(s, p, o));
   }
@@ -415,7 +454,7 @@ var GraphBuilder = class {
   linkBlankNode(subject, predicate) {
     const s = this.subjectTerm(normalize(subject));
     const blank = BlankNodeFrom.string(void 0, this.factory);
-    const p = NamedNodeFrom.string(predicate, this.factory);
+    const p = NamedNodeFrom.string(escapeIri(predicate), this.factory);
     this.store.add(this.factory.quad(s, p, blank));
     return { kind: "blank", value: blank.value };
   }
@@ -493,9 +532,12 @@ function credentialToRdf(credential) {
   b.addType(subject, VC_CREDENTIAL);
   for (const t of credential.type ?? []) {
     const iri = typeIri(t);
-    if (iri !== VC_CREDENTIAL) b.addType(subject, iri);
+    if (iri === VC_CREDENTIAL) continue;
+    const safe = safeObjectIri(iri);
+    if (safe !== void 0) b.addType(subject, safe);
   }
-  b.addIri(subject, VC_ISSUER, credential.issuer);
+  const issuerIri = safeObjectIri(credential.issuer);
+  if (issuerIri !== void 0) b.addIri(subject, VC_ISSUER, issuerIri);
   if (credential.validFrom !== void 0) {
     b.addLiteral(subject, VC_VALID_FROM, credential.validFrom, `${XSD}dateTime`);
   }
