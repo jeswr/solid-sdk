@@ -207,14 +207,14 @@ independently-authored sectors stay non-overlapping. Imports gUFO; reaches
 external vocabularies (PROV/FOAF/Org/vCard/schema.org/gist) only via the optional
 `core-alignments.ttl`.
 
-**The ten sectors** — each `rdfs:subClassOf`-roots every class in a `core:` class,
+**The twelve sectors** — each `rdfs:subClassOf`-roots every class in a `core:` class,
 carries its own gUFO meta-type, **constrains but never forks** the Core, and
 reuses a real domain vocabulary:
 
 | Sector | Prefix | gUFO highlights | External reuse |
 |---|---|---|---|
 | `sectors/identity#` | `id:` | NaturalPerson SubKind; VerifiableAttribute; HL7 Gender-Harmony five slots | eIDAS PID, ISO 3166, vCard, schema:Person |
-| `sectors/finance#` | `fin:` | Account=Relator(+Phase status); Transaction=Event; Counterparty=RoleMixin; Budget/BudgetCategory(envelope)+CRDT-sync (Actual Budget) | FIBO (version-pinned slim MIREOT), ISO 4217/20022 |
+| `sectors/finance#` | `fin:` | Account=Relator(+Phase status); Transaction=Event; Counterparty=RoleMixin; Budget/BudgetCategory(envelope)+CRDT-sync (Actual Budget); **double-entry LEDGER** (LedgerAccount/JournalEntry/LedgerEntry + Debit/Credit + account-class/code — Keystone) + **private equity** (Fund/Commitment/Notice + GP/LP + capital-call/distribution amounts — CapNote) + `fin:sharePct`/`fin:jurisdiction` (v1.2.0) | FIBO (version-pinned slim MIREOT + Mode-A LedgerAccount/LedgerEntry/PrivateEquityFund), ISO 4217/20022 |
 | `sectors/health#` | `health:` | Patient=RoleMixin of Person; Observation=Record+Quantity; record-vs-act split | FHIR (Mode A, no fhir.ttl), SNOMED CT/LOINC, QUDT/UCUM units |
 | `sectors/health/diet#` | `diet:` | SUB-SECTOR of health — Meal/FoodItem/Exposure=Record; Symptom=ClinicalEntry; TriggerClass+coded values=Category (per-trigger evidence-prior lag windows); elimination-protocol FSM; time-boxed conclusions; summary-only genetics — for the coeliac/multi-intolerance diary (`@jeswr/solid-health-diary`) | schema.org Meal/NutritionInformation, SNOMED CT/LOINC symptoms, ChEBI + Monash-FODMAP triggers, Open Food Facts allergen/additive taxonomy (all Mode A) |
 | `sectors/media#` | `media:` | CreativeWork=InformationResource+Asset; Artist=RoleMixin; PlaybackEvent | schema.org CreativeWork/MusicRecording, ODRL |
@@ -224,6 +224,8 @@ reuses a real domain vocabulary:
 | `sectors/social#` | `social:` | Note=InformationResource (as:Note/sioc:Note); Feed=InformationResource (as:Collection) — for Elk + Miniflux + pod-chat | ActivityStreams 2.0, SIOC, `@jeswr/solid-chat-interop` CanonicalMessage |
 | `sectors/bookmarks#` | `bookmark:` | Bookmark=InformationResource (a saved reference) + archived/notes/tags(skos) — for Linkding | schema:url/BookmarkAction, DCT, SKOS; the forthcoming `@jeswr/solid-bookmark` `book:` (Mode A) |
 | `sectors/futures#` | `fut:` | Participatory-democracy deliberation — Need/Satisfier SPLIT (Max-Neef axiological×existential matrix + Schwartz value scheme, all seeds not law); tri-state Resonance=Record; Deliberation=Activity; SharedFuture with per-cluster BridgingEvidence + MANDATORY dissent annex; Stage-1 AppProposal⊑wf:Task — for `jeswr/unite` (the exact IRIs its Stage-1 client writes) | ActivityStreams 2.0, PROV-O, ODRL 2.2 consent actions, VC 2.0, wf:/`@jeswr/solid-task-model` (all Mode A); Max-Neef 1991 + Schwartz 1992 + bridging-systems literature cited in the alignments |
+| `sectors/collectibles#` | `col:` | ProvenanceEvent=Activity (PROV-O-correct: creation is the only `prov:wasGeneratedBy`, others `prov:used`; attribution → an Agent NODE; `prov:startedAtTime` not `prov:atTime`); Valuation/Appraisal=Record on a separate MonetaryAmount node (never `schema:offers`); InsurancePolicy=InformationResource — for Provena (art/collectibles provenance). Replaces the reserved `provena.example.org` NS + the non-existent `schema:artworkMedium/artworkSize` | schema.org (real terms: `schema:artMedium`, `width`/`height`, MonetaryAmount), PROV-O, linked.art/CIDOC-CRM (reference-only, never adopted) — all Mode A |
+| `sectors/equine#` | `eq:` | Horse=Kind⊑Asset (schema.org has NO animal class — 404); Syndicate=Kind⊑Organization; OwnershipShare/StudShare=Record; StudNomination⊑schema:Reservation (`schema:totalPrice`); RaceResult⊑schema:SportsEvent; PrizeDistribution⊑schema:MoneyTransfer (`schema:amount` — replacing the non-existent `schema:prize`); coded sex/status/expense; percentages plain `xsd:decimal` — for Furlong. Replaces the per-resource `#flg.` fragment-IRI anti-pattern with shared `eq:` terms | schema.org (real dual-types only), W3C Organization, Wikidata horse anchor (all Mode A) |
 
 Each sector declares a `…/sectors/<sector>#sector` marker (a `skos:Concept`) —
 that is the IRI an app names in `fedapp:sector`. (`drawing`, `social` and
