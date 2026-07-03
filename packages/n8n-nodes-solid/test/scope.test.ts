@@ -134,6 +134,24 @@ describe("resolveTarget — refused targets (scope guard)", () => {
     );
   });
 
+  // --- encoded path delimiters (defence in depth, wave-3 review): the parser
+  // leaves %2F/%5C un-decoded so `..%2f` passes the prefix check textually — but
+  // a server that decodes before normalising would alias it above the base.
+  // The ambiguity is refused outright.
+
+  it("refuses an encoded-slash traversal that the parser does NOT collapse (..%2f)", () => {
+    expect(() => resolveTarget(BASE, "..%2fsecret.ttl")).toThrow(/encoded path delimiter/);
+    expect(() => resolveTarget(BASE, "..%2F..%2Fsecret.ttl")).toThrow(/encoded path delimiter/);
+  });
+
+  it("refuses any encoded slash or backslash in a target path", () => {
+    expect(() => resolveTarget(BASE, "a%2fb.ttl")).toThrow(/encoded path delimiter/);
+    expect(() => resolveTarget(BASE, "a%5Cb.ttl")).toThrow(/encoded path delimiter/);
+    expect(() => resolveTarget(BASE, "https://alice.pod.example/data/a%2Fb.ttl")).toThrow(
+      /encoded path delimiter/,
+    );
+  });
+
   it("refuses a non-http(s) absolute target (SSRF / scheme confusion)", () => {
     expect(() => resolveTarget(BASE, "file:///etc/passwd")).toThrow(/http\(s\)/);
   });

@@ -1520,6 +1520,11 @@ function assertWithinPod(base, url) {
       `[n8n-nodes-solid] target URL ${redactUserinfo(url)} escapes pod path ${b.pathname} (refused)`
     );
   }
+  if (/%2f|%5c/i.test(u.pathname)) {
+    throw new Error(
+      `[n8n-nodes-solid] target URL ${redactUserinfo(url)} contains an encoded path delimiter (%2F/%5C) (refused)`
+    );
+  }
 }
 function resolveTarget(base, target) {
   if (typeof target !== "string" || target.trim().length === 0) {

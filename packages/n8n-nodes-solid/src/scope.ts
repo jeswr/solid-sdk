@@ -125,6 +125,18 @@ export function assertWithinPod(base: string, url: string): void {
       `[n8n-nodes-solid] target URL ${redactUserinfo(url)} escapes pod path ${b.pathname} (refused)`,
     );
   }
+  // Defence in depth: refuse ENCODED path delimiters. The WHATWG parser leaves
+  // `%2F`/`%5C` un-decoded, so `data/..%2fsecret` passes the prefix check and the
+  // request URL itself stays under the pod — but a server that percent-DECODES
+  // before path-normalisation would alias it ABOVE the base (`/secret`). A pod
+  // resource address never legitimately encodes a `/` or `\` in a segment, so the
+  // ambiguity is refused outright rather than trusting every server's decode
+  // order (fail-closed; same posture as the traversal guard above).
+  if (/%2f|%5c/i.test(u.pathname)) {
+    throw new Error(
+      `[n8n-nodes-solid] target URL ${redactUserinfo(url)} contains an encoded path delimiter (%2F/%5C) (refused)`,
+    );
+  }
 }
 
 /**

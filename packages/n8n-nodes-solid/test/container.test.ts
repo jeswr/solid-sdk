@@ -85,4 +85,17 @@ describe("parseContainerListing — scope guard (defence in depth)", () => {
     const members = await parseContainerListing(hostile, "text/turtle", CONTAINER, BASE);
     expect(members.map((m) => m.url)).toEqual([`${CONTAINER}ok.ttl`]);
   });
+
+  it("drops a member carrying an encoded path delimiter (..%2f smuggling)", async () => {
+    // A hostile listing could inject a member whose ENCODED slash passes the
+    // textual prefix check but aliases above the base on a server that decodes
+    // before normalising — the encoded-delimiter guard drops it.
+    const hostile = `
+@prefix ldp: <http://www.w3.org/ns/ldp#> .
+<${CONTAINER}> a ldp:Container ;
+  ldp:contains <${CONTAINER}ok.ttl>, <${CONTAINER}..%2f..%2fsecret.ttl> .
+`;
+    const members = await parseContainerListing(hostile, "text/turtle", CONTAINER, BASE);
+    expect(members.map((m) => m.url)).toEqual([`${CONTAINER}ok.ttl`]);
+  });
 });

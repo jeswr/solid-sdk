@@ -95,6 +95,12 @@ data outside the configured pod:
   issued**.
 - **`http(s)` only** — any other scheme (`file:`, `data:`, …) is rejected (an
   SSRF / scheme-confusion guard).
+- **Encoded path delimiters (`%2F`/`%5C`) are refused.** The URL parser leaves
+  them un-decoded, so a `..%2f` target stays textually under the pod — but a
+  server that percent-decodes before normalising a path would alias it above the
+  base. A pod address never legitimately encodes a `/` in a segment, so the
+  ambiguity is refused (fail-closed, defence in depth) both for targets and for
+  container-listing members.
 - **Redirects are never followed.** Every request is issued with
   `disableFollowRedirect` (and `sendCredentialsOnCrossOriginRedirect: false` as
   defence in depth), and a `3xx` answer is **refused fail-closed** with a clear
