@@ -64,6 +64,7 @@ const ONTOLOGIES = [
   { dir: "bookmarks", file: "bookmarks.ttl", ns: "https://w3id.org/jeswr/sectors/bookmarks#" },
   { dir: "futures", file: "futures.ttl", ns: "https://w3id.org/jeswr/sectors/futures#" },
   { dir: "collectibles", file: "collectibles.ttl", ns: "https://w3id.org/jeswr/sectors/collectibles#" },
+  { dir: "equine", file: "equine.ttl", ns: "https://w3id.org/jeswr/sectors/equine#" },
 ];
 
 // =============================================================================

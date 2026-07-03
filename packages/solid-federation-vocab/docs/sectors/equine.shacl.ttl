@@ -1,0 +1,237 @@
+# AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+#
+@prefix eq:      <https://w3id.org/jeswr/sectors/equine#> .
+@prefix eqsh:    <https://w3id.org/jeswr/sectors/equine/shapes#> .
+@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix sh:      <http://www.w3.org/ns/shacl#> .
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix skos:    <http://www.w3.org/2004/02/skos/core#> .
+@prefix prof:    <http://www.w3.org/ns/dx/prof/> .
+@prefix schema:  <http://schema.org/> .
+
+# =============================================================================
+# Solid EQUINE sector — SHACL data-model profile (F4).
+#
+# The OWL ontology (equine.ttl) licenses meaning; THIS shape checks shape. The
+# MUSTs encode Furlong's write path with the review's corrections:
+#  - a Horse's eq:sex / eq:status, when present, MUST be coded IRIs (SHOULD both);
+#  - an OwnershipShare MUST carry eq:horse (IRI) + eq:sharePct (0–100) + at least
+#    one of eq:owner / eq:syndicate;
+#  - a StudShare MUST carry eq:horse + eq:sharePct;
+#  - a StudNomination MUST carry eq:horse (the stallion), eq:mareName, eq:season;
+#    it SHOULD price via schema:totalPrice (NOT schema:price);
+#  - a RaceResult MUST carry eq:horse, eq:forRace (IRI) and eq:finishPos (≥1);
+#  - a PrizeDistribution MUST carry schema:amount; it SHOULD name eq:recipientType.
+#
+# Discipline (matches the sibling sectors' profiles):
+#  - OPEN BY DEFAULT — no sh:closed (composes with app + schema.org profiles).
+#  - sh:severity carries the RFC 2119 grade: Violation=MUST, Warning=SHOULD.
+#  - Cross-RESOURCE references (eq:horse, eq:owner, eq:sire/dam, eq:forRace) are
+#    sh:nodeKind sh:IRI, NOT sh:class — a pod resource does not carry the
+#    referent's typing triples (pedigree links may be external studbook IRIs).
+#  - IMMUTABLE version IRI (.../equine/profile/0.1.0); additive-only.
+# =============================================================================
+
+<https://w3id.org/jeswr/sectors/equine/profile>
+    a prof:Profile ;
+    dcterms:title "Solid Equine data-model profile (version-independent)"@en ;
+    dcterms:description "Resolves to the current Equine sector profile version."@en .
+
+<https://w3id.org/jeswr/sectors/equine/profile/0.1.0>
+    a prof:Profile ;
+    dcterms:title "Solid Equine data-model profile"@en ;
+    dcterms:isVersionOf <https://w3id.org/jeswr/sectors/equine/profile> ;
+    owl:versionInfo "0.1.0" ;
+    owl:versionIRI <https://w3id.org/jeswr/sectors/equine/profile/0.1.0> ;
+    prof:isProfileOf <https://w3id.org/jeswr/sectors/equine> ;
+    prof:hasToken "solid-equine-0.1.0" ;
+    prof:hasResource [
+        prof:hasRole <http://www.w3.org/ns/dx/prof/role/constraints> ;
+        prof:hasArtifact <https://w3id.org/jeswr/sectors/equine/equine.shacl.ttl>
+    ] ;
+    prof:hasResource [
+        prof:hasRole <http://www.w3.org/ns/dx/prof/role/vocabulary> ;
+        prof:hasArtifact <https://w3id.org/jeswr/sectors/equine>
+    ] ;
+    rdfs:comment "Open-by-default SHACL profile for the equine sector."@en .
+
+# -----------------------------------------------------------------------------
+# Horse — sex + status are coded IRIs when present (both SHOULD).
+# -----------------------------------------------------------------------------
+eqsh:HorseShape a sh:NodeShape ;
+    sh:targetClass eq:Horse ;
+    rdfs:label "Horse shape"@en ;
+    sh:property [
+        sh:path eq:sex ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:severity sh:Warning ;
+        sh:message "A Horse SHOULD carry exactly one coded eq:sex IRI."@en
+    ] ;
+    sh:property [
+        sh:path eq:status ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:severity sh:Warning ;
+        sh:message "A Horse's eq:status, when present, SHOULD be a single coded IRI."@en
+    ] ;
+    sh:property [
+        sh:path eq:sire ;
+        sh:nodeKind sh:IRI ;
+        sh:severity sh:Warning ;
+        sh:message "eq:sire, when present, SHOULD be an IRI (a pedigree link)."@en
+    ] ;
+    sh:property [
+        sh:path eq:dam ;
+        sh:nodeKind sh:IRI ;
+        sh:severity sh:Warning ;
+        sh:message "eq:dam, when present, SHOULD be an IRI (a pedigree link)."@en
+    ] .
+
+# -----------------------------------------------------------------------------
+# OwnershipShare — horse + percentage + a holder.
+# -----------------------------------------------------------------------------
+eqsh:OwnershipShareShape a sh:NodeShape ;
+    sh:targetClass eq:OwnershipShare ;
+    rdfs:label "Ownership share shape"@en ;
+    sh:property [
+        sh:path eq:horse ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:severity sh:Violation ;
+        sh:message "An OwnershipShare MUST reference exactly one eq:horse (IRI)."@en
+    ] ;
+    sh:property [
+        sh:path eq:sharePct ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:decimal ;
+        sh:minInclusive 0 ;
+        sh:maxInclusive 100 ;
+        sh:severity sh:Violation ;
+        sh:message "An OwnershipShare MUST carry exactly one eq:sharePct (xsd:decimal, 0–100)."@en
+    ] ;
+    sh:or (
+        [ sh:path eq:owner ; sh:minCount 1 ]
+        [ sh:path eq:syndicate ; sh:minCount 1 ]
+    ) ;
+    sh:severity sh:Violation ;
+    sh:message "An OwnershipShare MUST name at least one of eq:owner or eq:syndicate."@en .
+
+# -----------------------------------------------------------------------------
+# StudShare — horse + percentage.
+# -----------------------------------------------------------------------------
+eqsh:StudShareShape a sh:NodeShape ;
+    sh:targetClass eq:StudShare ;
+    rdfs:label "Stud share shape"@en ;
+    sh:property [
+        sh:path eq:horse ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:severity sh:Violation ;
+        sh:message "A StudShare MUST reference exactly one eq:horse (IRI)."@en
+    ] ;
+    sh:property [
+        sh:path eq:sharePct ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:decimal ;
+        sh:minInclusive 0 ;
+        sh:maxInclusive 100 ;
+        sh:severity sh:Violation ;
+        sh:message "A StudShare MUST carry exactly one eq:sharePct (xsd:decimal, 0–100)."@en
+    ] .
+
+# -----------------------------------------------------------------------------
+# StudNomination — stallion + mare name + season; price is schema:totalPrice.
+# -----------------------------------------------------------------------------
+eqsh:StudNominationShape a sh:NodeShape ;
+    sh:targetClass eq:StudNomination ;
+    rdfs:label "Stud nomination shape"@en ;
+    sh:property [
+        sh:path eq:horse ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:severity sh:Violation ;
+        sh:message "A StudNomination MUST reference exactly one eq:horse (the stallion, IRI)."@en
+    ] ;
+    sh:property [
+        sh:path eq:mareName ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:severity sh:Violation ;
+        sh:message "A StudNomination MUST carry exactly one eq:mareName."@en
+    ] ;
+    sh:property [
+        sh:path eq:season ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:severity sh:Violation ;
+        sh:message "A StudNomination MUST carry exactly one eq:season."@en
+    ] ;
+    sh:property [
+        sh:path schema:price ;
+        sh:maxCount 0 ;
+        sh:severity sh:Warning ;
+        sh:message "A StudNomination SHOULD price via schema:totalPrice (the Reservation price property), NOT schema:price."@en
+    ] .
+
+# -----------------------------------------------------------------------------
+# RaceResult — horse + race + finishing position.
+# -----------------------------------------------------------------------------
+eqsh:RaceResultShape a sh:NodeShape ;
+    sh:targetClass eq:RaceResult ;
+    rdfs:label "Race result shape"@en ;
+    sh:property [
+        sh:path eq:horse ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:severity sh:Violation ;
+        sh:message "A RaceResult MUST reference exactly one eq:horse (IRI)."@en
+    ] ;
+    sh:property [
+        sh:path eq:forRace ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:severity sh:Violation ;
+        sh:message "A RaceResult MUST reference exactly one eq:forRace (IRI)."@en
+    ] ;
+    sh:property [
+        sh:path eq:finishPos ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:positiveInteger ;
+        sh:severity sh:Violation ;
+        sh:message "A RaceResult MUST carry exactly one eq:finishPos (xsd:positiveInteger, 1 = win)."@en
+    ] .
+
+# -----------------------------------------------------------------------------
+# PrizeDistribution — amount (schema:amount, NOT the non-existent schema:prize).
+# -----------------------------------------------------------------------------
+eqsh:PrizeDistributionShape a sh:NodeShape ;
+    sh:targetClass eq:PrizeDistribution ;
+    rdfs:label "Prize distribution shape"@en ;
+    sh:property [
+        sh:path schema:amount ;
+        sh:minCount 1 ;
+        sh:severity sh:Violation ;
+        sh:message "A PrizeDistribution MUST carry a schema:amount (dual-typed schema:MoneyTransfer — never the non-existent schema:prize)."@en
+    ] ;
+    sh:property [
+        sh:path eq:recipientType ;
+        sh:nodeKind sh:IRI ;
+        sh:severity sh:Warning ;
+        sh:message "A PrizeDistribution SHOULD carry a coded eq:recipientType IRI."@en
+    ] .

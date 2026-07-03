@@ -1,0 +1,145 @@
+{
+  "@context": {
+    "@version": 1.1,
+    "@protected": true,
+    "eq": "https://w3id.org/jeswr/sectors/equine#",
+    "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+    "skos": "http://www.w3.org/2004/02/skos/core#",
+    "xsd": "http://www.w3.org/2001/XMLSchema#",
+    "id": "@id",
+    "type": "@type",
+    "colour": {
+      "@id": "eq:colour",
+      "@type": "xsd:string"
+    },
+    "country": {
+      "@id": "eq:country",
+      "@type": "xsd:string"
+    },
+    "dam": {
+      "@id": "eq:dam",
+      "@type": "@id"
+    },
+    "expense-agistment": "eq:expense-agistment",
+    "expense-entry-fees": "eq:expense-entry-fees",
+    "expense-farrier": "eq:expense-farrier",
+    "expense-training-fees": "eq:expense-training-fees",
+    "expense-transport": "eq:expense-transport",
+    "expense-veterinary": "eq:expense-veterinary",
+    "expenseCategory": {
+      "@id": "eq:expenseCategory",
+      "@type": "@id"
+    },
+    "ExpenseCategory": "eq:ExpenseCategory",
+    "expenseCategoryScheme": "eq:expenseCategoryScheme",
+    "finishPos": {
+      "@id": "eq:finishPos",
+      "@type": "xsd:positiveInteger"
+    },
+    "forRace": {
+      "@id": "eq:forRace",
+      "@type": "@id"
+    },
+    "horse": {
+      "@id": "eq:horse",
+      "@type": "@id"
+    },
+    "Horse": "eq:Horse",
+    "HorseStatus": "eq:HorseStatus",
+    "horseStatusScheme": "eq:horseStatusScheme",
+    "jockeyPct": {
+      "@id": "eq:jockeyPct",
+      "@type": "xsd:decimal"
+    },
+    "managedBy": {
+      "@id": "eq:managedBy",
+      "@type": "@id"
+    },
+    "mareName": {
+      "@id": "eq:mareName",
+      "@type": "xsd:string"
+    },
+    "mgmtPct": {
+      "@id": "eq:mgmtPct",
+      "@type": "xsd:decimal"
+    },
+    "nominator": {
+      "@id": "eq:nominator",
+      "@type": "@id"
+    },
+    "owner": {
+      "@id": "eq:owner",
+      "@type": "@id"
+    },
+    "OwnershipShare": "eq:OwnershipShare",
+    "PrizeDistribution": "eq:PrizeDistribution",
+    "RaceResult": "eq:RaceResult",
+    "recipient-breeder": "eq:recipient-breeder",
+    "recipient-jockey": "eq:recipient-jockey",
+    "recipient-owner": "eq:recipient-owner",
+    "recipient-stable-staff": "eq:recipient-stable-staff",
+    "recipient-trainer": "eq:recipient-trainer",
+    "recipientType": {
+      "@id": "eq:recipientType",
+      "@type": "@id"
+    },
+    "RecipientType": "eq:RecipientType",
+    "recipientTypeScheme": "eq:recipientTypeScheme",
+    "season": {
+      "@id": "eq:season",
+      "@type": "xsd:string"
+    },
+    "sector": "eq:sector",
+    "sex": {
+      "@id": "eq:sex",
+      "@type": "@id"
+    },
+    "Sex": "eq:Sex",
+    "sex-colt": "eq:sex-colt",
+    "sex-filly": "eq:sex-filly",
+    "sex-gelding": "eq:sex-gelding",
+    "sex-mare": "eq:sex-mare",
+    "sex-stallion": "eq:sex-stallion",
+    "sexScheme": "eq:sexScheme",
+    "sharePct": {
+      "@id": "eq:sharePct",
+      "@type": "xsd:decimal"
+    },
+    "sire": {
+      "@id": "eq:sire",
+      "@type": "@id"
+    },
+    "status": {
+      "@id": "eq:status",
+      "@type": "@id"
+    },
+    "status-at-stud": "eq:status-at-stud",
+    "status-broodmare": "eq:status-broodmare",
+    "status-in-training": "eq:status-in-training",
+    "status-racing": "eq:status-racing",
+    "status-retired": "eq:status-retired",
+    "status-spelling": "eq:status-spelling",
+    "stud-barren": "eq:stud-barren",
+    "stud-covered": "eq:stud-covered",
+    "stud-in-foal": "eq:stud-in-foal",
+    "stud-maiden": "eq:stud-maiden",
+    "stud-slipped": "eq:stud-slipped",
+    "StudNomination": "eq:StudNomination",
+    "StudShare": "eq:StudShare",
+    "studStatus": {
+      "@id": "eq:studStatus",
+      "@type": "@id"
+    },
+    "StudStatus": "eq:StudStatus",
+    "studStatusScheme": "eq:studStatusScheme",
+    "syndicate": {
+      "@id": "eq:syndicate",
+      "@type": "@id"
+    },
+    "Syndicate": "eq:Syndicate",
+    "trainerPct": {
+      "@id": "eq:trainerPct",
+      "@type": "xsd:decimal"
+    }
+  }
+}

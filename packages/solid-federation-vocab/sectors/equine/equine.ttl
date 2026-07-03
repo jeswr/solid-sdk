@@ -1,0 +1,477 @@
+# AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+#
+@prefix eq:      <https://w3id.org/jeswr/sectors/equine#> .
+@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix skos:    <http://www.w3.org/2004/02/skos/core#> .
+@prefix vann:    <http://purl.org/vocab/vann/> .
+@prefix gufo:    <http://purl.org/nemo/gufo#> .
+@prefix schema:  <http://schema.org/> .
+@prefix org:     <http://www.w3.org/ns/org#> .
+
+# =============================================================================
+# Solid EQUINE sector ontology (KEY=equine).
+#
+# The racehorse ownership / breeding / prize domain — the sector the `Furlong`
+# revenue product (jeswr/product-6) operates in (fedapp:sector). Furlong today
+# mints its private predicates as PER-RESOURCE fragment IRIs
+# (`<podRoot>furlong/horses.ttl#flg.status`), so every pod — indeed every
+# resource — coins a different IRI for the same concept: no cross-pod query, no
+# SHACL shape, no federation membership. This sector REPLACES that whole
+# `flgPred`/`flgClass` map 1:1 with shared `eq:` terms at a domain the suite owns
+# (w3id.org/jeswr), and REPLACES the NON-EXISTENT schema.org terms Furlong wrote:
+#   - schema:Animal (HTTP 404 — schema.org has no animal class)  → eq:Horse;
+#   - schema:prize  (HTTP 404 — schema:award (Text) exists)      → eq:PrizeDistribution;
+#   - schema:season (media-series only, superseded)              → eq:season;
+#   - schema:price on a Reservation                              → schema:totalPrice.
+# See the ontology review, full-solid-ecosystem
+# docs/design/revenue-products-ontology-review.md §2.
+#
+# CORRECT schema.org reuse is KEPT (dual-typed, real terms, verified extant):
+#   eq:StudNomination ⊑ schema:Reservation (price via schema:totalPrice);
+#   eq:RaceResult     ⊑ schema:SportsEvent;
+#   eq:PrizeDistribution ⊑ schema:MoneyTransfer (amount via schema:amount —
+#     schema:recipient is an advisory domain stretch, documented, kept).
+#
+# gUFO META-TYPES (each class carries its own AND roots transitively in Core):
+#   Horse = gufo:Kind → root core:Asset (an owned animal — schema.org has no
+#     animal class, so NO schema: root; external animal ontologies are alignment
+#     only, equine-alignments.ttl).
+#   Syndicate = gufo:Kind → root core:Organization (aligned org:Organization Mode A).
+#   OwnershipShare / StudShare = gufo:SubKind → root core:Record (fractional
+#     ownership / breeding-rights records about a horse).
+#   StudNomination = gufo:SubKind → root core:InformationResource (a booking).
+#   RaceResult = gufo:EventType → root core:Event.
+#   PrizeDistribution = gufo:EventType → root core:Activity.
+#   Sex / HorseStatus / StudStatus / RecipientType / ExpenseCategory =
+#     gufo:Category → root core:Category (coded values, bound to skos:Concept).
+#
+# CONTRACT (sector contract R8 §4, F1–F7): imports the gUFO Core; roots every
+# class transitively in a Core class and carries its gUFO meta-type; CONSTRAINS,
+# never forks, the vocabularies it reuses (schema.org where real, org:, vCard/foaf
+# for people). Open-world by default — the SHACL profile (equine.shacl.ttl)
+# carries the closed-world MUST/SHOULD contract. F5 DL hygiene: external classes
+# referenced in axioms are declared as punned owl terms.
+# =============================================================================
+
+<https://w3id.org/jeswr/sectors/equine> a owl:Ontology ;
+    dcterms:title "Solid Equine Sector Ontology"@en ;
+    rdfs:label "Solid Equine Sector Ontology"@en ;
+    vann:preferredNamespacePrefix "eq" ;
+    vann:preferredNamespaceUri "https://w3id.org/jeswr/sectors/equine#" ;
+    owl:imports <https://w3id.org/jeswr/core> ;
+    owl:versionInfo "0.1.0" ;
+    owl:versionIRI <https://w3id.org/jeswr/sectors/equine/0.1.0> ;
+    dcterms:description """The racehorse ownership / breeding / prize data sector
+        for the Furlong revenue product: horses, ownership + stud shares held via
+        syndicates, stud nominations, race results and prize distributions, plus
+        the coded status/sex/expense value sets. Replaces Furlong's per-resource
+        fragment-IRI private predicates with shared eq: terms, and the non-existent
+        schema:Animal/schema:prize/schema:season terms with correct ones. Keeps the
+        real schema.org dual-types (Reservation/SportsEvent/MoneyTransfer). Aligns
+        Mode-A to schema.org, org: and external animal ontologies in
+        equine-alignments.ttl."""@en ;
+    dcterms:modified "2026-07-03"^^xsd:date ;
+    rdfs:comment "Sector ontology for the Furlong product (revenue-products ontology review §2). Fixes non-existent schema terms + the per-resource-IRI anti-pattern."@en .
+
+# -----------------------------------------------------------------------------
+# Annotation-property declarations (F5 DL hygiene — match the Core pattern).
+# -----------------------------------------------------------------------------
+dcterms:title       a owl:AnnotationProperty .
+dcterms:description a owl:AnnotationProperty .
+dcterms:modified    a owl:AnnotationProperty .
+vann:preferredNamespacePrefix a owl:AnnotationProperty .
+vann:preferredNamespaceUri    a owl:AnnotationProperty .
+skos:definition     a owl:AnnotationProperty .
+skos:scopeNote      a owl:AnnotationProperty .
+skos:notation       a owl:AnnotationProperty .
+
+# -----------------------------------------------------------------------------
+# External classes referenced in axioms below, declared (punned) so the DL
+# profile holds even when their host ontology is not in the reasoned closure
+# (the F5 fix the Core + sibling sectors apply). schema.org / org: are NOT
+# owl:imported; specific terms are referenced and aligned in equine-alignments.ttl.
+# -----------------------------------------------------------------------------
+schema:Reservation a owl:Class ;
+    rdfs:label "schema.org Reservation"@en ;
+    rdfs:isDefinedBy <http://schema.org/> .
+schema:SportsEvent a owl:Class ;
+    rdfs:label "schema.org SportsEvent"@en ;
+    rdfs:isDefinedBy <http://schema.org/> .
+schema:MoneyTransfer a owl:Class ;
+    rdfs:label "schema.org MoneyTransfer"@en ;
+    rdfs:isDefinedBy <http://schema.org/> .
+
+skos:Concept a owl:Class ;
+    rdfs:label "SKOS Concept"@en ;
+    rdfs:isDefinedBy <http://www.w3.org/2004/02/skos/core#> .
+skos:ConceptScheme a owl:Class ;
+    rdfs:label "SKOS Concept Scheme"@en ;
+    rdfs:isDefinedBy <http://www.w3.org/2004/02/skos/core#> .
+
+# =============================================================================
+# 1. HORSE — gufo:Kind, root core:Asset. The animal itself (schema.org has NO
+#    animal class; external animal ontologies are alignment-only). Owned via
+#    fractional shares; its pedigree (eq:sire/eq:dam) links to other horses.
+# =============================================================================
+
+eq:Horse a owl:Class, gufo:Kind ;
+    rdfs:subClassOf core:Asset ;
+    rdfs:label "Horse"@en ;
+    skos:definition "A horse — typically a racehorse or breeding animal — held as an owned asset. schema.org has NO animal class (schema:Animal returns 404), so eq:Horse roots in core:Asset and aligns to external animal ontologies (Mode A) only. Its sex is a coded eq:sex value; status a coded eq:status value; pedigree via eq:sire/eq:dam; foaling country via eq:country."@en ;
+    skos:scopeNote "gufo:Kind. Roots in core:Asset (an owned thing). Identify with core:identifiedBy + a studbook/registry-scheme core:Identifier."@en .
+
+# =============================================================================
+# 2. OWNERSHIP — a syndicate + fractional shares. gufo:Kind / SubKind.
+# =============================================================================
+
+eq:Syndicate a owl:Class, gufo:Kind ;
+    rdfs:subClassOf core:Organization ;
+    rdfs:label "Syndicate"@en ;
+    skos:definition "A racing/breeding syndicate — an organization of members who jointly own one or more horses through fractional shares. Aligned Mode-A to org:Organization (equine-alignments.ttl); members and their percentages are carried by eq:OwnershipShare records."@en ;
+    skos:scopeNote "gufo:Kind. Roots in core:Organization."@en .
+
+eq:OwnershipShare a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf core:Record ;
+    rdfs:label "Ownership Share"@en ;
+    skos:definition "A fractional-ownership record: a share (eq:sharePct, an xsd:decimal percentage) of a horse (eq:horse) held by an owner (eq:owner) or via a syndicate (eq:syndicate), optionally managed by a racing manager (eq:managedBy, eq:mgmtPct). A core:Record about the ownership relation."@en ;
+    skos:scopeNote "gufo:SubKind of core:Record (information object). Percentages are plain xsd:decimal datatype values — honest, not borrowed from qudt."@en .
+
+eq:StudShare a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf core:Record ;
+    rdfs:label "Stud Share"@en ;
+    skos:definition "A breeding-rights share in a stallion at stud: a fractional share (eq:sharePct) of a horse (eq:horse), typically carrying a nomination entitlement per breeding season (eq:season) and a stud status (eq:studStatus). A core:Record distinct from an eq:OwnershipShare (racing ownership) — stud shares confer breeding rights."@en ;
+    skos:scopeNote "gufo:SubKind of core:Record."@en .
+
+# =============================================================================
+# 3. BREEDING — a stud nomination. gufo:SubKind, root core:InformationResource,
+#    dual-typed schema:Reservation (a booking of a covering); price via
+#    schema:totalPrice (the Reservation price property — NOT schema:price).
+# =============================================================================
+
+eq:StudNomination a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf core:InformationResource, schema:Reservation ;
+    rdfs:label "Stud Nomination"@en ;
+    skos:definition "A booking to send a mare (eq:mareName) to a stallion (eq:horse) for covering in a breeding season (eq:season), made by a nominator (eq:nominator). A booking, so dual-typed schema:Reservation — its price is schema:totalPrice (the Reservation price property; schema:price is NOT declared on Reservation)."@en ;
+    skos:scopeNote "gufo:SubKind of core:InformationResource; ⊑ schema:Reservation (punned above). The mare may not be a pod Horse, so eq:mareName is a literal; the stallion is eq:horse."@en .
+
+# =============================================================================
+# 4. RACING — race results + prize distributions. gufo:EventType.
+# =============================================================================
+
+eq:RaceResult a owl:Class, gufo:EventType ;
+    rdfs:subClassOf core:Event, schema:SportsEvent ;
+    rdfs:label "Race Result"@en ;
+    skos:definition "A horse's result in a race: the race (eq:forRace), the finishing position (eq:finishPos) and the horse (eq:horse). Dual-typed schema:SportsEvent (the correct, extant schema.org term — kept from Furlong). Prize money flows through a linked eq:PrizeDistribution."@en ;
+    skos:scopeNote "gufo:EventType rooting in core:Event; ⊑ schema:SportsEvent (punned above)."@en .
+
+eq:PrizeDistribution a owl:Class, gufo:EventType ;
+    rdfs:subClassOf core:Activity, schema:MoneyTransfer ;
+    rdfs:label "Prize Distribution"@en ;
+    skos:definition "A distribution of race prize money to a recipient. Dual-typed schema:MoneyTransfer (correct, extant — replacing the NON-EXISTENT schema:prize): the amount is schema:amount; the split between owner/trainer/jockey is carried by eq:jockeyPct / eq:trainerPct and the recipient kind by eq:recipientType. (schema:recipient is an advisory domain stretch on MoneyTransfer — documented, kept, since domainIncludes is non-restrictive.)"@en ;
+    skos:scopeNote "gufo:EventType rooting in core:Activity; ⊑ schema:MoneyTransfer (punned above)."@en .
+
+# =============================================================================
+# 5. CODED-VALUE CLASSES — gufo:Category, root core:Category.
+# =============================================================================
+
+eq:Sex a owl:Class, gufo:Category ;
+    rdfs:subClassOf core:Category ;
+    rdfs:label "Sex"@en ;
+    skos:definition "The sex/entirety class of a horse (colt / filly / gelding / mare / stallion). A coded value (core:Category); members are skos:Concepts in eq:sexScheme."@en ;
+    skos:scopeNote "gufo:Category of core:Category."@en .
+
+eq:HorseStatus a owl:Class, gufo:Category ;
+    rdfs:subClassOf core:Category ;
+    rdfs:label "Horse Status"@en ;
+    skos:definition "The current racing/management status of a horse (in-training / racing / spelling / retired / at-stud / broodmare). A coded value; members are skos:Concepts in eq:horseStatusScheme."@en ;
+    skos:scopeNote "gufo:Category of core:Category."@en .
+
+eq:StudStatus a owl:Class, gufo:Category ;
+    rdfs:subClassOf core:Category ;
+    rdfs:label "Stud Status"@en ;
+    skos:definition "The breeding status of a broodmare or a stud share (maiden / covered / in-foal / barren / slipped / retired-from-stud). A coded value; members are skos:Concepts in eq:studStatusScheme."@en ;
+    skos:scopeNote "gufo:Category of core:Category."@en .
+
+eq:RecipientType a owl:Class, gufo:Category ;
+    rdfs:subClassOf core:Category ;
+    rdfs:label "Recipient Type"@en ;
+    skos:definition "The kind of party a prize distribution pays (owner / trainer / jockey / breeder / stable-staff). A coded value qualifying an eq:PrizeDistribution's recipient; members are skos:Concepts in eq:recipientTypeScheme."@en ;
+    skos:scopeNote "gufo:Category of core:Category."@en .
+
+eq:ExpenseCategory a owl:Class, gufo:Category ;
+    rdfs:subClassOf core:Category ;
+    rdfs:label "Expense Category"@en ;
+    skos:definition "The kind of a horse-keeping expense (training-fees / veterinary / transport / entry-fees / agistment / farrier). A coded value classifying a schema:Invoice expense; members are skos:Concepts in eq:expenseCategoryScheme."@en ;
+    skos:scopeNote "gufo:Category of core:Category. Classifies expense invoices (schema:Invoice + schema:totalPaymentDue — the correct terms Furlong keeps)."@en .
+
+# =============================================================================
+# 6. PROPERTIES. Domained onto an eq: class where a single class owns them;
+#    properties shared by several classes deliberately carry NO rdfs:domain.
+# =============================================================================
+
+# --- Horse attributes ---
+eq:status a owl:ObjectProperty ;
+    rdfs:domain eq:Horse ;
+    rdfs:range eq:HorseStatus ;
+    rdfs:label "status"@en ;
+    skos:definition "The current racing/management status of a horse (a coded eq:HorseStatus value). Replaces Furlong's per-resource #flg.status IRI."@en .
+
+eq:sex a owl:ObjectProperty ;
+    rdfs:domain eq:Horse ;
+    rdfs:range eq:Sex ;
+    rdfs:label "sex"@en ;
+    skos:definition "The sex/entirety of a horse (a coded eq:Sex value)."@en .
+
+eq:sire a owl:ObjectProperty ;
+    rdfs:domain eq:Horse ;
+    rdfs:range eq:Horse ;
+    rdfs:label "sire"@en ;
+    skos:definition "The father of a horse (a pedigree link to another eq:Horse — possibly an external studbook IRI)."@en .
+
+eq:dam a owl:ObjectProperty ;
+    rdfs:domain eq:Horse ;
+    rdfs:range eq:Horse ;
+    rdfs:label "dam"@en ;
+    skos:definition "The mother of a horse (a pedigree link to another eq:Horse — possibly an external studbook IRI)."@en .
+
+eq:colour a owl:DatatypeProperty ;
+    rdfs:domain eq:Horse ;
+    rdfs:range xsd:string ;
+    rdfs:label "colour"@en ;
+    skos:definition "The coat colour of a horse (e.g. \"bay\", \"chestnut\", \"grey\") — free text, as colours vary by registry."@en .
+
+eq:country a owl:DatatypeProperty ;
+    rdfs:domain eq:Horse ;
+    rdfs:range xsd:string ;
+    rdfs:label "country"@en ;
+    skos:definition "The country of foaling of a horse, as an ISO 3166 / studbook country code (e.g. \"GB\", \"IRE\", \"AUS\")."@en .
+
+# --- Ownership / management (shared by OwnershipShare and StudShare) ---
+eq:horse a owl:ObjectProperty ;
+    rdfs:range eq:Horse ;
+    rdfs:label "horse"@en ;
+    skos:definition "The horse an ownership share, stud share or race result concerns. No rdfs:domain — shared by eq:OwnershipShare, eq:StudShare and eq:RaceResult."@en .
+
+eq:owner a owl:ObjectProperty ;
+    rdfs:domain eq:OwnershipShare ;
+    rdfs:range core:Agent ;
+    rdfs:label "owner"@en ;
+    skos:definition "The agent (person or organization) holding an ownership share."@en .
+
+eq:syndicate a owl:ObjectProperty ;
+    rdfs:range eq:Syndicate ;
+    rdfs:label "syndicate"@en ;
+    skos:definition "The syndicate through which a share is held. No rdfs:domain — an OwnershipShare or a StudShare may be held via a syndicate."@en .
+
+eq:sharePct a owl:DatatypeProperty ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "share percentage"@en ;
+    skos:definition "The fractional-ownership percentage (0–100) an OwnershipShare or StudShare represents. A plain xsd:decimal — honest, not a qudt QuantityValue."@en .
+
+eq:managedBy a owl:ObjectProperty ;
+    rdfs:domain eq:OwnershipShare ;
+    rdfs:range core:Agent ;
+    rdfs:label "managed by"@en ;
+    skos:definition "The racing manager acting for an ownership share on the owners' behalf."@en .
+
+eq:mgmtPct a owl:DatatypeProperty ;
+    rdfs:domain eq:OwnershipShare ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "management percentage"@en ;
+    skos:definition "The percentage (0–100) a racing manager takes from an ownership share's prize returns."@en .
+
+# --- Breeding (StudShare + StudNomination) ---
+eq:studStatus a owl:ObjectProperty ;
+    rdfs:range eq:StudStatus ;
+    rdfs:label "stud status"@en ;
+    skos:definition "The breeding status (a coded eq:StudStatus value) of a broodmare or a stud share. No rdfs:domain — carried on eq:Horse (a broodmare) or eq:StudShare."@en .
+
+eq:season a owl:DatatypeProperty ;
+    rdfs:range xsd:string ;
+    rdfs:label "season"@en ;
+    skos:definition "The breeding (or racing) season a stud share / nomination applies to, as a season label (e.g. \"2026\" or \"2026/2027\"). Replaces the MIS-DOMAINED schema:season (declared only on media series)."@en .
+
+eq:mareName a owl:DatatypeProperty ;
+    rdfs:domain eq:StudNomination ;
+    rdfs:range xsd:string ;
+    rdfs:label "mare name"@en ;
+    skos:definition "The name of the mare a stud nomination sends to the stallion. A literal because the mare is often not a pod-held eq:Horse."@en .
+
+eq:nominator a owl:ObjectProperty ;
+    rdfs:domain eq:StudNomination ;
+    rdfs:range core:Agent ;
+    rdfs:label "nominator"@en ;
+    skos:definition "The agent who made a stud nomination (the mare's owner or their agent)."@en .
+
+# --- Racing results + prizes ---
+eq:forRace a owl:ObjectProperty ;
+    rdfs:domain eq:RaceResult ;
+    rdfs:label "for race"@en ;
+    skos:definition "The race a result is for — an IRI identifying the race (a fixtures/registry IRI). No rdfs:range: the race is an external entity referenced by IRI."@en .
+
+eq:finishPos a owl:DatatypeProperty ;
+    rdfs:domain eq:RaceResult ;
+    rdfs:range xsd:positiveInteger ;
+    rdfs:label "finishing position"@en ;
+    skos:definition "The finishing position of the horse in the race (1 = win). A positive integer."@en .
+
+eq:recipientType a owl:ObjectProperty ;
+    rdfs:domain eq:PrizeDistribution ;
+    rdfs:range eq:RecipientType ;
+    rdfs:label "recipient type"@en ;
+    skos:definition "The kind of party (a coded eq:RecipientType value) a prize distribution pays."@en .
+
+eq:jockeyPct a owl:DatatypeProperty ;
+    rdfs:domain eq:PrizeDistribution ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "jockey percentage"@en ;
+    skos:definition "The percentage (0–100) of a prize distribution allocated to the jockey."@en .
+
+eq:trainerPct a owl:DatatypeProperty ;
+    rdfs:domain eq:PrizeDistribution ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "trainer percentage"@en ;
+    skos:definition "The percentage (0–100) of a prize distribution allocated to the trainer."@en .
+
+# --- Expenses ---
+eq:expenseCategory a owl:ObjectProperty ;
+    rdfs:range eq:ExpenseCategory ;
+    rdfs:label "expense category"@en ;
+    skos:definition "The coded category (a coded eq:ExpenseCategory value) of a horse-keeping expense invoice (a schema:Invoice — the correct term Furlong keeps). No rdfs:domain — attached to the external invoice resource."@en .
+
+# =============================================================================
+# 7. CODED-VALUE SCHEMES — the canonical value sets (skos:Concept members). Each
+#    member is typed with its eq: coded class AND skos:Concept, carries
+#    skos:prefLabel + skos:definition (F1 term hygiene) + skos:notation, and
+#    skos:inScheme its scheme. Seeds, not law — cross-map (skos:closeMatch) other
+#    value sets.
+# =============================================================================
+
+# --- Sex ---
+eq:sexScheme a skos:ConceptScheme ;
+    rdfs:label "Horse sex scheme"@en ;
+    skos:definition "The coded sex/entirety values for eq:sex."@en .
+
+eq:sex-colt a eq:Sex, skos:Concept ;
+    skos:inScheme eq:sexScheme ; skos:notation "colt" ;
+    skos:prefLabel "Colt"@en ; skos:definition "An entire male horse aged four or under."@en .
+eq:sex-filly a eq:Sex, skos:Concept ;
+    skos:inScheme eq:sexScheme ; skos:notation "filly" ;
+    skos:prefLabel "Filly"@en ; skos:definition "A female horse aged four or under."@en .
+eq:sex-gelding a eq:Sex, skos:Concept ;
+    skos:inScheme eq:sexScheme ; skos:notation "gelding" ;
+    skos:prefLabel "Gelding"@en ; skos:definition "A castrated male horse."@en .
+eq:sex-mare a eq:Sex, skos:Concept ;
+    skos:inScheme eq:sexScheme ; skos:notation "mare" ;
+    skos:prefLabel "Mare"@en ; skos:definition "A female horse aged five or over."@en .
+eq:sex-stallion a eq:Sex, skos:Concept ;
+    skos:inScheme eq:sexScheme ; skos:notation "stallion" ;
+    skos:prefLabel "Stallion"@en ; skos:definition "An entire male horse aged five or over, typically at stud."@en .
+
+# --- Horse status ---
+eq:horseStatusScheme a skos:ConceptScheme ;
+    rdfs:label "Horse status scheme"@en ;
+    skos:definition "The coded racing/management status values for eq:status."@en .
+
+eq:status-in-training a eq:HorseStatus, skos:Concept ;
+    skos:inScheme eq:horseStatusScheme ; skos:notation "in-training" ;
+    skos:prefLabel "In training"@en ; skos:definition "The horse is in a training yard preparing to race."@en .
+eq:status-racing a eq:HorseStatus, skos:Concept ;
+    skos:inScheme eq:horseStatusScheme ; skos:notation "racing" ;
+    skos:prefLabel "Racing"@en ; skos:definition "The horse is actively racing."@en .
+eq:status-spelling a eq:HorseStatus, skos:Concept ;
+    skos:inScheme eq:horseStatusScheme ; skos:notation "spelling" ;
+    skos:prefLabel "Spelling"@en ; skos:definition "The horse is resting/turned out between preparations."@en .
+eq:status-retired a eq:HorseStatus, skos:Concept ;
+    skos:inScheme eq:horseStatusScheme ; skos:notation "retired" ;
+    skos:prefLabel "Retired"@en ; skos:definition "The horse has retired from racing."@en .
+eq:status-at-stud a eq:HorseStatus, skos:Concept ;
+    skos:inScheme eq:horseStatusScheme ; skos:notation "at-stud" ;
+    skos:prefLabel "At stud"@en ; skos:definition "The (male) horse is standing at stud for breeding."@en .
+eq:status-broodmare a eq:HorseStatus, skos:Concept ;
+    skos:inScheme eq:horseStatusScheme ; skos:notation "broodmare" ;
+    skos:prefLabel "Broodmare"@en ; skos:definition "The (female) horse is retired to breeding as a broodmare."@en .
+
+# --- Stud status ---
+eq:studStatusScheme a skos:ConceptScheme ;
+    rdfs:label "Stud status scheme"@en ;
+    skos:definition "The coded breeding-status values for eq:studStatus."@en .
+
+eq:stud-maiden a eq:StudStatus, skos:Concept ;
+    skos:inScheme eq:studStatusScheme ; skos:notation "maiden" ;
+    skos:prefLabel "Maiden"@en ; skos:definition "A mare that has not yet been bred."@en .
+eq:stud-covered a eq:StudStatus, skos:Concept ;
+    skos:inScheme eq:studStatusScheme ; skos:notation "covered" ;
+    skos:prefLabel "Covered"@en ; skos:definition "A mare that has been covered by a stallion this season, pregnancy not yet confirmed."@en .
+eq:stud-in-foal a eq:StudStatus, skos:Concept ;
+    skos:inScheme eq:studStatusScheme ; skos:notation "in-foal" ;
+    skos:prefLabel "In foal"@en ; skos:definition "A mare confirmed pregnant."@en .
+eq:stud-barren a eq:StudStatus, skos:Concept ;
+    skos:inScheme eq:studStatusScheme ; skos:notation "barren" ;
+    skos:prefLabel "Barren"@en ; skos:definition "A mare that failed to conceive this season."@en .
+eq:stud-slipped a eq:StudStatus, skos:Concept ;
+    skos:inScheme eq:studStatusScheme ; skos:notation "slipped" ;
+    skos:prefLabel "Slipped"@en ; skos:definition "A mare that lost the pregnancy (aborted/slipped the foal)."@en .
+
+# --- Recipient type ---
+eq:recipientTypeScheme a skos:ConceptScheme ;
+    rdfs:label "Prize recipient type scheme"@en ;
+    skos:definition "The coded recipient-kind values for eq:recipientType."@en .
+
+eq:recipient-owner a eq:RecipientType, skos:Concept ;
+    skos:inScheme eq:recipientTypeScheme ; skos:notation "owner" ;
+    skos:prefLabel "Owner"@en ; skos:definition "The prize share paid to the horse's owners."@en .
+eq:recipient-trainer a eq:RecipientType, skos:Concept ;
+    skos:inScheme eq:recipientTypeScheme ; skos:notation "trainer" ;
+    skos:prefLabel "Trainer"@en ; skos:definition "The prize share paid to the trainer."@en .
+eq:recipient-jockey a eq:RecipientType, skos:Concept ;
+    skos:inScheme eq:recipientTypeScheme ; skos:notation "jockey" ;
+    skos:prefLabel "Jockey"@en ; skos:definition "The prize share paid to the jockey."@en .
+eq:recipient-breeder a eq:RecipientType, skos:Concept ;
+    skos:inScheme eq:recipientTypeScheme ; skos:notation "breeder" ;
+    skos:prefLabel "Breeder"@en ; skos:definition "The breeder's prize/bonus share where a scheme pays one."@en .
+eq:recipient-stable-staff a eq:RecipientType, skos:Concept ;
+    skos:inScheme eq:recipientTypeScheme ; skos:notation "stable-staff" ;
+    skos:prefLabel "Stable staff"@en ; skos:definition "The stable-staff share of a prize."@en .
+
+# --- Expense category ---
+eq:expenseCategoryScheme a skos:ConceptScheme ;
+    rdfs:label "Horse expense category scheme"@en ;
+    skos:definition "The coded expense-category values for eq:expenseCategory."@en .
+
+eq:expense-training-fees a eq:ExpenseCategory, skos:Concept ;
+    skos:inScheme eq:expenseCategoryScheme ; skos:notation "training-fees" ;
+    skos:prefLabel "Training fees"@en ; skos:definition "Trainer's day-rate and preparation fees."@en .
+eq:expense-veterinary a eq:ExpenseCategory, skos:Concept ;
+    skos:inScheme eq:expenseCategoryScheme ; skos:notation "veterinary" ;
+    skos:prefLabel "Veterinary"@en ; skos:definition "Veterinary treatment and examinations."@en .
+eq:expense-transport a eq:ExpenseCategory, skos:Concept ;
+    skos:inScheme eq:expenseCategoryScheme ; skos:notation "transport" ;
+    skos:prefLabel "Transport"@en ; skos:definition "Horse transport to and from races and yards."@en .
+eq:expense-entry-fees a eq:ExpenseCategory, skos:Concept ;
+    skos:inScheme eq:expenseCategoryScheme ; skos:notation "entry-fees" ;
+    skos:prefLabel "Entry fees"@en ; skos:definition "Race entry and declaration fees."@en .
+eq:expense-agistment a eq:ExpenseCategory, skos:Concept ;
+    skos:inScheme eq:expenseCategoryScheme ; skos:notation "agistment" ;
+    skos:prefLabel "Agistment"@en ; skos:definition "Spelling/agistment (grazing and keep) fees."@en .
+eq:expense-farrier a eq:ExpenseCategory, skos:Concept ;
+    skos:inScheme eq:expenseCategoryScheme ; skos:notation "farrier" ;
+    skos:prefLabel "Farrier"@en ; skos:definition "Farrier (shoeing) fees."@en .
+
+# =============================================================================
+# SECTOR MARKER — the IRI an app's fedapp:sector names to declare it operates in
+# the equine (racehorse ownership / breeding) sector. A skos:Concept in the
+# federation sector register; dereferences to this ontology.
+# =============================================================================
+
+<https://w3id.org/jeswr/sectors/equine#sector>
+    a skos:Concept ;
+    rdfs:label "Equine sector"@en ;
+    rdfs:comment "The Equine (racehorse ownership, breeding, prize distribution) data sector. The value an app's fedapp:sector names in its Client Identifier Document to declare it operates over equine-ownership data — the sector the Furlong product declares. Backed by this sector ontology."@en ;
+    rdfs:isDefinedBy <https://w3id.org/jeswr/sectors/equine> ;
+    skos:prefLabel "Equine"@en .
