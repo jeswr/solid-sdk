@@ -215,6 +215,28 @@ describe("safeIri / safeHttpIri guard completeness", () => {
     expect(() => requireIri("relative", "myfield")).toThrow(/myfield/);
     expect(requireIri("https://a/x", "myfield")).toBe("https://a/x");
   });
+
+  it("escapeIri covers the FULL C0 control range U+0000-U+001F (not just delimiters)", () => {
+    expect(escapeIri("a\u0000\t\n\r\u001fb")).toBe("a%00%09%0A%0D%1Fb");
+  });
+
+  it("escape-first: an EMBEDDED tab/newline/CR is never STRIPPED (validated ≡ emitted)", () => {
+    // The WHATWG parser strips these before parsing; escaping first means a control in
+    // the SCHEME breaks the (now `%XX`-bearing) scheme → rejected, and a control in the
+    // PATH is `%XX`-encoded — never silently stripped so that validated ≠ emitted.
+    expect(safeIri("ht\ntps://example.org/p")).toBeUndefined();
+    expect(safeHttpIri("ht\ntps://example.org/p")).toBeUndefined();
+    const encoded = safeHttpIri("https://example.org/p\tx");
+    expect(encoded).toBe("https://example.org/p%09x");
+    expect(encoded).not.toContain("\t");
+    const nlInPath = safeIri("https://example.org/a\nb");
+    expect(nlInPath).toBe("https://example.org/a%0Ab");
+  });
+
+  it("a normal port (:443) round-trips byte-identically (no normalisation drift)", () => {
+    expect(safeHttpIri("https://example.org:443/p")).toBe("https://example.org:443/p");
+    expect(safeIri("https://example.org:443/p")).toBe("https://example.org:443/p");
+  });
 });
 
 // --- The parseIntent contract stays intact (graceful unresolved, never a throw) -------
@@ -235,6 +257,36 @@ describe("parseIntent stays graceful on a malformed-IRI translated draft", () =>
     expect(r.resolved).toBe(true);
     expect(r.intent?.agent).toBe("urn:agent:me");
     expect(r.quads.length).toBeGreaterThan(0);
+  });
+
+  it("a DETERMINISTIC verb match with a MALFORMED url → unresolved, NOT a throw", async () => {
+    // `read https://[` matches the read verb and extracts a malformed URL. Before the
+    // fix the fail-closed setter would THROW out of parseIntent; the contract is to
+    // degrade to an unresolved result on hostile NL input (only direct intentToRdf/
+    // serialize callers get the throw).
+    let r: Awaited<ReturnType<typeof parseIntent>> | undefined;
+    await expect(async () => {
+      r = await parseIntent("read https://[");
+    }).not.toThrow();
+    expect(r?.resolved).toBe(false);
+    expect(r?.quads).toEqual([]);
+  });
+
+  it("a malformed grant recipient in NL → unresolved, NOT a throw", async () => {
+    // `https://[bad` is captured whole by the recipient marker but is not a valid URL
+    // (unterminated IPv6 literal) → safeIri rejects it → the draft never lowers.
+    let r: Awaited<ReturnType<typeof parseIntent>> | undefined;
+    await expect(async () => {
+      r = await parseIntent("share https://alice.pod/x with https://[bad");
+    }).not.toThrow();
+    expect(r?.resolved).toBe(false);
+  });
+
+  it("a well-formed deterministic input still resolves (no over-rejection)", async () => {
+    const r = await parseIntent("read https://alice.pod/notes.ttl");
+    expect(r.resolved).toBe(true);
+    expect(r.source).toBe("deterministic");
+    expect(r.intent?.target).toBe("https://alice.pod/notes.ttl");
   });
 });
 

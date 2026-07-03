@@ -16,13 +16,15 @@
 //     impossible. A subject can NEVER inject (every breakout char is neutralised), so
 //     subjects are escaped, never dropped/rejected.
 //   - `safeIri` - for OBJECT fields that must be an ABSOLUTE IRI but may legitimately
-//     be non-http (`urn:`/`did:` agent/recipient/target identifiers). Validates the
-//     value is a parseable absolute IRI (any scheme) via the WHATWG URL parser, then
-//     returns the LEXICALLY-PRESERVED original run through `escapeIri`; `undefined`
-//     when the value is not a valid absolute IRI.
-//   - `safeHttpIri` - the http(s)-only variant of `safeIri`, for object fields that
-//     must be fetchable-over-http (`protocolSource`): additionally rejects any
-//     non-http(s) scheme.
+//     be non-http (`urn:`/`did:` agent/recipient/target identifiers). ESCAPE-FIRST:
+//     runs `escapeIri` FIRST, validates THAT escaped string is a parseable absolute IRI
+//     (any scheme) via the WHATWG URL parser, then emits exactly the escaped string —
+//     so what is validated is what is emitted (the parser can't silently strip an
+//     embedded control out from under the validation); `undefined` when not a valid
+//     absolute IRI.
+//   - `safeHttpIri` - the http(s)-only variant of `safeIri` (same escape-first
+//     discipline), for object fields that must be fetchable-over-http
+//     (`protocolSource`): additionally rejects any non-http(s) scheme.
 //   - `requireIri` / `requireHttpIri` - the FAIL-CLOSED wrappers of the two `safe*`
 //     guards: a required object IRI that cannot be safely emitted THROWS rather than
 //     being silently dropped, so a serialised graph never omits a field the public
@@ -76,47 +78,54 @@ function hasEdgeControlOrSpace(value: string): boolean {
 /**
  * Validate an ABSOLUTE IRI for an OBJECT position, SCHEME-AGNOSTICALLY — a legitimate
  * `urn:`/`did:` identifier (an agent/recipient/target may be one) is accepted, only a
- * value that is not a parseable absolute IRI is rejected. Returns the LEXICALLY
- * PRESERVED original run through {@link escapeIri} (so any IRIREF-forbidden char the
- * value carries is neutralised before n3.Writer, without the URL parser's
- * normalisation silently changing the IRI), or `undefined` when `value` is not a
- * string, has a leading/trailing control/space, or is not an absolute IRI.
+ * value that is not a parseable absolute IRI is rejected.
+ *
+ * ESCAPE-FIRST / validate-the-escaped / emit-the-escaped. The WHATWG URL parser
+ * silently STRIPS embedded tab/newline/CR (and other C0 controls) BEFORE parsing — so
+ * validating the raw value and then emitting `escapeIri(raw)` would emit a string that
+ * was NEVER validated (`ht\ntps://x` validates as http(s), then emits `ht%0Atps://x`).
+ * We therefore run {@link escapeIri} FIRST (every C0 control U+0000-U+001F, space, and
+ * the IRIREF delimiter set → `%XX`), then validate THAT escaped string with the URL
+ * parser, then emit EXACTLY the validated string. The parser sees no strippable char,
+ * so validated ≡ emitted; a value whose only defect was an embedded control becomes a
+ * `%XX`-encoded IRI (never a silently-stripped one). Returns `undefined` when `value`
+ * is not a string, has a leading/trailing control/space, or is not an absolute IRI.
  */
 export function safeIri(value: string | undefined): string | undefined {
   if (typeof value !== "string" || hasEdgeControlOrSpace(value)) {
     return undefined;
   }
+  const escaped = escapeIri(value);
   try {
-    // Parse only to VALIDATE it is an absolute IRI (a relative string throws); the
-    // parsed/normalised form is intentionally discarded in favour of the original.
-    new URL(value);
+    // Validate the ESCAPED form (a relative string throws); we emit exactly this.
+    new URL(escaped);
   } catch {
     return undefined;
   }
-  return escapeIri(value);
+  return escaped;
 }
 
 /**
  * Validate an http(s) IRI for an OBJECT position that must be fetchable-over-http
- * (e.g. a handshake `protocolSource`). As {@link safeIri} but additionally rejects any
- * non-`http:`/`https:` scheme. LEXICAL-preserving: returns {@link escapeIri} of the
- * ORIGINAL (not the URL parser's normalised `href`), so the emitted IRI matches the
- * value that was checked. Returns `undefined` when malformed / non-http(s).
+ * (e.g. a handshake `protocolSource`). As {@link safeIri} (same escape-first,
+ * validate-the-escaped, emit-the-escaped discipline) but additionally rejects any
+ * non-`http:`/`https:` scheme. Returns `undefined` when malformed / non-http(s).
  */
 export function safeHttpIri(value: string | undefined): string | undefined {
   if (typeof value !== "string" || hasEdgeControlOrSpace(value)) {
     return undefined;
   }
+  const escaped = escapeIri(value);
   let u: URL;
   try {
-    u = new URL(value);
+    u = new URL(escaped);
   } catch {
     return undefined;
   }
   if (u.protocol !== "http:" && u.protocol !== "https:") {
     return undefined;
   }
-  return escapeIri(value);
+  return escaped;
 }
 
 /**

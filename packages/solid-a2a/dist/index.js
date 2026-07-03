@@ -184,27 +184,29 @@ function safeIri(value) {
   if (typeof value !== "string" || hasEdgeControlOrSpace(value)) {
     return void 0;
   }
+  const escaped = escapeIri(value);
   try {
-    new URL(value);
+    new URL(escaped);
   } catch {
     return void 0;
   }
-  return escapeIri(value);
+  return escaped;
 }
 function safeHttpIri(value) {
   if (typeof value !== "string" || hasEdgeControlOrSpace(value)) {
     return void 0;
   }
+  const escaped = escapeIri(value);
   let u;
   try {
-    u = new URL(value);
+    u = new URL(escaped);
   } catch {
     return void 0;
   }
   if (u.protocol !== "http:" && u.protocol !== "https:") {
     return void 0;
   }
-  return escapeIri(value);
+  return escaped;
 }
 function requireIri(value, field) {
   const safe = safeIri(value);
@@ -1179,7 +1181,7 @@ async function parseIntent(nl, options = {}) {
   }
   const base = options.baseIRI ?? DEFAULT_BASE;
   const draft = classifyDeterministic(nl);
-  if (draft !== void 0) {
+  if (draft !== void 0 && isValidDraft(draft)) {
     const intent = lowerDraft(draft, base, nl);
     return {
       resolved: true,
@@ -1216,7 +1218,7 @@ async function parseIntent(nl, options = {}) {
     resolved: false,
     quads: [],
     nl,
-    reason: "no deterministic verb matched and no translate function was supplied."
+    reason: draft !== void 0 ? "a verb matched but the extracted target/recipient was not a valid IRI, and no translate function was supplied." : "no deterministic verb matched and no translate function was supplied."
   };
 }
 function classifyDeterministic(nl) {

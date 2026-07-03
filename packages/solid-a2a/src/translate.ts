@@ -73,9 +73,16 @@ export async function parseIntent(
   }
   const base = options.baseIRI ?? DEFAULT_BASE;
 
-  // 1. Deterministic path.
+  // 1. Deterministic path. The draft MUST pass isValidDraft before it is lowered:
+  //    classifyDeterministic can extract a MALFORMED URL (e.g. `read https://[`), and
+  //    the object-IRI setters now fail closed (throw) on a malformed IRI. parseIntent's
+  //    documented contract is to DEGRADE to an unresolved result on hostile input, never
+  //    throw — so an invalid deterministic draft is treated as "not classified" and
+  //    falls through to the translate/unresolved path (exactly like the translated-draft
+  //    path already validates before lowering). Only the direct intentToRdf/serialize
+  //    callers get the fail-closed throw.
   const draft = classifyDeterministic(nl);
-  if (draft !== undefined) {
+  if (draft !== undefined && isValidDraft(draft)) {
     const intent = lowerDraft(draft, base, nl);
     return {
       resolved: true,
@@ -113,12 +120,16 @@ export async function parseIntent(
     };
   }
 
-  // 3. Unresolved (no model wired).
+  // 3. Unresolved (no model wired). Distinguish "no verb matched" from "a verb matched
+  //    but the extracted target/recipient was a malformed IRI" so the reason is honest.
   return {
     resolved: false,
     quads: [],
     nl,
-    reason: "no deterministic verb matched and no translate function was supplied.",
+    reason:
+      draft !== undefined
+        ? "a verb matched but the extracted target/recipient was not a valid IRI, and no translate function was supplied."
+        : "no deterministic verb matched and no translate function was supplied.",
   };
 }
 

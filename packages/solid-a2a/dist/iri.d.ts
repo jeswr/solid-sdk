@@ -10,19 +10,25 @@ export declare function escapeIri(value: string): string;
 /**
  * Validate an ABSOLUTE IRI for an OBJECT position, SCHEME-AGNOSTICALLY — a legitimate
  * `urn:`/`did:` identifier (an agent/recipient/target may be one) is accepted, only a
- * value that is not a parseable absolute IRI is rejected. Returns the LEXICALLY
- * PRESERVED original run through {@link escapeIri} (so any IRIREF-forbidden char the
- * value carries is neutralised before n3.Writer, without the URL parser's
- * normalisation silently changing the IRI), or `undefined` when `value` is not a
- * string, has a leading/trailing control/space, or is not an absolute IRI.
+ * value that is not a parseable absolute IRI is rejected.
+ *
+ * ESCAPE-FIRST / validate-the-escaped / emit-the-escaped. The WHATWG URL parser
+ * silently STRIPS embedded tab/newline/CR (and other C0 controls) BEFORE parsing — so
+ * validating the raw value and then emitting `escapeIri(raw)` would emit a string that
+ * was NEVER validated (`ht\ntps://x` validates as http(s), then emits `ht%0Atps://x`).
+ * We therefore run {@link escapeIri} FIRST (every C0 control U+0000-U+001F, space, and
+ * the IRIREF delimiter set → `%XX`), then validate THAT escaped string with the URL
+ * parser, then emit EXACTLY the validated string. The parser sees no strippable char,
+ * so validated ≡ emitted; a value whose only defect was an embedded control becomes a
+ * `%XX`-encoded IRI (never a silently-stripped one). Returns `undefined` when `value`
+ * is not a string, has a leading/trailing control/space, or is not an absolute IRI.
  */
 export declare function safeIri(value: string | undefined): string | undefined;
 /**
  * Validate an http(s) IRI for an OBJECT position that must be fetchable-over-http
- * (e.g. a handshake `protocolSource`). As {@link safeIri} but additionally rejects any
- * non-`http:`/`https:` scheme. LEXICAL-preserving: returns {@link escapeIri} of the
- * ORIGINAL (not the URL parser's normalised `href`), so the emitted IRI matches the
- * value that was checked. Returns `undefined` when malformed / non-http(s).
+ * (e.g. a handshake `protocolSource`). As {@link safeIri} (same escape-first,
+ * validate-the-escaped, emit-the-escaped discipline) but additionally rejects any
+ * non-`http:`/`https:` scheme. Returns `undefined` when malformed / non-http(s).
  */
 export declare function safeHttpIri(value: string | undefined): string | undefined;
 /**
