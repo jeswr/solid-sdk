@@ -21,6 +21,7 @@ import {
   type TermWrapper as TermWrapperType,
 } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
+import { escapeIri, safeHttpIri } from "./iri.js";
 import {
   AD_AGENT_DESCRIPTION,
   AD_DESCRIPTION,
@@ -160,12 +161,26 @@ export function wrapProfile(dataset: DatasetCore): ProfileDataset {
 
 // --- the write path (describeAgent / buildAgentPointer) ------------------
 
-/** Add a single `(subject, predicate-IRI, object-IRI)` triple through the factory. */
+/**
+ * Add a single `(subject, predicate-IRI, object-IRI)` triple through the factory.
+ *
+ * IRI-INJECTION CHOKEPOINT. `n3.Writer` emits a NamedNode's value verbatim
+ * between `<…>` (it does NOT escape `> < " { } SPACE | ^ \` \\`), so an untrusted
+ * `objectIri` — any of the http(s) object fields (url / owner / protocolSource /
+ * issuer / agent) that flow here — could break out and inject arbitrary triples.
+ * The object is therefore validated + percent-encoded via {@link safeHttpIri} and
+ * the triple is DROPPED if it is not a well-formed absolute http(s) IRI. The
+ * predicate is a trusted vocab constant, but is defensively escaped too. The
+ * SUBJECT (`node`) is sanitised at construction (see `AgentBuilder.agent` /
+ * `PointerBuilder.link`), so its `.value` is already injection-safe here.
+ */
 function addIri(node: TermWrapper, predicate: string, objectIri: string): void {
+  const object = safeHttpIri(objectIri);
+  if (object === undefined) return; // not a safe absolute http(s) IRI → drop the triple
   const factory = node.factory;
   const subject = node as unknown as Term;
-  const p = NamedNodeFrom.string(predicate, factory);
-  const o = NamedNodeFrom.string(objectIri, factory);
+  const p = NamedNodeFrom.string(escapeIri(predicate), factory);
+  const o = NamedNodeFrom.string(object, factory);
   node.dataset.add(factory.quad(subject as never, p as never, o as never));
 }
 
@@ -257,7 +272,7 @@ class WritableAgentDescription extends TermWrapper {
     const factory = this.factory;
     const blank = BlankNodeFrom.string(undefined, factory) as Term;
     const subject = this as unknown as Term;
-    const p = NamedNodeFrom.string(predicate, factory);
+    const p = NamedNodeFrom.string(escapeIri(predicate), factory);
     this.dataset.add(factory.quad(subject as never, p as never, blank as never));
     return blank;
   }
@@ -273,8 +288,11 @@ export class AgentBuilder {
 
   /** Open the agent-description subject (`id` is the agent IRI) for writing. */
   agent(id: string): WritableAgentDescription {
+    // Subject IRI. `descriptor.id` may legitimately be a non-http absolute IRI
+    // (a `did:`/`urn:` agent id), so escape scheme-agnostically (never drop a
+    // subject) — this neutralises an injection break-out while preserving `did:`.
     const node = new WritableAgentDescription(
-      id,
+      escapeIri(id),
       this.store as unknown as DatasetCore,
       this.factory,
     );
@@ -301,7 +319,14 @@ export class PointerBuilder {
    * `interop:hasAuthorizationAgent` (the SAI "agent that represents you").
    */
   link(webId: string, agent: string, predicate: string): void {
-    const node = new TermWrapper(webId, this.store as unknown as DatasetCore, this.factory);
+    // Subject IRI (the WebID). Escape scheme-agnostically so an injection
+    // break-out is neutralised without dropping the subject. The `agent` object
+    // is validated + dropped-if-invalid inside `addIri` (http(s) IRI field).
+    const node = new TermWrapper(
+      escapeIri(webId),
+      this.store as unknown as DatasetCore,
+      this.factory,
+    );
     addIri(node, predicate, agent);
   }
 
