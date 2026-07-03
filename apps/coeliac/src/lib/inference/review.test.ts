@@ -55,6 +55,25 @@ describe("surfaceReviews — time-boxed re-challenge (DESIGN §4.3, RESEARCH §2
     expect(surfaceReviews([notConfirmed], now)).toEqual([]);
   });
 
+  it("NEVER surfaces a lifelong exclusion (gluten) even with a stray past reviewAfter", () => {
+    // Malformed / legacy / hand-authored data could put a reviewAfter on a gluten
+    // conclusion; re-testing gluten in coeliac is dangerous, so it must be filtered out
+    // regardless of the write path. (roborev HIGH regression guard.)
+    const strayGluten = conclusion({ aboutTrigger: "gluten", verdict: "reacts", reviewAfter: atDays(1) });
+    expect(surfaceReviews([strayGluten], now)).toEqual([]);
+  });
+
+  it("filters to the time-boxed set, keeping a due lactose while dropping a stray gluten", () => {
+    const due = surfaceReviews(
+      [
+        conclusion({ aboutTrigger: "gluten", verdict: "reacts", reviewAfter: atDays(1) }),
+        conclusion({ aboutTrigger: "lactose", verdict: "reacts", reviewAfter: atDays(182) }),
+      ],
+      now,
+    );
+    expect(due.map((d) => d.trigger)).toEqual(["lactose"]);
+  });
+
   it("orders most-overdue first", () => {
     const due = surfaceReviews(
       [
