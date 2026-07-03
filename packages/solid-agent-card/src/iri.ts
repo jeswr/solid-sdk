@@ -60,6 +60,19 @@ export function safeHttpIri(value: string | undefined): string | undefined {
     return undefined;
   }
   if (u.protocol !== "http:" && u.protocol !== "https:") return undefined;
+  // `new URL()` is FORGIVING for http(s): it REPAIRS authority-DEFICIENT forms into
+  // a URL with a synthesised host — both authority-LESS (`https:example.com`,
+  // `https:/foo`, `http:bar`) AND empty-authority triple-slash (`https:///foo`,
+  // `http:////foo`, which it repairs to host `foo` by consuming a path segment).
+  // Because we emit the escaped ORIGINAL (not `u.href`), those lexically-invalid
+  // strings would slip through. Require a NON-EMPTY LEXICAL authority: the escaped
+  // string must start with `http://`/`https://` AND the very next char must be a
+  // real authority char — not `/`, `?`, `#`, or end-of-string. Keep the
+  // `u.host === ""` reject too (a `https://:@/x`-style form is lexically
+  // `//`-authority'd yet parses host-empty). A normal `https://host/path` passes
+  // byte-identical.
+  if (!/^https?:\/\/[^/?#]/i.test(escaped)) return undefined;
+  if (u.host === "") return undefined;
   // Emit exactly the string that was validated.
   return escaped;
 }

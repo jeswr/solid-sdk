@@ -10,6 +10,8 @@ function safeHttpIri(value) {
     return void 0;
   }
   if (u.protocol !== "http:" && u.protocol !== "https:") return void 0;
+  if (!/^https?:\/\/[^/?#]/i.test(escaped)) return void 0;
+  if (u.host === "") return void 0;
   return escaped;
 }
 var IRIREF_FORBIDDEN = /[\u0000-\u0020<>"{}|^`\\]/g;

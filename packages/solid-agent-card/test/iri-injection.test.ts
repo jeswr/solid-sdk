@@ -418,3 +418,74 @@ describe("safeHttpIri — escape-FIRST (URL parser normalises before it validate
     expect(docs.agentCard.url.includes(" ")).toBe(false);
   });
 });
+
+describe("safeHttpIri — REQUIRES an explicit `//` authority (new URL repairs authority-less forms)", () => {
+  const base = { id: "https://alice.pod.example/agent", name: "Alice" } as const;
+  // `new URL("https:example.com")` REPAIRS to a host — but it is not a lexical
+  // absolute http(s) IRI, so every safeHttpIri-fed field must reject it. Includes
+  // the EMPTY-authority triple-slash forms (`https:///foo`, `http:////foo`) that
+  // `new URL` ALSO repairs to a synthesised host (`foo`) by consuming a path
+  // segment — so `u.host === ""` alone would not catch them.
+  const Authorityless = [
+    "https:example.com",
+    "https:/foo",
+    "http:bar",
+    "https:///foo",
+    "http:////foo",
+  ];
+
+  it("REJECTS authority-less url as the descriptor url → fail-closed throw", () => {
+    for (const url of Authorityless) {
+      expect(() => describeAgent({ ...base, url })).toThrow(
+        /resolvable http\(s\) `url` is required/,
+      );
+    }
+  });
+
+  it("DROPS authority-less owner / issuer / protocolSource from RDF + JSON-LD + card", async () => {
+    for (const bad of Authorityless) {
+      const docs = describeAgent({
+        ...base,
+        owner: bad,
+        protocolSources: [bad, "https://alice.pod.example/p#v1"],
+        securitySchemes: [{ type: "solid-oidc", issuer: bad }],
+      });
+      // RDF: no ad:owner, only the one valid protocolSource, no scheme url.
+      const quads = await parseTurtle(await docs.agentDescription.toTurtle());
+      expect(quads.some((q) => q.predicate.value === `${ANP_AD}owner`)).toBe(false);
+      const protoObjs = quads
+        .filter((q) => q.predicate.value === `${ANP_AD}protocolSource`)
+        .map((q) => q.object.value);
+      expect(protoObjs).toEqual(["https://alice.pod.example/p#v1"]);
+      // JSON-LD
+      const jsonld = (await docs.agentDescription.toJsonLd()) as Record<string, unknown>;
+      expect(jsonld.owner).toBeUndefined();
+      expect(jsonld.protocolSource).toEqual([{ "@id": "https://alice.pod.example/p#v1" }]);
+      // A2A card
+      expect(docs.agentCard["x-solid"]?.owner).toBeUndefined();
+      expect(docs.agentCard["x-solid"]?.protocolSources).toEqual([
+        "https://alice.pod.example/p#v1",
+      ]);
+      expect(docs.agentCard.securitySchemes?.["solid-oidc"]?.openIdConnectUrl).toBeUndefined();
+    }
+  });
+
+  it("REJECTS an authority-less pointer target / webId → fail-closed throw", () => {
+    for (const bad of Authorityless) {
+      expect(() => buildAgentPointer("https://alice.pod.example/profile#me", bad)).toThrow(
+        /agent must be an absolute http\(s\) IRI/,
+      );
+      expect(() => buildAgentPointer(bad, "https://alice.pod.example/agent")).toThrow(
+        /webId must be an absolute http\(s\) IRI/,
+      );
+    }
+  });
+
+  it("a normal `//`-authority IRI still passes byte-identical", async () => {
+    const lexical = "https://alice.pod.example/agent";
+    const quads = await parseTurtle(
+      await describeAgent({ ...base, url: lexical }).agentDescription.toTurtle(),
+    );
+    expect(quads.find((q) => q.predicate.value === `${ANP_AD}url`)?.object.value).toBe(lexical);
+  });
+});
