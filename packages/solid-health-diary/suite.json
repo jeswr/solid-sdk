@@ -23,9 +23,26 @@
     "solid-federation-vocab"
   ],
   "federation": {
-    "sectors": ["health"],
-    "produces": ["health"],
-    "consumes": ["health"],
+    "sectors": [
+      "health"
+    ],
+    "produces": [
+      "health"
+    ],
+    "consumes": [
+      "health"
+    ],
     "note": "The shared multi-intolerance health-diary RDF model (Brief 1A of the coeliac-app build) — typed accessors + SHACL for Meal / FoodItem / Exposure / Symptom / TriggerClass (evidence-prior lag profiles) / EliminationProtocol / ToleranceConclusion / GeneticSummary / DietPlan, plus deriveExposures (OFF allergen/trace/additive tags + ingredient-text sulphite aliases + a high-risk-category → possible-undeclared fallback) and an owner-only fail-closed ACL helper. Reuses schema.org / OWL-Time / PROV-O / Dublin Core; new terms under diet: (https://w3id.org/jeswr/sectors/health/diet#), a sub-module of the health sector (vocab authored in parallel in solid-federation-vocab, Brief 1B). SECURITY-CRITICAL: models health data (symptoms, genetics summary, restriction plan) — all pod resources are owner-only, fail-closed. GitHub-installable now (committed dist/, ignore-scripts=true); npm publish is a deferred migration."
+  },
+  "status": {
+    "generatedAt": "2026-07-03T05:14:36.006Z",
+    "commit": "39955ba8b66b89babb2c0cae55512af718d7f4b9",
+    "version": "0.1.0",
+    "gate": {
+      "lint": "skip",
+      "typecheck": "skip",
+      "test": "skip",
+      "build": "skip"
+    }
   }
 }
