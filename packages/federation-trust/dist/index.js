@@ -46,7 +46,7 @@ function statusName(iri) {
   return void 0;
 }
 
-// ../solid-vc/dist/index.js
+// node_modules/@jeswr/solid-vc/dist/index.js
 import { createHash } from "node:crypto";
 import { canonize } from "rdf-canonize";
 import { randomUUID } from "node:crypto";
@@ -635,6 +635,8 @@ function relayErrorCode(code) {
     case "ISSUER_MISMATCH":
     case "PROOF_PURPOSE_MISMATCH":
       return code;
+    // UNTRUSTED_ISSUER from solid-vc is subsumed by our own trust-anchor gate; map
+    // it conservatively (it should not arise — we never pass trustedIssuers down).
     default:
       return "MALFORMED";
   }
