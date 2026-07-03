@@ -12,7 +12,7 @@
  * these are moderated by *this* app — the view carries a peer-content banner and
  * every link-out passes through an external-community interstitial (design §3.1).
  */
-import { isAllowlistedCommunityHost } from "./allowlist.js";
+import { isAllowlistedCommunityHost } from "./allowlist";
 
 /** How the entry is grouped in the view (drives section ordering + labels). */
 export type CommunityCategory = "charity" | "venue-guide" | "peer-forum" | "patient-community";

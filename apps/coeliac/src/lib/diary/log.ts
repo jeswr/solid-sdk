@@ -14,9 +14,9 @@ import {
   type SymptomType,
 } from "@jeswr/solid-health-diary";
 import { ulid } from "ulid";
-import type { StoredMeal, StoredSymptom } from "../cache/diary-store.js";
-import { mealLabel, mealSignature } from "../cache/diary-store.js";
-import { mealUrl, symptomUrl } from "../pod/layout.js";
+import type { StoredMeal, StoredSymptom } from "../cache/diary-store";
+import { mealLabel, mealSignature } from "../cache/diary-store";
+import { mealUrl, symptomUrl } from "../pod/layout";
 
 /** Inputs for a new meal log. `at` defaults to now; exposures are derived if omitted. */
 export interface NewMealInput {

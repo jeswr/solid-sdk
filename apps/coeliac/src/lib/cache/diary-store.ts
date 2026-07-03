@@ -26,7 +26,7 @@ import type {
   TriggerSlug,
   Verdict,
 } from "@jeswr/solid-health-diary";
-import type { Kv } from "./kv.js";
+import type { Kv } from "./kv";
 
 /** The persistence/sync state of an optimistically-written record. */
 export type SyncState = "pending" | "synced" | "error";

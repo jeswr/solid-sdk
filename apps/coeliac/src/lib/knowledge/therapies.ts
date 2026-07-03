@@ -13,7 +13,7 @@
  * as a named-product LABEL LOOKUP (a 404 for an investigational drug is expected,
  * and is not proof that "nothing is approved").
  */
-import { knowledgeJson } from "./fetch.js";
+import { knowledgeJson } from "./fetch";
 
 /** Honest evidence stage for a therapy row (rail §2.5). */
 export type EvidenceStage =

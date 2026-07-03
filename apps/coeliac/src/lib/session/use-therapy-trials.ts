@@ -10,10 +10,10 @@
  */
 "use client";
 import { useEffect, useState } from "react";
-import { knowledgeFetch, knowledgeJson } from "../knowledge/fetch.js";
-import { recruitingTherapies } from "../knowledge/therapies.js";
-import { buildCtgovSearchUrl, parseCtgovResponse, type TrialStudy } from "../knowledge/trials.js";
-import { useSession } from "./context.js";
+import { knowledgeFetch, knowledgeJson } from "../knowledge/fetch";
+import { recruitingTherapies } from "../knowledge/therapies";
+import { buildCtgovSearchUrl, parseCtgovResponse, type TrialStudy } from "../knowledge/trials";
+import { useSession } from "./context";
 
 /** term → its live recruiting studies (empty until/if the fetch resolves). */
 export type TherapyTrials = Record<string, TrialStudy[]>;

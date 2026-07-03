@@ -13,7 +13,7 @@
  * (`@/lib/session/context`), so views stay testable with a stubbed fetch.
  */
 import type { LoginController, SessionChangeDetail } from "@jeswr/solid-elements/react";
-import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DiaryStore } from "@/lib/cache/diary-store";
 import { defaultKv } from "@/lib/cache/kv";
 import { flushOutbox } from "@/lib/diary/sync";
@@ -33,7 +33,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [controller, setController] = useState<LoginController | null>(null);
   const [value, setValue] = useState<SessionValue>(() => ({ ...anonymousSession }));
   const valueRef = useRef(value);
-  valueRef.current = value;
+  // Keep the ref in sync post-commit (react-hooks v6 forbids ref writes during
+  // render); `reconcile` only reads it from event handlers, so this is safe.
+  useEffect(() => {
+    valueRef.current = value;
+  }, [value]);
 
   /** Bring an authenticated controller online: resolve storage + provision + flush. */
   const activateSession = useCallback(async (c: LoginController) => {
@@ -83,7 +87,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     const c = controllerRef.current;
     resetDiaryReadyMemo();
     if (c) await c.logout();
-    setValue((v) => ({ ...anonymousSession, status: "anonymous", login: v.login, logout: v.logout, reconcile: v.reconcile }));
+    setValue(() => ({ ...anonymousSession, status: "anonymous" }));
   }, []);
 
   const reconcile = useCallback(async () => {
@@ -92,10 +96,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     await flushOutbox({ authedFetch: v.authedFetch, webId: v.webId, storageRoot: v.storageRoot }, v.store);
   }, []);
 
-  // Inject the stable callbacks once.
-  useEffect(() => {
-    setValue((v) => ({ ...v, login, logout, reconcile }));
-  }, [login, logout, reconcile]);
+  // Merge the stable callbacks into the context value during render (react-hooks
+  // v6 forbids the old inject-via-effect setValue; this also drops a render pass).
+  const contextValue = useMemo(
+    () => ({ ...value, login, logout, reconcile }),
+    [value, login, logout, reconcile],
+  );
 
   // Build the controller + silent-restore on mount (client-only).
   useEffect(() => {
@@ -170,7 +176,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   );
 
   return (
-    <SessionContext.Provider value={value}>
+    <SessionContext.Provider value={contextValue}>
       {value.status === "loading" ? (
         <RestoringSplash />
       ) : value.status === "authed" ? (

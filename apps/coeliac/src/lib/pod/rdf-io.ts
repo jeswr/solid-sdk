@@ -6,7 +6,7 @@
  */
 import type { DatasetCore, Quad } from "@rdfjs/types";
 import { Writer } from "n3";
-import { PodWriteError } from "./pod-fs.js";
+import { PodWriteError } from "./pod-fs";
 
 /** Serialise every quad in a dataset to a Turtle string (via `n3.Writer`). */
 export function datasetToTurtle(dataset: DatasetCore): Promise<string> {

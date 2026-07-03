@@ -11,8 +11,8 @@
  * invariant). Best-effort throughout: a cache read/write failure never blocks a
  * fetch or a render.
  */
-import { knowledgeCacheUrl } from "../pod/layout.js";
-import { ensureDiaryReady, putResource } from "../pod/pod-fs.js";
+import { knowledgeCacheUrl } from "../pod/layout";
+import { ensureDiaryReady, putResource } from "../pod/pod-fs";
 
 /** A dated cache envelope: when it was fetched + the public payload. */
 export interface KnowledgeCacheEnvelope<T> {

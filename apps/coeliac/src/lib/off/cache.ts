@@ -10,10 +10,10 @@
 import { FoodItem, foodItemSubject, parseFoodItem } from "@jeswr/solid-health-diary";
 import { fetchRdf } from "@jeswr/fetch-rdf";
 import { DataFactory, Store } from "n3";
-import { offCacheUrl } from "../pod/layout.js";
-import { ensureDiaryReady, putResource } from "../pod/pod-fs.js";
-import { datasetToTurtle } from "../pod/rdf-io.js";
-import { type OffProduct, offProductRef, offProductToFoodItem } from "./off.js";
+import { offCacheUrl } from "../pod/layout";
+import { ensureDiaryReady, putResource } from "../pod/pod-fs";
+import { datasetToTurtle } from "../pod/rdf-io";
+import { type OffProduct, offProductRef, offProductToFoodItem } from "./off";
 
 /** Serialise an OFF product to a `diet:FoodItem` cache document (Turtle). */
 export async function serializeOffCache(url: string, product: OffProduct): Promise<string> {

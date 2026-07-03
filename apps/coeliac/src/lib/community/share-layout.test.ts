@@ -10,7 +10,7 @@ import {
   isDiaryIri,
   shareProvenanceSidecarUrl,
   shareUrl,
-} from "./share-layout.js";
+} from "./share-layout";
 
 const ROOT = "https://alice.example/";
 const ULID = "01ARZ3NDEKTSV4RRFFQ69G5FAV";

@@ -29,4 +29,4 @@ export {
   startProtocol,
   type StartProtocolInput,
   type StartResult,
-} from "./fsm.js";
+} from "./fsm";

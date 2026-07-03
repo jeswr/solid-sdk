@@ -14,9 +14,9 @@
  * via {@link deriveConfirmedConclusion} (the sole `confirmed` path) and persisted too.
  */
 import { useCallback } from "react";
-import type { StoredConclusion, StoredProtocol } from "../cache/diary-store.js";
-import { syncConclusion, syncProtocol } from "../diary/sync.js";
-import { deriveConfirmedConclusion } from "../inference/conclude.js";
+import type { StoredConclusion, StoredProtocol } from "../cache/diary-store";
+import { syncConclusion, syncProtocol } from "../diary/sync";
+import { deriveConfirmedConclusion } from "../inference/conclude";
 import {
   advanceProtocol,
   type ProtocolEvent,
@@ -24,10 +24,10 @@ import {
   type ProtocolSafetyContext,
   startProtocol,
   type StartProtocolInput,
-} from "../protocol/fsm.js";
-import { newConclusionRecord, newProtocolRecord, storedProtocolToData, updateProtocolRecord } from "../protocol/persist.js";
-import { NotSignedInError } from "./use-diary-actions.js";
-import { useSession } from "./context.js";
+} from "../protocol/fsm";
+import { newConclusionRecord, newProtocolRecord, storedProtocolToData, updateProtocolRecord } from "../protocol/persist";
+import { NotSignedInError } from "./use-diary-actions";
+import { useSession } from "./context";
 
 /** The result of a protocol mutation: the updated record + a settle-when-synced promise. */
 export interface ProtocolActionResult {

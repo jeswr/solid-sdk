@@ -10,7 +10,7 @@
  * (`rankLiterature`), so no health interest ever leaves the device.
  */
 import { useCallback, useEffect, useState } from "react";
-import { knowledgeFetch, knowledgeJson } from "../knowledge/fetch.js";
+import { knowledgeFetch, knowledgeJson } from "../knowledge/fetch";
 import {
   buildEpmcSearchUrl,
   type EpmcResult,
@@ -18,11 +18,11 @@ import {
   parseEpmcResponse,
   type RankedLiterature,
   rankLiterature,
-} from "../knowledge/literature.js";
-import { isStale, readKnowledgeCache, writeKnowledgeCache } from "../knowledge/cache.js";
-import { GENERIC_COELIAC_CONDITION } from "../knowledge/terms.js";
-import { trackedTriggers } from "../knowledge/tracked.js";
-import { useSession } from "./context.js";
+} from "../knowledge/literature";
+import { isStale, readKnowledgeCache, writeKnowledgeCache } from "../knowledge/cache";
+import { GENERIC_COELIAC_CONDITION } from "../knowledge/terms";
+import { trackedTriggers } from "../knowledge/tracked";
+import { useSession } from "./context";
 
 const CACHE_SLUG = "research-latest";
 

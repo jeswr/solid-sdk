@@ -10,7 +10,7 @@
 import { fetchRdf } from "@jeswr/fetch-rdf";
 import { docOf } from "@jeswr/solid-health-diary";
 import { DataFactory } from "n3";
-import { asContainer, containerOf } from "./layout.js";
+import { asContainer, containerOf } from "./layout";
 
 const PIM_STORAGE = "http://www.w3.org/ns/pim/space#storage";
 

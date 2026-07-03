@@ -9,7 +9,7 @@
  * it freely.
  */
 import { createContext, useContext } from "react";
-import type { DiaryStore } from "../cache/diary-store.js";
+import type { DiaryStore } from "../cache/diary-store";
 
 /** Coarse auth status driving the top-level shell (restoring → login/app). */
 export type SessionStatus = "loading" | "anonymous" | "authed";

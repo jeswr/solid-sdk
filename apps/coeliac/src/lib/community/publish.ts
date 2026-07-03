@@ -20,10 +20,10 @@
 import { writeOwnerOnlyAcl } from "@jeswr/solid-health-diary";
 import { DataFactory, Writer } from "n3";
 import { PROV } from "@jeswr/solid-health-diary";
-import { ensureContainer, putResource } from "../pod/pod-fs.js";
-import type { ShareCard } from "./share-card.js";
-import { assertShareable, ShareSanitizationError } from "./share.js";
-import { serializeShareCard } from "./share-rdf.js";
+import { ensureContainer, putResource } from "../pod/pod-fs";
+import type { ShareCard } from "./share-card";
+import { assertShareable, ShareSanitizationError } from "./share";
+import { serializeShareCard } from "./share-rdf";
 import {
   assertCommunityScope,
   communityContainers,
@@ -31,7 +31,7 @@ import {
   containsDiaryScope,
   shareProvenanceSidecarUrl,
   shareUrl,
-} from "./share-layout.js";
+} from "./share-layout";
 
 const { namedNode, quad } = DataFactory;
 

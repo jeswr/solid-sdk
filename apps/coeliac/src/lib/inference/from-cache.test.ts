@@ -5,8 +5,8 @@
  * anchoring) rather than fed to the engine as a NaN date.
  */
 import { describe, expect, it } from "vitest";
-import type { StoredMeal, StoredSymptom } from "../cache/diary-store.js";
-import { diaryDataFromCache, storedMealToData, storedSymptomToData } from "./from-cache.js";
+import type { StoredMeal, StoredSymptom } from "../cache/diary-store";
+import { diaryDataFromCache, storedMealToData, storedSymptomToData } from "./from-cache";
 
 function storedMeal(over: Partial<StoredMeal> = {}): StoredMeal {
   return {

@@ -1,9 +1,9 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 import { describe, expect, it } from "vitest";
-import type { ShareCard } from "./share-card.js";
-import { DIET_SAFE_FOOD_SHARE } from "./share-card.js";
-import { serializeShareCard } from "./share-rdf.js";
-import { ShareSanitizationError } from "./share.js";
+import type { ShareCard } from "./share-card";
+import { DIET_SAFE_FOOD_SHARE } from "./share-card";
+import { serializeShareCard } from "./share-rdf";
+import { ShareSanitizationError } from "./share";
 
 const SUBJECT = "https://alice.example/community/shares/01ARZ3NDEKTSV4RRFFQ69G5FAV.ttl#it";
 const DIARY_IRI = "https://alice.example/health/diary/meals/2026/07/01ARZ3NDEKTSV4RRFFQ69G5FAV.ttl#it";

@@ -10,10 +10,10 @@
  */
 "use client";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { knowledgeFetch } from "../knowledge/fetch.js";
-import { isStale, readKnowledgeCache, writeKnowledgeCache } from "../knowledge/cache.js";
-import { countryNameForLocale, fetchAllRecruitingTrials, filterTrialsByCountry, type TrialStudy } from "../knowledge/trials.js";
-import { useSession } from "./context.js";
+import { knowledgeFetch } from "../knowledge/fetch";
+import { isStale, readKnowledgeCache, writeKnowledgeCache } from "../knowledge/cache";
+import { countryNameForLocale, fetchAllRecruitingTrials, filterTrialsByCountry, type TrialStudy } from "../knowledge/trials";
+import { useSession } from "./context";
 
 const CACHE_SLUG = "trials-latest";
 
@@ -88,6 +88,7 @@ export function useTrials(): TrialsViewState {
   }, [publicFetch, authedFetch, storageRoot, webId]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- load-on-mount data hook: the sync setState is the intentional loading flag; data setState runs in the async continuation (new react-hooks v6 rule, Next 16 upgrade)
     void load();
   }, [load]);
 

@@ -7,8 +7,8 @@
  * cache-only (no network), so the home screen paints synchronously from IndexedDB.
  */
 import { useCallback, useEffect, useState } from "react";
-import type { FrequentMeal, StoredMeal, StoredSymptom } from "../cache/diary-store.js";
-import { useSession } from "./context.js";
+import type { FrequentMeal, StoredMeal, StoredSymptom } from "../cache/diary-store";
+import { useSession } from "./context";
 
 export interface DiaryLists {
   recent: StoredMeal[];
@@ -50,6 +50,7 @@ export function useDiaryLists(): DiaryLists {
   }, [store]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- load-on-mount data hook: the sync setState is the intentional loading flag; data setState runs in the async continuation (new react-hooks v6 rule, Next 16 upgrade)
     void refresh();
   }, [refresh]);
 

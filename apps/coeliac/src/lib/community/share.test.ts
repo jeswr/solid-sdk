@@ -1,10 +1,10 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 import type { ToleranceConclusionData } from "@jeswr/solid-health-diary";
 import { describe, expect, it } from "vitest";
-import { ShareIdentityError, type CommunityIdentity } from "./identity.js";
-import type { CanonicalMessage, ShareCard } from "./share-card.js";
-import { DIET_SAFE_FOOD_SHARE } from "./share-card.js";
-import { serializeShareCard } from "./share-rdf.js";
+import { ShareIdentityError, type CommunityIdentity } from "./identity";
+import type { CanonicalMessage, ShareCard } from "./share-card";
+import { DIET_SAFE_FOOD_SHARE } from "./share-card";
+import { serializeShareCard } from "./share-rdf";
 import {
   assertShareable,
   deriveSafeFoodCandidates,
@@ -14,7 +14,7 @@ import {
   sanitizeLine,
   sanitizeText,
   ShareSanitizationError,
-} from "./share.js";
+} from "./share";
 
 const REAL_WEBID = "https://alice.example/profile/card#me";
 
