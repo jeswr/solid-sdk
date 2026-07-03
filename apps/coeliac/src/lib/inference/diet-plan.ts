@@ -120,13 +120,17 @@ export function deriveCurrentPlan(
 
   for (const [trigger, current] of latest) {
     const timeBoxed = timeBoxedTriggers.includes(trigger);
-    // Time-boxed → the latest verdict decides (a newer `tolerated` clears it).
-    // Lifelong → any confirmed exclusion sticks, never cleared by a later `tolerated`.
-    const source = timeBoxed
-      ? isExclusionVerdict(current.verdict)
-        ? current
-        : undefined
-      : latestExclusion.get(trigger);
+    // ONLY a latest `tolerated` verdict shrinks the avoid-list — and only for a
+    // time-boxed (secondary) intolerance. Everything else preserves the most-recent
+    // prior confirmed exclusion (`latestExclusion`):
+    //  - latest `inconclusive` (e.g. an aborted re-test) is NOT a settled outcome —
+    //    it must NOT remove a food from the avoid-list (aligns with `settledTriggers`
+    //    in propose.ts, where `inconclusive` likewise does not settle a trigger);
+    //  - latest `reacts`/`dose-dependent` keeps it excluded (and equals `latest` here);
+    //  - a LIFELONG trigger (gluten/coeliac) is sticky: a later `tolerated`/`inconclusive`
+    //    can never clear a confirmed reaction (it is never time-boxed).
+    const clearedByTolerated = timeBoxed && current.verdict === "tolerated";
+    const source = clearedByTolerated ? undefined : latestExclusion.get(trigger);
     if (!source) continue; // cleared (time-boxed latest tolerated) or never a reaction
     const reviewAfter = parseDate(source.reviewAfter);
     // Fail closed on the trigger set: a lifelong exclusion (e.g. gluten) is never

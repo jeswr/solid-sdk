@@ -156,6 +156,43 @@ describe("deriveCurrentPlan — latest-conclusion collapse (stale-guidance fix)"
     expect(plan.exclusions).toHaveLength(0); // the later test cleared it
   });
 
+  it("a NEWER inconclusive does NOT clear a prior reacts (reacts → inconclusive stays excluded)", () => {
+    const plan = deriveCurrentPlan(
+      [
+        dated("lactose", "reacts", "2026-01-01T00:00:00.000Z", { reviewAfter: "2026-05-01T00:00:00.000Z" }),
+        dated("lactose", "inconclusive", "2026-03-01T00:00:00.000Z"), // aborted re-test — not settled
+      ],
+      [],
+      NOW,
+    );
+    expect(plan.exclusions).toHaveLength(1);
+    const lac = plan.exclusions[0];
+    // Keeps the exclusion, its "why" (the reacts verdict), and its review date.
+    expect(lac).toMatchObject({ trigger: "lactose", verdict: "reacts" });
+    expect(lac.reviewAfter?.toISOString()).toBe("2026-05-01T00:00:00.000Z");
+    expect(lac.reviewDue).toBe(true); // overdue → still review-surfaces
+  });
+
+  it("an inconclusive-only trigger with no prior reaction is NOT excluded", () => {
+    const plan = deriveCurrentPlan([dated("lactose", "inconclusive", "2026-03-01T00:00:00.000Z")], [], NOW);
+    expect(plan.exclusions).toHaveLength(0);
+  });
+
+  it("SAFETY: a NEWER inconclusive for gluten leaves the lifelong exclusion intact", () => {
+    const plan = deriveCurrentPlan(
+      [
+        dated("gluten", "reacts", "2026-01-01T00:00:00.000Z"),
+        dated("gluten", "inconclusive", "2026-06-01T00:00:00.000Z"),
+      ],
+      [],
+      NOW,
+    );
+    const gluten = plan.exclusions.find((e) => e.trigger === "gluten");
+    expect(gluten).toBeDefined();
+    expect(gluten?.verdict).toBe("reacts");
+    expect(gluten?.timeBoxed).toBe(false);
+  });
+
   it("a NEWER reacts re-avoids after an older tolerated (tolerated → reacts)", () => {
     const plan = deriveCurrentPlan(
       [

@@ -44,14 +44,30 @@ export function surfaceReviews(
   // NEWER `tolerated` conclusion for the same trigger has superseded it (stale
   // medical guidance — roborev Medium). Deterministic + input-order-independent.
   const confirmed = conclusions.filter((c) => c.confidence === "confirmed");
-  const current = latestByTrigger(confirmed, {
-    triggerOf: (c) => c.aboutTrigger,
-    createdMsOf: (c) => c.created?.getTime() ?? Number.NaN,
-    idOf: (c) => c.id ?? "",
-  });
+  const accessors = {
+    triggerOf: (c: ToleranceConclusionData) => c.aboutTrigger,
+    createdMsOf: (c: ToleranceConclusionData) => c.created?.getTime() ?? Number.NaN,
+    idOf: (c: ToleranceConclusionData) => c.id ?? "",
+  };
+  // The current conclusion per trigger (any verdict) decides whether a re-challenge
+  // is still open; the current EXCLUSION conclusion per trigger carries the `why`/
+  // review date. Only a latest `tolerated` closes the re-challenge — a later
+  // `inconclusive` (e.g. an aborted re-test) must NOT suppress an overdue prompt from
+  // an earlier `reacts` (aligns with `settledTriggers`: `inconclusive` is not settled).
+  const latest = latestByTrigger(confirmed, accessors);
+  const latestExclusion = latestByTrigger(
+    confirmed.filter((c) => c.verdict === "reacts" || c.verdict === "dose-dependent"),
+    accessors,
+  );
+  const sources: ToleranceConclusionData[] = [];
+  for (const [trigger, cur] of latest) {
+    if (cur.verdict === "tolerated") continue; // the food is now tolerated — no re-test
+    const src = latestExclusion.get(trigger);
+    if (src) sources.push(src);
+  }
 
   const due: ReviewSurfacing[] = [];
-  for (const c of current.values()) {
+  for (const c of sources) {
     // Only a CONFIRMED exclusion (from a completed protocol) is re-challenged — a
     // low-confidence or malformed conclusion carrying a stray `reviewAfter` must not
     // drive re-challenge advice or suppress a fresh elimination proposal.

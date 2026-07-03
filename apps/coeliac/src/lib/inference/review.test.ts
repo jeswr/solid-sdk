@@ -117,6 +117,18 @@ describe("surfaceReviews — latest-conclusion collapse (stale-guidance fix)", (
     expect(due).toEqual([]);
   });
 
+  it("a NEWER inconclusive does NOT suppress a due reacts prompt (reacts → inconclusive)", () => {
+    const due = surfaceReviews(
+      [
+        dated("lactose", "reacts", 10, atDays(150)), // overdue exclusion
+        dated("lactose", "inconclusive", 160), // aborted re-test — not settled
+      ],
+      now,
+    );
+    expect(due.map((d) => d.trigger)).toEqual(["lactose"]);
+    expect(due[0]!.verdict).toBe("reacts");
+  });
+
   it("still surfaces when the NEWER conclusion is the due reacts", () => {
     const due = surfaceReviews(
       [
