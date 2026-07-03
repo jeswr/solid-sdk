@@ -1,26 +1,396 @@
+/* AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate. */
 @import "tailwindcss";
 
+/*
+ * App styles. Colours come from the @jeswr/app-shell OKLCH tokens (imported in
+ * layout.tsx via "@jeswr/app-shell/styles.css") — `--background`, `--foreground`,
+ * `--primary`, `--border`, `--muted-foreground`, `--destructive`, etc. — so
+ * light/dark theming (the ThemeProvider toggles `.dark`) works automatically.
+ */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --ok: oklch(0.62 0.13 150);
+  --warn: oklch(0.7 0.14 70);
+  --danger: var(--destructive, oklch(0.58 0.2 25));
+  --caution: oklch(0.72 0.13 55);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--background, #fff);
+  color: var(--foreground, #171717);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  margin: 0;
+}
+
+a {
+  color: var(--primary, #0a7);
+}
+
+:focus-visible {
+  outline: 2px solid var(--ring, var(--primary, #0a7));
+  outline-offset: 2px;
+}
+
+/* ---- Chrome ---------------------------------------------------------------- */
+.app__header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border, #e5e5e5);
+}
+.app__brand {
+  font-weight: 700;
+  font-size: 1.15rem;
+  color: var(--foreground, inherit);
+  text-decoration: none;
+}
+.app__nav {
+  display: flex;
+  gap: 1rem;
+}
+.app__nav a {
+  color: var(--foreground, inherit);
+  text-decoration: none;
+}
+.app__nav a:hover {
+  text-decoration: underline;
+}
+.app__actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.app__main {
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: 1rem;
+}
+.app__footer {
+  max-width: 44rem;
+  margin: 2rem auto 3rem;
+  padding: 0 1rem;
+  color: var(--muted-foreground, #666);
+  font-size: 0.85rem;
+}
+
+/* ---- Buttons + chips ------------------------------------------------------- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.55rem 0.9rem;
+  border: 1px solid var(--border, #ccc);
+  border-radius: 0.6rem;
+  background: var(--card, #fff);
+  color: var(--foreground, inherit);
+  font: inherit;
+  cursor: pointer;
+}
+.btn:hover {
+  background: var(--muted, #f2f2f2);
+}
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.btn--primary {
+  background: var(--primary, #0a7);
+  color: var(--primary-foreground, #fff);
+  border-color: transparent;
+}
+.btn--primary:hover {
+  filter: brightness(1.05);
+  background: var(--primary, #0a7);
+}
+.btn--big {
+  padding: 1rem 1.5rem;
+  font-size: 1.15rem;
+  width: 100%;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.chip {
+  padding: 0.5rem 0.85rem;
+  border: 1px solid var(--border, #ccc);
+  border-radius: 999px;
+  background: var(--card, #fff);
+  color: var(--foreground, inherit);
+  font: inherit;
+  cursor: pointer;
+}
+.chip--on {
+  background: var(--primary, #0a7);
+  color: var(--primary-foreground, #fff);
+  border-color: transparent;
+}
+.chip--emergency {
+  border-color: var(--danger);
+}
+.chip--relog {
+  background: var(--secondary, #eef);
+}
+.chip__count {
+  color: var(--muted-foreground, #777);
+  font-size: 0.85em;
+}
+
+/* ---- Home ------------------------------------------------------------------ */
+.home > section {
+  margin: 1.5rem 0;
+}
+.home__cta {
+  margin-top: 1rem;
+}
+
+/* ---- Exposures ------------------------------------------------------------- */
+.exposure-list {
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0;
+  display: grid;
+  gap: 0.5rem;
+}
+.exposure {
+  padding: 0.6rem 0.75rem;
+  border-radius: 0.5rem;
+  border-left: 4px solid var(--border, #ccc);
+  background: var(--card, #fafafa);
+}
+.exposure__level {
+  font-weight: 700;
+}
+.exposure__note {
+  margin: 0.35rem 0 0;
+  font-size: 0.85rem;
+  color: var(--muted-foreground, #555);
+}
+.exposure--danger {
+  border-left-color: var(--danger);
+}
+.exposure--warn {
+  border-left-color: var(--warn);
+}
+.exposure--caution {
+  border-left-color: var(--caution);
+}
+.exposure--info {
+  border-left-color: var(--muted-foreground, #999);
+}
+
+/* ---- Product view ---------------------------------------------------------- */
+.product {
+  border: 1px solid var(--border, #e5e5e5);
+  border-radius: 0.75rem;
+  padding: 1rem;
+  background: var(--card, #fff);
+}
+.product__brands,
+.product__qty {
+  margin: 0.1rem 0;
+  color: var(--muted-foreground, #666);
+}
+.product__quality {
+  margin-top: 0.75rem;
+  font-size: 0.85rem;
+  color: var(--muted-foreground, #555);
+  background: var(--muted, #f6f6f6);
+  padding: 0.5rem 0.65rem;
+  border-radius: 0.5rem;
+}
+.product__log {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-top: 1rem;
+}
+.product__status,
+.symptom-log__status,
+.manual-meal__status {
+  color: var(--muted-foreground, #555);
+  font-size: 0.9rem;
+}
+.product__attribution {
+  margin-top: 1rem;
+  font-size: 0.8rem;
+  color: var(--muted-foreground, #666);
+}
+
+/* ---- Scan ------------------------------------------------------------------ */
+.scan__video {
+  width: 100%;
+  max-height: 60vh;
+  background: #000;
+  border-radius: 0.75rem;
+}
+.scan__manual {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+.scan__manual input,
+.manual-meal input,
+.product select,
+.manual-meal select {
+  padding: 0.5rem;
+  border: 1px solid var(--border, #ccc);
+  border-radius: 0.5rem;
+  background: var(--background, #fff);
+  color: var(--foreground, inherit);
+  font: inherit;
+}
+
+/* ---- Symptom log ----------------------------------------------------------- */
+.symptom-log__detail {
+  margin-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  align-items: flex-start;
+}
+.severity {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  width: 100%;
+  max-width: 22rem;
+}
+
+/* ---- Emergency rail -------------------------------------------------------- */
+.emergency {
+  margin-top: 1rem;
+  border: 2px solid var(--danger);
+  border-radius: 0.75rem;
+  padding: 1rem;
+  background: color-mix(in oklch, var(--danger) 10%, var(--card, #fff));
+}
+.emergency__title {
+  margin-top: 0;
+  color: var(--danger);
+}
+.emergency a {
+  font-weight: 700;
+}
+
+/* ---- Recent + badges ------------------------------------------------------- */
+.recent__list {
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0;
+  display: grid;
+  gap: 0.4rem;
+}
+.recent__item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--border, #eee);
+  border-radius: 0.5rem;
+}
+.recent__time {
+  margin-left: auto;
+  color: var(--muted-foreground, #777);
+  font-size: 0.8rem;
+}
+.sync-badge {
+  font-size: 0.75rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid var(--border, #ddd);
+}
+.sync-badge--synced {
+  color: var(--ok);
+  border-color: var(--ok);
+}
+.sync-badge--pending {
+  color: var(--warn);
+  border-color: var(--warn);
+}
+.sync-badge--error {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+/* ---- Offline banner + login + restoring ------------------------------------ */
+.offline-banner {
+  padding: 0.6rem 0.9rem;
+  border-radius: 0.5rem;
+  background: var(--warn);
+  color: #1a1200;
+  font-size: 0.9rem;
+}
+.offline-banner--syncing {
+  background: var(--muted, #eee);
+  color: var(--foreground, #222);
+}
+.login-area {
+  max-width: 30rem;
+  margin: 3rem auto;
+  padding: 1.5rem;
+  display: grid;
+  gap: 1.5rem;
+}
+.login-area__disclaimer {
+  color: var(--muted-foreground, #666);
+  font-size: 0.85rem;
+}
+.restoring {
+  min-height: 60vh;
+  display: grid;
+  place-content: center;
+  gap: 1rem;
+  justify-items: center;
+  color: var(--muted-foreground, #666);
+}
+.restoring__spinner {
+  width: 2rem;
+  height: 2rem;
+  border: 3px solid var(--border, #ccc);
+  border-top-color: var(--primary, #0a7);
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .restoring__spinner {
+    animation: none;
+  }
+}
+
+.manual-meal {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+.manual-meal__items {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.manual-meal__items li {
+  background: var(--muted, #eee);
+  border-radius: 999px;
+  padding: 0.25rem 0.6rem;
+}
+.log-page__manual {
+  margin-top: 1.5rem;
 }

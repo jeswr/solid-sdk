@@ -1,0 +1,88 @@
+// AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+/**
+ * Flush the optimistic outbox to the pod (UX invariant #2 — writes persist
+ * asynchronously; the cache is the source of truth for the UI). Each pending
+ * record is serialised via `@jeswr/solid-health-diary` and PUT under the
+ * ACL-protected diary root; success flips it to `synced`, a failure to `error`
+ * (retried next flush). ALL writes go through the injected authed fetch; the diary
+ * root's owner-only ACL is ensured (written first) before any resource write.
+ */
+import { serializeMeal, serializeSymptom } from "@jeswr/solid-health-diary";
+import type { DiaryStore, StoredMeal, StoredSymptom } from "../cache/diary-store.js";
+import { ensureDiaryReady, putResource } from "../pod/pod-fs.js";
+
+/** The authed context a flush needs. */
+export interface SyncContext {
+  authedFetch: typeof globalThis.fetch;
+  webId: string;
+  storageRoot: string;
+}
+
+/** Serialise + PUT one meal to the pod (ACL ensured first). */
+export async function syncMeal(ctx: SyncContext, meal: StoredMeal): Promise<void> {
+  await ensureDiaryReady(ctx.authedFetch, ctx.storageRoot, ctx.webId);
+  const body = await serializeMeal(meal.url, {
+    startTime: new Date(meal.startTime),
+    created: new Date(meal.createdAt),
+    context: meal.context,
+    portion: meal.portion,
+    venue: meal.venue,
+    note: meal.note,
+    patient: ctx.webId,
+    items: meal.items,
+    exposures: meal.exposures,
+  });
+  await putResource(ctx.authedFetch, meal.url, body);
+}
+
+/** Serialise + PUT one symptom to the pod (ACL ensured first). */
+export async function syncSymptom(ctx: SyncContext, symptom: StoredSymptom): Promise<void> {
+  await ensureDiaryReady(ctx.authedFetch, ctx.storageRoot, ctx.webId);
+  const body = await serializeSymptom(symptom.url, {
+    symptomType: symptom.symptomType,
+    onset: new Date(symptom.onset),
+    created: new Date(symptom.createdAt),
+    severity: symptom.severity,
+    note: symptom.note,
+    patient: ctx.webId,
+  });
+  await putResource(ctx.authedFetch, symptom.url, body);
+}
+
+/** The outcome of a flush pass. */
+export interface FlushResult {
+  synced: number;
+  failed: number;
+}
+
+/**
+ * Flush every pending/errored record to the pod, updating each record's sync
+ * state in the store. Never throws — a per-record failure marks that record
+ * `error` and the flush continues (offline-tolerant; retried next pass).
+ */
+export async function flushOutbox(ctx: SyncContext, store: DiaryStore): Promise<FlushResult> {
+  const { meals, symptoms } = await store.pending();
+  let synced = 0;
+  let failed = 0;
+  for (const meal of meals) {
+    try {
+      await syncMeal(ctx, meal);
+      await store.markMealSync(meal.ulid, "synced");
+      synced += 1;
+    } catch (err) {
+      await store.markMealSync(meal.ulid, "error", (err as Error).message);
+      failed += 1;
+    }
+  }
+  for (const symptom of symptoms) {
+    try {
+      await syncSymptom(ctx, symptom);
+      await store.markSymptomSync(symptom.ulid, "synced");
+      synced += 1;
+    } catch (err) {
+      await store.markSymptomSync(symptom.ulid, "error", (err as Error).message);
+      failed += 1;
+    }
+  }
+  return { synced, failed };
+}
