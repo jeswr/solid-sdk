@@ -51,13 +51,13 @@ export declare function isHttpIri(value: string | undefined): value is string;
  * SECURITY (load-bearing): the value comes from untrusted DAV data (a VEVENT `URL`,
  * a vCard `UID`/`URL`). {@link isHttpIri} only returns a BOOLEAN — a caller that then
  * uses the ORIGINAL string as an IRI term hands `n3.Writer` (which does not escape
- * IRIs) a value that may contain a `>` and thereby INJECT arbitrary triples into the
- * owner's pod resource (e.g. a forged `solid:oidcIssuer`). This function returns the
- * value to actually emit: WHATWG-normalised (`new URL(value).href` percent-encodes
- * `<`, `>`, `"`, space, `{`, `}`) and then any residual Turtle-IRIREF-illegal char
- * (`|`, `^`, `` ` ``) percent-encoded, so the emitted `<...>` can never be broken out
- * of and is always a well-formed IRIREF. Use THIS (never the raw string) wherever an
- * untrusted value becomes an IRI object.
+ * IRIs) a value that may contain a right-angle-bracket and thereby INJECT arbitrary
+ * triples into the owner's pod resource (e.g. a forged `solid:oidcIssuer`). This
+ * function returns the value to actually emit: WHATWG-normalised (`new URL(value).href`
+ * percent-encodes angle brackets, double-quote, space, and curly braces) and then any
+ * residual Turtle-IRIREF-illegal char (pipe, caret, backtick) percent-encoded, so the
+ * emitted IRIREF can never be broken out of and is always well-formed. Use THIS (never
+ * the raw string) wherever an untrusted value becomes an IRI object.
  */
 export declare function safeHttpIri(value: string | undefined): string | undefined;
 //# sourceMappingURL=vocab.d.ts.map

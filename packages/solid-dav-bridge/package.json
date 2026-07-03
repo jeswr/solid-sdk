@@ -47,12 +47,14 @@
     "build": "tsc -p tsconfig.build.json",
     "check:dist": "node scripts/check-dist.mjs",
     "check:lockfile-transport": "node scripts/check-lockfile-transport.mjs",
+    "api:report": "npm run build && api-extractor run --local",
+    "api:check": "npm run build && api-extractor run --local && git diff --exit-code -- etc/",
     "lint": "biome check src test scripts && npm run check:lockfile-transport",
     "lint:fix": "biome check --write src test scripts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "gate": "npm run lint && npm run typecheck && npm run test && npm run build && npm run check:dist && npm run check:lockfile-transport"
+    "gate": "npm run lint && npm run typecheck && npm run test && npm run build && npm run check:dist && npm run api:check && npm run check:lockfile-transport"
   },
   "dependencies": {
     "@jeswr/fetch-rdf": "^0.1.0",
@@ -65,6 +67,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.0.0",
+    "@microsoft/api-extractor": "^7.58.9",
     "@rdfjs/types": "^2.0.1",
     "@types/n3": "^1.26.1",
     "@types/node": "^20",
