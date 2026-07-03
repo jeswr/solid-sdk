@@ -16,7 +16,7 @@ export { sendNotification, notifyAgent } from "./send.js";
 export type { SendResult, NotifyAgentArgs } from "./send.js";
 export { readInbox, parseInboxNotification, findActivitySubject, isDirectChild, } from "./read.js";
 export type { InboxNotification } from "./read.js";
-export { buildActivity, serializeTurtle, ActivityDoc, isHttpIri, safeHttpIri, } from "./activity.js";
+export { buildActivity, serializeTurtle, ActivityDoc, isHttpIri, safeHttpIri, escapeIri, } from "./activity.js";
 export type { ActivityNotification, ActivityType } from "./activity.js";
 export { TaskDoc, writeTask, buildTaskNotification, parseTask, parseTaskFromNotification, notifyTaskAssigned, notifyTaskStateChanged, } from "./task.js";
 export type { TaskNotification, TaskState, NotifyTaskArgs, } from "./task.js";

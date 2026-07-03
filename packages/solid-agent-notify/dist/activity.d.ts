@@ -31,8 +31,19 @@ export interface ActivityNotification {
 /** True for an absolute http(s) URL usable as an AS2.0 IRI object/actor/target. */
 export declare function isHttpIri(value: string | undefined): boolean;
 /**
- * Canonicalise an untrusted string into a SAFE absolute http(s) IRI, or
- * `undefined` if it is not one.
+ * LEXICAL, scheme-agnostic escape for an IRI destined for ANY term position:
+ * percent-encode EXACTLY the characters the Turtle IRIREF grammar forbids
+ * (U+0000–U+0020 plus `< > " { } | ^ ` \`) and NOTHING else. A well-formed IRI —
+ * which contains none of those — round-trips BYTE-FOR-BYTE unchanged (so default
+ * ports, host case, dot-segments etc. are preserved; RDF identity is lexical),
+ * while an injection payload (whose `>`, SPACE, `<`, `"` would break out of the
+ * `<…>` delimiters) is rendered inert. Mirrors the `@jeswr/federation-registry`
+ * `escapeIri` reference implementation.
+ */
+export declare function escapeIri(value: string): string;
+/**
+ * Validate an untrusted string as a SAFE absolute http(s) IRI and return its
+ * LEXICAL, Turtle-safe form, or `undefined` if it is not a safe http(s) IRI.
  *
  * SECURITY (Turtle IRI-injection). `n3.Writer` does NOT escape IRIs: a string fed
  * straight to `NamedNodeFrom.string` is emitted VERBATIM between `<…>`, so a raw
@@ -40,14 +51,21 @@ export declare function isHttpIri(value: string | undefined): boolean;
  * the serialised document — which this package then POSTs to a peer's LDN inbox.
  * `isHttpIri` only returns a boolean and the callers used to write the RAW value,
  * so a hostile actor/target/assignee field could smuggle triples into a victim's
- * inbox. Routing every WRITE-side IRI through this canonicaliser closes that: it
- * runs the value through the WHATWG `URL` parser (which percent-encodes spaces,
- * `>`, `<`, `"`, `{`, `}`, `` ` `` and other unsafe bytes) and additionally
- * percent-encodes the three characters the URL parser leaves intact but Turtle
- * still forbids in an IRIREF (`|` `^` `` ` ``, belt-and-braces on the backtick).
- * The result therefore contains no Turtle IRIREF-terminating character, so it
- * cannot escape the `<…>`. Mirrors the `@jeswr/rdf-serialize` / solid-dav-bridge
- * `safeHttpIri` reference implementation.
+ * inbox. Routing every WRITE-side IRI through this validator closes that.
+ *
+ * We validate STRUCTURE + SCHEME via the WHATWG `URL` parser, but return the
+ * LEXICALLY-preserved input via {@link escapeIri} rather than `URL.href`, because
+ * RDF identity is lexical: `.href` would silently canonicalise the IRI (drop a
+ * default port, lowercase the host, collapse dot-segments) and change which
+ * resource the triple is about. {@link escapeIri} touches only the IRIREF-forbidden
+ * characters, so the result contains no `<…>`-terminating character yet denotes the
+ * exact IRI the caller supplied.
+ *
+ * Values carrying a LEADING or TRAILING C0-control-or-space are REJECTED outright:
+ * the WHATWG parser STRIPS those before parsing, so `" https://x"` would validate
+ * as `https://x` while `escapeIri(" https://x")` would emit `%20https://x` — a
+ * DIFFERENT, malformed IRI. Rejecting keeps the validated string and the emitted
+ * string from ever diverging.
  */
 export declare function safeHttpIri(value: string | undefined): string | undefined;
 /** Typed `@rdfjs/wrapper` view of a single AS2.0 activity subject (read + write). */
@@ -77,10 +95,18 @@ export declare class ActivityDoc extends TermWrapper {
  * the relative `#it` — the inbox assigns the final IRI). Only http(s) IRIs are
  * written for actor/object/target (never coerce arbitrary text into a NamedNode).
  *
+ * SECURITY (subject IRI-injection). The subject is the id of EVERY emitted quad,
+ * so — unlike the object-position IRIs, which are dropped when unsafe — it MUST
+ * fail closed: {@link safeSubjectIri} accepts only a safe `#`-fragment (the `#it`
+ * default) or an absolute http(s) IRI (emitted in its lexical, escaped form) and
+ * THROWS on anything that could break out of `<…>`.
+ *
  * HOST-LEAK CARE: the payload carries only what the caller intended — the sender
  * WebID, optional object/target IRIs the caller explicitly supplies, a timestamp,
  * a type, and free-text summary/content. We never sweep in arbitrary internal pod
  * URLs, so a notification cannot exfiltrate private resource locations.
+ *
+ * @throws TypeError if `subject` is neither a safe `#`-fragment nor an http(s) IRI.
  */
 export declare function buildActivity(notification: ActivityNotification, subject?: string): Store;
 /** Serialise an n3 Store to Turtle with the `as:` prefix. */
