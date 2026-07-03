@@ -27,6 +27,7 @@ export function AppChrome({ children }: { children: ReactNode }) {
           <Link href="/protocols">Challenges</Link>
           <Link href="/genetics">Genetics</Link>
           <Link href="/knowledge/research">Research</Link>
+          <Link href="/community">Community</Link>
         </nav>
         <div className="app__actions">
           <ThemeToggle />

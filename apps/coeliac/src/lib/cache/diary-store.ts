@@ -227,6 +227,21 @@ export class DiaryStore {
     return out;
   }
 
+  /**
+   * Whether ANY cached meal carries the given context (e.g. `restaurant`). Scans
+   * the FULL meal cache — deliberately NOT `recentMeals()`, which caps at a limit
+   * and dedupes by signature, so a restaurant meal outside the recent window, or
+   * one sharing a signature with a newer non-restaurant meal, would be missed
+   * (Phase-4A eating-out surfacing must not lose an eating-out signal). Cache-only,
+   * no network; returns a bare boolean so no meal detail is exposed to the caller.
+   */
+  async hasMealContext(context: MealContext): Promise<boolean> {
+    for (const meal of await this.allMeals()) {
+      if (meal.context === context) return true;
+    }
+    return false;
+  }
+
   /** Frequent meals: grouped by signature, most-logged first (the killer shortcut). */
   async frequentMeals(limit = 8): Promise<FrequentMeal[]> {
     const groups = new Map<string, FrequentMeal>();
