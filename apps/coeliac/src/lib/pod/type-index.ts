@@ -93,12 +93,16 @@ function diaryRegistrations(storageRoot: string): { classIri: string; container:
   ];
 }
 
-/** Read `solid:privateTypeIndex` off a profile dataset for any subject, if present. */
-function privateIndexOf(dataset: DatasetCore): string | undefined {
-  for (const q of dataset.match(null, null, null)) {
-    if (q.predicate.value === `${SOLID}privateTypeIndex` && q.object.termType === "NamedNode") {
-      return q.object.value;
-    }
+/**
+ * Read `solid:privateTypeIndex` declared BY THE AUTHENTICATED WEBID SUBJECT (never
+ * an unrelated subject in the profile document — that could point the app at a
+ * foreign index), if present.
+ */
+function privateIndexOf(dataset: DatasetCore, webId: string): string | undefined {
+  const subject = DataFactory.namedNode(webId);
+  const predicate = DataFactory.namedNode(`${SOLID}privateTypeIndex`);
+  for (const q of dataset.match(subject, predicate, null)) {
+    if (q.object.termType === "NamedNode") return q.object.value;
   }
   return undefined;
 }
@@ -182,7 +186,7 @@ export async function registerDiaryTypes(
   const { webId, storageRoot } = params;
   try {
     const { dataset } = await fetchRdf(docOf(webId), { fetch: authedFetch });
-    const existing = privateIndexOf(dataset);
+    const existing = privateIndexOf(dataset, webId);
     if (existing) {
       await registerIntoIndex(authedFetch, existing, storageRoot);
       return { registered: true, indexUrl: existing };

@@ -54,17 +54,24 @@ export function useBarcodeScanner(
     let cancelled = false;
     let readBarcodes: typeof import("zxing-wasm/reader").readBarcodes;
 
+    /** Schedule the next frame only while the loop is still active. */
+    function scheduleNext() {
+      if (!cancelled && !detectedRef.current) rafRef.current = requestAnimationFrame(tick);
+    }
+
     async function tick() {
+      // Stop rescheduling once cancelled (unmount / stop) or a code was detected.
+      if (cancelled || detectedRef.current) return;
       const video = videoRef.current;
-      if (cancelled || detectedRef.current || !video || video.readyState < 2) {
-        rafRef.current = requestAnimationFrame(tick);
+      if (!video || video.readyState < 2) {
+        scheduleNext();
         return;
       }
       const canvas = (canvasRef.current ??= document.createElement("canvas"));
       const w = video.videoWidth;
       const h = video.videoHeight;
       if (w === 0 || h === 0) {
-        rafRef.current = requestAnimationFrame(tick);
+        scheduleNext();
         return;
       }
       canvas.width = w;
@@ -88,7 +95,7 @@ export function useBarcodeScanner(
       } catch {
         // transient decode error — keep sampling
       }
-      if (!cancelled) rafRef.current = requestAnimationFrame(tick);
+      scheduleNext();
     }
 
     void (async () => {

@@ -11,7 +11,7 @@ import { FoodItem, foodItemSubject, parseFoodItem } from "@jeswr/solid-health-di
 import { fetchRdf } from "@jeswr/fetch-rdf";
 import { DataFactory, Store } from "n3";
 import { offCacheUrl } from "../pod/layout.js";
-import { putResource } from "../pod/pod-fs.js";
+import { ensureDiaryReady, putResource } from "../pod/pod-fs.js";
 import { datasetToTurtle } from "../pod/rdf-io.js";
 import { type OffProduct, offProductRef, offProductToFoodItem } from "./off.js";
 
@@ -33,14 +33,22 @@ export async function serializeOffCache(url: string, product: OffProduct): Promi
   return datasetToTurtle(store);
 }
 
-/** Write an OFF product to the pod cache (best-effort; swallows errors). */
+/**
+ * Write an OFF product to the pod cache (best-effort; swallows errors). Ensures
+ * the diary root's owner-only ACL is in place FIRST (the cache lives under the
+ * diary root, so a fast scan right after login must not race ahead of the
+ * backgrounded provisioning and write an unprotected resource — the "ACL first"
+ * invariant, DESIGN §9). `ensureDiaryReady` is memoised, so this is cheap.
+ */
 export async function writeOffCache(
   authedFetch: typeof globalThis.fetch,
   storageRoot: string,
+  ownerWebId: string,
   product: OffProduct,
 ): Promise<void> {
   if (!product.found) return;
   try {
+    await ensureDiaryReady(authedFetch, storageRoot, ownerWebId);
     const url = offCacheUrl(storageRoot, product.barcode);
     await putResource(authedFetch, url, await serializeOffCache(url, product));
   } catch {

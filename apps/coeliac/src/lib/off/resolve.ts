@@ -12,6 +12,8 @@ export interface ResolveContext {
   publicFetch: typeof globalThis.fetch;
   authedFetch: typeof globalThis.fetch;
   storageRoot: string | null;
+  /** The pod owner WebID — required to write-through the owner-only-ACL'd cache. */
+  webId: string | null;
 }
 
 /** A product plus where it came from (for the offline note in the UI). */
@@ -32,8 +34,8 @@ export async function resolveProduct(
 ): Promise<ResolvedProduct> {
   try {
     const product = await lookupProduct(barcode, ctx.publicFetch);
-    if (product.found && ctx.storageRoot) {
-      void writeOffCache(ctx.authedFetch, ctx.storageRoot, product);
+    if (product.found && ctx.storageRoot && ctx.webId) {
+      void writeOffCache(ctx.authedFetch, ctx.storageRoot, ctx.webId, product);
     }
     return { product, source: "off" };
   } catch (err) {

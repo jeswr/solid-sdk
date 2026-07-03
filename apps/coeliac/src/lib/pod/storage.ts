@@ -9,19 +9,37 @@
  */
 import { fetchRdf } from "@jeswr/fetch-rdf";
 import { docOf } from "@jeswr/solid-health-diary";
-import { asContainer } from "./layout.js";
+import { DataFactory } from "n3";
+import { asContainer, containerOf } from "./layout.js";
 
 const PIM_STORAGE = "http://www.w3.org/ns/pim/space#storage";
 
-/** The origin-root fallback (`https://alice.example/`) for a WebID. */
-export function originRoot(webId: string): string {
-  return new URL("/", webId).toString();
+/**
+ * The pod-root fallback for a WebID when the profile advertises no `pim:storage`.
+ *
+ * Deriving the SERVER origin (`https://host/`) would be WRONG for a path-based
+ * WebID (`https://host/alice/profile/card#me` lives in the pod `https://host/alice/`,
+ * not the server root) — it would provision/write the diary under the wrong
+ * container. Instead we derive from the profile document path, which conventionally
+ * sits at `<podRoot>profile/card`: strip that suffix to get the pod root; otherwise
+ * fall back to the container holding the profile document (conservative). The
+ * PRIMARY path is always `pim:storage` discovery — this is only the last resort.
+ */
+export function podRootFallback(webId: string): string {
+  const doc = docOf(webId);
+  const u = new URL(doc);
+  if (/\/profile\/card$/.test(u.pathname)) {
+    u.pathname = u.pathname.replace(/profile\/card$/, "");
+    return u.toString();
+  }
+  return containerOf(doc);
 }
 
 /**
- * Every `pim:storage` advertised on the WebID profile, as container URLs
- * (trailing-slash-normalised, http(s) only, de-duplicated). Empty if none / the
- * profile is unreadable.
+ * Every `pim:storage` advertised on the WebID profile FOR THE AUTHENTICATED WEBID
+ * SUBJECT (never an unrelated subject in the same document — that could target the
+ * wrong storage), as container URLs (trailing-slash-normalised, http(s) only,
+ * de-duplicated). Empty if none / the profile is unreadable.
  */
 export async function resolveStorageRoots(
   webId: string,
@@ -34,8 +52,9 @@ export async function resolveStorageRoots(
     return [];
   }
   const roots = new Set<string>();
-  for (const q of dataset.match(null, null, null)) {
-    if (q.predicate.value !== PIM_STORAGE) continue;
+  const subject = DataFactory.namedNode(webId);
+  const predicate = DataFactory.namedNode(PIM_STORAGE);
+  for (const q of dataset.match(subject, predicate, null)) {
     if (q.object.termType !== "NamedNode") continue;
     try {
       const u = new URL(q.object.value);
@@ -50,14 +69,15 @@ export async function resolveStorageRoots(
 }
 
 /**
- * The storage root to use for the diary: the first advertised `pim:storage`, or
- * the WebID origin root when the profile advertises none (the common CSS default,
- * where the pod root is the WebID origin).
+ * The storage root to use for the diary: the first `pim:storage` the WebID
+ * advertises, or the pod-root fallback derived from the profile document path when
+ * the profile advertises none (never the bare server origin — see
+ * {@link podRootFallback}).
  */
 export async function resolveStorageRoot(
   webId: string,
   authedFetch: typeof globalThis.fetch,
 ): Promise<string> {
   const roots = await resolveStorageRoots(webId, authedFetch);
-  return roots[0] ?? originRoot(webId);
+  return roots[0] ?? podRootFallback(webId);
 }

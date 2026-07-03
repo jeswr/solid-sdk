@@ -18,7 +18,7 @@ import { DiaryStore } from "@/lib/cache/diary-store";
 import { defaultKv } from "@/lib/cache/kv";
 import { flushOutbox } from "@/lib/diary/sync";
 import { ensureDiaryReady, resetDiaryReadyMemo } from "@/lib/pod/pod-fs";
-import { originRoot, resolveStorageRoot } from "@/lib/pod/storage";
+import { podRootFallback, resolveStorageRoot } from "@/lib/pod/storage";
 import { registerDiaryTypes } from "@/lib/pod/type-index";
 import {
   anonymousSession,
@@ -45,7 +45,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     try {
       storageRoot = await resolveStorageRoot(webId, authedFetch);
     } catch {
-      storageRoot = originRoot(webId);
+      storageRoot = podRootFallback(webId);
     }
     const store = new DiaryStore(defaultKv(), webId);
     setValue((v) => ({ ...v, status: "authed", webId, authedFetch, publicFetch, storageRoot, store }));

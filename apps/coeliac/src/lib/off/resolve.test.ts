@@ -1,7 +1,12 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { resetDiaryReadyMemo } from "../pod/pod-fs";
 import { serializeOffCache } from "./cache";
 import { resolveProduct } from "./resolve";
+
+const WEBID = "https://alice.example/profile/card#me";
+
+beforeEach(() => resetDiaryReadyMemo());
 
 const APRICOTS = {
   status: 1,
@@ -20,13 +25,19 @@ describe("resolveProduct", () => {
       publicFetch: off as unknown as typeof globalThis.fetch,
       authedFetch: authed,
       storageRoot: "https://alice.example/",
+      webId: WEBID,
     });
     expect(source).toBe("off");
     expect(product.name).toBe("Dried Apricots");
-    // write-through fires asynchronously; give the microtask a tick
-    await Promise.resolve();
-    await new Promise((r) => setTimeout(r, 0));
+    // write-through fires asynchronously (ACL-first, then the cache PUT) — poll.
+    for (let i = 0; i < 50 && !puts.some((u) => u.endsWith("/cache/off/3800000000000.ttl")); i++) {
+      await new Promise((r) => setTimeout(r, 0));
+    }
     expect(puts.some((u) => u.endsWith("/cache/off/3800000000000.ttl"))).toBe(true);
+    // The owner-only ACL was written before the cache resource.
+    expect(puts.findIndex((u) => u.endsWith("/health/diary/.acl"))).toBeLessThan(
+      puts.findIndex((u) => u.endsWith("/cache/off/3800000000000.ttl")),
+    );
   });
 
   it("falls back to the pod cache on a network error (offline)", async () => {
@@ -58,6 +69,7 @@ describe("resolveProduct", () => {
       publicFetch: off as unknown as typeof globalThis.fetch,
       authedFetch: authed,
       storageRoot: "https://alice.example/",
+      webId: WEBID,
     });
     expect(source).toBe("cache");
     expect(product.name).toBe("Dried Apricots");
@@ -73,6 +85,7 @@ describe("resolveProduct", () => {
         publicFetch: off as unknown as typeof globalThis.fetch,
         authedFetch: authed,
         storageRoot: "https://alice.example/",
+        webId: WEBID,
       }),
     ).rejects.toThrow();
   });

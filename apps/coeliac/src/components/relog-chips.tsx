@@ -29,7 +29,12 @@ export function RelogChips({
   async function relog(meal: StoredMeal, key: string) {
     setBusy(key);
     try {
-      await relogMeal(meal);
+      const { syncing } = await relogMeal(meal);
+      // Optimistic: the record is already cached. The pod write settles in the
+      // background; a failure is already recorded on the cached record (shown as a
+      // Retry badge + reconciled on reconnect), so swallow the rejection here to
+      // avoid an unhandled promise rejection.
+      syncing.catch(() => {});
       setJustLogged(key);
       onLogged?.();
       setTimeout(() => setJustLogged((k) => (k === key ? null : k)), 1500);
