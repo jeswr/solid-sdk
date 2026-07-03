@@ -111,6 +111,16 @@ The store deploys as the **10th pod-app subdomain** alongside the others — see
 the suite's main orchestrating session; this repo documents the recipe but does not touch
 the live box.)
 
+**Vercel alternative (committed `web/vercel.json`).** The store is a static SPA, so it
+can also deploy to Vercel with zero server work. Import settings: Framework Preset
+**Vite**, **Root Directory `web`**, build `npm run build`, output `dist`, install
+`npm ci`. Set **`APP_ORIGIN`** (and mirror `VITE_APP_ORIGIN`) to the deploy origin
+(e.g. `https://apps.solid-test.jeswr.org` or `<project>.vercel.app`) so the build
+regenerates `clientid.jsonld` + the DCAT `/catalog` IRIs for that origin. `web/vercel.json`
+serves `clientid.jsonld`/`catalog.jsonld` as `application/ld+json` and `catalog.ttl` as
+`text/turtle`, all with `Access-Control-Allow-Origin: *`, plus the SPA `→ index.html`
+rewrite.
+
 ## License
 
 [MIT](./LICENSE) © Jesse Wright.
