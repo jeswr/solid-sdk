@@ -13,13 +13,59 @@
     "test": "vitest",
     "rdf": "n3"
   },
-  "dependsOn": ["solid-federation-vocab"],
+  "dependsOn": [
+    "solid-federation-vocab"
+  ],
   "federation": {
     "clientIdUrl": "https://pod-chat.jeswr.org/clientid.jsonld",
-    "sectors": ["social"],
-    "accessModes": ["Read", "Write", "Append"],
-    "produces": ["social"],
-    "consumes": ["social", "productivity"],
+    "sectors": [
+      "social"
+    ],
+    "accessModes": [
+      "Read",
+      "Write",
+      "Append"
+    ],
+    "produces": [
+      "social"
+    ],
+    "consumes": [
+      "social",
+      "productivity"
+    ],
     "membershipTodo": "fedapp: block published in clientid.jsonld (fedapp:App over the social sector; produces pc:ChatRoom + as:Note, consumes those plus wf:Task for actionable messages via the shared cross-app task model). Federation membership is asserted by the registry after a signed challenge, not here."
+  },
+  "status": {
+    "generatedAt": "2026-07-03T05:14:26.476Z",
+    "commit": "b0c2d72ec4d32b06c8b93f95eacec073c507b435",
+    "version": "0.0.1",
+    "gate": {
+      "lint": "skip",
+      "typecheck": "skip",
+      "test": "skip",
+      "build": "skip"
+    },
+    "coverage": {
+      "lines": {
+        "pct": 100,
+        "covered": 308,
+        "total": 308
+      },
+      "statements": {
+        "pct": 100,
+        "covered": 335,
+        "total": 335
+      },
+      "branches": {
+        "pct": 97.81,
+        "covered": 134,
+        "total": 137
+      },
+      "functions": {
+        "pct": 100,
+        "covered": 103,
+        "total": 103
+      }
+    }
   }
 }
