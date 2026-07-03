@@ -20,6 +20,7 @@ import {
   type TermWrapper as TermWrapperType,
 } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
+import { escapeIri, safeHttpIri } from "./iri.js";
 import {
   FEDREG_ACCEPTS_SPEC,
   FEDREG_APP,
@@ -141,12 +142,26 @@ export function wrap(dataset: DatasetCore): RegistryDataset {
 
 // --- the write path (build) ----------------------------------------------
 
-/** Add a `(subject, predicate-IRI, object-IRI)` triple through the factory. */
+/**
+ * Add a `(subject, predicate-IRI, object-IRI)` triple through the factory.
+ *
+ * The object-IRI chokepoint: every object IRI in this vocab is legitimately an
+ * http(s) IRI (a member app client_id, an assertedBy WebID/key, a storage root,
+ * an acceptsSpec / supportsSector IRI, plus the trusted rdf:type / status vocab
+ * constants). Route it through {@link safeHttpIri}: an untrusted string that is
+ * not a parseable http(s) URL — or one carrying Turtle-IRIREF-breaking chars
+ * (`> " { } | ^ \` SPACE`) that n3.Writer would emit verbatim between `<…>` —
+ * is DROPPED (the triple is not added) rather than serialised as an injection.
+ */
 function addIriTriple(node: TermWrapper, predicate: string, objectIri: string): void {
+  const safeObject = safeHttpIri(objectIri);
+  if (safeObject === undefined) {
+    return;
+  }
   const factory = node.factory;
   const subject = node as unknown as Term;
   const p = NamedNodeFrom.string(predicate, factory);
-  const o = NamedNodeFrom.string(objectIri, factory);
+  const o = NamedNodeFrom.string(safeObject, factory);
   node.dataset.add(factory.quad(subject as never, p as never, o as never));
 }
 
@@ -201,8 +216,11 @@ class WritableRegistry extends TermWrapper {
    */
   linkMember(id?: string): WritableMembership {
     const factory = this.factory;
+    // A membership id may legitimately be a non-http absolute IRI (e.g. urn:),
+    // so escape (not http-restrict) it: percent-encode only the IRIREF-forbidden
+    // chars so an injection payload can't break out of the `<…>` on serialise.
     const subjectTerm: Term = id
-      ? (NamedNodeFrom.string(id, factory) as Term)
+      ? (NamedNodeFrom.string(escapeIri(id), factory) as Term)
       : (BlankNodeFrom.string(undefined, factory) as Term);
     const self = this as unknown as Term;
     const p = NamedNodeFrom.string(FEDREG_MEMBER, factory);
@@ -240,23 +258,42 @@ export class RegistryBuilder {
   private readonly store = new Store();
   private readonly factory = DataFactory as unknown as DataFactoryType;
 
-  /** Open a Registry subject (its IRI) for writing. */
+  /**
+   * Open a Registry subject (its IRI) for writing.
+   *
+   * The `id` mints the subject NamedNode. A registry/membership/storage id may
+   * legitimately be a non-http absolute IRI (e.g. urn:), so escape (not
+   * http-restrict) it via {@link escapeIri}: percent-encode only the
+   * IRIREF-forbidden chars so an untrusted id can't inject triples on serialise.
+   */
   registry(id: string): WritableRegistry {
-    const node = new WritableRegistry(id, this.store as unknown as DatasetCore, this.factory);
+    const node = new WritableRegistry(
+      escapeIri(id),
+      this.store as unknown as DatasetCore,
+      this.factory,
+    );
     node.typeRegistry();
     return node;
   }
 
   /** Open a standalone Membership subject (its IRI) for writing. */
   membership(id: string): WritableMembership {
-    const node = new WritableMembership(id, this.store as unknown as DatasetCore, this.factory);
+    const node = new WritableMembership(
+      escapeIri(id),
+      this.store as unknown as DatasetCore,
+      this.factory,
+    );
     node.typeMembership();
     return node;
   }
 
   /** Open a StorageDescription subject (its IRI) for writing. */
   storage(id: string): WritableStorage {
-    const node = new WritableStorage(id, this.store as unknown as DatasetCore, this.factory);
+    const node = new WritableStorage(
+      escapeIri(id),
+      this.store as unknown as DatasetCore,
+      this.factory,
+    );
     node.typeStorage();
     return node;
   }

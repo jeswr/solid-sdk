@@ -24,6 +24,7 @@
     "typecheck": "npm run build:deps && tsc -p tsconfig.json --noEmit",
     "api:report": "npm run build && api-extractor run --local",
     "api:check": "npm run build && api-extractor run --local && git diff --exit-code -- etc/",
+    "gate": "npm run lint && npm run typecheck && npm run test && npm run build && npm run check:dist",
     "lint": "biome check src test scripts && npm run check:lockfile-transport",
     "lint:fix": "biome check --write src test scripts",
     "test": "npm run build:deps && vitest run",
