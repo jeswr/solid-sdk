@@ -23,5 +23,15 @@
     "solid-session-restore",
     "solid-odrl"
   ],
-  "notes": "Phase 1 (P2 of full-solid-ecosystem docs/design/access-management-proposal.md @ 8a069f4): standalone owner console over EXISTING pod surfaces — grant dashboard (by-resource/by-agent), revoke/edit with If-Match CAS, data-class view via type indexes, ODRL access-request inbox, client-side CAS-pinned approve/deny pipeline with deterministic grantIds + DPV consent receipts. It AUTHORS ACLs — security-critical; every ACL write goes through @solid/object typed accessors, never hand-built triples."
+  "notes": "Phase 1 (P2 of full-solid-ecosystem docs/design/access-management-proposal.md @ 8a069f4): standalone owner console over EXISTING pod surfaces — grant dashboard (by-resource/by-agent), revoke/edit with If-Match CAS, data-class view via type indexes, ODRL access-request inbox, client-side CAS-pinned approve/deny pipeline with deterministic grantIds + DPV consent receipts. It AUTHORS ACLs — security-critical; every ACL write goes through @solid/object typed accessors, never hand-built triples.",
+  "status": {
+    "generatedAt": "2026-07-03T05:14:30.562Z",
+    "commit": "15b8b5edeeb80af8a93855a8f4ed24e1a4f3356e",
+    "gate": {
+      "lint": "skip",
+      "typecheck": "skip",
+      "test": "skip",
+      "build": "skip"
+    }
+  }
 }
