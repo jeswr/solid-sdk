@@ -534,11 +534,23 @@ fsh:SpecSynthesisShape
     a sh:NodeShape ;
     sh:targetClass fut:SpecSynthesis ;
     rdfs:label "Spec Synthesis shape"@en ;
+    # SHACL does NOT apply RDFS subclass closure to sh:targetClass — a shape
+    # targeting fut:SharedFuture is never automatically evaluated against a
+    # fut:SpecSynthesis instance just because the ontology asserts
+    # `fut:SpecSynthesis rdfs:subClassOf fut:SharedFuture`. Without an explicit
+    # composition, a SpecSynthesis missing as:content / prov:wasDerivedFrom /
+    # fut:bridgingEvidence / sec:proof / the dissent annex would silently
+    # CONFORM. sh:node re-validates every focus node of THIS shape against
+    # fsh:SharedFutureShape's full constraint set, matching the suite's
+    # established subclass-MUST-composition pattern (health.shacl.ttl
+    # hsh:StepCountObservationShape / hsh:SleepObservationShape composing
+    # hsh:ObservationShape via sh:node).
+    sh:node fsh:SharedFutureShape ;
     sh:property [
         sh:path fut:acceptanceCriterion ;
         sh:minCount 1 ;
         sh:severity sh:Warning ;
-        sh:message "A SpecSynthesis SHOULD carry ≥1 fut:acceptanceCriterion — the testable spec handed to implementation. (It also inherits every SharedFuture MUST: provenance, bridging evidence, proof, dissent annex.)"@en
+        sh:message "A SpecSynthesis SHOULD carry ≥1 fut:acceptanceCriterion — the testable spec handed to implementation. (It also inherits every SharedFuture MUST: provenance, bridging evidence, proof, dissent annex — enforced via sh:node fsh:SharedFutureShape, not reasoner subclass closure.)"@en
     ] .
 
 fsh:AcceptanceCriterionShape
