@@ -20,5 +20,38 @@
     "doc": "https://github.com/jeswr/rdf-serialize#readme",
     "milestone": "Suite RDF-serialiser consolidation (DRY)",
     "note": "The single sanctioned n3.Writer RDF serialiser for the @jeswr suite, consolidated from the five near-identical src/serialize.ts copies in @jeswr/solid-vc, @jeswr/solid-odrl, @jeswr/solid-a2a, @jeswr/federation-client and @jeswr/solid-agent-card. Serialise a readonly Quad[] to Turtle / N-Triples / N-Quads / TriG via n3.Writer (never hand-concatenated RDF). Vocab-agnostic — the caller supplies its own prefix map (each consumer keeps its own vocab prefix constant). Configurable empty-graph behaviour: the 4-of-5 majority short-circuits a zero-quad input to \"\" (emptyAsEmptyString default true); federation-client's bare-preamble behaviour is reproduced with emptyAsEmptyString:false. Self-contained committed dist/ via a plain tsc build (no esbuild inlining — the only deps are the npm-published n3 + @rdfjs/types) so it installs from a GitHub branch under ignore-scripts=true with no build step; a check:dist gate fails if committed dist/ drifts from a fresh build of committed src. SEPARATE-CODEBASE, client-safe — zero prod-solid-server core risk. Phase 1: create + characterize + behavior-parity proof (this repo). Phase 2 (deferred, not in this repo): rewire the five consumers onto a thin local wrapper passing their own PREFIXES + the right emptyAsEmptyString, preserving each consumer's serialize(quads, format) public surface."
+  },
+  "status": {
+    "generatedAt": "2026-07-03T05:14:29.495Z",
+    "commit": "eed2c11ceaf4de5e1f79132353744a5d1e3d6c48",
+    "version": "0.1.0",
+    "gate": {
+      "lint": "skip",
+      "typecheck": "skip",
+      "test": "skip",
+      "build": "skip"
+    },
+    "coverage": {
+      "lines": {
+        "pct": 100,
+        "covered": 29,
+        "total": 29
+      },
+      "statements": {
+        "pct": 100,
+        "covered": 29,
+        "total": 29
+      },
+      "branches": {
+        "pct": 100,
+        "covered": 15,
+        "total": 15
+      },
+      "functions": {
+        "pct": 100,
+        "covered": 2,
+        "total": 2
+      }
+    }
   }
 }
