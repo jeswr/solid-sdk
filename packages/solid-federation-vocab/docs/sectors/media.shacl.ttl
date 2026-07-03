@@ -1,0 +1,258 @@
+# AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+#
+@prefix mdsh:    <https://w3id.org/jeswr/sectors/media/shapes#> .
+@prefix media:   <https://w3id.org/jeswr/sectors/media#> .
+@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix sh:      <http://www.w3.org/ns/shacl#> .
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix prof:    <http://www.w3.org/ns/dx/prof/> .
+
+# =============================================================================
+# Solid Media & Activity — SHACL data-model profile (F4; R4/R8 §4.5)
+#
+# The NORMATIVE conformance artifact: the ontology licenses meaning, THIS shape
+# checks shape. Discipline:
+#  - OPEN BY DEFAULT — no sh:closed (composes with downstream profiles).
+#  - sh:severity carries the RFC 2119 grade: Violation=MUST, Warning=SHOULD,
+#    Info=MAY. A conformance RESULT is read against severity, not pass/fail.
+#  - IMMUTABLE version IRI (.../media/profile/1.0.0); additive-only.
+#
+# v1.0.0 tracks the gUFO re-base of media.ttl.
+# =============================================================================
+
+<https://w3id.org/jeswr/sectors/media/profile/1.0.0>
+    a prof:Profile ;
+    dcterms:title "Solid Media & Activity data-model profile (gUFO re-base)"@en ;
+    dcterms:isVersionOf <https://w3id.org/jeswr/sectors/media/profile> ;
+    owl:versionInfo "1.0.0" ;
+    owl:versionIRI <https://w3id.org/jeswr/sectors/media/profile/1.0.0> ;
+    prof:isProfileOf <https://w3id.org/jeswr/sectors/media> ;
+    prof:hasToken "media-1.0.0" ;
+    prof:hasResource [
+        prof:hasRole <http://www.w3.org/ns/dx/prof/role/constraints> ;
+        prof:hasArtifact <https://w3id.org/jeswr/sectors/media/profile/1.0.0/shapes>
+    ] ;
+    rdfs:comment "Open-by-default SHACL profile for media works, playback events and listening history, re-based onto the gUFO Core. "@en .
+
+# -----------------------------------------------------------------------------
+# CreativeWork — a work needs a title; SHOULD credit an artist & licence
+# -----------------------------------------------------------------------------
+mdsh:CreativeWorkShape
+    a sh:NodeShape ;
+    sh:targetClass media:CreativeWork ;
+    rdfs:label "Creative Work shape"@en ;
+    sh:property [
+        sh:path dcterms:title ;
+        sh:minCount 1 ;
+        sh:datatype xsd:string ;
+        sh:severity sh:Violation ;          # MUST: a work must be titled
+        sh:message "A creative work MUST have a dcterms:title."@en ;
+    ] ;
+    sh:property [
+        sh:path media:performedByArtist ;
+        sh:minCount 1 ;
+        sh:class media:Artist ;
+        sh:severity sh:Warning ;            # SHOULD: credit the artist
+        sh:message "A creative work SHOULD credit at least one media:Artist."@en ;
+    ] ;
+    sh:property [
+        sh:path media:hasLicense ;
+        sh:class media:UsageLicense ;
+        sh:severity sh:Warning ;            # SHOULD: declare a usage licence
+        sh:message "A creative work SHOULD declare a media:UsageLicense (ODRL usage-control tie, R2)."@en ;
+    ] ;
+    sh:property [
+        sh:path media:durationSeconds ;
+        sh:datatype xsd:decimal ;
+        sh:minInclusive 0 ;
+        sh:maxCount 1 ;
+        sh:severity sh:Info ;               # MAY
+        sh:message "media:durationSeconds, if present, MUST be a single non-negative decimal."@en ;
+    ] .
+
+# -----------------------------------------------------------------------------
+# MusicRecording — ISRC well-formed if present
+# -----------------------------------------------------------------------------
+mdsh:MusicRecordingShape
+    a sh:NodeShape ;
+    sh:targetClass media:MusicRecording ;
+    rdfs:label "Music Recording shape"@en ;
+    sh:property [
+        sh:path media:isrc ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+        # ISRC = 2-letter country + 3-char registrant + 2-digit year + 5-digit designation
+        sh:pattern "^[A-Z]{2}[A-Z0-9]{3}[0-9]{2}[0-9]{5}$" ;
+        sh:severity sh:Warning ;            # SHOULD: ISRC well-formed
+        sh:message "media:isrc SHOULD be a well-formed 12-character ISRC."@en ;
+    ] ;
+    sh:property [
+        sh:path media:recordingOf ;
+        sh:class media:MusicComposition ;
+        sh:maxCount 1 ;
+        sh:severity sh:Info ;               # MAY link to its composition
+        sh:message "media:recordingOf, if present, MUST point at a media:MusicComposition."@en ;
+    ] .
+
+# -----------------------------------------------------------------------------
+# PlaybackEvent — the imported-history row: WHAT, WHEN, WHO, on which account
+# -----------------------------------------------------------------------------
+mdsh:PlaybackEventShape
+    a sh:NodeShape ;
+    sh:targetClass media:PlaybackEvent ;
+    rdfs:label "Playback Event shape"@en ;
+    sh:property [
+        sh:path media:playedWork ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:class media:CreativeWork ;
+        sh:severity sh:Violation ;          # MUST: WHAT was played
+        sh:message "A playback event MUST reference exactly one media:playedWork (a media:CreativeWork)."@en ;
+    ] ;
+    sh:property [
+        sh:path core:hadParticipant ;
+        sh:minCount 1 ;
+        sh:class core:Agent ;
+        sh:severity sh:Violation ;          # MUST: WHO listened
+        sh:message "A playback event MUST have at least one core:hadParticipant (the listener, a core:Agent)."@en ;
+    ] ;
+    sh:property [
+        sh:path core:atTime ;
+        sh:minCount 1 ;
+        sh:severity sh:Violation ;          # MUST: WHEN it happened
+        sh:message "A playback event MUST record core:atTime (when it occurred)."@en ;
+    ] ;
+    sh:property [
+        sh:path media:onAccount ;
+        sh:class media:MediaAccount ;
+        sh:maxCount 1 ;
+        sh:severity sh:Warning ;            # SHOULD: on which account
+        sh:message "A playback event SHOULD record the media:MediaAccount it occurred on."@en ;
+    ] ;
+    sh:property [
+        sh:path media:msPlayed ;
+        sh:datatype xsd:integer ;
+        sh:minInclusive 0 ;
+        sh:maxCount 1 ;
+        sh:severity sh:Info ;               # MAY: distinguishes skip vs full listen
+        sh:message "media:msPlayed, if present, MUST be a single non-negative integer."@en ;
+    ] .
+
+# -----------------------------------------------------------------------------
+# ListeningHistory — an imported export is a Record ABOUT a Person
+# -----------------------------------------------------------------------------
+mdsh:ListeningHistoryShape
+    a sh:NodeShape ;
+    sh:targetClass media:ListeningHistory ;
+    rdfs:label "Listening History shape"@en ;
+    sh:property [
+        sh:path core:subject ;
+        sh:minCount 1 ;
+        sh:class core:Agent ;
+        sh:severity sh:Violation ;          # MUST: whose history this is (data subject)
+        sh:message "A listening history MUST have a core:subject (the person it is about)."@en ;
+    ] ;
+    sh:property [
+        sh:path core:hasPart ;
+        sh:minCount 1 ;
+        sh:severity sh:Warning ;            # SHOULD: contain the play rows
+        sh:message "A listening history SHOULD aggregate its playback events via core:hasPart."@en ;
+    ] .
+
+# -----------------------------------------------------------------------------
+# UsageLicense — a licence binds a work, parties and validity
+# -----------------------------------------------------------------------------
+mdsh:UsageLicenseShape
+    a sh:NodeShape ;
+    sh:targetClass media:UsageLicense ;
+    rdfs:label "Usage License shape"@en ;
+    sh:property [
+        sh:path media:licensedWork ;
+        sh:minCount 1 ;
+        sh:class media:CreativeWork ;
+        sh:severity sh:Violation ;          # MUST: what is licensed
+        sh:message "A usage licence MUST reference the media:licensedWork it applies to."@en ;
+    ] ;
+    sh:property [
+        sh:path core:relatesParty ;
+        sh:minCount 1 ;
+        sh:severity sh:Warning ;            # SHOULD: a party (rights-holder/beneficiary)
+        sh:message "A usage licence SHOULD name at least one party via core:relatesParty."@en ;
+    ] ;
+    sh:property [
+        sh:path core:validFrom ;
+        sh:datatype xsd:dateTime ;
+        sh:maxCount 1 ;
+        sh:severity sh:Info ;               # MAY: validity window
+        sh:message "core:validFrom, if present, MUST be a single xsd:dateTime."@en ;
+    ] .
+
+# =============================================================================
+# F4 coverage — a node shape per remaining instantiable class. Work subtypes
+# re-state the CreativeWork MUST-title (SHACL targets don't inherit); collection
+# works and the account/activity get their own shapes.
+# =============================================================================
+
+# Shared shape for titled creative-work subtypes: MUST a dcterms:title.
+mdsh:TitledWorkShape
+    a sh:NodeShape ;
+    rdfs:label "Titled work shape"@en ;
+    sh:property [
+        sh:path dcterms:title ; sh:minCount 1 ; sh:datatype xsd:string ;
+        sh:severity sh:Violation ;
+        sh:message "A creative work MUST have a dcterms:title."@en
+    ] .
+
+mdsh:TrackShape a sh:NodeShape ;
+    sh:targetClass media:Track ; sh:node mdsh:TitledWorkShape ;
+    rdfs:label "Track shape"@en .
+
+mdsh:MusicCompositionShape a sh:NodeShape ;
+    sh:targetClass media:MusicComposition ; sh:node mdsh:TitledWorkShape ;
+    rdfs:label "Music Composition shape"@en .
+
+mdsh:PodcastEpisodeShape a sh:NodeShape ;
+    sh:targetClass media:PodcastEpisode ; sh:node mdsh:TitledWorkShape ;
+    rdfs:label "Podcast Episode shape"@en .
+
+# Album / Playlist — collection works (core:InformationResource); SHOULD a title.
+mdsh:AlbumShape a sh:NodeShape ;
+    sh:targetClass media:Album ; rdfs:label "Album shape"@en ;
+    sh:property [
+        sh:path dcterms:title ; sh:minCount 1 ; sh:datatype xsd:string ;
+        sh:severity sh:Warning ;
+        sh:message "An album SHOULD have a dcterms:title."@en
+    ] .
+
+mdsh:PlaylistShape a sh:NodeShape ;
+    sh:targetClass media:Playlist ; rdfs:label "Playlist shape"@en ;
+    sh:property [
+        sh:path dcterms:title ; sh:minCount 1 ; sh:datatype xsd:string ;
+        sh:severity sh:Warning ;
+        sh:message "A playlist SHOULD have a dcterms:title."@en
+    ] .
+
+# MusicGroup — a band acting as an artist (a core:Organization).
+mdsh:MusicGroupShape a sh:NodeShape ;
+    sh:targetClass media:MusicGroup ; rdfs:label "Music Group shape"@en .
+
+# MediaAccount — a streaming account; SHOULD name its holder (Core mediation).
+mdsh:MediaAccountShape a sh:NodeShape ;
+    sh:targetClass media:MediaAccount ; rdfs:label "Media Account shape"@en ;
+    sh:property [
+        sh:path core:hasAccountHolder ; sh:class core:Agent ;
+        sh:severity sh:Warning ;
+        sh:message "A media account SHOULD mediate a core:hasAccountHolder (the listener)."@en
+    ] .
+
+# ListeningActivity — an act of consuming a work over time.
+mdsh:ListeningActivityShape a sh:NodeShape ;
+    sh:targetClass media:ListeningActivity ; rdfs:label "Listening Activity shape"@en ;
+    sh:property [
+        sh:path media:consumedWork ; sh:class media:CreativeWork ;
+        sh:minCount 1 ; sh:severity sh:Warning ;
+        sh:message "A listening activity SHOULD reference the media:consumedWork."@en
+    ] .

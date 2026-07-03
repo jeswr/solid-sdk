@@ -62,6 +62,7 @@ const ONTOLOGIES = [
   { dir: "drawing", file: "drawing.ttl", ns: "https://w3id.org/jeswr/sectors/drawing#" },
   { dir: "social", file: "social.ttl", ns: "https://w3id.org/jeswr/sectors/social#" },
   { dir: "bookmarks", file: "bookmarks.ttl", ns: "https://w3id.org/jeswr/sectors/bookmarks#" },
+  { dir: "futures", file: "futures.ttl", ns: "https://w3id.org/jeswr/sectors/futures#" },
 ];
 
 // =============================================================================

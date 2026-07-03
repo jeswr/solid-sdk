@@ -12,7 +12,7 @@ suite, served under the persistent namespace **`https://w3id.org/jeswr/`**
 | `https://w3id.org/jeswr/fedreg#` | `fedreg:` | **Federation Catalogue / Registry** — the discovery axis. A `fedreg:Registry` (a `dcat:Catalog`) listing member apps with a **registry-asserted** `fedreg:Membership` (lifecycle status + `assertedBy` authority — distinct from the app's self-asserted `fedapp:App`), and a `fedreg:StorageDescription` advertising **which client-client spec-versions a resource server accepts** (`acceptsSpec`) and which sectors it supports — the substrate for asynchronous schema migration. Consumed by [`@jeswr/federation-registry`](https://github.com/jeswr/federation-registry). |
 | `https://w3id.org/jeswr/task#` | `tm:` | The **shared cross-app task / issue model** — the canonical, dereferenceable re-use of the W3C workflow ontology (`wf:`), Dublin Core Terms (`dct:`) and ActivityStreams 2.0 (`as:`) every suite app reads/writes for tasks and issues. |
 | `https://w3id.org/jeswr/core#` | `core:` | The **gUFO-based Solid Core** — the foundational ontology every sector imports and constrains-but-never-forks. Every cross-sector root (Agent, Account, Identifier, Record, Relationship, Quantity, …) carries a gUFO meta-type (Kind / Relator / Role(Mixin) / Phase / EventType / …). |
-| `https://w3id.org/jeswr/sectors/<sector>#` | per-sector | The **sector ontologies** (`identity`, `finance`, `health`, `media`, `scheduling`, `contacts`, `drawing`, `social`, `bookmarks`) — the domain models a `fedapp:sector` references. Each imports `core:` and reuses real vocabularies (see below). |
+| `https://w3id.org/jeswr/sectors/<sector>#` | per-sector | The **sector ontologies** (`identity`, `finance`, `health`, `media`, `scheduling`, `contacts`, `drawing`, `social`, `bookmarks`, `futures`) — the domain models a `fedapp:sector` references. Each imports `core:` and reuses real vocabularies (see below). |
 
 The IRIs resolve via a permanent `w3id.org` redirect to a GitHub Pages target
 under this repo (`docs/`), so they survive a host move and stay under `@jeswr`
@@ -207,7 +207,7 @@ independently-authored sectors stay non-overlapping. Imports gUFO; reaches
 external vocabularies (PROV/FOAF/Org/vCard/schema.org/gist) only via the optional
 `core-alignments.ttl`.
 
-**The nine sectors** — each `rdfs:subClassOf`-roots every class in a `core:` class,
+**The ten sectors** — each `rdfs:subClassOf`-roots every class in a `core:` class,
 carries its own gUFO meta-type, **constrains but never forks** the Core, and
 reuses a real domain vocabulary:
 
@@ -223,6 +223,7 @@ reuses a real domain vocabulary:
 | `sectors/drawing#` | `drawing:` | Scene=InformationResource (a creative work) + the round-trip spine (opaque scene document, schema version, thumbnail) — for Excalidraw | schema:CreativeWork; the forthcoming `@jeswr/solid-drawing` `draw:` (Mode A) |
 | `sectors/social#` | `social:` | Note=InformationResource (as:Note/sioc:Note); Feed=InformationResource (as:Collection) — for Elk + Miniflux + pod-chat | ActivityStreams 2.0, SIOC, `@jeswr/solid-chat-interop` CanonicalMessage |
 | `sectors/bookmarks#` | `bookmark:` | Bookmark=InformationResource (a saved reference) + archived/notes/tags(skos) — for Linkding | schema:url/BookmarkAction, DCT, SKOS; the forthcoming `@jeswr/solid-bookmark` `book:` (Mode A) |
+| `sectors/futures#` | `fut:` | Participatory-democracy deliberation — Need/Satisfier SPLIT (Max-Neef axiological×existential matrix + Schwartz value scheme, all seeds not law); tri-state Resonance=Record; Deliberation=Activity; SharedFuture with per-cluster BridgingEvidence + MANDATORY dissent annex; Stage-1 AppProposal⊑wf:Task — for `jeswr/unite` (the exact IRIs its Stage-1 client writes) | ActivityStreams 2.0, PROV-O, ODRL 2.2 consent actions, VC 2.0, wf:/`@jeswr/solid-task-model` (all Mode A); Max-Neef 1991 + Schwartz 1992 + bridging-systems literature cited in the alignments |
 
 Each sector declares a `…/sectors/<sector>#sector` marker (a `skos:Concept`) —
 that is the IRI an app names in `fedapp:sector`. (`drawing`, `social` and
@@ -251,7 +252,11 @@ per-dir `catalog-v001.xml`) for **zero unsatisfiable classes**.
 > thin DOMAIN MARKERS that root one or two classes in the Core and align (Mode A)
 > to the detailed external/forthcoming vocabularies, so the re-sync script does not
 > own them. `social` also REPAIRS the previously-dangling `fedapp:sector`
-> reference in `@jeswr/pod-chat`'s clientid. The remaining unauthored sectors
+> reference in `@jeswr/pod-chat`'s clientid. The `futures` sector was likewise
+> authored directly here (gUFO-rooted from the outset) from `jeswr/unite`'s
+> design/01 data model — its Need/Resonance term IRIs are the strings the running
+> unite Stage-1 client already writes, so they are frozen against that client.
+> The remaining unauthored sectors
 > (work / mobility / documents) are a separate decision. The detail vocabularies
 > `@jeswr/solid-drawing` (`draw:`) and `@jeswr/solid-bookmark` (`book:`) ship in
 > their own repos (Phase B), referenced here only via the Mode-A alignment hooks.

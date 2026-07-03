@@ -1,0 +1,562 @@
+# AUTHORED-BY Claude Fable 5 (PSS agent)
+#
+@prefix fut:     <https://w3id.org/jeswr/sectors/futures#> .
+@prefix fsh:     <https://w3id.org/jeswr/sectors/futures/shapes#> .
+@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix sh:      <http://www.w3.org/ns/shacl#> .
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix prof:    <http://www.w3.org/ns/dx/prof/> .
+@prefix as:      <https://www.w3.org/ns/activitystreams#> .
+@prefix prov:    <http://www.w3.org/ns/prov#> .
+@prefix sec:     <https://w3id.org/security#> .
+
+# =============================================================================
+# Solid FUTURES sector — SHACL data-model profile (F4).
+#
+# The NORMATIVE conformance artifact: the OWL ontology (futures.ttl) licenses
+# meaning; THIS shape checks shape. The MUSTs are calibrated to what the
+# RUNNING unite Stage-1 client (jeswr/unite app/src/lib/model.ts) actually
+# emits and requires on read:
+#  - a Need MUST have exactly one as:content (≤2000 chars), one fut:needConcept
+#    (any IRI — foreign schemes are first-class), one dct:created
+#    (xsd:dateTime), one dct:creator; fut:intensity, when present, is an
+#    integer 1–5; fut:inDeliberation is exactly-one in the unite profile
+#    (graded MUST here because the Stage-1 aggregator drops items without it);
+#  - a Resonance MUST have exactly one fut:onStatement, one fut:stance from the
+#    CLOSED tri-state set, one dct:created, one dct:creator; fut:dimension,
+#    when present, is from the closed dimension set;
+#  and to the design/01 §SHACL MUSTs for the process layer:
+#  - a Claim's as:content is capped at 500 chars (atomicity);
+#  - a SharedFuture MUST carry ≥1 prov:wasDerivedFrom, ≥1 fut:bridgingEvidence,
+#    a Data Integrity proof (sec:proof), and EITHER ≥1 fut:dissent OR an
+#    explicit fut:noDissentRecorded true — silence is never consensus;
+#  - an AppProposal MUST carry ≥1 fut:motivatedBy;
+#  - every AcceptanceCriterion MUST fut:operationalises a Need.
+#
+# Discipline (matches the sibling sectors' profiles):
+#  - OPEN BY DEFAULT — no sh:closed (composes with app profiles).
+#  - sh:severity carries the RFC 2119 grade: Violation=MUST, Warning=SHOULD.
+#  - Cross-RESOURCE references (fut:inDeliberation, fut:onStatement,
+#    fut:needConcept, dct:creator) are checked as sh:nodeKind sh:IRI, NOT
+#    sh:class — a pod resource does not carry the referent's typing triples,
+#    and the unite trust model verifies referents at aggregation time
+#    (dct:creator must equal the registry WebID; one resonance per
+#    (participant, statement)), which SHACL cannot see. Single-resource
+#    validation must not fail on that.
+#  - Free-text content accepts xsd:string OR rdf:langString (the unite writer
+#    emits plain literals; language-tagged content is equally valid).
+#  - IMMUTABLE version IRI (.../futures/profile/0.1.0); additive-only.
+#
+# Two invariants are cross-resource / semantic and are enforced by the unite
+# aggregator, NOT here: (a) creator-must-match-pod-owner (anti-impersonation);
+# (b) one-resonance-per-(participant,statement), latest dct:created wins.
+# The k-anonymity floor on published aggregates is an ODRL constraint
+# (fut:kThreshold), evaluated by the consuming service.
+# =============================================================================
+
+<https://w3id.org/jeswr/sectors/futures/profile>
+    a prof:Profile ;
+    dcterms:title "Solid Futures data-model profile (version-independent)"@en ;
+    dcterms:description "Resolves to the current Futures sector profile version."@en .
+
+<https://w3id.org/jeswr/sectors/futures/profile/0.1.0>
+    a prof:Profile ;
+    dcterms:title "Solid Futures data-model profile"@en ;
+    dcterms:isVersionOf <https://w3id.org/jeswr/sectors/futures/profile> ;
+    owl:versionInfo "0.1.0" ;
+    owl:versionIRI <https://w3id.org/jeswr/sectors/futures/profile/0.1.0> ;
+    prof:isProfileOf <https://w3id.org/jeswr/sectors/futures> ;
+    prof:hasToken "solid-futures-0.1.0" ;
+    prof:hasResource [
+        prof:hasRole <http://www.w3.org/ns/dx/prof/role/constraints> ;
+        prof:hasArtifact <https://w3id.org/jeswr/sectors/futures/futures.shacl.ttl>
+    ] ;
+    prof:hasResource [
+        prof:hasRole <http://www.w3.org/ns/dx/prof/role/vocabulary> ;
+        prof:hasArtifact <https://w3id.org/jeswr/sectors/futures>
+    ] ;
+    rdfs:comment "Open-by-default SHACL profile for the futures sector; the version implementations pin via fedreg:acceptsSpec."@en .
+
+# -----------------------------------------------------------------------------
+# Need — exactly what the unite client writes (model.ts serializeNeed) and
+# requires on read (parseNeeds drops an item missing any required field).
+# -----------------------------------------------------------------------------
+fsh:NeedShape
+    a sh:NodeShape ;
+    sh:targetClass fut:Need ;
+    rdfs:label "Need shape"@en ;
+    sh:property [
+        sh:path as:content ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:or ( [ sh:datatype xsd:string ] [ sh:datatype rdf:langString ] ) ;
+        sh:maxLength 2000 ;
+        sh:severity sh:Violation ;
+        sh:message "A Need MUST carry exactly one as:content free-text (string or language-tagged, ≤2000 chars — the unite MAX_CONTENT_LENGTH)."@en
+    ] ;
+    sh:property [
+        sh:path fut:needConcept ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:severity sh:Violation ;
+        sh:message "A Need MUST link exactly one fut:needConcept — a need-scheme concept IRI (the Max-Neef seeds or ANY community scheme; foreign concepts are first-class, so this is nodeKind IRI, not a closed set)."@en
+    ] ;
+    sh:property [
+        sh:path dcterms:created ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:dateTime ;
+        sh:severity sh:Violation ;
+        sh:message "A Need MUST carry exactly one dct:created xsd:dateTime."@en
+    ] ;
+    sh:property [
+        sh:path dcterms:creator ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:severity sh:Violation ;
+        sh:message "A Need MUST carry exactly one dct:creator WebID IRI (possibly pseudonymous — privacy tier 4). The aggregator verifies it equals the pod owner's registry WebID."@en
+    ] ;
+    sh:property [
+        sh:path fut:inDeliberation ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:severity sh:Violation ;
+        sh:message "A Need MUST reference exactly one fut:inDeliberation IRI (the unite Stage-1 aggregator drops items without it). nodeKind IRI — the Deliberation's typing lives in the community's resource, not here."@en
+    ] ;
+    sh:property [
+        sh:path fut:intensity ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:integer ;
+        sh:minInclusive 1 ;
+        sh:maxInclusive 5 ;
+        sh:severity sh:Violation ;
+        sh:message "fut:intensity, when present, MUST be an xsd:integer 1–5 (an ordinal self-report)."@en
+    ] .
+
+# -----------------------------------------------------------------------------
+# Resonance — exactly what the unite client writes (serializeResonance) and
+# requires on read; stance/dimension are CLOSED coded sets (sh:in, not
+# sh:class — the instance data does not carry the coded values' typing).
+# -----------------------------------------------------------------------------
+fsh:ResonanceShape
+    a sh:NodeShape ;
+    sh:targetClass fut:Resonance ;
+    rdfs:label "Resonance shape"@en ;
+    sh:property [
+        sh:path fut:onStatement ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:severity sh:Violation ;
+        sh:message "A Resonance MUST react to exactly one fut:onStatement IRI (a Claim / Need / Satisfier / ValueStatement in some pod)."@en
+    ] ;
+    sh:property [
+        sh:path fut:stance ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:in ( fut:Resonates fut:Conflicts fut:Unsure ) ;
+        sh:severity sh:Violation ;
+        sh:message "A Resonance MUST carry exactly one fut:stance from the CLOSED tri-state set fut:Resonates / fut:Conflicts / fut:Unsure — conforming readers drop any other value."@en
+    ] ;
+    sh:property [
+        sh:path dcterms:created ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:dateTime ;
+        sh:severity sh:Violation ;
+        sh:message "A Resonance MUST carry exactly one dct:created xsd:dateTime (the aggregator's latest-wins dedup key)."@en
+    ] ;
+    sh:property [
+        sh:path dcterms:creator ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:severity sh:Violation ;
+        sh:message "A Resonance MUST carry exactly one dct:creator WebID IRI — it lives in the REACTOR's pod."@en
+    ] ;
+    sh:property [
+        sh:path fut:inDeliberation ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:severity sh:Violation ;
+        sh:message "A Resonance MUST reference exactly one fut:inDeliberation IRI."@en
+    ] ;
+    sh:property [
+        sh:path fut:dimension ;
+        sh:maxCount 1 ;
+        sh:in ( fut:IShareThis fut:IAspireToThis fut:IWouldSupportThis ) ;
+        sh:severity sh:Violation ;
+        sh:message "fut:dimension, when present, MUST be one of fut:IShareThis / fut:IAspireToThis / fut:IWouldSupportThis (closed set; conforming readers drop other values)."@en
+    ] .
+
+# -----------------------------------------------------------------------------
+# Claim — atomicity: ≤500 chars, one idea. (design/01 §SHACL MUSTs)
+# -----------------------------------------------------------------------------
+fsh:ClaimShape
+    a sh:NodeShape ;
+    sh:targetClass fut:Claim ;
+    rdfs:label "Claim shape"@en ;
+    sh:property [
+        sh:path as:content ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:or ( [ sh:datatype xsd:string ] [ sh:datatype rdf:langString ] ) ;
+        sh:maxLength 500 ;
+        sh:severity sh:Violation ;
+        sh:message "A Claim MUST carry exactly one as:content of ≤500 characters — one atomic, voteable idea (the Pol.is deliberation unit)."@en
+    ] ;
+    sh:property [
+        sh:path dcterms:creator ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:severity sh:Violation ;
+        sh:message "A Claim MUST carry exactly one dct:creator."@en
+    ] ;
+    sh:property [
+        sh:path dcterms:created ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:dateTime ;
+        sh:severity sh:Violation ;
+        sh:message "A Claim MUST carry exactly one dct:created xsd:dateTime."@en
+    ] ;
+    sh:property [
+        sh:path fut:adoptedBy ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:severity sh:Warning ;
+        sh:message "A GenAI-derived Claim SHOULD carry fut:adoptedBy — the explicit adoption without which it must not enter deliberation attributed to a person."@en
+    ] .
+
+# -----------------------------------------------------------------------------
+# LifeContext / VisionStatement / Satisfier / ValueStatement — expression layer.
+# -----------------------------------------------------------------------------
+fsh:LifeContextShape
+    a sh:NodeShape ;
+    sh:targetClass fut:LifeContext ;
+    rdfs:label "Life Context shape"@en ;
+    sh:property [
+        sh:path as:content ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:or ( [ sh:datatype xsd:string ] [ sh:datatype rdf:langString ] ) ;
+        sh:severity sh:Violation ;
+        sh:message "A LifeContext MUST carry exactly one as:content — the self-description of present circumstances."@en
+    ] ;
+    sh:property [
+        sh:path fut:expressesNeed ;
+        sh:nodeKind sh:IRI ;
+        sh:severity sh:Warning ;
+        sh:message "A LifeContext SHOULD link the Needs it surfaces via fut:expressesNeed."@en
+    ] .
+
+fsh:VisionStatementShape
+    a sh:NodeShape ;
+    sh:targetClass fut:VisionStatement ;
+    rdfs:label "Vision Statement shape"@en ;
+    sh:property [
+        sh:path as:content ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:or ( [ sh:datatype xsd:string ] [ sh:datatype rdf:langString ] ) ;
+        sh:severity sh:Violation ;
+        sh:message "A VisionStatement MUST carry exactly one as:content — the ideal-future narrative."@en
+    ] ;
+    sh:property [
+        sh:path dcterms:creator ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:severity sh:Violation ;
+        sh:message "A VisionStatement MUST carry exactly one dct:creator."@en
+    ] ;
+    sh:property [
+        sh:path fut:scope ;
+        sh:maxCount 1 ;
+        sh:in ( fut:self fut:household fut:community fut:nation fut:humanity ) ;
+        sh:severity sh:Warning ;
+        sh:message "A VisionStatement SHOULD carry one fut:scope from the scope ladder (self / household / community / nation / humanity)."@en
+    ] ;
+    sh:property [
+        sh:path fut:horizon ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:gYear ;
+        sh:severity sh:Violation ;
+        sh:message "fut:horizon, when present, MUST be one xsd:gYear (use fut:horizonConcept for scheme-based periods)."@en
+    ] .
+
+fsh:SatisfierShape
+    a sh:NodeShape ;
+    sh:targetClass fut:Satisfier ;
+    rdfs:label "Satisfier shape"@en ;
+    sh:property [
+        sh:path fut:satisfies ;
+        sh:minCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:severity sh:Violation ;
+        sh:message "A Satisfier MUST link at least one fut:satisfies target — the Need instance(s) and/or need concept(s) it meets (the needs/satisfiers split)."@en
+    ] ;
+    sh:property [
+        sh:path as:content ;
+        sh:maxCount 1 ;
+        sh:or ( [ sh:datatype xsd:string ] [ sh:datatype rdf:langString ] ) ;
+        sh:severity sh:Warning ;
+        sh:message "A Satisfier SHOULD describe itself in as:content."@en
+    ] ;
+    sh:property [
+        sh:path fut:existentialCategory ;
+        sh:maxCount 1 ;
+        sh:in ( fut:existential-being fut:existential-having fut:existential-doing fut:existential-interacting ) ;
+        sh:severity sh:Warning ;
+        sh:message "A Satisfier SHOULD be placed on the existential axis of the Max-Neef matrix (being / having / doing / interacting)."@en
+    ] .
+
+fsh:ValueStatementShape
+    a sh:NodeShape ;
+    sh:targetClass fut:ValueStatement ;
+    rdfs:label "Value Statement shape"@en ;
+    sh:property [
+        sh:path fut:valueConcept ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:severity sh:Violation ;
+        sh:message "A ValueStatement MUST link exactly one fut:valueConcept — a value-scheme concept IRI (the Schwartz seeds or any community scheme)."@en
+    ] ;
+    sh:property [
+        sh:path as:content ;
+        sh:maxCount 1 ;
+        sh:or ( [ sh:datatype xsd:string ] [ sh:datatype rdf:langString ] ) ;
+        sh:severity sh:Warning ;
+        sh:message "A ValueStatement SHOULD carry free-text as:content."@en
+    ] .
+
+# -----------------------------------------------------------------------------
+# Deliberation — the community's scoping resource.
+# -----------------------------------------------------------------------------
+fsh:DeliberationShape
+    a sh:NodeShape ;
+    sh:targetClass fut:Deliberation ;
+    rdfs:label "Deliberation shape"@en ;
+    sh:property [
+        sh:path dcterms:title ;
+        sh:minCount 1 ;
+        sh:severity sh:Violation ;
+        sh:message "A Deliberation MUST carry a dct:title (the topic participants see)."@en
+    ] ;
+    sh:property [
+        sh:path fut:method ;
+        sh:maxCount 1 ;
+        sh:in ( fut:resonanceMapping fut:mediatedSynthesis fut:miniPublic ) ;
+        sh:severity sh:Warning ;
+        sh:message "A Deliberation SHOULD declare its fut:method (resonance-mapping / mediated-synthesis / mini-public)."@en
+    ] .
+
+# -----------------------------------------------------------------------------
+# SharedFuture — provenance + bridging evidence + proof + the MANDATORY dissent
+# annex: ≥1 fut:dissent OR an explicit fut:noDissentRecorded true. (design/01)
+# -----------------------------------------------------------------------------
+fsh:SharedFutureShape
+    a sh:NodeShape ;
+    sh:targetClass fut:SharedFuture ;
+    rdfs:label "Shared Future shape"@en ;
+    sh:property [
+        sh:path as:content ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:or ( [ sh:datatype xsd:string ] [ sh:datatype rdf:langString ] ) ;
+        sh:severity sh:Violation ;
+        sh:message "A SharedFuture MUST carry exactly one as:content — the synthesis text."@en
+    ] ;
+    sh:property [
+        sh:path prov:wasDerivedFrom ;
+        sh:minCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:severity sh:Violation ;
+        sh:message "A SharedFuture MUST list every input statement via prov:wasDerivedFrom (≥1) — traceable, subject to each input's ODRL policy."@en
+    ] ;
+    sh:property [
+        sh:path fut:bridgingEvidence ;
+        sh:minCount 1 ;
+        sh:severity sh:Violation ;
+        sh:message "A SharedFuture MUST carry ≥1 fut:bridgingEvidence — the per-cluster endorsement statistics that evidence it as common ground, not one cluster's position."@en
+    ] ;
+    sh:property [
+        sh:path sec:proof ;
+        sh:minCount 1 ;
+        sh:severity sh:Violation ;
+        sh:message "A SharedFuture MUST carry a Data Integrity proof (sec:proof) — downstream consumers verify integrity + provenance without trusting the wire (see fut:SharedFutureCredential)."@en
+    ] ;
+    sh:property [
+        sh:path prov:wasGeneratedBy ;
+        sh:minCount 1 ;
+        sh:severity sh:Warning ;
+        sh:message "A SharedFuture SHOULD record its synthesis activity (prov:wasGeneratedBy, with prov:wasAssociatedWith the mediator and prov:hadPlan the model+prompt) — GenAI mediation is never invisible."@en
+    ] ;
+    sh:property [
+        sh:path fut:bridgingScore ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:decimal ;
+        sh:minInclusive 0.0 ;
+        sh:maxInclusive 1.0 ;
+        sh:severity sh:Violation ;
+        sh:message "fut:bridgingScore, when present, MUST be an xsd:decimal in [0,1] — the product-over-clusters group-informed-consensus score; an out-of-band value would corrupt ranking."@en
+    ] ;
+    sh:or (
+        [ sh:property [ sh:path fut:dissent ; sh:minCount 1 ] ]
+        [ sh:property [ sh:path fut:noDissentRecorded ; sh:hasValue true ] ]
+    ) ;
+    sh:message "A SharedFuture MUST carry its dissent annex: ≥1 fut:dissent, OR the explicit assertion fut:noDissentRecorded true. A synthesis with neither is INVALID — convergence must never mean erasure."@en ;
+    sh:severity sh:Violation .
+
+fsh:DissentRecordShape
+    a sh:NodeShape ;
+    sh:targetClass fut:DissentRecord ;
+    rdfs:label "Dissent Record shape"@en ;
+    sh:property [
+        sh:path as:content ;
+        sh:minCount 1 ;
+        sh:or ( [ sh:datatype xsd:string ] [ sh:datatype rdf:langString ] ) ;
+        sh:severity sh:Violation ;
+        sh:message "A DissentRecord MUST carry the dissenting position as as:content — a first-class minority report, never a bare flag."@en
+    ] .
+
+fsh:BridgingEvidenceShape
+    a sh:NodeShape ;
+    sh:targetClass fut:BridgingEvidence ;
+    rdfs:label "Bridging Evidence shape"@en ;
+    sh:property [
+        sh:path fut:resonatesCount ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:nonNegativeInteger ;
+        sh:severity sh:Violation ;
+        sh:message "A BridgingEvidence MUST carry exactly one fut:resonatesCount."@en
+    ] ;
+    sh:property [
+        sh:path fut:conflictsCount ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:nonNegativeInteger ;
+        sh:severity sh:Violation ;
+        sh:message "A BridgingEvidence MUST carry exactly one fut:conflictsCount."@en
+    ] ;
+    sh:property [
+        sh:path fut:unsureCount ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:nonNegativeInteger ;
+        sh:severity sh:Violation ;
+        sh:message "A BridgingEvidence MUST carry exactly one fut:unsureCount — 'unsure' is a first-class signal, counted in seen."@en
+    ] ;
+    sh:property [
+        sh:path fut:seenCount ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:nonNegativeInteger ;
+        sh:severity sh:Warning ;
+        sh:message "A BridgingEvidence SHOULD carry fut:seenCount (resonates + conflicts + unsure) — the smoothing denominator."@en
+    ] ;
+    sh:property [
+        sh:path fut:clusterLabel ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:severity sh:Warning ;
+        sh:message "A BridgingEvidence SHOULD carry an opaque fut:clusterLabel (an aggregate identifier, never a member list)."@en
+    ] ;
+    sh:property [
+        sh:path fut:bridgingScore ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:decimal ;
+        sh:minInclusive 0.0 ;
+        sh:maxInclusive 1.0 ;
+        sh:severity sh:Violation ;
+        sh:message "fut:bridgingScore, when present, MUST be an xsd:decimal in [0,1] — a per-cluster group-informed-consensus probability; an out-of-band value would corrupt convergence ranking."@en
+    ] .
+
+fsh:ConvergenceMetricsShape
+    a sh:NodeShape ;
+    sh:targetClass fut:ConvergenceMetrics ;
+    rdfs:label "Convergence Metrics shape"@en ;
+    sh:property [
+        sh:path fut:clusterCount ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:nonNegativeInteger ;
+        sh:severity sh:Warning ;
+        sh:message "ConvergenceMetrics SHOULD report the fut:clusterCount."@en
+    ] ;
+    sh:property [
+        sh:path fut:crossClusterConsensusRate ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:decimal ;
+        sh:minInclusive 0.0 ;
+        sh:maxInclusive 1.0 ;
+        sh:severity sh:Violation ;
+        sh:message "fut:crossClusterConsensusRate, when present, MUST be a decimal in [0,1]."@en
+    ] ;
+    sh:property [
+        sh:path fut:verificationTier ;
+        sh:datatype xsd:string ;
+        sh:severity sh:Warning ;
+        sh:message "Participation counts SHOULD be stratified by fut:verificationTier — T1-only cohorts are honestly labelled, never silently mixed."@en
+    ] .
+
+# -----------------------------------------------------------------------------
+# Stage-1 layer — AppProposal / SpecSynthesis / AcceptanceCriterion.
+# -----------------------------------------------------------------------------
+fsh:AppProposalShape
+    a sh:NodeShape ;
+    sh:targetClass fut:AppProposal ;
+    rdfs:label "App Proposal shape"@en ;
+    sh:property [
+        sh:path fut:motivatedBy ;
+        sh:minCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:severity sh:Violation ;
+        sh:message "An AppProposal MUST trace to ≥1 fut:motivatedBy (a Need or ValueStatement) — what keeps Stage-1 co-design value-centric rather than feature-listing."@en
+    ] ;
+    sh:property [
+        sh:path dcterms:title ;
+        sh:minCount 1 ;
+        sh:severity sh:Warning ;
+        sh:message "An AppProposal SHOULD carry a dct:title (it is a wf:Task in the shared task model — the title is what solid-issues / Pod Manager render)."@en
+    ] .
+
+fsh:SpecSynthesisShape
+    a sh:NodeShape ;
+    sh:targetClass fut:SpecSynthesis ;
+    rdfs:label "Spec Synthesis shape"@en ;
+    sh:property [
+        sh:path fut:acceptanceCriterion ;
+        sh:minCount 1 ;
+        sh:severity sh:Warning ;
+        sh:message "A SpecSynthesis SHOULD carry ≥1 fut:acceptanceCriterion — the testable spec handed to implementation. (It also inherits every SharedFuture MUST: provenance, bridging evidence, proof, dissent annex.)"@en
+    ] .
+
+fsh:AcceptanceCriterionShape
+    a sh:NodeShape ;
+    sh:targetClass fut:AcceptanceCriterion ;
+    rdfs:label "Acceptance Criterion shape"@en ;
+    sh:property [
+        sh:path fut:operationalises ;
+        sh:minCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:severity sh:Violation ;
+        sh:message "An AcceptanceCriterion MUST link the fut:Need it operationalises (design/05 §4 closing-the-loop: every criterion traces to a need)."@en
+    ] ;
+    sh:property [
+        sh:path as:content ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:or ( [ sh:datatype xsd:string ] [ sh:datatype rdf:langString ] ) ;
+        sh:severity sh:Violation ;
+        sh:message "An AcceptanceCriterion MUST state its testable criterion as as:content."@en
+    ] .

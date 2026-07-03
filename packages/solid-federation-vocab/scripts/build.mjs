@@ -17,6 +17,7 @@ import {
   writeFileSync,
   mkdirSync,
   copyFileSync,
+  existsSync,
 } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -165,6 +166,7 @@ const ONTOS = [
   ["sectors/drawing/drawing.ttl", "sectors/drawing", "drawing", "https://w3id.org/jeswr/sectors/drawing#"],
   ["sectors/social/social.ttl", "sectors/social", "social", "https://w3id.org/jeswr/sectors/social#"],
   ["sectors/bookmarks/bookmarks.ttl", "sectors/bookmarks", "bookmark", "https://w3id.org/jeswr/sectors/bookmarks#"],
+  ["sectors/futures/futures.ttl", "sectors/futures", "fut", "https://w3id.org/jeswr/sectors/futures#"],
 ];
 
 const RDF_LABEL = `${RDFS}label`;
@@ -303,8 +305,21 @@ for (const [srcRel, route, prefix, ns] of ONTOS) {
   );
   // c) HTML term table (derived)
   writeFileSync(join(destDir, `${slug}.html`), ontologyHtml(route, prefix, ns, terms, depth));
+  // d) SHACL profile + Mode-A alignments (served VERBATIM alongside the vocab)
+  //    so a profile's `prof:hasArtifact` constraints URL — advertised at
+  //    …/sectors/<x>/<slug>.shacl.ttl — actually resolves once GitHub Pages /
+  //    the w3id route is live. The source dir is that of the vocabulary .ttl.
+  const srcDir = dirname(join(ROOT, srcRel));
+  let extras = "";
+  for (const sidecar of [`${slug}.shacl.ttl`, `${slug}-alignments.ttl`]) {
+    const from = join(srcDir, sidecar);
+    if (existsSync(from)) {
+      copyFileSync(from, join(destDir, sidecar));
+      extras += `,${sidecar}`;
+    }
+  }
   console.log(
-    `docs/${routeParts.length > 1 ? routeParts.slice(0, -1).join("/") + "/" : ""}${slug}.{ttl,html,-context.jsonld} — ${terms.length} terms (served by GitHub Pages)`,
+    `docs/${routeParts.length > 1 ? routeParts.slice(0, -1).join("/") + "/" : ""}${slug}.{ttl,html,-context.jsonld${extras}} — ${terms.length} terms (served by GitHub Pages)`,
   );
 }
 

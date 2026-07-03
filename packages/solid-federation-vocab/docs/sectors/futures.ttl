@@ -1,0 +1,775 @@
+# AUTHORED-BY Claude Fable 5 (PSS agent)
+#
+@prefix fut:     <https://w3id.org/jeswr/sectors/futures#> .
+@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix skos:    <http://www.w3.org/2004/02/skos/core#> .
+@prefix vann:    <http://purl.org/vocab/vann/> .
+@prefix gufo:    <http://purl.org/nemo/gufo#> .
+@prefix wf:      <http://www.w3.org/2005/01/wf/flow#> .
+@prefix odrl:    <http://www.w3.org/ns/odrl/2/> .
+
+# =============================================================================
+# Solid FUTURES sector ontology (KEY=futures).
+#
+# The participatory-democracy / shared-futures deliberation domain — the sector
+# the `unite` platform (jeswr/unite) operates in (fedapp:sector). Formalises the
+# `fut:` data model of unite's design/01-data-model.md: personal expressions of
+# lived context, ideal futures, needs, values and satisfiers; tri-state
+# resonance reactions; scoped deliberations; and synthesized shared-future
+# artifacts carrying provenance, per-cluster bridging evidence and a MANDATORY
+# dissent annex.
+#
+# THE LOAD-BEARING SPLIT this vocabulary exists to carry (design/01 + 03 §2):
+# Max-Neef's Human Scale Development distinguishes fundamental human NEEDS —
+# few, finite, universal (the nine axiological needs seeded in
+# fut:maxneefScheme) — from SATISFIERS, the culturally-variable ways needs are
+# met. fut:Need and fut:Satisfier are therefore SEPARATE classes joined by
+# fut:satisfies, so convergence machinery can compute common ground at the
+# needs layer (where it structurally exists) and treat satisfier diversity as
+# design-space, not noise. The existential axis of Max-Neef's needs matrix
+# (being / having / doing / interacting) is seeded in fut:existentialScheme;
+# the value scheme (fut:valueScheme) is seeded from Schwartz's basic-values
+# circumplex. NO scheme is closed or centrally owned: any community may publish
+# its own skos:ConceptScheme and cross-map (fut:needConcept deliberately ranges
+# over skos:Concept, not the seed scheme).
+#
+# gUFO META-TYPES (each class carries its own AND roots transitively in Core):
+#   LifeContext / VisionStatement / Claim / Need / Satisfier / ValueStatement /
+#     SharedFuture / SharedFutureCredential / DissentRecord / AcceptanceCriterion
+#     / AppProposal = gufo:SubKind → root core:InformationResource (authored
+#     information objects).
+#   Resonance / BridgingEvidence / ConvergenceMetrics = gufo:SubKind →
+#     root core:Record (structured records about statements/deliberations).
+#   Deliberation = gufo:EventType → root core:Activity (a scoped convergence
+#     exercise; aligned to prov:Activity / as:Event in futures-alignments.ttl).
+#   Stance / ResonanceDimension / Scope / DeliberationMethod / NeedConcept /
+#     ExistentialCategory / ValueConcept = gufo:Category → root core:Category
+#     (rigid non-sortals whose instances are the coded values, bound to
+#     skos:Concept).
+#
+# INSTANCE-IRI CONTRACT: the term IRIs below are EXACTLY the strings the
+# running unite Stage-1 client (jeswr/unite app/src/lib/fut.ts) reads and
+# writes — fut:Need, fut:Resonance, fut:needConcept, fut:intensity,
+# fut:inDeliberation, fut:onStatement, fut:stance, fut:dimension, the stance
+# individuals fut:Resonates / fut:Conflicts / fut:Unsure, the dimension
+# individuals fut:IShareThis / fut:IAspireToThis / fut:IWouldSupportThis,
+# fut:maxneefScheme and the nine fut:maxneef-<need> concepts. Do not rename
+# them without a coordinated unite migration (fedreg:acceptsSpec is the
+# migration substrate).
+#
+# NAMESPACE GOVERNANCE (design/01 note): seeding under w3id.org/jeswr mirrors
+# how every sector bootstrapped, but unite's design/04 specifies a migration
+# path to a steward-circle-governed namespace once adoption warrants it —
+# hence owl:versionInfo 0.1.0, not 1.0.0.
+#
+# CONTRACT (sector contract R8 §4, F1–F7): imports the gUFO Core; roots every
+# class transitively in a Core class and carries its gUFO meta-type; CONSTRAINS,
+# never forks, the vocabularies it reuses (AS2 content, DCT attribution, PROV
+# derivation, ODRL consent, SKOS schemes — all referenced, none widened);
+# open-world by default — the SHACL profile (futures.shacl.ttl) carries the
+# closed-world MUST/SHOULD contract. F5 DL hygiene: external terms referenced
+# in axioms are declared as punned owl terms.
+# =============================================================================
+
+<https://w3id.org/jeswr/sectors/futures> a owl:Ontology ;
+    dcterms:title "Solid Futures Sector Ontology"@en ;
+    rdfs:label "Solid Futures Sector Ontology"@en ;
+    vann:preferredNamespacePrefix "fut" ;
+    vann:preferredNamespaceUri "https://w3id.org/jeswr/sectors/futures#" ;
+    owl:imports <https://w3id.org/jeswr/core> ;
+    owl:versionInfo "0.1.0" ;
+    owl:versionIRI <https://w3id.org/jeswr/sectors/futures/0.1.0> ;
+    dcterms:description """The participatory-democracy / shared-futures
+        deliberation data sector for the unite platform (jeswr/unite):
+        expression-layer statements (life context, vision, claim, need,
+        satisfier, value) living in the author's pod; tri-state resonance
+        reactions living in the reactor's pod; process-layer deliberations,
+        synthesized shared futures with per-cluster bridging evidence and a
+        mandatory dissent annex; the Max-Neef needs matrix (axiological +
+        existential schemes), the Schwartz-seeded value scheme, and the ODRL
+        consent-action profile. Aligns Mode-A to ActivityStreams 2.0, PROV-O,
+        ODRL 2.2 and the literature sources in futures-alignments.ttl."""@en ;
+    dcterms:modified "2026-07-03"^^xsd:date ;
+    rdfs:comment "Sector ontology for unite Stage-1 (design/01-data-model.md). Version 0.1.0: the namespace-governance migration to a steward-circle namespace is a documented follow-on (unite design/04), carried by fedreg:acceptsSpec dual-advertisement."@en .
+
+# -----------------------------------------------------------------------------
+# Annotation-property declarations (F5 DL hygiene — match the Core pattern).
+# -----------------------------------------------------------------------------
+dcterms:title       a owl:AnnotationProperty .
+dcterms:description a owl:AnnotationProperty .
+dcterms:modified    a owl:AnnotationProperty .
+vann:preferredNamespacePrefix a owl:AnnotationProperty .
+vann:preferredNamespaceUri    a owl:AnnotationProperty .
+skos:definition     a owl:AnnotationProperty .
+skos:scopeNote      a owl:AnnotationProperty .
+skos:notation       a owl:AnnotationProperty .
+
+# -----------------------------------------------------------------------------
+# External classes referenced in axioms below, declared (punned) so the DL
+# profile holds even when their host ontology is not in the reasoned closure —
+# the F5 fix the Core + sibling sectors apply. wf: (the SolidOS workflow vocab
+# the shared task model rides on), ODRL 2.2 and SKOS are NOT owl:imported
+# (non-DL / heavy closures); we reference specific terms and align in
+# futures-alignments.ttl.
+# -----------------------------------------------------------------------------
+skos:Concept a owl:Class ;
+    rdfs:label "SKOS Concept"@en ;
+    rdfs:isDefinedBy <http://www.w3.org/2004/02/skos/core#> .
+
+skos:ConceptScheme a owl:Class ;
+    rdfs:label "SKOS Concept Scheme"@en ;
+    rdfs:isDefinedBy <http://www.w3.org/2004/02/skos/core#> .
+
+wf:Task a owl:Class ;
+    rdfs:label "wf Task"@en ;
+    rdfs:isDefinedBy <http://www.w3.org/2005/01/wf/flow#> .
+
+odrl:Action a owl:Class ;
+    rdfs:label "ODRL Action"@en ;
+    rdfs:isDefinedBy <http://www.w3.org/ns/odrl/2/> .
+
+odrl:LeftOperand a owl:Class ;
+    rdfs:label "ODRL Left Operand"@en ;
+    rdfs:isDefinedBy <http://www.w3.org/ns/odrl/2/> .
+
+# =============================================================================
+# 1. EXPRESSION LAYER — statements living in the AUTHOR's pod.
+#    gufo:SubKind, root core:InformationResource. Content via as:content;
+#    attribution via dct:creator (a WebID, possibly pseudonymous — design/01
+#    privacy tier 4); timestamps via dct:created.
+# =============================================================================
+
+fut:LifeContext a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf core:InformationResource ;
+    rdfs:label "Life Context"@en ;
+    skos:definition "A self-description of the author's PRESENT circumstances ('my current life'). An information resource describing a situation (the situation itself is not reified in v0.1). Content via as:content; may carry fut:expressesNeed links to the Needs it surfaces."@en ;
+    skos:scopeNote "gufo:SubKind of core:InformationResource. Lives in the author's pod under the design/01 privacy tiers (private by default)."@en .
+
+fut:VisionStatement a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf core:InformationResource ;
+    rdfs:label "Vision Statement"@en ;
+    skos:definition "A narrative description of the best possible future FOR THE AUTHOR ('my ideal future') — and, the author may say, for whom else (fut:scope). Content via as:content; optional target timeframe via fut:horizon / fut:horizonConcept."@en ;
+    skos:scopeNote "gufo:SubKind of core:InformationResource. Decomposed into atomic fut:Claims via fut:articulates; the scope ladder (self→humanity) matters for convergence (unite design/03 §2)."@en .
+
+fut:Claim a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf core:InformationResource ;
+    rdfs:label "Claim"@en ;
+    skos:definition "An ATOMIC, voteable statement — one idea, short, standalone: the Pol.is-style unit of deliberation. Derived from a fut:VisionStatement (prov:wasDerivedFrom / the inverse of fut:articulates) or authored directly. When GenAI performs the decomposition the activity is recorded (prov:wasGeneratedBy with the model+prompt as a prov:Plan) AND the author must approve the claim before it becomes theirs — approval is fut:adoptedBy plus the claim moving into the author's pod. Nothing enters deliberation attributed to a person without that explicit adoption."@en ;
+    skos:scopeNote "gufo:SubKind of core:InformationResource. as:content is capped at 500 characters (atomicity — futures.shacl.ttl)."@en .
+
+fut:Need a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf core:InformationResource ;
+    rdfs:label "Need"@en ;
+    skos:definition "A need or want FELT BY THE AUTHOR: a link to a concept in a need scheme (fut:needConcept — the Max-Neef seed or any community scheme), free-text context via as:content, an optional 1–5 fut:intensity, and optional fut:metBy / fut:unmetBecause context. One half of the load-bearing needs/satisfiers split: convergence computes common ground at THIS layer first."@en ;
+    skos:scopeNote "gufo:SubKind of core:InformationResource. THE class the unite Stage-1 client writes (one resource per Need under the participant's deliberation container); its required fields are the NeedShape MUSTs."@en .
+
+fut:Satisfier a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf core:InformationResource ;
+    rdfs:label "Satisfier"@en ;
+    skos:definition "A culturally-specific WAY OF MEETING one or more needs: a proposal, practice, institution, technology or app. Linked to the fut:Need instance(s) and/or need concept(s) it serves via fut:satisfies; optionally placed on the existential axis of Max-Neef's matrix via fut:existentialCategory. The other half of the needs/satisfiers split — satisfier diversity is a feature to preserve (a portfolio of ways to meet a shared need), never noise to average away."@en ;
+    skos:scopeNote "gufo:SubKind of core:InformationResource. People who violently disagree about satisfiers routinely share the underlying needs — the data model's convergence thesis (unite design/03 §2)."@en .
+
+fut:ValueStatement a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf core:InformationResource ;
+    rdfs:label "Value Statement"@en ;
+    skos:definition "An expression that the author HOLDS a value: a link to a concept in a value scheme (fut:valueConcept — the Schwartz seed or any community scheme) plus free-text as:content. Value proximity between people whose positions differ is a documented depolarisation lever (unite design/03 §2)."@en ;
+    skos:scopeNote "gufo:SubKind of core:InformationResource. The author's own priority ordering may be carried with schema:position (not redeclared here)."@en .
+
+# =============================================================================
+# 2. REACTION LAYER — lives in the REACTOR's pod (never the statement author's).
+# =============================================================================
+
+fut:Resonance a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf core:Record ;
+    rdfs:label "Resonance"@en ;
+    skos:definition "The vote/endorsement primitive: a TRI-STATE reaction (fut:Resonates / fut:Conflicts / fut:Unsure — the Pol.is agree/disagree/pass pattern) to a statement (fut:onStatement → a Claim, Need, Satisfier or ValueStatement), optionally qualified by a fut:dimension (sharing a present condition vs. aspiring to it vs. willingness to support others having it — psychologically distinct signals the convergence math keeps separable). Stored in the REACTOR's pod; announced to the deliberation inbox; only ever published in aggregate (the ODRL consent layer + k-anonymity)."@en ;
+    skos:scopeNote "gufo:SubKind of core:Record. THE second class the unite Stage-1 client writes; resonances are the raw material of opinion-space mapping. Richer than as:Like (aligned Mode-A in futures-alignments.ttl)."@en .
+
+# =============================================================================
+# 3. PROCESS LAYER — lives in the community's space.
+# =============================================================================
+
+fut:Deliberation a owl:Class, gufo:EventType ;
+    rdfs:subClassOf core:Activity ;
+    rdfs:label "Deliberation"@en ;
+    skos:definition "A SCOPED convergence exercise within a community: a titled activity with a topic, a time window, a method (fut:method → resonance-mapping / mediated-synthesis / mini-public) and a participating community. All statements and resonances entering a deliberation reference it via fut:inDeliberation."@en ;
+    skos:scopeNote "gufo:EventType rooting in core:Activity; aligned Mode-A to prov:Activity and as:Event in futures-alignments.ttl."@en .
+
+fut:SharedFuture a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf core:InformationResource ;
+    rdfs:label "Shared Future"@en ;
+    skos:definition "The CONVERGENCE ARTIFACT: a synthesized shared-future statement. Carries the synthesis text (as:content), full derivation provenance (prov:wasDerivedFrom → every input statement, subject to each input's ODRL policy), the generating activity (prov:wasGeneratedBy, with the mediator — human WebID or GenAI agent — and its prov:Plan: GenAI mediation is NEVER invisible), per-cluster endorsement evidence (fut:bridgingEvidence — the proof this is common ground, not one cluster's position), post-synthesis endorsements (fut:endorsedBy), and a MANDATORY dissent annex: at least one fut:dissent OR an explicit fut:noDissentRecorded true. A SharedFuture without its dissent annex is INVALID (SHACL-enforced) — convergence must never mean erasure."@en ;
+    skos:scopeNote "gufo:SubKind of core:InformationResource. Signed as a Verifiable Credential (fut:SharedFutureCredential) with a Data Integrity proof so downstream consumers can verify integrity + provenance without trusting the wire."@en .
+
+fut:SharedFutureCredential a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf core:InformationResource ;
+    rdfs:label "Shared Future Credential"@en ;
+    skos:definition "The W3C Verifiable Credential (VC 2.0, Data Integrity proof) issued by the facilitating community over a fut:SharedFuture — the signed, wire-verifiable form handed to downstream consumers (unite Stage-3: governance reporting). Aligned Mode-A to cred:VerifiableCredential in futures-alignments.ttl; issued via the @jeswr/solid-vc proof-suite seam."@en ;
+    skos:scopeNote "gufo:SubKind of core:InformationResource. The credential WRAPS the SharedFuture; the dissent annex travels with it."@en .
+
+fut:DissentRecord a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf core:InformationResource ;
+    rdfs:label "Dissent Record"@en ;
+    skos:definition "A FIRST-CLASS minority report attached to a synthesis: the dissenting position (as:content), the dissenting cluster/cohort in aggregate, and optionally authored dissent statements whose authors opted in. Mandatory companion of fut:SharedFuture (unite design/01; critique C1/C8 — convergence must never mean erasure)."@en ;
+    skos:scopeNote "gufo:SubKind of core:InformationResource. Attached via fut:dissent."@en .
+
+fut:BridgingEvidence a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf core:Record ;
+    rdfs:label "Bridging Evidence"@en ;
+    skos:definition "Per-cluster endorsement statistics for ONE opinion cluster over a statement/synthesis: the resonates / conflicts / unsure counts (and the total seen), the raw material of the bridging-based ranking (group-informed consensus across EVERY cluster, not majority preference). A SharedFuture carries one BridgingEvidence per cluster — the evidence that it is common ground."@en ;
+    skos:scopeNote "gufo:SubKind of core:Record. Counts are k-anonymous aggregates; the unite Stage-1 client computes them as { resonates, conflicts, unsure, seen } per cluster."@en .
+
+fut:ConvergenceMetrics a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf core:Record ;
+    rdfs:label "Convergence Metrics"@en ;
+    skos:definition "The PUBLISHED aggregate for a deliberation: cluster count, cross-cluster consensus rate, bridging-score distribution and participation counts stratified by verification tier (T1 community-vouched vs. T2 ZK-personhood — unite design/02 §5: tiers are honestly labelled, never silently mixed). Open data, k-anonymous."@en ;
+    skos:scopeNote "gufo:SubKind of core:Record."@en .
+
+# =============================================================================
+# 4. STAGE-1 LAYER — app co-design (unite design/05).
+# =============================================================================
+
+fut:AppProposal a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf core:InformationResource , wf:Task ;
+    rdfs:label "App Proposal"@en ;
+    skos:definition "A proposed Solid app in a Stage-1 co-design deliberation. Because it IS a wf:Task in the shared task model (@jeswr/solid-task-model), it federates into solid-issues and Pod Manager for free (kanban, assignment, state). MUST trace to at least one need or value via fut:motivatedBy — what keeps Stage 1 value-centric rather than feature-listing."@en ;
+    skos:scopeNote "gufo:SubKind of core:InformationResource and ⊑ wf:Task (http://www.w3.org/2005/01/wf/flow#Task, punned above)."@en .
+
+fut:SpecSynthesis a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf fut:SharedFuture ;
+    rdfs:label "Spec Synthesis"@en ;
+    skos:definition "The converged app spec handed to GenAI implementation: a fut:SharedFuture that adds acceptance criteria (fut:acceptanceCriterion), each linked back to the fut:Need it operationalises (the closing-the-loop check, unite design/05 §4), and a pointer to the implementation tracker (fut:implementationTracker → a wf:Tracker)."@en ;
+    skos:scopeNote "gufo:SubKind via fut:SharedFuture; inherits the mandatory dissent annex and bridging evidence."@en .
+
+fut:AcceptanceCriterion a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf core:InformationResource ;
+    rdfs:label "Acceptance Criterion"@en ;
+    skos:definition "One testable criterion of a fut:SpecSynthesis, linked via fut:operationalises to the fut:Need it operationalises — every criterion MUST trace to a need (SHACL-enforced), so the implemented app can be checked against the needs that motivated it."@en ;
+    skos:scopeNote "gufo:SubKind of core:InformationResource. Criterion text via as:content."@en .
+
+# =============================================================================
+# 5. CODED-VALUE CLASSES — gufo:Category, root core:Category. Rigid non-sortals
+#    whose instances are the coded values (bound to skos:Concept in the schemes
+#    below). Constrain core:Category; never widen it.
+# =============================================================================
+
+fut:Stance a owl:Class, gufo:Category ;
+    rdfs:subClassOf core:Category ;
+    rdfs:label "Stance"@en ;
+    skos:definition "The tri-state reaction value of a fut:Resonance: resonates / conflicts / unsure — the Pol.is agree/disagree/pass triple. A coded value (core:Category); the members are skos:Concepts in fut:stanceScheme. CLOSED for interoperability: the unite client drops a resonance carrying any other stance IRI."@en ;
+    skos:scopeNote "gufo:Category of core:Category. 'Pass/unsure' is a first-class signal (counted in seen), distinct from 'never saw it' — the distinction the bridging smoothing depends on."@en .
+
+fut:ResonanceDimension a owl:Class, gufo:Category ;
+    rdfs:subClassOf core:Category ;
+    rdfs:label "Resonance Dimension"@en ;
+    skos:definition "The optional qualifier of a fut:Resonance separating three psychologically distinct positive signals: I SHARE this (a present condition), I ASPIRE to this (a hoped-for condition), I would SUPPORT others having this (solidarity without personal stake). The convergence math wants them separable."@en ;
+    skos:scopeNote "gufo:Category of core:Category. Members are skos:Concepts in fut:dimensionScheme."@en .
+
+fut:Scope a owl:Class, gufo:Category ;
+    rdfs:subClassOf core:Category ;
+    rdfs:label "Scope"@en ;
+    skos:definition "The scope ladder of a fut:VisionStatement — WHOM the envisioned future is for: self / household / community / nation / humanity. The ladder matters for convergence (unite design/03 §2)."@en ;
+    skos:scopeNote "gufo:Category of core:Category. Members are skos:Concepts in fut:scopeScheme."@en .
+
+fut:DeliberationMethod a owl:Class, gufo:Category ;
+    rdfs:subClassOf core:Category ;
+    rdfs:label "Deliberation Method"@en ;
+    skos:definition "The convergence method a fut:Deliberation uses: resonance-mapping (Pol.is-style opinion mapping), mediated-synthesis (a human or GenAI mediator drafts syntheses — always visibly attributed), or mini-public (a sampled deliberative body)."@en ;
+    skos:scopeNote "gufo:Category of core:Category. Members are skos:Concepts in fut:methodScheme."@en .
+
+fut:NeedConcept a owl:Class, gufo:Category ;
+    rdfs:subClassOf core:Category ;
+    rdfs:label "Need Concept"@en ;
+    skos:definition "A fundamental-human-need concept in a need scheme — the AXIOLOGICAL axis of Max-Neef's needs matrix. The seed members are the nine Max-Neef needs in fut:maxneefScheme; any community may publish its own scheme and cross-map (skos:closeMatch), so fut:needConcept accepts ANY skos:Concept, and this class types only the canonical seeds."@en ;
+    skos:scopeNote "gufo:Category of core:Category. Needs are few, finite and universal; satisfiers vary — the load-bearing split."@en .
+
+fut:ExistentialCategory a owl:Class, gufo:Category ;
+    rdfs:subClassOf core:Category ;
+    rdfs:label "Existential Category"@en ;
+    skos:definition "The EXISTENTIAL axis of Max-Neef's needs matrix: being (qualities), having (things/institutions), doing (actions), interacting (settings). Crossing the nine axiological needs with these four columns yields the matrix whose CELLS satisfiers occupy — fut:existentialCategory places a Need or Satisfier on this axis."@en ;
+    skos:scopeNote "gufo:Category of core:Category. Members are skos:Concepts in fut:existentialScheme."@en .
+
+fut:ValueConcept a owl:Class, gufo:Category ;
+    rdfs:subClassOf core:Category ;
+    rdfs:label "Value Concept"@en ;
+    skos:definition "A basic-value concept in a value scheme. The seed members are the ten Schwartz basic values in fut:valueScheme (a stable circumplex: adjacent values compatible, opposing values in tension — replicated across dozens of cultures), giving cluster interpretation a psychologically meaningful prior rather than an ad-hoc tag soup. Communities may publish and cross-map their own schemes."@en ;
+    skos:scopeNote "gufo:Category of core:Category. fut:valueConcept accepts any skos:Concept; this class types the canonical seeds."@en .
+
+# =============================================================================
+# 6. PROPERTIES. Sub-properties of a Core property where one fits; domained
+#    onto a fut: class (constrain, never widen a reused property). Properties
+#    used by SEVERAL classes deliberately carry NO rdfs:domain.
+# =============================================================================
+
+# --- Expression layer ----------------------------------------------------------
+fut:expressesNeed a owl:ObjectProperty ;
+    rdfs:domain fut:LifeContext ;
+    rdfs:range fut:Need ;
+    rdfs:label "expresses need"@en ;
+    skos:definition "Relates a LifeContext to a Need it surfaces — the elicitation edge from 'my current life' to the needs felt in it."@en .
+
+fut:articulates a owl:ObjectProperty, owl:InverseFunctionalProperty ;
+    rdfs:domain fut:VisionStatement ;
+    rdfs:range fut:Claim ;
+    rdfs:label "articulates"@en ;
+    skos:definition "Relates a VisionStatement to an atomic Claim decomposed from it. Inverse-functional: a Claim is articulated by at most one Vision (the composition edge). GenAI decomposition is recorded via prov:wasGeneratedBy on the Claim; the Claim only becomes the author's on explicit adoption (fut:adoptedBy)."@en .
+
+fut:adoptedBy a owl:ObjectProperty ;
+    rdfs:domain fut:Claim ;
+    rdfs:range core:Agent ;
+    rdfs:label "adopted by"@en ;
+    skos:definition "The agent who explicitly ADOPTED a derived Claim as their own — the consent gate: nothing enters deliberation attributed to a person without this assertion plus the claim living in their pod."@en .
+
+fut:horizon a owl:DatatypeProperty ;
+    rdfs:domain fut:VisionStatement ;
+    rdfs:range xsd:gYear ;
+    rdfs:label "horizon"@en ;
+    skos:definition "The optional target YEAR of a VisionStatement's envisioned future. For a coarser, scheme-based period use fut:horizonConcept instead."@en .
+
+fut:horizonConcept a owl:ObjectProperty ;
+    rdfs:domain fut:VisionStatement ;
+    rdfs:range skos:Concept ;
+    rdfs:label "horizon concept"@en ;
+    skos:definition "The optional target timeframe of a VisionStatement as a SKOS period concept (e.g. a community's 'next generation' concept), for visions whose horizon is not a calendar year."@en .
+
+fut:scope a owl:ObjectProperty ;
+    rdfs:domain fut:VisionStatement ;
+    rdfs:range fut:Scope ;
+    rdfs:label "scope"@en ;
+    skos:definition "WHOM the envisioned future is for: self / household / community / nation / humanity (the scope ladder)."@en .
+
+fut:needConcept a owl:ObjectProperty ;
+    rdfs:domain fut:Need ;
+    rdfs:range skos:Concept ;
+    rdfs:label "need concept"@en ;
+    skos:definition "The need-scheme concept a Need instantiates — a member of fut:maxneefScheme (the nine Max-Neef seeds) OR any community-published scheme concept. Deliberately ranges over skos:Concept, not fut:NeedConcept: no scheme is closed or centrally owned; the unite client accepts foreign concept IRIs."@en .
+
+fut:intensity a owl:DatatypeProperty ;
+    rdfs:domain fut:Need ;
+    rdfs:range xsd:integer ;
+    rdfs:label "intensity"@en ;
+    skos:definition "The optional felt intensity of a Need, an integer 1–5 (futures.shacl.ttl enforces the band). An ordinal self-report, never a measurement."@en .
+
+fut:metBy a owl:DatatypeProperty ;
+    rdfs:domain fut:Need ;
+    rdfs:range xsd:string ;
+    rdfs:label "met by"@en ;
+    skos:definition "Free-text context on HOW a Need is currently (partially) met — the author's own account, feeding satisfier elicitation."@en .
+
+fut:unmetBecause a owl:DatatypeProperty ;
+    rdfs:domain fut:Need ;
+    rdfs:range xsd:string ;
+    rdfs:label "unmet because"@en ;
+    skos:definition "Free-text context on WHY a Need is unmet — the author's own account of the obstacle."@en .
+
+fut:satisfies a owl:ObjectProperty ;
+    rdfs:domain fut:Satisfier ;
+    rdfs:label "satisfies"@en ;
+    skos:definition "Relates a Satisfier to what it meets: a fut:Need INSTANCE (someone's felt need) and/or a need CONCEPT (a scheme member). Deliberately rangeless — both targets are first-class (the needs/satisfiers split)."@en .
+
+fut:existentialCategory a owl:ObjectProperty ;
+    rdfs:range fut:ExistentialCategory ;
+    rdfs:label "existential category"@en ;
+    skos:definition "Places a Need or Satisfier on the EXISTENTIAL axis of Max-Neef's matrix (being / having / doing / interacting). No rdfs:domain — it applies to both halves of the needs/satisfiers split."@en .
+
+fut:valueConcept a owl:ObjectProperty ;
+    rdfs:domain fut:ValueStatement ;
+    rdfs:range skos:Concept ;
+    rdfs:label "value concept"@en ;
+    skos:definition "The value-scheme concept a ValueStatement instantiates — a member of fut:valueScheme (the ten Schwartz seeds) OR any community-published scheme concept. Like fut:needConcept, deliberately open to foreign schemes."@en .
+
+# --- Reaction layer ------------------------------------------------------------
+fut:onStatement a owl:ObjectProperty ;
+    rdfs:domain fut:Resonance ;
+    rdfs:label "on statement"@en ;
+    skos:definition "The statement a Resonance reacts to: a fut:Claim, fut:Need, fut:Satisfier or fut:ValueStatement. Deliberately rangeless — the union is documented here and closed per-deliberation by the aggregator, not by OWL."@en .
+
+fut:stance a owl:ObjectProperty ;
+    rdfs:domain fut:Resonance ;
+    rdfs:range fut:Stance ;
+    rdfs:label "stance"@en ;
+    skos:definition "The tri-state reaction of a Resonance: fut:Resonates / fut:Conflicts / fut:Unsure. Exactly one; a resonance carrying any other IRI is dropped by conforming readers."@en .
+
+fut:dimension a owl:ObjectProperty ;
+    rdfs:domain fut:Resonance ;
+    rdfs:range fut:ResonanceDimension ;
+    rdfs:label "dimension"@en ;
+    skos:definition "The optional qualifier of a Resonance: fut:IShareThis / fut:IAspireToThis / fut:IWouldSupportThis — present condition vs. aspiration vs. support, kept separable for the convergence math."@en .
+
+# --- Process layer ---------------------------------------------------------------
+fut:inDeliberation a owl:ObjectProperty ;
+    rdfs:range fut:Deliberation ;
+    rdfs:label "in deliberation"@en ;
+    skos:definition "The Deliberation a statement or resonance enters. No rdfs:domain — every expression-layer and reaction-layer resource may carry it; the unite Stage-1 client always writes it."@en .
+
+fut:method a owl:ObjectProperty ;
+    rdfs:domain fut:Deliberation ;
+    rdfs:range fut:DeliberationMethod ;
+    rdfs:label "method"@en ;
+    skos:definition "The convergence method a Deliberation uses (resonance-mapping / mediated-synthesis / mini-public)."@en .
+
+fut:bridgingEvidence a owl:ObjectProperty ;
+    rdfs:domain fut:SharedFuture ;
+    rdfs:range fut:BridgingEvidence ;
+    rdfs:label "bridging evidence"@en ;
+    skos:definition "Relates a SharedFuture to the per-cluster endorsement statistics (one BridgingEvidence per opinion cluster) that EVIDENCE it as common ground rather than one cluster's position. At least one is mandatory (SHACL)."@en .
+
+fut:endorsedBy a owl:ObjectProperty ;
+    rdfs:domain fut:SharedFuture ;
+    rdfs:range fut:Resonance ;
+    rdfs:label "endorsed by"@en ;
+    skos:definition "A POST-synthesis Resonance record endorsing (or contesting — the stance is in the Resonance) a SharedFuture."@en .
+
+fut:dissent a owl:ObjectProperty ;
+    rdfs:domain fut:SharedFuture ;
+    rdfs:range fut:DissentRecord ;
+    rdfs:label "dissent"@en ;
+    skos:definition "The MANDATORY dissent annex of a SharedFuture: a first-class minority report. May be absent only when the synthesis explicitly asserts fut:noDissentRecorded true — a SharedFuture with neither is invalid (SHACL-enforced). Convergence must never mean erasure."@en .
+
+fut:noDissentRecorded a owl:DatatypeProperty ;
+    rdfs:domain fut:SharedFuture ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "no dissent recorded"@en ;
+    skos:definition "The EXPLICIT assertion that a deliberation produced no dissent to this synthesis. Required (true) whenever a SharedFuture carries no fut:dissent — silence is never treated as consensus."@en .
+
+fut:clusterLabel a owl:DatatypeProperty ;
+    rdfs:domain fut:BridgingEvidence ;
+    rdfs:range xsd:string ;
+    rdfs:label "cluster label"@en ;
+    skos:definition "The opaque label of the opinion cluster a BridgingEvidence aggregates (e.g. 'cluster-0'). A k-anonymous aggregate identifier, never a member list."@en .
+
+fut:resonatesCount a owl:DatatypeProperty ;
+    rdfs:domain fut:BridgingEvidence ;
+    rdfs:range xsd:nonNegativeInteger ;
+    rdfs:label "resonates count"@en ;
+    skos:definition "How many participants in this cluster resonated with the statement/synthesis."@en .
+
+fut:conflictsCount a owl:DatatypeProperty ;
+    rdfs:domain fut:BridgingEvidence ;
+    rdfs:range xsd:nonNegativeInteger ;
+    rdfs:label "conflicts count"@en ;
+    skos:definition "How many participants in this cluster conflicted with the statement/synthesis."@en .
+
+fut:unsureCount a owl:DatatypeProperty ;
+    rdfs:domain fut:BridgingEvidence ;
+    rdfs:range xsd:nonNegativeInteger ;
+    rdfs:label "unsure count"@en ;
+    skos:definition "How many participants in this cluster passed/were unsure. Counted in seen — 'unsure' is a first-class signal, distinct from never having seen the statement."@en .
+
+fut:seenCount a owl:DatatypeProperty ;
+    rdfs:domain fut:BridgingEvidence ;
+    rdfs:range xsd:nonNegativeInteger ;
+    rdfs:label "seen count"@en ;
+    skos:definition "How many participants in this cluster SAW the statement (resonates + conflicts + unsure). The denominator of the Laplace-smoothed group-informed-consensus score."@en .
+
+fut:bridgingScore a owl:DatatypeProperty ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "bridging score"@en ;
+    skos:definition "A group-informed-consensus score in [0,1]: the product over opinion clusters of the (Laplace-smoothed) per-cluster resonance probability — high only when a statement earns positive reception in EVERY cluster. No rdfs:domain — carried on a BridgingEvidence (per-cluster factor) or a statement/synthesis (the product)."@en .
+
+fut:clusterCount a owl:DatatypeProperty ;
+    rdfs:domain fut:ConvergenceMetrics ;
+    rdfs:range xsd:nonNegativeInteger ;
+    rdfs:label "cluster count"@en ;
+    skos:definition "The number of opinion clusters the deliberation's resonance matrix produced."@en .
+
+fut:crossClusterConsensusRate a owl:DatatypeProperty ;
+    rdfs:domain fut:ConvergenceMetrics ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "cross-cluster consensus rate"@en ;
+    skos:definition "The share of statements in [0,1] clearing the bridging threshold (minimum resonance in EVERY cluster) — the deliberation-level common-ground signal."@en .
+
+fut:participantCount a owl:DatatypeProperty ;
+    rdfs:domain fut:ConvergenceMetrics ;
+    rdfs:range xsd:nonNegativeInteger ;
+    rdfs:label "participant count"@en ;
+    skos:definition "How many verified participants entered the deliberation. Report per verification tier (fut:verificationTier) — T1-only cohorts are honestly labelled, never silently mixed with stronger tiers."@en .
+
+fut:verificationTier a owl:DatatypeProperty ;
+    rdfs:domain fut:ConvergenceMetrics ;
+    rdfs:range xsd:string ;
+    rdfs:label "verification tier"@en ;
+    skos:definition "The personhood-verification tier a participation count refers to: 'T1' (community-vouched membership credential) or 'T2' (ZK personhood). Until a T2 provider exists nothing may claim sybil-resistance beyond the vouching community's diligence (unite decisions/0001 Q1)."@en .
+
+# --- Stage-1 layer ---------------------------------------------------------------
+fut:motivatedBy a owl:ObjectProperty ;
+    rdfs:domain fut:AppProposal ;
+    rdfs:label "motivated by"@en ;
+    skos:definition "The fut:Need or fut:ValueStatement an AppProposal traces to. EVERY proposal must carry at least one (SHACL-enforced) — what keeps Stage-1 co-design value-centric rather than feature-listing. Deliberately rangeless: both targets are first-class."@en .
+
+fut:acceptanceCriterion a owl:ObjectProperty ;
+    rdfs:domain fut:SpecSynthesis ;
+    rdfs:range fut:AcceptanceCriterion ;
+    rdfs:label "acceptance criterion"@en ;
+    skos:definition "A testable criterion of a converged app spec. Each criterion MUST link back (fut:operationalises) to the fut:Need it operationalises — the closing-the-loop check."@en .
+
+fut:operationalises a owl:ObjectProperty ;
+    rdfs:domain fut:AcceptanceCriterion ;
+    rdfs:range fut:Need ;
+    rdfs:label "operationalises"@en ;
+    skos:definition "The Need an AcceptanceCriterion makes testable — so the implemented app can be verified against the needs that motivated it, not just its feature list."@en .
+
+fut:implementationTracker a owl:ObjectProperty ;
+    rdfs:domain fut:SpecSynthesis ;
+    rdfs:label "implementation tracker"@en ;
+    skos:definition "The task tracker (a wf:Tracker in the shared task model) where a SpecSynthesis's implementation is tracked. Rangeless — wf:Tracker is not imported into the reasoned closure (Mode A; see futures-alignments.ttl)."@en .
+
+# =============================================================================
+# 7. CODED-VALUE SCHEMES — the canonical value sets (skos:Concept members).
+#    Each member is typed with its fut: coded class AND skos:Concept, carries
+#    skos:prefLabel + skos:definition (F1 term hygiene) + skos:notation (the
+#    plain token a UI uses), and skos:inScheme its scheme. Every scheme is a
+#    SEED, not law — communities may publish their own and cross-map.
+# =============================================================================
+
+# --- Stances (CLOSED — the unite client drops any other value) -----------------
+fut:stanceScheme a skos:ConceptScheme ;
+    rdfs:label "Stance scheme"@en ;
+    skos:definition "The tri-state reaction value set for fut:stance (the Pol.is agree/disagree/pass pattern). Closed for interoperability."@en .
+
+fut:Resonates a fut:Stance, skos:Concept ;
+    skos:inScheme fut:stanceScheme ; skos:notation "resonates" ;
+    skos:prefLabel "Resonates"@en ;
+    skos:definition "The statement resonates with the reactor — agreement/endorsement. (IRI written verbatim by the unite client.)"@en .
+fut:Conflicts a fut:Stance, skos:Concept ;
+    skos:inScheme fut:stanceScheme ; skos:notation "conflicts" ;
+    skos:prefLabel "Conflicts"@en ;
+    skos:definition "The statement conflicts with the reactor's experience or view — disagreement. (IRI written verbatim by the unite client.)"@en .
+fut:Unsure a fut:Stance, skos:Concept ;
+    skos:inScheme fut:stanceScheme ; skos:notation "unsure" ;
+    skos:prefLabel "Unsure"@en ;
+    skos:definition "The reactor saw the statement and passed — a first-class signal counted in seen, distinct from never having seen it. (IRI written verbatim by the unite client.)"@en .
+
+# --- Resonance dimensions -------------------------------------------------------
+fut:dimensionScheme a skos:ConceptScheme ;
+    rdfs:label "Resonance Dimension scheme"@en ;
+    skos:definition "The optional qualifier value set for fut:dimension — three psychologically distinct positive signals the convergence math keeps separable."@en .
+
+fut:IShareThis a fut:ResonanceDimension, skos:Concept ;
+    skos:inScheme fut:dimensionScheme ; skos:notation "share" ;
+    skos:prefLabel "I share this"@en ;
+    skos:definition "The reactor shares this as a PRESENT condition of their own life. (IRI written verbatim by the unite client.)"@en .
+fut:IAspireToThis a fut:ResonanceDimension, skos:Concept ;
+    skos:inScheme fut:dimensionScheme ; skos:notation "aspire" ;
+    skos:prefLabel "I aspire to this"@en ;
+    skos:definition "The reactor aspires to this as a hoped-for condition they do not yet have. (IRI written verbatim by the unite client.)"@en .
+fut:IWouldSupportThis a fut:ResonanceDimension, skos:Concept ;
+    skos:inScheme fut:dimensionScheme ; skos:notation "support" ;
+    skos:prefLabel "I would support this"@en ;
+    skos:definition "The reactor would support OTHERS having this, without personal stake — solidarity, kept separable from sharing/aspiring. (IRI written verbatim by the unite client.)"@en .
+
+# --- Vision scopes ---------------------------------------------------------------
+fut:scopeScheme a skos:ConceptScheme ;
+    rdfs:label "Scope scheme"@en ;
+    skos:definition "The scope ladder for fut:scope — whom an envisioned future is for."@en .
+
+fut:self a fut:Scope, skos:Concept ;
+    skos:inScheme fut:scopeScheme ; skos:notation "self" ;
+    skos:prefLabel "Self"@en ; skos:definition "A future for the author themself."@en .
+fut:household a fut:Scope, skos:Concept ;
+    skos:inScheme fut:scopeScheme ; skos:notation "household" ;
+    skos:prefLabel "Household"@en ; skos:definition "A future for the author's household/family."@en .
+fut:community a fut:Scope, skos:Concept ;
+    skos:inScheme fut:scopeScheme ; skos:notation "community" ;
+    skos:prefLabel "Community"@en ; skos:definition "A future for the author's community."@en .
+fut:nation a fut:Scope, skos:Concept ;
+    skos:inScheme fut:scopeScheme ; skos:notation "nation" ;
+    skos:prefLabel "Nation"@en ; skos:definition "A future for the author's nation/society."@en .
+fut:humanity a fut:Scope, skos:Concept ;
+    skos:inScheme fut:scopeScheme ; skos:notation "humanity" ;
+    skos:prefLabel "Humanity"@en ; skos:definition "A future for humanity as a whole."@en .
+
+# --- Deliberation methods --------------------------------------------------------
+fut:methodScheme a skos:ConceptScheme ;
+    rdfs:label "Deliberation Method scheme"@en ;
+    skos:definition "The convergence-method value set for fut:method."@en .
+
+fut:resonanceMapping a fut:DeliberationMethod, skos:Concept ;
+    skos:inScheme fut:methodScheme ; skos:notation "resonance-mapping" ;
+    skos:prefLabel "Resonance mapping"@en ;
+    skos:definition "Pol.is-style opinion-space mapping: participants react to atomic statements; clustering + bridging-based ranking surface cross-cluster common ground. The unite Stage-1 method."@en .
+fut:mediatedSynthesis a fut:DeliberationMethod, skos:Concept ;
+    skos:inScheme fut:methodScheme ; skos:notation "mediated-synthesis" ;
+    skos:prefLabel "Mediated synthesis"@en ;
+    skos:definition "A mediator (human WebID or GenAI agent — always visibly attributed via prov:wasAssociatedWith + prov:hadPlan) drafts candidate syntheses which participants then endorse or dissent from."@en .
+fut:miniPublic a fut:DeliberationMethod, skos:Concept ;
+    skos:inScheme fut:methodScheme ; skos:notation "mini-public" ;
+    skos:prefLabel "Mini-public"@en ;
+    skos:definition "A sampled deliberative body (citizens'-assembly style) deliberates on behalf of the wider community; the sample's outputs are published as syntheses with dissent."@en .
+
+# =============================================================================
+# 8. THE MAX-NEEF NEED MATRIX — axiological axis (the nine fundamental needs,
+#    fut:maxneefScheme) × existential axis (being/having/doing/interacting,
+#    fut:existentialScheme). Source: Max-Neef, Elizalde & Hopenhayn, *Human
+#    Scale Development* (Apex Press, 1991) — cited in futures-alignments.ttl.
+#    THE NINE CONCEPT IRIs ARE WRITTEN VERBATIM BY THE UNITE CLIENT — do not
+#    rename. Seeds, not law: extensible via skos:narrower, cross-mapped via
+#    skos:closeMatch.
+# =============================================================================
+
+fut:maxneefScheme a skos:ConceptScheme ;
+    rdfs:label "Max-Neef need scheme"@en ;
+    skos:definition "The AXIOLOGICAL axis of Max-Neef's needs matrix: the nine fundamental human needs — few, finite, universal and stable across cultures. The default need scheme unite seeds its pickers and validation from; communities may extend (skos:narrower) or publish their own scheme and cross-map."@en .
+
+fut:maxneef-subsistence a fut:NeedConcept, skos:Concept ;
+    skos:inScheme fut:maxneefScheme ; skos:notation "subsistence" ;
+    skos:prefLabel "Subsistence"@en ;
+    skos:definition "Physical and mental health, food, shelter, work — the need to stay alive and well."@en .
+fut:maxneef-protection a fut:NeedConcept, skos:Concept ;
+    skos:inScheme fut:maxneefScheme ; skos:notation "protection" ;
+    skos:prefLabel "Protection"@en ;
+    skos:definition "Care, safety, security, social systems that shield from harm."@en .
+fut:maxneef-affection a fut:NeedConcept, skos:Concept ;
+    skos:inScheme fut:maxneefScheme ; skos:notation "affection" ;
+    skos:prefLabel "Affection"@en ;
+    skos:definition "Friendship, family, love, intimacy — the need to care and be cared for."@en .
+fut:maxneef-understanding a fut:NeedConcept, skos:Concept ;
+    skos:inScheme fut:maxneefScheme ; skos:notation "understanding" ;
+    skos:prefLabel "Understanding"@en ;
+    skos:definition "Curiosity, learning, analysis, education — the need to make sense of the world."@en .
+fut:maxneef-participation a fut:NeedConcept, skos:Concept ;
+    skos:inScheme fut:maxneefScheme ; skos:notation "participation" ;
+    skos:prefLabel "Participation"@en ;
+    skos:definition "Responsibilities, rights, work-with-others — the need to shape the decisions that shape one's life."@en .
+fut:maxneef-idleness a fut:NeedConcept, skos:Concept ;
+    skos:inScheme fut:maxneefScheme ; skos:notation "idleness" ;
+    skos:prefLabel "Idleness / leisure"@en ;
+    skos:definition "Play, rest, imagination, tranquillity — the need for time that is not instrumental. (Label matches the unite client's picker.)"@en .
+fut:maxneef-creation a fut:NeedConcept, skos:Concept ;
+    skos:inScheme fut:maxneefScheme ; skos:notation "creation" ;
+    skos:prefLabel "Creation"@en ;
+    skos:definition "Skills, work, invention, expression — the need to make things."@en .
+fut:maxneef-identity a fut:NeedConcept, skos:Concept ;
+    skos:inScheme fut:maxneefScheme ; skos:notation "identity" ;
+    skos:prefLabel "Identity"@en ;
+    skos:definition "Belonging, self-knowledge, groups, values — the need to be someone in particular."@en .
+fut:maxneef-freedom a fut:NeedConcept, skos:Concept ;
+    skos:inScheme fut:maxneefScheme ; skos:notation "freedom" ;
+    skos:prefLabel "Freedom"@en ;
+    skos:definition "Autonomy, equal rights, dissent, self-determination — the need to choose."@en .
+
+fut:existentialScheme a skos:ConceptScheme ;
+    rdfs:label "Existential category scheme"@en ;
+    skos:definition "The EXISTENTIAL axis of Max-Neef's needs matrix — the four modes through which every need is experienced and satisfied. Crossing it with the nine axiological needs yields the 36-cell matrix whose cells satisfiers occupy."@en .
+
+fut:existential-being a fut:ExistentialCategory, skos:Concept ;
+    skos:inScheme fut:existentialScheme ; skos:notation "being" ;
+    skos:prefLabel "Being"@en ;
+    skos:definition "Personal or collective QUALITIES/attributes through which a need is lived (e.g. physical health for subsistence; adaptability for protection)."@en .
+fut:existential-having a fut:ExistentialCategory, skos:Concept ;
+    skos:inScheme fut:existentialScheme ; skos:notation "having" ;
+    skos:prefLabel "Having"@en ;
+    skos:definition "Institutions, norms, tools and THINGS through which a need is met (e.g. food and shelter for subsistence; social security for protection)."@en .
+fut:existential-doing a fut:ExistentialCategory, skos:Concept ;
+    skos:inScheme fut:existentialScheme ; skos:notation "doing" ;
+    skos:prefLabel "Doing"@en ;
+    skos:definition "Personal or collective ACTIONS through which a need is actualised (e.g. working, resting; cooperating, planning)."@en .
+fut:existential-interacting a fut:ExistentialCategory, skos:Concept ;
+    skos:inScheme fut:existentialScheme ; skos:notation "interacting" ;
+    skos:prefLabel "Interacting"@en ;
+    skos:definition "SETTINGS — spaces, times and milieus — in which a need is met (e.g. the living environment for subsistence; social settings for affection)."@en .
+
+# =============================================================================
+# 9. THE VALUE SCHEME — the ten Schwartz basic values (circumplex order).
+#    Source: Schwartz, *Universals in the Content and Structure of Values*
+#    (Advances in Experimental Social Psychology 25, 1992) — cited in
+#    futures-alignments.ttl. A seed for cluster interpretation, not law.
+# =============================================================================
+
+fut:valueScheme a skos:ConceptScheme ;
+    rdfs:label "Value scheme (Schwartz)"@en ;
+    skos:definition "The default value scheme for fut:valueConcept, seeded from Schwartz's ten basic values — a stable circumplex (adjacent values compatible, opposing values in tension) replicated across dozens of cultures, giving opinion-cluster interpretation a psychologically meaningful prior."@en .
+
+fut:schwartz-self-direction a fut:ValueConcept, skos:Concept ;
+    skos:inScheme fut:valueScheme ; skos:notation "self-direction" ;
+    skos:prefLabel "Self-direction"@en ;
+    skos:definition "Independent thought and action — choosing, creating, exploring."@en .
+fut:schwartz-stimulation a fut:ValueConcept, skos:Concept ;
+    skos:inScheme fut:valueScheme ; skos:notation "stimulation" ;
+    skos:prefLabel "Stimulation"@en ;
+    skos:definition "Excitement, novelty and challenge in life."@en .
+fut:schwartz-hedonism a fut:ValueConcept, skos:Concept ;
+    skos:inScheme fut:valueScheme ; skos:notation "hedonism" ;
+    skos:prefLabel "Hedonism"@en ;
+    skos:definition "Pleasure and sensuous gratification for oneself."@en .
+fut:schwartz-achievement a fut:ValueConcept, skos:Concept ;
+    skos:inScheme fut:valueScheme ; skos:notation "achievement" ;
+    skos:prefLabel "Achievement"@en ;
+    skos:definition "Personal success through demonstrating competence according to social standards."@en .
+fut:schwartz-power a fut:ValueConcept, skos:Concept ;
+    skos:inScheme fut:valueScheme ; skos:notation "power" ;
+    skos:prefLabel "Power"@en ;
+    skos:definition "Social status and prestige; control or dominance over people and resources."@en .
+fut:schwartz-security a fut:ValueConcept, skos:Concept ;
+    skos:inScheme fut:valueScheme ; skos:notation "security" ;
+    skos:prefLabel "Security"@en ;
+    skos:definition "Safety, harmony and stability of society, relationships and self."@en .
+fut:schwartz-conformity a fut:ValueConcept, skos:Concept ;
+    skos:inScheme fut:valueScheme ; skos:notation "conformity" ;
+    skos:prefLabel "Conformity"@en ;
+    skos:definition "Restraint of actions and impulses likely to upset or harm others or violate social expectations."@en .
+fut:schwartz-tradition a fut:ValueConcept, skos:Concept ;
+    skos:inScheme fut:valueScheme ; skos:notation "tradition" ;
+    skos:prefLabel "Tradition"@en ;
+    skos:definition "Respect for and commitment to the customs and ideas one's culture or religion provides."@en .
+fut:schwartz-benevolence a fut:ValueConcept, skos:Concept ;
+    skos:inScheme fut:valueScheme ; skos:notation "benevolence" ;
+    skos:prefLabel "Benevolence"@en ;
+    skos:definition "Preserving and enhancing the welfare of those one is in frequent personal contact with."@en .
+fut:schwartz-universalism a fut:ValueConcept, skos:Concept ;
+    skos:inScheme fut:valueScheme ; skos:notation "universalism" ;
+    skos:prefLabel "Universalism"@en ;
+    skos:definition "Understanding, appreciation, tolerance and protection for the welfare of all people and of nature."@en .
+
+# =============================================================================
+# 10. THE ODRL CONSENT-ACTION PROFILE — what leaving your pod means. Every
+#     expression-layer resource MAY carry odrl:hasPolicy → an ODRL 2.2 policy
+#     over these profiled actions. Defaults are CONSERVATIVE: aggregate +
+#     synthesize permitted; quoteVerbatim + governmentUse prohibited until
+#     explicitly granted. Facilitation services MUST evaluate policies before
+#     use (client-side via @jeswr/solid-odrl); revocation governs FUTURE use.
+# =============================================================================
+
+fut:consentActionScheme a skos:ConceptScheme ;
+    rdfs:label "Consent action scheme"@en ;
+    skos:definition "The fut: ODRL-profile actions an author's standing consent policy permits or prohibits over an expression-layer resource."@en .
+
+fut:aggregate a odrl:Action, skos:Concept ;
+    skos:inScheme fut:consentActionScheme ; skos:notation "aggregate" ;
+    skos:prefLabel "Aggregate"@en ;
+    skos:definition "May be included in opinion-space mapping and convergence metrics — k-anonymous aggregate only, never individual disclosure. Permitted by default. (Profiles odrl:aggregate — see futures-alignments.ttl.)"@en .
+fut:synthesize a odrl:Action, skos:Concept ;
+    skos:inScheme fut:consentActionScheme ; skos:notation "synthesize" ;
+    skos:prefLabel "Synthesize"@en ;
+    skos:definition "May be an input to a fut:SharedFuture — implies being listed in its prov:wasDerivedFrom (pseudonymously if the author is pseudonymous). Permitted by default."@en .
+fut:quoteVerbatim a odrl:Action, skos:Concept ;
+    skos:inScheme fut:consentActionScheme ; skos:notation "quote-verbatim" ;
+    skos:prefLabel "Quote verbatim"@en ;
+    skos:definition "May be quoted verbatim in a synthesis or dissent record. PROHIBITED until explicitly granted."@en .
+fut:governmentUse a odrl:Action, skos:Concept ;
+    skos:inScheme fut:consentActionScheme ; skos:notation "government-use" ;
+    skos:prefLabel "Government use"@en ;
+    skos:definition "Derived artifacts may be forwarded into Stage-3 governance reporting. PROHIBITED until explicitly granted."@en .
+
+fut:kThreshold a odrl:LeftOperand, skos:Concept ;
+    skos:inScheme fut:consentActionScheme ; skos:notation "k-threshold" ;
+    skos:prefLabel "k-threshold"@en ;
+    skos:definition "ODRL left operand for the k-anonymity constraint on odrl:derive: any derived publication must aggregate at least k contributors (unite default k=5)."@en .
+
+# =============================================================================
+# SECTOR MARKER — the IRI an app's fedapp:sector names to declare it operates
+# in the futures (participatory-democracy / deliberation) sector. A
+# skos:Concept in the federation sector register; dereferences to this ontology.
+# =============================================================================
+
+<https://w3id.org/jeswr/sectors/futures#sector>
+    a skos:Concept ;
+    rdfs:label "Futures sector"@en ;
+    rdfs:comment "The Futures (participatory-democracy / shared-futures deliberation) data sector. The value an app's fedapp:sector names in its Client Identifier Document to declare it operates over deliberation data — the sector the unite platform declares. Backed by this sector ontology."@en ;
+    rdfs:isDefinedBy <https://w3id.org/jeswr/sectors/futures> ;
+    skos:prefLabel "Futures"@en .

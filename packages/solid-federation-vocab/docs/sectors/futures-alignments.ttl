@@ -1,0 +1,135 @@
+# AUTHORED-BY Claude Fable 5 (PSS agent)
+#
+@prefix fut:     <https://w3id.org/jeswr/sectors/futures#> .
+@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix skos:    <http://www.w3.org/2004/02/skos/core#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+
+# External vocabularies (real IRIs — encouraged in an alignments file):
+@prefix as:      <https://www.w3.org/ns/activitystreams#> .   # ActivityStreams 2.0
+@prefix prov:    <http://www.w3.org/ns/prov#> .                # W3C PROV-O
+@prefix odrl:    <http://www.w3.org/ns/odrl/2/> .              # W3C ODRL 2.2 core vocabulary
+@prefix cred:    <https://www.w3.org/2018/credentials#> .      # W3C VC Data Model 2.0
+@prefix schema:  <http://schema.org/> .                        # schema.org
+@prefix wf:      <http://www.w3.org/2005/01/wf/flow#> .        # SolidOS workflow (the shared task model's base)
+@prefix dbr:     <http://dbpedia.org/resource/> .              # DBpedia resources (literature anchors)
+
+# =============================================================================
+# Solid FUTURES sector — ALIGNMENTS (v0.1.0).
+#
+# Bridges the futures-sector terms (futures.ttl) to the external vocabularies
+# and literature concepts unite's design names. EXTERNAL REUSE IS MODE A: we do
+# NOT MIREOT-import AS2 / ODRL / VC / schema.org — we ALIGN via skos:closeMatch
+# / skos:broadMatch (annotation, NO entailment), so an external concept that
+# fuses concerns can never collapse two distinct Core/fut classes. Kept OUT of
+# the reasoned closure (owl:imports futures only) so the consistency engine
+# reasons a clean core ∪ futures without it.
+#
+# LITERATURE ANCHORS use DBpedia resource IRIs (stable, dereferenceable
+# mirrors of the Wikipedia articles) at SCHEME level only — the individual
+# Max-Neef needs and Schwartz values have no canonical external IRIs, and
+# mapping them to approximate encyclopedia topics would be over-broad (the
+# lesson of the health-sector alignment review). Bibliographic sources are
+# carried as dcterms:source literals.
+#
+# CITATIONS (from unite design/01 + design/03 §2, where each is discussed):
+#   - Max-Neef, Elizalde & Hopenhayn, *Human Scale Development: Conception,
+#     Application and Further Reflections*, Apex Press, 1991 — the
+#     needs/satisfiers distinction and the axiological × existential matrix.
+#   - Shalom H. Schwartz, *Universals in the Content and Structure of Values*,
+#     Advances in Experimental Social Psychology 25, 1992 — the basic-values
+#     circumplex seeding fut:valueScheme.
+#   - Aviv Ovadya & Luke Thorburn, *Bridging Systems* (arXiv:2210.15723, 2022)
+#     — bridging-based ranking, the objective fut:bridgingScore operationalises
+#     (via Pol.is group-informed consensus).
+#   - W3C ActivityStreams 2.0 vocabulary (as:), W3C PROV-O (prov:), W3C ODRL
+#     2.2 core vocabulary (odrl:), W3C VC Data Model 2.0 (cred:) — all
+#     Recommendation-track, referenced by their published term IRIs.
+# =============================================================================
+
+<https://w3id.org/jeswr/sectors/futures/alignments> a owl:Ontology ;
+    dcterms:title "Solid Futures sector — external alignments"@en ;
+    owl:imports <https://w3id.org/jeswr/sectors/futures> ;
+    owl:versionInfo "0.1.0" ;
+    rdfs:comment "Optional Mode-A bridge: ActivityStreams 2.0 reaction/event terms, PROV-O activity framing, ODRL 2.2 profiled actions, VC 2.0 credential class, the shared task model's wf: terms, and scheme-level literature anchors for the Max-Neef and Schwartz seeds. External IRIs are real and governed by their bodies. Nothing is owl:imported into the reasoned closure."@en .
+
+dcterms:title a owl:AnnotationProperty .
+dcterms:source a owl:AnnotationProperty .
+owl:versionInfo a owl:AnnotationProperty .
+
+# -----------------------------------------------------------------------------
+# ActivityStreams 2.0 — the reaction + event framing (Mode A). fut:Resonance is
+# deliberately RICHER than as:Like (tri-state + dimension), so closeMatch, not
+# subclass; the fut:Resonates stance is the as:Like-shaped corner of it.
+# -----------------------------------------------------------------------------
+fut:Resonance    skos:closeMatch as:Like .        # design/01: "aligns to as:Like but is richer and tri-state"
+fut:Deliberation skos:closeMatch as:Event .       # a deliberation announces as an AS2 event
+
+# -----------------------------------------------------------------------------
+# PROV-O — the process framing (Mode A). fut:Deliberation roots in core:Activity
+# for the sector contract; PROV consumers may treat it as a prov:Activity.
+# SharedFuture derivation/generation edges use prov:wasDerivedFrom /
+# prov:wasGeneratedBy DIRECTLY (constrained in futures.shacl.ttl, not forked).
+# -----------------------------------------------------------------------------
+fut:Deliberation skos:closeMatch prov:Activity .
+
+# -----------------------------------------------------------------------------
+# schema.org — the reaction pair (Mode A). AgreeAction/DisagreeAction are
+# schema.org's assessment actions; the stance CODED VALUES (not the Resonance
+# record) are what they approximate. schema.org has no 'pass/unsure' action —
+# fut:Unsure is deliberately left un-bound rather than mapped approximately.
+# -----------------------------------------------------------------------------
+fut:Resonates skos:closeMatch schema:AgreeAction .
+fut:Conflicts skos:closeMatch schema:DisagreeAction .
+
+# -----------------------------------------------------------------------------
+# ODRL 2.2 — the consent-action profile (Mode A). fut:aggregate profiles the
+# published odrl:aggregate action; fut:synthesize and fut:quoteVerbatim are
+# NARROWER than the closest ODRL actions (derive / reproduce), so broadMatch.
+# fut:governmentUse has no ODRL counterpart — deliberately un-bound.
+# fut:kThreshold is a profile left-operand for constraints on odrl:derive.
+# -----------------------------------------------------------------------------
+fut:aggregate     skos:closeMatch odrl:aggregate .
+fut:synthesize    skos:broadMatch odrl:derive .
+fut:quoteVerbatim skos:broadMatch odrl:reproduce .
+fut:kThreshold    rdfs:seeAlso odrl:derive .
+
+# -----------------------------------------------------------------------------
+# W3C VC Data Model 2.0 — the signed synthesis (Mode A).
+# -----------------------------------------------------------------------------
+fut:SharedFutureCredential skos:closeMatch cred:VerifiableCredential .
+
+# -----------------------------------------------------------------------------
+# The shared task model (wf: — SolidOS workflow, the base @jeswr/solid-task-model
+# rides on). fut:AppProposal is ALREADY rdfs:subClassOf wf:Task in futures.ttl
+# (the federation edge is load-bearing, not an annotation); here only the
+# tracker pointer's intended range is anchored.
+# -----------------------------------------------------------------------------
+fut:implementationTracker rdfs:seeAlso wf:Tracker .
+
+# -----------------------------------------------------------------------------
+# LITERATURE ANCHORS — scheme level only (see header note).
+# -----------------------------------------------------------------------------
+fut:maxneefScheme
+    dcterms:source "Manfred Max-Neef, Antonio Elizalde & Martín Hopenhayn, Human Scale Development: Conception, Application and Further Reflections. New York: Apex Press, 1991."@en ;
+    skos:closeMatch dbr:Fundamental_human_needs ;
+    rdfs:seeAlso <https://en.wikipedia.org/wiki/Fundamental_human_needs> .
+
+fut:existentialScheme
+    dcterms:source "Manfred Max-Neef, Antonio Elizalde & Martín Hopenhayn, Human Scale Development, Apex Press, 1991 — the existential categories (being / having / doing / interacting) of the needs matrix."@en ;
+    rdfs:seeAlso <https://en.wikipedia.org/wiki/Fundamental_human_needs> .
+
+fut:valueScheme
+    dcterms:source "Shalom H. Schwartz, Universals in the Content and Structure of Values: Theoretical Advances and Empirical Tests in 20 Countries. Advances in Experimental Social Psychology 25, 1992, pp. 1–65."@en ;
+    skos:closeMatch dbr:Theory_of_basic_human_values ;
+    rdfs:seeAlso <https://en.wikipedia.org/wiki/Theory_of_basic_human_values> .
+
+fut:bridgingScore
+    dcterms:source "Aviv Ovadya & Luke Thorburn, Bridging Systems: Open Problems for Countering Destructive Divisiveness across Ranking, Recommenders, and Governance. arXiv:2210.15723, 2022. Operationalised as Pol.is group-informed consensus (Small et al., Polis: Scaling Deliberation by Mapping High Dimensional Opinion Spaces, Recerca 26(2), 2021)."@en ;
+    rdfs:seeAlso <https://arxiv.org/abs/2210.15723> .
+
+fut:BridgingEvidence
+    rdfs:seeAlso <https://arxiv.org/abs/2210.15723> .

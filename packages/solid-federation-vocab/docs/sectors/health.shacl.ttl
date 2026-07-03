@@ -1,0 +1,402 @@
+# AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+#
+@prefix health:  <https://w3id.org/jeswr/sectors/health#> .
+@prefix hsh:     <https://w3id.org/jeswr/sectors/health/shapes#> .
+@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix sh:      <http://www.w3.org/ns/shacl#> .
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix prof:    <http://www.w3.org/ns/dx/prof/> .
+@prefix time:    <http://www.w3.org/2006/time#> .
+@prefix qudt:    <http://qudt.org/schema/qudt/> .
+
+# =============================================================================
+# Solid Health Sector — SHACL data-model profile (F4; R4 / R8 §4.5).
+#
+# The NORMATIVE conformance artifact: the OWL ontology licenses meaning, THIS
+# shape checks shape. The MUST/SHOULD grades are DERIVED FROM THE CORRESPONDING
+# FHIR R4/R5 StructureDefinitions (the HEALTH-row Mode-A pattern): a FHIR element
+# with min=1 (e.g. Observation.code, Observation.status, Immunization.patient)
+# becomes a sh:minCount 1 / sh:Violation MUST; optional elements become SHOULD/MAY.
+#
+# Discipline:
+#  - OPEN BY DEFAULT — no sh:closed (composes with downstream/jurisdictional
+#    profiles; child-conformance ⇒ parent-conformance, the §3.4 ⊆ rule).
+#  - sh:severity carries the RFC 2119 grade: Violation=MUST, Warning=SHOULD,
+#    Info=MAY. A conformance RESULT is read against severity, not pass/fail.
+#  - IMMUTABLE version IRI (.../health/profile/1.0.0); additive-only.
+#
+# v1.0.0 tracks the gUFO re-base of health.ttl.
+# =============================================================================
+
+<https://w3id.org/jeswr/sectors/health/profile>
+    a prof:Profile ;
+    dcterms:title "Solid Health data-model profile (version-independent)"@en ;
+    dcterms:description "Resolves to the current Health profile version."@en .
+
+<https://w3id.org/jeswr/sectors/health/profile/1.0.0>
+    a prof:Profile ;
+    dcterms:title "Solid Health data-model profile (gUFO re-base)"@en ;
+    dcterms:isVersionOf <https://w3id.org/jeswr/sectors/health/profile> ;
+    owl:versionInfo "1.0.0" ;
+    owl:versionIRI <https://w3id.org/jeswr/sectors/health/profile/1.0.0> ;
+    prof:isProfileOf <https://w3id.org/jeswr/sectors/health> ;
+    prof:hasToken "solid-health-1.0.0" ;
+    prof:hasResource [
+        prof:hasRole <http://www.w3.org/ns/dx/prof/role/constraints> ;
+        prof:hasArtifact <https://w3id.org/jeswr/sectors/health/profile/1.0.0/health.shacl.ttl>
+    ] ;
+    prof:hasResource [
+        prof:hasRole <http://www.w3.org/ns/dx/prof/role/vocabulary> ;
+        prof:hasArtifact <https://w3id.org/jeswr/sectors/health>
+    ] ;
+    rdfs:comment "Open-by-default SHACL profile, MUST/SHOULD grades derived from FHIR R4/R5 StructureDefinitions. "@en .
+
+# -----------------------------------------------------------------------------
+# HealthRecord — the record/subject separation (the load-bearing split).
+# FHIR Composition.subject (min=1) → MUST a Person.
+# -----------------------------------------------------------------------------
+
+hsh:HealthRecordShape
+    a sh:NodeShape ;
+    sh:targetClass health:HealthRecord ;
+    rdfs:label "Health Record shape"@en ;
+    # MUST: the document names its subject, and the subject MUST be a Person
+    # (enforcing record ≠ patient). FHIR Composition.subject min=1.
+    sh:property [
+        sh:path core:subject ;
+        sh:minCount 1 ;
+        sh:class core:Person ;
+        sh:severity sh:Violation ;
+        sh:message "A HealthRecord MUST have a core:subject that is a core:Person (the patient, distinct from the record document)."@en
+    ] ;
+    # SHOULD: a custodial care provider. FHIR Composition.custodian (optional).
+    sh:property [
+        sh:path health:careProvider ;
+        sh:minCount 1 ;
+        sh:class core:Organization ;
+        sh:severity sh:Warning ;
+        sh:message "A HealthRecord SHOULD name a health:careProvider (the custodial healthcare organization)."@en
+    ] ;
+    # SHOULD: clinical entries aggregated by hasEntry (sub-property of hasPart).
+    sh:property [
+        sh:path health:hasEntry ;
+        sh:class health:ClinicalEntry ;
+        sh:severity sh:Warning ;
+        sh:message "Clinical entries of a HealthRecord SHOULD be linked via health:hasEntry and be health:ClinicalEntry instances."@en
+    ] .
+
+# -----------------------------------------------------------------------------
+# Observation — code + value + UNIT + effective time + subject.
+# Derived from FHIR Observation StructureDefinition required elements:
+#   Observation.code (min=1)    → MUST hasCode
+#   Observation.subject (min=1 in vital-signs profile) → MUST patient
+#   Observation.value[x]        → MUST exactly one value (for a measurement)
+#   Observation.value.unit/code → SHOULD a QUDT unit + a UCUM code
+#   Observation.effective[x]    → MUST effectiveTime
+# -----------------------------------------------------------------------------
+
+hsh:ObservationShape
+    a sh:NodeShape ;
+    sh:targetClass health:Observation ;
+    rdfs:label "Observation shape"@en ;
+
+    # MUST: states WHAT it measures (a clinical code). FHIR Observation.code min=1.
+    sh:property [
+        sh:path health:hasCode ;
+        sh:minCount 1 ;
+        sh:class health:CodeableConcept ;
+        sh:severity sh:Violation ;
+        sh:message "An Observation MUST carry health:hasCode (a CodeableConcept saying what was measured)."@en
+    ] ;
+
+    # MUST: the patient (a Person) it is about — record ≠ subject.
+    sh:property [
+        sh:path health:patient ;
+        sh:minCount 1 ;
+        sh:class core:Person ;
+        sh:severity sh:Violation ;
+        sh:message "An Observation MUST identify its health:patient (a core:Person)."@en
+    ] ;
+
+    # MUST: exactly one measured value.
+    sh:property [
+        sh:path health:value ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:severity sh:Violation ;
+        sh:message "An Observation MUST carry exactly one health:value."@en
+    ] ;
+
+    # SHOULD: a QUDT unit for the value (the Mode-B unit reuse).
+    sh:property [
+        sh:path health:hasUnit ;
+        sh:class qudt:Unit ;
+        sh:maxCount 1 ;
+        sh:severity sh:Warning ;
+        sh:message "An Observation SHOULD carry a QUDT health:hasUnit (e.g. unit:BEAT-PER-MIN, unit:SEC) for its value."@en
+    ] ;
+
+    # SHOULD: a UCUM unit-code string (the FHIR Quantity.code parallel).
+    sh:property [
+        sh:path health:unitCode ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+        sh:severity sh:Warning ;
+        sh:message "An Observation SHOULD carry a UCUM unit code (health:unitCode) for its value."@en
+    ] ;
+
+    # MUST: when it is effective (instant or interval). FHIR Observation.effective.
+    sh:property [
+        sh:path health:effectiveTime ;
+        sh:minCount 1 ;
+        sh:class time:TemporalEntity ;
+        sh:severity sh:Violation ;
+        sh:message "An Observation MUST carry health:effectiveTime (a time:Instant or time:Interval)."@en
+    ] .
+
+# -----------------------------------------------------------------------------
+# HeartRateObservation — the Apple-Health HKQuantityTypeIdentifierHeartRate type.
+# SHOULD bind the QUDT beat-per-minute unit (the worked vital-sign + unit case).
+# -----------------------------------------------------------------------------
+
+hsh:HeartRateObservationShape
+    a sh:NodeShape ;
+    sh:targetClass health:HeartRateObservation ;
+    rdfs:label "Heart Rate Observation shape"@en ;
+    # SHOULD: the unit be beats-per-minute (QUDT unit:BEAT-PER-MIN).
+    sh:property [
+        sh:path health:hasUnit ;
+        sh:hasValue <http://qudt.org/vocab/unit/BEAT-PER-MIN> ;
+        sh:severity sh:Warning ;
+        sh:message "A HeartRateObservation SHOULD carry health:hasUnit unit:BEAT-PER-MIN (UCUM '/min')."@en
+    ] .
+
+# -----------------------------------------------------------------------------
+# Condition — a coded clinical finding about the patient.
+# FHIR Condition.code (must-support) + Condition.subject (min=1).
+# -----------------------------------------------------------------------------
+
+hsh:ConditionShape
+    a sh:NodeShape ;
+    sh:targetClass health:Condition ;
+    rdfs:label "Condition shape"@en ;
+    sh:property [
+        sh:path health:patient ;
+        sh:minCount 1 ;
+        sh:class core:Person ;
+        sh:severity sh:Violation ;
+        sh:message "A Condition MUST identify its health:patient (a core:Person)."@en
+    ] ;
+    sh:property [
+        sh:path health:hasCode ;
+        sh:minCount 1 ;
+        sh:class health:CodeableConcept ;
+        sh:severity sh:Violation ;
+        sh:message "A Condition MUST carry health:hasCode (a SNOMED CT clinical-finding concept)."@en
+    ] .
+
+# -----------------------------------------------------------------------------
+# MedicationStatement — references an identifiable medicinal product.
+# FHIR MedicationStatement.subject (min=1) + .medication (min=1).
+# -----------------------------------------------------------------------------
+
+hsh:MedicationStatementShape
+    a sh:NodeShape ;
+    sh:targetClass health:MedicationStatement ;
+    rdfs:label "Medication Statement shape"@en ;
+    sh:property [
+        sh:path health:patient ;
+        sh:minCount 1 ;
+        sh:class core:Person ;
+        sh:severity sh:Violation ;
+        sh:message "A MedicationStatement MUST identify its health:patient (a core:Person)."@en
+    ] ;
+    sh:property [
+        sh:path health:medication ;
+        sh:minCount 1 ;
+        sh:class health:MedicinalProduct ;
+        sh:severity sh:Violation ;
+        sh:message "A MedicationStatement MUST reference a health:MedicinalProduct via health:medication."@en
+    ] .
+
+# -----------------------------------------------------------------------------
+# MedicinalProduct — SHOULD carry an ISO IDMP identifier.
+# -----------------------------------------------------------------------------
+
+hsh:MedicinalProductShape
+    a sh:NodeShape ;
+    sh:targetClass health:MedicinalProduct ;
+    rdfs:label "Medicinal Product shape"@en ;
+    sh:property [
+        sh:path core:identifiedBy ;
+        sh:minCount 1 ;
+        sh:class core:Identifier ;
+        sh:severity sh:Warning ;
+        sh:message "A MedicinalProduct SHOULD be core:identifiedBy an Identifier (e.g. an ISO IDMP MPID/PhPID)."@en
+    ] .
+
+# -----------------------------------------------------------------------------
+# Encounter — an activity involving the patient at a provider.
+# FHIR Encounter.subject (min=1) + .participant.
+# -----------------------------------------------------------------------------
+
+hsh:EncounterShape
+    a sh:NodeShape ;
+    sh:targetClass health:Encounter ;
+    rdfs:label "Encounter shape"@en ;
+    sh:property [
+        sh:path health:patient ;
+        sh:minCount 1 ;
+        sh:class core:Person ;
+        sh:severity sh:Violation ;
+        sh:message "An Encounter MUST identify its health:patient (a core:Person)."@en
+    ] ;
+    sh:property [
+        sh:path health:recordedBy ;
+        sh:minCount 1 ;
+        sh:class core:Agent ;
+        sh:severity sh:Warning ;
+        sh:message "An Encounter SHOULD record health:recordedBy (the practitioner or provider that carried it out)."@en
+    ] .
+
+# -----------------------------------------------------------------------------
+# Immunization — a vaccine record about the patient referencing the product.
+# FHIR Immunization.patient (min=1) + .vaccineCode (min=1).
+# -----------------------------------------------------------------------------
+
+hsh:ImmunizationShape
+    a sh:NodeShape ;
+    sh:targetClass health:Immunization ;
+    rdfs:label "Immunization shape"@en ;
+    sh:property [
+        sh:path health:patient ;
+        sh:minCount 1 ;
+        sh:class core:Person ;
+        sh:severity sh:Violation ;
+        sh:message "An Immunization MUST identify its health:patient (a core:Person)."@en
+    ] ;
+    sh:property [
+        sh:path health:medication ;
+        sh:minCount 1 ;
+        sh:class health:MedicinalProduct ;
+        sh:severity sh:Violation ;
+        sh:message "An Immunization MUST reference the administered vaccine (a health:MedicinalProduct) via health:medication."@en
+    ] .
+
+# =============================================================================
+# F4 coverage — a node shape per remaining instantiable class. Subtypes do NOT
+# inherit a parent's sh:targetClass, so each needs its own; observation subtypes
+# refine the Observation contract, the abstract entry stays open.
+# =============================================================================
+
+# ClinicalEntry — abstract super-class of entries; MUST be about its patient.
+hsh:ClinicalEntryShape
+    a sh:NodeShape ;
+    sh:targetClass health:ClinicalEntry ;
+    rdfs:label "Clinical Entry shape"@en ;
+    sh:property [
+        sh:path health:patient ;
+        sh:minCount 1 ;
+        sh:class core:Person ;
+        sh:severity sh:Violation ;
+        sh:message "A clinical entry MUST identify its health:patient (a core:Person)."@en
+    ] .
+
+# CodeableConcept — a coded concept MUST carry its code value; SHOULD name the scheme.
+hsh:CodeableConceptShape
+    a sh:NodeShape ;
+    sh:targetClass health:CodeableConcept ;
+    rdfs:label "Codeable Concept shape"@en ;
+    sh:property [
+        sh:path core:value ;
+        sh:minCount 1 ;
+        sh:severity sh:Violation ;
+        sh:message "A CodeableConcept MUST carry its code (core:value, e.g. a SNOMED/LOINC code)."@en
+    ] ;
+    sh:property [
+        sh:path core:inScheme ;
+        sh:class core:IdentifierScheme ;
+        sh:severity sh:Warning ;
+        sh:message "A CodeableConcept SHOULD name its coding system via core:inScheme."@en
+    ] .
+
+# VitalSign — a vital-sign Observation (inherits ObservationShape via targetClass on
+# health:Observation only superficially; SHACL targets don't inherit, so re-state the
+# load-bearing MUSTs for the vital-sign subtree).
+hsh:VitalSignShape
+    a sh:NodeShape ;
+    sh:targetClass health:VitalSign ;
+    rdfs:label "Vital Sign shape"@en ;
+    sh:property [
+        sh:path health:hasCode ; sh:minCount 1 ; sh:class health:CodeableConcept ;
+        sh:severity sh:Violation ;
+        sh:message "A VitalSign MUST carry health:hasCode."@en
+    ] ;
+    sh:property [
+        sh:path health:value ; sh:minCount 1 ; sh:maxCount 1 ;
+        sh:severity sh:Violation ;
+        sh:message "A VitalSign MUST carry exactly one health:value."@en
+    ] ;
+    sh:property [
+        sh:path health:hasUnit ; sh:class qudt:Unit ; sh:maxCount 1 ;
+        sh:severity sh:Warning ;
+        sh:message "A VitalSign SHOULD carry a QUDT health:hasUnit."@en
+    ] .
+
+# StepCountObservation — a count over an interval (dimensionless). Compose with
+# ObservationShape (SHACL targets don't inherit) so the Observation MUSTs
+# (hasCode, patient, effectiveTime) still apply.
+hsh:StepCountObservationShape
+    a sh:NodeShape ;
+    sh:targetClass health:StepCountObservation ;
+    rdfs:label "Step Count Observation shape"@en ;
+    sh:node hsh:ObservationShape ;     # inherits hasCode + patient + value + effectiveTime MUSTs
+    sh:property [
+        sh:path health:value ; sh:minCount 1 ; sh:maxCount 1 ;
+        sh:severity sh:Violation ;
+        sh:message "A StepCountObservation MUST carry exactly one health:value (the step count)."@en
+    ] .
+
+# SleepObservation — a duration value in seconds. Compose with ObservationShape
+# so the inherited Observation MUSTs still apply.
+hsh:SleepObservationShape
+    a sh:NodeShape ;
+    sh:targetClass health:SleepObservation ;
+    rdfs:label "Sleep Observation shape"@en ;
+    sh:node hsh:ObservationShape ;     # inherits hasCode + patient + value + effectiveTime MUSTs
+    sh:property [
+        sh:path health:value ; sh:minCount 1 ; sh:maxCount 1 ;
+        sh:severity sh:Violation ;
+        sh:message "A SleepObservation MUST carry exactly one health:value (the sleep duration)."@en
+    ] .
+
+# ObservationActivity — the act of measuring; SHOULD record its performer + result.
+hsh:ObservationActivityShape
+    a sh:NodeShape ;
+    sh:targetClass health:ObservationActivity ;
+    rdfs:label "Observation Activity shape"@en ;
+    sh:property [
+        sh:path health:resultsIn ; sh:class health:Observation ;
+        sh:minCount 1 ; sh:severity sh:Warning ;
+        sh:message "An ObservationActivity SHOULD link the health:Observation it produces via health:resultsIn."@en
+    ] ;
+    sh:property [
+        sh:path health:recordedBy ; sh:class core:Agent ;
+        sh:severity sh:Warning ;
+        sh:message "An ObservationActivity SHOULD record health:recordedBy (its performer)."@en
+    ] .
+
+# ImmunizationActivity — the act of administering a vaccine.
+hsh:ImmunizationActivityShape
+    a sh:NodeShape ;
+    sh:targetClass health:ImmunizationActivity ;
+    rdfs:label "Immunization Activity shape"@en ;
+    sh:property [
+        sh:path health:medication ; sh:class health:MedicinalProduct ;
+        sh:minCount 1 ; sh:severity sh:Warning ;
+        sh:message "An ImmunizationActivity SHOULD reference the administered vaccine via health:medication."@en
+    ] .
