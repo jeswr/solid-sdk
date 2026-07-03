@@ -30,7 +30,7 @@ import {
   TermWrapper,
 } from "@rdfjs/wrapper";
 import { DataFactory, Store, Writer } from "n3";
-import { httpIriOrUndefined, isHttpIri } from "./iri.js";
+import { httpIriOrUndefined } from "./iri.js";
 import { dct, MEM_EMBEDDING_REF, MEMORY_CLASS, PREFIXES, prov, rdf, schema } from "./vocab.js";
 
 // `isHttpIri` lives in the shared pure-IRI core (`./iri.ts`); re-exported here so
@@ -251,10 +251,21 @@ export function parseMemory(resourceUrl: string, dataset: DatasetCore): MemoryDa
 
   // The two set-valued fields are omitted when empty (their absence vs an empty
   // array is observable to consumers, so this is kept explicit). Categories are
-  // IRIs, so a non-http(s) category read from a hostile pod is dropped too;
-  // keywords are free-text literals and are kept verbatim.
+  // IRIs: each is run through httpIriOrUndefined, keeping the CANONICALISED form
+  // of any http(s) IRI (so a benign non-canonical value — missing trailing slash,
+  // upper-case host — is not lost) and dropping only genuinely non-http(s) values
+  // read from a hostile pod. keywords are free-text literals and kept verbatim.
   const keywords = [...doc.keywords];
-  const categories = [...doc.categories].filter(isHttpIri);
+  // Canonicalisation can collapse two DISTINCT stored terms onto one value
+  // (e.g. <https://example.com> and <https://example.com/> both → the latter),
+  // so dedupe with a Set AFTER canonicalising to avoid returning duplicates.
+  const categories = [
+    ...new Set(
+      [...doc.categories]
+        .map((c) => httpIriOrUndefined(c))
+        .filter((c): c is string => c !== undefined),
+    ),
+  ];
   if (keywords.length > 0) data.keywords = keywords;
   if (categories.length > 0) data.categories = categories;
   return data;
@@ -263,9 +274,11 @@ export function parseMemory(resourceUrl: string, dataset: DatasetCore): MemoryDa
 /**
  * Build a fresh n3 `Store` holding one memory rooted at `${resourceUrl}#it`.
  *
- * Object-property fields that are not absolute http(s) IRIs (`about`,
- * `attributedTo`, `generatedBy`, `embeddingRef`, and each `categories` entry) are
- * DROPPED rather than coerced into a malformed `NamedNode` — keeping the graph
+ * Object-property fields (`about`, `attributedTo`, `generatedBy`, `embeddingRef`,
+ * and each `categories` entry) are run through `httpIriOrUndefined`: an absolute
+ * http(s) IRI is written in its CANONICAL, injection-safe form (any
+ * Turtle-breaking character percent-encoded) and a non-http(s) value is DROPPED
+ * rather than coerced into a malformed `NamedNode` — keeping the graph
  * well-formed (pod data is untrusted input). `keywords` are free-text literals, so
  * every entry is written (no IRI filter). `created` defaults to now.
  */
@@ -287,8 +300,14 @@ export function buildMemory(resourceUrl: string, data: MemoryData): Store {
   doc.generatedBy = httpIriOrUndefined(data.generatedBy);
   doc.embeddingRef = httpIriOrUndefined(data.embeddingRef);
 
-  // Categories are IRIs — drop non-http(s). Keywords are free text — keep all.
-  for (const iri of data.categories ?? []) if (isHttpIri(iri)) doc.categories.add(iri);
+  // Categories are IRIs — write the CANONICALISED form of each http(s) value
+  // (httpIriOrUndefined percent-encodes any Turtle-breaking char, so the write is
+  // injection-safe) and drop only genuinely non-http(s) values. Keywords are free
+  // text — keep all.
+  for (const iri of data.categories ?? []) {
+    const safe = httpIriOrUndefined(iri);
+    if (safe !== undefined) doc.categories.add(safe);
+  }
   for (const keyword of data.keywords ?? []) doc.keywords.add(keyword);
 
   return store;

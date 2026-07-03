@@ -129,9 +129,11 @@ export declare function parseMemory(resourceUrl: string, dataset: DatasetCore): 
 /**
  * Build a fresh n3 `Store` holding one memory rooted at `${resourceUrl}#it`.
  *
- * Object-property fields that are not absolute http(s) IRIs (`about`,
- * `attributedTo`, `generatedBy`, `embeddingRef`, and each `categories` entry) are
- * DROPPED rather than coerced into a malformed `NamedNode` — keeping the graph
+ * Object-property fields (`about`, `attributedTo`, `generatedBy`, `embeddingRef`,
+ * and each `categories` entry) are run through `httpIriOrUndefined`: an absolute
+ * http(s) IRI is written in its CANONICAL, injection-safe form (any
+ * Turtle-breaking character percent-encoded) and a non-http(s) value is DROPPED
+ * rather than coerced into a malformed `NamedNode` — keeping the graph
  * well-formed (pod data is untrusted input). `keywords` are free-text literals, so
  * every entry is written (no IRI filter). `created` defaults to now.
  */

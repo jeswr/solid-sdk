@@ -9,33 +9,85 @@
  */
 
 /**
- * True for an absolute `http(s)` URL usable as a WebID / IRI object.
+ * The **canonicalised** value if it is an absolute http(s) IRI, else `undefined`
+ * — the recurring untrusted-input filter for an OPTIONAL object-property write
+ * (drop a non-http(s) value rather than coerce it into a malformed `NamedNode`).
  *
- * Pod data is untrusted input: object-property values that are not absolute
- * http(s) IRIs (e.g. `javascript:`, `mailto:`, `urn:`, a bare string) are
- * rejected here so a caller never coerces one into a malformed `NamedNode` nor
- * surfaces it to a UI as a link. A narrowing type guard so callers can use it in
- * a `?:` without an extra cast.
+ * **Security — n3.Writer IRI-injection defence (load-bearing).** `n3.Writer`
+ * does NOT escape IRIs: it emits an object IRI verbatim between `<…>`, so an
+ * untrusted string containing `>` / a space / `< " { } | ^ \`` breaks out of the
+ * IRI and injects arbitrary triples into the serialised graph. This helper is
+ * the single chokepoint that neutralises that: it returns the **canonical form**
+ * (`URL.href`, which percent-encodes `< > " SPACE` and strips control chars),
+ * then percent-encodes the FULL residual set of Turtle-IRIREF-forbidden
+ * characters the URL parser leaves intact in a query/fragment position
+ * (`\ { } | ^ \``). The returned value therefore contains no character that can
+ * escape an `<…>` term. Both the OPTIONAL object-property write sites AND the
+ * set-valued `categories` sites (write + read) go through here, persisting the
+ * canonicalised form of every http(s) value and dropping only genuinely
+ * non-http(s) ones. ({@link isHttpIri} is the separate boolean SAFETY guard for
+ * callers that only need a yes/no; it is not what the category sites use.)
+ *
+ * Values that are not absolute http(s) IRIs (e.g. `javascript:`, `mailto:`,
+ * `urn:`, a bare string) return `undefined` so a caller never coerces one into a
+ * malformed `NamedNode` nor surfaces it to a UI as a link.
  */
-export function isHttpIri(value: string | undefined): value is string {
-  if (!value) return false;
+export function httpIriOrUndefined(value: string | undefined): string | undefined {
+  if (typeof value !== "string") return undefined;
+  let u: URL;
   try {
-    const u = new URL(value);
-    return u.protocol === "http:" || u.protocol === "https:";
+    u = new URL(value);
   } catch {
-    return false;
+    return undefined;
   }
+  if (u.protocol !== "http:" && u.protocol !== "https:") return undefined;
+  // Canonicalise (percent-encodes < > " space, strips control chars) then
+  // percent-encode the FULL Turtle-IRIREF-forbidden residual set the URL parser
+  // leaves literal in a query/fragment position: \ { } | ^ ` (mirrors the
+  // @jeswr/federation-registry escapeIri set). Encode `\` first so it cannot be
+  // reintroduced by a later replacement.
+  return u.href
+    .replace(/\\/g, "%5C")
+    .replace(/\{/g, "%7B")
+    .replace(/\}/g, "%7D")
+    .replace(/\|/g, "%7C")
+    .replace(/\^/g, "%5E")
+    .replace(/`/g, "%60");
 }
 
 /**
- * The value if it is an absolute http(s) IRI ({@link isHttpIri}), else
- * `undefined` — i.e. `isHttpIri(v) ? v : undefined`, the recurring untrusted-
- * input filter for an OPTIONAL object-property write (drop a non-http(s) value
- * rather than coerce it into a malformed `NamedNode`). Named once here instead of
- * repeating the ternary at every optional-IRI write site.
+ * The raw characters forbidden inside a Turtle `IRIREF` (`<…>`): the control /
+ * space range `U+0000–U+0020` plus `< > " { } | ^ \` \\`. Any of these written
+ * verbatim by `n3.Writer` breaks out of the IRI term and injects triples — so a
+ * string containing one is unsafe to write raw.
  */
-export function httpIriOrUndefined(value: string | undefined): string | undefined {
-  return isHttpIri(value) ? value : undefined;
+// biome-ignore lint/suspicious/noControlCharactersInRegex: matching the U+0000–U+0020 IRIREF-forbidden range is the point.
+const TURTLE_IRIREF_FORBIDDEN = /[\u0000-\u0020<>"{}|^`\\]/;
+
+/**
+ * A **safety** type guard: true for an absolute http(s) IRI that is safe to emit
+ * verbatim in a Turtle `IRIREF` — i.e. one that carries NONE of the raw
+ * {@link TURTLE_IRIREF_FORBIDDEN} characters. A narrowing guard so callers can
+ * use it in a `?:` / `.filter()` without an extra cast.
+ *
+ * This is deliberately NOT canonical-equality: benign WHATWG canonicalisation
+ * differences (a missing trailing slash, an upper-case host, a stripped default
+ * port) do not make an IRI unsafe, so accepting them here avoids silently
+ * DROPPING valid data. The injection defence is the forbidden-character
+ * rejection: a value that passes contains no character that can escape an `<…>`
+ * term. (Write sites that want to persist the normalised form use
+ * {@link httpIriOrUndefined}, which percent-encodes rather than rejects.)
+ */
+export function isHttpIri(value: string | undefined): value is string {
+  if (typeof value !== "string") return false;
+  let u: URL;
+  try {
+    u = new URL(value);
+  } catch {
+    return false;
+  }
+  if (u.protocol !== "http:" && u.protocol !== "https:") return false;
+  return !TURTLE_IRIREF_FORBIDDEN.test(value);
 }
 
 /**
