@@ -13,9 +13,12 @@
  * rule). Dates are stored as ISO strings.
  */
 import type {
+  CoeliacGeneticRisk,
   Confidence,
   ExposureData,
   FoodItemData,
+  GeneticSourceType,
+  HlaMarkerData,
   MealContext,
   Portion,
   ProtocolPhase,
@@ -111,6 +114,43 @@ export interface StoredConclusion {
   error?: string;
 }
 
+/**
+ * The interpreted genetic summary as cached locally (Phase 3c). PRIVACY-CRITICAL,
+ * and — like a protocol — a SINGLE latest-state record (one per pod, `summary.ttl`,
+ * overwritten in place). Holds ONLY the interpreted markers + framing + rollup;
+ * there is by construction NO field for raw genotype bytes (the raw file is parsed
+ * on-device and discarded). `consentGiven` is cached so the UI can reflect the
+ * consented state offline, and is always `true` here (a summary is never created
+ * without consent).
+ */
+export interface StoredGeneticSummary {
+  readonly kind: "genetic";
+  /** The pod resource URL (`…/genetics/summary.ttl`). */
+  url: string;
+  /** The interpreted HLA marker rows (summary only — never raw bytes). */
+  markers: HlaMarkerData[];
+  /** The mandatory negative-predictive framing (`diet:geneticInterpretation`). */
+  interpretation: string;
+  /** The NPV-only rollup (`risk-haplotype-present`/`-absent`/`partial-coverage`/`indeterminate`). */
+  coeliacGeneticRisk?: CoeliacGeneticRisk;
+  /** Was every primary risk tag SNP definitively called? Drives the NPV-absent gate. */
+  coverageComplete?: boolean;
+  /** Provenance WITHOUT raw data (`manual`/`consumer-array`/`clinical-report`). */
+  sourceType?: GeneticSourceType;
+  /** Always `true` — a genetic summary is never cached/written without explicit consent. */
+  consentGiven: true;
+  createdAt: string;
+  /**
+   * A unique per-write revision token (collision-proof, unlike a ms timestamp). Used
+   * ONLY as the sync-completion discriminator: an in-flight write settling against a
+   * DIFFERENT `rev` (a newer summary replaced it) is ignored, so a newer unsaved
+   * record is never wrongly flipped to `synced`.
+   */
+  rev: string;
+  sync: SyncState;
+  error?: string;
+}
+
 /** A frequent-meal group for the one-tap re-log chips. */
 export interface FrequentMeal {
   signature: string;
@@ -142,10 +182,13 @@ export class DiaryStore {
     private readonly scope: string,
   ) {}
 
-  private prefix(kind: "meal" | "symptom" | "protocol" | "conclusion"): string {
+  private prefix(kind: "meal" | "symptom" | "protocol" | "conclusion" | "genetic"): string {
     return `${encodeURIComponent(this.scope)}|${kind}|`;
   }
-  private key(kind: "meal" | "symptom" | "protocol" | "conclusion", ulid: string): string {
+  private key(
+    kind: "meal" | "symptom" | "protocol" | "conclusion" | "genetic",
+    ulid: string,
+  ): string {
     return `${this.prefix(kind)}${ulid}`;
   }
 
@@ -252,24 +295,61 @@ export class DiaryStore {
     await this.kv.set(this.key("conclusion", ulid), c);
   }
 
+  // --- genetics (Phase 3c) — a SINGLE latest-state record, most-sensitive --------
+
+  /** The fixed cache id for the one genetic summary (there is exactly one per pod). */
+  private static readonly GENETIC_ID = "summary";
+
+  async putGeneticSummary(summary: StoredGeneticSummary): Promise<void> {
+    await this.kv.set(this.key("genetic", DiaryStore.GENETIC_ID), summary);
+  }
+  async getGeneticSummary(): Promise<StoredGeneticSummary | undefined> {
+    return (
+      (await this.kv.get<StoredGeneticSummary>(this.key("genetic", DiaryStore.GENETIC_ID))) ??
+      undefined
+    );
+  }
+  /** Delete the cached genetic summary (e.g. on an explicit user-initiated removal). */
+  async deleteGeneticSummary(): Promise<void> {
+    await this.kv.del(this.key("genetic", DiaryStore.GENETIC_ID));
+  }
+  /**
+   * Mark the sync state of the genetic summary — but ONLY if the stored record is
+   * still the SAME one whose write settled (`expectedCreatedAt` discriminator). If a
+   * newer summary replaced it while the older write was in flight, the stale
+   * completion is IGNORED, so the newer record is never wrongly flipped to `synced`
+   * (which would drop it from the outbox and lose an unsaved genetic summary). Each
+   * `rev` is a unique per-save token, so it uniquely identifies the record flushed.
+   */
+  async markGeneticSync(expectedRev: string, sync: SyncState, error?: string): Promise<void> {
+    const g = await this.kv.get<StoredGeneticSummary>(this.key("genetic", DiaryStore.GENETIC_ID));
+    if (!g || g.rev !== expectedRev) return; // replaced in flight — ignore the stale completion
+    g.sync = sync;
+    g.error = sync === "error" ? error : undefined;
+    await this.kv.set(this.key("genetic", DiaryStore.GENETIC_ID), g);
+  }
+
   /** Records still needing a pod write (pending or errored). */
   async pending(): Promise<{
     meals: StoredMeal[];
     symptoms: StoredSymptom[];
     protocols: StoredProtocol[];
     conclusions: StoredConclusion[];
+    genetics: StoredGeneticSummary[];
   }> {
-    const [meals, symptoms, protocols, conclusions] = await Promise.all([
+    const [meals, symptoms, protocols, conclusions, genetic] = await Promise.all([
       this.allMeals(),
       this.allSymptoms(),
       this.allProtocols(),
       this.allConclusions(),
+      this.getGeneticSummary(),
     ]);
     return {
       meals: meals.filter((m) => m.sync !== "synced"),
       symptoms: symptoms.filter((s) => s.sync !== "synced"),
       protocols: protocols.filter((p) => p.sync !== "synced"),
       conclusions: conclusions.filter((c) => c.sync !== "synced"),
+      genetics: genetic && genetic.sync !== "synced" ? [genetic] : [],
     };
   }
 

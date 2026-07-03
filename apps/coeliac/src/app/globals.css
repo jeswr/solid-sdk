@@ -847,3 +847,195 @@ a {
   color: var(--muted-foreground, #666);
   margin: 0.35rem 0 0;
 }
+
+/* --- Genetics view (Phase 3c) --------------------------------------------- */
+.genetics__signin,
+.genetics-manual__intro {
+  color: var(--muted-foreground, #555);
+}
+.genetics-current,
+.genetics-entry {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  border: 1px solid var(--border, #e5e5e5);
+  border-radius: 12px;
+  background: var(--card, #fff);
+}
+.genetics-rollup {
+  padding: 0.85rem 1rem;
+  border-left: 4px solid var(--muted-foreground, #999);
+  border-radius: 8px;
+  background: var(--muted, #f6f6f6);
+  margin: 0.75rem 0;
+}
+.genetics-rollup--ok {
+  border-left-color: var(--ok);
+  background: color-mix(in oklch, var(--ok) 8%, var(--card, #fff));
+}
+.genetics-rollup--warn {
+  border-left-color: var(--warn);
+  background: color-mix(in oklch, var(--warn) 8%, var(--card, #fff));
+}
+.genetics-rollup--info {
+  border-left-color: var(--muted-foreground, #888);
+}
+.genetics-rollup__title {
+  margin: 0 0 0.35rem;
+  font-size: 1rem;
+}
+.genetics-rollup__body {
+  margin: 0;
+  color: var(--muted-foreground, #444);
+  font-size: 0.92rem;
+}
+.genetics-markers {
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.genetics-marker {
+  display: flex;
+  gap: 0.75rem;
+  align-items: baseline;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--border, #eee);
+  border-radius: 8px;
+}
+.genetics-marker__haplo {
+  font-weight: 600;
+  min-width: 4rem;
+}
+.genetics-marker__presence {
+  font-size: 0.85rem;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--border, #ddd);
+}
+.genetics-marker__presence--present {
+  color: var(--warn);
+  border-color: var(--warn);
+}
+.genetics-marker__presence--absent {
+  color: var(--ok);
+  border-color: var(--ok);
+}
+.genetics-marker__presence--uncertain {
+  color: var(--muted-foreground, #777);
+}
+.genetics-marker__geno {
+  font-size: 0.8rem;
+  color: var(--muted-foreground, #888);
+  font-variant-numeric: tabular-nums;
+}
+.genetics-preview__caveat,
+.genetics-preview__empty,
+.genetics-current__meta,
+.genetics-current__framing {
+  font-size: 0.85rem;
+  color: var(--muted-foreground, #666);
+}
+.genetics-current__framing {
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px dashed var(--border, #e5e5e5);
+}
+.genetics-modes {
+  display: flex;
+  gap: 0.5rem;
+  margin: 0.75rem 0;
+}
+.genetics-mode {
+  padding: 0.4rem 0.85rem;
+  border: 1px solid var(--border, #ccc);
+  border-radius: 999px;
+  background: transparent;
+  cursor: pointer;
+}
+.genetics-mode.is-active {
+  background: var(--primary, #1a1a1a);
+  color: var(--primary-foreground, #fff);
+  border-color: var(--primary, #1a1a1a);
+}
+.genetics-haplo {
+  border: 1px solid var(--border, #eee);
+  border-radius: 8px;
+  padding: 0.6rem 0.8rem;
+  margin: 0.5rem 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+  align-items: center;
+}
+.genetics-haplo__legend {
+  font-weight: 600;
+  padding: 0 0.35rem;
+}
+.genetics-haplo__hint {
+  font-weight: 400;
+  font-size: 0.8rem;
+  color: var(--muted-foreground, #888);
+}
+.genetics-haplo__opt {
+  display: inline-flex;
+  gap: 0.3rem;
+  align-items: center;
+  font-size: 0.9rem;
+}
+.genetics-upload__privacy {
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--ok);
+  border-radius: 8px;
+  background: color-mix(in oklch, var(--ok) 6%, var(--card, #fff));
+  font-size: 0.9rem;
+}
+.genetics-review {
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border, #e5e5e5);
+}
+.genetics-consent {
+  margin-top: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+.genetics-consent__label {
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-start;
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+.genetics-consent__label input {
+  margin-top: 0.2rem;
+}
+.genetics-consent__error {
+  color: var(--danger);
+  font-size: 0.9rem;
+}
+.insights__genetics {
+  margin: 0.75rem 0;
+  padding: 0.75rem 1rem;
+  border-left: 4px solid var(--muted-foreground, #999);
+  border-radius: 8px;
+  background: var(--muted, #f6f6f6);
+  font-size: 0.9rem;
+}
+.insights__genetics--ok {
+  border-left-color: var(--ok);
+  background: color-mix(in oklch, var(--ok) 8%, var(--card, #fff));
+}
+.insights__genetics p {
+  margin: 0 0 0.4rem;
+}
+
+.genetics-assist {
+  padding: 0.6rem 0.85rem;
+  border-left: 4px solid var(--warn);
+  border-radius: 8px;
+  background: color-mix(in oklch, var(--warn) 8%, var(--card, #fff));
+  font-size: 0.9rem;
+}

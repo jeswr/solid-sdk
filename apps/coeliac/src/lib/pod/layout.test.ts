@@ -7,6 +7,8 @@ import {
   containerOf,
   diaryContainers,
   diaryRoot,
+  geneticsContainer,
+  geneticsSummaryUrl,
   isBarcode,
   mealUrl,
   monthBucket,
@@ -68,6 +70,16 @@ describe("pod layout", () => {
     expect(containers).toContain("https://alice.example/health/diary/cache/off/");
     expect(containers).toContain("https://alice.example/health/diary/protocols/");
     expect(containers).toContain("https://alice.example/health/diary/conclusions/");
+    expect(containers).toContain("https://alice.example/health/diary/genetics/");
+  });
+
+  it("keeps the single genetic summary under the genetics container (fixed name, no traversal)", () => {
+    expect(geneticsContainer(ROOT)).toBe("https://alice.example/health/diary/genetics/");
+    expect(geneticsSummaryUrl(ROOT)).toBe(
+      "https://alice.example/health/diary/genetics/summary.ttl",
+    );
+    // The name is code-supplied + fixed, so the URL always stays under the diary root.
+    expect(geneticsSummaryUrl(ROOT).startsWith(diaryRoot(ROOT))).toBe(true);
   });
 
   it("keeps protocol + conclusion URLs inside their containers (ULID-guarded)", () => {

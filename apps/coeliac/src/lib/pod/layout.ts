@@ -81,6 +81,26 @@ export function protocolsContainer(storageRoot: string): string {
   return `${diaryRoot(storageRoot)}protocols/`;
 }
 
+/**
+ * The genetics container (`…/health/diary/genetics/`, Phase 3c §5.5). Holds the
+ * single interpreted `summary.ttl` (never raw genotype data). It lives under the
+ * diary root, so the owner-only `acl:default` written by `ensureDiaryReady` already
+ * covers it — the most-sensitive record gets the same fail-closed owner-only ACL,
+ * written first, as the rest of the diary.
+ */
+export function geneticsContainer(storageRoot: string): string {
+  return `${diaryRoot(storageRoot)}genetics/`;
+}
+
+/**
+ * The single genetic-summary resource URL (`…/genetics/summary.ttl`). There is
+ * exactly one summary per pod (latest-state, overwritten in place) — a fixed,
+ * code-supplied name (no user-derived path segment), so it can never traverse.
+ */
+export function geneticsSummaryUrl(storageRoot: string): string {
+  return `${geneticsContainer(storageRoot)}summary.ttl`;
+}
+
 /** The tolerance-conclusions container (`…/health/diary/conclusions/`). */
 export function conclusionsContainer(storageRoot: string): string {
   return `${diaryRoot(storageRoot)}conclusions/`;
@@ -143,6 +163,7 @@ export function diaryContainers(storageRoot: string): string[] {
     symptomsContainer(storageRoot),
     protocolsContainer(storageRoot),
     conclusionsContainer(storageRoot),
+    geneticsContainer(storageRoot),
     `${diaryRoot(storageRoot)}cache/`,
     offCacheContainer(storageRoot),
     knowledgeCacheContainer(storageRoot),

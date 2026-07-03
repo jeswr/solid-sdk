@@ -156,4 +156,59 @@ describe("flushOutbox", () => {
     expect(pending.conclusions).toHaveLength(1);
     expect(pending.conclusions[0].sync).toBe("pending");
   });
+
+  it("syncs a genetic summary to its container, ACL-first, owner-only (no public grant)", async () => {
+    const s = scenario();
+    const store = new DiaryStore(new MemoryKv(), WEBID);
+    await store.putGeneticSummary({
+      kind: "genetic",
+      url: `${ROOT}health/diary/genetics/summary.ttl`,
+      markers: [
+        { rsid: "rs2187668", riskHaplotype: "DQ2.5", markerPresence: "present" },
+        { rsid: "rs7454108", riskHaplotype: "DQ8", markerPresence: "absent" },
+      ],
+      interpretation: "Carrying DQ2/DQ8 does NOT mean you have coeliac disease. Discuss with your clinician.",
+      coeliacGeneticRisk: "risk-haplotype-present",
+      coverageComplete: true,
+      sourceType: "manual",
+      consentGiven: true,
+      createdAt: "2026-07-03T00:00:00.000Z",
+      rev: "rev-1",
+      sync: "pending",
+    });
+
+    const result = await flushOutbox({ authedFetch: s.fetch, webId: WEBID, storageRoot: ROOT }, store);
+    expect(result.synced).toBe(1);
+    const urls = s.puts().map((p) => p.url);
+    const summaryUrl = `${ROOT}health/diary/genetics/summary.ttl`;
+    expect(urls).toContain(summaryUrl);
+    const aclIdx = urls.findIndex((u) => u.endsWith("/health/diary/.acl"));
+    expect(aclIdx).toBeGreaterThanOrEqual(0);
+    expect(aclIdx).toBeLessThan(urls.indexOf(summaryUrl)); // ACL before the summary
+    const acl = s.puts().find((p) => p.url.endsWith("/health/diary/.acl"));
+    expect(acl?.body ?? "").not.toMatch(/agentClass|foaf:Agent|Public/i);
+    expect((await store.pending()).genetics).toHaveLength(0);
+  });
+
+  it("a STALE genetic-sync completion never marks a NEWER summary synced (rev-guard)", async () => {
+    const store = new DiaryStore(new MemoryKv(), WEBID);
+    const base = {
+      kind: "genetic" as const,
+      url: `${ROOT}health/diary/genetics/summary.ttl`,
+      markers: [{ rsid: "rs2187668", riskHaplotype: "DQ2.5" as const, markerPresence: "present" as const }],
+      interpretation: "framing",
+      consentGiven: true as const,
+      createdAt: "2026-07-03T00:00:00.000Z",
+      sync: "pending" as const,
+    };
+    // The FIRST summary (rev A) starts an in-flight write; a NEWER summary (rev B)
+    // replaces it before A's write settles.
+    await store.putGeneticSummary({ ...base, rev: "A" });
+    await store.putGeneticSummary({ ...base, rev: "B" });
+    // A's stale completion arrives — it must be ignored.
+    await store.markGeneticSync("A", "synced");
+    const now = await store.getGeneticSummary();
+    expect(now?.rev).toBe("B");
+    expect(now?.sync).toBe("pending"); // the newer record is still pending, not lost
+  });
 });
