@@ -488,6 +488,30 @@ describe("one-active-challenge invariant", () => {
     expect(r2.protocol.phase).toBe("observe");
   });
 
+  it("blocks CONCLUDING an observe outcome while another protocol is in progress", () => {
+    const other: ProtocolData = { targetTrigger: "fructan", phase: "baseline" };
+    // reacted:true would conclude[reacts]; blocked because a second protocol is live.
+    const r1 = advanceProtocol(
+      { targetTrigger: "lactose", phase: "observe", challengeStep: 0 },
+      { type: "record-outcome", reacted: true },
+      NOW,
+      {},
+      { otherProtocols: [other] },
+    );
+    expect(r1.rejection?.safety?.kind).toBe("active-challenge-exists");
+    expect(r1.verdict).toBeUndefined();
+    // final clean dose (would conclude[tolerated]) is blocked too.
+    const r2 = advanceProtocol(
+      { targetTrigger: "lactose", phase: "observe", challengeStep: 2 },
+      { type: "record-outcome", reacted: false },
+      NOW,
+      {},
+      { otherProtocols: [other] },
+    );
+    expect(r2.rejection?.safety?.kind).toBe("active-challenge-exists");
+    expect(r2.verdict).toBeUndefined();
+  });
+
   it("abort ALWAYS bypasses the one-active guard (so a conflict is resolvable)", () => {
     const other: ProtocolData = { targetTrigger: "fructan", phase: "observe", challengeStep: 0 };
     const r = advanceProtocol(
@@ -552,12 +576,24 @@ describe("prompts — supportive, non-gamified (orthorexia guard)", () => {
     expect(reprompt.dueAt?.getTime()).not.toBe(later.getTime());
   });
 
-  it("reintroduce/baseline prompts carry the clinician caveat", () => {
-    const r = startProtocol({ trigger: "lactose" }, {}, NOW);
-    if (r.ok) expect(r.prompt.message).toContain(CLINICIAN_CAVEAT);
-    const p: ProtocolData = { targetTrigger: "lactose", phase: "washout" };
-    const res = advanceProtocol(p, { type: "advance-phase" }, NOW);
-    expect(res.prompt?.message).toContain(CLINICIAN_CAVEAT);
+  it("EVERY live-phase prompt carries the clinician caveat", () => {
+    // Walk the full run and assert each phase-entry prompt carries the caveat.
+    const start = startProtocol({ trigger: "lactose" }, {}, NOW);
+    if (!start.ok) throw new Error("expected ok");
+    expect(start.prompt.message).toContain(CLINICIAN_CAVEAT); // baseline
+    let p = start.protocol;
+    const events = [
+      { type: "advance-phase" } as const, // → eliminate
+      { type: "advance-phase", symptomsImproved: true } as const, // → washout
+      { type: "advance-phase" } as const, // → reintroduce
+      { type: "advance-phase" } as const, // → observe
+    ];
+    for (const e of events) {
+      const res = advanceProtocol(p, e, NOW);
+      p = res.protocol;
+      expect(p.phase).not.toBe("concluded");
+      expect(res.prompt?.message).toContain(CLINICIAN_CAVEAT);
+    }
   });
 });
 

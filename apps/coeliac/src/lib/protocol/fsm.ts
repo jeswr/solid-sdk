@@ -438,7 +438,12 @@ function recordOutcome(
   options: ProtocolOptions,
 ): AdvanceResult {
   // (Health-safety rails already enforced by the top guard — a safety-blocked trigger
-  // never reaches here on a non-abort event.)
+  // never reaches here on a non-abort event.) One-variable-at-a-time is enforced for
+  // EVERY outcome, including the ones that CONCLUDE: if another protocol is in
+  // progress, a conclusion produced now would have muddied attribution — refuse until
+  // the conflict is resolved (abort still works).
+  const blocked = activeConflictReject(protocol, options);
+  if (blocked) return blocked;
   const step = protocol.challengeStep ?? 0;
   const lastStep = doseCount(options) - 1;
   if (reacted) {
@@ -452,12 +457,8 @@ function recordOutcome(
       prompt: promptFor(concluded, verdict),
     };
   }
-  // No reaction: more doses left ⇒ next reintroduction dose (the health-safety rails
-  // were already rechecked above; re-check only the one-active conflict since moving
-  // to the next dose keeps this challenge active); otherwise ⇒ `tolerated`.
+  // No reaction: more doses left ⇒ next reintroduction dose; otherwise ⇒ `tolerated`.
   if (step < lastStep) {
-    const blocked = activeConflictReject(protocol, options);
-    if (blocked) return blocked;
     return toPhase(protocol, "reintroduce", now, options, step + 1);
   }
   const concluded = conclude(protocol, now);
@@ -603,7 +604,7 @@ export function promptFor(protocol: ProtocolData, verdict?: Verdict): ProtocolPr
         message:
           `Elimination: leave out ${trigger} and keep logging meals and symptoms. Give it the full ` +
           "window before judging — some things settle slowly. When it's done, tell the app whether " +
-          "you felt better.",
+          `you felt better. ${CLINICIAN_CAVEAT}`,
       };
     case "washout":
       return {
@@ -611,7 +612,7 @@ export function promptFor(protocol: ProtocolData, verdict?: Verdict): ProtocolPr
         dueAt,
         message:
           `Nice work finishing the ${trigger}-free stretch. A short washout keeps things clean before ` +
-          "the reintroduction — carry on with your usual otherwise-settled diet for a few days.",
+          `the reintroduction — carry on with your usual otherwise-settled diet for a few days. ${CLINICIAN_CAVEAT}`,
       };
     case "reintroduce":
       return {
@@ -627,7 +628,7 @@ export function promptFor(protocol: ProtocolData, verdict?: Verdict): ProtocolPr
         dueAt,
         message:
           `Observing your ${doseLabel(protocol.challengeStep ?? 0)} ${trigger} dose. Log any symptoms ` +
-          "and how strong they are — there's no right answer here, we're just watching what your body does.",
+          `and how strong they are — there's no right answer here, we're just watching what your body does. ${CLINICIAN_CAVEAT}`,
       };
     }
     case "concluded":
