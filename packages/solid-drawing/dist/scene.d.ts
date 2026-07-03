@@ -54,11 +54,29 @@ export declare function sceneSubject(resourceUrl: string): NamedNode;
  * Build a fresh `n3.Store` holding one `draw:Scene` rooted at
  * `${resourceUrl}#it`. The store is the value the `n3.Writer` serialises; pass
  * it to {@link storeToTurtle} (or {@link serializeScene} does both).
+ *
+ * **IRI safety.** Every IRI field is caller-supplied and potentially hostile, and
+ * `n3.Writer` does NOT escape IRIs (see {@link safeHttpIri}), so each is routed
+ * through `safeHttpIri` before `namedNode()` — otherwise a `>` or space in the value
+ * would break out of the serialised `<…>` and inject arbitrary triples. Optional IRI
+ * fields whose value is not a valid http(s) IRI are DROPPED (the triple is omitted);
+ * the REQUIRED `sceneDocument` cannot be dropped, so an invalid/hostile value makes
+ * `buildScene` throw a `TypeError` rather than emit an unsafe/attacker-chosen link.
+ *
+ * @throws {TypeError} when `data.sceneDocument` is not a parseable http(s) IRI — a
+ *   deliberate departure from a total contract: a scene with no valid canvas link is
+ *   invalid input, and writing the raw value would be a triple-injection sink.
  */
 export declare function buildScene(resourceUrl: string, data: SceneData): Store;
 /** Serialise any `n3.Store` to Turtle with the model's prefixes (via `n3.Writer`). */
 export declare function storeToTurtle(store: Store): Promise<string>;
-/** Serialise a scene to Turtle (via `n3.Writer`, with the model's prefixes). */
+/**
+ * Serialise a scene to Turtle (via `n3.Writer`, with the model's prefixes).
+ *
+ * `async` so that a synchronous failure in {@link buildScene} (an invalid required
+ * `sceneDocument`) surfaces as a REJECTED promise, not a synchronous throw — a
+ * `Promise`-returning function should never throw before it returns.
+ */
 export declare function serializeScene(resourceUrl: string, data: SceneData): Promise<string>;
 /**
  * Read a `draw:Scene` descriptor out of an already-parsed RDF dataset.

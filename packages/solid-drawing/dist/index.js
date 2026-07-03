@@ -16,6 +16,7 @@
  *
  * @packageDocumentation
  */
+export { safeHttpIri } from "./iri.js";
 export { buildScene, parseScene, parseSceneTtl, sceneSubject, serializeScene, storeToTurtle, } from "./scene.js";
 // NOTE: the filesystem-backed shape helpers (`drawingOntologyTtl`,
 // `drawingShapeTtl`, `DRAWING_ONTOLOGY_PATH`, `DRAWING_SHAPE_PATH`) are

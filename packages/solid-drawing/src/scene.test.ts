@@ -1,6 +1,8 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 import type { Quad } from "@rdfjs/types";
+import { Parser } from "n3";
 import { describe, expect, it } from "vitest";
+import { safeHttpIri } from "./iri.js";
 import {
   buildScene,
   parseScene,
@@ -279,5 +281,100 @@ describe("parseScene — optional fields enforce the SHACL contract (roborev fin
     const parsed = await parseSceneTtl(URL_, ttl, "text/turtle");
     expect(parsed).toEqual({ sceneDocument: CANVAS });
     expect(parsed?.about).toBeUndefined();
+  });
+});
+
+describe("IRI-injection hardening (n3.Writer does NOT escape IRIs)", () => {
+  // The payload closes the `<…>` IRI-ref early with `>`, then supplies a full
+  // extra triple; if the field reached namedNode() unescaped, n3.Writer would emit
+  // it verbatim and the re-parsed graph would contain the injected `<https://evil/s2>`
+  // subject. safeHttpIri neutralises it (URL parse percent-encodes `> " space`).
+  const Injection = "https://evil/x> . <https://evil/s2> <https://evil/p2> <https://evil/o2";
+  const InjectedSubject = "https://evil/s2";
+
+  it("neutralises an injection payload in an OPTIONAL field (schema:about) — no extra triples", async () => {
+    const ttl = await serializeScene(URL_, { sceneDocument: CANVAS, about: Injection });
+
+    // Re-parse the serialised Turtle and assert the attacker's triple is absent. The
+    // payload's host is `evil`, so the rest ("> . <https://evil/s2> …") is percent-
+    // encoded INTO the path by URL — a single safe object IRI, never a new subject.
+    const quads = new Parser({ baseIRI: URL_ }).parse(ttl);
+    const injected = quads.filter(
+      (q) => q.subject.value === InjectedSubject || q.object.value === InjectedSubject,
+    );
+    expect(injected).toHaveLength(0);
+    // Every triple in the whole document must still be rooted at the scene subject —
+    // a raw payload would have introduced the injected `<https://evil/s2>` subject.
+    expect(quads.every((q) => q.subject.value === `${URL_}#it`)).toBe(true);
+    // The about value survives only in fully-encoded, break-out-free form.
+    const aboutQuad = quads.find((q) => q.predicate.value === "http://schema.org/about");
+    expect(aboutQuad?.object.value).not.toMatch(/[<>" ]/);
+  });
+
+  it("neutralises an injection payload in draw:thumbnail — no extra triples", async () => {
+    const ttl = await serializeScene(URL_, { sceneDocument: CANVAS, thumbnail: Injection });
+    const quads = new Parser({ baseIRI: URL_ }).parse(ttl);
+    expect(quads.filter((q) => q.subject.value === InjectedSubject)).toHaveLength(0);
+    expect(quads.every((q) => q.subject.value === `${URL_}#it`)).toBe(true);
+  });
+
+  it("NEUTRALISES a hostile REQUIRED sceneDocument that is itself a parseable URL (encoded, no injection)", async () => {
+    // The payload's scheme+host (`https://evil`) make it a VALID (if weird) URL, so
+    // it is canonicalised (break-out chars percent-encoded into the path), NOT thrown
+    // — the serialised document must still hold exactly one, safe, scene triple.
+    const ttl = await serializeScene(URL_, { sceneDocument: Injection });
+    const quads = new Parser({ baseIRI: URL_ }).parse(ttl);
+    expect(quads.filter((q) => q.subject.value === InjectedSubject)).toHaveLength(0);
+    expect(quads.every((q) => q.subject.value === `${URL_}#it`)).toBe(true);
+    const docQuad = quads.find(
+      (q) => q.predicate.value === "https://w3id.org/jeswr/drawing#sceneDocument",
+    );
+    expect(docQuad?.object.value).not.toMatch(/[<>" ]/);
+  });
+
+  it("REJECTS a non-http(s) sceneDocument (e.g. file:) — required field throws", () => {
+    expect(() => buildScene(URL_, { sceneDocument: "file:///etc/passwd" })).toThrow(TypeError);
+  });
+
+  it("REJECTS an unparseable sceneDocument (not an IRI at all) — required field throws", () => {
+    expect(() => buildScene(URL_, { sceneDocument: "not an iri" })).toThrow(TypeError);
+  });
+
+  it("serializeScene propagates the throw for an invalid required sceneDocument", async () => {
+    await expect(serializeScene(URL_, { sceneDocument: "file:///etc/passwd" })).rejects.toThrow(
+      TypeError,
+    );
+  });
+
+  describe("safeHttpIri", () => {
+    it("returns undefined for non-string / non-http(s) / unparseable input", () => {
+      expect(safeHttpIri(undefined)).toBeUndefined();
+      expect(safeHttpIri("file:///etc/passwd")).toBeUndefined();
+      expect(safeHttpIri("javascript:alert(1)")).toBeUndefined();
+      expect(safeHttpIri("not an iri")).toBeUndefined();
+      expect(safeHttpIri("urn:isbn:0451450523")).toBeUndefined();
+    });
+
+    it("passes a clean http(s) IRI through unchanged", () => {
+      expect(safeHttpIri(CANVAS)).toBe(CANVAS);
+      expect(safeHttpIri("https://example.org/a#it")).toBe("https://example.org/a#it");
+    });
+
+    it("percent-encodes the Turtle-illegal chars URL leaves untouched (| ^ `)", () => {
+      const out = safeHttpIri("https://example.org/a|b^c`d");
+      expect(out).toBeDefined();
+      expect(out).not.toMatch(/[|^`]/);
+      expect(out).toContain("%7C");
+      expect(out).toContain("%5E");
+      expect(out).toContain("%60");
+    });
+
+    it("neutralises the delimiter break-out chars (none of angle/quote/space survive)", () => {
+      const out = safeHttpIri(Injection);
+      // The payload IS a parseable URL, so it canonicalises; the break-out delimiters
+      // must be percent-encoded away.
+      expect(out).toBeDefined();
+      expect(out).not.toMatch(/[<>" ]/);
+    });
   });
 });

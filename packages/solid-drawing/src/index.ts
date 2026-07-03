@@ -17,6 +17,7 @@
  * @packageDocumentation
  */
 
+export { safeHttpIri } from "./iri.js";
 export {
   buildScene,
   parseScene,

@@ -18,6 +18,7 @@
 
 import type { DatasetCore, NamedNode, Quad_Object } from "@rdfjs/types";
 import { DataFactory, type Quad, Store, Writer } from "n3";
+import { safeHttpIri } from "./iri.js";
 import {
   DCT_CREATED,
   DCT_MODIFIED,
@@ -84,14 +85,35 @@ function dateTime(value: string): Quad_Object {
  * Build a fresh `n3.Store` holding one `draw:Scene` rooted at
  * `${resourceUrl}#it`. The store is the value the `n3.Writer` serialises; pass
  * it to {@link storeToTurtle} (or {@link serializeScene} does both).
+ *
+ * **IRI safety.** Every IRI field is caller-supplied and potentially hostile, and
+ * `n3.Writer` does NOT escape IRIs (see {@link safeHttpIri}), so each is routed
+ * through `safeHttpIri` before `namedNode()` — otherwise a `>` or space in the value
+ * would break out of the serialised `<…>` and inject arbitrary triples. Optional IRI
+ * fields whose value is not a valid http(s) IRI are DROPPED (the triple is omitted);
+ * the REQUIRED `sceneDocument` cannot be dropped, so an invalid/hostile value makes
+ * `buildScene` throw a `TypeError` rather than emit an unsafe/attacker-chosen link.
+ *
+ * @throws {TypeError} when `data.sceneDocument` is not a parseable http(s) IRI — a
+ *   deliberate departure from a total contract: a scene with no valid canvas link is
+ *   invalid input, and writing the raw value would be a triple-injection sink.
  */
 export function buildScene(resourceUrl: string, data: SceneData): Store {
   const subject = sceneSubject(resourceUrl);
   const store = new Store();
 
+  // Required: the link to the byte-exact .excalidraw JSON blob. An unparseable or
+  // non-http(s) sceneDocument is invalid AND an IRI-injection vector — reject rather
+  // than write it raw (n3.Writer would emit it verbatim between `<…>`).
+  const sceneDocument = safeHttpIri(data.sceneDocument);
+  if (sceneDocument === undefined) {
+    throw new TypeError(
+      "buildScene: `sceneDocument` must be a valid http(s) IRI (got an unparseable or non-http(s) value)",
+    );
+  }
+
   store.addQuad(quad(subject, RDF_TYPE, DRAW_SCENE));
-  // Required: the link to the byte-exact .excalidraw JSON blob.
-  store.addQuad(quad(subject, DRAW_SCENE_DOCUMENT, namedNode(data.sceneDocument)));
+  store.addQuad(quad(subject, DRAW_SCENE_DOCUMENT, namedNode(sceneDocument)));
 
   if (data.title !== undefined) {
     store.addQuad(quad(subject, DCT_TITLE, literal(data.title)));
@@ -108,14 +130,19 @@ export function buildScene(resourceUrl: string, data: SceneData): Store {
   if (data.viewBackgroundColor !== undefined) {
     store.addQuad(quad(subject, DRAW_VIEW_BACKGROUND_COLOR, literal(data.viewBackgroundColor)));
   }
-  if (data.thumbnail !== undefined) {
-    store.addQuad(quad(subject, DRAW_THUMBNAIL, namedNode(data.thumbnail)));
+  // Optional IRI fields: drop any that is not a valid (Turtle-safe) http(s) IRI —
+  // a hostile value must never reach `namedNode()` unescaped (IRI-injection).
+  const thumbnail = safeHttpIri(data.thumbnail);
+  if (thumbnail !== undefined) {
+    store.addQuad(quad(subject, DRAW_THUMBNAIL, namedNode(thumbnail)));
   }
-  if (data.about !== undefined) {
-    store.addQuad(quad(subject, SCHEMA_ABOUT, namedNode(data.about)));
+  const about = safeHttpIri(data.about);
+  if (about !== undefined) {
+    store.addQuad(quad(subject, SCHEMA_ABOUT, namedNode(about)));
   }
-  if (data.wasGeneratedBy !== undefined) {
-    store.addQuad(quad(subject, PROV_WAS_GENERATED_BY, namedNode(data.wasGeneratedBy)));
+  const wasGeneratedBy = safeHttpIri(data.wasGeneratedBy);
+  if (wasGeneratedBy !== undefined) {
+    store.addQuad(quad(subject, PROV_WAS_GENERATED_BY, namedNode(wasGeneratedBy)));
   }
 
   return store;
@@ -130,8 +157,14 @@ export function storeToTurtle(store: Store): Promise<string> {
   });
 }
 
-/** Serialise a scene to Turtle (via `n3.Writer`, with the model's prefixes). */
-export function serializeScene(resourceUrl: string, data: SceneData): Promise<string> {
+/**
+ * Serialise a scene to Turtle (via `n3.Writer`, with the model's prefixes).
+ *
+ * `async` so that a synchronous failure in {@link buildScene} (an invalid required
+ * `sceneDocument`) surfaces as a REJECTED promise, not a synchronous throw — a
+ * `Promise`-returning function should never throw before it returns.
+ */
+export async function serializeScene(resourceUrl: string, data: SceneData): Promise<string> {
   return storeToTurtle(buildScene(resourceUrl, data));
 }
 
