@@ -207,6 +207,51 @@ describe("pod writes refuse a redirect (fail-closed)", () => {
   });
 });
 
+describe("container must be unambiguous (query/fragment cannot decoy the ACL)", () => {
+  for (const bad of [
+    "https://alice.pod.example/chat/?x=/",
+    "https://alice.pod.example/chat/#frag/",
+    "https://alice.pod.example/chat", // no trailing slash
+  ]) {
+    it(`rejects a container "${bad}" with NO write`, async () => {
+      const { fetch: writeFetch, writes } = fakeWriteFetch();
+      await expect(
+        importRoom({
+          homeserverUrl: HOMESERVER,
+          accessToken: TOKEN,
+          roomId: ROOM,
+          writeFetch,
+          container: bad,
+          ownerWebId: OWNER,
+          guardedFetch: fakeGuardedFetch([{ chunk: [plainMessage] as MatrixEvent[] }]),
+        }),
+      ).rejects.toThrow(/container/);
+      expect(writes.length).toBe(0); // fail-closed: nothing was written anywhere
+    });
+  }
+
+  it("a clean container writes the ACL at <container>.acl and every message URL is within it", async () => {
+    const cleanContainer = "https://alice.pod.example/chat/matrix/";
+    const { fetch: writeFetch, writes } = fakeWriteFetch();
+    await importRoom({
+      homeserverUrl: HOMESERVER,
+      accessToken: TOKEN,
+      roomId: ROOM,
+      writeFetch,
+      container: cleanContainer,
+      ownerWebId: OWNER,
+      guardedFetch: fakeGuardedFetch([{ chunk: [plainMessage] as MatrixEvent[] }]),
+    });
+    // The ACL is written at exactly `<container>.acl` — not a decoy.
+    expect(writes[0]?.url).toBe(`${cleanContainer}.acl`);
+    // Every non-ACL write is strictly under the container.
+    for (const w of writes.slice(1)) {
+      expect(w.url.startsWith(cleanContainer)).toBe(true);
+      expect(w.url.length).toBeGreaterThan(cleanContainer.length);
+    }
+  });
+});
+
 describe("scope guard — a write URL outside the container is refused", () => {
   it("throws when a custom messageUrlFor escapes the container (cross-origin)", async () => {
     const { fetch: writeFetch } = fakeWriteFetch();

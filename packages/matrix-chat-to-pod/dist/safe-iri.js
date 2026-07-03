@@ -62,6 +62,31 @@ export function safeHttpIri(value) {
     return encoded;
 }
 /**
+ * Canonicalise + validate a SOLID CONTAINER IRI, or `undefined` if it is not a
+ * usable owner-lockable container. A container is the ACL anchor, so it must be
+ * UNAMBIGUOUS: an injection-safe absolute http(s) IRI whose PATH ends in `/` and
+ * that carries NO query (`?`) or fragment (`#`). Those are rejected because a
+ * value like `https://pod.example/chat/?x=/` deceptively "ends in `/`" yet
+ * `${container}.acl` would resolve to `https://pod.example/chat/?x=/.acl` — a
+ * different resource than the real container ACL `https://pod.example/chat/.acl`,
+ * so messages (resolving under `/chat/`) would land OUTSIDE the intended
+ * owner-only ACL. The returned value is the ONE canonical container string every
+ * caller must use for BOTH the ACL URL and every scope check — no downstream code
+ * may re-derive from the raw input.
+ */
+export function canonicalContainer(container) {
+    const safe = safeHttpIri(container);
+    if (safe === undefined)
+        return undefined;
+    const u = new URL(safe);
+    if (u.search !== "" || u.hash !== "")
+        return undefined;
+    if (!u.pathname.endsWith("/"))
+        return undefined;
+    // With no query/fragment, origin + pathname IS the canonical container.
+    return `${u.origin}${u.pathname}`;
+}
+/**
  * True when `resourceUrl` is an http(s) IRI within the `base` container — SAME
  * origin AND a path strictly under the container's path. Both are canonicalised
  * through {@link safeHttpIri} first (so a `..`-escape or an injection char cannot

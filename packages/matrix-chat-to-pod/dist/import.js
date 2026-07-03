@@ -27,7 +27,7 @@
  */
 import { createNodeGuardedFetch } from "@jeswr/guarded-fetch/node";
 import { longChatMessageSubject, serializeLongChat, } from "@jeswr/solid-chat-interop";
-import { isWithinBase, safeHttpIri } from "./safe-iri.js";
+import { canonicalContainer, isWithinBase, safeHttpIri } from "./safe-iri.js";
 import { matrixEventToCanonical, } from "./transform.js";
 /** A conservative max for a single Matrix `/messages` page. */
 const MAX_PAGE_SIZE = 1000;
@@ -136,11 +136,12 @@ export async function buildOwnerOnlyAclTurtle(container, ownerWebId) {
     // `<...>` could inject a public `acl:agentClass foaf:Agent` grant, turning the
     // owner-private container PUBLIC. Both MUST be canonical, injection-safe http(s)
     // IRIs; anything else is refused BEFORE a single quad is built (never write a
-    // half-safe ACL). `container` must additionally still be a container (trailing '/'
-    // preserved by canonicalisation).
-    const safeContainer = safeHttpIri(container);
-    if (safeContainer === undefined || !safeContainer.endsWith("/")) {
-        throw new Error("owner-only ACL: container must be a safe http(s) container IRI ending in '/'.");
+    // half-safe ACL). `container` must be an UNAMBIGUOUS container — path ends in '/',
+    // NO query/fragment — so `${container}.acl` cannot resolve to a decoy resource
+    // (e.g. `chat/?x=/` → `chat/?x=/.acl`, not the real `chat/.acl`).
+    const safeContainer = canonicalContainer(container);
+    if (safeContainer === undefined) {
+        throw new Error("owner-only ACL: container must be a safe http(s) container IRI ending in '/' with no query or fragment.");
     }
     const safeOwner = safeHttpIri(ownerWebId);
     if (safeOwner === undefined) {
@@ -193,12 +194,19 @@ function messagesUrl(homeserverUrl, roomId, pageSize, from) {
  *   `writeAcl` is set without an `ownerWebId`, or a homeserver/pod request fails.
  */
 export async function importRoom(options) {
-    const { homeserverUrl, accessToken, roomId, writeFetch, container, webIdFor, writeAcl = true, ownerWebId, } = options;
+    const { homeserverUrl, accessToken, roomId, writeFetch, webIdFor, writeAcl = true, ownerWebId, } = options;
     if (!/^https:\/\//i.test(homeserverUrl)) {
         throw new Error("homeserverUrl must be an https URL (a user-configured remote is SSRF-guarded).");
     }
-    if (!container.endsWith("/")) {
-        throw new Error("container must end with '/' (it is a Solid container).");
+    // SECURITY: canonicalise + validate the container ONCE, up front, and use this
+    // ONE value for BOTH the ACL URL and every message-URL scope check. Rejecting a
+    // query/fragment here is load-bearing: a raw `chat/?x=/` "ends in `/`" yet its
+    // `.acl` would land on a decoy resource while messages resolve under `/chat/`,
+    // leaving the imported chat OUTSIDE the owner-only ACL. No downstream code
+    // re-derives from the raw input.
+    const container = canonicalContainer(options.container);
+    if (container === undefined) {
+        throw new Error("container must be a safe http(s) container IRI ending in '/' with no query or fragment.");
     }
     if (writeAcl && !ownerWebId) {
         throw new Error("writeAcl is enabled but ownerWebId is missing (owner-only ACL needs the owner).");

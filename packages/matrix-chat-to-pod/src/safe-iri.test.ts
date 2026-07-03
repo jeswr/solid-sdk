@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { isWithinBase, safeHttpIri, sanitizeText } from "./safe-iri.js";
+import { canonicalContainer, isWithinBase, safeHttpIri, sanitizeText } from "./safe-iri.js";
 
 const NUL = String.fromCharCode(0);
 const ESC = String.fromCharCode(27);
@@ -72,6 +72,39 @@ describe("safeHttpIri", () => {
       const out = safeHttpIri(v);
       if (out !== undefined) expect(forbidden.test(out)).toBe(false);
     }
+  });
+});
+
+describe("canonicalContainer", () => {
+  it("accepts a clean container and returns origin+path (no query/fragment)", () => {
+    expect(canonicalContainer("https://alice.pod.example/chat/matrix/")).toBe(
+      "https://alice.pod.example/chat/matrix/",
+    );
+  });
+
+  it("REJECTS a container carrying a query (`?x=/` deceptively ends in '/')", () => {
+    // `${container}.acl` would resolve to `chat/?x=/.acl`, a decoy — not the real ACL.
+    expect(canonicalContainer("https://alice.pod.example/chat/?x=/")).toBeUndefined();
+  });
+
+  it("REJECTS a container carrying a fragment (`#frag/`)", () => {
+    expect(canonicalContainer("https://alice.pod.example/chat/#frag/")).toBeUndefined();
+  });
+
+  it("REJECTS a path that does not end in '/'", () => {
+    expect(canonicalContainer("https://alice.pod.example/chat")).toBeUndefined();
+  });
+
+  it("REJECTS a non-http(s) container", () => {
+    expect(canonicalContainer("ftp://x.example/c/")).toBeUndefined();
+    expect(canonicalContainer("not a url")).toBeUndefined();
+    expect(canonicalContainer(undefined)).toBeUndefined();
+  });
+
+  it("NEUTRALISES an injection char in the path (canonicalises, still a container)", () => {
+    const out = canonicalContainer("https://alice.pod.example/a>x/");
+    expect(out).toBe("https://alice.pod.example/a%3Ex/");
+    expect(out?.endsWith("/")).toBe(true);
   });
 });
 
