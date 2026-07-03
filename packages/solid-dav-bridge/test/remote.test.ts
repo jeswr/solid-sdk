@@ -1,5 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
-import { assertSafeUrl, SsrfError } from "@jeswr/guarded-fetch";
+import { assertSafeUrl, createGuardedFetch, SsrfError } from "@jeswr/guarded-fetch";
 import { describe, expect, it, vi } from "vitest";
 import { findComponents, parseComponents } from "../src/ical.js";
 import { importCalendar } from "../src/ingest.js";
@@ -152,5 +152,52 @@ describe("SSRF guard wiring (the real @jeswr/guarded-fetch policy)", () => {
     await expect(assertSafeUrl("https://user:pass@dav.example.com/")).rejects.toBeInstanceOf(
       SsrfError,
     );
+  });
+});
+
+describe("redirect handling (guarded-fetch re-validates + strips creds per hop)", () => {
+  // The module docs previously claimed "redirects are not followed"; in fact
+  // guarded-fetch DOES follow them but re-validates each hop and strips credential
+  // headers cross-origin. These pin the security-relevant behaviour the DAV
+  // credential path depends on: the Authorization header never reaches a different
+  // origin, and a redirect to an internal address is refused.
+  it("STRIPS the Authorization header on a cross-origin redirect (no off-origin cred leak)", async () => {
+    let hop = 0;
+    const seen: { url: string; authorization: string | null }[] = [];
+    const fetcher = (async (url: string | URL | Request, init?: RequestInit) => {
+      hop += 1;
+      const h = new Headers(init?.headers ?? {});
+      seen.push({ url: String(url), authorization: h.get("authorization") });
+      if (hop === 1) {
+        return new Response(null, {
+          status: 302,
+          headers: { location: "https://origin-b.example/evil" },
+        });
+      }
+      return new Response("final", { status: 200, headers: { "content-type": "text/plain" } });
+    }) as unknown as typeof globalThis.fetch;
+    // deterministic public-IP resolver so host classification passes for the example hosts
+    const dnsLookup = (async () => [{ address: "93.184.216.34", family: 4 }]) as never;
+    const guarded = createGuardedFetch({ fetch: fetcher, dnsLookup });
+
+    const res = await guarded("https://origin-a.example/cal", {
+      headers: { authorization: "Basic SECRETCREDS" },
+    });
+    expect(res.status).toBe(200);
+    // hop 1 (origin A) carried the credential; hop 2 (cross-origin B) did NOT
+    expect(seen[0]?.authorization).toBe("Basic SECRETCREDS");
+    expect(seen[1]?.url).toBe("https://origin-b.example/evil");
+    expect(seen[1]?.authorization).toBeNull();
+  });
+
+  it("REFUSES a redirect to a cloud-metadata address (redirect-based SSRF closed)", async () => {
+    const fetcher = (async () =>
+      new Response(null, {
+        status: 302,
+        headers: { location: "https://169.254.169.254/latest/meta-data/" },
+      })) as unknown as typeof globalThis.fetch;
+    const dnsLookup = (async () => [{ address: "93.184.216.34", family: 4 }]) as never;
+    const guarded = createGuardedFetch({ fetch: fetcher, dnsLookup });
+    await expect(guarded("https://origin-a.example/cal")).rejects.toBeInstanceOf(SsrfError);
   });
 });

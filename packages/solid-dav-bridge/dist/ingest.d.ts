@@ -53,8 +53,8 @@ export interface ImportResult {
     /** Per-item outcome, in source order. */
     readonly items: ImportItemResult[];
 }
-/** Shared options for both importers. */
-interface BaseImportOptions {
+/** Shared options for both importers ({@link importCalendar} / {@link importAddressBook}). */
+export interface BaseImportOptions {
     /**
      * The authed `fetch` used to PUT each resource. Injectable so the import is
      * unit-testable with a stubbed fetch (no live server) and so the caller wires in
@@ -135,5 +135,4 @@ export declare function importCalendar(options: ImportCalendarOptions): Promise<
  * `options.container`. Returns a per-item report.
  */
 export declare function importAddressBook(options: ImportAddressBookOptions): Promise<ImportResult>;
-export {};
 //# sourceMappingURL=ingest.d.ts.map

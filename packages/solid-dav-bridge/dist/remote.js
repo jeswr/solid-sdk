@@ -7,16 +7,25 @@
  * MANDATORY that it go through `@jeswr/guarded-fetch` (the suite's SSRF-safe fetch):
  * https-only, no userinfo, block private / loopback / link-local / cloud-metadata
  * addresses, DNS-pin (the `./node` entry closes the lookup→connect rebinding TOCTOU),
- * cap the response body + time, and DO NOT auto-follow redirects (each hop would
- * otherwise re-leak the Authorization header to a new origin). A DAV URL is
- * attacker-influenceable (a user types it), so every one of these defences is
- * required.
+ * and cap the response body + time. A DAV URL is attacker-influenceable (a user types
+ * it), so every one of these defences is required.
+ *
+ * **Redirects (how the guard actually handles them).** `@jeswr/guarded-fetch` does
+ * NOT let the underlying fetch auto-follow — it sets `redirect:"manual"` and runs its
+ * OWN bounded redirect loop (≤ `maxRedirects` hops). On EACH hop it re-runs the FULL
+ * host classification (so a `302` to a private / loopback / cloud-metadata address is
+ * REFUSED, closing redirect-based SSRF) AND, on a CROSS-ORIGIN hop, STRIPS the
+ * credential headers (`Authorization`, `Cookie`, `DPoP`) before re-issuing. So the
+ * DAV `Authorization` header is forwarded only on a SAME-origin redirect and is never
+ * sent to a different origin — the security outcome the older "we don't follow
+ * redirects" wording was reaching for, achieved by re-validate-and-strip rather than
+ * outright refusal (which would break legitimate same-origin DAV redirects).
  *
  * **DAV credential handling (load-bearing).** Basic / Bearer auth is a SEPARATE
  * injectable credential ({@link DavAuth}) turned into an `Authorization` header. It
- * is NEVER logged, NEVER placed in a URL, and — because the guard does NOT follow
- * redirects — never re-sent to a different origin on a redirect. {@link DavFetchError}
- * messages carry only the URL + status, never the credential.
+ * is NEVER logged, NEVER placed in a URL, and — because the guard strips credential
+ * headers on any cross-origin redirect hop — never re-sent to a different origin.
+ * {@link DavFetchError} messages carry only the URL + status, never the credential.
  *
  * The returned text is the untrusted DAV body — hand it to `importCalendar` /
  * `importAddressBook` (which parse + harden every field). This helper does NOT write
@@ -71,9 +80,10 @@ function authHeader(davAuth) {
  * over-cap body; the guard throws its own `SsrfError`/`GuardError` for a blocked
  * URL (re-thrown untouched — that is the security signal).
  *
- * The URL is validated + DNS-pinned by `@jeswr/guarded-fetch`; redirects are NOT
- * followed, so the `Authorization` header cannot leak cross-origin. The credential
- * is never logged and never placed in the URL.
+ * The URL is validated + DNS-pinned by `@jeswr/guarded-fetch`; redirects are
+ * re-validated per hop and credential headers stripped on any cross-origin hop, so
+ * the `Authorization` header cannot leak cross-origin. The credential is never logged
+ * and never placed in the URL.
  *
  * @param url - the DAV endpoint URL (must be https; attacker-influenceable).
  */

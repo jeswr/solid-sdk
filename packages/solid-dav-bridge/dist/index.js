@@ -31,10 +31,10 @@
  *    pod resource via an injectable authed `writeFetch`.
  *  - **THE SSRF REMOTE** ({@link fetchDav}) is the ONLY place a user URL is
  *    dereferenced — always through `@jeswr/guarded-fetch` (https-only, block
- *    private/loopback/metadata, DNS-pin, cap + timeout, NO redirect-follow). DAV auth
- *    is a separate injectable credential turned into an `Authorization` header —
- *    never logged, never in a URL, never re-sent cross-origin (the guard does not
- *    follow redirects).
+ *    private/loopback/metadata, DNS-pin, cap + timeout, per-hop redirect
+ *    re-validation). DAV auth is a separate injectable credential turned into an
+ *    `Authorization` header — never logged, never in a URL, never re-sent cross-origin
+ *    (the guard strips credential headers on any cross-origin redirect hop).
  *
  * **Owner-privacy contract:** imported third-party data MUST default to owner-only.
  * This package never writes a broadening ACL and never auto-shares — written
@@ -58,5 +58,5 @@ export { vcardToContact, veventToEvent, } from "./map.js";
 // --- the optional SSRF-guarded fetch-from-DAV helper + DAV auth ---
 export { DavFetchError, fetchDav } from "./remote.js";
 // --- the vocabularies + the http(s)-only IRI guard ---
-export { EVENT_PREFIXES, ICAL, ICAL_RRULE, ICAL_VEVENT, isHttpIri, SCHEMA, SCHEMA_EVENT, } from "./vocab.js";
+export { EVENT_PREFIXES, ICAL, ICAL_RRULE, ICAL_VEVENT, isHttpIri, SCHEMA, SCHEMA_EVENT, safeHttpIri, } from "./vocab.js";
 //# sourceMappingURL=index.js.map

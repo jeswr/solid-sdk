@@ -62,7 +62,8 @@ const cardReport = await importAddressBook({
 ```ts
 // Pass a davUrl instead of the text — it is dereferenced ONLY through
 // @jeswr/guarded-fetch: https-only, blocks private / loopback / link-local /
-// cloud-metadata, DNS-pins, caps body + time, and does NOT follow redirects.
+// cloud-metadata, DNS-pins, caps body + time, and re-validates every redirect hop
+// (stripping the Authorization header on any cross-origin hop).
 const report = await importCalendar({
   davUrl: "https://dav.example.com/calendars/alice/personal/",
   davAuth: { type: "basic", username: "alice", password: process.env.DAV_PASSWORD! },
@@ -132,12 +133,15 @@ is load-bearing:
   [`@jeswr/guarded-fetch`](https://github.com/jeswr/guarded-fetch) — https-only, no
   userinfo, blocks private / loopback / link-local / cloud-metadata addresses, DNS-pins
   (closing the lookup→connect rebinding window via the `./node` entry), caps response
-  size + time, and **does not follow redirects** (so the `Authorization` header cannot
-  leak to another origin).
+  size + time, and **re-validates every redirect hop** — a `302` to a private /
+  loopback / cloud-metadata address is refused, and credential headers are stripped on
+  any cross-origin hop (so the `Authorization` header cannot leak to another origin).
 - **DAV credentials are never exposed.** A Basic / Bearer credential is turned into an
   `Authorization` header only — it is **never logged**, **never placed in a URL**, and
-  **never re-sent cross-origin** (no redirect-follow). `DavFetchError` messages carry
-  only the URL + status. (Tested: the password never appears in the error or the URL.)
+  **never re-sent cross-origin** (the guard strips credential headers on any
+  cross-origin redirect hop). `DavFetchError` messages carry only the URL + status.
+  (Tested: the password never appears in the error or the URL, and a cross-origin
+  redirect drops the `Authorization` header.)
 - **Untrusted-input hardened.** Imported DAV data is untrusted: an unparseable date
   drops **that** field (never aborts the event); a `javascript:` / `mailto:` / `urn:` /
   bare-string value in an IRI field is **dropped**, never coerced; a malformed email /

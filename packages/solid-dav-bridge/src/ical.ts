@@ -57,6 +57,13 @@ const MAX_LINE_LENGTH = 1_000_000; // one (unfolded) logical line, chars
 const MAX_NESTING = 20; // BEGIN/END depth
 
 /**
+ * The NUL character (U+0000), built from its code point so no literal NUL byte
+ * ever appears in this source file. Stripped from every parsed content line by
+ * {@link parseContentLine} — see the rationale there.
+ */
+const NUL = String.fromCharCode(0);
+
+/**
  * Unfold RFC 5545 §3.1 / RFC 6350 §3.2 folded lines: a CRLF (or bare LF/CR)
  * followed by a single space or HTAB continues the previous logical line; the
  * leading whitespace is removed. Returns logical lines (empty lines dropped).
@@ -96,6 +103,15 @@ export function unfoldLines(text: string): string[] {
  * UNQUOTED `:` to split off the value.
  */
 export function parseContentLine(line: string): ContentLine | undefined {
+  // Strip NUL (U+0000) up front. A NUL never legitimately appears in an
+  // iCalendar/vCard content line, but a hostile feed can embed one in a TEXT
+  // field (SUMMARY/DESCRIPTION/NOTE/…) or a param; it would otherwise survive
+  // through `unescapeText` into an emitted RDF literal and reach the pod resource
+  // (a NUL in output can truncate C-string consumers and is illegal in a Turtle
+  // literal). Removing it here is the single chokepoint every parsed name, param
+  // and value flows through, so no downstream field can carry a NUL. (IRI fields
+  // are separately covered by `safeHttpIri`, whose IRI_UNSAFE range includes 0x00.)
+  line = line.split(NUL).join("");
   // Find the first unquoted ':' — that separates the name+params from the value.
   let inQuote = false;
   let colon = -1;

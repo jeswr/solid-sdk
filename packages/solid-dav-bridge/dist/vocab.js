@@ -62,4 +62,51 @@ export function isHttpIri(value) {
         return false;
     }
 }
+/**
+ * Characters a Turtle `IRIREF` (`<...>`) forbids UNESCAPED (RDF 1.1 Turtle §6.5):
+ * the ASCII controls + SPACE (U+0000-U+0020) and `<`, `>`, `"`, `{`, `}`, `|`,
+ * `^`, `` ` ``, `\`. Any of these emitted raw inside `<...>` would either break OUT
+ * of the IRIREF (a `>` closes it — enabling RDF/TURTLE INJECTION of attacker triples)
+ * or produce an IRIREF a strict parser rejects. `n3.Writer` does NOT escape IRIs (it
+ * trusts the caller), so an IRI term MUST be sanitised before it reaches the writer.
+ */
+// biome-ignore lint/suspicious/noControlCharactersInRegex: the ASCII control range 0x00-0x20 is exactly what a Turtle IRIREF forbids.
+const IRI_UNSAFE = /[\x00-\x20<>"{}|^\x60\\]/g;
+/** Percent-encode one character's UTF-8 bytes for an IRI. */
+function pctEncode(ch) {
+    let out = "";
+    for (const b of new TextEncoder().encode(ch)) {
+        out += `%${b.toString(16).toUpperCase().padStart(2, "0")}`;
+    }
+    return out;
+}
+/**
+ * Validate AND canonicalise an untrusted value into an injection-safe absolute
+ * `http(s)` IRI, or `undefined` if it is not one.
+ *
+ * SECURITY (load-bearing): the value comes from untrusted DAV data (a VEVENT `URL`,
+ * a vCard `UID`/`URL`). {@link isHttpIri} only returns a BOOLEAN — a caller that then
+ * uses the ORIGINAL string as an IRI term hands `n3.Writer` (which does not escape
+ * IRIs) a value that may contain a right-angle-bracket and thereby INJECT arbitrary
+ * triples into the owner's pod resource (e.g. a forged `solid:oidcIssuer`). This
+ * function returns the value to actually emit: WHATWG-normalised (`new URL(value).href`
+ * percent-encodes angle brackets, double-quote, space, and curly braces) and then any
+ * residual Turtle-IRIREF-illegal char (pipe, caret, backtick) percent-encoded, so the
+ * emitted IRIREF can never be broken out of and is always well-formed. Use THIS (never
+ * the raw string) wherever an untrusted value becomes an IRI object.
+ */
+export function safeHttpIri(value) {
+    if (!value)
+        return undefined;
+    let u;
+    try {
+        u = new URL(value);
+    }
+    catch {
+        return undefined;
+    }
+    if (u.protocol !== "http:" && u.protocol !== "https:")
+        return undefined;
+    return u.href.replace(IRI_UNSAFE, pctEncode);
+}
 //# sourceMappingURL=vocab.js.map
