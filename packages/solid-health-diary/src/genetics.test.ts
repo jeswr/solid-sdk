@@ -25,11 +25,27 @@ function summary(): GeneticSummaryData {
   return {
     id: geneticSummarySubject(URL_),
     markers: [
-      { rsid: "rs2187668", genotype: "AG", markerInterpretation: "DQ2.5 risk haplotype" },
-      { rsid: "rs7454108", genotype: "TT", markerInterpretation: "DQ8 tag" },
+      {
+        rsid: "rs2187668",
+        genotype: "AG",
+        markerInterpretation: "DQ2.5 risk haplotype",
+        riskHaplotype: "DQ2.5",
+        markerPresence: "present",
+      },
+      {
+        rsid: "rs7454108",
+        genotype: "TT",
+        markerInterpretation: "DQ8 tag",
+        riskHaplotype: "DQ8",
+        markerPresence: "absent",
+      },
     ],
     interpretation: NEG_PREDICTIVE,
     enteredManually: false,
+    consentGiven: true,
+    sourceType: "consumer-array",
+    coeliacGeneticRisk: "risk-haplotype-present",
+    coverageComplete: true,
     patient: ME,
     created: new Date("2026-07-01T00:00:00.000Z"),
   };
@@ -48,6 +64,8 @@ describe("GeneticSummary round-trip (parse∘build == identity)", () => {
       markers: [{ rsid: "rs2187668", markerInterpretation: "DQ2.5 risk haplotype" }],
       interpretation: NEG_PREDICTIVE,
       enteredManually: true,
+      consentGiven: true,
+      sourceType: "manual",
       created: new Date("2026-07-01T00:00:00.000Z"),
     };
     expect(parseGeneticSummary(URL_, buildGeneticSummary(URL_, data))).toEqual(data);
@@ -93,7 +111,18 @@ describe("PRIVACY invariant — raw genotype bytes never enter the pod graph", (
     expect(keys).not.toContain("rawFile");
     expect(keys).not.toContain("raw");
     expect(keys.sort()).toEqual(
-      ["created", "enteredManually", "id", "interpretation", "markers", "patient"].sort(),
+      [
+        "coeliacGeneticRisk",
+        "consentGiven",
+        "coverageComplete",
+        "created",
+        "enteredManually",
+        "id",
+        "interpretation",
+        "markers",
+        "patient",
+        "sourceType",
+      ].sort(),
     );
   });
 });
@@ -136,5 +165,132 @@ describe("buildGeneticSummary fail-closed on an rsid-less HLA marker (SHACL MUST
       <${URL_}#marker-1> a diet:HlaMarker ; diet:rsid "rs2187668" ; diet:genotype "AG" .`;
     const parsed = await parseGeneticSummaryTtl(URL_, ttl);
     expect(parsed?.markers.map((m) => m.rsid)).toEqual(["rs2187668"]); // the blank-rsid row dropped
+  });
+});
+
+describe("consent guardrail — diet:consentGiven MUST be true to write (fail-closed)", () => {
+  it("buildGeneticSummary THROWS when consentGiven is undefined (no consent)", () => {
+    const { consentGiven: _omit, ...noConsent } = summary();
+    expect(() => buildGeneticSummary(URL_, noConsent as GeneticSummaryData)).toThrow(
+      /consentGiven MUST be true|explicit consent/i,
+    );
+  });
+
+  it("buildGeneticSummary THROWS when consentGiven is explicitly false", () => {
+    expect(() => buildGeneticSummary(URL_, { ...summary(), consentGiven: false })).toThrow(
+      /consentGiven MUST be true|explicit consent/i,
+    );
+  });
+
+  it("parseGeneticSummary REJECTS a stored summary whose consentGiven is present-but-false", async () => {
+    const ttl = `
+      @prefix diet: <https://w3id.org/jeswr/sectors/health/diet#> .
+      @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+      <${URL_}#it> a diet:GeneticSummary ;
+        diet:geneticInterpretation ${JSON.stringify(NEG_PREDICTIVE)} ;
+        diet:consentGiven "false"^^xsd:boolean .`;
+    expect(await parseGeneticSummaryTtl(URL_, ttl)).toBeUndefined();
+  });
+
+  it("parseGeneticSummary ALLOWS a pre-refinement summary with NO consentGiven triple (back-compat)", async () => {
+    const ttl = `
+      @prefix diet: <https://w3id.org/jeswr/sectors/health/diet#> .
+      <${URL_}#it> a diet:GeneticSummary ;
+        diet:geneticInterpretation ${JSON.stringify(NEG_PREDICTIVE)} ;
+        diet:enteredManually true .`;
+    const parsed = await parseGeneticSummaryTtl(URL_, ttl);
+    expect(parsed).toBeDefined();
+    expect(parsed?.consentGiven).toBeUndefined();
+  });
+
+  it("a consent-true summary round-trips with consentGiven surfaced", async () => {
+    const parsed = await parseGeneticSummaryTtl(
+      URL_,
+      await serializeGeneticSummary(URL_, summary()),
+    );
+    expect(parsed?.consentGiven).toBe(true);
+  });
+});
+
+describe("NPV-only guardrail — 'risk-haplotype-absent' requires complete coverage", () => {
+  it("buildGeneticSummary THROWS when risk-haplotype-absent but coverageComplete is undefined", () => {
+    const { coverageComplete: _omit, ...noCoverage } = summary();
+    expect(() =>
+      buildGeneticSummary(URL_, {
+        ...(noCoverage as GeneticSummaryData),
+        coeliacGeneticRisk: "risk-haplotype-absent",
+      }),
+    ).toThrow(/coverageComplete=true|overstate/i);
+  });
+
+  it("buildGeneticSummary THROWS when risk-haplotype-absent but coverageComplete is false", () => {
+    expect(() =>
+      buildGeneticSummary(URL_, {
+        ...summary(),
+        coeliacGeneticRisk: "risk-haplotype-absent",
+        coverageComplete: false,
+      }),
+    ).toThrow(/coverageComplete=true|overstate/i);
+  });
+
+  it("a risk-haplotype-absent summary WITH coverageComplete=true is allowed + round-trips", async () => {
+    const data: GeneticSummaryData = {
+      ...summary(),
+      coeliacGeneticRisk: "risk-haplotype-absent",
+      coverageComplete: true,
+    };
+    const parsed = await parseGeneticSummaryTtl(URL_, await serializeGeneticSummary(URL_, data));
+    expect(parsed?.coeliacGeneticRisk).toBe("risk-haplotype-absent");
+    expect(parsed?.coverageComplete).toBe(true);
+  });
+
+  it("risk-haplotype-present is NOT coverage-gated (a positive is never a diagnosis, but not overstated by absence)", () => {
+    const { coverageComplete: _omit, ...noCoverage } = summary();
+    expect(() =>
+      buildGeneticSummary(URL_, {
+        ...(noCoverage as GeneticSummaryData),
+        coeliacGeneticRisk: "risk-haplotype-present",
+      }),
+    ).not.toThrow();
+  });
+
+  it("parseGeneticSummary REJECTS a stored summary asserting risk-haplotype-absent WITHOUT complete coverage", async () => {
+    const ttl = `
+      @prefix diet: <https://w3id.org/jeswr/sectors/health/diet#> .
+      <${URL_}#it> a diet:GeneticSummary ;
+        diet:geneticInterpretation ${JSON.stringify(NEG_PREDICTIVE)} ;
+        diet:consentGiven true ;
+        diet:coeliacGeneticRisk diet:riskHaplotypeAbsent .`;
+    // No diet:coverageComplete → an overstated negative; must fail closed.
+    expect(await parseGeneticSummaryTtl(URL_, ttl)).toBeUndefined();
+  });
+});
+
+describe("structured genetics fields round-trip + wire encoding (concept IRIs)", () => {
+  it("markerPresence / riskHaplotype / coeliacGeneticRisk / sourceType round-trip as friendly tokens", async () => {
+    const parsed = await parseGeneticSummaryTtl(
+      URL_,
+      await serializeGeneticSummary(URL_, summary()),
+    );
+    expect(parsed?.sourceType).toBe("consumer-array");
+    expect(parsed?.coeliacGeneticRisk).toBe("risk-haplotype-present");
+    expect(parsed?.markers.map((m) => m.riskHaplotype)).toEqual(["DQ2.5", "DQ8"]);
+    expect(parsed?.markers.map((m) => m.markerPresence)).toEqual(["present", "absent"]);
+  });
+
+  it("the friendly tokens are STORED as diet: concept IRIs on the wire (distinct from reused schemes)", async () => {
+    const ttl = await serializeGeneticSummary(URL_, summary());
+    // riskHaplotype DQ2.5 → diet:DQ2_5 (dot is not a bare local-name char)
+    expect(ttl).toContain("diet:DQ2_5");
+    expect(ttl).toContain("diet:DQ8");
+    // markerPresence uses DISTINCT IRIs so it never conflates with the ExposureLevel
+    // diet:present / diet:absent concepts (a different scheme).
+    expect(ttl).toContain("diet:markerPresent");
+    expect(ttl).toContain("diet:markerAbsent");
+    // sourceType manual → diet:manualEntry (distinct from the SourceConfidence diet:manual)
+    expect(ttl).toContain("diet:consumerArray");
+    // coeliacGeneticRisk present → diet:riskHaplotypePresent
+    expect(ttl).toContain("diet:riskHaplotypePresent");
+    expect(ttl).toContain("diet:consentGiven");
   });
 });

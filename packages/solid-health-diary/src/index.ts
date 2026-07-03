@@ -28,12 +28,16 @@ export { aclUrlFor, buildOwnerOnlyAcl, writeOwnerOnlyAcl } from "./acl.js";
 // Coded-value codecs (friendly token ⇄ diet: concept IRI).
 export {
   type Codec,
+  coeliacGeneticRiskCodec,
   confidenceCodec,
   contextCodec,
   exposureLevelCodec,
+  markerPresenceCodec,
   phaseCodec,
   portionCodec,
+  riskHaplotypeCodec,
   sourceConfidenceCodec,
+  sourceTypeCodec,
   symptomTypeCodec,
   verdictCodec,
 } from "./concepts.js";
@@ -63,13 +67,21 @@ export { deriveExposures } from "./derive.js";
 // GeneticSummary (summary only — never raw genotype data).
 export {
   buildGeneticSummary,
+  COELIAC_GENETIC_RISKS,
+  type CoeliacGeneticRisk,
+  GENETIC_SOURCE_TYPES,
+  type GeneticSourceType,
   GeneticSummary,
   type GeneticSummaryData,
   geneticSummarySubject,
   type HlaMarkerData,
+  MARKER_PRESENCES,
+  type MarkerPresence,
   markerSubject,
   parseGeneticSummary,
   parseGeneticSummaryTtl,
+  RISK_HAPLOTYPES,
+  type RiskHaplotype,
   serializeGeneticSummary,
 } from "./genetics.js";
 // Pure IRI helpers.

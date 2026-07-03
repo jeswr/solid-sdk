@@ -21,10 +21,10 @@
  * @packageDocumentation
  */
 export { aclUrlFor, buildOwnerOnlyAcl, writeOwnerOnlyAcl } from "./acl.js";
-export { type Codec, confidenceCodec, contextCodec, exposureLevelCodec, phaseCodec, portionCodec, sourceConfidenceCodec, symptomTypeCodec, verdictCodec, } from "./concepts.js";
+export { type Codec, coeliacGeneticRiskCodec, confidenceCodec, contextCodec, exposureLevelCodec, markerPresenceCodec, phaseCodec, portionCodec, riskHaplotypeCodec, sourceConfidenceCodec, sourceTypeCodec, symptomTypeCodec, verdictCodec, } from "./concepts.js";
 export { buildDietPlan, buildToleranceConclusion, CONFIDENCE_LEVELS, type Confidence, conclusionSubject, DietPlan, type DietPlanData, dietPlanSubject, parseDietPlan, parseDietPlanTtl, parseToleranceConclusion, parseToleranceConclusionTtl, serializeDietPlan, serializeToleranceConclusion, ToleranceConclusion, type ToleranceConclusionData, VERDICTS, type Verdict, } from "./conclusion.js";
 export { deriveExposures } from "./derive.js";
-export { buildGeneticSummary, GeneticSummary, type GeneticSummaryData, geneticSummarySubject, type HlaMarkerData, markerSubject, parseGeneticSummary, parseGeneticSummaryTtl, serializeGeneticSummary, } from "./genetics.js";
+export { buildGeneticSummary, COELIAC_GENETIC_RISKS, type CoeliacGeneticRisk, GENETIC_SOURCE_TYPES, type GeneticSourceType, GeneticSummary, type GeneticSummaryData, geneticSummarySubject, type HlaMarkerData, MARKER_PRESENCES, type MarkerPresence, markerSubject, parseGeneticSummary, parseGeneticSummaryTtl, RISK_HAPLOTYPES, type RiskHaplotype, serializeGeneticSummary, } from "./genetics.js";
 export { docOf, httpIriOrUndefined, isHttpIri } from "./iri.js";
 export { buildMeal, EXPOSURE_LEVELS, Exposure, type ExposureData, type ExposureLevel, exposureSubject, FoodItem, type FoodItemData, foodItemSubject, MEAL_CONTEXTS, Meal, type MealContext, type MealData, mealSubject, PORTIONS, type Portion, parseExposure, parseFoodItem, parseMeal, parseMealTtl, SOURCE_CONFIDENCES, type SourceConfidence, serializeMeal, } from "./meal.js";
 export { ACTIVE_CHALLENGE_PHASES, assertSingleActiveChallenge, buildProtocol, countActiveChallenges, EliminationProtocol, hasSingleActiveChallenge, isActiveChallengePhase, PROTOCOL_PHASES, type ProtocolData, type ProtocolPhase, parseProtocol, parseProtocolTtl, protocolSubject, serializeProtocol, } from "./protocol.js";

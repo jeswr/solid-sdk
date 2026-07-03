@@ -278,11 +278,41 @@ dsh:GeneticSummaryShape
         sh:message "A GeneticSummary MUST carry a diet:geneticInterpretation (the negative-predictive framing — never a 'you have/don't have coeliac' statement)."@en
     ] ;
     sh:property [
+        sh:path diet:consentGiven ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:boolean ;
+        sh:hasValue true ;
+        sh:severity sh:Violation ;
+        sh:message "A GeneticSummary MUST carry diet:consentGiven = true — genetic data is never stored without explicit consent (fail-closed)."@en
+    ] ;
+    sh:property [
         sh:path diet:enteredManually ;
         sh:maxCount 1 ;
         sh:datatype xsd:boolean ;
         sh:severity sh:Warning ;
         sh:message "A GeneticSummary SHOULD declare diet:enteredManually (manual entry vs on-device-parsed upload)."@en
+    ] ;
+    sh:property [
+        sh:path diet:sourceType ;
+        sh:maxCount 1 ;
+        sh:class diet:GeneticSourceType ;
+        sh:severity sh:Warning ;
+        sh:message "A GeneticSummary SHOULD declare diet:sourceType (manual/consumer-array/clinical-report) — provenance without raw data."@en
+    ] ;
+    sh:property [
+        sh:path diet:coverageComplete ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:boolean ;
+        sh:severity sh:Warning ;
+        sh:message "A GeneticSummary SHOULD declare diet:coverageComplete (did the source test every risk tag SNP?) — load-bearing for the 'absence excludes' NPV claim."@en
+    ] ;
+    sh:property [
+        sh:path diet:coeliacGeneticRisk ;
+        sh:maxCount 1 ;
+        sh:class diet:CoeliacGeneticRisk ;
+        sh:severity sh:Warning ;
+        sh:message "A GeneticSummary MAY carry a diet:coeliacGeneticRisk NPV-only rollup (risk-haplotype-present/absent/partial-coverage/indeterminate — 'absent' means unlikely, never 'you don't have coeliac')."@en
     ] ;
     sh:property [
         sh:path diet:hlaMarker ;
@@ -312,6 +342,20 @@ dsh:HlaMarkerShape
         sh:datatype xsd:string ;
         sh:severity sh:Warning ;
         sh:message "An HlaMarker SHOULD carry a diet:markerInterpretation."@en
+    ] ;
+    sh:property [
+        sh:path diet:riskHaplotype ;
+        sh:maxCount 1 ;
+        sh:class diet:HlaRiskHaplotype ;
+        sh:severity sh:Warning ;
+        sh:message "An HlaMarker MAY carry a machine-readable diet:riskHaplotype (DQ2.5/DQ2.2/DQ7/DQ8) that it tags."@en
+    ] ;
+    sh:property [
+        sh:path diet:markerPresence ;
+        sh:maxCount 1 ;
+        sh:class diet:MarkerPresence ;
+        sh:severity sh:Warning ;
+        sh:message "An HlaMarker MAY carry a structured diet:markerPresence (present/absent/uncertain — 'uncertain' for a no-call, never a false 'absent')."@en
     ] .
 
 # -----------------------------------------------------------------------------

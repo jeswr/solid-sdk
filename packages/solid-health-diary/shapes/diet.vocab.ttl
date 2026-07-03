@@ -242,6 +242,35 @@ diet:Portion a owl:Class, gufo:Category ;
     skos:definition "A qualitative portion size for a Meal (small / normal / large) where a precise QUDT quantity is not captured."@en ;
     skos:scopeNote "gufo:Category of core:Category. Members are skos:Concepts in diet:PortionScheme."@en .
 
+# --- Genetics coded classes (Phase 3c — PRIVACY-/SAFETY-CRITICAL) -------------
+# Machine-readable value sets for the interpreted HLA summary. DQ2/DQ8 is COMMON
+# (~25–40% of the general population) and NOT diagnostic; only the NEGATIVE
+# predictive value is strong. These carry structure, never raw genotype data.
+
+diet:HlaRiskHaplotype a owl:Class, gufo:Category ;
+    rdfs:subClassOf core:Category ;
+    rdfs:label "HLA Risk Haplotype"@en ;
+    skos:definition "A coeliac-risk HLA-DQ haplotype an HlaMarker tags: DQ2.5 (tag SNP rs2187668), DQ2.2, DQ7, DQ8 (tag SNP rs7454108). Carrying one is NOT diagnostic; its clinical value is negative-predictive."@en ;
+    skos:scopeNote "gufo:Category of core:Category. Members are skos:Concepts in diet:HlaRiskHaplotypeScheme."@en .
+
+diet:MarkerPresence a owl:Class, gufo:Category ;
+    rdfs:subClassOf core:Category ;
+    rdfs:label "Marker Presence"@en ;
+    skos:definition "The structured presence call for one HlaMarker: present / absent / uncertain. 'uncertain' encodes a no-call or ambiguous genotype — never a false 'absent' (an unknown must not read as reassurance)."@en ;
+    skos:scopeNote "gufo:Category of core:Category. Members are skos:Concepts in diet:MarkerPresenceScheme."@en .
+
+diet:CoeliacGeneticRisk a owl:Class, gufo:Category ;
+    rdfs:subClassOf core:Category ;
+    rdfs:label "Coeliac Genetic Risk"@en ;
+    skos:definition "The negative-predictive-only rollup over a GeneticSummary's markers: risk-haplotype-present (a DQ2/DQ8 haplotype was found — NOT a diagnosis), risk-haplotype-absent (none found → coeliac unlikely; valid ONLY with complete coverage — NOT 'you don't have coeliac'), partial-coverage (the source could not test every risk locus), indeterminate (cannot be called)."@en ;
+    skos:scopeNote "gufo:Category of core:Category. Members are skos:Concepts in diet:CoeliacGeneticRiskScheme."@en .
+
+diet:GeneticSourceType a owl:Class, gufo:Category ;
+    rdfs:subClassOf core:Category ;
+    rdfs:label "Genetic Source Type"@en ;
+    skos:definition "The provenance of a GeneticSummary WITHOUT any raw data: manual (known HLA type entered by hand), consumer-array (on-device-parsed 23andMe/AncestryDNA export — raw file discarded), clinical-report (an HLA lab report). 'manual' aligns with the legacy diet:enteredManually=true."@en ;
+    skos:scopeNote "gufo:Category of core:Category. Members are skos:Concepts in diet:GeneticSourceTypeScheme."@en .
+
 # =============================================================================
 # 3. PROPERTIES — sub-properties of a Core/health property where one fits, else
 #    domained onto a diet: class (constrain, never widen a reused property).
@@ -459,6 +488,30 @@ diet:enteredManually a owl:DatatypeProperty ;
     rdfs:label "entered manually"@en ;
     skos:definition "True if a GeneticSummary was entered manually (known HLA type/result), false if parsed on-device from a consumer raw-genotype upload (the raw file discarded)."@en .
 
+diet:consentGiven a owl:DatatypeProperty ;
+    rdfs:domain diet:GeneticSummary ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "consent given"@en ;
+    skos:definition "Explicit genetic-data consent. MUST be true for a GeneticSummary to be written or valid (fail-closed): genetic data is never stored without explicit consent. Mirrors the diet:geneticInterpretation MUST."@en .
+
+diet:sourceType a owl:ObjectProperty ;
+    rdfs:domain diet:GeneticSummary ;
+    rdfs:range diet:GeneticSourceType ;
+    rdfs:label "source type"@en ;
+    skos:definition "The provenance of a GeneticSummary WITHOUT raw data (manual / consumer-array / clinical-report). Supersedes the boolean diet:enteredManually (sourceType=manual ≡ enteredManually=true)."@en .
+
+diet:coeliacGeneticRisk a owl:ObjectProperty ;
+    rdfs:domain diet:GeneticSummary ;
+    rdfs:range diet:CoeliacGeneticRisk ;
+    rdfs:label "coeliac genetic risk"@en ;
+    skos:definition "The negative-predictive-only rollup for a GeneticSummary (risk-haplotype-present / risk-haplotype-absent / partial-coverage / indeterminate). 'risk-haplotype-absent' is valid ONLY when diet:coverageComplete=true, and means coeliac is unlikely — never 'you don't have coeliac'."@en .
+
+diet:coverageComplete a owl:DatatypeProperty ;
+    rdfs:domain diet:GeneticSummary ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "coverage complete"@en ;
+    skos:definition "True if the source tested every tracked coeliac-risk tag SNP. Load-bearing for the 'absence excludes' NPV claim: when false/absent, a 'not found' result is NOT reassurance (a consumer chip may not tag every risk allele)."@en .
+
 diet:rsid a owl:DatatypeProperty ;
     rdfs:domain diet:HlaMarker ;
     rdfs:range xsd:string ;
@@ -476,6 +529,18 @@ diet:markerInterpretation a owl:DatatypeProperty ;
     rdfs:range xsd:string ;
     rdfs:label "marker interpretation"@en ;
     skos:definition "The interpretation of an HlaMarker's genotype (e.g. 'rs2187668 present → DQ2.5 risk haplotype')."@en .
+
+diet:riskHaplotype a owl:ObjectProperty ;
+    rdfs:domain diet:HlaMarker ;
+    rdfs:range diet:HlaRiskHaplotype ;
+    rdfs:label "risk haplotype"@en ;
+    skos:definition "The machine-readable coeliac-risk HLA-DQ haplotype an HlaMarker tags (DQ2.5 / DQ2.2 / DQ7 / DQ8) — additive to the free-text diet:markerInterpretation."@en .
+
+diet:markerPresence a owl:ObjectProperty ;
+    rdfs:domain diet:HlaMarker ;
+    rdfs:range diet:MarkerPresence ;
+    rdfs:label "marker presence"@en ;
+    skos:definition "The structured presence call for an HlaMarker (present / absent / uncertain). 'uncertain' for a no-call or ambiguous genotype — never a false 'absent'."@en .
 
 # --- DietPlan -----------------------------------------------------------------
 diet:excludes a owl:ObjectProperty ;
@@ -763,6 +828,70 @@ diet:jointPain a diet:SymptomType, skos:Concept ;
 diet:mood a diet:SymptomType, skos:Concept ;
     skos:inScheme diet:SymptomScheme ; skos:notation "mood" ;
     skos:prefLabel "Mood change"@en ; skos:definition "Low mood, irritability or anxiety."@en .
+
+# --- Genetics concept schemes (Phase 3c) -------------------------------------
+
+diet:HlaRiskHaplotypeScheme a skos:ConceptScheme ;
+    rdfs:label "HLA Risk Haplotype scheme"@en ;
+    skos:definition "The coeliac-risk HLA-DQ haplotype value set for diet:riskHaplotype."@en .
+
+diet:DQ2_5 a diet:HlaRiskHaplotype, skos:Concept ;
+    skos:inScheme diet:HlaRiskHaplotypeScheme ; skos:notation "DQ2.5" ;
+    skos:prefLabel "HLA-DQ2.5"@en ; skos:definition "The HLA-DQ2.5 haplotype (tag SNP rs2187668) — the haplotype ~90–95% of coeliac patients carry; common in the general population and NOT diagnostic."@en .
+diet:DQ2_2 a diet:HlaRiskHaplotype, skos:Concept ;
+    skos:inScheme diet:HlaRiskHaplotypeScheme ; skos:notation "DQ2.2" ;
+    skos:prefLabel "HLA-DQ2.2"@en ; skos:definition "The HLA-DQ2.2 haplotype (chip-dependent tag coverage)."@en .
+diet:DQ7 a diet:HlaRiskHaplotype, skos:Concept ;
+    skos:inScheme diet:HlaRiskHaplotypeScheme ; skos:notation "DQ7" ;
+    skos:prefLabel "HLA-DQ7"@en ; skos:definition "The HLA-DQ7 haplotype (chip-dependent tag coverage)."@en .
+diet:DQ8 a diet:HlaRiskHaplotype, skos:Concept ;
+    skos:inScheme diet:HlaRiskHaplotypeScheme ; skos:notation "DQ8" ;
+    skos:prefLabel "HLA-DQ8"@en ; skos:definition "The HLA-DQ8 haplotype (tag SNP rs7454108) — carried by ~5–10% of coeliac patients; common in the general population and NOT diagnostic."@en .
+
+diet:MarkerPresenceScheme a skos:ConceptScheme ;
+    rdfs:label "Marker Presence scheme"@en ;
+    skos:definition "The structured presence-call value set for diet:markerPresence."@en .
+
+diet:markerPresent a diet:MarkerPresence, skos:Concept ;
+    skos:inScheme diet:MarkerPresenceScheme ; skos:notation "present" ;
+    skos:prefLabel "Present"@en ; skos:definition "The risk allele the marker tags is present."@en .
+diet:markerAbsent a diet:MarkerPresence, skos:Concept ;
+    skos:inScheme diet:MarkerPresenceScheme ; skos:notation "absent" ;
+    skos:prefLabel "Absent"@en ; skos:definition "The risk allele the marker tags is absent (only meaningful if the locus was tested — see diet:coverageComplete)."@en .
+diet:markerUncertain a diet:MarkerPresence, skos:Concept ;
+    skos:inScheme diet:MarkerPresenceScheme ; skos:notation "uncertain" ;
+    skos:prefLabel "Uncertain"@en ; skos:definition "A no-call or ambiguous genotype — NEVER a false 'absent'; an unknown must not read as reassurance."@en .
+
+diet:CoeliacGeneticRiskScheme a skos:ConceptScheme ;
+    rdfs:label "Coeliac Genetic Risk scheme"@en ;
+    skos:definition "The negative-predictive-only rollup value set for diet:coeliacGeneticRisk."@en .
+
+diet:riskHaplotypePresent a diet:CoeliacGeneticRisk, skos:Concept ;
+    skos:inScheme diet:CoeliacGeneticRiskScheme ; skos:notation "risk-haplotype-present" ;
+    skos:prefLabel "Risk haplotype present"@en ; skos:definition "A DQ2/DQ8 risk haplotype was found. NOT a diagnosis — DQ2/DQ8 is common (~25–40% of the general population); most carriers never develop coeliac."@en .
+diet:riskHaplotypeAbsent a diet:CoeliacGeneticRisk, skos:Concept ;
+    skos:inScheme diet:CoeliacGeneticRiskScheme ; skos:notation "risk-haplotype-absent" ;
+    skos:prefLabel "Risk haplotype absent"@en ; skos:definition "No DQ2/DQ8 risk haplotype was found → coeliac is very unlikely (the strong negative predictive value). Valid ONLY with diet:coverageComplete=true. NOT a statement that 'you don't have coeliac'."@en .
+diet:partialCoverage a diet:CoeliacGeneticRisk, skos:Concept ;
+    skos:inScheme diet:CoeliacGeneticRiskScheme ; skos:notation "partial-coverage" ;
+    skos:prefLabel "Partial coverage"@en ; skos:definition "The source could not speak to every coeliac-risk locus, so an 'absent' result cannot be asserted; a 'not found' here is not reassurance."@en .
+diet:indeterminate a diet:CoeliacGeneticRisk, skos:Concept ;
+    skos:inScheme diet:CoeliacGeneticRiskScheme ; skos:notation "indeterminate" ;
+    skos:prefLabel "Indeterminate"@en ; skos:definition "The rollup cannot be called from the available markers."@en .
+
+diet:GeneticSourceTypeScheme a skos:ConceptScheme ;
+    rdfs:label "Genetic Source Type scheme"@en ;
+    skos:definition "The provenance value set (no raw data) for diet:sourceType."@en .
+
+diet:manualEntry a diet:GeneticSourceType, skos:Concept ;
+    skos:inScheme diet:GeneticSourceTypeScheme ; skos:notation "manual" ;
+    skos:prefLabel "Manual entry"@en ; skos:definition "A known HLA type/result entered by hand (≡ the legacy diet:enteredManually=true)."@en .
+diet:consumerArray a diet:GeneticSourceType, skos:Concept ;
+    skos:inScheme diet:GeneticSourceTypeScheme ; skos:notation "consumer-array" ;
+    skos:prefLabel "Consumer array"@en ; skos:definition "An on-device-parsed consumer raw-genotype export (23andMe/AncestryDNA) — the raw file is discarded, only the summary stored."@en .
+diet:clinicalReport a diet:GeneticSourceType, skos:Concept ;
+    skos:inScheme diet:GeneticSourceTypeScheme ; skos:notation "clinical-report" ;
+    skos:prefLabel "Clinical report"@en ; skos:definition "An HLA-DQ typing result from a clinical laboratory report."@en .
 
 # =============================================================================
 # SUB-SECTOR MARKER — the IRI an app's fedapp:sector names to declare it operates

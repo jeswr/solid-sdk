@@ -24,13 +24,13 @@
 // Owner-only fail-closed ACL helper.
 export { aclUrlFor, buildOwnerOnlyAcl, writeOwnerOnlyAcl } from "./acl.js";
 // Coded-value codecs (friendly token ⇄ diet: concept IRI).
-export { confidenceCodec, contextCodec, exposureLevelCodec, phaseCodec, portionCodec, sourceConfidenceCodec, symptomTypeCodec, verdictCodec, } from "./concepts.js";
+export { coeliacGeneticRiskCodec, confidenceCodec, contextCodec, exposureLevelCodec, markerPresenceCodec, phaseCodec, portionCodec, riskHaplotypeCodec, sourceConfidenceCodec, sourceTypeCodec, symptomTypeCodec, verdictCodec, } from "./concepts.js";
 // ToleranceConclusion + DietPlan.
 export { buildDietPlan, buildToleranceConclusion, CONFIDENCE_LEVELS, conclusionSubject, DietPlan, dietPlanSubject, parseDietPlan, parseDietPlanTtl, parseToleranceConclusion, parseToleranceConclusionTtl, serializeDietPlan, serializeToleranceConclusion, ToleranceConclusion, VERDICTS, } from "./conclusion.js";
 // Exposure derivation.
 export { deriveExposures } from "./derive.js";
 // GeneticSummary (summary only — never raw genotype data).
-export { buildGeneticSummary, GeneticSummary, geneticSummarySubject, markerSubject, parseGeneticSummary, parseGeneticSummaryTtl, serializeGeneticSummary, } from "./genetics.js";
+export { buildGeneticSummary, COELIAC_GENETIC_RISKS, GENETIC_SOURCE_TYPES, GeneticSummary, geneticSummarySubject, MARKER_PRESENCES, markerSubject, parseGeneticSummary, parseGeneticSummaryTtl, RISK_HAPLOTYPES, serializeGeneticSummary, } from "./genetics.js";
 // Pure IRI helpers.
 export { docOf, httpIriOrUndefined, isHttpIri } from "./iri.js";
 // Meal + FoodItem + Exposure.

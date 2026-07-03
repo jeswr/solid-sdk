@@ -48,4 +48,39 @@ export declare const portionCodec: Codec<"small" | "normal" | "large">;
  * the IRI local name is the camelCase concept id.
  */
 export declare const symptomTypeCodec: Codec<"bloating" | "diarrhoea" | "constipation" | "abdominal-pain" | "brain-fog" | "headache" | "fatigue" | "skin-rash" | "wheeze-breathing" | "anaphylaxis" | "nausea" | "reflux" | "joint-pain" | "mood">;
+/**
+ * `diet:HlaRiskHaplotype` — WHICH coeliac-risk HLA-DQ haplotype a marker tags.
+ * Token `DQ2.5` ⇄ IRI `diet:DQ2_5` (the IRI local name uses `_` since `.` is not
+ * a valid bare local-name char). Tag SNPs (verified): `rs2187668`→`DQ2.5`,
+ * `rs7454108`→`DQ8`; DQ2.2/DQ7 tags are chip-dependent (coverage caveat).
+ */
+export declare const riskHaplotypeCodec: Codec<"DQ2.5" | "DQ2.2" | "DQ7" | "DQ8">;
+/**
+ * `diet:MarkerPresence` — the structured presence call for one marker. `uncertain`
+ * is used for a no-call / ambiguous genotype — **never a false `absent`** (an
+ * unknown must not read as reassurance). Distinct IRI local names
+ * (`markerPresent`/`markerAbsent`/`markerUncertain`) so this genetics value set
+ * never conflates with the reused generic `diet:present`/`diet:absent`
+ * ExposureLevel concepts (a different scheme).
+ */
+export declare const markerPresenceCodec: Codec<"present" | "absent" | "uncertain">;
+/**
+ * `diet:CoeliacGeneticRisk` — the NPV-only UI rollup over the markers. Token
+ * `risk-haplotype-absent` ⇄ IRI `diet:riskHaplotypeAbsent`. **Framed
+ * negative-predictive-only:** `risk-haplotype-absent` means coeliac is *unlikely*,
+ * explicitly NOT "you don't have coeliac"; `risk-haplotype-present` is NOT a
+ * diagnosis (DQ2/DQ8 is common). `partial-coverage` = the source could not speak
+ * to every risk locus; `indeterminate` = cannot be called. The
+ * `risk-haplotype-absent` rollup is only valid when coverage is complete — that
+ * safety rule is enforced in `buildGeneticSummary`/`parseGeneticSummary`.
+ */
+export declare const coeliacGeneticRiskCodec: Codec<"risk-haplotype-present" | "risk-haplotype-absent" | "partial-coverage" | "indeterminate">;
+/**
+ * `diet:GeneticSourceType` — provenance of the summary WITHOUT any raw data. Token
+ * `manual` ⇄ IRI `diet:manualEntry` (distinct from the reused generic `diet:manual`
+ * SourceConfidence concept — a different scheme), `consumer-array` ⇄
+ * `diet:consumerArray`, `clinical-report` ⇄ `diet:clinicalReport`. `sourceType=manual`
+ * ≡ the legacy `enteredManually=true` (kept for back-compat; this supersedes it).
+ */
+export declare const sourceTypeCodec: Codec<"manual" | "consumer-array" | "clinical-report">;
 //# sourceMappingURL=concepts.d.ts.map

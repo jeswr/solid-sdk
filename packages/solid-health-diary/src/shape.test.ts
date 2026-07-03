@@ -106,11 +106,22 @@ describe("SHACL — the build* outputs produce NO violation", () => {
     expect(await violations(store)).toEqual([]);
   });
 
-  it("a GeneticSummary (interpretation MUST-present) has no violation", async () => {
+  it("a GeneticSummary (interpretation + consent MUST-present) has no violation", async () => {
     const store = buildGeneticSummary(URL_, {
-      markers: [{ rsid: "rs2187668", markerInterpretation: "DQ2.5 risk haplotype" }],
+      markers: [
+        {
+          rsid: "rs2187668",
+          markerInterpretation: "DQ2.5 risk haplotype",
+          riskHaplotype: "DQ2.5",
+          markerPresence: "present",
+        },
+      ],
       interpretation: "Cannot diagnose; negative-predictive only; chip may miss alleles.",
       enteredManually: true,
+      consentGiven: true,
+      sourceType: "manual",
+      coeliacGeneticRisk: "risk-haplotype-present",
+      coverageComplete: false,
     });
     expect(await violations(store)).toEqual([]);
   });
@@ -143,5 +154,27 @@ describe("SHACL — malformed data yields a violation", () => {
     `;
     const v = await violations(new Parser().parse(ttl));
     expect(v.some((m) => m.includes("geneticInterpretation"))).toBe(true);
+  });
+
+  it("a GeneticSummary with NO consent violates the MUST (consent MUST be true)", async () => {
+    const ttl = `
+      @prefix diet: <https://w3id.org/jeswr/sectors/health/diet#> .
+      <${URL_}#it> a diet:GeneticSummary ;
+        diet:geneticInterpretation "Cannot diagnose; negative-predictive only." .
+    `;
+    const v = await violations(new Parser().parse(ttl));
+    expect(v.some((m) => m.includes("consentGiven"))).toBe(true);
+  });
+
+  it("a GeneticSummary with consentGiven=false violates the MUST (sh:hasValue true)", async () => {
+    const ttl = `
+      @prefix diet: <https://w3id.org/jeswr/sectors/health/diet#> .
+      @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+      <${URL_}#it> a diet:GeneticSummary ;
+        diet:geneticInterpretation "Cannot diagnose; negative-predictive only." ;
+        diet:consentGiven "false"^^xsd:boolean .
+    `;
+    const v = await violations(new Parser().parse(ttl));
+    expect(v.some((m) => m.includes("consentGiven"))).toBe(true);
   });
 });

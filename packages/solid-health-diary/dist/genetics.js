@@ -13,19 +13,42 @@
  * field).
  *
  * **Framing is negative-predictive only** (RESEARCH §2.5): carrying DQ2/DQ8 does
- * NOT mean coeliac (30–40% of everyone carries it); NOT carrying it makes coeliac
- * very unlikely; this cannot diagnose. Plus a chip-coverage caveat. The framing
- * lives in `diet:geneticInterpretation`; the app is responsible for presenting it.
+ * NOT mean coeliac (~25–40% of the general population carries it — it is COMMON and
+ * NOT diagnostic); NOT carrying it makes coeliac very unlikely (only the NEGATIVE
+ * predictive value is strong). This cannot diagnose. Plus a chip-coverage caveat.
+ * The framing lives in `diet:geneticInterpretation`; the app presents it.
+ *
+ * **Two fail-closed write guardrails (mirroring the interpretation MUST):**
+ * 1. `diet:consentGiven` MUST be `true` — genetic data is never written without
+ *    explicit consent (`buildGeneticSummary` throws; a stored summary whose consent
+ *    is present-but-not-true is rejected on read).
+ * 2. A `diet:coeliacGeneticRisk` of `risk-haplotype-absent` (the NPV "coeliac
+ *    unlikely" rollup) requires `diet:coverageComplete=true` — the model refuses to
+ *    assert an absent result when the source did not cover every risk tag SNP, so it
+ *    can never overstate a negative.
+ *
+ * Additive Phase-3c terms (`diet:riskHaplotype`/`markerPresence` on a marker;
+ * `diet:consentGiven`/`sourceType`/`coeliacGeneticRisk`/`coverageComplete` on the
+ * summary) are all optional-on-read, so a pre-refinement summary still parses.
  *
  * Typed accessors; never hand-built triples.
  */
 import { LiteralAs, LiteralFrom, NamedNodeAs, NamedNodeFrom, OptionalAs, OptionalFrom, SetFrom, TermWrapper, } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
+import { coeliacGeneticRiskCodec, markerPresenceCodec, riskHaplotypeCodec, sourceTypeCodec, } from "./concepts.js";
 import { httpIriOrUndefined } from "./iri.js";
 import { assertSubjectSingletons } from "./rdfGuards.js";
 import { parseBody, storeToTurtle } from "./serialize.js";
 import { setIfDefined, tryRead, validDateOrUndefined } from "./util.js";
 import { DIET_GENETIC_SUMMARY, DIET_HLA_MARKER, dct, diet, HEALTH_PATIENT_PROP, rdf, } from "./vocab.js";
+/** The known risk haplotypes. */
+export const RISK_HAPLOTYPES = riskHaplotypeCodec.tokens;
+/** The known marker-presence values. */
+export const MARKER_PRESENCES = markerPresenceCodec.tokens;
+/** The known coeliac-genetic-risk rollup values. */
+export const COELIAC_GENETIC_RISKS = coeliacGeneticRiskCodec.tokens;
+/** The known genetic-source-type values. */
+export const GENETIC_SOURCE_TYPES = sourceTypeCodec.tokens;
 /** The GeneticSummary subject IRI: `${url}#it`. */
 export function geneticSummarySubject(url) {
     return `${url}#it`;
@@ -33,8 +56,19 @@ export function geneticSummarySubject(url) {
 // The SHACL `sh:maxCount 1` predicates (only these are guarded). Note
 // diet:geneticInterpretation is min-count-1 but NOT max-count-1 in the shape, and
 // diet:genotype is unconstrained — so neither is guarded here.
-const GENETIC_SUMMARY_SINGLETONS = [diet("enteredManually")];
-const HLA_MARKER_SINGLETONS = [diet("rsid"), diet("markerInterpretation")];
+const GENETIC_SUMMARY_SINGLETONS = [
+    diet("enteredManually"),
+    diet("consentGiven"),
+    diet("sourceType"),
+    diet("coeliacGeneticRisk"),
+    diet("coverageComplete"),
+];
+const HLA_MARKER_SINGLETONS = [
+    diet("rsid"),
+    diet("markerInterpretation"),
+    diet("riskHaplotype"),
+    diet("markerPresence"),
+];
 /** The n-th HLA marker node IRI: `${url}#marker-{n}`. */
 export function markerSubject(url, index) {
     return `${url}#marker-${index}`;
@@ -73,6 +107,34 @@ export class GeneticSummary extends TermWrapper {
     }
     set enteredManually(value) {
         OptionalAs.object(this, diet("enteredManually"), value, LiteralFrom.boolean);
+    }
+    /** `diet:consentGiven` — explicit genetic-data consent (MUST be true to write). */
+    get consentGiven() {
+        return OptionalFrom.subjectPredicate(this, diet("consentGiven"), LiteralAs.boolean);
+    }
+    set consentGiven(value) {
+        OptionalAs.object(this, diet("consentGiven"), value, LiteralFrom.boolean);
+    }
+    /** `diet:coverageComplete` — did the source test every tracked risk tag SNP? */
+    get coverageComplete() {
+        return OptionalFrom.subjectPredicate(this, diet("coverageComplete"), LiteralAs.boolean);
+    }
+    set coverageComplete(value) {
+        OptionalAs.object(this, diet("coverageComplete"), value, LiteralFrom.boolean);
+    }
+    /** `diet:sourceType` → `diet:{concept}`; read back as the friendly token. */
+    get sourceType() {
+        return sourceTypeCodec.fromIri(OptionalFrom.subjectPredicate(this, diet("sourceType"), NamedNodeAs.string));
+    }
+    set sourceType(value) {
+        OptionalAs.object(this, diet("sourceType"), value ? sourceTypeCodec.toIri(value) : undefined, NamedNodeFrom.string);
+    }
+    /** `diet:coeliacGeneticRisk` → `diet:{concept}`; read back as the friendly token. */
+    get coeliacGeneticRisk() {
+        return coeliacGeneticRiskCodec.fromIri(OptionalFrom.subjectPredicate(this, diet("coeliacGeneticRisk"), NamedNodeAs.string));
+    }
+    set coeliacGeneticRisk(value) {
+        OptionalAs.object(this, diet("coeliacGeneticRisk"), value ? coeliacGeneticRiskCodec.toIri(value) : undefined, NamedNodeFrom.string);
     }
     /** `health:patient` — the pod-owner Patient/Person WebID. */
     get patient() {
@@ -115,6 +177,20 @@ class HlaMarker extends TermWrapper {
     set markerInterpretation(value) {
         OptionalAs.object(this, diet("markerInterpretation"), value, LiteralFrom.string);
     }
+    /** `diet:riskHaplotype` → `diet:{concept}`; read back as the friendly token. */
+    get riskHaplotype() {
+        return riskHaplotypeCodec.fromIri(OptionalFrom.subjectPredicate(this, diet("riskHaplotype"), NamedNodeAs.string));
+    }
+    set riskHaplotype(value) {
+        OptionalAs.object(this, diet("riskHaplotype"), value ? riskHaplotypeCodec.toIri(value) : undefined, NamedNodeFrom.string);
+    }
+    /** `diet:markerPresence` → `diet:{concept}`; read back as the friendly token. */
+    get markerPresence() {
+        return markerPresenceCodec.fromIri(OptionalFrom.subjectPredicate(this, diet("markerPresence"), NamedNodeAs.string));
+    }
+    set markerPresence(value) {
+        OptionalAs.object(this, diet("markerPresence"), value ? markerPresenceCodec.toIri(value) : undefined, NamedNodeFrom.string);
+    }
 }
 /** Parse a GeneticSummary out of a dataset, or `undefined` if `${url}#it` is not one. */
 export function parseGeneticSummary(url, dataset) {
@@ -130,8 +206,27 @@ function parseGeneticSummaryImpl(url, dataset) {
     const interpretation = doc.interpretation;
     if (!interpretation || interpretation.trim() === "")
         return undefined;
+    // Consent guardrail on READ (fail-closed, symmetric with the writer): a summary
+    // whose diet:consentGiven is PRESENT but not `true` is an un-consented genetic
+    // record — reject it rather than surface it. An ABSENT diet:consentGiven parses
+    // (back-compat: a pre-refinement summary predates the consent field).
+    const consentGiven = doc.consentGiven;
+    if (consentGiven !== undefined && consentGiven !== true)
+        return undefined;
+    const coverageComplete = doc.coverageComplete;
+    const coeliacGeneticRisk = doc.coeliacGeneticRisk;
+    // NPV-only safety guardrail: a "risk-haplotype-absent" rollup asserts coeliac is
+    // unlikely, which is only sound when the source tested every needed tag SNP. A
+    // stored summary that claims `risk-haplotype-absent` WITHOUT coverageComplete=true
+    // is an overstated negative — reject it (never surface a false reassurance).
+    if (coeliacGeneticRisk === "risk-haplotype-absent" && coverageComplete !== true)
+        return undefined;
     const data = { id: geneticSummarySubject(url), markers: [], interpretation };
     setIfDefined(data, "enteredManually", doc.enteredManually);
+    setIfDefined(data, "consentGiven", consentGiven);
+    setIfDefined(data, "sourceType", doc.sourceType);
+    setIfDefined(data, "coeliacGeneticRisk", coeliacGeneticRisk);
+    setIfDefined(data, "coverageComplete", coverageComplete);
     // http(s)-filtered on READ (symmetric with the writer) — never surface a
     // non-http(s) IRI from a hostile pod document.
     setIfDefined(data, "patient", httpIriOrUndefined(doc.patient));
@@ -148,6 +243,8 @@ function parseGeneticSummaryImpl(url, dataset) {
         const marker = { rsid };
         setIfDefined(marker, "genotype", m.genotype);
         setIfDefined(marker, "markerInterpretation", m.markerInterpretation);
+        setIfDefined(marker, "riskHaplotype", m.riskHaplotype);
+        setIfDefined(marker, "markerPresence", m.markerPresence);
         data.markers.push(marker);
     }
     return data;
@@ -159,10 +256,34 @@ export function buildGeneticSummary(url, data) {
             "framing) is REQUIRED and must be non-empty — refusing to write a genetics " +
             'summary with no "cannot diagnose you" guardrail.');
     }
+    // CONSENT GUARDRAIL (fail-closed, mirrors the interpretation MUST): a genetic
+    // summary is the most sensitive record in the diary — it is never written without
+    // EXPLICIT consent. `consentGiven` must be strictly `true`; `undefined`/`false`
+    // both refuse the write. This is the data-layer half of "no consent → no write".
+    if (data.consentGiven !== true) {
+        throw new Error("buildGeneticSummary: diet:consentGiven MUST be true to write a genetics " +
+            "summary — refusing to store genetic data without explicit consent (fail-closed).");
+    }
+    // NPV-only safety guardrail: "risk-haplotype-absent" (coeliac unlikely) is a sound
+    // claim ONLY when the source tested every needed tag SNP. Refuse to assert an
+    // absent rollup without complete coverage — that would overstate the negative
+    // (a consumer chip may not tag every risk allele; a "not found" is not a clean
+    // bill of health). Use partial-coverage/indeterminate instead when coverage is
+    // incomplete.
+    if (data.coeliacGeneticRisk === "risk-haplotype-absent" && data.coverageComplete !== true) {
+        throw new Error("buildGeneticSummary: a diet:coeliacGeneticRisk of 'risk-haplotype-absent' " +
+            "requires diet:coverageComplete=true — refusing to assert an absent (NPV) " +
+            "rollup when the source did not cover every risk tag SNP (use " +
+            "'partial-coverage'/'indeterminate' instead).");
+    }
     const store = new Store();
     const doc = new GeneticSummary(geneticSummarySubject(url), store, DataFactory).mark();
     doc.interpretation = data.interpretation;
     doc.enteredManually = data.enteredManually;
+    doc.consentGiven = data.consentGiven;
+    doc.sourceType = data.sourceType;
+    doc.coeliacGeneticRisk = data.coeliacGeneticRisk;
+    doc.coverageComplete = data.coverageComplete;
     doc.patient = httpIriOrUndefined(data.patient);
     doc.created = data.created ?? new Date();
     data.markers.forEach((marker, i) => {
@@ -176,6 +297,8 @@ export function buildGeneticSummary(url, data) {
         m.rsid = marker.rsid;
         m.genotype = marker.genotype;
         m.markerInterpretation = marker.markerInterpretation;
+        m.riskHaplotype = marker.riskHaplotype;
+        m.markerPresence = marker.markerPresence;
         doc.hlaMarker.add(node);
     });
     return store;
