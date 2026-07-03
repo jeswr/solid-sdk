@@ -203,3 +203,108 @@ describe("SHACL — malformed data yields a violation", () => {
     expect(await violations(store)).toEqual([]);
   });
 });
+
+// Two genetic-data defense-in-depth gaps roborev found in the vendored diet:
+// profile, closed in lockstep with the authoritative solid-federation-vocab copy
+// (the two diet.shacl.ttl files are byte-identical). SECURITY-CRITICAL — genetic
+// data: a bypassed NPV safety invariant could surface a false "coeliac unlikely".
+describe("SHACL — genetic-data defense-in-depth safety invariants", () => {
+  // Gap #2 — coverageComplete contradictory-value bypass. Asserting BOTH true AND
+  // false used to only WARN (sh:maxCount 1 at sh:Warning), and the `true` value
+  // satisfied the GeneticRiskCoverageShape coverage check — letting a
+  // risk-haplotype-absent rollup slip past. The cardinality is now sh:Violation.
+  it("a GeneticSummary asserting BOTH coverageComplete true AND false violates the MUST (contradictory pair)", async () => {
+    const ttl = `
+      @prefix diet: <https://w3id.org/jeswr/sectors/health/diet#> .
+      @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+      <${URL_}#it> a diet:GeneticSummary ;
+        diet:geneticInterpretation "Cannot diagnose; negative-predictive only." ;
+        diet:consentGiven true ;
+        diet:coeliacGeneticRisk diet:riskHaplotypeAbsent ;
+        diet:coverageComplete true ;
+        diet:coverageComplete false .
+    `;
+    const v = await violations(new Parser().parse(ttl));
+    expect(v.some((m) => m.includes("coverageComplete"))).toBe(true);
+  });
+
+  // Gap #3 — rollup↔marker cross-field inconsistency. buildGeneticSummary does NOT
+  // guard this (it only enforces risk-absent ⇒ coverageComplete=true), so the app
+  // ALLOWS building it (coverage IS complete here) — the SHACL layer is the guard
+  // that catches the contradiction. A claimed "no risk haplotype" refuted by a
+  // PRESENT DQ2.5 risk marker MUST fail.
+  it("a GeneticSummary claiming risk-haplotype-absent alongside a PRESENT DQ2.5 risk marker violates the consistency MUST", async () => {
+    const store = buildGeneticSummary(URL_, {
+      markers: [
+        {
+          rsid: "rs2187668",
+          markerInterpretation: "rs2187668 present → DQ2.5 risk haplotype",
+          riskHaplotype: "DQ2.5",
+          markerPresence: "present",
+        },
+      ],
+      interpretation: "Cannot diagnose; negative-predictive only; coverage complete.",
+      consentGiven: true,
+      coeliacGeneticRisk: "risk-haplotype-absent",
+      coverageComplete: true,
+    });
+    const v = await violations(store);
+    expect(v.some((m) => m.includes("risk-haplotype-absent") && m.includes("markerPresence"))).toBe(
+      true,
+    );
+  });
+
+  it("risk-haplotype-absent alongside an ABSENT DQ8 marker (coverage complete) has no violation", async () => {
+    const store = buildGeneticSummary(URL_, {
+      markers: [
+        {
+          rsid: "rs7454108",
+          markerInterpretation: "rs7454108 absent → no DQ8 risk haplotype",
+          riskHaplotype: "DQ8",
+          markerPresence: "absent",
+        },
+      ],
+      interpretation: "Cannot diagnose; negative-predictive only; coverage complete.",
+      consentGiven: true,
+      coeliacGeneticRisk: "risk-haplotype-absent",
+      coverageComplete: true,
+    });
+    expect(await violations(store)).toEqual([]);
+  });
+
+  it("risk-haplotype-PRESENT alongside a PRESENT DQ2.5 marker has no violation (rollup is not 'absent')", async () => {
+    const store = buildGeneticSummary(URL_, {
+      markers: [
+        {
+          rsid: "rs2187668",
+          markerInterpretation: "rs2187668 present → DQ2.5 risk haplotype",
+          riskHaplotype: "DQ2.5",
+          markerPresence: "present",
+        },
+      ],
+      interpretation: "Cannot diagnose; negative-predictive only; DQ2/DQ8 is common.",
+      consentGiven: true,
+      coeliacGeneticRisk: "risk-haplotype-present",
+      coverageComplete: false,
+    });
+    expect(await violations(store)).toEqual([]);
+  });
+
+  it("risk-haplotype-absent alongside a PRESENT DQ7 marker (DQ7 excluded from the risk set) has no violation", async () => {
+    const store = buildGeneticSummary(URL_, {
+      markers: [
+        {
+          rsid: "rs-dq7",
+          markerInterpretation: "DQ7 present — not coeliac-risk-conferring on its own",
+          riskHaplotype: "DQ7",
+          markerPresence: "present",
+        },
+      ],
+      interpretation: "Cannot diagnose; negative-predictive only; coverage complete.",
+      consentGiven: true,
+      coeliacGeneticRisk: "risk-haplotype-absent",
+      coverageComplete: true,
+    });
+    expect(await violations(store)).toEqual([]);
+  });
+});

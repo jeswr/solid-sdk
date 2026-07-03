@@ -304,8 +304,8 @@ dsh:GeneticSummaryShape
         sh:path diet:coverageComplete ;
         sh:maxCount 1 ;
         sh:datatype xsd:boolean ;
-        sh:severity sh:Warning ;
-        sh:message "A GeneticSummary SHOULD declare diet:coverageComplete (did the source test every risk tag SNP?) — load-bearing for the 'absence excludes' NPV claim."@en
+        sh:severity sh:Violation ;
+        sh:message "A GeneticSummary MUST assert at most ONE diet:coverageComplete value — a summary MUST NOT claim BOTH complete and incomplete coverage, because a contradictory true/false pair would let a risk-haplotype-absent rollup slip past the GeneticRiskCoverageShape NPV safety invariant. (It also SHOULD declare diet:coverageComplete — did the source test every risk tag SNP? — load-bearing for the 'absence excludes' NPV claim.)"@en
     ] ;
     sh:property [
         sh:path diet:coeliacGeneticRisk ;
@@ -324,7 +324,7 @@ dsh:GeneticSummaryShape
 # NPV-only safety invariant (Violation): a 'risk-haplotype-absent' rollup is a
 # sound negative claim ONLY with complete coverage. Encoded as NOT (risk = absent
 # AND coverageComplete != true), so external SHACL validation rejects an overstated
-# negative exactly as buildGeneticSummary/parseGeneticSummary do (no asymmetry).
+# negative exactly as the app's buildGeneticSummary/parseGeneticSummary do (no asymmetry).
 dsh:GeneticRiskCoverageShape
     a sh:NodeShape ;
     sh:targetClass diet:GeneticSummary ;
@@ -335,6 +335,39 @@ dsh:GeneticRiskCoverageShape
         sh:and (
             [ sh:path diet:coeliacGeneticRisk ; sh:hasValue diet:riskHaplotypeAbsent ]
             [ sh:not [ sh:path diet:coverageComplete ; sh:hasValue true ] ]
+        )
+    ] .
+
+# Cross-field consistency safety invariant (Violation): a 'risk-haplotype-absent'
+# rollup claims NO coeliac-risk haplotype was found, so it MUST NOT be asserted
+# alongside a linked HlaMarker whose markerPresence = present for a coeliac-risk
+# haplotype (DQ2.5 / DQ2.2 / DQ8). A present risk marker directly contradicts the
+# 'absent' claim — the strong NPV signal is a genuine absence, so a claimed absence
+# refuted by a present marker MUST fail (use risk-haplotype-present/indeterminate).
+# DQ7 is excluded: it is not a coeliac-risk-conferring haplotype on its own.
+dsh:GeneticRiskMarkerConsistencyShape
+    a sh:NodeShape ;
+    sh:targetClass diet:GeneticSummary ;
+    rdfs:label "Genetic risk-rollup vs marker consistency safety shape"@en ;
+    sh:severity sh:Violation ;
+    sh:message "A GeneticSummary asserting diet:coeliacGeneticRisk = risk-haplotype-absent MUST NOT link a diet:hlaMarker whose diet:markerPresence = present for a coeliac-risk haplotype (DQ2.5/DQ2.2/DQ8) — a present risk marker contradicts the 'no risk haplotype found' rollup; use risk-haplotype-present or indeterminate."@en ;
+    sh:not [
+        sh:and (
+            [ sh:path diet:coeliacGeneticRisk ; sh:hasValue diet:riskHaplotypeAbsent ]
+            [
+                sh:path diet:hlaMarker ;
+                sh:qualifiedMinCount 1 ;
+                sh:qualifiedValueShape [
+                    sh:and (
+                        [ sh:path diet:markerPresence ; sh:hasValue diet:markerPresent ]
+                        [ sh:or (
+                            [ sh:path diet:riskHaplotype ; sh:hasValue diet:DQ2_5 ]
+                            [ sh:path diet:riskHaplotype ; sh:hasValue diet:DQ2_2 ]
+                            [ sh:path diet:riskHaplotype ; sh:hasValue diet:DQ8 ]
+                        ) ]
+                    )
+                ]
+            ]
         )
     ] .
 
