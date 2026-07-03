@@ -12,7 +12,17 @@
  * one account's data can never surface under another (the same-WebID isolation
  * rule). Dates are stored as ISO strings.
  */
-import type { ExposureData, FoodItemData, MealContext, Portion, SymptomType } from "@jeswr/solid-health-diary";
+import type {
+  Confidence,
+  ExposureData,
+  FoodItemData,
+  MealContext,
+  Portion,
+  ProtocolPhase,
+  SymptomType,
+  TriggerSlug,
+  Verdict,
+} from "@jeswr/solid-health-diary";
 import type { Kv } from "./kv.js";
 
 /** The persistence/sync state of an optimistically-written record. */
@@ -53,6 +63,54 @@ export interface StoredSymptom {
   error?: string;
 }
 
+/**
+ * An elimination protocol as cached locally (Phase 2B). Unlike append-only
+ * meals/symptoms, a protocol is a SINGLE resource UPDATED in place across its
+ * lifetime (same `ulid`/`url` on every phase transition — the pod PUT overwrites
+ * it). Dates are ISO strings.
+ */
+export interface StoredProtocol {
+  readonly kind: "protocol";
+  ulid: string;
+  url: string;
+  targetTrigger: TriggerSlug;
+  phase: ProtocolPhase;
+  phaseStarted?: string;
+  phasePlannedEnd?: string;
+  challengeStep?: number;
+  patient?: string;
+  /** `dcterms:created` — when the protocol was first started (stable). */
+  createdAt: string;
+  /** Local bookkeeping — when the record was last written (newest wins on merge). */
+  updatedAt: string;
+  sync: SyncState;
+  error?: string;
+}
+
+/**
+ * A tolerance conclusion as cached locally (Phase 2B) — minted ONLY from a
+ * concluded protocol (the sole `confirmed` path). Dates are ISO strings.
+ */
+export interface StoredConclusion {
+  readonly kind: "conclusion";
+  ulid: string;
+  url: string;
+  aboutTrigger: TriggerSlug;
+  verdict: Verdict;
+  /** Always `confirmed` here (a conclusion only exists from a completed protocol). */
+  confidence: Confidence;
+  note?: string;
+  /** `diet:reviewAfter` re-challenge date (time-boxed secondary intolerances). */
+  reviewAfter?: string;
+  patient?: string;
+  derivedFrom?: string[];
+  /** The protocol (`ulid`) that produced this conclusion. */
+  protocolUlid?: string;
+  createdAt: string;
+  sync: SyncState;
+  error?: string;
+}
+
 /** A frequent-meal group for the one-tap re-log chips. */
 export interface FrequentMeal {
   signature: string;
@@ -84,10 +142,10 @@ export class DiaryStore {
     private readonly scope: string,
   ) {}
 
-  private prefix(kind: "meal" | "symptom"): string {
+  private prefix(kind: "meal" | "symptom" | "protocol" | "conclusion"): string {
     return `${encodeURIComponent(this.scope)}|${kind}|`;
   }
-  private key(kind: "meal" | "symptom", ulid: string): string {
+  private key(kind: "meal" | "symptom" | "protocol" | "conclusion", ulid: string): string {
     return `${this.prefix(kind)}${ulid}`;
   }
 
@@ -149,12 +207,69 @@ export class DiaryStore {
       .slice(0, limit);
   }
 
+  // --- protocols (Phase 2B) — updated in place across the lifetime -------------
+
+  async putProtocol(protocol: StoredProtocol): Promise<void> {
+    await this.kv.set(this.key("protocol", protocol.ulid), protocol);
+  }
+  async getProtocol(ulid: string): Promise<StoredProtocol | undefined> {
+    return (await this.kv.get<StoredProtocol>(this.key("protocol", ulid))) ?? undefined;
+  }
+  /** All protocols, newest-created first. */
+  async allProtocols(): Promise<StoredProtocol[]> {
+    const keys = await this.kv.keys(this.prefix("protocol"));
+    const items = await Promise.all(keys.map((k) => this.kv.get<StoredProtocol>(k)));
+    return items
+      .filter((p): p is StoredProtocol => !!p)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+  async markProtocolSync(ulid: string, sync: SyncState, error?: string): Promise<void> {
+    const p = await this.kv.get<StoredProtocol>(this.key("protocol", ulid));
+    if (!p) return;
+    p.sync = sync;
+    p.error = sync === "error" ? error : undefined;
+    await this.kv.set(this.key("protocol", ulid), p);
+  }
+
+  // --- conclusions (Phase 2B) --------------------------------------------------
+
+  async putConclusion(conclusion: StoredConclusion): Promise<void> {
+    await this.kv.set(this.key("conclusion", conclusion.ulid), conclusion);
+  }
+  /** All conclusions, newest-created first. */
+  async allConclusions(): Promise<StoredConclusion[]> {
+    const keys = await this.kv.keys(this.prefix("conclusion"));
+    const items = await Promise.all(keys.map((k) => this.kv.get<StoredConclusion>(k)));
+    return items
+      .filter((c): c is StoredConclusion => !!c)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+  async markConclusionSync(ulid: string, sync: SyncState, error?: string): Promise<void> {
+    const c = await this.kv.get<StoredConclusion>(this.key("conclusion", ulid));
+    if (!c) return;
+    c.sync = sync;
+    c.error = sync === "error" ? error : undefined;
+    await this.kv.set(this.key("conclusion", ulid), c);
+  }
+
   /** Records still needing a pod write (pending or errored). */
-  async pending(): Promise<{ meals: StoredMeal[]; symptoms: StoredSymptom[] }> {
-    const [meals, symptoms] = await Promise.all([this.allMeals(), this.allSymptoms()]);
+  async pending(): Promise<{
+    meals: StoredMeal[];
+    symptoms: StoredSymptom[];
+    protocols: StoredProtocol[];
+    conclusions: StoredConclusion[];
+  }> {
+    const [meals, symptoms, protocols, conclusions] = await Promise.all([
+      this.allMeals(),
+      this.allSymptoms(),
+      this.allProtocols(),
+      this.allConclusions(),
+    ]);
     return {
       meals: meals.filter((m) => m.sync !== "synced"),
       symptoms: symptoms.filter((s) => s.sync !== "synced"),
+      protocols: protocols.filter((p) => p.sync !== "synced"),
+      conclusions: conclusions.filter((c) => c.sync !== "synced"),
     };
   }
 

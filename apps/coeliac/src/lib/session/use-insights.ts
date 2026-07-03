@@ -49,8 +49,13 @@ export function useInsights(context: SafetyContext = EMPTY_CONTEXT): InsightsSta
       setState({ result: null, mealCount: 0, symptomCount: 0, loaded: true });
       return;
     }
-    const [meals, symptoms] = await Promise.all([store.allMeals(), store.allSymptoms()]);
-    const diary = diaryDataFromCache(meals, symptoms);
+    const [meals, symptoms, protocols, conclusions] = await Promise.all([
+      store.allMeals(),
+      store.allSymptoms(),
+      store.allProtocols(),
+      store.allConclusions(),
+    ]);
+    const diary = diaryDataFromCache(meals, symptoms, protocols, conclusions);
     const result = analyze(diary, context);
     setState({
       result,

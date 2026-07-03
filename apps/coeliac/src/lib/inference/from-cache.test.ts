@@ -80,4 +80,40 @@ describe("diaryDataFromCache", () => {
     expect(diary.meals).toEqual([]);
     expect(diary.symptoms).toEqual([]);
   });
+
+  it("maps cached protocols + conclusions into the DiaryData snapshot", () => {
+    const diary = diaryDataFromCache(
+      [],
+      [],
+      [
+        {
+          kind: "protocol",
+          ulid: "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+          url: "https://alice.example/health/diary/protocols/p.ttl",
+          targetTrigger: "lactose",
+          phase: "observe",
+          challengeStep: 1,
+          createdAt: "2026-07-01T08:00:00.000Z",
+          updatedAt: "2026-07-01T08:00:00.000Z",
+          sync: "synced",
+        },
+      ],
+      [
+        {
+          kind: "conclusion",
+          ulid: "01ARZ3NDEKTSV4RRFFQ69G5FBW",
+          url: "https://alice.example/health/diary/conclusions/c.ttl",
+          aboutTrigger: "lactose",
+          verdict: "reacts",
+          confidence: "confirmed",
+          createdAt: "2026-07-10T08:00:00.000Z",
+          sync: "synced",
+        },
+      ],
+    );
+    expect(diary.protocols).toHaveLength(1);
+    expect(diary.protocols?.[0].phase).toBe("observe");
+    expect(diary.conclusions).toHaveLength(1);
+    expect(diary.conclusions?.[0].confidence).toBe("confirmed");
+  });
 });

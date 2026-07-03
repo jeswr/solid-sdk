@@ -19,6 +19,8 @@
  * frames nothing as certainty. Emergency rails reuse the full {@link EmergencyRail}
  * guidance so a potentially-fatal reaction is never shown as a data point.
  */
+import Link from "next/link";
+import { useCallback, useState } from "react";
 import { PATTERN_NOT_DIAGNOSIS } from "@/lib/inference/types";
 import type {
   AnalysisResult,
@@ -29,9 +31,23 @@ import type {
   SafetyRail,
   SuspicionScore,
 } from "@/lib/inference/types";
+import type { StoredProtocol } from "@/lib/cache/diary-store";
+import { nextAction } from "@/lib/protocol/fsm";
+import { storedProtocolToData } from "@/lib/protocol/persist";
 import { triggerLabel } from "@/lib/off/exposure-display";
 import { useInsights } from "@/lib/session/use-insights";
+import { useProtocolActions } from "@/lib/session/use-protocol-actions";
+import { useProtocols } from "@/lib/session/use-protocols";
 import { EmergencyRail } from "./emergency-rail";
+
+const PHASE_LABEL: Record<string, string> = {
+  baseline: "Baseline",
+  eliminate: "Eliminating",
+  washout: "Washout",
+  reintroduce: "Reintroducing",
+  observe: "Observing",
+  concluded: "Concluded",
+};
 
 const CONFIDENCE_LABEL: Record<SuspicionScore["confidence"], string> = {
   emerging: "Emerging",
@@ -132,6 +148,31 @@ function ReviewCard({ review }: { review: ReviewSurfacing }) {
   );
 }
 
+/** A compact summary of the active challenges — phase + what to do next (DESIGN §3). */
+function ActiveChallenges({ active }: { active: StoredProtocol[] }) {
+  if (active.length === 0) return null;
+  return (
+    <section className="insights__active" aria-label="Active challenges">
+      <h2>Your active challenge{active.length === 1 ? "" : "s"}</h2>
+      <ul className="active-challenge-list">
+        {active.map((p) => {
+          const na = nextAction(storedProtocolToData(p));
+          return (
+            <li key={p.ulid} className="active-challenge">
+              <span className="active-challenge__trigger">{triggerLabel(p.targetTrigger)}</span>
+              <span className="active-challenge__phase">{PHASE_LABEL[p.phase] ?? p.phase}</span>
+              <span className="active-challenge__next">{na.detail}</span>
+            </li>
+          );
+        })}
+      </ul>
+      <p className="active-challenge__link">
+        <Link href="/protocols">Open your challenges</Link> to record the next step.
+      </p>
+    </section>
+  );
+}
+
 function InsightsBody({ result }: { result: AnalysisResult }) {
   const { safetyRails, suspicions, proposal, reviews } = result;
   return (
@@ -177,12 +218,50 @@ function InsightsBody({ result }: { result: AnalysisResult }) {
 }
 
 export function InsightsView() {
-  const { result, mealCount, symptomCount, loaded } = useInsights();
+  const { result, mealCount, symptomCount, loaded, refresh } = useInsights();
+  const protocols = useProtocols();
+  const { startChallenge } = useProtocolActions();
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const proposal = result?.proposal;
+  const canStart = protocols.active.length === 0;
+
+  const onStart = useCallback(
+    async (trigger: string) => {
+      setBusy(true);
+      setNotice(null);
+      const repaint = () => Promise.all([refresh(), protocols.refresh()]);
+      try {
+        const res = await startChallenge(
+          { trigger: trigger as Parameters<typeof startChallenge>[0]["trigger"] },
+          protocols.safety,
+        );
+        // A refusal (gluten / emergency / one-at-a-time) is surfaced; nothing was written.
+        // Otherwise the cache is already written (optimistic) — the pod write finishes
+        // in the background and repaints on settle; we do NOT await it.
+        if ("refused" in res) setNotice(res.message);
+        else void res.syncing.catch(() => {}).finally(() => void repaint());
+      } finally {
+        await repaint();
+        setBusy(false);
+      }
+    },
+    [startChallenge, protocols, refresh],
+  );
 
   return (
     <div className="insights">
       <h1>Insights</h1>
       <p className="insights__caveat">{PATTERN_NOT_DIAGNOSIS}</p>
+
+      <ActiveChallenges active={protocols.active} />
+
+      {notice ? (
+        <aside className="insights__notice" role="note">
+          {notice}
+        </aside>
+      ) : null}
 
       {!loaded ? (
         <p className="insights__loading">Analysing your diary…</p>
@@ -199,6 +278,18 @@ export function InsightsView() {
             {symptomCount === 1 ? "" : "s"} from your diary.
           </p>
           <InsightsBody result={result} />
+          {proposal && proposal.kind === "eliminate" && proposal.trigger && canStart ? (
+            <div className="insights__start">
+              <button type="button" disabled={busy} onClick={() => onStart(proposal.trigger as string)}>
+                Start a {triggerLabel(proposal.trigger)} challenge
+              </button>
+              <p className="insights__start-note">
+                Starts a structured elimination-and-reintroduction test you run at your own pace.
+                It&apos;s a suggestion, not an instruction — talk it through with your clinician or
+                dietitian first.
+              </p>
+            </div>
+          ) : null}
         </>
       ) : null}
     </div>

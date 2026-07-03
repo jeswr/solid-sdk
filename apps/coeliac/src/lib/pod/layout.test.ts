@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   assertBarcode,
   assertUlid,
+  conclusionUrl,
   containerOf,
   diaryContainers,
   diaryRoot,
@@ -10,6 +11,7 @@ import {
   mealUrl,
   monthBucket,
   offCacheUrl,
+  protocolUrl,
   symptomUrl,
 } from "./layout";
 
@@ -59,11 +61,23 @@ describe("pod layout", () => {
     expect(() => offCacheUrl(ROOT, "../../etc/passwd")).toThrow();
   });
 
-  it("lists the containers to provision", () => {
+  it("lists the containers to provision (incl. protocols + conclusions)", () => {
     const containers = diaryContainers(ROOT);
     expect(containers).toContain("https://alice.example/health/diary/");
     expect(containers).toContain("https://alice.example/health/diary/meals/");
     expect(containers).toContain("https://alice.example/health/diary/cache/off/");
+    expect(containers).toContain("https://alice.example/health/diary/protocols/");
+    expect(containers).toContain("https://alice.example/health/diary/conclusions/");
+  });
+
+  it("keeps protocol + conclusion URLs inside their containers (ULID-guarded)", () => {
+    const ulid = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
+    expect(protocolUrl(ROOT, ulid)).toBe(`https://alice.example/health/diary/protocols/${ulid}.ttl`);
+    expect(conclusionUrl(ROOT, ulid)).toBe(
+      `https://alice.example/health/diary/conclusions/${ulid}.ttl`,
+    );
+    expect(() => protocolUrl(ROOT, "../../etc/passwd")).toThrow();
+    expect(() => conclusionUrl(ROOT, "../secrets")).toThrow();
   });
 
   it("derives a container from a resource URL", () => {

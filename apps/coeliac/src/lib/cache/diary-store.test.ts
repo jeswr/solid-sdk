@@ -61,6 +61,60 @@ describe("DiaryStore", () => {
     expect(pending.symptoms[0].error).toBe("offline");
   });
 
+  it("stores + updates a protocol in place, and lists conclusions", async () => {
+    const s = store();
+    const proto = {
+      kind: "protocol" as const,
+      ulid: "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+      url: `${ROOT}health/diary/protocols/01ARZ3NDEKTSV4RRFFQ69G5FAV.ttl`,
+      targetTrigger: "lactose" as const,
+      phase: "baseline" as const,
+      createdAt: "2026-07-01T08:00:00.000Z",
+      updatedAt: "2026-07-01T08:00:00.000Z",
+      sync: "pending" as const,
+    };
+    await s.putProtocol(proto);
+    expect((await s.getProtocol(proto.ulid))?.phase).toBe("baseline");
+    // Update in place (same ulid/url).
+    await s.putProtocol({ ...proto, phase: "eliminate", updatedAt: "2026-07-02T08:00:00.000Z" });
+    const all = await s.allProtocols();
+    expect(all).toHaveLength(1);
+    expect(all[0].phase).toBe("eliminate");
+
+    const conc = {
+      kind: "conclusion" as const,
+      ulid: "01ARZ3NDEKTSV4RRFFQ69G5FBW",
+      url: `${ROOT}health/diary/conclusions/01ARZ3NDEKTSV4RRFFQ69G5FBW.ttl`,
+      aboutTrigger: "lactose" as const,
+      verdict: "reacts" as const,
+      confidence: "confirmed" as const,
+      protocolUlid: proto.ulid,
+      createdAt: "2026-07-10T08:00:00.000Z",
+      sync: "pending" as const,
+    };
+    await s.putConclusion(conc);
+    expect((await s.allConclusions())[0].verdict).toBe("reacts");
+  });
+
+  it("includes pending protocols + conclusions in the outbox", async () => {
+    const s = store();
+    await s.putProtocol({
+      kind: "protocol",
+      ulid: "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+      url: `${ROOT}health/diary/protocols/01ARZ3NDEKTSV4RRFFQ69G5FAV.ttl`,
+      targetTrigger: "lactose",
+      phase: "baseline",
+      createdAt: "2026-07-01T08:00:00.000Z",
+      updatedAt: "2026-07-01T08:00:00.000Z",
+      sync: "pending",
+    });
+    const pending = await s.pending();
+    expect(pending.protocols).toHaveLength(1);
+    expect(pending.conclusions).toHaveLength(0);
+    await s.markProtocolSync("01ARZ3NDEKTSV4RRFFQ69G5FAV", "synced");
+    expect((await s.pending()).protocols).toHaveLength(0);
+  });
+
   it("namespaces by scope so accounts never cross-read (shared kv)", async () => {
     const kv = new MemoryKv();
     const alice = new DiaryStore(kv, "https://alice.example/#me");

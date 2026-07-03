@@ -11,12 +11,18 @@
  * as a `NaN` date — a malformed lag anchor would silently corrupt correlation, so
  * fail-closed (skip the record) is the safe choice.
  *
- * Only meals + symptoms live in today's cache, so `triggerClasses` / `protocols` /
- * `conclusions` / `plan` are left unset — the engine treats them as optional and
- * falls back to the model's evidence-prior lag windows.
+ * Meals + symptoms + protocols + conclusions live in the cache; `triggerClasses` /
+ * `plan` are left unset — the engine treats them as optional and falls back to the
+ * model's evidence-prior lag windows.
  */
 import type { MealData, SymptomData } from "@jeswr/solid-health-diary";
-import type { StoredMeal, StoredSymptom } from "../cache/diary-store.js";
+import type {
+  StoredConclusion,
+  StoredMeal,
+  StoredProtocol,
+  StoredSymptom,
+} from "../cache/diary-store.js";
+import { storedConclusionToData, storedProtocolToData } from "../protocol/persist.js";
 import type { DiaryData } from "./types.js";
 
 /** Parse an ISO timestamp to a valid `Date`, or `undefined` when it does not parse. */
@@ -61,6 +67,8 @@ export function storedSymptomToData(symptom: StoredSymptom): SymptomData | undef
 export function diaryDataFromCache(
   meals: readonly StoredMeal[],
   symptoms: readonly StoredSymptom[],
+  protocols: readonly StoredProtocol[] = [],
+  conclusions: readonly StoredConclusion[] = [],
 ): DiaryData {
   return {
     meals: meals
@@ -69,5 +77,7 @@ export function diaryDataFromCache(
     symptoms: symptoms
       .map(storedSymptomToData)
       .filter((s): s is SymptomData => s !== undefined),
+    protocols: protocols.map(storedProtocolToData),
+    conclusions: conclusions.map(storedConclusionToData),
   };
 }

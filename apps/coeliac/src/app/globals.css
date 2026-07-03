@@ -525,3 +525,127 @@ a {
   color: var(--muted-foreground, #555);
   font-size: 0.92rem;
 }
+
+/* --- Elimination challenges (Phase 2B) ------------------------------------ */
+.protocols__intro,
+.insights__start-note {
+  color: var(--muted-foreground, #555);
+  font-size: 0.92rem;
+}
+.protocols__notice,
+.insights__notice {
+  margin: 1rem 0;
+  padding: 0.75rem 1rem;
+  border-left: 4px solid var(--warn);
+  border-radius: 8px;
+  background: color-mix(in oklch, var(--warn) 8%, var(--card, #fff));
+  font-size: 0.92rem;
+}
+.protocols__active,
+.protocols__start,
+.protocols__concluded,
+.insights__active {
+  margin-top: 1.5rem;
+}
+.protocol-list,
+.active-challenge-list {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+.protocol {
+  padding: 1rem;
+  border: 1px solid var(--border, #e5e5e5);
+  border-radius: 10px;
+  background: var(--card, #fff);
+}
+.protocol--concluded {
+  background: var(--secondary, #eef7f3);
+}
+.protocol__head,
+.active-challenge {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.protocol__trigger,
+.active-challenge__trigger {
+  font-weight: 600;
+}
+.protocol__phase,
+.protocol__verdict,
+.active-challenge__phase {
+  font-size: 0.78rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: var(--secondary, #eef7f3);
+  color: var(--secondary-foreground, #234);
+}
+.protocol__verdict--reacts {
+  background: color-mix(in oklch, var(--danger) 16%, var(--card, #fff));
+}
+.protocol__verdict--tolerated {
+  background: color-mix(in oklch, var(--warn) 16%, var(--card, #fff));
+}
+.protocol__prompt {
+  margin: 0.6rem 0 0;
+}
+.protocol__due,
+.protocol__review,
+.active-challenge__next {
+  color: var(--muted-foreground, #666);
+  font-size: 0.88rem;
+}
+.protocol__actions {
+  margin-top: 0.75rem;
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.protocol__actions button,
+.protocols__proposal button,
+.insights__start button {
+  padding: 0.5rem 0.9rem;
+  border: 1px solid var(--border, #ccc);
+  border-radius: 8px;
+  background: var(--primary, #1a7f5a);
+  color: var(--primary-foreground, #fff);
+  font-size: 0.92rem;
+  cursor: pointer;
+}
+.protocol__actions button:disabled,
+.protocols__proposal button:disabled,
+.insights__start button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.protocol__abort {
+  background: transparent !important;
+  color: var(--danger) !important;
+  border-color: var(--danger) !important;
+}
+.protocols__start-blocked,
+.protocols__no-proposal,
+.protocols__none,
+.protocols__loading {
+  color: var(--muted-foreground, #666);
+  font-size: 0.92rem;
+}
+.insights__start {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  border: 1px solid var(--border, #e5e5e5);
+  border-radius: 10px;
+  background: var(--secondary, #eef7f3);
+}
+.active-challenge {
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--border, #eee);
+}
+.active-challenge__link {
+  font-size: 0.9rem;
+  margin-top: 0.5rem;
+}

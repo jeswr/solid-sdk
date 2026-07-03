@@ -48,6 +48,30 @@ export function offCacheContainer(storageRoot: string): string {
   return `${diaryRoot(storageRoot)}cache/off/`;
 }
 
+/** The elimination-protocols container (`…/health/diary/protocols/`). */
+export function protocolsContainer(storageRoot: string): string {
+  return `${diaryRoot(storageRoot)}protocols/`;
+}
+
+/** The tolerance-conclusions container (`…/health/diary/conclusions/`). */
+export function conclusionsContainer(storageRoot: string): string {
+  return `${diaryRoot(storageRoot)}conclusions/`;
+}
+
+/**
+ * An elimination-protocol resource URL: `…/protocols/{ulid}.ttl`. Protocols are
+ * few + long-lived (one active at a time), so they are NOT month-bucketed. The
+ * `ulid` is validated (path-injection guard) exactly like a meal ULID.
+ */
+export function protocolUrl(storageRoot: string, ulid: string): string {
+  return `${protocolsContainer(storageRoot)}${assertUlid(ulid)}.ttl`;
+}
+
+/** A tolerance-conclusion resource URL: `…/conclusions/{ulid}.ttl`. */
+export function conclusionUrl(storageRoot: string, ulid: string): string {
+  return `${conclusionsContainer(storageRoot)}${assertUlid(ulid)}.ttl`;
+}
+
 /** Two-digit UTC month (`01`–`12`) for a date. */
 function utcMonth(date: Date): string {
   return String(date.getUTCMonth() + 1).padStart(2, "0");
@@ -89,6 +113,8 @@ export function diaryContainers(storageRoot: string): string[] {
     diaryRoot(storageRoot),
     mealsContainer(storageRoot),
     symptomsContainer(storageRoot),
+    protocolsContainer(storageRoot),
+    conclusionsContainer(storageRoot),
     `${diaryRoot(storageRoot)}cache/`,
     offCacheContainer(storageRoot),
   ];
