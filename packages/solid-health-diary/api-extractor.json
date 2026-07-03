@@ -1,0 +1,12 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/api-extractor/v7/api-extractor.schema.json",
+  "mainEntryPointFilePath": "<projectFolder>/dist/index.d.ts",
+  "apiReport": { "enabled": true, "reportFolder": "<projectFolder>/etc/", "reportFileName": "solid-health-diary.api.md" },
+  "docModel": { "enabled": false },
+  "dtsRollup": { "enabled": false },
+  "tsdocMetadata": { "enabled": false },
+  "messages": {
+    "compilerMessageReporting": { "default": { "logLevel": "none" } },
+    "extractorMessageReporting": { "default": { "logLevel": "none" } }
+  }
+}

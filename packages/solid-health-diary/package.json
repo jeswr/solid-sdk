@@ -1,0 +1,82 @@
+{
+  "name": "@jeswr/solid-health-diary",
+  "version": "0.1.0",
+  "description": "The shared multi-intolerance health-diary RDF model for the Solid app suite — typed read/write accessors over meals, food items, derived exposures, symptoms, trigger classes (with evidence-prior lag profiles), elimination protocols, tolerance conclusions, a genetics summary and a diet plan (schema.org / OWL-Time / PROV-O / Dublin Core + the diet: nutrition/intolerance terms), plus OFF-tag exposure derivation and an owner-only fail-closed ACL helper.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Jesse Wright",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jeswr/solid-health-diary.git"
+  },
+  "homepage": "https://github.com/jeswr/solid-health-diary#readme",
+  "bugs": {
+    "url": "https://github.com/jeswr/solid-health-diary/issues"
+  },
+  "keywords": [
+    "solid",
+    "rdf",
+    "health",
+    "diary",
+    "coeliac",
+    "celiac",
+    "intolerance",
+    "food",
+    "openfoodfacts",
+    "shacl"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./shape": {
+      "import": "./dist/shape.js",
+      "types": "./dist/shape.d.ts"
+    },
+    "./shapes/diet.shacl.ttl": "./shapes/diet.shacl.ttl",
+    "./shapes/diet.vocab.ttl": "./shapes/diet.vocab.ttl"
+  },
+  "files": [
+    "dist",
+    "shapes",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "biome check src",
+    "lint:fix": "biome check --write src",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "gate": "npm run lint && npm run typecheck && npm run test && npm run build && npm run check:dist && npm run check:lockfile-transport",
+    "check:dist": "node scripts/check-dist.mjs",
+    "check:lockfile-transport": "node scripts/check-lockfile-transport.mjs",
+    "api:report": "npm run build && npx --yes @microsoft/api-extractor@7 run --local",
+    "api:check": "npm run build && npx --yes @microsoft/api-extractor@7 run"
+  },
+  "dependencies": {
+    "@jeswr/fetch-rdf": "^0.1.0",
+    "@rdfjs/wrapper": "^0.34.0",
+    "n3": "^2.0.3"
+  },
+  "peerDependencies": {
+    "@rdfjs/types": "^2.0.1"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.0.0",
+    "@rdfjs/types": "^2.0.1",
+    "@types/n3": "^1.26.1",
+    "@types/node": "^20",
+    "@zazuko/env-node": "^3.0.0",
+    "esbuild": "^0.25.0",
+    "rdf-validate-shacl": "^0.6.5",
+    "typescript": "^5",
+    "vitest": "^4.1.8"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

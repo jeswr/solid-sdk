@@ -1,0 +1,335 @@
+# AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+#
+@prefix diet:    <https://w3id.org/jeswr/sectors/health/diet#> .
+@prefix dsh:     <https://w3id.org/jeswr/sectors/health/diet/shapes#> .
+@prefix health:  <https://w3id.org/jeswr/sectors/health#> .
+@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix sh:      <http://www.w3.org/ns/shacl#> .
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix prof:    <http://www.w3.org/ns/dx/prof/> .
+@prefix time:    <http://www.w3.org/2006/time#> .
+@prefix schema:  <http://schema.org/> .
+
+# =============================================================================
+# Solid Health / DIET sub-sector — SHACL data-model profile (F4).
+#
+# The NORMATIVE conformance artifact: the OWL ontology (diet.ttl) licenses
+# meaning; THIS shape checks shape. Grades follow the coeliac-app design's
+# make-or-break "frictionless logging" rule (DESIGN §5.3: "no mandatory fields
+# beyond WHAT and WHEN"):
+#  - a Meal MUSTs are its item(s) (WHAT) + ingestion time (WHEN);
+#  - a Symptom MUSTs are its type (WHAT) + onset time (WHEN);
+#  everything else — context, portion, severity, provenance — is SHOULD/MAY so
+#  the 5-second happy path validates.
+#
+# Discipline (matches the health sector's profile):
+#  - OPEN BY DEFAULT — no sh:closed (composes with app profiles).
+#  - sh:severity carries the RFC 2119 grade: Violation=MUST, Warning=SHOULD.
+#    A conformance RESULT is read against severity, not a bare pass/fail.
+#  - IMMUTABLE version IRI (.../diet/profile/1.0.0); additive-only.
+#
+# Two invariants are cross-resource / semantic and are enforced in the app
+# accessor + UI, NOT here (SHACL is single-resource): (a) at most ONE protocol per
+# pod in an active reintroduce/observe phase; (b) confidence diet:confirmedByOwnTest
+# requires a COMPLETED protocol. The vocabulary + these notes carry them.
+#
+# The genetics privacy invariant — the RAW genotype file NEVER enters the pod — is
+# enforced on-device (parse-then-discard) and covered by a package test; SHACL
+# cannot assert the ABSENCE of an undefined property, so it is a design note here.
+# =============================================================================
+
+<https://w3id.org/jeswr/sectors/health/diet/profile>
+    a prof:Profile ;
+    dcterms:title "Solid Health Diet data-model profile (version-independent)"@en ;
+    dcterms:description "Resolves to the current Diet sub-sector profile version."@en .
+
+<https://w3id.org/jeswr/sectors/health/diet/profile/1.0.0>
+    a prof:Profile ;
+    dcterms:title "Solid Health Diet data-model profile"@en ;
+    dcterms:isVersionOf <https://w3id.org/jeswr/sectors/health/diet/profile> ;
+    owl:versionInfo "1.0.0" ;
+    owl:versionIRI <https://w3id.org/jeswr/sectors/health/diet/profile/1.0.0> ;
+    prof:isProfileOf <https://w3id.org/jeswr/sectors/health/diet> ;
+    prof:hasToken "solid-health-diet-1.0.0" ;
+    prof:hasResource [
+        prof:hasRole <http://www.w3.org/ns/dx/prof/role/constraints> ;
+        prof:hasArtifact <https://w3id.org/jeswr/sectors/health/diet/profile/1.0.0/diet.shacl.ttl>
+    ] ;
+    prof:hasResource [
+        prof:hasRole <http://www.w3.org/ns/dx/prof/role/vocabulary> ;
+        prof:hasArtifact <https://w3id.org/jeswr/sectors/health/diet>
+    ] ;
+    rdfs:comment "Open-by-default SHACL profile for the diet sub-sector; MUSTs follow the 'what + when' frictionless-logging rule."@en .
+
+# -----------------------------------------------------------------------------
+# Meal — WHAT (≥1 food item) + WHEN (ingestion time). The rest is enrichment.
+# -----------------------------------------------------------------------------
+dsh:MealShape
+    a sh:NodeShape ;
+    sh:targetClass diet:Meal ;
+    rdfs:label "Meal shape"@en ;
+    sh:property [
+        sh:path schema:startTime ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:dateTime ;
+        sh:severity sh:Violation ;
+        sh:message "A Meal MUST carry exactly one schema:startTime (the ingestion time — the load-bearing anchor for lag correlation)."@en
+    ] ;
+    sh:property [
+        sh:path diet:hasItem ;
+        sh:minCount 1 ;
+        sh:class diet:FoodItem ;
+        sh:severity sh:Violation ;
+        sh:message "A Meal MUST have at least one diet:hasItem (a diet:FoodItem) — the WHAT of the intake."@en
+    ] ;
+    sh:property [
+        sh:path diet:context ;
+        sh:maxCount 1 ;
+        sh:class diet:MealContext ;
+        sh:severity sh:Warning ;
+        sh:message "A Meal SHOULD carry a diet:context (home/restaurant/work/travel/other) — the eating-out signal."@en
+    ] ;
+    sh:property [
+        sh:path diet:portion ;
+        sh:maxCount 1 ;
+        sh:class diet:Portion ;
+        sh:severity sh:Warning ;
+        sh:message "A Meal MAY carry a diet:portion (small/normal/large)."@en
+    ] .
+
+# -----------------------------------------------------------------------------
+# FoodItem — a name; provenance of its data; OFF category is load-bearing.
+# -----------------------------------------------------------------------------
+dsh:FoodItemShape
+    a sh:NodeShape ;
+    sh:targetClass diet:FoodItem ;
+    rdfs:label "Food Item shape"@en ;
+    sh:property [
+        sh:path schema:name ;
+        sh:minCount 1 ;
+        sh:severity sh:Violation ;
+        sh:message "A FoodItem MUST carry a schema:name."@en
+    ] ;
+    sh:property [
+        sh:path diet:sourceConfidence ;
+        sh:maxCount 1 ;
+        sh:class diet:SourceConfidence ;
+        sh:severity sh:Warning ;
+        sh:message "A FoodItem SHOULD declare its diet:sourceConfidence (manual/off/ocr/voice) so the engine can down-weight low-confidence sources."@en
+    ] ;
+    sh:property [
+        sh:path diet:offCategory ;
+        sh:severity sh:Warning ;
+        sh:message "A scanned FoodItem SHOULD carry its diet:offCategory (OFF categories_tags) — load-bearing for the possible-undeclared sulphite flag."@en
+    ] .
+
+# -----------------------------------------------------------------------------
+# Exposure — a derived record: a trigger, a level, and (SHOULD) its provenance.
+# -----------------------------------------------------------------------------
+dsh:ExposureShape
+    a sh:NodeShape ;
+    sh:targetClass diet:Exposure ;
+    rdfs:label "Exposure shape"@en ;
+    sh:property [
+        sh:path diet:trigger ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:class diet:TriggerClass ;
+        sh:severity sh:Violation ;
+        sh:message "An Exposure MUST identify its diet:trigger (a diet:TriggerClass)."@en
+    ] ;
+    sh:property [
+        sh:path diet:exposureLevel ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:class diet:ExposureLevel ;
+        sh:severity sh:Violation ;
+        sh:message "An Exposure MUST carry a diet:exposureLevel (present/trace/possible-undeclared/absent)."@en
+    ] ;
+    sh:property [
+        sh:path diet:derivedFrom ;
+        sh:severity sh:Warning ;
+        sh:message "An Exposure SHOULD carry diet:derivedFrom provenance (the FoodItem tags it was derived from) for tap-through transparency."@en
+    ] .
+
+# -----------------------------------------------------------------------------
+# Symptom — WHAT (type) + WHEN (onset). Severity + patient are SHOULD.
+# -----------------------------------------------------------------------------
+dsh:SymptomShape
+    a sh:NodeShape ;
+    sh:targetClass diet:Symptom ;
+    rdfs:label "Symptom shape"@en ;
+    sh:property [
+        sh:path diet:symptomType ;
+        sh:minCount 1 ;
+        sh:class diet:SymptomType ;
+        sh:severity sh:Violation ;
+        sh:message "A Symptom MUST carry a diet:symptomType."@en
+    ] ;
+    sh:property [
+        sh:path schema:startTime ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:dateTime ;
+        sh:severity sh:Violation ;
+        sh:message "A Symptom MUST carry exactly one schema:startTime (the ONSET time — the other half of the lag calculation)."@en
+    ] ;
+    sh:property [
+        sh:path diet:severity ;
+        sh:maxCount 1 ;
+        sh:severity sh:Warning ;
+        sh:message "A Symptom SHOULD carry a diet:severity (an ordinal 0–10 or a band)."@en
+    ] ;
+    sh:property [
+        sh:path health:patient ;
+        sh:class core:Person ;
+        sh:severity sh:Warning ;
+        sh:message "A Symptom SHOULD identify its health:patient (the pod-owner Person it is about)."@en
+    ] .
+
+# -----------------------------------------------------------------------------
+# EliminationProtocol — a target trigger + a current phase (the state machine).
+# (One-active-challenge invariant is cross-resource — enforced in the app.)
+# -----------------------------------------------------------------------------
+dsh:EliminationProtocolShape
+    a sh:NodeShape ;
+    sh:targetClass diet:EliminationProtocol ;
+    rdfs:label "Elimination Protocol shape"@en ;
+    sh:property [
+        sh:path diet:targetTrigger ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:class diet:TriggerClass ;
+        sh:severity sh:Violation ;
+        sh:message "An EliminationProtocol MUST target exactly one diet:targetTrigger (one variable at a time)."@en
+    ] ;
+    sh:property [
+        sh:path diet:phase ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:class diet:ProtocolPhase ;
+        sh:severity sh:Violation ;
+        sh:message "An EliminationProtocol MUST carry its current diet:phase (baseline/eliminate/washout/reintroduce/observe/concluded)."@en
+    ] ;
+    sh:property [
+        sh:path diet:phaseStarted ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:dateTime ;
+        sh:severity sh:Warning ;
+        sh:message "An EliminationProtocol SHOULD record diet:phaseStarted for the current phase."@en
+    ] .
+
+# -----------------------------------------------------------------------------
+# ToleranceConclusion — a trigger + a verdict; confidence + review-after SHOULD.
+# (confirmedByOwnTest requires a completed protocol — enforced in the app.)
+# -----------------------------------------------------------------------------
+dsh:ToleranceConclusionShape
+    a sh:NodeShape ;
+    sh:targetClass diet:ToleranceConclusion ;
+    rdfs:label "Tolerance Conclusion shape"@en ;
+    sh:property [
+        sh:path diet:aboutTrigger ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:class diet:TriggerClass ;
+        sh:severity sh:Violation ;
+        sh:message "A ToleranceConclusion MUST be diet:aboutTrigger exactly one diet:TriggerClass."@en
+    ] ;
+    sh:property [
+        sh:path diet:verdict ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:class diet:Verdict ;
+        sh:severity sh:Violation ;
+        sh:message "A ToleranceConclusion MUST carry a diet:verdict (tolerated/reacts/dose-dependent/inconclusive)."@en
+    ] ;
+    sh:property [
+        sh:path diet:confidence ;
+        sh:maxCount 1 ;
+        sh:class diet:Confidence ;
+        sh:severity sh:Warning ;
+        sh:message "A ToleranceConclusion SHOULD carry an ordinal diet:confidence (never a bare precise percentage)."@en
+    ] ;
+    sh:property [
+        sh:path diet:reviewAfter ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:date ;
+        sh:severity sh:Warning ;
+        sh:message "A secondary-intolerance ToleranceConclusion SHOULD carry a diet:reviewAfter date (time-boxed re-challenge)."@en
+    ] .
+
+# -----------------------------------------------------------------------------
+# GeneticSummary — the negative-predictive interpretation MUST be present.
+# -----------------------------------------------------------------------------
+dsh:GeneticSummaryShape
+    a sh:NodeShape ;
+    sh:targetClass diet:GeneticSummary ;
+    rdfs:label "Genetic Summary shape"@en ;
+    sh:property [
+        sh:path diet:geneticInterpretation ;
+        sh:minCount 1 ;
+        sh:datatype xsd:string ;
+        sh:severity sh:Violation ;
+        sh:message "A GeneticSummary MUST carry a diet:geneticInterpretation (the negative-predictive framing — never a 'you have/don't have coeliac' statement)."@en
+    ] ;
+    sh:property [
+        sh:path diet:enteredManually ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:boolean ;
+        sh:severity sh:Warning ;
+        sh:message "A GeneticSummary SHOULD declare diet:enteredManually (manual entry vs on-device-parsed upload)."@en
+    ] ;
+    sh:property [
+        sh:path diet:hlaMarker ;
+        sh:class diet:HlaMarker ;
+        sh:severity sh:Warning ;
+        sh:message "A GeneticSummary SHOULD carry its diet:hlaMarker rows (rsID→genotype→interpretation, summary only)."@en
+    ] .
+
+# -----------------------------------------------------------------------------
+# HlaMarker — an rsID row (summary only, never raw genotype data).
+# -----------------------------------------------------------------------------
+dsh:HlaMarkerShape
+    a sh:NodeShape ;
+    sh:targetClass diet:HlaMarker ;
+    rdfs:label "HLA Marker shape"@en ;
+    sh:property [
+        sh:path diet:rsid ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:severity sh:Violation ;
+        sh:message "An HlaMarker MUST carry its diet:rsid (e.g. rs2187668, rs7454108)."@en
+    ] ;
+    sh:property [
+        sh:path diet:markerInterpretation ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:severity sh:Warning ;
+        sh:message "An HlaMarker SHOULD carry a diet:markerInterpretation."@en
+    ] .
+
+# -----------------------------------------------------------------------------
+# DietPlan — the working exclusion set; each exclusion SHOULD name its basis.
+# -----------------------------------------------------------------------------
+dsh:DietPlanShape
+    a sh:NodeShape ;
+    sh:targetClass diet:DietPlan ;
+    rdfs:label "Diet Plan shape"@en ;
+    sh:property [
+        sh:path diet:excludes ;
+        sh:class diet:TriggerClass ;
+        sh:severity sh:Warning ;
+        sh:message "A DietPlan's diet:excludes values SHOULD be diet:TriggerClass instances."@en
+    ] ;
+    sh:property [
+        sh:path diet:restsOn ;
+        sh:class diet:ToleranceConclusion ;
+        sh:severity sh:Warning ;
+        sh:message "A DietPlan SHOULD link each exclusion's basis via diet:restsOn (a ToleranceConclusion) — the 'why'."@en
+    ] .

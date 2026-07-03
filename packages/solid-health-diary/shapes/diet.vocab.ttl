@@ -1,0 +1,780 @@
+# AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+#
+@prefix diet:    <https://w3id.org/jeswr/sectors/health/diet#> .
+@prefix health:  <https://w3id.org/jeswr/sectors/health#> .
+@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix skos:    <http://www.w3.org/2004/02/skos/core#> .
+@prefix time:    <http://www.w3.org/2006/time#> .
+@prefix vann:    <http://purl.org/vocab/vann/> .
+@prefix gufo:    <http://purl.org/nemo/gufo#> .
+@prefix schema:  <http://schema.org/> .
+@prefix prov:    <http://www.w3.org/ns/prov#> .
+
+# =============================================================================
+# Solid Health / DIET sub-sector Ontology (DIET) — the nutrition & food-
+# intolerance domain the coeliac & multi-intolerance diary (jeswr/coeliac-app,
+# @jeswr/solid-health-diary) needs, that the parent health sector lacks.
+#
+# A SUB-SECTOR of the gUFO-rooted health sector (sectors/health/health.ttl), NOT
+# a fork: it owl:imports the health sector (and, transitively, the Solid Core),
+# roots every class in a Core class, carries its own gUFO meta-type, and
+# CONSTRAINS — never widens — the terms it reuses. Symptoms are health-sector
+# clinical records about the pod-owner Patient; meals/exposures/conclusions/
+# genetics/plans are Core records. External nutrition/clinical standards
+# (schema.org Meal/NutritionInformation, SNOMED CT / LOINC symptom concepts,
+# FODMAP concepts) are reached Mode-A via skos:closeMatch in diet-alignments.ttl
+# — never MIREOT-imported.
+#
+# gUFO META-TYPES (each class carries its own AND roots transitively in Core):
+#   Meal / FoodItem / Exposure / EliminationProtocol / ToleranceConclusion /
+#       GeneticSummary / HlaMarker / DietPlan  = gufo:SubKind → root core:Record
+#       (structured information records about the Patient / the diary).
+#   Symptom = gufo:SubKind → root core:Record via health:ClinicalEntry (a clinical
+#       entry about the Patient; skos:closeMatch health:Observation in alignments).
+#   TriggerClass + the coded-value classes (MealContext / ExposureLevel /
+#       ProtocolPhase / Verdict / Confidence / SourceConfidence / SymptomType /
+#       Portion) = gufo:Category → root core:Category (rigid non-sortals whose
+#       instances are the coded values, bound to skos:Concept).
+#
+# THE LOAD-BEARING FACTS this vocab exists to carry (from the coeliac-app design):
+#  - Symptom LAG is per-TriggerClass: each trigger carries an evidence-PRIOR lag
+#    profile (diet:lagWindowMin/Max in hours + diet:lagMode) so lagged
+#    exposure↔symptom correlation is possible at all (gluten ~0–72 h right-skew;
+#    lactose/sulphite ~0.5–6 h; FODMAP mid). Priors are seeds, learnable per-user.
+#  - The `possible-undeclared` exposure level encodes the sub-10-ppm sulphite /
+#    high-risk-OFF-category honesty flag: clean allergen/additive tags but a
+#    category (dried fruit, wine…) that commonly hides a trigger. Category-driven,
+#    fail-honest, never a false all-clear.
+#  - Genetics stores ONLY the interpreted summary (rsID→genotype→interpretation),
+#    never the raw genotype file. Negative-predictive framing lives in the data.
+#  - Conclusions are TIME-BOXED (diet:reviewAfter): secondary intolerances get a
+#    re-challenge date — the feature that serves the multi-year healing journey.
+#
+# CONTRACT (health sector R8 §4, F1–F7): imports the health sector; roots every
+# class transitively in a Core class; open-world by default — the SHACL profile
+# (diet.shacl.ttl) carries the closed-world MUST/SHOULD contract. F5 DL hygiene:
+# external terms referenced in axioms are declared as punned owl terms.
+# =============================================================================
+
+<https://w3id.org/jeswr/sectors/health/diet> a owl:Ontology ;
+    dcterms:title "Solid Health Diet sub-sector Ontology"@en ;
+    rdfs:label "Solid Health Diet sub-sector Ontology"@en ;
+    vann:preferredNamespacePrefix "diet" ;
+    vann:preferredNamespaceUri "https://w3id.org/jeswr/sectors/health/diet#" ;
+    owl:imports <https://w3id.org/jeswr/core> ,
+                <https://w3id.org/jeswr/sectors/health> ;
+    owl:versionInfo "1.0.0" ;
+    owl:versionIRI <https://w3id.org/jeswr/sectors/health/diet/1.0.0> ;
+    dcterms:description """The nutrition & multi-intolerance food-diary domain for
+        the coeliac & multi-intolerance app (@jeswr/solid-health-diary): meals and
+        food items (with Open Food Facts allergen/trace/additive/category tags),
+        engine-derived trigger exposures, symptoms (clinical records about the
+        Patient), extensible trigger classes carrying evidence-prior lag windows,
+        one-variable-at-a-time elimination protocols, time-boxed tolerance
+        conclusions, on-device-summarised HLA-DQ genetics, and the working diet
+        plan. A sub-sector of the health sector; aligns Mode-A to schema.org
+        Meal/NutritionInformation, SNOMED CT / LOINC symptom concepts and FODMAP
+        concepts in diet-alignments.ttl."""@en ;
+    dcterms:modified "2026-07-03"^^xsd:date ;
+    rdfs:comment "Sub-sector of the health sector (sectors/health). Decision support, not diagnosis — the app never asserts a disease; that framing is carried in the confidence + interpretation data."@en .
+
+# -----------------------------------------------------------------------------
+# Annotation-property declarations (F5 DL hygiene — match the health pattern).
+# -----------------------------------------------------------------------------
+dcterms:title       a owl:AnnotationProperty .
+dcterms:description a owl:AnnotationProperty .
+dcterms:modified    a owl:AnnotationProperty .
+vann:preferredNamespacePrefix a owl:AnnotationProperty .
+vann:preferredNamespaceUri    a owl:AnnotationProperty .
+skos:definition     a owl:AnnotationProperty .
+skos:scopeNote      a owl:AnnotationProperty .
+skos:notation       a owl:AnnotationProperty .
+
+# -----------------------------------------------------------------------------
+# External classes/properties referenced in axioms below, declared (punned) so
+# the DL profile holds even when their host ontology is not in the reasoned
+# closure — the F5 fix the Core + health sectors apply for time:/qudt:. schema.org
+# and PROV-O are NOT owl:imported (heavy, non-DL closures); we reference specific
+# terms and align in diet-alignments.ttl.
+# -----------------------------------------------------------------------------
+schema:Meal a owl:Class ;
+    rdfs:label "schema.org Meal"@en ;
+    rdfs:isDefinedBy <http://schema.org/> .
+
+skos:Concept a owl:Class ;
+    rdfs:label "SKOS Concept"@en ;
+    rdfs:isDefinedBy <http://www.w3.org/2004/02/skos/core#> .
+
+skos:ConceptScheme a owl:Class ;
+    rdfs:label "SKOS Concept Scheme"@en ;
+    rdfs:isDefinedBy <http://www.w3.org/2004/02/skos/core#> .
+
+time:TemporalEntity a owl:Class ;
+    rdfs:label "Temporal Entity"@en ;
+    rdfs:isDefinedBy <http://www.w3.org/2006/time#> .
+
+prov:wasDerivedFrom a owl:ObjectProperty ;
+    rdfs:label "was derived from"@en ;
+    rdfs:isDefinedBy <http://www.w3.org/ns/prov#> .
+
+# =============================================================================
+# 1. MEAL / INTAKE EVENT — diet:Meal ⊑ schema:Meal + core:Record.
+#    A logged ingestion: WHAT (food items) and WHEN (ingestion time — the
+#    load-bearing half of the lag calculation), plus optional eating-out context.
+# =============================================================================
+
+diet:Meal a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf core:Record , schema:Meal ;
+    rdfs:label "Meal"@en ;
+    skos:definition "A logged intake event: one or more food items ingested at a recorded time, optionally in an eating-out context. A core:Record about the pod-owner Patient and a schema:Meal. Its schema:startTime is the INGESTION time — the load-bearing anchor for lagged exposure↔symptom correlation."@en ;
+    skos:scopeNote "gufo:SubKind of core:Record (and ⊑ schema:Meal). Items via diet:hasItem (⊑ core:hasPart); ingestion time via schema:startTime; eating-out signal via diet:context."@en .
+
+diet:FoodItem a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf core:Record ;
+    rdfs:label "Food Item"@en ;
+    skos:definition "A single food/drink item within a Meal: a name plus (when scanned) its Open Food Facts barcode, reference, cached ingredient text, and allergen / trace / additive / CATEGORY tags. A core:Record; the OFF category is load-bearing for the possible-undeclared sulphite flag."@en ;
+    skos:scopeNote "gufo:SubKind of core:Record. core:partOf its Meal via the inverse of diet:hasItem. Carries diet:sourceConfidence (manual/off/ocr/voice)."@en .
+
+diet:Exposure a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf core:Record ;
+    rdfs:label "Exposure"@en ;
+    skos:definition "The engine-DERIVED trigger content of a meal: a link to a TriggerClass, an exposure level (present / trace / possible-undeclared / absent), and full provenance back to the FoodItem tags it was derived from. Not user-entered — computed from OFF tags + ingredient-text aliases + the high-risk-category map."@en ;
+    skos:scopeNote "gufo:SubKind of core:Record. Trigger via diet:trigger; level via diet:exposureLevel; provenance via diet:derivedFrom (⊑ prov:wasDerivedFrom)."@en .
+
+diet:Symptom a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf health:ClinicalEntry ;
+    rdfs:label "Symptom"@en ;
+    skos:definition "A symptom recorded by the user: a coded symptom type, an ordinal severity, an ONSET time (the other half of the lag calculation) and optional duration. A health:ClinicalEntry — a clinical record about the Patient (skos:closeMatch health:Observation). Breathing/anaphylaxis symptom types are specially flagged to trigger the emergency rail, never correlation."@en ;
+    skos:scopeNote "gufo:SubKind of core:Record via health:ClinicalEntry. Type via diet:symptomType; severity via diet:severity; onset via schema:startTime; the patient via health:patient (⊑ core:about)."@en .
+
+diet:EliminationProtocol a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf core:Record ;
+    rdfs:label "Elimination Protocol"@en ;
+    skos:definition "A one-variable-at-a-time elimination/reintroduction protocol targeting a single TriggerClass, tracked as a state machine (baseline→eliminate→washout→reintroduce→observe→concluded). A core:Record holding the protocol's mutable phase state. Invariant: at most one protocol per pod may be in an active reintroduce/observe phase at a time (concurrent challenges destroy attribution)."@en ;
+    skos:scopeNote "gufo:SubKind of core:Record. Target via diet:targetTrigger; current phase via diet:phase; timing via diet:phaseStarted / diet:phasePlannedEnd; dose escalation via diet:challengeStep."@en .
+
+diet:ToleranceConclusion a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf core:Record ;
+    rdfs:label "Tolerance Conclusion"@en ;
+    skos:definition "A conclusion about one TriggerClass: a verdict (tolerated / reacts / dose-dependent / inconclusive), an ordinal confidence with a plain-language string (never a bare precise percentage), the evidence it rests on, and — for secondary intolerances — a review-after date. A conclusion only reaches confirmed-by-your-own-test via a completed protocol, never correlation alone."@en ;
+    skos:scopeNote "gufo:SubKind of core:Record. Trigger via diet:aboutTrigger; verdict via diet:verdict; confidence via diet:confidence; evidence via diet:derivedFrom (⊑ prov:wasDerivedFrom); time-box via diet:reviewAfter."@en .
+
+diet:GeneticSummary a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf core:Record ;
+    rdfs:label "Genetic Summary"@en ;
+    skos:definition "The interpreted-ONLY summary of a user's coeliac-relevant HLA-DQ genetics: a small set of rsID→genotype→interpretation markers plus a negative-predictive-framed interpretation. The RAW genotype file is parsed on-device and discarded — it NEVER enters the pod. Carries whether it was entered manually or parsed from an upload."@en ;
+    skos:scopeNote "gufo:SubKind of core:Record. Markers via diet:hlaMarker → diet:HlaMarker; framing via diet:geneticInterpretation; path via diet:enteredManually."@en .
+
+diet:HlaMarker a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf core:Record ;
+    rdfs:label "HLA Marker"@en ;
+    skos:definition "One coeliac-relevant HLA-DQ genetic marker row in a GeneticSummary: a tag-SNP rsID (e.g. rs2187668 for DQ2.5, rs7454108 for DQ8), the observed genotype, and its interpretation. A core:Record row; the interpreted summary, never raw genotype data."@en ;
+    skos:scopeNote "gufo:SubKind of core:Record. rsID via diet:rsid; genotype via diet:genotype; interpretation via diet:markerInterpretation."@en .
+
+diet:DietPlan a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf core:Record ;
+    rdfs:label "Diet Plan"@en ;
+    skos:definition "The current working exclusion set — which TriggerClasses the user is avoiding and, via provenance, the ToleranceConclusion each exclusion rests on. Generated from conclusions; the 'what am I currently avoiding and why' view. Biased toward shrinking, not growing, the avoid-list (orthorexia guard)."@en ;
+    skos:scopeNote "gufo:SubKind of core:Record. Exclusions via diet:excludes → diet:TriggerClass; supporting conclusions via diet:restsOn (⊑ prov:wasDerivedFrom)."@en .
+
+# =============================================================================
+# 2. TRIGGER CLASS + coded-value classes — gufo:Category, root core:Category.
+#    Rigid non-sortals whose instances are the coded values (bound to skos:Concept
+#    in the schemes below). Constrain core:Category; never widen it.
+# =============================================================================
+
+diet:TriggerClass a owl:Class, gufo:Category ;
+    rdfs:subClassOf core:Category ;
+    rdfs:label "Trigger Class"@en ;
+    skos:definition "A class of dietary trigger the diary tracks (gluten, lactose, a FODMAP subgroup, sulphites, histamine, an allergen, caffeine, …), each carrying an evidence-PRIOR lag profile (diet:lagWindowMin/Max in hours + diet:lagMode) used to time lagged correlation. Extensible and learnable per-user. A coded value (core:Category); the trigger scheme's members are skos:Concepts."@en ;
+    skos:scopeNote "gufo:Category of core:Category. Members are in diet:TriggerScheme; each carries diet:lagWindowMin / diet:lagWindowMax / diet:lagMode."@en .
+
+diet:SymptomType a owl:Class, gufo:Category ;
+    rdfs:subClassOf core:Category ;
+    rdfs:label "Symptom Type"@en ;
+    skos:definition "A coded type of symptom the diary records (bloating, diarrhoea, brain-fog, wheeze/breathing, …). Members of diet:SymptomScheme, SNOMED CT / LOINC-aligned in diet-alignments.ttl. Breathing/anaphylaxis types carry diet:triggersEmergencyRail true."@en ;
+    skos:scopeNote "gufo:Category of core:Category. Members are skos:Concepts in diet:SymptomScheme."@en .
+
+diet:MealContext a owl:Class, gufo:Category ;
+    rdfs:subClassOf core:Category ;
+    rdfs:label "Meal Context"@en ;
+    skos:definition "The eating context of a Meal (home / restaurant / work / travel / other) — the eating-out signal used to surface 'your reactions cluster on restaurant meals'."@en ;
+    skos:scopeNote "gufo:Category of core:Category. Members are skos:Concepts in diet:MealContextScheme."@en .
+
+diet:ExposureLevel a owl:Class, gufo:Category ;
+    rdfs:subClassOf core:Category ;
+    rdfs:label "Exposure Level"@en ;
+    skos:definition "The strength of a derived Exposure: present / trace / possible-undeclared / absent. 'possible-undeclared' encodes the sub-10-ppm honesty flag (clean tags but a high-risk category that commonly hides the trigger)."@en ;
+    skos:scopeNote "gufo:Category of core:Category. Members are skos:Concepts in diet:ExposureLevelScheme."@en .
+
+diet:ProtocolPhase a owl:Class, gufo:Category ;
+    rdfs:subClassOf core:Category ;
+    rdfs:label "Protocol Phase"@en ;
+    skos:definition "A phase of an elimination protocol's state machine: baseline / eliminate / washout / reintroduce / observe / concluded."@en ;
+    skos:scopeNote "gufo:Category of core:Category. Members are skos:Concepts in diet:ProtocolPhaseScheme."@en .
+
+diet:Verdict a owl:Class, gufo:Category ;
+    rdfs:subClassOf core:Category ;
+    rdfs:label "Verdict"@en ;
+    skos:definition "The outcome of a tolerance conclusion: tolerated / reacts / dose-dependent / inconclusive."@en ;
+    skos:scopeNote "gufo:Category of core:Category. Members are skos:Concepts in diet:VerdictScheme."@en .
+
+diet:Confidence a owl:Class, gufo:Category ;
+    rdfs:subClassOf core:Category ;
+    rdfs:label "Confidence"@en ;
+    skos:definition "The ordinal confidence of a conclusion: emerging / suspected / likely / confirmed-by-your-own-test. Deliberately NOT a bare percentage — 'this is a pattern in your data, not a diagnosis'. Only a completed protocol yields confirmed-by-your-own-test."@en ;
+    skos:scopeNote "gufo:Category of core:Category. Members are skos:Concepts in diet:ConfidenceScheme (ordered by skos:notation)."@en .
+
+diet:SourceConfidence a owl:Class, gufo:Category ;
+    rdfs:subClassOf core:Category ;
+    rdfs:label "Source Confidence"@en ;
+    skos:definition "How a FoodItem's data was captured: manual / off (Open Food Facts) / ocr / voice. Low-confidence sources (ocr, voice) are user-confirmed drafts and MAY be down-weighted by the inference engine."@en ;
+    skos:scopeNote "gufo:Category of core:Category. Members are skos:Concepts in diet:SourceConfidenceScheme."@en .
+
+diet:Portion a owl:Class, gufo:Category ;
+    rdfs:subClassOf core:Category ;
+    rdfs:label "Portion"@en ;
+    skos:definition "A qualitative portion size for a Meal (small / normal / large) where a precise QUDT quantity is not captured."@en ;
+    skos:scopeNote "gufo:Category of core:Category. Members are skos:Concepts in diet:PortionScheme."@en .
+
+# =============================================================================
+# 3. PROPERTIES — sub-properties of a Core/health property where one fits, else
+#    domained onto a diet: class (constrain, never widen a reused property).
+# =============================================================================
+
+# --- Meal structure -----------------------------------------------------------
+diet:hasItem a owl:ObjectProperty ;
+    rdfs:subPropertyOf core:hasPart ;
+    rdfs:domain diet:Meal ;
+    rdfs:range diet:FoodItem ;
+    rdfs:label "has item"@en ;
+    skos:definition "Relates a Meal to a FoodItem it contains. A sub-property of core:hasPart, so the part-whole spine holds."@en .
+
+diet:context a owl:ObjectProperty ;
+    rdfs:domain diet:Meal ;
+    rdfs:range diet:MealContext ;
+    rdfs:label "context"@en ;
+    skos:definition "The eating context of a Meal (home / restaurant / work / travel / other). The eating-out signal for clustering reactions by context."@en .
+
+diet:venue a owl:DatatypeProperty ;
+    rdfs:domain diet:Meal ;
+    rdfs:range xsd:string ;
+    rdfs:label "venue"@en ;
+    skos:definition "Free-text name of the venue a Meal was eaten at (a restaurant, canteen). For a structured reference use schema:location toward a schema:Restaurant."@en .
+
+diet:portion a owl:ObjectProperty ;
+    rdfs:domain diet:Meal ;
+    rdfs:range diet:Portion ;
+    rdfs:label "portion"@en ;
+    skos:definition "The qualitative portion size of a Meal (small / normal / large). Optional; apps MAY instead carry a QUDT quantity."@en .
+
+diet:note a owl:DatatypeProperty ;
+    rdfs:range xsd:string ;
+    rdfs:label "note"@en ;
+    skos:definition "A free-text note on a Meal or a Symptom. No rdfs:domain — it applies to several diet records."@en .
+
+# --- FoodItem / Open Food Facts ----------------------------------------------
+diet:offBarcode a owl:DatatypeProperty ;
+    rdfs:domain diet:FoodItem ;
+    rdfs:range xsd:string ;
+    rdfs:label "OFF barcode"@en ;
+    skos:definition "The GTIN/EAN barcode scanned for a FoodItem (the Open Food Facts product key)."@en .
+
+diet:offRef a owl:ObjectProperty ;
+    rdfs:domain diet:FoodItem ;
+    rdfs:label "OFF reference"@en ;
+    skos:definition "The Open Food Facts product reference IRI (https://world.openfoodfacts.org/product/{barcode}) a FoodItem was resolved from. Open Food Facts data is ODbL — attribute it wherever the product is shown."@en .
+
+diet:ingredientsText a owl:DatatypeProperty ;
+    rdfs:domain diet:FoodItem ;
+    rdfs:range xsd:string ;
+    rdfs:label "ingredients text"@en ;
+    skos:definition "The cached Open Food Facts ingredients_text for a FoodItem (or an OCR draft, flagged diet:sourceConfidence diet:ocr). Scanned for sulphite aliases in exposure derivation."@en .
+
+diet:declaredAllergen a owl:DatatypeProperty ;
+    rdfs:domain diet:FoodItem ;
+    rdfs:label "declared allergen"@en ;
+    skos:definition "A declared-allergen code for a FoodItem, from Open Food Facts allergens_tags (e.g. en:gluten, en:milk)."@en .
+
+diet:traceAllergen a owl:DatatypeProperty ;
+    rdfs:domain diet:FoodItem ;
+    rdfs:label "trace allergen"@en ;
+    skos:definition "A 'may contain' trace-allergen code for a FoodItem, from Open Food Facts traces_tags (cross-contamination risk)."@en .
+
+diet:additive a owl:DatatypeProperty ;
+    rdfs:domain diet:FoodItem ;
+    rdfs:label "additive"@en ;
+    skos:definition "An additive E-number code for a FoodItem, from Open Food Facts additives_tags. The sulphite hook is E220–E228 (en:e220…en:e228)."@en .
+
+diet:offCategory a owl:DatatypeProperty ;
+    rdfs:domain diet:FoodItem ;
+    rdfs:label "OFF category"@en ;
+    skos:definition "An Open Food Facts categories_tags value for a FoodItem (e.g. en:dried-fruits, en:wines). LOAD-BEARING: the possible-undeclared sulphite Exposure fires from a high-risk category even when allergen/additive tags are clean; if the category is unknown, that fallback is suppressed (no false alarm)."@en .
+
+diet:sourceConfidence a owl:ObjectProperty ;
+    rdfs:domain diet:FoodItem ;
+    rdfs:range diet:SourceConfidence ;
+    rdfs:label "source confidence"@en ;
+    skos:definition "How a FoodItem's data was captured (manual / off / ocr / voice). Low-confidence sources are user-confirmed drafts the engine MAY down-weight."@en .
+
+# --- Exposure -----------------------------------------------------------------
+diet:trigger a owl:ObjectProperty ;
+    rdfs:domain diet:Exposure ;
+    rdfs:range diet:TriggerClass ;
+    rdfs:label "trigger"@en ;
+    skos:definition "The TriggerClass a derived Exposure is to (gluten, lactose, sulphites, …)."@en .
+
+diet:exposureLevel a owl:ObjectProperty ;
+    rdfs:domain diet:Exposure ;
+    rdfs:range diet:ExposureLevel ;
+    rdfs:label "exposure level"@en ;
+    skos:definition "The strength of a derived Exposure (present / trace / possible-undeclared / absent)."@en .
+
+diet:derivedFrom a owl:ObjectProperty ;
+    rdfs:subPropertyOf prov:wasDerivedFrom ;
+    rdfs:label "derived from"@en ;
+    skos:definition "The evidence a derived record rests on — the FoodItem tags an Exposure came from, or the exposures/symptoms/protocol a ToleranceConclusion rests on. A sub-property of prov:wasDerivedFrom for tap-through transparency. No rdfs:domain — used by Exposure and ToleranceConclusion."@en .
+
+# --- Symptom ------------------------------------------------------------------
+diet:symptomType a owl:ObjectProperty ;
+    rdfs:domain diet:Symptom ;
+    rdfs:range diet:SymptomType ;
+    rdfs:label "symptom type"@en ;
+    skos:definition "The coded type of a Symptom (bloating, diarrhoea, wheeze/breathing, …), a member of diet:SymptomScheme."@en .
+
+diet:severity a owl:DatatypeProperty ;
+    rdfs:domain diet:Symptom ;
+    rdfs:label "severity"@en ;
+    skos:definition "The ordinal severity of a Symptom — an integer 0–10, or a coded band (none/mild/moderate/severe) carried as its skos:notation. Store an ordinal; never a false-precise measurement."@en .
+
+diet:duration a owl:ObjectProperty ;
+    rdfs:subPropertyOf core:atTime ;
+    rdfs:domain diet:Symptom ;
+    rdfs:range time:TemporalEntity ;
+    rdfs:label "duration"@en ;
+    skos:definition "The duration of a Symptom as an OWL-Time interval (time:Interval). A sub-property of core:atTime. Onset itself is schema:startTime."@en .
+
+diet:triggersEmergencyRail a owl:DatatypeProperty ;
+    rdfs:domain diet:SymptomType ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "triggers emergency rail"@en ;
+    skos:definition "True on a SymptomType (breathing difficulty, anaphylaxis) that MUST surface the emergency rail rather than be correlated. A hard, non-suppressible safety flag carried in the vocabulary itself."@en .
+
+# --- TriggerClass lag profile (evidence priors, learnable per-user) -----------
+diet:lagWindowMin a owl:DatatypeProperty ;
+    rdfs:domain diet:TriggerClass ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "lag window min"@en ;
+    skos:definition "The minimum exposure→symptom lag, in HOURS, of a TriggerClass's evidence-prior window — the earliest a reaction is expected after exposure. Correlation looks back over [onset − lagWindowMax, onset − lagWindowMin]."@en .
+
+diet:lagWindowMax a owl:DatatypeProperty ;
+    rdfs:domain diet:TriggerClass ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "lag window max"@en ;
+    skos:definition "The maximum exposure→symptom lag, in HOURS, of a TriggerClass's evidence-prior window — the latest a reaction is plausibly attributable (e.g. ~72 h for gluten, ~6 h for acute sulphite/lactose)."@en .
+
+diet:lagMode a owl:DatatypeProperty ;
+    rdfs:domain diet:TriggerClass ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "lag mode"@en ;
+    skos:definition "The modal (most-likely) exposure→symptom lag, in HOURS, of a TriggerClass — the peak of a typically right-skewed window (gluten a few hours; acute triggers ~1 h)."@en .
+
+# --- EliminationProtocol ------------------------------------------------------
+diet:targetTrigger a owl:ObjectProperty ;
+    rdfs:domain diet:EliminationProtocol ;
+    rdfs:range diet:TriggerClass ;
+    rdfs:label "target trigger"@en ;
+    skos:definition "The single TriggerClass an EliminationProtocol tests. Exactly one — one variable at a time."@en .
+
+diet:phase a owl:ObjectProperty ;
+    rdfs:domain diet:EliminationProtocol ;
+    rdfs:range diet:ProtocolPhase ;
+    rdfs:label "phase"@en ;
+    skos:definition "The current phase of an EliminationProtocol's state machine (baseline / eliminate / washout / reintroduce / observe / concluded)."@en .
+
+diet:phaseStarted a owl:DatatypeProperty ;
+    rdfs:domain diet:EliminationProtocol ;
+    rdfs:range xsd:dateTime ;
+    rdfs:label "phase started"@en ;
+    skos:definition "When the current phase of an EliminationProtocol began."@en .
+
+diet:phasePlannedEnd a owl:DatatypeProperty ;
+    rdfs:domain diet:EliminationProtocol ;
+    rdfs:range xsd:dateTime ;
+    rdfs:label "phase planned end"@en ;
+    skos:definition "The planned end of the current phase (from the per-phase default duration, user-adjustable)."@en .
+
+diet:challengeStep a owl:DatatypeProperty ;
+    rdfs:domain diet:EliminationProtocol ;
+    rdfs:range xsd:integer ;
+    rdfs:label "challenge step"@en ;
+    skos:definition "The dose-escalation step index within the reintroduce phase (0 = first, smallest dose)."@en .
+
+# --- ToleranceConclusion ------------------------------------------------------
+diet:aboutTrigger a owl:ObjectProperty ;
+    rdfs:domain diet:ToleranceConclusion ;
+    rdfs:range diet:TriggerClass ;
+    rdfs:label "about trigger"@en ;
+    skos:definition "The single TriggerClass a ToleranceConclusion is about."@en .
+
+diet:verdict a owl:ObjectProperty ;
+    rdfs:domain diet:ToleranceConclusion ;
+    rdfs:range diet:Verdict ;
+    rdfs:label "verdict"@en ;
+    skos:definition "The verdict of a ToleranceConclusion (tolerated / reacts / dose-dependent / inconclusive)."@en .
+
+diet:confidence a owl:ObjectProperty ;
+    rdfs:domain diet:ToleranceConclusion ;
+    rdfs:range diet:Confidence ;
+    rdfs:label "confidence"@en ;
+    skos:definition "The ordinal confidence of a ToleranceConclusion (emerging / suspected / likely / confirmed-by-your-own-test). confirmed-by-your-own-test requires a completed protocol, never correlation alone."@en .
+
+diet:reviewAfter a owl:DatatypeProperty ;
+    rdfs:domain diet:ToleranceConclusion ;
+    rdfs:range xsd:date ;
+    rdfs:label "review after"@en ;
+    skos:definition "The date after which a ToleranceConclusion should be re-challenged. Secondary intolerances (e.g. lactose during villous healing) are time-boxed — this date drives the proactive re-challenge prompt that serves the multi-year journey."@en .
+
+# --- GeneticSummary / HlaMarker ----------------------------------------------
+diet:hlaMarker a owl:ObjectProperty ;
+    rdfs:domain diet:GeneticSummary ;
+    rdfs:range diet:HlaMarker ;
+    rdfs:label "HLA marker"@en ;
+    skos:definition "Relates a GeneticSummary to one interpreted HLA-DQ marker row (rsID→genotype→interpretation). Summary rows only — never raw genotype data."@en .
+
+diet:geneticInterpretation a owl:DatatypeProperty ;
+    rdfs:domain diet:GeneticSummary ;
+    rdfs:range xsd:string ;
+    rdfs:label "genetic interpretation"@en ;
+    skos:definition "The negative-predictive-framed interpretation of a GeneticSummary: carrying DQ2/DQ8 does NOT diagnose coeliac (30–40% of everyone carries it); NOT carrying it makes coeliac very unlikely; diagnosis needs serology + biopsy while eating gluten; a consumer chip may not tag every risk allele (a null result is not reassurance)."@en .
+
+diet:enteredManually a owl:DatatypeProperty ;
+    rdfs:domain diet:GeneticSummary ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "entered manually"@en ;
+    skos:definition "True if a GeneticSummary was entered manually (known HLA type/result), false if parsed on-device from a consumer raw-genotype upload (the raw file discarded)."@en .
+
+diet:rsid a owl:DatatypeProperty ;
+    rdfs:domain diet:HlaMarker ;
+    rdfs:range xsd:string ;
+    rdfs:label "rsID"@en ;
+    skos:definition "The dbSNP reference-SNP identifier of an HlaMarker (e.g. rs2187668, rs7454108)."@en .
+
+diet:genotype a owl:DatatypeProperty ;
+    rdfs:domain diet:HlaMarker ;
+    rdfs:range xsd:string ;
+    rdfs:label "genotype"@en ;
+    skos:definition "The observed genotype at an HlaMarker's rsID (e.g. 'AG'). The interpreted summary value, not the raw file."@en .
+
+diet:markerInterpretation a owl:DatatypeProperty ;
+    rdfs:domain diet:HlaMarker ;
+    rdfs:range xsd:string ;
+    rdfs:label "marker interpretation"@en ;
+    skos:definition "The interpretation of an HlaMarker's genotype (e.g. 'rs2187668 present → DQ2.5 risk haplotype')."@en .
+
+# --- DietPlan -----------------------------------------------------------------
+diet:excludes a owl:ObjectProperty ;
+    rdfs:domain diet:DietPlan ;
+    rdfs:range diet:TriggerClass ;
+    rdfs:label "excludes"@en ;
+    skos:definition "A TriggerClass the current DietPlan avoids. The 'what am I currently avoiding' set; the conclusion each rests on is linked via diet:restsOn."@en .
+
+diet:restsOn a owl:ObjectProperty ;
+    rdfs:subPropertyOf prov:wasDerivedFrom ;
+    rdfs:domain diet:DietPlan ;
+    rdfs:range diet:ToleranceConclusion ;
+    rdfs:label "rests on"@en ;
+    skos:definition "A ToleranceConclusion a DietPlan's exclusions rest on ('…and why'). A sub-property of prov:wasDerivedFrom."@en .
+
+# =============================================================================
+# 4. CODED-VALUE SCHEMES — the canonical value sets (skos:Concept members). Each
+#    member is typed with its diet: coded class AND skos:Concept, carries
+#    skos:prefLabel + skos:definition (F1/term-hygiene) + skos:notation (the
+#    plain token the app UI uses), and skos:inScheme its scheme.
+# =============================================================================
+
+diet:MealContextScheme a skos:ConceptScheme ;
+    rdfs:label "Meal Context scheme"@en ;
+    skos:definition "The eating-context value set for diet:context."@en .
+
+diet:home a diet:MealContext, skos:Concept ;
+    skos:inScheme diet:MealContextScheme ; skos:notation "home" ;
+    skos:prefLabel "Home"@en ; skos:definition "Eaten at home."@en .
+diet:restaurant a diet:MealContext, skos:Concept ;
+    skos:inScheme diet:MealContextScheme ; skos:notation "restaurant" ;
+    skos:prefLabel "Restaurant"@en ; skos:definition "Eaten out at a restaurant or food establishment — the cross-contamination-risk context."@en .
+diet:work a diet:MealContext, skos:Concept ;
+    skos:inScheme diet:MealContextScheme ; skos:notation "work" ;
+    skos:prefLabel "Work"@en ; skos:definition "Eaten at work (canteen, desk)."@en .
+diet:travel a diet:MealContext, skos:Concept ;
+    skos:inScheme diet:MealContextScheme ; skos:notation "travel" ;
+    skos:prefLabel "Travel"@en ; skos:definition "Eaten while travelling."@en .
+diet:other a diet:MealContext, skos:Concept ;
+    skos:inScheme diet:MealContextScheme ; skos:notation "other" ;
+    skos:prefLabel "Other"@en ; skos:definition "An eating context not covered by the other values."@en .
+
+diet:ExposureLevelScheme a skos:ConceptScheme ;
+    rdfs:label "Exposure Level scheme"@en ;
+    skos:definition "The derived-exposure strength value set for diet:exposureLevel."@en .
+
+diet:present a diet:ExposureLevel, skos:Concept ;
+    skos:inScheme diet:ExposureLevelScheme ; skos:notation "present" ;
+    skos:prefLabel "Present"@en ; skos:definition "The trigger is present in the meal (a declared allergen or an E220–E228 additive, or an ingredient-text match)."@en .
+diet:trace a diet:ExposureLevel, skos:Concept ;
+    skos:inScheme diet:ExposureLevelScheme ; skos:notation "trace" ;
+    skos:prefLabel "Trace"@en ; skos:definition "A 'may contain' trace of the trigger (from OFF traces_tags — cross-contamination risk)."@en .
+diet:possibleUndeclared a diet:ExposureLevel, skos:Concept ;
+    skos:inScheme diet:ExposureLevelScheme ; skos:notation "possible-undeclared" ;
+    skos:prefLabel "Possible (undeclared)"@en ; skos:definition "Tags are clean but the FoodItem's OFF category is one that commonly HIDES this trigger (dried fruit, wine, beer, bottled citrus, pickles → sulphites) — the sub-10-ppm honesty flag. Fires only when a high-risk category is known; if the category is unknown it does NOT fire (no false alarm)."@en .
+diet:absent a diet:ExposureLevel, skos:Concept ;
+    skos:inScheme diet:ExposureLevelScheme ; skos:notation "absent" ;
+    skos:prefLabel "Absent"@en ; skos:definition "No evidence of the trigger in the meal."@en .
+
+diet:ProtocolPhaseScheme a skos:ConceptScheme ;
+    rdfs:label "Protocol Phase scheme"@en ;
+    skos:definition "The elimination-protocol state-machine phases for diet:phase."@en .
+
+diet:baseline a diet:ProtocolPhase, skos:Concept ;
+    skos:inScheme diet:ProtocolPhaseScheme ; skos:notation "baseline" ;
+    skos:prefLabel "Baseline"@en ; skos:definition "Establish a symptom baseline on the current diet (3–7 days)."@en .
+diet:eliminate a diet:ProtocolPhase, skos:Concept ;
+    skos:inScheme diet:ProtocolPhaseScheme ; skos:notation "eliminate" ;
+    skos:prefLabel "Eliminate"@en ; skos:definition "Fully remove the target trigger for a sustained period (FODMAP-style ~2–6 weeks)."@en .
+diet:washout a diet:ProtocolPhase, skos:Concept ;
+    skos:inScheme diet:ProtocolPhaseScheme ; skos:notation "washout" ;
+    skos:prefLabel "Washout"@en ; skos:definition "Return to a clean baseline (~3 days) between challenges to isolate the signal."@en .
+diet:reintroduce a diet:ProtocolPhase, skos:Concept ;
+    skos:inScheme diet:ProtocolPhaseScheme ; skos:notation "reintroduce" ;
+    skos:prefLabel "Reintroduce"@en ; skos:definition "Reintroduce the single trigger in small→larger doses over ~3 days (one variable at a time)."@en .
+diet:observe a diet:ProtocolPhase, skos:Concept ;
+    skos:inScheme diet:ProtocolPhaseScheme ; skos:notation "observe" ;
+    skos:prefLabel "Observe"@en ; skos:definition "Observe for a reaction over the trigger's lag window after each dose."@en .
+diet:concluded a diet:ProtocolPhase, skos:Concept ;
+    skos:inScheme diet:ProtocolPhaseScheme ; skos:notation "concluded" ;
+    skos:prefLabel "Concluded"@en ; skos:definition "The protocol has concluded with a verdict (see diet:Verdict)."@en .
+
+diet:VerdictScheme a skos:ConceptScheme ;
+    rdfs:label "Verdict scheme"@en ;
+    skos:definition "The tolerance-conclusion outcome value set for diet:verdict."@en .
+
+diet:tolerated a diet:Verdict, skos:Concept ;
+    skos:inScheme diet:VerdictScheme ; skos:notation "tolerated" ;
+    skos:prefLabel "Tolerated"@en ; skos:definition "No reaction observed through the maximum dose — the trigger is tolerated."@en .
+diet:reacts a diet:Verdict, skos:Concept ;
+    skos:inScheme diet:VerdictScheme ; skos:notation "reacts" ;
+    skos:prefLabel "Reacts"@en ; skos:definition "A reaction was observed on reintroduction — the trigger is implicated."@en .
+diet:doseDependent a diet:Verdict, skos:Concept ;
+    skos:inScheme diet:VerdictScheme ; skos:notation "dose-dependent" ;
+    skos:prefLabel "Dose-dependent"@en ; skos:definition "Tolerated up to a threshold dose, reacts above it."@en .
+diet:inconclusive a diet:Verdict, skos:Concept ;
+    skos:inScheme diet:VerdictScheme ; skos:notation "inconclusive" ;
+    skos:prefLabel "Inconclusive"@en ; skos:definition "The protocol did not yield a clear verdict (e.g. confounded, incomplete)."@en .
+
+diet:ConfidenceScheme a skos:ConceptScheme ;
+    rdfs:label "Confidence scheme"@en ;
+    skos:definition "The ordinal confidence value set for diet:confidence (ordered by skos:notation)."@en .
+
+diet:emerging a diet:Confidence, skos:Concept ;
+    skos:inScheme diet:ConfidenceScheme ; skos:notation "1" ;
+    skos:prefLabel "Emerging"@en ; skos:definition "A weak, early pattern — few supporting events. A pattern in your data, not a diagnosis."@en .
+diet:suspected a diet:Confidence, skos:Concept ;
+    skos:inScheme diet:ConfidenceScheme ; skos:notation "2" ;
+    skos:prefLabel "Suspected"@en ; skos:definition "A moderate pattern worth testing with an elimination protocol."@en .
+diet:likely a diet:Confidence, skos:Concept ;
+    skos:inScheme diet:ConfidenceScheme ; skos:notation "3" ;
+    skos:prefLabel "Likely"@en ; skos:definition "A strong correlational pattern — but still correlation, which proposes; a protocol confirms."@en .
+diet:confirmedByOwnTest a diet:Confidence, skos:Concept ;
+    skos:inScheme diet:ConfidenceScheme ; skos:notation "4" ;
+    skos:prefLabel "Confirmed by your own test"@en ; skos:definition "Confirmed by a COMPLETED elimination protocol — the only path to this level. Never reached by correlation alone."@en .
+
+diet:SourceConfidenceScheme a skos:ConceptScheme ;
+    rdfs:label "Source Confidence scheme"@en ;
+    skos:definition "The FoodItem data-capture provenance value set for diet:sourceConfidence."@en .
+
+diet:manual a diet:SourceConfidence, skos:Concept ;
+    skos:inScheme diet:SourceConfidenceScheme ; skos:notation "manual" ;
+    skos:prefLabel "Manual"@en ; skos:definition "Entered manually by the user."@en .
+diet:off a diet:SourceConfidence, skos:Concept ;
+    skos:inScheme diet:SourceConfidenceScheme ; skos:notation "off" ;
+    skos:prefLabel "Open Food Facts"@en ; skos:definition "Resolved from an Open Food Facts barcode lookup (ODbL — attribute)."@en .
+diet:ocr a diet:SourceConfidence, skos:Concept ;
+    skos:inScheme diet:SourceConfidenceScheme ; skos:notation "ocr" ;
+    skos:prefLabel "OCR"@en ; skos:definition "Extracted by on-device OCR from a packet photo — a user-confirmed DRAFT, never auto-fed to inference."@en .
+diet:voice a diet:SourceConfidence, skos:Concept ;
+    skos:inScheme diet:SourceConfidenceScheme ; skos:notation "voice" ;
+    skos:prefLabel "Voice"@en ; skos:definition "Parsed from a voice entry — a user-confirmed draft."@en .
+
+diet:PortionScheme a skos:ConceptScheme ;
+    rdfs:label "Portion scheme"@en ;
+    skos:definition "The qualitative portion value set for diet:portion."@en .
+
+diet:small a diet:Portion, skos:Concept ;
+    skos:inScheme diet:PortionScheme ; skos:notation "small" ;
+    skos:prefLabel "Small"@en ; skos:definition "A small portion."@en .
+diet:normal a diet:Portion, skos:Concept ;
+    skos:inScheme diet:PortionScheme ; skos:notation "normal" ;
+    skos:prefLabel "Normal"@en ; skos:definition "A normal portion."@en .
+diet:large a diet:Portion, skos:Concept ;
+    skos:inScheme diet:PortionScheme ; skos:notation "large" ;
+    skos:prefLabel "Large"@en ; skos:definition "A large portion."@en .
+
+# =============================================================================
+# 5. TRIGGER SCHEME — the extensible TriggerClass concepts, each seeded with an
+#    evidence-PRIOR lag profile (hours) from the coeliac-app RESEARCH §2.1. These
+#    are PRIORS (learnable per-user), not per-user data: gluten wide/right-skew
+#    (~0–72 h); acute lactose/sulphite/histamine tight (~0.25–6 h); FODMAP
+#    subgroups mid (~0.5–24 h). SNOMED/FODMAP alignments are in diet-alignments.ttl.
+# =============================================================================
+
+diet:TriggerScheme a skos:ConceptScheme ;
+    rdfs:label "Trigger scheme"@en ;
+    skos:definition "The extensible set of dietary TriggerClass concepts the diary tracks, each carrying an evidence-prior lag profile."@en .
+
+diet:gluten a diet:TriggerClass, skos:Concept ;
+    skos:inScheme diet:TriggerScheme ; skos:notation "gluten" ;
+    skos:prefLabel "Gluten"@en ;
+    skos:definition "Wheat/barley/rye gluten. Coeliac reactions have a WIDE, right-skewed lag: median ~1 h (IQR 0.6–8 h) but 13% ≥12 h and up to 24–48 h in older adults (RESEARCH §2.1). Pre-diagnosis gluten elimination is hard-blocked in the app — get tested first while still eating gluten."@en ;
+    diet:lagWindowMin 0.0 ; diet:lagWindowMax 72.0 ; diet:lagMode 3.0 .
+
+diet:lactose a diet:TriggerClass, skos:Concept ;
+    skos:inScheme diet:TriggerScheme ; skos:notation "lactose" ;
+    skos:prefLabel "Lactose"@en ;
+    skos:definition "Milk sugar. Secondary lactose intolerance from villous atrophy is common and often RESOLVES as the gut heals (≥6 months) — its conclusions are time-boxed and re-challenged (RESEARCH §2.2). Acute reaction is tight, ~0.5–6 h."@en ;
+    diet:lagWindowMin 0.5 ; diet:lagWindowMax 6.0 ; diet:lagMode 2.0 .
+
+diet:fructose a diet:TriggerClass, skos:Concept ;
+    skos:inScheme diet:TriggerScheme ; skos:notation "fructose" ;
+    skos:prefLabel "Fructose"@en ;
+    skos:definition "Excess free fructose (a FODMAP monosaccharide). FODMAP reactions are mid-window (~0.5–24 h) — osmotic + fermentative (RESEARCH §2.3)."@en ;
+    diet:lagWindowMin 0.5 ; diet:lagWindowMax 24.0 ; diet:lagMode 4.0 .
+
+diet:fructan a diet:TriggerClass, skos:Concept ;
+    skos:inScheme diet:TriggerScheme ; skos:notation "fructan" ;
+    skos:prefLabel "Fructan"@en ;
+    skos:definition "Fructans (wheat, onion, garlic — a FODMAP oligosaccharide). Mid-window fermentative reaction (~0.5–24 h)."@en ;
+    diet:lagWindowMin 0.5 ; diet:lagWindowMax 24.0 ; diet:lagMode 6.0 .
+
+diet:galactan a diet:TriggerClass, skos:Concept ;
+    skos:inScheme diet:TriggerScheme ; skos:notation "galactan" ;
+    skos:prefLabel "Galactan (GOS)"@en ;
+    skos:definition "Galacto-oligosaccharides (legumes — a FODMAP oligosaccharide). Mid-window fermentative reaction (~0.5–24 h)."@en ;
+    diet:lagWindowMin 0.5 ; diet:lagWindowMax 24.0 ; diet:lagMode 6.0 .
+
+diet:polyol a diet:TriggerClass, skos:Concept ;
+    skos:inScheme diet:TriggerScheme ; skos:notation "polyol" ;
+    skos:prefLabel "Polyol"@en ;
+    skos:definition "Sugar alcohols (sorbitol, mannitol — a FODMAP). Mid-window osmotic reaction (~0.5–24 h)."@en ;
+    diet:lagWindowMin 0.5 ; diet:lagWindowMax 24.0 ; diet:lagMode 4.0 .
+
+diet:sulphites a diet:TriggerClass, skos:Concept ;
+    skos:inScheme diet:TriggerScheme ; skos:notation "sulphites" ;
+    skos:prefLabel "Sulphites"@en ;
+    skos:definition "Sulphur dioxide + sulphites (E220–E228). Asthma-type reaction (wheeze, flushing, headache), acute and tight (~0.25–6 h). Sub-10-ppm is legally unlabelled — hence the possible-undeclared category flag (RESEARCH §2.7)."@en ;
+    diet:lagWindowMin 0.25 ; diet:lagWindowMax 6.0 ; diet:lagMode 1.0 .
+
+diet:histamine a diet:TriggerClass, skos:Concept ;
+    skos:inScheme diet:TriggerScheme ; skos:notation "histamine" ;
+    skos:prefLabel "Histamine"@en ;
+    skos:definition "Dietary histamine / histamine intolerance. Rapid reaction (~0.25–4 h)."@en ;
+    diet:lagWindowMin 0.25 ; diet:lagWindowMax 4.0 ; diet:lagMode 1.0 .
+
+diet:nuts a diet:TriggerClass, skos:Concept ;
+    skos:inScheme diet:TriggerScheme ; skos:notation "nuts" ;
+    skos:prefLabel "Nuts"@en ;
+    skos:definition "Tree nuts / peanuts. IgE-type reactions are fast (~0–6 h). A breathing/anaphylaxis symptom with a nut exposure is an emergency, never a correlation."@en ;
+    diet:lagWindowMin 0.0 ; diet:lagWindowMax 6.0 ; diet:lagMode 1.0 .
+
+diet:soy a diet:TriggerClass, skos:Concept ;
+    skos:inScheme diet:TriggerScheme ; skos:notation "soy" ;
+    skos:prefLabel "Soy"@en ;
+    skos:definition "Soy/soya. Reaction typically fast to mid (~0–8 h)."@en ;
+    diet:lagWindowMin 0.0 ; diet:lagWindowMax 8.0 ; diet:lagMode 2.0 .
+
+diet:egg a diet:TriggerClass, skos:Concept ;
+    skos:inScheme diet:TriggerScheme ; skos:notation "egg" ;
+    skos:prefLabel "Egg"@en ;
+    skos:definition "Egg. Reaction typically fast (~0–6 h)."@en ;
+    diet:lagWindowMin 0.0 ; diet:lagWindowMax 6.0 ; diet:lagMode 1.0 .
+
+diet:caffeine a diet:TriggerClass, skos:Concept ;
+    skos:inScheme diet:TriggerScheme ; skos:notation "caffeine" ;
+    skos:prefLabel "Caffeine"@en ;
+    skos:definition "Caffeine. Reaction fast (~0.25–6 h)."@en ;
+    diet:lagWindowMin 0.25 ; diet:lagWindowMax 6.0 ; diet:lagMode 1.0 .
+
+# =============================================================================
+# 6. SYMPTOM SCHEME — the coded symptom types. SNOMED CT / LOINC concept
+#    alignments are in diet-alignments.ttl. Breathing/anaphylaxis types carry
+#    diet:triggersEmergencyRail true (the hard, non-suppressible safety flag).
+# =============================================================================
+
+diet:SymptomScheme a skos:ConceptScheme ;
+    rdfs:label "Symptom scheme"@en ;
+    skos:definition "The extensible set of coded symptom types the diary records."@en .
+
+diet:bloating a diet:SymptomType, skos:Concept ;
+    skos:inScheme diet:SymptomScheme ; skos:notation "bloating" ;
+    skos:prefLabel "Bloating"@en ; skos:definition "Abdominal bloating / distension."@en .
+diet:diarrhoea a diet:SymptomType, skos:Concept ;
+    skos:inScheme diet:SymptomScheme ; skos:notation "diarrhoea" ;
+    skos:prefLabel "Diarrhoea"@en ; skos:definition "Loose or watery stools."@en .
+diet:constipation a diet:SymptomType, skos:Concept ;
+    skos:inScheme diet:SymptomScheme ; skos:notation "constipation" ;
+    skos:prefLabel "Constipation"@en ; skos:definition "Difficult or infrequent stools."@en .
+diet:abdominalPain a diet:SymptomType, skos:Concept ;
+    skos:inScheme diet:SymptomScheme ; skos:notation "abdominal-pain" ;
+    skos:prefLabel "Abdominal pain"@en ; skos:definition "Abdominal pain or cramping."@en .
+diet:brainFog a diet:SymptomType, skos:Concept ;
+    skos:inScheme diet:SymptomScheme ; skos:notation "brain-fog" ;
+    skos:prefLabel "Brain fog"@en ; skos:definition "Impaired concentration / mental cloudiness."@en .
+diet:headache a diet:SymptomType, skos:Concept ;
+    skos:inScheme diet:SymptomScheme ; skos:notation "headache" ;
+    skos:prefLabel "Headache"@en ; skos:definition "Headache."@en .
+diet:fatigue a diet:SymptomType, skos:Concept ;
+    skos:inScheme diet:SymptomScheme ; skos:notation "fatigue" ;
+    skos:prefLabel "Fatigue"@en ; skos:definition "Tiredness / lack of energy."@en .
+diet:skinRash a diet:SymptomType, skos:Concept ;
+    skos:inScheme diet:SymptomScheme ; skos:notation "skin-rash" ;
+    skos:prefLabel "Skin / rash"@en ; skos:definition "Skin reaction, rash, itching or hives."@en .
+diet:wheezeBreathing a diet:SymptomType, skos:Concept ;
+    skos:inScheme diet:SymptomScheme ; skos:notation "wheeze-breathing" ;
+    skos:prefLabel "Wheeze / breathing difficulty"@en ;
+    skos:definition "Wheeze, chest tightness or breathing difficulty (the sulphite asthma-type reaction). SPECIALLY FLAGGED — surfaces the emergency rail, never correlation."@en ;
+    diet:triggersEmergencyRail true .
+diet:anaphylaxis a diet:SymptomType, skos:Concept ;
+    skos:inScheme diet:SymptomScheme ; skos:notation "anaphylaxis" ;
+    skos:prefLabel "Anaphylaxis"@en ;
+    skos:definition "A severe, potentially life-threatening allergic reaction. SPECIALLY FLAGGED — surfaces the emergency rail immediately, never correlation."@en ;
+    diet:triggersEmergencyRail true .
+diet:nausea a diet:SymptomType, skos:Concept ;
+    skos:inScheme diet:SymptomScheme ; skos:notation "nausea" ;
+    skos:prefLabel "Nausea"@en ; skos:definition "Nausea or feeling sick."@en .
+diet:reflux a diet:SymptomType, skos:Concept ;
+    skos:inScheme diet:SymptomScheme ; skos:notation "reflux" ;
+    skos:prefLabel "Reflux"@en ; skos:definition "Acid reflux / heartburn."@en .
+diet:jointPain a diet:SymptomType, skos:Concept ;
+    skos:inScheme diet:SymptomScheme ; skos:notation "joint-pain" ;
+    skos:prefLabel "Joint pain"@en ; skos:definition "Joint pain or aching."@en .
+diet:mood a diet:SymptomType, skos:Concept ;
+    skos:inScheme diet:SymptomScheme ; skos:notation "mood" ;
+    skos:prefLabel "Mood change"@en ; skos:definition "Low mood, irritability or anxiety."@en .
+
+# =============================================================================
+# SUB-SECTOR MARKER — the IRI an app's fedapp:sector names to declare it operates
+# in the diet (nutrition / food-intolerance) sub-sector. A skos:Concept in the
+# federation sector register, skos:broader the parent health sector; dereferences
+# to this ontology.
+# =============================================================================
+
+<https://w3id.org/jeswr/sectors/health/diet#sector>
+    a skos:Concept ;
+    rdfs:label "Diet sub-sector"@en ;
+    rdfs:comment "The Diet (nutrition / food-intolerance) sub-sector of the Health sector. The value a food-diary app's fedapp:sector names in its Client Identifier Document. Backed by this sub-sector ontology; narrower than the Health sector."@en ;
+    rdfs:isDefinedBy <https://w3id.org/jeswr/sectors/health/diet> ;
+    skos:broader <https://w3id.org/jeswr/sectors/health#sector> ;
+    skos:prefLabel "Diet"@en .

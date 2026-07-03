@@ -1,0 +1,31 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jeswr/full-solid-ecosystem/main/tracking/schema/suite.schema.json",
+  "id": "solid-health-diary",
+  "kind": "sdk",
+  "name": "Solid Health Diary",
+  "repo": "https://github.com/jeswr/solid-health-diary",
+  "category": "infrastructure",
+  "maturity": "alpha",
+  "visibility": "public",
+  "securityCritical": true,
+  "stack": {
+    "lang": "TypeScript (ESM, NodeNext)",
+    "runtime": "Node >=20",
+    "rdf": "n3 ^2.x",
+    "rdf-wrapper": "@rdfjs/wrapper ^0.34.x",
+    "fetch-rdf": "@jeswr/fetch-rdf ^0.1",
+    "shacl": "rdf-validate-shacl ^0.6, @zazuko/env-node ^3 (dev)",
+    "test": "vitest ^4.x",
+    "lint": "@biomejs/biome ^2.x",
+    "node": ">=20"
+  },
+  "dependsOn": [
+    "solid-federation-vocab"
+  ],
+  "federation": {
+    "sectors": ["health"],
+    "produces": ["health"],
+    "consumes": ["health"],
+    "note": "The shared multi-intolerance health-diary RDF model (Brief 1A of the coeliac-app build) — typed accessors + SHACL for Meal / FoodItem / Exposure / Symptom / TriggerClass (evidence-prior lag profiles) / EliminationProtocol / ToleranceConclusion / GeneticSummary / DietPlan, plus deriveExposures (OFF allergen/trace/additive tags + ingredient-text sulphite aliases + a high-risk-category → possible-undeclared fallback) and an owner-only fail-closed ACL helper. Reuses schema.org / OWL-Time / PROV-O / Dublin Core; new terms under diet: (https://w3id.org/jeswr/sectors/health/diet#), a sub-module of the health sector (vocab authored in parallel in solid-federation-vocab, Brief 1B). SECURITY-CRITICAL: models health data (symptoms, genetics summary, restriction plan) — all pod resources are owner-only, fail-closed. GitHub-installable now (committed dist/, ignore-scripts=true); npm publish is a deferred migration."
+  }
+}
