@@ -27,9 +27,28 @@
  */
 import { createNodeGuardedFetch } from "@jeswr/guarded-fetch/node";
 import { longChatMessageSubject, serializeLongChat, } from "@jeswr/solid-chat-interop";
+import { isWithinBase, safeHttpIri } from "./safe-iri.js";
 import { matrixEventToCanonical, } from "./transform.js";
 /** A conservative max for a single Matrix `/messages` page. */
 const MAX_PAGE_SIZE = 1000;
+/**
+ * Fail CLOSED on any HTTP redirect. Every trust-bearing fetch in this package sets
+ * `redirect: "manual"` so the runtime does NOT silently auto-follow a 3xx — a
+ * followed redirect on a DPoP/Bearer POD WRITE could land the authed request (and
+ * its body) at an attacker-chosen or wrong resource, and a followed redirect on the
+ * ACL write could leave the container UNLOCKED while content lands in it. With
+ * `redirect: "manual"` the runtime surfaces the redirect as either an
+ * `opaqueredirect` response (`type === "opaqueredirect"`, `status === 0`) or a raw
+ * 3xx; either is refused here. Call BEFORE inspecting `res.ok`.
+ */
+function assertNoRedirect(res, method, url) {
+    if (res.type === "opaqueredirect" || (res.status >= 300 && res.status < 400)) {
+        // `url` is a caller/config value; canonicalise it for the message so a hostile
+        // URL cannot inject control chars into logs (`safeHttpIri` strips/encodes them).
+        const safe = safeHttpIri(url) ?? "<unsafe-url>";
+        throw new Error(`refusing to follow a redirect on ${method} ${safe} (status ${res.status}).`);
+    }
+}
 /**
  * Slugify a Matrix event id into a safe, COLLISION-FREE path segment. A naive
  * "replace every non-URL-safe char with `_`" is NOT injective — `$a:b` and `$a/b`
@@ -75,7 +94,9 @@ async function putLongChat(writeFetch, url, msg) {
         method: "PUT",
         headers: { "content-type": "text/turtle" },
         body: turtle,
+        redirect: "manual",
     });
+    assertNoRedirect(res, "PUT", url);
     if (!res.ok) {
         throw new Error(`pod write failed: PUT ${url} -> ${res.status} ${res.statusText}`);
     }
@@ -96,7 +117,9 @@ async function writeOwnerOnlyAcl(writeFetch, container, ownerWebId) {
         method: "PUT",
         headers: { "content-type": "text/turtle" },
         body: turtle,
+        redirect: "manual",
     });
+    assertNoRedirect(res, "PUT", aclUrl);
     if (!res.ok) {
         throw new Error(`owner-only ACL write failed: PUT ${aclUrl} -> ${res.status} ${res.statusText}`);
     }
@@ -108,16 +131,31 @@ async function writeOwnerOnlyAcl(writeFetch, container, ownerWebId) {
  * hand-concatenated triples (house rule). Exported for testing.
  */
 export async function buildOwnerOnlyAclTurtle(container, ownerWebId) {
+    // SECURITY (fail-closed): an ACL is the most dangerous injection sink in this
+    // package — a `>` in `ownerWebId` or `container` reaching n3.Writer's un-escaped
+    // `<...>` could inject a public `acl:agentClass foaf:Agent` grant, turning the
+    // owner-private container PUBLIC. Both MUST be canonical, injection-safe http(s)
+    // IRIs; anything else is refused BEFORE a single quad is built (never write a
+    // half-safe ACL). `container` must additionally still be a container (trailing '/'
+    // preserved by canonicalisation).
+    const safeContainer = safeHttpIri(container);
+    if (safeContainer === undefined || !safeContainer.endsWith("/")) {
+        throw new Error("owner-only ACL: container must be a safe http(s) container IRI ending in '/'.");
+    }
+    const safeOwner = safeHttpIri(ownerWebId);
+    if (safeOwner === undefined) {
+        throw new Error("owner-only ACL: ownerWebId must be a safe absolute http(s) IRI.");
+    }
     const { DataFactory, Store, Writer } = await import("n3");
     const { namedNode } = DataFactory;
     const Acl = "http://www.w3.org/ns/auth/acl#";
     const RdfType = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
     const store = new Store();
-    const auth = namedNode(`${container}.acl#owner`);
+    const auth = namedNode(`${safeContainer}.acl#owner`);
     store.addQuad(auth, namedNode(RdfType), namedNode(`${Acl}Authorization`));
-    store.addQuad(auth, namedNode(`${Acl}agent`), namedNode(ownerWebId));
-    store.addQuad(auth, namedNode(`${Acl}accessTo`), namedNode(container));
-    store.addQuad(auth, namedNode(`${Acl}default`), namedNode(container));
+    store.addQuad(auth, namedNode(`${Acl}agent`), namedNode(safeOwner));
+    store.addQuad(auth, namedNode(`${Acl}accessTo`), namedNode(safeContainer));
+    store.addQuad(auth, namedNode(`${Acl}default`), namedNode(safeContainer));
     store.addQuad(auth, namedNode(`${Acl}mode`), namedNode(`${Acl}Read`));
     store.addQuad(auth, namedNode(`${Acl}mode`), namedNode(`${Acl}Write`));
     store.addQuad(auth, namedNode(`${Acl}mode`), namedNode(`${Acl}Control`));
@@ -201,7 +239,13 @@ export async function importRoom(options) {
                 authorization: `Bearer ${accessToken}`,
                 accept: "application/json",
             },
+            // The guarded fetch re-validates + re-pins each redirect hop itself and strips
+            // the Authorization header cross-origin; we ALSO set manual + refuse a 3xx
+            // here so a raw redirect from an injected/non-guarded fetch double can never
+            // leak the Bearer token or read from a redirected host.
+            redirect: "manual",
         });
+        assertNoRedirect(res, "GET", url.toString());
         if (!res.ok) {
             throw new Error(`Matrix /messages failed: ${res.status} ${res.statusText} (room ${roomId}, page ${pages}).`);
         }
@@ -231,10 +275,15 @@ export async function importRoom(options) {
         const state = states.get(eventId);
         if (state === undefined)
             continue;
-        const targetUrl = messageUrlFor(eventId);
+        // SCOPE GUARD (fail-closed): the resolved write URL — whether the default slug
+        // or a caller-supplied `messageUrlFor` — MUST be a safe http(s) IRI strictly
+        // within the configured container. This stops a custom (or buggy) resolver, or
+        // an injection-carrying event id, from writing OUTSIDE the owner-locked
+        // container (where the owner-only ACL does not apply).
+        const targetUrl = assertWritableUrl(messageUrlFor(eventId), container);
         if (state.redactedAt !== undefined) {
             // A redaction is terminal: tombstone the resource, clearing any body.
-            await applyRedaction(writeFetch, messageUrlFor, eventId, state.redactedAt);
+            await applyRedaction(writeFetch, targetUrl, state.redactedAt);
             redacted++;
             continue;
         }
@@ -248,8 +297,13 @@ export async function importRoom(options) {
         const out = { ...base, id: subject };
         if (state.edit !== undefined) {
             // Preserve the original message's timestamps/author where the edit lacked
-            // them, but the edit's CONTENT wins; set the dct:isReplacedBy edit pointer.
-            out.replacedBy = longChatMessageSubject(messageUrlFor(state.edit.editEventId));
+            // them, but the edit's CONTENT wins; set the dct:isReplacedBy edit pointer —
+            // only when the edit's own resource is a safe, in-container IRI (else drop the
+            // metadata pointer rather than lose the message content or inject an IRI).
+            const editSubject = safeHttpIri(longChatMessageSubject(messageUrlFor(state.edit.editEventId)));
+            if (editSubject !== undefined && isWithinBase(editSubject, container)) {
+                out.replacedBy = editSubject;
+            }
             if (state.message?.published !== undefined && out.published === undefined) {
                 out.published = state.message.published;
             }
@@ -309,8 +363,7 @@ function foldResult(states, result) {
  * its content on re-sync). We write a minimal LongChat resource carrying only the
  * tombstone. The `deletedAt` defaults to `now` when the source did not carry one.
  */
-async function applyRedaction(writeFetch, messageUrlFor, targetEventId, deletedAt) {
-    const url = messageUrlFor(targetEventId);
+async function applyRedaction(writeFetch, url, deletedAt) {
     const subject = longChatMessageSubject(url);
     const tombstone = {
         id: subject,
@@ -319,6 +372,20 @@ async function applyRedaction(writeFetch, messageUrlFor, targetEventId, deletedA
         deletedAt: deletedAt ?? new Date().toISOString(),
     };
     await putLongChat(writeFetch, url, tombstone);
+}
+/**
+ * Resolve + validate a pod write URL against the container base (fail-closed). The
+ * resolver's output MUST be a safe, canonical http(s) IRI STRICTLY within `container`
+ * (same origin + a path under the container); anything else throws before any write
+ * happens. Returns the canonical safe URL to use for BOTH the HTTP request and the
+ * `#it` subject, so the two can never disagree.
+ */
+function assertWritableUrl(url, container) {
+    const safe = safeHttpIri(url);
+    if (safe === undefined || !isWithinBase(safe, container)) {
+        throw new Error("refusing a pod write to a resource outside the configured container base.");
+    }
+    return safe;
 }
 /** True for an https URL (best-effort; unparseable → false). */
 function isHttps(u) {

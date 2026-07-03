@@ -98,12 +98,30 @@ phase 1; `m.image`/`m.file`/`m.audio`/`m.video`/`m.location` are skipped (media 
   `@jeswr/guarded-fetch`'s node DNS-pinning fetch: **https-only**, blocks
   private/loopback/link-local/**cloud-metadata** addresses, DNS-pins to close the rebinding window,
   caps response size + time, and **does not auto-follow redirects**.
+- **Every trust-bearing fetch refuses redirects** — the homeserver reads AND the DPoP/Bearer **pod
+  writes** (message + ACL PUTs) are issued with `redirect: "manual"` and **fail closed on any 3xx /
+  `opaqueredirect`**. A followed redirect on a pod write could land the authed request at a wrong /
+  attacker-chosen resource (or leave the ACL unwritten while content lands), so it is refused, not
+  followed.
 - **The Matrix access token is a runtime input** — sent only as a `Bearer` header on the guarded
   homeserver request. It is **never written to the pod, never logged, never placed in a URL** (there
   is a regression test for this).
+- **Untrusted IRIs are canonicalised, never coerced** — every untrusted string that becomes a
+  `namedNode()` (a resolved WebID, a room/reply/edit target, the ACL owner + container) passes
+  `safeHttpIri`: it must be an absolute http(s) IRI, is canonicalised via the WHATWG URL parser, and
+  the IRIREF-forbidden residue (`|` `^` `` ` ``) is percent-encoded. This neutralises the n3.Writer
+  IRI-injection class — a `>` in an untrusted value can no longer break out of `<...>` and inject
+  triples (e.g. a public `acl:agentClass` grant into the ACL). A bare "is it http(s)?" boolean check
+  is **not** sufficient and is not used.
 - **Imported chat is third-party data landing in your pod** → the default ACL is **OWNER-ONLY**
   (`acl:Read`/`acl:Write`/`acl:Control` for the owner over the container + descendants), written
   **before** any message lands. Nothing is auto-shared; the importer never widens an existing ACL.
+- **Pod writes stay inside the configured container (scope guard)** — every resolved write URL
+  (default slug or a caller `messageUrlFor`) must be a safe http(s) IRI **strictly within** the
+  container (same origin + descendant path); anything else is refused before any write.
+- **Control characters are stripped from imported bodies** — NUL and other non-whitespace C0/C1
+  control chars (ESC, BEL, DEL, …) are removed from the untrusted message body before it is persisted
+  (tab / newline / CR are kept); the `formatted_body` HTML is never persisted (stored-XSS guard).
 - **Source edits and redactions are honoured on re-sync** — re-running rewrites the same stable
   resource per event id (a reversible base64url slug, so distinct event ids never collide), applies
   new edits, and clears redacted bodies.
