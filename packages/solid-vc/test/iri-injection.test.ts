@@ -176,4 +176,50 @@ describe("fail-closed required identity fields (issuer / subject id)", () => {
     expect(result.verified).toBe(false);
     expect(result.errors.some((e) => e.code === "MALFORMED")).toBe(true);
   });
+
+  // JSON-LD parity: the projection must refuse EXACTLY the subject ids the RDF path
+  // refuses — a present relative/malformed id must throw, not be copied through.
+  for (const bad of ["relative/subject", "not an iri", "  "]) {
+    it(`credentialToJsonLd REJECTS a non-absolute credentialSubject.id ${JSON.stringify(bad)}`, () => {
+      const cred: Credential = {
+        issuer: "https://alice.example/#me",
+        credentialSubject: { id: bad, claim: "x" },
+      };
+      expect(() => credentialToJsonLd(cred)).toThrow(/credentialSubject\.id/);
+    });
+  }
+
+  it("credentialToJsonLd REJECTS a bad id inside a MULTI-subject array too", () => {
+    const cred: Credential = {
+      issuer: "https://alice.example/#me",
+      credentialSubject: [{ id: "https://ok.example/#a" }, { id: "relative/bad" }],
+    };
+    expect(() => credentialToJsonLd(cred)).toThrow(/credentialSubject\.id/);
+  });
+
+  it("credentialToJsonLd keeps a valid did:/urn:/http subject id byte-unchanged (no canonicalisation)", () => {
+    for (const id of [
+      "did:example:123",
+      "urn:uuid:11111111-2222-3333-4444-555555555555",
+      "https://carol.example/#me",
+    ]) {
+      const doc = credentialToJsonLd({
+        issuer: "https://alice.example/#me",
+        credentialSubject: { id, over18: true },
+      });
+      const subject = doc.credentialSubject as { id: string; over18: boolean };
+      expect(subject.id).toBe(id); // verbatim — matches the RDF path
+      expect(subject.over18).toBe(true);
+    }
+  });
+
+  it("credentialToJsonLd accepts an ABSENT subject id (anonymous subject)", () => {
+    const doc = credentialToJsonLd({
+      issuer: "https://alice.example/#me",
+      credentialSubject: { over18: true },
+    });
+    const subject = doc.credentialSubject as { id?: string; over18: boolean };
+    expect(subject.id).toBeUndefined();
+    expect(subject.over18).toBe(true);
+  });
 });

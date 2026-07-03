@@ -51,6 +51,25 @@ function typeIri(type: string): string {
 }
 
 /**
+ * FAIL-CLOSED check for a credential-subject `id`, shared by the RDF ({@link
+ * writeSubject}) and JSON-LD ({@link credentialToJsonLd}) projections so BOTH refuse
+ * exactly the same identities. A PRESENT id must be an absolute IRI (throws
+ * otherwise); an ABSENT / empty id is fine (an anonymous subject → a blank node).
+ * Validate-only — NO canonicalisation — so a valid id's bytes are unchanged and the
+ * two projections stay in lock-step. Injection is separately neutralised by
+ * `escapeIri` at the write chokepoint; this is the semantic identity requirement.
+ */
+function assertAbsoluteSubjectId(id: string | undefined): void {
+  if (typeof id === "string" && id.length > 0 && !isAbsoluteIri(id)) {
+    throw new Error(
+      `@jeswr/solid-vc: credentialSubject.id must be an absolute IRI, got ${JSON.stringify(
+        id,
+      )} — refusing to emit a credential subject with a relative/invalid id`,
+    );
+  }
+}
+
+/**
  * Write one credential-subject node (its `id` and arbitrary claims) under the
  * credential `subject` via `cred:credentialSubject`. Claims whose value is an
  * absolute-IRI string are written as IRI objects; everything else as a typed
@@ -59,19 +78,10 @@ function typeIri(type: string): string {
 function writeSubject(b: GraphBuilder, credential: NodeRef, subject: CredentialSubject): void {
   let node: NodeRef;
   if (typeof subject.id === "string" && subject.id.length > 0) {
-    // A PRESENT subject `id` is an identity field: FAIL CLOSED on a non-absolute /
-    // relative id rather than sign a credential asserting claims about a broken
-    // subject IRI. Injection is already neutralised by escapeIri at the write
-    // chokepoint; this adds the semantic requirement that the id be an absolute IRI.
-    // (A valid absolute id is written verbatim, exactly as before — no change to a
-    // valid credential's bytes; an ABSENT id still becomes an anonymous blank node.)
-    if (!isAbsoluteIri(subject.id)) {
-      throw new Error(
-        `@jeswr/solid-vc: credentialSubject.id must be an absolute IRI, got ${JSON.stringify(
-          subject.id,
-        )} — refusing to write a credential subject with a relative/invalid id`,
-      );
-    }
+    // FAIL CLOSED on a non-absolute / relative id (shared rule) — a valid absolute
+    // id is written verbatim, exactly as before; an ABSENT id becomes an anonymous
+    // blank node below.
+    assertAbsoluteSubjectId(subject.id);
     node = iriRef(subject.id);
     b.addIri(credential, VC_CREDENTIAL_SUBJECT, subject.id);
   } else {
@@ -199,6 +209,14 @@ export function credentialToJsonLd(credential: Credential): Record<string, unkno
   const subjects = Array.isArray(credential.credentialSubject)
     ? credential.credentialSubject
     : [credential.credentialSubject];
+  // FAIL CLOSED on a PRESENT relative/malformed subject id here too — parity with
+  // the RDF lowering (writeSubject), which throws on the same field. Validate-only
+  // (no canonicalisation): a valid absolute id is copied through byte-unchanged; an
+  // absent id stays absent (an anonymous subject). Without this the JSON-LD
+  // projection would silently accept an identity the RDF/Turtle path refuses.
+  for (const s of subjects) {
+    assertAbsoluteSubjectId(s.id);
+  }
   doc.credentialSubject = subjects.length === 1 ? subjects[0] : subjects;
   return doc;
 }

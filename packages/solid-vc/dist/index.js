@@ -489,16 +489,19 @@ function typeIri(type) {
   if (looksLikeIri(type)) return type;
   return `https://w3id.org/jeswr/solid-vc#${type}`;
 }
+function assertAbsoluteSubjectId(id) {
+  if (typeof id === "string" && id.length > 0 && !isAbsoluteIri(id)) {
+    throw new Error(
+      `@jeswr/solid-vc: credentialSubject.id must be an absolute IRI, got ${JSON.stringify(
+        id
+      )} \u2014 refusing to emit a credential subject with a relative/invalid id`
+    );
+  }
+}
 function writeSubject(b, credential, subject) {
   let node;
   if (typeof subject.id === "string" && subject.id.length > 0) {
-    if (!isAbsoluteIri(subject.id)) {
-      throw new Error(
-        `@jeswr/solid-vc: credentialSubject.id must be an absolute IRI, got ${JSON.stringify(
-          subject.id
-        )} \u2014 refusing to write a credential subject with a relative/invalid id`
-      );
-    }
+    assertAbsoluteSubjectId(subject.id);
     node = iriRef(subject.id);
     b.addIri(credential, VC_CREDENTIAL_SUBJECT, subject.id);
   } else {
@@ -587,6 +590,9 @@ function credentialToJsonLd(credential) {
   if (credential.validFrom !== void 0) doc.validFrom = credential.validFrom;
   if (credential.validUntil !== void 0) doc.validUntil = credential.validUntil;
   const subjects = Array.isArray(credential.credentialSubject) ? credential.credentialSubject : [credential.credentialSubject];
+  for (const s of subjects) {
+    assertAbsoluteSubjectId(s.id);
+  }
   doc.credentialSubject = subjects.length === 1 ? subjects[0] : subjects;
   return doc;
 }
