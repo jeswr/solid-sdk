@@ -55,6 +55,7 @@ const ONTOLOGIES = [
   { dir: "identity", file: "identity.ttl", ns: "https://w3id.org/jeswr/sectors/identity#" },
   { dir: "finance", file: "finance.ttl", ns: "https://w3id.org/jeswr/sectors/finance#" },
   { dir: "health", file: "health.ttl", ns: "https://w3id.org/jeswr/sectors/health#" },
+  { dir: "health/diet", file: "diet.ttl", ns: "https://w3id.org/jeswr/sectors/health/diet#" },
   { dir: "media", file: "media.ttl", ns: "https://w3id.org/jeswr/sectors/media#" },
   { dir: "scheduling", file: "scheduling.ttl", ns: "https://w3id.org/jeswr/sectors/scheduling#" },
   { dir: "contacts", file: "contacts.ttl", ns: "https://w3id.org/jeswr/sectors/contacts#" },

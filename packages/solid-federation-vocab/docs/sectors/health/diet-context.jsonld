@@ -1,0 +1,241 @@
+{
+  "@context": {
+    "@version": 1.1,
+    "@protected": true,
+    "diet": "https://w3id.org/jeswr/sectors/health/diet#",
+    "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+    "skos": "http://www.w3.org/2004/02/skos/core#",
+    "xsd": "http://www.w3.org/2001/XMLSchema#",
+    "id": "@id",
+    "type": "@type",
+    "abdominalPain": "diet:abdominalPain",
+    "aboutTrigger": {
+      "@id": "diet:aboutTrigger",
+      "@type": "@id"
+    },
+    "absent": "diet:absent",
+    "additive": "diet:additive",
+    "anaphylaxis": "diet:anaphylaxis",
+    "baseline": "diet:baseline",
+    "bloating": "diet:bloating",
+    "brainFog": "diet:brainFog",
+    "caffeine": "diet:caffeine",
+    "challengeStep": {
+      "@id": "diet:challengeStep",
+      "@type": "xsd:integer"
+    },
+    "concluded": "diet:concluded",
+    "confidence": {
+      "@id": "diet:confidence",
+      "@type": "@id"
+    },
+    "Confidence": "diet:Confidence",
+    "ConfidenceScheme": "diet:ConfidenceScheme",
+    "confirmedByOwnTest": "diet:confirmedByOwnTest",
+    "constipation": "diet:constipation",
+    "context": {
+      "@id": "diet:context",
+      "@type": "@id"
+    },
+    "declaredAllergen": "diet:declaredAllergen",
+    "derivedFrom": {
+      "@id": "diet:derivedFrom",
+      "@type": "@id"
+    },
+    "diarrhoea": "diet:diarrhoea",
+    "DietPlan": "diet:DietPlan",
+    "doseDependent": "diet:doseDependent",
+    "duration": {
+      "@id": "diet:duration",
+      "@type": "@id"
+    },
+    "egg": "diet:egg",
+    "eliminate": "diet:eliminate",
+    "EliminationProtocol": "diet:EliminationProtocol",
+    "emerging": "diet:emerging",
+    "enteredManually": {
+      "@id": "diet:enteredManually",
+      "@type": "xsd:boolean"
+    },
+    "excludes": {
+      "@id": "diet:excludes",
+      "@type": "@id"
+    },
+    "Exposure": "diet:Exposure",
+    "exposureLevel": {
+      "@id": "diet:exposureLevel",
+      "@type": "@id"
+    },
+    "ExposureLevel": "diet:ExposureLevel",
+    "ExposureLevelScheme": "diet:ExposureLevelScheme",
+    "fatigue": "diet:fatigue",
+    "FoodItem": "diet:FoodItem",
+    "fructan": "diet:fructan",
+    "fructose": "diet:fructose",
+    "galactan": "diet:galactan",
+    "geneticInterpretation": {
+      "@id": "diet:geneticInterpretation",
+      "@type": "xsd:string"
+    },
+    "GeneticSummary": "diet:GeneticSummary",
+    "genotype": {
+      "@id": "diet:genotype",
+      "@type": "xsd:string"
+    },
+    "gluten": "diet:gluten",
+    "hasItem": {
+      "@id": "diet:hasItem",
+      "@type": "@id"
+    },
+    "headache": "diet:headache",
+    "histamine": "diet:histamine",
+    "hlaMarker": {
+      "@id": "diet:hlaMarker",
+      "@type": "@id"
+    },
+    "HlaMarker": "diet:HlaMarker",
+    "home": "diet:home",
+    "inconclusive": "diet:inconclusive",
+    "ingredientsText": {
+      "@id": "diet:ingredientsText",
+      "@type": "xsd:string"
+    },
+    "jointPain": "diet:jointPain",
+    "lactose": "diet:lactose",
+    "lagMode": {
+      "@id": "diet:lagMode",
+      "@type": "xsd:decimal"
+    },
+    "lagWindowMax": {
+      "@id": "diet:lagWindowMax",
+      "@type": "xsd:decimal"
+    },
+    "lagWindowMin": {
+      "@id": "diet:lagWindowMin",
+      "@type": "xsd:decimal"
+    },
+    "large": "diet:large",
+    "likely": "diet:likely",
+    "manual": "diet:manual",
+    "markerInterpretation": {
+      "@id": "diet:markerInterpretation",
+      "@type": "xsd:string"
+    },
+    "Meal": "diet:Meal",
+    "MealContext": "diet:MealContext",
+    "MealContextScheme": "diet:MealContextScheme",
+    "mood": "diet:mood",
+    "nausea": "diet:nausea",
+    "normal": "diet:normal",
+    "note": {
+      "@id": "diet:note",
+      "@type": "xsd:string"
+    },
+    "nuts": "diet:nuts",
+    "observe": "diet:observe",
+    "ocr": "diet:ocr",
+    "off": "diet:off",
+    "offBarcode": {
+      "@id": "diet:offBarcode",
+      "@type": "xsd:string"
+    },
+    "offCategory": "diet:offCategory",
+    "offRef": {
+      "@id": "diet:offRef",
+      "@type": "@id"
+    },
+    "other": "diet:other",
+    "phase": {
+      "@id": "diet:phase",
+      "@type": "@id"
+    },
+    "phasePlannedEnd": {
+      "@id": "diet:phasePlannedEnd",
+      "@type": "xsd:dateTime"
+    },
+    "phaseStarted": {
+      "@id": "diet:phaseStarted",
+      "@type": "xsd:dateTime"
+    },
+    "polyol": "diet:polyol",
+    "portion": {
+      "@id": "diet:portion",
+      "@type": "@id"
+    },
+    "Portion": "diet:Portion",
+    "PortionScheme": "diet:PortionScheme",
+    "possibleUndeclared": "diet:possibleUndeclared",
+    "present": "diet:present",
+    "ProtocolPhase": "diet:ProtocolPhase",
+    "ProtocolPhaseScheme": "diet:ProtocolPhaseScheme",
+    "reacts": "diet:reacts",
+    "reflux": "diet:reflux",
+    "reintroduce": "diet:reintroduce",
+    "restaurant": "diet:restaurant",
+    "restsOn": {
+      "@id": "diet:restsOn",
+      "@type": "@id"
+    },
+    "reviewAfter": {
+      "@id": "diet:reviewAfter",
+      "@type": "xsd:date"
+    },
+    "rsid": {
+      "@id": "diet:rsid",
+      "@type": "xsd:string"
+    },
+    "sector": "diet:sector",
+    "severity": "diet:severity",
+    "skinRash": "diet:skinRash",
+    "small": "diet:small",
+    "sourceConfidence": {
+      "@id": "diet:sourceConfidence",
+      "@type": "@id"
+    },
+    "SourceConfidence": "diet:SourceConfidence",
+    "SourceConfidenceScheme": "diet:SourceConfidenceScheme",
+    "soy": "diet:soy",
+    "sulphites": "diet:sulphites",
+    "suspected": "diet:suspected",
+    "Symptom": "diet:Symptom",
+    "SymptomScheme": "diet:SymptomScheme",
+    "symptomType": {
+      "@id": "diet:symptomType",
+      "@type": "@id"
+    },
+    "SymptomType": "diet:SymptomType",
+    "targetTrigger": {
+      "@id": "diet:targetTrigger",
+      "@type": "@id"
+    },
+    "ToleranceConclusion": "diet:ToleranceConclusion",
+    "tolerated": "diet:tolerated",
+    "trace": "diet:trace",
+    "traceAllergen": "diet:traceAllergen",
+    "travel": "diet:travel",
+    "trigger": {
+      "@id": "diet:trigger",
+      "@type": "@id"
+    },
+    "TriggerClass": "diet:TriggerClass",
+    "TriggerScheme": "diet:TriggerScheme",
+    "triggersEmergencyRail": {
+      "@id": "diet:triggersEmergencyRail",
+      "@type": "xsd:boolean"
+    },
+    "venue": {
+      "@id": "diet:venue",
+      "@type": "xsd:string"
+    },
+    "verdict": {
+      "@id": "diet:verdict",
+      "@type": "@id"
+    },
+    "Verdict": "diet:Verdict",
+    "VerdictScheme": "diet:VerdictScheme",
+    "voice": "diet:voice",
+    "washout": "diet:washout",
+    "wheezeBreathing": "diet:wheezeBreathing",
+    "work": "diet:work"
+  }
+}

@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate -->
+<!-- OASIS XML catalog for the health/diet sub-sector's owl:imports closure, for
+     the ROBOT/HermiT consistency gate (scripts/ontology-gate.mjs F6). Maps every
+     import IRI (and its transitive closure via the health sector + Core) to a
+     local Turtle file so no network dereference is needed. Paths are relative to
+     this file (sectors/health/diet/). -->
+<catalog prefer="public" xmlns="urn:oasis:names:tc:entity:xmlns:xml:catalog">
+  <!-- gUFO (the adopted foundation) -->
+  <uri name="http://purl.org/nemo/gufo#" uri="../../core/imports/gufo.ttl"/>
+  <uri name="http://purl.org/nemo/gufo" uri="../../core/imports/gufo.ttl"/>
+  <uri name="http://purl.org/nemo/gufo#/1.0.0" uri="../../core/imports/gufo.ttl"/>
+  <!-- W3C OWL-Time -->
+  <uri name="http://www.w3.org/2006/time" uri="../../core/imports/owl-time.ttl"/>
+  <uri name="http://www.w3.org/2006/time#" uri="../../core/imports/owl-time.ttl"/>
+  <!-- PROV-O -->
+  <uri name="http://www.w3.org/ns/prov-o" uri="../../core/imports/prov-o.ttl"/>
+  <uri name="http://www.w3.org/ns/prov#" uri="../../core/imports/prov-o.ttl"/>
+  <uri name="http://www.w3.org/ns/prov" uri="../../core/imports/prov-o.ttl"/>
+  <!-- SKOS Core -->
+  <uri name="http://www.w3.org/2004/02/skos/core" uri="../../core/imports/skos.ttl"/>
+  <uri name="http://www.w3.org/2004/02/skos/core#" uri="../../core/imports/skos.ttl"/>
+  <!-- QUDT schema + slim units (pulled transitively via the health sector) -->
+  <uri name="http://qudt.org/schema/qudt/" uri="../../core/imports/qudt-schema.ttl"/>
+  <uri name="http://qudt.org/2.1/schema/qudt" uri="../../core/imports/qudt-schema.ttl"/>
+  <uri name="http://qudt.org/2.1/vocab/qudt-slim" uri="../../core/imports/qudt-units-slim.ttl"/>
+  <!-- The Solid Core (a direct import + the sector's mandatory root) -->
+  <uri name="https://w3id.org/jeswr/core" uri="../../core/core.ttl"/>
+  <uri name="https://w3id.org/jeswr/core#" uri="../../core/core.ttl"/>
+  <uri name="https://w3id.org/jeswr/core/1.0.1" uri="../../core/core.ttl"/>
+  <!-- The parent health sector (a direct import) -->
+  <uri name="https://w3id.org/jeswr/sectors/health" uri="../health.ttl"/>
+  <uri name="https://w3id.org/jeswr/sectors/health#" uri="../health.ttl"/>
+  <uri name="https://w3id.org/jeswr/sectors/health/1.0.0" uri="../health.ttl"/>
+  <!-- QUDT health slim module (imported by the health sector) -->
+  <uri name="https://w3id.org/jeswr/sectors/health/imports/qudt-health-slim" uri="../imports/qudt-health-slim.ttl"/>
+  <!-- This sub-sector (self, for the alignments file's import) -->
+  <uri name="https://w3id.org/jeswr/sectors/health/diet" uri="diet.ttl"/>
+  <uri name="https://w3id.org/jeswr/sectors/health/diet#" uri="diet.ttl"/>
+  <uri name="https://w3id.org/jeswr/sectors/health/diet/1.0.0" uri="diet.ttl"/>
+</catalog>

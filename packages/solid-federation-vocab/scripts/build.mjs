@@ -158,6 +158,7 @@ const ONTOS = [
   ["sectors/identity/identity.ttl", "sectors/identity", "id", "https://w3id.org/jeswr/sectors/identity#"],
   ["sectors/finance/finance.ttl", "sectors/finance", "fin", "https://w3id.org/jeswr/sectors/finance#"],
   ["sectors/health/health.ttl", "sectors/health", "health", "https://w3id.org/jeswr/sectors/health#"],
+  ["sectors/health/diet/diet.ttl", "sectors/health/diet", "diet", "https://w3id.org/jeswr/sectors/health/diet#"],
   ["sectors/media/media.ttl", "sectors/media", "media", "https://w3id.org/jeswr/sectors/media#"],
   ["sectors/scheduling/scheduling.ttl", "sectors/scheduling", "sched", "https://w3id.org/jeswr/sectors/scheduling#"],
   ["sectors/contacts/contacts.ttl", "sectors/contacts", "contact", "https://w3id.org/jeswr/sectors/contacts#"],
@@ -285,9 +286,13 @@ ${rows}
 for (const [srcRel, route, prefix, ns] of ONTOS) {
   const ttl = readFileSync(join(ROOT, srcRel), "utf8");
   const terms = indexOntology(ttl, route, ns);
-  const slug = route.split("/").pop();
-  const depth = route.includes("/") ? route.split("/").length - 1 : 0;
-  const destDir = route.includes("/") ? DOCS_SECTORS : DOCS;
+  // Honour the FULL w3id route path so a sub-sector (e.g. sectors/health/diet)
+  // nests correctly under docs/ and its `up` depth stays right — the served
+  // path is docs/<route> (minus the final slug), NOT a flattened docs/sectors/.
+  const routeParts = route.split("/");
+  const slug = routeParts[routeParts.length - 1];
+  const depth = routeParts.length - 1;
+  const destDir = join(DOCS, ...routeParts.slice(0, -1));
   mkdirSync(destDir, { recursive: true });
   // a) Turtle (served verbatim)
   copyFileSync(join(ROOT, srcRel), join(destDir, `${slug}.ttl`));
@@ -299,7 +304,7 @@ for (const [srcRel, route, prefix, ns] of ONTOS) {
   // c) HTML term table (derived)
   writeFileSync(join(destDir, `${slug}.html`), ontologyHtml(route, prefix, ns, terms, depth));
   console.log(
-    `docs/${route.includes("/") ? "sectors/" : ""}${slug}.{ttl,html,-context.jsonld} — ${terms.length} terms (served by GitHub Pages)`,
+    `docs/${routeParts.length > 1 ? routeParts.slice(0, -1).join("/") + "/" : ""}${slug}.{ttl,html,-context.jsonld} — ${terms.length} terms (served by GitHub Pages)`,
   );
 }
 
