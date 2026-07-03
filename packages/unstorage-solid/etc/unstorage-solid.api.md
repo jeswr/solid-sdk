@@ -44,6 +44,15 @@ export class SolidPreconditionFailedError extends Error {
 }
 
 // @public
+export class SolidRedirectError extends Error {
+    constructor(url: string, status: number);
+    // (undocumented)
+    readonly status: number;
+    // (undocumented)
+    readonly url: string;
+}
+
+// @public
 export interface WatchSocket {
     // (undocumented)
     addEventListener(type: "message", listener: (ev: {

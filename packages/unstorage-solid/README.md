@@ -146,6 +146,37 @@ Resource keys map to non-container LDP resources. In `getKeys`, container member
 `opts.maxDepth`); only non-container members become keys. `clear` deletes
 resources before their containers.
 
+**Key normalisation.** A key segment is URI-decoded then re-`encodeURIComponent`-ed,
+so *equivalent* percent-spellings converge on one resource (e.g. `A`, `%41` and a
+lowercase `%3a` vs `%3A` map to the same URL). This is intentional — it also lets you
+pass a pre-encoded `%2F` to keep a literal `/` **inside** a single segment (a raw `/`
+key is rejected). Ordinary keys (identifiers without `%`) are unaffected and map
+**injectively** to distinct resources; only exotic keys differing solely in redundant
+percent-encoding share a resource.
+
+## Security model
+
+The driver's trust boundary is the injected `fetch`; on top of it, the URL layer is
+**fail-closed**:
+
+- **Containment.** Every key is mapped to a URL that is re-validated to be `base` or a
+  strict descendant (traversal / absolute / cross-origin segments are rejected — see
+  the mapping table above). A key can never address another origin or escape `base`.
+- **Hostile container listings.** `getKeys` / `clear` parse the `ldp:contains`
+  listing through `@jeswr/fetch-rdf` + `@solid/object` (never hand-parsed). Any member
+  IRI that is not within `base` is **dropped** — a malicious or buggy server cannot
+  inject a foreign URL into the key space or trick `clear` into deleting a resource
+  outside `base`.
+- **Redirect refusal (SSRF / credential-leak guard).** Every pod request goes through a
+  single scoped `fetch` that forces `redirect: "manual"` and **refuses** any redirect
+  (throwing `SolidRedirectError`) rather than following it. `assertWithinBase` only
+  vets the *initial* URL, so without this a poisoned in-pod resource (e.g. one planted
+  by an app with append access in a shared pod) could answer a credentialed `GET`/`PUT`
+  with a `302` to a foreign origin and the underlying `fetch` would forward your
+  `Authorization` / DPoP headers off-origin. A Solid pod addressed by exact, normalised
+  URLs never legitimately redirects a data request, so a redirect is treated as
+  hostile and fails closed (a `304 Not Modified` is not a redirect and passes through).
+
 ### Container auto-creation (CSS vs ESS)
 
 On `setItem` of a deep key (`a:b:c`) where intermediate containers do not exist,
@@ -211,6 +242,7 @@ A `check:dist` gate fails if the committed `dist/` drifts from a fresh build of
 | `SolidDriverOptions` | driver configuration (`base`, `fetch`, `headers`, `defaultContentType`, `watch`). |
 | `SolidHttpError` | thrown on an uninterpretable non-2xx response. |
 | `SolidPreconditionFailedError` | thrown on a `412`/`428` optimistic-concurrency rejection. |
+| `SolidRedirectError` | thrown when a pod request is redirected (refused, not followed — the SSRF / credential-leak guard). |
 
 The full public API surface is snapshotted in
 [`etc/unstorage-solid.api.md`](./etc/unstorage-solid.api.md) (api-extractor) and

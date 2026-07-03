@@ -324,6 +324,43 @@ async function listContainer(containerUrl, base, fetchImpl) {
   return members;
 }
 
+// src/scope.ts
+var SolidRedirectError = class extends Error {
+  url;
+  status;
+  constructor(url, status) {
+    super(
+      `[unstorage-solid] refusing to follow a redirect (status ${status}) from ${url} (a redirected pod request could forward credentials off-origin \u2014 SSRF/credential-leak guard)`
+    );
+    this.name = "SolidRedirectError";
+    this.url = url;
+    this.status = status;
+  }
+};
+function urlOf(input) {
+  if (typeof input === "string") {
+    return input;
+  }
+  if (input instanceof URL) {
+    return input.toString();
+  }
+  return input.url;
+}
+function createScopedFetch(base, fetchImpl) {
+  const scoped = async (input, init) => {
+    const url = urlOf(input);
+    assertWithinBase(base, url);
+    const res = await fetchImpl(url, { ...init, redirect: "manual" });
+    const isOpaqueRedirect = res.type === "opaqueredirect";
+    const isReadableRedirect = res.status >= 300 && res.status < 400 && res.status !== 304 && res.headers.has("location");
+    if (isOpaqueRedirect || isReadableRedirect) {
+      throw new SolidRedirectError(url, res.status);
+    }
+    return res;
+  };
+  return scoped;
+}
+
 // src/watch.ts
 import { DataFactory as DataFactory2 } from "n3";
 var STORAGE_DESCRIPTION_REL = "http://www.w3.org/ns/solid/terms#storageDescription";
@@ -583,10 +620,7 @@ var solidDriver = defineDriver((options) => {
   const defaultContentType = options.defaultContentType ?? "text/plain; charset=utf-8";
   const watchEnabled = options.watch === true;
   const activeWatches = /* @__PURE__ */ new Set();
-  const doFetch = (url, init) => {
-    assertWithinBase(base, url);
-    return fetchImpl(url, init);
-  };
+  const doFetch = createScopedFetch(base, fetchImpl);
   const ensureParentContainers = async (resourceUrl, headers) => {
     const u = new URL(resourceUrl);
     const baseUrl = new URL(base);
@@ -739,7 +773,7 @@ var solidDriver = defineDriver((options) => {
       await collectKeys(
         startContainer,
         base,
-        fetchImpl,
+        doFetch,
         txHeaders,
         options.headers,
         0,
@@ -753,7 +787,7 @@ var solidDriver = defineDriver((options) => {
       const startContainer = prefix ? keyToContainerUrl(base, prefix) : base;
       const txHeaders = asTx(opts).headers;
       const headers = buildHeaders(options.headers, txHeaders);
-      await clearContainer(startContainer, base, fetchImpl, headers, prefix !== void 0);
+      await clearContainer(startContainer, base, doFetch, headers, prefix !== void 0);
     },
     async watch(callback) {
       if (!watchEnabled) {
@@ -869,6 +903,7 @@ var index_default = solidDriver;
 export {
   SolidHttpError,
   SolidPreconditionFailedError,
+  SolidRedirectError,
   index_default as default
 };
 //# sourceMappingURL=index.js.map

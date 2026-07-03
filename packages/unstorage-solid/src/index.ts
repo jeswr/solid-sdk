@@ -21,6 +21,7 @@ import type { Driver, StorageMeta, StorageValue, WatchCallback } from "unstorage
 import { defineDriver } from "unstorage";
 import { listContainer } from "./container.js";
 import { assertWithinBase, keyToContainerUrl, keyToUrl, normalizeBase, urlToKey } from "./keys.js";
+import { createScopedFetch } from "./scope.js";
 import { type ActiveWatch, startWatch, type WatchSocketFactory } from "./watch.js";
 
 const DRIVER_NAME = "solid";
@@ -159,11 +160,10 @@ const solidDriver = defineDriver<SolidDriverOptions, undefined>((options) => {
   // Track open watches so dispose() can close them.
   const activeWatches = new Set<ActiveWatch>();
 
-  const doFetch = (url: string, init: RequestInit): Promise<Response> => {
-    // Defence in depth: every URL we issue a request to must lie under base.
-    assertWithinBase(base, url);
-    return fetchImpl(url, init);
-  };
+  // The single credentialed-fetch choke point for the data path: asserts base
+  // containment of the target AND refuses redirects (credential-leak / SSRF guard —
+  // see scope.ts). Reads, writes, deletes, and container listings all go through it.
+  const doFetch = createScopedFetch(base, fetchImpl);
 
   /**
    * Ensure the parent containers of `resourceUrl` exist, creating any missing
@@ -359,7 +359,7 @@ const solidDriver = defineDriver<SolidDriverOptions, undefined>((options) => {
       await collectKeys(
         startContainer,
         base,
-        fetchImpl,
+        doFetch,
         txHeaders,
         options.headers,
         0,
@@ -378,8 +378,9 @@ const solidDriver = defineDriver<SolidDriverOptions, undefined>((options) => {
       const txHeaders = asTx(opts).headers;
       const headers = buildHeaders(options.headers, txHeaders);
       // Only delete the prefix container itself when a prefix was given; never
-      // delete the driver base container.
-      await clearContainer(startContainer, base, fetchImpl, headers, prefix !== undefined);
+      // delete the driver base container. `doFetch` (the scoped fetch) applies the
+      // base-containment + redirect guards to every listing GET and DELETE here.
+      await clearContainer(startContainer, base, doFetch, headers, prefix !== undefined);
     },
 
     async watch(callback: WatchCallback) {
@@ -547,6 +548,11 @@ function toBodyInit(value: unknown): BodyInit {
   return JSON.stringify(value);
 }
 
+/**
+ * Thrown when the driver refuses to follow a redirect on a pod request (the
+ * credential-leak / SSRF guard — see the Security section of the README).
+ */
+export { SolidRedirectError } from "./scope.js";
 /**
  * Internal testing seam types, re-exported so the `wsFactory` field on
  * {@link SolidDriverOptions} is resolvable in the public `.d.ts`. Not part of the

@@ -85,6 +85,11 @@ export declare class SolidHttpError extends Error {
  */
 declare const solidDriver: (opts: SolidDriverOptions) => Driver<SolidDriverOptions, undefined>;
 /**
+ * Thrown when the driver refuses to follow a redirect on a pod request (the
+ * credential-leak / SSRF guard — see the Security section of the README).
+ */
+export { SolidRedirectError } from "./scope.js";
+/**
  * Internal testing seam types, re-exported so the `wsFactory` field on
  * {@link SolidDriverOptions} is resolvable in the public `.d.ts`. Not part of the
  * stable public contract.
