@@ -18,7 +18,7 @@
     "@jeswr/fetch-rdf": "^0.1.0",
     "@jeswr/guarded-fetch": "git+https://github.com/jeswr/guarded-fetch.git#2901beb339a56b55a23549993d80320dbacb20fb",
     "@jeswr/solid-elements": "git+https://github.com/jeswr/solid-elements.git#2c00745d3b834a7f645b1ca17b6ff8ffac3b1a8e",
-    "@jeswr/solid-health-diary": "git+https://github.com/jeswr/solid-health-diary.git#39955ba8b66b89babb2c0cae55512af718d7f4b9",
+    "@jeswr/solid-health-diary": "git+https://github.com/jeswr/solid-health-diary.git#0df1597b0671b63314674fa783abf913e6cd7583",
     "@jeswr/solid-session-restore": "git+https://github.com/jeswr/solid-session-restore.git#38e78dbececbf0dd12c9ceac288a6eef6c624377",
     "@lit/react": "^1.0.8",
     "@rdfjs/wrapper": "^0.34.0",
