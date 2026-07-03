@@ -24,10 +24,30 @@
     "solid-federation-vocab"
   ],
   "federation": {
-    "sectors": ["productivity"],
-    "accessModes": ["Read", "Write", "Append"],
-    "consumes": ["productivity"],
-    "produces": ["productivity"],
+    "sectors": [
+      "productivity"
+    ],
+    "accessModes": [
+      "Read",
+      "Write",
+      "Append"
+    ],
+    "consumes": [
+      "productivity"
+    ],
+    "produces": [
+      "productivity"
+    ],
     "membershipTodo": "TODO(O1-gated): declare fedapp:memberOf once the fedapp: namespace is frozen and the registry engine ships. Solid Issues is a Jira/Monday-parity issue tracker storing wf:Task data in the user's pod (productivity sector, Read/Write/Append); its clientid.jsonld will gain a fedapp: block at that point. Membership is the registry's job after a signed challenge — never self-asserted here."
+  },
+  "status": {
+    "generatedAt": "2026-07-03T05:14:36.336Z",
+    "commit": "8e76ae30f1ce57c9e610dbef4d9d9fca805b15aa",
+    "gate": {
+      "lint": "skip",
+      "typecheck": "skip",
+      "test": "skip",
+      "build": "skip"
+    }
   }
 }
