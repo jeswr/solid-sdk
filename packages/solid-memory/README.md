@@ -212,7 +212,14 @@ apply).
   stores a `javascript:` / `mailto:` / `urn:` IRI as a NamedNode can never surface it to
   a consumer (which might render it as a link).
 - **Scope guard.** The store can never touch a foreign origin or escape its container,
-  even if a hostile/buggy server injects a foreign URL into a listing.
+  even if a hostile/buggy server injects a foreign URL into a listing. Embedded
+  credentials (`https://user:pass@…`) in a container or target URL are refused.
+- **Redirect refusal.** Every request forces `redirect: "manual"` and **refuses** any
+  redirect response (3xx / `opaqueredirect`), fail-closed: the injected fetch is
+  credentialed (Authorization/DPoP), so a redirect planted by a poisoned in-pod
+  resource must never be followed — it could forward the credential off-origin
+  (token exfiltration). A relocated pod is the caller's concern (reconstruct the
+  store on the new container URL).
 - **Never hand-built triples.** All RDF goes through the model (typed `@rdfjs/wrapper`
   accessors), `@jeswr/fetch-rdf` (`parseRdf`), `@solid/object` (`ContainerDataset`), and
   `n3.Writer` — the suite house rule.
