@@ -905,6 +905,7 @@ async function discoverAgent(webId, options = {}) {
     const fetched = await fetchRdf(webId, fetchOpts);
     profileDataset = fetched.dataset;
   } catch (err) {
+    void err;
     return { webId, pointers: [] };
   }
   const profile = wrapProfile(profileDataset);
