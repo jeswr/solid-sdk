@@ -15,6 +15,7 @@
  *
  * @packageDocumentation
  */
+export { escapeIri, safeHttpIri, safeSubjectBaseIri } from "./iri.js";
 export { buildScene, parseScene, parseSceneTtl, type Quad, type SceneData, sceneSubject, serializeScene, storeToTurtle, } from "./scene.js";
 export { DCT, DCT_CREATED, DCT_CREATED_IRI, DCT_MODIFIED, DCT_MODIFIED_IRI, DCT_TITLE, DCT_TITLE_IRI, DRAW, DRAW_SCENE, DRAW_SCENE_DOCUMENT, DRAW_SCENE_DOCUMENT_IRI, DRAW_SCENE_IRI, DRAW_SCHEMA_VERSION, DRAW_SCHEMA_VERSION_IRI, DRAW_THUMBNAIL, DRAW_THUMBNAIL_IRI, DRAW_VIEW_BACKGROUND_COLOR, DRAW_VIEW_BACKGROUND_COLOR_IRI, dct, draw, PREFIXES, PROV, PROV_WAS_GENERATED_BY, PROV_WAS_GENERATED_BY_IRI, prov, RDF, RDF_TYPE, RDF_TYPE_IRI, RDFS, rdf, SCHEMA, SCHEMA_ABOUT, SCHEMA_ABOUT_IRI, SCHEMA_CREATIVE_WORK, SCHEMA_CREATIVE_WORK_IRI, schema, XSD, XSD_DATE_TIME, XSD_STRING, xsd, } from "./vocab.js";
 //# sourceMappingURL=index.d.ts.map

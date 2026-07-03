@@ -48,17 +48,55 @@ export interface SceneData {
  * The canonical subject IRI for a scene stored at `resourceUrl`. Conventionally
  * the descriptor lives in the same document and is named with the `#it` fragment,
  * matching how the suite models name their primary subject.
+ *
+ * **IRI safety (FAIL CLOSED).** `resourceUrl` is caller-supplied and potentially
+ * hostile, and it flows unguarded into `namedNode()` — which `n3.Writer` emits
+ * verbatim between `<…>` WITHOUT escaping — so a `resourceUrl` carrying a Turtle
+ * IRI-ref delimiter (`>`, space, `<`, …) would break out of the serialised subject
+ * and inject arbitrary triples into EVERY document built from it. The subject is
+ * REQUIRED and there is no safe "drop", so it is routed through
+ * {@link safeSubjectBaseIri}: the value must be a parseable absolute http(s) IRI
+ * (else this THROWS — a scene MUST have a valid subject, never an injectable/empty
+ * one), and its EXACT lexeme is preserved (RDF identity is lexical — no `URL.href`
+ * canonicalisation) with only the Turtle-forbidden characters percent-encoded. The
+ * fixed, trusted `#it` fragment is appended AFTER the base is escaped.
+ *
+ * @throws {TypeError} when `resourceUrl` is not a parseable absolute http(s) IRI.
  */
 export declare function sceneSubject(resourceUrl: string): NamedNode;
 /**
  * Build a fresh `n3.Store` holding one `draw:Scene` rooted at
  * `${resourceUrl}#it`. The store is the value the `n3.Writer` serialises; pass
  * it to {@link storeToTurtle} (or {@link serializeScene} does both).
+ *
+ * **IRI safety.** Every IRI — the subject AND every IRI field — is caller-supplied
+ * and potentially hostile, and `n3.Writer` does NOT escape IRIs (see
+ * {@link safeHttpIri}), so each is routed through a guard before `namedNode()` —
+ * otherwise a `>` or space in the value would break out of the serialised `<…>` and
+ * inject arbitrary triples. The REQUIRED scene SUBJECT (`resourceUrl`) goes through
+ * {@link sceneSubject} → `safeSubjectBaseIri` (validate absolute http(s), preserve
+ * the exact lexeme, escape Turtle-forbidden chars) and FAILS CLOSED — an
+ * unparseable/non-http(s) `resourceUrl` throws. Optional IRI fields whose value is
+ * not a valid http(s) IRI are DROPPED (the triple is omitted); the REQUIRED
+ * `sceneDocument` cannot be dropped, so an invalid/hostile value makes `buildScene`
+ * throw a `TypeError` rather than emit an unsafe/attacker-chosen link.
+ *
+ * @throws {TypeError} when `resourceUrl` is not a parseable absolute http(s) IRI
+ *   (invalid scene subject) or `data.sceneDocument` is not a parseable http(s) IRI —
+ *   a deliberate departure from a total contract: a scene with no valid subject or
+ *   canvas link is invalid input, and writing the raw value would be a
+ *   triple-injection sink.
  */
 export declare function buildScene(resourceUrl: string, data: SceneData): Store;
 /** Serialise any `n3.Store` to Turtle with the model's prefixes (via `n3.Writer`). */
 export declare function storeToTurtle(store: Store): Promise<string>;
-/** Serialise a scene to Turtle (via `n3.Writer`, with the model's prefixes). */
+/**
+ * Serialise a scene to Turtle (via `n3.Writer`, with the model's prefixes).
+ *
+ * `async` so that a synchronous failure in {@link buildScene} (an invalid required
+ * `sceneDocument`) surfaces as a REJECTED promise, not a synchronous throw — a
+ * `Promise`-returning function should never throw before it returns.
+ */
 export declare function serializeScene(resourceUrl: string, data: SceneData): Promise<string>;
 /**
  * Read a `draw:Scene` descriptor out of an already-parsed RDF dataset.
