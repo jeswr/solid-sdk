@@ -178,6 +178,9 @@ export function GeneticsView() {
   const [parsing, setParsing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
+  // Set when a file parse has PRE-FILLED the editable form — the free-text/SNP parse
+  // is only an ASSIST; the human reviews + corrects every marker before saving.
+  const [assistNote, setAssistNote] = useState<string | undefined>(undefined);
 
   const showPreview = useCallback((p: GeneticPreview | undefined) => {
     setPreview(p);
@@ -204,15 +207,32 @@ export function GeneticsView() {
       setPreview(undefined);
       setParsing(true);
       try {
-        // Parsed ENTIRELY on-device — the raw file is never uploaded anywhere.
-        showPreview(await buildFilePreview(file));
+        // Parsed ENTIRELY on-device — the raw file is never uploaded anywhere. The
+        // parse is an ASSIST only: it PRE-FILLS the editable form, which the human
+        // then reviews + corrects. Nothing derived from a file parse is persisted
+        // without that explicit review + consent, so a parse error is surfaced to
+        // the user (never silently saved). Anything the parser did not confidently
+        // read is left `unknown` for the user to set.
+        const parsed = await buildFilePreview(file);
+        const prefilled: Partial<Record<RiskHaplotype, ManualChoice>> = {};
+        for (const m of parsed.markers) {
+          if (m.riskHaplotype && m.markerPresence) prefilled[m.riskHaplotype] = m.markerPresence;
+        }
+        setChoices(prefilled);
+        setMode("manual");
+        const anyFound = parsed.markers.length > 0;
+        setAssistNote(
+          anyFound
+            ? "We read the markers below from your file. Please review and correct each one before saving — anything we could not read confidently is left blank for you to set."
+            : "We could not confidently read any DQ2/DQ8 markers from that file. Please set them manually below.",
+        );
       } catch (err) {
         setError((err as Error).message);
       } finally {
         setParsing(false);
       }
     },
-    [buildFilePreview, showPreview],
+    [buildFilePreview],
   );
 
   const onSave = useCallback(
@@ -225,6 +245,7 @@ export function GeneticsView() {
         // Optimistic: the cache already has it; reflect immediately, then await sync.
         setPreview(undefined);
         setChoices({});
+        setAssistNote(undefined);
         await refresh();
         void syncing.catch(() => {
           /* a failed pod flush is retried by the outbox; the cache keeps the record */
@@ -293,6 +314,7 @@ export function GeneticsView() {
               setMode("manual");
               setPreview(undefined);
               setError(undefined);
+              setAssistNote(undefined);
             }}
           >
             Enter manually
@@ -306,6 +328,7 @@ export function GeneticsView() {
               setMode("upload");
               setPreview(undefined);
               setError(undefined);
+              setAssistNote(undefined);
             }}
           >
             Upload a test file
@@ -314,6 +337,11 @@ export function GeneticsView() {
 
         {mode === "manual" ? (
           <div className="genetics-manual">
+            {assistNote ? (
+              <p className="genetics-assist" role="status">
+                {assistNote}
+              </p>
+            ) : null}
             <p className="genetics-manual__intro">
               Record what a clinical HLA report or a consumer test told you, per haplotype. Leave a
               row on &ldquo;Unknown&rdquo; if you are not sure — an unknown is never treated as

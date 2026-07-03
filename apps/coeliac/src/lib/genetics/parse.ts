@@ -168,34 +168,56 @@ const HAPLOTYPE_PHRASE: { re: RegExp; haplotype: ClinicalObservation["haplotype"
   { re: /\bDQ2(?!\.\d)\b/i, haplotype: "DQ2.5" },
 ];
 
-const NEG_CUE_RE = /\b(negative|absent|not\s+detected|not\s+present|no\s+risk)\b/i;
-const POS_CUE_RE = /\b(positive|present|detected|carrier|heterozygous|homozygous)\b/i;
-
 /**
- * The sentiment of a text span: `false` = negative, `true` = positive, `undefined`
- * = ambiguous (neither cue, or BOTH — which must never be guessed). Negation is not
- * "positive minus": a span with both cues is genuinely ambiguous and returns
- * undefined so the caller skips it rather than pick a side.
+ * All sentiment cues, negated phrases FIRST so the regex consumes "not detected" as
+ * one negative cue rather than matching "detected" as a positive one. Each cue's
+ * polarity: negative for the negation/absence phrases, positive otherwise.
  */
-function spanSentiment(span: string): boolean | undefined {
-  const neg = NEG_CUE_RE.test(span);
-  // A NEGATED positive ("not detected"/"not present") is negative, not positive —
-  // strip those phrases before the positive test so "detected" inside "not detected"
-  // does not read as a positive cue (which would make the span look ambiguous).
-  const posSpan = span.replace(/\bnot\s+(?:detected|present)\b/gi, " ");
-  const pos = POS_CUE_RE.test(posSpan);
-  if (neg && !pos) return false;
-  if (pos && !neg) return true;
-  return undefined;
+const CUE_RE =
+  /\b(not\s+detected|not\s+present|no\s+risk|negative|absent|positive|present|detected|carrier|heterozygous|homozygous)\b/gi;
+const NEGATIVE_CUES = new Set(["not detected", "not present", "no risk", "negative", "absent"]);
+
+interface Cue {
+  index: number;
+  present: boolean;
+}
+/** Every sentiment cue in a line, with its position + polarity, in order. */
+function cuesIn(line: string): Cue[] {
+  const cues: Cue[] = [];
+  for (const m of line.matchAll(CUE_RE)) {
+    const text = (m[1] ?? "").toLowerCase().replace(/\s+/g, " ");
+    cues.push({ index: m.index ?? 0, present: !NEGATIVE_CUES.has(text) });
+  }
+  return cues;
 }
 
-/** The distinct risk haplotypes named in a span, in declaration order (deduped). */
-function haplotypesIn(span: string): ClinicalObservation["haplotype"][] {
-  const found: ClinicalObservation["haplotype"][] = [];
+/** Every risk haplotype named in a line, with its first position (deduped, ordered by position). */
+function haplotypeMentions(line: string): { index: number; haplotype: ClinicalObservation["haplotype"] }[] {
+  const seen = new Set<string>();
+  const found: { index: number; haplotype: ClinicalObservation["haplotype"] }[] = [];
   for (const { re, haplotype } of HAPLOTYPE_PHRASE) {
-    if (re.test(span) && !found.includes(haplotype)) found.push(haplotype);
+    const m = re.exec(line);
+    if (m && !seen.has(haplotype)) {
+      seen.add(haplotype);
+      found.push({ index: m.index, haplotype });
+    }
   }
-  return found;
+  return found.sort((a, b) => a.index - b.index);
+}
+
+/**
+ * The sentiment cue that GOVERNS a haplotype mention: the nearest cue at/after the
+ * haplotype's position (clinical wording states the cue AFTER the haplotype(s), e.g.
+ * "DQ2.5 and DQ8 negative"); if none follows, the nearest preceding cue. `undefined`
+ * when the line has no cue at all. This nearest-cue association is robust to `and`
+ * both GROUPING a shared cue ("DQ2.5 and DQ8 positive") and SEPARATING two cued
+ * clauses ("DQ2.5 negative and DQ8 positive"), which no split heuristic handles.
+ */
+function governingSentiment(cues: Cue[], at: number): boolean | undefined {
+  const following = cues.filter((c) => c.index >= at).sort((a, b) => a.index - b.index)[0];
+  if (following) return following.present;
+  const preceding = cues.filter((c) => c.index < at).sort((a, b) => b.index - a.index)[0];
+  return preceding?.present;
 }
 
 /**
@@ -231,27 +253,18 @@ export function parseClinicalText(text: string): ClinicalObservation[] {
     out.push({ haplotype, statedPresent });
   };
   for (const line of text.split(/\r?\n/)) {
-    const lineSentiment = spanSentiment(line);
-    if (lineSentiment !== undefined) {
-      // ONE unambiguous sentiment for the whole line — apply it to EVERY haplotype
-      // named ("DQ2.5 and DQ8 negative" → both absent → complete coverage). Safe
-      // because there is no competing cue to mis-attribute.
-      for (const haplotype of haplotypesIn(line)) recordPhrase(haplotype, lineSentiment);
-    } else if (NEG_CUE_RE.test(line) && POS_CUE_RE.test(line)) {
-      // MIXED sentiment on one line ("DQ2.5 negative, DQ8 positive") — the line-wide
-      // sentiment is ambiguous, so classify each haplotype LOCALLY. Split ONLY on
-      // punctuation clause boundaries (NOT on "and"), so a group that SHARES one cue
-      // keeps it: "DQ2.5 and DQ8 positive, DQ7 negative" → clause "DQ2.5 and DQ8
-      // positive" (both present) + "DQ7 negative" (absent). Each clause's own
-      // sentiment applies to every haplotype in it; a clause we cannot classify
-      // unambiguously is skipped (never guessed).
-      for (const clause of line.split(/[,;/]/)) {
-        const clauseSentiment = spanSentiment(clause);
-        if (clauseSentiment === undefined) continue;
-        for (const haplotype of haplotypesIn(clause)) recordPhrase(haplotype, clauseSentiment);
-      }
+    const cues = cuesIn(line);
+    if (cues.length === 0) continue; // no sentiment cue on the line → skip
+    // Associate each haplotype with the cue that GOVERNS it (nearest at/after it,
+    // else nearest before). This correctly handles "DQ2.5 and DQ8 negative" (shared
+    // cue → both absent), "DQ2.5 negative, DQ8 positive" and "DQ2.5 negative and
+    // DQ8 positive" (each governed by its own nearer cue), and
+    // "DQ2.5 and DQ8 positive, DQ7 negative" (group shares positive, DQ7 negative).
+    for (const { index, haplotype } of haplotypeMentions(line)) {
+      const present = governingSentiment(cues, index);
+      if (present === undefined) continue; // no governing cue → skip (never guess)
+      recordPhrase(haplotype, present);
     }
-    // else: no sentiment cue at all → skip the line.
   }
   return out;
 }

@@ -79,9 +79,12 @@ describe("parseClinicalText", () => {
     expect(obs).toContainEqual({ haplotype: "DQ8", statedPresent: false });
   });
 
-  it("ignores an ambiguous line that is neither clearly positive nor negative", () => {
-    // "DQ2 testing was inconclusive" — no positive/negative token → not classified.
+  it("an ambiguous / unparseable line yields NO confident marker (bias to uncertain, never guess)", () => {
+    // No sentiment cue → no confident present/absent is fabricated. The human sets it
+    // in the confirm step (the parser is an assist, not the source of truth).
     expect(parseClinicalText("DQ2 testing was inconclusive.")).toEqual([]);
+    expect(parseClinicalText("HLA-DQ2.5 result: see attached notes.")).toEqual([]);
+    expect(parseClinicalText("Patient discussed DQ2.5 and DQ8 with the clinician.")).toEqual([]);
   });
 
   it("classifies negated phrasing ('not detected' / 'not present') as NEGATIVE, not ambiguous", () => {
@@ -117,6 +120,12 @@ describe("parseClinicalText", () => {
 
   it("MIXED-sentiment line 'DQ2.5 negative, DQ8 positive' → DQ2.5 absent + DQ8 PRESENT (not both absent)", () => {
     const obs = parseClinicalText("HLA-DQ2.5 negative, HLA-DQ8 positive.");
+    expect(obs).toContainEqual({ haplotype: "DQ2.5", statedPresent: false });
+    expect(obs).toContainEqual({ haplotype: "DQ8", statedPresent: true });
+  });
+
+  it("'DQ2.5 negative and DQ8 positive' (mixed, joined by AND) → each governed locally", () => {
+    const obs = parseClinicalText("HLA-DQ2.5 negative and HLA-DQ8 positive.");
     expect(obs).toContainEqual({ haplotype: "DQ2.5", statedPresent: false });
     expect(obs).toContainEqual({ haplotype: "DQ8", statedPresent: true });
   });

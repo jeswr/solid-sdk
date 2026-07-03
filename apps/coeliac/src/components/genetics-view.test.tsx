@@ -46,10 +46,12 @@ describe("GeneticsView — privacy invariants", () => {
     const input = screen.getByLabelText(/genetic test file/i);
     await user.upload(input, rawGenomeFile());
 
-    // A preview appears (parsed on-device); the two tag SNPs are interpreted.
+    // The parse is an ASSIST: it pre-fills the editable form (which the user must
+    // confirm), rather than saving anything directly.
+    await waitFor(() => expect(screen.getByText(/read the markers below from your file/i)).toBeInTheDocument());
+    // The human reviews + confirms via Preview → consent → save.
+    await user.click(screen.getByRole("button", { name: /preview summary/i }));
     await waitFor(() => expect(screen.getByText(/this is what will be saved/i)).toBeInTheDocument());
-
-    // Consent + save (the derived summary DOES get written).
     await user.click(screen.getByRole("checkbox"));
     await user.click(screen.getByRole("button", { name: /save summary to my pod/i }));
 
@@ -69,6 +71,27 @@ describe("GeneticsView — privacy invariants", () => {
     const summaryBody =
       fm.calls.find((c) => c.url.endsWith("summary.ttl") && c.method === "PUT")?.body ?? "";
     expect(summaryBody).toMatch(/rs2187668/);
+  });
+
+  it("a file parse is an ASSIST — the user can CORRECT a marker before it is saved", async () => {
+    const { store } = renderWithSession(<GeneticsView />);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("tab", { name: /upload a test file/i }));
+    await user.upload(screen.getByLabelText(/genetic test file/i), rawGenomeFile());
+    // The parse pre-fills the editable form (DQ2.5 present from rs2187668 CT).
+    await waitFor(() => expect(screen.getByText(/read the markers below from your file/i)).toBeInTheDocument());
+    // The human OVERRIDES the parsed DQ2.5 (present → absent) before saving.
+    await user.click(screen.getAllByRole("radio", { name: /^Absent$/ })[0]);
+    await user.click(screen.getByRole("button", { name: /preview summary/i }));
+    await waitFor(() => expect(screen.getByRole("checkbox")).toBeInTheDocument());
+    await user.click(screen.getByRole("checkbox"));
+    await user.click(screen.getByRole("button", { name: /save summary to my pod/i }));
+    // The SAVED marker reflects the user's correction, not the parsed value.
+    await waitFor(async () => {
+      const saved = await store.getGeneticSummary();
+      const dq25 = saved?.markers.find((m) => m.riskHaplotype === "DQ2.5");
+      expect(dq25?.markerPresence).toBe("absent");
+    });
   });
 
   it("the consent checkbox is UNCHECKED by default and gates Save", async () => {
