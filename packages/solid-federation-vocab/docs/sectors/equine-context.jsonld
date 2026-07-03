@@ -23,6 +23,10 @@
     "expense-agistment": "eq:expense-agistment",
     "expense-entry-fees": "eq:expense-entry-fees",
     "expense-farrier": "eq:expense-farrier",
+    "expense-insurance": "eq:expense-insurance",
+    "expense-other": "eq:expense-other",
+    "expense-registration": "eq:expense-registration",
+    "expense-sales": "eq:expense-sales",
     "expense-training-fees": "eq:expense-training-fees",
     "expense-transport": "eq:expense-transport",
     "expense-veterinary": "eq:expense-veterinary",
@@ -67,6 +71,12 @@
       "@id": "eq:mgmtPct",
       "@type": "xsd:decimal"
     },
+    "nomination-cancelled": "eq:nomination-cancelled",
+    "nomination-confirmed": "eq:nomination-confirmed",
+    "nomination-foaled": "eq:nomination-foaled",
+    "nomination-pending": "eq:nomination-pending",
+    "nomination-served": "eq:nomination-served",
+    "nominationStatusScheme": "eq:nominationStatusScheme",
     "nominator": {
       "@id": "eq:nominator",
       "@type": "@id"
@@ -80,6 +90,7 @@
     "RaceResult": "eq:RaceResult",
     "recipient-breeder": "eq:recipient-breeder",
     "recipient-jockey": "eq:recipient-jockey",
+    "recipient-manager": "eq:recipient-manager",
     "recipient-owner": "eq:recipient-owner",
     "recipient-stable-staff": "eq:recipient-stable-staff",
     "recipient-trainer": "eq:recipient-trainer",

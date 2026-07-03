@@ -81,7 +81,8 @@ pod:nomination-2026-01 a eq:StudNomination ;
 pod:nomination-2026-02 a eq:StudNomination ;
     eq:horse pod:horse-desert-king ;
     eq:season "2026" ;
-    eq:nominator <https://owner.pod.example/profile/card#me> .
+    eq:nominator <https://owner.pod.example/profile/card#me> ;
+    eq:studStatus eq:nomination-pending .    # coded booking-workflow status (eq:nominationStatusScheme)
 
 # 5. RaceResult — the horse won race rr:ascot-2026-r3.
 pod:result-galway-star-ascot a eq:RaceResult ;
@@ -115,3 +116,19 @@ pod:invoice-training-2026-06 a schema:Invoice ;
     eq:expenseCategory eq:expense-training-fees ;
     schema:totalPaymentDue [ a schema:MonetaryAmount ; schema:value "3200"^^xsd:decimal ; schema:currency "GBP" ] ;
     dcterms:date "2026-06-30"^^xsd:date .
+
+# 7b. An insurance expense — exercises the new eq:expense-insurance category.
+pod:invoice-insurance-2026-06 a schema:Invoice ;
+    schema:about pod:horse-galway-star ;
+    eq:expenseCategory eq:expense-insurance ;
+    schema:totalPaymentDue [ a schema:MonetaryAmount ; schema:value "1400"^^xsd:decimal ; schema:currency "GBP" ] ;
+    dcterms:date "2026-06-28"^^xsd:date .
+
+# 8. A PrizeDistribution paying the racing MANAGER — exercises the new coded
+#    eq:recipient-manager (the recipient kind previously written as an uncoded
+#    literal fallback).
+pod:prize-galway-star-ascot-manager a eq:PrizeDistribution ;
+    schema:amount [ a schema:MonetaryAmount ; schema:value "2800"^^xsd:decimal ; schema:currency "GBP" ] ;
+    schema:recipient <https://manager.example/profile#me> ;
+    eq:recipientType eq:recipient-manager ;
+    dcterms:date "2026-06-25"^^xsd:date .

@@ -197,19 +197,19 @@ eq:HorseStatus a owl:Class, gufo:Category ;
 eq:StudStatus a owl:Class, gufo:Category ;
     rdfs:subClassOf core:Category ;
     rdfs:label "Stud Status"@en ;
-    skos:definition "The breeding status of a broodmare or a stud share (maiden / covered / in-foal / barren / slipped / retired-from-stud). A coded value; members are skos:Concepts in eq:studStatusScheme."@en ;
-    skos:scopeNote "gufo:Category of core:Category."@en .
+    skos:definition "A coded status carried by eq:studStatus. Two value sets share this class: the BREEDING status of a broodmare or stud share (maiden / covered / in-foal / barren / slipped / retired-from-stud, in eq:studStatusScheme) and the BOOKING-WORKFLOW status of a stud nomination (pending / confirmed / served / foaled / cancelled, in eq:nominationStatusScheme). Members are skos:Concepts in one of those two schemes."@en ;
+    skos:scopeNote "gufo:Category of core:Category. eq:studStatus on an eq:StudShare takes an eq:studStatusScheme value; on an eq:StudNomination it takes an eq:nominationStatusScheme value."@en .
 
 eq:RecipientType a owl:Class, gufo:Category ;
     rdfs:subClassOf core:Category ;
     rdfs:label "Recipient Type"@en ;
-    skos:definition "The kind of party a prize distribution pays (owner / trainer / jockey / breeder / stable-staff). A coded value qualifying an eq:PrizeDistribution's recipient; members are skos:Concepts in eq:recipientTypeScheme."@en ;
+    skos:definition "The kind of party a prize distribution pays (owner / trainer / jockey / manager / breeder / stable-staff). A coded value qualifying an eq:PrizeDistribution's recipient; members are skos:Concepts in eq:recipientTypeScheme."@en ;
     skos:scopeNote "gufo:Category of core:Category."@en .
 
 eq:ExpenseCategory a owl:Class, gufo:Category ;
     rdfs:subClassOf core:Category ;
     rdfs:label "Expense Category"@en ;
-    skos:definition "The kind of a horse-keeping expense (training-fees / veterinary / transport / entry-fees / agistment / farrier). A coded value classifying a schema:Invoice expense; members are skos:Concepts in eq:expenseCategoryScheme."@en ;
+    skos:definition "The kind of a horse-keeping expense (training-fees / veterinary / transport / entry-fees / agistment / farrier / insurance / registration / sales / other). A coded value classifying a schema:Invoice expense; members are skos:Concepts in eq:expenseCategoryScheme. A seed set, not law — an app maps its own expense categories onto these (falling back to eq:expense-other rather than an uncoded literal)."@en ;
     skos:scopeNote "gufo:Category of core:Category. Classifies expense invoices (schema:Invoice + schema:totalPaymentDue — the correct terms Furlong keeps)."@en .
 
 # =============================================================================
@@ -298,7 +298,7 @@ eq:mgmtFlat a owl:ObjectProperty ;
 eq:studStatus a owl:ObjectProperty ;
     rdfs:range eq:StudStatus ;
     rdfs:label "stud status"@en ;
-    skos:definition "The breeding status (a coded eq:StudStatus value) of a broodmare or a stud share. No rdfs:domain — carried on eq:Horse (a broodmare) or eq:StudShare."@en .
+    skos:definition "A coded eq:StudStatus value. On an eq:Horse (a broodmare) or an eq:StudShare it is the BREEDING status (eq:studStatusScheme); on an eq:StudNomination it is the BOOKING-WORKFLOW status (eq:nominationStatusScheme). No rdfs:domain — shared by those three classes."@en .
 
 eq:season a owl:DatatypeProperty ;
     rdfs:range xsd:string ;
@@ -430,6 +430,29 @@ eq:stud-retired-from-stud a eq:StudStatus, skos:Concept ;
     skos:inScheme eq:studStatusScheme ; skos:notation "retired-from-stud" ;
     skos:prefLabel "Retired from stud"@en ; skos:definition "A broodmare or stud share retired from breeding (no longer covered / standing)."@en .
 
+# --- Stud nomination booking-workflow status (the eq:studStatus value set on an
+#     eq:StudNomination — distinct from the breeding statuses above; these track
+#     the covering BOOKING lifecycle Furlong records on a nomination). ---
+eq:nominationStatusScheme a skos:ConceptScheme ;
+    rdfs:label "Stud nomination status scheme"@en ;
+    skos:definition "The coded booking-workflow status values for eq:studStatus on an eq:StudNomination."@en .
+
+eq:nomination-pending a eq:StudStatus, skos:Concept ;
+    skos:inScheme eq:nominationStatusScheme ; skos:notation "pending" ;
+    skos:prefLabel "Pending"@en ; skos:definition "A stud nomination has been requested but not yet confirmed by the stallion's stud."@en .
+eq:nomination-confirmed a eq:StudStatus, skos:Concept ;
+    skos:inScheme eq:nominationStatusScheme ; skos:notation "confirmed" ;
+    skos:prefLabel "Confirmed"@en ; skos:definition "The stud has confirmed the nomination (a covering slot is booked) but the mare has not yet been covered."@en .
+eq:nomination-served a eq:StudStatus, skos:Concept ;
+    skos:inScheme eq:nominationStatusScheme ; skos:notation "served" ;
+    skos:prefLabel "Served"@en ; skos:definition "The mare has been served (covered) under the nomination this season."@en .
+eq:nomination-foaled a eq:StudStatus, skos:Concept ;
+    skos:inScheme eq:nominationStatusScheme ; skos:notation "foaled" ;
+    skos:prefLabel "Foaled"@en ; skos:definition "The nomination resulted in a live foal."@en .
+eq:nomination-cancelled a eq:StudStatus, skos:Concept ;
+    skos:inScheme eq:nominationStatusScheme ; skos:notation "cancelled" ;
+    skos:prefLabel "Cancelled"@en ; skos:definition "The nomination was cancelled before a covering took place."@en .
+
 # --- Recipient type ---
 eq:recipientTypeScheme a skos:ConceptScheme ;
     rdfs:label "Prize recipient type scheme"@en ;
@@ -444,6 +467,9 @@ eq:recipient-trainer a eq:RecipientType, skos:Concept ;
 eq:recipient-jockey a eq:RecipientType, skos:Concept ;
     skos:inScheme eq:recipientTypeScheme ; skos:notation "jockey" ;
     skos:prefLabel "Jockey"@en ; skos:definition "The prize share paid to the jockey."@en .
+eq:recipient-manager a eq:RecipientType, skos:Concept ;
+    skos:inScheme eq:recipientTypeScheme ; skos:notation "manager" ;
+    skos:prefLabel "Manager"@en ; skos:definition "The prize share paid to the racing manager (their management cut of the owners' prize returns). The recipient kind the Furlong distribution waterfall pays alongside owner/trainer/jockey — previously written as an uncoded literal fallback for want of this concept."@en .
 eq:recipient-breeder a eq:RecipientType, skos:Concept ;
     skos:inScheme eq:recipientTypeScheme ; skos:notation "breeder" ;
     skos:prefLabel "Breeder"@en ; skos:definition "The breeder's prize/bonus share where a scheme pays one."@en .
@@ -474,6 +500,18 @@ eq:expense-agistment a eq:ExpenseCategory, skos:Concept ;
 eq:expense-farrier a eq:ExpenseCategory, skos:Concept ;
     skos:inScheme eq:expenseCategoryScheme ; skos:notation "farrier" ;
     skos:prefLabel "Farrier"@en ; skos:definition "Farrier (shoeing) fees."@en .
+eq:expense-insurance a eq:ExpenseCategory, skos:Concept ;
+    skos:inScheme eq:expenseCategoryScheme ; skos:notation "insurance" ;
+    skos:prefLabel "Insurance"@en ; skos:definition "Bloodstock mortality / veterinary insurance premiums."@en .
+eq:expense-registration a eq:ExpenseCategory, skos:Concept ;
+    skos:inScheme eq:expenseCategoryScheme ; skos:notation "registration" ;
+    skos:prefLabel "Registration"@en ; skos:definition "Studbook registration, naming, microchipping and colours-registration fees."@en .
+eq:expense-sales a eq:ExpenseCategory, skos:Concept ;
+    skos:inScheme eq:expenseCategoryScheme ; skos:notation "sales" ;
+    skos:prefLabel "Sales"@en ; skos:definition "Sales-ring and bloodstock costs — sales-entry fees, agent commission, and purchase costs."@en .
+eq:expense-other a eq:ExpenseCategory, skos:Concept ;
+    skos:inScheme eq:expenseCategoryScheme ; skos:notation "other" ;
+    skos:prefLabel "Other"@en ; skos:definition "Any horse-keeping expense not covered by a more specific category — the catch-all an app maps an uncoded expense category onto instead of writing an uncoded literal."@en .
 
 # =============================================================================
 # SECTOR MARKER — the IRI an app's fedapp:sector names to declare it operates in
