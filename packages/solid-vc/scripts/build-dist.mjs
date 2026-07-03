@@ -36,7 +36,7 @@
  * The committed `dist/` is kept in sync with `src/` by `scripts/check-dist-fresh.mjs`.
  */
 import { execFileSync } from "node:child_process";
-import { readFileSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
@@ -85,6 +85,75 @@ function externals() {
   return [...new Set([...declared, ...EXTERNAL_TRANSITIVE])];
 }
 
+/**
+ * esbuild embeds the on-disk location of every bundled module — as a `// <path>`
+ * banner comment in `index.js` and as a `sources` entry in `index.js.map`. For the
+ * INLINED off-npm deps that path is an ABSOLUTE, build-machine location (e.g.
+ * `…/Users/<name>/…/node_modules/@jeswr/fetch-rdf/…`), which (a) leaks the builder's
+ * home directory and (b) makes the committed artifact non-reproducible (it differs
+ * per machine / per worktree). Rewrite every such path to a STABLE, repo-relative
+ * form (`node_modules/…` in the code banner; `../node_modules/…` in the map, which is
+ * relative to `dist/`). Deterministic + machine-independent, so a fresh build on any
+ * box reproduces byte-identical `index.js` (what `check:dist` compares) and a clean
+ * `index.js.map`. First-party `src/*` sources already emit as clean `../src/*`.
+ */
+function stripMachinePaths(buildDir) {
+  const jsPath = join(buildDir, "index.js");
+  if (existsSync(jsPath)) {
+    const js = readFileSync(jsPath, "utf8")
+      // `// <junk…>node_modules/<rest>` → `// node_modules/<rest>` (repo-relative).
+      .replace(/^(\s*\/\/\s*).*?node_modules\//gm, "$1node_modules/")
+      // `// <junk…>/src/<rest>` → `// src/<rest>` (a first-party module banner that
+      // picked up a machine prefix when the outdir is distant from the sources).
+      .replace(/^(\s*\/\/\s*).*?\/(src\/[^\n]*)$/gm, "$1$2");
+    writeFileSync(jsPath, js);
+    assertNoMachinePath(jsPath, js);
+  }
+  const mapPath = join(buildDir, "index.js.map");
+  if (existsSync(mapPath)) {
+    const map = JSON.parse(readFileSync(mapPath, "utf8"));
+    if (Array.isArray(map.sources)) {
+      map.sources = map.sources.map(normalizeSource);
+    }
+    // Never emit an absolute sourceRoot either.
+    if (typeof map.sourceRoot === "string" && /\/(Users|home|private|root)\//.test(map.sourceRoot)) {
+      map.sourceRoot = "";
+    }
+    const serialized = JSON.stringify(map);
+    writeFileSync(mapPath, serialized);
+    assertNoMachinePath(mapPath, serialized);
+  }
+}
+
+/**
+ * Normalise ONE sourcemap `sources` entry to a stable, machine-INDEPENDENT,
+ * dist-relative path. Every source is either a first-party `src/*` module or an
+ * inlined off-npm dep under `node_modules/*`; anchoring on those markers (and
+ * re-rooting at `../`, since the map lives in `dist/`) yields the SAME value whether
+ * the build ran into the repo's own `dist/` or into a distant scratch dir (what
+ * `check:dist` uses) — so a fresh rebuild reproduces byte-identically and no build
+ * machine's home path can leak. node_modules is checked first (its internal `/src/`
+ * must not be mistaken for a first-party source).
+ */
+function normalizeSource(s) {
+  if (typeof s !== "string") return s;
+  const nm = s.lastIndexOf("node_modules/");
+  if (nm !== -1) return `../${s.slice(nm)}`;
+  const m = s.match(/(?:^|\/)(src\/.*)$/);
+  return m ? `../${m[1]}` : s;
+}
+
+/** Fail the build if a build-machine absolute path survived the rewrite. */
+function assertNoMachinePath(path, content) {
+  const leak = content.match(/[^\s"']*\/(Users|home|private|root)\/[^\s"']*/);
+  if (leak) {
+    throw new Error(
+      `build-dist: ${path} still contains a build-machine absolute path (${leak[0]}). ` +
+        "The path-stripping post-process did not cover it — update stripMachinePaths().",
+    );
+  }
+}
+
 async function main(buildDir = outdir) {
   // 1. Ensure @jeswr/fetch-rdf's dist exists in node_modules so esbuild can
   //    resolve + inline it (ignore-scripts skipped its prepare on install).
@@ -111,6 +180,11 @@ async function main(buildDir = outdir) {
     legalComments: "none",
     logLevel: "warning",
   });
+
+  // 2b. Strip build-machine absolute paths esbuild embedded for the inlined off-npm
+  //     deps (index.js banner comments + index.js.map `sources`) → repo-relative +
+  //     reproducible. Fails closed if any /Users|/home|/private|/root path survives.
+  stripMachinePaths(buildDir);
 
   // 3. Emit the .d.ts declarations (declaration-only — esbuild already wrote JS).
   execFileSync(

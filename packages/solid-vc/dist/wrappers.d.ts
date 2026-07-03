@@ -61,11 +61,21 @@ export declare function iriRef(iri: string): NodeRef;
 export declare class GraphBuilder {
     private readonly store;
     private readonly factory;
-    /** Materialise a {@link NodeRef} to its RDF/JS term. */
+    /**
+     * Materialise a {@link NodeRef} to its RDF/JS term. An IRI subject is passed
+     * through {@link escapeIri} FIRST so an untrusted subject id cannot break out of
+     * the `<…>` when the graph is serialised (n3.Writer does not escape IRIs). This
+     * is scheme-agnostic, so a `urn:uuid:` / `did:` subject is preserved unchanged.
+     */
     private subjectTerm;
     /** Add `(subject, rdf:type, classIri)`. */
     addType(subject: NodeRef | string, classIri: string): void;
-    /** Add `(subject, predicate, object-IRI)`. */
+    /**
+     * Add `(subject, predicate, object-IRI)`. The predicate and object IRIs are
+     * passed through {@link escapeIri} so neither an untrusted claim-key predicate
+     * nor an untrusted object IRI can break out of the serialised `<…>` — the
+     * low-level chokepoint that closes the injection for EVERY object-IRI write.
+     */
     addIri(subject: NodeRef | string, predicate: string, objectIri: string): void;
     /** Add `(subject, predicate, literal)` with an optional datatype IRI. */
     addLiteral(subject: NodeRef | string, predicate: string, value: string, datatypeIri?: string): void;

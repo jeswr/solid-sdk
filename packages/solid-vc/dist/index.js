@@ -178,6 +178,46 @@ function waitForDrain(parser) {
   });
 }
 
+// src/iri.ts
+var IRI_FORBIDDEN = /[\u0000-\u0020<>"{}|^`\\]/g;
+function percentEncode(ch) {
+  return `%${ch.charCodeAt(0).toString(16).toUpperCase().padStart(2, "0")}`;
+}
+function escapeIri(value) {
+  return value.replace(IRI_FORBIDDEN, percentEncode);
+}
+function safeHttpIri(value) {
+  if (typeof value !== "string") return void 0;
+  let u;
+  try {
+    u = new URL(value);
+  } catch {
+    return void 0;
+  }
+  if (u.protocol !== "http:" && u.protocol !== "https:") return void 0;
+  return u.href.replace(/\|/g, "%7C").replace(/\^/g, "%5E").replace(/`/g, "%60");
+}
+function isAbsoluteIri(value) {
+  return /^[A-Za-z][A-Za-z0-9+.-]*:/.test(value);
+}
+function safeObjectIri(value) {
+  if (typeof value !== "string") return void 0;
+  const http = safeHttpIri(value);
+  if (http !== void 0) return http;
+  return isAbsoluteIri(value) ? escapeIri(value) : void 0;
+}
+function requireObjectIri(value, field) {
+  const iri = safeObjectIri(value);
+  if (iri === void 0) {
+    throw new Error(
+      `@jeswr/solid-vc: ${field} must be an absolute http(s)/did:/urn: IRI, got ${JSON.stringify(
+        value
+      )} \u2014 refusing to build a credential with an invalid ${field}`
+    );
+  }
+  return iri;
+}
+
 // node_modules/@jeswr/rdf-serialize/dist/serialize.js
 import { Writer } from "n3";
 var DEFAULT_FORMAT = "text/turtle";
@@ -382,28 +422,38 @@ function normalize(subject) {
 var GraphBuilder = class {
   store = new Store2();
   factory = DataFactory;
-  /** Materialise a {@link NodeRef} to its RDF/JS term. */
+  /**
+   * Materialise a {@link NodeRef} to its RDF/JS term. An IRI subject is passed
+   * through {@link escapeIri} FIRST so an untrusted subject id cannot break out of
+   * the `<…>` when the graph is serialised (n3.Writer does not escape IRIs). This
+   * is scheme-agnostic, so a `urn:uuid:` / `did:` subject is preserved unchanged.
+   */
   subjectTerm(ref) {
-    return ref.kind === "iri" ? NamedNodeFrom.string(ref.value, this.factory) : BlankNodeFrom.string(ref.value, this.factory);
+    return ref.kind === "iri" ? NamedNodeFrom.string(escapeIri(ref.value), this.factory) : BlankNodeFrom.string(ref.value, this.factory);
   }
   /** Add `(subject, rdf:type, classIri)`. */
   addType(subject, classIri) {
     this.addIri(subject, RDF_TYPE, classIri);
   }
-  /** Add `(subject, predicate, object-IRI)`. */
+  /**
+   * Add `(subject, predicate, object-IRI)`. The predicate and object IRIs are
+   * passed through {@link escapeIri} so neither an untrusted claim-key predicate
+   * nor an untrusted object IRI can break out of the serialised `<…>` — the
+   * low-level chokepoint that closes the injection for EVERY object-IRI write.
+   */
   addIri(subject, predicate, objectIri) {
     const s = this.subjectTerm(normalize(subject));
-    const p = NamedNodeFrom.string(predicate, this.factory);
-    const o = NamedNodeFrom.string(objectIri, this.factory);
+    const p = NamedNodeFrom.string(escapeIri(predicate), this.factory);
+    const o = NamedNodeFrom.string(escapeIri(objectIri), this.factory);
     this.store.add(this.factory.quad(s, p, o));
   }
   /** Add `(subject, predicate, literal)` with an optional datatype IRI. */
   addLiteral(subject, predicate, value, datatypeIri) {
     const s = this.subjectTerm(normalize(subject));
-    const p = NamedNodeFrom.string(predicate, this.factory);
+    const p = NamedNodeFrom.string(escapeIri(predicate), this.factory);
     const o = datatypeIri === void 0 ? LiteralFrom.string(value, this.factory) : this.factory.literal(
       value,
-      NamedNodeFrom.string(datatypeIri, this.factory)
+      NamedNodeFrom.string(escapeIri(datatypeIri), this.factory)
     );
     this.store.add(this.factory.quad(s, p, o));
   }
@@ -415,7 +465,7 @@ var GraphBuilder = class {
   linkBlankNode(subject, predicate) {
     const s = this.subjectTerm(normalize(subject));
     const blank = BlankNodeFrom.string(void 0, this.factory);
-    const p = NamedNodeFrom.string(predicate, this.factory);
+    const p = NamedNodeFrom.string(escapeIri(predicate), this.factory);
     this.store.add(this.factory.quad(s, p, blank));
     return { kind: "blank", value: blank.value };
   }
@@ -439,10 +489,36 @@ function typeIri(type) {
   if (looksLikeIri(type)) return type;
   return `https://w3id.org/jeswr/solid-vc#${type}`;
 }
+function normalizeSubjectId(id) {
+  if (typeof id !== "string" || id.trim().length === 0) return void 0;
+  if (!isAbsoluteIri(id)) {
+    throw new Error(
+      `@jeswr/solid-vc: credentialSubject.id must be an absolute IRI, got ${JSON.stringify(
+        id
+      )} \u2014 refusing to emit a credential subject with a relative/invalid id`
+    );
+  }
+  return id;
+}
+function subjectWithNormalizedId(subject) {
+  if (normalizeSubjectId(subject.id) !== void 0) return subject;
+  if (!("id" in subject)) return subject;
+  const { id: _blank, ...rest } = subject;
+  return rest;
+}
+function normalizeCredentialSubjects(credential) {
+  const cs = credential.credentialSubject;
+  const credentialSubject = Array.isArray(cs) ? cs.map(subjectWithNormalizedId) : subjectWithNormalizedId(cs);
+  return { ...credential, credentialSubject };
+}
 function writeSubject(b, credential, subject) {
-  const node = typeof subject.id === "string" && subject.id.length > 0 ? iriRef(subject.id) : b.linkBlankNode(credential, VC_CREDENTIAL_SUBJECT);
-  if (node.kind === "iri") {
-    b.addIri(credential, VC_CREDENTIAL_SUBJECT, node.value);
+  const idIri = normalizeSubjectId(subject.id);
+  let node;
+  if (idIri !== void 0) {
+    node = iriRef(idIri);
+    b.addIri(credential, VC_CREDENTIAL_SUBJECT, idIri);
+  } else {
+    node = b.linkBlankNode(credential, VC_CREDENTIAL_SUBJECT);
   }
   for (const [claim, value] of Object.entries(subject)) {
     if (claim === "id" || value === void 0) continue;
@@ -493,9 +569,12 @@ function credentialToRdf(credential) {
   b.addType(subject, VC_CREDENTIAL);
   for (const t of credential.type ?? []) {
     const iri = typeIri(t);
-    if (iri !== VC_CREDENTIAL) b.addType(subject, iri);
+    if (iri === VC_CREDENTIAL) continue;
+    const safe = safeObjectIri(iri);
+    if (safe !== void 0) b.addType(subject, safe);
   }
-  b.addIri(subject, VC_ISSUER, credential.issuer);
+  const issuerIri = requireObjectIri(credential.issuer, "issuer");
+  b.addIri(subject, VC_ISSUER, issuerIri);
   if (credential.validFrom !== void 0) {
     b.addLiteral(subject, VC_VALID_FROM, credential.validFrom, `${XSD}dateTime`);
   }
@@ -512,6 +591,7 @@ function credentialToTurtle(credential, format) {
   return serialize2(credentialToRdf(credential), format);
 }
 function credentialToJsonLd(credential) {
+  requireObjectIri(credential.issuer, "issuer");
   const id = credential.id ?? `urn:uuid:${randomUUID()}`;
   const types = ["VerifiableCredential", ...credential.type ?? []];
   const doc = {
@@ -523,7 +603,8 @@ function credentialToJsonLd(credential) {
   if (credential.validFrom !== void 0) doc.validFrom = credential.validFrom;
   if (credential.validUntil !== void 0) doc.validUntil = credential.validUntil;
   const subjects = Array.isArray(credential.credentialSubject) ? credential.credentialSubject : [credential.credentialSubject];
-  doc.credentialSubject = subjects.length === 1 ? subjects[0] : subjects;
+  const normalized = subjects.map(subjectWithNormalizedId);
+  doc.credentialSubject = normalized.length === 1 ? normalized[0] : normalized;
   return doc;
 }
 function credentialMetaFromNode(node) {
@@ -736,11 +817,11 @@ async function issue(input) {
   const suite = input.suite ?? new DataIntegritySuite("eddsa-rdfc-2022");
   const created = input.options?.created ?? /* @__PURE__ */ new Date();
   const proofPurpose = input.options?.proofPurpose ?? "assertionMethod";
-  const credential = {
+  const credential = normalizeCredentialSubjects({
     ...input.credential,
     id: input.credential.id ?? `urn:uuid:${randomUUID2()}`,
     validFrom: input.credential.validFrom ?? created.toISOString()
-  };
+  });
   const documentQuads = credentialToRdf(credential);
   const proof = await suite.sign(documentQuads, {
     key: input.key,
@@ -854,34 +935,44 @@ async function verifyCredential(vc, options) {
   if (options.trustedIssuers !== void 0 && !options.trustedIssuers.includes(issuer)) {
     errors.push({ code: "UNTRUSTED_ISSUER", message: `issuer ${issuer} is not trusted` });
   }
-  const documentQuads = credentialToRdf(unsigned(vc));
-  for (const proof of proofs) {
-    const suite = registry.get(proof.cryptosuite);
-    if (suite === void 0) {
-      errors.push({
-        code: "UNKNOWN_CRYPTOSUITE",
-        message: `no registered suite for cryptosuite "${proof.cryptosuite}"`
-      });
-      continue;
-    }
-    if (normalizePurpose(proof.proofPurpose) !== normalizePurpose(expectedPurpose)) {
-      errors.push({
-        code: "PROOF_PURPOSE_MISMATCH",
-        message: `proofPurpose "${proof.proofPurpose}" != expected "${expectedPurpose}"`
-      });
-    }
-    if (!controlledBy(proof.verificationMethod, issuer)) {
-      errors.push({
-        code: "ISSUER_MISMATCH",
-        message: `verificationMethod ${proof.verificationMethod} is not controlled by issuer ${issuer}`
-      });
-    }
-    const ok = await verifyOneProof(suite, documentQuads, proof, options.resolveKey);
-    if (!ok) {
-      errors.push({
-        code: "INVALID_SIGNATURE",
-        message: `signature did not verify for proof (${proof.cryptosuite})`
-      });
+  let documentQuads;
+  try {
+    documentQuads = credentialToRdf(unsigned(vc));
+  } catch (e) {
+    errors.push({
+      code: "MALFORMED",
+      message: `credential could not be lowered to its signed RDF: ${e.message}`
+    });
+  }
+  if (documentQuads !== void 0) {
+    for (const proof of proofs) {
+      const suite = registry.get(proof.cryptosuite);
+      if (suite === void 0) {
+        errors.push({
+          code: "UNKNOWN_CRYPTOSUITE",
+          message: `no registered suite for cryptosuite "${proof.cryptosuite}"`
+        });
+        continue;
+      }
+      if (normalizePurpose(proof.proofPurpose) !== normalizePurpose(expectedPurpose)) {
+        errors.push({
+          code: "PROOF_PURPOSE_MISMATCH",
+          message: `proofPurpose "${proof.proofPurpose}" != expected "${expectedPurpose}"`
+        });
+      }
+      if (!controlledBy(proof.verificationMethod, issuer)) {
+        errors.push({
+          code: "ISSUER_MISMATCH",
+          message: `verificationMethod ${proof.verificationMethod} is not controlled by issuer ${issuer}`
+        });
+      }
+      const ok = await verifyOneProof(suite, documentQuads, proof, options.resolveKey);
+      if (!ok) {
+        errors.push({
+          code: "INVALID_SIGNATURE",
+          message: `signature did not verify for proof (${proof.cryptosuite})`
+        });
+      }
     }
   }
   return errors.length === 0 ? { verified: true, errors: [], issuer } : { verified: false, errors, issuer };

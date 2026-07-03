@@ -20,6 +20,7 @@ import {
   type TermWrapper as TermWrapperType,
 } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
+import { escapeIri } from "./iri.js";
 import {
   DC_CREATED,
   RDF_TYPE,
@@ -181,10 +182,15 @@ export class GraphBuilder {
   private readonly store = new Store();
   private readonly factory = DataFactory as unknown as DataFactoryType;
 
-  /** Materialise a {@link NodeRef} to its RDF/JS term. */
+  /**
+   * Materialise a {@link NodeRef} to its RDF/JS term. An IRI subject is passed
+   * through {@link escapeIri} FIRST so an untrusted subject id cannot break out of
+   * the `<…>` when the graph is serialised (n3.Writer does not escape IRIs). This
+   * is scheme-agnostic, so a `urn:uuid:` / `did:` subject is preserved unchanged.
+   */
   private subjectTerm(ref: NodeRef): Term {
     return ref.kind === "iri"
-      ? (NamedNodeFrom.string(ref.value, this.factory) as unknown as Term)
+      ? (NamedNodeFrom.string(escapeIri(ref.value), this.factory) as unknown as Term)
       : (BlankNodeFrom.string(ref.value, this.factory) as unknown as Term);
   }
 
@@ -193,11 +199,16 @@ export class GraphBuilder {
     this.addIri(subject, RDF_TYPE, classIri);
   }
 
-  /** Add `(subject, predicate, object-IRI)`. */
+  /**
+   * Add `(subject, predicate, object-IRI)`. The predicate and object IRIs are
+   * passed through {@link escapeIri} so neither an untrusted claim-key predicate
+   * nor an untrusted object IRI can break out of the serialised `<…>` — the
+   * low-level chokepoint that closes the injection for EVERY object-IRI write.
+   */
   addIri(subject: NodeRef | string, predicate: string, objectIri: string): void {
     const s = this.subjectTerm(normalize(subject));
-    const p = NamedNodeFrom.string(predicate, this.factory);
-    const o = NamedNodeFrom.string(objectIri, this.factory);
+    const p = NamedNodeFrom.string(escapeIri(predicate), this.factory);
+    const o = NamedNodeFrom.string(escapeIri(objectIri), this.factory);
     this.store.add(this.factory.quad(s as never, p as never, o as never) as Quad);
   }
 
@@ -209,13 +220,13 @@ export class GraphBuilder {
     datatypeIri?: string,
   ): void {
     const s = this.subjectTerm(normalize(subject));
-    const p = NamedNodeFrom.string(predicate, this.factory);
+    const p = NamedNodeFrom.string(escapeIri(predicate), this.factory);
     const o =
       datatypeIri === undefined
         ? (LiteralFrom.string(value, this.factory) as unknown as never)
         : (this.factory.literal(
             value,
-            NamedNodeFrom.string(datatypeIri, this.factory) as never,
+            NamedNodeFrom.string(escapeIri(datatypeIri), this.factory) as never,
           ) as never);
     this.store.add(this.factory.quad(s as never, p as never, o as never) as Quad);
   }
@@ -228,7 +239,7 @@ export class GraphBuilder {
   linkBlankNode(subject: NodeRef | string, predicate: string): NodeRef {
     const s = this.subjectTerm(normalize(subject));
     const blank = BlankNodeFrom.string(undefined, this.factory) as unknown as Term;
-    const p = NamedNodeFrom.string(predicate, this.factory);
+    const p = NamedNodeFrom.string(escapeIri(predicate), this.factory);
     this.store.add(this.factory.quad(s as never, p as never, blank as never) as Quad);
     return { kind: "blank", value: (blank as { value: string }).value };
   }

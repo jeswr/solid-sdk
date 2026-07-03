@@ -6,7 +6,11 @@
 // via the ProofSuite seam; the bundled DataIntegritySuite is the default.
 
 import { randomUUID } from "node:crypto";
-import { buildAgentAuthorizationCredential, credentialToRdf } from "./credential.js";
+import {
+  buildAgentAuthorizationCredential,
+  credentialToRdf,
+  normalizeCredentialSubjects,
+} from "./credential.js";
 import { DataIntegritySuite, type ProofSuite } from "./proof.js";
 import type {
   AgentAuthorization,
@@ -45,13 +49,17 @@ export async function issue(input: IssueInput): Promise<VerifiableCredential> {
   const created = input.options?.created ?? new Date();
   const proofPurpose = input.options?.proofPurpose ?? "assertionMethod";
 
-  // Ensure the credential has a stable @id (so the proof binds a named subject)
-  // and a validFrom (issuance instant) before lowering.
-  const credential: Credential = {
+  // Ensure the credential has a stable @id (so the proof binds a named subject) and a
+  // validFrom (issuance instant) before lowering. Normalise the subject id(s) to the
+  // SAME form the signed RDF graph uses (a blank/whitespace id → anonymous, stripped;
+  // a present relative id → throws) so the RETURNED signed VC agrees byte-for-byte
+  // with the blank-node graph the proof is computed over — never returning a
+  // whitespace-only id that JSON-LD would read as a present relative `@id`.
+  const credential: Credential = normalizeCredentialSubjects({
     ...input.credential,
     id: input.credential.id ?? `urn:uuid:${randomUUID()}`,
     validFrom: input.credential.validFrom ?? created.toISOString(),
-  };
+  });
 
   const documentQuads = credentialToRdf(credential);
   const proof = await suite.sign(documentQuads, {

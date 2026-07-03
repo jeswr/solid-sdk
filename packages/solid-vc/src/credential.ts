@@ -9,6 +9,7 @@
 import { randomUUID } from "node:crypto";
 import { parseRdf } from "@jeswr/fetch-rdf";
 import type { DatasetCore, Quad } from "@rdfjs/types";
+import { isAbsoluteIri, requireObjectIri, safeObjectIri } from "./iri.js";
 import { serialize } from "./serialize.js";
 import type { AgentAuthorization, Credential, CredentialSubject, JsonValue } from "./types.js";
 import {
@@ -50,18 +51,85 @@ function typeIri(type: string): string {
 }
 
 /**
+ * Normalise a credential-subject `id`, shared by the RDF ({@link writeSubject}) and
+ * JSON-LD ({@link credentialToJsonLd}) projections so BOTH treat the id identically:
+ *
+ *  - a BLANK id (absent / empty `""` / whitespace-only) → `undefined` = an ANONYMOUS
+ *    subject (a blank node in RDF; no `@id` in JSON-LD). Load-bearing for JSON-LD:
+ *    an empty-string `@id` is a PRESENT RELATIVE reference that resolves against the
+ *    document base, NOT an anonymous subject — so it must be OMITTED, not copied.
+ *  - a PRESENT (non-blank) id → must be an absolute IRI, else THROW (fail closed on a
+ *    relative / malformed identity). Returned VERBATIM — NO canonicalisation — so a
+ *    valid id's bytes are unchanged and the two projections stay byte-for-byte in
+ *    lock-step. Injection is separately neutralised by `escapeIri` at the write
+ *    chokepoint; this is the semantic identity requirement.
+ */
+function normalizeSubjectId(id: string | undefined): string | undefined {
+  if (typeof id !== "string" || id.trim().length === 0) return undefined;
+  if (!isAbsoluteIri(id)) {
+    throw new Error(
+      `@jeswr/solid-vc: credentialSubject.id must be an absolute IRI, got ${JSON.stringify(
+        id,
+      )} — refusing to emit a credential subject with a relative/invalid id`,
+    );
+  }
+  return id;
+}
+
+/**
+ * Return the subject with its id NORMALISED to match the signed RDF graph: identical
+ * when the id is absolute, but with a BLANK id (empty `""` / whitespace / absent)
+ * STRIPPED so the subject is anonymous (no `@id`, matching the RDF blank node).
+ * Throws (via {@link normalizeSubjectId}) on a present relative/malformed id. Used by
+ * every OUTPUT projection — `credentialToJsonLd` AND the signed VC that `issue()`
+ * returns — so the returned/serialised subject can never disagree with the blank-node
+ * graph the proof was computed over.
+ */
+function subjectWithNormalizedId(subject: CredentialSubject): CredentialSubject {
+  if (normalizeSubjectId(subject.id) !== undefined) return subject; // valid absolute id → verbatim
+  if (!("id" in subject)) return subject; // never had an id → nothing to strip
+  const { id: _blank, ...rest } = subject; // blank id → drop it (anonymous)
+  return rest;
+}
+
+/**
+ * Return a {@link Credential} whose `credentialSubject` id(s) are normalised EXACTLY
+ * as the signed RDF graph normalises them ({@link subjectWithNormalizedId} on the
+ * single subject or each element of a subject array): a blank id is stripped
+ * (anonymous), a present non-blank id must be absolute (throws). `issue()` runs the
+ * returned VC through this so the SIGNED graph (a blank node for a blank id) and the
+ * RETURNED object agree — a whitespace-only `id` can never survive in the returned VC
+ * as a present relative JSON-LD `@id`. Idempotent, and a no-op for a credential whose
+ * subjects all carry a valid absolute id or no id.
+ */
+export function normalizeCredentialSubjects(credential: Credential): Credential {
+  const cs = credential.credentialSubject;
+  // `Array.isArray` narrows the array branch but not the single branch out of a
+  // `readonly T[]` union member, so cast the single value (the branch is provably a
+  // lone CredentialSubject). Shape (single vs array) is preserved.
+  const credentialSubject = Array.isArray(cs)
+    ? cs.map(subjectWithNormalizedId)
+    : subjectWithNormalizedId(cs as CredentialSubject);
+  return { ...credential, credentialSubject };
+}
+
+/**
  * Write one credential-subject node (its `id` and arbitrary claims) under the
  * credential `subject` via `cred:credentialSubject`. Claims whose value is an
  * absolute-IRI string are written as IRI objects; everything else as a typed
  * literal (so the JSON booleans/numbers round-trip with their XSD datatype).
  */
 function writeSubject(b: GraphBuilder, credential: NodeRef, subject: CredentialSubject): void {
-  const node: NodeRef =
-    typeof subject.id === "string" && subject.id.length > 0
-      ? iriRef(subject.id)
-      : b.linkBlankNode(credential, VC_CREDENTIAL_SUBJECT);
-  if (node.kind === "iri") {
-    b.addIri(credential, VC_CREDENTIAL_SUBJECT, node.value);
+  // Shared rule: a valid absolute id is written verbatim; a BLANK id (empty /
+  // whitespace / absent) becomes an anonymous blank node; a present relative id
+  // FAILS CLOSED (throws).
+  const idIri = normalizeSubjectId(subject.id);
+  let node: NodeRef;
+  if (idIri !== undefined) {
+    node = iriRef(idIri);
+    b.addIri(credential, VC_CREDENTIAL_SUBJECT, idIri);
+  } else {
+    node = b.linkBlankNode(credential, VC_CREDENTIAL_SUBJECT);
   }
   for (const [claim, value] of Object.entries(subject)) {
     if (claim === "id" || value === undefined) continue;
@@ -125,9 +193,22 @@ export function credentialToRdf(credential: Credential): Quad[] {
   b.addType(subject, VC_CREDENTIAL);
   for (const t of credential.type ?? []) {
     const iri = typeIri(t);
-    if (iri !== VC_CREDENTIAL) b.addType(subject, iri);
+    if (iri === VC_CREDENTIAL) continue;
+    // A type is an object-position IRI: canonicalise an http(s) type, escape a
+    // non-http absolute type in place, and DROP a malformed one (never emit a
+    // type IRI that could break out of the serialised `<…>`).
+    const safe = safeObjectIri(iri);
+    if (safe !== undefined) b.addType(subject, safe);
   }
-  b.addIri(subject, VC_ISSUER, credential.issuer);
+  // The issuer is a REQUIRED, identity-bearing object IRI (a WebID, or a DID/URN —
+  // all legitimate). Route it through the FAIL-CLOSED guard: canonicalise http(s),
+  // escape a DID/URN, and THROW on a non-absolute / malformed / missing issuer —
+  // NEVER silently drop the triple, which would let a credential be signed over a
+  // graph carrying no issuer (a fail-open the verifier could not detect). A valid
+  // issuer is canonicalised/escaped exactly as before, so valid credentials are
+  // byte-unchanged.
+  const issuerIri = requireObjectIri(credential.issuer, "issuer");
+  b.addIri(subject, VC_ISSUER, issuerIri);
   if (credential.validFrom !== undefined) {
     b.addLiteral(subject, VC_VALID_FROM, credential.validFrom, `${XSD}dateTime`);
   }
@@ -154,6 +235,11 @@ export function credentialToTurtle(credential: Credential, format?: string): Pro
  * inline `@context`. A consumer can parse it back via `@jeswr/fetch-rdf`.
  */
 export function credentialToJsonLd(credential: Credential): Record<string, unknown> {
+  // FAIL CLOSED on a missing/invalid issuer here too — the JSON-LD projection must
+  // never emit a document with no valid issuer (parity with the RDF lowering). The
+  // raw issuer is kept (this projection does not canonicalise); the guard only
+  // rejects the values the RDF path would refuse.
+  requireObjectIri(credential.issuer, "issuer");
   const id = credential.id ?? `urn:uuid:${randomUUID()}`;
   const types = ["VerifiableCredential", ...(credential.type ?? [])];
   const doc: Record<string, unknown> = {
@@ -167,7 +253,13 @@ export function credentialToJsonLd(credential: Credential): Record<string, unkno
   const subjects = Array.isArray(credential.credentialSubject)
     ? credential.credentialSubject
     : [credential.credentialSubject];
-  doc.credentialSubject = subjects.length === 1 ? subjects[0] : subjects;
+  // NORMALISE each subject in lock-step with the RDF lowering (writeSubject): a
+  // PRESENT relative/malformed id THROWS (fail closed); a BLANK id (empty `""` /
+  // whitespace / absent) is OMITTED so the subject is anonymous — NOT copied through
+  // as an empty-string `@id` (which is a present RELATIVE reference resolving against
+  // the base, the parity gap this closes). A valid absolute id is byte-unchanged.
+  const normalized = subjects.map(subjectWithNormalizedId);
+  doc.credentialSubject = normalized.length === 1 ? normalized[0] : normalized;
   return doc;
 }
 

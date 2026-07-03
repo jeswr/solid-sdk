@@ -132,39 +132,55 @@ export async function verifyCredential(
   }
 
   // The canonical bytes the signature must cover: the claim graph WITHOUT proof.
-  const documentQuads = credentialToRdf(unsigned(vc));
+  // credentialToRdf FAILS CLOSED (throws) on a malformed identity field (a
+  // non-absolute issuer / subject id) — a legitimately-issued credential could never
+  // have been signed over such a graph, so a VC that cannot be lowered is forged /
+  // tampered. Map that throw to a MALFORMED error and skip signature checking, rather
+  // than letting it escape: verifyCredential MUST NEVER throw on an invalid input.
+  let documentQuads: ReturnType<typeof credentialToRdf> | undefined;
+  try {
+    documentQuads = credentialToRdf(unsigned(vc));
+  } catch (e) {
+    errors.push({
+      code: "MALFORMED",
+      message: `credential could not be lowered to its signed RDF: ${(e as Error).message}`,
+    });
+  }
 
   // 3–6: check EACH proof (a multi-proof credential must have every proof valid).
-  for (const proof of proofs) {
-    const suite = registry.get(proof.cryptosuite);
-    if (suite === undefined) {
-      errors.push({
-        code: "UNKNOWN_CRYPTOSUITE",
-        message: `no registered suite for cryptosuite "${proof.cryptosuite}"`,
-      });
-      continue;
-    }
-    // 6. proof purpose
-    if (normalizePurpose(proof.proofPurpose) !== normalizePurpose(expectedPurpose)) {
-      errors.push({
-        code: "PROOF_PURPOSE_MISMATCH",
-        message: `proofPurpose "${proof.proofPurpose}" != expected "${expectedPurpose}"`,
-      });
-    }
-    // 5. issuer binding
-    if (!controlledBy(proof.verificationMethod, issuer)) {
-      errors.push({
-        code: "ISSUER_MISMATCH",
-        message: `verificationMethod ${proof.verificationMethod} is not controlled by issuer ${issuer}`,
-      });
-    }
-    // 4. signature
-    const ok = await verifyOneProof(suite, documentQuads, proof, options.resolveKey);
-    if (!ok) {
-      errors.push({
-        code: "INVALID_SIGNATURE",
-        message: `signature did not verify for proof (${proof.cryptosuite})`,
-      });
+  // Skipped entirely when the claim graph could not be lowered (MALFORMED above).
+  if (documentQuads !== undefined) {
+    for (const proof of proofs) {
+      const suite = registry.get(proof.cryptosuite);
+      if (suite === undefined) {
+        errors.push({
+          code: "UNKNOWN_CRYPTOSUITE",
+          message: `no registered suite for cryptosuite "${proof.cryptosuite}"`,
+        });
+        continue;
+      }
+      // 6. proof purpose
+      if (normalizePurpose(proof.proofPurpose) !== normalizePurpose(expectedPurpose)) {
+        errors.push({
+          code: "PROOF_PURPOSE_MISMATCH",
+          message: `proofPurpose "${proof.proofPurpose}" != expected "${expectedPurpose}"`,
+        });
+      }
+      // 5. issuer binding
+      if (!controlledBy(proof.verificationMethod, issuer)) {
+        errors.push({
+          code: "ISSUER_MISMATCH",
+          message: `verificationMethod ${proof.verificationMethod} is not controlled by issuer ${issuer}`,
+        });
+      }
+      // 4. signature
+      const ok = await verifyOneProof(suite, documentQuads, proof, options.resolveKey);
+      if (!ok) {
+        errors.push({
+          code: "INVALID_SIGNATURE",
+          message: `signature did not verify for proof (${proof.cryptosuite})`,
+        });
+      }
     }
   }
 
