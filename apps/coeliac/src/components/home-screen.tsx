@@ -10,6 +10,7 @@ import Link from "next/link";
 import { useCallback } from "react";
 import { useDiaryLists } from "@/lib/session/use-diary-lists";
 import { OfflineBanner } from "./offline-banner";
+import { ReChallengePrompts } from "./rechallenge-prompts";
 import { RecentActivity } from "./recent-activity";
 import { RelogChips } from "./relog-chips";
 import { SymptomQuickLog } from "./symptom-quick-log";
@@ -28,6 +29,7 @@ export function HomeScreen() {
         </Link>
       </section>
       <RelogChips frequent={lists.frequent} recent={lists.recent} onLogged={onLogged} />
+      <ReChallengePrompts />
       <SymptomQuickLog onLogged={onLogged} />
       <RecentActivity meals={lists.recent} symptoms={lists.symptoms} loaded={lists.loaded} />
     </div>

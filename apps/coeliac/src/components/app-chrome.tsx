@@ -8,11 +8,32 @@
  */
 import { AccountMenu, FeedbackButton, ThemeToggle } from "@jeswr/app-shell";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { useSession } from "@/lib/session/context";
 
+const NAV_ITEMS: ReadonlyArray<{ href: string; label: string }> = [
+  { href: "/", label: "Home" },
+  { href: "/log", label: "Log food" },
+  { href: "/symptoms", label: "Symptoms" },
+  { href: "/insights", label: "Insights" },
+  { href: "/plan", label: "Plan" },
+  { href: "/protocols", label: "Challenges" },
+  { href: "/genetics", label: "Genetics" },
+  { href: "/knowledge/research", label: "Research" },
+  { href: "/community", label: "Community" },
+];
+
+/** Is `href` the current page? Exact for "/", prefix for nested routes. */
+function isActive(pathname: string | null, href: string): boolean {
+  if (!pathname) return false;
+  if (href === "/") return pathname === "/";
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
 export function AppChrome({ children }: { children: ReactNode }) {
   const { webId, logout } = useSession();
+  const pathname = usePathname();
   return (
     <div className="app">
       <header className="app__header">
@@ -20,14 +41,15 @@ export function AppChrome({ children }: { children: ReactNode }) {
           Coeliac Diary
         </Link>
         <nav className="app__nav" aria-label="Primary">
-          <Link href="/">Home</Link>
-          <Link href="/log">Log food</Link>
-          <Link href="/symptoms">Symptoms</Link>
-          <Link href="/insights">Insights</Link>
-          <Link href="/protocols">Challenges</Link>
-          <Link href="/genetics">Genetics</Link>
-          <Link href="/knowledge/research">Research</Link>
-          <Link href="/community">Community</Link>
+          {NAV_ITEMS.map(({ href, label }) => (
+            <Link
+              key={href}
+              href={href}
+              aria-current={isActive(pathname, href) ? "page" : undefined}
+            >
+              {label}
+            </Link>
+          ))}
         </nav>
         <div className="app__actions">
           <ThemeToggle />

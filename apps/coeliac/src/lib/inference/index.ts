@@ -16,7 +16,22 @@
  */
 
 export { analyze, type AnalysisResult } from "./analyze";
+export {
+  analyzeContextCluster,
+  CLUSTER_LIFT,
+  CLUSTER_RATE_FLOOR,
+  CONTEXT_WINDOW_HOURS,
+  MIN_MEALS_PER_CONTEXT,
+  type ContextClusterSurfacing,
+  type ContextReactionRate,
+} from "./context-cluster";
 export { deriveConfirmedConclusion, DEFAULT_REVIEW_AFTER_DAYS, TIME_BOXED_TRIGGERS } from "./conclude";
+export {
+  deriveCurrentPlan,
+  type CurrentPlan,
+  type ExclusionReason,
+  type PlanExclusion,
+} from "./diet-plan";
 export type { ConcludeOptions } from "./conclude";
 export { correlate, type CorrelateOptions } from "./correlate";
 export { HOUR_MS, lagHours, onsetWithinLag, resolveAllLags, resolveLag, type ResolvedLag } from "./lag";

@@ -19,6 +19,7 @@ import { storedProtocolToData } from "@/lib/protocol/persist";
 import { useInsights } from "@/lib/session/use-insights";
 import { useProtocolActions } from "@/lib/session/use-protocol-actions";
 import { useProtocols } from "@/lib/session/use-protocols";
+import { MedicalDisclaimer } from "./medical-disclaimer";
 
 const PHASE_LABEL: Record<string, string> = {
   baseline: "Baseline",
@@ -209,6 +210,7 @@ export function ProtocolsView() {
   return (
     <div className="protocols">
       <h1>Elimination challenges</h1>
+      <MedicalDisclaimer />
       <p className="protocols__intro">
         An elimination challenge is a careful way to test whether one food really affects you: you
         leave it out for a while, then reintroduce it in small steps and watch what happens. {CLINICIAN_CAVEAT}

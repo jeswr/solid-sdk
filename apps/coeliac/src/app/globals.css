@@ -58,6 +58,11 @@ a {
 .app__nav a:hover {
   text-decoration: underline;
 }
+.app__nav a[aria-current="page"] {
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
 .app__actions {
   margin-left: auto;
   display: flex;
@@ -1158,4 +1163,156 @@ a {
   display: flex;
   flex-wrap: wrap;
   gap: 0.6rem;
+}
+
+/* --- Phase 4B: eating-out clustering, diet plan, re-challenge prompts ------ */
+/*
+ * Inference-adjacent + conclusion surfaces. Colours come from the shared OKLCH
+ * tokens so light/dark + contrast track the theme; the review-due accent reuses
+ * --warn (an AA-contrast token against --card) rather than a hard-coded hue.
+ */
+.context-cluster {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  border: 1px solid var(--border, #e5e5e5);
+  border-radius: 10px;
+  background: var(--card, transparent);
+}
+.context-cluster--flagged {
+  border-color: var(--caution, #b8860b);
+  border-left-width: 4px;
+}
+.context-cluster__message {
+  margin: 0 0 0.75rem;
+}
+.context-cluster__breakdown {
+  list-style: none;
+  margin: 0 0 0.5rem;
+  padding: 0;
+}
+.context-cluster__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: space-between;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--border, #eee);
+}
+.context-cluster__ctx {
+  font-weight: 600;
+}
+.context-cluster__rate {
+  color: var(--muted-foreground, #555);
+  font-size: 0.92rem;
+}
+.context-cluster__disclaimer {
+  color: var(--muted-foreground, #666);
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+/* Diet plan — "what I'm currently avoiding and why" */
+.diet-plan__empty,
+.diet-plan__loading {
+  color: var(--muted-foreground, #555);
+}
+.diet-plan__review-lead {
+  padding: 0.6rem 0.8rem;
+  border-radius: 8px;
+  background: var(--secondary, #eef7f3);
+  font-weight: 600;
+}
+.plan-list {
+  list-style: none;
+  margin: 1rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.plan-item {
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--border, #e5e5e5);
+  border-radius: 10px;
+}
+.plan-item--review-due {
+  border-left: 4px solid var(--warn, #b8860b);
+}
+.plan-item__head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+.plan-item__trigger {
+  font-weight: 700;
+  font-size: 1.05rem;
+}
+.plan-item__tag {
+  font-size: 0.75rem;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  background: var(--secondary, #eef7f3);
+  color: var(--secondary-foreground, var(--foreground, #222));
+}
+.plan-item__tag--lifelong {
+  background: var(--muted, #eee);
+}
+.plan-item__why {
+  margin: 0.4rem 0 0;
+}
+.plan-item__note {
+  color: var(--muted-foreground, #555);
+  font-size: 0.9rem;
+  margin: 0.3rem 0 0;
+}
+.plan-item__review {
+  margin: 0.5rem 0 0;
+  font-weight: 500;
+}
+.plan-item__review-later {
+  margin: 0.5rem 0 0;
+  color: var(--muted-foreground, #666);
+  font-size: 0.9rem;
+}
+
+/* Home-screen re-challenge prompts */
+.rechallenge {
+  margin: 1rem 0;
+  padding: 1rem;
+  border: 1px solid var(--border, #e5e5e5);
+  border-left: 4px solid var(--ok, #2e8b57);
+  border-radius: 10px;
+  background: var(--card, transparent);
+}
+.rechallenge__title {
+  margin: 0 0 0.4rem;
+  font-size: 1.05rem;
+}
+.rechallenge__lead {
+  margin: 0 0 0.6rem;
+}
+.rechallenge__list {
+  list-style: none;
+  margin: 0 0 0.6rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.rechallenge__item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.rechallenge__trigger {
+  font-weight: 600;
+}
+.rechallenge__msg {
+  color: var(--muted-foreground, #555);
+  font-size: 0.92rem;
+}
+.rechallenge__cta {
+  margin: 0;
+  font-size: 0.92rem;
 }

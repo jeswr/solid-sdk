@@ -15,6 +15,7 @@
  */
 
 import { countActiveChallenges, isActiveChallengePhase } from "@jeswr/solid-health-diary";
+import { analyzeContextCluster, type ContextClusterSurfacing } from "./context-cluster";
 import { correlate } from "./correlate";
 import { rankSuspicions } from "./rank";
 import { scheduleReintroduction } from "./reintroduction";
@@ -47,6 +48,12 @@ export interface AnalysisResult {
   reviews: ReviewSurfacing[];
   /** Reintroduction schedule for the one active challenge, if a protocol is in one. */
   reintroductionSchedule?: ReintroductionSchedule;
+  /**
+   * Eating-out context clustering (DESIGN §2.2/§4) — present only when there are
+   * enough restaurant-context meals to say anything honest. Inference-adjacent, so
+   * it carries its own disclaimer and never overclaims.
+   */
+  contextCluster?: ContextClusterSurfacing;
 }
 
 /** Run the full analysis over a diary snapshot. Pure; no I/O. */
@@ -93,6 +100,11 @@ export function analyze(
   safetyRails.sort((a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity]);
 
   const result: AnalysisResult = { safetyRails, suspicions, proposal, reviews };
+
+  // Eating-out context clustering — a coarse "where do your reactions happen?"
+  // signal from `diet:context`. Undefined (omitted) unless enough restaurant meals.
+  const contextCluster = analyzeContextCluster(diary.meals, diary.symptoms);
+  if (contextCluster) result.contextCluster = contextCluster;
 
   // Reintroduction schedule for the ONE active challenge (one-active-challenge rule).
   if (countActiveChallenges(protocols) >= 1) {

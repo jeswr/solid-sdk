@@ -31,6 +31,7 @@ import type {
   SafetyRail,
   SuspicionScore,
 } from "@/lib/inference/types";
+import type { ContextClusterSurfacing } from "@/lib/inference/context-cluster";
 import type { StoredProtocol } from "@/lib/cache/diary-store";
 import { nextAction } from "@/lib/protocol/fsm";
 import { storedProtocolToData } from "@/lib/protocol/persist";
@@ -40,6 +41,7 @@ import { useInsights } from "@/lib/session/use-insights";
 import { useProtocolActions } from "@/lib/session/use-protocol-actions";
 import { useProtocols } from "@/lib/session/use-protocols";
 import { EmergencyRail } from "./emergency-rail";
+import { MedicalDisclaimer } from "./medical-disclaimer";
 
 const PHASE_LABEL: Record<string, string> = {
   baseline: "Baseline",
@@ -140,6 +142,47 @@ function ProposalCard({ proposal }: { proposal: EliminationProposal }) {
   );
 }
 
+/** Human label for a meal context (`restaurant` → "Eating out"). */
+const CONTEXT_LABEL: Record<string, string> = {
+  restaurant: "Eating out",
+  home: "At home",
+  work: "At work",
+  travel: "Travelling",
+  other: "Other",
+};
+
+/**
+ * The eating-out clustering surface (DESIGN §2.2/§4). Inference-adjacent, so it
+ * shows counts (never a causal claim) and carries the "pattern not a diagnosis"
+ * caveat. Rendered only when the engine returns a surfacing (enough restaurant
+ * meals). The `clustered` flag drives the emphasis; a non-clustered breakdown is
+ * framed neutrally, never as "you react to eating out".
+ */
+function ContextClusterCard({ cluster }: { cluster: ContextClusterSurfacing }) {
+  return (
+    <section
+      className={`context-cluster ${cluster.clustered ? "context-cluster--flagged" : ""}`}
+      aria-label="Where your reactions happen"
+    >
+      <h2>Where your reactions happen</h2>
+      <p className="context-cluster__message">{cluster.message}</p>
+      <ul className="context-cluster__breakdown">
+        {cluster.byContext
+          .filter((r) => r.mealCount > 0)
+          .map((r) => (
+            <li key={r.context} className="context-cluster__row">
+              <span className="context-cluster__ctx">{CONTEXT_LABEL[r.context] ?? r.context}</span>
+              <span className="context-cluster__rate">
+                {r.followedCount}/{r.mealCount} meals followed by a symptom ({pct(r.followedRate)})
+              </span>
+            </li>
+          ))}
+      </ul>
+      <p className="context-cluster__disclaimer">{cluster.disclaimer}</p>
+    </section>
+  );
+}
+
 function ReviewCard({ review }: { review: ReviewSurfacing }) {
   return (
     <li className="review">
@@ -175,7 +218,7 @@ function ActiveChallenges({ active }: { active: StoredProtocol[] }) {
 }
 
 function InsightsBody({ result }: { result: AnalysisResult }) {
-  const { safetyRails, suspicions, proposal, reviews } = result;
+  const { safetyRails, suspicions, proposal, reviews, contextCluster } = result;
   return (
     <>
       {safetyRails.length > 0 ? (
@@ -203,6 +246,8 @@ function InsightsBody({ result }: { result: AnalysisResult }) {
       </section>
 
       <ProposalCard proposal={proposal} />
+
+      {contextCluster ? <ContextClusterCard cluster={contextCluster} /> : null}
 
       {reviews.length > 0 ? (
         <section className="insights__reviews" aria-label="Foods ready to re-test">
@@ -289,7 +334,7 @@ export function InsightsView() {
   return (
     <div className="insights">
       <h1>Insights</h1>
-      <p className="insights__caveat">{PATTERN_NOT_DIAGNOSIS}</p>
+      <MedicalDisclaimer>{PATTERN_NOT_DIAGNOSIS}</MedicalDisclaimer>
 
       <ActiveChallenges active={protocols.active} />
       <GeneticSignal />
