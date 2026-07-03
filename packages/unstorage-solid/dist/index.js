@@ -865,10 +865,10 @@ function toBodyInit(value) {
   }
   return JSON.stringify(value);
 }
-var src_default = solidDriver;
+var index_default = solidDriver;
 export {
   SolidHttpError,
   SolidPreconditionFailedError,
-  src_default as default
+  index_default as default
 };
 //# sourceMappingURL=index.js.map
