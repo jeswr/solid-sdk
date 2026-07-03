@@ -20,7 +20,7 @@
     <p>Prefix <code>diet:</code> · a gUFO-based ontology in the @jeswr Solid federation; imports the <a href="../../core.html">Solid Core</a>.</p>
     <p class="warn">⚠️ <strong>Experimental</strong> — AI-agent-generated (Claude Opus 4.8, @jeswr PSS agent); under active development, not production-hardened.</p>
     <p>Other representations: <a href="diet.ttl">Turtle</a> · <a href="diet-context.jsonld">JSON-LD context</a> · <a href="../../">index</a></p>
-    <h2>Terms (124)</h2>
+    <h2>Terms (152)</h2>
     <table>
       <tr><th>Term</th><th>Label</th><th>Comment / definition</th></tr>
       <tr><td><code>diet:abdominalPain</code></td><td>Abdominal pain</td><td>Abdominal pain or cramping.</td></tr>
@@ -33,18 +33,29 @@
       <tr><td><code>diet:brainFog</code></td><td>Brain fog</td><td>Impaired concentration / mental cloudiness.</td></tr>
       <tr><td><code>diet:caffeine</code></td><td>Caffeine</td><td>Caffeine. Reaction fast (~0.25–6 h).</td></tr>
       <tr><td><code>diet:challengeStep</code></td><td>challenge step</td><td>The dose-escalation step index within the reintroduce phase (0 = first, smallest dose).</td></tr>
+      <tr><td><code>diet:clinicalReport</code></td><td>Clinical report</td><td>An HLA-DQ typing result from a clinical laboratory report.</td></tr>
+      <tr><td><code>diet:coeliacGeneticRisk</code></td><td>coeliac genetic risk</td><td>The negative-predictive-only rollup for a GeneticSummary (risk-haplotype-present / risk-haplotype-absent / partial-coverage / indeterminate). 'risk-haplotype-absent' is valid ONLY when diet:coverageComplete=true, and means coeliac is unlikely — never 'you don't have coeliac'.</td></tr>
+      <tr><td><code>diet:CoeliacGeneticRisk</code></td><td>Coeliac Genetic Risk</td><td>The negative-predictive-only rollup over a GeneticSummary's markers: risk-haplotype-present (a DQ2/DQ8 haplotype was found — NOT a diagnosis), risk-haplotype-absent (none found → coeliac unlikely; valid ONLY with complete coverage — NOT 'you don't have coeliac'), partial-coverage (the source could not test every risk locus), indeterminate (cannot be called).</td></tr>
+      <tr><td><code>diet:CoeliacGeneticRiskScheme</code></td><td>Coeliac Genetic Risk scheme</td><td>The negative-predictive-only rollup value set for diet:coeliacGeneticRisk.</td></tr>
       <tr><td><code>diet:concluded</code></td><td>Concluded</td><td>The protocol has concluded with a verdict (see diet:Verdict).</td></tr>
       <tr><td><code>diet:confidence</code></td><td>confidence</td><td>The ordinal confidence of a ToleranceConclusion (emerging / suspected / likely / confirmed-by-your-own-test). confirmed-by-your-own-test requires a completed protocol, never correlation alone.</td></tr>
       <tr><td><code>diet:Confidence</code></td><td>Confidence</td><td>The ordinal confidence of a conclusion: emerging / suspected / likely / confirmed-by-your-own-test. Deliberately NOT a bare percentage — 'this is a pattern in your data, not a diagnosis'. Only a completed protocol yields confirmed-by-your-own-test.</td></tr>
       <tr><td><code>diet:ConfidenceScheme</code></td><td>Confidence scheme</td><td>The ordinal confidence value set for diet:confidence (ordered by skos:notation).</td></tr>
       <tr><td><code>diet:confirmedByOwnTest</code></td><td>Confirmed by your own test</td><td>Confirmed by a COMPLETED elimination protocol — the only path to this level. Never reached by correlation alone.</td></tr>
+      <tr><td><code>diet:consentGiven</code></td><td>consent given</td><td>Explicit genetic-data consent. MUST be true for a GeneticSummary to be written or valid (fail-closed): genetic data is never stored without explicit consent. Mirrors the diet:geneticInterpretation MUST.</td></tr>
       <tr><td><code>diet:constipation</code></td><td>Constipation</td><td>Difficult or infrequent stools.</td></tr>
+      <tr><td><code>diet:consumerArray</code></td><td>Consumer array</td><td>An on-device-parsed consumer raw-genotype export (23andMe/AncestryDNA) — the raw file is discarded, only the summary stored.</td></tr>
       <tr><td><code>diet:context</code></td><td>context</td><td>The eating context of a Meal (home / restaurant / work / travel / other). The eating-out signal for clustering reactions by context.</td></tr>
+      <tr><td><code>diet:coverageComplete</code></td><td>coverage complete</td><td>True if the source tested every tracked coeliac-risk tag SNP. Load-bearing for the 'absence excludes' NPV claim: when false/absent, a 'not found' result is NOT reassurance (a consumer chip may not tag every risk allele).</td></tr>
       <tr><td><code>diet:declaredAllergen</code></td><td>declared allergen</td><td>A declared-allergen code for a FoodItem, from Open Food Facts allergens_tags (e.g. en:gluten, en:milk).</td></tr>
       <tr><td><code>diet:derivedFrom</code></td><td>derived from</td><td>The evidence a derived record rests on — the FoodItem tags an Exposure came from, or the exposures/symptoms/protocol a ToleranceConclusion rests on. A sub-property of prov:wasDerivedFrom for tap-through transparency. No rdfs:domain — used by Exposure and ToleranceConclusion.</td></tr>
       <tr><td><code>diet:diarrhoea</code></td><td>Diarrhoea</td><td>Loose or watery stools.</td></tr>
       <tr><td><code>diet:DietPlan</code></td><td>Diet Plan</td><td>The current working exclusion set — which TriggerClasses the user is avoiding and, via provenance, the ToleranceConclusion each exclusion rests on. Generated from conclusions; the 'what am I currently avoiding and why' view. Biased toward shrinking, not growing, the avoid-list (orthorexia guard).</td></tr>
       <tr><td><code>diet:doseDependent</code></td><td>Dose-dependent</td><td>Tolerated up to a threshold dose, reacts above it.</td></tr>
+      <tr><td><code>diet:DQ2_2</code></td><td>HLA-DQ2.2</td><td>The HLA-DQ2.2 haplotype (chip-dependent tag coverage).</td></tr>
+      <tr><td><code>diet:DQ2_5</code></td><td>HLA-DQ2.5</td><td>The HLA-DQ2.5 haplotype (tag SNP rs2187668) — the haplotype ~90–95% of coeliac patients carry; common in the general population and NOT diagnostic.</td></tr>
+      <tr><td><code>diet:DQ7</code></td><td>HLA-DQ7</td><td>The HLA-DQ7 haplotype (chip-dependent tag coverage).</td></tr>
+      <tr><td><code>diet:DQ8</code></td><td>HLA-DQ8</td><td>The HLA-DQ8 haplotype (tag SNP rs7454108) — carried by ~5–10% of coeliac patients; common in the general population and NOT diagnostic.</td></tr>
       <tr><td><code>diet:duration</code></td><td>duration</td><td>The duration of a Symptom as an OWL-Time interval (time:Interval). A sub-property of core:atTime. Onset itself is schema:startTime.</td></tr>
       <tr><td><code>diet:egg</code></td><td>Egg</td><td>Egg. Reaction typically fast (~0–6 h).</td></tr>
       <tr><td><code>diet:eliminate</code></td><td>Eliminate</td><td>Fully remove the target trigger for a sustained period (FODMAP-style ~2–6 weeks).</td></tr>
@@ -62,6 +73,8 @@
       <tr><td><code>diet:fructose</code></td><td>Fructose</td><td>Excess free fructose (a FODMAP monosaccharide). FODMAP reactions are mid-window (~0.5–24 h) — osmotic + fermentative (RESEARCH §2.3).</td></tr>
       <tr><td><code>diet:galactan</code></td><td>Galactan (GOS)</td><td>Galacto-oligosaccharides (legumes — a FODMAP oligosaccharide). Mid-window fermentative reaction (~0.5–24 h).</td></tr>
       <tr><td><code>diet:geneticInterpretation</code></td><td>genetic interpretation</td><td>The negative-predictive-framed interpretation of a GeneticSummary: carrying DQ2/DQ8 does NOT diagnose coeliac (30–40% of everyone carries it); NOT carrying it makes coeliac very unlikely; diagnosis needs serology + biopsy while eating gluten; a consumer chip may not tag every risk allele (a null result is not reassurance).</td></tr>
+      <tr><td><code>diet:GeneticSourceType</code></td><td>Genetic Source Type</td><td>The provenance of a GeneticSummary WITHOUT any raw data: manual (known HLA type entered by hand), consumer-array (on-device-parsed 23andMe/AncestryDNA export — raw file discarded), clinical-report (an HLA lab report). 'manual' aligns with the legacy diet:enteredManually=true.</td></tr>
+      <tr><td><code>diet:GeneticSourceTypeScheme</code></td><td>Genetic Source Type scheme</td><td>The provenance value set (no raw data) for diet:sourceType.</td></tr>
       <tr><td><code>diet:GeneticSummary</code></td><td>Genetic Summary</td><td>The interpreted-ONLY summary of a user's coeliac-relevant HLA-DQ genetics: a small set of rsID→genotype→interpretation markers plus a negative-predictive-framed interpretation. The RAW genotype file is parsed on-device and discarded — it NEVER enters the pod. Carries whether it was entered manually or parsed from an upload.</td></tr>
       <tr><td><code>diet:genotype</code></td><td>genotype</td><td>The observed genotype at an HlaMarker's rsID (e.g. 'AG'). The interpreted summary value, not the raw file.</td></tr>
       <tr><td><code>diet:gluten</code></td><td>Gluten</td><td>Wheat/barley/rye gluten. Coeliac reactions have a WIDE, right-skewed lag: median ~1 h (IQR 0.6–8 h) but 13% ≥12 h and up to 24–48 h in older adults (RESEARCH §2.1). Pre-diagnosis gluten elimination is hard-blocked in the app — get tested first while still eating gluten.</td></tr>
@@ -70,8 +83,11 @@
       <tr><td><code>diet:histamine</code></td><td>Histamine</td><td>Dietary histamine / histamine intolerance. Rapid reaction (~0.25–4 h).</td></tr>
       <tr><td><code>diet:hlaMarker</code></td><td>HLA marker</td><td>Relates a GeneticSummary to one interpreted HLA-DQ marker row (rsID→genotype→interpretation). Summary rows only — never raw genotype data.</td></tr>
       <tr><td><code>diet:HlaMarker</code></td><td>HLA Marker</td><td>One coeliac-relevant HLA-DQ genetic marker row in a GeneticSummary: a tag-SNP rsID (e.g. rs2187668 for DQ2.5, rs7454108 for DQ8), the observed genotype, and its interpretation. A core:Record row; the interpreted summary, never raw genotype data.</td></tr>
+      <tr><td><code>diet:HlaRiskHaplotype</code></td><td>HLA Risk Haplotype</td><td>A coeliac-risk HLA-DQ haplotype an HlaMarker tags: DQ2.5 (tag SNP rs2187668), DQ2.2, DQ7, DQ8 (tag SNP rs7454108). Carrying one is NOT diagnostic; its clinical value is negative-predictive.</td></tr>
+      <tr><td><code>diet:HlaRiskHaplotypeScheme</code></td><td>HLA Risk Haplotype scheme</td><td>The coeliac-risk HLA-DQ haplotype value set for diet:riskHaplotype.</td></tr>
       <tr><td><code>diet:home</code></td><td>Home</td><td>Eaten at home.</td></tr>
       <tr><td><code>diet:inconclusive</code></td><td>Inconclusive</td><td>The protocol did not yield a clear verdict (e.g. confounded, incomplete).</td></tr>
+      <tr><td><code>diet:indeterminate</code></td><td>Indeterminate</td><td>The rollup cannot be called from the available markers.</td></tr>
       <tr><td><code>diet:ingredientsText</code></td><td>ingredients text</td><td>The cached Open Food Facts ingredients_text for a FoodItem (or an OCR draft, flagged diet:sourceConfidence diet:ocr). Scanned for sulphite aliases in exposure derivation.</td></tr>
       <tr><td><code>diet:jointPain</code></td><td>Joint pain</td><td>Joint pain or aching.</td></tr>
       <tr><td><code>diet:lactose</code></td><td>Lactose</td><td>Milk sugar. Secondary lactose intolerance from villous atrophy is common and often RESOLVES as the gut heals (≥6 months) — its conclusions are time-boxed and re-challenged (RESEARCH §2.2). Acute reaction is tight, ~0.5–6 h.</td></tr>
@@ -81,7 +97,14 @@
       <tr><td><code>diet:large</code></td><td>Large</td><td>A large portion.</td></tr>
       <tr><td><code>diet:likely</code></td><td>Likely</td><td>A strong correlational pattern — but still correlation, which proposes; a protocol confirms.</td></tr>
       <tr><td><code>diet:manual</code></td><td>Manual</td><td>Entered manually by the user.</td></tr>
+      <tr><td><code>diet:manualEntry</code></td><td>Manual entry</td><td>A known HLA type/result entered by hand (≡ the legacy diet:enteredManually=true).</td></tr>
+      <tr><td><code>diet:markerAbsent</code></td><td>Absent</td><td>The risk allele the marker tags is absent (only meaningful if the locus was tested — see diet:coverageComplete).</td></tr>
       <tr><td><code>diet:markerInterpretation</code></td><td>marker interpretation</td><td>The interpretation of an HlaMarker's genotype (e.g. 'rs2187668 present → DQ2.5 risk haplotype').</td></tr>
+      <tr><td><code>diet:markerPresence</code></td><td>marker presence</td><td>The structured presence call for an HlaMarker (present / absent / uncertain). 'uncertain' for a no-call or ambiguous genotype — never a false 'absent'.</td></tr>
+      <tr><td><code>diet:MarkerPresence</code></td><td>Marker Presence</td><td>The structured presence call for one HlaMarker: present / absent / uncertain. 'uncertain' encodes a no-call or ambiguous genotype — never a false 'absent' (an unknown must not read as reassurance).</td></tr>
+      <tr><td><code>diet:MarkerPresenceScheme</code></td><td>Marker Presence scheme</td><td>The structured presence-call value set for diet:markerPresence.</td></tr>
+      <tr><td><code>diet:markerPresent</code></td><td>Present</td><td>The risk allele the marker tags is present.</td></tr>
+      <tr><td><code>diet:markerUncertain</code></td><td>Uncertain</td><td>A no-call or ambiguous genotype — NEVER a false 'absent'; an unknown must not read as reassurance.</td></tr>
       <tr><td><code>diet:Meal</code></td><td>Meal</td><td>A logged intake event: one or more food items ingested at a recorded time, optionally in an eating-out context. A core:Record about the pod-owner Patient and a schema:FoodEvent (schema.org has no `schema:Meal` — that IRI 404s). Its schema:startTime is the INGESTION time — the load-bearing anchor for lagged exposure↔symptom correlation.</td></tr>
       <tr><td><code>diet:MealContext</code></td><td>Meal Context</td><td>The eating context of a Meal (home / restaurant / work / travel / other) — the eating-out signal used to surface 'your reactions cluster on restaurant meals'.</td></tr>
       <tr><td><code>diet:MealContextScheme</code></td><td>Meal Context scheme</td><td>The eating-context value set for diet:context.</td></tr>
@@ -97,6 +120,7 @@
       <tr><td><code>diet:offCategory</code></td><td>OFF category</td><td>An Open Food Facts categories_tags value for a FoodItem (e.g. en:dried-fruits, en:wines). LOAD-BEARING: the possible-undeclared sulphite Exposure fires from a high-risk category even when allergen/additive tags are clean; if the category is unknown, that fallback is suppressed (no false alarm).</td></tr>
       <tr><td><code>diet:offRef</code></td><td>OFF reference</td><td>The Open Food Facts product reference IRI (https://world.openfoodfacts.org/product/{barcode}) a FoodItem was resolved from. Open Food Facts data is ODbL — attribute it wherever the product is shown.</td></tr>
       <tr><td><code>diet:other</code></td><td>Other</td><td>An eating context not covered by the other values.</td></tr>
+      <tr><td><code>diet:partialCoverage</code></td><td>Partial coverage</td><td>The source could not speak to every coeliac-risk locus, so an 'absent' result cannot be asserted; a 'not found' here is not reassurance.</td></tr>
       <tr><td><code>diet:phase</code></td><td>phase</td><td>The current phase of an EliminationProtocol's state machine (baseline / eliminate / washout / reintroduce / observe / concluded).</td></tr>
       <tr><td><code>diet:phasePlannedEnd</code></td><td>phase planned end</td><td>The planned end of the current phase (from the per-phase default duration, user-adjustable).</td></tr>
       <tr><td><code>diet:phaseStarted</code></td><td>phase started</td><td>When the current phase of an EliminationProtocol began.</td></tr>
@@ -114,6 +138,9 @@
       <tr><td><code>diet:restaurant</code></td><td>Restaurant</td><td>Eaten out at a restaurant or food establishment — the cross-contamination-risk context.</td></tr>
       <tr><td><code>diet:restsOn</code></td><td>rests on</td><td>A ToleranceConclusion a DietPlan's exclusions rest on ('…and why'). A sub-property of prov:wasDerivedFrom.</td></tr>
       <tr><td><code>diet:reviewAfter</code></td><td>review after</td><td>The date after which a ToleranceConclusion should be re-challenged. Secondary intolerances (e.g. lactose during villous healing) are time-boxed — this date drives the proactive re-challenge prompt that serves the multi-year journey.</td></tr>
+      <tr><td><code>diet:riskHaplotype</code></td><td>risk haplotype</td><td>The machine-readable coeliac-risk HLA-DQ haplotype an HlaMarker tags (DQ2.5 / DQ2.2 / DQ7 / DQ8) — additive to the free-text diet:markerInterpretation.</td></tr>
+      <tr><td><code>diet:riskHaplotypeAbsent</code></td><td>Risk haplotype absent</td><td>No DQ2/DQ8 risk haplotype was found → coeliac is very unlikely (the strong negative predictive value). Valid ONLY with diet:coverageComplete=true. NOT a statement that 'you don't have coeliac'.</td></tr>
+      <tr><td><code>diet:riskHaplotypePresent</code></td><td>Risk haplotype present</td><td>A DQ2/DQ8 risk haplotype was found. NOT a diagnosis — DQ2/DQ8 is common (~25–40% of the general population); most carriers never develop coeliac.</td></tr>
       <tr><td><code>diet:rsid</code></td><td>rsID</td><td>The dbSNP reference-SNP identifier of an HlaMarker (e.g. rs2187668, rs7454108).</td></tr>
       <tr><td><code>diet:sector</code></td><td>Diet sub-sector</td><td>The Diet (nutrition / food-intolerance) sub-sector of the Health sector. The value a food-diary app's fedapp:sector names in its Client Identifier Document. Backed by this sub-sector ontology; narrower than the Health sector.</td></tr>
       <tr><td><code>diet:severity</code></td><td>severity</td><td>The ordinal severity of a Symptom — an integer 0–10, or a coded band (none/mild/moderate/severe) carried as its skos:notation. Store an ordinal; never a false-precise measurement.</td></tr>
@@ -122,6 +149,7 @@
       <tr><td><code>diet:sourceConfidence</code></td><td>source confidence</td><td>How a FoodItem's data was captured (manual / off / ocr / voice). Low-confidence sources are user-confirmed drafts the engine MAY down-weight.</td></tr>
       <tr><td><code>diet:SourceConfidence</code></td><td>Source Confidence</td><td>How a FoodItem's data was captured: manual / off (Open Food Facts) / ocr / voice. Low-confidence sources (ocr, voice) are user-confirmed drafts and MAY be down-weighted by the inference engine.</td></tr>
       <tr><td><code>diet:SourceConfidenceScheme</code></td><td>Source Confidence scheme</td><td>The FoodItem data-capture provenance value set for diet:sourceConfidence.</td></tr>
+      <tr><td><code>diet:sourceType</code></td><td>source type</td><td>The provenance of a GeneticSummary WITHOUT raw data (manual / consumer-array / clinical-report). Supersedes the boolean diet:enteredManually (sourceType=manual ≡ enteredManually=true).</td></tr>
       <tr><td><code>diet:soy</code></td><td>Soy</td><td>Soy/soya. Reaction typically fast to mid (~0–8 h).</td></tr>
       <tr><td><code>diet:sulphites</code></td><td>Sulphites</td><td>Sulphur dioxide + sulphites (E220–E228). Asthma-type reaction (wheeze, flushing, headache), acute and tight (~0.25–6 h). Sub-10-ppm is legally unlabelled — hence the possible-undeclared category flag (RESEARCH §2.7).</td></tr>
       <tr><td><code>diet:suspected</code></td><td>Suspected</td><td>A moderate pattern worth testing with an elimination protocol.</td></tr>

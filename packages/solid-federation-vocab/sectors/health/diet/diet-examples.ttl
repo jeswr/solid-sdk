@@ -68,17 +68,48 @@ ex:conclusion-lactose a diet:ToleranceConclusion ;
     diet:reviewAfter "2027-01-02"^^xsd:date ;
     diet:derivedFrom ex:exposure-01 , ex:symptom-01 .
 
-# 8. GeneticSummary — interpreted summary only (raw file never stored).
+# 8. GeneticSummary — interpreted summary only (raw file never stored). Consent
+#    is a MUST (fail-closed); the coded rollup here is risk-haplotype-PRESENT,
+#    which is NOT a diagnosis (DQ2/DQ8 is common), so no coverage claim is needed.
 ex:genetics a diet:GeneticSummary ;
+    diet:consentGiven true ;
     diet:enteredManually false ;
+    diet:sourceType diet:consumerArray ;
+    diet:coverageComplete false ;
+    diet:coeliacGeneticRisk diet:riskHaplotypePresent ;
     diet:geneticInterpretation "Carrying DQ2.5 does NOT mean you have coeliac (30–40% of people carry DQ2/DQ8); it cannot diagnose you. Diagnosis needs serology + biopsy while eating gluten. This consumer chip may not tag every risk allele — a null result is not reassurance." ;
     diet:hlaMarker ex:marker-dq25 .
 
-# 8b. HlaMarker — one rsID row.
+# 8b. HlaMarker — one rsID row, with the machine-readable risk-haplotype tag +
+#     structured presence call (additive to the free-text interpretation).
 ex:marker-dq25 a diet:HlaMarker ;
     diet:rsid "rs2187668" ;
     diet:genotype "AG" ;
+    diet:riskHaplotype diet:DQ2_5 ;
+    diet:markerPresence diet:markerPresent ;
     diet:markerInterpretation "rs2187668 present → DQ2.5 risk haplotype." .
+
+# 8c. GeneticSummary (negative case) — a clinical HLA report with COMPLETE
+#     coverage that found no risk haplotype: the NPV-only 'risk-haplotype-absent'
+#     rollup is sound ONLY because diet:coverageComplete = true (the
+#     GeneticRiskCoverageShape safety invariant). 'Unlikely', never 'you don't
+#     have coeliac'.
+ex:genetics-negative a diet:GeneticSummary ;
+    diet:consentGiven true ;
+    diet:enteredManually false ;
+    diet:sourceType diet:clinicalReport ;
+    diet:coverageComplete true ;
+    diet:coeliacGeneticRisk diet:riskHaplotypeAbsent ;
+    diet:geneticInterpretation "No DQ2/DQ8 risk haplotype was found on a complete HLA-DQ typing → coeliac is very unlikely (strong negative predictive value). This is NOT a statement that you don't have coeliac; discuss with a clinician." ;
+    diet:hlaMarker ex:marker-dq8-absent .
+
+# 8d. HlaMarker — an absent DQ8 tag SNP (only meaningful because coverage is complete).
+ex:marker-dq8-absent a diet:HlaMarker ;
+    diet:rsid "rs7454108" ;
+    diet:genotype "TT" ;
+    diet:riskHaplotype diet:DQ8 ;
+    diet:markerPresence diet:markerAbsent ;
+    diet:markerInterpretation "rs7454108 absent → no DQ8 risk haplotype tagged." .
 
 # 9. DietPlan — the working exclusion set + why.
 ex:plan a diet:DietPlan ;

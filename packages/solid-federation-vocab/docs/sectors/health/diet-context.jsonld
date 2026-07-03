@@ -24,6 +24,13 @@
       "@id": "diet:challengeStep",
       "@type": "xsd:integer"
     },
+    "clinicalReport": "diet:clinicalReport",
+    "coeliacGeneticRisk": {
+      "@id": "diet:coeliacGeneticRisk",
+      "@type": "@id"
+    },
+    "CoeliacGeneticRisk": "diet:CoeliacGeneticRisk",
+    "CoeliacGeneticRiskScheme": "diet:CoeliacGeneticRiskScheme",
     "concluded": "diet:concluded",
     "confidence": {
       "@id": "diet:confidence",
@@ -32,10 +39,19 @@
     "Confidence": "diet:Confidence",
     "ConfidenceScheme": "diet:ConfidenceScheme",
     "confirmedByOwnTest": "diet:confirmedByOwnTest",
+    "consentGiven": {
+      "@id": "diet:consentGiven",
+      "@type": "xsd:boolean"
+    },
     "constipation": "diet:constipation",
+    "consumerArray": "diet:consumerArray",
     "context": {
       "@id": "diet:context",
       "@type": "@id"
+    },
+    "coverageComplete": {
+      "@id": "diet:coverageComplete",
+      "@type": "xsd:boolean"
     },
     "declaredAllergen": "diet:declaredAllergen",
     "derivedFrom": {
@@ -45,6 +61,10 @@
     "diarrhoea": "diet:diarrhoea",
     "DietPlan": "diet:DietPlan",
     "doseDependent": "diet:doseDependent",
+    "DQ2_2": "diet:DQ2_2",
+    "DQ2_5": "diet:DQ2_5",
+    "DQ7": "diet:DQ7",
+    "DQ8": "diet:DQ8",
     "duration": {
       "@id": "diet:duration",
       "@type": "@id"
@@ -77,6 +97,8 @@
       "@id": "diet:geneticInterpretation",
       "@type": "xsd:string"
     },
+    "GeneticSourceType": "diet:GeneticSourceType",
+    "GeneticSourceTypeScheme": "diet:GeneticSourceTypeScheme",
     "GeneticSummary": "diet:GeneticSummary",
     "genotype": {
       "@id": "diet:genotype",
@@ -94,8 +116,11 @@
       "@type": "@id"
     },
     "HlaMarker": "diet:HlaMarker",
+    "HlaRiskHaplotype": "diet:HlaRiskHaplotype",
+    "HlaRiskHaplotypeScheme": "diet:HlaRiskHaplotypeScheme",
     "home": "diet:home",
     "inconclusive": "diet:inconclusive",
+    "indeterminate": "diet:indeterminate",
     "ingredientsText": {
       "@id": "diet:ingredientsText",
       "@type": "xsd:string"
@@ -117,10 +142,20 @@
     "large": "diet:large",
     "likely": "diet:likely",
     "manual": "diet:manual",
+    "manualEntry": "diet:manualEntry",
+    "markerAbsent": "diet:markerAbsent",
     "markerInterpretation": {
       "@id": "diet:markerInterpretation",
       "@type": "xsd:string"
     },
+    "markerPresence": {
+      "@id": "diet:markerPresence",
+      "@type": "@id"
+    },
+    "MarkerPresence": "diet:MarkerPresence",
+    "MarkerPresenceScheme": "diet:MarkerPresenceScheme",
+    "markerPresent": "diet:markerPresent",
+    "markerUncertain": "diet:markerUncertain",
     "Meal": "diet:Meal",
     "MealContext": "diet:MealContext",
     "MealContextScheme": "diet:MealContextScheme",
@@ -145,6 +180,7 @@
       "@type": "@id"
     },
     "other": "diet:other",
+    "partialCoverage": "diet:partialCoverage",
     "phase": {
       "@id": "diet:phase",
       "@type": "@id"
@@ -180,6 +216,12 @@
       "@id": "diet:reviewAfter",
       "@type": "xsd:date"
     },
+    "riskHaplotype": {
+      "@id": "diet:riskHaplotype",
+      "@type": "@id"
+    },
+    "riskHaplotypeAbsent": "diet:riskHaplotypeAbsent",
+    "riskHaplotypePresent": "diet:riskHaplotypePresent",
     "rsid": {
       "@id": "diet:rsid",
       "@type": "xsd:string"
@@ -194,6 +236,10 @@
     },
     "SourceConfidence": "diet:SourceConfidence",
     "SourceConfidenceScheme": "diet:SourceConfidenceScheme",
+    "sourceType": {
+      "@id": "diet:sourceType",
+      "@type": "@id"
+    },
     "soy": "diet:soy",
     "sulphites": "diet:sulphites",
     "suspected": "diet:suspected",
