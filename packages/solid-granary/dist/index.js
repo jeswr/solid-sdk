@@ -28,7 +28,7 @@ export { isActivity, isCollection, iterateObjects, typeSet } from "./granary.js"
 // --- the ingest API (write to a pod) + the pure transform ---
 export { defaultSlug, granaryToCanonical, ingestGranary, } from "./ingest.js";
 // --- granary AS2 object → canonical message mapping ---
-export { granaryObjectToCanonical, importedDate, refToIri } from "./map.js";
+export { granaryObjectToCanonical, importedDate, refToIri, safeHttpIri } from "./map.js";
 // --- the optional SSRF-guarded fetch-from-granary helper ---
 export { fetchGranary, GranaryFetchError } from "./remote.js";
 //# sourceMappingURL=index.js.map

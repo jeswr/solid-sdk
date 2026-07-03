@@ -26,7 +26,7 @@
  */
 import { serializeAs2, serializeLongChat } from "@jeswr/solid-chat-interop";
 import { iterateObjects } from "./granary.js";
-import { granaryObjectToCanonical } from "./map.js";
+import { granaryObjectToCanonical, safeHttpIri } from "./map.js";
 /** Characters not safe in a resource slug, collapsed to `-`. */
 const UNSAFE_SLUG = /[^a-zA-Z0-9._-]+/g;
 /**
@@ -47,6 +47,81 @@ export function defaultSlug(msg, index) {
     }
     const token = h.toString(16).padStart(8, "0");
     return `granary-${token}.ttl`;
+}
+/**
+ * Redact the ENTIRE authority userinfo (`user:pass@`) from a URL string so credentials
+ * NEVER reach an error message / log. This is a pure SECRET-SAFETY pass, NOT RFC-correct
+ * URL parsing — the inputs that reach it are malformed by definition (that is why they
+ * failed validation), so it must not let ANY delimiter other than the path `/` terminate
+ * the userinfo scan. A "stop at the first `@`/whitespace/`?`/`#`" approach leaks a
+ * userinfo carrying those very characters (`user:sec@ret@h`, `user:pass word@h`,
+ * `user:sec?ret@h`, `user:sec#ret@h`).
+ *
+ * Definitive rule:
+ *  1. Authority start = just after `//` for a scheme-relative value, else just after the
+ *     first `://`, else position 0 (no scheme).
+ *  2. Pre-path/authority region = from there up to (but excluding) the FIRST `/` at or
+ *     after it — and ONLY `/` ends it; `?`, `#`, and whitespace are all treated as part
+ *     of a (malformed) userinfo. No `/` ⇒ the region runs to end of string.
+ *  3. Find the LAST `@` in that region. If present, replace everything from the authority
+ *     start up to and INCLUDING it with `***@` (so an embedded-`@` userinfo goes in full).
+ *     If absent, return unchanged — a later `@` in the PATH is not a credential.
+ */
+function redactUrl(raw) {
+    let authStart;
+    if (raw.startsWith("//")) {
+        authStart = 2; // scheme-relative: authority begins right after the leading `//`
+    }
+    else {
+        const s = raw.indexOf("://");
+        authStart = s === -1 ? 0 : s + 3;
+    }
+    const prefix = raw.slice(0, authStart); // scheme (+ `//`) kept verbatim, or "" if none
+    const rest = raw.slice(authStart);
+    const slash = rest.indexOf("/"); // ONLY the path `/` ends the authority region
+    const authEnd = slash === -1 ? rest.length : slash;
+    const authority = rest.slice(0, authEnd);
+    const after = rest.slice(authEnd);
+    const lastAt = authority.lastIndexOf("@");
+    if (lastAt === -1)
+        return raw; // no userinfo in the authority
+    const host = authority.slice(lastAt + 1);
+    return `${prefix}***@${host}${after}`;
+}
+/**
+ * Validate the caller-configured target container: it MUST be an absolute http(s) URL,
+ * with NO embedded credentials and NO IRIREF-illegal characters. A scheme-relative /
+ * non-absolute value would make `new URL(slug, base)` throw unpredictably; a
+ * `file:`/`javascript:` base is not a pod; a `https://user:pass@…` base would embed
+ * credentials in every write URL (a credential-in-URL leak — SECURITY check 5); and a
+ * container path carrying `|`/`^`/backtick etc. would flow UNENCODED into the RDF
+ * SUBJECT `<container…#it>` (the slug is already sanitised, so the container is the only
+ * remaining source), yielding malformed Turtle a strict downstream parser rejects. Fail
+ * closed on any of these — and every error message REDACTS userinfo first, so a bad
+ * `user:pass@` value can never leak its credentials into a thrown error / log.
+ */
+function assertValidContainer(container) {
+    const safe = redactUrl(container);
+    let u;
+    try {
+        u = new URL(container);
+    }
+    catch {
+        throw new TypeError(`ingestGranary: \`container\` must be an absolute URL: ${safe}`);
+    }
+    if (u.protocol !== "http:" && u.protocol !== "https:") {
+        throw new TypeError(`ingestGranary: \`container\` must be an http(s) URL: ${safe}`);
+    }
+    if (u.username !== "" || u.password !== "") {
+        throw new TypeError("ingestGranary: `container` must not embed credentials (user:pass@)");
+    }
+    // `safeHttpIri` canonicalises then percent-encodes the residual IRIREF-illegal chars.
+    // If it differs from the plain canonical `href`, the container carries such a char —
+    // which would land UNENCODED in the RDF subject (the subject is built from the raw
+    // write URL, never re-encoded). Reject rather than silently rewrite the write target.
+    if (safeHttpIri(container) !== u.href) {
+        throw new TypeError(`ingestGranary: \`container\` contains characters illegal in an RDF IRI: ${safe}`);
+    }
 }
 /** Join a container URL (ending `/`) and a slug into a resource URL, safely. */
 function resourceUrl(container, slug) {
@@ -83,7 +158,14 @@ export async function ingestGranary(payload, options) {
     if (typeof container !== "string" || container.length === 0) {
         throw new TypeError("ingestGranary: `container` is required");
     }
-    const base = container.endsWith("/") ? container : `${container}/`;
+    assertValidContainer(container);
+    // Use the WHATWG-normalised form as the base so the write URL AND the RDF subject are
+    // byte-consistent with what `fetch` will actually request (path residual chars like
+    // `^`/`` ` ``/`{`/`}` are percent-encoded identically). This also keeps `resourceUrl`'s
+    // containment check from tripping on a raw-vs-normalised mismatch. (`|` — the one char
+    // the URL parser leaves literal — is already rejected by `assertValidContainer`.)
+    const canonical = new URL(container).href;
+    const base = canonical.endsWith("/") ? canonical : `${canonical}/`;
     const items = [];
     let written = 0;
     let failed = 0;
@@ -97,14 +179,31 @@ export async function ingestGranary(payload, options) {
             const headers = { "content-type": "text/turtle" };
             if (conditional === "if-none-match")
                 headers["if-none-match"] = "*";
-            const res = await writeFetch(url, { method: "PUT", headers, body });
-            const ok = res.status >= 200 && res.status < 300;
-            items.push({ index, url, written: ok, status: res.status });
+            // `redirect: "manual"` is load-bearing, not cosmetic: `writeFetch` is a
+            // DPoP/WebID-authenticated fetch, so if the pod (or a hostile intermediary)
+            // answers a PUT with a 3xx, the default `redirect: "follow"` would re-send the
+            // authorization + DPoP proof AND the message body to the redirect target — a
+            // cross-origin credential + data leak. Forcing "manual" makes the authed fetch
+            // return the redirect WITHOUT following it; we then treat any 3xx / opaque
+            // redirect as a FAILED write (fail-closed), never a success.
+            const res = await writeFetch(url, { method: "PUT", headers, body, redirect: "manual" });
+            const redirected = res.type === "opaqueredirect" || (res.status >= 300 && res.status < 400);
+            const ok = !redirected && res.status >= 200 && res.status < 300;
             if (ok) {
+                items.push({ index, url, written: true, status: res.status });
                 written++;
             }
             else {
                 failed++;
+                items.push(redirected
+                    ? {
+                        index,
+                        url,
+                        written: false,
+                        status: res.status || undefined,
+                        error: `write refused a redirect (${res.type || res.status}); not followed to protect DPoP/WebID credentials`,
+                    }
+                    : { index, url, written: false, status: res.status });
                 if (!continueOnError) {
                     return { total: index + 1, written, failed, items };
                 }

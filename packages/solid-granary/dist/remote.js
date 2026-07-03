@@ -58,6 +58,13 @@ export async function fetchGranary(url, options = {}) {
     try {
         res = await guarded(url, {
             method: "GET",
+            // Fail closed on redirects at THIS layer too. The default `nodeGuardedFetch`
+            // already re-validates + re-pins every hop internally (so it FOLLOWS safe
+            // redirects and returns a 2xx), and overrides this flag with its own manual
+            // loop — so this is a no-op for the guarded path. But if a caller injects their
+            // OWN `fetch` (options.fetch), `redirect: "manual"` stops it from silently
+            // auto-following a redirect to another origin; the 3xx check below then rejects.
+            redirect: "manual",
             headers: {
                 accept: "application/activity+json, application/ld+json, application/json",
             },
@@ -70,6 +77,12 @@ export async function fetchGranary(url, options = {}) {
         if (err instanceof GranaryFetchError)
             throw err;
         throw new GranaryFetchError(`granary fetch failed: ${url}`, url, { cause: err });
+    }
+    // Fail closed on a redirect (an injected non-guarded fetch could otherwise be told
+    // to follow one). The default guarded fetch already followed+re-validated safe hops
+    // and returns a 2xx, so this never fires for the guarded path.
+    if (res.type === "opaqueredirect" || (res.status >= 300 && res.status < 400)) {
+        throw new GranaryFetchError(`granary endpoint returned a redirect (${res.type || res.status}); not followed`, url, { status: res.status || undefined });
     }
     if (res.status < 200 || res.status >= 300) {
         throw new GranaryFetchError(`granary endpoint returned ${res.status}`, url, {
