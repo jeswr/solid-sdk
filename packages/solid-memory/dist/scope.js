@@ -27,6 +27,13 @@ export function normalizeContainer(container) {
     if (url.protocol !== "http:" && url.protocol !== "https:") {
         throw new Error(`[solid-memory] \`container\` must be an http(s) URL, got protocol: ${url.protocol}`);
     }
+    // Refuse embedded credentials (https://user:pass@host/…): a credential does not
+    // belong in an address (it leaks into logs/errors), and `fetch` rejects such URLs
+    // anyway — fail here, clearly, at construction (suite convention, cf.
+    // n8n-nodes-solid's pod-scope guard).
+    if (url.username !== "" || url.password !== "") {
+        throw new Error("[solid-memory] `container` must not embed credentials (userinfo refused)");
+    }
     // Collapse the path to a single trailing slash; preserve everything else.
     if (!url.pathname.endsWith("/")) {
         url.pathname = `${url.pathname}/`;
@@ -61,6 +68,13 @@ export function assertWithinBase(container, url, opts) {
     }
     catch {
         throw new Error(`[solid-memory] target URL is invalid: ${url}`);
+    }
+    // Refuse a target with embedded credentials (https://user:pass@host/…) — the
+    // origin/path checks below would pass for the store's own host, but a userinfo
+    // component has no business in a target address (it leaks into logs/errors and
+    // `fetch` rejects it anyway). Fail closed here, in the one reviewed guard.
+    if (u.username !== "" || u.password !== "") {
+        throw new Error(`[solid-memory] target URL embeds credentials (userinfo refused): ${u.origin}${u.pathname}`);
     }
     if (u.origin !== b.origin) {
         throw new Error(`[solid-memory] target URL ${url} escapes container origin ${b.origin} (refused)`);
