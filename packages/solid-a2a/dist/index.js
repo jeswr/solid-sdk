@@ -919,8 +919,8 @@ async function hashQuads(quads) {
   return `${PROTOCOL_HASH_PREFIX}${digest}`;
 }
 async function verifyProtocolDocument(body, expectedHash, contentType2 = "text/turtle") {
-  let quads;
   try {
+    let quads;
     if (typeof body === "string") {
       const dataset = await parseRdf(body, contentType2, {});
       quads = [...dataset];
@@ -929,10 +929,10 @@ async function verifyProtocolDocument(body, expectedHash, contentType2 = "text/t
     } else {
       quads = [...body];
     }
+    return constantTimeEquals(await hashQuads(quads), expectedHash);
   } catch {
     return false;
   }
-  return constantTimeEquals(await hashQuads(quads), expectedHash);
 }
 function nodeShapeSubjects(shape) {
   const out = /* @__PURE__ */ new Set();

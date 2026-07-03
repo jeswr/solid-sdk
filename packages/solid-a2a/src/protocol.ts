@@ -134,8 +134,8 @@ export async function verifyProtocolDocument(
   expectedHash: string,
   contentType = "text/turtle",
 ): Promise<boolean> {
-  let quads: readonly Quad[];
   try {
+    let quads: readonly Quad[];
     if (typeof body === "string") {
       const dataset = await parseRdf(body, contentType, {});
       quads = [...dataset] as Quad[];
@@ -144,11 +144,14 @@ export async function verifyProtocolDocument(
     } else {
       quads = [...(body as DatasetCore)] as Quad[];
     }
+    // The hash step is INSIDE the try too: the RDFC-1.0 canonicalization is async
+    // and CAN reject (e.g. a malformed quad that parses but fails canonicalization),
+    // and the documented contract is to never throw — a body that cannot be
+    // parsed OR canonicalized/hashed cannot match a pinned hash, so fail closed.
+    return constantTimeEquals(await hashQuads(quads), expectedHash);
   } catch {
-    // A body that does not parse cannot match a hash — fail closed.
     return false;
   }
-  return constantTimeEquals(await hashQuads(quads), expectedHash);
 }
 
 /**

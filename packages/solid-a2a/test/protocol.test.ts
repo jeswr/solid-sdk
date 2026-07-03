@@ -92,6 +92,17 @@ describe("verifyProtocolDocument", () => {
   it("fails closed (returns false, no throw) on an unparseable body", async () => {
     expect(await verifyProtocolDocument("<<<not rdf>>>", "sha256:abc", "text/turtle")).toBe(false);
   });
+
+  it("fails closed (returns false, no throw) when canonicalization/hash itself errors", async () => {
+    // A quad-array body that bypasses the parse step (Array.isArray) but is
+    // malformed enough that RDFC-1.0 canonicalization rejects (missing term
+    // properties). The hash step is async and now runs inside verify's try/catch,
+    // so the rejection must fail closed rather than escape as a thrown promise.
+    const malformed = [{ notAQuad: true }] as unknown as Parameters<
+      typeof verifyProtocolDocument
+    >[0];
+    await expect(verifyProtocolDocument(malformed, "sha256:abc")).resolves.toBe(false);
+  });
 });
 
 describe("Protocol Document serialisation", () => {
