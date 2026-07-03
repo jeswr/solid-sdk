@@ -349,6 +349,11 @@ export function SolidSessionProvider({ children }: { children: ReactNode }) {
     if (managerReady.current) return;
     let cancelled = false;
     (async () => {
+      // 0.1.5+: the package ROOT no longer registers <authorization-code-flow> as a
+      // side-effect — the `/registerElements` subpath does. Import it FIRST so the
+      // custom element is defined before flowRef.current.getCode is used; without
+      // this the element never upgrades and interactive login silently breaks.
+      await import("@solid/reactive-authentication/registerElements");
       const { ReactiveFetchManager } = await import("@solid/reactive-authentication");
       const { WebIdDPoPTokenProvider } = await import("@/lib/webid-token-provider");
       const ui = flowRef.current;
@@ -649,7 +654,9 @@ export function SolidSessionProvider({ children }: { children: ReactNode }) {
   return (
     <SessionContext.Provider value={value}>
       {children}
-      {/* Registered + driven by @solid/reactive-authentication; visually hidden. */}
+      {/* Registered via the "@solid/reactive-authentication/registerElements"
+          side-effect import (in the fetch-patch effect above) + driven by
+          @solid/reactive-authentication; visually hidden. */}
       <authorization-code-flow
         ref={flowRef as unknown as React.Ref<HTMLElement>}
         style={{ position: "absolute", width: 0, height: 0, overflow: "hidden" }}
