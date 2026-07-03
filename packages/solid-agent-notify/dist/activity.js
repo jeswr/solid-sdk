@@ -74,34 +74,44 @@ export function escapeIri(value) {
  * characters, so the result contains no `<…>`-terminating character yet denotes the
  * exact IRI the caller supplied.
  *
- * Values carrying a LEADING or TRAILING C0-control-or-space are REJECTED outright:
- * the WHATWG parser STRIPS those before parsing, so `" https://x"` would validate
- * as `https://x` while `escapeIri(" https://x")` would emit `%20https://x` — a
- * DIFFERENT, malformed IRI. Rejecting keeps the validated string and the emitted
- * string from ever diverging.
+ * The order is ESCAPE-FIRST, then VALIDATE-THE-ESCAPED, then EMIT-THE-ESCAPED —
+ * the ONLY order that closes the WHATWG-stripping divergence. The URL parser both
+ * TRIMS leading/trailing C0-control-or-space AND REMOVES *embedded* tab/newline/CR
+ * (U+0009/000A/000D) from ANYWHERE before parsing, so validating the RAW value and
+ * emitting an escaped copy could disagree (`ht\ntps://x` parses as `https://x` yet
+ * `escapeIri` would emit `ht%0Atps://x`). By percent-encoding the FULL forbidden
+ * set — including every C0 control (tab/nl/cr → `%09`/`%0A`/`%0D`) — BEFORE
+ * `new URL()`, the parser has nothing left to strip, so the string we validate is
+ * byte-identical to the string we emit. A leading/trailing C0-or-space is still
+ * rejected outright (rather than emitted as a `%XX`-suffixed IRI) so a stray edge
+ * byte can't silently change which resource the IRI denotes.
  */
 export function safeHttpIri(value) {
     if (typeof value !== "string")
         return undefined;
-    // WHATWG URL trims leading/trailing C0-controls-or-space (code point <= U+0020)
-    // BEFORE parsing — reject such values so the parsed (trimmed) value can never
-    // diverge from the escaped (untrimmed) value we emit. (Char-code check, not a
-    // control-character regex, which the linter forbids.) Every trimmed byte is in
-    // the BMP single-unit range, so `charCodeAt` is sufficient.
+    // Reject a leading/trailing C0-control-or-space (code point <= U+0020) outright:
+    // we do NOT want to emit a `%20`/`%0A`-suffixed IRI for a stray edge byte. (A
+    // char-code check, not a control-character regex, which the linter forbids; every
+    // such byte is in the BMP single-unit range, so `charCodeAt` is sufficient.)
     const firstCode = value.charCodeAt(0);
     const lastCode = value.charCodeAt(value.length - 1);
     if (firstCode <= 0x20 || lastCode <= 0x20)
         return undefined;
+    // ESCAPE FIRST — percent-encode the full IRIREF-forbidden set (incl. every C0
+    // control) so the WHATWG parser cannot STRIP embedded tab/nl/cr out from under us.
+    const escaped = escapeIri(value);
     let u;
     try {
-        u = new URL(value);
+        u = new URL(escaped);
     }
     catch {
         return undefined;
     }
     if (u.protocol !== "http:" && u.protocol !== "https:")
         return undefined;
-    return escapeIri(value);
+    // Emit EXACTLY what we validated (the escaped string), never `u.href` — RDF
+    // identity is lexical, so default ports / host case / dot-segments are preserved.
+    return escaped;
 }
 /**
  * A safe same-document `#`-fragment: starts with `#` and contains ONLY RFC 3987

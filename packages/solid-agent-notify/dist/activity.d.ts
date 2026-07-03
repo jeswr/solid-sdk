@@ -61,11 +61,17 @@ export declare function escapeIri(value: string): string;
  * characters, so the result contains no `<…>`-terminating character yet denotes the
  * exact IRI the caller supplied.
  *
- * Values carrying a LEADING or TRAILING C0-control-or-space are REJECTED outright:
- * the WHATWG parser STRIPS those before parsing, so `" https://x"` would validate
- * as `https://x` while `escapeIri(" https://x")` would emit `%20https://x` — a
- * DIFFERENT, malformed IRI. Rejecting keeps the validated string and the emitted
- * string from ever diverging.
+ * The order is ESCAPE-FIRST, then VALIDATE-THE-ESCAPED, then EMIT-THE-ESCAPED —
+ * the ONLY order that closes the WHATWG-stripping divergence. The URL parser both
+ * TRIMS leading/trailing C0-control-or-space AND REMOVES *embedded* tab/newline/CR
+ * (U+0009/000A/000D) from ANYWHERE before parsing, so validating the RAW value and
+ * emitting an escaped copy could disagree (`ht\ntps://x` parses as `https://x` yet
+ * `escapeIri` would emit `ht%0Atps://x`). By percent-encoding the FULL forbidden
+ * set — including every C0 control (tab/nl/cr → `%09`/`%0A`/`%0D`) — BEFORE
+ * `new URL()`, the parser has nothing left to strip, so the string we validate is
+ * byte-identical to the string we emit. A leading/trailing C0-or-space is still
+ * rejected outright (rather than emitted as a `%XX`-suffixed IRI) so a stray edge
+ * byte can't silently change which resource the IRI denotes.
  */
 export declare function safeHttpIri(value: string | undefined): string | undefined;
 /** Typed `@rdfjs/wrapper` view of a single AS2.0 activity subject (read + write). */
