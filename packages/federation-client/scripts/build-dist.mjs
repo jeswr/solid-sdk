@@ -38,13 +38,104 @@
  * The committed `dist/` is kept in sync with `src/` by `scripts/check-dist-fresh.mjs`.
  */
 import { execFileSync } from "node:child_process";
-import { rmSync } from "node:fs";
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const outdir = join(root, "dist");
+
+/**
+ * Any absolute home path that must NEVER appear in a committed artifact (an info
+ * leak + non-reproducible build). Shared by the `.js` comment guard and the
+ * `.js.map` `sources[]` guard.
+ */
+const HOME_PATH_RE = /\/Users\/|\/home\/|\/root\//;
+
+/**
+ * Collapse a path down to a bare `node_modules/<rest>` at its FIRST
+ * `/node_modules/` segment; a path with no `node_modules` (e.g. `../src/list.ts`)
+ * is returned unchanged. This makes an inlined dependency's recorded path
+ * independent of WHERE the build ran.
+ */
+function collapseNodeModules(p) {
+  const marker = "/node_modules/";
+  const i = p.indexOf(marker);
+  return i === -1 ? p : `node_modules/${p.slice(i + marker.length)}`;
+}
+
+/** Throw if any absolute home path survives normalisation in `text`. */
+function assertNoHomePath(label, text) {
+  if (HOME_PATH_RE.test(text)) {
+    const leak = text.split("\n").find((l) => HOME_PATH_RE.test(l)) ?? text.slice(0, 200);
+    throw new Error(
+      `build-dist: absolute local path survived normalisation in ${label}: ${leak}`,
+    );
+  }
+}
+
+/**
+ * Normalise esbuild's inlined-module PATH COMMENTS in an emitted bundle so the
+ * committed artifact is reproducible + leaks no local filesystem path.
+ *
+ * esbuild prefixes each inlined module with a `// <path>` comment giving that
+ * module's path RELATIVE TO THE WORKING DIRECTORY. When the build runs in a git
+ * worktree whose `node_modules` is a SYMLINK to the main checkout, esbuild
+ * resolves the symlink to its realpath, so the relative path traverses up to the
+ * filesystem root and back down into an absolute `/Users/<user>/…/node_modules/…`
+ * location — embedding the local FS/user path into `dist/*.js` (an info leak +
+ * non-reproducible, since the traversal depth varies by build location).
+ *
+ * This collapses any `…/node_modules/` prefix on a comment line down to a bare
+ * `node_modules/…`, making the committed JS independent of WHERE it was built.
+ * It only rewrites lines that START with `// ` (esbuild's module-path comments),
+ * never code or string literals. Fails hard if any `/Users/` (or other absolute
+ * home) path survives, so a future leak can never land silently.
+ */
+function normalizeBundlePaths(file) {
+  const original = readFileSync(file, "utf8");
+  // Collapse `// <anything>/node_modules/<rest>` → `// node_modules/<rest>`
+  // (lazy up to the FIRST `/node_modules/`) on comment lines only.
+  const rewritten = original.replace(
+    /^\/\/ .*?\/node_modules\//gm,
+    "// node_modules/",
+  );
+  assertNoHomePath(file, rewritten);
+  if (rewritten !== original) {
+    writeFileSync(file, rewritten);
+  }
+}
+
+/**
+ * Normalise a `.js.map`'s `sources[]` so the committed source map is reproducible
+ * + leaks no local filesystem path (the SAME symlink-realpath traversal that
+ * affects the `.js` comments records absolute `/Users/…/node_modules/…` paths in
+ * the map's `sources` array). Each entry is collapsed to package-relative
+ * (`node_modules/…`), matching the `.js` comment form; package-local sources
+ * (`../src/…`) are left untouched. The `sources[]` array is then re-checked for
+ * any surviving home path (scanned separately from `sourcesContent`, which is the
+ * inlined SOURCE CODE and may legitimately contain such a substring). `mappings`
+ * / `names` / `sourcesContent` are untouched, so the map stays valid.
+ */
+function normalizeSourceMap(file) {
+  const original = readFileSync(file, "utf8");
+  const map = JSON.parse(original);
+  if (Array.isArray(map.sources)) {
+    map.sources = map.sources.map(collapseNodeModules);
+    for (const s of map.sources) {
+      if (HOME_PATH_RE.test(s)) {
+        throw new Error(
+          `build-dist: absolute local path survived normalisation in ${file} (sources[]): ${s}`,
+        );
+      }
+    }
+  }
+  const rewritten = JSON.stringify(map);
+  if (rewritten !== original) {
+    writeFileSync(file, rewritten);
+  }
+}
 
 /**
  * Everything that must stay EXTERNAL (resolved from npm, not inlined). The off-npm
@@ -150,6 +241,15 @@ async function main(buildDir = outdir) {
     legalComments: "none",
     logLevel: "warning",
   });
+
+  // 2c. Normalise esbuild's inlined-module path comments (in `.js`) AND the
+  //     `sources[]` arrays (in `.js.map`) so the committed artifacts are
+  //     reproducible + carry no local `/Users/…` filesystem path (see
+  //     `normalizeBundlePaths` / `normalizeSourceMap`). Applied to BOTH bundles.
+  normalizeBundlePaths(join(buildDir, "index.js"));
+  normalizeBundlePaths(join(buildDir, "node.js"));
+  normalizeSourceMap(join(buildDir, "index.js.map"));
+  normalizeSourceMap(join(buildDir, "node.js.map"));
 
   // 3. Emit the .d.ts declarations (declaration-only — esbuild already wrote JS).
   execFileSync(

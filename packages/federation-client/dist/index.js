@@ -241,6 +241,34 @@ import {
   TermWrapper
 } from "@rdfjs/wrapper";
 import { DataFactory, Store as Store2 } from "n3";
+
+// src/iri.ts
+var IRIREF_FORBIDDEN_CHARS = /* @__PURE__ */ new Set(["<", ">", '"', "{", "}", "|", "^", "`", "\\"]);
+function percentEncode(ch) {
+  return `%${ch.charCodeAt(0).toString(16).toUpperCase().padStart(2, "0")}`;
+}
+function hasScheme(value) {
+  return /^[A-Za-z][A-Za-z0-9+.-]*:/.test(value);
+}
+function escapeIri(value) {
+  let out = "";
+  for (const ch of value) {
+    const code = ch.codePointAt(0) ?? 0;
+    out += code <= 32 || IRIREF_FORBIDDEN_CHARS.has(ch) ? percentEncode(ch) : ch;
+  }
+  return out;
+}
+function safeIri(value) {
+  if (typeof value !== "string" || value.length === 0) {
+    return void 0;
+  }
+  if (!hasScheme(value)) {
+    return void 0;
+  }
+  return escapeIri(value);
+}
+
+// src/wrappers.ts
 function iriTerms(node, predicate) {
   return SetFrom.subjectPredicate(node, predicate, TermAs.instance(TermWrapper), TermFrom.instance);
 }
@@ -304,10 +332,14 @@ function wrap(dataset) {
   return new FederationDataset(dataset, DataFactory);
 }
 function addIriTriple(node, predicate, objectIri) {
+  const safeObject = safeIri(objectIri);
+  if (safeObject === void 0) {
+    return;
+  }
   const factory = node.factory;
   const subject = node;
   const p = NamedNodeFrom.string(predicate, factory);
-  const o = NamedNodeFrom.string(objectIri, factory);
+  const o = NamedNodeFrom.string(safeObject, factory);
   node.dataset.add(factory.quad(subject, p, o));
 }
 var WritableSectorUse = class extends TermWrapper {
@@ -367,7 +399,7 @@ var FederationBuilder = class {
   factory = DataFactory;
   /** Open the app subject (`id` is its client_id IRI) for writing. */
   app(id) {
-    const node = new WritableApp(id, this.store, this.factory);
+    const node = new WritableApp(escapeIri(id), this.store, this.factory);
     node.typeApp();
     return node;
   }

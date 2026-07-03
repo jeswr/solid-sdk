@@ -18,6 +18,7 @@ import {
   type TermWrapper as TermWrapperType,
 } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
+import { escapeIri, safeIri } from "./iri.js";
 import {
   FEDAPP_ACCESS,
   FEDAPP_APP,
@@ -145,12 +146,29 @@ export function wrap(dataset: DatasetCore): FederationDataset {
  * Add a single `(subject, predicate-IRI, object-IRI)` triple to a node's
  * dataset through the factory (the wrapper's sanctioned write surface) — never
  * a hand-built triple constructed from outside the wrapper.
+ *
+ * SECURITY: this is the single OBJECT-IRI chokepoint for the write path. Every
+ * object IRI in a federation graph (sector / access-mode / consumes / produces /
+ * declaresShape / rdf:type) is a generic, trust-bearing RDF IRI, so the object is
+ * routed through {@link safeIri} (SCHEME-AGNOSTIC): `n3.Writer` does not escape
+ * IRIs, so an unescaped `>`/space in an untrusted object would break out of `<…>`
+ * and inject triples. `safeIri` requires an ABSOLUTE IRI (any scheme — an
+ * `http(s)` Solid resource OR a `urn:`/`did:`/other shape/sector IRI) and
+ * percent-encodes only the injection-critical chars, preserving the caller's
+ * exact lexical IRI (no canonicalisation → RDF IRI identity holds). A schemeless
+ * value is DROPPED (not a valid absolute NamedNode object). The trusted vocab
+ * constants (predicates, `rdf:type` values, `acl:` modes) are all absolute IRIs
+ * and pass through unchanged.
  */
 function addIriTriple(node: TermWrapper, predicate: string, objectIri: string): void {
+  const safeObject = safeIri(objectIri);
+  if (safeObject === undefined) {
+    return;
+  }
   const factory = node.factory;
   const subject = node as unknown as Term;
   const p = NamedNodeFrom.string(predicate, factory);
-  const o = NamedNodeFrom.string(objectIri, factory);
+  const o = NamedNodeFrom.string(safeObject, factory);
   node.dataset.add(factory.quad(subject as never, p as never, o as never));
 }
 
@@ -234,7 +252,14 @@ export class FederationBuilder {
 
   /** Open the app subject (`id` is its client_id IRI) for writing. */
   app(id: string): WritableApp {
-    const node = new WritableApp(id, this.store as unknown as DatasetCore, this.factory);
+    // SECURITY: the app subject is minted straight from the client_id string via
+    // `factory.namedNode` (the TermWrapper string constructor) and later emitted
+    // by `n3.Writer`, which does not escape IRIs. A client_id is normally http(s)
+    // but MAY legitimately be another absolute IRI, so escape (scheme-agnostic)
+    // rather than validate-and-drop: {@link escapeIri} percent-encodes only the
+    // Turtle IRIREF-forbidden characters, so the subject cannot break out of its
+    // `<…>` while a legitimate non-http id still round-trips.
+    const node = new WritableApp(escapeIri(id), this.store as unknown as DatasetCore, this.factory);
     node.typeApp();
     return node;
   }
