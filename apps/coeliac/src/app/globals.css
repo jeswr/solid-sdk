@@ -649,3 +649,201 @@ a {
   font-size: 0.9rem;
   margin-top: 0.5rem;
 }
+
+/* ---- Knowledge (Phase 3a/3b): research / trials / therapies ---------------- */
+.knowledge h1 {
+  margin-bottom: 0.5rem;
+}
+.med-disclaimer {
+  border: 1px solid var(--border, #e5e5e5);
+  border-left: 4px solid var(--primary, #0a7);
+  border-radius: 0.5rem;
+  background: var(--muted, #f6f8f7);
+  padding: 0.7rem 0.9rem;
+  margin: 0.5rem 0 1rem;
+}
+.med-disclaimer__text {
+  font-weight: 600;
+  margin: 0;
+}
+.med-disclaimer__extra {
+  margin: 0.4rem 0 0;
+  font-size: 0.9rem;
+  color: var(--muted-foreground, #666);
+}
+.knowledge-tabs {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.25rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border, #e5e5e5);
+}
+.knowledge-tabs a {
+  text-decoration: none;
+  font-weight: 500;
+}
+.knowledge-tabs a:hover {
+  text-decoration: underline;
+}
+.knowledge__offline,
+.knowledge__error {
+  background: var(--muted, #f6f8f7);
+  border: 1px solid var(--border, #e5e5e5);
+  border-radius: 0.5rem;
+  padding: 0.6rem 0.8rem;
+  font-size: 0.9rem;
+  color: var(--muted-foreground, #666);
+}
+.knowledge__loading,
+.knowledge__empty {
+  color: var(--muted-foreground, #666);
+}
+
+.research__key-message {
+  font-weight: 600;
+  background: var(--muted, #f6f8f7);
+  border-left: 4px solid var(--warn, oklch(0.7 0.14 70));
+  border-radius: 0.4rem;
+  padding: 0.6rem 0.8rem;
+}
+.guideline-list,
+.lit-list,
+.trial-list,
+.therapy-list {
+  list-style: none;
+  padding: 0;
+  margin: 0.75rem 0;
+  display: grid;
+  gap: 0.9rem;
+}
+.guideline,
+.lit-card,
+.trial-card,
+.therapy {
+  border: 1px solid var(--border, #e5e5e5);
+  border-radius: 0.6rem;
+  padding: 0.85rem 1rem;
+  background: var(--card, #fff);
+}
+.guideline__title,
+.lit-card__title,
+.trial-card__title,
+.therapy__name {
+  margin: 0 0 0.25rem;
+  font-size: 1.05rem;
+}
+.guideline__org,
+.lit-card__authors,
+.therapy__mechanism {
+  color: var(--muted-foreground, #666);
+  font-size: 0.9rem;
+  margin: 0.15rem 0;
+}
+.lit-card__meta,
+.trial-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  font-size: 0.82rem;
+  margin: 0.25rem 0;
+}
+.lit-card__meta span,
+.trial-card__meta span {
+  background: var(--muted, #eef1f0);
+  border-radius: 0.35rem;
+  padding: 0.1rem 0.45rem;
+}
+.lit-card__matched,
+.trial-card__status {
+  background: color-mix(in oklch, var(--ok) 20%, transparent) !important;
+}
+.lit-card__why {
+  font-size: 0.82rem;
+  color: var(--muted-foreground, #666);
+  margin: 0.35rem 0 0;
+}
+.trial-card__discuss,
+.therapy__note {
+  font-size: 0.9rem;
+  background: var(--muted, #f6f8f7);
+  border-radius: 0.4rem;
+  padding: 0.5rem 0.65rem;
+  margin: 0.5rem 0;
+}
+.trial-card__eligibility summary {
+  cursor: pointer;
+  font-size: 0.88rem;
+  color: var(--muted-foreground, #666);
+}
+.trial-card__eligibility-text {
+  font-size: 0.85rem;
+  white-space: pre-wrap;
+}
+.trial-card__cta {
+  display: inline-block;
+  margin-top: 0.4rem;
+  font-weight: 600;
+}
+.trials__filter {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+.trials__filter select {
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--border, #ccc);
+  border-radius: 0.45rem;
+  background: var(--card, #fff);
+  color: var(--foreground, inherit);
+}
+
+.therapies__truth {
+  font-weight: 700;
+  background: var(--muted, #f6f8f7);
+  border-left: 4px solid var(--ok, oklch(0.62 0.13 150));
+  border-radius: 0.4rem;
+  padding: 0.7rem 0.9rem;
+}
+.therapies__asof {
+  font-size: 0.82rem;
+  color: var(--muted-foreground, #666);
+}
+.therapy__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.therapy__stage {
+  font-size: 0.78rem;
+  border-radius: 0.35rem;
+  padding: 0.12rem 0.5rem;
+  white-space: nowrap;
+}
+.therapy__stage--danger {
+  background: color-mix(in oklch, var(--danger) 22%, transparent);
+}
+.therapy__stage--warn {
+  background: color-mix(in oklch, var(--warn) 25%, transparent);
+}
+.therapy__stage--ok {
+  background: color-mix(in oklch, var(--ok) 22%, transparent);
+}
+.therapy__stage--info {
+  background: var(--muted, #eef1f0);
+}
+.therapy--danger {
+  border-left: 4px solid var(--danger);
+}
+.therapy__status {
+  margin: 0.35rem 0;
+}
+.therapy__live,
+.therapy__sources {
+  font-size: 0.82rem;
+  color: var(--muted-foreground, #666);
+  margin: 0.35rem 0 0;
+}

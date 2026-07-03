@@ -48,6 +48,34 @@ export function offCacheContainer(storageRoot: string): string {
   return `${diaryRoot(storageRoot)}cache/off/`;
 }
 
+/**
+ * The knowledge (literature / trials) cache container
+ * (`…/health/diary/cache/knowledge/`, Phase 3a/3b §3.5). Holds ONLY public
+ * result-list JSON (no health data); it lives under the diary root so the
+ * owner-only `acl:default` written by `ensureDiaryReady` already protects it.
+ */
+export function knowledgeCacheContainer(storageRoot: string): string {
+  return `${diaryRoot(storageRoot)}cache/knowledge/`;
+}
+
+const KNOWLEDGE_CACHE_SLUG_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
+
+/**
+ * A knowledge cache resource URL: `…/cache/knowledge/{slug}.json`. The slug is a
+ * fixed, code-supplied constant (e.g. `research-latest`, `trials-latest`,
+ * `guidelines`) — validated lowercase-alnum-dash so it can never traverse out of
+ * the cache container, exactly like a barcode.
+ */
+export function knowledgeCacheUrl(storageRoot: string, slug: string): string {
+  return `${knowledgeCacheContainer(storageRoot)}${assertKnowledgeSlug(slug)}.json`;
+}
+
+/** Assert a knowledge cache slug is a safe lowercase-alnum-dash token. */
+export function assertKnowledgeSlug(slug: string): string {
+  if (!KNOWLEDGE_CACHE_SLUG_RE.test(slug)) throw new Error(`invalid knowledge slug: ${slug}`);
+  return slug;
+}
+
 /** The elimination-protocols container (`…/health/diary/protocols/`). */
 export function protocolsContainer(storageRoot: string): string {
   return `${diaryRoot(storageRoot)}protocols/`;
@@ -117,6 +145,7 @@ export function diaryContainers(storageRoot: string): string[] {
     conclusionsContainer(storageRoot),
     `${diaryRoot(storageRoot)}cache/`,
     offCacheContainer(storageRoot),
+    knowledgeCacheContainer(storageRoot),
   ];
 }
 
