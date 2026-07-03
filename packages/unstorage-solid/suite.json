@@ -19,9 +19,44 @@
     "api": "@microsoft/api-extractor + publint + @arethetypeswrong/cli",
     "node": ">=20"
   },
-  "dependsOn": ["fetch-rdf"],
+  "dependsOn": [
+    "fetch-rdf"
+  ],
   "federation": {
     "sectors": [],
     "membershipTodo": "SDK (not an app). An unstorage `defineDriver()` driver that backs unstorage's KV API with a Solid pod over LDP: keys map to LDP resource paths under a base container, values are opaque KV blobs (text/json/binary), and getKeys reads ldp:contains container listings via @jeswr/fetch-rdf + @solid/object. Watch uses Solid Notifications WebSocketChannel2023 with graceful degradation. No federation membership of its own — it is storage glue."
+  },
+  "status": {
+    "generatedAt": "2026-07-03T05:14:40.594Z",
+    "commit": "d79c890f95c879beb7d75c4dadada53af5190c9a",
+    "version": "0.1.0",
+    "gate": {
+      "lint": "skip",
+      "typecheck": "skip",
+      "test": "skip",
+      "build": "skip"
+    },
+    "coverage": {
+      "lines": {
+        "pct": 96.4,
+        "covered": 670,
+        "total": 695
+      },
+      "statements": {
+        "pct": 96.4,
+        "covered": 670,
+        "total": 695
+      },
+      "branches": {
+        "pct": 91.57,
+        "covered": 239,
+        "total": 261
+      },
+      "functions": {
+        "pct": 95.55,
+        "covered": 43,
+        "total": 45
+      }
+    }
   }
 }
