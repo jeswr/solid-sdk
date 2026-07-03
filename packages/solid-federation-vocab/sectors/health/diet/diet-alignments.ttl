@@ -31,7 +31,7 @@
 # CITATIONS (verify terminology bindings against a licensed browser before any
 # clinical use — closeMatch is a non-entailing terminology hint, not a claim of
 # semantic identity):
-#   - schema.org: Meal / NutritionInformation / Restaurant / MenuItem.
+#   - schema.org: FoodEvent / NutritionInformation / Restaurant / MenuItem.
 #   - SNOMED CT International concept IDs for symptom clinical-findings.
 #   - LOINC 72514-3 (Pain severity 0–10 NRS) for the severity ordinal.
 #   - ChEBI chemical-entity IDs for the chemical/FODMAP trigger substances; FODMAP
@@ -51,10 +51,11 @@ dcterms:title a owl:AnnotationProperty .
 owl:versionInfo a owl:AnnotationProperty .
 
 # -----------------------------------------------------------------------------
-# schema.org — Meal / NutritionInformation / Restaurant (Mode A). diet:Meal is
-# already rdfs:subClassOf schema:Meal in diet.ttl; here we add the wider bridge.
+# schema.org — FoodEvent / NutritionInformation / Restaurant (Mode A). diet:Meal
+# is already rdfs:subClassOf schema:FoodEvent in diet.ttl (schema.org has no
+# `schema:Meal` — that IRI 404s); here we add the wider bridge.
 # -----------------------------------------------------------------------------
-diet:Meal      skos:closeMatch schema:Meal .
+diet:Meal      skos:closeMatch schema:FoodEvent .
 diet:FoodItem  skos:closeMatch schema:MenuItem , schema:NutritionInformation .   # a consumed food item / its nutrition facet
 diet:venue     skos:closeMatch schema:Restaurant , schema:FoodEstablishment .
 diet:Symptom   skos:closeMatch fhir:Observation .                                # the symptom-as-observation framing (health sector's Mode A)
