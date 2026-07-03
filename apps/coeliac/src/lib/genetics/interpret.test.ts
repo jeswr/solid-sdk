@@ -116,6 +116,15 @@ describe("buildSummaryData / interpret helpers", () => {
     expect(m.markerPresence).toBe("present");
   });
 
+  it("clinical prose 'DQ2.5 and DQ8 negative' on one line → complete-coverage NPV-absent", () => {
+    const data = interpretClinical([
+      { haplotype: "DQ2.5", statedPresent: false },
+      { haplotype: "DQ8", statedPresent: false },
+    ]);
+    expect(data.coverageComplete).toBe(true);
+    expect(data.coeliacGeneticRisk).toBe("risk-haplotype-absent");
+  });
+
   it("clinical prose 'DQ8 negative' → an absent DQ8 marker (partial coverage, not NPV-absent)", () => {
     const data = interpretClinical([{ haplotype: "DQ8", statedPresent: false }]);
     expect(data.markers[0].markerPresence).toBe("absent");
@@ -128,5 +137,18 @@ describe("buildSummaryData / interpret helpers", () => {
     const data = interpretClinical([{ haplotype: "DQ8" }]);
     expect(data.markers[0].markerPresence).toBe("uncertain");
     expect(data.coeliacGeneticRisk).toBe("indeterminate");
+  });
+
+  it("the interpreted marker NEVER carries the raw genotype (only the presence is kept)", () => {
+    const data = interpretConsumerArray([
+      { rsid: "rs2187668", genotype: "CT" },
+      { rsid: "rs7454108", genotype: "TT" },
+    ]);
+    for (const m of data.markers) {
+      expect(m.genotype).toBeUndefined(); // the raw tag-SNP call is not persisted
+      expect(m.markerPresence).toBeDefined();
+    }
+    // The interpretation prose describes the call without exposing the genotype bytes.
+    expect(data.markers[0].markerInterpretation).not.toMatch(/CT|TT/);
   });
 });

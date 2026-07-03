@@ -84,6 +84,14 @@ describe("parseClinicalText", () => {
     });
   });
 
+  it("records BOTH haplotypes named on one line ('DQ2.5 and DQ8 negative')", () => {
+    const obs = parseClinicalText("HLA-DQ2.5 and HLA-DQ8 negative.");
+    expect(obs).toContainEqual({ haplotype: "DQ2.5", statedPresent: false });
+    expect(obs).toContainEqual({ haplotype: "DQ8", statedPresent: false });
+    // bare-DQ2 must not duplicate DQ2.5.
+    expect(obs.filter((o) => o.haplotype === "DQ2.5")).toHaveLength(1);
+  });
+
   it("does not emit a duplicate marker when both an rsid genotype and a phrase name the same haplotype", () => {
     const obs = parseClinicalText("rs7454108 (TC). HLA-DQ8 positive.");
     const dq8 = obs.filter((o) => o.haplotype === "DQ8");

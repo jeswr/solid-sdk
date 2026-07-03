@@ -101,13 +101,20 @@ function markerInterpretationLine(
   return `${rsid} (${haplotype} tag): ${verb}.`;
 }
 
-/** Build a machine-readable marker row from one raw SNP call. */
+/**
+ * Build a machine-readable marker row from one raw SNP call. **The raw genotype is
+ * DELIBERATELY NOT carried into the marker** — only the derived `markerPresence`
+ * (present/absent/uncertain) is. The task's privacy invariant is that only the
+ * DQ2/DQ8 marker PRESENCE is persisted, so even the two tag-SNP raw genotype calls
+ * never reach the cache or the pod (they exist only transiently in `parse.ts`).
+ * `callPresence` reads the genotype here; nothing downstream sees it.
+ */
 export function markerFromRawCall(call: RawSnpCall): HlaMarkerData {
   const haplotype = ALL_TAG_SNPS[call.rsid];
   const presence = callPresence(call.rsid, call.genotype);
   return {
     rsid: call.rsid,
-    genotype: call.genotype,
+    // NO `genotype` field — presence only (privacy: the raw tag-SNP call is not persisted).
     riskHaplotype: haplotype,
     markerPresence: presence,
     markerInterpretation: markerInterpretationLine(haplotype, presence, call.rsid),

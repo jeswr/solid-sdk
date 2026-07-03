@@ -169,23 +169,25 @@ export function parseClinicalText(text: string): ClinicalObservation[] {
 
   // (b) explicit "DQ… positive/negative/present/absent/detected/not detected".
   for (const line of text.split(/\r?\n/)) {
+    // NEGATION FIRST: common report wording ("not detected"/"not present"/"no
+    // risk") contains a positive token ("detected"/"present"), so a negative must
+    // win over a bare positive — otherwise a genuine negative reads as ambiguous
+    // and is dropped. A negation cue makes the statement negative regardless.
+    const negative = /\b(negative|absent|not\s+detected|not\s+present|no\s+risk)\b/i.test(line);
+    const positive =
+      !negative && /\b(positive|present|detected|carrier|heterozygous|homozygous)\b/i.test(line);
+    // Only classify a line that carries exactly one clear sentiment cue.
+    if (positive === negative) continue; // neither (or the impossible both) → ambiguous → skip
+    // A line may name MORE THAN ONE haplotype ("DQ2.5 and DQ8 negative") — record
+    // each, so a double-negative line yields complete coverage, not partial. The
+    // per-haplotype seen-key still de-dupes (incl. bare `DQ2` collapsing onto DQ2.5
+    // and an rsid-covered haplotype), so no duplicate/contradictory marker is added.
     for (const { re, haplotype } of HAPLOTYPE_PHRASE) {
       if (!re.test(line)) continue;
       const key = `phrase:${haplotype}`;
       if (seenHaplo.has(key) || seenHaplo.has(`rs-covered:${haplotype}`)) continue;
-      // NEGATION FIRST: common report wording ("not detected"/"not present"/"no
-      // risk") contains a positive token ("detected"/"present"), so a negative must
-      // win over a bare positive — otherwise a genuine negative reads as ambiguous
-      // and is dropped. A negation cue makes the statement negative regardless.
-      const negative = /\b(negative|absent|not\s+detected|not\s+present|no\s+risk)\b/i.test(line);
-      const positive =
-        !negative &&
-        /\b(positive|present|detected|carrier|heterozygous|homozygous)\b/i.test(line);
-      // Only record a phrase we can classify (exactly one of pos/neg true).
-      if (positive === negative) continue; // neither cue → ambiguous → skip
       seenHaplo.add(key);
       out.push({ haplotype, statedPresent: positive });
-      break; // one classification per line
     }
   }
   return out;

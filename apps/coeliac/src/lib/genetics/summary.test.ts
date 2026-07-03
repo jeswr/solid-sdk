@@ -67,6 +67,9 @@ describe("writeGeneticSummary", () => {
     const body = r.puts().find((p) => p.url === SUMMARY_URL)?.body ?? "";
     expect(body).toMatch(/geneticInterpretation/);
     expect(body).toMatch(/rs2187668/);
+    // The raw tag-SNP genotype is NOT persisted — no diet:genotype predicate + no
+    // genotype literal reaches the pod (only rsid + presence + interpretation).
+    expect(body).not.toMatch(/genotype/);
     // No raw-genome surface exists in the model — the body is a small summary, not a genome.
     expect(body.length).toBeLessThan(4000);
   });

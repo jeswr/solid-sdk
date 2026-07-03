@@ -105,7 +105,6 @@ function PreviewSummary({ preview }: { preview: GeneticPreview }) {
               <span className={`genetics-marker__presence genetics-marker__presence--${m.markerPresence}`}>
                 {m.markerPresence ? PRESENCE_LABEL[m.markerPresence] : "—"}
               </span>
-              {m.genotype ? <span className="genetics-marker__geno">genotype {m.genotype}</span> : null}
             </li>
           ))}
         </ul>
