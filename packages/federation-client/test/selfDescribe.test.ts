@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+import { Parser } from "n3";
 import { describe, expect, it } from "vitest";
 import type { AppRegistration } from "../src/index.js";
 import { selfDescribe, verify } from "../src/index.js";
@@ -82,6 +83,44 @@ describe("selfDescribe", () => {
     const result = await verify(app.id, { body: turtle });
     expect(result.valid).toBe(true);
     expect(result.registration?.sectorUse?.[0]?.produces).toContain("https://example/shapes/B");
+  });
+
+  it("does not allow n3.Writer IRI-injection via an untrusted consumes IRI (regression)", async () => {
+    // `n3.Writer` does not escape IRIs, so an unguarded object with a `>`/space
+    // would break out of `<…>` and inject arbitrary triples. The malicious
+    // `consumes` value below attempts to smuggle in `<https://evil/s2> ...`.
+    const malicious: AppRegistration = {
+      id: "https://app.example/clientid",
+      consumes: ["https://evil/x> . <https://evil/s2> <https://evil/p2> <https://evil/o2"],
+    };
+    const turtle = await selfDescribe(malicious).toString();
+
+    // Re-parse: the guard must have neutralised the payload, so no injected
+    // subject/predicate/object triple appears in the graph.
+    const quads = new Parser().parse(turtle);
+    expect(quads.some((q) => q.subject.value === "https://evil/s2")).toBe(false);
+    expect(quads.some((q) => q.predicate.value === "https://evil/p2")).toBe(false);
+    expect(quads.some((q) => q.object.value === "https://evil/o2")).toBe(false);
+    // The app subject is intact and there is exactly one consumes object, whose
+    // value is the percent-encoded (non-breaking) form of the payload.
+    const consumes = quads.filter(
+      (q) => q.predicate.value === "https://w3id.org/jeswr/fed#consumes",
+    );
+    expect(consumes).toHaveLength(1);
+    expect(consumes[0]?.subject.value).toBe("https://app.example/clientid");
+    expect(consumes[0]?.object.value).not.toContain(">");
+    expect(consumes[0]?.object.value).not.toContain(" ");
+  });
+
+  it("does not allow IRI-injection via an untrusted app.id subject (regression)", async () => {
+    const malicious: AppRegistration = {
+      id: "https://app.example/x> <https://evil/s> <https://evil/p> <https://evil/o> .# ",
+      sectors: ["https://w3id.org/jeswr/sectors/media"],
+    };
+    const turtle = await selfDescribe(malicious).toString();
+    const quads = new Parser().parse(turtle);
+    expect(quads.some((q) => q.subject.value === "https://evil/s")).toBe(false);
+    expect(quads.some((q) => q.predicate.value === "https://evil/p")).toBe(false);
   });
 
   it("serialises to N-Triples when asked", async () => {
