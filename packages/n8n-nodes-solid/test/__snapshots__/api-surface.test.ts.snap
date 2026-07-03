@@ -1,0 +1,180 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`public API surface (committed snapshot — one-file diff) > importable library exports (the package \`main\`) 1`] = `
+{
+  "assertWithinPod": "function",
+  "isContainerUrl": "function",
+  "normalizePodBase": "function",
+  "parseContainerListing": "function",
+  "redactUserinfo": "function",
+  "resolveTarget": "function",
+}
+`;
+
+exports[`public API surface (committed snapshot — one-file diff) > n8n ICredentialType (credential shape + token injection) 1`] = `
+{
+  "authenticate": {
+    "properties": {
+      "headers": {
+        "Authorization": "=Bearer {{$credentials.accessToken}}",
+      },
+    },
+    "type": "generic",
+  },
+  "displayName": "Solid Pod (OIDC / Bearer) API",
+  "name": "solidApi",
+  "properties": [
+    {
+      "displayName": "Pod Base URL",
+      "name": "podBaseUrl",
+      "password": false,
+      "required": true,
+      "type": "string",
+    },
+    {
+      "displayName": "Access Token",
+      "name": "accessToken",
+      "password": true,
+      "required": true,
+      "type": "string",
+    },
+  ],
+}
+`;
+
+exports[`public API surface (committed snapshot — one-file diff) > n8n INodeType description (resource/operation/parameter tree) 1`] = `
+{
+  "credentials": [
+    {
+      "name": "solidApi",
+      "required": true,
+    },
+  ],
+  "displayName": "Solid",
+  "inputs": [
+    "main",
+  ],
+  "name": "solid",
+  "outputs": [
+    "main",
+  ],
+  "properties": [
+    {
+      "default": "resource",
+      "displayName": "Resource",
+      "displayOptions": null,
+      "name": "resource",
+      "options": [
+        "resource",
+        "container",
+      ],
+      "required": false,
+      "type": "options",
+    },
+    {
+      "default": "read",
+      "displayName": "Operation",
+      "displayOptions": {
+        "show": {
+          "resource": [
+            "resource",
+          ],
+        },
+      },
+      "name": "operation",
+      "options": [
+        "read",
+        "create",
+        "update",
+        "delete",
+      ],
+      "required": false,
+      "type": "options",
+    },
+    {
+      "default": "list",
+      "displayName": "Operation",
+      "displayOptions": {
+        "show": {
+          "resource": [
+            "container",
+          ],
+        },
+      },
+      "name": "operation",
+      "options": [
+        "list",
+      ],
+      "required": false,
+      "type": "options",
+    },
+    {
+      "default": "",
+      "displayName": "Target",
+      "displayOptions": null,
+      "name": "target",
+      "options": undefined,
+      "required": true,
+      "type": "string",
+    },
+    {
+      "default": "",
+      "displayName": "Content",
+      "displayOptions": {
+        "show": {
+          "operation": [
+            "create",
+            "update",
+          ],
+          "resource": [
+            "resource",
+          ],
+        },
+      },
+      "name": "content",
+      "options": undefined,
+      "required": false,
+      "type": "string",
+    },
+    {
+      "default": "text/turtle",
+      "displayName": "Content Type",
+      "displayOptions": {
+        "show": {
+          "operation": [
+            "create",
+            "update",
+          ],
+          "resource": [
+            "resource",
+          ],
+        },
+      },
+      "name": "contentType",
+      "options": undefined,
+      "required": false,
+      "type": "string",
+    },
+    {
+      "default": "",
+      "displayName": "If-Match ETag",
+      "displayOptions": {
+        "show": {
+          "operation": [
+            "update",
+          ],
+          "resource": [
+            "resource",
+          ],
+        },
+      },
+      "name": "ifMatch",
+      "options": undefined,
+      "required": false,
+      "type": "string",
+    },
+  ],
+  "usableAsTool": true,
+  "version": 1,
+}
+`;
