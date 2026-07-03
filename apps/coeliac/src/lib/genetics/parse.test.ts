@@ -53,6 +53,17 @@ describe("parseConsumerArray", () => {
   it("returns nothing for a file with no tag SNPs", () => {
     expect(parseConsumerArray("rs1 1 1 AA\nrs2 2 2 GG\n")).toEqual([]);
   });
+
+  it("REJECTS clinical prose that merely starts with a tag rsid (no junk genotype)", () => {
+    // "rs2187668 was reported as CT" has the rsid but not the genome-row shape.
+    expect(parseConsumerArray("rs2187668 was reported as CT in the report")).toEqual([]);
+    // A real row with a bogus (non-chromosome) 2nd column is also rejected.
+    expect(parseConsumerArray("rs2187668 foo 12345 CT")).toEqual([]);
+    // The genuine genome-row shape IS still accepted.
+    expect(parseConsumerArray("rs2187668\t6\t32713862\tCT")).toEqual([
+      { rsid: "rs2187668", genotype: "CT" },
+    ]);
+  });
 });
 
 describe("parseClinicalText", () => {
@@ -90,6 +101,24 @@ describe("parseClinicalText", () => {
     expect(obs).toContainEqual({ haplotype: "DQ8", statedPresent: false });
     // bare-DQ2 must not duplicate DQ2.5.
     expect(obs.filter((o) => o.haplotype === "DQ2.5")).toHaveLength(1);
+  });
+
+  it("'DQ2.2 negative' → ONLY a DQ2.2 marker (bare-DQ2 must NOT fabricate a DQ2.5)", () => {
+    const obs = parseClinicalText("HLA-DQ2.2 negative.");
+    expect(obs).toEqual([{ haplotype: "DQ2.2", statedPresent: false }]);
+  });
+
+  it("'DQ2.2 and DQ8 negative' → DQ2.2 + DQ8 absent, NO spurious DQ2.5", () => {
+    const obs = parseClinicalText("HLA-DQ2.2 and HLA-DQ8 negative.");
+    expect(obs).toContainEqual({ haplotype: "DQ2.2", statedPresent: false });
+    expect(obs).toContainEqual({ haplotype: "DQ8", statedPresent: false });
+    expect(obs.some((o) => o.haplotype === "DQ2.5")).toBe(false);
+  });
+
+  it("MIXED-sentiment line 'DQ2.5 negative, DQ8 positive' → DQ2.5 absent + DQ8 PRESENT (not both absent)", () => {
+    const obs = parseClinicalText("HLA-DQ2.5 negative, HLA-DQ8 positive.");
+    expect(obs).toContainEqual({ haplotype: "DQ2.5", statedPresent: false });
+    expect(obs).toContainEqual({ haplotype: "DQ8", statedPresent: true });
   });
 
   it("does not emit a duplicate marker when both an rsid genotype and a phrase name the same haplotype", () => {

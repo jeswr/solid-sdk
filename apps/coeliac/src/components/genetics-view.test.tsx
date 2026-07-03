@@ -93,6 +93,22 @@ describe("GeneticsView — privacy invariants", () => {
     expect(fm.puts().some((u) => u.endsWith("summary.ttl"))).toBe(false);
   });
 
+  it("resets consent when the preview changes (consent never carries across summaries)", async () => {
+    renderWithSession(<GeneticsView />);
+    const user = userEvent.setup();
+    // First preview → tick consent.
+    await user.click(screen.getAllByRole("radio", { name: /^Present$/ })[0]);
+    await user.click(screen.getByRole("button", { name: /preview summary/i }));
+    await waitFor(() => expect(screen.getByRole("checkbox")).toBeInTheDocument());
+    await user.click(screen.getByRole("checkbox"));
+    expect(screen.getByRole("checkbox")).toBeChecked();
+    // Change the interpretation and re-preview → consent must be back to UNCHECKED.
+    await user.click(screen.getAllByRole("radio", { name: /^Absent$/ })[1]);
+    await user.click(screen.getByRole("button", { name: /preview summary/i }));
+    await waitFor(() => expect(screen.getByRole("checkbox")).not.toBeChecked());
+    expect(screen.getByRole("button", { name: /save summary to my pod/i })).toBeDisabled();
+  });
+
   it("shows the NPV-only framing everywhere", () => {
     renderWithSession(<GeneticsView />);
     expect(screen.getByText(GENETIC_FRAMING)).toBeInTheDocument();

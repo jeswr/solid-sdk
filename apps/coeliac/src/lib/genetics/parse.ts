@@ -78,6 +78,27 @@ function normaliseGenotype(...alleleCols: string[]): string {
     .toUpperCase();
 }
 
+/** A consumer-array chromosome column: 1–22, X, Y, MT, or M. */
+const CHROMOSOME_RE = /^(?:[1-9]|1\d|2[0-2]|X|Y|MT|M)$/i;
+/** A genome position column: digits. */
+const POSITION_RE = /^\d+$/;
+/** A genotype/allele token: ACGT, a no-call (`-`/`0`/`N`), or an indel marker (I/D). */
+const ALLELE_RE = /^[ACGT0\-NID]{1,2}$/i;
+
+/**
+ * Is a split row a REAL consumer-array data row (not clinical prose that happens to
+ * start with an rsid, e.g. "rs2187668 was reported as CT…")? Requires the exact
+ * genome-file shape: a chromosome column, a numeric position, and genotype-looking
+ * allele column(s). If it does not match, the row is skipped so the clinical-text
+ * parser can run instead (rather than fabricating a junk genotype).
+ */
+function isConsumerRow(cols: string[]): boolean {
+  if (!CHROMOSOME_RE.test(cols[1] ?? "") || !POSITION_RE.test(cols[2] ?? "")) return false;
+  if (cols.length >= 5) return ALLELE_RE.test(cols[3] ?? "") && ALLELE_RE.test(cols[4] ?? "");
+  if (cols.length === 4) return ALLELE_RE.test(cols[3] ?? "");
+  return false;
+}
+
 /**
  * Scan a consumer raw-array export (23andMe / AncestryDNA) for the coeliac tag
  * SNPs. Pure: no I/O. Only rows whose rsid is a recognised tag SNP are retained
@@ -100,12 +121,16 @@ export function parseConsumerArray(text: string): RawSnpCall[] {
     const cols = line.split(/\s+/);
     const rsid = cols[0];
     if (!rsid || !isTagRsid(rsid) || seen.has(rsid)) continue;
+    // Reject clinical prose that merely starts with a tag rsid — require the exact
+    // genome-row shape (chromosome + position + allele columns), else skip so the
+    // clinical-text parser handles it instead of fabricating a junk genotype.
+    if (!isConsumerRow(cols)) continue;
     // 23andMe: [rsid, chr, pos, genotype] → col 3.
     // AncestryDNA: [rsid, chr, pos, allele1, allele2] → cols 3+4.
-    let genotype = "";
-    if (cols.length >= 5) genotype = normaliseGenotype(cols[3] ?? "", cols[4] ?? "");
-    else if (cols.length === 4) genotype = normaliseGenotype(cols[3] ?? "");
-    else continue; // a header/short row for a tag rsid — skip (interpreted as no data)
+    const genotype =
+      cols.length >= 5
+        ? normaliseGenotype(cols[3] ?? "", cols[4] ?? "")
+        : normaliseGenotype(cols[3] ?? "");
     seen.add(rsid);
     out.push({ rsid, genotype });
   }
@@ -138,8 +163,40 @@ const HAPLOTYPE_PHRASE: { re: RegExp; haplotype: ClinicalObservation["haplotype"
   { re: /\bDQ8\b/i, haplotype: "DQ8" },
   // Bare "DQ2" (no sub-type) most commonly means the DQ2.5 haplotype in coeliac
   // reporting; classify it as DQ2.5 but the caller still shows the coverage caveat.
-  { re: /\bDQ2\b/i, haplotype: "DQ2.5" },
+  // The negative lookahead `(?!\.\d)` stops it ALSO matching a dotted subtype like
+  // "DQ2.2"/"DQ2.5" (which would fabricate a spurious DQ2.5 marker on that line).
+  { re: /\bDQ2(?!\.\d)\b/i, haplotype: "DQ2.5" },
 ];
+
+const NEG_CUE_RE = /\b(negative|absent|not\s+detected|not\s+present|no\s+risk)\b/i;
+const POS_CUE_RE = /\b(positive|present|detected|carrier|heterozygous|homozygous)\b/i;
+
+/**
+ * The sentiment of a text span: `false` = negative, `true` = positive, `undefined`
+ * = ambiguous (neither cue, or BOTH — which must never be guessed). Negation is not
+ * "positive minus": a span with both cues is genuinely ambiguous and returns
+ * undefined so the caller skips it rather than pick a side.
+ */
+function spanSentiment(span: string): boolean | undefined {
+  const neg = NEG_CUE_RE.test(span);
+  // A NEGATED positive ("not detected"/"not present") is negative, not positive —
+  // strip those phrases before the positive test so "detected" inside "not detected"
+  // does not read as a positive cue (which would make the span look ambiguous).
+  const posSpan = span.replace(/\bnot\s+(?:detected|present)\b/gi, " ");
+  const pos = POS_CUE_RE.test(posSpan);
+  if (neg && !pos) return false;
+  if (pos && !neg) return true;
+  return undefined;
+}
+
+/** The distinct risk haplotypes named in a span, in declaration order (deduped). */
+function haplotypesIn(span: string): ClinicalObservation["haplotype"][] {
+  const found: ClinicalObservation["haplotype"][] = [];
+  for (const { re, haplotype } of HAPLOTYPE_PHRASE) {
+    if (re.test(span) && !found.includes(haplotype)) found.push(haplotype);
+  }
+  return found;
+}
 
 /**
  * Best-effort scan of clinical-report text. Returns any confidently-classifiable
@@ -168,27 +225,30 @@ export function parseClinicalText(text: string): ClinicalObservation[] {
   }
 
   // (b) explicit "DQ… positive/negative/present/absent/detected/not detected".
+  const recordPhrase = (haplotype: ClinicalObservation["haplotype"], statedPresent: boolean) => {
+    if (seenHaplo.has(`phrase:${haplotype}`) || seenHaplo.has(`rs-covered:${haplotype}`)) return;
+    seenHaplo.add(`phrase:${haplotype}`);
+    out.push({ haplotype, statedPresent });
+  };
   for (const line of text.split(/\r?\n/)) {
-    // NEGATION FIRST: common report wording ("not detected"/"not present"/"no
-    // risk") contains a positive token ("detected"/"present"), so a negative must
-    // win over a bare positive — otherwise a genuine negative reads as ambiguous
-    // and is dropped. A negation cue makes the statement negative regardless.
-    const negative = /\b(negative|absent|not\s+detected|not\s+present|no\s+risk)\b/i.test(line);
-    const positive =
-      !negative && /\b(positive|present|detected|carrier|heterozygous|homozygous)\b/i.test(line);
-    // Only classify a line that carries exactly one clear sentiment cue.
-    if (positive === negative) continue; // neither (or the impossible both) → ambiguous → skip
-    // A line may name MORE THAN ONE haplotype ("DQ2.5 and DQ8 negative") — record
-    // each, so a double-negative line yields complete coverage, not partial. The
-    // per-haplotype seen-key still de-dupes (incl. bare `DQ2` collapsing onto DQ2.5
-    // and an rsid-covered haplotype), so no duplicate/contradictory marker is added.
-    for (const { re, haplotype } of HAPLOTYPE_PHRASE) {
-      if (!re.test(line)) continue;
-      const key = `phrase:${haplotype}`;
-      if (seenHaplo.has(key) || seenHaplo.has(`rs-covered:${haplotype}`)) continue;
-      seenHaplo.add(key);
-      out.push({ haplotype, statedPresent: positive });
+    const lineSentiment = spanSentiment(line);
+    if (lineSentiment !== undefined) {
+      // ONE unambiguous sentiment for the whole line — apply it to EVERY haplotype
+      // named ("DQ2.5 and DQ8 negative" → both absent → complete coverage). Safe
+      // because there is no competing cue to mis-attribute.
+      for (const haplotype of haplotypesIn(line)) recordPhrase(haplotype, lineSentiment);
+    } else if (NEG_CUE_RE.test(line) && POS_CUE_RE.test(line)) {
+      // MIXED sentiment on one line ("DQ2.5 negative, DQ8 positive") — the line-wide
+      // sentiment is ambiguous, so classify each haplotype LOCALLY: split into
+      // clauses and take each clause's own sentiment; a clause we cannot classify
+      // unambiguously is skipped (never guessed).
+      for (const clause of line.split(/[,;/]|\band\b/i)) {
+        const clauseSentiment = spanSentiment(clause);
+        if (clauseSentiment === undefined) continue;
+        for (const haplotype of haplotypesIn(clause)) recordPhrase(haplotype, clauseSentiment);
+      }
     }
+    // else: no sentiment cue at all → skip the line.
   }
   return out;
 }

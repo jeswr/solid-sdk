@@ -70,16 +70,18 @@ export async function writeGeneticSummary(
   input: GeneticSummaryInput,
 ): Promise<{ url: string }> {
   const url = geneticsSummaryUrl(ctx.storageRoot);
-  // Serialise (Turtle) FIRST — if a guardrail (consent / coverage / framing)
-  // rejects, we throw before touching the network or the write chain, and nothing
-  // (not even the container ACL) is written for this un-consented/invalid summary.
-  const body = await serializeGeneticSummary(url, {
-    ...input,
-    patient: input.patient ?? ctx.webId,
-  });
-  // Serialise the actual pod write per resource so concurrent writers land in order
-  // (the newest write is last; no out-of-order stale overwrite of the fixed URL).
+  // Enqueue SYNCHRONOUSLY (before any await) so the chain order == the call order —
+  // otherwise a newer save whose serialisation finishes faster could enqueue/write
+  // first and an older slower serialisation could then write LAST, leaving stale
+  // data on the pod. The Turtle serialisation (which runs the consent / coverage /
+  // framing guardrails) happens INSIDE the chain: a guardrail rejection throws here
+  // and rejects this write WITHOUT any ACL/PUT (nothing is written for an
+  // un-consented/invalid summary), and the chain continues for later writes.
   await serializeWrite(url, async () => {
+    const body = await serializeGeneticSummary(url, {
+      ...input,
+      patient: input.patient ?? ctx.webId,
+    });
     // Owner-only ACL on the diary root FIRST (fail-closed) — never a briefly-public write.
     await ensureDiaryReady(ctx.authedFetch, ctx.storageRoot, ctx.webId);
     await putResource(ctx.authedFetch, url, body);

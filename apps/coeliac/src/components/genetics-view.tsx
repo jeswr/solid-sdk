@@ -170,9 +170,19 @@ export function GeneticsView() {
   const [mode, setMode] = useState<"manual" | "upload">("manual");
   const [choices, setChoices] = useState<Partial<Record<RiskHaplotype, ManualChoice>>>({});
   const [preview, setPreview] = useState<GeneticPreview | undefined>(undefined);
+  // A monotonic id bumped each time a NEW preview is produced — used to KEY the
+  // ConsentGate so it remounts (resetting the consent checkbox to unchecked)
+  // whenever the interpreted summary changes; consent for one summary must NEVER
+  // carry over to a different one.
+  const [previewSeq, setPreviewSeq] = useState(0);
   const [parsing, setParsing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
+
+  const showPreview = useCallback((p: GeneticPreview | undefined) => {
+    setPreview(p);
+    if (p) setPreviewSeq((n) => n + 1);
+  }, []);
 
   const manualSelections = useMemo(() => {
     const out: Partial<Record<RiskHaplotype, MarkerPresence>> = {};
@@ -184,8 +194,8 @@ export function GeneticsView() {
 
   const buildManual = useCallback(() => {
     setError(undefined);
-    setPreview(buildManualPreview(manualSelections));
-  }, [buildManualPreview, manualSelections]);
+    showPreview(buildManualPreview(manualSelections));
+  }, [buildManualPreview, manualSelections, showPreview]);
 
   const onFile = useCallback(
     async (file: File | undefined) => {
@@ -195,14 +205,14 @@ export function GeneticsView() {
       setParsing(true);
       try {
         // Parsed ENTIRELY on-device — the raw file is never uploaded anywhere.
-        setPreview(await buildFilePreview(file));
+        showPreview(await buildFilePreview(file));
       } catch (err) {
         setError((err as Error).message);
       } finally {
         setParsing(false);
       }
     },
-    [buildFilePreview],
+    [buildFilePreview, showPreview],
   );
 
   const onSave = useCallback(
@@ -353,7 +363,7 @@ export function GeneticsView() {
           <div className="genetics-review">
             <h3>This is what will be saved</h3>
             <PreviewSummary preview={preview} />
-            <ConsentGate onSave={onSave} saving={saving} error={error} />
+            <ConsentGate key={previewSeq} onSave={onSave} saving={saving} error={error} />
           </div>
         ) : error ? (
           <p className="genetics-consent__error" role="alert">
