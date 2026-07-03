@@ -26,5 +26,16 @@
   ],
   "federation": {
     "membershipTodo": "SDK (not an app) — a security primitive consumed by suite packages that dereference an attacker-influenceable URL (federation registry/storage discovery, community feed sources, LDN cross-pod delivery). It holds no federation membership of its own; it provides the SSRF / DNS-rebinding egress guard those consumers route every outbound external fetch through."
+  },
+  "status": {
+    "generatedAt": "2026-07-03T05:14:25.106Z",
+    "commit": "2901beb339a56b55a23549993d80320dbacb20fb",
+    "version": "0.1.0",
+    "gate": {
+      "lint": "skip",
+      "typecheck": "skip",
+      "test": "skip",
+      "build": "skip"
+    }
   }
 }
