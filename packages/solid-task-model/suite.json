@@ -22,9 +22,26 @@
     "solid-federation-vocab"
   ],
   "federation": {
-    "sectors": ["productivity"],
-    "produces": ["productivity"],
-    "consumes": ["productivity"],
+    "sectors": [
+      "productivity"
+    ],
+    "produces": [
+      "productivity"
+    ],
+    "consumes": [
+      "productivity"
+    ],
     "note": "The SHARED federated Task/Issue RDF model — one wf:Task definition (typed accessors + SHACL shape) that the Pod Manager, solid-issues, and the pod-apps all read/write so a task created in one shows up as 'assigned to me' in another. Mints nothing; reuses wf:/flow, Dublin Core, schema.org and PROV-O per ADR-0013 + the R9 data-federation recommendation. GitHub-installable now (committed dist/, ignore-scripts=true); npm publish is a deferred migration."
+  },
+  "status": {
+    "generatedAt": "2026-07-03T05:14:38.996Z",
+    "commit": "0a872d7771ca66d1776170fcd7b5fbd195f4ff9e",
+    "version": "0.4.0",
+    "gate": {
+      "lint": "skip",
+      "typecheck": "skip",
+      "test": "skip",
+      "build": "skip"
+    }
   }
 }
