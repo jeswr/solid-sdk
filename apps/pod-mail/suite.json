@@ -17,10 +17,56 @@
   "dependsOn": [],
   "federation": {
     "clientIdUrl": "https://mail.solid-test.jeswr.org/clientid.jsonld",
-    "sectors": ["social", "productivity"],
-    "accessModes": ["Read", "Append", "Write"],
-    "consumes": ["social", "productivity"],
-    "produces": ["social", "productivity"],
+    "sectors": [
+      "social",
+      "productivity"
+    ],
+    "accessModes": [
+      "Read",
+      "Append",
+      "Write"
+    ],
+    "consumes": [
+      "social",
+      "productivity"
+    ],
+    "produces": [
+      "social",
+      "productivity"
+    ],
     "membershipTodo": "TODO(O1-gated): declare fedapp:memberOf once the fedapp: namespace (https://w3id.org/jeswr/fed) is frozen and the registry engine ships. The clientid.jsonld already carries an interim fedapp: block; confirm/replace the IRIs at that point. Membership is the registry's call after a signed challenge — not self-asserted."
+  },
+  "status": {
+    "generatedAt": "2026-07-03T05:14:27.660Z",
+    "commit": "e7916cccf80747b67218daea1043209b5cf08529",
+    "version": "0.0.1",
+    "gate": {
+      "lint": "skip",
+      "typecheck": "skip",
+      "test": "skip",
+      "build": "skip"
+    },
+    "coverage": {
+      "lines": {
+        "pct": 100,
+        "covered": 182,
+        "total": 182
+      },
+      "statements": {
+        "pct": 100,
+        "covered": 195,
+        "total": 195
+      },
+      "branches": {
+        "pct": 100,
+        "covered": 59,
+        "total": 59
+      },
+      "functions": {
+        "pct": 100,
+        "covered": 91,
+        "total": 91
+      }
+    }
   }
 }
