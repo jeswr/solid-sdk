@@ -5,12 +5,12 @@ function canonicalNQuads(quads) {
   return canonize.canonize(quads, { algorithm: RDFC_1_0 });
 }
 
-// node_modules/@jeswr/fetch-rdf/dist/parse.js
+// ..node_modules/@jeswr/fetch-rdf/dist/parse.js
 import contentType from "content-type";
 import { Store, StreamParser } from "n3";
 import { JsonLdParser } from "jsonld-streaming-parser";
 
-// node_modules/@jeswr/fetch-rdf/dist/errors.js
+// ..node_modules/@jeswr/fetch-rdf/dist/errors.js
 var RdfFetchError = class extends Error {
   /** The original cause, if any (e.g. a network error or parser exception). */
   cause;
@@ -34,7 +34,7 @@ var RdfFetchError = class extends Error {
   }
 };
 
-// node_modules/@jeswr/fetch-rdf/dist/parse.js
+// ..node_modules/@jeswr/fetch-rdf/dist/parse.js
 var SUPPORTED_RDF_MEDIA_TYPES = [
   "text/turtle",
   "application/n-triples",
@@ -159,7 +159,75 @@ function waitForDrain(parser) {
   });
 }
 
-// node_modules/@jeswr/rdf-serialize/dist/serialize.js
+// src/iri.ts
+var IRIREF_FORBIDDEN_DELIMITERS = /* @__PURE__ */ new Set(["<", ">", '"', "{", "}", "|", "^", "`", "\\"]);
+function escapeIri(value) {
+  let out = "";
+  for (let i = 0; i < value.length; i++) {
+    const ch = value[i];
+    const code = value.charCodeAt(i);
+    if (code <= 32 || IRIREF_FORBIDDEN_DELIMITERS.has(ch)) {
+      out += `%${code.toString(16).toUpperCase().padStart(2, "0")}`;
+    } else {
+      out += ch;
+    }
+  }
+  return out;
+}
+function hasEdgeControlOrSpace(value) {
+  if (value.length === 0) {
+    return false;
+  }
+  return value.charCodeAt(0) <= 32 || value.charCodeAt(value.length - 1) <= 32;
+}
+function safeIri(value) {
+  if (typeof value !== "string" || hasEdgeControlOrSpace(value)) {
+    return void 0;
+  }
+  const escaped = escapeIri(value);
+  try {
+    new URL(escaped);
+  } catch {
+    return void 0;
+  }
+  return escaped;
+}
+function safeHttpIri(value) {
+  if (typeof value !== "string" || hasEdgeControlOrSpace(value)) {
+    return void 0;
+  }
+  const escaped = escapeIri(value);
+  let u;
+  try {
+    u = new URL(escaped);
+  } catch {
+    return void 0;
+  }
+  if (u.protocol !== "http:" && u.protocol !== "https:") {
+    return void 0;
+  }
+  return escaped;
+}
+function requireIri(value, field) {
+  const safe = safeIri(value);
+  if (safe === void 0) {
+    throw new TypeError(
+      `@jeswr/solid-a2a: ${field} is not a valid absolute IRI: ${JSON.stringify(value)}`
+    );
+  }
+  return safe;
+}
+function requireHttpIri(value, field) {
+  const safe = safeHttpIri(value);
+  if (safe === void 0) {
+    throw new TypeError(
+      `@jeswr/solid-a2a: ${field} is not a valid http(s) IRI: ${JSON.stringify(value)}`
+    );
+  }
+  return safe;
+}
+
+// ..node_modules/@jeswr/rdf-serialize/dist/serialize.js
 import { Writer } from "n3";
 var DEFAULT_FORMAT = "text/turtle";
 function serialize(quads, options) {
@@ -400,7 +468,7 @@ function addIri(node, predicate, objectIri) {
   const factory = node.factory;
   const subject = node;
   const p = NamedNodeFrom.string(predicate, factory);
-  const o = NamedNodeFrom.string(objectIri, factory);
+  const o = NamedNodeFrom.string(escapeIri(objectIri), factory);
   node.dataset.add(factory.quad(subject, p, o));
 }
 function addLiteral(node, predicate, value) {
@@ -421,21 +489,24 @@ var WritableParameter = class extends TermWrapper {
     addLiteral(this, A2A_PARAM_VALUE, value);
   }
 };
+function addRequiredIri(node, predicate, iri, field) {
+  addIri(node, predicate, requireIri(iri, field));
+}
 var WritableAction = class extends TermWrapper {
   typeAction(actionTypeIri) {
     addIri(this, RDF_TYPE, actionTypeIri);
   }
   setObject(iri) {
-    addIri(this, SCHEMA_OBJECT, iri);
+    addRequiredIri(this, SCHEMA_OBJECT, iri, "target (schema:object)");
   }
   setTarget(iri) {
-    addIri(this, SCHEMA_TARGET, iri);
+    addRequiredIri(this, SCHEMA_TARGET, iri, "target (schema:target)");
   }
   setRecipient(iri) {
-    addIri(this, SCHEMA_RECIPIENT, iri);
+    addRequiredIri(this, SCHEMA_RECIPIENT, iri, "recipient");
   }
   setAgent(iri) {
-    addIri(this, SCHEMA_AGENT, iri);
+    addRequiredIri(this, SCHEMA_AGENT, iri, "agent");
   }
   addMode(modeIri) {
     addIri(this, A2A_MODE, modeIri);
@@ -446,7 +517,7 @@ var WritableIntent = class extends TermWrapper {
     addIri(this, RDF_TYPE, A2A_INTENT);
   }
   setAgent(iri) {
-    addIri(this, SCHEMA_AGENT, iri);
+    addRequiredIri(this, SCHEMA_AGENT, iri, "agent");
   }
   /** Link a fresh blank-node action node, typed with the action-type IRI. */
   linkAction(actionTypeIri) {
@@ -473,9 +544,18 @@ var WritableIntent = class extends TermWrapper {
 var IntentBuilder = class {
   store = new Store2();
   factory = DataFactory;
-  /** Open the intent subject (`id` is the intent IRI) for writing. */
+  /**
+   * Open the intent subject (`id` is the intent IRI) for writing. The id is an
+   * untrusted SUBJECT that may be a legitimate non-http absolute IRI (`urn:...`), so
+   * it is escaped scheme-agnostically ({@link escapeIri}) — a valid id is unchanged,
+   * an injected breakout char is neutralised before it reaches n3.Writer.
+   */
   intent(id) {
-    const node = new WritableIntent(id, this.store, this.factory);
+    const node = new WritableIntent(
+      escapeIri(id),
+      this.store,
+      this.factory
+    );
     node.typeIntent();
     return node;
   }
@@ -491,15 +571,28 @@ var IntentBuilder = class {
 var GraphBuilder = class {
   store = new Store2();
   factory = DataFactory;
-  /** Materialise a {@link NodeRef} to its RDF/JS term. */
+  /**
+   * Materialise a {@link NodeRef} to its RDF/JS term. An IRI SUBJECT is escaped
+   * scheme-agnostically ({@link escapeIri}) — subjects here may legitimately be a
+   * `urn:` (e.g. the handshake subject, a protocol-document id, a SHACL shape id), so
+   * we must NOT restrict the scheme; we only neutralise breakout chars. A blank-node
+   * id is minted internally (never untrusted), so it is left as-is.
+   */
   subjectTerm(ref) {
-    return ref.kind === "iri" ? NamedNodeFrom.string(ref.value, this.factory) : BlankNodeFrom.string(ref.value, this.factory);
+    return ref.kind === "iri" ? NamedNodeFrom.string(escapeIri(ref.value), this.factory) : BlankNodeFrom.string(ref.value, this.factory);
   }
-  /** Add `(subject, predicate, object-IRI)`. */
+  /**
+   * Add `(subject, predicate, object-IRI)`. The object IRI is escaped
+   * ({@link escapeIri}) as a universal chokepoint so no breakout char reaches
+   * n3.Writer; this covers every object position (trusted vocab IRIs, `urn:`/`http`
+   * shape ids, class IRIs) without dropping a legitimate non-http object. Callers
+   * with a field that MUST be http(s) (e.g. a `protocolSource`) additionally pre-filter
+   * through `safeHttpIri`. The predicate is always a trusted vocab constant.
+   */
   addIri(subject, predicate, objectIri) {
     const s = this.subjectTerm(normalize(subject));
     const p = NamedNodeFrom.string(predicate, this.factory);
-    const o = NamedNodeFrom.string(objectIri, this.factory);
+    const o = NamedNodeFrom.string(escapeIri(objectIri), this.factory);
     this.store.add(this.factory.quad(s, p, o));
   }
   /** Add `(subject, predicate, literal)` with an optional datatype IRI. */
@@ -628,7 +721,8 @@ function handshakeToRdf(message) {
   if (message.kind === "upgrade-offer") {
     b.addIri(HANDSHAKE_SUBJECT, RDF_TYPE, A2A_UPGRADE_OFFER);
     b.addLiteral(HANDSHAKE_SUBJECT, A2A_PROTOCOL_HASH, message.protocolHash);
-    b.addIri(HANDSHAKE_SUBJECT, A2A_PROTOCOL_SOURCE, message.protocolSource);
+    const source = requireHttpIri(message.protocolSource, "protocolSource");
+    b.addIri(HANDSHAKE_SUBJECT, A2A_PROTOCOL_SOURCE, source);
     b.addLiteral(HANDSHAKE_SUBJECT, A2A_REQUIRED, message.required ? "true" : "false", XSD_BOOLEAN);
     if (message.protocolName !== void 0) {
       b.addLiteral(HANDSHAKE_SUBJECT, A2A_PROTOCOL_NAME, message.protocolName);
@@ -764,29 +858,30 @@ function intentToJsonLd(intent) {
     "@type": actionTypeAlias(intent)
   };
   if (intent.target !== void 0) {
+    const target = requireIri(intent.target, "target");
     if (intent.action === "list") {
-      action.target = { "@id": intent.target };
+      action.target = { "@id": target };
     } else {
-      action.object = { "@id": intent.target };
+      action.object = { "@id": target };
     }
   }
   if (intent.recipient !== void 0) {
-    action.recipient = { "@id": intent.recipient };
+    action.recipient = { "@id": requireIri(intent.recipient, "recipient") };
   }
   if (intent.agent !== void 0) {
-    action.agent = { "@id": intent.agent };
+    action.agent = { "@id": requireIri(intent.agent, "agent") };
   }
   if (intent.modes && intent.modes.length > 0) {
     action.mode = intent.modes.map((m) => ({ "@id": ACL_MODE_IRI[m] }));
   }
   const doc = {
     "@context": A2A_INLINE_CONTEXT,
-    "@id": intent.id,
+    "@id": escapeIri(intent.id),
     "@type": "Intent",
     action
   };
   if (intent.agent !== void 0) {
-    doc.agent = { "@id": intent.agent };
+    doc.agent = { "@id": requireIri(intent.agent, "agent") };
   }
   if (intent.parameters && intent.parameters.length > 0) {
     doc.parameter = intent.parameters.map((p) => ({
@@ -1067,12 +1162,13 @@ function shapeToTurtle(quads, format) {
 function buildResponseShape(responseClassIri, shapeId) {
   const b = new GraphBuilder();
   const id = shapeId ?? `${A2A}ResponseShape`;
+  const responseClass = requireIri(responseClassIri, "responseClassIri");
   b.addIri(id, RDF_TYPE, SH_NODE_SHAPE2);
-  b.addIri(id, SH_TARGET_CLASS, responseClassIri);
+  b.addIri(id, SH_TARGET_CLASS, responseClass);
   const typeProp = b.linkBlankNode(id, SH_PROPERTY);
   b.addIri(typeProp, RDF_TYPE, SH_PROPERTY_SHAPE);
   b.addIri(typeProp, SH_PATH, RDF_TYPE);
-  b.addIri(typeProp, SH_HAS_VALUE, responseClassIri);
+  b.addIri(typeProp, SH_HAS_VALUE, responseClass);
   b.addLiteral(typeProp, SH_MIN_COUNT, "1", XSD_INTEGER);
   return b.quads();
 }
@@ -1085,7 +1181,7 @@ async function parseIntent(nl, options = {}) {
   }
   const base = options.baseIRI ?? DEFAULT_BASE;
   const draft = classifyDeterministic(nl);
-  if (draft !== void 0) {
+  if (draft !== void 0 && isValidDraft(draft)) {
     const intent = lowerDraft(draft, base, nl);
     return {
       resolved: true,
@@ -1122,7 +1218,7 @@ async function parseIntent(nl, options = {}) {
     resolved: false,
     quads: [],
     nl,
-    reason: "no deterministic verb matched and no translate function was supplied."
+    reason: draft !== void 0 ? "a verb matched but the extracted target/recipient was not a valid IRI, and no translate function was supplied." : "no deterministic verb matched and no translate function was supplied."
   };
 }
 function classifyDeterministic(nl) {
@@ -1319,8 +1415,8 @@ function shortHash(input) {
   }
   return (h >>> 0).toString(36);
 }
-function optionalStringOk(value) {
-  return value === void 0 || typeof value === "string" && value.trim().length > 0;
+function optionalIriOk(value) {
+  return value === void 0 || typeof value === "string" && safeIri(value) !== void 0;
 }
 function isValidDraft(draft) {
   if (typeof draft !== "object" || draft === null) {
@@ -1329,13 +1425,13 @@ function isValidDraft(draft) {
   if (typeof draft.action !== "string" || !VALID_INTENT_ACTIONS.has(draft.action)) {
     return false;
   }
-  if (!optionalStringOk(draft.target)) {
+  if (!optionalIriOk(draft.target)) {
     return false;
   }
-  if (!optionalStringOk(draft.recipient)) {
+  if (!optionalIriOk(draft.recipient)) {
     return false;
   }
-  if (!optionalStringOk(draft.agent)) {
+  if (!optionalIriOk(draft.agent)) {
     return false;
   }
   if (!parametersFieldOk(draft.parameters)) {

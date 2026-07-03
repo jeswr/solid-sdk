@@ -12,6 +12,7 @@
 
 import { parseRdf } from "@jeswr/fetch-rdf";
 import type { DatasetCore, Quad } from "@rdfjs/types";
+import { requireHttpIri } from "./iri.js";
 import { serialize } from "./serialize.js";
 import type { HandshakeMessage, UpgradeOffer, UpgradeResponse } from "./types.js";
 import { A2A, RDF_TYPE, XSD } from "./vocab.js";
@@ -176,7 +177,13 @@ export function handshakeToRdf(message: HandshakeMessage): Quad[] {
   if (message.kind === "upgrade-offer") {
     b.addIri(HANDSHAKE_SUBJECT, RDF_TYPE, A2A_UPGRADE_OFFER);
     b.addLiteral(HANDSHAKE_SUBJECT, A2A_PROTOCOL_HASH, message.protocolHash);
-    b.addIri(HANDSHAKE_SUBJECT, A2A_PROTOCOL_SOURCE, message.protocolSource);
+    // `protocolSource` is an untrusted http(s) IRI object (a fetch target for the
+    // peer) and is REQUIRED for a usable offer. FAIL CLOSED: a non-http(s) / malformed
+    // value THROWS rather than being silently dropped — so the RDF form never omits a
+    // source the structured UpgradeOffer still claims (the object-desync / fail-open
+    // class), and an unfetchable source is caught at encode time, not silently on read.
+    const source = requireHttpIri(message.protocolSource, "protocolSource");
+    b.addIri(HANDSHAKE_SUBJECT, A2A_PROTOCOL_SOURCE, source);
     b.addLiteral(HANDSHAKE_SUBJECT, A2A_REQUIRED, message.required ? "true" : "false", XSD_BOOLEAN);
     if (message.protocolName !== undefined) {
       b.addLiteral(HANDSHAKE_SUBJECT, A2A_PROTOCOL_NAME, message.protocolName);

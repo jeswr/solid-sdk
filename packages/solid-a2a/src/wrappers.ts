@@ -20,6 +20,7 @@ import {
   type TermWrapper as TermWrapperType,
 } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
+import { escapeIri, requireIri } from "./iri.js";
 import {
   A2A_ACTION,
   A2A_INTENT,
@@ -158,12 +159,18 @@ export function actionKindOf(action: ActionNode): IntentAction | undefined {
 
 // --- the write path (intentToRdf / buildShapeForIntent / buildProtocolDocument) -
 
-/** Add a single `(subject, predicate-IRI, object-IRI)` triple through the factory. */
+/**
+ * Add a single `(subject, predicate-IRI, object-IRI)` triple through the factory.
+ * The object IRI is escaped through {@link escapeIri} as a universal chokepoint so a
+ * breakout character can never reach n3.Writer verbatim (a no-op on the trusted vocab
+ * IRIs and on the already-`safeHttpIri`-normalised values the setters pass). The
+ * predicate is always a trusted vocab constant, never untrusted input.
+ */
 function addIri(node: TermWrapper, predicate: string, objectIri: string): void {
   const factory = node.factory;
   const subject = node as unknown as Term;
   const p = NamedNodeFrom.string(predicate, factory);
-  const o = NamedNodeFrom.string(objectIri, factory);
+  const o = NamedNodeFrom.string(escapeIri(objectIri), factory);
   node.dataset.add(factory.quad(subject as never, p as never, o as never));
 }
 
@@ -189,22 +196,36 @@ class WritableParameter extends TermWrapper {
   }
 }
 
+/**
+ * Add an `(this, predicate, object-IRI)` triple for a REQUIRED, untrusted object IRI,
+ * FAILING CLOSED. `object`/`target`/`recipient`/`agent` are untrusted input (an
+ * untrusted Intent, or a malicious LLM-returned draft flowing through `intentToRdf`).
+ * A scheme-agnostic absolute IRI (http(s), `urn:`, `did:`) is emitted with any breakout
+ * char neutralised ({@link requireIri} → {@link escapeIri}); a value that is NOT a
+ * valid absolute IRI THROWS rather than being silently dropped — so the serialised
+ * quads never omit a field the public {@link import("./types.js").Intent} still claims
+ * (the object-desync / fail-open class). `field` names the offending field in the error.
+ */
+function addRequiredIri(node: TermWrapper, predicate: string, iri: string, field: string): void {
+  addIri(node, predicate, requireIri(iri, field));
+}
+
 /** The action node (a schema:Action subclass), opened for writing. */
 class WritableAction extends TermWrapper {
   typeAction(actionTypeIri: string): void {
     addIri(this, RDF_TYPE, actionTypeIri);
   }
   setObject(iri: string): void {
-    addIri(this, SCHEMA_OBJECT, iri);
+    addRequiredIri(this, SCHEMA_OBJECT, iri, "target (schema:object)");
   }
   setTarget(iri: string): void {
-    addIri(this, SCHEMA_TARGET, iri);
+    addRequiredIri(this, SCHEMA_TARGET, iri, "target (schema:target)");
   }
   setRecipient(iri: string): void {
-    addIri(this, SCHEMA_RECIPIENT, iri);
+    addRequiredIri(this, SCHEMA_RECIPIENT, iri, "recipient");
   }
   setAgent(iri: string): void {
-    addIri(this, SCHEMA_AGENT, iri);
+    addRequiredIri(this, SCHEMA_AGENT, iri, "agent");
   }
   addMode(modeIri: string): void {
     addIri(this, A2A_MODE, modeIri);
@@ -217,7 +238,7 @@ class WritableIntent extends TermWrapper {
     addIri(this, RDF_TYPE, A2A_INTENT);
   }
   setAgent(iri: string): void {
-    addIri(this, SCHEMA_AGENT, iri);
+    addRequiredIri(this, SCHEMA_AGENT, iri, "agent");
   }
 
   /** Link a fresh blank-node action node, typed with the action-type IRI. */
@@ -253,9 +274,18 @@ export class IntentBuilder {
   private readonly store = new Store();
   private readonly factory = DataFactory as unknown as DataFactoryType;
 
-  /** Open the intent subject (`id` is the intent IRI) for writing. */
+  /**
+   * Open the intent subject (`id` is the intent IRI) for writing. The id is an
+   * untrusted SUBJECT that may be a legitimate non-http absolute IRI (`urn:...`), so
+   * it is escaped scheme-agnostically ({@link escapeIri}) — a valid id is unchanged,
+   * an injected breakout char is neutralised before it reaches n3.Writer.
+   */
   intent(id: string): WritableIntent {
-    const node = new WritableIntent(id, this.store as unknown as DatasetCore, this.factory);
+    const node = new WritableIntent(
+      escapeIri(id),
+      this.store as unknown as DatasetCore,
+      this.factory,
+    );
     node.typeIntent();
     return node;
   }
@@ -295,18 +325,31 @@ export class GraphBuilder {
   private readonly store = new Store();
   private readonly factory = DataFactory as unknown as DataFactoryType;
 
-  /** Materialise a {@link NodeRef} to its RDF/JS term. */
+  /**
+   * Materialise a {@link NodeRef} to its RDF/JS term. An IRI SUBJECT is escaped
+   * scheme-agnostically ({@link escapeIri}) — subjects here may legitimately be a
+   * `urn:` (e.g. the handshake subject, a protocol-document id, a SHACL shape id), so
+   * we must NOT restrict the scheme; we only neutralise breakout chars. A blank-node
+   * id is minted internally (never untrusted), so it is left as-is.
+   */
   private subjectTerm(ref: NodeRef): Term {
     return ref.kind === "iri"
-      ? (NamedNodeFrom.string(ref.value, this.factory) as unknown as Term)
+      ? (NamedNodeFrom.string(escapeIri(ref.value), this.factory) as unknown as Term)
       : (BlankNodeFrom.string(ref.value, this.factory) as unknown as Term);
   }
 
-  /** Add `(subject, predicate, object-IRI)`. */
+  /**
+   * Add `(subject, predicate, object-IRI)`. The object IRI is escaped
+   * ({@link escapeIri}) as a universal chokepoint so no breakout char reaches
+   * n3.Writer; this covers every object position (trusted vocab IRIs, `urn:`/`http`
+   * shape ids, class IRIs) without dropping a legitimate non-http object. Callers
+   * with a field that MUST be http(s) (e.g. a `protocolSource`) additionally pre-filter
+   * through `safeHttpIri`. The predicate is always a trusted vocab constant.
+   */
   addIri(subject: NodeRef | string, predicate: string, objectIri: string): void {
     const s = this.subjectTerm(normalize(subject));
     const p = NamedNodeFrom.string(predicate, this.factory);
-    const o = NamedNodeFrom.string(objectIri, this.factory);
+    const o = NamedNodeFrom.string(escapeIri(objectIri), this.factory);
     this.store.add(this.factory.quad(s as never, p as never, o as never) as Quad);
   }
 

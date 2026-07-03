@@ -8,6 +8,7 @@
 
 import { parseRdf } from "@jeswr/fetch-rdf";
 import type { DatasetCore, Quad } from "@rdfjs/types";
+import { escapeIri, requireIri } from "./iri.js";
 import { serialize } from "./serialize.js";
 import type { Intent, IntentParameter } from "./types.js";
 import {
@@ -79,21 +80,28 @@ export function intentToTurtle(intent: Intent, format?: string): Promise<string>
  * `application/ld+json`) — see {@link parseIntentGraph}.
  */
 export function intentToJsonLd(intent: Intent): Record<string, unknown> {
+  // IRIs are sanitised IDENTICALLY to the Turtle/quad path (intentToRdf) so the two
+  // serialisations can never diverge: the `@id` SUBJECT is scheme-agnostically escaped
+  // (a subject can never inject), and every object IRI (`target`/`recipient`/`agent`)
+  // goes through requireIri — a valid absolute IRI (incl. `urn:`/`did:`) is emitted, a
+  // malformed one THROWS (fail closed) rather than being emitted unchecked, so this
+  // JSON-LD view never claims a field the quad path would reject (object-desync class).
   const action: Record<string, unknown> = {
     "@type": actionTypeAlias(intent),
   };
   if (intent.target !== undefined) {
+    const target = requireIri(intent.target, "target");
     if (intent.action === "list") {
-      action.target = { "@id": intent.target };
+      action.target = { "@id": target };
     } else {
-      action.object = { "@id": intent.target };
+      action.object = { "@id": target };
     }
   }
   if (intent.recipient !== undefined) {
-    action.recipient = { "@id": intent.recipient };
+    action.recipient = { "@id": requireIri(intent.recipient, "recipient") };
   }
   if (intent.agent !== undefined) {
-    action.agent = { "@id": intent.agent };
+    action.agent = { "@id": requireIri(intent.agent, "agent") };
   }
   if (intent.modes && intent.modes.length > 0) {
     action.mode = intent.modes.map((m) => ({ "@id": ACL_MODE_IRI[m] }));
@@ -101,12 +109,12 @@ export function intentToJsonLd(intent: Intent): Record<string, unknown> {
 
   const doc: Record<string, unknown> = {
     "@context": A2A_INLINE_CONTEXT,
-    "@id": intent.id,
+    "@id": escapeIri(intent.id),
     "@type": "Intent",
     action,
   };
   if (intent.agent !== undefined) {
-    doc.agent = { "@id": intent.agent };
+    doc.agent = { "@id": requireIri(intent.agent, "agent") };
   }
   if (intent.parameters && intent.parameters.length > 0) {
     doc.parameter = intent.parameters.map((p) => ({

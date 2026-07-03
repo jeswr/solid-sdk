@@ -8,6 +8,7 @@
 // (typed wrapper write path) — never hand-built triples. Serialise via n3.Writer.
 
 import type { Quad } from "@rdfjs/types";
+import { requireIri } from "./iri.js";
 import { serialize } from "./serialize.js";
 import {
   A2A,
@@ -139,18 +140,30 @@ export function shapeToTurtle(quads: readonly Quad[], format?: string): Promise<
  * because a response payload's shape is exchange-specific.
  *
  * @param responseClassIri - the rdf:type a conforming response subject must carry.
+ * @throws {TypeError} if `responseClassIri` is not a valid absolute IRI. FAIL CLOSED:
+ *   `sh:targetClass` / `sh:hasValue` are what make the shape actually CONSTRAIN the
+ *   response class — omitting them for a malformed IRI would silently yield a VACUOUS
+ *   (unconstrained) shape, a validation bypass. A valid non-http `urn:`/`did:` class
+ *   is accepted (scheme-agnostic); only an unemittable IRI is rejected.
  */
 export function buildResponseShape(responseClassIri: string, shapeId?: string): Quad[] {
   const b = new GraphBuilder();
+  // `shapeId` (a subject) is escaped scheme-agnostically by the GraphBuilder chokepoint
+  // (it may legitimately be a `urn:`). `responseClassIri` is an untrusted class IRI used
+  // in OBJECT position (sh:targetClass, sh:hasValue): require a valid absolute IRI and
+  // THROW if malformed (never emit an unconstrained response shape, never an injectable
+  // object). The single validated+escaped value is reused for both class-bearing triples.
   const id = shapeId ?? `${A2A}ResponseShape`;
+  const responseClass = requireIri(responseClassIri, "responseClassIri");
   b.addIri(id, RDF_TYPE, SH_NODE_SHAPE);
-  b.addIri(id, SH_TARGET_CLASS, responseClassIri);
-  // A single placeholder property: rdf:type must be present (minCount 1). This is
-  // deliberately permissive — the response shape's specifics are exchange-defined.
+  b.addIri(id, SH_TARGET_CLASS, responseClass);
+  // A single placeholder property: rdf:type must be present (minCount 1) and equal the
+  // response class. The shape's further specifics are exchange-defined, but it always
+  // CONSTRAINS the response class — never vacuous.
   const typeProp = b.linkBlankNode(id, SH_PROPERTY);
   b.addIri(typeProp, RDF_TYPE, SH_PROPERTY_SHAPE);
   b.addIri(typeProp, SH_PATH, RDF_TYPE);
-  b.addIri(typeProp, SH_HAS_VALUE, responseClassIri);
+  b.addIri(typeProp, SH_HAS_VALUE, responseClass);
   b.addLiteral(typeProp, SH_MIN_COUNT, "1", XSD_INTEGER);
   return b.quads();
 }
