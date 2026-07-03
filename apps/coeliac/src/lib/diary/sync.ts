@@ -16,10 +16,12 @@ import {
 import type {
   DiaryStore,
   StoredConclusion,
+  StoredGeneticSummary,
   StoredMeal,
   StoredProtocol,
   StoredSymptom,
 } from "../cache/diary-store.js";
+import { writeGeneticSummary } from "../genetics/summary.js";
 import { ensureDiaryReady, putResource } from "../pod/pod-fs.js";
 import { storedConclusionToData, storedProtocolToData } from "../protocol/persist.js";
 
@@ -80,6 +82,32 @@ export async function syncConclusion(ctx: SyncContext, conclusion: StoredConclus
   await putResource(ctx.authedFetch, conclusion.url, body);
 }
 
+/**
+ * Serialise + PUT the genetic summary to the pod (owner-only ACL ensured first).
+ * The write goes through the model's consent/coverage guardrails
+ * ({@link writeGeneticSummary}) — the cached record is always consented (`true` by
+ * construction), so this re-affirms consent at the write boundary.
+ */
+export async function syncGeneticSummary(
+  ctx: SyncContext,
+  summary: StoredGeneticSummary,
+): Promise<void> {
+  await writeGeneticSummary(
+    { authedFetch: ctx.authedFetch, webId: ctx.webId, storageRoot: ctx.storageRoot },
+    {
+      markers: summary.markers,
+      interpretation: summary.interpretation,
+      sourceType: summary.sourceType,
+      enteredManually: summary.sourceType === "manual",
+      coeliacGeneticRisk: summary.coeliacGeneticRisk,
+      coverageComplete: summary.coverageComplete,
+      consentGiven: true,
+      patient: ctx.webId,
+      created: new Date(summary.createdAt),
+    },
+  );
+}
+
 /** The outcome of a flush pass. */
 export interface FlushResult {
   synced: number;
@@ -92,7 +120,7 @@ export interface FlushResult {
  * `error` and the flush continues (offline-tolerant; retried next pass).
  */
 export async function flushOutbox(ctx: SyncContext, store: DiaryStore): Promise<FlushResult> {
-  const { meals, symptoms, protocols, conclusions } = await store.pending();
+  const { meals, symptoms, protocols, conclusions, genetics } = await store.pending();
   let synced = 0;
   let failed = 0;
   for (const meal of meals) {
@@ -139,6 +167,16 @@ export async function flushOutbox(ctx: SyncContext, store: DiaryStore): Promise<
       synced += 1;
     } catch (err) {
       await store.markConclusionSync(conclusion.ulid, "error", (err as Error).message);
+      failed += 1;
+    }
+  }
+  for (const summary of genetics) {
+    try {
+      await syncGeneticSummary(ctx, summary);
+      await store.markGeneticSync("synced");
+      synced += 1;
+    } catch (err) {
+      await store.markGeneticSync("error", (err as Error).message);
       failed += 1;
     }
   }

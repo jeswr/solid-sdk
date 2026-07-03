@@ -35,6 +35,7 @@ import type { StoredProtocol } from "@/lib/cache/diary-store";
 import { nextAction } from "@/lib/protocol/fsm";
 import { storedProtocolToData } from "@/lib/protocol/persist";
 import { triggerLabel } from "@/lib/off/exposure-display";
+import { useGenetics } from "@/lib/session/use-genetics";
 import { useInsights } from "@/lib/session/use-insights";
 import { useProtocolActions } from "@/lib/session/use-protocol-actions";
 import { useProtocols } from "@/lib/session/use-protocols";
@@ -217,6 +218,41 @@ function InsightsBody({ result }: { result: AnalysisResult }) {
   );
 }
 
+/**
+ * A careful, NPV-only genetics signal (Phase 3c). Shown only when a summary is
+ * recorded. A DQ2/DQ8-ABSENT result is a genuine "coeliac unlikely" signal — but it
+ * is STILL NOT a diagnosis, and a PRESENT result is explicitly NOT confirmation
+ * (DQ2/DQ8 is common). Everything else stays neutral. Links to the Genetics view for
+ * the full framing.
+ */
+function GeneticSignal() {
+  const { summary, loaded } = useGenetics();
+  if (!loaded || !summary) return null;
+  const risk = summary.coeliacGeneticRisk;
+  let tone = "info";
+  let text: string;
+  if (risk === "risk-haplotype-absent") {
+    tone = "ok";
+    text =
+      "Your recorded HLA summary found no DQ2/DQ8 risk variant, which makes coeliac disease very " +
+      "unlikely. This is NOT a diagnosis and does not fully rule it out — discuss with your clinician.";
+  } else if (risk === "risk-haplotype-present") {
+    text =
+      "Your recorded HLA summary found a DQ2/DQ8 variant. This is COMMON and is NOT confirmation of " +
+      "coeliac — most carriers never develop it. Only a clinician can diagnose coeliac.";
+  } else {
+    text =
+      "Your recorded HLA summary is incomplete or inconclusive, so it tells us little either way. " +
+      "See Genetics for the full picture.";
+  }
+  return (
+    <aside className={`insights__genetics insights__genetics--${tone}`} role="note">
+      <p>{text}</p>
+      <Link href="/genetics">View genetics</Link>
+    </aside>
+  );
+}
+
 export function InsightsView() {
   const { result, mealCount, symptomCount, loaded, refresh } = useInsights();
   const protocols = useProtocols();
@@ -256,6 +292,7 @@ export function InsightsView() {
       <p className="insights__caveat">{PATTERN_NOT_DIAGNOSIS}</p>
 
       <ActiveChallenges active={protocols.active} />
+      <GeneticSignal />
 
       {notice ? (
         <aside className="insights__notice" role="note">

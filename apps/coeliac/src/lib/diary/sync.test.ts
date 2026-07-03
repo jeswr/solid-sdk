@@ -156,4 +156,36 @@ describe("flushOutbox", () => {
     expect(pending.conclusions).toHaveLength(1);
     expect(pending.conclusions[0].sync).toBe("pending");
   });
+
+  it("syncs a genetic summary to its container, ACL-first, owner-only (no public grant)", async () => {
+    const s = scenario();
+    const store = new DiaryStore(new MemoryKv(), WEBID);
+    await store.putGeneticSummary({
+      kind: "genetic",
+      url: `${ROOT}health/diary/genetics/summary.ttl`,
+      markers: [
+        { rsid: "rs2187668", riskHaplotype: "DQ2.5", markerPresence: "present" },
+        { rsid: "rs7454108", riskHaplotype: "DQ8", markerPresence: "absent" },
+      ],
+      interpretation: "Carrying DQ2/DQ8 does NOT mean you have coeliac disease. Discuss with your clinician.",
+      coeliacGeneticRisk: "risk-haplotype-present",
+      coverageComplete: true,
+      sourceType: "manual",
+      consentGiven: true,
+      createdAt: "2026-07-03T00:00:00.000Z",
+      sync: "pending",
+    });
+
+    const result = await flushOutbox({ authedFetch: s.fetch, webId: WEBID, storageRoot: ROOT }, store);
+    expect(result.synced).toBe(1);
+    const urls = s.puts().map((p) => p.url);
+    const summaryUrl = `${ROOT}health/diary/genetics/summary.ttl`;
+    expect(urls).toContain(summaryUrl);
+    const aclIdx = urls.findIndex((u) => u.endsWith("/health/diary/.acl"));
+    expect(aclIdx).toBeGreaterThanOrEqual(0);
+    expect(aclIdx).toBeLessThan(urls.indexOf(summaryUrl)); // ACL before the summary
+    const acl = s.puts().find((p) => p.url.endsWith("/health/diary/.acl"));
+    expect(acl?.body ?? "").not.toMatch(/agentClass|foaf:Agent|Public/i);
+    expect((await store.pending()).genetics).toHaveLength(0);
+  });
 });
