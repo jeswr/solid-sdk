@@ -21,6 +21,7 @@
     "build:dev": "npm run build:deps && tsc -p tsconfig.json",
     "check:dist": "node scripts/check-dist-fresh.mjs",
     "check:lockfile-transport": "node scripts/check-lockfile-transport.mjs",
+    "fix:lockfile-transport": "node scripts/normalize-lockfile.mjs",
     "api:report": "api-extractor run --local -c config/api-extractor.json",
     "api:check": "api-extractor run -c config/api-extractor.json",
     "typecheck": "npm run build:deps && tsc -p tsconfig.json --noEmit",
