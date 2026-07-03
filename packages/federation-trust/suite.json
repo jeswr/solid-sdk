@@ -18,10 +18,25 @@
     "lint": "@biomejs/biome ^2.x",
     "node": ">=24"
   },
-  "dependsOn": ["solid-vc", "federation-registry", "solid-federation-vocab"],
+  "dependsOn": [
+    "solid-vc",
+    "federation-registry",
+    "solid-federation-vocab"
+  ],
   "federation": {
     "service": "Trust framework (R9 O2/R3 — the signed membership challenge above the registry's fedreg:assertedBy)",
     "vocab": "https://w3id.org/jeswr/fedtrust#",
     "membershipTodo": "SDK (not an app). issueMembershipCredential() signs 'app X is a member of federation F with status S, asserted by authority A' as a W3C VC 2.0 fedtrust:MembershipCredential (Data Integrity, EdDSA/ECDSA over RDFC-1.0 via @jeswr/solid-vc). verifyMembershipCredential() verifies FAIL-CLOSED against the verifier's trust anchors: signature, expiry, issuer-binding, assertedBy==issuer, status in accepted set (default Active), expected federation/app (anti-replay), and an optional delegation chain (fedtrust:DelegationCredential links) to a trusted anchor. Composes @jeswr/solid-vc (proof-suite seam) + @jeswr/federation-registry (fedreg: Membership vocab) — duplicates neither. CLIENT-SIDE only; server-side membership ENFORCEMENT is a CORE-PSS decision flagged for the maintainer, not built here."
+  },
+  "status": {
+    "generatedAt": "2026-07-03T05:14:24.550Z",
+    "commit": "872c18ba13aa5a9427003d18d611e706f54ff558",
+    "version": "0.1.0",
+    "gate": {
+      "lint": "skip",
+      "typecheck": "skip",
+      "test": "skip",
+      "build": "skip"
+    }
   }
 }
