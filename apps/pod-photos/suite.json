@@ -16,13 +16,58 @@
     "lint": "@biomejs/biome ^1.9.4",
     "node": ">=22"
   },
-  "dependsOn": ["solid-federation-vocab"],
+  "dependsOn": [
+    "solid-federation-vocab"
+  ],
   "federation": {
     "clientIdUrl": "https://pod-photos.example/clientid.jsonld",
-    "sectors": ["media"],
-    "accessModes": ["Read", "Write", "Append"],
-    "produces": ["media"],
-    "consumes": ["media"],
+    "sectors": [
+      "media"
+    ],
+    "accessModes": [
+      "Read",
+      "Write",
+      "Append"
+    ],
+    "produces": [
+      "media"
+    ],
+    "consumes": [
+      "media"
+    ],
     "membershipTodo": "Federation membership is asserted by the registry after a signed challenge, not here. Once fedapp: (https://w3id.org/jeswr/fed#) is frozen (ADR-0013 / O1), this app publishes fedapp:sector media + fedapp:produces/consumes schema:Photograph + schema:ImageGallery from its clientid.jsonld; see public/clientid.jsonld."
+  },
+  "status": {
+    "generatedAt": "2026-07-03T05:14:28.564Z",
+    "commit": "999e5b6c971f24c5381f7891486ee582eb0bb4cf",
+    "version": "0.0.1",
+    "gate": {
+      "lint": "skip",
+      "typecheck": "skip",
+      "test": "skip",
+      "build": "skip"
+    },
+    "coverage": {
+      "lines": {
+        "pct": 100,
+        "covered": 857,
+        "total": 857
+      },
+      "statements": {
+        "pct": 100,
+        "covered": 857,
+        "total": 857
+      },
+      "branches": {
+        "pct": 100,
+        "covered": 363,
+        "total": 363
+      },
+      "functions": {
+        "pct": 100,
+        "covered": 115,
+        "total": 115
+      }
+    }
   }
 }
