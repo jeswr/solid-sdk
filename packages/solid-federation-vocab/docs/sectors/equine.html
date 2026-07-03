@@ -20,7 +20,7 @@
     <p>Prefix <code>eq:</code> · a gUFO-based ontology in the @jeswr Solid federation; imports the <a href="../core.html">Solid Core</a>.</p>
     <p class="warn">⚠️ <strong>Experimental</strong> — AI-agent-generated (Claude Opus 4.8, @jeswr PSS agent); under active development, not production-hardened.</p>
     <p>Other representations: <a href="equine.ttl">Turtle</a> · <a href="equine-context.jsonld">JSON-LD context</a> · <a href="../">index</a></p>
-    <h2>Terms (68)</h2>
+    <h2>Terms (69)</h2>
     <table>
       <tr><th>Term</th><th>Label</th><th>Comment / definition</th></tr>
       <tr><td><code>eq:colour</code></td><td>colour</td><td>The coat colour of a horse (e.g. &quot;bay&quot;, &quot;chestnut&quot;, &quot;grey&quot;) — free text, as colours vary by registry.</td></tr>
@@ -44,6 +44,7 @@
       <tr><td><code>eq:jockeyPct</code></td><td>jockey percentage</td><td>The percentage (0–100) of a prize distribution allocated to the jockey.</td></tr>
       <tr><td><code>eq:managedBy</code></td><td>managed by</td><td>The racing manager acting for an ownership share on the owners' behalf.</td></tr>
       <tr><td><code>eq:mareName</code></td><td>mare name</td><td>The name of the mare a stud nomination sends to the stallion. A literal because the mare is often not a pod-held eq:Horse.</td></tr>
+      <tr><td><code>eq:mgmtFlat</code></td><td>flat management fee</td><td>A flat (fixed) management fee a racing manager charges an ownership share, as a plain xsd:decimal amount in the share's currency — the fixed-fee alternative (or complement) to the percentage eq:mgmtPct. Non-negative; an honest plain decimal, not a qudt QuantityValue (matching eq:mgmtPct and eq:sharePct).</td></tr>
       <tr><td><code>eq:mgmtPct</code></td><td>management percentage</td><td>The percentage (0–100) a racing manager takes from an ownership share's prize returns.</td></tr>
       <tr><td><code>eq:nominator</code></td><td>nominator</td><td>The agent who made a stud nomination (the mare's owner or their agent).</td></tr>
       <tr><td><code>eq:owner</code></td><td>owner</td><td>The agent (person or organization) holding an ownership share.</td></tr>

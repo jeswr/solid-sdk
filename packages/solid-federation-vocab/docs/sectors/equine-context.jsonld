@@ -59,6 +59,10 @@
       "@id": "eq:mareName",
       "@type": "xsd:string"
     },
+    "mgmtFlat": {
+      "@id": "eq:mgmtFlat",
+      "@type": "xsd:decimal"
+    },
     "mgmtPct": {
       "@id": "eq:mgmtPct",
       "@type": "xsd:decimal"

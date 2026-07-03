@@ -50,7 +50,8 @@ pod:share-galway-star-oaktree a eq:OwnershipShare ;
     eq:syndicate pod:syndicate-oaktree ;
     eq:owner <https://owner.pod.example/profile/card#me> ;
     eq:managedBy <https://manager.example/profile#me> ;
-    eq:mgmtPct "5.0"^^xsd:decimal .
+    eq:mgmtPct "5.0"^^xsd:decimal ;
+    eq:mgmtFlat "500.00"^^xsd:decimal .
 
 # 3. StudShare — a breeding-rights share in the stallion.
 pod:studshare-desert-king a eq:StudShare ;

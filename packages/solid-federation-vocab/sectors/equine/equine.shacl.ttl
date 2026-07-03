@@ -117,6 +117,14 @@ eqsh:OwnershipShareShape a sh:NodeShape ;
         sh:severity sh:Violation ;
         sh:message "An OwnershipShare MUST carry exactly one eq:sharePct (xsd:decimal, 0–100)."@en
     ] ;
+    sh:property [
+        sh:path eq:mgmtFlat ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:decimal ;
+        sh:minInclusive 0 ;
+        sh:severity sh:Warning ;
+        sh:message "An OwnershipShare's eq:mgmtFlat, when present, SHOULD be a single non-negative xsd:decimal (a flat management fee — the fixed-fee alternative to eq:mgmtPct)."@en
+    ] ;
     sh:or (
         [ sh:path eq:owner ; sh:minCount 1 ]
         [ sh:path eq:syndicate ; sh:minCount 1 ]

@@ -285,6 +285,12 @@ eq:mgmtPct a owl:DatatypeProperty ;
     rdfs:label "management percentage"@en ;
     skos:definition "The percentage (0–100) a racing manager takes from an ownership share's prize returns."@en .
 
+eq:mgmtFlat a owl:DatatypeProperty ;
+    rdfs:domain eq:OwnershipShare ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "flat management fee"@en ;
+    skos:definition "A flat (fixed) management fee a racing manager charges an ownership share, as a plain xsd:decimal amount in the share's currency — the fixed-fee alternative (or complement) to the percentage eq:mgmtPct. Non-negative; an honest plain decimal, not a qudt QuantityValue (matching eq:mgmtPct and eq:sharePct)."@en .
+
 # --- Breeding (StudShare + StudNomination) ---
 eq:studStatus a owl:ObjectProperty ;
     rdfs:range eq:StudStatus ;
