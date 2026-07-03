@@ -11,6 +11,8 @@
  * the app — the app works fully without the worker).
  */
 
+import { SHELL_CACHE_PREFIX } from "./shell-manifest";
+
 /** The stable, root-scoped worker URL (served from `public/`). */
 export const SERVICE_WORKER_URL = "/sw.js";
 
@@ -102,4 +104,71 @@ export function purgeShellCache(options: RegisterOptions = {}): void {
   } catch {
     // best-effort
   }
+}
+
+/** The minimal `CacheStorage` surface used to delete the shell caches (testable). */
+export interface CacheStorageLike {
+  keys(): Promise<string[]>;
+  delete(name: string): Promise<boolean>;
+}
+
+/** Resolve the CacheStorage to use, tolerating non-browser environments. */
+function resolveCaches(explicit?: CacheStorageLike): CacheStorageLike | undefined {
+  if (explicit) return explicit;
+  if (typeof caches === "undefined") return undefined;
+  return caches as CacheStorageLike;
+}
+
+/**
+ * Delete every generation of the shell cache directly from the page (does not
+ * need a controlling worker). Fail-safe. Used to clean up after a worker is
+ * unregistered (e.g. in dev, where the SW must NOT run).
+ */
+export async function deleteShellCaches(
+  options: { caches?: CacheStorageLike } = {},
+): Promise<void> {
+  const cs = resolveCaches(options.caches);
+  if (!cs) return;
+  try {
+    const names = await cs.keys();
+    await Promise.all(
+      names
+        .filter((name) => name.startsWith(SHELL_CACHE_PREFIX))
+        .map((name) => cs.delete(name).catch(() => false)),
+    );
+  } catch {
+    // best-effort
+  }
+}
+
+export interface PolicyOptions extends RegisterOptions {
+  /** Injected CacheStorage (defaults to the global one in the browser). */
+  caches?: CacheStorageLike;
+  /**
+   * Whether this is a production build. Defaults to
+   * `process.env.NODE_ENV === "production"`. In dev the worker must NOT run — it
+   * would cache Next dev route documents + `/_next` chunks and cause stale
+   * chunks / hydration mismatches across reloads.
+   */
+  production?: boolean;
+}
+
+/**
+ * Apply the service-worker policy for the current environment:
+ *  - production → register the app-shell worker (unchanged behaviour);
+ *  - non-production → do NOT register, and actively clean up any worker + shell
+ *    caches a previous production/localhost session may have left behind, so a
+ *    developer isn't stuck with a stale SW.
+ * Fail-safe throughout; returns the registration in production, else `null`.
+ */
+export async function applyServiceWorkerPolicy(
+  options: PolicyOptions = {},
+): Promise<unknown | null> {
+  const production = options.production ?? process.env.NODE_ENV === "production";
+  if (!production) {
+    await unregisterServiceWorkers(options);
+    await deleteShellCaches(options);
+    return null;
+  }
+  return registerServiceWorker(options);
 }

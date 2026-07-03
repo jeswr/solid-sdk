@@ -1,12 +1,16 @@
 // AUTHORED-BY Claude Fable 5
 import { describe, expect, it, vi } from "vitest";
 import {
+  applyServiceWorkerPolicy,
+  type CacheStorageLike,
+  deleteShellCaches,
   type NavigatorLike,
   purgeShellCache,
   registerServiceWorker,
   SERVICE_WORKER_URL,
   unregisterServiceWorkers,
 } from "./register-sw";
+import { SHELL_CACHE_NAME, SHELL_CACHE_PREFIX } from "./shell-manifest";
 
 function fakeNavigator(overrides: Partial<NavigatorLike["serviceWorker"]> = {}): {
   navigator: NavigatorLike;
@@ -97,5 +101,64 @@ describe("purgeShellCache", () => {
   it("no-ops when there is no controller", () => {
     const { navigator } = fakeNavigator();
     expect(() => purgeShellCache({ navigator })).not.toThrow();
+  });
+});
+
+function fakeCaches(names: string[]): { caches: CacheStorageLike; deleted: string[] } {
+  const deleted: string[] = [];
+  const caches: CacheStorageLike = {
+    keys: vi.fn(async () => names),
+    delete: vi.fn(async (name: string) => {
+      deleted.push(name);
+      return true;
+    }),
+  };
+  return { caches, deleted };
+}
+
+describe("deleteShellCaches", () => {
+  it("deletes only shell-prefixed caches, leaving others intact", async () => {
+    const { caches, deleted } = fakeCaches([
+      SHELL_CACHE_NAME,
+      `${SHELL_CACHE_PREFIX}v0`,
+      "workbox-precache",
+      "some-other-cache",
+    ]);
+    await deleteShellCaches({ caches });
+    expect(deleted).toEqual([SHELL_CACHE_NAME, `${SHELL_CACHE_PREFIX}v0`]);
+  });
+
+  it("no-ops when no CacheStorage is available", async () => {
+    await expect(deleteShellCaches({})).resolves.toBeUndefined();
+  });
+});
+
+describe("applyServiceWorkerPolicy", () => {
+  it("registers the worker in a production build", async () => {
+    const { navigator, register } = fakeNavigator();
+    const { caches } = fakeCaches([]);
+    const result = await applyServiceWorkerPolicy({ navigator, caches, production: true });
+    expect(register).toHaveBeenCalledWith(SERVICE_WORKER_URL, {
+      scope: "/",
+      updateViaCache: "none",
+    });
+    expect(result).not.toBeNull();
+  });
+
+  it("does NOT register in dev — it unregisters any worker AND purges shell caches", async () => {
+    const register = vi.fn(async () => ({ scope: "/" }));
+    const stale = { unregister: vi.fn(async () => true) };
+    const navigator: NavigatorLike = {
+      serviceWorker: {
+        register,
+        getRegistrations: vi.fn(async () => [stale]),
+      } as unknown as NavigatorLike["serviceWorker"],
+    };
+    const { caches, deleted } = fakeCaches([SHELL_CACHE_NAME]);
+    const result = await applyServiceWorkerPolicy({ navigator, caches, production: false });
+    expect(result).toBeNull();
+    expect(register).not.toHaveBeenCalled();
+    expect(stale.unregister).toHaveBeenCalled();
+    expect(deleted).toEqual([SHELL_CACHE_NAME]);
   });
 });
