@@ -3,25 +3,61 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --turbopack",
+    "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "gate": "npm run lint && npm run typecheck && npm run test && npm run build"
   },
   "dependencies": {
+    "@jeswr/app-shell": "git+https://github.com/jeswr/app-shell.git#e2ad58b166e9c2e5f0e30d88029847abc05b42e2",
+    "@jeswr/fetch-rdf": "^0.1.0",
+    "@jeswr/guarded-fetch": "git+https://github.com/jeswr/guarded-fetch.git#2901beb339a56b55a23549993d80320dbacb20fb",
+    "@jeswr/solid-elements": "git+https://github.com/jeswr/solid-elements.git#2c00745d3b834a7f645b1ca17b6ff8ffac3b1a8e",
+    "@jeswr/solid-health-diary": "git+https://github.com/jeswr/solid-health-diary.git#39955ba8b66b89babb2c0cae55512af718d7f4b9",
+    "@jeswr/solid-session-restore": "git+https://github.com/jeswr/solid-session-restore.git#38e78dbececbf0dd12c9ceac288a6eef6c624377",
+    "@lit/react": "^1.0.8",
+    "@rdfjs/wrapper": "^0.34.0",
+    "@solid/object": "^0.6.0",
+    "@solid/reactive-authentication": "^0.1.5",
+    "dpop": "^2.1.1",
+    "lit": "^3.3.3",
+    "n3": "^2.0.3",
+    "next": "15.5.20",
+    "oauth4webapi": "^3.8.6",
     "react": "19.1.0",
     "react-dom": "19.1.0",
-    "next": "15.4.6"
+    "solid-offline": "git+https://github.com/jeswr/solid-offline.git#b1c29914677f6b11fd5853f1be4edd5b9e24ec74",
+    "ulid": "^3.0.0",
+    "zxing-wasm": "^3.1.0"
   },
   "devDependencies": {
-    "typescript": "^5",
+    "@eslint/eslintrc": "^3",
+    "@playwright/test": "^1.49.0",
+    "@rdfjs/types": "^2.0.1",
+    "@tailwindcss/postcss": "^4",
+    "@testing-library/dom": "^10.4.0",
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.3.0",
+    "@testing-library/user-event": "^14.5.2",
+    "@types/n3": "^1.26.1",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "@tailwindcss/postcss": "^4",
-    "tailwindcss": "^4",
+    "@vitejs/plugin-react": "^6.0.0",
     "eslint": "^9",
-    "eslint-config-next": "15.4.6",
-    "@eslint/eslintrc": "^3"
+    "eslint-config-next": "15.5.20",
+    "jose": "^5.10.0",
+    "jsdom": "^29.0.0",
+    "tailwindcss": "^4",
+    "typescript": "^5",
+    "vitest": "^4.1.8"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }
