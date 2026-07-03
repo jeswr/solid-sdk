@@ -171,13 +171,19 @@ npm test            # build:deps → vitest run
 npm run build       # esbuild (bundles @jeswr/fetch-rdf inline) + tsc (.d.ts) → committed dist/
 npm run check:dist  # guard the committed dist/ against drift from src/
 npm run check:lockfile-transport  # guard package-lock.json against the SSH git transport (#78)
+npm run fix:lockfile-transport    # the FIX half of the #78 guard — normalizes an SSH-rewritten lockfile back to HTTPS
 ```
 
 `check:lockfile-transport` is a recurrence guard for the [#78][i78] bug class: `npm install`
 silently rewrites the `@jeswr/fetch-rdf` github: dependency's `resolved` URL in `package-lock.json`
 to the SSH transport (`git+ssh://git@github.com/...`), which fails `npm ci` in CI / Vercel without
 an SSH key. The guard fails if any committed lockfile contains an SSH git transport — rewrite each
-to `git+https://github.com/...` and re-run.
+to `git+https://github.com/...` and re-run. This recurs on ANY `npm install` / `npm update`, even
+one that only bumps an unrelated dependency, because npm recomputes every git-dependency `resolved`
+URL as SSH as a side effect of any lockfile regen — a repo-local git config `insteadOf` does **not**
+prevent it (it only changes what the `git` binary does when actually invoked, not what npm writes).
+Run `npm run fix:lockfile-transport` after any install/update to rewrite the lockfile back to HTTPS
+before committing; it is idempotent and a no-op when the lockfile is already clean.
 
 `@jeswr/fetch-rdf` is an off-npm git dependency that ships no usable `dist/` under
 `ignore-scripts=true`; `scripts/build-deps.mjs` builds it once after install (pinned to the exact
