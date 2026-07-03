@@ -31,7 +31,7 @@
  * `finish_reason`, raw endpoint internals, …) are never copied into the canonical
  * model.
  */
-import { httpIriOrUndefined, isHttpIri } from "./iri.js";
+import { httpIriOrUndefined, safeHttpIri } from "./iri.js";
 /** Default model→IRI resolver: a stable non-http URN (dropped by the IRI guard on write). */
 function defaultResolveModelIri(model, endpoint) {
     const m = (model ?? "").trim();
@@ -58,8 +58,12 @@ function resolveId(value, baseIri) {
     const v = value?.trim();
     if (!v)
         return undefined;
-    if (isHttpIri(v))
-        return v;
+    // An already-absolute http(s) id is used as-is — but CANONICALISED (never the raw
+    // value), so an id like `http://e/a>b` cannot carry an IRI-injection character
+    // into the canonical model and thence into `n3.Writer`.
+    const direct = safeHttpIri(v);
+    if (direct !== undefined)
+        return direct;
     if (!baseIri)
         return undefined;
     try {

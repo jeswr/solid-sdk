@@ -34,7 +34,7 @@
 
 import type { ChatAdapter } from "./adapter.js";
 import type { CanonicalMessage, MessageProvenance } from "./canonical.js";
-import { httpIriOrUndefined, isHttpIri } from "./iri.js";
+import { httpIriOrUndefined, safeHttpIri } from "./iri.js";
 
 /**
  * The PUBLIC subset of a LibreChat message this adapter reads — the documented
@@ -126,7 +126,11 @@ function toIso(createdAt: string | number | undefined): string | undefined {
 function resolveId(value: string | undefined, baseIri: string | undefined): string | undefined {
   const v = value?.trim();
   if (!v) return undefined;
-  if (isHttpIri(v)) return v;
+  // An already-absolute http(s) id is used as-is — but CANONICALISED (never the raw
+  // value), so an id like `http://e/a>b` cannot carry an IRI-injection character
+  // into the canonical model and thence into `n3.Writer`.
+  const direct = safeHttpIri(v);
+  if (direct !== undefined) return direct;
   if (!baseIri) return undefined;
   try {
     const resolved = new URL(encodeURIComponent(v), baseIri).toString();

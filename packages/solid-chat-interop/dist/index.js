@@ -20,8 +20,8 @@
  */
 // --- AS2.0 shape (dataset-level read/write + the typed doc + subject helper) ---
 export { As2MessageDoc, as2MessageSubject, buildAs2Message, parseAs2Message, } from "./as2.js";
-// --- IRI helpers (the untrusted-input http(s)-only filter) ---
-export { docOf, httpIriOrUndefined, isHttpIri, safeIri } from "./iri.js";
+// --- IRI helpers (the untrusted-input http(s)-only + IRI-injection-safe filter) ---
+export { docOf, httpIriOrUndefined, isHttpIri, safeHttpIri, safeIri, sanitizeText, } from "./iri.js";
 export { LibreChatAdapter, } from "./librechat.js";
 // --- SolidOS LongChat shape (dataset-level read/write + the typed doc + helper) ---
 export { buildLongChatMessage, LongChatMessageDoc, longChatMessageSubject, parseLongChatMessage, } from "./longchat.js";

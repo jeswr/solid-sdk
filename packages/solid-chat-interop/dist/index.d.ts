@@ -20,7 +20,7 @@
 export type { ChatAdapter } from "./adapter.js";
 export { As2MessageDoc, as2MessageSubject, buildAs2Message, parseAs2Message, } from "./as2.js";
 export type { CanonicalMessage, CanonicalRoom, MessageProvenance, MessageTask, TaskState, } from "./canonical.js";
-export { docOf, httpIriOrUndefined, isHttpIri, safeIri } from "./iri.js";
+export { docOf, httpIriOrUndefined, isHttpIri, safeHttpIri, safeIri, sanitizeText, } from "./iri.js";
 export { LibreChatAdapter, type LibreChatAdapterOptions, type LibreChatMessage, } from "./librechat.js";
 export { buildLongChatMessage, LongChatMessageDoc, longChatMessageSubject, parseLongChatMessage, } from "./longchat.js";
 export { as2ToCanonical, canonicalToAs2, canonicalToLongChat, longChatToCanonical, MAPPING_TABLE, type MappingRow, parseAs2, parseLongChat, roundTripAs2ToLongChat, serializeAs2, serializeLongChat, storeToTurtle, } from "./reconcile.js";
