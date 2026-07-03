@@ -30,6 +30,7 @@
   <uri name="https://w3id.org/jeswr/sectors/finance#" uri="finance.ttl"/>
   <uri name="https://w3id.org/jeswr/sectors/finance/1.0.0" uri="finance.ttl"/>
   <uri name="https://w3id.org/jeswr/sectors/finance/1.1.0" uri="finance.ttl"/>
+  <uri name="https://w3id.org/jeswr/sectors/finance/1.2.0" uri="finance.ttl"/>
   <!-- FIBO slim MIREOT module (sector-local import) -->
   <uri name="https://w3id.org/jeswr/sectors/finance/imports/fibo-slim" uri="imports/fibo-slim.ttl"/>
 </catalog>

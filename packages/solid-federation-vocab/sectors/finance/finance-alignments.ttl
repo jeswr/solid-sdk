@@ -14,6 +14,14 @@
 @prefix fibo-fnd-acc-cur:  <https://spec.edmcouncil.org/fibo/ontology/FND/Accounting/CurrencyAmount/> .
 @prefix fibo-fnd-txn-txn:  <https://spec.edmcouncil.org/fibo/ontology/FND/Transactions/Transactions/> .
 @prefix fibo-fnd-rel-rel:  <https://spec.edmcouncil.org/fibo/ontology/FND/Relations/Relations/> .
+# FIBO modules for the v1.2.0 ledger + private-equity terms. IRIs byte-verified
+# by the products (Keystone pod-store.ts, CapNote vocab.ts, both CONFIRMED-tagged):
+#   LedgerAccount lives in FBC ClientsAndAccounts (fibo-fbc-pas-caa, above);
+#   LedgerEntry lives in FND/TransactionsExt/REATransactions (a DIFFERENT module —
+#   NOT ClientsAndAccounts); the private-equity fund lives in SEC/Funds/Funds.
+@prefix fibo-fnd-txnsext-rea: <https://spec.edmcouncil.org/fibo/ontology/FND/TransactionsExt/REATransactions/> .
+@prefix fibo-sec-fund-fund:  <https://spec.edmcouncil.org/fibo/ontology/SEC/Funds/Funds/> .
+@prefix fibo-sec-fund-civ:   <https://spec.edmcouncil.org/fibo/ontology/SEC/Funds/CollectiveInvestmentVehicles/> .
 # ISO 20022 financial-messaging business concepts (UNIFI e-Repository).
 @prefix iso20022:          <https://www.iso20022.org/standardsrepository/type/> .
 @prefix schema:            <http://schema.org/> .
@@ -74,3 +82,26 @@ core:hasAccountHolder    skos:closeMatch fibo-fnd-rel-rel:isHeldBy .
 # Annotation only.
 fin:allocated            skos:closeMatch schema:amount .
 fin:categoryConcept      skos:closeMatch schema:category .
+
+# --- v1.2.0 double-entry ledger (Keystone) — FIBO Mode-A bridges ---
+# LedgerAccount ↔ FIBO ClientsAndAccounts LedgerAccount (CONFIRMED-resolving, byte-
+# verified by Keystone). LedgerEntry ↔ FIBO's REATransactions LedgerEntry (the
+# module where FIBO's LedgerEntry actually lives — NOT ClientsAndAccounts). Keystone
+# dual-types its ledger resources with these FIBO classes; here they are annotation-
+# only Mode-A bridges. The generic double-entry concepts FIBO has NO single simple
+# term for (fin:EntrySide/Debit/Credit, fin:AccountClass, the account-code
+# hierarchy, fin:JournalEntry) are deliberately UNbridged — no false FIBO IRI.
+fin:LedgerAccount        skos:closeMatch fibo-fbc-pas-caa:LedgerAccount .
+fin:LedgerEntry          skos:closeMatch fibo-fnd-txnsext-rea:LedgerEntry .
+
+# --- v1.2.0 private equity (CapNote) — FIBO Mode-A bridges ---
+# fin:Fund ↔ FIBO SEC/Funds PrivateEquityFund (CONFIRMED-resolving, byte-verified by
+# CapNote — the dominant fund kind; fin:Fund is the broader vehicle, so closeMatch is
+# an approximate anchor, not identity). fin:Notice's distribution case has only a WEAK
+# FIBO analogue: FundsCashDistribution is a distribution POLICY/method, not a discrete
+# call/distribution EVENT — so it is rdfs:seeAlso, never a closeMatch (CapNote's own
+# honest treatment). fin:Commitment, fin:GeneralPartner, fin:LimitedPartner and
+# fin:NoticeType have NO confirmed 1:1 FIBO class (CapNote kept them app-local for
+# exactly this reason) — left UNbridged rather than assert a non-existent FIBO IRI.
+fin:Fund                 skos:closeMatch fibo-sec-fund-fund:PrivateEquityFund .
+fin:Notice               rdfs:seeAlso fibo-sec-fund-civ:FundsCashDistribution .

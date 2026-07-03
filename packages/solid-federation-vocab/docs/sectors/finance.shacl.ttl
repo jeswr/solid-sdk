@@ -26,8 +26,9 @@
 <https://w3id.org/jeswr/sectors/finance/profile> a prof:Profile ;
     dcterms:title "Solid Finance data-model profile (version-independent)"@en ;
     dcterms:hasVersion <https://w3id.org/jeswr/sectors/finance/profile/1.0.0> ,
-                       <https://w3id.org/jeswr/sectors/finance/profile/1.1.0> ;
-    rdfs:comment "Version-independent IRI resolving to the current Finance profile (latest: 1.1.0). "@en .
+                       <https://w3id.org/jeswr/sectors/finance/profile/1.1.0> ,
+                       <https://w3id.org/jeswr/sectors/finance/profile/1.2.0> ;
+    rdfs:comment "Version-independent IRI resolving to the current Finance profile (latest: 1.2.0). "@en .
 
 <https://w3id.org/jeswr/sectors/finance/profile/1.0.0> a prof:Profile ;
     dcterms:title "Solid Finance data-model profile 1.0.0"@en ;
@@ -44,6 +45,14 @@
     prof:isProfileOf <https://w3id.org/jeswr/sectors/finance> ;
     prof:hasToken "finance-1.1.0" ;
     rdfs:comment "IMMUTABLE version IRI. ADDITIVE over 1.0.0: adds the Budget + BudgetCategory (envelope) shapes for the Actual Budget use case. Open shapes; sh:Violation=MUST, sh:Warning=SHOULD. "@en .
+
+<https://w3id.org/jeswr/sectors/finance/profile/1.2.0> a prof:Profile ;
+    dcterms:title "Solid Finance data-model profile 1.2.0"@en ;
+    dcterms:isVersionOf <https://w3id.org/jeswr/sectors/finance/profile> ;
+    owl:versionInfo "1.2.0" ;
+    prof:isProfileOf <https://w3id.org/jeswr/sectors/finance> ;
+    prof:hasToken "finance-1.2.0" ;
+    rdfs:comment "IMMUTABLE version IRI. ADDITIVE over 1.1.0: adds the double-entry LEDGER shapes (LedgerAccount/JournalEntry/LedgerEntry — Keystone) and the private-equity shapes (Fund/Commitment/Notice — CapNote). Open shapes; sh:Violation=MUST, sh:Warning=SHOULD. "@en .
 
 # -----------------------------------------------------------------------------
 # MonetaryAmount — a value MUST have an amount and an ISO 4217 currency code.
@@ -323,3 +332,87 @@ finsh:BudgetCategoryShape a sh:NodeShape ;
     sh:property [ sh:path fin:categoryConcept ; sh:class skos:Concept ; sh:maxCount 1 ;
         sh:severity sh:Warning ;
         sh:message "A budget category SHOULD name its classifying fin:categoryConcept (a skos:Concept)."@en ] .
+
+# =============================================================================
+# v1.2.0 — DOUBLE-ENTRY LEDGER shapes (Keystone's general ledger).
+# =============================================================================
+
+# --- LedgerAccount — a chart-of-accounts node: class + code (MUST); parent code. ---
+finsh:LedgerAccountShape a sh:NodeShape ;
+    sh:targetClass fin:LedgerAccount ; rdfs:label "Ledger Account shape"@en ;
+    sh:property [ sh:path fin:accountClass ; sh:nodeKind sh:IRI ;
+        sh:minCount 1 ; sh:maxCount 1 ; sh:severity sh:Violation ;
+        sh:message "A ledger account MUST carry exactly one coded fin:accountClass IRI (asset/liability/equity/income/expense)."@en ] ;
+    sh:property [ sh:path fin:accountCode ; sh:datatype xsd:string ;
+        sh:minCount 1 ; sh:maxCount 1 ; sh:severity sh:Violation ;
+        sh:message "A ledger account MUST carry exactly one fin:accountCode (chart-of-accounts code)."@en ] ;
+    sh:property [ sh:path fin:parentAccountCode ; sh:datatype xsd:string ; sh:maxCount 1 ;
+        sh:severity sh:Info ;
+        sh:message "fin:parentAccountCode, if present, MUST be a single string (the parent's code)."@en ] .
+
+# --- JournalEntry — a balanced set of postings; SHOULD carry a date. The balance
+#     invariant (Σdebits = Σcredits) is a cross-resource check the app enforces. ---
+finsh:JournalEntryShape a sh:NodeShape ;
+    sh:targetClass fin:JournalEntry ; rdfs:label "Journal Entry shape"@en ;
+    sh:property [ sh:path dcterms:date ; sh:datatype xsd:date ; sh:maxCount 1 ;
+        sh:severity sh:Warning ;
+        sh:message "A journal entry SHOULD carry a dcterms:date."@en ] .
+
+# --- LedgerEntry — one posting line: side + account + amount + its journal entry. ---
+finsh:LedgerEntryShape a sh:NodeShape ;
+    sh:targetClass fin:LedgerEntry ; rdfs:label "Ledger Entry shape"@en ;
+    sh:property [ sh:path fin:entrySide ; sh:nodeKind sh:IRI ;
+        sh:minCount 1 ; sh:maxCount 1 ; sh:severity sh:Violation ;
+        sh:message "A ledger entry MUST post on exactly one fin:entrySide (fin:Debit or fin:Credit)."@en ] ;
+    sh:property [ sh:path fin:postsTo ; sh:nodeKind sh:IRI ;
+        sh:minCount 1 ; sh:maxCount 1 ; sh:severity sh:Violation ;
+        sh:message "A ledger entry MUST reference exactly one fin:postsTo ledger account (IRI)."@en ] ;
+    sh:property [ sh:path fin:hasMonetaryAmount ; sh:class fin:MonetaryAmount ;
+        sh:minCount 1 ; sh:maxCount 1 ; sh:severity sh:Violation ;
+        sh:message "A ledger entry MUST carry exactly one fin:hasMonetaryAmount (a fin:MonetaryAmount node)."@en ] ;
+    sh:property [ sh:path fin:partOfJournalEntry ; sh:nodeKind sh:IRI ;
+        sh:minCount 1 ; sh:maxCount 1 ; sh:severity sh:Violation ;
+        sh:message "A ledger entry MUST reference exactly one fin:partOfJournalEntry (IRI)."@en ] .
+
+# =============================================================================
+# v1.2.0 — PRIVATE-EQUITY shapes (CapNote's capital calls & distributions).
+# =============================================================================
+
+# --- Fund — SHOULD carry a vintage year and name its general partner. ---
+finsh:FundShape a sh:NodeShape ;
+    sh:targetClass fin:Fund ; rdfs:label "Fund shape"@en ;
+    sh:property [ sh:path fin:vintageYear ; sh:datatype xsd:gYear ; sh:maxCount 1 ;
+        sh:severity sh:Warning ;
+        sh:message "A fund SHOULD carry a fin:vintageYear (xsd:gYear)."@en ] ;
+    sh:property [ sh:path fin:generalPartner ; sh:nodeKind sh:IRI ; sh:maxCount 1 ;
+        sh:severity sh:Warning ;
+        sh:message "A fund SHOULD name its fin:generalPartner (an Agent IRI)."@en ] .
+
+# --- Commitment — an LP's standing commitment: fund + LP + committed amount. ---
+finsh:CommitmentShape a sh:NodeShape ;
+    sh:targetClass fin:Commitment ; rdfs:label "Commitment shape"@en ;
+    sh:property [ sh:path fin:fund ; sh:nodeKind sh:IRI ;
+        sh:minCount 1 ; sh:maxCount 1 ; sh:severity sh:Violation ;
+        sh:message "A commitment MUST reference exactly one fin:fund (IRI)."@en ] ;
+    sh:property [ sh:path fin:limitedPartner ; sh:nodeKind sh:IRI ;
+        sh:minCount 1 ; sh:maxCount 1 ; sh:severity sh:Violation ;
+        sh:message "A commitment MUST name exactly one fin:limitedPartner (an Agent IRI)."@en ] ;
+    sh:property [ sh:path fin:commitmentAmount ; sh:class fin:MonetaryAmount ;
+        sh:minCount 1 ; sh:maxCount 1 ; sh:severity sh:Violation ;
+        sh:message "A commitment MUST carry exactly one fin:commitmentAmount (a fin:MonetaryAmount node)."@en ] .
+
+# --- Notice — a capital-call / distribution notice: kind + fund + an amount. ---
+finsh:NoticeShape a sh:NodeShape ;
+    sh:targetClass fin:Notice ; rdfs:label "Notice shape"@en ;
+    sh:property [ sh:path fin:noticeType ; sh:nodeKind sh:IRI ;
+        sh:minCount 1 ; sh:maxCount 1 ; sh:severity sh:Violation ;
+        sh:message "A notice MUST carry exactly one coded fin:noticeType IRI (capital-call or distribution)."@en ] ;
+    sh:property [ sh:path fin:fund ; sh:nodeKind sh:IRI ;
+        sh:minCount 1 ; sh:maxCount 1 ; sh:severity sh:Violation ;
+        sh:message "A notice MUST reference exactly one fin:fund (IRI)."@en ] ;
+    sh:or (
+        [ sh:path fin:callAmount ; sh:minCount 1 ]
+        [ sh:path fin:distributionAmount ; sh:minCount 1 ]
+    ) ;
+    sh:severity sh:Violation ;
+    sh:message "A notice MUST carry either a fin:callAmount (a capital call) or a fin:distributionAmount (a distribution)."@en .

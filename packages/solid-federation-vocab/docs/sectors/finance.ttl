@@ -58,8 +58,8 @@
     vann:preferredNamespaceUri "https://w3id.org/jeswr/sectors/finance#" ;
     owl:imports <https://w3id.org/jeswr/core> ,
                 <https://w3id.org/jeswr/sectors/finance/imports/fibo-slim> ;
-    owl:versionInfo "1.1.0" ;
-    owl:versionIRI <https://w3id.org/jeswr/sectors/finance/1.1.0> ;
+    owl:versionInfo "1.2.0" ;
+    owl:versionIRI <https://w3id.org/jeswr/sectors/finance/1.2.0> ;
     dcterms:description """Personal-finance terms (accounts, transactions,
         holdings, payments) for the EDMA lending/banking use cases, re-based onto
         the gUFO Solid Core. Account=Relator(+Phase status); transactions/payments
@@ -69,10 +69,19 @@
         re-base of v0 (meta-types change meaning), so a new MAJOR version. v1.1.0
         ADDITIVE: personal envelope/zero-based budgeting (fin:Budget,
         fin:BudgetCategory, allocation + category-assignment props) + a CRDT-sync
-        pointer pair (fin:syncLog/fin:snapshot) for the Actual Budget use case; no
-        existing term changed."""@en ;
-    dcterms:modified "2026-06-21"^^xsd:date ;
-    rdfs:comment "Re-based per R11 §4.2. v1.1.0 ADDITIVE: envelope budgeting + CRDT-sync pointers (Actual Budget)."@en .
+        pointer pair (fin:syncLog/fin:snapshot) for the Actual Budget use case.
+        v1.2.0 ADDITIVE (revenue-products ontology review §4–§5): a double-entry
+        LEDGER module (fin:LedgerAccount, fin:JournalEntry, fin:LedgerEntry,
+        fin:entrySide + fin:Debit/fin:Credit, fin:postsTo, fin:accountClass /
+        Code / parentAccountCode) for Keystone's general ledger, a private-equity
+        module (fin:Fund, fin:Commitment, fin:Notice, GP/LP roles, commitment /
+        called / distribution / call amounts, fin:vintageYear, fin:noticeType) for
+        CapNote's capital calls & distributions, and fin:sharePct (the honest
+        percentage datatype replacing Keystone's range-violating bare-literal
+        qudt:quantityValue) + fin:jurisdiction. Generic double-entry + PE terms,
+        aligned to FIBO Mode-A (finance-alignments.ttl); no existing term changed."""@en ;
+    dcterms:modified "2026-07-03"^^xsd:date ;
+    rdfs:comment "Re-based per R11 §4.2. v1.2.0 ADDITIVE: double-entry ledger (Keystone) + private-equity capital-calls/distributions (CapNote) + fin:sharePct/jurisdiction. See the revenue-products ontology review §4–§5."@en .
 
 # -----------------------------------------------------------------------------
 # Annotation-property declarations (F5 DL hygiene — match the Core pattern).
@@ -414,6 +423,268 @@ fin:snapshot a owl:ObjectProperty ;
     rdfs:range core:InformationResource ;
     rdfs:label "snapshot"@en ;
     skos:definition "A periodic compacted snapshot resource of the budget's CRDT state, so a fresh client need not replay the whole sync log. The pointer to the snapshot resource (an opaque byte payload). A plain object property."@en .
+
+# =============================================================================
+# 8. DOUBLE-ENTRY LEDGER — Keystone's general ledger (v1.2.0 ADDITIVE). Generic
+#    double-entry bookkeeping terms NOT specific to Keystone, so they live in the
+#    shared sector, not a dead w3id.org/keystone/ns# namespace (which returns
+#    404). A LedgerAccount is a chart-of-accounts node; a JournalEntry is a
+#    balanced set of LedgerEntry postings; each entry posts a debit/credit
+#    (fin:entrySide) to an account (fin:postsTo). FIBO's LedgerAccount/LedgerEntry
+#    are byte-verified by Keystone and dual-typed there / aligned Mode-A here —
+#    these fin: terms carry only the GENERIC double-entry concepts FIBO lacks a
+#    single simple term for (the debit/credit side, the account-class/code
+#    hierarchy). (revenue-products ontology review §4.)
+# =============================================================================
+
+fin:LedgerAccount a owl:Class, gufo:Kind ;
+    rdfs:subClassOf core:InformationResource ;
+    rdfs:label "Ledger Account"@en ;
+    skos:definition "A general-ledger account — a node in a chart of accounts against which double-entry postings (fin:LedgerEntry) are recorded. An information object (the account definition), classified by fin:accountClass (asset/liability/equity/income/expense), identified by fin:accountCode, and nested under a parent via fin:parentAccountCode. Distinct from a fin:FinancialAccount (a real account at an institution, a Relator); a LedgerAccount is a bookkeeping classification. Aligned Mode-A to fibo-fbc-pas-caa:LedgerAccount."@en ;
+    skos:scopeNote "gufo:Kind (information object) under core:InformationResource. The chart-of-accounts node; Keystone dual-types it with the byte-verified FIBO LedgerAccount."@en .
+
+fin:JournalEntry a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf core:Record ;
+    rdfs:label "Journal Entry"@en ;
+    skos:definition "A balanced double-entry bookkeeping transaction — a set of fin:LedgerEntry postings whose debits equal its credits, recorded on a date. A core:Record; its component postings reference it via fin:partOfJournalEntry."@en ;
+    skos:scopeNote "gufo:SubKind of core:Record. The balance invariant (Σdebits = Σcredits) is a cross-resource check the app enforces, not a single-resource SHACL MUST."@en .
+
+fin:LedgerEntry a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf core:Record ;
+    rdfs:label "Ledger Entry"@en ;
+    skos:definition "One posting line of a double-entry transaction: a monetary amount (fin:hasMonetaryAmount) posted on one side (fin:entrySide → fin:Debit or fin:Credit) to a ledger account (fin:postsTo), as part of a journal entry (fin:partOfJournalEntry). Aligned Mode-A to fibo-fnd-txnsext-rea:LedgerEntry (FIBO's FND/TransactionsExt/REATransactions module — where FIBO's LedgerEntry actually lives, byte-verified by Keystone; NOT the ClientsAndAccounts module that holds LedgerAccount)."@en ;
+    skos:scopeNote "gufo:SubKind of core:Record."@en .
+
+# --- ledger coded-value classes (gufo:Category, root core:Category) ---
+
+fin:EntrySide a owl:Class, gufo:Category ;
+    rdfs:subClassOf core:Category ;
+    rdfs:label "Entry Side"@en ;
+    skos:definition "The side of a double-entry posting: debit or credit. A coded value (core:Category); the two members are fin:Debit and fin:Credit in fin:entrySideScheme."@en ;
+    skos:scopeNote "gufo:Category of core:Category. FIBO has no single simple debit/credit term — this is the generic double-entry concept Keystone needs."@en .
+
+fin:AccountClass a owl:Class, gufo:Category ;
+    rdfs:subClassOf core:Category ;
+    rdfs:label "Account Class"@en ;
+    skos:definition "The top-level classification of a ledger account: asset / liability / equity / income / expense (the five fundamental accounting classes, whose normal debit/credit balance the double-entry rules follow). A coded value; members are skos:Concepts in fin:accountClassScheme."@en ;
+    skos:scopeNote "gufo:Category of core:Category."@en .
+
+# --- ledger properties ---
+
+fin:entrySide a owl:ObjectProperty ;
+    rdfs:domain fin:LedgerEntry ;
+    rdfs:range fin:EntrySide ;
+    rdfs:label "entry side"@en ;
+    skos:definition "The side (fin:Debit or fin:Credit) a ledger entry posts on."@en .
+
+fin:postsTo a owl:ObjectProperty ;
+    rdfs:domain fin:LedgerEntry ;
+    rdfs:range fin:LedgerAccount ;
+    rdfs:label "posts to"@en ;
+    skos:definition "The ledger account a ledger entry posts to."@en .
+
+fin:partOfJournalEntry a owl:ObjectProperty ;
+    rdfs:subPropertyOf core:partOf ;
+    rdfs:domain fin:LedgerEntry ;
+    rdfs:range fin:JournalEntry ;
+    rdfs:label "part of journal entry"@en ;
+    skos:definition "The journal entry a ledger-entry posting belongs to. A sub-property of core:partOf (the journal entry aggregates its posting lines)."@en .
+
+fin:accountClass a owl:ObjectProperty ;
+    rdfs:domain fin:LedgerAccount ;
+    rdfs:range fin:AccountClass ;
+    rdfs:label "account class"@en ;
+    skos:definition "The fundamental accounting class (a coded fin:AccountClass value) of a ledger account."@en .
+
+fin:accountCode a owl:DatatypeProperty ;
+    rdfs:domain fin:LedgerAccount ;
+    rdfs:range xsd:string ;
+    rdfs:label "account code"@en ;
+    skos:definition "The chart-of-accounts code of a ledger account (e.g. \"1200\")."@en .
+
+fin:parentAccountCode a owl:DatatypeProperty ;
+    rdfs:domain fin:LedgerAccount ;
+    rdfs:range xsd:string ;
+    rdfs:label "parent account code"@en ;
+    skos:definition "The fin:accountCode of the parent ledger account in the chart-of-accounts hierarchy (the code-based parent link Keystone uses)."@en .
+
+# --- ledger coded-value schemes ---
+
+fin:entrySideScheme a skos:ConceptScheme ;
+    rdfs:label "Entry side scheme"@en ;
+    skos:definition "The two double-entry sides for fin:entrySide."@en .
+
+fin:Debit a fin:EntrySide, skos:Concept ;
+    skos:inScheme fin:entrySideScheme ; skos:notation "debit" ;
+    skos:prefLabel "Debit"@en ;
+    skos:definition "The debit side of a posting — increases asset/expense accounts, decreases liability/equity/income accounts."@en .
+fin:Credit a fin:EntrySide, skos:Concept ;
+    skos:inScheme fin:entrySideScheme ; skos:notation "credit" ;
+    skos:prefLabel "Credit"@en ;
+    skos:definition "The credit side of a posting — increases liability/equity/income accounts, decreases asset/expense accounts."@en .
+
+fin:accountClassScheme a skos:ConceptScheme ;
+    rdfs:label "Account class scheme"@en ;
+    skos:definition "The five fundamental accounting classes for fin:accountClass."@en .
+
+fin:class-asset a fin:AccountClass, skos:Concept ;
+    skos:inScheme fin:accountClassScheme ; skos:notation "asset" ;
+    skos:prefLabel "Asset"@en ; skos:definition "Resources owned (normal debit balance)."@en .
+fin:class-liability a fin:AccountClass, skos:Concept ;
+    skos:inScheme fin:accountClassScheme ; skos:notation "liability" ;
+    skos:prefLabel "Liability"@en ; skos:definition "Obligations owed (normal credit balance)."@en .
+fin:class-equity a fin:AccountClass, skos:Concept ;
+    skos:inScheme fin:accountClassScheme ; skos:notation "equity" ;
+    skos:prefLabel "Equity"@en ; skos:definition "Residual owners' interest (normal credit balance)."@en .
+fin:class-income a fin:AccountClass, skos:Concept ;
+    skos:inScheme fin:accountClassScheme ; skos:notation "income" ;
+    skos:prefLabel "Income"@en ; skos:definition "Revenue earned (normal credit balance)."@en .
+fin:class-expense a fin:AccountClass, skos:Concept ;
+    skos:inScheme fin:accountClassScheme ; skos:notation "expense" ;
+    skos:prefLabel "Expense"@en ; skos:definition "Costs incurred (normal debit balance)."@en .
+
+# =============================================================================
+# 9. PRIVATE EQUITY — CapNote's capital calls & distributions (v1.2.0 ADDITIVE).
+#    Generic PE vocabulary (fund, commitment, notice, GP/LP), NOT CapNote-specific,
+#    so it lives in the shared sector rather than a non-dereferencing
+#    capnote.app/vocab# namespace. Every amount is a fin:MonetaryAmount node (the
+#    dual-typed FIBO+schema shape CapNote already uses). (review §5.)
+# =============================================================================
+
+fin:Fund a owl:Class, gufo:Kind ;
+    rdfs:subClassOf core:Organization ;
+    rdfs:label "Fund"@en ;
+    skos:definition "A pooled private-equity / venture / real-asset investment fund vehicle into which limited partners commit capital and from which a general partner draws it down and distributes returns. Its vintage year is fin:vintageYear; its manager is a fin:GeneralPartner. Aligned Mode-A to FIBO's SEC Funds module."@en ;
+    skos:scopeNote "gufo:Kind. Roots in core:Organization (a pooled vehicle / legal entity). GP via fin:generalPartner; LP commitments via fin:Commitment."@en .
+
+fin:Commitment a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf core:Record ;
+    rdfs:label "Commitment"@en ;
+    skos:definition "A limited partner's standing commitment of capital to a fund: the committed amount (fin:commitmentAmount), how much has been drawn to date (fin:calledToDate) and the undrawn balance (fin:remainingCommitment), for a fund (fin:fund) and an LP (fin:limitedPartner). A core:Record of the LP↔fund commitment."@en ;
+    skos:scopeNote "gufo:SubKind of core:Record. Amounts are fin:MonetaryAmount nodes (the dual-typed FIBO+schema shape)."@en .
+
+fin:Notice a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf core:InformationResource ;
+    rdfs:label "Notice"@en ;
+    skos:definition "A capital-call or distribution notice issued by a fund's general partner to a limited partner: its kind is fin:noticeType (fin:notice-capital-call / fin:notice-distribution), its amount fin:callAmount (a call) or fin:distributionAmount (a distribution), for a fund (fin:fund). An information resource (the notice document); may be dual-typed schema:Invoice for a capital call (with schema:paymentDueDate)."@en ;
+    skos:scopeNote "gufo:SubKind of core:InformationResource. Issued date via dcterms:issued; due date via schema:paymentDueDate (Mode-A)."@en .
+
+# --- PE role-mixins (gufo:RoleMixin, root core:Agent) ---
+
+fin:GeneralPartner a owl:Class, gufo:RoleMixin ;
+    rdfs:subClassOf core:Agent ;
+    rdfs:label "General Partner"@en ;
+    skos:definition "The role of the agent (a management company) that manages a fund, draws down committed capital and issues notices."@en ;
+    skos:scopeNote "gufo:RoleMixin (cross-kind, anti-rigid) played by an Agent for a fund."@en .
+
+fin:LimitedPartner a owl:Class, gufo:RoleMixin ;
+    rdfs:subClassOf core:Agent ;
+    rdfs:label "Limited Partner"@en ;
+    skos:definition "The role of the agent (an investor) that commits capital to a fund as a limited partner."@en ;
+    skos:scopeNote "gufo:RoleMixin played by an Agent for a commitment."@en .
+
+# --- PE coded-value class ---
+
+fin:NoticeType a owl:Class, gufo:Category ;
+    rdfs:subClassOf core:Category ;
+    rdfs:label "Notice Type"@en ;
+    skos:definition "The kind of a fund notice: a capital call (drawing committed capital) or a distribution (returning proceeds). A coded value; members are skos:Concepts in fin:noticeTypeScheme."@en ;
+    skos:scopeNote "gufo:Category of core:Category."@en .
+
+# --- PE properties ---
+
+fin:fund a owl:ObjectProperty ;
+    rdfs:range fin:Fund ;
+    rdfs:label "fund"@en ;
+    skos:definition "The fund a commitment or notice concerns. No rdfs:domain — shared by fin:Commitment and fin:Notice."@en .
+
+fin:generalPartner a owl:ObjectProperty ;
+    rdfs:range fin:GeneralPartner ;
+    rdfs:label "general partner"@en ;
+    skos:definition "The agent playing the General Partner role for a fund. No rdfs:domain — carried on a fin:Fund (its manager) or a fin:Notice (its issuer)."@en .
+
+fin:limitedPartner a owl:ObjectProperty ;
+    rdfs:domain fin:Commitment ;
+    rdfs:range fin:LimitedPartner ;
+    rdfs:label "limited partner"@en ;
+    skos:definition "The agent playing the Limited Partner role for a commitment."@en .
+
+fin:commitmentAmount a owl:ObjectProperty ;
+    rdfs:subPropertyOf fin:hasMonetaryAmount ;
+    rdfs:domain fin:Commitment ;
+    rdfs:range fin:MonetaryAmount ;
+    rdfs:label "commitment amount"@en ;
+    skos:definition "The total capital a limited partner has committed to a fund (a fin:MonetaryAmount node)."@en .
+
+fin:calledToDate a owl:ObjectProperty ;
+    rdfs:subPropertyOf fin:hasMonetaryAmount ;
+    rdfs:domain fin:Commitment ;
+    rdfs:range fin:MonetaryAmount ;
+    rdfs:label "called to date"@en ;
+    skos:definition "The cumulative capital drawn down against a commitment so far (a fin:MonetaryAmount node)."@en .
+
+fin:remainingCommitment a owl:ObjectProperty ;
+    rdfs:subPropertyOf fin:hasMonetaryAmount ;
+    rdfs:domain fin:Commitment ;
+    rdfs:range fin:MonetaryAmount ;
+    rdfs:label "remaining commitment"@en ;
+    skos:definition "The undrawn balance of a commitment (committed minus called — a fin:MonetaryAmount node)."@en .
+
+fin:callAmount a owl:ObjectProperty ;
+    rdfs:subPropertyOf fin:hasMonetaryAmount ;
+    rdfs:domain fin:Notice ;
+    rdfs:range fin:MonetaryAmount ;
+    rdfs:label "call amount"@en ;
+    skos:definition "The amount a capital-call notice draws down (a fin:MonetaryAmount node)."@en .
+
+fin:distributionAmount a owl:ObjectProperty ;
+    rdfs:subPropertyOf fin:hasMonetaryAmount ;
+    rdfs:domain fin:Notice ;
+    rdfs:range fin:MonetaryAmount ;
+    rdfs:label "distribution amount"@en ;
+    skos:definition "The amount a distribution notice returns to a limited partner (a fin:MonetaryAmount node)."@en .
+
+fin:vintageYear a owl:DatatypeProperty ;
+    rdfs:domain fin:Fund ;
+    rdfs:range xsd:gYear ;
+    rdfs:label "vintage year"@en ;
+    skos:definition "The vintage year of a fund — the year it began drawing capital, the standard PE cohort key."@en .
+
+fin:noticeType a owl:ObjectProperty ;
+    rdfs:domain fin:Notice ;
+    rdfs:range fin:NoticeType ;
+    rdfs:label "notice type"@en ;
+    skos:definition "The kind (a coded fin:NoticeType value) of a fund notice: capital call or distribution."@en .
+
+fin:noticeTypeScheme a skos:ConceptScheme ;
+    rdfs:label "Notice type scheme"@en ;
+    skos:definition "The kinds of fund notice for fin:noticeType."@en .
+
+fin:notice-capital-call a fin:NoticeType, skos:Concept ;
+    skos:inScheme fin:noticeTypeScheme ; skos:notation "capital-call" ;
+    skos:prefLabel "Capital call"@en ;
+    skos:definition "A notice drawing down committed capital from limited partners (fin:callAmount)."@en .
+fin:notice-distribution a fin:NoticeType, skos:Concept ;
+    skos:inScheme fin:noticeTypeScheme ; skos:notation "distribution" ;
+    skos:prefLabel "Distribution"@en ;
+    skos:definition "A notice returning proceeds to limited partners (fin:distributionAmount)."@en .
+
+# =============================================================================
+# 10. SHARED FINANCE DATATYPES (v1.2.0 ADDITIVE) — the honest percentage
+#     (replacing Keystone's range-violating bare-literal qudt:quantityValue) and
+#     a jurisdiction bridge (replacing the GovernmentService-scoped
+#     schema:jurisdiction stretch). (review §4.)
+# =============================================================================
+
+fin:sharePct a owl:DatatypeProperty ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "share percentage"@en ;
+    skos:definition "A percentage (0–100) — an ownership stake or holding proportion — as a plain xsd:decimal. The HONEST replacement for a range-violating bare-literal qudt:quantityValue (QUDT requires a qudt:QuantityValue NODE; for an app-internal percentage the sector datatype property is the correct weight). No rdfs:domain — used on ownership edges and holdings."@en .
+
+fin:jurisdiction a owl:DatatypeProperty ;
+    rdfs:range xsd:string ;
+    rdfs:label "jurisdiction"@en ;
+    skos:definition "The legal jurisdiction (an ISO 3166 code or name) governing an entity or account. A neutral finance term replacing schema:jurisdiction, whose schema.org domain is GovernmentService/Legislation. No rdfs:domain — carried on institutions, funds or accounts."@en .
 
 # =============================================================================
 # SECTOR MARKER — the IRI an app's fedapp:sector points at to declare it operates
