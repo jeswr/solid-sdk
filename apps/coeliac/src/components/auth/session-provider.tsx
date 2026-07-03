@@ -111,7 +111,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     void (async () => {
       try {
         const { createReactiveAuthController } = await import("@jeswr/solid-elements/auth");
-        await import("@solid/reactive-authentication"); // registers <authorization-code-flow>
+        // Import the registerElements entrypoint — on @solid/reactive-authentication
+        // 0.1.5 the bare package import no longer self-registers the custom element;
+        // ./registerElements is the export that defines <authorization-code-flow>.
+        await import("@solid/reactive-authentication/registerElements");
         const flowEl = document.createElement("authorization-code-flow") as HTMLElement & {
           getCode: (uri: URL, signal: AbortSignal) => Promise<string>;
         };
