@@ -16,5 +16,38 @@
     "lint": "@biomejs/biome"
   },
   "dependsOn": [],
-  "federation": null
+  "federation": null,
+  "status": {
+    "generatedAt": "2026-07-03T05:14:31.173Z",
+    "commit": "1029a665956483d56fbe7734544d6f529b47d462",
+    "version": "0.1.0",
+    "gate": {
+      "lint": "skip",
+      "typecheck": "skip",
+      "test": "skip",
+      "build": "skip"
+    },
+    "coverage": {
+      "lines": {
+        "pct": 94.93,
+        "covered": 431,
+        "total": 454
+      },
+      "statements": {
+        "pct": 94.52,
+        "covered": 449,
+        "total": 475
+      },
+      "branches": {
+        "pct": 90.14,
+        "covered": 421,
+        "total": 467
+      },
+      "functions": {
+        "pct": 90.78,
+        "covered": 69,
+        "total": 76
+      }
+    }
+  }
 }
