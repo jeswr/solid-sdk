@@ -6,7 +6,7 @@
 // from main.tsx, never from the data layer (which stays fetch-injectable and
 // unit-testable without any of this).
 
-import "@solid/reactive-authentication"; // registers <authorization-code-flow>
+import "@solid/reactive-authentication/registerElements"; // registers <authorization-code-flow>
 import type { LoginController } from "@jeswr/solid-elements";
 import { createReactiveAuthController } from "@jeswr/solid-elements/auth";
 
