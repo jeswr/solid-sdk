@@ -5,15 +5,22 @@ import type { ProtocolDocument, ProtocolDocumentInput } from "./types.js";
  * metadata. The PD graph is: the PD subject typed `a2a:ProtocolDocument`, linked
  * to its shape subject(s) via `a2a:requestShape` / `a2a:responseShape`, plus the
  * supplied shape quads and the dcterms metadata. The hash is computed over the
- * canonical serialisation of the FULL graph (so it pins the shapes too).
+ * RDFC-1.0 canonical serialisation of the FULL graph (so it pins the shapes too).
+ *
+ * Async because the RDFC-1.0 canonicalization (via the reference `rdf-canonize`
+ * `canonize`) is async — see `hashQuads`.
  */
-export declare function buildProtocolDocument(input: ProtocolDocumentInput): ProtocolDocument;
+export declare function buildProtocolDocument(input: ProtocolDocumentInput): Promise<ProtocolDocument>;
 /**
- * The sha256 hash (`sha256:<hex>`) of a set of quads, over their DETERMINISTIC
- * canonical N-Quads serialisation (blank-node labels normalised so the hash is
- * stable across runs / builders). Exposed so a caller can hash a shape directly.
+ * The sha256 hash (`sha256:<hex>`) of a set of quads, over their RDFC-1.0 canonical
+ * N-Quads serialisation (canonical.ts). Because RDFC-1.0 is a W3C Recommendation,
+ * this hash agrees with any independent conformant implementation over the same
+ * graph. Exposed so a caller can hash a shape directly.
+ *
+ * Async because the RDFC-1.0 canonicalization is async (the reference
+ * implementation's public API).
  */
-export declare function hashQuads(quads: readonly Quad[]): string;
+export declare function hashQuads(quads: readonly Quad[]): Promise<string>;
 /**
  * Verify that a Protocol Document body matches its pinned hash. The body may be
  * the parsed quads/dataset OR a Turtle/JSON-LD string (parsed via the sanctioned

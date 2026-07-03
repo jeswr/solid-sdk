@@ -3,9 +3,10 @@
 // The SHACL-bodied Protocol Document (PD) — AGORA's hash-pinned protocol document
 // made RDF/SHACL-native (roadmap M2, "the single clearest novel slice"). A PD's
 // body is a SHACL shape (request + optional response); the document is
-// CONTENT-ADDRESSED: its hash is a sha256 over a DETERMINISTIC canonical
-// serialisation of its quads, so an upgrading peer can verify a fetched PD matches
-// its pinned hash before trusting it. The PD's IRI/hash is what goes into an M1
+// CONTENT-ADDRESSED: its hash is a sha256 over the RDFC-1.0 canonical N-Quads of
+// its quads (canonical.ts), so an upgrading peer using ANY conformant RDFC-1.0
+// implementation verifies a fetched PD matches its pinned hash before trusting it.
+// The PD's IRI/hash is what goes into an M1
 // AgentDescriptor.protocolSources. RDF is built via the GraphBuilder (typed
 // wrappers) + serialised via n3.Writer — never hand-built triples.
 
@@ -40,9 +41,14 @@ const SH_NODE_SHAPE = `${SH}NodeShape` as const;
  * metadata. The PD graph is: the PD subject typed `a2a:ProtocolDocument`, linked
  * to its shape subject(s) via `a2a:requestShape` / `a2a:responseShape`, plus the
  * supplied shape quads and the dcterms metadata. The hash is computed over the
- * canonical serialisation of the FULL graph (so it pins the shapes too).
+ * RDFC-1.0 canonical serialisation of the FULL graph (so it pins the shapes too).
+ *
+ * Async because the RDFC-1.0 canonicalization (via the reference `rdf-canonize`
+ * `canonize`) is async — see `hashQuads`.
  */
-export function buildProtocolDocument(input: ProtocolDocumentInput): ProtocolDocument {
+export async function buildProtocolDocument(
+  input: ProtocolDocumentInput,
+): Promise<ProtocolDocument> {
   const { requestShape, responseShape, meta } = input;
   if (!meta?.id) {
     throw new TypeError("buildProtocolDocument: meta.id (the protocol IRI) is required.");
@@ -80,7 +86,7 @@ export function buildProtocolDocument(input: ProtocolDocumentInput): ProtocolDoc
     ...((responseShape ?? []) as Quad[]),
   ];
 
-  const hash = hashQuads(quads);
+  const hash = await hashQuads(quads);
   const frozenMeta: ProtocolMeta = { ...meta };
   const requestShapeQuads = [...(requestShape as Quad[])];
 
@@ -95,12 +101,16 @@ export function buildProtocolDocument(input: ProtocolDocumentInput): ProtocolDoc
 }
 
 /**
- * The sha256 hash (`sha256:<hex>`) of a set of quads, over their DETERMINISTIC
- * canonical N-Quads serialisation (blank-node labels normalised so the hash is
- * stable across runs / builders). Exposed so a caller can hash a shape directly.
+ * The sha256 hash (`sha256:<hex>`) of a set of quads, over their RDFC-1.0 canonical
+ * N-Quads serialisation (canonical.ts). Because RDFC-1.0 is a W3C Recommendation,
+ * this hash agrees with any independent conformant implementation over the same
+ * graph. Exposed so a caller can hash a shape directly.
+ *
+ * Async because the RDFC-1.0 canonicalization is async (the reference
+ * implementation's public API).
  */
-export function hashQuads(quads: readonly Quad[]): string {
-  const canonical = canonicalNQuads(quads);
+export async function hashQuads(quads: readonly Quad[]): Promise<string> {
+  const canonical = await canonicalNQuads(quads);
   const digest = createHash(PROTOCOL_HASH_ALGORITHM).update(canonical, "utf8").digest("hex");
   return `${PROTOCOL_HASH_PREFIX}${digest}`;
 }
@@ -138,7 +148,7 @@ export async function verifyProtocolDocument(
     // A body that does not parse cannot match a hash — fail closed.
     return false;
   }
-  return constantTimeEquals(hashQuads(quads), expectedHash);
+  return constantTimeEquals(await hashQuads(quads), expectedHash);
 }
 
 /**

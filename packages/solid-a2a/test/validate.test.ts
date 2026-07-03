@@ -80,7 +80,7 @@ describe("validateIntent — conformance", () => {
 
   it("validates against a Protocol Document's bundled request shape", async () => {
     const r = await parseIntent("read https://a/x");
-    const pd = buildProtocolDocument({
+    const pd = await buildProtocolDocument({
       requestShape: buildShapeForIntent("read"),
       responseShape: buildResponseShape("https://schema.org/ReadAction"),
       meta: { id: "https://a/p#v1", name: "Read" },
@@ -95,7 +95,7 @@ describe("validateIntent — conformance", () => {
     // class the request graph carries) and demands a property the request lacks.
     // If validateIntent used the whole PD graph, the request would fail; using
     // only the request shape, it must still pass.
-    const pd = buildProtocolDocument({
+    const pd = await buildProtocolDocument({
       requestShape: buildShapeForIntent("read"),
       responseShape: buildResponseShape("https://w3id.org/jeswr/a2a#Intent"),
       meta: { id: "https://a/p#v1", name: "Read" },

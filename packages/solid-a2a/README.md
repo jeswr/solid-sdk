@@ -144,20 +144,25 @@ builds a (deliberately permissive) response shape so a Protocol Document has one
 A **Protocol Document** is the SHACL-bodied, content-addressed protocol both agents agree on:
 
 ```ts
-const pd = buildProtocolDocument({
+const pd = await buildProtocolDocument({
   requestShape:  buildShapeForIntent("read"),
   responseShape: buildResponseShape("https://schema.org/ReadAction"),
   meta: { id: "https://alice.pod/protocols/read#v1", name: "Read protocol", version: "1" },
 });
 
-pd.hash;                 // "sha256:…" — a content hash over the canonical serialisation of the PD
+pd.hash;                 // "sha256:…" — SHA-256 over the RDFC-1.0 canonical N-Quads of the PD graph
 await pd.toTurtle();     // the SHACL-bodied document (Turtle)
 await pd.toJsonLd();     // the metadata + shape links, with the inline @context (discovery view)
 ```
 
-`pd.hash` is **deterministic + stable** across runs for the same logical document (blank-node labels
-are normalised before hashing — see `canonicalNQuads`). An upgrading peer verifies a fetched body
-against its pin **before** trusting it:
+> `buildProtocolDocument`, `hashQuads`, and `canonicalNQuads` are **async** (they return a
+> `Promise`) — the RDFC-1.0 canonicalization runs through the reference `rdf-canonize` async API.
+
+`pd.hash` is **deterministic + stable** across runs for the same logical document, and — because the
+canonicalization is **RDFC-1.0** (a W3C Recommendation, computed via `rdf-canonize`) — it is
+**interoperable**: any independent conformant implementation produces the same hash over the same
+graph (see `canonicalNQuads`). An upgrading peer verifies a fetched body against its pin **before**
+trusting it:
 
 ```ts
 const fetchedTurtle = await fetch(protocolSource).then((r) => r.text());
@@ -167,7 +172,9 @@ const trusted = await verifyProtocolDocument(fetchedTurtle, offer.protocolHash);
 > **Hash choice.** AGORA pins by **SHA1**; this package uses **SHA-256** — SHA1's collision
 > resistance is broken, which is the exact property a content address relies on. The algorithm is
 > exposed (`PROTOCOL_HASH_ALGORITHM`) and a hash carries its `sha256:` prefix so a verifier knows
-> what it was computed with.
+> what it was computed with. The `sha256:` prefix denotes exactly this construction — **RDFC-1.0
+> canonical N-Quads, then SHA-256** — as required by the [a2a-rdf extension spec][a2a-rdf-ext]
+> (§"Content addressing"); a change to either half would need a new prefix.
 
 The PD's `id`/`hash` is what goes into an **M1** `AgentDescriptor.protocolSources` — that is how an
 upgrading peer discovers the protocol to fetch.
@@ -280,9 +287,32 @@ to `git+https://github.com/...` and re-run.
 `@jeswr/fetch-rdf` is an off-npm git dependency that ships no usable `dist/` under
 `ignore-scripts=true`; `scripts/build-deps.mjs` builds it once after install (pinned to the exact
 lockfile-resolved commit), and `scripts/build-dist.mjs` **inlines only it** into the committed
-`dist/index.js`. Everything else — `n3`, `@rdfjs/*`, `rdf-validate-shacl` and its `clownface` /
-`@vocabulary/sh` / `rdf-dataset-ext` / `rdf-literal` tree — stays **external** (npm-published), so a
-consumer resolves one shared copy.
+`dist/index.js`. Everything else — `n3`, `@rdfjs/*`, `rdf-canonize`, `rdf-validate-shacl` and its
+`clownface` / `@vocabulary/sh` / `rdf-dataset-ext` / `rdf-literal` tree — stays **external**
+(npm-published), so a consumer resolves one shared copy.
+
+## Changelog
+
+### 0.2.0 — RDFC-1.0 content hashing (breaking)
+
+The protocol/content hash is now **SHA-256 over the [RDFC-1.0][rdf-canon] canonical N-Quads** of the
+graph (via [`rdf-canonize`][rdf-canonize], the W3C reference implementation), replacing the package's
+earlier bespoke deterministic sorted-N-Quads canonicalization. This is what the
+[a2a-rdf extension spec][a2a-rdf-ext] normatively requires so that **independent** implementations
+agree on the same `sha256:` hash for the same graph.
+
+Two breaking changes for consumers:
+
+- **Hash VALUES change.** The same PD/shape now hashes to a **different** `sha256:` value than in
+  `0.1.x`. A hash pinned/published under `0.1.x` (e.g. in an `AgentDescriptor.protocolSources`, an
+  Agent Card `protocolDocuments[].hash`, or an on-the-wire `protocolHash`) **will not match** a body
+  re-hashed under `0.2.0`. Both peers must be on `0.2.0`+; re-pin any published hashes. (The
+  `sha256:` prefix, per the extension spec, denotes the RDFC-1.0+SHA-256 pair specifically.)
+- **`buildProtocolDocument`, `hashQuads`, and `canonicalNQuads` are now `async`** (return a
+  `Promise`), because the RDFC-1.0 canonicalization uses `rdf-canonize`'s async API. Add `await`.
+  (`verifyProtocolDocument` was already async — unchanged.) The untrusted-RDF hardening
+  (fail-closed `verifyProtocolDocument`) and the no-silent-downgrade handshake behaviour are
+  unchanged.
 
 ## License
 
@@ -300,3 +330,6 @@ consumer resolves one shared copy.
 [fetch-rdf]: https://github.com/jeswr/fetch-rdf
 [wrapper]: https://github.com/rdfjs-base/wrapper
 [i78]: https://github.com/jeswr/prod-solid-server/issues/78
+[rdf-canon]: https://www.w3.org/TR/rdf-canon/
+[rdf-canonize]: https://github.com/digitalbazaar/rdf-canonize
+[a2a-rdf-ext]: https://github.com/jeswr/a2a-rdf-extension

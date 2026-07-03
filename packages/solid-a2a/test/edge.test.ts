@@ -93,23 +93,23 @@ describe("shape builder", () => {
 });
 
 describe("canonicalNQuads", () => {
-  it("is stable for an empty graph", () => {
-    expect(canonicalNQuads([])).toBe("");
+  it("is stable for an empty graph", async () => {
+    expect(await canonicalNQuads([])).toBe("");
   });
 
-  it("is order-independent + blank-node-label-independent (two shape builds match)", () => {
-    const a = canonicalNQuads(buildShapeForIntent("grant"));
-    const b = canonicalNQuads([...buildShapeForIntent("grant")].reverse());
+  it("is order-independent + blank-node-label-independent (two shape builds match)", async () => {
+    const a = await canonicalNQuads(buildShapeForIntent("grant"));
+    const b = await canonicalNQuads([...buildShapeForIntent("grant")].reverse());
     expect(a).toBe(b);
   });
 
-  it("distinguishes structurally-different graphs", () => {
-    expect(hashQuads(buildShapeForIntent("read"))).not.toBe(
-      hashQuads(buildShapeForIntent("delete")),
+  it("distinguishes structurally-different graphs", async () => {
+    expect(await hashQuads(buildShapeForIntent("read"))).not.toBe(
+      await hashQuads(buildShapeForIntent("delete")),
     );
   });
 
-  it("includes the graph term — two datasets differing only by named graph hash differently", () => {
+  it("includes the graph term — two datasets differing only by named graph hash differently", async () => {
     const { namedNode, quad, defaultGraph } = DataFactory;
     const s = namedNode("https://a/s");
     const p = namedNode("https://a/p");
@@ -117,10 +117,10 @@ describe("canonicalNQuads", () => {
     const inDefault = [quad(s, p, o, defaultGraph())];
     const inNamed = [quad(s, p, o, namedNode("https://a/g"))];
     const inOtherGraph = [quad(s, p, o, namedNode("https://a/g2"))];
-    expect(canonicalNQuads(inDefault)).not.toBe(canonicalNQuads(inNamed));
-    expect(canonicalNQuads(inNamed)).not.toBe(canonicalNQuads(inOtherGraph));
+    expect(await canonicalNQuads(inDefault)).not.toBe(await canonicalNQuads(inNamed));
+    expect(await canonicalNQuads(inNamed)).not.toBe(await canonicalNQuads(inOtherGraph));
     // The named-graph line includes the graph IRI.
-    expect(canonicalNQuads(inNamed)).toContain("<https://a/g>");
+    expect(await canonicalNQuads(inNamed)).toContain("<https://a/g>");
   });
 });
 

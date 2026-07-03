@@ -1,144 +1,8 @@
 // src/canonical.ts
-import { createHash } from "node:crypto";
+import canonize from "rdf-canonize";
+var RDFC_1_0 = "RDFC-1.0";
 function canonicalNQuads(quads) {
-  const labels = canonicalBlankLabels(quads);
-  const lines = quads.map((q) => quadToLine(q, labels));
-  lines.sort();
-  return lines.join("\n");
-}
-function canonicalBlankLabels(quads) {
-  const blanks = collectBlankNodes(quads);
-  let colour = /* @__PURE__ */ new Map();
-  for (const b of blanks) {
-    colour.set(b, "_:b");
-  }
-  const rounds = Math.min(blanks.size + 2, 16);
-  for (let r = 0; r < rounds; r++) {
-    const next = refineRound(blanks, quads, colour);
-    const stable = coloursStable(blanks, colour, next);
-    colour = next;
-    if (stable) {
-      break;
-    }
-  }
-  return assignLabels(blanks, colour);
-}
-function collectBlankNodes(quads) {
-  const blanks = /* @__PURE__ */ new Set();
-  for (const q of quads) {
-    if (q.subject.termType === "BlankNode") {
-      blanks.add(q.subject.value);
-    }
-    if (q.object.termType === "BlankNode") {
-      blanks.add(q.object.value);
-    }
-    if (q.graph?.termType === "BlankNode") {
-      blanks.add(q.graph.value);
-    }
-  }
-  return blanks;
-}
-function refineRound(blanks, quads, colour) {
-  const next = /* @__PURE__ */ new Map();
-  for (const b of blanks) {
-    const signals = blankNodeSignals(b, quads, colour);
-    const h = createHash("sha256").update(`${colour.get(b)}
-${signals.join("\n")}`, "utf8").digest("hex");
-    next.set(b, h);
-  }
-  return next;
-}
-function blankNodeSignals(b, quads, colour) {
-  const signals = [];
-  for (const q of quads) {
-    const sub = q.subject.termType === "BlankNode" ? q.subject.value : void 0;
-    const obj = q.object.termType === "BlankNode" ? q.object.value : void 0;
-    const grp = q.graph?.termType === "BlankNode" ? q.graph.value : void 0;
-    const graphSig = q.graph ? termColour(q.graph, colour) : "";
-    if (sub === b) {
-      signals.push(`s|${q.predicate.value}|${termColour(q.object, colour)}|${graphSig}`);
-    }
-    if (obj === b) {
-      signals.push(`o|${q.predicate.value}|${termColour(q.subject, colour)}|${graphSig}`);
-    }
-    if (grp === b) {
-      signals.push(
-        `g|${q.predicate.value}|${termColour(q.subject, colour)}|${termColour(q.object, colour)}`
-      );
-    }
-  }
-  signals.sort();
-  return signals;
-}
-function coloursStable(blanks, prev, next) {
-  for (const b of blanks) {
-    if (next.get(b) !== prev.get(b)) {
-      return false;
-    }
-  }
-  return true;
-}
-function assignLabels(blanks, colour) {
-  const ordered = [...blanks].sort(
-    (a, b) => compareStrings(colour.get(a) ?? "", colour.get(b) ?? "") || compareStrings(a, b)
-  );
-  const labels = /* @__PURE__ */ new Map();
-  for (let i = 0; i < ordered.length; i++) {
-    labels.set(ordered[i], `c14n-${i}`);
-  }
-  return labels;
-}
-function compareStrings(a, b) {
-  if (a < b) {
-    return -1;
-  }
-  if (a > b) {
-    return 1;
-  }
-  return 0;
-}
-function termColour(term, colour) {
-  if (term.termType === "BlankNode") {
-    return colour.get(term.value) ?? "_:b";
-  }
-  return nquadsTerm(term, void 0);
-}
-function quadToLine(q, labels) {
-  const s = nquadsTerm(q.subject, labels);
-  const p = nquadsTerm(q.predicate, labels);
-  const o = nquadsTerm(q.object, labels);
-  const inDefaultGraph = q.graph === void 0 || q.graph.termType === "DefaultGraph" || q.graph.value === "";
-  if (inDefaultGraph) {
-    return `${s} ${p} ${o} .`;
-  }
-  return `${s} ${p} ${o} ${nquadsTerm(q.graph, labels)} .`;
-}
-function nquadsTerm(term, labels) {
-  switch (term.termType) {
-    case "NamedNode":
-      return `<${term.value}>`;
-    case "BlankNode": {
-      const label = labels?.get(term.value);
-      return `_:${label ?? term.value}`;
-    }
-    case "Literal": {
-      const lit = term;
-      const escaped = escapeLiteral(lit.value);
-      if (lit.language) {
-        return `"${escaped}"@${lit.language}`;
-      }
-      const dt = lit.datatype?.value;
-      if (dt && dt !== "http://www.w3.org/2001/XMLSchema#string") {
-        return `"${escaped}"^^<${dt}>`;
-      }
-      return `"${escaped}"`;
-    }
-    default:
-      return `<${term.value}>`;
-  }
-}
-function escapeLiteral(value) {
-  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n").replace(/\r/g, "\\r").replace(/\t/g, "\\t");
+  return canonize.canonize(quads, { algorithm: RDFC_1_0 });
 }
 
 // node_modules/@jeswr/fetch-rdf/dist/parse.js
@@ -997,7 +861,7 @@ function aclModeFromIri(iri) {
 }
 
 // src/protocol.ts
-import { createHash as createHash2 } from "node:crypto";
+import { createHash } from "node:crypto";
 var A2A_PROTOCOL_DOCUMENT = `${A2A}ProtocolDocument`;
 var A2A_REQUEST_SHAPE = `${A2A}requestShape`;
 var A2A_RESPONSE_SHAPE = `${A2A}responseShape`;
@@ -1005,7 +869,7 @@ var DCTERMS_TITLE = `${DCTERMS}title`;
 var DCTERMS_DESCRIPTION = `${DCTERMS}description`;
 var DCTERMS_HAS_VERSION = `${DCTERMS}hasVersion`;
 var SH_NODE_SHAPE = `${SH}NodeShape`;
-function buildProtocolDocument(input) {
+async function buildProtocolDocument(input) {
   const { requestShape, responseShape, meta } = input;
   if (!meta?.id) {
     throw new TypeError("buildProtocolDocument: meta.id (the protocol IRI) is required.");
@@ -1037,7 +901,7 @@ function buildProtocolDocument(input) {
     ...requestShape,
     ...responseShape ?? []
   ];
-  const hash = hashQuads(quads);
+  const hash = await hashQuads(quads);
   const frozenMeta = { ...meta };
   const requestShapeQuads = [...requestShape];
   return {
@@ -1049,9 +913,9 @@ function buildProtocolDocument(input) {
     toJsonLd: () => Promise.resolve(buildPdJsonLd(quads, frozenMeta))
   };
 }
-function hashQuads(quads) {
-  const canonical = canonicalNQuads(quads);
-  const digest = createHash2(PROTOCOL_HASH_ALGORITHM).update(canonical, "utf8").digest("hex");
+async function hashQuads(quads) {
+  const canonical = await canonicalNQuads(quads);
+  const digest = createHash(PROTOCOL_HASH_ALGORITHM).update(canonical, "utf8").digest("hex");
   return `${PROTOCOL_HASH_PREFIX}${digest}`;
 }
 async function verifyProtocolDocument(body, expectedHash, contentType2 = "text/turtle") {
@@ -1068,7 +932,7 @@ async function verifyProtocolDocument(body, expectedHash, contentType2 = "text/t
   } catch {
     return false;
   }
-  return constantTimeEquals(hashQuads(quads), expectedHash);
+  return constantTimeEquals(await hashQuads(quads), expectedHash);
 }
 function nodeShapeSubjects(shape) {
   const out = /* @__PURE__ */ new Set();

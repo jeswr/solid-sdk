@@ -80,73 +80,74 @@ exports[`characterization — Protocol Document hash + JSON-LD (byte-exact) > PD
 <https://alice.pod/protocols/read#v1> <https://w3id.org/jeswr/a2a#requestShape> <https://w3id.org/jeswr/a2a#ReadIntentShape> .
 <https://alice.pod/protocols/read#v1> <https://w3id.org/jeswr/a2a#responseShape> <https://w3id.org/jeswr/a2a#ResponseShape> .
 <https://w3id.org/jeswr/a2a#ReadIntentShape> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#NodeShape> .
-<https://w3id.org/jeswr/a2a#ReadIntentShape> <http://www.w3.org/ns/shacl#property> _:c14n-1 .
+<https://w3id.org/jeswr/a2a#ReadIntentShape> <http://www.w3.org/ns/shacl#property> _:c14n0 .
 <https://w3id.org/jeswr/a2a#ReadIntentShape> <http://www.w3.org/ns/shacl#targetClass> <https://w3id.org/jeswr/a2a#Intent> .
 <https://w3id.org/jeswr/a2a#ResponseShape> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#NodeShape> .
-<https://w3id.org/jeswr/a2a#ResponseShape> <http://www.w3.org/ns/shacl#property> _:c14n-0 .
+<https://w3id.org/jeswr/a2a#ResponseShape> <http://www.w3.org/ns/shacl#property> _:c14n2 .
 <https://w3id.org/jeswr/a2a#ResponseShape> <http://www.w3.org/ns/shacl#targetClass> <https://schema.org/ReadAction> .
-_:c14n-0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#PropertyShape> .
-_:c14n-0 <http://www.w3.org/ns/shacl#hasValue> <https://schema.org/ReadAction> .
-_:c14n-0 <http://www.w3.org/ns/shacl#minCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
-_:c14n-0 <http://www.w3.org/ns/shacl#path> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> .
-_:c14n-1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#PropertyShape> .
-_:c14n-1 <http://www.w3.org/ns/shacl#maxCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
-_:c14n-1 <http://www.w3.org/ns/shacl#minCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
-_:c14n-1 <http://www.w3.org/ns/shacl#name> "action" .
-_:c14n-1 <http://www.w3.org/ns/shacl#node> _:c14n-3 .
-_:c14n-1 <http://www.w3.org/ns/shacl#path> <https://w3id.org/jeswr/a2a#action> .
-_:c14n-2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#PropertyShape> .
-_:c14n-2 <http://www.w3.org/ns/shacl#minCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
-_:c14n-2 <http://www.w3.org/ns/shacl#name> "target" .
-_:c14n-2 <http://www.w3.org/ns/shacl#nodeKind> <http://www.w3.org/ns/shacl#IRI> .
-_:c14n-2 <http://www.w3.org/ns/shacl#path> <https://schema.org/object> .
-_:c14n-3 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#NodeShape> .
-_:c14n-3 <http://www.w3.org/ns/shacl#property> _:c14n-2 .
-_:c14n-3 <http://www.w3.org/ns/shacl#property> _:c14n-4 .
-_:c14n-4 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#PropertyShape> .
-_:c14n-4 <http://www.w3.org/ns/shacl#hasValue> <https://schema.org/ReadAction> .
-_:c14n-4 <http://www.w3.org/ns/shacl#minCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
-_:c14n-4 <http://www.w3.org/ns/shacl#path> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ."
+_:c14n0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#PropertyShape> .
+_:c14n0 <http://www.w3.org/ns/shacl#maxCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
+_:c14n0 <http://www.w3.org/ns/shacl#minCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
+_:c14n0 <http://www.w3.org/ns/shacl#name> "action" .
+_:c14n0 <http://www.w3.org/ns/shacl#node> _:c14n1 .
+_:c14n0 <http://www.w3.org/ns/shacl#path> <https://w3id.org/jeswr/a2a#action> .
+_:c14n1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#NodeShape> .
+_:c14n1 <http://www.w3.org/ns/shacl#property> _:c14n3 .
+_:c14n1 <http://www.w3.org/ns/shacl#property> _:c14n4 .
+_:c14n2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#PropertyShape> .
+_:c14n2 <http://www.w3.org/ns/shacl#hasValue> <https://schema.org/ReadAction> .
+_:c14n2 <http://www.w3.org/ns/shacl#minCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
+_:c14n2 <http://www.w3.org/ns/shacl#path> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> .
+_:c14n3 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#PropertyShape> .
+_:c14n3 <http://www.w3.org/ns/shacl#minCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
+_:c14n3 <http://www.w3.org/ns/shacl#name> "target" .
+_:c14n3 <http://www.w3.org/ns/shacl#nodeKind> <http://www.w3.org/ns/shacl#IRI> .
+_:c14n3 <http://www.w3.org/ns/shacl#path> <https://schema.org/object> .
+_:c14n4 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#PropertyShape> .
+_:c14n4 <http://www.w3.org/ns/shacl#hasValue> <https://schema.org/ReadAction> .
+_:c14n4 <http://www.w3.org/ns/shacl#minCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
+_:c14n4 <http://www.w3.org/ns/shacl#path> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> .
+"
 `;
 
-exports[`characterization — Protocol Document hash + JSON-LD (byte-exact) > PD content hash is byte-stable (the published pin value must not move) 1`] = `"sha256:0f5687c36d84e5cfcbdc63402e624f00a9fbc707b23b2591c50a4b7edcbaaa4e"`;
+exports[`characterization — Protocol Document hash + JSON-LD (byte-exact) > PD content hash is byte-stable (the published pin value must not move) 1`] = `"sha256:838fb80a4235e1d38a3e44162d644047c30b5c86c945d01144358e2ebc8e7cba"`;
 
 exports[`characterization — SHACL request shape canonical N-Quads + hash (byte-exact) > per-action shape hashes + default shape ids are byte-stable 1`] = `
 {
   "append": {
-    "hash": "sha256:1bffcaefdbf8280954bd0d6eb2ca8fecc9cb98bc44cef02cdab03b1e976f00b3",
+    "hash": "sha256:99dbe26b178e82ee1fb906030dbbf686aa22a9dede7bd7f49d1e16ff85691c26",
     "shapeId": "https://w3id.org/jeswr/a2a#AppendIntentShape",
   },
   "create": {
-    "hash": "sha256:d157800175d4f3abe16f4f51b8a4a5df349df279ad518f5507429b23734baab6",
+    "hash": "sha256:e28e5f62307dbd7f9f7f522c427f8c05ad5d8e1fcacd62256e8e7e4b3c257017",
     "shapeId": "https://w3id.org/jeswr/a2a#CreateIntentShape",
   },
   "delete": {
-    "hash": "sha256:b64552ea095e0006d68c4ee8c9f7c898338d184acdb69c590a1f0b0a29148c6a",
+    "hash": "sha256:01b15128f6332c62ecb5227cfb7f78fec9dc8ab80367cfc8bac4542c2fecdffe",
     "shapeId": "https://w3id.org/jeswr/a2a#DeleteIntentShape",
   },
   "grant": {
-    "hash": "sha256:ec9d7a928ef7368fb1541210f8c1c3158221a7489b89d6e2442be9d5716e9228",
+    "hash": "sha256:57944c583352a20a0d64e12301a68ccd794af3b00e81cf828c74636a81512df6",
     "shapeId": "https://w3id.org/jeswr/a2a#GrantIntentShape",
   },
   "list": {
-    "hash": "sha256:e072e6e4dca847b2a79fa4be953b92f36374e099fd3965926f9f872e5d7f812d",
+    "hash": "sha256:6652fdb02e4989bfaf4b514f5eee2fd53c801dbf86a56f45e9c51092f4ec5d6d",
     "shapeId": "https://w3id.org/jeswr/a2a#ListIntentShape",
   },
   "query": {
-    "hash": "sha256:9272e6d6eb5fbf81e26098bdaf071d6c309ec99d0c7f7e5e10350d9f2da2b5b7",
+    "hash": "sha256:347fb26bb834e3e704e7a25e7decaca9190eb388768b11bb94e44ab0518c3180",
     "shapeId": "https://w3id.org/jeswr/a2a#QueryIntentShape",
   },
   "read": {
-    "hash": "sha256:7f66f1a681b09323f851c737c0edbbc80b571b10c3e705934f10eb1092c81589",
+    "hash": "sha256:553e95cbfc321618fe49ca8bfd15da75c6c7ffa66a128745186e7e7844669929",
     "shapeId": "https://w3id.org/jeswr/a2a#ReadIntentShape",
   },
   "subscribe": {
-    "hash": "sha256:4d1496f8ad322e7ea782169a8ff90d605cc165738ebc9c861bcf04e9a9ce1753",
+    "hash": "sha256:4f11dc274470fc2f80e06b6a66b2b5f40bc161e359c1cdbfd4801a95f1163f23",
     "shapeId": "https://w3id.org/jeswr/a2a#SubscribeIntentShape",
   },
   "update": {
-    "hash": "sha256:eecd2150233f052a87bd7e8ff50fed216f2f0d39da6b2a8ec2caa017341cdecd",
+    "hash": "sha256:9c6d28543c2a593e8b00e632a27e3de317371221aa706b9409101b3a1c6e7527",
     "shapeId": "https://w3id.org/jeswr/a2a#UpdateIntentShape",
   },
 }
@@ -154,270 +155,284 @@ exports[`characterization — SHACL request shape canonical N-Quads + hash (byte
 
 exports[`characterization — SHACL request shape canonical N-Quads + hash (byte-exact) > shape[append] canonical N-Quads is byte-stable 1`] = `
 "<https://w3id.org/jeswr/a2a#AppendIntentShape> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#NodeShape> .
-<https://w3id.org/jeswr/a2a#AppendIntentShape> <http://www.w3.org/ns/shacl#property> _:c14n-2 .
+<https://w3id.org/jeswr/a2a#AppendIntentShape> <http://www.w3.org/ns/shacl#property> _:c14n0 .
 <https://w3id.org/jeswr/a2a#AppendIntentShape> <http://www.w3.org/ns/shacl#targetClass> <https://w3id.org/jeswr/a2a#Intent> .
-_:c14n-0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#NodeShape> .
-_:c14n-0 <http://www.w3.org/ns/shacl#property> _:c14n-1 .
-_:c14n-0 <http://www.w3.org/ns/shacl#property> _:c14n-3 .
-_:c14n-1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#PropertyShape> .
-_:c14n-1 <http://www.w3.org/ns/shacl#hasValue> <https://w3id.org/jeswr/a2a#AppendAction> .
-_:c14n-1 <http://www.w3.org/ns/shacl#minCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
-_:c14n-1 <http://www.w3.org/ns/shacl#path> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> .
-_:c14n-2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#PropertyShape> .
-_:c14n-2 <http://www.w3.org/ns/shacl#maxCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
-_:c14n-2 <http://www.w3.org/ns/shacl#minCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
-_:c14n-2 <http://www.w3.org/ns/shacl#name> "action" .
-_:c14n-2 <http://www.w3.org/ns/shacl#node> _:c14n-0 .
-_:c14n-2 <http://www.w3.org/ns/shacl#path> <https://w3id.org/jeswr/a2a#action> .
-_:c14n-3 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#PropertyShape> .
-_:c14n-3 <http://www.w3.org/ns/shacl#minCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
-_:c14n-3 <http://www.w3.org/ns/shacl#name> "target" .
-_:c14n-3 <http://www.w3.org/ns/shacl#nodeKind> <http://www.w3.org/ns/shacl#IRI> .
-_:c14n-3 <http://www.w3.org/ns/shacl#path> <https://schema.org/object> ."
+_:c14n0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#PropertyShape> .
+_:c14n0 <http://www.w3.org/ns/shacl#maxCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
+_:c14n0 <http://www.w3.org/ns/shacl#minCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
+_:c14n0 <http://www.w3.org/ns/shacl#name> "action" .
+_:c14n0 <http://www.w3.org/ns/shacl#node> _:c14n1 .
+_:c14n0 <http://www.w3.org/ns/shacl#path> <https://w3id.org/jeswr/a2a#action> .
+_:c14n1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#NodeShape> .
+_:c14n1 <http://www.w3.org/ns/shacl#property> _:c14n2 .
+_:c14n1 <http://www.w3.org/ns/shacl#property> _:c14n3 .
+_:c14n2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#PropertyShape> .
+_:c14n2 <http://www.w3.org/ns/shacl#hasValue> <https://w3id.org/jeswr/a2a#AppendAction> .
+_:c14n2 <http://www.w3.org/ns/shacl#minCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
+_:c14n2 <http://www.w3.org/ns/shacl#path> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> .
+_:c14n3 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#PropertyShape> .
+_:c14n3 <http://www.w3.org/ns/shacl#minCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
+_:c14n3 <http://www.w3.org/ns/shacl#name> "target" .
+_:c14n3 <http://www.w3.org/ns/shacl#nodeKind> <http://www.w3.org/ns/shacl#IRI> .
+_:c14n3 <http://www.w3.org/ns/shacl#path> <https://schema.org/object> .
+"
 `;
 
 exports[`characterization — SHACL request shape canonical N-Quads + hash (byte-exact) > shape[create] canonical N-Quads is byte-stable 1`] = `
 "<https://w3id.org/jeswr/a2a#CreateIntentShape> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#NodeShape> .
-<https://w3id.org/jeswr/a2a#CreateIntentShape> <http://www.w3.org/ns/shacl#property> _:c14n-1 .
+<https://w3id.org/jeswr/a2a#CreateIntentShape> <http://www.w3.org/ns/shacl#property> _:c14n3 .
 <https://w3id.org/jeswr/a2a#CreateIntentShape> <http://www.w3.org/ns/shacl#targetClass> <https://w3id.org/jeswr/a2a#Intent> .
-_:c14n-0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#NodeShape> .
-_:c14n-0 <http://www.w3.org/ns/shacl#property> _:c14n-2 .
-_:c14n-0 <http://www.w3.org/ns/shacl#property> _:c14n-3 .
-_:c14n-1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#PropertyShape> .
-_:c14n-1 <http://www.w3.org/ns/shacl#maxCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
-_:c14n-1 <http://www.w3.org/ns/shacl#minCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
-_:c14n-1 <http://www.w3.org/ns/shacl#name> "action" .
-_:c14n-1 <http://www.w3.org/ns/shacl#node> _:c14n-0 .
-_:c14n-1 <http://www.w3.org/ns/shacl#path> <https://w3id.org/jeswr/a2a#action> .
-_:c14n-2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#PropertyShape> .
-_:c14n-2 <http://www.w3.org/ns/shacl#hasValue> <https://schema.org/CreateAction> .
-_:c14n-2 <http://www.w3.org/ns/shacl#minCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
-_:c14n-2 <http://www.w3.org/ns/shacl#path> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> .
-_:c14n-3 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#PropertyShape> .
-_:c14n-3 <http://www.w3.org/ns/shacl#minCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
-_:c14n-3 <http://www.w3.org/ns/shacl#name> "target" .
-_:c14n-3 <http://www.w3.org/ns/shacl#nodeKind> <http://www.w3.org/ns/shacl#IRI> .
-_:c14n-3 <http://www.w3.org/ns/shacl#path> <https://schema.org/object> ."
+_:c14n0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#NodeShape> .
+_:c14n0 <http://www.w3.org/ns/shacl#property> _:c14n1 .
+_:c14n0 <http://www.w3.org/ns/shacl#property> _:c14n2 .
+_:c14n1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#PropertyShape> .
+_:c14n1 <http://www.w3.org/ns/shacl#minCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
+_:c14n1 <http://www.w3.org/ns/shacl#name> "target" .
+_:c14n1 <http://www.w3.org/ns/shacl#nodeKind> <http://www.w3.org/ns/shacl#IRI> .
+_:c14n1 <http://www.w3.org/ns/shacl#path> <https://schema.org/object> .
+_:c14n2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#PropertyShape> .
+_:c14n2 <http://www.w3.org/ns/shacl#hasValue> <https://schema.org/CreateAction> .
+_:c14n2 <http://www.w3.org/ns/shacl#minCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
+_:c14n2 <http://www.w3.org/ns/shacl#path> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> .
+_:c14n3 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#PropertyShape> .
+_:c14n3 <http://www.w3.org/ns/shacl#maxCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
+_:c14n3 <http://www.w3.org/ns/shacl#minCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
+_:c14n3 <http://www.w3.org/ns/shacl#name> "action" .
+_:c14n3 <http://www.w3.org/ns/shacl#node> _:c14n0 .
+_:c14n3 <http://www.w3.org/ns/shacl#path> <https://w3id.org/jeswr/a2a#action> .
+"
 `;
 
 exports[`characterization — SHACL request shape canonical N-Quads + hash (byte-exact) > shape[delete] canonical N-Quads is byte-stable 1`] = `
 "<https://w3id.org/jeswr/a2a#DeleteIntentShape> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#NodeShape> .
-<https://w3id.org/jeswr/a2a#DeleteIntentShape> <http://www.w3.org/ns/shacl#property> _:c14n-2 .
+<https://w3id.org/jeswr/a2a#DeleteIntentShape> <http://www.w3.org/ns/shacl#property> _:c14n3 .
 <https://w3id.org/jeswr/a2a#DeleteIntentShape> <http://www.w3.org/ns/shacl#targetClass> <https://w3id.org/jeswr/a2a#Intent> .
-_:c14n-0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#PropertyShape> .
-_:c14n-0 <http://www.w3.org/ns/shacl#minCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
-_:c14n-0 <http://www.w3.org/ns/shacl#name> "target" .
-_:c14n-0 <http://www.w3.org/ns/shacl#nodeKind> <http://www.w3.org/ns/shacl#IRI> .
-_:c14n-0 <http://www.w3.org/ns/shacl#path> <https://schema.org/object> .
-_:c14n-1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#PropertyShape> .
-_:c14n-1 <http://www.w3.org/ns/shacl#hasValue> <https://schema.org/DeleteAction> .
-_:c14n-1 <http://www.w3.org/ns/shacl#minCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
-_:c14n-1 <http://www.w3.org/ns/shacl#path> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> .
-_:c14n-2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#PropertyShape> .
-_:c14n-2 <http://www.w3.org/ns/shacl#maxCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
-_:c14n-2 <http://www.w3.org/ns/shacl#minCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
-_:c14n-2 <http://www.w3.org/ns/shacl#name> "action" .
-_:c14n-2 <http://www.w3.org/ns/shacl#node> _:c14n-3 .
-_:c14n-2 <http://www.w3.org/ns/shacl#path> <https://w3id.org/jeswr/a2a#action> .
-_:c14n-3 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#NodeShape> .
-_:c14n-3 <http://www.w3.org/ns/shacl#property> _:c14n-0 .
-_:c14n-3 <http://www.w3.org/ns/shacl#property> _:c14n-1 ."
+_:c14n0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#NodeShape> .
+_:c14n0 <http://www.w3.org/ns/shacl#property> _:c14n1 .
+_:c14n0 <http://www.w3.org/ns/shacl#property> _:c14n2 .
+_:c14n1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#PropertyShape> .
+_:c14n1 <http://www.w3.org/ns/shacl#hasValue> <https://schema.org/DeleteAction> .
+_:c14n1 <http://www.w3.org/ns/shacl#minCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
+_:c14n1 <http://www.w3.org/ns/shacl#path> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> .
+_:c14n2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#PropertyShape> .
+_:c14n2 <http://www.w3.org/ns/shacl#minCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
+_:c14n2 <http://www.w3.org/ns/shacl#name> "target" .
+_:c14n2 <http://www.w3.org/ns/shacl#nodeKind> <http://www.w3.org/ns/shacl#IRI> .
+_:c14n2 <http://www.w3.org/ns/shacl#path> <https://schema.org/object> .
+_:c14n3 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#PropertyShape> .
+_:c14n3 <http://www.w3.org/ns/shacl#maxCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
+_:c14n3 <http://www.w3.org/ns/shacl#minCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
+_:c14n3 <http://www.w3.org/ns/shacl#name> "action" .
+_:c14n3 <http://www.w3.org/ns/shacl#node> _:c14n0 .
+_:c14n3 <http://www.w3.org/ns/shacl#path> <https://w3id.org/jeswr/a2a#action> .
+"
 `;
 
 exports[`characterization — SHACL request shape canonical N-Quads + hash (byte-exact) > shape[grant] canonical N-Quads is byte-stable 1`] = `
 "<https://w3id.org/jeswr/a2a#GrantIntentShape> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#NodeShape> .
-<https://w3id.org/jeswr/a2a#GrantIntentShape> <http://www.w3.org/ns/shacl#property> _:c14n-2 .
+<https://w3id.org/jeswr/a2a#GrantIntentShape> <http://www.w3.org/ns/shacl#property> _:c14n1 .
 <https://w3id.org/jeswr/a2a#GrantIntentShape> <http://www.w3.org/ns/shacl#targetClass> <https://w3id.org/jeswr/a2a#Intent> .
-_:c14n-0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#PropertyShape> .
-_:c14n-0 <http://www.w3.org/ns/shacl#hasValue> <https://w3id.org/jeswr/a2a#GrantAction> .
-_:c14n-0 <http://www.w3.org/ns/shacl#minCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
-_:c14n-0 <http://www.w3.org/ns/shacl#path> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> .
-_:c14n-1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#PropertyShape> .
-_:c14n-1 <http://www.w3.org/ns/shacl#minCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
-_:c14n-1 <http://www.w3.org/ns/shacl#name> "recipient" .
-_:c14n-1 <http://www.w3.org/ns/shacl#nodeKind> <http://www.w3.org/ns/shacl#IRI> .
-_:c14n-1 <http://www.w3.org/ns/shacl#path> <https://schema.org/recipient> .
-_:c14n-2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#PropertyShape> .
-_:c14n-2 <http://www.w3.org/ns/shacl#maxCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
-_:c14n-2 <http://www.w3.org/ns/shacl#minCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
-_:c14n-2 <http://www.w3.org/ns/shacl#name> "action" .
-_:c14n-2 <http://www.w3.org/ns/shacl#node> _:c14n-3 .
-_:c14n-2 <http://www.w3.org/ns/shacl#path> <https://w3id.org/jeswr/a2a#action> .
-_:c14n-3 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#NodeShape> .
-_:c14n-3 <http://www.w3.org/ns/shacl#property> _:c14n-0 .
-_:c14n-3 <http://www.w3.org/ns/shacl#property> _:c14n-1 .
-_:c14n-3 <http://www.w3.org/ns/shacl#property> _:c14n-4 .
-_:c14n-3 <http://www.w3.org/ns/shacl#property> _:c14n-5 .
-_:c14n-4 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#PropertyShape> .
-_:c14n-4 <http://www.w3.org/ns/shacl#minCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
-_:c14n-4 <http://www.w3.org/ns/shacl#name> "mode" .
-_:c14n-4 <http://www.w3.org/ns/shacl#nodeKind> <http://www.w3.org/ns/shacl#IRI> .
-_:c14n-4 <http://www.w3.org/ns/shacl#path> <https://w3id.org/jeswr/a2a#mode> .
-_:c14n-5 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#PropertyShape> .
-_:c14n-5 <http://www.w3.org/ns/shacl#minCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
-_:c14n-5 <http://www.w3.org/ns/shacl#name> "target" .
-_:c14n-5 <http://www.w3.org/ns/shacl#nodeKind> <http://www.w3.org/ns/shacl#IRI> .
-_:c14n-5 <http://www.w3.org/ns/shacl#path> <https://schema.org/object> ."
+_:c14n0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#NodeShape> .
+_:c14n0 <http://www.w3.org/ns/shacl#property> _:c14n2 .
+_:c14n0 <http://www.w3.org/ns/shacl#property> _:c14n3 .
+_:c14n0 <http://www.w3.org/ns/shacl#property> _:c14n4 .
+_:c14n0 <http://www.w3.org/ns/shacl#property> _:c14n5 .
+_:c14n1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#PropertyShape> .
+_:c14n1 <http://www.w3.org/ns/shacl#maxCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
+_:c14n1 <http://www.w3.org/ns/shacl#minCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
+_:c14n1 <http://www.w3.org/ns/shacl#name> "action" .
+_:c14n1 <http://www.w3.org/ns/shacl#node> _:c14n0 .
+_:c14n1 <http://www.w3.org/ns/shacl#path> <https://w3id.org/jeswr/a2a#action> .
+_:c14n2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#PropertyShape> .
+_:c14n2 <http://www.w3.org/ns/shacl#minCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
+_:c14n2 <http://www.w3.org/ns/shacl#name> "recipient" .
+_:c14n2 <http://www.w3.org/ns/shacl#nodeKind> <http://www.w3.org/ns/shacl#IRI> .
+_:c14n2 <http://www.w3.org/ns/shacl#path> <https://schema.org/recipient> .
+_:c14n3 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#PropertyShape> .
+_:c14n3 <http://www.w3.org/ns/shacl#minCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
+_:c14n3 <http://www.w3.org/ns/shacl#name> "mode" .
+_:c14n3 <http://www.w3.org/ns/shacl#nodeKind> <http://www.w3.org/ns/shacl#IRI> .
+_:c14n3 <http://www.w3.org/ns/shacl#path> <https://w3id.org/jeswr/a2a#mode> .
+_:c14n4 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#PropertyShape> .
+_:c14n4 <http://www.w3.org/ns/shacl#minCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
+_:c14n4 <http://www.w3.org/ns/shacl#name> "target" .
+_:c14n4 <http://www.w3.org/ns/shacl#nodeKind> <http://www.w3.org/ns/shacl#IRI> .
+_:c14n4 <http://www.w3.org/ns/shacl#path> <https://schema.org/object> .
+_:c14n5 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#PropertyShape> .
+_:c14n5 <http://www.w3.org/ns/shacl#hasValue> <https://w3id.org/jeswr/a2a#GrantAction> .
+_:c14n5 <http://www.w3.org/ns/shacl#minCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
+_:c14n5 <http://www.w3.org/ns/shacl#path> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> .
+"
 `;
 
 exports[`characterization — SHACL request shape canonical N-Quads + hash (byte-exact) > shape[list] canonical N-Quads is byte-stable 1`] = `
 "<https://w3id.org/jeswr/a2a#ListIntentShape> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#NodeShape> .
-<https://w3id.org/jeswr/a2a#ListIntentShape> <http://www.w3.org/ns/shacl#property> _:c14n-1 .
+<https://w3id.org/jeswr/a2a#ListIntentShape> <http://www.w3.org/ns/shacl#property> _:c14n2 .
 <https://w3id.org/jeswr/a2a#ListIntentShape> <http://www.w3.org/ns/shacl#targetClass> <https://w3id.org/jeswr/a2a#Intent> .
-_:c14n-0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#PropertyShape> .
-_:c14n-0 <http://www.w3.org/ns/shacl#hasValue> <https://w3id.org/jeswr/a2a#ListAction> .
-_:c14n-0 <http://www.w3.org/ns/shacl#minCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
-_:c14n-0 <http://www.w3.org/ns/shacl#path> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> .
-_:c14n-1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#PropertyShape> .
-_:c14n-1 <http://www.w3.org/ns/shacl#maxCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
-_:c14n-1 <http://www.w3.org/ns/shacl#minCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
-_:c14n-1 <http://www.w3.org/ns/shacl#name> "action" .
-_:c14n-1 <http://www.w3.org/ns/shacl#node> _:c14n-2 .
-_:c14n-1 <http://www.w3.org/ns/shacl#path> <https://w3id.org/jeswr/a2a#action> .
-_:c14n-2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#NodeShape> .
-_:c14n-2 <http://www.w3.org/ns/shacl#property> _:c14n-0 .
-_:c14n-2 <http://www.w3.org/ns/shacl#property> _:c14n-3 .
-_:c14n-3 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#PropertyShape> .
-_:c14n-3 <http://www.w3.org/ns/shacl#minCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
-_:c14n-3 <http://www.w3.org/ns/shacl#name> "target" .
-_:c14n-3 <http://www.w3.org/ns/shacl#nodeKind> <http://www.w3.org/ns/shacl#IRI> .
-_:c14n-3 <http://www.w3.org/ns/shacl#path> <https://schema.org/target> ."
+_:c14n0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#NodeShape> .
+_:c14n0 <http://www.w3.org/ns/shacl#property> _:c14n1 .
+_:c14n0 <http://www.w3.org/ns/shacl#property> _:c14n3 .
+_:c14n1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#PropertyShape> .
+_:c14n1 <http://www.w3.org/ns/shacl#hasValue> <https://w3id.org/jeswr/a2a#ListAction> .
+_:c14n1 <http://www.w3.org/ns/shacl#minCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
+_:c14n1 <http://www.w3.org/ns/shacl#path> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> .
+_:c14n2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#PropertyShape> .
+_:c14n2 <http://www.w3.org/ns/shacl#maxCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
+_:c14n2 <http://www.w3.org/ns/shacl#minCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
+_:c14n2 <http://www.w3.org/ns/shacl#name> "action" .
+_:c14n2 <http://www.w3.org/ns/shacl#node> _:c14n0 .
+_:c14n2 <http://www.w3.org/ns/shacl#path> <https://w3id.org/jeswr/a2a#action> .
+_:c14n3 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#PropertyShape> .
+_:c14n3 <http://www.w3.org/ns/shacl#minCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
+_:c14n3 <http://www.w3.org/ns/shacl#name> "target" .
+_:c14n3 <http://www.w3.org/ns/shacl#nodeKind> <http://www.w3.org/ns/shacl#IRI> .
+_:c14n3 <http://www.w3.org/ns/shacl#path> <https://schema.org/target> .
+"
 `;
 
 exports[`characterization — SHACL request shape canonical N-Quads + hash (byte-exact) > shape[query] canonical N-Quads is byte-stable 1`] = `
 "<https://w3id.org/jeswr/a2a#QueryIntentShape> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#NodeShape> .
-<https://w3id.org/jeswr/a2a#QueryIntentShape> <http://www.w3.org/ns/shacl#property> _:c14n-1 .
+<https://w3id.org/jeswr/a2a#QueryIntentShape> <http://www.w3.org/ns/shacl#property> _:c14n2 .
 <https://w3id.org/jeswr/a2a#QueryIntentShape> <http://www.w3.org/ns/shacl#targetClass> <https://w3id.org/jeswr/a2a#Intent> .
-_:c14n-0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#PropertyShape> .
-_:c14n-0 <http://www.w3.org/ns/shacl#hasValue> <https://w3id.org/jeswr/a2a#QueryAction> .
-_:c14n-0 <http://www.w3.org/ns/shacl#minCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
-_:c14n-0 <http://www.w3.org/ns/shacl#path> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> .
-_:c14n-1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#PropertyShape> .
-_:c14n-1 <http://www.w3.org/ns/shacl#maxCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
-_:c14n-1 <http://www.w3.org/ns/shacl#minCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
-_:c14n-1 <http://www.w3.org/ns/shacl#name> "action" .
-_:c14n-1 <http://www.w3.org/ns/shacl#node> _:c14n-2 .
-_:c14n-1 <http://www.w3.org/ns/shacl#path> <https://w3id.org/jeswr/a2a#action> .
-_:c14n-2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#NodeShape> .
-_:c14n-2 <http://www.w3.org/ns/shacl#property> _:c14n-0 ."
+_:c14n0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#NodeShape> .
+_:c14n0 <http://www.w3.org/ns/shacl#property> _:c14n1 .
+_:c14n1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#PropertyShape> .
+_:c14n1 <http://www.w3.org/ns/shacl#hasValue> <https://w3id.org/jeswr/a2a#QueryAction> .
+_:c14n1 <http://www.w3.org/ns/shacl#minCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
+_:c14n1 <http://www.w3.org/ns/shacl#path> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> .
+_:c14n2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#PropertyShape> .
+_:c14n2 <http://www.w3.org/ns/shacl#maxCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
+_:c14n2 <http://www.w3.org/ns/shacl#minCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
+_:c14n2 <http://www.w3.org/ns/shacl#name> "action" .
+_:c14n2 <http://www.w3.org/ns/shacl#node> _:c14n0 .
+_:c14n2 <http://www.w3.org/ns/shacl#path> <https://w3id.org/jeswr/a2a#action> .
+"
 `;
 
 exports[`characterization — SHACL request shape canonical N-Quads + hash (byte-exact) > shape[read] canonical N-Quads is byte-stable 1`] = `
 "<https://w3id.org/jeswr/a2a#ReadIntentShape> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#NodeShape> .
-<https://w3id.org/jeswr/a2a#ReadIntentShape> <http://www.w3.org/ns/shacl#property> _:c14n-3 .
+<https://w3id.org/jeswr/a2a#ReadIntentShape> <http://www.w3.org/ns/shacl#property> _:c14n0 .
 <https://w3id.org/jeswr/a2a#ReadIntentShape> <http://www.w3.org/ns/shacl#targetClass> <https://w3id.org/jeswr/a2a#Intent> .
-_:c14n-0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#NodeShape> .
-_:c14n-0 <http://www.w3.org/ns/shacl#property> _:c14n-1 .
-_:c14n-0 <http://www.w3.org/ns/shacl#property> _:c14n-2 .
-_:c14n-1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#PropertyShape> .
-_:c14n-1 <http://www.w3.org/ns/shacl#minCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
-_:c14n-1 <http://www.w3.org/ns/shacl#name> "target" .
-_:c14n-1 <http://www.w3.org/ns/shacl#nodeKind> <http://www.w3.org/ns/shacl#IRI> .
-_:c14n-1 <http://www.w3.org/ns/shacl#path> <https://schema.org/object> .
-_:c14n-2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#PropertyShape> .
-_:c14n-2 <http://www.w3.org/ns/shacl#hasValue> <https://schema.org/ReadAction> .
-_:c14n-2 <http://www.w3.org/ns/shacl#minCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
-_:c14n-2 <http://www.w3.org/ns/shacl#path> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> .
-_:c14n-3 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#PropertyShape> .
-_:c14n-3 <http://www.w3.org/ns/shacl#maxCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
-_:c14n-3 <http://www.w3.org/ns/shacl#minCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
-_:c14n-3 <http://www.w3.org/ns/shacl#name> "action" .
-_:c14n-3 <http://www.w3.org/ns/shacl#node> _:c14n-0 .
-_:c14n-3 <http://www.w3.org/ns/shacl#path> <https://w3id.org/jeswr/a2a#action> ."
+_:c14n0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#PropertyShape> .
+_:c14n0 <http://www.w3.org/ns/shacl#maxCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
+_:c14n0 <http://www.w3.org/ns/shacl#minCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
+_:c14n0 <http://www.w3.org/ns/shacl#name> "action" .
+_:c14n0 <http://www.w3.org/ns/shacl#node> _:c14n1 .
+_:c14n0 <http://www.w3.org/ns/shacl#path> <https://w3id.org/jeswr/a2a#action> .
+_:c14n1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#NodeShape> .
+_:c14n1 <http://www.w3.org/ns/shacl#property> _:c14n2 .
+_:c14n1 <http://www.w3.org/ns/shacl#property> _:c14n3 .
+_:c14n2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#PropertyShape> .
+_:c14n2 <http://www.w3.org/ns/shacl#minCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
+_:c14n2 <http://www.w3.org/ns/shacl#name> "target" .
+_:c14n2 <http://www.w3.org/ns/shacl#nodeKind> <http://www.w3.org/ns/shacl#IRI> .
+_:c14n2 <http://www.w3.org/ns/shacl#path> <https://schema.org/object> .
+_:c14n3 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#PropertyShape> .
+_:c14n3 <http://www.w3.org/ns/shacl#hasValue> <https://schema.org/ReadAction> .
+_:c14n3 <http://www.w3.org/ns/shacl#minCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
+_:c14n3 <http://www.w3.org/ns/shacl#path> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> .
+"
 `;
 
 exports[`characterization — SHACL request shape canonical N-Quads + hash (byte-exact) > shape[subscribe] canonical N-Quads is byte-stable 1`] = `
 "<https://w3id.org/jeswr/a2a#SubscribeIntentShape> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#NodeShape> .
-<https://w3id.org/jeswr/a2a#SubscribeIntentShape> <http://www.w3.org/ns/shacl#property> _:c14n-0 .
+<https://w3id.org/jeswr/a2a#SubscribeIntentShape> <http://www.w3.org/ns/shacl#property> _:c14n1 .
 <https://w3id.org/jeswr/a2a#SubscribeIntentShape> <http://www.w3.org/ns/shacl#targetClass> <https://w3id.org/jeswr/a2a#Intent> .
-_:c14n-0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#PropertyShape> .
-_:c14n-0 <http://www.w3.org/ns/shacl#maxCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
-_:c14n-0 <http://www.w3.org/ns/shacl#minCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
-_:c14n-0 <http://www.w3.org/ns/shacl#name> "action" .
-_:c14n-0 <http://www.w3.org/ns/shacl#node> _:c14n-1 .
-_:c14n-0 <http://www.w3.org/ns/shacl#path> <https://w3id.org/jeswr/a2a#action> .
-_:c14n-1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#NodeShape> .
-_:c14n-1 <http://www.w3.org/ns/shacl#property> _:c14n-2 .
-_:c14n-2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#PropertyShape> .
-_:c14n-2 <http://www.w3.org/ns/shacl#hasValue> <https://w3id.org/jeswr/a2a#SubscribeAction> .
-_:c14n-2 <http://www.w3.org/ns/shacl#minCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
-_:c14n-2 <http://www.w3.org/ns/shacl#path> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ."
+_:c14n0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#NodeShape> .
+_:c14n0 <http://www.w3.org/ns/shacl#property> _:c14n2 .
+_:c14n1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#PropertyShape> .
+_:c14n1 <http://www.w3.org/ns/shacl#maxCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
+_:c14n1 <http://www.w3.org/ns/shacl#minCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
+_:c14n1 <http://www.w3.org/ns/shacl#name> "action" .
+_:c14n1 <http://www.w3.org/ns/shacl#node> _:c14n0 .
+_:c14n1 <http://www.w3.org/ns/shacl#path> <https://w3id.org/jeswr/a2a#action> .
+_:c14n2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#PropertyShape> .
+_:c14n2 <http://www.w3.org/ns/shacl#hasValue> <https://w3id.org/jeswr/a2a#SubscribeAction> .
+_:c14n2 <http://www.w3.org/ns/shacl#minCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
+_:c14n2 <http://www.w3.org/ns/shacl#path> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> .
+"
 `;
 
 exports[`characterization — SHACL request shape canonical N-Quads + hash (byte-exact) > shape[update] canonical N-Quads is byte-stable 1`] = `
 "<https://w3id.org/jeswr/a2a#UpdateIntentShape> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#NodeShape> .
-<https://w3id.org/jeswr/a2a#UpdateIntentShape> <http://www.w3.org/ns/shacl#property> _:c14n-0 .
+<https://w3id.org/jeswr/a2a#UpdateIntentShape> <http://www.w3.org/ns/shacl#property> _:c14n2 .
 <https://w3id.org/jeswr/a2a#UpdateIntentShape> <http://www.w3.org/ns/shacl#targetClass> <https://w3id.org/jeswr/a2a#Intent> .
-_:c14n-0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#PropertyShape> .
-_:c14n-0 <http://www.w3.org/ns/shacl#maxCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
-_:c14n-0 <http://www.w3.org/ns/shacl#minCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
-_:c14n-0 <http://www.w3.org/ns/shacl#name> "action" .
-_:c14n-0 <http://www.w3.org/ns/shacl#node> _:c14n-1 .
-_:c14n-0 <http://www.w3.org/ns/shacl#path> <https://w3id.org/jeswr/a2a#action> .
-_:c14n-1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#NodeShape> .
-_:c14n-1 <http://www.w3.org/ns/shacl#property> _:c14n-2 .
-_:c14n-1 <http://www.w3.org/ns/shacl#property> _:c14n-3 .
-_:c14n-2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#PropertyShape> .
-_:c14n-2 <http://www.w3.org/ns/shacl#minCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
-_:c14n-2 <http://www.w3.org/ns/shacl#name> "target" .
-_:c14n-2 <http://www.w3.org/ns/shacl#nodeKind> <http://www.w3.org/ns/shacl#IRI> .
-_:c14n-2 <http://www.w3.org/ns/shacl#path> <https://schema.org/object> .
-_:c14n-3 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#PropertyShape> .
-_:c14n-3 <http://www.w3.org/ns/shacl#hasValue> <https://schema.org/UpdateAction> .
-_:c14n-3 <http://www.w3.org/ns/shacl#minCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
-_:c14n-3 <http://www.w3.org/ns/shacl#path> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ."
+_:c14n0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#PropertyShape> .
+_:c14n0 <http://www.w3.org/ns/shacl#hasValue> <https://schema.org/UpdateAction> .
+_:c14n0 <http://www.w3.org/ns/shacl#minCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
+_:c14n0 <http://www.w3.org/ns/shacl#path> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> .
+_:c14n1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#NodeShape> .
+_:c14n1 <http://www.w3.org/ns/shacl#property> _:c14n0 .
+_:c14n1 <http://www.w3.org/ns/shacl#property> _:c14n3 .
+_:c14n2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#PropertyShape> .
+_:c14n2 <http://www.w3.org/ns/shacl#maxCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
+_:c14n2 <http://www.w3.org/ns/shacl#minCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
+_:c14n2 <http://www.w3.org/ns/shacl#name> "action" .
+_:c14n2 <http://www.w3.org/ns/shacl#node> _:c14n1 .
+_:c14n2 <http://www.w3.org/ns/shacl#path> <https://w3id.org/jeswr/a2a#action> .
+_:c14n3 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#PropertyShape> .
+_:c14n3 <http://www.w3.org/ns/shacl#minCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
+_:c14n3 <http://www.w3.org/ns/shacl#name> "target" .
+_:c14n3 <http://www.w3.org/ns/shacl#nodeKind> <http://www.w3.org/ns/shacl#IRI> .
+_:c14n3 <http://www.w3.org/ns/shacl#path> <https://schema.org/object> .
+"
 `;
 
 exports[`characterization — SHACL response shape (byte-exact) > response shape canonical N-Quads + hash are byte-stable 1`] = `
 {
-  "hash": "sha256:0998503cba99c1da9edad543fdc97487838494add80bd109a381da48b2878c2f",
+  "hash": "sha256:6e74e004ea924a367a9ad0ba92ee7a189f3ab22683f03136754f371b4dd58440",
   "nq": "<https://w3id.org/jeswr/a2a#ResponseShape> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#NodeShape> .
-<https://w3id.org/jeswr/a2a#ResponseShape> <http://www.w3.org/ns/shacl#property> _:c14n-0 .
+<https://w3id.org/jeswr/a2a#ResponseShape> <http://www.w3.org/ns/shacl#property> _:c14n0 .
 <https://w3id.org/jeswr/a2a#ResponseShape> <http://www.w3.org/ns/shacl#targetClass> <https://schema.org/ReadAction> .
-_:c14n-0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#PropertyShape> .
-_:c14n-0 <http://www.w3.org/ns/shacl#hasValue> <https://schema.org/ReadAction> .
-_:c14n-0 <http://www.w3.org/ns/shacl#minCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
-_:c14n-0 <http://www.w3.org/ns/shacl#path> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> .",
+_:c14n0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#PropertyShape> .
+_:c14n0 <http://www.w3.org/ns/shacl#hasValue> <https://schema.org/ReadAction> .
+_:c14n0 <http://www.w3.org/ns/shacl#minCount> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
+_:c14n0 <http://www.w3.org/ns/shacl#path> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> .
+",
 }
 `;
 
 exports[`characterization — handshake codec RDF (byte-exact) > upgrade-offer (optional, unnamed) canonical N-Quads + hash 1`] = `
 {
-  "hash": "sha256:716488154d0575845a5b0253db604fa997df07e0f1c90a7892186b917e358ad6",
+  "hash": "sha256:3dba75c6b8dbcee1abc0610b770a56c3ed52da2e505f5a4b4b7e5c1a90601891",
   "nq": "<urn:a2a:handshake> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/jeswr/a2a#UpgradeOffer> .
 <urn:a2a:handshake> <https://w3id.org/jeswr/a2a#protocolHash> "sha256:abcdef" .
 <urn:a2a:handshake> <https://w3id.org/jeswr/a2a#protocolSource> <https://alice.pod/protocols/read#v1> .
-<urn:a2a:handshake> <https://w3id.org/jeswr/a2a#required> "false"^^<http://www.w3.org/2001/XMLSchema#boolean> .",
+<urn:a2a:handshake> <https://w3id.org/jeswr/a2a#required> "false"^^<http://www.w3.org/2001/XMLSchema#boolean> .
+",
 }
 `;
 
 exports[`characterization — handshake codec RDF (byte-exact) > upgrade-offer (required, named) canonical N-Quads + hash 1`] = `
 {
-  "hash": "sha256:7f26798421a22dd354e7f2c58528692e3647ac2e6c5cc1b97847487952a62135",
+  "hash": "sha256:e9d6f165782bb10239b51f8ddf54c8583c1839527c54de96785177392730ab27",
   "nq": "<urn:a2a:handshake> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/jeswr/a2a#UpgradeOffer> .
 <urn:a2a:handshake> <https://w3id.org/jeswr/a2a#protocolHash> "sha256:abcdef" .
 <urn:a2a:handshake> <https://w3id.org/jeswr/a2a#protocolName> "Read protocol" .
 <urn:a2a:handshake> <https://w3id.org/jeswr/a2a#protocolSource> <https://alice.pod/protocols/read#v1> .
-<urn:a2a:handshake> <https://w3id.org/jeswr/a2a#required> "true"^^<http://www.w3.org/2001/XMLSchema#boolean> .",
+<urn:a2a:handshake> <https://w3id.org/jeswr/a2a#required> "true"^^<http://www.w3.org/2001/XMLSchema#boolean> .
+",
 }
 `;
 
 exports[`characterization — handshake codec RDF (byte-exact) > upgrade-response (accept, no reason) canonical N-Quads + hash 1`] = `
 {
-  "hash": "sha256:0b2df8dde6afd59a3dd4053b20f904a42b0682cd0ef6e4f78a82e6fba71b577f",
+  "hash": "sha256:2b970691fa3bbca225635127d944f50b99c4fcd24d435c575d0d500fe441433f",
   "nq": "<urn:a2a:handshake> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/jeswr/a2a#UpgradeResponse> .
 <urn:a2a:handshake> <https://w3id.org/jeswr/a2a#accept> "true"^^<http://www.w3.org/2001/XMLSchema#boolean> .
-<urn:a2a:handshake> <https://w3id.org/jeswr/a2a#protocolHash> "sha256:abcdef" .",
+<urn:a2a:handshake> <https://w3id.org/jeswr/a2a#protocolHash> "sha256:abcdef" .
+",
 }
 `;
 
 exports[`characterization — handshake codec RDF (byte-exact) > upgrade-response (decline, with reason) canonical N-Quads + hash 1`] = `
 {
-  "hash": "sha256:a502305498ff880102cd8624e63ba4378b858eaab01b5b8298ff0072634ff40d",
+  "hash": "sha256:125fbd36c518bb0685ec259809be01f6a53415509b6839e446ecb54777b7d427",
   "nq": "<urn:a2a:handshake> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/jeswr/a2a#UpgradeResponse> .
 <urn:a2a:handshake> <https://w3id.org/jeswr/a2a#accept> "false"^^<http://www.w3.org/2001/XMLSchema#boolean> .
 <urn:a2a:handshake> <https://w3id.org/jeswr/a2a#protocolHash> "sha256:abcdef" .
-<urn:a2a:handshake> <https://w3id.org/jeswr/a2a#reason> "policy forbids the requested mode" .",
+<urn:a2a:handshake> <https://w3id.org/jeswr/a2a#reason> "policy forbids the requested mode" .
+",
 }
 `;
 
@@ -1062,171 +1077,180 @@ exports[`characterization — intent → JSON-LD projection (byte-exact) > inten
 exports[`characterization — intent → RDF canonical N-Quads (byte-exact) > intent[append] canonical N-Quads is byte-stable 1`] = `
 "<urn:a2a:intent:golden-append> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/jeswr/a2a#Intent> .
 <urn:a2a:intent:golden-append> <https://schema.org/agent> <https://alice.example/profile#me> .
-<urn:a2a:intent:golden-append> <https://w3id.org/jeswr/a2a#action> _:c14n-1 .
-<urn:a2a:intent:golden-append> <https://w3id.org/jeswr/a2a#parameter> _:c14n-0 .
-<urn:a2a:intent:golden-append> <https://w3id.org/jeswr/a2a#parameter> _:c14n-2 .
-_:c14n-0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/jeswr/a2a#Parameter> .
-_:c14n-0 <https://w3id.org/jeswr/a2a#paramKey> "label" .
-_:c14n-0 <https://w3id.org/jeswr/a2a#paramValue> "with spaces" .
-_:c14n-1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/jeswr/a2a#AppendAction> .
-_:c14n-1 <https://schema.org/agent> <https://alice.example/profile#me> .
-_:c14n-1 <https://schema.org/object> <https://alice.pod/data/resource> .
-_:c14n-2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/jeswr/a2a#Parameter> .
-_:c14n-2 <https://w3id.org/jeswr/a2a#paramKey> "limit" .
-_:c14n-2 <https://w3id.org/jeswr/a2a#paramValue> "10" ."
+<urn:a2a:intent:golden-append> <https://w3id.org/jeswr/a2a#action> _:c14n1 .
+<urn:a2a:intent:golden-append> <https://w3id.org/jeswr/a2a#parameter> _:c14n0 .
+<urn:a2a:intent:golden-append> <https://w3id.org/jeswr/a2a#parameter> _:c14n2 .
+_:c14n0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/jeswr/a2a#Parameter> .
+_:c14n0 <https://w3id.org/jeswr/a2a#paramKey> "label" .
+_:c14n0 <https://w3id.org/jeswr/a2a#paramValue> "with spaces" .
+_:c14n1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/jeswr/a2a#AppendAction> .
+_:c14n1 <https://schema.org/agent> <https://alice.example/profile#me> .
+_:c14n1 <https://schema.org/object> <https://alice.pod/data/resource> .
+_:c14n2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/jeswr/a2a#Parameter> .
+_:c14n2 <https://w3id.org/jeswr/a2a#paramKey> "limit" .
+_:c14n2 <https://w3id.org/jeswr/a2a#paramValue> "10" .
+"
 `;
 
 exports[`characterization — intent → RDF canonical N-Quads (byte-exact) > intent[create] canonical N-Quads is byte-stable 1`] = `
 "<urn:a2a:intent:golden-create> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/jeswr/a2a#Intent> .
 <urn:a2a:intent:golden-create> <https://schema.org/agent> <https://alice.example/profile#me> .
-<urn:a2a:intent:golden-create> <https://w3id.org/jeswr/a2a#action> _:c14n-1 .
-<urn:a2a:intent:golden-create> <https://w3id.org/jeswr/a2a#parameter> _:c14n-0 .
-<urn:a2a:intent:golden-create> <https://w3id.org/jeswr/a2a#parameter> _:c14n-2 .
-_:c14n-0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/jeswr/a2a#Parameter> .
-_:c14n-0 <https://w3id.org/jeswr/a2a#paramKey> "label" .
-_:c14n-0 <https://w3id.org/jeswr/a2a#paramValue> "with spaces" .
-_:c14n-1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://schema.org/CreateAction> .
-_:c14n-1 <https://schema.org/agent> <https://alice.example/profile#me> .
-_:c14n-1 <https://schema.org/object> <https://alice.pod/data/resource> .
-_:c14n-2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/jeswr/a2a#Parameter> .
-_:c14n-2 <https://w3id.org/jeswr/a2a#paramKey> "limit" .
-_:c14n-2 <https://w3id.org/jeswr/a2a#paramValue> "10" ."
+<urn:a2a:intent:golden-create> <https://w3id.org/jeswr/a2a#action> _:c14n0 .
+<urn:a2a:intent:golden-create> <https://w3id.org/jeswr/a2a#parameter> _:c14n1 .
+<urn:a2a:intent:golden-create> <https://w3id.org/jeswr/a2a#parameter> _:c14n2 .
+_:c14n0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://schema.org/CreateAction> .
+_:c14n0 <https://schema.org/agent> <https://alice.example/profile#me> .
+_:c14n0 <https://schema.org/object> <https://alice.pod/data/resource> .
+_:c14n1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/jeswr/a2a#Parameter> .
+_:c14n1 <https://w3id.org/jeswr/a2a#paramKey> "limit" .
+_:c14n1 <https://w3id.org/jeswr/a2a#paramValue> "10" .
+_:c14n2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/jeswr/a2a#Parameter> .
+_:c14n2 <https://w3id.org/jeswr/a2a#paramKey> "label" .
+_:c14n2 <https://w3id.org/jeswr/a2a#paramValue> "with spaces" .
+"
 `;
 
 exports[`characterization — intent → RDF canonical N-Quads (byte-exact) > intent[delete] canonical N-Quads is byte-stable 1`] = `
 "<urn:a2a:intent:golden-delete> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/jeswr/a2a#Intent> .
 <urn:a2a:intent:golden-delete> <https://schema.org/agent> <https://alice.example/profile#me> .
-<urn:a2a:intent:golden-delete> <https://w3id.org/jeswr/a2a#action> _:c14n-1 .
-<urn:a2a:intent:golden-delete> <https://w3id.org/jeswr/a2a#parameter> _:c14n-0 .
-<urn:a2a:intent:golden-delete> <https://w3id.org/jeswr/a2a#parameter> _:c14n-2 .
-_:c14n-0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/jeswr/a2a#Parameter> .
-_:c14n-0 <https://w3id.org/jeswr/a2a#paramKey> "limit" .
-_:c14n-0 <https://w3id.org/jeswr/a2a#paramValue> "10" .
-_:c14n-1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://schema.org/DeleteAction> .
-_:c14n-1 <https://schema.org/agent> <https://alice.example/profile#me> .
-_:c14n-1 <https://schema.org/object> <https://alice.pod/data/resource> .
-_:c14n-2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/jeswr/a2a#Parameter> .
-_:c14n-2 <https://w3id.org/jeswr/a2a#paramKey> "label" .
-_:c14n-2 <https://w3id.org/jeswr/a2a#paramValue> "with spaces" ."
+<urn:a2a:intent:golden-delete> <https://w3id.org/jeswr/a2a#action> _:c14n2 .
+<urn:a2a:intent:golden-delete> <https://w3id.org/jeswr/a2a#parameter> _:c14n0 .
+<urn:a2a:intent:golden-delete> <https://w3id.org/jeswr/a2a#parameter> _:c14n1 .
+_:c14n0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/jeswr/a2a#Parameter> .
+_:c14n0 <https://w3id.org/jeswr/a2a#paramKey> "limit" .
+_:c14n0 <https://w3id.org/jeswr/a2a#paramValue> "10" .
+_:c14n1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/jeswr/a2a#Parameter> .
+_:c14n1 <https://w3id.org/jeswr/a2a#paramKey> "label" .
+_:c14n1 <https://w3id.org/jeswr/a2a#paramValue> "with spaces" .
+_:c14n2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://schema.org/DeleteAction> .
+_:c14n2 <https://schema.org/agent> <https://alice.example/profile#me> .
+_:c14n2 <https://schema.org/object> <https://alice.pod/data/resource> .
+"
 `;
 
 exports[`characterization — intent → RDF canonical N-Quads (byte-exact) > intent[grant] canonical N-Quads is byte-stable 1`] = `
 "<urn:a2a:intent:golden-grant> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/jeswr/a2a#Intent> .
 <urn:a2a:intent:golden-grant> <https://schema.org/agent> <https://alice.example/profile#me> .
-<urn:a2a:intent:golden-grant> <https://w3id.org/jeswr/a2a#action> _:c14n-2 .
-<urn:a2a:intent:golden-grant> <https://w3id.org/jeswr/a2a#parameter> _:c14n-0 .
-<urn:a2a:intent:golden-grant> <https://w3id.org/jeswr/a2a#parameter> _:c14n-1 .
-_:c14n-0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/jeswr/a2a#Parameter> .
-_:c14n-0 <https://w3id.org/jeswr/a2a#paramKey> "label" .
-_:c14n-0 <https://w3id.org/jeswr/a2a#paramValue> "with spaces" .
-_:c14n-1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/jeswr/a2a#Parameter> .
-_:c14n-1 <https://w3id.org/jeswr/a2a#paramKey> "limit" .
-_:c14n-1 <https://w3id.org/jeswr/a2a#paramValue> "10" .
-_:c14n-2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/jeswr/a2a#GrantAction> .
-_:c14n-2 <https://schema.org/agent> <https://alice.example/profile#me> .
-_:c14n-2 <https://schema.org/object> <https://alice.pod/data/resource> .
-_:c14n-2 <https://schema.org/recipient> <https://bob.example/profile#me> .
-_:c14n-2 <https://w3id.org/jeswr/a2a#mode> <http://www.w3.org/ns/auth/acl#Append> .
-_:c14n-2 <https://w3id.org/jeswr/a2a#mode> <http://www.w3.org/ns/auth/acl#Control> .
-_:c14n-2 <https://w3id.org/jeswr/a2a#mode> <http://www.w3.org/ns/auth/acl#Read> .
-_:c14n-2 <https://w3id.org/jeswr/a2a#mode> <http://www.w3.org/ns/auth/acl#Write> ."
+<urn:a2a:intent:golden-grant> <https://w3id.org/jeswr/a2a#action> _:c14n2 .
+<urn:a2a:intent:golden-grant> <https://w3id.org/jeswr/a2a#parameter> _:c14n0 .
+<urn:a2a:intent:golden-grant> <https://w3id.org/jeswr/a2a#parameter> _:c14n1 .
+_:c14n0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/jeswr/a2a#Parameter> .
+_:c14n0 <https://w3id.org/jeswr/a2a#paramKey> "label" .
+_:c14n0 <https://w3id.org/jeswr/a2a#paramValue> "with spaces" .
+_:c14n1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/jeswr/a2a#Parameter> .
+_:c14n1 <https://w3id.org/jeswr/a2a#paramKey> "limit" .
+_:c14n1 <https://w3id.org/jeswr/a2a#paramValue> "10" .
+_:c14n2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/jeswr/a2a#GrantAction> .
+_:c14n2 <https://schema.org/agent> <https://alice.example/profile#me> .
+_:c14n2 <https://schema.org/object> <https://alice.pod/data/resource> .
+_:c14n2 <https://schema.org/recipient> <https://bob.example/profile#me> .
+_:c14n2 <https://w3id.org/jeswr/a2a#mode> <http://www.w3.org/ns/auth/acl#Append> .
+_:c14n2 <https://w3id.org/jeswr/a2a#mode> <http://www.w3.org/ns/auth/acl#Control> .
+_:c14n2 <https://w3id.org/jeswr/a2a#mode> <http://www.w3.org/ns/auth/acl#Read> .
+_:c14n2 <https://w3id.org/jeswr/a2a#mode> <http://www.w3.org/ns/auth/acl#Write> .
+"
 `;
 
 exports[`characterization — intent → RDF canonical N-Quads (byte-exact) > intent[list] canonical N-Quads is byte-stable 1`] = `
 "<urn:a2a:intent:golden-list> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/jeswr/a2a#Intent> .
 <urn:a2a:intent:golden-list> <https://schema.org/agent> <https://alice.example/profile#me> .
-<urn:a2a:intent:golden-list> <https://w3id.org/jeswr/a2a#action> _:c14n-1 .
-<urn:a2a:intent:golden-list> <https://w3id.org/jeswr/a2a#parameter> _:c14n-0 .
-<urn:a2a:intent:golden-list> <https://w3id.org/jeswr/a2a#parameter> _:c14n-2 .
-_:c14n-0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/jeswr/a2a#Parameter> .
-_:c14n-0 <https://w3id.org/jeswr/a2a#paramKey> "label" .
-_:c14n-0 <https://w3id.org/jeswr/a2a#paramValue> "with spaces" .
-_:c14n-1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/jeswr/a2a#ListAction> .
-_:c14n-1 <https://schema.org/agent> <https://alice.example/profile#me> .
-_:c14n-1 <https://schema.org/target> <https://alice.pod/data/resource> .
-_:c14n-2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/jeswr/a2a#Parameter> .
-_:c14n-2 <https://w3id.org/jeswr/a2a#paramKey> "limit" .
-_:c14n-2 <https://w3id.org/jeswr/a2a#paramValue> "10" ."
+<urn:a2a:intent:golden-list> <https://w3id.org/jeswr/a2a#action> _:c14n1 .
+<urn:a2a:intent:golden-list> <https://w3id.org/jeswr/a2a#parameter> _:c14n0 .
+<urn:a2a:intent:golden-list> <https://w3id.org/jeswr/a2a#parameter> _:c14n2 .
+_:c14n0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/jeswr/a2a#Parameter> .
+_:c14n0 <https://w3id.org/jeswr/a2a#paramKey> "limit" .
+_:c14n0 <https://w3id.org/jeswr/a2a#paramValue> "10" .
+_:c14n1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/jeswr/a2a#ListAction> .
+_:c14n1 <https://schema.org/agent> <https://alice.example/profile#me> .
+_:c14n1 <https://schema.org/target> <https://alice.pod/data/resource> .
+_:c14n2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/jeswr/a2a#Parameter> .
+_:c14n2 <https://w3id.org/jeswr/a2a#paramKey> "label" .
+_:c14n2 <https://w3id.org/jeswr/a2a#paramValue> "with spaces" .
+"
 `;
 
 exports[`characterization — intent → RDF canonical N-Quads (byte-exact) > intent[query] canonical N-Quads is byte-stable 1`] = `
 "<urn:a2a:intent:golden-query> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/jeswr/a2a#Intent> .
 <urn:a2a:intent:golden-query> <https://schema.org/agent> <https://alice.example/profile#me> .
-<urn:a2a:intent:golden-query> <https://w3id.org/jeswr/a2a#action> _:c14n-2 .
-<urn:a2a:intent:golden-query> <https://w3id.org/jeswr/a2a#parameter> _:c14n-0 .
-<urn:a2a:intent:golden-query> <https://w3id.org/jeswr/a2a#parameter> _:c14n-1 .
-_:c14n-0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/jeswr/a2a#Parameter> .
-_:c14n-0 <https://w3id.org/jeswr/a2a#paramKey> "label" .
-_:c14n-0 <https://w3id.org/jeswr/a2a#paramValue> "with spaces" .
-_:c14n-1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/jeswr/a2a#Parameter> .
-_:c14n-1 <https://w3id.org/jeswr/a2a#paramKey> "limit" .
-_:c14n-1 <https://w3id.org/jeswr/a2a#paramValue> "10" .
-_:c14n-2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/jeswr/a2a#QueryAction> .
-_:c14n-2 <https://schema.org/agent> <https://alice.example/profile#me> .
-_:c14n-2 <https://schema.org/object> <https://alice.pod/data/resource> ."
+<urn:a2a:intent:golden-query> <https://w3id.org/jeswr/a2a#action> _:c14n2 .
+<urn:a2a:intent:golden-query> <https://w3id.org/jeswr/a2a#parameter> _:c14n0 .
+<urn:a2a:intent:golden-query> <https://w3id.org/jeswr/a2a#parameter> _:c14n1 .
+_:c14n0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/jeswr/a2a#Parameter> .
+_:c14n0 <https://w3id.org/jeswr/a2a#paramKey> "limit" .
+_:c14n0 <https://w3id.org/jeswr/a2a#paramValue> "10" .
+_:c14n1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/jeswr/a2a#Parameter> .
+_:c14n1 <https://w3id.org/jeswr/a2a#paramKey> "label" .
+_:c14n1 <https://w3id.org/jeswr/a2a#paramValue> "with spaces" .
+_:c14n2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/jeswr/a2a#QueryAction> .
+_:c14n2 <https://schema.org/agent> <https://alice.example/profile#me> .
+_:c14n2 <https://schema.org/object> <https://alice.pod/data/resource> .
+"
 `;
 
 exports[`characterization — intent → RDF canonical N-Quads (byte-exact) > intent[read] canonical N-Quads is byte-stable 1`] = `
 "<urn:a2a:intent:golden-read> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/jeswr/a2a#Intent> .
 <urn:a2a:intent:golden-read> <https://schema.org/agent> <https://alice.example/profile#me> .
-<urn:a2a:intent:golden-read> <https://w3id.org/jeswr/a2a#action> _:c14n-1 .
-<urn:a2a:intent:golden-read> <https://w3id.org/jeswr/a2a#parameter> _:c14n-0 .
-<urn:a2a:intent:golden-read> <https://w3id.org/jeswr/a2a#parameter> _:c14n-2 .
-_:c14n-0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/jeswr/a2a#Parameter> .
-_:c14n-0 <https://w3id.org/jeswr/a2a#paramKey> "limit" .
-_:c14n-0 <https://w3id.org/jeswr/a2a#paramValue> "10" .
-_:c14n-1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://schema.org/ReadAction> .
-_:c14n-1 <https://schema.org/agent> <https://alice.example/profile#me> .
-_:c14n-1 <https://schema.org/object> <https://alice.pod/data/resource> .
-_:c14n-2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/jeswr/a2a#Parameter> .
-_:c14n-2 <https://w3id.org/jeswr/a2a#paramKey> "label" .
-_:c14n-2 <https://w3id.org/jeswr/a2a#paramValue> "with spaces" ."
+<urn:a2a:intent:golden-read> <https://w3id.org/jeswr/a2a#action> _:c14n2 .
+<urn:a2a:intent:golden-read> <https://w3id.org/jeswr/a2a#parameter> _:c14n0 .
+<urn:a2a:intent:golden-read> <https://w3id.org/jeswr/a2a#parameter> _:c14n1 .
+_:c14n0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/jeswr/a2a#Parameter> .
+_:c14n0 <https://w3id.org/jeswr/a2a#paramKey> "label" .
+_:c14n0 <https://w3id.org/jeswr/a2a#paramValue> "with spaces" .
+_:c14n1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/jeswr/a2a#Parameter> .
+_:c14n1 <https://w3id.org/jeswr/a2a#paramKey> "limit" .
+_:c14n1 <https://w3id.org/jeswr/a2a#paramValue> "10" .
+_:c14n2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://schema.org/ReadAction> .
+_:c14n2 <https://schema.org/agent> <https://alice.example/profile#me> .
+_:c14n2 <https://schema.org/object> <https://alice.pod/data/resource> .
+"
 `;
 
 exports[`characterization — intent → RDF canonical N-Quads (byte-exact) > intent[subscribe] canonical N-Quads is byte-stable 1`] = `
 "<urn:a2a:intent:golden-subscribe> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/jeswr/a2a#Intent> .
 <urn:a2a:intent:golden-subscribe> <https://schema.org/agent> <https://alice.example/profile#me> .
-<urn:a2a:intent:golden-subscribe> <https://w3id.org/jeswr/a2a#action> _:c14n-0 .
-<urn:a2a:intent:golden-subscribe> <https://w3id.org/jeswr/a2a#parameter> _:c14n-1 .
-<urn:a2a:intent:golden-subscribe> <https://w3id.org/jeswr/a2a#parameter> _:c14n-2 .
-_:c14n-0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/jeswr/a2a#SubscribeAction> .
-_:c14n-0 <https://schema.org/agent> <https://alice.example/profile#me> .
-_:c14n-0 <https://schema.org/object> <https://alice.pod/data/resource> .
-_:c14n-1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/jeswr/a2a#Parameter> .
-_:c14n-1 <https://w3id.org/jeswr/a2a#paramKey> "limit" .
-_:c14n-1 <https://w3id.org/jeswr/a2a#paramValue> "10" .
-_:c14n-2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/jeswr/a2a#Parameter> .
-_:c14n-2 <https://w3id.org/jeswr/a2a#paramKey> "label" .
-_:c14n-2 <https://w3id.org/jeswr/a2a#paramValue> "with spaces" ."
+<urn:a2a:intent:golden-subscribe> <https://w3id.org/jeswr/a2a#action> _:c14n0 .
+<urn:a2a:intent:golden-subscribe> <https://w3id.org/jeswr/a2a#parameter> _:c14n1 .
+<urn:a2a:intent:golden-subscribe> <https://w3id.org/jeswr/a2a#parameter> _:c14n2 .
+_:c14n0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/jeswr/a2a#SubscribeAction> .
+_:c14n0 <https://schema.org/agent> <https://alice.example/profile#me> .
+_:c14n0 <https://schema.org/object> <https://alice.pod/data/resource> .
+_:c14n1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/jeswr/a2a#Parameter> .
+_:c14n1 <https://w3id.org/jeswr/a2a#paramKey> "limit" .
+_:c14n1 <https://w3id.org/jeswr/a2a#paramValue> "10" .
+_:c14n2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/jeswr/a2a#Parameter> .
+_:c14n2 <https://w3id.org/jeswr/a2a#paramKey> "label" .
+_:c14n2 <https://w3id.org/jeswr/a2a#paramValue> "with spaces" .
+"
 `;
 
 exports[`characterization — intent → RDF canonical N-Quads (byte-exact) > intent[update] canonical N-Quads is byte-stable 1`] = `
 "<urn:a2a:intent:golden-update> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/jeswr/a2a#Intent> .
 <urn:a2a:intent:golden-update> <https://schema.org/agent> <https://alice.example/profile#me> .
-<urn:a2a:intent:golden-update> <https://w3id.org/jeswr/a2a#action> _:c14n-2 .
-<urn:a2a:intent:golden-update> <https://w3id.org/jeswr/a2a#parameter> _:c14n-0 .
-<urn:a2a:intent:golden-update> <https://w3id.org/jeswr/a2a#parameter> _:c14n-1 .
-_:c14n-0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/jeswr/a2a#Parameter> .
-_:c14n-0 <https://w3id.org/jeswr/a2a#paramKey> "label" .
-_:c14n-0 <https://w3id.org/jeswr/a2a#paramValue> "with spaces" .
-_:c14n-1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/jeswr/a2a#Parameter> .
-_:c14n-1 <https://w3id.org/jeswr/a2a#paramKey> "limit" .
-_:c14n-1 <https://w3id.org/jeswr/a2a#paramValue> "10" .
-_:c14n-2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://schema.org/UpdateAction> .
-_:c14n-2 <https://schema.org/agent> <https://alice.example/profile#me> .
-_:c14n-2 <https://schema.org/object> <https://alice.pod/data/resource> ."
+<urn:a2a:intent:golden-update> <https://w3id.org/jeswr/a2a#action> _:c14n0 .
+<urn:a2a:intent:golden-update> <https://w3id.org/jeswr/a2a#parameter> _:c14n1 .
+<urn:a2a:intent:golden-update> <https://w3id.org/jeswr/a2a#parameter> _:c14n2 .
+_:c14n0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://schema.org/UpdateAction> .
+_:c14n0 <https://schema.org/agent> <https://alice.example/profile#me> .
+_:c14n0 <https://schema.org/object> <https://alice.pod/data/resource> .
+_:c14n1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/jeswr/a2a#Parameter> .
+_:c14n1 <https://w3id.org/jeswr/a2a#paramKey> "label" .
+_:c14n1 <https://w3id.org/jeswr/a2a#paramValue> "with spaces" .
+_:c14n2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/jeswr/a2a#Parameter> .
+_:c14n2 <https://w3id.org/jeswr/a2a#paramKey> "limit" .
+_:c14n2 <https://w3id.org/jeswr/a2a#paramValue> "10" .
+"
 `;
 
 exports[`characterization — intent → RDF content hash (the protocolSources pin value) > per-action intent hashes are byte-stable 1`] = `
 {
-  "append": "sha256:9423765597b81a20aa9ccafdedd2af979b6d5c484d1eb09318be2b63ccc31696",
-  "create": "sha256:c28e34b97607e7a17767f6bad982d0bc9399301d71b4e706feffffd9bd4f56e5",
-  "delete": "sha256:5284eed614733381a289276288f58868124ca08f0fb022a0b9c720c1d140949d",
-  "grant": "sha256:ecac15a4973e89dcea8ba97402ad0e939dabccba007922e00e59d3ef70d5de28",
-  "list": "sha256:6aad9179b2a6fd1532dfffab6057cc0753e40078717dd616240defc2c38d71d4",
-  "query": "sha256:b2ea05c59bcc050947768f16f62e285108d19122bc2ca525e6fbaf20d5722c2c",
-  "read": "sha256:09f6cf79b876b6961a784aeaac29c79406a2d9f7aa7086ce9c20ee030ebe2171",
-  "subscribe": "sha256:bba8960da528bf149398a0c044a4479104b6d4241689c6e1f89d549030a6ae5a",
-  "update": "sha256:45b68392f1d7e52a1d369a00f4168cb04f51024a18dc9fa16de18470104d524c",
+  "append": "sha256:181f8e9f595bb0e58052057165a284b2d87aabf9a27bec10526ee18b6dde0979",
+  "create": "sha256:500bb1dd48122d2964e4f8bc81236e67779369a80d49e9ed726da751e6f4f1af",
+  "delete": "sha256:0b24c150fc28413d5651a8498c406d61db091c0708c73aaed76177805b8d88a1",
+  "grant": "sha256:0f7b76c5091caa9a7ae0a880f8447dd79141f393af655a8917c1f9fcdbdca376",
+  "list": "sha256:568af0c927209c0fe2f1f8d6e83f2cc2977f8d0ca6823918215826db2def1975",
+  "query": "sha256:adfa09e50c0bd21fbd17ea53ea54e33445c006a4f5c368b1f8dfd802181615f3",
+  "read": "sha256:406f00e36fb5b1b8a59a806b1aa1a430c3ed7c7d0d62aa9e4416db59f55dcdc2",
+  "subscribe": "sha256:4f29b40110524f86e639a63aa5521b8ee9659f7b771baf50ab9b49b109ed2a42",
+  "update": "sha256:721bf55fa0208dd055e16178e735fb94b6765c63d3aab6ae2ac09157784cf963",
 }
 `;
