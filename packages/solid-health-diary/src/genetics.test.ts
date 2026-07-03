@@ -335,4 +335,40 @@ describe("provenance-consistency guardrail — sourceType vs enteredManually mus
       buildGeneticSummary(URL_, { ...noManualFlag, sourceType: "manual" }),
     ).not.toThrow();
   });
+
+  it("parseGeneticSummary REJECTS stored data whose sourceType and enteredManually contradict", async () => {
+    const ttl = `
+      @prefix diet: <https://w3id.org/jeswr/sectors/health/diet#> .
+      <${URL_}#it> a diet:GeneticSummary ;
+        diet:geneticInterpretation ${JSON.stringify(NEG_PREDICTIVE)} ;
+        diet:consentGiven true ;
+        diet:sourceType diet:manualEntry ;
+        diet:enteredManually false .`;
+    // manual (via sourceType) but enteredManually=false → hostile/stale; fail closed.
+    expect(await parseGeneticSummaryTtl(URL_, ttl)).toBeUndefined();
+  });
+
+  it("parseGeneticSummary REJECTS a non-manual sourceType with enteredManually:true", async () => {
+    const ttl = `
+      @prefix diet: <https://w3id.org/jeswr/sectors/health/diet#> .
+      <${URL_}#it> a diet:GeneticSummary ;
+        diet:geneticInterpretation ${JSON.stringify(NEG_PREDICTIVE)} ;
+        diet:consentGiven true ;
+        diet:sourceType diet:consumerArray ;
+        diet:enteredManually true .`;
+    expect(await parseGeneticSummaryTtl(URL_, ttl)).toBeUndefined();
+  });
+
+  it("parseGeneticSummary ALLOWS an agreeing stored pair (manual + enteredManually:true)", async () => {
+    const ttl = `
+      @prefix diet: <https://w3id.org/jeswr/sectors/health/diet#> .
+      <${URL_}#it> a diet:GeneticSummary ;
+        diet:geneticInterpretation ${JSON.stringify(NEG_PREDICTIVE)} ;
+        diet:consentGiven true ;
+        diet:sourceType diet:manualEntry ;
+        diet:enteredManually true .`;
+    const parsed = await parseGeneticSummaryTtl(URL_, ttl);
+    expect(parsed?.sourceType).toBe("manual");
+    expect(parsed?.enteredManually).toBe(true);
+  });
 });

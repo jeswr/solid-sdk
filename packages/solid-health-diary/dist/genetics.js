@@ -221,10 +221,22 @@ function parseGeneticSummaryImpl(url, dataset) {
     // is an overstated negative — reject it (never surface a false reassurance).
     if (coeliacGeneticRisk === "risk-haplotype-absent" && coverageComplete !== true)
         return undefined;
+    // Provenance-consistency guardrail on READ (fail-closed, symmetric with the
+    // writer): diet:sourceType and the legacy diet:enteredManually are equivalent
+    // (`manual` ⇔ enteredManually=true). A stored summary that carries a contradictory
+    // pair is hostile/stale pod data — reject it rather than surface two conflicting
+    // provenance claims. (Either field alone, or an absent field, is fine.)
+    const enteredManually = doc.enteredManually;
+    const sourceType = doc.sourceType;
+    if (enteredManually !== undefined &&
+        sourceType !== undefined &&
+        (sourceType === "manual") !== enteredManually) {
+        return undefined;
+    }
     const data = { id: geneticSummarySubject(url), markers: [], interpretation };
-    setIfDefined(data, "enteredManually", doc.enteredManually);
+    setIfDefined(data, "enteredManually", enteredManually);
     setIfDefined(data, "consentGiven", consentGiven);
-    setIfDefined(data, "sourceType", doc.sourceType);
+    setIfDefined(data, "sourceType", sourceType);
     setIfDefined(data, "coeliacGeneticRisk", coeliacGeneticRisk);
     setIfDefined(data, "coverageComplete", coverageComplete);
     // http(s)-filtered on READ (symmetric with the writer) — never surface a
