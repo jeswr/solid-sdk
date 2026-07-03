@@ -123,6 +123,7 @@
     "stud-covered": "eq:stud-covered",
     "stud-in-foal": "eq:stud-in-foal",
     "stud-maiden": "eq:stud-maiden",
+    "stud-retired-from-stud": "eq:stud-retired-from-stud",
     "stud-slipped": "eq:stud-slipped",
     "StudNomination": "eq:StudNomination",
     "StudShare": "eq:StudShare",

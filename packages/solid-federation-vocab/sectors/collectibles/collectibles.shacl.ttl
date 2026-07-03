@@ -111,7 +111,15 @@ colsh:ProvenanceEventShape a sh:NodeShape ;
         sh:datatype xsd:dateTime ;
         sh:severity sh:Warning ;
         sh:message "A ProvenanceEvent SHOULD record prov:startedAtTime (xsd:dateTime) — never prov:atTime (whose domain is prov:InstantaneousEvent)."@en
-    ] .
+    ] ;
+    # MUST be dated — at least one of prov:startedAtTime or dcterms:date (the
+    # documented timing contract; prov:startedAtTime is preferred, per the Warning).
+    sh:or (
+        [ sh:path prov:startedAtTime ; sh:minCount 1 ]
+        [ sh:path dcterms:date ; sh:minCount 1 ]
+    ) ;
+    sh:severity sh:Violation ;
+    sh:message "A ProvenanceEvent MUST be dated — carry at least one of prov:startedAtTime (preferred) or dcterms:date (never prov:atTime)."@en .
 
 # -----------------------------------------------------------------------------
 # Valuation + Appraisal — exactly one col:amount MonetaryAmount node.
@@ -123,9 +131,10 @@ colsh:ValuationShape a sh:NodeShape ;
         sh:path col:amount ;
         sh:minCount 1 ;
         sh:maxCount 1 ;
+        sh:class schema:MonetaryAmount ;
         sh:node colsh:MonetaryAmountShape ;
         sh:severity sh:Violation ;
-        sh:message "A Valuation MUST carry exactly one col:amount pointing at a valid schema:MonetaryAmount node."@en
+        sh:message "A Valuation MUST carry exactly one col:amount pointing at a schema:MonetaryAmount node (schema:value + schema:currency)."@en
     ] ;
     sh:property [
         sh:path schema:offers ;
@@ -141,9 +150,16 @@ colsh:AppraisalShape a sh:NodeShape ;
         sh:path col:amount ;
         sh:minCount 1 ;
         sh:maxCount 1 ;
+        sh:class schema:MonetaryAmount ;
         sh:node colsh:MonetaryAmountShape ;
         sh:severity sh:Violation ;
-        sh:message "An Appraisal MUST carry exactly one col:amount pointing at a valid schema:MonetaryAmount node."@en
+        sh:message "An Appraisal MUST carry exactly one col:amount pointing at a schema:MonetaryAmount node (schema:value + schema:currency)."@en
+    ] ;
+    sh:property [
+        sh:path schema:offers ;
+        sh:maxCount 0 ;
+        sh:severity sh:Violation ;
+        sh:message "An Appraisal MUST NOT use schema:offers (range Offer/Demand only; an appraisal value is not an offer) — link the amount via col:amount."@en
     ] ;
     sh:property [
         sh:path col:appraiser ;
@@ -171,9 +187,18 @@ colsh:InsurancePolicyShape a sh:NodeShape ;
         sh:path col:coverageAmount ;
         sh:minCount 1 ;
         sh:maxCount 1 ;
+        sh:class schema:MonetaryAmount ;
         sh:node colsh:MonetaryAmountShape ;
         sh:severity sh:Violation ;
-        sh:message "An InsurancePolicy MUST carry exactly one col:coverageAmount pointing at a valid schema:MonetaryAmount node."@en
+        sh:message "An InsurancePolicy MUST carry exactly one col:coverageAmount pointing at a schema:MonetaryAmount node (schema:value + schema:currency)."@en
+    ] ;
+    sh:property [
+        sh:path col:premium ;
+        sh:maxCount 1 ;
+        sh:class schema:MonetaryAmount ;
+        sh:node colsh:MonetaryAmountShape ;
+        sh:severity sh:Warning ;
+        sh:message "col:premium, when present, MUST point at a single schema:MonetaryAmount node (schema:value + schema:currency)."@en
     ] ;
     sh:property [
         sh:path col:insurer ;

@@ -340,9 +340,10 @@ finsh:BudgetCategoryShape a sh:NodeShape ;
 # --- LedgerAccount — a chart-of-accounts node: class + code (MUST); parent code. ---
 finsh:LedgerAccountShape a sh:NodeShape ;
     sh:targetClass fin:LedgerAccount ; rdfs:label "Ledger Account shape"@en ;
-    sh:property [ sh:path fin:accountClass ; sh:nodeKind sh:IRI ;
+    sh:property [ sh:path fin:accountClass ;
+        sh:in ( fin:class-asset fin:class-liability fin:class-equity fin:class-income fin:class-expense ) ;
         sh:minCount 1 ; sh:maxCount 1 ; sh:severity sh:Violation ;
-        sh:message "A ledger account MUST carry exactly one coded fin:accountClass IRI (asset/liability/equity/income/expense)."@en ] ;
+        sh:message "A ledger account MUST carry exactly one coded fin:accountClass — one of fin:class-asset/liability/equity/income/expense."@en ] ;
     sh:property [ sh:path fin:accountCode ; sh:datatype xsd:string ;
         sh:minCount 1 ; sh:maxCount 1 ; sh:severity sh:Violation ;
         sh:message "A ledger account MUST carry exactly one fin:accountCode (chart-of-accounts code)."@en ] ;
@@ -361,9 +362,10 @@ finsh:JournalEntryShape a sh:NodeShape ;
 # --- LedgerEntry — one posting line: side + account + amount + its journal entry. ---
 finsh:LedgerEntryShape a sh:NodeShape ;
     sh:targetClass fin:LedgerEntry ; rdfs:label "Ledger Entry shape"@en ;
-    sh:property [ sh:path fin:entrySide ; sh:nodeKind sh:IRI ;
+    sh:property [ sh:path fin:entrySide ;
+        sh:in ( fin:Debit fin:Credit ) ;
         sh:minCount 1 ; sh:maxCount 1 ; sh:severity sh:Violation ;
-        sh:message "A ledger entry MUST post on exactly one fin:entrySide (fin:Debit or fin:Credit)."@en ] ;
+        sh:message "A ledger entry MUST post on exactly one fin:entrySide — fin:Debit or fin:Credit."@en ] ;
     sh:property [ sh:path fin:postsTo ; sh:nodeKind sh:IRI ;
         sh:minCount 1 ; sh:maxCount 1 ; sh:severity sh:Violation ;
         sh:message "A ledger entry MUST reference exactly one fin:postsTo ledger account (IRI)."@en ] ;
@@ -404,12 +406,21 @@ finsh:CommitmentShape a sh:NodeShape ;
 # --- Notice — a capital-call / distribution notice: kind + fund + an amount. ---
 finsh:NoticeShape a sh:NodeShape ;
     sh:targetClass fin:Notice ; rdfs:label "Notice shape"@en ;
-    sh:property [ sh:path fin:noticeType ; sh:nodeKind sh:IRI ;
+    sh:property [ sh:path fin:noticeType ;
+        sh:in ( fin:notice-capital-call fin:notice-distribution ) ;
         sh:minCount 1 ; sh:maxCount 1 ; sh:severity sh:Violation ;
-        sh:message "A notice MUST carry exactly one coded fin:noticeType IRI (capital-call or distribution)."@en ] ;
+        sh:message "A notice MUST carry exactly one coded fin:noticeType — fin:notice-capital-call or fin:notice-distribution."@en ] ;
     sh:property [ sh:path fin:fund ; sh:nodeKind sh:IRI ;
         sh:minCount 1 ; sh:maxCount 1 ; sh:severity sh:Violation ;
         sh:message "A notice MUST reference exactly one fin:fund (IRI)."@en ] ;
+    # When present, each amount MUST be a single fin:MonetaryAmount node…
+    sh:property [ sh:path fin:callAmount ; sh:class fin:MonetaryAmount ; sh:maxCount 1 ;
+        sh:severity sh:Violation ;
+        sh:message "fin:callAmount, when present, MUST be a single fin:MonetaryAmount node."@en ] ;
+    sh:property [ sh:path fin:distributionAmount ; sh:class fin:MonetaryAmount ; sh:maxCount 1 ;
+        sh:severity sh:Violation ;
+        sh:message "fin:distributionAmount, when present, MUST be a single fin:MonetaryAmount node."@en ] ;
+    # …and a notice MUST carry at least one of them.
     sh:or (
         [ sh:path fin:callAmount ; sh:minCount 1 ]
         [ sh:path fin:distributionAmount ; sh:minCount 1 ]

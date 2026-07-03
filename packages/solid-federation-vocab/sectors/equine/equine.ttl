@@ -417,6 +417,9 @@ eq:stud-barren a eq:StudStatus, skos:Concept ;
 eq:stud-slipped a eq:StudStatus, skos:Concept ;
     skos:inScheme eq:studStatusScheme ; skos:notation "slipped" ;
     skos:prefLabel "Slipped"@en ; skos:definition "A mare that lost the pregnancy (aborted/slipped the foal)."@en .
+eq:stud-retired-from-stud a eq:StudStatus, skos:Concept ;
+    skos:inScheme eq:studStatusScheme ; skos:notation "retired-from-stud" ;
+    skos:prefLabel "Retired from stud"@en ; skos:definition "A broodmare or stud share retired from breeding (no longer covered / standing)."@en .
 
 # --- Recipient type ---
 eq:recipientTypeScheme a skos:ConceptScheme ;

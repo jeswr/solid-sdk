@@ -20,7 +20,7 @@
     <p>Prefix <code>eq:</code> · a gUFO-based ontology in the @jeswr Solid federation; imports the <a href="../core.html">Solid Core</a>.</p>
     <p class="warn">⚠️ <strong>Experimental</strong> — AI-agent-generated (Claude Opus 4.8, @jeswr PSS agent); under active development, not production-hardened.</p>
     <p>Other representations: <a href="equine.ttl">Turtle</a> · <a href="equine-context.jsonld">JSON-LD context</a> · <a href="../">index</a></p>
-    <h2>Terms (67)</h2>
+    <h2>Terms (68)</h2>
     <table>
       <tr><th>Term</th><th>Label</th><th>Comment / definition</th></tr>
       <tr><td><code>eq:colour</code></td><td>colour</td><td>The coat colour of a horse (e.g. &quot;bay&quot;, &quot;chestnut&quot;, &quot;grey&quot;) — free text, as colours vary by registry.</td></tr>
@@ -81,6 +81,7 @@
       <tr><td><code>eq:stud-covered</code></td><td>Covered</td><td>A mare that has been covered by a stallion this season, pregnancy not yet confirmed.</td></tr>
       <tr><td><code>eq:stud-in-foal</code></td><td>In foal</td><td>A mare confirmed pregnant.</td></tr>
       <tr><td><code>eq:stud-maiden</code></td><td>Maiden</td><td>A mare that has not yet been bred.</td></tr>
+      <tr><td><code>eq:stud-retired-from-stud</code></td><td>Retired from stud</td><td>A broodmare or stud share retired from breeding (no longer covered / standing).</td></tr>
       <tr><td><code>eq:stud-slipped</code></td><td>Slipped</td><td>A mare that lost the pregnancy (aborted/slipped the foal).</td></tr>
       <tr><td><code>eq:StudNomination</code></td><td>Stud Nomination</td><td>A booking to send a mare (eq:mareName) to a stallion (eq:horse) for covering in a breeding season (eq:season), made by a nominator (eq:nominator). A booking, so dual-typed schema:Reservation — its price is schema:totalPrice (the Reservation price property; schema:price is NOT declared on Reservation).</td></tr>
       <tr><td><code>eq:StudShare</code></td><td>Stud Share</td><td>A breeding-rights share in a stallion at stud: a fractional share (eq:sharePct) of a horse (eq:horse), typically carrying a nomination entitlement per breeding season (eq:season) and a stud status (eq:studStatus). A core:Record distinct from an eq:OwnershipShare (racing ownership) — stud shares confer breeding rights.</td></tr>
