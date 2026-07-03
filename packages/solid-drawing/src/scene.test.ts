@@ -2,7 +2,7 @@
 import type { Quad } from "@rdfjs/types";
 import { Parser } from "n3";
 import { describe, expect, it } from "vitest";
-import { safeHttpIri } from "./iri.js";
+import { escapeIri, safeHttpIri, safeSubjectBaseIri } from "./iri.js";
 import {
   buildScene,
   parseScene,
@@ -375,6 +375,97 @@ describe("IRI-injection hardening (n3.Writer does NOT escape IRIs)", () => {
       // must be percent-encoded away.
       expect(out).toBeDefined();
       expect(out).not.toMatch(/[<>" ]/);
+    });
+  });
+});
+
+describe("IRI-injection hardening — the REQUIRED scene SUBJECT (resourceUrl)", () => {
+  // roborev finding (scene.ts sceneSubject): the caller-supplied `resourceUrl` flowed
+  // through `namedNode(`${resourceUrl}#it`)` UNGUARDED, so a hostile resourceUrl
+  // carrying Turtle IRI-ref delimiters broke out of EVERY serialised subject `<…>` —
+  // the prior round guarded the SceneData object fields but left the subject an
+  // unescaped n3.Writer injection sink. The subject is REQUIRED, so it now FAILS
+  // CLOSED: a non-parseable / non-http(s) resourceUrl THROWS (never an
+  // injectable/empty subject); a parseable http(s) IRI is escaped lexically.
+
+  const SubjectPayload = "> <https://evil/s> <https://evil/p> <https://evil/o";
+
+  it("THROWS on a resourceUrl that is not a parseable absolute IRI (break-out payload)", () => {
+    expect(() => sceneSubject(SubjectPayload)).toThrow(TypeError);
+    expect(() => buildScene(SubjectPayload, { sceneDocument: CANVAS })).toThrow(TypeError);
+  });
+
+  it("THROWS on a lone-space resourceUrl and one that starts with `<`", () => {
+    expect(() => buildScene(" ", { sceneDocument: CANVAS })).toThrow(TypeError);
+    expect(() => buildScene("<https://evil/s>", { sceneDocument: CANVAS })).toThrow(TypeError);
+  });
+
+  it("THROWS on a non-http(s) resourceUrl (e.g. file:)", () => {
+    expect(() => buildScene("file:///etc/passwd", { sceneDocument: CANVAS })).toThrow(TypeError);
+  });
+
+  it("serializeScene REJECTS (never emits an injected triple) for a hostile resourceUrl", async () => {
+    await expect(serializeScene(SubjectPayload, { sceneDocument: CANVAS })).rejects.toThrow(
+      TypeError,
+    );
+  });
+
+  it("a clean http(s) resourceUrl round-trips byte-identical as the subject", async () => {
+    expect(sceneSubject(URL_).value).toBe(`${URL_}#it`);
+    const ttl = await serializeScene(URL_, { sceneDocument: CANVAS });
+    const quads = new Parser({ baseIRI: URL_ }).parse(ttl);
+    expect(quads.length).toBeGreaterThan(0);
+    // EVERY triple is rooted at the exact `${URL_}#it` subject — no injected subject.
+    expect(quads.every((q) => q.subject.value === `${URL_}#it`)).toBe(true);
+  });
+
+  it("neutralises (escapes, no injection) a PARSEABLE http resourceUrl carrying break-out chars", async () => {
+    // A parseable http(s) URL whose PATH carries `>`/space/`<` is a VALID (if weird)
+    // absolute http IRI, so it is not thrown — but its lexeme is percent-encoded, so
+    // the serialised subject is a single safe `<…>`, never a break-out.
+    const sneaky = "https://pod.example/a> <https://evil/s> <https://evil/p> <https://evil/o";
+    const ttl = await serializeScene(sneaky, { sceneDocument: CANVAS });
+    const quads = new Parser({ baseIRI: URL_ }).parse(ttl);
+    expect(quads.filter((q) => q.subject.value === "https://evil/s")).toHaveLength(0);
+    const subjects = new Set(quads.map((q) => q.subject.value));
+    expect(subjects.size).toBe(1);
+    const only = [...subjects][0] ?? "";
+    expect(only).not.toMatch(/[<>" ]/);
+  });
+
+  describe("safeSubjectBaseIri + escapeIri", () => {
+    it("returns the exact lexeme for a clean http(s) IRI (no URL canonicalisation)", () => {
+      expect(safeSubjectBaseIri(URL_)).toBe(URL_);
+      // A path that WHATWG-URL would canonicalise (e.g. a `..` segment) is preserved
+      // lexically — a subject's identity is its exact string.
+      const lexical = "https://pod.example/a/../b";
+      expect(safeSubjectBaseIri(lexical)).toBe(lexical);
+    });
+
+    it("returns undefined for non-string / non-http(s) / unparseable input", () => {
+      expect(safeSubjectBaseIri(undefined)).toBeUndefined();
+      expect(safeSubjectBaseIri("file:///etc/passwd")).toBeUndefined();
+      expect(safeSubjectBaseIri("not an iri")).toBeUndefined();
+      expect(safeSubjectBaseIri(SubjectPayload)).toBeUndefined();
+    });
+
+    it("escapes the FULL Turtle-IRIREF-forbidden set (angle/quote/space/brace/pipe/caret/backtick/backslash + controls)", () => {
+      const out = escapeIri('a<b>c"d e{f}g|h^i`j\\k\tl\nm');
+      expect(out).not.toMatch(/[<>"{}|^`\\ \t\n]/);
+      expect(out).toContain("%3C"); // <
+      expect(out).toContain("%3E"); // >
+      expect(out).toContain("%22"); // "
+      expect(out).toContain("%20"); // space
+      expect(out).toContain("%7C"); // |
+      expect(out).toContain("%5E"); // ^
+      expect(out).toContain("%60"); // `
+      expect(out).toContain("%5C"); // backslash
+      expect(out).toContain("%09"); // tab
+      expect(out).toContain("%0A"); // newline
+    });
+
+    it("leaves an already-safe string untouched", () => {
+      expect(escapeIri("https://example.org/a/b#it")).toBe("https://example.org/a/b#it");
     });
   });
 });
