@@ -35,6 +35,7 @@ export {
 export type { ConcludeOptions } from "./conclude";
 export { correlate, type CorrelateOptions } from "./correlate";
 export { HOUR_MS, lagHours, onsetWithinLag, resolveAllLags, resolveLag, type ResolvedLag } from "./lag";
+export { latestByTrigger, latestByTriggerList, type LatestAccessors } from "./latest-conclusion";
 export {
   DEFAULT_PHASE_SCHEDULE,
   hasInProgressProtocol,

@@ -125,3 +125,90 @@ describe("deriveCurrentPlan", () => {
     expect(deriveCurrentPlan([], [], NOW).exclusions).toHaveLength(0);
   });
 });
+
+describe("deriveCurrentPlan — latest-conclusion collapse (stale-guidance fix)", () => {
+  /** A dated conclusion with a distinct url (the tie-break id) per record. */
+  function dated(
+    trigger: StoredConclusion["aboutTrigger"],
+    verdict: StoredConclusion["verdict"],
+    createdAt: string,
+    extra: Partial<StoredConclusion> = {},
+  ): StoredConclusion {
+    return conclusion({
+      aboutTrigger: trigger,
+      verdict,
+      createdAt,
+      url: `https://alice.example/conclusions/${trigger}-${createdAt}.ttl`,
+      ulid: `c-${trigger}-${createdAt}`,
+      ...extra,
+    });
+  }
+
+  it("a NEWER tolerated clears an older reacts for a time-boxed trigger (reacts → tolerated)", () => {
+    const plan = deriveCurrentPlan(
+      [
+        dated("lactose", "reacts", "2026-01-01T00:00:00.000Z"),
+        dated("lactose", "tolerated", "2026-03-01T00:00:00.000Z"),
+      ],
+      [],
+      NOW,
+    );
+    expect(plan.exclusions).toHaveLength(0); // the later test cleared it
+  });
+
+  it("a NEWER reacts re-avoids after an older tolerated (tolerated → reacts)", () => {
+    const plan = deriveCurrentPlan(
+      [
+        dated("lactose", "tolerated", "2026-01-01T00:00:00.000Z"),
+        dated("lactose", "reacts", "2026-03-01T00:00:00.000Z"),
+      ],
+      [],
+      NOW,
+    );
+    expect(plan.exclusions).toHaveLength(1);
+    expect(plan.exclusions[0]).toMatchObject({ trigger: "lactose", verdict: "reacts" });
+  });
+
+  it("uses the NEWER conclusion's review date, not an older one's", () => {
+    const plan = deriveCurrentPlan(
+      [
+        dated("lactose", "reacts", "2026-01-01T00:00:00.000Z", { reviewAfter: "2026-02-01T00:00:00.000Z" }),
+        dated("lactose", "reacts", "2026-03-01T00:00:00.000Z", { reviewAfter: "2026-09-01T00:00:00.000Z" }),
+      ],
+      [],
+      NOW,
+    );
+    const lac = plan.exclusions.find((e) => e.trigger === "lactose");
+    expect(lac?.reviewAfter?.toISOString()).toBe("2026-09-01T00:00:00.000Z");
+    // The newer review date is in the future → not yet due.
+    expect(lac?.reviewDue).toBe(false);
+  });
+
+  it("is input-ORDER-independent (shuffled input → identical output)", () => {
+    const records = [
+      dated("lactose", "reacts", "2026-01-01T00:00:00.000Z"),
+      dated("lactose", "tolerated", "2026-03-01T00:00:00.000Z"),
+      dated("fructose", "reacts", "2026-02-01T00:00:00.000Z", { reviewAfter: "2026-05-01T00:00:00.000Z" }),
+      dated("gluten", "reacts", "2026-01-15T00:00:00.000Z"),
+    ];
+    const forward = deriveCurrentPlan(records, [], NOW);
+    const reversed = deriveCurrentPlan([...records].reverse(), [], NOW);
+    expect(reversed).toEqual(forward);
+  });
+
+  it("SAFETY: a stray NEWER tolerated for gluten NEVER clears the lifelong exclusion", () => {
+    const plan = deriveCurrentPlan(
+      [
+        dated("gluten", "reacts", "2026-01-01T00:00:00.000Z"),
+        dated("gluten", "tolerated", "2026-06-01T00:00:00.000Z"), // stray/hostile — must not clear
+      ],
+      [],
+      NOW,
+    );
+    const gluten = plan.exclusions.find((e) => e.trigger === "gluten");
+    expect(gluten).toBeDefined();
+    expect(gluten?.verdict).toBe("reacts");
+    expect(gluten?.reviewDue).toBe(false);
+    expect(gluten?.timeBoxed).toBe(false);
+  });
+});

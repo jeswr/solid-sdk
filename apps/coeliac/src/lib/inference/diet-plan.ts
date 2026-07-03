@@ -26,6 +26,7 @@
 import type { TriggerSlug, Verdict } from "@jeswr/solid-health-diary";
 import type { StoredConclusion, StoredProtocol } from "../cache/diary-store";
 import { TIME_BOXED_TRIGGERS } from "./conclude";
+import { latestByTrigger } from "./latest-conclusion";
 
 /** Why a trigger is on the current avoid-list. */
 export type ExclusionReason =
@@ -79,6 +80,19 @@ const AVOIDING_PHASES = new Set(["eliminate", "washout"]);
  * Derive the current exclusion set from cached conclusions + protocols. Confirmed
  * reactions win over active-elimination for the same trigger (a completed test is a
  * stronger "why" than a running one). Pure; `now` injectable for tests.
+ *
+ * Conclusions are FIRST collapsed to the single LATEST confirmed one per trigger
+ * ({@link latestByTrigger}, deterministic tie-break) so stale guidance can never
+ * surface: a newer `tolerated` supersedes an older `reacts`. How the latest is used
+ * depends on whether the trigger can genuinely resolve:
+ *
+ *  - **Time-boxed (secondary intolerance — lactose, the FODMAP subgroups):** the
+ *    LATEST conclusion decides. A newer `tolerated` CLEARS it from the avoid-list
+ *    (the expansion / orthorexia guard — shrink where evidence allows).
+ *  - **Lifelong (gluten/coeliac + other non-time-boxed exclusions):** STICKY. Once a
+ *    confirmed reaction exists it stays excluded; a later `tolerated` conclusion can
+ *    NEVER clear it and it is never review-flagged. This is the lifelong-exclusion
+ *    rail — gluten avoidance is permanent regardless of any conclusion ordering.
  */
 export function deriveCurrentPlan(
   conclusions: readonly StoredConclusion[],
@@ -88,24 +102,45 @@ export function deriveCurrentPlan(
 ): CurrentPlan {
   const byTrigger = new Map<TriggerSlug, PlanExclusion>();
 
-  // 1. Confirmed reactions (durable "why") — the strongest source.
-  for (const c of conclusions) {
-    if (c.confidence !== "confirmed") continue;
-    if (!isExclusionVerdict(c.verdict)) continue;
-    const timeBoxed = timeBoxedTriggers.includes(c.aboutTrigger);
-    const reviewAfter = parseDate(c.reviewAfter);
+  // 1. Confirmed reactions (durable "why"), collapsed to the current one per trigger.
+  const confirmed = conclusions.filter((c) => c.confidence === "confirmed");
+  const accessors = {
+    triggerOf: (c: StoredConclusion) => c.aboutTrigger,
+    createdMsOf: (c: StoredConclusion) => Date.parse(c.createdAt),
+    idOf: (c: StoredConclusion) => c.url,
+  };
+  // The current confirmed conclusion per trigger (ANY verdict — so a latest
+  // `tolerated` is visible), and the current confirmed EXCLUSION conclusion per
+  // trigger (for the lifelong-sticky path).
+  const latest = latestByTrigger(confirmed, accessors);
+  const latestExclusion = latestByTrigger(
+    confirmed.filter((c) => isExclusionVerdict(c.verdict)),
+    accessors,
+  );
+
+  for (const [trigger, current] of latest) {
+    const timeBoxed = timeBoxedTriggers.includes(trigger);
+    // Time-boxed → the latest verdict decides (a newer `tolerated` clears it).
+    // Lifelong → any confirmed exclusion sticks, never cleared by a later `tolerated`.
+    const source = timeBoxed
+      ? isExclusionVerdict(current.verdict)
+        ? current
+        : undefined
+      : latestExclusion.get(trigger);
+    if (!source) continue; // cleared (time-boxed latest tolerated) or never a reaction
+    const reviewAfter = parseDate(source.reviewAfter);
     // Fail closed on the trigger set: a lifelong exclusion (e.g. gluten) is never
     // review-due, even if untrusted/legacy data stamped a `reviewAfter` on it.
     const reviewDue = timeBoxed && !!reviewAfter && reviewAfter.getTime() <= now.getTime();
-    byTrigger.set(c.aboutTrigger, {
-      trigger: c.aboutTrigger,
+    byTrigger.set(trigger, {
+      trigger,
       reason: "confirmed-reaction",
-      verdict: c.verdict,
-      conclusionId: c.url,
+      verdict: source.verdict,
+      conclusionId: source.url,
       reviewAfter,
       reviewDue,
       timeBoxed,
-      note: c.note,
+      note: source.note,
     });
   }
 

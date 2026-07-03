@@ -22,6 +22,7 @@
 
 import type { ToleranceConclusionData, TriggerSlug } from "@jeswr/solid-health-diary";
 import { TIME_BOXED_TRIGGERS } from "./conclude";
+import { latestByTrigger } from "./latest-conclusion";
 import type { ReviewSurfacing } from "./types";
 
 const DAY_MS = 86_400_000;
@@ -38,8 +39,19 @@ export function surfaceReviews(
   now: Date = new Date(),
   timeBoxedTriggers: readonly TriggerSlug[] = TIME_BOXED_TRIGGERS,
 ): ReviewSurfacing[] {
+  // Collapse to the single LATEST confirmed conclusion per trigger FIRST, so an
+  // older `reacts` (with a `reviewAfter`) can never surface a re-test prompt after a
+  // NEWER `tolerated` conclusion for the same trigger has superseded it (stale
+  // medical guidance — roborev Medium). Deterministic + input-order-independent.
+  const confirmed = conclusions.filter((c) => c.confidence === "confirmed");
+  const current = latestByTrigger(confirmed, {
+    triggerOf: (c) => c.aboutTrigger,
+    createdMsOf: (c) => c.created?.getTime() ?? Number.NaN,
+    idOf: (c) => c.id ?? "",
+  });
+
   const due: ReviewSurfacing[] = [];
-  for (const c of conclusions) {
+  for (const c of current.values()) {
     // Only a CONFIRMED exclusion (from a completed protocol) is re-challenged — a
     // low-confidence or malformed conclusion carrying a stray `reviewAfter` must not
     // drive re-challenge advice or suppress a fresh elimination proposal.

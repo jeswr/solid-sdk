@@ -85,3 +85,58 @@ describe("surfaceReviews — time-boxed re-challenge (DESIGN §4.3, RESEARCH §2
     expect(due.map((d) => d.trigger)).toEqual(["fructose", "lactose"]);
   });
 });
+
+describe("surfaceReviews — latest-conclusion collapse (stale-guidance fix)", () => {
+  const now = atDays(200);
+
+  /** A conclusion with an explicit `created` recency + distinct id (the tie-break). */
+  function dated(
+    trigger: ToleranceConclusionData["aboutTrigger"],
+    verdict: Verdict,
+    createdDay: number,
+    reviewAfter?: Date,
+  ): ToleranceConclusionData {
+    return {
+      id: `https://pod.example/conclusions/${trigger}-${createdDay}#it`,
+      aboutTrigger: trigger,
+      verdict,
+      confidence: "confirmed",
+      reviewAfter,
+      created: atDays(createdDay),
+    };
+  }
+
+  it("does NOT re-surface a due reacts once a NEWER tolerated has superseded it", () => {
+    const due = surfaceReviews(
+      [
+        dated("lactose", "reacts", 10, atDays(150)), // older, would be overdue
+        dated("lactose", "tolerated", 160), // newer — the food is now tolerated
+      ],
+      now,
+    );
+    expect(due).toEqual([]);
+  });
+
+  it("still surfaces when the NEWER conclusion is the due reacts", () => {
+    const due = surfaceReviews(
+      [
+        dated("lactose", "tolerated", 10),
+        dated("lactose", "reacts", 160, atDays(150)),
+      ],
+      now,
+    );
+    expect(due.map((d) => d.trigger)).toEqual(["lactose"]);
+  });
+
+  it("is input-ORDER-independent", () => {
+    const records = [
+      dated("lactose", "reacts", 10, atDays(150)),
+      dated("lactose", "tolerated", 160),
+      dated("fructose", "reacts", 20, atDays(100)),
+    ];
+    const forward = surfaceReviews(records, now);
+    const reversed = surfaceReviews([...records].reverse(), now);
+    expect(reversed).toEqual(forward);
+    expect(forward.map((d) => d.trigger)).toEqual(["fructose"]);
+  });
+});
