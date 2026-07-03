@@ -20,7 +20,7 @@ import {
   type TermWrapper as TermWrapperType,
 } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
-import { escapeIri, safeHttpIri } from "./iri.js";
+import { escapeIri, requireIri } from "./iri.js";
 import {
   A2A_ACTION,
   A2A_INTENT,
@@ -197,18 +197,17 @@ class WritableParameter extends TermWrapper {
 }
 
 /**
- * Add an `(this, predicate, object-IRI)` triple ONLY when the object is a valid
- * http(s) IRI. `object`, `target`, `recipient` and `agent` are untrusted input
- * (an untrusted Intent, or a malicious LLM-returned draft flowing through
- * `intentToRdf`); a non-http(s) or malformed value is DROPPED rather than emitted, so
- * an injection string never reaches the serialiser. (`escapeIri` in `addIri` is the
- * belt-and-suspenders second layer.)
+ * Add an `(this, predicate, object-IRI)` triple for a REQUIRED, untrusted object IRI,
+ * FAILING CLOSED. `object`/`target`/`recipient`/`agent` are untrusted input (an
+ * untrusted Intent, or a malicious LLM-returned draft flowing through `intentToRdf`).
+ * A scheme-agnostic absolute IRI (http(s), `urn:`, `did:`) is emitted with any breakout
+ * char neutralised ({@link requireIri} → {@link escapeIri}); a value that is NOT a
+ * valid absolute IRI THROWS rather than being silently dropped — so the serialised
+ * quads never omit a field the public {@link import("./types.js").Intent} still claims
+ * (the object-desync / fail-open class). `field` names the offending field in the error.
  */
-function addHttpIri(node: TermWrapper, predicate: string, iri: string): void {
-  const safe = safeHttpIri(iri);
-  if (safe !== undefined) {
-    addIri(node, predicate, safe);
-  }
+function addRequiredIri(node: TermWrapper, predicate: string, iri: string, field: string): void {
+  addIri(node, predicate, requireIri(iri, field));
 }
 
 /** The action node (a schema:Action subclass), opened for writing. */
@@ -217,16 +216,16 @@ class WritableAction extends TermWrapper {
     addIri(this, RDF_TYPE, actionTypeIri);
   }
   setObject(iri: string): void {
-    addHttpIri(this, SCHEMA_OBJECT, iri);
+    addRequiredIri(this, SCHEMA_OBJECT, iri, "target (schema:object)");
   }
   setTarget(iri: string): void {
-    addHttpIri(this, SCHEMA_TARGET, iri);
+    addRequiredIri(this, SCHEMA_TARGET, iri, "target (schema:target)");
   }
   setRecipient(iri: string): void {
-    addHttpIri(this, SCHEMA_RECIPIENT, iri);
+    addRequiredIri(this, SCHEMA_RECIPIENT, iri, "recipient");
   }
   setAgent(iri: string): void {
-    addHttpIri(this, SCHEMA_AGENT, iri);
+    addRequiredIri(this, SCHEMA_AGENT, iri, "agent");
   }
   addMode(modeIri: string): void {
     addIri(this, A2A_MODE, modeIri);
@@ -239,7 +238,7 @@ class WritableIntent extends TermWrapper {
     addIri(this, RDF_TYPE, A2A_INTENT);
   }
   setAgent(iri: string): void {
-    addHttpIri(this, SCHEMA_AGENT, iri);
+    addRequiredIri(this, SCHEMA_AGENT, iri, "agent");
   }
 
   /** Link a fresh blank-node action node, typed with the action-type IRI. */

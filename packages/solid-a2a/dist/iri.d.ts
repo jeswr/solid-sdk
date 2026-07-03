@@ -8,12 +8,31 @@
  */
 export declare function escapeIri(value: string): string;
 /**
- * Validate + normalise an http(s) IRI for an OBJECT position. Returns the normalised
- * absolute IRI, or `undefined` when `value` is not a string, is not a parseable
- * absolute URL, or is not `http:`/`https:`. The result is additionally run through
- * {@link escapeIri} so any IRIREF-forbidden char the URL parser leaves in place
- * (`| ^ ` in a query/fragment, ...) is neutralised before it reaches n3.Writer. A
- * caller DROPS the triple when this returns `undefined`.
+ * Validate an ABSOLUTE IRI for an OBJECT position, SCHEME-AGNOSTICALLY — a legitimate
+ * `urn:`/`did:` identifier (an agent/recipient/target may be one) is accepted, only a
+ * value that is not a parseable absolute IRI is rejected. Returns the LEXICALLY
+ * PRESERVED original run through {@link escapeIri} (so any IRIREF-forbidden char the
+ * value carries is neutralised before n3.Writer, without the URL parser's
+ * normalisation silently changing the IRI), or `undefined` when `value` is not a
+ * string, has a leading/trailing control/space, or is not an absolute IRI.
+ */
+export declare function safeIri(value: string | undefined): string | undefined;
+/**
+ * Validate an http(s) IRI for an OBJECT position that must be fetchable-over-http
+ * (e.g. a handshake `protocolSource`). As {@link safeIri} but additionally rejects any
+ * non-`http:`/`https:` scheme. LEXICAL-preserving: returns {@link escapeIri} of the
+ * ORIGINAL (not the URL parser's normalised `href`), so the emitted IRI matches the
+ * value that was checked. Returns `undefined` when malformed / non-http(s).
  */
 export declare function safeHttpIri(value: string | undefined): string | undefined;
+/**
+ * The FAIL-CLOSED wrapper of {@link safeIri}: return the safely-emittable absolute IRI,
+ * or THROW a `TypeError` naming `field` when `value` cannot be safely emitted. Use for
+ * a REQUIRED object IRI (an intent's `target`/`recipient`/`agent`, a SHACL response
+ * class): never silently drop it, so the serialised graph cannot omit a field the
+ * public object still claims (the object-desync / fail-open class).
+ */
+export declare function requireIri(value: string, field: string): string;
+/** The FAIL-CLOSED wrapper of {@link safeHttpIri} (throws for a non-http(s) value). */
+export declare function requireHttpIri(value: string, field: string): string;
 //# sourceMappingURL=iri.d.ts.map

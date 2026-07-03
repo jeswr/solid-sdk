@@ -8,6 +8,7 @@
 // parse" returns an unresolved IntentResult (never a throw).
 
 import { intentToRdf } from "./intent.js";
+import { safeIri } from "./iri.js";
 import type {
   Intent,
   IntentParameter,
@@ -401,21 +402,22 @@ function shortHash(input: string): string {
 }
 
 /**
- * An OPTIONAL string field on a draft is valid iff it is absent OR a non-blank
- * string (a string with at least one non-whitespace char). A present-but-non-string
- * value, an empty string, OR a whitespace-only string (`"   "`) is malformed model
- * output and must be rejected (→ an unresolved result), never lowered to an invalid
- * RDF term. These fields (`target`/`recipient`/`agent`) are IRIs in the RDF graph,
- * and a blank IRI is never valid. Used for EVERY optional string field on the draft.
+ * An OPTIONAL IRI field on a draft (`target`/`recipient`/`agent`) is valid iff it is
+ * absent OR a string that is a valid ABSOLUTE IRI ({@link safeIri} — scheme-agnostic, so
+ * a `urn:`/`did:` identifier is accepted). A present-but-non-string value, an empty /
+ * whitespace-only string, OR any non-absolute-IRI string is malformed model output and
+ * is rejected here (→ an unresolved result) rather than reaching `intentToRdf`, whose
+ * fail-closed setters would THROW. This keeps parseIntent's contract (a malformed draft
+ * → unresolved, never a throw) while `intentToRdf` stays fail-closed for direct callers.
  */
-function optionalStringOk(value: unknown): boolean {
-  return value === undefined || (typeof value === "string" && value.trim().length > 0);
+function optionalIriOk(value: unknown): boolean {
+  return value === undefined || (typeof value === "string" && safeIri(value) !== undefined);
 }
 
 /**
  * Validate a draft from the injected translate fn before lowering it. Defensive:
  * the draft is untrusted model output, so EVERY field is type-checked — every
- * optional string field (`target`/`recipient`/`agent`) must be a non-empty string
+ * optional IRI field (`target`/`recipient`/`agent`) must be a valid absolute IRI
  * when present, and modes are checked against an OWN-KEY allowlist (NOT the `in`
  * operator, which walks the prototype chain and would accept inherited keys like
  * `toString`/`constructor`). Any malformed field → `false` (the caller returns the
@@ -428,14 +430,14 @@ function isValidDraft(draft: StructuredIntentDraft): boolean {
   if (typeof draft.action !== "string" || !VALID_INTENT_ACTIONS.has(draft.action)) {
     return false;
   }
-  // Every optional string field must be a non-empty string when present.
-  if (!optionalStringOk(draft.target)) {
+  // Every optional IRI field must be a valid absolute IRI when present.
+  if (!optionalIriOk(draft.target)) {
     return false;
   }
-  if (!optionalStringOk(draft.recipient)) {
+  if (!optionalIriOk(draft.recipient)) {
     return false;
   }
-  if (!optionalStringOk(draft.agent)) {
+  if (!optionalIriOk(draft.agent)) {
     return false;
   }
   if (!parametersFieldOk(draft.parameters)) {

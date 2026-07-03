@@ -5,12 +5,12 @@ function canonicalNQuads(quads) {
   return canonize.canonize(quads, { algorithm: RDFC_1_0 });
 }
 
-// ../../../../../../../../Users/jesght/Documents/GitHub/jeswr/solid-a2a/node_modules/@jeswr/fetch-rdf/dist/parse.js
+// ..node_modules/@jeswr/fetch-rdf/dist/parse.js
 import contentType from "content-type";
 import { Store, StreamParser } from "n3";
 import { JsonLdParser } from "jsonld-streaming-parser";
 
-// ../../../../../../../../Users/jesght/Documents/GitHub/jeswr/solid-a2a/node_modules/@jeswr/fetch-rdf/dist/errors.js
+// ..node_modules/@jeswr/fetch-rdf/dist/errors.js
 var RdfFetchError = class extends Error {
   /** The original cause, if any (e.g. a network error or parser exception). */
   cause;
@@ -34,7 +34,7 @@ var RdfFetchError = class extends Error {
   }
 };
 
-// ../../../../../../../../Users/jesght/Documents/GitHub/jeswr/solid-a2a/node_modules/@jeswr/fetch-rdf/dist/parse.js
+// ..node_modules/@jeswr/fetch-rdf/dist/parse.js
 var SUPPORTED_RDF_MEDIA_TYPES = [
   "text/turtle",
   "application/n-triples",
@@ -174,8 +174,25 @@ function escapeIri(value) {
   }
   return out;
 }
+function hasEdgeControlOrSpace(value) {
+  if (value.length === 0) {
+    return false;
+  }
+  return value.charCodeAt(0) <= 32 || value.charCodeAt(value.length - 1) <= 32;
+}
+function safeIri(value) {
+  if (typeof value !== "string" || hasEdgeControlOrSpace(value)) {
+    return void 0;
+  }
+  try {
+    new URL(value);
+  } catch {
+    return void 0;
+  }
+  return escapeIri(value);
+}
 function safeHttpIri(value) {
-  if (typeof value !== "string") {
+  if (typeof value !== "string" || hasEdgeControlOrSpace(value)) {
     return void 0;
   }
   let u;
@@ -187,10 +204,28 @@ function safeHttpIri(value) {
   if (u.protocol !== "http:" && u.protocol !== "https:") {
     return void 0;
   }
-  return escapeIri(u.href);
+  return escapeIri(value);
+}
+function requireIri(value, field) {
+  const safe = safeIri(value);
+  if (safe === void 0) {
+    throw new TypeError(
+      `@jeswr/solid-a2a: ${field} is not a valid absolute IRI: ${JSON.stringify(value)}`
+    );
+  }
+  return safe;
+}
+function requireHttpIri(value, field) {
+  const safe = safeHttpIri(value);
+  if (safe === void 0) {
+    throw new TypeError(
+      `@jeswr/solid-a2a: ${field} is not a valid http(s) IRI: ${JSON.stringify(value)}`
+    );
+  }
+  return safe;
 }
 
-// ../../../../../../../../Users/jesght/Documents/GitHub/jeswr/solid-a2a/node_modules/@jeswr/rdf-serialize/dist/serialize.js
+// ..node_modules/@jeswr/rdf-serialize/dist/serialize.js
 import { Writer } from "n3";
 var DEFAULT_FORMAT = "text/turtle";
 function serialize(quads, options) {
@@ -452,27 +487,24 @@ var WritableParameter = class extends TermWrapper {
     addLiteral(this, A2A_PARAM_VALUE, value);
   }
 };
-function addHttpIri(node, predicate, iri) {
-  const safe = safeHttpIri(iri);
-  if (safe !== void 0) {
-    addIri(node, predicate, safe);
-  }
+function addRequiredIri(node, predicate, iri, field) {
+  addIri(node, predicate, requireIri(iri, field));
 }
 var WritableAction = class extends TermWrapper {
   typeAction(actionTypeIri) {
     addIri(this, RDF_TYPE, actionTypeIri);
   }
   setObject(iri) {
-    addHttpIri(this, SCHEMA_OBJECT, iri);
+    addRequiredIri(this, SCHEMA_OBJECT, iri, "target (schema:object)");
   }
   setTarget(iri) {
-    addHttpIri(this, SCHEMA_TARGET, iri);
+    addRequiredIri(this, SCHEMA_TARGET, iri, "target (schema:target)");
   }
   setRecipient(iri) {
-    addHttpIri(this, SCHEMA_RECIPIENT, iri);
+    addRequiredIri(this, SCHEMA_RECIPIENT, iri, "recipient");
   }
   setAgent(iri) {
-    addHttpIri(this, SCHEMA_AGENT, iri);
+    addRequiredIri(this, SCHEMA_AGENT, iri, "agent");
   }
   addMode(modeIri) {
     addIri(this, A2A_MODE, modeIri);
@@ -483,7 +515,7 @@ var WritableIntent = class extends TermWrapper {
     addIri(this, RDF_TYPE, A2A_INTENT);
   }
   setAgent(iri) {
-    addHttpIri(this, SCHEMA_AGENT, iri);
+    addRequiredIri(this, SCHEMA_AGENT, iri, "agent");
   }
   /** Link a fresh blank-node action node, typed with the action-type IRI. */
   linkAction(actionTypeIri) {
@@ -687,10 +719,8 @@ function handshakeToRdf(message) {
   if (message.kind === "upgrade-offer") {
     b.addIri(HANDSHAKE_SUBJECT, RDF_TYPE, A2A_UPGRADE_OFFER);
     b.addLiteral(HANDSHAKE_SUBJECT, A2A_PROTOCOL_HASH, message.protocolHash);
-    const source = safeHttpIri(message.protocolSource);
-    if (source !== void 0) {
-      b.addIri(HANDSHAKE_SUBJECT, A2A_PROTOCOL_SOURCE, source);
-    }
+    const source = requireHttpIri(message.protocolSource, "protocolSource");
+    b.addIri(HANDSHAKE_SUBJECT, A2A_PROTOCOL_SOURCE, source);
     b.addLiteral(HANDSHAKE_SUBJECT, A2A_REQUIRED, message.required ? "true" : "false", XSD_BOOLEAN);
     if (message.protocolName !== void 0) {
       b.addLiteral(HANDSHAKE_SUBJECT, A2A_PROTOCOL_NAME, message.protocolName);
@@ -826,29 +856,30 @@ function intentToJsonLd(intent) {
     "@type": actionTypeAlias(intent)
   };
   if (intent.target !== void 0) {
+    const target = requireIri(intent.target, "target");
     if (intent.action === "list") {
-      action.target = { "@id": intent.target };
+      action.target = { "@id": target };
     } else {
-      action.object = { "@id": intent.target };
+      action.object = { "@id": target };
     }
   }
   if (intent.recipient !== void 0) {
-    action.recipient = { "@id": intent.recipient };
+    action.recipient = { "@id": requireIri(intent.recipient, "recipient") };
   }
   if (intent.agent !== void 0) {
-    action.agent = { "@id": intent.agent };
+    action.agent = { "@id": requireIri(intent.agent, "agent") };
   }
   if (intent.modes && intent.modes.length > 0) {
     action.mode = intent.modes.map((m) => ({ "@id": ACL_MODE_IRI[m] }));
   }
   const doc = {
     "@context": A2A_INLINE_CONTEXT,
-    "@id": intent.id,
+    "@id": escapeIri(intent.id),
     "@type": "Intent",
     action
   };
   if (intent.agent !== void 0) {
-    doc.agent = { "@id": intent.agent };
+    doc.agent = { "@id": requireIri(intent.agent, "agent") };
   }
   if (intent.parameters && intent.parameters.length > 0) {
     doc.parameter = intent.parameters.map((p) => ({
@@ -1129,17 +1160,13 @@ function shapeToTurtle(quads, format) {
 function buildResponseShape(responseClassIri, shapeId) {
   const b = new GraphBuilder();
   const id = shapeId ?? `${A2A}ResponseShape`;
-  const responseClass = safeHttpIri(responseClassIri);
+  const responseClass = requireIri(responseClassIri, "responseClassIri");
   b.addIri(id, RDF_TYPE, SH_NODE_SHAPE2);
-  if (responseClass !== void 0) {
-    b.addIri(id, SH_TARGET_CLASS, responseClass);
-  }
+  b.addIri(id, SH_TARGET_CLASS, responseClass);
   const typeProp = b.linkBlankNode(id, SH_PROPERTY);
   b.addIri(typeProp, RDF_TYPE, SH_PROPERTY_SHAPE);
   b.addIri(typeProp, SH_PATH, RDF_TYPE);
-  if (responseClass !== void 0) {
-    b.addIri(typeProp, SH_HAS_VALUE, responseClass);
-  }
+  b.addIri(typeProp, SH_HAS_VALUE, responseClass);
   b.addLiteral(typeProp, SH_MIN_COUNT, "1", XSD_INTEGER);
   return b.quads();
 }
@@ -1386,8 +1413,8 @@ function shortHash(input) {
   }
   return (h >>> 0).toString(36);
 }
-function optionalStringOk(value) {
-  return value === void 0 || typeof value === "string" && value.trim().length > 0;
+function optionalIriOk(value) {
+  return value === void 0 || typeof value === "string" && safeIri(value) !== void 0;
 }
 function isValidDraft(draft) {
   if (typeof draft !== "object" || draft === null) {
@@ -1396,13 +1423,13 @@ function isValidDraft(draft) {
   if (typeof draft.action !== "string" || !VALID_INTENT_ACTIONS.has(draft.action)) {
     return false;
   }
-  if (!optionalStringOk(draft.target)) {
+  if (!optionalIriOk(draft.target)) {
     return false;
   }
-  if (!optionalStringOk(draft.recipient)) {
+  if (!optionalIriOk(draft.recipient)) {
     return false;
   }
-  if (!optionalStringOk(draft.agent)) {
+  if (!optionalIriOk(draft.agent)) {
     return false;
   }
   if (!parametersFieldOk(draft.parameters)) {

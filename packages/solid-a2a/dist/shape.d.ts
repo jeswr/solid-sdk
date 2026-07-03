@@ -32,6 +32,11 @@ export declare function shapeToTurtle(quads: readonly Quad[], format?: string): 
  * because a response payload's shape is exchange-specific.
  *
  * @param responseClassIri - the rdf:type a conforming response subject must carry.
+ * @throws {TypeError} if `responseClassIri` is not a valid absolute IRI. FAIL CLOSED:
+ *   `sh:targetClass` / `sh:hasValue` are what make the shape actually CONSTRAIN the
+ *   response class — omitting them for a malformed IRI would silently yield a VACUOUS
+ *   (unconstrained) shape, a validation bypass. A valid non-http `urn:`/`did:` class
+ *   is accepted (scheme-agnostic); only an unemittable IRI is rejected.
  */
 export declare function buildResponseShape(responseClassIri: string, shapeId?: string): Quad[];
 //# sourceMappingURL=shape.d.ts.map
