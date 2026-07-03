@@ -1,5 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
-import { Parser, Store } from "n3";
+import { parseRdf } from "@jeswr/fetch-rdf";
 import { describe, expect, it, vi } from "vitest";
 import { defaultSlug, ingestGranary } from "../src/ingest.js";
 import { granaryObjectToCanonical } from "../src/map.js";
@@ -242,6 +242,70 @@ describe("ingestGranary", () => {
         ingestGranary(mastodonNote, { writeFetch: fetchFn, container: "//evil.example/imports/" }),
       ).rejects.toThrow(/absolute URL/);
     });
+
+    it("REDACTS embedded userinfo from every rejection message (no credential leak)", async () => {
+      const { fetchFn } = recordingFetch();
+      const capture = async (container: string): Promise<string> => {
+        try {
+          await ingestGranary(mastodonNote, { writeFetch: fetchFn, container });
+          throw new Error("expected ingestGranary to reject");
+        } catch (e) {
+          return (e as Error).message;
+        }
+      };
+      // A non-http(s) scheme WITH userinfo hits the scheme error path (before the
+      // credentials check) which echoes the URL — the creds must be redacted there.
+      const m1 = await capture("ftp://alice:s3cr3t@pods.example/x/");
+      expect(m1).not.toContain("s3cr3t");
+      expect(m1).not.toContain("alice:s3cr3t");
+      expect(m1).toContain("***@");
+      // A malformed (unparseable) URL with userinfo hits the catch path — also redacted.
+      const m2 = await capture("ht tp://bob:hunter2@x/");
+      expect(m2).not.toContain("hunter2");
+      expect(m2).toContain("***@");
+    });
+
+    it("rejects a `|`-bearing container (survives URL-parsing into a malformed RDF subject)", async () => {
+      // `|` is the one IRIREF-illegal char the WHATWG URL parser leaves LITERAL in a
+      // path, so it would flow unencoded into the subject `<…imp|orts/…#it>` — malformed
+      // Turtle. Reject it (fail-closed), never write.
+      const { fetchFn, calls } = recordingFetch();
+      await expect(
+        ingestGranary(mastodonNote, {
+          writeFetch: fetchFn,
+          container: "https://alice.pod.example/imp|orts/",
+        }),
+      ).rejects.toThrow(/illegal in an RDF IRI/);
+      expect(calls).toHaveLength(0);
+    });
+
+    it("a `^`-bearing container is auto-encoded by the URL parser → SUBJECT parses as valid Turtle", async () => {
+      // `^` (and backtick/`{`/`}`) are percent-encoded by URL path normalisation, so the
+      // subject `<…imp%5Eorts/…#it>` is a well-formed IRIREF — accepted, not rejected.
+      const { fetchFn, calls } = recordingFetch();
+      const container = "https://alice.pod.example/imp^orts/";
+      const result = await ingestGranary(mastodonNote, { writeFetch: fetchFn, container });
+      expect(result.written).toBe(1);
+      const body = String(calls[0]?.init.body ?? "");
+      const dataset = await parseRdf(body, "text/turtle"); // throws on a malformed IRIREF
+      expect(dataset.size).toBeGreaterThan(0);
+      const subjects = [...dataset].map((q) => q.subject.value);
+      // the `^` is encoded in the subject IRI, never literal
+      expect(subjects.some((s) => s.includes("imp%5Eorts"))).toBe(true);
+      expect(subjects.every((s) => !s.includes("imp^orts"))).toBe(true);
+    });
+
+    it("an IRIREF-clean container produces a SUBJECT that parses as valid Turtle", async () => {
+      const { fetchFn, calls } = recordingFetch();
+      await ingestGranary(mastodonNote, { writeFetch: fetchFn, container: CONTAINER });
+      const body = String(calls[0]?.init.body ?? "");
+      // parseRdf throws on a malformed IRIREF; a clean parse proves the subject is valid.
+      const dataset = await parseRdf(body, "text/turtle");
+      expect(dataset.size).toBeGreaterThan(0);
+      // the message resource subject is the container-derived `<container…#it>` IRI
+      const subjects = new Set([...dataset].map((q) => q.subject.value));
+      expect([...subjects].some((s) => s.startsWith(CONTAINER))).toBe(true);
+    });
   });
 
   it("SECURITY: a hostile `>`-bearing IRI cannot inject triples into the written Turtle", async () => {
@@ -258,15 +322,16 @@ describe("ingestGranary", () => {
     // of the `<…>` IRIREF and forge `<victim/#me> solid:oidcIssuer <attacker>` — an
     // account-takeover. Now every quad's subject is the single message resource, and no
     // predicate is `solid:oidcIssuer`.
-    const store = new Store(new Parser().parse(body));
-    for (const q of store) {
+    // Parse via the suite RDF parser (@jeswr/fetch-rdf) — never a bespoke/direct n3.
+    const dataset = await parseRdf(body, "text/turtle");
+    for (const q of dataset) {
       expect(q.subject.value).not.toBe("https://victim/#me");
       expect(q.predicate.value).not.toBe("http://www.w3.org/ns/solid/terms#oidcIssuer");
     }
     // the hostile value DID land — but as one safe, fully-encoded IRI token (no raw `>`).
     expect(body).toContain("%3E");
-    // and it parsed at all (a malformed IRIREF would have thrown in the Parser above).
-    expect(store.size).toBeGreaterThan(0);
+    // and it parsed at all (a malformed IRIREF would have thrown in parseRdf above).
+    expect(dataset.size).toBeGreaterThan(0);
   });
 
   describe("error handling", () => {

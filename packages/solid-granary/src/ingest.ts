@@ -29,7 +29,7 @@ import type { CanonicalMessage } from "@jeswr/solid-chat-interop";
 import { serializeAs2, serializeLongChat } from "@jeswr/solid-chat-interop";
 import type { GranaryAs2 } from "./granary.js";
 import { iterateObjects } from "./granary.js";
-import { granaryObjectToCanonical } from "./map.js";
+import { granaryObjectToCanonical, safeHttpIri } from "./map.js";
 
 /** The on-pod write shape for imported messages. */
 export type IngestFormat = "as2" | "longchat";
@@ -135,24 +135,50 @@ export function defaultSlug(msg: CanonicalMessage, index: number): string {
 }
 
 /**
- * Validate the caller-configured target container: it MUST be an absolute http(s) URL
- * with NO embedded credentials. A scheme-relative / non-absolute value would make
- * `new URL(slug, base)` throw unpredictably; a `file:`/`javascript:` base is not a pod;
- * and a `https://user:pass@…` base would embed credentials in every write URL (a
- * credential-in-URL leak — see SECURITY check 5). Fail closed on any of these.
+ * Redact any userinfo (`user:pass@`) from a URL string so credentials NEVER reach an
+ * error message / log. Deliberately regex-based (not `new URL()`) so it also redacts a
+ * MALFORMED / non-absolute value — the exact case whose error path echoes the raw
+ * string. Only the authority userinfo (between `//` and the first `@`, before any path)
+ * is stripped.
+ */
+function redactUrl(raw: string): string {
+  return raw.replace(/(\/\/)[^/@\s]*@/g, "$1***@");
+}
+
+/**
+ * Validate the caller-configured target container: it MUST be an absolute http(s) URL,
+ * with NO embedded credentials and NO IRIREF-illegal characters. A scheme-relative /
+ * non-absolute value would make `new URL(slug, base)` throw unpredictably; a
+ * `file:`/`javascript:` base is not a pod; a `https://user:pass@…` base would embed
+ * credentials in every write URL (a credential-in-URL leak — SECURITY check 5); and a
+ * container path carrying `|`/`^`/backtick etc. would flow UNENCODED into the RDF
+ * SUBJECT `<container…#it>` (the slug is already sanitised, so the container is the only
+ * remaining source), yielding malformed Turtle a strict downstream parser rejects. Fail
+ * closed on any of these — and every error message REDACTS userinfo first, so a bad
+ * `user:pass@` value can never leak its credentials into a thrown error / log.
  */
 function assertValidContainer(container: string): void {
+  const safe = redactUrl(container);
   let u: URL;
   try {
     u = new URL(container);
   } catch {
-    throw new TypeError(`ingestGranary: \`container\` must be an absolute URL: ${container}`);
+    throw new TypeError(`ingestGranary: \`container\` must be an absolute URL: ${safe}`);
   }
   if (u.protocol !== "http:" && u.protocol !== "https:") {
-    throw new TypeError(`ingestGranary: \`container\` must be an http(s) URL: ${container}`);
+    throw new TypeError(`ingestGranary: \`container\` must be an http(s) URL: ${safe}`);
   }
   if (u.username !== "" || u.password !== "") {
     throw new TypeError("ingestGranary: `container` must not embed credentials (user:pass@)");
+  }
+  // `safeHttpIri` canonicalises then percent-encodes the residual IRIREF-illegal chars.
+  // If it differs from the plain canonical `href`, the container carries such a char —
+  // which would land UNENCODED in the RDF subject (the subject is built from the raw
+  // write URL, never re-encoded). Reject rather than silently rewrite the write target.
+  if (safeHttpIri(container) !== u.href) {
+    throw new TypeError(
+      `ingestGranary: \`container\` contains characters illegal in an RDF IRI: ${safe}`,
+    );
   }
 }
 
@@ -206,7 +232,13 @@ export async function ingestGranary(
     throw new TypeError("ingestGranary: `container` is required");
   }
   assertValidContainer(container);
-  const base = container.endsWith("/") ? container : `${container}/`;
+  // Use the WHATWG-normalised form as the base so the write URL AND the RDF subject are
+  // byte-consistent with what `fetch` will actually request (path residual chars like
+  // `^`/`` ` ``/`{`/`}` are percent-encoded identically). This also keeps `resourceUrl`'s
+  // containment check from tripping on a raw-vs-normalised mismatch. (`|` — the one char
+  // the URL parser leaves literal — is already rejected by `assertValidContainer`.)
+  const canonical = new URL(container).href;
+  const base = canonical.endsWith("/") ? canonical : `${canonical}/`;
 
   const items: IngestItemResult[] = [];
   let written = 0;
