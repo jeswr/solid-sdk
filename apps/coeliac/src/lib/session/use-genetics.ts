@@ -94,7 +94,7 @@ function readFileText(file: File): Promise<string> {
 }
 
 export function useGenetics(): GeneticsState & GeneticsActions {
-  const { store, storageRoot, webId, authedFetch } = useSession();
+  const { status, store, storageRoot, webId, authedFetch } = useSession();
   const [summary, setSummary] = useState<StoredGeneticSummary | undefined>(undefined);
   const [loaded, setLoaded] = useState(false);
 
@@ -110,8 +110,10 @@ export function useGenetics(): GeneticsState & GeneticsActions {
     setLoaded(true);
     // Cross-session hydration: if the cache is empty but a summary exists on the
     // pod (a prior session on another device), pull it down and cache it as synced.
-    // Fail-safe — a 404 / offline yields undefined and leaves the empty state.
-    if (!cached && storageRoot && webId) {
+    // Gated on a FULLY-authed session (never fire a remote read with a half-wired or
+    // just-signed-out `authedFetch`). Fail-safe — a 404 / offline yields undefined
+    // and leaves the empty state.
+    if (!cached && status === "authed" && storageRoot && webId) {
       const remote = await readGeneticSummary({ authedFetch, webId, storageRoot });
       if (remote) {
         const record: StoredGeneticSummary = {
@@ -131,7 +133,7 @@ export function useGenetics(): GeneticsState & GeneticsActions {
         setSummary(record);
       }
     }
-  }, [store, storageRoot, webId, authedFetch]);
+  }, [status, store, storageRoot, webId, authedFetch]);
 
   useEffect(() => {
     void refresh();
