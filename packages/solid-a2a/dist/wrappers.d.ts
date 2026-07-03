@@ -74,7 +74,12 @@ declare class WritableIntent extends TermWrapper {
 export declare class IntentBuilder {
     private readonly store;
     private readonly factory;
-    /** Open the intent subject (`id` is the intent IRI) for writing. */
+    /**
+     * Open the intent subject (`id` is the intent IRI) for writing. The id is an
+     * untrusted SUBJECT that may be a legitimate non-http absolute IRI (`urn:...`), so
+     * it is escaped scheme-agnostically ({@link escapeIri}) — a valid id is unchanged,
+     * an injected breakout char is neutralised before it reaches n3.Writer.
+     */
     intent(id: string): WritableIntent;
     /** Map an intent action kind to its RDF action-type IRI. */
     static actionTypeIri(action: IntentAction): string;
@@ -104,9 +109,22 @@ export type NodeRef = {
 export declare class GraphBuilder {
     private readonly store;
     private readonly factory;
-    /** Materialise a {@link NodeRef} to its RDF/JS term. */
+    /**
+     * Materialise a {@link NodeRef} to its RDF/JS term. An IRI SUBJECT is escaped
+     * scheme-agnostically ({@link escapeIri}) — subjects here may legitimately be a
+     * `urn:` (e.g. the handshake subject, a protocol-document id, a SHACL shape id), so
+     * we must NOT restrict the scheme; we only neutralise breakout chars. A blank-node
+     * id is minted internally (never untrusted), so it is left as-is.
+     */
     private subjectTerm;
-    /** Add `(subject, predicate, object-IRI)`. */
+    /**
+     * Add `(subject, predicate, object-IRI)`. The object IRI is escaped
+     * ({@link escapeIri}) as a universal chokepoint so no breakout char reaches
+     * n3.Writer; this covers every object position (trusted vocab IRIs, `urn:`/`http`
+     * shape ids, class IRIs) without dropping a legitimate non-http object. Callers
+     * with a field that MUST be http(s) (e.g. a `protocolSource`) additionally pre-filter
+     * through `safeHttpIri`. The predicate is always a trusted vocab constant.
+     */
     addIri(subject: NodeRef | string, predicate: string, objectIri: string): void;
     /** Add `(subject, predicate, literal)` with an optional datatype IRI. */
     addLiteral(subject: NodeRef | string, predicate: string, value: string, datatypeIri?: string): void;
