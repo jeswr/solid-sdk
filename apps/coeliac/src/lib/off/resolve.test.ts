@@ -33,11 +33,13 @@ describe("resolveProduct", () => {
     for (let i = 0; i < 50 && !puts.some((u) => u.endsWith("/cache/off/3800000000000.ttl")); i++) {
       await new Promise((r) => setTimeout(r, 0));
     }
-    expect(puts.some((u) => u.endsWith("/cache/off/3800000000000.ttl"))).toBe(true);
-    // The owner-only ACL was written before the cache resource.
-    expect(puts.findIndex((u) => u.endsWith("/health/diary/.acl"))).toBeLessThan(
-      puts.findIndex((u) => u.endsWith("/cache/off/3800000000000.ttl")),
-    );
+    // The owner-only ACL was written, AND before the cache resource (both must
+    // exist — a missing ACL write must not pass this vacuously via findIndex -1).
+    const aclIndex = puts.findIndex((u) => u.endsWith("/health/diary/.acl"));
+    const cacheIndex = puts.findIndex((u) => u.endsWith("/cache/off/3800000000000.ttl"));
+    expect(aclIndex).toBeGreaterThanOrEqual(0);
+    expect(cacheIndex).toBeGreaterThanOrEqual(0);
+    expect(aclIndex).toBeLessThan(cacheIndex);
   });
 
   it("falls back to the pod cache on a network error (offline)", async () => {
