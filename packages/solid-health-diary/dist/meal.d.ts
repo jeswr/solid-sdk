@@ -1,5 +1,5 @@
 /**
- * `diet:Meal` (⊑ `schema:Meal`) + its `diet:FoodItem`s + the derived
+ * `diet:Meal` (⊑ `schema:FoodEvent`) + its `diet:FoodItem`s + the derived
  * `diet:Exposure`s — one pod resource per intake event (DESIGN §2.2 entities 1–3,
  * §2.3 layout `meals/{yyyy}/{mm}/{ulid}.ttl`).
  *

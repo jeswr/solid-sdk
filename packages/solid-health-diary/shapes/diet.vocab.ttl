@@ -26,7 +26,7 @@
 # CONSTRAINS — never widens — the terms it reuses. Symptoms are health-sector
 # clinical records about the pod-owner Patient; meals/exposures/conclusions/
 # genetics/plans are Core records. External nutrition/clinical standards
-# (schema.org Meal/NutritionInformation, SNOMED CT / LOINC symptom concepts,
+# (schema.org FoodEvent/NutritionInformation, SNOMED CT / LOINC symptom concepts,
 # FODMAP concepts) are reached Mode-A via skos:closeMatch in diet-alignments.ttl
 # — never MIREOT-imported.
 #
@@ -102,8 +102,8 @@ skos:notation       a owl:AnnotationProperty .
 # and PROV-O are NOT owl:imported (heavy, non-DL closures); we reference specific
 # terms and align in diet-alignments.ttl.
 # -----------------------------------------------------------------------------
-schema:Meal a owl:Class ;
-    rdfs:label "schema.org Meal"@en ;
+schema:FoodEvent a owl:Class ;
+    rdfs:label "schema.org FoodEvent"@en ;
     rdfs:isDefinedBy <http://schema.org/> .
 
 skos:Concept a owl:Class ;
@@ -123,16 +123,16 @@ prov:wasDerivedFrom a owl:ObjectProperty ;
     rdfs:isDefinedBy <http://www.w3.org/ns/prov#> .
 
 # =============================================================================
-# 1. MEAL / INTAKE EVENT — diet:Meal ⊑ schema:Meal + core:Record.
+# 1. MEAL / INTAKE EVENT — diet:Meal ⊑ schema:FoodEvent + core:Record.
 #    A logged ingestion: WHAT (food items) and WHEN (ingestion time — the
 #    load-bearing half of the lag calculation), plus optional eating-out context.
 # =============================================================================
 
 diet:Meal a owl:Class, gufo:SubKind ;
-    rdfs:subClassOf core:Record , schema:Meal ;
+    rdfs:subClassOf core:Record , schema:FoodEvent ;
     rdfs:label "Meal"@en ;
-    skos:definition "A logged intake event: one or more food items ingested at a recorded time, optionally in an eating-out context. A core:Record about the pod-owner Patient and a schema:Meal. Its schema:startTime is the INGESTION time — the load-bearing anchor for lagged exposure↔symptom correlation."@en ;
-    skos:scopeNote "gufo:SubKind of core:Record (and ⊑ schema:Meal). Items via diet:hasItem (⊑ core:hasPart); ingestion time via schema:startTime; eating-out signal via diet:context."@en .
+    skos:definition "A logged intake event: one or more food items ingested at a recorded time, optionally in an eating-out context. A core:Record about the pod-owner Patient and a schema:FoodEvent. Its schema:startTime is the INGESTION time — the load-bearing anchor for lagged exposure↔symptom correlation."@en ;
+    skos:scopeNote "gufo:SubKind of core:Record (and ⊑ schema:FoodEvent). Items via diet:hasItem (⊑ core:hasPart); ingestion time via schema:startTime; eating-out signal via diet:context."@en .
 
 diet:FoodItem a owl:Class, gufo:SubKind ;
     rdfs:subClassOf core:Record ;

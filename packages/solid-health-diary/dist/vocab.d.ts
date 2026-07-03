@@ -6,8 +6,9 @@
  * (extend the existing gUFO-rooted `health` sector, do NOT fork it) and the
  * suite's federation-namespace discipline:
  *
- * - **`schema:` — schema.org** (canonical `http://` scheme): `schema:Meal`
- *   (the super-class of `diet:Meal`), `schema:name`, `schema:startTime`,
+ * - **`schema:` — schema.org** (canonical `http://` scheme): `schema:FoodEvent`
+ *   (the super-class of `diet:Meal` — a real schema.org type, `⊑ schema:Event`;
+ *   note schema.org has NO `schema:Meal`), `schema:name`, `schema:startTime`,
  *   `schema:endTime`, `schema:location`, `schema:image`.
  * - **`health:` — the suite health sector** (`https://w3id.org/jeswr/sectors/health#`,
  *   FHIR/SNOMED/LOINC-aligned, gUFO-rooted): `health:Patient` (the pod owner),
@@ -34,7 +35,7 @@
  * the committed `dist/` is treated as final. The w3id redirect for the namespace
  * is a `needs:user` item.
  */
-/** schema.org (canonical http scheme) — `schema:Meal`, `schema:startTime`, … */
+/** schema.org (canonical http scheme) — `schema:FoodEvent`, `schema:startTime`, … */
 export declare const SCHEMA = "http://schema.org/";
 /** The suite health sector — `health:Patient`, `health:Observation`. */
 export declare const HEALTH = "https://w3id.org/jeswr/sectors/health#";
@@ -62,7 +63,7 @@ export declare const RDFS = "http://www.w3.org/2000/01/rdf-schema#";
 export declare const XSD = "http://www.w3.org/2001/XMLSchema#";
 /** FOAF — `foaf:Agent` (referenced only to prove its ABSENCE in the owner-only ACL). */
 export declare const FOAF = "http://xmlns.com/foaf/0.1/";
-/** Build a `schema:` term IRI. */
+/** Build a `schema:` term IRI (e.g. `schema:FoodEvent`, `schema:startTime`). */
 export declare const schema: (local: string) => string;
 /** Build a `health:` term IRI. */
 export declare const health: (local: string) => string;
@@ -86,8 +87,13 @@ export declare const rdfs: (local: string) => string;
 export declare const xsd: (local: string) => string;
 /** The `rdf:type` predicate IRI (convenience). */
 export declare const RDF_TYPE: string;
-/** `schema:Meal` — the super-class of `diet:Meal`. */
-export declare const SCHEMA_MEAL: string;
+/**
+ * `schema:FoodEvent` — the super-class of `diet:Meal`. A real, dereferenceable
+ * schema.org type (`schema:FoodEvent ⊑ schema:Event`) for an eating/intake event.
+ * (schema.org has NO `schema:Meal` — that IRI 404s — so the earlier `SCHEMA_MEAL`
+ * naming was corrected to this existing term.)
+ */
+export declare const SCHEMA_FOOD_EVENT: string;
 /** `health:Patient` — the pod-owner role each entry is `core:about`. */
 export declare const HEALTH_PATIENT: string;
 /** `health:Observation` — the super-class a `diet:Symptom` is stamped with. */
@@ -114,7 +120,7 @@ export declare const DIET_DERIVED_FROM: string;
 export declare const DIET_RESTS_ON: string;
 /** `skos:Concept` — the class of a TriggerClass / symptom-type concept. */
 export declare const SKOS_CONCEPT: string;
-/** `diet:Meal` (⊑ `schema:Meal`) — an intake event. */
+/** `diet:Meal` (⊑ `schema:FoodEvent`) — an intake event. */
 export declare const DIET_MEAL: string;
 /** `diet:FoodItem` — one food/product in a meal. */
 export declare const DIET_FOOD_ITEM: string;

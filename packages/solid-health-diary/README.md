@@ -29,7 +29,7 @@ is self-contained and its round-trip fixtures validate against the canonical SHA
 
 | Entity | Class | Key fields |
 |---|---|---|
-| Meal / intake event | `diet:Meal` (⊑ `schema:Meal`) | `schema:startTime` (ingestion time — load-bearing for lag), `diet:context`, `diet:portion`, `diet:hasItem` → FoodItems, `diet:venue`, `diet:note` |
+| Meal / intake event | `diet:Meal` (⊑ `schema:FoodEvent`) | `schema:startTime` (ingestion time — load-bearing for lag), `diet:context`, `diet:portion`, `diet:hasItem` → FoodItems, `diet:venue`, `diet:note` |
 | Food item | `diet:FoodItem` | `schema:name`, `diet:offBarcode`/`offRef`/`ingredientsText`, `diet:declaredAllergen`/`traceAllergen`/`additive`/`offCategory` (OFF tags), `diet:sourceConfidence` (`manual`/`off`/`ocr`/`voice`) |
 | Exposure (derived) | `diet:Exposure` | `diet:trigger` → TriggerClass, `diet:exposureLevel` (`present`/`trace`/`possible-undeclared`/`absent`), `diet:derivedFrom` (tap-through provenance) |
 | Symptom | `diet:Symptom` (⊑ `health:Observation`) | `diet:symptomType`, `schema:startTime` (onset), `diet:severity` (0–10), `health:patient` |

@@ -194,7 +194,7 @@ export {
   rdf,
   rdfs,
   SCHEMA,
-  SCHEMA_MEAL,
+  SCHEMA_FOOD_EVENT,
   SKOS,
   SKOS_CONCEPT,
   schema,
