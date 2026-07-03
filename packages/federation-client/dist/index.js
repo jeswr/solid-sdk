@@ -1186,14 +1186,14 @@ var require_ipaddr = __commonJS({
         if (string[string.length - 1] === ":") {
           string = string.slice(0, -1);
         }
-        parts = function() {
+        parts = (function() {
           const ref = string.split(":");
           const results = [];
           for (let i = 0; i < ref.length; i++) {
             results.push(parseInt(ref[i], 16));
           }
           return results;
-        }();
+        })();
         return {
           parts,
           zoneId
@@ -1237,7 +1237,7 @@ var require_ipaddr = __commonJS({
         return part;
       }
       const ipaddr2 = {};
-      ipaddr2.IPv4 = function() {
+      ipaddr2.IPv4 = (function() {
         function IPv4(octets) {
           if (octets.length !== 4) {
             throw new Error("ipaddr: ipv4 octet count should be 4");
@@ -1351,7 +1351,7 @@ var require_ipaddr = __commonJS({
           return this.octets.join(".");
         };
         return IPv4;
-      }();
+      })();
       ipaddr2.IPv4.broadcastAddressFromCIDR = function(string) {
         try {
           const cidr = this.parseCIDR(string);
@@ -1444,7 +1444,7 @@ var require_ipaddr = __commonJS({
       ipaddr2.IPv4.parser = function(string) {
         let match, part, value;
         if (match = string.match(ipv4Regexes.fourOctet)) {
-          return function() {
+          return (function() {
             const ref = match.slice(1, 6);
             const results = [];
             for (let i = 0; i < ref.length; i++) {
@@ -1452,22 +1452,22 @@ var require_ipaddr = __commonJS({
               results.push(parseIntAuto(part));
             }
             return results;
-          }();
+          })();
         } else if (match = string.match(ipv4Regexes.longValue)) {
           value = parseIntAuto(match[1]);
           if (value > 4294967295 || value < 0) {
             throw new Error("ipaddr: address outside defined range");
           }
-          return function() {
+          return (function() {
             const results = [];
             let shift;
             for (shift = 0; shift <= 24; shift += 8) {
               results.push(value >> shift & 255);
             }
             return results;
-          }().reverse();
+          })().reverse();
         } else if (match = string.match(ipv4Regexes.twoOctet)) {
-          return function() {
+          return (function() {
             const ref = match.slice(1, 4);
             const results = [];
             value = parseIntAuto(ref[1]);
@@ -1479,9 +1479,9 @@ var require_ipaddr = __commonJS({
             results.push(value >> 8 & 255);
             results.push(value & 255);
             return results;
-          }();
+          })();
         } else if (match = string.match(ipv4Regexes.threeOctet)) {
-          return function() {
+          return (function() {
             const ref = match.slice(1, 5);
             const results = [];
             value = parseIntAuto(ref[2]);
@@ -1493,7 +1493,7 @@ var require_ipaddr = __commonJS({
             results.push(value >> 8 & 255);
             results.push(value & 255);
             return results;
-          }();
+          })();
         } else {
           return null;
         }
@@ -1515,7 +1515,7 @@ var require_ipaddr = __commonJS({
         }
         return new this(octets);
       };
-      ipaddr2.IPv6 = function() {
+      ipaddr2.IPv6 = (function() {
         function IPv6(parts, zoneId) {
           let i, part;
           if (parts.length === 16) {
@@ -1719,7 +1719,7 @@ var require_ipaddr = __commonJS({
           return this.toRFC5952String();
         };
         return IPv6;
-      }();
+      })();
       ipaddr2.IPv6.broadcastAddressFromCIDR = function(string) {
         try {
           const cidr = this.parseCIDR(string);
