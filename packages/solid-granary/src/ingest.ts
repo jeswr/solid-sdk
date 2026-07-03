@@ -135,14 +135,32 @@ export function defaultSlug(msg: CanonicalMessage, index: number): string {
 }
 
 /**
- * Redact any userinfo (`user:pass@`) from a URL string so credentials NEVER reach an
- * error message / log. Deliberately regex-based (not `new URL()`) so it also redacts a
- * MALFORMED / non-absolute value — the exact case whose error path echoes the raw
- * string. Only the authority userinfo (between `//` and the first `@`, before any path)
- * is stripped.
+ * Redact the ENTIRE authority userinfo (`user:pass@`) from a URL string so credentials
+ * NEVER reach an error message / log. Deliberately manual (not `new URL()` and not a
+ * "stop at the first `@`/whitespace" regex) so it also redacts a MALFORMED / non-absolute
+ * value — the exact case whose error path echoes the raw string — AND a userinfo that
+ * itself contains `@` or whitespace (`user:sec@ret@host`, `user:pass word@host`).
+ *
+ * Algorithm: locate the authority region — the substring after the scheme's `//` (or the
+ * whole string when there is no `//`) up to the first `/`, `?`, or `#` (the path/query/
+ * fragment boundary) — then, within it, replace everything up to and INCLUDING the LAST
+ * `@` with `***@`. The last `@` is the userinfo/host separator (RFC 3986), so this strips
+ * a userinfo with embedded `@`s in full. If the authority has no `@`, the value is
+ * returned unchanged (no userinfo to redact — an `@` later in the path is not a credential).
  */
 function redactUrl(raw: string): string {
-  return raw.replace(/(\/\/)[^/@\s]*@/g, "$1***@");
+  const schemeSep = raw.indexOf("//");
+  const authStart = schemeSep === -1 ? 0 : schemeSep + 2;
+  const prefix = raw.slice(0, authStart); // scheme + "//" (or "" when no "//")
+  const rest = raw.slice(authStart);
+  const boundary = rest.search(/[/?#]/);
+  const authEnd = boundary === -1 ? rest.length : boundary;
+  const authority = rest.slice(0, authEnd);
+  const after = rest.slice(authEnd);
+  const lastAt = authority.lastIndexOf("@");
+  if (lastAt === -1) return raw; // no userinfo in the authority
+  const host = authority.slice(lastAt + 1);
+  return `${prefix}***@${host}${after}`;
 }
 
 /**

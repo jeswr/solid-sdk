@@ -243,7 +243,7 @@ describe("ingestGranary", () => {
       ).rejects.toThrow(/absolute URL/);
     });
 
-    it("REDACTS embedded userinfo from every rejection message (no credential leak)", async () => {
+    it("REDACTS the ENTIRE userinfo from every rejection message (no credential leak)", async () => {
       const { fetchFn } = recordingFetch();
       const capture = async (container: string): Promise<string> => {
         try {
@@ -253,16 +253,27 @@ describe("ingestGranary", () => {
           return (e as Error).message;
         }
       };
-      // A non-http(s) scheme WITH userinfo hits the scheme error path (before the
-      // credentials check) which echoes the URL — the creds must be redacted there.
-      const m1 = await capture("ftp://alice:s3cr3t@pods.example/x/");
-      expect(m1).not.toContain("s3cr3t");
-      expect(m1).not.toContain("alice:s3cr3t");
-      expect(m1).toContain("***@");
-      // A malformed (unparseable) URL with userinfo hits the catch path — also redacted.
-      const m2 = await capture("ht tp://bob:hunter2@x/");
-      expect(m2).not.toContain("hunter2");
-      expect(m2).toContain("***@");
+      // Each case: [container, secret fragments that must NOT appear]. Every case must
+      // still surface `***@`, proving the userinfo was replaced wholesale.
+      const cases: [string, string[]][] = [
+        // non-http(s) scheme with userinfo → the scheme-error path (echoes the URL)
+        ["ftp://alice:s3cr3t@pods.example/x/", ["alice", "s3cr3t"]],
+        // malformed/unparseable URL with userinfo → the catch path (echoes the URL)
+        ["ht tp://bob:hunter2@x/", ["bob", "hunter2"]],
+        // userinfo containing an EMBEDDED `@` — must redact up to the LAST `@`
+        ["ftp://carol:sec@ret@pods.example/x/", ["carol", "sec", "ret", "sec@ret"]],
+        // whitespace inside the userinfo (malformed) — must not stop at the space
+        ["ht tp://dave:pass word@example/x/", ["dave", "pass", "word", "pass word"]],
+        // scheme-relative //user:pass@host — still has userinfo to strip
+        ["//erin:topsecret@host/x/", ["erin", "topsecret"]],
+      ];
+      for (const [container, secrets] of cases) {
+        const msg = await capture(container);
+        for (const s of secrets) {
+          expect(msg, `leaked "${s}" for ${container}`).not.toContain(s);
+        }
+        expect(msg).toContain("***@");
+      }
     });
 
     it("rejects a `|`-bearing container (survives URL-parsing into a malformed RDF subject)", async () => {
