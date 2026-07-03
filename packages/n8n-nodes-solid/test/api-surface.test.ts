@@ -61,15 +61,19 @@ function projectOptions(options: unknown): unknown {
 }
 
 beforeAll(() => {
-  // Ensure the shipped dist exists (a clean checkout may not have built yet);
-  // check:dist guards that the committed dist matches source.
-  if (!existsSync(libJs) || !existsSync(nodeJs) || !existsSync(credJs)) {
-    execFileSync("node", [join(root, "scripts", "build-dist.mjs")], {
-      cwd: root,
-      stdio: "inherit",
-    });
+  // This snapshot asserts the SHIPPED artifact surface, so it must load the
+  // committed dist as-is — never silently rebuild it (that would let a stale or
+  // absent dist pass by snapshotting a freshly-built one instead of what ships).
+  // `npm run build` / the check:dist gate own producing + freshness-checking dist;
+  // here we fail loudly if it isn't present.
+  const missing = [libJs, nodeJs, credJs].filter((p) => !existsSync(p));
+  if (missing.length > 0) {
+    throw new Error(
+      `Shipped dist artifact(s) missing — run \`npm run build\` before this test:\n` +
+        missing.map((p) => `  - ${p}`).join("\n"),
+    );
   }
-}, 120_000);
+});
 
 describe("public API surface (committed snapshot — one-file diff, over the shipped dist)", () => {
   it("importable library exports (the package `main` = dist/src/index.js)", () => {
