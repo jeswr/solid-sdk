@@ -124,6 +124,7 @@ eqsh:OwnershipShareShape a sh:NodeShape ;
         sh:path eq:mgmtFlat ;
         sh:maxCount 1 ;
         sh:node [
+            sh:class schema:MonetaryAmount ;
             sh:property [ sh:path schema:value ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:decimal ; sh:minInclusive 0 ] ;
             sh:property [ sh:path schema:currency ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ]
         ] ;
