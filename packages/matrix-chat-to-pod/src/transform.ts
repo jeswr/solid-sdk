@@ -44,8 +44,8 @@
  */
 
 import type { CanonicalMessage } from "@jeswr/solid-chat-interop";
-import { isHttpIri } from "@jeswr/solid-chat-interop";
 import type { MatrixEvent } from "./matrix.js";
+import { safeHttpIri, sanitizeText } from "./safe-iri.js";
 
 /**
  * Context the transform needs to mint IN-POD IRIs and (optionally) resolve a
@@ -212,8 +212,15 @@ function readBody(
 ): { body: string; formatted?: string } | undefined {
   if (content === null || typeof content !== "object") return undefined;
   if (!isTextMsgtype(str(content.msgtype))) return undefined;
-  const body = str(content.body);
-  if (body === undefined) return undefined;
+  const raw = str(content.body);
+  if (raw === undefined) return undefined;
+  // SECURITY: strip non-whitespace control chars (NUL, ESC, BEL, DEL, C1, …) from
+  // the UNTRUSTED body before it is persisted as a pod literal — n3 escapes NUL but
+  // emits other C0/C1 controls verbatim, which would smuggle a terminal-escape /
+  // display-spoofing / log-injection sequence into the stored resource. A message
+  // that is ONLY control chars sanitises to empty → dropped (no usable body).
+  const body = sanitizeText(raw);
+  if (body.length === 0) return undefined;
   const result: { body: string; formatted?: string } = { body };
   // Only treat formatted_body as HTML when the format is the conventional HTML one
   // (org.matrix.custom.html); an unknown format is ignored (we keep plain text).
@@ -247,33 +254,38 @@ function buildCanonical(
   };
 
   // Author: only a real http(s) WebID resolved from the Matrix sender; never the
-  // bare @user:server (the canonical model filters non-http(s) IRIs).
+  // bare @user:server. The resolver output is UNTRUSTED (a naive caller may derive
+  // the WebID from the untrusted sender), so it is passed through `safeHttpIri` —
+  // which returns the CANONICALISED IRI (a boolean `isHttpIri` would let a `>`
+  // through and inject triples via n3.Writer's un-escaped `<...>`).
   const sender = str(event.sender);
   if (sender !== undefined && ctx.webIdFor) {
-    const webId = ctx.webIdFor(sender);
-    if (isHttpIri(webId)) msg.author = webId;
+    const webId = safeHttpIri(ctx.webIdFor(sender));
+    if (webId !== undefined) msg.author = webId;
   }
 
   const published = tsToIso(event.origin_server_ts);
   if (published !== undefined) msg.published = published;
 
-  // Room IRI (in-pod), only when the resolver yields an http(s) IRI.
+  // Room IRI (in-pod), only when the resolver yields a safe http(s) IRI.
   const roomId = str(event.room_id);
   if (roomId !== undefined && ctx.roomIriFor) {
-    const roomIri = ctx.roomIriFor(roomId);
-    if (isHttpIri(roomIri)) msg.room = roomIri;
+    const roomIri = safeHttpIri(ctx.roomIriFor(roomId));
+    if (roomIri !== undefined) msg.room = roomIri;
   }
 
-  // Reply edge → the in-pod resource of the replied-to event.
+  // Reply edge → the in-pod resource of the replied-to event. `replyTo` is an
+  // UNTRUSTED Matrix event id; the resolved IRI is canonicalised safe before use.
   const replyTo = replyTargetEventId(event);
   if (replyTo !== undefined) {
-    const inReplyToIri = ctx.messageIriFor(replyTo);
-    if (isHttpIri(inReplyToIri)) msg.inReplyTo = inReplyToIri;
+    const inReplyToIri = safeHttpIri(ctx.messageIriFor(replyTo));
+    if (inReplyToIri !== undefined) msg.inReplyTo = inReplyToIri;
   }
 
-  // Provenance: record the source IRI honestly when supplied + http(s).
-  if (isHttpIri(ctx.derivedFrom)) {
-    msg.provenance = { derivedFrom: ctx.derivedFrom };
+  // Provenance: record the source IRI honestly when supplied + a safe http(s) IRI.
+  const derivedFrom = safeHttpIri(ctx.derivedFrom);
+  if (derivedFrom !== undefined) {
+    msg.provenance = { derivedFrom };
   }
 
   return msg;

@@ -59,7 +59,9 @@ describe("matrixEventToCanonical — plain message", () => {
     expect(r.message.published).toBe(new Date(1_700_000_000_000).toISOString());
     expect(r.message.room).toBe(POD);
     expect(r.message.id).toBe(messageIriFor("$plain1:example.org"));
-    expect(r.message.provenance?.derivedFrom).toBe("https://matrix.example.org");
+    // `derivedFrom` is canonicalised by `safeHttpIri` (WHATWG `.href`), which adds
+    // the origin-form trailing '/'.
+    expect(r.message.provenance?.derivedFrom).toBe("https://matrix.example.org/");
   });
 
   it("leaves author UNSET for an unknown sender (never fabricates a WebID)", () => {
