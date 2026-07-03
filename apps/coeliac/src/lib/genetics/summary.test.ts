@@ -80,6 +80,30 @@ describe("writeGeneticSummary", () => {
     expect(r.puts()).toHaveLength(0); // not even the ACL was written for an un-consented summary
   });
 
+  it("serialises concurrent writes per resource — PUTs never interleave (newest lands last)", async () => {
+    // A fetch whose PUT to summary.ttl resolves on the NEXT microtask-ish delay, so
+    // an unserialised implementation would interleave the two writers' PUTs.
+    const events: string[] = [];
+    let n = 0;
+    const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      const method = (init?.method ?? "GET").toUpperCase();
+      if (method === "HEAD") return new Response(null, { status: 200 });
+      if (method === "PUT" && url === SUMMARY_URL) {
+        const id = ++n;
+        events.push(`start-${id}`);
+        await new Promise((r) => setTimeout(r, 5));
+        events.push(`end-${id}`);
+        return new Response("", { status: 201 });
+      }
+      return new Response("", { status: 200 });
+    }) as unknown as typeof globalThis.fetch;
+    const ctx = { authedFetch: fetch, webId: WEBID, storageRoot: ROOT };
+    await Promise.all([writeGeneticSummary(ctx, CONSENTED), writeGeneticSummary(ctx, CONSENTED)]);
+    // Each summary PUT fully completes before the next starts (no interleave).
+    expect(events).toEqual(["start-1", "end-1", "start-2", "end-2"]);
+  });
+
   it("REFUSES an overstated NPV negative (risk-haplotype-absent w/o complete coverage)", async () => {
     const r = recorder();
     const bad = {

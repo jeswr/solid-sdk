@@ -227,8 +227,11 @@ export function interpretClinical(
 ): Omit<GeneticSummaryData, "consentGiven"> {
   const markers: HlaMarkerData[] = observations.map((o) => {
     if (o.rsid && o.genotype !== undefined) return markerFromRawCall({ rsid: o.rsid, genotype: o.genotype });
-    // A prose "positive"/"negative" statement → present/absent (never uncertain=absent).
-    const presence: MarkerPresence = o.statedPresent ? "present" : "absent";
+    // A prose statement → present/absent. A missing/undefined statedPresent must
+    // NEVER collapse to `absent` (the false-reassurance failure mode) — map it to
+    // `uncertain`. Only an explicit `false` is `absent`.
+    const presence: MarkerPresence =
+      o.statedPresent === true ? "present" : o.statedPresent === false ? "absent" : "uncertain";
     return markerFromManual(o.haplotype, presence);
   });
   return buildSummaryData(markers, "clinical-report", patient);

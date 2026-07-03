@@ -122,4 +122,11 @@ describe("buildSummaryData / interpret helpers", () => {
     expect(data.coeliacGeneticRisk).toBe("partial-coverage"); // DQ2.5 not covered
     expect(data.coverageComplete).toBe(false);
   });
+
+  it("a clinical observation with NEITHER genotype nor statedPresent → uncertain, NEVER absent", () => {
+    // The type permits this shape; the safety rule forbids it collapsing to absent.
+    const data = interpretClinical([{ haplotype: "DQ8" }]);
+    expect(data.markers[0].markerPresence).toBe("uncertain");
+    expect(data.coeliacGeneticRisk).toBe("indeterminate");
+  });
 });

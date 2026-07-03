@@ -170,16 +170,21 @@ export async function flushOutbox(ctx: SyncContext, store: DiaryStore): Promise<
       failed += 1;
     }
   }
-  for (const summary of genetics) {
-    try {
-      await syncGeneticSummary(ctx, summary);
-      // Discriminate by rev so a stale completion never marks a NEWER summary
-      // synced (see markGeneticSync).
-      await store.markGeneticSync(summary.rev, "synced");
-      synced += 1;
-    } catch (err) {
-      await store.markGeneticSync(summary.rev, "error", (err as Error).message);
-      failed += 1;
+  if (genetics.length > 0) {
+    // Re-read the CURRENT genetic record right before writing so reconcile never
+    // flushes a stale snapshot on top of a newer save that landed after `pending()`.
+    const current = await store.getGeneticSummary();
+    if (current && current.sync !== "synced") {
+      try {
+        await syncGeneticSummary(ctx, current);
+        // Discriminate by rev so a stale completion never marks a NEWER summary
+        // synced (see markGeneticSync).
+        await store.markGeneticSync(current.rev, "synced");
+        synced += 1;
+      } catch (err) {
+        await store.markGeneticSync(current.rev, "error", (err as Error).message);
+        failed += 1;
+      }
     }
   }
   return { synced, failed };

@@ -33,6 +33,30 @@ export interface GeneticsContext {
 }
 
 /**
+ * Per-resource write serialization. The genetic summary is a SINGLE fixed-URL
+ * resource, so two concurrent writers (a rapid double-save, or a reconcile racing a
+ * save) could otherwise have their PUTs land OUT OF ORDER — an older in-flight write
+ * completing last and overwriting the pod with stale data. Chaining every write to a
+ * given URL through one promise guarantees they land in enqueue order, so the LAST
+ * write enqueued (the newest save) is the last to hit the pod. Keyed by URL; a
+ * failed write does not break the chain (the next write still runs).
+ */
+const writeChains = new Map<string, Promise<unknown>>();
+function serializeWrite<T>(url: string, run: () => Promise<T>): Promise<T> {
+  const prev = writeChains.get(url) ?? Promise.resolve();
+  const next = prev.then(run, run); // run regardless of the previous write's outcome
+  // Keep the chain alive even if this write rejects (swallow only for the chain tail).
+  writeChains.set(
+    url,
+    next.then(
+      () => undefined,
+      () => undefined,
+    ),
+  );
+  return next;
+}
+
+/**
  * Serialise + PUT the genetic summary to the pod, owner-only ACL ensured FIRST.
  *
  * `input` is a {@link GeneticSummaryInput}, so `consentGiven: true` is required at
@@ -46,16 +70,20 @@ export async function writeGeneticSummary(
   input: GeneticSummaryInput,
 ): Promise<{ url: string }> {
   const url = geneticsSummaryUrl(ctx.storageRoot);
-  // Serialise FIRST — if a guardrail (consent / coverage / framing) rejects, we
-  // throw before touching the network, and nothing (not even the container ACL) is
-  // written for this un-consented/invalid summary.
+  // Serialise (Turtle) FIRST — if a guardrail (consent / coverage / framing)
+  // rejects, we throw before touching the network or the write chain, and nothing
+  // (not even the container ACL) is written for this un-consented/invalid summary.
   const body = await serializeGeneticSummary(url, {
     ...input,
     patient: input.patient ?? ctx.webId,
   });
-  // Owner-only ACL on the diary root FIRST (fail-closed) — never a briefly-public write.
-  await ensureDiaryReady(ctx.authedFetch, ctx.storageRoot, ctx.webId);
-  await putResource(ctx.authedFetch, url, body);
+  // Serialise the actual pod write per resource so concurrent writers land in order
+  // (the newest write is last; no out-of-order stale overwrite of the fixed URL).
+  await serializeWrite(url, async () => {
+    // Owner-only ACL on the diary root FIRST (fail-closed) — never a briefly-public write.
+    await ensureDiaryReady(ctx.authedFetch, ctx.storageRoot, ctx.webId);
+    await putResource(ctx.authedFetch, url, body);
+  });
   return { url };
 }
 

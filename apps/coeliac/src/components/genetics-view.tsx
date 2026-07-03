@@ -341,7 +341,7 @@ export function GeneticsView() {
             </p>
             <input
               type="file"
-              accept=".txt,.csv,.tsv,text/plain"
+              accept=".txt,.tsv,text/plain"
               aria-label="Genetic test file (parsed on this device only)"
               onChange={(e) => void onFile(e.target.files?.[0])}
               disabled={parsing || saving}

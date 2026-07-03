@@ -115,7 +115,11 @@ export function useGenetics(): GeneticsState & GeneticsActions {
     // and leaves the empty state.
     if (!cached && status === "authed" && storageRoot && webId) {
       const remote = await readGeneticSummary({ authedFetch, webId, storageRoot });
-      if (remote) {
+      // Re-check the cache AFTER the async read: if the user saved a new local
+      // summary while the read was in flight, do NOT overwrite it with the older
+      // remote record — hydrate only if the cache is STILL empty.
+      const stillEmpty = !(await store.getGeneticSummary());
+      if (remote && stillEmpty) {
         const record: StoredGeneticSummary = {
           kind: "genetic",
           url: geneticsSummaryUrl(storageRoot),
