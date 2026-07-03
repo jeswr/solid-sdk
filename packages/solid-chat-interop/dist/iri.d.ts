@@ -21,11 +21,27 @@
  */
 export declare function isHttpIri(value: string | undefined): value is string;
 /**
- * The value if it is an absolute http(s) IRI ({@link isHttpIri}), else
- * `undefined` — i.e. `isHttpIri(v) ? v : undefined`, the recurring untrusted-
- * input filter for an OPTIONAL object-property write (drop a non-http(s) value
- * rather than coerce it into a malformed `NamedNode`). Named once here instead of
- * repeating the ternary at every optional-IRI write site.
+ * The CANONICAL, injection-safe http(s) IRI for an untrusted value, or
+ * `undefined` if it is absent or not an absolute http(s) URL.
+ *
+ * A plain `isHttpIri` boolean check is NOT sufficient before handing a foreign
+ * value to `namedNode()`: `new URL(v)` VALIDATES `v` but the raw `v` may still
+ * contain characters illegal in a Turtle `IRIREF` (e.g. a JSON-LD `@id` of
+ * `http://e/a>b` parses fine yet its raw `>` would break out of `<…>` under
+ * `n3.Writer`, which does not escape IRIs). This helper instead returns the
+ * WHATWG-CANONICAL form (`new URL(v).href`) with any {@link IRIREF_FORBIDDEN}
+ * residual percent-encoded — so what reaches `namedNode()` can never carry an
+ * IRI-injection or an invalid-`IRIREF` character. Use this at EVERY site that
+ * maps an untrusted string into an IRI-valued term (read AND write).
+ */
+export declare function safeHttpIri(value: string | undefined): string | undefined;
+/**
+ * The canonical, injection-safe http(s) IRI for an untrusted value, else
+ * `undefined` — the recurring untrusted-input filter for an OPTIONAL
+ * object-property write (drop a non-http(s) value rather than coerce it into a
+ * malformed `NamedNode`, and CANONICALISE an http(s) value so no IRI-injection
+ * character survives into `n3.Writer`). Delegates to {@link safeHttpIri}; named
+ * separately so the write sites read as a "drop or keep" filter.
  */
 export declare function httpIriOrUndefined(value: string | undefined): string | undefined;
 /**
@@ -34,6 +50,15 @@ export declare function httpIriOrUndefined(value: string | undefined): string | 
  * IRI-valued field read as `safeIri(x)` (the intent: sanitise, don't coerce).
  */
 export declare const safeIri: typeof httpIriOrUndefined;
+/**
+ * Sanitise an untrusted text literal (a chat body / title / media type) destined
+ * for a pod resource by stripping smuggling-prone control characters
+ * ({@link TEXT_CONTROL_CHARS}). Bodies are stored as PLAIN TEXT literals only —
+ * this keeps a hostile foreign message from persisting a raw `ESC`/`DEL`/C1
+ * control sequence into the serialised RDF. `undefined` passes through unchanged
+ * so an optional field stays absent.
+ */
+export declare function sanitizeText<T extends string | undefined>(value: T): T;
 /**
  * Serialise an UNTRUSTED date to an ISO-8601 string, or `undefined` if it is
  * absent or invalid. A `Date` parsed from a malformed RDF literal (e.g.

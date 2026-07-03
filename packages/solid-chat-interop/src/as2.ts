@@ -30,7 +30,7 @@ import {
 } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
 import type { CanonicalMessage, MessageProvenance, MessageTask, TaskState } from "./canonical.js";
-import { httpIriOrUndefined, readIsoDate, tryRead } from "./iri.js";
+import { httpIriOrUndefined, readIsoDate, safeHttpIri, sanitizeText, tryRead } from "./iri.js";
 import {
   AS_ATTRIBUTED_TO,
   AS_CONTENT,
@@ -257,11 +257,26 @@ export function parseAs2Message(
  * defaults to `now` when omitted.
  */
 export function buildAs2Message(subject: string, msg: CanonicalMessage): Store {
+  // The subject is the ONE mandatory IRI (it becomes the message's `<subject>`
+  // NamedNode via `n3.Writer`, which does NOT escape IRIs). A non-http(s) or
+  // injection-bearing subject cannot be silently dropped like an optional object
+  // property — it would corrupt the serialised resource — so fail closed. Use the
+  // CANONICAL form so an injection character (e.g. `>`) can never break out of the
+  // `<…>`.
+  const safeSubject = safeHttpIri(subject);
+  if (safeSubject === undefined) {
+    throw new TypeError(
+      `buildAs2Message: subject must be an absolute http(s) IRI, got ${JSON.stringify(subject)}`,
+    );
+  }
   const store = new Store();
-  const doc = new As2MessageDoc(subject, store, DataFactory).markNote();
+  const doc = new As2MessageDoc(safeSubject, store, DataFactory).markNote();
 
-  doc.content = msg.content;
-  doc.mediaType = msg.mediaType?.trim() || DEFAULT_MEDIA_TYPE;
+  // Bodies/titles/media types are stored as PLAIN TEXT literals; strip smuggling-
+  // prone control characters (see iri.ts `sanitizeText`) from every untrusted text
+  // value before it is persisted.
+  doc.content = sanitizeText(msg.content);
+  doc.mediaType = sanitizeText(msg.mediaType)?.trim() || DEFAULT_MEDIA_TYPE;
   doc.author = httpIriOrUndefined(msg.author);
   doc.published = msg.published ? new Date(msg.published) : new Date();
   doc.room = httpIriOrUndefined(msg.room);
@@ -281,7 +296,7 @@ export function buildAs2Message(subject: string, msg: CanonicalMessage): Store {
     // code. Uses @jeswr/solid-task-model's class + state consts (re-exported).
     doc.types.add(TASK_CLASS);
     doc.types.add(msg.task.state === "closed" ? WF_CLOSED : WF_OPEN);
-    doc.taskTitle = msg.task.title;
+    doc.taskTitle = sanitizeText(msg.task.title);
     doc.assignee = httpIriOrUndefined(msg.task.assignee);
   }
 

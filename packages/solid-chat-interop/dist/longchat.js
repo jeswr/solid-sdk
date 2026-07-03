@@ -20,8 +20,8 @@
  */
 import { LiteralAs, LiteralFrom, NamedNodeAs, NamedNodeFrom, OptionalAs, OptionalFrom, SetFrom, TermWrapper, } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
-import { httpIriOrUndefined, readIsoDate, tryRead } from "./iri.js";
-import { AS_ATTRIBUTED_TO, AS_CONTENT, AS_IN_REPLY_TO, AS_NOTE, AS_PUBLISHED, DCT_CREATED, DCT_IS_REPLACED_BY, DCT_TITLE, DEFAULT_MEDIA_TYPE, FOAF_MAKER, PROV_WAS_ATTRIBUTED_TO, PROV_WAS_DERIVED_FROM, PROV_WAS_GENERATED_BY, RDF_TYPE, SCHEMA_DATE_DELETED, SCHEMA_MESSAGE, SIOC_CONTENT, SIOC_HAS_REPLY, SIOC_NOTE, TASK_CLASS, WF_ASSIGNEE, WF_CLOSED, WF_OPEN, } from "./vocab.js";
+import { httpIriOrUndefined, readIsoDate, safeHttpIri, sanitizeText, tryRead } from "./iri.js";
+import { AS_ATTRIBUTED_TO, AS_CONTENT, AS_IN_REPLY_TO, AS_NOTE, AS_PUBLISHED, DCT_CREATED, DCT_IS_REPLACED_BY, DCT_TITLE, DEFAULT_MEDIA_TYPE, FOAF_MAKER, PROV_WAS_ATTRIBUTED_TO, PROV_WAS_DERIVED_FROM, PROV_WAS_GENERATED_BY, RDF_TYPE, SCHEMA_DATE_DELETED, SCHEMA_MESSAGE, SIOC_CONTENT, SIOC_NOTE, TASK_CLASS, WF_ASSIGNEE, WF_CLOSED, WF_OPEN, } from "./vocab.js";
 /** Typed `@rdfjs/wrapper` view of a single SolidOS LongChat message subject. */
 export class LongChatMessageDoc extends TermWrapper {
     get types() {
@@ -244,9 +244,18 @@ export function parseLongChatMessage(subject, dataset) {
  * `now` when omitted.
  */
 export function buildLongChatMessage(subject, msg) {
+    // Fail closed on a non-http(s) / injection-bearing subject and use the CANONICAL
+    // form (see `buildAs2Message` for the rationale — the subject becomes the
+    // message's `<subject>` NamedNode and `n3.Writer` does not escape IRIs).
+    const safeSubject = safeHttpIri(subject);
+    if (safeSubject === undefined) {
+        throw new TypeError(`buildLongChatMessage: subject must be an absolute http(s) IRI, got ${JSON.stringify(subject)}`);
+    }
     const store = new Store();
-    const doc = new LongChatMessageDoc(subject, store, DataFactory).mark();
-    doc.content = msg.content;
+    const doc = new LongChatMessageDoc(safeSubject, store, DataFactory).mark();
+    // Bodies/titles are stored as PLAIN TEXT literals; strip smuggling-prone control
+    // characters from untrusted text before persisting (see iri.ts `sanitizeText`).
+    doc.content = sanitizeText(msg.content);
     doc.author = httpIriOrUndefined(msg.author);
     doc.created = msg.published ? new Date(msg.published) : new Date();
     doc.inReplyTo = httpIriOrUndefined(msg.inReplyTo);
@@ -260,7 +269,7 @@ export function buildLongChatMessage(subject, msg) {
     if (msg.task) {
         doc.types.add(TASK_CLASS);
         doc.types.add(msg.task.state === "closed" ? WF_CLOSED : WF_OPEN);
-        doc.taskTitle = msg.task.title;
+        doc.taskTitle = sanitizeText(msg.task.title);
         doc.assignee = httpIriOrUndefined(msg.task.assignee);
     }
     return store;

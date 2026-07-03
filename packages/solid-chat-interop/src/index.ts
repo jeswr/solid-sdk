@@ -36,8 +36,15 @@ export type {
   MessageTask,
   TaskState,
 } from "./canonical.js";
-// --- IRI helpers (the untrusted-input http(s)-only filter) ---
-export { docOf, httpIriOrUndefined, isHttpIri, safeIri } from "./iri.js";
+// --- IRI helpers (the untrusted-input http(s)-only + IRI-injection-safe filter) ---
+export {
+  docOf,
+  httpIriOrUndefined,
+  isHttpIri,
+  safeHttpIri,
+  safeIri,
+  sanitizeText,
+} from "./iri.js";
 export {
   LibreChatAdapter,
   type LibreChatAdapterOptions,

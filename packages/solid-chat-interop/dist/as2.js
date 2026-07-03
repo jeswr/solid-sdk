@@ -18,7 +18,7 @@
  */
 import { LiteralAs, LiteralFrom, NamedNodeAs, NamedNodeFrom, OptionalAs, OptionalFrom, SetFrom, TermWrapper, } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
-import { httpIriOrUndefined, readIsoDate, tryRead } from "./iri.js";
+import { httpIriOrUndefined, readIsoDate, safeHttpIri, sanitizeText, tryRead } from "./iri.js";
 import { AS_ATTRIBUTED_TO, AS_CONTENT, AS_CONTEXT, AS_IN_REPLY_TO, AS_MEDIA_TYPE, AS_NOTE, AS_PUBLISHED, DCT_IS_REPLACED_BY, DCT_TITLE, DEFAULT_MEDIA_TYPE, PROV_WAS_ATTRIBUTED_TO, PROV_WAS_DERIVED_FROM, PROV_WAS_GENERATED_BY, RDF_TYPE, SCHEMA_DATE_DELETED, TASK_CLASS, WF_ASSIGNEE, WF_CLOSED, WF_OPEN, } from "./vocab.js";
 /** Typed `@rdfjs/wrapper` view of a single AS2.0 message subject (`as:Note`). */
 export class As2MessageDoc extends TermWrapper {
@@ -226,10 +226,23 @@ export function parseAs2Message(subject, dataset) {
  * defaults to `now` when omitted.
  */
 export function buildAs2Message(subject, msg) {
+    // The subject is the ONE mandatory IRI (it becomes the message's `<subject>`
+    // NamedNode via `n3.Writer`, which does NOT escape IRIs). A non-http(s) or
+    // injection-bearing subject cannot be silently dropped like an optional object
+    // property — it would corrupt the serialised resource — so fail closed. Use the
+    // CANONICAL form so an injection character (e.g. `>`) can never break out of the
+    // `<…>`.
+    const safeSubject = safeHttpIri(subject);
+    if (safeSubject === undefined) {
+        throw new TypeError(`buildAs2Message: subject must be an absolute http(s) IRI, got ${JSON.stringify(subject)}`);
+    }
     const store = new Store();
-    const doc = new As2MessageDoc(subject, store, DataFactory).markNote();
-    doc.content = msg.content;
-    doc.mediaType = msg.mediaType?.trim() || DEFAULT_MEDIA_TYPE;
+    const doc = new As2MessageDoc(safeSubject, store, DataFactory).markNote();
+    // Bodies/titles/media types are stored as PLAIN TEXT literals; strip smuggling-
+    // prone control characters (see iri.ts `sanitizeText`) from every untrusted text
+    // value before it is persisted.
+    doc.content = sanitizeText(msg.content);
+    doc.mediaType = sanitizeText(msg.mediaType)?.trim() || DEFAULT_MEDIA_TYPE;
     doc.author = httpIriOrUndefined(msg.author);
     doc.published = msg.published ? new Date(msg.published) : new Date();
     doc.room = httpIriOrUndefined(msg.room);
@@ -247,7 +260,7 @@ export function buildAs2Message(subject, msg) {
         // code. Uses @jeswr/solid-task-model's class + state consts (re-exported).
         doc.types.add(TASK_CLASS);
         doc.types.add(msg.task.state === "closed" ? WF_CLOSED : WF_OPEN);
-        doc.taskTitle = msg.task.title;
+        doc.taskTitle = sanitizeText(msg.task.title);
         doc.assignee = httpIriOrUndefined(msg.task.assignee);
     }
     return store;

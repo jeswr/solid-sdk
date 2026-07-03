@@ -32,14 +32,61 @@ export function isHttpIri(value: string | undefined): value is string {
 }
 
 /**
- * The value if it is an absolute http(s) IRI ({@link isHttpIri}), else
- * `undefined` — i.e. `isHttpIri(v) ? v : undefined`, the recurring untrusted-
- * input filter for an OPTIONAL object-property write (drop a non-http(s) value
- * rather than coerce it into a malformed `NamedNode`). Named once here instead of
- * repeating the ternary at every optional-IRI write site.
+ * Characters that are FORBIDDEN inside a Turtle / N-Triples `IRIREF`
+ * (`'<' ([^#x00-#x20<>"{}|^`\] | UCHAR)* '>'`). WHATWG `URL` canonicalisation
+ * percent-encodes MOST of these (notably `>`, whitespace and `"`), but leaves a
+ * few — `|`, `^`, `` ` ``, `\` — unencoded inside the FRAGMENT (the fragment
+ * percent-encode set is smaller than the path set), and older runtimes differ on
+ * which residuals they encode. `n3.Writer` does NOT escape IRIs, so ANY residual
+ * forbidden byte reaching `namedNode()` would emit an invalid `IRIREF` — and a
+ * residual `>` would BREAK OUT of the `<…>` and inject arbitrary triples into the
+ * serialised pod resource. This set is the defence-in-depth backstop applied OVER
+ * the canonical form.
+ */
+// biome-ignore lint/suspicious/noControlCharactersInRegex: intentional — we percent-encode the control range that is illegal in a Turtle IRIREF.
+const IRIREF_FORBIDDEN = /[\u0000-\u0020<>"{}|^`\\]/g;
+
+function percentEncodeByte(ch: string): string {
+  return `%${ch.charCodeAt(0).toString(16).toUpperCase().padStart(2, "0")}`;
+}
+
+/**
+ * The CANONICAL, injection-safe http(s) IRI for an untrusted value, or
+ * `undefined` if it is absent or not an absolute http(s) URL.
+ *
+ * A plain `isHttpIri` boolean check is NOT sufficient before handing a foreign
+ * value to `namedNode()`: `new URL(v)` VALIDATES `v` but the raw `v` may still
+ * contain characters illegal in a Turtle `IRIREF` (e.g. a JSON-LD `@id` of
+ * `http://e/a>b` parses fine yet its raw `>` would break out of `<…>` under
+ * `n3.Writer`, which does not escape IRIs). This helper instead returns the
+ * WHATWG-CANONICAL form (`new URL(v).href`) with any {@link IRIREF_FORBIDDEN}
+ * residual percent-encoded — so what reaches `namedNode()` can never carry an
+ * IRI-injection or an invalid-`IRIREF` character. Use this at EVERY site that
+ * maps an untrusted string into an IRI-valued term (read AND write).
+ */
+export function safeHttpIri(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  let canonical: string;
+  try {
+    const u = new URL(value);
+    if (u.protocol !== "http:" && u.protocol !== "https:") return undefined;
+    canonical = u.href;
+  } catch {
+    return undefined;
+  }
+  return canonical.replace(IRIREF_FORBIDDEN, percentEncodeByte);
+}
+
+/**
+ * The canonical, injection-safe http(s) IRI for an untrusted value, else
+ * `undefined` — the recurring untrusted-input filter for an OPTIONAL
+ * object-property write (drop a non-http(s) value rather than coerce it into a
+ * malformed `NamedNode`, and CANONICALISE an http(s) value so no IRI-injection
+ * character survives into `n3.Writer`). Delegates to {@link safeHttpIri}; named
+ * separately so the write sites read as a "drop or keep" filter.
  */
 export function httpIriOrUndefined(value: string | undefined): string | undefined {
-  return isHttpIri(value) ? value : undefined;
+  return safeHttpIri(value);
 }
 
 /**
@@ -48,6 +95,32 @@ export function httpIriOrUndefined(value: string | undefined): string | undefine
  * IRI-valued field read as `safeIri(x)` (the intent: sanitise, don't coerce).
  */
 export const safeIri = httpIriOrUndefined;
+
+/**
+ * Characters STRIPPED from an untrusted text literal before it is written into a
+ * pod resource: the C0/C1 control range, EXCLUDING tab (`\t`), line feed (`\n`)
+ * and carriage return (`\r`), which are legitimate in a multi-line chat body and
+ * are safely escaped by `n3.Writer`. The remaining controls — NUL, `ESC`
+ * (`0x1B`), `DEL`, the C1 block (`0x80`–`0x9F`), … — are a smuggling / terminal-
+ * escape vector, and `n3.Writer` emits several of them RAW (unescaped) into the
+ * Turtle literal (verified: `0x1A`–`0x1F`, `0x7F`–`0x9F`). Strip them so an
+ * untrusted body/title can never carry a control-sequence payload into the
+ * serialised resource.
+ */
+// biome-ignore lint/suspicious/noControlCharactersInRegex: intentional — we strip the control range from untrusted text before it is persisted.
+const TEXT_CONTROL_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g;
+
+/**
+ * Sanitise an untrusted text literal (a chat body / title / media type) destined
+ * for a pod resource by stripping smuggling-prone control characters
+ * ({@link TEXT_CONTROL_CHARS}). Bodies are stored as PLAIN TEXT literals only —
+ * this keeps a hostile foreign message from persisting a raw `ESC`/`DEL`/C1
+ * control sequence into the serialised RDF. `undefined` passes through unchanged
+ * so an optional field stays absent.
+ */
+export function sanitizeText<T extends string | undefined>(value: T): T {
+  return (value === undefined ? undefined : value.replace(TEXT_CONTROL_CHARS, "")) as T;
+}
 
 /**
  * Serialise an UNTRUSTED date to an ISO-8601 string, or `undefined` if it is

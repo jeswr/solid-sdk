@@ -32,7 +32,7 @@ import {
 } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
 import type { CanonicalMessage, MessageProvenance, MessageTask, TaskState } from "./canonical.js";
-import { httpIriOrUndefined, readIsoDate, tryRead } from "./iri.js";
+import { httpIriOrUndefined, readIsoDate, safeHttpIri, sanitizeText, tryRead } from "./iri.js";
 import {
   AS_ATTRIBUTED_TO,
   AS_CONTENT,
@@ -51,7 +51,6 @@ import {
   SCHEMA_DATE_DELETED,
   SCHEMA_MESSAGE,
   SIOC_CONTENT,
-  SIOC_HAS_REPLY,
   SIOC_NOTE,
   TASK_CLASS,
   WF_ASSIGNEE,
@@ -286,10 +285,21 @@ export function parseLongChatMessage(
  * `now` when omitted.
  */
 export function buildLongChatMessage(subject: string, msg: CanonicalMessage): Store {
+  // Fail closed on a non-http(s) / injection-bearing subject and use the CANONICAL
+  // form (see `buildAs2Message` for the rationale — the subject becomes the
+  // message's `<subject>` NamedNode and `n3.Writer` does not escape IRIs).
+  const safeSubject = safeHttpIri(subject);
+  if (safeSubject === undefined) {
+    throw new TypeError(
+      `buildLongChatMessage: subject must be an absolute http(s) IRI, got ${JSON.stringify(subject)}`,
+    );
+  }
   const store = new Store();
-  const doc = new LongChatMessageDoc(subject, store, DataFactory).mark();
+  const doc = new LongChatMessageDoc(safeSubject, store, DataFactory).mark();
 
-  doc.content = msg.content;
+  // Bodies/titles are stored as PLAIN TEXT literals; strip smuggling-prone control
+  // characters from untrusted text before persisting (see iri.ts `sanitizeText`).
+  doc.content = sanitizeText(msg.content);
   doc.author = httpIriOrUndefined(msg.author);
   doc.created = msg.published ? new Date(msg.published) : new Date();
   doc.inReplyTo = httpIriOrUndefined(msg.inReplyTo);
@@ -305,7 +315,7 @@ export function buildLongChatMessage(subject: string, msg: CanonicalMessage): St
   if (msg.task) {
     doc.types.add(TASK_CLASS);
     doc.types.add(msg.task.state === "closed" ? WF_CLOSED : WF_OPEN);
-    doc.taskTitle = msg.task.title;
+    doc.taskTitle = sanitizeText(msg.task.title);
     doc.assignee = httpIriOrUndefined(msg.task.assignee);
   }
 
