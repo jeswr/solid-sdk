@@ -339,6 +339,47 @@ describe("THE CRUX — parse accepts BOTH email/phone forms → same Contact", (
   });
 });
 
+describe("n3.Writer IRI-injection hardening (mailto:/tel: are opaque schemes)", () => {
+  // n3.Writer does NOT escape an IRI's `> < " { } SPACE | ^ ` \\` — it emits the
+  // string verbatim between `<…>`. `mailto:`/`tel:` are OPAQUE URL schemes, so
+  // `new URL().href` does NOT percent-encode those chars in the opaque path. Without
+  // escapeIri, an untrusted address/number carrying `> . <s> <p> <o` breaks out of
+  // the value IRI and injects a SECOND triple. These tests serialise a hostile
+  // contact via the PUBLIC API, re-parse, and assert the injected triple is absent.
+  const EvilS = "https://evil.example/s2";
+
+  it("does not let a hostile email inject a second triple", async () => {
+    // Full mailto: IRI whose opaque part breaks out: `<mailto:a@evil> . <s> <p> <o>`.
+    const payload =
+      "mailto:a@evil> . <https://evil.example/s2> <https://evil.example/p2> <https://evil.example/o2";
+    const ttl = await serializePerson(PERSON, { name: "Evil Email", emails: [payload] });
+    const store = parseStore(ttl, PERSON);
+    // The injected subject must NOT appear as a subject anywhere in the graph.
+    const injected = store.getQuads(DataFactory.namedNode(EvilS), null, null, null);
+    expect(injected).toHaveLength(0);
+    // And the value stays a single (escaped) mailto: IRI on the structured node.
+    const parsed = parsePerson(PERSON, store);
+    expect(parsed?.emails).toHaveLength(1);
+    expect(parsed?.emails?.[0]?.startsWith("mailto:")).toBe(true);
+    expect(parsed?.emails?.[0]).not.toContain(" ");
+    expect(parsed?.emails?.[0]).not.toContain(">");
+  });
+
+  it("does not let a hostile phone number inject a second triple", async () => {
+    const payload =
+      "tel:+1> . <https://evil.example/s2> <https://evil.example/p2> <https://evil.example/o2";
+    const ttl = await serializePerson(PERSON, { name: "Evil Phone", phones: [payload] });
+    const store = parseStore(ttl, PERSON);
+    const injected = store.getQuads(DataFactory.namedNode(EvilS), null, null, null);
+    expect(injected).toHaveLength(0);
+    const parsed = parsePerson(PERSON, store);
+    expect(parsed?.phones).toHaveLength(1);
+    expect(parsed?.phones?.[0]?.startsWith("tel:")).toBe(true);
+    expect(parsed?.phones?.[0]).not.toContain(" ");
+    expect(parsed?.phones?.[0]).not.toContain(">");
+  });
+});
+
 describe("SolidOS-readable triples (the pane reads these)", () => {
   it("a built person carries the exact triples SolidOS reads", () => {
     const store = buildPerson(PERSON, {
