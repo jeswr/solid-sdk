@@ -4,7 +4,7 @@
 //
 // n8n-nodes-solid has THREE public surfaces, and "what is the API?" should be a
 // one-file diff, not a code-reading exercise:
-//   1. the importable pure-logic library (`src/index` — the package `main`);
+//   1. the importable pure-logic library (the package `main` — `dist/src/index`);
 //   2. the n8n `INodeType` the community-node loader consumes (its description:
 //      resource/operation/parameter tree the UI + workflows bind to);
 //   3. the `ICredentialType` (the credential shape + how the token is injected).
@@ -18,58 +18,148 @@
 // test snapshots ALL THREE surfaces into one committed file
 // (`test/__snapshots__/api-surface.test.ts.snap`): any change to the public
 // contract shows up as a reviewable snapshot diff and must be intentional.
+//
+// IMPORTANT — this test loads the BUILT dist entrypoints, not the `src`/`nodes`
+// TypeScript. n8n require()s the CommonJS dist (`package.json` `main` + the `n8n`
+// field), and a GitHub-branch consumer imports the committed dist under
+// `ignore-scripts=true`. Snapshotting `src` would validate the source, not what
+// SHIPS; loading dist makes the snapshot the real public module surface and keeps
+// it consistent with the `check:dist` freshness contract.
 
-import { describe, expect, it } from "vitest";
-import { SolidApi } from "../credentials/SolidApi.credentials.js";
-import { Solid } from "../nodes/Solid/Solid.node.js";
-import * as lib from "../src/index.js";
+import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
+import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { beforeAll, describe, expect, it } from "vitest";
 
-describe("public API surface (committed snapshot — one-file diff)", () => {
-  it("importable library exports (the package `main`)", () => {
-    // Names + typeof only: signatures live in the committed dist/src/*.d.ts.
+const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+const libJs = join(root, "dist", "src", "index.js");
+const nodeJs = join(root, "dist", "nodes", "Solid", "Solid.node.js");
+const credJs = join(root, "dist", "credentials", "SolidApi.credentials.js");
+const require = createRequire(import.meta.url);
+
+// n8n option metadata is UI-facing contract: a change to an option's display
+// `name`/`description`/`action` (not just its `value`) changes what the operator
+// sees. Snapshot all the stable UI-relevant fields, not just value.
+interface NodeOption {
+  name?: string;
+  value?: unknown;
+  description?: string;
+  action?: string;
+}
+function projectOptions(options: unknown): unknown {
+  if (!Array.isArray(options)) {
+    return undefined;
+  }
+  return (options as NodeOption[]).map((o) => ({
+    name: o.name ?? null,
+    value: o.value ?? null,
+    description: o.description ?? null,
+    action: o.action ?? null,
+  }));
+}
+
+beforeAll(() => {
+  // Ensure the shipped dist exists (a clean checkout may not have built yet);
+  // check:dist guards that the committed dist matches source.
+  if (!existsSync(libJs) || !existsSync(nodeJs) || !existsSync(credJs)) {
+    execFileSync("node", [join(root, "scripts", "build-dist.mjs")], {
+      cwd: root,
+      stdio: "inherit",
+    });
+  }
+}, 120_000);
+
+describe("public API surface (committed snapshot — one-file diff, over the shipped dist)", () => {
+  it("importable library exports (the package `main` = dist/src/index.js)", () => {
+    // Load through the built CJS entry the loader/consumers actually use — not
+    // the src. Names + typeof only: signatures live in committed dist/src/*.d.ts.
+    const lib = require(libJs) as Record<string, unknown>;
     const shape = Object.fromEntries(
       Object.keys(lib)
         .sort()
-        .map((k) => [k, typeof (lib as Record<string, unknown>)[k]]),
+        .map((k) => [k, typeof lib[k]]),
     );
     expect(shape).toMatchSnapshot();
   });
 
   it("n8n INodeType description (resource/operation/parameter tree)", () => {
-    const d = new Solid().description;
-    // Project to the loader-relevant, stable fields — a change here is a change
-    // to what the n8n UI shows and what a workflow can set.
+    const mod = require(nodeJs) as {
+      Solid: new () => { description: Record<string, unknown> };
+    };
+    const d = new mod.Solid().description as {
+      name: string;
+      displayName: string;
+      version: number;
+      usableAsTool?: boolean;
+      credentials: unknown;
+      inputs: unknown;
+      outputs: unknown;
+      properties: Array<{
+        name: string;
+        displayName: string;
+        description?: string;
+        type: string;
+        default: unknown;
+        required?: boolean;
+        noDataExpression?: boolean;
+        placeholder?: string;
+        displayOptions?: unknown;
+        options?: unknown;
+      }>;
+    };
+    // Project to the loader-/UI-relevant, stable fields — a change here is a
+    // change to what the n8n UI shows and what a workflow can set. Includes each
+    // option's full UI metadata (name/value/description/action), not just value.
     const projected = {
       name: d.name,
       displayName: d.displayName,
       version: d.version,
-      usableAsTool: d.usableAsTool,
+      usableAsTool: d.usableAsTool ?? false,
       credentials: d.credentials,
       inputs: d.inputs,
       outputs: d.outputs,
       properties: d.properties.map((p) => ({
         name: p.name,
         displayName: p.displayName,
+        description: p.description ?? null,
         type: p.type,
         default: p.default,
         required: p.required ?? false,
+        noDataExpression: p.noDataExpression ?? false,
+        placeholder: p.placeholder ?? null,
         displayOptions: p.displayOptions ?? null,
-        options: Array.isArray(p.options)
-          ? (p.options as { value?: unknown }[]).map((o) => o.value ?? o)
-          : undefined,
+        options: projectOptions(p.options),
       })),
     };
     expect(projected).toMatchSnapshot();
   });
 
   it("n8n ICredentialType (credential shape + token injection)", () => {
-    const c = new SolidApi();
+    const mod = require(credJs) as {
+      SolidApi: new () => {
+        name: string;
+        displayName: string;
+        properties: Array<{
+          name: string;
+          displayName: string;
+          description?: string;
+          type: string;
+          required?: boolean;
+          typeOptions?: { password?: boolean };
+        }>;
+        authenticate: unknown;
+      };
+    };
+    const c = new mod.SolidApi();
     const projected = {
       name: c.name,
       displayName: c.displayName,
       properties: c.properties.map((p) => ({
         name: p.name,
         displayName: p.displayName,
+        description: p.description ?? null,
         type: p.type,
         required: p.required ?? false,
         password: p.typeOptions?.password ?? false,
