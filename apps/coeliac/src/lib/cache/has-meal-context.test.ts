@@ -7,8 +7,8 @@
  */
 import type { MealContext } from "@jeswr/solid-health-diary";
 import { describe, expect, it } from "vitest";
-import { DiaryStore, type StoredMeal } from "./diary-store.js";
-import { MemoryKv } from "./kv.js";
+import { DiaryStore, type StoredMeal } from "./diary-store";
+import { MemoryKv } from "./kv";
 
 function meal(overrides: Partial<StoredMeal> & { ulid: string; startTime: string }): StoredMeal {
   return {

@@ -13,8 +13,8 @@
  * not. Pure; no I/O. A malformed lag anchor is simply skipped (fail-closed).
  */
 import type { MealData, SymptomData, TriggerClassData, TriggerSlug } from "@jeswr/solid-health-diary";
-import { onsetWithinLag, resolveLag } from "../inference/lag.js";
-import { partitionEmergencySymptoms } from "../inference/safety.js";
+import { onsetWithinLag, resolveLag } from "../inference/lag";
+import { partitionEmergencySymptoms } from "../inference/safety";
 
 /**
  * The set of triggers that were exposed within their lag window before ANY emergency

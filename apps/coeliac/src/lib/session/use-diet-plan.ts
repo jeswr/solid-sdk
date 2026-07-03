@@ -11,11 +11,11 @@
  * (gluten is never surfaced for re-test).
  */
 import { useCallback, useEffect, useState } from "react";
-import { storedConclusionToData } from "../protocol/persist.js";
-import { deriveCurrentPlan, type CurrentPlan } from "../inference/diet-plan.js";
-import { surfaceReviews } from "../inference/review.js";
-import type { ReviewSurfacing } from "../inference/types.js";
-import { useSession } from "./context.js";
+import { storedConclusionToData } from "../protocol/persist";
+import { deriveCurrentPlan, type CurrentPlan } from "../inference/diet-plan";
+import { surfaceReviews } from "../inference/review";
+import type { ReviewSurfacing } from "../inference/types";
+import { useSession } from "./context";
 
 export interface DietPlanState {
   plan: CurrentPlan;
@@ -50,6 +50,7 @@ export function useDietPlan(): DietPlanState {
   }, [store]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- load-on-mount data hook: the sync setState is the intentional loading flag; data setState runs in the async continuation (new react-hooks v6 rule, Next 16 upgrade)
     void refresh();
   }, [refresh]);
 

@@ -15,10 +15,10 @@
 import { DCT, DIET, PROV, RDF, XSD } from "@jeswr/solid-health-diary";
 import { DataFactory, Writer } from "n3";
 import type { Quad } from "@rdfjs/types";
-import { AS2, DEFAULT_MEDIA_TYPE, type ShareCard } from "./share-card.js";
-import { httpOrigin } from "./identity.js";
-import { containsDiaryScope, isDiaryIri } from "./share-layout.js";
-import { ShareSanitizationError } from "./share.js";
+import { AS2, DEFAULT_MEDIA_TYPE, type ShareCard } from "./share-card";
+import { httpOrigin } from "./identity";
+import { containsDiaryScope, isDiaryIri } from "./share-layout";
+import { ShareSanitizationError } from "./share";
 
 const { namedNode, literal, quad } = DataFactory;
 

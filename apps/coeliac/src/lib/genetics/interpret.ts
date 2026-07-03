@@ -32,7 +32,7 @@ import type {
   MarkerPresence,
   RiskHaplotype,
 } from "@jeswr/solid-health-diary";
-import { ALL_TAG_SNPS, type ClinicalObservation, type RawSnpCall, type TagRsid } from "./parse.js";
+import { ALL_TAG_SNPS, type ClinicalObservation, type RawSnpCall, type TagRsid } from "./parse";
 
 /** Per-SNP allele classification (both DNA strands), from the verified biallelic pairs. */
 interface SnpModel {

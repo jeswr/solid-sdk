@@ -9,7 +9,7 @@
  * boolean; no meal detail is read into the view.
  */
 import { useEffect, useState } from "react";
-import { useSession } from "./context.js";
+import { useSession } from "./context";
 
 export interface EatingOutSignal {
   /** True once at least one restaurant-context meal is in the cache. */

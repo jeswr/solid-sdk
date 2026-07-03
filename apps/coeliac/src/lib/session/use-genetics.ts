@@ -22,20 +22,20 @@
 import type { GeneticSummaryData, MarkerPresence, RiskHaplotype } from "@jeswr/solid-health-diary";
 import { useCallback, useEffect, useState } from "react";
 import { ulid } from "ulid";
-import type { StoredGeneticSummary } from "../cache/diary-store.js";
-import { syncGeneticSummary } from "../diary/sync.js";
+import type { StoredGeneticSummary } from "../cache/diary-store";
+import { syncGeneticSummary } from "../diary/sync";
 import {
   buildSummaryData,
   interpretClinical,
   interpretConsumerArray,
   type SummarySource,
-} from "../genetics/interpret.js";
-import { markerFromManual } from "../genetics/interpret.js";
-import { parseClinicalText, parseConsumerArray } from "../genetics/parse.js";
-import { readGeneticSummary } from "../genetics/summary.js";
-import { geneticsSummaryUrl } from "../pod/layout.js";
-import { NotSignedInError } from "./use-diary-actions.js";
-import { useSession } from "./context.js";
+} from "../genetics/interpret";
+import { markerFromManual } from "../genetics/interpret";
+import { parseClinicalText, parseConsumerArray } from "../genetics/parse";
+import { readGeneticSummary } from "../genetics/summary";
+import { geneticsSummaryUrl } from "../pod/layout";
+import { NotSignedInError } from "./use-diary-actions";
+import { useSession } from "./context";
 
 /** An interpreted, pre-consent preview of what WOULD be stored (never raw bytes). */
 export type GeneticPreview = Omit<GeneticSummaryData, "consentGiven" | "id"> & {
@@ -147,6 +147,7 @@ export function useGenetics(): GeneticsState & GeneticsActions {
   }, [status, store, storageRoot, webId, authedFetch]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- load-on-mount data hook: the sync setState is the intentional loading flag; data setState runs in the async continuation (new react-hooks v6 rule, Next 16 upgrade)
     void refresh();
   }, [refresh]);
 

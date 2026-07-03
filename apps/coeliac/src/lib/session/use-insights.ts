@@ -13,10 +13,10 @@
  * own — it only feeds cached records in and hands the typed result out.
  */
 import { useCallback, useEffect, useState } from "react";
-import { analyze, type AnalysisResult } from "../inference/analyze.js";
-import { diaryDataFromCache } from "../inference/from-cache.js";
-import type { SafetyContext } from "../inference/types.js";
-import { useSession } from "./context.js";
+import { analyze, type AnalysisResult } from "../inference/analyze";
+import { diaryDataFromCache } from "../inference/from-cache";
+import type { SafetyContext } from "../inference/types";
+import { useSession } from "./context";
 
 /** Stable default context identity so the effect does not re-fire every render. */
 const EMPTY_CONTEXT: SafetyContext = {};
@@ -66,6 +66,7 @@ export function useInsights(context: SafetyContext = EMPTY_CONTEXT): InsightsSta
   }, [store, context]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- load-on-mount data hook: the sync setState is the intentional loading flag; data setState runs in the async continuation (new react-hooks v6 rule, Next 16 upgrade)
     void refresh();
   }, [refresh]);
 

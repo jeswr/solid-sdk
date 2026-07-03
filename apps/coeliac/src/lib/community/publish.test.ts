@@ -1,14 +1,14 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { ShareCard } from "./share-card.js";
-import { DIET_SAFE_FOOD_SHARE } from "./share-card.js";
+import type { ShareCard } from "./share-card";
+import { DIET_SAFE_FOOD_SHARE } from "./share-card";
 import {
   ensureCommunityReady,
   publishShareCard,
   resetCommunityReadyMemo,
   serializeProvenanceSidecar,
   writeShareProvenanceSidecar,
-} from "./publish.js";
+} from "./publish";
 
 const ROOT = "https://alice.example/";
 const OWNER = "https://alice.example/profile/card#me";

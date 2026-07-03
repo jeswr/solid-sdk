@@ -20,10 +20,10 @@ import type {
   StoredMeal,
   StoredProtocol,
   StoredSymptom,
-} from "../cache/diary-store.js";
-import { writeGeneticSummary } from "../genetics/summary.js";
-import { ensureDiaryReady, putResource } from "../pod/pod-fs.js";
-import { storedConclusionToData, storedProtocolToData } from "../protocol/persist.js";
+} from "../cache/diary-store";
+import { writeGeneticSummary } from "../genetics/summary";
+import { ensureDiaryReady, putResource } from "../pod/pod-fs";
+import { storedConclusionToData, storedProtocolToData } from "../protocol/persist";
 
 /** The authed context a flush needs. */
 export interface SyncContext {

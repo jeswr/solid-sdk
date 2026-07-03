@@ -19,7 +19,7 @@
  *   shares/{ulid}.provenance.ttl    # owner-only sidecar (source link; NEVER bundled into the card)
  * ```
  */
-import { asContainer, assertUlid } from "../pod/layout.js";
+import { asContainer, assertUlid } from "../pod/layout";
 
 /**
  * The path segment that marks a health-diary resource. Any IRI carrying it is a

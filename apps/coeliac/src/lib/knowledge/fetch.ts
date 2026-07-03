@@ -18,7 +18,7 @@
  * and the final response URL is re-checked so a cross-host redirect can never
  * smuggle in off-allowlist content. `https:` is mandatory.
  */
-import { foreignFetch } from "../fetch/guarded.js";
+import { foreignFetch } from "../fetch/guarded";
 
 /** The closed allowlist of knowledge origins (hostnames). Frozen — never mutated. */
 export const KNOWLEDGE_HOSTS: readonly string[] = Object.freeze([

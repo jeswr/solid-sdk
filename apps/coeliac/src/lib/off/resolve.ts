@@ -5,8 +5,8 @@
  * lookup (DESIGN §5.2/§6). The barcode is the only thing sent to OFF — never any
  * health data.
  */
-import { readOffCache, writeOffCache } from "./cache.js";
-import { lookupProduct, type OffProduct } from "./off.js";
+import { readOffCache, writeOffCache } from "./cache";
+import { lookupProduct, type OffProduct } from "./off";
 
 export interface ResolveContext {
   publicFetch: typeof globalThis.fetch;

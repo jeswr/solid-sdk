@@ -14,8 +14,8 @@
  * request MUST be a "simple" GET — no custom headers, no `Authorization`, default
  * `Accept`. The knowledge fetch's `simple` mode enforces this.
  */
-import { knowledgeJson } from "./fetch.js";
-import { GENERIC_COELIAC_CONDITION } from "./terms.js";
+import { knowledgeJson } from "./fetch";
+import { GENERIC_COELIAC_CONDITION } from "./terms";
 
 const CTGOV_STUDIES = "https://clinicaltrials.gov/api/v2/studies";
 

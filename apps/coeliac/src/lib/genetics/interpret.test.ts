@@ -10,7 +10,7 @@ import {
   interpretConsumerArray,
   markerFromManual,
   rollup,
-} from "./interpret.js";
+} from "./interpret";
 
 describe("callPresence — the health-accuracy core", () => {
   it("rs2187668: a risk (T/A) allele on EITHER strand → present", () => {

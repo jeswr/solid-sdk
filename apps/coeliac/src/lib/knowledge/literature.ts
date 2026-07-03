@@ -15,8 +15,8 @@
  *   - the app never paraphrases a medical claim — it shows title + metadata + the
  *     canonical DOI/PMID link and the user reads the source.
  */
-import { knowledgeJson } from "./fetch.js";
-import { GENERIC_COELIAC_QUERY, triggerLocalKeywords } from "./terms.js";
+import { knowledgeJson } from "./fetch";
+import { GENERIC_COELIAC_QUERY, triggerLocalKeywords } from "./terms";
 
 const EPMC_SEARCH = "https://www.ebi.ac.uk/europepmc/webservices/rest/search";
 const PUBMED_ESEARCH = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi";

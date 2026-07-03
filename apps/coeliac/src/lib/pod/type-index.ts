@@ -28,9 +28,9 @@ import {
   TermWrapper,
 } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
-import { mealsContainer, symptomsContainer } from "./layout.js";
-import { ensureContainer, putResource } from "./pod-fs.js";
-import { conditionalPut, datasetToTurtle } from "./rdf-io.js";
+import { mealsContainer, symptomsContainer } from "./layout";
+import { ensureContainer, putResource } from "./pod-fs";
+import { conditionalPut, datasetToTurtle } from "./rdf-io";
 import { writeOwnerOnlyAcl } from "@jeswr/solid-health-diary";
 
 const SOLID = "http://www.w3.org/ns/solid/terms#";

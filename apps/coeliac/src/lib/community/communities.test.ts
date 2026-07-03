@@ -1,13 +1,13 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 import { describe, expect, it } from "vitest";
-import { isAllowlistedCommunityHost } from "./allowlist.js";
+import { isAllowlistedCommunityHost } from "./allowlist";
 import {
   allowedCommunities,
   CATEGORY_LABELS,
   COMMUNITIES,
   communitiesByCategory,
   type CommunityCategory,
-} from "./communities.js";
+} from "./communities";
 
 describe("community catalog", () => {
   it("has the curated, non-empty catalog with unique ids", () => {

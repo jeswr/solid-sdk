@@ -4,7 +4,7 @@ import {
   isTagRsid,
   parseClinicalText,
   parseConsumerArray,
-} from "./parse.js";
+} from "./parse";
 
 const RAW_23ANDME = `# rsid\tchromosome\tposition\tgenotype
 rs4477212\t1\t82154\tAA

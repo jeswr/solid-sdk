@@ -8,10 +8,10 @@
  * and is retried by the outbox reconcile on reconnect — the log is never lost.
  */
 import { useCallback } from "react";
-import type { StoredMeal, StoredSymptom } from "../cache/diary-store.js";
-import { type NewMealInput, type NewSymptomInput, cloneForRelog, newMealRecord, newSymptomRecord } from "../diary/log.js";
-import { syncMeal, syncSymptom } from "../diary/sync.js";
-import { useSession } from "./context.js";
+import type { StoredMeal, StoredSymptom } from "../cache/diary-store";
+import { type NewMealInput, type NewSymptomInput, cloneForRelog, newMealRecord, newSymptomRecord } from "../diary/log";
+import { syncMeal, syncSymptom } from "../diary/sync";
+import { useSession } from "./context";
 
 /** A record written optimistically, with a promise that settles when it syncs. */
 export interface LogResult<T> {

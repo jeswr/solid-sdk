@@ -58,10 +58,10 @@ import {
   type TriggerSlug,
   type Verdict,
 } from "@jeswr/solid-health-diary";
-import { HOUR_MS, resolveLag } from "../inference/lag.js";
-import { DEFAULT_PHASE_SCHEDULE } from "../inference/propose.js";
-import { REINTRODUCTION_DEFAULTS } from "../inference/reintroduction.js";
-import type { PhaseSchedule } from "../inference/types.js";
+import { HOUR_MS, resolveLag } from "../inference/lag";
+import { DEFAULT_PHASE_SCHEDULE } from "../inference/propose";
+import { REINTRODUCTION_DEFAULTS } from "../inference/reintroduction";
+import type { PhaseSchedule } from "../inference/types";
 
 const DAY_MS = 86_400_000;
 

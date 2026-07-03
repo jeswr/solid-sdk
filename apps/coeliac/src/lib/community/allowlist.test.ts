@@ -1,6 +1,6 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 import { describe, expect, it } from "vitest";
-import { COMMUNITY_HOSTS, isAllowlistedCommunityHost } from "./allowlist.js";
+import { COMMUNITY_HOSTS, isAllowlistedCommunityHost } from "./allowlist";
 
 describe("community allowlist", () => {
   it("accepts https URLs on the closed host allowlist", () => {

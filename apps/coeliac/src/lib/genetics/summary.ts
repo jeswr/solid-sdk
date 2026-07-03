@@ -22,8 +22,8 @@ import {
   parseGeneticSummary,
   serializeGeneticSummary,
 } from "@jeswr/solid-health-diary";
-import { geneticsSummaryUrl } from "../pod/layout.js";
-import { ensureDiaryReady, putResource } from "../pod/pod-fs.js";
+import { geneticsSummaryUrl } from "../pod/layout";
+import { ensureDiaryReady, putResource } from "../pod/pod-fs";
 
 /** The authed context a genetics write/read needs (the suite auth seam). */
 export interface GeneticsContext {

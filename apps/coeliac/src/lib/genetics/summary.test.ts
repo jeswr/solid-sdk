@@ -6,9 +6,9 @@
 import type { GeneticSummaryInput } from "@jeswr/solid-health-diary";
 import { serializeGeneticSummary } from "@jeswr/solid-health-diary";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { resetDiaryReadyMemo } from "../pod/pod-fs.js";
-import { readGeneticSummary, writeGeneticSummary } from "./summary.js";
-import { GENETIC_FRAMING, interpretConsumerArray } from "./interpret.js";
+import { resetDiaryReadyMemo } from "../pod/pod-fs";
+import { readGeneticSummary, writeGeneticSummary } from "./summary";
+import { GENETIC_FRAMING, interpretConsumerArray } from "./interpret";
 
 const ROOT = "https://alice.example/";
 const WEBID = "https://alice.example/profile/card#me";

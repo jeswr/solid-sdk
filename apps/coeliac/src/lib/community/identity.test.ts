@@ -10,7 +10,7 @@ import {
   ShareIdentityError,
   sharesHost,
   validateIdentity,
-} from "./identity.js";
+} from "./identity";
 
 const REAL_WEBID = "https://alice.example/profile/card#me";
 

@@ -9,11 +9,11 @@
  * `undefined` ⇒ NOT diagnosed ⇒ gluten challenges stay blocked, the safe default).
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { StoredConclusion, StoredProtocol } from "../cache/diary-store.js";
-import { diaryDataFromCache } from "../inference/from-cache.js";
-import type { ProtocolSafetyContext } from "../protocol/fsm.js";
-import { emergencyTriggersFromDiary } from "../protocol/safety-context.js";
-import { useSession } from "./context.js";
+import type { StoredConclusion, StoredProtocol } from "../cache/diary-store";
+import { diaryDataFromCache } from "../inference/from-cache";
+import type { ProtocolSafetyContext } from "../protocol/fsm";
+import { emergencyTriggersFromDiary } from "../protocol/safety-context";
+import { useSession } from "./context";
 
 /** What the caller can pin about the user's clinical status (safety-relevant). */
 export interface ProtocolSafetyInput {
@@ -73,6 +73,7 @@ export function useProtocols(input: ProtocolSafetyInput = EMPTY): ProtocolsState
   }, [store]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- load-on-mount data hook: the sync setState is the intentional loading flag; data setState runs in the async continuation (new react-hooks v6 rule, Next 16 upgrade)
     void refresh();
   }, [refresh]);
 

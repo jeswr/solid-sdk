@@ -22,11 +22,11 @@
  * keeps ONLY the tolerated trigger slug and drops all of it.
  */
 import { isTriggerSlug, type ToleranceConclusionData, type TriggerSlug } from "@jeswr/solid-health-diary";
-import type { CommunityIdentity } from "./identity.js";
-import { assertIdentityForAudience, authorForIdentity, httpHost, sharesHost } from "./identity.js";
-import type { CanonicalMessage, ShareAudience, ShareCard, ShareKind } from "./share-card.js";
-import { DEFAULT_MEDIA_TYPE, SHARE_CLASS } from "./share-card.js";
-import { containsDiaryScope, safeDecodeAll } from "./share-layout.js";
+import type { CommunityIdentity } from "./identity";
+import { assertIdentityForAudience, authorForIdentity, httpHost, sharesHost } from "./identity";
+import type { CanonicalMessage, ShareAudience, ShareCard, ShareKind } from "./share-card";
+import { DEFAULT_MEDIA_TYPE, SHARE_CLASS } from "./share-card";
+import { containsDiaryScope, safeDecodeAll } from "./share-layout";
 
 /** Thrown when a card would leak diary/genetics/provenance or a real identity. */
 export class ShareSanitizationError extends Error {

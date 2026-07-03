@@ -12,8 +12,8 @@
  * digits-only so it cannot alter the request path.
  */
 import type { FoodItemData } from "@jeswr/solid-health-diary";
-import { foreignFetch } from "../fetch/guarded.js";
-import { assertBarcode } from "../pod/layout.js";
+import { foreignFetch } from "../fetch/guarded";
+import { assertBarcode } from "../pod/layout";
 
 /** The OFF host (public, ODbL). */
 export const OFF_HOST = "https://world.openfoodfacts.org";

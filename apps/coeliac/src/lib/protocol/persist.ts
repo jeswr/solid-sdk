@@ -19,8 +19,8 @@ import {
   type ToleranceConclusionData,
 } from "@jeswr/solid-health-diary";
 import { ulid } from "ulid";
-import type { StoredConclusion, StoredProtocol } from "../cache/diary-store.js";
-import { conclusionUrl, protocolUrl } from "../pod/layout.js";
+import type { StoredConclusion, StoredProtocol } from "../cache/diary-store";
+import { conclusionUrl, protocolUrl } from "../pod/layout";
 
 /** ISO → `Date`, or `undefined` when absent / unparseable (fail-closed). */
 function toDate(iso: string | undefined): Date | undefined {

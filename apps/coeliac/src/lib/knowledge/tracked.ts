@@ -7,7 +7,7 @@
  * trigger term is ever sent to an external API by default.
  */
 import type { TriggerSlug } from "@jeswr/solid-health-diary";
-import type { DiaryStore } from "../cache/diary-store.js";
+import type { DiaryStore } from "../cache/diary-store";
 
 /**
  * The distinct triggers the user tracks: every active/past protocol target, every

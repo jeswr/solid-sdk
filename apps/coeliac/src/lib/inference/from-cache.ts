@@ -21,9 +21,9 @@ import type {
   StoredMeal,
   StoredProtocol,
   StoredSymptom,
-} from "../cache/diary-store.js";
-import { storedConclusionToData, storedProtocolToData } from "../protocol/persist.js";
-import type { DiaryData } from "./types.js";
+} from "../cache/diary-store";
+import { storedConclusionToData, storedProtocolToData } from "../protocol/persist";
+import type { DiaryData } from "./types";
 
 /** Parse an ISO timestamp to a valid `Date`, or `undefined` when it does not parse. */
 function parseDate(iso: string): Date | undefined {

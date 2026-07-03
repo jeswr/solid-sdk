@@ -103,7 +103,7 @@ function isConsumerRow(cols: string[]): boolean {
  * Scan a consumer raw-array export (23andMe / AncestryDNA) for the coeliac tag
  * SNPs. Pure: no I/O. Only rows whose rsid is a recognised tag SNP are retained
  * (the rest of the genome is read past and never stored). A row's genotype is kept
- * verbatim (upper-cased); {@link import("./interpret.js").callPresence} decides the
+ * verbatim (upper-cased); {@link import("./interpret").callPresence} decides the
  * presence. If the same rsid appears more than once, the FIRST occurrence wins
  * (raw files list each SNP once; a duplicate is treated as noise).
  */
