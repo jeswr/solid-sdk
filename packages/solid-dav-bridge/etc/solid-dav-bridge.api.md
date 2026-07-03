@@ -8,6 +8,18 @@ import { ContactData } from '@jeswr/solid-task-model/contacts';
 import type { Quad } from '@rdfjs/types';
 
 // @public
+export interface BaseImportOptions {
+    readonly conditional?: Conditional;
+    readonly container: string;
+    readonly continueOnError?: boolean;
+    readonly davAuth?: DavAuth;
+    readonly davFetch?: typeof globalThis.fetch;
+    readonly davUrl?: string;
+    readonly maxItems?: number;
+    readonly writeFetch?: typeof globalThis.fetch;
+}
+
+// @public
 export interface Component {
     readonly components: Component[];
     readonly name: string;
@@ -91,8 +103,6 @@ export const ICAL_VEVENT: "http://www.w3.org/2002/12/cal/ical#Vevent";
 // @public
 export function importAddressBook(options: ImportAddressBookOptions): Promise<ImportResult>;
 
-// Warning: (ae-forgotten-export) The symbol "BaseImportOptions" needs to be exported by the entry point index.d.ts
-//
 // @public
 export interface ImportAddressBookOptions extends BaseImportOptions {
     readonly inAddressBook?: string;

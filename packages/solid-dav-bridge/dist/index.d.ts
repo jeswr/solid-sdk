@@ -49,7 +49,7 @@
 export type { ContactData } from "@jeswr/solid-task-model/contacts";
 export { parseICalDate, type RdfDateLiteral } from "./datetime.js";
 export { type Component, type ContentLine, findComponents, getProperties, getProperty, parseComponents, parseContentLine, unescapeText, unfoldLines, } from "./ical.js";
-export { type Conditional, defaultContactSlug, defaultEventSlug, type ImportAddressBookOptions, type ImportCalendarOptions, type ImportItemResult, type ImportResult, importAddressBook, importCalendar, } from "./ingest.js";
+export { type BaseImportOptions, type Conditional, defaultContactSlug, defaultEventSlug, type ImportAddressBookOptions, type ImportCalendarOptions, type ImportItemResult, type ImportResult, importAddressBook, importCalendar, } from "./ingest.js";
 export { type MappedContact, type MappedEvent, type VcardToContactOptions, type VeventToEventOptions, vcardToContact, veventToEvent, } from "./map.js";
 export { type DavAuth, DavFetchError, type FetchDavOptions, fetchDav } from "./remote.js";
 export { EVENT_PREFIXES, ICAL, ICAL_RRULE, ICAL_VEVENT, isHttpIri, SCHEMA, SCHEMA_EVENT, safeHttpIri, } from "./vocab.js";

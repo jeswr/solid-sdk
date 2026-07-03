@@ -66,6 +66,7 @@ export {
 } from "./ical.js";
 // --- the ingest API (write to a pod) ---
 export {
+  type BaseImportOptions,
   type Conditional,
   defaultContactSlug,
   defaultEventSlug,

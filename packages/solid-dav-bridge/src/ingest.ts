@@ -67,8 +67,8 @@ export interface ImportResult {
   readonly items: ImportItemResult[];
 }
 
-/** Shared options for both importers. */
-interface BaseImportOptions {
+/** Shared options for both importers ({@link importCalendar} / {@link importAddressBook}). */
+export interface BaseImportOptions {
   /**
    * The authed `fetch` used to PUT each resource. Injectable so the import is
    * unit-testable with a stubbed fetch (no live server) and so the caller wires in

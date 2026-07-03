@@ -76,6 +76,80 @@ describe("RDF injection is neutralised (contact webId)", () => {
   });
 });
 
+describe("RDF injection is neutralised (contact webId via the URL fallback)", () => {
+  it("a hostile vCard URL (UID not a WebID) is canonicalised through safeHttpIri", async () => {
+    // UID is a urn:uuid (NOT an http WebID) so vcardToContact falls through to the
+    // URL property for the webId — this exercises the `safeHttpIri(URL)` path
+    // (distinct from the UID path covered above). A hostile URL must NOT inject.
+    const vcf = [
+      "BEGIN:VCARD",
+      "VERSION:4.0",
+      "FN:Carol",
+      "UID:urn:uuid:11111111-2222-3333-4444-555555555555",
+      `URL:https://e.org/u${FORGED}`,
+      "END:VCARD",
+    ].join("\r\n");
+    const mapped = vcardToContact(findComponents(parseComponents(vcf), "VCARD")[0]!);
+    // webId came from the URL property (the fallback), canonicalised + IRI-safe.
+    expect(mapped.data.webId).toBeDefined();
+    expect(mapped.data.webId).toContain("https://e.org/u");
+    for (const ch of ILLEGAL) expect(mapped.data.webId ?? "").not.toContain(ch);
+    // the re-sync uid is the (non-WebID) urn:uuid, untouched
+    expect(mapped.uid).toBe("urn:uuid:11111111-2222-3333-4444-555555555555");
+
+    const turtle = await serializePerson(
+      "https://alice.pod.example/contacts/carol.ttl",
+      mapped.data,
+    );
+    const quads = new Parser().parse(turtle);
+    expect(quads.some((q) => q.predicate.value.includes("oidcIssuer"))).toBe(false);
+    expect(quads.some((q) => q.subject.value.includes("victim.pod.example"))).toBe(false);
+  });
+});
+
+describe("NUL bytes never survive parsing into an emitted literal", () => {
+  const nulChar = String.fromCharCode(0);
+
+  it("a NUL in a VEVENT SUMMARY is stripped and does not reach schema:name", async () => {
+    const ics = [
+      "BEGIN:VEVENT",
+      "UID:nul-1",
+      `SUMMARY:hel${nulChar}lo`,
+      `DESCRIPTION:a${nulChar}b`,
+      "END:VEVENT",
+    ].join("\r\n");
+    const mapped = veventToEvent(findComponents(parseComponents(ics), "VEVENT")[0]!, {
+      subject: "https://alice.pod.example/imports/ev.ttl#it",
+    });
+    // No literal object carries a NUL byte.
+    for (const q of mapped.quads) {
+      expect(q.object.value).not.toContain(nulChar);
+    }
+    const name = mapped.quads.find((q) => q.predicate.value.endsWith("name"))?.object.value;
+    expect(name).toBe("hello");
+
+    const turtle = await eventToTurtle(mapped.quads);
+    expect(turtle).not.toContain(nulChar);
+    // and the serialised literal round-trips NUL-free through a strict parser
+    const quads = new Parser().parse(turtle);
+    for (const q of quads) expect(q.object.value).not.toContain(nulChar);
+  });
+
+  it("a NUL in a vCard FN/NOTE is stripped before it reaches ContactData", () => {
+    const vcf = [
+      "BEGIN:VCARD",
+      "VERSION:4.0",
+      `FN:Da${nulChar}ve`,
+      `NOTE:se${nulChar}cret`,
+      "END:VCARD",
+    ].join("\r\n");
+    const mapped = vcardToContact(findComponents(parseComponents(vcf), "VCARD")[0]!);
+    expect(mapped.data.name).toBe("Dave");
+    expect(mapped.data.name).not.toContain(nulChar);
+    expect(mapped.data.note ?? "").not.toContain(nulChar);
+  });
+});
+
 describe("safeHttpIri", () => {
   it("percent-encodes IRIREF-illegal characters (no injection char survives)", () => {
     const out = safeHttpIri('https://e.org/a> <x> "y" {z}|w');

@@ -90,6 +90,17 @@ describe("parseContentLine", () => {
     expect(cl?.group).toBeUndefined();
     expect(cl?.value).toBe("https://x.example/a.b.c");
   });
+  it("strips NUL (U+0000) bytes from the name, params and value", () => {
+    const nulChar = String.fromCharCode(0);
+    const cl = parseContentLine(`SUM${nulChar}MARY;P=v${nulChar}1:he${nulChar}llo`);
+    expect(cl?.name).toBe("SUMMARY");
+    expect(cl?.params.P).toBe("v1");
+    expect(cl?.value).toBe("hello");
+    // no field carries a residual NUL
+    expect(cl?.name).not.toContain(nulChar);
+    expect(cl?.value).not.toContain(nulChar);
+    expect(cl?.params.P).not.toContain(nulChar);
+  });
 });
 
 describe("unescapeText", () => {
