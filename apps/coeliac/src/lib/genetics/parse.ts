@@ -239,10 +239,13 @@ export function parseClinicalText(text: string): ClinicalObservation[] {
       for (const haplotype of haplotypesIn(line)) recordPhrase(haplotype, lineSentiment);
     } else if (NEG_CUE_RE.test(line) && POS_CUE_RE.test(line)) {
       // MIXED sentiment on one line ("DQ2.5 negative, DQ8 positive") — the line-wide
-      // sentiment is ambiguous, so classify each haplotype LOCALLY: split into
-      // clauses and take each clause's own sentiment; a clause we cannot classify
+      // sentiment is ambiguous, so classify each haplotype LOCALLY. Split ONLY on
+      // punctuation clause boundaries (NOT on "and"), so a group that SHARES one cue
+      // keeps it: "DQ2.5 and DQ8 positive, DQ7 negative" → clause "DQ2.5 and DQ8
+      // positive" (both present) + "DQ7 negative" (absent). Each clause's own
+      // sentiment applies to every haplotype in it; a clause we cannot classify
       // unambiguously is skipped (never guessed).
-      for (const clause of line.split(/[,;/]|\band\b/i)) {
+      for (const clause of line.split(/[,;/]/)) {
         const clauseSentiment = spanSentiment(clause);
         if (clauseSentiment === undefined) continue;
         for (const haplotype of haplotypesIn(clause)) recordPhrase(haplotype, clauseSentiment);

@@ -121,6 +121,15 @@ describe("parseClinicalText", () => {
     expect(obs).toContainEqual({ haplotype: "DQ8", statedPresent: true });
   });
 
+  it("GROUPED mixed clause 'DQ2.5 and DQ8 positive, DQ7 negative' keeps the shared cue", () => {
+    // The 'and'-grouped DQ2.5+DQ8 SHARE "positive"; only punctuation splits clauses,
+    // so DQ2.5 is not dropped.
+    const obs = parseClinicalText("HLA-DQ2.5 and HLA-DQ8 positive, HLA-DQ7 negative.");
+    expect(obs).toContainEqual({ haplotype: "DQ2.5", statedPresent: true });
+    expect(obs).toContainEqual({ haplotype: "DQ8", statedPresent: true });
+    expect(obs).toContainEqual({ haplotype: "DQ7", statedPresent: false });
+  });
+
   it("does not emit a duplicate marker when both an rsid genotype and a phrase name the same haplotype", () => {
     const obs = parseClinicalText("rs7454108 (TC). HLA-DQ8 positive.");
     const dq8 = obs.filter((o) => o.haplotype === "DQ8");
