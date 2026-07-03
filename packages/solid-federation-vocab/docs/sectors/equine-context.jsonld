@@ -61,7 +61,7 @@
     },
     "mgmtFlat": {
       "@id": "eq:mgmtFlat",
-      "@type": "xsd:decimal"
+      "@type": "@id"
     },
     "mgmtPct": {
       "@id": "eq:mgmtPct",

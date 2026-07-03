@@ -105,6 +105,9 @@ schema:SportsEvent a owl:Class ;
 schema:MoneyTransfer a owl:Class ;
     rdfs:label "schema.org MoneyTransfer"@en ;
     rdfs:isDefinedBy <http://schema.org/> .
+schema:MonetaryAmount a owl:Class ;
+    rdfs:label "schema.org MonetaryAmount"@en ;
+    rdfs:isDefinedBy <http://schema.org/> .
 
 skos:Concept a owl:Class ;
     rdfs:label "SKOS Concept"@en ;
@@ -285,11 +288,11 @@ eq:mgmtPct a owl:DatatypeProperty ;
     rdfs:label "management percentage"@en ;
     skos:definition "The percentage (0–100) a racing manager takes from an ownership share's prize returns."@en .
 
-eq:mgmtFlat a owl:DatatypeProperty ;
+eq:mgmtFlat a owl:ObjectProperty ;
     rdfs:domain eq:OwnershipShare ;
-    rdfs:range xsd:decimal ;
+    rdfs:range schema:MonetaryAmount ;
     rdfs:label "flat management fee"@en ;
-    skos:definition "A flat (fixed) management fee a racing manager charges an ownership share, as a plain xsd:decimal amount in the share's currency — the fixed-fee alternative (or complement) to the percentage eq:mgmtPct. Non-negative; an honest plain decimal, not a qudt QuantityValue (matching eq:mgmtPct and eq:sharePct)."@en .
+    skos:definition "A flat (fixed) management fee a racing manager charges an ownership share — the fixed-fee alternative (or complement) to the percentage eq:mgmtPct. A schema:MonetaryAmount node (schema:value + schema:currency), matching the sector's other monetary values (prize schema:amount, nomination schema:totalPrice, expense schema:totalPaymentDue) so a federated consumer reads the currency unambiguously — a bare decimal cannot be compared across pods/currencies. (eq:mgmtPct / eq:sharePct / eq:jockeyPct / eq:trainerPct stay plain decimals: they are unit-free percentages, not monetary amounts.)"@en .
 
 # --- Breeding (StudShare + StudNomination) ---
 eq:studStatus a owl:ObjectProperty ;

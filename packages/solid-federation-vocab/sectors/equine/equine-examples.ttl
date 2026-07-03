@@ -51,7 +51,7 @@ pod:share-galway-star-oaktree a eq:OwnershipShare ;
     eq:owner <https://owner.pod.example/profile/card#me> ;
     eq:managedBy <https://manager.example/profile#me> ;
     eq:mgmtPct "5.0"^^xsd:decimal ;
-    eq:mgmtFlat "500.00"^^xsd:decimal .
+    eq:mgmtFlat [ a schema:MonetaryAmount ; schema:value "500.00"^^xsd:decimal ; schema:currency "GBP" ] .
 
 # 2b. A SYNDICATE-ONLY OwnershipShare — held purely via the syndicate, no direct
 #     eq:horse (the syndicate owns the horses). Exercises the relaxed

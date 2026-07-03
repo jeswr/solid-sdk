@@ -123,10 +123,12 @@ eqsh:OwnershipShareShape a sh:NodeShape ;
     sh:property [
         sh:path eq:mgmtFlat ;
         sh:maxCount 1 ;
-        sh:datatype xsd:decimal ;
-        sh:minInclusive 0 ;
+        sh:node [
+            sh:property [ sh:path schema:value ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:decimal ; sh:minInclusive 0 ] ;
+            sh:property [ sh:path schema:currency ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ]
+        ] ;
         sh:severity sh:Warning ;
-        sh:message "An OwnershipShare's eq:mgmtFlat, when present, SHOULD be a single non-negative xsd:decimal (a flat management fee — the fixed-fee alternative to eq:mgmtPct)."@en
+        sh:message "An OwnershipShare's eq:mgmtFlat, when present, SHOULD be a single schema:MonetaryAmount (schema:value ≥ 0 + schema:currency) — a flat management fee, the fixed-fee alternative to eq:mgmtPct; carry the currency so it reads unambiguously across pods."@en
     ] ;
     sh:or (
         [ sh:path eq:owner ; sh:minCount 1 ]
