@@ -9,7 +9,7 @@
 import { randomUUID } from "node:crypto";
 import { parseRdf } from "@jeswr/fetch-rdf";
 import type { DatasetCore, Quad } from "@rdfjs/types";
-import { safeObjectIri } from "./iri.js";
+import { isAbsoluteIri, requireObjectIri, safeObjectIri } from "./iri.js";
 import { serialize } from "./serialize.js";
 import type { AgentAuthorization, Credential, CredentialSubject, JsonValue } from "./types.js";
 import {
@@ -57,12 +57,25 @@ function typeIri(type: string): string {
  * literal (so the JSON booleans/numbers round-trip with their XSD datatype).
  */
 function writeSubject(b: GraphBuilder, credential: NodeRef, subject: CredentialSubject): void {
-  const node: NodeRef =
-    typeof subject.id === "string" && subject.id.length > 0
-      ? iriRef(subject.id)
-      : b.linkBlankNode(credential, VC_CREDENTIAL_SUBJECT);
-  if (node.kind === "iri") {
-    b.addIri(credential, VC_CREDENTIAL_SUBJECT, node.value);
+  let node: NodeRef;
+  if (typeof subject.id === "string" && subject.id.length > 0) {
+    // A PRESENT subject `id` is an identity field: FAIL CLOSED on a non-absolute /
+    // relative id rather than sign a credential asserting claims about a broken
+    // subject IRI. Injection is already neutralised by escapeIri at the write
+    // chokepoint; this adds the semantic requirement that the id be an absolute IRI.
+    // (A valid absolute id is written verbatim, exactly as before — no change to a
+    // valid credential's bytes; an ABSENT id still becomes an anonymous blank node.)
+    if (!isAbsoluteIri(subject.id)) {
+      throw new Error(
+        `@jeswr/solid-vc: credentialSubject.id must be an absolute IRI, got ${JSON.stringify(
+          subject.id,
+        )} — refusing to write a credential subject with a relative/invalid id`,
+      );
+    }
+    node = iriRef(subject.id);
+    b.addIri(credential, VC_CREDENTIAL_SUBJECT, subject.id);
+  } else {
+    node = b.linkBlankNode(credential, VC_CREDENTIAL_SUBJECT);
   }
   for (const [claim, value] of Object.entries(subject)) {
     if (claim === "id" || value === undefined) continue;
@@ -133,11 +146,15 @@ export function credentialToRdf(credential: Credential): Quad[] {
     const safe = safeObjectIri(iri);
     if (safe !== undefined) b.addType(subject, safe);
   }
-  // The issuer is an object-position IRI (a WebID, or a DID/URN — all legitimate).
-  // Route it through the object-IRI guard: canonicalise http(s), escape a DID/URN,
-  // and DROP a non-absolute / malformed issuer rather than write a broken triple.
-  const issuerIri = safeObjectIri(credential.issuer);
-  if (issuerIri !== undefined) b.addIri(subject, VC_ISSUER, issuerIri);
+  // The issuer is a REQUIRED, identity-bearing object IRI (a WebID, or a DID/URN —
+  // all legitimate). Route it through the FAIL-CLOSED guard: canonicalise http(s),
+  // escape a DID/URN, and THROW on a non-absolute / malformed / missing issuer —
+  // NEVER silently drop the triple, which would let a credential be signed over a
+  // graph carrying no issuer (a fail-open the verifier could not detect). A valid
+  // issuer is canonicalised/escaped exactly as before, so valid credentials are
+  // byte-unchanged.
+  const issuerIri = requireObjectIri(credential.issuer, "issuer");
+  b.addIri(subject, VC_ISSUER, issuerIri);
   if (credential.validFrom !== undefined) {
     b.addLiteral(subject, VC_VALID_FROM, credential.validFrom, `${XSD}dateTime`);
   }
@@ -164,6 +181,11 @@ export function credentialToTurtle(credential: Credential, format?: string): Pro
  * inline `@context`. A consumer can parse it back via `@jeswr/fetch-rdf`.
  */
 export function credentialToJsonLd(credential: Credential): Record<string, unknown> {
+  // FAIL CLOSED on a missing/invalid issuer here too — the JSON-LD projection must
+  // never emit a document with no valid issuer (parity with the RDF lowering). The
+  // raw issuer is kept (this projection does not canonicalise); the guard only
+  // rejects the values the RDF path would refuse.
+  requireObjectIri(credential.issuer, "issuer");
   const id = credential.id ?? `urn:uuid:${randomUUID()}`;
   const types = ["VerifiableCredential", ...(credential.type ?? [])];
   const doc: Record<string, unknown> = {

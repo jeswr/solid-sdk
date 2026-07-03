@@ -10,9 +10,12 @@
 
 import { Parser, type Quad } from "n3";
 import { describe, expect, it } from "vitest";
-import { credentialToTurtle } from "../src/credential.js";
-import { escapeIri, safeHttpIri, safeObjectIri } from "../src/iri.js";
+import { credentialToJsonLd, credentialToRdf, credentialToTurtle } from "../src/credential.js";
+import { escapeIri, requireObjectIri, safeHttpIri, safeObjectIri } from "../src/iri.js";
+import { issue } from "../src/issue.js";
 import type { Credential } from "../src/types.js";
+import { verifyCredential } from "../src/verify.js";
+import { issuerKey, keyResolver } from "./helpers.js";
 
 // A payload that, emitted VERBATIM inside `<…>`, closes the issuer IRI (`x>`),
 // terminates the statement (` . `), and injects a second, attacker-chosen triple.
@@ -92,5 +95,85 @@ describe("n3.Writer IRI-injection hardening", () => {
     expect(safeObjectIri("did:example:123")).toBe("did:example:123");
     expect(safeObjectIri("relative/path")).toBeUndefined();
     expect(safeObjectIri(undefined)).toBeUndefined();
+  });
+
+  it("requireObjectIri: returns a valid IRI, THROWS on an invalid one", () => {
+    // Valid identity IRIs pass through with the same canonicalise/escape as safeObjectIri.
+    expect(requireObjectIri("https://a.example/p#f", "issuer")).toBe("https://a.example/p#f");
+    expect(requireObjectIri("did:example:123", "issuer")).toBe("did:example:123");
+    expect(requireObjectIri("urn:uuid:abc", "issuer")).toBe("urn:uuid:abc");
+    // Every case safeObjectIri would DROP now throws — a required identity field must
+    // never be silently omitted.
+    expect(() => requireObjectIri("relative/path", "issuer")).toThrow(/issuer/);
+    expect(() => requireObjectIri("", "issuer")).toThrow(/issuer/);
+    expect(() => requireObjectIri(undefined, "issuer")).toThrow(/issuer/);
+  });
+});
+
+// The MEDIUM finding: an invalid/non-absolute `issuer` was SILENTLY DROPPED from the
+// signed graph — a fail-OPEN, since a credential could be issued whose issuer is not
+// bound into the signed RDF preimage. Required identity fields must FAIL CLOSED.
+describe("fail-closed required identity fields (issuer / subject id)", () => {
+  const MalformedIssuers = ["relative/issuer", "not an iri", "", "   "];
+
+  for (const bad of MalformedIssuers) {
+    it(`credentialToRdf / Turtle / JsonLd REJECT a malformed issuer ${JSON.stringify(bad)}`, async () => {
+      const cred: Credential = {
+        issuer: bad,
+        credentialSubject: { id: "https://good.example/#s" },
+      };
+      expect(() => credentialToRdf(cred)).toThrow(/issuer/);
+      // credentialToTurtle throws synchronously (credentialToRdf runs before
+      // serialize); wrap in an async IIFE so it surfaces as a rejected promise.
+      await expect((async () => credentialToTurtle(cred))()).rejects.toThrow(/issuer/);
+      expect(() => credentialToJsonLd(cred)).toThrow(/issuer/);
+    });
+  }
+
+  it("issue() REFUSES to sign a credential with a malformed issuer (no unsigned-issuer VC)", async () => {
+    const key = await issuerKey();
+    const cred: Credential = {
+      issuer: "relative/issuer",
+      credentialSubject: { id: "https://good.example/#s", over18: true },
+    };
+    await expect(issue({ credential: cred, key })).rejects.toThrow(/issuer/);
+  });
+
+  it("credentialToRdf REJECTS a non-absolute credentialSubject.id", () => {
+    const cred: Credential = {
+      issuer: "https://alice.example/#me",
+      credentialSubject: { id: "relative/subject", claim: "x" },
+    };
+    expect(() => credentialToRdf(cred)).toThrow(/credentialSubject\.id/);
+  });
+
+  it("a valid did:/urn:/http issuer + subject still round-trips (valid credentials unchanged)", async () => {
+    const key = await issuerKey();
+    const cred: Credential = {
+      issuer: "https://alice.example/profile#me",
+      credentialSubject: { id: "did:example:123", over18: true },
+    };
+    const vc = await issue({ credential: cred, key });
+    const result = await verifyCredential(vc, { resolveKey: keyResolver(key) });
+    expect(result.verified).toBe(true);
+    expect(result.issuer).toBe("https://alice.example/profile#me");
+  });
+
+  it("verifyCredential FAILS CLOSED (MALFORMED, never throws) on a forged malformed-issuer VC", async () => {
+    const key = await issuerKey();
+    const good = await issue({
+      credential: {
+        issuer: "https://alice.example/profile#me",
+        credentialSubject: { id: "https://good.example/#s" },
+      },
+      key,
+    });
+    // Forge: swap the bound issuer for a non-absolute one after signing. The signed
+    // graph can no longer be reconstructed (it would require a dropped/invalid issuer
+    // triple) — verify must report MALFORMED, not throw and not accept.
+    const forged = { ...good, issuer: "relative/issuer" };
+    const result = await verifyCredential(forged, { resolveKey: keyResolver(key) });
+    expect(result.verified).toBe(false);
+    expect(result.errors.some((e) => e.code === "MALFORMED")).toBe(true);
   });
 });

@@ -27,4 +27,16 @@ export declare function isAbsoluteIri(value: string): boolean;
  *    the triple instead of writing a malformed IRI.
  */
 export declare function safeObjectIri(value: string | undefined): string | undefined;
+/**
+ * The FAIL-CLOSED variant of {@link safeObjectIri} for a REQUIRED, identity-bearing
+ * object IRI (a credential `issuer`, a presentation `holder`): returns the safe
+ * absolute IRI, or THROWS when the value cannot be made one. An identity field must
+ * NEVER be silently dropped from the graph the proof is computed over — omitting the
+ * `issuer` triple would let a credential be signed/serialised with NO (or, on
+ * verify, a mismatched) issuer, which is a fail-OPEN. Optional object IRIs (a claim
+ * value, an extra type) keep using {@link safeObjectIri} (drop-on-invalid). Because
+ * it delegates to {@link safeObjectIri}, a VALID issuer is canonicalised/escaped
+ * exactly as before — only the previously-dropped (invalid) case now throws.
+ */
+export declare function requireObjectIri(value: string | undefined, field: string): string;
 //# sourceMappingURL=iri.d.ts.map
