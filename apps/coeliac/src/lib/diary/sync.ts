@@ -7,9 +7,21 @@
  * (retried next flush). ALL writes go through the injected authed fetch; the diary
  * root's owner-only ACL is ensured (written first) before any resource write.
  */
-import { serializeMeal, serializeSymptom } from "@jeswr/solid-health-diary";
-import type { DiaryStore, StoredMeal, StoredSymptom } from "../cache/diary-store.js";
+import {
+  serializeMeal,
+  serializeProtocol,
+  serializeSymptom,
+  serializeToleranceConclusion,
+} from "@jeswr/solid-health-diary";
+import type {
+  DiaryStore,
+  StoredConclusion,
+  StoredMeal,
+  StoredProtocol,
+  StoredSymptom,
+} from "../cache/diary-store.js";
 import { ensureDiaryReady, putResource } from "../pod/pod-fs.js";
+import { storedConclusionToData, storedProtocolToData } from "../protocol/persist.js";
 
 /** The authed context a flush needs. */
 export interface SyncContext {
@@ -49,6 +61,25 @@ export async function syncSymptom(ctx: SyncContext, symptom: StoredSymptom): Pro
   await putResource(ctx.authedFetch, symptom.url, body);
 }
 
+/** Serialise + PUT one elimination protocol to the pod (ACL ensured first). */
+export async function syncProtocol(ctx: SyncContext, protocol: StoredProtocol): Promise<void> {
+  await ensureDiaryReady(ctx.authedFetch, ctx.storageRoot, ctx.webId);
+  const data = storedProtocolToData(protocol);
+  const body = await serializeProtocol(protocol.url, { ...data, patient: data.patient ?? ctx.webId });
+  await putResource(ctx.authedFetch, protocol.url, body);
+}
+
+/** Serialise + PUT one tolerance conclusion to the pod (ACL ensured first). */
+export async function syncConclusion(ctx: SyncContext, conclusion: StoredConclusion): Promise<void> {
+  await ensureDiaryReady(ctx.authedFetch, ctx.storageRoot, ctx.webId);
+  const data = storedConclusionToData(conclusion);
+  const body = await serializeToleranceConclusion(conclusion.url, {
+    ...data,
+    patient: data.patient ?? ctx.webId,
+  });
+  await putResource(ctx.authedFetch, conclusion.url, body);
+}
+
 /** The outcome of a flush pass. */
 export interface FlushResult {
   synced: number;
@@ -61,7 +92,7 @@ export interface FlushResult {
  * `error` and the flush continues (offline-tolerant; retried next pass).
  */
 export async function flushOutbox(ctx: SyncContext, store: DiaryStore): Promise<FlushResult> {
-  const { meals, symptoms } = await store.pending();
+  const { meals, symptoms, protocols, conclusions } = await store.pending();
   let synced = 0;
   let failed = 0;
   for (const meal of meals) {
@@ -81,6 +112,26 @@ export async function flushOutbox(ctx: SyncContext, store: DiaryStore): Promise<
       synced += 1;
     } catch (err) {
       await store.markSymptomSync(symptom.ulid, "error", (err as Error).message);
+      failed += 1;
+    }
+  }
+  for (const protocol of protocols) {
+    try {
+      await syncProtocol(ctx, protocol);
+      await store.markProtocolSync(protocol.ulid, "synced");
+      synced += 1;
+    } catch (err) {
+      await store.markProtocolSync(protocol.ulid, "error", (err as Error).message);
+      failed += 1;
+    }
+  }
+  for (const conclusion of conclusions) {
+    try {
+      await syncConclusion(ctx, conclusion);
+      await store.markConclusionSync(conclusion.ulid, "synced");
+      synced += 1;
+    } catch (err) {
+      await store.markConclusionSync(conclusion.ulid, "error", (err as Error).message);
       failed += 1;
     }
   }

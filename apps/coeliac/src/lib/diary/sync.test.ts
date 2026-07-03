@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DiaryStore } from "../cache/diary-store";
 import { MemoryKv } from "../cache/kv";
 import { resetDiaryReadyMemo } from "../pod/pod-fs";
+import { newConclusionRecord, newProtocolRecord } from "../protocol/persist";
 import { newMealRecord, newSymptomRecord } from "./log";
 import { flushOutbox } from "./sync";
 
@@ -94,5 +95,33 @@ describe("flushOutbox", () => {
     const result = await flushOutbox({ authedFetch: s.fetch, webId: WEBID, storageRoot: ROOT }, store);
     expect(result.synced).toBe(1);
     expect(s.puts().some((p) => p.url === symptom.url)).toBe(true);
+  });
+
+  it("syncs a protocol + conclusion to their containers, ACL-first, owner-only", async () => {
+    const s = scenario();
+    const store = new DiaryStore(new MemoryKv(), WEBID);
+    const proto = newProtocolRecord(
+      { targetTrigger: "lactose", phase: "baseline", created: new Date("2026-07-01T08:00:00Z") },
+      ROOT,
+    );
+    await store.putProtocol(proto);
+    const conc = newConclusionRecord(
+      { aboutTrigger: "lactose", verdict: "reacts", confidence: "confirmed" },
+      ROOT,
+      proto.ulid,
+    );
+    await store.putConclusion(conc);
+
+    const result = await flushOutbox({ authedFetch: s.fetch, webId: WEBID, storageRoot: ROOT }, store);
+    expect(result.synced).toBe(2);
+    const urls = s.puts().map((p) => p.url);
+    expect(urls).toContain(proto.url);
+    expect(urls).toContain(conc.url);
+    // ACL (owner-only) is written on the diary root before any resource under it.
+    const aclIdx = urls.findIndex((u) => u.endsWith(".acl") || u.includes("/.acl"));
+    const protoIdx = urls.indexOf(proto.url);
+    expect(aclIdx).toBeGreaterThanOrEqual(0);
+    expect(aclIdx).toBeLessThan(protoIdx);
+    expect((await store.pending()).protocols).toHaveLength(0);
   });
 });
