@@ -231,16 +231,19 @@ export function InsightsView() {
     async (trigger: string) => {
       setBusy(true);
       setNotice(null);
+      const repaint = () => Promise.all([refresh(), protocols.refresh()]);
       try {
         const res = await startChallenge(
           { trigger: trigger as Parameters<typeof startChallenge>[0]["trigger"] },
           protocols.safety,
         );
         // A refusal (gluten / emergency / one-at-a-time) is surfaced; nothing was written.
+        // Otherwise the cache is already written (optimistic) — the pod write finishes
+        // in the background and repaints on settle; we do NOT await it.
         if ("refused" in res) setNotice(res.message);
-        else await res.syncing.catch(() => {});
+        else void res.syncing.catch(() => {}).finally(() => void repaint());
       } finally {
-        await Promise.all([refresh(), protocols.refresh()]);
+        await repaint();
         setBusy(false);
       }
     },

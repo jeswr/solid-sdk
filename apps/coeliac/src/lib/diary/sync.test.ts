@@ -124,4 +124,36 @@ describe("flushOutbox", () => {
     expect(aclIdx).toBeLessThan(protoIdx);
     expect((await store.pending()).protocols).toHaveLength(0);
   });
+
+  it("defers a conclusion whose source protocol has NOT synced (no orphan confirmed conclusion)", async () => {
+    // A fetch that fails every protocol PUT (protocol never lands on the pod).
+    const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      const method = (init?.method ?? "GET").toUpperCase();
+      if (method === "HEAD") return new Response(null, { status: 200 });
+      if (method === "PUT" && url.includes("/protocols/")) throw new TypeError("Failed to fetch");
+      return new Response("", { status: 201 });
+    }) as unknown as typeof globalThis.fetch;
+
+    const store = new DiaryStore(new MemoryKv(), WEBID);
+    const proto = newProtocolRecord(
+      { targetTrigger: "lactose", phase: "concluded", created: new Date("2026-07-01T08:00:00Z") },
+      ROOT,
+    );
+    await store.putProtocol(proto);
+    const conc = newConclusionRecord(
+      { aboutTrigger: "lactose", verdict: "reacts", confidence: "confirmed" },
+      ROOT,
+      proto.ulid,
+    );
+    await store.putConclusion(conc);
+
+    const result = await flushOutbox({ authedFetch: fetch, webId: WEBID, storageRoot: ROOT }, store);
+    expect(result.failed).toBe(1); // the protocol PUT failed
+    // The conclusion was DEFERRED (not synced, not failed) — still pending for retry.
+    const pending = await store.pending();
+    expect(pending.protocols).toHaveLength(1);
+    expect(pending.conclusions).toHaveLength(1);
+    expect(pending.conclusions[0].sync).toBe("pending");
+  });
 });

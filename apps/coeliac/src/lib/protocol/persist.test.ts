@@ -93,5 +93,8 @@ describe("conclusion persistence", () => {
     expect(data.verdict).toBe("reacts");
     expect(data.reviewAfter?.getTime()).toBe(conclusion.reviewAfter?.getTime());
     expect(data.derivedFrom).toEqual(conclusion.derivedFrom);
+    // Identity + created preserved (idempotent re-sync; stable review conclusionId).
+    expect(data.id).toBe(`${rec.url}#it`);
+    expect(data.created?.getTime()).toBe(NOW.getTime());
   });
 });

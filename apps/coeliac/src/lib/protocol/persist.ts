@@ -13,6 +13,7 @@
  * as a `NaN` Date — the same fail-closed rule the diary cache-bridge uses.
  */
 import {
+  conclusionSubject,
   type ProtocolData,
   protocolSubject,
   type ToleranceConclusionData,
@@ -107,9 +108,13 @@ export function updateProtocolRecord(
 /** Convert a cached conclusion to the model {@link ToleranceConclusionData}. */
 export function storedConclusionToData(sc: StoredConclusion): ToleranceConclusionData {
   const data: ToleranceConclusionData = {
+    // Preserve identity + created so a re-sync is idempotent and due-review surfacing
+    // keeps a stable `conclusionId` (the review UI keys off it).
+    id: conclusionSubject(sc.url),
     aboutTrigger: sc.aboutTrigger,
     verdict: sc.verdict,
     confidence: sc.confidence,
+    created: toDate(sc.createdAt),
   };
   if (sc.note) data.note = sc.note;
   const reviewAfter = toDate(sc.reviewAfter);

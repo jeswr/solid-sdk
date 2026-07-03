@@ -160,6 +160,12 @@ export function ProtocolsView() {
   const proposal = insights.result?.proposal;
   const canStart = active.length === 0;
 
+  // Refresh both views from the cache (repaints the sync badge when a write settles).
+  const repaint = useCallback(
+    () => Promise.all([refresh(), insights.refresh()]),
+    [refresh, insights],
+  );
+
   const onEvent = useCallback(
     async (protocol: StoredProtocol, event: ProtocolEvent) => {
       setBusy(true);
@@ -167,16 +173,18 @@ export function ProtocolsView() {
       try {
         const res = await advanceChallenge(protocol, event, safety);
         if ("rejected" in res) {
-          setNotice(res.message);
+          setNotice(res.message); // nothing was written
         } else {
-          await res.syncing.catch(() => {}); // failure is retried by the outbox
+          // Optimistic: the cache is ALREADY written; the pod write finishes in the
+          // background (retried by the outbox on failure) and repaints on settle.
+          void res.syncing.catch(() => {}).finally(() => void repaint());
         }
       } finally {
-        await Promise.all([refresh(), insights.refresh()]);
+        await repaint(); // paint the local change immediately (do NOT await the pod write)
         setBusy(false);
       }
     },
-    [advanceChallenge, safety, refresh, insights],
+    [advanceChallenge, safety, repaint],
   );
 
   const onStart = useCallback(
@@ -188,17 +196,14 @@ export function ProtocolsView() {
           { trigger: trigger as Parameters<typeof startChallenge>[0]["trigger"] },
           safety,
         );
-        if ("refused" in res) {
-          setNotice(res.message);
-        } else {
-          await res.syncing.catch(() => {});
-        }
+        if ("refused" in res) setNotice(res.message);
+        else void res.syncing.catch(() => {}).finally(() => void repaint());
       } finally {
-        await Promise.all([refresh(), insights.refresh()]);
+        await repaint();
         setBusy(false);
       }
     },
-    [startChallenge, safety, refresh, insights],
+    [startChallenge, safety, repaint],
   );
 
   return (

@@ -115,10 +115,14 @@ export async function flushOutbox(ctx: SyncContext, store: DiaryStore): Promise<
       failed += 1;
     }
   }
+  // Protocols first. Track those still NOT on the pod after this pass so a confirmed
+  // conclusion is never persisted without its completed-protocol evidence resource.
+  const unsyncedProtocolUlids = new Set(protocols.map((p) => p.ulid));
   for (const protocol of protocols) {
     try {
       await syncProtocol(ctx, protocol);
       await store.markProtocolSync(protocol.ulid, "synced");
+      unsyncedProtocolUlids.delete(protocol.ulid);
       synced += 1;
     } catch (err) {
       await store.markProtocolSync(protocol.ulid, "error", (err as Error).message);
@@ -126,6 +130,9 @@ export async function flushOutbox(ctx: SyncContext, store: DiaryStore): Promise<
     }
   }
   for (const conclusion of conclusions) {
+    // Defer a conclusion whose source protocol has not yet landed on the pod — it is
+    // left pending and retried on the next flush (dependency-ordered write).
+    if (conclusion.protocolUlid && unsyncedProtocolUlids.has(conclusion.protocolUlid)) continue;
     try {
       await syncConclusion(ctx, conclusion);
       await store.markConclusionSync(conclusion.ulid, "synced");
