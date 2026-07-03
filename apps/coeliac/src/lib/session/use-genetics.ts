@@ -21,6 +21,7 @@
  */
 import type { GeneticSummaryData, MarkerPresence, RiskHaplotype } from "@jeswr/solid-health-diary";
 import { useCallback, useEffect, useState } from "react";
+import { ulid } from "ulid";
 import type { StoredGeneticSummary } from "../cache/diary-store.js";
 import { syncGeneticSummary } from "../diary/sync.js";
 import {
@@ -123,6 +124,7 @@ export function useGenetics(): GeneticsState & GeneticsActions {
           sourceType: remote.sourceType,
           consentGiven: true,
           createdAt: (remote.created ?? new Date()).toISOString(),
+          rev: ulid(),
           sync: "synced",
         };
         await store.putGeneticSummary(record);
@@ -190,6 +192,7 @@ export function useGenetics(): GeneticsState & GeneticsActions {
         sourceType: preview.source,
         consentGiven: true,
         createdAt: new Date().toISOString(),
+        rev: ulid(),
         sync: "pending",
       };
       await store.putGeneticSummary(record);
@@ -198,10 +201,12 @@ export function useGenetics(): GeneticsState & GeneticsActions {
       const syncing = (async () => {
         try {
           await syncGeneticSummary(ctx, record);
-          await store.markGeneticSync("synced");
+          // Discriminate by createdAt: if a newer save replaced this record while the
+          // write was in flight, this stale completion is ignored (see markGeneticSync).
+          await store.markGeneticSync(record.createdAt, "synced");
           setSummary(await store.getGeneticSummary());
         } catch (err) {
-          await store.markGeneticSync("error", (err as Error).message);
+          await store.markGeneticSync(record.createdAt, "error", (err as Error).message);
           setSummary(await store.getGeneticSummary());
           throw err;
         }

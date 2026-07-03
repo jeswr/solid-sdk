@@ -140,6 +140,13 @@ export interface StoredGeneticSummary {
   /** Always `true` — a genetic summary is never cached/written without explicit consent. */
   consentGiven: true;
   createdAt: string;
+  /**
+   * A unique per-write revision token (collision-proof, unlike a ms timestamp). Used
+   * ONLY as the sync-completion discriminator: an in-flight write settling against a
+   * DIFFERENT `rev` (a newer summary replaced it) is ignored, so a newer unsaved
+   * record is never wrongly flipped to `synced`.
+   */
+  rev: string;
   sync: SyncState;
   error?: string;
 }
@@ -306,9 +313,17 @@ export class DiaryStore {
   async deleteGeneticSummary(): Promise<void> {
     await this.kv.del(this.key("genetic", DiaryStore.GENETIC_ID));
   }
-  async markGeneticSync(sync: SyncState, error?: string): Promise<void> {
+  /**
+   * Mark the sync state of the genetic summary — but ONLY if the stored record is
+   * still the SAME one whose write settled (`expectedCreatedAt` discriminator). If a
+   * newer summary replaced it while the older write was in flight, the stale
+   * completion is IGNORED, so the newer record is never wrongly flipped to `synced`
+   * (which would drop it from the outbox and lose an unsaved genetic summary). Each
+   * `rev` is a unique per-save token, so it uniquely identifies the record flushed.
+   */
+  async markGeneticSync(expectedRev: string, sync: SyncState, error?: string): Promise<void> {
     const g = await this.kv.get<StoredGeneticSummary>(this.key("genetic", DiaryStore.GENETIC_ID));
-    if (!g) return;
+    if (!g || g.rev !== expectedRev) return; // replaced in flight — ignore the stale completion
     g.sync = sync;
     g.error = sync === "error" ? error : undefined;
     await this.kv.set(this.key("genetic", DiaryStore.GENETIC_ID), g);

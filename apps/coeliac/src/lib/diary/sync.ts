@@ -173,10 +173,12 @@ export async function flushOutbox(ctx: SyncContext, store: DiaryStore): Promise<
   for (const summary of genetics) {
     try {
       await syncGeneticSummary(ctx, summary);
-      await store.markGeneticSync("synced");
+      // Discriminate by rev so a stale completion never marks a NEWER summary
+      // synced (see markGeneticSync).
+      await store.markGeneticSync(summary.rev, "synced");
       synced += 1;
     } catch (err) {
-      await store.markGeneticSync("error", (err as Error).message);
+      await store.markGeneticSync(summary.rev, "error", (err as Error).message);
       failed += 1;
     }
   }

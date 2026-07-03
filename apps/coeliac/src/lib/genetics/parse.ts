@@ -161,6 +161,9 @@ export function parseClinicalText(text: string): ClinicalObservation[] {
     const haplotype = ALL_TAG_SNPS[rsid];
     if (seenHaplo.has(`rs:${rsid}`)) continue;
     seenHaplo.add(`rs:${rsid}`);
+    // Mark this haplotype covered by an rsid call so the phrase scan (b) does not
+    // ALSO emit a duplicate/contradictory marker for the same haplotype.
+    seenHaplo.add(`rs-covered:${haplotype}`);
     out.push({ haplotype, rsid, genotype: (m[2] ?? "").toUpperCase() });
   }
 
@@ -170,10 +173,16 @@ export function parseClinicalText(text: string): ClinicalObservation[] {
       if (!re.test(line)) continue;
       const key = `phrase:${haplotype}`;
       if (seenHaplo.has(key) || seenHaplo.has(`rs-covered:${haplotype}`)) continue;
-      const positive = /\b(positive|present|detected|carrier|heterozygous|homozygous)\b/i.test(line);
+      // NEGATION FIRST: common report wording ("not detected"/"not present"/"no
+      // risk") contains a positive token ("detected"/"present"), so a negative must
+      // win over a bare positive — otherwise a genuine negative reads as ambiguous
+      // and is dropped. A negation cue makes the statement negative regardless.
       const negative = /\b(negative|absent|not\s+detected|not\s+present|no\s+risk)\b/i.test(line);
-      // Only record a phrase we can classify UNAMBIGUOUSLY (exactly one of pos/neg).
-      if (positive === negative) continue;
+      const positive =
+        !negative &&
+        /\b(positive|present|detected|carrier|heterozygous|homozygous)\b/i.test(line);
+      // Only record a phrase we can classify (exactly one of pos/neg true).
+      if (positive === negative) continue; // neither cue → ambiguous → skip
       seenHaplo.add(key);
       out.push({ haplotype, statedPresent: positive });
       break; // one classification per line

@@ -72,6 +72,24 @@ describe("parseClinicalText", () => {
     // "DQ2 testing was inconclusive" — no positive/negative token → not classified.
     expect(parseClinicalText("DQ2 testing was inconclusive.")).toEqual([]);
   });
+
+  it("classifies negated phrasing ('not detected' / 'not present') as NEGATIVE, not ambiguous", () => {
+    expect(parseClinicalText("HLA-DQ8 not detected.")).toContainEqual({
+      haplotype: "DQ8",
+      statedPresent: false,
+    });
+    expect(parseClinicalText("HLA-DQ2.5 not present.")).toContainEqual({
+      haplotype: "DQ2.5",
+      statedPresent: false,
+    });
+  });
+
+  it("does not emit a duplicate marker when both an rsid genotype and a phrase name the same haplotype", () => {
+    const obs = parseClinicalText("rs7454108 (TC). HLA-DQ8 positive.");
+    const dq8 = obs.filter((o) => o.haplotype === "DQ8");
+    expect(dq8).toHaveLength(1);
+    expect(dq8[0].rsid).toBe("rs7454108"); // the rsid observation wins; no contradictory phrase marker
+  });
 });
 
 describe("isTagRsid", () => {
