@@ -63,7 +63,7 @@
     "check:lockfile-transport": "node scripts/check-lockfile-transport.mjs"
   },
   "dependencies": {
-    "@jeswr/solid-memory": "github:jeswr/solid-memory#main"
+    "@jeswr/solid-memory": "github:jeswr/solid-memory#df88d64"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.0.0",
