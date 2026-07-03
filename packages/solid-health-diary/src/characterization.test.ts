@@ -15,7 +15,7 @@ import type { Store } from "n3";
 import { describe, expect, it } from "vitest";
 import type { Codec } from "./concepts.js";
 import type { Confidence, DietPlanData, ToleranceConclusionData, Verdict } from "./conclusion.js";
-import type { GeneticSummaryData, HlaMarkerData } from "./genetics.js";
+import type { GeneticSummaryData, GeneticSummaryInput, HlaMarkerData } from "./genetics.js";
 import * as mainEntry from "./index.js";
 // Compile-time type-export contract (type-erased, so not in the runtime set).
 import type { ExposureData, FoodItemData, MealData } from "./meal.js";
@@ -40,6 +40,11 @@ const _confidence: Confidence = "confirmed";
 const _lag: LagProfile = { lagWindowMin: 0, lagWindowMax: 1, lagMode: 0 };
 const _trigger: TriggerClassData = { slug: "gluten", lagWindowMin: 0, lagWindowMax: 1, lagMode: 0 };
 const _genetics: GeneticSummaryData = { markers: [], interpretation: "i" };
+const _geneticsInput: GeneticSummaryInput = {
+  markers: [],
+  interpretation: "i",
+  consentGiven: true,
+};
 const _marker: HlaMarkerData = { rsid: "rs1" };
 const _codec: Codec<"a"> = {
   toIri: () => "x",
@@ -62,6 +67,7 @@ void [
   _lag,
   _trigger,
   _genetics,
+  _geneticsInput,
   _marker,
   _codec,
 ];

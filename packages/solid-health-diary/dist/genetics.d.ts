@@ -115,8 +115,11 @@ export interface GeneticSummaryData {
     /**
      * `diet:sourceType` — provenance of the summary WITHOUT raw data
      * (`manual`/`consumer-array`/`clinical-report`). Supersedes the boolean
-     * `enteredManually` (`sourceType=manual` ≡ `enteredManually=true`); both are kept
-     * for back-compat and set independently by the caller.
+     * `enteredManually` (`sourceType=manual` ⇔ `enteredManually=true`). Both are kept
+     * for back-compat; when BOTH are set the builder enforces they agree
+     * (`buildGeneticSummary` throws on a contradictory pair such as
+     * `sourceType:"manual"` with `enteredManually:false`), so the pod can never hold
+     * two conflicting provenance claims.
      */
     sourceType?: GeneticSourceType;
     /**
@@ -139,6 +142,18 @@ export interface GeneticSummaryData {
     /** `dcterms:created`. */
     created?: Date;
 }
+/**
+ * The WRITE input for {@link buildGeneticSummary} / {@link serializeGeneticSummary}
+ * — a {@link GeneticSummaryData} whose `consentGiven` is a REQUIRED literal `true`,
+ * so a caller **cannot compile** a genetics write without explicit consent (the
+ * compile-time half of the fail-closed consent guardrail; the builder still checks
+ * at runtime to defend against an unsafe cast). Parsed/read data stays
+ * {@link GeneticSummaryData} with `consentGiven` optional, so a pre-refinement pod
+ * document still parses.
+ */
+export type GeneticSummaryInput = GeneticSummaryData & {
+    consentGiven: true;
+};
 /** The GeneticSummary subject IRI: `${url}#it`. */
 export declare function geneticSummarySubject(url: string): string;
 /** The n-th HLA marker node IRI: `${url}#marker-{n}`. */
@@ -175,10 +190,15 @@ export declare class GeneticSummary extends TermWrapper {
 }
 /** Parse a GeneticSummary out of a dataset, or `undefined` if `${url}#it` is not one. */
 export declare function parseGeneticSummary(url: string, dataset: DatasetCore): GeneticSummaryData | undefined;
-/** Build a fresh n3 `Store` holding one GeneticSummary rooted at `${url}#it`. */
-export declare function buildGeneticSummary(url: string, data: GeneticSummaryData): Store;
-/** Serialise a GeneticSummary to Turtle (via `n3.Writer`). */
-export declare function serializeGeneticSummary(url: string, data: GeneticSummaryData): Promise<string>;
+/**
+ * Build a fresh n3 `Store` holding one GeneticSummary rooted at `${url}#it`.
+ *
+ * `data` is a {@link GeneticSummaryInput}, so `consentGiven: true` is required at
+ * COMPILE time; the runtime guardrails below still fire (a cast can bypass the type).
+ */
+export declare function buildGeneticSummary(url: string, data: GeneticSummaryInput): Store;
+/** Serialise a GeneticSummary to Turtle (via `n3.Writer`). Requires consent (see {@link GeneticSummaryInput}). */
+export declare function serializeGeneticSummary(url: string, data: GeneticSummaryInput): Promise<string>;
 /** Parse a fetched GeneticSummary body (Turtle / JSON-LD) via `@jeswr/fetch-rdf`. */
 export declare function parseGeneticSummaryTtl(url: string, body: string, contentType?: string | null): Promise<GeneticSummaryData | undefined>;
 //# sourceMappingURL=genetics.d.ts.map

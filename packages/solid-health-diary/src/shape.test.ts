@@ -177,4 +177,29 @@ describe("SHACL — malformed data yields a violation", () => {
     const v = await violations(new Parser().parse(ttl));
     expect(v.some((m) => m.includes("consentGiven"))).toBe(true);
   });
+
+  it("a GeneticSummary claiming risk-haplotype-absent WITHOUT coverageComplete=true violates the MUST", async () => {
+    const ttl = `
+      @prefix diet: <https://w3id.org/jeswr/sectors/health/diet#> .
+      <${URL_}#it> a diet:GeneticSummary ;
+        diet:geneticInterpretation "Cannot diagnose; negative-predictive only." ;
+        diet:consentGiven true ;
+        diet:coeliacGeneticRisk diet:riskHaplotypeAbsent .
+    `;
+    const v = await violations(new Parser().parse(ttl));
+    expect(
+      v.some((m) => m.includes("coverageComplete") || m.includes("risk-haplotype-absent")),
+    ).toBe(true);
+  });
+
+  it("a GeneticSummary claiming risk-haplotype-absent WITH coverageComplete=true has no violation", async () => {
+    const store = buildGeneticSummary(URL_, {
+      markers: [{ rsid: "rs2187668", markerInterpretation: "no risk haplotype found" }],
+      interpretation: "Cannot diagnose; negative-predictive only; coverage complete.",
+      consentGiven: true,
+      coeliacGeneticRisk: "risk-haplotype-absent",
+      coverageComplete: true,
+    });
+    expect(await violations(store)).toEqual([]);
+  });
 });

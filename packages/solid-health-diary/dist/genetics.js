@@ -249,7 +249,12 @@ function parseGeneticSummaryImpl(url, dataset) {
     }
     return data;
 }
-/** Build a fresh n3 `Store` holding one GeneticSummary rooted at `${url}#it`. */
+/**
+ * Build a fresh n3 `Store` holding one GeneticSummary rooted at `${url}#it`.
+ *
+ * `data` is a {@link GeneticSummaryInput}, so `consentGiven: true` is required at
+ * COMPILE time; the runtime guardrails below still fire (a cast can bypass the type).
+ */
 export function buildGeneticSummary(url, data) {
     if (!data.interpretation || data.interpretation.trim() === "") {
         throw new Error("buildGeneticSummary: a diet:geneticInterpretation (the negative-predictive " +
@@ -275,6 +280,18 @@ export function buildGeneticSummary(url, data) {
             "requires diet:coverageComplete=true — refusing to assert an absent (NPV) " +
             "rollup when the source did not cover every risk tag SNP (use " +
             "'partial-coverage'/'indeterminate' instead).");
+    }
+    // Provenance-consistency guardrail: diet:sourceType and the legacy
+    // diet:enteredManually are equivalent (`manual` ⇔ enteredManually=true). When a
+    // caller sets BOTH, refuse a contradictory pair (e.g. sourceType:"manual" with
+    // enteredManually:false, or a non-manual sourceType with enteredManually:true) so
+    // the pod never holds two conflicting provenance claims.
+    if (data.sourceType !== undefined && data.enteredManually !== undefined) {
+        const manualByType = data.sourceType === "manual";
+        if (manualByType !== data.enteredManually) {
+            throw new Error("buildGeneticSummary: diet:sourceType and diet:enteredManually disagree — " +
+                "'manual' ⇔ enteredManually=true. Set them consistently or provide only one.");
+        }
     }
     const store = new Store();
     const doc = new GeneticSummary(geneticSummarySubject(url), store, DataFactory).mark();
@@ -303,7 +320,7 @@ export function buildGeneticSummary(url, data) {
     });
     return store;
 }
-/** Serialise a GeneticSummary to Turtle (via `n3.Writer`). */
+/** Serialise a GeneticSummary to Turtle (via `n3.Writer`). Requires consent (see {@link GeneticSummaryInput}). */
 export function serializeGeneticSummary(url, data) {
     return storeToTurtle(buildGeneticSummary(url, data));
 }

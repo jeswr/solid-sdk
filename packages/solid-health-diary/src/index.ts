@@ -73,6 +73,7 @@ export {
   type GeneticSourceType,
   GeneticSummary,
   type GeneticSummaryData,
+  type GeneticSummaryInput,
   geneticSummarySubject,
   type HlaMarkerData,
   MARKER_PRESENCES,

@@ -321,6 +321,23 @@ dsh:GeneticSummaryShape
         sh:message "A GeneticSummary SHOULD carry its diet:hlaMarker rows (rsID→genotype→interpretation, summary only)."@en
     ] .
 
+# NPV-only safety invariant (Violation): a 'risk-haplotype-absent' rollup is a
+# sound negative claim ONLY with complete coverage. Encoded as NOT (risk = absent
+# AND coverageComplete != true), so external SHACL validation rejects an overstated
+# negative exactly as buildGeneticSummary/parseGeneticSummary do (no asymmetry).
+dsh:GeneticRiskCoverageShape
+    a sh:NodeShape ;
+    sh:targetClass diet:GeneticSummary ;
+    rdfs:label "Genetic risk-coverage safety shape"@en ;
+    sh:severity sh:Violation ;
+    sh:message "A GeneticSummary asserting diet:coeliacGeneticRisk = risk-haplotype-absent MUST also assert diet:coverageComplete = true — an 'absent' (NPV) result requires complete coverage; otherwise use partial-coverage/indeterminate."@en ;
+    sh:not [
+        sh:and (
+            [ sh:path diet:coeliacGeneticRisk ; sh:hasValue diet:riskHaplotypeAbsent ]
+            [ sh:not [ sh:path diet:coverageComplete ; sh:hasValue true ] ]
+        )
+    ] .
+
 # -----------------------------------------------------------------------------
 # HlaMarker — an rsID row (summary only, never raw genotype data).
 # -----------------------------------------------------------------------------

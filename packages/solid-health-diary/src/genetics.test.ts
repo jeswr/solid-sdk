@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildGeneticSummary,
   type GeneticSummaryData,
+  type GeneticSummaryInput,
   geneticSummarySubject,
   parseGeneticSummary,
   parseGeneticSummaryTtl,
@@ -21,7 +22,7 @@ const NEG_PREDICTIVE =
   "not carrying it makes coeliac very unlikely. This cannot diagnose you — diagnosis " +
   "needs serology + biopsy while eating gluten. Your file may not test every risk allele.";
 
-function summary(): GeneticSummaryData {
+function summary(): GeneticSummaryInput {
   return {
     id: geneticSummarySubject(URL_),
     markers: [
@@ -59,7 +60,7 @@ describe("GeneticSummary round-trip (parse∘build == identity)", () => {
   });
 
   it("a manual-entry summary round-trips", () => {
-    const data: GeneticSummaryData = {
+    const data: GeneticSummaryInput = {
       id: geneticSummarySubject(URL_),
       markers: [{ rsid: "rs2187668", markerInterpretation: "DQ2.5 risk haplotype" }],
       interpretation: NEG_PREDICTIVE,
@@ -74,7 +75,10 @@ describe("GeneticSummary round-trip (parse∘build == identity)", () => {
 
 describe("interpretation is REQUIRED (the negative-predictive framing guardrail)", () => {
   it("buildGeneticSummary THROWS when the interpretation is missing/empty", () => {
-    const data = { markers: [{ rsid: "rs2187668" }], interpretation: "" } as GeneticSummaryData;
+    const data = {
+      markers: [{ rsid: "rs2187668" }],
+      interpretation: "",
+    } as unknown as GeneticSummaryInput;
     expect(() => buildGeneticSummary(URL_, data)).toThrow(/negative-predictive|REQUIRED/i);
   });
 
@@ -95,7 +99,7 @@ describe("PRIVACY invariant — raw genotype bytes never enter the pod graph", (
       "rs4988235\t2\t136608646\tGG\nRAW_GENOTYPE_BLOB_THAT_MUST_NEVER_PERSIST\n";
     // A hostile/careless caller passes the raw file alongside the summary. The
     // model has no accessor for it, so build must NOT serialise it.
-    const data = { ...summary(), rawFile: rawGenotypeFile } as unknown as GeneticSummaryData;
+    const data = { ...summary(), rawFile: rawGenotypeFile } as unknown as GeneticSummaryInput;
     const ttl = await serializeGeneticSummary(URL_, data);
     expect(ttl).not.toContain("RAW_GENOTYPE_BLOB_THAT_MUST_NEVER_PERSIST");
     expect(ttl).not.toContain("rs4988235"); // an rsID NOT in the summary markers
@@ -170,16 +174,23 @@ describe("buildGeneticSummary fail-closed on an rsid-less HLA marker (SHACL MUST
 
 describe("consent guardrail — diet:consentGiven MUST be true to write (fail-closed)", () => {
   it("buildGeneticSummary THROWS when consentGiven is undefined (no consent)", () => {
+    // The type BLOCKS omitting consent (GeneticSummaryInput requires consentGiven:true);
+    // cast through unknown to exercise the runtime guardrail a cast could bypass.
     const { consentGiven: _omit, ...noConsent } = summary();
-    expect(() => buildGeneticSummary(URL_, noConsent as GeneticSummaryData)).toThrow(
+    expect(() => buildGeneticSummary(URL_, noConsent as unknown as GeneticSummaryInput)).toThrow(
       /consentGiven MUST be true|explicit consent/i,
     );
   });
 
   it("buildGeneticSummary THROWS when consentGiven is explicitly false", () => {
-    expect(() => buildGeneticSummary(URL_, { ...summary(), consentGiven: false })).toThrow(
-      /consentGiven MUST be true|explicit consent/i,
-    );
+    // consentGiven:false is a compile error against GeneticSummaryInput — cast to
+    // prove the runtime guardrail also rejects it.
+    expect(() =>
+      buildGeneticSummary(URL_, {
+        ...summary(),
+        consentGiven: false,
+      } as unknown as GeneticSummaryInput),
+    ).toThrow(/consentGiven MUST be true|explicit consent/i);
   });
 
   it("parseGeneticSummary REJECTS a stored summary whose consentGiven is present-but-false", async () => {
@@ -217,7 +228,7 @@ describe("NPV-only guardrail — 'risk-haplotype-absent' requires complete cover
     const { coverageComplete: _omit, ...noCoverage } = summary();
     expect(() =>
       buildGeneticSummary(URL_, {
-        ...(noCoverage as GeneticSummaryData),
+        ...noCoverage,
         coeliacGeneticRisk: "risk-haplotype-absent",
       }),
     ).toThrow(/coverageComplete=true|overstate/i);
@@ -234,7 +245,7 @@ describe("NPV-only guardrail — 'risk-haplotype-absent' requires complete cover
   });
 
   it("a risk-haplotype-absent summary WITH coverageComplete=true is allowed + round-trips", async () => {
-    const data: GeneticSummaryData = {
+    const data: GeneticSummaryInput = {
       ...summary(),
       coeliacGeneticRisk: "risk-haplotype-absent",
       coverageComplete: true,
@@ -248,7 +259,7 @@ describe("NPV-only guardrail — 'risk-haplotype-absent' requires complete cover
     const { coverageComplete: _omit, ...noCoverage } = summary();
     expect(() =>
       buildGeneticSummary(URL_, {
-        ...(noCoverage as GeneticSummaryData),
+        ...noCoverage,
         coeliacGeneticRisk: "risk-haplotype-present",
       }),
     ).not.toThrow();
@@ -292,5 +303,36 @@ describe("structured genetics fields round-trip + wire encoding (concept IRIs)",
     // coeliacGeneticRisk present → diet:riskHaplotypePresent
     expect(ttl).toContain("diet:riskHaplotypePresent");
     expect(ttl).toContain("diet:consentGiven");
+  });
+});
+
+describe("provenance-consistency guardrail — sourceType vs enteredManually must agree", () => {
+  it("THROWS on sourceType:'manual' with enteredManually:false", () => {
+    expect(() =>
+      buildGeneticSummary(URL_, { ...summary(), sourceType: "manual", enteredManually: false }),
+    ).toThrow(/sourceType and diet:enteredManually disagree|manual/i);
+  });
+
+  it("THROWS on a non-manual sourceType with enteredManually:true", () => {
+    expect(() =>
+      buildGeneticSummary(URL_, {
+        ...summary(),
+        sourceType: "consumer-array",
+        enteredManually: true,
+      }),
+    ).toThrow(/sourceType and diet:enteredManually disagree|manual/i);
+  });
+
+  it("ALLOWS an agreeing pair (manual + enteredManually:true)", () => {
+    expect(() =>
+      buildGeneticSummary(URL_, { ...summary(), sourceType: "manual", enteredManually: true }),
+    ).not.toThrow();
+  });
+
+  it("ALLOWS only one of the two provenance fields set", () => {
+    const { enteredManually: _drop, ...noManualFlag } = summary();
+    expect(() =>
+      buildGeneticSummary(URL_, { ...noManualFlag, sourceType: "manual" }),
+    ).not.toThrow();
   });
 });
