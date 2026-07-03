@@ -14,13 +14,36 @@
     "test": "vitest",
     "lint": "biome"
   },
-  "dependsOn": ["full-solid-ecosystem"],
+  "dependsOn": [
+    "full-solid-ecosystem"
+  ],
   "federation": {
     "clientIdUrl": "https://money.solid.example/clientid.jsonld",
-    "sectors": ["finance"],
-    "accessModes": ["Read", "Write", "Append"],
-    "produces": ["finance"],
-    "consumes": ["finance"],
+    "sectors": [
+      "finance"
+    ],
+    "accessModes": [
+      "Read",
+      "Write",
+      "Append"
+    ],
+    "produces": [
+      "finance"
+    ],
+    "consumes": [
+      "finance"
+    ],
     "membershipTodo": "O1-gated: Pod Money consumes and produces fin:FinancialAccount / fin:Transaction / fin:Balance / fin:Holding on the finance sector (canonical namespace https://w3id.org/jeswr/sectors/finance#, from jeswr/solid-federation-vocab). Membership is asserted once the fedapp: namespace is frozen; it remains the registry's job after a signed challenge."
+  },
+  "status": {
+    "generatedAt": "2026-07-03T05:14:28.003Z",
+    "commit": "988aece25cbe0233f6d56f1f79ee85992a931ae8",
+    "version": "0.0.1",
+    "gate": {
+      "lint": "skip",
+      "typecheck": "skip",
+      "test": "skip",
+      "build": "skip"
+    }
   }
 }
