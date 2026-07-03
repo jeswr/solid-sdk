@@ -5,9 +5,14 @@
 // SSRF guard).
 
 import { describe, expect, it, vi } from "vitest";
-import { createScopedFetch, SolidRedirectError } from "../src/scope.js";
+import {
+  createSameOriginRedirectRefusingFetch,
+  createScopedFetch,
+  SolidRedirectError,
+} from "../src/scope.js";
 
 const BASE = "https://pod.example/kv/";
+const ORIGIN = "https://pod.example";
 
 describe("createScopedFetch — base containment", () => {
   it("asserts the initial target is within base before issuing the request", async () => {
@@ -81,5 +86,43 @@ describe("createScopedFetch — redirect refusal", () => {
     const scoped = createScopedFetch(BASE, inner as unknown as typeof fetch);
     const res = await scoped(`${BASE}foo`);
     expect(res.status).toBe(300);
+  });
+});
+
+describe("createSameOriginRedirectRefusingFetch (watch path)", () => {
+  it("allows a same-origin target OUTSIDE the base sub-tree (no path-containment check)", async () => {
+    // The storage-description doc legitimately lives outside `base` but on-origin.
+    const inner = vi.fn(async () => new Response("desc", { status: 200 }));
+    const guarded = createSameOriginRedirectRefusingFetch(ORIGIN, inner as unknown as typeof fetch);
+    const res = await guarded("https://pod.example/.well-known/solid");
+    expect(res.status).toBe(200);
+    expect(inner).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuses a cross-origin target (fail-closed) and never issues the request", async () => {
+    const inner = vi.fn(async () => new Response("x", { status: 200 }));
+    const guarded = createSameOriginRedirectRefusingFetch(ORIGIN, inner as unknown as typeof fetch);
+    await expect(guarded("https://evil.example/steal")).rejects.toThrow(/escapes pod origin/);
+    expect(inner).not.toHaveBeenCalled();
+  });
+
+  it("forces manual redirect and refuses a 3xx (even to a same-origin target)", async () => {
+    const inner = vi.fn(
+      async () =>
+        new Response(null, { status: 302, headers: { location: "https://evil.example/harvest" } }),
+    );
+    const guarded = createSameOriginRedirectRefusingFetch(ORIGIN, inner as unknown as typeof fetch);
+    await expect(guarded("https://pod.example/.well-known/solid")).rejects.toBeInstanceOf(
+      SolidRedirectError,
+    );
+    expect(inner).toHaveBeenCalledTimes(1);
+    expect((inner.mock.calls[0]?.[1] as RequestInit).redirect).toBe("manual");
+  });
+
+  it("refuses a browser opaque redirect", async () => {
+    const opaque = { type: "opaqueredirect", status: 0, ok: false, headers: new Headers() };
+    const inner = vi.fn(async () => opaque as unknown as Response);
+    const guarded = createSameOriginRedirectRefusingFetch(ORIGIN, inner as unknown as typeof fetch);
+    await expect(guarded("https://pod.example/desc")).rejects.toBeInstanceOf(SolidRedirectError);
   });
 });

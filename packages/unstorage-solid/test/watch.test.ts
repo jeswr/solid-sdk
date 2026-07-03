@@ -201,6 +201,63 @@ describe("watch", () => {
     }
   });
 
+  it("refuses a same-origin description doc that redirects off-origin (no header forwarded off-origin)", async () => {
+    const onDegrade = vi.fn();
+    const seen: string[] = [];
+    const Off = "https://evil.example/steal";
+    // The HEAD advertises a SAME-ORIGIN description doc; GETting it answers with a
+    // 302 to a foreign origin. The watch fetch must refuse the redirect rather than
+    // follow it and forward the driver `authorization` header to evil.example.
+    const fetchImpl: typeof globalThis.fetch = (async (input, init) => {
+      const url = typeof input === "string" ? input : (input as URL).toString();
+      const method = (init?.method ?? "GET").toUpperCase();
+      seen.push(`${method} ${url}`);
+      if (method === "HEAD" && url === BASE) {
+        return new Response(null, {
+          status: 200,
+          headers: new Headers({
+            link: `<${DESC}>; rel="http://www.w3.org/ns/solid/terms#storageDescription"`,
+          }),
+        });
+      }
+      if (method === "GET" && url === DESC) {
+        return new Response(null, { status: 302, headers: new Headers({ location: Off }) });
+      }
+      return new Response(null, { status: 404 });
+    }) as typeof globalThis.fetch;
+    const driver = solidDriver({
+      base: BASE,
+      fetch: fetchImpl,
+      headers: { authorization: "Bearer tok" },
+      watch: true,
+      wsFactory: (url) => new FakeSocket(url),
+      onWatchDegrade: onDegrade,
+    });
+    const unwatch = await driver.watch?.(() => {});
+    // The redirect was refused → watch degraded to a no-op (no throw out of watch()).
+    expect(onDegrade).toHaveBeenCalled();
+    expect(typeof unwatch).toBe("function");
+    // The foreign origin was NEVER requested — the guard refused before following.
+    expect(seen.some((s) => s.includes("evil.example"))).toBe(false);
+  });
+
+  it("a normal (non-redirecting) same-origin watch still connects", async () => {
+    const events: [WatchEvent, string][] = [];
+    const driver = solidDriver({
+      base: BASE,
+      fetch: notificationFetch({ advertise: true }),
+      headers: { authorization: "Bearer tok" },
+      watch: true,
+      wsFactory: (url) => new FakeSocket(url),
+    });
+    await driver.watch?.((event, key) => events.push([event, key]));
+    // Discovery + subscribe succeeded through the same-origin redirect-refusing
+    // fetch and the socket opened at the advertised receiveFrom.
+    expect(FakeSocket.last?.url).toBe(RECEIVE_FROM);
+    FakeSocket.last?.emit(JSON.stringify({ type: "Update", object: `${BASE}foo` }));
+    expect(events).toEqual([["update", "foo"]]);
+  });
+
   it("dispose() closes open sockets", async () => {
     const driver = solidDriver({
       base: BASE,

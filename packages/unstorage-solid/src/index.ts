@@ -21,7 +21,7 @@ import type { Driver, StorageMeta, StorageValue, WatchCallback } from "unstorage
 import { defineDriver } from "unstorage";
 import { listContainer } from "./container.js";
 import { assertWithinBase, keyToContainerUrl, keyToUrl, normalizeBase, urlToKey } from "./keys.js";
-import { createScopedFetch } from "./scope.js";
+import { createSameOriginRedirectRefusingFetch, createScopedFetch } from "./scope.js";
 import { type ActiveWatch, startWatch, type WatchSocketFactory } from "./watch.js";
 
 const DRIVER_NAME = "solid";
@@ -388,30 +388,24 @@ const solidDriver = defineDriver<SolidDriverOptions, undefined>((options) => {
         options.onWatchDegrade?.("watch disabled (set `watch: true` in driver options)");
         return () => {};
       }
-      // Apply the driver `headers` to the notification discovery/subscribe
-      // requests too (the option is documented as merged into EVERY request) —
-      // BUT only for requests that stay within the base origin. Watch discovery
-      // follows pod-controlled URLs (a Link header, then RDF in the description
-      // doc); `startWatch` already constrains those to same-origin, and this is
-      // defence in depth: even if a foreign URL reached this fetch, the driver
-      // headers (which may include `Authorization`) are NOT sent off-origin.
-      // Same-origin URLs get the merged headers; anything else gets none.
+      // The notification discovery/subscribe requests carry the driver `headers`
+      // (the option is documented as merged into EVERY request) and go through the
+      // SAME-ORIGIN, redirect-REFUSING fetch (`createSameOriginRedirectRefusingFetch`).
+      // Watch discovery follows pod-controlled URLs (a Link header, then RDF in the
+      // description doc); those are legitimately same-origin but may lie OUTSIDE the
+      // driver base sub-tree (the storage-description doc, the subscription
+      // endpoint), so we cannot use `createScopedFetch` (it enforces base-PATH
+      // containment). The same-origin variant still fails closed: a request whose
+      // target leaves the pod origin, or that answers with a redirect, is refused —
+      // so the caller's (possibly credentialed) `headers` can never be forwarded
+      // off-origin. A refusal throws; `startWatch` catches it and degrades to a
+      // no-op watch.
       const baseOrigin = new URL(base).origin;
-      const isSameOrigin = (input: RequestInfo | URL): boolean => {
-        const raw =
-          typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
-        try {
-          return new URL(raw, base).origin === baseOrigin;
-        } catch {
-          return false;
-        }
-      };
+      const guardedFetch = createSameOriginRedirectRefusingFetch(baseOrigin, fetchImpl);
       const watchFetch: typeof globalThis.fetch = (input, init) =>
-        fetchImpl(input, {
+        guardedFetch(input, {
           ...init,
-          headers: isSameOrigin(input)
-            ? { ...options.headers, ...(init?.headers as object) }
-            : ((init?.headers as Record<string, string> | undefined) ?? {}),
+          headers: { ...options.headers, ...(init?.headers as object) },
         });
       const startOpts = {
         base,

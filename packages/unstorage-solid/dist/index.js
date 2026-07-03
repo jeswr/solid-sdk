@@ -346,19 +346,45 @@ function urlOf(input) {
   }
   return input.url;
 }
+function isRefusableRedirect(res) {
+  if (res.type === "opaqueredirect") {
+    return true;
+  }
+  return res.status >= 300 && res.status < 400 && res.status !== 304 && res.headers.has("location");
+}
 function createScopedFetch(base, fetchImpl) {
   const scoped = async (input, init) => {
     const url = urlOf(input);
     assertWithinBase(base, url);
     const res = await fetchImpl(url, { ...init, redirect: "manual" });
-    const isOpaqueRedirect = res.type === "opaqueredirect";
-    const isReadableRedirect = res.status >= 300 && res.status < 400 && res.status !== 304 && res.headers.has("location");
-    if (isOpaqueRedirect || isReadableRedirect) {
+    if (isRefusableRedirect(res)) {
       throw new SolidRedirectError(url, res.status);
     }
     return res;
   };
   return scoped;
+}
+function createSameOriginRedirectRefusingFetch(origin, fetchImpl) {
+  const guarded = async (input, init) => {
+    const url = urlOf(input);
+    let target;
+    try {
+      target = new URL(url);
+    } catch {
+      throw new Error(`[unstorage-solid] watch request URL is invalid: ${url}`);
+    }
+    if (target.origin !== origin) {
+      throw new Error(
+        `[unstorage-solid] watch request to ${url} escapes pod origin ${origin} (refused)`
+      );
+    }
+    const res = await fetchImpl(url, { ...init, redirect: "manual" });
+    if (isRefusableRedirect(res)) {
+      throw new SolidRedirectError(url, res.status);
+    }
+    return res;
+  };
+  return guarded;
 }
 
 // src/watch.ts
@@ -796,17 +822,10 @@ var solidDriver = defineDriver((options) => {
         };
       }
       const baseOrigin = new URL(base).origin;
-      const isSameOrigin = (input) => {
-        const raw = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
-        try {
-          return new URL(raw, base).origin === baseOrigin;
-        } catch {
-          return false;
-        }
-      };
-      const watchFetch = (input, init) => fetchImpl(input, {
+      const guardedFetch = createSameOriginRedirectRefusingFetch(baseOrigin, fetchImpl);
+      const watchFetch = (input, init) => guardedFetch(input, {
         ...init,
-        headers: isSameOrigin(input) ? { ...options.headers, ...init?.headers } : init?.headers ?? {}
+        headers: { ...options.headers, ...init?.headers }
       });
       const startOpts = {
         base,

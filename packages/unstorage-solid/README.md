@@ -176,6 +176,12 @@ The driver's trust boundary is the injected `fetch`; on top of it, the URL layer
   `Authorization` / DPoP headers off-origin. A Solid pod addressed by exact, normalised
   URLs never legitimately redirects a data request, so a redirect is treated as
   hostile and fails closed (a `304 Not Modified` is not a redirect and passes through).
+- **Watch discovery (opt-in `watch: true`).** Notification discovery / subscription
+  requests follow pod-controlled URLs (a `Link` header, then RDF in the storage
+  description) that are legitimately same-origin but may lie *outside* `base`, so they
+  use a same-origin, **redirect-refusing** fetch: a target that leaves the pod origin,
+  or a description doc that redirects off-origin, is refused (the watch degrades to a
+  no-op) so the injected `fetch`'s credentials are never forwarded off-origin.
 
 ### Container auto-creation (CSS vs ESS)
 
