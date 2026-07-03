@@ -468,4 +468,22 @@ describe("rollup↔marker consistency guardrail — risk-haplotype-absent vs a p
     expect(parsed?.coeliacGeneticRisk).toBe("risk-haplotype-absent");
     expect(parsed?.markers.map((m) => m.markerPresence)).toEqual(["absent"]);
   });
+
+  it("parseGeneticSummary REJECTS the bypass: a PRESENT DQ2.5 marker with NO rsid (dropped but still contradicts)", async () => {
+    // A hostile marker with a present coeliac-risk haplotype but a missing diet:rsid
+    // is DROPPED from the surfaced markers — the consistency check must still see it,
+    // so the summary must fail closed rather than surface a false "coeliac unlikely".
+    const ttl = `
+      @prefix diet: <https://w3id.org/jeswr/sectors/health/diet#> .
+      <${URL_}#it> a diet:GeneticSummary ;
+        diet:geneticInterpretation ${JSON.stringify(NEG_PREDICTIVE)} ;
+        diet:consentGiven true ;
+        diet:coverageComplete true ;
+        diet:coeliacGeneticRisk diet:riskHaplotypeAbsent ;
+        diet:hlaMarker <${URL_}#marker-0> .
+      <${URL_}#marker-0> a diet:HlaMarker ;
+        diet:riskHaplotype diet:DQ2_5 ;
+        diet:markerPresence diet:markerPresent .`;
+    expect(await parseGeneticSummaryTtl(URL_, ttl)).toBeUndefined();
+  });
 });

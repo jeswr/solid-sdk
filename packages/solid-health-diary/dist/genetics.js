@@ -272,9 +272,18 @@ function parseGeneticSummaryImpl(url, dataset) {
     setIfDefined(data, "patient", httpIriOrUndefined(doc.patient));
     setIfDefined(data, "created", validDateOrUndefined(doc.created));
     const nodes = [...doc.hlaMarker].sort((a, b) => trailingIndex(a) - trailingIndex(b));
+    // The presence/haplotype call of EVERY linked marker, including ones we drop
+    // below for an invalid rsid — the rollup↔marker consistency check must see these
+    // too, or a hostile rsid-less-but-PRESENT risk marker would bypass it (a malformed
+    // marker must not smuggle a present risk haplotype past the fail-closed guard).
+    const allMarkerCalls = [];
     for (const node of nodes) {
         assertSubjectSingletons(dataset, node, HLA_MARKER_SINGLETONS);
         const m = new HlaMarker(node, dataset, DataFactory);
+        const call = { rsid: m.rsid ?? "" };
+        setIfDefined(call, "riskHaplotype", m.riskHaplotype);
+        setIfDefined(call, "markerPresence", m.markerPresence);
+        allMarkerCalls.push(call);
         const rsid = m.rsid;
         // Mirror the builder's rsid MUST on READ: drop a marker with a missing or
         // whitespace-only diet:rsid (an invalid HLA row must not surface from pod data).
@@ -291,8 +300,10 @@ function parseGeneticSummaryImpl(url, dataset) {
     // writer + dsh:GeneticRiskMarkerConsistencyShape): a stored summary claiming
     // 'risk-haplotype-absent' while a linked marker shows a coeliac-risk haplotype
     // (DQ2.5/DQ2.2/DQ8) PRESENT is a self-contradictory (hostile/stale) record —
-    // reject it rather than surface a false "coeliac unlikely".
-    if (absentRollupContradictedByMarker(coeliacGeneticRisk, data.markers))
+    // reject it rather than surface a false "coeliac unlikely". Evaluated over ALL
+    // linked markers (incl. rsid-less ones dropped above) so a malformed present risk
+    // marker cannot bypass the check.
+    if (absentRollupContradictedByMarker(coeliacGeneticRisk, allMarkerCalls))
         return undefined;
     return data;
 }
