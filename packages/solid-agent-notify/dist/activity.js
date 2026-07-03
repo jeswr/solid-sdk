@@ -23,6 +23,42 @@ export function isHttpIri(value) {
         return false;
     }
 }
+/**
+ * Canonicalise an untrusted string into a SAFE absolute http(s) IRI, or
+ * `undefined` if it is not one.
+ *
+ * SECURITY (Turtle IRI-injection). `n3.Writer` does NOT escape IRIs: a string fed
+ * straight to `NamedNodeFrom.string` is emitted VERBATIM between `<…>`, so a raw
+ * `>` / space / `<` breaks out of the IRI and injects attacker-chosen triples into
+ * the serialised document — which this package then POSTs to a peer's LDN inbox.
+ * `isHttpIri` only returns a boolean and the callers used to write the RAW value,
+ * so a hostile actor/target/assignee field could smuggle triples into a victim's
+ * inbox. Routing every WRITE-side IRI through this canonicaliser closes that: it
+ * runs the value through the WHATWG `URL` parser (which percent-encodes spaces,
+ * `>`, `<`, `"`, `{`, `}`, `` ` `` and other unsafe bytes) and additionally
+ * percent-encodes the three characters the URL parser leaves intact but Turtle
+ * still forbids in an IRIREF (`|` `^` `` ` ``, belt-and-braces on the backtick).
+ * The result therefore contains no Turtle IRIREF-terminating character, so it
+ * cannot escape the `<…>`. Mirrors the `@jeswr/rdf-serialize` / solid-dav-bridge
+ * `safeHttpIri` reference implementation.
+ */
+export function safeHttpIri(value) {
+    if (typeof value !== "string")
+        return undefined;
+    let u;
+    try {
+        u = new URL(value);
+    }
+    catch {
+        return undefined;
+    }
+    if (u.protocol !== "http:" && u.protocol !== "https:")
+        return undefined;
+    return u.href
+        .replace(/\|/g, "%7C")
+        .replace(/\^/g, "%5E")
+        .replace(/`/g, "%60");
+}
 /** Typed `@rdfjs/wrapper` view of a single AS2.0 activity subject (read + write). */
 export class ActivityDoc extends TermWrapper {
     get types() {
@@ -87,11 +123,11 @@ export class ActivityDoc extends TermWrapper {
 export function buildActivity(notification, subject = "#it") {
     const store = new Store();
     const doc = new ActivityDoc(subject, store, DataFactory).setType(notification.type);
-    doc.actor = isHttpIri(notification.actor) ? notification.actor : undefined;
-    doc.activityObject = isHttpIri(notification.object)
-        ? notification.object
-        : undefined;
-    doc.target = isHttpIri(notification.target) ? notification.target : undefined;
+    // Object-position IRIs: canonicalise (Turtle IRI-injection guard) and DROP the
+    // triple when the value is not a safe http(s) IRI — never write a raw string.
+    doc.actor = safeHttpIri(notification.actor);
+    doc.activityObject = safeHttpIri(notification.object);
+    doc.target = safeHttpIri(notification.target);
     doc.summary = notification.summary?.trim() || undefined;
     doc.content = notification.content?.trim() || undefined;
     doc.published = notification.published ?? new Date();

@@ -4,12 +4,13 @@
  * coercion safety, and the read-side accessors.
  */
 import { parseRdf } from "@jeswr/fetch-rdf";
-import { DataFactory } from "n3";
+import { DataFactory, Parser } from "n3";
 import { describe, expect, it } from "vitest";
 import {
   ActivityDoc,
   buildActivity,
   isHttpIri,
+  safeHttpIri,
   serializeTurtle,
 } from "./activity.js";
 
@@ -106,5 +107,55 @@ describe("buildActivity + serializeTurtle", () => {
     );
     const ttl = await serializeTurtle(store);
     expect(ttl).toContain("alice.example/n1");
+  });
+});
+
+describe("safeHttpIri", () => {
+  it("canonicalises safe http(s) IRIs", () => {
+    expect(safeHttpIri("https://alice.example/card#me")).toBe(
+      "https://alice.example/card#me"
+    );
+    // The URL parser percent-encodes Turtle-terminating characters.
+    expect(safeHttpIri("https://evil/x> y")).not.toContain(">");
+    expect(safeHttpIri("https://evil/x> y")).not.toContain(" ");
+  });
+  it("percent-encodes the URL-parser-tolerated Turtle-forbidden chars |, ^, `", () => {
+    const out = safeHttpIri("https://evil/a|b^c`d");
+    expect(out).toBeDefined();
+    expect(out).not.toContain("|");
+    expect(out).not.toContain("^");
+    expect(out).not.toContain("`");
+  });
+  it("rejects non-http(s) / non-URL / non-string values", () => {
+    expect(safeHttpIri(undefined)).toBeUndefined();
+    // biome-ignore lint/suspicious/noExplicitAny: exercising a non-string arg at runtime.
+    expect(safeHttpIri(123 as any)).toBeUndefined();
+    expect(safeHttpIri("mailto:a@b.com")).toBeUndefined();
+    expect(safeHttpIri("just text")).toBeUndefined();
+  });
+});
+
+describe("Turtle IRI-injection guard (n3.Writer does NOT escape IRIs)", () => {
+  // Payload that, written RAW between <…>, would break out of the actor IRI and
+  // inject a second, attacker-chosen triple into the serialised (then POSTed) doc.
+  const INJECTION =
+    "https://evil/x> . <https://evil/s2> <https://evil/p2> <https://evil/o2";
+
+  it("does not let a hostile actor inject a second triple", async () => {
+    const store = buildActivity({
+      type: "Announce",
+      actor: INJECTION,
+      object: "https://bob.example/chat/",
+    });
+    const ttl = await serializeTurtle(store);
+    const quads = new Parser().parse(ttl);
+    // The smuggled subject/predicate/object must NOT appear as its own triple.
+    for (const q of quads) {
+      expect(q.subject.value).not.toBe("https://evil/s2");
+      expect(q.predicate.value).not.toBe("https://evil/p2");
+      expect(q.object.value).not.toBe("https://evil/o2");
+    }
+    // And the raw breakout sequence never reaches the wire.
+    expect(ttl).not.toContain("> . <https://evil/s2>");
   });
 });

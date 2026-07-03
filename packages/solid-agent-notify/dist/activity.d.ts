@@ -30,6 +30,26 @@ export interface ActivityNotification {
 }
 /** True for an absolute http(s) URL usable as an AS2.0 IRI object/actor/target. */
 export declare function isHttpIri(value: string | undefined): boolean;
+/**
+ * Canonicalise an untrusted string into a SAFE absolute http(s) IRI, or
+ * `undefined` if it is not one.
+ *
+ * SECURITY (Turtle IRI-injection). `n3.Writer` does NOT escape IRIs: a string fed
+ * straight to `NamedNodeFrom.string` is emitted VERBATIM between `<…>`, so a raw
+ * `>` / space / `<` breaks out of the IRI and injects attacker-chosen triples into
+ * the serialised document — which this package then POSTs to a peer's LDN inbox.
+ * `isHttpIri` only returns a boolean and the callers used to write the RAW value,
+ * so a hostile actor/target/assignee field could smuggle triples into a victim's
+ * inbox. Routing every WRITE-side IRI through this canonicaliser closes that: it
+ * runs the value through the WHATWG `URL` parser (which percent-encodes spaces,
+ * `>`, `<`, `"`, `{`, `}`, `` ` `` and other unsafe bytes) and additionally
+ * percent-encodes the three characters the URL parser leaves intact but Turtle
+ * still forbids in an IRIREF (`|` `^` `` ` ``, belt-and-braces on the backtick).
+ * The result therefore contains no Turtle IRIREF-terminating character, so it
+ * cannot escape the `<…>`. Mirrors the `@jeswr/rdf-serialize` / solid-dav-bridge
+ * `safeHttpIri` reference implementation.
+ */
+export declare function safeHttpIri(value: string | undefined): string | undefined;
 /** Typed `@rdfjs/wrapper` view of a single AS2.0 activity subject (read + write). */
 export declare class ActivityDoc extends TermWrapper {
     get types(): Set<string>;

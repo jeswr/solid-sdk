@@ -18,7 +18,7 @@ export { sendNotification, notifyAgent } from "./send.js";
 // ── Read ──
 export { readInbox, parseInboxNotification, findActivitySubject, isDirectChild, } from "./read.js";
 // ── Activity model ──
-export { buildActivity, serializeTurtle, ActivityDoc, isHttpIri, } from "./activity.js";
+export { buildActivity, serializeTurtle, ActivityDoc, isHttpIri, safeHttpIri, } from "./activity.js";
 // ── Shared federation task model (https://w3id.org/jeswr/task — wf:Task + dct:) ──
 export { TaskDoc, writeTask, buildTaskNotification, parseTask, parseTaskFromNotification, notifyTaskAssigned, notifyTaskStateChanged, } from "./task.js";
 // ── Errors ──
