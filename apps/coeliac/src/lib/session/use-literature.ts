@@ -10,16 +10,17 @@
  * (`rankLiterature`), so no health interest ever leaves the device.
  */
 import { useCallback, useEffect, useState } from "react";
-import { knowledgeFetch } from "../knowledge/fetch.js";
+import { knowledgeFetch, knowledgeJson } from "../knowledge/fetch.js";
 import {
   buildEpmcSearchUrl,
   type EpmcResult,
+  fetchPubmedFallback,
   parseEpmcResponse,
   type RankedLiterature,
   rankLiterature,
 } from "../knowledge/literature.js";
-import { knowledgeJson } from "../knowledge/fetch.js";
-import { readKnowledgeCache, writeKnowledgeCache } from "../knowledge/cache.js";
+import { isStale, readKnowledgeCache, writeKnowledgeCache } from "../knowledge/cache.js";
+import { GENERIC_COELIAC_CONDITION } from "../knowledge/terms.js";
 import { trackedTriggers } from "../knowledge/tracked.js";
 import { useSession } from "./context.js";
 
@@ -57,23 +58,31 @@ export function useLiterature(): LiteratureState {
 
     // 1) Offline-first: paint from the pod cache if present.
     let cached: LiteraturePayload | undefined;
+    let cacheFresh = false;
     if (storageRoot) {
       const env = await readKnowledgeCache<LiteraturePayload>(authedFetch, storageRoot, CACHE_SLUG);
       cached = env?.data;
+      cacheFresh = !!env && !isStale(env, new Date());
       if (cached) {
         setState({
           ranked: rankLiterature(cached.results, { trackedTriggers: triggers }),
           hitCount: cached.hitCount,
-          loading: true,
+          loading: !cacheFresh,
           error: null,
           fromCache: true,
         });
       }
     }
 
+    // If the cache is still fresh (<24h), don't re-hit the API on every visit.
+    if (cached && cacheFresh) {
+      setState((s) => ({ ...s, loading: false }));
+      return;
+    }
+
     // 2) Refresh from Europe PMC through the closed allowlist.
+    const kf = knowledgeFetch(publicFetch);
     try {
-      const kf = knowledgeFetch(publicFetch);
       const body = await knowledgeJson(kf, buildEpmcSearchUrl({ pageSize: 30 }));
       const parsed = parseEpmcResponse(body);
       const payload: LiteraturePayload = { hitCount: parsed.hitCount, results: [...parsed.results] };
@@ -87,12 +96,35 @@ export function useLiterature(): LiteratureState {
       if (storageRoot && webId) {
         void writeKnowledgeCache(authedFetch, storageRoot, webId, CACHE_SLUG, payload);
       }
-    } catch (err) {
+      return;
+    } catch (epmcErr) {
+      // 3) EPMC down — try the PubMed fallback before surfacing an error.
+      try {
+        const results = await fetchPubmedFallback(kf, GENERIC_COELIAC_CONDITION, 30);
+        if (results.length > 0) {
+          setState({
+            ranked: rankLiterature(results, { trackedTriggers: triggers }),
+            hitCount: results.length,
+            loading: false,
+            error: null,
+            fromCache: false,
+          });
+          if (storageRoot && webId) {
+            void writeKnowledgeCache(authedFetch, storageRoot, webId, CACHE_SLUG, {
+              hitCount: results.length,
+              results,
+            });
+          }
+          return;
+        }
+      } catch {
+        // fall through to the error/keep-cache path
+      }
       // Keep the cached view if we have one; only surface an error if we have nothing.
       setState((s) => ({
         ...s,
         loading: false,
-        error: cached ? null : `Couldn't reach the research index (${(err as Error).message}).`,
+        error: cached ? null : `Couldn't reach the research index (${(epmcErr as Error).message}).`,
       }));
     }
   }, [publicFetch, authedFetch, storageRoot, webId, store]);

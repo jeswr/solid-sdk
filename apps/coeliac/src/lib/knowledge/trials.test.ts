@@ -10,6 +10,7 @@ import {
   buildCtgovSearchUrl,
   countryNameForLocale,
   eligibilitySummary,
+  fetchAllRecruitingTrials,
   fetchRecruitingTrials,
   filterTrialsByCountry,
   normalizeTrialStudy,
@@ -148,6 +149,62 @@ describe("URL builder + fetch", () => {
   it("an opt-in term narrows by a named intervention", () => {
     const url = buildCtgovSearchUrl({ term: "ZED1227" });
     expect(url).toContain("query.term=ZED1227");
+  });
+
+  it("follows nextPageToken across pages (so the country filter sees the full set)", async () => {
+    const page1 = {
+      studies: [
+        {
+          protocolSection: {
+            identificationModule: { nctId: "NCT00000001", briefTitle: "Page1 study" },
+            contactsLocationsModule: { locations: [{ country: "United Kingdom" }] },
+          },
+        },
+      ],
+      nextPageToken: "P2",
+    };
+    const page2 = {
+      studies: [
+        {
+          protocolSection: {
+            identificationModule: { nctId: "NCT00000002", briefTitle: "Page2 study" },
+            contactsLocationsModule: { locations: [{ country: "Ireland" }] },
+          },
+        },
+      ],
+    };
+    const calls: string[] = [];
+    const spy = vi.fn(async (u: RequestInfo | URL) => {
+      const url = String(u);
+      calls.push(url);
+      return new Response(JSON.stringify(url.includes("pageToken=P2") ? page2 : page1), { status: 200 });
+    });
+    const kf = knowledgeFetch(spy as unknown as typeof globalThis.fetch);
+    const studies = await fetchAllRecruitingTrials(kf, { pageSize: 40, maxPages: 5 });
+    expect(studies.map((s) => s.nctId)).toEqual(["NCT00000001", "NCT00000002"]);
+    expect(calls.some((u) => u.includes("pageToken=P2"))).toBe(true);
+  });
+
+  it("stops at maxPages even if the registry keeps returning a token", async () => {
+    const spy = vi.fn(async (u: RequestInfo | URL) => {
+      const n = String(u).includes("pageToken") ? "b" : "a";
+      return new Response(
+        JSON.stringify({
+          studies: [
+            {
+              protocolSection: {
+                identificationModule: { nctId: `NCT0000000${n === "a" ? 1 : 2}`, briefTitle: "s" },
+              },
+            },
+          ],
+          nextPageToken: "loop",
+        }),
+        { status: 200 },
+      );
+    });
+    const kf = knowledgeFetch(spy as unknown as typeof globalThis.fetch);
+    await fetchAllRecruitingTrials(kf, { maxPages: 2 });
+    expect(spy).toHaveBeenCalledTimes(2); // capped, never an infinite loop
   });
 
   it("fetches recruiting trials through the allowlist (CT.gov host only)", async () => {

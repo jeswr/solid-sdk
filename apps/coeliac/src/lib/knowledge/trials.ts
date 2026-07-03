@@ -201,9 +201,9 @@ export function filterTrialsByCountry(
 }
 
 /**
- * Fetch RECRUITING coeliac trials (§4.1). Uses the GENERIC condition by default —
- * no PII / health interest leaves the device. Returns raw studies; the caller
- * applies the client-side country filter + renders the no-enrolment framing.
+ * Fetch ONE page of RECRUITING coeliac trials (§4.1). Uses the GENERIC condition
+ * by default — no PII / health interest leaves the device. Returns raw studies +
+ * the `nextPageToken`; the caller applies the client-side country filter.
  */
 export async function fetchRecruitingTrials(
   knowledgeFetchFn: typeof globalThis.fetch,
@@ -213,4 +213,33 @@ export async function fetchRecruitingTrials(
   // `simple: true` — CT.gov v2 preflight 403s any non-simple request (§1.1).
   const body = await knowledgeJson(knowledgeFetchFn, url, { simple: true });
   return parseCtgovResponse(body);
+}
+
+/**
+ * Fetch RECRUITING coeliac trials across pages, following `nextPageToken` up to
+ * `maxPages` (default 5 → up to ~200 studies), so the client-side country filter
+ * has the FULL result set rather than only the first page (roborev: a partial page
+ * could make a country wrongly appear to have no trials). Deduped by NCT id; stops
+ * on the first failing page but keeps whatever it has already gathered.
+ */
+export async function fetchAllRecruitingTrials(
+  knowledgeFetchFn: typeof globalThis.fetch,
+  opts: { cond?: string; term?: string; pageSize?: number; maxPages?: number } = {},
+): Promise<TrialStudy[]> {
+  const maxPages = Math.min(Math.max(opts.maxPages ?? 5, 1), 10);
+  const seen = new Set<string>();
+  const out: TrialStudy[] = [];
+  let pageToken: string | undefined;
+  for (let page = 0; page < maxPages; page++) {
+    const { studies, nextPageToken } = await fetchRecruitingTrials(knowledgeFetchFn, { ...opts, pageToken });
+    for (const s of studies) {
+      if (!seen.has(s.nctId)) {
+        seen.add(s.nctId);
+        out.push(s);
+      }
+    }
+    if (!nextPageToken) break;
+    pageToken = nextPageToken;
+  }
+  return out;
 }

@@ -10,15 +10,9 @@
  */
 "use client";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { knowledgeFetch, knowledgeJson } from "../knowledge/fetch.js";
-import { readKnowledgeCache, writeKnowledgeCache } from "../knowledge/cache.js";
-import {
-  buildCtgovSearchUrl,
-  countryNameForLocale,
-  filterTrialsByCountry,
-  parseCtgovResponse,
-  type TrialStudy,
-} from "../knowledge/trials.js";
+import { knowledgeFetch } from "../knowledge/fetch.js";
+import { isStale, readKnowledgeCache, writeKnowledgeCache } from "../knowledge/cache.js";
+import { countryNameForLocale, fetchAllRecruitingTrials, filterTrialsByCountry, type TrialStudy } from "../knowledge/trials.js";
 import { useSession } from "./context.js";
 
 const CACHE_SLUG = "trials-latest";
@@ -59,24 +53,32 @@ export function useTrials(): TrialsViewState {
     setError(null);
 
     let cached: TrialStudy[] | undefined;
+    let cacheFresh = false;
     if (storageRoot) {
       const env = await readKnowledgeCache<TrialStudy[]>(authedFetch, storageRoot, CACHE_SLUG);
-      cached = env?.data;
-      if (cached && Array.isArray(cached)) {
+      cached = Array.isArray(env?.data) ? env?.data : undefined;
+      cacheFresh = !!env && !isStale(env, new Date());
+      if (cached) {
         setAll(cached);
         setFromCache(true);
       }
     }
 
+    // Fresh cache (<24h) — don't re-hit the registry every visit.
+    if (cached && cacheFresh) {
+      setLoading(false);
+      return;
+    }
+
     try {
       const kf = knowledgeFetch(publicFetch);
-      const body = await knowledgeJson(kf, buildCtgovSearchUrl({ pageSize: 40 }), { simple: true });
-      const parsed = parseCtgovResponse(body);
-      setAll([...parsed.studies]);
+      // Follow nextPageToken so the client-side country filter sees the FULL set.
+      const studies = await fetchAllRecruitingTrials(kf, { pageSize: 40, maxPages: 5 });
+      setAll(studies);
       setFromCache(false);
       setError(null);
       if (storageRoot && webId) {
-        void writeKnowledgeCache(authedFetch, storageRoot, webId, CACHE_SLUG, [...parsed.studies]);
+        void writeKnowledgeCache(authedFetch, storageRoot, webId, CACHE_SLUG, studies);
       }
     } catch (err) {
       if (!cached) setError(`Couldn't reach the trials registry (${(err as Error).message}).`);

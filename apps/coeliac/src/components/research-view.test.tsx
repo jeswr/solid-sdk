@@ -67,4 +67,32 @@ describe("ResearchView", () => {
     expect(link).toHaveAttribute("href", "https://doi.org/10.1/rev");
     expect(link).toHaveAttribute("rel", expect.stringContaining("noopener"));
   });
+
+  it("falls back to PubMed when Europe PMC is unavailable", async () => {
+    const esummary = {
+      result: {
+        uids: ["999"],
+        "999": {
+          uid: "999",
+          title: "PubMed fallback coeliac review",
+          pubdate: "2026 Jun",
+          pubtype: ["Review"],
+          articleids: [{ idtype: "doi", value: "10.1/fb" }],
+        },
+      },
+    };
+    const publicFetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("www.ebi.ac.uk")) return new Response("down", { status: 503 });
+      if (url.includes("esearch")) {
+        return new Response(JSON.stringify({ esearchresult: { count: "1", idlist: ["999"] } }), { status: 200 });
+      }
+      if (url.includes("esummary")) return new Response(JSON.stringify(esummary), { status: 200 });
+      return new Response("{}", { status: 404 });
+    }) as unknown as typeof globalThis.fetch;
+    renderWithSession(<ResearchView />, { publicFetch });
+    await waitFor(() =>
+      expect(screen.getByText(/PubMed fallback coeliac review/)).toBeInTheDocument(),
+    );
+  });
 });

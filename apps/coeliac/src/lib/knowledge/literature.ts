@@ -20,6 +20,7 @@ import { GENERIC_COELIAC_QUERY, triggerLocalKeywords } from "./terms.js";
 
 const EPMC_SEARCH = "https://www.ebi.ac.uk/europepmc/webservices/rest/search";
 const PUBMED_ESEARCH = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi";
+const PUBMED_ESUMMARY = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi";
 
 /** A normalised Europe PMC search result (only the fields we render / rank on). */
 export interface EpmcResult {
@@ -346,4 +347,73 @@ export async function fetchPubmedIds(
 ): Promise<PubmedEsearchResult> {
   const body = await knowledgeJson(knowledgeFetchFn, buildPubmedEsearchUrl({ term, retmax }));
   return parsePubmedEsearch(body);
+}
+
+/** Build a PubMed `esummary` URL for a set of PMIDs (metadata for the fallback cards). */
+export function buildPubmedEsummaryUrl(ids: readonly string[]): string {
+  const params = new URLSearchParams({ db: "pubmed", id: ids.join(","), retmode: "json" });
+  return `${PUBMED_ESUMMARY}?${params.toString()}`;
+}
+
+/**
+ * Parse a PubMed `esummary` JSON response into {@link EpmcResult}s so the Research
+ * view can render them identically to EPMC (title + type + date + canonical link).
+ * Defensive on every field; a retracted `pubtype` is still hard-detected so the
+ * fallback path keeps the same safety exclusion as the primary feed.
+ */
+export function parsePubmedEsummary(body: unknown): EpmcResult[] {
+  const o = (body ?? {}) as Record<string, unknown>;
+  const result = (o.result ?? {}) as Record<string, unknown>;
+  const uids = Array.isArray(result.uids) ? (result.uids as unknown[]).filter((x): x is string => typeof x === "string") : [];
+  const out: EpmcResult[] = [];
+  for (const uid of uids) {
+    const rec = result[uid] as Record<string, unknown> | undefined;
+    const title = str(rec?.title);
+    if (!rec || !title) continue;
+    const pubTypes = Array.isArray(rec.pubtype)
+      ? (rec.pubtype as unknown[]).filter((x): x is string => typeof x === "string").map((t) => t.toLowerCase())
+      : [];
+    const articleIds = Array.isArray(rec.articleids) ? (rec.articleids as unknown[]) : [];
+    let doi: string | undefined;
+    for (const a of articleIds) {
+      const ao = a as Record<string, unknown>;
+      if (ao?.idtype === "doi") doi = str(ao.value);
+    }
+    const pubdate = str(rec.pubdate);
+    const pubYear = pubdate ? pubdate.slice(0, 4) : undefined;
+    out.push({
+      id: uid,
+      source: "MED",
+      pmid: uid,
+      doi,
+      title,
+      authorString: undefined,
+      journalTitle: str(rec.fulljournalname) ?? str(rec.source),
+      pubYear,
+      pubTypes,
+      isOpenAccess: false,
+      citedByCount: 0,
+      firstPublicationDate: pubdate,
+      retracted: detectRetraction(rec, pubTypes),
+      url: epmcResultUrl({ doi, pmid: uid, source: "MED", id: uid }),
+    });
+  }
+  return out;
+}
+
+/**
+ * PubMed FALLBACK feed (§3.1): when Europe PMC is unavailable, resolve PMIDs for a
+ * term then fetch their summaries, returning renderable {@link EpmcResult}s. NOTE
+ * (§9): PubMed recency ordering is NOT depended on — this is a resilience fallback,
+ * not the primary recency feed. Returns [] if nothing resolves.
+ */
+export async function fetchPubmedFallback(
+  knowledgeFetchFn: typeof globalThis.fetch,
+  term: string,
+  retmax = 25,
+): Promise<EpmcResult[]> {
+  const { idlist } = await fetchPubmedIds(knowledgeFetchFn, term, retmax);
+  if (idlist.length === 0) return [];
+  const body = await knowledgeJson(knowledgeFetchFn, buildPubmedEsummaryUrl(idlist));
+  return parsePubmedEsummary(body);
 }

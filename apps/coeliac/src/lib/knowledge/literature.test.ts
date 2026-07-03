@@ -13,11 +13,13 @@ import {
   detectRetraction,
   epmcResultUrl,
   fetchLatestLiterature,
+  fetchPubmedFallback,
   isGuideline,
   isPreprint,
   normalizePubTypes,
   parseEpmcResponse,
   parsePubmedEsearch,
+  parsePubmedEsummary,
   rankLiterature,
   recencyWeight,
 } from "./literature";
@@ -211,6 +213,62 @@ describe("URL builders", () => {
     const parsed = parsePubmedEsearch(body);
     expect(parsed.count).toBe(5);
     expect(parsed.idlist).toEqual(["1", "2", "3"]);
+  });
+});
+
+describe("PubMed fallback (§3.1) — renders EpmcResult-shaped cards", () => {
+  const ESUMMARY = {
+    result: {
+      uids: ["111", "222"],
+      "111": {
+        uid: "111",
+        title: "A coeliac review from PubMed",
+        pubdate: "2026 Jun",
+        fulljournalname: "Gut",
+        pubtype: ["Review"],
+        articleids: [{ idtype: "doi", value: "10.1/pm" }],
+      },
+      "222": {
+        uid: "222",
+        title: "Retracted PubMed paper",
+        pubdate: "2025 Jan",
+        pubtype: ["Retracted Publication"],
+        articleids: [],
+      },
+    },
+  };
+
+  it("maps esummary records to results and keeps the retraction hard-exclude", () => {
+    const results = parsePubmedEsummary(ESUMMARY);
+    expect(results).toHaveLength(2);
+    const clean = results.find((r) => r.id === "111");
+    expect(clean?.title).toContain("coeliac review");
+    expect(clean?.url).toBe("https://doi.org/10.1/pm");
+    expect(clean?.retracted).toBe(false);
+    expect(results.find((r) => r.id === "222")?.retracted).toBe(true);
+  });
+
+  it("fetchPubmedFallback does esearch → esummary through the allowlist", async () => {
+    const spy = vi.fn(async (u: RequestInfo | URL) => {
+      const url = String(u);
+      if (url.includes("esearch")) {
+        return new Response(JSON.stringify({ esearchresult: { count: "2", idlist: ["111", "222"] } }), {
+          status: 200,
+        });
+      }
+      return new Response(JSON.stringify(ESUMMARY), { status: 200 });
+    });
+    const kf = knowledgeFetch(spy as unknown as typeof globalThis.fetch);
+    const results = await fetchPubmedFallback(kf, "celiac disease", 25);
+    expect(results.map((r) => r.id)).toEqual(["111", "222"]);
+  });
+
+  it("returns [] when nothing resolves", async () => {
+    const spy = vi.fn(async () =>
+      new Response(JSON.stringify({ esearchresult: { count: "0", idlist: [] } }), { status: 200 }),
+    );
+    const kf = knowledgeFetch(spy as unknown as typeof globalThis.fetch);
+    expect(await fetchPubmedFallback(kf, "celiac disease")).toEqual([]);
   });
 });
 
