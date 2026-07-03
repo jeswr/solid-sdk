@@ -11,6 +11,9 @@ const eslintConfig = [
     ignores: [
       ".next/**",
       "out/**",
+      // Static assets served verbatim — incl. `sw.js`, a classic service worker
+      // written against ServiceWorkerGlobalScope globals, not the app's module env.
+      "public/**",
       "coverage/**",
       "playwright-report/**",
       "test-results/**",
