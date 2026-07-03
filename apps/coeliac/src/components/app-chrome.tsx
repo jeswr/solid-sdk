@@ -23,6 +23,7 @@ export function AppChrome({ children }: { children: ReactNode }) {
           <Link href="/">Home</Link>
           <Link href="/log">Log food</Link>
           <Link href="/symptoms">Symptoms</Link>
+          <Link href="/insights">Insights</Link>
         </nav>
         <div className="app__actions">
           <ThemeToggle />

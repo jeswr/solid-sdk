@@ -394,3 +394,134 @@ a {
 .log-page__manual {
   margin-top: 1.5rem;
 }
+
+/* ── Insights / correlations view ─────────────────────────────────────── */
+.insights__caveat {
+  margin: 0.25rem 0 1rem;
+  padding: 0.75rem 0.9rem;
+  border-left: 4px solid var(--primary, #0a7);
+  background: var(--muted, #f6f6f6);
+  color: var(--muted-foreground, #555);
+  border-radius: 6px;
+  font-size: 0.95rem;
+}
+.insights__scope {
+  color: var(--muted-foreground, #666);
+  font-size: 0.9rem;
+  margin: 0 0 1rem;
+}
+.insights__empty,
+.insights__none,
+.insights__loading {
+  color: var(--muted-foreground, #666);
+}
+.insights__rails {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+.insight-rail {
+  padding: 0.85rem 1rem;
+  border-radius: 8px;
+  border-left: 4px solid var(--border, #ccc);
+  background: var(--card, #fafafa);
+}
+.insight-rail__message {
+  margin: 0;
+}
+.insight-rail--danger {
+  border-left-color: var(--danger);
+  background: color-mix(in oklch, var(--danger) 8%, var(--card, #fff));
+}
+.insight-rail--warn {
+  border-left-color: var(--warn);
+  background: color-mix(in oklch, var(--warn) 8%, var(--card, #fff));
+}
+.insight-rail--info {
+  border-left-color: var(--muted-foreground, #999);
+}
+.suspicion-list,
+.review-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.suspicion {
+  border: 1px solid var(--border, #e5e5e5);
+  border-radius: 10px;
+  padding: 0.9rem 1rem;
+  background: var(--card, #fff);
+}
+.suspicion__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.suspicion__trigger {
+  font-weight: 600;
+  font-size: 1.05rem;
+}
+.suspicion__confidence {
+  font-size: 0.8rem;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  background: var(--muted, #eee);
+  color: var(--muted-foreground, #555);
+}
+.suspicion__confidence--likely {
+  background: color-mix(in oklch, var(--warn) 22%, var(--card, #fff));
+  color: var(--foreground, inherit);
+}
+.suspicion__stat {
+  margin: 0.5rem 0 0;
+}
+.suspicion__confounded {
+  margin: 0.5rem 0 0;
+  color: var(--caution, #a70);
+  font-size: 0.92rem;
+}
+.suspicion__evidence {
+  margin: 0.5rem 0 0;
+  color: var(--muted-foreground, #666);
+  font-size: 0.88rem;
+}
+.suspicion__disclaimer {
+  margin: 0.5rem 0 0;
+  color: var(--muted-foreground, #777);
+  font-size: 0.82rem;
+  font-style: italic;
+}
+.proposal {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  border: 1px solid var(--border, #e5e5e5);
+  border-radius: 10px;
+  background: var(--secondary, #eef7f3);
+}
+.proposal__note {
+  color: var(--muted-foreground, #666);
+  font-size: 0.88rem;
+  margin-bottom: 0;
+}
+.insights__reviews {
+  margin-top: 1.5rem;
+}
+.review {
+  display: flex;
+  gap: 0.6rem;
+  align-items: baseline;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--border, #eee);
+}
+.review__trigger {
+  font-weight: 600;
+}
+.review__message {
+  color: var(--muted-foreground, #555);
+  font-size: 0.92rem;
+}
