@@ -96,4 +96,5 @@ export {
   isHttpIri,
   SCHEMA,
   SCHEMA_EVENT,
+  safeHttpIri,
 } from "./vocab.js";

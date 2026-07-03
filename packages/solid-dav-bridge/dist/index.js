@@ -58,5 +58,5 @@ export { vcardToContact, veventToEvent, } from "./map.js";
 // --- the optional SSRF-guarded fetch-from-DAV helper + DAV auth ---
 export { DavFetchError, fetchDav } from "./remote.js";
 // --- the vocabularies + the http(s)-only IRI guard ---
-export { EVENT_PREFIXES, ICAL, ICAL_RRULE, ICAL_VEVENT, isHttpIri, SCHEMA, SCHEMA_EVENT, } from "./vocab.js";
+export { EVENT_PREFIXES, ICAL, ICAL_RRULE, ICAL_VEVENT, isHttpIri, SCHEMA, SCHEMA_EVENT, safeHttpIri, } from "./vocab.js";
 //# sourceMappingURL=index.js.map

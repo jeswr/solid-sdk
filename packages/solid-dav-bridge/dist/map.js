@@ -26,7 +26,7 @@
 import { DataFactory } from "n3";
 import { parseICalDate } from "./datetime.js";
 import { getProperties, getProperty, unescapeText, } from "./ical.js";
-import { ICAL_RRULE, ICAL_TZID, ICAL_UID, ICAL_VEVENT, isHttpIri, RDF_TYPE, SCHEMA_DESCRIPTION, SCHEMA_END_DATE, SCHEMA_EVENT, SCHEMA_IDENTIFIER, SCHEMA_LOCATION, SCHEMA_NAME, SCHEMA_PLACE, SCHEMA_START_DATE, SCHEMA_URL, } from "./vocab.js";
+import { ICAL_RRULE, ICAL_TZID, ICAL_UID, ICAL_VEVENT, RDF_TYPE, SCHEMA_DESCRIPTION, SCHEMA_END_DATE, SCHEMA_EVENT, SCHEMA_IDENTIFIER, SCHEMA_LOCATION, SCHEMA_NAME, SCHEMA_PLACE, SCHEMA_START_DATE, SCHEMA_URL, safeHttpIri, } from "./vocab.js";
 const { namedNode, literal, blankNode, quad } = DataFactory;
 /** Read the first property value of a component, TEXT-unescaped, or `undefined`. */
 function textProp(component, name) {
@@ -107,8 +107,11 @@ export function veventToEvent(component, options) {
         quads.push(quad(place, namedNode(SCHEMA_NAME), literal(location)));
     }
     // URL → schema:url only when it is an absolute http(s) IRI (untrusted input).
-    const url = textProp(component, "URL");
-    if (url !== undefined && isHttpIri(url)) {
+    // safeHttpIri (not the raw value) is emitted: it canonicalises + percent-encodes
+    // every Turtle-IRIREF-illegal char, so a hostile `URL:` value cannot break out of
+    // the `<...>` and inject triples (n3.Writer does not escape IRIs).
+    const url = safeHttpIri(textProp(component, "URL"));
+    if (url !== undefined) {
         quads.push(quad(s, namedNode(SCHEMA_URL), namedNode(url)));
     }
     // RRULE → ical:rrule, raw string verbatim (phase-1: not expanded). There can be
@@ -232,15 +235,14 @@ export function vcardToContact(component, options = {}) {
     // WebID: a UID that is an http(s) URL is the WebID; else the first http(s) URL.
     const uidRaw = textProp(component, "UID");
     // A UID may be `urn:uuid:...` (not a WebID) — only treat an http(s) UID as a WebID.
-    let webId;
-    if (uidRaw !== undefined && isHttpIri(uidRaw)) {
-        webId = uidRaw;
-    }
-    else {
+    // safeHttpIri validates AND canonicalises: the webId flows into serializePerson →
+    // an IRI object, so it MUST be injection-safe (never the raw untrusted string).
+    let webId = safeHttpIri(uidRaw);
+    if (webId === undefined) {
         for (const u of getProperties(component, "URL")) {
             if (typeof u.value === "string") {
-                const candidate = unescapeText(u.value).trim();
-                if (isHttpIri(candidate)) {
+                const candidate = safeHttpIri(unescapeText(u.value).trim());
+                if (candidate !== undefined) {
                     webId = candidate;
                     break;
                 }
@@ -265,8 +267,10 @@ export function vcardToContact(component, options = {}) {
         noteParts.push(`Organization: ${org}`);
     const note = noteParts.length > 0 ? noteParts.join("\n") : undefined;
     const data = { name };
-    if (options.inAddressBook !== undefined && isHttpIri(options.inAddressBook)) {
-        data.inAddressBook = options.inAddressBook;
+    // inAddressBook is caller-supplied but still becomes an IRI object → canonicalise.
+    const inAddressBook = safeHttpIri(options.inAddressBook);
+    if (inAddressBook !== undefined) {
+        data.inAddressBook = inAddressBook;
     }
     if (emails.length > 0)
         data.emails = emails;
