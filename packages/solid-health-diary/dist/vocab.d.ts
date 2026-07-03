@@ -94,6 +94,13 @@ export declare const RDF_TYPE: string;
  * naming was corrected to this existing term.)
  */
 export declare const SCHEMA_FOOD_EVENT: string;
+/**
+ * @deprecated Renamed to {@link SCHEMA_FOOD_EVENT}. schema.org has NO `schema:Meal`
+ * type (that IRI 404s), so this alias now resolves to the correct existing term
+ * `schema:FoodEvent`. Kept only for source-compatibility with any pre-rename
+ * importer; migrate to `SCHEMA_FOOD_EVENT`.
+ */
+export declare const SCHEMA_MEAL: string;
 /** `health:Patient` — the pod-owner role each entry is `core:about`. */
 export declare const HEALTH_PATIENT: string;
 /** `health:Observation` — the super-class a `diet:Symptom` is stamped with. */
