@@ -510,12 +510,43 @@ function isFiniteNumber(v) {
   return Number.isFinite(Number(s));
 }
 
-// node_modules/@jeswr/fetch-rdf/dist/parse.js
+// src/iri.ts
+var IRIREF_FORBIDDEN = /[\u0000-\u0020<>"{}|^`\\]/g;
+function escapeIri(value) {
+  return value.replace(
+    IRIREF_FORBIDDEN,
+    (c) => `%${c.charCodeAt(0).toString(16).toUpperCase().padStart(2, "0")}`
+  );
+}
+var LEADING_TRAILING_C0 = /^[\u0000-\u0020]|[\u0000-\u0020]$/;
+var ABSOLUTE_IRI_SCHEME = /^[a-z][a-z0-9+.-]*:/i;
+function safeHttpIri(value) {
+  if (typeof value !== "string") return void 0;
+  if (LEADING_TRAILING_C0.test(value)) return void 0;
+  const escaped = escapeIri(value);
+  let u;
+  try {
+    u = new URL(escaped);
+  } catch {
+    return void 0;
+  }
+  if (u.protocol !== "http:" && u.protocol !== "https:") return void 0;
+  return escaped;
+}
+function safeIri(value) {
+  if (typeof value !== "string") return void 0;
+  if (LEADING_TRAILING_C0.test(value)) return void 0;
+  const escaped = escapeIri(value);
+  if (!ABSOLUTE_IRI_SCHEME.test(escaped)) return void 0;
+  return escaped;
+}
+
+// ..node_modules/@jeswr/fetch-rdf/dist/parse.js
 import contentType from "content-type";
 import { Store, StreamParser } from "n3";
 import { JsonLdParser } from "jsonld-streaming-parser";
 
-// node_modules/@jeswr/fetch-rdf/dist/errors.js
+// ..node_modules/@jeswr/fetch-rdf/dist/errors.js
 var RdfFetchError = class extends Error {
   /** The original cause, if any (e.g. a network error or parser exception). */
   cause;
@@ -539,7 +570,7 @@ var RdfFetchError = class extends Error {
   }
 };
 
-// node_modules/@jeswr/fetch-rdf/dist/parse.js
+// ..node_modules/@jeswr/fetch-rdf/dist/parse.js
 var SUPPORTED_RDF_MEDIA_TYPES = [
   "text/turtle",
   "application/n-triples",
@@ -836,24 +867,36 @@ function normalize(subject) {
 var GraphBuilder = class {
   store = new Store2();
   factory = DataFactory;
-  /** Materialise a {@link NodeRef} to its RDF/JS term. */
+  /**
+   * Materialise a {@link NodeRef} to its RDF/JS term. Every IRI subject is run
+   * through {@link escapeIri} FIRST, so a Turtle IRIREF-forbidden octet in an
+   * untrusted subject id (e.g. a `>` in a caller-supplied policy/rule/duty id)
+   * can never break out of the serialiser's `<...>` — the breakout-proof
+   * chokepoint for subjects.
+   */
   subjectTerm(ref) {
-    return ref.kind === "iri" ? NamedNodeFrom.string(ref.value, this.factory) : BlankNodeFrom.string(ref.value, this.factory);
+    return ref.kind === "iri" ? NamedNodeFrom.string(escapeIri(ref.value), this.factory) : BlankNodeFrom.string(ref.value, this.factory);
   }
-  /** Add `(subject, predicate, object-IRI)`. */
+  /**
+   * Add `(subject, predicate, object-IRI)`. Predicate and object IRI are passed
+   * through {@link escapeIri} so no IRIREF-forbidden octet reaches the serialiser
+   * regardless of the call site — the breakout-proof chokepoint for object IRIs.
+   * (Trusted vocab constants contain no forbidden octet, so this is a no-op for
+   * them; semantic http(s)-only validation lives at the call sites in policy.ts.)
+   */
   addIri(subject, predicate, objectIri) {
     const s = this.subjectTerm(normalize(subject));
-    const p = NamedNodeFrom.string(predicate, this.factory);
-    const o = NamedNodeFrom.string(objectIri, this.factory);
+    const p = NamedNodeFrom.string(escapeIri(predicate), this.factory);
+    const o = NamedNodeFrom.string(escapeIri(objectIri), this.factory);
     this.store.add(this.factory.quad(s, p, o));
   }
   /** Add `(subject, predicate, literal)` with an optional datatype IRI. */
   addLiteral(subject, predicate, value, datatypeIri) {
     const s = this.subjectTerm(normalize(subject));
-    const p = NamedNodeFrom.string(predicate, this.factory);
+    const p = NamedNodeFrom.string(escapeIri(predicate), this.factory);
     const o = datatypeIri === void 0 ? LiteralFrom.string(value, this.factory) : this.factory.literal(
       value,
-      NamedNodeFrom.string(datatypeIri, this.factory)
+      NamedNodeFrom.string(escapeIri(datatypeIri), this.factory)
     );
     this.store.add(this.factory.quad(s, p, o));
   }
@@ -865,7 +908,7 @@ var GraphBuilder = class {
   linkBlankNode(subject, predicate) {
     const s = this.subjectTerm(normalize(subject));
     const blank = BlankNodeFrom.string(void 0, this.factory);
-    const p = NamedNodeFrom.string(predicate, this.factory);
+    const p = NamedNodeFrom.string(escapeIri(predicate), this.factory);
     this.store.add(this.factory.quad(s, p, blank));
     return { kind: "blank", value: blank.value };
   }
@@ -926,8 +969,9 @@ function writeConstraint(b, parent, c) {
   b.addIri(node, ODRL_OPERATOR, OPERATOR_IRI[c.operator]);
   const rights = Array.isArray(c.rightOperand) ? c.rightOperand : [c.rightOperand];
   for (const r of rights) {
-    if (typeof r === "string" && isIriValued(c.leftOperand) && looksLikeIri(r)) {
-      b.addIri(node, ODRL_RIGHT_OPERAND, r);
+    const safe = typeof r === "string" && isIriValued(c.leftOperand) ? safeIri(r) : void 0;
+    if (safe !== void 0) {
+      b.addIri(node, ODRL_RIGHT_OPERAND, safe);
     } else {
       const dt = inferDatatype(c, r);
       b.addLiteral(node, ODRL_RIGHT_OPERAND, String(r), dt);
@@ -937,14 +981,38 @@ function writeConstraint(b, parent, c) {
 function isIriValued(left) {
   return left === "recipient" || left === "purpose" || left === "spatial" || left === "systemDevice";
 }
-function looksLikeIri(v) {
-  return /^[a-z][a-z0-9+.-]*:/i.test(v);
+var OdrlSerializationError = class extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "OdrlSerializationError";
+  }
+};
+function requireHttpIri(value, field) {
+  if (value === void 0) {
+    return void 0;
+  }
+  const shown = value.length > 200 ? `${value.slice(0, 200)}\u2026` : value;
+  const safe = safeHttpIri(value);
+  if (safe === void 0) {
+    throw new OdrlSerializationError(
+      `Refusing to serialise policy: ${field} must be an http(s) IRI, got ${JSON.stringify(shown)}. Dropping it would widen the policy to a wildcard (fail-closed).`
+    );
+  }
+  if (safe !== value) {
+    throw new OdrlSerializationError(
+      `Refusing to serialise policy: ${field} contains characters that require escaping, got ${JSON.stringify(
+        shown
+      )}. An evaluation-critical IRI (target/assignee/assigner/profile) must be a clean absolute http(s) IRI so it evaluates identically in-memory and after a serialise\u2192parse round-trip.`
+    );
+  }
+  return safe;
 }
 function writeDuty(b, parent, predicate, duty) {
   const node = b.linkChild(parent, predicate, duty.id);
   b.addIri(node, ODRL_ACTION, ACTION_IRI[duty.action]);
-  if (duty.target !== void 0) {
-    b.addIri(node, ODRL_TARGET, duty.target);
+  const dutyTarget = requireHttpIri(duty.target, "duty.target");
+  if (dutyTarget !== void 0) {
+    b.addIri(node, ODRL_TARGET, dutyTarget);
   }
   for (const c of duty.constraints ?? []) {
     writeConstraint(b, node, c);
@@ -954,14 +1022,15 @@ function writeRule(b, policy, rule, inheritedAssigner, inheritedAssignee) {
   const predicate = rule.type === "prohibition" ? ODRL_PROHIBITION : ODRL_PERMISSION;
   const node = b.linkChild(policy, predicate, rule.id);
   b.addIri(node, ODRL_ACTION, ACTION_IRI[rule.action]);
-  if (rule.target !== void 0) {
-    b.addIri(node, ODRL_TARGET, rule.target);
+  const target = requireHttpIri(rule.target, "rule.target");
+  if (target !== void 0) {
+    b.addIri(node, ODRL_TARGET, target);
   }
-  const assignee = rule.assignee ?? inheritedAssignee;
+  const assignee = requireHttpIri(rule.assignee ?? inheritedAssignee, "rule.assignee");
   if (assignee !== void 0) {
     b.addIri(node, ODRL_ASSIGNEE, assignee);
   }
-  const assigner = rule.assigner ?? inheritedAssigner;
+  const assigner = requireHttpIri(rule.assigner ?? inheritedAssigner, "rule.assigner");
   if (assigner !== void 0) {
     b.addIri(node, ODRL_ASSIGNER, assigner);
   }
@@ -980,13 +1049,18 @@ function policyToRdf(policy) {
   b.addIri(subject, RDF_TYPE, policyTypeIri(policy.type));
   b.addIri(subject, ODRL_UID, policy.id);
   for (const p of toArray(policy.profile)) {
-    b.addIri(subject, ODRL_PROFILE, p);
+    const safeProfile = requireHttpIri(p, "policy.profile");
+    if (safeProfile !== void 0) {
+      b.addIri(subject, ODRL_PROFILE, safeProfile);
+    }
   }
-  if (policy.assigner !== void 0) {
-    b.addIri(subject, ODRL_ASSIGNER, policy.assigner);
+  const policyAssigner = requireHttpIri(policy.assigner, "policy.assigner");
+  if (policyAssigner !== void 0) {
+    b.addIri(subject, ODRL_ASSIGNER, policyAssigner);
   }
-  if (policy.assignee !== void 0) {
-    b.addIri(subject, ODRL_ASSIGNEE, policy.assignee);
+  const policyAssignee = requireHttpIri(policy.assignee, "policy.assignee");
+  if (policyAssignee !== void 0) {
+    b.addIri(subject, ODRL_ASSIGNEE, policyAssignee);
   }
   if (policy.conflict !== void 0) {
     b.addIri(subject, ODRL_CONFLICT, CONFLICT_IRI[policy.conflict]);
@@ -1010,18 +1084,22 @@ function policyToTurtle(policy, format) {
   return serialize(policyToRdf(policy), format);
 }
 function policyToJsonLd(policy) {
+  const id = escapeIri(policy.id);
   const doc = {
     "@context": ODRL_INLINE_CONTEXT,
-    "@id": policy.id,
+    "@id": id,
     "@type": `odrl:${policy.type ?? "Set"}`,
-    uid: { "@id": policy.id }
+    uid: { "@id": id }
   };
   const profiles = toArray(policy.profile);
-  if (profiles.length > 0) {
-    doc.profile = profiles.map((p) => ({ "@id": p }));
+  const emittedProfiles = profiles.map((p) => requireHttpIri(p, "policy.profile")).filter((p) => p !== void 0);
+  if (emittedProfiles.length > 0) {
+    doc.profile = emittedProfiles.map((p) => ({ "@id": p }));
   }
-  if (policy.assigner !== void 0) doc.assigner = { "@id": policy.assigner };
-  if (policy.assignee !== void 0) doc.assignee = { "@id": policy.assignee };
+  const jsonAssigner = requireHttpIri(policy.assigner, "policy.assigner");
+  if (jsonAssigner !== void 0) doc.assigner = { "@id": jsonAssigner };
+  const jsonAssignee = requireHttpIri(policy.assignee, "policy.assignee");
+  if (jsonAssignee !== void 0) doc.assignee = { "@id": jsonAssignee };
   if (policy.conflict !== void 0) doc.conflict = { "@id": CONFLICT_IRI[policy.conflict] };
   if (policy.permissions && policy.permissions.length > 0) {
     doc.permission = policy.permissions.map((r) => ruleJsonLd(r, policy));
@@ -1036,12 +1114,13 @@ function policyToJsonLd(policy) {
 }
 function ruleJsonLd(rule, policy) {
   const node = {};
-  if (rule.id !== void 0) node["@id"] = rule.id;
+  if (rule.id !== void 0) node["@id"] = escapeIri(rule.id);
   node.action = { "@id": ACTION_IRI[rule.action] };
-  if (rule.target !== void 0) node.target = { "@id": rule.target };
-  const assignee = rule.assignee ?? policy.assignee;
+  const target = requireHttpIri(rule.target, "rule.target");
+  if (target !== void 0) node.target = { "@id": target };
+  const assignee = requireHttpIri(rule.assignee ?? policy.assignee, "rule.assignee");
   if (assignee !== void 0) node.assignee = { "@id": assignee };
-  const assigner = rule.assigner ?? policy.assigner;
+  const assigner = requireHttpIri(rule.assigner ?? policy.assigner, "rule.assigner");
   if (assigner !== void 0) node.assigner = { "@id": assigner };
   if (rule.constraints && rule.constraints.length > 0) {
     node.constraint = rule.constraints.map((c) => constraintJsonLd(c));
@@ -1053,9 +1132,10 @@ function ruleJsonLd(rule, policy) {
 }
 function dutyJsonLd(duty) {
   const node = {};
-  if (duty.id !== void 0) node["@id"] = duty.id;
+  if (duty.id !== void 0) node["@id"] = escapeIri(duty.id);
   node.action = { "@id": ACTION_IRI[duty.action] };
-  if (duty.target !== void 0) node.target = { "@id": duty.target };
+  const target = requireHttpIri(duty.target, "duty.target");
+  if (target !== void 0) node.target = { "@id": target };
   if (duty.constraints && duty.constraints.length > 0) {
     node.constraint = duty.constraints.map((c) => constraintJsonLd(c));
   }
@@ -1068,8 +1148,9 @@ function constraintJsonLd(c) {
   };
   const rights = Array.isArray(c.rightOperand) ? c.rightOperand : [c.rightOperand];
   const emitted = rights.map((r) => {
-    if (typeof r === "string" && isIriValued(c.leftOperand) && looksLikeIri(r)) {
-      return { "@id": r };
+    const safe = typeof r === "string" && isIriValued(c.leftOperand) ? safeIri(r) : void 0;
+    if (safe !== void 0) {
+      return { "@id": safe };
     }
     const dt = inferDatatype(c, r);
     return dt !== void 0 ? { "@value": String(r), "@type": dt } : String(r);
@@ -1226,8 +1307,10 @@ export {
   ODRL_INLINE_CONTEXT,
   OPERATORS,
   OPERATOR_IRI,
+  OdrlSerializationError,
   VALID_ACTION_IRIS,
   constraintSatisfied,
+  escapeIri,
   evaluate,
   parsePolicy,
   policyFromRdf,
@@ -1236,6 +1319,8 @@ export {
   policyToTurtle,
   requestContextFromA2AIntent,
   requestContextFromWac,
+  safeHttpIri,
+  safeIri,
   serialize
 };
 //# sourceMappingURL=index.js.map

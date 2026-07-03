@@ -75,9 +75,21 @@ export declare function iriRef(iri: string): NodeRef;
 export declare class GraphBuilder {
     private readonly store;
     private readonly factory;
-    /** Materialise a {@link NodeRef} to its RDF/JS term. */
+    /**
+     * Materialise a {@link NodeRef} to its RDF/JS term. Every IRI subject is run
+     * through {@link escapeIri} FIRST, so a Turtle IRIREF-forbidden octet in an
+     * untrusted subject id (e.g. a `>` in a caller-supplied policy/rule/duty id)
+     * can never break out of the serialiser's `<...>` — the breakout-proof
+     * chokepoint for subjects.
+     */
     private subjectTerm;
-    /** Add `(subject, predicate, object-IRI)`. */
+    /**
+     * Add `(subject, predicate, object-IRI)`. Predicate and object IRI are passed
+     * through {@link escapeIri} so no IRIREF-forbidden octet reaches the serialiser
+     * regardless of the call site — the breakout-proof chokepoint for object IRIs.
+     * (Trusted vocab constants contain no forbidden octet, so this is a no-op for
+     * them; semantic http(s)-only validation lives at the call sites in policy.ts.)
+     */
     addIri(subject: NodeRef | string, predicate: string, objectIri: string): void;
     /** Add `(subject, predicate, literal)` with an optional datatype IRI. */
     addLiteral(subject: NodeRef | string, predicate: string, value: string, datatypeIri?: string): void;
