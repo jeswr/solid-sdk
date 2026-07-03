@@ -1,0 +1,81 @@
+# AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+#
+@prefix col:     <https://w3id.org/jeswr/sectors/collectibles#> .
+@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix skos:    <http://www.w3.org/2004/02/skos/core#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+
+# External vocabularies (real IRIs — encouraged in an alignments file):
+@prefix schema:  <http://schema.org/> .                        # schema.org
+@prefix prov:    <http://www.w3.org/ns/prov#> .                # W3C PROV-O
+# linked.art / CIDOC-CRM — the museum & art-market standard (ALIGNMENT REFERENCE
+# ONLY; full CRM is far too heavy for a consumer product, so never adopted).
+@prefix crm:     <http://www.cidoc-crm.org/cidoc-crm/> .       # CIDOC-CRM 7.x
+@prefix la:      <https://linked.art/ns/terms/> .              # Linked Art profile terms
+
+# =============================================================================
+# Solid COLLECTIBLES sector — ALIGNMENTS (v0.1.0).
+#
+# Bridges the collectibles-sector terms (collectibles.ttl) to the external
+# vocabularies the domain uses. EXTERNAL REUSE IS MODE A: we do NOT MIREOT-import
+# schema.org / PROV-O / CIDOC-CRM — we ALIGN via skos:closeMatch / skos:broadMatch
+# (annotation, NO entailment), so an external concept that fuses concerns can
+# never collapse two distinct Core/col classes. Kept OUT of the reasoned closure
+# (owl:imports collectibles only).
+#
+# THE linked.art / CIDOC-CRM MAP IS A REFERENCE, NOT AN ADOPTION (review §1): the
+# art-market standard models acquisitions as crm:E8_Acquisition etc.; full CRM is
+# far too heavy for a consumer product, so collectibles stays PROV-O-primary and
+# only ANNOTATES the closest CRM/linked.art analogues here.
+# =============================================================================
+
+<https://w3id.org/jeswr/sectors/collectibles/alignments> a owl:Ontology ;
+    dcterms:title "Solid Collectibles sector — external alignments"@en ;
+    owl:imports <https://w3id.org/jeswr/sectors/collectibles> ;
+    owl:versionInfo "0.1.0" ;
+    rdfs:comment "Optional Mode-A bridge: schema.org amount/creative-work terms, PROV-O activity/attribution framing, and linked.art (CIDOC-CRM) art-market analogues as reference only. External IRIs are real and governed by their bodies. Nothing is owl:imported into the reasoned closure."@en .
+
+dcterms:title a owl:AnnotationProperty .
+dcterms:source a owl:AnnotationProperty .
+owl:versionInfo a owl:AnnotationProperty .
+
+# -----------------------------------------------------------------------------
+# PROV-O — the process framing (Mode A). col:ProvenanceEvent roots in
+# core:Activity for the sector contract; PROV consumers may treat it as a
+# prov:Activity. The correct attribution/timing/generation edges
+# (prov:wasAssociatedWith → an Agent NODE, prov:startedAtTime, prov:used,
+# prov:wasGeneratedBy for creation only) are used DIRECTLY on instances
+# (constrained in collectibles.shacl.ttl), not forked.
+# -----------------------------------------------------------------------------
+col:ProvenanceEvent skos:closeMatch prov:Activity .
+col:appraiser       rdfs:seeAlso prov:wasAssociatedWith .
+col:insurer         rdfs:seeAlso prov:wasAssociatedWith .
+
+# -----------------------------------------------------------------------------
+# schema.org — the amount + creative-work reuse (Mode A). The amount NODE is a
+# schema:MonetaryAmount (used directly, punned in collectibles.ttl); these bridge
+# the col: qualifier predicates to their closest schema.org analogues. The asset
+# stays a schema:VisualArtwork/CreativeWork in the product's pod.
+# -----------------------------------------------------------------------------
+col:amount         skos:closeMatch schema:value .
+col:coverageAmount skos:broadMatch schema:value .
+col:premium        skos:broadMatch schema:value .
+
+# -----------------------------------------------------------------------------
+# linked.art / CIDOC-CRM — REFERENCE ONLY (review §1: never adopted). The closest
+# CRM analogues for the provenance/valuation model, for consumers who also read
+# CRM. broadMatch where CRM's class is broader (an acquisition is one kind of
+# E7_Activity); closeMatch where the fit is tight.
+# -----------------------------------------------------------------------------
+col:ProvenanceEvent skos:broadMatch crm:E7_Activity ;
+    dcterms:source "CIDOC Conceptual Reference Model (ISO 21127) via the linked.art profile — an acquisition is crm:E8_Acquisition, a sub-activity of E7_Activity. Reference alignment only; collectibles stays PROV-O-primary."@en .
+col:evt-acquisition skos:closeMatch crm:E8_Acquisition .
+col:evt-sale        skos:closeMatch crm:E8_Acquisition .
+col:evt-exhibition  skos:closeMatch crm:E7_Activity .
+col:Valuation       skos:closeMatch crm:E13_Attribute_Assignment ;
+    dcterms:source "linked.art models a valuation as a crm:E13_Attribute_Assignment / dimension. Reference only."@en .
+col:Appraisal       skos:closeMatch crm:E13_Attribute_Assignment .
+col:Valuation       rdfs:seeAlso la:Valuation .

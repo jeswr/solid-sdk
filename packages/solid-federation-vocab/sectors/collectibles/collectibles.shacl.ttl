@@ -1,0 +1,183 @@
+# AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+#
+@prefix col:     <https://w3id.org/jeswr/sectors/collectibles#> .
+@prefix colsh:   <https://w3id.org/jeswr/sectors/collectibles/shapes#> .
+@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix sh:      <http://www.w3.org/ns/shacl#> .
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix skos:    <http://www.w3.org/2004/02/skos/core#> .
+@prefix prof:    <http://www.w3.org/ns/dx/prof/> .
+@prefix schema:  <http://schema.org/> .
+@prefix prov:    <http://www.w3.org/ns/prov#> .
+
+# =============================================================================
+# Solid COLLECTIBLES sector — SHACL data-model profile (F4).
+#
+# The OWL ontology (collectibles.ttl) licenses meaning; THIS shape checks shape.
+# The MUSTs encode the review's PROV-O corrections and amount discipline:
+#  - a ProvenanceEvent MUST carry exactly one col:eventType (a coded IRI) and
+#    at least one of prov:startedAtTime / dcterms:date; if it carries a
+#    prov:wasAssociatedWith it MUST be an IRI (an Agent node, never a literal);
+#  - a Valuation / Appraisal MUST carry exactly one col:amount pointing at a
+#    node validated by the MonetaryAmountShape (schema:value + schema:currency),
+#    and MUST NOT link its amount via schema:offers (range Offer/Demand only);
+#    an Appraisal SHOULD name its col:appraiser;
+#  - an InsurancePolicy MUST carry a col:policyNumber and a col:coverageAmount;
+#  - a schema:MonetaryAmount value node MUST carry schema:value (xsd:decimal)
+#    and a 3-letter ISO 4217 schema:currency.
+#
+# Discipline (matches the sibling sectors' profiles):
+#  - OPEN BY DEFAULT — no sh:closed (composes with app + schema.org profiles).
+#  - sh:severity carries the RFC 2119 grade: Violation=MUST, Warning=SHOULD.
+#  - Cross-RESOURCE references (col:appraiser, col:insurer, the asset link) are
+#    checked as sh:nodeKind sh:IRI, NOT sh:class — a pod resource does not carry
+#    the referent's typing triples.
+#  - IMMUTABLE version IRI (.../collectibles/profile/0.1.0); additive-only.
+# =============================================================================
+
+<https://w3id.org/jeswr/sectors/collectibles/profile>
+    a prof:Profile ;
+    dcterms:title "Solid Collectibles data-model profile (version-independent)"@en ;
+    dcterms:description "Resolves to the current Collectibles sector profile version."@en .
+
+<https://w3id.org/jeswr/sectors/collectibles/profile/0.1.0>
+    a prof:Profile ;
+    dcterms:title "Solid Collectibles data-model profile"@en ;
+    dcterms:isVersionOf <https://w3id.org/jeswr/sectors/collectibles/profile> ;
+    owl:versionInfo "0.1.0" ;
+    owl:versionIRI <https://w3id.org/jeswr/sectors/collectibles/profile/0.1.0> ;
+    prof:isProfileOf <https://w3id.org/jeswr/sectors/collectibles> ;
+    prof:hasToken "solid-collectibles-0.1.0" ;
+    prof:hasResource [
+        prof:hasRole <http://www.w3.org/ns/dx/prof/role/constraints> ;
+        prof:hasArtifact <https://w3id.org/jeswr/sectors/collectibles/collectibles.shacl.ttl>
+    ] ;
+    prof:hasResource [
+        prof:hasRole <http://www.w3.org/ns/dx/prof/role/vocabulary> ;
+        prof:hasArtifact <https://w3id.org/jeswr/sectors/collectibles>
+    ] ;
+    rdfs:comment "Open-by-default SHACL profile for the collectibles sector."@en .
+
+# -----------------------------------------------------------------------------
+# MonetaryAmount value node — schema:value + ISO 4217 schema:currency.
+# -----------------------------------------------------------------------------
+colsh:MonetaryAmountShape a sh:NodeShape ;
+    sh:targetClass schema:MonetaryAmount ;
+    rdfs:label "Monetary amount shape"@en ;
+    sh:property [
+        sh:path schema:value ;
+        sh:datatype xsd:decimal ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:severity sh:Violation ;
+        sh:message "A schema:MonetaryAmount MUST carry exactly one schema:value (xsd:decimal)."@en
+    ] ;
+    sh:property [
+        sh:path schema:currency ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:pattern "^[A-Z]{3}$" ;
+        sh:severity sh:Violation ;
+        sh:message "A schema:MonetaryAmount MUST carry exactly one ISO 4217 alphabetic schema:currency code (3 uppercase letters)."@en
+    ] .
+
+# -----------------------------------------------------------------------------
+# ProvenanceEvent — coded type; PROV-O-correct timing + attribution.
+# -----------------------------------------------------------------------------
+colsh:ProvenanceEventShape a sh:NodeShape ;
+    sh:targetClass col:ProvenanceEvent ;
+    rdfs:label "Provenance event shape"@en ;
+    sh:property [
+        sh:path col:eventType ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:severity sh:Violation ;
+        sh:message "A ProvenanceEvent MUST carry exactly one col:eventType coded IRI."@en
+    ] ;
+    sh:property [
+        sh:path prov:wasAssociatedWith ;
+        sh:nodeKind sh:IRI ;
+        sh:severity sh:Violation ;
+        sh:message "prov:wasAssociatedWith, when present, MUST be an Agent IRI — never a string literal (the review's attribution fix)."@en
+    ] ;
+    sh:property [
+        sh:path prov:startedAtTime ;
+        sh:datatype xsd:dateTime ;
+        sh:severity sh:Warning ;
+        sh:message "A ProvenanceEvent SHOULD record prov:startedAtTime (xsd:dateTime) — never prov:atTime (whose domain is prov:InstantaneousEvent)."@en
+    ] .
+
+# -----------------------------------------------------------------------------
+# Valuation + Appraisal — exactly one col:amount MonetaryAmount node.
+# -----------------------------------------------------------------------------
+colsh:ValuationShape a sh:NodeShape ;
+    sh:targetClass col:Valuation ;
+    rdfs:label "Valuation shape"@en ;
+    sh:property [
+        sh:path col:amount ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:node colsh:MonetaryAmountShape ;
+        sh:severity sh:Violation ;
+        sh:message "A Valuation MUST carry exactly one col:amount pointing at a valid schema:MonetaryAmount node."@en
+    ] ;
+    sh:property [
+        sh:path schema:offers ;
+        sh:maxCount 0 ;
+        sh:severity sh:Violation ;
+        sh:message "A Valuation MUST NOT use schema:offers (range Offer/Demand only; a valuation is not an offer) — link the amount via col:amount."@en
+    ] .
+
+colsh:AppraisalShape a sh:NodeShape ;
+    sh:targetClass col:Appraisal ;
+    rdfs:label "Appraisal shape"@en ;
+    sh:property [
+        sh:path col:amount ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:node colsh:MonetaryAmountShape ;
+        sh:severity sh:Violation ;
+        sh:message "An Appraisal MUST carry exactly one col:amount pointing at a valid schema:MonetaryAmount node."@en
+    ] ;
+    sh:property [
+        sh:path col:appraiser ;
+        sh:minCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:severity sh:Warning ;
+        sh:message "An Appraisal SHOULD name its col:appraiser (an Agent IRI)."@en
+    ] .
+
+# -----------------------------------------------------------------------------
+# InsurancePolicy — policy number + coverage amount.
+# -----------------------------------------------------------------------------
+colsh:InsurancePolicyShape a sh:NodeShape ;
+    sh:targetClass col:InsurancePolicy ;
+    rdfs:label "Insurance policy shape"@en ;
+    sh:property [
+        sh:path col:policyNumber ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:severity sh:Violation ;
+        sh:message "An InsurancePolicy MUST carry exactly one col:policyNumber."@en
+    ] ;
+    sh:property [
+        sh:path col:coverageAmount ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:node colsh:MonetaryAmountShape ;
+        sh:severity sh:Violation ;
+        sh:message "An InsurancePolicy MUST carry exactly one col:coverageAmount pointing at a valid schema:MonetaryAmount node."@en
+    ] ;
+    sh:property [
+        sh:path col:insurer ;
+        sh:nodeKind sh:IRI ;
+        sh:severity sh:Warning ;
+        sh:message "An InsurancePolicy SHOULD name its col:insurer (an Agent IRI)."@en
+    ] .

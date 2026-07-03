@@ -167,6 +167,7 @@ const ONTOS = [
   ["sectors/social/social.ttl", "sectors/social", "social", "https://w3id.org/jeswr/sectors/social#"],
   ["sectors/bookmarks/bookmarks.ttl", "sectors/bookmarks", "bookmark", "https://w3id.org/jeswr/sectors/bookmarks#"],
   ["sectors/futures/futures.ttl", "sectors/futures", "fut", "https://w3id.org/jeswr/sectors/futures#"],
+  ["sectors/collectibles/collectibles.ttl", "sectors/collectibles", "col", "https://w3id.org/jeswr/sectors/collectibles#"],
 ];
 
 const RDF_LABEL = `${RDFS}label`;
