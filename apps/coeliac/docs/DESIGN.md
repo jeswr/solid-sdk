@@ -142,8 +142,10 @@ carrying `dcterms:created`, provenance, and a stable slug-derived IRI.
      (Exposure below) is category-driven — a clean-tag product in a high-risk
      category (dried fruit, wine) can still hide sub-10-ppm sulphites
      (`RESEARCH.md` §2.7), so the derivation needs the category, not just the
-     tags. If OFF has no category for the barcode, `possible-undeclared` cannot
-     fire and the exposure is `absent` with a "category unknown" note.
+     tags. If OFF has no category for the barcode, only the **`possible-
+     undeclared` fallback** is suppressed (with a "category unknown" note) — a
+     `present`/`trace` exposure still derived from `additives_tags` (E220–E228),
+     `allergens_tags`/`traces_tags`, or an ingredient-text alias is unaffected.
 3. **Exposure (derived)** — `diet:Exposure`
    - The engine-derived trigger content of a meal: `diet:trigger` → a
      **TriggerClass** (see §2.3), `diet:exposureLevel` ∈
