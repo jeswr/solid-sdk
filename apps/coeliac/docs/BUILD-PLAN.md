@@ -59,10 +59,17 @@ Reuse `schema:`/`health:`/`time:`/`prov:`/`dcterms:` real terms; new terms under
 `@jeswr/fetch-rdf@0.1.0`; serialise via `n3.Writer`. **Never hand-build triples.**
 **Acceptance:**
 - Each entity: `parse∘build == identity` round-trip test; typed accessors.
+- `FoodItem` stores `diet:offCategory` (OFF `categories_tags`) alongside
+  allergen/trace/additive tags — required so the derivation can see the category.
 - `deriveExposures(foodItems) → Exposure[]` maps OFF `allergens_tags`,
   `traces_tags`, `additives_tags` (E220–E228 → `sulphites`) + ingredient-text
-  sulphite aliases (RESEARCH §2.7) → exposures with `exposureLevel` incl.
-  `possible-undeclared` for high-risk categories with clean tags.
+  sulphite aliases (RESEARCH §2.7) → exposures with `exposureLevel`. The
+  `possible-undeclared` level fires from a curated **high-risk-category → trigger
+  map** applied to `diet:offCategory` (dried fruit / wine / beer / bottled citrus
+  / pickles → `sulphites`) when tags are clean; if the category is absent/unknown
+  it does NOT fire. **Fixtures must cover** a clean-tag high-risk sulphite
+  category (e.g. `en:dried-apricots`) → `possible-undeclared`, and an
+  unknown-category product → no false alarm.
 - ACL helper writes **owner-only, fail-closed** ACL via `n3.Writer`; test proves
   no public access.
 - `sourceConfidence` field on FoodItem (`manual`/`off`/`ocr`/`voice`).

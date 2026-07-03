@@ -17,7 +17,8 @@
 ## 0. Product thesis in one line
 A pod-owned, multi-intolerance health diary whose **make-or-break feature is
 frictionless logging** (5-second scan-or-say), whose **inference engine respects
-symptom lag** (24–72 h for gluten, tight windows for lactose/sulphites), and
+symptom lag** (a wide, right-skewed ~0–72 h window for gluten, tight windows for
+lactose/sulphites), and
 whose **structured elimination protocols** turn the multi-year "what else is
 wrong with me?" odyssey into a guided, one-variable-at-a-time process — with the
 diary owned by the user, forever, in their Solid pod.
@@ -136,14 +137,24 @@ carrying `dcterms:created`, provenance, and a stable slug-derived IRI.
    - `diet:declaredAllergen` → allergen codes (from OFF `allergens_tags`).
    - `diet:traceAllergen` → "may contain" (OFF `traces_tags` — cross-contam).
    - `diet:additive` → OFF `additives_tags` (the sulphite hook E220–E228).
+   - `diet:offCategory` → OFF `categories_tags` (e.g. `en:dried-fruits`,
+     `en:wines`). **Load-bearing:** the `possible-undeclared` sulphite flag
+     (Exposure below) is category-driven — a clean-tag product in a high-risk
+     category (dried fruit, wine) can still hide sub-10-ppm sulphites
+     (`RESEARCH.md` §2.7), so the derivation needs the category, not just the
+     tags. If OFF has no category for the barcode, `possible-undeclared` cannot
+     fire and the exposure is `absent` with a "category unknown" note.
 3. **Exposure (derived)** — `diet:Exposure`
    - The engine-derived trigger content of a meal: `diet:trigger` → a
      **TriggerClass** (see §2.3), `diet:exposureLevel` ∈
      {`present`, `trace`, `possible-undeclared`, `absent`}, `diet:derivedFrom`
      (`prov:wasDerivedFrom` the FoodItems/tags it came from — full transparency).
    - `possible-undeclared` encodes the sub-10-ppm sulphite / high-risk-category
-     honesty flag (`RESEARCH.md` §2.7): "clean tags but a category that commonly
-     hides this trigger."
+     honesty flag (`RESEARCH.md` §2.7): "clean tags but a **`diet:offCategory`**
+     that commonly hides this trigger." Fires from the FoodItem's OFF
+     `categories_tags` against a curated high-risk-category → trigger map
+     (dried fruit / wine / beer / bottled citrus / pickles → `sulphites`, etc.);
+     if the category is unknown it does NOT fire (no false alarm).
 4. **Symptom** — `diet:Symptom` (a `health:Observation` about the Patient)
    - `diet:symptomType` (SKOS-coded: bloating, diarrhoea, constipation,
      abdominal-pain, brain-fog, headache, fatigue, skin/rash, wheeze/breathing,

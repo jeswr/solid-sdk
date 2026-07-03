@@ -240,7 +240,9 @@ dietitian / see a doctor" safety rail** (§4). No streaks-for-avoidance mechanic
   `product_name`, `ingredients_text`, **`allergens_tags`** (e.g. `en:milk`,
   `en:nuts`, `en:soybeans`), **`traces_tags`** (cross-contamination — "may
   contain"), **`additives_tags`** (e.g. `en:e322` — the sulphite hook is
-  `en:e220`…`en:e228`), `nutriments`.
+  `en:e220`…`en:e228`), `categories_tags` (e.g. `en:dried-fruits`, `en:wines` —
+  the input to the "may contain undeclared sulphites" high-risk-category flag),
+  `nutriments`.
 - **Licence: ODbL** — data is open; **attribution to Open Food Facts required**;
   cache is fine (encouraged).
 - Docs: https://openfoodfacts.github.io/openfoodfacts-server/api/ ·
