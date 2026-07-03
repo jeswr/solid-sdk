@@ -25,7 +25,11 @@
  */
 
 // --- re-exported canonical model + IRI guard from solid-chat-interop, so a
-//     consumer has the hub types + the http(s)-only filter to hand. ---
+//     consumer has the hub types + the http(s)-only predicate to hand. ---
+//     NOTE: `safeIri`/`isHttpIri` only *filter* (http(s)? yes/no) and return the
+//     value UNCHANGED. If you build an RDF `NamedNode` from an UNTRUSTED value use
+//     {@link safeHttpIri} instead — it canonicalises (`new URL().href`) so a
+//     `>`-bearing IRI cannot break out of an `n3.Writer` IRIREF and inject triples.
 export type { CanonicalMessage, MessageProvenance } from "@jeswr/solid-chat-interop";
 export { isHttpIri, safeIri } from "@jeswr/solid-chat-interop";
 // --- granary AS2 JSON shapes + payload iteration ---
@@ -48,6 +52,6 @@ export {
   ingestGranary,
 } from "./ingest.js";
 // --- granary AS2 object → canonical message mapping ---
-export { granaryObjectToCanonical, importedDate, refToIri } from "./map.js";
+export { granaryObjectToCanonical, importedDate, refToIri, safeHttpIri } from "./map.js";
 // --- the optional SSRF-guarded fetch-from-granary helper ---
 export { type FetchGranaryOptions, fetchGranary, GranaryFetchError } from "./remote.js";

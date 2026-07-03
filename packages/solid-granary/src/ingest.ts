@@ -134,6 +134,28 @@ export function defaultSlug(msg: CanonicalMessage, index: number): string {
   return `granary-${token}.ttl`;
 }
 
+/**
+ * Validate the caller-configured target container: it MUST be an absolute http(s) URL
+ * with NO embedded credentials. A scheme-relative / non-absolute value would make
+ * `new URL(slug, base)` throw unpredictably; a `file:`/`javascript:` base is not a pod;
+ * and a `https://user:pass@…` base would embed credentials in every write URL (a
+ * credential-in-URL leak — see SECURITY check 5). Fail closed on any of these.
+ */
+function assertValidContainer(container: string): void {
+  let u: URL;
+  try {
+    u = new URL(container);
+  } catch {
+    throw new TypeError(`ingestGranary: \`container\` must be an absolute URL: ${container}`);
+  }
+  if (u.protocol !== "http:" && u.protocol !== "https:") {
+    throw new TypeError(`ingestGranary: \`container\` must be an http(s) URL: ${container}`);
+  }
+  if (u.username !== "" || u.password !== "") {
+    throw new TypeError("ingestGranary: `container` must not embed credentials (user:pass@)");
+  }
+}
+
 /** Join a container URL (ending `/`) and a slug into a resource URL, safely. */
 function resourceUrl(container: string, slug: string): string {
   const base = container.endsWith("/") ? container : `${container}/`;
@@ -183,6 +205,7 @@ export async function ingestGranary(
   if (typeof container !== "string" || container.length === 0) {
     throw new TypeError("ingestGranary: `container` is required");
   }
+  assertValidContainer(container);
   const base = container.endsWith("/") ? container : `${container}/`;
 
   const items: IngestItemResult[] = [];
@@ -200,13 +223,32 @@ export async function ingestGranary(
       const headers: Record<string, string> = { "content-type": "text/turtle" };
       if (conditional === "if-none-match") headers["if-none-match"] = "*";
 
-      const res = await writeFetch(url, { method: "PUT", headers, body });
-      const ok = res.status >= 200 && res.status < 300;
-      items.push({ index, url, written: ok, status: res.status });
+      // `redirect: "manual"` is load-bearing, not cosmetic: `writeFetch` is a
+      // DPoP/WebID-authenticated fetch, so if the pod (or a hostile intermediary)
+      // answers a PUT with a 3xx, the default `redirect: "follow"` would re-send the
+      // authorization + DPoP proof AND the message body to the redirect target — a
+      // cross-origin credential + data leak. Forcing "manual" makes the authed fetch
+      // return the redirect WITHOUT following it; we then treat any 3xx / opaque
+      // redirect as a FAILED write (fail-closed), never a success.
+      const res = await writeFetch(url, { method: "PUT", headers, body, redirect: "manual" });
+      const redirected = res.type === "opaqueredirect" || (res.status >= 300 && res.status < 400);
+      const ok = !redirected && res.status >= 200 && res.status < 300;
       if (ok) {
+        items.push({ index, url, written: true, status: res.status });
         written++;
       } else {
         failed++;
+        items.push(
+          redirected
+            ? {
+                index,
+                url,
+                written: false,
+                status: res.status || undefined,
+                error: `write refused a redirect (${res.type || res.status}); not followed to protect DPoP/WebID credentials`,
+              }
+            : { index, url, written: false, status: res.status },
+        );
         if (!continueOnError) {
           return { total: index + 1, written, failed, items };
         }

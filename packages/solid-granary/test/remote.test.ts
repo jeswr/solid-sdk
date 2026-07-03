@@ -67,6 +67,36 @@ describe("fetchGranary", () => {
     ).rejects.toMatchObject({ message: expect.stringContaining("exceeds") });
   });
 
+  it("passes redirect:'manual' to the underlying fetch (fail-closed on an injected fetch)", async () => {
+    const f = jsonFetch(rssFeed);
+    await fetchGranary("https://granary.io/x", { fetch: f });
+    const init = (f as unknown as { mock: { calls: [unknown, RequestInit][] } }).mock.calls[0]?.[1];
+    expect(init?.redirect).toBe("manual");
+  });
+
+  it("fails closed on a 3xx redirect (does not follow it)", async () => {
+    const f = vi.fn(
+      async () => new Response(null, { status: 302, headers: { location: "https://evil/" } }),
+    ) as unknown as typeof globalThis.fetch;
+    await expect(fetchGranary("https://granary.io/x", { fetch: f })).rejects.toMatchObject({
+      name: "GranaryFetchError",
+      message: expect.stringContaining("redirect"),
+    });
+  });
+
+  it("fails closed on an opaqueredirect response", async () => {
+    const opaque = Object.create(Response.prototype, {
+      type: { value: "opaqueredirect" },
+      status: { value: 0 },
+      text: { value: async () => "" },
+    }) as Response;
+    const f = vi.fn(async () => opaque) as unknown as typeof globalThis.fetch;
+    await expect(fetchGranary("https://granary.io/x", { fetch: f })).rejects.toMatchObject({
+      name: "GranaryFetchError",
+      message: expect.stringContaining("redirect"),
+    });
+  });
+
   it("wraps a thrown network error as GranaryFetchError", async () => {
     const f = vi.fn(async () => {
       throw new Error("boom");

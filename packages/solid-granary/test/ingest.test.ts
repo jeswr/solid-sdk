@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+import { Parser, Store } from "n3";
 import { describe, expect, it, vi } from "vitest";
 import { defaultSlug, ingestGranary } from "../src/ingest.js";
 import { granaryObjectToCanonical } from "../src/map.js";
@@ -173,6 +174,99 @@ describe("ingestGranary", () => {
     const result = await ingestGranary(messyFeed, { writeFetch: fetchFn, container: CONTAINER });
     expect(result.total).toBe(1);
     expect(calls).toHaveLength(1);
+  });
+
+  describe("redirect-refusal (credential-leak hardening)", () => {
+    it("forces redirect:'manual' on every credentialed PUT", async () => {
+      const { fetchFn, calls } = recordingFetch();
+      await ingestGranary(mastodonNote, { writeFetch: fetchFn, container: CONTAINER });
+      expect(calls[0]?.init.redirect).toBe("manual");
+    });
+
+    it("treats a 3xx as a FAILED write (never followed, never counted as written)", async () => {
+      const fetchFn = vi.fn(
+        async () => new Response(null, { status: 302, headers: { location: "https://evil/" } }),
+      ) as unknown as typeof globalThis.fetch;
+      const result = await ingestGranary(mastodonNote, {
+        writeFetch: fetchFn,
+        container: CONTAINER,
+      });
+      expect(result.written).toBe(0);
+      expect(result.failed).toBe(1);
+      expect(result.items[0]?.written).toBe(false);
+      expect(result.items[0]?.error).toMatch(/redirect/i);
+    });
+
+    it("treats an opaqueredirect response as a FAILED write", async () => {
+      const opaque = Object.create(Response.prototype, {
+        type: { value: "opaqueredirect" },
+        status: { value: 0 },
+      }) as Response;
+      const fetchFn = vi.fn(async () => opaque) as unknown as typeof globalThis.fetch;
+      const result = await ingestGranary(mastodonNote, {
+        writeFetch: fetchFn,
+        container: CONTAINER,
+        continueOnError: true,
+      });
+      expect(result.written).toBe(0);
+      expect(result.failed).toBe(1);
+      expect(result.items[0]?.error).toMatch(/redirect/i);
+    });
+  });
+
+  describe("container validation (scope guard / credential-in-URL)", () => {
+    it("rejects a container with embedded credentials", async () => {
+      const { fetchFn, calls } = recordingFetch();
+      await expect(
+        ingestGranary(mastodonNote, {
+          writeFetch: fetchFn,
+          container: "https://user:pass@alice.pod.example/imports/",
+        }),
+      ).rejects.toThrow(/credential/i);
+      expect(calls).toHaveLength(0);
+    });
+
+    it("rejects a non-http(s) container scheme", async () => {
+      const { fetchFn, calls } = recordingFetch();
+      for (const bad of ["file:///etc/", "javascript:alert(1)"]) {
+        await expect(
+          ingestGranary(mastodonNote, { writeFetch: fetchFn, container: bad }),
+        ).rejects.toThrow(/container/);
+      }
+      expect(calls).toHaveLength(0);
+    });
+
+    it("rejects a scheme-relative / non-absolute container", async () => {
+      const { fetchFn } = recordingFetch();
+      await expect(
+        ingestGranary(mastodonNote, { writeFetch: fetchFn, container: "//evil.example/imports/" }),
+      ).rejects.toThrow(/absolute URL/);
+    });
+  });
+
+  it("SECURITY: a hostile `>`-bearing IRI cannot inject triples into the written Turtle", async () => {
+    const { fetchFn, calls } = recordingFetch();
+    const evil =
+      "https://e.org/x> . <https://victim/#me> <http://www.w3.org/ns/solid/terms#oidcIssuer> <https://attacker/";
+    await ingestGranary(
+      { type: "Note", content: "hi", attributedTo: evil, url: evil },
+      { writeFetch: fetchFn, container: CONTAINER },
+    );
+    const body = String(calls[0]?.init.body ?? "");
+    // DECISIVE proof: parse the written Turtle and assert the forged triple did NOT
+    // materialise. Before the safeHttpIri canonicalisation, the raw `>` would break out
+    // of the `<…>` IRIREF and forge `<victim/#me> solid:oidcIssuer <attacker>` — an
+    // account-takeover. Now every quad's subject is the single message resource, and no
+    // predicate is `solid:oidcIssuer`.
+    const store = new Store(new Parser().parse(body));
+    for (const q of store) {
+      expect(q.subject.value).not.toBe("https://victim/#me");
+      expect(q.predicate.value).not.toBe("http://www.w3.org/ns/solid/terms#oidcIssuer");
+    }
+    // the hostile value DID land — but as one safe, fully-encoded IRI token (no raw `>`).
+    expect(body).toContain("%3E");
+    // and it parsed at all (a malformed IRIREF would have thrown in the Parser above).
+    expect(store.size).toBeGreaterThan(0);
   });
 
   describe("error handling", () => {

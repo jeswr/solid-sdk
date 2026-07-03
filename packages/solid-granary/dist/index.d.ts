@@ -27,6 +27,6 @@ export { isHttpIri, safeIri } from "@jeswr/solid-chat-interop";
 export type { GranaryActorRef, GranaryAs2, GranaryAs2Collection, GranaryAs2Object, GranaryObjectRef, } from "./granary.js";
 export { isActivity, isCollection, iterateObjects, typeSet } from "./granary.js";
 export { defaultSlug, granaryToCanonical, type IngestFormat, type IngestGranaryOptions, type IngestGranaryResult, type IngestItemResult, ingestGranary, } from "./ingest.js";
-export { granaryObjectToCanonical, importedDate, refToIri } from "./map.js";
+export { granaryObjectToCanonical, importedDate, refToIri, safeHttpIri } from "./map.js";
 export { type FetchGranaryOptions, fetchGranary, GranaryFetchError } from "./remote.js";
 //# sourceMappingURL=index.d.ts.map
