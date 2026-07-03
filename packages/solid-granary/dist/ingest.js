@@ -50,25 +50,36 @@ export function defaultSlug(msg, index) {
 }
 /**
  * Redact the ENTIRE authority userinfo (`user:pass@`) from a URL string so credentials
- * NEVER reach an error message / log. Deliberately manual (not `new URL()` and not a
- * "stop at the first `@`/whitespace" regex) so it also redacts a MALFORMED / non-absolute
- * value — the exact case whose error path echoes the raw string — AND a userinfo that
- * itself contains `@` or whitespace (`user:sec@ret@host`, `user:pass word@host`).
+ * NEVER reach an error message / log. This is a pure SECRET-SAFETY pass, NOT RFC-correct
+ * URL parsing — the inputs that reach it are malformed by definition (that is why they
+ * failed validation), so it must not let ANY delimiter other than the path `/` terminate
+ * the userinfo scan. A "stop at the first `@`/whitespace/`?`/`#`" approach leaks a
+ * userinfo carrying those very characters (`user:sec@ret@h`, `user:pass word@h`,
+ * `user:sec?ret@h`, `user:sec#ret@h`).
  *
- * Algorithm: locate the authority region — the substring after the scheme's `//` (or the
- * whole string when there is no `//`) up to the first `/`, `?`, or `#` (the path/query/
- * fragment boundary) — then, within it, replace everything up to and INCLUDING the LAST
- * `@` with `***@`. The last `@` is the userinfo/host separator (RFC 3986), so this strips
- * a userinfo with embedded `@`s in full. If the authority has no `@`, the value is
- * returned unchanged (no userinfo to redact — an `@` later in the path is not a credential).
+ * Definitive rule:
+ *  1. Authority start = just after `//` for a scheme-relative value, else just after the
+ *     first `://`, else position 0 (no scheme).
+ *  2. Pre-path/authority region = from there up to (but excluding) the FIRST `/` at or
+ *     after it — and ONLY `/` ends it; `?`, `#`, and whitespace are all treated as part
+ *     of a (malformed) userinfo. No `/` ⇒ the region runs to end of string.
+ *  3. Find the LAST `@` in that region. If present, replace everything from the authority
+ *     start up to and INCLUDING it with `***@` (so an embedded-`@` userinfo goes in full).
+ *     If absent, return unchanged — a later `@` in the PATH is not a credential.
  */
 function redactUrl(raw) {
-    const schemeSep = raw.indexOf("//");
-    const authStart = schemeSep === -1 ? 0 : schemeSep + 2;
-    const prefix = raw.slice(0, authStart); // scheme + "//" (or "" when no "//")
+    let authStart;
+    if (raw.startsWith("//")) {
+        authStart = 2; // scheme-relative: authority begins right after the leading `//`
+    }
+    else {
+        const s = raw.indexOf("://");
+        authStart = s === -1 ? 0 : s + 3;
+    }
+    const prefix = raw.slice(0, authStart); // scheme (+ `//`) kept verbatim, or "" if none
     const rest = raw.slice(authStart);
-    const boundary = rest.search(/[/?#]/);
-    const authEnd = boundary === -1 ? rest.length : boundary;
+    const slash = rest.indexOf("/"); // ONLY the path `/` ends the authority region
+    const authEnd = slash === -1 ? rest.length : slash;
     const authority = rest.slice(0, authEnd);
     const after = rest.slice(authEnd);
     const lastAt = authority.lastIndexOf("@");

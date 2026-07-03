@@ -266,6 +266,12 @@ describe("ingestGranary", () => {
         ["ht tp://dave:pass word@example/x/", ["dave", "pass", "word", "pass word"]],
         // scheme-relative //user:pass@host — still has userinfo to strip
         ["//erin:topsecret@host/x/", ["erin", "topsecret"]],
+        // no-scheme user:pass@host — the authority is the whole pre-path region
+        ["frank:swordfish@host/x/", ["frank", "swordfish"]],
+        // `?` inside the userinfo — must NOT stop the scan at the query delimiter
+        ["ftp://grace:sec?ret@pods.example/x/", ["grace", "sec", "ret", "sec?ret"]],
+        // `#` inside the userinfo — must NOT stop the scan at the fragment delimiter
+        ["ftp://heidi:sec#ret@pods.example/x/", ["heidi", "sec", "ret", "sec#ret"]],
       ];
       for (const [container, secrets] of cases) {
         const msg = await capture(container);
