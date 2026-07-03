@@ -199,7 +199,15 @@ npm test            # vitest
 npm run build       # esbuild bundles dist/index.js (inlining @jeswr/fetch-rdf) + tsc emits .d.ts
 npm run check:dist  # guard the committed dist/ against drift from src/
 npm run check:lockfile-transport  # guard package-lock.json against the SSH git transport (#78: npm install rewrites @jeswr github: deps to git+ssh, breaking npm ci)
+npm run fix:lockfile-transport    # the FIX half of the #78 guard — normalizes an SSH-rewritten lockfile back to HTTPS; run after any npm install/update, before committing
 ```
+
+Any `npm install` / `npm update` re-triggers the #78 rewrite (npm recomputes every git-dependency
+`resolved` URL as SSH on ANY lockfile regen, even one triggered by an unrelated bump) — a
+repo-local git config `insteadOf` does **not** prevent it (it only changes what the `git` binary
+does when actually invoked, not what npm writes into the lockfile). `npm run fix:lockfile-transport`
+is the durable fix: run it after any install/update, then `check:lockfile-transport` (or `lint`)
+passes and the lockfile stays committable over HTTPS.
 
 The committed `dist/` is kept in sync with `src/` by `scripts/check-dist-fresh.mjs` (the suite
 GitHub-installable-under-`ignore-scripts` pattern).
