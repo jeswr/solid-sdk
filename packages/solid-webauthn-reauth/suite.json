@@ -20,5 +20,16 @@
     "@jeswr/solid-dpop",
     "@jeswr/solid-session-restore"
   ],
-  "federation": null
+  "federation": null,
+  "status": {
+    "generatedAt": "2026-07-03T05:14:39.638Z",
+    "commit": "5e29bac31c56f7794fbdcb0460adab51bab39f0a",
+    "version": "0.1.0",
+    "gate": {
+      "lint": "skip",
+      "typecheck": "skip",
+      "test": "skip",
+      "build": "skip"
+    }
+  }
 }
