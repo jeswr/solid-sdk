@@ -181,6 +181,9 @@ export function GeneticsView() {
   // Set when a file parse has PRE-FILLED the editable form — the free-text/SNP parse
   // is only an ASSIST; the human reviews + corrects every marker before saving.
   const [assistNote, setAssistNote] = useState<string | undefined>(undefined);
+  // The provenance of a file-assisted entry (preserved through the confirm step so a
+  // consumer-array / clinical-report upload is not saved as sourceType "manual").
+  const [assistSource, setAssistSource] = useState<GeneticPreview["source"] | undefined>(undefined);
 
   const showPreview = useCallback((p: GeneticPreview | undefined) => {
     setPreview(p);
@@ -197,8 +200,8 @@ export function GeneticsView() {
 
   const buildManual = useCallback(() => {
     setError(undefined);
-    showPreview(buildManualPreview(manualSelections));
-  }, [buildManualPreview, manualSelections, showPreview]);
+    showPreview(buildManualPreview(manualSelections, assistSource ?? "manual"));
+  }, [buildManualPreview, manualSelections, assistSource, showPreview]);
 
   const onFile = useCallback(
     async (file: File | undefined) => {
@@ -219,6 +222,7 @@ export function GeneticsView() {
           if (m.riskHaplotype && m.markerPresence) prefilled[m.riskHaplotype] = m.markerPresence;
         }
         setChoices(prefilled);
+        setAssistSource(parsed.source); // preserve upload provenance through the confirm step
         setMode("manual");
         const anyFound = parsed.markers.length > 0;
         setAssistNote(
@@ -246,6 +250,7 @@ export function GeneticsView() {
         setPreview(undefined);
         setChoices({});
         setAssistNote(undefined);
+        setAssistSource(undefined);
         await refresh();
         void syncing.catch(() => {
           /* a failed pod flush is retried by the outbox; the cache keeps the record */
@@ -315,6 +320,7 @@ export function GeneticsView() {
               setPreview(undefined);
               setError(undefined);
               setAssistNote(undefined);
+              setAssistSource(undefined);
             }}
           >
             Enter manually
@@ -329,6 +335,7 @@ export function GeneticsView() {
               setPreview(undefined);
               setError(undefined);
               setAssistNote(undefined);
+              setAssistSource(undefined);
             }}
           >
             Upload a test file

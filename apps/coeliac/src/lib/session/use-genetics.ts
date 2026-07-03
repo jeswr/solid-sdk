@@ -58,9 +58,16 @@ export interface GeneticsState {
 }
 
 export interface GeneticsActions {
-  /** Build a preview from manual present/absent/uncertain selections (nothing written). */
+  /**
+   * Build a preview from present/absent/uncertain selections (nothing written). The
+   * `source` records provenance: `manual` for hand entry, or the originating
+   * `consumer-array`/`clinical-report` when the selections were PRE-FILLED from a
+   * file parse and then human-confirmed (the confirm step edits values, but the data
+   * still originated from that file, so the provenance is preserved).
+   */
   buildManualPreview: (
     selections: Partial<Record<RiskHaplotype, MarkerPresence>>,
+    source?: SummarySource,
     patient?: string,
   ) => GeneticPreview;
   /**
@@ -146,14 +153,15 @@ export function useGenetics(): GeneticsState & GeneticsActions {
   const buildManualPreview = useCallback(
     (
       selections: Partial<Record<RiskHaplotype, MarkerPresence>>,
+      source: SummarySource = "manual",
       patient?: string,
     ): GeneticPreview => {
       // A haplotype the user left UNKNOWN yields NO marker (never a false absent).
       const markers = (Object.entries(selections) as [RiskHaplotype, MarkerPresence][])
         .filter(([, presence]) => presence !== undefined)
         .map(([haplotype, presence]) => markerFromManual(haplotype, presence));
-      const data = buildSummaryData(markers, "manual", patient ?? webId ?? undefined);
-      return { ...data, source: "manual" };
+      const data = buildSummaryData(markers, source, patient ?? webId ?? undefined);
+      return { ...data, source };
     },
     [webId],
   );

@@ -71,6 +71,9 @@ describe("GeneticsView — privacy invariants", () => {
     const summaryBody =
       fm.calls.find((c) => c.url.endsWith("summary.ttl") && c.method === "PUT")?.body ?? "";
     expect(summaryBody).toMatch(/rs2187668/);
+    // Provenance is preserved through the confirm step — a consumer-array upload is
+    // saved as consumer-array, not "manual".
+    expect((await store.getGeneticSummary())?.sourceType).toBe("consumer-array");
   });
 
   it("a file parse is an ASSIST — the user can CORRECT a marker before it is saved", async () => {

@@ -191,33 +191,46 @@ function cuesIn(line: string): Cue[] {
   return cues;
 }
 
-/** Every risk haplotype named in a line, with its first position (deduped, ordered by position). */
-function haplotypeMentions(line: string): { index: number; haplotype: ClinicalObservation["haplotype"] }[] {
-  const seen = new Set<string>();
-  const found: { index: number; haplotype: ClinicalObservation["haplotype"] }[] = [];
+/** Every DISTINCT risk haplotype named in a span (deduped). */
+function haplotypesIn(span: string): ClinicalObservation["haplotype"][] {
+  const found: ClinicalObservation["haplotype"][] = [];
   for (const { re, haplotype } of HAPLOTYPE_PHRASE) {
-    const m = re.exec(line);
-    if (m && !seen.has(haplotype)) {
-      seen.add(haplotype);
-      found.push({ index: m.index, haplotype });
-    }
+    if (re.test(span) && !found.includes(haplotype)) found.push(haplotype);
   }
-  return found.sort((a, b) => a.index - b.index);
+  return found;
 }
 
 /**
- * The sentiment cue that GOVERNS a haplotype mention: the nearest cue at/after the
- * haplotype's position (clinical wording states the cue AFTER the haplotype(s), e.g.
- * "DQ2.5 and DQ8 negative"); if none follows, the nearest preceding cue. `undefined`
- * when the line has no cue at all. This nearest-cue association is robust to `and`
- * both GROUPING a shared cue ("DQ2.5 and DQ8 positive") and SEPARATING two cued
- * clauses ("DQ2.5 negative and DQ8 positive"), which no split heuristic handles.
+ * Classify one span, calling `record(haplotype, present)` for each confidently
+ * classified haplotype. Two levels so cue-before AND cue-after AND grouped-shared
+ * phrasings all resolve, and an ambiguous fragment is left UNSET (never guessed —
+ * the human sets it in the confirm step):
+ *   - a span with ONE consistent cue polarity applies it to every haplotype in it
+ *     ("DQ2.5 and DQ8 negative" → both absent; "positive for DQ2.5" → present);
+ *   - a span with CONFLICTING cues ("DQ2.5 negative and DQ8 positive") is sub-split
+ *     on the coordinating "and"/"&"; each sub-span with a single cue is applied, and
+ *     a cue-less or still-conflicting sub-span is skipped.
  */
-function governingSentiment(cues: Cue[], at: number): boolean | undefined {
-  const following = cues.filter((c) => c.index >= at).sort((a, b) => a.index - b.index)[0];
-  if (following) return following.present;
-  const preceding = cues.filter((c) => c.index < at).sort((a, b) => b.index - a.index)[0];
-  return preceding?.present;
+function classifySpan(
+  span: string,
+  record: (haplotype: ClinicalObservation["haplotype"], present: boolean) => void,
+): void {
+  const cues = cuesIn(span);
+  if (cues.length === 0) return; // no cue → nothing confident
+  const polarities = new Set(cues.map((c) => c.present));
+  if (polarities.size === 1) {
+    const present = cues[0]?.present as boolean;
+    for (const haplotype of haplotypesIn(span)) record(haplotype, present);
+    return;
+  }
+  // Conflicting cues in one punctuation-clause → sub-split on the conjunction.
+  for (const sub of span.split(/\band\b|&/i)) {
+    const subCues = cuesIn(sub);
+    if (subCues.length === 0) continue; // cue-less fragment → leave unset
+    if (new Set(subCues.map((c) => c.present)).size !== 1) continue; // still ambiguous
+    const present = subCues[0]?.present as boolean;
+    for (const haplotype of haplotypesIn(sub)) record(haplotype, present);
+  }
 }
 
 /**
@@ -253,18 +266,12 @@ export function parseClinicalText(text: string): ClinicalObservation[] {
     out.push({ haplotype, statedPresent });
   };
   for (const line of text.split(/\r?\n/)) {
-    const cues = cuesIn(line);
-    if (cues.length === 0) continue; // no sentiment cue on the line → skip
-    // Associate each haplotype with the cue that GOVERNS it (nearest at/after it,
-    // else nearest before). This correctly handles "DQ2.5 and DQ8 negative" (shared
-    // cue → both absent), "DQ2.5 negative, DQ8 positive" and "DQ2.5 negative and
-    // DQ8 positive" (each governed by its own nearer cue), and
-    // "DQ2.5 and DQ8 positive, DQ7 negative" (group shares positive, DQ7 negative).
-    for (const { index, haplotype } of haplotypeMentions(line)) {
-      const present = governingSentiment(cues, index);
-      if (present === undefined) continue; // no governing cue → skip (never guess)
-      recordPhrase(haplotype, present);
-    }
+    // Split on punctuation clause boundaries FIRST (top level), then classify each
+    // clause (which may sub-split on a conjunction if it carries conflicting cues).
+    // "positive for DQ2.5, negative for DQ8" → clause "positive for DQ2.5" (present)
+    // + "negative for DQ8" (absent); "DQ2.5 and DQ8 negative" stays one clause with
+    // one cue → both absent.
+    for (const clause of line.split(/[,;/]/)) classifySpan(clause, recordPhrase);
   }
   return out;
 }

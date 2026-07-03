@@ -130,6 +130,19 @@ describe("parseClinicalText", () => {
     expect(obs).toContainEqual({ haplotype: "DQ8", statedPresent: true });
   });
 
+  it("CUE-BEFORE mixed phrasing 'negative for DQ2.5, positive for DQ8' → DQ2.5 absent + DQ8 present", () => {
+    const obs = parseClinicalText("negative for HLA-DQ2.5, positive for HLA-DQ8.");
+    expect(obs).toContainEqual({ haplotype: "DQ2.5", statedPresent: false });
+    expect(obs).toContainEqual({ haplotype: "DQ8", statedPresent: true });
+  });
+
+  it("'no risk allele for DQ8' → DQ8 absent", () => {
+    expect(parseClinicalText("no risk allele for HLA-DQ8.")).toContainEqual({
+      haplotype: "DQ8",
+      statedPresent: false,
+    });
+  });
+
   it("GROUPED mixed clause 'DQ2.5 and DQ8 positive, DQ7 negative' keeps the shared cue", () => {
     // The 'and'-grouped DQ2.5+DQ8 SHARE "positive"; only punctuation splits clauses,
     // so DQ2.5 is not dropped.
