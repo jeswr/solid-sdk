@@ -1,0 +1,50 @@
+# AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+#
+# NEGATIVE conformance fixtures for the genetic-data defense-in-depth safety
+# shapes in diet.shacl.ttl. UNLIKE diet-examples.ttl (which MUST validate with NO
+# sh:Violation), every instance HERE MUST raise at least one sh:Violation when
+# validated with rdf-validate-shacl (data = this file + diet.ttl for coded-value
+# class typing; shapes = diet.shacl.ttl). They exercise the two roborev-found gaps
+# closed in lockstep across the authoritative + the @jeswr/solid-health-diary
+# vendored copy:
+#   #2 coverageComplete contradictory-value bypass (dsh:GeneticSummaryShape,
+#      diet:coverageComplete sh:maxCount 1 now at sh:Violation), and
+#   #3 rollup↔marker cross-field inconsistency (dsh:GeneticRiskMarkerConsistencyShape).
+# Parsed for well-formedness by the ontology gate (Layer 1); SHACL-validated
+# out-of-band (this repo has no rdf-validate-shacl dep — the automated SHACL gate
+# lives in the health-diary vitest over the byte-identical shape).
+#
+@prefix diet:   <https://w3id.org/jeswr/sectors/health/diet#> .
+@prefix ex:     <https://example.org/alice/health/diary/> .
+@prefix xsd:    <http://www.w3.org/2001/XMLSchema#> .
+
+# N1. Gap #2 — CONTRADICTORY coverageComplete. Consent + interpretation are valid,
+#     so the ONLY violation is the diet:coverageComplete sh:maxCount 1 breach: the
+#     summary asserts BOTH true AND false. Before the fix this cardinality was a
+#     sh:Warning, so a risk-haplotype-absent rollup slipped past the NPV safety
+#     invariant (the presence of a `true` value satisfied GeneticRiskCoverageShape);
+#     the sh:Violation cardinality now rejects the contradictory pair.
+ex:neg-contradictory-coverage a diet:GeneticSummary ;
+    diet:consentGiven true ;
+    diet:geneticInterpretation "Cannot diagnose; negative-predictive only." ;
+    diet:coeliacGeneticRisk diet:riskHaplotypeAbsent ;
+    diet:coverageComplete true ;
+    diet:coverageComplete false .
+
+# N2. Gap #3 — ROLLUP↔MARKER inconsistency. Coverage is complete (so the NPV
+#     coverage invariant is satisfied) yet the summary claims risk-haplotype-absent
+#     while linking an HlaMarker whose markerPresence = present for a coeliac-risk
+#     haplotype (DQ2.5). A present risk marker refutes the 'no risk haplotype'
+#     rollup — dsh:GeneticRiskMarkerConsistencyShape raises the only violation.
+ex:neg-rollup-marker a diet:GeneticSummary ;
+    diet:consentGiven true ;
+    diet:geneticInterpretation "Cannot diagnose; negative-predictive only." ;
+    diet:coverageComplete true ;
+    diet:coeliacGeneticRisk diet:riskHaplotypeAbsent ;
+    diet:hlaMarker ex:neg-marker-dq25-present .
+
+ex:neg-marker-dq25-present a diet:HlaMarker ;
+    diet:rsid "rs2187668" ;
+    diet:riskHaplotype diet:DQ2_5 ;
+    diet:markerPresence diet:markerPresent ;
+    diet:markerInterpretation "rs2187668 present → DQ2.5 risk haplotype." .
