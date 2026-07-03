@@ -228,27 +228,26 @@ describe("SHACL — genetic-data defense-in-depth safety invariants", () => {
     expect(v.some((m) => m.includes("coverageComplete"))).toBe(true);
   });
 
-  // Gap #3 — rollup↔marker cross-field inconsistency. buildGeneticSummary does NOT
-  // guard this (it only enforces risk-absent ⇒ coverageComplete=true), so the app
-  // ALLOWS building it (coverage IS complete here) — the SHACL layer is the guard
-  // that catches the contradiction. A claimed "no risk haplotype" refuted by a
-  // PRESENT DQ2.5 risk marker MUST fail.
+  // Gap #3 — rollup↔marker cross-field inconsistency. Built via RAW Turtle (the
+  // app builder/parser now guard this too — see genetics.test.ts — so we bypass
+  // them here to exercise the SHACL layer directly on the contradiction). A claimed
+  // "no risk haplotype" refuted by a PRESENT DQ2.5 risk marker MUST fail. Coverage
+  // is complete, so this is NOT the coverage invariant — it is the consistency one.
   it("a GeneticSummary claiming risk-haplotype-absent alongside a PRESENT DQ2.5 risk marker violates the consistency MUST", async () => {
-    const store = buildGeneticSummary(URL_, {
-      markers: [
-        {
-          rsid: "rs2187668",
-          markerInterpretation: "rs2187668 present → DQ2.5 risk haplotype",
-          riskHaplotype: "DQ2.5",
-          markerPresence: "present",
-        },
-      ],
-      interpretation: "Cannot diagnose; negative-predictive only; coverage complete.",
-      consentGiven: true,
-      coeliacGeneticRisk: "risk-haplotype-absent",
-      coverageComplete: true,
-    });
-    const v = await violations(store);
+    const ttl = `
+      @prefix diet: <https://w3id.org/jeswr/sectors/health/diet#> .
+      <${URL_}#it> a diet:GeneticSummary ;
+        diet:geneticInterpretation "Cannot diagnose; negative-predictive only; coverage complete." ;
+        diet:consentGiven true ;
+        diet:coverageComplete true ;
+        diet:coeliacGeneticRisk diet:riskHaplotypeAbsent ;
+        diet:hlaMarker <${URL_}#marker-0> .
+      <${URL_}#marker-0> a diet:HlaMarker ;
+        diet:rsid "rs2187668" ;
+        diet:riskHaplotype diet:DQ2_5 ;
+        diet:markerPresence diet:markerPresent .
+    `;
+    const v = await violations(new Parser().parse(ttl));
     expect(v.some((m) => m.includes("risk-haplotype-absent") && m.includes("markerPresence"))).toBe(
       true,
     );

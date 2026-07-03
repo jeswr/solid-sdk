@@ -218,6 +218,41 @@ function trailingIndex(iri: string): number {
   return m ? Number.parseInt(m[1] as string, 10) : -1;
 }
 
+/**
+ * The coeliac-risk-CONFERRING HLA-DQ haplotypes for the rollup↔marker consistency
+ * guardrail: `DQ2.5` / `DQ2.2` / `DQ8`. `DQ7` is deliberately EXCLUDED — it is not
+ * a coeliac-risk-conferring haplotype on its own, so a present DQ7 marker does not
+ * contradict a `risk-haplotype-absent` rollup. Mirrors the shape's DQ2.5/DQ2.2/DQ8
+ * set (`dsh:GeneticRiskMarkerConsistencyShape`).
+ */
+const RISK_CONFERRING_HAPLOTYPES: ReadonlySet<RiskHaplotype> = new Set<RiskHaplotype>([
+  "DQ2.5",
+  "DQ2.2",
+  "DQ8",
+]);
+
+/**
+ * Does a `risk-haplotype-absent` rollup contradict a linked marker? A summary that
+ * asserts NO coeliac-risk haplotype (`coeliacGeneticRisk = risk-haplotype-absent`)
+ * MUST NOT carry a marker whose `markerPresence = present` for a coeliac-risk
+ * haplotype (DQ2.5/DQ2.2/DQ8) — a present risk marker directly refutes the "no risk
+ * haplotype found" claim, and the strong NPV signal is a genuine ABSENCE, so a
+ * claimed absence contradicted by a present marker is unsafe. Used to fail the
+ * write AND the read closed, symmetric with `dsh:GeneticRiskMarkerConsistencyShape`.
+ */
+function absentRollupContradictedByMarker(
+  coeliacGeneticRisk: CoeliacGeneticRisk | undefined,
+  markers: readonly HlaMarkerData[],
+): boolean {
+  if (coeliacGeneticRisk !== "risk-haplotype-absent") return false;
+  return markers.some(
+    (m) =>
+      m.markerPresence === "present" &&
+      m.riskHaplotype !== undefined &&
+      RISK_CONFERRING_HAPLOTYPES.has(m.riskHaplotype),
+  );
+}
+
 /** Typed `@rdfjs/wrapper` view of a `diet:GeneticSummary`. */
 export class GeneticSummary extends TermWrapper {
   get id(): string {
@@ -449,6 +484,12 @@ function parseGeneticSummaryImpl(
     setIfDefined(marker, "markerPresence", m.markerPresence);
     data.markers.push(marker);
   }
+  // ROLLUP↔MARKER CONSISTENCY guardrail on READ (fail-closed, symmetric with the
+  // writer + dsh:GeneticRiskMarkerConsistencyShape): a stored summary claiming
+  // 'risk-haplotype-absent' while a linked marker shows a coeliac-risk haplotype
+  // (DQ2.5/DQ2.2/DQ8) PRESENT is a self-contradictory (hostile/stale) record —
+  // reject it rather than surface a false "coeliac unlikely".
+  if (absentRollupContradictedByMarker(coeliacGeneticRisk, data.markers)) return undefined;
   return data;
 }
 
@@ -488,6 +529,21 @@ export function buildGeneticSummary(url: string, data: GeneticSummaryInput): Sto
         "requires diet:coverageComplete=true — refusing to assert an absent (NPV) " +
         "rollup when the source did not cover every risk tag SNP (use " +
         "'partial-coverage'/'indeterminate' instead).",
+    );
+  }
+  // ROLLUP↔MARKER CONSISTENCY guardrail (mirrors dsh:GeneticRiskMarkerConsistencyShape,
+  // so the app write path never emits what the SHACL profile rejects): refuse a
+  // 'risk-haplotype-absent' rollup that is directly contradicted by a linked marker
+  // showing a coeliac-risk haplotype (DQ2.5/DQ2.2/DQ8) PRESENT — a present risk
+  // marker means the "no risk haplotype found" claim is false. Use
+  // 'risk-haplotype-present'/'indeterminate' instead.
+  if (absentRollupContradictedByMarker(data.coeliacGeneticRisk, data.markers)) {
+    throw new Error(
+      "buildGeneticSummary: a diet:coeliacGeneticRisk of 'risk-haplotype-absent' MUST " +
+        "NOT be asserted alongside an HLA marker whose diet:markerPresence is 'present' " +
+        "for a coeliac-risk haplotype (DQ2.5/DQ2.2/DQ8) — a present risk marker " +
+        "contradicts the 'no risk haplotype found' rollup (use " +
+        "'risk-haplotype-present'/'indeterminate').",
     );
   }
   // Provenance-consistency guardrail: diet:sourceType and the legacy

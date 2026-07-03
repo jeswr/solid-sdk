@@ -247,6 +247,9 @@ describe("NPV-only guardrail — 'risk-haplotype-absent' requires complete cover
   it("a risk-haplotype-absent summary WITH coverageComplete=true is allowed + round-trips", async () => {
     const data: GeneticSummaryInput = {
       ...summary(),
+      // markers must be CONSISTENT with the absent rollup (no present risk marker) —
+      // see the rollup↔marker consistency guardrail below.
+      markers: [{ rsid: "rs7454108", riskHaplotype: "DQ8", markerPresence: "absent" }],
       coeliacGeneticRisk: "risk-haplotype-absent",
       coverageComplete: true,
     };
@@ -370,5 +373,99 @@ describe("provenance-consistency guardrail — sourceType vs enteredManually mus
     const parsed = await parseGeneticSummaryTtl(URL_, ttl);
     expect(parsed?.sourceType).toBe("manual");
     expect(parsed?.enteredManually).toBe(true);
+  });
+});
+
+describe("rollup↔marker consistency guardrail — risk-haplotype-absent vs a present risk marker", () => {
+  // The app-layer half of dsh:GeneticRiskMarkerConsistencyShape (no SHACL/app
+  // asymmetry): a 'risk-haplotype-absent' rollup MUST NOT be asserted alongside a
+  // marker whose markerPresence = present for a coeliac-risk haplotype (DQ2.5/DQ2.2/DQ8).
+  const absentBase = (): GeneticSummaryInput => ({
+    ...summary(),
+    markers: [],
+    coeliacGeneticRisk: "risk-haplotype-absent",
+    coverageComplete: true,
+  });
+
+  it("buildGeneticSummary THROWS on risk-haplotype-absent + a PRESENT DQ2.5 marker", () => {
+    expect(() =>
+      buildGeneticSummary(URL_, {
+        ...absentBase(),
+        markers: [{ rsid: "rs2187668", riskHaplotype: "DQ2.5", markerPresence: "present" }],
+      }),
+    ).toThrow(/risk-haplotype-absent|present risk marker|markerPresence/i);
+  });
+
+  it("buildGeneticSummary THROWS on risk-haplotype-absent + a PRESENT DQ8 marker", () => {
+    expect(() =>
+      buildGeneticSummary(URL_, {
+        ...absentBase(),
+        markers: [{ rsid: "rs7454108", riskHaplotype: "DQ8", markerPresence: "present" }],
+      }),
+    ).toThrow(/risk-haplotype-absent|DQ2\.5\/DQ2\.2\/DQ8/i);
+  });
+
+  it("buildGeneticSummary ALLOWS risk-haplotype-absent + an ABSENT DQ8 marker (coverage complete)", () => {
+    expect(() =>
+      buildGeneticSummary(URL_, {
+        ...absentBase(),
+        markers: [{ rsid: "rs7454108", riskHaplotype: "DQ8", markerPresence: "absent" }],
+      }),
+    ).not.toThrow();
+  });
+
+  it("buildGeneticSummary ALLOWS risk-haplotype-absent + a PRESENT DQ7 marker (DQ7 excluded)", () => {
+    expect(() =>
+      buildGeneticSummary(URL_, {
+        ...absentBase(),
+        markers: [{ rsid: "rs-dq7", riskHaplotype: "DQ7", markerPresence: "present" }],
+      }),
+    ).not.toThrow();
+  });
+
+  it("buildGeneticSummary ALLOWS risk-haplotype-PRESENT + a PRESENT DQ2.5 marker (rollup is not 'absent')", () => {
+    expect(() =>
+      buildGeneticSummary(URL_, {
+        ...summary(),
+        coeliacGeneticRisk: "risk-haplotype-present",
+        coverageComplete: false,
+        markers: [{ rsid: "rs2187668", riskHaplotype: "DQ2.5", markerPresence: "present" }],
+      }),
+    ).not.toThrow();
+  });
+
+  it("parseGeneticSummary REJECTS a stored risk-haplotype-absent summary with a PRESENT DQ2.5 marker", async () => {
+    const ttl = `
+      @prefix diet: <https://w3id.org/jeswr/sectors/health/diet#> .
+      <${URL_}#it> a diet:GeneticSummary ;
+        diet:geneticInterpretation ${JSON.stringify(NEG_PREDICTIVE)} ;
+        diet:consentGiven true ;
+        diet:coverageComplete true ;
+        diet:coeliacGeneticRisk diet:riskHaplotypeAbsent ;
+        diet:hlaMarker <${URL_}#marker-0> .
+      <${URL_}#marker-0> a diet:HlaMarker ;
+        diet:rsid "rs2187668" ;
+        diet:riskHaplotype diet:DQ2_5 ;
+        diet:markerPresence diet:markerPresent .`;
+    // Present DQ2.5 marker refutes the 'no risk haplotype' rollup → fail closed.
+    expect(await parseGeneticSummaryTtl(URL_, ttl)).toBeUndefined();
+  });
+
+  it("parseGeneticSummary ALLOWS a stored risk-haplotype-absent summary with an ABSENT DQ8 marker", async () => {
+    const ttl = `
+      @prefix diet: <https://w3id.org/jeswr/sectors/health/diet#> .
+      <${URL_}#it> a diet:GeneticSummary ;
+        diet:geneticInterpretation ${JSON.stringify(NEG_PREDICTIVE)} ;
+        diet:consentGiven true ;
+        diet:coverageComplete true ;
+        diet:coeliacGeneticRisk diet:riskHaplotypeAbsent ;
+        diet:hlaMarker <${URL_}#marker-0> .
+      <${URL_}#marker-0> a diet:HlaMarker ;
+        diet:rsid "rs7454108" ;
+        diet:riskHaplotype diet:DQ8 ;
+        diet:markerPresence diet:markerAbsent .`;
+    const parsed = await parseGeneticSummaryTtl(URL_, ttl);
+    expect(parsed?.coeliacGeneticRisk).toBe("risk-haplotype-absent");
+    expect(parsed?.markers.map((m) => m.markerPresence)).toEqual(["absent"]);
   });
 });
