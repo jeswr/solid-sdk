@@ -23,9 +23,27 @@
     "solid-task-model"
   ],
   "federation": {
-    "sectors": ["communication", "chat"],
-    "produces": ["chat"],
-    "consumes": ["chat"],
+    "sectors": [
+      "communication",
+      "chat"
+    ],
+    "produces": [
+      "chat"
+    ],
+    "consumes": [
+      "chat"
+    ],
     "note": "The chat/conversation interop RECONCILER between the suite's three chat shapes — ActivityStreams 2.0 (the canonical write model, exactly what @jeswr/pod-chat produces: as:Note/as:Collection/as:attributedTo/as:published/as:inReplyTo/as:mediaType, the wf:Task actionable overlay carried through), SolidOS meeting:LongChat (the installed-base read: sioc:content/foaf:maker/dct:created, dct:isReplacedBy edit, schema:dateDeleted delete), and an external-schema adapter seam with one concrete LibreChat adapter (text/createdAt/sender/conversationId/parentMessageId/model → AS2.0, AI messages → prov: attribution, no LibreChat-private field leaks). Mints NO new chat predicate; reuses pod-chat's pc:ChatRoom and the @jeswr/solid-task-model wf:Task overlay so an actionable message is the SAME shape solid-issues/PM read. Pure-RDF, non-server-touching; untrusted IRIs filtered http(s)-only on read AND write. GitHub-installable now (committed dist/, ignore-scripts=true); npm publish is a deferred migration."
+  },
+  "status": {
+    "generatedAt": "2026-07-03T05:14:32.896Z",
+    "commit": "4661d3fddf970e6f35d1fb4f2b1ae44531d62d80",
+    "version": "0.0.1",
+    "gate": {
+      "lint": "skip",
+      "typecheck": "skip",
+      "test": "skip",
+      "build": "skip"
+    }
   }
 }
