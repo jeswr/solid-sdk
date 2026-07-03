@@ -2,6 +2,17 @@ import type { DatasetCore, Quad } from "@rdfjs/types";
 import type { AgentAuthorization, Credential } from "./types.js";
 import { type CredentialNode } from "./wrappers.js";
 /**
+ * Return a {@link Credential} whose `credentialSubject` id(s) are normalised EXACTLY
+ * as the signed RDF graph normalises them ({@link subjectWithNormalizedId} on the
+ * single subject or each element of a subject array): a blank id is stripped
+ * (anonymous), a present non-blank id must be absolute (throws). `issue()` runs the
+ * returned VC through this so the SIGNED graph (a blank node for a blank id) and the
+ * RETURNED object agree — a whitespace-only `id` can never survive in the returned VC
+ * as a present relative JSON-LD `@id`. Idempotent, and a no-op for a credential whose
+ * subjects all carry a valid absolute id or no id.
+ */
+export declare function normalizeCredentialSubjects(credential: Credential): Credential;
+/**
  * Lower a structured {@link Credential} (the UNSIGNED claim graph — no proof) to
  * RDF quads via the typed write path. The credential gets an `@id` (a random
  * `urn:uuid:` when omitted) so it is an addressable named node the proof can bind

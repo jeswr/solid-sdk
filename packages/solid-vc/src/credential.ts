@@ -77,15 +77,40 @@ function normalizeSubjectId(id: string | undefined): string | undefined {
 }
 
 /**
- * Return the JSON-LD form of a subject: identical when its id is absolute, but with a
- * BLANK id STRIPPED (so an anonymous subject carries no `@id`, matching the RDF blank
- * node). Throws (via {@link normalizeSubjectId}) on a present relative/malformed id.
+ * Return the subject with its id NORMALISED to match the signed RDF graph: identical
+ * when the id is absolute, but with a BLANK id (empty `""` / whitespace / absent)
+ * STRIPPED so the subject is anonymous (no `@id`, matching the RDF blank node).
+ * Throws (via {@link normalizeSubjectId}) on a present relative/malformed id. Used by
+ * every OUTPUT projection — `credentialToJsonLd` AND the signed VC that `issue()`
+ * returns — so the returned/serialised subject can never disagree with the blank-node
+ * graph the proof was computed over.
  */
-function jsonLdSubject(subject: CredentialSubject): CredentialSubject {
+function subjectWithNormalizedId(subject: CredentialSubject): CredentialSubject {
   if (normalizeSubjectId(subject.id) !== undefined) return subject; // valid absolute id → verbatim
   if (!("id" in subject)) return subject; // never had an id → nothing to strip
   const { id: _blank, ...rest } = subject; // blank id → drop it (anonymous)
   return rest;
+}
+
+/**
+ * Return a {@link Credential} whose `credentialSubject` id(s) are normalised EXACTLY
+ * as the signed RDF graph normalises them ({@link subjectWithNormalizedId} on the
+ * single subject or each element of a subject array): a blank id is stripped
+ * (anonymous), a present non-blank id must be absolute (throws). `issue()` runs the
+ * returned VC through this so the SIGNED graph (a blank node for a blank id) and the
+ * RETURNED object agree — a whitespace-only `id` can never survive in the returned VC
+ * as a present relative JSON-LD `@id`. Idempotent, and a no-op for a credential whose
+ * subjects all carry a valid absolute id or no id.
+ */
+export function normalizeCredentialSubjects(credential: Credential): Credential {
+  const cs = credential.credentialSubject;
+  // `Array.isArray` narrows the array branch but not the single branch out of a
+  // `readonly T[]` union member, so cast the single value (the branch is provably a
+  // lone CredentialSubject). Shape (single vs array) is preserved.
+  const credentialSubject = Array.isArray(cs)
+    ? cs.map(subjectWithNormalizedId)
+    : subjectWithNormalizedId(cs as CredentialSubject);
+  return { ...credential, credentialSubject };
 }
 
 /**
@@ -233,7 +258,7 @@ export function credentialToJsonLd(credential: Credential): Record<string, unkno
   // whitespace / absent) is OMITTED so the subject is anonymous — NOT copied through
   // as an empty-string `@id` (which is a present RELATIVE reference resolving against
   // the base, the parity gap this closes). A valid absolute id is byte-unchanged.
-  const normalized = subjects.map(jsonLdSubject);
+  const normalized = subjects.map(subjectWithNormalizedId);
   doc.credentialSubject = normalized.length === 1 ? normalized[0] : normalized;
   return doc;
 }

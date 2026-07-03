@@ -500,11 +500,16 @@ function normalizeSubjectId(id) {
   }
   return id;
 }
-function jsonLdSubject(subject) {
+function subjectWithNormalizedId(subject) {
   if (normalizeSubjectId(subject.id) !== void 0) return subject;
   if (!("id" in subject)) return subject;
   const { id: _blank, ...rest } = subject;
   return rest;
+}
+function normalizeCredentialSubjects(credential) {
+  const cs = credential.credentialSubject;
+  const credentialSubject = Array.isArray(cs) ? cs.map(subjectWithNormalizedId) : subjectWithNormalizedId(cs);
+  return { ...credential, credentialSubject };
 }
 function writeSubject(b, credential, subject) {
   const idIri = normalizeSubjectId(subject.id);
@@ -598,7 +603,7 @@ function credentialToJsonLd(credential) {
   if (credential.validFrom !== void 0) doc.validFrom = credential.validFrom;
   if (credential.validUntil !== void 0) doc.validUntil = credential.validUntil;
   const subjects = Array.isArray(credential.credentialSubject) ? credential.credentialSubject : [credential.credentialSubject];
-  const normalized = subjects.map(jsonLdSubject);
+  const normalized = subjects.map(subjectWithNormalizedId);
   doc.credentialSubject = normalized.length === 1 ? normalized[0] : normalized;
   return doc;
 }
@@ -812,11 +817,11 @@ async function issue(input) {
   const suite = input.suite ?? new DataIntegritySuite("eddsa-rdfc-2022");
   const created = input.options?.created ?? /* @__PURE__ */ new Date();
   const proofPurpose = input.options?.proofPurpose ?? "assertionMethod";
-  const credential = {
+  const credential = normalizeCredentialSubjects({
     ...input.credential,
     id: input.credential.id ?? `urn:uuid:${randomUUID2()}`,
     validFrom: input.credential.validFrom ?? created.toISOString()
-  };
+  });
   const documentQuads = credentialToRdf(credential);
   const proof = await suite.sign(documentQuads, {
     key: input.key,

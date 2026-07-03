@@ -264,4 +264,61 @@ describe("fail-closed required identity fields (issuer / subject id)", () => {
     expect(subject.id).toBeUndefined();
     expect(subject.over18).toBe(true);
   });
+
+  // The round-4 gap: issue() must STRIP a blank id from the RETURNED VC so it agrees
+  // with the blank-node graph the proof covered (a whitespace-only id in the returned
+  // object would be a present relative JSON-LD @id disagreeing with the signature).
+  it("issue() strips a whitespace-only subject id from the returned VC (matches the signed blank node) and still verifies", async () => {
+    const key = await issuerKey();
+    const vc = await issue({
+      credential: {
+        issuer: "https://alice.example/profile#me",
+        credentialSubject: { id: "   ", over18: true },
+      },
+      key,
+    });
+    const subject = (
+      Array.isArray(vc.credentialSubject) ? vc.credentialSubject[0] : vc.credentialSubject
+    ) as { id?: string; over18: boolean };
+    expect("id" in subject).toBe(false); // no relative "" @id in the returned VC
+    expect(subject.over18).toBe(true);
+    const result = await verifyCredential(vc, { resolveKey: keyResolver(key) });
+    expect(result.verified).toBe(true);
+  });
+
+  it("issue() RETAINS a valid absolute subject id in the returned VC", async () => {
+    const key = await issuerKey();
+    const vc = await issue({
+      credential: {
+        issuer: "https://alice.example/profile#me",
+        credentialSubject: { id: "https://carol.example/#me", over18: true },
+      },
+      key,
+    });
+    const subject = (
+      Array.isArray(vc.credentialSubject) ? vc.credentialSubject[0] : vc.credentialSubject
+    ) as { id?: string };
+    expect(subject.id).toBe("https://carol.example/#me");
+    const result = await verifyCredential(vc, { resolveKey: keyResolver(key) });
+    expect(result.verified).toBe(true);
+  });
+
+  it("issue() strips a blank id per-element across a MULTI-subject VC (each matches its signed node)", async () => {
+    const key = await issuerKey();
+    const vc = await issue({
+      credential: {
+        issuer: "https://alice.example/profile#me",
+        credentialSubject: [
+          { id: "https://carol.example/#me", n: 1 },
+          { id: "   ", n: 2 },
+        ],
+      },
+      key,
+    });
+    const subjects = vc.credentialSubject as Array<{ id?: string; n: number }>;
+    expect(subjects[0].id).toBe("https://carol.example/#me");
+    expect("id" in subjects[1]).toBe(false);
+    const result = await verifyCredential(vc, { resolveKey: keyResolver(key) });
+    expect(result.verified).toBe(true);
+  });
 });
