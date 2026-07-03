@@ -19,12 +19,16 @@
 # The OWL ontology (equine.ttl) licenses meaning; THIS shape checks shape. The
 # MUSTs encode Furlong's write path with the review's corrections:
 #  - a Horse's eq:sex / eq:status, when present, MUST be coded IRIs (SHOULD both);
-#  - an OwnershipShare MUST carry eq:horse (IRI) + eq:sharePct (0–100) + at least
-#    one of eq:owner / eq:syndicate;
+#  - an OwnershipShare MUST carry eq:sharePct (0–100) + at least one of
+#    eq:owner / eq:syndicate; eq:horse is OPTIONAL (a syndicate-only share omits
+#    it — the syndicate owns the horses), an IRI when present;
 #  - a StudShare MUST carry eq:horse + eq:sharePct;
-#  - a StudNomination MUST carry eq:horse (the stallion), eq:mareName, eq:season;
-#    it SHOULD price via schema:totalPrice (NOT schema:price);
-#  - a RaceResult MUST carry eq:horse, eq:forRace (IRI) and eq:finishPos (≥1);
+#  - a StudNomination MUST carry eq:horse (the stallion) + eq:season; eq:mareName
+#    is OPTIONAL (a nomination may be recorded before the mare is chosen), a
+#    string when present; it SHOULD price via schema:totalPrice (NOT schema:price);
+#  - a RaceResult MUST carry eq:horse + eq:finishPos (≥1); eq:forRace is OPTIONAL
+#    (inline results carry the race as a schema:name, not an external race IRI),
+#    an IRI when present;
 #  - a PrizeDistribution MUST carry schema:amount; it SHOULD name eq:recipientType.
 #
 # Discipline (matches the sibling sectors' profiles):
@@ -101,11 +105,10 @@ eqsh:OwnershipShareShape a sh:NodeShape ;
     rdfs:label "Ownership share shape"@en ;
     sh:property [
         sh:path eq:horse ;
-        sh:minCount 1 ;
         sh:maxCount 1 ;
         sh:nodeKind sh:IRI ;
         sh:severity sh:Violation ;
-        sh:message "An OwnershipShare MUST reference exactly one eq:horse (IRI)."@en
+        sh:message "An OwnershipShare's eq:horse, when present, MUST be a single IRI. OPTIONAL: a syndicate-only share (the syndicate owns the horses) omits it."@en
     ] ;
     sh:property [
         sh:path eq:sharePct ;
@@ -173,11 +176,10 @@ eqsh:StudNominationShape a sh:NodeShape ;
     ] ;
     sh:property [
         sh:path eq:mareName ;
-        sh:minCount 1 ;
         sh:maxCount 1 ;
         sh:datatype xsd:string ;
         sh:severity sh:Violation ;
-        sh:message "A StudNomination MUST carry exactly one eq:mareName."@en
+        sh:message "A StudNomination's eq:mareName, when present, MUST be a single xsd:string. OPTIONAL: a nomination may be recorded before the mare is chosen."@en
     ] ;
     sh:property [
         sh:path eq:season ;
@@ -210,11 +212,10 @@ eqsh:RaceResultShape a sh:NodeShape ;
     ] ;
     sh:property [
         sh:path eq:forRace ;
-        sh:minCount 1 ;
         sh:maxCount 1 ;
         sh:nodeKind sh:IRI ;
         sh:severity sh:Violation ;
-        sh:message "A RaceResult MUST reference exactly one eq:forRace (IRI)."@en
+        sh:message "A RaceResult's eq:forRace, when present, MUST be a single IRI (an external race identifier). OPTIONAL: an inline result carries the race as a schema:name, with no external race IRI."@en
     ] ;
     sh:property [
         sh:path eq:finishPos ;

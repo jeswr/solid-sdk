@@ -53,6 +53,14 @@ pod:share-galway-star-oaktree a eq:OwnershipShare ;
     eq:mgmtPct "5.0"^^xsd:decimal ;
     eq:mgmtFlat "500.00"^^xsd:decimal .
 
+# 2b. A SYNDICATE-ONLY OwnershipShare — held purely via the syndicate, no direct
+#     eq:horse (the syndicate owns the horses). Exercises the relaxed
+#     eqsh:OwnershipShareShape (eq:horse OPTIONAL).
+pod:share-oaktree-pooled a eq:OwnershipShare ;
+    eq:sharePct "5.0"^^xsd:decimal ;
+    eq:syndicate pod:syndicate-oaktree ;
+    eq:owner <https://owner.pod.example/profile/card#me> .
+
 # 3. StudShare — a breeding-rights share in the stallion.
 pod:studshare-desert-king a eq:StudShare ;
     eq:horse pod:horse-desert-king ;
@@ -68,12 +76,29 @@ pod:nomination-2026-01 a eq:StudNomination ;
     eq:nominator <https://owner.pod.example/profile/card#me> ;
     schema:totalPrice [ a schema:MonetaryAmount ; schema:value "18000"^^xsd:decimal ; schema:currency "GBP" ] .
 
+# 4b. A StudNomination recorded BEFORE the mare is chosen — no eq:mareName yet.
+#     Exercises the relaxed eqsh:StudNominationShape (eq:mareName OPTIONAL).
+pod:nomination-2026-02 a eq:StudNomination ;
+    eq:horse pod:horse-desert-king ;
+    eq:season "2026" ;
+    eq:nominator <https://owner.pod.example/profile/card#me> .
+
 # 5. RaceResult — the horse won race rr:ascot-2026-r3.
 pod:result-galway-star-ascot a eq:RaceResult ;
     eq:horse pod:horse-galway-star ;
     eq:forRace rr:ascot-2026-r3 ;
     eq:finishPos "1"^^xsd:positiveInteger ;
     dcterms:date "2026-06-20"^^xsd:date .
+
+# 5b. An INLINE RaceResult — the race is recorded as a schema:name only, with NO
+#     external eq:forRace IRI (the actual Furlong write path: race_name is an
+#     inline string, no race registry IRI). Exercises the relaxed
+#     eqsh:RaceResultShape (eq:forRace OPTIONAL).
+pod:result-galway-star-york a eq:RaceResult ;
+    eq:horse pod:horse-galway-star ;
+    schema:name "York — Ebor Handicap 2026" ;
+    eq:finishPos "3"^^xsd:positiveInteger ;
+    dcterms:date "2026-08-22"^^xsd:date .
 
 # 6. PrizeDistribution — the owner's share of the prize (schema:amount).
 pod:prize-galway-star-ascot a eq:PrizeDistribution ;
