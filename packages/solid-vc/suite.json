@@ -20,10 +20,47 @@
     "lint": "@biomejs/biome ^2.x",
     "node": ">=24"
   },
-  "dependsOn": ["solid-agent-card", "solid-odrl", "solid-dpop"],
+  "dependsOn": [
+    "solid-agent-card",
+    "solid-odrl",
+    "solid-dpop"
+  ],
   "roadmap": {
     "doc": "https://github.com/jeswr/prod-solid-server/blob/main/docs/design/agentic-solid-infrastructure.md",
     "milestone": "M4-VC — VC / ZKP credential exchange (the signed-VC default)",
     "note": "The W3C Verifiable Credentials 2.0 data model + sign/verify backbone with a PLUGGABLE proof-suite seam. Build VC 2.0 credentials/presentations as queryable JSON-LD/RDF (real W3C vocab https://www.w3.org/ns/credentials/v2) via the suite RDF libs (@jeswr/fetch-rdf / @solid/object / n3.Writer — never bespoke); sign with an embedded Data Integrity proof (eddsa-rdfc-2022 / ecdsa-rdfc-2019 over RDFC-1.0 via jose/WebCrypto + rdf-canonize); verify through independent fail-closed gates (signature, expiry, not-yet-valid, issuer-binding, proof-purpose, trusted-issuer). Headline use case: a signed AgentAuthorizationCredential ('WebID X authorizes agent Y for action Z under ODRL policy P') composing with M1 (@jeswr/solid-agent-card) + M3 (@jeswr/solid-odrl). The ProofSuite interface + SuiteRegistry are the seam a BBS / JWT / SPARQ ZK-over-SPARQL proof plugs into WITHOUT touching the data model or the verify pipeline — the ZKP cryptography itself lives in @jeswr/sparq (the SPARQ agent's domain), NOT here. SEPARATE-CODEBASE — zero prod-solid-server core risk (client-side library; no networking, no server change). Supersedes/consolidates @jeswr/vc-cli + @jeswr/vc-queries (cited, not green-fielded). NEXT in M4: BBS support here (the interop floor), then the @jeswr/agent-zk-sparql wire-encoding adapter; the SERVER-SIDE delegated-token / trust-check enforcement (M5b/M5d) is CORE-PSS and is NOT built here (flagged for maintainer approval)."
+  },
+  "status": {
+    "generatedAt": "2026-07-03T05:14:39.288Z",
+    "commit": "3c1219b9f7f15067a533bb7a5bae72772cfdc945",
+    "version": "0.1.0",
+    "gate": {
+      "lint": "skip",
+      "typecheck": "skip",
+      "test": "skip",
+      "build": "skip"
+    },
+    "coverage": {
+      "lines": {
+        "pct": 93.83,
+        "covered": 730,
+        "total": 778
+      },
+      "statements": {
+        "pct": 93.83,
+        "covered": 730,
+        "total": 778
+      },
+      "branches": {
+        "pct": 87.55,
+        "covered": 211,
+        "total": 241
+      },
+      "functions": {
+        "pct": 87.05,
+        "covered": 74,
+        "total": 85
+      }
+    }
   }
 }
