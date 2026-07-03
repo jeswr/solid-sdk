@@ -178,14 +178,17 @@ describe("fail-closed required identity fields (issuer / subject id)", () => {
   });
 
   // JSON-LD parity: the projection must refuse EXACTLY the subject ids the RDF path
-  // refuses — a present relative/malformed id must throw, not be copied through.
-  for (const bad of ["relative/subject", "not an iri", "  "]) {
+  // refuses — a present NON-BLANK relative/malformed id must throw, not be copied
+  // through. (Blank ids — empty/whitespace — are anonymous, tested separately below.)
+  for (const bad of ["relative/subject", "not an iri", "./x", "#frag"]) {
     it(`credentialToJsonLd REJECTS a non-absolute credentialSubject.id ${JSON.stringify(bad)}`, () => {
       const cred: Credential = {
         issuer: "https://alice.example/#me",
         credentialSubject: { id: bad, claim: "x" },
       };
       expect(() => credentialToJsonLd(cred)).toThrow(/credentialSubject\.id/);
+      // parity: the RDF path throws on the same id.
+      expect(() => credentialToRdf(cred)).toThrow(/credentialSubject\.id/);
     });
   }
 
@@ -195,6 +198,45 @@ describe("fail-closed required identity fields (issuer / subject id)", () => {
       credentialSubject: [{ id: "https://ok.example/#a" }, { id: "relative/bad" }],
     };
     expect(() => credentialToJsonLd(cred)).toThrow(/credentialSubject\.id/);
+  });
+
+  // The round-3 gap: an EMPTY / whitespace-only id is a PRESENT RELATIVE JSON-LD
+  // `@id` (resolves against the base), NOT anonymous — it must be OMITTED to match
+  // the RDF path, which treats a blank id as an anonymous blank node.
+  for (const blank of ["", "   "]) {
+    it(`credentialToJsonLd OMITS a blank subject id ${JSON.stringify(blank)} (anonymous, single subject)`, () => {
+      const doc = credentialToJsonLd({
+        issuer: "https://alice.example/#me",
+        credentialSubject: { id: blank, over18: true },
+      });
+      const subject = doc.credentialSubject as Record<string, unknown>;
+      expect("id" in subject).toBe(false); // no @id emitted — not a relative "" @id
+      expect(subject.over18).toBe(true);
+      // the RDF path accepts a blank id too (anonymous blank node — no throw).
+      expect(() =>
+        credentialToRdf({
+          issuer: "https://alice.example/#me",
+          credentialSubject: { id: blank, over18: true },
+        }),
+      ).not.toThrow();
+    });
+  }
+
+  it("credentialToJsonLd OMITS a blank id per-element in a MULTI-subject array", () => {
+    const doc = credentialToJsonLd({
+      issuer: "https://alice.example/#me",
+      credentialSubject: [
+        { id: "https://ok.example/#a", n: 1 },
+        { id: "", n: 2 },
+        { id: "   ", n: 3 },
+      ],
+    });
+    const subjects = doc.credentialSubject as Array<Record<string, unknown>>;
+    expect(subjects).toHaveLength(3);
+    expect(subjects[0].id).toBe("https://ok.example/#a"); // valid id kept verbatim
+    expect("id" in subjects[1]).toBe(false); // "" stripped → anonymous
+    expect("id" in subjects[2]).toBe(false); // "   " stripped → anonymous
+    expect(subjects.map((s) => s.n)).toEqual([1, 2, 3]);
   });
 
   it("credentialToJsonLd keeps a valid did:/urn:/http subject id byte-unchanged (no canonicalisation)", () => {

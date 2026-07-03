@@ -489,21 +489,29 @@ function typeIri(type) {
   if (looksLikeIri(type)) return type;
   return `https://w3id.org/jeswr/solid-vc#${type}`;
 }
-function assertAbsoluteSubjectId(id) {
-  if (typeof id === "string" && id.length > 0 && !isAbsoluteIri(id)) {
+function normalizeSubjectId(id) {
+  if (typeof id !== "string" || id.trim().length === 0) return void 0;
+  if (!isAbsoluteIri(id)) {
     throw new Error(
       `@jeswr/solid-vc: credentialSubject.id must be an absolute IRI, got ${JSON.stringify(
         id
       )} \u2014 refusing to emit a credential subject with a relative/invalid id`
     );
   }
+  return id;
+}
+function jsonLdSubject(subject) {
+  if (normalizeSubjectId(subject.id) !== void 0) return subject;
+  if (!("id" in subject)) return subject;
+  const { id: _blank, ...rest } = subject;
+  return rest;
 }
 function writeSubject(b, credential, subject) {
+  const idIri = normalizeSubjectId(subject.id);
   let node;
-  if (typeof subject.id === "string" && subject.id.length > 0) {
-    assertAbsoluteSubjectId(subject.id);
-    node = iriRef(subject.id);
-    b.addIri(credential, VC_CREDENTIAL_SUBJECT, subject.id);
+  if (idIri !== void 0) {
+    node = iriRef(idIri);
+    b.addIri(credential, VC_CREDENTIAL_SUBJECT, idIri);
   } else {
     node = b.linkBlankNode(credential, VC_CREDENTIAL_SUBJECT);
   }
@@ -590,10 +598,8 @@ function credentialToJsonLd(credential) {
   if (credential.validFrom !== void 0) doc.validFrom = credential.validFrom;
   if (credential.validUntil !== void 0) doc.validUntil = credential.validUntil;
   const subjects = Array.isArray(credential.credentialSubject) ? credential.credentialSubject : [credential.credentialSubject];
-  for (const s of subjects) {
-    assertAbsoluteSubjectId(s.id);
-  }
-  doc.credentialSubject = subjects.length === 1 ? subjects[0] : subjects;
+  const normalized = subjects.map(jsonLdSubject);
+  doc.credentialSubject = normalized.length === 1 ? normalized[0] : normalized;
   return doc;
 }
 function credentialMetaFromNode(node) {

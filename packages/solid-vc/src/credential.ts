@@ -51,22 +51,41 @@ function typeIri(type: string): string {
 }
 
 /**
- * FAIL-CLOSED check for a credential-subject `id`, shared by the RDF ({@link
- * writeSubject}) and JSON-LD ({@link credentialToJsonLd}) projections so BOTH refuse
- * exactly the same identities. A PRESENT id must be an absolute IRI (throws
- * otherwise); an ABSENT / empty id is fine (an anonymous subject → a blank node).
- * Validate-only — NO canonicalisation — so a valid id's bytes are unchanged and the
- * two projections stay in lock-step. Injection is separately neutralised by
- * `escapeIri` at the write chokepoint; this is the semantic identity requirement.
+ * Normalise a credential-subject `id`, shared by the RDF ({@link writeSubject}) and
+ * JSON-LD ({@link credentialToJsonLd}) projections so BOTH treat the id identically:
+ *
+ *  - a BLANK id (absent / empty `""` / whitespace-only) → `undefined` = an ANONYMOUS
+ *    subject (a blank node in RDF; no `@id` in JSON-LD). Load-bearing for JSON-LD:
+ *    an empty-string `@id` is a PRESENT RELATIVE reference that resolves against the
+ *    document base, NOT an anonymous subject — so it must be OMITTED, not copied.
+ *  - a PRESENT (non-blank) id → must be an absolute IRI, else THROW (fail closed on a
+ *    relative / malformed identity). Returned VERBATIM — NO canonicalisation — so a
+ *    valid id's bytes are unchanged and the two projections stay byte-for-byte in
+ *    lock-step. Injection is separately neutralised by `escapeIri` at the write
+ *    chokepoint; this is the semantic identity requirement.
  */
-function assertAbsoluteSubjectId(id: string | undefined): void {
-  if (typeof id === "string" && id.length > 0 && !isAbsoluteIri(id)) {
+function normalizeSubjectId(id: string | undefined): string | undefined {
+  if (typeof id !== "string" || id.trim().length === 0) return undefined;
+  if (!isAbsoluteIri(id)) {
     throw new Error(
       `@jeswr/solid-vc: credentialSubject.id must be an absolute IRI, got ${JSON.stringify(
         id,
       )} — refusing to emit a credential subject with a relative/invalid id`,
     );
   }
+  return id;
+}
+
+/**
+ * Return the JSON-LD form of a subject: identical when its id is absolute, but with a
+ * BLANK id STRIPPED (so an anonymous subject carries no `@id`, matching the RDF blank
+ * node). Throws (via {@link normalizeSubjectId}) on a present relative/malformed id.
+ */
+function jsonLdSubject(subject: CredentialSubject): CredentialSubject {
+  if (normalizeSubjectId(subject.id) !== undefined) return subject; // valid absolute id → verbatim
+  if (!("id" in subject)) return subject; // never had an id → nothing to strip
+  const { id: _blank, ...rest } = subject; // blank id → drop it (anonymous)
+  return rest;
 }
 
 /**
@@ -76,14 +95,14 @@ function assertAbsoluteSubjectId(id: string | undefined): void {
  * literal (so the JSON booleans/numbers round-trip with their XSD datatype).
  */
 function writeSubject(b: GraphBuilder, credential: NodeRef, subject: CredentialSubject): void {
+  // Shared rule: a valid absolute id is written verbatim; a BLANK id (empty /
+  // whitespace / absent) becomes an anonymous blank node; a present relative id
+  // FAILS CLOSED (throws).
+  const idIri = normalizeSubjectId(subject.id);
   let node: NodeRef;
-  if (typeof subject.id === "string" && subject.id.length > 0) {
-    // FAIL CLOSED on a non-absolute / relative id (shared rule) — a valid absolute
-    // id is written verbatim, exactly as before; an ABSENT id becomes an anonymous
-    // blank node below.
-    assertAbsoluteSubjectId(subject.id);
-    node = iriRef(subject.id);
-    b.addIri(credential, VC_CREDENTIAL_SUBJECT, subject.id);
+  if (idIri !== undefined) {
+    node = iriRef(idIri);
+    b.addIri(credential, VC_CREDENTIAL_SUBJECT, idIri);
   } else {
     node = b.linkBlankNode(credential, VC_CREDENTIAL_SUBJECT);
   }
@@ -209,15 +228,13 @@ export function credentialToJsonLd(credential: Credential): Record<string, unkno
   const subjects = Array.isArray(credential.credentialSubject)
     ? credential.credentialSubject
     : [credential.credentialSubject];
-  // FAIL CLOSED on a PRESENT relative/malformed subject id here too — parity with
-  // the RDF lowering (writeSubject), which throws on the same field. Validate-only
-  // (no canonicalisation): a valid absolute id is copied through byte-unchanged; an
-  // absent id stays absent (an anonymous subject). Without this the JSON-LD
-  // projection would silently accept an identity the RDF/Turtle path refuses.
-  for (const s of subjects) {
-    assertAbsoluteSubjectId(s.id);
-  }
-  doc.credentialSubject = subjects.length === 1 ? subjects[0] : subjects;
+  // NORMALISE each subject in lock-step with the RDF lowering (writeSubject): a
+  // PRESENT relative/malformed id THROWS (fail closed); a BLANK id (empty `""` /
+  // whitespace / absent) is OMITTED so the subject is anonymous — NOT copied through
+  // as an empty-string `@id` (which is a present RELATIVE reference resolving against
+  // the base, the parity gap this closes). A valid absolute id is byte-unchanged.
+  const normalized = subjects.map(jsonLdSubject);
+  doc.credentialSubject = normalized.length === 1 ? normalized[0] : normalized;
   return doc;
 }
 
