@@ -22,9 +22,26 @@
     "solid-federation-vocab"
   ],
   "federation": {
-    "sectors": ["media"],
-    "produces": ["media"],
-    "consumes": ["media"],
+    "sectors": [
+      "media"
+    ],
+    "produces": [
+      "media"
+    ],
+    "consumes": [
+      "media"
+    ],
     "note": "The RDF vocab + types for vector drawings / whiteboards — the data model for an Excalidraw→Solid fork. A draw:Scene descriptor points (draw:sceneDocument) at a byte-exact .excalidraw JSON blob; the canvas is opaque, never shredded into triples. Mints exactly five terms under https://w3id.org/jeswr/drawing#; reuses dct/schema/prov. draw:Scene is rdfs:subClassOf schema:CreativeWork and gufo:SubKind of core:InformationResource — the same convention the other @jeswr sector vocabs follow; the solid-federation-vocab drawing# alignments reference these IRIs. GitHub-installable now (committed dist/, ignore-scripts=true); npm publish is a deferred migration."
+  },
+  "status": {
+    "generatedAt": "2026-07-03T05:14:34.452Z",
+    "commit": "506e1fbd76bb9dc5ee290aabdc550cf45569647f",
+    "version": "0.1.0",
+    "gate": {
+      "lint": "skip",
+      "typecheck": "skip",
+      "test": "skip",
+      "build": "skip"
+    }
   }
 }
