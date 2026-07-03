@@ -9,7 +9,7 @@
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { parseRdf } from "@jeswr/fetch-rdf";
-import { DataFactory, Store } from "n3";
+import { DataFactory, Parser, Store } from "n3";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { serializeTurtle } from "./activity.js";
 import { NoInboxError } from "./errors.js";
@@ -29,6 +29,55 @@ const DCT = "http://purl.org/dc/terms/";
 const ALICE = "https://alice.example/card#me";
 const BOB = "https://bob.example/card#me";
 const TASK_IRI = "https://alice.example/tasks/42#it";
+
+// ──────────────────── Turtle IRI-injection guard (n3.Writer) ────────────────────
+
+describe("Turtle IRI-injection guard — task subject + assignee", () => {
+  // A payload that, written RAW between <…>, breaks out and injects a 2nd triple.
+  const INJECTION =
+    "https://evil/x> . <https://evil/s2> <https://evil/p2> <https://evil/o2";
+
+  it("does not let a hostile assignee inject a second triple", async () => {
+    const store = buildTaskNotification(
+      { task: TASK_IRI, assignee: INJECTION },
+      { actor: ALICE }
+    );
+    const ttl = await serializeTurtle(store);
+    const quads = new Parser().parse(ttl);
+    for (const q of quads) {
+      expect(q.subject.value).not.toBe("https://evil/s2");
+      expect(q.predicate.value).not.toBe("https://evil/p2");
+      expect(q.object.value).not.toBe("https://evil/o2");
+    }
+    expect(ttl).not.toContain("> . <https://evil/s2>");
+  });
+
+  it("canonicalises a hostile-but-URL-parseable task subject without breakout", async () => {
+    // This payload IS a valid URL (host `evil`, the rest percent-encoded into the
+    // path), so it is not rejected — but it must be written CANONICALISED, so the
+    // `> . <…>` sequence can never break out of the subject <…> and inject triples.
+    const store = buildTaskNotification({ task: INJECTION }, { actor: ALICE });
+    const ttl = await serializeTurtle(store);
+    const quads = new Parser().parse(ttl);
+    for (const q of quads) {
+      expect(q.subject.value).not.toBe("https://evil/s2");
+      expect(q.predicate.value).not.toBe("https://evil/p2");
+      expect(q.object.value).not.toBe("https://evil/o2");
+    }
+    expect(ttl).not.toContain("> . <https://evil/s2>");
+  });
+
+  it("REJECTS a task subject that is not an absolute http(s) URL", () => {
+    // A genuinely unparseable / non-http subject → safeHttpIri returns undefined →
+    // throw (a notification with an unwritable subject IRI is invalid).
+    expect(() =>
+      buildTaskNotification({ task: "not a url> <injected>" }, { actor: ALICE })
+    ).toThrow(TypeError);
+    expect(() => writeTask(new Store(), { task: "mailto:evil@x" })).toThrow(
+      TypeError
+    );
+  });
+});
 
 // ──────────────────────────── TaskDoc (typed accessors) ────────────────────────────
 

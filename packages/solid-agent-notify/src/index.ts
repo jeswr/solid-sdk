@@ -35,6 +35,8 @@ export {
   serializeTurtle,
   ActivityDoc,
   isHttpIri,
+  safeHttpIri,
+  escapeIri,
 } from "./activity.js";
 export type { ActivityNotification, ActivityType } from "./activity.js";
 

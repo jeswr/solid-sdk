@@ -20,7 +20,7 @@
  */
 import { LiteralAs, LiteralFrom, NamedNodeAs, NamedNodeFrom, OptionalAs, OptionalFrom, SetFrom, TermWrapper, } from "@rdfjs/wrapper";
 import { DataFactory } from "n3";
-import { buildActivity, isHttpIri, } from "./activity.js";
+import { buildActivity, isHttpIri, safeHttpIri, } from "./activity.js";
 import { AS, DCT, RDF_TYPE, WF } from "./config.js";
 import { notifyAgent } from "./send.js";
 /**
@@ -103,16 +103,22 @@ export class TaskDoc extends TermWrapper {
  * coerce arbitrary text into a NamedNode). Returns the same store for chaining.
  */
 export function writeTask(store, task) {
-    if (!isHttpIri(task.task)) {
+    // The task IRI is the SUBJECT of every emitted quad, so a hostile value must
+    // NOT be written raw (Turtle IRI-injection). Canonicalise it; if it is not a
+    // safe http(s) IRI the notification is invalid — REJECT rather than emit a
+    // subject that could break out of `<…>` and inject triples into the peer inbox.
+    const subject = safeHttpIri(task.task);
+    if (subject === undefined) {
         throw new TypeError(`task IRI must be an absolute http(s) URL: ${task.task}`);
     }
-    const doc = new TaskDoc(task.task, store, DataFactory)
+    const doc = new TaskDoc(subject, store, DataFactory)
         .markTask()
         .setState(task.state ?? "Open");
     doc.title = task.title?.trim() || undefined;
     doc.description = task.description?.trim() || undefined;
-    doc.assignee = isHttpIri(task.assignee) ? task.assignee : undefined;
-    doc.creator = isHttpIri(task.creator) ? task.creator : undefined;
+    // Object-position IRIs: canonicalise + DROP on invalid (never write raw).
+    doc.assignee = safeHttpIri(task.assignee);
+    doc.creator = safeHttpIri(task.creator);
     doc.created = task.created ?? new Date();
     return store;
 }
