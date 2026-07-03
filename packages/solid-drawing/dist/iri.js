@@ -106,25 +106,55 @@ export function escapeIri(value) {
  * link).
  *
  * Unlike {@link safeHttpIri} (used for OBJECT links) this does NOT canonicalise via
- * `URL.href`: a subject's identity is its EXACT lexical value, so the original string
- * is preserved and only the Turtle-forbidden characters are percent-encoded (via
+ * `URL.href`: a subject's identity is its EXACT lexical value, so the string is
+ * preserved and only the Turtle-forbidden characters are percent-encoded (via
  * {@link escapeIri}) so the serialised `<…>` cannot be broken out of. A clean http(s)
- * IRI is therefore returned byte-identical; a parseable http(s) IRI that carries
- * break-out characters is neutralised (escaped) into a single safe term rather than
- * allowed to inject a triple.
+ * IRI is therefore returned byte-identical (a `:443`/`:80` port and a `/../` segment
+ * survive untouched); a parseable http(s) IRI that carries embedded break-out
+ * characters is neutralised (escaped) into a single safe term rather than allowed to
+ * inject a triple.
+ *
+ * **Escape FIRST, validate the ESCAPED, emit the ESCAPED.** WHATWG `URL` SILENTLY
+ * rewrites its input while parsing — it strips ALL embedded C0 controls (tab/LF/CR
+ * and the rest of U+0000–U+001F) and trims leading/trailing C0-controls-and-spaces
+ * (U+0000–U+0020). Validating the RAW value and then emitting `escapeIri(raw)` would
+ * therefore emit a lexeme that is NOT the absolute http(s) IRI that passed `new URL`.
+ * So this guard:
+ *  1. FAILS CLOSED on any raw C0 control anywhere, and on a leading/trailing space —
+ *     a legitimate absolute http(s) IRI carries none of these raw, so reject rather
+ *     than silently normalise the subject's identity; then
+ *  2. escapes the (forbidden-char) set BEFORE parsing and validates + returns THAT
+ *     escaped string, so the emitted lexeme is provably the one `new URL` accepted.
  */
 export function safeSubjectBaseIri(value) {
     if (typeof value !== "string")
         return undefined;
+    // (1) Reject the characters `URL` would silently drop, so the emitted lexeme can
+    // never diverge from the validated IRI. Any raw C0 control (U+0000–U+001F) anywhere
+    // — WHATWG strips embedded tab/LF/CR — and a leading/trailing space (U+0020) —
+    // WHATWG trims it — are never part of a well-formed absolute http(s) IRI.
+    for (const ch of value) {
+        if ((ch.codePointAt(0) ?? 0) < 0x20)
+            return undefined;
+    }
+    if (value.length > 0) {
+        if (value.charCodeAt(0) <= 0x20)
+            return undefined;
+        if (value.charCodeAt(value.length - 1) <= 0x20)
+            return undefined;
+    }
+    // (2) Escape the full Turtle-IRIREF-forbidden set BEFORE parsing, then validate and
+    // emit exactly that escaped string.
+    const escaped = escapeIri(value);
     let u;
     try {
-        u = new URL(value);
+        u = new URL(escaped);
     }
     catch {
         return undefined;
     }
     if (u.protocol !== "http:" && u.protocol !== "https:")
         return undefined;
-    return escapeIri(value);
+    return escaped;
 }
 //# sourceMappingURL=iri.js.map

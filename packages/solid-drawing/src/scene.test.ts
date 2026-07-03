@@ -404,6 +404,31 @@ describe("IRI-injection hardening — the REQUIRED scene SUBJECT (resourceUrl)",
     expect(() => buildScene("file:///etc/passwd", { sceneDocument: CANVAS })).toThrow(TypeError);
   });
 
+  it("THROWS on chars WHATWG URL would SILENTLY drop — never normalised into the subject", () => {
+    // WHATWG `URL` trims leading/trailing C0-controls+spaces and STRIPS embedded
+    // tab/LF/CR; if the guard validated the raw value and emitted the escaped one, the
+    // subject lexeme could diverge from the validated IRI. It instead FAILS CLOSED.
+    expect(() => sceneSubject(" https://pod.example/a")).toThrow(TypeError); // leading space
+    expect(() => sceneSubject("https://pod.example/a ")).toThrow(TypeError); // trailing space
+    expect(() => sceneSubject("https://pod.example/a\nb")).toThrow(TypeError); // embedded LF
+    expect(() => sceneSubject("https://pod.example/a\tb")).toThrow(TypeError); // embedded tab
+    expect(() => sceneSubject("https://pod.example/a\rb")).toThrow(TypeError); // embedded CR
+    expect(() => buildScene("https://pod.example/a\nb", { sceneDocument: CANVAS })).toThrow(
+      TypeError,
+    );
+  });
+
+  it("round-trips a clean http(s) resourceUrl with an explicit :443 port BYTE-IDENTICAL", async () => {
+    // No `URL.href` canonicalisation, so the default-port `:443` is NOT stripped — the
+    // subject's lexeme is exactly what the caller passed.
+    const withPort = "https://pod.example:443/alice/drawings/diagram.ttl";
+    expect(sceneSubject(withPort).value).toBe(`${withPort}#it`);
+    const ttl = await serializeScene(withPort, { sceneDocument: CANVAS });
+    const quads = new Parser({ baseIRI: withPort }).parse(ttl);
+    expect(quads.length).toBeGreaterThan(0);
+    expect(quads.every((q) => q.subject.value === `${withPort}#it`)).toBe(true);
+  });
+
   it("serializeScene REJECTS (never emits an injected triple) for a hostile resourceUrl", async () => {
     await expect(serializeScene(SubjectPayload, { sceneDocument: CANVAS })).rejects.toThrow(
       TypeError,
@@ -447,6 +472,29 @@ describe("IRI-injection hardening — the REQUIRED scene SUBJECT (resourceUrl)",
       expect(safeSubjectBaseIri("file:///etc/passwd")).toBeUndefined();
       expect(safeSubjectBaseIri("not an iri")).toBeUndefined();
       expect(safeSubjectBaseIri(SubjectPayload)).toBeUndefined();
+    });
+
+    it("returns undefined for the chars WHATWG URL would silently strip/trim (fail closed)", () => {
+      expect(safeSubjectBaseIri(" https://pod.example/a")).toBeUndefined(); // leading space
+      expect(safeSubjectBaseIri("https://pod.example/a ")).toBeUndefined(); // trailing space
+      expect(safeSubjectBaseIri("https://pod.example/a\tb")).toBeUndefined(); // embedded tab
+      expect(safeSubjectBaseIri("https://pod.example/a\nb")).toBeUndefined(); // embedded LF
+      expect(safeSubjectBaseIri("https://pod.example/a\rb")).toBeUndefined(); // embedded CR
+      expect(safeSubjectBaseIri("\u0000https://pod.example/a")).toBeUndefined(); // leading NUL control
+    });
+
+    it("preserves an explicit default port (:443) — no URL.href canonicalisation", () => {
+      const withPort = "https://pod.example:443/a";
+      expect(safeSubjectBaseIri(withPort)).toBe(withPort);
+    });
+
+    it("emits EXACTLY the escaped string it validated (escape-first, not the raw value)", () => {
+      // A parseable http(s) IRI with an EMBEDDED space + `<` is neutralised: the guard
+      // escapes first, validates the escaped string, and returns THAT — so the emitted
+      // lexeme is provably the one `new URL` accepted, and carries no break-out char.
+      const out = safeSubjectBaseIri("https://pod.example/a b<c");
+      expect(out).toBe("https://pod.example/a%20b%3Cc");
+      expect(out).not.toMatch(/[<>" ]/);
     });
 
     it("escapes the FULL Turtle-IRIREF-forbidden set (angle/quote/space/brace/pipe/caret/backtick/backslash + controls)", () => {

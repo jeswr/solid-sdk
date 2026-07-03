@@ -54,12 +54,25 @@ export declare function escapeIri(value: string): string;
  * link).
  *
  * Unlike {@link safeHttpIri} (used for OBJECT links) this does NOT canonicalise via
- * `URL.href`: a subject's identity is its EXACT lexical value, so the original string
- * is preserved and only the Turtle-forbidden characters are percent-encoded (via
+ * `URL.href`: a subject's identity is its EXACT lexical value, so the string is
+ * preserved and only the Turtle-forbidden characters are percent-encoded (via
  * {@link escapeIri}) so the serialised `<…>` cannot be broken out of. A clean http(s)
- * IRI is therefore returned byte-identical; a parseable http(s) IRI that carries
- * break-out characters is neutralised (escaped) into a single safe term rather than
- * allowed to inject a triple.
+ * IRI is therefore returned byte-identical (a `:443`/`:80` port and a `/../` segment
+ * survive untouched); a parseable http(s) IRI that carries embedded break-out
+ * characters is neutralised (escaped) into a single safe term rather than allowed to
+ * inject a triple.
+ *
+ * **Escape FIRST, validate the ESCAPED, emit the ESCAPED.** WHATWG `URL` SILENTLY
+ * rewrites its input while parsing — it strips ALL embedded C0 controls (tab/LF/CR
+ * and the rest of U+0000–U+001F) and trims leading/trailing C0-controls-and-spaces
+ * (U+0000–U+0020). Validating the RAW value and then emitting `escapeIri(raw)` would
+ * therefore emit a lexeme that is NOT the absolute http(s) IRI that passed `new URL`.
+ * So this guard:
+ *  1. FAILS CLOSED on any raw C0 control anywhere, and on a leading/trailing space —
+ *     a legitimate absolute http(s) IRI carries none of these raw, so reject rather
+ *     than silently normalise the subject's identity; then
+ *  2. escapes the (forbidden-char) set BEFORE parsing and validates + returns THAT
+ *     escaped string, so the emitted lexeme is provably the one `new URL` accepted.
  */
 export declare function safeSubjectBaseIri(value: string | undefined): string | undefined;
 //# sourceMappingURL=iri.d.ts.map
