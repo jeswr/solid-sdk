@@ -7,6 +7,9 @@
   "tsdocMetadata": { "enabled": false },
   "messages": {
     "compilerMessageReporting": { "default": { "logLevel": "none" } },
-    "extractorMessageReporting": { "default": { "logLevel": "none" } }
+    "extractorMessageReporting": {
+      "default": { "logLevel": "none" },
+      "ae-forgotten-export": { "logLevel": "error" }
+    }
   }
 }
