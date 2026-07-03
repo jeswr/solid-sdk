@@ -33,5 +33,16 @@
   ],
   "federation": {
     "membershipTodo": "SDK (not an app) — a server-side authentication/authorization primitive. It verifies DPoP-bound Solid-OIDC access tokens for an app's own write API and authorizes a single owner WebID; it holds no federation membership of its own. The 5 revenue products (AccessRadar + Keystone/CapNote/Provena/Furlong) consume it to gate their /api/** routes."
+  },
+  "status": {
+    "generatedAt": "2026-07-03T05:14:31.745Z",
+    "commit": "f12f12ad2762d644c741cbb5255f0047b6e1730a",
+    "version": "0.1.0",
+    "gate": {
+      "lint": "skip",
+      "typecheck": "skip",
+      "test": "skip",
+      "build": "skip"
+    }
   }
 }
