@@ -26,9 +26,9 @@
 #  - a StudNomination MUST carry eq:horse (the stallion) + eq:season; eq:mareName
 #    is OPTIONAL (a nomination may be recorded before the mare is chosen), a
 #    string when present; it SHOULD price via schema:totalPrice (NOT schema:price);
-#  - a RaceResult MUST carry eq:horse + eq:finishPos (≥1); eq:forRace is OPTIONAL
-#    (inline results carry the race as a schema:name, not an external race IRI),
-#    an IRI when present;
+#  - a RaceResult MUST carry eq:horse + eq:finishPos (≥1) AND identify its race
+#    by EITHER an external eq:forRace IRI OR an inline schema:name (Furlong writes
+#    the inline schema:name) — each typed when present, but not both required;
 #  - a PrizeDistribution MUST carry schema:amount; it SHOULD name eq:recipientType.
 #
 # Discipline (matches the sibling sectors' profiles):
@@ -217,8 +217,24 @@ eqsh:RaceResultShape a sh:NodeShape ;
         sh:maxCount 1 ;
         sh:nodeKind sh:IRI ;
         sh:severity sh:Violation ;
-        sh:message "A RaceResult's eq:forRace, when present, MUST be a single IRI (an external race identifier). OPTIONAL: an inline result carries the race as a schema:name, with no external race IRI."@en
+        sh:message "A RaceResult's eq:forRace, when present, MUST be a single IRI (an external race identifier)."@en
     ] ;
+    sh:property [
+        sh:path schema:name ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:severity sh:Violation ;
+        sh:message "A RaceResult's schema:name (an inline race name), when present, MUST be a single string."@en
+    ] ;
+    # A RaceResult MUST identify its race SOMEHOW: an external eq:forRace IRI OR
+    # an inline schema:name. (Either form is fine — Furlong writes the inline
+    # schema:name — but a result with neither has no race identity at all.)
+    sh:or (
+        [ sh:path eq:forRace ; sh:minCount 1 ]
+        [ sh:path schema:name ; sh:minCount 1 ]
+    ) ;
+    sh:severity sh:Violation ;
+    sh:message "A RaceResult MUST identify its race by either an external eq:forRace IRI or an inline schema:name."@en ;
     sh:property [
         sh:path eq:finishPos ;
         sh:minCount 1 ;
