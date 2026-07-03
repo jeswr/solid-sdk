@@ -187,6 +187,17 @@ export class Solid implements INodeType {
             headers: req.headers,
             returnFullResponse: true,
             ignoreHttpStatusErrors: true,
+            // SECURITY (wave-3 review): NEVER follow redirects on an
+            // authenticated pod request. n8n's axios transport follows them by
+            // default AND forwards credentials on cross-origin redirects
+            // (`sendCredentialsOnCrossOriginRedirect` defaults to true), so a
+            // poisoned in-pod resource answering `302 Location: https://evil…`
+            // would exfiltrate the Bearer token. The 3xx comes back to the
+            // operations, which refuse it fail-closed (assertNotRedirect).
+            disableFollowRedirect: true,
+            // Defence in depth: even if redirect-following is ever re-enabled,
+            // never forward the credential across origins.
+            sendCredentialsOnCrossOriginRedirect: false,
             // Always treat the body as raw text — Solid resources are opaque
             // bytes/RDF; we never want n8n to JSON-parse the body.
             json: false,

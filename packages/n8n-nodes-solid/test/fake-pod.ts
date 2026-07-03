@@ -23,6 +23,12 @@ export interface FakePodOptions {
   base: string;
   /** Record every request the node issues (for assertions). */
   log?: SolidHttpRequest[];
+  /**
+   * URLs that answer a redirect (any method) — models a poisoned/misbehaving
+   * pod resource. The transport contract says redirects are NOT followed, so
+   * the operations must refuse these fail-closed.
+   */
+  redirects?: Record<string, { statusCode?: number; location: string }>;
 }
 
 /**
@@ -74,6 +80,11 @@ export function createFakePod(opts: FakePodOptions): {
   const transport: SolidTransport = async (req: SolidHttpRequest): Promise<SolidHttpResponse> => {
     log.push(req);
     const url = req.url;
+
+    const redirect = opts.redirects?.[url];
+    if (redirect) {
+      return resp(redirect.statusCode ?? 302, { location: redirect.location }, "");
+    }
 
     if (req.method === "GET") {
       if (isContainer(url)) {

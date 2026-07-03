@@ -262,3 +262,95 @@ describe("listContainer", () => {
     ).rejects.toThrow(/escapes pod/);
   });
 });
+
+describe("redirect refusal (token-leak / pod-escape guard — wave-3 security review)", () => {
+  // A poisoned in-pod resource answering `3xx Location: https://evil…` must be
+  // REFUSED on every operation: a followed redirect would re-send the Bearer
+  // header to the attacker origin (n8n's axios transport forwards credentials on
+  // cross-origin redirects by default), and a redirected PUT could steer a write
+  // out of the pod. Regression for the wave-3 HIGH finding.
+  const Evil = "https://evil.example/steal";
+
+  function redirectingPod(statusCode = 302) {
+    return createFakePod({
+      base: BASE,
+      redirects: {
+        "https://alice.pod.example/data/poisoned.ttl": { statusCode, location: Evil },
+        "https://alice.pod.example/data/poisoned/": { statusCode, location: Evil },
+      },
+    });
+  }
+
+  it("read: refuses a 302 and never issues a second request", async () => {
+    const { transport, log } = redirectingPod();
+    await expect(
+      readResource({ podBaseUrl: BASE, target: "poisoned.ttl", request: transport }),
+    ).rejects.toThrow(/redirect .*refused|refused.*redirect|answered a redirect/);
+    expect(log).toHaveLength(1); // the redirect target was never requested
+    expect(log[0]?.url).toBe("https://alice.pod.example/data/poisoned.ttl");
+  });
+
+  it("create: refuses a 302 on the PUT (a redirected write could escape the pod)", async () => {
+    const { transport, log } = redirectingPod();
+    await expect(
+      createResource({
+        podBaseUrl: BASE,
+        target: "poisoned.ttl",
+        content: "secret payload",
+        contentType: "text/plain",
+        request: transport,
+      }),
+    ).rejects.toThrow(/answered a redirect/);
+    expect(log).toHaveLength(1);
+  });
+
+  it("update: refuses a 307 (method/body-preserving redirect) on the PUT", async () => {
+    const { transport, log } = redirectingPod(307);
+    await expect(
+      updateResource({
+        podBaseUrl: BASE,
+        target: "poisoned.ttl",
+        content: "secret payload",
+        contentType: "text/plain",
+        request: transport,
+      }),
+    ).rejects.toThrow(/answered a redirect \(HTTP 307/);
+    expect(log).toHaveLength(1);
+  });
+
+  it("delete: refuses a 301", async () => {
+    const { transport, log } = redirectingPod(301);
+    await expect(
+      deleteResource({ podBaseUrl: BASE, target: "poisoned.ttl", request: transport }),
+    ).rejects.toThrow(/answered a redirect \(HTTP 301/);
+    expect(log).toHaveLength(1);
+  });
+
+  it("list: refuses a 302 on the container GET", async () => {
+    const { transport, log } = redirectingPod();
+    await expect(
+      listContainer({ podBaseUrl: BASE, target: "poisoned/", request: transport }),
+    ).rejects.toThrow(/answered a redirect/);
+    expect(log).toHaveLength(1);
+  });
+
+  it("echoes the redirect Location with userinfo REDACTED (continueOnFail surfaces it)", async () => {
+    const { transport } = createFakePod({
+      base: BASE,
+      redirects: {
+        "https://alice.pod.example/data/poisoned.ttl": {
+          location: "https://alice:s3cr3t-p4ss@evil.example/steal",
+        },
+      },
+    });
+    let message = "";
+    try {
+      await readResource({ podBaseUrl: BASE, target: "poisoned.ttl", request: transport });
+    } catch (e) {
+      message = (e as Error).message;
+    }
+    expect(message).toMatch(/answered a redirect/);
+    expect(message).toContain("//<redacted>@evil.example/steal");
+    expect(message).not.toContain("s3cr3t-p4ss");
+  });
+});

@@ -30,6 +30,7 @@ function fakeExecute(params: NodeParams[], opts?: { continueOnFail?: boolean }) 
   const { transport, store, log } = createFakePod({ base: BASE });
   const credentials = { podBaseUrl: BASE, accessToken: "TOP-SECRET-TOKEN" };
   const seenAuth: string[] = []; // record any credential-type passed to the helper
+  const seenOptions: Record<string, unknown>[] = []; // record every IHttpRequestOptions
 
   const ctx = {
     getInputData: () => params.map(() => ({ json: {} })),
@@ -44,6 +45,7 @@ function fakeExecute(params: NodeParams[], opts?: { continueOnFail?: boolean }) 
       httpRequestWithAuthentication: {
         async call(_this: unknown, credType: string, options: Record<string, unknown>) {
           seenAuth.push(credType);
+          seenOptions.push(options);
           const req: SolidHttpRequest = {
             method: options.method as SolidHttpRequest["method"],
             url: options.url as string,
@@ -57,8 +59,15 @@ function fakeExecute(params: NodeParams[], opts?: { continueOnFail?: boolean }) 
     },
   };
 
-  // biome-ignore lint/suspicious/noExplicitAny: minimal fake IExecuteFunctions
-  return { run: () => new Solid().execute.call(ctx as any), store, log, seenAuth, credentials };
+  return {
+    // biome-ignore lint/suspicious/noExplicitAny: minimal fake IExecuteFunctions
+    run: () => new Solid().execute.call(ctx as any),
+    store,
+    log,
+    seenAuth,
+    seenOptions,
+    credentials,
+  };
 }
 
 describe("Solid.execute — resource lifecycle", () => {
@@ -87,6 +96,42 @@ describe("Solid.execute — resource lifecycle", () => {
     expect(e.seenAuth).toContain("solidApi");
     // The token is held only in the (fake) credential object n8n injects via the
     // helper — the node code path never references credentials.accessToken.
+  });
+
+  it("disables redirect-following + cross-origin credential forwarding on EVERY request", async () => {
+    // Security regression (wave-3 review): without `disableFollowRedirect`,
+    // n8n's axios transport follows a poisoned resource's 302 off-pod and (by
+    // default) FORWARDS the Bearer header cross-origin — token exfiltration.
+    const e = fakeExecute(
+      [
+        { resource: "resource", operation: "read", target: "x.ttl" },
+        {
+          resource: "resource",
+          operation: "create",
+          target: "y.ttl",
+          content: "z",
+          contentType: "text/plain",
+        },
+        { resource: "container", operation: "list", target: "c/" },
+      ],
+      // continueOnFail so every item issues its request even if an earlier one
+      // errors (the 404 read) — statuses are irrelevant; we assert the options.
+      { continueOnFail: true },
+    );
+    await e.run().catch(() => {});
+    expect(e.seenOptions.length).toBeGreaterThanOrEqual(3);
+    for (const options of e.seenOptions) {
+      expect(options.disableFollowRedirect).toBe(true);
+      expect(options.sendCredentialsOnCrossOriginRedirect).toBe(false);
+    }
+  });
+
+  it("never places the token anywhere in the request options it builds", async () => {
+    const e = fakeExecute([{ resource: "resource", operation: "read", target: "x.ttl" }]);
+    await e.run().catch(() => {});
+    for (const options of e.seenOptions) {
+      expect(JSON.stringify(options)).not.toContain("TOP-SECRET-TOKEN");
+    }
   });
 });
 

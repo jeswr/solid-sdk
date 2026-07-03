@@ -14,6 +14,7 @@ import {
   isContainerUrl,
   normalizePodBase,
   type ResolvedTarget,
+  redactUserinfo,
   resolveTarget,
 } from "../../src/scope.js";
 
@@ -47,6 +48,13 @@ export interface SolidHttpRequest {
  * operations can map it to a Solid-aware error/result. (n8n's httpRequest is
  * configured with `returnFullResponse: true` + `ignoreHttpStatusErrors: true` to
  * satisfy this; see Solid.node.ts.)
+ *
+ * SECURITY CONTRACT: the transport MUST NOT follow redirects — it returns the
+ * 3xx response as-is so the operations can REFUSE it (assertNotRedirect). A
+ * transport that transparently follows a redirect on an authenticated request
+ * can be steered off-pod by a poisoned in-pod resource, forwarding the Bearer
+ * token to an attacker origin (in the node this is enforced with
+ * `disableFollowRedirect: true`; see Solid.node.ts).
  */
 export type SolidTransport = (req: SolidHttpRequest) => Promise<SolidHttpResponse>;
 
@@ -81,6 +89,27 @@ function httpError(op: string, url: string, res: SolidHttpResponse): Error {
 }
 
 /**
+ * REFUSE any redirect answer, fail-closed (security guard — see the wave-3
+ * review). The transport never follows redirects (`disableFollowRedirect`), so a
+ * 3xx surfaces here. Following one on an authenticated pod request would let a
+ * poisoned in-pod resource `302` the request off-pod WITH the Bearer header
+ * attached (n8n's axios transport forwards credentials on cross-origin redirects
+ * by default) — a token-exfiltration vector; a redirected PUT could additionally
+ * steer a WRITE outside the pod. The `Location` is echoed userinfo-redacted for
+ * debuggability (this message surfaces as item JSON under `continueOnFail`).
+ */
+function assertNotRedirect(op: string, url: string, res: SolidHttpResponse): void {
+  if (res.statusCode >= 300 && res.statusCode < 400) {
+    const location = res.headers.location;
+    const to = location ? ` to ${redactUserinfo(location)}` : "";
+    throw new Error(
+      `[n8n-nodes-solid] ${op} ${url} answered a redirect (HTTP ${res.statusCode}${to}) — refused: ` +
+        "an authenticated pod request never follows redirects (token-leak / pod-escape guard)",
+    );
+  }
+}
+
+/**
  * Resolve + scope-guard a target against the pod base, returning the validated
  * absolute URL. Throws (fail-closed) if the target escapes the pod.
  */
@@ -93,6 +122,7 @@ export function scopedTarget(podBaseUrl: string, target: string): ResolvedTarget
 export async function readResource(input: SolidOperationInput): Promise<SolidResult> {
   const { url } = scopedTarget(input.podBaseUrl, input.target);
   const res = await input.request({ method: "GET", url, headers: {} });
+  assertNotRedirect("read", url, res);
   if (res.statusCode < 200 || res.statusCode >= 300) {
     throw httpError("read", url, res);
   }
@@ -125,6 +155,7 @@ export async function createResource(input: ResourceWriteInput): Promise<SolidRe
     },
     body: input.content,
   });
+  assertNotRedirect("create", url, res);
   if (res.statusCode === 412) {
     throw new Error(
       `[n8n-nodes-solid] create ${url} failed: resource already exists (412). Use Update to overwrite.`,
@@ -155,6 +186,7 @@ export async function updateResource(
     headers["if-match"] = input.ifMatch.trim();
   }
   const res = await input.request({ method: "PUT", url, headers, body: input.content });
+  assertNotRedirect("update", url, res);
   if (res.statusCode === 412) {
     throw new Error(
       `[n8n-nodes-solid] update ${url} failed: precondition failed (412 — the resource changed since the supplied ETag).`,
@@ -170,6 +202,7 @@ export async function updateResource(
 export async function deleteResource(input: SolidOperationInput): Promise<SolidResult> {
   const { url } = scopedTarget(input.podBaseUrl, input.target);
   const res = await input.request({ method: "DELETE", url, headers: {} });
+  assertNotRedirect("delete", url, res);
   if (res.statusCode === 404 || res.statusCode === 410) {
     return { url, deleted: false, notFound: true, statusCode: res.statusCode };
   }
@@ -198,6 +231,7 @@ export async function listContainer(
     url: containerUrl,
     headers: { accept: ACCEPT_RDF },
   });
+  assertNotRedirect("list", containerUrl, res);
   if (res.statusCode === 404 || res.statusCode === 410) {
     return { members: [], containerUrl };
   }

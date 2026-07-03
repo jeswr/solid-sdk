@@ -1579,6 +1579,15 @@ var ACCEPT_RDF = "text/turtle, application/ld+json;q=0.9";
 function httpError(op, url, res) {
   return new Error(`[n8n-nodes-solid] ${op} ${url} failed: HTTP ${res.statusCode}`);
 }
+function assertNotRedirect(op, url, res) {
+  if (res.statusCode >= 300 && res.statusCode < 400) {
+    const location = res.headers.location;
+    const to = location ? ` to ${redactUserinfo(location)}` : "";
+    throw new Error(
+      `[n8n-nodes-solid] ${op} ${url} answered a redirect (HTTP ${res.statusCode}${to}) \u2014 refused: an authenticated pod request never follows redirects (token-leak / pod-escape guard)`
+    );
+  }
+}
 function scopedTarget(podBaseUrl, target) {
   const base = normalizePodBase(podBaseUrl);
   return resolveTarget(base, target);
@@ -1586,6 +1595,7 @@ function scopedTarget(podBaseUrl, target) {
 async function readResource(input) {
   const { url } = scopedTarget(input.podBaseUrl, input.target);
   const res = await input.request({ method: "GET", url, headers: {} });
+  assertNotRedirect("read", url, res);
   if (res.statusCode < 200 || res.statusCode >= 300) {
     throw httpError("read", url, res);
   }
@@ -1613,6 +1623,7 @@ async function createResource(input) {
     },
     body: input.content
   });
+  assertNotRedirect("create", url, res);
   if (res.statusCode === 412) {
     throw new Error(
       `[n8n-nodes-solid] create ${url} failed: resource already exists (412). Use Update to overwrite.`
@@ -1635,6 +1646,7 @@ async function updateResource(input) {
     headers["if-match"] = input.ifMatch.trim();
   }
   const res = await input.request({ method: "PUT", url, headers, body: input.content });
+  assertNotRedirect("update", url, res);
   if (res.statusCode === 412) {
     throw new Error(
       `[n8n-nodes-solid] update ${url} failed: precondition failed (412 \u2014 the resource changed since the supplied ETag).`
@@ -1648,6 +1660,7 @@ async function updateResource(input) {
 async function deleteResource(input) {
   const { url } = scopedTarget(input.podBaseUrl, input.target);
   const res = await input.request({ method: "DELETE", url, headers: {} });
+  assertNotRedirect("delete", url, res);
   if (res.statusCode === 404 || res.statusCode === 410) {
     return { url, deleted: false, notFound: true, statusCode: res.statusCode };
   }
@@ -1665,6 +1678,7 @@ async function listContainer(input) {
     url: containerUrl,
     headers: { accept: ACCEPT_RDF }
   });
+  assertNotRedirect("list", containerUrl, res);
   if (res.statusCode === 404 || res.statusCode === 410) {
     return { members: [], containerUrl };
   }
@@ -1845,6 +1859,17 @@ var Solid = class {
             headers: req.headers,
             returnFullResponse: true,
             ignoreHttpStatusErrors: true,
+            // SECURITY (wave-3 review): NEVER follow redirects on an
+            // authenticated pod request. n8n's axios transport follows them by
+            // default AND forwards credentials on cross-origin redirects
+            // (`sendCredentialsOnCrossOriginRedirect` defaults to true), so a
+            // poisoned in-pod resource answering `302 Location: https://evil…`
+            // would exfiltrate the Bearer token. The 3xx comes back to the
+            // operations, which refuse it fail-closed (assertNotRedirect).
+            disableFollowRedirect: true,
+            // Defence in depth: even if redirect-following is ever re-enabled,
+            // never forward the credential across origins.
+            sendCredentialsOnCrossOriginRedirect: false,
             // Always treat the body as raw text — Solid resources are opaque
             // bytes/RDF; we never want n8n to JSON-parse the body.
             json: false,

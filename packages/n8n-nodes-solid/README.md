@@ -95,6 +95,13 @@ data outside the configured pod:
   issued**.
 - **`http(s)` only** — any other scheme (`file:`, `data:`, …) is rejected (an
   SSRF / scheme-confusion guard).
+- **Redirects are never followed.** Every request is issued with
+  `disableFollowRedirect` (and `sendCredentialsOnCrossOriginRedirect: false` as
+  defence in depth), and a `3xx` answer is **refused fail-closed** with a clear
+  error. Without this, a poisoned in-pod resource answering
+  `302 Location: https://evil…` would be followed by n8n's transport **with the
+  Bearer header forwarded cross-origin** (n8n's default) — a token-exfiltration
+  vector — and a redirected `PUT` could steer a write outside the pod.
 - The **access token is never read by node code** (n8n injects it as a header), so
   it is never logged.
 - The only RDF the node parses is the **container listing**; resource values are
