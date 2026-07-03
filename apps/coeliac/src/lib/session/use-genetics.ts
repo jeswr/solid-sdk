@@ -201,12 +201,12 @@ export function useGenetics(): GeneticsState & GeneticsActions {
       const syncing = (async () => {
         try {
           await syncGeneticSummary(ctx, record);
-          // Discriminate by createdAt: if a newer save replaced this record while the
+          // Discriminate by rev: if a newer save replaced this record while the
           // write was in flight, this stale completion is ignored (see markGeneticSync).
-          await store.markGeneticSync(record.createdAt, "synced");
+          await store.markGeneticSync(record.rev, "synced");
           setSummary(await store.getGeneticSummary());
         } catch (err) {
-          await store.markGeneticSync(record.createdAt, "error", (err as Error).message);
+          await store.markGeneticSync(record.rev, "error", (err as Error).message);
           setSummary(await store.getGeneticSummary());
           throw err;
         }

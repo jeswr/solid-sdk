@@ -39,7 +39,7 @@ function allBodies(fetchMock: ReturnType<typeof makeFetchMock>): string {
 describe("GeneticsView — privacy invariants", () => {
   it("RAW genome bytes never leave the device (only the derived summary is written)", async () => {
     const fetchMock = makeFetchMock();
-    const { fetchMock: fm } = renderWithSession(<GeneticsView />, { fetchMock });
+    const { fetchMock: fm, store } = renderWithSession(<GeneticsView />, { fetchMock });
     const user = userEvent.setup();
 
     await user.click(screen.getByRole("tab", { name: /upload a test file/i }));
@@ -54,6 +54,9 @@ describe("GeneticsView — privacy invariants", () => {
     await user.click(screen.getByRole("button", { name: /save summary to my pod/i }));
 
     await waitFor(() => expect(fm.puts().some((u) => u.endsWith("summary.ttl"))).toBe(true));
+    // The record transitions to `synced` (not stuck pending — the rev discriminator
+    // must match the record that was flushed).
+    await waitFor(async () => expect((await store.getGeneticSummary())?.sync).toBe("synced"));
 
     const bodies = allBodies(fm);
     // THE INVARIANT: no request body ever carried the raw file's secret marker or
