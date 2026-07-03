@@ -13,6 +13,11 @@
  * caller-supplied or server-listed URL can never make the store touch a foreign
  * origin or escape the container sub-tree.
  *
+ * **Redirect refusal on every op.** Every request forces `redirect: "manual"` and
+ * REFUSES any redirect response (see {@link MemoryStore.request}): a credentialed
+ * fetch must never transparently follow a 3xx a hostile/poisoned resource plants,
+ * or the credential could be forwarded off-origin (token exfiltration).
+ *
  * **RDF discipline (house rule).** The ONLY RDF the store touches is built/parsed
  * via the model (`buildMemory`/`parseMemoryTtl`), the container listing
  * (`@jeswr/fetch-rdf` `parseRdf` + `@solid/object` `ContainerDataset`), and the
@@ -72,6 +77,29 @@ export class MemoryStore {
         this.fetch = options.fetch;
     }
     /**
+     * The ONE fetch chokepoint every request the store issues goes through.
+     * REDIRECT-REFUSAL (fail-closed): the injected `fetch` is CREDENTIALED
+     * (Authorization / DPoP), so a redirect must never be transparently followed —
+     * a hostile or poisoned in-pod resource that answers 3xx could bounce the
+     * request (and with it the credential / a signed proof) to an attacker origin
+     * (token exfiltration). Every request therefore forces `redirect: "manual"`,
+     * and ANY redirect response — a 3xx status, or the browser's `opaqueredirect`
+     * filtered response — is REFUSED with a thrown error. The store never follows
+     * a redirect; a relocated pod is the caller's concern (reconstruct the store
+     * on the new container URL).
+     */
+    async request(url, init) {
+        const res = await this.fetch(url, { ...init, redirect: "manual" });
+        // `opaqueredirect` is the browser's filtered response for a redirect under
+        // redirect:"manual" (status reads 0); Node's undici returns the raw 3xx.
+        if (res.type === "opaqueredirect" || (res.status >= 300 && res.status < 400)) {
+            const shown = res.status === 0 ? "opaque redirect" : `${res.status}`;
+            throw new Error(`[solid-memory] ${init.method ?? "GET"} ${url} responded with a redirect (${shown}) — ` +
+                "refused: redirects are never followed on a credentialed request (credential-exfiltration guard)");
+        }
+        return res;
+    }
+    /**
      * Create a new memory under the container. Mints a fresh resource URL
      * (`${container}${uuid}`), serialises the memory, and PUTs it with
      * `If-None-Match: *` (a CONDITIONAL create — fails if the resource already
@@ -88,7 +116,7 @@ export class MemoryStore {
         // Defence in depth: a minted URL is always under the container, but assert it.
         assertWithinBase(this.container, url);
         const body = await this.serialize(url, data);
-        const res = await this.fetch(url, {
+        const res = await this.request(url, {
             method: "PUT",
             headers: {
                 "content-type": "text/turtle",
@@ -110,7 +138,7 @@ export class MemoryStore {
      */
     async get(url) {
         assertWithinBase(this.container, url);
-        const res = await this.fetch(url, {
+        const res = await this.request(url, {
             method: "GET",
             headers: { accept: "text/turtle, application/ld+json;q=0.9" },
         });
@@ -213,7 +241,7 @@ export class MemoryStore {
         const headers = { "content-type": "text/turtle" };
         if (opts?.ifMatch)
             headers["if-match"] = opts.ifMatch;
-        const res = await this.fetch(url, { method: "PUT", headers, body });
+        const res = await this.request(url, { method: "PUT", headers, body });
         if (!res.ok) {
             throw new Error(`[solid-memory] update ${url} failed: ${res.status} ${res.statusText}`);
         }
@@ -230,7 +258,7 @@ export class MemoryStore {
         const headers = {};
         if (opts?.ifMatch)
             headers["if-match"] = opts.ifMatch;
-        const res = await this.fetch(url, { method: "DELETE", headers });
+        const res = await this.request(url, { method: "DELETE", headers });
         if (!res.ok) {
             throw new Error(`[solid-memory] delete ${url} failed: ${res.status} ${res.statusText}`);
         }
@@ -318,7 +346,7 @@ export class MemoryStore {
         const ifMatch = opts?.ifMatch ?? existing.etag;
         if (ifMatch)
             headers["if-match"] = ifMatch;
-        const res = await this.fetch(url, { method: "PUT", headers, body });
+        const res = await this.request(url, { method: "PUT", headers, body });
         if (!res.ok) {
             throw new Error(`[solid-memory] unforget ${url} failed: ${res.status} ${res.statusText}`);
         }
@@ -333,7 +361,7 @@ export class MemoryStore {
      * @throws on any non-ok, non-404/410 response.
      */
     async list() {
-        const res = await this.fetch(this.container, {
+        const res = await this.request(this.container, {
             method: "GET",
             headers: { accept: "text/turtle, application/ld+json;q=0.9" },
         });

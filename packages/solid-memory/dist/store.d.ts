@@ -12,6 +12,11 @@
  * caller-supplied or server-listed URL can never make the store touch a foreign
  * origin or escape the container sub-tree.
  *
+ * **Redirect refusal on every op.** Every request forces `redirect: "manual"` and
+ * REFUSES any redirect response (see {@link MemoryStore.request}): a credentialed
+ * fetch must never transparently follow a 3xx a hostile/poisoned resource plants,
+ * or the credential could be forwarded off-origin (token exfiltration).
+ *
  * **RDF discipline (house rule).** The ONLY RDF the store touches is built/parsed
  * via the model (`buildMemory`/`parseMemoryTtl`), the container listing
  * (`@jeswr/fetch-rdf` `parseRdf` + `@solid/object` `ContainerDataset`), and the
@@ -52,6 +57,19 @@ export declare class MemoryStore {
     readonly container: string;
     private readonly fetch;
     constructor(options: MemoryStoreOptions);
+    /**
+     * The ONE fetch chokepoint every request the store issues goes through.
+     * REDIRECT-REFUSAL (fail-closed): the injected `fetch` is CREDENTIALED
+     * (Authorization / DPoP), so a redirect must never be transparently followed —
+     * a hostile or poisoned in-pod resource that answers 3xx could bounce the
+     * request (and with it the credential / a signed proof) to an attacker origin
+     * (token exfiltration). Every request therefore forces `redirect: "manual"`,
+     * and ANY redirect response — a 3xx status, or the browser's `opaqueredirect`
+     * filtered response — is REFUSED with a thrown error. The store never follows
+     * a redirect; a relocated pod is the caller's concern (reconstruct the store
+     * on the new container URL).
+     */
+    private request;
     /**
      * Create a new memory under the container. Mints a fresh resource URL
      * (`${container}${uuid}`), serialises the memory, and PUTs it with

@@ -713,3 +713,96 @@ describe("search convenience", () => {
     expect(out.map((m: MemoryData) => m.text)).toEqual(["remember dark mode"]);
   });
 });
+
+describe("redirect refusal (credential-exfiltration guard)", () => {
+  const resourceUrl = `${CONTAINER}m1`;
+  const evilTarget = "https://evil.example/steal";
+
+  /**
+   * A pod that answers EVERY request with a 302 → attacker origin, recording each
+   * request's URL + the `redirect` mode the store passed. A store that followed
+   * the Location (or let the runtime follow it) would leak the credentialed
+   * request off-origin — the guard must instead throw and never issue a second
+   * request.
+   */
+  function makeRedirectingPod() {
+    const calls: Array<{ url: string; redirect: RequestInit["redirect"] }> = [];
+    const fetchImpl: typeof globalThis.fetch = async (input, init) => {
+      const url = typeof input === "string" ? input : input.toString();
+      calls.push({ url, redirect: init?.redirect });
+      return new Response(null, { status: 302, headers: { location: evilTarget } });
+    };
+    return { calls, fetchImpl };
+  }
+
+  it("forces redirect:'manual' on every request", async () => {
+    const { calls, fetchImpl } = makeRedirectingPod();
+    const s = new MemoryStore({ container: CONTAINER, fetch: fetchImpl });
+    await expect(s.get(resourceUrl)).rejects.toThrow(/redirect/);
+    await expect(s.list()).rejects.toThrow(/redirect/);
+    expect(calls.length).toBeGreaterThan(0);
+    for (const call of calls) expect(call.redirect).toBe("manual");
+  });
+
+  it("every credentialed op refuses a 302 and never requests the attacker origin", async () => {
+    const { calls, fetchImpl } = makeRedirectingPod();
+    const s = new MemoryStore({ container: CONTAINER, fetch: fetchImpl });
+
+    await expect(s.create({ text: "x" })).rejects.toThrow(/refused/);
+    await expect(s.get(resourceUrl)).rejects.toThrow(/refused/);
+    // Explicit created + assumeNotForgotten skips update's pre-read, so the PUT
+    // itself is the redirected request under test.
+    await expect(
+      s.update(resourceUrl, { text: "x", created: new Date() }, { assumeNotForgotten: true }),
+    ).rejects.toThrow(/refused/);
+    await expect(s.delete(resourceUrl)).rejects.toThrow(/refused/);
+    await expect(s.forget(resourceUrl)).rejects.toThrow(/redirect/);
+    await expect(s.unforget(resourceUrl)).rejects.toThrow(/redirect/);
+    await expect(s.list()).rejects.toThrow(/refused/);
+    await expect(s.all()).rejects.toThrow(/refused/);
+
+    // The credential never went off-origin: every request the store issued
+    // targeted the container sub-tree (or the container itself), NEVER the
+    // redirect Location.
+    expect(calls.length).toBeGreaterThan(0);
+    for (const call of calls) {
+      expect(call.url.startsWith("https://alice.pod/")).toBe(true);
+      expect(call.url).not.toContain("evil.example");
+    }
+  });
+
+  it("update's fail-closed tombstone pre-read also refuses a redirect", async () => {
+    // With no explicit invalidatedAt, update() pre-reads via get(); the 302 makes
+    // that read FAIL, so the fail-closed tombstone guard refuses the update too
+    // (a redirecting pod can neither be read nor blindly overwritten).
+    const { fetchImpl } = makeRedirectingPod();
+    const s = new MemoryStore({ container: CONTAINER, fetch: fetchImpl });
+    await expect(s.update(resourceUrl, { text: "x" })).rejects.toThrow(/fail-closed/);
+  });
+
+  it("refuses a browser opaqueredirect (filtered response, status 0)", async () => {
+    // A browser under redirect:"manual" surfaces a cross-origin redirect as an
+    // opaqueredirect filtered response (status 0, no Location visible). The
+    // Response constructor cannot mint status 0, so shape a minimal stand-in.
+    const opaque = {
+      type: "opaqueredirect",
+      status: 0,
+      ok: false,
+      statusText: "",
+      headers: new Headers(),
+    } as unknown as Response;
+    const fetchImpl: typeof globalThis.fetch = async () => opaque;
+    const s = new MemoryStore({ container: CONTAINER, fetch: fetchImpl });
+    await expect(s.get(resourceUrl)).rejects.toThrow(/opaque redirect/);
+    await expect(s.delete(resourceUrl)).rejects.toThrow(/refused/);
+  });
+
+  it("refuses every 3xx status, not just 302", async () => {
+    for (const status of [301, 303, 307, 308]) {
+      const fetchImpl: typeof globalThis.fetch = async () =>
+        new Response(null, { status, headers: { location: evilTarget } });
+      const s = new MemoryStore({ container: CONTAINER, fetch: fetchImpl });
+      await expect(s.get(resourceUrl)).rejects.toThrow(/redirect/);
+    }
+  });
+});
