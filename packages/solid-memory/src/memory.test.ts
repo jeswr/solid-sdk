@@ -1,5 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
-import { DataFactory } from "n3";
+import { DataFactory, Parser } from "n3";
 import { describe, expect, it } from "vitest";
 import {
   buildMemory,
@@ -155,6 +155,119 @@ describe("http(s)-IRI scope filtering on object properties", () => {
     const ttl = await serializeMemory(URL_, data);
     const parsed = await parseMemoryTtl(URL_, ttl, "text/turtle");
     expect(parsed?.categories).toEqual(["https://valid.example/cat"]);
+  });
+
+  it("neutralises an n3.Writer IRI-injection payload on an object property + category", async () => {
+    // n3.Writer emits IRIs verbatim between <…> and does NOT escape `>`/space, so
+    // an untrusted string can break out of the <…> term and inject arbitrary
+    // triples. httpIriOrUndefined canonicalises (percent-encodes the escaping
+    // characters) so both attributedTo and the hostile category are written as a
+    // single SAFE IRI — no injected triple survives.
+    const payload = "https://evil/x> . <https://evil/s2> <https://evil/p2> <https://evil/o2";
+    const data: MemoryData = {
+      text: "x",
+      attributedTo: payload,
+      categories: [payload, "https://valid.example/cat"],
+    };
+    const ttl = await serializeMemory(URL_, data);
+    // Re-parse the serialised Turtle with a raw n3 Parser and assert NO injected
+    // triple exists (the payload's smuggled subject/predicate/object).
+    const quads = new Parser().parse(ttl);
+    const smuggled = new Set(["https://evil/s2", "https://evil/p2", "https://evil/o2"]);
+    for (const q of quads) {
+      expect(smuggled.has(q.subject.value)).toBe(false);
+      expect(smuggled.has(q.predicate.value)).toBe(false);
+      expect(smuggled.has(q.object.value)).toBe(false);
+      // No NamedNode carries a raw Turtle-breaking octet.
+      for (const term of [q.subject, q.predicate, q.object]) {
+        if (term.termType !== "NamedNode") continue;
+        for (const ch of ["<", ">", '"', "{", "}", "|", "^", "`", "\\", " "]) {
+          expect(term.value.includes(ch)).toBe(false);
+        }
+      }
+    }
+    // The clean category survives (the hostile one is persisted percent-encoded,
+    // not injected).
+    const parsed = await parseMemoryTtl(URL_, ttl, "text/turtle");
+    expect(parsed?.categories).toContain("https://valid.example/cat");
+    // A clean http IRI still round-trips byte-for-byte.
+    const clean: MemoryData = { text: "y", attributedTo: "https://agent.pod/profile/card#me" };
+    const roundTripped = await parseMemoryTtl(
+      URL_,
+      await serializeMemory(URL_, clean),
+      "text/turtle",
+    );
+    expect(roundTripped?.attributedTo).toBe("https://agent.pod/profile/card#me");
+  });
+
+  it("keeps valid categories that differ only by benign canonicalisation (no drop, no injection)", async () => {
+    // Regression: the validator must NOT drop safe http(s) IRIs whose WHATWG
+    // canonical form merely differs (a missing trailing slash, an upper-case
+    // host, a stripped default port). Option (a): categories persist the
+    // canonicalised form, so these are KEPT (not silently lost) — and still
+    // injection-safe.
+    const data: MemoryData = {
+      text: "x",
+      categories: [
+        "https://example.com", // canonicalises to https://example.com/
+        "https://EXAMPLE.org/Path", // host lower-cased, path case preserved
+        "https://valid.example/cat",
+      ],
+    };
+    const ttl = await serializeMemory(URL_, data);
+    const parsed = await parseMemoryTtl(URL_, ttl, "text/turtle");
+    expect(parsed?.categories).toContain("https://example.com/");
+    expect(parsed?.categories).toContain("https://example.org/Path");
+    expect(parsed?.categories).toContain("https://valid.example/cat");
+    expect(parsed?.categories?.length).toBe(3);
+    // No NamedNode carries a Turtle-breaking octet.
+    for (const q of new Parser().parse(ttl)) {
+      for (const term of [q.subject, q.predicate, q.object]) {
+        if (term.termType !== "NamedNode") continue;
+        for (const ch of ["<", ">", '"', "{", "}", "|", "^", "`", "\\", " "]) {
+          expect(term.value.includes(ch)).toBe(false);
+        }
+      }
+    }
+  });
+
+  it("dedupes categories that collide after canonicalisation on read", async () => {
+    // Two DISTINCT stored terms that canonicalise to the same value must not be
+    // returned twice: <https://example.com> and <https://example.com/> both map
+    // to https://example.com/, so parseMemory dedupes after canonicalising.
+    const body = `@prefix mem: <https://w3id.org/jeswr/memory#> .
+@prefix schema: <http://schema.org/> .
+<${URL_}#it> a mem:MemoryItem ;
+  schema:text "x" ;
+  schema:about <https://example.com>, <https://example.com/> .`;
+    const parsed = await parseMemoryTtl(URL_, body, "text/turtle");
+    expect(parsed?.categories).toEqual(["https://example.com/"]);
+  });
+
+  it("percent-encodes the FULL Turtle-forbidden residual set from query + fragment positions", async () => {
+    // URL.href leaves `\ { } | ^ \`` LITERAL in a query/fragment position (it only
+    // encodes < > " space + control chars). n3.Writer emits a NamedNode verbatim
+    // between <…>, and every one of those residual chars is forbidden in a Turtle
+    // IRIREF — so any surviving raw octet produces malformed Turtle / an injection
+    // vector. httpIriOrUndefined must percent-encode the whole residual set.
+    const forbidden = ["\\", "{", "}", "|", "^", "`"];
+    for (const [label, iri] of [
+      ["query", `https://e.x/p?a=1${forbidden.join("")}2`],
+      ["fragment", `https://e.x/p#f${forbidden.join("")}g`],
+    ] as const) {
+      const ttl = await serializeMemory(URL_, { text: label, attributedTo: iri });
+      // The serialised Turtle must re-parse cleanly (no malformed IRIREF)…
+      const quads = new Parser().parse(ttl);
+      // …and no NamedNode may carry any raw forbidden octet.
+      for (const q of quads) {
+        for (const term of [q.subject, q.predicate, q.object]) {
+          if (term.termType !== "NamedNode") continue;
+          for (const ch of forbidden) {
+            expect(term.value.includes(ch)).toBe(false);
+          }
+        }
+      }
+    }
   });
 
   it("keeps free-text keywords verbatim (no IRI filter)", async () => {
