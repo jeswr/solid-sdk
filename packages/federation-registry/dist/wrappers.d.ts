@@ -74,7 +74,14 @@ declare class WritableStorage extends TermWrapper {
 export declare class RegistryBuilder {
     private readonly store;
     private readonly factory;
-    /** Open a Registry subject (its IRI) for writing. */
+    /**
+     * Open a Registry subject (its IRI) for writing.
+     *
+     * The `id` mints the subject NamedNode. A registry/membership/storage id may
+     * legitimately be a non-http absolute IRI (e.g. urn:), so escape (not
+     * http-restrict) it via {@link escapeIri}: percent-encode only the
+     * IRIREF-forbidden chars so an untrusted id can't inject triples on serialise.
+     */
     registry(id: string): WritableRegistry;
     /** Open a standalone Membership subject (its IRI) for writing. */
     membership(id: string): WritableMembership;

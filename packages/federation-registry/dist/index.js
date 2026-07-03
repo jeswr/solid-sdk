@@ -1,9 +1,9 @@
-// node_modules/@jeswr/fetch-rdf/dist/parse.js
+// ../../../../../../../../Users/jesght/Documents/GitHub/jeswr/federation-registry/node_modules/@jeswr/fetch-rdf/dist/parse.js
 import contentType from "content-type";
 import { Store, StreamParser } from "n3";
 import { JsonLdParser } from "jsonld-streaming-parser";
 
-// node_modules/@jeswr/fetch-rdf/dist/errors.js
+// ../../../../../../../../Users/jesght/Documents/GitHub/jeswr/federation-registry/node_modules/@jeswr/fetch-rdf/dist/errors.js
 var RdfFetchError = class extends Error {
   /** The original cause, if any (e.g. a network error or parser exception). */
   cause;
@@ -27,7 +27,7 @@ var RdfFetchError = class extends Error {
   }
 };
 
-// node_modules/@jeswr/fetch-rdf/dist/parse.js
+// ../../../../../../../../Users/jesght/Documents/GitHub/jeswr/federation-registry/node_modules/@jeswr/fetch-rdf/dist/parse.js
 var SUPPORTED_RDF_MEDIA_TYPES = [
   "text/turtle",
   "application/n-triples",
@@ -152,7 +152,7 @@ function waitForDrain(parser) {
   });
 }
 
-// node_modules/@jeswr/fetch-rdf/dist/fetch.js
+// ../../../../../../../../Users/jesght/Documents/GitHub/jeswr/federation-registry/node_modules/@jeswr/fetch-rdf/dist/fetch.js
 var ACCEPT = "text/turtle, application/ld+json;q=0.9";
 async function fetchRdf(url, options = {}) {
   const fetchImpl = options.fetch ?? globalThis.fetch;
@@ -409,6 +409,40 @@ import {
   TermWrapper
 } from "@rdfjs/wrapper";
 import { DataFactory, Store as Store2 } from "n3";
+
+// src/iri.ts
+function safeHttpIri(value) {
+  if (typeof value !== "string") {
+    return void 0;
+  }
+  let u;
+  try {
+    u = new URL(value);
+  } catch {
+    return void 0;
+  }
+  if (u.protocol !== "http:" && u.protocol !== "https:") {
+    return void 0;
+  }
+  return u.href.replace(/\|/g, "%7C").replace(/\^/g, "%5E").replace(/`/g, "%60");
+}
+var IRIREF_FORBIDDEN_CHARS = new Set(
+  ["<", ">", '"', "{", "}", "|", "^", "`", "\\"].map((c) => c.charCodeAt(0))
+);
+function escapeIri(value) {
+  let out = "";
+  for (const ch of value) {
+    const code = ch.codePointAt(0);
+    if (code <= 32 || IRIREF_FORBIDDEN_CHARS.has(code)) {
+      out += `%${code.toString(16).toUpperCase().padStart(2, "0")}`;
+    } else {
+      out += ch;
+    }
+  }
+  return out;
+}
+
+// src/wrappers.ts
 var XSD_DATETIME = "http://www.w3.org/2001/XMLSchema#dateTime";
 function objectTerms(node, predicate) {
   return SetFrom.subjectPredicate(node, predicate, TermAs.instance(TermWrapper), TermFrom.instance);
@@ -475,10 +509,14 @@ function wrap(dataset) {
   return new RegistryDataset(dataset, DataFactory);
 }
 function addIriTriple(node, predicate, objectIri) {
+  const safeObject = safeHttpIri(objectIri);
+  if (safeObject === void 0) {
+    return;
+  }
   const factory = node.factory;
   const subject = node;
   const p = NamedNodeFrom.string(predicate, factory);
-  const o = NamedNodeFrom.string(objectIri, factory);
+  const o = NamedNodeFrom.string(safeObject, factory);
   node.dataset.add(factory.quad(subject, p, o));
 }
 function addLiteralTriple(node, predicate, value, datatype) {
@@ -515,7 +553,7 @@ var WritableRegistry = class extends TermWrapper {
    */
   linkMember(id) {
     const factory = this.factory;
-    const subjectTerm = id ? NamedNodeFrom.string(id, factory) : BlankNodeFrom.string(void 0, factory);
+    const subjectTerm = id ? NamedNodeFrom.string(escapeIri(id), factory) : BlankNodeFrom.string(void 0, factory);
     const self = this;
     const p = NamedNodeFrom.string(FEDREG_MEMBER, factory);
     this.dataset.add(factory.quad(self, p, subjectTerm));
@@ -541,21 +579,40 @@ var WritableStorage = class extends TermWrapper {
 var RegistryBuilder = class {
   store = new Store2();
   factory = DataFactory;
-  /** Open a Registry subject (its IRI) for writing. */
+  /**
+   * Open a Registry subject (its IRI) for writing.
+   *
+   * The `id` mints the subject NamedNode. A registry/membership/storage id may
+   * legitimately be a non-http absolute IRI (e.g. urn:), so escape (not
+   * http-restrict) it via {@link escapeIri}: percent-encode only the
+   * IRIREF-forbidden chars so an untrusted id can't inject triples on serialise.
+   */
   registry(id) {
-    const node = new WritableRegistry(id, this.store, this.factory);
+    const node = new WritableRegistry(
+      escapeIri(id),
+      this.store,
+      this.factory
+    );
     node.typeRegistry();
     return node;
   }
   /** Open a standalone Membership subject (its IRI) for writing. */
   membership(id) {
-    const node = new WritableMembership(id, this.store, this.factory);
+    const node = new WritableMembership(
+      escapeIri(id),
+      this.store,
+      this.factory
+    );
     node.typeMembership();
     return node;
   }
   /** Open a StorageDescription subject (its IRI) for writing. */
   storage(id) {
-    const node = new WritableStorage(id, this.store, this.factory);
+    const node = new WritableStorage(
+      escapeIri(id),
+      this.store,
+      this.factory
+    );
     node.typeStorage();
     return node;
   }
