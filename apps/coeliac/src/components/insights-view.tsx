@@ -40,8 +40,13 @@ import { useGenetics } from "@/lib/session/use-genetics";
 import { useInsights } from "@/lib/session/use-insights";
 import { useProtocolActions } from "@/lib/session/use-protocol-actions";
 import { useProtocols } from "@/lib/session/use-protocols";
+import { useSafetyContextCache } from "@/lib/session/use-safety-context";
 import { EmergencyRail } from "./emergency-rail";
+import { EvidenceDrilldown } from "./evidence-drilldown";
+import { LiftMeter } from "./lift-meter";
 import { MedicalDisclaimer } from "./medical-disclaimer";
+import { ReintroductionTimeline } from "./reintroduction-timeline";
+import { SafetyContextForm } from "./safety-context-form";
 
 const PHASE_LABEL: Record<string, string> = {
   baseline: "Baseline",
@@ -114,9 +119,8 @@ function SuspicionCard({ suspicion }: { suspicion: SuspicionScore }) {
           the only way to separate them.
         </p>
       ) : null}
-      <p className="suspicion__evidence">
-        Based on {evidence.length} matched exposure{evidence.length === 1 ? "" : "s"}.
-      </p>
+      <LiftMeter suspicion={suspicion} />
+      <EvidenceDrilldown evidence={evidence} />
       <p className="suspicion__disclaimer">{disclaimer}</p>
     </li>
   );
@@ -259,6 +263,10 @@ function InsightsBody({ result }: { result: AnalysisResult }) {
           </ul>
         </section>
       ) : null}
+
+      {result.reintroductionSchedule ? (
+        <ReintroductionTimeline schedule={result.reintroductionSchedule} />
+      ) : null}
     </>
   );
 }
@@ -298,9 +306,26 @@ function GeneticSignal() {
   );
 }
 
+/**
+ * The Insights view. `useSafetyContextCache` starts every mount at the SAFE
+ * empty default `{}` and only becomes the user's true saved values once its own
+ * cache read resolves (roborev finding, health-data-critical: feeding that
+ * transient `{}` into the engine before it resolves would compute safety rails —
+ * most dangerously an alarm-symptom flag's urgent rail — against the WRONG
+ * context for one render). `useInsights` itself withholds `loaded` until its
+ * OWN computed result reflects the CURRENT `safetyContext` reference (see its
+ * `contextApplied` tracking) — so the analysis-dependent body below only ever
+ * renders a result computed against the context actually in effect, never a
+ * stale one from before the cache read resolved.
+ */
 export function InsightsView() {
-  const { result, mealCount, symptomCount, loaded, refresh } = useInsights();
-  const protocols = useProtocols();
+  const { context: safetyContext, update: updateSafetyContext } = useSafetyContextCache();
+  const { result, mealCount, symptomCount, loaded, refresh } = useInsights(safetyContext);
+  // `coeliacDiagnosed` also drives the elimination-protocol FSM's own pre-diagnosis
+  // gluten block (`ProtocolSafetyContext`) — shared from the SAME safety-context
+  // inputs, so a user who confirms diagnosis here no longer sees the challenge
+  // refused everywhere else too.
+  const protocols = useProtocols({ coeliacDiagnosed: safetyContext.coeliacDiagnosed });
   const { startChallenge } = useProtocolActions();
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -338,6 +363,7 @@ export function InsightsView() {
 
       <ActiveChallenges active={protocols.active} />
       <GeneticSignal />
+      <SafetyContextForm value={safetyContext} onChange={updateSafetyContext} />
 
       {notice ? (
         <aside className="insights__notice" role="note">

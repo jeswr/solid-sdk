@@ -565,6 +565,171 @@ a {
   font-size: 0.92rem;
 }
 
+/* --- Lift/confidence meter (Insights richer-UI, deliverable 3) ------------ */
+.lift-meter {
+  margin: 0.6rem 0 0;
+}
+.lift-meter__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+}
+.lift-meter__label {
+  color: var(--muted-foreground, #666);
+}
+.lift-meter__value {
+  font-weight: 600;
+}
+.lift-meter__track {
+  margin-top: 0.3rem;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--muted, #eee);
+  overflow: hidden;
+}
+.lift-meter__fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--muted-foreground, #999);
+  transition: width 0.2s ease;
+}
+.lift-meter__fill--likely {
+  background: var(--warn, #c80);
+}
+.lift-meter__fill--suspected {
+  background: var(--caution, #a70);
+}
+.lift-meter__fill--emerging {
+  background: var(--muted-foreground, #999);
+}
+.lift-meter__note {
+  margin: 0.3rem 0 0;
+  color: var(--muted-foreground, #777);
+  font-size: 0.82rem;
+}
+
+/* --- Evidence tap-through drill-down (Insights richer-UI, deliverable 1) -- */
+.evidence-drilldown {
+  margin: 0.6rem 0 0;
+  font-size: 0.9rem;
+}
+.evidence-drilldown__summary {
+  cursor: pointer;
+  color: var(--primary, #0a7);
+  font-weight: 500;
+}
+.evidence-drilldown__list {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.evidence-drilldown__item {
+  padding: 0.5rem 0.65rem;
+  border-radius: 6px;
+  background: var(--muted, #f6f6f6);
+}
+.evidence-drilldown__meal {
+  margin: 0;
+  font-weight: 500;
+}
+.evidence-drilldown__level {
+  color: var(--muted-foreground, #666);
+  font-weight: 400;
+}
+.evidence-drilldown__symptoms {
+  margin: 0.3rem 0 0;
+  padding-left: 1.1rem;
+  color: var(--muted-foreground, #555);
+}
+.evidence-drilldown__confounders {
+  margin: 0.3rem 0 0;
+  color: var(--caution, #a70);
+  font-size: 0.85rem;
+}
+
+/* --- Reintroduction-schedule timeline (Insights richer-UI, deliverable 4) - */
+.reintro-timeline {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  border: 1px solid var(--border, #e5e5e5);
+  border-radius: 10px;
+  background: var(--card, #fff);
+}
+.reintro-timeline__washout {
+  color: var(--muted-foreground, #555);
+  font-size: 0.92rem;
+}
+.reintro-timeline__steps {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.reintro-timeline__step {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.5rem 0.65rem;
+  border-left: 3px solid var(--primary, #0a7);
+  background: var(--muted, #f6f6f6);
+  border-radius: 4px;
+  flex-wrap: wrap;
+}
+.reintro-timeline__dose {
+  font-weight: 600;
+}
+.reintro-timeline__dates {
+  color: var(--muted-foreground, #555);
+  font-size: 0.9rem;
+}
+.reintro-timeline__note {
+  margin: 0.75rem 0 0;
+  color: var(--muted-foreground, #666);
+  font-size: 0.85rem;
+}
+
+/* --- Safety-context inputs (Insights richer-UI, deliverable 2) ------------ */
+.safety-context-form {
+  margin: 0.75rem 0 1.25rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border, #e5e5e5);
+  border-radius: 8px;
+  background: var(--card, #fafafa);
+  font-size: 0.92rem;
+}
+.safety-context-form__summary {
+  cursor: pointer;
+  font-weight: 500;
+}
+.safety-context-form__note {
+  color: var(--muted-foreground, #666);
+  font-size: 0.85rem;
+}
+.safety-context-form__toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.5rem 0;
+}
+.safety-context-form__alarms {
+  margin-top: 0.75rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--border, #eee);
+  border-radius: 6px;
+}
+.safety-context-form__alarms legend {
+  font-size: 0.85rem;
+  color: var(--muted-foreground, #666);
+  padding: 0 0.25rem;
+}
+
 /* --- Elimination challenges (Phase 2B) ------------------------------------ */
 .protocols__intro,
 .insights__start-note {

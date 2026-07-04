@@ -151,6 +151,53 @@ export interface StoredGeneticSummary {
   error?: string;
 }
 
+/**
+ * A per-user trigger lag profile as cached locally (Brief follow-up to Phase 4B —
+ * the Insights richer-UI work). Mirrors `diet:TriggerClass`
+ * ({@link import("@jeswr/solid-health-diary").TriggerClassData}), but is a LOCALLY
+ * LEARNED refinement of the model's evidence-prior lag window (`lag.ts`
+ * `resolveLag` prefers this over the prior when it validates) — it is derived
+ * on-device from the user's own logged exposure/symptom pairings
+ * ({@link "../inference/learn-lag-profile"}), never fetched or written to the pod.
+ * A SINGLE latest-state record per trigger (like a protocol, overwritten in place
+ * as more evidence accumulates), keyed by `slug`.
+ */
+export interface StoredTriggerClass {
+  readonly kind: "triggerClass";
+  slug: TriggerSlug;
+  lagWindowMin: number;
+  lagWindowMax: number;
+  lagMode: number;
+  label?: string;
+  /** How many evidence pairings the learned profile rests on (transparency, never hidden). */
+  sampleSize: number;
+  /** When this profile was last (re)learned. */
+  updatedAt: string;
+}
+
+/**
+ * The caller-supplied safety signals ({@link import("../inference/types").SafetyContext})
+ * as cached locally — a SINGLE latest-state record (like the genetic summary), so
+ * the Insights safety-context inputs (alarm checklist, confirmed-coeliac toggle,
+ * strict-adherence toggle) persist across visits instead of resetting to the
+ * always-safe defaults every reload. Mirrors the engine's `SafetyContext` shape
+ * exactly (never a superset) — this cache module stores it structurally without
+ * depending on the inference layer's types.
+ */
+export interface StoredSafetyContext {
+  readonly kind: "safetyContext";
+  coeliacDiagnosed?: boolean;
+  alarmFlags?: {
+    unintendedWeightLoss?: boolean;
+    giBleeding?: boolean;
+    persistentVomiting?: boolean;
+    dysphagia?: boolean;
+    anaemia?: boolean;
+  };
+  strictAdherence?: boolean;
+  updatedAt: string;
+}
+
 /** A frequent-meal group for the one-tap re-log chips. */
 export interface FrequentMeal {
   signature: string;
@@ -176,11 +223,90 @@ export function mealLabel(items: readonly FoodItemData[]): string {
 }
 
 export class DiaryStore {
+  /**
+   * Set the instant {@link purge} is CALLED (synchronously, before its own
+   * async work) — see {@link isPurged}. This is the store-level half of the
+   * session-race guard (`session/use-insights.ts`): a caller holding a
+   * reference to THIS store instance can synchronously check whether the
+   * account it belongs to has departed, without depending on any React
+   * re-render/effect timing (which cannot be trusted to run before a
+   * concurrently in-flight `await` continuation resumes — a roborev finding
+   * against an earlier ref-based attempt at this same guard).
+   */
+  private purged = false;
+
+  /**
+   * Every in-flight write {@link purge} must DRAIN before its own delete scan
+   * (roborev rounds 3 + 4): checking {@link isPurged} at the top of a write
+   * only closes the race for a write that starts AFTER `purge()` flips the
+   * flag. A write already past that check when `purge()` is called is still
+   * in flight — if `purge()`'s scan+delete ran immediately, that write's
+   * `kv.set`/`kv.del` could land AFTER the delete and resurrect the key.
+   * `purge()` awaits every write registered here before scanning, so a write
+   * already under way is guaranteed to settle first.
+   *
+   * EVERY mutating method on this class registers here via the shared
+   * {@link write} wrapper — not just the two originally-fixed background
+   * writers (`putTriggerClass`/`putSafetyContext`). Round 3 scoped the fix to
+   * those two because they are the only FIRE-AND-FORGET callers (`useInsights`
+   * and the `SafetyContextForm` checkbox handlers both fire them without
+   * awaiting, by design, so they can't block the paint) — but round 4's
+   * review correctly generalised the concern: the same optimistic-write
+   * outbox pattern (`markMealSync`/`markSymptomSync`/protocol/conclusion/
+   * genetic sync updates) is ALSO not guaranteed to be awaited by every
+   * caller across the app's lifetime (a background reconcile pass is a
+   * plausible future — or already-latent — source of the identical race), so
+   * ALL of them now go through the same fail-closed + drained path.
+   */
+  private readonly pendingWrites = new Set<Promise<unknown>>();
+
   constructor(
     private readonly kv: Kv,
     /** WebID (or another per-account key) — namespaces all keys. */
     private readonly scope: string,
   ) {}
+
+  /**
+   * Whether the mandatory logout privacy {@link purge} has been called (or is
+   * in progress) on THIS store instance. A caller with a background write in
+   * flight (e.g. `useInsights`'s learned-trigger-class persist) must check
+   * this BEFORE writing and abandon the write if `true` — a purge in progress
+   * must never be silently undone by a stale, unrelated write racing it.
+   */
+  isPurged(): boolean {
+    return this.purged;
+  }
+
+  /**
+   * Register a background write's promise so {@link purge} can wait for it
+   * to settle before scanning+deleting (see {@link pendingWrites}). Called
+   * SYNCHRONOUSLY, before the write's own `await` — so if `purge()` has not
+   * yet been called, this registration is guaranteed to land before it could
+   * be (JS run-to-completion: nothing yields between the caller's `isPurged`
+   * check and this call).
+   */
+  private trackWrite(write: Promise<unknown>): Promise<unknown> {
+    this.pendingWrites.add(write);
+    const untrack = () => this.pendingWrites.delete(write);
+    write.then(untrack, untrack);
+    return write;
+  }
+
+  /**
+   * The FAIL-CLOSED + DRAINED wrapper every mutating call in this class goes
+   * through (roborev round 4 — generalised from the two-method fix in round 3
+   * to every write path, since the same TOCTOU applies to `putMeal`/
+   * `markMealSync`/protocol/conclusion/genetic writes too: any of them can be
+   * in flight — via the optimistic-write reconcile flow — when a logout
+   * fires). `op` is called SYNCHRONOUSLY (its `kv.set`/`kv.del` call returns a
+   * promise immediately, before any `await`), so the `isPurged()` check and
+   * the `trackWrite` registration are one atomic synchronous unit — nothing
+   * can interleave a `purge()` call between them.
+   */
+  private async write(op: () => Promise<void>): Promise<void> {
+    if (this.purged) return;
+    await this.trackWrite(op());
+  }
 
   /**
    * The scope-wide key prefix covering EVERY kind for this account's WebID. The
@@ -192,21 +318,23 @@ export class DiaryStore {
   private scopePrefix(): string {
     return `${encodeURIComponent(this.scope)}|`;
   }
-  private prefix(kind: "meal" | "symptom" | "protocol" | "conclusion" | "genetic"): string {
+  private prefix(
+    kind: "meal" | "symptom" | "protocol" | "conclusion" | "genetic" | "triggerClass" | "safetyContext",
+  ): string {
     return `${this.scopePrefix()}${kind}|`;
   }
   private key(
-    kind: "meal" | "symptom" | "protocol" | "conclusion" | "genetic",
+    kind: "meal" | "symptom" | "protocol" | "conclusion" | "genetic" | "triggerClass" | "safetyContext",
     ulid: string,
   ): string {
     return `${this.prefix(kind)}${ulid}`;
   }
 
   async putMeal(meal: StoredMeal): Promise<void> {
-    await this.kv.set(this.key("meal", meal.ulid), meal);
+    await this.write(() => this.kv.set(this.key("meal", meal.ulid), meal));
   }
   async putSymptom(symptom: StoredSymptom): Promise<void> {
-    await this.kv.set(this.key("symptom", symptom.ulid), symptom);
+    await this.write(() => this.kv.set(this.key("symptom", symptom.ulid), symptom));
   }
 
   async allMeals(): Promise<StoredMeal[]> {
@@ -278,7 +406,7 @@ export class DiaryStore {
   // --- protocols (Phase 2B) — updated in place across the lifetime -------------
 
   async putProtocol(protocol: StoredProtocol): Promise<void> {
-    await this.kv.set(this.key("protocol", protocol.ulid), protocol);
+    await this.write(() => this.kv.set(this.key("protocol", protocol.ulid), protocol));
   }
   async getProtocol(ulid: string): Promise<StoredProtocol | undefined> {
     return (await this.kv.get<StoredProtocol>(this.key("protocol", ulid))) ?? undefined;
@@ -296,13 +424,13 @@ export class DiaryStore {
     if (!p) return;
     p.sync = sync;
     p.error = sync === "error" ? error : undefined;
-    await this.kv.set(this.key("protocol", ulid), p);
+    await this.write(() => this.kv.set(this.key("protocol", ulid), p));
   }
 
   // --- conclusions (Phase 2B) --------------------------------------------------
 
   async putConclusion(conclusion: StoredConclusion): Promise<void> {
-    await this.kv.set(this.key("conclusion", conclusion.ulid), conclusion);
+    await this.write(() => this.kv.set(this.key("conclusion", conclusion.ulid), conclusion));
   }
   /** All conclusions, newest-created first. */
   async allConclusions(): Promise<StoredConclusion[]> {
@@ -317,7 +445,7 @@ export class DiaryStore {
     if (!c) return;
     c.sync = sync;
     c.error = sync === "error" ? error : undefined;
-    await this.kv.set(this.key("conclusion", ulid), c);
+    await this.write(() => this.kv.set(this.key("conclusion", ulid), c));
   }
 
   // --- genetics (Phase 3c) — a SINGLE latest-state record, most-sensitive --------
@@ -326,7 +454,7 @@ export class DiaryStore {
   private static readonly GENETIC_ID = "summary";
 
   async putGeneticSummary(summary: StoredGeneticSummary): Promise<void> {
-    await this.kv.set(this.key("genetic", DiaryStore.GENETIC_ID), summary);
+    await this.write(() => this.kv.set(this.key("genetic", DiaryStore.GENETIC_ID), summary));
   }
   async getGeneticSummary(): Promise<StoredGeneticSummary | undefined> {
     return (
@@ -336,7 +464,7 @@ export class DiaryStore {
   }
   /** Delete the cached genetic summary (e.g. on an explicit user-initiated removal). */
   async deleteGeneticSummary(): Promise<void> {
-    await this.kv.del(this.key("genetic", DiaryStore.GENETIC_ID));
+    await this.write(() => this.kv.del(this.key("genetic", DiaryStore.GENETIC_ID)));
   }
   /**
    * Mark the sync state of the genetic summary — but ONLY if the stored record is
@@ -351,7 +479,54 @@ export class DiaryStore {
     if (!g || g.rev !== expectedRev) return; // replaced in flight — ignore the stale completion
     g.sync = sync;
     g.error = sync === "error" ? error : undefined;
-    await this.kv.set(this.key("genetic", DiaryStore.GENETIC_ID), g);
+    await this.write(() => this.kv.set(this.key("genetic", DiaryStore.GENETIC_ID), g));
+  }
+
+  // --- learned trigger lag profiles (Insights richer-UI follow-up) -------------
+
+  /**
+   * Store (or overwrite in place) a locally-learned per-trigger lag profile.
+   * ONE record per `slug` — a re-learn simply replaces the prior estimate, same
+   * as a protocol's in-place update.
+   *
+   * FAIL-CLOSED + DRAINED (roborev, session-race guard round 3): a caller
+   * (`useInsights`) fires this WITHOUT awaiting it, so a logout's `purge()`
+   * can be called concurrently. `isPurged()` short-circuits a write that
+   * starts AFTER the account has departed; {@link trackWrite} registers a
+   * write already under way so `purge()` waits for it to settle before its
+   * own scan+delete — together these close the race in both directions.
+   */
+  async putTriggerClass(triggerClass: StoredTriggerClass): Promise<void> {
+    await this.write(() => this.kv.set(this.key("triggerClass", triggerClass.slug), triggerClass));
+  }
+  /** All locally-learned trigger classes for this account. */
+  async allTriggerClasses(): Promise<StoredTriggerClass[]> {
+    const keys = await this.kv.keys(this.prefix("triggerClass"));
+    const items = await Promise.all(keys.map((k) => this.kv.get<StoredTriggerClass>(k)));
+    return items.filter((t): t is StoredTriggerClass => !!t);
+  }
+
+  // --- safety-context inputs (Insights richer-UI follow-up) --------------------
+
+  /** The fixed cache id for the one safety-context record (there is exactly one per pod). */
+  private static readonly SAFETY_CONTEXT_ID = "current";
+
+  /**
+   * Persist the current safety-context inputs (alarm flags / diagnosed /
+   * adherence). FAIL-CLOSED + DRAINED, same discipline as
+   * {@link putTriggerClass} — the checkbox `onChange` handlers
+   * (`SafetyContextForm`) fire this without awaiting it either.
+   */
+  async putSafetyContext(ctx: StoredSafetyContext): Promise<void> {
+    await this.write(() => this.kv.set(this.key("safetyContext", DiaryStore.SAFETY_CONTEXT_ID), ctx));
+  }
+  /** Read back the persisted safety-context inputs, if any were ever saved. */
+  async getSafetyContext(): Promise<StoredSafetyContext | undefined> {
+    return (
+      (await this.kv.get<StoredSafetyContext>(
+        this.key("safetyContext", DiaryStore.SAFETY_CONTEXT_ID),
+      )) ?? undefined
+    );
   }
 
   /** Records still needing a pod write (pending or errored). */
@@ -381,9 +556,15 @@ export class DiaryStore {
   /**
    * PRIVACY PURGE — mandatory on sign-out (the offline design's §7 logout-purge,
    * parallel to the credential wipe). Delete EVERY cached record for THIS account's
-   * WebID scope from the backing Kv — meals, symptoms, protocols, conclusions and
-   * the genetic summary alike, pending or synced — so nothing the now-departed user
-   * logged or read is recoverable by the next user of the same browser/device.
+   * WebID scope from the backing Kv — meals, symptoms, protocols, conclusions, the
+   * genetic summary, the locally-learned trigger lag profiles, and the
+   * safety-context inputs alike, pending or synced — so nothing the now-departed
+   * user logged or read is recoverable by the next user of the same browser/device.
+   * New record kinds are covered by CONSTRUCTION, not by an enumerated list: every
+   * kind is namespaced under this same `|`-delimited {@link scopePrefix}
+   * (see {@link key}), and purge deletes by prefix scan — so a kind added later
+   * (like `triggerClass`/`safetyContext`) is swept automatically without this
+   * method needing an update, as long as it goes through {@link key}/{@link prefix}.
    *
    * Purge is exact and isolated: it only touches keys under this scope's
    * `|`-delimited {@link scopePrefix}, so a DIFFERENT WebID's cache (and the
@@ -397,8 +578,18 @@ export class DiaryStore {
    * must never — reach into the Cache API: private pod/health data is never written
    * there (the shell-only service-worker boundary), so there is nothing to purge
    * from it.
+   *
+   * Marks {@link isPurged} `true` as the FIRST synchronous statement — before any
+   * `await` — so a concurrent background writer that checks it (even one already
+   * mid-flight) sees the departure as soon as `purge()` is called, not only once
+   * it finishes. Then DRAINS {@link pendingWrites} (roborev round 3): a
+   * background write that had ALREADY passed its own `isPurged()` check before
+   * this line ran is still in flight — waiting for it to settle here guarantees
+   * its `kv.set` cannot land AFTER the delete scan below and resurrect a key.
    */
   async purge(): Promise<void> {
+    this.purged = true;
+    await Promise.allSettled([...this.pendingWrites]);
     const keys = await this.kv.keys(this.scopePrefix());
     const results = await Promise.allSettled(keys.map((k) => this.kv.del(k)));
     const failed = results.filter((r) => r.status === "rejected").length;
@@ -412,13 +603,13 @@ export class DiaryStore {
     if (!meal) return;
     meal.sync = sync;
     meal.error = sync === "error" ? error : undefined;
-    await this.kv.set(this.key("meal", ulid), meal);
+    await this.write(() => this.kv.set(this.key("meal", ulid), meal));
   }
   async markSymptomSync(ulid: string, sync: SyncState, error?: string): Promise<void> {
     const symptom = await this.kv.get<StoredSymptom>(this.key("symptom", ulid));
     if (!symptom) return;
     symptom.sync = sync;
     symptom.error = sync === "error" ? error : undefined;
-    await this.kv.set(this.key("symptom", ulid), symptom);
+    await this.write(() => this.kv.set(this.key("symptom", ulid), symptom));
   }
 }
