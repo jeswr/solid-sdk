@@ -22,9 +22,45 @@ import {
 } from "../src/safeFetch.js";
 import { stubFetch } from "./fixtures.js";
 
+/**
+ * `assertSafeUrl` now does REAL DNS-resolved validation — a hostname that resolves
+ * to a private IP MUST be rejected (the SSRF regression roborev caught). The tests
+ * inject a stub resolver (`opts.dnsLookup`) so a hostname case is DETERMINISTIC +
+ * hermetic (no live network): `publicResolver` for a legitimately-public host,
+ * `loopbackResolver`/`privateResolver` for the block cases. Literal-IP and
+ * denylisted-name cases short-circuit before any resolution, so their resolver is
+ * never consulted.
+ */
+const publicResolver = async () => [{ address: "93.184.216.34", family: 4 }];
+const loopbackResolver = async () => [{ address: "127.0.0.1", family: 4 }];
+const privateResolver = async () => [{ address: "10.0.0.5", family: 4 }];
+
 describe("assertSafeUrl — SSRF guards (via @jeswr/guarded-fetch)", () => {
   it("accepts a plain https public URL", async () => {
-    expect((await assertSafeUrl("https://matrix.org/_matrix")).hostname).toBe("matrix.org");
+    expect(
+      (await assertSafeUrl("https://matrix.org/_matrix", { dnsLookup: publicResolver })).hostname,
+    ).toBe("matrix.org");
+  });
+
+  it("REJECTS a hostname that resolves to a private IP (the DNS-rebinding/SSRF case)", async () => {
+    // The regression roborev caught: a public-LOOKING hostname whose DNS answer is
+    // a private/internal IP must be refused — assertSafeUrl must resolve + block it,
+    // not wave it through on a DNS-less syntactic check.
+    try {
+      await assertSafeUrl("https://sneaky-public-name.example/", { dnsLookup: privateResolver });
+      throw new Error("should have thrown");
+    } catch (e) {
+      expect((e as SafeFetchError).code).toBe("blocked-host");
+    }
+  });
+
+  it("REJECTS a hostname that resolves to loopback (127.0.0.1)", async () => {
+    try {
+      await assertSafeUrl("https://rebind.example/", { dnsLookup: loopbackResolver });
+      throw new Error("should have thrown");
+    } catch (e) {
+      expect((e as SafeFetchError).code).toBe("blocked-host");
+    }
   });
 
   it("rejects http://", async () => {
@@ -107,8 +143,11 @@ describe("assertSafeUrl — SSRF guards (via @jeswr/guarded-fetch)", () => {
     "https://in-addr.arpa/",
     "https://ip6.arpa/",
   ])("blocks local/internal hostname %s", async (url) => {
+    // A denylisted name throws BEFORE any resolution; localhost/*.local/bare-`local`
+    // are refused via the resolver returning a loopback address. Injecting the
+    // resolver keeps every case deterministic + offline.
     try {
-      await assertSafeUrl(url);
+      await assertSafeUrl(url, { dnsLookup: loopbackResolver });
       throw new Error("should have thrown");
     } catch (e) {
       expect((e as SafeFetchError).code).toBe("blocked-host");
@@ -119,8 +158,8 @@ describe("assertSafeUrl — SSRF guards (via @jeswr/guarded-fetch)", () => {
     "https://matrix.org/",
     "https://forum.solidproject.org/",
     "https://example.com/",
-  ])("allows a public DNS hostname %s", async (url) => {
-    await expect(assertSafeUrl(url)).resolves.not.toThrow();
+  ])("allows a public DNS hostname %s (resolving to a public IP)", async (url) => {
+    await expect(assertSafeUrl(url, { dnsLookup: publicResolver })).resolves.not.toThrow();
   });
 
   it("rejects a malformed URL", async () => {

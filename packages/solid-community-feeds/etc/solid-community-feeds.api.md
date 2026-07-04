@@ -4,6 +4,8 @@
 
 ```ts
 
+import { DnsLookup } from '@jeswr/guarded-fetch';
+
 // @public
 export interface As2Object {
     // (undocumented)
@@ -17,7 +19,9 @@ export interface As2Object {
 }
 
 // @public
-export function assertSafeUrl(rawUrl: string): Promise<URL>;
+export function assertSafeUrl(rawUrl: string, opts?: {
+    dnsLookup?: DnsLookup;
+}): Promise<URL>;
 
 // @public
 export type BodyChunk = Uint8Array | string;

@@ -22,7 +22,7 @@
  *      re-validates + follows a *safe* redirect). We force that stricter posture with
  *      `maxRedirects: 0` so behaviour is preserved exactly: a redirect to any host,
  *      safe or not, surfaces as an error.
- *   2. **Two fetch strategies, selected by whether a `fetch` is injected:**
+ *   2. **Two `safeFetch` strategies, selected by whether a `fetch` is injected:**
  *      - No `opts.fetch` (the production default): use the Node DNS-pinned entry
  *        (`@jeswr/guarded-fetch/node`) — real `dns.lookup`, every record validated,
  *        the validated IP PINNED to the connecting socket (closes the lookup→connect
@@ -30,10 +30,16 @@
  *      - `opts.fetch` supplied (a test stub, or a caller-supplied fetch we cannot
  *        assume pins DNS): layer the browser-safe guard (`createGuardedFetch`) over
  *        it, FORCED into the DNS-less syntactic branch (`dnsLookup: null`,
- *        `allowUnresolvedHosts: true`). This exactly reproduces this package's
- *        original posture for an injected fetch — no live DNS resolution, only
+ *        `allowUnresolvedHosts: true`). This reproduces this package's original
+ *        posture for an injected fetch — no live DNS resolution, only
  *        scheme / userinfo / literal-IP / hostname-denylist checks — so unit tests
  *        keep stubbing the network with no live DNS or network calls.
+ *
+ *      NOTE — this DNS-less branch is used ONLY for the injected-fetch `safeFetch`
+ *      code path (a test/caller-supplied fetch that does its OWN resolution). The
+ *      EXPORTED `assertSafeUrl` validator does REAL DNS-resolved validation (see
+ *      below) — it must NEVER use the DNS-less branch, or a hostname that resolves
+ *      to a private/internal IP would silently pass the validator (an SSRF hole).
  *   3. **An extended hostname denylist.** The original bespoke guard additionally
  *      blocked bare/suffix `intranet` / `lan` / `home.arpa` / `in-addr.arpa` /
  *      `ip6.arpa` (RFC 6761/8375 reserved special-use names beyond guarded-fetch's
@@ -50,6 +56,13 @@
  *      `assertSafeUrl` is now ASYNC (guarded-fetch's own `assertSafeUrl` is async,
  *      since real SSRF validation can require a DNS lookup) — a deliberate,
  *      documented break from the previous synchronous signature.
+ *   6. **The exported `assertSafeUrl` validator does REAL DNS-resolved validation.**
+ *      It runs guarded-fetch's own `assertSafeUrl` on the DNS-RESOLVING Node branch
+ *      (the default `node:dns/promises` resolver, or an injected one for tests) — so
+ *      a hostname that resolves to a private/loopback/link-local/metadata IP is
+ *      REJECTED, not just literal-IP / denylisted-name targets. This is the SSRF
+ *      guarantee a config-time validator must give; the DNS-less branch above is
+ *      strictly for the injected-fetch code path and is never reachable from here.
  *
  * `enforcePortGate` is left OFF (guarded-fetch defaults it on: only port 443 in
  * production) because the original guard never restricted ports and a self-hosted
@@ -58,6 +71,7 @@
 import {
   createGuardedFetch,
   DEFAULT_HOSTNAME_DENYLIST,
+  type DnsLookup,
   GuardError,
   type GuardOptions,
   assertSafeUrl as guardedAssertSafeUrl,
@@ -158,12 +172,29 @@ const SHARED_GUARD_OPTIONS = {
 /**
  * The forced DNS-less posture for an INJECTED fetch (tests / a caller-supplied
  * fetch we cannot assume pins DNS): no live DNS resolution, matching this
- * package's original never-resolves posture exactly.
+ * package's original never-resolves posture exactly. Used ONLY by
+ * {@link buildGuardedFetch} for the injected-fetch `safeFetch` path — NEVER by
+ * the exported {@link assertSafeUrl} validator (which must do real DNS-resolved
+ * private-IP blocking; see {@link REAL_VALIDATION_GUARD_OPTIONS}).
  */
 const INJECTED_FETCH_GUARD_OPTIONS = {
   ...SHARED_GUARD_OPTIONS,
   dnsLookup: null,
   allowUnresolvedHosts: true,
+} satisfies GuardOptions;
+
+/**
+ * The REAL-DNS validation posture for the exported {@link assertSafeUrl}. It
+ * DELIBERATELY omits `dnsLookup: null` / `allowUnresolvedHosts` so guarded-fetch
+ * runs its Node DNS-RESOLVING branch: the default `node:dns/promises` resolver
+ * (or an injected one for tests) resolves the hostname and EVERY A/AAAA record
+ * must be public — so a hostname resolving to a private/internal IP is refused.
+ * `requireDnsPinning` is left off: `assertSafeUrl` validates but does not fetch,
+ * so there is no socket to pin (real resolution + every-record-public is the
+ * correct validator semantic; the fetch path does the actual pinning).
+ */
+const REAL_VALIDATION_GUARD_OPTIONS = {
+  ...SHARED_GUARD_OPTIONS,
 } satisfies GuardOptions;
 
 /** Map a guarded-fetch `SsrfError` / `GuardError` onto this package's `SafeFetchError` taxonomy. */
@@ -215,13 +246,24 @@ function mapGuardError(err: unknown): SafeFetchError {
 }
 
 /**
- * Validate a target URL for SSRF safety. Throws {@link SafeFetchError} on any
+ * Validate a target URL for SSRF safety, doing REAL DNS resolution: a hostname
+ * that resolves to a private/loopback/link-local/metadata IP is REJECTED, not
+ * just literal-IP / denylisted-name targets. Throws {@link SafeFetchError} on any
  * violation. Exported for reuse by callers that want to vet a user-supplied base
  * URL up front (e.g. at config time). ASYNC — see the module doc for why.
+ *
+ * `opts.dnsLookup` injects a resolver (tests only) — production always uses the
+ * default `node:dns/promises` resolver via guarded-fetch's Node branch.
  */
-export async function assertSafeUrl(rawUrl: string): Promise<URL> {
+export async function assertSafeUrl(
+  rawUrl: string,
+  opts: { dnsLookup?: DnsLookup } = {},
+): Promise<URL> {
   try {
-    await guardedAssertSafeUrl(rawUrl, INJECTED_FETCH_GUARD_OPTIONS);
+    await guardedAssertSafeUrl(rawUrl, {
+      ...REAL_VALIDATION_GUARD_OPTIONS,
+      ...(opts.dnsLookup ? { dnsLookup: opts.dnsLookup } : {}),
+    });
   } catch (err) {
     throw mapGuardError(err);
   }
