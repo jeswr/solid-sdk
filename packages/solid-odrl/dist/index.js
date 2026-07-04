@@ -1,3 +1,34 @@
+// src/iri.ts
+var IRIREF_FORBIDDEN = /[\u0000-\u0020<>"{}|^`\\]/g;
+function escapeIri(value) {
+  return value.replace(
+    IRIREF_FORBIDDEN,
+    (c) => `%${c.charCodeAt(0).toString(16).toUpperCase().padStart(2, "0")}`
+  );
+}
+var LEADING_TRAILING_C0 = /^[\u0000-\u0020]|[\u0000-\u0020]$/;
+var ABSOLUTE_IRI_SCHEME = /^[a-z][a-z0-9+.-]*:/i;
+function safeHttpIri(value) {
+  if (typeof value !== "string") return void 0;
+  if (LEADING_TRAILING_C0.test(value)) return void 0;
+  const escaped = escapeIri(value);
+  let u;
+  try {
+    u = new URL(escaped);
+  } catch {
+    return void 0;
+  }
+  if (u.protocol !== "http:" && u.protocol !== "https:") return void 0;
+  return escaped;
+}
+function safeIri(value) {
+  if (typeof value !== "string") return void 0;
+  if (LEADING_TRAILING_C0.test(value)) return void 0;
+  const escaped = escapeIri(value);
+  if (!ABSOLUTE_IRI_SCHEME.test(escaped)) return void 0;
+  return escaped;
+}
+
 // src/vocab.ts
 var ODRL = "http://www.w3.org/ns/odrl/2/";
 var ACL = "http://www.w3.org/ns/auth/acl#";
@@ -214,6 +245,33 @@ var ODRLD_REVOKED_POLICY = `${ODRLD}revokedPolicy`;
 var PROV_WAS_ATTRIBUTED_TO = `${PROV}wasAttributedTo`;
 var PROV_ACTED_ON_BEHALF_OF = `${PROV}actedOnBehalfOf`;
 var PROV_WAS_DERIVED_FROM = `${PROV}wasDerivedFrom`;
+var PROV_ACTIVITY = `${PROV}Activity`;
+var PROV_ASSOCIATION = `${PROV}Association`;
+var PROV_WAS_ASSOCIATED_WITH = `${PROV}wasAssociatedWith`;
+var PROV_USED = `${PROV}used`;
+var PROV_GENERATED = `${PROV}generated`;
+var PROV_STARTED_AT_TIME = `${PROV}startedAtTime`;
+var PROV_ENDED_AT_TIME = `${PROV}endedAtTime`;
+var PROV_QUALIFIED_ASSOCIATION = `${PROV}qualifiedAssociation`;
+var PROV_AGENT = `${PROV}agent`;
+var PROV_HAD_PLAN = `${PROV}hadPlan`;
+var PROV_WAS_GENERATED_BY = `${PROV}wasGeneratedBy`;
+var XSD_DATETIME = `${XSD}dateTime`;
+var PROV_INLINE_CONTEXT = {
+  prov: PROV,
+  xsd: XSD,
+  wasAssociatedWith: { "@id": PROV_WAS_ASSOCIATED_WITH, "@type": "@id" },
+  used: { "@id": PROV_USED, "@type": "@id" },
+  generated: { "@id": PROV_GENERATED, "@type": "@id" },
+  startedAtTime: { "@id": PROV_STARTED_AT_TIME, "@type": XSD_DATETIME },
+  endedAtTime: { "@id": PROV_ENDED_AT_TIME, "@type": XSD_DATETIME },
+  qualifiedAssociation: { "@id": PROV_QUALIFIED_ASSOCIATION, "@type": "@id" },
+  agent: { "@id": PROV_AGENT, "@type": "@id" },
+  hadPlan: { "@id": PROV_HAD_PLAN, "@type": "@id" },
+  actedOnBehalfOf: { "@id": PROV_ACTED_ON_BEHALF_OF, "@type": "@id" },
+  wasDerivedFrom: { "@id": PROV_WAS_DERIVED_FROM, "@type": "@id" },
+  wasGeneratedBy: { "@id": PROV_WAS_GENERATED_BY, "@type": "@id" }
+};
 var ODRL_INLINE_CONTEXT = {
   odrl: ODRL,
   acl: ACL,
@@ -238,6 +296,340 @@ var ODRLD_INLINE_CONTEXT_EXTENSION = {
   odrld: ODRLD,
   delegatedUnder: { "@id": ODRLD_DELEGATED_UNDER, "@type": "@id" }
 };
+
+// src/wrappers.ts
+import { escapeIri as escapeIri2 } from "@jeswr/rdf-serialize";
+import {
+  BlankNodeFrom,
+  DatasetWrapper,
+  LiteralFrom,
+  NamedNodeFrom,
+  SetFrom,
+  TermAs,
+  TermFrom,
+  TermWrapper
+} from "@rdfjs/wrapper";
+import { DataFactory, Store } from "n3";
+function objectTerms(node, predicate) {
+  return SetFrom.subjectPredicate(node, predicate, TermAs.instance(TermWrapper), TermFrom.instance);
+}
+var ConstraintNode = class extends TermWrapper {
+  get leftOperands() {
+    return objectTerms(this, ODRL_LEFT_OPERAND);
+  }
+  get operators() {
+    return objectTerms(this, ODRL_OPERATOR);
+  }
+  get rightOperands() {
+    return objectTerms(this, ODRL_RIGHT_OPERAND);
+  }
+};
+var DutyNode = class extends TermWrapper {
+  get actions() {
+    return objectTerms(this, ODRL_ACTION);
+  }
+  get targets() {
+    return objectTerms(this, ODRL_TARGET);
+  }
+  get constraints() {
+    return SetFrom.subjectPredicate(
+      this,
+      ODRL_CONSTRAINT,
+      TermAs.instance(ConstraintNode),
+      TermFrom.instance
+    );
+  }
+};
+var RuleNode = class extends TermWrapper {
+  get actions() {
+    return objectTerms(this, ODRL_ACTION);
+  }
+  get targets() {
+    return objectTerms(this, ODRL_TARGET);
+  }
+  get assignees() {
+    return objectTerms(this, ODRL_ASSIGNEE);
+  }
+  get assigners() {
+    return objectTerms(this, ODRL_ASSIGNER);
+  }
+  get constraints() {
+    return SetFrom.subjectPredicate(
+      this,
+      ODRL_CONSTRAINT,
+      TermAs.instance(ConstraintNode),
+      TermFrom.instance
+    );
+  }
+  get duties() {
+    return SetFrom.subjectPredicate(this, ODRL_DUTY, TermAs.instance(DutyNode), TermFrom.instance);
+  }
+};
+var PolicyNode = class extends TermWrapper {
+  get types() {
+    return objectTerms(this, RDF_TYPE);
+  }
+  get uids() {
+    return objectTerms(this, ODRL_UID);
+  }
+  get profiles() {
+    return objectTerms(this, ODRL_PROFILE);
+  }
+  get assigners() {
+    return objectTerms(this, ODRL_ASSIGNER);
+  }
+  get assignees() {
+    return objectTerms(this, ODRL_ASSIGNEE);
+  }
+  get conflicts() {
+    return objectTerms(this, ODRL_CONFLICT);
+  }
+  /** Delegation profile: the `odrld:delegatedUnder` parent-policy edge(s). */
+  get delegatedUnders() {
+    return objectTerms(this, ODRLD_DELEGATED_UNDER);
+  }
+  get permissions() {
+    return SetFrom.subjectPredicate(
+      this,
+      ODRL_PERMISSION,
+      TermAs.instance(RuleNode),
+      TermFrom.instance
+    );
+  }
+  get prohibitions() {
+    return SetFrom.subjectPredicate(
+      this,
+      ODRL_PROHIBITION,
+      TermAs.instance(RuleNode),
+      TermFrom.instance
+    );
+  }
+  get obligations() {
+    return SetFrom.subjectPredicate(
+      this,
+      ODRL_OBLIGATION,
+      TermAs.instance(DutyNode),
+      TermFrom.instance
+    );
+  }
+};
+var PolicyDataset = class extends DatasetWrapper {
+  /** Every `odrl:Policy` (or Set/Offer/Agreement) subject in the dataset. */
+  policies() {
+    const seen = /* @__PURE__ */ new Map();
+    for (const cls of [ODRL_POLICY, ODRL_SET, ODRL_OFFER, ODRL_AGREEMENT]) {
+      for (const node of this.instancesOf(cls, PolicyNode)) {
+        seen.set(node.value, node);
+      }
+    }
+    return [...seen.values()];
+  }
+};
+function wrapPolicy(dataset) {
+  return new PolicyDataset(dataset, DataFactory);
+}
+function firstIri(terms) {
+  for (const term of terms) {
+    if (term.termType === "NamedNode") {
+      return term.value;
+    }
+  }
+  return void 0;
+}
+function allValues(terms) {
+  const out = [];
+  for (const term of terms) {
+    if (term.termType === "Literal") {
+      const dt = term.datatype?.value;
+      out.push(
+        dt !== void 0 ? { value: term.value, isIri: false, datatype: dt } : { value: term.value, isIri: false }
+      );
+    } else if (term.termType === "NamedNode") {
+      out.push({ value: term.value, isIri: true });
+    }
+  }
+  return out;
+}
+function iriRef(iri) {
+  return { kind: "iri", value: iri };
+}
+function normalize(subject) {
+  return typeof subject === "string" ? { kind: "iri", value: subject } : subject;
+}
+var GraphBuilder = class {
+  store = new Store();
+  factory = DataFactory;
+  /**
+   * Mint a `NamedNode` whose IRI value is INJECTION-SAFE. `n3.Writer` does NOT
+   * escape IRIs — it emits whatever string a `NamedNode` carries verbatim inside
+   * `<…>` — so an IRI value carrying a Turtle `IRIREF`-forbidden character (`>`,
+   * a space, `<`, `"`, `{`, `}`, `|`, `^`, backtick, backslash, a C0 control)
+   * would break out of the angle brackets and inject arbitrary triples into the
+   * serialised document. Since an ODRL policy's party / target / policy IRIs can
+   * originate from foreign input (a delegation chain assembled from other agents'
+   * pods, a parsed-then-re-serialised policy), every IRI written here is
+   * percent-escaped through the suite-canonical {@link escapeIri} FIRST — the
+   * SOLE chokepoint every `NamedNodeFrom.string` call in this builder routes
+   * through (subjects, predicates, object IRIs, and datatype IRIs alike), so a
+   * forbidden octet can never reach the serialiser regardless of the call site.
+   * Escaping is IDENTITY-PRESERVING (only forbidden bytes become `%XX`; a
+   * well-formed IRI round-trips byte-for-byte) and does NOT affect evaluation,
+   * which compares the raw string values — so a hostile IRI simply fails to
+   * match a legitimate one (fail-closed) rather than laundering an injection
+   * through the serialiser. (Explicit http(s)-contract fields — target/
+   * assignee/assigner/profile — get an ADDITIONAL, stricter guard upstream in
+   * policy.ts: `requireHttpIri` refuses to serialise rather than silently drop
+   * an unsafe EXPLICIT value, since dropping would widen the policy to a
+   * wildcard match — a privilege escalation. Escaping here is the universal
+   * breakout guard; `requireHttpIri` is the additional fail-closed reject for
+   * evaluation-critical fields.)
+   */
+  iriTerm(value) {
+    return NamedNodeFrom.string(escapeIri2(value), this.factory);
+  }
+  /** Materialise a {@link NodeRef} to its RDF/JS term. */
+  subjectTerm(ref) {
+    return ref.kind === "iri" ? this.iriTerm(ref.value) : BlankNodeFrom.string(ref.value, this.factory);
+  }
+  /**
+   * Add `(subject, predicate, object-IRI)`. Predicate and object IRI are passed
+   * through {@link escapeIri} so no IRIREF-forbidden octet reaches the serialiser
+   * regardless of the call site — the breakout-proof chokepoint for object IRIs.
+   * (Trusted vocab constants contain no forbidden octet, so this is a no-op for
+   * them; semantic http(s)-only validation lives at the call sites in policy.ts.)
+   */
+  addIri(subject, predicate, objectIri) {
+    const s = this.subjectTerm(normalize(subject));
+    const p = this.iriTerm(predicate);
+    const o = this.iriTerm(objectIri);
+    this.store.add(this.factory.quad(s, p, o));
+  }
+  /** Add `(subject, predicate, literal)` with an optional datatype IRI. */
+  addLiteral(subject, predicate, value, datatypeIri) {
+    const s = this.subjectTerm(normalize(subject));
+    const p = this.iriTerm(predicate);
+    const o = datatypeIri === void 0 ? LiteralFrom.string(value, this.factory) : this.factory.literal(value, this.iriTerm(datatypeIri));
+    this.store.add(this.factory.quad(s, p, o));
+  }
+  /**
+   * Mint a fresh blank node, link it `(subject, predicate, _:b)`, and return a
+   * {@link NodeRef} to the new blank node (so subsequent writes target it
+   * unambiguously as a blank, never as an IRI).
+   */
+  linkBlankNode(subject, predicate) {
+    const s = this.subjectTerm(normalize(subject));
+    const blank = BlankNodeFrom.string(void 0, this.factory);
+    const p = this.iriTerm(predicate);
+    this.store.add(this.factory.quad(s, p, blank));
+    return { kind: "blank", value: blank.value };
+  }
+  /**
+   * Link a CHILD node (a named IRI child if provided, else a fresh blank) from
+   * `subject` via `predicate`, and return its {@link NodeRef}. Used for rule/duty/
+   * constraint nodes which may carry their own IRI or be anonymous.
+   */
+  linkChild(subject, predicate, childIri) {
+    if (childIri !== void 0) {
+      this.addIri(subject, predicate, childIri);
+      return iriRef(childIri);
+    }
+    return this.linkBlankNode(subject, predicate);
+  }
+  /** The underlying store (a DatasetCore). */
+  dataset() {
+    return this.store;
+  }
+  /** The accumulated quads. */
+  quads() {
+    return [...this.store];
+  }
+};
+
+// src/action-provenance.ts
+function asArray(v) {
+  if (v === void 0) {
+    return [];
+  }
+  return typeof v === "string" ? [v] : v;
+}
+function actionProvenance(input) {
+  const b = new GraphBuilder();
+  const act = iriRef(input.activity);
+  b.addIri(act, RDF_TYPE, PROV_ACTIVITY);
+  b.addIri(act, PROV_WAS_ASSOCIATED_WITH, input.agent);
+  const used = asArray(input.used);
+  for (const u of used) {
+    b.addIri(act, PROV_USED, u);
+  }
+  const generated = asArray(input.generated);
+  for (const g of generated) {
+    b.addIri(act, PROV_GENERATED, g);
+  }
+  b.addLiteral(act, PROV_STARTED_AT_TIME, input.started.toISOString(), XSD_DATETIME);
+  if (input.ended !== void 0) {
+    b.addLiteral(act, PROV_ENDED_AT_TIME, input.ended.toISOString(), XSD_DATETIME);
+  }
+  const assoc = b.linkBlankNode(act, PROV_QUALIFIED_ASSOCIATION);
+  b.addIri(assoc, RDF_TYPE, PROV_ASSOCIATION);
+  b.addIri(assoc, PROV_AGENT, input.agent);
+  b.addIri(assoc, PROV_HAD_PLAN, input.plan);
+  if (input.onBehalfOf !== void 0) {
+    b.addIri(iriRef(input.agent), PROV_ACTED_ON_BEHALF_OF, input.onBehalfOf);
+  }
+  for (const g of generated) {
+    const artifact = iriRef(g);
+    for (const u of used) {
+      b.addIri(artifact, PROV_WAS_DERIVED_FROM, u);
+    }
+    b.addIri(artifact, PROV_WAS_GENERATED_BY, input.activity);
+  }
+  return b.quads();
+}
+function actionProvenanceJsonLd(input) {
+  const act = escapeIri(input.activity);
+  const agent = escapeIri(input.agent);
+  const plan = escapeIri(input.plan);
+  const used = asArray(input.used).map(escapeIri);
+  const generated = asArray(input.generated).map(escapeIri);
+  const assocId = "_:association";
+  const activityNode = {
+    "@id": act,
+    "@type": "prov:Activity",
+    wasAssociatedWith: { "@id": agent },
+    startedAtTime: input.started.toISOString(),
+    qualifiedAssociation: { "@id": assocId }
+  };
+  if (used.length > 0) {
+    activityNode.used = used.map((u) => ({ "@id": u }));
+  }
+  if (generated.length > 0) {
+    activityNode.generated = generated.map((g) => ({ "@id": g }));
+  }
+  if (input.ended !== void 0) {
+    activityNode.endedAtTime = input.ended.toISOString();
+  }
+  const associationNode = {
+    "@id": assocId,
+    "@type": "prov:Association",
+    agent: { "@id": agent },
+    hadPlan: { "@id": plan }
+  };
+  const graph = [activityNode, associationNode];
+  if (input.onBehalfOf !== void 0) {
+    graph.push({
+      "@id": agent,
+      actedOnBehalfOf: { "@id": escapeIri(input.onBehalfOf) }
+    });
+  }
+  for (const g of generated) {
+    graph.push({
+      "@id": g,
+      ...used.length > 0 ? { wasDerivedFrom: used.map((u) => ({ "@id": u })) } : {},
+      wasGeneratedBy: { "@id": act }
+    });
+  }
+  return { "@context": PROV_INLINE_CONTEXT, "@graph": graph };
+}
 
 // src/compose.ts
 var A2A_ACTION_TO_ODRL = {
@@ -486,18 +878,18 @@ function compare(requestValue, c, operator) {
     case "lteq":
       return numericOrTemporalCompare(scalar, right0, c) <= 0;
     case "isAnyOf":
-      return asArray(requestValue).some((rv) => rights.some((r) => scalarsEqual(rv, r, c)));
+      return asArray2(requestValue).some((rv) => rights.some((r) => scalarsEqual(rv, r, c)));
     case "isNoneOf":
-      return asArray(requestValue).every((rv) => rights.every((r) => !scalarsEqual(rv, r, c)));
+      return asArray2(requestValue).every((rv) => rights.every((r) => !scalarsEqual(rv, r, c)));
     case "isAllOf": {
-      const rvSet = asArray(requestValue);
+      const rvSet = asArray2(requestValue);
       return rights.every((r) => rvSet.some((rv) => scalarsEqual(rv, r, c)));
     }
     default:
       return false;
   }
 }
-function asArray(v) {
+function asArray2(v) {
   return Array.isArray(v) ? v : [v];
 }
 function scalarsEqual(a, b, c) {
@@ -539,254 +931,6 @@ function isFiniteNumber(v) {
   }
   return Number.isFinite(Number(s));
 }
-
-// src/wrappers.ts
-import { escapeIri } from "@jeswr/rdf-serialize";
-import {
-  BlankNodeFrom,
-  DatasetWrapper,
-  LiteralFrom,
-  NamedNodeFrom,
-  SetFrom,
-  TermAs,
-  TermFrom,
-  TermWrapper
-} from "@rdfjs/wrapper";
-import { DataFactory, Store } from "n3";
-function objectTerms(node, predicate) {
-  return SetFrom.subjectPredicate(node, predicate, TermAs.instance(TermWrapper), TermFrom.instance);
-}
-var ConstraintNode = class extends TermWrapper {
-  get leftOperands() {
-    return objectTerms(this, ODRL_LEFT_OPERAND);
-  }
-  get operators() {
-    return objectTerms(this, ODRL_OPERATOR);
-  }
-  get rightOperands() {
-    return objectTerms(this, ODRL_RIGHT_OPERAND);
-  }
-};
-var DutyNode = class extends TermWrapper {
-  get actions() {
-    return objectTerms(this, ODRL_ACTION);
-  }
-  get targets() {
-    return objectTerms(this, ODRL_TARGET);
-  }
-  get constraints() {
-    return SetFrom.subjectPredicate(
-      this,
-      ODRL_CONSTRAINT,
-      TermAs.instance(ConstraintNode),
-      TermFrom.instance
-    );
-  }
-};
-var RuleNode = class extends TermWrapper {
-  get actions() {
-    return objectTerms(this, ODRL_ACTION);
-  }
-  get targets() {
-    return objectTerms(this, ODRL_TARGET);
-  }
-  get assignees() {
-    return objectTerms(this, ODRL_ASSIGNEE);
-  }
-  get assigners() {
-    return objectTerms(this, ODRL_ASSIGNER);
-  }
-  get constraints() {
-    return SetFrom.subjectPredicate(
-      this,
-      ODRL_CONSTRAINT,
-      TermAs.instance(ConstraintNode),
-      TermFrom.instance
-    );
-  }
-  get duties() {
-    return SetFrom.subjectPredicate(this, ODRL_DUTY, TermAs.instance(DutyNode), TermFrom.instance);
-  }
-};
-var PolicyNode = class extends TermWrapper {
-  get types() {
-    return objectTerms(this, RDF_TYPE);
-  }
-  get uids() {
-    return objectTerms(this, ODRL_UID);
-  }
-  get profiles() {
-    return objectTerms(this, ODRL_PROFILE);
-  }
-  get assigners() {
-    return objectTerms(this, ODRL_ASSIGNER);
-  }
-  get assignees() {
-    return objectTerms(this, ODRL_ASSIGNEE);
-  }
-  get conflicts() {
-    return objectTerms(this, ODRL_CONFLICT);
-  }
-  /** Delegation profile: the `odrld:delegatedUnder` parent-policy edge(s). */
-  get delegatedUnders() {
-    return objectTerms(this, ODRLD_DELEGATED_UNDER);
-  }
-  get permissions() {
-    return SetFrom.subjectPredicate(
-      this,
-      ODRL_PERMISSION,
-      TermAs.instance(RuleNode),
-      TermFrom.instance
-    );
-  }
-  get prohibitions() {
-    return SetFrom.subjectPredicate(
-      this,
-      ODRL_PROHIBITION,
-      TermAs.instance(RuleNode),
-      TermFrom.instance
-    );
-  }
-  get obligations() {
-    return SetFrom.subjectPredicate(
-      this,
-      ODRL_OBLIGATION,
-      TermAs.instance(DutyNode),
-      TermFrom.instance
-    );
-  }
-};
-var PolicyDataset = class extends DatasetWrapper {
-  /** Every `odrl:Policy` (or Set/Offer/Agreement) subject in the dataset. */
-  policies() {
-    const seen = /* @__PURE__ */ new Map();
-    for (const cls of [ODRL_POLICY, ODRL_SET, ODRL_OFFER, ODRL_AGREEMENT]) {
-      for (const node of this.instancesOf(cls, PolicyNode)) {
-        seen.set(node.value, node);
-      }
-    }
-    return [...seen.values()];
-  }
-};
-function wrapPolicy(dataset) {
-  return new PolicyDataset(dataset, DataFactory);
-}
-function firstIri(terms) {
-  for (const term of terms) {
-    if (term.termType === "NamedNode") {
-      return term.value;
-    }
-  }
-  return void 0;
-}
-function allValues(terms) {
-  const out = [];
-  for (const term of terms) {
-    if (term.termType === "Literal") {
-      const dt = term.datatype?.value;
-      out.push(
-        dt !== void 0 ? { value: term.value, isIri: false, datatype: dt } : { value: term.value, isIri: false }
-      );
-    } else if (term.termType === "NamedNode") {
-      out.push({ value: term.value, isIri: true });
-    }
-  }
-  return out;
-}
-function iriRef(iri) {
-  return { kind: "iri", value: iri };
-}
-function normalize(subject) {
-  return typeof subject === "string" ? { kind: "iri", value: subject } : subject;
-}
-var GraphBuilder = class {
-  store = new Store();
-  factory = DataFactory;
-  /**
-   * Mint a `NamedNode` whose IRI value is INJECTION-SAFE. `n3.Writer` does NOT
-   * escape IRIs — it emits whatever string a `NamedNode` carries verbatim inside
-   * `<…>` — so an IRI value carrying a Turtle `IRIREF`-forbidden character (`>`,
-   * a space, `<`, `"`, `{`, `}`, `|`, `^`, backtick, backslash, a C0 control)
-   * would break out of the angle brackets and inject arbitrary triples into the
-   * serialised document. Since an ODRL policy's party / target / policy IRIs can
-   * originate from foreign input (a delegation chain assembled from other agents'
-   * pods, a parsed-then-re-serialised policy), every IRI written here is
-   * percent-escaped through the suite-canonical {@link escapeIri} FIRST — the
-   * SOLE chokepoint every `NamedNodeFrom.string` call in this builder routes
-   * through (subjects, predicates, object IRIs, and datatype IRIs alike), so a
-   * forbidden octet can never reach the serialiser regardless of the call site.
-   * Escaping is IDENTITY-PRESERVING (only forbidden bytes become `%XX`; a
-   * well-formed IRI round-trips byte-for-byte) and does NOT affect evaluation,
-   * which compares the raw string values — so a hostile IRI simply fails to
-   * match a legitimate one (fail-closed) rather than laundering an injection
-   * through the serialiser. (Explicit http(s)-contract fields — target/
-   * assignee/assigner/profile — get an ADDITIONAL, stricter guard upstream in
-   * policy.ts: `requireHttpIri` refuses to serialise rather than silently drop
-   * an unsafe EXPLICIT value, since dropping would widen the policy to a
-   * wildcard match — a privilege escalation. Escaping here is the universal
-   * breakout guard; `requireHttpIri` is the additional fail-closed reject for
-   * evaluation-critical fields.)
-   */
-  iriTerm(value) {
-    return NamedNodeFrom.string(escapeIri(value), this.factory);
-  }
-  /** Materialise a {@link NodeRef} to its RDF/JS term. */
-  subjectTerm(ref) {
-    return ref.kind === "iri" ? this.iriTerm(ref.value) : BlankNodeFrom.string(ref.value, this.factory);
-  }
-  /**
-   * Add `(subject, predicate, object-IRI)`. Predicate and object IRI are passed
-   * through {@link escapeIri} so no IRIREF-forbidden octet reaches the serialiser
-   * regardless of the call site — the breakout-proof chokepoint for object IRIs.
-   * (Trusted vocab constants contain no forbidden octet, so this is a no-op for
-   * them; semantic http(s)-only validation lives at the call sites in policy.ts.)
-   */
-  addIri(subject, predicate, objectIri) {
-    const s = this.subjectTerm(normalize(subject));
-    const p = this.iriTerm(predicate);
-    const o = this.iriTerm(objectIri);
-    this.store.add(this.factory.quad(s, p, o));
-  }
-  /** Add `(subject, predicate, literal)` with an optional datatype IRI. */
-  addLiteral(subject, predicate, value, datatypeIri) {
-    const s = this.subjectTerm(normalize(subject));
-    const p = this.iriTerm(predicate);
-    const o = datatypeIri === void 0 ? LiteralFrom.string(value, this.factory) : this.factory.literal(value, this.iriTerm(datatypeIri));
-    this.store.add(this.factory.quad(s, p, o));
-  }
-  /**
-   * Mint a fresh blank node, link it `(subject, predicate, _:b)`, and return a
-   * {@link NodeRef} to the new blank node (so subsequent writes target it
-   * unambiguously as a blank, never as an IRI).
-   */
-  linkBlankNode(subject, predicate) {
-    const s = this.subjectTerm(normalize(subject));
-    const blank = BlankNodeFrom.string(void 0, this.factory);
-    const p = this.iriTerm(predicate);
-    this.store.add(this.factory.quad(s, p, blank));
-    return { kind: "blank", value: blank.value };
-  }
-  /**
-   * Link a CHILD node (a named IRI child if provided, else a fresh blank) from
-   * `subject` via `predicate`, and return its {@link NodeRef}. Used for rule/duty/
-   * constraint nodes which may carry their own IRI or be anonymous.
-   */
-  linkChild(subject, predicate, childIri) {
-    if (childIri !== void 0) {
-      this.addIri(subject, predicate, childIri);
-      return iriRef(childIri);
-    }
-    return this.linkBlankNode(subject, predicate);
-  }
-  /** The underlying store (a DatasetCore). */
-  dataset() {
-    return this.store;
-  }
-  /** The accumulated quads. */
-  quads() {
-    return [...this.store];
-  }
-};
 
 // src/delegation.ts
 var DEFAULT_MAX_CHAIN_LENGTH = 8;
@@ -1028,37 +1172,6 @@ function delegationProvenance(chain) {
     }
   }
   return b.quads();
-}
-
-// src/iri.ts
-var IRIREF_FORBIDDEN = /[\u0000-\u0020<>"{}|^`\\]/g;
-function escapeIri2(value) {
-  return value.replace(
-    IRIREF_FORBIDDEN,
-    (c) => `%${c.charCodeAt(0).toString(16).toUpperCase().padStart(2, "0")}`
-  );
-}
-var LEADING_TRAILING_C0 = /^[\u0000-\u0020]|[\u0000-\u0020]$/;
-var ABSOLUTE_IRI_SCHEME = /^[a-z][a-z0-9+.-]*:/i;
-function safeHttpIri(value) {
-  if (typeof value !== "string") return void 0;
-  if (LEADING_TRAILING_C0.test(value)) return void 0;
-  const escaped = escapeIri2(value);
-  let u;
-  try {
-    u = new URL(escaped);
-  } catch {
-    return void 0;
-  }
-  if (u.protocol !== "http:" && u.protocol !== "https:") return void 0;
-  return escaped;
-}
-function safeIri(value) {
-  if (typeof value !== "string") return void 0;
-  if (LEADING_TRAILING_C0.test(value)) return void 0;
-  const escaped = escapeIri2(value);
-  if (!ABSOLUTE_IRI_SCHEME.test(escaped)) return void 0;
-  return escaped;
 }
 
 // node_modules/@jeswr/fetch-rdf/dist/parse.js
@@ -1399,7 +1512,7 @@ function policyToTurtle(policy, format) {
   return serialize(policyToRdf(policy), format);
 }
 function policyToJsonLd(policy) {
-  const id = escapeIri2(policy.id);
+  const id = escapeIri(policy.id);
   const context = policy.delegatedUnder !== void 0 ? { ...ODRL_INLINE_CONTEXT, ...ODRLD_INLINE_CONTEXT_EXTENSION } : ODRL_INLINE_CONTEXT;
   const doc = {
     "@context": context,
@@ -1418,7 +1531,7 @@ function policyToJsonLd(policy) {
   if (jsonAssignee !== void 0) doc.assignee = { "@id": jsonAssignee };
   if (policy.conflict !== void 0) doc.conflict = { "@id": CONFLICT_IRI[policy.conflict] };
   if (policy.delegatedUnder !== void 0)
-    doc.delegatedUnder = { "@id": escapeIri2(policy.delegatedUnder) };
+    doc.delegatedUnder = { "@id": escapeIri(policy.delegatedUnder) };
   if (policy.permissions && policy.permissions.length > 0) {
     doc.permission = policy.permissions.map((r) => ruleJsonLd(r, policy));
   }
@@ -1432,7 +1545,7 @@ function policyToJsonLd(policy) {
 }
 function ruleJsonLd(rule, policy) {
   const node = {};
-  if (rule.id !== void 0) node["@id"] = escapeIri2(rule.id);
+  if (rule.id !== void 0) node["@id"] = escapeIri(rule.id);
   node.action = { "@id": ACTION_IRI[rule.action] };
   const target = requireHttpIri(rule.target, "rule.target");
   if (target !== void 0) node.target = { "@id": target };
@@ -1450,7 +1563,7 @@ function ruleJsonLd(rule, policy) {
 }
 function dutyJsonLd(duty) {
   const node = {};
-  if (duty.id !== void 0) node["@id"] = escapeIri2(duty.id);
+  if (duty.id !== void 0) node["@id"] = escapeIri(duty.id);
   node.action = { "@id": ACTION_IRI[duty.action] };
   const target = requireHttpIri(duty.target, "duty.target");
   if (target !== void 0) node.target = { "@id": target };
@@ -1646,12 +1759,27 @@ export {
   OdrlSerializationError,
   PROV,
   PROV_ACTED_ON_BEHALF_OF,
+  PROV_ACTIVITY,
+  PROV_AGENT,
+  PROV_ASSOCIATION,
+  PROV_ENDED_AT_TIME,
+  PROV_GENERATED,
+  PROV_HAD_PLAN,
+  PROV_INLINE_CONTEXT,
+  PROV_QUALIFIED_ASSOCIATION,
+  PROV_STARTED_AT_TIME,
+  PROV_USED,
+  PROV_WAS_ASSOCIATED_WITH,
   PROV_WAS_ATTRIBUTED_TO,
   PROV_WAS_DERIVED_FROM,
+  PROV_WAS_GENERATED_BY,
   VALID_ACTION_IRIS,
+  XSD_DATETIME,
+  actionProvenance,
+  actionProvenanceJsonLd,
   constraintSatisfied,
   delegationProvenance,
-  escapeIri2 as escapeIri,
+  escapeIri,
   evaluate,
   evaluateDelegated,
   matchingPermissions,

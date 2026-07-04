@@ -44,6 +44,8 @@
  *
  * @packageDocumentation
  */
+export type { ActionProvenanceInput } from "./action-provenance.js";
+export { actionProvenance, actionProvenanceJsonLd } from "./action-provenance.js";
 export type { A2AIntentLike } from "./compose.js";
 export { A2A_ACTION_TO_ODRL, requestContextFromA2AIntent, requestContextFromWac, } from "./compose.js";
 export type { DelegatedEvaluationResult, DelegationEvaluateOptions, DelegationHopTrace, } from "./delegation.js";
@@ -53,5 +55,5 @@ export { escapeIri, safeHttpIri, safeIri } from "./iri.js";
 export { IRI_TO_ACTION, IRI_TO_LEFT_OPERAND, IRI_TO_OPERATOR, OdrlSerializationError, parsePolicy, policyFromRdf, policyToJsonLd, policyToRdf, policyToTurtle, } from "./policy.js";
 export { serialize } from "./serialize.js";
 export type { ActiveDuty, Decision, DecisionRule, EvaluateOptions, EvaluationResult, OdrlConstraint, OdrlDuty, OdrlPolicy, OdrlRule, PolicyType, RequestContext, RuleType, } from "./types.js";
-export { ACL, ACL_MODE_TO_ACTION, ACL_MODES, ACTION_IRI, type AclMode, CONFLICT_IRI, CONFLICT_STRATEGIES, type ConflictStrategy, DPV, LEFT_OPERAND_IRI, LEFT_OPERANDS, type LeftOperandName, ODRL, ODRL_ACTIONS, ODRL_GRANT_USE, ODRL_INLINE_CONTEXT, ODRL_NEXT_POLICY, ODRL_TRANSFER, ODRLD, ODRLD_DELEGATED_UNDER, ODRLD_DELEGATION_DEPTH, ODRLD_INLINE_CONTEXT_EXTENSION, ODRLD_PROFILE_IRI, ODRLD_REVOCATION_CLASS, ODRLD_REVOKED_POLICY, type OdrlActionName, OPERATOR_IRI, OPERATORS, type OperatorName, PROV, PROV_ACTED_ON_BEHALF_OF, PROV_WAS_ATTRIBUTED_TO, PROV_WAS_DERIVED_FROM, VALID_ACTION_IRIS, } from "./vocab.js";
+export { ACL, ACL_MODE_TO_ACTION, ACL_MODES, ACTION_IRI, type AclMode, CONFLICT_IRI, CONFLICT_STRATEGIES, type ConflictStrategy, DPV, LEFT_OPERAND_IRI, LEFT_OPERANDS, type LeftOperandName, ODRL, ODRL_ACTIONS, ODRL_GRANT_USE, ODRL_INLINE_CONTEXT, ODRL_NEXT_POLICY, ODRL_TRANSFER, ODRLD, ODRLD_DELEGATED_UNDER, ODRLD_DELEGATION_DEPTH, ODRLD_INLINE_CONTEXT_EXTENSION, ODRLD_PROFILE_IRI, ODRLD_REVOCATION_CLASS, ODRLD_REVOKED_POLICY, type OdrlActionName, OPERATOR_IRI, OPERATORS, type OperatorName, PROV, PROV_ACTED_ON_BEHALF_OF, PROV_ACTIVITY, PROV_AGENT, PROV_ASSOCIATION, PROV_ENDED_AT_TIME, PROV_GENERATED, PROV_HAD_PLAN, PROV_INLINE_CONTEXT, PROV_QUALIFIED_ASSOCIATION, PROV_STARTED_AT_TIME, PROV_USED, PROV_WAS_ASSOCIATED_WITH, PROV_WAS_ATTRIBUTED_TO, PROV_WAS_DERIVED_FROM, PROV_WAS_GENERATED_BY, VALID_ACTION_IRIS, XSD_DATETIME, } from "./vocab.js";
 //# sourceMappingURL=index.d.ts.map

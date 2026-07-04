@@ -305,6 +305,36 @@ export declare const PROV_WAS_ATTRIBUTED_TO: "http://www.w3.org/ns/prov#wasAttri
 export declare const PROV_ACTED_ON_BEHALF_OF: "http://www.w3.org/ns/prov#actedOnBehalfOf";
 /** `prov:wasDerivedFrom` — Entity → Entity (the generic super-property of `odrld:delegatedUnder`). */
 export declare const PROV_WAS_DERIVED_FROM: "http://www.w3.org/ns/prov#wasDerivedFrom";
+/** `prov:Activity` — the class of a performed action. */
+export declare const PROV_ACTIVITY: "http://www.w3.org/ns/prov#Activity";
+/** `prov:Association` — the class of a `qualifiedAssociation` blank node. */
+export declare const PROV_ASSOCIATION: "http://www.w3.org/ns/prov#Association";
+/** `prov:wasAssociatedWith` — Activity → Agent (who carried out the activity). */
+export declare const PROV_WAS_ASSOCIATED_WITH: "http://www.w3.org/ns/prov#wasAssociatedWith";
+/** `prov:used` — Activity → Entity (a resource the activity consumed). */
+export declare const PROV_USED: "http://www.w3.org/ns/prov#used";
+/** `prov:generated` — Activity → Entity (an artifact the activity produced). */
+export declare const PROV_GENERATED: "http://www.w3.org/ns/prov#generated";
+/** `prov:startedAtTime` — Activity → xsd:dateTime. */
+export declare const PROV_STARTED_AT_TIME: "http://www.w3.org/ns/prov#startedAtTime";
+/** `prov:endedAtTime` — Activity → xsd:dateTime. */
+export declare const PROV_ENDED_AT_TIME: "http://www.w3.org/ns/prov#endedAtTime";
+/** `prov:qualifiedAssociation` — Activity → Association (the reified agent+plan link). */
+export declare const PROV_QUALIFIED_ASSOCIATION: "http://www.w3.org/ns/prov#qualifiedAssociation";
+/** `prov:agent` — Association → Agent (used inside the reified Association node). */
+export declare const PROV_AGENT: "http://www.w3.org/ns/prov#agent";
+/** `prov:hadPlan` — Association → Entity (the authorizing plan — the leaf Agreement). */
+export declare const PROV_HAD_PLAN: "http://www.w3.org/ns/prov#hadPlan";
+/** `prov:wasGeneratedBy` — Entity → Activity (inverse of `generated`, on the artifact). */
+export declare const PROV_WAS_GENERATED_BY: "http://www.w3.org/ns/prov#wasGeneratedBy";
+/** `xsd:dateTime` — the datatype for `startedAtTime`/`endedAtTime` literals. */
+export declare const XSD_DATETIME: "http://www.w3.org/2001/XMLSchema#dateTime";
+/**
+ * A SELF-CONTAINED inline JSON-LD `@context` for a per-action PROV bundle
+ * ({@link actionProvenanceJsonLd} — same "no network dependency" rationale as
+ * {@link ODRL_INLINE_CONTEXT}). IRI-valued terms carry `"@type": "@id"`.
+ */
+export declare const PROV_INLINE_CONTEXT: Readonly<Record<string, unknown>>;
 /**
  * A SELF-CONTAINED inline JSON-LD `@context` for an ODRL policy graph. Like M1/M2,
  * the emitted JSON-LD embeds this rather than a bare remote `@context` URL, so the
