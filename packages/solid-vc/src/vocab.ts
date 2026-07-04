@@ -92,6 +92,28 @@ export const SEC_MULTIBASE = `${SEC}multibase` as const;
 export const SCHEMA_ENCODING_FORMAT = `${SCHEMA}encodingFormat` as const;
 /** `cred:verifiableCredential` — Presentation → an embedded credential. */
 export const VC_VERIFIABLE_CREDENTIAL = `${VC}verifiableCredential` as const;
+
+// --- Bitstring Status List v1.0 (standard, W3C Recommendation) --------------
+// Terms live in the W3C status vocabulary and are ALL defined by the VC 2.0
+// base context (`https://www.w3.org/ns/credentials/v2`), so the JSON-LD
+// projection needs no extra context entry — the Turtle and JSON-LD stay in
+// lock-step through the same pinned context.
+/** The W3C Bitstring Status List vocabulary namespace. */
+export const STATUS = "https://www.w3.org/ns/credentials/status#" as const;
+/** `status:BitstringStatusListEntry` — the per-credential status entry class. */
+export const STATUS_BITSTRING_ENTRY = `${STATUS}BitstringStatusListEntry` as const;
+/** `status:BitstringStatusList` — the hosted list (the subject of the list VC). */
+export const STATUS_BITSTRING_LIST = `${STATUS}BitstringStatusList` as const;
+/** `status:BitstringStatusListCredential` — the credential type hosting a list. */
+export const STATUS_BITSTRING_CREDENTIAL = `${STATUS}BitstringStatusListCredential` as const;
+/** `status:statusPurpose` — what a set bit MEANS (`revocation` / `suspension`). */
+export const STATUS_PURPOSE = `${STATUS}statusPurpose` as const;
+/** `status:statusListIndex` — the credential's bit position (a string integer). */
+export const STATUS_LIST_INDEX = `${STATUS}statusListIndex` as const;
+/** `status:statusListCredential` — entry → the URL of the hosted list credential. */
+export const STATUS_LIST_CREDENTIAL = `${STATUS}statusListCredential` as const;
+/** `status:encodedList` — the multibase(base64url) GZIP'd bitstring literal. */
+export const STATUS_ENCODED_LIST = `${STATUS}encodedList` as const;
 /** `cred:holder` — Presentation → the presenting party. */
 export const VC_HOLDER = `${VC}holder` as const;
 

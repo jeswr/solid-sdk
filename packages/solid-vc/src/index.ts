@@ -42,6 +42,16 @@
  * @packageDocumentation
  */
 
+export {
+  BitstringDecodeError,
+  createStatusBitstring,
+  DEFAULT_MAX_DECODED_BYTES,
+  decodeStatusList,
+  encodeStatusList,
+  getStatusBit,
+  MIN_STATUS_LIST_LENGTH,
+  setStatusBit,
+} from "./bitstring.js";
 export { canonicalNQuads, dataIntegrityHash } from "./canonicalize.js";
 // --- data model + RDF ------------------------------------------------------
 export {
@@ -50,6 +60,8 @@ export {
   buildBoundAgentAuthorizationCredential,
   credentialFromRdf,
   credentialMetaFromNode,
+  credentialStatusesOf,
+  credentialStatusFromNode,
   credentialToJsonLd,
   credentialToRdf,
   credentialToTurtle,
@@ -82,10 +94,25 @@ export {
   SuiteRegistry,
 } from "./proof.js";
 export { serialize } from "./serialize.js";
+// --- Bitstring Status List v1.0 (runtime Phase-1 G2: revocation/suspension) --
+export {
+  type BitstringStatusListCredentialInput,
+  type BitstringStatusListEntryInput,
+  type BitstringStatusOptions,
+  bitstringStatusListEntry,
+  buildBitstringStatusListCredential,
+  createBitstringStatusResolver,
+  readStatusBit,
+  resolveBitstringStatus,
+  statusListBitsOf,
+  withStatusBit,
+} from "./status.js";
 // --- types -----------------------------------------------------------------
 export type {
   AgentAuthorization,
+  BitstringStatusListEntry,
   Credential,
+  CredentialStatusCheck,
   CredentialSubject,
   DataIntegrityProof,
   IssueOptions,
@@ -113,9 +140,18 @@ export {
   SEC_DIGEST_MULTIBASE,
   SEC_MULTIKEY,
   SEC_PUBLIC_KEY_MULTIBASE,
+  STATUS,
+  STATUS_BITSTRING_CREDENTIAL,
+  STATUS_BITSTRING_ENTRY,
+  STATUS_BITSTRING_LIST,
+  STATUS_ENCODED_LIST,
+  STATUS_LIST_CREDENTIAL,
+  STATUS_LIST_INDEX,
+  STATUS_PURPOSE,
   SVC,
   SVC_AGENT_AUTHORIZATION,
   VC,
+  VC_CREDENTIAL_STATUS,
   VC_RELATED_RESOURCE,
   VC_V2_CONTEXT,
 } from "./vocab.js";

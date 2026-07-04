@@ -1,5 +1,5 @@
 import type { DatasetCore, Quad } from "@rdfjs/types";
-import type { AgentAuthorization, Credential, RelatedResource } from "./types.js";
+import type { AgentAuthorization, BitstringStatusListEntry, Credential, RelatedResource } from "./types.js";
 import { type CredentialNode } from "./wrappers.js";
 /**
  * Return a {@link Credential} whose `credentialSubject` id(s) are normalised EXACTLY
@@ -12,6 +12,8 @@ import { type CredentialNode } from "./wrappers.js";
  * subjects all carry a valid absolute id or no id.
  */
 export declare function normalizeCredentialSubjects(credential: Credential): Credential;
+/** Normalise a credential's one-or-many `credentialStatus` to an array. */
+export declare function credentialStatusesOf(credentialStatus: Credential["credentialStatus"]): readonly BitstringStatusListEntry[];
 /**
  * Lower a structured {@link Credential} (the UNSIGNED claim graph — no proof) to
  * RDF quads via the typed write path. The credential gets an `@id` (a random
@@ -85,6 +87,17 @@ export declare function buildBoundAgentAuthorizationCredential(auth: AgentAuthor
  * resource whose entry lacks a digest as unbound and fails closed.
  */
 export declare function relatedResourcesFromNode(node: CredentialNode): RelatedResource[];
+/**
+ * Read the Bitstring status entries back from a parsed credential node — the
+ * typed inverse of the {@link credentialToRdf} `credentialStatus` lowering.
+ * Returns one entry per `cred:credentialStatus` object (IRI or blank node)
+ * that is a well-formed `status:BitstringStatusListEntry` (type + non-empty
+ * purpose + integer-string index + an IRI list URL). A malformed / alien-typed
+ * entry is SKIPPED here (this is a reader, not the gate) — but note the
+ * VERIFIER does the opposite: `resolveBitstringStatus` treats a present entry
+ * it cannot make sense of as `unreachable`, fail-closed.
+ */
+export declare function credentialStatusFromNode(node: CredentialNode): BitstringStatusListEntry[];
 /**
  * Read the agent-authorization claim back from a parsed credential node — the
  * typed inverse of {@link buildAgentAuthorizationCredential}. Returns `undefined`

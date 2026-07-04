@@ -24,6 +24,7 @@ import type { ProofSuite, ProofVerifyOptions, SuiteRegistry } from "./proof.js";
 import { defaultSuiteRegistry } from "./proof.js";
 import type {
   Credential,
+  CredentialStatusCheck,
   DataIntegrityProof,
   PresentedResourceContent,
   RelatedResource,
@@ -73,6 +74,28 @@ export interface VerifyCredentialOptions extends VerifyOptions {
    * content it is about to trust.)
    */
   readonly presentedResources?: Readonly<Record<string, PresentedResourceContent>>;
+  /**
+   * The credential-status seam (Phase C — revocation/suspension, runtime G2).
+   * When supplied, the resolver is consulted and its outcome gates the
+   * verification FAIL-CLOSED:
+   *
+   *  - `revoked` / `suspended` → `STATUS_REVOKED` / `STATUS_SUSPENDED`;
+   *  - `unreachable` — a PRESENT `credentialStatus` entry that could not be
+   *    fetched / verified / decoded → `STATUS_UNREACHABLE` (a distinct
+   *    verification failure, NEVER a silent pass);
+   *  - a resolver that THROWS or returns an unrecognised shape →
+   *    `STATUS_UNREACHABLE` (the seam itself is fail-closed);
+   *  - only `valid` (every bit clear) and `absent` (the credential carries NO
+   *    status entry — the issuer provides no revocation mechanism) let
+   *    verification proceed.
+   *
+   * Supply `createBitstringStatusResolver(…)` for the W3C Bitstring Status
+   * List v1.0 implementation. When this option is OMITTED, status is NOT
+   * checked (the pre-G2 behaviour) — a Phase-C verifier MUST supply it.
+   */
+  readonly resolveStatus?: (
+    vc: VerifiableCredential,
+  ) => CredentialStatusCheck | Promise<CredentialStatusCheck>;
 }
 
 /** Default issuer-binding check: the method is the issuer or a fragment/path of it. */
@@ -324,6 +347,16 @@ export async function verifyCredential(
     }
   }
 
+  // 10. credential status (Phase C — revocation/suspension), when the caller
+  // supplied the seam. Fail-closed in EVERY branch: a definitive set bit is
+  // STATUS_REVOKED / STATUS_SUSPENDED; anything that prevented CONFIRMING the
+  // status — including the resolver itself throwing or returning an
+  // unrecognised shape — is STATUS_UNREACHABLE. Only `valid` and `absent`
+  // (no status entry = no revocation mechanism) add no error.
+  if (options.resolveStatus !== undefined) {
+    errors.push(...(await statusGate(options.resolveStatus, vc)));
+  }
+
   // The canonical bytes the signature must cover: the claim graph WITHOUT proof.
   // credentialToRdf FAILS CLOSED (throws) on a malformed identity field (a
   // non-absolute issuer / subject id) — a legitimately-issued credential could never
@@ -385,6 +418,52 @@ export async function verifyCredential(
   return errors.length === 0
     ? { verified: true, errors: [], issuer }
     : { verified: false, errors, issuer };
+}
+
+/**
+ * Run the `resolveStatus` seam FAIL-CLOSED and map its outcome to structured
+ * errors (see {@link VerifyCredentialOptions.resolveStatus}). A throwing
+ * resolver and an unrecognised outcome shape both become `STATUS_UNREACHABLE`
+ * — an unconfirmable status must DENY, never crash and never pass.
+ */
+async function statusGate(
+  resolveStatus: NonNullable<VerifyCredentialOptions["resolveStatus"]>,
+  vc: VerifiableCredential,
+): Promise<VerificationError[]> {
+  let check: CredentialStatusCheck;
+  try {
+    check = await resolveStatus(vc);
+  } catch (e) {
+    return [
+      {
+        code: "STATUS_UNREACHABLE",
+        message: `credential status could not be resolved: ${(e as Error).message}`,
+      },
+    ];
+  }
+  switch (check?.status) {
+    case "absent":
+    case "valid":
+      return [];
+    case "revoked":
+      return [{ code: "STATUS_REVOKED", message: `credential is revoked: ${check.reason}` }];
+    case "suspended":
+      return [{ code: "STATUS_SUSPENDED", message: `credential is suspended: ${check.reason}` }];
+    case "unreachable":
+      return [
+        {
+          code: "STATUS_UNREACHABLE",
+          message: `credential status could not be confirmed: ${check.reason}`,
+        },
+      ];
+    default:
+      return [
+        {
+          code: "STATUS_UNREACHABLE",
+          message: "credential status resolver returned an unrecognised outcome — failing closed",
+        },
+      ];
+  }
 }
 
 /**

@@ -40,17 +40,19 @@
  *
  * @packageDocumentation
  */
+export { BitstringDecodeError, createStatusBitstring, DEFAULT_MAX_DECODED_BYTES, decodeStatusList, encodeStatusList, getStatusBit, MIN_STATUS_LIST_LENGTH, setStatusBit, } from "./bitstring.js";
 export { canonicalNQuads, dataIntegrityHash } from "./canonicalize.js";
-export { agentAuthorizationFromRdf, buildAgentAuthorizationCredential, buildBoundAgentAuthorizationCredential, credentialFromRdf, credentialMetaFromNode, credentialToJsonLd, credentialToRdf, credentialToTurtle, parseCredentialRdf, relatedResourcesFromNode, } from "./credential.js";
+export { agentAuthorizationFromRdf, buildAgentAuthorizationCredential, buildBoundAgentAuthorizationCredential, credentialFromRdf, credentialMetaFromNode, credentialStatusesOf, credentialStatusFromNode, credentialToJsonLd, credentialToRdf, credentialToTurtle, parseCredentialRdf, relatedResourcesFromNode, } from "./credential.js";
 export { digestQuads, digestRdfContent } from "./digest.js";
 export { type IssueInput, issue, issueAgentAuthorization } from "./issue.js";
 export { cryptosuiteForKeyType, exportPrivateJwk, exportPublicJwk, generateKeyPairForSuite, importKeyPair, importPublicKey, type SuiteKeyType, } from "./keys.js";
 export { base58btcDecode, base58btcEncode } from "./multibase.js";
 export { DataIntegritySuite, defaultSuiteRegistry, type ProofSignOptions, type ProofSuite, type ProofVerifyOptions, proofOptionsQuads, SuiteRegistry, } from "./proof.js";
 export { serialize } from "./serialize.js";
-export type { AgentAuthorization, Credential, CredentialSubject, DataIntegrityProof, IssueOptions, JsonValue, KeyPair, Presentation, PresentedResourceContent, RelatedResource, VerifiableCredential, VerifiablePresentation, VerificationError, VerificationErrorCode, VerificationResult, VerifyOptions, } from "./types.js";
+export { type BitstringStatusListCredentialInput, type BitstringStatusListEntryInput, type BitstringStatusOptions, bitstringStatusListEntry, buildBitstringStatusListCredential, createBitstringStatusResolver, readStatusBit, resolveBitstringStatus, statusListBitsOf, withStatusBit, } from "./status.js";
+export type { AgentAuthorization, BitstringStatusListEntry, Credential, CredentialStatusCheck, CredentialSubject, DataIntegrityProof, IssueOptions, JsonValue, KeyPair, Presentation, PresentedResourceContent, RelatedResource, VerifiableCredential, VerifiablePresentation, VerificationError, VerificationErrorCode, VerificationResult, VerifyOptions, } from "./types.js";
 export { type VerifyCredentialOptions, verifyCredential, verifyRelatedResources, } from "./verify.js";
-export { SEC_ASSERTION_METHOD, SEC_CONTROLLER, SEC_DIGEST_MULTIBASE, SEC_MULTIKEY, SEC_PUBLIC_KEY_MULTIBASE, SVC, SVC_AGENT_AUTHORIZATION, VC, VC_RELATED_RESOURCE, VC_V2_CONTEXT, } from "./vocab.js";
+export { SEC_ASSERTION_METHOD, SEC_CONTROLLER, SEC_DIGEST_MULTIBASE, SEC_MULTIKEY, SEC_PUBLIC_KEY_MULTIBASE, STATUS, STATUS_BITSTRING_CREDENTIAL, STATUS_BITSTRING_ENTRY, STATUS_BITSTRING_LIST, STATUS_ENCODED_LIST, STATUS_LIST_CREDENTIAL, STATUS_LIST_INDEX, STATUS_PURPOSE, SVC, SVC_AGENT_AUTHORIZATION, VC, VC_CREDENTIAL_STATUS, VC_RELATED_RESOURCE, VC_V2_CONTEXT, } from "./vocab.js";
 export { createWebIdKeyResolver, type DecodedMultikey, decodeMultikey, encodeMultikey, type PublishedVerificationMethod, type PublishVerificationMethodInput, publishVerificationMethod, type ResolvedWebIdKey, type ResolveWebIdKeyOptions, resolveWebIdKey, type WebIdKeyResolver, } from "./webid.js";
 export { CredentialNode, PresentationNode, ProofNode, VcDataset, wrapVc, } from "./wrappers.js";
 //# sourceMappingURL=index.d.ts.map
