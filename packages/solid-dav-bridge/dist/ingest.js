@@ -26,6 +26,7 @@
  * (SSRF-safe). When a caller passes `icsText` / `vcfText` directly, NO network is
  * touched (the unit-testable path).
  */
+import { assertWithinPodScope, normalizePodBase } from "@jeswr/guarded-fetch";
 import { serializePerson } from "@jeswr/solid-task-model/contacts";
 import { Store, Writer } from "n3";
 import { findComponents, parseComponents } from "./ical.js";
@@ -61,22 +62,29 @@ export function defaultContactSlug(contact, index) {
     return `contact-${fnv1a(seed)}.ttl`;
 }
 /**
- * Join a container URL (ending `/`) and a slug into a resource URL, SAFELY. The
- * slug is sanitised (path separators / traversal collapse to `-`) and the resolved
- * URL MUST stay STRICTLY under the container — a slug of "" / "." / "/" resolves to
- * the container itself and is rejected (these defences are load-bearing).
+ * Join a container URL (a POD-SCOPE base — already normalised by
+ * {@link resolveContainer}) and a slug into a resource URL, SAFELY. The slug is
+ * sanitised (path separators / traversal collapse to `-`) and the resolved URL MUST
+ * stay STRICTLY under the container: containment is decided by
+ * `@jeswr/guarded-fetch`'s {@link assertWithinPodScope} (`allowRoot: false`) —
+ * the suite's ONE reviewed pod-scope primitive — not a bespoke raw-string prefix
+ * check. It parses via `new URL()`, resolves the (already-sanitised) slug against
+ * the container with real dot-segment collapsing, and rejects query/fragment
+ * smuggling, encoded path delimiters, scheme confusion, and a slug of "" / "." /
+ * "/" that would resolve to the container itself (these defences are load-bearing).
  */
 function resourceUrl(container, slug) {
-    const base = container.endsWith("/") ? container : `${container}/`;
     const cleaned = slug.replace(/^\/+/, "").replace(UNSAFE_SLUG, "-");
     if (cleaned.length === 0) {
         throw new Error(`slug "${slug}" is empty after sanitisation (would target the container)`);
     }
-    const resolved = new URL(cleaned, base).toString();
-    if (!resolved.startsWith(base) || resolved === base) {
-        throw new Error(`slug "${slug}" does not resolve to a child of the container ${base}`);
+    try {
+        return assertWithinPodScope(container, cleaned, { allowRoot: false });
     }
-    return resolved;
+    catch (err) {
+        const reason = err instanceof Error ? err.message : String(err);
+        throw new Error(`slug "${slug}" does not resolve to a child of the container ${container}: ${reason}`, { cause: err });
+    }
 }
 /** Serialise event quads to Turtle via n3.Writer (typed quads — never hand-built strings). */
 function eventToTurtle(quads) {
@@ -88,12 +96,29 @@ function eventToTurtle(quads) {
         writer.end((error, result) => (error ? reject(error) : resolve(result)));
     });
 }
-/** Resolve the base container, validating it is a non-empty string. */
+/**
+ * Resolve the base container to `@jeswr/guarded-fetch`'s canonical pod-scope base
+ * form: an absolute http(s) URL, exactly one trailing `/`, no query/fragment, no
+ * embedded credentials, no encoded path delimiter (`normalizePodBase`). This closes
+ * the raw-string smuggling class a bespoke `container.endsWith("/")` check missed —
+ * e.g. a container URL whose PATH lacks a trailing slash but whose QUERY/FRAGMENT
+ * happens to end in "/" (`https://pod.example/other?x=/`) used to fool the textual
+ * check into treating `/other` as already-slash-terminated, so a resolved child
+ * would land as a SIBLING of `/other` instead of nested under it. `normalizePodBase`
+ * parses the URL properly, decides the trailing slash from the PATH alone, and
+ * discards any query/fragment — the container can never be misread this way again.
+ */
 function resolveContainer(container) {
     if (typeof container !== "string" || container.length === 0) {
         throw new TypeError("import: `container` is required");
     }
-    return container.endsWith("/") ? container : `${container}/`;
+    try {
+        return normalizePodBase(container);
+    }
+    catch (err) {
+        const reason = err instanceof Error ? err.message : String(err);
+        throw new TypeError(`import: \`container\` is invalid: ${reason}`, { cause: err });
+    }
 }
 /**
  * Import iCalendar VEVENTs into a Solid pod as `schema:Event` Turtle resources.
