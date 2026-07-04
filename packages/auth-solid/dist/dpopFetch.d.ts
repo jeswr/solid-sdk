@@ -23,6 +23,16 @@
  * Transport guard (both paths): never attach a DPoP proof / access token to a plaintext `http:`
  * URL unless `allowInsecure` is set for a loopback host — so a token is never sent over the wire in
  * the clear. We never log tokens, proofs, keys, or request bodies.
+ *
+ * Redirect guard (the CREDENTIALED paths only): both the pod resource fetch and the token-endpoint
+ * leg carry a credential (an `Authorization: DPoP` / `DPoP` header, the client credential / auth
+ * code). A credentialed request must NEVER auto-follow a 3xx — following would re-send that
+ * credential to a host the SERVER chose in `Location` (a token-leak / SSRF-adjacent class). So both
+ * credentialed fetches are wrapped with `refuseRedirects` from `@jeswr/guarded-fetch`: any redirect
+ * is REFUSED (throws `RedirectRefusedError`) instead of followed. The UNcredentialed discovery /
+ * JWKS / userinfo legs still FOLLOW redirects (correct for public OIDC metadata) — they are NOT
+ * wrapped, keeping credentialed-vs-uncredentialed distinct (the estate "credentialed fetch must
+ * refuse redirects" discipline).
  */
 import { type DpopKeyPair } from "@jeswr/solid-dpop";
 import type { FetchLike, SolidAuthState } from "./types.js";

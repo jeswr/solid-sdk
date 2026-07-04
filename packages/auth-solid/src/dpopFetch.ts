@@ -24,8 +24,19 @@
  * Transport guard (both paths): never attach a DPoP proof / access token to a plaintext `http:`
  * URL unless `allowInsecure` is set for a loopback host — so a token is never sent over the wire in
  * the clear. We never log tokens, proofs, keys, or request bodies.
+ *
+ * Redirect guard (the CREDENTIALED paths only): both the pod resource fetch and the token-endpoint
+ * leg carry a credential (an `Authorization: DPoP` / `DPoP` header, the client credential / auth
+ * code). A credentialed request must NEVER auto-follow a 3xx — following would re-send that
+ * credential to a host the SERVER chose in `Location` (a token-leak / SSRF-adjacent class). So both
+ * credentialed fetches are wrapped with `refuseRedirects` from `@jeswr/guarded-fetch`: any redirect
+ * is REFUSED (throws `RedirectRefusedError`) instead of followed. The UNcredentialed discovery /
+ * JWKS / userinfo legs still FOLLOW redirects (correct for public OIDC metadata) — they are NOT
+ * wrapped, keeping credentialed-vs-uncredentialed distinct (the estate "credentialed fetch must
+ * refuse redirects" discipline).
  */
 
+import { refuseRedirects } from "@jeswr/guarded-fetch";
 import { createDpopProof, type DpopKeyPair, importDpopKeyPairJwk } from "@jeswr/solid-dpop";
 import type { JWK } from "jose";
 import type { FetchLike, SolidAuthState } from "./types.js";
@@ -204,8 +215,15 @@ export function buildDpopCustomFetch(
   underlying: FetchLike,
   allowInsecure: boolean,
 ): typeof fetch {
+  // SECURITY (redirect refusal): the token-endpoint leg is CREDENTIALED — it carries the DPoP proof
+  // plus the authorization code and, for a confidential client, the client secret. Wrap the
+  // underlying fetch so the token request REFUSES any 3xx (throws `RedirectRefusedError`) rather than
+  // re-sending that credential to a server-chosen `Location`. This wraps ONLY the token leg; the
+  // pass-through discovery / JWKS / userinfo legs below use the raw `underlying` and still follow
+  // redirects (correct for public OIDC metadata) — credentialed-vs-uncredentialed kept distinct.
+  const tokenLegFetch = refuseRedirects(underlying as typeof globalThis.fetch) as FetchLike;
   const dpopFetch = async (input: URL | RequestInfo, init?: RequestInit): Promise<Response> => {
-    // Non-token legs (discovery / JWKS / userinfo): pass straight through, no DPoP.
+    // Non-token legs (discovery / JWKS / userinfo): pass straight through, no DPoP, follow redirects.
     if (!isTokenEndpointLeg(input, init)) {
       return underlying(input as string | URL | Request, init);
     }
@@ -242,7 +260,8 @@ export function buildDpopCustomFetch(
       headers.set("dpop", proof);
       // oauth4webapi sends the body in `init.body` (a URLSearchParams string) — a small, replayable
       // value, so the §8 retry can resend it as-is. We forward `init` unchanged but with our headers.
-      return underlying(url, { ...(init ?? {}), method, headers });
+      // `tokenLegFetch` refuses redirects (see above) so this credentialed request never follows a 3xx.
+      return tokenLegFetch(url, { ...(init ?? {}), method, headers });
     };
 
     const res = await send();
@@ -426,7 +445,16 @@ export function buildSolidDpopFetch(
   state: SolidAuthState,
   options: SolidDpopFetchOptions = {},
 ): FetchLike {
-  const underlying: FetchLike = options.fetch ?? (globalThis.fetch as FetchLike);
+  const rawUnderlying: FetchLike = options.fetch ?? (globalThis.fetch as FetchLike);
+  // SECURITY (redirect refusal): this fetch carries the DPoP-bound access token + proof
+  // (`Authorization: DPoP <token>` + `DPoP: <proof>`). A credentialed request must NEVER auto-follow
+  // a 3xx — following would re-send the token/proof to a target the SERVER chose in `Location` (a
+  // token-leak / SSRF-adjacent class). Wrap the underlying fetch so any redirect is REFUSED (throws
+  // `RedirectRefusedError`) rather than followed; this also forces `redirect:"manual"`, overriding a
+  // caller-supplied `redirect` mode (the estate "credentialed fetch must refuse redirects" rule).
+  const underlying: FetchLike = refuseRedirects(
+    rawUnderlying as typeof globalThis.fetch,
+  ) as FetchLike;
   const allowInsecure = options.allowInsecure === true;
   // Validate the cap: a non-finite (NaN/Infinity) or negative value would silently remove the
   // memory bound (`total > NaN` is always false; `Infinity` is unbounded). Reject it (a roborev

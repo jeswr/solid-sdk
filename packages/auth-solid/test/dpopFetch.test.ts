@@ -8,6 +8,7 @@
  *     the 401 DPoP-Nonce retry once, enforces transport, never leaks the token/proof/key.
  */
 
+import { RedirectRefusedError } from "@jeswr/guarded-fetch";
 import { generateDpopKeyPair } from "@jeswr/solid-dpop";
 import { calculateJwkThumbprint, exportJWK } from "jose";
 import { describe, expect, it, vi } from "vitest";
@@ -534,6 +535,118 @@ describe("solidDpopFetch — bounded + cancellable replay buffering", () => {
         ),
       ).toThrow(/maxReplayBodyBytes/);
     }
+  });
+});
+
+describe("credentialed fetch REFUSES redirects (credential-safety, #78 discipline)", () => {
+  async function stateFor() {
+    const kp = await generateDpopKeyPair();
+    const dpopKeyJwk = await exportJWK(kp.privateKey);
+    return { accessToken: "redir-access-token-secret", dpopKeyJwk };
+  }
+
+  /** A moved-redirect Response (a real 3xx status + Location) the mock underlying returns. */
+  function redirectResponse(status: number, location = "https://attacker.example/steal"): Response {
+    return new Response("", { status, headers: { location } });
+  }
+
+  it("solidDpopFetch: a 302 on the pod request is REFUSED — the DPoP token is NOT re-sent to Location", async () => {
+    const underlying = vi.fn(async () => redirectResponse(302));
+    const st = await stateFor();
+    const f = buildSolidDpopFetch(
+      { accessToken: st.accessToken, dpopKeyJwk: st.dpopKeyJwk },
+      { fetch: underlying as never },
+    );
+    // WAS follow (default), NOW refuse: the credentialed request throws instead of following.
+    await expect(f(POD)).rejects.toBeInstanceOf(RedirectRefusedError);
+    // Called EXACTLY once: forced redirect:"manual", never followed → the token/proof never reached
+    // the server-chosen Location (the token-leak the fix closes).
+    expect(underlying).toHaveBeenCalledTimes(1);
+  });
+
+  it("solidDpopFetch: refuses EVERY moved-redirect status (301/302/303/307/308)", async () => {
+    const st = await stateFor();
+    for (const status of [301, 302, 303, 307, 308]) {
+      const underlying = vi.fn(async () => redirectResponse(status));
+      const f = buildSolidDpopFetch(
+        { accessToken: st.accessToken, dpopKeyJwk: st.dpopKeyJwk },
+        { fetch: underlying as never },
+      );
+      await expect(f(POD)).rejects.toBeInstanceOf(RedirectRefusedError);
+      expect(underlying).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it("solidDpopFetch: even a caller-supplied redirect:'follow' cannot re-enable following (override is structural)", async () => {
+    const underlying = vi.fn(async () => redirectResponse(302));
+    const st = await stateFor();
+    const f = buildSolidDpopFetch(
+      { accessToken: st.accessToken, dpopKeyJwk: st.dpopKeyJwk },
+      { fetch: underlying as never },
+    );
+    await expect(f(POD, { redirect: "follow" } as RequestInit)).rejects.toBeInstanceOf(
+      RedirectRefusedError,
+    );
+    expect(underlying).toHaveBeenCalledTimes(1);
+  });
+
+  it("solidDpopFetch: the RedirectRefusedError carries the request URL + status and leaks no token", async () => {
+    const underlying = vi.fn(async () => redirectResponse(307, "https://attacker.example/steal"));
+    const st = await stateFor();
+    const f = buildSolidDpopFetch(
+      { accessToken: st.accessToken, dpopKeyJwk: st.dpopKeyJwk },
+      { fetch: underlying as never },
+    );
+    let err: unknown;
+    try {
+      await f(POD);
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toBeInstanceOf(RedirectRefusedError);
+    const e = err as RedirectRefusedError;
+    expect(e.status).toBe(307);
+    expect(e.url).toBe(POD);
+    expect(e.message).not.toContain(st.accessToken);
+  });
+
+  it("buildDpopCustomFetch: a 302 on the TOKEN leg is REFUSED — the proof/code is not re-sent", async () => {
+    const underlying = vi.fn(async () => redirectResponse(302));
+    const kp = await generateDpopKeyPair();
+    const cf = buildDpopCustomFetch(kp, underlying as never, false);
+    await expect(
+      cf("https://op.example/token", {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          grant_type: "authorization_code",
+          code: "c",
+          code_verifier: "v",
+        }),
+      }),
+    ).rejects.toBeInstanceOf(RedirectRefusedError);
+    expect(underlying).toHaveBeenCalledTimes(1);
+  });
+
+  it("buildDpopCustomFetch: the UNcredentialed discovery (GET) leg still FOLLOWS a 302 — NOT refused", async () => {
+    // Discovery/JWKS/userinfo carry no credential → they must NOT be redirect-refused (public OIDC
+    // metadata legitimately redirects). They pass through the RAW underlying, so a 302 is RETURNED,
+    // not thrown — proving credentialed-vs-uncredentialed is kept distinct.
+    const underlying = vi.fn(async () => redirectResponse(302));
+    const kp = await generateDpopKeyPair();
+    const cf = buildDpopCustomFetch(kp, underlying as never, false);
+    const res = await cf("https://op.example/.well-known/openid-configuration", { method: "GET" });
+    expect(res.status).toBe(302);
+    expect(underlying).toHaveBeenCalledTimes(1);
+  });
+
+  it("buildDpopCustomFetch: the UNcredentialed JWKS (GET) leg is likewise NOT redirect-refused", async () => {
+    const underlying = vi.fn(async () => redirectResponse(302));
+    const kp = await generateDpopKeyPair();
+    const cf = buildDpopCustomFetch(kp, underlying as never, false);
+    const res = await cf("https://op.example/jwks", { method: "GET" });
+    expect(res.status).toBe(302);
+    expect(underlying).toHaveBeenCalledTimes(1);
   });
 });
 
