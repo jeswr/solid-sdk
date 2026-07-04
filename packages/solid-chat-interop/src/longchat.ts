@@ -285,9 +285,10 @@ export function parseLongChatMessage(
  * `now` when omitted.
  */
 export function buildLongChatMessage(subject: string, msg: CanonicalMessage): Store {
-  // Fail closed on a non-http(s) / injection-bearing subject and use the CANONICAL
-  // form (see `buildAs2Message` for the rationale — the subject becomes the
-  // message's `<subject>` NamedNode and `n3.Writer` does not escape IRIs).
+  // Fail closed on a non-http(s) / injection-bearing subject; the guard returns the
+  // injection-safe (percent-escaped, LEXICAL) form (see `buildAs2Message` for the
+  // rationale — the subject becomes the message's `<subject>` NamedNode and
+  // `n3.Writer` does not escape IRIs).
   const safeSubject = safeHttpIri(subject);
   if (safeSubject === undefined) {
     throw new TypeError(

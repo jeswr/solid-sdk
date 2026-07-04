@@ -58,9 +58,10 @@ function resolveId(value, baseIri) {
     const v = value?.trim();
     if (!v)
         return undefined;
-    // An already-absolute http(s) id is used as-is — but CANONICALISED (never the raw
-    // value), so an id like `http://e/a>b` cannot carry an IRI-injection character
-    // into the canonical model and thence into `n3.Writer`.
+    // An already-absolute http(s) id is used as-is — but injection-safe-ESCAPED
+    // (never the raw value), so an id like `http://e/a>b` cannot carry an IRI-injection
+    // character into the canonical model and thence into `n3.Writer`. (The base-relative
+    // branch below does the URL canonicalisation explicitly via `new URL`, not here.)
     const direct = safeHttpIri(v);
     if (direct !== undefined)
         return direct;
