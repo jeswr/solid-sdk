@@ -1004,6 +1004,37 @@ function unsigned(vc) {
   const { proof: _proof, ...rest } = vc;
   return rest;
 }
+function normalizeRelatedResources(value) {
+  if (value === void 0) return { entries: [] };
+  if (!Array.isArray(value)) {
+    return {
+      error: { code: "MALFORMED", message: "relatedResource must be an array when present" }
+    };
+  }
+  const entries = [];
+  for (const raw of value) {
+    if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+      return {
+        error: { code: "MALFORMED", message: "relatedResource entry must be an object" }
+      };
+    }
+    const entry = raw;
+    if (typeof entry.id !== "string" || entry.id.length === 0) {
+      return {
+        error: {
+          code: "MALFORMED",
+          message: "relatedResource entry must carry a non-empty string id"
+        }
+      };
+    }
+    entries.push({
+      id: entry.id,
+      ...typeof entry.digestMultibase === "string" ? { digestMultibase: entry.digestMultibase } : {},
+      ...typeof entry.mediaType === "string" ? { mediaType: entry.mediaType } : {}
+    });
+  }
+  return { entries };
+}
 async function checkPresentedResource(related, iri, presented) {
   const entries = related.filter((r) => r.id === iri);
   if (entries.length === 0) {
@@ -1045,10 +1076,13 @@ async function checkPresentedResource(related, iri, presented) {
   return [];
 }
 async function verifyRelatedResources(credential, presentedResources) {
-  const related = credential.relatedResource ?? [];
+  const normalized = normalizeRelatedResources(credential.relatedResource);
+  if ("error" in normalized) {
+    return { verified: false, errors: [normalized.error], issuer: credential.issuer };
+  }
   const errors = [];
   for (const [iri, presented] of Object.entries(presentedResources)) {
-    errors.push(...await checkPresentedResource(related, iri, presented));
+    errors.push(...await checkPresentedResource(normalized.entries, iri, presented));
   }
   return errors.length === 0 ? { verified: true, errors: [], issuer: credential.issuer } : { verified: false, errors, issuer: credential.issuer };
 }
@@ -1088,8 +1122,13 @@ async function verifyCredential(vc, options) {
     errors.push({ code: "UNTRUSTED_ISSUER", message: `issuer ${issuer} is not trusted` });
   }
   if (options.presentedResources !== void 0) {
-    for (const [iri, presented] of Object.entries(options.presentedResources)) {
-      errors.push(...await checkPresentedResource(vc.relatedResource ?? [], iri, presented));
+    const normalized = normalizeRelatedResources(vc.relatedResource);
+    if ("error" in normalized) {
+      errors.push(normalized.error);
+    } else {
+      for (const [iri, presented] of Object.entries(options.presentedResources)) {
+        errors.push(...await checkPresentedResource(normalized.entries, iri, presented));
+      }
     }
   }
   let documentQuads;

@@ -90,6 +90,59 @@ function unsigned(vc: VerifiableCredential): Credential {
 }
 
 /**
+ * Validate + normalise a credential's `relatedResource` field FAIL-CLOSED before
+ * the digest gate touches it. The value comes off an UNTRUSTED credential, so
+ * the compile-time `readonly RelatedResource[]` type is not a runtime guarantee:
+ * a hostile/malformed credential can carry `relatedResource: { … }` (a non-array
+ * object — `.filter` would throw), `[null]` (a null entry — reading `.id` would
+ * throw), or `[{}]` (an entry with no `id`). The verifier must REJECT such a
+ * credential with a structured `MALFORMED` result, NEVER crash — a thrown
+ * exception in the verify path is a fail-OPEN surface (the caller's try/catch,
+ * if any, cannot distinguish "verifier bug" from "invalid credential").
+ *
+ * Returns the cleaned entries when every entry is a well-formed object with a
+ * non-empty string `id`; otherwise a single `MALFORMED` error (and no entries).
+ * A well-formed entry that merely LACKS `digestMultibase` is NOT malformed here
+ * — it is a legitimate (unbound) entry that {@link checkPresentedResource}
+ * rejects with `RELATED_RESOURCE_MISSING` only if that resource is presented.
+ */
+function normalizeRelatedResources(
+  value: unknown,
+): { entries: RelatedResource[] } | { error: VerificationError } {
+  if (value === undefined) return { entries: [] };
+  if (!Array.isArray(value)) {
+    return {
+      error: { code: "MALFORMED", message: "relatedResource must be an array when present" },
+    };
+  }
+  const entries: RelatedResource[] = [];
+  for (const raw of value) {
+    if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+      return {
+        error: { code: "MALFORMED", message: "relatedResource entry must be an object" },
+      };
+    }
+    const entry = raw as Record<string, unknown>;
+    if (typeof entry.id !== "string" || entry.id.length === 0) {
+      return {
+        error: {
+          code: "MALFORMED",
+          message: "relatedResource entry must carry a non-empty string id",
+        },
+      };
+    }
+    entries.push({
+      id: entry.id,
+      ...(typeof entry.digestMultibase === "string"
+        ? { digestMultibase: entry.digestMultibase }
+        : {}),
+      ...(typeof entry.mediaType === "string" ? { mediaType: entry.mediaType } : {}),
+    });
+  }
+  return { entries };
+}
+
+/**
  * Check ONE presented resource against the credential's signed
  * `relatedResource` digest bindings. Fail-closed in every branch:
  *
@@ -171,10 +224,15 @@ export async function verifyRelatedResources(
   credential: Credential,
   presentedResources: Readonly<Record<string, PresentedResourceContent>>,
 ): Promise<VerificationResult> {
-  const related = credential.relatedResource ?? [];
+  // FAIL-CLOSED on a malformed relatedResource shape (non-array / null entry /
+  // id-less entry) → a MALFORMED result, never a thrown crash.
+  const normalized = normalizeRelatedResources(credential.relatedResource as unknown);
+  if ("error" in normalized) {
+    return { verified: false, errors: [normalized.error], issuer: credential.issuer };
+  }
   const errors: VerificationError[] = [];
   for (const [iri, presented] of Object.entries(presentedResources)) {
-    errors.push(...(await checkPresentedResource(related, iri, presented)));
+    errors.push(...(await checkPresentedResource(normalized.entries, iri, presented)));
   }
   return errors.length === 0
     ? { verified: true, errors: [], issuer: credential.issuer }
@@ -247,8 +305,16 @@ export async function verifyCredential(
   // binding is only meaningful when the signature gates ALSO pass (the digest
   // lives in the signed graph), which the single `verified` conjunction enforces.
   if (options.presentedResources !== undefined) {
-    for (const [iri, presented] of Object.entries(options.presentedResources)) {
-      errors.push(...(await checkPresentedResource(vc.relatedResource ?? [], iri, presented)));
+    // Normalise the UNTRUSTED relatedResource shape FAIL-CLOSED first — a
+    // non-array / null-entry / id-less-entry credential becomes a MALFORMED
+    // verification failure, never a thrown crash in the verify path.
+    const normalized = normalizeRelatedResources(vc.relatedResource as unknown);
+    if ("error" in normalized) {
+      errors.push(normalized.error);
+    } else {
+      for (const [iri, presented] of Object.entries(options.presentedResources)) {
+        errors.push(...(await checkPresentedResource(normalized.entries, iri, presented)));
+      }
     }
   }
 

@@ -377,6 +377,82 @@ describe("verifyCredential presentedResources (the fail-closed digest check)", (
   });
 });
 
+describe("verifyCredential — MALFORMED relatedResource fails closed (never throws)", () => {
+  // A hostile/corrupt credential can carry a relatedResource that is not the
+  // typed shape; the verifier must REJECT (MALFORMED), never crash. Each case
+  // is a `verifyCredential(...).resolves` assertion — a thrown error would fail
+  // the promise resolution and the test.
+  async function verifyMalformed(relatedResource: unknown) {
+    const key = await issuerKey();
+    // Sign a valid credential, then swap in a malformed relatedResource so the
+    // ONLY defect is the shape the normaliser must reject.
+    const vc = await issueAgentAuthorization(AUTH, key);
+    const tampered = { ...vc, relatedResource } as unknown as Parameters<
+      typeof verifyCredential
+    >[0];
+    return verifyCredential(tampered, {
+      resolveKey: keyResolver(key),
+      presentedResources: { [POLICY_IRI]: { content: POLICY_TTL } },
+    });
+  }
+
+  it("relatedResource is a non-array OBJECT → MALFORMED, no throw", async () => {
+    const result = await verifyMalformed({ id: POLICY_IRI, digestMultibase: "zabc" });
+    expect(result.verified).toBe(false);
+    expect(result.errors.map((e) => e.code)).toContain("MALFORMED");
+  });
+
+  it("relatedResource has a NULL entry → MALFORMED, no throw", async () => {
+    const result = await verifyMalformed([null]);
+    expect(result.verified).toBe(false);
+    expect(result.errors.map((e) => e.code)).toContain("MALFORMED");
+  });
+
+  it("relatedResource entry is MISSING its fields (empty object) → MALFORMED, no throw", async () => {
+    const result = await verifyMalformed([{}]);
+    expect(result.verified).toBe(false);
+    expect(result.errors.map((e) => e.code)).toContain("MALFORMED");
+  });
+
+  it("relatedResource entry id is not a string → MALFORMED, no throw", async () => {
+    const result = await verifyMalformed([{ id: 42, digestMultibase: "zabc" }]);
+    expect(result.verified).toBe(false);
+    expect(result.errors.map((e) => e.code)).toContain("MALFORMED");
+  });
+
+  it("relatedResource is a string → MALFORMED, no throw", async () => {
+    const result = await verifyMalformed("not-an-array");
+    expect(result.verified).toBe(false);
+    expect(result.errors.map((e) => e.code)).toContain("MALFORMED");
+  });
+
+  it("verifyRelatedResources also fails closed on a malformed shape (no throw)", async () => {
+    const bad = { relatedResource: [null] } as unknown as Parameters<
+      typeof verifyRelatedResources
+    >[0];
+    const result = await verifyRelatedResources(bad, { [POLICY_IRI]: { content: POLICY_TTL } });
+    expect(result.verified).toBe(false);
+    expect(result.errors[0]?.code).toBe("MALFORMED");
+  });
+
+  it("a well-formed entry that merely LACKS a digest is NOT malformed (→ MISSING)", async () => {
+    const key = await issuerKey();
+    const credential = buildAgentAuthorizationCredential(AUTH);
+    const vc = await issue({
+      credential: { ...credential, relatedResource: [{ id: POLICY_IRI }] },
+      key,
+    });
+    const result = await verifyCredential(vc, {
+      resolveKey: keyResolver(key),
+      presentedResources: { [POLICY_IRI]: { content: POLICY_TTL } },
+    });
+    expect(result.verified).toBe(false);
+    const codes = result.errors.map((e) => e.code);
+    expect(codes).toContain("RELATED_RESOURCE_MISSING");
+    expect(codes).not.toContain("MALFORMED");
+  });
+});
+
 describe("verifyRelatedResources (the standalone digest gate)", () => {
   it("passes for the exact and the isomorphic policy", async () => {
     const credential = await buildBoundAgentAuthorizationCredential({
