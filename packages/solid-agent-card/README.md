@@ -123,6 +123,14 @@ private-range-blocking):
 await discoverAgent(untrustedWebId, { fetch: guardedNodeFetch });
 ```
 
+Independently of the injected fetch, `discoverAgent` applies a fail-closed
+**scheme guard** to the pointer itself: a pointer object that is not a
+well-formed absolute `http(s)` IRI (`file:`, `javascript:`, `data:`, `urn:`,
+authority-deficient `https:foo` forms, literals, blank nodes) is **rejected
+before any request is issued** — it never reaches the fetch. The injected guard
+is then responsible only for the remaining http(s) SSRF surface (private
+ranges, DNS rebinding, redirects).
+
 In a browser, CORS only limits which cross-origin *responses* your code can read —
 it does **not** stop the request being *issued* to an internal target, and a
 permissively-CORS internal endpoint could still be read. So treat untrusted
