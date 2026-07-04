@@ -10,7 +10,19 @@ import type { Quad } from '@rdfjs/types';
 export const DEFAULT_FORMAT: "text/turtle";
 
 // @public
+export function escapeIri(value: string): string;
+
+// @public
+export function isHttpIri(value: unknown): value is string;
+
+// @public
 export function legacySerialize(quads: readonly Quad[], format?: string, prefixes?: Readonly<Record<string, string>>, emptyAsEmptyString?: boolean): Promise<string>;
+
+// @public
+export function safeHttpIri(value: unknown): string | undefined;
+
+// @public
+export function safeIri(value: unknown): string | undefined;
 
 // @public
 export function serialize(quads: readonly Quad[], options?: SerializeOptions): Promise<string>;

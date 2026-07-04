@@ -79,6 +79,73 @@ The string `"text/turtle"` — the default media type.
 
 The options interface for `serialize` (re-exported as a type).
 
+## IRI-safety helpers
+
+`n3.Writer` emits an IRI **verbatim** between angle brackets — it does not
+escape it. So an IRI value that itself contains a `>` (or a space, `<`, `"`,
+`{`, `}`, `|`, `^`, backtick, backslash, or a C0 control) **breaks out of the
+brackets and injects arbitrary triples** whenever that value came from untrusted
+input (parsed RDF re-read as a string, a JSON/API field, a user-supplied URL, an
+HTTP header). A bare `startsWith("http")` / `new URL()` check is **not enough**:
+
+```
+http://evil/> <https://evil/s> <https://evil/o> .
+```
+
+passes `new URL()` yet still injects. This package exports the **single
+canonical, audited** IRI-safety helper set so every `@jeswr` RDF-writing package
+consumes one implementation instead of a hand-copied variant. All of them return
+the **escaped LEXICAL value** — never `new URL().href` — because RDF identity is
+lexical: dropping `:443`, lower-casing the host, or collapsing dot-segments
+changes the IRI's identity (a different `NamedNode`) and must never happen
+silently to data.
+
+#### `escapeIri(value: string): string`
+
+A **purely lexical** percent-encoder of the full Turtle `IRIREF`-forbidden set:
+the whole C0 control range U+0000–U+001F, SPACE, and `< > " { } | ^ ` (backtick)
+`\`. It does **no** URL parsing and **no** canonicalisation — it iterates the
+string by code point and replaces only those forbidden characters with their
+uppercase `%XX` form. It never touches `%` (so there is no double-encoding), and
+astral characters and all IRI-legal punctuation pass through byte-for-byte.
+
+#### `safeHttpIri(value: unknown): string | undefined`
+
+The **definitive http(s)-only guard** for untrusted input (the 6-clause contract
+distilled from ~40 cumulative adversarial review rounds). It returns `undefined`
+unless, in order: `value` is a string; it has no leading/trailing C0-control or
+space; the escape-first result parses (`new URL`); its scheme is `http:`/`https:`;
+and it has a **non-empty lexical authority** (so authority-less `https:example.com`
+and empty-authority `https:///foo` / `http:////foo` / `https://?x` are rejected).
+On success it returns the escaped lexical value byte-identical (`:443`, host-case
+and dot-segments survive).
+
+#### `safeIri(value: unknown): string | undefined`
+
+The **scheme-agnostic** sibling of `safeHttpIri`: same escape-first +
+leading/trailing-control/space rejection, but it accepts **any absolute
+`scheme:` IRI** (`urn:`, `did:`, `mailto:`, `http:`, …) and does not require an
+authority, returning the escaped lexical value. A schemeless / relative
+reference (`/foo`, `foo/bar`, `#frag`) yields `undefined`.
+
+#### `isHttpIri(value: unknown): value is string`
+
+A lexical **safety predicate** (type-narrowing): `true` iff `value` is a string,
+an absolute `http:`/`https:` URL, and contains **no** raw `IRIREF`-forbidden
+character. It deliberately accepts benign canonicalisation differences (a missing
+trailing slash, an upper-case host) — it does **not** require
+`value === safeHttpIri(value)`.
+
+### When to use each
+
+| Field | Helper |
+|---|---|
+| An **http(s)** resource / WebID / URL field from untrusted input | `safeHttpIri(v)` — drop the field when it returns `undefined` |
+| A **scheme-agnostic object IRI** (may be `urn:` / `did:` / `mailto:`) | `safeIri(v)` |
+| A **subject / id you have already validated** as the right scheme and just need injection-safe | `escapeIri(v)` |
+| An **exact-match evaluation** field where lexical identity matters (e.g. comparing a policy target) | reject when `safeHttpIri(v) !== v` |
+| A cheap **guard / type-narrow** ("is this already a safe http(s) IRI?") | `isHttpIri(v)` |
+
 ## The two divergences this consolidates
 
 The five copies were identical except for two things, both now options:
