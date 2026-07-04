@@ -141,6 +141,84 @@ describe("importCalendar", () => {
     }
   });
 
+  // POD-SCOPE HARDENING (raw-string sweep, security/podscope-rawstring): the
+  // container/scope logic now goes through `@jeswr/guarded-fetch`'s
+  // `normalizePodBase`/`assertWithinPodScope` (parsed via `new URL()`, decides the
+  // trailing slash from the PATH only) instead of a bespoke `container.endsWith("/")`
+  // / `resolved.startsWith(base)` raw-string check. The bespoke check was fooled by a
+  // container whose PATH lacked a trailing slash but whose QUERY/FRAGMENT happened to
+  // END in "/" (e.g. `.../other?x=/`) — `.endsWith("/")` read that as "already
+  // slash-terminated", so a resolved child landed as a SIBLING of `/other` (e.g.
+  // `.../evt-0.ttl`) instead of nested under it (`.../other/evt-0.ttl`). These pin the
+  // corrected behaviour: the query/fragment is discarded and the trailing slash is
+  // decided from the real path, so every child still resolves strictly under the
+  // intended container.
+  it("POD-SCOPE: a container whose QUERY ends in '/' cannot smuggle a non-slash path past the check", async () => {
+    const { fetchFn, calls } = recordingFetch();
+    await importCalendar({
+      writeFetch: fetchFn,
+      container: `${CONTAINER.slice(0, -1)}?x=/`, // .../dav?x=/  (path has NO trailing slash)
+      icsText: veventWithRrule,
+      slug: () => "evt-0.ttl",
+    });
+    expect(calls).toHaveLength(1);
+    const url = calls[0]?.url ?? "";
+    // Correct: nested under the real container path, not a sibling of it, and no
+    // query string survives onto the written resource URL.
+    expect(url).toBe(`${CONTAINER}evt-0.ttl`);
+  });
+
+  it("POD-SCOPE: a container whose FRAGMENT ends in '/' cannot smuggle a non-slash path past the check", async () => {
+    const { fetchFn, calls } = recordingFetch();
+    await importCalendar({
+      writeFetch: fetchFn,
+      container: `${CONTAINER.slice(0, -1)}#/`, // .../dav#/  (path has NO trailing slash)
+      icsText: veventWithRrule,
+      slug: () => "evt-0.ttl",
+    });
+    expect(calls).toHaveLength(1);
+    const url = calls[0]?.url ?? "";
+    expect(url).toBe(`${CONTAINER}evt-0.ttl`);
+  });
+
+  it("POD-SCOPE: a real, already-normalised container is accepted unchanged", async () => {
+    const { fetchFn, calls } = recordingFetch();
+    await importCalendar({
+      writeFetch: fetchFn,
+      container: CONTAINER,
+      icsText: veventWithRrule,
+      slug: () => "evt-0.ttl",
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.url).toBe(`${CONTAINER}evt-0.ttl`);
+  });
+
+  it("POD-SCOPE: a child path resolves correctly (strictly nested, no escape)", async () => {
+    const { fetchFn, calls } = recordingFetch();
+    await importCalendar({
+      writeFetch: fetchFn,
+      container: CONTAINER,
+      icsText: veventWithRrule,
+      slug: () => "sub/evt-0.ttl", // the "/" is sanitised, but confirm the resolved child stays nested
+    });
+    expect(calls).toHaveLength(1);
+    const url = calls[0]?.url ?? "";
+    expect(url.startsWith(CONTAINER)).toBe(true);
+    expect(url).not.toBe(CONTAINER);
+  });
+
+  it("POD-SCOPE: a container escaping to a foreign origin is rejected", async () => {
+    const { fetchFn } = recordingFetch();
+    await expect(
+      importCalendar({
+        writeFetch: fetchFn,
+        container: "javascript:alert(1)//",
+        icsText: veventWithRrule,
+        slug: () => "evt-0.ttl",
+      }),
+    ).rejects.toThrow(/container/);
+  });
+
   it("if-none-match conditional adds If-None-Match: *", async () => {
     const { fetchFn, calls } = recordingFetch();
     await importCalendar({
