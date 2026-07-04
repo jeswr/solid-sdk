@@ -1,6 +1,7 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 import { describe, expect, it } from "vitest";
 import {
+  asContainer,
   assertBarcode,
   assertUlid,
   conclusionUrl,
@@ -96,5 +97,42 @@ describe("pod layout", () => {
     expect(containerOf("https://alice.example/health/diary/meals/2026/07/x.ttl")).toBe(
       "https://alice.example/health/diary/meals/2026/07/",
     );
+  });
+
+  describe("query/fragment-smuggling regression (podscope-rawstring)", () => {
+    it("asContainer uses the PARSED PATH, not a raw-string endsWith(\"/\") check", () => {
+      // A raw string ending in "/" via its query/fragment (path does NOT end in "/")
+      // must still be normalised on the path, not accepted as-is.
+      expect(asContainer("https://alice.example/pod?x=/")).toBe("https://alice.example/pod/");
+      expect(asContainer("https://alice.example/pod#/")).toBe("https://alice.example/pod/");
+      // And the query/fragment must never survive into the normalised container address.
+      expect(asContainer("https://alice.example/pod?x=/")).not.toContain("?");
+      expect(asContainer("https://alice.example/pod#/")).not.toContain("#");
+    });
+
+    it("diaryRoot resolves the sub-path correctly even from a query/fragment-bearing root (no swallowed suffix)", () => {
+      // Before the fix, string-concatenating "health/diary/" onto a root with a
+      // surviving query/fragment would land the suffix INSIDE the query/fragment
+      // (e.g. "https://alice.example/pod?x=/health/diary/") rather than extending the
+      // path — so a fetch to that address would hit "/pod", not "/pod/health/diary/".
+      expect(diaryRoot("https://alice.example/pod?x=/")).toBe(
+        "https://alice.example/pod/health/diary/",
+      );
+      expect(diaryRoot("https://alice.example/pod#/")).toBe(
+        "https://alice.example/pod/health/diary/",
+      );
+      // Sub-path resolution off a query/fragment-bearing root is also correct end-to-end.
+      const ulid = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
+      const at = new Date("2026-07-03T12:00:00Z");
+      expect(mealUrl("https://alice.example/pod?x=/", at, ulid)).toBe(
+        `https://alice.example/pod/health/diary/meals/2026/07/${ulid}.ttl`,
+      );
+    });
+
+    it("asContainer still rejects non-http(s), credentialed, and encoded-delimiter bases (fail-closed)", () => {
+      expect(() => asContainer("ftp://alice.example/pod/")).toThrow();
+      expect(() => asContainer("https://user:pass@alice.example/pod/")).toThrow();
+      expect(() => asContainer("https://alice.example/pod%2f../")).toThrow();
+    });
   });
 });

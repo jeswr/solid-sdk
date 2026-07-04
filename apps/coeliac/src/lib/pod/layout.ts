@@ -1,4 +1,4 @@
-// AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+// AUTHORED-BY Claude Sonnet 5
 /**
  * Pod storage layout for the health diary (DESIGN §2.3). Pure URL helpers — no
  * I/O — so they are exhaustively unit-testable and cannot hide a path-traversal
@@ -12,25 +12,46 @@
  *   cache/off/{barcode}.ttl
  * ```
  */
+import { normalizePodBase } from "@jeswr/guarded-fetch";
 
-/** Ensure a base URL ends with a single trailing slash (a container URL). */
+/**
+ * Ensure a base URL is a canonical container ADDRESS — an absolute http(s) URL with
+ * exactly one trailing `/`, no query/fragment, no embedded credentials, and no encoded
+ * path delimiter — by delegating to `@jeswr/guarded-fetch`'s `normalizePodBase` (the
+ * suite's one reviewed home for pod-scope base normalisation).
+ *
+ * This closes a real smuggling hole a naive raw-string check has: a value like
+ * `https://host/pod?x=/` or `https://host/pod#/` has a raw STRING that already ends in
+ * `/` (so `url.endsWith("/")` treats it as "already a container") even though the URL's
+ * actual PATH does not end in `/` — and the query/fragment survives into any later
+ * `${root}sub/path` concatenation, where it silently swallows the appended segment
+ * instead of extending the path, so the resulting address resolves (and is fetched) at
+ * the WRONG resource. `normalizePodBase` checks/normalises on the PARSED path and always
+ * strips query + fragment, so the returned string can never carry either.
+ *
+ * @throws {PodScopeError} if `url` is not an absolute http(s) URL, embeds credentials
+ *   (`user:pass@`), or contains an encoded path delimiter (`%2F`/`%5C`).
+ */
 export function asContainer(url: string): string {
-  return url.endsWith("/") ? url : `${url}/`;
+  return normalizePodBase(url);
 }
 
 /**
  * The diary root container for a storage root, e.g.
  * `https://alice.example/` → `https://alice.example/health/diary/`.
  *
- * @throws if `storageRoot` is not an absolute http(s) URL.
+ * `storageRoot` is normalised to a clean container address FIRST (`asContainer`,
+ * stripping any query/fragment and validating http(s)); the diary sub-path is then
+ * resolved against that clean base with `new URL()` rather than raw string
+ * concatenation, so even a future change to `asContainer`'s contract can't reopen the
+ * query/fragment-swallows-the-suffix bug — the sub-path is built through the URL
+ * parser, not string-glued onto whatever `storageRoot` happened to contain.
+ *
+ * @throws {PodScopeError} if `storageRoot` is not an absolute http(s) URL.
  */
 export function diaryRoot(storageRoot: string): string {
-  const root = asContainer(storageRoot);
-  const u = new URL(root); // throws on a non-absolute URL
-  if (u.protocol !== "https:" && u.protocol !== "http:") {
-    throw new Error(`storageRoot must be http(s): ${storageRoot}`);
-  }
-  return `${root}health/diary/`;
+  const root = asContainer(storageRoot); // throws on a non-http(s)/malformed base
+  return new URL("health/diary/", root).toString();
 }
 
 /** The meals container (`…/health/diary/meals/`). */
