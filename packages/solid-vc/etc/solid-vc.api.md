@@ -16,6 +16,8 @@ export interface AgentAuthorization {
     readonly agent: string;
     readonly id?: string;
     readonly policy?: string;
+    readonly policyContent?: string;
+    readonly policyContentType?: string;
     readonly principal: string;
     readonly target?: string;
     readonly validFrom?: string;
@@ -35,6 +37,9 @@ export function base58btcEncode(bytes: Uint8Array): string;
 export function buildAgentAuthorizationCredential(auth: AgentAuthorization): Credential_2;
 
 // @public
+export function buildBoundAgentAuthorizationCredential(auth: AgentAuthorization): Promise<Credential_2>;
+
+// @public
 export function canonicalNQuads(quads: readonly Quad[]): Promise<string>;
 
 // @public
@@ -42,6 +47,7 @@ interface Credential_2 {
     readonly credentialSubject: CredentialSubject | readonly CredentialSubject[];
     readonly id?: string;
     readonly issuer: string;
+    readonly relatedResource?: readonly RelatedResource[];
     readonly type?: readonly string[];
     readonly validFrom?: string;
     readonly validUntil?: string;
@@ -122,6 +128,12 @@ export class DataIntegritySuite implements ProofSuite {
 export function defaultSuiteRegistry(): SuiteRegistry;
 
 // @public
+export function digestQuads(quads: readonly Quad[]): Promise<string>;
+
+// @public
+export function digestRdfContent(content: string, contentType?: string): Promise<string>;
+
+// @public
 export function exportPrivateJwk(key: KeyPair): Promise<JWK>;
 
 // @public
@@ -195,6 +207,12 @@ export class PresentationNode extends TermWrapper {
 }
 
 // @public
+export interface PresentedResourceContent {
+    readonly content: string;
+    readonly contentType?: string;
+}
+
+// @public
 export class ProofNode extends TermWrapper {
     // (undocumented)
     get createds(): Set<TermWrapper>;
@@ -233,6 +251,19 @@ export interface ProofVerifyOptions {
 }
 
 // @public
+export interface RelatedResource {
+    readonly digestMultibase?: string;
+    readonly id: string;
+    readonly mediaType?: string;
+}
+
+// @public
+export function relatedResourcesFromNode(node: CredentialNode): RelatedResource[];
+
+// @public
+export const SEC_DIGEST_MULTIBASE: "https://w3id.org/security#digestMultibase";
+
+// @public
 export function serialize(quads: readonly Quad[], format?: string): Promise<string>;
 
 // @public
@@ -253,6 +284,9 @@ export const SVC_AGENT_AUTHORIZATION: "https://w3id.org/jeswr/solid-vc#AgentAuth
 
 // @public
 export const VC: "https://www.w3.org/2018/credentials#";
+
+// @public
+export const VC_RELATED_RESOURCE: "https://www.w3.org/2018/credentials#relatedResource";
 
 // @public
 export const VC_V2_CONTEXT: "https://www.w3.org/ns/credentials/v2";
@@ -281,7 +315,7 @@ export interface VerificationError {
 }
 
 // @public
-export type VerificationErrorCode = "MALFORMED" | "NO_PROOF" | "UNKNOWN_CRYPTOSUITE" | "INVALID_SIGNATURE" | "EXPIRED" | "NOT_YET_VALID" | "ISSUER_MISMATCH" | "PROOF_PURPOSE_MISMATCH" | "UNTRUSTED_ISSUER";
+export type VerificationErrorCode = "MALFORMED" | "NO_PROOF" | "UNKNOWN_CRYPTOSUITE" | "INVALID_SIGNATURE" | "EXPIRED" | "NOT_YET_VALID" | "ISSUER_MISMATCH" | "PROOF_PURPOSE_MISMATCH" | "UNTRUSTED_ISSUER" | "RELATED_RESOURCE_MISSING" | "RELATED_RESOURCE_MISMATCH";
 
 // @public
 export interface VerificationResult {
@@ -296,6 +330,7 @@ export function verifyCredential(vc: VerifiableCredential, options: VerifyCreden
 // @public
 export interface VerifyCredentialOptions extends VerifyOptions {
     readonly isControlledBy?: (verificationMethod: string, issuer: string) => boolean;
+    readonly presentedResources?: Readonly<Record<string, PresentedResourceContent>>;
     readonly registry?: SuiteRegistry;
     readonly resolveKey: ProofVerifyOptions["resolveKey"];
 }
@@ -306,6 +341,9 @@ export interface VerifyOptions {
     readonly now?: Date;
     readonly trustedIssuers?: readonly string[];
 }
+
+// @public
+export function verifyRelatedResources(credential: Credential_2, presentedResources: Readonly<Record<string, PresentedResourceContent>>): Promise<VerificationResult>;
 
 // @public
 export function wrapVc(dataset: DatasetCore): VcDataset;

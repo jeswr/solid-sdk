@@ -41,14 +41,15 @@
  * @packageDocumentation
  */
 export { canonicalNQuads, dataIntegrityHash } from "./canonicalize.js";
-export { agentAuthorizationFromRdf, buildAgentAuthorizationCredential, credentialFromRdf, credentialMetaFromNode, credentialToJsonLd, credentialToRdf, credentialToTurtle, parseCredentialRdf, } from "./credential.js";
+export { agentAuthorizationFromRdf, buildAgentAuthorizationCredential, buildBoundAgentAuthorizationCredential, credentialFromRdf, credentialMetaFromNode, credentialToJsonLd, credentialToRdf, credentialToTurtle, parseCredentialRdf, relatedResourcesFromNode, } from "./credential.js";
+export { digestQuads, digestRdfContent } from "./digest.js";
 export { type IssueInput, issue, issueAgentAuthorization } from "./issue.js";
 export { cryptosuiteForKeyType, exportPrivateJwk, exportPublicJwk, generateKeyPairForSuite, importKeyPair, importPublicKey, type SuiteKeyType, } from "./keys.js";
 export { base58btcDecode, base58btcEncode } from "./multibase.js";
 export { DataIntegritySuite, defaultSuiteRegistry, type ProofSignOptions, type ProofSuite, type ProofVerifyOptions, proofOptionsQuads, SuiteRegistry, } from "./proof.js";
 export { serialize } from "./serialize.js";
-export type { AgentAuthorization, Credential, CredentialSubject, DataIntegrityProof, IssueOptions, JsonValue, KeyPair, Presentation, VerifiableCredential, VerifiablePresentation, VerificationError, VerificationErrorCode, VerificationResult, VerifyOptions, } from "./types.js";
-export { type VerifyCredentialOptions, verifyCredential } from "./verify.js";
-export { SVC, SVC_AGENT_AUTHORIZATION, VC, VC_V2_CONTEXT, } from "./vocab.js";
+export type { AgentAuthorization, Credential, CredentialSubject, DataIntegrityProof, IssueOptions, JsonValue, KeyPair, Presentation, PresentedResourceContent, RelatedResource, VerifiableCredential, VerifiablePresentation, VerificationError, VerificationErrorCode, VerificationResult, VerifyOptions, } from "./types.js";
+export { type VerifyCredentialOptions, verifyCredential, verifyRelatedResources, } from "./verify.js";
+export { SEC_DIGEST_MULTIBASE, SVC, SVC_AGENT_AUTHORIZATION, VC, VC_RELATED_RESOURCE, VC_V2_CONTEXT, } from "./vocab.js";
 export { CredentialNode, PresentationNode, ProofNode, VcDataset, wrapVc, } from "./wrappers.js";
 //# sourceMappingURL=index.d.ts.map

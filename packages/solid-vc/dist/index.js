@@ -178,6 +178,42 @@ function waitForDrain(parser) {
   });
 }
 
+// src/digest.ts
+import { createHash as createHash2 } from "node:crypto";
+
+// src/multibase.ts
+import { base58btc } from "multiformats/bases/base58";
+function base58btcEncode(bytes) {
+  return base58btc.encode(bytes);
+}
+function base58btcDecode(value) {
+  return base58btc.decode(value);
+}
+
+// src/digest.ts
+var MULTIHASH_SHA2_256_PREFIX = Uint8Array.from([18, 32]);
+function sha256Multihash(digest) {
+  const out = new Uint8Array(MULTIHASH_SHA2_256_PREFIX.length + digest.length);
+  out.set(MULTIHASH_SHA2_256_PREFIX, 0);
+  out.set(digest, MULTIHASH_SHA2_256_PREFIX.length);
+  return base58btcEncode(out);
+}
+async function digestQuads(quads) {
+  const canonical = await canonicalNQuads(quads);
+  const digest = new Uint8Array(createHash2("sha256").update(canonical, "utf8").digest());
+  return sha256Multihash(digest);
+}
+async function digestRdfContent(content, contentType2 = "text/turtle") {
+  const dataset = await parseRdf(content, contentType2);
+  const quads = [...dataset.match()];
+  if (quads.length === 0) {
+    throw new Error(
+      "@jeswr/solid-vc: refusing to digest an EMPTY RDF graph \u2014 the content parsed to zero quads (wrong contentType, or an empty policy document). A digest over nothing binds nothing."
+    );
+  }
+  return digestQuads(quads);
+}
+
 // src/iri.ts
 var IRI_FORBIDDEN = /[\u0000-\u0020<>"{}|^`\\]/g;
 function percentEncode(ch) {
@@ -263,6 +299,10 @@ var VC_CREDENTIAL_SUBJECT = `${VC}credentialSubject`;
 var VC_VALID_FROM = `${VC}validFrom`;
 var VC_VALID_UNTIL = `${VC}validUntil`;
 var VC_CREDENTIAL_STATUS = `${VC}credentialStatus`;
+var VC_RELATED_RESOURCE = `${VC}relatedResource`;
+var SEC_DIGEST_MULTIBASE = `${SEC}digestMultibase`;
+var SEC_MULTIBASE = `${SEC}multibase`;
+var SCHEMA_ENCODING_FORMAT = `${SCHEMA}encodingFormat`;
 var VC_VERIFIABLE_CREDENTIAL = `${VC}verifiableCredential`;
 var VC_HOLDER = `${VC}holder`;
 var SEC_PROOF = `${SEC}proof`;
@@ -562,6 +602,17 @@ function writeClaim(b, subject, claim, value) {
     writeClaim(b, child, k, v);
   }
 }
+function writeRelatedResource(b, credential, related) {
+  const idIri = requireObjectIri(related.id, "relatedResource.id");
+  b.addIri(credential, VC_RELATED_RESOURCE, idIri);
+  const node = iriRef(idIri);
+  if (related.digestMultibase !== void 0) {
+    b.addLiteral(node, SEC_DIGEST_MULTIBASE, related.digestMultibase, SEC_MULTIBASE);
+  }
+  if (related.mediaType !== void 0) {
+    b.addLiteral(node, SCHEMA_ENCODING_FORMAT, related.mediaType);
+  }
+}
 function credentialToRdf(credential) {
   const id = credential.id ?? `urn:uuid:${randomUUID()}`;
   const subject = iriRef(id);
@@ -580,6 +631,9 @@ function credentialToRdf(credential) {
   }
   if (credential.validUntil !== void 0) {
     b.addLiteral(subject, VC_VALID_UNTIL, credential.validUntil, `${XSD}dateTime`);
+  }
+  for (const related of credential.relatedResource ?? []) {
+    writeRelatedResource(b, subject, related);
   }
   const subjects = Array.isArray(credential.credentialSubject) ? credential.credentialSubject : [credential.credentialSubject];
   for (const s of subjects) {
@@ -602,6 +656,16 @@ function credentialToJsonLd(credential) {
   };
   if (credential.validFrom !== void 0) doc.validFrom = credential.validFrom;
   if (credential.validUntil !== void 0) doc.validUntil = credential.validUntil;
+  if (credential.relatedResource !== void 0 && credential.relatedResource.length > 0) {
+    for (const related of credential.relatedResource) {
+      requireObjectIri(related.id, "relatedResource.id");
+    }
+    doc.relatedResource = credential.relatedResource.map((related) => ({
+      id: related.id,
+      ...related.digestMultibase !== void 0 ? { digestMultibase: related.digestMultibase } : {},
+      ...related.mediaType !== void 0 ? { mediaType: related.mediaType } : {}
+    }));
+  }
   const subjects = Array.isArray(credential.credentialSubject) ? credential.credentialSubject : [credential.credentialSubject];
   const normalized = subjects.map(subjectWithNormalizedId);
   doc.credentialSubject = normalized.length === 1 ? normalized[0] : normalized;
@@ -628,6 +692,11 @@ function credentialFromRdf(dataset) {
   return wrapVc(dataset).credentials()[0];
 }
 function buildAgentAuthorizationCredential(auth) {
+  if (auth.policyContent !== void 0) {
+    throw new Error(
+      "@jeswr/solid-vc: buildAgentAuthorizationCredential cannot bind policyContent (digest computation is async) \u2014 use buildBoundAgentAuthorizationCredential / issueAgentAuthorization, which emit the relatedResource digest binding"
+    );
+  }
   const actions = Array.isArray(auth.action) ? auth.action : [auth.action];
   const subject = {
     [SVC_AUTHORIZES]: auth.agent,
@@ -645,6 +714,50 @@ function buildAgentAuthorizationCredential(auth) {
     ...auth.validUntil !== void 0 ? { validUntil: auth.validUntil } : {}
   };
   return credential;
+}
+async function buildBoundAgentAuthorizationCredential(auth) {
+  if (auth.policyContent === void 0) {
+    return buildAgentAuthorizationCredential(auth);
+  }
+  if (auth.policy === void 0) {
+    throw new Error(
+      "@jeswr/solid-vc: policyContent requires a policy IRI \u2014 the content digest binds to the relatedResource id, so an anonymous policy cannot be content-bound"
+    );
+  }
+  const contentType2 = auth.policyContentType ?? "text/turtle";
+  const digestMultibase = await digestRdfContent(auth.policyContent, contentType2);
+  const { policyContent: _c, policyContentType: _ct, ...bare } = auth;
+  const credential = buildAgentAuthorizationCredential(bare);
+  const related = {
+    id: auth.policy,
+    digestMultibase,
+    mediaType: contentType2
+  };
+  return { ...credential, relatedResource: [related] };
+}
+function relatedResourcesFromNode(node) {
+  const dataset = node.dataset;
+  const out = [];
+  for (const quad of dataset.match()) {
+    if (quad.subject.termType !== "NamedNode" || quad.subject.value !== node.value) continue;
+    if (quad.predicate.value !== VC_RELATED_RESOURCE) continue;
+    if (quad.object.termType !== "NamedNode") continue;
+    const id = quad.object.value;
+    let digestMultibase;
+    let mediaType;
+    for (const q of dataset.match()) {
+      if (q.subject.termType !== "NamedNode" || q.subject.value !== id) continue;
+      if (q.object.termType !== "Literal") continue;
+      if (q.predicate.value === SEC_DIGEST_MULTIBASE) digestMultibase = q.object.value;
+      if (q.predicate.value === SCHEMA_ENCODING_FORMAT) mediaType = q.object.value;
+    }
+    out.push({
+      id,
+      ...digestMultibase !== void 0 ? { digestMultibase } : {},
+      ...mediaType !== void 0 ? { mediaType } : {}
+    });
+  }
+  return out;
 }
 function agentAuthorizationFromRdf(node) {
   const meta = credentialMetaFromNode(node);
@@ -698,15 +811,6 @@ function readSubjectClaims(dataset, subjectIri) {
 
 // src/issue.ts
 import { randomUUID as randomUUID2 } from "node:crypto";
-
-// src/multibase.ts
-import { base58btc } from "multiformats/bases/base58";
-function base58btcEncode(bytes) {
-  return base58btc.encode(bytes);
-}
-function base58btcDecode(value) {
-  return base58btc.decode(value);
-}
 
 // src/proof.ts
 var SuiteRegistry = class {
@@ -831,7 +935,7 @@ async function issue(input) {
   return { ...credential, proof };
 }
 async function issueAgentAuthorization(auth, key, opts) {
-  const credential = buildAgentAuthorizationCredential(auth);
+  const credential = auth.policyContent !== void 0 ? await buildBoundAgentAuthorizationCredential(auth) : buildAgentAuthorizationCredential(auth);
   return issue({
     credential,
     key,
@@ -900,6 +1004,54 @@ function unsigned(vc) {
   const { proof: _proof, ...rest } = vc;
   return rest;
 }
+async function checkPresentedResource(related, iri, presented) {
+  const entries = related.filter((r) => r.id === iri);
+  if (entries.length === 0) {
+    return [
+      {
+        code: "RELATED_RESOURCE_MISSING",
+        message: `credential carries no relatedResource digest binding for presented resource ${iri}`
+      }
+    ];
+  }
+  if (entries.some((r) => typeof r.digestMultibase !== "string" || r.digestMultibase.length === 0)) {
+    return [
+      {
+        code: "RELATED_RESOURCE_MISSING",
+        message: `relatedResource entry for ${iri} carries no digestMultibase \u2014 an undigested entry binds nothing`
+      }
+    ];
+  }
+  let recomputed;
+  try {
+    recomputed = await digestRdfContent(presented.content, presented.contentType ?? "text/turtle");
+  } catch (e) {
+    return [
+      {
+        code: "RELATED_RESOURCE_MISMATCH",
+        message: `presented content for ${iri} could not be canonically digested: ${e.message}`
+      }
+    ];
+  }
+  const mismatched = entries.filter((r) => r.digestMultibase !== recomputed);
+  if (mismatched.length > 0) {
+    return [
+      {
+        code: "RELATED_RESOURCE_MISMATCH",
+        message: `digest of presented content for ${iri} (${recomputed}) does not match the signed digestMultibase \u2014 the presented resource is not the content the issuer bound`
+      }
+    ];
+  }
+  return [];
+}
+async function verifyRelatedResources(credential, presentedResources) {
+  const related = credential.relatedResource ?? [];
+  const errors = [];
+  for (const [iri, presented] of Object.entries(presentedResources)) {
+    errors.push(...await checkPresentedResource(related, iri, presented));
+  }
+  return errors.length === 0 ? { verified: true, errors: [], issuer: credential.issuer } : { verified: false, errors, issuer: credential.issuer };
+}
 async function verifyCredential(vc, options) {
   const errors = [];
   const registry = options.registry ?? defaultSuiteRegistry();
@@ -934,6 +1086,11 @@ async function verifyCredential(vc, options) {
   }
   if (options.trustedIssuers !== void 0 && !options.trustedIssuers.includes(issuer)) {
     errors.push({ code: "UNTRUSTED_ISSUER", message: `issuer ${issuer} is not trusted` });
+  }
+  if (options.presentedResources !== void 0) {
+    for (const [iri, presented] of Object.entries(options.presentedResources)) {
+      errors.push(...await checkPresentedResource(vc.relatedResource ?? [], iri, presented));
+    }
   }
   let documentQuads;
   try {
@@ -993,16 +1150,19 @@ export {
   DataIntegritySuite,
   PresentationNode,
   ProofNode,
+  SEC_DIGEST_MULTIBASE,
   SVC,
   SVC_AGENT_AUTHORIZATION,
   SuiteRegistry,
   VC,
+  VC_RELATED_RESOURCE,
   VC_V2_CONTEXT,
   VcDataset,
   agentAuthorizationFromRdf,
   base58btcDecode,
   base58btcEncode,
   buildAgentAuthorizationCredential,
+  buildBoundAgentAuthorizationCredential,
   canonicalNQuads,
   credentialFromRdf,
   credentialMetaFromNode,
@@ -1012,6 +1172,8 @@ export {
   cryptosuiteForKeyType,
   dataIntegrityHash,
   defaultSuiteRegistry,
+  digestQuads,
+  digestRdfContent,
   exportPrivateJwk,
   exportPublicJwk,
   generateKeyPairForSuite,
@@ -1021,8 +1183,10 @@ export {
   issueAgentAuthorization,
   parseCredentialRdf,
   proofOptionsQuads,
+  relatedResourcesFromNode,
   serialize2 as serialize,
   verifyCredential,
+  verifyRelatedResources,
   wrapVc
 };
 //# sourceMappingURL=index.js.map

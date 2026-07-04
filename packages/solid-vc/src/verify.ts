@@ -19,11 +19,14 @@
 // a thrown exception or a silent accept.
 
 import { credentialToRdf } from "./credential.js";
+import { digestRdfContent } from "./digest.js";
 import type { ProofSuite, ProofVerifyOptions, SuiteRegistry } from "./proof.js";
 import { defaultSuiteRegistry } from "./proof.js";
 import type {
   Credential,
   DataIntegrityProof,
+  PresentedResourceContent,
+  RelatedResource,
   VerifiableCredential,
   VerificationError,
   VerificationResult,
@@ -51,6 +54,19 @@ export interface VerifyCredentialOptions extends VerifyOptions {
    * a DID document / WebID profile controller relationship.
    */
   readonly isControlledBy?: (verificationMethod: string, issuer: string) => boolean;
+  /**
+   * The content of related resources the verifier was PRESENTED, keyed by
+   * resource IRI — the G1 policy-content-binding check. For EVERY entry here,
+   * the credential MUST carry a signed `relatedResource` digest for that IRI
+   * and the digest recomputed over the presented content's canonical form
+   * (RDFC-1.0 → sha2-256 → digestMultibase) MUST match — else verification
+   * fails with `RELATED_RESOURCE_MISSING` / `RELATED_RESOURCE_MISMATCH`.
+   * FAIL-CLOSED in every branch: no digest to check against, unparseable
+   * content, and a digest mismatch all reject. (Resources the credential lists
+   * but the caller did not present are NOT checked — the caller asserts which
+   * content it is about to trust.)
+   */
+  readonly presentedResources?: Readonly<Record<string, PresentedResourceContent>>;
 }
 
 /** Default issuer-binding check: the method is the issuer or a fragment/path of it. */
@@ -71,6 +87,98 @@ function proofsOf(vc: VerifiableCredential): DataIntegrityProof[] {
 function unsigned(vc: VerifiableCredential): Credential {
   const { proof: _proof, ...rest } = vc;
   return rest as Credential;
+}
+
+/**
+ * Check ONE presented resource against the credential's signed
+ * `relatedResource` digest bindings. Fail-closed in every branch:
+ *
+ *  - no `relatedResource` entry for the presented IRI → `RELATED_RESOURCE_MISSING`
+ *    (the credential does not bind that resource's content — the exact
+ *    "missing digest" fail-open G1 closes; a bare `svc:policy` IRI is not a binding);
+ *  - an entry WITHOUT `digestMultibase` → `RELATED_RESOURCE_MISSING`;
+ *  - unparseable / empty presented content → `RELATED_RESOURCE_MISMATCH` (content
+ *    that cannot be canonicalized can never be the content the issuer digested);
+ *  - recomputed digest ≠ ANY signed digest for that IRI (duplicate entries must
+ *    ALL agree) → `RELATED_RESOURCE_MISMATCH`.
+ *
+ * The recomputation uses the SAME canonical construction as issuance
+ * ({@link digestRdfContent}: parse → RDFC-1.0 canonical N-Quads → sha2-256 →
+ * multibase multihash), so a reordered-but-isomorphic serialisation of the SAME
+ * policy graph matches, while any semantic change rejects.
+ */
+async function checkPresentedResource(
+  related: readonly RelatedResource[],
+  iri: string,
+  presented: PresentedResourceContent,
+): Promise<VerificationError[]> {
+  const entries = related.filter((r) => r.id === iri);
+  if (entries.length === 0) {
+    return [
+      {
+        code: "RELATED_RESOURCE_MISSING",
+        message: `credential carries no relatedResource digest binding for presented resource ${iri}`,
+      },
+    ];
+  }
+  if (
+    entries.some((r) => typeof r.digestMultibase !== "string" || r.digestMultibase.length === 0)
+  ) {
+    return [
+      {
+        code: "RELATED_RESOURCE_MISSING",
+        message: `relatedResource entry for ${iri} carries no digestMultibase — an undigested entry binds nothing`,
+      },
+    ];
+  }
+  let recomputed: string;
+  try {
+    recomputed = await digestRdfContent(presented.content, presented.contentType ?? "text/turtle");
+  } catch (e) {
+    return [
+      {
+        code: "RELATED_RESOURCE_MISMATCH",
+        message: `presented content for ${iri} could not be canonically digested: ${(e as Error).message}`,
+      },
+    ];
+  }
+  const mismatched = entries.filter((r) => r.digestMultibase !== recomputed);
+  if (mismatched.length > 0) {
+    return [
+      {
+        code: "RELATED_RESOURCE_MISMATCH",
+        message: `digest of presented content for ${iri} (${recomputed}) does not match the signed digestMultibase — the presented resource is not the content the issuer bound`,
+      },
+    ];
+  }
+  return [];
+}
+
+/**
+ * Verify the G1 policy-content bindings ALONE: for every presented resource,
+ * recompute its canonical digest and compare against the credential's
+ * `relatedResource` `digestMultibase`, fail-closed (see
+ * {@link VerifyCredentialOptions.presentedResources} for the exact semantics).
+ *
+ * NOTE this checks CONTENT INTEGRITY only — it does NOT verify the proof. The
+ * digest bindings are trustworthy only because they live in the SIGNED claim
+ * graph, so a real verifier composes this with the signature gates: either call
+ * {@link verifyCredential} with the `presentedResources` option (which runs
+ * both), or call this ONLY on a credential that already passed
+ * `verifyCredential`.
+ */
+export async function verifyRelatedResources(
+  credential: Credential,
+  presentedResources: Readonly<Record<string, PresentedResourceContent>>,
+): Promise<VerificationResult> {
+  const related = credential.relatedResource ?? [];
+  const errors: VerificationError[] = [];
+  for (const [iri, presented] of Object.entries(presentedResources)) {
+    errors.push(...(await checkPresentedResource(related, iri, presented)));
+  }
+  return errors.length === 0
+    ? { verified: true, errors: [], issuer: credential.issuer }
+    : { verified: false, errors, issuer: credential.issuer };
 }
 
 /**
@@ -129,6 +237,19 @@ export async function verifyCredential(
   // 8. trusted issuer (optional allowlist)
   if (options.trustedIssuers !== undefined && !options.trustedIssuers.includes(issuer)) {
     errors.push({ code: "UNTRUSTED_ISSUER", message: `issuer ${issuer} is not trusted` });
+  }
+
+  // 9. presented related-resource content (the G1 policy-content binding):
+  // every presented resource's canonical digest must match a signed
+  // `relatedResource` digestMultibase — fail-closed on a missing binding, an
+  // undigested entry, unparseable content, or a mismatch. Runs regardless of
+  // the other gates' outcome so `errors` reports EVERY distinct failure; the
+  // binding is only meaningful when the signature gates ALSO pass (the digest
+  // lives in the signed graph), which the single `verified` conjunction enforces.
+  if (options.presentedResources !== undefined) {
+    for (const [iri, presented] of Object.entries(options.presentedResources)) {
+      errors.push(...(await checkPresentedResource(vc.relatedResource ?? [], iri, presented)));
+    }
   }
 
   // The canonical bytes the signature must cover: the claim graph WITHOUT proof.

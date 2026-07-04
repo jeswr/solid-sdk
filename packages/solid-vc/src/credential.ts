@@ -9,10 +9,20 @@
 import { randomUUID } from "node:crypto";
 import { parseRdf } from "@jeswr/fetch-rdf";
 import type { DatasetCore, Quad } from "@rdfjs/types";
+import { digestRdfContent } from "./digest.js";
 import { isAbsoluteIri, requireObjectIri, safeObjectIri } from "./iri.js";
 import { serialize } from "./serialize.js";
-import type { AgentAuthorization, Credential, CredentialSubject, JsonValue } from "./types.js";
+import type {
+  AgentAuthorization,
+  Credential,
+  CredentialSubject,
+  JsonValue,
+  RelatedResource,
+} from "./types.js";
 import {
+  SCHEMA_ENCODING_FORMAT,
+  SEC_DIGEST_MULTIBASE,
+  SEC_MULTIBASE,
   SVC_ACTION,
   SVC_AGENT_AUTHORIZATION,
   SVC_AUTHORIZES,
@@ -22,6 +32,7 @@ import {
   VC_CREDENTIAL,
   VC_CREDENTIAL_SUBJECT,
   VC_ISSUER,
+  VC_RELATED_RESOURCE,
   VC_VALID_FROM,
   VC_VALID_UNTIL,
   XSD,
@@ -180,6 +191,32 @@ function writeClaim(b: GraphBuilder, subject: NodeRef, claim: string, value: Jso
 }
 
 /**
+ * Write one VCDM 2.0 `relatedResource` entry into the SIGNED claim graph:
+ * `credential cred:relatedResource <resource>` plus the resource's
+ * `sec:digestMultibase` (and `schema:encodingFormat` media type) triples. The
+ * resource `id` is a REQUIRED, binding-bearing object IRI, so it routes through
+ * the FAIL-CLOSED {@link requireObjectIri} — silently dropping it would silently
+ * UNBIND the policy the credential claims to bind (a fail-open the verifier
+ * could not detect). The digest/mediaType are plain literals (typed for the
+ * digest, per the VC 2.0 context's `sec:multibase` datatype).
+ */
+function writeRelatedResource(
+  b: GraphBuilder,
+  credential: NodeRef,
+  related: RelatedResource,
+): void {
+  const idIri = requireObjectIri(related.id, "relatedResource.id");
+  b.addIri(credential, VC_RELATED_RESOURCE, idIri);
+  const node = iriRef(idIri);
+  if (related.digestMultibase !== undefined) {
+    b.addLiteral(node, SEC_DIGEST_MULTIBASE, related.digestMultibase, SEC_MULTIBASE);
+  }
+  if (related.mediaType !== undefined) {
+    b.addLiteral(node, SCHEMA_ENCODING_FORMAT, related.mediaType);
+  }
+}
+
+/**
  * Lower a structured {@link Credential} (the UNSIGNED claim graph — no proof) to
  * RDF quads via the typed write path. The credential gets an `@id` (a random
  * `urn:uuid:` when omitted) so it is an addressable named node the proof can bind
@@ -214,6 +251,9 @@ export function credentialToRdf(credential: Credential): Quad[] {
   }
   if (credential.validUntil !== undefined) {
     b.addLiteral(subject, VC_VALID_UNTIL, credential.validUntil, `${XSD}dateTime`);
+  }
+  for (const related of credential.relatedResource ?? []) {
+    writeRelatedResource(b, subject, related);
   }
   const subjects = Array.isArray(credential.credentialSubject)
     ? credential.credentialSubject
@@ -250,6 +290,21 @@ export function credentialToJsonLd(credential: Credential): Record<string, unkno
   };
   if (credential.validFrom !== undefined) doc.validFrom = credential.validFrom;
   if (credential.validUntil !== undefined) doc.validUntil = credential.validUntil;
+  if (credential.relatedResource !== undefined && credential.relatedResource.length > 0) {
+    // Lock-step with the RDF lowering: a relatedResource with an invalid id is
+    // refused there (requireObjectIri throws), so refuse it here too rather than
+    // emit a JSON-LD projection the RDF path could never have signed.
+    for (const related of credential.relatedResource) {
+      requireObjectIri(related.id, "relatedResource.id");
+    }
+    doc.relatedResource = credential.relatedResource.map((related) => ({
+      id: related.id,
+      ...(related.digestMultibase !== undefined
+        ? { digestMultibase: related.digestMultibase }
+        : {}),
+      ...(related.mediaType !== undefined ? { mediaType: related.mediaType } : {}),
+    }));
+  }
   const subjects = Array.isArray(credential.credentialSubject)
     ? credential.credentialSubject
     : [credential.credentialSubject];
@@ -314,6 +369,18 @@ export function credentialFromRdf(dataset: DatasetCore): CredentialNode | undefi
  * IRI) and `@jeswr/solid-odrl` (the `policy` IRI).
  */
 export function buildAgentAuthorizationCredential(auth: AgentAuthorization): Credential {
+  // FAIL CLOSED: this SYNC builder cannot compute the policy-content digest
+  // (canonicalization is async). Silently ignoring `policyContent` would return
+  // a credential the caller believes is content-bound but is not — the exact
+  // policy-substitution fail-open G1 exists to close. Route to the async
+  // builder instead.
+  if (auth.policyContent !== undefined) {
+    throw new Error(
+      "@jeswr/solid-vc: buildAgentAuthorizationCredential cannot bind policyContent (digest " +
+        "computation is async) — use buildBoundAgentAuthorizationCredential / " +
+        "issueAgentAuthorization, which emit the relatedResource digest binding",
+    );
+  }
   const actions = Array.isArray(auth.action) ? auth.action : [auth.action];
   const subject: Record<string, JsonValue> = {
     [SVC_AUTHORIZES]: auth.agent,
@@ -333,6 +400,84 @@ export function buildAgentAuthorizationCredential(auth: AgentAuthorization): Cre
     ...(auth.validUntil !== undefined ? { validUntil: auth.validUntil } : {}),
   };
   return credential;
+}
+
+/**
+ * Build a POLICY-CONTENT-BOUND `AgentAuthorizationCredential` (the G1 binding):
+ * like {@link buildAgentAuthorizationCredential}, but the exact ODRL
+ * Agreement/policy content is cryptographically bound into the (to-be-signed)
+ * claim graph as a VCDM 2.0 `relatedResource` entry — the policy IRI plus the
+ * `digestMultibase` of the content's RDFC-1.0 canonical form (see
+ * {@link digestRdfContent}). A verifier recomputes the digest over the policy it
+ * is presented and compares fail-closed ({@link verifyRelatedResources} / the
+ * `presentedResources` option of `verifyCredential`), so a substituted or
+ * mutated policy behind the (mutable) `svc:policy` IRI can no longer verify.
+ *
+ * FAIL-CLOSED requirements (both throw):
+ *  - `policyContent` requires `policy` (the digest must bind to a named
+ *    resource IRI — there is nothing to hang an anonymous digest on);
+ *  - the content must parse to a NON-EMPTY graph (digestRdfContent's guard).
+ *
+ * Async because RDFC-1.0 canonicalization is async. When `policyContent` is
+ * absent this degrades to exactly {@link buildAgentAuthorizationCredential}
+ * (the bare-IRI form — which binds only the pointer, not the content; the
+ * accountable-agent-runtime marks that form `policyIntegrityProvisional`).
+ */
+export async function buildBoundAgentAuthorizationCredential(
+  auth: AgentAuthorization,
+): Promise<Credential> {
+  if (auth.policyContent === undefined) {
+    return buildAgentAuthorizationCredential(auth);
+  }
+  if (auth.policy === undefined) {
+    throw new Error(
+      "@jeswr/solid-vc: policyContent requires a policy IRI — the content digest binds to the " +
+        "relatedResource id, so an anonymous policy cannot be content-bound",
+    );
+  }
+  const contentType = auth.policyContentType ?? "text/turtle";
+  const digestMultibase = await digestRdfContent(auth.policyContent, contentType);
+  const { policyContent: _c, policyContentType: _ct, ...bare } = auth;
+  const credential = buildAgentAuthorizationCredential(bare);
+  const related: RelatedResource = {
+    id: auth.policy,
+    digestMultibase,
+    mediaType: contentType,
+  };
+  return { ...credential, relatedResource: [related] };
+}
+
+/**
+ * Read the `relatedResource` digest bindings back from a parsed credential node
+ * — the typed inverse of the {@link credentialToRdf} relatedResource lowering.
+ * Returns one entry per `cred:relatedResource` object IRI, with its
+ * `sec:digestMultibase` / media type when present. An entry WITHOUT a digest is
+ * still returned (so a caller can see it) — but the VERIFIER treats a presented
+ * resource whose entry lacks a digest as unbound and fails closed.
+ */
+export function relatedResourcesFromNode(node: CredentialNode): RelatedResource[] {
+  const dataset = node.dataset as unknown as DatasetCore;
+  const out: RelatedResource[] = [];
+  for (const quad of dataset.match()) {
+    if (quad.subject.termType !== "NamedNode" || quad.subject.value !== node.value) continue;
+    if (quad.predicate.value !== VC_RELATED_RESOURCE) continue;
+    if (quad.object.termType !== "NamedNode") continue;
+    const id = quad.object.value;
+    let digestMultibase: string | undefined;
+    let mediaType: string | undefined;
+    for (const q of dataset.match()) {
+      if (q.subject.termType !== "NamedNode" || q.subject.value !== id) continue;
+      if (q.object.termType !== "Literal") continue;
+      if (q.predicate.value === SEC_DIGEST_MULTIBASE) digestMultibase = q.object.value;
+      if (q.predicate.value === SCHEMA_ENCODING_FORMAT) mediaType = q.object.value;
+    }
+    out.push({
+      id,
+      ...(digestMultibase !== undefined ? { digestMultibase } : {}),
+      ...(mediaType !== undefined ? { mediaType } : {}),
+    });
+  }
+  return out;
 }
 
 /**

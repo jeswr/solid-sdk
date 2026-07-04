@@ -25,6 +25,30 @@ export interface Credential {
     readonly validUntil?: string;
     /** The credential subject(s) — the claims being asserted. */
     readonly credentialSubject: CredentialSubject | readonly CredentialSubject[];
+    /**
+     * Resources whose CONTENT the credential cryptographically binds (VCDM 2.0
+     * §5.3 "Integrity of Related Resources"). Part of the SIGNED claim graph —
+     * tampering an entry (id or digest) invalidates the proof. The G1
+     * policy-content binding lists the ODRL policy here with its
+     * `digestMultibase`; {@link verifyRelatedResources} / the
+     * `presentedResources` verify option recompute + compare fail-closed.
+     */
+    readonly relatedResource?: readonly RelatedResource[];
+}
+/**
+ * One VCDM 2.0 `relatedResource` entry: the resource IRI plus the cryptographic
+ * digest of its content. This package emits + checks `digestMultibase` (a
+ * multibase/base58btc-encoded sha2-256 MULTIHASH over the resource's RDFC-1.0
+ * canonical N-Quads — see {@link digestRdfContent}); an entry WITHOUT a digest
+ * binds nothing and is rejected by the verifier when its resource is presented.
+ */
+export interface RelatedResource {
+    /** The related resource IRI (e.g. the bound ODRL policy IRI). Required. */
+    readonly id: string;
+    /** Multibase(base58btc) sha2-256 multihash of the resource's canonical content. */
+    readonly digestMultibase?: string;
+    /** The media type the digest was computed for (e.g. `text/turtle`). */
+    readonly mediaType?: string;
 }
 /** A credential subject: an optional `id` (the subject IRI) plus arbitrary claims. */
 export interface CredentialSubject {
@@ -50,6 +74,17 @@ export interface AgentAuthorization {
     readonly target?: string;
     /** Link to the governing `@jeswr/solid-odrl` ODRL policy graph (optional). */
     readonly policy?: string;
+    /**
+     * The EXACT content of the `policy` document (RDF source — Turtle by default,
+     * see `policyContentType`), for the G1 policy-content binding. When present
+     * (requires `policy`), {@link buildBoundAgentAuthorizationCredential} /
+     * {@link issueAgentAuthorization} compute its canonical digest and emit a
+     * `relatedResource` entry binding the policy CONTENT into the signed graph —
+     * closing the policy-substitution hole a bare `svc:policy` IRI leaves open.
+     */
+    readonly policyContent?: string;
+    /** Content type of `policyContent` (default `text/turtle`). */
+    readonly policyContentType?: string;
     /** Credential IRI (optional — random `urn:uuid:` if omitted). */
     readonly id?: string;
     /** Validity start (optional — now at issue time). */
@@ -132,7 +167,19 @@ export interface VerificationError {
     readonly message: string;
 }
 /** The closed set of verification failure categories. */
-export type VerificationErrorCode = "MALFORMED" | "NO_PROOF" | "UNKNOWN_CRYPTOSUITE" | "INVALID_SIGNATURE" | "EXPIRED" | "NOT_YET_VALID" | "ISSUER_MISMATCH" | "PROOF_PURPOSE_MISMATCH" | "UNTRUSTED_ISSUER";
+export type VerificationErrorCode = "MALFORMED" | "NO_PROOF" | "UNKNOWN_CRYPTOSUITE" | "INVALID_SIGNATURE" | "EXPIRED" | "NOT_YET_VALID" | "ISSUER_MISMATCH" | "PROOF_PURPOSE_MISMATCH" | "UNTRUSTED_ISSUER" | "RELATED_RESOURCE_MISSING" | "RELATED_RESOURCE_MISMATCH";
+/**
+ * The PRESENTED content of a related resource (the policy document the verifier
+ * was actually handed), keyed by resource IRI in the `presentedResources`
+ * verify option. The digest is recomputed over THIS content's canonical form
+ * and compared fail-closed against the credential's signed `digestMultibase`.
+ */
+export interface PresentedResourceContent {
+    /** The resource content as RDF source text. */
+    readonly content: string;
+    /** Content type of `content` (default `text/turtle`). */
+    readonly contentType?: string;
+}
 /** Options shared by the verification entrypoints. */
 export interface VerifyOptions {
     /** The instant to evaluate validity against (default `new Date()`). Injectable for tests. */

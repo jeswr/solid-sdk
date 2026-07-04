@@ -28,6 +28,14 @@ export declare function issue(input: IssueInput): Promise<VerifiableCredential>;
  * Convenience: build + sign an {@link AgentAuthorization} ("WebID X authorizes
  * agent Y for action Z under policy P") in one call. The principal WebID is the
  * issuer; sign with that WebID's key.
+ *
+ * G1 policy-content binding: when `auth.policyContent` is supplied (with
+ * `auth.policy`), the credential is built via
+ * {@link buildBoundAgentAuthorizationCredential} — the policy content's
+ * canonical digest is emitted as a signed `relatedResource` entry, so the
+ * verifier can prove the presented policy is the exact graph signed over (see
+ * the `presentedResources` option of `verifyCredential`). Without
+ * `policyContent` this is the bare-IRI form, which binds only the pointer.
  */
 export declare function issueAgentAuthorization(auth: AgentAuthorization, key: KeyPair | unknown, opts?: {
     suite?: ProofSuite;
