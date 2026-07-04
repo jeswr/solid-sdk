@@ -53,6 +53,8 @@ export {
   setStatusBit,
 } from "./bitstring.js";
 export { canonicalNQuads, dataIntegrityHash } from "./canonicalize.js";
+// --- countersigning (a Data Integrity proof SET — G15b) --------------------
+export { type CountersignOptions, countersign } from "./countersign.js";
 // --- data model + RDF ------------------------------------------------------
 export {
   agentAuthorizationFromRdf,
@@ -93,6 +95,12 @@ export {
   proofOptionsQuads,
   SuiteRegistry,
 } from "./proof.js";
+// --- fail-closed structural validation of a parsed credential (G15a) -------
+export {
+  parseAndValidateCredential,
+  readValidCredential,
+  type ValidCredentialResult,
+} from "./read-valid.js";
 export { serialize } from "./serialize.js";
 // --- Bitstring Status List v1.0 (runtime Phase-1 G2: revocation/suspension) --
 export {
