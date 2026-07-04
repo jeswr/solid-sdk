@@ -107,18 +107,25 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       flush,
       revokeCredentials: c ? () => c.logout() : undefined,
     });
-    // The credential is revoked either way — always go anonymous (never leave the
-    // user logged in). But an incomplete purge is securityCritical on a shared
-    // device, so we make it VISIBLE (a warning banner + "Clear local data" retry),
-    // never swallow it. Retain the store so the retry can re-attempt the purge.
+    // Go anonymous (never trap the user in a half-logged-in UI), but NEVER silently
+    // claim a clean sign-out. Two failures are surfaced DISTINCTLY:
+    //  - revokeFailed: the credential may not be revoked → the session could still be
+    //    live / silently restorable ("you may still be signed in"); the fix is reload.
+    //  - purgeFailed: the local WebID-scoped health cache may not be wiped → offer a
+    //    "Clear local data" retry (retain the store for it).
+    // Only a purge failure is retryable here, so only then do we retain the store.
     failedPurgeStoreRef.current = outcome.purgeFailed ? store : null;
-    setValue(() => ({
-      ...anonymousSession,
-      status: "anonymous",
-      purgeWarning: outcome.purgeFailed
-        ? "Local health data may not have been fully cleared from this device."
-        : null,
-    }));
+    let purgeWarning: string | null = null;
+    if (outcome.revokeFailed && outcome.purgeFailed) {
+      purgeWarning =
+        "Sign-out may be incomplete — your credentials could not be revoked (you may still be signed in on this device), and local health data may not have been fully cleared. Reload the page and sign out again.";
+    } else if (outcome.revokeFailed) {
+      purgeWarning =
+        "Sign-out may be incomplete — your credentials could not be revoked, so you may still be signed in on this device. Reload the page and sign out again.";
+    } else if (outcome.purgeFailed) {
+      purgeWarning = "Local health data may not have been fully cleared from this device.";
+    }
+    setValue(() => ({ ...anonymousSession, status: "anonymous", purgeWarning }));
   }, []);
 
   /** Re-attempt the failed logout purge; clears the warning only when it succeeds. */
@@ -242,7 +249,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       ) : (
         <>
           {value.purgeWarning !== null ? (
-            <LogoutPurgeWarning onRetry={retryPurge} onDismiss={dismissPurgeWarning} />
+            <LogoutPurgeWarning
+              message={value.purgeWarning}
+              onRetry={retryPurge}
+              onDismiss={dismissPurgeWarning}
+            />
           ) : null}
           <LoginArea controller={controller} onSessionChange={onSessionChange} />
         </>
