@@ -51,9 +51,14 @@ describe("IRI-injection hardening (n3.Writer breakout)", () => {
     expect(() => policyToTurtle(withAssignee)).toThrow(OdrlSerializationError);
   });
 
-  it("neutralises a breakout payload on the escape-path (constraint operand) \u2014 no injected triple", async () => {
-    // A constraint right-operand is NOT an exact-match field, so the payload is
-    // ESCAPED (not rejected). The escaping must still prevent any triple injection.
+  it("REFUSES an IRI-valued constraint operand whose escaping would MUTATE it (was: silently escaped)", () => {
+    // A constraint right-operand for an IRI-valued left-operand (recipient/purpose/
+    // spatial/systemDevice) is EVALUATION-CRITICAL: evaluate() compares it by EXACT
+    // STRING. So \u2014 like target/assignee \u2014 a value escaping would mutate (INJECTION
+    // carries `>` + spaces) is REJECTED, not silently escaped. Silently escaping it
+    // would let the SAME policy decide differently in-memory vs after a
+    // serialise\u2192parse round-trip (a neq/isNoneOf widening). Fail-closed on all three
+    // serialisers so a refused policy can't be smuggled out in any form.
     const policy: OdrlPolicy = {
       id: "https://alice.example/policies/p1",
       type: "Set",
@@ -65,14 +70,35 @@ describe("IRI-injection hardening (n3.Writer breakout)", () => {
         },
       ],
     };
+    expect(() => policyToTurtle(policy)).toThrow(OdrlSerializationError);
+    expect(() => policyToRdf(policy)).toThrow(OdrlSerializationError);
+    expect(() => policyToJsonLd(policy)).toThrow(OdrlSerializationError);
+  });
+
+  it("a SCHEMELESS constraint operand carrying breakout octets is a quoted literal \u2014 no injected triple", async () => {
+    // A schemeless value on an IRI-valued left-operand is NOT an IRI: it becomes a
+    // (typed/plain) LITERAL, which n3.Writer quotes + escapes, so a breakout payload
+    // cannot inject a triple. This is the surviving escape-path (literals), distinct
+    // from the rejected IRI-operand path above.
+    const literalPayload = 'evil> . <https://evil/s2> <https://evil/p2> "x';
+    const policy: OdrlPolicy = {
+      id: "https://alice.example/policies/p1",
+      type: "Set",
+      permissions: [
+        {
+          type: "permission",
+          action: "read",
+          constraints: [{ leftOperand: "purpose", operator: "eq", rightOperand: literalPayload }],
+        },
+      ],
+    };
 
     const turtle = await policyToTurtle(policy);
     const quads = new Parser().parse(turtle);
 
-    // The core assertion: the attacker's injected subject must NOT exist.
+    // The attacker's injected subject must NOT exist.
     expect(quads.filter((q) => q.subject.value === "https://evil/s2")).toHaveLength(0);
-
-    // And no term carries a raw IRIREF-forbidden octet.
+    // No NamedNode carries a raw IRIREF-forbidden octet.
     for (const q of quads) {
       for (const t of [q.subject, q.predicate, q.object]) {
         if (t.termType === "NamedNode") {
@@ -81,7 +107,11 @@ describe("IRI-injection hardening (n3.Writer breakout)", () => {
         }
       }
     }
-
+    // The payload survives verbatim as a Literal object (quoted, not injected).
+    const litValues = quads
+      .filter((q) => q.object.termType === "Literal")
+      .map((q) => q.object.value);
+    expect(litValues).toContain(literalPayload);
     // Structural integrity: re-parsing yields exactly the quads we lowered.
     expect(quads).toHaveLength(policyToRdf(policy).length);
   });
@@ -254,6 +284,107 @@ describe("IRI-injection hardening (n3.Writer breakout)", () => {
     const parsed = await parsePolicy(await policyToTurtle(policy));
     const parsedValues = (parsed?.permissions?.[0]?.constraints ?? []).map((c) => c.rightOperand);
     expect(parsedValues).toContain("urn:example:party:42");
+  });
+
+  it("a clean IRI operand under neq decides IDENTICALLY in-memory vs round-tripped (no widening)", async () => {
+    // The reviewer's exact concern: a NEGATIVE operator (neq) over an IRI operand.
+    // Had a mutating operand been silently escaped, an excluded recipient would slip
+    // past neq after a round-trip (widening). A CLEAN operand is byte-identical
+    // across the round-trip, so the deny/permit decision is the SAME before + after.
+    const excluded = "https://carol.example/profile/card#me";
+    const other = "https://dave.example/profile/card#me";
+    const policy: OdrlPolicy = {
+      id: "https://alice.example/policies/neq",
+      type: "Set",
+      permissions: [
+        {
+          type: "permission",
+          action: "read",
+          target: "https://alice.example/notes/n.ttl",
+          constraints: [{ leftOperand: "recipient", operator: "neq", rightOperand: excluded }],
+        },
+      ],
+    };
+    const parsed = (await parsePolicy(await policyToTurtle(policy))) as OdrlPolicy;
+
+    const base = { action: "read" as const, target: "https://alice.example/notes/n.ttl" };
+    // recipient == excluded → neq unsatisfied → notApplicable, BOTH ways (the guard).
+    const asExcluded = { ...base, agent: excluded, attributes: { recipient: excluded } };
+    expect(evaluate(policy, asExcluded).decision).toBe("notApplicable");
+    expect(evaluate(parsed, asExcluded).decision).toBe(evaluate(policy, asExcluded).decision);
+    // recipient == other → neq satisfied → permit, BOTH ways.
+    const asOther = { ...base, agent: other, attributes: { recipient: other } };
+    expect(evaluate(policy, asOther).decision).toBe("permit");
+    expect(evaluate(parsed, asOther).decision).toBe(evaluate(policy, asOther).decision);
+  });
+
+  it("a clean IRI operand under isNoneOf decides IDENTICALLY in-memory vs round-tripped (no widening)", async () => {
+    const excludedA = "https://carol.example/profile/card#me";
+    const excludedB = "https://erin.example/profile/card#me";
+    const other = "https://dave.example/profile/card#me";
+    const policy: OdrlPolicy = {
+      id: "https://alice.example/policies/none",
+      type: "Set",
+      permissions: [
+        {
+          type: "permission",
+          action: "read",
+          target: "https://alice.example/notes/n.ttl",
+          constraints: [
+            {
+              leftOperand: "recipient",
+              operator: "isNoneOf",
+              rightOperand: [excludedA, excludedB],
+            },
+          ],
+        },
+      ],
+    };
+    const parsed = (await parsePolicy(await policyToTurtle(policy))) as OdrlPolicy;
+
+    const base = { action: "read" as const, target: "https://alice.example/notes/n.ttl" };
+    // recipient in the excluded set → isNoneOf unsatisfied → notApplicable, BOTH ways.
+    const asExcluded = { ...base, agent: excludedA, attributes: { recipient: excludedA } };
+    expect(evaluate(policy, asExcluded).decision).toBe("notApplicable");
+    expect(evaluate(parsed, asExcluded).decision).toBe(evaluate(policy, asExcluded).decision);
+    // recipient outside the set → isNoneOf satisfied → permit, BOTH ways.
+    const asOther = { ...base, agent: other, attributes: { recipient: other } };
+    expect(evaluate(policy, asOther).decision).toBe("permit");
+    expect(evaluate(parsed, asOther).decision).toBe(evaluate(policy, asOther).decision);
+  });
+
+  it("REFUSES an IRI operand with a space under a negative operator (neq / isNoneOf)", () => {
+    // The precise widening surface: a space-carrying IRI operand under a NEGATIVE
+    // operator must be refused at serialise time (fail-closed), never escaped.
+    const spaced = "https://carol.example/a b";
+    const neqPolicy: OdrlPolicy = {
+      id: "https://alice.example/policies/neq-space",
+      type: "Set",
+      permissions: [
+        {
+          type: "permission",
+          action: "read",
+          target: "https://alice.example/notes/n.ttl",
+          constraints: [{ leftOperand: "recipient", operator: "neq", rightOperand: spaced }],
+        },
+      ],
+    };
+    const noneOfPolicy: OdrlPolicy = {
+      ...neqPolicy,
+      id: "https://alice.example/policies/none-space",
+      permissions: [
+        {
+          type: "permission",
+          action: "read",
+          target: "https://alice.example/notes/n.ttl",
+          constraints: [{ leftOperand: "recipient", operator: "isNoneOf", rightOperand: [spaced] }],
+        },
+      ],
+    };
+    expect(() => policyToTurtle(neqPolicy)).toThrow(OdrlSerializationError);
+    expect(() => policyToJsonLd(neqPolicy)).toThrow(OdrlSerializationError);
+    expect(() => policyToTurtle(noneOfPolicy)).toThrow(OdrlSerializationError);
+    expect(() => policyToJsonLd(noneOfPolicy)).toThrow(OdrlSerializationError);
   });
 });
 

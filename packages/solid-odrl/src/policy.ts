@@ -108,13 +108,7 @@ function writeConstraint(b: GraphBuilder, parent: NodeRef, c: OdrlConstraint): v
   b.addIri(node, ODRL_OPERATOR, OPERATOR_IRI[c.operator]);
   const rights = Array.isArray(c.rightOperand) ? c.rightOperand : [c.rightOperand];
   for (const r of rights) {
-    // A recipient/purpose/spatial right-operand is typically an ABSOLUTE IRI (an
-    // http(s) resource/WebID OR a non-http concept IRI like a urn:/did: purpose);
-    // a count/time is a typed literal. Use the SCHEME-AGNOSTIC safeIri so a
-    // legitimate urn:/did: operand keeps its NamedNode semantics (safeHttpIri would
-    // wrongly demote it to a string literal) while a `>`/space breakout is still
-    // escaped away. A value with no scheme (a plain string) → a (typed) literal.
-    const safe = typeof r === "string" && isIriValued(c.leftOperand) ? safeIri(r) : undefined;
+    const safe = iriOperand(r, c.leftOperand);
     if (safe !== undefined) {
       b.addIri(node, ODRL_RIGHT_OPERAND, safe);
     } else {
@@ -122,6 +116,52 @@ function writeConstraint(b: GraphBuilder, parent: NodeRef, c: OdrlConstraint): v
       b.addLiteral(node, ODRL_RIGHT_OPERAND, String(r), dt);
     }
   }
+}
+
+/**
+ * Resolve a constraint right-operand for an IRI-valued left-operand under the SAME
+ * evaluation-critical discipline as target/assignee/assigner/profile.
+ *
+ * A recipient/purpose/spatial/systemDevice operand is typically an ABSOLUTE IRI (an
+ * http(s) resource/WebID OR a non-http concept IRI like a urn:/did: purpose); a
+ * count/time is a typed literal. `evaluate()` compares constraint operands by EXACT
+ * STRING, so — exactly like target/assignee — an IRI operand MUST be byte-identical
+ * to its escaped form, else a serialise→parse round-trip would MUTATE it (`…/a b` →
+ * `…/a%20b`) and the SAME policy would decide DIFFERENTLY in-memory vs after
+ * round-trip. For a NEGATIVE operator (`neq`, `isNoneOf`) that silent escape can
+ * WIDEN a permission (a constraint that should deny stops matching post-round-trip) —
+ * a privilege escalation. So:
+ *
+ *  - not IRI-valued / not a string → `undefined` (the caller emits a typed literal,
+ *    which round-trips losslessly and is injection-safe when quoted).
+ *  - schemeless string → `undefined` (a plain string → a typed literal, same as
+ *    above; never an IRI).
+ *  - an absolute IRI (any scheme) that escaping would NOT mutate → returned
+ *    byte-identical (a NamedNode operand; `safeIri` keeps urn:/did: semantics).
+ *  - an absolute IRI that escaping WOULD mutate (contains a space / control /
+ *    IRIREF-forbidden char) → THROW {@link OdrlSerializationError}. We do NOT
+ *    silently escape an evaluation-participating operand.
+ */
+function iriOperand(r: string | number, left: LeftOperandName): string | undefined {
+  if (typeof r !== "string" || !isIriValued(left)) {
+    return undefined;
+  }
+  const safe = safeIri(r);
+  if (safe === undefined) {
+    // Schemeless (or leading/trailing-trimmable) → not an IRI; emit a literal.
+    return undefined;
+  }
+  if (safe !== r) {
+    const shown = r.length > 200 ? `${r.slice(0, 200)}…` : r;
+    throw new OdrlSerializationError(
+      `Refusing to serialise policy: an IRI-valued constraint right-operand (${left}) ` +
+        `contains characters that require escaping, got ${JSON.stringify(shown)}. ` +
+        "An evaluation-critical IRI operand must be a clean absolute IRI so the constraint " +
+        "decides identically in-memory and after a serialise→parse round-trip; silently " +
+        "escaping it would WIDEN a neq/isNoneOf constraint (fail-closed).",
+    );
+  }
+  return safe;
 }
 
 /** Left-operands whose right-operand is an IRI (a party/purpose/place reference). */
@@ -378,10 +418,12 @@ function constraintJsonLd(c: OdrlConstraint): Record<string, unknown> {
   };
   const rights = Array.isArray(c.rightOperand) ? c.rightOperand : [c.rightOperand];
   const emitted = rights.map((r) => {
-    // Mirror the RDF path (writeConstraint): a safe ABSOLUTE IRI (any scheme —
-    // http(s)/urn:/did:) for an IRI-valued left-operand is an `@id`; a schemeless
-    // value is a (typed) literal. JSON-quoted, so no injection either way.
-    const safe = typeof r === "string" && isIriValued(c.leftOperand) ? safeIri(r) : undefined;
+    // Mirror the RDF path (writeConstraint) exactly, incl. the evaluation-critical
+    // reject-if-escaping-would-mutate rule for an IRI-valued operand (iriOperand),
+    // so a policy the RDF path REFUSES can never be smuggled out as JSON-LD. A safe
+    // ABSOLUTE IRI (any scheme — http(s)/urn:/did:) is an `@id`; a schemeless value
+    // is a (typed) literal.
+    const safe = iriOperand(r, c.leftOperand);
     if (safe !== undefined) {
       return { "@id": safe };
     }

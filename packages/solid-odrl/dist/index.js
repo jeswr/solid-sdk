@@ -969,7 +969,7 @@ function writeConstraint(b, parent, c) {
   b.addIri(node, ODRL_OPERATOR, OPERATOR_IRI[c.operator]);
   const rights = Array.isArray(c.rightOperand) ? c.rightOperand : [c.rightOperand];
   for (const r of rights) {
-    const safe = typeof r === "string" && isIriValued(c.leftOperand) ? safeIri(r) : void 0;
+    const safe = iriOperand(r, c.leftOperand);
     if (safe !== void 0) {
       b.addIri(node, ODRL_RIGHT_OPERAND, safe);
     } else {
@@ -977,6 +977,22 @@ function writeConstraint(b, parent, c) {
       b.addLiteral(node, ODRL_RIGHT_OPERAND, String(r), dt);
     }
   }
+}
+function iriOperand(r, left) {
+  if (typeof r !== "string" || !isIriValued(left)) {
+    return void 0;
+  }
+  const safe = safeIri(r);
+  if (safe === void 0) {
+    return void 0;
+  }
+  if (safe !== r) {
+    const shown = r.length > 200 ? `${r.slice(0, 200)}\u2026` : r;
+    throw new OdrlSerializationError(
+      `Refusing to serialise policy: an IRI-valued constraint right-operand (${left}) contains characters that require escaping, got ${JSON.stringify(shown)}. An evaluation-critical IRI operand must be a clean absolute IRI so the constraint decides identically in-memory and after a serialise\u2192parse round-trip; silently escaping it would WIDEN a neq/isNoneOf constraint (fail-closed).`
+    );
+  }
+  return safe;
 }
 function isIriValued(left) {
   return left === "recipient" || left === "purpose" || left === "spatial" || left === "systemDevice";
@@ -1148,7 +1164,7 @@ function constraintJsonLd(c) {
   };
   const rights = Array.isArray(c.rightOperand) ? c.rightOperand : [c.rightOperand];
   const emitted = rights.map((r) => {
-    const safe = typeof r === "string" && isIriValued(c.leftOperand) ? safeIri(r) : void 0;
+    const safe = iriOperand(r, c.leftOperand);
     if (safe !== void 0) {
       return { "@id": safe };
     }
