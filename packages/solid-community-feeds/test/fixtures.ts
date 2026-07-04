@@ -7,7 +7,15 @@
 
 import type { FetchLike } from "../src/safeFetch.js";
 
-/** Build a stub FetchLike from a map of (url-substring → JSON body | thrower). */
+/**
+ * Build a stub FetchLike from a map of (url-substring → JSON body | thrower).
+ *
+ * Returns REAL `Response` objects (via the global `Response` constructor) rather
+ * than a hand-rolled shape: `safeFetch` now layers `@jeswr/guarded-fetch`'s guard
+ * over the injected fetch, and that guard's body-cap logic reads `res.body` as a
+ * genuine `ReadableStream` (`.getReader()`), not merely an async-iterable — so the
+ * stub must behave like a real fetch response for the guard to interoperate.
+ */
 export function stubFetch(
   routes: Array<{
     match: (url: string, init?: { headers?: Record<string, string> }) => boolean;
@@ -31,16 +39,12 @@ export function stubFetch(
     }
     const status = route.status ?? 200;
     const text = route.bodyText !== undefined ? route.bodyText : JSON.stringify(route.body ?? {});
-    const respHeaders = route.responseHeaders ?? {};
-    return {
-      ok: status >= 200 && status < 300,
+    const headers = new Headers(route.responseHeaders ?? {});
+    return new Response(status === 204 || status === 304 ? null : text, {
       status,
       statusText: route.statusText ?? "OK",
-      headers: {
-        get: (name: string) => respHeaders[name.toLowerCase()] ?? null,
-      },
-      text: async () => text,
-    };
+      headers,
+    }) as unknown as Awaited<ReturnType<FetchLike>>;
   };
   return { fetch, calls };
 }
