@@ -456,32 +456,40 @@ export async function verifyAgentAuthority(
     }
   }
 
-  // --- Phase A + the delegation-trust anchor + the G1/G2 gates --------------
-  // GATE-PRECEDENCE (roborev Medium — a multiply-failing credential must report
-  // the FIRST gate it fails, not whichever gate `solid-vc.verifyCredential`
-  // happens to surface): per hop, run
-  //   Phase A (proof + key-control ONLY) → SUBJECT_ISSUER_MISMATCH → the G1
-  //   digest gate → the G2 status gate
-  // strictly in that order, each gate its OWN call so an earlier gate's PASS is
-  // required before a later gate ever runs. The pre-fix code called
-  // `verifyCredential` with `presentedResources` + `resolveStatus` bundled
-  // together, so a validly-signed SUBJECT-SPOOFED credential that also failed
-  // the digest or status gate reported `POLICY_INTEGRITY` / the status code
-  // instead of the intended `SUBJECT_ISSUER_MISMATCH` (Phase B) — the digest and
-  // status checks ran (and could fail first) before the subject↔issuer check
-  // (which lived in a separate loop AFTER every hop's combined check had
-  // already passed). No gate is weakened: all four still run and fail-closed —
-  // this only fixes WHICH one wins when several are broken at once.
+  // --- Phase A (ALL hops) + the delegation-trust anchor + the G1/G2 gates ---
+  // TWO-PASS ORDERING (roborev Medium — a diagnostic phase-ordering finding, NOT
+  // a security bypass: every invalid chain was ALREADY rejected either way; this
+  // is about which phase/code a MULTI-HOP chain with mixed failures reports).
+  // The prior structure ran ONE per-hop loop doing Phase A → subject-issuer →
+  // digest → status for hop 0, then hop 1, etc. — so a Phase-B
+  // `SUBJECT_ISSUER_MISMATCH` on an EARLIER hop returned BEFORE Phase A ever ran
+  // for a LATER hop, masking that later hop's invalid proof behind an earlier
+  // hop's Phase-B code. The documented semantics are: Phase A (proof/validity/
+  // key-control) for ALL hops FIRST; only once every hop has passed Phase A do
+  // the Phase-B/C gates run. Fixed by splitting into two passes:
+  //   Pass 1 — Phase-A-ONLY `verifyCredential` (no `presentedResources`, no
+  //            `resolveStatus`) for EVERY hop, in order. Any failure returns
+  //            immediately with ITS hop's Phase-A code — a later hop's bad proof
+  //            can never be masked by an earlier hop's Phase-B/C result, because
+  //            no Phase-B/C gate has run for ANY hop yet.
+  //   Pass 2 — only reached once every hop has passed Phase A. Per hop, in
+  //            order: SUBJECT_ISSUER_MISMATCH → the G1 digest gate
+  //            (verifyRelatedResources → POLICY_INTEGRITY) → the G2 status gate
+  //            (resolveStatus → REVOKED/SUSPENDED/STATUS_RETRIEVAL_ERROR) — the
+  //            existing single-hop gate-precedence order (758607c/6ad0776/
+  //            bdabba5), unchanged.
+  // No gate is weakened: all four still run and fail-closed for every hop —
+  // this only fixes WHICH hop's WHICH code wins when failures span hops.
   const contents = chain.policyContents ?? {};
+
+  // --- Pass 1: Phase A (proof, cryptosuite, validity window, key-control) ---
+  // for EVERY hop, no `presentedResources`, no `resolveStatus` — so a genuine
+  // proof failure on ANY hop is reported immediately and cannot be masked by,
+  // nor itself mask, a downstream digest/status/subject-issuer finding on a
+  // DIFFERENT hop. Phase A across the whole chain always wins.
   for (const hop of ordered) {
     // biome-ignore lint/style/noNonNullAssertion: every hop bound (checked above)
     const b = bound.get(hop.id)!;
-    const presented: PresentedResourceContent | undefined = contents[hop.id];
-
-    // Phase A ONLY: proof, cryptosuite, validity window, issuer/key-control —
-    // no `presentedResources`, no `resolveStatus`, so a genuine proof failure is
-    // reported immediately and cannot be masked by a downstream digest/status
-    // failure on the SAME call. Phase A always wins.
     const phaseARes = await verifyCredential(b.vc, {
       resolveKey,
       ...(options.isControlledBy !== undefined && { isControlledBy: options.isControlledBy }),
@@ -495,21 +503,34 @@ export async function verifyAgentAuthority(
       );
       const code: VerifierErrorCode =
         phaseAError !== undefined ? (phaseAError.code as VerifierErrorCode) : "INVALID_SIGNATURE";
-      return deny("A", code, `Phase A (credential verification) failed: ${detail}`, chainIds);
+      return deny(
+        "A",
+        code,
+        `Phase A (credential verification) failed for hop <${hop.id}>: ${detail}`,
+        chainIds,
+      );
     }
+  }
 
-    // SECURITY (delegation-trust anchor) — runs immediately after Phase A's
-    // proof passes, BEFORE the digest/status gates below. Each hop's
-    // self-asserted `credentialSubject.id`, when present, MUST equal its
-    // proof-verified `issuer`. `verifyCredential` (Phase A) proves the
-    // signature against `issuer` + key control but does NOT constrain the
-    // subject id — so without this an attacker who legitimately controls their
-    // OWN issuer key could sign an otherwise-valid credential whose
-    // `subject.id` names a TRUSTED party (a root owner / an authorized
-    // delegatee) and have the chain accept it as that party's grant,
-    // impersonating any assigner. Placed here so a subject-spoofed credential
-    // is rejected with the precise `SUBJECT_ISSUER_MISMATCH` code EVEN WHEN it
-    // also fails the digest or status gate below (the gate-precedence fix).
+  // --- Pass 2: reached only once EVERY hop has passed Phase A above. Per hop,
+  // in order: subject-issuer anchor → G1 digest gate → G2 status gate.
+  for (const hop of ordered) {
+    // biome-ignore lint/style/noNonNullAssertion: every hop bound (checked above)
+    const b = bound.get(hop.id)!;
+    const presented: PresentedResourceContent | undefined = contents[hop.id];
+
+    // SECURITY (delegation-trust anchor) — runs BEFORE the digest/status gates
+    // below, for this hop. Each hop's self-asserted `credentialSubject.id`,
+    // when present, MUST equal its proof-verified `issuer`. `verifyCredential`
+    // (Phase A) proves the signature against `issuer` + key control but does
+    // NOT constrain the subject id — so without this an attacker who
+    // legitimately controls their OWN issuer key could sign an otherwise-valid
+    // credential whose `subject.id` names a TRUSTED party (a root owner / an
+    // authorized delegatee) and have the chain accept it as that party's
+    // grant, impersonating any assigner. Placed here so a subject-spoofed
+    // credential is rejected with the precise `SUBJECT_ISSUER_MISMATCH` code
+    // EVEN WHEN it also fails the digest or status gate below (the single-hop
+    // gate-precedence fix, preserved unchanged inside Pass 2).
     const assertedSubjectId = claimString(subjectRecord(b.vc)?.id);
     if (assertedSubjectId !== undefined && assertedSubjectId !== b.vc.issuer) {
       return deny(

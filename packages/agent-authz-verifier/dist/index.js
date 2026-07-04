@@ -1785,7 +1785,6 @@ async function verifyAgentAuthority(chain, options) {
   const contents = chain.policyContents ?? {};
   for (const hop of ordered) {
     const b = bound.get(hop.id);
-    const presented = contents[hop.id];
     const phaseARes = await verifyCredential(b.vc, {
       resolveKey,
       ...options.isControlledBy !== void 0 && { isControlledBy: options.isControlledBy },
@@ -1798,8 +1797,17 @@ async function verifyAgentAuthority(chain, options) {
         (e) => PHASE_A_CODES.has(e.code)
       );
       const code = phaseAError !== void 0 ? phaseAError.code : "INVALID_SIGNATURE";
-      return deny("A", code, `Phase A (credential verification) failed: ${detail}`, chainIds);
+      return deny(
+        "A",
+        code,
+        `Phase A (credential verification) failed for hop <${hop.id}>: ${detail}`,
+        chainIds
+      );
     }
+  }
+  for (const hop of ordered) {
+    const b = bound.get(hop.id);
+    const presented = contents[hop.id];
     const assertedSubjectId = claimString(subjectRecord(b.vc)?.id);
     if (assertedSubjectId !== void 0 && assertedSubjectId !== b.vc.issuer) {
       return deny(

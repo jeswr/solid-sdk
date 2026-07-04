@@ -276,6 +276,47 @@ describe("delegation-trust — the principal is the proof-verified issuer, not s
     expect(r.code).toBe("SUBJECT_ISSUER_MISMATCH");
   });
 
+  it("CROSS-HOP TWO-PASS ORDERING: root hop spoofed subject + child hop bad proof → reports the CHILD's Phase-A code, not the root's SUBJECT_ISSUER_MISMATCH", async () => {
+    // The root (mandate) hop has a VALID proof (attacker's own key) but a
+    // SPOOFED subject.id (Alice) — on its own this would report
+    // SUBJECT_ISSUER_MISMATCH (see the single-hop test above). The CHILD
+    // (agreement) hop is otherwise legitimate but has a TAMPERED proof (an
+    // invalid signature). Pre-fix, the single per-hop loop ran Phase A →
+    // subject-issuer → digest → status for the root hop FIRST and returned
+    // SUBJECT_ISSUER_MISMATCH before ever reaching the child hop's Phase A —
+    // masking the child's invalid proof behind the root's Phase-B finding. The
+    // two-pass fix must run Phase A for EVERY hop (Pass 1) before ANY hop's
+    // Phase-B/C gates (Pass 2) run, so the child's Phase-A failure
+    // (INVALID_SIGNATURE) is reported instead.
+    const forgedRootSpoofed = await forgeWithAttackerIssuer({
+      principal: CAST.alice,
+      agent: CAST.agentA,
+      action: ["read", "grantUse"],
+      policy: CAST.mandateId,
+    });
+    const tamperedChild = tamperProof(base.credentials.agreement);
+    const chain: PresentedChain = {
+      credentials: [forgedRootSpoofed, tamperedChild],
+      policies: [base.mandate, base.agreement],
+    };
+    const r = await verifyAgentAuthority(chain, {
+      request: {
+        action: "read",
+        target: CAST.records,
+        attributes: { purpose: CAST.purpose, dateTime: base.now.toISOString() },
+      },
+      rootPrincipal: CAST.alice,
+      now: base.now,
+      resolveKey: base.registry.resolveKey,
+      isControlledBy: base.registry.isControlledBy,
+      resolveStatus: statusValid(),
+      actor: CAST.inst,
+    });
+    expect(r.authorized).toBe(false);
+    expect(r.phase).toBe("A");
+    expect(r.code).toBe("INVALID_SIGNATURE");
+  });
+
   it("SUBJECT-SPOOFED CHILD: attacker-issued hop whose subject.id claims the parent-authorized delegatee → REJECTED", async () => {
     // The mandate authorizes agentA as the delegatee. The attacker issues the
     // agreement hop with subject.id = agentA (spoofing the authorized delegatee)
