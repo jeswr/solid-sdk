@@ -151,6 +151,53 @@ export interface StoredGeneticSummary {
   error?: string;
 }
 
+/**
+ * A per-user trigger lag profile as cached locally (Brief follow-up to Phase 4B —
+ * the Insights richer-UI work). Mirrors `diet:TriggerClass`
+ * ({@link import("@jeswr/solid-health-diary").TriggerClassData}), but is a LOCALLY
+ * LEARNED refinement of the model's evidence-prior lag window (`lag.ts`
+ * `resolveLag` prefers this over the prior when it validates) — it is derived
+ * on-device from the user's own logged exposure/symptom pairings
+ * ({@link "../inference/learn-lag-profile"}), never fetched or written to the pod.
+ * A SINGLE latest-state record per trigger (like a protocol, overwritten in place
+ * as more evidence accumulates), keyed by `slug`.
+ */
+export interface StoredTriggerClass {
+  readonly kind: "triggerClass";
+  slug: TriggerSlug;
+  lagWindowMin: number;
+  lagWindowMax: number;
+  lagMode: number;
+  label?: string;
+  /** How many evidence pairings the learned profile rests on (transparency, never hidden). */
+  sampleSize: number;
+  /** When this profile was last (re)learned. */
+  updatedAt: string;
+}
+
+/**
+ * The caller-supplied safety signals ({@link import("../inference/types").SafetyContext})
+ * as cached locally — a SINGLE latest-state record (like the genetic summary), so
+ * the Insights safety-context inputs (alarm checklist, confirmed-coeliac toggle,
+ * strict-adherence toggle) persist across visits instead of resetting to the
+ * always-safe defaults every reload. Mirrors the engine's `SafetyContext` shape
+ * exactly (never a superset) — this cache module stores it structurally without
+ * depending on the inference layer's types.
+ */
+export interface StoredSafetyContext {
+  readonly kind: "safetyContext";
+  coeliacDiagnosed?: boolean;
+  alarmFlags?: {
+    unintendedWeightLoss?: boolean;
+    giBleeding?: boolean;
+    persistentVomiting?: boolean;
+    dysphagia?: boolean;
+    anaemia?: boolean;
+  };
+  strictAdherence?: boolean;
+  updatedAt: string;
+}
+
 /** A frequent-meal group for the one-tap re-log chips. */
 export interface FrequentMeal {
   signature: string;
@@ -192,11 +239,13 @@ export class DiaryStore {
   private scopePrefix(): string {
     return `${encodeURIComponent(this.scope)}|`;
   }
-  private prefix(kind: "meal" | "symptom" | "protocol" | "conclusion" | "genetic"): string {
+  private prefix(
+    kind: "meal" | "symptom" | "protocol" | "conclusion" | "genetic" | "triggerClass" | "safetyContext",
+  ): string {
     return `${this.scopePrefix()}${kind}|`;
   }
   private key(
-    kind: "meal" | "symptom" | "protocol" | "conclusion" | "genetic",
+    kind: "meal" | "symptom" | "protocol" | "conclusion" | "genetic" | "triggerClass" | "safetyContext",
     ulid: string,
   ): string {
     return `${this.prefix(kind)}${ulid}`;
@@ -354,6 +403,41 @@ export class DiaryStore {
     await this.kv.set(this.key("genetic", DiaryStore.GENETIC_ID), g);
   }
 
+  // --- learned trigger lag profiles (Insights richer-UI follow-up) -------------
+
+  /**
+   * Store (or overwrite in place) a locally-learned per-trigger lag profile.
+   * ONE record per `slug` — a re-learn simply replaces the prior estimate, same
+   * as a protocol's in-place update.
+   */
+  async putTriggerClass(triggerClass: StoredTriggerClass): Promise<void> {
+    await this.kv.set(this.key("triggerClass", triggerClass.slug), triggerClass);
+  }
+  /** All locally-learned trigger classes for this account. */
+  async allTriggerClasses(): Promise<StoredTriggerClass[]> {
+    const keys = await this.kv.keys(this.prefix("triggerClass"));
+    const items = await Promise.all(keys.map((k) => this.kv.get<StoredTriggerClass>(k)));
+    return items.filter((t): t is StoredTriggerClass => !!t);
+  }
+
+  // --- safety-context inputs (Insights richer-UI follow-up) --------------------
+
+  /** The fixed cache id for the one safety-context record (there is exactly one per pod). */
+  private static readonly SAFETY_CONTEXT_ID = "current";
+
+  /** Persist the current safety-context inputs (alarm flags / diagnosed / adherence). */
+  async putSafetyContext(ctx: StoredSafetyContext): Promise<void> {
+    await this.kv.set(this.key("safetyContext", DiaryStore.SAFETY_CONTEXT_ID), ctx);
+  }
+  /** Read back the persisted safety-context inputs, if any were ever saved. */
+  async getSafetyContext(): Promise<StoredSafetyContext | undefined> {
+    return (
+      (await this.kv.get<StoredSafetyContext>(
+        this.key("safetyContext", DiaryStore.SAFETY_CONTEXT_ID),
+      )) ?? undefined
+    );
+  }
+
   /** Records still needing a pod write (pending or errored). */
   async pending(): Promise<{
     meals: StoredMeal[];
@@ -381,9 +465,15 @@ export class DiaryStore {
   /**
    * PRIVACY PURGE — mandatory on sign-out (the offline design's §7 logout-purge,
    * parallel to the credential wipe). Delete EVERY cached record for THIS account's
-   * WebID scope from the backing Kv — meals, symptoms, protocols, conclusions and
-   * the genetic summary alike, pending or synced — so nothing the now-departed user
-   * logged or read is recoverable by the next user of the same browser/device.
+   * WebID scope from the backing Kv — meals, symptoms, protocols, conclusions, the
+   * genetic summary, the locally-learned trigger lag profiles, and the
+   * safety-context inputs alike, pending or synced — so nothing the now-departed
+   * user logged or read is recoverable by the next user of the same browser/device.
+   * New record kinds are covered by CONSTRUCTION, not by an enumerated list: every
+   * kind is namespaced under this same `|`-delimited {@link scopePrefix}
+   * (see {@link key}), and purge deletes by prefix scan — so a kind added later
+   * (like `triggerClass`/`safetyContext`) is swept automatically without this
+   * method needing an update, as long as it goes through {@link key}/{@link prefix}.
    *
    * Purge is exact and isolated: it only touches keys under this scope's
    * `|`-delimited {@link scopePrefix}, so a DIFFERENT WebID's cache (and the

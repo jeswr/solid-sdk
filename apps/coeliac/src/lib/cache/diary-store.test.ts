@@ -160,24 +160,107 @@ async function seedEveryKind(s: DiaryStore, prefix: string): Promise<void> {
     rev: `${prefix}-rev`,
     sync: "pending",
   });
+  await s.putTriggerClass({
+    kind: "triggerClass",
+    slug: "lactose",
+    lagWindowMin: 1,
+    lagWindowMax: 4,
+    lagMode: 2,
+    sampleSize: 5,
+    updatedAt: "2026-07-05T08:00:00.000Z",
+  });
+  await s.putSafetyContext({
+    kind: "safetyContext",
+    coeliacDiagnosed: true,
+    strictAdherence: true,
+    updatedAt: "2026-07-05T08:00:00.000Z",
+  });
 }
 
 async function isEmpty(s: DiaryStore): Promise<boolean> {
-  const [meals, symptoms, protocols, conclusions, genetic] = await Promise.all([
-    s.allMeals(),
-    s.allSymptoms(),
-    s.allProtocols(),
-    s.allConclusions(),
-    s.getGeneticSummary(),
-  ]);
+  const [meals, symptoms, protocols, conclusions, genetic, triggerClasses, safetyContext] =
+    await Promise.all([
+      s.allMeals(),
+      s.allSymptoms(),
+      s.allProtocols(),
+      s.allConclusions(),
+      s.getGeneticSummary(),
+      s.allTriggerClasses(),
+      s.getSafetyContext(),
+    ]);
   return (
     meals.length === 0 &&
     symptoms.length === 0 &&
     protocols.length === 0 &&
     conclusions.length === 0 &&
-    genetic === undefined
+    genetic === undefined &&
+    triggerClasses.length === 0 &&
+    safetyContext === undefined
   );
 }
+
+describe("DiaryStore — learned trigger classes + safety-context (Insights richer-UI)", () => {
+  it("stores + overwrites a learned trigger class in place, keyed by slug", async () => {
+    const s = store();
+    await s.putTriggerClass({
+      kind: "triggerClass",
+      slug: "gluten",
+      lagWindowMin: 2,
+      lagWindowMax: 48,
+      lagMode: 6,
+      sampleSize: 4,
+      updatedAt: "2026-07-01T08:00:00.000Z",
+    });
+    await s.putTriggerClass({
+      kind: "triggerClass",
+      slug: "lactose",
+      lagWindowMin: 1,
+      lagWindowMax: 5,
+      lagMode: 2,
+      sampleSize: 3,
+      updatedAt: "2026-07-01T08:00:00.000Z",
+    });
+    expect((await s.allTriggerClasses()).map((t) => t.slug).sort()).toEqual(["gluten", "lactose"]);
+
+    // Re-learning the SAME trigger overwrites in place — not a second record.
+    await s.putTriggerClass({
+      kind: "triggerClass",
+      slug: "gluten",
+      lagWindowMin: 3,
+      lagWindowMax: 40,
+      lagMode: 8,
+      sampleSize: 9,
+      updatedAt: "2026-07-10T08:00:00.000Z",
+    });
+    const all = await s.allTriggerClasses();
+    expect(all).toHaveLength(2);
+    const gluten = all.find((t) => t.slug === "gluten");
+    expect(gluten?.sampleSize).toBe(9);
+    expect(gluten?.lagMode).toBe(8);
+  });
+
+  it("stores + overwrites the single safety-context record", async () => {
+    const s = store();
+    expect(await s.getSafetyContext()).toBeUndefined();
+    await s.putSafetyContext({
+      kind: "safetyContext",
+      coeliacDiagnosed: false,
+      updatedAt: "2026-07-01T08:00:00.000Z",
+    });
+    expect((await s.getSafetyContext())?.coeliacDiagnosed).toBe(false);
+    await s.putSafetyContext({
+      kind: "safetyContext",
+      coeliacDiagnosed: true,
+      strictAdherence: true,
+      alarmFlags: { giBleeding: true },
+      updatedAt: "2026-07-10T08:00:00.000Z",
+    });
+    const ctx = await s.getSafetyContext();
+    expect(ctx?.coeliacDiagnosed).toBe(true);
+    expect(ctx?.strictAdherence).toBe(true);
+    expect(ctx?.alarmFlags?.giBleeding).toBe(true);
+  });
+});
 
 describe("DiaryStore.purge (logout privacy purge)", () => {
   it("drops every kind for the scope — pending AND synced alike", async () => {

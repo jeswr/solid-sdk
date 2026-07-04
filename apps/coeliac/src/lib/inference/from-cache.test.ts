@@ -5,8 +5,15 @@
  * anchoring) rather than fed to the engine as a NaN date.
  */
 import { describe, expect, it } from "vitest";
-import type { StoredMeal, StoredSymptom } from "../cache/diary-store";
-import { diaryDataFromCache, storedMealToData, storedSymptomToData } from "./from-cache";
+import type { StoredMeal, StoredSafetyContext, StoredSymptom, StoredTriggerClass } from "../cache/diary-store";
+import {
+  diaryDataFromCache,
+  storedMealToData,
+  storedSafetyContextToContext,
+  storedSymptomToData,
+  storedTriggerClassToData,
+  triggerClassDataToStored,
+} from "./from-cache";
 
 function storedMeal(over: Partial<StoredMeal> = {}): StoredMeal {
   return {
@@ -115,5 +122,94 @@ describe("diaryDataFromCache", () => {
     expect(diary.protocols?.[0].phase).toBe("observe");
     expect(diary.conclusions).toHaveLength(1);
     expect(diary.conclusions?.[0].confidence).toBe("confirmed");
+  });
+
+  it("feeds cached learned trigger classes into DiaryData.triggerClasses", () => {
+    const tc: StoredTriggerClass = {
+      kind: "triggerClass",
+      slug: "lactose",
+      lagWindowMin: 1,
+      lagWindowMax: 5,
+      lagMode: 2,
+      sampleSize: 6,
+      updatedAt: "2026-07-01T08:00:00.000Z",
+    };
+    const diary = diaryDataFromCache([], [], [], [], [tc]);
+    expect(diary.triggerClasses).toEqual([
+      { slug: "lactose", lagWindowMin: 1, lagWindowMax: 5, lagMode: 2, label: undefined },
+    ]);
+  });
+
+  it("defaults to an empty triggerClasses list (unchanged prior behaviour)", () => {
+    const diary = diaryDataFromCache([], []);
+    expect(diary.triggerClasses).toEqual([]);
+  });
+});
+
+describe("storedTriggerClassToData / triggerClassDataToStored", () => {
+  it("round-trips a valid learned trigger class", () => {
+    const stored: StoredTriggerClass = {
+      kind: "triggerClass",
+      slug: "gluten",
+      lagWindowMin: 2,
+      lagWindowMax: 48,
+      lagMode: 6,
+      label: "Gluten",
+      sampleSize: 8,
+      updatedAt: "2026-07-01T08:00:00.000Z",
+    };
+    const data = storedTriggerClassToData(stored);
+    expect(data).toEqual({
+      slug: "gluten",
+      lagWindowMin: 2,
+      lagWindowMax: 48,
+      lagMode: 6,
+      label: "Gluten",
+    });
+    const back = triggerClassDataToStored(data!, 8, "2026-07-05T08:00:00.000Z");
+    expect(back).toEqual({
+      kind: "triggerClass",
+      slug: "gluten",
+      lagWindowMin: 2,
+      lagWindowMax: 48,
+      lagMode: 6,
+      label: "Gluten",
+      sampleSize: 8,
+      updatedAt: "2026-07-05T08:00:00.000Z",
+    });
+  });
+
+  it("drops (fails closed on) an invalid / corrupt stored profile", () => {
+    const corrupt: StoredTriggerClass = {
+      kind: "triggerClass",
+      slug: "lactose",
+      lagWindowMin: 10,
+      lagWindowMax: 2, // unordered — max < min
+      lagMode: 5,
+      sampleSize: 6,
+      updatedAt: "2026-07-01T08:00:00.000Z",
+    };
+    expect(storedTriggerClassToData(corrupt)).toBeUndefined();
+  });
+});
+
+describe("storedSafetyContextToContext", () => {
+  it("maps the cached record to the engine's SafetyContext shape", () => {
+    const ctx: StoredSafetyContext = {
+      kind: "safetyContext",
+      coeliacDiagnosed: true,
+      strictAdherence: true,
+      alarmFlags: { giBleeding: true },
+      updatedAt: "2026-07-01T08:00:00.000Z",
+    };
+    expect(storedSafetyContextToContext(ctx)).toEqual({
+      coeliacDiagnosed: true,
+      alarmFlags: { giBleeding: true },
+      strictAdherence: true,
+    });
+  });
+
+  it("returns the safe empty default when nothing is cached", () => {
+    expect(storedSafetyContextToContext(undefined)).toEqual({});
   });
 });

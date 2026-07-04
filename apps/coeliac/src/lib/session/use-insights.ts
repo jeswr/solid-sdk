@@ -11,10 +11,22 @@
  * correlation only ever PROPOSES (no `confirmed`); the pre-diagnosis gluten block and
  * orthorexia/expansion bias live inside `analyze`. This hook adds no inference of its
  * own — it only feeds cached records in and hands the typed result out.
+ *
+ * PER-USER LAG PROFILES (the Insights richer-UI data-flow fix, suite-tracker-ov8g
+ * deliverable 5): every refresh ALSO reads back any locally-learned trigger lag
+ * profiles ({@link import("../cache/diary-store").StoredTriggerClass}) from the
+ * cache and feeds them into `diary.triggerClasses`, so `resolveLag` uses the
+ * user's OWN observed lag window instead of the model's evidence prior once
+ * enough evidence exists. After each analysis, any newly-eligible profiles
+ * (`learnTriggerClasses`) are persisted back — best-effort, fire-and-forget, never
+ * blocking the paint and never surfacing an error (a failed persist just means the
+ * next run learns again from the same underlying diary). Nothing here leaves the
+ * device: no network call is made, only the existing local cache.
  */
 import { useCallback, useEffect, useState } from "react";
 import { analyze, type AnalysisResult } from "../inference/analyze";
-import { diaryDataFromCache } from "../inference/from-cache";
+import { diaryDataFromCache, triggerClassDataToStored } from "../inference/from-cache";
+import { learnTriggerClasses } from "../inference/learn-lag-profile";
 import type { SafetyContext } from "../inference/types";
 import { useSession } from "./context";
 
@@ -49,13 +61,14 @@ export function useInsights(context: SafetyContext = EMPTY_CONTEXT): InsightsSta
       setState({ result: null, mealCount: 0, symptomCount: 0, loaded: true });
       return;
     }
-    const [meals, symptoms, protocols, conclusions] = await Promise.all([
+    const [meals, symptoms, protocols, conclusions, triggerClasses] = await Promise.all([
       store.allMeals(),
       store.allSymptoms(),
       store.allProtocols(),
       store.allConclusions(),
+      store.allTriggerClasses(),
     ]);
-    const diary = diaryDataFromCache(meals, symptoms, protocols, conclusions);
+    const diary = diaryDataFromCache(meals, symptoms, protocols, conclusions, triggerClasses);
     const result = analyze(diary, context);
     setState({
       result,
@@ -63,6 +76,15 @@ export function useInsights(context: SafetyContext = EMPTY_CONTEXT): InsightsSta
       symptomCount: diary.symptoms.length,
       loaded: true,
     });
+
+    // Best-effort: persist any freshly-eligible per-user lag profiles for the NEXT
+    // run to read back (see module docs). Never awaited — must not delay the paint
+    // — and a rejection is swallowed (cache-only, non-critical refinement).
+    for (const learned of learnTriggerClasses(result.suspicions)) {
+      void store
+        .putTriggerClass(triggerClassDataToStored(learned.data, learned.sampleSize))
+        .catch(() => {});
+    }
   }, [store, context]);
 
   useEffect(() => {
