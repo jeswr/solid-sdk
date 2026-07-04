@@ -22,6 +22,7 @@ import { credentialToRdf } from "./credential.js";
 import { digestRdfContent } from "./digest.js";
 import type { ProofSuite, ProofVerifyOptions, SuiteRegistry } from "./proof.js";
 import { defaultSuiteRegistry } from "./proof.js";
+import { proofsOf, unsigned } from "./proof-set.js";
 import type {
   Credential,
   CredentialStatusCheck,
@@ -102,20 +103,6 @@ export interface VerifyCredentialOptions extends VerifyOptions {
 function defaultControlledBy(verificationMethod: string, issuer: string): boolean {
   if (verificationMethod === issuer) return true;
   return verificationMethod.startsWith(`${issuer}#`) || verificationMethod.startsWith(`${issuer}/`);
-}
-
-/** Normalise one-or-many proofs to an array. */
-function proofsOf(vc: VerifiableCredential): DataIntegrityProof[] {
-  const proof = vc.proof;
-  return Array.isArray(proof)
-    ? [...(proof as readonly DataIntegrityProof[])]
-    : [proof as DataIntegrityProof];
-}
-
-/** Strip the proof to recover the unsigned claim graph the signature covered. */
-function unsigned(vc: VerifiableCredential): Credential {
-  const { proof: _proof, ...rest } = vc;
-  return rest as Credential;
 }
 
 /**

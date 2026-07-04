@@ -94,6 +94,15 @@ export function buildBoundAgentAuthorizationCredential(auth: AgentAuthorization)
 export function canonicalNQuads(quads: readonly Quad[]): Promise<string>;
 
 // @public
+export function countersign(vc: VerifiableCredential, key: KeyPair | unknown, opts?: CountersignOptions): Promise<VerifiableCredential>;
+
+// @public
+export interface CountersignOptions {
+    readonly options?: IssueOptions;
+    readonly suite?: ProofSuite;
+}
+
+// @public
 export function createBitstringStatusResolver(options: BitstringStatusOptions): (vc: VerifiableCredential) => Promise<CredentialStatusCheck>;
 
 // @public
@@ -298,6 +307,9 @@ export interface KeyPair {
 export const MIN_STATUS_LIST_LENGTH = 131072;
 
 // @public
+export function parseAndValidateCredential(body: string, contentType?: string): Promise<ValidCredentialResult>;
+
+// @public
 export function parseCredentialRdf(body: string, contentType?: string): Promise<DatasetCore>;
 
 // @public
@@ -386,6 +398,9 @@ export interface PublishVerificationMethodInput {
 
 // @public
 export function readStatusBit(credential: Credential_2, index: number): boolean;
+
+// @public
+export function readValidCredential(dataset: DatasetCore): ValidCredentialResult;
 
 // @public
 export interface RelatedResource {
@@ -482,6 +497,22 @@ export const SVC: "https://w3id.org/jeswr/solid-vc#";
 
 // @public
 export const SVC_AGENT_AUTHORIZATION: "https://w3id.org/jeswr/solid-vc#AgentAuthorizationCredential";
+
+// @public
+export type ValidCredentialResult = {
+    readonly valid: true;
+    readonly credential: {
+        readonly id: string;
+        readonly issuer: string;
+        readonly validFrom?: string;
+        readonly validUntil?: string;
+        readonly types: string[];
+        readonly node: CredentialNode;
+    };
+} | {
+    readonly valid: false;
+    readonly error: string;
+};
 
 // @public
 export const VC: "https://www.w3.org/2018/credentials#";

@@ -42,12 +42,14 @@
  */
 export { BitstringDecodeError, createStatusBitstring, DEFAULT_MAX_DECODED_BYTES, decodeStatusList, encodeStatusList, getStatusBit, MIN_STATUS_LIST_LENGTH, setStatusBit, } from "./bitstring.js";
 export { canonicalNQuads, dataIntegrityHash } from "./canonicalize.js";
+export { type CountersignOptions, countersign } from "./countersign.js";
 export { agentAuthorizationFromRdf, buildAgentAuthorizationCredential, buildBoundAgentAuthorizationCredential, credentialFromRdf, credentialMetaFromNode, credentialStatusesOf, credentialStatusFromNode, credentialToJsonLd, credentialToRdf, credentialToTurtle, parseCredentialRdf, relatedResourcesFromNode, } from "./credential.js";
 export { digestQuads, digestRdfContent } from "./digest.js";
 export { type IssueInput, issue, issueAgentAuthorization } from "./issue.js";
 export { cryptosuiteForKeyType, exportPrivateJwk, exportPublicJwk, generateKeyPairForSuite, importKeyPair, importPublicKey, type SuiteKeyType, } from "./keys.js";
 export { base58btcDecode, base58btcEncode } from "./multibase.js";
 export { DataIntegritySuite, defaultSuiteRegistry, type ProofSignOptions, type ProofSuite, type ProofVerifyOptions, proofOptionsQuads, SuiteRegistry, } from "./proof.js";
+export { parseAndValidateCredential, readValidCredential, type ValidCredentialResult, } from "./read-valid.js";
 export { serialize } from "./serialize.js";
 export { type BitstringStatusListCredentialInput, type BitstringStatusListEntryInput, type BitstringStatusOptions, bitstringStatusListEntry, buildBitstringStatusListCredential, createBitstringStatusResolver, readStatusBit, resolveBitstringStatus, statusListBitsOf, withStatusBit, } from "./status.js";
 export type { AgentAuthorization, BitstringStatusListEntry, Credential, CredentialStatusCheck, CredentialSubject, DataIntegrityProof, IssueOptions, JsonValue, KeyPair, Presentation, PresentedResourceContent, RelatedResource, VerifiableCredential, VerifiablePresentation, VerificationError, VerificationErrorCode, VerificationResult, VerifyOptions, } from "./types.js";

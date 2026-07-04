@@ -183,12 +183,12 @@ async function parseRdf(body, contentTypeHeader, options = {}) {
   }
 }
 function collectIntoStore(parser) {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve, reject2) => {
     const store = new Store();
     parser.on("data", (quad) => {
       store.addQuad(quad);
     });
-    parser.on("error", reject);
+    parser.on("error", reject2);
     parser.on("end", () => {
       resolve(store);
     });
@@ -240,7 +240,7 @@ async function pumpBody(parser, body) {
   }
 }
 function waitForDrain(parser) {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve, reject2) => {
     const cleanup = () => {
       parser.off("drain", onDrain);
       parser.off("error", onError);
@@ -251,7 +251,7 @@ function waitForDrain(parser) {
     };
     const onError = (err) => {
       cleanup();
-      reject(err);
+      reject2(err);
     };
     parser.once("drain", onDrain);
     parser.once("error", onError);
@@ -344,12 +344,12 @@ function serialize(quads, options) {
   if (emptyAsEmptyString && quads.length === 0) {
     return Promise.resolve("");
   }
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve, reject2) => {
     const writer = new Writer({ format, prefixes });
     writer.addQuads(quads);
     writer.end((error, result) => {
       if (error) {
-        reject(error);
+        reject2(error);
       } else {
         resolve(result);
       }
@@ -1030,9 +1030,6 @@ function readSubjectClaims(dataset, subjectIri) {
   };
 }
 
-// src/issue.ts
-import { randomUUID as randomUUID2 } from "node:crypto";
-
 // src/proof.ts
 var SuiteRegistry = class {
   suites = /* @__PURE__ */ new Map();
@@ -1137,7 +1134,49 @@ function defaultSuiteRegistry() {
   return new SuiteRegistry().register(new DataIntegritySuite("eddsa-rdfc-2022")).register(new DataIntegritySuite("ecdsa-rdfc-2019"));
 }
 
+// src/proof-set.ts
+function proofsOf(vc) {
+  const proof = vc.proof;
+  if (proof === void 0) return [];
+  return Array.isArray(proof) ? [...proof] : [proof];
+}
+function unsigned(vc) {
+  const { proof: _proof, ...rest } = vc;
+  return rest;
+}
+
+// src/countersign.ts
+async function countersign(vc, key, opts) {
+  if (vc === null || typeof vc !== "object" || typeof vc.issuer !== "string" || vc.issuer.length === 0 || vc.credentialSubject === void 0) {
+    throw new Error(
+      "@jeswr/solid-vc: countersign requires a structurally signed credential (a string issuer and a credentialSubject) \u2014 got a non-credential object"
+    );
+  }
+  if (typeof vc.id !== "string" || vc.id.length === 0) {
+    throw new Error(
+      "@jeswr/solid-vc: countersign requires a credential with a stable `id` \u2014 an id-less credential lowers to a fresh random subject on every call, so its signatures are not reproducible and a countersignature would not verify"
+    );
+  }
+  const existing = proofsOf(vc);
+  if (existing.length === 0) {
+    throw new Error(
+      "@jeswr/solid-vc: countersign requires a credential that already carries a proof \u2014 use issue() to create the first signature, then countersign() to add another"
+    );
+  }
+  const suite = opts?.suite ?? new DataIntegritySuite("eddsa-rdfc-2022");
+  const created = opts?.options?.created ?? /* @__PURE__ */ new Date();
+  const proofPurpose = opts?.options?.proofPurpose ?? "assertionMethod";
+  const documentQuads = credentialToRdf(unsigned(vc));
+  const newProof = await suite.sign(documentQuads, {
+    key,
+    proofPurpose,
+    created
+  });
+  return { ...vc, proof: [...existing, newProof] };
+}
+
 // src/issue.ts
+import { randomUUID as randomUUID2 } from "node:crypto";
 async function issue(input) {
   const suite = input.suite ?? new DataIntegritySuite("eddsa-rdfc-2022");
   const created = input.options?.created ?? /* @__PURE__ */ new Date();
@@ -1212,18 +1251,128 @@ function algForJwk(jwk) {
   throw new Error(`unsupported JWK: kty=${jwk.kty} crv=${jwk.crv ?? "?"}`);
 }
 
+// src/read-valid.ts
+var XSD_DATETIME_RE = /^-?\d{4,}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})?$/;
+function isXsdDateTime(value) {
+  if (!XSD_DATETIME_RE.test(value)) return false;
+  return !Number.isNaN(Date.parse(value));
+}
+function reject(error) {
+  return { valid: false, error };
+}
+var XSD_DATETIME = `${XSD}dateTime`;
+function readOptionalDateTime(terms, field) {
+  const all = [...terms];
+  if (all.length === 0) return { ok: true };
+  if (all.length > 1) {
+    return { ok: false, error: `credential ${field} has more than one value \u2014 ambiguous` };
+  }
+  const term = all[0];
+  if (term === void 0) return { ok: true };
+  if (term.termType !== "Literal") {
+    return { ok: false, error: `credential ${field} must be an xsd:dateTime literal` };
+  }
+  if (term.datatype?.value !== XSD_DATETIME) {
+    return {
+      ok: false,
+      error: `credential ${field} must be typed xsd:dateTime, not ${term.datatype?.value ?? "an untyped literal"}`
+    };
+  }
+  if (!isXsdDateTime(term.value)) {
+    return {
+      ok: false,
+      error: `credential ${field} "${term.value}" is not a well-formed xsd:dateTime`
+    };
+  }
+  return { ok: true, value: term.value };
+}
+function hasCredentialShapedNode(dataset) {
+  for (const quad of dataset) {
+    if (quad.predicate.value === VC_ISSUER || quad.predicate.value === VC_CREDENTIAL_SUBJECT) {
+      return true;
+    }
+  }
+  return false;
+}
+function readValidCredential(dataset) {
+  try {
+    return readValidCredentialInner(dataset);
+  } catch (e) {
+    return reject(`credential could not be read: ${e.message}`);
+  }
+}
+function readValidCredentialInner(dataset) {
+  const nodes = wrapVc(dataset).credentials();
+  if (nodes.length > 1) {
+    return reject(
+      `dataset contains ${nodes.length} VerifiableCredential nodes \u2014 ambiguous, refusing to pick one`
+    );
+  }
+  if (nodes.length === 0) {
+    return hasCredentialShapedNode(dataset) ? reject("credential node is missing the required VerifiableCredential type") : reject("no VerifiableCredential node in the dataset");
+  }
+  const node = nodes[0];
+  if (node === void 0) {
+    return reject("no VerifiableCredential node in the dataset");
+  }
+  const types = [];
+  for (const t of node.types) {
+    if (t.termType === "NamedNode") types.push(t.value);
+  }
+  if (!types.includes(VC_CREDENTIAL)) {
+    return reject("credential node is missing the required VerifiableCredential type");
+  }
+  const issuerTerms = [...node.issuers];
+  if (issuerTerms.length === 0) {
+    return reject("credential has no issuer");
+  }
+  if (issuerTerms.length > 1) {
+    return reject("credential has more than one issuer \u2014 ambiguous");
+  }
+  const issuerTerm = issuerTerms[0];
+  if (issuerTerm === void 0) {
+    return reject("credential has no issuer");
+  }
+  if (issuerTerm.termType !== "NamedNode") {
+    return reject("credential issuer must be an IRI (a NamedNode), not a literal or blank node");
+  }
+  if (!isAbsoluteIri(issuerTerm.value)) {
+    return reject(`credential issuer "${issuerTerm.value}" is not an absolute IRI`);
+  }
+  const issuer = issuerTerm.value;
+  if (node.subjects.size === 0) {
+    return reject("credential has no credentialSubject");
+  }
+  const validFrom = readOptionalDateTime(node.validFroms, "validFrom");
+  if (!validFrom.ok) return reject(validFrom.error);
+  const validUntil = readOptionalDateTime(node.validUntils, "validUntil");
+  if (!validUntil.ok) return reject(validUntil.error);
+  return {
+    valid: true,
+    credential: {
+      id: node.value,
+      issuer,
+      ...validFrom.value !== void 0 ? { validFrom: validFrom.value } : {},
+      ...validUntil.value !== void 0 ? { validUntil: validUntil.value } : {},
+      types,
+      node
+    }
+  };
+}
+async function parseAndValidateCredential(body, contentType2 = "text/turtle") {
+  let dataset;
+  try {
+    dataset = await parseCredentialRdf(body, contentType2);
+  } catch (e) {
+    return reject(`credential body could not be parsed as ${contentType2}: ${e.message}`);
+  }
+  return readValidCredential(dataset);
+}
+
 // src/verify.ts
 function defaultControlledBy(verificationMethod, issuer) {
   if (verificationMethod === issuer) return true;
   return verificationMethod.startsWith(`${issuer}#`) || verificationMethod.startsWith(`${issuer}/`);
-}
-function proofsOf(vc) {
-  const proof = vc.proof;
-  return Array.isArray(proof) ? [...proof] : [proof];
-}
-function unsigned(vc) {
-  const { proof: _proof, ...rest } = vc;
-  return rest;
 }
 function normalizeRelatedResources(value) {
   if (value === void 0) return { entries: [] };
@@ -2135,6 +2284,7 @@ export {
   buildBitstringStatusListCredential,
   buildBoundAgentAuthorizationCredential,
   canonicalNQuads,
+  countersign,
   createBitstringStatusResolver,
   createStatusBitstring,
   createWebIdKeyResolver,
@@ -2162,10 +2312,12 @@ export {
   importPublicKey,
   issue,
   issueAgentAuthorization,
+  parseAndValidateCredential,
   parseCredentialRdf,
   proofOptionsQuads,
   publishVerificationMethod,
   readStatusBit,
+  readValidCredential,
   relatedResourcesFromNode,
   resolveBitstringStatus,
   resolveWebIdKey,
