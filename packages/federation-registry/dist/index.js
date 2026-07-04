@@ -1,9 +1,9 @@
-// ..node_modules/@jeswr/fetch-rdf/dist/parse.js
+// node_modules/@jeswr/fetch-rdf/dist/parse.js
 import contentType from "content-type";
 import { Store, StreamParser } from "n3";
 import { JsonLdParser } from "jsonld-streaming-parser";
 
-// ..node_modules/@jeswr/fetch-rdf/dist/errors.js
+// node_modules/@jeswr/fetch-rdf/dist/errors.js
 var RdfFetchError = class extends Error {
   /** The original cause, if any (e.g. a network error or parser exception). */
   cause;
@@ -27,7 +27,7 @@ var RdfFetchError = class extends Error {
   }
 };
 
-// ..node_modules/@jeswr/fetch-rdf/dist/parse.js
+// node_modules/@jeswr/fetch-rdf/dist/parse.js
 var SUPPORTED_RDF_MEDIA_TYPES = [
   "text/turtle",
   "application/n-triples",
@@ -152,7 +152,7 @@ function waitForDrain(parser) {
   });
 }
 
-// ..node_modules/@jeswr/fetch-rdf/dist/fetch.js
+// node_modules/@jeswr/fetch-rdf/dist/fetch.js
 var ACCEPT = "text/turtle, application/ld+json;q=0.9";
 async function fetchRdf(url, options = {}) {
   const fetchImpl = options.fetch ?? globalThis.fetch;
