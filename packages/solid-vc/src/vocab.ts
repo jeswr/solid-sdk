@@ -111,6 +111,20 @@ export const SEC_PROOF_PURPOSE = `${SEC}proofPurpose` as const;
 /** The dateTime the proof was created (Data Integrity uses `dc:created`). */
 export const DC_CREATED = "http://purl.org/dc/terms/created" as const;
 
+// --- Controlled-identifier-document / verification-method terms (standard) --
+/** `sec:Multikey` — the multibase-multicodec public-key verification-method class. */
+export const SEC_MULTIKEY = `${SEC}Multikey` as const;
+/** `sec:controller` — verification method → the identity that controls it. */
+export const SEC_CONTROLLER = `${SEC}controller` as const;
+/** `sec:publicKeyMultibase` — the Multikey public key (multibase multicodec). */
+export const SEC_PUBLIC_KEY_MULTIBASE = `${SEC}publicKeyMultibase` as const;
+/**
+ * `sec:assertionMethod` — controller document → a verification method the
+ * controller AUTHORISES for assertion proofs (the verification relationship a
+ * VC `assertionMethod` proof purpose requires the controller document to list).
+ */
+export const SEC_ASSERTION_METHOD = `${SEC}assertionMethod` as const;
+
 // --- The @jeswr agent-authorization extension (minted, documented) --------
 /**
  * `svc:AgentAuthorizationCredential` — the headline credential type: a signed

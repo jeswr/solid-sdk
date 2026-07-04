@@ -312,6 +312,10 @@ var SEC_PROOF_VALUE = `${SEC}proofValue`;
 var SEC_VERIFICATION_METHOD = `${SEC}verificationMethod`;
 var SEC_PROOF_PURPOSE = `${SEC}proofPurpose`;
 var DC_CREATED = "http://purl.org/dc/terms/created";
+var SEC_MULTIKEY = `${SEC}Multikey`;
+var SEC_CONTROLLER = `${SEC}controller`;
+var SEC_PUBLIC_KEY_MULTIBASE = `${SEC}publicKeyMultibase`;
+var SEC_ASSERTION_METHOD = `${SEC}assertionMethod`;
 var SVC_AGENT_AUTHORIZATION = `${SVC}AgentAuthorizationCredential`;
 var SVC_AUTHORIZES = `${SVC}authorizes`;
 var SVC_ACTION = `${SVC}action`;
@@ -1156,7 +1160,7 @@ async function verifyCredential(vc, options) {
           message: `proofPurpose "${proof.proofPurpose}" != expected "${expectedPurpose}"`
         });
       }
-      if (!controlledBy(proof.verificationMethod, issuer)) {
+      if (!await controlledBy(proof.verificationMethod, issuer)) {
         errors.push({
           code: "ISSUER_MISMATCH",
           message: `verificationMethod ${proof.verificationMethod} is not controlled by issuer ${issuer}`
@@ -1184,12 +1188,289 @@ function normalizePurpose(purpose) {
   const hash = purpose.lastIndexOf("#");
   return hash === -1 ? purpose : purpose.slice(hash + 1);
 }
+
+// src/webid.ts
+import { SetFrom as SetFrom2, TermAs as TermAs2, TermFrom as TermFrom2, TermWrapper as TermWrapper2 } from "@rdfjs/wrapper";
+import { base64url, exportJWK as exportJWK2 } from "jose";
+import { DataFactory as DataFactory2 } from "n3";
+var ED25519_PUB_PREFIX = Uint8Array.from([237, 1]);
+var P256_PUB_PREFIX = Uint8Array.from([128, 36]);
+async function encodeMultikey(publicKey) {
+  return (await multikeyOf(publicKey)).publicKeyMultibase;
+}
+async function multikeyOf(publicKey) {
+  const jwk = await exportJWK2(publicKey);
+  if (jwk.kty === "OKP" && jwk.crv === "Ed25519" && typeof jwk.x === "string") {
+    const raw = base64url.decode(jwk.x);
+    if (raw.length !== 32) {
+      throw new Error(`@jeswr/solid-vc: Ed25519 public key must be 32 bytes, got ${raw.length}`);
+    }
+    return {
+      publicKeyMultibase: base58btcEncode(concatBytes(ED25519_PUB_PREFIX, raw)),
+      keyType: "Ed25519"
+    };
+  }
+  if (jwk.kty === "EC" && jwk.crv === "P-256" && typeof jwk.x === "string" && typeof jwk.y === "string") {
+    const x = base64url.decode(jwk.x);
+    const y = base64url.decode(jwk.y);
+    if (x.length !== 32 || y.length !== 32) {
+      throw new Error(
+        `@jeswr/solid-vc: P-256 coordinates must be 32 bytes each, got x=${x.length} y=${y.length}`
+      );
+    }
+    const parity = Uint8Array.from([2 + (y[31] & 1)]);
+    return {
+      publicKeyMultibase: base58btcEncode(concatBytes(P256_PUB_PREFIX, parity, x)),
+      keyType: "P-256"
+    };
+  }
+  throw new Error(
+    `@jeswr/solid-vc: unsupported public key for Multikey encoding (kty=${jwk.kty} crv=${jwk.crv ?? "?"}) \u2014 only Ed25519 and P-256 are supported`
+  );
+}
+async function decodeMultikey(publicKeyMultibase) {
+  let bytes;
+  try {
+    bytes = base58btcDecode(publicKeyMultibase);
+  } catch {
+    return void 0;
+  }
+  try {
+    if (hasPrefix(bytes, ED25519_PUB_PREFIX)) {
+      const raw = bytes.subarray(ED25519_PUB_PREFIX.length);
+      if (raw.length !== 32) return void 0;
+      const publicKey = await importPublicKey({
+        kty: "OKP",
+        crv: "Ed25519",
+        x: base64url.encode(raw)
+      });
+      return { publicKey, keyType: "Ed25519" };
+    }
+    if (hasPrefix(bytes, P256_PUB_PREFIX)) {
+      const point = bytes.subarray(P256_PUB_PREFIX.length);
+      if (point.length !== 33 || point[0] !== 2 && point[0] !== 3) {
+        return void 0;
+      }
+      const publicKey = await globalThis.crypto.subtle.importKey(
+        "raw",
+        point,
+        { name: "ECDSA", namedCurve: "P-256" },
+        true,
+        ["verify"]
+      );
+      return { publicKey, keyType: "P-256" };
+    }
+  } catch {
+    return void 0;
+  }
+  return void 0;
+}
+function concatBytes(...parts) {
+  const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
+  let offset = 0;
+  for (const p of parts) {
+    out.set(p, offset);
+    offset += p.length;
+  }
+  return out;
+}
+function hasPrefix(bytes, prefix) {
+  if (bytes.length < prefix.length) return false;
+  for (let i = 0; i < prefix.length; i += 1) {
+    if (bytes[i] !== prefix[i]) return false;
+  }
+  return true;
+}
+function objectTerms2(node, predicate) {
+  return SetFrom2.subjectPredicate(node, predicate, TermAs2.instance(TermWrapper2), TermFrom2.instance);
+}
+var ControllerNode = class extends TermWrapper2 {
+  get assertionMethods() {
+    return objectTerms2(this, SEC_ASSERTION_METHOD);
+  }
+};
+var VerificationMethodNode = class extends TermWrapper2 {
+  get types() {
+    return objectTerms2(this, RDF_TYPE);
+  }
+  get controllers() {
+    return objectTerms2(this, SEC_CONTROLLER);
+  }
+  get publicKeyMultibases() {
+    return objectTerms2(this, SEC_PUBLIC_KEY_MULTIBASE);
+  }
+};
+async function publishVerificationMethod(input) {
+  const controller = safeHttpIri(input.controller);
+  if (controller === void 0) {
+    throw new Error(
+      `@jeswr/solid-vc: publishVerificationMethod controller must be an absolute http(s) IRI, got ${JSON.stringify(input.controller)}`
+    );
+  }
+  const isPair = isKeyPair(input.key);
+  const vmInput = input.verificationMethod ?? (isPair ? input.key.verificationMethod : void 0);
+  if (vmInput === void 0) {
+    throw new Error(
+      "@jeswr/solid-vc: publishVerificationMethod requires a verificationMethod IRI (explicit, or via a KeyPair)"
+    );
+  }
+  const verificationMethod = safeHttpIri(vmInput);
+  if (verificationMethod === void 0) {
+    throw new Error(
+      `@jeswr/solid-vc: publishVerificationMethod verificationMethod must be an absolute http(s) IRI, got ${JSON.stringify(vmInput)}`
+    );
+  }
+  const publicKey = isPair ? input.key.publicKey : input.key;
+  const { publicKeyMultibase, keyType } = await multikeyOf(publicKey);
+  const g = new GraphBuilder();
+  g.addIri(controller, SEC_VERIFICATION_METHOD, verificationMethod);
+  g.addIri(controller, SEC_ASSERTION_METHOD, verificationMethod);
+  g.addType(verificationMethod, SEC_MULTIKEY);
+  g.addIri(verificationMethod, SEC_CONTROLLER, controller);
+  g.addLiteral(verificationMethod, SEC_PUBLIC_KEY_MULTIBASE, publicKeyMultibase, SEC_MULTIBASE);
+  const quads = g.quads();
+  const turtle = await serialize2(quads);
+  return { controller, verificationMethod, publicKeyMultibase, keyType, quads, turtle };
+}
+function isKeyPair(key) {
+  return typeof key === "object" && key !== null && "publicKey" in key && "verificationMethod" in key && typeof key.verificationMethod === "string";
+}
+var defaultGuardedFetch;
+function guardedFetchDefault() {
+  defaultGuardedFetch ??= import("@jeswr/guarded-fetch/node").then(
+    (m) => m.createNodeGuardedFetch({ maxRedirects: 0 })
+  );
+  return defaultGuardedFetch;
+}
+var RDF_ACCEPT = "text/turtle, application/ld+json;q=0.9, application/n-triples;q=0.8, application/n-quads;q=0.7";
+function documentUrlOf(iri) {
+  const u = new URL(iri);
+  u.hash = "";
+  return u.href;
+}
+async function fetchDocument(docUrl, fetchImpl, cache) {
+  const cached = cache?.get(docUrl);
+  if (cached !== void 0) return cached;
+  const load = (async () => {
+    try {
+      const res = await fetchImpl(docUrl, {
+        redirect: "manual",
+        headers: { accept: RDF_ACCEPT }
+      });
+      if (!res.ok) return void 0;
+      if (res.redirected === true) return void 0;
+      if (typeof res.url === "string" && res.url.length > 0) {
+        let finalUrl;
+        try {
+          finalUrl = new URL(res.url).href;
+        } catch {
+          return void 0;
+        }
+        if (finalUrl !== docUrl) return void 0;
+      }
+      const body = await res.text();
+      const store = await parseRdf(body, res.headers.get("content-type"), { baseIRI: docUrl });
+      return store;
+    } catch {
+      return void 0;
+    }
+  })();
+  cache?.set(docUrl, load);
+  return load;
+}
+var factory = DataFactory2;
+function containsIri(terms, iri) {
+  for (const term of terms) {
+    if (term.termType === "NamedNode" && term.value === iri) return true;
+  }
+  return false;
+}
+function literalValues(terms) {
+  const out = /* @__PURE__ */ new Set();
+  for (const term of terms) {
+    if (term.termType === "Literal") out.add(term.value);
+  }
+  return out;
+}
+async function resolveWebIdKeyInternal(webId, keyId, fetchImpl, cache) {
+  const controller = safeHttpIri(webId);
+  const verificationMethod = safeHttpIri(keyId);
+  if (controller === void 0 || verificationMethod === void 0) return void 0;
+  const controllerDocUrl = documentUrlOf(controller);
+  const controllerDoc = await fetchDocument(controllerDocUrl, fetchImpl, cache);
+  if (controllerDoc === void 0) return void 0;
+  const controllerNode = new ControllerNode(controller, controllerDoc, factory);
+  if (!containsIri(controllerNode.assertionMethods, verificationMethod)) return void 0;
+  const keyDocUrl = documentUrlOf(verificationMethod);
+  const keyDoc = keyDocUrl === controllerDocUrl ? controllerDoc : await fetchDocument(keyDocUrl, fetchImpl, cache);
+  if (keyDoc === void 0) return void 0;
+  const vmNode = new VerificationMethodNode(verificationMethod, keyDoc, factory);
+  if (!containsIri(vmNode.types, SEC_MULTIKEY)) return void 0;
+  const controllers = vmNode.controllers;
+  if (controllers.size !== 1 || !containsIri(controllers, controller)) return void 0;
+  const multibases = literalValues(vmNode.publicKeyMultibases);
+  if (multibases.size !== 1) return void 0;
+  const [publicKeyMultibase] = multibases;
+  if (publicKeyMultibase === void 0) return void 0;
+  const decoded = await decodeMultikey(publicKeyMultibase);
+  if (decoded === void 0) return void 0;
+  return {
+    controller,
+    verificationMethod,
+    publicKeyMultibase,
+    publicKey: decoded.publicKey,
+    keyType: decoded.keyType
+  };
+}
+async function resolveWebIdKey(webId, keyId, options = {}) {
+  try {
+    const fetchImpl = options.fetch ?? await guardedFetchDefault();
+    return await resolveWebIdKeyInternal(webId, keyId, fetchImpl);
+  } catch {
+    return void 0;
+  }
+}
+function createWebIdKeyResolver(options = {}) {
+  const cache = /* @__PURE__ */ new Map();
+  const fetchOf = async () => options.fetch ?? await guardedFetchDefault();
+  const resolveKey = async (verificationMethod) => {
+    try {
+      const fetchImpl = await fetchOf();
+      const vm = safeHttpIri(verificationMethod);
+      if (vm === void 0) return void 0;
+      const keyDoc = await fetchDocument(documentUrlOf(vm), fetchImpl, cache);
+      if (keyDoc === void 0) return void 0;
+      const vmNode = new VerificationMethodNode(vm, keyDoc, factory);
+      const controllers = [...vmNode.controllers].filter((t) => t.termType === "NamedNode");
+      if (controllers.length !== 1) return void 0;
+      const controller = controllers[0].value;
+      const resolved = await resolveWebIdKeyInternal(controller, vm, fetchImpl, cache);
+      return resolved?.publicKey;
+    } catch {
+      return void 0;
+    }
+  };
+  const isControlledBy = async (verificationMethod, issuer) => {
+    try {
+      const fetchImpl = await fetchOf();
+      const resolved = await resolveWebIdKeyInternal(issuer, verificationMethod, fetchImpl, cache);
+      return resolved !== void 0;
+    } catch {
+      return false;
+    }
+  };
+  return { resolveKey, isControlledBy };
+}
 export {
   CredentialNode,
   DataIntegritySuite,
   PresentationNode,
   ProofNode,
+  SEC_ASSERTION_METHOD,
+  SEC_CONTROLLER,
   SEC_DIGEST_MULTIBASE,
+  SEC_MULTIKEY,
+  SEC_PUBLIC_KEY_MULTIBASE,
   SVC,
   SVC_AGENT_AUTHORIZATION,
   SuiteRegistry,
@@ -1203,6 +1484,7 @@ export {
   buildAgentAuthorizationCredential,
   buildBoundAgentAuthorizationCredential,
   canonicalNQuads,
+  createWebIdKeyResolver,
   credentialFromRdf,
   credentialMetaFromNode,
   credentialToJsonLd,
@@ -1210,9 +1492,11 @@ export {
   credentialToTurtle,
   cryptosuiteForKeyType,
   dataIntegrityHash,
+  decodeMultikey,
   defaultSuiteRegistry,
   digestQuads,
   digestRdfContent,
+  encodeMultikey,
   exportPrivateJwk,
   exportPublicJwk,
   generateKeyPairForSuite,
@@ -1222,7 +1506,9 @@ export {
   issueAgentAuthorization,
   parseCredentialRdf,
   proofOptionsQuads,
+  publishVerificationMethod,
   relatedResourcesFromNode,
+  resolveWebIdKey,
   serialize2 as serialize,
   verifyCredential,
   verifyRelatedResources,
