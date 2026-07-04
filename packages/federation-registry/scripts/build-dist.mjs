@@ -29,13 +29,92 @@
  * The committed `dist/` is kept in sync with `src/` by `scripts/check-dist-fresh.mjs`.
  */
 import { execFileSync } from "node:child_process";
-import { rmSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const outdir = join(root, "dist");
+
+/**
+ * Host/home path prefixes that must NEVER survive in a COMMITTED artifact. esbuild
+ * embeds machine-absolute paths in two places — bundle banner comments in `index.js`
+ * and `sources[]` in `index.js.map` — which would otherwise leak the builder's home
+ * directory (`/Users/<name>/…`) AND make the committed bytes non-deterministic across
+ * machines / worktrees. `sanitizeDist` rewrites them to package-relative; this guard
+ * fails the build if any survive. (Mirrors solid-a2a / federation-client.)
+ */
+const FORBIDDEN_PATH_PREFIXES = ["/Users/", "/home/", "/root/", "/private/", "/var/"];
+
+/**
+ * Rewrite a single sourcemap `sources[]` entry to a package-relative label. The map
+ * lives in `dist/`, so the package root is `..`. An inlined dep resolves to a
+ * `…/node_modules/…` path and our own code to a `…/src/…` path — anchor on the
+ * package-internal segment and drop the machine-absolute (or dot-dot) prefix, so the
+ * label is identical whether the build ran in the main checkout, a worktree, or a
+ * scratch dir (check-dist rebuilds into `os.tmpdir()`).
+ */
+function pkgRelativeSource(source) {
+  const nm = source.indexOf("/node_modules/");
+  if (nm !== -1) {
+    return `..${source.slice(nm)}`;
+  }
+  const sc = source.lastIndexOf("/src/");
+  if (sc !== -1) {
+    return `..${source.slice(sc)}`;
+  }
+  return source;
+}
+
+/**
+ * Strip machine-absolute paths esbuild embeds, then FAIL the build if any host/home
+ * path prefix survives in the emitted `index.js` / `index.js.map`. Keeps the committed
+ * dist deterministic + free of the builder's home path.
+ */
+function sanitizeDist(buildDir) {
+  const artifacts = [];
+
+  // 1. index.js — banner comments carry `<abs>/node_modules/<pkg>/…`; reduce the
+  //    absolute prefix before any `/node_modules/` to a package-relative `node_modules/`.
+  const jsPath = join(buildDir, "index.js");
+  const js = readFileSync(jsPath, "utf8").replace(
+    /\/[^\s"'`\n]*?\/node_modules\//g,
+    "node_modules/",
+  );
+  writeFileSync(jsPath, js);
+  artifacts.push(["index.js", js]);
+
+  // 2. index.js.map — relativise every `sources[]` entry (structured, so no regex on
+  //    JSON). check-dist ignores `*.map`, but the committed map must still not leak.
+  const mapPath = join(buildDir, "index.js.map");
+  if (existsSync(mapPath)) {
+    const map = JSON.parse(readFileSync(mapPath, "utf8"));
+    if (Array.isArray(map.sources)) {
+      map.sources = map.sources.map(pkgRelativeSource);
+    }
+    if (typeof map.sourceRoot === "string" && map.sourceRoot.length > 0) {
+      map.sourceRoot = "";
+    }
+    const mapText = JSON.stringify(map);
+    writeFileSync(mapPath, mapText);
+    artifacts.push(["index.js.map", mapText]);
+  }
+
+  // 3. Guard: no host/home path may survive in EITHER artifact.
+  for (const [name, content] of artifacts) {
+    for (const prefix of FORBIDDEN_PATH_PREFIXES) {
+      const at = content.indexOf(prefix);
+      if (at !== -1) {
+        throw new Error(
+          `build-dist: committed dist/${name} still contains a host path (${prefix}…): ` +
+            `${JSON.stringify(content.slice(at, at + 100))}. The sanitiser must reduce ` +
+            "every absolute path to a package-relative one before commit.",
+        );
+      }
+    }
+  }
+}
 
 /**
  * Everything that must stay EXTERNAL (resolved from npm, not inlined). The ONLY
@@ -88,6 +167,11 @@ async function main(buildDir = outdir) {
     ],
     { cwd: root, stdio: ["ignore", "ignore", "inherit"] },
   );
+
+  // 4. Strip machine-absolute paths from the emitted JS + sourcemap, and fail closed
+  //    if any host/home path prefix survives (keeps the committed dist deterministic +
+  //    leak-free).
+  sanitizeDist(buildDir);
 }
 
 const argDir = process.argv[2];
