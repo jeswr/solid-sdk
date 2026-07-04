@@ -24,9 +24,10 @@
  * ONLY place a user-configured URL is dereferenced — always through
  * `@jeswr/guarded-fetch` (SSRF-safe). This module takes an already-parsed payload.
  */
+import { escapeIri } from "@jeswr/rdf-serialize";
 import { serializeAs2, serializeLongChat } from "@jeswr/solid-chat-interop";
 import { iterateObjects } from "./granary.js";
-import { granaryObjectToCanonical, safeHttpIri } from "./map.js";
+import { granaryObjectToCanonical } from "./map.js";
 /** Characters not safe in a resource slug, collapsed to `-`. */
 const UNSAFE_SLUG = /[^a-zA-Z0-9._-]+/g;
 /**
@@ -115,11 +116,18 @@ function assertValidContainer(container) {
     if (u.username !== "" || u.password !== "") {
         throw new TypeError("ingestGranary: `container` must not embed credentials (user:pass@)");
     }
-    // `safeHttpIri` canonicalises then percent-encodes the residual IRIREF-illegal chars.
-    // If it differs from the plain canonical `href`, the container carries such a char —
-    // which would land UNENCODED in the RDF subject (the subject is built from the raw
-    // write URL, never re-encoded). Reject rather than silently rewrite the write target.
-    if (safeHttpIri(container) !== u.href) {
+    // The RDF subject is built from the WHATWG-normalised write URL (`new URL(slug,
+    // container)` — i.e. `u.href`-equivalent normalisation). `escapeIri` (the canonical
+    // suite lexical IRIREF escaper) percent-encodes the full IRIREF-forbidden set; if it
+    // changes `u.href`, the NORMALISED container STILL carries an IRIREF-illegal char that
+    // the URL parser did NOT encode — `|` is the one that survives path normalisation
+    // (`^`/`` ` ``/`{`/`}`/`<`/`>`/`"` are auto-encoded by `new URL()`, `\`→`/`), and it
+    // would land UNENCODED in the subject `<container…#it>`, yielding malformed Turtle a
+    // strict downstream parser rejects. Reject rather than silently rewrite the write
+    // target. (This checks the parser-normalised form so it accepts benign lexical
+    // variants — an upper-case host, an explicit `:443`, a missing trailing slash — which
+    // the subject-builder canonicalises anyway.)
+    if (escapeIri(u.href) !== u.href) {
         throw new TypeError(`ingestGranary: \`container\` contains characters illegal in an RDF IRI: ${safe}`);
     }
 }
