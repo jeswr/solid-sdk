@@ -53,8 +53,9 @@ export interface ButtonProps extends React_2.ComponentProps<"button"> {
     variant?: "ghost" | "outline";
 }
 
-// Warning: (ae-forgotten-export) The symbol "ClassValue" needs to be exported by the entry point index.d.ts
-//
+// @public (undocumented)
+export type ClassValue = string | number | false | null | undefined;
+
 // @public
 export function cn(...values: ClassValue[]): string;
 

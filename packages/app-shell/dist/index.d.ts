@@ -4,5 +4,5 @@ export { Avatar, AvatarFallback, AvatarImage, Button, type ButtonProps, Dropdown
 export { type ResolvedTheme, type Theme, type ThemeContextValue, ThemeProvider, type ThemeProviderProps, themeScript, useTheme, } from "./components/theme-provider.js";
 export { ThemeToggle } from "./components/theme-toggle.js";
 export { useSolidExtensionPresent } from "./hooks/use-solid-extension-present.js";
-export { cn } from "./lib/cn.js";
+export { type ClassValue, cn } from "./lib/cn.js";
 export { buildIssueUrl, composeIssueBody, composeIssueTitle, type FeedbackCategory, type FeedbackDiagnostics, type FeedbackPayload, type FeedbackSubmitResult, feedbackLabels, } from "./lib/feedback-core.js";

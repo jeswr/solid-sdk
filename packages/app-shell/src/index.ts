@@ -43,7 +43,7 @@ export {
 } from "./components/theme-provider.js";
 export { ThemeToggle } from "./components/theme-toggle.js";
 export { useSolidExtensionPresent } from "./hooks/use-solid-extension-present.js";
-export { cn } from "./lib/cn.js";
+export { type ClassValue, cn } from "./lib/cn.js";
 export {
   buildIssueUrl,
   composeIssueBody,
