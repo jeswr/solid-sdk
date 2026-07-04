@@ -44,4 +44,40 @@ describe("resolveStorageRoots", () => {
 <${WEBID}> foaf:name "Alice" .`;
     expect(await resolveStorageRoot(WEBID, profileFetch(ttl))).toBe("https://host.example/alice/");
   });
+
+  describe("query/fragment-smuggling regression (podscope-rawstring)", () => {
+    // A `pim:storage` value whose raw STRING already ends in "/" via a query or
+    // fragment (while its actual URL PATH does not) used to slip past the container
+    // check (a naive `endsWith("/")`) and, once concatenated with a fixed sub-path
+    // later, resolve at the WRONG resource (the appended suffix landed inside the
+    // query/fragment instead of extending the path). Such a value must be rejected
+    // outright, not silently coerced.
+
+    it("rejects a pim:storage value with a query string (never smuggles past the container check)", async () => {
+      const ttl = `@prefix pim: <http://www.w3.org/ns/pim/space#> .
+<${WEBID}> pim:storage <https://evil.example/pod?x=/> .`;
+      expect(await resolveStorageRoots(WEBID, profileFetch(ttl))).toEqual([]);
+    });
+
+    it("rejects a pim:storage value with a fragment (never smuggles past the container check)", async () => {
+      const ttl = `@prefix pim: <http://www.w3.org/ns/pim/space#> .
+<${WEBID}> pim:storage <https://evil.example/pod#/> .`;
+      expect(await resolveStorageRoots(WEBID, profileFetch(ttl))).toEqual([]);
+    });
+
+    it("keeps a legitimate co-declared root when a query/fragment-bearing one is rejected", async () => {
+      const ttl = `@prefix pim: <http://www.w3.org/ns/pim/space#> .
+<${WEBID}> pim:storage <https://evil.example/pod?x=/> .
+<${WEBID}> pim:storage <https://host.example/alice/> .`;
+      expect(await resolveStorageRoots(WEBID, profileFetch(ttl))).toEqual([
+        "https://host.example/alice/",
+      ]);
+    });
+
+    it("resolveStorageRoot falls back to the pod root when the only declared root is rejected", async () => {
+      const ttl = `@prefix pim: <http://www.w3.org/ns/pim/space#> .
+<${WEBID}> pim:storage <https://evil.example/pod#/> .`;
+      expect(await resolveStorageRoot(WEBID, profileFetch(ttl))).toBe("https://host.example/alice/");
+    });
+  });
 });

@@ -1,4 +1,4 @@
-// AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+// AUTHORED-BY Claude Sonnet 5
 /**
  * Resolve the pod storage root(s) for a WebID by reading `pim:storage` off the
  * profile (via `@jeswr/fetch-rdf`), with a safe fallback to the WebID's origin
@@ -56,11 +56,21 @@ export async function resolveStorageRoots(
   const predicate = DataFactory.namedNode(PIM_STORAGE);
   for (const q of dataset.match(subject, predicate, null)) {
     if (q.object.termType !== "NamedNode") continue;
+    const value = q.object.value;
     try {
-      const u = new URL(q.object.value);
-      if (u.protocol === "https:" || u.protocol === "http:") {
-        roots.add(asContainer(q.object.value));
-      }
+      const u = new URL(value);
+      if (u.protocol !== "https:" && u.protocol !== "http:") continue;
+      // A `pim:storage` value is UNTRUSTED (read off the WebID profile) and must be a
+      // container ADDRESS, never a resource-with-query/fragment. Reject one outright —
+      // don't silently coerce it — because a raw-string container check (`endsWith("/")`)
+      // can be fooled by a value whose STRING ends in "/" via its query/fragment (e.g.
+      // `…/pod?x=/` or `…/pod#/`) while its actual PATH does not, letting a later
+      // `${root}sub/path` concatenation land inside the query/fragment instead of the
+      // path and silently resolve at the WRONG resource. `asContainer` (below) also
+      // strips query/fragment defensively, but the untrusted-input boundary rejects
+      // outright rather than guessing what a malformed/hostile profile value "meant".
+      if (u.search !== "" || u.hash !== "") continue;
+      roots.add(asContainer(value));
     } catch {
       // skip an unparseable storage IRI
     }
