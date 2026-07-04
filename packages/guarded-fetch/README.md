@@ -166,6 +166,45 @@ entry, so `instanceof SsrfError` works across both.
 
 Both are guard refusals; a guarded fetch never silently succeeds on a refused target.
 
+## The pod-scope guard (`podScope`) — "is this URL within MY container?"
+
+Distinct from the SSRF guard (host safety), the **pod-scope guard** is the suite's one reviewed
+home for the *capability* check: is a candidate URL within the ONE pod (sub-)container this
+component was configured to touch? It consolidates the ~8 bespoke `assertWithinBase` copies
+(rxdb-solid, y-solid, n8n-nodes-solid, solid-mcp, unite, solid-components, solid-granary,
+matrix-chat-to-pod) into a single implementation that is the **union of every defence** any one
+of them had — fail-closed on any doubt. Browser-safe (WHATWG `URL` only), exported from the
+default entry.
+
+```ts
+import {
+  normalizePodBase,       // canonical container address (trailing /, no query/fragment) — throws
+  assertWithinPodScope,   // fail-closed assert; returns the CANONICAL in-scope URL — throws
+  isWithinPodScope,       // boolean form (false on ANY doubt, incl. an invalid base)
+  podScopedUrl,           // filter form: canonical URL | undefined (drop hostile listing entries)
+  createPodScopedFetch,   // fetch wrapper: every request AND redirect hop re-checked in scope
+  isContainerUrl,         // LDP trailing-slash convention, query/fragment-proof
+  PodScopeError,
+} from "@jeswr/guarded-fetch";
+
+const base = "https://alice.pod.example/notes/";
+assertWithinPodScope(base, "doc.ttl");                      // → https://alice.pod.example/notes/doc.ttl
+assertWithinPodScope(base, "https://h/notesfoo/x");         // ✗ PodScopeError (segment boundary)
+assertWithinPodScope(base, base, { allowRoot: false });     // ✗ strict-descendant (write-target) mode
+const podFetch = createPodScopedFetch(base, { fetch: authedFetch }); // refuses out-of-scope hops
+```
+
+What it enforces (each rule came from at least one hardened copy): http(s)-only schemes;
+scheme-relative (`//host/…`) refused; embedded credentials refused **and never echoed in error
+messages** (`redactUserinfo`); same-origin (scheme+host+port); **segment-boundary** path prefix
+(`/podfoo` is NOT under `/pod/`); `.`/`..`/`%2e%2e`/backslash traversal collapsed-then-validated;
+encoded path delimiters (`%2F`/`%5C`) refused outright (server decode-order ambiguity); root-absolute
+refs NOT silently re-rooted; the base root gated by `allowRoot` (default in-scope; `false` = strict
+descendant, the rxdb/y-solid write-target semantics). `createPodScopedFetch` additionally re-checks
+**every redirect hop** (manual redirects, bounded hops, loop detection, Fetch method/body semantics)
+so a poisoned in-scope resource cannot `302` an authenticated fetch out of the pod. It composes with
+the SSRF guard: `createPodScopedFetch(base, { fetch: createGuardedFetch(opts) })`.
+
 ## GitHub-installable under `ignore-scripts=true`
 
 The committed `dist/` is **self-contained**: `ipaddr.js` is bundled inline (esbuild) into

@@ -15,7 +15,12 @@
  * Consolidated from the suite's three divergent copies (federation-client, solid-community-feeds,
  * solid-agent-notify) plus the prod-solid-server `@pss/guarded-fetch` reference; the consolidated
  * guard is a strict SUPERSET of every defence any one of them had.
+ *
+ * The POD-SCOPE guard (`./podScope.js`) is the second consolidation: the capability check
+ * ("is this URL within the ONE pod container this component is configured to touch?"),
+ * unifying the suite's ~8 bespoke `assertWithinBase` copies. Browser-safe, WHATWG-URL-only.
  */
 export { classifyIpLiteral, isLoopbackAddress, isPublicAddress, } from "./addresses.js";
 export { assertSafeUrl, createGuardedFetch, DEFAULT_HOSTNAME_DENYLIST, type DnsLookup, GuardError, type GuardOptions, guardedFetch, isDeniedHostname, normalizeHostForClassification, type ResolvedAddress, SsrfError, } from "./guard.js";
+export { assertWithinPodScope, createPodScopedFetch, isContainerUrl, isWithinPodScope, normalizePodBase, type PodScopedFetchOptions, PodScopeError, type PodScopeOptions, podScopedUrl, redactUserinfo, } from "./podScope.js";
 //# sourceMappingURL=index.d.ts.map

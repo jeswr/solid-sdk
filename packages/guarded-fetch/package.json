@@ -1,7 +1,7 @@
 {
   "name": "@jeswr/guarded-fetch",
   "version": "0.1.0",
-  "description": "SSRF / DNS-rebinding-guarded fetch for the @jeswr Solid suite: a public-address-only IP classifier (RFC1918 / CGNAT / link-local incl. cloud-metadata / IPv4-mapped IPv6 / ULA / 6to4 / NAT64 embedded-v4 / TEST-NET), an https-only no-userinfo policy core with per-resolved-record rebinding re-check, a manual-redirect re-validation loop (cross-origin credential + body strip), a response-size cap + timeout, and an injectable-fetch seam. Browser-safe by default (no node: import); an opt-in ./node entry adds a full undici DNS-pinning fetch (closes the lookup->connect TOCTOU). Consolidated from the suite's three divergent copies. Experimental, AI-agent-generated.",
+  "description": "SSRF / DNS-rebinding-guarded fetch for the @jeswr Solid suite: a public-address-only IP classifier (RFC1918 / CGNAT / link-local incl. cloud-metadata / IPv4-mapped IPv6 / ULA / 6to4 / NAT64 embedded-v4 / TEST-NET), an https-only no-userinfo policy core with per-resolved-record rebinding re-check, a manual-redirect re-validation loop (cross-origin credential + body strip), a response-size cap + timeout, and an injectable-fetch seam. Browser-safe by default (no node: import); an opt-in ./node entry adds a full undici DNS-pinning fetch (closes the lookup->connect TOCTOU). Consolidated from the suite's three divergent copies. Experimental, AI-agent-generated. Now also the pod-scope capability guard (assertWithinPodScope / createPodScopedFetch), consolidating the suite's ~8 bespoke assertWithinBase copies.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
