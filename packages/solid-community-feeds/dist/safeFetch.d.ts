@@ -41,9 +41,16 @@
  *      to a private/internal IP would silently pass the validator (an SSRF hole).
  *   3. **An extended hostname denylist.** The original bespoke guard additionally
  *      blocked bare/suffix `intranet` / `lan` / `home.arpa` / `in-addr.arpa` /
- *      `ip6.arpa` (RFC 6761/8375 reserved special-use names beyond guarded-fetch's
- *      cloud-focused default list). We pass those as extra `hostnameDenylist`
- *      entries on TOP of `DEFAULT_HOSTNAME_DENYLIST` so no protection is dropped.
+ *      `ip6.arpa` / `localhost` / `local` (RFC 6761/8375 reserved special-use
+ *      names beyond guarded-fetch's cloud-focused default list). We pass those as
+ *      extra `hostnameDenylist` entries on TOP of `DEFAULT_HOSTNAME_DENYLIST` so no
+ *      protection is dropped. Blocking `localhost`/`*.localhost`/`local`/`*.local`
+ *      via `hostnameDenylist` (rather than relying solely on guarded-fetch's own
+ *      DNS-less special-name checks) matters because `hostnameDenylist` is enforced
+ *      UNCONDITIONALLY, before guarded-fetch branches into DNS-resolving vs
+ *      DNS-less validation (see point 6) — so these special-use names are refused
+ *      pre-resolution no matter which branch `assertSafeUrl` takes, even if a
+ *      resolver were ever to return a public address for one of them.
  *   4. **HTTP-status mapping.** guarded-fetch has no opinion on non-2xx statuses
  *      (only redirects/SSRF/size/time are its job) — a non-2xx response is mapped to
  *      a typed `SafeFetchError("http", …)` here, same as before.
@@ -62,6 +69,10 @@
  *      REJECTED, not just literal-IP / denylisted-name targets. This is the SSRF
  *      guarantee a config-time validator must give; the DNS-less branch above is
  *      strictly for the injected-fetch code path and is never reachable from here.
+ *      Special-use hostnames (`localhost`, `*.localhost`, `local`, `*.local`) are
+ *      refused by `hostnameDenylist` BEFORE guarded-fetch ever decides which branch
+ *      to take — so they are rejected unconditionally, regardless of what any
+ *      injected/default resolver would return for them (see point 3).
  *
  * `enforcePortGate` is left OFF (guarded-fetch defaults it on: only port 443 in
  * production) because the original guard never restricted ports and a self-hosted

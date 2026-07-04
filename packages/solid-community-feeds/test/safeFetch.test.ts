@@ -162,6 +162,33 @@ describe("assertSafeUrl — SSRF guards (via @jeswr/guarded-fetch)", () => {
     await expect(assertSafeUrl(url, { dnsLookup: publicResolver })).resolves.not.toThrow();
   });
 
+  it.each([
+    "https://localhost/",
+    "https://foo.localhost/",
+    "https://something.local/",
+    "https://local/",
+  ])(
+    "REJECTS special-use hostname %s pre-resolution even when the injected resolver returns a PUBLIC IP " +
+      "(roborev regression: assertSafeUrl's DNS-resolving branch must not accept these on resolver say-so)",
+    async (url) => {
+      // This is the exact gap the roborev finding named: assertSafeUrl always runs
+      // guarded-fetch's DNS-RESOLVING branch, which bypasses guarded-fetch's own
+      // DNS-less special-name checks for localhost/*.localhost/local/*.local. If
+      // localhost/local were only ever rejected because the test resolver returns a
+      // loopback address (as the "blocks local/internal hostname" cases above do),
+      // a resolver that answered with a PUBLIC address for one of these names would
+      // slip through. Proving these fail with `publicResolver` injected demonstrates
+      // the block is the PRE-resolution `hostnameDenylist` check (this package's
+      // EXTRA_HOSTNAME_DENYLIST `.localhost` / `.local` entries), not resolver luck.
+      try {
+        await assertSafeUrl(url, { dnsLookup: publicResolver });
+        throw new Error("should have thrown");
+      } catch (e) {
+        expect((e as SafeFetchError).code).toBe("blocked-host");
+      }
+    },
+  );
+
   it("rejects a malformed URL", async () => {
     await expect(assertSafeUrl("not a url")).rejects.toThrowError(SafeFetchError);
   });
