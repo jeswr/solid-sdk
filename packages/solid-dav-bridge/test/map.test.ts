@@ -121,6 +121,25 @@ describe("veventToEvent", () => {
     expect(predValues(quads, RDF_TYPE)).toContain(SCHEMA_EVENT);
     expect(predValues(quads, RDF_TYPE)).toContain(ICAL_VEVENT);
   });
+
+  it("trims folding/surrounding whitespace on a URL before the guard (accepts the trimmed IRI)", () => {
+    // Documents the mapping-path reality vs the guard-level pin: RFC 5545 content-line
+    // values can carry surrounding/folding whitespace, so the mapping path TRIMS before
+    // safeHttpIri. A padded-but-valid `URL:` is therefore ACCEPTED as its trimmed,
+    // injection-safe IRI (safeHttpIri still escapes it) — NOT rejected on the
+    // whitespace. (safeHttpIri's raw-whitespace rejection, pinned in injection.test.ts,
+    // applies to an untrimmed value passed directly to the guard.)
+    const ics = [
+      "BEGIN:VEVENT",
+      "UID:ws-url",
+      "URL: https://meet.example.com/padded ", // leading + trailing whitespace
+      "END:VEVENT",
+    ].join("\r\n");
+    const { quads } = veventToEvent(firstVevent(ics), { subject: SUBJECT });
+    const urlQuad = quads.find((q) => q.predicate.value === SCHEMA_URL);
+    expect(urlQuad?.object.termType).toBe("NamedNode");
+    expect(urlQuad?.object.value).toBe("https://meet.example.com/padded");
+  });
 });
 
 describe("vcardToContact", () => {
@@ -143,6 +162,20 @@ describe("vcardToContact", () => {
 
   it("uses an http(s) UID as the WebID", () => {
     const { data } = vcardToContact(firstVcard(vcardWebId));
+    expect(data.webId).toBe("https://bob.example/profile/card#me");
+  });
+
+  it("trims surrounding whitespace on a UID before the guard (accepts the trimmed WebID)", () => {
+    // Same mapping-path reality as the URL test above: a padded-but-valid `UID:` is
+    // trimmed before safeHttpIri and accepted as its trimmed, injection-safe WebID.
+    const vcf = [
+      "BEGIN:VCARD",
+      "VERSION:4.0",
+      "FN:Padded",
+      "UID: https://bob.example/profile/card#me ", // leading + trailing whitespace
+      "END:VCARD",
+    ].join("\r\n");
+    const { data } = vcardToContact(firstVcard(vcf));
     expect(data.webId).toBe("https://bob.example/profile/card#me");
   });
 

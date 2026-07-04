@@ -59,6 +59,7 @@
   "dependencies": {
     "@jeswr/fetch-rdf": "^0.1.0",
     "@jeswr/guarded-fetch": "git+https://github.com/jeswr/guarded-fetch.git#bd4490927fd36d62f6b78a0021e8d40bbb572c3b",
+    "@jeswr/rdf-serialize": "git+https://github.com/jeswr/rdf-serialize.git#ef3dd85636b868ea336a45f79c0446ade0982e7b",
     "@jeswr/solid-task-model": "git+https://github.com/jeswr/solid-task-model.git#fa88a345a5ed03b26b46efd57d448ebd9ca8a826",
     "n3": "^2.0.3"
   },
@@ -75,6 +76,6 @@
     "vitest": "^4.1.8"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=24"
   }
 }

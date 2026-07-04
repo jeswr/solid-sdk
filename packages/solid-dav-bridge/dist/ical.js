@@ -79,7 +79,8 @@ export function parseContentLine(line) {
     // (a NUL in output can truncate C-string consumers and is illegal in a Turtle
     // literal). Removing it here is the single chokepoint every parsed name, param
     // and value flows through, so no downstream field can carry a NUL. (IRI fields
-    // are separately covered by `safeHttpIri`, whose IRI_UNSAFE range includes 0x00.)
+    // are separately covered by `safeHttpIri`, which escapes the whole C0-control
+    // range U+0000-U+001F, including NUL.)
     line = line.split(NUL).join("");
     // Find the first unquoted ':' — that separates the name+params from the value.
     let inQuote = false;

@@ -6,6 +6,7 @@
 
 import { ContactData } from '@jeswr/solid-task-model/contacts';
 import type { Quad } from '@rdfjs/types';
+import { safeHttpIri } from '@jeswr/rdf-serialize';
 
 // @public
 export interface BaseImportOptions {
@@ -167,8 +168,7 @@ export interface RdfDateLiteral {
     readonly value: string;
 }
 
-// @public
-export function safeHttpIri(value: string | undefined): string | undefined;
+export { safeHttpIri }
 
 // @public
 export const SCHEMA: "https://schema.org/";

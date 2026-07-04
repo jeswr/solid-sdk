@@ -45,19 +45,32 @@ export declare const EVENT_PREFIXES: Record<string, string>;
  */
 export declare function isHttpIri(value: string | undefined): value is string;
 /**
- * Validate AND canonicalise an untrusted value into an injection-safe absolute
- * `http(s)` IRI, or `undefined` if it is not one.
+ * The canonical http(s)-only IRI guard for UNTRUSTED input, re-exported from
+ * `@jeswr/rdf-serialize` — the suite's SINGLE audited IRI-safety implementation
+ * (consolidated from six+ hand-copied, subtly-divergent variants hardened across
+ * ~40 cumulative adversarial review rounds). This bridge no longer keeps its own
+ * copy; it consumes the shared one so a fix upstream reaches every writer.
  *
  * SECURITY (load-bearing): the value comes from untrusted DAV data (a VEVENT `URL`,
- * a vCard `UID`/`URL`). {@link isHttpIri} only returns a BOOLEAN — a caller that then
- * uses the ORIGINAL string as an IRI term hands `n3.Writer` (which does not escape
- * IRIs) a value that may contain a right-angle-bracket and thereby INJECT arbitrary
- * triples into the owner's pod resource (e.g. a forged `solid:oidcIssuer`). This
- * function returns the value to actually emit: WHATWG-normalised (`new URL(value).href`
- * percent-encodes angle brackets, double-quote, space, and curly braces) and then any
- * residual Turtle-IRIREF-illegal char (pipe, caret, backtick) percent-encoded, so the
- * emitted IRIREF can never be broken out of and is always well-formed. Use THIS (never
- * the raw string) wherever an untrusted value becomes an IRI object.
+ * a vCard `UID`/`URL`). `n3.Writer` does NOT escape IRIs, so an IRI value that
+ * itself contains a `>` (or SPACE, `<`, `"`, `{`, `}`, `|`, `^`, `` ` ``, `\`, or
+ * a C0 control) would break OUT of the `<...>` IRIREF and INJECT arbitrary triples
+ * into the owner's pod resource (e.g. a forged `solid:oidcIssuer` on the victim's
+ * WebID). `safeHttpIri` returns the value to actually emit: it rejects a non-string
+ * and a leading/trailing-C0-or-space value, percent-encodes every IRIREF-forbidden
+ * character LEXICALLY (before any URL parse), requires an `http(s)` scheme with a
+ * non-empty authority, and returns the ESCAPED LEXICAL string.
+ *
+ * NOTE — SEMANTIC DIFFERENCE vs the retired local copy (intentional): the shared
+ * guard is LEXICAL. It returns the escaped input, NEVER `new URL().href`, so it
+ * does NOT lower-case the host, strip a default port, or append a trailing slash
+ * (RDF identity is lexical — canonicalisation would silently change the IRI's
+ * identity). It also REJECTS a value with leading/trailing whitespace outright
+ * rather than stripping it. Signature widens `string | undefined` → `unknown`
+ * (a superset), so every existing call site remains type-safe. Use THIS (never the
+ * raw string) wherever an untrusted value becomes an IRI object.
+ *
+ * @see https://github.com/jeswr/rdf-serialize `src/iri.ts` for the full 6-clause contract.
  */
-export declare function safeHttpIri(value: string | undefined): string | undefined;
+export { safeHttpIri } from "@jeswr/rdf-serialize";
 //# sourceMappingURL=vocab.d.ts.map
