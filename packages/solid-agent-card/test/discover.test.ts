@@ -113,6 +113,82 @@ describe("discoverAgent — pointer reading", () => {
   });
 });
 
+describe("discoverAgent — non-http(s) pointer rejection (scheme guard)", () => {
+  /** A fetch that serves the given profile and RECORDS every URL requested. */
+  function recordingFetch(pointer: string, requested: string[]): typeof globalThis.fetch {
+    return (async (url: string | URL) => {
+      const u = String(url);
+      requested.push(u);
+      if (u === WEBID) {
+        return new Response(pointer, { status: 200, headers: { "content-type": "text/turtle" } });
+      }
+      return new Response("not found", { status: 404 });
+    }) as unknown as typeof globalThis.fetch;
+  }
+
+  it.each([
+    "file:///etc/passwd",
+    "ftp://internal.example/agent",
+    "urn:uuid:12345678",
+  ])("rejects a %s pointer — no pointer reported, no second fetch issued", async (bad) => {
+    const pointer = `@prefix interop: <http://www.w3.org/ns/solid/interop#>.
+<${WEBID}> interop:hasAuthorizationAgent <${bad}>.`;
+    const requested: string[] = [];
+    const r = await discoverAgent(WEBID, { fetch: recordingFetch(pointer, requested) });
+    expect(r.pointers).toEqual([]);
+    // fail-closed BEFORE the fetch: only the profile itself was requested.
+    expect(requested).toEqual([WEBID]);
+  });
+
+  it("rejects an authority-deficient https pointer (https:agent.example)", async () => {
+    // N3's Turtle parser base-resolves relative-looking IRIs, so inject the raw
+    // term via JSON-LD, where the string survives verbatim into the NamedNode.
+    const requested: string[] = [];
+    const fetch = (async (url: string | URL) => {
+      requested.push(String(url));
+      return new Response(
+        JSON.stringify({
+          "@id": WEBID,
+          "http://www.w3.org/ns/solid/interop#hasAuthorizationAgent": {
+            "@id": "https:agent.example",
+          },
+        }),
+        { status: 200, headers: { "content-type": "application/ld+json" } },
+      );
+    }) as unknown as typeof globalThis.fetch;
+    const r = await discoverAgent(WEBID, { fetch });
+    expect(r.pointers).toEqual([]);
+    expect(requested).toEqual([WEBID]);
+  });
+
+  it("skips the non-http(s) pointer but keeps a valid https one alongside it", async () => {
+    const descriptor = await describeAgent(DESCRIPTOR).agentDescription.toTurtle();
+    const pointer = `@prefix interop: <http://www.w3.org/ns/solid/interop#>.
+<${WEBID}> interop:hasAuthorizationAgent <file:///etc/passwd>, <${AGENT}>.`;
+    const requested: string[] = [];
+    const fetch = (async (url: string | URL) => {
+      const u = String(url);
+      requested.push(u);
+      if (u === WEBID) {
+        return new Response(pointer, { status: 200, headers: { "content-type": "text/turtle" } });
+      }
+      if (u === AGENT) {
+        return new Response(descriptor, {
+          status: 200,
+          headers: { "content-type": "text/turtle" },
+        });
+      }
+      return new Response("not found", { status: 404 });
+    }) as unknown as typeof globalThis.fetch;
+    const r = await discoverAgent(WEBID, { fetch });
+    expect(r.pointers).toHaveLength(1);
+    expect(r.pointers[0]?.agent).toBe(AGENT);
+    expect(r.verification?.valid).toBe(true);
+    // the file: IRI was never fetched.
+    expect(requested).toEqual([WEBID, AGENT]);
+  });
+});
+
 describe("discoverAgent — descriptor resolution failures", () => {
   it("surfaces fetch-failed when the descriptor 404s, keeping the pointer", async () => {
     const fetch = await buildFetch({ descriptorStatus: 404 });
