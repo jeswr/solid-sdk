@@ -256,8 +256,10 @@ function buildCanonical(
   // Author: only a real http(s) WebID resolved from the Matrix sender; never the
   // bare @user:server. The resolver output is UNTRUSTED (a naive caller may derive
   // the WebID from the untrusted sender), so it is passed through `safeHttpIri` —
-  // which returns the CANONICALISED IRI (a boolean `isHttpIri` would let a `>`
-  // through and inject triples via n3.Writer's un-escaped `<...>`).
+  // which returns the injection-safe LEXICAL IRI (every IRIREF-forbidden byte
+  // percent-encoded; a boolean `isHttpIri` would let a `>` through and inject
+  // triples via n3.Writer's un-escaped `<...>`). Lexical, not `.href`-canonical:
+  // a WebID keeps its exact identity (see safe-iri.ts).
   const sender = str(event.sender);
   if (sender !== undefined && ctx.webIdFor) {
     const webId = safeHttpIri(ctx.webIdFor(sender));
@@ -275,7 +277,7 @@ function buildCanonical(
   }
 
   // Reply edge → the in-pod resource of the replied-to event. `replyTo` is an
-  // UNTRUSTED Matrix event id; the resolved IRI is canonicalised safe before use.
+  // UNTRUSTED Matrix event id; the resolved IRI is made injection-safe before use.
   const replyTo = replyTargetEventId(event);
   if (replyTo !== undefined) {
     const inReplyToIri = safeHttpIri(ctx.messageIriFor(replyTo));

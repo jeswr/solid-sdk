@@ -1,8 +1,15 @@
 // AUTHORED-BY Claude Fable 5
 /**
- * Unit tests for the untrusted-IRI hardening (`safeHttpIri` / `isWithinBase` /
- * `sanitizeText`) — the guard that stops an untrusted string breaking out of a
- * Turtle `<...>` and injecting triples, and stops a write escaping the container.
+ * Unit tests for the REPO-SPECIFIC untrusted-input hardening in this package —
+ * {@link canonicalContainer} (the owner-lockable container ACL anchor),
+ * {@link isWithinBase} (the strict-descendant write-scope check), and
+ * {@link sanitizeText} (the chat-body control-char stripper).
+ *
+ * The generic IRI-injection guard `safeHttpIri` is NO LONGER implemented here — it
+ * moved to the audited suite home `@jeswr/rdf-serialize` and is exhaustively tested
+ * THERE (this package re-exports it). These tests cover only what this package
+ * composes on top of it; the end-to-end injection-safety proof (a hostile IRI in a
+ * Matrix event cannot break out of the serialized Turtle) lives in `security.test.ts`.
  */
 
 import { describe, expect, it } from "vitest";
@@ -13,65 +20,34 @@ const ESC = String.fromCharCode(27);
 const BEL = String.fromCharCode(7);
 const DEL = String.fromCharCode(127);
 
-describe("safeHttpIri", () => {
-  it("accepts a plain http(s) IRI and returns its canonical form", () => {
-    expect(safeHttpIri("https://alice.pod.example/profile/card#me")).toBe(
-      "https://alice.pod.example/profile/card#me",
+// Boundary smoke test for the RE-EXPORT: this package depends on the exact
+// security contract of `safeHttpIri` at every IRI write-path call site
+// (webId / room / reply / edit target / ACL owner), so pin that the symbol
+// re-exported from `./safe-iri.js` still resolves to the http(s)-only,
+// injection-escaping guard — a mis-wired re-export (e.g. to the scheme-agnostic
+// `safeIri`, or a dropped import) would be caught here rather than in prod. The
+// exhaustive cases live in `@jeswr/rdf-serialize`'s own suite; this is a guard
+// against a wiring regression in THIS package.
+describe("safeHttpIri (re-export contract smoke test)", () => {
+  it("keeps a clean http(s) IRI usable", () => {
+    expect(safeHttpIri("https://alice.pod.example/profile#me")).toBe(
+      "https://alice.pod.example/profile#me",
     );
-    expect(safeHttpIri("http://x.example/a")).toBe("http://x.example/a");
   });
 
-  it("canonicalises an origin-only URL with the trailing slash", () => {
-    expect(safeHttpIri("https://matrix.example.org")).toBe("https://matrix.example.org/");
+  it("drops non-http(s) schemes (never widened to a scheme-agnostic guard)", () => {
+    expect(safeHttpIri("mailto:alice@example.com")).toBeUndefined();
+    expect(safeHttpIri("urn:uuid:1234")).toBeUndefined();
+    // biome-ignore lint/suspicious/noExplicitAny: exercising the untrusted `unknown` input path.
+    expect(safeHttpIri("javascript:alert(1)" as any)).toBeUndefined();
   });
 
-  it("rejects non-http(s) schemes and non-strings", () => {
-    expect(safeHttpIri("javascript:alert(1)")).toBeUndefined();
-    expect(safeHttpIri("mailto:a@b.c")).toBeUndefined();
-    expect(safeHttpIri("urn:x:y")).toBeUndefined();
-    expect(safeHttpIri("not a url")).toBeUndefined();
-    expect(safeHttpIri("")).toBeUndefined();
-    expect(safeHttpIri(undefined)).toBeUndefined();
-    expect(safeHttpIri(null)).toBeUndefined();
-    expect(safeHttpIri(42)).toBeUndefined();
-    expect(safeHttpIri({})).toBeUndefined();
-  });
-
-  it("NEUTRALISES a `>` breakout — the returned value contains no raw angle bracket", () => {
-    const evil =
-      "https://evil.example/a> <http://x/p> <http://x/o> .\n<http://s> <http://p> <http://o";
-    const out = safeHttpIri(evil);
-    expect(out).toBeDefined();
-    expect(out).not.toContain(">");
-    expect(out).not.toContain("<");
-    expect(out).not.toContain("\n");
-    // The breakout chars are percent-encoded, not present raw.
-    expect(out).toContain("%3E");
-  });
-
-  it("percent-encodes the URL-parser residue `|`, `^` and backtick", () => {
-    const out = safeHttpIri("https://x.example/a|b^c`d");
-    expect(out).toBeDefined();
-    expect(out).not.toContain("|");
-    expect(out).not.toContain("^");
-    expect(out).not.toContain("`");
-    expect(out).toContain("%7C");
-    expect(out).toContain("%5E");
-    expect(out).toContain("%60");
-  });
-
-  it("contains no IRIREF-forbidden character for any accepted value", () => {
-    // biome-ignore lint/suspicious/noControlCharactersInRegex: asserting the C0 range is absent is the point.
-    const forbidden = /[\u0000-\u0020<>"{}|\\^`]/;
-    for (const v of [
-      "https://x.example/normal",
-      `https://x.example/${NUL}${ESC}${BEL}`,
-      "https://x.example/a>b<c|d^e`f",
-      "https://x.example/a b",
-    ]) {
-      const out = safeHttpIri(v);
-      if (out !== undefined) expect(forbidden.test(out)).toBe(false);
-    }
+  it("neutralises a Turtle-IRIREF breakout payload (the `>` cannot survive)", () => {
+    const hostile = "http://evil.example/o> . <http://victim.example/s> <http://p> <http://o";
+    const safe = safeHttpIri(hostile);
+    expect(safe).toBeDefined();
+    expect(safe).not.toContain(">");
+    expect(safe).not.toContain(" ");
   });
 });
 

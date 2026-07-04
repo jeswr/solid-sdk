@@ -120,8 +120,9 @@ const MAX_PAGE_SIZE = 1000;
  */
 function assertNoRedirect(res: Response, method: string, url: string): void {
   if (res.type === "opaqueredirect" || (res.status >= 300 && res.status < 400)) {
-    // `url` is a caller/config value; canonicalise it for the message so a hostile
-    // URL cannot inject control chars into logs (`safeHttpIri` strips/encodes them).
+    // `url` is a caller/config value; make it injection-safe for the message so a
+    // hostile URL cannot inject control chars into logs (`safeHttpIri` percent-encodes
+    // the IRIREF-forbidden bytes and rejects a leading/trailing-control value).
     const safe = safeHttpIri(url) ?? "<unsafe-url>";
     throw new Error(`refusing to follow a redirect on ${method} ${safe} (status ${res.status}).`);
   }
@@ -229,11 +230,13 @@ export async function buildOwnerOnlyAclTurtle(
   // SECURITY (fail-closed): an ACL is the most dangerous injection sink in this
   // package — a `>` in `ownerWebId` or `container` reaching n3.Writer's un-escaped
   // `<...>` could inject a public `acl:agentClass foaf:Agent` grant, turning the
-  // owner-private container PUBLIC. Both MUST be canonical, injection-safe http(s)
-  // IRIs; anything else is refused BEFORE a single quad is built (never write a
-  // half-safe ACL). `container` must be an UNAMBIGUOUS container — path ends in '/',
-  // NO query/fragment — so `${container}.acl` cannot resolve to a decoy resource
-  // (e.g. `chat/?x=/` → `chat/?x=/.acl`, not the real `chat/.acl`).
+  // owner-private container PUBLIC. Both MUST be injection-safe http(s) IRIs
+  // (`safeHttpIri` percent-encodes every IRIREF-forbidden byte); anything else is
+  // refused BEFORE a single quad is built (never write a half-safe ACL). The
+  // `container` is ADDITIONALLY canonicalised to an UNAMBIGUOUS container anchor
+  // (`canonicalContainer`) — path ends in '/', NO query/fragment — so
+  // `${container}.acl` cannot resolve to a decoy resource (e.g. `chat/?x=/` →
+  // `chat/?x=/.acl`, not the real `chat/.acl`).
   const safeContainer = canonicalContainer(container);
   if (safeContainer === undefined) {
     throw new Error(
