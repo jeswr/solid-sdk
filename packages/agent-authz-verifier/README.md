@@ -50,10 +50,16 @@ the injected seams doubled.
    policy document is presented (`PresentedChain.policyContents`), its RDFC-1.0
    canonical digest must match the credential's SIGNED `relatedResource`
    digest (`POLICY_INTEGRITY` on a mismatch or a missing digest).
-3. **Phase B** — cross-binding: each hop's credential is issued by (and
-   self-asserts a subject of) that hop's `odrl:assigner`; the delegate it
-   authorizes is the NEXT hop's assigner; the ROOT credential's issuer is the
-   caller's trusted root principal (`BINDING_MISMATCH`).
+3. **Phase B** — cross-binding, anchored to the **proof-verified issuer**: the
+   delegating principal of every hop is `vc.issuer` (never the self-asserted
+   `credentialSubject.id` — `verifyCredential` proves the signature against
+   `issuer` + key control but does not constrain the subject id, so trusting
+   `subject.id` would let an attacker with their own valid issuer impersonate any
+   assigner; a credential whose `subject.id` disagrees with its `issuer` is
+   rejected `SUBJECT_ISSUER_MISMATCH`). Each hop's credential is then issued by
+   that hop's `odrl:assigner`; the delegate it authorizes is the NEXT hop's
+   assigner; the ROOT credential's issuer is the caller's trusted root principal
+   (`BINDING_MISMATCH`).
 4. **Phase C** — status ∪ revocation: every hop credential's status entry is
    resolved through the `resolveStatus` seam (`REVOKED` / `SUSPENDED`; an
    unconfirmable entry — or an entry present with NO resolver supplied — is
@@ -146,7 +152,7 @@ Every deny carries exactly one code, so a recorded decision is machine-comparabl
 |---|---|
 | assembly | `CHAIN_MALFORMED` |
 | A | `MALFORMED`, `NO_PROOF`, `UNKNOWN_CRYPTOSUITE`, `INVALID_SIGNATURE`, `EXPIRED`, `NOT_YET_VALID`, `ISSUER_MISMATCH`, `PROOF_PURPOSE_MISMATCH`, `UNTRUSTED_ISSUER` |
-| B | `BINDING_MISMATCH`, `POLICY_INTEGRITY` |
+| B | `BINDING_MISMATCH`, `SUBJECT_ISSUER_MISMATCH`, `POLICY_INTEGRITY` |
 | C | `REVOKED`, `SUSPENDED`, `STATUS_RETRIEVAL_ERROR` |
 | D | `POLICY_DENIED` |
 | composition | `IDENTITY_COMPOSITION_FAILED` |

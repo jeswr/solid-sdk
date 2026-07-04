@@ -1622,11 +1622,11 @@ function readBoundAuthorization(vc) {
     return void 0;
   }
   const subject = subjectRecord(vc);
-  const principal = claimString(subject?.id) ?? vc.issuer;
   const authorizes = claimString(subject?.[SVC_AUTHORIZES2]);
-  if (subject === void 0 || authorizes === void 0) {
+  if (subject === void 0 || authorizes === void 0 || typeof vc.issuer !== "string") {
     return void 0;
   }
+  const principal = vc.issuer;
   const action = claimStrings(subject[SVC_ACTION2]);
   const target = claimString(subject[SVC_TARGET2]);
   const policy = claimString(subject[SVC_POLICY2]);
@@ -1732,6 +1732,15 @@ async function verifyAgentAuthority(chain, options) {
         "B",
         "BINDING_MISMATCH",
         "A presented credential is not a well-formed AgentAuthorizationCredential.",
+        chainIds
+      );
+    }
+    const assertedSubjectId = claimString(subjectRecord(vc)?.id);
+    if (assertedSubjectId !== void 0 && assertedSubjectId !== vc.issuer) {
+      return deny(
+        "B",
+        "SUBJECT_ISSUER_MISMATCH",
+        `Credential subject <${assertedSubjectId}> \u2260 its proof-verified issuer <${vc.issuer}> \u2014 refusing a subject-spoofed authorization.`,
         chainIds
       );
     }

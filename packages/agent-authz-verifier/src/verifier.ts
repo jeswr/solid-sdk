@@ -78,7 +78,15 @@ const SVC_POLICY = `${SVC}policy`;
 
 /** The bound agent-authorization claim read from an AgentAuthorizationCredential. */
 export interface BoundAuthorization {
-  /** The issuer / subject / delegator (svc credential: issuer ≡ subject.id). */
+  /**
+   * The delegating principal — ALWAYS the PROOF-VERIFIED `vc.issuer`, NEVER the
+   * self-asserted `credentialSubject.id`. `verifyCredential` proves the signature
+   * against `issuer` + key control but does NOT constrain the subject id, so
+   * trusting `subject.id` here would let an attacker with their own valid issuer
+   * impersonate any assigner/root (a chain-of-trust bypass). The verifier
+   * additionally enforces `subject.id === issuer` fail-closed
+   * (`SUBJECT_ISSUER_MISMATCH`).
+   */
   readonly principal: string;
   /** The delegate the credential authorizes (`svc:authorizes`). */
   readonly authorizes: string;
@@ -241,9 +249,14 @@ function claimStrings(value: unknown): string[] {
 }
 
 /**
- * Read the AgentAuthorizationCredential's bound claim from its subject graph —
- * `issuer` is the principal (solid-vc asserts issuer ≡ subject.id); the subject
- * carries `svc:authorizes` / `svc:action` / `svc:target` / `svc:policy`.
+ * Read the AgentAuthorizationCredential's bound claim from its subject graph. The
+ * delegating `principal` is the PROOF-VERIFIED `vc.issuer` — never the
+ * self-asserted `credentialSubject.id` (see {@link BoundAuthorization.principal}
+ * for why trusting the subject id would be a chain-of-trust bypass). The subject
+ * carries the grant fields `svc:authorizes` / `svc:action` / `svc:target` /
+ * `svc:policy`. NOTE this is a pure reader — it does NOT verify the proof; the
+ * verifier runs Phase A (`verifyCredential`) and the `subject.id === issuer`
+ * fail-closed check before any of these fields are trusted.
  */
 export function readBoundAuthorization(vc: VerifiableCredential): BoundAuthorization | undefined {
   const types = vc.type ?? [];
@@ -251,11 +264,12 @@ export function readBoundAuthorization(vc: VerifiableCredential): BoundAuthoriza
     return undefined;
   }
   const subject = subjectRecord(vc);
-  const principal = claimString(subject?.id) ?? vc.issuer;
   const authorizes = claimString(subject?.[SVC_AUTHORIZES]);
-  if (subject === undefined || authorizes === undefined) {
+  if (subject === undefined || authorizes === undefined || typeof vc.issuer !== "string") {
     return undefined;
   }
+  // SECURITY: the delegating principal is the proof-anchored issuer, NOT subject.id.
+  const principal = vc.issuer;
   const action = claimStrings(subject[SVC_ACTION]);
   const target = claimString(subject[SVC_TARGET]);
   const policy = claimString(subject[SVC_POLICY]);
@@ -403,6 +417,26 @@ export async function verifyAgentAuthority(
         "B",
         "BINDING_MISMATCH",
         "A presented credential is not a well-formed AgentAuthorizationCredential.",
+        chainIds,
+      );
+    }
+    // SECURITY (delegation-trust anchor): the credential's self-asserted
+    // `credentialSubject.id`, when present, MUST equal its proof-verified `issuer`.
+    // `verifyCredential` (Phase A) proves the signature against `issuer` + key
+    // control but does NOT constrain the subject id — so without this an attacker
+    // who legitimately controls their OWN issuer key could sign a credential whose
+    // `subject.id` names a TRUSTED party (a root owner / an authorized delegatee)
+    // and have the chain accept it as that party's grant, impersonating any
+    // assigner. The composed verifier must enforce it here, fail-closed. (The
+    // principal used for every trust decision is already anchored to `issuer` in
+    // `readBoundAuthorization`; this rejects a spoofed subject outright rather than
+    // silently ignoring it.)
+    const assertedSubjectId = claimString(subjectRecord(vc)?.id);
+    if (assertedSubjectId !== undefined && assertedSubjectId !== vc.issuer) {
+      return deny(
+        "B",
+        "SUBJECT_ISSUER_MISMATCH",
+        `Credential subject <${assertedSubjectId}> ≠ its proof-verified issuer <${vc.issuer}> — refusing a subject-spoofed authorization.`,
         chainIds,
       );
     }

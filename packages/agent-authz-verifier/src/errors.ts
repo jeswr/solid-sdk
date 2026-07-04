@@ -40,6 +40,13 @@ export type VerifierErrorCode =
   | "UNTRUSTED_ISSUER"
   // Phase B
   | "BINDING_MISMATCH"
+  // Phase B — the delegation-trust identity anchor: a credential's self-asserted
+  // `credentialSubject.id` disagrees with its PROOF-VERIFIED `issuer`. Fail-closed:
+  // `verifyCredential` proves the signature against `issuer` + key control but does
+  // NOT constrain the subject id, so an attacker controlling their own valid issuer
+  // could otherwise name a trusted party in `subject.id` and have the grant accepted
+  // as that party's. The delegating principal is ALWAYS the proof-verified issuer.
+  | "SUBJECT_ISSUER_MISMATCH"
   // Phase B — the policy-content binding gate (G1): the presented policy content's
   // canonical digest did not match the credential's signed `relatedResource`
   // digest (solid-vc `RELATED_RESOURCE_MISMATCH`), or the credential carries NO
