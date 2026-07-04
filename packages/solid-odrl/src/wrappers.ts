@@ -19,6 +19,7 @@ import {
   type TermWrapper as TermWrapperType,
 } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
+import { escapeIri } from "./iri.js";
 import {
   ODRL_ACTION,
   ODRL_AGREEMENT,
@@ -258,18 +259,30 @@ export class GraphBuilder {
   private readonly store = new Store();
   private readonly factory = DataFactory as unknown as DataFactoryType;
 
-  /** Materialise a {@link NodeRef} to its RDF/JS term. */
+  /**
+   * Materialise a {@link NodeRef} to its RDF/JS term. Every IRI subject is run
+   * through {@link escapeIri} FIRST, so a Turtle IRIREF-forbidden octet in an
+   * untrusted subject id (e.g. a `>` in a caller-supplied policy/rule/duty id)
+   * can never break out of the serialiser's `<...>` — the breakout-proof
+   * chokepoint for subjects.
+   */
   private subjectTerm(ref: NodeRef): Term {
     return ref.kind === "iri"
-      ? (NamedNodeFrom.string(ref.value, this.factory) as unknown as Term)
+      ? (NamedNodeFrom.string(escapeIri(ref.value), this.factory) as unknown as Term)
       : (BlankNodeFrom.string(ref.value, this.factory) as unknown as Term);
   }
 
-  /** Add `(subject, predicate, object-IRI)`. */
+  /**
+   * Add `(subject, predicate, object-IRI)`. Predicate and object IRI are passed
+   * through {@link escapeIri} so no IRIREF-forbidden octet reaches the serialiser
+   * regardless of the call site — the breakout-proof chokepoint for object IRIs.
+   * (Trusted vocab constants contain no forbidden octet, so this is a no-op for
+   * them; semantic http(s)-only validation lives at the call sites in policy.ts.)
+   */
   addIri(subject: NodeRef | string, predicate: string, objectIri: string): void {
     const s = this.subjectTerm(normalize(subject));
-    const p = NamedNodeFrom.string(predicate, this.factory);
-    const o = NamedNodeFrom.string(objectIri, this.factory);
+    const p = NamedNodeFrom.string(escapeIri(predicate), this.factory);
+    const o = NamedNodeFrom.string(escapeIri(objectIri), this.factory);
     this.store.add(this.factory.quad(s as never, p as never, o as never) as Quad);
   }
 
@@ -281,13 +294,13 @@ export class GraphBuilder {
     datatypeIri?: string,
   ): void {
     const s = this.subjectTerm(normalize(subject));
-    const p = NamedNodeFrom.string(predicate, this.factory);
+    const p = NamedNodeFrom.string(escapeIri(predicate), this.factory);
     const o =
       datatypeIri === undefined
         ? (LiteralFrom.string(value, this.factory) as unknown as never)
         : (this.factory.literal(
             value,
-            NamedNodeFrom.string(datatypeIri, this.factory) as never,
+            NamedNodeFrom.string(escapeIri(datatypeIri), this.factory) as never,
           ) as never);
     this.store.add(this.factory.quad(s as never, p as never, o as never) as Quad);
   }
@@ -300,7 +313,7 @@ export class GraphBuilder {
   linkBlankNode(subject: NodeRef | string, predicate: string): NodeRef {
     const s = this.subjectTerm(normalize(subject));
     const blank = BlankNodeFrom.string(undefined, this.factory) as unknown as Term;
-    const p = NamedNodeFrom.string(predicate, this.factory);
+    const p = NamedNodeFrom.string(escapeIri(predicate), this.factory);
     this.store.add(this.factory.quad(s as never, p as never, blank as never) as Quad);
     return { kind: "blank", value: (blank as { value: string }).value };
   }

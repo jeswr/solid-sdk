@@ -2,6 +2,19 @@ import type { DatasetCore, Quad } from "@rdfjs/types";
 import type { OdrlPolicy } from "./types.js";
 import { IRI_TO_ACTION, IRI_TO_LEFT_OPERAND, IRI_TO_OPERATOR } from "./vocab.js";
 /**
+ * Thrown when an EXPLICITLY-PROVIDED http(s)-contract IRI (a rule/duty/policy
+ * `target`, `assignee`, `assigner`, or `profile`) cannot be made into a safe
+ * http(s) IRI. We refuse to serialise rather than silently DROP it: a dropped
+ * `target`/`assignee` is treated as a WILDCARD by {@link evaluate} (a rule with no
+ * target matches ANY resource; with no assignee, ANY agent), so silently dropping a
+ * malformed one would WIDEN the policy — a privilege escalation. Throwing is the
+ * fail-closed choice that is safe for BOTH permissions (dropping would over-grant)
+ * and prohibitions (dropping the whole rule would under-deny).
+ */
+export declare class OdrlSerializationError extends Error {
+    constructor(message: string);
+}
+/**
  * Lower a structured {@link OdrlPolicy} to RDF quads (an `odrl:Policy` graph)
  * through the typed wrapper write path.
  */

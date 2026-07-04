@@ -39,7 +39,8 @@
 export type { A2AIntentLike } from "./compose.js";
 export { A2A_ACTION_TO_ODRL, requestContextFromA2AIntent, requestContextFromWac, } from "./compose.js";
 export { constraintSatisfied, evaluate } from "./evaluate.js";
-export { IRI_TO_ACTION, IRI_TO_LEFT_OPERAND, IRI_TO_OPERATOR, parsePolicy, policyFromRdf, policyToJsonLd, policyToRdf, policyToTurtle, } from "./policy.js";
+export { escapeIri, safeHttpIri, safeIri } from "./iri.js";
+export { IRI_TO_ACTION, IRI_TO_LEFT_OPERAND, IRI_TO_OPERATOR, OdrlSerializationError, parsePolicy, policyFromRdf, policyToJsonLd, policyToRdf, policyToTurtle, } from "./policy.js";
 export { serialize } from "./serialize.js";
 export type { ActiveDuty, Decision, DecisionRule, EvaluateOptions, EvaluationResult, OdrlConstraint, OdrlDuty, OdrlPolicy, OdrlRule, PolicyType, RequestContext, RuleType, } from "./types.js";
 export { ACL, ACL_MODE_TO_ACTION, ACL_MODES, ACTION_IRI, type AclMode, CONFLICT_IRI, CONFLICT_STRATEGIES, type ConflictStrategy, DPV, LEFT_OPERAND_IRI, LEFT_OPERANDS, type LeftOperandName, ODRL, ODRL_ACTIONS, ODRL_INLINE_CONTEXT, type OdrlActionName, OPERATOR_IRI, OPERATORS, type OperatorName, VALID_ACTION_IRIS, } from "./vocab.js";

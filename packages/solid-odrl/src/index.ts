@@ -45,10 +45,12 @@ export {
   requestContextFromWac,
 } from "./compose.js";
 export { constraintSatisfied, evaluate } from "./evaluate.js";
+export { escapeIri, safeHttpIri, safeIri } from "./iri.js";
 export {
   IRI_TO_ACTION,
   IRI_TO_LEFT_OPERAND,
   IRI_TO_OPERATOR,
+  OdrlSerializationError,
   parsePolicy,
   policyFromRdf,
   policyToJsonLd,
