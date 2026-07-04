@@ -13,7 +13,8 @@
  *
  * Externalisation contract (the load-bearing part):
  *   - INLINED  (bundled into dist/index.js): the off-npm `@jeswr/*` git deps only —
- *       `@jeswr/solid-dpop`.
+ *       `@jeswr/solid-dpop` and `@jeswr/guarded-fetch` (its browser-safe default entry, for the
+ *       `refuseRedirects` credentialed-fetch guard — no `undici`/`node:*` is pulled in).
  *   - EXTERNAL (resolved from npm by the consumer):
  *       - `jose` — solid-dpop's only runtime dep (npm-published; kept external so a single shared
  *         copy + normal dedupe/audit apply).
@@ -36,8 +37,14 @@ import { build } from "esbuild";
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const outdir = join(root, "dist");
 
-/** The off-npm `@jeswr/*` packages we INLINE (everything else stays external). */
-const INLINE = new Set(["@jeswr/solid-dpop"]);
+/**
+ * The off-npm `@jeswr/*` packages we INLINE (everything else stays external). Both are git deps with
+ * a committed self-contained `dist/` and no runtime npm dep beyond `jose` — inlining them makes OUR
+ * install artifact robust regardless of how the consumer resolved the transitive git dep. We import
+ * ONLY the browser-safe `@jeswr/guarded-fetch` default entry (`refuseRedirects` — no `undici` / no
+ * `node:*`), so bundling it does not pull the node-only DNS-pinning fetch in.
+ */
+const INLINE = new Set(["@jeswr/solid-dpop", "@jeswr/guarded-fetch"]);
 
 /**
  * Known transitive externals the inlined `@jeswr/*` code pulls in but that are not direct
