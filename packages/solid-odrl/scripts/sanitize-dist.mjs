@@ -31,7 +31,16 @@
 import { isAbsolute, relative, resolve } from "node:path";
 
 /**
- * Host/home absolute-path prefixes that must NEVER survive in a committed artifact.
+ * Host/home absolute-path prefixes used only to produce a MORE SPECIFIC error message
+ * when a residual leaked path happens to match one of these common roots. This list is
+ * NOT the guard itself — see `assertNoHostPath`, which fails closed on ANY residual
+ * POSIX absolute path (`norm.startsWith("/")`), not merely a fixed allowlist of known
+ * prefixes. A substring-allowlist check here previously let an absolute path outside
+ * this fixed set (e.g. `/tmp/build/x.ts`, `/opt/ci/x.ts`, `/workspace/x.ts`) silently
+ * SURVIVE despite the guard's fail-closed intent, because `pkgRelativePath` always
+ * reduces a legitimate path to a relative label (own source → `src/…`, a dependency →
+ * `node_modules/…`) — so ANY remaining absolute path at this point is unconditionally a
+ * leak, regardless of which root it starts with.
  */
 export const FORBIDDEN_PATH_PREFIXES = ["/Users/", "/home/", "/root/", "/private/", "/var/"];
 
@@ -174,14 +183,24 @@ export function assertNoHostPath(name, paths) {
           "package-relative one before commit.",
       );
     }
-    for (const prefix of FORBIDDEN_PATH_PREFIXES) {
-      if (norm.includes(prefix)) {
-        throw new Error(
-          `build-dist: committed dist/${name} still embeds a host path (${prefix}…): ` +
-            `${JSON.stringify(p)}. The sanitiser must reduce every build path to a ` +
-            "package-relative one before commit.",
-        );
-      }
+    // TRUE fail-closed check (NOT a substring allowlist): `pkgRelativePath` reduces
+    // EVERY legitimate build path to a package-relative label before it ever reaches
+    // this guard — own source becomes `src/…`, an inlined dependency becomes
+    // `node_modules/…` — so nothing legitimate remains an absolute POSIX path here.
+    // Reject ANY residual leading `/`, not just a fixed set of known home/build-root
+    // prefixes: the old `FORBIDDEN_PATH_PREFIXES.some(p => norm.includes(p))` allowlist
+    // missed common absolute roots like `/tmp/…`, `/opt/…`, `/workspace/…` — they
+    // survived `pkgRelativePath` and slipped past the guard despite it claiming to
+    // fail-closed. `FORBIDDEN_PATH_PREFIXES` is kept only to make the error message
+    // more specific when the residual happens to match one of those known roots.
+    if (norm.startsWith("/")) {
+      const knownPrefix = FORBIDDEN_PATH_PREFIXES.find((prefix) => norm.includes(prefix));
+      throw new Error(
+        `build-dist: committed dist/${name} still embeds a host path` +
+          (knownPrefix ? ` (${knownPrefix}…)` : "") +
+          `: ${JSON.stringify(p)}. The sanitiser must reduce every build path to a ` +
+          "package-relative one before commit.",
+      );
     }
   }
 }

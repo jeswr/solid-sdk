@@ -198,3 +198,62 @@ describe("classifier is OS-agnostic + segment-exact (Windows-style backslash pat
     expect(pkgRelativePath(own, root)).toBe("foonode_modules/thing.ts");
   });
 });
+
+describe("REGRESSION: assertNoHostPath fails closed on ANY residual absolute path, not a fixed prefix allowlist", () => {
+  // roborev found the old guard checked a substring ALLOWLIST
+  // (`/Users/`, `/home/`, `/root/`, `/private/`, `/var/`) that misses common absolute
+  // build roots like `/tmp/…`, `/opt/…`, `/workspace/…` — they survive `pkgRelativePath`
+  // (no node_modules anchor, escapes the package root) and previously passed the guard
+  // despite it claiming to fail-closed. The fixed guard rejects ANY residual leading
+  // `/`, not merely a known set of prefixes.
+
+  it("FAILS the banner guard on a residual /tmp/… path (no Users/home/root/private/var prefix)", () => {
+    const dirty = "// /tmp/build/outside.ts\nconst a = 1;";
+    expect(() => sanitizeJs(dirty, ROOT)).toThrow(/host path/);
+  });
+
+  it("FAILS the sources[] guard on a residual /tmp/… path", () => {
+    const map = { version: 3, sources: ["/tmp/build/outside.ts"] };
+    expect(() => sanitizeMap(map, ROOT)).toThrow(/host path/);
+  });
+
+  it("FAILS the banner guard on a residual /opt/… path", () => {
+    const dirty = "// /opt/ci/outside.ts\nconst b = 2;";
+    expect(() => sanitizeJs(dirty, ROOT)).toThrow(/host path/);
+  });
+
+  it("FAILS the sources[] guard on a residual /opt/… path", () => {
+    const map = { version: 3, sources: ["/opt/ci/outside.ts"] };
+    expect(() => sanitizeMap(map, ROOT)).toThrow(/host path/);
+  });
+
+  it("FAILS the banner guard on a residual /workspace/… path", () => {
+    const dirty = "// /workspace/outside.ts\nconst c = 3;";
+    expect(() => sanitizeJs(dirty, ROOT)).toThrow(/host path/);
+  });
+
+  it("FAILS the sources[] guard on a residual /workspace/… path", () => {
+    const map = { version: 3, sources: ["/workspace/outside.ts"] };
+    expect(() => sanitizeMap(map, ROOT)).toThrow(/host path/);
+  });
+
+  it("still PASSES legit own-source (`src/…`) and dependency (`node_modules/…`) labels through the same guard", () => {
+    const dirty = [
+      `// ${ROOT}/src/registry.ts`,
+      `// ${ROOT}/node_modules/@jeswr/fetch-rdf/dist/parse.js`,
+      "export const ok = true;",
+    ].join("\n");
+    const clean = sanitizeJs(dirty, ROOT);
+    expect(clean).toContain("// src/registry.ts");
+    expect(clean).toContain("// node_modules/@jeswr/fetch-rdf/dist/parse.js");
+
+    const map = sanitizeMap(
+      {
+        version: 3,
+        sources: [`${ROOT}/src/registry.ts`, `${ROOT}/node_modules/n3/src/parse.ts`],
+      },
+      ROOT,
+    );
+    expect(map.sources).toEqual(["src/registry.ts", "node_modules/n3/src/parse.ts"]);
+  });
+});
