@@ -95,4 +95,15 @@ describe("ResearchView", () => {
       expect(screen.getByText(/PubMed fallback coeliac review/)).toBeInTheDocument(),
     );
   });
+
+  it("fails open when EVERY upstream (Europe PMC + PubMed) is down — never throws, guidelines still render", async () => {
+    const publicFetch = vi.fn(async () => {
+      throw new Error("network down");
+    }) as unknown as typeof globalThis.fetch;
+    // rendering itself must not throw despite every knowledge fetch rejecting
+    expect(() => renderWithSession(<ResearchView />, { publicFetch })).not.toThrow();
+    // the curated guidelines are static — always available, API outage or not
+    expect(screen.getByText(/NG20/)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText(/couldn.?t reach/i)).toBeInTheDocument());
+  });
 });
