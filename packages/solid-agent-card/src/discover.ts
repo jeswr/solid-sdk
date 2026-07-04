@@ -133,7 +133,6 @@ export async function discoverAgent(
     initial,
     descriptorDataset,
     webId,
-    agentIri,
     options.requireOwnerMatch === true,
   );
 
@@ -153,10 +152,19 @@ type OwnerBackLink =
 
 /**
  * The OWNER BACK-LINK check, computed from the RAW `ad:owner` terms on the
- * agent-description subject (NOT the projected descriptor, which keeps only the
- * first owner). The security guarantee is EXACT and ORDER-INDEPENDENT: the
- * back-link holds iff there is EXACTLY ONE `ad:owner`, it is an IRI, and it
- * equals `webId`. Any deviation fails CLOSED regardless of RDF insertion order:
+ * RESOLVED DESCRIPTION'S ACTUAL SUBJECT (`descriptorSubject` — i.e. the
+ * `ad:AgentDescription` node's IRI), NOT the requested agent IRI. Keying on the
+ * resolved subject avoids a subject-confusion: a document served at URL A whose
+ * description subject is B could otherwise contain an unrelated
+ * `<A> ad:owner <webId>` triple and spuriously satisfy the back-link even though
+ * the resolved description (subject B) never claimed that owner. (The
+ * subject-binding guard in verifyDataset already flags A≠B, but the owner check
+ * must be self-consistently scoped to the resolved subject regardless.) It also
+ * ignores the projected `descriptor.owner`, which keeps only the first term.
+ *
+ * The security guarantee is EXACT and ORDER-INDEPENDENT: the back-link holds iff
+ * the resolved subject has EXACTLY ONE `ad:owner`, it is an IRI, and it equals
+ * `webId`. Any deviation fails CLOSED regardless of RDF insertion order:
  *   - zero owners           → `none`     (no claim → cannot confirm);
  *   - two or more owners     → `multiple` (ambiguous → cannot rely on any one,
  *                                          even if one of them matches);
@@ -165,10 +173,14 @@ type OwnerBackLink =
  * This closes the insertion-order-ambiguity class: a descriptor carrying BOTH a
  * matching and a non-matching `ad:owner` is rejected either way round.
  */
-function ownerBackLink(dataset: DatasetCore, agentIri: string, webId: string): OwnerBackLink {
+function ownerBackLink(
+  dataset: DatasetCore,
+  descriptorSubject: string,
+  webId: string,
+): OwnerBackLink {
   const owners: { value: string; isIri: boolean }[] = [];
   for (const quad of dataset) {
-    if (quad.predicate.value === AD_OWNER && quad.subject.value === agentIri) {
+    if (quad.predicate.value === AD_OWNER && quad.subject.value === descriptorSubject) {
       owners.push({ value: quad.object.value, isIri: quad.object.termType === "NamedNode" });
     }
   }
@@ -176,14 +188,14 @@ function ownerBackLink(dataset: DatasetCore, agentIri: string, webId: string): O
     return {
       matches: false,
       reason: "none",
-      message: `Agent Description (${agentIri}) has no ad:owner, so the owner back-link to ${webId} cannot be confirmed.`,
+      message: `Agent Description (${descriptorSubject}) has no ad:owner, so the owner back-link to ${webId} cannot be confirmed.`,
     };
   }
   if (owners.length > 1) {
     return {
       matches: false,
       reason: "multiple",
-      message: `Agent Description (${agentIri}) declares ${owners.length} ad:owner triples; the owner back-link requires exactly one (ambiguous — fail-closed).`,
+      message: `Agent Description (${descriptorSubject}) declares ${owners.length} ad:owner triples; the owner back-link requires exactly one (ambiguous — fail-closed).`,
     };
   }
   const [owner] = owners as [{ value: string; isIri: boolean }];
@@ -214,17 +226,23 @@ function applyOwnerBackLink(
   verification: VerificationResult,
   dataset: DatasetCore,
   webId: string,
-  agentIri: string,
   required: boolean,
 ): { verification: VerificationResult; ownerMatchesWebId?: boolean } {
-  if (verification.descriptor === undefined) {
+  // Fail closed when no descriptor was resolved (no subject to scope the check
+  // to). ownerMatchesWebId stays undefined — there is nothing to report on.
+  const subject = verification.descriptor?.id;
+  if (subject === undefined) {
     return { verification };
   }
-  const link = ownerBackLink(dataset, agentIri, webId);
+  // Key the raw owner check on the RESOLVED description's actual subject, not
+  // the requested agent IRI — closes the subject-confusion where an unrelated
+  // `<agentIri> ad:owner <webId>` triple could otherwise satisfy the back-link
+  // for a description whose subject differs.
+  const link = ownerBackLink(dataset, subject, webId);
   if (link.matches || !required) {
     return { verification, ownerMatchesWebId: link.matches };
   }
-  const value = verification.descriptor.owner;
+  const value = verification.descriptor?.owner;
   return {
     ownerMatchesWebId: false,
     verification: {
@@ -235,7 +253,7 @@ function applyOwnerBackLink(
         {
           code: "owner-mismatch",
           message: link.message,
-          subject: agentIri,
+          subject,
           ...(value !== undefined && { value }),
         },
       ],

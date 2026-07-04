@@ -237,3 +237,40 @@ describe("the owner back-link is order-independent (multi-owner ambiguity, fail-
     expect(issue?.message).toMatch(/not an IRI/);
   });
 });
+
+describe("the owner back-link is scoped to the RESOLVED subject (no subject-confusion)", () => {
+  const Evil = "https://evil.example/agent";
+
+  /**
+   * A hostile document served at AGENT (the requested IRI) whose actual
+   * ad:AgentDescription SUBJECT is EVIL — and which ALSO carries an unrelated
+   * `<AGENT> ad:owner <WEBID>` triple. The resolved description (subject EVIL)
+   * never claims WEBID as its owner. A back-link check keyed on the requested
+   * AGENT IRI would spuriously find the stray triple and report a match; keyed
+   * on the resolved subject EVIL it correctly finds no owner → fail-closed.
+   */
+  const Confused = `@prefix ad: <https://w3id.org/agent-description#>.
+<${Evil}> a ad:AgentDescription ; ad:name "Evil" ; ad:url <${Evil}> .
+<${AGENT}> ad:owner <${WEBID}> .`;
+
+  it("does NOT report ownerMatchesWebId:true from a stray owner triple on the requested (non-subject) IRI", async () => {
+    const fetch = podFetch(await jeswrProfile(), Confused);
+    const r = await discoverAgent(WEBID, { fetch });
+    // Subject-binding already flags the A≠B mismatch…
+    expect(r.verification?.issues.map((i) => i.code)).toContain("subject-mismatch");
+    // …and the owner back-link is scoped to the RESOLVED subject (EVIL), which
+    // has no ad:owner — so it must NOT be spuriously satisfied by <AGENT> ad:owner <WEBID>.
+    expect(r.ownerMatchesWebId).toBe(false);
+  });
+
+  it("fails closed under requireOwnerMatch for the same confused document", async () => {
+    const fetch = podFetch(await jeswrProfile(), Confused);
+    const r = await discoverAgent(WEBID, { fetch, requireOwnerMatch: true });
+    expect(r.ownerMatchesWebId).toBe(false);
+    expect(r.verification?.valid).toBe(false);
+    const issue = r.verification?.issues.find((i) => i.code === "owner-mismatch");
+    // The owner-mismatch issue is scoped to the resolved subject, not the requested IRI.
+    expect(issue?.subject).toBe(Evil);
+    expect(issue?.message).toContain(Evil);
+  });
+});

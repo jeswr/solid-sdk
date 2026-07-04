@@ -996,7 +996,6 @@ async function discoverAgent(webId, options = {}) {
     initial,
     descriptorDataset,
     webId,
-    agentIri,
     options.requireOwnerMatch === true
   );
   return {
@@ -1007,10 +1006,10 @@ async function discoverAgent(webId, options = {}) {
     ...ownerMatchesWebId !== void 0 && { ownerMatchesWebId }
   };
 }
-function ownerBackLink(dataset, agentIri, webId) {
+function ownerBackLink(dataset, descriptorSubject, webId) {
   const owners = [];
   for (const quad of dataset) {
-    if (quad.predicate.value === AD_OWNER && quad.subject.value === agentIri) {
+    if (quad.predicate.value === AD_OWNER && quad.subject.value === descriptorSubject) {
       owners.push({ value: quad.object.value, isIri: quad.object.termType === "NamedNode" });
     }
   }
@@ -1018,14 +1017,14 @@ function ownerBackLink(dataset, agentIri, webId) {
     return {
       matches: false,
       reason: "none",
-      message: `Agent Description (${agentIri}) has no ad:owner, so the owner back-link to ${webId} cannot be confirmed.`
+      message: `Agent Description (${descriptorSubject}) has no ad:owner, so the owner back-link to ${webId} cannot be confirmed.`
     };
   }
   if (owners.length > 1) {
     return {
       matches: false,
       reason: "multiple",
-      message: `Agent Description (${agentIri}) declares ${owners.length} ad:owner triples; the owner back-link requires exactly one (ambiguous \u2014 fail-closed).`
+      message: `Agent Description (${descriptorSubject}) declares ${owners.length} ad:owner triples; the owner back-link requires exactly one (ambiguous \u2014 fail-closed).`
     };
   }
   const [owner] = owners;
@@ -1045,15 +1044,16 @@ function ownerBackLink(dataset, agentIri, webId) {
   }
   return { matches: true };
 }
-function applyOwnerBackLink(verification, dataset, webId, agentIri, required) {
-  if (verification.descriptor === void 0) {
+function applyOwnerBackLink(verification, dataset, webId, required) {
+  const subject = verification.descriptor?.id;
+  if (subject === void 0) {
     return { verification };
   }
-  const link = ownerBackLink(dataset, agentIri, webId);
+  const link = ownerBackLink(dataset, subject, webId);
   if (link.matches || !required) {
     return { verification, ownerMatchesWebId: link.matches };
   }
-  const value = verification.descriptor.owner;
+  const value = verification.descriptor?.owner;
   return {
     ownerMatchesWebId: false,
     verification: {
@@ -1064,7 +1064,7 @@ function applyOwnerBackLink(verification, dataset, webId, agentIri, required) {
         {
           code: "owner-mismatch",
           message: link.message,
-          subject: agentIri,
+          subject,
           ...value !== void 0 && { value }
         }
       ]
