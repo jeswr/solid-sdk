@@ -9,8 +9,8 @@
  *  1. **IRI injection** — an untrusted IRI-valued object (author / inReplyTo / …)
  *     that VALIDATES as an absolute http(s) URL yet carries a Turtle-`IRIREF`-illegal
  *     character (`>` breaks out of `<…>` and injects arbitrary triples; `|`/`^`/`\`
- *     in a fragment yield an invalid `IRIREF`). The fix CANONICALISES + percent-
- *     encodes every residual, so no injection character reaches `namedNode()`.
+ *     in a fragment yield an invalid `IRIREF`). The fix LEXICALLY percent-encodes
+ *     every forbidden character, so no injection character reaches `namedNode()`.
  *  2. **Control-character smuggling** — a body/title carrying `ESC`/`DEL`/C1 control
  *     bytes that `n3.Writer` emits RAW into the serialised literal. The fix strips
  *     them (keeping `\t`/`\n`/`\r`).
@@ -31,7 +31,7 @@ const SUBJECT = "https://alice.example/chat/room1/msg1.ttl#it";
 const BREAKOUT_AUTHOR =
   "https://evil.example/a> <https://alice.example/chat/room1/msg1.ttl#it> <http://www.w3.org/ns/prov#wasAttributedTo> <https://evil.example/pwned";
 
-describe("safeHttpIri — canonicalises + neutralises IRI-injection characters", () => {
+describe("safeHttpIri — percent-encodes + neutralises IRI-injection characters", () => {
   it("accepts a clean http(s) IRI unchanged", () => {
     expect(safeHttpIri("https://alice.example/profile/card#me")).toBe(
       "https://alice.example/profile/card#me",
@@ -110,6 +110,25 @@ describe("AS2.0 write — an IRI-injection author cannot inject triples", () => 
     const msg = parseAs2Message(SUBJECT, store);
     expect(msg?.author).toBe("http://ex.org/a%3Eb");
   });
+
+  // Explicit end-to-end regression over the canonical @jeswr/rdf-serialize guard:
+  // the classic `http://evil/> <s> <p> .` Turtle-breakout payload (passes new URL())
+  // must NOT be able to inject a triple through this repo's public serialize API.
+  it("neutralises the classic '> <s> <p> .' breakout payload through serializeAs2", async () => {
+    const payload = "http://evil/> <http://evil/s> <http://evil/p> <http://evil/o> .";
+    const turtle = await serializeAs2(
+      { content: "hi", mediaType: "text/plain", author: payload },
+      SUBJECT,
+    );
+    const quads = new Parser({ format: "text/turtle" }).parse(turtle);
+    // Exactly one subject (ours) — the attacker's `<http://evil/s>` never becomes a subject.
+    expect(new Set(quads.map((q) => q.subject.value))).toEqual(new Set([SUBJECT]));
+    // No NamedNode carries a raw '>' and no attacker predicate/object leaked in.
+    for (const q of quads) {
+      if (q.object.termType === "NamedNode") expect(q.object.value).not.toContain(">");
+      expect(q.predicate.value).not.toBe("http://evil/p");
+    }
+  });
 });
 
 describe("LongChat write — an IRI-injection author cannot inject triples", () => {
@@ -126,7 +145,7 @@ describe("LongChat write — an IRI-injection author cannot inject triples", () 
   });
 });
 
-describe("subject IRI is validated + canonicalised (fail closed)", () => {
+describe("subject IRI is validated + injection-escaped (fail closed)", () => {
   it("throws on a non-http(s) subject rather than emitting a malformed graph", () => {
     expect(() => buildAs2Message("urn:uuid:x", { content: "x", mediaType: "text/plain" })).toThrow(
       /absolute http\(s\) IRI/,
@@ -186,8 +205,8 @@ describe("body/title control-character smuggling is stripped", () => {
   });
 });
 
-describe("LibreChat adapter — an absolute id with an injection char is canonicalised", () => {
-  it("canonicalises a conversationId carrying a raw '>' rather than passing it through", () => {
+describe("LibreChat adapter — an absolute id with an injection char is percent-escaped", () => {
+  it("percent-escapes a conversationId carrying a raw '>' rather than passing it through", () => {
     const adapter = new LibreChatAdapter();
     const msg = adapter.toCanonical({
       text: "x",

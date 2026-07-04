@@ -43,6 +43,11 @@ npm install github:jeswr/solid-chat-interop#main
 
 (npm publish is a deferred migration; consume via GitHub for now.)
 
+**Requires Node `>=24`.** This is the `@jeswr` suite baseline (the build image is `node:24-alpine`)
+and the declared floor of the `@jeswr/rdf-serialize` dependency (`engines.node: ">=24"`), so
+`engines.node` here is raised to match it — a lower floor would let `npm install` (with
+`engine-strict`) resolve a dependency it cannot satisfy.
+
 ## Quick start
 
 ```ts

@@ -229,9 +229,9 @@ export function buildAs2Message(subject, msg) {
     // The subject is the ONE mandatory IRI (it becomes the message's `<subject>`
     // NamedNode via `n3.Writer`, which does NOT escape IRIs). A non-http(s) or
     // injection-bearing subject cannot be silently dropped like an optional object
-    // property — it would corrupt the serialised resource — so fail closed. Use the
-    // CANONICAL form so an injection character (e.g. `>`) can never break out of the
-    // `<…>`.
+    // property — it would corrupt the serialised resource — so fail closed. The guard
+    // returns the injection-safe (percent-escaped, LEXICAL) form so an injection
+    // character (e.g. `>`) can never break out of the `<…>`.
     const safeSubject = safeHttpIri(subject);
     if (safeSubject === undefined) {
         throw new TypeError(`buildAs2Message: subject must be an absolute http(s) IRI, got ${JSON.stringify(subject)}`);

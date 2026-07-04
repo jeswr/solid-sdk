@@ -1,55 +1,53 @@
 /**
- * Pure IRI helpers — the ONE reviewed home for the small, total IRI predicates
- * the reconciler and the adapter share.
+ * Pure IRI + text helpers — the ONE reviewed home for the small, total
+ * predicates the reconciler and the adapter share.
  *
- * Copied verbatim from `@jeswr/solid-task-model`'s `src/iri.ts` (the gold-standard
- * untrusted-IRI filter) so this package's read/write paths apply the EXACT same
- * http(s)-only guard a foreign chat document's object-property values must pass.
+ * **Consolidated (bead suite-tracker-olt0).** The injection-safe IRI guards
+ * (`isHttpIri` / `safeHttpIri` / `escapeIri`) were formerly a hand-copied variant
+ * of the suite's untrusted-IRI filter. They now re-export the ONE audited
+ * implementation from `@jeswr/rdf-serialize` (`src/iri.ts`), so this package
+ * carries no divergent copy. The re-exports preserve this module's public API —
+ * `./iri.js` remains the single import site for the reconciler + adapter.
  *
- * **Pure core, no platform.** This module depends only on the WHATWG `URL` global
- * (available in both Node and the browser) — no `node:*`, no DOM, no RDF/`n3`
- * machinery — so it is client-safe and can be read as a small spec.
- */
-/**
- * True for an absolute `http(s)` URL usable as a WebID / IRI object.
+ * **Semantic note — LEXICAL, not canonicalising.** The previous local
+ * `safeHttpIri` returned `new URL(v).href` (adding a trailing slash, lower-casing
+ * the host, dropping a default port) then encoded residual forbidden bytes. The
+ * canonical replacement is purely LEXICAL: it percent-encodes the Turtle-`IRIREF`
+ * forbidden set and otherwise preserves the value byte-for-byte, and REJECTS a
+ * value with a leading/trailing control-or-space rather than letting the URL
+ * parser silently strip it. This is deliberate — RDF identity is lexical, so a
+ * `NamedNode` must carry the caller's value, not a silently-canonicalised one. No
+ * call site in this package depends on the old canonicalisation: the only
+ * derived-URL mint (the LibreChat `resolveId` base-resolution) canonicalises
+ * explicitly via `new URL`, not via this guard.
  *
- * Chat data is untrusted input: object-property values that are not absolute
- * http(s) IRIs (e.g. `javascript:`, `mailto:`, `urn:`, a bare string) are
- * rejected here so a caller never coerces one into a malformed `NamedNode` nor
- * surfaces it to a UI as a link. A narrowing type guard so callers can use it in
- * a `?:` without an extra cast.
+ * **Pure core, no platform.** The retained helpers depend only on the WHATWG
+ * `URL` global (Node + browser) — no `node:*`, no DOM, no RDF/`n3` machinery — so
+ * this module stays client-safe.
  */
-export declare function isHttpIri(value: string | undefined): value is string;
+import { escapeIri, isHttpIri, safeHttpIri } from "@jeswr/rdf-serialize";
+export { escapeIri, isHttpIri, safeHttpIri };
 /**
- * The CANONICAL, injection-safe http(s) IRI for an untrusted value, or
- * `undefined` if it is absent or not an absolute http(s) URL.
+ * The injection-safe http(s) IRI for an untrusted value, else `undefined` — the
+ * recurring untrusted-input filter for an OPTIONAL object-property write (drop a
+ * non-http(s) value rather than coerce it into a malformed `NamedNode`, and
+ * percent-escape an http(s) value so no IRI-injection character survives into
+ * `n3.Writer`). A thin, http(s)-only alias of the canonical {@link safeHttpIri};
+ * named separately so the write sites read as a "drop or keep" filter.
+ */
+export declare function httpIriOrUndefined(value: unknown): string | undefined;
+/**
+ * HTTP(S)-ONLY safe-IRI alias — historically this package's `safeIri`.
  *
- * A plain `isHttpIri` boolean check is NOT sufficient before handing a foreign
- * value to `namedNode()`: `new URL(v)` VALIDATES `v` but the raw `v` may still
- * contain characters illegal in a Turtle `IRIREF` (e.g. a JSON-LD `@id` of
- * `http://e/a>b` parses fine yet its raw `>` would break out of `<…>` under
- * `n3.Writer`, which does not escape IRIs). This helper instead returns the
- * WHATWG-CANONICAL form (`new URL(v).href`) with any {@link IRIREF_FORBIDDEN}
- * residual percent-encoded — so what reaches `namedNode()` can never carry an
- * IRI-injection or an invalid-`IRIREF` character. Use this at EVERY site that
- * maps an untrusted string into an IRI-valued term (read AND write).
+ * ⚠️ NAME-COLLISION HAZARD: the canonical `@jeswr/rdf-serialize` `safeIri` is
+ * SCHEME-AGNOSTIC (it accepts `urn:` / `did:` / `mailto:` / …). This package's
+ * `safeIri` has ALWAYS been http(s)-only, so it is deliberately aliased to the
+ * canonical {@link safeHttpIri} — NOT the canonical `safeIri`. Rewiring it to the
+ * scheme-agnostic canonical `safeIri` would be a SECURITY REGRESSION (foreign
+ * `urn:` / non-http object values would start being accepted as IRIs). Kept for
+ * API stability; prefer {@link safeHttpIri} at new call sites.
  */
-export declare function safeHttpIri(value: string | undefined): string | undefined;
-/**
- * The canonical, injection-safe http(s) IRI for an untrusted value, else
- * `undefined` — the recurring untrusted-input filter for an OPTIONAL
- * object-property write (drop a non-http(s) value rather than coerce it into a
- * malformed `NamedNode`, and CANONICALISE an http(s) value so no IRI-injection
- * character survives into `n3.Writer`). Delegates to {@link safeHttpIri}; named
- * separately so the write sites read as a "drop or keep" filter.
- */
-export declare function httpIriOrUndefined(value: string | undefined): string | undefined;
-/**
- * Readable alias for {@link httpIriOrUndefined} — "give me a SAFE IRI or
- * nothing". Provided so call sites mapping an external/foreign value into an
- * IRI-valued field read as `safeIri(x)` (the intent: sanitise, don't coerce).
- */
-export declare const safeIri: typeof httpIriOrUndefined;
+export declare const safeIri: typeof safeHttpIri;
 /**
  * Sanitise an untrusted text literal (a chat body / title / media type) destined
  * for a pod resource by stripping smuggling-prone control characters
