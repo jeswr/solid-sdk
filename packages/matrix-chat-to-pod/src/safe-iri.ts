@@ -1,39 +1,39 @@
 // AUTHORED-BY Claude Fable 5
 /**
- * Untrusted-IRI hardening for the n3.Writer / RDF write path.
+ * Repo-specific untrusted-input hardening for the n3.Writer / RDF write path — the
+ * pieces that are SPECIFIC to importing Matrix chat into a Solid pod (an
+ * owner-lockable container anchor, a strict-descendant write-scope check, and a
+ * chat-body control-char sanitiser).
  *
- * `n3.Writer` (and any RDF serializer that emits `<...>` IRIREFs) does NOT escape
- * the IRI it is given — it writes the string between the angle brackets verbatim.
- * So a value that reaches `namedNode()` carrying a `>` (or a newline, or any other
- * IRIREF-forbidden char) BREAKS OUT of the `<...>` and injects arbitrary triples
- * into the serialized document. In this package the injected document could be a
- * `.acl` — turning an owner-private container PUBLIC — so a bare "is it an http(s)
- * URL?" boolean check is NOT sufficient: `isHttpIri("https://x/a>...")` is `true`
- * yet the raw value still contains the breakout `>`.
+ * The generic IRI-injection guard — "make an untrusted string safe to hand to
+ * `namedNode()` so it cannot break out of a Turtle `<...>` and inject triples" —
+ * is NO LONGER implemented here. It now lives in the ONE audited suite home,
+ * `@jeswr/rdf-serialize` ({@link safeHttpIri}), consolidated from the ~6 hand-copied
+ * variants across the suite (each hardened independently over ~40 cumulative
+ * adversarial review rounds). This module RE-EXPORTS it so callers keep a single
+ * import site, and composes it into the two repo-specific helpers below.
  *
- * {@link safeHttpIri} closes this by returning the CANONICALISED form (never the
- * raw input):
- *  1. reject anything that is not an absolute `http:`/`https:` URL;
- *  2. canonicalise via the WHATWG URL parser (`new URL(v).href`), which
- *     percent-encodes `<`, `>`, `"`, spaces and C0 controls — the breakout chars;
- *  3. percent-encode the three IRIREF-forbidden chars the URL parser leaves alone
- *     (`|`, `^`, `` ` ``); and
- *  4. fail closed — if ANY IRIREF-forbidden char somehow survives, return
- *     `undefined` rather than emit an injectable IRI.
- *
- * The result is safe to hand to `namedNode()`: it is a well-formed absolute http(s)
- * IRI with no character that can escape a Turtle/N-Triples `<...>`.
+ * IMPORTANT — LEXICAL, not `.href`-canonical. The canonical {@link safeHttpIri}
+ * returns the injection-safe ESCAPED LEXICAL value (every IRIREF-forbidden byte
+ * percent-encoded), NEVER `new URL(v).href`. This is the intended behaviour: RDF
+ * identity is lexical, so a WebID / message IRI must be stored byte-for-byte as
+ * given (minus the dangerous bytes) rather than silently canonicalised (host
+ * lower-cased, `:443` dropped, a trailing `/` appended, dot-segments collapsed) —
+ * canonicalisation would change the NamedNode's identity. The injection-safety
+ * property (no raw `<` `>` `"` space / C0 control can survive) is unchanged. Where
+ * this package genuinely NEEDS an unambiguous canonical form — the container ACL
+ * anchor — {@link canonicalContainer} derives it EXPLICITLY (its own `new URL()`
+ * origin+path re-derivation), not as a side effect of the IRI guard.
  */
 
 import { isWithinPodScope } from "@jeswr/guarded-fetch";
+import { safeHttpIri } from "@jeswr/rdf-serialize";
 
-/**
- * IRIREF-forbidden characters per the Turtle grammar: the `#x00-#x20` control +
- * space range, plus `<` `>` `"` `{` `}` `|` `^` backtick and backslash. Used as a
- * fail-closed final guard after canonicalisation.
- */
-// biome-ignore lint/suspicious/noControlCharactersInRegex: matching the IRIREF-forbidden C0 range is the point.
-const IRIREF_FORBIDDEN = /[\u0000-\u0020<>"{}|\\^`]/;
+// Re-export the canonical suite IRI guard so this package's write path keeps ONE
+// import site (`./safe-iri.js`) for it. It is the DEFINITIVE http(s)-only,
+// injection-safe, lexical guard for an untrusted value that becomes a
+// `namedNode()` — use it (never a boolean `isHttpIri`) at every such site.
+export { safeHttpIri };
 
 /**
  * Percent-encoded path-delimiter characters (`%2F` = `/`, `%5C` = `\`). Matches
@@ -42,33 +42,6 @@ const IRIREF_FORBIDDEN = /[\u0000-\u0020<>"{}|\\^`]/;
  * rejected here too, not just at the delegated scope check inside {@link isWithinBase}.
  */
 const ENCODED_PATH_DELIMITER = /%2f|%5c/i;
-
-/**
- * Return an injection-safe, canonical absolute http(s) IRI for an UNTRUSTED value,
- * or `undefined` if the value is not a usable http(s) IRI. NEVER returns the raw
- * input — always the canonicalised, fully-escaped form (see module docs). Use this
- * (not a boolean `isHttpIri`) at every site where an untrusted string becomes a
- * `namedNode()` object/subject.
- */
-export function safeHttpIri(value: unknown): string | undefined {
-  if (typeof value !== "string" || value.length === 0) return undefined;
-  let href: string;
-  try {
-    const u = new URL(value);
-    if (u.protocol !== "http:" && u.protocol !== "https:") return undefined;
-    href = u.href;
-  } catch {
-    return undefined;
-  }
-  // The WHATWG URL parser percent-encodes the breakout chars (`<` `>` `"` space,
-  // C0 controls) but leaves `|`, `^` and backtick un-encoded — all three are
-  // IRIREF-forbidden, so encode them explicitly.
-  const encoded = href.replace(/\|/g, "%7C").replace(/\^/g, "%5E").replace(/`/g, "%60");
-  // Fail closed: any IRIREF-forbidden char that survived means we cannot emit a
-  // safe `<...>` — drop the value rather than inject.
-  if (IRIREF_FORBIDDEN.test(encoded)) return undefined;
-  return encoded;
-}
 
 /**
  * Canonicalise + validate a SOLID CONTAINER IRI, or `undefined` if it is not a
@@ -82,6 +55,13 @@ export function safeHttpIri(value: unknown): string | undefined {
  * owner-only ACL. The returned value is the ONE canonical container string every
  * caller must use for BOTH the ACL URL and every scope check — no downstream code
  * may re-derive from the raw input.
+ *
+ * This is the ONE place in this package that deliberately CANONICALISES (as opposed
+ * to the lexical {@link safeHttpIri}): after the injection guard runs it re-parses
+ * with `new URL()` and returns `${origin}${pathname}`, so an origin-only input
+ * (`https://x.example`) gains the container trailing slash and the host is
+ * origin-normalised — the container identity MUST be unambiguous for the ACL to
+ * bind, which is exactly the case where canonicalisation is correct.
  *
  * ALSO rejects a path carrying an encoded delimiter (`%2F`/`%5C`, case-insensitive
  * — {@link ENCODED_PATH_DELIMITER}). This mirrors `@jeswr/guarded-fetch`'s
@@ -110,14 +90,18 @@ export function canonicalContainer(container: unknown): string | undefined {
  * origin AND a path STRICTLY under the container's path (the container itself is
  * NOT within base — a strict descendant is required, matching `allowRoot: false`).
  *
- * Both inputs are canonicalised through {@link safeHttpIri} FIRST — this keeps the
- * RDF-injection-safety property explicit at this call site (a `..`-escape is
- * collapsed and any IRIREF-breakout char / non-http(s) scheme is rejected to
- * `undefined` before the scope check runs). The origin + segment-boundary
- * path-prefix + traversal/encoded-delimiter checks are then DELEGATED to
- * `@jeswr/guarded-fetch`'s consolidated pod-scope primitive
- * ({@link isWithinPodScope}) — the suite's ONE reviewed home for "is this URL
- * within the configured pod (sub-)container?".
+ * Both inputs are passed through {@link safeHttpIri} FIRST — this keeps the
+ * RDF-injection-safety property explicit at this call site (a non-http(s) scheme
+ * or any IRIREF-breakout char is escaped / rejected to `undefined` before the
+ * scope check runs). The origin + segment-boundary path-prefix +
+ * traversal/encoded-delimiter checks are then DELEGATED to `@jeswr/guarded-fetch`'s
+ * consolidated pod-scope primitive ({@link isWithinPodScope}) — the suite's ONE
+ * reviewed home for "is this URL within the configured pod (sub-)container?".
+ *
+ * NOTE the `safeHttpIri` here is LEXICAL (it does not collapse `.`/`..`), but the
+ * traversal check is NOT weakened: `isWithinPodScope` re-parses each input with
+ * `new URL()`, which collapses dot-segments FIRST and validates the COLLAPSED
+ * result — so a `..`-escape still fails the scope check exactly as before.
  *
  * NOTE the argument order: this function's external signature is
  * `(resourceUrl, base)` (its callers depend on it), whereas `isWithinPodScope`

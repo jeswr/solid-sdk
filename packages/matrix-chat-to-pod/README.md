@@ -32,8 +32,14 @@ npm install github:jeswr/matrix-chat-to-pod#main
 ```
 
 The built `dist/` is committed, so it imports with **no build step** under `ignore-scripts=true`.
-`@jeswr/fetch-rdf` resolves from npm; `@jeswr/solid-chat-interop` and `@jeswr/guarded-fetch` resolve
-from GitHub (they also ship committed `dist/`). npm publish is a deferred migration, not a blocker.
+`@jeswr/fetch-rdf` resolves from npm; `@jeswr/solid-chat-interop`, `@jeswr/guarded-fetch` and
+`@jeswr/rdf-serialize` resolve from GitHub (they also ship committed `dist/`, sha-pinned). npm
+publish is a deferred migration, not a blocker.
+
+**Requires Node `>=24`.** This is the `@jeswr` suite baseline (the build image is `node:24-alpine`)
+and is also the declared floor of the `@jeswr/rdf-serialize` dependency (`engines.node: ">=24"`), so
+`engines.node` here is raised to match it — a lower floor would let `npm install` (with
+`engine-strict`) resolve a dependency it cannot satisfy.
 
 ## Quick start
 
@@ -106,13 +112,17 @@ phase 1; `m.image`/`m.file`/`m.audio`/`m.video`/`m.location` are skipped (media 
 - **The Matrix access token is a runtime input** — sent only as a `Bearer` header on the guarded
   homeserver request. It is **never written to the pod, never logged, never placed in a URL** (there
   is a regression test for this).
-- **Untrusted IRIs are canonicalised, never coerced** — every untrusted string that becomes a
-  `namedNode()` (a resolved WebID, a room/reply/edit target, the ACL owner + container) passes
-  `safeHttpIri`: it must be an absolute http(s) IRI, is canonicalised via the WHATWG URL parser, and
-  the IRIREF-forbidden residue (`|` `^` `` ` ``) is percent-encoded. This neutralises the n3.Writer
-  IRI-injection class — a `>` in an untrusted value can no longer break out of `<...>` and inject
-  triples (e.g. a public `acl:agentClass` grant into the ACL). A bare "is it http(s)?" boolean check
-  is **not** sufficient and is not used.
+- **Untrusted IRIs are made injection-safe, never coerced** — every untrusted string that becomes a
+  `namedNode()` (a resolved WebID, a room/reply/edit target, the ACL owner + container) passes the
+  canonical suite guard `safeHttpIri` (from [`@jeswr/rdf-serialize`](https://github.com/jeswr/rdf-serialize),
+  re-exported here): it must be an absolute http(s) IRI, and every Turtle-`IRIREF`-forbidden byte
+  (`<` `>` `"` space, the C0 controls, `{` `}` `|` `^` `` ` `` `\`) is **lexically** percent-encoded
+  — the value is returned byte-for-byte otherwise (RDF identity is lexical: no host-lowercasing,
+  `:443`-dropping, or trailing-slash synthesis that would change the NamedNode's identity). This
+  neutralises the n3.Writer IRI-injection class — a `>` in an untrusted value can no longer break out
+  of `<...>` and inject triples (e.g. a public `acl:agentClass` grant into the ACL). A bare "is it
+  http(s)?" boolean check is **not** sufficient and is not used. Where an **unambiguous canonical**
+  form is genuinely required — the container ACL anchor — `canonicalContainer` derives it explicitly.
 - **Imported chat is third-party data landing in your pod** → the default ACL is **OWNER-ONLY**
   (`acl:Read`/`acl:Write`/`acl:Control` for the owner over the container + descendants), written
   **before** any message lands. Nothing is auto-shared; the importer never widens an existing ACL.
