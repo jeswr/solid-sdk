@@ -1,0 +1,54 @@
+// AUTHORED-BY Claude Fable 5
+//
+// api-extractor — the public-API snapshot gate (the reviewability cornerstone).
+//
+// `api-extractor run --local` (npm run api:report) regenerates the committed
+// `etc/app-shell.api.md` — the ONE diffable file that IS the package's public
+// TYPE surface (components + props + hooks + pure helpers + their signatures).
+// `api-extractor run` (npm run api:check) FAILS if the built dist/index.d.ts
+// drifts from that committed report, so an accidental contract change can never
+// land silently. It complements test/public-api.test.ts (which pins the RUNTIME
+// export set): the test guards Object.keys(barrel), this guards the full typed
+// signatures the ~10 consuming apps compile against.
+//
+// Runs off the COMMITTED dist/ (the GitHub-install artifact), so it verifies the
+// exact surface consumers get — run `npm run build` first (gate order:
+// lint → typecheck → build → check:dist → api:check → test).
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/api-extractor/v7/api-extractor.schema.json",
+  "projectFolder": ".",
+  "mainEntryPointFilePath": "<projectFolder>/dist/index.d.ts",
+
+  "compiler": {
+    "tsconfigFilePath": "<projectFolder>/tsconfig.json"
+  },
+
+  "apiReport": {
+    "enabled": true,
+    "reportFileName": "app-shell.api.md",
+    "reportFolder": "<projectFolder>/etc/",
+    "reportTempFolder": "<projectFolder>/temp/"
+  },
+
+  "docModel": { "enabled": false },
+  "dtsRollup": { "enabled": false },
+  "tsdocMetadata": { "enabled": false },
+
+  "messages": {
+    "compilerMessageReporting": {
+      "default": { "logLevel": "warning" }
+    },
+    "extractorMessageReporting": {
+      "default": { "logLevel": "warning" },
+      // We do not use @public/@beta release tags; the WHOLE barrel is public.
+      "ae-missing-release-tag": { "logLevel": "none" },
+      // A type referenced by a public signature but not exported from the
+      // barrel is a REAL finding — keep it visible (it lands as a `// Warning:`
+      // line inside the committed report, so the reviewer sees it in the diff).
+      "ae-forgotten-export": { "logLevel": "warning" }
+    },
+    "tsdocMessageReporting": {
+      "default": { "logLevel": "none" }
+    }
+  }
+}

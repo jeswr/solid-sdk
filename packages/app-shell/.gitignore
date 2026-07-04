@@ -3,3 +3,4 @@ coverage/
 *.tsbuildinfo
 .DS_Store
 # NOTE: dist/ is intentionally COMMITTED (GitHub-installable under ignore-scripts).
+temp/

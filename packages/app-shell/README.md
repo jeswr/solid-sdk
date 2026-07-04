@@ -245,13 +245,20 @@ chrome and want Tailwind classes to fully control it, pass `defensiveReset={fals
 ```bash
 npm run lint        # Biome
 npm run typecheck   # tsc --noEmit
-npm test            # vitest (theme + account menu + feedback + CSS isolation + extension presence)
 npm run build       # tsc → dist/ + copy CSS
 npm run check:dist  # guard committed dist/ against drift from src/
+npm run api:check   # guard the committed public-API snapshot (etc/app-shell.api.md)
+npm test            # vitest (theme + account menu + feedback + CSS isolation + extension presence)
 ```
 
 `dist/` is committed on purpose (GitHub-installable under `ignore-scripts=true`).
 Rebuild + commit `dist/` alongside any `src/` change — `check:dist` guards drift.
+
+The public TYPE surface (every exported component/prop/hook/helper signature) is
+snapshotted in [`etc/app-shell.api.md`](etc/app-shell.api.md) (api-extractor).
+`npm run api:check` fails on drift; after an INTENDED surface change, regenerate
+with `npm run api:report` and commit the diff — that diff is the semver call.
+It complements `test/public-api.test.ts`, which pins the runtime export set.
 
 ## Adopting it in another app
 
