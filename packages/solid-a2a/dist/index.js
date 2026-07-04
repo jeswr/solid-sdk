@@ -5,12 +5,12 @@ function canonicalNQuads(quads) {
   return canonize.canonize(quads, { algorithm: RDFC_1_0 });
 }
 
-// ..node_modules/@jeswr/fetch-rdf/dist/parse.js
+// node_modules/@jeswr/fetch-rdf/dist/parse.js
 import contentType from "content-type";
 import { Store, StreamParser } from "n3";
 import { JsonLdParser } from "jsonld-streaming-parser";
 
-// ..node_modules/@jeswr/fetch-rdf/dist/errors.js
+// node_modules/@jeswr/fetch-rdf/dist/errors.js
 var RdfFetchError = class extends Error {
   /** The original cause, if any (e.g. a network error or parser exception). */
   cause;
@@ -34,7 +34,7 @@ var RdfFetchError = class extends Error {
   }
 };
 
-// ..node_modules/@jeswr/fetch-rdf/dist/parse.js
+// node_modules/@jeswr/fetch-rdf/dist/parse.js
 var SUPPORTED_RDF_MEDIA_TYPES = [
   "text/turtle",
   "application/n-triples",
@@ -227,7 +227,7 @@ function requireHttpIri(value, field) {
   return safe;
 }
 
-// ..node_modules/@jeswr/rdf-serialize/dist/serialize.js
+// node_modules/@jeswr/rdf-serialize/dist/serialize.js
 import { Writer } from "n3";
 var DEFAULT_FORMAT = "text/turtle";
 function serialize(quads, options) {
