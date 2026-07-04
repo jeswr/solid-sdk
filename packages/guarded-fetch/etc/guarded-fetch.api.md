@@ -8,10 +8,16 @@
 export function assertSafeUrl(rawUrl: string, options?: GuardOptions): Promise<void>;
 
 // @public
+export function assertWithinPodScope(base: string, url: string, options?: PodScopeOptions): string;
+
+// @public
 export function classifyIpLiteral(value: string): 0 | 4 | 6;
 
 // @public
 export function createGuardedFetch(options?: GuardOptions): typeof globalThis.fetch;
+
+// @public
+export function createPodScopedFetch(base: string, options?: PodScopedFetchOptions): typeof globalThis.fetch;
 
 // @public
 export const DEFAULT_HOSTNAME_DENYLIST: readonly string[];
@@ -46,6 +52,9 @@ export interface GuardOptions {
 }
 
 // @public
+export function isContainerUrl(url: string): boolean;
+
+// @public
 export function isDeniedHostname(hostname: string, denylist: readonly string[]): boolean;
 
 // @public
@@ -55,7 +64,37 @@ export function isLoopbackAddress(address: string): boolean;
 export function isPublicAddress(address: string, allowLoopback: boolean): boolean;
 
 // @public
+export function isWithinPodScope(base: string, url: string, options?: PodScopeOptions): boolean;
+
+// @public
 export function normalizeHostForClassification(hostname: string): string;
+
+// @public
+export function normalizePodBase(base: string): string;
+
+// @public
+export interface PodScopedFetchOptions extends PodScopeOptions {
+    readonly fetch?: typeof globalThis.fetch;
+    readonly maxRedirects?: number;
+}
+
+// @public
+export function podScopedUrl(base: string, url: string, options?: PodScopeOptions): string | undefined;
+
+// @public
+export class PodScopeError extends Error {
+    constructor(message: string, options?: {
+        cause?: unknown;
+    });
+}
+
+// @public
+export interface PodScopeOptions {
+    readonly allowRoot?: boolean;
+}
+
+// @public
+export function redactUserinfo(value: string): string;
 
 // @public
 export interface ResolvedAddress {

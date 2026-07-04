@@ -1002,6 +1002,97 @@ function isLoopbackAddress(address) {
   return false;
 }
 
+// src/redirect.ts
+function isRedirect(status) {
+  return status === 301 || status === 302 || status === 303 || status === 307 || status === 308;
+}
+function sameOrigin(a, b) {
+  try {
+    return new URL(a).origin === new URL(b).origin;
+  } catch {
+    return false;
+  }
+}
+function safeProtocol(u) {
+  try {
+    return new URL(u).protocol;
+  } catch {
+    return "";
+  }
+}
+var CREDENTIAL_HEADERS = /* @__PURE__ */ new Set([
+  "authorization",
+  "cookie",
+  "proxy-authorization",
+  "www-authenticate",
+  "dpop"
+]);
+var CONTENT_HEADERS = /* @__PURE__ */ new Set([
+  "content-length",
+  "content-type",
+  "content-encoding",
+  "content-language",
+  "content-location"
+]);
+function rewriteInitForRedirect(init, status, crossOrigin) {
+  const method = (init.method ?? "GET").toUpperCase();
+  const methodChanges = status === 303 || (status === 301 || status === 302) && method !== "GET" && method !== "HEAD";
+  const dropBody = methodChanges || crossOrigin;
+  const headers = new Headers(init.headers ?? {});
+  if (crossOrigin) {
+    for (const name of CREDENTIAL_HEADERS) {
+      headers.delete(name);
+    }
+  }
+  if (dropBody) {
+    for (const name of CONTENT_HEADERS) {
+      headers.delete(name);
+    }
+  }
+  const kept = {};
+  headers.forEach((value, key) => {
+    kept[key] = value;
+  });
+  const {
+    body: _body,
+    duplex: _duplex,
+    method: _method,
+    ...rest
+  } = init;
+  const next = { ...rest, headers: kept };
+  if (methodChanges) {
+    next.method = "GET";
+  } else if (init.method !== void 0) {
+    next.method = init.method;
+    if (!dropBody && init.body !== void 0) {
+      next.body = init.body;
+      const duplex = init.duplex;
+      if (duplex !== void 0) {
+        next.duplex = duplex;
+      }
+    }
+  }
+  return next;
+}
+function normalizeRequest(input, init) {
+  if (typeof input === "string") {
+    return { url: input, init };
+  }
+  if (input instanceof URL) {
+    return { url: input.toString(), init };
+  }
+  const req = input;
+  const fromRequest = {
+    method: req.method,
+    headers: req.headers,
+    credentials: req.credentials,
+    redirect: req.redirect,
+    ...req.signal ? { signal: req.signal } : {},
+    ...req.body ? { body: req.body, duplex: "half" } : {}
+  };
+  return { url: req.url, init: { ...fromRequest, ...init ?? {} } };
+}
+
 // src/guard.ts
 var SsrfError = class extends Error {
   constructor(message2, options) {
@@ -1418,100 +1509,11 @@ var SsrfGuard = class {
     }
   }
 };
-function isRedirect(status) {
-  return status === 301 || status === 302 || status === 303 || status === 307 || status === 308;
-}
 function isNullBodyStatus(status) {
   return status === 101 || status === 204 || status === 205 || status === 304;
 }
 function isBodyBearingStatus(status) {
   return status >= 200 && status < 300 && status !== 204 && status !== 205;
-}
-function sameOrigin(a, b) {
-  try {
-    return new URL(a).origin === new URL(b).origin;
-  } catch {
-    return false;
-  }
-}
-function safeProtocol(u) {
-  try {
-    return new URL(u).protocol;
-  } catch {
-    return "";
-  }
-}
-var CREDENTIAL_HEADERS = /* @__PURE__ */ new Set([
-  "authorization",
-  "cookie",
-  "proxy-authorization",
-  "www-authenticate",
-  "dpop"
-]);
-var CONTENT_HEADERS = /* @__PURE__ */ new Set([
-  "content-length",
-  "content-type",
-  "content-encoding",
-  "content-language",
-  "content-location"
-]);
-function rewriteInitForRedirect(init, status, crossOrigin) {
-  const method = (init.method ?? "GET").toUpperCase();
-  const methodChanges = status === 303 || (status === 301 || status === 302) && method !== "GET" && method !== "HEAD";
-  const dropBody = methodChanges || crossOrigin;
-  const headers = new Headers(init.headers ?? {});
-  if (crossOrigin) {
-    for (const name of CREDENTIAL_HEADERS) {
-      headers.delete(name);
-    }
-  }
-  if (dropBody) {
-    for (const name of CONTENT_HEADERS) {
-      headers.delete(name);
-    }
-  }
-  const kept = {};
-  headers.forEach((value, key) => {
-    kept[key] = value;
-  });
-  const {
-    body: _body,
-    duplex: _duplex,
-    method: _method,
-    ...rest
-  } = init;
-  const next = { ...rest, headers: kept };
-  if (methodChanges) {
-    next.method = "GET";
-  } else if (init.method !== void 0) {
-    next.method = init.method;
-    if (!dropBody && init.body !== void 0) {
-      next.body = init.body;
-      const duplex = init.duplex;
-      if (duplex !== void 0) {
-        next.duplex = duplex;
-      }
-    }
-  }
-  return next;
-}
-function normalizeRequest(input, init) {
-  if (typeof input === "string") {
-    return { url: input, init };
-  }
-  if (input instanceof URL) {
-    return { url: input.toString(), init };
-  }
-  const req = input;
-  const fromRequest = {
-    method: req.method,
-    headers: req.headers,
-    credentials: req.credentials,
-    redirect: req.redirect,
-    ...req.signal ? { signal: req.signal } : {},
-    ...req.body ? { body: req.body, duplex: "half" } : {}
-  };
-  return { url: req.url, init: { ...fromRequest, ...init ?? {} } };
 }
 function hasNodeDns() {
   return typeof process !== "undefined" && process.versions !== void 0 && process.versions.node !== void 0;
@@ -1523,17 +1525,194 @@ function isBrowserContext() {
 function message(cause) {
   return cause instanceof Error ? cause.message : String(cause);
 }
+
+// src/podScope.ts
+var PodScopeError = class extends Error {
+  constructor(message2, options) {
+    super(message2, options);
+    this.name = "PodScopeError";
+  }
+};
+var DEFAULT_MAX_REDIRECTS2 = 5;
+var ENCODED_DELIMITER = /%2f|%5c/i;
+function redactUserinfo(value) {
+  if (typeof value !== "string") {
+    return String(value);
+  }
+  return value.replace(/\/\/[^/?#]*@/g, "//<redacted>@");
+}
+function normalizePodBase(base) {
+  if (typeof base !== "string" || base.trim().length === 0) {
+    throw new PodScopeError("pod base URL must be a non-empty string.");
+  }
+  let url;
+  try {
+    url = new URL(base.trim());
+  } catch {
+    throw new PodScopeError(
+      `pod base URL must be an absolute http(s) URL, got: ${redactUserinfo(base)}`
+    );
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new PodScopeError(`pod base URL must be http(s), got protocol: ${url.protocol}`);
+  }
+  if (url.username !== "" || url.password !== "") {
+    throw new PodScopeError("pod base URL must not embed credentials (user:pass@).");
+  }
+  if (ENCODED_DELIMITER.test(url.pathname)) {
+    throw new PodScopeError(
+      `pod base URL contains an encoded path delimiter (%2F/%5C): ${redactUserinfo(base)}`
+    );
+  }
+  if (!url.pathname.endsWith("/")) {
+    url.pathname = `${url.pathname}/`;
+  }
+  url.search = "";
+  url.hash = "";
+  return url.toString();
+}
+function assertWithinPodScope(base, url, options) {
+  const root = normalizePodBase(base);
+  if (typeof url !== "string" || url.trim().length === 0) {
+    throw new PodScopeError("target URL must be a non-empty string.");
+  }
+  const trimmed = url.trim();
+  if (trimmed.startsWith("//")) {
+    throw new PodScopeError(
+      `target URL must not be scheme-relative ("//..."): ${redactUserinfo(url)} (refused)`
+    );
+  }
+  let resolved;
+  try {
+    resolved = new URL(trimmed, root);
+  } catch {
+    throw new PodScopeError(`target URL is invalid: ${redactUserinfo(url)}`);
+  }
+  if (resolved.protocol !== "http:" && resolved.protocol !== "https:") {
+    throw new PodScopeError(
+      `target URL must be http(s), got protocol: ${resolved.protocol} (refused)`
+    );
+  }
+  if (resolved.username !== "" || resolved.password !== "") {
+    throw new PodScopeError("target URL must not embed credentials (user:pass@) (refused)");
+  }
+  const b = new URL(root);
+  if (resolved.origin !== b.origin) {
+    throw new PodScopeError(
+      `target URL ${redactUserinfo(resolved.toString())} escapes pod origin ${b.origin} (refused)`
+    );
+  }
+  if (ENCODED_DELIMITER.test(resolved.pathname)) {
+    throw new PodScopeError(
+      `target URL ${redactUserinfo(resolved.toString())} contains an encoded path delimiter (%2F/%5C) (refused)`
+    );
+  }
+  const basePath = b.pathname;
+  const isRoot = resolved.pathname === basePath || basePath !== "/" && resolved.pathname === basePath.slice(0, -1);
+  if (!isRoot && !resolved.pathname.startsWith(basePath)) {
+    throw new PodScopeError(
+      `target URL ${redactUserinfo(resolved.toString())} escapes pod path ${basePath} (refused)`
+    );
+  }
+  if (isRoot && options?.allowRoot === false) {
+    throw new PodScopeError(
+      `target URL ${redactUserinfo(resolved.toString())} is the pod base itself, not a resource under it (refused; allowRoot is false)`
+    );
+  }
+  return resolved.toString();
+}
+function isWithinPodScope(base, url, options) {
+  try {
+    assertWithinPodScope(base, url, options);
+    return true;
+  } catch {
+    return false;
+  }
+}
+function podScopedUrl(base, url, options) {
+  try {
+    return assertWithinPodScope(base, url, options);
+  } catch {
+    return void 0;
+  }
+}
+function isContainerUrl(url) {
+  try {
+    return new URL(url).pathname.endsWith("/");
+  } catch {
+    return url.endsWith("/");
+  }
+}
+function createPodScopedFetch(base, options = {}) {
+  const root = normalizePodBase(base);
+  const fetcher = options.fetch ?? globalThis.fetch;
+  const maxRedirects = options.maxRedirects ?? DEFAULT_MAX_REDIRECTS2;
+  const scopeOptions = { allowRoot: options.allowRoot ?? true };
+  const scoped = async (input, init) => {
+    const { url: startUrl, init: effectiveInit } = normalizeRequest(input, init);
+    let currentUrl = assertWithinPodScope(root, startUrl, scopeOptions);
+    let currentInit = { ...effectiveInit ?? {} };
+    const seen = /* @__PURE__ */ new Set();
+    for (let hop = 0; hop <= maxRedirects; hop += 1) {
+      if (seen.has(currentUrl)) {
+        throw new PodScopeError(`redirect loop detected at ${currentUrl}.`);
+      }
+      seen.add(currentUrl);
+      const res = await fetcher(currentUrl, {
+        ...currentInit,
+        // Every hop is re-checked by US, so the underlying fetch must NOT auto-follow.
+        redirect: "manual"
+      });
+      if (!isRedirect(res.status)) {
+        return res;
+      }
+      const location = res.headers.get("location");
+      if (!location) {
+        return res;
+      }
+      let nextUrl;
+      try {
+        nextUrl = new URL(location, currentUrl).toString();
+      } catch {
+        throw new PodScopeError(
+          `redirect to a malformed Location (${redactUserinfo(location)}) from ${currentUrl} (refused)`
+        );
+      }
+      const checkedNext = assertWithinPodScope(root, nextUrl, scopeOptions);
+      currentInit = rewriteInitForRedirect(
+        currentInit,
+        res.status,
+        !sameOrigin(currentUrl, checkedNext)
+      );
+      try {
+        await res.body?.cancel();
+      } catch {
+      }
+      currentUrl = checkedNext;
+    }
+    throw new PodScopeError(`too many redirects (> ${maxRedirects}) within pod scope ${root}.`);
+  };
+  return scoped;
+}
 export {
   DEFAULT_HOSTNAME_DENYLIST,
   GuardError,
+  PodScopeError,
   SsrfError,
   assertSafeUrl,
+  assertWithinPodScope,
   classifyIpLiteral,
   createGuardedFetch,
+  createPodScopedFetch,
   guardedFetch,
+  isContainerUrl,
   isDeniedHostname,
   isLoopbackAddress,
   isPublicAddress,
-  normalizeHostForClassification
+  isWithinPodScope,
+  normalizeHostForClassification,
+  normalizePodBase,
+  podScopedUrl,
+  redactUserinfo
 };
 //# sourceMappingURL=index.js.map
