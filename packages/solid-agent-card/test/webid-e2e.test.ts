@@ -172,3 +172,68 @@ describe("the owner back-link (ownerMatchesWebId / requireOwnerMatch)", () => {
     expect(r.ownerMatchesWebId).toBeUndefined();
   });
 });
+
+describe("the owner back-link is order-independent (multi-owner ambiguity, fail-closed)", () => {
+  const Third = "https://someone-else.example/profile#me";
+
+  /**
+   * Serve a descriptor with TWO ad:owner triples in the given order (the
+   * projected descriptor would keep only the first — so a passes-by-order bug
+   * would flip with the order). The raw-term check must reject BOTH ways.
+   */
+  async function discoverWithTwoOwners(first: string, second: string, requireOwnerMatch: boolean) {
+    const descriptor = `@prefix ad: <https://w3id.org/agent-description#>.
+<${AGENT}> a ad:AgentDescription ;
+  ad:name "Jesse's Agent" ;
+  ad:url <${AGENT}> ;
+  ad:owner <${first}> ;
+  ad:owner <${second}> .`;
+    const fetch = podFetch(await jeswrProfile(), descriptor);
+    return discoverAgent(WEBID, { fetch, requireOwnerMatch });
+  }
+
+  it("matching-then-mismatching: fails closed (multiple), not passed by first-owner order", async () => {
+    const r = await discoverWithTwoOwners(WEBID, Third, true);
+    expect(r.ownerMatchesWebId).toBe(false);
+    expect(r.verification?.valid).toBe(false);
+    const issue = r.verification?.issues.find((i) => i.code === "owner-mismatch");
+    expect(issue?.message).toMatch(/2 ad:owner|ambiguous/);
+  });
+
+  it("mismatching-then-matching: fails closed the SAME way (order-independent)", async () => {
+    const r = await discoverWithTwoOwners(Third, WEBID, true);
+    expect(r.ownerMatchesWebId).toBe(false);
+    expect(r.verification?.valid).toBe(false);
+    const issue = r.verification?.issues.find((i) => i.code === "owner-mismatch");
+    expect(issue?.message).toMatch(/2 ad:owner|ambiguous/);
+  });
+
+  it("two IDENTICAL matching owner triples are ONE triple in RDF (set semantics) → still a match", async () => {
+    // An RDF graph is a SET: `<a> ad:owner <b> . <a> ad:owner <b> .` is a single
+    // quad, not two. So a duplicate matching owner is genuinely one distinct
+    // owner and the exactly-one back-link holds. (Only DISTINCT owner values
+    // create the ambiguity the fail-closed guard rejects.)
+    const r = await discoverWithTwoOwners(WEBID, WEBID, true);
+    expect(r.ownerMatchesWebId).toBe(true);
+    expect(r.verification?.valid).toBe(true);
+  });
+
+  it("reports ownerMatchesWebId=false for multiple owners even without requireOwnerMatch", async () => {
+    const r = await discoverWithTwoOwners(WEBID, Third, false);
+    expect(r.ownerMatchesWebId).toBe(false);
+    // Not required → the descriptor is still well-formed (multiple ad:owner is
+    // not a verifyDescriptor error); only the back-link flag reflects it.
+    expect(r.verification?.valid).toBe(true);
+  });
+
+  it("a non-IRI ad:owner (literal) fails closed under requireOwnerMatch", async () => {
+    const descriptor = `@prefix ad: <https://w3id.org/agent-description#>.
+<${AGENT}> a ad:AgentDescription ; ad:name "X" ; ad:url <${AGENT}> ; ad:owner "${WEBID}" .`;
+    const fetch = podFetch(await jeswrProfile(), descriptor);
+    const r = await discoverAgent(WEBID, { fetch, requireOwnerMatch: true });
+    expect(r.ownerMatchesWebId).toBe(false);
+    expect(r.verification?.valid).toBe(false);
+    const issue = r.verification?.issues.find((i) => i.code === "owner-mismatch");
+    expect(issue?.message).toMatch(/not an IRI/);
+  });
+});

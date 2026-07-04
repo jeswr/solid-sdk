@@ -9,10 +9,11 @@
 // typed wrappers.
 
 import { fetchRdf } from "@jeswr/fetch-rdf";
+import type { DatasetCore } from "@rdfjs/types";
 import { classifyFetchError, describeError } from "./internal/errors.js";
 import type { AgentDiscovery, AgentPointer, VerificationResult } from "./types.js";
 import { verifyDataset } from "./verify.js";
-import { WELL_KNOWN_AGENT_CARD, WELL_KNOWN_AGENT_DESCRIPTIONS } from "./vocab.js";
+import { AD_OWNER, WELL_KNOWN_AGENT_CARD, WELL_KNOWN_AGENT_DESCRIPTIONS } from "./vocab.js";
 import { wrapProfile } from "./wrappers.js";
 
 /** Options for {@link discoverAgent}. */
@@ -41,9 +42,11 @@ export interface DiscoverOptions {
    */
   readonly resolveDescriptor?: boolean;
   /**
-   * When `true`, require the resolved descriptor's `ad:owner` to point BACK to
-   * the WebID discovery started from (exact IRI equality; fail-closed — a
-   * missing `ad:owner` also fails). This is the OWNER BACK-LINK guard, the
+   * When `true`, require the resolved descriptor to carry EXACTLY ONE `ad:owner`
+   * IRI equal to the WebID discovery started from — the check is exact AND
+   * order-independent. Fail-closed on every deviation: zero owners, two-or-more
+   * owners (ambiguous, even if one matches), a non-IRI owner term, or a single
+   * non-matching owner. This is the OWNER BACK-LINK guard, the
    * bidirectional binding the accountability chain needs: the profile says
    * "this agent represents me" AND the agent's own description says "I
    * represent this WebID". Without it, a profile can point at any third
@@ -128,6 +131,7 @@ export async function discoverAgent(
   const initial = verifyDataset(descriptorDataset, agentIri, { requireSubjectMatch: true });
   const { verification, ownerMatchesWebId } = applyOwnerBackLink(
     initial,
+    descriptorDataset,
     webId,
     agentIri,
     options.requireOwnerMatch === true,
@@ -142,16 +146,73 @@ export async function discoverAgent(
   };
 }
 
+/** The outcome of the raw {@link ownerBackLink} check, with a fail reason. */
+type OwnerBackLink =
+  | { matches: true }
+  | { matches: false; reason: "none" | "multiple" | "non-iri" | "mismatch"; message: string };
+
 /**
- * The OWNER BACK-LINK check: does the descriptor's `ad:owner` point back to the
- * WebID discovery started from? Exact IRI equality, computed only when a
- * descriptor was actually projected. Fail-closed: a descriptor with NO
- * `ad:owner` does not match (it makes no ownership claim, so the back-link
- * cannot be confirmed). When `required`, a failed back-link invalidates the
- * verification with an `owner-mismatch` issue.
+ * The OWNER BACK-LINK check, computed from the RAW `ad:owner` terms on the
+ * agent-description subject (NOT the projected descriptor, which keeps only the
+ * first owner). The security guarantee is EXACT and ORDER-INDEPENDENT: the
+ * back-link holds iff there is EXACTLY ONE `ad:owner`, it is an IRI, and it
+ * equals `webId`. Any deviation fails CLOSED regardless of RDF insertion order:
+ *   - zero owners           → `none`     (no claim → cannot confirm);
+ *   - two or more owners     → `multiple` (ambiguous → cannot rely on any one,
+ *                                          even if one of them matches);
+ *   - a non-IRI owner term   → `non-iri`  (a literal/blank node is malformed);
+ *   - a single non-matching  → `mismatch`.
+ * This closes the insertion-order-ambiguity class: a descriptor carrying BOTH a
+ * matching and a non-matching `ad:owner` is rejected either way round.
+ */
+function ownerBackLink(dataset: DatasetCore, agentIri: string, webId: string): OwnerBackLink {
+  const owners: { value: string; isIri: boolean }[] = [];
+  for (const quad of dataset) {
+    if (quad.predicate.value === AD_OWNER && quad.subject.value === agentIri) {
+      owners.push({ value: quad.object.value, isIri: quad.object.termType === "NamedNode" });
+    }
+  }
+  if (owners.length === 0) {
+    return {
+      matches: false,
+      reason: "none",
+      message: `Agent Description (${agentIri}) has no ad:owner, so the owner back-link to ${webId} cannot be confirmed.`,
+    };
+  }
+  if (owners.length > 1) {
+    return {
+      matches: false,
+      reason: "multiple",
+      message: `Agent Description (${agentIri}) declares ${owners.length} ad:owner triples; the owner back-link requires exactly one (ambiguous — fail-closed).`,
+    };
+  }
+  const [owner] = owners as [{ value: string; isIri: boolean }];
+  if (!owner.isIri) {
+    return {
+      matches: false,
+      reason: "non-iri",
+      message: `Agent Description ad:owner ("${owner.value}") is not an IRI; the owner back-link requires an IRI equal to ${webId}.`,
+    };
+  }
+  if (owner.value !== webId) {
+    return {
+      matches: false,
+      reason: "mismatch",
+      message: `Agent Description ad:owner (${owner.value}) does not equal the WebID discovery started from (${webId}).`,
+    };
+  }
+  return { matches: true };
+}
+
+/**
+ * Apply the OWNER BACK-LINK to a verification result. Computes
+ * {@link ownerBackLink} from the raw dataset (only when an agent description was
+ * found), sets `ownerMatchesWebId`, and — when `required` — invalidates the
+ * verification with an `owner-mismatch` issue on any failure.
  */
 function applyOwnerBackLink(
   verification: VerificationResult,
+  dataset: DatasetCore,
   webId: string,
   agentIri: string,
   required: boolean,
@@ -159,17 +220,13 @@ function applyOwnerBackLink(
   if (verification.descriptor === undefined) {
     return { verification };
   }
-  const owner = verification.descriptor.owner;
-  const ownerMatchesWebId = owner === webId;
-  if (!required || ownerMatchesWebId) {
-    return { verification, ownerMatchesWebId };
+  const link = ownerBackLink(dataset, agentIri, webId);
+  if (link.matches || !required) {
+    return { verification, ownerMatchesWebId: link.matches };
   }
-  const message =
-    owner === undefined
-      ? `Agent Description (${agentIri}) has no ad:owner, so the owner back-link to ${webId} cannot be confirmed (requireOwnerMatch).`
-      : `Agent Description ad:owner (${owner}) does not equal the WebID discovery started from (${webId}).`;
+  const value = verification.descriptor.owner;
   return {
-    ownerMatchesWebId,
+    ownerMatchesWebId: false,
     verification: {
       ...verification,
       valid: false,
@@ -177,9 +234,9 @@ function applyOwnerBackLink(
         ...verification.issues,
         {
           code: "owner-mismatch",
-          message,
+          message: link.message,
           subject: agentIri,
-          ...(owner !== undefined && { value: owner }),
+          ...(value !== undefined && { value }),
         },
       ],
     },
