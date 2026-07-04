@@ -452,6 +452,22 @@ var MissingAuthFlowError = class extends Error {
   }
 };
 var isLoopback2 = (host) => host === "localhost" || host === "127.0.0.1" || host === "[::1]";
+function noUrlEncodeClientSecretBasic2(clientSecret) {
+  return (_as, client, _body, headers) => {
+    headers.set("authorization", `Basic ${btoa(`${client.client_id}:${clientSecret}`)}`);
+  };
+}
+var ESS_NO_URL_ENCODE_HOST2 = "login.inrupt.com";
+function isEssNoUrlEncodeIssuer2(issuer) {
+  try {
+    return new URL(issuer).hostname === ESS_NO_URL_ENCODE_HOST2;
+  } catch {
+    return false;
+  }
+}
+function clientSecretBasicFor2(issuer) {
+  return isEssNoUrlEncodeIssuer2(issuer) ? noUrlEncodeClientSecretBasic2 : oauth2.ClientSecretBasic;
+}
 var EXPIRY_SKEW_MS2 = 3e4;
 function expiresAtFrom2(expiresIn) {
   return expiresIn === void 0 ? void 0 : Date.now() + expiresIn * 1e3 - EXPIRY_SKEW_MS2;
@@ -1318,14 +1334,15 @@ var SolidAuthEngine = class {
    *     rather than a confusing token-endpoint 401 now or a broken silent
    *     restore later.
    */
-  #resolveClientAuth(client) {
+  #resolveClientAuth(issuer, client) {
     const method = client.token_endpoint_auth_method;
     const rawSecret = client.client_secret;
     const secret = typeof rawSecret === "string" && rawSecret.length > 0 ? rawSecret : void 0;
+    const basicFor = clientSecretBasicFor2(issuer);
     if (method === void 0 || method === "none") {
       if (method === void 0 && secret !== void 0) {
         return {
-          clientAuth: oauth2.ClientSecretBasic(secret),
+          clientAuth: basicFor(secret),
           confidential: { tokenEndpointAuthMethod: "client_secret_basic", clientSecret: secret }
         };
       }
@@ -1338,7 +1355,7 @@ var SolidAuthEngine = class {
         );
       }
       return {
-        clientAuth: method === "client_secret_basic" ? oauth2.ClientSecretBasic(secret) : oauth2.ClientSecretPost(secret),
+        clientAuth: method === "client_secret_basic" ? basicFor(secret) : oauth2.ClientSecretPost(secret),
         confidential: { tokenEndpointAuthMethod: method, clientSecret: secret }
       };
     }
@@ -1363,7 +1380,7 @@ var SolidAuthEngine = class {
     const discoveryResponse = await oauth2.discoveryRequest(issuer, http);
     const authorizationServer = await oauth2.processDiscoveryResponse(issuer, discoveryResponse);
     const client = await this.#resolveClient(authorizationServer, baseHttp);
-    const { clientAuth } = this.#resolveClientAuth(client);
+    const { clientAuth } = this.#resolveClientAuth(authorizationServer.issuer, client);
     const dpopKey = await oauth2.generateKeyPair("ES256", { extractable: false });
     const dpopHandle = oauth2.DPoP(client, dpopKey);
     let dpopJkt;
@@ -1506,7 +1523,7 @@ var SolidAuthEngine = class {
   #persistChain = Promise.resolve();
   async #persist(session, generation) {
     if (!session.refreshToken) return { wrote: false, durable: false };
-    const confidential = this.#resolveClientAuth(session.client).confidential ?? {};
+    const confidential = this.#resolveClientAuth(session.authorizationServer.issuer, session.client).confidential ?? {};
     const run = this.#persistChain.then(async () => {
       if (generation !== this.#generation) return { wrote: false, durable: false };
       try {

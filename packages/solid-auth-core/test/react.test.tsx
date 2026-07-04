@@ -11,7 +11,7 @@ import type { LoginResult, RestoreOutcome, SolidAuth } from "../src/index.js";
 import { SessionProvider, type SolidSession, useSolidSession } from "../src/react/index.js";
 
 declare global {
-  // biome-ignore lint: the React test-environment flag must be a global `var` declaration
+  // The React act() environment flag — must be a global `var` declaration.
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;

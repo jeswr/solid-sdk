@@ -280,6 +280,56 @@ export interface SolidAuthConfig {
 const isLoopback = (host: string): boolean =>
   host === "localhost" || host === "127.0.0.1" || host === "[::1]";
 
+/**
+ * A variant of oauth4webapi's {@link oauth.ClientSecretBasic} that does NOT
+ * URL-encode the client_id / secret before base64. Inrupt ESS / PodSpaces
+ * (`login.inrupt.com`) REJECTS the spec-compliant `application/x-www-form-
+ * urlencoded` form (RFC 6749 §2.3.1 / Appendix B) and expects the raw values —
+ * a BESPOKE per-server workaround, scoped to ESS issuers only. Mirrors
+ * @jeswr/solid-session-restore's `noUrlEncodeClientSecretBasic` verbatim so the
+ * LOGIN code-exchange and the silent-restore refresh grant present the SAME
+ * Basic header to ESS (the finding: the restore path already had the workaround,
+ * the login path did not — so login failed against the exact issuer class the
+ * confidential-registration path exists to support).
+ *
+ * @see https://www.rfc-editor.org/rfc/rfc6749.html#section-2.3.1
+ */
+function noUrlEncodeClientSecretBasic(clientSecret: string): oauth.ClientAuth {
+  return (_as, client, _body, headers) => {
+    headers.set("authorization", `Basic ${btoa(`${client.client_id}:${clientSecret}`)}`);
+  };
+}
+
+/** The ESS host whose token endpoint rejects the spec form-url-encoded Basic creds. */
+const ESS_NO_URL_ENCODE_HOST = "login.inrupt.com";
+
+/**
+ * Whether an issuer is the Inrupt ESS host that needs the no-url-encode
+ * workaround, matched on the EXACT hostname (an unparseable issuer → false, so
+ * we never apply the bespoke path to an unknown issuer). Exact-host match (not a
+ * substring `includes`) so an unrelated issuer whose URL merely CONTAINS the
+ * string is never tricked into sending a non-standard Basic header to the wrong
+ * server. Mirrors @jeswr/solid-session-restore's `isEssNoUrlEncodeIssuer`.
+ */
+function isEssNoUrlEncodeIssuer(issuer: string): boolean {
+  try {
+    return new URL(issuer).hostname === ESS_NO_URL_ENCODE_HOST;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Pick the `client_secret_basic` constructor for an issuer: the BESPOKE
+ * non-URL-encoding variant for Inrupt ESS, the standard RFC-6749-§2.3.1-compliant
+ * {@link oauth.ClientSecretBasic} for every other server. The issuer-aware
+ * selection @jeswr/solid-session-restore already applies to its restore grant,
+ * mirrored here for the login code-exchange.
+ */
+function clientSecretBasicFor(issuer: string): (secret: string) => oauth.ClientAuth {
+  return isEssNoUrlEncodeIssuer(issuer) ? noUrlEncodeClientSecretBasic : oauth.ClientSecretBasic;
+}
+
 /** Refresh this far before the reported expiry, to absorb clock skew + RTT. */
 const EXPIRY_SKEW_MS = 30_000;
 
@@ -1739,7 +1789,10 @@ class SolidAuthEngine implements SolidAuth {
    *     rather than a confusing token-endpoint 401 now or a broken silent
    *     restore later.
    */
-  #resolveClientAuth(client: oauth.Client): {
+  #resolveClientAuth(
+    issuer: string,
+    client: oauth.Client,
+  ): {
     clientAuth: oauth.ClientAuth;
     /** Present only for a confidential client — persisted so restore can redeem. */
     confidential?: {
@@ -1750,6 +1803,10 @@ class SolidAuthEngine implements SolidAuth {
     const method = (client as { token_endpoint_auth_method?: unknown }).token_endpoint_auth_method;
     const rawSecret = (client as { client_secret?: unknown }).client_secret;
     const secret = typeof rawSecret === "string" && rawSecret.length > 0 ? rawSecret : undefined;
+    // ISSUER-AWARE Basic: the ESS (`login.inrupt.com`) no-URL-encode workaround
+    // for `client_secret_basic`, else the spec encoder — the SAME selection the
+    // restore grant uses, so login works against ESS too (the roborev finding).
+    const basicFor = clientSecretBasicFor(issuer);
     if (method === undefined || method === "none") {
       // Public client (the normal Solid path). An unused secret alongside an
       // explicit `none` is NOT persisted — the grants won't send it.
@@ -1758,7 +1815,7 @@ class SolidAuthEngine implements SolidAuth {
         // when omitted — a secret-issuing registration with no stated method is
         // a confidential-basic client, not a public one.
         return {
-          clientAuth: oauth.ClientSecretBasic(secret),
+          clientAuth: basicFor(secret),
           confidential: { tokenEndpointAuthMethod: "client_secret_basic", clientSecret: secret },
         };
       }
@@ -1774,9 +1831,7 @@ class SolidAuthEngine implements SolidAuth {
       }
       return {
         clientAuth:
-          method === "client_secret_basic"
-            ? oauth.ClientSecretBasic(secret)
-            : oauth.ClientSecretPost(secret),
+          method === "client_secret_basic" ? basicFor(secret) : oauth.ClientSecretPost(secret),
         confidential: { tokenEndpointAuthMethod: method, clientSecret: secret },
       };
     }
@@ -1818,7 +1873,7 @@ class SolidAuthEngine implements SolidAuth {
     // so an unsupported/incoherent confidential registration fails with a clear,
     // targeted error instead of a token-endpoint 401 or a later broken restore
     // (the roborev finding). The static-clientId path is always `none` (public).
-    const { clientAuth } = this.#resolveClientAuth(client);
+    const { clientAuth } = this.#resolveClientAuth(authorizationServer.issuer, client);
 
     const dpopKey = await oauth.generateKeyPair("ES256", { extractable: false });
     const dpopHandle = oauth.DPoP(client, dpopKey);
@@ -2059,7 +2114,9 @@ class SolidAuthEngine implements SolidAuth {
     // rule). Resolved ONCE here (pure on session.client), outside the serialized
     // write turn below. Same fail-closed store + clear-on-logout discipline as
     // the refresh token it authorises.
-    const confidential = this.#resolveClientAuth(session.client).confidential ?? {};
+    const confidential =
+      this.#resolveClientAuth(session.authorizationServer.issuer, session.client).confidential ??
+      {};
     const run = this.#persistChain.then(async (): Promise<PersistResult> => {
       // We now hold the write turn. If a LATER login (or logout) has superseded us
       // since this attempt started, do NOT write — the winner's credential stands.

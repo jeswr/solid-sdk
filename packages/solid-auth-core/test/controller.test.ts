@@ -3594,3 +3594,67 @@ describe("createSolidAuth — confidential dynamic registrations (roborev Medium
     expect(grantCalls).toBe(0);
   });
 });
+
+describe("createSolidAuth — ESS/Inrupt raw-Basic client auth on LOGIN (roborev Medium fix)", () => {
+  // Inrupt ESS / PodSpaces (login.inrupt.com) REJECTS the spec form-url-encoded
+  // Basic credentials and needs a RAW (non-URL-encoded) Basic header. session-
+  // restore already applies this issuer-aware workaround to its refresh grant;
+  // the LOGIN code-exchange must too, or ESS confidential login fails — the exact
+  // issuer class the confidential-registration path exists to support.
+
+  it("uses the RAW (no-URL-encode) Basic header for a login.inrupt.com confidential registration, and persists it", async () => {
+    agentIssuer = "https://login.inrupt.com/"; // discovery echoes this as the AS issuer
+    dynamicClientResponse = {
+      client_id: "ess client", // a SPACE distinguishes raw btoa from form-url-encoding
+      token_endpoint_auth_method: "client_secret_basic",
+      client_secret: "s p@ce/secret",
+    };
+    const store = new RecordingStore();
+    const controller = createSolidAuth({
+      authFlow,
+      callbackUri: "https://app.example/callback",
+      store,
+      publicFetch: ok200RecordingFetch(),
+    });
+    await controller.login("https://alice.pod.example/profile/card#me");
+
+    // For ESS, the resolved clientAuth is the BESPOKE raw-Basic closure (a real
+    // function — NOT the tagged oauth.ClientSecretBasic mock the spec path uses).
+    expect(typeof lastClientAuth).toBe("function");
+    const headers = new Headers();
+    (lastClientAuth as (as: unknown, c: { client_id: string }, b: unknown, h: Headers) => void)(
+      {},
+      { client_id: "ess client" },
+      new URLSearchParams(),
+      headers,
+    );
+    // Raw base64 of `client_id:secret` — no application/x-www-form-urlencoded of
+    // the space/`@`/`/`, which the spec ClientSecretBasic would apply.
+    expect(headers.get("authorization")).toBe(`Basic ${btoa("ess client:s p@ce/secret")}`);
+
+    // The method + secret are carried forward so silent restore redeems as the
+    // same client (and restore already uses the same ESS workaround).
+    const persisted = store.map.get("https://login.inrupt.com/");
+    expect(persisted?.tokenEndpointAuthMethod).toBe("client_secret_basic");
+    expect(persisted?.clientSecret).toBe("s p@ce/secret");
+  });
+
+  it("a NON-ESS issuer still uses the spec (URL-encoding) ClientSecretBasic on login", async () => {
+    // agentIssuer defaults to https://idp.example/ (non-ESS) — the spec encoder.
+    dynamicClientResponse = {
+      client_id: "dyn-basic",
+      token_endpoint_auth_method: "client_secret_basic",
+      client_secret: "sekret",
+    };
+    const controller = createSolidAuth({
+      authFlow,
+      callbackUri: "https://app.example/callback",
+      store: new RecordingStore(),
+      publicFetch: ok200RecordingFetch(),
+    });
+    await controller.login("https://alice.pod.example/profile/card#me");
+    // The spec path returns the tagged oauth.ClientSecretBasic mock object, not a
+    // bespoke closure — proving the ESS workaround is scoped to ESS only.
+    expect(lastClientAuth).toEqual({ kind: "client_secret_basic", secret: "sekret" });
+  });
+});
