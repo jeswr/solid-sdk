@@ -11,6 +11,7 @@
 import { fetchRdf } from "@jeswr/fetch-rdf";
 import type { DatasetCore } from "@rdfjs/types";
 import { classifyFetchError, describeError } from "./internal/errors.js";
+import { safeHttpIri } from "./iri.js";
 import type { AgentDiscovery, AgentPointer, VerificationResult } from "./types.js";
 import { verifyDataset } from "./verify.js";
 import { AD_OWNER, WELL_KNOWN_AGENT_CARD, WELL_KNOWN_AGENT_DESCRIPTIONS } from "./vocab.js";
@@ -33,6 +34,12 @@ export interface DiscoverOptions {
    * discovery as only partially guarded. (This is distinct from the
    * subject-binding spoofing guard, which prevents a descriptor from *claiming* a
    * different agent IRI, not SSRF.)
+   *
+   * Independently of the injected fetch, `discoverAgent` REJECTS (skips) any
+   * pointer whose object is not a well-formed absolute http(s) IRI — `file:`,
+   * `javascript:`, `data:`, scheme-relative and authority-deficient forms never
+   * reach the fetch at all. The injected guard is then responsible only for the
+   * remaining http(s) SSRF surface (private ranges, DNS rebinding, redirects).
    */
   readonly fetch?: typeof globalThis.fetch;
   /**
@@ -102,7 +109,19 @@ export async function discoverAgent(
     if (agent.termType !== "NamedNode") {
       continue;
     }
-    pointers.push({ webId, agent: agent.value, predicate });
+    // SCHEME GUARD (fail-closed): the pointer object comes from a possibly
+    // UNTRUSTED profile document and is the IRI the descriptor fetch below is
+    // issued against. Only well-formed absolute http(s) IRIs are accepted —
+    // `file:`, `javascript:`, `data:`, `ftp:`, authority-deficient `https:foo`
+    // etc. are all REJECTED (skipped) here, BEFORE any fetch, rather than
+    // delegated to the injected fetch's own policy. `safeHttpIri` also
+    // percent-encodes IRIREF-forbidden characters, so the value we keep (and
+    // later fetch / compare subjects against) is the neutralised form.
+    const safeAgent = safeHttpIri(agent.value);
+    if (safeAgent === undefined) {
+      continue;
+    }
+    pointers.push({ webId, agent: safeAgent, predicate });
   }
 
   if (pointers.length === 0 || options.resolveDescriptor === false) {

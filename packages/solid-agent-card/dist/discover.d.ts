@@ -16,6 +16,12 @@ export interface DiscoverOptions {
      * discovery as only partially guarded. (This is distinct from the
      * subject-binding spoofing guard, which prevents a descriptor from *claiming* a
      * different agent IRI, not SSRF.)
+     *
+     * Independently of the injected fetch, `discoverAgent` REJECTS (skips) any
+     * pointer whose object is not a well-formed absolute http(s) IRI — `file:`,
+     * `javascript:`, `data:`, scheme-relative and authority-deficient forms never
+     * reach the fetch at all. The injected guard is then responsible only for the
+     * remaining http(s) SSRF surface (private ranges, DNS rebinding, redirects).
      */
     readonly fetch?: typeof globalThis.fetch;
     /**

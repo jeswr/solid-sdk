@@ -962,6 +962,7 @@ async function discoverAgent(webId, options = {}) {
     const fetched = await fetchRdf(webId, fetchOpts);
     profileDataset = fetched.dataset;
   } catch (err) {
+    void err;
     return { webId, pointers: [] };
   }
   const profile = wrapProfile(profileDataset);
@@ -971,7 +972,11 @@ async function discoverAgent(webId, options = {}) {
     if (agent.termType !== "NamedNode") {
       continue;
     }
-    pointers.push({ webId, agent: agent.value, predicate });
+    const safeAgent = safeHttpIri(agent.value);
+    if (safeAgent === void 0) {
+      continue;
+    }
+    pointers.push({ webId, agent: safeAgent, predicate });
   }
   if (pointers.length === 0 || options.resolveDescriptor === false) {
     return { webId, pointers };
