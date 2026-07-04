@@ -80,11 +80,28 @@ import * as DPoP from "dpop";
 import { DataFactory } from "n3";
 import * as oauth from "oauth4webapi";
 import { brandFetchWrapper, MODULE_PRISTINE_FETCH, resolvePristineFetch } from "./pristine.js";
+import {
+  authErrorFrom,
+  cleanedUrl,
+  clearPersistedRedirectFlow,
+  ES256_JWK_IMPORT_ALG,
+  hasAuthCodeParams,
+  hasAuthErrorParams,
+  type PersistedRedirectFlow,
+  parseAutologinFragment,
+  planRedirect,
+  type RedirectFlowStorage,
+  readPersistedRedirectFlow,
+  stripAuthCallbackParams,
+  writePersistedRedirectFlow,
+} from "./redirect.js";
 import type { PersistedSession, SessionStore } from "./session-store.js";
 import type {
+  BeginRedirectLoginOptions,
   GetCodeCallback,
   LoginResult,
   RecentLoginAccount,
+  RedirectOutcome,
   RestoreOutcome,
   SolidAuth,
   SolidAuthController,
@@ -275,10 +292,68 @@ export interface SolidAuthConfig {
    * hold a reference to the original — otherwise the default is correct and safer.
    */
   publicFetch?: typeof fetch;
+  /**
+   * The full-page navigation seam for {@link SolidAuth.beginRedirectLogin} — how the
+   * page is sent to the OP's authorization endpoint. Defaults to
+   * `globalThis.location.assign`. Inject to test the redirect flow without a real
+   * navigation, or to route the navigation through a router.
+   */
+  navigate?: (url: string) => void;
+  /**
+   * The registered app-root RETURN URI for FULL-PAGE-redirect logins — the page the OP
+   * redirects back to, which MUST run the app so it can read `?code&state` and drive
+   * {@link SolidAuth.completeRedirectLogin} / {@link SolidAuth.handleRedirect}.
+   *
+   * DISTINCT from {@link callbackUri}: `callbackUri` is the POPUP callback page (it only
+   * `postMessage`s and does NOT run the app), so it is the WRONG target for a full-page
+   * redirect. When this is set it is the default `redirect_uri` for both
+   * {@link SolidAuth.beginRedirectLogin} and the {@link SolidAuth.handleRedirect}
+   * autologin path; it MUST be a registered `redirect_uri` (listed in the Client
+   * Identifier Document, or dynamically registered). When ABSENT, `handleRedirect`
+   * derives the return URI from the CURRENT page URL (origin + path, fragment stripped)
+   * and a direct `beginRedirectLogin` falls back to `callbackUri`.
+   */
+  redirectUri?: string;
+  /**
+   * The transient store for the FULL-PAGE-redirect login's in-between state (the
+   * PKCE verifier + exported DPoP JWK + state/nonce + client), which must survive the
+   * navigation. Defaults to `globalThis.sessionStorage` (per-tab, same-origin, cleared
+   * on tab close). Inject an in-memory stub for tests / non-browser hosts.
+   */
+  redirectFlowStorage?: RedirectFlowStorage;
+  /**
+   * The sessionStorage key the redirect flow persists its record under. MUST be
+   * unique per app on a shared origin. Defaults to a name derived from
+   * {@link dbName}. Distinct from {@link redirectSentinelKey}.
+   */
+  redirectFlowKey?: string;
+  /**
+   * The sessionStorage key for the one-shot autologin loop-guard sentinel (the WebID
+   * last attempted this tab), so a redirect that bounces back still unauthenticated
+   * does not loop. App-specific; defaults to a name derived from {@link dbName}.
+   */
+  redirectSentinelKey?: string;
 }
 
 const isLoopback = (host: string): boolean =>
   host === "localhost" || host === "127.0.0.1" || host === "[::1]";
+
+/**
+ * The default transient store for the redirect flow: `globalThis.sessionStorage`, or
+ * `undefined` when it is absent OR access to it THROWS. Merely READING the
+ * `sessionStorage` property throws a `SecurityError` in a sandboxed iframe / when a
+ * browser blocks storage, so this MUST be try/catch-guarded — otherwise constructing
+ * the auth object would fail even for a consumer that never touches redirect login
+ * (the roborev finding). A redirect login then fails fast at `writePersistedRedirectFlow`
+ * (which throws "no sessionStorage") rather than at construction.
+ */
+function defaultSessionStorage(): RedirectFlowStorage | undefined {
+  try {
+    return (globalThis as { sessionStorage?: RedirectFlowStorage }).sessionStorage ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 /**
  * A variant of oauth4webapi's {@link oauth.ClientSecretBasic} that does NOT
@@ -745,6 +820,14 @@ class SolidAuthEngine implements SolidAuth {
   readonly #clientId: string | undefined;
   readonly #remembered: RememberedAccount;
   readonly #recentAccounts: RecentAccountsList;
+  /** The full-page navigation seam (defaults to `location.assign`). */
+  readonly #navigate: (url: string) => void;
+  /** The transient store for the redirect flow's in-between state (sessionStorage). */
+  readonly #redirectStorage: RedirectFlowStorage | undefined;
+  /** The sessionStorage key the redirect record is persisted under. */
+  readonly #redirectFlowKey: string;
+  /** The sessionStorage key for the one-shot autologin loop-guard sentinel. */
+  readonly #redirectSentinelKey: string;
 
   // The token provider, built lazily so construction has no side effects until a
   // login/restore actually happens.
@@ -823,6 +906,23 @@ class SolidAuthEngine implements SolidAuth {
       options.recentAccountsKey ??
         `${options.rememberedAccountsKey ?? "solid-elements"}.recent-accounts`,
     );
+    // The redirect-flow navigation + transient store. The store defaults to
+    // sessionStorage (per-tab, same-origin, cleared on tab close) — the ONLY web
+    // storage appropriate for the short-lived, must-not-outlive-the-tab redirect
+    // record. Resolved through a try/catch helper: merely READING
+    // `globalThis.sessionStorage` THROWS in a sandboxed iframe / when storage is
+    // blocked, and that must NOT make `createSolidAuth()` fail for a consumer that
+    // never uses redirect login (the roborev finding). The keys default off dbName so
+    // two apps on a shared origin do not collide.
+    const keyBase = options.dbName ?? "solid-auth-core";
+    this.#navigate =
+      options.navigate ??
+      ((url: string): void => {
+        globalThis.location?.assign(url);
+      });
+    this.#redirectStorage = options.redirectFlowStorage ?? defaultSessionStorage();
+    this.#redirectFlowKey = options.redirectFlowKey ?? `${keyBase}.redirect-flow`;
+    this.#redirectSentinelKey = options.redirectSentinelKey ?? `${keyBase}.redirect-sentinel`;
   }
 
   get publicFetch(): typeof fetch {
@@ -1439,113 +1539,17 @@ class SolidAuthEngine implements SolidAuth {
       const validated = validateWebId(targetWebId, this.#opts.allowInsecureLoopback ?? false);
       const issuer = await this.#resolveIssuer(validated);
       const session = await this.#authenticate(generation, issuer, validated);
-      if (generation !== this.#generation) {
-        // Superseded by a logout / a LATER login during the popup — discard so we
-        // don't clobber the winning attempt's state.
-        throw new DOMException("Login superseded", "AbortError");
-      }
-      // Persist the DPoP-bound refresh token + key for silent restore next load,
-      // THEN drop the refresh token from the in-memory session — only the durable
-      // store keeps it; the live session needs only the access token + DPoP key.
-      // #persist is SERIALIZED + generation-guarded so a superseded earlier login's
-      // store write can never land AFTER (and overwrite) a later login's credential.
-      // It returns BOTH whether a credential for this session was WRITTEN (so the
-      // current, this-page session can refresh) and whether it is DURABLE (survives a
-      // reload → restorable next load). The two differ for the in-memory fallback store.
-      const { wrote: credentialWritten, durable: credentialRestorable } = await this.#persist(
-        session,
+      // Establish the authenticated session — persist, silent-restore pointer,
+      // recent-accounts, account-switch cleanup, and the interleaved supersession
+      // fences. Shared VERBATIM with completeRedirectLogin (the redirect path
+      // establishes a session identically), so the generation-fence contract has one
+      // audited home.
+      return await this.#finalizeAuthenticatedSession(
         generation,
+        session,
+        previousIssuer,
+        previousWebId,
       );
-      // Re-check after the (awaited) persist: a later login may have superseded us
-      // while the store write was in flight; if so, do not overwrite its state.
-      if (generation !== this.#generation) {
-        throw new DOMException("Login superseded", "AbortError");
-      }
-      session.refreshToken = undefined;
-      this.#session = session;
-      this.#ensureProvider();
-      // SILENT-RESTORE pointer: write it ONLY when a refresh credential is RESTORABLE
-      // next load (durable). Otherwise — the OP issued no refresh_token, the store write
-      // failed, or the store is non-durable — there is NOTHING to restore from for THIS
-      // account next load, so a pointer would make the next load attempt silent restore
-      // and fall back (despite login claiming the account is restorable — the roborev
-      // finding).
-      //
-      // CRUCIALLY, when not restorable we must CLEAR any PRE-EXISTING pointer, not merely
-      // skip writing: a stale pointer to a PREVIOUS account (e.g. account A on the same
-      // issuer, or one whose account-switch cleanup delete failed) would otherwise
-      // survive this login and silently restore the WRONG (old) account on the next load
-      // instead of falling back to login for the current, non-restorable session (the
-      // roborev finding). SAFE either way: a storage failure must NOT reject an
-      // otherwise-successful login while the controller already holds the live session.
-      if (credentialRestorable) {
-        this.#safeWriteRemembered(session.webId, session.issuer.href);
-      } else {
-        this.#safeClearRemembered();
-      }
-      // RECENT-ACCOUNTS list (DISTINCT from the silent-restore pointer above): the
-      // credential-free, logout-surviving returning-user affordance. This is always
-      // remembered — it does not imply a restorable credential, only that the user has
-      // signed in with this WebID before (it powers the account picker / no-arg login).
-      this.#recentAccounts.remember({ webId: session.webId, displayName: session.webId });
-      // ACCOUNT-SWITCH CLEANUP: if this login replaced a session on a DIFFERENT issuer,
-      // delete that old issuer's persisted credential (serialized through the chain, so
-      // it can't race this login's own persist). Best-effort.
-      // Normalize previousIssuer before comparing: it may be a stored/raw string
-      // (e.g. "https://idp.example") while session.issuer.href is normalized
-      // ("https://idp.example/"). A raw `!==` would treat the SAME issuer as
-      // different and #forget the credential JUST persisted for it (roborev finding).
-      let normalizedPrevIssuer: string | null = null;
-      try {
-        normalizedPrevIssuer = previousIssuer ? new URL(previousIssuer).href : null;
-      } catch {
-        // Unparseable old issuer → nothing safe to forget.
-        normalizedPrevIssuer = null;
-      }
-      if (normalizedPrevIssuer && normalizedPrevIssuer !== session.issuer.href) {
-        try {
-          await this.#forget(new URL(normalizedPrevIssuer));
-        } catch {
-          // Store error — the stale entry is DPoP-bound; harmless.
-        }
-      } else if (
-        !credentialWritten &&
-        normalizedPrevIssuer === session.issuer.href &&
-        previousWebId !== undefined &&
-        !webIdsEqual(previousWebId, session.webId)
-      ) {
-        // SAME-ISSUER account SWITCH (the replaced WebID DIFFERS from the new one) where
-        // THIS login WROTE NO new credential (no refresh_token / store-write failed): the
-        // store still holds the PREVIOUS, DIFFERENT account's credential for this issuer
-        // (we didn't overwrite it). Leaving it would let a later restore redeem the WRONG
-        // account's refresh token for the issuer the live session now belongs to. Drop it
-        // so no stale, mismatched credential lingers (the roborev finding).
-        //
-        // CRUCIALLY gated on a DIFFERENT WebID (the roborev follow-up): a plain SAME-WebID
-        // re-login that wrote no new credential must NOT delete the stored credential — it
-        // belongs to the SAME account and is still valid, so deleting it would make that
-        // still-live session non-restorable/non-refreshable once its access token expired.
-        // Also gated on `!credentialWritten` (NOT `!credentialRestorable`): a successful
-        // put to the NON-DURABLE in-memory store DID write the current session's credential
-        // — we must not delete THAT either. Best-effort; the entry is DPoP-bound regardless.
-        try {
-          await this.#forget(session.issuer);
-        } catch {
-          // Store error — the stale entry is DPoP-bound; harmless.
-        }
-      }
-      // FINAL SUPERSESSION RECHECK (after the awaited account-switch cleanup): a newer
-      // login / a logout may have advanced #generation (and replaced/cleared #session)
-      // WHILE #forget was in flight. Returning a success for `session.webId` here would
-      // report a WebID that no longer matches `controller.webId` (the winner's account, or
-      // logged-out) — a stale, misleading result. Throw the same AbortError as the earlier
-      // checkpoints so the superseded attempt does not claim an out-of-date success (the
-      // roborev finding). The winning op owns the reported state + the session-change event.
-      if (generation !== this.#generation || this.#session !== session) {
-        throw new DOMException("Login superseded", "AbortError");
-      }
-      this.#emitSessionChange();
-      return { webId: session.webId };
     } catch (e) {
       // FAILED / cancelled attempt: if it did NOT replace the prior session (that is
       // still the live one), re-sync its generation to the current one so it stays
@@ -1560,6 +1564,144 @@ class SolidAuthEngine implements SolidAuth {
       // (a superseding login/logout already replaced/aborted it — don't clobber theirs).
       if (generation === this.#generation) this.#activeLoginAbort = undefined;
     }
+  }
+
+  /**
+   * Establish an authenticated {@link LiveSession} into the controller: persist the
+   * DPoP-bound refresh credential, pin the session + provider, write/clear the
+   * silent-restore pointer, remember the account, run account-switch cleanup, and
+   * emit the session-change event — all under the interleaved generation-supersession
+   * fences. Shared by {@link login} (popup path) AND {@link completeRedirectLogin}
+   * (full-page-redirect path): both authenticate a WebID and then need the IDENTICAL
+   * post-auth establishment, so this is its ONE audited home rather than two copies of
+   * the security-critical fence logic. Returns the {@link LoginResult}; throws the same
+   * `AbortError` the callers propagate when a newer login/logout superseded this one.
+   *
+   * @param previousIssuer the issuer of the session/pointer this login is REPLACING
+   *   (for cross-issuer credential cleanup); undefined when there is none.
+   * @param previousWebId the WebID being replaced (gates the same-issuer account-switch
+   *   cleanup so a plain same-WebID re-login never drops a still-valid credential).
+   */
+  // ESSENTIAL COMPLEXITY (intentionally over the cognitive-complexity warn threshold —
+  // the linter flags it; that flag is a "review this carefully" signal, not a cleanup
+  // target): every branch is a fail-closed cross-account credential-leak fence — the
+  // interleaved post-await generation re-checks, the durable-vs-wrote persist split, the
+  // same-/cross-issuer account-switch cleanup gated on a DIFFERENT WebID. This is the
+  // VERBATIM block that previously lived inline in login() (extracted so the redirect
+  // path reuses ONE audited copy); collapsing a branch is a CVE, not a simplification.
+  async #finalizeAuthenticatedSession(
+    generation: number,
+    session: LiveSession,
+    previousIssuer: string | undefined,
+    previousWebId: string | undefined,
+  ): Promise<LoginResult> {
+    if (generation !== this.#generation) {
+      // Superseded by a logout / a LATER login during the popup — discard so we
+      // don't clobber the winning attempt's state.
+      throw new DOMException("Login superseded", "AbortError");
+    }
+    // Persist the DPoP-bound refresh token + key for silent restore next load,
+    // THEN drop the refresh token from the in-memory session — only the durable
+    // store keeps it; the live session needs only the access token + DPoP key.
+    // #persist is SERIALIZED + generation-guarded so a superseded earlier login's
+    // store write can never land AFTER (and overwrite) a later login's credential.
+    // It returns BOTH whether a credential for this session was WRITTEN (so the
+    // current, this-page session can refresh) and whether it is DURABLE (survives a
+    // reload → restorable next load). The two differ for the in-memory fallback store.
+    const { wrote: credentialWritten, durable: credentialRestorable } = await this.#persist(
+      session,
+      generation,
+    );
+    // Re-check after the (awaited) persist: a later login may have superseded us
+    // while the store write was in flight; if so, do not overwrite its state.
+    if (generation !== this.#generation) {
+      throw new DOMException("Login superseded", "AbortError");
+    }
+    session.refreshToken = undefined;
+    this.#session = session;
+    this.#ensureProvider();
+    // SILENT-RESTORE pointer: write it ONLY when a refresh credential is RESTORABLE
+    // next load (durable). Otherwise — the OP issued no refresh_token, the store write
+    // failed, or the store is non-durable — there is NOTHING to restore from for THIS
+    // account next load, so a pointer would make the next load attempt silent restore
+    // and fall back (despite login claiming the account is restorable — the roborev
+    // finding).
+    //
+    // CRUCIALLY, when not restorable we must CLEAR any PRE-EXISTING pointer, not merely
+    // skip writing: a stale pointer to a PREVIOUS account (e.g. account A on the same
+    // issuer, or one whose account-switch cleanup delete failed) would otherwise
+    // survive this login and silently restore the WRONG (old) account on the next load
+    // instead of falling back to login for the current, non-restorable session (the
+    // roborev finding). SAFE either way: a storage failure must NOT reject an
+    // otherwise-successful login while the controller already holds the live session.
+    if (credentialRestorable) {
+      this.#safeWriteRemembered(session.webId, session.issuer.href);
+    } else {
+      this.#safeClearRemembered();
+    }
+    // RECENT-ACCOUNTS list (DISTINCT from the silent-restore pointer above): the
+    // credential-free, logout-surviving returning-user affordance. This is always
+    // remembered — it does not imply a restorable credential, only that the user has
+    // signed in with this WebID before (it powers the account picker / no-arg login).
+    this.#recentAccounts.remember({ webId: session.webId, displayName: session.webId });
+    // ACCOUNT-SWITCH CLEANUP: if this login replaced a session on a DIFFERENT issuer,
+    // delete that old issuer's persisted credential (serialized through the chain, so
+    // it can't race this login's own persist). Best-effort.
+    // Normalize previousIssuer before comparing: it may be a stored/raw string
+    // (e.g. "https://idp.example") while session.issuer.href is normalized
+    // ("https://idp.example/"). A raw `!==` would treat the SAME issuer as
+    // different and #forget the credential JUST persisted for it (roborev finding).
+    let normalizedPrevIssuer: string | null = null;
+    try {
+      normalizedPrevIssuer = previousIssuer ? new URL(previousIssuer).href : null;
+    } catch {
+      // Unparseable old issuer → nothing safe to forget.
+      normalizedPrevIssuer = null;
+    }
+    if (normalizedPrevIssuer && normalizedPrevIssuer !== session.issuer.href) {
+      try {
+        await this.#forget(new URL(normalizedPrevIssuer));
+      } catch {
+        // Store error — the stale entry is DPoP-bound; harmless.
+      }
+    } else if (
+      !credentialWritten &&
+      normalizedPrevIssuer === session.issuer.href &&
+      previousWebId !== undefined &&
+      !webIdsEqual(previousWebId, session.webId)
+    ) {
+      // SAME-ISSUER account SWITCH (the replaced WebID DIFFERS from the new one) where
+      // THIS login WROTE NO new credential (no refresh_token / store-write failed): the
+      // store still holds the PREVIOUS, DIFFERENT account's credential for this issuer
+      // (we didn't overwrite it). Leaving it would let a later restore redeem the WRONG
+      // account's refresh token for the issuer the live session now belongs to. Drop it
+      // so no stale, mismatched credential lingers (the roborev finding).
+      //
+      // CRUCIALLY gated on a DIFFERENT WebID (the roborev follow-up): a plain SAME-WebID
+      // re-login that wrote no new credential must NOT delete the stored credential — it
+      // belongs to the SAME account and is still valid, so deleting it would make that
+      // still-live session non-restorable/non-refreshable once its access token expired.
+      // Also gated on `!credentialWritten` (NOT `!credentialRestorable`): a successful
+      // put to the NON-DURABLE in-memory store DID write the current session's credential
+      // — we must not delete THAT either. Best-effort; the entry is DPoP-bound regardless.
+      try {
+        await this.#forget(session.issuer);
+      } catch {
+        // Store error — the stale entry is DPoP-bound; harmless.
+      }
+    }
+    // FINAL SUPERSESSION RECHECK (after the awaited account-switch cleanup): a newer
+    // login / a logout may have advanced #generation (and replaced/cleared #session)
+    // WHILE #forget was in flight. Returning a success for `session.webId` here would
+    // report a WebID that no longer matches `controller.webId` (the winner's account, or
+    // logged-out) — a stale, misleading result. Throw the same AbortError as the earlier
+    // checkpoints so the superseded attempt does not claim an out-of-date success (the
+    // roborev finding). The winning op owns the reported state + the session-change event.
+    if (generation !== this.#generation || this.#session !== session) {
+      throw new DOMException("Login superseded", "AbortError");
+    }
+    this.#emitSessionChange();
+    return { webId: session.webId };
   }
 
   /** Abort the in-flight interactive login's popup (if any) and drop the handle. */
@@ -1725,16 +1867,33 @@ class SolidAuthEngine implements SolidAuth {
     return {};
   }
 
-  /** Resolve the OAuth client (static Client Identifier Document or dynamic reg). */
+  /**
+   * Resolve the OAuth client (static Client Identifier Document or dynamic reg).
+   *
+   * `overrides` (the FULL-PAGE-redirect path): the redirect login returns to the
+   * APP ROOT, not the popup `callbackUri`, and may use a different `clientId`. When
+   * a `redirectUri` distinct from `callbackUri` is passed it is registered ALONGSIDE
+   * the callback (the OP rejects a redirect_uri it was never told about, so the
+   * dynamic-registration path must register it; for a static client the document
+   * itself must list it — the OP is authoritative off the document). With no
+   * overrides the popup path is byte-identical to before.
+   */
   async #resolveClient(
     authorizationServer: oauth.AuthorizationServer,
     http: OauthHttpOptions,
+    overrides?: { clientId?: string; redirectUri?: string },
   ): Promise<oauth.Client> {
-    if (this.#clientId !== undefined) {
+    const clientId = overrides?.clientId ?? this.#clientId;
+    const redirectUri = overrides?.redirectUri ?? this.#opts.callbackUri;
+    const redirectUris =
+      redirectUri !== this.#opts.callbackUri
+        ? [this.#opts.callbackUri, redirectUri]
+        : [this.#opts.callbackUri];
+    if (clientId !== undefined) {
       return {
-        client_id: this.#clientId,
+        client_id: clientId,
         token_endpoint_auth_method: "none",
-        redirect_uris: [this.#opts.callbackUri],
+        redirect_uris: redirectUris,
         response_types: ["code"],
       };
     }
@@ -1747,7 +1906,7 @@ class SolidAuthEngine implements SolidAuth {
     const registrationResponse = await oauth.dynamicClientRegistrationRequest(
       authorizationServer,
       {
-        redirect_uris: [this.#opts.callbackUri],
+        redirect_uris: redirectUris,
         grant_types: ["authorization_code", "refresh_token"],
         response_types: ["code"],
         token_endpoint_auth_method: "none",
@@ -2135,13 +2294,18 @@ class SolidAuthEngine implements SolidAuth {
         } catch {
           previous = undefined; // a read fault → fall back to delete-on-rollback
         }
-        // Persist the client_id that was ACTUALLY used: the static Client Identifier
-        // Document URL when configured, else the server-assigned DYNAMIC client id
-        // from this login's registration. A refresh token is client-bound (RFC 6749
-        // §6 / §10.4), so silent restore must redeem it as the SAME client — persisting
-        // the dynamic id is what keeps the default (no-static-clientId) path restorable
-        // instead of re-registering a new client that cannot redeem the old token.
-        const clientId = this.#clientId ?? session.client.client_id;
+        // Persist the client_id THIS session ACTUALLY authenticated with — read from
+        // `session.client.client_id`, NOT the controller-level `this.#clientId`. A
+        // refresh token is client-bound (RFC 6749 §6 / §10.4), so silent restore must
+        // redeem it as the SAME client. `session.client` is the client `#resolveClient`
+        // built for this login: the static Client Identifier Document URL, the
+        // server-assigned DYNAMIC id, OR — for a full-page-redirect login with a per-call
+        // `clientId` override — that override. Preferring `this.#clientId` here would
+        // store the WRONG (controller-default) client for an override'd redirect session,
+        // so restore could never redeem its token (the roborev finding). For the popup /
+        // no-override paths `session.client.client_id` already EQUALS `this.#clientId`
+        // (static) or the dynamic id, so this is a no-op there.
+        const clientId = session.client.client_id;
         await this.#store.put({
           issuer: session.issuer.href,
           webId: session.webId,
@@ -2243,6 +2407,468 @@ class SolidAuthEngine implements SolidAuth {
         },
       },
     };
+  }
+
+  // ── FULL-PAGE-redirect login (the `#autologin/<webid>` launch contract) ──────
+  //
+  // The redirect counterpart to the popup login(): it survives a full-page
+  // navigation by persisting its in-between state (PKCE verifier + EXPORTED DPoP JWK
+  // + state/nonce + the exact client/issuer/redirect_uri) to sessionStorage between
+  // beginRedirectLogin (before the nav) and completeRedirectLogin (after the broker
+  // redirects back). The pure decision/parsing/persist pieces live in ./redirect.ts;
+  // the credential-redeeming machinery is HERE (it needs the engine's discovery,
+  // client-auth resolution, pristine OIDC fetch, and session establishment). Every
+  // OIDC hop rides the pristine #oauthFetch (the login-stall unrepresentability
+  // guarantee) exactly like the popup path.
+
+  hasPendingRedirect(): boolean {
+    return readPersistedRedirectFlow(this.#redirectStorage, this.#redirectFlowKey) !== null;
+  }
+
+  async beginRedirectLogin(
+    options: BeginRedirectLoginOptions,
+  ): Promise<{ authorizationUrl: string }> {
+    // Resolve the issuer + the (optional) requested WebID. `webId` binds the login to
+    // an identity (its issuer resolved from the profile, then PROVEN on return);
+    // `oidcIssuer` is used directly (its returned WebID accepted after an https guard).
+    let issuer: URL;
+    let requestedWebId: string | null;
+    if (options.webId !== undefined && options.webId !== "") {
+      const validated = validateWebId(options.webId, this.#opts.allowInsecureLoopback ?? false);
+      issuer = await this.#resolveIssuer(validated);
+      requestedWebId = validated;
+    } else if (options.oidcIssuer !== undefined && options.oidcIssuer !== "") {
+      issuer = this.#requireSecureIssuer(options.oidcIssuer);
+      requestedWebId = null;
+    } else {
+      throw new InvalidWebIdError("", "beginRedirectLogin requires a webId or an oidcIssuer");
+    }
+    // The app-root return URL: the per-call override, else the configured
+    // `redirectUri` (the registered full-page-redirect return URI), else — as a last
+    // resort for a direct call with neither configured — `callbackUri`. NB `callbackUri`
+    // is the POPUP page and is the wrong full-page target, so a direct redirect login
+    // SHOULD pass `redirectUri` or configure `options.redirectUri`; `handleRedirect`
+    // always supplies a correct app URL itself. Persisted + reused VERBATIM in the token
+    // exchange — the two MUST be byte-identical or the exchange is rejected.
+    const redirectUri = options.redirectUri ?? this.#opts.redirectUri ?? this.#opts.callbackUri;
+    // `consent` (default, a direct user-initiated redirect) → select_account consent;
+    // `none` (the #autologin deep-link) → silent SSO (login_required on no session).
+    const prompt = options.prompt ?? "consent";
+
+    const baseHttp = this.#httpOptions(issuer);
+    const http = { ...baseHttp, [oauth.customFetch]: this.#oauthFetch() };
+    const discoveryResponse = await oauth.discoveryRequest(issuer, http);
+    const authorizationServer = await oauth.processDiscoveryResponse(issuer, discoveryResponse);
+    const client = await this.#resolveClient(authorizationServer, baseHttp, {
+      clientId: options.clientId,
+      redirectUri,
+    });
+
+    // EXTRACTABLE DPoP key: exported to JWK so it survives the full-page redirect (the
+    // ONE place a DPoP key is exported — the popup path keeps its key non-extractable
+    // in a closure; the redirect erases that closure). Re-imported NON-extractable on
+    // completion, so the extractable copy exists only in the transient record.
+    const dpopKey = await oauth.generateKeyPair("ES256", { extractable: true });
+    const dpopHandle = oauth.DPoP(client, dpopKey);
+    // RFC 9449 §10 DPoP authorization-code binding (best-effort; omit if unavailable).
+    let dpopJkt: string | undefined;
+    try {
+      dpopJkt = await dpopHandle.calculateThumbprint();
+    } catch {
+      dpopJkt = undefined;
+    }
+    const dpopPrivateJwk = await globalThis.crypto.subtle.exportKey("jwk", dpopKey.privateKey);
+    const dpopPublicJwk = await globalThis.crypto.subtle.exportKey("jwk", dpopKey.publicKey);
+
+    const codeVerifier = oauth.generateRandomCodeVerifier();
+    const state = oauth.generateRandomState();
+    const nonce = oauth.generateRandomNonce();
+    // PKCE S256 is MANDATORY for a public browser client — ALWAYS an S256 challenge,
+    // never `plain`, never skipped (same discipline as the popup #authenticate).
+    const codeChallenge = await oauth.calculatePKCECodeChallenge(codeVerifier);
+
+    const url = new URL(authorizationServer.authorization_endpoint as string);
+    url.searchParams.set("client_id", client.client_id);
+    url.searchParams.set("redirect_uri", redirectUri);
+    url.searchParams.set("response_type", "code");
+    // `offline_access` so the OP issues a refresh token (silent restore parity with
+    // the popup path); `webid` is the Solid-OIDC scope.
+    url.searchParams.set("scope", "openid webid offline_access");
+    url.searchParams.set("state", state);
+    url.searchParams.set("nonce", nonce);
+    url.searchParams.set("prompt", prompt === "none" ? "none" : "select_account consent");
+    url.searchParams.set("code_challenge", codeChallenge);
+    url.searchParams.set("code_challenge_method", "S256");
+    if (dpopJkt) url.searchParams.set("dpop_jkt", dpopJkt);
+
+    const flow: PersistedRedirectFlow = {
+      dpopPrivateJwk,
+      dpopPublicJwk,
+      codeVerifier,
+      state,
+      nonce,
+      issuer: issuer.href,
+      client,
+      redirectUri,
+      webId: requestedWebId,
+    };
+    // Persist BEFORE navigating: a redirect whose in-between state was NOT saved can
+    // never be completed. writePersistedRedirectFlow THROWS when no storage is
+    // available, so we do not navigate into an uncompletable flow.
+    writePersistedRedirectFlow(this.#redirectStorage, this.#redirectFlowKey, flow);
+    const authorizationUrl = url.toString();
+    // Full-page navigation to the OP's authorization endpoint (the seam defaults to
+    // location.assign). All in-memory state is about to be destroyed — completion
+    // resumes purely from the persisted record.
+    this.#navigate(authorizationUrl);
+    return { authorizationUrl };
+  }
+
+  async completeRedirectLogin(
+    callbackUrl: string = globalThis.location?.href ?? "",
+  ): Promise<LoginResult> {
+    const flow = readPersistedRedirectFlow(this.#redirectStorage, this.#redirectFlowKey);
+    if (!flow) {
+      // The record may be genuinely absent OR present-but-CORRUPT (readPersistedRedirectFlow
+      // returns null for both). A corrupt record still OCCUPIES the key with stale transient
+      // material (an exported DPoP key) and would block a fresh flow — so clear the key
+      // before failing (the roborev finding). Idempotent when the key is already empty.
+      clearPersistedRedirectFlow(this.#redirectStorage, this.#redirectFlowKey);
+      throw new Error("No pending redirect login to complete (no persisted state found).");
+    }
+    // CLEAR the transient record whether we succeed OR fail (finally) — so a refresh /
+    // back-button can never replay the single-use code + verifier + exported DPoP key.
+    try {
+      // Establish under the SAME generation fence as login(): abort a prior in-flight
+      // login, drain in-flight grants, then bump the generation so THIS completion
+      // supersedes any earlier attempt.
+      this.#abortActiveLogin();
+      await this.#drainActiveGrants();
+      const generation = ++this.#generation;
+      this.#abortActiveLogin();
+      const priorSession = this.#session;
+      const previousIssuer = priorSession?.issuer.href ?? this.#safeReadRemembered()?.issuer;
+      const previousWebId = priorSession?.webId ?? this.#safeReadRemembered()?.webId;
+      try {
+        const session = await this.#exchangeRedirectCode(generation, flow, callbackUrl);
+        return await this.#finalizeAuthenticatedSession(
+          generation,
+          session,
+          previousIssuer,
+          previousWebId,
+        );
+      } catch (e) {
+        // FAILED completion: if it did NOT replace the prior session, re-sync its
+        // generation so a session that survives a failed switch stays refreshable
+        // (mirrors login()'s failure path).
+        if (priorSession && this.#session === priorSession && generation === this.#generation) {
+          priorSession.generation = this.#generation;
+        }
+        throw e;
+      } finally {
+        if (generation === this.#generation) this.#activeLoginAbort = undefined;
+      }
+    } finally {
+      clearPersistedRedirectFlow(this.#redirectStorage, this.#redirectFlowKey);
+    }
+  }
+
+  /**
+   * The DPoP-bound authorization-code exchange for the FULL-PAGE-redirect path,
+   * resuming purely from the persisted {@link PersistedRedirectFlow}: reconstruct the
+   * EXACT client, re-import the DPoP key, VALIDATE the persisted `state`, exchange the
+   * code (nonce-retry like #authenticate, `expectedNonce` = the persisted nonce),
+   * ENFORCE the DPoP token type + the https WebID guard + the requested-WebID match
+   * (all fail-closed BEFORE any session state is written), and return the
+   * {@link LiveSession} for {@link #finalizeAuthenticatedSession} to establish.
+   */
+  async #exchangeRedirectCode(
+    generation: number,
+    flow: PersistedRedirectFlow,
+    callbackUrl: string,
+  ): Promise<LiveSession> {
+    const issuer = new URL(flow.issuer);
+    const baseHttp = this.#httpOptions(issuer);
+    const http = { ...baseHttp, [oauth.customFetch]: this.#oauthFetch() };
+    const discoveryResponse = await oauth.discoveryRequest(issuer, http);
+    const authorizationServer = await oauth.processDiscoveryResponse(issuer, discoveryResponse);
+    if (generation !== this.#generation) throw new DOMException("Login superseded", "AbortError");
+    // Reconstruct the EXACT client the authorization request used (persisted verbatim,
+    // so a confidential dynamic client is redeemed as the SAME client — RFC 6749 §6).
+    const client = flow.client as oauth.Client;
+    const { clientAuth } = this.#resolveClientAuth(authorizationServer.issuer, client);
+    // Re-import the persisted ES256 DPoP key: private NON-extractable (sign only — it
+    // was exportable ONLY to survive the redirect, never re-exported now), public
+    // extractable (dpop exports it as the proof-header JWK, RFC 9449 §4.2).
+    const privateKey = await globalThis.crypto.subtle.importKey(
+      "jwk",
+      flow.dpopPrivateJwk,
+      ES256_JWK_IMPORT_ALG,
+      false,
+      ["sign"],
+    );
+    const publicKey = await globalThis.crypto.subtle.importKey(
+      "jwk",
+      flow.dpopPublicJwk,
+      ES256_JWK_IMPORT_ALG,
+      true,
+      ["verify"],
+    );
+    if (generation !== this.#generation) throw new DOMException("Login superseded", "AbortError");
+    const dpopKey: CryptoKeyPair = { privateKey, publicKey };
+    const dpopHandle = oauth.DPoP(client, dpopKey);
+    // Validate the auth response against the PERSISTED state (CSRF / OP mix-up guard —
+    // a mismatched/absent state throws).
+    const params = oauth.validateAuthResponse(
+      authorizationServer,
+      client,
+      new URL(callbackUrl),
+      flow.state,
+    );
+    // The grant + PROCESS as one unit (a `use_dpop_nonce` challenge can surface from
+    // either), retried once on a server-required DPoP nonce — same as #authenticate.
+    const exchange = async (): Promise<oauth.TokenEndpointResponse> => {
+      const tokenResponse = await oauth.authorizationCodeGrantRequest(
+        authorizationServer,
+        client,
+        clientAuth,
+        params,
+        // The redirect_uri MUST be byte-identical to the authorization request's.
+        flow.redirectUri,
+        flow.codeVerifier, // PKCE always on (S256) — single-use against the code.
+        { DPoP: dpopHandle, ...http },
+      );
+      return oauth.processAuthorizationCodeResponse(authorizationServer, client, tokenResponse, {
+        expectedNonce: flow.nonce,
+      });
+    };
+    let tokenResult: oauth.TokenEndpointResponse;
+    try {
+      tokenResult = await exchange();
+    } catch (e) {
+      if (!oauth.isDPoPNonceError(e)) throw e;
+      tokenResult = await exchange();
+    }
+    if (generation !== this.#generation) throw new DOMException("Login superseded", "AbortError");
+    // ENFORCE DPoP (reject a non-sender-constrained Bearer, defeating the DPoP model).
+    if (tokenResult.token_type.toLowerCase() !== "dpop") {
+      throw new Error(
+        `Expected a DPoP-bound token but the identity provider returned token_type="${tokenResult.token_type}".`,
+      );
+    }
+    const claimedWebId = webIdFromClaims(oauth.getValidatedIdTokenClaims(tokenResult));
+    if (!claimedWebId) {
+      throw new Error("The identity provider did not return a WebID for this session.");
+    }
+    // SCHEME GUARD (untrusted WebID): the WebID's origin joins the credential boundary
+    // (the DPoP token may be attached to it), so it MUST be https (loopback http only
+    // under the opt-in) — a cleartext WebID would let the token ride over plaintext.
+    // Fail closed. This is the ONLY WebID guard for the issuer-only (`webId` null) path.
+    const webId = validateWebId(claimedWebId, this.#opts.allowInsecureLoopback ?? false);
+    // WEBID-MATCH GUARD (fail-closed): when the login was BOUND to a requested WebID,
+    // the OP MUST have authenticated as it — the launch carries only the public WebID,
+    // so a live OP session for a DIFFERENT account must never be silently accepted.
+    // `webIdsEqual` returns false if either side is missing/unparseable (fail-closed).
+    if (flow.webId !== null && !webIdsEqual(webId, flow.webId)) {
+      throw new Error(
+        `Signed in as a different WebID than requested (asked for ${flow.webId}, got ${webId}).`,
+      );
+    }
+    return {
+      generation,
+      issuer,
+      webId,
+      accessToken: tokenResult.access_token,
+      dpopKey,
+      dpopHandle,
+      authorizationServer,
+      client,
+      allowedOrigins: this.#allowedOriginsFor(webId, issuer),
+      expiresAt: expiresAtFrom(tokenResult.expires_in),
+      // Stash the refresh token transiently for #persist; cleared right after.
+      refreshToken: tokenResult.refresh_token,
+    };
+  }
+
+  async handleRedirect(
+    currentUrl: string = globalThis.location?.href ?? "",
+  ): Promise<RedirectOutcome> {
+    // Fail-closed: ANY failure resolves to `{ outcome: "error" }` (never throws), and
+    // the transient state is cleaned up so a fresh login can proceed.
+    try {
+      const url = new URL(currentUrl);
+      const fragmentWebId = parseAutologinFragment(url.hash);
+      const plan = planRedirect({
+        loggedIn: this.webId !== null,
+        hasPendingRedirect: this.hasPendingRedirect(),
+        hasCodeParams: hasAuthCodeParams(url.search),
+        hasErrorParams: hasAuthErrorParams(url.search),
+        fragmentWebId,
+        sentinel: this.#readSentinel(),
+        webIdsEqual,
+      });
+      switch (plan.kind) {
+        case "none": {
+          // A live session WON (or the flow is abandoned): drop any STALE pending
+          // record + sentinel. planRedirect only yields `none` WITH a pending record
+          // when already logged in / abandoned (a pending record + code|error is
+          // complete|abort), so clearing here never discards an in-flight completion —
+          // but it DOES stop an orphaned record (which holds exported DPoP key material
+          // and would BLOCK a future `#autologin` deep-link — hasPendingRedirect stays
+          // true) from lingering (the roborev finding). Also scrub the callback params
+          // from the address bar if this was a redirect-shaped return.
+          const isRedirectReturn = hasAuthCodeParams(url.search) || hasAuthErrorParams(url.search);
+          if (this.hasPendingRedirect()) {
+            clearPersistedRedirectFlow(this.#redirectStorage, this.#redirectFlowKey);
+            this.#clearSentinel();
+          }
+          if (isRedirectReturn) {
+            this.#cleanAddressBar(currentUrl);
+          }
+          // A redirect return (`?code`/`?error`) that reached `none` while NOT logged in
+          // means we had NO readable pending flow to complete it (missing / corrupt /
+          // no-storage) — SURFACE that as an error rather than silently swallowing a
+          // failed completion (the roborev finding). When logged in, a live session
+          // legitimately won, so stand down quietly.
+          if (isRedirectReturn && this.webId === null) {
+            // Clear any CORRUPT record still occupying the key (hasPendingRedirect() read
+            // it as absent, so the stale-cleanup above skipped it) so it can't linger.
+            clearPersistedRedirectFlow(this.#redirectStorage, this.#redirectFlowKey);
+            return {
+              outcome: "error",
+              error: authErrorFrom(url.search) ?? "redirect_state_missing",
+            };
+          }
+          return { outcome: "none" };
+        }
+        case "complete": {
+          // CASE A — returning with `?code&state` + a persisted record: complete it.
+          const result = await this.completeRedirectLogin(currentUrl);
+          this.#clearSentinel(); // authenticated — the loop guard is done.
+          this.#cleanAddressBar(currentUrl); // scrub ?code&state from the address bar.
+          return { outcome: "completed", webId: result.webId };
+        }
+        case "abort": {
+          // Returning with `?error&state`: the OP declined silent SSO / the user
+          // declined. STATE GUARD (login CSRF / DoS — the roborev finding): only OUR
+          // flow's error return may cancel it. A foreign/spoofed `?error&state` whose
+          // `state` does not match the persisted flow (an attacker luring the victim to
+          // a crafted callback to abort a legitimate in-flight login) is IGNORED, leaving
+          // the pending flow intact. Then drop the record + sentinel and surface the
+          // error.
+          const flow = readPersistedRedirectFlow(this.#redirectStorage, this.#redirectFlowKey);
+          const returnedState = new URLSearchParams(url.search).get("state");
+          if (!flow || returnedState !== flow.state) {
+            return { outcome: "none" }; // not our error return — do not touch the pending flow.
+          }
+          const error = authErrorFrom(url.search) ?? "login_failed";
+          clearPersistedRedirectFlow(this.#redirectStorage, this.#redirectFlowKey);
+          this.#clearSentinel();
+          this.#cleanAddressBar(currentUrl); // scrub ?error&state from the address bar.
+          return { outcome: "error", error };
+        }
+        case "begin": {
+          // CASE B — a fresh `#autologin/<webid>` deep-link: set the one-shot loop
+          // sentinel THEN begin a SILENT (prompt=none) redirect. The RETURN URI is the
+          // configured `redirectUri`, else the CURRENT app page (origin+path, fragment
+          // stripped) — NEVER the popup `callbackUri`, which does not run the app and so
+          // would strand the full-page redirect (the roborev finding). The page then
+          // navigates away; nothing else should run.
+          this.#writeSentinel(plan.webId);
+          await this.beginRedirectLogin({
+            webId: plan.webId,
+            prompt: "none",
+            redirectUri: this.#opts.redirectUri ?? cleanedUrl(currentUrl),
+          });
+          return { outcome: "redirecting" };
+        }
+        case "clear-sentinel": {
+          // LOOP GUARD: a repeat deep-link for the SAME WebID that bounced back still
+          // unauthenticated — do not re-attempt; just clear the one-shot sentinel.
+          this.#clearSentinel();
+          return { outcome: "none" };
+        }
+      }
+    } catch (e) {
+      // Fail-closed cleanup: drop any half-persisted record + sentinel so the app can
+      // fall back to a fresh interactive login, AND scrub the callback params from the
+      // address bar (a FAILED completion must not leave `?code&state` / `?error&state`
+      // visible in the URL + history either — the roborev finding). #cleanAddressBar is
+      // a no-op when currentUrl is unparseable / carries no query, so it is safe to call
+      // unconditionally here.
+      clearPersistedRedirectFlow(this.#redirectStorage, this.#redirectFlowKey);
+      this.#clearSentinel();
+      this.#cleanAddressBar(currentUrl);
+      return { outcome: "error", error: e instanceof Error ? e.message : String(e) };
+    }
+  }
+
+  /** Parse + require a SECURE (https, or loopback http under the opt-in) issuer URL. */
+  #requireSecureIssuer(raw: string): URL {
+    let u: URL;
+    try {
+      u = new URL(raw);
+    } catch {
+      throw new Error(`The OIDC issuer is not a valid URL: ${raw}`);
+    }
+    if (u.protocol === "https:") return u;
+    if (
+      u.protocol === "http:" &&
+      (this.#opts.allowInsecureLoopback ?? false) &&
+      isLoopback(u.hostname)
+    ) {
+      return u;
+    }
+    throw new Error(
+      `The OIDC issuer must be https (http is allowed only for a loopback dev host with ` +
+        `allowInsecureLoopback): ${raw}`,
+    );
+  }
+
+  /**
+   * Scrub the OAuth callback params (`?code`/`?state`/`?error`) + fragment from the
+   * address bar after a redirect return, via `history.replaceState` (no navigation, no
+   * new history entry). Best-effort: a non-DOM host (SSR) / a `history` that throws is
+   * simply skipped. Keeps the single-use code out of the visible URL + browser history
+   * so a copy-paste / back-button cannot resurface it (the roborev finding).
+   */
+  #cleanAddressBar(currentUrl: string): void {
+    try {
+      // Strip ONLY the OAuth callback params + the autologin fragment — PRESERVE the
+      // app's own query state (the roborev finding); `cleanedUrl` would drop it.
+      const cleaned = stripAuthCallbackParams(currentUrl);
+      if (cleaned !== currentUrl) {
+        // PRESERVE the current `history.state` (SPA/router state) — passing `null` would
+        // clobber it (the roborev finding). The `?.` short-circuits (args unevaluated)
+        // when there is no history, so `globalThis.history.state` never throws here.
+        globalThis.history?.replaceState(globalThis.history.state, "", cleaned);
+      }
+    } catch {
+      // No history (SSR / non-DOM) or a throwing replaceState — best-effort, skip.
+    }
+  }
+
+  /** The one-shot autologin loop-guard sentinel (best-effort; storage may be absent). */
+  #readSentinel(): string | null {
+    try {
+      return this.#redirectStorage?.getItem(this.#redirectSentinelKey) ?? null;
+    } catch {
+      return null;
+    }
+  }
+  #writeSentinel(webId: string): void {
+    try {
+      this.#redirectStorage?.setItem(this.#redirectSentinelKey, webId);
+    } catch {
+      // best-effort — the loop guard just won't remember this attempt.
+    }
+  }
+  #clearSentinel(): void {
+    try {
+      this.#redirectStorage?.removeItem(this.#redirectSentinelKey);
+    } catch {
+      // storage unavailable — nothing to clear.
+    }
   }
 }
 

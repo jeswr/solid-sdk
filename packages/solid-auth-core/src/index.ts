@@ -46,6 +46,26 @@ export {
   type ProactiveTokenProvider,
   proactiveAuthenticatedFetch,
 } from "./proactive-fetch.js";
+// ── The full-page-redirect (autologin) login primitives ─────────────────────
+export {
+  AUTOLOGIN_FRAGMENT_PREFIX,
+  authErrorFrom,
+  cleanedUrl,
+  clearPersistedRedirectFlow,
+  ES256_JWK_IMPORT_ALG,
+  hasAuthCodeParams,
+  hasAuthErrorParams,
+  type OAuthClientRecord,
+  type PersistedRedirectFlow,
+  parseAutologinFragment,
+  planRedirect,
+  type RedirectFlowStorage,
+  type RedirectPlan,
+  type RedirectPlanInputs,
+  readPersistedRedirectFlow,
+  stripAuthCallbackParams,
+  writePersistedRedirectFlow,
+} from "./redirect.js";
 // ── The session-store seam (local structural mirror — see src/session-store.ts) ─
 export type {
   PersistedSession,
@@ -54,9 +74,11 @@ export type {
 } from "./session-store.js";
 // ── The seam types ──────────────────────────────────────────────────────────
 export {
+  type BeginRedirectLoginOptions,
   type GetCodeCallback,
   type LoginResult,
   type RecentLoginAccount,
+  type RedirectOutcome,
   type RestoreOutcome,
   type SolidAuth,
   type SolidAuthController,
