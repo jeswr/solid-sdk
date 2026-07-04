@@ -226,9 +226,17 @@ export function safeIri(value) {
  * the `safeHttpIri(v) !== v` rule (below) only for EXACT-MATCH evaluation
  * fields where lexical identity matters.
  *
+ * Like {@link safeHttpIri} (clause 6), it requires a NON-EMPTY LEXICAL
+ * authority: an authority-less `https:example.com` is REJECTED even though the
+ * WHATWG parser accepts it, because as an IRI its identity (scheme +
+ * path-rooted `example.com`) diverges from what a fetch of it would
+ * canonicalise to (`https://example.com/`) — blessing the raw form invites an
+ * RDF-identity / dereference-target mismatch, and would make this public guard
+ * lexically weaker than `safeHttpIri`.
+ *
  * @param value - The candidate (any type).
  * @returns `true` (narrowing `value` to `string`) iff it is a raw-safe absolute
- *   http(s) IRI.
+ *   http(s) IRI with a real authority.
  */
 export function isHttpIri(value) {
     if (typeof value !== "string") {
@@ -244,6 +252,11 @@ export function isHttpIri(value) {
     catch {
         return false;
     }
-    return url.protocol === "http:" || url.protocol === "https:";
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+        return false;
+    }
+    // Same lexical-authority rule as safeHttpIri clause 6: rejects authority-less
+    // `https:example.com` and empty-authority `https:///foo` / `https://?x`.
+    return /^https?:\/\/[^/?#]/i.test(value) && url.host !== "";
 }
 //# sourceMappingURL=iri.js.map
