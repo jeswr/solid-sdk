@@ -72,6 +72,24 @@ export const VC_VALID_FROM = `${VC}validFrom` as const;
 export const VC_VALID_UNTIL = `${VC}validUntil` as const;
 /** `cred:credentialStatus` — Credential → a status entry (e.g. revocation list). */
 export const VC_CREDENTIAL_STATUS = `${VC}credentialStatus` as const;
+/**
+ * `cred:relatedResource` — Credential → a resource whose CONTENT the credential
+ * binds by cryptographic digest (VCDM 2.0 §5.3 "Integrity of Related Resources").
+ * The G1 policy-content binding hangs off this: the ODRL policy an
+ * AgentAuthorizationCredential authorizes is listed here with a digest, so a
+ * verifier can prove the presented policy is the exact graph the issuer signed
+ * over (no policy substitution behind a mutable IRI).
+ */
+export const VC_RELATED_RESOURCE = `${VC}relatedResource` as const;
+/** `sec:digestMultibase` — a multibase-encoded multihash content digest (VCDM 2.0). */
+export const SEC_DIGEST_MULTIBASE = `${SEC}digestMultibase` as const;
+/** `sec:multibase` — the datatype of a multibase-encoded literal (Data Integrity). */
+export const SEC_MULTIBASE = `${SEC}multibase` as const;
+/**
+ * `schema:encodingFormat` — the IRI the published VC 2.0 context expands a related
+ * resource's `mediaType` to (kept in lock-step so Turtle and JSON-LD agree).
+ */
+export const SCHEMA_ENCODING_FORMAT = `${SCHEMA}encodingFormat` as const;
 /** `cred:verifiableCredential` — Presentation → an embedded credential. */
 export const VC_VERIFIABLE_CREDENTIAL = `${VC}verifiableCredential` as const;
 /** `cred:holder` — Presentation → the presenting party. */

@@ -116,7 +116,41 @@ const result = await verifyCredential(vc, {
 
 Every verification failure is reported as a distinct structured error code (`INVALID_SIGNATURE`,
 `EXPIRED`, `NOT_YET_VALID`, `ISSUER_MISMATCH`, `PROOF_PURPOSE_MISMATCH`, `UNKNOWN_CRYPTOSUITE`,
-`UNTRUSTED_ISSUER`, `NO_PROOF`, `MALFORMED`) — never collapsed into a generic `false`.
+`UNTRUSTED_ISSUER`, `NO_PROOF`, `MALFORMED`, `RELATED_RESOURCE_MISSING`,
+`RELATED_RESOURCE_MISMATCH`) — never collapsed into a generic `false`.
+
+### Policy CONTENT binding (no policy substitution)
+
+A bare `policy` IRI binds only the pointer: whoever controls the policy document can swap the
+graph behind it and the signature still verifies. To bind the policy's **content**, pass the exact
+policy source as `policyContent` — the credential then carries a VCDM 2.0 `relatedResource` entry
+whose `digestMultibase` is the sha2-256 multihash of the policy's **RDFC-1.0 canonical form**
+(same canonicalization discipline as the Data Integrity proof itself), signed with the rest of the
+claim graph. The verifier hands `verifyCredential` the policy it was actually presented and the
+digest is recomputed and compared **fail-closed**:
+
+```ts
+const policyTurtle = await (await fetch(policyIri)).text();
+
+const vc = await issueAgentAuthorization(
+  { principal, agent, action, target, policy: policyIri, policyContent: policyTurtle },
+  key,
+);
+
+const result = await verifyCredential(vc, {
+  resolveKey,
+  presentedResources: { [policyIri]: { content: presentedPolicyTurtle } },
+});
+// A substituted/mutated policy → RELATED_RESOURCE_MISMATCH; a credential with no
+// digest for a presented policy → RELATED_RESOURCE_MISSING; a reordered-but-
+// isomorphic serialisation of the SAME policy graph still verifies (RDFC-1.0).
+```
+
+Standalone pieces: `buildBoundAgentAuthorizationCredential` (build without signing),
+`digestRdfContent` / `digestQuads` (compute a `digestMultibase`), `verifyRelatedResources`
+(the digest gate alone — content integrity only; compose with `verifyCredential`, which checks the
+digest bindings AND that they sit in the signed graph), `relatedResourcesFromNode` (read bindings
+back from parsed RDF).
 
 ## Relationship to the prior VC line
 
