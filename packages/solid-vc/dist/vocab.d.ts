@@ -66,6 +66,22 @@ export declare const SEC_MULTIBASE: "https://w3id.org/security#multibase";
 export declare const SCHEMA_ENCODING_FORMAT: "https://schema.org/encodingFormat";
 /** `cred:verifiableCredential` — Presentation → an embedded credential. */
 export declare const VC_VERIFIABLE_CREDENTIAL: "https://www.w3.org/2018/credentials#verifiableCredential";
+/** The W3C Bitstring Status List vocabulary namespace. */
+export declare const STATUS: "https://www.w3.org/ns/credentials/status#";
+/** `status:BitstringStatusListEntry` — the per-credential status entry class. */
+export declare const STATUS_BITSTRING_ENTRY: "https://www.w3.org/ns/credentials/status#BitstringStatusListEntry";
+/** `status:BitstringStatusList` — the hosted list (the subject of the list VC). */
+export declare const STATUS_BITSTRING_LIST: "https://www.w3.org/ns/credentials/status#BitstringStatusList";
+/** `status:BitstringStatusListCredential` — the credential type hosting a list. */
+export declare const STATUS_BITSTRING_CREDENTIAL: "https://www.w3.org/ns/credentials/status#BitstringStatusListCredential";
+/** `status:statusPurpose` — what a set bit MEANS (`revocation` / `suspension`). */
+export declare const STATUS_PURPOSE: "https://www.w3.org/ns/credentials/status#statusPurpose";
+/** `status:statusListIndex` — the credential's bit position (a string integer). */
+export declare const STATUS_LIST_INDEX: "https://www.w3.org/ns/credentials/status#statusListIndex";
+/** `status:statusListCredential` — entry → the URL of the hosted list credential. */
+export declare const STATUS_LIST_CREDENTIAL: "https://www.w3.org/ns/credentials/status#statusListCredential";
+/** `status:encodedList` — the multibase(base64url) GZIP'd bitstring literal. */
+export declare const STATUS_ENCODED_LIST: "https://www.w3.org/ns/credentials/status#encodedList";
 /** `cred:holder` — Presentation → the presenting party. */
 export declare const VC_HOLDER: "https://www.w3.org/2018/credentials#holder";
 /** `sec:proof` — the embedded Data Integrity proof node. */

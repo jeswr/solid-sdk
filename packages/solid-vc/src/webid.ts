@@ -369,9 +369,11 @@ export interface ResolvedWebIdKey {
 /** A document-fetch memo: URL → the parsed store (or `undefined` = failed). */
 type DocumentCache = Map<string, Promise<DatasetCore | undefined>>;
 
-/** The lazily-built default guarded fetch (node path, redirects refused). */
+/** The lazily-built default guarded fetch (node path, redirects refused).
+ * Package-internal (also consumed by `src/status.ts`) — NOT re-exported from
+ * the package index. */
 let defaultGuardedFetch: Promise<typeof globalThis.fetch> | undefined;
-function guardedFetchDefault(): Promise<typeof globalThis.fetch> {
+export function guardedFetchDefault(): Promise<typeof globalThis.fetch> {
   defaultGuardedFetch ??= import("@jeswr/guarded-fetch/node").then((m) =>
     m.createNodeGuardedFetch({ maxRedirects: 0 }),
   );

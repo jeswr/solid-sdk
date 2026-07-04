@@ -14,15 +14,24 @@ import { isAbsoluteIri, requireObjectIri, safeObjectIri } from "./iri.js";
 import { serialize } from "./serialize.js";
 import type {
   AgentAuthorization,
+  BitstringStatusListEntry,
   Credential,
   CredentialSubject,
   JsonValue,
   RelatedResource,
 } from "./types.js";
 import {
+  RDF_TYPE,
   SCHEMA_ENCODING_FORMAT,
   SEC_DIGEST_MULTIBASE,
   SEC_MULTIBASE,
+  STATUS_BITSTRING_CREDENTIAL,
+  STATUS_BITSTRING_ENTRY,
+  STATUS_BITSTRING_LIST,
+  STATUS_ENCODED_LIST,
+  STATUS_LIST_CREDENTIAL,
+  STATUS_LIST_INDEX,
+  STATUS_PURPOSE,
   SVC_ACTION,
   SVC_AGENT_AUTHORIZATION,
   SVC_AUTHORIZES,
@@ -30,6 +39,7 @@ import {
   SVC_POLICY,
   SVC_TARGET,
   VC_CREDENTIAL,
+  VC_CREDENTIAL_STATUS,
   VC_CREDENTIAL_SUBJECT,
   VC_ISSUER,
   VC_RELATED_RESOURCE,
@@ -56,6 +66,11 @@ function looksLikeIri(value: string): boolean {
 function typeIri(type: string): string {
   if (type === "VerifiableCredential") return VC_CREDENTIAL;
   if (type === "AgentAuthorizationCredential") return SVC_AGENT_AUTHORIZATION;
+  // The Bitstring Status List classes — defined by the VC 2.0 base context, so
+  // the bare names the JSON-LD projection keeps expand to these SAME IRIs.
+  if (type === "BitstringStatusListCredential") return STATUS_BITSTRING_CREDENTIAL;
+  if (type === "BitstringStatusList") return STATUS_BITSTRING_LIST;
+  if (type === "BitstringStatusListEntry") return STATUS_BITSTRING_ENTRY;
   if (looksLikeIri(type)) return type;
   // A bare extension type name: home it under the @jeswr svc extension namespace.
   return `https://w3id.org/jeswr/solid-vc#${type}`;
@@ -144,13 +159,49 @@ function writeSubject(b: GraphBuilder, credential: NodeRef, subject: CredentialS
   }
   for (const [claim, value] of Object.entries(subject)) {
     if (claim === "id" || value === undefined) continue;
+    // `type` on a subject is rdf:type (exactly as the VC 2.0 JSON-LD context
+    // reads it — `type` is an alias of `@type`), NOT an svc#type claim: the
+    // status list credential's subject carries `type: "BitstringStatusList"`,
+    // and the Turtle/JSON-LD lock-step requires both projections to agree on
+    // the class IRI. FAIL-CLOSED on a non-string entry — silently dropping a
+    // type from the SIGNED graph would let two differently-typed subjects
+    // canonicalise identically.
+    if (claim === "type") {
+      const types = Array.isArray(value) ? value : [value];
+      for (const t of types) {
+        if (typeof t !== "string" || t.length === 0) {
+          throw new Error(
+            "@jeswr/solid-vc: a credentialSubject `type` must be a non-empty string " +
+              "(or an array of them)",
+          );
+        }
+        b.addType(node, typeIri(t));
+      }
+      continue;
+    }
     writeClaim(b, node, claim, value);
   }
 }
 
+/**
+ * The bare subject-claim keys the VC 2.0 base context maps to the W3C status
+ * vocabulary (the status list credential's subject uses them). Kept in
+ * lock-step with the JSON-LD projection: the SAME pinned context expands the
+ * SAME bare names to these IRIs.
+ */
+const STATUS_CLAIM_TERMS: Readonly<Record<string, string>> = {
+  statusPurpose: STATUS_PURPOSE,
+  encodedList: STATUS_ENCODED_LIST,
+  statusListIndex: STATUS_LIST_INDEX,
+  statusListCredential: STATUS_LIST_CREDENTIAL,
+};
+
 /** The predicate IRI for a subject claim key (absolute IRI kept; bare name homed). */
 function claimPredicate(claim: string): string {
-  return looksLikeIri(claim) ? claim : `https://w3id.org/jeswr/solid-vc#${claim}`;
+  if (looksLikeIri(claim)) return claim;
+  const status = STATUS_CLAIM_TERMS[claim];
+  if (status !== undefined) return status;
+  return `https://w3id.org/jeswr/solid-vc#${claim}`;
 }
 
 /** Write one claim value (string IRI / typed literal / nested object / array). */
@@ -166,6 +217,13 @@ function writeClaim(b: GraphBuilder, subject: NodeRef, claim: string, value: Jso
     return; // RDF has no null; omit.
   }
   if (typeof value === "string") {
+    // `encodedList` is a multibase literal (never an IRI): the VC 2.0 context
+    // types it `sec:multibase`, and its `u…` value must not be mistaken for a
+    // scheme'd IRI. Match the context's datatype so Turtle and JSON-LD agree.
+    if (predicate === STATUS_ENCODED_LIST) {
+      b.addLiteral(subject, predicate, value, SEC_MULTIBASE);
+      return;
+    }
     if (looksLikeIri(value)) {
       b.addIri(subject, predicate, value);
     } else {
@@ -216,6 +274,78 @@ function writeRelatedResource(
   }
 }
 
+/** Normalise a credential's one-or-many `credentialStatus` to an array. */
+export function credentialStatusesOf(
+  credentialStatus: Credential["credentialStatus"],
+): readonly BitstringStatusListEntry[] {
+  if (credentialStatus === undefined) return [];
+  return Array.isArray(credentialStatus)
+    ? (credentialStatus as readonly BitstringStatusListEntry[])
+    : [credentialStatus as BitstringStatusListEntry];
+}
+
+/**
+ * Write ONE `credentialStatus` entry (a W3C Bitstring Status List v1.0
+ * `BitstringStatusListEntry`) into the SIGNED claim graph:
+ *
+ *   credential cred:credentialStatus  <entry | _:entry> .
+ *   entry      rdf:type               status:BitstringStatusListEntry ;
+ *              status:statusPurpose   "revocation" ;
+ *              status:statusListIndex "94567" ;
+ *              status:statusListCredential <https://issuer.example/status/1> .
+ *
+ * STRICT + FAIL-CLOSED (all throws): only the `BitstringStatusListEntry` type
+ * is supported (an unknown status type cannot be lowered faithfully — silently
+ * writing a half-shaped entry would sign a status binding the verifier cannot
+ * check); `statusPurpose` must be a non-empty string; `statusListIndex` must
+ * be a string NON-NEGATIVE INTEGER (per spec); `statusListCredential` is a
+ * REQUIRED, binding-bearing object IRI ({@link requireObjectIri} — dropping it
+ * would sign an uncheckable, dangling status entry).
+ */
+function writeCredentialStatus(
+  b: GraphBuilder,
+  credential: NodeRef,
+  status: BitstringStatusListEntry,
+): void {
+  if (status === null || typeof status !== "object" || Array.isArray(status)) {
+    throw new Error("@jeswr/solid-vc: credentialStatus entry must be an object");
+  }
+  if (status.type !== "BitstringStatusListEntry") {
+    throw new Error(
+      `@jeswr/solid-vc: unsupported credentialStatus type ${JSON.stringify(
+        status.type,
+      )} — only "BitstringStatusListEntry" (W3C Bitstring Status List v1.0) can be lowered`,
+    );
+  }
+  if (typeof status.statusPurpose !== "string" || status.statusPurpose.length === 0) {
+    throw new Error("@jeswr/solid-vc: credentialStatus.statusPurpose must be a non-empty string");
+  }
+  if (
+    typeof status.statusListIndex !== "string" ||
+    !/^(0|[1-9][0-9]*)$/.test(status.statusListIndex)
+  ) {
+    throw new Error(
+      "@jeswr/solid-vc: credentialStatus.statusListIndex must be a string non-negative integer",
+    );
+  }
+  const listIri = requireObjectIri(
+    status.statusListCredential,
+    "credentialStatus.statusListCredential",
+  );
+  let node: NodeRef;
+  if (status.id !== undefined) {
+    const idIri = requireObjectIri(status.id, "credentialStatus.id");
+    b.addIri(credential, VC_CREDENTIAL_STATUS, idIri);
+    node = iriRef(idIri);
+  } else {
+    node = b.linkBlankNode(credential, VC_CREDENTIAL_STATUS);
+  }
+  b.addType(node, STATUS_BITSTRING_ENTRY);
+  b.addLiteral(node, STATUS_PURPOSE, status.statusPurpose);
+  b.addLiteral(node, STATUS_LIST_INDEX, status.statusListIndex);
+  b.addIri(node, STATUS_LIST_CREDENTIAL, listIri);
+}
+
 /**
  * Lower a structured {@link Credential} (the UNSIGNED claim graph — no proof) to
  * RDF quads via the typed write path. The credential gets an `@id` (a random
@@ -254,6 +384,9 @@ export function credentialToRdf(credential: Credential): Quad[] {
   }
   for (const related of credential.relatedResource ?? []) {
     writeRelatedResource(b, subject, related);
+  }
+  for (const status of credentialStatusesOf(credential.credentialStatus)) {
+    writeCredentialStatus(b, subject, status);
   }
   const subjects = Array.isArray(credential.credentialSubject)
     ? credential.credentialSubject
@@ -304,6 +437,29 @@ export function credentialToJsonLd(credential: Credential): Record<string, unkno
         : {}),
       ...(related.mediaType !== undefined ? { mediaType: related.mediaType } : {}),
     }));
+  }
+  if (credential.credentialStatus !== undefined) {
+    // Lock-step with the RDF lowering: run each entry through the SAME strict
+    // validation writeCredentialStatus applies (an entry the RDF path would
+    // refuse to sign must not appear in the JSON-LD projection either). The
+    // validated entries project verbatim — every key is a VC 2.0 base-context
+    // term, so the JSON-LD expands to the same quads the Turtle carries.
+    const entries = credentialStatusesOf(credential.credentialStatus);
+    const check = new GraphBuilder();
+    for (const status of entries) {
+      writeCredentialStatus(check, iriRef(id), status);
+    }
+    const projected = entries.map((status) => ({
+      ...(status.id !== undefined ? { id: status.id } : {}),
+      type: status.type,
+      statusPurpose: status.statusPurpose,
+      statusListIndex: status.statusListIndex,
+      statusListCredential: status.statusListCredential,
+    }));
+    doc.credentialStatus =
+      !Array.isArray(credential.credentialStatus) && projected.length === 1
+        ? projected[0]
+        : projected;
   }
   const subjects = Array.isArray(credential.credentialSubject)
     ? credential.credentialSubject
@@ -398,6 +554,7 @@ export function buildAgentAuthorizationCredential(auth: AgentAuthorization): Cre
     ...(auth.id !== undefined ? { id: auth.id } : {}),
     ...(auth.validFrom !== undefined ? { validFrom: auth.validFrom } : {}),
     ...(auth.validUntil !== undefined ? { validUntil: auth.validUntil } : {}),
+    ...(auth.credentialStatus !== undefined ? { credentialStatus: auth.credentialStatus } : {}),
   };
   return credential;
 }
@@ -475,6 +632,70 @@ export function relatedResourcesFromNode(node: CredentialNode): RelatedResource[
       id,
       ...(digestMultibase !== undefined ? { digestMultibase } : {}),
       ...(mediaType !== undefined ? { mediaType } : {}),
+    });
+  }
+  return out;
+}
+
+/**
+ * Read the Bitstring status entries back from a parsed credential node — the
+ * typed inverse of the {@link credentialToRdf} `credentialStatus` lowering.
+ * Returns one entry per `cred:credentialStatus` object (IRI or blank node)
+ * that is a well-formed `status:BitstringStatusListEntry` (type + non-empty
+ * purpose + integer-string index + an IRI list URL). A malformed / alien-typed
+ * entry is SKIPPED here (this is a reader, not the gate) — but note the
+ * VERIFIER does the opposite: `resolveBitstringStatus` treats a present entry
+ * it cannot make sense of as `unreachable`, fail-closed.
+ */
+export function credentialStatusFromNode(node: CredentialNode): BitstringStatusListEntry[] {
+  const dataset = node.dataset as unknown as DatasetCore;
+  const out: BitstringStatusListEntry[] = [];
+  for (const quad of dataset.match()) {
+    if (quad.subject.termType !== "NamedNode" || quad.subject.value !== node.value) continue;
+    if (quad.predicate.value !== VC_CREDENTIAL_STATUS) continue;
+    const entryTerm = quad.object;
+    if (entryTerm.termType !== "NamedNode" && entryTerm.termType !== "BlankNode") continue;
+    let isEntry = false;
+    let statusPurpose: string | undefined;
+    let statusListIndex: string | undefined;
+    let statusListCredential: string | undefined;
+    for (const q of dataset.match()) {
+      if (q.subject.termType !== entryTerm.termType || q.subject.value !== entryTerm.value) {
+        continue;
+      }
+      if (
+        q.predicate.value === RDF_TYPE &&
+        q.object.termType === "NamedNode" &&
+        q.object.value === STATUS_BITSTRING_ENTRY
+      ) {
+        isEntry = true;
+      }
+      if (q.predicate.value === STATUS_PURPOSE && q.object.termType === "Literal") {
+        statusPurpose = q.object.value;
+      }
+      if (q.predicate.value === STATUS_LIST_INDEX && q.object.termType === "Literal") {
+        statusListIndex = q.object.value;
+      }
+      if (q.predicate.value === STATUS_LIST_CREDENTIAL && q.object.termType === "NamedNode") {
+        statusListCredential = q.object.value;
+      }
+    }
+    if (
+      !isEntry ||
+      statusPurpose === undefined ||
+      statusPurpose.length === 0 ||
+      statusListIndex === undefined ||
+      !/^(0|[1-9][0-9]*)$/.test(statusListIndex) ||
+      statusListCredential === undefined
+    ) {
+      continue;
+    }
+    out.push({
+      ...(entryTerm.termType === "NamedNode" ? { id: entryTerm.value } : {}),
+      type: "BitstringStatusListEntry",
+      statusPurpose,
+      statusListIndex,
+      statusListCredential,
     });
   }
   return out;

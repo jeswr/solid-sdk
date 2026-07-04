@@ -95,6 +95,7 @@ export interface ResolvedWebIdKey {
     /** The key type the multikey encodes. */
     readonly keyType: SuiteKeyType;
 }
+export declare function guardedFetchDefault(): Promise<typeof globalThis.fetch>;
 /**
  * Resolve a verification method (key id) from a WebID, DOCUMENT-RESOLVED and
  * FAIL-CLOSED (G4): returns the key ONLY when

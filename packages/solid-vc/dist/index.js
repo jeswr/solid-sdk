@@ -1,3 +1,83 @@
+// src/bitstring.ts
+import { gunzipSync, gzipSync } from "node:zlib";
+var MIN_STATUS_LIST_LENGTH = 131072;
+var DEFAULT_MAX_DECODED_BYTES = 16 * 1024 * 1024;
+var BitstringDecodeError = class extends Error {
+  constructor(message) {
+    super(`@jeswr/solid-vc: ${message}`);
+    this.name = "BitstringDecodeError";
+  }
+};
+function createStatusBitstring(length = MIN_STATUS_LIST_LENGTH) {
+  if (!Number.isInteger(length) || length < MIN_STATUS_LIST_LENGTH) {
+    throw new RangeError(
+      `@jeswr/solid-vc: a status bitstring must be at least ${MIN_STATUS_LIST_LENGTH} bits (the spec's 16KB herd-privacy minimum), got ${length}`
+    );
+  }
+  if (length % 8 !== 0) {
+    throw new RangeError(
+      `@jeswr/solid-vc: a status bitstring length must be a multiple of 8, got ${length}`
+    );
+  }
+  return new Uint8Array(length / 8);
+}
+function checkIndex(bits, index) {
+  if (!Number.isInteger(index) || index < 0 || index >= bits.length * 8) {
+    throw new RangeError(
+      `@jeswr/solid-vc: statusListIndex ${index} is outside the bitstring (0..${bits.length * 8 - 1})`
+    );
+  }
+}
+function getStatusBit(bits, index) {
+  checkIndex(bits, index);
+  const byte = bits[index >> 3];
+  return (byte & 128 >> (index & 7)) !== 0;
+}
+function setStatusBit(bits, index, value) {
+  checkIndex(bits, index);
+  const mask = 128 >> (index & 7);
+  if (value) {
+    bits[index >> 3] = bits[index >> 3] | mask;
+  } else {
+    bits[index >> 3] = bits[index >> 3] & ~mask;
+  }
+}
+var BASE64URL = /^[A-Za-z0-9_-]+$/;
+function encodeStatusList(bits) {
+  const compressed = gzipSync(bits);
+  return `u${Buffer.from(compressed).toString("base64url")}`;
+}
+function decodeStatusList(encoded, options) {
+  const maxDecodedBytes = options?.maxDecodedBytes ?? DEFAULT_MAX_DECODED_BYTES;
+  if (typeof encoded !== "string" || encoded.length < 2) {
+    throw new BitstringDecodeError("encodedList is not a non-empty string");
+  }
+  if (!encoded.startsWith("u")) {
+    throw new BitstringDecodeError(
+      `encodedList must carry the multibase base64url prefix "u", got "${encoded.slice(0, 1)}"`
+    );
+  }
+  const payload = encoded.slice(1);
+  if (!BASE64URL.test(payload)) {
+    throw new BitstringDecodeError("encodedList payload is not valid base64url");
+  }
+  const compressed = Buffer.from(payload, "base64url");
+  let bits;
+  try {
+    bits = gunzipSync(compressed, { maxOutputLength: maxDecodedBytes });
+  } catch (e) {
+    throw new BitstringDecodeError(
+      `encodedList did not decompress as GZIP within ${maxDecodedBytes} bytes: ${e.message}`
+    );
+  }
+  if (bits.length * 8 < MIN_STATUS_LIST_LENGTH) {
+    throw new BitstringDecodeError(
+      `decoded bitstring is ${bits.length * 8} bits \u2014 below the spec's ${MIN_STATUS_LIST_LENGTH}-bit (16KB) minimum`
+    );
+  }
+  return new Uint8Array(bits.buffer, bits.byteOffset, bits.byteLength);
+}
+
 // src/canonicalize.ts
 import { createHash } from "node:crypto";
 import { canonize } from "rdf-canonize";
@@ -304,6 +384,14 @@ var SEC_DIGEST_MULTIBASE = `${SEC}digestMultibase`;
 var SEC_MULTIBASE = `${SEC}multibase`;
 var SCHEMA_ENCODING_FORMAT = `${SCHEMA}encodingFormat`;
 var VC_VERIFIABLE_CREDENTIAL = `${VC}verifiableCredential`;
+var STATUS = "https://www.w3.org/ns/credentials/status#";
+var STATUS_BITSTRING_ENTRY = `${STATUS}BitstringStatusListEntry`;
+var STATUS_BITSTRING_LIST = `${STATUS}BitstringStatusList`;
+var STATUS_BITSTRING_CREDENTIAL = `${STATUS}BitstringStatusListCredential`;
+var STATUS_PURPOSE = `${STATUS}statusPurpose`;
+var STATUS_LIST_INDEX = `${STATUS}statusListIndex`;
+var STATUS_LIST_CREDENTIAL = `${STATUS}statusListCredential`;
+var STATUS_ENCODED_LIST = `${STATUS}encodedList`;
 var VC_HOLDER = `${VC}holder`;
 var SEC_PROOF = `${SEC}proof`;
 var SEC_DATA_INTEGRITY_PROOF = `${SEC}DataIntegrityProof`;
@@ -530,6 +618,9 @@ function looksLikeIri(value) {
 function typeIri(type) {
   if (type === "VerifiableCredential") return VC_CREDENTIAL;
   if (type === "AgentAuthorizationCredential") return SVC_AGENT_AUTHORIZATION;
+  if (type === "BitstringStatusListCredential") return STATUS_BITSTRING_CREDENTIAL;
+  if (type === "BitstringStatusList") return STATUS_BITSTRING_LIST;
+  if (type === "BitstringStatusListEntry") return STATUS_BITSTRING_ENTRY;
   if (looksLikeIri(type)) return type;
   return `https://w3id.org/jeswr/solid-vc#${type}`;
 }
@@ -566,11 +657,32 @@ function writeSubject(b, credential, subject) {
   }
   for (const [claim, value] of Object.entries(subject)) {
     if (claim === "id" || value === void 0) continue;
+    if (claim === "type") {
+      const types = Array.isArray(value) ? value : [value];
+      for (const t of types) {
+        if (typeof t !== "string" || t.length === 0) {
+          throw new Error(
+            "@jeswr/solid-vc: a credentialSubject `type` must be a non-empty string (or an array of them)"
+          );
+        }
+        b.addType(node, typeIri(t));
+      }
+      continue;
+    }
     writeClaim(b, node, claim, value);
   }
 }
+var STATUS_CLAIM_TERMS = {
+  statusPurpose: STATUS_PURPOSE,
+  encodedList: STATUS_ENCODED_LIST,
+  statusListIndex: STATUS_LIST_INDEX,
+  statusListCredential: STATUS_LIST_CREDENTIAL
+};
 function claimPredicate(claim) {
-  return looksLikeIri(claim) ? claim : `https://w3id.org/jeswr/solid-vc#${claim}`;
+  if (looksLikeIri(claim)) return claim;
+  const status = STATUS_CLAIM_TERMS[claim];
+  if (status !== void 0) return status;
+  return `https://w3id.org/jeswr/solid-vc#${claim}`;
 }
 function writeClaim(b, subject, claim, value) {
   const predicate = claimPredicate(claim);
@@ -584,6 +696,10 @@ function writeClaim(b, subject, claim, value) {
     return;
   }
   if (typeof value === "string") {
+    if (predicate === STATUS_ENCODED_LIST) {
+      b.addLiteral(subject, predicate, value, SEC_MULTIBASE);
+      return;
+    }
     if (looksLikeIri(value)) {
       b.addIri(subject, predicate, value);
     } else {
@@ -617,6 +733,46 @@ function writeRelatedResource(b, credential, related) {
     b.addLiteral(node, SCHEMA_ENCODING_FORMAT, related.mediaType);
   }
 }
+function credentialStatusesOf(credentialStatus) {
+  if (credentialStatus === void 0) return [];
+  return Array.isArray(credentialStatus) ? credentialStatus : [credentialStatus];
+}
+function writeCredentialStatus(b, credential, status) {
+  if (status === null || typeof status !== "object" || Array.isArray(status)) {
+    throw new Error("@jeswr/solid-vc: credentialStatus entry must be an object");
+  }
+  if (status.type !== "BitstringStatusListEntry") {
+    throw new Error(
+      `@jeswr/solid-vc: unsupported credentialStatus type ${JSON.stringify(
+        status.type
+      )} \u2014 only "BitstringStatusListEntry" (W3C Bitstring Status List v1.0) can be lowered`
+    );
+  }
+  if (typeof status.statusPurpose !== "string" || status.statusPurpose.length === 0) {
+    throw new Error("@jeswr/solid-vc: credentialStatus.statusPurpose must be a non-empty string");
+  }
+  if (typeof status.statusListIndex !== "string" || !/^(0|[1-9][0-9]*)$/.test(status.statusListIndex)) {
+    throw new Error(
+      "@jeswr/solid-vc: credentialStatus.statusListIndex must be a string non-negative integer"
+    );
+  }
+  const listIri = requireObjectIri(
+    status.statusListCredential,
+    "credentialStatus.statusListCredential"
+  );
+  let node;
+  if (status.id !== void 0) {
+    const idIri = requireObjectIri(status.id, "credentialStatus.id");
+    b.addIri(credential, VC_CREDENTIAL_STATUS, idIri);
+    node = iriRef(idIri);
+  } else {
+    node = b.linkBlankNode(credential, VC_CREDENTIAL_STATUS);
+  }
+  b.addType(node, STATUS_BITSTRING_ENTRY);
+  b.addLiteral(node, STATUS_PURPOSE, status.statusPurpose);
+  b.addLiteral(node, STATUS_LIST_INDEX, status.statusListIndex);
+  b.addIri(node, STATUS_LIST_CREDENTIAL, listIri);
+}
 function credentialToRdf(credential) {
   const id = credential.id ?? `urn:uuid:${randomUUID()}`;
   const subject = iriRef(id);
@@ -638,6 +794,9 @@ function credentialToRdf(credential) {
   }
   for (const related of credential.relatedResource ?? []) {
     writeRelatedResource(b, subject, related);
+  }
+  for (const status of credentialStatusesOf(credential.credentialStatus)) {
+    writeCredentialStatus(b, subject, status);
   }
   const subjects = Array.isArray(credential.credentialSubject) ? credential.credentialSubject : [credential.credentialSubject];
   for (const s of subjects) {
@@ -669,6 +828,21 @@ function credentialToJsonLd(credential) {
       ...related.digestMultibase !== void 0 ? { digestMultibase: related.digestMultibase } : {},
       ...related.mediaType !== void 0 ? { mediaType: related.mediaType } : {}
     }));
+  }
+  if (credential.credentialStatus !== void 0) {
+    const entries = credentialStatusesOf(credential.credentialStatus);
+    const check = new GraphBuilder();
+    for (const status of entries) {
+      writeCredentialStatus(check, iriRef(id), status);
+    }
+    const projected = entries.map((status) => ({
+      ...status.id !== void 0 ? { id: status.id } : {},
+      type: status.type,
+      statusPurpose: status.statusPurpose,
+      statusListIndex: status.statusListIndex,
+      statusListCredential: status.statusListCredential
+    }));
+    doc.credentialStatus = !Array.isArray(credential.credentialStatus) && projected.length === 1 ? projected[0] : projected;
   }
   const subjects = Array.isArray(credential.credentialSubject) ? credential.credentialSubject : [credential.credentialSubject];
   const normalized = subjects.map(subjectWithNormalizedId);
@@ -715,7 +889,8 @@ function buildAgentAuthorizationCredential(auth) {
     credentialSubject,
     ...auth.id !== void 0 ? { id: auth.id } : {},
     ...auth.validFrom !== void 0 ? { validFrom: auth.validFrom } : {},
-    ...auth.validUntil !== void 0 ? { validUntil: auth.validUntil } : {}
+    ...auth.validUntil !== void 0 ? { validUntil: auth.validUntil } : {},
+    ...auth.credentialStatus !== void 0 ? { credentialStatus: auth.credentialStatus } : {}
   };
   return credential;
 }
@@ -759,6 +934,48 @@ function relatedResourcesFromNode(node) {
       id,
       ...digestMultibase !== void 0 ? { digestMultibase } : {},
       ...mediaType !== void 0 ? { mediaType } : {}
+    });
+  }
+  return out;
+}
+function credentialStatusFromNode(node) {
+  const dataset = node.dataset;
+  const out = [];
+  for (const quad of dataset.match()) {
+    if (quad.subject.termType !== "NamedNode" || quad.subject.value !== node.value) continue;
+    if (quad.predicate.value !== VC_CREDENTIAL_STATUS) continue;
+    const entryTerm = quad.object;
+    if (entryTerm.termType !== "NamedNode" && entryTerm.termType !== "BlankNode") continue;
+    let isEntry = false;
+    let statusPurpose;
+    let statusListIndex;
+    let statusListCredential;
+    for (const q of dataset.match()) {
+      if (q.subject.termType !== entryTerm.termType || q.subject.value !== entryTerm.value) {
+        continue;
+      }
+      if (q.predicate.value === RDF_TYPE && q.object.termType === "NamedNode" && q.object.value === STATUS_BITSTRING_ENTRY) {
+        isEntry = true;
+      }
+      if (q.predicate.value === STATUS_PURPOSE && q.object.termType === "Literal") {
+        statusPurpose = q.object.value;
+      }
+      if (q.predicate.value === STATUS_LIST_INDEX && q.object.termType === "Literal") {
+        statusListIndex = q.object.value;
+      }
+      if (q.predicate.value === STATUS_LIST_CREDENTIAL && q.object.termType === "NamedNode") {
+        statusListCredential = q.object.value;
+      }
+    }
+    if (!isEntry || statusPurpose === void 0 || statusPurpose.length === 0 || statusListIndex === void 0 || !/^(0|[1-9][0-9]*)$/.test(statusListIndex) || statusListCredential === void 0) {
+      continue;
+    }
+    out.push({
+      ...entryTerm.termType === "NamedNode" ? { id: entryTerm.value } : {},
+      type: "BitstringStatusListEntry",
+      statusPurpose,
+      statusListIndex,
+      statusListCredential
     });
   }
   return out;
@@ -1135,6 +1352,9 @@ async function verifyCredential(vc, options) {
       }
     }
   }
+  if (options.resolveStatus !== void 0) {
+    errors.push(...await statusGate(options.resolveStatus, vc));
+  }
   let documentQuads;
   try {
     documentQuads = credentialToRdf(unsigned(vc));
@@ -1176,6 +1396,42 @@ async function verifyCredential(vc, options) {
     }
   }
   return errors.length === 0 ? { verified: true, errors: [], issuer } : { verified: false, errors, issuer };
+}
+async function statusGate(resolveStatus, vc) {
+  let check;
+  try {
+    check = await resolveStatus(vc);
+  } catch (e) {
+    return [
+      {
+        code: "STATUS_UNREACHABLE",
+        message: `credential status could not be resolved: ${e.message}`
+      }
+    ];
+  }
+  switch (check?.status) {
+    case "absent":
+    case "valid":
+      return [];
+    case "revoked":
+      return [{ code: "STATUS_REVOKED", message: `credential is revoked: ${check.reason}` }];
+    case "suspended":
+      return [{ code: "STATUS_SUSPENDED", message: `credential is suspended: ${check.reason}` }];
+    case "unreachable":
+      return [
+        {
+          code: "STATUS_UNREACHABLE",
+          message: `credential status could not be confirmed: ${check.reason}`
+        }
+      ];
+    default:
+      return [
+        {
+          code: "STATUS_UNREACHABLE",
+          message: "credential status resolver returned an unrecognised outcome \u2014 failing closed"
+        }
+      ];
+  }
 }
 async function controlledByFailClosed(controlledBy, verificationMethod, issuer) {
   try {
@@ -1468,9 +1724,386 @@ function createWebIdKeyResolver(options = {}) {
   };
   return { resolveKey, isControlledBy };
 }
+
+// src/status.ts
+var SUPPORTED_PURPOSES = /* @__PURE__ */ new Set(["revocation", "suspension"]);
+var INDEX_PATTERN = /^(0|[1-9][0-9]*)$/;
+var DEFAULT_MAX_BODY_BYTES = 32 * 1024 * 1024;
+var MAX_STATUS_ENTRIES = 8;
+var STATUS_ACCEPT = "application/vc+ld+json, application/ld+json;q=0.9, application/json;q=0.8";
+function bitstringStatusListEntry(input) {
+  if (!SUPPORTED_PURPOSES.has(input.statusPurpose)) {
+    throw new Error(
+      `@jeswr/solid-vc: unsupported statusPurpose ${JSON.stringify(
+        input.statusPurpose
+      )} \u2014 this implementation supports "revocation" and "suspension"`
+    );
+  }
+  const index = typeof input.statusListIndex === "number" ? String(input.statusListIndex) : input.statusListIndex;
+  if (!INDEX_PATTERN.test(index) || typeof input.statusListIndex === "number" && !Number.isInteger(input.statusListIndex)) {
+    throw new Error(
+      `@jeswr/solid-vc: statusListIndex must be a non-negative integer, got ${JSON.stringify(
+        input.statusListIndex
+      )}`
+    );
+  }
+  const listUrl = requireHttpUrl(input.statusListCredential, "statusListCredential");
+  return {
+    ...input.id !== void 0 ? { id: input.id } : {},
+    type: "BitstringStatusListEntry",
+    statusPurpose: input.statusPurpose,
+    statusListIndex: index,
+    statusListCredential: listUrl
+  };
+}
+function buildBitstringStatusListCredential(input) {
+  const id = requireHttpUrl(input.id, "status list credential id");
+  if (!SUPPORTED_PURPOSES.has(input.statusPurpose)) {
+    throw new Error(
+      `@jeswr/solid-vc: unsupported statusPurpose ${JSON.stringify(input.statusPurpose)}`
+    );
+  }
+  const bits = input.bits ?? createStatusBitstring();
+  const credentialSubject = {
+    id: `${id}#list`,
+    type: "BitstringStatusList",
+    statusPurpose: input.statusPurpose,
+    encodedList: encodeStatusList(bits)
+  };
+  return {
+    id,
+    type: ["BitstringStatusListCredential"],
+    issuer: input.issuer,
+    credentialSubject,
+    ...input.validFrom !== void 0 ? { validFrom: input.validFrom } : {},
+    ...input.validUntil !== void 0 ? { validUntil: input.validUntil } : {}
+  };
+}
+function statusListBitsOf(credential, options) {
+  const subject = singleSubjectOf(credential);
+  const encoded = subject?.encodedList;
+  if (typeof encoded !== "string") {
+    throw new Error(
+      "@jeswr/solid-vc: credential does not carry a BitstringStatusList subject with an encodedList"
+    );
+  }
+  return decodeStatusList(encoded, options);
+}
+function withStatusBit(credential, index, value) {
+  const bits = statusListBitsOf(credential);
+  setStatusBit(bits, index, value);
+  const subject = singleSubjectOf(credential);
+  if (subject === void 0) {
+    throw new Error("@jeswr/solid-vc: credential does not carry a single credentialSubject");
+  }
+  const { proof: _proof, ...unsigned2 } = credential;
+  return {
+    ...unsigned2,
+    credentialSubject: { ...subject, encodedList: encodeStatusList(bits) }
+  };
+}
+function readStatusBit(credential, index) {
+  return getStatusBit(statusListBitsOf(credential), index);
+}
+async function resolveBitstringStatus(vc, options) {
+  const normalized = normalizeStatusEntries(vc.credentialStatus);
+  if ("reason" in normalized) return { status: "unreachable", reason: normalized.reason };
+  if (normalized.entries.length === 0) return { status: "absent" };
+  let suspended;
+  let unreachable;
+  for (const entry of normalized.entries) {
+    const outcome = await checkOneEntry(vc, entry, options);
+    if (outcome.kind === "revoked") return { status: "revoked", reason: outcome.reason };
+    if (outcome.kind === "suspended") suspended ??= outcome.reason;
+    if (outcome.kind === "unreachable") unreachable ??= outcome.reason;
+  }
+  if (suspended !== void 0) return { status: "suspended", reason: suspended };
+  if (unreachable !== void 0) return { status: "unreachable", reason: unreachable };
+  return { status: "valid" };
+}
+function createBitstringStatusResolver(options) {
+  return (vc) => resolveBitstringStatus(vc, options);
+}
+function requireHttpUrl(value, field) {
+  if (typeof value !== "string" || value.length === 0) {
+    throw new Error(`@jeswr/solid-vc: ${field} must be a non-empty string`);
+  }
+  let url;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error(
+      `@jeswr/solid-vc: ${field} must be an absolute URL, got ${JSON.stringify(value)}`
+    );
+  }
+  if (url.protocol !== "https:" && url.protocol !== "http:") {
+    throw new Error(
+      `@jeswr/solid-vc: ${field} must be an http(s) URL, got ${JSON.stringify(value)}`
+    );
+  }
+  return url.href;
+}
+function singleSubjectOf(credential) {
+  const cs = credential.credentialSubject;
+  if (Array.isArray(cs)) {
+    return cs.length === 1 ? cs[0] : void 0;
+  }
+  return cs;
+}
+function normalizeStatusEntries(value) {
+  if (value === void 0) return { entries: [] };
+  const raw = Array.isArray(value) ? value : [value];
+  if (raw.length > MAX_STATUS_ENTRIES) {
+    return {
+      reason: `credential carries ${raw.length} credentialStatus entries \u2014 more than the ${MAX_STATUS_ENTRIES}-entry cap (request-amplification guard)`
+    };
+  }
+  const entries = [];
+  for (const item of raw) {
+    if (item === null || typeof item !== "object" || Array.isArray(item)) {
+      return { reason: "credentialStatus entry is not an object" };
+    }
+    const entry = item;
+    const types = Array.isArray(entry.type) ? entry.type : [entry.type];
+    if (!types.includes("BitstringStatusListEntry")) {
+      return {
+        reason: `unsupported credentialStatus type ${JSON.stringify(
+          entry.type
+        )} \u2014 cannot be checked, failing closed`
+      };
+    }
+    if (typeof entry.statusPurpose !== "string" || !SUPPORTED_PURPOSES.has(entry.statusPurpose)) {
+      return {
+        reason: `unsupported statusPurpose ${JSON.stringify(entry.statusPurpose)}`
+      };
+    }
+    if (typeof entry.statusListIndex !== "string" || !INDEX_PATTERN.test(entry.statusListIndex)) {
+      return {
+        reason: `statusListIndex is not a non-negative integer string: ${JSON.stringify(
+          entry.statusListIndex
+        )}`
+      };
+    }
+    if ("statusSize" in entry && entry.statusSize !== void 0 && entry.statusSize !== 1) {
+      return {
+        reason: `unsupported statusSize ${JSON.stringify(entry.statusSize)} \u2014 only 1-bit statuses are supported`
+      };
+    }
+    let listUrl;
+    try {
+      listUrl = requireHttpUrl(
+        typeof entry.statusListCredential === "string" ? entry.statusListCredential : void 0,
+        "statusListCredential"
+      );
+    } catch (e) {
+      return { reason: e.message };
+    }
+    entries.push({
+      ...typeof entry.id === "string" ? { id: entry.id } : {},
+      type: "BitstringStatusListEntry",
+      statusPurpose: entry.statusPurpose,
+      statusListIndex: entry.statusListIndex,
+      statusListCredential: listUrl
+    });
+  }
+  return { entries };
+}
+async function checkOneEntry(vc, entry, options) {
+  const url = entry.statusListCredential;
+  const body = await fetchStatusListBody(url, options);
+  if (typeof body !== "string") return { kind: "unreachable", reason: body.reason };
+  const parsed = parseStatusListDocument(body, url, entry.statusPurpose);
+  if ("reason" in parsed) return { kind: "unreachable", reason: parsed.reason };
+  const { listVc, encodedList } = parsed;
+  const trustedIssuers = options.trustedStatusIssuers ?? [vc.issuer];
+  const listResult = await verifyCredential(listVc, {
+    resolveKey: options.resolveKey,
+    ...options.registry !== void 0 ? { registry: options.registry } : {},
+    ...options.isControlledBy !== void 0 ? { isControlledBy: options.isControlledBy } : {},
+    ...options.now !== void 0 ? { now: options.now } : {},
+    trustedIssuers
+  });
+  if (!listResult.verified) {
+    const codes = listResult.errors.map((e) => e.code).join(", ");
+    return {
+      kind: "unreachable",
+      reason: `status list credential at ${url} failed verification (${codes})`
+    };
+  }
+  let bits;
+  try {
+    bits = decodeStatusList(encodedList, {
+      ...options.maxDecodedBytes !== void 0 ? { maxDecodedBytes: options.maxDecodedBytes } : {}
+    });
+  } catch (e) {
+    return { kind: "unreachable", reason: e.message };
+  }
+  const index = Number(entry.statusListIndex);
+  if (!Number.isSafeInteger(index) || index >= bits.length * 8) {
+    return {
+      kind: "unreachable",
+      reason: `statusListIndex ${entry.statusListIndex} is outside the ${bits.length * 8}-bit status list`
+    };
+  }
+  if (getStatusBit(bits, index)) {
+    const reason = `status list ${url} has bit ${index} SET (purpose ${entry.statusPurpose})`;
+    return entry.statusPurpose === "suspension" ? { kind: "suspended", reason } : { kind: "revoked", reason };
+  }
+  return { kind: "clear" };
+}
+async function fetchStatusListBody(url, options) {
+  const maxBodyBytes = options.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES;
+  try {
+    const fetchImpl = options.fetch ?? await guardedFetchDefault();
+    const res = await fetchImpl(url, {
+      redirect: "manual",
+      headers: { accept: STATUS_ACCEPT }
+    });
+    if (!res.ok) {
+      return { reason: `status list fetch of ${url} returned ${res.status}` };
+    }
+    if (res.redirected === true) {
+      return { reason: `status list fetch of ${url} was redirected \u2014 refused` };
+    }
+    if (typeof res.url === "string" && res.url.length > 0) {
+      let finalUrl;
+      try {
+        finalUrl = new URL(res.url).href;
+      } catch {
+        return { reason: `status list fetch of ${url} reported an unparseable final URL` };
+      }
+      if (finalUrl !== url) {
+        return { reason: `status list fetch of ${url} resolved to a different URL (${finalUrl})` };
+      }
+    }
+    const body = await readBodyBounded(res, maxBodyBytes);
+    if (body === void 0) {
+      return { reason: `status list body at ${url} exceeded the ${maxBodyBytes}-byte ceiling` };
+    }
+    return body;
+  } catch (e) {
+    return { reason: `status list fetch of ${url} failed: ${e.message}` };
+  }
+}
+async function readBodyBounded(res, maxBytes) {
+  const stream = res.body;
+  if (stream === null || stream === void 0 || typeof stream.getReader !== "function") {
+    const text = await res.text();
+    return Buffer.byteLength(text, "utf8") > maxBytes ? void 0 : text;
+  }
+  const reader = stream.getReader();
+  const chunks = [];
+  let total = 0;
+  try {
+    for (; ; ) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value !== void 0) {
+        total += value.byteLength;
+        if (total > maxBytes) {
+          await reader.cancel();
+          return void 0;
+        }
+        chunks.push(value);
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  return Buffer.concat(chunks).toString("utf8");
+}
+function parseStatusListDocument(body, url, entryPurpose) {
+  let doc;
+  try {
+    doc = JSON.parse(body);
+  } catch {
+    return { reason: `status list body at ${url} is not valid JSON` };
+  }
+  if (doc === null || typeof doc !== "object" || Array.isArray(doc)) {
+    return { reason: `status list document at ${url} is not a JSON object` };
+  }
+  const d = doc;
+  if (typeof d.id !== "string" || new URL(url).href !== safeHref(d.id)) {
+    return {
+      reason: `status list credential id ${JSON.stringify(d.id)} does not match the URL fetched (${url})`
+    };
+  }
+  const types = Array.isArray(d.type) ? d.type : [d.type];
+  if (!types.includes("BitstringStatusListCredential") && !types.includes("https://www.w3.org/ns/credentials/status#BitstringStatusListCredential")) {
+    return { reason: `document at ${url} is not a BitstringStatusListCredential` };
+  }
+  const issuer = typeof d.issuer === "string" ? d.issuer : d.issuer !== null && typeof d.issuer === "object" && typeof d.issuer.id === "string" ? d.issuer.id : void 0;
+  if (issuer === void 0) {
+    return { reason: `status list credential at ${url} carries no issuer` };
+  }
+  const rawSubject = Array.isArray(d.credentialSubject) ? d.credentialSubject.length === 1 ? d.credentialSubject[0] : void 0 : d.credentialSubject;
+  if (rawSubject === null || typeof rawSubject !== "object" || Array.isArray(rawSubject)) {
+    return { reason: `status list credential at ${url} does not carry a single subject` };
+  }
+  const subject = rawSubject;
+  const subjectTypes = Array.isArray(subject.type) ? subject.type : [subject.type];
+  if (!subjectTypes.includes("BitstringStatusList")) {
+    return { reason: `status list subject at ${url} is not a BitstringStatusList` };
+  }
+  const purposes = Array.isArray(subject.statusPurpose) ? subject.statusPurpose : [subject.statusPurpose];
+  if (!purposes.includes(entryPurpose)) {
+    return {
+      reason: `status list at ${url} has purpose ${JSON.stringify(subject.statusPurpose)}, not the entry's ${JSON.stringify(entryPurpose)} \u2014 the bit does not mean what the entry claims`
+    };
+  }
+  const encodedList = subject.encodedList;
+  if (typeof encodedList !== "string" || encodedList.length === 0) {
+    return { reason: `status list at ${url} carries no encodedList` };
+  }
+  const proof = parseProofs(d.proof);
+  if (proof === void 0) {
+    return { reason: `status list credential at ${url} carries no well-formed proof` };
+  }
+  const listVc = {
+    id: d.id,
+    type: types.filter((t) => typeof t === "string" && t !== "VerifiableCredential"),
+    issuer,
+    ...typeof d.validFrom === "string" ? { validFrom: d.validFrom } : {},
+    ...typeof d.validUntil === "string" ? { validUntil: d.validUntil } : {},
+    credentialSubject: subject,
+    proof
+  };
+  return { listVc, encodedList };
+}
+function safeHref(value) {
+  try {
+    return new URL(value).href;
+  } catch {
+    return void 0;
+  }
+}
+function parseProofs(value) {
+  const raw = Array.isArray(value) ? value : [value];
+  if (raw.length === 0) return void 0;
+  const proofs = [];
+  for (const item of raw) {
+    if (item === null || typeof item !== "object" || Array.isArray(item)) return void 0;
+    const p = item;
+    if (p.type !== "DataIntegrityProof" || typeof p.cryptosuite !== "string" || typeof p.verificationMethod !== "string" || typeof p.proofPurpose !== "string" || typeof p.proofValue !== "string") {
+      return void 0;
+    }
+    proofs.push({
+      type: "DataIntegrityProof",
+      cryptosuite: p.cryptosuite,
+      verificationMethod: p.verificationMethod,
+      proofPurpose: p.proofPurpose,
+      ...typeof p.created === "string" ? { created: p.created } : {},
+      proofValue: p.proofValue
+    });
+  }
+  return proofs.length === 1 ? proofs[0] : proofs;
+}
 export {
+  BitstringDecodeError,
   CredentialNode,
+  DEFAULT_MAX_DECODED_BYTES,
   DataIntegritySuite,
+  MIN_STATUS_LIST_LENGTH,
   PresentationNode,
   ProofNode,
   SEC_ASSERTION_METHOD,
@@ -1478,35 +2111,53 @@ export {
   SEC_DIGEST_MULTIBASE,
   SEC_MULTIKEY,
   SEC_PUBLIC_KEY_MULTIBASE,
+  STATUS,
+  STATUS_BITSTRING_CREDENTIAL,
+  STATUS_BITSTRING_ENTRY,
+  STATUS_BITSTRING_LIST,
+  STATUS_ENCODED_LIST,
+  STATUS_LIST_CREDENTIAL,
+  STATUS_LIST_INDEX,
+  STATUS_PURPOSE,
   SVC,
   SVC_AGENT_AUTHORIZATION,
   SuiteRegistry,
   VC,
+  VC_CREDENTIAL_STATUS,
   VC_RELATED_RESOURCE,
   VC_V2_CONTEXT,
   VcDataset,
   agentAuthorizationFromRdf,
   base58btcDecode,
   base58btcEncode,
+  bitstringStatusListEntry,
   buildAgentAuthorizationCredential,
+  buildBitstringStatusListCredential,
   buildBoundAgentAuthorizationCredential,
   canonicalNQuads,
+  createBitstringStatusResolver,
+  createStatusBitstring,
   createWebIdKeyResolver,
   credentialFromRdf,
   credentialMetaFromNode,
+  credentialStatusFromNode,
+  credentialStatusesOf,
   credentialToJsonLd,
   credentialToRdf,
   credentialToTurtle,
   cryptosuiteForKeyType,
   dataIntegrityHash,
   decodeMultikey,
+  decodeStatusList,
   defaultSuiteRegistry,
   digestQuads,
   digestRdfContent,
   encodeMultikey,
+  encodeStatusList,
   exportPrivateJwk,
   exportPublicJwk,
   generateKeyPairForSuite,
+  getStatusBit,
   importKeyPair,
   importPublicKey,
   issue,
@@ -1514,11 +2165,16 @@ export {
   parseCredentialRdf,
   proofOptionsQuads,
   publishVerificationMethod,
+  readStatusBit,
   relatedResourcesFromNode,
+  resolveBitstringStatus,
   resolveWebIdKey,
   serialize2 as serialize,
+  setStatusBit,
+  statusListBitsOf,
   verifyCredential,
   verifyRelatedResources,
+  withStatusBit,
   wrapVc
 };
 //# sourceMappingURL=index.js.map

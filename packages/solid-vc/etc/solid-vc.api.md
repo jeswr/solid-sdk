@@ -14,6 +14,7 @@ import { TermWrapper } from '@rdfjs/wrapper';
 export interface AgentAuthorization {
     readonly action: string | readonly string[];
     readonly agent: string;
+    readonly credentialStatus?: BitstringStatusListEntry | readonly BitstringStatusListEntry[];
     readonly id?: string;
     readonly policy?: string;
     readonly policyContent?: string;
@@ -34,7 +35,57 @@ export function base58btcDecode(value: string): Uint8Array;
 export function base58btcEncode(bytes: Uint8Array): string;
 
 // @public
+export class BitstringDecodeError extends Error {
+    constructor(message: string);
+}
+
+// @public
+export interface BitstringStatusListCredentialInput {
+    readonly bits?: Uint8Array;
+    readonly id: string;
+    readonly issuer: string;
+    readonly statusPurpose: "revocation" | "suspension";
+    readonly validFrom?: string;
+    readonly validUntil?: string;
+}
+
+// @public
+export interface BitstringStatusListEntry {
+    readonly id?: string;
+    readonly statusListCredential: string;
+    readonly statusListIndex: string;
+    readonly statusPurpose: string;
+    readonly type: "BitstringStatusListEntry";
+}
+
+// @public
+export function bitstringStatusListEntry(input: BitstringStatusListEntryInput): BitstringStatusListEntry;
+
+// @public
+export interface BitstringStatusListEntryInput {
+    readonly id?: string;
+    readonly statusListCredential: string;
+    readonly statusListIndex: number | string;
+    readonly statusPurpose: "revocation" | "suspension";
+}
+
+// @public
+export interface BitstringStatusOptions {
+    readonly fetch?: typeof globalThis.fetch;
+    readonly isControlledBy?: VerifyCredentialOptions["isControlledBy"];
+    readonly maxBodyBytes?: number;
+    readonly maxDecodedBytes?: number;
+    readonly now?: Date;
+    readonly registry?: SuiteRegistry;
+    readonly resolveKey: VerifyCredentialOptions["resolveKey"];
+    readonly trustedStatusIssuers?: readonly string[];
+}
+
+// @public
 export function buildAgentAuthorizationCredential(auth: AgentAuthorization): Credential_2;
+
+// @public
+export function buildBitstringStatusListCredential(input: BitstringStatusListCredentialInput): Credential_2;
 
 // @public
 export function buildBoundAgentAuthorizationCredential(auth: AgentAuthorization): Promise<Credential_2>;
@@ -43,10 +94,17 @@ export function buildBoundAgentAuthorizationCredential(auth: AgentAuthorization)
 export function canonicalNQuads(quads: readonly Quad[]): Promise<string>;
 
 // @public
+export function createBitstringStatusResolver(options: BitstringStatusOptions): (vc: VerifiableCredential) => Promise<CredentialStatusCheck>;
+
+// @public
+export function createStatusBitstring(length?: number): Uint8Array;
+
+// @public
 export function createWebIdKeyResolver(options?: ResolveWebIdKeyOptions): WebIdKeyResolver;
 
 // @public
 interface Credential_2 {
+    readonly credentialStatus?: BitstringStatusListEntry | readonly BitstringStatusListEntry[];
     readonly credentialSubject: CredentialSubject | readonly CredentialSubject[];
     readonly id?: string;
     readonly issuer: string;
@@ -84,6 +142,28 @@ export class CredentialNode extends TermWrapper {
     // (undocumented)
     get validUntils(): Set<TermWrapper>;
 }
+
+// @public
+export type CredentialStatusCheck = {
+    readonly status: "absent";
+} | {
+    readonly status: "valid";
+} | {
+    readonly status: "revoked";
+    readonly reason: string;
+} | {
+    readonly status: "suspended";
+    readonly reason: string;
+} | {
+    readonly status: "unreachable";
+    readonly reason: string;
+};
+
+// @public
+export function credentialStatusesOf(credentialStatus: Credential_2["credentialStatus"]): readonly BitstringStatusListEntry[];
+
+// @public
+export function credentialStatusFromNode(node: CredentialNode): BitstringStatusListEntry[];
 
 // @public
 export interface CredentialSubject {
@@ -139,6 +219,14 @@ export interface DecodedMultikey {
 export function decodeMultikey(publicKeyMultibase: string): Promise<DecodedMultikey | undefined>;
 
 // @public
+export function decodeStatusList(encoded: string, options?: {
+    readonly maxDecodedBytes?: number;
+}): Uint8Array;
+
+// @public
+export const DEFAULT_MAX_DECODED_BYTES: number;
+
+// @public
 export function defaultSuiteRegistry(): SuiteRegistry;
 
 // @public
@@ -151,6 +239,9 @@ export function digestRdfContent(content: string, contentType?: string): Promise
 export function encodeMultikey(publicKey: CryptoKey): Promise<string>;
 
 // @public
+export function encodeStatusList(bits: Uint8Array): string;
+
+// @public
 export function exportPrivateJwk(key: KeyPair): Promise<JWK>;
 
 // @public
@@ -158,6 +249,9 @@ export function exportPublicJwk(key: KeyPair): Promise<JWK>;
 
 // @public
 export function generateKeyPairForSuite(verificationMethod: string, type?: SuiteKeyType): Promise<KeyPair>;
+
+// @public
+export function getStatusBit(bits: Uint8Array, index: number): boolean;
 
 // @public
 export function importKeyPair(verificationMethod: string, privateJwk: JWK): Promise<KeyPair>;
@@ -199,6 +293,9 @@ export interface KeyPair {
     readonly publicKey: CryptoKey;
     readonly verificationMethod: string;
 }
+
+// @public
+export const MIN_STATUS_LIST_LENGTH = 131072;
 
 // @public
 export function parseCredentialRdf(body: string, contentType?: string): Promise<DatasetCore>;
@@ -288,6 +385,9 @@ export interface PublishVerificationMethodInput {
 }
 
 // @public
+export function readStatusBit(credential: Credential_2, index: number): boolean;
+
+// @public
 export interface RelatedResource {
     readonly digestMultibase?: string;
     readonly id: string;
@@ -296,6 +396,9 @@ export interface RelatedResource {
 
 // @public
 export function relatedResourcesFromNode(node: CredentialNode): RelatedResource[];
+
+// @public
+export function resolveBitstringStatus(vc: VerifiableCredential | Credential_2, options: BitstringStatusOptions): Promise<CredentialStatusCheck>;
 
 // @public
 export interface ResolvedWebIdKey {
@@ -333,6 +436,38 @@ export const SEC_PUBLIC_KEY_MULTIBASE: "https://w3id.org/security#publicKeyMulti
 export function serialize(quads: readonly Quad[], format?: string): Promise<string>;
 
 // @public
+export function setStatusBit(bits: Uint8Array, index: number, value: boolean): void;
+
+// @public
+export const STATUS: "https://www.w3.org/ns/credentials/status#";
+
+// @public
+export const STATUS_BITSTRING_CREDENTIAL: "https://www.w3.org/ns/credentials/status#BitstringStatusListCredential";
+
+// @public
+export const STATUS_BITSTRING_ENTRY: "https://www.w3.org/ns/credentials/status#BitstringStatusListEntry";
+
+// @public
+export const STATUS_BITSTRING_LIST: "https://www.w3.org/ns/credentials/status#BitstringStatusList";
+
+// @public
+export const STATUS_ENCODED_LIST: "https://www.w3.org/ns/credentials/status#encodedList";
+
+// @public
+export const STATUS_LIST_CREDENTIAL: "https://www.w3.org/ns/credentials/status#statusListCredential";
+
+// @public
+export const STATUS_LIST_INDEX: "https://www.w3.org/ns/credentials/status#statusListIndex";
+
+// @public
+export const STATUS_PURPOSE: "https://www.w3.org/ns/credentials/status#statusPurpose";
+
+// @public
+export function statusListBitsOf(credential: Credential_2, options?: {
+    readonly maxDecodedBytes?: number;
+}): Uint8Array;
+
+// @public
 export type SuiteKeyType = "Ed25519" | "P-256";
 
 // @public
@@ -350,6 +485,9 @@ export const SVC_AGENT_AUTHORIZATION: "https://w3id.org/jeswr/solid-vc#AgentAuth
 
 // @public
 export const VC: "https://www.w3.org/2018/credentials#";
+
+// @public
+export const VC_CREDENTIAL_STATUS: "https://www.w3.org/2018/credentials#credentialStatus";
 
 // @public
 export const VC_RELATED_RESOURCE: "https://www.w3.org/2018/credentials#relatedResource";
@@ -381,7 +519,7 @@ export interface VerificationError {
 }
 
 // @public
-export type VerificationErrorCode = "MALFORMED" | "NO_PROOF" | "UNKNOWN_CRYPTOSUITE" | "INVALID_SIGNATURE" | "EXPIRED" | "NOT_YET_VALID" | "ISSUER_MISMATCH" | "PROOF_PURPOSE_MISMATCH" | "UNTRUSTED_ISSUER" | "RELATED_RESOURCE_MISSING" | "RELATED_RESOURCE_MISMATCH";
+export type VerificationErrorCode = "MALFORMED" | "NO_PROOF" | "UNKNOWN_CRYPTOSUITE" | "INVALID_SIGNATURE" | "EXPIRED" | "NOT_YET_VALID" | "ISSUER_MISMATCH" | "PROOF_PURPOSE_MISMATCH" | "UNTRUSTED_ISSUER" | "RELATED_RESOURCE_MISSING" | "RELATED_RESOURCE_MISMATCH" | "STATUS_REVOKED" | "STATUS_SUSPENDED" | "STATUS_UNREACHABLE";
 
 // @public
 export interface VerificationResult {
@@ -399,6 +537,7 @@ export interface VerifyCredentialOptions extends VerifyOptions {
     readonly presentedResources?: Readonly<Record<string, PresentedResourceContent>>;
     readonly registry?: SuiteRegistry;
     readonly resolveKey: ProofVerifyOptions["resolveKey"];
+    readonly resolveStatus?: (vc: VerifiableCredential) => CredentialStatusCheck | Promise<CredentialStatusCheck>;
 }
 
 // @public
@@ -416,6 +555,9 @@ export interface WebIdKeyResolver {
     readonly isControlledBy: (verificationMethod: string, issuer: string) => Promise<boolean>;
     readonly resolveKey: (verificationMethod: string) => Promise<CryptoKey | undefined>;
 }
+
+// @public
+export function withStatusBit(credential: Credential_2 | VerifiableCredential, index: number, value: boolean): Credential_2;
 
 // @public
 export function wrapVc(dataset: DatasetCore): VcDataset;

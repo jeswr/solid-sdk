@@ -34,6 +34,38 @@ export interface Credential {
      * `presentedResources` verify option recompute + compare fail-closed.
      */
     readonly relatedResource?: readonly RelatedResource[];
+    /**
+     * The credential's status entry/entries (VCDM 2.0 `credentialStatus`) — how a
+     * verifier discovers whether the credential has been REVOKED or SUSPENDED
+     * after issuance. This package implements the W3C Bitstring Status List
+     * v1.0 mechanism ({@link BitstringStatusListEntry}); part of the SIGNED claim
+     * graph, so an attacker cannot strip or repoint the status entry without
+     * invalidating the proof. Absent = the issuer provides NO revocation
+     * mechanism (verification proceeds without a status gate); PRESENT entries
+     * are checked FAIL-CLOSED by the status resolver (see
+     * `resolveBitstringStatus` / the `resolveStatus` verify option).
+     */
+    readonly credentialStatus?: BitstringStatusListEntry | readonly BitstringStatusListEntry[];
+}
+/**
+ * One W3C Bitstring Status List v1.0 `credentialStatus` entry: "my status is
+ * bit `statusListIndex` of the list hosted by the credential at
+ * `statusListCredential`, and a set bit means `statusPurpose`".
+ */
+export interface BitstringStatusListEntry {
+    /** The entry IRI (optional — spec allows an anonymous entry node). */
+    readonly id?: string;
+    /** Always `"BitstringStatusListEntry"`. */
+    readonly type: "BitstringStatusListEntry";
+    /**
+     * What a SET bit means: `"revocation"` (permanent) or `"suspension"`
+     * (temporary). MUST match the hosted list's own `statusPurpose`.
+     */
+    readonly statusPurpose: string;
+    /** The credential's bit position in the list — a string non-negative integer (per spec). */
+    readonly statusListIndex: string;
+    /** The URL of the `BitstringStatusListCredential` hosting the status list. */
+    readonly statusListCredential: string;
 }
 /**
  * One VCDM 2.0 `relatedResource` entry: the resource IRI plus the cryptographic
@@ -91,6 +123,12 @@ export interface AgentAuthorization {
     readonly validFrom?: string;
     /** Expiry (optional). */
     readonly validUntil?: string;
+    /**
+     * The credential's revocation/suspension status entry (optional — the G2
+     * issue-side param): build it with `bitstringStatusListEntry(…)` and the
+     * signed credential becomes revocable via the referenced hosted status list.
+     */
+    readonly credentialStatus?: BitstringStatusListEntry | readonly BitstringStatusListEntry[];
 }
 /**
  * An embedded W3C Data Integrity proof (one `proof` node on a signed credential /
@@ -167,7 +205,35 @@ export interface VerificationError {
     readonly message: string;
 }
 /** The closed set of verification failure categories. */
-export type VerificationErrorCode = "MALFORMED" | "NO_PROOF" | "UNKNOWN_CRYPTOSUITE" | "INVALID_SIGNATURE" | "EXPIRED" | "NOT_YET_VALID" | "ISSUER_MISMATCH" | "PROOF_PURPOSE_MISMATCH" | "UNTRUSTED_ISSUER" | "RELATED_RESOURCE_MISSING" | "RELATED_RESOURCE_MISMATCH";
+export type VerificationErrorCode = "MALFORMED" | "NO_PROOF" | "UNKNOWN_CRYPTOSUITE" | "INVALID_SIGNATURE" | "EXPIRED" | "NOT_YET_VALID" | "ISSUER_MISMATCH" | "PROOF_PURPOSE_MISMATCH" | "UNTRUSTED_ISSUER" | "RELATED_RESOURCE_MISSING" | "RELATED_RESOURCE_MISMATCH" | "STATUS_REVOKED" | "STATUS_SUSPENDED" | "STATUS_UNREACHABLE";
+/**
+ * The outcome of resolving a credential's status (the Phase-C seam):
+ *
+ *  - `absent` — the credential carries NO `credentialStatus`: the issuer
+ *    provides no revocation mechanism, so verification PROCEEDS (this is the
+ *    one non-failure "nothing to check" outcome);
+ *  - `valid` — every status entry resolved and every bit is CLEAR;
+ *  - `revoked` / `suspended` — a bit is SET for that purpose (definitive);
+ *  - `unreachable` — a PRESENT entry could not be confirmed (fetch failed,
+ *    the list credential's own signature/shape/purpose was invalid, the
+ *    bitstring would not decode, the index was out of range, …). FAIL-CLOSED:
+ *    a credential whose status cannot be confirmed must NOT verify as valid —
+ *    `unreachable` is a distinct verification FAILURE, never a silent pass.
+ */
+export type CredentialStatusCheck = {
+    readonly status: "absent";
+} | {
+    readonly status: "valid";
+} | {
+    readonly status: "revoked";
+    readonly reason: string;
+} | {
+    readonly status: "suspended";
+    readonly reason: string;
+} | {
+    readonly status: "unreachable";
+    readonly reason: string;
+};
 /**
  * The PRESENTED content of a related resource (the policy document the verifier
  * was actually handed), keyed by resource IRI in the `presentedResources`

@@ -1,5 +1,5 @@
 import type { ProofVerifyOptions, SuiteRegistry } from "./proof.js";
-import type { Credential, PresentedResourceContent, VerifiableCredential, VerificationResult, VerifyOptions } from "./types.js";
+import type { Credential, CredentialStatusCheck, PresentedResourceContent, VerifiableCredential, VerificationResult, VerifyOptions } from "./types.js";
 /** Options for {@link verifyCredential}: the suite registry + the key resolver. */
 export interface VerifyCredentialOptions extends VerifyOptions {
     /**
@@ -37,6 +37,26 @@ export interface VerifyCredentialOptions extends VerifyOptions {
      * content it is about to trust.)
      */
     readonly presentedResources?: Readonly<Record<string, PresentedResourceContent>>;
+    /**
+     * The credential-status seam (Phase C — revocation/suspension, runtime G2).
+     * When supplied, the resolver is consulted and its outcome gates the
+     * verification FAIL-CLOSED:
+     *
+     *  - `revoked` / `suspended` → `STATUS_REVOKED` / `STATUS_SUSPENDED`;
+     *  - `unreachable` — a PRESENT `credentialStatus` entry that could not be
+     *    fetched / verified / decoded → `STATUS_UNREACHABLE` (a distinct
+     *    verification failure, NEVER a silent pass);
+     *  - a resolver that THROWS or returns an unrecognised shape →
+     *    `STATUS_UNREACHABLE` (the seam itself is fail-closed);
+     *  - only `valid` (every bit clear) and `absent` (the credential carries NO
+     *    status entry — the issuer provides no revocation mechanism) let
+     *    verification proceed.
+     *
+     * Supply `createBitstringStatusResolver(…)` for the W3C Bitstring Status
+     * List v1.0 implementation. When this option is OMITTED, status is NOT
+     * checked (the pre-G2 behaviour) — a Phase-C verifier MUST supply it.
+     */
+    readonly resolveStatus?: (vc: VerifiableCredential) => CredentialStatusCheck | Promise<CredentialStatusCheck>;
 }
 /**
  * Verify the G1 policy-content bindings ALONE: for every presented resource,
