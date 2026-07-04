@@ -265,11 +265,12 @@ async function runLoginFlow(
     // scenario B's gated `beforeFetch`) this NEVER resolves — the provider's
     // own discovery request re-enters `upgrade()` and deadlocks on the
     // single-flight login.
+    let stallTimer: ReturnType<typeof setTimeout> | undefined;
     const probe = globalThis.fetch(POD_ROOT, { method: "HEAD" });
     const response = await Promise.race([
       probe,
-      new Promise<never>((_, reject) =>
-        setTimeout(
+      new Promise<never>((_, reject) => {
+        stallTimer = setTimeout(
           () =>
             reject(
               new Error(
@@ -281,9 +282,12 @@ async function runLoginFlow(
               ),
             ),
           4000,
-        ),
-      ),
+        );
+      }),
     ]);
+    // Clear the stall timer when the probe wins, so a passing test doesn't
+    // leave a 4s timer referenced (roborev Low).
+    if (stallTimer !== undefined) clearTimeout(stallTimer);
     expect(response.status).toBe(200);
     return recorded;
   } finally {
