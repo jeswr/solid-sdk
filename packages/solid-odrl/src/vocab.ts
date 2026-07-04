@@ -22,6 +22,21 @@ export const ACL = "http://www.w3.org/ns/auth/acl#" as const;
 export const DPV = "https://w3id.org/dpv#" as const;
 /** XSD namespace (datatypes for typed constraint right-operands). */
 export const XSD = "http://www.w3.org/2001/XMLSchema#" as const;
+/** W3C PROV-O namespace — the attribution/delegation audit-trail terms. */
+export const PROV = "http://www.w3.org/ns/prov#" as const;
+/**
+ * The `@jeswr` ODRL **agent-delegation profile** term namespace. Terms are minted
+ * here ONLY for genuine gaps in ODRL 2.2 (each is documented with its rationale in
+ * `docs/delegation-profile.md` §4); everything the standard already provides
+ * (`odrl:grantUse`, `odrl:nextPolicy`, `odrl:transfer`, Offer/Agreement,
+ * assigner/assignee) is used verbatim at its canonical IRI.
+ */
+export const ODRLD = "https://w3id.org/jeswr/odrl-delegation#" as const;
+/**
+ * The profile identifier a policy asserts via `odrl:profile` to opt in to the
+ * agent-delegation profile semantics (`docs/delegation-profile.md`).
+ */
+export const ODRLD_PROFILE_IRI = "https://w3id.org/jeswr/odrl-delegation" as const;
 /** RDF namespace. */
 export const RDF = "http://www.w3.org/1999/02/22-rdf-syntax-ns#" as const;
 /** RDFS namespace. */
@@ -141,6 +156,34 @@ export const ODRL_INFORM = `${ODRL}inform` as const;
 export const ODRL_ANONYMIZE = `${ODRL}anonymize` as const;
 /** `odrl:delete` is reused as a duty action (delete-after-use). */
 
+// --- ODRL delegation action concepts (standard — the agent-delegation profile) ---
+// The three standard ODRL 2.2 Vocabulary terms the agent-delegation profile
+// (`docs/delegation-profile.md`) is built on. All three are REAL ODRL IRIs
+// (https://www.w3.org/TR/odrl-vocab/ §4.4.22, §4.4.29, §3.12.2); nothing minted.
+/**
+ * `odrl:grantUse` — "To grant the use of the Asset to third parties." The vocab
+ * note: "This action enables the assignee to create policies for the use of the
+ * Asset for third parties. The nextPolicy is recommended to be agreed with the
+ * third party. Use of temporal constraints is recommended." (ODRL Vocab §4.4.22.)
+ * This is ODRL's native DELEGATION action: a permission on `grantUse` is what
+ * authorises an agent to issue a downstream policy to a sub-agent.
+ */
+export const ODRL_GRANT_USE = `${ODRL}grantUse` as const;
+/**
+ * `odrl:nextPolicy` — "To grant the specified Policy to a third party for their
+ * use of the Asset." (ODRL Vocab §4.4.29 — an ACTION concept in ODRL 2.2, not a
+ * property.) Used as the action of a DUTY on a `grantUse` permission whose
+ * `odrl:target` is the downstream Policy the delegate must issue — the mechanism
+ * by which a delegator pins exactly what may be passed on.
+ */
+export const ODRL_NEXT_POLICY = `${ODRL}nextPolicy` as const;
+/**
+ * `odrl:transfer` — "To transfer the ownership of the Asset in perpetuity."
+ * (ODRL Vocab §3.12.2.) Ownership transfer, NOT delegation-of-use; a top-level
+ * action concept the vocabulary does NOT place under the `use` umbrella.
+ */
+export const ODRL_TRANSFER = `${ODRL}transfer` as const;
+
 // --- ACL-mode action concepts (Solid-resource binding, NOT data-use actions) ---
 // ODRL has NO native action faithful to Solid's `acl:Append` (a STRICT subclass of
 // `acl:Write` — add-only, never modify/delete; WAC spec) or `acl:Control` (which
@@ -182,6 +225,9 @@ export const ODRL_ACTIONS = [
   "anonymize",
   "append",
   "control",
+  "grantUse",
+  "nextPolicy",
+  "transfer",
 ] as const;
 /** An ODRL action short name. */
 export type OdrlActionName = (typeof ODRL_ACTIONS)[number];
@@ -204,6 +250,10 @@ export const ACTION_IRI: Readonly<Record<OdrlActionName, string>> = {
   // practice), NOT minted, and deliberately distinct from the ODRL data-use actions.
   append: ACTION_APPEND_IRI,
   control: ACTION_CONTROL_IRI,
+  // Delegation concepts — standard ODRL 2.2 IRIs (see the constants above).
+  grantUse: ODRL_GRANT_USE,
+  nextPolicy: ODRL_NEXT_POLICY,
+  transfer: ODRL_TRANSFER,
 };
 /** Reverse: ODRL action IRI → short action name (for round-trip read). */
 export const IRI_TO_ACTION: Readonly<Record<string, OdrlActionName>> = Object.fromEntries(
@@ -222,7 +272,26 @@ export const VALID_ACTION_IRIS: ReadonlySet<string> = new Set(Object.values(ACTI
  * rule (fail-closed / never-broaden). All data-access actions (`read`/`write`/
  * `modify`/`append`/…) remain under the `use` umbrella as ODRL models them.
  */
-const NOT_UNDER_USE: ReadonlySet<OdrlActionName> = new Set<OdrlActionName>(["control"]);
+/*
+ * The DELEGATION actions are also excluded — a deliberate, deny-biased
+ * **agent-delegation-profile RESTRICTION** of the core vocabulary hierarchy
+ * (`docs/delegation-profile.md` §3.2). The ODRL 2.2 Vocabulary marks `grantUse`
+ * and `nextPolicy` as "Included In: use", so under core semantics a bare
+ * `odrl:use` permission would let its assignee RE-DELEGATE the asset to third
+ * parties — a privilege escalation for usage control (every use-grantee could
+ * mint downstream grants). This profile requires delegation authority to be
+ * EXPLICIT: only a rule whose action is literally `grantUse` matches a
+ * `grantUse` request (same for `nextPolicy`). `transfer` (ownership transfer)
+ * is not under `use` even in the core vocabulary (it carries no `includedIn`)
+ * and stays excluded here. Restricting matching is strictly safe: this
+ * evaluator can only ever grant LESS than core-vocabulary semantics would.
+ */
+const NOT_UNDER_USE: ReadonlySet<OdrlActionName> = new Set<OdrlActionName>([
+  "control",
+  "grantUse",
+  "nextPolicy",
+  "transfer",
+]);
 
 /**
  * Extra (non-umbrella) implications from the ACL/WAC action hierarchy. Each entry
@@ -334,6 +403,20 @@ export const ODRL_SPATIAL = `${ODRL}spatial` as const;
 export const ODRL_ELAPSED_TIME = `${ODRL}elapsedTime` as const;
 /** `odrl:systemDevice` — the requesting device/system constraint. */
 export const ODRL_SYSTEM_DEVICE = `${ODRL}systemDevice` as const;
+/**
+ * `odrld:delegationDepth` — MINTED (agent-delegation profile, see
+ * `docs/delegation-profile.md` §4.1): the number of delegation hops remaining at
+ * and below a `grantUse` permission. ODRL 2.2 has NO left-operand for bounding
+ * re-delegation depth (its operand list — dateTime, count, recipient, … — is
+ * about direct use, not chain shape), and `odrl:count` counts EXERCISES of an
+ * action, not the depth of a downstream chain, so reusing it would be a semantic
+ * pun. A `grantUse` permission constrains re-delegation with
+ * `odrld:delegationDepth odrl:lteq N`; the chain evaluator supplies the actual
+ * remaining depth as the request value (callers never assert it — see
+ * `evaluateDelegated`). Absent the constraint, the profile default is depth 1
+ * (delegate may NOT re-delegate) — fail-closed.
+ */
+export const ODRLD_DELEGATION_DEPTH = `${ODRLD}delegationDepth` as const;
 
 /** The closed set of constraint left-operand short names the evaluator handles. */
 export const LEFT_OPERANDS = [
@@ -344,6 +427,7 @@ export const LEFT_OPERANDS = [
   "spatial",
   "elapsedTime",
   "systemDevice",
+  "delegationDepth",
 ] as const;
 /** A constraint left-operand short name. */
 export type LeftOperandName = (typeof LEFT_OPERANDS)[number];
@@ -356,6 +440,7 @@ export const LEFT_OPERAND_IRI: Readonly<Record<LeftOperandName, string>> = {
   spatial: ODRL_SPATIAL,
   elapsedTime: ODRL_ELAPSED_TIME,
   systemDevice: ODRL_SYSTEM_DEVICE,
+  delegationDepth: ODRLD_DELEGATION_DEPTH,
 };
 /** Reverse: left-operand IRI → short name. */
 export const IRI_TO_LEFT_OPERAND: Readonly<Record<string, LeftOperandName>> = Object.fromEntries(
@@ -413,6 +498,38 @@ export const IRI_TO_OPERATOR: Readonly<Record<string, OperatorName>> = Object.fr
   Object.entries(OPERATOR_IRI).map(([k, v]) => [v, k as OperatorName]),
 ) as Readonly<Record<string, OperatorName>>;
 
+// --- Agent-delegation profile: chain-edge + revocation terms (minted) ------
+// Minted `odrld:` terms for the two genuine ODRL 2.2 gaps the delegation profile
+// hits beyond depth-bounding. Rationale per term in docs/delegation-profile.md §4.
+/**
+ * `odrld:delegatedUnder` — MINTED (delegation profile §4.2): Policy → Policy, "this
+ * policy was issued under the authority of that policy" (the child self-declares
+ * its UPSTREAM authority). ODRL's own `nextPolicy` points DOWNSTREAM from the
+ * delegator's duty; a verifier holding only the leaf grant needs the explicit
+ * reverse edge to assemble + check the chain. `prov:wasDerivedFrom` alone is too
+ * loose (any derivation) for a fail-closed authority check, so this is declared a
+ * subproperty of it: every `delegatedUnder` edge is still visible to generic
+ * PROV consumers.
+ */
+export const ODRLD_DELEGATED_UNDER = `${ODRLD}delegatedUnder` as const;
+/**
+ * `odrld:Revocation` — MINTED (delegation profile §4.3): the class of a revocation
+ * statement an assigner publishes to withdraw a previously issued delegation
+ * policy. ODRL 2.2 has no revocation vocabulary at all (expiry is expressible via
+ * `odrl:dateTime` constraints; withdrawal-before-expiry is not).
+ */
+export const ODRLD_REVOCATION_CLASS = `${ODRLD}Revocation` as const;
+/** `odrld:revokedPolicy` — MINTED (with {@link ODRLD_REVOCATION_CLASS}): Revocation → the revoked Policy. */
+export const ODRLD_REVOKED_POLICY = `${ODRLD}revokedPolicy` as const;
+
+// --- PROV-O attribution terms (standard) — the delegation audit trail ------
+/** `prov:wasAttributedTo` — Entity → Agent (each hop policy is attributed to its issuer). */
+export const PROV_WAS_ATTRIBUTED_TO = `${PROV}wasAttributedTo` as const;
+/** `prov:actedOnBehalfOf` — Agent → Agent (the delegate acts on behalf of the delegator). */
+export const PROV_ACTED_ON_BEHALF_OF = `${PROV}actedOnBehalfOf` as const;
+/** `prov:wasDerivedFrom` — Entity → Entity (the generic super-property of `odrld:delegatedUnder`). */
+export const PROV_WAS_DERIVED_FROM = `${PROV}wasDerivedFrom` as const;
+
 /**
  * A SELF-CONTAINED inline JSON-LD `@context` for an ODRL policy graph. Like M1/M2,
  * the emitted JSON-LD embeds this rather than a bare remote `@context` URL, so the
@@ -440,4 +557,15 @@ export const ODRL_INLINE_CONTEXT: Readonly<Record<string, unknown>> = {
   leftOperand: { "@id": ODRL_LEFT_OPERAND, "@type": "@id" },
   operator: { "@id": ODRL_OPERATOR, "@type": "@id" },
   rightOperand: ODRL_RIGHT_OPERAND,
+} as const;
+
+/**
+ * The delegation-profile EXTENSION of {@link ODRL_INLINE_CONTEXT}: added to the
+ * emitted JSON-LD `@context` ONLY when the policy actually uses a profile term
+ * (currently `delegatedUnder`), so a plain ODRL policy's JSON-LD projection is
+ * byte-identical to what it was before the profile existed.
+ */
+export const ODRLD_INLINE_CONTEXT_EXTENSION: Readonly<Record<string, unknown>> = {
+  odrld: ODRLD,
+  delegatedUnder: { "@id": ODRLD_DELEGATED_UNDER, "@type": "@id" },
 } as const;

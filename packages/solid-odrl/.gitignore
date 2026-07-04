@@ -5,3 +5,6 @@
 node_modules/
 coverage/
 .roborev/
+# api-extractor scratch dir (temp report + tsdoc metadata); the reviewed report
+# lives in etc/, committed and diffable.
+temp/

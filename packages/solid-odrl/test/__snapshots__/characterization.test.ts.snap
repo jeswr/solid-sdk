@@ -1,0 +1,1125 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`characterization: JSON-LD projection > policyToJsonLd is a stable document for the rich policy 1`] = `
+{
+  "@context": {
+    "acl": "http://www.w3.org/ns/auth/acl#",
+    "action": {
+      "@id": "http://www.w3.org/ns/odrl/2/action",
+      "@type": "@id",
+    },
+    "assignee": {
+      "@id": "http://www.w3.org/ns/odrl/2/assignee",
+      "@type": "@id",
+    },
+    "assigner": {
+      "@id": "http://www.w3.org/ns/odrl/2/assigner",
+      "@type": "@id",
+    },
+    "conflict": {
+      "@id": "http://www.w3.org/ns/odrl/2/conflict",
+      "@type": "@id",
+    },
+    "constraint": {
+      "@id": "http://www.w3.org/ns/odrl/2/constraint",
+      "@type": "@id",
+    },
+    "dpv": "https://w3id.org/dpv#",
+    "duty": {
+      "@id": "http://www.w3.org/ns/odrl/2/duty",
+      "@type": "@id",
+    },
+    "leftOperand": {
+      "@id": "http://www.w3.org/ns/odrl/2/leftOperand",
+      "@type": "@id",
+    },
+    "obligation": {
+      "@id": "http://www.w3.org/ns/odrl/2/obligation",
+      "@type": "@id",
+    },
+    "odrl": "http://www.w3.org/ns/odrl/2/",
+    "operator": {
+      "@id": "http://www.w3.org/ns/odrl/2/operator",
+      "@type": "@id",
+    },
+    "permission": {
+      "@id": "http://www.w3.org/ns/odrl/2/permission",
+      "@type": "@id",
+    },
+    "profile": {
+      "@id": "http://www.w3.org/ns/odrl/2/profile",
+      "@type": "@id",
+    },
+    "prohibition": {
+      "@id": "http://www.w3.org/ns/odrl/2/prohibition",
+      "@type": "@id",
+    },
+    "rightOperand": "http://www.w3.org/ns/odrl/2/rightOperand",
+    "target": {
+      "@id": "http://www.w3.org/ns/odrl/2/target",
+      "@type": "@id",
+    },
+    "uid": {
+      "@id": "http://www.w3.org/ns/odrl/2/uid",
+      "@type": "@id",
+    },
+  },
+  "@id": "https://alice.example/policies/p1",
+  "@type": "odrl:Offer",
+  "assigner": {
+    "@id": "https://alice.example/profile/card#me",
+  },
+  "conflict": {
+    "@id": "http://www.w3.org/ns/odrl/2/prohibit",
+  },
+  "obligation": [
+    {
+      "action": {
+        "@id": "http://www.w3.org/ns/odrl/2/inform",
+      },
+      "target": {
+        "@id": "https://alice.example/profile/card#me",
+      },
+    },
+  ],
+  "permission": [
+    {
+      "action": {
+        "@id": "http://www.w3.org/ns/odrl/2/read",
+      },
+      "assignee": {
+        "@id": "https://bob.example/profile/card#me",
+      },
+      "assigner": {
+        "@id": "https://alice.example/profile/card#me",
+      },
+      "constraint": [
+        {
+          "leftOperand": {
+            "@id": "http://www.w3.org/ns/odrl/2/purpose",
+          },
+          "operator": {
+            "@id": "http://www.w3.org/ns/odrl/2/eq",
+          },
+          "rightOperand": {
+            "@id": "https://w3id.org/dpv#ResearchAndDevelopment",
+          },
+        },
+        {
+          "leftOperand": {
+            "@id": "http://www.w3.org/ns/odrl/2/dateTime",
+          },
+          "operator": {
+            "@id": "http://www.w3.org/ns/odrl/2/lteq",
+          },
+          "rightOperand": {
+            "@type": "http://www.w3.org/2001/XMLSchema#dateTime",
+            "@value": "2027-01-01T00:00:00Z",
+          },
+        },
+        {
+          "leftOperand": {
+            "@id": "http://www.w3.org/ns/odrl/2/count",
+          },
+          "operator": {
+            "@id": "http://www.w3.org/ns/odrl/2/lteq",
+          },
+          "rightOperand": {
+            "@type": "http://www.w3.org/2001/XMLSchema#integer",
+            "@value": "5",
+          },
+        },
+      ],
+      "duty": [
+        {
+          "action": {
+            "@id": "http://www.w3.org/ns/odrl/2/attribute",
+          },
+          "constraint": [
+            {
+              "leftOperand": {
+                "@id": "http://www.w3.org/ns/odrl/2/recipient",
+              },
+              "operator": {
+                "@id": "http://www.w3.org/ns/odrl/2/eq",
+              },
+              "rightOperand": {
+                "@id": "https://alice.example/profile/card#me",
+              },
+            },
+          ],
+        },
+      ],
+      "target": {
+        "@id": "https://alice.example/notes/private.ttl",
+      },
+    },
+  ],
+  "profile": [
+    {
+      "@id": "https://w3id.org/oac#",
+    },
+  ],
+  "prohibition": [
+    {
+      "action": {
+        "@id": "http://www.w3.org/ns/odrl/2/distribute",
+      },
+      "assigner": {
+        "@id": "https://alice.example/profile/card#me",
+      },
+      "target": {
+        "@id": "https://alice.example/notes/private.ttl",
+      },
+    },
+  ],
+  "uid": {
+    "@id": "https://alice.example/policies/p1",
+  },
+}
+`;
+
+exports[`characterization: compose adapters > requestContextFromA2AIntent maps the verb table stably 1`] = `
+[
+  {
+    "action": "read",
+    "agent": "https://bob.example/profile/card#me",
+    "attributes": {
+      "recipient": "https://carol.example/profile/card#me",
+    },
+    "target": "https://alice.example/notes/private.ttl",
+  },
+  {
+    "action": "write",
+    "agent": "https://bob.example/profile/card#me",
+    "attributes": {
+      "recipient": "https://carol.example/profile/card#me",
+    },
+    "target": "https://alice.example/notes/private.ttl",
+  },
+  {
+    "action": "modify",
+    "agent": "https://bob.example/profile/card#me",
+    "attributes": {
+      "recipient": "https://carol.example/profile/card#me",
+    },
+    "target": "https://alice.example/notes/private.ttl",
+  },
+  {
+    "action": "append",
+    "agent": "https://bob.example/profile/card#me",
+    "attributes": {
+      "recipient": "https://carol.example/profile/card#me",
+    },
+    "target": "https://alice.example/notes/private.ttl",
+  },
+  {
+    "action": "delete",
+    "agent": "https://bob.example/profile/card#me",
+    "attributes": {
+      "recipient": "https://carol.example/profile/card#me",
+    },
+    "target": "https://alice.example/notes/private.ttl",
+  },
+  {
+    "action": "read",
+    "agent": "https://bob.example/profile/card#me",
+    "attributes": {
+      "recipient": "https://carol.example/profile/card#me",
+    },
+    "target": "https://alice.example/notes/private.ttl",
+  },
+  {
+    "action": "control",
+    "agent": "https://bob.example/profile/card#me",
+    "attributes": {
+      "recipient": "https://carol.example/profile/card#me",
+    },
+    "target": "https://alice.example/notes/private.ttl",
+  },
+  {
+    "action": "use",
+    "agent": "https://bob.example/profile/card#me",
+    "attributes": {
+      "recipient": "https://carol.example/profile/card#me",
+    },
+    "target": "https://alice.example/notes/private.ttl",
+  },
+  {
+    "action": "read",
+    "agent": "https://bob.example/profile/card#me",
+    "attributes": {
+      "recipient": "https://carol.example/profile/card#me",
+    },
+    "target": "https://alice.example/notes/private.ttl",
+  },
+  {
+    "action": "use",
+    "agent": "https://bob.example/profile/card#me",
+    "attributes": {
+      "recipient": "https://carol.example/profile/card#me",
+    },
+    "target": "https://alice.example/notes/private.ttl",
+  },
+]
+`;
+
+exports[`characterization: compose adapters > requestContextFromWac maps each ACL mode stably 1`] = `
+[
+  {
+    "action": "read",
+    "agent": "https://bob.example/profile/card#me",
+    "target": "https://alice.example/notes/private.ttl",
+  },
+  {
+    "action": "write",
+    "agent": "https://bob.example/profile/card#me",
+    "target": "https://alice.example/notes/private.ttl",
+  },
+  {
+    "action": "append",
+    "agent": "https://bob.example/profile/card#me",
+    "target": "https://alice.example/notes/private.ttl",
+  },
+  {
+    "action": "control",
+    "agent": "https://bob.example/profile/card#me",
+    "target": "https://alice.example/notes/private.ttl",
+  },
+]
+`;
+
+exports[`characterization: delegation decision matrix > a delegated Agreement's express graph is stable (delegatedUnder + grantUse + nextPolicy) 1`] = `
+"<https://agent-a.example/policies/to-b>
+  http://www.w3.org/1999/02/22-rdf-syntax-ns#type <http://www.w3.org/ns/odrl/2/Agreement>
+  http://www.w3.org/ns/odrl/2/assignee <https://agent-b.example/id#it>
+  http://www.w3.org/ns/odrl/2/assigner <https://agent-a.example/id#it>
+  http://www.w3.org/ns/odrl/2/permission [ http://www.w3.org/ns/odrl/2/action <http://www.w3.org/ns/odrl/2/grantUse> ; http://www.w3.org/ns/odrl/2/assignee <https://agent-b.example/id#it> ; http://www.w3.org/ns/odrl/2/assigner <https://agent-a.example/id#it> ; http://www.w3.org/ns/odrl/2/constraint [ http://www.w3.org/ns/odrl/2/leftOperand <https://w3id.org/jeswr/odrl-delegation#delegationDepth> ; http://www.w3.org/ns/odrl/2/operator <http://www.w3.org/ns/odrl/2/lteq> ; http://www.w3.org/ns/odrl/2/rightOperand "1"^^http://www.w3.org/2001/XMLSchema#integer ] ; http://www.w3.org/ns/odrl/2/duty [ http://www.w3.org/ns/odrl/2/action <http://www.w3.org/ns/odrl/2/nextPolicy> ; http://www.w3.org/ns/odrl/2/target <https://agent-b.example/policies/to-c> ] ; http://www.w3.org/ns/odrl/2/target <https://alice.example/notes/private.ttl> ]
+  http://www.w3.org/ns/odrl/2/permission [ http://www.w3.org/ns/odrl/2/action <http://www.w3.org/ns/odrl/2/read> ; http://www.w3.org/ns/odrl/2/assignee <https://agent-b.example/id#it> ; http://www.w3.org/ns/odrl/2/assigner <https://agent-a.example/id#it> ; http://www.w3.org/ns/odrl/2/target <https://alice.example/notes/private.ttl> ]
+  http://www.w3.org/ns/odrl/2/uid <https://agent-a.example/policies/to-b>
+  https://w3id.org/jeswr/odrl-delegation#delegatedUnder <https://alice.example/policies/root>"
+`;
+
+exports[`characterization: delegation decision matrix > a delegated Agreement's express graph is stable (delegatedUnder + grantUse + nextPolicy) 2`] = `
+{
+  "@context": {
+    "acl": "http://www.w3.org/ns/auth/acl#",
+    "action": {
+      "@id": "http://www.w3.org/ns/odrl/2/action",
+      "@type": "@id",
+    },
+    "assignee": {
+      "@id": "http://www.w3.org/ns/odrl/2/assignee",
+      "@type": "@id",
+    },
+    "assigner": {
+      "@id": "http://www.w3.org/ns/odrl/2/assigner",
+      "@type": "@id",
+    },
+    "conflict": {
+      "@id": "http://www.w3.org/ns/odrl/2/conflict",
+      "@type": "@id",
+    },
+    "constraint": {
+      "@id": "http://www.w3.org/ns/odrl/2/constraint",
+      "@type": "@id",
+    },
+    "delegatedUnder": {
+      "@id": "https://w3id.org/jeswr/odrl-delegation#delegatedUnder",
+      "@type": "@id",
+    },
+    "dpv": "https://w3id.org/dpv#",
+    "duty": {
+      "@id": "http://www.w3.org/ns/odrl/2/duty",
+      "@type": "@id",
+    },
+    "leftOperand": {
+      "@id": "http://www.w3.org/ns/odrl/2/leftOperand",
+      "@type": "@id",
+    },
+    "obligation": {
+      "@id": "http://www.w3.org/ns/odrl/2/obligation",
+      "@type": "@id",
+    },
+    "odrl": "http://www.w3.org/ns/odrl/2/",
+    "odrld": "https://w3id.org/jeswr/odrl-delegation#",
+    "operator": {
+      "@id": "http://www.w3.org/ns/odrl/2/operator",
+      "@type": "@id",
+    },
+    "permission": {
+      "@id": "http://www.w3.org/ns/odrl/2/permission",
+      "@type": "@id",
+    },
+    "profile": {
+      "@id": "http://www.w3.org/ns/odrl/2/profile",
+      "@type": "@id",
+    },
+    "prohibition": {
+      "@id": "http://www.w3.org/ns/odrl/2/prohibition",
+      "@type": "@id",
+    },
+    "rightOperand": "http://www.w3.org/ns/odrl/2/rightOperand",
+    "target": {
+      "@id": "http://www.w3.org/ns/odrl/2/target",
+      "@type": "@id",
+    },
+    "uid": {
+      "@id": "http://www.w3.org/ns/odrl/2/uid",
+      "@type": "@id",
+    },
+  },
+  "@id": "https://agent-a.example/policies/to-b",
+  "@type": "odrl:Agreement",
+  "assignee": {
+    "@id": "https://agent-b.example/id#it",
+  },
+  "assigner": {
+    "@id": "https://agent-a.example/id#it",
+  },
+  "delegatedUnder": {
+    "@id": "https://alice.example/policies/root",
+  },
+  "permission": [
+    {
+      "action": {
+        "@id": "http://www.w3.org/ns/odrl/2/read",
+      },
+      "assignee": {
+        "@id": "https://agent-b.example/id#it",
+      },
+      "assigner": {
+        "@id": "https://agent-a.example/id#it",
+      },
+      "target": {
+        "@id": "https://alice.example/notes/private.ttl",
+      },
+    },
+    {
+      "action": {
+        "@id": "http://www.w3.org/ns/odrl/2/grantUse",
+      },
+      "assignee": {
+        "@id": "https://agent-b.example/id#it",
+      },
+      "assigner": {
+        "@id": "https://agent-a.example/id#it",
+      },
+      "constraint": [
+        {
+          "leftOperand": {
+            "@id": "https://w3id.org/jeswr/odrl-delegation#delegationDepth",
+          },
+          "operator": {
+            "@id": "http://www.w3.org/ns/odrl/2/lteq",
+          },
+          "rightOperand": {
+            "@type": "http://www.w3.org/2001/XMLSchema#integer",
+            "@value": "1",
+          },
+        },
+      ],
+      "duty": [
+        {
+          "action": {
+            "@id": "http://www.w3.org/ns/odrl/2/nextPolicy",
+          },
+          "target": {
+            "@id": "https://agent-b.example/policies/to-c",
+          },
+        },
+      ],
+      "target": {
+        "@id": "https://alice.example/notes/private.ttl",
+      },
+    },
+  ],
+  "uid": {
+    "@id": "https://agent-a.example/policies/to-b",
+  },
+}
+`;
+
+exports[`characterization: delegation decision matrix > cyclic chain (root repeated) → deny 1`] = `
+{
+  "decision": "deny",
+  "duties": [],
+  "hops": [],
+  "reason": "Cyclic chain: policy <https://alice.example/policies/root> appears more than once.",
+}
+`;
+
+exports[`characterization: delegation decision matrix > delegationProvenance emits a stable PROV-O overlay for the 2-hop chain 1`] = `
+"<https://agent-a.example/policies/to-b>
+  http://www.w3.org/ns/prov#wasAttributedTo <https://agent-a.example/id#it>
+  http://www.w3.org/ns/prov#wasDerivedFrom <https://alice.example/policies/root>
+  https://w3id.org/jeswr/odrl-delegation#delegatedUnder <https://alice.example/policies/root>
+<https://agent-b.example/id#it>
+  http://www.w3.org/ns/prov#actedOnBehalfOf <https://agent-a.example/id#it>
+<https://agent-b.example/policies/to-c>
+  http://www.w3.org/ns/prov#wasAttributedTo <https://agent-b.example/id#it>
+  http://www.w3.org/ns/prov#wasDerivedFrom <https://agent-a.example/policies/to-b>
+  https://w3id.org/jeswr/odrl-delegation#delegatedUnder <https://agent-a.example/policies/to-b>
+<https://agent-c.example/id#it>
+  http://www.w3.org/ns/prov#actedOnBehalfOf <https://agent-b.example/id#it>
+<https://alice.example/policies/root>
+  http://www.w3.org/ns/prov#wasAttributedTo <https://alice.example/profile/card#me>"
+`;
+
+exports[`characterization: delegation decision matrix > depth exceeded (2 hops under an explicit lteq 1) → deny 1`] = `
+{
+  "decision": "deny",
+  "duties": [],
+  "hops": [
+    {
+      "index": 1,
+      "ok": false,
+      "policyId": "https://agent-a.example/policies/to-b",
+      "reason": "the parent policy does not cleanly authorise delegation by <https://agent-a.example/id#it> (notApplicable: No permission or prohibition matches the request.).",
+    },
+  ],
+  "reason": "Hop 1 (<https://agent-a.example/policies/to-b>): the parent policy does not cleanly authorise delegation by <https://agent-a.example/id#it> (notApplicable: No permission or prohibition matches the request.).",
+}
+`;
+
+exports[`characterization: delegation decision matrix > depth exceeded (2 hops under the default budget of 1) → deny 1`] = `
+{
+  "decision": "deny",
+  "duties": [],
+  "hops": [
+    {
+      "index": 1,
+      "ok": false,
+      "policyId": "https://agent-a.example/policies/to-b",
+      "reason": "grantUse permission carries no delegationDepth constraint, so its budget is the profile default of 1 hop — 2 remaining hops exceed it",
+    },
+  ],
+  "reason": "Hop 1 (<https://agent-a.example/policies/to-b>): grantUse permission carries no delegationDepth constraint, so its budget is the profile default of 1 hop — 2 remaining hops exceed it",
+}
+`;
+
+exports[`characterization: delegation decision matrix > expired mid-chain hop → deny 1`] = `
+{
+  "decision": "deny",
+  "duties": [],
+  "hops": [
+    {
+      "index": 1,
+      "ok": true,
+      "policyId": "https://agent-a.example/policies/to-b",
+      "reason": "ok",
+    },
+    {
+      "index": 2,
+      "ok": true,
+      "policyId": "https://agent-b.example/policies/to-c",
+      "reason": "ok",
+    },
+  ],
+  "reason": "Hop 1 (<https://agent-a.example/policies/to-b>) does not cleanly grant the requested capability to its delegate <https://agent-b.example/id#it> (notApplicable: No permission or prohibition matches the request.) — a delegate cannot receive more than the delegator holds.",
+}
+`;
+
+exports[`characterization: delegation decision matrix > nextPolicy narrows: out-of-scope request against the mandated hop → deny 1`] = `
+{
+  "decision": "deny",
+  "duties": [],
+  "hops": [
+    {
+      "index": 1,
+      "ok": true,
+      "policyId": "https://agent-a.example/policies/to-b",
+      "reason": "ok",
+    },
+  ],
+  "reason": "Hop 0 (<https://alice.example/policies/root>) does not cleanly grant the requested capability to its delegate <https://agent-a.example/id#it> (notApplicable: No permission or prohibition matches the request.) — a delegate cannot receive more than the delegator holds.",
+}
+`;
+
+exports[`characterization: delegation decision matrix > nextPolicy narrows: the mandated hop is granted, in-scope request → permit 1`] = `
+{
+  "decision": "permit",
+  "duties": [],
+  "hops": [
+    {
+      "index": 1,
+      "ok": true,
+      "policyId": "https://agent-a.example/policies/to-b",
+      "reason": "ok",
+    },
+  ],
+  "leaf": {
+    "conflict": false,
+    "decision": "permit",
+    "duties": [],
+    "matchedPermissions": [
+      {
+        "action": "read",
+        "assignee": "https://agent-b.example/id#it",
+        "target": "https://alice.example/notes/private.ttl",
+        "type": "permission",
+      },
+    ],
+    "matchedProhibitions": [],
+    "reason": "A permission matches the request.",
+  },
+  "reason": "Every hop of the 1-hop delegation chain is valid and the request is within the chain intersection.",
+}
+`;
+
+exports[`characterization: delegation decision matrix > nextPolicy violated (a different policy was delegated) → deny 1`] = `
+{
+  "decision": "deny",
+  "duties": [],
+  "hops": [
+    {
+      "index": 1,
+      "ok": false,
+      "policyId": "https://agent-a.example/policies/to-b",
+      "reason": "grantUse permission mandates nextPolicy <https://agent-b.example/policies/to-c> but the delegated hop is <https://agent-a.example/policies/to-b>",
+    },
+  ],
+  "reason": "Hop 1 (<https://agent-a.example/policies/to-b>): grantUse permission mandates nextPolicy <https://agent-b.example/policies/to-c> but the delegated hop is <https://agent-a.example/policies/to-b>",
+}
+`;
+
+exports[`characterization: delegation decision matrix > over-broad hop (delegate granted write the delegator lacks) → deny 1`] = `
+{
+  "decision": "deny",
+  "duties": [],
+  "hops": [
+    {
+      "index": 1,
+      "ok": true,
+      "policyId": "https://agent-a.example/policies/to-b",
+      "reason": "ok",
+    },
+  ],
+  "reason": "Hop 0 (<https://alice.example/policies/root>) does not cleanly grant the requested capability to its delegate <https://agent-a.example/id#it> (notApplicable: No permission or prohibition matches the request.) — a delegate cannot receive more than the delegator holds.",
+}
+`;
+
+exports[`characterization: delegation decision matrix > revoked hop → deny 1`] = `
+{
+  "decision": "deny",
+  "duties": [],
+  "hops": [],
+  "reason": "Hop 1 (<https://agent-a.example/policies/to-b>) has been revoked.",
+}
+`;
+
+exports[`characterization: delegation decision matrix > valid 1-hop chain → permit 1`] = `
+{
+  "decision": "permit",
+  "duties": [],
+  "hops": [
+    {
+      "index": 1,
+      "ok": true,
+      "policyId": "https://agent-a.example/policies/to-b",
+      "reason": "ok",
+    },
+  ],
+  "leaf": {
+    "conflict": false,
+    "decision": "permit",
+    "duties": [],
+    "matchedPermissions": [
+      {
+        "action": "read",
+        "assignee": "https://agent-b.example/id#it",
+        "target": "https://alice.example/notes/private.ttl",
+        "type": "permission",
+      },
+    ],
+    "matchedProhibitions": [],
+    "reason": "A permission matches the request.",
+  },
+  "reason": "Every hop of the 1-hop delegation chain is valid and the request is within the chain intersection.",
+}
+`;
+
+exports[`characterization: delegation decision matrix > valid 2-hop chain (root depth 2) → permit 1`] = `
+{
+  "decision": "permit",
+  "duties": [],
+  "hops": [
+    {
+      "index": 1,
+      "ok": true,
+      "policyId": "https://agent-a.example/policies/to-b",
+      "reason": "ok",
+    },
+    {
+      "index": 2,
+      "ok": true,
+      "policyId": "https://agent-b.example/policies/to-c",
+      "reason": "ok",
+    },
+  ],
+  "leaf": {
+    "conflict": false,
+    "decision": "permit",
+    "duties": [],
+    "matchedPermissions": [
+      {
+        "action": "read",
+        "assignee": "https://agent-c.example/id#it",
+        "target": "https://alice.example/notes/private.ttl",
+        "type": "permission",
+      },
+    ],
+    "matchedProhibitions": [],
+    "reason": "A permission matches the request.",
+  },
+  "reason": "Every hop of the 2-hop delegation chain is valid and the request is within the chain intersection.",
+}
+`;
+
+exports[`characterization: evaluate decision matrix > append does NOT cover a write request (no over-grant) 1`] = `
+{
+  "conflict": false,
+  "decision": "notApplicable",
+  "duties": [],
+  "matchedPermissions": [],
+  "matchedProhibitions": [],
+  "reason": "No permission or prohibition matches the request.",
+}
+`;
+
+exports[`characterization: evaluate decision matrix > conflict default (no strategy) → deny (fail-closed prohibit) 1`] = `
+{
+  "conflict": true,
+  "decision": "deny",
+  "duties": [],
+  "matchedPermissions": [
+    {
+      "action": "read",
+      "target": "https://alice.example/notes/private.ttl",
+      "type": "permission",
+    },
+  ],
+  "matchedProhibitions": [
+    {
+      "action": "read",
+      "target": "https://alice.example/notes/private.ttl",
+      "type": "prohibition",
+    },
+  ],
+  "reason": "Conflict resolved by odrl:prohibit — prohibition overrides permission.",
+}
+`;
+
+exports[`characterization: evaluate decision matrix > conflict invalid → deny 1`] = `
+{
+  "conflict": true,
+  "decision": "deny",
+  "duties": [],
+  "matchedPermissions": [
+    {
+      "action": "read",
+      "target": "https://alice.example/notes/private.ttl",
+      "type": "permission",
+    },
+  ],
+  "matchedProhibitions": [
+    {
+      "action": "read",
+      "target": "https://alice.example/notes/private.ttl",
+      "type": "prohibition",
+    },
+  ],
+  "reason": "Conflict resolved by odrl:invalid — the policy is void; denying (fail-closed).",
+}
+`;
+
+exports[`characterization: evaluate decision matrix > conflict perm → permit 1`] = `
+{
+  "conflict": true,
+  "decision": "permit",
+  "duties": [],
+  "matchedPermissions": [
+    {
+      "action": "read",
+      "target": "https://alice.example/notes/private.ttl",
+      "type": "permission",
+    },
+  ],
+  "matchedProhibitions": [
+    {
+      "action": "read",
+      "target": "https://alice.example/notes/private.ttl",
+      "type": "prohibition",
+    },
+  ],
+  "reason": "Conflict resolved by odrl:perm — permission overrides prohibition.",
+}
+`;
+
+exports[`characterization: evaluate decision matrix > constraint fail-closed: missing purpose in context → notApplicable 1`] = `
+{
+  "conflict": false,
+  "decision": "notApplicable",
+  "duties": [],
+  "matchedPermissions": [],
+  "matchedProhibitions": [],
+  "reason": "No permission or prohibition matches the request.",
+}
+`;
+
+exports[`characterization: evaluate decision matrix > constraint satisfied: purpose supplied → permit 1`] = `
+{
+  "conflict": false,
+  "decision": "permit",
+  "duties": [],
+  "matchedPermissions": [
+    {
+      "action": "read",
+      "target": "https://alice.example/notes/private.ttl",
+      "type": "permission",
+    },
+  ],
+  "matchedProhibitions": [],
+  "reason": "A permission matches the request.",
+}
+`;
+
+exports[`characterization: evaluate decision matrix > dateTime lteq against injected now → permit 1`] = `
+{
+  "conflict": false,
+  "decision": "permit",
+  "duties": [],
+  "matchedPermissions": [
+    {
+      "action": "read",
+      "target": "https://alice.example/notes/private.ttl",
+      "type": "permission",
+    },
+  ],
+  "matchedProhibitions": [],
+  "reason": "A permission matches the request.",
+}
+`;
+
+exports[`characterization: evaluate decision matrix > deny: matching prohibition only 1`] = `
+{
+  "conflict": false,
+  "decision": "deny",
+  "duties": [],
+  "matchedPermissions": [],
+  "matchedProhibitions": [
+    {
+      "action": "read",
+      "target": "https://alice.example/notes/private.ttl",
+      "type": "prohibition",
+    },
+  ],
+  "reason": "A prohibition matches the request.",
+}
+`;
+
+exports[`characterization: evaluate decision matrix > isAnyOf set membership → permit 1`] = `
+{
+  "conflict": false,
+  "decision": "permit",
+  "duties": [],
+  "matchedPermissions": [
+    {
+      "action": "read",
+      "target": "https://alice.example/notes/private.ttl",
+      "type": "permission",
+    },
+  ],
+  "matchedProhibitions": [],
+  "reason": "A permission matches the request.",
+}
+`;
+
+exports[`characterization: evaluate decision matrix > notApplicable: no rule matches 1`] = `
+{
+  "conflict": false,
+  "decision": "notApplicable",
+  "duties": [],
+  "matchedPermissions": [],
+  "matchedProhibitions": [],
+  "reason": "No permission or prohibition matches the request.",
+}
+`;
+
+exports[`characterization: evaluate decision matrix > permit with unfulfilled duty (advisory) → permit, duty reported 1`] = `
+{
+  "conflict": false,
+  "decision": "permit",
+  "duties": [
+    {
+      "action": "attribute",
+      "fulfilled": false,
+    },
+  ],
+  "matchedPermissions": [
+    {
+      "action": "read",
+      "target": "https://alice.example/notes/private.ttl",
+      "type": "permission",
+    },
+  ],
+  "matchedProhibitions": [],
+  "reason": "A permission matches the request.",
+}
+`;
+
+exports[`characterization: evaluate decision matrix > permit: matching permission only 1`] = `
+{
+  "conflict": false,
+  "decision": "permit",
+  "duties": [],
+  "matchedPermissions": [
+    {
+      "action": "read",
+      "assignee": "https://bob.example/profile/card#me",
+      "target": "https://alice.example/notes/private.ttl",
+      "type": "permission",
+    },
+  ],
+  "matchedProhibitions": [],
+  "reason": "A permission matches the request.",
+}
+`;
+
+exports[`characterization: evaluate decision matrix > requireDuties with discharged duty → permit 1`] = `
+{
+  "conflict": false,
+  "decision": "permit",
+  "duties": [
+    {
+      "action": "attribute",
+      "fulfilled": true,
+    },
+  ],
+  "matchedPermissions": [
+    {
+      "action": "read",
+      "target": "https://alice.example/notes/private.ttl",
+      "type": "permission",
+    },
+  ],
+  "matchedProhibitions": [],
+  "reason": "A permission matches the request.",
+}
+`;
+
+exports[`characterization: evaluate decision matrix > requireDuties with unfulfilled duty → deny 1`] = `
+{
+  "conflict": false,
+  "decision": "deny",
+  "duties": [
+    {
+      "action": "attribute",
+      "fulfilled": false,
+    },
+  ],
+  "matchedPermissions": [
+    {
+      "action": "read",
+      "target": "https://alice.example/notes/private.ttl",
+      "type": "permission",
+    },
+  ],
+  "matchedProhibitions": [],
+  "reason": "A permission matches the request. But requireDuties is set and these duties are unfulfilled: attribute.",
+}
+`;
+
+exports[`characterization: evaluate decision matrix > use umbrella covers a read request 1`] = `
+{
+  "conflict": false,
+  "decision": "permit",
+  "duties": [],
+  "matchedPermissions": [
+    {
+      "action": "use",
+      "target": "https://alice.example/notes/private.ttl",
+      "type": "permission",
+    },
+  ],
+  "matchedProhibitions": [],
+  "reason": "A permission matches the request.",
+}
+`;
+
+exports[`characterization: evaluate decision matrix > use umbrella does NOT cover a control request (fail-closed) 1`] = `
+{
+  "conflict": false,
+  "decision": "notApplicable",
+  "duties": [],
+  "matchedPermissions": [],
+  "matchedProhibitions": [],
+  "reason": "No permission or prohibition matches the request.",
+}
+`;
+
+exports[`characterization: evaluate decision matrix > write subsumes an append request 1`] = `
+{
+  "conflict": false,
+  "decision": "permit",
+  "duties": [],
+  "matchedPermissions": [
+    {
+      "action": "write",
+      "target": "https://alice.example/notes/private.ttl",
+      "type": "permission",
+    },
+  ],
+  "matchedProhibitions": [],
+  "reason": "A permission matches the request.",
+}
+`;
+
+exports[`characterization: express graph fingerprint > policyToRdf emits a stable canonical graph for the rich policy 1`] = `
+"<https://alice.example/policies/p1>
+  http://www.w3.org/1999/02/22-rdf-syntax-ns#type <http://www.w3.org/ns/odrl/2/Offer>
+  http://www.w3.org/ns/odrl/2/assigner <https://alice.example/profile/card#me>
+  http://www.w3.org/ns/odrl/2/conflict <http://www.w3.org/ns/odrl/2/prohibit>
+  http://www.w3.org/ns/odrl/2/obligation [ http://www.w3.org/ns/odrl/2/action <http://www.w3.org/ns/odrl/2/inform> ; http://www.w3.org/ns/odrl/2/target <https://alice.example/profile/card#me> ]
+  http://www.w3.org/ns/odrl/2/permission [ http://www.w3.org/ns/odrl/2/action <http://www.w3.org/ns/odrl/2/read> ; http://www.w3.org/ns/odrl/2/assignee <https://bob.example/profile/card#me> ; http://www.w3.org/ns/odrl/2/assigner <https://alice.example/profile/card#me> ; http://www.w3.org/ns/odrl/2/constraint [ http://www.w3.org/ns/odrl/2/leftOperand <http://www.w3.org/ns/odrl/2/count> ; http://www.w3.org/ns/odrl/2/operator <http://www.w3.org/ns/odrl/2/lteq> ; http://www.w3.org/ns/odrl/2/rightOperand "5"^^http://www.w3.org/2001/XMLSchema#integer ] ; http://www.w3.org/ns/odrl/2/constraint [ http://www.w3.org/ns/odrl/2/leftOperand <http://www.w3.org/ns/odrl/2/dateTime> ; http://www.w3.org/ns/odrl/2/operator <http://www.w3.org/ns/odrl/2/lteq> ; http://www.w3.org/ns/odrl/2/rightOperand "2027-01-01T00:00:00Z"^^http://www.w3.org/2001/XMLSchema#dateTime ] ; http://www.w3.org/ns/odrl/2/constraint [ http://www.w3.org/ns/odrl/2/leftOperand <http://www.w3.org/ns/odrl/2/purpose> ; http://www.w3.org/ns/odrl/2/operator <http://www.w3.org/ns/odrl/2/eq> ; http://www.w3.org/ns/odrl/2/rightOperand <https://w3id.org/dpv#ResearchAndDevelopment> ] ; http://www.w3.org/ns/odrl/2/duty [ http://www.w3.org/ns/odrl/2/action <http://www.w3.org/ns/odrl/2/attribute> ; http://www.w3.org/ns/odrl/2/constraint [ http://www.w3.org/ns/odrl/2/leftOperand <http://www.w3.org/ns/odrl/2/recipient> ; http://www.w3.org/ns/odrl/2/operator <http://www.w3.org/ns/odrl/2/eq> ; http://www.w3.org/ns/odrl/2/rightOperand <https://alice.example/profile/card#me> ] ] ; http://www.w3.org/ns/odrl/2/target <https://alice.example/notes/private.ttl> ]
+  http://www.w3.org/ns/odrl/2/profile <https://w3id.org/oac#>
+  http://www.w3.org/ns/odrl/2/prohibition [ http://www.w3.org/ns/odrl/2/action <http://www.w3.org/ns/odrl/2/distribute> ; http://www.w3.org/ns/odrl/2/assigner <https://alice.example/profile/card#me> ; http://www.w3.org/ns/odrl/2/target <https://alice.example/notes/private.ttl> ]
+  http://www.w3.org/ns/odrl/2/uid <https://alice.example/policies/p1>"
+`;
+
+exports[`characterization: express graph fingerprint > policyToRdf emits a stable graph for the append/control acl-mode policy 1`] = `
+"<https://alice.example/policies/acl>
+  http://www.w3.org/1999/02/22-rdf-syntax-ns#type <http://www.w3.org/ns/odrl/2/Set>
+  http://www.w3.org/ns/odrl/2/permission [ http://www.w3.org/ns/odrl/2/action <http://www.w3.org/ns/auth/acl#Append> ; http://www.w3.org/ns/odrl/2/assignee <https://bob.example/profile/card#me> ; http://www.w3.org/ns/odrl/2/target <https://alice.example/notes/private.ttl> ]
+  http://www.w3.org/ns/odrl/2/permission [ http://www.w3.org/ns/odrl/2/action <http://www.w3.org/ns/auth/acl#Control> ; http://www.w3.org/ns/odrl/2/assignee <https://alice.example/profile/card#me> ; http://www.w3.org/ns/odrl/2/target <https://alice.example/notes/private.ttl> ]
+  http://www.w3.org/ns/odrl/2/prohibition [ http://www.w3.org/ns/odrl/2/action <http://www.w3.org/ns/odrl/2/delete> ; http://www.w3.org/ns/odrl/2/target <https://alice.example/notes/private.ttl> ]
+  http://www.w3.org/ns/odrl/2/uid <https://alice.example/policies/acl>"
+`;
+
+exports[`characterization: parse round-trip structure > JSON-LD round-trip recovers a stable OdrlPolicy 1`] = `
+{
+  "assigner": "https://alice.example/profile/card#me",
+  "conflict": "prohibit",
+  "id": "https://alice.example/policies/p1",
+  "obligations": [
+    {
+      "action": "inform",
+      "target": "https://alice.example/profile/card#me",
+    },
+  ],
+  "permissions": [
+    {
+      "action": "read",
+      "assignee": "https://bob.example/profile/card#me",
+      "assigner": "https://alice.example/profile/card#me",
+      "constraints": [
+        {
+          "leftOperand": "purpose",
+          "operator": "eq",
+          "rightOperand": "https://w3id.org/dpv#ResearchAndDevelopment",
+        },
+        {
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "leftOperand": "dateTime",
+          "operator": "lteq",
+          "rightOperand": "2027-01-01T00:00:00Z",
+        },
+        {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "leftOperand": "count",
+          "operator": "lteq",
+          "rightOperand": 5,
+        },
+      ],
+      "duties": [
+        {
+          "action": "attribute",
+          "constraints": [
+            {
+              "leftOperand": "recipient",
+              "operator": "eq",
+              "rightOperand": "https://alice.example/profile/card#me",
+            },
+          ],
+        },
+      ],
+      "target": "https://alice.example/notes/private.ttl",
+      "type": "permission",
+    },
+  ],
+  "profile": "https://w3id.org/oac#",
+  "prohibitions": [
+    {
+      "action": "distribute",
+      "assigner": "https://alice.example/profile/card#me",
+      "target": "https://alice.example/notes/private.ttl",
+      "type": "prohibition",
+    },
+  ],
+  "type": "Offer",
+}
+`;
+
+exports[`characterization: parse round-trip structure > Turtle round-trip recovers a stable OdrlPolicy 1`] = `
+{
+  "assigner": "https://alice.example/profile/card#me",
+  "conflict": "prohibit",
+  "id": "https://alice.example/policies/p1",
+  "obligations": [
+    {
+      "action": "inform",
+      "target": "https://alice.example/profile/card#me",
+    },
+  ],
+  "permissions": [
+    {
+      "action": "read",
+      "assignee": "https://bob.example/profile/card#me",
+      "assigner": "https://alice.example/profile/card#me",
+      "constraints": [
+        {
+          "leftOperand": "purpose",
+          "operator": "eq",
+          "rightOperand": "https://w3id.org/dpv#ResearchAndDevelopment",
+        },
+        {
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "leftOperand": "dateTime",
+          "operator": "lteq",
+          "rightOperand": "2027-01-01T00:00:00Z",
+        },
+        {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "leftOperand": "count",
+          "operator": "lteq",
+          "rightOperand": 5,
+        },
+      ],
+      "duties": [
+        {
+          "action": "attribute",
+          "constraints": [
+            {
+              "leftOperand": "recipient",
+              "operator": "eq",
+              "rightOperand": "https://alice.example/profile/card#me",
+            },
+          ],
+        },
+      ],
+      "target": "https://alice.example/notes/private.ttl",
+      "type": "permission",
+    },
+  ],
+  "profile": "https://w3id.org/oac#",
+  "prohibitions": [
+    {
+      "action": "distribute",
+      "assigner": "https://alice.example/profile/card#me",
+      "target": "https://alice.example/notes/private.ttl",
+      "type": "prohibition",
+    },
+  ],
+  "type": "Offer",
+}
+`;

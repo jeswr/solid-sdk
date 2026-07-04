@@ -7,6 +7,7 @@
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { describe, expect, it } from "vitest";
 import {
+  OdrlSerializationError,
   parsePolicy,
   policyFromRdf,
   policyToJsonLd,
@@ -258,5 +259,33 @@ describe("policyFromRdf edge cases", () => {
     expect(parsed?.id).toBe(policy.id);
     expect(parsed?.type).toBe("Agreement");
     expect(parsed?.permissions?.[0]?.assignee).toBe(AGENT);
+  });
+
+  it("REJECTS a hostile IRI in a target — fail-closed, no triple injection via policyToTurtle (adversarial-verify High)", () => {
+    // A rule target carrying a `>` + spaces would break out of the <…> that
+    // n3.Writer emits verbatim and inject arbitrary triples if forwarded raw.
+    // `target` is an EVALUATION-CRITICAL, http(s)-contract field (requireHttpIri
+    // in src/policy.ts), so — unlike a subject/id field, which is merely escaped
+    // (see test/iri.test.ts's "JSON-LD emits an escaped @id" case) — the write
+    // path REFUSES to serialise rather than silently percent-escape it: silently
+    // escaping would make the in-memory policy and the serialise→parse round-trip
+    // carry DIFFERENT target strings, which could let a constraint decide
+    // differently (a neq/isNoneOf widening) or otherwise desync evaluation from
+    // what was written. Fail-closed (reject) is the safe choice for both
+    // permissions (would over-grant) and prohibitions (would under-deny). See
+    // test/iri.test.ts's `REFUSES a hostile assignee or rule.target` for the
+    // dedicated unit-level coverage of this same `requireHttpIri` contract.
+    const hostileTarget =
+      "https://res.example/r> <https://evil/s> <https://evil/p> <https://evil/o> .\n<https://x";
+    expect(() =>
+      policyToTurtle({
+        id: "https://alice.example/policies/inj",
+        type: "Agreement",
+        assigner: OWNER,
+        permissions: [
+          { type: "permission", action: "read", target: hostileTarget, assignee: AGENT },
+        ],
+      }),
+    ).toThrow(OdrlSerializationError);
   });
 });

@@ -22,7 +22,9 @@
     "check:dist": "node scripts/check-dist-fresh.mjs",
     "check:lockfile-transport": "node scripts/check-lockfile-transport.mjs",
     "fix:lockfile-transport": "node scripts/normalize-lockfile.mjs",
-    "typecheck": "npm run build:deps && tsc -p tsconfig.json --noEmit",
+    "api:report": "npm run build && api-extractor run --local -c config/api-extractor.json",
+    "api:check": "npm run build && api-extractor run -c config/api-extractor.json",
+    "typecheck": "npm run build:deps && tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
     "lint": "biome check src test scripts && npm run check:lockfile-transport",
     "lint:fix": "biome check --write src test scripts",
     "test": "npm run build:deps && vitest run",
@@ -54,7 +56,7 @@
   },
   "homepage": "https://github.com/jeswr/solid-odrl#readme",
   "dependencies": {
-    "@jeswr/rdf-serialize": "git+https://github.com/jeswr/rdf-serialize.git#eed2c11ceaf4de5e1f79132353744a5d1e3d6c48",
+    "@jeswr/rdf-serialize": "git+https://github.com/jeswr/rdf-serialize.git#ef3dd85636b868ea336a45f79c0446ade0982e7b",
     "@rdfjs/wrapper": "^0.34.0",
     "@solid/object": "^0.6.0",
     "content-type": "^1.0.5",
@@ -64,6 +66,7 @@
   "devDependencies": {
     "@biomejs/biome": "^2.0.0",
     "@jeswr/fetch-rdf": "github:jeswr/fetch-rdf#main",
+    "@microsoft/api-extractor": "^7.58.9",
     "@rdfjs/types": "^2.0.1",
     "@types/n3": "^1.16.0",
     "@types/node": "^22.0.0",

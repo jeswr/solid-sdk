@@ -32,13 +32,39 @@
  * The committed `dist/` is kept in sync with `src/` by `scripts/check-dist-fresh.mjs`.
  */
 import { execFileSync } from "node:child_process";
-import { readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, isAbsolute, join, resolve, sep } from "node:path";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
+import { sanitizeJs, sanitizeMap } from "./sanitize-dist.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const outdir = join(root, "dist");
+
+/**
+ * Rewrite the machine-dependent build paths esbuild embeds — the `index.js` banner
+ * comments and the `index.js.map` `sources[]` / `sourceRoot` — to a stable
+ * package-relative label, failing closed if any host path survives. The pure rewrite
+ * + guard logic lives in `sanitize-dist.mjs` (unit-tested in `test/dist-sanitize.test.ts`,
+ * incl. the parent-node_modules + space-in-path leak cases); this wrapper only does the
+ * file read/write and supplies the two frames of reference the classifier needs:
+ *   - `root` is the package root (own source lives under it → `src/…`);
+ *   - esbuild emits banner paths relative to the build WORKING DIR (= `root`, since the
+ *     build always runs with cwd = the package root) and sourcemap `sources[]` relative
+ *     to the MAP FILE's dir (= `buildDir`). Passing each base lets the sanitiser resolve
+ *     to an absolute path and classify by `path.relative(root, …)` rather than by a
+ *     substring that a parent dir named `src`/`node_modules` could defeat.
+ */
+function sanitizeDist(buildDir) {
+  const jsPath = join(buildDir, "index.js");
+  writeFileSync(jsPath, sanitizeJs(readFileSync(jsPath, "utf8"), root, root));
+
+  const mapPath = join(buildDir, "index.js.map");
+  if (existsSync(mapPath)) {
+    const map = sanitizeMap(JSON.parse(readFileSync(mapPath, "utf8")), root, buildDir);
+    writeFileSync(mapPath, JSON.stringify(map));
+  }
+}
 
 /** The ONE off-npm dependency we INLINE; everything else stays external. */
 const INLINE = "@jeswr/fetch-rdf";
@@ -79,112 +105,6 @@ function externals() {
   return [...new Set([...declared, ...EXTERNAL_TRANSITIVE])];
 }
 
-/** `realpathSync` that never throws (a missing/odd path just yields the input). */
-function safeReal(p) {
-  try {
-    return realpathSync(p);
-  } catch {
-    return p;
-  }
-}
-
-/**
- * Reduce a (possibly absolute, possibly `../../…`-relative, possibly
- * symlink-resolved) module path to a LOCATION-INDEPENDENT package-relative form by
- * MARKER, not by prefix: everything up to and including the last `node_modules/`
- * segment collapses to `node_modules/…`, otherwise the path is taken from its last
- * `/src/` segment (→ `src/…`). This strips the maintainer's local
- * `/Users/jesght/…` (or the build box's `/private/tmp/…` worktree) prefix that
- * esbuild embeds (following the `node_modules` symlink out of cwd) and that tsc
- * embeds in the `.d.ts.map` `sources[]` — and it produces the SAME result whether
- * the build runs in `<root>/dist` or the check-dist scratch dir.
- */
-function toPackageRelative(p) {
-  if (typeof p !== "string") return p;
-  const nm = p.lastIndexOf("node_modules/");
-  if (nm !== -1) {
-    return p.slice(nm);
-  }
-  const srcIdx = p.lastIndexOf("/src/");
-  if (srcIdx !== -1) {
-    return p.slice(srcIdx + 1); // → "src/…"
-  }
-  // Already a bare relative like "src/…" (or has no recognised marker): leave it.
-  return p.replace(/^\.\//, "");
-}
-
-/**
- * Post-process the emitted `dist/` so NO absolute local filesystem path is
- * committed: rewrite the `.js` bundle's module-boundary path comments and every
- * source-map `sources[]` entry to package-relative. Then a build-FAIL guard scans
- * the committed `.js` + `.map` for any absolute path and throws — the committed
- * artifact must be reproducible + leak-free regardless of who/where built it.
- */
-function normalizeAndGuardPaths(buildDir) {
-  const rootPrefixes = [...new Set([root, safeReal(root)])].map((r) =>
-    r.endsWith(sep) ? r : r + sep,
-  );
-  const nmRealPrefixes = [
-    ...new Set([join(root, "node_modules"), safeReal(join(root, "node_modules"))]),
-  ].map((r) => (r.endsWith(sep) ? r : r + sep));
-
-  const files = readdirSync(buildDir).filter((f) => f.endsWith(".js") || f.endsWith(".map"));
-  for (const f of files) {
-    const fp = join(buildDir, f);
-    if (f.endsWith(".map")) {
-      const map = JSON.parse(readFileSync(fp, "utf8"));
-      if (Array.isArray(map.sources)) {
-        map.sources = map.sources.map(toPackageRelative);
-      }
-      writeFileSync(fp, `${JSON.stringify(map)}\n`);
-    } else {
-      let txt = readFileSync(fp, "utf8");
-      // Collapse any absolute `…/node_modules/` prefix in module-boundary comments.
-      txt = txt.replace(/\/[^\s"'`]*?\/node_modules\//g, "node_modules/");
-      // Strip a bare `node_modules` real-path prefix (symlink target) if present.
-      for (const r of nmRealPrefixes) {
-        txt = txt.split(r).join("node_modules/");
-      }
-      // Strip a package-root prefix (worktree or its realpath) → root-relative.
-      for (const r of rootPrefixes) {
-        txt = txt.split(r).join("");
-      }
-      writeFileSync(fp, txt);
-    }
-  }
-
-  // Build-fail guard: no local absolute path may survive in the committed artifact.
-  // For `.map` files scan BOTH `sources[]` AND `sourcesContent[]` (an embedded source
-  // body could itself carry a build-box path), not just the source names.
-  const ABSOLUTE = /(?:\/Users\/|\/home\/|\/root\/|\/private\/|\/var\/)/;
-  const offenders = [];
-  for (const f of readdirSync(buildDir).filter((x) => x.endsWith(".js") || x.endsWith(".map"))) {
-    const txt = readFileSync(join(buildDir, f), "utf8");
-    if (f.endsWith(".map")) {
-      const map = JSON.parse(txt);
-      for (const s of map.sources ?? []) {
-        if (typeof s === "string" && ABSOLUTE.test(s)) offenders.push(`${f} sources[]: ${s}`);
-      }
-      for (const sc of map.sourcesContent ?? []) {
-        if (typeof sc === "string" && ABSOLUTE.test(sc)) {
-          const line = sc.split("\n").find((l) => ABSOLUTE.test(l)) ?? "";
-          offenders.push(`${f} sourcesContent: ${line.trim().slice(0, 120)}`);
-        }
-      }
-    } else if (ABSOLUTE.test(txt)) {
-      const line = txt.split("\n").find((l) => ABSOLUTE.test(l)) ?? "";
-      offenders.push(`${f}: ${line.trim().slice(0, 120)}`);
-    }
-  }
-  if (offenders.length > 0) {
-    throw new Error(
-      `build-dist: refusing to emit — absolute local path(s) leaked into dist/:\n  ${offenders.join(
-        "\n  ",
-      )}`,
-    );
-  }
-}
-
 async function main(buildDir = outdir) {
   // 1. Ensure @jeswr/fetch-rdf's dist exists in node_modules so esbuild can
   //    resolve + inline it (ignore-scripts skipped its prepare on install).
@@ -222,8 +142,11 @@ async function main(buildDir = outdir) {
     { cwd: root, stdio: ["ignore", "ignore", "inherit"] },
   );
 
-  // 4. Strip absolute local paths from the JS + source maps, then fail-guard.
-  normalizeAndGuardPaths(buildDir);
+  // 4. Strip machine-absolute paths from the emitted JS + sourcemap, and fail closed
+  //    if any host/home path prefix survives (keeps the committed dist deterministic +
+  //    leak-free regardless of the build location — e.g. a worktree under a parent dir
+  //    named node_modules/src, which the old substring reducer could not handle).
+  sanitizeDist(buildDir);
 }
 
 const argDir = process.argv[2];

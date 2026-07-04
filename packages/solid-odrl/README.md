@@ -62,7 +62,9 @@ import {
   // parse (round-trip)
   parsePolicy, policyFromRdf,
   // evaluate
-  evaluate, constraintSatisfied,
+  evaluate, constraintSatisfied, matchingPermissions,
+  // agent-delegation profile (docs/delegation-profile.md)
+  evaluateDelegated, delegationProvenance,
   // compose with the sibling packages
   requestContextFromA2AIntent, requestContextFromWac,
   // serialise raw quads
@@ -149,7 +151,38 @@ result.conflict;            // was the perm-vs-prohibit conflict strategy invoke
   outstanding duty (advisory). Pass `{ requireDuties: true }` to make an unfulfilled duty a **deny**.
 - **Operators.** `eq` `neq` `gt` `gteq` `lt` `lteq` `isAnyOf` `isAllOf` `isNoneOf`, with type-aware
   comparison (numeric / temporal / lexical).
-- **Left-operands.** `dateTime` `purpose` `recipient` `count` `spatial` `elapsedTime` `systemDevice`.
+- **Left-operands.** `dateTime` `purpose` `recipient` `count` `spatial` `elapsedTime` `systemDevice`
+  (+ the profile-reserved `delegationDepth`, below).
+
+## Agent delegation — the accountability profile
+
+The **ODRL agent-delegation profile** (spec: [`docs/delegation-profile.md`](docs/delegation-profile.md),
+profile IRI `https://w3id.org/jeswr/odrl-delegation`) lets an agent grant a sub-agent a **subset** of
+its own permissions, with every hop auditable back to the delegating principal:
+
+- **Delegation authority is ODRL's own `odrl:grantUse`** — a permission whose action is `grantUse`
+  authorises its (explicitly named) assignee to issue a downstream `odrl:Agreement`
+  (`odrl:assigner` = the delegator, `odrl:assignee` = the delegate, `odrld:delegatedUnder` = the
+  parent policy). A duty with action `odrl:nextPolicy` pins exactly which downstream policy may be
+  issued; an `odrld:delegationDepth odrl:lteq N` constraint bounds re-delegation (**default 1** —
+  a bare `grantUse` never authorises re-delegation).
+- **`evaluateDelegated(chain, request, options)`** walks the chain (root first) **fail-closed**: a
+  delegated permission is valid only if *every* hop is structurally well-formed, in scope,
+  unexpired, unrevoked (`options.revoked`), depth-bounded and acyclic — anything malformed or
+  over-broad is a `deny` (never `notApplicable`). The delegate's effective permissions are the
+  **intersection** of the whole chain, checked per request; duties accumulate down the chain.
+- **A bare `odrl:use` permission never authorises delegation.** The profile restricts the
+  vocabulary's `grantUse ⊑ use` hierarchy (deny-biased) so a use-grantee cannot re-delegate — the
+  same never-broaden posture as the `control`/`append` mappings below.
+- **`delegationProvenance(chain)`** emits the PROV-O audit overlay (`prov:wasAttributedTo`,
+  `prov:actedOnBehalfOf`, `prov:wasDerivedFrom` + `odrld:delegatedUnder`) that traces every
+  delegated action to the delegating principal.
+
+The full delegation decision matrix (valid 1-/2-hop permits; over-broad, expired-mid-chain, cyclic,
+depth-exceeded, wrong-`nextPolicy` and revoked denies) is pinned as golden-master snapshots in
+`test/characterization.test.ts`. Design rationale: [`docs/DECISIONS.md`](docs/DECISIONS.md). The
+pairing with signed agent-authorization credentials (`@jeswr/solid-vc`, the planned CCG note) is
+sketched in the spec's §10.
 
 ## Solid / WAC mode mapping
 

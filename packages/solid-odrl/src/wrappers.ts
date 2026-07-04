@@ -6,6 +6,7 @@
 // house rule). Reading uses SetFrom.subjectPredicate; writing uses
 // NamedNodeFrom/LiteralFrom + the dataset add, all from @rdfjs/wrapper.
 
+import { escapeIri } from "@jeswr/rdf-serialize";
 import type { DataFactory as DataFactoryType, DatasetCore, Quad, Term } from "@rdfjs/types";
 import {
   BlankNodeFrom,
@@ -19,7 +20,6 @@ import {
   type TermWrapper as TermWrapperType,
 } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
-import { escapeIri } from "./iri.js";
 import {
   ODRL_ACTION,
   ODRL_AGREEMENT,
@@ -40,6 +40,7 @@ import {
   ODRL_SET,
   ODRL_TARGET,
   ODRL_UID,
+  ODRLD_DELEGATED_UNDER,
   RDF_TYPE,
 } from "./vocab.js";
 
@@ -130,6 +131,10 @@ export class PolicyNode extends TermWrapper {
   }
   get conflicts(): Set<TermWrapperType> {
     return objectTerms(this, ODRL_CONFLICT);
+  }
+  /** Delegation profile: the `odrld:delegatedUnder` parent-policy edge(s). */
+  get delegatedUnders(): Set<TermWrapperType> {
+    return objectTerms(this, ODRLD_DELEGATED_UNDER);
   }
   get permissions(): Set<RuleNode> {
     return SetFrom.subjectPredicate(
@@ -260,15 +265,40 @@ export class GraphBuilder {
   private readonly factory = DataFactory as unknown as DataFactoryType;
 
   /**
-   * Materialise a {@link NodeRef} to its RDF/JS term. Every IRI subject is run
-   * through {@link escapeIri} FIRST, so a Turtle IRIREF-forbidden octet in an
-   * untrusted subject id (e.g. a `>` in a caller-supplied policy/rule/duty id)
-   * can never break out of the serialiser's `<...>` — the breakout-proof
-   * chokepoint for subjects.
+   * Mint a `NamedNode` whose IRI value is INJECTION-SAFE. `n3.Writer` does NOT
+   * escape IRIs — it emits whatever string a `NamedNode` carries verbatim inside
+   * `<…>` — so an IRI value carrying a Turtle `IRIREF`-forbidden character (`>`,
+   * a space, `<`, `"`, `{`, `}`, `|`, `^`, backtick, backslash, a C0 control)
+   * would break out of the angle brackets and inject arbitrary triples into the
+   * serialised document. Since an ODRL policy's party / target / policy IRIs can
+   * originate from foreign input (a delegation chain assembled from other agents'
+   * pods, a parsed-then-re-serialised policy), every IRI written here is
+   * percent-escaped through the suite-canonical {@link escapeIri} FIRST — the
+   * SOLE chokepoint every `NamedNodeFrom.string` call in this builder routes
+   * through (subjects, predicates, object IRIs, and datatype IRIs alike), so a
+   * forbidden octet can never reach the serialiser regardless of the call site.
+   * Escaping is IDENTITY-PRESERVING (only forbidden bytes become `%XX`; a
+   * well-formed IRI round-trips byte-for-byte) and does NOT affect evaluation,
+   * which compares the raw string values — so a hostile IRI simply fails to
+   * match a legitimate one (fail-closed) rather than laundering an injection
+   * through the serialiser. (Explicit http(s)-contract fields — target/
+   * assignee/assigner/profile — get an ADDITIONAL, stricter guard upstream in
+   * policy.ts: `requireHttpIri` refuses to serialise rather than silently drop
+   * an unsafe EXPLICIT value, since dropping would widen the policy to a
+   * wildcard match — a privilege escalation. Escaping here is the universal
+   * breakout guard; `requireHttpIri` is the additional fail-closed reject for
+   * evaluation-critical fields.)
    */
+  private iriTerm(value: string): Term {
+    return NamedNodeFrom.string(escapeIri(value), this.factory) as unknown as Term;
+  }
+
+  /** Materialise a {@link NodeRef} to its RDF/JS term. */
   private subjectTerm(ref: NodeRef): Term {
+    // Only an IRI subject needs escaping; a blank-node label is not serialised
+    // inside `<…>` and must be preserved verbatim.
     return ref.kind === "iri"
-      ? (NamedNodeFrom.string(escapeIri(ref.value), this.factory) as unknown as Term)
+      ? this.iriTerm(ref.value)
       : (BlankNodeFrom.string(ref.value, this.factory) as unknown as Term);
   }
 
@@ -281,8 +311,8 @@ export class GraphBuilder {
    */
   addIri(subject: NodeRef | string, predicate: string, objectIri: string): void {
     const s = this.subjectTerm(normalize(subject));
-    const p = NamedNodeFrom.string(escapeIri(predicate), this.factory);
-    const o = NamedNodeFrom.string(escapeIri(objectIri), this.factory);
+    const p = this.iriTerm(predicate);
+    const o = this.iriTerm(objectIri);
     this.store.add(this.factory.quad(s as never, p as never, o as never) as Quad);
   }
 
@@ -294,14 +324,11 @@ export class GraphBuilder {
     datatypeIri?: string,
   ): void {
     const s = this.subjectTerm(normalize(subject));
-    const p = NamedNodeFrom.string(escapeIri(predicate), this.factory);
+    const p = this.iriTerm(predicate);
     const o =
       datatypeIri === undefined
         ? (LiteralFrom.string(value, this.factory) as unknown as never)
-        : (this.factory.literal(
-            value,
-            NamedNodeFrom.string(escapeIri(datatypeIri), this.factory) as never,
-          ) as never);
+        : (this.factory.literal(value, this.iriTerm(datatypeIri) as never) as never);
     this.store.add(this.factory.quad(s as never, p as never, o as never) as Quad);
   }
 
@@ -313,7 +340,7 @@ export class GraphBuilder {
   linkBlankNode(subject: NodeRef | string, predicate: string): NodeRef {
     const s = this.subjectTerm(normalize(subject));
     const blank = BlankNodeFrom.string(undefined, this.factory) as unknown as Term;
-    const p = NamedNodeFrom.string(escapeIri(predicate), this.factory);
+    const p = this.iriTerm(predicate);
     this.store.add(this.factory.quad(s as never, p as never, blank as never) as Quad);
     return { kind: "blank", value: (blank as { value: string }).value };
   }

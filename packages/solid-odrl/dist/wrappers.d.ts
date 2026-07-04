@@ -29,6 +29,8 @@ export declare class PolicyNode extends TermWrapper {
     get assigners(): Set<TermWrapperType>;
     get assignees(): Set<TermWrapperType>;
     get conflicts(): Set<TermWrapperType>;
+    /** Delegation profile: the `odrld:delegatedUnder` parent-policy edge(s). */
+    get delegatedUnders(): Set<TermWrapperType>;
     get permissions(): Set<RuleNode>;
     get prohibitions(): Set<RuleNode>;
     get obligations(): Set<DutyNode>;
@@ -76,12 +78,32 @@ export declare class GraphBuilder {
     private readonly store;
     private readonly factory;
     /**
-     * Materialise a {@link NodeRef} to its RDF/JS term. Every IRI subject is run
-     * through {@link escapeIri} FIRST, so a Turtle IRIREF-forbidden octet in an
-     * untrusted subject id (e.g. a `>` in a caller-supplied policy/rule/duty id)
-     * can never break out of the serialiser's `<...>` — the breakout-proof
-     * chokepoint for subjects.
+     * Mint a `NamedNode` whose IRI value is INJECTION-SAFE. `n3.Writer` does NOT
+     * escape IRIs — it emits whatever string a `NamedNode` carries verbatim inside
+     * `<…>` — so an IRI value carrying a Turtle `IRIREF`-forbidden character (`>`,
+     * a space, `<`, `"`, `{`, `}`, `|`, `^`, backtick, backslash, a C0 control)
+     * would break out of the angle brackets and inject arbitrary triples into the
+     * serialised document. Since an ODRL policy's party / target / policy IRIs can
+     * originate from foreign input (a delegation chain assembled from other agents'
+     * pods, a parsed-then-re-serialised policy), every IRI written here is
+     * percent-escaped through the suite-canonical {@link escapeIri} FIRST — the
+     * SOLE chokepoint every `NamedNodeFrom.string` call in this builder routes
+     * through (subjects, predicates, object IRIs, and datatype IRIs alike), so a
+     * forbidden octet can never reach the serialiser regardless of the call site.
+     * Escaping is IDENTITY-PRESERVING (only forbidden bytes become `%XX`; a
+     * well-formed IRI round-trips byte-for-byte) and does NOT affect evaluation,
+     * which compares the raw string values — so a hostile IRI simply fails to
+     * match a legitimate one (fail-closed) rather than laundering an injection
+     * through the serialiser. (Explicit http(s)-contract fields — target/
+     * assignee/assigner/profile — get an ADDITIONAL, stricter guard upstream in
+     * policy.ts: `requireHttpIri` refuses to serialise rather than silently drop
+     * an unsafe EXPLICIT value, since dropping would widen the policy to a
+     * wildcard match — a privilege escalation. Escaping here is the universal
+     * breakout guard; `requireHttpIri` is the additional fail-closed reject for
+     * evaluation-critical fields.)
      */
+    private iriTerm;
+    /** Materialise a {@link NodeRef} to its RDF/JS term. */
     private subjectTerm;
     /**
      * Add `(subject, predicate, object-IRI)`. Predicate and object IRI are passed
