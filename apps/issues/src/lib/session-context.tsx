@@ -366,6 +366,17 @@ export function SolidSessionProvider({ children }: { children: ReactNode }) {
       const isLoopback = host === "localhost" || host === "127.0.0.1" || host === "[::1]";
       const clientId = isLoopback ? undefined : new URL("/clientid.jsonld", location.href).toString();
 
+      // Snapshot the PRISTINE fetch — before `manager.registerGlobally()` below
+      // patches `globalThis.fetch` — and pin BOTH the WebID-profile read and the
+      // provider's own OIDC traffic (discovery/registration/token+refresh grants)
+      // to it. Without this, oauth4webapi falls back to the (later-patched) global
+      // fetch identifier for its own requests; `ReactiveFetchManager.fetch` reacts
+      // to a 401 by calling `provider.upgrade()`, which single-flights onto the very
+      // `#authenticate()` promise that issued the original request — a circular
+      // await that stalls interactive login forever, after the profile read and
+      // before the OIDC popup ever opens (the login-stall bug).
+      const pristineFetch = globalThis.fetch.bind(globalThis);
+
       const provider = new WebIdDPoPTokenProvider(
         new URL("/callback.html", location.href).toString(),
         ui.getCode.bind(ui),
@@ -375,7 +386,13 @@ export function SolidSessionProvider({ children }: { children: ReactNode }) {
           if (!webIdRef.current) throw new Error("No WebID provided.");
           return webIdRef.current;
         },
-        { allowInsecureLoopback: true, onSession: persistSession, ...(clientId ? { clientId } : {}) },
+        {
+          allowInsecureLoopback: true,
+          onSession: persistSession,
+          profileFetch: pristineFetch,
+          oauthFetch: pristineFetch,
+          ...(clientId ? { clientId } : {}),
+        },
       );
       providerRef.current = provider;
       // 0.1.3: the constructor does NOT patch globalThis.fetch — registerGlobally() does.
