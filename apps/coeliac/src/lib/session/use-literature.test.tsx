@@ -78,21 +78,71 @@ describe("useLiterature — default path privacy invariant", () => {
     const { result } = renderHook(() => useLiterature(), { wrapper });
     await waitFor(() => expect(result.current.loading).toBe(false));
 
+    // Check EVERY outbound URL (not just the ones that happen to hit EPMC) — a
+    // regression that leaked the profile through a DIFFERENT knowledge request
+    // (e.g. the PubMed fallback, or a future call) must fail this test too.
+    expect(seenUrls.length).toBeGreaterThan(0);
+    for (const called of seenUrls) {
+      expect(called.toLowerCase()).not.toContain("sulphite");
+      expect(called.toLowerCase()).not.toContain("bloating");
+      expect(called.toLowerCase()).not.toContain("flare");
+      expect(called.toLowerCase()).not.toContain("recent");
+    }
     const epmcCalls = seenUrls.filter((u) => u.includes("www.ebi.ac.uk"));
     expect(epmcCalls.length).toBeGreaterThan(0);
     for (const called of epmcCalls) {
       const query = new URL(called).searchParams.get("query");
       // the fixed generic query — decoded, exactly what buildEpmcSearchUrl's default emits
       expect(query).toBe('(coeliac OR "celiac disease")');
-      // never the user's own tracked-trigger / symptom terms
-      expect(called.toLowerCase()).not.toContain("sulphite");
-      expect(called.toLowerCase()).not.toContain("bloating");
-      expect(called.toLowerCase()).not.toContain("flare");
-      expect(called.toLowerCase()).not.toContain("recent");
     }
     // sanity: the profile really was read locally (for on-device re-ranking) —
     // proves this isn't a vacuous pass because trackedTriggers returned [].
     expect(await trackedTriggers(store)).toContain("sulphites");
+  });
+
+  it("falls back to PubMed with the fixed generic condition — never the user's tracked triggers — when Europe PMC fails", async () => {
+    const harness = makeSession({ webId: WEBID });
+    const { store } = harness;
+    await store.putProtocol({
+      kind: "protocol",
+      ulid: "01SULPHITEPROTOCOL0000001",
+      url: `${WEBID}/protocols/sulphites.ttl`,
+      targetTrigger: "sulphites",
+      phase: "eliminate",
+      createdAt: "2026-07-01T00:00:00Z",
+      updatedAt: "2026-07-01T00:00:00Z",
+      sync: "synced",
+    });
+
+    const seenUrls: string[] = [];
+    const publicFetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      seenUrls.push(url);
+      if (url.includes("www.ebi.ac.uk")) return new Response("down", { status: 503 });
+      if (url.includes("esearch")) {
+        return new Response(JSON.stringify({ esearchresult: { count: "0", idlist: [] } }), { status: 200 });
+      }
+      return new Response("{}", { status: 404 });
+    }) as unknown as typeof globalThis.fetch;
+
+    const value = { ...harness.value, publicFetch };
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <SessionContext.Provider value={value}>{children}</SessionContext.Provider>
+    );
+
+    const { result } = renderHook(() => useLiterature(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    const pubmedCalls = seenUrls.filter((u) => u.includes("eutils.ncbi.nlm.nih.gov"));
+    expect(pubmedCalls.length).toBeGreaterThan(0);
+    const esearchCall = pubmedCalls.find((u) => u.includes("esearch"));
+    expect(esearchCall).toBeDefined();
+    const term = new URL(esearchCall as string).searchParams.get("term");
+    // GENERIC_COELIAC_CONDITION — never "sulphites" or any user-tracked trigger
+    expect(term).toBe("celiac disease");
+    for (const called of seenUrls) {
+      expect(called.toLowerCase()).not.toContain("sulphite");
+    }
   });
 
   it("fails open — never throws — when Europe PMC AND the PubMed fallback are both unreachable", async () => {
