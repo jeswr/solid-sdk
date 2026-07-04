@@ -46,6 +46,7 @@
  * @packageDocumentation
  */
 
+export { escapeIri, safeHttpIri, safeIri } from "@jeswr/rdf-serialize";
 export type { ActionProvenanceInput } from "./action-provenance.js";
 export { actionProvenance, actionProvenanceJsonLd } from "./action-provenance.js";
 export type { A2AIntentLike } from "./compose.js";
@@ -67,7 +68,6 @@ export {
   evaluateDelegated,
 } from "./delegation.js";
 export { constraintSatisfied, evaluate, matchingPermissions } from "./evaluate.js";
-export { escapeIri, safeHttpIri, safeIri } from "./iri.js";
 export {
   IRI_TO_ACTION,
   IRI_TO_LEFT_OPERAND,

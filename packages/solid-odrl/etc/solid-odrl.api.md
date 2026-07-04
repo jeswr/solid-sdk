@@ -5,7 +5,10 @@
 ```ts
 
 import type { DatasetCore } from '@rdfjs/types';
+import { escapeIri } from '@jeswr/rdf-serialize';
 import type { Quad } from '@rdfjs/types';
+import { safeHttpIri } from '@jeswr/rdf-serialize';
+import { safeIri } from '@jeswr/rdf-serialize';
 
 // @public
 export const A2A_ACTION_TO_ODRL: Readonly<Record<string, OdrlActionName>>;
@@ -141,8 +144,7 @@ export function delegationProvenance(chain: readonly OdrlPolicy[]): Quad[];
 // @public
 export const DPV: "https://w3id.org/dpv#";
 
-// @public
-export function escapeIri(value: string): string;
+export { escapeIri }
 
 // @public
 export function evaluate(policy: OdrlPolicy, request: RequestContext, options?: EvaluateOptions): EvaluationResult;
@@ -421,11 +423,9 @@ export function requestContextFromWac(agent: string | undefined, mode: AclMode, 
 // @public
 export type RuleType = "permission" | "prohibition" | "obligation";
 
-// @public
-export function safeHttpIri(value: string | undefined): string | undefined;
+export { safeHttpIri }
 
-// @public
-export function safeIri(value: string | undefined): string | undefined;
+export { safeIri }
 
 // @public
 export function serialize(quads: readonly Quad[], format?: string): Promise<string>;

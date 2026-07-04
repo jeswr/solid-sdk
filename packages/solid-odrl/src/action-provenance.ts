@@ -26,8 +26,8 @@
 // serialisation, and the two paths stay byte-identical on the shared fields
 // (delegatedUnder-style escaping parity).
 
+import { escapeIri } from "@jeswr/rdf-serialize";
 import type { Quad } from "@rdfjs/types";
-import { escapeIri } from "./iri.js";
 import {
   PROV_ACTED_ON_BEHALF_OF,
   PROV_ACTIVITY,

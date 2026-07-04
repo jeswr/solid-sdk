@@ -56,7 +56,7 @@
   },
   "homepage": "https://github.com/jeswr/solid-odrl#readme",
   "dependencies": {
-    "@jeswr/rdf-serialize": "git+https://github.com/jeswr/rdf-serialize.git#ef3dd85636b868ea336a45f79c0446ade0982e7b",
+    "@jeswr/rdf-serialize": "git+https://github.com/jeswr/rdf-serialize.git#8ebdda44ab1da63ef91052a5b2f1e453c0a29c79",
     "@rdfjs/wrapper": "^0.34.0",
     "@solid/object": "^0.6.0",
     "content-type": "^1.0.5",

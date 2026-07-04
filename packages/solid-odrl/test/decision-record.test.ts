@@ -7,6 +7,7 @@
 // neutralised (no triple injection) IDENTICALLY on the RDF and JSON-LD paths.
 
 import { parseRdf } from "@jeswr/fetch-rdf";
+import { escapeIri } from "@jeswr/rdf-serialize";
 import type { Quad } from "@rdfjs/types";
 import { describe, expect, it } from "vitest";
 import {
@@ -16,7 +17,6 @@ import {
   recordEvaluation,
 } from "../src/decision-record.js";
 import { evaluate } from "../src/evaluate.js";
-import { escapeIri } from "../src/iri.js";
 import { serialize } from "../src/serialize.js";
 import type { EvaluationResult, OdrlPolicy, RequestContext } from "../src/types.js";
 import {

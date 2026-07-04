@@ -44,6 +44,7 @@
  *
  * @packageDocumentation
  */
+export { escapeIri, safeHttpIri, safeIri } from "@jeswr/rdf-serialize";
 export type { ActionProvenanceInput } from "./action-provenance.js";
 export { actionProvenance, actionProvenanceJsonLd } from "./action-provenance.js";
 export type { A2AIntentLike } from "./compose.js";
@@ -53,7 +54,6 @@ export { decisionRecord, decisionRecordJsonLd, recordEvaluation } from "./decisi
 export type { DelegatedEvaluationResult, DelegationEvaluateOptions, DelegationHopTrace, } from "./delegation.js";
 export { DEFAULT_MAX_CHAIN_LENGTH, delegationProvenance, evaluateDelegated, } from "./delegation.js";
 export { constraintSatisfied, evaluate, matchingPermissions } from "./evaluate.js";
-export { escapeIri, safeHttpIri, safeIri } from "./iri.js";
 export { IRI_TO_ACTION, IRI_TO_LEFT_OPERAND, IRI_TO_OPERATOR, OdrlSerializationError, parsePolicy, policyFromRdf, policyToJsonLd, policyToRdf, policyToTurtle, } from "./policy.js";
 export { serialize } from "./serialize.js";
 export type { ActiveDuty, Decision, DecisionRule, EvaluateOptions, EvaluationResult, OdrlConstraint, OdrlDuty, OdrlPolicy, OdrlRule, PolicyType, RequestContext, RuleType, } from "./types.js";

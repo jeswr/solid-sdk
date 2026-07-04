@@ -37,9 +37,9 @@
 // deciding constraints). Assignment NEVER throws: a descriptor that finds no rule is
 // still recorded, just with no `odrl:constraint`.
 
+import { escapeIri, safeIri } from "@jeswr/rdf-serialize";
 import type { Quad } from "@rdfjs/types";
 import { constraintSatisfied, evaluate } from "./evaluate.js";
-import { escapeIri, safeIri } from "./iri.js";
 import { inferDatatype, isIriValued } from "./policy.js";
 import type {
   ActiveDuty,

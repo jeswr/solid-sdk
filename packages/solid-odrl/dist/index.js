@@ -1,33 +1,8 @@
-// src/iri.ts
-var IRIREF_FORBIDDEN = /[\u0000-\u0020<>"{}|^`\\]/g;
-function escapeIri(value) {
-  return value.replace(
-    IRIREF_FORBIDDEN,
-    (c) => `%${c.charCodeAt(0).toString(16).toUpperCase().padStart(2, "0")}`
-  );
-}
-var LEADING_TRAILING_C0 = /^[\u0000-\u0020]|[\u0000-\u0020]$/;
-var ABSOLUTE_IRI_SCHEME = /^[a-z][a-z0-9+.-]*:/i;
-function safeHttpIri(value) {
-  if (typeof value !== "string") return void 0;
-  if (LEADING_TRAILING_C0.test(value)) return void 0;
-  const escaped = escapeIri(value);
-  let u;
-  try {
-    u = new URL(escaped);
-  } catch {
-    return void 0;
-  }
-  if (u.protocol !== "http:" && u.protocol !== "https:") return void 0;
-  return escaped;
-}
-function safeIri(value) {
-  if (typeof value !== "string") return void 0;
-  if (LEADING_TRAILING_C0.test(value)) return void 0;
-  const escaped = escapeIri(value);
-  if (!ABSOLUTE_IRI_SCHEME.test(escaped)) return void 0;
-  return escaped;
-}
+// src/index.ts
+import { escapeIri as escapeIri5, safeHttpIri as safeHttpIri2, safeIri as safeIri3 } from "@jeswr/rdf-serialize";
+
+// src/action-provenance.ts
+import { escapeIri as escapeIri2 } from "@jeswr/rdf-serialize";
 
 // src/vocab.ts
 var ODRL = "http://www.w3.org/ns/odrl/2/";
@@ -342,7 +317,7 @@ var DECISION_RECORD_INLINE_CONTEXT = {
 };
 
 // src/wrappers.ts
-import { escapeIri as escapeIri2 } from "@jeswr/rdf-serialize";
+import { escapeIri } from "@jeswr/rdf-serialize";
 import {
   BlankNodeFrom,
   DatasetWrapper,
@@ -529,7 +504,7 @@ var GraphBuilder = class {
    * evaluation-critical fields.)
    */
   iriTerm(value) {
-    return NamedNodeFrom.string(escapeIri2(value), this.factory);
+    return NamedNodeFrom.string(escapeIri(value), this.factory);
   }
   /** Materialise a {@link NodeRef} to its RDF/JS term. */
   subjectTerm(ref) {
@@ -630,11 +605,11 @@ function actionProvenance(input) {
   return b.quads();
 }
 function actionProvenanceJsonLd(input) {
-  const act = escapeIri(input.activity);
-  const agent = escapeIri(input.agent);
-  const plan = escapeIri(input.plan);
-  const used = asArray(input.used).map(escapeIri);
-  const generated = asArray(input.generated).map(escapeIri);
+  const act = escapeIri2(input.activity);
+  const agent = escapeIri2(input.agent);
+  const plan = escapeIri2(input.plan);
+  const used = asArray(input.used).map(escapeIri2);
+  const generated = asArray(input.generated).map(escapeIri2);
   const assocId = "_:association";
   const activityNode = {
     "@id": act,
@@ -662,7 +637,7 @@ function actionProvenanceJsonLd(input) {
   if (input.onBehalfOf !== void 0) {
     graph.push({
       "@id": agent,
-      actedOnBehalfOf: { "@id": escapeIri(input.onBehalfOf) }
+      actedOnBehalfOf: { "@id": escapeIri2(input.onBehalfOf) }
     });
   }
   for (const g of generated) {
@@ -722,6 +697,9 @@ function requestContextFromWac(agent, mode, target, attributes) {
     ...attributes !== void 0 && { attributes }
   };
 }
+
+// src/decision-record.ts
+import { escapeIri as escapeIri4, safeIri as safeIri2 } from "@jeswr/rdf-serialize";
 
 // src/evaluate.ts
 function evaluate(policy, request, options = {}) {
@@ -1130,6 +1108,9 @@ function waitForDrain(parser) {
   });
 }
 
+// src/policy.ts
+import { escapeIri as escapeIri3, safeHttpIri, safeIri } from "@jeswr/rdf-serialize";
+
 // src/serialize.ts
 import { legacySerialize } from "@jeswr/rdf-serialize";
 var PREFIXES = {
@@ -1314,7 +1295,7 @@ function policyToTurtle(policy, format) {
   return serialize(policyToRdf(policy), format);
 }
 function policyToJsonLd(policy) {
-  const id = escapeIri(policy.id);
+  const id = escapeIri3(policy.id);
   const context = policy.delegatedUnder !== void 0 ? { ...ODRL_INLINE_CONTEXT, ...ODRLD_INLINE_CONTEXT_EXTENSION } : ODRL_INLINE_CONTEXT;
   const doc = {
     "@context": context,
@@ -1333,7 +1314,7 @@ function policyToJsonLd(policy) {
   if (jsonAssignee !== void 0) doc.assignee = { "@id": jsonAssignee };
   if (policy.conflict !== void 0) doc.conflict = { "@id": CONFLICT_IRI[policy.conflict] };
   if (policy.delegatedUnder !== void 0)
-    doc.delegatedUnder = { "@id": escapeIri(policy.delegatedUnder) };
+    doc.delegatedUnder = { "@id": escapeIri3(policy.delegatedUnder) };
   if (policy.permissions && policy.permissions.length > 0) {
     doc.permission = policy.permissions.map((r) => ruleJsonLd(r, policy));
   }
@@ -1347,7 +1328,7 @@ function policyToJsonLd(policy) {
 }
 function ruleJsonLd(rule, policy) {
   const node = {};
-  if (rule.id !== void 0) node["@id"] = escapeIri(rule.id);
+  if (rule.id !== void 0) node["@id"] = escapeIri3(rule.id);
   node.action = { "@id": ACTION_IRI[rule.action] };
   const target = requireHttpIri(rule.target, "rule.target");
   if (target !== void 0) node.target = { "@id": target };
@@ -1365,7 +1346,7 @@ function ruleJsonLd(rule, policy) {
 }
 function dutyJsonLd(duty) {
   const node = {};
-  if (duty.id !== void 0) node["@id"] = escapeIri(duty.id);
+  if (duty.id !== void 0) node["@id"] = escapeIri3(duty.id);
   node.action = { "@id": ACTION_IRI[duty.action] };
   const target = requireHttpIri(duty.target, "duty.target");
   if (target !== void 0) node.target = { "@id": target };
@@ -1568,7 +1549,7 @@ function requestPurposes(request) {
   return [];
 }
 function operandIsIri(c, r) {
-  return isIriValued(c.leftOperand) && typeof r === "string" && safeIri(r) !== void 0;
+  return isIriValued(c.leftOperand) && typeof r === "string" && safeIri2(r) !== void 0;
 }
 function writeDecisionConstraint(b, parent, c) {
   const node = b.linkBlankNode(parent, ODRL_CONSTRAINT);
@@ -1587,7 +1568,7 @@ function decisionConstraintJsonLd(c) {
   const rights = Array.isArray(c.rightOperand) ? c.rightOperand : [c.rightOperand];
   const emitted = rights.map((r) => {
     if (operandIsIri(c, r)) {
-      return { "@id": escapeIri(r) };
+      return { "@id": escapeIri4(r) };
     }
     const dt = inferDatatype(c, r);
     return dt !== void 0 ? { "@value": String(r), "@type": dt } : String(r);
@@ -1669,21 +1650,21 @@ function decisionRecordJsonLd(input) {
   const { id, policy, request, result: result2, evaluatedAt } = input;
   const doc = {
     "@context": DECISION_RECORD_INLINE_CONTEXT,
-    "@id": escapeIri(id),
+    "@id": escapeIri4(id),
     "@type": "odrld:DecisionRecord",
     endedAtTime: evaluatedAt.toISOString(),
-    evaluatedPolicy: { "@id": escapeIri(policy.id) },
+    evaluatedPolicy: { "@id": escapeIri4(policy.id) },
     requestAction: { "@id": ACTION_IRI[request.action] },
     decision: result2.decision,
     reason: result2.reason
   };
   if (request.agent !== void 0) {
-    doc.requestAgent = { "@id": escapeIri(request.agent) };
+    doc.requestAgent = { "@id": escapeIri4(request.agent) };
   }
   if (request.target !== void 0) {
-    doc.requestTarget = { "@id": escapeIri(request.target) };
+    doc.requestTarget = { "@id": escapeIri4(request.target) };
   }
-  const purposeNodes = requestPurposes(request).map((p) => ({ "@id": escapeIri(p) }));
+  const purposeNodes = requestPurposes(request).map((p) => ({ "@id": escapeIri4(p) }));
   if (purposeNodes.length > 0) {
     const [only] = purposeNodes;
     doc.requestPurpose = purposeNodes.length === 1 ? only : purposeNodes;
@@ -1713,13 +1694,13 @@ function decidingRuleJsonLd(descriptor, rule) {
     action: { "@id": ACTION_IRI[descriptor.action] }
   };
   if (descriptor.id !== void 0) {
-    node["@id"] = escapeIri(descriptor.id);
+    node["@id"] = escapeIri4(descriptor.id);
   }
   if (descriptor.target !== void 0) {
-    node.target = { "@id": escapeIri(descriptor.target) };
+    node.target = { "@id": escapeIri4(descriptor.target) };
   }
   if (descriptor.assignee !== void 0) {
-    node.assignee = { "@id": escapeIri(descriptor.assignee) };
+    node.assignee = { "@id": escapeIri4(descriptor.assignee) };
   }
   const constraints = rule?.constraints ?? [];
   if (constraints.length > 0) {
@@ -1734,10 +1715,10 @@ function activeDutyJsonLd(duty) {
     fulfilled: duty.fulfilled
   };
   if (duty.id !== void 0) {
-    node.onDuty = { "@id": escapeIri(duty.id) };
+    node.onDuty = { "@id": escapeIri4(duty.id) };
   }
   if (duty.target !== void 0) {
-    node.target = { "@id": escapeIri(duty.target) };
+    node.target = { "@id": escapeIri4(duty.target) };
   }
   return node;
 }
@@ -2060,7 +2041,7 @@ export {
   decisionRecord,
   decisionRecordJsonLd,
   delegationProvenance,
-  escapeIri,
+  escapeIri5 as escapeIri,
   evaluate,
   evaluateDelegated,
   matchingPermissions,
@@ -2072,8 +2053,8 @@ export {
   recordEvaluation,
   requestContextFromA2AIntent,
   requestContextFromWac,
-  safeHttpIri,
-  safeIri,
+  safeHttpIri2 as safeHttpIri,
+  safeIri3 as safeIri,
   serialize
 };
 //# sourceMappingURL=index.js.map

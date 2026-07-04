@@ -8,10 +8,10 @@
 // with an independent n3 Parser, and assert the injected triples never materialise
 // — while a legitimate `urn:` policy id still round-trips.
 
+import { escapeIri, safeHttpIri, safeIri } from "@jeswr/rdf-serialize";
 import { Parser } from "n3";
 import { describe, expect, it } from "vitest";
 import { evaluate } from "../src/evaluate.js";
-import { escapeIri, safeHttpIri, safeIri } from "../src/iri.js";
 import {
   OdrlSerializationError,
   parsePolicy,

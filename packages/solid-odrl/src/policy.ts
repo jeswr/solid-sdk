@@ -7,8 +7,8 @@
 // fields). All RDF reads/writes go through src/wrappers.ts.
 
 import { parseRdf } from "@jeswr/fetch-rdf";
+import { escapeIri, safeHttpIri, safeIri } from "@jeswr/rdf-serialize";
 import type { DatasetCore, Quad } from "@rdfjs/types";
-import { escapeIri, safeHttpIri, safeIri } from "./iri.js";
 import { serialize } from "./serialize.js";
 import type {
   OdrlConstraint,

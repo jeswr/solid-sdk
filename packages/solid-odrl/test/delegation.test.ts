@@ -7,10 +7,10 @@
 // injected-attribute) is exercised as a DENY, and the valid 1-/2-/3-hop chains as
 // the only PERMITs.
 
+import { escapeIri } from "@jeswr/rdf-serialize";
 import { describe, expect, it } from "vitest";
 import { delegationProvenance, evaluateDelegated } from "../src/delegation.js";
 import { evaluate } from "../src/evaluate.js";
-import { escapeIri } from "../src/iri.js";
 import { parsePolicy, policyFromRdf, policyToJsonLd, policyToTurtle } from "../src/policy.js";
 import { serialize } from "../src/serialize.js";
 import type { OdrlPolicy, RequestContext } from "../src/types.js";

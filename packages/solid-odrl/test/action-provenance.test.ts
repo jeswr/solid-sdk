@@ -7,13 +7,13 @@
 // hostile IRI in any field is neutralised (no triple injection) on both the
 // RDF and JSON-LD paths, and the two paths escape identically (parity).
 
+import { escapeIri } from "@jeswr/rdf-serialize";
 import { describe, expect, it } from "vitest";
 import {
   type ActionProvenanceInput,
   actionProvenance,
   actionProvenanceJsonLd,
 } from "../src/action-provenance.js";
-import { escapeIri } from "../src/iri.js";
 import { serialize } from "../src/serialize.js";
 import {
   PROV_ACTED_ON_BEHALF_OF,
