@@ -1,6 +1,7 @@
 // AUTHORED-BY Claude Fable 5
 //
-// Unit coverage for the IRI-injection guards (src/iri.ts):
+// Unit coverage for the IRI-injection guards (consolidated onto the canonical
+// `@jeswr/rdf-serialize` export; federation-client's local `src/iri.ts` deleted):
 //  - LEXICAL PRESERVATION: guards must NOT canonicalise (no default-port strip,
 //    no host lower-casing) — RDF IRI identity is lexical.
 //  - SCHEME-AGNOSTIC object guard: a `urn:`/`did:` object IRI must survive as a
@@ -8,11 +9,11 @@
 //  - the FULL Turtle IRIREF-forbidden set (incl. the `{ } \` chars) is encoded,
 //    so a guarded value can never emit an invalid or injecting `<…>`.
 
+import { escapeIri, safeHttpIri, safeIri } from "@jeswr/rdf-serialize";
 import { Parser } from "n3";
 import { describe, expect, it } from "vitest";
 import type { AppRegistration } from "../src/index.js";
 import { selfDescribe } from "../src/index.js";
-import { escapeIri, safeHttpIri, safeIri } from "../src/iri.js";
 
 /** Every character the Turtle IRIREF grammar forbids inside `<…>`. */
 const FORBIDDEN = ["<", ">", '"', "{", "}", "|", "^", "`", "\\", " "] as const;

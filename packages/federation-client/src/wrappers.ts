@@ -6,6 +6,7 @@
 // hand-built quads (the house rule). Reading uses SetFrom.subjectPredicate;
 // writing uses RequiredAs.object + the dataset add, all from @rdfjs/wrapper.
 
+import { escapeIri, safeIri } from "@jeswr/rdf-serialize";
 import type { DataFactory as DataFactoryType, DatasetCore, Quad, Term } from "@rdfjs/types";
 import {
   BlankNodeFrom,
@@ -18,7 +19,6 @@ import {
   type TermWrapper as TermWrapperType,
 } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
-import { escapeIri, safeIri } from "./iri.js";
 import {
   FEDAPP_ACCESS,
   FEDAPP_APP,

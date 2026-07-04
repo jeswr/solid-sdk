@@ -230,6 +230,87 @@ function accessModeName(iri) {
   return void 0;
 }
 
+// node_modules/@jeswr/rdf-serialize/dist/iri.js
+var FORBIDDEN_SYMBOL_CODES = /* @__PURE__ */ new Set([
+  60,
+  // <
+  62,
+  // >
+  34,
+  // "
+  123,
+  // {
+  125,
+  // }
+  124,
+  // |
+  94,
+  // ^
+  96,
+  // ` (backtick)
+  92
+  // \ (backslash)
+]);
+function isForbidden(codePoint) {
+  return codePoint <= 32 || FORBIDDEN_SYMBOL_CODES.has(codePoint);
+}
+function hasEdgeControlOrSpace(value) {
+  return value.length > 0 && (value.charCodeAt(0) <= 32 || value.charCodeAt(value.length - 1) <= 32);
+}
+function escapeIri(value) {
+  let out = "";
+  for (const ch of value) {
+    const codePoint = ch.codePointAt(0);
+    if (isForbidden(codePoint)) {
+      out += `%${codePoint.toString(16).toUpperCase().padStart(2, "0")}`;
+    } else {
+      out += ch;
+    }
+  }
+  return out;
+}
+function safeIri(value) {
+  if (typeof value !== "string") {
+    return void 0;
+  }
+  if (hasEdgeControlOrSpace(value)) {
+    return void 0;
+  }
+  const escaped = escapeIri(value);
+  try {
+    new URL(escaped);
+  } catch {
+    return void 0;
+  }
+  return escaped;
+}
+
+// node_modules/@jeswr/rdf-serialize/dist/serialize.js
+import { Writer } from "n3";
+var DEFAULT_FORMAT = "text/turtle";
+function serialize(quads, options) {
+  const format = options?.format ?? DEFAULT_FORMAT;
+  const prefixes = options?.prefixes ?? {};
+  const emptyAsEmptyString = options?.emptyAsEmptyString ?? true;
+  if (emptyAsEmptyString && quads.length === 0) {
+    return Promise.resolve("");
+  }
+  return new Promise((resolve, reject) => {
+    const writer = new Writer({ format, prefixes });
+    writer.addQuads(quads);
+    writer.end((error, result) => {
+      if (error) {
+        reject(error);
+      } else {
+        resolve(result);
+      }
+    });
+  });
+}
+function legacySerialize(quads, format = DEFAULT_FORMAT, prefixes = {}, emptyAsEmptyString = true) {
+  return serialize(quads, { format, prefixes, emptyAsEmptyString });
+}
+
 // src/wrappers.ts
 import {
   BlankNodeFrom,
@@ -241,34 +322,6 @@ import {
   TermWrapper
 } from "@rdfjs/wrapper";
 import { DataFactory, Store as Store2 } from "n3";
-
-// src/iri.ts
-var IRIREF_FORBIDDEN_CHARS = /* @__PURE__ */ new Set(["<", ">", '"', "{", "}", "|", "^", "`", "\\"]);
-function percentEncode(ch) {
-  return `%${ch.charCodeAt(0).toString(16).toUpperCase().padStart(2, "0")}`;
-}
-function hasScheme(value) {
-  return /^[A-Za-z][A-Za-z0-9+.-]*:/.test(value);
-}
-function escapeIri(value) {
-  let out = "";
-  for (const ch of value) {
-    const code = ch.codePointAt(0) ?? 0;
-    out += code <= 32 || IRIREF_FORBIDDEN_CHARS.has(ch) ? percentEncode(ch) : ch;
-  }
-  return out;
-}
-function safeIri(value) {
-  if (typeof value !== "string" || value.length === 0) {
-    return void 0;
-  }
-  if (!hasScheme(value)) {
-    return void 0;
-  }
-  return escapeIri(value);
-}
-
-// src/wrappers.ts
 function iriTerms(node, predicate) {
   return SetFrom.subjectPredicate(node, predicate, TermAs.instance(TermWrapper), TermFrom.instance);
 }
@@ -619,7 +672,7 @@ function containerMembers(dataset, source) {
 import contentType2 from "content-type";
 import { Store as Store3, StreamParser as StreamParser2 } from "n3";
 import { JsonLdParser as JsonLdParser2 } from "jsonld-streaming-parser";
-import { Writer } from "n3";
+import { Writer as Writer2 } from "n3";
 import {
   BlankNodeFrom as BlankNodeFrom2,
   DatasetWrapper as DatasetWrapper2,
@@ -2695,32 +2748,6 @@ function guardedFetchFor(options) {
     ...options.guard ?? {},
     ...options.fetch !== void 0 ? { fetch: options.fetch } : {}
   });
-}
-
-// node_modules/@jeswr/rdf-serialize/dist/serialize.js
-import { Writer as Writer2 } from "n3";
-var DEFAULT_FORMAT = "text/turtle";
-function serialize(quads, options) {
-  const format = options?.format ?? DEFAULT_FORMAT;
-  const prefixes = options?.prefixes ?? {};
-  const emptyAsEmptyString = options?.emptyAsEmptyString ?? true;
-  if (emptyAsEmptyString && quads.length === 0) {
-    return Promise.resolve("");
-  }
-  return new Promise((resolve, reject) => {
-    const writer = new Writer2({ format, prefixes });
-    writer.addQuads(quads);
-    writer.end((error, result) => {
-      if (error) {
-        reject(error);
-      } else {
-        resolve(result);
-      }
-    });
-  });
-}
-function legacySerialize(quads, format = DEFAULT_FORMAT, prefixes = {}, emptyAsEmptyString = true) {
-  return serialize(quads, { format, prefixes, emptyAsEmptyString });
 }
 
 // src/serialize.ts
