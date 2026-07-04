@@ -288,12 +288,24 @@ describe("isHttpIri — lexical safety predicate (not canonical equality)", () =
     expect(isHttpIri("http://EXAMPLE.com/")).toBe(true);
     // Default :443 + host case — raw-safe, accepted.
     expect(isHttpIri("https://Example.COM:443/x")).toBe(true);
-    // The genuine divergence from safeHttpIri: the authority-less form is
-    // injection-safe (no forbidden char, parses http(s)) so the PREDICATE
-    // accepts it, even though safeHttpIri's strict lexical-authority rule
-    // rejects it. isHttpIri is a safety predicate, not `=== safeHttpIri`.
-    expect(isHttpIri("https:example.com")).toBe(true);
+  });
+
+  it("rejects authority-less and empty-authority forms (same lexical rule as safeHttpIri)", () => {
+    // Regression (roborev Medium on 7c2ff17): the WHATWG parser accepts
+    // authority-less `https:example.com`, but as an IRI its identity (scheme +
+    // path `example.com`) diverges from the `https://example.com/` a fetch
+    // would canonicalise it to — the guard must not bless the raw form.
+    expect(isHttpIri("https:example.com")).toBe(false);
     expect(safeHttpIri("https:example.com")).toBeUndefined();
+    // Empty-authority forms.
+    expect(isHttpIri("https:///foo")).toBe(false);
+    expect(isHttpIri("http:////foo")).toBe(false);
+    expect(isHttpIri("https://?x")).toBe(false);
+    expect(isHttpIri("https://#frag")).toBe(false);
+    // Case-insensitive scheme still accepted when a real authority is present.
+    expect(isHttpIri("HTTPS://example.com/x")).toBe(true);
+    // Userinfo is a real (if unusual) authority — still accepted.
+    expect(isHttpIri("https://user@example.com/x")).toBe(true);
   });
 
   it("returns false when a raw forbidden char is present (the injection payload)", () => {

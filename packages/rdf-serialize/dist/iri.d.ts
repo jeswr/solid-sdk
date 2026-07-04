@@ -95,9 +95,17 @@ export declare function safeIri(value: unknown): string | undefined;
  * the `safeHttpIri(v) !== v` rule (below) only for EXACT-MATCH evaluation
  * fields where lexical identity matters.
  *
+ * Like {@link safeHttpIri} (clause 6), it requires a NON-EMPTY LEXICAL
+ * authority: an authority-less `https:example.com` is REJECTED even though the
+ * WHATWG parser accepts it, because as an IRI its identity (scheme +
+ * path-rooted `example.com`) diverges from what a fetch of it would
+ * canonicalise to (`https://example.com/`) — blessing the raw form invites an
+ * RDF-identity / dereference-target mismatch, and would make this public guard
+ * lexically weaker than `safeHttpIri`.
+ *
  * @param value - The candidate (any type).
  * @returns `true` (narrowing `value` to `string`) iff it is a raw-safe absolute
- *   http(s) IRI.
+ *   http(s) IRI with a real authority.
  */
 export declare function isHttpIri(value: unknown): value is string;
 //# sourceMappingURL=iri.d.ts.map
