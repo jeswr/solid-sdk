@@ -15,7 +15,7 @@ import {
   type FeedbackDiagnostics,
   feedbackLabels,
 } from "../src/lib/feedback-core.js";
-import { FOCUSABLE_SELECTOR, tabbableElements } from "../src/lib/focus-trap.js";
+import { FOCUSABLE_SELECTOR, tabbableElements, tabTrapTarget } from "../src/lib/focus-trap.js";
 
 const user = userEvent.setup({ pointerEventsCheck: 0 });
 
@@ -373,5 +373,67 @@ describe("tabbableElements (radio-group tab-order helper)", () => {
     const tabbable = tabbableElements(root, selector);
     // Nameless radios are not grouped — both survive — plus checkbox + textarea.
     expect(tabbable.length).toBe(4);
+  });
+});
+
+// The pure Tab-containment decision extracted from the FeedbackDialog keydown
+// handler. The component tests above exercise it end-to-end through jsdom +
+// userEvent; these pin the decision function directly (DOM in, element out) so
+// the aria-modal keyboard-containment contract is a reviewable unit spec.
+describe("tabTrapTarget (pure modal Tab-containment decision)", () => {
+  const mount = (html: string): HTMLElement => {
+    const dialog = document.createElement("div");
+    dialog.innerHTML = html;
+    document.body.appendChild(dialog);
+    return dialog;
+  };
+  afterEach(() => {
+    document.body.innerHTML = "";
+  });
+
+  it("case 1: parks focus on the dialog itself when nothing is tabbable", () => {
+    // No focusable descendants at all (a disabled button matches none of the
+    // selector clauses) — the trap has nowhere to wrap to.
+    const dialog = mount(`<p>no controls</p><button type="button" disabled>x</button>`);
+    expect(tabbableElements(dialog, FOCUSABLE_SELECTOR)).toHaveLength(0);
+    expect(tabTrapTarget(dialog, null, false)).toBe(dialog);
+    expect(tabTrapTarget(dialog, null, true)).toBe(dialog);
+  });
+
+  it("case 2 (forward): wraps last→first, and pulls in when focus escaped", () => {
+    const dialog = mount(
+      `<button type="button">a</button><button type="button">b</button><button type="button">c</button>`,
+    );
+    const [first, , last] = tabbableElements(dialog, FOCUSABLE_SELECTOR);
+    const outside = document.createElement("button");
+    document.body.appendChild(outside);
+
+    expect(tabTrapTarget(dialog, last ?? null, false)).toBe(first); // last → first
+    expect(tabTrapTarget(dialog, outside, false)).toBe(first); // escaped → first
+  });
+
+  it("case 2 (backward): Shift+Tab wraps first→last, and pulls in when escaped", () => {
+    const dialog = mount(
+      `<button type="button">a</button><button type="button">b</button><button type="button">c</button>`,
+    );
+    const [first, , last] = tabbableElements(dialog, FOCUSABLE_SELECTOR);
+    const outside = document.createElement("button");
+    document.body.appendChild(outside);
+
+    expect(tabTrapTarget(dialog, first ?? null, true)).toBe(last); // first → last
+    expect(tabTrapTarget(dialog, outside, true)).toBe(last); // escaped → last
+  });
+
+  it("case 3: returns null in the interior (native tab order is already correct)", () => {
+    const dialog = mount(
+      `<button type="button">a</button><button type="button">b</button><button type="button">c</button>`,
+    );
+    const [first, mid, last] = tabbableElements(dialog, FOCUSABLE_SELECTOR);
+    // Forward from a non-last element → don't intervene.
+    expect(tabTrapTarget(dialog, first ?? null, false)).toBeNull();
+    expect(tabTrapTarget(dialog, mid ?? null, false)).toBeNull();
+    // Backward from a non-first element → don't intervene.
+    expect(tabTrapTarget(dialog, last ?? null, true)).toBeNull();
+    expect(tabTrapTarget(dialog, mid ?? null, true)).toBeNull();
   });
 });

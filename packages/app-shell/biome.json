@@ -7,7 +7,13 @@
     "enabled": true,
     "rules": {
       "recommended": true,
-      "suspicious": { "noConsole": "off" }
+      "suspicious": { "noConsole": "off" },
+      "complexity": {
+        "noExcessiveCognitiveComplexity": {
+          "level": "warn",
+          "options": { "maxAllowedComplexity": 15 }
+        }
+      }
     }
   },
   "javascript": { "formatter": { "quoteStyle": "double" } },

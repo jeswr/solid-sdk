@@ -16,6 +16,32 @@
  */
 export const FOCUSABLE_SELECTOR = 'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 /**
+ * The full Tab-key containment decision for a modal: given the dialog, the
+ * currently-focused element, and the Tab direction, return the element focus
+ * must MOVE to (caller then `preventDefault()`s + focuses it) — or `null` when
+ * the browser's native tab order already stays inside the dialog.
+ *
+ * The three cases (ESSENTIAL a11y logic — the `aria-modal="true"` keyboard
+ * containment contract; do not collapse them):
+ *  1. nothing tabbable in the panel → the dialog itself (park focus there);
+ *  2. Tab from the LAST tabbable (or from outside the dialog — focus escaped)
+ *     → wrap to the FIRST; Shift+Tab from the FIRST (or outside) → the LAST;
+ *  3. otherwise → `null` (native order is correct; do not intervene).
+ *
+ * PURE (DOM in, element out): no browser global, unit-testable without React.
+ */
+export function tabTrapTarget(dialog, active, shiftKey) {
+    const focusable = tabbableElements(dialog, FOCUSABLE_SELECTOR);
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (first === undefined || last === undefined)
+        return dialog; // case 1
+    const escaped = !dialog.contains(active);
+    if (shiftKey)
+        return active === first || escaped ? last : null; // case 2/3 (backward)
+    return active === last || escaped ? first : null; // case 2/3 (forward)
+}
+/**
  * The list of ACTUALLY tabbable elements inside `root`, in DOM order, mirroring
  * the browser's real Tab sequence. `selector` matches focusable candidates
  * (already excluding disabled / `tabindex=-1`); the one nuance the raw selector

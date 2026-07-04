@@ -33,7 +33,7 @@ import {
   type FeedbackSubmitResult,
   feedbackLabels,
 } from "../lib/feedback-core.js";
-import { FOCUSABLE_SELECTOR, tabbableElements } from "../lib/focus-trap.js";
+import { tabTrapTarget } from "../lib/focus-trap.js";
 import { Button, type ButtonProps } from "./primitives.js";
 
 // ── Presentation data ──────────────────────────────────────────────────────────
@@ -136,37 +136,17 @@ export function FeedbackDialog({
       if (e.key !== "Tab") return;
       const dialog = dialogRef.current;
       if (!dialog) return;
-      // The selector already excludes disabled controls and tabindex=-1 (the
-      // backdrop), which is the full set of non-tabbable cases the panel has —
-      // so no layout-based visibility filter is needed (and none would work
-      // under jsdom, which does no layout). `sr-only` radios stay tabbable.
-      //
-      // BUT a radio GROUP is special: native browser tab order includes only ONE
-      // member per group — the CHECKED radio (or the first radio if none is
-      // checked) — never every radio. If we treated all three category radios as
-      // tabbable, selecting a non-default category (Feedback/Help) would make the
-      // checked radio differ from `first`, so Shift+Tab from it would NOT wrap and
-      // focus would escape the modal. Collapse each radio group to its single
-      // tabbable member to mirror the browser's real tab order.
-      const focusable = tabbableElements(dialog, FOCUSABLE_SELECTOR);
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (first === undefined || last === undefined) {
-        // Nothing focusable in the panel — keep focus on the dialog itself.
+      // The containment decision (which element Tab must land on, incl. the
+      // radio-group and focus-escaped nuances) is the PURE `tabTrapTarget` in
+      // lib/focus-trap.ts — see its docs; this handler only applies the result.
+      const target = tabTrapTarget(
+        dialog,
+        document.activeElement as HTMLElement | null,
+        e.shiftKey,
+      );
+      if (target) {
         e.preventDefault();
-        dialog.focus();
-        return;
-      }
-      const active = document.activeElement as HTMLElement | null;
-      // Wrap focus, and pull focus back in if it has escaped the dialog.
-      if (e.shiftKey) {
-        if (active === first || !dialog.contains(active)) {
-          e.preventDefault();
-          last.focus();
-        }
-      } else if (active === last || !dialog.contains(active)) {
-        e.preventDefault();
-        first.focus();
+        target.focus();
       }
     };
 
