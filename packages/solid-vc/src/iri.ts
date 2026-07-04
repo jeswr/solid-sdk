@@ -21,7 +21,11 @@
 //                     safe for SUBJECT ids and any value that may legitimately be a
 //                     non-http absolute IRI, and for closing the breakout at the
 //                     low-level write chokepoint (subject / predicate / object /
-//                     datatype). This is the load-bearing security floor.
+//                     datatype). This is the load-bearing security floor. It now
+//                     lives in — and is RE-EXPORTED from — the canonical
+//                     `@jeswr/rdf-serialize` (the single audited home for the
+//                     injection-neutraliser); the implementation there is
+//                     byte-equivalent to the former local one.
 //
 //   • safeHttpIri   — http(s)-only. Canonicalises via `new URL().href` (which
 //                     percent-encodes the breakout characters and strips control
@@ -39,33 +43,21 @@
 //                     triple. This is what an object-IRI field (issuer, a type IRI)
 //                     routes through.
 
-/**
- * The characters a Turtle / N-Triples `IRIREF` may not contain literally, per the
- * grammar (`[^#x00-#x20<>"{}|^` + "`" + `\] | UCHAR`): the C0 control range
- * U+0000–U+0020 (control chars + space), plus `<`, `>`, `"`, `{`, `}`, `|`, `^`,
- * backtick, and backslash. `n3.Writer` escapes none of these inside `<…>`, so any
- * of them in an emitted IRI is an injection vector. Built from a string (not a
- * regex literal) so the C0 range carries no literal control byte in source.
- */
-// biome-ignore lint/suspicious/noControlCharactersInRegex: the C0 control range IS the IRIREF-forbidden set we must percent-encode; matching it is the whole point.
-const IRI_FORBIDDEN = /[\u0000-\u0020<>"{}|^`\\]/g;
-
-/** Percent-encode a single forbidden character to its `%XX` form (upper-hex). */
-function percentEncode(ch: string): string {
-  return `%${ch.charCodeAt(0).toString(16).toUpperCase().padStart(2, "0")}`;
-}
+import { escapeIri } from "@jeswr/rdf-serialize";
 
 /**
- * Scheme-agnostically neutralise an IRI for safe `<…>` emission: percent-encode
- * ONLY the Turtle-IRIREF forbidden characters, leaving everything else untouched.
- * A well-formed absolute IRI of ANY scheme (`http:`, `https:`, `urn:uuid:…`,
- * `did:…`) is returned byte-identical (round-trip preserving), while a hostile
- * value can no longer break out of the angle brackets. `%` is NOT forbidden, so an
- * already-percent-encoded IRI is not double-encoded.
+ * `escapeIri` — the scheme-agnostic Turtle-IRIREF injection-neutraliser — now lives
+ * in exactly one audited place: it is the single canonical export of
+ * `@jeswr/rdf-serialize`, imported here and RE-EXPORTED. The former local
+ * implementation was byte-equivalent for every input (same forbidden set — the C0
+ * control range U+0000–U+0020 plus `<`, `>`, `"`, `{`, `}`, `|`, `^`, backtick and
+ * backslash — and the same uppercase `%XX` percent-encoding; a well-formed absolute
+ * IRI of any scheme survives byte-for-byte, and `%` is not double-encoded). It is
+ * imported (not merely `export … from`) so the local {@link safeObjectIri} composite
+ * can still reference it, and re-exported so `./iri.js`'s existing consumers (e.g.
+ * `src/wrappers.ts`) resolve it unchanged.
  */
-export function escapeIri(value: string): string {
-  return value.replace(IRI_FORBIDDEN, percentEncode);
-}
+export { escapeIri };
 
 /**
  * Canonicalise + harden a value that must be an http(s) IRI. Returns `undefined`

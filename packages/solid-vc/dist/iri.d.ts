@@ -1,12 +1,17 @@
+import { escapeIri } from "@jeswr/rdf-serialize";
 /**
- * Scheme-agnostically neutralise an IRI for safe `<…>` emission: percent-encode
- * ONLY the Turtle-IRIREF forbidden characters, leaving everything else untouched.
- * A well-formed absolute IRI of ANY scheme (`http:`, `https:`, `urn:uuid:…`,
- * `did:…`) is returned byte-identical (round-trip preserving), while a hostile
- * value can no longer break out of the angle brackets. `%` is NOT forbidden, so an
- * already-percent-encoded IRI is not double-encoded.
+ * `escapeIri` — the scheme-agnostic Turtle-IRIREF injection-neutraliser — now lives
+ * in exactly one audited place: it is the single canonical export of
+ * `@jeswr/rdf-serialize`, imported here and RE-EXPORTED. The former local
+ * implementation was byte-equivalent for every input (same forbidden set — the C0
+ * control range U+0000–U+0020 plus `<`, `>`, `"`, `{`, `}`, `|`, `^`, backtick and
+ * backslash — and the same uppercase `%XX` percent-encoding; a well-formed absolute
+ * IRI of any scheme survives byte-for-byte, and `%` is not double-encoded). It is
+ * imported (not merely `export … from`) so the local {@link safeObjectIri} composite
+ * can still reference it, and re-exported so `./iri.js`'s existing consumers (e.g.
+ * `src/wrappers.ts`) resolve it unchanged.
  */
-export declare function escapeIri(value: string): string;
+export { escapeIri };
 /**
  * Canonicalise + harden a value that must be an http(s) IRI. Returns `undefined`
  * (⇒ the caller DROPS the triple) when the value is not a parseable http(s) URL.

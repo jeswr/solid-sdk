@@ -72,7 +72,7 @@
   "devDependencies": {
     "@biomejs/biome": "^2.0.0",
     "@jeswr/fetch-rdf": "github:jeswr/fetch-rdf#main",
-    "@jeswr/rdf-serialize": "git+https://github.com/jeswr/rdf-serialize.git#eed2c11ceaf4de5e1f79132353744a5d1e3d6c48",
+    "@jeswr/rdf-serialize": "git+https://github.com/jeswr/rdf-serialize.git#8ebdda44ab1da63ef91052a5b2f1e453c0a29c79",
     "@microsoft/api-extractor": "^7.58.9",
     "@rdfjs/types": "^2.0.1",
     "@types/n3": "^1.16.0",

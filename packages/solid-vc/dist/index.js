@@ -294,44 +294,41 @@ async function digestRdfContent(content, contentType2 = "text/turtle") {
   return digestQuads(quads);
 }
 
-// src/iri.ts
-var IRI_FORBIDDEN = /[\u0000-\u0020<>"{}|^`\\]/g;
-function percentEncode(ch) {
-  return `%${ch.charCodeAt(0).toString(16).toUpperCase().padStart(2, "0")}`;
+// node_modules/@jeswr/rdf-serialize/dist/iri.js
+var FORBIDDEN_SYMBOL_CODES = /* @__PURE__ */ new Set([
+  60,
+  // <
+  62,
+  // >
+  34,
+  // "
+  123,
+  // {
+  125,
+  // }
+  124,
+  // |
+  94,
+  // ^
+  96,
+  // ` (backtick)
+  92
+  // \ (backslash)
+]);
+function isForbidden(codePoint) {
+  return codePoint <= 32 || FORBIDDEN_SYMBOL_CODES.has(codePoint);
 }
 function escapeIri(value) {
-  return value.replace(IRI_FORBIDDEN, percentEncode);
-}
-function safeHttpIri(value) {
-  if (typeof value !== "string") return void 0;
-  let u;
-  try {
-    u = new URL(value);
-  } catch {
-    return void 0;
+  let out = "";
+  for (const ch of value) {
+    const codePoint = ch.codePointAt(0);
+    if (isForbidden(codePoint)) {
+      out += `%${codePoint.toString(16).toUpperCase().padStart(2, "0")}`;
+    } else {
+      out += ch;
+    }
   }
-  if (u.protocol !== "http:" && u.protocol !== "https:") return void 0;
-  return u.href.replace(/\|/g, "%7C").replace(/\^/g, "%5E").replace(/`/g, "%60");
-}
-function isAbsoluteIri(value) {
-  return /^[A-Za-z][A-Za-z0-9+.-]*:/.test(value);
-}
-function safeObjectIri(value) {
-  if (typeof value !== "string") return void 0;
-  const http = safeHttpIri(value);
-  if (http !== void 0) return http;
-  return isAbsoluteIri(value) ? escapeIri(value) : void 0;
-}
-function requireObjectIri(value, field) {
-  const iri = safeObjectIri(value);
-  if (iri === void 0) {
-    throw new Error(
-      `@jeswr/solid-vc: ${field} must be an absolute http(s)/did:/urn: IRI, got ${JSON.stringify(
-        value
-      )} \u2014 refusing to build a credential with an invalid ${field}`
-    );
-  }
-  return iri;
+  return out;
 }
 
 // node_modules/@jeswr/rdf-serialize/dist/serialize.js
@@ -358,6 +355,39 @@ function serialize(quads, options) {
 }
 function legacySerialize(quads, format = DEFAULT_FORMAT, prefixes = {}, emptyAsEmptyString = true) {
   return serialize(quads, { format, prefixes, emptyAsEmptyString });
+}
+
+// src/iri.ts
+function safeHttpIri2(value) {
+  if (typeof value !== "string") return void 0;
+  let u;
+  try {
+    u = new URL(value);
+  } catch {
+    return void 0;
+  }
+  if (u.protocol !== "http:" && u.protocol !== "https:") return void 0;
+  return u.href.replace(/\|/g, "%7C").replace(/\^/g, "%5E").replace(/`/g, "%60");
+}
+function isAbsoluteIri(value) {
+  return /^[A-Za-z][A-Za-z0-9+.-]*:/.test(value);
+}
+function safeObjectIri(value) {
+  if (typeof value !== "string") return void 0;
+  const http = safeHttpIri2(value);
+  if (http !== void 0) return http;
+  return isAbsoluteIri(value) ? escapeIri(value) : void 0;
+}
+function requireObjectIri(value, field) {
+  const iri = safeObjectIri(value);
+  if (iri === void 0) {
+    throw new Error(
+      `@jeswr/solid-vc: ${field} must be an absolute http(s)/did:/urn: IRI, got ${JSON.stringify(
+        value
+      )} \u2014 refusing to build a credential with an invalid ${field}`
+    );
+  }
+  return iri;
 }
 
 // src/vocab.ts
@@ -1713,7 +1743,7 @@ var VerificationMethodNode = class extends TermWrapper2 {
   }
 };
 async function publishVerificationMethod(input) {
-  const controller = safeHttpIri(input.controller);
+  const controller = safeHttpIri2(input.controller);
   if (controller === void 0) {
     throw new Error(
       `@jeswr/solid-vc: publishVerificationMethod controller must be an absolute http(s) IRI, got ${JSON.stringify(input.controller)}`
@@ -1726,7 +1756,7 @@ async function publishVerificationMethod(input) {
       "@jeswr/solid-vc: publishVerificationMethod requires a verificationMethod IRI (explicit, or via a KeyPair)"
     );
   }
-  const verificationMethod = safeHttpIri(vmInput);
+  const verificationMethod = safeHttpIri2(vmInput);
   if (verificationMethod === void 0) {
     throw new Error(
       `@jeswr/solid-vc: publishVerificationMethod verificationMethod must be an absolute http(s) IRI, got ${JSON.stringify(vmInput)}`
@@ -1805,8 +1835,8 @@ function literalValues(terms) {
   return out;
 }
 async function resolveWebIdKeyInternal(webId, keyId, fetchImpl, cache) {
-  const controller = safeHttpIri(webId);
-  const verificationMethod = safeHttpIri(keyId);
+  const controller = safeHttpIri2(webId);
+  const verificationMethod = safeHttpIri2(keyId);
   if (controller === void 0 || verificationMethod === void 0) return void 0;
   const controllerDocUrl = documentUrlOf(controller);
   const controllerDoc = await fetchDocument(controllerDocUrl, fetchImpl, cache);
@@ -1848,7 +1878,7 @@ function createWebIdKeyResolver(options = {}) {
   const resolveKey = async (verificationMethod) => {
     try {
       const fetchImpl = await fetchOf();
-      const vm = safeHttpIri(verificationMethod);
+      const vm = safeHttpIri2(verificationMethod);
       if (vm === void 0) return void 0;
       const keyDoc = await fetchDocument(documentUrlOf(vm), fetchImpl, cache);
       if (keyDoc === void 0) return void 0;
