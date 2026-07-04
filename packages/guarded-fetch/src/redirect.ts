@@ -57,11 +57,15 @@ export const CONTENT_HEADERS: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * Rewrite the per-hop `init` for the NEXT redirect hop, applying standard Fetch redirect
- * semantics: a method-changing redirect (303 always; 301/302 on a non-GET/HEAD) switches to
- * GET and drops the body + body-shaping Content-* headers; a cross-origin redirect
- * additionally strips credential headers AND the body (even a 307/308). Returns a fresh init
- * (the caller's object is never mutated).
+ * Rewrite the per-hop `init` for the NEXT redirect hop, applying the WHATWG Fetch spec's
+ * "HTTP-redirect fetch" method-rewrite rule exactly (step 11): the method switches to `GET`
+ * and the body is dropped ONLY when
+ *   - the status is 301 or 302 AND the method is `POST`, OR
+ *   - the status is 303 AND the method is neither `GET` nor `HEAD`.
+ * So a `HEAD` under a 303 stays `HEAD`, and a `PUT`/`PATCH`/`DELETE` under a 301/302 keeps its
+ * method (and, on a same-origin hop, its body) — a redirect must NOT silently downgrade a
+ * mutating verb to a `GET`. A cross-origin redirect additionally strips credential headers AND
+ * the body (even a 307/308). Returns a fresh init (the caller's object is never mutated).
  */
 export function rewriteInitForRedirect(
   init: RequestInit,
@@ -70,7 +74,8 @@ export function rewriteInitForRedirect(
 ): RequestInit {
   const method = (init.method ?? "GET").toUpperCase();
   const methodChanges =
-    status === 303 || ((status === 301 || status === 302) && method !== "GET" && method !== "HEAD");
+    ((status === 301 || status === 302) && method === "POST") ||
+    (status === 303 && method !== "GET" && method !== "HEAD");
   const dropBody = methodChanges || crossOrigin;
 
   const headers = new Headers(init.headers ?? {});

@@ -1036,7 +1036,7 @@ var CONTENT_HEADERS = /* @__PURE__ */ new Set([
 ]);
 function rewriteInitForRedirect(init, status, crossOrigin) {
   const method = (init.method ?? "GET").toUpperCase();
-  const methodChanges = status === 303 || (status === 301 || status === 302) && method !== "GET" && method !== "HEAD";
+  const methodChanges = (status === 301 || status === 302) && method === "POST" || status === 303 && method !== "GET" && method !== "HEAD";
   const dropBody = methodChanges || crossOrigin;
   const headers = new Headers(init.headers ?? {});
   if (crossOrigin) {
@@ -1669,6 +1669,11 @@ function createPodScopedFetch(base, options = {}) {
       const location = res.headers.get("location");
       if (!location) {
         return res;
+      }
+      if (location.trim().startsWith("//")) {
+        throw new PodScopeError(
+          `redirect Location must not be scheme-relative ("//..."): ${redactUserinfo(location)} (refused)`
+        );
       }
       let nextUrl;
       try {

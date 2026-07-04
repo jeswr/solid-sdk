@@ -473,6 +473,80 @@ describe("createPodScopedFetch", () => {
     expect(headers.get("content-type")).toBeNull();
   });
 
+  it("Fetch method-rewrite: a HEAD 303 stays HEAD (not downgraded to GET)", async () => {
+    const inner = vi
+      .fn()
+      .mockResolvedValueOnce(redirectTo("other.ttl", 303))
+      .mockResolvedValueOnce(new Response("done"));
+    const f = createPodScopedFetch(BASE, { fetch: inner as unknown as typeof fetch });
+    await f(`${BASE}doc.ttl`, { method: "HEAD" });
+    const [, init] = inner.mock.calls[1] as unknown as [string, RequestInit];
+    expect(init.method).toBe("HEAD");
+  });
+
+  it.each([
+    301, 302,
+  ] as const)("Fetch method-rewrite: a PUT under a %d keeps its method AND body (not GET)", async (status) => {
+    const inner = vi
+      .fn()
+      .mockResolvedValueOnce(redirectTo("moved.ttl", status))
+      .mockResolvedValueOnce(new Response("done"));
+    const f = createPodScopedFetch(BASE, { fetch: inner as unknown as typeof fetch });
+    await f(`${BASE}doc.ttl`, { method: "PUT", body: "payload" });
+    const [, init] = inner.mock.calls[1] as unknown as [string, RequestInit];
+    expect(init.method).toBe("PUT");
+    expect(init.body).toBe("payload");
+  });
+
+  it.each([
+    301, 302,
+  ] as const)("Fetch method-rewrite: a PATCH under a %d keeps its method (not GET)", async (status) => {
+    const inner = vi
+      .fn()
+      .mockResolvedValueOnce(redirectTo("moved.ttl", status))
+      .mockResolvedValueOnce(new Response("done"));
+    const f = createPodScopedFetch(BASE, { fetch: inner as unknown as typeof fetch });
+    await f(`${BASE}doc.ttl`, { method: "PATCH", body: "delta" });
+    const [, init] = inner.mock.calls[1] as unknown as [string, RequestInit];
+    expect(init.method).toBe("PATCH");
+    expect(init.body).toBe("delta");
+  });
+
+  it.each([
+    301, 302,
+  ] as const)("Fetch method-rewrite: a POST under a %d becomes GET and drops the body", async (status) => {
+    const inner = vi
+      .fn()
+      .mockResolvedValueOnce(redirectTo("moved.ttl", status))
+      .mockResolvedValueOnce(new Response("done"));
+    const f = createPodScopedFetch(BASE, { fetch: inner as unknown as typeof fetch });
+    await f(`${BASE}doc.ttl`, {
+      method: "POST",
+      body: "payload",
+      headers: { "content-type": "text/turtle" },
+    });
+    const [, init] = inner.mock.calls[1] as unknown as [string, RequestInit];
+    expect(init.method).toBe("GET");
+    expect(init.body).toBeUndefined();
+    expect(new Headers(init.headers).get("content-type")).toBeNull();
+  });
+
+  it("REFUSES a scheme-relative Location before resolution (even to the in-scope host)", async () => {
+    // `//alice.pod.example/notes/doc` resolves against the current https hop back into scope,
+    // so a post-resolution check alone would FOLLOW it — the raw `//` form is refused first.
+    const inner = vi.fn().mockResolvedValueOnce(redirectTo("//alice.pod.example/notes/doc"));
+    const f = createPodScopedFetch(BASE, { fetch: inner as unknown as typeof fetch });
+    await expect(f(`${BASE}doc.ttl`)).rejects.toThrow(/scheme-relative/);
+    expect(inner).toHaveBeenCalledTimes(1); // never followed
+  });
+
+  it("REFUSES a scheme-relative Location pointing at a foreign host", async () => {
+    const inner = vi.fn().mockResolvedValueOnce(redirectTo("//evil.example/steal"));
+    const f = createPodScopedFetch(BASE, { fetch: inner as unknown as typeof fetch });
+    await expect(f(`${BASE}doc.ttl`)).rejects.toThrow(PodScopeError);
+    expect(inner).toHaveBeenCalledTimes(1);
+  });
+
   it("preserves method + body + credentials across an in-scope 307", async () => {
     const inner = vi
       .fn()

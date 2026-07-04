@@ -334,6 +334,19 @@ export function createPodScopedFetch(
         // A 3xx with no Location is not followable — return it as-is.
         return res;
       }
+      // Apply the SAME pre-parse guard `assertWithinPodScope` applies to an initial URL, on
+      // the RAW Location BEFORE resolution: a scheme-relative Location (`//host/…`) resolves
+      // against the current hop's scheme and — when it names the pod's own host — would land
+      // back in scope, silently bypassing the documented "scheme-relative refused" rule. The
+      // form itself is refused here so a poisoned resource cannot re-point the origin via a
+      // `//`-Location even to an in-scope host. (Other refused forms — non-http(s) scheme,
+      // embedded credentials, out-of-scope origin/path — are caught post-resolution by
+      // `assertWithinPodScope` below, since resolution preserves them.)
+      if (location.trim().startsWith("//")) {
+        throw new PodScopeError(
+          `redirect Location must not be scheme-relative ("//..."): ${redactUserinfo(location)} (refused)`,
+        );
+      }
       let nextUrl: string;
       try {
         nextUrl = new URL(location, currentUrl).toString();
