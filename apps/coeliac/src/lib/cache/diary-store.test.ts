@@ -125,3 +125,124 @@ describe("DiaryStore", () => {
     expect((await bob.allMeals()).length).toBe(0);
   });
 });
+
+/** Seed one record of every kind for a store (pending by default). */
+async function seedEveryKind(s: DiaryStore, prefix: string): Promise<void> {
+  await s.putMeal(newMealRecord({ storageRoot: ROOT, items: [{ name: `${prefix}-meal` }] }));
+  await s.putSymptom(newSymptomRecord({ storageRoot: ROOT, symptomType: "bloating" }));
+  await s.putProtocol({
+    kind: "protocol",
+    ulid: `${prefix}-PROTO`,
+    url: `${ROOT}health/diary/protocols/${prefix}.ttl`,
+    targetTrigger: "lactose",
+    phase: "baseline",
+    createdAt: "2026-07-01T08:00:00.000Z",
+    updatedAt: "2026-07-01T08:00:00.000Z",
+    sync: "pending",
+  });
+  await s.putConclusion({
+    kind: "conclusion",
+    ulid: `${prefix}-CONC`,
+    url: `${ROOT}health/diary/conclusions/${prefix}.ttl`,
+    aboutTrigger: "lactose",
+    verdict: "reacts",
+    confidence: "confirmed",
+    createdAt: "2026-07-10T08:00:00.000Z",
+    sync: "synced", // mix synced + pending — purge must drop both
+  });
+  await s.putGeneticSummary({
+    kind: "genetic",
+    url: `${ROOT}health/genetics/summary.ttl`,
+    markers: [],
+    interpretation: "Negative-predictive only; cannot diagnose.",
+    consentGiven: true,
+    createdAt: "2026-07-05T08:00:00.000Z",
+    rev: `${prefix}-rev`,
+    sync: "pending",
+  });
+}
+
+async function isEmpty(s: DiaryStore): Promise<boolean> {
+  const [meals, symptoms, protocols, conclusions, genetic] = await Promise.all([
+    s.allMeals(),
+    s.allSymptoms(),
+    s.allProtocols(),
+    s.allConclusions(),
+    s.getGeneticSummary(),
+  ]);
+  return (
+    meals.length === 0 &&
+    symptoms.length === 0 &&
+    protocols.length === 0 &&
+    conclusions.length === 0 &&
+    genetic === undefined
+  );
+}
+
+describe("DiaryStore.purge (logout privacy purge)", () => {
+  it("drops every kind for the scope — pending AND synced alike", async () => {
+    const s = store();
+    await seedEveryKind(s, "a");
+    expect(await isEmpty(s)).toBe(false);
+    await s.purge();
+    expect(await isEmpty(s)).toBe(true);
+    // The outbox is empty too — nothing recoverable.
+    const pending = await s.pending();
+    expect(pending.meals).toHaveLength(0);
+    expect(pending.symptoms).toHaveLength(0);
+    expect(pending.protocols).toHaveLength(0);
+    expect(pending.conclusions).toHaveLength(0);
+    expect(pending.genetics).toHaveLength(0);
+  });
+
+  it("purges ONLY the departing WebID — another account's cache is untouched", async () => {
+    const kv = new MemoryKv();
+    const alice = new DiaryStore(kv, "https://alice.example/#me");
+    const bob = new DiaryStore(kv, "https://bob.example/#me");
+    await seedEveryKind(alice, "alice");
+    await seedEveryKind(bob, "bob");
+    await alice.purge();
+    expect(await isEmpty(alice)).toBe(true);
+    // Bob (the other identity on the same shared kv) keeps everything.
+    expect(await isEmpty(bob)).toBe(false);
+    expect((await bob.allMeals()).length).toBe(1);
+    expect(await bob.getGeneticSummary()).toBeDefined();
+  });
+
+  it("the `|` delimiter prevents prefix-collision purges (scope A ⊏ scope B textually)", async () => {
+    // Without the trailing delimiter, scope "acct" would be a textual prefix of
+    // "acct2" and its purge would wrongly wipe the sibling. The `|` boundary stops it.
+    const kv = new MemoryKv();
+    const acct = new DiaryStore(kv, "acct");
+    const acct2 = new DiaryStore(kv, "acct2");
+    await seedEveryKind(acct, "x");
+    await seedEveryKind(acct2, "y");
+    await acct.purge();
+    expect(await isEmpty(acct)).toBe(true);
+    expect(await isEmpty(acct2)).toBe(false);
+  });
+
+  it("is a no-op on an empty store (never throws)", async () => {
+    const s = store();
+    await expect(s.purge()).resolves.toBeUndefined();
+  });
+
+  it("attempts every key and rejects (with a count) if the backing del fails", async () => {
+    // A Kv whose del always rejects — purge must still ATTEMPT all keys (best-effort
+    // total), then reject reporting the failure so the caller can surface it.
+    let delAttempts = 0;
+    const failingKv = new (class extends MemoryKv {
+      override async del(): Promise<void> {
+        delAttempts += 1;
+        throw new Error("blocked");
+      }
+    })();
+    const s = new DiaryStore(failingKv, "https://alice.example/#me");
+    await seedEveryKind(s, "z");
+    const keyCount = (await failingKv.keys(`${encodeURIComponent("https://alice.example/#me")}|`)).length;
+    expect(keyCount).toBeGreaterThan(0);
+    await expect(s.purge()).rejects.toThrow(/failed to delete/);
+    // allSettled ⇒ every key's del was attempted, not aborted on the first failure.
+    expect(delAttempts).toBe(keyCount);
+  });
+});

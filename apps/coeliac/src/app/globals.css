@@ -340,6 +340,40 @@ a {
   background: var(--muted, #eee);
   color: var(--foreground, #222);
 }
+.logout-warning {
+  max-width: 30rem;
+  margin: 1.5rem auto 0;
+  padding: 0.9rem 1rem;
+  border-radius: 0.5rem;
+  border-left: 4px solid var(--warn);
+  background: color-mix(in oklch, var(--warn) 12%, var(--card, #fff));
+  font-size: 0.9rem;
+}
+.logout-warning__text {
+  margin: 0 0 0.6rem;
+}
+.logout-warning__actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.logout-warning__btn {
+  padding: 0.4rem 0.8rem;
+  border-radius: 0.4rem;
+  border: 1px solid var(--warn);
+  background: transparent;
+  color: var(--foreground, #222);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.logout-warning__btn--primary {
+  background: var(--warn);
+  color: #1a1200;
+}
+.logout-warning__btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
 .login-area {
   max-width: 30rem;
   margin: 3rem auto;

@@ -182,8 +182,18 @@ export class DiaryStore {
     private readonly scope: string,
   ) {}
 
+  /**
+   * The scope-wide key prefix covering EVERY kind for this account's WebID. The
+   * trailing `|` delimiter — which `encodeURIComponent` never emits (it escapes
+   * `|` to `%7C`) — makes this an exact, collision-free scope boundary: one
+   * account's prefix can never be a prefix of another's, even when one encoded
+   * WebID is a textual prefix of another (proven by the purge cross-scope test).
+   */
+  private scopePrefix(): string {
+    return `${encodeURIComponent(this.scope)}|`;
+  }
   private prefix(kind: "meal" | "symptom" | "protocol" | "conclusion" | "genetic"): string {
-    return `${encodeURIComponent(this.scope)}|${kind}|`;
+    return `${this.scopePrefix()}${kind}|`;
   }
   private key(
     kind: "meal" | "symptom" | "protocol" | "conclusion" | "genetic",
@@ -366,6 +376,35 @@ export class DiaryStore {
       conclusions: conclusions.filter((c) => c.sync !== "synced"),
       genetics: genetic && genetic.sync !== "synced" ? [genetic] : [],
     };
+  }
+
+  /**
+   * PRIVACY PURGE — mandatory on sign-out (the offline design's §7 logout-purge,
+   * parallel to the credential wipe). Delete EVERY cached record for THIS account's
+   * WebID scope from the backing Kv — meals, symptoms, protocols, conclusions and
+   * the genetic summary alike, pending or synced — so nothing the now-departed user
+   * logged or read is recoverable by the next user of the same browser/device.
+   *
+   * Purge is exact and isolated: it only touches keys under this scope's
+   * `|`-delimited {@link scopePrefix}, so a DIFFERENT WebID's cache (and the
+   * anonymous cache) is never affected. It is best-effort but TOTAL — every
+   * deletable key is attempted even if one `del` fails — and rejects (reporting how
+   * many keys could not be deleted) only if the backing store itself failed on some
+   * keys, so a caller can surface an incomplete purge rather than silently assume
+   * success.
+   *
+   * This operates ONLY on the app's IndexedDB Kv. It deliberately does NOT — and
+   * must never — reach into the Cache API: private pod/health data is never written
+   * there (the shell-only service-worker boundary), so there is nothing to purge
+   * from it.
+   */
+  async purge(): Promise<void> {
+    const keys = await this.kv.keys(this.scopePrefix());
+    const results = await Promise.allSettled(keys.map((k) => this.kv.del(k)));
+    const failed = results.filter((r) => r.status === "rejected").length;
+    if (failed > 0) {
+      throw new Error(`DiaryStore.purge: ${failed}/${keys.length} key(s) failed to delete`);
+    }
   }
 
   async markMealSync(ulid: string, sync: SyncState, error?: string): Promise<void> {
