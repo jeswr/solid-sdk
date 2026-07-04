@@ -223,11 +223,34 @@ export function mealLabel(items: readonly FoodItemData[]): string {
 }
 
 export class DiaryStore {
+  /**
+   * Set the instant {@link purge} is CALLED (synchronously, before its own
+   * async work) — see {@link isPurged}. This is the store-level half of the
+   * session-race guard (`session/use-insights.ts`): a caller holding a
+   * reference to THIS store instance can synchronously check whether the
+   * account it belongs to has departed, without depending on any React
+   * re-render/effect timing (which cannot be trusted to run before a
+   * concurrently in-flight `await` continuation resumes — a roborev finding
+   * against an earlier ref-based attempt at this same guard).
+   */
+  private purged = false;
+
   constructor(
     private readonly kv: Kv,
     /** WebID (or another per-account key) — namespaces all keys. */
     private readonly scope: string,
   ) {}
+
+  /**
+   * Whether the mandatory logout privacy {@link purge} has been called (or is
+   * in progress) on THIS store instance. A caller with a background write in
+   * flight (e.g. `useInsights`'s learned-trigger-class persist) must check
+   * this BEFORE writing and abandon the write if `true` — a purge in progress
+   * must never be silently undone by a stale, unrelated write racing it.
+   */
+  isPurged(): boolean {
+    return this.purged;
+  }
 
   /**
    * The scope-wide key prefix covering EVERY kind for this account's WebID. The
@@ -487,8 +510,14 @@ export class DiaryStore {
    * must never — reach into the Cache API: private pod/health data is never written
    * there (the shell-only service-worker boundary), so there is nothing to purge
    * from it.
+   *
+   * Marks {@link isPurged} `true` as the FIRST synchronous statement — before any
+   * `await` — so a concurrent background writer that checks it (even one already
+   * mid-flight) sees the departure as soon as `purge()` is called, not only once
+   * it finishes.
    */
   async purge(): Promise<void> {
+    this.purged = true;
     const keys = await this.kv.keys(this.scopePrefix());
     const results = await Promise.allSettled(keys.map((k) => this.kv.del(k)));
     const failed = results.filter((r) => r.status === "rejected").length;

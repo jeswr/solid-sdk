@@ -58,7 +58,13 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-/** A Kv whose READS (get/keys) pause on `gate` — writes (set/del) are immediate. */
+/**
+ * A Kv whose per-key `get` pauses on `gate` — `keys`/`set`/`del` are immediate.
+ * Gating only `get` (not `keys`) is deliberate: `DiaryStore.purge` calls
+ * `kv.keys` + `kv.del` (never `get`), so it can run to completion independently
+ * of a `refresh()` in flight that is blocked reading actual record CONTENT via
+ * `get` — exactly the interleaving the session-race guard must handle.
+ */
 class GatedReadKv implements Kv {
   constructor(
     private readonly inner: Kv,
@@ -75,7 +81,6 @@ class GatedReadKv implements Kv {
     return this.inner.del(key);
   }
   async keys(prefix?: string): Promise<string[]> {
-    await this.gate;
     return this.inner.keys(prefix);
   }
 }
@@ -142,6 +147,65 @@ describe("useInsights — session-race guard on the background trigger-class per
     // (now signed-out) account's scope. (The "control case" test below confirms
     // this SAME seeded diary reaches "likely" and DOES persist when nothing
     // races — so an empty result here is the guard, not an under-powered setup.)
+    expect(await store.allTriggerClasses()).toEqual([]);
+  });
+
+  it("abandons the persist when `store.purge()` runs mid-flight — even with NO context/re-render change at all", async () => {
+    // The tightest reproduction of the roborev finding: `refreshStore.isPurged()`
+    // is the PRIMARY guard precisely because it does not depend on React
+    // re-rendering/effects at all. Here the session context NEVER changes —
+    // only `store.purge()` is called directly, mid-flight, on the SAME store
+    // instance/reference the in-flight refresh() captured. A ref-identity-only
+    // guard would NOT catch this (the reference never changes); `isPurged()`
+    // does.
+    const gate = deferred<void>();
+    const memKv = new MemoryKv();
+    const gatedKv = new GatedReadKv(memKv, gate.promise);
+    const webId = "https://alice.example/#me";
+    const store = new DiaryStore(gatedKv, webId);
+    for (let d = 0; d < 6; d++) {
+      await store.putMeal(lactoseMeal(d));
+      await store.putSymptom(symptomAfter(d, 2));
+    }
+
+    const value: SessionValue = {
+      ...anonymousSession,
+      status: "authed",
+      webId,
+      storageRoot: "https://alice.example/",
+      store,
+      authedFetch: (...a) => globalThis.fetch(...a),
+      publicFetch: (...a) => globalThis.fetch(...a),
+    };
+    function Wrapper({ children }: { children: ReactNode }) {
+      return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
+    }
+
+    const { result } = renderHook(() => useInsights(), { wrapper: Wrapper });
+    expect(result.current.loaded).toBe(false);
+
+    // Purge runs to completion WHILE the refresh's reads are still gated —
+    // `purge()`'s own `keys`/`del` calls go through the un-gated `set`/`del`
+    // path on `GatedReadKv`, so it completes immediately.
+    await store.purge();
+    expect(store.isPurged()).toBe(true);
+
+    // Now let the gated reads resolve. The guard abandons the ENTIRE
+    // completion (state update AND persist) once `isPurged()` is true, so
+    // `loaded` correctly stays `false` forever here — there is no other
+    // context/store change in this test to drive a fresh, un-abandoned refresh.
+    act(() => {
+      gate.resolve();
+    });
+    // Flush the microtask queue so the abandoned refresh's continuation runs.
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(result.current.loaded).toBe(false);
+
+    // Nothing was written back after the purge — the guard caught it purely via
+    // `isPurged()`, with no context change and no re-render in the picture.
     expect(await store.allTriggerClasses()).toEqual([]);
   });
 

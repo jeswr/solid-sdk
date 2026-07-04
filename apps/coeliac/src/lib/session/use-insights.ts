@@ -23,15 +23,24 @@
  * next run learns again from the same underlying diary). Nothing here leaves the
  * device: no network call is made, only the existing local cache.
  *
- * SESSION-RACE GUARD (roborev finding, health-data-critical): the background
- * persist above is deliberately NOT awaited, so it can still be in flight after
- * the account signs out. `DiaryStore.purge` (the mandatory logout privacy wipe,
- * `session/logout.ts`) targets the SAME store instance a stale `refresh()` call
- * closed over — an unguarded late write would silently resurrect a
- * just-purged account's derived data. `storeRef` always tracks the CURRENT
- * session's store; a refresh whose own captured store no longer matches it (the
- * session moved on — sign-out, re-login, or account switch happened while this
- * refresh was awaiting the cache reads) abandons the persist instead of writing.
+ * SESSION-RACE GUARD (roborev finding, health-data-critical — hardened over TWO
+ * rounds): the background persist above is deliberately NOT awaited, so it can
+ * still be in flight after the account signs out. `DiaryStore.purge` (the
+ * mandatory logout privacy wipe, `session/logout.ts`) targets the SAME store
+ * instance a stale `refresh()` call closed over — an unguarded late write would
+ * silently resurrect a just-purged account's derived data.
+ *
+ * The PRIMARY guard is `refreshStore.isPurged()` — a flag `DiaryStore` sets
+ * SYNCHRONOUSLY on itself the instant `purge()` is called (before its own async
+ * work), so checking it has NO dependency on React re-render/effect timing at
+ * all. An earlier version of this guard instead compared a `useEffect`-updated
+ * `storeRef` against the captured store — roborev correctly flagged (twice)
+ * that a passive effect only flushes AFTER commit, on its own schedule, which a
+ * concurrently-resolving `await` continuation is not guaranteed to lose the
+ * race against. `storeRef` is kept as a SECONDARY, defense-in-depth check for
+ * the (not currently reachable, but not guaranteed-impossible) case of a store
+ * changing WITHOUT a purge — e.g. a future non-purging account switch.
+ * `isPurged()` is the check that must never be relied on alone to be absent.
  *
  * CONTEXT-APPLIED GATE (roborev finding, health-data-critical): a caller (e.g.
  * `InsightsView`) typically supplies a `context` that itself starts at the safe
@@ -85,9 +94,10 @@ export function useInsights(context: SafetyContext = EMPTY_CONTEXT): InsightsSta
     contextUsed: null,
   });
 
-  // Always tracks the CURRENT session's store (see the SESSION-RACE GUARD docs
-  // above) — updated synchronously in an effect so a refresh in flight can tell
-  // whether the session has moved on since it started.
+  // SECONDARY, defense-in-depth tracking of the current session's store (see
+  // the SESSION-RACE GUARD docs above) — `isPurged()` is the guard actually
+  // relied on to close the race; this is kept only to also catch a
+  // (hypothetical) store change that does NOT go through `purge()`.
   const storeRef = useRef(store);
   useEffect(() => {
     storeRef.current = store;
@@ -112,10 +122,12 @@ export function useInsights(context: SafetyContext = EMPTY_CONTEXT): InsightsSta
 
     // The session may have signed out (or switched accounts) WHILE the reads
     // above were in flight — `DiaryStore.purge` (the mandatory logout wipe) may
-    // already have run against this exact store. Abandon BOTH the state update
-    // (never show a stale/previous account's analysis after the session moved
-    // on) and the persist below (never risk resurrecting purged data).
-    if (storeRef.current !== refreshStore) return;
+    // already have run (or be running) against this exact store. Abandon BOTH
+    // the state update (never show a stale/previous account's analysis after
+    // the session moved on) and the persist below (never risk resurrecting
+    // purged data). `isPurged()` is the primary, timing-independent check;
+    // `storeRef` is the secondary one — see the SESSION-RACE GUARD module docs.
+    if (refreshStore.isPurged() || storeRef.current !== refreshStore) return;
 
     setState({
       result,

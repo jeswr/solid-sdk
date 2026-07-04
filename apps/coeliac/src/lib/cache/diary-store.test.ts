@@ -310,6 +310,32 @@ describe("DiaryStore.purge (logout privacy purge)", () => {
     await expect(s.purge()).resolves.toBeUndefined();
   });
 
+  it("isPurged() flips true SYNCHRONOUSLY the instant purge() is called — the session-race guard's primary check (use-insights.ts)", async () => {
+    const s = store();
+    expect(s.isPurged()).toBe(false);
+    const purging = s.purge();
+    // True even before the async purge work has resolved — a concurrent
+    // background writer checking mid-flight must see the departure immediately.
+    expect(s.isPurged()).toBe(true);
+    await purging;
+    expect(s.isPurged()).toBe(true);
+  });
+
+  it("isPurged() stays true even when the purge itself failed to delete every key", async () => {
+    const failingKv = new (class extends MemoryKv {
+      override async del(): Promise<void> {
+        throw new Error("blocked");
+      }
+    })();
+    const s = new DiaryStore(failingKv, "https://alice.example/#me");
+    await seedEveryKind(s, "z");
+    await expect(s.purge()).rejects.toThrow();
+    // The account is still departing even though the wipe was incomplete — a
+    // background writer must not be tricked into treating a failed purge as
+    // "safe to write into".
+    expect(s.isPurged()).toBe(true);
+  });
+
   it("attempts every key and rejects (with a count) if the backing del fails", async () => {
     // A Kv whose del always rejects — purge must still ATTEMPT all keys (best-effort
     // total), then reject reporting the failure so the caller can surface it.
