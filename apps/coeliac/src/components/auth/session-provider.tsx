@@ -26,8 +26,10 @@ import {
   type SessionValue,
 } from "@/lib/session/context";
 import { runSecureLogout } from "@/lib/session/logout";
+import { warningsFromOutcome } from "@/lib/session/logout-warnings";
 import { LoginArea } from "./login-area";
 import { LogoutPurgeWarning } from "./logout-purge-warning";
+import { LogoutRevokeWarning } from "./logout-revoke-warning";
 import { RestoringSplash } from "./restoring-splash";
 
 export function SessionProvider({ children }: { children: ReactNode }) {
@@ -58,9 +60,21 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       storageRoot = podRootFallback(webId);
     }
     const store = new DiaryStore(defaultKv(), webId);
-    // A successful (re)activation clears any stale logout-purge warning + retained store.
+    // A successful (re)activation clears BOTH stale logout warnings + the retained store
+    // (the session is now genuinely live under a fresh credential, so neither the
+    // "may still be signed in" nor the "data may remain" warning still applies).
     failedPurgeStoreRef.current = null;
-    setValue((v) => ({ ...v, status: "authed", webId, authedFetch, publicFetch, storageRoot, store, purgeWarning: null }));
+    setValue((v) => ({
+      ...v,
+      status: "authed",
+      webId,
+      authedFetch,
+      publicFetch,
+      storageRoot,
+      store,
+      purgeWarning: null,
+      revokeWarning: null,
+    }));
     // Background provisioning — never blocks the UI; each step is best-effort.
     void (async () => {
       try {
@@ -108,24 +122,16 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       revokeCredentials: c ? () => c.logout() : undefined,
     });
     // Go anonymous (never trap the user in a half-logged-in UI), but NEVER silently
-    // claim a clean sign-out. Two failures are surfaced DISTINCTLY:
-    //  - revokeFailed: the credential may not be revoked → the session could still be
-    //    live / silently restorable ("you may still be signed in"); the fix is reload.
-    //  - purgeFailed: the local WebID-scoped health cache may not be wiped → offer a
-    //    "Clear local data" retry (retain the store for it).
-    // Only a purge failure is retryable here, so only then do we retain the store.
+    // claim a clean sign-out. The two failures are tracked as FULLY INDEPENDENT state
+    // (purgeWarning vs revokeWarning) so resolving one never hides the other:
+    //  - purgeFailed → purgeWarning: the local health cache may not be wiped; offer a
+    //    "Clear local data" retry (retain the store ONLY in this case).
+    //  - revokeFailed → revokeWarning: the credential may not be revoked → the session
+    //    could still be live; a persistent SECURITY banner, cleared only by a revoke
+    //    retry or reactivation — never by the purge retry or a dismiss.
     failedPurgeStoreRef.current = outcome.purgeFailed ? store : null;
-    let purgeWarning: string | null = null;
-    if (outcome.revokeFailed && outcome.purgeFailed) {
-      purgeWarning =
-        "Sign-out may be incomplete — your credentials could not be revoked (you may still be signed in on this device), and local health data may not have been fully cleared. Reload the page and sign out again.";
-    } else if (outcome.revokeFailed) {
-      purgeWarning =
-        "Sign-out may be incomplete — your credentials could not be revoked, so you may still be signed in on this device. Reload the page and sign out again.";
-    } else if (outcome.purgeFailed) {
-      purgeWarning = "Local health data may not have been fully cleared from this device.";
-    }
-    setValue(() => ({ ...anonymousSession, status: "anonymous", purgeWarning }));
+    const { purgeWarning, revokeWarning } = warningsFromOutcome(outcome);
+    setValue(() => ({ ...anonymousSession, status: "anonymous", purgeWarning, revokeWarning }));
   }, []);
 
   /** Re-attempt the failed logout purge; clears the warning only when it succeeds. */
@@ -155,6 +161,32 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setValue((v) => (v.purgeWarning === null ? v : { ...v, purgeWarning: null }));
   }, []);
 
+  /**
+   * Re-attempt the failed credential revocation (sign out again). Clears the
+   * revoke-warning ONLY when the revocation actually succeeds — a still-failing revoke
+   * keeps the security banner visible with an updated reason. Never touches the purge
+   * warning. There is no plain "dismiss" for this banner: the user IS still signed in.
+   */
+  const retryRevoke = useCallback(async () => {
+    const c = controllerRef.current;
+    if (!c) {
+      // No controller to revoke through — a reload is the only path; keep the banner.
+      return;
+    }
+    try {
+      await c.logout();
+      setValue((v) => (v.revokeWarning === null ? v : { ...v, revokeWarning: null }));
+    } catch (err) {
+      setValue((v) => ({
+        ...v,
+        revokeWarning:
+          err instanceof Error
+            ? `Sign-out still failed — you may still be signed in on this device (${err.message}). Reload the page and sign out again.`
+            : "Sign-out still failed — you may still be signed in on this device. Reload the page and sign out again.",
+      }));
+    }
+  }, []);
+
   const reconcile = useCallback(async () => {
     const v = valueRef.current;
     if (!v.store || !v.webId || !v.storageRoot) return;
@@ -164,8 +196,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   // Merge the stable callbacks into the context value during render (react-hooks
   // v6 forbids the old inject-via-effect setValue; this also drops a render pass).
   const contextValue = useMemo(
-    () => ({ ...value, login, logout, reconcile, retryPurge, dismissPurgeWarning }),
-    [value, login, logout, reconcile, retryPurge, dismissPurgeWarning],
+    () => ({ ...value, login, logout, reconcile, retryPurge, dismissPurgeWarning, retryRevoke }),
+    [value, login, logout, reconcile, retryPurge, dismissPurgeWarning, retryRevoke],
   );
 
   // Build the controller + silent-restore on mount (client-only).
@@ -248,6 +280,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         children
       ) : (
         <>
+          {value.revokeWarning !== null ? (
+            <LogoutRevokeWarning
+              message={value.revokeWarning}
+              onRetry={retryRevoke}
+              onReload={() => window.location.reload()}
+            />
+          ) : null}
           {value.purgeWarning !== null ? (
             <LogoutPurgeWarning
               message={value.purgeWarning}

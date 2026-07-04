@@ -31,19 +31,33 @@ export interface SessionValue {
    * Set when the last sign-out could NOT fully clear the local WebID-scoped health
    * cache (the mandatory logout purge failed). Surfaced to the user (a visible
    * warning, not a console line) because on a shared device private health data may
-   * still be readable; `null` when the last sign-out purged cleanly.
+   * still be readable; `null` when the last sign-out purged cleanly. FULLY INDEPENDENT
+   * of {@link revokeWarning} — clearing one never affects the other.
    */
   purgeWarning: string | null;
+  /**
+   * Set when the last sign-out could NOT revoke the credential — the session may STILL
+   * BE LIVE / silently restorable on this device. A SECURITY state, distinct from
+   * {@link purgeWarning}: it is NOT dismissible and NOT cleared by the purge retry; it
+   * clears ONLY on a successful revoke retry ({@link retryRevoke}) or a fresh session
+   * (re)activation. `null` when the last sign-out revoked cleanly.
+   */
+  revokeWarning: string | null;
   /** Start an interactive login for a WebID (or re-login the last account). */
   login: (webId?: string) => Promise<void>;
   /** Sign out (clears the session + persisted credential). */
   logout: () => Promise<void>;
   /** Flush the optimistic outbox to the pod (reconcile). */
   reconcile: () => Promise<void>;
-  /** Re-attempt the failed logout purge (clears {@link purgeWarning} on success). */
+  /** Re-attempt the failed logout purge (clears {@link purgeWarning} on success only). */
   retryPurge: () => Promise<void>;
-  /** Dismiss the {@link purgeWarning} banner without retrying. */
+  /** Dismiss the {@link purgeWarning} banner without retrying (revoke warning untouched). */
   dismissPurgeWarning: () => void;
+  /**
+   * Re-attempt the failed credential revocation (sign out again). Clears
+   * {@link revokeWarning} ONLY on success; the purge warning is never touched.
+   */
+  retryRevoke: () => Promise<void>;
 }
 
 /** The pre-login default: pristine global fetch, no session. */
@@ -55,11 +69,13 @@ export const anonymousSession: SessionValue = {
   storageRoot: null,
   store: null,
   purgeWarning: null,
+  revokeWarning: null,
   login: async () => {},
   logout: async () => {},
   reconcile: async () => {},
   retryPurge: async () => {},
   dismissPurgeWarning: () => {},
+  retryRevoke: async () => {},
 };
 
 export const SessionContext = createContext<SessionValue>(anonymousSession);
