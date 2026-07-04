@@ -114,7 +114,7 @@ function createNodeGuardedFetch(options = {}) {
   const allowLoopback = options.allowLoopback ?? false;
   const resolveAll = options.resolveAll ?? defaultResolveAll;
   const ca = options.ca;
-  const pinningFetch = async (input, init) => {
+  const pinningFetch = (async (input, init) => {
     const urlStr = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
     const requireLoopbackOnly = safeIsHttp(urlStr) && allowLoopback;
     const lookup = createValidatingLookup(resolveAll, allowLoopback, requireLoopbackOnly);
@@ -136,7 +136,7 @@ function createNodeGuardedFetch(options = {}) {
       void agent.close().catch(() => {
       });
     }
-  };
+  });
   const dnsLookup = (host) => resolveAll(host);
   return createGuardedFetch({
     ...stripNodeOnlyOptions(options),

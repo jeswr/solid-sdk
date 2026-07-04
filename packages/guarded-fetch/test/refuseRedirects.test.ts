@@ -218,17 +218,28 @@ describe("refuseRedirects — input normalisation + credential passthrough", () 
     expect((inner.mock.calls[0]?.[1] as RequestInit).redirect).toBe("manual");
   });
 
-  it("does NOT drop policy-bearing Request fields (mode / integrity / cache / referrerPolicy)", async () => {
+  it("does NOT drop policy-bearing Request fields (mode / integrity / cache)", async () => {
     // Regression for the reconstruction gap: routing a Request through a subset-copy would
     // silently drop mode:"same-origin" / integrity / cache, weakening the caller's fetch policy.
     // Passing the Request THROUGH preserves them all.
+    //
+    // referrerPolicy is DELIBERATELY not asserted here (it used to be, but that assertion was
+    // vacuous): this test inspects the ORIGINAL `req` object, which refuseRedirects never
+    // mutates — so `passed.referrerPolicy` trivially echoes whatever `req` was built with
+    // regardless of what the wrapper actually does. The real-world behavior is the OPPOSITE of
+    // "preserved": per the Fetch spec, an effective request built from a `Request` input plus a
+    // NON-EMPTY init (ours always carries at least `redirect`) resets `referrer` to `"client"`
+    // and `referrerPolicy` to `""` on the request that's actually issued. That reset happens
+    // inside the real fetch's Request-construction algorithm, which this mocked `inner` fetch
+    // (a plain recording stub, not a spec-accurate Request constructor) does not reproduce — so
+    // it can't be cleanly asserted here without a real fetch implementation. See the doc comment
+    // on refuseRedirects for the full explanation.
     const inner = vi.fn(async () => new Response("ok"));
     const f = refuseRedirects(inner as unknown as typeof fetch);
     const req = new Request(URL_A, {
       mode: "same-origin",
       integrity: "sha256-abc",
       cache: "no-store",
-      referrerPolicy: "no-referrer",
       headers: { authorization: "DPoP tok" },
     });
     await f(req);
@@ -237,7 +248,6 @@ describe("refuseRedirects — input normalisation + credential passthrough", () 
     expect(passed.mode).toBe("same-origin");
     expect(passed.integrity).toBe("sha256-abc");
     expect(passed.cache).toBe("no-store");
-    expect(passed.referrerPolicy).toBe("no-referrer");
     expect(passed.headers.get("authorization")).toBe("DPoP tok");
     expect((inner.mock.calls[0]?.[1] as RequestInit).redirect).toBe("manual");
   });

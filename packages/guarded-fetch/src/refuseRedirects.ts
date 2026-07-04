@@ -101,15 +101,22 @@ export function refuseRedirects(
   fetch: typeof globalThis.fetch = globalThis.fetch,
 ): typeof globalThis.fetch {
   const wrapped = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-    // Pass the ORIGINAL input THROUGH untouched so a `Request`'s FULL semantics (mode, cache,
-    // integrity, referrer, referrerPolicy, keepalive, credentials, body, signal, …) are
-    // preserved — the underlying fetch's Request constructor applies the `init` override OVER
-    // the input's own fields, so we FORCE `redirect:"manual"` (the fetch cannot auto-follow,
-    // even if the caller or the Request itself asked for "follow") WITHOUT dropping any other
-    // caller-set fetch policy. We deliberately do NOT reconstruct the init from the Request:
-    // that path drops policy-bearing fields (`mode:"same-origin"`, `integrity`, …), which for a
-    // credential-safety wrapper would silently weaken the caller's request policy. Only the URL
-    // for the refusal message is derived separately (see {@link requestUrlOf}).
+    // Pass the ORIGINAL input THROUGH untouched so a `Request`'s policy-bearing fields (mode,
+    // cache, integrity, keepalive, credentials, body, signal, …) are preserved — the underlying
+    // fetch's Request constructor applies the `init` override OVER the input's own fields, so we
+    // FORCE `redirect:"manual"` (the fetch cannot auto-follow, even if the caller or the Request
+    // itself asked for "follow") WITHOUT dropping any other caller-set fetch policy. We
+    // deliberately do NOT reconstruct the init from the Request: that path drops policy-bearing
+    // fields (`mode:"same-origin"`, `integrity`, …), which for a credential-safety wrapper would
+    // silently weaken the caller's request policy. Only the URL for the refusal message is
+    // derived separately (see {@link requestUrlOf}).
+    //
+    // NOTE `referrer`/`referrerPolicy` are NOT in the preserved list above, and deliberately so:
+    // per the Fetch spec, constructing an effective request from a `Request` input together with
+    // a NON-EMPTY `init` (ours always is — it carries at least `redirect`) resets `referrer` to
+    // `"client"` and `referrerPolicy` to `""` on the request the underlying fetch actually issues,
+    // regardless of what the input `Request` itself carried. So those two fields are NOT
+    // preserved through this wrapper — only genuinely-preserved fields are documented as such.
     const res = await fetch(input, { ...(init ?? {}), redirect: "manual" });
 
     const opaqueRedirect = res.type === "opaqueredirect";
