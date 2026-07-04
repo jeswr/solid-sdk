@@ -1720,8 +1720,7 @@ var RedirectRefusedError = class extends Error {
 };
 function refuseRedirects(fetch = globalThis.fetch) {
   const wrapped = async (input, init) => {
-    const { url, init: effectiveInit } = normalizeRequest(input, init);
-    const res = await fetch(url, { ...effectiveInit ?? {}, redirect: "manual" });
+    const res = await fetch(input, { ...init ?? {}, redirect: "manual" });
     const opaqueRedirect = res.type === "opaqueredirect";
     if (opaqueRedirect || isRedirect(res.status)) {
       const location = opaqueRedirect ? void 0 : res.headers.get("location") ?? void 0;
@@ -1729,7 +1728,7 @@ function refuseRedirects(fetch = globalThis.fetch) {
         await res.body?.cancel();
       } catch {
       }
-      const safeUrl = redactUserinfo(url);
+      const safeUrl = redactUserinfo(requestUrlOf(input));
       const safeLocation = location !== void 0 ? redactUserinfo(location) : void 0;
       const where = opaqueRedirect ? "opaque redirect" : `status ${res.status}`;
       const to = safeLocation !== void 0 ? ` \u2192 ${safeLocation}` : "";
@@ -1741,6 +1740,15 @@ function refuseRedirects(fetch = globalThis.fetch) {
     return res;
   };
   return wrapped;
+}
+function requestUrlOf(input) {
+  if (typeof input === "string") {
+    return input;
+  }
+  if (input instanceof URL) {
+    return input.toString();
+  }
+  return input.url;
 }
 export {
   DEFAULT_HOSTNAME_DENYLIST,

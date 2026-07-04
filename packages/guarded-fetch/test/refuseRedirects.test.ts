@@ -189,29 +189,57 @@ describe("refuseRedirects — input normalisation + credential passthrough", () 
     expect(inner.mock.calls[0]?.[0]).toBe(URL_A);
   });
 
-  it("accepts a URL input (stringified to the target)", async () => {
+  it("accepts a URL input, passed through to the underlying fetch", async () => {
     const inner = vi.fn(async () => new Response("ok"));
     const f = refuseRedirects(inner as unknown as typeof fetch);
-    await f(new URL(URL_A));
-    expect(inner.mock.calls[0]?.[0]).toBe(URL_A);
+    const target = new URL(URL_A);
+    await f(target);
+    // The input is passed THROUGH untouched (a URL), not reconstructed to a string.
+    expect(String(inner.mock.calls[0]?.[0])).toBe(URL_A);
+    expect((inner.mock.calls[0]?.[1] as RequestInit).redirect).toBe("manual");
   });
 
-  it("accepts a Request input, forwarding method + body + credential headers", async () => {
+  it("passes a Request input THROUGH untouched, forwarding method + credential headers", async () => {
     const inner = vi.fn(async () => new Response("ok"));
     const f = refuseRedirects(inner as unknown as typeof fetch);
-    await f(
-      new Request(URL_A, {
-        method: "POST",
-        body: "payload",
-        headers: { authorization: "DPoP tok", "content-type": "text/turtle" },
-      }),
-    );
-    const [url, init] = inner.mock.calls[0] as unknown as [string, RequestInit];
-    expect(url).toBe(URL_A);
-    expect(init.method).toBe("POST");
-    const headers = new Headers(init.headers);
-    expect(headers.get("authorization")).toBe("DPoP tok");
-    expect(init.redirect).toBe("manual");
+    const req = new Request(URL_A, {
+      method: "POST",
+      body: "payload",
+      headers: { authorization: "DPoP tok", "content-type": "text/turtle" },
+    });
+    await f(req);
+    // The Request is handed to the underlying fetch as-is (first arg), with only a
+    // redirect:"manual" override in the init (second arg) — no reconstruction.
+    const passed = inner.mock.calls[0]?.[0] as Request;
+    expect(passed).toBeInstanceOf(Request);
+    expect(passed.url).toBe(URL_A);
+    expect(passed.method).toBe("POST");
+    expect(passed.headers.get("authorization")).toBe("DPoP tok");
+    expect((inner.mock.calls[0]?.[1] as RequestInit).redirect).toBe("manual");
+  });
+
+  it("does NOT drop policy-bearing Request fields (mode / integrity / cache / referrerPolicy)", async () => {
+    // Regression for the reconstruction gap: routing a Request through a subset-copy would
+    // silently drop mode:"same-origin" / integrity / cache, weakening the caller's fetch policy.
+    // Passing the Request THROUGH preserves them all.
+    const inner = vi.fn(async () => new Response("ok"));
+    const f = refuseRedirects(inner as unknown as typeof fetch);
+    const req = new Request(URL_A, {
+      mode: "same-origin",
+      integrity: "sha256-abc",
+      cache: "no-store",
+      referrerPolicy: "no-referrer",
+      headers: { authorization: "DPoP tok" },
+    });
+    await f(req);
+    const passed = inner.mock.calls[0]?.[0] as Request;
+    expect(passed).toBe(req); // the SAME object — passed through, not reconstructed
+    expect(passed.mode).toBe("same-origin");
+    expect(passed.integrity).toBe("sha256-abc");
+    expect(passed.cache).toBe("no-store");
+    expect(passed.referrerPolicy).toBe("no-referrer");
+    expect(passed.headers.get("authorization")).toBe("DPoP tok");
+    expect((inner.mock.calls[0]?.[1] as RequestInit).redirect).toBe("manual");
   });
 
   it("forwards an init's credential header to the underlying (authed) fetch unchanged", async () => {
