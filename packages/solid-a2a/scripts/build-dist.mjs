@@ -42,110 +42,26 @@ import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
+import { sanitizeJs, sanitizeMap } from "./sanitize-dist.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const outdir = join(root, "dist");
 
 /**
- * Host/home path prefixes that must NEVER survive in a COMMITTED artifact. esbuild
- * embeds machine paths in two places — module-boundary banner comments in `index.js`
- * and `sources[]` in `index.js.map` — which would otherwise leak the builder's home
- * directory (`/Users/<name>/…`) AND make the committed bytes non-deterministic across
- * machines / worktrees. `sanitizeDist` rewrites those path FIELDS to a package-relative
- * label; `assertNoHostPath` then fails the build if any host prefix survives in them.
- * (Mirrors federation-client / solid-agent-card.)
- */
-const FORBIDDEN_PATH_PREFIXES = ["/Users/", "/home/", "/root/", "/private/", "/var/"];
-
-/**
- * Matches an esbuild module-boundary banner line: `// <path>` where <path> has a
- * separator and ends in a source extension, and contains no `:` (so a URL like
- * `https://…/x.js` in a preserved source comment is NOT treated as a banner). Own
- * code and inlined deps are the only lines of this shape; ordinary prose comments
- * (no slash / no source extension) never match. Used both to REWRITE the banner
- * path and to COLLECT the path fields the guard scans.
- */
-const JS_BANNER_RE = /^\/\/ ([^\s:]*\/[^\s:]*?\.(?:js|cjs|mjs|ts|tsx|jsx))$/gm;
-
-/**
- * Reduce a build path to a stable, location-independent package-relative label:
- * an inlined dep collapses to `node_modules/…`, our own code to `src/…`. Anchoring
- * on the package-internal segment (not the machine prefix) makes the label identical
- * whether the build ran in the main checkout, a worktree, or a scratch tmpdir
- * (check-dist rebuilds into `os.tmpdir()`), drops the builder's home path, and — by
- * emitting the SAME plain form for the `.js` banner comments and the `.map`
- * `sources[]` — keeps the two consistent (no dangling `..`). Matches the a2a/vc
- * landed convention of a plain `node_modules/…` / `src/…` label.
- */
-function pkgRelativePath(p) {
-  const nm = p.indexOf("/node_modules/");
-  if (nm !== -1) {
-    return p.slice(nm + 1);
-  }
-  const sc = p.indexOf("/src/");
-  if (sc !== -1) {
-    return p.slice(sc + 1);
-  }
-  // Already relative (e.g. `src/index.ts`, `node_modules/…`): drop any leading
-  // `./` / `../` segments so the label form is identical to the collapsed ones.
-  return p.replace(/^(?:\.\.?\/)+/, "");
-}
-
-/**
- * Fail the build if any host/home absolute-path prefix survives in the given build
- * PATH fields. Scans ONLY the path fields passed in — the `.js` banner comment paths
- * and the sourcemap `sources[]` entries — NOT `sourcesContent` (inlined source
- * bodies) and NOT arbitrary `.js` string content, so a legitimate string / URL /
- * fixture / prose comment containing `/var/` or `/private/` cannot false-fail.
- */
-function assertNoHostPath(name, paths) {
-  for (const p of paths) {
-    for (const prefix of FORBIDDEN_PATH_PREFIXES) {
-      if (p.includes(prefix)) {
-        throw new Error(
-          `build-dist: committed dist/${name} still embeds a host path (${prefix}…): ` +
-            `${JSON.stringify(p)}. The sanitiser must reduce every build path to a ` +
-            "package-relative one before commit.",
-        );
-      }
-    }
-  }
-}
-
-/**
  * Rewrite the machine-dependent build paths esbuild embeds — the `index.js` banner
- * comments and the `index.js.map` `sources[]` — to a stable package-relative label,
- * then fail closed if any host path survives in those fields. Keeps the committed
- * dist deterministic + leak-free without touching code or inlined source bodies.
+ * comments and the `index.js.map` `sources[]` / `sourceRoot` — to a stable
+ * package-relative label, failing closed if any host path survives. The pure rewrite
+ * + guard logic lives in `sanitize-dist.mjs` (unit-tested in `test/dist-sanitize.test.ts`,
+ * incl. the space-in-path leak case); this wrapper only does the file read/write.
  */
 function sanitizeDist(buildDir) {
-  // 1. index.js — rewrite each module-boundary banner path to its package-relative
-  //    label (`node_modules/…` or `src/…`), consistent with the sourcemap below.
   const jsPath = join(buildDir, "index.js");
-  const jsBannerPaths = [];
-  const js = readFileSync(jsPath, "utf8").replace(JS_BANNER_RE, (_m, p) => {
-    const rel = pkgRelativePath(p);
-    jsBannerPaths.push(rel);
-    return `// ${rel}`;
-  });
-  writeFileSync(jsPath, js);
-  assertNoHostPath("index.js", jsBannerPaths);
+  writeFileSync(jsPath, sanitizeJs(readFileSync(jsPath, "utf8")));
 
-  // 2. index.js.map — relativise every `sources[]` entry to the SAME plain label form
-  //    used for the `.js` banners. `sourcesContent` (inlined source bodies) is left
-  //    untouched; check-dist ignores `*.map`, but the committed map must not leak.
   const mapPath = join(buildDir, "index.js.map");
   if (existsSync(mapPath)) {
-    const map = JSON.parse(readFileSync(mapPath, "utf8"));
-    const sources = Array.isArray(map.sources) ? map.sources.map(pkgRelativePath) : [];
-    if (Array.isArray(map.sources)) {
-      map.sources = sources;
-    }
-    if (typeof map.sourceRoot === "string" && map.sourceRoot.length > 0) {
-      map.sourceRoot = "";
-    }
+    const map = sanitizeMap(JSON.parse(readFileSync(mapPath, "utf8")));
     writeFileSync(mapPath, JSON.stringify(map));
-    assertNoHostPath("index.js.map", sources);
   }
 }
 
