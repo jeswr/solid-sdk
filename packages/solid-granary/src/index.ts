@@ -28,8 +28,10 @@
 //     consumer has the hub types + the http(s)-only predicate to hand. ---
 //     NOTE: `safeIri`/`isHttpIri` only *filter* (http(s)? yes/no) and return the
 //     value UNCHANGED. If you build an RDF `NamedNode` from an UNTRUSTED value use
-//     {@link safeHttpIri} instead — it canonicalises (`new URL().href`) so a
-//     `>`-bearing IRI cannot break out of an `n3.Writer` IRIREF and inject triples.
+//     {@link safeHttpIri} (re-exported here from `@jeswr/rdf-serialize`) instead — it
+//     LEXICALLY percent-encodes the IRIREF-forbidden set (`< > " { } | ^` backtick `\`
+//     + C0/space) so a `>`-bearing IRI cannot break out of an `n3.Writer` IRIREF and
+//     inject triples, while preserving the value's lexical RDF identity.
 export type { CanonicalMessage, MessageProvenance } from "@jeswr/solid-chat-interop";
 export { isHttpIri, safeIri } from "@jeswr/solid-chat-interop";
 // --- granary AS2 JSON shapes + payload iteration ---

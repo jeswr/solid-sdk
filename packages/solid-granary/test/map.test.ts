@@ -4,53 +4,38 @@ import { granaryToCanonical } from "../src/ingest.js";
 import { granaryObjectToCanonical, importedDate, refToIri, safeHttpIri } from "../src/map.js";
 import { hostileNote, mastodonNote, messyFeed, rssFeed } from "./fixtures.js";
 
-describe("safeHttpIri (n3.Writer IRIREF-injection hardening)", () => {
-  it("passes an already-canonical http(s) IRI through unchanged (idempotent)", () => {
-    expect(safeHttpIri("https://example.org/a/b?x=1#frag")).toBe(
-      "https://example.org/a/b?x=1#frag",
+// NOTE: `safeHttpIri` is no longer implemented in this repo — it is re-exported from
+// `@jeswr/rdf-serialize` (the suite's single audited IRI-safety guard), whose own test
+// suite exhaustively covers the injection-escaping contract (`>`-breakout, control
+// chars, non-http scheme, `|`/`^`/`` ` ``/`{`/`}` residual escaping, lexical identity
+// preservation). The granary-level injection-safety property — that a hostile IRI in a
+// payload cannot break out of the SERIALISED Turtle through the public `ingestGranary`
+// API — is proved end-to-end in `ingest.test.ts` ("a hostile `>`-bearing IRI cannot
+// inject triples into the written Turtle"). So no local unit copy of those assertions
+// lives here; `refToIri` below exercises the map's use of the imported guard.
+
+// Boundary smoke test for the RE-EXPORT: this package depends on the exact security
+// contract of `safeHttpIri` at every IRI mapping call site (`refToIri`, `room`,
+// `derivedFrom`), so pin that the symbol re-exported from `../src/map.js` still resolves
+// to the http(s)-only, injection-escaping guard — a mis-wired re-export (e.g. to the
+// scheme-agnostic `safeIri`, or a dropped import) would be caught here rather than in
+// prod. Exhaustive cases live in `@jeswr/rdf-serialize`; this guards THIS package's wiring.
+describe("safeHttpIri (re-export contract smoke test)", () => {
+  it("keeps a clean http(s) IRI usable", () => {
+    expect(safeHttpIri("https://example.org/profile#me")).toBe("https://example.org/profile#me");
+  });
+  it("drops non-http(s) schemes (never widened to a scheme-agnostic guard)", () => {
+    expect(safeHttpIri("mailto:alice@example.com")).toBeUndefined();
+    expect(safeHttpIri("urn:uuid:1234")).toBeUndefined();
+    expect(safeHttpIri("javascript:alert(1)")).toBeUndefined();
+  });
+  it("neutralises a Turtle-IRIREF breakout payload (the `>` cannot survive)", () => {
+    const safe = safeHttpIri(
+      "http://evil.example/o> . <http://victim.example/s> <http://p> <http://o",
     );
-    // an already-percent-encoded value is untouched (`%` is not in the residual set)
-    expect(safeHttpIri("https://example.org/a%7Cb")).toBe("https://example.org/a%7Cb");
-  });
-
-  it("drops non-http(s) and non-string values", () => {
-    for (const v of ["javascript:alert(1)", "mailto:a@b", "urn:x", "not a url", "", 42, null, {}]) {
-      // biome-ignore lint/suspicious/noExplicitAny: exercising untrusted input types.
-      expect(safeHttpIri(v as any)).toBeUndefined();
-    }
-  });
-
-  it("ENCODES the `>` breakout char so a hostile IRI can NEVER close its own <…> IRIREF", () => {
-    // The canonical injection payload: a value that, written raw as <…>, would break
-    // out and forge a `solid:oidcIssuer` on the owner's WebID (account takeover).
-    const evil =
-      "https://e.org/x> . <https://victim/#me> <http://www.w3.org/ns/solid/terms#oidcIssuer> <https://attacker/";
-    const safe = safeHttpIri(evil);
     expect(safe).toBeDefined();
-    // No unescaped `>` / `<` / space survives — it cannot terminate an n3.Writer IRIREF.
     expect(safe).not.toContain(">");
-    expect(safe).not.toContain("<");
     expect(safe).not.toContain(" ");
-    expect(safe).toContain("%3E"); // `>` encoded
-    expect(safe).toContain("%3C"); // `<` encoded
-  });
-
-  it("percent-encodes the residual IRIREF-illegal chars that survive URL.href", () => {
-    // `|` `^` `` ` `` `{` `}` are legal in a URL query/fragment (so `new URL().href`
-    // keeps them) but ILLEGAL in a Turtle IRIREF — n3.Writer would emit an invalid
-    // token a strict downstream parser rejects. They must be percent-encoded.
-    const safe = safeHttpIri("https://example.org/a?x=|^`{}#f|^{}");
-    expect(safe).toBeDefined();
-    for (const c of ["|", "^", "`", "{", "}"]) {
-      expect(safe).not.toContain(c);
-    }
-    expect(safe).toContain("%7C"); // |
-    expect(safe).toContain("%5E"); // ^
-    expect(safe).toContain("%60"); // `
-    expect(safe).toContain("%7B"); // {
-    expect(safe).toContain("%7D"); // }
-    // still a well-formed, dereferenceable IRI
-    expect(() => new URL(safe as string)).not.toThrow();
   });
 });
 
