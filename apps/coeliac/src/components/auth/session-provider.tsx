@@ -25,6 +25,7 @@ import {
   SessionContext,
   type SessionValue,
 } from "@/lib/session/context";
+import { performSecureLogout } from "@/lib/session/logout";
 import { LoginArea } from "./login-area";
 import { RestoringSplash } from "./restoring-splash";
 
@@ -85,8 +86,27 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     const c = controllerRef.current;
+    const { store, webId, storageRoot, authedFetch, status } = valueRef.current;
     resetDiaryReadyMemo();
-    if (c) await c.logout();
+    // Best-effort final flush (online only) BEFORE the credential is revoked, then
+    // a MANDATORY purge of the WebID-scoped private health cache so no logged/read
+    // data survives on a shared device. Extracted + unit-tested in session/logout.
+    const flush =
+      store && webId && storageRoot && status === "authed"
+        ? () => flushOutbox({ authedFetch, webId, storageRoot }, store)
+        : undefined;
+    try {
+      await performSecureLogout({
+        store,
+        flush,
+        revokeCredentials: c ? () => c.logout() : undefined,
+      });
+    } catch (err) {
+      // The credential is already revoked; complete the UI sign-out regardless, but
+      // surface an incomplete privacy purge (a shared-device concern) rather than
+      // hide it behind a clean-looking logout.
+      if (typeof console !== "undefined") console.warn("[session] logout purge incomplete:", err);
+    }
     setValue(() => ({ ...anonymousSession, status: "anonymous" }));
   }, []);
 
