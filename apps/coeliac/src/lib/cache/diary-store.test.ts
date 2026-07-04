@@ -2,7 +2,37 @@
 import { describe, expect, it } from "vitest";
 import { newMealRecord, newSymptomRecord } from "../diary/log";
 import { DiaryStore, mealLabel, mealSignature } from "./diary-store";
+import type { Kv } from "./kv";
 import { MemoryKv } from "./kv";
+
+function deferred<T>() {
+  let resolve!: (v: T) => void;
+  const promise = new Promise<T>((r) => {
+    resolve = r;
+  });
+  return { promise, resolve };
+}
+
+/** A Kv whose `set` pauses on `gate` — everything else is immediate. */
+class GatedSetKv implements Kv {
+  constructor(
+    private readonly inner: Kv,
+    private readonly gate: Promise<void>,
+  ) {}
+  async get<T>(key: string): Promise<T | undefined> {
+    return this.inner.get<T>(key);
+  }
+  async set<T>(key: string, value: T): Promise<void> {
+    await this.gate;
+    return this.inner.set(key, value);
+  }
+  async del(key: string): Promise<void> {
+    return this.inner.del(key);
+  }
+  async keys(prefix?: string): Promise<string[]> {
+    return this.inner.keys(prefix);
+  }
+}
 
 const ROOT = "https://alice.example/";
 
@@ -334,6 +364,48 @@ describe("DiaryStore.purge (logout privacy purge)", () => {
     // background writer must not be tricked into treating a failed purge as
     // "safe to write into".
     expect(s.isPurged()).toBe(true);
+  });
+
+  it("purge() DRAINS an already-in-flight background write before scanning+deleting (roborev round 3 — closes the TOCTOU a bare isPurged() check leaves open)", async () => {
+    // A write that already passed its OWN `isPurged()` check (false) before
+    // `purge()` was called is still "in flight" on a slow `kv.set`. If
+    // `purge()` scanned+deleted immediately, that write could land AFTER the
+    // scan and resurrect the key. `purge()` must wait for it to settle first.
+    const gate = deferred<void>();
+    const gatedKv = new GatedSetKv(new MemoryKv(), gate.promise);
+    const s = new DiaryStore(gatedKv, "https://alice.example/#me");
+
+    const writing = s.putTriggerClass({
+      kind: "triggerClass",
+      slug: "lactose",
+      lagWindowMin: 1,
+      lagWindowMax: 3,
+      lagMode: 2,
+      sampleSize: 5,
+      updatedAt: "2026-07-01T08:00:00.000Z",
+    });
+
+    // `purge()` is called WHILE that write is still gated — it must block on
+    // draining `pendingWrites`, not race ahead to the scan.
+    const purging = s.purge();
+    let purgeSettled = false;
+    void purging.then(() => {
+      purgeSettled = true;
+    });
+    // Give the microtask queue a few turns — purge() must NOT have resolved
+    // yet (it's correctly blocked on the gated write).
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(purgeSettled).toBe(false);
+
+    gate.resolve();
+    await writing;
+    await purging;
+
+    // The write landed, then the purge's scan ran AFTER it and removed the
+    // key — never the other way around.
+    expect(await s.allTriggerClasses()).toEqual([]);
   });
 
   it("attempts every key and rejects (with a count) if the backing del fails", async () => {

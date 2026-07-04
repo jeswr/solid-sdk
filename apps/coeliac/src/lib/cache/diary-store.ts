@@ -235,6 +235,24 @@ export class DiaryStore {
    */
   private purged = false;
 
+  /**
+   * In-flight FIRE-AND-FORGET background writes {@link purge} must DRAIN
+   * before its own delete scan (roborev round 3): checking {@link isPurged}
+   * at the top of a write only closes the race for a write that starts
+   * AFTER `purge()` flips the flag. A write already past that check when
+   * `purge()` is called is still in flight — if `purge()`'s scan+delete ran
+   * immediately, that write's `kv.set` could land AFTER the delete and
+   * resurrect the key. `purge()` awaits every write registered here before
+   * scanning, so a write already under way is guaranteed to settle first.
+   * Only the two BACKGROUND, unawaited-by-their-caller writers register here
+   * (`putTriggerClass`/`putSafetyContext` — `useInsights`/
+   * `useSafetyContextCache` both fire them without awaiting, by design, so
+   * they can't block the paint); every other write method here is always
+   * awaited by its own caller before that caller does anything else, so
+   * there is no OTHER dangling write for a purge to race today.
+   */
+  private readonly pendingWrites = new Set<Promise<unknown>>();
+
   constructor(
     private readonly kv: Kv,
     /** WebID (or another per-account key) — namespaces all keys. */
@@ -250,6 +268,21 @@ export class DiaryStore {
    */
   isPurged(): boolean {
     return this.purged;
+  }
+
+  /**
+   * Register a background write's promise so {@link purge} can wait for it
+   * to settle before scanning+deleting (see {@link pendingWrites}). Called
+   * SYNCHRONOUSLY, before the write's own `await` — so if `purge()` has not
+   * yet been called, this registration is guaranteed to land before it could
+   * be (JS run-to-completion: nothing yields between the caller's `isPurged`
+   * check and this call).
+   */
+  private trackWrite(write: Promise<unknown>): Promise<unknown> {
+    this.pendingWrites.add(write);
+    const untrack = () => this.pendingWrites.delete(write);
+    write.then(untrack, untrack);
+    return write;
   }
 
   /**
@@ -432,9 +465,17 @@ export class DiaryStore {
    * Store (or overwrite in place) a locally-learned per-trigger lag profile.
    * ONE record per `slug` — a re-learn simply replaces the prior estimate, same
    * as a protocol's in-place update.
+   *
+   * FAIL-CLOSED + DRAINED (roborev, session-race guard round 3): a caller
+   * (`useInsights`) fires this WITHOUT awaiting it, so a logout's `purge()`
+   * can be called concurrently. `isPurged()` short-circuits a write that
+   * starts AFTER the account has departed; {@link trackWrite} registers a
+   * write already under way so `purge()` waits for it to settle before its
+   * own scan+delete — together these close the race in both directions.
    */
   async putTriggerClass(triggerClass: StoredTriggerClass): Promise<void> {
-    await this.kv.set(this.key("triggerClass", triggerClass.slug), triggerClass);
+    if (this.purged) return;
+    await this.trackWrite(this.kv.set(this.key("triggerClass", triggerClass.slug), triggerClass));
   }
   /** All locally-learned trigger classes for this account. */
   async allTriggerClasses(): Promise<StoredTriggerClass[]> {
@@ -448,9 +489,15 @@ export class DiaryStore {
   /** The fixed cache id for the one safety-context record (there is exactly one per pod). */
   private static readonly SAFETY_CONTEXT_ID = "current";
 
-  /** Persist the current safety-context inputs (alarm flags / diagnosed / adherence). */
+  /**
+   * Persist the current safety-context inputs (alarm flags / diagnosed /
+   * adherence). FAIL-CLOSED + DRAINED, same discipline as
+   * {@link putTriggerClass} — the checkbox `onChange` handlers
+   * (`SafetyContextForm`) fire this without awaiting it either.
+   */
   async putSafetyContext(ctx: StoredSafetyContext): Promise<void> {
-    await this.kv.set(this.key("safetyContext", DiaryStore.SAFETY_CONTEXT_ID), ctx);
+    if (this.purged) return;
+    await this.trackWrite(this.kv.set(this.key("safetyContext", DiaryStore.SAFETY_CONTEXT_ID), ctx));
   }
   /** Read back the persisted safety-context inputs, if any were ever saved. */
   async getSafetyContext(): Promise<StoredSafetyContext | undefined> {
@@ -514,10 +561,14 @@ export class DiaryStore {
    * Marks {@link isPurged} `true` as the FIRST synchronous statement — before any
    * `await` — so a concurrent background writer that checks it (even one already
    * mid-flight) sees the departure as soon as `purge()` is called, not only once
-   * it finishes.
+   * it finishes. Then DRAINS {@link pendingWrites} (roborev round 3): a
+   * background write that had ALREADY passed its own `isPurged()` check before
+   * this line ran is still in flight — waiting for it to settle here guarantees
+   * its `kv.set` cannot land AFTER the delete scan below and resurrect a key.
    */
   async purge(): Promise<void> {
     this.purged = true;
+    await Promise.allSettled([...this.pendingWrites]);
     const keys = await this.kv.keys(this.scopePrefix());
     const results = await Promise.allSettled(keys.map((k) => this.kv.del(k)));
     const failed = results.filter((r) => r.status === "rejected").length;
