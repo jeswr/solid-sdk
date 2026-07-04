@@ -7,7 +7,9 @@
  * hostile `URL:` (event) or `UID:`/`URL:` (contact) value was emitted as a RAW IRI
  * term — and `n3.Writer` does NOT escape IRIs — so a value containing `>` broke out
  * of the `<...>` IRIREF and injected triples (e.g. a forged `solid:oidcIssuer` on
- * the victim's WebID). The fix canonicalises every untrusted IRI via `safeHttpIri`.
+ * the victim's WebID). The fix neutralises every untrusted IRI via `safeHttpIri`
+ * (now the shared `@jeswr/rdf-serialize` guard, re-exported through `src/vocab.ts`),
+ * which lexically percent-encodes every IRIREF-forbidden character.
  */
 import { serializePerson } from "@jeswr/solid-task-model/contacts";
 import { Parser, Store, Writer } from "n3";
@@ -77,7 +79,7 @@ describe("RDF injection is neutralised (contact webId)", () => {
 });
 
 describe("RDF injection is neutralised (contact webId via the URL fallback)", () => {
-  it("a hostile vCard URL (UID not a WebID) is canonicalised through safeHttpIri", async () => {
+  it("a hostile vCard URL (UID not a WebID) is neutralised through safeHttpIri", async () => {
     // UID is a urn:uuid (NOT an http WebID) so vcardToContact falls through to the
     // URL property for the webId — this exercises the `safeHttpIri(URL)` path
     // (distinct from the UID path covered above). A hostile URL must NOT inject.
@@ -90,7 +92,7 @@ describe("RDF injection is neutralised (contact webId via the URL fallback)", ()
       "END:VCARD",
     ].join("\r\n");
     const mapped = vcardToContact(findComponents(parseComponents(vcf), "VCARD")[0]!);
-    // webId came from the URL property (the fallback), canonicalised + IRI-safe.
+    // webId came from the URL property (the fallback), escaped + IRI-safe.
     expect(mapped.data.webId).toBeDefined();
     expect(mapped.data.webId).toContain("https://e.org/u");
     for (const ch of ILLEGAL) expect(mapped.data.webId ?? "").not.toContain(ch);
@@ -150,7 +152,13 @@ describe("NUL bytes never survive parsing into an emitted literal", () => {
   });
 });
 
-describe("safeHttpIri", () => {
+// safeHttpIri is now the shared `@jeswr/rdf-serialize` guard, re-exported through
+// `src/vocab.ts`. It has its own exhaustive upstream unit suite; these cases assert
+// the injection-safety contract AT THIS BRIDGE'S BOUNDARY (that the re-export is
+// wired to the audited implementation) and pin the intentional semantic difference
+// vs the retired local `new URL().href` copy (lexical preservation, whitespace
+// rejection). PRESERVE every injection-safety assertion here.
+describe("safeHttpIri (shared @jeswr/rdf-serialize guard, re-exported via src/vocab.ts)", () => {
   it("percent-encodes IRIREF-illegal characters (no injection char survives)", () => {
     const out = safeHttpIri('https://e.org/a> <x> "y" {z}|w');
     expect(out).toBeDefined();
@@ -159,21 +167,34 @@ describe("safeHttpIri", () => {
     expect(new URL(out!).protocol).toBe("https:");
   });
 
-  it("preserves an already-canonical http(s) IRI unchanged", () => {
+  it("rejects non-http(s), data:, and unparseable values", () => {
+    expect(safeHttpIri("javascript:alert(1)")).toBeUndefined();
+    expect(safeHttpIri("data:text/html,<script>alert(1)</script>")).toBeUndefined();
+    expect(safeHttpIri("urn:uuid:abc")).toBeUndefined();
+    expect(safeHttpIri("mailto:a@b.com")).toBeUndefined();
+    expect(safeHttpIri("not a url")).toBeUndefined();
+    expect(safeHttpIri(undefined)).toBeUndefined();
+    expect(safeHttpIri("")).toBeUndefined();
+  });
+
+  it("preserves the LEXICAL value byte-for-byte — no href-canonicalisation (adopted semantic)", () => {
+    // A clean http(s) IRI round-trips unchanged.
     expect(safeHttpIri("https://meet.example.com/standup")).toBe(
       "https://meet.example.com/standup",
     );
     expect(safeHttpIri("https://bob.example/profile/card#me")).toBe(
       "https://bob.example/profile/card#me",
     );
-  });
-
-  it("rejects non-http(s) and unparseable values", () => {
-    expect(safeHttpIri("javascript:alert(1)")).toBeUndefined();
-    expect(safeHttpIri("urn:uuid:abc")).toBeUndefined();
-    expect(safeHttpIri("mailto:a@b.com")).toBeUndefined();
-    expect(safeHttpIri("not a url")).toBeUndefined();
-    expect(safeHttpIri(undefined)).toBeUndefined();
-    expect(safeHttpIri("")).toBeUndefined();
+    // The shared guard is LEXICAL: unlike the retired `new URL().href` copy it does
+    // NOT lower-case the host, strip the default port, or add a trailing slash — RDF
+    // identity is lexical, so the value is returned exactly as given.
+    expect(safeHttpIri("https://Example.COM:443/A")).toBe("https://Example.COM:443/A");
+    // ...and a leading/trailing-whitespace value handed DIRECTLY to the guard is
+    // REJECTED, not stripped. NOTE: the import MAPPING path trims content-line values
+    // (RFC 5545/6350 folding) BEFORE calling safeHttpIri, so a padded-but-valid
+    // `URL:`/`UID:` in a real feed is accepted as its trimmed IRI — see the
+    // "trims ... whitespace ... before the guard" mapping-level tests in map.test.ts.
+    expect(safeHttpIri(" https://e.org/x")).toBeUndefined();
+    expect(safeHttpIri("https://e.org/x ")).toBeUndefined();
   });
 });

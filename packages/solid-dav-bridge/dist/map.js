@@ -33,6 +33,14 @@ function textProp(component, name) {
     const prop = getProperty(component, name);
     if (!prop || typeof prop.value !== "string")
         return undefined;
+    // .trim() is INTENTIONAL: RFC 5545/6350 content-line values can carry surrounding
+    // / folding whitespace, so every field (incl. the IRI fields URL/UID that feed
+    // safeHttpIri) is trimmed here first. This is SAFE for the IRI path — safeHttpIri
+    // still LEXICALLY escapes the trimmed result before it becomes a NamedNode, so a
+    // hostile value can never inject; trimming only means a padded-but-otherwise-valid
+    // URL/UID is accepted (as its trimmed IRI) rather than rejected on the whitespace.
+    // (safeHttpIri's OWN raw-whitespace rejection still guards a caller that passes an
+    // untrimmed value directly — e.g. options.inAddressBook — belt-and-suspenders.)
     const text = unescapeText(prop.value).trim();
     return text.length > 0 ? text : undefined;
 }
@@ -107,9 +115,9 @@ export function veventToEvent(component, options) {
         quads.push(quad(place, namedNode(SCHEMA_NAME), literal(location)));
     }
     // URL → schema:url only when it is an absolute http(s) IRI (untrusted input).
-    // safeHttpIri (not the raw value) is emitted: it canonicalises + percent-encodes
-    // every Turtle-IRIREF-illegal char, so a hostile `URL:` value cannot break out of
-    // the `<...>` and inject triples (n3.Writer does not escape IRIs).
+    // safeHttpIri (not the raw value) is emitted: it lexically percent-encodes every
+    // Turtle-IRIREF-illegal char, so a hostile `URL:` value cannot break out of the
+    // `<...>` and inject triples (n3.Writer does not escape IRIs).
     const url = safeHttpIri(textProp(component, "URL"));
     if (url !== undefined) {
         quads.push(quad(s, namedNode(SCHEMA_URL), namedNode(url)));
@@ -235,12 +243,15 @@ export function vcardToContact(component, options = {}) {
     // WebID: a UID that is an http(s) URL is the WebID; else the first http(s) URL.
     const uidRaw = textProp(component, "UID");
     // A UID may be `urn:uuid:...` (not a WebID) — only treat an http(s) UID as a WebID.
-    // safeHttpIri validates AND canonicalises: the webId flows into serializePerson →
-    // an IRI object, so it MUST be injection-safe (never the raw untrusted string).
+    // safeHttpIri validates the scheme AND lexically escapes the value: the webId flows
+    // into serializePerson → an IRI object, so it MUST be injection-safe (never the raw
+    // untrusted string).
     let webId = safeHttpIri(uidRaw);
     if (webId === undefined) {
         for (const u of getProperties(component, "URL")) {
             if (typeof u.value === "string") {
+                // .trim() intentional (folding whitespace) — see textProp; safeHttpIri still
+                // lexically escapes the trimmed result, so this cannot inject.
                 const candidate = safeHttpIri(unescapeText(u.value).trim());
                 if (candidate !== undefined) {
                     webId = candidate;
@@ -267,7 +278,7 @@ export function vcardToContact(component, options = {}) {
         noteParts.push(`Organization: ${org}`);
     const note = noteParts.length > 0 ? noteParts.join("\n") : undefined;
     const data = { name };
-    // inAddressBook is caller-supplied but still becomes an IRI object → canonicalise.
+    // inAddressBook is caller-supplied but still becomes an IRI object → validate + escape.
     const inAddressBook = safeHttpIri(options.inAddressBook);
     if (inAddressBook !== undefined) {
         data.inAddressBook = inAddressBook;

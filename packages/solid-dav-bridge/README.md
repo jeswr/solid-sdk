@@ -32,6 +32,11 @@ GitHub-installable now (committed, drift-guarded `dist/`; `ignore-scripts=true`-
 npm install github:jeswr/solid-dav-bridge#main
 ```
 
+**Requires Node `>=24`.** This is the `@jeswr` suite baseline (the build image is
+`node:24-alpine`) and the declared floor of the `@jeswr/rdf-serialize` dependency
+(`engines.node: ">=24"`), so `engines.node` here is raised to match it — a lower floor
+would let `npm install` (with `engine-strict`) resolve a dependency it cannot satisfy.
+
 The committed `dist/` is self-contained (a minimal in-house RFC 5545/6350 parser, no
 inlined third-party parser), so it installs and imports with **no build step** under
 `ignore-scripts=true`. npm publish is a deferred suite migration, not a blocker.
@@ -184,8 +189,10 @@ base (iCloud, Google, Fastmail, Nextcloud, Radicale, SOGo, …) into a user's po
 suite's `schema:Event` + SolidOS `vcard:AddressBook` models. It composes the suite
 keystones: [`@jeswr/solid-task-model`](https://github.com/jeswr/solid-task-model) (the
 contacts model + serialisers), [`@jeswr/guarded-fetch`](https://github.com/jeswr/guarded-fetch)
-(SSRF), and [`@jeswr/fetch-rdf`](https://github.com/jeswr/fetch-rdf) (RDF parse, via the
-task-model).
+(SSRF), [`@jeswr/fetch-rdf`](https://github.com/jeswr/fetch-rdf) (RDF parse, via the
+task-model), and [`@jeswr/rdf-serialize`](https://github.com/jeswr/rdf-serialize) (the
+suite's single audited `safeHttpIri` IRI-injection guard — this bridge consumes the
+shared one rather than keeping its own copy).
 
 ## License
 

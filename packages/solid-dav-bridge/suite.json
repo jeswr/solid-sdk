@@ -9,14 +9,14 @@
   "visibility": "public",
   "stack": {
     "lang": "TypeScript (ESM, NodeNext)",
-    "runtime": "Node >=20",
+    "runtime": "Node >=24",
     "task-model": "@jeswr/solid-task-model (git pin, committed dist — ./contacts buildPerson)",
     "fetch-rdf": "@jeswr/fetch-rdf ^0.1 (via task-model)",
     "guarded-fetch": "@jeswr/guarded-fetch (git, committed dist)",
     "rdf": "n3 ^2 (n3.Writer + DataFactory for schema:Event)",
     "test": "vitest ^4.x",
     "lint": "@biomejs/biome ^2.x",
-    "node": ">=20"
+    "node": ">=24"
   },
   "dependsOn": [
     "solid-task-model",
