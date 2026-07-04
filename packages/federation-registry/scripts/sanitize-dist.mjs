@@ -28,7 +28,7 @@
  * matches neither is returned unchanged for the fail-closed guard to reject — never
  * silently stripped.
  */
-import { isAbsolute, relative, resolve, sep } from "node:path";
+import { isAbsolute, relative, resolve } from "node:path";
 
 /**
  * Host/home absolute-path prefixes that must NEVER survive in a committed artifact.
@@ -48,18 +48,44 @@ export const JS_BANNER_RE = /^\/\/ (.+\.(?:js|cjs|mjs|ts|tsx|jsx))$/gm;
  * A comment line that is essentially a bare host path — a leaked module banner esbuild
  * emitted for a module with NO recognised source extension (so the rewrite could not
  * classify it) or a value the classifier could not reduce. Matches `// /Users/…`,
- * `// ../../home/…`, etc. Anchored so ordinary prose (`// see /var/log …`) does not
- * match — only a line that STARTS (after `// `, optional `./`/`../`, optional `/`)
- * with a forbidden root segment.
+ * `// ../../home/…`, `// C:/Users/…`, etc. Anchored so ordinary prose (`// see /var/log
+ * …`) does not match — only a line that STARTS (after `// `, an optional Windows drive
+ * prefix, optional `./`/`../`, optional `/`) with a forbidden root segment. Callers
+ * POSIX-normalise the line (backslashes → `/`) before testing, so a Windows banner is
+ * caught too.
  */
-const LEAKED_BANNER_RE = /^\/\/ (?:\.{1,2}\/)*\/?(?:Users|home|root|private|var)\//;
+const LEAKED_BANNER_RE = /^\/\/ (?:[A-Za-z]:\/)?(?:\.{1,2}\/)*\/?(?:Users|home|root|private|var)\//;
 
 /** A `scheme://` URL — not a filesystem build path, so it is left untouched. */
 const URL_RE = /^[a-z][a-z0-9+.-]*:\/\//i;
 
-/** Normalise OS path separators to POSIX so the committed label is stable cross-OS. */
+/**
+ * Normalise a path to POSIX separators so labels + guard checks are stable cross-OS.
+ * Replaces EVERY backslash (not just the OS `sep`) so a Windows-style `…\node_modules\…`
+ * emitted on a Windows builder — or fed through on any OS — is classified/rejected the
+ * same way as its `/`-separated form. A blanket backslash replace (rather than
+ * `split(sep)`) is what makes this OS-agnostic.
+ */
 function toPosix(p) {
-  return p.split(sep).join("/");
+  return p.replace(/\\/g, "/");
+}
+
+/**
+ * Index at which the LAST real `node_modules/` PATH SEGMENT begins in a POSIX path, or
+ * `-1`. Segment-exact: matches only `/node_modules/` (a `/`-bounded segment) or a
+ * leading `node_modules/` — never an arbitrary substring like `foonode_modules/`. The
+ * return value is the offset of the `n` in `node_modules/` so `slice()` yields
+ * `node_modules/<pkg>/…`.
+ */
+function nodeModulesSegmentStart(posix) {
+  const bounded = posix.lastIndexOf("/node_modules/");
+  if (bounded !== -1) {
+    return bounded + 1;
+  }
+  if (posix.startsWith("node_modules/")) {
+    return 0;
+  }
+  return -1;
 }
 
 /**
@@ -92,22 +118,25 @@ export function pkgRelativePath(p, packageRoot, baseDir = packageRoot) {
     const escapes = rel === "" || rel === ".." || rel.startsWith("../");
     if (!escapes) {
       // Under the package root. A dependency installed in the package's OWN
-      // node_modules still lives under the root — detect it by a node_modules
-      // segment in the RELATIVE path (immune to a parent dir named node_modules/src).
-      const nmRel = rel.lastIndexOf("node_modules/");
+      // node_modules still lives under the root — detect it by a real node_modules
+      // path SEGMENT in the RELATIVE path (immune to a parent dir named
+      // node_modules/src, and to an arbitrary `…node_modules/` substring).
+      const nmRel = nodeModulesSegmentStart(rel);
       if (nmRel !== -1) {
         return rel.slice(nmRel);
       }
       return rel; // own source, e.g. `src/index.ts`
     }
   }
-  // Outside the package root (a hoisted / parent-store dependency) — a dependency
-  // genuinely lives under node_modules, so the LAST `/node_modules/` is correct here.
-  const nm = abs.lastIndexOf("/node_modules/");
+  // Outside the package root (a hoisted / parent-store dependency). POSIX-normalise
+  // first so a Windows-style `…\node_modules\…` absolute path is reduced too, then
+  // anchor on the LAST real `node_modules/` segment.
+  const absPosix = toPosix(abs);
+  const nm = nodeModulesSegmentStart(absPosix);
   if (nm !== -1) {
-    return abs.slice(nm + 1);
+    return absPosix.slice(nm);
   }
-  return abs; // residual host path — the fail-closed guard rejects it
+  return absPosix; // residual host path (POSIX-normalised) — the guard rejects it
 }
 
 /**
@@ -119,8 +148,14 @@ export function pkgRelativePath(p, packageRoot, baseDir = packageRoot) {
  */
 export function assertNoHostPath(name, paths) {
   for (const p of paths) {
+    if (typeof p !== "string") {
+      continue;
+    }
+    // POSIX-normalise so a Windows-style `C:\Users\…` residual is caught by the
+    // forward-slash forbidden prefixes too.
+    const norm = toPosix(p);
     for (const prefix of FORBIDDEN_PATH_PREFIXES) {
-      if (typeof p === "string" && p.includes(prefix)) {
+      if (norm.includes(prefix)) {
         throw new Error(
           `build-dist: committed dist/${name} still embeds a host path (${prefix}…): ` +
             `${JSON.stringify(p)}. The sanitiser must reduce every build path to a ` +
@@ -139,11 +174,14 @@ export function assertNoHostPath(name, paths) {
  * guard cannot be defeated by a space in the path.
  */
 export function assertNoLeakedBanner(name, js) {
-  for (const line of js.split("\n")) {
+  for (const rawLine of js.split("\n")) {
+    // POSIX-normalise the line so a Windows `// C:\Users\…` banner is tested in its
+    // `/`-separated form (which `LEAKED_BANNER_RE`'s optional drive prefix matches).
+    const line = toPosix(rawLine);
     if (LEAKED_BANNER_RE.test(line)) {
       throw new Error(
         `build-dist: committed dist/${name} has an unclassified absolute-path module ` +
-          `banner (a leak the classifier could not reduce): ${JSON.stringify(line.slice(0, 120))}.`,
+          `banner (a leak the classifier could not reduce): ${JSON.stringify(rawLine.slice(0, 120))}.`,
       );
     }
   }
