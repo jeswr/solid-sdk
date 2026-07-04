@@ -129,6 +129,13 @@ async function main(buildDir = outdir) {
   // 2. Clean target then bundle the runtime JS (esbuild owns dist/index.js).
   rmSync(buildDir, { recursive: true, force: true });
   await build({
+    // Pin the working dir esbuild computes banner/sourcemap paths against to the
+    // package root, so those embedded paths are ROOT-relative regardless of the cwd
+    // the build is invoked from. Without this, running the build from a different cwd
+    // would emit caller-cwd-relative paths that the sanitiser (which resolves banners
+    // against `root`) would resolve against the wrong base → nondeterministic labels
+    // that could bypass the leak guard.
+    absWorkingDir: root,
     entryPoints: [join(root, "src", "index.ts")],
     outfile: join(buildDir, "index.js"),
     bundle: true,

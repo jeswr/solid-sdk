@@ -143,3 +143,41 @@ describe("sanitizeMap — sources[] relativised, sourceRoot cleared + validated"
     expect(() => sanitizeMap({ version: 3 }, ROOT)).not.toThrow();
   });
 });
+
+describe("classifier is OS-agnostic + segment-exact (Windows-style backslash paths)", () => {
+  it("reduces an OUTSIDE-root dependency with backslash separators to node_modules/…", () => {
+    // Absolute path that ESCAPES the root, with a backslash-separated node_modules
+    // segment as a Windows builder would emit. The outside-root branch POSIX-normalises
+    // before anchoring on the last real node_modules segment.
+    const p = "/other/store\\node_modules\\@jeswr\\fetch-rdf\\dist\\parse.js";
+    expect(pkgRelativePath(p, ROOT)).toBe("node_modules/@jeswr/fetch-rdf/dist/parse.js");
+  });
+
+  it("reduces a Windows drive-letter dependency path to node_modules/…", () => {
+    const p = "C:\\Users\\x\\proj\\node_modules\\pkg\\dist\\x.js";
+    expect(pkgRelativePath(p, ROOT)).toBe("node_modules/pkg/dist/x.js");
+  });
+
+  it("FAILS the sources[] guard on a Windows-style residual host path (no node_modules anchor)", () => {
+    const map = { version: 3, sources: ["C:\\Users\\someone\\orphan.ts"] };
+    expect(() => sanitizeMap(map, ROOT)).toThrow(/host path/);
+  });
+
+  it("FAILS the banner guard on a Windows-style residual host path (with extension)", () => {
+    const dirty = "// C:\\Users\\someone\\orphan.js\nconst q = 1;";
+    expect(() => sanitizeJs(dirty, ROOT)).toThrow(/host path|absolute-path module banner/);
+  });
+
+  it("FAILS the banner guard on an unclassifiable Windows banner (drive prefix, no extension)", () => {
+    const dirty = "// C:\\Users\\someone\\weird-entry\nconst z = 3;";
+    expect(() => sanitizeJs(dirty, ROOT)).toThrow(/absolute-path module banner|host path/);
+  });
+
+  it("segment-exact: a `foonode_modules/…` substring is NOT treated as a dep marker", () => {
+    // Own source under a dir literally named `foonode_modules` has no real node_modules
+    // SEGMENT, so it stays own source rather than being sliced at the fake marker.
+    const root = "/Users/x/proj";
+    const own = `${root}/foonode_modules/thing.ts`;
+    expect(pkgRelativePath(own, root)).toBe("foonode_modules/thing.ts");
+  });
+});
