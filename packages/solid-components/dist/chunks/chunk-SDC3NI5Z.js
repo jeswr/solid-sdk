@@ -13005,9 +13005,11 @@ var DataWriter = class {
   /**
    * SCOPE GUARD (fail-closed). Reject unless `target` is a safe write target: an absolute
    * http(s) URL, no embedded credentials, and — when a base is configured — same origin +
-   * a path under the base's DIRECTORY. RETURNS the canonical (WHATWG-normalised) in-scope
-   * URL string so callers fetch the URL that was CHECKED (check-then-use-the-checked-value),
-   * not a non-normalised raw input. Run BEFORE any fetch.
+   * a path STRICTLY UNDER the base's DIRECTORY (the base/container document itself is
+   * NOT a valid write target — see the `allowRoot: false` note below). RETURNS the
+   * canonical (WHATWG-normalised) in-scope URL string so callers fetch the URL that was
+   * CHECKED (check-then-use-the-checked-value), not a non-normalised raw input. Run
+   * BEFORE any fetch.
    *
    * DELEGATION: when a base is configured, the same-origin / segment-boundary-path /
    * encoded-delimiter / traversal defence is delegated to `@jeswr/guarded-fetch`'s
@@ -13056,7 +13058,7 @@ var DataWriter = class {
       );
     }
     try {
-      return podScope.assertWithinPodScope(containerBase, target, { allowRoot: true });
+      return podScope.assertWithinPodScope(containerBase, target, { allowRoot: false });
     } catch (err) {
       const reason = err instanceof podScope.PodScopeError ? err.message : String(err);
       throw new WriteScopeError(target, reason);

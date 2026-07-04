@@ -56,7 +56,7 @@ import {
   safeTel,
   serializeTurtle,
   stripScheme
-} from "./chunks/chunk-KUXXL4HJ.js";
+} from "./chunks/chunk-SDC3NI5Z.js";
 import "./chunks/chunk-BNRDLDVI.js";
 
 // src/components/task-list.ts

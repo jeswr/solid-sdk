@@ -413,6 +413,27 @@ describe("DataWriter scope guard — @jeswr/guarded-fetch delegation specifics",
     ).rejects.toBeInstanceOf(WriteScopeError);
     expect(fetch).not.toHaveBeenCalled();
   });
+
+  it("REGRESSION (roborev Medium): the SLASHLESS pod-base form is REJECTED as a write target", async () => {
+    // assertWithinPodScope's `allowRoot` gate treats the base's slash-terminated form
+    // (`…/alice/`) and its slashless form (`…/alice`) as the SAME "root" candidate. The
+    // consolidation onto @jeswr/guarded-fetch initially called it with `allowRoot: true`
+    // (the default), which — unlike the pre-consolidation bespoke `startsWith(baseDir)`
+    // check (which rejected the slashless form: `/alice` does not start with `/alice/`)
+    // — WIDENED the write boundary to admit it. A write target must be a resource
+    // STRICTLY under the base, so BOTH the slash and slashless spellings of the base
+    // itself must be refused (allowRoot: false), never just accepted-with-a-warning.
+    const { dw, fetch } = recordingWriter("https://alice.example/alice/");
+    await expect(
+      dw.saveMerged("https://alice.example/alice", setTitle("X")),
+    ).rejects.toBeInstanceOf(WriteScopeError);
+    // The slash-terminated exact base itself must ALSO be refused — a write target is
+    // strictly a resource UNDER the base, never the base/container document itself.
+    await expect(
+      dw.saveMerged("https://alice.example/alice/", setTitle("X")),
+    ).rejects.toBeInstanceOf(WriteScopeError);
+    expect(fetch).not.toHaveBeenCalled();
+  });
 });
 
 describe("DataWriter.delete — conditional", () => {

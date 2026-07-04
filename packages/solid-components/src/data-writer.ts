@@ -485,9 +485,11 @@ export class DataWriter {
   /**
    * SCOPE GUARD (fail-closed). Reject unless `target` is a safe write target: an absolute
    * http(s) URL, no embedded credentials, and — when a base is configured — same origin +
-   * a path under the base's DIRECTORY. RETURNS the canonical (WHATWG-normalised) in-scope
-   * URL string so callers fetch the URL that was CHECKED (check-then-use-the-checked-value),
-   * not a non-normalised raw input. Run BEFORE any fetch.
+   * a path STRICTLY UNDER the base's DIRECTORY (the base/container document itself is
+   * NOT a valid write target — see the `allowRoot: false` note below). RETURNS the
+   * canonical (WHATWG-normalised) in-scope URL string so callers fetch the URL that was
+   * CHECKED (check-then-use-the-checked-value), not a non-normalised raw input. Run
+   * BEFORE any fetch.
    *
    * DELEGATION: when a base is configured, the same-origin / segment-boundary-path /
    * encoded-delimiter / traversal defence is delegated to `@jeswr/guarded-fetch`'s
@@ -549,9 +551,20 @@ export class DataWriter {
       );
     }
     try {
-      // allowRoot:true — writing to the configured container/base itself is in scope
-      // (matches the prior `startsWith(baseDir)` behaviour, which admitted the base dir).
-      return podScope.assertWithinPodScope(containerBase, target, { allowRoot: true });
+      // allowRoot:false — a WRITE target must be a resource STRICTLY UNDER the base
+      // container, never the container/base document itself. This is NOT the same
+      // as the pre-consolidation `startsWith(baseDir)` check: that check happened to
+      // accept the base's SLASH-TERMINATED form as a side effect of `x.startsWith(x)`
+      // being trivially true, but it REJECTED the base's SLASHLESS form (`/alice` does
+      // not start with `/alice/`). `assertWithinPodScope`'s `allowRoot` gate treats
+      // the slash and slashless spellings of the root as the SAME candidate (a
+      // deliberate alias, documented in podScope.ts, for the read/list case where
+      // servers commonly alias the two) — so `allowRoot: true` here would have
+      // WIDENED the write boundary to admit the slashless root too (roborev Medium).
+      // No write path in this module targets the base document itself (every write is
+      // a shaped resource under the base), so `allowRoot: false` is safe and
+      // strictly narrower than — never wider than — the pre-consolidation guard.
+      return podScope.assertWithinPodScope(containerBase, target, { allowRoot: false });
     } catch (err) {
       const reason = err instanceof podScope.PodScopeError ? err.message : String(err);
       throw new WriteScopeError(target, reason);
