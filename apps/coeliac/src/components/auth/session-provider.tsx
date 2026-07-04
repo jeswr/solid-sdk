@@ -25,8 +25,9 @@ import {
   SessionContext,
   type SessionValue,
 } from "@/lib/session/context";
-import { performSecureLogout } from "@/lib/session/logout";
+import { runSecureLogout } from "@/lib/session/logout";
 import { LoginArea } from "./login-area";
+import { LogoutPurgeWarning } from "./logout-purge-warning";
 import { RestoringSplash } from "./restoring-splash";
 
 export function SessionProvider({ children }: { children: ReactNode }) {
@@ -34,6 +35,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [controller, setController] = useState<LoginController | null>(null);
   const [value, setValue] = useState<SessionValue>(() => ({ ...anonymousSession }));
   const valueRef = useRef(value);
+  // The store of the just-departed account whose logout purge FAILED — retained
+  // (only for that case) so "Clear local data" can re-attempt the purge after the
+  // session has already gone anonymous. Cleared once a purge finally succeeds.
+  const failedPurgeStoreRef = useRef<DiaryStore | null>(null);
   // Keep the ref in sync post-commit (react-hooks v6 forbids ref writes during
   // render); `reconcile` only reads it from event handlers, so this is safe.
   useEffect(() => {
@@ -53,7 +58,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       storageRoot = podRootFallback(webId);
     }
     const store = new DiaryStore(defaultKv(), webId);
-    setValue((v) => ({ ...v, status: "authed", webId, authedFetch, publicFetch, storageRoot, store }));
+    // A successful (re)activation clears any stale logout-purge warning + retained store.
+    failedPurgeStoreRef.current = null;
+    setValue((v) => ({ ...v, status: "authed", webId, authedFetch, publicFetch, storageRoot, store, purgeWarning: null }));
     // Background provisioning — never blocks the UI; each step is best-effort.
     void (async () => {
       try {
@@ -95,19 +102,50 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       store && webId && storageRoot && status === "authed"
         ? () => flushOutbox({ authedFetch, webId, storageRoot }, store)
         : undefined;
-    try {
-      await performSecureLogout({
-        store,
-        flush,
-        revokeCredentials: c ? () => c.logout() : undefined,
-      });
-    } catch (err) {
-      // The credential is already revoked; complete the UI sign-out regardless, but
-      // surface an incomplete privacy purge (a shared-device concern) rather than
-      // hide it behind a clean-looking logout.
-      if (typeof console !== "undefined") console.warn("[session] logout purge incomplete:", err);
+    const outcome = await runSecureLogout({
+      store,
+      flush,
+      revokeCredentials: c ? () => c.logout() : undefined,
+    });
+    // The credential is revoked either way — always go anonymous (never leave the
+    // user logged in). But an incomplete purge is securityCritical on a shared
+    // device, so we make it VISIBLE (a warning banner + "Clear local data" retry),
+    // never swallow it. Retain the store so the retry can re-attempt the purge.
+    failedPurgeStoreRef.current = outcome.purgeFailed ? store : null;
+    setValue(() => ({
+      ...anonymousSession,
+      status: "anonymous",
+      purgeWarning: outcome.purgeFailed
+        ? "Local health data may not have been fully cleared from this device."
+        : null,
+    }));
+  }, []);
+
+  /** Re-attempt the failed logout purge; clears the warning only when it succeeds. */
+  const retryPurge = useCallback(async () => {
+    const store = failedPurgeStoreRef.current;
+    if (!store) {
+      setValue((v) => ({ ...v, purgeWarning: null }));
+      return;
     }
-    setValue(() => ({ ...anonymousSession, status: "anonymous" }));
+    try {
+      await store.purge();
+      failedPurgeStoreRef.current = null;
+      setValue((v) => ({ ...v, purgeWarning: null }));
+    } catch (err) {
+      // Still not cleared — keep the warning visible (updated with the reason).
+      setValue((v) => ({
+        ...v,
+        purgeWarning:
+          err instanceof Error
+            ? `Still could not clear local health data: ${err.message}`
+            : "Still could not clear local health data.",
+      }));
+    }
+  }, []);
+
+  const dismissPurgeWarning = useCallback(() => {
+    setValue((v) => (v.purgeWarning === null ? v : { ...v, purgeWarning: null }));
   }, []);
 
   const reconcile = useCallback(async () => {
@@ -119,8 +157,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   // Merge the stable callbacks into the context value during render (react-hooks
   // v6 forbids the old inject-via-effect setValue; this also drops a render pass).
   const contextValue = useMemo(
-    () => ({ ...value, login, logout, reconcile }),
-    [value, login, logout, reconcile],
+    () => ({ ...value, login, logout, reconcile, retryPurge, dismissPurgeWarning }),
+    [value, login, logout, reconcile, retryPurge, dismissPurgeWarning],
   );
 
   // Build the controller + silent-restore on mount (client-only).
@@ -202,7 +240,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       ) : value.status === "authed" ? (
         children
       ) : (
-        <LoginArea controller={controller} onSessionChange={onSessionChange} />
+        <>
+          {value.purgeWarning !== null ? (
+            <LogoutPurgeWarning onRetry={retryPurge} onDismiss={dismissPurgeWarning} />
+          ) : null}
+          <LoginArea controller={controller} onSessionChange={onSessionChange} />
+        </>
       )}
     </SessionContext.Provider>
   );

@@ -27,12 +27,23 @@ export interface SessionValue {
   storageRoot: string | null;
   /** The durable client cache + outbox for this account, or null before login. */
   store: DiaryStore | null;
+  /**
+   * Set when the last sign-out could NOT fully clear the local WebID-scoped health
+   * cache (the mandatory logout purge failed). Surfaced to the user (a visible
+   * warning, not a console line) because on a shared device private health data may
+   * still be readable; `null` when the last sign-out purged cleanly.
+   */
+  purgeWarning: string | null;
   /** Start an interactive login for a WebID (or re-login the last account). */
   login: (webId?: string) => Promise<void>;
   /** Sign out (clears the session + persisted credential). */
   logout: () => Promise<void>;
   /** Flush the optimistic outbox to the pod (reconcile). */
   reconcile: () => Promise<void>;
+  /** Re-attempt the failed logout purge (clears {@link purgeWarning} on success). */
+  retryPurge: () => Promise<void>;
+  /** Dismiss the {@link purgeWarning} banner without retrying. */
+  dismissPurgeWarning: () => void;
 }
 
 /** The pre-login default: pristine global fetch, no session. */
@@ -43,9 +54,12 @@ export const anonymousSession: SessionValue = {
   publicFetch: (...a) => globalThis.fetch(...a),
   storageRoot: null,
   store: null,
+  purgeWarning: null,
   login: async () => {},
   logout: async () => {},
   reconcile: async () => {},
+  retryPurge: async () => {},
+  dismissPurgeWarning: () => {},
 };
 
 export const SessionContext = createContext<SessionValue>(anonymousSession);

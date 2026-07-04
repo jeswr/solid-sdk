@@ -61,3 +61,32 @@ export async function performSecureLogout(ctx: SecureLogoutContext): Promise<voi
     await ctx.store.purge();
   }
 }
+
+/** The result of a sign-out — whether the mandatory privacy purge completed. */
+export interface LogoutOutcome {
+  /**
+   * `true` when the local WebID-scoped health cache could NOT be fully cleared
+   * (the `DiaryStore.purge` rejected). The caller MUST make this VISIBLE to the
+   * user — on a shared device, private health data may still be readable — rather
+   * than swallow it: the credential is already revoked, but the wipe is incomplete.
+   */
+  purgeFailed: boolean;
+  /** The purge-failure message, present only when {@link purgeFailed}. */
+  error?: string;
+}
+
+/**
+ * Caller-facing wrapper around {@link performSecureLogout} that always resolves,
+ * REPORTING (never swallowing) a purge failure as a {@link LogoutOutcome}. The UI
+ * layer still transitions to signed-out unconditionally (the credential is revoked
+ * either way — never leave the user logged in) but uses the returned `purgeFailed`
+ * to surface a user-visible "local data may not be fully cleared" warning + retry.
+ */
+export async function runSecureLogout(ctx: SecureLogoutContext): Promise<LogoutOutcome> {
+  try {
+    await performSecureLogout(ctx);
+    return { purgeFailed: false };
+  } catch (err) {
+    return { purgeFailed: true, error: err instanceof Error ? err.message : String(err) };
+  }
+}

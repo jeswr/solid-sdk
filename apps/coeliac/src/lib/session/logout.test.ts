@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { DiaryStore } from "../cache/diary-store";
 import { MemoryKv } from "../cache/kv";
 import { newMealRecord } from "../diary/log";
-import { performSecureLogout } from "./logout";
+import { performSecureLogout, runSecureLogout } from "./logout";
 
 const ROOT = "https://alice.example/";
 
@@ -78,5 +78,45 @@ describe("performSecureLogout", () => {
     await store.putMeal(newMealRecord({ storageRoot: ROOT, items: [{ name: "Secret" }] }));
     await performSecureLogout({ store });
     expect(await store.allMeals()).toHaveLength(0);
+  });
+});
+
+describe("runSecureLogout (surfaces, never swallows, a purge failure)", () => {
+  it("reports purgeFailed:false on a clean purge", async () => {
+    const store = seededStore();
+    await store.putMeal(newMealRecord({ storageRoot: ROOT, items: [{ name: "Secret" }] }));
+    const outcome = await runSecureLogout({ store });
+    expect(outcome).toEqual({ purgeFailed: false });
+    expect(await store.allMeals()).toHaveLength(0);
+  });
+
+  it("SURFACES a purge failure as an outcome (purgeFailed:true + message) instead of swallowing it", async () => {
+    const failingKv = new (class extends MemoryKv {
+      override async del(): Promise<void> {
+        throw new Error("blocked");
+      }
+    })();
+    const store = new DiaryStore(failingKv, "https://alice.example/#me");
+    await store.putMeal(newMealRecord({ storageRoot: ROOT, items: [{ name: "Secret" }] }));
+
+    // Never rejects (the UI still goes anonymous) but the failure is RETURNED, not
+    // dropped — the caller MUST make it visible on a shared device.
+    const outcome = await runSecureLogout({ store });
+    expect(outcome.purgeFailed).toBe(true);
+    expect(outcome.error).toMatch(/failed to delete/);
+  });
+
+  it("still revokes the credential even when the purge fails (never leaves logged in)", async () => {
+    const failingKv = new (class extends MemoryKv {
+      override async del(): Promise<void> {
+        throw new Error("blocked");
+      }
+    })();
+    const store = new DiaryStore(failingKv, "https://alice.example/#me");
+    await store.putMeal(newMealRecord({ storageRoot: ROOT, items: [{ name: "Secret" }] }));
+    const revokeCredentials = vi.fn(async () => {});
+    const outcome = await runSecureLogout({ store, revokeCredentials });
+    expect(revokeCredentials).toHaveBeenCalledOnce();
+    expect(outcome.purgeFailed).toBe(true);
   });
 });
