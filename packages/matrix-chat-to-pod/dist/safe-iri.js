@@ -33,6 +33,13 @@ import { isWithinPodScope } from "@jeswr/guarded-fetch";
 // biome-ignore lint/suspicious/noControlCharactersInRegex: matching the IRIREF-forbidden C0 range is the point.
 const IRIREF_FORBIDDEN = /[\u0000-\u0020<>"{}|\\^`]/;
 /**
+ * Percent-encoded path-delimiter characters (`%2F` = `/`, `%5C` = `\`). Matches
+ * `@jeswr/guarded-fetch`'s `normalizePodBase` `ENCODED_DELIMITER` check exactly
+ * (case-insensitive) -- see {@link canonicalContainer} for why this must be
+ * rejected here too, not just at the delegated scope check inside {@link isWithinBase}.
+ */
+const ENCODED_PATH_DELIMITER = /%2f|%5c/i;
+/**
  * Return an injection-safe, canonical absolute http(s) IRI for an UNTRUSTED value,
  * or `undefined` if the value is not a usable http(s) IRI. NEVER returns the raw
  * input — always the canonicalised, fully-escaped form (see module docs). Use this
@@ -74,6 +81,17 @@ export function safeHttpIri(value) {
  * owner-only ACL. The returned value is the ONE canonical container string every
  * caller must use for BOTH the ACL URL and every scope check — no downstream code
  * may re-derive from the raw input.
+ *
+ * ALSO rejects a path carrying an encoded delimiter (`%2F`/`%5C`, case-insensitive
+ * — {@link ENCODED_PATH_DELIMITER}). This mirrors `@jeswr/guarded-fetch`'s
+ * `normalizePodBase`, which every write-target check now runs through via
+ * {@link isWithinBase}. Without this check here, `importRoot()` could accept such
+ * a container, write its ACL (a real side effect), and only THEN discover — at
+ * every subsequent per-message `isWithinBase` scope check — that the delegated
+ * guard rejects the base outright, silently dropping every message as
+ * out-of-scope. Rejecting up front at the container gate avoids that write-then-
+ * reject-everything trap and keeps `canonicalContainer` in lockstep with the
+ * scope check its own output feeds.
  */
 export function canonicalContainer(container) {
     const safe = safeHttpIri(container);
@@ -84,7 +102,9 @@ export function canonicalContainer(container) {
         return undefined;
     if (!u.pathname.endsWith("/"))
         return undefined;
-    // With no query/fragment, origin + pathname IS the canonical container.
+    if (ENCODED_PATH_DELIMITER.test(u.pathname))
+        return undefined;
+    // With no query/fragment/encoded-delimiter, origin + pathname IS the canonical container.
     return `${u.origin}${u.pathname}`;
 }
 /**

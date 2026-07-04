@@ -43,6 +43,17 @@ export declare function safeHttpIri(value: unknown): string | undefined;
  * owner-only ACL. The returned value is the ONE canonical container string every
  * caller must use for BOTH the ACL URL and every scope check — no downstream code
  * may re-derive from the raw input.
+ *
+ * ALSO rejects a path carrying an encoded delimiter (`%2F`/`%5C`, case-insensitive
+ * — {@link ENCODED_PATH_DELIMITER}). This mirrors `@jeswr/guarded-fetch`'s
+ * `normalizePodBase`, which every write-target check now runs through via
+ * {@link isWithinBase}. Without this check here, `importRoot()` could accept such
+ * a container, write its ACL (a real side effect), and only THEN discover — at
+ * every subsequent per-message `isWithinBase` scope check — that the delegated
+ * guard rejects the base outright, silently dropping every message as
+ * out-of-scope. Rejecting up front at the container gate avoids that write-then-
+ * reject-everything trap and keeps `canonicalContainer` in lockstep with the
+ * scope check its own output feeds.
  */
 export declare function canonicalContainer(container: unknown): string | undefined;
 /**
