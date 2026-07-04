@@ -112,10 +112,21 @@ function assertNotRedirect(op: string, url: string, res: SolidHttpResponse): voi
 /**
  * Resolve + scope-guard a target against the pod base, returning the validated
  * absolute URL. Throws (fail-closed) if the target escapes the pod.
+ *
+ * @param options.allowRoot - forwarded to {@link resolveTarget}; default `true`
+ *   (a READ target — the node never rejected the pod root). Every WRITE
+ *   operation (create/update/delete) below passes `{ allowRoot: false }`
+ *   explicitly: a write must land strictly UNDER the base, never mint/overwrite
+ *   the base container's own address (roborev finding, 13311df — see the
+ *   `resolveTarget` doc for the slashless-root-alias detail).
  */
-export function scopedTarget(podBaseUrl: string, target: string): ResolvedTarget {
+export function scopedTarget(
+  podBaseUrl: string,
+  target: string,
+  options?: { readonly allowRoot?: boolean },
+): ResolvedTarget {
   const base = normalizePodBase(podBaseUrl);
-  return resolveTarget(base, target);
+  return resolveTarget(base, target, options);
 }
 
 /** Resource -> Read: GET the resource, return its body + content-type + etag. */
@@ -140,7 +151,7 @@ export async function readResource(input: SolidOperationInput): Promise<SolidRes
  * resource already exists — Create never silently overwrites.
  */
 export async function createResource(input: ResourceWriteInput): Promise<SolidResult> {
-  const { url, container } = scopedTarget(input.podBaseUrl, input.target);
+  const { url, container } = scopedTarget(input.podBaseUrl, input.target, { allowRoot: false });
   if (container) {
     throw new Error(
       `[n8n-nodes-solid] create target ${url} is a container (trailing slash); use a resource path`,
@@ -175,7 +186,7 @@ export async function createResource(input: ResourceWriteInput): Promise<SolidRe
 export async function updateResource(
   input: ResourceWriteInput & { ifMatch?: string },
 ): Promise<SolidResult> {
-  const { url, container } = scopedTarget(input.podBaseUrl, input.target);
+  const { url, container } = scopedTarget(input.podBaseUrl, input.target, { allowRoot: false });
   if (container) {
     throw new Error(
       `[n8n-nodes-solid] update target ${url} is a container (trailing slash); use a resource path`,
@@ -200,7 +211,7 @@ export async function updateResource(
 
 /** Resource -> Delete: DELETE the resource. A 404 is reported, not thrown. */
 export async function deleteResource(input: SolidOperationInput): Promise<SolidResult> {
-  const { url } = scopedTarget(input.podBaseUrl, input.target);
+  const { url } = scopedTarget(input.podBaseUrl, input.target, { allowRoot: false });
   const res = await input.request({ method: "DELETE", url, headers: {} });
   assertNotRedirect("delete", url, res);
   if (res.statusCode === 404 || res.statusCode === 410) {

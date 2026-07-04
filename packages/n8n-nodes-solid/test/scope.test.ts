@@ -59,6 +59,33 @@ describe("resolveTarget — accepted targets (returns the canonical in-scope URL
   });
 });
 
+describe("resolveTarget — allowRoot: false (WRITE-target guard, roborev 13311df)", () => {
+  it("refuses the base itself (slash-terminated)", () => {
+    expect(() => resolveTarget(BASE, BASE, { allowRoot: false })).toThrow(
+      /pod base itself.*allowRoot is false/,
+    );
+  });
+
+  it("refuses the SLASHLESS alias of the base — the widening the finding flagged", () => {
+    // `assertWithinPodScope` treats `.../data` (no trailing slash) as the SAME
+    // root as `.../data/`, so with the default `allowRoot: true` this slashless
+    // form is silently accepted as an ordinary in-scope target — a boundary
+    // widening vs the pre-consolidation guard (which required an exact pathname
+    // prefix match and rejected this shorter, slash-less path outright). A
+    // write-target caller MUST pass `allowRoot: false` to close this gap.
+    const slashless = BASE.slice(0, -1); // "https://alice.pod.example/data"
+    expect(() => resolveTarget(BASE, slashless, { allowRoot: false })).toThrow(
+      /pod base itself.*allowRoot is false/,
+    );
+  });
+
+  it("still accepts a strict descendant of the base", () => {
+    expect(resolveTarget(BASE, "notes/today.ttl", { allowRoot: false }).url).toBe(
+      "https://alice.pod.example/data/notes/today.ttl",
+    );
+  });
+});
+
 describe("resolveTarget — refused targets (delegates to the shared guard, fail-closed)", () => {
   it("refuses an empty target (the wrapper's own guard)", () => {
     expect(() => resolveTarget(BASE, "")).toThrow(/non-empty/);
@@ -131,6 +158,17 @@ describe("assertWithinPod (back-compat void wrapper over assertWithinPodScope)",
     expect(() => assertWithinPod(BASE, "https://alice.pod.example/data2/x.ttl")).toThrow(
       /escapes pod path/,
     );
+  });
+
+  it("rejects a RELATIVE url — must be absolute (roborev Medium finding, 13311df)", () => {
+    // Pre-consolidation `assertWithinPod` parsed `url` with `new URL(url)` (no
+    // base), so a relative reference always threw. Delegating straight to
+    // `assertWithinPodScope(base, url, ...)` would instead RESOLVE a relative
+    // `url` against `base` — silently validating a different (resolved) URL
+    // than the original string a caller might go on to use elsewhere. Assert
+    // the absolute-only contract is preserved.
+    expect(() => assertWithinPod(BASE, "notes/today.ttl")).toThrow(/target URL is invalid/);
+    expect(() => assertWithinPod(BASE, "/notes/today.ttl")).toThrow(/target URL is invalid/);
   });
 });
 

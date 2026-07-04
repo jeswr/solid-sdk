@@ -43,6 +43,23 @@ describe("parseContainerListing — Turtle", () => {
     expect(members.map((m) => m.url)).toEqual([`${CONTAINER}a.ttl`]);
   });
 
+  it("excludes a SLASHLESS self-alias of the container (roborev Low finding, 13311df)", async () => {
+    // `podScopedUrl(..., { allowRoot: true })` treats the container's
+    // slash-terminated and slashless spellings as the SAME root, so a
+    // hostile/buggy server listing `<.../notes>` (no trailing slash) instead of
+    // `<.../notes/>` came back canonicalised to that slashless string — which
+    // did not string-equal `containerUrl` and so slipped past the (pre-fix)
+    // self-member check as a bogus non-container "member" duplicating the
+    // container itself.
+    const slashlessSelf = CONTAINER.slice(0, -1); // "https://.../data/notes"
+    const selfListing = `
+@prefix ldp: <http://www.w3.org/ns/ldp#> .
+<${CONTAINER}> a ldp:Container ; ldp:contains <${slashlessSelf}>, <${CONTAINER}a.ttl> .
+`;
+    const members = await parseContainerListing(selfListing, "text/turtle", CONTAINER, BASE);
+    expect(members.map((m) => m.url)).toEqual([`${CONTAINER}a.ttl`]);
+  });
+
   it("returns [] for a valid but empty container", async () => {
     const empty = `@prefix ldp: <http://www.w3.org/ns/ldp#> .\n<${CONTAINER}> a ldp:Container .\n`;
     const members = await parseContainerListing(empty, "text/turtle", CONTAINER, BASE);

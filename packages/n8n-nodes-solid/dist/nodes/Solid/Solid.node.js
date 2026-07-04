@@ -2413,7 +2413,7 @@ var ContainerDataset = class extends DatasetWrapper {
 var import_n32 = require("n3");
 
 // src/scope.ts
-function resolveTarget(base, target) {
+function resolveTarget(base, target, options) {
   if (typeof target !== "string" || target.trim().length === 0) {
     throw new Error("[n8n-nodes-solid] target must be a non-empty string");
   }
@@ -2424,7 +2424,7 @@ function resolveTarget(base, target) {
     );
   }
   const ref = /^https?:\/\//i.test(trimmed) ? trimmed : trimmed.replace(/^\/+/, "");
-  const url = assertWithinPodScope(base, ref, { allowRoot: true });
+  const url = assertWithinPodScope(base, ref, { allowRoot: options?.allowRoot ?? true });
   return { url, container: isContainerUrl(url) };
 }
 
@@ -2435,6 +2435,7 @@ async function parseContainerListing(body, contentType2, containerUrl, base) {
   if (!container) {
     return [];
   }
+  const containerUrlNoSlash = containerUrl.endsWith("/") ? containerUrl.slice(0, -1) : containerUrl;
   const members = [];
   for (const resource of container.contains) {
     const absolute = new URL(resource.id, containerUrl).toString();
@@ -2442,7 +2443,7 @@ async function parseContainerListing(body, contentType2, containerUrl, base) {
     if (scoped === void 0) {
       continue;
     }
-    if (scoped === containerUrl) {
+    if (scoped === containerUrl || scoped === containerUrlNoSlash) {
       continue;
     }
     members.push({ url: scoped, container: isContainerUrl(scoped) });
@@ -2464,9 +2465,9 @@ function assertNotRedirect(op, url, res) {
     );
   }
 }
-function scopedTarget(podBaseUrl, target) {
+function scopedTarget(podBaseUrl, target, options) {
   const base = normalizePodBase(podBaseUrl);
-  return resolveTarget(base, target);
+  return resolveTarget(base, target, options);
 }
 async function readResource(input) {
   const { url } = scopedTarget(input.podBaseUrl, input.target);
@@ -2484,7 +2485,7 @@ async function readResource(input) {
   };
 }
 async function createResource(input) {
-  const { url, container } = scopedTarget(input.podBaseUrl, input.target);
+  const { url, container } = scopedTarget(input.podBaseUrl, input.target, { allowRoot: false });
   if (container) {
     throw new Error(
       `[n8n-nodes-solid] create target ${url} is a container (trailing slash); use a resource path`
@@ -2511,7 +2512,7 @@ async function createResource(input) {
   return { url, created: true, statusCode: res.statusCode, etag: res.headers.etag ?? null };
 }
 async function updateResource(input) {
-  const { url, container } = scopedTarget(input.podBaseUrl, input.target);
+  const { url, container } = scopedTarget(input.podBaseUrl, input.target, { allowRoot: false });
   if (container) {
     throw new Error(
       `[n8n-nodes-solid] update target ${url} is a container (trailing slash); use a resource path`
@@ -2534,7 +2535,7 @@ async function updateResource(input) {
   return { url, updated: true, statusCode: res.statusCode, etag: res.headers.etag ?? null };
 }
 async function deleteResource(input) {
-  const { url } = scopedTarget(input.podBaseUrl, input.target);
+  const { url } = scopedTarget(input.podBaseUrl, input.target, { allowRoot: false });
   const res = await input.request({ method: "DELETE", url, headers: {} });
   assertNotRedirect("delete", url, res);
   if (res.statusCode === 404 || res.statusCode === 410) {

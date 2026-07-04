@@ -85,6 +85,28 @@ describe("createResource", () => {
     ).rejects.toThrow(/escapes pod/);
     expect(log).toHaveLength(0); // never issued a request to the foreign host
   });
+
+  it("refuses the SLASHLESS pod-base alias as a write target (roborev 13311df)", async () => {
+    // `resolveTarget(..., { allowRoot: true })` (the default) treats
+    // `https://alice.pod.example/data` (no trailing slash) as the SAME root as
+    // the base `https://alice.pod.example/data/` and would accept it as an
+    // ordinary in-scope path — widening the write boundary vs the
+    // pre-consolidation guard, which rejected this exact form outright. Every
+    // WRITE call site now passes `allowRoot: false` to `scopedTarget` to close
+    // that gap.
+    const { transport, log } = pod();
+    const slashlessBase = BASE.slice(0, -1);
+    await expect(
+      createResource({
+        podBaseUrl: BASE,
+        target: slashlessBase,
+        content: "x",
+        contentType: "text/plain",
+        request: transport,
+      }),
+    ).rejects.toThrow(/pod base itself/);
+    expect(log).toHaveLength(0); // never issued a request
+  });
 });
 
 describe("readResource", () => {
@@ -172,6 +194,20 @@ describe("updateResource", () => {
       }),
     ).rejects.toThrow(/precondition failed/);
   });
+
+  it("refuses the SLASHLESS pod-base alias as a write target (roborev 13311df)", async () => {
+    const { transport, log } = pod();
+    await expect(
+      updateResource({
+        podBaseUrl: BASE,
+        target: BASE.slice(0, -1),
+        content: "x",
+        contentType: "text/plain",
+        request: transport,
+      }),
+    ).rejects.toThrow(/pod base itself/);
+    expect(log).toHaveLength(0);
+  });
 });
 
 describe("deleteResource", () => {
@@ -197,6 +233,14 @@ describe("deleteResource", () => {
       request: transport,
     });
     expect(res).toMatchObject({ deleted: false, notFound: true });
+  });
+
+  it("refuses the SLASHLESS pod-base alias as a write target (roborev 13311df)", async () => {
+    const { transport, log } = pod();
+    await expect(
+      deleteResource({ podBaseUrl: BASE, target: BASE.slice(0, -1), request: transport }),
+    ).rejects.toThrow(/pod base itself/);
+    expect(log).toHaveLength(0);
   });
 });
 

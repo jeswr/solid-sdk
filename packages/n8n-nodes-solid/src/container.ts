@@ -55,6 +55,16 @@ export async function parseContainerListing(
     return [];
   }
 
+  // The container root is a container ADDRESS (trailing slash) but
+  // `podScopedUrl`/`assertWithinPodScope` treat the slash-terminated and
+  // slashless forms of a root path as the SAME root (roborev Low finding,
+  // 13311df) — a hostile/misbehaving server can list a slashless self-alias
+  // (`<.../notes>` instead of `<.../notes/>`) and it comes back canonicalised
+  // to that slashless string, which does not string-equal `containerUrl`. Strip
+  // any trailing slash from BOTH sides before the self-member comparison so the
+  // two spellings of "the container itself" are recognised as equivalent.
+  const containerUrlNoSlash = containerUrl.endsWith("/") ? containerUrl.slice(0, -1) : containerUrl;
+
   const members: ContainerMember[] = [];
   for (const resource of container.contains) {
     // resource.id may be relative if the server emitted a relative IRI the parser
@@ -70,9 +80,10 @@ export async function parseContainerListing(
     if (scoped === undefined) {
       continue;
     }
-    // Some serialisations list the container itself; skip the self-member
-    // (compare against the canonical scoped value now in use).
-    if (scoped === containerUrl) {
+    // Some serialisations list the container itself (slash-terminated OR its
+    // slashless alias); skip the self-member either way (compare against the
+    // canonical scoped value now in use).
+    if (scoped === containerUrl || scoped === containerUrlNoSlash) {
       continue;
     }
     members.push({ url: scoped, container: isContainerUrl(scoped) });
