@@ -33,10 +33,12 @@ const h2 = vi.hoisted(() => ({
 
 vi.mock("oauth4webapi", () => {
   const allowInsecureRequests = Symbol("allowInsecureRequests");
+  const customFetch = Symbol("customFetch");
   const expectNoNonce = Symbol("expectNoNonce");
   const nopkce = Symbol("nopkce");
   return {
     allowInsecureRequests,
+    customFetch,
     expectNoNonce,
     nopkce,
     // Discovery → a minimal authorization server advertising S256 PKCE.
