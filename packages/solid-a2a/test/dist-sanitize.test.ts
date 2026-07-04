@@ -173,6 +173,23 @@ describe("classifier is OS-agnostic + segment-exact (Windows-style backslash pat
     expect(() => sanitizeJs(dirty, ROOT)).toThrow(/absolute-path module banner|host path/);
   });
 
+  it("FAILS the sources[] guard on a BARE drive-letter path with NO Unix segment", () => {
+    // `D:\a\repo\orphan.ts` -> `D:/a/repo/orphan.ts`: matches no forbidden Unix prefix,
+    // but ANY drive-qualified absolute path is a host path and must be rejected.
+    const map = { version: 3, sources: ["D:\\a\\repo\\orphan.ts"] };
+    expect(() => sanitizeMap(map, ROOT)).toThrow(/host path/);
+  });
+
+  it("FAILS the banner guard on a BARE drive-letter banner with NO Unix segment (with extension)", () => {
+    const dirty = "// D:\\a\\repo\\orphan.js\nconst d = 1;";
+    expect(() => sanitizeJs(dirty, ROOT)).toThrow(/host path|absolute-path module banner/);
+  });
+
+  it("FAILS the banner guard on a BARE drive-letter banner with NO Unix segment (no extension)", () => {
+    const dirty = "// D:\\a\\repo\\orphan\nconst e = 2;";
+    expect(() => sanitizeJs(dirty, ROOT)).toThrow(/absolute-path module banner|host path/);
+  });
+
   it("segment-exact: a `foonode_modules/…` substring is NOT treated as a dep marker", () => {
     // Own source under a dir literally named `foonode_modules` has no real node_modules
     // SEGMENT, so it stays own source rather than being sliced at the fake marker.
