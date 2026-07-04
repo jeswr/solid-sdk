@@ -1,7 +1,31 @@
 <!-- AUTHORED-BY Claude Fable 5 -->
+<!-- AUTHORED-BY Claude Sonnet 5 (status banner, 2026-07-04) -->
 
 # Coeliac & Multi-Intolerance App — Phased Build Plan (builder briefs)
 
+> **STATUS (2026-07-04): ALL PHASES SHIPPED.** Every brief below (1A–4B) has
+> landed on `main` and the full gate is green (`lint`+`typecheck`+537
+> tests+`build`, verified at `7a03c45`). This document is kept as the historical
+> build contract / acceptance-criteria record — do not read the phase list as
+> pending work. Landing commits, for traceability:
+> - **1A** `@jeswr/solid-health-diary` — external repo, pinned
+>   `git+https://github.com/jeswr/solid-health-diary.git#3a24de2` in
+>   `package.json` (that repo's own Phase-3c genetics-model landing).
+> - **1B** `diet:` sector vocab — external repo (`solid-federation-vocab`).
+> - **1C** `c642128`/`d18116b` (app shell, login, logging UX, symptom log).
+> - **2A** `6e58438`/`b5ce685`/`7ec9a2a` (inference engine).
+> - **2B** `56a9a9a`/`c73580b`/`a6c2b92` (elimination-protocol FSM + UI).
+> - **3A** `39058fc` (knowledge: trials/research/therapies).
+> - **3B** `cd8396a`/`e15a4bb`/`5a7f49d` (genetics upload — privacy-critical).
+> - **4A** `ce9ab50`/`69057b4` (community link-outs + peer share-card).
+> - **4B** `c3afeac` (eating-out clustering, DietPlan view, home re-challenge,
+>   disclaimer audit + a11y), `d68031b`/`46d7063`/`e9844a5` (shell-only SW),
+>   `539419f`…`7a03c45` (WebID-scoped logout purge + revoke/purge warnings).
+>
+> No further increment is defined in this plan's sequence. Any new product work
+> beyond this contract needs a new design brief (a new `docs/design/*.md` +
+> a BUILD-PLAN addendum), not an ad hoc addition here.
+>
 > The dispatchable build contract derived from `docs/DESIGN.md` (grounded in
 > `docs/RESEARCH.md`). Each phase is a set of builder-agent briefs with explicit
 > acceptance criteria. Fan-out rules and dependencies are stated so the
