@@ -149,6 +149,17 @@ export interface AgentDiscovery {
     readonly descriptor?: AgentDescriptor;
     /** Verification result for the resolved descriptor (if one was resolved). */
     readonly verification?: VerificationResult;
+    /**
+     * The OWNER BACK-LINK: whether the resolved descriptor carries EXACTLY ONE
+     * `ad:owner` IRI equal to the WebID discovery started from (exact,
+     * order-independent). Defined only when a descriptor was resolved; `false`
+     * whenever that strict condition does not hold — a different owner, no
+     * `ad:owner`, MULTIPLE `ad:owner` triples (ambiguous, fail-closed even if one
+     * matches), or a non-IRI owner term. Pass
+     * {@link import("./discover.js").DiscoverOptions.requireOwnerMatch} to make a
+     * failed back-link fail verification outright.
+     */
+    readonly ownerMatchesWebId?: boolean;
 }
 /** A single validation problem found by {@link verifyDescriptor}. */
 export interface VerificationIssue {
@@ -162,7 +173,7 @@ export interface VerificationIssue {
     readonly value?: string;
 }
 /** The closed set of issue codes the validator can emit. */
-export type VerificationIssueCode = "no-agent-description" | "multiple-agent-descriptions" | "subject-mismatch" | "missing-name" | "missing-url" | "invalid-url" | "invalid-owner" | "skill-missing-id" | "skill-missing-name" | "duplicate-skill-id" | "invalid-security-scheme" | "invalid-protocol-source" | "fetch-failed" | "parse-failed";
+export type VerificationIssueCode = "no-agent-description" | "multiple-agent-descriptions" | "subject-mismatch" | "missing-name" | "missing-url" | "invalid-url" | "invalid-owner" | "skill-missing-id" | "skill-missing-name" | "duplicate-skill-id" | "invalid-security-scheme" | "invalid-protocol-source" | "owner-mismatch" | "fetch-failed" | "parse-failed";
 /** The result of verifying an agent descriptor. */
 export interface VerificationResult {
     /** `true` when the descriptor is well-formed. */
