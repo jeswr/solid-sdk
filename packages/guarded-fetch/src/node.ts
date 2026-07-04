@@ -68,6 +68,13 @@ import {
 // no local binding).
 export type { DnsLookup, GuardOptions, ResolvedAddress } from "./index.js";
 
+// Re-export the redirect-refusal wrapper from THIS entry too, so a `./node`-only consumer can
+// stack it on the pinning fetch (`refuseRedirects(nodeGuardedFetch)` — SSRF-pinned AND
+// redirect-refusing). `./index.js` is external in the node bundle, so `RedirectRefusedError` is
+// the SAME runtime class as the one from `@jeswr/guarded-fetch` (a single shared class, like
+// `SsrfError`), and `instanceof` works across both entries.
+export { RedirectRefusedError, refuseRedirects } from "./index.js";
+
 /** The `net.connect`-style lookup callback undici's connector invokes. */
 export type ConnectLookup = (
   hostname: string,

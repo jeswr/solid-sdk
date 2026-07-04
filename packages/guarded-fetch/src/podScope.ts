@@ -48,7 +48,18 @@
  *
  * **Pure core, no platform:** only the WHATWG `URL` global — browser-safe, no `node:*`.
  */
-import { isRedirect, normalizeRequest, rewriteInitForRedirect, sameOrigin } from "./redirect.js";
+import {
+  isRedirect,
+  normalizeRequest,
+  redactUserinfo,
+  rewriteInitForRedirect,
+  sameOrigin,
+} from "./redirect.js";
+
+// `redactUserinfo` lives in the shared `./redirect.js` machinery (used by both guards + the
+// redirect-refusal wrapper); it is re-exported here so `@jeswr/guarded-fetch`'s public
+// `redactUserinfo` export (historically resolved through this module) is unchanged.
+export { redactUserinfo } from "./redirect.js";
 
 /** Raised when the pod-scope guard refuses a base, a candidate URL, or a redirect hop. */
 export class PodScopeError extends Error {
@@ -87,32 +98,6 @@ const DEFAULT_MAX_REDIRECTS = 5;
 
 /** Encoded path delimiters (`%2F` / `%5C`), refused when they survive in a resolved path. */
 const ENCODED_DELIMITER = /%2f|%5c/i;
-
-/**
- * Redact any embedded userinfo (`scheme://user:pass@host…` or a scheme-relative
- * `//user:pass@host…`) from a URL-ish string BEFORE it is interpolated into an error
- * message. Every validation error here echoes a user-controlled value, and consumers
- * surface those messages into logs / item output — so a target like `https://u:p@host/x`
- * must never leak its credentials through an error.
- *
- * This is a deliberately BROAD, best-effort textual scrub that also works on MALFORMED
- * input (where `new URL` threw, so the parser cannot be trusted — and a value like
- * `ht!tp://u:p@host/` has no RFC-valid scheme yet still carries a secret). It replaces
- * EVERY `//…@` authority-userinfo span (global, scheme-prefix-agnostic) with
- * `//<redacted>@`. The span is `[^/?#]*` (NOT excluding whitespace or `@`): a malformed
- * target like `https://alice:s3 cr3t@ho st/x` would otherwise slip the scrub and leak the
- * credential through the invalid-target error path. Over-redaction is safe here (these are
- * error strings, not requests); under-redaction would leak — so the rule errs toward
- * redacting.
- */
-export function redactUserinfo(value: string): string {
-  if (typeof value !== "string") {
-    return String(value);
-  }
-  // `[^/?#]*@` is greedy up to the LAST `@` before an authority terminator, so all
-  // userinfo (incl. spaces, control chars, an embedded `@`) is redacted.
-  return value.replace(/\/\/[^/?#]*@/g, "//<redacted>@");
-}
 
 /**
  * Normalise a pod base URL to a canonical container address: an absolute http(s) URL with

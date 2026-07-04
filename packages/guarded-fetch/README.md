@@ -163,8 +163,12 @@ entry, so `instanceof SsrfError` works across both.
   oversize / timeout / malformed.
 - `GuardError` — the **policy boundary**: a disallowed port, or a content-type allowlist miss when
   `allowedContentTypes` is configured.
+- `PodScopeError` — the **capability boundary** (`podScope`): a candidate URL / redirect hop
+  outside the configured pod (sub-)container.
+- `RedirectRefusedError` — the **credential-safety refusal** (`refuseRedirects`): the request was
+  allowed but its response was a redirect the wrapper will not follow.
 
-Both are guard refusals; a guarded fetch never silently succeeds on a refused target.
+All are guard refusals; a guarded fetch never silently succeeds on a refused target.
 
 ## The pod-scope guard (`podScope`) — "is this URL within MY container?"
 
@@ -204,6 +208,44 @@ descendant, the rxdb/y-solid write-target semantics). `createPodScopedFetch` add
 **every redirect hop** (manual redirects, bounded hops, loop detection, Fetch method/body semantics)
 so a poisoned in-scope resource cannot `302` an authenticated fetch out of the pod. It composes with
 the SSRF guard: `createPodScopedFetch(base, { fetch: createGuardedFetch(opts) })`.
+
+## Refuse redirects on a credentialed fetch (`refuseRedirects`)
+
+A request that carries a credential (an `Authorization` / `DPoP` header, a cookie) and
+**auto-follows a redirect** can leak that credential to a target the *server* chose in its
+`Location`, or be silently re-pointed at a different resource. Native `fetch` follows `3xx` by
+default. For a trust-bearing request the safe posture is to **not follow any redirect** — and that
+is the one recurring roborev finding this wrapper exists to close across the estate ("a
+credentialed/trust-bearing fetch must refuse redirects").
+
+```ts
+import { refuseRedirects, RedirectRefusedError } from "@jeswr/guarded-fetch";
+
+const safeFetch = refuseRedirects(authedFetch); // wrap your DPoP/Bearer fetch
+try {
+  const res = await safeFetch("https://alice.pod.example/private/doc", {
+    headers: { authorization: "DPoP …" },
+  });
+} catch (e) {
+  if (e instanceof RedirectRefusedError) {
+    // e.url / e.status / e.location (userinfo redacted) — the redirect was NOT followed
+  }
+}
+```
+
+`refuseRedirects(fetch)` forces `redirect:"manual"` on every request and **throws
+`RedirectRefusedError`** when the response is a redirect — a moved `3xx` (301/302/303/307/308) on
+Node/undici, or a browser **opaque-redirect** (`type === "opaqueredirect"`, `status === 0`), both
+detected. A `300`/`304` is **not** a moved redirect and passes through untouched. The refused
+response's body is drained; the request URL + `Location` are **userinfo-redacted** in the error.
+
+**The opt-out is structural** (spelled out in code): there is no runtime flag to re-enable
+following, and a stray `redirect:"follow"` in a request's `init` is overridden to `"manual"` — to
+follow redirects you use a follow-capable fetch *instead of* wrapping. It is the credentialed
+complement to `createGuardedFetch` / `createPodScopedFetch`, which **follow** redirects with
+re-validation (the right posture for an *uncredentialed* public-data fetch). It composes:
+`createGuardedFetch({ fetch: refuseRedirects(authed) })` SSRF-validates the host *and* refuses any
+redirect (surfaced as an `SsrfError` whose `cause` is the `RedirectRefusedError`).
 
 ## GitHub-installable under `ignore-scripts=true`
 

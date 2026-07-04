@@ -5,11 +5,7 @@ var __getOwnPropNames = Object.getOwnPropertyNames;
 var __getProtoOf = Object.getPrototypeOf;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
 var __commonJS = (cb, mod) => function __require() {
-  try {
-    return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
-  } catch (e) {
-    throw mod = 0, e;
-  }
+  return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
 };
 var __copyProps = (to, from, except, desc) => {
   if (from && typeof from === "object" || typeof from === "function") {
@@ -86,14 +82,14 @@ var require_ipaddr = __commonJS({
         if (string[string.length - 1] === ":") {
           string = string.slice(0, -1);
         }
-        parts = (function() {
+        parts = function() {
           const ref = string.split(":");
           const results = [];
           for (let i = 0; i < ref.length; i++) {
             results.push(parseInt(ref[i], 16));
           }
           return results;
-        })();
+        }();
         return {
           parts,
           zoneId
@@ -137,7 +133,7 @@ var require_ipaddr = __commonJS({
         return part;
       }
       const ipaddr2 = {};
-      ipaddr2.IPv4 = (function() {
+      ipaddr2.IPv4 = function() {
         function IPv4(octets) {
           if (octets.length !== 4) {
             throw new Error("ipaddr: ipv4 octet count should be 4");
@@ -251,7 +247,7 @@ var require_ipaddr = __commonJS({
           return this.octets.join(".");
         };
         return IPv4;
-      })();
+      }();
       ipaddr2.IPv4.broadcastAddressFromCIDR = function(string) {
         try {
           const cidr = this.parseCIDR(string);
@@ -344,7 +340,7 @@ var require_ipaddr = __commonJS({
       ipaddr2.IPv4.parser = function(string) {
         let match, part, value;
         if (match = string.match(ipv4Regexes.fourOctet)) {
-          return (function() {
+          return function() {
             const ref = match.slice(1, 6);
             const results = [];
             for (let i = 0; i < ref.length; i++) {
@@ -352,22 +348,22 @@ var require_ipaddr = __commonJS({
               results.push(parseIntAuto(part));
             }
             return results;
-          })();
+          }();
         } else if (match = string.match(ipv4Regexes.longValue)) {
           value = parseIntAuto(match[1]);
           if (value > 4294967295 || value < 0) {
             throw new Error("ipaddr: address outside defined range");
           }
-          return (function() {
+          return function() {
             const results = [];
             let shift;
             for (shift = 0; shift <= 24; shift += 8) {
               results.push(value >> shift & 255);
             }
             return results;
-          })().reverse();
+          }().reverse();
         } else if (match = string.match(ipv4Regexes.twoOctet)) {
-          return (function() {
+          return function() {
             const ref = match.slice(1, 4);
             const results = [];
             value = parseIntAuto(ref[1]);
@@ -379,9 +375,9 @@ var require_ipaddr = __commonJS({
             results.push(value >> 8 & 255);
             results.push(value & 255);
             return results;
-          })();
+          }();
         } else if (match = string.match(ipv4Regexes.threeOctet)) {
-          return (function() {
+          return function() {
             const ref = match.slice(1, 5);
             const results = [];
             value = parseIntAuto(ref[2]);
@@ -393,7 +389,7 @@ var require_ipaddr = __commonJS({
             results.push(value >> 8 & 255);
             results.push(value & 255);
             return results;
-          })();
+          }();
         } else {
           return null;
         }
@@ -415,7 +411,7 @@ var require_ipaddr = __commonJS({
         }
         return new this(octets);
       };
-      ipaddr2.IPv6 = (function() {
+      ipaddr2.IPv6 = function() {
         function IPv6(parts, zoneId) {
           let i, part;
           if (parts.length === 16) {
@@ -562,13 +558,13 @@ var require_ipaddr = __commonJS({
           return bytes;
         };
         IPv6.prototype.toFixedLengthString = function() {
-          const addr = (function() {
+          const addr = function() {
             const results = [];
             for (let i = 0; i < this.parts.length; i++) {
               results.push(padPart(this.parts[i].toString(16), 4));
             }
             return results;
-          }).call(this).join(":");
+          }.call(this).join(":");
           let suffix = "";
           if (this.zoneId) {
             suffix = `%${this.zoneId}`;
@@ -585,13 +581,13 @@ var require_ipaddr = __commonJS({
           return new ipaddr2.IPv4([high >> 8, high & 255, low >> 8, low & 255]);
         };
         IPv6.prototype.toNormalizedString = function() {
-          const addr = (function() {
+          const addr = function() {
             const results = [];
             for (let i = 0; i < this.parts.length; i++) {
               results.push(this.parts[i].toString(16));
             }
             return results;
-          }).call(this).join(":");
+          }.call(this).join(":");
           let suffix = "";
           if (this.zoneId) {
             suffix = `%${this.zoneId}`;
@@ -619,7 +615,7 @@ var require_ipaddr = __commonJS({
           return this.toRFC5952String();
         };
         return IPv6;
-      })();
+      }();
       ipaddr2.IPv6.broadcastAddressFromCIDR = function(string) {
         try {
           const cidr = this.parseCIDR(string);
@@ -1020,6 +1016,12 @@ function safeProtocol(u) {
     return "";
   }
 }
+function redactUserinfo(value) {
+  if (typeof value !== "string") {
+    return String(value);
+  }
+  return value.replace(/\/\/[^/?#]*@/g, "//<redacted>@");
+}
 var CREDENTIAL_HEADERS = /* @__PURE__ */ new Set([
   "authorization",
   "cookie",
@@ -1136,7 +1138,7 @@ async function loadNodeDnsLookup() {
 }
 function createGuardedFetch(options = {}) {
   const guard = new SsrfGuard(options);
-  return ((input, init) => guard.fetch(input, init));
+  return (input, init) => guard.fetch(input, init);
 }
 function guardedFetch(input, init) {
   return new SsrfGuard(init ?? {}).fetch(input, init);
@@ -1535,12 +1537,6 @@ var PodScopeError = class extends Error {
 };
 var DEFAULT_MAX_REDIRECTS2 = 5;
 var ENCODED_DELIMITER = /%2f|%5c/i;
-function redactUserinfo(value) {
-  if (typeof value !== "string") {
-    return String(value);
-  }
-  return value.replace(/\/\/[^/?#]*@/g, "//<redacted>@");
-}
 function normalizePodBase(base) {
   if (typeof base !== "string" || base.trim().length === 0) {
     throw new PodScopeError("pod base URL must be a non-empty string.");
@@ -1699,10 +1695,58 @@ function createPodScopedFetch(base, options = {}) {
   };
   return scoped;
 }
+
+// src/refuseRedirects.ts
+var RedirectRefusedError = class extends Error {
+  /** The request URL that returned the refused redirect (userinfo redacted). */
+  url;
+  /**
+   * The redirect status. `0` for a browser opaque-redirect, whose real 3xx status is masked by
+   * the Fetch spec's response filtering (the wrapper still refuses it).
+   */
+  status;
+  /**
+   * The `Location` header (userinfo redacted), when readable — `undefined` for a browser
+   * opaque-redirect (whose headers are stripped) or a redirect with no `Location`.
+   */
+  location;
+  constructor(message2, detail) {
+    super(message2, detail.cause !== void 0 ? { cause: detail.cause } : void 0);
+    this.name = "RedirectRefusedError";
+    this.url = detail.url;
+    this.status = detail.status;
+    this.location = detail.location;
+  }
+};
+function refuseRedirects(fetch = globalThis.fetch) {
+  const wrapped = async (input, init) => {
+    const { url, init: effectiveInit } = normalizeRequest(input, init);
+    const res = await fetch(url, { ...effectiveInit ?? {}, redirect: "manual" });
+    const opaqueRedirect = res.type === "opaqueredirect";
+    if (opaqueRedirect || isRedirect(res.status)) {
+      const location = opaqueRedirect ? void 0 : res.headers.get("location") ?? void 0;
+      try {
+        await res.body?.cancel();
+      } catch {
+      }
+      const safeUrl = redactUserinfo(url);
+      const safeLocation = location !== void 0 ? redactUserinfo(location) : void 0;
+      const where = opaqueRedirect ? "opaque redirect" : `status ${res.status}`;
+      const to = safeLocation !== void 0 ? ` \u2192 ${safeLocation}` : "";
+      throw new RedirectRefusedError(
+        `Refusing to follow a redirect (${where}${to}) from ${safeUrl}: this fetch refuses redirects for credential safety. Use a follow-capable fetch if a redirect is an expected part of the protocol.`,
+        { url: safeUrl, status: res.status, location: safeLocation }
+      );
+    }
+    return res;
+  };
+  return wrapped;
+}
 export {
   DEFAULT_HOSTNAME_DENYLIST,
   GuardError,
   PodScopeError,
+  RedirectRefusedError,
   SsrfError,
   assertSafeUrl,
   assertWithinPodScope,
@@ -1718,6 +1762,7 @@ export {
   normalizeHostForClassification,
   normalizePodBase,
   podScopedUrl,
-  redactUserinfo
+  redactUserinfo,
+  refuseRedirects
 };
 //# sourceMappingURL=index.js.map
