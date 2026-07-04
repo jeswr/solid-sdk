@@ -236,20 +236,27 @@ export class DiaryStore {
   private purged = false;
 
   /**
-   * In-flight FIRE-AND-FORGET background writes {@link purge} must DRAIN
-   * before its own delete scan (roborev round 3): checking {@link isPurged}
-   * at the top of a write only closes the race for a write that starts
-   * AFTER `purge()` flips the flag. A write already past that check when
-   * `purge()` is called is still in flight — if `purge()`'s scan+delete ran
-   * immediately, that write's `kv.set` could land AFTER the delete and
-   * resurrect the key. `purge()` awaits every write registered here before
-   * scanning, so a write already under way is guaranteed to settle first.
-   * Only the two BACKGROUND, unawaited-by-their-caller writers register here
-   * (`putTriggerClass`/`putSafetyContext` — `useInsights`/
-   * `useSafetyContextCache` both fire them without awaiting, by design, so
-   * they can't block the paint); every other write method here is always
-   * awaited by its own caller before that caller does anything else, so
-   * there is no OTHER dangling write for a purge to race today.
+   * Every in-flight write {@link purge} must DRAIN before its own delete scan
+   * (roborev rounds 3 + 4): checking {@link isPurged} at the top of a write
+   * only closes the race for a write that starts AFTER `purge()` flips the
+   * flag. A write already past that check when `purge()` is called is still
+   * in flight — if `purge()`'s scan+delete ran immediately, that write's
+   * `kv.set`/`kv.del` could land AFTER the delete and resurrect the key.
+   * `purge()` awaits every write registered here before scanning, so a write
+   * already under way is guaranteed to settle first.
+   *
+   * EVERY mutating method on this class registers here via the shared
+   * {@link write} wrapper — not just the two originally-fixed background
+   * writers (`putTriggerClass`/`putSafetyContext`). Round 3 scoped the fix to
+   * those two because they are the only FIRE-AND-FORGET callers (`useInsights`
+   * and the `SafetyContextForm` checkbox handlers both fire them without
+   * awaiting, by design, so they can't block the paint) — but round 4's
+   * review correctly generalised the concern: the same optimistic-write
+   * outbox pattern (`markMealSync`/`markSymptomSync`/protocol/conclusion/
+   * genetic sync updates) is ALSO not guaranteed to be awaited by every
+   * caller across the app's lifetime (a background reconcile pass is a
+   * plausible future — or already-latent — source of the identical race), so
+   * ALL of them now go through the same fail-closed + drained path.
    */
   private readonly pendingWrites = new Set<Promise<unknown>>();
 
@@ -286,6 +293,22 @@ export class DiaryStore {
   }
 
   /**
+   * The FAIL-CLOSED + DRAINED wrapper every mutating call in this class goes
+   * through (roborev round 4 — generalised from the two-method fix in round 3
+   * to every write path, since the same TOCTOU applies to `putMeal`/
+   * `markMealSync`/protocol/conclusion/genetic writes too: any of them can be
+   * in flight — via the optimistic-write reconcile flow — when a logout
+   * fires). `op` is called SYNCHRONOUSLY (its `kv.set`/`kv.del` call returns a
+   * promise immediately, before any `await`), so the `isPurged()` check and
+   * the `trackWrite` registration are one atomic synchronous unit — nothing
+   * can interleave a `purge()` call between them.
+   */
+  private async write(op: () => Promise<void>): Promise<void> {
+    if (this.purged) return;
+    await this.trackWrite(op());
+  }
+
+  /**
    * The scope-wide key prefix covering EVERY kind for this account's WebID. The
    * trailing `|` delimiter — which `encodeURIComponent` never emits (it escapes
    * `|` to `%7C`) — makes this an exact, collision-free scope boundary: one
@@ -308,10 +331,10 @@ export class DiaryStore {
   }
 
   async putMeal(meal: StoredMeal): Promise<void> {
-    await this.kv.set(this.key("meal", meal.ulid), meal);
+    await this.write(() => this.kv.set(this.key("meal", meal.ulid), meal));
   }
   async putSymptom(symptom: StoredSymptom): Promise<void> {
-    await this.kv.set(this.key("symptom", symptom.ulid), symptom);
+    await this.write(() => this.kv.set(this.key("symptom", symptom.ulid), symptom));
   }
 
   async allMeals(): Promise<StoredMeal[]> {
@@ -383,7 +406,7 @@ export class DiaryStore {
   // --- protocols (Phase 2B) — updated in place across the lifetime -------------
 
   async putProtocol(protocol: StoredProtocol): Promise<void> {
-    await this.kv.set(this.key("protocol", protocol.ulid), protocol);
+    await this.write(() => this.kv.set(this.key("protocol", protocol.ulid), protocol));
   }
   async getProtocol(ulid: string): Promise<StoredProtocol | undefined> {
     return (await this.kv.get<StoredProtocol>(this.key("protocol", ulid))) ?? undefined;
@@ -401,13 +424,13 @@ export class DiaryStore {
     if (!p) return;
     p.sync = sync;
     p.error = sync === "error" ? error : undefined;
-    await this.kv.set(this.key("protocol", ulid), p);
+    await this.write(() => this.kv.set(this.key("protocol", ulid), p));
   }
 
   // --- conclusions (Phase 2B) --------------------------------------------------
 
   async putConclusion(conclusion: StoredConclusion): Promise<void> {
-    await this.kv.set(this.key("conclusion", conclusion.ulid), conclusion);
+    await this.write(() => this.kv.set(this.key("conclusion", conclusion.ulid), conclusion));
   }
   /** All conclusions, newest-created first. */
   async allConclusions(): Promise<StoredConclusion[]> {
@@ -422,7 +445,7 @@ export class DiaryStore {
     if (!c) return;
     c.sync = sync;
     c.error = sync === "error" ? error : undefined;
-    await this.kv.set(this.key("conclusion", ulid), c);
+    await this.write(() => this.kv.set(this.key("conclusion", ulid), c));
   }
 
   // --- genetics (Phase 3c) — a SINGLE latest-state record, most-sensitive --------
@@ -431,7 +454,7 @@ export class DiaryStore {
   private static readonly GENETIC_ID = "summary";
 
   async putGeneticSummary(summary: StoredGeneticSummary): Promise<void> {
-    await this.kv.set(this.key("genetic", DiaryStore.GENETIC_ID), summary);
+    await this.write(() => this.kv.set(this.key("genetic", DiaryStore.GENETIC_ID), summary));
   }
   async getGeneticSummary(): Promise<StoredGeneticSummary | undefined> {
     return (
@@ -441,7 +464,7 @@ export class DiaryStore {
   }
   /** Delete the cached genetic summary (e.g. on an explicit user-initiated removal). */
   async deleteGeneticSummary(): Promise<void> {
-    await this.kv.del(this.key("genetic", DiaryStore.GENETIC_ID));
+    await this.write(() => this.kv.del(this.key("genetic", DiaryStore.GENETIC_ID)));
   }
   /**
    * Mark the sync state of the genetic summary — but ONLY if the stored record is
@@ -456,7 +479,7 @@ export class DiaryStore {
     if (!g || g.rev !== expectedRev) return; // replaced in flight — ignore the stale completion
     g.sync = sync;
     g.error = sync === "error" ? error : undefined;
-    await this.kv.set(this.key("genetic", DiaryStore.GENETIC_ID), g);
+    await this.write(() => this.kv.set(this.key("genetic", DiaryStore.GENETIC_ID), g));
   }
 
   // --- learned trigger lag profiles (Insights richer-UI follow-up) -------------
@@ -474,8 +497,7 @@ export class DiaryStore {
    * own scan+delete — together these close the race in both directions.
    */
   async putTriggerClass(triggerClass: StoredTriggerClass): Promise<void> {
-    if (this.purged) return;
-    await this.trackWrite(this.kv.set(this.key("triggerClass", triggerClass.slug), triggerClass));
+    await this.write(() => this.kv.set(this.key("triggerClass", triggerClass.slug), triggerClass));
   }
   /** All locally-learned trigger classes for this account. */
   async allTriggerClasses(): Promise<StoredTriggerClass[]> {
@@ -496,8 +518,7 @@ export class DiaryStore {
    * (`SafetyContextForm`) fire this without awaiting it either.
    */
   async putSafetyContext(ctx: StoredSafetyContext): Promise<void> {
-    if (this.purged) return;
-    await this.trackWrite(this.kv.set(this.key("safetyContext", DiaryStore.SAFETY_CONTEXT_ID), ctx));
+    await this.write(() => this.kv.set(this.key("safetyContext", DiaryStore.SAFETY_CONTEXT_ID), ctx));
   }
   /** Read back the persisted safety-context inputs, if any were ever saved. */
   async getSafetyContext(): Promise<StoredSafetyContext | undefined> {
@@ -582,13 +603,13 @@ export class DiaryStore {
     if (!meal) return;
     meal.sync = sync;
     meal.error = sync === "error" ? error : undefined;
-    await this.kv.set(this.key("meal", ulid), meal);
+    await this.write(() => this.kv.set(this.key("meal", ulid), meal));
   }
   async markSymptomSync(ulid: string, sync: SyncState, error?: string): Promise<void> {
     const symptom = await this.kv.get<StoredSymptom>(this.key("symptom", ulid));
     if (!symptom) return;
     symptom.sync = sync;
     symptom.error = sync === "error" ? error : undefined;
-    await this.kv.set(this.key("symptom", ulid), symptom);
+    await this.write(() => this.kv.set(this.key("symptom", ulid), symptom));
   }
 }

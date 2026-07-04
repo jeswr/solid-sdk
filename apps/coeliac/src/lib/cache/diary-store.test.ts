@@ -408,6 +408,50 @@ describe("DiaryStore.purge (logout privacy purge)", () => {
     expect(await s.allTriggerClasses()).toEqual([]);
   });
 
+  it("the same drain applies to EVERY write method (roborev round 4 — generalised beyond the two originally-fixed methods)", async () => {
+    // putMeal (a plain put) and markMealSync (a read-then-write, part of the
+    // optimistic-write outbox reconcile path) both now go through the shared
+    // `write()` wrapper — prove the drain closes the race for these too, not
+    // just `putTriggerClass`/`putSafetyContext`.
+    const gate = deferred<void>();
+    const gatedKv = new GatedSetKv(new MemoryKv(), gate.promise);
+    const s = new DiaryStore(gatedKv, "https://alice.example/#me");
+
+    const meal = {
+      kind: "meal" as const,
+      ulid: "m1",
+      url: `${ROOT}health/diary/meals/m1.ttl`,
+      startTime: "2026-07-01T08:00:00.000Z",
+      createdAt: "2026-07-01T08:00:00.000Z",
+      items: [{ name: "Toast" }],
+      exposures: [],
+      signature: "n:toast",
+      label: "Toast",
+      sync: "pending" as const,
+    };
+
+    const writing = s.putMeal(meal);
+    const purging = s.purge();
+    let purgeSettled = false;
+    void purging.then(() => {
+      purgeSettled = true;
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(purgeSettled).toBe(false); // still draining the gated putMeal write
+
+    gate.resolve();
+    await writing;
+    await purging;
+    expect(await s.allMeals()).toEqual([]);
+
+    // A FRESH write attempted AFTER purge() has completed is fail-closed —
+    // `isPurged()` is now `true`, so it silently no-ops rather than writing.
+    await s.putMeal({ ...meal, ulid: "m2" });
+    expect(await s.allMeals()).toEqual([]);
+  });
+
   it("attempts every key and rejects (with a count) if the backing del fails", async () => {
     // A Kv whose del always rejects — purge must still ATTEMPT all keys (best-effort
     // total), then reject reporting the failure so the caller can surface it.
