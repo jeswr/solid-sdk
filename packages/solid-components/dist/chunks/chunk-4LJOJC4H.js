@@ -12828,18 +12828,32 @@ var DataWriter = class {
    * {@link WriteScopeError} so a write is REFUSED (never silently unscoped) when the guard
    * cannot load.
    *
-   * SHAPE-VALIDATED (roborev Low @ 6c11868): the imported module is UNTRUSTED beyond its
-   * TypeScript type — `import(...) as PodScopePrimitive` is a compile-time-only cast, so an
-   * incompatible installed peer version (a renamed/removed export, a shape change) would
-   * otherwise surface as a raw `TypeError` deep in `#assertWithinScope` the first time the
-   * write path calls a missing/non-function member, rather than the fail-closed
-   * `WriteScopeError` every other guard failure produces. So we verify the two members we
-   * actually use are the right RUNTIME shape — `assertWithinPodScope` a function,
-   * `PodScopeError` a constructor (`typeof === "function"`, which covers both plain
-   * functions and classes) — and throw a plain `Error` on a mismatch. That `Error` is caught
-   * by `#assertWithinScope`'s existing load try/catch and turned into a `WriteScopeError`
-   * (never a bare `TypeError`), so an incompatible peer fails the write closed with a clear
-   * message instead of throwing something a caller might mistake for an unrelated bug.
+   * SHAPE-VALIDATED (roborev Low @ 6c11868, hardened in review round 2): the imported
+   * module is UNTRUSTED beyond its TypeScript type — `import(...) as PodScopePrimitive`
+   * is a compile-time-only cast, so an incompatible installed peer version (a
+   * renamed/removed export, a shape change) would otherwise surface as a raw
+   * `TypeError` deep in `#assertWithinScope` the first time the write path calls a
+   * missing/non-function member, rather than the fail-closed `WriteScopeError` every
+   * other guard failure produces. So we verify the two members we actually use are the
+   * right RUNTIME shape before caching them, and throw a plain `Error` on a mismatch —
+   * caught by `#assertWithinScope`'s existing load try/catch and turned into a
+   * `WriteScopeError` (never a bare `TypeError`).
+   *
+   * `assertWithinPodScope`: `typeof === "function"` is sufficient — it is only ever
+   * CALLED, never used as the right-hand side of `instanceof`.
+   *
+   * `PodScopeError`: `typeof === "function"` alone is NOT sufficient (round-2 roborev
+   * finding) — `#assertWithinScope`'s catch handler does
+   * `err instanceof podScope.PodScopeError`, and `instanceof` throws a bare `TypeError`
+   * ("Function has non-object prototype … in instanceof check") when the right-hand
+   * side is a function with no constructible `.prototype` (an arrow function, or a
+   * function whose `.prototype` was deleted/reassigned to a primitive) — exactly the
+   * bare-TypeError failure mode this fix exists to close. A regular function/class
+   * always has an OWN `.prototype` that is an object; an arrow function has none. So
+   * we additionally require `.prototype` to be a non-null object. Belt-and-braces:
+   * `#assertWithinScope` ALSO wraps its `instanceof` check in a try/catch (defense in
+   * depth — this check is the primary guard, that one covers any shape this static
+   * check doesn't anticipate, e.g. a Proxy that lies about its own `.prototype`).
    */
   async #loadPodScope() {
     if (!this.#podScope) {
@@ -12849,7 +12863,7 @@ var DataWriter = class {
           `incompatible @jeswr/guarded-fetch peer: assertWithinPodScope is not a function (got ${typeof mod.assertWithinPodScope})`
         );
       }
-      if (typeof mod.PodScopeError !== "function") {
+      if (typeof mod.PodScopeError !== "function" || typeof mod.PodScopeError.prototype !== "object" || mod.PodScopeError.prototype === null) {
         throw new Error(
           `incompatible @jeswr/guarded-fetch peer: PodScopeError is not a constructor (got ${typeof mod.PodScopeError})`
         );
@@ -13083,11 +13097,17 @@ var DataWriter = class {
     try {
       return podScope.assertWithinPodScope(containerBase, target, { allowRoot: false });
     } catch (err) {
-      const reason = err instanceof podScope.PodScopeError ? err.message : String(err);
-      throw new WriteScopeError(target, reason);
+      throw new WriteScopeError(target, podScopeErrorReason(err, podScope.PodScopeError));
     }
   }
 };
+function podScopeErrorReason(err, podScopeErrorCtor) {
+  try {
+    return err instanceof podScopeErrorCtor ? err.message : String(err);
+  } catch {
+    return String(err);
+  }
+}
 async function applyMutator(graph, resourceUrl, mutate) {
   const returned = await mutate(graph, resourceUrl);
   return returned instanceof N3Store ? returned : graph;

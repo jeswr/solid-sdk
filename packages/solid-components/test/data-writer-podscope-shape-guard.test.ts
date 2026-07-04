@@ -113,6 +113,36 @@ describe("DataWriter#loadPodScope — incompatible @jeswr/guarded-fetch peer sha
     vi.resetModules();
   });
 
+  it("PodScopeError a non-constructible function (arrow fn) → fail-closed WriteScopeError, not a bare TypeError", async () => {
+    // Round-2 roborev finding: `typeof === "function"` alone does not prove
+    // constructibility. An arrow function passes that check but has no `.prototype`,
+    // so `err instanceof podScope.PodScopeError` throws a bare TypeError
+    // ("Function has non-object prototype … in instanceof check") the moment the
+    // scope guard rejects anything — exactly the failure mode this fix closes.
+    vi.doMock("@jeswr/guarded-fetch", () => ({
+      assertWithinPodScope: () => {
+        throw new Error("out of scope");
+      },
+      PodScopeError: (message: string) => new Error(message), // arrow fn: no .prototype
+    }));
+    vi.resetModules();
+    const { DataWriter: FreshDataWriter, WriteScopeError: FreshWriteScopeError } = await import(
+      "../src/data-writer.js"
+    );
+    const fetch = unusedFetch();
+    const dw = new FreshDataWriter({
+      fetch: fetch as unknown as typeof globalThis.fetch,
+      base: "https://alice.example/tasks/",
+    });
+
+    await expect(
+      dw.saveMerged("https://alice.example/tasks/1", setTitle("X")),
+    ).rejects.toBeInstanceOf(FreshWriteScopeError);
+    expect(fetch).not.toHaveBeenCalled();
+    vi.doUnmock("@jeswr/guarded-fetch");
+    vi.resetModules();
+  });
+
   it("the WriteScopeError message names the incompatible peer, not a bare TypeError", async () => {
     vi.doMock("@jeswr/guarded-fetch", () => ({
       assertWithinPodScope: undefined,
