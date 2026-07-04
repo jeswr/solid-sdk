@@ -1,30 +1,10 @@
 import { type SessionStore } from "@jeswr/solid-session-restore";
 import type { AuthorizationCodeFlow, GetCodeCallback } from "@solid/reactive-authentication";
 import type { LoginController } from "../login-controller.js";
-/** A WebID's profile advertises several OIDC issuers; the host must choose one. */
-export declare class AmbiguousIssuerError extends Error {
-    readonly webId: string;
-    readonly issuers: string[];
-    constructor(webId: string, issuers: string[]);
-}
-/** A WebID's profile has no `solid:oidcIssuer` — it cannot be used for Solid login. */
-export declare class NoSolidIssuerError extends Error {
-    readonly webId: string;
-    constructor(webId: string);
-}
-/** The supplied input is not a usable WebID URL. */
-export declare class InvalidWebIdError extends Error {
-    constructor(input: string, reason: string);
-}
-/**
- * `login()` was called but no `authFlow` (the interactive popup driver) was supplied
- * at construction. `authFlow` is OPTIONAL — a restore-only consumer can omit it — but
- * the INTERACTIVE login flow needs it to drive the authorization-code popup. Construct
- * the controller with an `authFlow` to use `login()`.
- */
-export declare class MissingAuthFlowError extends Error {
-    constructor();
-}
+import { AmbiguousIssuerError, InvalidWebIdError, MissingAuthFlowError, NoSolidIssuerError } from "./errors.js";
+import { computeAllowedOrigins, htuOf, isOriginAllowed, validateWebId } from "./origin.js";
+import { isUseDpopNonceChallenge, parseWwwAuthenticate } from "./www-authenticate.js";
+export { AmbiguousIssuerError, InvalidWebIdError, MissingAuthFlowError, NoSolidIssuerError };
 /** Pick one issuer from several advertised on a profile (the user chooses). */
 export type ChooseIssuerCallback = (issuers: string[], webId: string) => Promise<string>;
 /** Options for {@link createReactiveAuthController}. */
@@ -136,79 +116,8 @@ export interface ReactiveAuthControllerOptions {
      */
     publicFetch?: typeof fetch;
 }
-/** How {@link computeAllowedOrigins} derives the default WebID/issuer origins. */
-export interface AllowedOriginsInputs {
-    /** Explicit allowed resource origins (any URL; compared by `origin`). */
-    allowedOrigins?: string[];
-    /** The authenticated WebID (its origin is included unless disabled). */
-    webId?: string;
-    /** The issuer URL (its origin is included unless disabled). */
-    issuer?: string;
-    /** Include the WebID's origin. Default true. */
-    includeWebIdOrigin?: boolean;
-    /** Include the issuer's origin. Default true. */
-    includeIssuerOrigin?: boolean;
-    /**
-     * Allow `http:` origins for LOOPBACK hosts only (dev). Default false: every
-     * non-`https:` origin is dropped, so the token is never attached over cleartext.
-     */
-    allowInsecureLoopback?: boolean;
-}
-/**
- * The set of resource origins a session token may be attached to — the credential
- * boundary the token provider enforces. PURE + exported so the boundary is
- * unit-tested. CLEARTEXT GUARD: a non-`https:` origin is DROPPED (so a configured
- * `http:` allowedOrigin can't make the DPoP token ride over cleartext), EXCEPT a
- * loopback `http:` origin when `allowInsecureLoopback` is set (dev). Fail-closed: an
- * unparseable entry is skipped; an empty result means the token is attached to NOTHING.
- */
-export declare function computeAllowedOrigins(inputs: AllowedOriginsInputs): ReadonlySet<string>;
-/**
- * Whether a request URL targets an allowed origin (the per-request credential
- * gate). PURE + exported. Fail-closed: an unparseable URL is never allowed.
- */
-export declare function isOriginAllowed(allowed: ReadonlySet<string>, requestUrl: string): boolean;
-/**
- * The DPoP `htu` claim for a request URL — the request URI WITHOUT its query and
- * fragment (RFC 9449 §4.2). PURE + exported. If the URL is unparseable it is
- * returned unchanged (the proof generator then sees the raw string).
- */
-export declare function htuOf(requestUrl: string): string;
-/**
- * Whether a 401 response is a PURE DPoP-nonce challenge — i.e. its `WWW-Authenticate`
- * carries the DPoP scheme with `error="use_dpop_nonce"` (RFC 9449 §8). PURE + exported
- * for testing.
- *
- * This is deliberately CONSERVATIVE: it returns true ONLY when the server explicitly
- * says the token was fine and only the nonce was missing. Any OTHER error (e.g.
- * `invalid_token`, expired/revoked) — or no DPoP `error` token at all — returns false,
- * so the caller force-refreshes the access token instead of looping on a stale one even
- * when the server ALSO rotated the `DPoP-Nonce`. We match the `DPoP` auth-scheme
- * challenge specifically; a `Bearer …` challenge that happens to mention the string is
- * not treated as a DPoP nonce challenge.
- */
-export declare function isUseDpopNonceChallenge(response: Response): boolean;
-/**
- * Parse a `WWW-Authenticate` header into its individual challenges, each with its scheme
- * and a QUOTE-AWARE map of its top-level auth-params. PURE + exported for testing.
- *
- * The grammar (RFC 9110 §11.6.1) is comma-ambiguous: commas separate BOTH auth-params
- * within a challenge AND challenges from each other; auth-params allow optional whitespace
- * around `=` (BWS); and a quoted value may itself contain commas/`=`/scheme-like words. We
- * tokenise character-by-character into atoms (a bare word, a quoted string, or a standalone
- * `=`), then walk those atoms into challenges (see the internal `tokenizeChallengeHeader`
- * and `walkChallengeAtoms` helpers). Param VALUES are unquoted (quotes stripped, escapes
- * resolved). Odd input degrades safely (the caller is conservative — only an UNAMBIGUOUS
- * DPoP `error="use_dpop_nonce"` is acted on).
- *
- * The return type is written as the INLINE structural shape (not the internal `Challenge`
- * alias) so the published `.d.ts` — and the api-extractor report — stay byte-identical to
- * the pre-refactor signature: this decomposition changes structure, never the contract.
- */
-export declare function parseWwwAuthenticate(header: string): {
-    scheme: string;
-    params: Map<string, string>;
-}[];
+export type { AllowedOriginsInputs } from "./origin.js";
+export { computeAllowedOrigins, htuOf, isOriginAllowed, isUseDpopNonceChallenge, parseWwwAuthenticate, validateWebId, };
 /**
  * Build a {@link LoginController} that wires @solid/reactive-authentication +
  * @jeswr/solid-session-restore for <jeswr-login-panel>. Constructing this captures
@@ -216,15 +125,6 @@ export declare function parseWwwAuthenticate(header: string): {
  * is guaranteed credential-free.
  */
 export declare function createReactiveAuthController(options: ReactiveAuthControllerOptions): LoginController;
-/**
- * Validate user input as a WebID: it must parse as a URL and be **`https:`** —
- * because the WebID's origin is added to the credential boundary (the session's
- * DPoP token may be attached to it), so a cleartext `http:` WebID would let the
- * token be sent over plaintext. `http:` is allowed ONLY for a loopback host
- * (`localhost`/`127.0.0.1`/`[::1]`) and ONLY when `allowInsecureLoopback` is set
- * (dev CSS over HTTP) — every other `http:` WebID is rejected.
- */
-export declare function validateWebId(input: string, allowInsecureLoopback?: boolean): string;
 export type { LoginController, LoginResult, RecentLoginAccount, RestoreOutcome, } from "../login-controller.js";
 export type { InstallProactiveAuthFetchOptions, ProactiveAllowedOriginsInputs, ProactiveFetchConfig, ProactiveFetchInstall, ProactiveFetchState, ProactiveTokenProvider, } from "./proactive-fetch.js";
 export { __resetProactiveFetchForTests, deriveProactiveAllowedOrigins, installProactiveAuthFetch, isProviderOAuthRequest, isReactiveAuthResetError, proactiveAuthenticatedFetch, } from "./proactive-fetch.js";
