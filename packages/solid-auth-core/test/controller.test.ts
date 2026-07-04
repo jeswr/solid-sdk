@@ -180,6 +180,16 @@ let discoveryNoPkceMetadata = false;
 // retry then succeeds). `grantCalls` counts the attempts.
 let dpopNonceOnFirstGrant = false;
 let grantCalls = 0;
+// What the mocked dynamic registration returns (a test overrides it to simulate an
+// OP that mints a CONFIDENTIAL client despite the requested `none` — RFC 7591 lets
+// it). Reset to the public default in beforeEach.
+let dynamicClientResponse: Record<string, unknown> = {
+  client_id: "dynamic-client-id",
+  token_endpoint_auth_method: "none",
+};
+// The clientAuth argument the code exchange was called with (tagged by the mocked
+// None/ClientSecretBasic/ClientSecretPost helpers below).
+let lastClientAuth: unknown;
 
 vi.mock("oauth4webapi", () => {
   // A named error class so the throw in validateAuthResponse and the `instanceof`
@@ -199,7 +209,9 @@ vi.mock("oauth4webapi", () => {
     allowInsecureRequests,
     customFetch,
     nopkce: Symbol("nopkce"),
-    None: () => () => {},
+    None: () => ({ kind: "none" }),
+    ClientSecretBasic: (secret: string) => ({ kind: "client_secret_basic", secret }),
+    ClientSecretPost: (secret: string) => ({ kind: "client_secret_post", secret }),
     // The DPoP handle exposes calculateThumbprint() — the source uses it for the
     // `dpop_jkt` authorization-request parameter (RFC 9449 §10 code binding).
     DPoP: () => ({ calculateThumbprint: async () => dpopThumbprint }),
@@ -223,10 +235,7 @@ vi.mock("oauth4webapi", () => {
       lastRegistrationMetadata = metadata as Record<string, unknown>;
       return new Response();
     }),
-    processDynamicClientRegistrationResponse: vi.fn(async () => ({
-      client_id: "dynamic-client-id",
-      token_endpoint_auth_method: "none",
-    })),
+    processDynamicClientRegistrationResponse: vi.fn(async () => ({ ...dynamicClientResponse })),
     validateAuthResponse: (_as: unknown, _client: unknown, url: URL) => {
       // Mirror oauth4webapi: a callback URL carrying `error=...` throws an
       // AuthorizationResponseError with that error (so needsInteraction can react).
@@ -234,7 +243,8 @@ vi.mock("oauth4webapi", () => {
       if (error) throw new AuthorizationResponseError(error);
       return new URLSearchParams({ code: "authcode", state: "state" });
     },
-    authorizationCodeGrantRequest: vi.fn(async () => {
+    authorizationCodeGrantRequest: vi.fn(async (_as, _client, clientAuth) => {
+      lastClientAuth = clientAuth;
       if (tokenDelay) await tokenDelay();
       // First call throws a DPoP-nonce error when the test asks; the retry succeeds.
       if (dpopNonceOnFirstGrant && grantCalls === 0) {
@@ -287,6 +297,8 @@ const authFlow = {
 
 beforeEach(() => {
   lastRegistrationMetadata = undefined;
+  dynamicClientResponse = { client_id: "dynamic-client-id", token_endpoint_auth_method: "none" };
+  lastClientAuth = undefined;
   webIdClaim = "https://alice.pod.example/profile/card#me";
   agentIssuer = "https://idp.example/";
   agentIssuers = undefined;
@@ -3431,5 +3443,154 @@ describe("createSolidAuth — resource-server DPoP nonce (RFC 9449 §8, Medium f
     // The DPoP challenge said invalid_token → forced a refresh (not a pure nonce skip).
     expect(refreshGrantCalls).toBe(1);
     expect(recordedAuthHeader).toBe("DPoP refreshed-access-token");
+  });
+});
+
+describe("createSolidAuth — confidential dynamic registrations (roborev Medium fix)", () => {
+  // RFC 7591 lets the OP override the requested `token_endpoint_auth_method: "none"`
+  // and mint a CONFIDENTIAL client. The code exchange must then authenticate as the
+  // client the OP actually minted, and the method+secret must be PERSISTED so the
+  // silent-restore refresh grant can redeem the (client-bound, RFC 6749 §6) refresh
+  // token as the same client. Previously the exchange always used None() and persist
+  // dropped the credentials — login failed against such OPs, and restore was broken.
+
+  it("uses client_secret_basic on the code exchange and persists method+secret when the OP mints a basic confidential client", async () => {
+    dynamicClientResponse = {
+      client_id: "dyn-confidential",
+      token_endpoint_auth_method: "client_secret_basic",
+      client_secret: "s3cret",
+    };
+    const store = new RecordingStore();
+    const controller = createSolidAuth({
+      authFlow,
+      callbackUri: "https://app.example/callback",
+      store,
+      publicFetch: ok200RecordingFetch(),
+    });
+    await controller.login("https://alice.pod.example/profile/card#me");
+    expect(lastClientAuth).toEqual({ kind: "client_secret_basic", secret: "s3cret" });
+    const persisted = store.map.get("https://idp.example/");
+    expect(persisted?.clientId).toBe("dyn-confidential");
+    expect(persisted?.tokenEndpointAuthMethod).toBe("client_secret_basic");
+    expect(persisted?.clientSecret).toBe("s3cret");
+  });
+
+  it("uses client_secret_post when the OP says so", async () => {
+    dynamicClientResponse = {
+      client_id: "dyn-post",
+      token_endpoint_auth_method: "client_secret_post",
+      client_secret: "post-secret",
+    };
+    const store = new RecordingStore();
+    const controller = createSolidAuth({
+      authFlow,
+      callbackUri: "https://app.example/callback",
+      store,
+      publicFetch: ok200RecordingFetch(),
+    });
+    await controller.login("https://alice.pod.example/profile/card#me");
+    expect(lastClientAuth).toEqual({ kind: "client_secret_post", secret: "post-secret" });
+    expect(store.map.get("https://idp.example/")?.tokenEndpointAuthMethod).toBe(
+      "client_secret_post",
+    );
+    expect(store.map.get("https://idp.example/")?.clientSecret).toBe("post-secret");
+  });
+
+  it("treats a secret-issuing registration with NO stated method as client_secret_basic (the RFC 7591 default)", async () => {
+    dynamicClientResponse = { client_id: "dyn-default", client_secret: "defaulted" };
+    const store = new RecordingStore();
+    const controller = createSolidAuth({
+      authFlow,
+      callbackUri: "https://app.example/callback",
+      store,
+      publicFetch: ok200RecordingFetch(),
+    });
+    await controller.login("https://alice.pod.example/profile/card#me");
+    expect(lastClientAuth).toEqual({ kind: "client_secret_basic", secret: "defaulted" });
+    expect(store.map.get("https://idp.example/")?.tokenEndpointAuthMethod).toBe(
+      "client_secret_basic",
+    );
+  });
+
+  it("a PUBLIC dynamic registration stays None() and persists NO secret (unchanged path)", async () => {
+    const store = new RecordingStore();
+    const controller = createSolidAuth({
+      authFlow,
+      callbackUri: "https://app.example/callback",
+      store,
+      publicFetch: ok200RecordingFetch(),
+    });
+    await controller.login("https://alice.pod.example/profile/card#me");
+    expect(lastClientAuth).toEqual({ kind: "none" });
+    const persisted = store.map.get("https://idp.example/");
+    expect(persisted?.tokenEndpointAuthMethod).toBeUndefined();
+    expect(persisted?.clientSecret).toBeUndefined();
+  });
+
+  it("an explicit `none` WITH a stray secret stays public and the unused secret is NOT persisted", async () => {
+    dynamicClientResponse = {
+      client_id: "dyn-none-stray",
+      token_endpoint_auth_method: "none",
+      client_secret: "stray",
+    };
+    const store = new RecordingStore();
+    const controller = createSolidAuth({
+      authFlow,
+      callbackUri: "https://app.example/callback",
+      store,
+      publicFetch: ok200RecordingFetch(),
+    });
+    await controller.login("https://alice.pod.example/profile/card#me");
+    expect(lastClientAuth).toEqual({ kind: "none" });
+    expect(store.map.get("https://idp.example/")?.clientSecret).toBeUndefined();
+  });
+
+  it("the STATIC clientId path always exchanges as a public client (None)", async () => {
+    const controller = createSolidAuth({
+      authFlow,
+      callbackUri: "https://app.example/callback",
+      clientId: "https://app.example/clientid.jsonld",
+      store: new RecordingStore(),
+      publicFetch: ok200RecordingFetch(),
+    });
+    await controller.login("https://alice.pod.example/profile/card#me");
+    expect(lastClientAuth).toEqual({ kind: "none" });
+  });
+
+  it("rejects an UNSUPPORTED confidential method with a targeted error BEFORE the popup/grant", async () => {
+    dynamicClientResponse = {
+      client_id: "dyn-jwt",
+      token_endpoint_auth_method: "private_key_jwt",
+    };
+    const controller = createSolidAuth({
+      authFlow,
+      callbackUri: "https://app.example/callback",
+      store: new RecordingStore(),
+      publicFetch: ok200RecordingFetch(),
+    });
+    await expect(controller.login("https://alice.pod.example/profile/card#me")).rejects.toThrow(
+      /private_key_jwt.*does not\s+support/s,
+    );
+    // The failure happened pre-grant: the code exchange was never attempted.
+    expect(lastClientAuth).toBeUndefined();
+    // Nothing was persisted for the failed login.
+    expect(grantCalls).toBe(0);
+  });
+
+  it("rejects a confidential method WITHOUT a client_secret (incoherent registration)", async () => {
+    dynamicClientResponse = {
+      client_id: "dyn-broken",
+      token_endpoint_auth_method: "client_secret_basic",
+    };
+    const controller = createSolidAuth({
+      authFlow,
+      callbackUri: "https://app.example/callback",
+      store: new RecordingStore(),
+      publicFetch: ok200RecordingFetch(),
+    });
+    await expect(controller.login("https://alice.pod.example/profile/card#me")).rejects.toThrow(
+      /no client_secret/,
+    );
+    expect(grantCalls).toBe(0);
   });
 });

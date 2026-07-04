@@ -1296,6 +1296,57 @@ var SolidAuthEngine = class {
     return (url, opts) => f(url, opts);
   }
   /**
+   * The token-endpoint client authentication for `client` (the roborev finding —
+   * dynamic registration may return a CONFIDENTIAL client even though we request
+   * `token_endpoint_auth_method: "none"`; RFC 7591 lets the OP override, and its
+   * DEFAULT for a secret-issuing registration is `client_secret_basic`). Always
+   * using `oauth.None()` would fail the code exchange against such an OP, and
+   * dropping the method/secret at persist time would leave the refresh token
+   * unredeemable on restore (the grant must authenticate as the SAME client —
+   * RFC 6749 §6).
+   *
+   * Resolution (kept in lockstep with what @jeswr/solid-session-restore's restore
+   * grant supports — `none` / `client_secret_basic` / `client_secret_post`):
+   *   • no secret + method absent/`none`      → public (`None`), nothing persisted
+   *   • secret + `client_secret_basic`/absent → Basic (7591 default), persisted
+   *   • secret + `client_secret_post`         → Post, persisted
+   *   • secret + explicit `none`              → public; the unused secret is NOT
+   *     persisted (never store a credential the flows won't use)
+   *   • a confidential method WITHOUT a secret, or any UNSUPPORTED method
+   *     (`client_secret_jwt`, `private_key_jwt`, `tls_client_auth`, …) → throw a
+   *     targeted error BEFORE the grant, so the misconfiguration is explicit
+   *     rather than a confusing token-endpoint 401 now or a broken silent
+   *     restore later.
+   */
+  #resolveClientAuth(client) {
+    const method = client.token_endpoint_auth_method;
+    const rawSecret = client.client_secret;
+    const secret = typeof rawSecret === "string" && rawSecret.length > 0 ? rawSecret : void 0;
+    if (method === void 0 || method === "none") {
+      if (method === void 0 && secret !== void 0) {
+        return {
+          clientAuth: oauth2.ClientSecretBasic(secret),
+          confidential: { tokenEndpointAuthMethod: "client_secret_basic", clientSecret: secret }
+        };
+      }
+      return { clientAuth: oauth2.None() };
+    }
+    if (method === "client_secret_basic" || method === "client_secret_post") {
+      if (secret === void 0) {
+        throw new Error(
+          `The identity provider registered this client for ${String(method)} but returned no client_secret \u2014 the token exchange cannot authenticate. (Incoherent dynamic registration; configure a static Client Identifier Document instead.)`
+        );
+      }
+      return {
+        clientAuth: method === "client_secret_basic" ? oauth2.ClientSecretBasic(secret) : oauth2.ClientSecretPost(secret),
+        confidential: { tokenEndpointAuthMethod: method, clientSecret: secret }
+      };
+    }
+    throw new Error(
+      `The identity provider registered this client with token_endpoint_auth_method="${String(method)}", which this client (and its silent-restore grant) does not support \u2014 supported: none, client_secret_basic, client_secret_post. Configure a static Client Identifier Document (a public client) instead.`
+    );
+  }
+  /**
    * The interactive authorization-code + PKCE + DPoP grant, requesting
    * `offline_access` so the OP issues a refresh token, then minting a DPoP-bound
    * access token. Drives `authFlow.getCode` for the popup; retries once without
@@ -1312,6 +1363,7 @@ var SolidAuthEngine = class {
     const discoveryResponse = await oauth2.discoveryRequest(issuer, http);
     const authorizationServer = await oauth2.processDiscoveryResponse(issuer, discoveryResponse);
     const client = await this.#resolveClient(authorizationServer, baseHttp);
+    const { clientAuth } = this.#resolveClientAuth(client);
     const dpopKey = await oauth2.generateKeyPair("ES256", { extractable: false });
     const dpopHandle = oauth2.DPoP(client, dpopKey);
     let dpopJkt;
@@ -1358,11 +1410,16 @@ var SolidAuthEngine = class {
         const tokenResponse = await oauth2.authorizationCodeGrantRequest(
           authorizationServer,
           client,
-          oauth2.None(),
+          // The resolved client auth: `None` for a public client (static
+          // Client Identifier Document / public dynamic registration), Basic/
+          // Post when the OP issued a confidential dynamic registration — the
+          // exchange must authenticate as the client the OP actually minted
+          // (the roborev finding).
+          clientAuth,
           params,
           this.#opts.callbackUri,
           codeVerifier,
-          // PKCE always on (S256) — never oauth.nopkce for a public client
+          // PKCE always on (S256) — never oauth.nopkce for a browser client
           { DPoP: dpopHandle, ...http }
         );
         return oauth2.processAuthorizationCodeResponse(authorizationServer, client, tokenResponse, {
@@ -1449,6 +1506,7 @@ var SolidAuthEngine = class {
   #persistChain = Promise.resolve();
   async #persist(session, generation) {
     if (!session.refreshToken) return { wrote: false, durable: false };
+    const confidential = this.#resolveClientAuth(session.client).confidential ?? {};
     const run = this.#persistChain.then(async () => {
       if (generation !== this.#generation) return { wrote: false, durable: false };
       try {
@@ -1464,7 +1522,10 @@ var SolidAuthEngine = class {
           webId: session.webId,
           refreshToken: session.refreshToken,
           dpopKey: session.dpopKey,
-          ...clientId !== void 0 && clientId !== "" ? { clientId } : {}
+          ...clientId !== void 0 && clientId !== "" ? { clientId } : {},
+          // The confidential-client carry-forward (resolved above; empty for a
+          // public client).
+          ...confidential
         });
         if (generation !== this.#generation) {
           if (previous !== void 0) {
