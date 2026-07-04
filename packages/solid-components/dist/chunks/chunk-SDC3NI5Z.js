@@ -12805,9 +12805,38 @@ var WriteFailedError = class _WriteFailedError extends Error {
 var DataWriter = class {
   #fetch;
   #base;
+  /**
+   * Cached, lazily-loaded pod-scope primitive from `@jeswr/guarded-fetch` (the suite's
+   * ONE reviewed home for "is this URL within the configured pod (sub-)container?").
+   * Loaded by DYNAMIC import — see {@link DataWriter.#loadPodScope} — so the OPTIONAL,
+   * EXTERNAL `@jeswr/guarded-fetch` peer never enters the eager base bundle (a read-only /
+   * inline consumer of `@jeswr/solid-components` must be able to load it with the peer
+   * absent — the §8 buildless-install + "dynamic-import-only external peer" contract the
+   * packaged-dist smoke test pins; mirrors `shacl-view-fetch`'s `loadGuarded`). Only
+   * populated when a base is configured AND a scoped write is attempted.
+   */
+  #podScope;
   constructor(seam = {}) {
     this.#fetch = seam.fetch ?? globalThis.fetch.bind(globalThis);
     this.#base = seam.base;
+  }
+  /**
+   * Lazily import + cache the pod-scope primitive from `@jeswr/guarded-fetch`. The
+   * DYNAMIC import keeps the (optional, external) peer out of the eager base graph — only
+   * a base-scoped WRITE reaches here. If the peer is not installed the load rejects; the
+   * caller ({@link DataWriter.#assertWithinScope}) turns that into a fail-closed
+   * {@link WriteScopeError} so a write is REFUSED (never silently unscoped) when the guard
+   * cannot load.
+   */
+  async #loadPodScope() {
+    if (!this.#podScope) {
+      const mod = await import("@jeswr/guarded-fetch");
+      this.#podScope = {
+        assertWithinPodScope: mod.assertWithinPodScope,
+        PodScopeError: mod.PodScopeError
+      };
+    }
+    return this.#podScope;
   }
   /** The base every write is confined to, or `undefined` (no path-prefix check). */
   get base() {
@@ -12833,23 +12862,23 @@ var DataWriter = class {
    * @throws {@link WriteFailedError} on any other write failure.
    */
   async saveMerged(url, mutate, options = {}) {
-    this.#assertWithinScope(url);
+    const scoped = await this.#assertWithinScope(url);
     const createIfAbsent = options.createIfAbsent ?? true;
-    const pre = await this.#readForMerge(url, options.signal);
+    const pre = await this.#readForMerge(scoped, options.signal);
     if (pre.kind === "missing") {
       if (!createIfAbsent) {
-        throw new WriteFailedError(url, { status: 404 });
+        throw new WriteFailedError(scoped, { status: 404 });
       }
-      const created = await applyMutator(new N3Store(), url, mutate);
+      const created = await applyMutator(new N3Store(), scoped, mutate);
       const turtle2 = await serializeTurtle(created);
-      return this.#put(url, turtle2, { ifNoneMatch: "*", signal: options.signal });
+      return this.#put(scoped, turtle2, { ifNoneMatch: "*", signal: options.signal });
     }
-    const merged = await applyMutator(pre.graph, url, mutate);
+    const merged = await applyMutator(pre.graph, scoped, mutate);
     const turtle = await serializeTurtle(merged);
     if (!pre.etag) {
-      throw new UnconditionalOverwriteError(url);
+      throw new UnconditionalOverwriteError(scoped);
     }
-    return this.#put(url, turtle, { ifMatch: pre.etag, signal: options.signal });
+    return this.#put(scoped, turtle, { ifMatch: pre.etag, signal: options.signal });
   }
   /**
    * Conditional PUT of a Turtle body. ENFORCES the lost-update guard: overwriting an
@@ -12863,14 +12892,14 @@ var DataWriter = class {
    * @throws {@link WriteConflictError} / {@link WriteFailedError} on a failure.
    */
   async putTurtle(url, turtle, options = {}) {
-    this.#assertWithinScope(url);
+    const scoped = await this.#assertWithinScope(url);
     if (options.ifMatch && options.ifNoneMatch) {
       throw new Error("Pass at most one of ifMatch / ifNoneMatch.");
     }
     if (!options.ifMatch && !options.ifNoneMatch && !options.allowUnconditional) {
-      throw new UnconditionalOverwriteError(url);
+      throw new UnconditionalOverwriteError(scoped);
     }
-    return this.#put(url, turtle, options);
+    return this.#put(scoped, turtle, options);
   }
   /**
    * Conditional DELETE. Requires `ifMatch` (the lost-update guard) — an
@@ -12878,11 +12907,11 @@ var DataWriter = class {
    * discipline. Scope-guarded.
    */
   async delete(url, options) {
-    this.#assertWithinScope(url);
-    if (!options.ifMatch) throw new UnconditionalOverwriteError(url);
+    const scoped = await this.#assertWithinScope(url);
+    if (!options.ifMatch) throw new UnconditionalOverwriteError(scoped);
     let response;
     try {
-      response = await this.#fetch(url, {
+      response = await this.#fetch(scoped, {
         method: "DELETE",
         headers: { "If-Match": options.ifMatch },
         // SCOPE GUARD (redirect-SSRF) — see #put: refuse a redirect rather than
@@ -12891,13 +12920,13 @@ var DataWriter = class {
         ...options.signal ? { signal: options.signal } : {}
       });
     } catch (cause) {
-      throw new WriteFailedError(url, { cause });
+      throw new WriteFailedError(scoped, { cause });
     }
     if (response.status === 412 || response.status === 409 || response.status === 428) {
-      throw new WriteConflictError(url, response.status);
+      throw new WriteConflictError(scoped, response.status);
     }
     if (!response.ok && response.status !== 404) {
-      throw new WriteFailedError(url, { status: response.status });
+      throw new WriteFailedError(scoped, { status: response.status });
     }
   }
   /** The low-level conditional PUT (after the scope + conditional checks). */
@@ -12957,29 +12986,46 @@ var DataWriter = class {
       throw new WriteFailedError(url, { cause });
     }
     const finalUrl = response.url || url;
-    this.#assertWithinScope(finalUrl);
+    const checkedFinal = await this.#assertWithinScope(finalUrl);
     if (response.status === 404 || response.status === 410) return { kind: "missing" };
     if (!response.ok) {
-      throw new WriteFailedError(finalUrl, { status: response.status });
+      throw new WriteFailedError(checkedFinal, { status: response.status });
     }
     const contentType = response.headers.get("Content-Type");
     let graph;
     try {
       const body = response.body ?? await response.text();
-      graph = await parseToStore(body, contentType, { baseIRI: finalUrl });
+      graph = await parseToStore(body, contentType, { baseIRI: checkedFinal });
     } catch (cause) {
-      throw new WriteFailedError(finalUrl, { cause });
+      throw new WriteFailedError(checkedFinal, { cause });
     }
     const etag = response.headers.get("ETag");
     return { kind: "present", graph, ...etag ? { etag } : {} };
   }
   /**
-   * SCOPE GUARD (fail-closed). Throw a {@link WriteScopeError} unless `target` is a
-   * safe write target: an absolute http(s) URL, no embedded credentials, and — when
-   * a base is configured — same origin + a path under the base's directory. Mirrors
-   * the suite forks' `assertWithinBase`. Run BEFORE any fetch.
+   * SCOPE GUARD (fail-closed). Reject unless `target` is a safe write target: an absolute
+   * http(s) URL, no embedded credentials, and — when a base is configured — same origin +
+   * a path STRICTLY UNDER the base's DIRECTORY (the base/container document itself is
+   * NOT a valid write target — see the `allowRoot: false` note below). RETURNS the
+   * canonical (WHATWG-normalised) in-scope URL string so callers fetch the URL that was
+   * CHECKED (check-then-use-the-checked-value), not a non-normalised raw input. Run
+   * BEFORE any fetch.
+   *
+   * DELEGATION: when a base is configured, the same-origin / segment-boundary-path /
+   * encoded-delimiter / traversal defence is delegated to `@jeswr/guarded-fetch`'s
+   * consolidated `assertWithinPodScope` — the suite's ONE reviewed pod-scope home (retiring
+   * this repo's bespoke copy). The scheme + no-credentials checks (and, when NO base is
+   * configured, the deliberate opt-out mode that skips path/origin scoping) stay LOCAL: the
+   * consolidated primitive always requires a valid base, whereas this writer treats
+   * `base === undefined` as "no path-prefix check configured" (scheme/credential checks
+   * still apply to the target itself). The primitive is loaded by a cached DYNAMIC import
+   * (see {@link DataWriter.#loadPodScope}) so the optional external peer is only needed when
+   * a base-scoped write is actually attempted.
+   *
+   * @returns the canonical, in-scope URL to fetch.
+   * @throws {@link WriteScopeError} if `target` is not a safe / in-scope write target.
    */
-  #assertWithinScope(target) {
+  async #assertWithinScope(target) {
     let url;
     try {
       url = new URL(target);
@@ -12993,19 +13039,29 @@ var DataWriter = class {
     if (url.username || url.password) {
       throw new WriteScopeError(target, "embedded credentials in the URL");
     }
-    if (this.#base === void 0) return;
+    if (this.#base === void 0) return url.toString();
     let base;
     try {
       base = new URL(this.#base);
     } catch {
       throw new WriteScopeError(target, `the configured base "${this.#base}" is not a valid URL`);
     }
-    if (url.origin !== base.origin) {
-      throw new WriteScopeError(target, `different origin from the base (${base.origin})`);
-    }
     const baseDir = base.pathname.endsWith("/") ? base.pathname : base.pathname.slice(0, base.pathname.lastIndexOf("/") + 1);
-    if (!url.pathname.startsWith(baseDir)) {
-      throw new WriteScopeError(target, `path is outside the base directory (${baseDir})`);
+    const containerBase = `${base.origin}${baseDir}`;
+    let podScope;
+    try {
+      podScope = await this.#loadPodScope();
+    } catch (cause) {
+      throw new WriteScopeError(
+        target,
+        `the pod-scope guard (@jeswr/guarded-fetch) could not be loaded \u2014 install it to enable scoped writes (${cause instanceof Error ? cause.message : String(cause)})`
+      );
+    }
+    try {
+      return podScope.assertWithinPodScope(containerBase, target, { allowRoot: false });
+    } catch (err) {
+      const reason = err instanceof podScope.PodScopeError ? err.message : String(err);
+      throw new WriteScopeError(target, reason);
     }
   }
 };

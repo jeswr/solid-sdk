@@ -337,6 +337,105 @@ describe("DataWriter scope guard (fail-closed, BEFORE any fetch)", () => {
   });
 });
 
+describe("DataWriter scope guard — @jeswr/guarded-fetch delegation specifics", () => {
+  // Records every fetched URL so we can assert the CANONICAL (checked) URL is used.
+  function recordingWriter(base?: string) {
+    const urls: { method: string; url: string }[] = [];
+    const fetch = vi.fn(async (u: string, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      urls.push({ method, url: u });
+      if (method === "GET") return ttlRes(TASK_BODY, '"v1"');
+      return statusRes(205, '"v2"');
+    });
+    const dw = new DataWriter({ fetch: fetch as unknown as typeof globalThis.fetch, base });
+    return { dw, urls, fetch };
+  }
+
+  it("fetches the CANONICAL in-scope URL (check-then-use-the-checked-value)", async () => {
+    // A non-canonical but in-scope target (`…/tasks/./1`) must be normalised by the
+    // pod-scope guard and the CANONICAL form (`…/tasks/1`) is what the GET + PUT fetch —
+    // not the raw `./`-bearing input. This is the canonical-URL-bug class the migration
+    // guards: assertWithinPodScope RETURNS the WHATWG-normalised URL and the writer now
+    // uses it for the subsequent fetches.
+    const { dw, urls } = recordingWriter("https://alice.example/tasks/");
+    const result = await dw.saveMerged("https://alice.example/tasks/./1", setTitle("X"));
+    const canonical = "https://alice.example/tasks/1";
+    expect(urls.map((u) => u.url)).toEqual([canonical, canonical]); // GET then PUT
+    expect(result.url).toBe(canonical);
+  });
+
+  it("delete fetches the canonical in-scope URL too", async () => {
+    const { dw, urls } = recordingWriter("https://alice.example/tasks/");
+    await dw.delete("https://alice.example/tasks/./1", { ifMatch: '"v1"' });
+    expect(urls).toEqual([{ method: "DELETE", url: "https://alice.example/tasks/1" }]);
+  });
+
+  it("OPT-OUT: with NO base, a cross-origin absolute https target is ALLOWED", async () => {
+    // base === undefined deliberately disables the path/origin scoping (only the
+    // scheme + no-credentials checks apply); a caller without a base constrains targets
+    // another way. So a well-formed foreign https target proceeds (no WriteScopeError).
+    const { dw, urls } = recordingWriter(undefined);
+    const r = await dw.saveMerged("https://elsewhere.example/x/1", setTitle("X"));
+    expect(r.url).toBe("https://elsewhere.example/x/1");
+    expect(urls[0].method).toBe("GET");
+  });
+
+  it("accepts an http(s) target — http is NOT tightened to https-only", async () => {
+    // Unlike some suite guards, this one accepts BOTH http and https (the guard is a
+    // pod-scope capability check, not a transport-security policy). Pin that http works.
+    const { dw } = recordingWriter("http://alice.example/tasks/");
+    const r = await dw.saveMerged("http://alice.example/tasks/1", setTitle("X"));
+    expect(r.url).toBe("http://alice.example/tasks/1");
+  });
+
+  it("directory-of-a-NON-slash base: the scope is the base's PARENT directory", async () => {
+    // The base need not be a container. When it is a resource-like path (no trailing
+    // slash), the scope boundary is its PARENT directory — a sibling under that parent is
+    // in scope, a path outside it is not. (Preserves the pre-migration convenience.)
+    const under = recordingWriter("https://alice.example/tasks/index");
+    const r = await under.dw.saveMerged("https://alice.example/tasks/1", setTitle("X"));
+    expect(r.url).toBe("https://alice.example/tasks/1");
+
+    const outside = recordingWriter("https://alice.example/tasks/index");
+    await expect(
+      outside.dw.saveMerged("https://alice.example/other/1", setTitle("X")),
+    ).rejects.toBeInstanceOf(WriteScopeError);
+    expect(outside.fetch).not.toHaveBeenCalled();
+  });
+
+  it("delegation wired: an encoded path-delimiter traversal is REFUSED (guarded-fetch)", async () => {
+    // A hardening the bespoke guard lacked, now inherited from assertWithinPodScope: an
+    // encoded `/` (`%2F`) surviving in the resolved path is refused (a server that decodes
+    // before normalising could alias it outside the base). Proves the delegation is live.
+    const { dw, fetch } = recordingWriter("https://alice.example/tasks/");
+    await expect(
+      dw.saveMerged("https://alice.example/tasks/..%2fsecret", setTitle("X")),
+    ).rejects.toBeInstanceOf(WriteScopeError);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("REGRESSION (roborev Medium): the SLASHLESS pod-base form is REJECTED as a write target", async () => {
+    // assertWithinPodScope's `allowRoot` gate treats the base's slash-terminated form
+    // (`…/alice/`) and its slashless form (`…/alice`) as the SAME "root" candidate. The
+    // consolidation onto @jeswr/guarded-fetch initially called it with `allowRoot: true`
+    // (the default), which — unlike the pre-consolidation bespoke `startsWith(baseDir)`
+    // check (which rejected the slashless form: `/alice` does not start with `/alice/`)
+    // — WIDENED the write boundary to admit it. A write target must be a resource
+    // STRICTLY under the base, so BOTH the slash and slashless spellings of the base
+    // itself must be refused (allowRoot: false), never just accepted-with-a-warning.
+    const { dw, fetch } = recordingWriter("https://alice.example/alice/");
+    await expect(
+      dw.saveMerged("https://alice.example/alice", setTitle("X")),
+    ).rejects.toBeInstanceOf(WriteScopeError);
+    // The slash-terminated exact base itself must ALSO be refused — a write target is
+    // strictly a resource UNDER the base, never the base/container document itself.
+    await expect(
+      dw.saveMerged("https://alice.example/alice/", setTitle("X")),
+    ).rejects.toBeInstanceOf(WriteScopeError);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+});
+
 describe("DataWriter.delete — conditional", () => {
   it("requires If-Match", async () => {
     const fetch = vi.fn(async () => statusRes(205));
