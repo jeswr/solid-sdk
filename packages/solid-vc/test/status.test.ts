@@ -605,6 +605,26 @@ describe("Phase C — every unconfirmable status FAILS CLOSED as STATUS_UNREACHA
     ).toBe("unreachable");
   });
 
+  it("an entry-count over the request-amplification cap is refused", async () => {
+    const key = await issuerKey();
+    const entries = Array.from({ length: 9 }, (_, i) =>
+      bitstringStatusListEntry({
+        statusPurpose: "revocation",
+        statusListIndex: i,
+        statusListCredential: `https://alice.example/status/${i}`,
+      }),
+    );
+    const check = await resolveBitstringStatus(
+      {
+        issuer: ISSUER,
+        credentialSubject: { id: AGENT },
+        credentialStatus: entries,
+      },
+      { resolveKey: keyResolver(key), fetch: fetchServing(LIST_URL, "unused") },
+    );
+    expect(check.status).toBe("unreachable");
+  });
+
   it("a THROWING resolveStatus seam maps to STATUS_UNREACHABLE, never a crash", async () => {
     const key = await issuerKey();
     const vc = await issuedWithStatus(key);

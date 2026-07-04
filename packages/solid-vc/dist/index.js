@@ -1729,6 +1729,7 @@ function createWebIdKeyResolver(options = {}) {
 var SUPPORTED_PURPOSES = /* @__PURE__ */ new Set(["revocation", "suspension"]);
 var INDEX_PATTERN = /^(0|[1-9][0-9]*)$/;
 var DEFAULT_MAX_BODY_BYTES = 32 * 1024 * 1024;
+var MAX_STATUS_ENTRIES = 8;
 var STATUS_ACCEPT = "application/vc+ld+json, application/ld+json;q=0.9, application/json;q=0.8";
 function bitstringStatusListEntry(input) {
   if (!SUPPORTED_PURPOSES.has(input.statusPurpose)) {
@@ -1852,6 +1853,11 @@ function singleSubjectOf(credential) {
 function normalizeStatusEntries(value) {
   if (value === void 0) return { entries: [] };
   const raw = Array.isArray(value) ? value : [value];
+  if (raw.length > MAX_STATUS_ENTRIES) {
+    return {
+      reason: `credential carries ${raw.length} credentialStatus entries \u2014 more than the ${MAX_STATUS_ENTRIES}-entry cap (request-amplification guard)`
+    };
+  }
   const entries = [];
   for (const item of raw) {
     if (item === null || typeof item !== "object" || Array.isArray(item)) {

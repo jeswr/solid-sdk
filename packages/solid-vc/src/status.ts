@@ -61,6 +61,16 @@ const INDEX_PATTERN = /^(0|[1-9][0-9]*)$/;
 /** The default ceiling on a fetched status-list-credential body: 32 MiB. */
 const DEFAULT_MAX_BODY_BYTES = 32 * 1024 * 1024;
 
+/**
+ * The most `credentialStatus` entries a single credential may carry before the
+ * check fails closed. Each entry costs the verifier an outbound fetch, so an
+ * UNBOUNDED entry list on a (possibly forged) credential is a request-
+ * amplification lever pointed at whatever URLs it names; real deployments
+ * carry one entry per purpose. Exceeding the cap → `unreachable`, never a
+ * partial/silent check.
+ */
+const MAX_STATUS_ENTRIES = 8;
+
 /** The content types we ask a status-list host for. */
 const STATUS_ACCEPT = "application/vc+ld+json, application/ld+json;q=0.9, application/json;q=0.8";
 
@@ -351,6 +361,11 @@ function normalizeStatusEntries(
 ): { entries: BitstringStatusListEntry[] } | { reason: string } {
   if (value === undefined) return { entries: [] };
   const raw = Array.isArray(value) ? value : [value];
+  if (raw.length > MAX_STATUS_ENTRIES) {
+    return {
+      reason: `credential carries ${raw.length} credentialStatus entries — more than the ${MAX_STATUS_ENTRIES}-entry cap (request-amplification guard)`,
+    };
+  }
   const entries: BitstringStatusListEntry[] = [];
   for (const item of raw) {
     if (item === null || typeof item !== "object" || Array.isArray(item)) {
