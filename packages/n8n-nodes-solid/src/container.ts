@@ -13,9 +13,10 @@
 // `this.helpers.httpRequest` (n8n owns the transport, not a bespoke fetch).
 
 import { parseRdf } from "@jeswr/fetch-rdf";
+import { podScopedUrl } from "@jeswr/guarded-fetch";
 import { ContainerDataset } from "@solid/object";
 import { DataFactory } from "n3";
-import { assertWithinPod, isContainerUrl } from "./scope.js";
+import { isContainerUrl } from "./scope.js";
 
 /** A single member of a container. */
 export interface ContainerMember {
@@ -54,23 +55,38 @@ export async function parseContainerListing(
     return [];
   }
 
+  // The container root is a container ADDRESS (trailing slash) but
+  // `podScopedUrl`/`assertWithinPodScope` treat the slash-terminated and
+  // slashless forms of a root path as the SAME root (roborev Low finding,
+  // 13311df) — a hostile/misbehaving server can list a slashless self-alias
+  // (`<.../notes>` instead of `<.../notes/>`) and it comes back canonicalised
+  // to that slashless string, which does not string-equal `containerUrl`. Strip
+  // any trailing slash from BOTH sides before the self-member comparison so the
+  // two spellings of "the container itself" are recognised as equivalent.
+  const containerUrlNoSlash = containerUrl.endsWith("/") ? containerUrl.slice(0, -1) : containerUrl;
+
   const members: ContainerMember[] = [];
   for (const resource of container.contains) {
     // resource.id may be relative if the server emitted a relative IRI the parser
     // did not resolve; resolve against the container URL to be safe.
     const absolute = new URL(resource.id, containerUrl).toString();
     // Defence in depth: never surface a member that escapes the pod base — a
-    // hostile/buggy server cannot inject foreign URLs into the listing.
-    try {
-      assertWithinPod(base, absolute);
-    } catch {
+    // hostile/buggy server cannot inject foreign URLs into the listing. The FILTER
+    // form returns the CANONICAL in-scope URL (or `undefined` to drop it); we push
+    // that canonical value — not the raw `absolute` — so the URL we validated is
+    // the URL we surface (avoids the canonical-URL bug class where a guard is used
+    // only for its throw side-effect while a non-canonical string is passed on).
+    const scoped = podScopedUrl(base, absolute, { allowRoot: true });
+    if (scoped === undefined) {
       continue;
     }
-    // Some serialisations list the container itself; skip the self-member.
-    if (absolute === containerUrl) {
+    // Some serialisations list the container itself (slash-terminated OR its
+    // slashless alias); skip the self-member either way (compare against the
+    // canonical scoped value now in use).
+    if (scoped === containerUrl || scoped === containerUrlNoSlash) {
       continue;
     }
-    members.push({ url: absolute, container: isContainerUrl(absolute) });
+    members.push({ url: scoped, container: isContainerUrl(scoped) });
   }
   return members;
 }

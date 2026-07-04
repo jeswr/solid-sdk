@@ -1,62 +1,71 @@
+import { isContainerUrl, normalizePodBase, redactUserinfo } from "@jeswr/guarded-fetch";
+export { isContainerUrl, normalizePodBase, redactUserinfo };
 /** A target whose resolved URL must lie under the pod base. */
 export interface ResolvedTarget {
-    /** The absolute, validated URL to request. */
+    /** The absolute, validated, CANONICAL URL to request. */
     readonly url: string;
     /** True iff the target is a container (LDP convention: a trailing slash). */
     readonly container: boolean;
 }
 /**
- * Redact any embedded userinfo (`scheme://user:pass@host…` or a scheme-relative
- * `//user:pass@host…`) from a URL-ish string BEFORE it is interpolated into an
- * error message. Every validation error here echoes a user-controlled value, and
- * the node surfaces those messages as item JSON under `continueOnFail` (and into
- * logs) — so a target like `https://u:p@host/x` must never leak its credentials
- * through an error.
+ * Backwards-compatible VOID assertion (public-API stability): throws unless `url`
+ * is `base` itself or a descendant of it. Delegates to {@link assertWithinPodScope}
+ * with `allowRoot: true` — the base counts as in-scope, matching this node's
+ * original semantics (it never rejected the pod root). Prefer the RETURNING
+ * `assertWithinPodScope` (re-derivable from `@jeswr/guarded-fetch`) for new code,
+ * so the checked URL is the URL that is used.
  *
- * This is a deliberately BROAD, best-effort textual scrub that also works on
- * MALFORMED input (where `new URL` threw, so we cannot trust the parser — and a
- * value like `ht!tp://u:p@host/` has no RFC-valid scheme yet still carries a
- * secret). It replaces EVERY `//…@` authority-userinfo span in the string
- * (global, scheme-prefix-agnostic) with `//<redacted>@`.
+ * `url` MUST be an absolute http(s) URL (the pre-consolidation contract — roborev
+ * Medium finding, 13311df): unlike {@link resolveTarget}, this assertion never
+ * resolved a relative reference against `base`, so a caller passing a relative
+ * string here while using the ORIGINAL (unresolved) string elsewhere would have
+ * validated a different URL than the one it went on to use. Parsing `url` with
+ * `new URL(url)` first (throwing on anything non-absolute) preserves that and
+ * hands `assertWithinPodScope` the already-canonical absolute string.
  *
- * The userinfo is taken as ALL characters from `//` up to the last `@` that
- * occurs BEFORE the first authority terminator (`/`, `?`, `#`). Crucially the
- * span is `[^/?#]` (NOT `[^/?#@\s]`): it must include whitespace and control
- * chars and even an embedded `@`, because a malformed target like
- * `https://alice:s3 cr3t@ho st/x` (space in the password) would otherwise slip
- * the scrub and leak the credential through the invalid-target error path. Over-
- * redaction is safe here (these are error strings, not requests); under-redaction
- * would leak — so the rule errs toward redacting. A `//` not followed by
- * userinfo-then-`@` before a terminator (e.g. a `//a/b` path) is left alone.
- */
-export declare function redactUserinfo(value: string): string;
-/**
- * Normalise a pod base URL to exactly one trailing slash. Throws if the base is
- * not an absolute http(s) URL.
- */
-export declare function normalizePodBase(base: string): string;
-/**
- * Fail-closed assertion that `url` is `base` itself or a strict descendant of it
- * (same origin, path prefixed by the base path, http(s) scheme). Guards against
- * any normalisation/encoding trick producing a URL outside the pod sub-tree.
- *
- * @throws if `url` is not http(s), not same-origin, or not path-prefixed by base.
+ * @throws Error if `url` is not an absolute URL.
+ * @throws PodScopeError if `url` is not http(s), not same-origin, or escapes the base.
  */
 export declare function assertWithinPod(base: string, url: string): void;
 /**
  * Resolve a workflow-supplied `target` (absolute URL OR base-relative path) to an
- * absolute URL confirmed to lie under the normalised pod `base`.
+ * absolute URL confirmed to lie under the pod `base`, returning the CANONICAL
+ * (WHATWG-normalised) URL callers must use for the request.
  *
- * The WHATWG `URL` constructor resolves a relative reference against the base and
- * collapses `.`/`..`; we then re-validate the COLLAPSED result with
- * {@link assertWithinPod}, so a `../../etc` style traversal cannot escape — the
- * thing we check is the already-collapsed URL.
+ * This is the n8n-specific wrapper over {@link assertWithinPodScope}. The ONE
+ * convenience the shared primitive intentionally does not provide is that a
+ * LEADING-SLASH target (`/notes/x.ttl`) re-roots RELATIVE TO THE BASE PATH rather
+ * than to the origin root — so `resolveTarget(base, "/notes/x.ttl")` equals
+ * `${base}notes/x.ttl`, NOT an escape to the origin root. The step order below is
+ * load-bearing:
+ *   1. reject an empty target;
+ *   2. reject a scheme-relative (`//host`) target FIRST — before the leading-slash
+ *      strip, else `//evil.example/x` would get its leading slashes stripped into a
+ *      harmless-looking relative path and silently miss the scheme-relative refusal;
+ *   3. only THEN, for a non-absolute target, strip leading `/`+ so it resolves
+ *      relative to the base path;
+ *   4. delegate credentials/origin/path/encoded-delimiter/traversal validation +
+ *      canonicalisation to `assertWithinPodScope`, using its RETURNED canonical URL.
  *
- * @param base - the normalised pod base (see {@link normalizePodBase}).
+ * @param base - the pod base (normalised via {@link normalizePodBase}; passing a
+ *   non-normalised base is fine — the primitive normalises it, idempotently).
  * @param target - absolute http(s) URL, or a path relative to `base`.
+ * @param options.allowRoot - whether the pod base itself (in EITHER its
+ *   slash-terminated or slashless spelling — `assertWithinPodScope` treats them
+ *   as the same root) counts as in-scope. Default `true` (matches the node's
+ *   original read/list semantics — it never rejected the pod root). **Callers
+ *   resolving a WRITE target (create/update/delete) MUST pass `false`**: with
+ *   the default, a workflow-supplied target equal to the pod base MINUS its
+ *   trailing slash (e.g. `https://pod.example/alice` against a base of
+ *   `https://pod.example/alice/`) is accepted as an ordinary in-scope resource
+ *   path — the pre-consolidation guard rejected that exact form outright (its
+ *   strict `pathname.startsWith(basePath)` check does not treat a shorter,
+ *   slash-less path as a prefix match), so accepting it widens the write
+ *   boundary vs `main` (roborev finding, 13311df). `allowRoot: false` closes
+ *   that gap by refusing BOTH root spellings for a write target.
  * @throws if the target is empty, not http(s), or resolves outside the pod.
  */
-export declare function resolveTarget(base: string, target: string): ResolvedTarget;
-/** True iff `url` is a container (LDP convention: the path ends with `/`). */
-export declare function isContainerUrl(url: string): boolean;
+export declare function resolveTarget(base: string, target: string, options?: {
+    readonly allowRoot?: boolean;
+}): ResolvedTarget;
 //# sourceMappingURL=scope.d.ts.map
