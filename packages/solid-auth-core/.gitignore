@@ -1,0 +1,5 @@
+# dist/ is COMMITTED (GitHub-installable under ignore-scripts=true) — do not ignore it.
+node_modules/
+coverage/
+*.tsbuildinfo
+.DS_Store

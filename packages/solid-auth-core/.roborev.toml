@@ -1,0 +1,11 @@
+# roborev config — repo-local.
+# Mirrors the suite's .roborev.toml (prod-solid-server) so the post-commit hook
+# reviews here with a non-Anthropic reviewer (pin agent+model per-repo).
+
+agent = "codex"
+model = "gpt-5.5"
+
+review_min_severity = "low"
+
+reuse_review_session = true
+reuse_review_session_lookback = 5
