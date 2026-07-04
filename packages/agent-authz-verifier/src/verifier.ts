@@ -18,19 +18,24 @@
 // verifies credentials + digests; `solid-odrl` walks the delegation chain).
 // A second, independent implementation reproduces exactly this composition.
 //
-// It composes, IN ORDER and FAIL-CLOSED:
+// It composes, IN ORDER and FAIL-CLOSED, as TWO PASSES over the ordered chain:
 //   assembly — extract each credential's bound policy, order the chain root-first
 //              by `odrld:delegatedUnder`; reject cycles / branches / gaps.
-//   Phase A  — `solid-vc.verifyCredential` on every credential at ONE instant
-//              (`now`): signature, cryptosuite, validity window, proof purpose —
-//              plus the G1 policy-content digest gate (`presentedResources`): the
-//              presented raw policy document must match the credential's SIGNED
-//              `relatedResource` digest, fail-closed (a pure digest failure is
-//              surfaced as a Phase-B `POLICY_INTEGRITY` deny).
-//   Phase B  — cross-binding: each hop's credential is issued by (and self-asserts
-//              a subject of) that hop's `odrl:assigner`; the delegate it authorizes
-//              is the NEXT hop's assigner; the ROOT credential's issuer is the
-//              trusted root principal for the target.
+//   Pass 1 (Phase A, ALL hops) — `solid-vc.verifyCredential` on EVERY credential
+//              at ONE instant (`now`): signature, cryptosuite, validity window,
+//              proof purpose. Proof-layer only — Pass 1 runs for the WHOLE chain
+//              before any Phase-B/C gate, so a later hop's bad proof is always
+//              reported over an earlier hop's Phase-B code.
+//   Pass 2 (per hop, only if every hop passed Phase A) —
+//     Phase B  — cross-binding: each hop's credential is issued by that hop's
+//              `odrl:assigner` (the SUBJECT-ISSUER gate: a subject id differing
+//              from the proof-verified issuer → `SUBJECT_ISSUER_MISMATCH`); the
+//              delegate it authorizes is the NEXT hop's assigner; the ROOT
+//              credential's issuer is the trusted root principal for the target.
+//              Plus the G1 policy-content digest gate (`verifyRelatedResources`
+//              over `policyContents`): the presented raw policy document must
+//              match the credential's SIGNED `relatedResource` digest,
+//              fail-closed (a digest failure → a `POLICY_INTEGRITY` deny).
 //   Phase C  — status ∪ revocation, fail-closed: each hop credential's W3C
 //              Bitstring Status List entry is resolved through solid-vc's
 //              `resolveStatus` seam — a set bit → `REVOKED`/`SUSPENDED`; an
@@ -105,8 +110,9 @@ export interface BoundAuthorization {
  * `policyContents` MUST be the raw FETCHED document bytes (Turtle by default), NOT a
  * re-serialisation of the parsed {@link OdrlPolicy} — a lossy parse→re-emit can drop
  * triples the issuer signed over, silently breaking (or, worse, laundering) the
- * digest. When a hop's content is present, `verifyCredential` recomputes its
- * RDFC-1.0 canonical digest and compares it against the credential's SIGNED
+ * digest. When a hop's content is present, the Pass-2 G1 gate
+ * (`verifyRelatedResources`) recomputes its RDFC-1.0 canonical digest and
+ * compares it against the credential's SIGNED
  * `relatedResource` `digestMultibase`, fail-closed (`POLICY_INTEGRITY` deny on a
  * missing digest or a mismatch). When every hop's content is presented and passes,
  * the permit's `policyIntegrityProvisional` is `false`; a hop presented WITHOUT
