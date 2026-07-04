@@ -56,7 +56,7 @@
   },
   "homepage": "https://github.com/jeswr/solid-agent-card#readme",
   "dependencies": {
-    "@jeswr/rdf-serialize": "git+https://github.com/jeswr/rdf-serialize.git#eed2c11ceaf4de5e1f79132353744a5d1e3d6c48",
+    "@jeswr/rdf-serialize": "git+https://github.com/jeswr/rdf-serialize.git#8ebdda44ab1da63ef91052a5b2f1e453c0a29c79",
     "@rdfjs/wrapper": "^0.34.0",
     "content-type": "^1.0.5",
     "jsonld-streaming-parser": "^5.0.0",

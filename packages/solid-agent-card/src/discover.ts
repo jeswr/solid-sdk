@@ -9,9 +9,9 @@
 // typed wrappers.
 
 import { fetchRdf } from "@jeswr/fetch-rdf";
+import { safeHttpIri } from "@jeswr/rdf-serialize";
 import type { DatasetCore } from "@rdfjs/types";
 import { classifyFetchError, describeError } from "./internal/errors.js";
-import { safeHttpIri } from "./iri.js";
 import type { AgentDiscovery, AgentPointer, VerificationResult } from "./types.js";
 import { verifyDataset } from "./verify.js";
 import { AD_OWNER, WELL_KNOWN_AGENT_CARD, WELL_KNOWN_AGENT_DESCRIPTIONS } from "./vocab.js";

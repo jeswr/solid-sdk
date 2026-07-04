@@ -1,26 +1,63 @@
-// src/iri.ts
+// node_modules/@jeswr/rdf-serialize/dist/iri.js
+var FORBIDDEN_SYMBOL_CODES = /* @__PURE__ */ new Set([
+  60,
+  // <
+  62,
+  // >
+  34,
+  // "
+  123,
+  // {
+  125,
+  // }
+  124,
+  // |
+  94,
+  // ^
+  96,
+  // ` (backtick)
+  92
+  // \ (backslash)
+]);
+function isForbidden(codePoint) {
+  return codePoint <= 32 || FORBIDDEN_SYMBOL_CODES.has(codePoint);
+}
+function hasEdgeControlOrSpace(value) {
+  return value.length > 0 && (value.charCodeAt(0) <= 32 || value.charCodeAt(value.length - 1) <= 32);
+}
+function escapeIri(value) {
+  let out = "";
+  for (const ch of value) {
+    const codePoint = ch.codePointAt(0);
+    if (isForbidden(codePoint)) {
+      out += `%${codePoint.toString(16).toUpperCase().padStart(2, "0")}`;
+    } else {
+      out += ch;
+    }
+  }
+  return out;
+}
 function safeHttpIri(value) {
-  if (typeof value !== "string") return void 0;
-  if (/^[\u0000-\u0020]|[\u0000-\u0020]$/.test(value)) return void 0;
+  if (typeof value !== "string") {
+    return void 0;
+  }
+  if (hasEdgeControlOrSpace(value)) {
+    return void 0;
+  }
   const escaped = escapeIri(value);
-  let u;
+  let url;
   try {
-    u = new URL(escaped);
+    url = new URL(escaped);
   } catch {
     return void 0;
   }
-  if (u.protocol !== "http:" && u.protocol !== "https:") return void 0;
-  if (!/^https?:\/\/[^/?#]/i.test(escaped)) return void 0;
-  if (u.host === "") return void 0;
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    return void 0;
+  }
+  if (!/^https?:\/\/[^/?#]/i.test(escaped) || url.host === "") {
+    return void 0;
+  }
   return escaped;
-}
-var IRIREF_FORBIDDEN = /[\u0000-\u0020<>"{}|^`\\]/g;
-function escapeIri(value) {
-  if (typeof value !== "string") return "";
-  return value.replace(
-    IRIREF_FORBIDDEN,
-    (c) => `%${c.charCodeAt(0).toString(16).toUpperCase().padStart(2, "0")}`
-  );
 }
 
 // node_modules/@jeswr/rdf-serialize/dist/serialize.js

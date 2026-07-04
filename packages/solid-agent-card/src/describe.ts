@@ -7,7 +7,7 @@
 // with Turtle + JSON-LD serialisers). Projecting both from one source means the
 // two encodings cannot drift.
 
-import { escapeIri, safeHttpIri } from "./iri.js";
+import { escapeIri, safeHttpIri } from "@jeswr/rdf-serialize";
 import { serialize } from "./serialize.js";
 import type {
   AgentCard,

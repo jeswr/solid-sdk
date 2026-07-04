@@ -7,8 +7,8 @@
 // represents you" — or schema:agent for industry reach). Built through the typed
 // wrapper write path, serialised via n3.Writer. Never a hand-built triple.
 
+import { safeHttpIri } from "@jeswr/rdf-serialize";
 import type { Quad } from "@rdfjs/types";
-import { safeHttpIri } from "./iri.js";
 import { serialize } from "./serialize.js";
 import { HAS_AUTHORIZATION_AGENT, SCHEMA_AGENT } from "./vocab.js";
 import { PointerBuilder } from "./wrappers.js";

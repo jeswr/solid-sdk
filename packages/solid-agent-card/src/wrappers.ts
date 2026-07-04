@@ -8,6 +8,7 @@
 // SetFrom.subjectPredicate; writing uses NamedNodeFrom/Literal + the dataset add,
 // all from @rdfjs/wrapper.
 
+import { escapeIri, safeHttpIri } from "@jeswr/rdf-serialize";
 import type { DataFactory as DataFactoryType, DatasetCore, Quad, Term } from "@rdfjs/types";
 import {
   BlankNodeFrom,
@@ -21,7 +22,6 @@ import {
   type TermWrapper as TermWrapperType,
 } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
-import { escapeIri, safeHttpIri } from "./iri.js";
 import {
   AD_AGENT_DESCRIPTION,
   AD_DESCRIPTION,
