@@ -48,8 +48,14 @@ vi.mock("dpop", () => ({
 
 vi.mock("oauth4webapi", () => {
   const allowInsecureRequests = Symbol("allowInsecureRequests");
+  const customFetch = Symbol("customFetch");
   return {
     allowInsecureRequests,
+    // The login-stall fix (`#httpOptions()`) threads `[customFetch]` into every
+    // oauth4webapi call's options; this mock's consumers don't need to route
+    // through it (they stub the OIDC calls directly), but the symbol must exist
+    // or building the options object throws "no export" in strict-mocked mode.
+    customFetch,
     None: () => () => {},
     ClientSecretBasic: () => () => {},
     expectNoNonce: Symbol("expectNoNonce"),
