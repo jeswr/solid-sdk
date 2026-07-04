@@ -12827,10 +12827,33 @@ var DataWriter = class {
    * caller ({@link DataWriter.#assertWithinScope}) turns that into a fail-closed
    * {@link WriteScopeError} so a write is REFUSED (never silently unscoped) when the guard
    * cannot load.
+   *
+   * SHAPE-VALIDATED (roborev Low @ 6c11868): the imported module is UNTRUSTED beyond its
+   * TypeScript type — `import(...) as PodScopePrimitive` is a compile-time-only cast, so an
+   * incompatible installed peer version (a renamed/removed export, a shape change) would
+   * otherwise surface as a raw `TypeError` deep in `#assertWithinScope` the first time the
+   * write path calls a missing/non-function member, rather than the fail-closed
+   * `WriteScopeError` every other guard failure produces. So we verify the two members we
+   * actually use are the right RUNTIME shape — `assertWithinPodScope` a function,
+   * `PodScopeError` a constructor (`typeof === "function"`, which covers both plain
+   * functions and classes) — and throw a plain `Error` on a mismatch. That `Error` is caught
+   * by `#assertWithinScope`'s existing load try/catch and turned into a `WriteScopeError`
+   * (never a bare `TypeError`), so an incompatible peer fails the write closed with a clear
+   * message instead of throwing something a caller might mistake for an unrelated bug.
    */
   async #loadPodScope() {
     if (!this.#podScope) {
       const mod = await import("@jeswr/guarded-fetch");
+      if (typeof mod.assertWithinPodScope !== "function") {
+        throw new Error(
+          `incompatible @jeswr/guarded-fetch peer: assertWithinPodScope is not a function (got ${typeof mod.assertWithinPodScope})`
+        );
+      }
+      if (typeof mod.PodScopeError !== "function") {
+        throw new Error(
+          `incompatible @jeswr/guarded-fetch peer: PodScopeError is not a constructor (got ${typeof mod.PodScopeError})`
+        );
+      }
       this.#podScope = {
         assertWithinPodScope: mod.assertWithinPodScope,
         PodScopeError: mod.PodScopeError
