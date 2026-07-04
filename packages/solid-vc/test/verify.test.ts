@@ -299,3 +299,46 @@ describe("multi-proof credentials", () => {
     expect(result.errors.map((e) => e.code)).toContain("UNKNOWN_CRYPTOSUITE");
   });
 });
+
+describe("async seams fail closed on rejection (never throw)", () => {
+  it("a REJECTING isControlledBy → fail-closed ISSUER_MISMATCH, not a thrown error", async () => {
+    const key = await issuerKey();
+    const vc = await issueAgentAuthorization(AUTH, key);
+    // A network-backed controller check (e.g. a WebID-doc fetch) that throws
+    // must DENY, never crash verifyCredential.
+    const isControlledBy = async () => {
+      throw new Error("ECONNRESET fetching the WebID document");
+    };
+    const result = await verifyCredential(vc, {
+      resolveKey: keyResolver(key),
+      isControlledBy,
+    });
+    expect(result.verified).toBe(false);
+    expect(result.errors.map((e) => e.code)).toContain("ISSUER_MISMATCH");
+  });
+
+  it("a synchronously-THROWING isControlledBy also fails closed", async () => {
+    const key = await issuerKey();
+    const vc = await issueAgentAuthorization(AUTH, key);
+    const isControlledBy = (): boolean => {
+      throw new Error("controller check blew up");
+    };
+    const result = await verifyCredential(vc, {
+      resolveKey: keyResolver(key),
+      isControlledBy,
+    });
+    expect(result.verified).toBe(false);
+    expect(result.errors.map((e) => e.code)).toContain("ISSUER_MISMATCH");
+  });
+
+  it("a REJECTING resolveKey → fail-closed INVALID_SIGNATURE, not a thrown error", async () => {
+    const key = await issuerKey();
+    const vc = await issueAgentAuthorization(AUTH, key);
+    const resolveKey = async (): Promise<CryptoKey | undefined> => {
+      throw new Error("DNS failure resolving the key document");
+    };
+    const result = await verifyCredential(vc, { resolveKey });
+    expect(result.verified).toBe(false);
+    expect(result.errors.map((e) => e.code)).toContain("INVALID_SIGNATURE");
+  });
+});

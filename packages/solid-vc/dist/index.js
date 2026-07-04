@@ -1160,7 +1160,7 @@ async function verifyCredential(vc, options) {
           message: `proofPurpose "${proof.proofPurpose}" != expected "${expectedPurpose}"`
         });
       }
-      if (!await controlledBy(proof.verificationMethod, issuer)) {
+      if (!await controlledByFailClosed(controlledBy, proof.verificationMethod, issuer)) {
         errors.push({
           code: "ISSUER_MISMATCH",
           message: `verificationMethod ${proof.verificationMethod} is not controlled by issuer ${issuer}`
@@ -1176,6 +1176,13 @@ async function verifyCredential(vc, options) {
     }
   }
   return errors.length === 0 ? { verified: true, errors: [], issuer } : { verified: false, errors, issuer };
+}
+async function controlledByFailClosed(controlledBy, verificationMethod, issuer) {
+  try {
+    return await controlledBy(verificationMethod, issuer);
+  } catch {
+    return false;
+  }
 }
 async function verifyOneProof(suite, documentQuads, proof, resolveKey) {
   try {
