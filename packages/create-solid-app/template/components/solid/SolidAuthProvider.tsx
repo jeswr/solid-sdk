@@ -166,6 +166,15 @@ interface AuthProviderConfig {
 function getAuthProvider(cfg: AuthProviderConfig): Promise<WebIdDPoPTokenProvider> {
   if (authProviderSingleton) return authProviderSingleton;
   authProviderSingleton = (async () => {
+    // Capture a PRISTINE fetch reference BEFORE the dynamic import — and
+    // therefore before `manager.registerGlobally()` below patches the global —
+    // EXPLICITLY, rather than relying on the provider's implicit construction-
+    // time-capture default. Pass it as BOTH `profileFetch` and `oauthFetch` (see
+    // the login-stall note below): an explicit, named snapshot survives a future
+    // reordering of this function far better than an implicit "whatever
+    // `globalThis.fetch` happens to be when `new WebIdDPoPTokenProvider(...)`
+    // runs" assumption would.
+    const pristineFetch = globalThis.fetch.bind(globalThis);
     // Dynamic import keeps the browser-only custom element out of the SSR bundle.
     const { ReactiveFetchManager } = await import(
       "@solid/reactive-authentication"
@@ -185,6 +194,19 @@ function getAuthProvider(cfg: AuthProviderConfig): Promise<WebIdDPoPTokenProvide
         // Dev-only: lets interactive login target a local CSS over HTTP.
         // Remote issuers stay HTTPS-strict.
         allowInsecureLoopback: cfg.allowInsecureLoopback,
+        // Pin BOTH the public WebID-profile read AND the provider's OWN OIDC
+        // hops (discovery / dynamic client registration / token grant) to the
+        // SAME pristine snapshot captured above. `registerGlobally()` below
+        // patches the global fetch with a wrapper whose credential boundary
+        // deliberately includes the active ISSUER's origin (so it can upgrade a
+        // 401 there) — so a provider-internal OIDC request riding the patched
+        // global would re-enter `provider.upgrade()`, which single-flights onto
+        // the very `#authenticate()` promise that ISSUED the request: a
+        // circular await that stalls interactive login forever, after the
+        // WebID profile read succeeds and before the OIDC popup ever opens
+        // (the login-stall bug; see `WebIdDPoPTokenProviderOptions.oauthFetch`).
+        profileFetch: pristineFetch,
+        oauthFetch: pristineFetch,
       },
     );
     const manager = new ReactiveFetchManager([provider]);
