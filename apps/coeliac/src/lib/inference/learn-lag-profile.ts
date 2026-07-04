@@ -29,6 +29,20 @@
  *    `isValidLagProfile` before being returned; a degenerate result (should not
  *    happen given a min/max/median are inherently ordered, but checked anyway —
  *    fail-closed) is dropped, never persisted.
+ *  - The window is padded out to at least {@link MIN_WINDOW_WIDTH_HOURS} wide
+ *    (symmetrically, clamped at 0) — a SELF-UNDERMINING FEEDBACK BUG found in
+ *    testing: when every observed lag happens to be identical (a very
+ *    consistent reactor), the raw `[min, max]` collapses to a ZERO-WIDTH
+ *    window. `correlate.ts`'s `baselineAndLift` explicitly treats
+ *    `windowWidth <= 0` as "cannot compute a baseline" and returns
+ *    `lift: undefined` — which then makes `classifyConfidence` unable to ever
+ *    reach `likely` again (it requires a defined lift). Because
+ *    `learnTriggerClasses` only re-learns from an ALREADY-`likely` suspicion,
+ *    a zero-width learned window is a ONE-WAY RATCHET: the very next run
+ *    reads it back, permanently downgrades to `suspected`, and can never
+ *    requalify to re-learn a better window. Padding guarantees `windowWidth`
+ *    stays positive, so the lift/baseline math (and hence future
+ *    reachability of `likely`) is never broken by an over-consistent sample.
  *
  * Pure; no I/O. The caller (`useInsights`) persists eligible results to the cache
  * (`DiaryStore.putTriggerClass`) and `from-cache.ts` feeds them back into the next
@@ -40,6 +54,13 @@ import type { SuspicionScore } from "./types";
 
 /** Minimum distinct lag observations before a per-user profile is trusted. */
 export const MIN_SAMPLE_SIZE = 5;
+
+/**
+ * The floor on a learned window's width (hours) — see the module docs' bug
+ * writeup. Any observed `[min, max]` narrower than this is padded out
+ * symmetrically (clamped so `lagWindowMin` never goes negative).
+ */
+export const MIN_WINDOW_WIDTH_HOURS = 1;
 
 /** One learned trigger class + how many observations it rests on (never hidden). */
 export interface LearnedTriggerClass {
@@ -73,11 +94,18 @@ export function learnTriggerClasses(
       pairing.symptoms.map((sym) => sym.lagHours),
     );
     if (observedLagHours.length < MIN_SAMPLE_SIZE) continue;
-    const profile = {
-      lagWindowMin: Math.min(...observedLagHours),
-      lagWindowMax: Math.max(...observedLagHours),
-      lagMode: median(observedLagHours),
-    };
+    const rawMin = Math.min(...observedLagHours);
+    const rawMax = Math.max(...observedLagHours);
+    const width = rawMax - rawMin;
+    // Pad a too-narrow (possibly zero) window out to the floor width — see the
+    // module docs' feedback-bug writeup. Clamp at 0 rather than let the pad push
+    // `lagWindowMin` negative, then push any resulting shortfall onto the max
+    // side so the total width still reaches the floor.
+    const pad = width < MIN_WINDOW_WIDTH_HOURS ? (MIN_WINDOW_WIDTH_HOURS - width) / 2 : 0;
+    const lagWindowMin = Math.max(0, rawMin - pad);
+    const shortfall = pad - (rawMin - lagWindowMin); // pad lost to the 0-floor clamp
+    const lagWindowMax = rawMax + pad + shortfall;
+    const profile = { lagWindowMin, lagWindowMax, lagMode: median(observedLagHours) };
     if (!isValidLagProfile(profile)) continue; // fail-closed: never persist a degenerate profile.
     out.push({
       data: { slug: s.trigger, ...profile },

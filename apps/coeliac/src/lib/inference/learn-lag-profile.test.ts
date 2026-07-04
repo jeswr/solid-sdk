@@ -2,7 +2,8 @@
 import type { TriggerSlug } from "@jeswr/solid-health-diary";
 import { describe, expect, it } from "vitest";
 import { PATTERN_NOT_DIAGNOSIS, type EvidencePairing, type SuspicionScore } from "./types";
-import { learnTriggerClasses, MIN_SAMPLE_SIZE } from "./learn-lag-profile";
+import { isValidLagProfile } from "@jeswr/solid-health-diary";
+import { learnTriggerClasses, MIN_SAMPLE_SIZE, MIN_WINDOW_WIDTH_HOURS } from "./learn-lag-profile";
 
 /** Build a minimal evidence pairing with a single symptom at the given lag (hours). */
 function pairing(lagHours: number, coPresent: TriggerSlug[] = []): EvidencePairing {
@@ -159,5 +160,46 @@ describe("learnTriggerClasses", () => {
     ];
     const learned = learnTriggerClasses(suspicions);
     expect(learned[0].sampleSize).toBe(5); // 3 from the multi-symptom pairing + 2 singles
+  });
+
+  it("pads a ZERO-WIDTH window (every observed lag identical) out to the floor width — the self-undermining feedback bug", () => {
+    // A very consistent reactor: every single observation lags by EXACTLY 2h.
+    // Without padding, lagWindowMin===lagWindowMax===2 — a zero-width window
+    // that `correlate.ts`'s baseline/lift math treats as "cannot compute a
+    // baseline" (lift: undefined), which then makes the NEXT run's confidence
+    // classification unable to ever reach "likely" again (a one-way ratchet
+    // down to "suspected", since only a "likely" suspicion is eligible to
+    // re-learn). The learned window must stay strictly positive-width.
+    const suspicions = [
+      mkScore({
+        trigger: "lactose",
+        confidence: "likely",
+        evidence: Array.from({ length: MIN_SAMPLE_SIZE }, () => pairing(2)),
+      }),
+    ];
+    const learned = learnTriggerClasses(suspicions);
+    expect(learned).toHaveLength(1);
+    const { lagWindowMin, lagWindowMax, lagMode } = learned[0].data;
+    expect(lagWindowMax - lagWindowMin).toBeGreaterThanOrEqual(MIN_WINDOW_WIDTH_HOURS);
+    expect(lagWindowMin).toBeLessThanOrEqual(2);
+    expect(lagWindowMax).toBeGreaterThanOrEqual(2);
+    expect(lagMode).toBe(2);
+    expect(isValidLagProfile({ lagWindowMin, lagWindowMax, lagMode })).toBe(true);
+  });
+
+  it("clamps the pad at 0 without shrinking below the floor width when the raw window sits at the lag-hours origin", () => {
+    // Every observation at lag 0h — padding downward would go negative; the
+    // shortfall must be pushed onto the max side instead.
+    const suspicions = [
+      mkScore({
+        trigger: "lactose",
+        confidence: "likely",
+        evidence: Array.from({ length: MIN_SAMPLE_SIZE }, () => pairing(0)),
+      }),
+    ];
+    const learned = learnTriggerClasses(suspicions);
+    const { lagWindowMin, lagWindowMax } = learned[0].data;
+    expect(lagWindowMin).toBe(0); // never negative
+    expect(lagWindowMax - lagWindowMin).toBeGreaterThanOrEqual(MIN_WINDOW_WIDTH_HOURS);
   });
 });

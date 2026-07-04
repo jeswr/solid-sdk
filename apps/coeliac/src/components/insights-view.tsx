@@ -306,6 +306,18 @@ function GeneticSignal() {
   );
 }
 
+/**
+ * The Insights view. `useSafetyContextCache` starts every mount at the SAFE
+ * empty default `{}` and only becomes the user's true saved values once its own
+ * cache read resolves (roborev finding, health-data-critical: feeding that
+ * transient `{}` into the engine before it resolves would compute safety rails —
+ * most dangerously an alarm-symptom flag's urgent rail — against the WRONG
+ * context for one render). `useInsights` itself withholds `loaded` until its
+ * OWN computed result reflects the CURRENT `safetyContext` reference (see its
+ * `contextApplied` tracking) — so the analysis-dependent body below only ever
+ * renders a result computed against the context actually in effect, never a
+ * stale one from before the cache read resolved.
+ */
 export function InsightsView() {
   const { context: safetyContext, update: updateSafetyContext } = useSafetyContextCache();
   const { result, mealCount, symptomCount, loaded, refresh } = useInsights(safetyContext);

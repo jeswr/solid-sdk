@@ -6,10 +6,12 @@
  * and surface only as the emergency rail. Empty diaries get a guiding empty-state, not a
  * fabricated pattern.
  */
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import type { StoredMeal, StoredSymptom } from "@/lib/cache/diary-store";
-import { SessionContext } from "@/lib/session/context";
+import { DiaryStore, type StoredMeal, type StoredSymptom } from "@/lib/cache/diary-store";
+import type { Kv } from "@/lib/cache/kv";
+import { MemoryKv } from "@/lib/cache/kv";
+import { anonymousSession, SessionContext, type SessionValue } from "@/lib/session/context";
 import { makeSession, renderWithSession } from "../../test/session-harness";
 import { InsightsView } from "./insights-view";
 
@@ -136,5 +138,94 @@ describe("InsightsView", () => {
     // The custom per-user window is used — not the model's 0.5–6h evidence prior.
     expect(screen.getByText(/within a 1–3h window/i)).toBeInTheDocument();
     expect(screen.queryByText(/within a 0\.5–6h window/i)).not.toBeInTheDocument();
+  });
+});
+
+function deferred<T>() {
+  let resolve!: (v: T) => void;
+  const promise = new Promise<T>((r) => {
+    resolve = r;
+  });
+  return { promise, resolve };
+}
+
+/** A Kv whose READS (get/keys) pause on `gate` — writes (set/del) are immediate. */
+class GatedReadKv implements Kv {
+  constructor(
+    private readonly inner: Kv,
+    private readonly gate: Promise<void>,
+  ) {}
+  async get<T>(key: string): Promise<T | undefined> {
+    await this.gate;
+    return this.inner.get<T>(key);
+  }
+  async set<T>(key: string, value: T): Promise<void> {
+    return this.inner.set(key, value);
+  }
+  async del(key: string): Promise<void> {
+    return this.inner.del(key);
+  }
+  async keys(prefix?: string): Promise<string[]> {
+    await this.gate;
+    return this.inner.keys(prefix);
+  }
+}
+
+describe("InsightsView — safety-context load gate (roborev finding, health-data-critical)", () => {
+  it("does not analyse/render against the safe DEFAULT context before the cache read resolves", async () => {
+    const gate = deferred<void>();
+    const gatedKv = new GatedReadKv(new MemoryKv(), gate.promise);
+    const webId = "https://alice.example/#me";
+    const store = new DiaryStore(gatedKv, webId);
+    // A saved alarm flag (giBleeding) — must be respected from the FIRST render
+    // that shows anything, never transiently omitted.
+    await store.putSafetyContext({
+      kind: "safetyContext",
+      alarmFlags: { giBleeding: true },
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    });
+    await store.putMeal(lactoseMeal(0));
+    await store.putSymptom(symptomAfter(0, 2));
+
+    const value: SessionValue = {
+      ...anonymousSession,
+      status: "authed",
+      webId,
+      storageRoot: "https://alice.example/",
+      store,
+      authedFetch: (...a) => globalThis.fetch(...a),
+      publicFetch: (...a) => globalThis.fetch(...a),
+    };
+
+    render(
+      <SessionContext.Provider value={value}>
+        <InsightsView />
+      </SessionContext.Provider>,
+    );
+
+    // While the safety-context cache read is still gated: the analysis-dependent
+    // body (safety rails, suspicions, proposal) is withheld — `useInsights`'s
+    // `contextApplied` gate (see its module docs) keeps `loaded` false until its
+    // result reflects the REAL persisted context, so the neutral "Analysing…"
+    // state shows instead of the alarm rail computed against the wrong `{}`
+    // default. (The safety-context INPUT FORM itself may render early with its
+    // not-yet-loaded — but about to self-correct — values; that's an ordinary
+    // controlled-input re-render, not a safety-rail miscomputation, so it is not
+    // asserted against here.)
+    expect(screen.getByText(/analysing your diary/i)).toBeInTheDocument();
+    expect(screen.queryByText(/alarm symptom/i)).not.toBeInTheDocument();
+
+    // Now let the cache read resolve.
+    act(() => {
+      gate.resolve();
+    });
+
+    // The alarm rail now appears, correctly reflecting the PERSISTED flag — it
+    // was never shown, nor omitted, against the wrong default context. Scoped to
+    // the rails section since the safety-context CHECKLIST also legitimately
+    // names "Gastrointestinal bleeding" elsewhere on the same page.
+    await waitFor(() => expect(screen.getByText(/alarm symptom/i)).toBeInTheDocument());
+    const rails = within(screen.getByLabelText(/safety guidance/i));
+    expect(rails.getByText(/gastrointestinal bleeding/i)).toBeInTheDocument();
   });
 });
