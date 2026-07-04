@@ -20,13 +20,13 @@ export interface FeedbackPayload {
 /** The diagnostics block, structured. The WebID is present ONLY with consent. */
 export interface FeedbackDiagnostics {
     appName: string;
-    appVersion?: string;
+    appVersion?: string | undefined;
     /** The page the feedback was raised from (`location.href`). */
-    pageUrl?: string;
+    pageUrl?: string | undefined;
     /** The browser user-agent. */
-    userAgent?: string;
-    /** Present ONLY when the reporter consented to share their WebID. */
-    webId?: string;
+    userAgent?: string | undefined;
+    /** Present ONLY when the reporter consented to share their WebID (`undefined` = absent). */
+    webId?: string | undefined;
 }
 /** The result a `submit` hook resolves with: the created issue's URL + number. */
 export interface FeedbackSubmitResult {

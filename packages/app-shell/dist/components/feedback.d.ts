@@ -7,14 +7,14 @@ export interface FeedbackDialogProps {
     /** This app's human name, attached to diagnostics + used in the dialog copy. */
     appName: string;
     /** Optional build SHA / version, attached to diagnostics. */
-    appVersion?: string;
+    appVersion?: string | undefined;
     /** The signed-in user's WebID. Attached ONLY if the consent box is ticked. */
-    webId?: string | null;
+    webId?: string | null | undefined;
     /**
      * Optional proxy hook. When provided it is called instead of the prefill flow;
      * it should create the issue server-side and resolve with its URL + number.
      */
-    submit?: (payload: FeedbackPayload) => Promise<FeedbackSubmitResult>;
+    submit?: ((payload: FeedbackPayload) => Promise<FeedbackSubmitResult>) | undefined;
     /** Controls dialog visibility. */
     open: boolean;
     /** Called when the dialog requests to close (backdrop / Escape / Close). */

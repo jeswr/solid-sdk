@@ -106,10 +106,10 @@ export interface FeedbackDiagnostics {
     // (undocumented)
     appName: string;
     // (undocumented)
-    appVersion?: string;
-    pageUrl?: string;
-    userAgent?: string;
-    webId?: string;
+    appVersion?: string | undefined;
+    pageUrl?: string | undefined;
+    userAgent?: string | undefined;
+    webId?: string | undefined;
 }
 
 // @public
@@ -118,12 +118,12 @@ export function FeedbackDialog(input: FeedbackDialogProps): React_2.JSX.Element 
 // @public (undocumented)
 export interface FeedbackDialogProps {
     appName: string;
-    appVersion?: string;
+    appVersion?: string | undefined;
     onOpenChange: (open: boolean) => void;
     open: boolean;
     repo: string;
-    submit?: (payload: FeedbackPayload) => Promise<FeedbackSubmitResult>;
-    webId?: string | null;
+    submit?: ((payload: FeedbackPayload) => Promise<FeedbackSubmitResult>) | undefined;
+    webId?: string | null | undefined;
 }
 
 // @public
