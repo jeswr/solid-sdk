@@ -93,7 +93,24 @@ export async function countersign(
     );
   }
 
-  // Producer guard 2: there must be an EXISTING proof to countersign. The first
+  // Producer guard 2: a STABLE credential id. `credentialToRdf` mints a fresh
+  // random `urn:uuid:` subject whenever `id` is absent (it is non-deterministic),
+  // so an id-less credential lowers to a DIFFERENT claim graph on every call —
+  // meaning a countersignature computed here would NOT verify (verify re-lowers
+  // the returned, still-id-less VC to yet another random subject), and the
+  // credential's own first proof is already unverifiable for the same reason.
+  // Refuse fail-closed rather than emit a silently-unverifiable proof set. Every
+  // credential from this library's `issue()` carries an id, so this only rejects a
+  // credential that could never have had a reproducible signature anyway.
+  if (typeof vc.id !== "string" || vc.id.length === 0) {
+    throw new Error(
+      "@jeswr/solid-vc: countersign requires a credential with a stable `id` — an id-less " +
+        "credential lowers to a fresh random subject on every call, so its signatures are not " +
+        "reproducible and a countersignature would not verify",
+    );
+  }
+
+  // Producer guard 3: there must be an EXISTING proof to countersign. The first
   // signature is `issue()`; countersign only ADDS to a proof set. Rejecting the
   // no-proof case keeps the two primitives distinct (and prevents a caller from
   // using countersign as a confusing alias for issue that skips issue's id/

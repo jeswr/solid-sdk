@@ -133,6 +133,30 @@ describe("readValidCredential — fail-closed rejections", () => {
     expect(result.error).toMatch(/validFrom.*not a well-formed xsd:dateTime/);
   });
 
+  it("rejects a lexically-date-shaped PLAIN literal validFrom (wrong/absent datatype)", async () => {
+    // A plain literal (no ^^ datatype ⇒ xsd:string) with correct dateTime TEXT must
+    // still be rejected — the field is typed xsd:dateTime, not stringly-typed.
+    const ttl = `${PREFIX}<urn:uuid:c> a cred:VerifiableCredential ;
+      cred:issuer <https://alice.example/#me> ;
+      cred:credentialSubject <https://bob.example/#me> ;
+      cred:validFrom "2024-01-01T00:00:00Z" .`;
+    const result = await parseAndValidateCredential(ttl);
+    expect(result.valid).toBe(false);
+    if (result.valid) throw new Error("expected invalid");
+    expect(result.error).toMatch(/validFrom must be typed xsd:dateTime/);
+  });
+
+  it("rejects an xsd:string-typed validUntil with dateTime text", async () => {
+    const ttl = `${PREFIX}<urn:uuid:c> a cred:VerifiableCredential ;
+      cred:issuer <https://alice.example/#me> ;
+      cred:credentialSubject <https://bob.example/#me> ;
+      cred:validUntil "2025-01-01T00:00:00Z"^^xsd:string .`;
+    const result = await parseAndValidateCredential(ttl);
+    expect(result.valid).toBe(false);
+    if (result.valid) throw new Error("expected invalid");
+    expect(result.error).toMatch(/validUntil must be typed xsd:dateTime/);
+  });
+
   it("rejects a shape-valid-but-impossible validUntil (month 13)", async () => {
     const ttl = `${PREFIX}<urn:uuid:c> a cred:VerifiableCredential ;
       cred:issuer <https://alice.example/#me> ;

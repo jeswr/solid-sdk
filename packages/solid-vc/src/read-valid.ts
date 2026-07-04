@@ -26,7 +26,7 @@
 import type { DatasetCore } from "@rdfjs/types";
 import { parseCredentialRdf } from "./credential.js";
 import { isAbsoluteIri } from "./iri.js";
-import { VC_CREDENTIAL, VC_CREDENTIAL_SUBJECT, VC_ISSUER } from "./vocab.js";
+import { VC_CREDENTIAL, VC_CREDENTIAL_SUBJECT, VC_ISSUER, XSD } from "./vocab.js";
 import { type CredentialNode, wrapVc } from "./wrappers.js";
 
 /**
@@ -73,15 +73,27 @@ function reject(error: string): ValidCredentialResult {
   return { valid: false, error };
 }
 
+/** The XSD dateTime datatype IRI a validFrom/validUntil literal MUST carry. */
+const XSD_DATETIME = `${XSD}dateTime`;
+
+/** A minimal read-only view of a term with (for a Literal) its datatype. */
+interface DateTimeTerm {
+  readonly termType: string;
+  readonly value: string;
+  readonly datatype?: { readonly value: string };
+}
+
 /**
  * Read an OPTIONAL `xsd:dateTime` property (validFrom / validUntil) FAIL-CLOSED:
  *  - absent → `{ ok: true }` (nothing to validate);
  *  - present but not exactly one value → `{ ok: false }` (ambiguous);
  *  - present but not a Literal (e.g. an IRI where a dateTime is required) → reject;
- *  - present Literal that is not a well-formed `xsd:dateTime` → reject.
+ *  - present Literal whose DATATYPE is not `xsd:dateTime` (a plain / `xsd:string`
+ *    literal with the same text) → reject — the field is typed, not stringly;
+ *  - present `xsd:dateTime` Literal whose lexical value is not well-formed → reject.
  */
 function readOptionalDateTime(
-  terms: ReadonlySet<{ termType: string; value: string }>,
+  terms: ReadonlySet<DateTimeTerm>,
   field: string,
 ): { ok: true; value?: string } | { ok: false; error: string } {
   const all = [...terms];
@@ -93,6 +105,16 @@ function readOptionalDateTime(
   if (term === undefined) return { ok: true };
   if (term.termType !== "Literal") {
     return { ok: false, error: `credential ${field} must be an xsd:dateTime literal` };
+  }
+  // Strict datatype: a lexically-date-shaped PLAIN or xsd:string literal is NOT an
+  // xsd:dateTime and must be rejected (the API documents fail-closed xsd:dateTime).
+  if (term.datatype?.value !== XSD_DATETIME) {
+    return {
+      ok: false,
+      error: `credential ${field} must be typed xsd:dateTime, not ${
+        term.datatype?.value ?? "an untyped literal"
+      }`,
+    };
   }
   if (!isXsdDateTime(term.value)) {
     return {

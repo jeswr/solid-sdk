@@ -152,6 +152,7 @@ describe("countersign — fail-closed producer guards", () => {
   it("throws when countersigning a credential that carries NO proof", async () => {
     const key2 = await generateKeyPairForSuite(VM2);
     const unsignedVc = {
+      id: "urn:uuid:no-proof",
       issuer: ISSUER,
       credentialSubject: { id: "https://bob.example/#me", over18: true },
     } as unknown as VerifiableCredential;
@@ -162,6 +163,16 @@ describe("countersign — fail-closed producer guards", () => {
     const key2 = await generateKeyPairForSuite(VM2);
     const bogus = { credentialSubject: { id: "x" }, proof: [] } as unknown as VerifiableCredential;
     await expect(countersign(bogus, key2)).rejects.toThrow(/structurally signed credential/);
+  });
+
+  it("throws when countersigning a credential with no stable id (unverifiable)", async () => {
+    // credentialToRdf mints a fresh random urn:uuid: subject for an id-less
+    // credential, so a countersignature over it could never verify — reject.
+    const key1 = await issuerKey();
+    const key2 = await generateKeyPairForSuite(VM2);
+    const vc = await issueAgentAuthorization(AUTH, key1);
+    const { id: _id, ...idless } = vc;
+    await expect(countersign(idless as VerifiableCredential, key2)).rejects.toThrow(/stable `id`/);
   });
 
   it("throws when the input has no credentialSubject", async () => {

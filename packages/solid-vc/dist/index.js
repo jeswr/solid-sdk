@@ -1152,6 +1152,11 @@ async function countersign(vc, key, opts) {
       "@jeswr/solid-vc: countersign requires a structurally signed credential (a string issuer and a credentialSubject) \u2014 got a non-credential object"
     );
   }
+  if (typeof vc.id !== "string" || vc.id.length === 0) {
+    throw new Error(
+      "@jeswr/solid-vc: countersign requires a credential with a stable `id` \u2014 an id-less credential lowers to a fresh random subject on every call, so its signatures are not reproducible and a countersignature would not verify"
+    );
+  }
   const existing = proofsOf(vc);
   if (existing.length === 0) {
     throw new Error(
@@ -1255,6 +1260,7 @@ function isXsdDateTime(value) {
 function reject(error) {
   return { valid: false, error };
 }
+var XSD_DATETIME = `${XSD}dateTime`;
 function readOptionalDateTime(terms, field) {
   const all = [...terms];
   if (all.length === 0) return { ok: true };
@@ -1265,6 +1271,12 @@ function readOptionalDateTime(terms, field) {
   if (term === void 0) return { ok: true };
   if (term.termType !== "Literal") {
     return { ok: false, error: `credential ${field} must be an xsd:dateTime literal` };
+  }
+  if (term.datatype?.value !== XSD_DATETIME) {
+    return {
+      ok: false,
+      error: `credential ${field} must be typed xsd:dateTime, not ${term.datatype?.value ?? "an untyped literal"}`
+    };
   }
   if (!isXsdDateTime(term.value)) {
     return {
