@@ -53,6 +53,22 @@ export interface NodePinningOptions extends Omit<GuardOptions, "fetch" | "pinnin
 }
 
 // @public
+export class RedirectRefusedError extends Error {
+    constructor(message: string, detail: {
+        url: string;
+        status: number;
+        location?: string;
+        cause?: unknown;
+    });
+    readonly location: string | undefined;
+    readonly status: number;
+    readonly url: string;
+}
+
+// @public
+export function refuseRedirects(fetch?: typeof globalThis.fetch): typeof globalThis.fetch;
+
+// @public
 export type ResolveAll = (hostname: string) => Promise<LookupAddress[]>;
 
 // @public

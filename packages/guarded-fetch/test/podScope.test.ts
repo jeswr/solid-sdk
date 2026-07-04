@@ -228,6 +228,55 @@ describe("assertWithinPodScope — origin escapes (fail-closed)", () => {
   });
 });
 
+describe("assertWithinPodScope — IPv6-literal host forms", () => {
+  const V6base = "https://[2001:db8::1]/pod/";
+
+  it("accepts an in-scope child under an IPv6-literal host base", () => {
+    expect(assertWithinPodScope(V6base, `${V6base}doc`)).toBe(`${V6base}doc`);
+  });
+
+  it("treats a fully-EXPANDED IPv6 form as the same origin (WHATWG compresses)", () => {
+    // The expanded literal canonicalises to the compressed `[2001:db8::1]` origin, so it is
+    // in scope — an attacker cannot dodge the origin check by re-spelling the same address.
+    expect(
+      assertWithinPodScope(V6base, "https://[2001:0db8:0000:0000:0000:0000:0000:0001]/pod/doc"),
+    ).toBe(`${V6base}doc`);
+  });
+
+  it("rejects a DIFFERENT IPv6 host (origin mismatch)", () => {
+    expect(isWithinPodScope(V6base, "https://[2001:db8::2]/pod/doc")).toBe(false);
+  });
+
+  it("rejects an IPv6 host with a different port", () => {
+    expect(isWithinPodScope(V6base, "https://[2001:db8::1]:8443/pod/doc")).toBe(false);
+  });
+
+  it("rejects a scheme-relative IPv6 candidate outright", () => {
+    expect(isWithinPodScope(V6base, "//[2001:db8::1]/pod/doc")).toBe(false);
+  });
+
+  it("rejects a `..` traversal that escapes an IPv6-host base", () => {
+    expect(isWithinPodScope(V6base, `${V6base}../secret`)).toBe(false);
+  });
+});
+
+describe("assertWithinPodScope — unicode / IDN host tricks", () => {
+  it("accepts the SAME unicode host, rejects its ASCII near-spelling (ü ≠ u)", () => {
+    const base = "https://bücher.example/pod/";
+    expect(isWithinPodScope(base, "https://bücher.example/pod/doc")).toBe(true);
+    // The ASCII spelling is a DIFFERENT origin after IDNA — not silently equated.
+    expect(isWithinPodScope(base, "https://bucher.example/pod/doc")).toBe(false);
+  });
+
+  it("rejects a Cyrillic homoglyph of an ASCII host (different origin after IDNA)", () => {
+    // `а` is Cyrillic 'а', a visual twin of ASCII 'a' — IDNA-encodes to a different host,
+    // so the origin check refuses it (the homoglyph-lookalike SSRF/scope-escape class).
+    expect(isWithinPodScope("https://alice.example/pod/", "https://аlice.example/pod/doc")).toBe(
+      false,
+    );
+  });
+});
+
 describe("assertWithinPodScope — scheme + credential guards", () => {
   it.each([
     "file:///etc/passwd",

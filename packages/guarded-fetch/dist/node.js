@@ -8,6 +8,7 @@ import {
   isPublicAddress,
   SsrfError
 } from "./index.js";
+import { RedirectRefusedError, refuseRedirects } from "./index.js";
 var defaultResolveAll = (hostname) => new Promise((resolve, reject) => {
   dnsLookupCb(hostname, { all: true }, (err, addresses) => {
     if (err) {
@@ -158,9 +159,11 @@ function safeIsHttp(u) {
   }
 }
 export {
+  RedirectRefusedError,
   createNodeGuardedFetch,
   createPinningDispatcher,
   createValidatingLookup,
-  nodeGuardedFetch
+  nodeGuardedFetch,
+  refuseRedirects
 };
 //# sourceMappingURL=node.js.map

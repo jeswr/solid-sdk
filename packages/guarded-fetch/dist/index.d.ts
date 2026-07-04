@@ -19,8 +19,14 @@
  * The POD-SCOPE guard (`./podScope.js`) is the second consolidation: the capability check
  * ("is this URL within the ONE pod container this component is configured to touch?"),
  * unifying the suite's ~8 bespoke `assertWithinBase` copies. Browser-safe, WHATWG-URL-only.
+ *
+ * The REDIRECT-REFUSAL wrapper (`./refuseRedirects.js`) is the third: `refuseRedirects(fetch)`
+ * (+ {@link RedirectRefusedError}) forces `redirect:"manual"` and REFUSES any redirect, the
+ * safe posture for a CREDENTIALED / trust-bearing request — closing the recurring
+ * "credentialed fetch must refuse redirects" roborev finding across the estate.
  */
 export { classifyIpLiteral, isLoopbackAddress, isPublicAddress, } from "./addresses.js";
 export { assertSafeUrl, createGuardedFetch, DEFAULT_HOSTNAME_DENYLIST, type DnsLookup, GuardError, type GuardOptions, guardedFetch, isDeniedHostname, normalizeHostForClassification, type ResolvedAddress, SsrfError, } from "./guard.js";
 export { assertWithinPodScope, createPodScopedFetch, isContainerUrl, isWithinPodScope, normalizePodBase, type PodScopedFetchOptions, PodScopeError, type PodScopeOptions, podScopedUrl, redactUserinfo, } from "./podScope.js";
+export { RedirectRefusedError, refuseRedirects } from "./refuseRedirects.js";
 //# sourceMappingURL=index.d.ts.map

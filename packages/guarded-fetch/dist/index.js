@@ -1020,6 +1020,12 @@ function safeProtocol(u) {
     return "";
   }
 }
+function redactUserinfo(value) {
+  if (typeof value !== "string") {
+    return String(value);
+  }
+  return value.replace(/\/\/[^/?#]*@/g, "//<redacted>@");
+}
 var CREDENTIAL_HEADERS = /* @__PURE__ */ new Set([
   "authorization",
   "cookie",
@@ -1535,12 +1541,6 @@ var PodScopeError = class extends Error {
 };
 var DEFAULT_MAX_REDIRECTS2 = 5;
 var ENCODED_DELIMITER = /%2f|%5c/i;
-function redactUserinfo(value) {
-  if (typeof value !== "string") {
-    return String(value);
-  }
-  return value.replace(/\/\/[^/?#]*@/g, "//<redacted>@");
-}
 function normalizePodBase(base) {
   if (typeof base !== "string" || base.trim().length === 0) {
     throw new PodScopeError("pod base URL must be a non-empty string.");
@@ -1699,10 +1699,66 @@ function createPodScopedFetch(base, options = {}) {
   };
   return scoped;
 }
+
+// src/refuseRedirects.ts
+var RedirectRefusedError = class extends Error {
+  /** The request URL that returned the refused redirect (userinfo redacted). */
+  url;
+  /**
+   * The redirect status. `0` for a browser opaque-redirect, whose real 3xx status is masked by
+   * the Fetch spec's response filtering (the wrapper still refuses it).
+   */
+  status;
+  /**
+   * The `Location` header (userinfo redacted), when readable — `undefined` for a browser
+   * opaque-redirect (whose headers are stripped) or a redirect with no `Location`.
+   */
+  location;
+  constructor(message2, detail) {
+    super(message2, detail.cause !== void 0 ? { cause: detail.cause } : void 0);
+    this.name = "RedirectRefusedError";
+    this.url = detail.url;
+    this.status = detail.status;
+    this.location = detail.location;
+  }
+};
+function refuseRedirects(fetch = globalThis.fetch) {
+  const wrapped = async (input, init) => {
+    const res = await fetch(input, { ...init ?? {}, redirect: "manual" });
+    const opaqueRedirect = res.type === "opaqueredirect";
+    if (opaqueRedirect || isRedirect(res.status)) {
+      const location = opaqueRedirect ? void 0 : res.headers.get("location") ?? void 0;
+      try {
+        await res.body?.cancel();
+      } catch {
+      }
+      const safeUrl = redactUserinfo(requestUrlOf(input));
+      const safeLocation = location !== void 0 ? redactUserinfo(location) : void 0;
+      const where = opaqueRedirect ? "opaque redirect" : `status ${res.status}`;
+      const to = safeLocation !== void 0 ? ` \u2192 ${safeLocation}` : "";
+      throw new RedirectRefusedError(
+        `Refusing to follow a redirect (${where}${to}) from ${safeUrl}: this fetch refuses redirects for credential safety. Use a follow-capable fetch if a redirect is an expected part of the protocol.`,
+        { url: safeUrl, status: res.status, location: safeLocation }
+      );
+    }
+    return res;
+  };
+  return wrapped;
+}
+function requestUrlOf(input) {
+  if (typeof input === "string") {
+    return input;
+  }
+  if (input instanceof URL) {
+    return input.toString();
+  }
+  return input.url;
+}
 export {
   DEFAULT_HOSTNAME_DENYLIST,
   GuardError,
   PodScopeError,
+  RedirectRefusedError,
   SsrfError,
   assertSafeUrl,
   assertWithinPodScope,
@@ -1718,6 +1774,7 @@ export {
   normalizeHostForClassification,
   normalizePodBase,
   podScopedUrl,
-  redactUserinfo
+  redactUserinfo,
+  refuseRedirects
 };
 //# sourceMappingURL=index.js.map
