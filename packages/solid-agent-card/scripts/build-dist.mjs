@@ -34,13 +34,29 @@
  * The committed `dist/` is kept in sync with `src/` by `scripts/check-dist-fresh.mjs`.
  */
 import { execFileSync } from "node:child_process";
-import { rmSync } from "node:fs";
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const outdir = join(root, "dist");
+
+/**
+ * Rewrite an esbuild sourcemap `sources[]` entry to a stable, package-root-relative
+ * path — dropping any absolute prefix or `../` traversal so the committed map is
+ * deterministic and never leaks the builder's filesystem. A bundled-dep source
+ * becomes `node_modules/…`; an own source becomes `src/…`. (`node_modules` is
+ * matched first so a dep whose own path contains `src/` still normalises to its
+ * `node_modules/` root.)
+ */
+function toPkgRelativeSource(source) {
+  const nm = source.indexOf("node_modules/");
+  if (nm !== -1) return source.slice(nm);
+  const src = source.indexOf("src/");
+  if (src !== -1) return source.slice(src);
+  return source;
+}
 
 /**
  * Everything that must stay EXTERNAL (resolved from npm, not inlined). The
@@ -83,6 +99,43 @@ async function main(buildDir = outdir) {
     legalComments: "none",
     logLevel: "warning",
   });
+
+  // 2b. Normalise esbuild's path labels so the COMMITTED bundle + sourcemap never
+  //     embed an absolute local build path (`/Users/…`, `/home/…`) or an
+  //     environment-specific `../…` traversal — both leak the builder's filesystem
+  //     and vary across checkouts / a symlinked `node_modules`. Rewrite to stable,
+  //     package-root-relative paths (`node_modules/…`, `src/…`). Idempotent; keeps
+  //     the committed dist deterministic.
+  const indexFile = join(buildDir, "index.js");
+  const mapFile = join(buildDir, "index.js.map");
+
+  // (i) The bundle's module-boundary `// <path>` comments.
+  const normalisedJs = readFileSync(indexFile, "utf8").replace(
+    /^\/\/ \S*\/(node_modules\/\S*)$/gm,
+    "// $1",
+  );
+  writeFileSync(indexFile, normalisedJs, "utf8");
+
+  // (ii) The sourcemap `sources[]` entries (esbuild records them absolute /
+  //      traversal-relative; rewrite each to package-root-relative).
+  const map = JSON.parse(readFileSync(mapFile, "utf8"));
+  if (Array.isArray(map.sources)) {
+    map.sources = map.sources.map(toPkgRelativeSource);
+  }
+  writeFileSync(mapFile, JSON.stringify(map), "utf8");
+
+  // 2c. Leak guard: FAIL the build if any absolute local path survives in the
+  //     committed JS bundle OR its sourcemap. Cheap, and it stops a regression in
+  //     the normalisation above from silently shipping a filesystem path.
+  for (const f of [indexFile, mapFile]) {
+    const content = readFileSync(f, "utf8");
+    const leak = content.match(/\/(?:Users|home)\/[^\s"']+/);
+    if (leak) {
+      throw new Error(
+        `build-dist: committed artifact ${f} leaks an absolute local path: ${leak[0]}`,
+      );
+    }
+  }
 
   // 3. Emit the .d.ts declarations (declaration-only — esbuild already wrote JS).
   execFileSync(

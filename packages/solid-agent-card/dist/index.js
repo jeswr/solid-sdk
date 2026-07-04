@@ -1,3 +1,28 @@
+// src/iri.ts
+function safeHttpIri(value) {
+  if (typeof value !== "string") return void 0;
+  if (/^[\u0000-\u0020]|[\u0000-\u0020]$/.test(value)) return void 0;
+  const escaped = escapeIri(value);
+  let u;
+  try {
+    u = new URL(escaped);
+  } catch {
+    return void 0;
+  }
+  if (u.protocol !== "http:" && u.protocol !== "https:") return void 0;
+  if (!/^https?:\/\/[^/?#]/i.test(escaped)) return void 0;
+  if (u.host === "") return void 0;
+  return escaped;
+}
+var IRIREF_FORBIDDEN = /[\u0000-\u0020<>"{}|^`\\]/g;
+function escapeIri(value) {
+  if (typeof value !== "string") return "";
+  return value.replace(
+    IRIREF_FORBIDDEN,
+    (c) => `%${c.charCodeAt(0).toString(16).toUpperCase().padStart(2, "0")}`
+  );
+}
+
 // node_modules/@jeswr/rdf-serialize/dist/serialize.js
 import { Writer } from "n3";
 var DEFAULT_FORMAT = "text/turtle";
@@ -196,10 +221,12 @@ function wrapProfile(dataset) {
   return new ProfileDataset(dataset, DataFactory);
 }
 function addIri(node, predicate, objectIri) {
+  const object = safeHttpIri(objectIri);
+  if (object === void 0) return;
   const factory = node.factory;
   const subject = node;
-  const p = NamedNodeFrom.string(predicate, factory);
-  const o = NamedNodeFrom.string(objectIri, factory);
+  const p = NamedNodeFrom.string(escapeIri(predicate), factory);
+  const o = NamedNodeFrom.string(object, factory);
   node.dataset.add(factory.quad(subject, p, o));
 }
 function addLiteral(node, predicate, value) {
@@ -280,7 +307,7 @@ var WritableAgentDescription = class extends TermWrapper {
     const factory = this.factory;
     const blank = BlankNodeFrom.string(void 0, factory);
     const subject = this;
-    const p = NamedNodeFrom.string(predicate, factory);
+    const p = NamedNodeFrom.string(escapeIri(predicate), factory);
     this.dataset.add(factory.quad(subject, p, blank));
     return blank;
   }
@@ -291,7 +318,7 @@ var AgentBuilder = class {
   /** Open the agent-description subject (`id` is the agent IRI) for writing. */
   agent(id) {
     const node = new WritableAgentDescription(
-      id,
+      escapeIri(id),
       this.store,
       this.factory
     );
@@ -311,7 +338,11 @@ var PointerBuilder = class {
    * `interop:hasAuthorizationAgent` (the SAI "agent that represents you").
    */
   link(webId, agent, predicate) {
-    const node = new TermWrapper(webId, this.store, this.factory);
+    const node = new TermWrapper(
+      escapeIri(webId),
+      this.store,
+      this.factory
+    );
     addIri(node, predicate, agent);
   }
   /** The accumulated quads. */
@@ -328,19 +359,30 @@ function describeAgent(descriptor) {
   if (!descriptor.name) {
     throw new TypeError("describeAgent: AgentDescriptor.name is required.");
   }
+  if (safeHttpIri(descriptor.url ?? descriptor.id) === void 0) {
+    throw new TypeError(
+      "describeAgent: a resolvable http(s) `url` is required (AgentDescriptor.url, which falls back to `id`); a non-http(s) `id` (did:/urn:) MUST supply an explicit http(s) `url`."
+    );
+  }
   return {
     agentCard: buildAgentCard(descriptor),
     agentDescription: buildAgentDescription(descriptor)
   };
 }
 function buildAgentCard(descriptor) {
-  const url = descriptor.url ?? descriptor.id;
+  const url = safeHttpIri(descriptor.url ?? descriptor.id);
+  if (url === void 0) {
+    throw new TypeError(
+      "describeAgent: a resolvable http(s) `url` is required (AgentDescriptor.url / id)."
+    );
+  }
   const securitySchemes = {};
   for (const scheme of descriptor.securitySchemes ?? []) {
+    const issuer = scheme.issuer !== void 0 ? safeHttpIri(scheme.issuer) : void 0;
     const entry = {
       type: scheme.type,
       ...scheme.description !== void 0 && { description: scheme.description },
-      ...scheme.issuer !== void 0 && { openIdConnectUrl: scheme.issuer }
+      ...issuer !== void 0 && { openIdConnectUrl: issuer }
     };
     securitySchemes[scheme.type] = entry;
   }
@@ -369,11 +411,17 @@ function buildAgentCard(descriptor) {
 function buildSolidExtension(descriptor) {
   const ext = {};
   if (descriptor.owner !== void 0) {
-    ext.owner = descriptor.owner;
+    const owner = safeHttpIri(descriptor.owner);
+    if (owner !== void 0) {
+      ext.owner = owner;
+    }
   }
-  ext.agentDescription = `${descriptor.id}#ad`;
+  ext.agentDescription = escapeIri(`${descriptor.id}#ad`);
   if (descriptor.protocolSources && descriptor.protocolSources.length > 0) {
-    ext.protocolSources = [...descriptor.protocolSources];
+    const sources = descriptor.protocolSources.map((s) => safeHttpIri(s)).filter((s) => s !== void 0);
+    if (sources.length > 0) {
+      ext.protocolSources = sources;
+    }
   }
   return ext;
 }
@@ -434,22 +482,28 @@ function buildJsonLd(descriptor) {
     // parses offline + deterministically and carries no SSRF/availability
     // dependency on the CG-draft context endpoint. See ANP_INLINE_CONTEXT.
     "@context": ANP_INLINE_CONTEXT,
-    "@id": descriptor.id,
+    "@id": escapeIri(descriptor.id),
     "@type": "AgentDescription",
     name: descriptor.name,
-    url: descriptor.url ?? descriptor.id
+    url: safeHttpIri(descriptor.url ?? descriptor.id)
   };
   if (descriptor.description !== void 0) {
     doc.description = descriptor.description;
   }
   if (descriptor.owner !== void 0) {
-    doc.owner = { "@id": descriptor.owner };
+    const owner = safeHttpIri(descriptor.owner);
+    if (owner !== void 0) {
+      doc.owner = { "@id": owner };
+    }
   }
   if (descriptor.did !== void 0) {
     doc.did = descriptor.did;
   }
   if (descriptor.protocolSources && descriptor.protocolSources.length > 0) {
-    doc.protocolSource = descriptor.protocolSources.map((s) => ({ "@id": s }));
+    const sources = descriptor.protocolSources.map((s) => safeHttpIri(s)).filter((s) => s !== void 0);
+    if (sources.length > 0) {
+      doc.protocolSource = sources.map((s) => ({ "@id": s }));
+    }
   }
   if (descriptor.skills && descriptor.skills.length > 0) {
     doc.skill = descriptor.skills.map((s) => {
@@ -474,7 +528,10 @@ function buildJsonLd(descriptor) {
         scheme.description = sc.description;
       }
       if (sc.issuer !== void 0) {
-        scheme.url = { "@id": sc.issuer };
+        const issuer = safeHttpIri(sc.issuer);
+        if (issuer !== void 0) {
+          scheme.url = { "@id": issuer };
+        }
       }
       return scheme;
     });
@@ -905,7 +962,6 @@ async function discoverAgent(webId, options = {}) {
     const fetched = await fetchRdf(webId, fetchOpts);
     profileDataset = fetched.dataset;
   } catch (err) {
-    void err;
     return { webId, pointers: [] };
   }
   const profile = wrapProfile(profileDataset);
@@ -965,6 +1021,14 @@ function buildAgentPointer(webId, agent, predicates = "interop:hasAuthorizationA
   }
   if (!agent) {
     throw new TypeError("buildAgentPointer: agent IRI is required.");
+  }
+  if (safeHttpIri(agent) === void 0) {
+    throw new TypeError(
+      "buildAgentPointer: agent must be an absolute http(s) IRI (the pointer target)."
+    );
+  }
+  if (safeHttpIri(webId) === void 0) {
+    throw new TypeError("buildAgentPointer: webId must be an absolute http(s) IRI.");
   }
   const list = Array.isArray(predicates) ? predicates : [predicates];
   if (list.length === 0) {

@@ -8,6 +8,7 @@
 // wrapper write path, serialised via n3.Writer. Never a hand-built triple.
 
 import type { Quad } from "@rdfjs/types";
+import { safeHttpIri } from "./iri.js";
 import { serialize } from "./serialize.js";
 import { HAS_AUTHORIZATION_AGENT, SCHEMA_AGENT } from "./vocab.js";
 import { PointerBuilder } from "./wrappers.js";
@@ -60,6 +61,19 @@ export function buildAgentPointer(
   }
   if (!agent) {
     throw new TypeError("buildAgentPointer: agent IRI is required.");
+  }
+  // FAIL CLOSED on both IRIs. `agent` (the pointer OBJECT) and `webId` (the
+  // SUBJECT) are required. A non-http(s) `agent` would be DROPPED by the write
+  // path's safeHttpIri, yielding a SILENT zero-quad pointer document (fail-open);
+  // reject it up front instead. Both a person's WebID and the agent it points to
+  // are dereferenceable http(s) IRIs in Solid, so require http(s) for each.
+  if (safeHttpIri(agent) === undefined) {
+    throw new TypeError(
+      "buildAgentPointer: agent must be an absolute http(s) IRI (the pointer target).",
+    );
+  }
+  if (safeHttpIri(webId) === undefined) {
+    throw new TypeError("buildAgentPointer: webId must be an absolute http(s) IRI.");
   }
 
   const list = Array.isArray(predicates) ? predicates : [predicates as PointerPredicate];

@@ -7,6 +7,7 @@
 // with Turtle + JSON-LD serialisers). Projecting both from one source means the
 // two encodings cannot drift.
 
+import { escapeIri, safeHttpIri } from "./iri.js";
 import { serialize } from "./serialize.js";
 import type {
   AgentCard,
@@ -36,6 +37,19 @@ export function describeAgent(descriptor: AgentDescriptor): AgentDescriptorDocum
   if (!descriptor.name) {
     throw new TypeError("describeAgent: AgentDescriptor.name is required.");
   }
+  // FAIL CLOSED on the required `ad:url`. The Agent Description's `url` is a
+  // required, resolvable http(s) IRI; it falls back to `descriptor.id`. If the
+  // effective url is not a safe absolute http(s) IRI (e.g. `id` is a `did:`/`urn:`
+  // and no explicit http(s) `url` was supplied), the RDF write path would SILENTLY
+  // drop `ad:url` (safeHttpIri → undefined) and emit a descriptor missing a
+  // required field. Reject the descriptor instead of emitting an invalid one.
+  if (safeHttpIri(descriptor.url ?? descriptor.id) === undefined) {
+    throw new TypeError(
+      "describeAgent: a resolvable http(s) `url` is required (AgentDescriptor.url, " +
+        "which falls back to `id`); a non-http(s) `id` (did:/urn:) MUST supply an " +
+        "explicit http(s) `url`.",
+    );
+  }
 
   return {
     agentCard: buildAgentCard(descriptor),
@@ -45,15 +59,31 @@ export function describeAgent(descriptor: AgentDescriptor): AgentDescriptorDocum
 
 /** Project a descriptor into an A2A Agent Card (plain JSON). */
 function buildAgentCard(descriptor: AgentDescriptor): AgentCard {
-  const url = descriptor.url ?? descriptor.id;
+  // The A2A card is the THIRD descriptor projection (beside the RDF quads +
+  // JSON-LD). Its IRI-valued fields carry the SAME sanitised/validated values as
+  // the other two so the three encodings never disagree and no raw
+  // IRIREF-forbidden char leaks through this public descriptor. `url` is
+  // guaranteed http(s) by the fail-closed check in describeAgent.
+  const url = safeHttpIri(descriptor.url ?? descriptor.id);
+  if (url === undefined) {
+    // Unreachable in practice — describeAgent fails closed on this first — but
+    // keep buildAgentCard self-consistent (required `url`) rather than emit a
+    // card with a dropped url that disagrees with the RDF/JSON-LD.
+    throw new TypeError(
+      "describeAgent: a resolvable http(s) `url` is required (AgentDescriptor.url / id).",
+    );
+  }
 
   const securitySchemes: Record<string, AgentCardSecurityScheme> = {};
   for (const scheme of descriptor.securitySchemes ?? []) {
     // Key each scheme by its type (a stable, human-readable handle in the card).
+    // `openIdConnectUrl` is IRI-valued → validate via safeHttpIri, drop if unsafe
+    // (matches the RDF `ad:url` / JSON-LD `url` drop behaviour for the issuer).
+    const issuer = scheme.issuer !== undefined ? safeHttpIri(scheme.issuer) : undefined;
     const entry: AgentCardSecurityScheme = {
       type: scheme.type,
       ...(scheme.description !== undefined && { description: scheme.description }),
-      ...(scheme.issuer !== undefined && { openIdConnectUrl: scheme.issuer }),
+      ...(issuer !== undefined && { openIdConnectUrl: issuer }),
     };
     securitySchemes[scheme.type] = entry;
   }
@@ -86,14 +116,26 @@ function buildAgentCard(descriptor: AgentDescriptor): AgentCard {
 /** The `x-solid` extension block of the A2A card, omitting empty fields. */
 function buildSolidExtension(descriptor: AgentDescriptor): NonNullable<AgentCard["x-solid"]> {
   const ext: { owner?: string; agentDescription?: string; protocolSources?: string[] } = {};
+  // owner is IRI-valued → validate + drop if unsafe (matches the RDF/JSON-LD).
   if (descriptor.owner !== undefined) {
-    ext.owner = descriptor.owner;
+    const owner = safeHttpIri(descriptor.owner);
+    if (owner !== undefined) {
+      ext.owner = owner;
+    }
   }
   // The RDF Agent Description is co-located at the agent IRI's `#ad` fragment by
-  // convention; callers serving it elsewhere can post-edit this field.
-  ext.agentDescription = `${descriptor.id}#ad`;
+  // convention; callers serving it elsewhere can post-edit this field. The IRI is
+  // id-derived (id may be did:/urn:) → escape scheme-agnostically.
+  ext.agentDescription = escapeIri(`${descriptor.id}#ad`);
   if (descriptor.protocolSources && descriptor.protocolSources.length > 0) {
-    ext.protocolSources = [...descriptor.protocolSources];
+    // Each protocol source is IRI-valued → validate + drop unsafe entries
+    // (matches the RDF/JSON-LD projections exactly).
+    const sources = descriptor.protocolSources
+      .map((s) => safeHttpIri(s))
+      .filter((s): s is string => s !== undefined);
+    if (sources.length > 0) {
+      ext.protocolSources = sources;
+    }
   }
   return ext;
 }
@@ -178,27 +220,42 @@ function writeSecuritySchemes(node: AgentNode, schemes: AgentDescriptor["securit
  * handles `application/ld+json`) — see {@link import("./verify.js").verifyDescriptor}.
  */
 function buildJsonLd(descriptor: AgentDescriptor): Record<string, unknown> {
+  // IRI sanitisation applies to the JSON-LD encoding TOO, not just the Turtle/quads
+  // path: a consumer parses this document into RDF (the `@id` / `@type:@id` terms
+  // become IRIs), so an untrusted value must not carry an unescaped break-out char
+  // into that RDF. `@id` is scheme-agnostic (may be `did:`/`urn:`) → escapeIri;
+  // the http(s)-contract fields (url/owner/protocolSource/issuer) → safeHttpIri,
+  // dropping any field whose value is not a safe absolute http(s) IRI. `url` is
+  // guaranteed present by the fail-closed check in describeAgent.
   const doc: Record<string, unknown> = {
     // A SELF-CONTAINED inline context (not a bare remote URL) so the document
     // parses offline + deterministically and carries no SSRF/availability
     // dependency on the CG-draft context endpoint. See ANP_INLINE_CONTEXT.
     "@context": ANP_INLINE_CONTEXT,
-    "@id": descriptor.id,
+    "@id": escapeIri(descriptor.id),
     "@type": "AgentDescription",
     name: descriptor.name,
-    url: descriptor.url ?? descriptor.id,
+    url: safeHttpIri(descriptor.url ?? descriptor.id),
   };
   if (descriptor.description !== undefined) {
     doc.description = descriptor.description;
   }
   if (descriptor.owner !== undefined) {
-    doc.owner = { "@id": descriptor.owner };
+    const owner = safeHttpIri(descriptor.owner);
+    if (owner !== undefined) {
+      doc.owner = { "@id": owner };
+    }
   }
   if (descriptor.did !== undefined) {
     doc.did = descriptor.did;
   }
   if (descriptor.protocolSources && descriptor.protocolSources.length > 0) {
-    doc.protocolSource = descriptor.protocolSources.map((s) => ({ "@id": s }));
+    const sources = descriptor.protocolSources
+      .map((s) => safeHttpIri(s))
+      .filter((s): s is string => s !== undefined);
+    if (sources.length > 0) {
+      doc.protocolSource = sources.map((s) => ({ "@id": s }));
+    }
   }
   if (descriptor.skills && descriptor.skills.length > 0) {
     doc.skill = descriptor.skills.map((s) => {
@@ -223,7 +280,10 @@ function buildJsonLd(descriptor: AgentDescriptor): Record<string, unknown> {
         scheme.description = sc.description;
       }
       if (sc.issuer !== undefined) {
-        scheme.url = { "@id": sc.issuer };
+        const issuer = safeHttpIri(sc.issuer);
+        if (issuer !== undefined) {
+          scheme.url = { "@id": issuer };
+        }
       }
       return scheme;
     });
