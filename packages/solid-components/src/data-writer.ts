@@ -261,13 +261,56 @@ export class DataWriter {
    * caller ({@link DataWriter.#assertWithinScope}) turns that into a fail-closed
    * {@link WriteScopeError} so a write is REFUSED (never silently unscoped) when the guard
    * cannot load.
+   *
+   * SHAPE-VALIDATED (roborev Low @ 6c11868, hardened in review round 2): the imported
+   * module is UNTRUSTED beyond its TypeScript type — `import(...) as PodScopePrimitive`
+   * is a compile-time-only cast, so an incompatible installed peer version (a
+   * renamed/removed export, a shape change) would otherwise surface as a raw
+   * `TypeError` deep in `#assertWithinScope` the first time the write path calls a
+   * missing/non-function member, rather than the fail-closed `WriteScopeError` every
+   * other guard failure produces. So we verify the two members we actually use are the
+   * right RUNTIME shape before caching them, and throw a plain `Error` on a mismatch —
+   * caught by `#assertWithinScope`'s existing load try/catch and turned into a
+   * `WriteScopeError` (never a bare `TypeError`).
+   *
+   * `assertWithinPodScope`: `typeof === "function"` is sufficient — it is only ever
+   * CALLED, never used as the right-hand side of `instanceof`.
+   *
+   * `PodScopeError`: `typeof === "function"` alone is NOT sufficient (round-2 roborev
+   * finding) — `#assertWithinScope`'s catch handler does
+   * `err instanceof podScope.PodScopeError`, and `instanceof` throws a bare `TypeError`
+   * ("Function has non-object prototype … in instanceof check") when the right-hand
+   * side is a function with no constructible `.prototype` (an arrow function, or a
+   * function whose `.prototype` was deleted/reassigned to a primitive) — exactly the
+   * bare-TypeError failure mode this fix exists to close. A regular function/class
+   * always has an OWN `.prototype` that is an object; an arrow function has none. So
+   * we additionally require `.prototype` to be a non-null object. Belt-and-braces:
+   * `#assertWithinScope` ALSO wraps its `instanceof` check in a try/catch (defense in
+   * depth — this check is the primary guard, that one covers any shape this static
+   * check doesn't anticipate, e.g. a Proxy that lies about its own `.prototype`).
    */
   async #loadPodScope(): Promise<PodScopePrimitive> {
     if (!this.#podScope) {
-      const mod = (await import("@jeswr/guarded-fetch")) as PodScopePrimitive;
+      const mod = (await import("@jeswr/guarded-fetch")) as Partial<PodScopePrimitive>;
+      if (typeof mod.assertWithinPodScope !== "function") {
+        throw new Error(
+          "incompatible @jeswr/guarded-fetch peer: assertWithinPodScope is not a function " +
+            `(got ${typeof mod.assertWithinPodScope})`,
+        );
+      }
+      if (
+        typeof mod.PodScopeError !== "function" ||
+        typeof mod.PodScopeError.prototype !== "object" ||
+        mod.PodScopeError.prototype === null
+      ) {
+        throw new Error(
+          "incompatible @jeswr/guarded-fetch peer: PodScopeError is not a constructor " +
+            `(got ${typeof mod.PodScopeError})`,
+        );
+      }
       this.#podScope = {
         assertWithinPodScope: mod.assertWithinPodScope,
-        PodScopeError: mod.PodScopeError,
+        PodScopeError: mod.PodScopeError as new (message: string) => Error,
       };
     }
     return this.#podScope;
@@ -566,9 +609,33 @@ export class DataWriter {
       // strictly narrower than — never wider than — the pre-consolidation guard.
       return podScope.assertWithinPodScope(containerBase, target, { allowRoot: false });
     } catch (err) {
-      const reason = err instanceof podScope.PodScopeError ? err.message : String(err);
-      throw new WriteScopeError(target, reason);
+      throw new WriteScopeError(target, podScopeErrorReason(err, podScope.PodScopeError));
     }
+  }
+}
+
+/**
+ * The reason string for a caught pod-scope-guard error: `err.message` when `err` is a
+ * `PodScopeError`, else `String(err)`. Extracted so `#assertWithinScope` stays under the
+ * cognitive-complexity limit AND so the defensive try/catch lives in one small, obviously-
+ * correct place.
+ *
+ * DEFENSE IN DEPTH (round-2 roborev finding on 6c11868's fix): `#loadPodScope` already
+ * validates `PodScopeError` has a constructible `.prototype`, so `err instanceof
+ * podScopeErrorCtor` should never throw — but `instanceof` against an UNTRUSTED
+ * cross-module value can still throw for a shape that static check doesn't anticipate
+ * (e.g. a Proxy that lies about its own `.prototype`). Never let that throw escape as a
+ * bare (non-`WriteScopeError`) error — fall back to `String(err)` so the caller still
+ * fails closed with a `WriteScopeError`.
+ */
+function podScopeErrorReason(
+  err: unknown,
+  podScopeErrorCtor: PodScopePrimitive["PodScopeError"],
+): string {
+  try {
+    return err instanceof podScopeErrorCtor ? err.message : String(err);
+  } catch {
+    return String(err);
   }
 }
 
