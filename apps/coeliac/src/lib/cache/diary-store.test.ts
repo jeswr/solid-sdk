@@ -34,6 +34,52 @@ class GatedSetKv implements Kv {
   }
 }
 
+/**
+ * Like {@link GatedSetKv} but its `set` only pauses once {@link armed} is flipped
+ * true — so a record can be SEEDED (armed=false, immediate) and only a LATER
+ * write gated. Needed to exercise a read-then-write path like `markMealSync`,
+ * whose target record must already exist before its gated `set` runs.
+ */
+class ArmableGatedSetKv implements Kv {
+  armed = false;
+  /**
+   * Resolves the first time an ARMED `set` is ENTERED — i.e. the gated write is
+   * genuinely in flight (its promise has been handed back to the caller's
+   * `write()` wrapper and registered in `pendingWrites`) — BEFORE it blocks on
+   * the gate. A test awaits this before calling `purge()` so the write is
+   * provably pending in `pendingWrites`, not merely scheduled: for a
+   * read-then-write path like `markMealSync` (which `await`s `kv.get` first),
+   * calling `purge()` too early would make its later `set` no-op via the
+   * `isPurged()` fail-closed check instead of exercising the drain.
+   */
+  readonly gatedSetEntered: Promise<void>;
+  private markEntered!: () => void;
+  constructor(
+    private readonly inner: Kv,
+    private readonly gate: Promise<void>,
+  ) {
+    this.gatedSetEntered = new Promise<void>((resolve) => {
+      this.markEntered = resolve;
+    });
+  }
+  async get<T>(key: string): Promise<T | undefined> {
+    return this.inner.get<T>(key);
+  }
+  async set<T>(key: string, value: T): Promise<void> {
+    if (this.armed) {
+      this.markEntered();
+      await this.gate;
+    }
+    return this.inner.set(key, value);
+  }
+  async del(key: string): Promise<void> {
+    return this.inner.del(key);
+  }
+  async keys(prefix?: string): Promise<string[]> {
+    return this.inner.keys(prefix);
+  }
+}
+
 const ROOT = "https://alice.example/";
 
 function store(scope = "https://alice.example/profile/card#me") {
@@ -449,6 +495,60 @@ describe("DiaryStore.purge (logout privacy purge)", () => {
     // A FRESH write attempted AFTER purge() has completed is fail-closed —
     // `isPurged()` is now `true`, so it silently no-ops rather than writing.
     await s.putMeal({ ...meal, ulid: "m2" });
+    expect(await s.allMeals()).toEqual([]);
+  });
+
+  it("the drain also covers the READ-THEN-WRITE outbox path (markMealSync), not just plain puts", async () => {
+    // `markMealSync` is the more subtle member of the generalised round-4 fix:
+    // it `kv.get`s the meal, THEN does a gated `kv.set` through the shared
+    // `write()` wrapper. Seed the meal with the gate disarmed (immediate), then
+    // ARM the gate so the sync-state write is genuinely in flight when
+    // `purge()` is called — the drain must still block on it, exactly as it
+    // does for the plain `putMeal` case above.
+    const gate = deferred<void>();
+    const gatedKv = new ArmableGatedSetKv(new MemoryKv(), gate.promise);
+    const s = new DiaryStore(gatedKv, "https://alice.example/#me");
+
+    const meal = {
+      kind: "meal" as const,
+      ulid: "m1",
+      url: `${ROOT}health/diary/meals/m1.ttl`,
+      startTime: "2026-07-01T08:00:00.000Z",
+      createdAt: "2026-07-01T08:00:00.000Z",
+      items: [{ name: "Toast" }],
+      exposures: [],
+      signature: "n:toast",
+      label: "Toast",
+      sync: "pending" as const,
+    };
+    await s.putMeal(meal); // seeded while the gate is disarmed
+    expect(await s.allMeals()).toHaveLength(1);
+
+    gatedKv.armed = true; // from here, every set() blocks on the gate
+    const syncing = s.markMealSync(meal.ulid, "synced"); // read (kv.get) THEN a gated write
+    // markMealSync `await`s kv.get FIRST, so we must NOT call purge() until its
+    // gated set() has actually been entered and registered in pendingWrites —
+    // otherwise purge() flips `purged` first and the set no-ops via isPurged(),
+    // which would make this test a false positive for the drain (roborev round 5).
+    await gatedKv.gatedSetEntered;
+    const purging = s.purge();
+    let purgeSettled = false;
+    void purging.then(() => {
+      purgeSettled = true;
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    // purge() must be BLOCKED draining the in-flight markMealSync write, not
+    // racing ahead to its delete scan (which would let the sync write's set()
+    // land afterwards and resurrect the key).
+    expect(purgeSettled).toBe(false);
+
+    gate.resolve();
+    await syncing;
+    await purging;
+    // Purge won even though a read-then-write sync raced it: the drained set
+    // landed first, then the purge scan removed it — nothing resurrected.
     expect(await s.allMeals()).toEqual([]);
   });
 
