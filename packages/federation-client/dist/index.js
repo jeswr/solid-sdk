@@ -1143,7 +1143,11 @@ var __getOwnPropNames = Object.getOwnPropertyNames;
 var __getProtoOf = Object.getPrototypeOf;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
 var __commonJS = (cb, mod) => function __require() {
-  return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
+  try {
+    return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
+  } catch (e) {
+    throw mod = 0, e;
+  }
 };
 var __copyProps = (to, from, except, desc) => {
   if (from && typeof from === "object" || typeof from === "function") {
@@ -1694,13 +1698,13 @@ var require_ipaddr = __commonJS({
           return bytes;
         };
         IPv6.prototype.toFixedLengthString = function() {
-          const addr = function() {
+          const addr = (function() {
             const results = [];
             for (let i = 0; i < this.parts.length; i++) {
               results.push(padPart(this.parts[i].toString(16), 4));
             }
             return results;
-          }.call(this).join(":");
+          }).call(this).join(":");
           let suffix = "";
           if (this.zoneId) {
             suffix = `%${this.zoneId}`;
@@ -1717,13 +1721,13 @@ var require_ipaddr = __commonJS({
           return new ipaddr2.IPv4([high >> 8, high & 255, low >> 8, low & 255]);
         };
         IPv6.prototype.toNormalizedString = function() {
-          const addr = function() {
+          const addr = (function() {
             const results = [];
             for (let i = 0; i < this.parts.length; i++) {
               results.push(this.parts[i].toString(16));
             }
             return results;
-          }.call(this).join(":");
+          }).call(this).join(":");
           let suffix = "";
           if (this.zoneId) {
             suffix = `%${this.zoneId}`;
@@ -2173,7 +2177,7 @@ async function loadNodeDnsLookup() {
 }
 function createGuardedFetch(options = {}) {
   const guard = new SsrfGuard(options);
-  return (input, init) => guard.fetch(input, init);
+  return ((input, init) => guard.fetch(input, init));
 }
 function guardedFetch(input, init) {
   return new SsrfGuard(init ?? {}).fetch(input, init);

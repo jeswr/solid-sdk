@@ -67,7 +67,7 @@
   "devDependencies": {
     "@biomejs/biome": "^2.0.0",
     "@jeswr/fetch-rdf": "github:jeswr/fetch-rdf#main",
-    "@jeswr/guarded-fetch": "git+https://github.com/jeswr/guarded-fetch.git#92f75f7ce98e32032ef0cfe31c91b1470fccda49",
+    "@jeswr/guarded-fetch": "git+https://github.com/jeswr/guarded-fetch.git#cc477056c0d573a4cb2aa9bec8420c246221af36",
     "@jeswr/rdf-serialize": "git+https://github.com/jeswr/rdf-serialize.git#eed2c11ceaf4de5e1f79132353744a5d1e3d6c48",
     "@microsoft/api-extractor": "^7.58.9",
     "@types/n3": "^1.16.0",
