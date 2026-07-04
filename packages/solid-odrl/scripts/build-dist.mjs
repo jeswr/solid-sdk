@@ -32,13 +32,39 @@
  * The committed `dist/` is kept in sync with `src/` by `scripts/check-dist-fresh.mjs`.
  */
 import { execFileSync } from "node:child_process";
-import { readFileSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
+import { sanitizeJs, sanitizeMap } from "./sanitize-dist.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const outdir = join(root, "dist");
+
+/**
+ * Rewrite the machine-dependent build paths esbuild embeds — the `index.js` banner
+ * comments and the `index.js.map` `sources[]` / `sourceRoot` — to a stable
+ * package-relative label, failing closed if any host path survives. The pure rewrite
+ * + guard logic lives in `sanitize-dist.mjs` (unit-tested in `test/dist-sanitize.test.ts`,
+ * incl. the parent-node_modules + space-in-path leak cases); this wrapper only does the
+ * file read/write and supplies the two frames of reference the classifier needs:
+ *   - `root` is the package root (own source lives under it → `src/…`);
+ *   - esbuild emits banner paths relative to the build WORKING DIR (= `root`, since the
+ *     build always runs with cwd = the package root) and sourcemap `sources[]` relative
+ *     to the MAP FILE's dir (= `buildDir`). Passing each base lets the sanitiser resolve
+ *     to an absolute path and classify by `path.relative(root, …)` rather than by a
+ *     substring that a parent dir named `src`/`node_modules` could defeat.
+ */
+function sanitizeDist(buildDir) {
+  const jsPath = join(buildDir, "index.js");
+  writeFileSync(jsPath, sanitizeJs(readFileSync(jsPath, "utf8"), root, root));
+
+  const mapPath = join(buildDir, "index.js.map");
+  if (existsSync(mapPath)) {
+    const map = sanitizeMap(JSON.parse(readFileSync(mapPath, "utf8")), root, buildDir);
+    writeFileSync(mapPath, JSON.stringify(map));
+  }
+}
 
 /** The ONE off-npm dependency we INLINE; everything else stays external. */
 const INLINE = "@jeswr/fetch-rdf";
@@ -115,6 +141,12 @@ async function main(buildDir = outdir) {
     ],
     { cwd: root, stdio: ["ignore", "ignore", "inherit"] },
   );
+
+  // 4. Strip machine-absolute paths from the emitted JS + sourcemap, and fail closed
+  //    if any host/home path prefix survives (keeps the committed dist deterministic +
+  //    leak-free regardless of the build location — e.g. a worktree under a parent dir
+  //    named node_modules/src, which the old substring reducer could not handle).
+  sanitizeDist(buildDir);
 }
 
 const argDir = process.argv[2];

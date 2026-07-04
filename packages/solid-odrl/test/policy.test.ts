@@ -259,4 +259,30 @@ describe("policyFromRdf edge cases", () => {
     expect(parsed?.type).toBe("Agreement");
     expect(parsed?.permissions?.[0]?.assignee).toBe(AGENT);
   });
+
+  it("neutralises a hostile IRI in a target — no triple injection via policyToTurtle (adversarial-verify High)", async () => {
+    // A rule target carrying a `>` + spaces would break out of the <…> that
+    // n3.Writer emits verbatim and inject arbitrary triples. The write path must
+    // percent-escape it so exactly the intended triples are emitted.
+    const hostileTarget =
+      "https://res.example/r> <https://evil/s> <https://evil/p> <https://evil/o> .\n<https://x";
+    const ttl = await policyToTurtle({
+      id: "https://alice.example/policies/inj",
+      type: "Agreement",
+      assigner: OWNER,
+      permissions: [{ type: "permission", action: "read", target: hostileTarget, assignee: AGENT }],
+    });
+    // The `>` breakout char survives only percent-escaped, so the hostile value
+    // stays inside ONE `odrl:target` object IRI.
+    expect(ttl).toContain("%3E");
+    // The graph parses to a single well-formed policy with exactly one permission —
+    // an injection would have manufactured extra rules/triples. The escaped target
+    // is the percent-encoded lexical form (an RDF parser does not percent-DECODE),
+    // so it is inert and never re-widens.
+    const parsed = await parsePolicy(ttl);
+    expect(parsed?.permissions?.length).toBe(1);
+    const t = parsed?.permissions?.[0]?.target ?? "";
+    expect(t).not.toMatch(/[<> ]/); // no raw breakout chars survive in the parsed IRI
+    expect(t).toContain("%3E");
+  });
 });

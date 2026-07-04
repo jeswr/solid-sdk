@@ -11,6 +11,7 @@ import { describe, expect, it } from "vitest";
 import { delegationProvenance, evaluateDelegated } from "../src/delegation.js";
 import { evaluate } from "../src/evaluate.js";
 import { parsePolicy, policyFromRdf, policyToJsonLd, policyToTurtle } from "../src/policy.js";
+import { serialize } from "../src/serialize.js";
 import type { OdrlPolicy, RequestContext } from "../src/types.js";
 import {
   ODRLD_DELEGATED_UNDER,
@@ -734,6 +735,61 @@ describe("evaluateDelegated: revocation + duties", () => {
   });
 });
 
+describe("evaluateDelegated: identity composition (actor must be the declared delegate)", () => {
+  const mallory = "https://mallory.example/id#it";
+
+  it("denies when a hop declaring A→B smuggles a permission granting a THIRD party (roborev/adversarial-verify High)", () => {
+    // The hop declares itself A→B (odrl:assignee = B), but its permission grants
+    // read to MALLORY. Before the identity-composition guard MALLORY was PERMITTED
+    // (privilege bounded by A's grant) while the PROV overlay credited B — a
+    // FORGED accountability attribution. It must now DENY.
+    const sneakyHop = hop1({
+      permissions: [{ type: "permission", action: "read", target: RES, assignee: mallory }],
+    });
+    const r = evaluateDelegated(
+      [root(), sneakyHop],
+      { agent: mallory, action: "read", target: RES },
+      {
+        now: NOW,
+      },
+    );
+    expect(r.decision).toBe("deny");
+    expect(r.reason).toMatch(/identity-composition guard|declared delegate/);
+  });
+
+  it("still permits when the actor IS the declared delegate", () => {
+    // Sanity: the guard does not deny the legitimate A→B delegation exercised by B.
+    expect(evaluateDelegated([root(), hop1()], READ_B, { now: NOW }).decision).toBe("permit");
+  });
+
+  it("permits when the leaf permission omits its assignee and inherits the hop delegate", () => {
+    // A permission with no explicit assignee inherits the hop's policy-level
+    // assignee (B), so the actor B still matches the declared delegate.
+    const inheritedHop = hop1({
+      permissions: [{ type: "permission", action: "read", target: RES }],
+    });
+    expect(evaluateDelegated([root(), inheritedHop], READ_B, { now: NOW }).decision).toBe("permit");
+  });
+
+  it("does NOT apply the guard to a single-policy (direct, non-delegated) grant", () => {
+    // A direct grant to a public policy has no declared delegate — the guard is
+    // delegation-only and must not deny a legitimate direct request.
+    const publicPolicy: OdrlPolicy = {
+      id: ROOT_ID,
+      type: "Agreement",
+      assigner: OWNER,
+      permissions: [{ type: "permission", action: "read", target: RES }], // no assignee
+    };
+    expect(
+      evaluateDelegated(
+        [publicPolicy],
+        { agent: mallory, action: "read", target: RES },
+        { now: NOW },
+      ).decision,
+    ).toBe("permit");
+  });
+});
+
 describe("delegationProvenance", () => {
   it("emits the attribution + authority-edge + acted-on-behalf-of overlay", () => {
     const quads = delegationProvenance([root(), hop1()]);
@@ -743,6 +799,40 @@ describe("delegationProvenance", () => {
     expect(triples).toContain(`${HOP1_ID} ${ODRLD_DELEGATED_UNDER} ${ROOT_ID}`);
     expect(triples).toContain(`${HOP1_ID} ${PROV_WAS_DERIVED_FROM} ${ROOT_ID}`);
     expect(triples).toContain(`${AGENT_B} ${PROV_ACTED_ON_BEHALF_OF} ${AGENT_A}`);
+  });
+
+  it("neutralises a hostile IRI in a hop party — no triple injection into the audit trail (adversarial-verify High)", async () => {
+    // n3.Writer emits an IRI verbatim inside <…>; an assigner value carrying a `>`
+    // + spaces would otherwise break out and inject a FORGED prov:wasAttributedTo
+    // triple, framing another principal in the accountability trail. The write
+    // path must percent-escape it so the hostile value stays inside ONE object IRI
+    // and no extra triples are minted.
+    const hostile =
+      "https://evil.example/x> <https://victim.example/policy> <http://www.w3.org/ns/prov#wasAttributedTo> <https://framed-victim.example/id#it> .\n<https://evil.example/x";
+    const quads = delegationProvenance([
+      {
+        id: ROOT_ID,
+        type: "Agreement",
+        assigner: hostile,
+        permissions: [{ type: "permission", action: "read", target: RES, assignee: AGENT_A }],
+      },
+      hop1(),
+    ]);
+    const ttl = await serialize(quads);
+    // The `>` breakout char survives only percent-escaped inside the object IRI.
+    expect(ttl).toContain("%3E");
+    // Re-parsing the serialised graph yields EXACTLY the triples we emitted — an
+    // injection would add triples (a forged attribution to the framed victim).
+    const { parseRdf } = await import("@jeswr/fetch-rdf");
+    const reparsed = await parseRdf(ttl, "text/turtle");
+    expect(reparsed.size).toBe(quads.length);
+    // No triple attributes anything to the framed victim as an OBJECT (it survives
+    // only as inert text inside the one escaped assigner IRI), and no forged
+    // subject is introduced.
+    for (const q of reparsed) {
+      expect(q.object.value).not.toBe("https://framed-victim.example/id#it");
+      expect(q.subject.value).not.toBe("https://victim.example/policy");
+    }
   });
 
   it("skips triples whose parties are absent and returns [] for an empty chain", () => {

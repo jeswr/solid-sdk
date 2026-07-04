@@ -541,6 +541,7 @@ function isFiniteNumber(v) {
 }
 
 // src/wrappers.ts
+import { escapeIri } from "@jeswr/rdf-serialize";
 import {
   BlankNodeFrom,
   DatasetWrapper,
@@ -701,25 +702,40 @@ function normalize(subject) {
 var GraphBuilder = class {
   store = new Store();
   factory = DataFactory;
+  /**
+   * Mint a `NamedNode` whose IRI value is INJECTION-SAFE. `n3.Writer` does NOT
+   * escape IRIs — it emits whatever string a `NamedNode` carries verbatim inside
+   * `<…>` — so an IRI value carrying a Turtle `IRIREF`-forbidden character (`>`,
+   * a space, `<`, `"`, `{`, `}`, `|`, `^`, backtick, backslash, a C0 control)
+   * would break out of the angle brackets and inject arbitrary triples into the
+   * serialised document. Since an ODRL policy's party / target / policy IRIs can
+   * originate from foreign input (a delegation chain assembled from other agents'
+   * pods, a parsed-then-re-serialised policy), every IRI written here is
+   * percent-escaped through the suite-canonical {@link escapeIri} FIRST. Escaping
+   * is IDENTITY-PRESERVING (only forbidden bytes become `%XX`; a well-formed IRI
+   * round-trips byte-for-byte) and does NOT affect evaluation, which compares the
+   * raw string values — so a hostile IRI simply fails to match a legitimate one
+   * (fail-closed) rather than laundering an injection through the serialiser.
+   */
+  iriTerm(value) {
+    return NamedNodeFrom.string(escapeIri(value), this.factory);
+  }
   /** Materialise a {@link NodeRef} to its RDF/JS term. */
   subjectTerm(ref) {
-    return ref.kind === "iri" ? NamedNodeFrom.string(ref.value, this.factory) : BlankNodeFrom.string(ref.value, this.factory);
+    return ref.kind === "iri" ? this.iriTerm(ref.value) : BlankNodeFrom.string(ref.value, this.factory);
   }
   /** Add `(subject, predicate, object-IRI)`. */
   addIri(subject, predicate, objectIri) {
     const s = this.subjectTerm(normalize(subject));
-    const p = NamedNodeFrom.string(predicate, this.factory);
-    const o = NamedNodeFrom.string(objectIri, this.factory);
+    const p = this.iriTerm(predicate);
+    const o = this.iriTerm(objectIri);
     this.store.add(this.factory.quad(s, p, o));
   }
   /** Add `(subject, predicate, literal)` with an optional datatype IRI. */
   addLiteral(subject, predicate, value, datatypeIri) {
     const s = this.subjectTerm(normalize(subject));
-    const p = NamedNodeFrom.string(predicate, this.factory);
-    const o = datatypeIri === void 0 ? LiteralFrom.string(value, this.factory) : this.factory.literal(
-      value,
-      NamedNodeFrom.string(datatypeIri, this.factory)
-    );
+    const p = this.iriTerm(predicate);
+    const o = datatypeIri === void 0 ? LiteralFrom.string(value, this.factory) : this.factory.literal(value, this.iriTerm(datatypeIri));
     this.store.add(this.factory.quad(s, p, o));
   }
   /**
@@ -730,7 +746,7 @@ var GraphBuilder = class {
   linkBlankNode(subject, predicate) {
     const s = this.subjectTerm(normalize(subject));
     const blank = BlankNodeFrom.string(void 0, this.factory);
-    const p = NamedNodeFrom.string(predicate, this.factory);
+    const p = this.iriTerm(predicate);
     this.store.add(this.factory.quad(s, p, blank));
     return { kind: "blank", value: blank.value };
   }
@@ -832,6 +848,15 @@ function evaluateDelegated(chain, request, options = {}) {
     return {
       ...denied(
         leaf.decision !== "permit" ? `Leaf policy <${leafPolicy.id}> does not permit: ${leaf.reason}` : `Leaf policy <${leafPolicy.id}> permits only via its odrl:perm conflict strategy over a matched prohibition \u2014 prohibitions are strict in a delegation chain.`,
+        hops
+      ),
+      leaf
+    };
+  }
+  if (chain.length > 1 && req.agent !== leafPolicy.assignee) {
+    return {
+      ...denied(
+        `Leaf policy <${leafPolicy.id}> permits the request, but its actual actor <${req.agent ?? "(none)"}> is not the hop's declared delegate <${leafPolicy.assignee ?? "(none)"}> \u2014 a delegated hop must not grant to a party other than its odrl:assignee (identity-composition guard).`,
         hops
       ),
       leaf

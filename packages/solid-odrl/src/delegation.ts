@@ -245,6 +245,33 @@ export function evaluateDelegated(
       leaf,
     };
   }
+
+  // --- identity composition: the actor MUST be the leaf's declared delegate ---
+  // In a DELEGATION chain (spec §5.2.2, the accountable-agent-runtime
+  // identity-composition rule) the leaf hop declares its single delegate via
+  // `odrl:assignee`, and the PROV overlay attributes the acting party to exactly
+  // that delegate (`<assignee> prov:actedOnBehalfOf <assigner>`,
+  // {@link delegationProvenance}). So the ACTUAL actor the chain permits MUST BE
+  // that declared delegate — otherwise a hop declaring itself A→B could smuggle a
+  // permission granting a THIRD party, who would then act under A's authority
+  // while the audit trail credited B (privilege is bounded by A's grant, but the
+  // accountability attribution is FORGED — the very property this keystone
+  // exists to guarantee). `leafPolicy.assignee` is present for a delegated hop
+  // (the per-edge check requires it). A single-policy chain is a direct grant
+  // (no declared delegate — it may be a public policy) and is exempt.
+  if (chain.length > 1 && req.agent !== leafPolicy.assignee) {
+    return {
+      ...denied(
+        `Leaf policy <${leafPolicy.id}> permits the request, but its actual actor <${
+          req.agent ?? "(none)"
+        }> is not the hop's declared delegate <${
+          leafPolicy.assignee ?? "(none)"
+        }> — a delegated hop must not grant to a party other than its odrl:assignee (identity-composition guard).`,
+        hops,
+      ),
+      leaf,
+    };
+  }
   aggregateDuties.push(...leaf.duties);
   const duties = dedupeDuties(aggregateDuties);
 
