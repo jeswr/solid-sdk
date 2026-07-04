@@ -52,15 +52,22 @@ const outdir = join(root, "dist");
  * comments and the `index.js.map` `sources[]` / `sourceRoot` — to a stable
  * package-relative label, failing closed if any host path survives. The pure rewrite
  * + guard logic lives in `sanitize-dist.mjs` (unit-tested in `test/dist-sanitize.test.ts`,
- * incl. the space-in-path leak case); this wrapper only does the file read/write.
+ * incl. the parent-node_modules + space-in-path leak cases); this wrapper only does the
+ * file read/write and supplies the two frames of reference the classifier needs:
+ *   - `root` is the package root (own source lives under it → `src/…`);
+ *   - esbuild emits banner paths relative to the build WORKING DIR (= `root`, since the
+ *     build always runs with cwd = the package root) and sourcemap `sources[]` relative
+ *     to the MAP FILE's dir (= `buildDir`). Passing each base lets the sanitiser resolve
+ *     to an absolute path and classify by `path.relative(root, …)` rather than by a
+ *     substring that a parent dir named `src`/`node_modules` could defeat.
  */
 function sanitizeDist(buildDir) {
   const jsPath = join(buildDir, "index.js");
-  writeFileSync(jsPath, sanitizeJs(readFileSync(jsPath, "utf8")));
+  writeFileSync(jsPath, sanitizeJs(readFileSync(jsPath, "utf8"), root, root));
 
   const mapPath = join(buildDir, "index.js.map");
   if (existsSync(mapPath)) {
-    const map = sanitizeMap(JSON.parse(readFileSync(mapPath, "utf8")));
+    const map = sanitizeMap(JSON.parse(readFileSync(mapPath, "utf8")), root, buildDir);
     writeFileSync(mapPath, JSON.stringify(map));
   }
 }

@@ -1,18 +1,34 @@
-// AUTHORED-BY Claude Fable 5
+// AUTHORED-BY Claude Sonnet 5
 /**
  * sanitize-dist — the PURE sanitisers for the committed `dist/` artifacts, split out
  * of `build-dist.mjs` so they can be unit-tested without running esbuild or touching
  * the filesystem. `build-dist.mjs` wires these into the actual file read/write.
  *
- * esbuild embeds machine paths in two places — module-boundary banner comments in
- * `index.js` and `sources[]` in `index.js.map` — which would otherwise (a) leak the
- * builder's home directory (`/Users/<name>/…`) into the committed bytes and (b) make
- * those bytes non-deterministic across machines / worktrees / a scratch-dir rebuild.
- * These helpers rewrite those path FIELDS to a stable, package-relative label and then
- * FAIL the build if any host path survives — including paths that contain a SPACE
- * (e.g. `/Users/Jesse Wright/…`), which a whitespace-excluding matcher would silently
- * miss.
+ * esbuild embeds machine-dependent paths in two places — module-boundary banner
+ * comments in `index.js` and `sources[]` in `index.js.map` — which would otherwise
+ * (a) leak the builder's home directory (`/Users/<name>/…`) into the committed bytes
+ * and (b) make those bytes non-deterministic across machines / worktrees / a
+ * scratch-dir rebuild. These helpers rewrite those path FIELDS to a stable,
+ * package-relative label and then FAIL the build if any host path survives.
+ *
+ * ROOT-CAUSE classification (why NOT string-substring). Earlier versions reduced a
+ * path with `indexOf`/`lastIndexOf("/src/")` / `lastIndexOf("/node_modules/")`. That
+ * is defeatable by CONTEXT: a checkout located under a parent directory that itself
+ * contains a `/node_modules/` or `/src/` segment (e.g.
+ * `/tmp/node_modules/worktrees/pkg/src/index.ts`) makes own-source mis-reduce to
+ * `node_modules/…` and slip past the guard. The fix classifies by PACKAGE-ROOT
+ * CONTEXT instead: resolve the esbuild-relative path to an absolute one (against the
+ * base it is relative to), then ask `path.relative(packageRoot, abs)` — if the file
+ * lives UNDER the package root and NOT inside a `node_modules/` segment of that
+ * relative path, it is OWN SOURCE and becomes `src/…` deterministically (immune to
+ * ancestor dirs named `src`/`node_modules`, and to spaces — `path.relative` handles
+ * them by construction). Anything that escapes the package root is an inlined
+ * DEPENDENCY (a dependency genuinely lives under `node_modules`), so the LAST
+ * `/node_modules/` of its absolute path is the correct anchor. A residual that
+ * matches neither is returned unchanged for the fail-closed guard to reject — never
+ * silently stripped.
  */
+import { isAbsolute, relative, resolve, sep } from "node:path";
 
 /**
  * Host/home absolute-path prefixes that must NEVER survive in a committed artifact.
@@ -41,32 +57,57 @@ const LEAKED_BANNER_RE = /^\/\/ (?:\.{1,2}\/)*\/?(?:Users|home|root|private|var)
 /** A `scheme://` URL — not a filesystem build path, so it is left untouched. */
 const URL_RE = /^[a-z][a-z0-9+.-]*:\/\//i;
 
+/** Normalise OS path separators to POSIX so the committed label is stable cross-OS. */
+function toPosix(p) {
+  return p.split(sep).join("/");
+}
+
 /**
- * Reduce a build path to a stable, location-independent package-relative label: an
- * inlined dep collapses to `node_modules/…`, our own code to `src/…`. Anchoring on the
- * LAST occurrence of the package-internal marker (`lastIndexOf`) — not the first — is
- * load-bearing: a checkout located under a parent dir that itself contains a
- * `/node_modules/` or `/src/` segment (e.g. `/Users/x/projects/src/nested/pkg/src/…`)
- * would otherwise retain the parent components, leaking a local path AND making the
- * dist non-deterministic. `lastIndexOf` always anchors on the package's OWN segment.
- * URLs are recognised and returned unchanged (a `https://…/x.js` in a preserved source
- * comment must not be mangled into `x.js`). A path with no marker is returned as-is so
- * that `assertNoHostPath` / `assertNoLeakedBanner` can still catch a residual host
- * prefix rather than have it silently stripped.
+ * Reduce an esbuild build path to a stable, location-independent package-relative
+ * label by PACKAGE-ROOT CONTEXT (see the module header for the rationale vs the old
+ * substring approach).
+ *
+ * @param p           the raw path esbuild emitted (usually RELATIVE to `baseDir`).
+ * @param packageRoot the absolute directory of the package being built (the dir that
+ *                    contains its `package.json`). Own source lives under it.
+ * @param baseDir     the directory `p` is relative to (esbuild emits banners relative
+ *                    to the working dir and sourcemap `sources[]` relative to the map
+ *                    file's dir). Defaults to `packageRoot` when omitted.
+ *
+ * OWN SOURCE (under packageRoot, not inside a node_modules segment) →
+ *   `relative(packageRoot, abs)`, e.g. `src/index.ts` — deterministic, space-proof,
+ *   immune to ancestor dirs named `src`/`node_modules`.
+ * DEPENDENCY (escapes packageRoot, or a dep in the package's own node_modules) →
+ *   sliced at the LAST `/node_modules/` → `node_modules/<pkg>/…`.
+ * URL → returned unchanged. UNCLASSIFIABLE RESIDUAL → returned as-is (an absolute host
+ *   path the guard then rejects).
  */
-export function pkgRelativePath(p) {
+export function pkgRelativePath(p, packageRoot, baseDir = packageRoot) {
   if (URL_RE.test(p)) {
     return p;
   }
-  const nm = p.lastIndexOf("/node_modules/");
+  const abs = isAbsolute(p) ? p : packageRoot ? resolve(baseDir ?? packageRoot, p) : p;
+  if (packageRoot && isAbsolute(abs)) {
+    const rel = toPosix(relative(packageRoot, abs));
+    const escapes = rel === "" || rel === ".." || rel.startsWith("../");
+    if (!escapes) {
+      // Under the package root. A dependency installed in the package's OWN
+      // node_modules still lives under the root — detect it by a node_modules
+      // segment in the RELATIVE path (immune to a parent dir named node_modules/src).
+      const nmRel = rel.lastIndexOf("node_modules/");
+      if (nmRel !== -1) {
+        return rel.slice(nmRel);
+      }
+      return rel; // own source, e.g. `src/index.ts`
+    }
+  }
+  // Outside the package root (a hoisted / parent-store dependency) — a dependency
+  // genuinely lives under node_modules, so the LAST `/node_modules/` is correct here.
+  const nm = abs.lastIndexOf("/node_modules/");
   if (nm !== -1) {
-    return p.slice(nm + 1);
+    return abs.slice(nm + 1);
   }
-  const sc = p.lastIndexOf("/src/");
-  if (sc !== -1) {
-    return p.slice(sc + 1);
-  }
-  return p;
+  return abs; // residual host path — the fail-closed guard rejects it
 }
 
 /**
@@ -92,10 +133,10 @@ export function assertNoHostPath(name, paths) {
 
 /**
  * Fallback guard against a leaked banner the extension-based rewrite could not classify
- * (e.g. a module with no source extension, or a path with a space the classifier could
- * not reduce). Scans the emitted `.js` COMMENT LINES only (via `LEAKED_BANNER_RE`), so
- * code/string content is never scanned. Any surviving bare host-path banner FAILS the
- * build — the guard cannot be defeated by a space in the path.
+ * (e.g. a module with no source extension, or a value the classifier could not reduce).
+ * Scans the emitted `.js` COMMENT LINES only (via `LEAKED_BANNER_RE`), so code/string
+ * content is never scanned. Any surviving bare host-path banner FAILS the build — the
+ * guard cannot be defeated by a space in the path.
  */
 export function assertNoLeakedBanner(name, js) {
   for (const line of js.split("\n")) {
@@ -111,12 +152,13 @@ export function assertNoLeakedBanner(name, js) {
 /**
  * Rewrite each `index.js` module-boundary banner path to its package-relative label,
  * then fail closed if any host path survives (both via the per-banner host-path check
- * and the bare-banner fallback). Returns the sanitised JS text.
+ * and the bare-banner fallback). `bannerBase` is the directory esbuild's banner paths
+ * are relative to (the build working dir = `packageRoot`). Returns the sanitised JS.
  */
-export function sanitizeJs(js) {
+export function sanitizeJs(js, packageRoot, bannerBase = packageRoot) {
   const bannerPaths = [];
   const out = js.replace(JS_BANNER_RE, (_m, p) => {
-    const rel = pkgRelativePath(p);
+    const rel = pkgRelativePath(p, packageRoot, bannerBase);
     bannerPaths.push(rel);
     return `// ${rel}`;
   });
@@ -127,15 +169,18 @@ export function sanitizeJs(js) {
 
 /**
  * Rewrite an `index.js.map` object in place: relativise every `sources[]` entry to the
- * SAME plain label form used for the `.js` banners, and CLEAR any non-empty
+ * SAME plain label form used for the `.js` banners (`sourcesBase` is the dir the map's
+ * `sources[]` are relative to — the map file's own directory), and CLEAR any non-empty
  * `sourceRoot` (which is prepended to every `sources[]` entry and can itself carry a
  * host path — clearing IS the sanitisation, since the committed map is self-contained
  * via `sourcesContent`). Then validate the sanitised `sources[]` AND the cleared
- * `sourceRoot` so no path-bearing field is silently unhandled. `sourcesContent` is left
- * untouched. Returns the (mutated) map object.
+ * `sourceRoot` so no path-bearing field is silently unhandled. `sourcesContent` is
+ * left untouched. Returns the (mutated) map object.
  */
-export function sanitizeMap(map) {
-  const sources = Array.isArray(map.sources) ? map.sources.map(pkgRelativePath) : [];
+export function sanitizeMap(map, packageRoot, sourcesBase = packageRoot) {
+  const sources = Array.isArray(map.sources)
+    ? map.sources.map((s) => pkgRelativePath(s, packageRoot, sourcesBase))
+    : [];
   if (Array.isArray(map.sources)) {
     map.sources = sources;
   }
