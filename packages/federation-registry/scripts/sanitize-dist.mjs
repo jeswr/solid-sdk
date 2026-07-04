@@ -36,6 +36,15 @@ import { isAbsolute, relative, resolve } from "node:path";
 export const FORBIDDEN_PATH_PREFIXES = ["/Users/", "/home/", "/root/", "/private/", "/var/"];
 
 /**
+ * A Windows drive-qualified absolute path (`C:/…`, `D:/…`) after POSIX-normalisation.
+ * ANY drive-qualified path is a host path — it is machine-specific and must never
+ * survive in a committed artifact — even a bare `D:/a/repo/orphan.ts` that contains no
+ * Unix forbidden segment. Completes the absolute-path taxonomy alongside the POSIX
+ * forbidden prefixes above.
+ */
+const DRIVE_ABS_RE = /^[A-Za-z]:\//;
+
+/**
  * Matches an esbuild module-boundary banner line: `// <path>` where <path> ends in a
  * source extension. The payload is matched PERMISSIVELY (`.+`, so a path containing a
  * space such as `/Users/Jesse Wright/…/src/foo.ts` is captured in full and cannot slip
@@ -47,14 +56,16 @@ export const JS_BANNER_RE = /^\/\/ (.+\.(?:js|cjs|mjs|ts|tsx|jsx))$/gm;
 /**
  * A comment line that is essentially a bare host path — a leaked module banner esbuild
  * emitted for a module with NO recognised source extension (so the rewrite could not
- * classify it) or a value the classifier could not reduce. Matches `// /Users/…`,
- * `// ../../home/…`, `// C:/Users/…`, etc. Anchored so ordinary prose (`// see /var/log
- * …`) does not match — only a line that STARTS (after `// `, an optional Windows drive
- * prefix, optional `./`/`../`, optional `/`) with a forbidden root segment. Callers
- * POSIX-normalise the line (backslashes → `/`) before testing, so a Windows banner is
- * caught too.
+ * classify it) or a value the classifier could not reduce. Matches EITHER a Windows
+ * drive-qualified banner (`// C:/…`, `// D:/a/repo/orphan.ts` — ANY drive path is a host
+ * path, even without a Unix forbidden segment) OR a POSIX forbidden-root banner
+ * (`// /Users/…`, `// ../../home/…`). Anchored so ordinary prose (`// see /var/log …`)
+ * does not match — the POSIX arm requires the line to START (after `// `, optional
+ * `./`/`../`, optional `/`) with a forbidden root segment. Callers POSIX-normalise the
+ * line (backslashes → `/`) before testing, so a Windows banner is caught too.
  */
-const LEAKED_BANNER_RE = /^\/\/ (?:[A-Za-z]:\/)?(?:\.{1,2}\/)*\/?(?:Users|home|root|private|var)\//;
+const LEAKED_BANNER_RE =
+  /^\/\/ (?:[A-Za-z]:\/|(?:\.{1,2}\/)*\/?(?:Users|home|root|private|var)\/)/;
 
 /** A `scheme://` URL — not a filesystem build path, so it is left untouched. */
 const URL_RE = /^[a-z][a-z0-9+.-]*:\/\//i;
@@ -154,6 +165,15 @@ export function assertNoHostPath(name, paths) {
     // POSIX-normalise so a Windows-style `C:\Users\…` residual is caught by the
     // forward-slash forbidden prefixes too.
     const norm = toPosix(p);
+    // ANY drive-qualified absolute path (`D:/…`) is machine-specific → a host path,
+    // even a bare `D:/a/repo/orphan.ts` that carries no Unix forbidden segment.
+    if (DRIVE_ABS_RE.test(norm)) {
+      throw new Error(
+        `build-dist: committed dist/${name} still embeds a host path (drive-qualified): ` +
+          `${JSON.stringify(p)}. The sanitiser must reduce every build path to a ` +
+          "package-relative one before commit.",
+      );
+    }
     for (const prefix of FORBIDDEN_PATH_PREFIXES) {
       if (norm.includes(prefix)) {
         throw new Error(
