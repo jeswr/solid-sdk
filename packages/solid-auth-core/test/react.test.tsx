@@ -7,7 +7,13 @@
 import { act, createElement, StrictMode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { LoginResult, RestoreOutcome, SolidAuth } from "../src/index.js";
+import type {
+  BeginRedirectLoginOptions,
+  LoginResult,
+  RedirectOutcome,
+  RestoreOutcome,
+  SolidAuth,
+} from "../src/index.js";
 import { SessionProvider, type SolidSession, useSolidSession } from "../src/react/index.js";
 
 declare global {
@@ -57,6 +63,23 @@ class FakeAuth implements SolidAuth {
   }
   recentAccounts(): [] {
     return [];
+  }
+  // ── Full-page-redirect seam (unused by the React tests; present for the contract). ──
+  async handleRedirect(): Promise<RedirectOutcome> {
+    return { outcome: "none" };
+  }
+  async beginRedirectLogin(_options: BeginRedirectLoginOptions): Promise<{
+    authorizationUrl: string;
+  }> {
+    return { authorizationUrl: "https://idp.example/auth" };
+  }
+  async completeRedirectLogin(): Promise<LoginResult> {
+    this.webId = "https://alice.example/#me";
+    this.#emit();
+    return { webId: this.webId };
+  }
+  hasPendingRedirect(): boolean {
+    return false;
   }
   onSessionChange(listener: (s: { webId: string | null }) => void): () => void {
     this.#listeners.add(listener);

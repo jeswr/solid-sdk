@@ -1,4 +1,5 @@
 import * as oauth from "oauth4webapi";
+import { type RedirectFlowStorage } from "./redirect.js";
 import type { SessionStore } from "./session-store.js";
 import type { GetCodeCallback, SolidAuth } from "./types.js";
 /**
@@ -154,6 +155,47 @@ export interface SolidAuthConfig {
      * hold a reference to the original — otherwise the default is correct and safer.
      */
     publicFetch?: typeof fetch;
+    /**
+     * The full-page navigation seam for {@link SolidAuth.beginRedirectLogin} — how the
+     * page is sent to the OP's authorization endpoint. Defaults to
+     * `globalThis.location.assign`. Inject to test the redirect flow without a real
+     * navigation, or to route the navigation through a router.
+     */
+    navigate?: (url: string) => void;
+    /**
+     * The registered app-root RETURN URI for FULL-PAGE-redirect logins — the page the OP
+     * redirects back to, which MUST run the app so it can read `?code&state` and drive
+     * {@link SolidAuth.completeRedirectLogin} / {@link SolidAuth.handleRedirect}.
+     *
+     * DISTINCT from {@link callbackUri}: `callbackUri` is the POPUP callback page (it only
+     * `postMessage`s and does NOT run the app), so it is the WRONG target for a full-page
+     * redirect. When this is set it is the default `redirect_uri` for both
+     * {@link SolidAuth.beginRedirectLogin} and the {@link SolidAuth.handleRedirect}
+     * autologin path; it MUST be a registered `redirect_uri` (listed in the Client
+     * Identifier Document, or dynamically registered). When ABSENT, `handleRedirect`
+     * derives the return URI from the CURRENT page URL (origin + path, fragment stripped)
+     * and a direct `beginRedirectLogin` falls back to `callbackUri`.
+     */
+    redirectUri?: string;
+    /**
+     * The transient store for the FULL-PAGE-redirect login's in-between state (the
+     * PKCE verifier + exported DPoP JWK + state/nonce + client), which must survive the
+     * navigation. Defaults to `globalThis.sessionStorage` (per-tab, same-origin, cleared
+     * on tab close). Inject an in-memory stub for tests / non-browser hosts.
+     */
+    redirectFlowStorage?: RedirectFlowStorage;
+    /**
+     * The sessionStorage key the redirect flow persists its record under. MUST be
+     * unique per app on a shared origin. Defaults to a name derived from
+     * {@link dbName}. Distinct from {@link redirectSentinelKey}.
+     */
+    redirectFlowKey?: string;
+    /**
+     * The sessionStorage key for the one-shot autologin loop-guard sentinel (the WebID
+     * last attempted this tab), so a redirect that bounces back still unauthenticated
+     * does not loop. App-specific; defaults to a name derived from {@link dbName}.
+     */
+    redirectSentinelKey?: string;
 }
 /** How {@link computeAllowedOrigins} derives the default WebID/issuer origins. */
 export interface AllowedOriginsInputs {

@@ -1,7 +1,7 @@
 // src/controller.ts
 import { fetchRdf } from "@jeswr/fetch-rdf";
 
-// node_modules/@jeswr/solid-session-restore/dist/remembered-account.js
+// ../solid-auth-core/node_modules/@jeswr/solid-session-restore/dist/remembered-account.js
 var DEFAULT_REMEMBERED_ACCOUNT_KEY = "solid-session-restore.remembered-account";
 var RememberedAccount = class {
   #key;
@@ -62,7 +62,7 @@ var RememberedAccount = class {
   }
 };
 
-// node_modules/@jeswr/solid-session-restore/dist/restore-session.js
+// ../solid-auth-core/node_modules/@jeswr/solid-session-restore/dist/restore-session.js
 import * as oauth from "oauth4webapi";
 var EXPIRY_SKEW_MS = 3e4;
 var isLoopback = (host) => host === "localhost" || host === "127.0.0.1" || host === "[::1]";
@@ -260,7 +260,7 @@ async function hasPersisted(store, issuer) {
   }
 }
 
-// node_modules/@jeswr/solid-session-restore/dist/session-persistence.js
+// ../solid-auth-core/node_modules/@jeswr/solid-session-restore/dist/session-persistence.js
 var DEFAULT_DB_NAME = "solid-session-restore:sessions";
 var DB_VERSION = 1;
 var STORE_NAME = "sessions";
@@ -333,7 +333,7 @@ function indexedDbAvailable() {
   return typeof globalThis.indexedDB !== "undefined";
 }
 
-// node_modules/@jeswr/solid-session-restore/dist/session-restore.js
+// ../solid-auth-core/node_modules/@jeswr/solid-session-restore/dist/session-restore.js
 async function decideSilentRestore(inputs) {
   const { lastActiveWebId, remembered, restoreIssuer } = inputs;
   const equal = inputs.webIdsEqual ?? webIdsEqual;
@@ -416,6 +416,115 @@ var MODULE_PRISTINE_FETCH = (() => {
   return resolved === raw ? raw.bind(globalThis) : resolved;
 })();
 
+// src/redirect.ts
+var ES256_JWK_IMPORT_ALG = { name: "ECDSA", namedCurve: "P-256" };
+var AUTOLOGIN_FRAGMENT_PREFIX = "#autologin/";
+function readPersistedRedirectFlow(storage, key) {
+  let raw;
+  try {
+    raw = storage?.getItem(key) ?? null;
+  } catch {
+    return null;
+  }
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed.codeVerifier !== "string" || typeof parsed.state !== "string" || typeof parsed.nonce !== "string" || typeof parsed.issuer !== "string" || typeof parsed.redirectUri !== "string" || typeof parsed.client !== "object" || parsed.client === null || typeof parsed.client.client_id !== "string") {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+function writePersistedRedirectFlow(storage, key, flow) {
+  if (!storage) {
+    throw new Error(
+      "Cannot start a redirect login: no sessionStorage is available to persist the in-flight login state across the full-page redirect."
+    );
+  }
+  try {
+    storage.setItem(key, JSON.stringify(flow));
+  } catch (e) {
+    throw new Error(
+      `Could not persist the redirect login state to sessionStorage: ${e instanceof Error ? e.message : String(e)}`
+    );
+  }
+}
+function clearPersistedRedirectFlow(storage, key) {
+  try {
+    storage?.removeItem(key);
+  } catch {
+  }
+}
+function parseAutologinFragment(hash) {
+  if (!hash.startsWith(AUTOLOGIN_FRAGMENT_PREFIX)) return null;
+  const encoded = hash.slice(AUTOLOGIN_FRAGMENT_PREFIX.length);
+  if (!encoded) return null;
+  try {
+    const webId = decodeURIComponent(encoded);
+    return webId.length > 0 ? webId : null;
+  } catch {
+    return null;
+  }
+}
+function hasAuthCodeParams(search) {
+  const params = new URLSearchParams(search);
+  return params.has("code") && params.has("state");
+}
+function hasAuthErrorParams(search) {
+  const params = new URLSearchParams(search);
+  return params.has("error") && params.has("state");
+}
+function authErrorFrom(search) {
+  return new URLSearchParams(search).get("error");
+}
+function cleanedUrl(href) {
+  try {
+    const u = new URL(href);
+    u.search = "";
+    u.hash = "";
+    return u.toString();
+  } catch {
+    return href;
+  }
+}
+var AUTH_CALLBACK_PARAMS = [
+  "code",
+  "state",
+  "error",
+  "error_description",
+  "error_uri",
+  "iss",
+  "session_state"
+];
+function stripAuthCallbackParams(href) {
+  try {
+    const u = new URL(href);
+    for (const p of AUTH_CALLBACK_PARAMS) u.searchParams.delete(p);
+    if (parseAutologinFragment(u.hash) !== null) u.hash = "";
+    return u.toString();
+  } catch {
+    return href;
+  }
+}
+function planRedirect(inputs) {
+  if (inputs.loggedIn) return { kind: "none" };
+  if (inputs.hasPendingRedirect && inputs.hasCodeParams) {
+    return { kind: "complete" };
+  }
+  if (inputs.hasPendingRedirect && inputs.hasErrorParams) {
+    return { kind: "abort" };
+  }
+  if (inputs.fragmentWebId) {
+    if (inputs.sentinel !== null && inputs.webIdsEqual(inputs.sentinel, inputs.fragmentWebId)) {
+      return { kind: "clear-sentinel" };
+    }
+    return { kind: "begin", webId: inputs.fragmentWebId };
+  }
+  return { kind: "none" };
+}
+
 // src/controller.ts
 var AmbiguousIssuerError = class extends Error {
   webId;
@@ -452,6 +561,13 @@ var MissingAuthFlowError = class extends Error {
   }
 };
 var isLoopback2 = (host) => host === "localhost" || host === "127.0.0.1" || host === "[::1]";
+function defaultSessionStorage() {
+  try {
+    return globalThis.sessionStorage ?? void 0;
+  } catch {
+    return void 0;
+  }
+}
 function noUrlEncodeClientSecretBasic2(clientSecret) {
   return (_as, client, _body, headers) => {
     headers.set("authorization", `Basic ${btoa(`${client.client_id}:${clientSecret}`)}`);
@@ -676,6 +792,14 @@ var SolidAuthEngine = class {
   #clientId;
   #remembered;
   #recentAccounts;
+  /** The full-page navigation seam (defaults to `location.assign`). */
+  #navigate;
+  /** The transient store for the redirect flow's in-between state (sessionStorage). */
+  #redirectStorage;
+  /** The sessionStorage key the redirect record is persisted under. */
+  #redirectFlowKey;
+  /** The sessionStorage key for the one-shot autologin loop-guard sentinel. */
+  #redirectSentinelKey;
   // The token provider, built lazily so construction has no side effects until a
   // login/restore actually happens.
   #provider;
@@ -725,6 +849,13 @@ var SolidAuthEngine = class {
     this.#recentAccounts = new RecentAccountsList(
       options.recentAccountsKey ?? `${options.rememberedAccountsKey ?? "solid-elements"}.recent-accounts`
     );
+    const keyBase = options.dbName ?? "solid-auth-core";
+    this.#navigate = options.navigate ?? ((url) => {
+      globalThis.location?.assign(url);
+    });
+    this.#redirectStorage = options.redirectFlowStorage ?? defaultSessionStorage();
+    this.#redirectFlowKey = options.redirectFlowKey ?? `${keyBase}.redirect-flow`;
+    this.#redirectSentinelKey = options.redirectSentinelKey ?? `${keyBase}.redirect-sentinel`;
   }
   get publicFetch() {
     return this.#publicFetch;
@@ -1109,47 +1240,12 @@ var SolidAuthEngine = class {
       const validated = validateWebId(targetWebId, this.#opts.allowInsecureLoopback ?? false);
       const issuer = await this.#resolveIssuer(validated);
       const session = await this.#authenticate(generation, issuer, validated);
-      if (generation !== this.#generation) {
-        throw new DOMException("Login superseded", "AbortError");
-      }
-      const { wrote: credentialWritten, durable: credentialRestorable } = await this.#persist(
+      return await this.#finalizeAuthenticatedSession(
+        generation,
         session,
-        generation
+        previousIssuer,
+        previousWebId
       );
-      if (generation !== this.#generation) {
-        throw new DOMException("Login superseded", "AbortError");
-      }
-      session.refreshToken = void 0;
-      this.#session = session;
-      this.#ensureProvider();
-      if (credentialRestorable) {
-        this.#safeWriteRemembered(session.webId, session.issuer.href);
-      } else {
-        this.#safeClearRemembered();
-      }
-      this.#recentAccounts.remember({ webId: session.webId, displayName: session.webId });
-      let normalizedPrevIssuer = null;
-      try {
-        normalizedPrevIssuer = previousIssuer ? new URL(previousIssuer).href : null;
-      } catch {
-        normalizedPrevIssuer = null;
-      }
-      if (normalizedPrevIssuer && normalizedPrevIssuer !== session.issuer.href) {
-        try {
-          await this.#forget(new URL(normalizedPrevIssuer));
-        } catch {
-        }
-      } else if (!credentialWritten && normalizedPrevIssuer === session.issuer.href && previousWebId !== void 0 && !webIdsEqual(previousWebId, session.webId)) {
-        try {
-          await this.#forget(session.issuer);
-        } catch {
-        }
-      }
-      if (generation !== this.#generation || this.#session !== session) {
-        throw new DOMException("Login superseded", "AbortError");
-      }
-      this.#emitSessionChange();
-      return { webId: session.webId };
     } catch (e) {
       if (priorSession && this.#session === priorSession && generation === this.#generation) {
         priorSession.generation = this.#generation;
@@ -1158,6 +1254,72 @@ var SolidAuthEngine = class {
     } finally {
       if (generation === this.#generation) this.#activeLoginAbort = void 0;
     }
+  }
+  /**
+   * Establish an authenticated {@link LiveSession} into the controller: persist the
+   * DPoP-bound refresh credential, pin the session + provider, write/clear the
+   * silent-restore pointer, remember the account, run account-switch cleanup, and
+   * emit the session-change event — all under the interleaved generation-supersession
+   * fences. Shared by {@link login} (popup path) AND {@link completeRedirectLogin}
+   * (full-page-redirect path): both authenticate a WebID and then need the IDENTICAL
+   * post-auth establishment, so this is its ONE audited home rather than two copies of
+   * the security-critical fence logic. Returns the {@link LoginResult}; throws the same
+   * `AbortError` the callers propagate when a newer login/logout superseded this one.
+   *
+   * @param previousIssuer the issuer of the session/pointer this login is REPLACING
+   *   (for cross-issuer credential cleanup); undefined when there is none.
+   * @param previousWebId the WebID being replaced (gates the same-issuer account-switch
+   *   cleanup so a plain same-WebID re-login never drops a still-valid credential).
+   */
+  // ESSENTIAL COMPLEXITY (intentionally over the cognitive-complexity warn threshold —
+  // the linter flags it; that flag is a "review this carefully" signal, not a cleanup
+  // target): every branch is a fail-closed cross-account credential-leak fence — the
+  // interleaved post-await generation re-checks, the durable-vs-wrote persist split, the
+  // same-/cross-issuer account-switch cleanup gated on a DIFFERENT WebID. This is the
+  // VERBATIM block that previously lived inline in login() (extracted so the redirect
+  // path reuses ONE audited copy); collapsing a branch is a CVE, not a simplification.
+  async #finalizeAuthenticatedSession(generation, session, previousIssuer, previousWebId) {
+    if (generation !== this.#generation) {
+      throw new DOMException("Login superseded", "AbortError");
+    }
+    const { wrote: credentialWritten, durable: credentialRestorable } = await this.#persist(
+      session,
+      generation
+    );
+    if (generation !== this.#generation) {
+      throw new DOMException("Login superseded", "AbortError");
+    }
+    session.refreshToken = void 0;
+    this.#session = session;
+    this.#ensureProvider();
+    if (credentialRestorable) {
+      this.#safeWriteRemembered(session.webId, session.issuer.href);
+    } else {
+      this.#safeClearRemembered();
+    }
+    this.#recentAccounts.remember({ webId: session.webId, displayName: session.webId });
+    let normalizedPrevIssuer = null;
+    try {
+      normalizedPrevIssuer = previousIssuer ? new URL(previousIssuer).href : null;
+    } catch {
+      normalizedPrevIssuer = null;
+    }
+    if (normalizedPrevIssuer && normalizedPrevIssuer !== session.issuer.href) {
+      try {
+        await this.#forget(new URL(normalizedPrevIssuer));
+      } catch {
+      }
+    } else if (!credentialWritten && normalizedPrevIssuer === session.issuer.href && previousWebId !== void 0 && !webIdsEqual(previousWebId, session.webId)) {
+      try {
+        await this.#forget(session.issuer);
+      } catch {
+      }
+    }
+    if (generation !== this.#generation || this.#session !== session) {
+      throw new DOMException("Login superseded", "AbortError");
+    }
+    this.#emitSessionChange();
+    return { webId: session.webId };
   }
   /** Abort the in-flight interactive login's popup (if any) and drop the handle. */
   #abortActiveLogin() {
@@ -1284,20 +1446,33 @@ var SolidAuthEngine = class {
     }
     return {};
   }
-  /** Resolve the OAuth client (static Client Identifier Document or dynamic reg). */
-  async #resolveClient(authorizationServer, http) {
-    if (this.#clientId !== void 0) {
+  /**
+   * Resolve the OAuth client (static Client Identifier Document or dynamic reg).
+   *
+   * `overrides` (the FULL-PAGE-redirect path): the redirect login returns to the
+   * APP ROOT, not the popup `callbackUri`, and may use a different `clientId`. When
+   * a `redirectUri` distinct from `callbackUri` is passed it is registered ALONGSIDE
+   * the callback (the OP rejects a redirect_uri it was never told about, so the
+   * dynamic-registration path must register it; for a static client the document
+   * itself must list it — the OP is authoritative off the document). With no
+   * overrides the popup path is byte-identical to before.
+   */
+  async #resolveClient(authorizationServer, http, overrides) {
+    const clientId = overrides?.clientId ?? this.#clientId;
+    const redirectUri = overrides?.redirectUri ?? this.#opts.callbackUri;
+    const redirectUris = redirectUri !== this.#opts.callbackUri ? [this.#opts.callbackUri, redirectUri] : [this.#opts.callbackUri];
+    if (clientId !== void 0) {
       return {
-        client_id: this.#clientId,
+        client_id: clientId,
         token_endpoint_auth_method: "none",
-        redirect_uris: [this.#opts.callbackUri],
+        redirect_uris: redirectUris,
         response_types: ["code"]
       };
     }
     const registrationResponse = await oauth2.dynamicClientRegistrationRequest(
       authorizationServer,
       {
-        redirect_uris: [this.#opts.callbackUri],
+        redirect_uris: redirectUris,
         grant_types: ["authorization_code", "refresh_token"],
         response_types: ["code"],
         token_endpoint_auth_method: "none"
@@ -1533,7 +1708,7 @@ var SolidAuthEngine = class {
         } catch {
           previous = void 0;
         }
-        const clientId = this.#clientId ?? session.client.client_id;
+        const clientId = session.client.client_id;
         await this.#store.put({
           issuer: session.issuer.href,
           webId: session.webId,
@@ -1614,6 +1789,336 @@ var SolidAuthEngine = class {
         }
       }
     };
+  }
+  // ── FULL-PAGE-redirect login (the `#autologin/<webid>` launch contract) ──────
+  //
+  // The redirect counterpart to the popup login(): it survives a full-page
+  // navigation by persisting its in-between state (PKCE verifier + EXPORTED DPoP JWK
+  // + state/nonce + the exact client/issuer/redirect_uri) to sessionStorage between
+  // beginRedirectLogin (before the nav) and completeRedirectLogin (after the broker
+  // redirects back). The pure decision/parsing/persist pieces live in ./redirect.ts;
+  // the credential-redeeming machinery is HERE (it needs the engine's discovery,
+  // client-auth resolution, pristine OIDC fetch, and session establishment). Every
+  // OIDC hop rides the pristine #oauthFetch (the login-stall unrepresentability
+  // guarantee) exactly like the popup path.
+  hasPendingRedirect() {
+    return readPersistedRedirectFlow(this.#redirectStorage, this.#redirectFlowKey) !== null;
+  }
+  async beginRedirectLogin(options) {
+    let issuer;
+    let requestedWebId;
+    if (options.webId !== void 0 && options.webId !== "") {
+      const validated = validateWebId(options.webId, this.#opts.allowInsecureLoopback ?? false);
+      issuer = await this.#resolveIssuer(validated);
+      requestedWebId = validated;
+    } else if (options.oidcIssuer !== void 0 && options.oidcIssuer !== "") {
+      issuer = this.#requireSecureIssuer(options.oidcIssuer);
+      requestedWebId = null;
+    } else {
+      throw new InvalidWebIdError("", "beginRedirectLogin requires a webId or an oidcIssuer");
+    }
+    const redirectUri = options.redirectUri ?? this.#opts.redirectUri ?? this.#opts.callbackUri;
+    const prompt = options.prompt ?? "consent";
+    const baseHttp = this.#httpOptions(issuer);
+    const http = { ...baseHttp, [oauth2.customFetch]: this.#oauthFetch() };
+    const discoveryResponse = await oauth2.discoveryRequest(issuer, http);
+    const authorizationServer = await oauth2.processDiscoveryResponse(issuer, discoveryResponse);
+    const client = await this.#resolveClient(authorizationServer, baseHttp, {
+      clientId: options.clientId,
+      redirectUri
+    });
+    const dpopKey = await oauth2.generateKeyPair("ES256", { extractable: true });
+    const dpopHandle = oauth2.DPoP(client, dpopKey);
+    let dpopJkt;
+    try {
+      dpopJkt = await dpopHandle.calculateThumbprint();
+    } catch {
+      dpopJkt = void 0;
+    }
+    const dpopPrivateJwk = await globalThis.crypto.subtle.exportKey("jwk", dpopKey.privateKey);
+    const dpopPublicJwk = await globalThis.crypto.subtle.exportKey("jwk", dpopKey.publicKey);
+    const codeVerifier = oauth2.generateRandomCodeVerifier();
+    const state = oauth2.generateRandomState();
+    const nonce = oauth2.generateRandomNonce();
+    const codeChallenge = await oauth2.calculatePKCECodeChallenge(codeVerifier);
+    const url = new URL(authorizationServer.authorization_endpoint);
+    url.searchParams.set("client_id", client.client_id);
+    url.searchParams.set("redirect_uri", redirectUri);
+    url.searchParams.set("response_type", "code");
+    url.searchParams.set("scope", "openid webid offline_access");
+    url.searchParams.set("state", state);
+    url.searchParams.set("nonce", nonce);
+    url.searchParams.set("prompt", prompt === "none" ? "none" : "select_account consent");
+    url.searchParams.set("code_challenge", codeChallenge);
+    url.searchParams.set("code_challenge_method", "S256");
+    if (dpopJkt) url.searchParams.set("dpop_jkt", dpopJkt);
+    const flow = {
+      dpopPrivateJwk,
+      dpopPublicJwk,
+      codeVerifier,
+      state,
+      nonce,
+      issuer: issuer.href,
+      client,
+      redirectUri,
+      webId: requestedWebId
+    };
+    writePersistedRedirectFlow(this.#redirectStorage, this.#redirectFlowKey, flow);
+    const authorizationUrl = url.toString();
+    this.#navigate(authorizationUrl);
+    return { authorizationUrl };
+  }
+  async completeRedirectLogin(callbackUrl = globalThis.location?.href ?? "") {
+    const flow = readPersistedRedirectFlow(this.#redirectStorage, this.#redirectFlowKey);
+    if (!flow) {
+      clearPersistedRedirectFlow(this.#redirectStorage, this.#redirectFlowKey);
+      throw new Error("No pending redirect login to complete (no persisted state found).");
+    }
+    try {
+      this.#abortActiveLogin();
+      await this.#drainActiveGrants();
+      const generation = ++this.#generation;
+      this.#abortActiveLogin();
+      const priorSession = this.#session;
+      const previousIssuer = priorSession?.issuer.href ?? this.#safeReadRemembered()?.issuer;
+      const previousWebId = priorSession?.webId ?? this.#safeReadRemembered()?.webId;
+      try {
+        const session = await this.#exchangeRedirectCode(generation, flow, callbackUrl);
+        return await this.#finalizeAuthenticatedSession(
+          generation,
+          session,
+          previousIssuer,
+          previousWebId
+        );
+      } catch (e) {
+        if (priorSession && this.#session === priorSession && generation === this.#generation) {
+          priorSession.generation = this.#generation;
+        }
+        throw e;
+      } finally {
+        if (generation === this.#generation) this.#activeLoginAbort = void 0;
+      }
+    } finally {
+      clearPersistedRedirectFlow(this.#redirectStorage, this.#redirectFlowKey);
+    }
+  }
+  /**
+   * The DPoP-bound authorization-code exchange for the FULL-PAGE-redirect path,
+   * resuming purely from the persisted {@link PersistedRedirectFlow}: reconstruct the
+   * EXACT client, re-import the DPoP key, VALIDATE the persisted `state`, exchange the
+   * code (nonce-retry like #authenticate, `expectedNonce` = the persisted nonce),
+   * ENFORCE the DPoP token type + the https WebID guard + the requested-WebID match
+   * (all fail-closed BEFORE any session state is written), and return the
+   * {@link LiveSession} for {@link #finalizeAuthenticatedSession} to establish.
+   */
+  async #exchangeRedirectCode(generation, flow, callbackUrl) {
+    const issuer = new URL(flow.issuer);
+    const baseHttp = this.#httpOptions(issuer);
+    const http = { ...baseHttp, [oauth2.customFetch]: this.#oauthFetch() };
+    const discoveryResponse = await oauth2.discoveryRequest(issuer, http);
+    const authorizationServer = await oauth2.processDiscoveryResponse(issuer, discoveryResponse);
+    if (generation !== this.#generation) throw new DOMException("Login superseded", "AbortError");
+    const client = flow.client;
+    const { clientAuth } = this.#resolveClientAuth(authorizationServer.issuer, client);
+    const privateKey = await globalThis.crypto.subtle.importKey(
+      "jwk",
+      flow.dpopPrivateJwk,
+      ES256_JWK_IMPORT_ALG,
+      false,
+      ["sign"]
+    );
+    const publicKey = await globalThis.crypto.subtle.importKey(
+      "jwk",
+      flow.dpopPublicJwk,
+      ES256_JWK_IMPORT_ALG,
+      true,
+      ["verify"]
+    );
+    if (generation !== this.#generation) throw new DOMException("Login superseded", "AbortError");
+    const dpopKey = { privateKey, publicKey };
+    const dpopHandle = oauth2.DPoP(client, dpopKey);
+    const params = oauth2.validateAuthResponse(
+      authorizationServer,
+      client,
+      new URL(callbackUrl),
+      flow.state
+    );
+    const exchange = async () => {
+      const tokenResponse = await oauth2.authorizationCodeGrantRequest(
+        authorizationServer,
+        client,
+        clientAuth,
+        params,
+        // The redirect_uri MUST be byte-identical to the authorization request's.
+        flow.redirectUri,
+        flow.codeVerifier,
+        // PKCE always on (S256) — single-use against the code.
+        { DPoP: dpopHandle, ...http }
+      );
+      return oauth2.processAuthorizationCodeResponse(authorizationServer, client, tokenResponse, {
+        expectedNonce: flow.nonce
+      });
+    };
+    let tokenResult;
+    try {
+      tokenResult = await exchange();
+    } catch (e) {
+      if (!oauth2.isDPoPNonceError(e)) throw e;
+      tokenResult = await exchange();
+    }
+    if (generation !== this.#generation) throw new DOMException("Login superseded", "AbortError");
+    if (tokenResult.token_type.toLowerCase() !== "dpop") {
+      throw new Error(
+        `Expected a DPoP-bound token but the identity provider returned token_type="${tokenResult.token_type}".`
+      );
+    }
+    const claimedWebId = webIdFromClaims2(oauth2.getValidatedIdTokenClaims(tokenResult));
+    if (!claimedWebId) {
+      throw new Error("The identity provider did not return a WebID for this session.");
+    }
+    const webId = validateWebId(claimedWebId, this.#opts.allowInsecureLoopback ?? false);
+    if (flow.webId !== null && !webIdsEqual(webId, flow.webId)) {
+      throw new Error(
+        `Signed in as a different WebID than requested (asked for ${flow.webId}, got ${webId}).`
+      );
+    }
+    return {
+      generation,
+      issuer,
+      webId,
+      accessToken: tokenResult.access_token,
+      dpopKey,
+      dpopHandle,
+      authorizationServer,
+      client,
+      allowedOrigins: this.#allowedOriginsFor(webId, issuer),
+      expiresAt: expiresAtFrom2(tokenResult.expires_in),
+      // Stash the refresh token transiently for #persist; cleared right after.
+      refreshToken: tokenResult.refresh_token
+    };
+  }
+  async handleRedirect(currentUrl = globalThis.location?.href ?? "") {
+    try {
+      const url = new URL(currentUrl);
+      const fragmentWebId = parseAutologinFragment(url.hash);
+      const plan = planRedirect({
+        loggedIn: this.webId !== null,
+        hasPendingRedirect: this.hasPendingRedirect(),
+        hasCodeParams: hasAuthCodeParams(url.search),
+        hasErrorParams: hasAuthErrorParams(url.search),
+        fragmentWebId,
+        sentinel: this.#readSentinel(),
+        webIdsEqual
+      });
+      switch (plan.kind) {
+        case "none": {
+          const isRedirectReturn = hasAuthCodeParams(url.search) || hasAuthErrorParams(url.search);
+          if (this.hasPendingRedirect()) {
+            clearPersistedRedirectFlow(this.#redirectStorage, this.#redirectFlowKey);
+            this.#clearSentinel();
+          }
+          if (isRedirectReturn) {
+            this.#cleanAddressBar(currentUrl);
+          }
+          if (isRedirectReturn && this.webId === null) {
+            clearPersistedRedirectFlow(this.#redirectStorage, this.#redirectFlowKey);
+            return {
+              outcome: "error",
+              error: authErrorFrom(url.search) ?? "redirect_state_missing"
+            };
+          }
+          return { outcome: "none" };
+        }
+        case "complete": {
+          const result = await this.completeRedirectLogin(currentUrl);
+          this.#clearSentinel();
+          this.#cleanAddressBar(currentUrl);
+          return { outcome: "completed", webId: result.webId };
+        }
+        case "abort": {
+          const flow = readPersistedRedirectFlow(this.#redirectStorage, this.#redirectFlowKey);
+          const returnedState = new URLSearchParams(url.search).get("state");
+          if (!flow || returnedState !== flow.state) {
+            return { outcome: "none" };
+          }
+          const error = authErrorFrom(url.search) ?? "login_failed";
+          clearPersistedRedirectFlow(this.#redirectStorage, this.#redirectFlowKey);
+          this.#clearSentinel();
+          this.#cleanAddressBar(currentUrl);
+          return { outcome: "error", error };
+        }
+        case "begin": {
+          this.#writeSentinel(plan.webId);
+          await this.beginRedirectLogin({
+            webId: plan.webId,
+            prompt: "none",
+            redirectUri: this.#opts.redirectUri ?? cleanedUrl(currentUrl)
+          });
+          return { outcome: "redirecting" };
+        }
+        case "clear-sentinel": {
+          this.#clearSentinel();
+          return { outcome: "none" };
+        }
+      }
+    } catch (e) {
+      clearPersistedRedirectFlow(this.#redirectStorage, this.#redirectFlowKey);
+      this.#clearSentinel();
+      this.#cleanAddressBar(currentUrl);
+      return { outcome: "error", error: e instanceof Error ? e.message : String(e) };
+    }
+  }
+  /** Parse + require a SECURE (https, or loopback http under the opt-in) issuer URL. */
+  #requireSecureIssuer(raw) {
+    let u;
+    try {
+      u = new URL(raw);
+    } catch {
+      throw new Error(`The OIDC issuer is not a valid URL: ${raw}`);
+    }
+    if (u.protocol === "https:") return u;
+    if (u.protocol === "http:" && (this.#opts.allowInsecureLoopback ?? false) && isLoopback2(u.hostname)) {
+      return u;
+    }
+    throw new Error(
+      `The OIDC issuer must be https (http is allowed only for a loopback dev host with allowInsecureLoopback): ${raw}`
+    );
+  }
+  /**
+   * Scrub the OAuth callback params (`?code`/`?state`/`?error`) + fragment from the
+   * address bar after a redirect return, via `history.replaceState` (no navigation, no
+   * new history entry). Best-effort: a non-DOM host (SSR) / a `history` that throws is
+   * simply skipped. Keeps the single-use code out of the visible URL + browser history
+   * so a copy-paste / back-button cannot resurface it (the roborev finding).
+   */
+  #cleanAddressBar(currentUrl) {
+    try {
+      const cleaned = stripAuthCallbackParams(currentUrl);
+      if (cleaned !== currentUrl) {
+        globalThis.history?.replaceState(globalThis.history.state, "", cleaned);
+      }
+    } catch {
+    }
+  }
+  /** The one-shot autologin loop-guard sentinel (best-effort; storage may be absent). */
+  #readSentinel() {
+    try {
+      return this.#redirectStorage?.getItem(this.#redirectSentinelKey) ?? null;
+    } catch {
+      return null;
+    }
+  }
+  #writeSentinel(webId) {
+    try {
+      this.#redirectStorage?.setItem(this.#redirectSentinelKey, webId);
+    } catch {
+    }
+  }
+  #clearSentinel() {
+    try {
+      this.#redirectStorage?.removeItem(this.#redirectSentinelKey);
+    } catch {
+    }
   }
 };
 var WebIdDPoPTokenProvider = class {
@@ -1875,27 +2380,39 @@ function sameWebId(a, b) {
   return a.trim() === b.trim();
 }
 export {
+  AUTOLOGIN_FRAGMENT_PREFIX,
   AmbiguousIssuerError,
+  ES256_JWK_IMPORT_ALG,
   InvalidWebIdError,
   MissingAuthFlowError,
   NoSolidIssuerError,
   PRISTINE_BASE,
   WebIdDPoPTokenProvider,
   __resetProactiveFetchForTests,
+  authErrorFrom,
   brandFetchWrapper,
+  cleanedUrl,
+  clearPersistedRedirectFlow,
   computeAllowedOrigins,
   createSolidAuth,
   deriveProactiveAllowedOrigins,
+  hasAuthCodeParams,
+  hasAuthErrorParams,
   htuOf,
   installProactiveAuthFetch,
   isOriginAllowed,
   isProviderOAuthRequest,
   isReactiveAuthResetError,
   isUseDpopNonceChallenge,
+  parseAutologinFragment,
   parseWwwAuthenticate,
+  planRedirect,
   proactiveAuthenticatedFetch,
+  readPersistedRedirectFlow,
   resolvePristineFetch,
   sameWebId,
-  validateWebId
+  stripAuthCallbackParams,
+  validateWebId,
+  writePersistedRedirectFlow
 };
 //# sourceMappingURL=index.js.map
