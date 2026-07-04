@@ -10,6 +10,7 @@
 import { describe, expect, it } from "vitest";
 import { delegationProvenance, evaluateDelegated } from "../src/delegation.js";
 import { evaluate } from "../src/evaluate.js";
+import { escapeIri } from "../src/iri.js";
 import { parsePolicy, policyFromRdf, policyToJsonLd, policyToTurtle } from "../src/policy.js";
 import { serialize } from "../src/serialize.js";
 import type { OdrlPolicy, RequestContext } from "../src/types.js";
@@ -897,5 +898,56 @@ describe("delegation terms: RDF round-trip", () => {
     const parsed = policyFromRdf(dataset);
     expect(parsed?.delegatedUnder).toBe(ROOT_ID);
     expect(parsed?.permissions?.some((p) => p.action === "grantUse")).toBe(true);
+  });
+
+  it("escapes a delegatedUnder parent IRI with a forbidden octet in JSON-LD, preserving chain equality across serialize→parse", async () => {
+    // The delegation-chain integrity risk: a parent policy IRI carrying a Turtle
+    // IRIREF-forbidden character (`>` + spaces) must be escaped IDENTICALLY in BOTH
+    // the parent policy's own @id AND the child's delegatedUnder @id — otherwise a
+    // JSON-LD serialize→parse round-trip would carry two DIFFERENT strings and the
+    // evaluateDelegated chain-equality check (child.delegatedUnder === parent.id)
+    // would silently break. This mirrors the RDF path (both go through escapeIri).
+    const hostileParent =
+      "https://alice.example/policies/root> <https://evil/s> <https://evil/p> <https://evil/o";
+    const parentPolicy: OdrlPolicy = {
+      id: hostileParent,
+      type: "Agreement",
+      assigner: OWNER,
+      assignee: AGENT_A,
+      permissions: [{ type: "permission", action: "read", target: RES, assignee: AGENT_A }],
+    };
+    const childPolicy: OdrlPolicy = {
+      id: HOP1_ID,
+      type: "Agreement",
+      assigner: AGENT_A,
+      assignee: AGENT_B,
+      delegatedUnder: hostileParent,
+      permissions: [{ type: "permission", action: "read", target: RES, assignee: AGENT_B }],
+    };
+
+    const parentDoc = policyToJsonLd(parentPolicy);
+    const childDoc = policyToJsonLd(childPolicy);
+
+    // The child's delegatedUnder @id is escaped — no raw breakout octet survives —
+    // and is byte-identical to the parent's escaped @id (chain equality preserved).
+    const escaped = escapeIri(hostileParent);
+    expect((childDoc.delegatedUnder as { "@id": string })["@id"]).toBe(escaped);
+    expect(parentDoc["@id"] as string).toBe(escaped);
+    expect((childDoc.delegatedUnder as { "@id": string })["@id"]).toBe(parentDoc["@id"]);
+    expect(escaped).toContain("%3E"); // `>` percent-encoded, not raw
+    const childJson = JSON.stringify(childDoc);
+    expect(childJson).not.toContain("root> <https://evil"); // no raw injection payload
+
+    // Round-trip both docs and confirm the parsed child.delegatedUnder still equals
+    // the parsed parent.id — the delegation edge survives serialization intact.
+    const { parseRdf } = await import("@jeswr/fetch-rdf");
+    const parsedParent = policyFromRdf(
+      await parseRdf(JSON.stringify(parentDoc), "application/ld+json"),
+    );
+    const parsedChild = policyFromRdf(
+      await parseRdf(JSON.stringify(childDoc), "application/ld+json"),
+    );
+    expect(parsedChild?.delegatedUnder).toBe(escaped);
+    expect(parsedChild?.delegatedUnder).toBe(parsedParent?.id);
   });
 });

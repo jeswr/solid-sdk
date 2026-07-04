@@ -1417,7 +1417,8 @@ function policyToJsonLd(policy) {
   const jsonAssignee = requireHttpIri(policy.assignee, "policy.assignee");
   if (jsonAssignee !== void 0) doc.assignee = { "@id": jsonAssignee };
   if (policy.conflict !== void 0) doc.conflict = { "@id": CONFLICT_IRI[policy.conflict] };
-  if (policy.delegatedUnder !== void 0) doc.delegatedUnder = { "@id": policy.delegatedUnder };
+  if (policy.delegatedUnder !== void 0)
+    doc.delegatedUnder = { "@id": escapeIri2(policy.delegatedUnder) };
   if (policy.permissions && policy.permissions.length > 0) {
     doc.permission = policy.permissions.map((r) => ruleJsonLd(r, policy));
   }

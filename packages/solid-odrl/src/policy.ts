@@ -378,7 +378,15 @@ export function policyToJsonLd(policy: OdrlPolicy): Record<string, unknown> {
   const jsonAssignee = requireHttpIri(policy.assignee, "policy.assignee");
   if (jsonAssignee !== undefined) doc.assignee = { "@id": jsonAssignee };
   if (policy.conflict !== undefined) doc.conflict = { "@id": CONFLICT_IRI[policy.conflict] };
-  if (policy.delegatedUnder !== undefined) doc.delegatedUnder = { "@id": policy.delegatedUnder };
+  // Escape the delegation-parent IRI exactly like the policy/rule/duty @id fields
+  // (and like the RDF path's GraphBuilder chokepoint): delegatedUnder is a
+  // subject-position id that may legitimately be a non-http absolute IRI, so it is
+  // escaped scheme-agnostically (escapeIri) rather than http-restricted. Leaving it
+  // raw would let a forbidden octet survive a JSON-LD serialise→parse round-trip and
+  // silently break delegation-chain equality checks — the same escaping-parity class
+  // as the audit-injection guard.
+  if (policy.delegatedUnder !== undefined)
+    doc.delegatedUnder = { "@id": escapeIri(policy.delegatedUnder) };
   if (policy.permissions && policy.permissions.length > 0) {
     doc.permission = policy.permissions.map((r) => ruleJsonLd(r, policy));
   }
