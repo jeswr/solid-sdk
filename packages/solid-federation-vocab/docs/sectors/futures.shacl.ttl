@@ -577,9 +577,9 @@ fsh:AppProposalShape
     sh:property [
         sh:path fut:indirectStakeholders ;
         sh:maxCount 1 ;
-        sh:or ( [ sh:datatype xsd:string ] [ sh:datatype rdf:langString ] ) ;
+        sh:datatype xsd:string ;
         sh:severity sh:Warning ;
-        sh:message "An AppProposal SHOULD carry the fut:indirectStakeholders VSD prompt (v0.2.0; ≤1, free text) — who is affected that is not in the room (unite design/03 §5)."@en
+        sh:message "An AppProposal SHOULD carry the fut:indirectStakeholders VSD prompt (v0.2.0; ≤1, xsd:string free text — matching its ontology range) — who is affected that is not in the room (unite design/03 §5)."@en
     ] .
 
 fsh:SpecSynthesisShape
@@ -669,6 +669,13 @@ fsh:InfraProposalShape
         sh:message "fut:breakingChange, when present, MUST be a single xsd:boolean."@en
     ] ;
     sh:property [
+        sh:path fut:migrationPath ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:severity sh:Violation ;
+        sh:message "fut:migrationPath, when present, MUST be a single xsd:string (matching its ontology range) — not a bare IRI or non-text term. Its presence-when-breaking is the node-level sh:or below."@en
+    ] ;
+    sh:property [
         sh:path fut:referenceImplementation ;
         sh:nodeKind sh:IRI ;
         sh:severity sh:Warning ;
@@ -677,9 +684,9 @@ fsh:InfraProposalShape
     sh:property [
         sh:path fut:indirectStakeholders ;
         sh:maxCount 1 ;
-        sh:or ( [ sh:datatype xsd:string ] [ sh:datatype rdf:langString ] ) ;
+        sh:datatype xsd:string ;
         sh:severity sh:Warning ;
-        sh:message "An InfraProposal SHOULD carry the fut:indirectStakeholders VSD prompt (≤1, free text) — who is affected that is not in the room (unite design/03 §5)."@en
+        sh:message "An InfraProposal SHOULD carry the fut:indirectStakeholders VSD prompt (≤1, xsd:string free text — matching its ontology range) — who is affected that is not in the room (unite design/03 §5)."@en
     ] ;
     sh:property [
         sh:path dcterms:title ;
@@ -717,9 +724,9 @@ fsh:AdoptionDecisionShape
         sh:path fut:adoptionBar ;
         sh:minCount 1 ;
         sh:maxCount 1 ;
-        sh:or ( [ sh:datatype xsd:string ] [ sh:datatype rdf:langString ] ) ;
+        sh:datatype xsd:string ;
         sh:severity sh:Warning ;
-        sh:message "An AdoptionDecision SHOULD state its fut:adoptionBar — the measured ratification criteria consumers recompute status against (default: unite design/04 §2). There is deliberately NO adoptionStatus decree property."@en
+        sh:message "An AdoptionDecision SHOULD state its fut:adoptionBar (xsd:string — matching its ontology range) — the measured ratification criteria consumers recompute status against (default: unite design/04 §2). There is deliberately NO adoptionStatus decree property."@en
     ] ;
     sh:property [
         sh:path fut:adoptionEvidence ;
