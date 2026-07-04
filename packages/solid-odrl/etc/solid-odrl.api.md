@@ -79,6 +79,24 @@ export function constraintSatisfied(c: OdrlConstraint, request: RequestContext, 
 export type Decision = "permit" | "deny" | "notApplicable";
 
 // @public
+export const DECISION_RECORD_INLINE_CONTEXT: Readonly<Record<string, unknown>>;
+
+// @public
+export function decisionRecord(input: DecisionRecordInput): Quad[];
+
+// @public
+export interface DecisionRecordInput {
+    readonly evaluatedAt: Date;
+    readonly id: string;
+    readonly policy: OdrlPolicy;
+    readonly request: RequestContext;
+    readonly result: EvaluationResult;
+}
+
+// @public
+export function decisionRecordJsonLd(input: DecisionRecordInput): Record<string, unknown>;
+
+// @public
 export interface DecisionRule {
     // (undocumented)
     readonly action: OdrlActionName;
@@ -128,6 +146,13 @@ export function escapeIri(value: string): string;
 
 // @public
 export function evaluate(policy: OdrlPolicy, request: RequestContext, options?: EvaluateOptions): EvaluationResult;
+
+// @public
+export interface EvaluatedDecisionRecord {
+    readonly jsonld: Record<string, unknown>;
+    readonly quads: Quad[];
+    readonly result: EvaluationResult;
+}
 
 // @public
 export function evaluateDelegated(chain: readonly OdrlPolicy[], request: RequestContext, options?: DelegationEvaluateOptions): DelegatedEvaluationResult;
@@ -202,22 +227,64 @@ export interface OdrlConstraint {
 export const ODRLD: "https://w3id.org/jeswr/odrl-delegation#";
 
 // @public
+export const ODRLD_ACTIVE_DUTY: "https://w3id.org/jeswr/odrl-delegation#activeDuty";
+
+// @public
+export const ODRLD_CONFLICT: "https://w3id.org/jeswr/odrl-delegation#conflict";
+
+// @public
+export const ODRLD_DECIDING_RULE: "https://w3id.org/jeswr/odrl-delegation#decidingRule";
+
+// @public
+export const ODRLD_DECISION: "https://w3id.org/jeswr/odrl-delegation#decision";
+
+// @public
+export const ODRLD_DECISION_RECORD_CLASS: "https://w3id.org/jeswr/odrl-delegation#DecisionRecord";
+
+// @public
 export const ODRLD_DELEGATED_UNDER: "https://w3id.org/jeswr/odrl-delegation#delegatedUnder";
 
 // @public
 export const ODRLD_DELEGATION_DEPTH: "https://w3id.org/jeswr/odrl-delegation#delegationDepth";
 
 // @public
+export const ODRLD_EVALUATED_POLICY: "https://w3id.org/jeswr/odrl-delegation#evaluatedPolicy";
+
+// @public
+export const ODRLD_FULFILLED: "https://w3id.org/jeswr/odrl-delegation#fulfilled";
+
+// @public
 export const ODRLD_INLINE_CONTEXT_EXTENSION: Readonly<Record<string, unknown>>;
 
 // @public
+export const ODRLD_ON_DUTY: "https://w3id.org/jeswr/odrl-delegation#onDuty";
+
+// @public
 export const ODRLD_PROFILE_IRI: "https://w3id.org/jeswr/odrl-delegation";
+
+// @public
+export const ODRLD_REASON: "https://w3id.org/jeswr/odrl-delegation#reason";
+
+// @public
+export const ODRLD_REQUEST_ACTION: "https://w3id.org/jeswr/odrl-delegation#requestAction";
+
+// @public
+export const ODRLD_REQUEST_AGENT: "https://w3id.org/jeswr/odrl-delegation#requestAgent";
+
+// @public
+export const ODRLD_REQUEST_PURPOSE: "https://w3id.org/jeswr/odrl-delegation#requestPurpose";
+
+// @public
+export const ODRLD_REQUEST_TARGET: "https://w3id.org/jeswr/odrl-delegation#requestTarget";
 
 // @public
 export const ODRLD_REVOCATION_CLASS: "https://w3id.org/jeswr/odrl-delegation#Revocation";
 
 // @public
 export const ODRLD_REVOKED_POLICY: "https://w3id.org/jeswr/odrl-delegation#revokedPolicy";
+
+// @public
+export const ODRLD_RULE_KIND: "https://w3id.org/jeswr/odrl-delegation#ruleKind";
 
 // @public
 export interface OdrlDuty {
@@ -335,6 +402,9 @@ export const PROV_WAS_DERIVED_FROM: "http://www.w3.org/ns/prov#wasDerivedFrom";
 export const PROV_WAS_GENERATED_BY: "http://www.w3.org/ns/prov#wasGeneratedBy";
 
 // @public
+export function recordEvaluation(id: string, policy: OdrlPolicy, request: RequestContext, options?: EvaluateOptions): EvaluatedDecisionRecord;
+
+// @public
 export interface RequestContext {
     readonly action: OdrlActionName;
     readonly agent?: string;
@@ -362,6 +432,9 @@ export function serialize(quads: readonly Quad[], format?: string): Promise<stri
 
 // @public
 export const VALID_ACTION_IRIS: ReadonlySet<string>;
+
+// @public
+export const XSD_BOOLEAN: "http://www.w3.org/2001/XMLSchema#boolean";
 
 // @public
 export const XSD_DATETIME: "http://www.w3.org/2001/XMLSchema#dateTime";

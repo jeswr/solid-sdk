@@ -87,8 +87,13 @@ function policyTypeOf(iri: string): PolicyType | undefined {
   return undefined;
 }
 
-/** Infer the XSD datatype IRI for a constraint right-operand when not given. */
-function inferDatatype(c: OdrlConstraint, value: string | number): string | undefined {
+/**
+ * Infer the XSD datatype IRI for a constraint right-operand when not given.
+ * Exported (an internal cross-module helper, NOT part of the package's public
+ * `index.ts` surface) so {@link decisionRecord}'s non-throwing constraint emitter
+ * datatypes a recorded constraint IDENTICALLY to how a policy datatypes it.
+ */
+export function inferDatatype(c: OdrlConstraint, value: string | number): string | undefined {
   if (c.datatype !== undefined) {
     return c.datatype;
   }
@@ -102,7 +107,7 @@ function inferDatatype(c: OdrlConstraint, value: string | number): string | unde
   return undefined;
 }
 
-/** Write a constraint node under `parent` via `predicate` (odrl:constraint). */
+/** Write a constraint node under `parent` via `odrl:constraint` (odrl:constraint). */
 function writeConstraint(b: GraphBuilder, parent: NodeRef, c: OdrlConstraint): void {
   const node = b.linkBlankNode(parent, ODRL_CONSTRAINT);
   b.addIri(node, ODRL_LEFT_OPERAND, LEFT_OPERAND_IRI[c.leftOperand]);
@@ -165,8 +170,12 @@ function iriOperand(r: string | number, left: LeftOperandName): string | undefin
   return safe;
 }
 
-/** Left-operands whose right-operand is an IRI (a party/purpose/place reference). */
-function isIriValued(left: LeftOperandName): boolean {
+/**
+ * Left-operands whose right-operand is an IRI (a party/purpose/place reference).
+ * Exported (internal cross-module helper, not re-exported from `index.ts`) so
+ * {@link decisionRecord}'s constraint emitter decides IRI-vs-literal identically.
+ */
+export function isIriValued(left: LeftOperandName): boolean {
   return (
     left === "recipient" || left === "purpose" || left === "spatial" || left === "systemDevice"
   );

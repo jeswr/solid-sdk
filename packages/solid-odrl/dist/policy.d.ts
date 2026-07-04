@@ -1,6 +1,19 @@
 import type { DatasetCore, Quad } from "@rdfjs/types";
-import type { OdrlPolicy } from "./types.js";
-import { IRI_TO_ACTION, IRI_TO_LEFT_OPERAND, IRI_TO_OPERATOR } from "./vocab.js";
+import type { OdrlConstraint, OdrlPolicy } from "./types.js";
+import { IRI_TO_ACTION, IRI_TO_LEFT_OPERAND, IRI_TO_OPERATOR, type LeftOperandName } from "./vocab.js";
+/**
+ * Infer the XSD datatype IRI for a constraint right-operand when not given.
+ * Exported (an internal cross-module helper, NOT part of the package's public
+ * `index.ts` surface) so {@link decisionRecord}'s non-throwing constraint emitter
+ * datatypes a recorded constraint IDENTICALLY to how a policy datatypes it.
+ */
+export declare function inferDatatype(c: OdrlConstraint, value: string | number): string | undefined;
+/**
+ * Left-operands whose right-operand is an IRI (a party/purpose/place reference).
+ * Exported (internal cross-module helper, not re-exported from `index.ts`) so
+ * {@link decisionRecord}'s constraint emitter decides IRI-vs-literal identically.
+ */
+export declare function isIriValued(left: LeftOperandName): boolean;
 /**
  * Thrown when an EXPLICITLY-PROVIDED http(s)-contract IRI (a rule/duty/policy
  * `target`, `assignee`, `assigner`, or `profile`) cannot be made into a safe
