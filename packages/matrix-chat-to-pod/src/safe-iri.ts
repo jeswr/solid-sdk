@@ -25,6 +25,8 @@
  * IRI with no character that can escape a Turtle/N-Triples `<...>`.
  */
 
+import { isWithinPodScope } from "@jeswr/guarded-fetch";
+
 /**
  * IRIREF-forbidden characters per the Turtle grammar: the `#x00-#x20` control +
  * space range, plus `<` `>` `"` `{` `}` `|` `^` backtick and backslash. Used as a
@@ -32,6 +34,14 @@
  */
 // biome-ignore lint/suspicious/noControlCharactersInRegex: matching the IRIREF-forbidden C0 range is the point.
 const IRIREF_FORBIDDEN = /[\u0000-\u0020<>"{}|\\^`]/;
+
+/**
+ * Percent-encoded path-delimiter characters (`%2F` = `/`, `%5C` = `\`). Matches
+ * `@jeswr/guarded-fetch`'s `normalizePodBase` `ENCODED_DELIMITER` check exactly
+ * (case-insensitive) -- see {@link canonicalContainer} for why this must be
+ * rejected here too, not just at the delegated scope check inside {@link isWithinBase}.
+ */
+const ENCODED_PATH_DELIMITER = /%2f|%5c/i;
 
 /**
  * Return an injection-safe, canonical absolute http(s) IRI for an UNTRUSTED value,
@@ -72,6 +82,17 @@ export function safeHttpIri(value: unknown): string | undefined {
  * owner-only ACL. The returned value is the ONE canonical container string every
  * caller must use for BOTH the ACL URL and every scope check — no downstream code
  * may re-derive from the raw input.
+ *
+ * ALSO rejects a path carrying an encoded delimiter (`%2F`/`%5C`, case-insensitive
+ * — {@link ENCODED_PATH_DELIMITER}). This mirrors `@jeswr/guarded-fetch`'s
+ * `normalizePodBase`, which every write-target check now runs through via
+ * {@link isWithinBase}. Without this check here, `importRoot()` could accept such
+ * a container, write its ACL (a real side effect), and only THEN discover — at
+ * every subsequent per-message `isWithinBase` scope check — that the delegated
+ * guard rejects the base outright, silently dropping every message as
+ * out-of-scope. Rejecting up front at the container gate avoids that write-then-
+ * reject-everything trap and keeps `canonicalContainer` in lockstep with the
+ * scope check its own output feeds.
  */
 export function canonicalContainer(container: unknown): string | undefined {
   const safe = safeHttpIri(container);
@@ -79,28 +100,41 @@ export function canonicalContainer(container: unknown): string | undefined {
   const u = new URL(safe);
   if (u.search !== "" || u.hash !== "") return undefined;
   if (!u.pathname.endsWith("/")) return undefined;
-  // With no query/fragment, origin + pathname IS the canonical container.
+  if (ENCODED_PATH_DELIMITER.test(u.pathname)) return undefined;
+  // With no query/fragment/encoded-delimiter, origin + pathname IS the canonical container.
   return `${u.origin}${u.pathname}`;
 }
 
 /**
  * True when `resourceUrl` is an http(s) IRI within the `base` container — SAME
- * origin AND a path strictly under the container's path. Both are canonicalised
- * through {@link safeHttpIri} first (so a `..`-escape or an injection char cannot
- * slip a write outside the base). Fail-closed: an unparseable/unsafe input is NOT
- * within base.
+ * origin AND a path STRICTLY under the container's path (the container itself is
+ * NOT within base — a strict descendant is required, matching `allowRoot: false`).
+ *
+ * Both inputs are canonicalised through {@link safeHttpIri} FIRST — this keeps the
+ * RDF-injection-safety property explicit at this call site (a `..`-escape is
+ * collapsed and any IRIREF-breakout char / non-http(s) scheme is rejected to
+ * `undefined` before the scope check runs). The origin + segment-boundary
+ * path-prefix + traversal/encoded-delimiter checks are then DELEGATED to
+ * `@jeswr/guarded-fetch`'s consolidated pod-scope primitive
+ * ({@link isWithinPodScope}) — the suite's ONE reviewed home for "is this URL
+ * within the configured pod (sub-)container?".
+ *
+ * NOTE the argument order: this function's external signature is
+ * `(resourceUrl, base)` (its callers depend on it), whereas `isWithinPodScope`
+ * takes `(base, url)` — so the arguments are SWAPPED at the delegation call.
+ *
+ * Fail-closed: an unparseable/unsafe input (or any doubt inside the scope check)
+ * is NOT within base.
  */
 export function isWithinBase(resourceUrl: string, base: string): boolean {
   const safeResource = safeHttpIri(resourceUrl);
   const safeBase = safeHttpIri(base);
   if (safeResource === undefined || safeBase === undefined) return false;
-  const r = new URL(safeResource);
-  const b = new URL(safeBase);
-  if (r.origin !== b.origin) return false;
-  // `base` is a container; its canonical path ends with '/'. The resource path must
-  // be a descendant (starts-with the container path, and is not the container itself).
-  const basePath = b.pathname.endsWith("/") ? b.pathname : `${b.pathname}/`;
-  return r.pathname.startsWith(basePath) && r.pathname.length > basePath.length;
+  // Delegate the origin/segment-boundary/traversal/encoded-delimiter checks to the
+  // consolidated guard. `allowRoot: false` preserves this function's strict-
+  // descendant contract (the container document itself is out of base). Argument
+  // order is (base, url) here — swapped from this function's own (resourceUrl, base).
+  return isWithinPodScope(safeBase, safeResource, { allowRoot: false });
 }
 
 /**

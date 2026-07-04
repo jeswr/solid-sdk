@@ -43,14 +43,39 @@ export declare function safeHttpIri(value: unknown): string | undefined;
  * owner-only ACL. The returned value is the ONE canonical container string every
  * caller must use for BOTH the ACL URL and every scope check — no downstream code
  * may re-derive from the raw input.
+ *
+ * ALSO rejects a path carrying an encoded delimiter (`%2F`/`%5C`, case-insensitive
+ * — {@link ENCODED_PATH_DELIMITER}). This mirrors `@jeswr/guarded-fetch`'s
+ * `normalizePodBase`, which every write-target check now runs through via
+ * {@link isWithinBase}. Without this check here, `importRoot()` could accept such
+ * a container, write its ACL (a real side effect), and only THEN discover — at
+ * every subsequent per-message `isWithinBase` scope check — that the delegated
+ * guard rejects the base outright, silently dropping every message as
+ * out-of-scope. Rejecting up front at the container gate avoids that write-then-
+ * reject-everything trap and keeps `canonicalContainer` in lockstep with the
+ * scope check its own output feeds.
  */
 export declare function canonicalContainer(container: unknown): string | undefined;
 /**
  * True when `resourceUrl` is an http(s) IRI within the `base` container — SAME
- * origin AND a path strictly under the container's path. Both are canonicalised
- * through {@link safeHttpIri} first (so a `..`-escape or an injection char cannot
- * slip a write outside the base). Fail-closed: an unparseable/unsafe input is NOT
- * within base.
+ * origin AND a path STRICTLY under the container's path (the container itself is
+ * NOT within base — a strict descendant is required, matching `allowRoot: false`).
+ *
+ * Both inputs are canonicalised through {@link safeHttpIri} FIRST — this keeps the
+ * RDF-injection-safety property explicit at this call site (a `..`-escape is
+ * collapsed and any IRIREF-breakout char / non-http(s) scheme is rejected to
+ * `undefined` before the scope check runs). The origin + segment-boundary
+ * path-prefix + traversal/encoded-delimiter checks are then DELEGATED to
+ * `@jeswr/guarded-fetch`'s consolidated pod-scope primitive
+ * ({@link isWithinPodScope}) — the suite's ONE reviewed home for "is this URL
+ * within the configured pod (sub-)container?".
+ *
+ * NOTE the argument order: this function's external signature is
+ * `(resourceUrl, base)` (its callers depend on it), whereas `isWithinPodScope`
+ * takes `(base, url)` — so the arguments are SWAPPED at the delegation call.
+ *
+ * Fail-closed: an unparseable/unsafe input (or any doubt inside the scope check)
+ * is NOT within base.
  */
 export declare function isWithinBase(resourceUrl: string, base: string): boolean;
 /** Strip non-whitespace control characters from an untrusted text body. */

@@ -106,6 +106,19 @@ describe("canonicalContainer", () => {
     expect(out).toBe("https://alice.pod.example/a%3Ex/");
     expect(out?.endsWith("/")).toBe(true);
   });
+
+  it("REJECTS a container path carrying an encoded path delimiter (%2F/%5C)", () => {
+    // `@jeswr/guarded-fetch`'s `normalizePodBase` (delegated to from `isWithinBase`)
+    // refuses a base whose pathname contains an encoded `/` or `\` — so accepting
+    // such a container here would let `importRoom()` write its ACL and then have
+    // EVERY subsequent per-message `isWithinBase` scope check reject the base
+    // outright, silently dropping every message as out-of-scope. Reject up front
+    // instead, matching the delegated guard exactly (case-insensitive).
+    expect(canonicalContainer("https://alice.pod.example/chat%2Fevil/")).toBeUndefined();
+    expect(canonicalContainer("https://alice.pod.example/chat%2fevil/")).toBeUndefined();
+    expect(canonicalContainer("https://alice.pod.example/chat%5Cevil/")).toBeUndefined();
+    expect(canonicalContainer("https://alice.pod.example/chat%5cevil/")).toBeUndefined();
+  });
 });
 
 describe("isWithinBase", () => {
