@@ -530,6 +530,57 @@ export const PROV_ACTED_ON_BEHALF_OF = `${PROV}actedOnBehalfOf` as const;
 /** `prov:wasDerivedFrom` — Entity → Entity (the generic super-property of `odrld:delegatedUnder`). */
 export const PROV_WAS_DERIVED_FROM = `${PROV}wasDerivedFrom` as const;
 
+// --- PROV-O per-action activity-bundle terms (standard) — G8, delegation
+// profile §8. `actionProvenance()` (src/action-provenance.ts) emits these for a
+// single PERFORMED action taken under a delegated/authorized permission — the
+// sibling of the chain-level `delegationProvenance` overlay above. All standard
+// PROV-O IRIs; nothing minted.
+/** `prov:Activity` — the class of a performed action. */
+export const PROV_ACTIVITY = `${PROV}Activity` as const;
+/** `prov:Association` — the class of a `qualifiedAssociation` blank node. */
+export const PROV_ASSOCIATION = `${PROV}Association` as const;
+/** `prov:wasAssociatedWith` — Activity → Agent (who carried out the activity). */
+export const PROV_WAS_ASSOCIATED_WITH = `${PROV}wasAssociatedWith` as const;
+/** `prov:used` — Activity → Entity (a resource the activity consumed). */
+export const PROV_USED = `${PROV}used` as const;
+/** `prov:generated` — Activity → Entity (an artifact the activity produced). */
+export const PROV_GENERATED = `${PROV}generated` as const;
+/** `prov:startedAtTime` — Activity → xsd:dateTime. */
+export const PROV_STARTED_AT_TIME = `${PROV}startedAtTime` as const;
+/** `prov:endedAtTime` — Activity → xsd:dateTime. */
+export const PROV_ENDED_AT_TIME = `${PROV}endedAtTime` as const;
+/** `prov:qualifiedAssociation` — Activity → Association (the reified agent+plan link). */
+export const PROV_QUALIFIED_ASSOCIATION = `${PROV}qualifiedAssociation` as const;
+/** `prov:agent` — Association → Agent (used inside the reified Association node). */
+export const PROV_AGENT = `${PROV}agent` as const;
+/** `prov:hadPlan` — Association → Entity (the authorizing plan — the leaf Agreement). */
+export const PROV_HAD_PLAN = `${PROV}hadPlan` as const;
+/** `prov:wasGeneratedBy` — Entity → Activity (inverse of `generated`, on the artifact). */
+export const PROV_WAS_GENERATED_BY = `${PROV}wasGeneratedBy` as const;
+/** `xsd:dateTime` — the datatype for `startedAtTime`/`endedAtTime` literals. */
+export const XSD_DATETIME = `${XSD}dateTime` as const;
+
+/**
+ * A SELF-CONTAINED inline JSON-LD `@context` for a per-action PROV bundle
+ * ({@link actionProvenanceJsonLd} — same "no network dependency" rationale as
+ * {@link ODRL_INLINE_CONTEXT}). IRI-valued terms carry `"@type": "@id"`.
+ */
+export const PROV_INLINE_CONTEXT: Readonly<Record<string, unknown>> = {
+  prov: PROV,
+  xsd: XSD,
+  wasAssociatedWith: { "@id": PROV_WAS_ASSOCIATED_WITH, "@type": "@id" },
+  used: { "@id": PROV_USED, "@type": "@id" },
+  generated: { "@id": PROV_GENERATED, "@type": "@id" },
+  startedAtTime: { "@id": PROV_STARTED_AT_TIME, "@type": XSD_DATETIME },
+  endedAtTime: { "@id": PROV_ENDED_AT_TIME, "@type": XSD_DATETIME },
+  qualifiedAssociation: { "@id": PROV_QUALIFIED_ASSOCIATION, "@type": "@id" },
+  agent: { "@id": PROV_AGENT, "@type": "@id" },
+  hadPlan: { "@id": PROV_HAD_PLAN, "@type": "@id" },
+  actedOnBehalfOf: { "@id": PROV_ACTED_ON_BEHALF_OF, "@type": "@id" },
+  wasDerivedFrom: { "@id": PROV_WAS_DERIVED_FROM, "@type": "@id" },
+  wasGeneratedBy: { "@id": PROV_WAS_GENERATED_BY, "@type": "@id" },
+} as const;
+
 /**
  * A SELF-CONTAINED inline JSON-LD `@context` for an ODRL policy graph. Like M1/M2,
  * the emitted JSON-LD embeds this rather than a bare remote `@context` URL, so the

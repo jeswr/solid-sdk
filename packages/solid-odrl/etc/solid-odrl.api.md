@@ -35,6 +35,24 @@ export type AclMode = (typeof ACL_MODES)[number];
 export const ACTION_IRI: Readonly<Record<OdrlActionName, string>>;
 
 // @public
+export function actionProvenance(input: ActionProvenanceInput): Quad[];
+
+// @public
+export interface ActionProvenanceInput {
+    readonly activity: string;
+    readonly agent: string;
+    readonly ended?: Date;
+    readonly generated?: string | readonly string[];
+    readonly onBehalfOf?: string;
+    readonly plan: string;
+    readonly started: Date;
+    readonly used: string | readonly string[];
+}
+
+// @public
+export function actionProvenanceJsonLd(input: ActionProvenanceInput): Record<string, unknown>;
+
+// @public
 export interface ActiveDuty {
     // (undocumented)
     readonly action: OdrlActionName;
@@ -104,6 +122,9 @@ export function delegationProvenance(chain: readonly OdrlPolicy[]): Quad[];
 
 // @public
 export const DPV: "https://w3id.org/dpv#";
+
+// @public
+export function escapeIri(value: string): string;
 
 // @public
 export function evaluate(policy: OdrlPolicy, request: RequestContext, options?: EvaluateOptions): EvaluationResult;
@@ -234,6 +255,11 @@ export interface OdrlRule {
 }
 
 // @public
+export class OdrlSerializationError extends Error {
+    constructor(message: string);
+}
+
+// @public
 export const OPERATOR_IRI: Readonly<Record<OperatorName, string>>;
 
 // @public
@@ -267,10 +293,46 @@ export const PROV: "http://www.w3.org/ns/prov#";
 export const PROV_ACTED_ON_BEHALF_OF: "http://www.w3.org/ns/prov#actedOnBehalfOf";
 
 // @public
+export const PROV_ACTIVITY: "http://www.w3.org/ns/prov#Activity";
+
+// @public
+export const PROV_AGENT: "http://www.w3.org/ns/prov#agent";
+
+// @public
+export const PROV_ASSOCIATION: "http://www.w3.org/ns/prov#Association";
+
+// @public
+export const PROV_ENDED_AT_TIME: "http://www.w3.org/ns/prov#endedAtTime";
+
+// @public
+export const PROV_GENERATED: "http://www.w3.org/ns/prov#generated";
+
+// @public
+export const PROV_HAD_PLAN: "http://www.w3.org/ns/prov#hadPlan";
+
+// @public
+export const PROV_INLINE_CONTEXT: Readonly<Record<string, unknown>>;
+
+// @public
+export const PROV_QUALIFIED_ASSOCIATION: "http://www.w3.org/ns/prov#qualifiedAssociation";
+
+// @public
+export const PROV_STARTED_AT_TIME: "http://www.w3.org/ns/prov#startedAtTime";
+
+// @public
+export const PROV_USED: "http://www.w3.org/ns/prov#used";
+
+// @public
+export const PROV_WAS_ASSOCIATED_WITH: "http://www.w3.org/ns/prov#wasAssociatedWith";
+
+// @public
 export const PROV_WAS_ATTRIBUTED_TO: "http://www.w3.org/ns/prov#wasAttributedTo";
 
 // @public
 export const PROV_WAS_DERIVED_FROM: "http://www.w3.org/ns/prov#wasDerivedFrom";
+
+// @public
+export const PROV_WAS_GENERATED_BY: "http://www.w3.org/ns/prov#wasGeneratedBy";
 
 // @public
 export interface RequestContext {
@@ -290,9 +352,18 @@ export function requestContextFromWac(agent: string | undefined, mode: AclMode, 
 export type RuleType = "permission" | "prohibition" | "obligation";
 
 // @public
+export function safeHttpIri(value: string | undefined): string | undefined;
+
+// @public
+export function safeIri(value: string | undefined): string | undefined;
+
+// @public
 export function serialize(quads: readonly Quad[], format?: string): Promise<string>;
 
 // @public
 export const VALID_ACTION_IRIS: ReadonlySet<string>;
+
+// @public
+export const XSD_DATETIME: "http://www.w3.org/2001/XMLSchema#dateTime";
 
 ```

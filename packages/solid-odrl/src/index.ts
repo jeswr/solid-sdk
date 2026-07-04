@@ -46,6 +46,8 @@
  * @packageDocumentation
  */
 
+export type { ActionProvenanceInput } from "./action-provenance.js";
+export { actionProvenance, actionProvenanceJsonLd } from "./action-provenance.js";
 export type { A2AIntentLike } from "./compose.js";
 export {
   A2A_ACTION_TO_ODRL,
@@ -122,7 +124,20 @@ export {
   type OperatorName,
   PROV,
   PROV_ACTED_ON_BEHALF_OF,
+  PROV_ACTIVITY,
+  PROV_AGENT,
+  PROV_ASSOCIATION,
+  PROV_ENDED_AT_TIME,
+  PROV_GENERATED,
+  PROV_HAD_PLAN,
+  PROV_INLINE_CONTEXT,
+  PROV_QUALIFIED_ASSOCIATION,
+  PROV_STARTED_AT_TIME,
+  PROV_USED,
+  PROV_WAS_ASSOCIATED_WITH,
   PROV_WAS_ATTRIBUTED_TO,
   PROV_WAS_DERIVED_FROM,
+  PROV_WAS_GENERATED_BY,
   VALID_ACTION_IRIS,
+  XSD_DATETIME,
 } from "./vocab.js";
