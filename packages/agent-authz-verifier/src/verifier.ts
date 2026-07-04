@@ -420,26 +420,6 @@ export async function verifyAgentAuthority(
         chainIds,
       );
     }
-    // SECURITY (delegation-trust anchor): the credential's self-asserted
-    // `credentialSubject.id`, when present, MUST equal its proof-verified `issuer`.
-    // `verifyCredential` (Phase A) proves the signature against `issuer` + key
-    // control but does NOT constrain the subject id — so without this an attacker
-    // who legitimately controls their OWN issuer key could sign a credential whose
-    // `subject.id` names a TRUSTED party (a root owner / an authorized delegatee)
-    // and have the chain accept it as that party's grant, impersonating any
-    // assigner. The composed verifier must enforce it here, fail-closed. (The
-    // principal used for every trust decision is already anchored to `issuer` in
-    // `readBoundAuthorization`; this rejects a spoofed subject outright rather than
-    // silently ignoring it.)
-    const assertedSubjectId = claimString(subjectRecord(vc)?.id);
-    if (assertedSubjectId !== undefined && assertedSubjectId !== vc.issuer) {
-      return deny(
-        "B",
-        "SUBJECT_ISSUER_MISMATCH",
-        `Credential subject <${assertedSubjectId}> ≠ its proof-verified issuer <${vc.issuer}> — refusing a subject-spoofed authorization.`,
-        chainIds,
-      );
-    }
     if (auth.policy === undefined) {
       return deny(
         "B",
@@ -547,6 +527,35 @@ export async function verifyAgentAuthority(
   const allContentBound = ordered.every((p) => contents[p.id] !== undefined);
 
   // --- Phase B: cross-binding ----------------------------------------------
+  // SECURITY (delegation-trust anchor) — runs FIRST in Phase B, i.e. AFTER Phase A
+  // has proof-verified every hop's credential. Each hop's self-asserted
+  // `credentialSubject.id`, when present, MUST equal its proof-verified `issuer`.
+  // `verifyCredential` (Phase A) proves the signature against `issuer` + key
+  // control but does NOT constrain the subject id — so without this an attacker who
+  // legitimately controls their OWN issuer key could sign an otherwise-valid
+  // credential whose `subject.id` names a TRUSTED party (a root owner / an
+  // authorized delegatee) and have the chain accept it as that party's grant,
+  // impersonating any assigner. Placed before the root-principal / assigner checks
+  // so a subject-spoofed credential is rejected with the precise
+  // `SUBJECT_ISSUER_MISMATCH` code (not the downstream `BINDING_MISMATCH`); a
+  // credential with a bad PROOF already failed Phase A above and reported its
+  // Phase-A code, so only a validly-signed subject-spoof reaches here. (The
+  // principal used for every trust decision is additionally anchored to `issuer` in
+  // `readBoundAuthorization`, so this rejects the spoof outright rather than
+  // silently ignoring it.)
+  for (const hop of ordered) {
+    // biome-ignore lint/style/noNonNullAssertion: every hop bound (checked above)
+    const b = bound.get(hop.id)!;
+    const assertedSubjectId = claimString(subjectRecord(b.vc)?.id);
+    if (assertedSubjectId !== undefined && assertedSubjectId !== b.vc.issuer) {
+      return deny(
+        "B",
+        "SUBJECT_ISSUER_MISMATCH",
+        `Credential subject <${assertedSubjectId}> ≠ its proof-verified issuer <${b.vc.issuer}> — refusing a subject-spoofed authorization.`,
+        chainIds,
+      );
+    }
+  }
   // biome-ignore lint/style/noNonNullAssertion: ordered non-empty (assembly)
   const rootHop = ordered[0]!;
   // biome-ignore lint/style/noNonNullAssertion: every hop bound (checked above)

@@ -1735,15 +1735,6 @@ async function verifyAgentAuthority(chain, options) {
         chainIds
       );
     }
-    const assertedSubjectId = claimString(subjectRecord(vc)?.id);
-    if (assertedSubjectId !== void 0 && assertedSubjectId !== vc.issuer) {
-      return deny(
-        "B",
-        "SUBJECT_ISSUER_MISMATCH",
-        `Credential subject <${assertedSubjectId}> \u2260 its proof-verified issuer <${vc.issuer}> \u2014 refusing a subject-spoofed authorization.`,
-        chainIds
-      );
-    }
     if (auth.policy === void 0) {
       return deny(
         "B",
@@ -1826,6 +1817,18 @@ async function verifyAgentAuthority(chain, options) {
     }
   }
   const allContentBound = ordered.every((p) => contents[p.id] !== void 0);
+  for (const hop of ordered) {
+    const b = bound.get(hop.id);
+    const assertedSubjectId = claimString(subjectRecord(b.vc)?.id);
+    if (assertedSubjectId !== void 0 && assertedSubjectId !== b.vc.issuer) {
+      return deny(
+        "B",
+        "SUBJECT_ISSUER_MISMATCH",
+        `Credential subject <${assertedSubjectId}> \u2260 its proof-verified issuer <${b.vc.issuer}> \u2014 refusing a subject-spoofed authorization.`,
+        chainIds
+      );
+    }
+  }
   const rootHop = ordered[0];
   const rootBound = bound.get(rootHop.id);
   if (rootBound.auth.principal !== rootPrincipal) {

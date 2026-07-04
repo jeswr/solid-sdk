@@ -18,6 +18,7 @@ import {
   generateKeyPairForSuite,
   issue,
   SVC,
+  type VerifiableCredential,
 } from "@jeswr/solid-vc";
 import { beforeAll, describe, expect, it } from "vitest";
 import { type PresentedChain, readBoundAuthorization, verifyAgentAuthority } from "../src/index.js";
@@ -69,6 +70,19 @@ async function forgeWithAttackerIssuer(input: {
   return issue({ credential: { ...unsigned, issuer: ATTACKER }, key: attackerSigningKey });
 }
 
+/** Flip one character of a signed credential's proof value (an invalid signature). */
+function tamperProof(vc: VerifiableCredential): VerifiableCredential {
+  const copy = structuredClone(vc) as VerifiableCredential & {
+    proof: { proofValue: string } | { proofValue: string }[];
+  };
+  const proof = Array.isArray(copy.proof) ? copy.proof[0] : copy.proof;
+  if (proof !== undefined) {
+    const v = proof.proofValue;
+    proof.proofValue = v.slice(0, -1) + (v.endsWith("z") ? "A" : "z");
+  }
+  return copy as VerifiableCredential;
+}
+
 const statusValid = () => makeStatusResolver("valid");
 
 describe("delegation-trust — the principal is the proof-verified issuer, not subject.id", () => {
@@ -103,6 +117,41 @@ describe("delegation-trust — the principal is the proof-verified issuer, not s
     expect(r.authorized).toBe(false);
     expect(r.phase).toBe("B");
     expect(r.code).toBe("SUBJECT_ISSUER_MISMATCH");
+  });
+
+  it("PHASE ORDERING: a credential with BOTH a bad proof AND a spoofed subject reports the Phase-A code, not SUBJECT_ISSUER_MISMATCH", async () => {
+    // The subject↔issuer check runs INSIDE Phase B (after Phase A verifies each
+    // hop's proof). A credential whose proof is invalid must fail at Phase A and
+    // report its Phase-A code — a genuine proof failure wins over the downstream
+    // identity check. (The spoofed-subject attack still reaches the Phase-B check
+    // because that attacker's credential IS validly signed by their real key.)
+    const spoofedButValidlySigned = await forgeWithAttackerIssuer({
+      principal: CAST.alice,
+      agent: CAST.agentA,
+      action: ["read", "grantUse"],
+      policy: CAST.mandateId,
+    });
+    const badProofSpoof = tamperProof(spoofedButValidlySigned);
+    const chain: PresentedChain = {
+      credentials: [badProofSpoof, base.credentials.agreement],
+      policies: [base.mandate, base.agreement],
+    };
+    const r = await verifyAgentAuthority(chain, {
+      request: {
+        action: "read",
+        target: CAST.records,
+        attributes: { purpose: CAST.purpose, dateTime: base.now.toISOString() },
+      },
+      rootPrincipal: CAST.alice,
+      now: base.now,
+      resolveKey: base.registry.resolveKey,
+      isControlledBy: base.registry.isControlledBy,
+      resolveStatus: statusValid(),
+      actor: CAST.inst,
+    });
+    expect(r.authorized).toBe(false);
+    expect(r.phase).toBe("A");
+    expect(r.code).toBe("INVALID_SIGNATURE");
   });
 
   it("SUBJECT-SPOOFED CHILD: attacker-issued hop whose subject.id claims the parent-authorized delegatee → REJECTED", async () => {
