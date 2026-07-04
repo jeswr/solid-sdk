@@ -991,12 +991,46 @@ async function discoverAgent(webId, options = {}) {
       }
     };
   }
-  const verification = verifyDataset(descriptorDataset, agentIri, { requireSubjectMatch: true });
+  const initial = verifyDataset(descriptorDataset, agentIri, { requireSubjectMatch: true });
+  const { verification, ownerMatchesWebId } = applyOwnerBackLink(
+    initial,
+    webId,
+    agentIri,
+    options.requireOwnerMatch === true
+  );
   return {
     webId,
     pointers,
     ...verification.descriptor !== void 0 && { descriptor: verification.descriptor },
-    verification
+    verification,
+    ...ownerMatchesWebId !== void 0 && { ownerMatchesWebId }
+  };
+}
+function applyOwnerBackLink(verification, webId, agentIri, required) {
+  if (verification.descriptor === void 0) {
+    return { verification };
+  }
+  const owner = verification.descriptor.owner;
+  const ownerMatchesWebId = owner === webId;
+  if (!required || ownerMatchesWebId) {
+    return { verification, ownerMatchesWebId };
+  }
+  const message = owner === void 0 ? `Agent Description (${agentIri}) has no ad:owner, so the owner back-link to ${webId} cannot be confirmed (requireOwnerMatch).` : `Agent Description ad:owner (${owner}) does not equal the WebID discovery started from (${webId}).`;
+  return {
+    ownerMatchesWebId,
+    verification: {
+      ...verification,
+      valid: false,
+      issues: [
+        ...verification.issues,
+        {
+          code: "owner-mismatch",
+          message,
+          subject: agentIri,
+          ...owner !== void 0 && { value: owner }
+        }
+      ]
+    }
   };
 }
 function agentDescriptionsUrl(origin) {

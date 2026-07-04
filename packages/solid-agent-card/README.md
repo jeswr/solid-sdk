@@ -93,6 +93,18 @@ if (result.verification?.valid) {
 Agent Description — including a **subject-binding spoofing guard** (a document served at URL A may
 not describe a different agent B). Pass `{ resolveDescriptor: false }` to read pointers only.
 
+The result also carries the **owner back-link**: `ownerMatchesWebId` is `true` iff the resolved
+description's `ad:owner` equals (exact IRI equality) the WebID discovery started from — the
+bidirectional binding ("my profile names this agent" AND "this agent names me") the
+accountability chain builds on. Pass `{ requireOwnerMatch: true }` to make a missing or
+mismatched back-link fail verification outright (issue code `owner-mismatch`, fail-closed: a
+descriptor with no `ad:owner` fails too).
+
+**The worked end-to-end recipe** — exactly which resources to host on a pod, which triples to add
+to a WebID document, and the verifying discovery call, modelled on the real `https://jeswr.org/#me`
+profile — is [`docs/WEBID-DISCOVERY.md`](./docs/WEBID-DISCOVERY.md), proven by
+[`test/webid-e2e.test.ts`](./test/webid-e2e.test.ts).
+
 ## Security — the fetch seam is the SSRF boundary
 
 `discoverAgent` and `verifyDescriptor` fetch remote documents: `discoverAgent`
@@ -146,7 +158,7 @@ deterministically, with no SSRF / availability dependency on a CG-draft context 
 machine-readable `code`: `no-agent-description`, `multiple-agent-descriptions`, `subject-mismatch`,
 `missing-name`, `missing-url`, `invalid-url`, `invalid-owner`, `skill-missing-id`,
 `skill-missing-name`, `duplicate-skill-id`, `invalid-security-scheme`, `invalid-protocol-source`,
-`fetch-failed`, `parse-failed`.
+`owner-mismatch` (from `discoverAgent` with `requireOwnerMatch`), `fetch-failed`, `parse-failed`.
 
 ## Scope note (what this is NOT)
 

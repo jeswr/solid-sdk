@@ -24,6 +24,22 @@ export interface DiscoverOptions {
      * only (no second fetch).
      */
     readonly resolveDescriptor?: boolean;
+    /**
+     * When `true`, require the resolved descriptor's `ad:owner` to point BACK to
+     * the WebID discovery started from (exact IRI equality; fail-closed — a
+     * missing `ad:owner` also fails). This is the OWNER BACK-LINK guard, the
+     * bidirectional binding the accountability chain needs: the profile says
+     * "this agent represents me" AND the agent's own description says "I
+     * represent this WebID". Without it, a profile can point at any third
+     * party's (well-formed) agent description and discovery still reports
+     * `valid` — the descriptor never claimed to represent this WebID, but
+     * nothing checked. Defaults to `false` (backwards compatible); either way
+     * the result carries {@link AgentDiscovery.ownerMatchesWebId} so callers can
+     * check cheaply. NOTE the equality is exact — `https://jeswr.org/#me` and
+     * `https://www.jeswr.org/#me` are different IRIs; the descriptor's
+     * `ad:owner` must use the canonical WebID spelling.
+     */
+    readonly requireOwnerMatch?: boolean;
 }
 /**
  * Discover the agent that represents the holder of `webId`.

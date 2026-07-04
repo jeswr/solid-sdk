@@ -165,6 +165,16 @@ export interface AgentDiscovery {
   readonly descriptor?: AgentDescriptor;
   /** Verification result for the resolved descriptor (if one was resolved). */
   readonly verification?: VerificationResult;
+  /**
+   * The OWNER BACK-LINK: whether the resolved descriptor's `ad:owner` equals
+   * (exact IRI equality) the WebID discovery started from. Defined only when a
+   * descriptor was resolved; `false` when the descriptor names a different
+   * owner OR carries no `ad:owner` at all (fail-closed — no claim means the
+   * back-link cannot be confirmed). Pass
+   * {@link import("./discover.js").DiscoverOptions.requireOwnerMatch} to make a
+   * failed back-link fail verification outright.
+   */
+  readonly ownerMatchesWebId?: boolean;
 }
 
 /** A single validation problem found by {@link verifyDescriptor}. */
@@ -193,6 +203,7 @@ export type VerificationIssueCode =
   | "duplicate-skill-id"
   | "invalid-security-scheme"
   | "invalid-protocol-source"
+  | "owner-mismatch"
   | "fetch-failed"
   | "parse-failed";
 

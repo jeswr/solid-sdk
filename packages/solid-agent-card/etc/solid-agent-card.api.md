@@ -86,6 +86,7 @@ export interface AgentDescriptorDocuments {
 // @public
 export interface AgentDiscovery {
     readonly descriptor?: AgentDescriptor;
+    readonly ownerMatchesWebId?: boolean;
     readonly pointers: readonly AgentPointer[];
     readonly verification?: VerificationResult;
     readonly webId: string;
@@ -138,6 +139,7 @@ export function discoverAgent(webId: string, options?: DiscoverOptions): Promise
 // @public
 export interface DiscoverOptions {
     readonly fetch?: typeof globalThis.fetch;
+    readonly requireOwnerMatch?: boolean;
     readonly resolveDescriptor?: boolean;
 }
 
@@ -178,7 +180,7 @@ export interface VerificationIssue {
 }
 
 // @public
-export type VerificationIssueCode = "no-agent-description" | "multiple-agent-descriptions" | "subject-mismatch" | "missing-name" | "missing-url" | "invalid-url" | "invalid-owner" | "skill-missing-id" | "skill-missing-name" | "duplicate-skill-id" | "invalid-security-scheme" | "invalid-protocol-source" | "fetch-failed" | "parse-failed";
+export type VerificationIssueCode = "no-agent-description" | "multiple-agent-descriptions" | "subject-mismatch" | "missing-name" | "missing-url" | "invalid-url" | "invalid-owner" | "skill-missing-id" | "skill-missing-name" | "duplicate-skill-id" | "invalid-security-scheme" | "invalid-protocol-source" | "owner-mismatch" | "fetch-failed" | "parse-failed";
 
 // @public
 export interface VerificationResult {

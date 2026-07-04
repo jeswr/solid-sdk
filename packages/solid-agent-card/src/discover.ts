@@ -10,7 +10,7 @@
 
 import { fetchRdf } from "@jeswr/fetch-rdf";
 import { classifyFetchError, describeError } from "./internal/errors.js";
-import type { AgentDiscovery, AgentPointer } from "./types.js";
+import type { AgentDiscovery, AgentPointer, VerificationResult } from "./types.js";
 import { verifyDataset } from "./verify.js";
 import { WELL_KNOWN_AGENT_CARD, WELL_KNOWN_AGENT_DESCRIPTIONS } from "./vocab.js";
 import { wrapProfile } from "./wrappers.js";
@@ -40,6 +40,22 @@ export interface DiscoverOptions {
    * only (no second fetch).
    */
   readonly resolveDescriptor?: boolean;
+  /**
+   * When `true`, require the resolved descriptor's `ad:owner` to point BACK to
+   * the WebID discovery started from (exact IRI equality; fail-closed — a
+   * missing `ad:owner` also fails). This is the OWNER BACK-LINK guard, the
+   * bidirectional binding the accountability chain needs: the profile says
+   * "this agent represents me" AND the agent's own description says "I
+   * represent this WebID". Without it, a profile can point at any third
+   * party's (well-formed) agent description and discovery still reports
+   * `valid` — the descriptor never claimed to represent this WebID, but
+   * nothing checked. Defaults to `false` (backwards compatible); either way
+   * the result carries {@link AgentDiscovery.ownerMatchesWebId} so callers can
+   * check cheaply. NOTE the equality is exact — `https://jeswr.org/#me` and
+   * `https://www.jeswr.org/#me` are different IRIs; the descriptor's
+   * `ad:owner` must use the canonical WebID spelling.
+   */
+  readonly requireOwnerMatch?: boolean;
 }
 
 /**
@@ -109,12 +125,64 @@ export async function discoverAgent(
     };
   }
 
-  const verification = verifyDataset(descriptorDataset, agentIri, { requireSubjectMatch: true });
+  const initial = verifyDataset(descriptorDataset, agentIri, { requireSubjectMatch: true });
+  const { verification, ownerMatchesWebId } = applyOwnerBackLink(
+    initial,
+    webId,
+    agentIri,
+    options.requireOwnerMatch === true,
+  );
+
   return {
     webId,
     pointers,
     ...(verification.descriptor !== undefined && { descriptor: verification.descriptor }),
     verification,
+    ...(ownerMatchesWebId !== undefined && { ownerMatchesWebId }),
+  };
+}
+
+/**
+ * The OWNER BACK-LINK check: does the descriptor's `ad:owner` point back to the
+ * WebID discovery started from? Exact IRI equality, computed only when a
+ * descriptor was actually projected. Fail-closed: a descriptor with NO
+ * `ad:owner` does not match (it makes no ownership claim, so the back-link
+ * cannot be confirmed). When `required`, a failed back-link invalidates the
+ * verification with an `owner-mismatch` issue.
+ */
+function applyOwnerBackLink(
+  verification: VerificationResult,
+  webId: string,
+  agentIri: string,
+  required: boolean,
+): { verification: VerificationResult; ownerMatchesWebId?: boolean } {
+  if (verification.descriptor === undefined) {
+    return { verification };
+  }
+  const owner = verification.descriptor.owner;
+  const ownerMatchesWebId = owner === webId;
+  if (!required || ownerMatchesWebId) {
+    return { verification, ownerMatchesWebId };
+  }
+  const message =
+    owner === undefined
+      ? `Agent Description (${agentIri}) has no ad:owner, so the owner back-link to ${webId} cannot be confirmed (requireOwnerMatch).`
+      : `Agent Description ad:owner (${owner}) does not equal the WebID discovery started from (${webId}).`;
+  return {
+    ownerMatchesWebId,
+    verification: {
+      ...verification,
+      valid: false,
+      issues: [
+        ...verification.issues,
+        {
+          code: "owner-mismatch",
+          message,
+          subject: agentIri,
+          ...(owner !== undefined && { value: owner }),
+        },
+      ],
+    },
   };
 }
 
