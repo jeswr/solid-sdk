@@ -60,10 +60,9 @@ import type {
   VerifiableCredential,
   VerifyCredentialOptions,
 } from "@jeswr/solid-vc";
-import { SVC, verifyCredential } from "@jeswr/solid-vc";
+import { SVC, verifyCredential, verifyRelatedResources } from "@jeswr/solid-vc";
 import {
   PHASE_A_CODES,
-  RELATED_RESOURCE_CODES,
   STATUS_GATE_CODES,
   type VerifierErrorCode,
   type VerifierPhase,
@@ -457,95 +456,60 @@ export async function verifyAgentAuthority(
     }
   }
 
-  // --- Phase A: every credential, one instant (+ the G1 content-digest gate) --
-  // Each hop's credential is verified WITH its presented policy content (when the
-  // chain carries it): solid-vc recomputes the RDFC-1.0 canonical digest of the raw
-  // document and compares it to the credential's SIGNED `relatedResource`
-  // `digestMultibase`, fail-closed — a substituted/mutated policy behind the
-  // (mutable) `svc:policy` IRI can no longer verify.
+  // --- Phase A + the delegation-trust anchor + the G1/G2 gates --------------
+  // GATE-PRECEDENCE (roborev Medium — a multiply-failing credential must report
+  // the FIRST gate it fails, not whichever gate `solid-vc.verifyCredential`
+  // happens to surface): per hop, run
+  //   Phase A (proof + key-control ONLY) → SUBJECT_ISSUER_MISMATCH → the G1
+  //   digest gate → the G2 status gate
+  // strictly in that order, each gate its OWN call so an earlier gate's PASS is
+  // required before a later gate ever runs. The pre-fix code called
+  // `verifyCredential` with `presentedResources` + `resolveStatus` bundled
+  // together, so a validly-signed SUBJECT-SPOOFED credential that also failed
+  // the digest or status gate reported `POLICY_INTEGRITY` / the status code
+  // instead of the intended `SUBJECT_ISSUER_MISMATCH` (Phase B) — the digest and
+  // status checks ran (and could fail first) before the subject↔issuer check
+  // (which lived in a separate loop AFTER every hop's combined check had
+  // already passed). No gate is weakened: all four still run and fail-closed —
+  // this only fixes WHICH one wins when several are broken at once.
   const contents = chain.policyContents ?? {};
   for (const hop of ordered) {
     // biome-ignore lint/style/noNonNullAssertion: every hop bound (checked above)
     const b = bound.get(hop.id)!;
     const presented: PresentedResourceContent | undefined = contents[hop.id];
-    // G2 fail-closed: a credential CARRYING a status entry, verified WITHOUT a
-    // status resolver, must deny — a status mechanism nobody checked must never
-    // read as "not revoked". (An entry-less credential passes without the gate.)
-    if (options.resolveStatus === undefined && b.vc.credentialStatus !== undefined) {
-      return deny(
-        "C",
-        "STATUS_RETRIEVAL_ERROR",
-        `Credential for hop <${hop.id}> carries a credentialStatus entry but no status resolver was supplied — denying (fail-closed).`,
-        chainIds,
-      );
-    }
-    const res = await verifyCredential(b.vc, {
+
+    // Phase A ONLY: proof, cryptosuite, validity window, issuer/key-control —
+    // no `presentedResources`, no `resolveStatus`, so a genuine proof failure is
+    // reported immediately and cannot be masked by a downstream digest/status
+    // failure on the SAME call. Phase A always wins.
+    const phaseARes = await verifyCredential(b.vc, {
       resolveKey,
       ...(options.isControlledBy !== undefined && { isControlledBy: options.isControlledBy }),
-      ...(options.resolveStatus !== undefined && { resolveStatus: options.resolveStatus }),
       expectedProofPurpose: "assertionMethod",
       now,
-      ...(presented !== undefined && { presentedResources: { [hop.id]: presented } }),
     });
-    if (!res.verified) {
-      const detail = res.errors.map((e) => e.message).join("; ");
-      // A genuine Phase-A failure (signature/validity/issuer/…) always wins; a
-      // PURE digest-binding failure is the G1 `POLICY_INTEGRITY` deny (Phase B
-      // semantics — the credential↔policy-content cross-binding broke); a PURE
-      // status failure is the G2 Phase-C deny (status ∪ revocation, fail-closed).
-      const phaseAError = res.errors.find((e) => PHASE_A_CODES.has(e.code as VerifierErrorCode));
-      if (phaseAError === undefined && res.errors.some((e) => RELATED_RESOURCE_CODES.has(e.code))) {
-        return deny(
-          "B",
-          "POLICY_INTEGRITY",
-          `Policy-content binding failed for <${hop.id}>: ${detail}`,
-          chainIds,
-        );
-      }
-      const statusError = res.errors.find((e) => STATUS_GATE_CODES.has(e.code));
-      if (phaseAError === undefined && statusError !== undefined) {
-        const statusCode: VerifierErrorCode =
-          statusError.code === "STATUS_REVOKED"
-            ? "REVOKED"
-            : statusError.code === "STATUS_SUSPENDED"
-              ? "SUSPENDED"
-              : "STATUS_RETRIEVAL_ERROR";
-        return deny(
-          "C",
-          statusCode,
-          `Credential status gate failed for hop <${hop.id}>: ${detail}`,
-          chainIds,
-        );
-      }
+    if (!phaseARes.verified) {
+      const detail = phaseARes.errors.map((e) => e.message).join("; ");
+      const phaseAError = phaseARes.errors.find((e) =>
+        PHASE_A_CODES.has(e.code as VerifierErrorCode),
+      );
       const code: VerifierErrorCode =
         phaseAError !== undefined ? (phaseAError.code as VerifierErrorCode) : "INVALID_SIGNATURE";
       return deny("A", code, `Phase A (credential verification) failed: ${detail}`, chainIds);
     }
-  }
-  // The permit is fully content-bound (non-provisional) only when EVERY hop's raw
-  // policy content was presented — and therefore digest-checked above, fail-closed.
-  const allContentBound = ordered.every((p) => contents[p.id] !== undefined);
 
-  // --- Phase B: cross-binding ----------------------------------------------
-  // SECURITY (delegation-trust anchor) — runs FIRST in Phase B, i.e. AFTER Phase A
-  // has proof-verified every hop's credential. Each hop's self-asserted
-  // `credentialSubject.id`, when present, MUST equal its proof-verified `issuer`.
-  // `verifyCredential` (Phase A) proves the signature against `issuer` + key
-  // control but does NOT constrain the subject id — so without this an attacker who
-  // legitimately controls their OWN issuer key could sign an otherwise-valid
-  // credential whose `subject.id` names a TRUSTED party (a root owner / an
-  // authorized delegatee) and have the chain accept it as that party's grant,
-  // impersonating any assigner. Placed before the root-principal / assigner checks
-  // so a subject-spoofed credential is rejected with the precise
-  // `SUBJECT_ISSUER_MISMATCH` code (not the downstream `BINDING_MISMATCH`); a
-  // credential with a bad PROOF already failed Phase A above and reported its
-  // Phase-A code, so only a validly-signed subject-spoof reaches here. (The
-  // principal used for every trust decision is additionally anchored to `issuer` in
-  // `readBoundAuthorization`, so this rejects the spoof outright rather than
-  // silently ignoring it.)
-  for (const hop of ordered) {
-    // biome-ignore lint/style/noNonNullAssertion: every hop bound (checked above)
-    const b = bound.get(hop.id)!;
+    // SECURITY (delegation-trust anchor) — runs immediately after Phase A's
+    // proof passes, BEFORE the digest/status gates below. Each hop's
+    // self-asserted `credentialSubject.id`, when present, MUST equal its
+    // proof-verified `issuer`. `verifyCredential` (Phase A) proves the
+    // signature against `issuer` + key control but does NOT constrain the
+    // subject id — so without this an attacker who legitimately controls their
+    // OWN issuer key could sign an otherwise-valid credential whose
+    // `subject.id` names a TRUSTED party (a root owner / an authorized
+    // delegatee) and have the chain accept it as that party's grant,
+    // impersonating any assigner. Placed here so a subject-spoofed credential
+    // is rejected with the precise `SUBJECT_ISSUER_MISMATCH` code EVEN WHEN it
+    // also fails the digest or status gate below (the gate-precedence fix).
     const assertedSubjectId = claimString(subjectRecord(b.vc)?.id);
     if (assertedSubjectId !== undefined && assertedSubjectId !== b.vc.issuer) {
       return deny(
@@ -555,7 +519,76 @@ export async function verifyAgentAuthority(
         chainIds,
       );
     }
+
+    // G1 policy-content digest gate (Phase B semantics — the credential↔policy-
+    // content cross-binding): recompute the RDFC-1.0 canonical digest of the
+    // presented raw policy document and compare it to the credential's SIGNED
+    // `relatedResource` `digestMultibase`, fail-closed — a substituted/mutated
+    // policy behind the (mutable) `svc:policy` IRI can no longer verify. Run
+    // standalone via solid-vc's `verifyRelatedResources` (NOT bundled into the
+    // Phase-A call above) so it can never mask — or be masked by — the
+    // subject-issuer check above it.
+    if (presented !== undefined) {
+      const digestRes = await verifyRelatedResources(b.vc, { [hop.id]: presented });
+      if (!digestRes.verified) {
+        const detail = digestRes.errors.map((e) => e.message).join("; ");
+        return deny(
+          "B",
+          "POLICY_INTEGRITY",
+          `Policy-content binding failed for <${hop.id}>: ${detail}`,
+          chainIds,
+        );
+      }
+    }
+
+    // G2 status gate (Phase C — status ∪ revocation, fail-closed). A credential
+    // CARRYING a status entry, verified WITHOUT a status resolver, must deny —
+    // a status mechanism nobody checked must never read as "not revoked". (An
+    // entry-less credential passes without the gate.)
+    if (options.resolveStatus === undefined && b.vc.credentialStatus !== undefined) {
+      return deny(
+        "C",
+        "STATUS_RETRIEVAL_ERROR",
+        `Credential for hop <${hop.id}> carries a credentialStatus entry but no status resolver was supplied — denying (fail-closed).`,
+        chainIds,
+      );
+    }
+    if (options.resolveStatus !== undefined) {
+      // Re-run `verifyCredential` with ONLY the status seam added (Phase A was
+      // already confirmed above with the identical `now` + key seams, so this
+      // call is deterministic and can only newly fail on the status gate).
+      const statusRes = await verifyCredential(b.vc, {
+        resolveKey,
+        ...(options.isControlledBy !== undefined && { isControlledBy: options.isControlledBy }),
+        resolveStatus: options.resolveStatus,
+        expectedProofPurpose: "assertionMethod",
+        now,
+      });
+      if (!statusRes.verified) {
+        const detail = statusRes.errors.map((e) => e.message).join("; ");
+        const statusError = statusRes.errors.find((e) => STATUS_GATE_CODES.has(e.code));
+        const statusCode: VerifierErrorCode =
+          statusError?.code === "STATUS_REVOKED"
+            ? "REVOKED"
+            : statusError?.code === "STATUS_SUSPENDED"
+              ? "SUSPENDED"
+              : "STATUS_RETRIEVAL_ERROR";
+        return deny(
+          "C",
+          statusCode,
+          `Credential status gate failed for hop <${hop.id}>: ${detail}`,
+          chainIds,
+        );
+      }
+    }
   }
+  // The permit is fully content-bound (non-provisional) only when EVERY hop's raw
+  // policy content was presented — and therefore digest-checked above, fail-closed.
+  const allContentBound = ordered.every((p) => contents[p.id] !== undefined);
+
+  // --- Phase B: cross-binding (root/assigner/linkage) -----------------------
+  // The subject↔issuer anchor + the G1/G2 gates already ran per hop above; here
+  // the root-principal / assigner / delegation-linkage checks follow.
   // biome-ignore lint/style/noNonNullAssertion: ordered non-empty (assembly)
   const rootHop = ordered[0]!;
   // biome-ignore lint/style/noNonNullAssertion: every hop bound (checked above)

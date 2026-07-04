@@ -14,6 +14,7 @@
 // are rejected specifically for the subject↔issuer disagreement, fail-closed.
 
 import {
+  bitstringStatusListEntry,
   buildAgentAuthorizationCredential,
   generateKeyPairForSuite,
   issue,
@@ -54,6 +55,8 @@ async function forgeWithAttackerIssuer(input: {
   agent: string;
   action: string | readonly string[];
   policy: string;
+  /** Attach a Bitstring status entry so the G2 status gate has something to gate on. */
+  credentialStatus?: Parameters<typeof buildAgentAuthorizationCredential>[0]["credentialStatus"];
 }) {
   const unsigned = buildAgentAuthorizationCredential({
     principal: input.principal, // → sets subject.id to the SPOOFED (trusted) party
@@ -63,6 +66,7 @@ async function forgeWithAttackerIssuer(input: {
     policy: input.policy,
     validFrom: VALID_FROM,
     validUntil: VALID_UNTIL,
+    ...(input.credentialStatus !== undefined && { credentialStatus: input.credentialStatus }),
   });
   // Re-attribute issuance to the attacker and sign with the attacker's key. The
   // subject id stays the spoofed party; issuer is now the attacker. A genuine,
@@ -152,6 +156,124 @@ describe("delegation-trust — the principal is the proof-verified issuer, not s
     expect(r.authorized).toBe(false);
     expect(r.phase).toBe("A");
     expect(r.code).toBe("INVALID_SIGNATURE");
+  });
+
+  it("GATE PRECEDENCE — spoofed subject + bad policy-content digest: reports SUBJECT_ISSUER_MISMATCH, not POLICY_INTEGRITY", async () => {
+    // The forged root has a VALID proof (attacker's own key) and a SPOOFED
+    // subject.id (Alice), and — because it was built WITHOUT `policyContent` —
+    // carries no `relatedResource` digest at all. Presenting the mandate's raw
+    // content for this hop therefore ALSO fails the G1 digest gate
+    // (RELATED_RESOURCE_MISSING). Pre-fix this reported `POLICY_INTEGRITY`
+    // (Phase B) because the digest gate ran bundled into the same
+    // `verifyCredential` call as the proof, before the separate subject-issuer
+    // loop ever ran. The fix must report `SUBJECT_ISSUER_MISMATCH` — the
+    // subject-issuer anchor now runs BEFORE the digest gate, per hop.
+    const forgedRootBadDigest = await forgeWithAttackerIssuer({
+      principal: CAST.alice,
+      agent: CAST.agentA,
+      action: ["read", "grantUse"],
+      policy: CAST.mandateId,
+    });
+    const chain: PresentedChain = {
+      credentials: [forgedRootBadDigest, base.credentials.agreement],
+      policies: [base.mandate, base.agreement],
+      policyContents: {
+        [CAST.mandateId]: { content: base.policyDocuments.mandate },
+      },
+    };
+    const r = await verifyAgentAuthority(chain, {
+      request: {
+        action: "read",
+        target: CAST.records,
+        attributes: { purpose: CAST.purpose, dateTime: base.now.toISOString() },
+      },
+      rootPrincipal: CAST.alice,
+      now: base.now,
+      resolveKey: base.registry.resolveKey,
+      isControlledBy: base.registry.isControlledBy,
+      resolveStatus: statusValid(),
+      actor: CAST.inst,
+    });
+    expect(r.authorized).toBe(false);
+    expect(r.phase).toBe("B");
+    expect(r.code).toBe("SUBJECT_ISSUER_MISMATCH");
+  });
+
+  it("GATE PRECEDENCE — spoofed subject + revoked status: reports SUBJECT_ISSUER_MISMATCH, not REVOKED", async () => {
+    // The forged root also carries a Bitstring `credentialStatus` entry, and
+    // the injected status resolver reports it revoked. Pre-fix this reported
+    // `REVOKED` (Phase C) because the bundled `verifyCredential` call ran the
+    // status gate before the separate subject-issuer loop. The fix must still
+    // report `SUBJECT_ISSUER_MISMATCH`.
+    const forgedRootRevoked = await forgeWithAttackerIssuer({
+      principal: CAST.alice,
+      agent: CAST.agentA,
+      action: ["read", "grantUse"],
+      policy: CAST.mandateId,
+      credentialStatus: bitstringStatusListEntry({
+        statusPurpose: "revocation",
+        statusListIndex: 7,
+        statusListCredential: CAST.statusListUrl,
+      }),
+    });
+    const chain: PresentedChain = {
+      credentials: [forgedRootRevoked, base.credentials.agreement],
+      policies: [base.mandate, base.agreement],
+    };
+    const r = await verifyAgentAuthority(chain, {
+      request: {
+        action: "read",
+        target: CAST.records,
+        attributes: { purpose: CAST.purpose, dateTime: base.now.toISOString() },
+      },
+      rootPrincipal: CAST.alice,
+      now: base.now,
+      resolveKey: base.registry.resolveKey,
+      isControlledBy: base.registry.isControlledBy,
+      resolveStatus: makeStatusResolver("revoked"),
+      actor: CAST.inst,
+    });
+    expect(r.authorized).toBe(false);
+    expect(r.phase).toBe("B");
+    expect(r.code).toBe("SUBJECT_ISSUER_MISMATCH");
+  });
+
+  it("GATE PRECEDENCE — spoofed subject + unreachable status: reports SUBJECT_ISSUER_MISMATCH, not STATUS_RETRIEVAL_ERROR", async () => {
+    // Same shape as the revoked case, but the injected status resolver reports
+    // the entry unreachable (a retrieval failure). Pre-fix this reported
+    // `STATUS_RETRIEVAL_ERROR` (Phase C); the fix must still report
+    // `SUBJECT_ISSUER_MISMATCH`.
+    const forgedRootUnreachable = await forgeWithAttackerIssuer({
+      principal: CAST.alice,
+      agent: CAST.agentA,
+      action: ["read", "grantUse"],
+      policy: CAST.mandateId,
+      credentialStatus: bitstringStatusListEntry({
+        statusPurpose: "revocation",
+        statusListIndex: 7,
+        statusListCredential: CAST.statusListUrl,
+      }),
+    });
+    const chain: PresentedChain = {
+      credentials: [forgedRootUnreachable, base.credentials.agreement],
+      policies: [base.mandate, base.agreement],
+    };
+    const r = await verifyAgentAuthority(chain, {
+      request: {
+        action: "read",
+        target: CAST.records,
+        attributes: { purpose: CAST.purpose, dateTime: base.now.toISOString() },
+      },
+      rootPrincipal: CAST.alice,
+      now: base.now,
+      resolveKey: base.registry.resolveKey,
+      isControlledBy: base.registry.isControlledBy,
+      resolveStatus: makeStatusResolver("unreachable"),
+      actor: CAST.inst,
+    });
+    expect(r.authorized).toBe(false);
+    expect(r.phase).toBe("B");
+    expect(r.code).toBe("SUBJECT_ISSUER_MISMATCH");
   });
 
   it("SUBJECT-SPOOFED CHILD: attacker-issued hop whose subject.id claims the parent-authorized delegatee → REJECTED", async () => {

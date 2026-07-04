@@ -20,10 +20,10 @@ var STATUS_GATE_CODES = /* @__PURE__ */ new Set([
   "STATUS_UNREACHABLE"
 ]);
 
-// node_modules/@jeswr/rdf-serialize/dist/serialize.js
+// ../agent-authz-verifier/node_modules/@jeswr/rdf-serialize/dist/serialize.js
 import { Writer } from "n3";
 
-// node_modules/@jeswr/solid-odrl/dist/index.js
+// ../agent-authz-verifier/node_modules/@jeswr/solid-odrl/dist/index.js
 import {
   BlankNodeFrom,
   DatasetWrapper,
@@ -701,7 +701,7 @@ function dedupeDuties(duties) {
   return out;
 }
 
-// node_modules/@jeswr/solid-vc/dist/index.js
+// ../agent-authz-verifier/node_modules/@jeswr/solid-vc/dist/index.js
 import { createHash } from "node:crypto";
 import { canonize } from "rdf-canonize";
 import { randomUUID } from "node:crypto";
@@ -1447,6 +1447,17 @@ async function checkPresentedResource(related, iri, presented) {
   }
   return [];
 }
+async function verifyRelatedResources(credential, presentedResources) {
+  const normalized = normalizeRelatedResources(credential.relatedResource);
+  if ("error" in normalized) {
+    return { verified: false, errors: [normalized.error], issuer: credential.issuer };
+  }
+  const errors = [];
+  for (const [iri, presented] of Object.entries(presentedResources)) {
+    errors.push(...await checkPresentedResource(normalized.entries, iri, presented));
+  }
+  return errors.length === 0 ? { verified: true, errors: [], issuer: credential.issuer } : { verified: false, errors, issuer: credential.issuer };
+}
 async function verifyCredential(vc, options) {
   const errors = [];
   const registry = options.registry ?? defaultSuiteRegistry();
@@ -1775,50 +1786,20 @@ async function verifyAgentAuthority(chain, options) {
   for (const hop of ordered) {
     const b = bound.get(hop.id);
     const presented = contents[hop.id];
-    if (options.resolveStatus === void 0 && b.vc.credentialStatus !== void 0) {
-      return deny(
-        "C",
-        "STATUS_RETRIEVAL_ERROR",
-        `Credential for hop <${hop.id}> carries a credentialStatus entry but no status resolver was supplied \u2014 denying (fail-closed).`,
-        chainIds
-      );
-    }
-    const res = await verifyCredential(b.vc, {
+    const phaseARes = await verifyCredential(b.vc, {
       resolveKey,
       ...options.isControlledBy !== void 0 && { isControlledBy: options.isControlledBy },
-      ...options.resolveStatus !== void 0 && { resolveStatus: options.resolveStatus },
       expectedProofPurpose: "assertionMethod",
-      now,
-      ...presented !== void 0 && { presentedResources: { [hop.id]: presented } }
+      now
     });
-    if (!res.verified) {
-      const detail = res.errors.map((e) => e.message).join("; ");
-      const phaseAError = res.errors.find((e) => PHASE_A_CODES.has(e.code));
-      if (phaseAError === void 0 && res.errors.some((e) => RELATED_RESOURCE_CODES.has(e.code))) {
-        return deny(
-          "B",
-          "POLICY_INTEGRITY",
-          `Policy-content binding failed for <${hop.id}>: ${detail}`,
-          chainIds
-        );
-      }
-      const statusError = res.errors.find((e) => STATUS_GATE_CODES.has(e.code));
-      if (phaseAError === void 0 && statusError !== void 0) {
-        const statusCode = statusError.code === "STATUS_REVOKED" ? "REVOKED" : statusError.code === "STATUS_SUSPENDED" ? "SUSPENDED" : "STATUS_RETRIEVAL_ERROR";
-        return deny(
-          "C",
-          statusCode,
-          `Credential status gate failed for hop <${hop.id}>: ${detail}`,
-          chainIds
-        );
-      }
+    if (!phaseARes.verified) {
+      const detail = phaseARes.errors.map((e) => e.message).join("; ");
+      const phaseAError = phaseARes.errors.find(
+        (e) => PHASE_A_CODES.has(e.code)
+      );
       const code = phaseAError !== void 0 ? phaseAError.code : "INVALID_SIGNATURE";
       return deny("A", code, `Phase A (credential verification) failed: ${detail}`, chainIds);
     }
-  }
-  const allContentBound = ordered.every((p) => contents[p.id] !== void 0);
-  for (const hop of ordered) {
-    const b = bound.get(hop.id);
     const assertedSubjectId = claimString(subjectRecord(b.vc)?.id);
     if (assertedSubjectId !== void 0 && assertedSubjectId !== b.vc.issuer) {
       return deny(
@@ -1828,7 +1809,48 @@ async function verifyAgentAuthority(chain, options) {
         chainIds
       );
     }
+    if (presented !== void 0) {
+      const digestRes = await verifyRelatedResources(b.vc, { [hop.id]: presented });
+      if (!digestRes.verified) {
+        const detail = digestRes.errors.map((e) => e.message).join("; ");
+        return deny(
+          "B",
+          "POLICY_INTEGRITY",
+          `Policy-content binding failed for <${hop.id}>: ${detail}`,
+          chainIds
+        );
+      }
+    }
+    if (options.resolveStatus === void 0 && b.vc.credentialStatus !== void 0) {
+      return deny(
+        "C",
+        "STATUS_RETRIEVAL_ERROR",
+        `Credential for hop <${hop.id}> carries a credentialStatus entry but no status resolver was supplied \u2014 denying (fail-closed).`,
+        chainIds
+      );
+    }
+    if (options.resolveStatus !== void 0) {
+      const statusRes = await verifyCredential(b.vc, {
+        resolveKey,
+        ...options.isControlledBy !== void 0 && { isControlledBy: options.isControlledBy },
+        resolveStatus: options.resolveStatus,
+        expectedProofPurpose: "assertionMethod",
+        now
+      });
+      if (!statusRes.verified) {
+        const detail = statusRes.errors.map((e) => e.message).join("; ");
+        const statusError = statusRes.errors.find((e) => STATUS_GATE_CODES.has(e.code));
+        const statusCode = statusError?.code === "STATUS_REVOKED" ? "REVOKED" : statusError?.code === "STATUS_SUSPENDED" ? "SUSPENDED" : "STATUS_RETRIEVAL_ERROR";
+        return deny(
+          "C",
+          statusCode,
+          `Credential status gate failed for hop <${hop.id}>: ${detail}`,
+          chainIds
+        );
+      }
+    }
   }
+  const allContentBound = ordered.every((p) => contents[p.id] !== void 0);
   const rootHop = ordered[0];
   const rootBound = bound.get(rootHop.id);
   if (rootBound.auth.principal !== rootPrincipal) {
