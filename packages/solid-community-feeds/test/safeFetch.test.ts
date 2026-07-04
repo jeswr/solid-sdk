@@ -1,4 +1,17 @@
-// AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+// AUTHORED-BY Claude Sonnet
+/**
+ * `safeFetch` is now a thin adapter over `@jeswr/guarded-fetch` (see the module
+ * doc in `src/safeFetch.ts`). The exhaustive private/loopback/link-local/IPv6/
+ * alternate-encoding/DNS-rebinding/redirect-to-private test matrix for the SHARED
+ * guard core lives in `@jeswr/guarded-fetch`'s own test suite — not duplicated
+ * here. This file keeps:
+ *   - the `assertSafeUrl` cases (still exercised — they ALSO prove this package's
+ *     EXTRA hostname denylist entries + the forced DNS-less wiring, which are
+ *     specific to this package, not to guarded-fetch's own default policy);
+ *   - the `safeFetch` request-behaviour cases (headers, redirect-refusal, body
+ *     cap, timeout, network/HTTP-status mapping, JSON parsing) — proving the
+ *     adapter wiring, not re-testing the guard's internals.
+ */
 import { describe, expect, it, vi } from "vitest";
 import {
   assertSafeUrl,
@@ -9,15 +22,15 @@ import {
 } from "../src/safeFetch.js";
 import { stubFetch } from "./fixtures.js";
 
-describe("assertSafeUrl — SSRF guards", () => {
-  it("accepts a plain https public URL", () => {
-    expect(assertSafeUrl("https://matrix.org/_matrix").hostname).toBe("matrix.org");
+describe("assertSafeUrl — SSRF guards (via @jeswr/guarded-fetch)", () => {
+  it("accepts a plain https public URL", async () => {
+    expect((await assertSafeUrl("https://matrix.org/_matrix")).hostname).toBe("matrix.org");
   });
 
-  it("rejects http://", () => {
-    expect(() => assertSafeUrl("http://example.com")).toThrowError(SafeFetchError);
+  it("rejects http://", async () => {
+    await expect(assertSafeUrl("http://example.com")).rejects.toThrowError(SafeFetchError);
     try {
-      assertSafeUrl("http://example.com");
+      await assertSafeUrl("http://example.com");
     } catch (e) {
       expect((e as SafeFetchError).code).toBe("scheme");
     }
@@ -28,13 +41,14 @@ describe("assertSafeUrl — SSRF guards", () => {
     "data:text/plain,hi",
     "ftp://x",
     "gopher://x",
-  ])("rejects non-https scheme %s", (url) => {
-    expect(() => assertSafeUrl(url)).toThrowError(SafeFetchError);
+  ])("rejects non-https scheme %s", async (url) => {
+    await expect(assertSafeUrl(url)).rejects.toThrowError(SafeFetchError);
   });
 
-  it("rejects credentials embedded in URL", () => {
+  it("rejects credentials embedded in URL", async () => {
     try {
-      assertSafeUrl("https://user:pass@example.com");
+      await assertSafeUrl("https://user:pass@example.com");
+      throw new Error("should have thrown");
     } catch (e) {
       expect((e as SafeFetchError).code).toBe("credentials");
     }
@@ -57,9 +71,9 @@ describe("assertSafeUrl — SSRF guards", () => {
     "https://[ff02::1]/", // ipv6 multicast
     "https://[::ffff:127.0.0.1]/", // ipv4-mapped loopback
     "https://[::ffff:10.0.0.1]/", // ipv4-mapped private
-  ])("blocks private/reserved literal IP %s", (url) => {
+  ])("blocks private/reserved literal IP %s", async (url) => {
     try {
-      assertSafeUrl(url);
+      await assertSafeUrl(url);
       throw new Error("should have thrown");
     } catch (e) {
       expect((e as SafeFetchError).code).toBe("blocked-host");
@@ -70,8 +84,8 @@ describe("assertSafeUrl — SSRF guards", () => {
     "https://8.8.8.8/",
     "https://1.1.1.1/",
     "https://172.32.0.1/",
-  ])("allows public literal IP %s", (url) => {
-    expect(() => assertSafeUrl(url)).not.toThrow();
+  ])("allows public literal IP %s", async (url) => {
+    await expect(assertSafeUrl(url)).resolves.not.toThrow();
   });
 
   it.each([
@@ -83,7 +97,8 @@ describe("assertSafeUrl — SSRF guards", () => {
     "https://box.lan/",
     "https://router.home.arpa/",
     "https://1.0.0.127.in-addr.arpa/",
-    // bare single-label / special-use names (no leading dot)
+    // bare single-label / special-use names (no leading dot) — this package's
+    // EXTRA hostnameDenylist entries (beyond guarded-fetch's cloud-focused default).
     "https://local/",
     "https://internal/",
     "https://intranet/",
@@ -91,9 +106,9 @@ describe("assertSafeUrl — SSRF guards", () => {
     "https://home.arpa/",
     "https://in-addr.arpa/",
     "https://ip6.arpa/",
-  ])("blocks local/internal hostname %s", (url) => {
+  ])("blocks local/internal hostname %s", async (url) => {
     try {
-      assertSafeUrl(url);
+      await assertSafeUrl(url);
       throw new Error("should have thrown");
     } catch (e) {
       expect((e as SafeFetchError).code).toBe("blocked-host");
@@ -104,17 +119,17 @@ describe("assertSafeUrl — SSRF guards", () => {
     "https://matrix.org/",
     "https://forum.solidproject.org/",
     "https://example.com/",
-  ])("allows a public DNS hostname %s", (url) => {
-    expect(() => assertSafeUrl(url)).not.toThrow();
+  ])("allows a public DNS hostname %s", async (url) => {
+    await expect(assertSafeUrl(url)).resolves.not.toThrow();
   });
 
-  it("rejects a malformed URL", () => {
-    expect(() => assertSafeUrl("not a url")).toThrowError(SafeFetchError);
+  it("rejects a malformed URL", async () => {
+    await expect(assertSafeUrl("not a url")).rejects.toThrowError(SafeFetchError);
   });
 });
 
-describe("safeFetch — request behaviour", () => {
-  it("returns body on 2xx and sends manual redirect + headers", async () => {
+describe("safeFetch — request behaviour (adapter over @jeswr/guarded-fetch)", () => {
+  it("returns body on 2xx and sends headers through the guard", async () => {
     const { fetch, calls } = stubFetch([
       { match: () => true, body: { ok: true }, bodyText: '{"ok":true}' },
     ]);
@@ -128,8 +143,14 @@ describe("safeFetch — request behaviour", () => {
     expect(calls[0]?.headers?.Authorization).toBe("Bearer secret");
   });
 
-  it("treats a 30x as a redirect error (no auto-follow)", async () => {
-    const { fetch } = stubFetch([{ match: () => true, status: 302 }]);
+  it("refuses to follow a redirect (redirect-refusal preserved via maxRedirects: 0)", async () => {
+    const { fetch } = stubFetch([
+      {
+        match: () => true,
+        status: 302,
+        responseHeaders: { location: "https://x.test/other" },
+      },
+    ]);
     try {
       await safeFetch("https://x.test/", {}, { fetch });
       throw new Error("should have thrown");
@@ -170,7 +191,7 @@ describe("safeFetch — request behaviour", () => {
     }
   });
 
-  it("times out via AbortController", async () => {
+  it("times out via the guard's own AbortController", async () => {
     const slowFetch = vi.fn(async (_url: string, init?: { signal?: AbortSignal }) => {
       return new Promise((_resolve, reject) => {
         init?.signal?.addEventListener("abort", () => {
@@ -199,77 +220,73 @@ describe("safeFetch — request behaviour", () => {
       throw new Error("should have thrown");
     } catch (e) {
       expect((e as SafeFetchError).code).toBe("too-large");
-      expect((e as Error).message).toContain("declared");
+      expect((e as Error).message).toContain("Content-Length");
     }
   });
 
   it("keeps the timeout active during the body read", async () => {
-    // fetch resolves headers immediately, but .text() never resolves until abort.
-    const fetch = vi.fn(async (_url: string, init?: { signal?: AbortSignal }) => {
-      return {
-        ok: true,
+    // fetch resolves headers immediately, but the body stream never yields until
+    // the SAME AbortSignal the guard passed to this stub fires (mirroring how a
+    // real fetch's body stream is tied to the request's AbortSignal).
+    const fetch: FetchLike = async (_url, init) => {
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          init?.signal?.addEventListener("abort", () => {
+            controller.error(Object.assign(new Error("aborted"), { name: "AbortError" }));
+          });
+        },
+      });
+      return new Response(stream, {
         status: 200,
         statusText: "OK",
-        headers: { get: () => null },
-        text: () =>
-          new Promise<string>((_resolve, reject) => {
-            init?.signal?.addEventListener("abort", () => {
-              reject(Object.assign(new Error("aborted"), { name: "AbortError" }));
-            });
-          }),
-      };
-    });
+      }) as unknown as Awaited<ReturnType<FetchLike>>;
+    };
     try {
-      await safeFetch("https://x.test/", {}, { fetch: fetch as never, timeoutMs: 5 });
+      await safeFetch("https://x.test/", {}, { fetch, timeoutMs: 5 });
       throw new Error("should have thrown");
     } catch (e) {
       expect((e as SafeFetchError).code).toBe("timeout");
-      expect((e as Error).message).toContain("body");
     }
   });
 
   it("streams the body and aborts mid-stream once over maxBytes (no full buffer)", async () => {
     let chunksYielded = 0;
-    const fetch: FetchLike = async () => ({
-      ok: true,
-      status: 200,
-      statusText: "OK",
-      headers: { get: () => null }, // no content-length → pre-check can't catch it
-      text: async () => {
-        throw new Error("text() must NOT be called when a stream is available");
-      },
-      body: (async function* () {
-        // each chunk is 8 bytes; cap is 10 → over after the 2nd chunk
-        for (let i = 0; i < 100; i++) {
-          chunksYielded++;
-          yield new Uint8Array(8);
-        }
-      })(),
-    });
+    const fetch: FetchLike = async () => {
+      const stream = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          chunksYielded += 1;
+          // each chunk is 8 bytes; cap is 10 → over after the 2nd chunk
+          controller.enqueue(new Uint8Array(8));
+        },
+      });
+      return new Response(stream, {
+        status: 200,
+        statusText: "OK",
+      }) as unknown as Awaited<ReturnType<FetchLike>>;
+    };
     try {
       await safeFetch("https://x.test/", {}, { fetch, maxBytes: 10 });
       throw new Error("should have thrown");
     } catch (e) {
       expect((e as SafeFetchError).code).toBe("too-large");
     }
-    // It stopped early — did NOT drain all 100 chunks.
+    // It stopped early — did NOT drain all 100 potential chunks.
     expect(chunksYielded).toBeLessThan(100);
   });
 
-  it("streams and decodes a body within the cap (string + byte chunks)", async () => {
-    const fetch: FetchLike = async () => ({
-      ok: true,
-      status: 200,
-      statusText: "OK",
-      headers: { get: () => null },
-      text: async () => {
-        throw new Error("text() must NOT be called when a stream is available");
+  it("streams and decodes a body within the cap (multi-chunk)", async () => {
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode("hel"));
+        controller.enqueue(new TextEncoder().encode("lo"));
+        controller.close();
       },
-      body: (async function* () {
-        yield new TextEncoder().encode("hel");
-        yield "lo";
-      })(),
     });
+    const fetch: FetchLike = async () =>
+      new Response(stream, {
+        status: 200,
+        statusText: "OK",
+      }) as unknown as Awaited<ReturnType<FetchLike>>;
     const res = await safeFetch("https://x.test/", {}, { fetch, maxBytes: 1000 });
     expect(res.body).toBe("hello");
   });

@@ -1,52 +1,78 @@
-// AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate; see prod-solid-server docs/MODEL-PROVENANCE.md
+// AUTHORED-BY Claude Sonnet — see prod-solid-server docs/MODEL-PROVENANCE.md
 /**
  * SSRF-safe fetch wrapper.
  *
  * The Matrix homeserver and Discourse forum base URLs are USER-CONFIGURED, so an
  * attacker (or a careless user) could point them at an internal target
- * (`http://169.254.169.254/`, `http://localhost:…`, an RFC1918 host). Every
- * outbound request this package makes goes through {@link safeFetch}, which:
+ * (`http://169.254.169.254/`, `http://localhost:…`, an RFC1918 host).
  *
- *   1. requires `https:` (no `http:`, no `file:`/`data:`/other schemes);
- *   2. rejects credentials embedded in the URL (`https://user:pass@host`);
- *   3. blocks literal-IP hosts in private / loopback / link-local / reserved
- *      ranges (IPv4 + IPv6), incl. the cloud metadata IP, AND known local /
- *      internal HOSTNAMES (`localhost`, `*.local`, `*.internal`, …);
- *   4. caps the response body size (default 5 MiB): a `Content-Length` pre-check
- *      rejects a declared-oversize body up front, and the body is then read
- *      INCREMENTALLY from the response stream, aborting the instant the byte
- *      count passes the cap — so a lying/absent `Content-Length` cannot force an
- *      unbounded buffer (a `text()` fallback + post-read cap covers seams that
- *      expose no stream);
- *   5. applies a request timeout (default 15 s) via AbortController that stays
- *      ACTIVE THROUGH THE BODY READ — a server can send headers fast then dribble
- *      the body forever, so clearing the timer at headers (a classic bug) would
- *      let the read hang; the timer is cleared only after the body resolves;
- *   6. does NOT follow redirects automatically (`redirect: "manual"`) — a 30x to
- *      an internal host is a classic SSRF bypass; a redirect is surfaced as an
- *      error rather than silently chased.
+ * This module is now a thin adapter over `@jeswr/guarded-fetch` — the suite-wide,
+ * exhaustively-tested SSRF guard consolidated from this package's original bespoke
+ * copy + `federation-client` + `solid-agent-notify` + the prod-solid-server
+ * `@pss/guarded-fetch` reference (P1.6 / shared-logic-review Action 5). The URL/host
+ * SSRF policy (https-only, no-userinfo, private/loopback/link-local/metadata/CGNAT/
+ * reserved-range blocking incl. IPv4-mapped/6to4/NAT64 IPv6 + alternate IPv4 encodings,
+ * a cloud-internal hostname denylist, per-hop redirect re-validation, DNS-rebinding
+ * defence, a response-size cap, and a request timeout) all now live in that shared,
+ * audited guard — see its README/tests for the full block-list.
  *
- * It does NOT resolve DNS itself (that needs a Node-only resolver and would break
- * the browser); literal-IP hosts + local hostnames are blocked synchronously, and
- * DNS-name targets are constrained by the https-only + no-redirect + timeout +
- * size-cap envelope. For a hard guarantee against DNS-rebinding to internal hosts,
- * a server-side deployment should additionally pin DNS (cf. prod-solid-server's
- * webidResolver).
+ * What THIS module still owns:
+ *   1. **Redirect-refusal.** This package's prior posture was "never chase a 30x —
+ *      surface it as an error", which is STRICTER than guarded-fetch's default (which
+ *      re-validates + follows a *safe* redirect). We force that stricter posture with
+ *      `maxRedirects: 0` so behaviour is preserved exactly: a redirect to any host,
+ *      safe or not, surfaces as an error.
+ *   2. **Two fetch strategies, selected by whether a `fetch` is injected:**
+ *      - No `opts.fetch` (the production default): use the Node DNS-pinned entry
+ *        (`@jeswr/guarded-fetch/node`) — real `dns.lookup`, every record validated,
+ *        the validated IP PINNED to the connecting socket (closes the lookup→connect
+ *        TOCTOU rebinding window).
+ *      - `opts.fetch` supplied (a test stub, or a caller-supplied fetch we cannot
+ *        assume pins DNS): layer the browser-safe guard (`createGuardedFetch`) over
+ *        it, FORCED into the DNS-less syntactic branch (`dnsLookup: null`,
+ *        `allowUnresolvedHosts: true`). This exactly reproduces this package's
+ *        original posture for an injected fetch — no live DNS resolution, only
+ *        scheme / userinfo / literal-IP / hostname-denylist checks — so unit tests
+ *        keep stubbing the network with no live DNS or network calls.
+ *   3. **An extended hostname denylist.** The original bespoke guard additionally
+ *      blocked bare/suffix `intranet` / `lan` / `home.arpa` / `in-addr.arpa` /
+ *      `ip6.arpa` (RFC 6761/8375 reserved special-use names beyond guarded-fetch's
+ *      cloud-focused default list). We pass those as extra `hostnameDenylist`
+ *      entries on TOP of `DEFAULT_HOSTNAME_DENYLIST` so no protection is dropped.
+ *   4. **HTTP-status mapping.** guarded-fetch has no opinion on non-2xx statuses
+ *      (only redirects/SSRF/size/time are its job) — a non-2xx response is mapped to
+ *      a typed `SafeFetchError("http", …)` here, same as before.
+ *   5. **The public `SafeFetchError` taxonomy**, for source compatibility with
+ *      `discourse.ts` / `matrix.ts` / this package's tests: guarded-fetch's
+ *      `SsrfError` / `GuardError` are caught and re-mapped onto this package's
+ *      existing `code` enum (scheme / credentials / blocked-host / redirect /
+ *      timeout / too-large / http / network) via message-shape matching. Note
+ *      `assertSafeUrl` is now ASYNC (guarded-fetch's own `assertSafeUrl` is async,
+ *      since real SSRF validation can require a DNS lookup) — a deliberate,
+ *      documented break from the previous synchronous signature.
  *
- * The `fetch` itself is INJECTED (`opts.fetch`) so the suite's auth-`fetch` seam
- * and tests can substitute it — the default is the global `fetch`.
+ * `enforcePortGate` is left OFF (guarded-fetch defaults it on: only port 443 in
+ * production) because the original guard never restricted ports and a self-hosted
+ * Matrix homeserver / Discourse instance can legitimately run on a non-standard port.
  */
+import {
+  createGuardedFetch,
+  DEFAULT_HOSTNAME_DENYLIST,
+  GuardError,
+  type GuardOptions,
+  assertSafeUrl as guardedAssertSafeUrl,
+  SsrfError,
+} from "@jeswr/guarded-fetch";
+import { createNodeGuardedFetch } from "@jeswr/guarded-fetch/node";
 
 /** A chunk yielded by a streamed response body — bytes or a decoded string. */
 export type BodyChunk = Uint8Array | string;
 
 /**
  * The response shape `safeFetch` consumes. `body` is OPTIONAL: when present (the
- * real WHATWG `fetch` returns a `ReadableStream` here, which is async-iterable in
- * Node 18+), `safeFetch` reads it INCREMENTALLY and aborts the moment the byte
- * count exceeds `maxBytes` — so an untrusted oversized body is never fully
- * buffered (a memory-DoS guard). When `body` is absent, it falls back to
- * `text()` with a post-read byte cap.
+ * real WHATWG `fetch` returns a `ReadableStream` here), `safeFetch` reads it via
+ * the shared guarded-fetch body-cap logic. When absent, the guard falls back to an
+ * empty body (matching standard `Response` semantics for a bodyless response).
  */
 export interface SafeFetchResponse {
   ok: boolean;
@@ -54,10 +80,10 @@ export interface SafeFetchResponse {
   statusText: string;
   headers: { get(name: string): string | null };
   text(): Promise<string>;
-  body?: AsyncIterable<BodyChunk> | null;
+  body?: ReadableStream<Uint8Array> | null;
 }
 
-/** A minimal structural fetch type so we don't depend on lib.dom's exact shape. */
+/** A minimal structural fetch type — `typeof globalThis.fetch`-compatible. */
 export type FetchLike = (
   input: string,
   init?: {
@@ -70,7 +96,7 @@ export type FetchLike = (
 ) => Promise<SafeFetchResponse>;
 
 export interface SafeFetchOptions {
-  /** Injected fetch (auth-fetch seam / test stub). Defaults to global `fetch`. */
+  /** Injected fetch (auth-fetch seam / test stub). Defaults to the Node DNS-pinned guard. */
   fetch?: FetchLike;
   /** Request timeout in milliseconds. Default 15000. */
   timeoutMs?: number;
@@ -87,10 +113,16 @@ export class SafeFetchError extends Error {
     | "timeout"
     | "too-large"
     | "http"
-    | "network";
+    | "network"
+    | "guard";
   readonly status?: number;
-  constructor(code: SafeFetchError["code"], message: string, status?: number) {
-    super(message);
+  constructor(
+    code: SafeFetchError["code"],
+    message: string,
+    status?: number,
+    options?: { cause?: unknown },
+  ) {
+    super(message, options);
     this.name = "SafeFetchError";
     this.code = code;
     if (status !== undefined) {
@@ -102,128 +134,127 @@ export class SafeFetchError extends Error {
 const DEFAULT_TIMEOUT_MS = 15_000;
 const DEFAULT_MAX_BYTES = 5 * 1024 * 1024;
 
-/** True if a host is a bracketed/bare IPv4 or IPv6 literal we can range-check. */
-function isIpLiteral(host: string): boolean {
-  const h = host.startsWith("[") && host.endsWith("]") ? host.slice(1, -1) : host;
-  return isIpv4(h) || h.includes(":");
-}
+/**
+ * Reserved special-use names (RFC 6761/8375) this package's original bespoke guard
+ * blocked that are NOT in guarded-fetch's cloud-focused `DEFAULT_HOSTNAME_DENYLIST` —
+ * added on top so no protection regresses. Dot-prefixed (suffix form) so each also
+ * matches the bare label (`isDeniedHostname` treats a leading-dot entry as matching
+ * both `host === entry.slice(1)` and a `.entry` suffix).
+ */
+const EXTRA_HOSTNAME_DENYLIST = [".intranet", ".lan", ".home.arpa", ".in-addr.arpa", ".ip6.arpa"];
 
-function isIpv4(host: string): boolean {
-  const parts = host.split(".");
-  if (parts.length !== 4) {
-    return false;
-  }
-  return parts.every((p) => /^\d{1,3}$/.test(p) && Number(p) <= 255);
-}
+const HOSTNAME_DENYLIST: readonly string[] = Object.freeze([
+  ...DEFAULT_HOSTNAME_DENYLIST,
+  ...EXTRA_HOSTNAME_DENYLIST,
+]);
+
+/** Shared policy knobs for BOTH the Node-pinned and the injected-fetch guard paths. */
+const SHARED_GUARD_OPTIONS = {
+  hostnameDenylist: HOSTNAME_DENYLIST,
+  enforcePortGate: false,
+  maxRedirects: 0,
+} as const;
 
 /**
- * True if a literal IP host is in a private / loopback / link-local / reserved
- * range (IPv4 + the common IPv6 cases). Non-literal hostnames return false here
- * (they pass the literal check; the https-only + no-redirect envelope still
- * applies). Conservative: anything we cannot confidently classify as PUBLIC and
- * is a literal IP is blocked.
+ * The forced DNS-less posture for an INJECTED fetch (tests / a caller-supplied
+ * fetch we cannot assume pins DNS): no live DNS resolution, matching this
+ * package's original never-resolves posture exactly.
  */
-function isBlockedIp(host: string): boolean {
-  const h = host.startsWith("[") && host.endsWith("]") ? host.slice(1, -1) : host;
+const INJECTED_FETCH_GUARD_OPTIONS = {
+  ...SHARED_GUARD_OPTIONS,
+  dnsLookup: null,
+  allowUnresolvedHosts: true,
+} satisfies GuardOptions;
 
-  if (isIpv4(h)) {
-    const [a, b] = h.split(".").map(Number) as [number, number, number, number];
-    if (a === 10) return true; // 10.0.0.0/8
-    if (a === 127) return true; // loopback
-    if (a === 0) return true; // "this network"
-    if (a === 169 && b === 254) return true; // link-local incl. 169.254.169.254 metadata
-    if (a === 172 && b >= 16 && b <= 31) return true; // 172.16.0.0/12
-    if (a === 192 && b === 168) return true; // 192.168.0.0/16
-    if (a === 100 && b >= 64 && b <= 127) return true; // CGNAT 100.64.0.0/10
-    if (a >= 224) return true; // multicast + reserved 224.0.0.0/3
-    return false;
+/** Map a guarded-fetch `SsrfError` / `GuardError` onto this package's `SafeFetchError` taxonomy. */
+function mapGuardError(err: unknown): SafeFetchError {
+  if (err instanceof SafeFetchError) {
+    return err;
   }
-
-  // IPv6 (lower-cased)
-  const v6 = h.toLowerCase();
-  if (v6 === "::1" || v6 === "::") return true; // loopback / unspecified
-  if (v6.startsWith("fe80")) return true; // link-local
-  if (v6.startsWith("fc") || v6.startsWith("fd")) return true; // unique-local fc00::/7
-  if (v6.startsWith("ff")) return true; // multicast
-  // IPv4-mapped (::ffff:a.b.c.d) — re-check the embedded v4.
-  const mapped = v6.match(/::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/);
-  if (mapped?.[1]) {
-    return isBlockedIp(mapped[1]);
+  if (err instanceof GuardError) {
+    return new SafeFetchError("guard", err.message, undefined, { cause: err });
   }
-  return true; // unknown IPv6 literal → fail closed
-}
-
-/**
- * True if a (non-literal-IP) hostname is a well-known LOCAL / internal name that
- * must never be fetched even before DNS resolution. This is a name-based block
- * complementing {@link isBlockedIp} (which only sees literal IPs).
- *
- * It is NOT a substitute for DNS-pinning: a public DNS name that *resolves* to a
- * private address still slips past a browser-safe (no-DNS) check. A server-side
- * deployment that wants a hard guarantee against DNS-rebinding should layer a
- * DNS-pinned resolver on top (see prod-solid-server's webidResolver). Here we
- * block the obvious local names + reserved special-use TLDs (RFC 6761/8375).
- */
-function isBlockedHostname(host: string): boolean {
-  const h = host.toLowerCase().replace(/\.$/, ""); // strip a trailing dot (FQDN root)
-  if (h === "localhost" || h === "ip6-localhost" || h === "ip6-loopback") {
-    return true;
-  }
-  // Reserved / internal special-use labels (RFC 6761/8375) that must never leave
-  // the box — stored WITHOUT a leading dot. Each is blocked both as a bare
-  // single-label name (`https://internal/`) AND as a suffix (`https://x.internal/`).
-  const blockedLabels = [
-    "localhost",
-    "local", // mDNS
-    "internal", // common internal convention + GCP
-    "intranet",
-    "lan",
-    "home.arpa", // RFC 8375 home networks
-    "in-addr.arpa",
-    "ip6.arpa",
-  ];
-  return blockedLabels.some((label) => h === label || h.endsWith(`.${label}`));
-}
-
-/**
- * Validate a target URL for SSRF safety and return the parsed URL. Throws
- * {@link SafeFetchError} on any violation. Exported for reuse by callers that
- * want to validate a user-supplied base URL up front (e.g. at config time).
- */
-export function assertSafeUrl(rawUrl: string): URL {
-  let url: URL;
-  try {
-    url = new URL(rawUrl);
-  } catch {
-    throw new SafeFetchError("network", `invalid URL: ${rawUrl}`);
-  }
-  if (url.protocol !== "https:") {
-    throw new SafeFetchError("scheme", `only https: URLs are allowed (got ${url.protocol})`);
-  }
-  if (url.username !== "" || url.password !== "") {
-    throw new SafeFetchError("credentials", "URLs must not embed credentials (user:pass@host)");
-  }
-  if (isIpLiteral(url.hostname)) {
-    if (isBlockedIp(url.hostname)) {
-      throw new SafeFetchError(
-        "blocked-host",
-        `refusing to fetch a private/reserved address: ${url.hostname}`,
-      );
+  if (err instanceof SsrfError) {
+    const msg = err.message;
+    if (/must be https/i.test(msg)) {
+      return new SafeFetchError("scheme", msg, undefined, { cause: err });
     }
-  } else if (isBlockedHostname(url.hostname)) {
-    throw new SafeFetchError(
-      "blocked-host",
-      `refusing to fetch a local/internal hostname: ${url.hostname}`,
-    );
+    if (/userinfo|credentials/i.test(msg)) {
+      return new SafeFetchError("credentials", msg, undefined, { cause: err });
+    }
+    if (/timed out/i.test(msg)) {
+      return new SafeFetchError("timeout", msg, undefined, { cause: err });
+    }
+    if (/exceeds cap/i.test(msg)) {
+      return new SafeFetchError("too-large", msg, undefined, { cause: err });
+    }
+    if (/redirect/i.test(msg)) {
+      return new SafeFetchError("redirect", msg, undefined, { cause: err });
+    }
+    if (/fetch failed for/i.test(msg)) {
+      return new SafeFetchError("network", msg, undefined, { cause: err });
+    }
+    // Every remaining SsrfError is a host/URL-shape policy refusal (private/
+    // reserved literal IP, denylisted/local/internal hostname, rebinding,
+    // malformed URL, DNS-less fail-closed, …).
+    return new SafeFetchError("blocked-host", msg, undefined, { cause: err });
   }
-  return url;
+  // A body-read-time abort (the guard's own AbortController fires mid-stream,
+  // e.g. a slow body dribbling past `timeoutMs`) surfaces as a raw AbortError —
+  // guarded-fetch's body-cap loop does not itself wrap a read-time abort into an
+  // SsrfError. Map it to "timeout" (same as the pre-request timeout case above).
+  if (err instanceof Error && err.name === "AbortError") {
+    return new SafeFetchError("timeout", err.message, undefined, { cause: err });
+  }
+  return new SafeFetchError(
+    "network",
+    `network error: ${err instanceof Error ? err.message : String(err)}`,
+    undefined,
+    { cause: err },
+  );
+}
+
+/**
+ * Validate a target URL for SSRF safety. Throws {@link SafeFetchError} on any
+ * violation. Exported for reuse by callers that want to vet a user-supplied base
+ * URL up front (e.g. at config time). ASYNC — see the module doc for why.
+ */
+export async function assertSafeUrl(rawUrl: string): Promise<URL> {
+  try {
+    await guardedAssertSafeUrl(rawUrl, INJECTED_FETCH_GUARD_OPTIONS);
+  } catch (err) {
+    throw mapGuardError(err);
+  }
+  try {
+    return new URL(rawUrl);
+  } catch {
+    throw new SafeFetchError("blocked-host", `invalid URL: ${rawUrl}`);
+  }
+}
+
+/** Build the guarded fetch for one `safeFetch` call, per the strategy in the module doc. */
+function buildGuardedFetch(opts: SafeFetchOptions): typeof globalThis.fetch {
+  const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const maxBytes = opts.maxBytes ?? DEFAULT_MAX_BYTES;
+  if (opts.fetch) {
+    return createGuardedFetch({
+      ...INJECTED_FETCH_GUARD_OPTIONS,
+      fetch: opts.fetch as unknown as typeof globalThis.fetch,
+      timeoutMs,
+      maxBytes,
+    });
+  }
+  return createNodeGuardedFetch({
+    ...SHARED_GUARD_OPTIONS,
+    timeoutMs,
+    maxBytes,
+  });
 }
 
 /**
  * Perform an SSRF-guarded GET (or other method) and return the response text.
- * The body is read in a size-capped fashion; the call times out after
- * `timeoutMs`. Throws {@link SafeFetchError} on any guard violation, non-2xx, a
- * redirect, timeout, or an oversize body.
+ * Throws {@link SafeFetchError} on any guard violation, non-2xx, a redirect,
+ * timeout, or an oversize body.
  */
 export async function safeFetch(
   rawUrl: string,
@@ -234,145 +265,35 @@ export async function safeFetch(
   },
   opts: SafeFetchOptions = {},
 ): Promise<{ status: number; body: string }> {
-  const url = assertSafeUrl(rawUrl);
-  const doFetch = opts.fetch ?? (globalThis.fetch as unknown as FetchLike);
-  if (typeof doFetch !== "function") {
-    throw new SafeFetchError("network", "no fetch implementation available");
-  }
-  const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const maxBytes = opts.maxBytes ?? DEFAULT_MAX_BYTES;
+  const guarded = buildGuardedFetch(opts);
 
-  // ONE AbortController + timer guards the WHOLE call — connect, header read AND
-  // body read. We deliberately keep the timer running until after `res.text()`
-  // resolves: a server can send headers fast then dribble the body forever, so
-  // clearing the timeout once headers arrive (a classic bug) would let the body
-  // read hang indefinitely. The timer is cleared only in the outer finally.
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let res: Response;
   try {
-    let res: Awaited<ReturnType<FetchLike>>;
-    try {
-      res = await doFetch(url.toString(), {
-        method: init.method ?? "GET",
-        headers: init.headers,
-        body: init.body,
-        redirect: "manual",
-        signal: controller.signal,
-      });
-    } catch (err) {
-      if (controller.signal.aborted) {
-        throw new SafeFetchError("timeout", `request timed out after ${timeoutMs}ms`);
-      }
-      throw new SafeFetchError(
-        "network",
-        `network error: ${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
-
-    // A 30x (manual redirect) appears as an opaque-ish response; surface it as
-    // an error rather than chasing it to a possibly-internal Location.
-    if (res.status >= 300 && res.status < 400) {
-      throw new SafeFetchError(
-        "redirect",
-        `refusing to follow redirect (status ${res.status})`,
-        res.status,
-      );
-    }
-    if (!res.ok) {
-      throw new SafeFetchError("http", `HTTP ${res.status} ${res.statusText}`, res.status);
-    }
-
-    // Cheap pre-check: reject a body the server DECLARES to be oversized before
-    // we read a single byte of it (defends against a huge announced body).
-    const declared = Number(res.headers.get("content-length"));
-    if (Number.isFinite(declared) && declared > maxBytes) {
-      throw new SafeFetchError(
-        "too-large",
-        `declared body ${declared} bytes exceeds cap of ${maxBytes}`,
-      );
-    }
-
-    // Read the body with the timeout STILL ACTIVE (see above). Prefer the
-    // STREAMING path: read chunks incrementally and bail the instant the byte
-    // count exceeds maxBytes, so a lying/absent Content-Length cannot force us to
-    // buffer an unbounded body (memory-DoS guard). Fall back to text() only when
-    // the seam exposes no stream (a minimal fetch / the test stub).
-    const text = res.body
-      ? await readStreamCapped(res.body, maxBytes, controller, timeoutMs)
-      : await readTextCapped(res, maxBytes, controller, timeoutMs);
-    return { status: res.status, body: text };
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-/** Read a streamed body incrementally, throwing `too-large` once over `maxBytes`. */
-async function readStreamCapped(
-  body: AsyncIterable<BodyChunk>,
-  maxBytes: number,
-  controller: AbortController,
-  timeoutMs: number,
-): Promise<string> {
-  const decoder = new TextDecoder("utf-8");
-  const parts: string[] = [];
-  let total = 0;
-  try {
-    for await (const chunk of body) {
-      const byteLen =
-        typeof chunk === "string" ? Buffer.byteLength(chunk, "utf8") : chunk.byteLength;
-      total += byteLen;
-      if (total > maxBytes) {
-        // Stop reading immediately — do not buffer the rest of the body.
-        controller.abort();
-        throw new SafeFetchError("too-large", `response body exceeds cap of ${maxBytes} bytes`);
-      }
-      parts.push(typeof chunk === "string" ? chunk : decoder.decode(chunk, { stream: true }));
-    }
-    parts.push(decoder.decode()); // flush any multi-byte remainder
-    return parts.join("");
+    res = await guarded(rawUrl, {
+      method: init.method ?? "GET",
+      headers: init.headers,
+      body: init.body,
+    });
   } catch (err) {
-    throw mapBodyReadError(err, controller, timeoutMs);
+    throw mapGuardError(err);
   }
-}
 
-/** Fallback: buffer via text() then enforce the byte cap (no stream available). */
-async function readTextCapped(
-  res: SafeFetchResponse,
-  maxBytes: number,
-  controller: AbortController,
-  timeoutMs: number,
-): Promise<string> {
+  if (!res.ok) {
+    throw new SafeFetchError("http", `HTTP ${res.status} ${res.statusText}`, res.status);
+  }
+
   let text: string;
   try {
     text = await res.text();
   } catch (err) {
-    throw mapBodyReadError(err, controller, timeoutMs);
+    throw new SafeFetchError(
+      "network",
+      `error reading body: ${err instanceof Error ? err.message : String(err)}`,
+      undefined,
+      { cause: err },
+    );
   }
-  if (Buffer.byteLength(text, "utf8") > maxBytes) {
-    throw new SafeFetchError("too-large", `response body exceeds cap of ${maxBytes} bytes`);
-  }
-  return text;
-}
-
-/**
- * Map a body-read failure to a typed {@link SafeFetchError}, the ONE place that
- * decides timeout-vs-network for a read. A `SafeFetchError` already raised inside
- * the read (e.g. the streaming `too-large` guard) is re-thrown unchanged; an abort
- * means the request timer fired (the timer stays active through the body read);
- * anything else is a network error. Returns `never` (always throws) so callers
- * read as `throw mapBodyReadError(...)`.
- */
-function mapBodyReadError(err: unknown, controller: AbortController, timeoutMs: number): never {
-  if (err instanceof SafeFetchError) {
-    throw err;
-  }
-  if (controller.signal.aborted) {
-    throw new SafeFetchError("timeout", `reading response body timed out after ${timeoutMs}ms`);
-  }
-  throw new SafeFetchError(
-    "network",
-    `error reading body: ${err instanceof Error ? err.message : String(err)}`,
-  );
+  return { status: res.status, body: text };
 }
 
 /** Parse a safe-fetched JSON body, throwing a typed error on malformed JSON. */

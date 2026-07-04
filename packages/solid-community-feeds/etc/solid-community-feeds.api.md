@@ -17,7 +17,7 @@ export interface As2Object {
 }
 
 // @public
-export function assertSafeUrl(rawUrl: string): URL;
+export function assertSafeUrl(rawUrl: string): Promise<URL>;
 
 // @public
 export type BodyChunk = Uint8Array | string;
@@ -174,9 +174,11 @@ export function safeFetch(rawUrl: string, init: {
 
 // @public (undocumented)
 export class SafeFetchError extends Error {
-    constructor(code: SafeFetchError["code"], message: string, status?: number);
+    constructor(code: SafeFetchError["code"], message: string, status?: number, options?: {
+        cause?: unknown;
+    });
     // (undocumented)
-    readonly code: "scheme" | "credentials" | "blocked-host" | "redirect" | "timeout" | "too-large" | "http" | "network";
+    readonly code: "scheme" | "credentials" | "blocked-host" | "redirect" | "timeout" | "too-large" | "http" | "network" | "guard";
     // (undocumented)
     readonly status?: number;
 }
@@ -198,7 +200,7 @@ export interface SafeFetchOptions {
 // @public
 export interface SafeFetchResponse {
     // (undocumented)
-    body?: AsyncIterable<BodyChunk> | null;
+    body?: ReadableStream<Uint8Array> | null;
     // (undocumented)
     headers: {
         get(name: string): string | null;
