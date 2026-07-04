@@ -43,6 +43,9 @@ export function buildBoundAgentAuthorizationCredential(auth: AgentAuthorization)
 export function canonicalNQuads(quads: readonly Quad[]): Promise<string>;
 
 // @public
+export function createWebIdKeyResolver(options?: ResolveWebIdKeyOptions): WebIdKeyResolver;
+
+// @public
 interface Credential_2 {
     readonly credentialSubject: CredentialSubject | readonly CredentialSubject[];
     readonly id?: string;
@@ -125,6 +128,17 @@ export class DataIntegritySuite implements ProofSuite {
 }
 
 // @public
+export interface DecodedMultikey {
+    // (undocumented)
+    readonly keyType: SuiteKeyType;
+    // (undocumented)
+    readonly publicKey: CryptoKey;
+}
+
+// @public
+export function decodeMultikey(publicKeyMultibase: string): Promise<DecodedMultikey | undefined>;
+
+// @public
 export function defaultSuiteRegistry(): SuiteRegistry;
 
 // @public
@@ -132,6 +146,9 @@ export function digestQuads(quads: readonly Quad[]): Promise<string>;
 
 // @public
 export function digestRdfContent(content: string, contentType?: string): Promise<string>;
+
+// @public
+export function encodeMultikey(publicKey: CryptoKey): Promise<string>;
 
 // @public
 export function exportPrivateJwk(key: KeyPair): Promise<JWK>;
@@ -251,6 +268,26 @@ export interface ProofVerifyOptions {
 }
 
 // @public
+export interface PublishedVerificationMethod {
+    readonly controller: string;
+    readonly keyType: SuiteKeyType;
+    readonly publicKeyMultibase: string;
+    readonly quads: readonly Quad[];
+    readonly turtle: string;
+    readonly verificationMethod: string;
+}
+
+// @public
+export function publishVerificationMethod(input: PublishVerificationMethodInput): Promise<PublishedVerificationMethod>;
+
+// @public
+export interface PublishVerificationMethodInput {
+    readonly controller: string;
+    readonly key: KeyPair | CryptoKey;
+    readonly verificationMethod?: string;
+}
+
+// @public
 export interface RelatedResource {
     readonly digestMultibase?: string;
     readonly id: string;
@@ -261,7 +298,36 @@ export interface RelatedResource {
 export function relatedResourcesFromNode(node: CredentialNode): RelatedResource[];
 
 // @public
+export interface ResolvedWebIdKey {
+    readonly controller: string;
+    readonly keyType: SuiteKeyType;
+    readonly publicKey: CryptoKey;
+    readonly publicKeyMultibase: string;
+    readonly verificationMethod: string;
+}
+
+// @public
+export function resolveWebIdKey(webId: string, keyId: string, options?: ResolveWebIdKeyOptions): Promise<ResolvedWebIdKey | undefined>;
+
+// @public
+export interface ResolveWebIdKeyOptions {
+    readonly fetch?: typeof globalThis.fetch;
+}
+
+// @public
+export const SEC_ASSERTION_METHOD: "https://w3id.org/security#assertionMethod";
+
+// @public
+export const SEC_CONTROLLER: "https://w3id.org/security#controller";
+
+// @public
 export const SEC_DIGEST_MULTIBASE: "https://w3id.org/security#digestMultibase";
+
+// @public
+export const SEC_MULTIKEY: "https://w3id.org/security#Multikey";
+
+// @public
+export const SEC_PUBLIC_KEY_MULTIBASE: "https://w3id.org/security#publicKeyMultibase";
 
 // @public
 export function serialize(quads: readonly Quad[], format?: string): Promise<string>;
@@ -329,7 +395,7 @@ export function verifyCredential(vc: VerifiableCredential, options: VerifyCreden
 
 // @public
 export interface VerifyCredentialOptions extends VerifyOptions {
-    readonly isControlledBy?: (verificationMethod: string, issuer: string) => boolean;
+    readonly isControlledBy?: (verificationMethod: string, issuer: string) => boolean | Promise<boolean>;
     readonly presentedResources?: Readonly<Record<string, PresentedResourceContent>>;
     readonly registry?: SuiteRegistry;
     readonly resolveKey: ProofVerifyOptions["resolveKey"];
@@ -344,6 +410,12 @@ export interface VerifyOptions {
 
 // @public
 export function verifyRelatedResources(credential: Credential_2, presentedResources: Readonly<Record<string, PresentedResourceContent>>): Promise<VerificationResult>;
+
+// @public
+export interface WebIdKeyResolver {
+    readonly isControlledBy: (verificationMethod: string, issuer: string) => Promise<boolean>;
+    readonly resolveKey: (verificationMethod: string) => Promise<CryptoKey | undefined>;
+}
 
 // @public
 export function wrapVc(dataset: DatasetCore): VcDataset;

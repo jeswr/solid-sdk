@@ -108,13 +108,31 @@ export {
 } from "./verify.js";
 // --- vocab (the standard + the one documented @jeswr extension) ------------
 export {
+  SEC_ASSERTION_METHOD,
+  SEC_CONTROLLER,
   SEC_DIGEST_MULTIBASE,
+  SEC_MULTIKEY,
+  SEC_PUBLIC_KEY_MULTIBASE,
   SVC,
   SVC_AGENT_AUTHORIZATION,
   VC,
   VC_RELATED_RESOURCE,
   VC_V2_CONTEXT,
 } from "./vocab.js";
+// --- WebID verification-method publish/resolve (runtime Phase-1 G4/G5) -----
+export {
+  createWebIdKeyResolver,
+  type DecodedMultikey,
+  decodeMultikey,
+  encodeMultikey,
+  type PublishedVerificationMethod,
+  type PublishVerificationMethodInput,
+  publishVerificationMethod,
+  type ResolvedWebIdKey,
+  type ResolveWebIdKeyOptions,
+  resolveWebIdKey,
+  type WebIdKeyResolver,
+} from "./webid.js";
 // --- typed wrappers (for callers extending the read path) ------------------
 export {
   CredentialNode,

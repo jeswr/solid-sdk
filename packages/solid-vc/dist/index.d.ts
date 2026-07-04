@@ -50,6 +50,7 @@ export { DataIntegritySuite, defaultSuiteRegistry, type ProofSignOptions, type P
 export { serialize } from "./serialize.js";
 export type { AgentAuthorization, Credential, CredentialSubject, DataIntegrityProof, IssueOptions, JsonValue, KeyPair, Presentation, PresentedResourceContent, RelatedResource, VerifiableCredential, VerifiablePresentation, VerificationError, VerificationErrorCode, VerificationResult, VerifyOptions, } from "./types.js";
 export { type VerifyCredentialOptions, verifyCredential, verifyRelatedResources, } from "./verify.js";
-export { SEC_DIGEST_MULTIBASE, SVC, SVC_AGENT_AUTHORIZATION, VC, VC_RELATED_RESOURCE, VC_V2_CONTEXT, } from "./vocab.js";
+export { SEC_ASSERTION_METHOD, SEC_CONTROLLER, SEC_DIGEST_MULTIBASE, SEC_MULTIKEY, SEC_PUBLIC_KEY_MULTIBASE, SVC, SVC_AGENT_AUTHORIZATION, VC, VC_RELATED_RESOURCE, VC_V2_CONTEXT, } from "./vocab.js";
+export { createWebIdKeyResolver, type DecodedMultikey, decodeMultikey, encodeMultikey, type PublishedVerificationMethod, type PublishVerificationMethodInput, publishVerificationMethod, type ResolvedWebIdKey, type ResolveWebIdKeyOptions, resolveWebIdKey, type WebIdKeyResolver, } from "./webid.js";
 export { CredentialNode, PresentationNode, ProofNode, VcDataset, wrapVc, } from "./wrappers.js";
 //# sourceMappingURL=index.d.ts.map

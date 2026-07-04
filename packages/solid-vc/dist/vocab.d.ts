@@ -82,6 +82,18 @@ export declare const SEC_VERIFICATION_METHOD: "https://w3id.org/security#verific
 export declare const SEC_PROOF_PURPOSE: "https://w3id.org/security#proofPurpose";
 /** The dateTime the proof was created (Data Integrity uses `dc:created`). */
 export declare const DC_CREATED: "http://purl.org/dc/terms/created";
+/** `sec:Multikey` — the multibase-multicodec public-key verification-method class. */
+export declare const SEC_MULTIKEY: "https://w3id.org/security#Multikey";
+/** `sec:controller` — verification method → the identity that controls it. */
+export declare const SEC_CONTROLLER: "https://w3id.org/security#controller";
+/** `sec:publicKeyMultibase` — the Multikey public key (multibase multicodec). */
+export declare const SEC_PUBLIC_KEY_MULTIBASE: "https://w3id.org/security#publicKeyMultibase";
+/**
+ * `sec:assertionMethod` — controller document → a verification method the
+ * controller AUTHORISES for assertion proofs (the verification relationship a
+ * VC `assertionMethod` proof purpose requires the controller document to list).
+ */
+export declare const SEC_ASSERTION_METHOD: "https://w3id.org/security#assertionMethod";
 /**
  * `svc:AgentAuthorizationCredential` — the headline credential type: a signed
  * assertion that a principal (a WebID) authorizes an agent (a WebID / agent-card

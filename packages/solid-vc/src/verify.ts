@@ -51,9 +51,15 @@ export interface VerifyCredentialOptions extends VerifyOptions {
    * Decide whether a `verificationMethod` IRI is controlled by `issuer`. Default:
    * the method IRI must equal the issuer IRI or start with `<issuer>#` /
    * `<issuer>/` (the common WebID `#key` / key-path convention). Override to consult
-   * a DID document / WebID profile controller relationship.
+   * a DID document / WebID profile controller relationship — may be ASYNC (a
+   * document-resolved check fetches the controller document): supply
+   * `createWebIdKeyResolver().isControlledBy` for the fail-closed,
+   * WebID-document-resolved check (runtime Phase-1 G4).
    */
-  readonly isControlledBy?: (verificationMethod: string, issuer: string) => boolean;
+  readonly isControlledBy?: (
+    verificationMethod: string,
+    issuer: string,
+  ) => boolean | Promise<boolean>;
   /**
    * The content of related resources the verifier was PRESENTED, keyed by
    * resource IRI — the G1 policy-content-binding check. For EVERY entry here,
@@ -353,8 +359,13 @@ export async function verifyCredential(
           message: `proofPurpose "${proof.proofPurpose}" != expected "${expectedPurpose}"`,
         });
       }
-      // 5. issuer binding
-      if (!controlledBy(proof.verificationMethod, issuer)) {
+      // 5. issuer binding (the check may be async — document-resolved G4). A
+      // network-backed controller check (e.g. createWebIdKeyResolver fetching
+      // the WebID document) can REJECT (DNS failure, ECONNRESET, a timeout);
+      // an unresolved control check must DENY, never crash the verifier — so a
+      // rejection is mapped to `false` here, preserving the "verifyCredential
+      // never throws on an invalid credential / unreachable seam" contract.
+      if (!(await controlledByFailClosed(controlledBy, proof.verificationMethod, issuer))) {
         errors.push({
           code: "ISSUER_MISMATCH",
           message: `verificationMethod ${proof.verificationMethod} is not controlled by issuer ${issuer}`,
@@ -374,6 +385,27 @@ export async function verifyCredential(
   return errors.length === 0
     ? { verified: true, errors: [], issuer }
     : { verified: false, errors, issuer };
+}
+
+/**
+ * Run the (possibly async) `isControlledBy` seam FAIL-CLOSED: a rejected promise
+ * (a network-backed controller check that throws — DNS failure, ECONNRESET, a
+ * timeout) is mapped to `false` (⇒ `ISSUER_MISMATCH`), never rethrown. A control
+ * check that cannot COMPLETE must DENY: the verifier can never conclude the issuer
+ * controls the key, so it must not accept — and it must not crash (the documented
+ * "never throws on invalid input / unreachable seam" contract). `resolveKey` is
+ * already fail-closed the same way via {@link verifyOneProof}'s try/catch.
+ */
+async function controlledByFailClosed(
+  controlledBy: (verificationMethod: string, issuer: string) => boolean | Promise<boolean>,
+  verificationMethod: string,
+  issuer: string,
+): Promise<boolean> {
+  try {
+    return await controlledBy(verificationMethod, issuer);
+  } catch {
+    return false;
+  }
 }
 
 /** Verify one proof through its suite, mapping any throw to a fail-closed `false`. */

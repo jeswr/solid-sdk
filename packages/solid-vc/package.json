@@ -1,7 +1,7 @@
 {
   "name": "@jeswr/solid-vc",
   "version": "0.1.0",
-  "description": "W3C Verifiable Credentials 2.0 data model + sign/verify with a PLUGGABLE proof-suite seam for agentic Solid (M4-VC of the agentic-Solid roadmap). Build/sign/verify VC 2.0 credentials and presentations as queryable JSON-LD/RDF (real W3C vocab https://www.w3.org/ns/credentials/v2), via the suite RDF libs (@jeswr/fetch-rdf / @solid/object / n3.Writer — never bespoke). Headline use case: a signed AgentAuthorizationCredential ('WebID X authorizes agent Y for action Z under ODRL policy P'), composing with @jeswr/solid-agent-card (M1) + @jeswr/solid-odrl (M3). Ships one concrete Data Integrity suite (EdDSA/ECDSA over RDFC-1.0 canonicalization via jose), plus a ProofSuite interface a JWT, BBS, or SPARQ ZKP proof plugs into. Security-critical: exhaustive tamper/invalid-signature/expiry/issuer-binding rejection tests. The ZKP cryptography itself lives in @jeswr/sparq (SPARQ agent's domain), NOT here — this only provides the verification seam it plugs into. Experimental, AI-agent-generated.",
+  "description": "W3C Verifiable Credentials 2.0 data model + sign/verify with a PLUGGABLE proof-suite seam for agentic Solid (M4-VC of the agentic-Solid roadmap). Build/sign/verify VC 2.0 credentials and presentations as queryable JSON-LD/RDF (real W3C vocab https://www.w3.org/ns/credentials/v2), via the suite RDF libs (@jeswr/fetch-rdf / @solid/object / n3.Writer \u2014 never bespoke). Headline use case: a signed AgentAuthorizationCredential ('WebID X authorizes agent Y for action Z under ODRL policy P'), composing with @jeswr/solid-agent-card (M1) + @jeswr/solid-odrl (M3). Ships one concrete Data Integrity suite (EdDSA/ECDSA over RDFC-1.0 canonicalization via jose), plus a ProofSuite interface a JWT, BBS, or SPARQ ZKP proof plugs into. Security-critical: exhaustive tamper/invalid-signature/expiry/issuer-binding rejection tests. The ZKP cryptography itself lives in @jeswr/sparq (SPARQ agent's domain), NOT here \u2014 this only provides the verification seam it plugs into. Experimental, AI-agent-generated.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -59,6 +59,7 @@
   },
   "homepage": "https://github.com/jeswr/solid-vc#readme",
   "dependencies": {
+    "@jeswr/guarded-fetch": "github:jeswr/guarded-fetch#bd4490927fd36d62f6b78a0021e8d40bbb572c3b",
     "@rdfjs/wrapper": "^0.34.0",
     "@solid/object": "^0.6.0",
     "content-type": "^1.0.5",
