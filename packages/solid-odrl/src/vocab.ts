@@ -522,6 +522,72 @@ export const ODRLD_REVOCATION_CLASS = `${ODRLD}Revocation` as const;
 /** `odrld:revokedPolicy` — MINTED (with {@link ODRLD_REVOCATION_CLASS}): Revocation → the revoked Policy. */
 export const ODRLD_REVOKED_POLICY = `${ODRLD}revokedPolicy` as const;
 
+// --- Decision-record terms (minted — G9, agent-delegation profile) ---------
+// A DECISION RECORD reifies the OUTCOME of one `evaluate(policy, request)` call as
+// an auditor-friendly RDF resource (`src/decision-record.ts`): what was evaluated,
+// what was decided, and — for explainability — the DECIDING rules + constraints and
+// the active duties. It is the sibling of the per-ACTION PROV bundle
+// (`actionProvenance`, which records that an action was PERFORMED); this records
+// that a decision was REACHED. The record is DESCRIPTIVE / non-enforcing — the
+// enforcement is `evaluate` itself, so these terms carry NO authorization weight.
+//
+// ODRL 2.2 has no vocabulary for an evaluation RESULT at all (it models policies +
+// rules, not decisions), and the ODRL CG Formal Semantics report — which does model
+// evaluation — has not published a stable term namespace. So each term below is a
+// genuine gap and is MINTED under the existing `odrld:` namespace (NO new w3id
+// namespace, which would need a redirect). All are PROVISIONAL: rebase onto the CG
+// Formal Semantics model verbatim once its namespace lands. Rationale per term:
+/**
+ * `odrld:DecisionRecord` — MINTED (G9): the class of a reified evaluation outcome.
+ * ODRL has no "decision"/"result" class; the CG Formal Semantics report models
+ * evaluation but publishes no stable namespace. PROVISIONAL.
+ */
+export const ODRLD_DECISION_RECORD_CLASS = `${ODRLD}DecisionRecord` as const;
+/** `odrld:evaluatedPolicy` — MINTED (G9): DecisionRecord → the evaluated Policy IRI. */
+export const ODRLD_EVALUATED_POLICY = `${ODRLD}evaluatedPolicy` as const;
+/** `odrld:requestAgent` — MINTED (G9): DecisionRecord → the requesting agent WebID. */
+export const ODRLD_REQUEST_AGENT = `${ODRLD}requestAgent` as const;
+/** `odrld:requestAction` — MINTED (G9): DecisionRecord → the requested ODRL action IRI. */
+export const ODRLD_REQUEST_ACTION = `${ODRLD}requestAction` as const;
+/** `odrld:requestTarget` — MINTED (G9): DecisionRecord → the requested target Asset IRI. */
+export const ODRLD_REQUEST_TARGET = `${ODRLD}requestTarget` as const;
+/** `odrld:requestPurpose` — MINTED (G9): DecisionRecord → the asserted purpose IRI (DPV-valued). */
+export const ODRLD_REQUEST_PURPOSE = `${ODRLD}requestPurpose` as const;
+/**
+ * `odrld:decision` — MINTED (G9): DecisionRecord → the outcome as a plain string
+ * literal (`permit` | `deny` | `notApplicable`). A string (not an IRI) so the record
+ * is self-contained and does not depend on minting three concept IRIs.
+ */
+export const ODRLD_DECISION = `${ODRLD}decision` as const;
+/** `odrld:reason` — MINTED (G9): DecisionRecord → the human/agent-readable reason (string). */
+export const ODRLD_REASON = `${ODRLD}reason` as const;
+/**
+ * `odrld:conflict` — MINTED (G9): DecisionRecord → `xsd:boolean`, whether a
+ * permission and a prohibition BOTH matched (so the conflict strategy was invoked).
+ * DISTINCT from `odrl:conflict`, which is the conflict-resolution STRATEGY
+ * (`perm`/`prohibit`/`invalid`) on a Policy — a different subject and range — so
+ * reusing `odrl:conflict` would be a semantic pun. MINTED.
+ */
+export const ODRLD_CONFLICT = `${ODRLD}conflict` as const;
+/** `odrld:decidingRule` — MINTED (G9): DecisionRecord → a reified deciding Rule node. */
+export const ODRLD_DECIDING_RULE = `${ODRLD}decidingRule` as const;
+/** `odrld:activeDuty` — MINTED (G9): DecisionRecord → a reified active Duty node. */
+export const ODRLD_ACTIVE_DUTY = `${ODRLD}activeDuty` as const;
+/**
+ * `odrld:onDuty` — MINTED (G9): an active-Duty node → the policy Duty IRI it reports
+ * the fulfilment state OF. The active-Duty node is RECORD-SCOPED (it carries the
+ * per-evaluation `odrld:fulfilled` flag, which varies between evaluations), so it must
+ * NOT be the stable policy Duty IRI itself — otherwise merging two records for the
+ * same duty with different fulfilment would assert both `true` and `false` on one
+ * node. This reference links the record-scoped node back to the stable duty (when the
+ * duty has an IRI) without putting per-evaluation state on that IRI.
+ */
+export const ODRLD_ON_DUTY = `${ODRLD}onDuty` as const;
+/** `odrld:ruleKind` — MINTED (G9): a deciding-Rule node → `permission` | `prohibition` (string). */
+export const ODRLD_RULE_KIND = `${ODRLD}ruleKind` as const;
+/** `odrld:fulfilled` — MINTED (G9): an active-Duty node → `xsd:boolean`, whether the duty is discharged. */
+export const ODRLD_FULFILLED = `${ODRLD}fulfilled` as const;
+
 // --- PROV-O attribution terms (standard) — the delegation audit trail ------
 /** `prov:wasAttributedTo` — Entity → Agent (each hop policy is attributed to its issuer). */
 export const PROV_WAS_ATTRIBUTED_TO = `${PROV}wasAttributedTo` as const;
@@ -559,6 +625,8 @@ export const PROV_HAD_PLAN = `${PROV}hadPlan` as const;
 export const PROV_WAS_GENERATED_BY = `${PROV}wasGeneratedBy` as const;
 /** `xsd:dateTime` — the datatype for `startedAtTime`/`endedAtTime` literals. */
 export const XSD_DATETIME = `${XSD}dateTime` as const;
+/** `xsd:boolean` — the datatype for the decision-record `conflict` / `fulfilled` flags. */
+export const XSD_BOOLEAN = `${XSD}boolean` as const;
 
 /**
  * A SELF-CONTAINED inline JSON-LD `@context` for a per-action PROV bundle
@@ -619,4 +687,46 @@ export const ODRL_INLINE_CONTEXT: Readonly<Record<string, unknown>> = {
 export const ODRLD_INLINE_CONTEXT_EXTENSION: Readonly<Record<string, unknown>> = {
   odrld: ODRLD,
   delegatedUnder: { "@id": ODRLD_DELEGATED_UNDER, "@type": "@id" },
+} as const;
+
+/**
+ * A SELF-CONTAINED inline JSON-LD `@context` for a decision record
+ * ({@link decisionRecord}'s JSON-LD sibling) — same "no network dependency"
+ * rationale as {@link ODRL_INLINE_CONTEXT}. IRI-valued terms carry `"@type": "@id"`;
+ * `conflict`/`fulfilled` carry `xsd:boolean`; `endedAtTime` carries `xsd:dateTime`;
+ * `decision`/`reason`/`ruleKind` are plain-literal terms. The nested `decidingRule`/
+ * `activeDuty`/`constraint` terms are node-valued (no `@type`, so a nested object is
+ * a blank node). The `odrl:` constraint/rule terms (`action`/`target`/`assignee`/
+ * `constraint`/`leftOperand`/`operator`/`rightOperand`) mirror
+ * {@link ODRL_INLINE_CONTEXT} verbatim so the deciding-rule constraints serialise
+ * byte-consistently with a policy's own constraints.
+ */
+export const DECISION_RECORD_INLINE_CONTEXT: Readonly<Record<string, unknown>> = {
+  odrl: ODRL,
+  odrld: ODRLD,
+  prov: PROV,
+  acl: ACL,
+  dpv: DPV,
+  xsd: XSD,
+  endedAtTime: { "@id": PROV_ENDED_AT_TIME, "@type": XSD_DATETIME },
+  evaluatedPolicy: { "@id": ODRLD_EVALUATED_POLICY, "@type": "@id" },
+  requestAgent: { "@id": ODRLD_REQUEST_AGENT, "@type": "@id" },
+  requestAction: { "@id": ODRLD_REQUEST_ACTION, "@type": "@id" },
+  requestTarget: { "@id": ODRLD_REQUEST_TARGET, "@type": "@id" },
+  requestPurpose: { "@id": ODRLD_REQUEST_PURPOSE, "@type": "@id" },
+  decision: ODRLD_DECISION,
+  reason: ODRLD_REASON,
+  conflict: { "@id": ODRLD_CONFLICT, "@type": XSD_BOOLEAN },
+  decidingRule: { "@id": ODRLD_DECIDING_RULE },
+  activeDuty: { "@id": ODRLD_ACTIVE_DUTY },
+  onDuty: { "@id": ODRLD_ON_DUTY, "@type": "@id" },
+  ruleKind: ODRLD_RULE_KIND,
+  fulfilled: { "@id": ODRLD_FULFILLED, "@type": XSD_BOOLEAN },
+  action: { "@id": ODRL_ACTION, "@type": "@id" },
+  target: { "@id": ODRL_TARGET, "@type": "@id" },
+  assignee: { "@id": ODRL_ASSIGNEE, "@type": "@id" },
+  constraint: { "@id": ODRL_CONSTRAINT },
+  leftOperand: { "@id": ODRL_LEFT_OPERAND, "@type": "@id" },
+  operator: { "@id": ODRL_OPERATOR, "@type": "@id" },
+  rightOperand: ODRL_RIGHT_OPERAND,
 } as const;

@@ -242,6 +242,20 @@ var IRI_TO_OPERATOR = Object.fromEntries(
 var ODRLD_DELEGATED_UNDER = `${ODRLD}delegatedUnder`;
 var ODRLD_REVOCATION_CLASS = `${ODRLD}Revocation`;
 var ODRLD_REVOKED_POLICY = `${ODRLD}revokedPolicy`;
+var ODRLD_DECISION_RECORD_CLASS = `${ODRLD}DecisionRecord`;
+var ODRLD_EVALUATED_POLICY = `${ODRLD}evaluatedPolicy`;
+var ODRLD_REQUEST_AGENT = `${ODRLD}requestAgent`;
+var ODRLD_REQUEST_ACTION = `${ODRLD}requestAction`;
+var ODRLD_REQUEST_TARGET = `${ODRLD}requestTarget`;
+var ODRLD_REQUEST_PURPOSE = `${ODRLD}requestPurpose`;
+var ODRLD_DECISION = `${ODRLD}decision`;
+var ODRLD_REASON = `${ODRLD}reason`;
+var ODRLD_CONFLICT = `${ODRLD}conflict`;
+var ODRLD_DECIDING_RULE = `${ODRLD}decidingRule`;
+var ODRLD_ACTIVE_DUTY = `${ODRLD}activeDuty`;
+var ODRLD_ON_DUTY = `${ODRLD}onDuty`;
+var ODRLD_RULE_KIND = `${ODRLD}ruleKind`;
+var ODRLD_FULFILLED = `${ODRLD}fulfilled`;
 var PROV_WAS_ATTRIBUTED_TO = `${PROV}wasAttributedTo`;
 var PROV_ACTED_ON_BEHALF_OF = `${PROV}actedOnBehalfOf`;
 var PROV_WAS_DERIVED_FROM = `${PROV}wasDerivedFrom`;
@@ -257,6 +271,7 @@ var PROV_AGENT = `${PROV}agent`;
 var PROV_HAD_PLAN = `${PROV}hadPlan`;
 var PROV_WAS_GENERATED_BY = `${PROV}wasGeneratedBy`;
 var XSD_DATETIME = `${XSD}dateTime`;
+var XSD_BOOLEAN = `${XSD}boolean`;
 var PROV_INLINE_CONTEXT = {
   prov: PROV,
   xsd: XSD,
@@ -295,6 +310,35 @@ var ODRL_INLINE_CONTEXT = {
 var ODRLD_INLINE_CONTEXT_EXTENSION = {
   odrld: ODRLD,
   delegatedUnder: { "@id": ODRLD_DELEGATED_UNDER, "@type": "@id" }
+};
+var DECISION_RECORD_INLINE_CONTEXT = {
+  odrl: ODRL,
+  odrld: ODRLD,
+  prov: PROV,
+  acl: ACL,
+  dpv: DPV,
+  xsd: XSD,
+  endedAtTime: { "@id": PROV_ENDED_AT_TIME, "@type": XSD_DATETIME },
+  evaluatedPolicy: { "@id": ODRLD_EVALUATED_POLICY, "@type": "@id" },
+  requestAgent: { "@id": ODRLD_REQUEST_AGENT, "@type": "@id" },
+  requestAction: { "@id": ODRLD_REQUEST_ACTION, "@type": "@id" },
+  requestTarget: { "@id": ODRLD_REQUEST_TARGET, "@type": "@id" },
+  requestPurpose: { "@id": ODRLD_REQUEST_PURPOSE, "@type": "@id" },
+  decision: ODRLD_DECISION,
+  reason: ODRLD_REASON,
+  conflict: { "@id": ODRLD_CONFLICT, "@type": XSD_BOOLEAN },
+  decidingRule: { "@id": ODRLD_DECIDING_RULE },
+  activeDuty: { "@id": ODRLD_ACTIVE_DUTY },
+  onDuty: { "@id": ODRLD_ON_DUTY, "@type": "@id" },
+  ruleKind: ODRLD_RULE_KIND,
+  fulfilled: { "@id": ODRLD_FULFILLED, "@type": XSD_BOOLEAN },
+  action: { "@id": ODRL_ACTION, "@type": "@id" },
+  target: { "@id": ODRL_TARGET, "@type": "@id" },
+  assignee: { "@id": ODRL_ASSIGNEE, "@type": "@id" },
+  constraint: { "@id": ODRL_CONSTRAINT },
+  leftOperand: { "@id": ODRL_LEFT_OPERAND, "@type": "@id" },
+  operator: { "@id": ODRL_OPERATOR, "@type": "@id" },
+  rightOperand: ODRL_RIGHT_OPERAND
 };
 
 // src/wrappers.ts
@@ -932,248 +976,6 @@ function isFiniteNumber(v) {
   return Number.isFinite(Number(s));
 }
 
-// src/delegation.ts
-var DEFAULT_MAX_CHAIN_LENGTH = 8;
-function evaluateDelegated(chain, request, options = {}) {
-  const now = options.now ?? /* @__PURE__ */ new Date();
-  const maxLen = options.maxChainLength ?? DEFAULT_MAX_CHAIN_LENGTH;
-  const hops = [];
-  if (chain.length === 0) {
-    return denied("Empty delegation chain \u2014 nothing grants the request.", hops);
-  }
-  if (!Number.isInteger(maxLen) || maxLen < 1) {
-    return denied(`Invalid maxChainLength ${String(maxLen)} \u2014 must be a positive integer.`, hops);
-  }
-  if (chain.length > maxLen) {
-    return denied(
-      `Chain length ${chain.length} exceeds the maximum ${maxLen} (maxChainLength).`,
-      hops
-    );
-  }
-  const req = stripDelegationDepth(request);
-  const seen = /* @__PURE__ */ new Set();
-  for (const [i, policy] of chain.entries()) {
-    if (policy.id === void 0 || policy.id === "") {
-      return denied(`Hop ${i} has no policy id \u2014 the chain edge cannot be verified.`, hops);
-    }
-    if (seen.has(policy.id)) {
-      return denied(`Cyclic chain: policy <${policy.id}> appears more than once.`, hops);
-    }
-    seen.add(policy.id);
-  }
-  const revoked = new Set(
-    typeof options.revoked === "string" ? [options.revoked] : options.revoked ?? []
-  );
-  for (const [i, policy] of chain.entries()) {
-    if (revoked.has(policy.id)) {
-      return denied(`Hop ${i} (<${policy.id}>) has been revoked.`, hops);
-    }
-  }
-  const strictProhibitions = chain.length > 1;
-  const aggregateDuties = [];
-  for (let i = 1; i < chain.length; i++) {
-    const parent = chain[i - 1];
-    const child = chain[i];
-    const remainingDepth = chain.length - i;
-    const edge = checkDelegationEdge(parent, child, remainingDepth, req, now);
-    if (!edge.ok) {
-      hops.push({ index: i, policyId: child.id, ok: false, reason: edge.reason });
-      return denied(`Hop ${i} (<${child.id}>): ${edge.reason}`, hops);
-    }
-    hops.push({ index: i, policyId: child.id, ok: true, reason: "ok" });
-    aggregateDuties.push(...edge.duties);
-  }
-  for (let i = 0; i < chain.length - 1; i++) {
-    const ancestor = chain[i];
-    const delegator = chain[i + 1].assigner;
-    const scope = evaluate(ancestor, { ...req, agent: delegator }, { now });
-    if (scope.decision !== "permit" || scope.matchedProhibitions.length > 0) {
-      return denied(
-        `Hop ${i} (<${ancestor.id}>) does not cleanly grant the requested capability to its delegate <${delegator}> (${scope.decision}${scope.matchedProhibitions.length > 0 ? ", with a matched prohibition" : ""}: ${scope.reason}) \u2014 a delegate cannot receive more than the delegator holds.`,
-        hops
-      );
-    }
-    const direct = evaluate(ancestor, req, { now });
-    if (direct.decision === "deny" || direct.matchedProhibitions.length > 0) {
-      return denied(
-        `Hop ${i} (<${ancestor.id}>) prohibits the request directly (${direct.reason}).`,
-        hops
-      );
-    }
-    aggregateDuties.push(...scope.duties);
-  }
-  const leafPolicy = chain[chain.length - 1];
-  const leaf = evaluate(leafPolicy, req, { now });
-  if (leaf.decision !== "permit" || strictProhibitions && leaf.matchedProhibitions.length > 0) {
-    return {
-      ...denied(
-        leaf.decision !== "permit" ? `Leaf policy <${leafPolicy.id}> does not permit: ${leaf.reason}` : `Leaf policy <${leafPolicy.id}> permits only via its odrl:perm conflict strategy over a matched prohibition \u2014 prohibitions are strict in a delegation chain.`,
-        hops
-      ),
-      leaf
-    };
-  }
-  if (chain.length > 1 && req.agent !== leafPolicy.assignee) {
-    return {
-      ...denied(
-        `Leaf policy <${leafPolicy.id}> permits the request, but its actual actor <${req.agent ?? "(none)"}> is not the hop's declared delegate <${leafPolicy.assignee ?? "(none)"}> \u2014 a delegated hop must not grant to a party other than its odrl:assignee (identity-composition guard).`,
-        hops
-      ),
-      leaf
-    };
-  }
-  aggregateDuties.push(...leaf.duties);
-  const duties = dedupeDuties(aggregateDuties);
-  if (options.requireDuties) {
-    const outstanding = duties.filter((d) => !d.fulfilled);
-    if (outstanding.length > 0) {
-      const names = outstanding.map((d) => d.action).join(", ");
-      return {
-        ...denied(
-          `Chain permits, but requireDuties is set and these chain duties are unfulfilled: ${names}.`,
-          hops
-        ),
-        leaf,
-        duties
-      };
-    }
-  }
-  return {
-    decision: "permit",
-    reason: chain.length === 1 ? "The policy permits the request (single-policy chain)." : `Every hop of the ${chain.length - 1}-hop delegation chain is valid and the request is within the chain intersection.`,
-    hops,
-    leaf,
-    duties
-  };
-}
-function edgeFailure(reason) {
-  return { ok: false, reason };
-}
-function checkDelegationEdge(parent, child, remainingDepth, req, now) {
-  if (child.type !== "Agreement") {
-    return edgeFailure(`a delegated hop must be an odrl:Agreement (got ${child.type ?? "Set"}).`);
-  }
-  if (child.assigner === void 0 || child.assignee === void 0) {
-    return edgeFailure(
-      "a delegated hop must name both assigner (the delegator) and assignee (the delegate)."
-    );
-  }
-  if (child.delegatedUnder !== parent.id) {
-    return edgeFailure(
-      `the hop must declare odrld:delegatedUnder <${parent.id}> (got ${child.delegatedUnder === void 0 ? "none" : `<${child.delegatedUnder}>`}).`
-    );
-  }
-  const authRequest = {
-    agent: child.assigner,
-    action: "grantUse",
-    ...req.target !== void 0 && { target: req.target },
-    attributes: { ...req.attributes ?? {}, delegationDepth: remainingDepth }
-  };
-  const auth = evaluate(parent, authRequest, { now });
-  if (auth.decision !== "permit" || auth.matchedProhibitions.length > 0) {
-    return edgeFailure(
-      `the parent policy does not cleanly authorise delegation by <${child.assigner}> (${auth.decision}${auth.matchedProhibitions.length > 0 ? ", with a matched prohibition" : ""}: ${auth.reason}).`
-    );
-  }
-  const candidates = matchingPermissions(parent, authRequest, { now }).filter(
-    (r) => r.action === "grantUse" && r.assignee === child.assigner
-  );
-  if (candidates.length === 0) {
-    return edgeFailure(
-      `the parent policy has no grantUse permission explicitly naming <${child.assigner}> as assignee (an assignee-free grantUse does not authorise delegation).`
-    );
-  }
-  const authorizing = [];
-  const failures = [];
-  for (const rule of candidates) {
-    const failure = checkGrantUseRule(rule, child, remainingDepth);
-    if (failure === void 0) {
-      authorizing.push(rule);
-    } else {
-      failures.push(failure);
-    }
-  }
-  if (authorizing.length === 0) {
-    return edgeFailure(failures.join(" / "));
-  }
-  const dutySource = {
-    id: parent.id,
-    permissions: authorizing,
-    ...parent.obligations !== void 0 && { obligations: parent.obligations }
-  };
-  const edgeDuties = evaluate(dutySource, authRequest, { now }).duties;
-  return {
-    ok: true,
-    duties: edgeDuties.filter((d) => d.action !== "nextPolicy")
-  };
-}
-function checkGrantUseRule(rule, child, remainingDepth) {
-  const hasDepthConstraint = (rule.constraints ?? []).some(
-    (c) => c.leftOperand === "delegationDepth"
-  );
-  if (!hasDepthConstraint && remainingDepth > 1) {
-    return `grantUse permission carries no delegationDepth constraint, so its budget is the profile default of 1 hop \u2014 ${remainingDepth} remaining hops exceed it`;
-  }
-  for (const duty of rule.duties ?? []) {
-    if (duty.action !== "nextPolicy") {
-      continue;
-    }
-    if (duty.target === void 0) {
-      return "grantUse permission carries a nextPolicy duty with no target policy (malformed)";
-    }
-    if (duty.target !== child.id) {
-      return `grantUse permission mandates nextPolicy <${duty.target}> but the delegated hop is <${child.id}>`;
-    }
-  }
-  return void 0;
-}
-function denied(reason, hops) {
-  return { decision: "deny", reason, hops, duties: [] };
-}
-function stripDelegationDepth(request) {
-  if (request.attributes === void 0 || !("delegationDepth" in request.attributes)) {
-    return request;
-  }
-  const { delegationDepth: _reserved, ...rest } = request.attributes;
-  const { attributes: _dropped, ...requestWithout } = request;
-  return Object.keys(rest).length > 0 ? { ...requestWithout, attributes: rest } : requestWithout;
-}
-function dedupeDuties(duties) {
-  const seen = /* @__PURE__ */ new Set();
-  const out = [];
-  for (const d of duties) {
-    const key = `${d.action}\0${d.target ?? ""}\0${d.id ?? ""}\0${d.fulfilled}`;
-    if (!seen.has(key)) {
-      seen.add(key);
-      out.push(d);
-    }
-  }
-  return out;
-}
-function delegationProvenance(chain) {
-  const b = new GraphBuilder();
-  for (const [i, policy] of chain.entries()) {
-    if (policy.id === void 0 || policy.id === "") {
-      continue;
-    }
-    const subject = iriRef(policy.id);
-    if (policy.assigner !== void 0) {
-      b.addIri(subject, PROV_WAS_ATTRIBUTED_TO, policy.assigner);
-    }
-    if (i > 0) {
-      const parent = chain[i - 1];
-      if (parent.id !== void 0 && parent.id !== "") {
-        b.addIri(subject, ODRLD_DELEGATED_UNDER, parent.id);
-        b.addIri(subject, PROV_WAS_DERIVED_FROM, parent.id);
-      }
-      if (policy.assignee !== void 0 && policy.assigner !== void 0) {
-        b.addIri(iriRef(policy.assignee), PROV_ACTED_ON_BEHALF_OF, policy.assigner);
-      }
-    }
-  }
-  return b.quads();
-}
-
 // node_modules/@jeswr/fetch-rdf/dist/parse.js
 import contentType from "content-type";
 import { Store as Store2, StreamParser } from "n3";
@@ -1726,6 +1528,467 @@ function actionOf(actions) {
   }
   return void 0;
 }
+
+// src/decision-record.ts
+function effectiveAssignee(rule, policy) {
+  return rule.assignee ?? policy.assignee;
+}
+function assignDecidingRules(decidingRules, policy, request, now) {
+  const consumed = /* @__PURE__ */ new Set();
+  return decidingRules.map((descriptor) => {
+    const pool = descriptor.type === "prohibition" ? policy.prohibitions ?? [] : policy.permissions ?? [];
+    const rule = pickSourceRule(descriptor, pool, consumed, policy, request, now);
+    if (rule !== void 0) {
+      consumed.add(rule);
+    }
+    return { descriptor, rule };
+  });
+}
+function pickSourceRule(descriptor, pool, consumed, policy, request, now) {
+  const available = pool.filter((rule) => !consumed.has(rule));
+  if (descriptor.id !== void 0) {
+    return available.find((rule) => rule.id === descriptor.id);
+  }
+  const shapeMatches = available.filter(
+    (rule) => rule.id === void 0 && rule.action === descriptor.action && rule.target === descriptor.target && effectiveAssignee(rule, policy) === descriptor.assignee
+  );
+  const satisfied = shapeMatches.find(
+    (rule) => (rule.constraints ?? []).every((c) => constraintSatisfied(c, request, now))
+  );
+  return satisfied ?? shapeMatches[0];
+}
+function requestPurposes(request) {
+  const p = request.attributes?.purpose;
+  if (typeof p === "string") {
+    return [p];
+  }
+  if (Array.isArray(p)) {
+    return p.filter((v) => typeof v === "string");
+  }
+  return [];
+}
+function operandIsIri(c, r) {
+  return isIriValued(c.leftOperand) && typeof r === "string" && safeIri(r) !== void 0;
+}
+function writeDecisionConstraint(b, parent, c) {
+  const node = b.linkBlankNode(parent, ODRL_CONSTRAINT);
+  b.addIri(node, ODRL_LEFT_OPERAND, LEFT_OPERAND_IRI[c.leftOperand]);
+  b.addIri(node, ODRL_OPERATOR, OPERATOR_IRI[c.operator]);
+  const rights = Array.isArray(c.rightOperand) ? c.rightOperand : [c.rightOperand];
+  for (const r of rights) {
+    if (operandIsIri(c, r)) {
+      b.addIri(node, ODRL_RIGHT_OPERAND, r);
+    } else {
+      b.addLiteral(node, ODRL_RIGHT_OPERAND, String(r), inferDatatype(c, r));
+    }
+  }
+}
+function decisionConstraintJsonLd(c) {
+  const rights = Array.isArray(c.rightOperand) ? c.rightOperand : [c.rightOperand];
+  const emitted = rights.map((r) => {
+    if (operandIsIri(c, r)) {
+      return { "@id": escapeIri(r) };
+    }
+    const dt = inferDatatype(c, r);
+    return dt !== void 0 ? { "@value": String(r), "@type": dt } : String(r);
+  });
+  return {
+    leftOperand: { "@id": LEFT_OPERAND_IRI[c.leftOperand] },
+    operator: { "@id": OPERATOR_IRI[c.operator] },
+    rightOperand: emitted.length === 1 ? emitted[0] : emitted
+  };
+}
+function decisionRecord(input) {
+  const { id, policy, request, result: result2, evaluatedAt } = input;
+  const b = new GraphBuilder();
+  const rec = iriRef(id);
+  b.addIri(rec, RDF_TYPE, ODRLD_DECISION_RECORD_CLASS);
+  b.addLiteral(rec, PROV_ENDED_AT_TIME, evaluatedAt.toISOString(), XSD_DATETIME);
+  b.addIri(rec, ODRLD_EVALUATED_POLICY, policy.id);
+  if (request.agent !== void 0) {
+    b.addIri(rec, ODRLD_REQUEST_AGENT, request.agent);
+  }
+  b.addIri(rec, ODRLD_REQUEST_ACTION, ACTION_IRI[request.action]);
+  if (request.target !== void 0) {
+    b.addIri(rec, ODRLD_REQUEST_TARGET, request.target);
+  }
+  for (const purpose of requestPurposes(request)) {
+    b.addIri(rec, ODRLD_REQUEST_PURPOSE, purpose);
+  }
+  b.addLiteral(rec, ODRLD_DECISION, result2.decision);
+  b.addLiteral(rec, ODRLD_REASON, result2.reason);
+  if (result2.conflict) {
+    b.addLiteral(rec, ODRLD_CONFLICT, "true", XSD_BOOLEAN);
+  }
+  const decidingRules = [
+    ...result2.matchedPermissions,
+    ...result2.matchedProhibitions
+  ];
+  for (const { descriptor, rule } of assignDecidingRules(
+    decidingRules,
+    policy,
+    request,
+    evaluatedAt
+  )) {
+    writeDecidingRule(b, rec, descriptor, rule);
+  }
+  for (const duty of result2.duties) {
+    writeActiveDuty(b, rec, duty);
+  }
+  return b.quads();
+}
+function writeDecidingRule(b, rec, descriptor, rule) {
+  const node = b.linkChild(rec, ODRLD_DECIDING_RULE, descriptor.id);
+  const cls = descriptor.type === "prohibition" ? ODRL_PROHIBITION_CLASS : ODRL_PERMISSION_CLASS;
+  b.addIri(node, RDF_TYPE, cls);
+  b.addLiteral(node, ODRLD_RULE_KIND, descriptor.type);
+  b.addIri(node, ODRL_ACTION, ACTION_IRI[descriptor.action]);
+  if (descriptor.target !== void 0) {
+    b.addIri(node, ODRL_TARGET, descriptor.target);
+  }
+  if (descriptor.assignee !== void 0) {
+    b.addIri(node, ODRL_ASSIGNEE, descriptor.assignee);
+  }
+  for (const c of rule?.constraints ?? []) {
+    writeDecisionConstraint(b, node, c);
+  }
+}
+function writeActiveDuty(b, rec, duty) {
+  const node = b.linkBlankNode(rec, ODRLD_ACTIVE_DUTY);
+  b.addIri(node, RDF_TYPE, ODRL_DUTY_CLASS);
+  if (duty.id !== void 0) {
+    b.addIri(node, ODRLD_ON_DUTY, duty.id);
+  }
+  b.addIri(node, ODRL_ACTION, ACTION_IRI[duty.action]);
+  if (duty.target !== void 0) {
+    b.addIri(node, ODRL_TARGET, duty.target);
+  }
+  b.addLiteral(node, ODRLD_FULFILLED, duty.fulfilled ? "true" : "false", XSD_BOOLEAN);
+}
+function decisionRecordJsonLd(input) {
+  const { id, policy, request, result: result2, evaluatedAt } = input;
+  const doc = {
+    "@context": DECISION_RECORD_INLINE_CONTEXT,
+    "@id": escapeIri(id),
+    "@type": "odrld:DecisionRecord",
+    endedAtTime: evaluatedAt.toISOString(),
+    evaluatedPolicy: { "@id": escapeIri(policy.id) },
+    requestAction: { "@id": ACTION_IRI[request.action] },
+    decision: result2.decision,
+    reason: result2.reason
+  };
+  if (request.agent !== void 0) {
+    doc.requestAgent = { "@id": escapeIri(request.agent) };
+  }
+  if (request.target !== void 0) {
+    doc.requestTarget = { "@id": escapeIri(request.target) };
+  }
+  const purposeNodes = requestPurposes(request).map((p) => ({ "@id": escapeIri(p) }));
+  if (purposeNodes.length > 0) {
+    const [only] = purposeNodes;
+    doc.requestPurpose = purposeNodes.length === 1 ? only : purposeNodes;
+  }
+  if (result2.conflict) {
+    doc.conflict = true;
+  }
+  const decidingRules = [
+    ...result2.matchedPermissions,
+    ...result2.matchedProhibitions
+  ];
+  const assignments = assignDecidingRules(decidingRules, policy, request, evaluatedAt);
+  if (assignments.length > 0) {
+    doc.decidingRule = assignments.map(
+      ({ descriptor, rule }) => decidingRuleJsonLd(descriptor, rule)
+    );
+  }
+  if (result2.duties.length > 0) {
+    doc.activeDuty = result2.duties.map((d) => activeDutyJsonLd(d));
+  }
+  return doc;
+}
+function decidingRuleJsonLd(descriptor, rule) {
+  const node = {
+    "@type": descriptor.type === "prohibition" ? "odrl:Prohibition" : "odrl:Permission",
+    ruleKind: descriptor.type,
+    action: { "@id": ACTION_IRI[descriptor.action] }
+  };
+  if (descriptor.id !== void 0) {
+    node["@id"] = escapeIri(descriptor.id);
+  }
+  if (descriptor.target !== void 0) {
+    node.target = { "@id": escapeIri(descriptor.target) };
+  }
+  if (descriptor.assignee !== void 0) {
+    node.assignee = { "@id": escapeIri(descriptor.assignee) };
+  }
+  const constraints = rule?.constraints ?? [];
+  if (constraints.length > 0) {
+    node.constraint = constraints.map((c) => decisionConstraintJsonLd(c));
+  }
+  return node;
+}
+function activeDutyJsonLd(duty) {
+  const node = {
+    "@type": "odrl:Duty",
+    action: { "@id": ACTION_IRI[duty.action] },
+    fulfilled: duty.fulfilled
+  };
+  if (duty.id !== void 0) {
+    node.onDuty = { "@id": escapeIri(duty.id) };
+  }
+  if (duty.target !== void 0) {
+    node.target = { "@id": escapeIri(duty.target) };
+  }
+  return node;
+}
+function recordEvaluation(id, policy, request, options = {}) {
+  const now = options.now ?? /* @__PURE__ */ new Date();
+  const result2 = evaluate(policy, request, { ...options, now });
+  const input = { id, policy, request, result: result2, evaluatedAt: now };
+  return { result: result2, quads: decisionRecord(input), jsonld: decisionRecordJsonLd(input) };
+}
+
+// src/delegation.ts
+var DEFAULT_MAX_CHAIN_LENGTH = 8;
+function evaluateDelegated(chain, request, options = {}) {
+  const now = options.now ?? /* @__PURE__ */ new Date();
+  const maxLen = options.maxChainLength ?? DEFAULT_MAX_CHAIN_LENGTH;
+  const hops = [];
+  if (chain.length === 0) {
+    return denied("Empty delegation chain \u2014 nothing grants the request.", hops);
+  }
+  if (!Number.isInteger(maxLen) || maxLen < 1) {
+    return denied(`Invalid maxChainLength ${String(maxLen)} \u2014 must be a positive integer.`, hops);
+  }
+  if (chain.length > maxLen) {
+    return denied(
+      `Chain length ${chain.length} exceeds the maximum ${maxLen} (maxChainLength).`,
+      hops
+    );
+  }
+  const req = stripDelegationDepth(request);
+  const seen = /* @__PURE__ */ new Set();
+  for (const [i, policy] of chain.entries()) {
+    if (policy.id === void 0 || policy.id === "") {
+      return denied(`Hop ${i} has no policy id \u2014 the chain edge cannot be verified.`, hops);
+    }
+    if (seen.has(policy.id)) {
+      return denied(`Cyclic chain: policy <${policy.id}> appears more than once.`, hops);
+    }
+    seen.add(policy.id);
+  }
+  const revoked = new Set(
+    typeof options.revoked === "string" ? [options.revoked] : options.revoked ?? []
+  );
+  for (const [i, policy] of chain.entries()) {
+    if (revoked.has(policy.id)) {
+      return denied(`Hop ${i} (<${policy.id}>) has been revoked.`, hops);
+    }
+  }
+  const strictProhibitions = chain.length > 1;
+  const aggregateDuties = [];
+  for (let i = 1; i < chain.length; i++) {
+    const parent = chain[i - 1];
+    const child = chain[i];
+    const remainingDepth = chain.length - i;
+    const edge = checkDelegationEdge(parent, child, remainingDepth, req, now);
+    if (!edge.ok) {
+      hops.push({ index: i, policyId: child.id, ok: false, reason: edge.reason });
+      return denied(`Hop ${i} (<${child.id}>): ${edge.reason}`, hops);
+    }
+    hops.push({ index: i, policyId: child.id, ok: true, reason: "ok" });
+    aggregateDuties.push(...edge.duties);
+  }
+  for (let i = 0; i < chain.length - 1; i++) {
+    const ancestor = chain[i];
+    const delegator = chain[i + 1].assigner;
+    const scope = evaluate(ancestor, { ...req, agent: delegator }, { now });
+    if (scope.decision !== "permit" || scope.matchedProhibitions.length > 0) {
+      return denied(
+        `Hop ${i} (<${ancestor.id}>) does not cleanly grant the requested capability to its delegate <${delegator}> (${scope.decision}${scope.matchedProhibitions.length > 0 ? ", with a matched prohibition" : ""}: ${scope.reason}) \u2014 a delegate cannot receive more than the delegator holds.`,
+        hops
+      );
+    }
+    const direct = evaluate(ancestor, req, { now });
+    if (direct.decision === "deny" || direct.matchedProhibitions.length > 0) {
+      return denied(
+        `Hop ${i} (<${ancestor.id}>) prohibits the request directly (${direct.reason}).`,
+        hops
+      );
+    }
+    aggregateDuties.push(...scope.duties);
+  }
+  const leafPolicy = chain[chain.length - 1];
+  const leaf = evaluate(leafPolicy, req, { now });
+  if (leaf.decision !== "permit" || strictProhibitions && leaf.matchedProhibitions.length > 0) {
+    return {
+      ...denied(
+        leaf.decision !== "permit" ? `Leaf policy <${leafPolicy.id}> does not permit: ${leaf.reason}` : `Leaf policy <${leafPolicy.id}> permits only via its odrl:perm conflict strategy over a matched prohibition \u2014 prohibitions are strict in a delegation chain.`,
+        hops
+      ),
+      leaf
+    };
+  }
+  if (chain.length > 1 && req.agent !== leafPolicy.assignee) {
+    return {
+      ...denied(
+        `Leaf policy <${leafPolicy.id}> permits the request, but its actual actor <${req.agent ?? "(none)"}> is not the hop's declared delegate <${leafPolicy.assignee ?? "(none)"}> \u2014 a delegated hop must not grant to a party other than its odrl:assignee (identity-composition guard).`,
+        hops
+      ),
+      leaf
+    };
+  }
+  aggregateDuties.push(...leaf.duties);
+  const duties = dedupeDuties(aggregateDuties);
+  if (options.requireDuties) {
+    const outstanding = duties.filter((d) => !d.fulfilled);
+    if (outstanding.length > 0) {
+      const names = outstanding.map((d) => d.action).join(", ");
+      return {
+        ...denied(
+          `Chain permits, but requireDuties is set and these chain duties are unfulfilled: ${names}.`,
+          hops
+        ),
+        leaf,
+        duties
+      };
+    }
+  }
+  return {
+    decision: "permit",
+    reason: chain.length === 1 ? "The policy permits the request (single-policy chain)." : `Every hop of the ${chain.length - 1}-hop delegation chain is valid and the request is within the chain intersection.`,
+    hops,
+    leaf,
+    duties
+  };
+}
+function edgeFailure(reason) {
+  return { ok: false, reason };
+}
+function checkDelegationEdge(parent, child, remainingDepth, req, now) {
+  if (child.type !== "Agreement") {
+    return edgeFailure(`a delegated hop must be an odrl:Agreement (got ${child.type ?? "Set"}).`);
+  }
+  if (child.assigner === void 0 || child.assignee === void 0) {
+    return edgeFailure(
+      "a delegated hop must name both assigner (the delegator) and assignee (the delegate)."
+    );
+  }
+  if (child.delegatedUnder !== parent.id) {
+    return edgeFailure(
+      `the hop must declare odrld:delegatedUnder <${parent.id}> (got ${child.delegatedUnder === void 0 ? "none" : `<${child.delegatedUnder}>`}).`
+    );
+  }
+  const authRequest = {
+    agent: child.assigner,
+    action: "grantUse",
+    ...req.target !== void 0 && { target: req.target },
+    attributes: { ...req.attributes ?? {}, delegationDepth: remainingDepth }
+  };
+  const auth = evaluate(parent, authRequest, { now });
+  if (auth.decision !== "permit" || auth.matchedProhibitions.length > 0) {
+    return edgeFailure(
+      `the parent policy does not cleanly authorise delegation by <${child.assigner}> (${auth.decision}${auth.matchedProhibitions.length > 0 ? ", with a matched prohibition" : ""}: ${auth.reason}).`
+    );
+  }
+  const candidates = matchingPermissions(parent, authRequest, { now }).filter(
+    (r) => r.action === "grantUse" && r.assignee === child.assigner
+  );
+  if (candidates.length === 0) {
+    return edgeFailure(
+      `the parent policy has no grantUse permission explicitly naming <${child.assigner}> as assignee (an assignee-free grantUse does not authorise delegation).`
+    );
+  }
+  const authorizing = [];
+  const failures = [];
+  for (const rule of candidates) {
+    const failure = checkGrantUseRule(rule, child, remainingDepth);
+    if (failure === void 0) {
+      authorizing.push(rule);
+    } else {
+      failures.push(failure);
+    }
+  }
+  if (authorizing.length === 0) {
+    return edgeFailure(failures.join(" / "));
+  }
+  const dutySource = {
+    id: parent.id,
+    permissions: authorizing,
+    ...parent.obligations !== void 0 && { obligations: parent.obligations }
+  };
+  const edgeDuties = evaluate(dutySource, authRequest, { now }).duties;
+  return {
+    ok: true,
+    duties: edgeDuties.filter((d) => d.action !== "nextPolicy")
+  };
+}
+function checkGrantUseRule(rule, child, remainingDepth) {
+  const hasDepthConstraint = (rule.constraints ?? []).some(
+    (c) => c.leftOperand === "delegationDepth"
+  );
+  if (!hasDepthConstraint && remainingDepth > 1) {
+    return `grantUse permission carries no delegationDepth constraint, so its budget is the profile default of 1 hop \u2014 ${remainingDepth} remaining hops exceed it`;
+  }
+  for (const duty of rule.duties ?? []) {
+    if (duty.action !== "nextPolicy") {
+      continue;
+    }
+    if (duty.target === void 0) {
+      return "grantUse permission carries a nextPolicy duty with no target policy (malformed)";
+    }
+    if (duty.target !== child.id) {
+      return `grantUse permission mandates nextPolicy <${duty.target}> but the delegated hop is <${child.id}>`;
+    }
+  }
+  return void 0;
+}
+function denied(reason, hops) {
+  return { decision: "deny", reason, hops, duties: [] };
+}
+function stripDelegationDepth(request) {
+  if (request.attributes === void 0 || !("delegationDepth" in request.attributes)) {
+    return request;
+  }
+  const { delegationDepth: _reserved, ...rest } = request.attributes;
+  const { attributes: _dropped, ...requestWithout } = request;
+  return Object.keys(rest).length > 0 ? { ...requestWithout, attributes: rest } : requestWithout;
+}
+function dedupeDuties(duties) {
+  const seen = /* @__PURE__ */ new Set();
+  const out = [];
+  for (const d of duties) {
+    const key = `${d.action}\0${d.target ?? ""}\0${d.id ?? ""}\0${d.fulfilled}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      out.push(d);
+    }
+  }
+  return out;
+}
+function delegationProvenance(chain) {
+  const b = new GraphBuilder();
+  for (const [i, policy] of chain.entries()) {
+    if (policy.id === void 0 || policy.id === "") {
+      continue;
+    }
+    const subject = iriRef(policy.id);
+    if (policy.assigner !== void 0) {
+      b.addIri(subject, PROV_WAS_ATTRIBUTED_TO, policy.assigner);
+    }
+    if (i > 0) {
+      const parent = chain[i - 1];
+      if (parent.id !== void 0 && parent.id !== "") {
+        b.addIri(subject, ODRLD_DELEGATED_UNDER, parent.id);
+        b.addIri(subject, PROV_WAS_DERIVED_FROM, parent.id);
+      }
+      if (policy.assignee !== void 0 && policy.assigner !== void 0) {
+        b.addIri(iriRef(policy.assignee), PROV_ACTED_ON_BEHALF_OF, policy.assigner);
+      }
+    }
+  }
+  return b.quads();
+}
 export {
   A2A_ACTION_TO_ODRL,
   ACL,
@@ -1734,6 +1997,7 @@ export {
   ACTION_IRI,
   CONFLICT_IRI,
   CONFLICT_STRATEGIES,
+  DECISION_RECORD_INLINE_CONTEXT,
   DEFAULT_MAX_CHAIN_LENGTH,
   DPV,
   IRI_TO_ACTION,
@@ -1743,12 +2007,26 @@ export {
   LEFT_OPERAND_IRI,
   ODRL,
   ODRLD,
+  ODRLD_ACTIVE_DUTY,
+  ODRLD_CONFLICT,
+  ODRLD_DECIDING_RULE,
+  ODRLD_DECISION,
+  ODRLD_DECISION_RECORD_CLASS,
   ODRLD_DELEGATED_UNDER,
   ODRLD_DELEGATION_DEPTH,
+  ODRLD_EVALUATED_POLICY,
+  ODRLD_FULFILLED,
   ODRLD_INLINE_CONTEXT_EXTENSION,
+  ODRLD_ON_DUTY,
   ODRLD_PROFILE_IRI,
+  ODRLD_REASON,
+  ODRLD_REQUEST_ACTION,
+  ODRLD_REQUEST_AGENT,
+  ODRLD_REQUEST_PURPOSE,
+  ODRLD_REQUEST_TARGET,
   ODRLD_REVOCATION_CLASS,
   ODRLD_REVOKED_POLICY,
+  ODRLD_RULE_KIND,
   ODRL_ACTIONS,
   ODRL_GRANT_USE,
   ODRL_INLINE_CONTEXT,
@@ -1774,10 +2052,13 @@ export {
   PROV_WAS_DERIVED_FROM,
   PROV_WAS_GENERATED_BY,
   VALID_ACTION_IRIS,
+  XSD_BOOLEAN,
   XSD_DATETIME,
   actionProvenance,
   actionProvenanceJsonLd,
   constraintSatisfied,
+  decisionRecord,
+  decisionRecordJsonLd,
   delegationProvenance,
   escapeIri,
   evaluate,
@@ -1788,6 +2069,7 @@ export {
   policyToJsonLd,
   policyToRdf,
   policyToTurtle,
+  recordEvaluation,
   requestContextFromA2AIntent,
   requestContextFromWac,
   safeHttpIri,

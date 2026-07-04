@@ -177,6 +177,20 @@ its own permissions, with every hop auditable back to the delegating principal:
 - **`delegationProvenance(chain)`** emits the PROV-O audit overlay (`prov:wasAttributedTo`,
   `prov:actedOnBehalfOf`, `prov:wasDerivedFrom` + `odrld:delegatedUnder`) that traces every
   delegated action to the delegating principal.
+- **`actionProvenance(input)`** / **`actionProvenanceJsonLd(input)`** emit the per-action PROV
+  activity bundle (a `prov:Activity` with `wasAssociatedWith` / `used` / `generated` /
+  `qualifiedAssociation`→`hadPlan`) recording that an action was **performed** under an
+  authorizing plan.
+- **`decisionRecord(input)`** / **`decisionRecordJsonLd(input)`** reify the **outcome** of one
+  `evaluate(policy, request)` call as an auditor-friendly `odrld:DecisionRecord`: the evaluated
+  policy + request fields, the `odrld:decision` (permit/deny/notApplicable) + reason (+ an
+  `odrld:conflict` flag when a conflict was resolved), and — for explainability — one
+  `odrld:decidingRule` node per matched permission/prohibition (naming the **deciding
+  constraints**, resolved back from the policy) and one `odrld:activeDuty` node per active duty
+  (with its `odrld:fulfilled` flag). **Descriptive, not enforcing** — the enforcement is
+  `evaluate` itself; hostile IRIs are escaped (breakout-proof) rather than throwing so an audit
+  trail is always producible. The `odrld:` decision terms are minted **provisionally** (re-basable
+  onto the ODRL CG Formal Semantics model once its namespace lands).
 
 The full delegation decision matrix (valid 1-/2-hop permits; over-broad, expired-mid-chain, cyclic,
 depth-exceeded, wrong-`nextPolicy` and revoked denies) is pinned as golden-master snapshots in

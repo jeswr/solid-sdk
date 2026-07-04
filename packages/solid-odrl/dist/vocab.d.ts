@@ -299,6 +299,56 @@ export declare const ODRLD_DELEGATED_UNDER: "https://w3id.org/jeswr/odrl-delegat
 export declare const ODRLD_REVOCATION_CLASS: "https://w3id.org/jeswr/odrl-delegation#Revocation";
 /** `odrld:revokedPolicy` — MINTED (with {@link ODRLD_REVOCATION_CLASS}): Revocation → the revoked Policy. */
 export declare const ODRLD_REVOKED_POLICY: "https://w3id.org/jeswr/odrl-delegation#revokedPolicy";
+/**
+ * `odrld:DecisionRecord` — MINTED (G9): the class of a reified evaluation outcome.
+ * ODRL has no "decision"/"result" class; the CG Formal Semantics report models
+ * evaluation but publishes no stable namespace. PROVISIONAL.
+ */
+export declare const ODRLD_DECISION_RECORD_CLASS: "https://w3id.org/jeswr/odrl-delegation#DecisionRecord";
+/** `odrld:evaluatedPolicy` — MINTED (G9): DecisionRecord → the evaluated Policy IRI. */
+export declare const ODRLD_EVALUATED_POLICY: "https://w3id.org/jeswr/odrl-delegation#evaluatedPolicy";
+/** `odrld:requestAgent` — MINTED (G9): DecisionRecord → the requesting agent WebID. */
+export declare const ODRLD_REQUEST_AGENT: "https://w3id.org/jeswr/odrl-delegation#requestAgent";
+/** `odrld:requestAction` — MINTED (G9): DecisionRecord → the requested ODRL action IRI. */
+export declare const ODRLD_REQUEST_ACTION: "https://w3id.org/jeswr/odrl-delegation#requestAction";
+/** `odrld:requestTarget` — MINTED (G9): DecisionRecord → the requested target Asset IRI. */
+export declare const ODRLD_REQUEST_TARGET: "https://w3id.org/jeswr/odrl-delegation#requestTarget";
+/** `odrld:requestPurpose` — MINTED (G9): DecisionRecord → the asserted purpose IRI (DPV-valued). */
+export declare const ODRLD_REQUEST_PURPOSE: "https://w3id.org/jeswr/odrl-delegation#requestPurpose";
+/**
+ * `odrld:decision` — MINTED (G9): DecisionRecord → the outcome as a plain string
+ * literal (`permit` | `deny` | `notApplicable`). A string (not an IRI) so the record
+ * is self-contained and does not depend on minting three concept IRIs.
+ */
+export declare const ODRLD_DECISION: "https://w3id.org/jeswr/odrl-delegation#decision";
+/** `odrld:reason` — MINTED (G9): DecisionRecord → the human/agent-readable reason (string). */
+export declare const ODRLD_REASON: "https://w3id.org/jeswr/odrl-delegation#reason";
+/**
+ * `odrld:conflict` — MINTED (G9): DecisionRecord → `xsd:boolean`, whether a
+ * permission and a prohibition BOTH matched (so the conflict strategy was invoked).
+ * DISTINCT from `odrl:conflict`, which is the conflict-resolution STRATEGY
+ * (`perm`/`prohibit`/`invalid`) on a Policy — a different subject and range — so
+ * reusing `odrl:conflict` would be a semantic pun. MINTED.
+ */
+export declare const ODRLD_CONFLICT: "https://w3id.org/jeswr/odrl-delegation#conflict";
+/** `odrld:decidingRule` — MINTED (G9): DecisionRecord → a reified deciding Rule node. */
+export declare const ODRLD_DECIDING_RULE: "https://w3id.org/jeswr/odrl-delegation#decidingRule";
+/** `odrld:activeDuty` — MINTED (G9): DecisionRecord → a reified active Duty node. */
+export declare const ODRLD_ACTIVE_DUTY: "https://w3id.org/jeswr/odrl-delegation#activeDuty";
+/**
+ * `odrld:onDuty` — MINTED (G9): an active-Duty node → the policy Duty IRI it reports
+ * the fulfilment state OF. The active-Duty node is RECORD-SCOPED (it carries the
+ * per-evaluation `odrld:fulfilled` flag, which varies between evaluations), so it must
+ * NOT be the stable policy Duty IRI itself — otherwise merging two records for the
+ * same duty with different fulfilment would assert both `true` and `false` on one
+ * node. This reference links the record-scoped node back to the stable duty (when the
+ * duty has an IRI) without putting per-evaluation state on that IRI.
+ */
+export declare const ODRLD_ON_DUTY: "https://w3id.org/jeswr/odrl-delegation#onDuty";
+/** `odrld:ruleKind` — MINTED (G9): a deciding-Rule node → `permission` | `prohibition` (string). */
+export declare const ODRLD_RULE_KIND: "https://w3id.org/jeswr/odrl-delegation#ruleKind";
+/** `odrld:fulfilled` — MINTED (G9): an active-Duty node → `xsd:boolean`, whether the duty is discharged. */
+export declare const ODRLD_FULFILLED: "https://w3id.org/jeswr/odrl-delegation#fulfilled";
 /** `prov:wasAttributedTo` — Entity → Agent (each hop policy is attributed to its issuer). */
 export declare const PROV_WAS_ATTRIBUTED_TO: "http://www.w3.org/ns/prov#wasAttributedTo";
 /** `prov:actedOnBehalfOf` — Agent → Agent (the delegate acts on behalf of the delegator). */
@@ -329,6 +379,8 @@ export declare const PROV_HAD_PLAN: "http://www.w3.org/ns/prov#hadPlan";
 export declare const PROV_WAS_GENERATED_BY: "http://www.w3.org/ns/prov#wasGeneratedBy";
 /** `xsd:dateTime` — the datatype for `startedAtTime`/`endedAtTime` literals. */
 export declare const XSD_DATETIME: "http://www.w3.org/2001/XMLSchema#dateTime";
+/** `xsd:boolean` — the datatype for the decision-record `conflict` / `fulfilled` flags. */
+export declare const XSD_BOOLEAN: "http://www.w3.org/2001/XMLSchema#boolean";
 /**
  * A SELF-CONTAINED inline JSON-LD `@context` for a per-action PROV bundle
  * ({@link actionProvenanceJsonLd} — same "no network dependency" rationale as
@@ -351,4 +403,17 @@ export declare const ODRL_INLINE_CONTEXT: Readonly<Record<string, unknown>>;
  * byte-identical to what it was before the profile existed.
  */
 export declare const ODRLD_INLINE_CONTEXT_EXTENSION: Readonly<Record<string, unknown>>;
+/**
+ * A SELF-CONTAINED inline JSON-LD `@context` for a decision record
+ * ({@link decisionRecord}'s JSON-LD sibling) — same "no network dependency"
+ * rationale as {@link ODRL_INLINE_CONTEXT}. IRI-valued terms carry `"@type": "@id"`;
+ * `conflict`/`fulfilled` carry `xsd:boolean`; `endedAtTime` carries `xsd:dateTime`;
+ * `decision`/`reason`/`ruleKind` are plain-literal terms. The nested `decidingRule`/
+ * `activeDuty`/`constraint` terms are node-valued (no `@type`, so a nested object is
+ * a blank node). The `odrl:` constraint/rule terms (`action`/`target`/`assignee`/
+ * `constraint`/`leftOperand`/`operator`/`rightOperand`) mirror
+ * {@link ODRL_INLINE_CONTEXT} verbatim so the deciding-rule constraints serialise
+ * byte-consistently with a policy's own constraints.
+ */
+export declare const DECISION_RECORD_INLINE_CONTEXT: Readonly<Record<string, unknown>>;
 //# sourceMappingURL=vocab.d.ts.map
