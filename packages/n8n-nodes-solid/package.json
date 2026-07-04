@@ -58,7 +58,7 @@
     "prepare": "npm run build"
   },
   "peerDependencies": {
-    "n8n-workflow": "*"
+    "n8n-workflow": ">=1.82.0 <3"
   },
   "dependencies": {
     "@jeswr/guarded-fetch": "github:jeswr/guarded-fetch#bd4490927fd36d62f6b78a0021e8d40bbb572c3b",
@@ -77,7 +77,7 @@
     "@types/node": "^22.0.0",
     "@vitest/coverage-v8": "^3.2.6",
     "esbuild": "^0.28.1",
-    "n8n-workflow": "^1.82.0",
+    "n8n-workflow": "2.28.4",
     "typescript": "^5.6.0",
     "vitest": "^3.2.6"
   },
