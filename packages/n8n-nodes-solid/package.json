@@ -61,6 +61,7 @@
     "n8n-workflow": "*"
   },
   "dependencies": {
+    "@jeswr/guarded-fetch": "github:jeswr/guarded-fetch#bd4490927fd36d62f6b78a0021e8d40bbb572c3b",
     "content-type": "^1.0.5",
     "jsonld-streaming-parser": "^5.0.0",
     "n3": "^2.0.3"
@@ -81,7 +82,7 @@
     "vitest": "^3.2.6"
   },
   "engines": {
-    "node": "^20.19.0 || >=22.12.0"
+    "node": ">=22.19.0"
   },
   "publishConfig": {
     "access": "public"

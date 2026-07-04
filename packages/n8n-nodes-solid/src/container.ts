@@ -13,9 +13,10 @@
 // `this.helpers.httpRequest` (n8n owns the transport, not a bespoke fetch).
 
 import { parseRdf } from "@jeswr/fetch-rdf";
+import { podScopedUrl } from "@jeswr/guarded-fetch";
 import { ContainerDataset } from "@solid/object";
 import { DataFactory } from "n3";
-import { assertWithinPod, isContainerUrl } from "./scope.js";
+import { isContainerUrl } from "./scope.js";
 
 /** A single member of a container. */
 export interface ContainerMember {
@@ -60,17 +61,21 @@ export async function parseContainerListing(
     // did not resolve; resolve against the container URL to be safe.
     const absolute = new URL(resource.id, containerUrl).toString();
     // Defence in depth: never surface a member that escapes the pod base — a
-    // hostile/buggy server cannot inject foreign URLs into the listing.
-    try {
-      assertWithinPod(base, absolute);
-    } catch {
+    // hostile/buggy server cannot inject foreign URLs into the listing. The FILTER
+    // form returns the CANONICAL in-scope URL (or `undefined` to drop it); we push
+    // that canonical value — not the raw `absolute` — so the URL we validated is
+    // the URL we surface (avoids the canonical-URL bug class where a guard is used
+    // only for its throw side-effect while a non-canonical string is passed on).
+    const scoped = podScopedUrl(base, absolute, { allowRoot: true });
+    if (scoped === undefined) {
       continue;
     }
-    // Some serialisations list the container itself; skip the self-member.
-    if (absolute === containerUrl) {
+    // Some serialisations list the container itself; skip the self-member
+    // (compare against the canonical scoped value now in use).
+    if (scoped === containerUrl) {
       continue;
     }
-    members.push({ url: absolute, container: isContainerUrl(absolute) });
+    members.push({ url: scoped, container: isContainerUrl(scoped) });
   }
   return members;
 }
