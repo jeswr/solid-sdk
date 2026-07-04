@@ -41,16 +41,18 @@
 # gUFO META-TYPES (each class carries its own AND roots transitively in Core):
 #   LifeContext / VisionStatement / Claim / Need / Satisfier / ValueStatement /
 #     SharedFuture / SharedFutureCredential / DissentRecord / AcceptanceCriterion
-#     / AppProposal = gufo:SubKind → root core:InformationResource (authored
-#     information objects).
-#   Resonance / BridgingEvidence / ConvergenceMetrics = gufo:SubKind →
-#     root core:Record (structured records about statements/deliberations).
+#     / AppProposal / InfraProposal / Critique = gufo:SubKind → root
+#     core:InformationResource (authored information objects); AdoptionDecision
+#     = gufo:SubKind → fut:SharedFuture (transitively core:InformationResource).
+#   Resonance / BridgingEvidence / ConvergenceMetrics / AdoptionObservation =
+#     gufo:SubKind → root core:Record (structured records about
+#     statements/deliberations/advertisements).
 #   Deliberation = gufo:EventType → root core:Activity (a scoped convergence
 #     exercise; aligned to prov:Activity / as:Event in futures-alignments.ttl).
 #   Stance / ResonanceDimension / Scope / DeliberationMethod / NeedConcept /
-#     ExistentialCategory / ValueConcept = gufo:Category → root core:Category
-#     (rigid non-sortals whose instances are the coded values, bound to
-#     skos:Concept).
+#     ExistentialCategory / ValueConcept / ProposalKind / StakeholderRole =
+#     gufo:Category → root core:Category (rigid non-sortals whose instances are
+#     the coded values, bound to skos:Concept).
 #
 # INSTANCE-IRI CONTRACT: the term IRIs below are EXACTLY the strings the
 # running unite Stage-1 client (jeswr/unite app/src/lib/fut.ts) reads and
@@ -58,14 +60,17 @@
 # fut:inDeliberation, fut:onStatement, fut:stance, fut:dimension, the stance
 # individuals fut:Resonates / fut:Conflicts / fut:Unsure, the dimension
 # individuals fut:IShareThis / fut:IAspireToThis / fut:IWouldSupportThis,
-# fut:maxneefScheme and the nine fut:maxneef-<need> concepts. Do not rename
+# fut:maxneefScheme and the nine fut:maxneef-<need> concepts. The v0.2.0 terms
+# are likewise EXACTLY the IRIs unite's S1 draft constants define
+# (app/src/lib/fut-draft.ts — Critique + indirectStakeholders wired in S1;
+# the scope-B/scope-C terms wire in S2/S4). Do not rename
 # them without a coordinated unite migration (fedreg:acceptsSpec is the
 # migration substrate).
 #
 # NAMESPACE GOVERNANCE (design/01 note): seeding under w3id.org/jeswr mirrors
 # how every sector bootstrapped, but unite's design/04 specifies a migration
 # path to a steward-circle-governed namespace once adoption warrants it —
-# hence owl:versionInfo 0.1.0, not 1.0.0.
+# hence the 0.x version line (now 0.2.0), not 1.0.0.
 #
 # CONTRACT (sector contract R8 §4, F1–F7): imports the gUFO Core; roots every
 # class transitively in a Core class and carries its gUFO meta-type; CONSTRAINS,
@@ -82,8 +87,8 @@
     vann:preferredNamespacePrefix "fut" ;
     vann:preferredNamespaceUri "https://w3id.org/jeswr/sectors/futures#" ;
     owl:imports <https://w3id.org/jeswr/core> ;
-    owl:versionInfo "0.1.0" ;
-    owl:versionIRI <https://w3id.org/jeswr/sectors/futures/0.1.0> ;
+    owl:versionInfo "0.2.0" ;
+    owl:versionIRI <https://w3id.org/jeswr/sectors/futures/0.2.0> ;
     dcterms:description """The participatory-democracy / shared-futures
         deliberation data sector for the unite platform (jeswr/unite):
         expression-layer statements (life context, vision, claim, need,
@@ -93,9 +98,22 @@
         mandatory dissent annex; the Max-Neef needs matrix (axiological +
         existential schemes), the Schwartz-seeded value scheme, and the ODRL
         consent-action profile. Aligns Mode-A to ActivityStreams 2.0, PROV-O,
-        ODRL 2.2 and the literature sources in futures-alignments.ttl."""@en ;
-    dcterms:modified "2026-07-03"^^xsd:date ;
-    rdfs:comment "Sector ontology for unite Stage-1 (design/01-data-model.md). Version 0.1.0: the namespace-governance migration to a steward-circle namespace is a documented follow-on (unite design/04), carried by fedreg:acceptsSpec dual-advertisement."@en .
+        ODRL 2.2 and the literature sources in futures-alignments.ttl.
+        v0.2.0 ADDITIVE (unite S1 draft, vocab/futures-0.2.0-draft.ttl @
+        ff18a63 — SCOPE-DIFFERENTIATION §3.2 + §4.2): the scope-B
+        infrastructure-proposal layer (fut:InfraProposal ⊑ wf:Task with
+        targetsSystem / proposalKind / affectsRole / breakingChange /
+        migrationPath / referenceImplementation), the adoption machinery
+        (fut:AdoptionDecision ⊑ fut:SharedFuture — ratification MEASURED via
+        fut:AdoptionObservation records of fedreg:acceptsSpec advertisements,
+        never asserted), scope-C self-describing legitimacy
+        (fut:methodProvenance, fut:decomposedBy), and the Convergence-Room
+        critique unit (fut:Critique) + the VSD prompt
+        (fut:indirectStakeholders). No 0.1.0 term changed; fut:onStatement's
+        rdfs:domain was WIDENED (removed) because Critique reuses it — the
+        section-6 multi-class-property rule."""@en ;
+    dcterms:modified "2026-07-04"^^xsd:date ;
+    rdfs:comment "Sector ontology for unite Stage-1 (design/01-data-model.md). Version 0.2.0 is the ADDITIVE delta unite's S1 build drafted (its ratification is the first scope-B deliberation — unite SCOPE-DIFFERENTIATION §3.1 B4); the namespace-governance migration to a steward-circle namespace remains a documented follow-on (unite design/04), carried by fedreg:acceptsSpec dual-advertisement."@en .
 
 # -----------------------------------------------------------------------------
 # Annotation-property declarations (F5 DL hygiene — match the Core pattern).
@@ -253,6 +271,42 @@ fut:AcceptanceCriterion a owl:Class, gufo:SubKind ;
     skos:scopeNote "gufo:SubKind of core:InformationResource. Criterion text via as:content."@en .
 
 # =============================================================================
+# 4b. SCOPE-B LAYER (v0.2.0) — the infrastructure-proposal + adoption machinery
+#     (unite SCOPE-DIFFERENTIATION §3.2; drafted in unite
+#     vocab/futures-0.2.0-draft.ttl and formalised here — the sector-contract
+#     home). ADDITIVE over 0.1.0.
+# =============================================================================
+
+fut:InfraProposal a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf core:InformationResource , wf:Task ;
+    rdfs:label "Infrastructure Proposal"@en ;
+    skos:definition "A proposed change to a shared digital system: a spec version, protocol profile, vocabulary, shared service, or governance-of-infrastructure decision. Inherits the fut:motivatedBy ≥1 requirement — infrastructure proposals stay value-centric too (what stops scope B degenerating into a feature-request tracker)."@en ;
+    skos:scopeNote "gufo:SubKind of core:InformationResource and ⊑ wf:Task like fut:AppProposal, so it federates into the shared task model unchanged."@en .
+
+fut:AdoptionDecision a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf fut:SharedFuture ;
+    rdfs:label "Adoption Decision"@en ;
+    skos:definition "A converged recommendation to adopt a spec version; ratification is MEASURED on the wire, never asserted. There is deliberately NO adoptionStatus decree property: an AdoptionDecision carries its bar (fut:adoptionBar) and its evidence (fut:adoptionEvidence), and any consumer recomputes Current/Proposed/Superseded from evidence against bar — a captured room can sign a recommendation; it cannot sign adoption."@en ;
+    skos:scopeNote "gufo:SubKind via fut:SharedFuture: inherits the mandatory dissent annex, bridging evidence and Data-Integrity signing."@en .
+
+fut:AdoptionObservation a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf core:Record ;
+    rdfs:label "Adoption Observation"@en ;
+    skos:definition "One observed fedreg:acceptsSpec advertisement: who advertises which version, observed when, at which source IRI. An index entry is a cache, never authoritative (unite design/02 §2) — the observationSource is where the claim is re-checked."@en ;
+    skos:scopeNote "gufo:SubKind of core:Record. The evidence unit fut:adoptionEvidence carries."@en .
+
+# =============================================================================
+# 4c. CONVERGENCE ROOM (v0.2.0) — the critique unit unite S1 wires ahead of the
+#     bump (SCOPE-DIFFERENTIATION "Build decisions (S1)"; design/03 §4 step 2).
+# =============================================================================
+
+fut:Critique a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf core:InformationResource ;
+    rdfs:label "Critique"@en ;
+    skos:definition "One critique in a Convergence-Room critique round (unite design/03 §4 step 2: critiques are captured AS DATA). design/01 assembles the DissentRecord FROM surviving critiques but never assigned the unit a class — v0.2.0 does. Carries as:content, fut:onStatement → the candidate synthesis, dct:created/creator, fut:inDeliberation; lives in the critic's own pod like every statement. Standing critiques at endorsement time are the raw material of the mandatory dissent annex."@en ;
+    skos:scopeNote "gufo:SubKind of core:InformationResource. THE third class the unite client writes (S1, app/src/lib/model.ts serializeCritique); its required fields are the CritiqueShape MUSTs."@en .
+
+# =============================================================================
 # 5. CODED-VALUE CLASSES — gufo:Category, root core:Category. Rigid non-sortals
 #    whose instances are the coded values (bound to skos:Concept in the schemes
 #    below). Constrain core:Category; never widen it.
@@ -299,6 +353,18 @@ fut:ValueConcept a owl:Class, gufo:Category ;
     rdfs:label "Value Concept"@en ;
     skos:definition "A basic-value concept in a value scheme. The seed members are the ten Schwartz basic values in fut:valueScheme (a stable circumplex: adjacent values compatible, opposing values in tension — replicated across dozens of cultures), giving cluster interpretation a psychologically meaningful prior rather than an ad-hoc tag soup. Communities may publish and cross-map their own schemes."@en ;
     skos:scopeNote "gufo:Category of core:Category. fut:valueConcept accepts any skos:Concept; this class types the canonical seeds."@en .
+
+fut:ProposalKind a owl:Class, gufo:Category ;
+    rdfs:subClassOf core:Category ;
+    rdfs:label "Proposal Kind"@en ;
+    skos:definition "The coded change kinds a fut:InfraProposal may carry (v0.2.0): spec change / new spec / service operation / deprecation. CLOSED for interoperability (the fedreg:status pattern): the unite client drops a proposal-kind value outside the coded set."@en ;
+    skos:scopeNote "gufo:Category of core:Category. Members are skos:Concepts in fut:proposalKindScheme."@en .
+
+fut:StakeholderRole a owl:Class, gufo:Category ;
+    rdfs:subClassOf core:Category ;
+    rdfs:label "Stakeholder Role"@en ;
+    skos:definition "The coded stakeholder strata scope B's role-cohort lens partitions by (v0.2.0): implementers / operators / participants. Role STANDING is declared-then-verified against the public federation web and fails closed to participant (unite SCOPE-DIFFERENTIATION §3.2) — the vocabulary only records whom a change touches."@en ;
+    skos:scopeNote "gufo:Category of core:Category. Members are skos:Concepts in fut:stakeholderRoleScheme."@en .
 
 # =============================================================================
 # 6. PROPERTIES. Sub-properties of a Core property where one fits; domained
@@ -385,9 +451,8 @@ fut:valueConcept a owl:ObjectProperty ;
 
 # --- Reaction layer ------------------------------------------------------------
 fut:onStatement a owl:ObjectProperty ;
-    rdfs:domain fut:Resonance ;
     rdfs:label "on statement"@en ;
-    skos:definition "The statement a Resonance reacts to: a fut:Claim, fut:Need, fut:Satisfier or fut:ValueStatement. Deliberately rangeless — the union is documented here and closed per-deliberation by the aggregator, not by OWL."@en .
+    skos:definition "The statement a reaction is about: for a fut:Resonance a fut:Claim, fut:Need, fut:Satisfier or fut:ValueStatement; for a fut:Critique (v0.2.0) the candidate synthesis under critique. Deliberately rangeless — the union is documented here and closed per-deliberation by the aggregator, not by OWL. No rdfs:domain since v0.2.0 (the section-6 multi-class-property rule): v0.1.0 domained it onto fut:Resonance; with fut:Critique reusing it, keeping that domain would have entailed every Critique to be a Resonance."@en .
 
 fut:stance a owl:ObjectProperty ;
     rdfs:domain fut:Resonance ;
@@ -519,6 +584,98 @@ fut:implementationTracker a owl:ObjectProperty ;
     rdfs:label "implementation tracker"@en ;
     skos:definition "The task tracker (a wf:Tracker in the shared task model) where a SpecSynthesis's implementation is tracked. Rangeless — wf:Tracker is not imported into the reasoned closure (Mode A; see futures-alignments.ttl)."@en .
 
+# --- Scope-B layer (v0.2.0): infrastructure proposals -------------------------
+fut:targetsSystem a owl:ObjectProperty ;
+    rdfs:domain fut:InfraProposal ;
+    rdfs:label "targets system"@en ;
+    skos:definition "The governed artifact being changed — an owl:Ontology version lineage, a protocol profile document, a fedreg:Registry, or a shared-service descriptor IRI. ≥1 (SHACL MUST). Deliberately rangeless: the governed surface is heterogeneous."@en .
+
+fut:proposalKind a owl:ObjectProperty ;
+    rdfs:domain fut:InfraProposal ;
+    rdfs:range fut:ProposalKind ;
+    rdfs:label "proposal kind"@en ;
+    skos:definition "The change kind, as a coded individual (the fedreg:status pattern): fut:SpecChange / fut:NewSpec / fut:ServiceOperation / fut:Deprecation. A non-coded value on read drops the field (closed set — conforming readers)."@en .
+
+fut:affectsRole a owl:ObjectProperty ;
+    rdfs:domain fut:InfraProposal ;
+    rdfs:range fut:StakeholderRole ;
+    rdfs:label "affects role"@en ;
+    skos:definition "Blast radius by stakeholder role (≥1, SHACL MUST): fut:ImplementerRole / fut:OperatorRole / fut:ParticipantRole. Role STANDING is declared-then-verified against the public federation web and fails closed to participant (unite SCOPE-DIFFERENTIATION §3.2) — this property only records whom the change touches."@en .
+
+fut:breakingChange a owl:DatatypeProperty ;
+    rdfs:domain fut:InfraProposal ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "breaking change"@en ;
+    skos:definition "Interop honesty: whether the change breaks running implementations. SHACL: breakingChange true ⇒ fut:migrationPath present."@en .
+
+fut:migrationPath a owl:DatatypeProperty ;
+    rdfs:domain fut:InfraProposal ;
+    rdfs:range xsd:string ;
+    rdfs:label "migration path"@en ;
+    skos:definition "The plain-language migration story a breaking change must carry."@en .
+
+fut:referenceImplementation a owl:ObjectProperty ;
+    rdfs:domain fut:InfraProposal ;
+    rdfs:label "reference implementation"@en ;
+    skos:definition "Running code (a repo/commit IRI). unite design/04 §2: REQUIRED before endorsement, not before compose — the endorsement-time requirement binds fut:AdoptionDecision's prov:wasDerivedFrom inputs (a cross-resource check the aggregator enforces), not drafts. Displayed as a link, never fetched/executed by the client (unite §7 security posture). Rangeless."@en .
+
+# --- Scope-B layer (v0.2.0): adoption decisions + observations ----------------
+fut:proposesVersion a owl:ObjectProperty ;
+    rdfs:domain fut:AdoptionDecision ;
+    rdfs:label "proposes version"@en ;
+    skos:definition "The immutable owl:versionIRI the decision recommends adopting. Rangeless — the target is a version IRI of any governed artifact."@en .
+
+fut:adoptionBar a owl:DatatypeProperty ;
+    rdfs:domain fut:AdoptionDecision ;
+    rdfs:range xsd:string ;
+    rdfs:label "adoption bar"@en ;
+    skos:definition "The measured ratification criteria (default: unite design/04 §2 — ≥2 independent implementations + ≥2 communities advertising via fedreg:acceptsSpec)."@en .
+
+fut:adoptionEvidence a owl:ObjectProperty ;
+    rdfs:domain fut:AdoptionDecision ;
+    rdfs:range fut:AdoptionObservation ;
+    rdfs:label "adoption evidence"@en ;
+    skos:definition "The observations the computed adoption status rests on."@en .
+
+fut:observedParty a owl:ObjectProperty ;
+    rdfs:domain fut:AdoptionObservation ;
+    rdfs:label "observed party"@en ;
+    skos:definition "The implementation/community whose advertisement was observed. Rangeless — implementations and communities are both first-class."@en .
+
+fut:observedVersion a owl:ObjectProperty ;
+    rdfs:domain fut:AdoptionObservation ;
+    rdfs:label "observed version"@en ;
+    skos:definition "The advertised spec version IRI."@en .
+
+fut:observedAt a owl:DatatypeProperty ;
+    rdfs:domain fut:AdoptionObservation ;
+    rdfs:range xsd:dateTime ;
+    rdfs:label "observed at"@en ;
+    skos:definition "When the advertisement was observed."@en .
+
+fut:observationSource a owl:ObjectProperty ;
+    rdfs:domain fut:AdoptionObservation ;
+    rdfs:label "observation source"@en ;
+    skos:definition "The registry/storage-description IRI the observation can be re-checked against — an index entry is a cache, never authoritative (unite design/02 §2)."@en .
+
+# --- Scope-C layer (v0.2.0): self-describing legitimacy -----------------------
+fut:methodProvenance a owl:ObjectProperty ;
+    rdfs:domain fut:SharedFuture ;
+    rdfs:range fut:DeliberationMethod ;
+    rdfs:label "method provenance"@en ;
+    skos:definition "Convenience mirror so a SharedFuture is self-describing about legitimacy (unite design/03 §5: anything forwarded to governance carries which method produced it): the deliberation-method concept (resonance-mapping / mediated-synthesis / mini-public). SHACL: REQUIRED on any SharedFuture whose inputs permitted fut:governmentUse — a cross-resource condition the forwarding service enforces."@en .
+
+fut:decomposedBy a owl:ObjectProperty ;
+    rdfs:domain fut:Claim ;
+    rdfs:label "decomposed by"@en ;
+    skos:definition "The decomposition activity's seam-recording (unite design/03 §1), mirroring the SynthesisMediator PROV pattern for the compose-side assistant: a derived fut:Claim → the prov:Activity (with prov:hadPlan) that split it from its narrative. Either way, fut:adoptedBy is what confers authorship. Rangeless — prov:Activity is not imported into the reasoned closure (Mode A; see futures-alignments.ttl)."@en .
+
+# --- Convergence Room (v0.2.0): the VSD prompt ---------------------------------
+fut:indirectStakeholders a owl:DatatypeProperty ;
+    rdfs:range xsd:string ;
+    rdfs:label "indirect stakeholders"@en ;
+    skos:definition "The VSD prompt (unite design/03 §5; Friedman & Hendry, Value Sensitive Design, 2019): who is affected that is not in the room — free text on a proposal. No rdfs:domain — it applies to both fut:AppProposal and fut:InfraProposal (the section-6 multi-class-property rule). Part of the compose grammar in scopes A and B (unite SCOPE-DIFFERENTIATION §1 row 1, §3.3 step 3)."@en .
+
 # =============================================================================
 # 7. CODED-VALUE SCHEMES — the canonical value sets (skos:Concept members).
 #    Each member is typed with its fut: coded class AND skos:Concept, carries
@@ -601,6 +758,46 @@ fut:miniPublic a fut:DeliberationMethod, skos:Concept ;
     skos:inScheme fut:methodScheme ; skos:notation "mini-public" ;
     skos:prefLabel "Mini-public"@en ;
     skos:definition "A sampled deliberative body (citizens'-assembly style) deliberates on behalf of the wider community; the sample's outputs are published as syntheses with dissent."@en .
+
+# --- Proposal kinds (v0.2.0; CLOSED — the unite client drops any other value) --
+fut:proposalKindScheme a skos:ConceptScheme ;
+    rdfs:label "Proposal Kind scheme"@en ;
+    skos:definition "The coded change-kind value set for fut:proposalKind (the fedreg:status pattern). Closed for interoperability."@en .
+
+fut:SpecChange a fut:ProposalKind, skos:Concept ;
+    skos:inScheme fut:proposalKindScheme ; skos:notation "spec-change" ;
+    skos:prefLabel "Spec change"@en ;
+    skos:definition "A change to an existing spec, protocol profile or vocabulary version lineage. (IRI read verbatim by the unite client.)"@en .
+fut:NewSpec a fut:ProposalKind, skos:Concept ;
+    skos:inScheme fut:proposalKindScheme ; skos:notation "new-spec" ;
+    skos:prefLabel "New spec"@en ;
+    skos:definition "A wholly new spec, protocol profile or vocabulary. (IRI read verbatim by the unite client.)"@en .
+fut:ServiceOperation a fut:ProposalKind, skos:Concept ;
+    skos:inScheme fut:proposalKindScheme ; skos:notation "service-operation" ;
+    skos:prefLabel "Service operation"@en ;
+    skos:definition "An operational change to a shared service (deployment, configuration, governance-of-infrastructure). (IRI read verbatim by the unite client.)"@en .
+fut:Deprecation a fut:ProposalKind, skos:Concept ;
+    skos:inScheme fut:proposalKindScheme ; skos:notation "deprecation" ;
+    skos:prefLabel "Deprecation"@en ;
+    skos:definition "Retiring a spec version, profile or shared service. (IRI read verbatim by the unite client.)"@en .
+
+# --- Stakeholder roles (v0.2.0; CLOSED) -----------------------------------------
+fut:stakeholderRoleScheme a skos:ConceptScheme ;
+    rdfs:label "Stakeholder Role scheme"@en ;
+    skos:definition "The coded stakeholder-strata value set for fut:affectsRole — the role-cohort lens scope B partitions blast radius by."@en .
+
+fut:ImplementerRole a fut:StakeholderRole, skos:Concept ;
+    skos:inScheme fut:stakeholderRoleScheme ; skos:notation "implementer" ;
+    skos:prefLabel "Implementer"@en ;
+    skos:definition "Someone who implements the governed artifact (writes/maintains conforming code). (IRI read verbatim by the unite client.)"@en .
+fut:OperatorRole a fut:StakeholderRole, skos:Concept ;
+    skos:inScheme fut:stakeholderRoleScheme ; skos:notation "operator" ;
+    skos:prefLabel "Operator"@en ;
+    skos:definition "Someone who runs an instance of the governed artifact (hosts/operates a conforming service). (IRI read verbatim by the unite client.)"@en .
+fut:ParticipantRole a fut:StakeholderRole, skos:Concept ;
+    skos:inScheme fut:stakeholderRoleScheme ; skos:notation "participant" ;
+    skos:prefLabel "Participant"@en ;
+    skos:definition "Someone who uses the governed artifact as an end participant — the fail-closed default standing (unite SCOPE-DIFFERENTIATION §3.2). (IRI read verbatim by the unite client.)"@en .
 
 # =============================================================================
 # 8. THE MAX-NEEF NEED MATRIX — axiological axis (the nine fundamental needs,

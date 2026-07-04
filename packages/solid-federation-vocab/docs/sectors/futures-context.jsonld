@@ -17,11 +17,29 @@
       "@id": "fut:adoptedBy",
       "@type": "@id"
     },
+    "adoptionBar": {
+      "@id": "fut:adoptionBar",
+      "@type": "xsd:string"
+    },
+    "AdoptionDecision": "fut:AdoptionDecision",
+    "adoptionEvidence": {
+      "@id": "fut:adoptionEvidence",
+      "@type": "@id"
+    },
+    "AdoptionObservation": "fut:AdoptionObservation",
+    "affectsRole": {
+      "@id": "fut:affectsRole",
+      "@type": "@id"
+    },
     "aggregate": "fut:aggregate",
     "AppProposal": "fut:AppProposal",
     "articulates": {
       "@id": "fut:articulates",
       "@type": "@id"
+    },
+    "breakingChange": {
+      "@id": "fut:breakingChange",
+      "@type": "xsd:boolean"
     },
     "bridgingEvidence": {
       "@id": "fut:bridgingEvidence",
@@ -49,12 +67,18 @@
     },
     "consentActionScheme": "fut:consentActionScheme",
     "ConvergenceMetrics": "fut:ConvergenceMetrics",
+    "Critique": "fut:Critique",
     "crossClusterConsensusRate": {
       "@id": "fut:crossClusterConsensusRate",
       "@type": "xsd:decimal"
     },
+    "decomposedBy": {
+      "@id": "fut:decomposedBy",
+      "@type": "@id"
+    },
     "Deliberation": "fut:Deliberation",
     "DeliberationMethod": "fut:DeliberationMethod",
+    "Deprecation": "fut:Deprecation",
     "dimension": {
       "@id": "fut:dimension",
       "@type": "@id"
@@ -99,10 +123,16 @@
       "@id": "fut:implementationTracker",
       "@type": "@id"
     },
+    "ImplementerRole": "fut:ImplementerRole",
     "inDeliberation": {
       "@id": "fut:inDeliberation",
       "@type": "@id"
     },
+    "indirectStakeholders": {
+      "@id": "fut:indirectStakeholders",
+      "@type": "xsd:string"
+    },
+    "InfraProposal": "fut:InfraProposal",
     "intensity": {
       "@id": "fut:intensity",
       "@type": "xsd:integer"
@@ -130,7 +160,15 @@
       "@id": "fut:method",
       "@type": "@id"
     },
+    "methodProvenance": {
+      "@id": "fut:methodProvenance",
+      "@type": "@id"
+    },
     "methodScheme": "fut:methodScheme",
+    "migrationPath": {
+      "@id": "fut:migrationPath",
+      "@type": "xsd:string"
+    },
     "miniPublic": "fut:miniPublic",
     "motivatedBy": {
       "@id": "fut:motivatedBy",
@@ -143,9 +181,26 @@
       "@type": "@id"
     },
     "NeedConcept": "fut:NeedConcept",
+    "NewSpec": "fut:NewSpec",
     "noDissentRecorded": {
       "@id": "fut:noDissentRecorded",
       "@type": "xsd:boolean"
+    },
+    "observationSource": {
+      "@id": "fut:observationSource",
+      "@type": "@id"
+    },
+    "observedAt": {
+      "@id": "fut:observedAt",
+      "@type": "xsd:dateTime"
+    },
+    "observedParty": {
+      "@id": "fut:observedParty",
+      "@type": "@id"
+    },
+    "observedVersion": {
+      "@id": "fut:observedVersion",
+      "@type": "@id"
     },
     "onStatement": {
       "@id": "fut:onStatement",
@@ -155,11 +210,27 @@
       "@id": "fut:operationalises",
       "@type": "@id"
     },
+    "OperatorRole": "fut:OperatorRole",
     "participantCount": {
       "@id": "fut:participantCount",
       "@type": "xsd:nonNegativeInteger"
     },
+    "ParticipantRole": "fut:ParticipantRole",
+    "proposalKind": {
+      "@id": "fut:proposalKind",
+      "@type": "@id"
+    },
+    "ProposalKind": "fut:ProposalKind",
+    "proposalKindScheme": "fut:proposalKindScheme",
+    "proposesVersion": {
+      "@id": "fut:proposesVersion",
+      "@type": "@id"
+    },
     "quoteVerbatim": "fut:quoteVerbatim",
+    "referenceImplementation": {
+      "@id": "fut:referenceImplementation",
+      "@type": "@id"
+    },
     "Resonance": "fut:Resonance",
     "ResonanceDimension": "fut:ResonanceDimension",
     "resonanceMapping": "fut:resonanceMapping",
@@ -195,9 +266,13 @@
       "@type": "xsd:nonNegativeInteger"
     },
     "self": "fut:self",
+    "ServiceOperation": "fut:ServiceOperation",
     "SharedFuture": "fut:SharedFuture",
     "SharedFutureCredential": "fut:SharedFutureCredential",
+    "SpecChange": "fut:SpecChange",
     "SpecSynthesis": "fut:SpecSynthesis",
+    "StakeholderRole": "fut:StakeholderRole",
+    "stakeholderRoleScheme": "fut:stakeholderRoleScheme",
     "stance": {
       "@id": "fut:stance",
       "@type": "@id"
@@ -205,6 +280,10 @@
     "Stance": "fut:Stance",
     "stanceScheme": "fut:stanceScheme",
     "synthesize": "fut:synthesize",
+    "targetsSystem": {
+      "@id": "fut:targetsSystem",
+      "@type": "@id"
+    },
     "unmetBecause": {
       "@id": "fut:unmetBecause",
       "@type": "xsd:string"

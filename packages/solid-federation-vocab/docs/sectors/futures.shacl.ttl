@@ -56,12 +56,32 @@
 # (b) one-resonance-per-(participant,statement), latest dct:created wins.
 # The k-anonymity floor on published aggregates is an ODRL constraint
 # (fut:kThreshold), evaluated by the consuming service.
+#
+# v0.2.0 ADDITIVE (the unite S1 draft's inline SHACL MUSTs, formalised):
+#  - an InfraProposal MUST carry ≥1 fut:motivatedBy (inherited requirement),
+#    ≥1 fut:targetsSystem, ≥1 fut:affectsRole from the closed role set; and
+#    breakingChange true ⇒ fut:migrationPath present (node-level sh:or);
+#  - an AdoptionDecision composes EVERY SharedFuture MUST via sh:node (the
+#    SpecSynthesis pattern — SHACL has no subclass closure) + exactly one
+#    fut:proposesVersion; its referenceImplementation-before-endorsement rule
+#    is CROSS-RESOURCE (binds the prov:wasDerivedFrom inputs) → aggregator;
+#  - an AdoptionObservation MUST carry observedParty / observedVersion /
+#    observedAt / observationSource (re-checkability is load-bearing);
+#  - a Critique replicates EXACTLY the unite serializeCritique emit shape
+#    (as:content ≤2000 + onStatement + created + creator + inDeliberation);
+#  - fut:methodProvenance, when present on a SharedFuture, MUST be one of the
+#    three method concepts (its REQUIRED-when-inputs-permitted-governmentUse
+#    condition is cross-resource → the forwarding service);
+#  - fut:indirectStakeholders is a SHOULD on both proposal shapes (the VSD
+#    compose prompt).
 # =============================================================================
 
 <https://w3id.org/jeswr/sectors/futures/profile>
     a prof:Profile ;
     dcterms:title "Solid Futures data-model profile (version-independent)"@en ;
-    dcterms:description "Resolves to the current Futures sector profile version."@en .
+    dcterms:hasVersion <https://w3id.org/jeswr/sectors/futures/profile/0.1.0> ,
+                       <https://w3id.org/jeswr/sectors/futures/profile/0.2.0> ;
+    dcterms:description "Resolves to the current Futures sector profile version (latest: 0.2.0)."@en .
 
 <https://w3id.org/jeswr/sectors/futures/profile/0.1.0>
     a prof:Profile ;
@@ -80,6 +100,24 @@
         prof:hasArtifact <https://w3id.org/jeswr/sectors/futures>
     ] ;
     rdfs:comment "Open-by-default SHACL profile for the futures sector; the version implementations pin via fedreg:acceptsSpec."@en .
+
+<https://w3id.org/jeswr/sectors/futures/profile/0.2.0>
+    a prof:Profile ;
+    dcterms:title "Solid Futures data-model profile 0.2.0"@en ;
+    dcterms:isVersionOf <https://w3id.org/jeswr/sectors/futures/profile> ;
+    owl:versionInfo "0.2.0" ;
+    owl:versionIRI <https://w3id.org/jeswr/sectors/futures/profile/0.2.0> ;
+    prof:isProfileOf <https://w3id.org/jeswr/sectors/futures> ;
+    prof:hasToken "solid-futures-0.2.0" ;
+    prof:hasResource [
+        prof:hasRole <http://www.w3.org/ns/dx/prof/role/constraints> ;
+        prof:hasArtifact <https://w3id.org/jeswr/sectors/futures/futures.shacl.ttl>
+    ] ;
+    prof:hasResource [
+        prof:hasRole <http://www.w3.org/ns/dx/prof/role/vocabulary> ;
+        prof:hasArtifact <https://w3id.org/jeswr/sectors/futures>
+    ] ;
+    rdfs:comment "IMMUTABLE version IRI. ADDITIVE over 0.1.0 (the unite S1 futures-0.2.0 draft, formalised): the scope-B InfraProposal + AdoptionDecision/AdoptionObservation shapes, the Convergence-Room Critique shape, and the methodProvenance / indirectStakeholders constraints. Open shapes; sh:Violation=MUST, sh:Warning=SHOULD."@en .
 
 # -----------------------------------------------------------------------------
 # Need — exactly what the unite client writes (model.ts serializeNeed) and
@@ -411,6 +449,13 @@ fsh:SharedFutureShape
         sh:severity sh:Violation ;
         sh:message "fut:bridgingScore, when present, MUST be an xsd:decimal in [0,1] — the product-over-clusters group-informed-consensus score; an out-of-band value would corrupt ranking."@en
     ] ;
+    sh:property [
+        sh:path fut:methodProvenance ;
+        sh:maxCount 1 ;
+        sh:in ( fut:resonanceMapping fut:mediatedSynthesis fut:miniPublic ) ;
+        sh:severity sh:Violation ;
+        sh:message "fut:methodProvenance (v0.2.0), when present, MUST be one of fut:resonanceMapping / fut:mediatedSynthesis / fut:miniPublic. Its REQUIRED-when-any-input-permitted-fut:governmentUse condition is cross-resource (the inputs' ODRL policies) and is enforced by the forwarding service, not here."@en
+    ] ;
     sh:or (
         [ sh:property [ sh:path fut:dissent ; sh:minCount 1 ] ]
         [ sh:property [ sh:path fut:noDissentRecorded ; sh:hasValue true ] ]
@@ -528,6 +573,13 @@ fsh:AppProposalShape
         sh:minCount 1 ;
         sh:severity sh:Warning ;
         sh:message "An AppProposal SHOULD carry a dct:title (it is a wf:Task in the shared task model — the title is what solid-issues / Pod Manager render)."@en
+    ] ;
+    sh:property [
+        sh:path fut:indirectStakeholders ;
+        sh:maxCount 1 ;
+        sh:or ( [ sh:datatype xsd:string ] [ sh:datatype rdf:langString ] ) ;
+        sh:severity sh:Warning ;
+        sh:message "An AppProposal SHOULD carry the fut:indirectStakeholders VSD prompt (v0.2.0; ≤1, free text) — who is affected that is not in the room (unite design/03 §5)."@en
     ] .
 
 fsh:SpecSynthesisShape
@@ -571,4 +623,195 @@ fsh:AcceptanceCriterionShape
         sh:or ( [ sh:datatype xsd:string ] [ sh:datatype rdf:langString ] ) ;
         sh:severity sh:Violation ;
         sh:message "An AcceptanceCriterion MUST state its testable criterion as as:content."@en
+    ] .
+
+# -----------------------------------------------------------------------------
+# Scope-B layer (v0.2.0) — InfraProposal / AdoptionDecision / AdoptionObservation
+# (the unite S1 draft's inline SHACL MUSTs, formalised).
+# -----------------------------------------------------------------------------
+fsh:InfraProposalShape
+    a sh:NodeShape ;
+    sh:targetClass fut:InfraProposal ;
+    rdfs:label "Infrastructure Proposal shape"@en ;
+    sh:property [
+        sh:path fut:motivatedBy ;
+        sh:minCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:severity sh:Violation ;
+        sh:message "An InfraProposal MUST trace to ≥1 fut:motivatedBy (a Need or ValueStatement) — the inherited value-centric requirement that stops scope B degenerating into a feature-request tracker."@en
+    ] ;
+    sh:property [
+        sh:path fut:targetsSystem ;
+        sh:minCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:severity sh:Violation ;
+        sh:message "An InfraProposal MUST name ≥1 fut:targetsSystem — the governed artifact being changed (an ontology version lineage, a protocol profile, a fedreg:Registry, a shared-service descriptor)."@en
+    ] ;
+    sh:property [
+        sh:path fut:affectsRole ;
+        sh:minCount 1 ;
+        sh:in ( fut:ImplementerRole fut:OperatorRole fut:ParticipantRole ) ;
+        sh:severity sh:Violation ;
+        sh:message "An InfraProposal MUST declare its blast radius: ≥1 fut:affectsRole from the CLOSED set fut:ImplementerRole / fut:OperatorRole / fut:ParticipantRole."@en
+    ] ;
+    sh:property [
+        sh:path fut:proposalKind ;
+        sh:maxCount 1 ;
+        sh:in ( fut:SpecChange fut:NewSpec fut:ServiceOperation fut:Deprecation ) ;
+        sh:severity sh:Violation ;
+        sh:message "fut:proposalKind, when present, MUST be one of the CLOSED coded kinds fut:SpecChange / fut:NewSpec / fut:ServiceOperation / fut:Deprecation — conforming readers drop any other value."@en
+    ] ;
+    sh:property [
+        sh:path fut:breakingChange ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:boolean ;
+        sh:severity sh:Violation ;
+        sh:message "fut:breakingChange, when present, MUST be a single xsd:boolean."@en
+    ] ;
+    sh:property [
+        sh:path fut:referenceImplementation ;
+        sh:nodeKind sh:IRI ;
+        sh:severity sh:Warning ;
+        sh:message "An InfraProposal SHOULD link running code via fut:referenceImplementation (a repo/commit IRI, displayed as a link — never fetched/executed). It is REQUIRED before ENDORSEMENT, not compose: that rule binds an AdoptionDecision's prov:wasDerivedFrom inputs and is enforced by the aggregator (cross-resource)."@en
+    ] ;
+    sh:property [
+        sh:path fut:indirectStakeholders ;
+        sh:maxCount 1 ;
+        sh:or ( [ sh:datatype xsd:string ] [ sh:datatype rdf:langString ] ) ;
+        sh:severity sh:Warning ;
+        sh:message "An InfraProposal SHOULD carry the fut:indirectStakeholders VSD prompt (≤1, free text) — who is affected that is not in the room (unite design/03 §5)."@en
+    ] ;
+    sh:property [
+        sh:path dcterms:title ;
+        sh:minCount 1 ;
+        sh:severity sh:Warning ;
+        sh:message "An InfraProposal SHOULD carry a dct:title (it is a wf:Task in the shared task model — the title is what solid-issues / Pod Manager render)."@en
+    ] ;
+    # Interop honesty: breakingChange true ⇒ a plain-language migration story.
+    # Encoded as a node-level sh:or (the dissent-annex pattern): EITHER no
+    # fut:breakingChange value is true, OR fut:migrationPath is present.
+    sh:or (
+        [ sh:property [ sh:path fut:breakingChange ; sh:in ( false ) ] ]
+        [ sh:property [ sh:path fut:migrationPath ; sh:minCount 1 ] ]
+    ) ;
+    sh:message "An InfraProposal asserting fut:breakingChange true MUST carry a fut:migrationPath — interop honesty: a breaking change never ships without its migration story."@en ;
+    sh:severity sh:Violation .
+
+fsh:AdoptionDecisionShape
+    a sh:NodeShape ;
+    sh:targetClass fut:AdoptionDecision ;
+    rdfs:label "Adoption Decision shape"@en ;
+    # SHACL does NOT apply RDFS subclass closure to sh:targetClass (see the
+    # fsh:SpecSynthesisShape note) — compose every SharedFuture MUST explicitly:
+    # provenance, bridging evidence, proof, and the MANDATORY dissent annex.
+    sh:node fsh:SharedFutureShape ;
+    sh:property [
+        sh:path fut:proposesVersion ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:severity sh:Violation ;
+        sh:message "An AdoptionDecision MUST recommend exactly one fut:proposesVersion — the immutable version IRI it recommends adopting."@en
+    ] ;
+    sh:property [
+        sh:path fut:adoptionBar ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:or ( [ sh:datatype xsd:string ] [ sh:datatype rdf:langString ] ) ;
+        sh:severity sh:Warning ;
+        sh:message "An AdoptionDecision SHOULD state its fut:adoptionBar — the measured ratification criteria consumers recompute status against (default: unite design/04 §2). There is deliberately NO adoptionStatus decree property."@en
+    ] ;
+    sh:property [
+        sh:path fut:adoptionEvidence ;
+        sh:nodeKind sh:IRI ;
+        sh:severity sh:Warning ;
+        sh:message "fut:adoptionEvidence links the AdoptionObservation records the computed status rests on — legitimately EMPTY at compose time (ratification is measured on the wire, later), so evidence presence is not a MUST."@en
+    ] .
+
+fsh:AdoptionObservationShape
+    a sh:NodeShape ;
+    sh:targetClass fut:AdoptionObservation ;
+    rdfs:label "Adoption Observation shape"@en ;
+    sh:property [
+        sh:path fut:observedParty ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:severity sh:Violation ;
+        sh:message "An AdoptionObservation MUST name exactly one fut:observedParty — whose fedreg:acceptsSpec advertisement was observed."@en
+    ] ;
+    sh:property [
+        sh:path fut:observedVersion ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:severity sh:Violation ;
+        sh:message "An AdoptionObservation MUST name exactly one fut:observedVersion — the advertised spec version IRI."@en
+    ] ;
+    sh:property [
+        sh:path fut:observedAt ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:dateTime ;
+        sh:severity sh:Violation ;
+        sh:message "An AdoptionObservation MUST carry exactly one fut:observedAt xsd:dateTime."@en
+    ] ;
+    sh:property [
+        sh:path fut:observationSource ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:severity sh:Violation ;
+        sh:message "An AdoptionObservation MUST carry exactly one fut:observationSource — the registry/storage-description IRI the claim is re-checked against (an index entry is a cache, never authoritative)."@en
+    ] .
+
+# -----------------------------------------------------------------------------
+# Convergence Room (v0.2.0) — Critique: EXACTLY the unite client's
+# serializeCritique output shape (jeswr/unite app/src/lib/model.ts —
+# parseCritiques drops an item missing any required field).
+# -----------------------------------------------------------------------------
+fsh:CritiqueShape
+    a sh:NodeShape ;
+    sh:targetClass fut:Critique ;
+    rdfs:label "Critique shape"@en ;
+    sh:property [
+        sh:path as:content ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:or ( [ sh:datatype xsd:string ] [ sh:datatype rdf:langString ] ) ;
+        sh:maxLength 2000 ;
+        sh:severity sh:Violation ;
+        sh:message "A Critique MUST carry exactly one as:content free-text (string or language-tagged, ≤2000 chars — the unite MAX_CONTENT_LENGTH)."@en
+    ] ;
+    sh:property [
+        sh:path fut:onStatement ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:severity sh:Violation ;
+        sh:message "A Critique MUST target exactly one fut:onStatement IRI — the candidate synthesis under critique."@en
+    ] ;
+    sh:property [
+        sh:path dcterms:created ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:dateTime ;
+        sh:severity sh:Violation ;
+        sh:message "A Critique MUST carry exactly one dct:created xsd:dateTime."@en
+    ] ;
+    sh:property [
+        sh:path dcterms:creator ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:severity sh:Violation ;
+        sh:message "A Critique MUST carry exactly one dct:creator WebID IRI — it lives in the CRITIC's own pod like every statement."@en
+    ] ;
+    sh:property [
+        sh:path fut:inDeliberation ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:severity sh:Violation ;
+        sh:message "A Critique MUST reference exactly one fut:inDeliberation IRI."@en
     ] .

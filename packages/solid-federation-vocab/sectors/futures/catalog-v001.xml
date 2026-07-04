@@ -30,4 +30,5 @@
   <uri name="https://w3id.org/jeswr/sectors/futures" uri="futures.ttl"/>
   <uri name="https://w3id.org/jeswr/sectors/futures#" uri="futures.ttl"/>
   <uri name="https://w3id.org/jeswr/sectors/futures/0.1.0" uri="futures.ttl"/>
+  <uri name="https://w3id.org/jeswr/sectors/futures/0.2.0" uri="futures.ttl"/>
 </catalog>

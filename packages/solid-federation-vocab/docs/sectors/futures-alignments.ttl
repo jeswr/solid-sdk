@@ -18,7 +18,7 @@
 @prefix dbr:     <http://dbpedia.org/resource/> .              # DBpedia resources (literature anchors)
 
 # =============================================================================
-# Solid FUTURES sector — ALIGNMENTS (v0.1.0).
+# Solid FUTURES sector — ALIGNMENTS (v0.2.0).
 #
 # Bridges the futures-sector terms (futures.ttl) to the external vocabularies
 # and literature concepts unite's design names. EXTERNAL REUSE IS MODE A: we do
@@ -53,8 +53,8 @@
 <https://w3id.org/jeswr/sectors/futures/alignments> a owl:Ontology ;
     dcterms:title "Solid Futures sector — external alignments"@en ;
     owl:imports <https://w3id.org/jeswr/sectors/futures> ;
-    owl:versionInfo "0.1.0" ;
-    rdfs:comment "Optional Mode-A bridge: ActivityStreams 2.0 reaction/event terms, PROV-O activity framing, ODRL 2.2 profiled actions, VC 2.0 credential class, the shared task model's wf: terms, and scheme-level literature anchors for the Max-Neef and Schwartz seeds. External IRIs are real and governed by their bodies. Nothing is owl:imported into the reasoned closure."@en .
+    owl:versionInfo "0.2.0" ;
+    rdfs:comment "Optional Mode-A bridge: ActivityStreams 2.0 reaction/event terms, PROV-O activity framing, ODRL 2.2 profiled actions, VC 2.0 credential class, the shared task model's wf: terms, and scheme-level literature anchors for the Max-Neef and Schwartz seeds. External IRIs are real and governed by their bodies. Nothing is owl:imported into the reasoned closure. v0.2.0 adds the fedreg: anchors for the adoption machinery."@en .
 
 dcterms:title a owl:AnnotationProperty .
 dcterms:source a owl:AnnotationProperty .
@@ -104,11 +104,21 @@ fut:SharedFutureCredential skos:closeMatch cred:VerifiableCredential .
 
 # -----------------------------------------------------------------------------
 # The shared task model (wf: — SolidOS workflow, the base @jeswr/solid-task-model
-# rides on). fut:AppProposal is ALREADY rdfs:subClassOf wf:Task in futures.ttl
-# (the federation edge is load-bearing, not an annotation); here only the
-# tracker pointer's intended range is anchored.
+# rides on). fut:AppProposal (and, since v0.2.0, fut:InfraProposal) is ALREADY
+# rdfs:subClassOf wf:Task in futures.ttl (the federation edge is load-bearing,
+# not an annotation); here only the tracker pointer's intended range is anchored.
 # -----------------------------------------------------------------------------
 fut:implementationTracker rdfs:seeAlso wf:Tracker .
+
+# -----------------------------------------------------------------------------
+# The federation registry (fedreg: — this repo's fedreg.ttl) — v0.2.0 adoption
+# machinery anchors. An AdoptionObservation records ONE observed
+# fedreg:acceptsSpec advertisement; the observationSource is the registry /
+# storage-description resource the claim is re-checked against. Annotation
+# only (rdfs:seeAlso) — fedreg: is not owl:imported into the reasoned closure.
+# -----------------------------------------------------------------------------
+fut:AdoptionObservation  rdfs:seeAlso <https://w3id.org/jeswr/fedreg#acceptsSpec> .
+fut:observationSource    rdfs:seeAlso <https://w3id.org/jeswr/fedreg#Registry> .
 
 # -----------------------------------------------------------------------------
 # LITERATURE ANCHORS — scheme level only (see header note).

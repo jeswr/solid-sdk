@@ -12,7 +12,10 @@
 # plain literal) + fut:needConcept + dct:created (xsd:dateTime) + dct:creator +
 # fut:inDeliberation (+ optional fut:intensity xsd:integer) for a Need;
 # rdf:type + fut:onStatement + fut:stance + dct:created + dct:creator +
-# fut:inDeliberation (+ optional fut:dimension) for a Resonance.
+# fut:inDeliberation (+ optional fut:dimension) for a Resonance. The v0.2.0
+# Critique instance (16) likewise replicates serializeCritique's exact emit
+# shape; 17–19 exercise the scope-B InfraProposal / AdoptionObservation /
+# AdoptionDecision shapes.
 #
 @prefix fut:     <https://w3id.org/jeswr/sectors/futures#> .
 @prefix core:    <https://w3id.org/jeswr/core#> .
@@ -191,3 +194,64 @@ town:sf-01-credential a fut:SharedFutureCredential ;
         sec:cryptosuite "eddsa-rdfc-2022" ;
         dct:created "2026-06-30T17:10:00Z"^^xsd:dateTime
     ] .
+
+# =============================================================================
+# v0.2.0 instances — the Convergence-Room critique unit + the scope-B
+# infrastructure-proposal and adoption machinery.
+# =============================================================================
+
+# 16. Critique — EXACTLY the unite client's serializeCritique output shape
+#     (lives in the CRITIC's own pod; standing critiques at endorsement time
+#     are the raw material of the mandatory dissent annex).
+<https://bob.pod.example/unite/town-2040/critiques/c-5a1b3c7d.ttl#it> a fut:Critique ;
+    as:content "The portfolio framing hides that the orbital bus line needs a depot the plan does not fund." ;
+    fut:onStatement town:sf-01 ;
+    dct:created "2026-06-29T19:20:00Z"^^xsd:dateTime ;
+    dct:creator <https://bob.pod.example/profile/card#me> ;
+    fut:inDeliberation town:deliberation .
+
+# 17. InfraProposal — a scope-B proposed change to a shared digital system:
+#     value-centric (motivatedBy), names the governed artifact (targetsSystem),
+#     declares blast radius (affectsRole), and — being breaking — carries its
+#     migration story.
+town:infra-01 a fut:InfraProposal ;
+    dct:title "Adopt futures sector 0.2.0" ;
+    as:content "Bump the deliberation vocabulary to 0.2.0 so critiques and infrastructure proposals are first-class data." ;
+    fut:motivatedBy <https://alice.pod.example/unite/town-2040/needs/n-7f3a2b1c.ttl#it> ;
+    fut:targetsSystem <https://w3id.org/jeswr/sectors/futures> ;
+    fut:proposalKind fut:SpecChange ;
+    fut:affectsRole fut:ImplementerRole , fut:OperatorRole ;
+    fut:breakingChange false ;
+    fut:referenceImplementation <https://github.com/jeswr/unite> ;
+    fut:indirectStakeholders "Communities running older clients that read town deliberation data but were not in this room." ;
+    dct:creator <https://bob.pod.example/profile/card#me> ;
+    dct:created "2026-07-02T10:00:00Z"^^xsd:dateTime ;
+    fut:inDeliberation town:deliberation .
+
+# 18. AdoptionObservation — one observed fedreg:acceptsSpec advertisement
+#     (a cache, never authoritative: re-checked at the observationSource).
+town:obs-01 a fut:AdoptionObservation ;
+    fut:observedParty <https://commons.example/profile#org> ;
+    fut:observedVersion <https://w3id.org/jeswr/sectors/futures/0.2.0> ;
+    fut:observedAt "2026-07-03T08:00:00Z"^^xsd:dateTime ;
+    fut:observationSource <https://commons.example/registry#registry> .
+
+# 19. AdoptionDecision — a converged recommendation (⊑ SharedFuture: carries
+#     provenance, bridging evidence, proof AND the dissent annex); ratification
+#     is MEASURED from evidence against the stated bar, never decreed.
+town:adopt-01 a fut:AdoptionDecision ;
+    as:content "We recommend adopting futures sector 0.2.0 for the town's deliberation data." ;
+    fut:proposesVersion <https://w3id.org/jeswr/sectors/futures/0.2.0> ;
+    fut:adoptionBar "≥2 independent implementations and ≥2 communities advertising the version via fedreg:acceptsSpec." ;
+    fut:adoptionEvidence town:obs-01 ;
+    fut:methodProvenance fut:resonanceMapping ;
+    prov:wasDerivedFrom town:infra-01 ;
+    prov:wasGeneratedBy town:synthesis-activity-01 ;
+    fut:bridgingEvidence town:sf-01-evidence-c0 , town:sf-01-evidence-c1 ;
+    fut:noDissentRecorded true ;
+    sec:proof [
+        a sec:DataIntegrityProof ;
+        sec:cryptosuite "eddsa-rdfc-2022" ;
+        dct:created "2026-07-03T09:00:00Z"^^xsd:dateTime
+    ] ;
+    dct:created "2026-07-03T09:00:00Z"^^xsd:dateTime .
