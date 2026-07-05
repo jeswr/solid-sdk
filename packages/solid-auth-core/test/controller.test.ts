@@ -3823,14 +3823,20 @@ describe("createSolidAuth — dropSession keeps the durable credential (transien
     recordedAuthHeader = null;
     await controller.authenticatedFetch("https://alice.pod.example/private/doc");
     expect(recordedAuthHeader).toBe("DPoP access-token");
+    // A consumer may CAPTURE the live handle (e.g. into a React memo) — it too must
+    // stop attaching after the drop (it reads the live session per call).
+    const capturedLiveHandle = controller.authenticatedFetch;
 
     await controller.dropSession();
 
-    // After dropSession the SAME handle attaches NOTHING (no live session), and the
-    // getter hands back the pristine publicFetch identity.
+    // After dropSession the getter hands back the pristine publicFetch identity…
     expect(controller.authenticatedFetch).toBe(controller.publicFetch);
     recordedAuthHeader = null;
     await controller.authenticatedFetch("https://alice.pod.example/private/doc");
+    expect(recordedAuthHeader).toBeNull();
+    // …and the CAPTURED pre-drop handle attaches nothing either (no live session).
+    recordedAuthHeader = null;
+    await capturedLiveHandle("https://alice.pod.example/private/doc");
     expect(recordedAuthHeader).toBeNull();
     // No login-stall regression: dropSession never reads or patches the global fetch
     // (patchGlobalFetch defaults false — the global must be byte-identical).
