@@ -50,7 +50,7 @@
   },
   "homepage": "https://github.com/jeswr/solid-community-feeds#readme",
   "dependencies": {
-    "@jeswr/guarded-fetch": "github:jeswr/guarded-fetch#cc477056c0d573a4cb2aa9bec8420c246221af36"
+    "@jeswr/guarded-fetch": "github:jeswr/guarded-fetch#184f060d95cc29ef7a01e8bc28fb04bb24b5af76"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.0.0",
