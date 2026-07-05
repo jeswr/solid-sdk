@@ -17,6 +17,7 @@
 import {
   AccountMenu,
   Button,
+  ErrorBoundary,
   FeedbackButton,
   ThemeToggle,
   useSolidExtensionPresent,
@@ -37,6 +38,28 @@ import { useSession } from "./auth/SessionProvider";
 import { LoginScreen } from "./LoginScreen";
 
 export function App() {
+  // CRASH-RESILIENCE BOUNDARY (#72/#73 cross-app parity): the shared
+  // @jeswr/app-shell <ErrorBoundary> wraps the app's routed root, INSIDE the
+  // providers (ThemeProvider/SessionProvider sit above in main.tsx) so a caught
+  // render error still paints THEMED chrome — the default <ErrorState> fallback
+  // themes through the same OKLCH tokens + `.dark` class.
+  //
+  // resetKey: pod-drive is ROUTER-FREE (no pathname/hash routes — FileBrowser
+  // descends the container tree via internal state), so the app's only
+  // "navigation" is the session transition (login ↔ app, keyed on webId).
+  // Passing `webId` as the resetKey means a logout/login clears a caught error;
+  // within-view recovery is the default fallback's own Retry button (reset →
+  // the children remount fresh). This deliberately mirrors the sibling apps'
+  // `resetKey={pathname}` recipe with this app's routing analog.
+  const { webId } = useSession();
+  return (
+    <ErrorBoundary resetKey={webId}>
+      <AppContent />
+    </ErrorBoundary>
+  );
+}
+
+function AppContent() {
   const { webId, session, logout, autologinPending, restoringSession } = useSession();
   // When the @jeswr Solid browser extension is installed it shows its OWN pinned top-right
   // account menu (avatar + WebID + sign-out), so rendering the app's <AccountMenu/> too is
