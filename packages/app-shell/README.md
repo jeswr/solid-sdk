@@ -184,6 +184,40 @@ WebID (that lives on `window.solid.webId`, `null` until the user authenticates
 through the extension). Hiding the app's own menu on mere presence is intended: the
 extension owns the account surface whether or not the user has signed in there yet.
 
+## Error boundary + error state
+
+The shared render-error handling (cross-app parity: one boundary in the shell,
+not a hand-rolled copy per app). Wrap your routed content once:
+
+```tsx
+import { ErrorBoundary, ErrorState } from "@jeswr/app-shell";
+
+// Vite (react-router): reset on navigation so a crashed page clears itself.
+const { pathname } = useLocation();
+<ErrorBoundary resetKey={pathname} onError={(err, info) => reportError(err, info)}>
+  <Routes>…</Routes>
+</ErrorBoundary>;
+
+// Standalone panel for a failed data fetch (role="alert", themed):
+<ErrorState title="Could not load mail" message="Check your connection." onRetry={refetch} />;
+```
+
+- `<ErrorBoundary>` — catches render/lifecycle errors in its subtree
+  (`getDerivedStateFromError`/`componentDidCatch`) and shows a themed fallback
+  instead of white-screening the app. Props: `resetKey` (recovers when it
+  **changes** — pass the route/pathname), `onError(error, info)` (the telemetry
+  seam — the **only** place raw error internals go; a thrown non-Error is
+  normalised to an `Error` first), and `fallback` (a node, or
+  `({ error, reset }) => ReactNode`; default `<ErrorState onRetry={reset} />`).
+  The **default fallback never renders the error message or stack** — the UI
+  shows friendly copy only, in production and everywhere else.
+- `<ErrorState>` — the standalone themed error panel: alert icon + `title` +
+  `message` + an optional Retry button (`onRetry` / `retryLabel`), with
+  `role="alert"`. Matches the shell's empty/loading-state visual language and
+  themes through the `as-` token utilities (no `dark:` variants), so it follows
+  the ThemeProvider automatically. Don't pass raw `Error#message` text into
+  `message` — keep diagnostics in telemetry.
+
 ## Styling
 
 The components use shadcn-compatible token utility classes, but through a
@@ -272,6 +306,9 @@ It complements `test/public-api.test.ts`, which pins the runtime export set.
    passing **this app's own** repo (the only required, app-specific value). Wire
    `webId` + `appVersion` if available, and a `submit` hook once the feedback
    proxy exists.
+6. Wrap the routed content in `<ErrorBoundary resetKey={pathname}>` (see "Error
+   boundary + error state") so a page crash shows a themed, recoverable panel
+   instead of a white screen; use `<ErrorState>` for failed data fetches.
 
 The pod-mail app is the reference pilot.
 

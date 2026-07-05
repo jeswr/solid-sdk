@@ -9,9 +9,14 @@
 //    on the app's own repo, via prefill or a server-side proxy hook).
 //  - Solid browser-extension presence: useSolidExtensionPresent() — flip an app's
 //    own chrome off when the @jeswr Solid browser extension is on the page.
+//  - Error handling: <ErrorBoundary> (subtree render-error catcher, resetKey /
+//    onError / custom fallback) + <ErrorState> (themed role="alert" error panel,
+//    also usable standalone for failed fetches).
 // The shadcn-compatible primitives are exported too for apps that want to build
 // their own header chrome on the same Radix + token base.
 export { AccountMenu, initials } from "./components/account-menu.js";
+export { ErrorBoundary, } from "./components/error-boundary.js";
+export { ErrorState } from "./components/error-state.js";
 export { FeedbackButton, FeedbackDialog, } from "./components/feedback.js";
 export { Avatar, AvatarFallback, AvatarImage, Button, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger, } from "./components/primitives.js";
 export { ThemeProvider, themeScript, useTheme, } from "./components/theme-provider.js";

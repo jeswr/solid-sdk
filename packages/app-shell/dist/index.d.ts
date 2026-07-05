@@ -1,4 +1,6 @@
 export { AccountMenu, type AccountMenuProps, initials } from "./components/account-menu.js";
+export { ErrorBoundary, type ErrorBoundaryFallbackProps, type ErrorBoundaryProps, type ErrorBoundaryState, } from "./components/error-boundary.js";
+export { ErrorState, type ErrorStateProps } from "./components/error-state.js";
 export { FeedbackButton, type FeedbackButtonProps, FeedbackDialog, type FeedbackDialogProps, } from "./components/feedback.js";
 export { Avatar, AvatarFallback, AvatarImage, Button, type ButtonProps, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger, } from "./components/primitives.js";
 export { type ResolvedTheme, type Theme, type ThemeContextValue, ThemeProvider, type ThemeProviderProps, themeScript, useTheme, } from "./components/theme-provider.js";

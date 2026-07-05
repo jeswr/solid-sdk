@@ -24,6 +24,9 @@ const PUBLIC_EXPORTS = [
   // Account menu
   "AccountMenu",
   "initials",
+  // Error handling (boundary + standalone themed panel)
+  "ErrorBoundary",
+  "ErrorState",
   // Feedback (components + pure, testable helpers)
   "FeedbackButton",
   "FeedbackDialog",

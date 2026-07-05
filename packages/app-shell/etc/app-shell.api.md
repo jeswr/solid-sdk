@@ -5,7 +5,9 @@
 ```ts
 
 import * as AvatarPrimitive from '@radix-ui/react-avatar';
+import { Component } from 'react';
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu';
+import { ErrorInfo } from 'react';
 import { JSX } from 'react';
 import type * as React_2 from 'react';
 import { ReactNode } from 'react';
@@ -82,6 +84,53 @@ export function DropdownMenuSeparator(input: React_2.ComponentProps<typeof Dropd
 
 // @public (undocumented)
 export const DropdownMenuTrigger: React_2.ForwardRefExoticComponent<DropdownMenuPrimitive.DropdownMenuTriggerProps & React_2.RefAttributes<HTMLButtonElement>>;
+
+// @public
+export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+    // (undocumented)
+    componentDidCatch(thrown: Error, info: ErrorInfo): void;
+    // (undocumented)
+    componentDidUpdate(prevProps: ErrorBoundaryProps): void;
+    // (undocumented)
+    static getDerivedStateFromError(thrown: unknown): ErrorBoundaryState;
+    // (undocumented)
+    render(): ReactNode;
+    reset: () => void;
+    // (undocumented)
+    state: ErrorBoundaryState;
+}
+
+// @public
+export interface ErrorBoundaryFallbackProps {
+    error: Error;
+    reset: () => void;
+}
+
+// @public (undocumented)
+export interface ErrorBoundaryProps {
+    children?: ReactNode;
+    fallback?: ReactNode | ((props: ErrorBoundaryFallbackProps) => ReactNode) | undefined;
+    onError?: ((error: Error, info: ErrorInfo) => void) | undefined;
+    resetKey?: unknown;
+}
+
+// @public
+export interface ErrorBoundaryState {
+    // (undocumented)
+    error: Error | null;
+}
+
+// @public
+export function ErrorState(input: ErrorStateProps): JSX.Element;
+
+// @public (undocumented)
+export interface ErrorStateProps {
+    className?: string | undefined;
+    message?: string | undefined;
+    onRetry?: (() => void) | undefined;
+    retryLabel?: string | undefined;
+    title?: string | undefined;
+}
 
 // @public
 export function FeedbackButton(input: FeedbackButtonProps): React_2.JSX.Element;
