@@ -4139,3 +4139,171 @@ describe("createSolidAuth — dropSession keeps the durable credential (transien
     expect(store.map.get(ISSUER)?.refreshToken).toBe("refresh-token");
   });
 });
+
+describe("createSolidAuth — the drain-window race at EVERY drain-before-bump call site (roborev Medium fix)", () => {
+  // The same race the dropSession drain-loop fixed exists wherever the engine
+  // drains grants then bumps the generation: login() and completeRedirectLogin().
+  // A grant that REGISTERS during the awaited drain pass (its pre-grant fence saw
+  // the not-yet-bumped generation) is missed by that pass's snapshot; unaborted,
+  // it would redeem (rotate) the refresh token while its guarded rotation write is
+  // generation-skipped after the bump — stranding the durable credential on the
+  // now-server-spent old token. Every call site now drains in an INLINE loop until
+  // no grant remains (loop-exit → bump is synchronous, so nothing can interleave).
+  //
+  // Deterministic construction (as in the dropSession race test): grant A is a
+  // gated in-flight proactive refresh; the drain-before-bump op is called (snapshot
+  // [A], drain window opens); a restore() issued SYNCHRONOUSLY in the same task
+  // registers grant B inside the window (restore-grant registration is synchronous
+  // with the call). The gate is released only AFTER the op settles, so under the
+  // old single-pass code B would then run unaborted and redeem the token
+  // (restoreRotationsAttempted > 0); with the loop, B is aborted before spending.
+
+  const ALICE = "https://alice.pod.example/profile/card#me";
+  const ISSUER = "https://idp.example/";
+  const REMEMBERED_KEY = "drain-race-test.remembered-account";
+  const RECENT_KEY = "drain-race-test.recent-accounts";
+
+  function installKeyedLocalStorage(): { map: Map<string, string>; restore: () => void } {
+    const map = new Map<string, string>();
+    const ls = {
+      getItem: (k: string) => (map.has(k) ? (map.get(k) as string) : null),
+      setItem: (k: string, v: string) => {
+        map.set(k, v);
+      },
+      removeItem: (k: string) => {
+        map.delete(k);
+      },
+    };
+    const orig = globalThis.localStorage;
+    Object.defineProperty(globalThis, "localStorage", { configurable: true, value: ls });
+    return {
+      map,
+      restore: () =>
+        Object.defineProperty(globalThis, "localStorage", { configurable: true, value: orig }),
+    };
+  }
+
+  it("login() drains a grant that registers DURING its drain window (no token spent under a skipped rotation)", async () => {
+    const store = new RecordingStore();
+    const ls = installKeyedLocalStorage();
+    try {
+      loginExpiresIn = 0; // session 1's token is already past expiry → proactive refresh
+      const controller = createSolidAuth({
+        authFlow,
+        callbackUri: "https://app.example/callback",
+        clientId: "https://app.example/clientid.jsonld",
+        store,
+        rememberedAccountsKey: REMEMBERED_KEY,
+        recentAccountsKey: RECENT_KEY,
+        publicFetch: ok200RecordingFetch(),
+      });
+      await controller.login(ALICE); // session 1 (credential + pointer written)
+      // Gate every grant; keep the latest release handle so the test can unblock a
+      // grant the old code would have left unaborted.
+      let releaseGate: (() => void) | undefined;
+      restoreDelay = () =>
+        new Promise<void>((res) => {
+          releaseGate = res;
+        });
+      // Grant A: a gated proactive refresh, registered + in flight.
+      const inFlightFetch = controller.authenticatedFetch("https://alice.pod.example/data");
+      await new Promise((r) => setTimeout(r, 0));
+      // login() #2 snapshots+aborts A, then AWAITS — its drain window is open.
+      const secondLogin = controller.login(ALICE);
+      // Grant B registers SYNCHRONOUSLY inside the window, pre-bump.
+      const lateRestore = controller.restore();
+      const result = await secondLogin;
+      expect(result.webId).toBe(ALICE);
+      // Unblock whatever is still gated (under the old code: the unaborted B, which
+      // would now redeem+rotate under a skipped write — the strand).
+      releaseGate?.();
+      await lateRestore;
+      await inFlightFetch;
+      // NO grant reached the redeem+rotate step (A and B were both aborted) …
+      expect(restoreRotationsAttempted).toBe(0);
+      // … and the live session + its freshly-persisted credential are intact.
+      expect(controller.webId).toBe(ALICE);
+      expect(store.map.get(ISSUER)?.refreshToken).toBe("refresh-token");
+    } finally {
+      restoreDelay = undefined;
+      ls.restore();
+    }
+  });
+
+  it("completeRedirectLogin() drains a grant that registers DURING its drain window (no token spent under a skipped rotation)", async () => {
+    const store = new RecordingStore();
+    const ls = installKeyedLocalStorage();
+    try {
+      loginExpiresIn = 0;
+      // A pending redirect-flow record so completeRedirectLogin reaches its drain
+      // (the drain runs BEFORE the code exchange, so placeholder JWKs suffice — the
+      // exchange failing afterwards does not matter for the drain-window property).
+      const flowStorage = new Map<string, string>();
+      const redirectFlowStorage = {
+        getItem: (k: string) => flowStorage.get(k) ?? null,
+        setItem: (k: string, v: string) => {
+          flowStorage.set(k, v);
+        },
+        removeItem: (k: string) => {
+          flowStorage.delete(k);
+        },
+      };
+      const FLOW_KEY = "drain-race-test.redirect-flow";
+      const controller = createSolidAuth({
+        authFlow,
+        callbackUri: "https://app.example/callback",
+        clientId: "https://app.example/clientid.jsonld",
+        store,
+        rememberedAccountsKey: REMEMBERED_KEY,
+        recentAccountsKey: RECENT_KEY,
+        publicFetch: ok200RecordingFetch(),
+        redirectFlowStorage,
+        redirectFlowKey: FLOW_KEY,
+      });
+      await controller.login(ALICE); // session 1 (expired token → refresh-eligible)
+      flowStorage.set(
+        FLOW_KEY,
+        JSON.stringify({
+          dpopPrivateJwk: { kty: "EC" },
+          dpopPublicJwk: { kty: "EC" },
+          codeVerifier: "verifier",
+          state: "state",
+          nonce: "nonce",
+          issuer: ISSUER,
+          client: { client_id: "https://app.example/clientid.jsonld" },
+          redirectUri: "https://app.example/",
+          webId: null,
+        }),
+      );
+      let releaseGate: (() => void) | undefined;
+      restoreDelay = () =>
+        new Promise<void>((res) => {
+          releaseGate = res;
+        });
+      // Grant A: a gated proactive refresh, registered + in flight.
+      const inFlightFetch = controller.authenticatedFetch("https://alice.pod.example/data");
+      await new Promise((r) => setTimeout(r, 0));
+      // completeRedirectLogin snapshots+aborts A, then AWAITS — drain window open.
+      const completion = controller.completeRedirectLogin(
+        "https://app.example/?code=authcode&state=state",
+      );
+      // Grant B registers SYNCHRONOUSLY inside the window, pre-bump.
+      const lateRestore = controller.restore();
+      // The completion itself fails later (placeholder JWKs cannot be imported) —
+      // irrelevant to the drain-window property under test.
+      await completion.catch(() => {});
+      releaseGate?.();
+      await lateRestore;
+      await inFlightFetch;
+      // NO grant reached the redeem+rotate step — the credential was never stranded …
+      expect(restoreRotationsAttempted).toBe(0);
+      expect(store.map.get(ISSUER)?.refreshToken).toBe("refresh-token");
+      // … so a subsequent restore succeeds from the intact credential.
+      restoreDelay = undefined;
+      expect(await controller.restore()).toEqual({ outcome: "restored", webId: ALICE });
+    } finally {
+      restoreDelay = undefined;
+      ls.restore();
+    }
+  });
+});

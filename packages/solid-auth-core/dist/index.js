@@ -1223,7 +1223,9 @@ var SolidAuthEngine = class {
   // generation re-checks must stay co-located to be reviewable as one fence.)
   async login(webId) {
     this.#abortActiveLogin();
-    await this.#drainActiveGrants();
+    while (this.#activeGrants.size > 0) {
+      await this.#drainActiveGrants();
+    }
     const generation = ++this.#generation;
     this.#abortActiveLogin();
     const priorSession = this.#session;
@@ -1338,10 +1340,19 @@ var SolidAuthEngine = class {
     for (const g of this.#activeGrants) g.abort.abort();
   }
   /**
-   * ABORT then AWAIT the in-flight grants to SETTLE — used by `login()` BEFORE it bumps the
-   * generation, so a grant the OP already processed gets its rotation write to land under
-   * its still-valid generation instead of being generation-skipped (the roborev finding).
-   * The abort bounds the wait. Snapshot the set first (members remove themselves on settle).
+   * ABORT then AWAIT the in-flight grants to SETTLE — used by `login()` /
+   * `completeRedirectLogin()` / `dropSession()` BEFORE they bump the generation, so a
+   * grant the OP already processed gets its rotation write to land under its still-valid
+   * generation instead of being generation-skipped (the roborev finding). The abort
+   * bounds the wait. Snapshot the set first (members remove themselves on settle).
+   *
+   * ONE PASS ONLY — every drain-before-bump call site MUST invoke this in an INLINE
+   * `while (this.#activeGrants.size > 0)` loop (the dropSession roborev follow-up): a
+   * grant that registers DURING an awaited pass is missed by that pass's snapshot, and
+   * the loop cannot live inside an async helper — the caller's `await` resumption would
+   * add a microtask hop between the final empty-check and the bump, reopening the
+   * window. Inline, loop-exit → bump is synchronous, so no grant can hold the
+   * pre-bump generation past the bump.
    */
   async #drainActiveGrants() {
     if (this.#activeGrants.size === 0) return;
@@ -1907,7 +1918,9 @@ var SolidAuthEngine = class {
     }
     try {
       this.#abortActiveLogin();
-      await this.#drainActiveGrants();
+      while (this.#activeGrants.size > 0) {
+        await this.#drainActiveGrants();
+      }
       const generation = ++this.#generation;
       this.#abortActiveLogin();
       const priorSession = this.#session;

@@ -1486,7 +1486,18 @@ class SolidAuthEngine implements SolidAuth {
     // than being generation-skipped after our bump — which would strand the prior session
     // on a spent token if THIS login then failed (the roborev finding). The abort bounds
     // the wait. We do this BEFORE the ++generation below.
-    await this.#drainActiveGrants();
+    //
+    // In a LOOP until NO grant remains (the dropSession roborev follow-up): a single
+    // pass only settles its SNAPSHOT — a grant that REGISTERS during the awaited pass
+    // (its pre-grant fence saw the not-yet-bumped generation) would be missed, redeem
+    // the refresh token, and have its rotation write generation-skipped after the bump
+    // (the same strand). The loop must stay INLINE at the call site: wrapping it in an
+    // async helper would put a microtask hop between the final empty-check and the bump,
+    // reopening the window — here loop-exit → ++generation is synchronous, so no grant
+    // can hold the old generation past the bump. (See dropSession for the write-up.)
+    while (this.#activeGrants.size > 0) {
+      await this.#drainActiveGrants();
+    }
     // FENCE: bump the generation so this attempt SUPERSEDES any earlier in-flight
     // login/restore — a slower earlier attempt that finishes later must NOT overwrite this
     // attempt's session/persisted credential/remembered pointer with a stale identity. We
@@ -1723,10 +1734,19 @@ class SolidAuthEngine implements SolidAuth {
   }
 
   /**
-   * ABORT then AWAIT the in-flight grants to SETTLE — used by `login()` BEFORE it bumps the
-   * generation, so a grant the OP already processed gets its rotation write to land under
-   * its still-valid generation instead of being generation-skipped (the roborev finding).
-   * The abort bounds the wait. Snapshot the set first (members remove themselves on settle).
+   * ABORT then AWAIT the in-flight grants to SETTLE — used by `login()` /
+   * `completeRedirectLogin()` / `dropSession()` BEFORE they bump the generation, so a
+   * grant the OP already processed gets its rotation write to land under its still-valid
+   * generation instead of being generation-skipped (the roborev finding). The abort
+   * bounds the wait. Snapshot the set first (members remove themselves on settle).
+   *
+   * ONE PASS ONLY — every drain-before-bump call site MUST invoke this in an INLINE
+   * `while (this.#activeGrants.size > 0)` loop (the dropSession roborev follow-up): a
+   * grant that registers DURING an awaited pass is missed by that pass's snapshot, and
+   * the loop cannot live inside an async helper — the caller's `await` resumption would
+   * add a microtask hop between the final empty-check and the bump, reopening the
+   * window. Inline, loop-exit → bump is synchronous, so no grant can hold the
+   * pre-bump generation past the bump.
    */
   async #drainActiveGrants(): Promise<void> {
     if (this.#activeGrants.size === 0) return;
@@ -2599,10 +2619,14 @@ class SolidAuthEngine implements SolidAuth {
     // back-button can never replay the single-use code + verifier + exported DPoP key.
     try {
       // Establish under the SAME generation fence as login(): abort a prior in-flight
-      // login, drain in-flight grants, then bump the generation so THIS completion
-      // supersedes any earlier attempt.
+      // login, drain in-flight grants — in a LOOP until none remains, so a grant that
+      // registers during a drain pass is drained too and loop-exit → bump stays
+      // synchronous (see login()/dropSession for the drain-window write-up) — then
+      // bump the generation so THIS completion supersedes any earlier attempt.
       this.#abortActiveLogin();
-      await this.#drainActiveGrants();
+      while (this.#activeGrants.size > 0) {
+        await this.#drainActiveGrants();
+      }
       const generation = ++this.#generation;
       this.#abortActiveLogin();
       const priorSession = this.#session;
