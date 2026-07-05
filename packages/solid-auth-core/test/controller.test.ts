@@ -87,6 +87,13 @@ vi.mock("@jeswr/solid-session-restore", async (importOriginal) => {
         if (opts.signal?.aborted) {
           throw new DOMException("aborted", "AbortError");
         }
+        // Simulate a TRANSIENT failure (network blip / 5xx / timeout) BEFORE the token
+        // is redeemed: the real restoreSession propagates the fetch error WITHOUT
+        // touching the persisted credential (clear-only-on-invalid_grant), so the
+        // token stays unspent + restorable on the next attempt.
+        if (restoreNetworkError) {
+          throw new TypeError("fetch failed (simulated transient network error)");
+        }
         restoreRotationsAttempted++; // reached the point where the token is redeemed + rotated
         // Simulate a DEAD refresh token (invalid_grant): the real restoreSession clears
         // the persisted entry via the (guarded) store and returns undefined.
@@ -167,6 +174,9 @@ let restoreDelay: (() => Promise<void>) | undefined;
 // When true, the mocked restoreSession simulates invalid_grant: it DELETEs the
 // persisted entry (via the guarded store) and returns undefined.
 let restoreInvalidGrant = false;
+// When true, the mocked restoreSession throws a TRANSIENT network error BEFORE
+// redeeming the token (credential untouched — clear-only-on-invalid_grant).
+let restoreNetworkError = false;
 // When set, the mocked restoreSession returns THIS as the restored WebID (to test
 // the cross-account refresh guard).
 let refreshWebId: string | undefined;
@@ -314,6 +324,7 @@ beforeEach(() => {
   refreshGrantCalls = 0;
   restoreDelay = undefined;
   restoreInvalidGrant = false;
+  restoreNetworkError = false;
   refreshWebId = undefined;
   refreshDpopKey = undefined;
   discoveryNoPkceMetadata = false;
@@ -3656,5 +3667,413 @@ describe("createSolidAuth — ESS/Inrupt raw-Basic client auth on LOGIN (roborev
     // The spec path returns the tagged oauth.ClientSecretBasic mock object, not a
     // bespoke closure — proving the ESS workaround is scoped to ESS only.
     expect(lastClientAuth).toEqual({ kind: "client_secret_basic", secret: "sekret" });
+  });
+});
+
+describe("createSolidAuth — dropSession keeps the durable credential (transient-failure teardown)", () => {
+  // THE AVAILABILITY REGRESSION UNDER TEST (found by the AccessRadar migration
+  // verify; affects every product consuming this engine): the public surface used
+  // to expose ONLY logout(), which deletes the durable credential + the restore
+  // pointer. An app whose post-restore enrichment (profile read) failed for a
+  // TRANSIENT reason (network blip / 5xx / timeout — NOT invalid_grant) had no
+  // fail-closed teardown except logout() — permanently deleting a still-valid
+  // credential and forcing a manual re-login. dropSession() is the transient
+  // primitive: drop the LIVE session, KEEP the credential + pointer, so the next
+  // load (or a later restore()) silently re-establishes the session.
+
+  const REMEMBERED_KEY = "drop-session-test.remembered-account";
+  const RECENT_KEY = "drop-session-test.recent-accounts";
+  const ALICE = "https://alice.pod.example/profile/card#me";
+  const ISSUER = "https://idp.example/";
+
+  /** A Map-backed localStorage shim (pointer + recent list under distinct keys). */
+  function installKeyedLocalStorage(): { map: Map<string, string>; restore: () => void } {
+    const map = new Map<string, string>();
+    const ls = {
+      getItem: (k: string) => (map.has(k) ? (map.get(k) as string) : null),
+      setItem: (k: string, v: string) => {
+        map.set(k, v);
+      },
+      removeItem: (k: string) => {
+        map.delete(k);
+      },
+    };
+    const orig = globalThis.localStorage;
+    Object.defineProperty(globalThis, "localStorage", { configurable: true, value: ls });
+    return {
+      map,
+      restore: () =>
+        Object.defineProperty(globalThis, "localStorage", { configurable: true, value: orig }),
+    };
+  }
+
+  /** Seed a store map with a restorable persisted credential for ISSUER/ALICE. */
+  function seededMap(): Map<string, import("@jeswr/solid-session-restore").PersistedSession> {
+    const map = new Map<string, import("@jeswr/solid-session-restore").PersistedSession>();
+    map.set(ISSUER, {
+      issuer: ISSUER,
+      webId: ALICE,
+      refreshToken: "stored-refresh",
+      dpopKey: { publicKey: {}, privateKey: {} } as unknown as CryptoKeyPair,
+    });
+    return map;
+  }
+
+  function mapStore(
+    map: Map<string, import("@jeswr/solid-session-restore").PersistedSession>,
+  ): SessionStore {
+    return {
+      get: async (i) => map.get(i),
+      put: async (s) => {
+        map.set(s.issuer, s);
+      },
+      delete: async (i) => {
+        map.delete(i);
+      },
+    };
+  }
+
+  /** Write the silent-restore pointer the way a prior login would have. */
+  function seedPointer(ls: Map<string, string>): void {
+    ls.set(REMEMBERED_KEY, JSON.stringify({ webId: ALICE, issuer: ISSUER }));
+  }
+
+  it("drops the live session but KEEPS the credential + pointer; a subsequent restore() succeeds", async () => {
+    const store = new RecordingStore();
+    const ls = installKeyedLocalStorage();
+    try {
+      const controller = createSolidAuth({
+        authFlow,
+        callbackUri: "https://app.example/callback",
+        clientId: "https://app.example/clientid.jsonld",
+        store,
+        rememberedAccountsKey: REMEMBERED_KEY,
+        recentAccountsKey: RECENT_KEY,
+      });
+      await controller.login(ALICE);
+      expect(controller.webId).toBe(ALICE);
+      expect(store.map.get(ISSUER)?.refreshToken).toBe("refresh-token");
+
+      await controller.dropSession();
+
+      // The LIVE session is gone (logged-out surface, exactly like logout)…
+      expect(controller.webId).toBeNull();
+      expect(controller.issuer).toBeNull();
+      expect(controller.authenticatedFetch).toBe(controller.publicFetch);
+      // …but the DURABLE credential is UNTOUCHED (the contrast with logout)…
+      expect(store.map.get(ISSUER)?.refreshToken).toBe("refresh-token");
+      // …and the silent-restore pointer is KEPT (the next load retries restore)…
+      expect(JSON.parse(ls.map.get(REMEMBERED_KEY) as string)).toEqual({
+        webId: ALICE,
+        issuer: ISSUER,
+      });
+      // …and the (logout-surviving anyway) recent-accounts list still lists alice.
+      expect(controller.recentAccounts()[0]?.webId).toBe(ALICE);
+
+      // THE INVARIANT: a subsequent silent restore re-establishes the session from
+      // the kept credential — no interactive login needed.
+      const outcome = await controller.restore();
+      expect(outcome).toEqual({ outcome: "restored", webId: ALICE });
+      expect(controller.webId).toBe(ALICE);
+    } finally {
+      ls.restore();
+    }
+  });
+
+  it("logout() (the contrast) DELETES the credential + pointer; a subsequent restore() falls back to login", async () => {
+    const store = new RecordingStore();
+    const ls = installKeyedLocalStorage();
+    try {
+      const controller = createSolidAuth({
+        authFlow,
+        callbackUri: "https://app.example/callback",
+        clientId: "https://app.example/clientid.jsonld",
+        store,
+        rememberedAccountsKey: REMEMBERED_KEY,
+        recentAccountsKey: RECENT_KEY,
+      });
+      await controller.login(ALICE);
+      await controller.logout();
+
+      expect(controller.webId).toBeNull();
+      expect(store.map.get(ISSUER)).toBeUndefined(); // credential deleted
+      expect(ls.map.get(REMEMBERED_KEY)).toBeUndefined(); // pointer cleared
+
+      const before = refreshGrantCalls;
+      const outcome = await controller.restore();
+      expect(outcome).toEqual({ outcome: "login" });
+      expect(refreshGrantCalls).toBe(before); // nothing stored → no grant attempted
+    } finally {
+      ls.restore();
+    }
+  });
+
+  it("reverts the credential boundary: token attached before dropSession, NEVER after; global fetch untouched", async () => {
+    const store = new RecordingStore();
+    const origGlobal = globalThis.fetch;
+    const controller = createSolidAuth({
+      authFlow,
+      callbackUri: "https://app.example/callback",
+      clientId: "https://app.example/clientid.jsonld",
+      store,
+      publicFetch: ok200RecordingFetch(),
+    });
+    await controller.login(ALICE);
+    // Live session: the token is attached proactively for the allowed (WebID) origin.
+    recordedAuthHeader = null;
+    await controller.authenticatedFetch("https://alice.pod.example/private/doc");
+    expect(recordedAuthHeader).toBe("DPoP access-token");
+
+    await controller.dropSession();
+
+    // After dropSession the SAME handle attaches NOTHING (no live session), and the
+    // getter hands back the pristine publicFetch identity.
+    expect(controller.authenticatedFetch).toBe(controller.publicFetch);
+    recordedAuthHeader = null;
+    await controller.authenticatedFetch("https://alice.pod.example/private/doc");
+    expect(recordedAuthHeader).toBeNull();
+    // No login-stall regression: dropSession never reads or patches the global fetch
+    // (patchGlobalFetch defaults false — the global must be byte-identical).
+    expect(globalThis.fetch).toBe(origGlobal);
+  });
+
+  it("emits the logged-out session change (listeners see webId null)", async () => {
+    const store = new RecordingStore();
+    const controller = createSolidAuth({
+      authFlow,
+      callbackUri: "https://app.example/callback",
+      clientId: "https://app.example/clientid.jsonld",
+      store,
+    });
+    await controller.login(ALICE);
+    const seen: (string | null)[] = [];
+    const unsubscribe = controller.onSessionChange(({ webId }) => {
+      seen.push(webId);
+    });
+    await controller.dropSession();
+    unsubscribe();
+    expect(seen).toEqual([null]);
+  });
+
+  it("is a safe no-op when already logged out (resolves, state consistent, store untouched)", async () => {
+    const map = seededMap();
+    const controller = createSolidAuth({
+      callbackUri: "https://app.example/callback",
+      clientId: "https://app.example/clientid.jsonld",
+      store: mapStore(map),
+    });
+    expect(controller.webId).toBeNull();
+    await expect(controller.dropSession()).resolves.toBeUndefined();
+    expect(controller.webId).toBeNull();
+    // A stored (not-yet-restored) credential is NOT deleted by an idle dropSession.
+    expect(map.get(ISSUER)?.refreshToken).toBe("stored-refresh");
+  });
+
+  it("supersedes an in-flight login: popup signal aborted, login rejects, credential from a PRIOR session kept", async () => {
+    // dropSession must behave like logout for the LIVE/in-flight surface (the app is
+    // tearing down) while differing ONLY in what it does to durable state.
+    const map = seededMap(); // a prior session's still-valid credential
+    let capturedSignal: AbortSignal | undefined;
+    const gatedAuthFlow = {
+      getCode: (_url: URL, signal?: AbortSignal) =>
+        new Promise<string>((res) => {
+          capturedSignal = signal;
+          signal?.addEventListener("abort", () =>
+            res("https://app.example/callback?code=authcode&state=state"),
+          );
+        }),
+    };
+    const controller = createSolidAuth({
+      authFlow: gatedAuthFlow,
+      callbackUri: "https://app.example/callback",
+      clientId: "https://app.example/clientid.jsonld",
+      store: mapStore(map),
+    });
+    const login = controller.login(ALICE);
+    await new Promise((r) => setTimeout(r, 0)); // reach the open popup
+    expect(capturedSignal?.aborted).toBe(false);
+
+    await controller.dropSession();
+    expect(capturedSignal?.aborted).toBe(true); // popup cancelled immediately
+
+    await expect(login).rejects.toThrow(); // the superseded login bails
+    expect(controller.webId).toBeNull();
+    // The prior credential was NOT deleted (dropSession touches nothing durable).
+    expect(map.get(ISSUER)?.refreshToken).toBe("stored-refresh");
+  });
+
+  it("aborts an in-flight restore GRANT without spending the refresh token (still restorable after)", async () => {
+    // dropSession during an in-flight silent restore: the drain aborts the grant
+    // BEFORE the token-endpoint redemption, so the stored refresh token stays
+    // UNSPENT — a later restore() succeeds from it. (The drain-before-bump ordering
+    // additionally lets an already-redeemed grant land its rotation write under its
+    // still-valid generation — either way the credential stays restorable, which is
+    // dropSession's whole contract.)
+    const map = seededMap();
+    const ls = installKeyedLocalStorage();
+    try {
+      seedPointer(ls.map);
+      const controller = createSolidAuth({
+        callbackUri: "https://app.example/callback",
+        clientId: "https://app.example/clientid.jsonld",
+        store: mapStore(map),
+        rememberedAccountsKey: REMEMBERED_KEY,
+        recentAccountsKey: RECENT_KEY,
+      });
+      // Gate the grant so we can interleave dropSession mid-flight.
+      let releaseGrant!: () => void;
+      const gate = new Promise<void>((res) => {
+        releaseGrant = res;
+      });
+      restoreDelay = () => gate;
+      const restoring = controller.restore();
+      await new Promise((r) => setTimeout(r, 0)); // the grant is now in flight
+
+      const dropped = controller.dropSession(); // aborts + drains the grant
+      releaseGrant();
+      await dropped;
+      await restoring; // fail-closed → { outcome: "login" } (superseded)
+
+      expect(controller.webId).toBeNull();
+      // The token was NEVER redeemed/rotated (aborted before spending) …
+      expect(restoreRotationsAttempted).toBe(0);
+      // … so the stored credential is intact and a later restore succeeds.
+      expect(map.get(ISSUER)?.refreshToken).toBe("stored-refresh");
+      restoreDelay = undefined;
+      const outcome = await controller.restore();
+      expect(outcome).toEqual({ outcome: "restored", webId: ALICE });
+    } finally {
+      ls.restore();
+    }
+  });
+
+  it("the CONSUMER enrichment flow — restore → transient profile-read failure → dropSession → next restore succeeds", async () => {
+    // The exact AccessRadar-shaped scenario the regression was found in: silent
+    // restore arms the session, the app's post-restore profile read fails for a
+    // TRANSIENT reason, the app tears down with dropSession() — and the NEXT load
+    // (modelled here as a later restore()) silently re-establishes the session.
+    const map = seededMap();
+    const ls = installKeyedLocalStorage();
+    try {
+      seedPointer(ls.map);
+      const controller = createSolidAuth({
+        callbackUri: "https://app.example/callback",
+        clientId: "https://app.example/clientid.jsonld",
+        store: mapStore(map),
+        rememberedAccountsKey: REMEMBERED_KEY,
+        recentAccountsKey: RECENT_KEY,
+      });
+      // Load 1: silent restore arms the session.
+      expect(await controller.restore()).toEqual({ outcome: "restored", webId: ALICE });
+      // The app's enrichment read then fails TRANSIENTLY (network blip / 5xx /
+      // timeout — NOT an auth signal). The app's fail-closed teardown for a
+      // transient failure is dropSession(), NOT logout().
+      await controller.dropSession();
+      expect(controller.webId).toBeNull();
+      // The rotated credential + pointer survive …
+      expect(map.get(ISSUER)?.refreshToken).toBe("rotated-refresh-token");
+      expect(ls.map.get(REMEMBERED_KEY)).toBeDefined();
+      // … so the next load restores WITHOUT any manual re-login.
+      expect(await controller.restore()).toEqual({ outcome: "restored", webId: ALICE });
+      expect(controller.webId).toBe(ALICE);
+    } finally {
+      ls.restore();
+    }
+  });
+
+  it("the DEFINITIVE contrast — a definitive auth failure is torn down with logout(), deleting the credential", async () => {
+    // The other half of the transient-vs-definitive rule: when the app's failure IS
+    // definitive (invalid_grant / a 401 proving the refresh token is revoked), the
+    // correct teardown is logout() — the credential is dead or must not be retried.
+    const map = seededMap();
+    const ls = installKeyedLocalStorage();
+    try {
+      seedPointer(ls.map);
+      const controller = createSolidAuth({
+        callbackUri: "https://app.example/callback",
+        clientId: "https://app.example/clientid.jsonld",
+        store: mapStore(map),
+        rememberedAccountsKey: REMEMBERED_KEY,
+        recentAccountsKey: RECENT_KEY,
+      });
+      expect(await controller.restore()).toEqual({ outcome: "restored", webId: ALICE });
+      // The app determines the failure is DEFINITIVE → full logout.
+      await controller.logout();
+      expect(controller.webId).toBeNull();
+      expect(map.get(ISSUER)).toBeUndefined(); // credential deleted
+      expect(ls.map.get(REMEMBERED_KEY)).toBeUndefined(); // pointer cleared
+      expect(await controller.restore()).toEqual({ outcome: "login" });
+    } finally {
+      ls.restore();
+    }
+  });
+
+  it("the ENGINE's own restore grant already keeps the credential on a TRANSIENT failure (and retries)", async () => {
+    // The engine-level half of the transient-vs-definitive distinction: a restore
+    // whose token-endpoint call fails TRANSIENTLY must keep the credential AND the
+    // pointer (clear-only-on-invalid_grant), so the next attempt succeeds once the
+    // network recovers. dropSession extends the same rule to the app's teardown.
+    const map = seededMap();
+    const ls = installKeyedLocalStorage();
+    try {
+      seedPointer(ls.map);
+      const controller = createSolidAuth({
+        callbackUri: "https://app.example/callback",
+        clientId: "https://app.example/clientid.jsonld",
+        store: mapStore(map),
+        rememberedAccountsKey: REMEMBERED_KEY,
+        recentAccountsKey: RECENT_KEY,
+      });
+      restoreNetworkError = true; // the grant fails transiently (fetch failed)
+      expect(await controller.restore()).toEqual({ outcome: "login" }); // fail-closed
+      // The credential AND the pointer survived the transient failure …
+      expect(map.get(ISSUER)?.refreshToken).toBe("stored-refresh");
+      expect(ls.map.get(REMEMBERED_KEY)).toBeDefined();
+      // … and the retry (network recovered) restores silently.
+      restoreNetworkError = false;
+      expect(await controller.restore()).toEqual({ outcome: "restored", webId: ALICE });
+    } finally {
+      ls.restore();
+    }
+  });
+
+  it("the ENGINE's restore grant deletes the credential ONLY on a DEFINITIVE invalid_grant", async () => {
+    const map = seededMap();
+    const ls = installKeyedLocalStorage();
+    try {
+      seedPointer(ls.map);
+      const controller = createSolidAuth({
+        callbackUri: "https://app.example/callback",
+        clientId: "https://app.example/clientid.jsonld",
+        store: mapStore(map),
+        rememberedAccountsKey: REMEMBERED_KEY,
+        recentAccountsKey: RECENT_KEY,
+      });
+      restoreInvalidGrant = true; // the OP says the refresh token is DEAD
+      expect(await controller.restore()).toEqual({ outcome: "login" });
+      // Definitive → the credential was cleared (by the restore implementation) and
+      // the pointer dropped (nothing left to restore from).
+      expect(map.get(ISSUER)).toBeUndefined();
+      expect(ls.map.get(REMEMBERED_KEY)).toBeUndefined();
+    } finally {
+      ls.restore();
+    }
+  });
+
+  it("login() after dropSession() works (the engine is fully reusable, not torn down)", async () => {
+    const store = new RecordingStore();
+    const controller = createSolidAuth({
+      authFlow,
+      callbackUri: "https://app.example/callback",
+      clientId: "https://app.example/clientid.jsonld",
+      store,
+    });
+    await controller.login(ALICE);
+    await controller.dropSession();
+    expect(controller.webId).toBeNull();
+    const result = await controller.login(ALICE);
+    expect(result.webId).toBe(ALICE);
+    expect(controller.webId).toBe(ALICE);
+    expect(store.map.get(ISSUER)?.refreshToken).toBe("refresh-token");
   });
 });

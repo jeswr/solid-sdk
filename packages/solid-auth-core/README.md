@@ -43,6 +43,18 @@ const pub = await auth.publicFetch(foreignUrl);         // pristine, credential-
 await auth.logout();                  // clears the persisted credential; fail-closed
 ```
 
+**Two teardowns — call the right one** (the silent-session-restore availability
+invariant): `logout()` is the DEFINITIVE teardown (an intentional sign-out, or a proven
+`invalid_grant`/401-revoked refresh token) — it deletes the persisted credential and the
+restore pointer. `dropSession()` is the TRANSIENT teardown — it drops the live in-memory
+session (webId null, pristine fetch again, logged-out session-change) but **keeps** the
+persisted credential + restore pointer, so the next page load silently restores. Use it
+when a post-restore read fails for any transient reason (network blip / 5xx / timeout):
+calling `logout()` there permanently deletes a still-valid credential and forces a manual
+re-login. (The engine's own restore/refresh grants already keep the credential on
+transient failures and clear it only on a definitive `invalid_grant`; `dropSession()`
+extends that distinction to the teardown the app performs around its own reads.)
+
 React apps use the `/react` subexport instead of a hand-rolled `SessionProvider.tsx`:
 
 ```tsx
@@ -104,7 +116,7 @@ pristine fetch while the pod probe is the **only** request through the patch.
 
 | Export | What it is |
 |---|---|
-| `createSolidAuth(config)` → `SolidAuth` | The keystone factory: WebID→issuer resolution (via `@jeswr/fetch-rdf` + `@solid/object`, never regex), interactive auth-code + PKCE(S256) + DPoP login (oauth4webapi; DPoP-only, `dpop_jkt` binding), silent restore + proactive refresh (via the inlined `@jeswr/solid-session-restore`; IndexedDB, WebID-scoped, fail-closed), logout/credential-revoke sequencing, recent-accounts, `onSessionChange`, and the two-fetch boundary (`authenticatedFetch` / `publicFetch`) |
+| `createSolidAuth(config)` → `SolidAuth` | The keystone factory: WebID→issuer resolution (via `@jeswr/fetch-rdf` + `@solid/object`, never regex), interactive auth-code + PKCE(S256) + DPoP login (oauth4webapi; DPoP-only, `dpop_jkt` binding), silent restore + proactive refresh (via the inlined `@jeswr/solid-session-restore`; IndexedDB, WebID-scoped, fail-closed), logout/credential-revoke sequencing plus the credential-keeping `dropSession()` transient teardown, recent-accounts, `onSessionChange`, and the two-fetch boundary (`authenticatedFetch` / `publicFetch`) |
 | `WebIdDPoPTokenProvider` | THE token provider (successor to the 21 app-local copies): DPoP proofs via the audited `dpop` package, per-origin RS nonce cache, fail-closed origin gate, proactive refresh — constructed/wired by the factory |
 | `installProactiveAuthFetch` + `proactiveAuthenticatedFetch` + `deriveProactiveAllowedOrigins` | The proactive authenticated-fetch wrapper, **moved here from `@jeswr/solid-elements`** (which will re-export). For apps that keep their own provider |
 | `@jeswr/solid-auth-core/react` | `SessionProvider` + `useSolidSession()` — the one React session glue (replaces the 14 divergent app copies); injectable-`auth` seam so it tests with a fake, no server |

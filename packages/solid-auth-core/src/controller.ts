@@ -1794,6 +1794,50 @@ class SolidAuthEngine implements SolidAuth {
   }
 
   /**
+   * Drop the LIVE in-memory session but KEEP the durable credential + the
+   * silent-restore pointer — the TRANSIENT-failure teardown (see the interface doc
+   * on {@link SolidAuth.dropSession} for the dropSession-vs-logout decision rule).
+   * The next page load (or a later `restore()` on this controller) silently
+   * re-establishes the session from the kept credential; `logout()` remains the
+   * definitive teardown that deletes it.
+   *
+   * ORDERING (mirrors `login()`'s drain-before-bump, for the OPPOSITE reason
+   * logout() skips it): logout deletes the credential anyway, so it may abort
+   * in-flight grants and bump immediately. dropSession's whole purpose is to keep
+   * the credential RESTORABLE — so it must first ABORT + AWAIT the in-flight
+   * refresh/restore grants (#drainActiveGrants). A grant the OP already processed
+   * despite the abort then lands its rotation write under its STILL-VALID
+   * generation; bumping first would generation-skip that write, leaving the store
+   * holding the OLD (now server-spent) refresh token — the next load's silent
+   * restore would hit `invalid_grant` and DELETE the credential, recreating the
+   * exact permanent-re-login failure this method exists to prevent. A grant the
+   * abort DID cancel never redeems the token at all (it stays unspent + valid).
+   * The abort bounds the wait, so dropSession resolves promptly.
+   */
+  async dropSession(): Promise<void> {
+    // Abort any in-flight interactive login's popup — dropSession supersedes it
+    // (after resolve the controller must be logged out, not re-armed by a
+    // completing popup).
+    this.#abortActiveLogin();
+    // Drain in-flight refresh/restore grants BEFORE bumping (see the method doc).
+    await this.#drainActiveGrants();
+    // LOCAL TEARDOWN — synchronous, no awaited I/O in between: drop the live
+    // session and bump the generation so any remaining in-flight login/restore
+    // continuation sees itself superseded (its post-await checks discard it).
+    this.#session = undefined;
+    this.#generation++;
+    // RE-ABORT after the drain yield point (login()'s pattern): a prior pre-popup
+    // login could have resumed during the awaited drain and registered a new
+    // abort handle / opened its popup — cancel it now that we've superseded it.
+    this.#abortActiveLogin();
+    // DELIBERATELY KEPT (the contrast with logout()): the durable credential in
+    // the session store, the silent-restore pointer, and the recent-accounts
+    // list. NO store delete, NO pointer clear — the next load retries silent
+    // restore. Nothing durable is touched, so this never rejects.
+    this.#emitSessionChange();
+  }
+
+  /**
    * Serialized durable delete (chained with persists so ordering is deterministic).
    * Returns whether the delete DURABLY SUCCEEDED (so logout() can surface a failure). We
    * call the store's `delete` DIRECTLY rather than `forgetPersisted` (which swallows store

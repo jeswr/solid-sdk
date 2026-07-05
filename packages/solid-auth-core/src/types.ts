@@ -163,6 +163,13 @@ export interface SolidAuthController {
    * Log out: clear the in-memory session AND the persisted credential, so a
    * subsequent restore falls back to login. After resolve, {@link webId} is null
    * and {@link authenticatedFetch} is the pristine fetch again.
+   *
+   * This is the FULL, definitive teardown — an intentional user sign-out, or a
+   * DEFINITIVE auth failure (`invalid_grant` / a 401 proving the refresh token is
+   * revoked). For a TRANSIENT failure (a network blip / 5xx / timeout on a
+   * post-restore read) use the engine's `dropSession()` instead (see
+   * {@link SolidAuth.dropSession}) — calling `logout()` there permanently deletes a
+   * still-valid credential and forces a manual re-login.
    */
   logout(): Promise<void>;
 }
@@ -175,6 +182,37 @@ export interface SolidAuthController {
 export interface SolidAuth extends SolidAuthController {
   /** The live session's issuer href, or null when logged out. */
   readonly issuer: string | null;
+
+  /**
+   * Drop the LIVE in-memory session WITHOUT deleting the durable credential or the
+   * silent-restore pointer — the TRANSIENT-failure teardown. After resolve,
+   * {@link SolidAuthController.webId} is null and
+   * {@link SolidAuthController.authenticatedFetch} is the pristine fetch again
+   * (exactly like {@link SolidAuthController.logout}), but the persisted DPoP-bound
+   * refresh token AND the restore pointer SURVIVE — so the next page load (or a
+   * later {@link SolidAuthController.restore} on this one) silently re-establishes
+   * the session instead of forcing a manual re-login.
+   *
+   * WHICH TEARDOWN TO CALL (the silent-session-restore availability invariant):
+   *  - `dropSession()` — a TRANSIENT failure after the session was armed (a network
+   *    blip / 5xx / timeout on the app's post-restore profile/enrichment read): the
+   *    credential is still good; keep it and let the next load retry.
+   *  - `logout()` — an INTENTIONAL user sign-out, or a DEFINITIVE auth failure
+   *    (`invalid_grant`, or a 401 proving the refresh token is revoked/expired):
+   *    the credential is dead or unwanted; delete it.
+   * Calling `logout()` on a transient failure permanently deletes a still-valid
+   * credential — the availability regression this method exists to prevent. (The
+   * engine's own restore/refresh grants already make this distinction internally:
+   * a transient grant failure keeps the credential, only a definitive
+   * `invalid_grant` clears it. This method extends the same distinction to the
+   * teardown the APP performs around its own post-restore reads.)
+   *
+   * Like `logout()`, it supersedes any in-flight login/restore/refresh (their
+   * results are discarded; an open login popup is aborted best-effort) and emits
+   * the logged-out session change. Unlike `logout()`, it performs NO durable
+   * delete, so it never rejects. Idempotent when already logged out.
+   */
+  dropSession(): Promise<void>;
 
   /**
    * Subscribe to session changes (a completed login, a completed/attempted
