@@ -159,6 +159,10 @@ async function applyRuleAction(
       await repo.update(action.url, { priority: action.value as Priority });
       break;
     case "Assign":
+      // NB: an AUTOMATION-driven reassignment does NOT fan out an LDN announce
+      // (#75 / 5u9) — the actor is the rule, not an interactive user, and this runs
+      // outside the announcer-bearing hook. Interactive assignment paths
+      // (create / edit / inline) notify; automation is deliberately silent.
       await repo.update(action.url, { assignee: action.value || undefined });
       break;
     case "AddComment":
@@ -654,8 +658,14 @@ export function IssuesView() {
       // OnCreated (#112): the just-created issue is now in the refreshed list.
       if (createdUrl) {
         void runAutomations({ type: "OnCreated", url: createdUrl });
-        // A create that set an assignee also fires OnAssigned.
-        if (values.assignee) void runAutomations({ type: "OnAssigned", url: createdUrl });
+        // A create that set an assignee also fires OnAssigned AND notifies the
+        // assignee's LDN inbox (#75 / 5u9). The edit path notifies via the wired
+        // `issues.update`; create goes through `batch`, so notify explicitly here.
+        if (values.assignee) {
+          void runAutomations({ type: "OnAssigned", url: createdUrl });
+          // New issue — no previous assignee (the transition is `-> assignee`).
+          issues.notifyAssignment({ issueUrl: createdUrl, assignee: values.assignee, issueTitle: values.title });
+        }
       }
     }
   };
@@ -726,6 +736,10 @@ export function IssuesView() {
       clearSelection();
     }, success);
   // F8 bulk assign / label: every selected issue updated in the same batch.
+  // NB: bulk assign deliberately does NOT fan out an LDN announce per issue
+  // (#75 / 5u9) — assigning one person across many issues at once would spam their
+  // inbox. Single-issue interactive assignment (create / edit / inline) notifies;
+  // bulk is intentionally silent.
   const bulkAssign = (assignee: string | undefined) =>
     bulk((r, u) => r.update(u, { assignee }), assignee ? "Assignee set" : "Assignee cleared");
   const bulkAddLabel = (label: string) =>
@@ -847,11 +861,24 @@ export function IssuesView() {
   // useCallback so it is a stable value — passing a fresh ref-reading closure into
   // makeInlineEditController during render trips the refs lint.
   const onInlineApplied = useCallback(
-    (field: EditableField, url: string) => {
+    (field: EditableField, url: string, value: string | number | Date | undefined, original: IssueRecord) => {
       if (field === "status") void runAutomations({ type: "OnStatusChange", url });
-      else if (field === "assignee") void runAutomations({ type: "OnAssigned", url });
+      else if (field === "assignee") {
+        void runAutomations({ type: "OnAssigned", url });
+        // Inline assignee edits persist via `issues.persist` (raw Repository.update),
+        // bypassing the wired `issues.update` announce — so notify here (#75 / 5u9)
+        // with the EXACT persisted transition passed by the controller (the new
+        // `value` + the pre-edit `original.assignee`), never a racy live-list read.
+        // A cleared assignee (value undefined) is a no-op in the Announcer.
+        issues.notifyAssignment({
+          issueUrl: url,
+          assignee: typeof value === "string" && value.length > 0 ? value : undefined,
+          previousAssignee: original.assignee,
+          issueTitle: original.title,
+        });
+      }
     },
-    [runAutomations],
+    [runAutomations, issues.notifyAssignment],
   );
   const { edit: inlineEdit, editStatus: inlineStatusEdit } = makeInlineEditController(
     { getIssues: issues.getIssues, setIssuesLocal: issues.setIssuesLocal, persist: issues.persist, refresh: issues.refresh },

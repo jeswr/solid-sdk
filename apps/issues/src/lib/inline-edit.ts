@@ -280,12 +280,19 @@ export function makeInlineEditController(
   toast: InlineEditToast,
   guardedTransition: GuardedTransition,
   /**
-   * Called when an inline edit's pod write SUCCEEDS, with the field that changed
-   * and the issue URL — so the caller can fire automation triggers (#112,
-   * OnStatusChange / OnAssigned) off an inline cell edit. Optional; a no-op when
-   * omitted (and for fields that drive no trigger).
+   * Called when an inline edit's pod write SUCCEEDS, with the field that changed,
+   * the issue URL, the EXACT value that was persisted, and the ORIGINAL (pre-edit)
+   * record — so the caller can fire automation triggers (#112, OnStatusChange /
+   * OnAssigned) AND an LDN assignment announce (#75 / 5u9) using the precise
+   * transition (persisted value + `original.assignee`), never a racy post-hoc read
+   * of the (possibly further-edited) live list. Optional; a no-op when omitted.
    */
-  onApplied?: (field: EditableField, url: string) => void,
+  onApplied?: (
+    field: EditableField,
+    url: string,
+    value: string | number | Date | undefined,
+    original: IssueRecord,
+  ) => void,
 ): {
   edit: (issue: IssueRecord, field: EditableField, value: string | number | Date | undefined) => void;
   editStatus: (issue: IssueRecord, status: StatusSlug) => void;
@@ -361,7 +368,9 @@ export function makeInlineEditController(
     seam.setIssuesLocal((current) => optimisticEdit(current, issue.url, field, value, workflow).next);
     void seam
       .persist(write)
-      .then(() => onApplied?.(field, issue.url))
+      // Pass the EXACT persisted value + the pre-edit record, so a notify/trigger
+      // uses the precise transition, not a racy read of the live (maybe re-edited) list.
+      .then(() => onApplied?.(field, issue.url, value, original))
       .catch((e) => handleFailure(field, original, optimistic, e));
   };
 

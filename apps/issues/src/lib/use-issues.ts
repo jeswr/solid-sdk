@@ -1,8 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import { Repository, type IssueRecord, type NewIssueInput, type IssuePatch, type SprintRecord, type ActivityRecord } from "@/lib/repository";
 import { watchContainer } from "@/lib/notifications";
+import { Announcer } from "@/lib/announce";
 import { ConflictError } from "@/lib/errors";
 import { RdfFetchError } from "@jeswr/fetch-rdf";
 import type { IssueState, StatusSlug } from "@/lib/issue";
@@ -73,6 +75,19 @@ export interface UseIssues {
   setState: (url: string, state: IssueState) => Promise<void>;
   setStatus: (url: string, status: StatusSlug) => Promise<void>;
   addComment: (url: string, content: string, mentions?: string[]) => Promise<void>;
+  /**
+   * Fire an LDN assignment announce (#75 / 5u9) for an assignment made OUTSIDE the
+   * wired `update` path (create via `batch`, inline cell edits via `persist`). Pass
+   * the EXACT persisted transition — the new `assignee` and the `previousAssignee`
+   * it replaced — so the dedupe distinguishes a re-assignment from a double-fire.
+   * Fire-and-forget, self-skipping, transition-gated; a no-op signed out / cleared.
+   */
+  notifyAssignment: (input: {
+    issueUrl: string;
+    assignee?: string;
+    previousAssignee?: string;
+    issueTitle?: string;
+  }) => void;
   /** F4: log work (seconds, optional note) against an issue, then refresh. */
   logWork: (url: string, seconds: number, note?: string) => Promise<void>;
   uploadAttachment: (url: string, file: { name: string; type: string; data: ArrayBuffer }) => Promise<void>;
@@ -199,6 +214,48 @@ export function useIssues(
   const currentIssuesRef = useRef<IssueRecord[]>(issues);
   currentIssuesRef.current = issues;
   const getIssues = useCallback(() => currentIssuesRef.current, []);
+
+  // LDN inbox WRITES (#75 / 5u9): when an issue is ASSIGNED to someone, or a
+  // collaborator is @MENTIONED, POST an `as:Announce` into that collaborator's
+  // FOREIGN-pod inbox (SSRF-guarded, redirect-refusing — see announce.ts). Bound
+  // to the acting user (`creator`) so the notification's `as:actor` is them and
+  // self-notification is skipped; a fresh session-scoped de-dupe set per identity
+  // keeps the SAME assignment idempotent (mentions are per-comment). Non-blocking:
+  // the pod write always succeeds even if the notify fails; a failure surfaces as
+  // a non-intrusive toast, never a thrown error into the mutation.
+  // Loopback SSRF-policy relaxation for LOCAL development / e2e ONLY: when the app
+  // itself is served from localhost (the mandated local-CSS test topology, where a
+  // collaborator's pod is `http://localhost:<port>`), permit http/loopback targets
+  // so cross-pod announces are exercisable. A deployed (https) origin never sets
+  // this, so production stays strict https-only. Even under the relaxation, a
+  // NON-loopback private address (10.x, 169.254.169.254 metadata, …) is still
+  // refused by the guard — this only re-permits genuine loopback.
+  const devLoopback =
+    typeof location !== "undefined" &&
+    (location.hostname === "localhost" ||
+      location.hostname === "127.0.0.1" ||
+      location.hostname === "[::1]");
+  const announcer = useMemo(
+    () =>
+      creator
+        ? new Announcer({
+            actorWebId: creator,
+            onError: (message) => toast.error(message),
+            ...(devLoopback ? { guardOptions: { allowLoopback: true } } : {}),
+          })
+        : null,
+    [creator, devLoopback],
+  );
+
+  // Stable announce-assignment seam for mutation paths that write OUTSIDE the wired
+  // `update` (create via `batch`, inline cell edits via `persist` + raw
+  // `Repository.update`). Memoised so passing it into per-render controllers keeps
+  // them stable. Fire-and-forget, self-skipping, session-deduped; no-op signed out.
+  const notifyAssignment = useCallback(
+    (input: { issueUrl: string; assignee?: string; previousAssignee?: string; issueTitle?: string }) =>
+      announcer?.announceAssignment(input),
+    [announcer],
+  );
 
   // Monotonic fetch sequence: a slow, older read (e.g. a live-sync refresh that
   // started before a mutation's PUT) must never clobber state written by a newer
@@ -404,10 +461,36 @@ export function useIssues(
     persist,
     refresh,
     create: (input) => mutate((r) => r.create({ ...input, creator: creator ?? undefined })),
-    update: (url, patch) => mutate((r) => r.update(url, patch)),
+    update: (url, patch) => {
+      // Snapshot the assignee BEFORE the write so we only announce a real change
+      // (transition-gated in the Announcer against `previousAssignee`).
+      const before = getIssues().find((i) => i.url === url);
+      return mutate(async (r) => {
+        await r.update(url, patch);
+        if ("assignee" in patch) {
+          announcer?.announceAssignment({
+            issueUrl: url,
+            issueTitle: patch.title ?? before?.title,
+            assignee: patch.assignee,
+            previousAssignee: before?.assignee,
+          });
+        }
+      });
+    },
     setState: (url, state) => mutate((r) => r.setState(url, state)),
     setStatus: (url, status) => mutate((r) => r.setStatus(url, status)),
-    addComment: (url, content, mentions) => mutate((r) => r.addComment(url, content, creator ?? undefined, mentions)),
+    addComment: (url, content, mentions) =>
+      mutate(async (r) => {
+        await r.addComment(url, content, creator ?? undefined, mentions);
+        if (mentions && mentions.length > 0) {
+          announcer?.announceMentions({
+            issueUrl: url,
+            issueTitle: getIssues().find((i) => i.url === url)?.title,
+            mentions,
+          });
+        }
+      }),
+    notifyAssignment,
     logWork: (url, seconds, note) => mutate((r) => r.logWork(url, seconds, note)),
     uploadAttachment: (url, file) => mutate(async (r) => void (await r.uploadAttachment(url, file))),
     removeAttachment: (url, fileUrl) => mutate((r) => r.removeAttachment(url, fileUrl)),
