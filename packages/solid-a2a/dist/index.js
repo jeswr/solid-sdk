@@ -159,29 +159,72 @@ function waitForDrain(parser) {
   });
 }
 
-// src/iri.ts
-var IRIREF_FORBIDDEN_DELIMITERS = /* @__PURE__ */ new Set(["<", ">", '"', "{", "}", "|", "^", "`", "\\"]);
+// node_modules/@jeswr/rdf-serialize/dist/iri.js
+var FORBIDDEN_SYMBOL_CODES = /* @__PURE__ */ new Set([
+  60,
+  // <
+  62,
+  // >
+  34,
+  // "
+  123,
+  // {
+  125,
+  // }
+  124,
+  // |
+  94,
+  // ^
+  96,
+  // ` (backtick)
+  92
+  // \ (backslash)
+]);
+function isForbidden(codePoint) {
+  return codePoint <= 32 || FORBIDDEN_SYMBOL_CODES.has(codePoint);
+}
+function hasEdgeControlOrSpace(value) {
+  return value.length > 0 && (value.charCodeAt(0) <= 32 || value.charCodeAt(value.length - 1) <= 32);
+}
 function escapeIri(value) {
   let out = "";
-  for (let i = 0; i < value.length; i++) {
-    const ch = value[i];
-    const code = value.charCodeAt(i);
-    if (code <= 32 || IRIREF_FORBIDDEN_DELIMITERS.has(ch)) {
-      out += `%${code.toString(16).toUpperCase().padStart(2, "0")}`;
+  for (const ch of value) {
+    const codePoint = ch.codePointAt(0);
+    if (isForbidden(codePoint)) {
+      out += `%${codePoint.toString(16).toUpperCase().padStart(2, "0")}`;
     } else {
       out += ch;
     }
   }
   return out;
 }
-function hasEdgeControlOrSpace(value) {
-  if (value.length === 0) {
-    return false;
+function safeHttpIri(value) {
+  if (typeof value !== "string") {
+    return void 0;
   }
-  return value.charCodeAt(0) <= 32 || value.charCodeAt(value.length - 1) <= 32;
+  if (hasEdgeControlOrSpace(value)) {
+    return void 0;
+  }
+  const escaped = escapeIri(value);
+  let url;
+  try {
+    url = new URL(escaped);
+  } catch {
+    return void 0;
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    return void 0;
+  }
+  if (!/^https?:\/\/[^/?#]/i.test(escaped) || url.host === "") {
+    return void 0;
+  }
+  return escaped;
 }
 function safeIri(value) {
-  if (typeof value !== "string" || hasEdgeControlOrSpace(value)) {
+  if (typeof value !== "string") {
+    return void 0;
+  }
+  if (hasEdgeControlOrSpace(value)) {
     return void 0;
   }
   const escaped = escapeIri(value);
@@ -191,40 +234,6 @@ function safeIri(value) {
     return void 0;
   }
   return escaped;
-}
-function safeHttpIri(value) {
-  if (typeof value !== "string" || hasEdgeControlOrSpace(value)) {
-    return void 0;
-  }
-  const escaped = escapeIri(value);
-  let u;
-  try {
-    u = new URL(escaped);
-  } catch {
-    return void 0;
-  }
-  if (u.protocol !== "http:" && u.protocol !== "https:") {
-    return void 0;
-  }
-  return escaped;
-}
-function requireIri(value, field) {
-  const safe = safeIri(value);
-  if (safe === void 0) {
-    throw new TypeError(
-      `@jeswr/solid-a2a: ${field} is not a valid absolute IRI: ${JSON.stringify(value)}`
-    );
-  }
-  return safe;
-}
-function requireHttpIri(value, field) {
-  const safe = safeHttpIri(value);
-  if (safe === void 0) {
-    throw new TypeError(
-      `@jeswr/solid-a2a: ${field} is not a valid http(s) IRI: ${JSON.stringify(value)}`
-    );
-  }
-  return safe;
 }
 
 // node_modules/@jeswr/rdf-serialize/dist/serialize.js
@@ -251,6 +260,26 @@ function serialize(quads, options) {
 }
 function legacySerialize(quads, format = DEFAULT_FORMAT, prefixes = {}, emptyAsEmptyString = true) {
   return serialize(quads, { format, prefixes, emptyAsEmptyString });
+}
+
+// src/iri.ts
+function requireIri(value, field) {
+  const safe = safeIri(value);
+  if (safe === void 0) {
+    throw new TypeError(
+      `@jeswr/solid-a2a: ${field} is not a valid absolute IRI: ${JSON.stringify(value)}`
+    );
+  }
+  return safe;
+}
+function requireHttpIri(value, field) {
+  const safe = safeHttpIri(value);
+  if (safe === void 0) {
+    throw new TypeError(
+      `@jeswr/solid-a2a: ${field} is not a valid http(s) IRI: ${JSON.stringify(value)}`
+    );
+  }
+  return safe;
 }
 
 // src/vocab.ts

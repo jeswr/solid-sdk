@@ -1,132 +1,60 @@
 // AUTHORED-BY Claude Fable 5
 //
-// IRI hardening for the n3.Writer serialisation path. n3.Writer does NOT escape the
-// contents of an IRI: an untrusted string handed to `namedNode()` and then written
-// is emitted VERBATIM between `<...>`, so a `>` or a space (or any other Turtle
-// IRIREF-forbidden char) BREAKS OUT of the `<...>` and injects arbitrary triples into
-// the serialised graph. n3.Writer escapes newlines/tabs but NOT the IRIREF-forbidden
-// set below. A boolean "looks-like-an-IRI" filter is INSUFFICIENT because it forwards
-// the raw string.
+// IRI hardening for the n3.Writer serialisation path.
 //
-// Guards, chosen per site:
-//   - `escapeIri` - for SUBJECT / id fields that may legitimately be a non-http
-//     absolute IRI (`urn:...` intent ids, protocol-document ids, SHACL shape ids).
-//     Percent-encodes ONLY the Turtle IRIREF-forbidden characters, without any scheme
-//     restriction, so a valid `urn:` id survives untouched but a breakout is
-//     impossible. A subject can NEVER inject (every breakout char is neutralised), so
-//     subjects are escaped, never dropped/rejected.
-//   - `safeIri` - for OBJECT fields that must be an ABSOLUTE IRI but may legitimately
-//     be non-http (`urn:`/`did:` agent/recipient/target identifiers). ESCAPE-FIRST:
-//     runs `escapeIri` FIRST, validates THAT escaped string is a parseable absolute IRI
-//     (any scheme) via the WHATWG URL parser, then emits exactly the escaped string —
-//     so what is validated is what is emitted (the parser can't silently strip an
-//     embedded control out from under the validation); `undefined` when not a valid
-//     absolute IRI.
-//   - `safeHttpIri` - the http(s)-only variant of `safeIri` (same escape-first
-//     discipline), for object fields that must be fetchable-over-http
-//     (`protocolSource`): additionally rejects any non-http(s) scheme.
-//   - `requireIri` / `requireHttpIri` - the FAIL-CLOSED wrappers of the two `safe*`
-//     guards: a required object IRI that cannot be safely emitted THROWS rather than
-//     being silently dropped, so a serialised graph never omits a field the public
-//     object still claims (no object-desync / fail-open). Both are LEXICAL-preserving.
+// THE BUG CLASS: n3.Writer does NOT escape the contents of an IRI. An untrusted
+// string handed to `namedNode()` and then written is emitted VERBATIM between
+// `<...>`, so a `>` or a space (or any other Turtle IRIREF-forbidden char) BREAKS
+// OUT of the `<...>` and injects arbitrary triples into the serialised graph. A
+// boolean "looks-like-an-IRI" filter is INSUFFICIENT because it forwards the raw
+// string; the value must be LEXICALLY percent-encoded before it reaches namedNode.
 //
-// A `safe*` guard rejects a value whose FIRST or LAST character is a C0 control or a
-// space BEFORE parsing: the WHATWG URL parser silently trims those, so a leading/
-// trailing-space value would otherwise validate yet round-trip to a percent-mangled
-// IRI different from the one that was checked. Rejecting up front fails closed instead.
+// CONSOLIDATION (upstreaming bead 3juf, step 2): the three low-level guards —
+// `escapeIri`, `safeIri`, `safeHttpIri` — now live in exactly ONE audited place,
+// the canonical `@jeswr/rdf-serialize` package (the single home for the suite's
+// injection-neutraliser, consolidated across five hand-copied variants). They are
+// IMPORTED here and RE-EXPORTED, so this package's existing chokepoints
+// (intent.ts, wrappers.ts, translate.ts, handshake.ts, shape.ts) and the IRI test
+// suites resolve them from `./iri.js` unchanged — a pure import-source change with
+// zero injection-logic change at every call site. The former local copies were:
+//
+//   - escapeIri:   BYTE-EQUIVALENT — the same Turtle-IRIREF forbidden set (the C0
+//                  control range U+0000-U+0020 incl. SPACE, plus `< > " { } | ^ `
+//                  (backtick) and `\`) percent-encoded to the same uppercase `%XX`;
+//                  a valid absolute IRI of any scheme survives byte-for-byte and `%`
+//                  is not double-encoded. (The canonical iterates by CODE POINT and
+//                  the former local one by UTF-16 code unit — observationally
+//                  identical, since every forbidden character is single-byte ASCII
+//                  and every non-forbidden code point, astral or not, passes through
+//                  unchanged either way.)
+//   - safeIri:     BYTE-EQUIVALENT behaviour (same escape-first / validate-the-escaped
+//                  / emit-the-escaped discipline, same leading/trailing-C0-or-space
+//                  rejection), with the input type widened `string | undefined` ->
+//                  `unknown` (a strict widening — a non-string still yields undefined).
+//   - safeHttpIri: LEXICAL-preserving in BOTH — it returns the ESCAPED value, never
+//                  `new URL().href`, so emitted IRI identity is unchanged for every
+//                  value both accept (this package's local copy was NOT a
+//                  canonicalising `.href` variant, so unlike @jeswr/solid-vc it is
+//                  safe to swap). The canonical additionally REJECTS an authority-less
+//                  `https:example.com` / empty-authority `https:///foo` form — a
+//                  STRICT SUPERSET-OF-SAFETY (it only rejects more; it never accepts
+//                  something the local copy rejected, and emits the identical string
+//                  for the accepted set). No `protocolSource` / object field that was
+//                  legitimately fetchable is affected; only never-fetchable
+//                  authority-less inputs newly fail closed.
+//
+// `requireIri` / `requireHttpIri` — the FAIL-CLOSED wrappers that THROW (rather than
+// silently drop) a REQUIRED object IRI so the serialised graph can never omit a field
+// the public object still claims (the object-desync / fail-open class) — are NOT part
+// of the canonical package and stay LOCAL, delegating to the imported `safeIri` /
+// `safeHttpIri`.
 
-// The delimiter/breakout characters (all code point < 0x80) that n3.Writer would emit
-// verbatim inside `<...>`. Control chars U+0000-U+0020 (incl. SPACE, 0x20) are handled
-// numerically in `escapeIri`, so no control-char literal appears in this source.
-const IRIREF_FORBIDDEN_DELIMITERS = new Set(["<", ">", '"', "{", "}", "|", "^", "`", "\\"]);
+import { escapeIri, safeHttpIri, safeIri } from "@jeswr/rdf-serialize";
 
-/**
- * Percent-encode ONLY the Turtle IRIREF-forbidden characters in `value`, without
- * restricting the scheme. Use for SUBJECT / id positions that may be a legitimate
- * non-http absolute IRI (e.g. a `urn:` intent id): a valid id round-trips unchanged
- * while an injected `>`/space/etc. is neutralised so it can never break out of the
- * `<...>`. The forbidden set is exactly the Turtle IRIREF grammar's excluded chars:
- * control chars U+0000-U+0020 (incl. SPACE) and `< > " { } | ^ ` \`.
- */
-export function escapeIri(value: string): string {
-  let out = "";
-  for (let i = 0; i < value.length; i++) {
-    const ch = value[i] as string;
-    const code = value.charCodeAt(i);
-    if (code <= 0x20 || IRIREF_FORBIDDEN_DELIMITERS.has(ch)) {
-      out += `%${code.toString(16).toUpperCase().padStart(2, "0")}`;
-    } else {
-      out += ch;
-    }
-  }
-  return out;
-}
-
-/**
- * True when `value`'s FIRST or LAST character is a C0 control (U+0000-U+001F) or a
- * space (U+0020). The WHATWG URL parser silently strips these before parsing, so a
- * value with a leading/trailing control/space would validate yet not be the string
- * that was checked — we reject it up front and fail closed instead.
- */
-function hasEdgeControlOrSpace(value: string): boolean {
-  if (value.length === 0) {
-    return false;
-  }
-  return value.charCodeAt(0) <= 0x20 || value.charCodeAt(value.length - 1) <= 0x20;
-}
-
-/**
- * Validate an ABSOLUTE IRI for an OBJECT position, SCHEME-AGNOSTICALLY — a legitimate
- * `urn:`/`did:` identifier (an agent/recipient/target may be one) is accepted, only a
- * value that is not a parseable absolute IRI is rejected.
- *
- * ESCAPE-FIRST / validate-the-escaped / emit-the-escaped. The WHATWG URL parser
- * silently STRIPS embedded tab/newline/CR (and other C0 controls) BEFORE parsing — so
- * validating the raw value and then emitting `escapeIri(raw)` would emit a string that
- * was NEVER validated (`ht\ntps://x` validates as http(s), then emits `ht%0Atps://x`).
- * We therefore run {@link escapeIri} FIRST (every C0 control U+0000-U+001F, space, and
- * the IRIREF delimiter set → `%XX`), then validate THAT escaped string with the URL
- * parser, then emit EXACTLY the validated string. The parser sees no strippable char,
- * so validated ≡ emitted; a value whose only defect was an embedded control becomes a
- * `%XX`-encoded IRI (never a silently-stripped one). Returns `undefined` when `value`
- * is not a string, has a leading/trailing control/space, or is not an absolute IRI.
- */
-export function safeIri(value: string | undefined): string | undefined {
-  if (typeof value !== "string" || hasEdgeControlOrSpace(value)) {
-    return undefined;
-  }
-  const escaped = escapeIri(value);
-  try {
-    // Validate the ESCAPED form (a relative string throws); we emit exactly this.
-    new URL(escaped);
-  } catch {
-    return undefined;
-  }
-  return escaped;
-}
-
-/**
- * Validate an http(s) IRI for an OBJECT position that must be fetchable-over-http
- * (e.g. a handshake `protocolSource`). As {@link safeIri} (same escape-first,
- * validate-the-escaped, emit-the-escaped discipline) but additionally rejects any
- * non-`http:`/`https:` scheme. Returns `undefined` when malformed / non-http(s).
- */
-export function safeHttpIri(value: string | undefined): string | undefined {
-  if (typeof value !== "string" || hasEdgeControlOrSpace(value)) {
-    return undefined;
-  }
-  const escaped = escapeIri(value);
-  let u: URL;
-  try {
-    u = new URL(escaped);
-  } catch {
-    return undefined;
-  }
-  if (u.protocol !== "http:" && u.protocol !== "https:") {
-    return undefined;
-  }
-  return escaped;
-}
+// Re-export the canonical guards so `./iri.js`'s existing consumers and tests resolve
+// them unchanged (`escapeIri` for SUBJECT/id positions; `safeIri` for scheme-agnostic
+// absolute object IRIs; `safeHttpIri` for http(s)-only object fields).
+export { escapeIri, safeHttpIri, safeIri };
 
 /**
  * The FAIL-CLOSED wrapper of {@link safeIri}: return the safely-emittable absolute IRI,
