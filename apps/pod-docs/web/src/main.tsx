@@ -8,6 +8,7 @@ import { ThemeProvider } from "@jeswr/app-shell";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
+import { AppErrorBoundary } from "./AppErrorBoundary";
 import { SessionProvider } from "./auth/SessionProvider";
 import "./styles.css";
 
@@ -24,7 +25,12 @@ createRoot(rootEl).render(
         --bg/--ink/… aliases map onto the OKLCH tokens in styles.css). */}
     <ThemeProvider>
       <SessionProvider>
-        <App />
+        {/* The shared crash-resilience boundary (#72/#73): INSIDE the providers
+            (themed fallback; the auth seam stays unguarded) but around ALL
+            rendered content. See AppErrorBoundary.tsx for the resetKey choice. */}
+        <AppErrorBoundary>
+          <App />
+        </AppErrorBoundary>
       </SessionProvider>
     </ThemeProvider>
   </StrictMode>,
