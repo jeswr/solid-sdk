@@ -289,12 +289,40 @@ describe("REGRESSION: the LEAKED_BANNER_RE fallback fails closed on ANY absolute
     expect(() => sanitizeJs("// ../../home/user/leak\nconst c = 3;", ROOT)).toThrow(/banner/);
   });
 
+  // roborev round 2 (Medium on a6e2e85): the leading-slash generalisation still left the
+  // NON-leading-slash `../`-escape arm restricted to the home-root allowlist, so a
+  // relative-escape banner to a NON-home root (`// ../../tmp/…`, `// ../../workspace/…`)
+  // still slipped through. The escape arm now rejects ANY `./`/`../`-prefixed banner
+  // regardless of the following segment.
+  // Both `../` (double-dot escape) and `./` (single-dot) prefixes are covered by the
+  // `(?:\.{1,2}\/)+` arm — pin BOTH branches so a future change can't silently drop the
+  // single-dot case (roborev Low on 394c365).
+  for (const rel of [
+    "../../tmp/build/outside",
+    "../../workspace/outside",
+    "../../opt/ci/outside",
+    "../foo",
+    "../../../../../../etc/passwd",
+    "./tmp/build/outside",
+    "./foo",
+  ]) {
+    it(`FAILS on a dot-prefixed relative-escape extensionless banner: // ${rel}`, () => {
+      expect(() => sanitizeJs(`// ${rel}\nconst d = 4;`, ROOT)).toThrow(/banner/);
+    });
+  }
+
+  it("FAILS on a POSIX-normalised UNC extensionless banner (`// //server/share/…`)", () => {
+    expect(() => sanitizeJs("// //server/share/leak\nconst e = 5;", ROOT)).toThrow(/banner/);
+  });
+
   it("still PASSES a reduced relative label, a URL banner, and ordinary prose (no false-positive)", () => {
     const clean = [
       "// src/index",
       "// node_modules/n3/dist/parse",
+      "// foo/bar/baz",
       "// https://example.org/schema",
       "// see /var/log for details",
+      "// ...continued prose, not a path",
       "export const ok = true;",
     ].join("\n");
     expect(() => sanitizeJs(clean, ROOT)).not.toThrow();

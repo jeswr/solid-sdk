@@ -67,26 +67,28 @@ export const JS_BANNER_RE = /^\/\/ (.+\.(?:js|cjs|mjs|ts|tsx|jsx))$/gm;
  * emitted for a module with NO recognised source extension (so `JS_BANNER_RE` did not
  * capture it and it never reached the `pkgRelativePath` rewrite / `assertNoHostPath`
  * guard) or a value the classifier could not reduce. This fallback must fail closed on
- * the SAME full absolute-path taxonomy as `assertNoHostPath` — NOT a fixed set of known
- * home roots. Three arms (tried in order):
+ * the SAME "not a clean in-root relative label" taxonomy as `assertNoHostPath` — NEVER a
+ * fixed set of known roots (an earlier version's `Users|home|root|private|var` allowlist
+ * let `// /tmp/…`, and then `// ../../tmp/…`, slip through). The complete set of path
+ * starts that are NOT a clean in-root relative label is exactly three, tried in order:
  *   1. `[A-Za-z]:\/` — a Windows drive-qualified banner (`// C:/…`, `// D:/a/orphan` —
  *      ANY drive path is a host path, even without a Unix forbidden segment);
- *   2. `(?:\.{1,2}\/)*\/` — ANY bare POSIX absolute-path banner: `// ` then optional
- *      `./`/`../` segments then a leading `/`. This generalises the old fixed-root
- *      allowlist so `// /tmp/…`, `// /opt/…`, `// /workspace/…`, `// /srv/…` (not just
- *      `/Users//home//root//private//var`) are ALL rejected — the same fail-closed
- *      guarantee `assertNoHostPath` now makes, previously missing from this fallback;
- *   3. `(?:\.{1,2}\/)*\/?(?:Users|home|root|private|var)\/` — the original known-root
- *      arm, kept verbatim as a strict superset so a NON-leading-slash `../`-escape to a
- *      home root (`// ../../home/…`) is still caught.
- * It deliberately does NOT match a reduced RELATIVE label (`// src/…`, `// node_modules/…`
- * — the legitimate sanitised forms, no leading `/`), a URL banner (`// https://…`), or
- * ordinary prose (`// see /var/log …` — the path is not at the START after `// `).
- * Anchored at `^\/\/ `. Callers POSIX-normalise the line (backslashes → `/`) before
- * testing, so a Windows banner is caught too.
+ *   2. `\/` — ANY bare POSIX absolute-path banner (leading `/`): `// /tmp/…`, `// /opt/…`,
+ *      `// /workspace/…`, `// /srv/…`, `// /Users/…`, and a POSIX-normalised UNC
+ *      `// //server/share/…` — every root, not a fixed list;
+ *   3. `(?:\.{1,2}\/)+` — ANY `./`/`../`-prefixed relative-escape banner, regardless of
+ *      the segment that follows: `// ../../tmp/…`, `// ../../workspace/…`, `// ../foo`.
+ *      A relative-escape banner is machine-context-dependent (its meaning depends on
+ *      where the package root sits) and was never reduced, so it is rejected wholesale
+ *      rather than allow-listed by first segment.
+ * It deliberately does NOT match a reduced in-root RELATIVE label (`// src/…`,
+ * `// node_modules/…` — the legitimate sanitised forms: a bare segment, no leading `/`,
+ * no `./`/`../` prefix, no drive), a URL banner (`// https://…`), or ordinary prose
+ * (`// see /var/log …`, `// ...continued` — the path/token is not a path-start at the
+ * START after `// `). Anchored at `^\/\/ `. Callers POSIX-normalise the line
+ * (backslashes → `/`) before testing, so a Windows banner is caught too.
  */
-const LEAKED_BANNER_RE =
-  /^\/\/ (?:[A-Za-z]:\/|(?:\.{1,2}\/)*\/|(?:\.{1,2}\/)*\/?(?:Users|home|root|private|var)\/)/;
+const LEAKED_BANNER_RE = /^\/\/ (?:[A-Za-z]:\/|\/|(?:\.{1,2}\/)+)/;
 
 /** A `scheme://` URL — not a filesystem build path, so it is left untouched. */
 const URL_RE = /^[a-z][a-z0-9+.-]*:\/\//i;
