@@ -1486,7 +1486,18 @@ class SolidAuthEngine implements SolidAuth {
     // than being generation-skipped after our bump — which would strand the prior session
     // on a spent token if THIS login then failed (the roborev finding). The abort bounds
     // the wait. We do this BEFORE the ++generation below.
-    await this.#drainActiveGrants();
+    //
+    // In a LOOP until NO grant remains (the dropSession roborev follow-up): a single
+    // pass only settles its SNAPSHOT — a grant that REGISTERS during the awaited pass
+    // (its pre-grant fence saw the not-yet-bumped generation) would be missed, redeem
+    // the refresh token, and have its rotation write generation-skipped after the bump
+    // (the same strand). The loop must stay INLINE at the call site: wrapping it in an
+    // async helper would put a microtask hop between the final empty-check and the bump,
+    // reopening the window — here loop-exit → ++generation is synchronous, so no grant
+    // can hold the old generation past the bump. (See dropSession for the write-up.)
+    while (this.#activeGrants.size > 0) {
+      await this.#drainActiveGrants();
+    }
     // FENCE: bump the generation so this attempt SUPERSEDES any earlier in-flight
     // login/restore — a slower earlier attempt that finishes later must NOT overwrite this
     // attempt's session/persisted credential/remembered pointer with a stale identity. We
@@ -1723,10 +1734,19 @@ class SolidAuthEngine implements SolidAuth {
   }
 
   /**
-   * ABORT then AWAIT the in-flight grants to SETTLE — used by `login()` BEFORE it bumps the
-   * generation, so a grant the OP already processed gets its rotation write to land under
-   * its still-valid generation instead of being generation-skipped (the roborev finding).
-   * The abort bounds the wait. Snapshot the set first (members remove themselves on settle).
+   * ABORT then AWAIT the in-flight grants to SETTLE — used by `login()` /
+   * `completeRedirectLogin()` / `dropSession()` BEFORE they bump the generation, so a
+   * grant the OP already processed gets its rotation write to land under its still-valid
+   * generation instead of being generation-skipped (the roborev finding). The abort
+   * bounds the wait. Snapshot the set first (members remove themselves on settle).
+   *
+   * ONE PASS ONLY — every drain-before-bump call site MUST invoke this in an INLINE
+   * `while (this.#activeGrants.size > 0)` loop (the dropSession roborev follow-up): a
+   * grant that registers DURING an awaited pass is missed by that pass's snapshot, and
+   * the loop cannot live inside an async helper — the caller's `await` resumption would
+   * add a microtask hop between the final empty-check and the bump, reopening the
+   * window. Inline, loop-exit → bump is synchronous, so no grant can hold the
+   * pre-bump generation past the bump.
    */
   async #drainActiveGrants(): Promise<void> {
     if (this.#activeGrants.size === 0) return;
@@ -1791,6 +1811,65 @@ class SolidAuthEngine implements SolidAuth {
         );
       }
     }
+  }
+
+  /**
+   * Drop the LIVE in-memory session but KEEP the durable credential + the
+   * silent-restore pointer — the TRANSIENT-failure teardown (see the interface doc
+   * on {@link SolidAuth.dropSession} for the dropSession-vs-logout decision rule).
+   * The next page load (or a later `restore()` on this controller) silently
+   * re-establishes the session from the kept credential; `logout()` remains the
+   * definitive teardown that deletes it.
+   *
+   * ORDERING (mirrors `login()`'s drain-before-bump, for the OPPOSITE reason
+   * logout() skips it): logout deletes the credential anyway, so it may abort
+   * in-flight grants and bump immediately. dropSession's whole purpose is to keep
+   * the credential RESTORABLE — so it must first ABORT + AWAIT the in-flight
+   * refresh/restore grants (#drainActiveGrants). A grant the OP already processed
+   * despite the abort then lands its rotation write under its STILL-VALID
+   * generation; bumping first would generation-skip that write, leaving the store
+   * holding the OLD (now server-spent) refresh token — the next load's silent
+   * restore would hit `invalid_grant` and DELETE the credential, recreating the
+   * exact permanent-re-login failure this method exists to prevent. A grant the
+   * abort DID cancel never redeems the token at all (it stays unspent + valid).
+   * The abort bounds the wait, so dropSession resolves promptly.
+   */
+  async dropSession(): Promise<void> {
+    // Abort any in-flight interactive login's popup — dropSession supersedes it
+    // (after resolve the controller must be logged out, not re-armed by a
+    // completing popup).
+    this.#abortActiveLogin();
+    // Drain in-flight refresh/restore grants BEFORE bumping (see the method doc) —
+    // in a LOOP until NO grant remains (the roborev finding): a single drain pass
+    // only aborts+awaits its SNAPSHOT, but a refresh/restore that entered during
+    // that awaited pass (its pre-grant fence saw the not-yet-bumped generation)
+    // registers a NEW grant the snapshot missed. Bumping with such a grant live
+    // would let it redeem (rotate) the refresh token while its guarded rotation
+    // write is generation-skipped — stranding the durable credential on the
+    // now-server-spent old token, the exact failure dropSession exists to prevent.
+    // Each pass aborts the newcomers too, so the supply is bounded by the grants
+    // the app had in flight; LOOP-EXIT → BUMP below is synchronous (registration
+    // cannot interleave on a single thread), so no grant ever holds the old
+    // generation past the bump — a grant entering after it sees no live session /
+    // a stale session generation and never spends the token.
+    while (this.#activeGrants.size > 0) {
+      await this.#drainActiveGrants();
+    }
+    // LOCAL TEARDOWN — synchronous with the loop exit above (no awaited I/O in
+    // between): drop the live session and bump the generation so any remaining
+    // in-flight login/restore continuation sees itself superseded (its post-await
+    // checks discard it).
+    this.#session = undefined;
+    this.#generation++;
+    // RE-ABORT after the drain yield point (login()'s pattern): a prior pre-popup
+    // login could have resumed during the awaited drain and registered a new
+    // abort handle / opened its popup — cancel it now that we've superseded it.
+    this.#abortActiveLogin();
+    // DELIBERATELY KEPT (the contrast with logout()): the durable credential in
+    // the session store, the silent-restore pointer, and the recent-accounts
+    // list. NO store delete, NO pointer clear — the next load retries silent
+    // restore. Nothing durable is touched, so this never rejects.
+    this.#emitSessionChange();
   }
 
   /**
@@ -2540,10 +2619,14 @@ class SolidAuthEngine implements SolidAuth {
     // back-button can never replay the single-use code + verifier + exported DPoP key.
     try {
       // Establish under the SAME generation fence as login(): abort a prior in-flight
-      // login, drain in-flight grants, then bump the generation so THIS completion
-      // supersedes any earlier attempt.
+      // login, drain in-flight grants — in a LOOP until none remains, so a grant that
+      // registers during a drain pass is drained too and loop-exit → bump stays
+      // synchronous (see login()/dropSession for the drain-window write-up) — then
+      // bump the generation so THIS completion supersedes any earlier attempt.
       this.#abortActiveLogin();
-      await this.#drainActiveGrants();
+      while (this.#activeGrants.size > 0) {
+        await this.#drainActiveGrants();
+      }
       const generation = ++this.#generation;
       this.#abortActiveLogin();
       const priorSession = this.#session;

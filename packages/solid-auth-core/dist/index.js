@@ -1223,7 +1223,9 @@ var SolidAuthEngine = class {
   // generation re-checks must stay co-located to be reviewable as one fence.)
   async login(webId) {
     this.#abortActiveLogin();
-    await this.#drainActiveGrants();
+    while (this.#activeGrants.size > 0) {
+      await this.#drainActiveGrants();
+    }
     const generation = ++this.#generation;
     this.#abortActiveLogin();
     const priorSession = this.#session;
@@ -1338,10 +1340,19 @@ var SolidAuthEngine = class {
     for (const g of this.#activeGrants) g.abort.abort();
   }
   /**
-   * ABORT then AWAIT the in-flight grants to SETTLE — used by `login()` BEFORE it bumps the
-   * generation, so a grant the OP already processed gets its rotation write to land under
-   * its still-valid generation instead of being generation-skipped (the roborev finding).
-   * The abort bounds the wait. Snapshot the set first (members remove themselves on settle).
+   * ABORT then AWAIT the in-flight grants to SETTLE — used by `login()` /
+   * `completeRedirectLogin()` / `dropSession()` BEFORE they bump the generation, so a
+   * grant the OP already processed gets its rotation write to land under its still-valid
+   * generation instead of being generation-skipped (the roborev finding). The abort
+   * bounds the wait. Snapshot the set first (members remove themselves on settle).
+   *
+   * ONE PASS ONLY — every drain-before-bump call site MUST invoke this in an INLINE
+   * `while (this.#activeGrants.size > 0)` loop (the dropSession roborev follow-up): a
+   * grant that registers DURING an awaited pass is missed by that pass's snapshot, and
+   * the loop cannot live inside an async helper — the caller's `await` resumption would
+   * add a microtask hop between the final empty-check and the bump, reopening the
+   * window. Inline, loop-exit → bump is synchronous, so no grant can hold the
+   * pre-bump generation past the bump.
    */
   async #drainActiveGrants() {
     if (this.#activeGrants.size === 0) return;
@@ -1381,6 +1392,37 @@ var SolidAuthEngine = class {
         );
       }
     }
+  }
+  /**
+   * Drop the LIVE in-memory session but KEEP the durable credential + the
+   * silent-restore pointer — the TRANSIENT-failure teardown (see the interface doc
+   * on {@link SolidAuth.dropSession} for the dropSession-vs-logout decision rule).
+   * The next page load (or a later `restore()` on this controller) silently
+   * re-establishes the session from the kept credential; `logout()` remains the
+   * definitive teardown that deletes it.
+   *
+   * ORDERING (mirrors `login()`'s drain-before-bump, for the OPPOSITE reason
+   * logout() skips it): logout deletes the credential anyway, so it may abort
+   * in-flight grants and bump immediately. dropSession's whole purpose is to keep
+   * the credential RESTORABLE — so it must first ABORT + AWAIT the in-flight
+   * refresh/restore grants (#drainActiveGrants). A grant the OP already processed
+   * despite the abort then lands its rotation write under its STILL-VALID
+   * generation; bumping first would generation-skip that write, leaving the store
+   * holding the OLD (now server-spent) refresh token — the next load's silent
+   * restore would hit `invalid_grant` and DELETE the credential, recreating the
+   * exact permanent-re-login failure this method exists to prevent. A grant the
+   * abort DID cancel never redeems the token at all (it stays unspent + valid).
+   * The abort bounds the wait, so dropSession resolves promptly.
+   */
+  async dropSession() {
+    this.#abortActiveLogin();
+    while (this.#activeGrants.size > 0) {
+      await this.#drainActiveGrants();
+    }
+    this.#session = void 0;
+    this.#generation++;
+    this.#abortActiveLogin();
+    this.#emitSessionChange();
   }
   /**
    * Serialized durable delete (chained with persists so ordering is deterministic).
@@ -1876,7 +1918,9 @@ var SolidAuthEngine = class {
     }
     try {
       this.#abortActiveLogin();
-      await this.#drainActiveGrants();
+      while (this.#activeGrants.size > 0) {
+        await this.#drainActiveGrants();
+      }
       const generation = ++this.#generation;
       this.#abortActiveLogin();
       const priorSession = this.#session;

@@ -61,6 +61,12 @@ class FakeAuth implements SolidAuth {
     this.#emit(); // fail-closed local teardown notifies FIRST…
     if (this.logoutError) throw this.logoutError; // …then the durable delete may fail
   }
+  async dropSession(): Promise<void> {
+    // The transient teardown: drop the live session + emit, touch nothing durable
+    // (the fake has no durable store; the real engine keeps credential + pointer).
+    this.webId = null;
+    this.#emit();
+  }
   recentAccounts(): [] {
     return [];
   }
