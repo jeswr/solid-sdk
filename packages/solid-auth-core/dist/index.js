@@ -1405,7 +1405,9 @@ var SolidAuthEngine = class {
    */
   async dropSession() {
     this.#abortActiveLogin();
-    await this.#drainActiveGrants();
+    while (this.#activeGrants.size > 0) {
+      await this.#drainActiveGrants();
+    }
     this.#session = void 0;
     this.#generation++;
     this.#abortActiveLogin();

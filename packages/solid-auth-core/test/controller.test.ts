@@ -4066,6 +4066,62 @@ describe("createSolidAuth — dropSession keeps the durable credential (transien
     }
   });
 
+  it("drains grants that register DURING the drain window — the token is never spent under a skipped rotation (roborev Medium fix)", async () => {
+    // The drain-race regression: dropSession's first drain pass aborts+awaits only
+    // its SNAPSHOT of in-flight grants. A grant that REGISTERS during that awaited
+    // pass (its pre-grant fence saw the not-yet-bumped generation) was missed by
+    // the snapshot — under the old single-pass code it was never aborted, redeemed
+    // (rotated) the refresh token at the OP, and had its guarded rotation write
+    // generation-skipped after the bump: the store kept the now-server-spent OLD
+    // token → the next load's restore would invalid_grant and DELETE the credential
+    // (the exact strand dropSession must prevent). The fix drains in a LOOP until
+    // no grant remains, then bumps synchronously.
+    //
+    // Deterministic construction: grant A is an in-flight (gated) proactive REFRESH;
+    // dropSession() snapshots+aborts A and awaits; a restore() issued SYNCHRONOUSLY
+    // in the same task registers grant B — restore()'s grant registration is
+    // synchronous with the call, so B deterministically lands INSIDE the drain
+    // window, before any microtask (including the drain continuation) runs.
+    const store = new RecordingStore();
+    const ls = installKeyedLocalStorage();
+    try {
+      loginExpiresIn = 0; // the access token is ALREADY past expiry (skew) → proactive refresh
+      const controller = createSolidAuth({
+        authFlow,
+        callbackUri: "https://app.example/callback",
+        clientId: "https://app.example/clientid.jsonld",
+        store,
+        rememberedAccountsKey: REMEMBERED_KEY,
+        recentAccountsKey: RECENT_KEY,
+        publicFetch: ok200RecordingFetch(),
+      });
+      await controller.login(ALICE); // writes the credential + pointer
+      // Gate every grant (A and B ride the same unresolved gate, raced with abort).
+      restoreDelay = () => new Promise<void>(() => {});
+      // Grant A: a proactive refresh (expired token) — let it register + hit the gate.
+      const inFlightFetch = controller.authenticatedFetch("https://alice.pod.example/data");
+      await new Promise((r) => setTimeout(r, 0));
+      // dropSession snapshots + aborts A, then AWAITS — the drain window is open.
+      const drop = controller.dropSession();
+      // Grant B registers SYNCHRONOUSLY, inside the drain window, pre-bump.
+      const lateRestore = controller.restore();
+      await drop;
+      await lateRestore;
+      await inFlightFetch;
+      // NEITHER grant reached the redeem+rotate step (both aborted before spending) …
+      expect(restoreRotationsAttempted).toBe(0);
+      // … so the stored refresh token is intact (unspent) and the pointer kept …
+      expect(store.map.get(ISSUER)?.refreshToken).toBe("refresh-token");
+      expect(ls.map.get(REMEMBERED_KEY)).toBeDefined();
+      expect(controller.webId).toBeNull();
+      // … and a subsequent restore succeeds from it (nothing was stranded).
+      restoreDelay = undefined;
+      expect(await controller.restore()).toEqual({ outcome: "restored", webId: ALICE });
+    } finally {
+      ls.restore();
+    }
+  });
+
   it("login() after dropSession() works (the engine is fully reusable, not torn down)", async () => {
     const store = new RecordingStore();
     const controller = createSolidAuth({

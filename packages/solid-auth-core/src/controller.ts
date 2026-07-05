@@ -1819,11 +1819,26 @@ class SolidAuthEngine implements SolidAuth {
     // (after resolve the controller must be logged out, not re-armed by a
     // completing popup).
     this.#abortActiveLogin();
-    // Drain in-flight refresh/restore grants BEFORE bumping (see the method doc).
-    await this.#drainActiveGrants();
-    // LOCAL TEARDOWN — synchronous, no awaited I/O in between: drop the live
-    // session and bump the generation so any remaining in-flight login/restore
-    // continuation sees itself superseded (its post-await checks discard it).
+    // Drain in-flight refresh/restore grants BEFORE bumping (see the method doc) —
+    // in a LOOP until NO grant remains (the roborev finding): a single drain pass
+    // only aborts+awaits its SNAPSHOT, but a refresh/restore that entered during
+    // that awaited pass (its pre-grant fence saw the not-yet-bumped generation)
+    // registers a NEW grant the snapshot missed. Bumping with such a grant live
+    // would let it redeem (rotate) the refresh token while its guarded rotation
+    // write is generation-skipped — stranding the durable credential on the
+    // now-server-spent old token, the exact failure dropSession exists to prevent.
+    // Each pass aborts the newcomers too, so the supply is bounded by the grants
+    // the app had in flight; LOOP-EXIT → BUMP below is synchronous (registration
+    // cannot interleave on a single thread), so no grant ever holds the old
+    // generation past the bump — a grant entering after it sees no live session /
+    // a stale session generation and never spends the token.
+    while (this.#activeGrants.size > 0) {
+      await this.#drainActiveGrants();
+    }
+    // LOCAL TEARDOWN — synchronous with the loop exit above (no awaited I/O in
+    // between): drop the live session and bump the generation so any remaining
+    // in-flight login/restore continuation sees itself superseded (its post-await
+    // checks discard it).
     this.#session = undefined;
     this.#generation++;
     // RE-ABORT after the drain yield point (login()'s pattern): a prior pre-popup
