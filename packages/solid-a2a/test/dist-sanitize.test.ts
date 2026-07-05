@@ -257,3 +257,46 @@ describe("REGRESSION: assertNoHostPath fails closed on ANY residual absolute pat
     expect(map.sources).toEqual(["src/registry.ts", "node_modules/n3/src/parse.ts"]);
   });
 });
+
+describe("REGRESSION: the LEAKED_BANNER_RE fallback fails closed on ANY absolute-path banner without a recognised extension", () => {
+  // roborev (Medium on c003214) found the fail-closed fix only covered the
+  // JS_BANNER_RE-captured (extension-bearing) path via assertNoHostPath, leaving the
+  // EXTENSIONLESS-banner fallback (assertNoLeakedBanner / LEAKED_BANNER_RE) with the
+  // SAME fixed-prefix allowlist gap: a banner like `// /tmp/build/outside` (no
+  // recognised extension → not captured by JS_BANNER_RE, not matched by the old
+  // /Users//home//root//private//var-only regex) survived. The fallback now rejects
+  // ANY bare POSIX absolute-path (or drive-qualified) banner, matching the primary
+  // guard's fail-closed guarantee.
+
+  for (const root of [
+    "/tmp/build/outside",
+    "/opt/ci/outside",
+    "/workspace/outside",
+    "/srv/x/leak",
+  ]) {
+    it(`FAILS on an extensionless banner under ${root} (not in the old fixed-prefix set)`, () => {
+      // No recognised source extension, so JS_BANNER_RE never captures it and it
+      // reaches the assertNoLeakedBanner fallback — which must now throw.
+      expect(() => sanitizeJs(`// ${root}\nconst a = 1;`, ROOT)).toThrow(/banner/);
+    });
+  }
+
+  it("FAILS on a drive-qualified extensionless banner (`// C:/…`)", () => {
+    expect(() => sanitizeJs("// C:/Users/a/orphan\nconst b = 2;", ROOT)).toThrow(/banner/);
+  });
+
+  it("FAILS on a non-leading-slash `../`-escape-to-home-root extensionless banner", () => {
+    expect(() => sanitizeJs("// ../../home/user/leak\nconst c = 3;", ROOT)).toThrow(/banner/);
+  });
+
+  it("still PASSES a reduced relative label, a URL banner, and ordinary prose (no false-positive)", () => {
+    const clean = [
+      "// src/index",
+      "// node_modules/n3/dist/parse",
+      "// https://example.org/schema",
+      "// see /var/log for details",
+      "export const ok = true;",
+    ].join("\n");
+    expect(() => sanitizeJs(clean, ROOT)).not.toThrow();
+  });
+});
