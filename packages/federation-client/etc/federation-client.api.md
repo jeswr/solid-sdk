@@ -4,6 +4,7 @@
 
 ```ts
 
+import { classifyIpLiteral } from '@jeswr/guarded-fetch';
 import { createGuardedFetch } from '@jeswr/guarded-fetch';
 import type { DatasetCore } from '@rdfjs/types';
 import { DnsLookup } from '@jeswr/guarded-fetch';
@@ -14,6 +15,8 @@ import { isPublicAddress } from '@jeswr/guarded-fetch';
 import { Membership } from '@jeswr/federation-registry';
 import { MembershipStatusName } from '@jeswr/federation-registry';
 import type { Quad } from '@rdfjs/types';
+import { RedirectRefusedError } from '@jeswr/guarded-fetch';
+import { refuseRedirects } from '@jeswr/guarded-fetch';
 import { RegistryIssue } from '@jeswr/federation-registry';
 import { ResolvedAddress } from '@jeswr/guarded-fetch';
 import { SsrfError } from '@jeswr/guarded-fetch';
@@ -43,6 +46,8 @@ export interface AppRegistration {
     readonly sectors?: readonly string[];
     readonly sectorUse?: readonly SectorUse[];
 }
+
+export { classifyIpLiteral }
 
 export { createGuardedFetch }
 
@@ -97,6 +102,10 @@ export interface ListOptions {
 export { Membership }
 
 export { MembershipStatusName }
+
+export { RedirectRefusedError }
+
+export { refuseRedirects }
 
 // @public
 export interface RegistryDiscovery {

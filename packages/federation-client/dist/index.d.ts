@@ -30,7 +30,7 @@ export type { SelfDescription } from "./selfDescribe.js";
 export { selfDescribe } from "./selfDescribe.js";
 export { serialize } from "./serialize.js";
 export type { DnsLookup, GuardOptions, ResolvedAddress } from "./ssrf.js";
-export { createGuardedFetch, guardedFetch, isLoopbackAddress, isPublicAddress, SsrfError, } from "./ssrf.js";
+export { classifyIpLiteral, createGuardedFetch, guardedFetch, isLoopbackAddress, isPublicAddress, RedirectRefusedError, refuseRedirects, SsrfError, } from "./ssrf.js";
 export type { AppRegistration, SectorUse, VerificationIssue, VerificationIssueCode, VerificationResult, } from "./types.js";
 export type { VerifyDatasetOptions, VerifyOptions } from "./verify.js";
 export { verify, verifyDataset } from "./verify.js";

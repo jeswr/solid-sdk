@@ -8,6 +8,7 @@ import {
   isPublicAddress,
   SsrfError
 } from "./index.js";
+import { RedirectRefusedError, refuseRedirects } from "./index.js";
 var defaultResolveAll = (hostname) => new Promise((resolve, reject) => {
   dnsLookupCb(hostname, { all: true }, (err, addresses) => {
     if (err) {

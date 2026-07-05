@@ -28,6 +28,13 @@
 // the non-SSRF policy refusals) — every old field is present with identical semantics, so a
 // caller passing the old options is unaffected.
 
+// The redirect-refusal primitive (`refuseRedirects` + `RedirectRefusedError`) is also
+// re-exported: the consolidated `@jeswr/guarded-fetch/node` re-exports both FROM the
+// guarded-fetch ROOT, and this package's build inlines that root ONCE into `dist/index.js`
+// while keeping it EXTERNAL to `dist/node.js` (the share-root plugin — ONE shared SsrfError /
+// RedirectRefusedError class). For `dist/node.js`'s `import { RedirectRefusedError,
+// refuseRedirects } from "./index.js"` to resolve at runtime, the ROOT must export them — so
+// they are surfaced here. Additive + browser-safe (both come from guarded-fetch's `.` entry).
 export {
   classifyIpLiteral,
   createGuardedFetch,
@@ -36,6 +43,8 @@ export {
   guardedFetch,
   isLoopbackAddress,
   isPublicAddress,
+  RedirectRefusedError,
   type ResolvedAddress,
+  refuseRedirects,
   SsrfError,
 } from "@jeswr/guarded-fetch";

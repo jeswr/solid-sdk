@@ -2188,6 +2188,101 @@ function isLoopbackAddress(address) {
   }
   return false;
 }
+function isRedirect(status) {
+  return status === 301 || status === 302 || status === 303 || status === 307 || status === 308;
+}
+function sameOrigin(a, b) {
+  try {
+    return new URL(a).origin === new URL(b).origin;
+  } catch {
+    return false;
+  }
+}
+function safeProtocol(u) {
+  try {
+    return new URL(u).protocol;
+  } catch {
+    return "";
+  }
+}
+function redactUserinfo(value) {
+  if (typeof value !== "string") {
+    return String(value);
+  }
+  return value.replace(/\/\/[^/?#]*@/g, "//<redacted>@");
+}
+var CREDENTIAL_HEADERS = /* @__PURE__ */ new Set([
+  "authorization",
+  "cookie",
+  "proxy-authorization",
+  "www-authenticate",
+  "dpop"
+]);
+var CONTENT_HEADERS = /* @__PURE__ */ new Set([
+  "content-length",
+  "content-type",
+  "content-encoding",
+  "content-language",
+  "content-location"
+]);
+function rewriteInitForRedirect(init, status, crossOrigin) {
+  const method = (init.method ?? "GET").toUpperCase();
+  const methodChanges = (status === 301 || status === 302) && method === "POST" || status === 303 && method !== "GET" && method !== "HEAD";
+  const dropBody = methodChanges || crossOrigin;
+  const headers = new Headers(init.headers ?? {});
+  if (crossOrigin) {
+    for (const name of CREDENTIAL_HEADERS) {
+      headers.delete(name);
+    }
+  }
+  if (dropBody) {
+    for (const name of CONTENT_HEADERS) {
+      headers.delete(name);
+    }
+  }
+  const kept = {};
+  headers.forEach((value, key) => {
+    kept[key] = value;
+  });
+  const {
+    body: _body,
+    duplex: _duplex,
+    method: _method,
+    ...rest
+  } = init;
+  const next = { ...rest, headers: kept };
+  if (methodChanges) {
+    next.method = "GET";
+  } else if (init.method !== void 0) {
+    next.method = init.method;
+    if (!dropBody && init.body !== void 0) {
+      next.body = init.body;
+      const duplex = init.duplex;
+      if (duplex !== void 0) {
+        next.duplex = duplex;
+      }
+    }
+  }
+  return next;
+}
+function normalizeRequest(input, init) {
+  if (typeof input === "string") {
+    return { url: input, init };
+  }
+  if (input instanceof URL) {
+    return { url: input.toString(), init };
+  }
+  const req = input;
+  const fromRequest = {
+    method: req.method,
+    headers: req.headers,
+    credentials: req.credentials,
+    redirect: req.redirect,
+    ...req.signal ? { signal: req.signal } : {},
+    ...req.body ? { body: req.body, duplex: "half" } : {}
+  };
+  return { url: req.url, init: { ...fromRequest, ...init ?? {} } };
+}
 var SsrfError = class extends Error {
   constructor(message2, options) {
     super(message2, options);
@@ -2600,100 +2695,11 @@ var SsrfGuard = class {
     }
   }
 };
-function isRedirect(status) {
-  return status === 301 || status === 302 || status === 303 || status === 307 || status === 308;
-}
 function isNullBodyStatus(status) {
   return status === 101 || status === 204 || status === 205 || status === 304;
 }
 function isBodyBearingStatus(status) {
   return status >= 200 && status < 300 && status !== 204 && status !== 205;
-}
-function sameOrigin(a, b) {
-  try {
-    return new URL(a).origin === new URL(b).origin;
-  } catch {
-    return false;
-  }
-}
-function safeProtocol(u) {
-  try {
-    return new URL(u).protocol;
-  } catch {
-    return "";
-  }
-}
-var CREDENTIAL_HEADERS = /* @__PURE__ */ new Set([
-  "authorization",
-  "cookie",
-  "proxy-authorization",
-  "www-authenticate",
-  "dpop"
-]);
-var CONTENT_HEADERS = /* @__PURE__ */ new Set([
-  "content-length",
-  "content-type",
-  "content-encoding",
-  "content-language",
-  "content-location"
-]);
-function rewriteInitForRedirect(init, status, crossOrigin) {
-  const method = (init.method ?? "GET").toUpperCase();
-  const methodChanges = status === 303 || (status === 301 || status === 302) && method !== "GET" && method !== "HEAD";
-  const dropBody = methodChanges || crossOrigin;
-  const headers = new Headers(init.headers ?? {});
-  if (crossOrigin) {
-    for (const name of CREDENTIAL_HEADERS) {
-      headers.delete(name);
-    }
-  }
-  if (dropBody) {
-    for (const name of CONTENT_HEADERS) {
-      headers.delete(name);
-    }
-  }
-  const kept = {};
-  headers.forEach((value, key) => {
-    kept[key] = value;
-  });
-  const {
-    body: _body,
-    duplex: _duplex,
-    method: _method,
-    ...rest
-  } = init;
-  const next = { ...rest, headers: kept };
-  if (methodChanges) {
-    next.method = "GET";
-  } else if (init.method !== void 0) {
-    next.method = init.method;
-    if (!dropBody && init.body !== void 0) {
-      next.body = init.body;
-      const duplex = init.duplex;
-      if (duplex !== void 0) {
-        next.duplex = duplex;
-      }
-    }
-  }
-  return next;
-}
-function normalizeRequest(input, init) {
-  if (typeof input === "string") {
-    return { url: input, init };
-  }
-  if (input instanceof URL) {
-    return { url: input.toString(), init };
-  }
-  const req = input;
-  const fromRequest = {
-    method: req.method,
-    headers: req.headers,
-    credentials: req.credentials,
-    redirect: req.redirect,
-    ...req.signal ? { signal: req.signal } : {},
-    ...req.body ? { body: req.body, duplex: "half" } : {}
-  };
-  return { url: req.url, init: { ...fromRequest, ...init ?? {} } };
 }
 function hasNodeDns() {
   return typeof process !== "undefined" && process.versions !== void 0 && process.versions.node !== void 0;
@@ -2704,6 +2710,59 @@ function isBrowserContext() {
 }
 function message(cause) {
   return cause instanceof Error ? cause.message : String(cause);
+}
+var RedirectRefusedError = class extends Error {
+  /** The request URL that returned the refused redirect (userinfo redacted). */
+  url;
+  /**
+   * The redirect status. `0` for a browser opaque-redirect, whose real 3xx status is masked by
+   * the Fetch spec's response filtering (the wrapper still refuses it).
+   */
+  status;
+  /**
+   * The `Location` header (userinfo redacted), when readable — `undefined` for a browser
+   * opaque-redirect (whose headers are stripped) or a redirect with no `Location`.
+   */
+  location;
+  constructor(message2, detail) {
+    super(message2, detail.cause !== void 0 ? { cause: detail.cause } : void 0);
+    this.name = "RedirectRefusedError";
+    this.url = detail.url;
+    this.status = detail.status;
+    this.location = detail.location;
+  }
+};
+function refuseRedirects(fetch = globalThis.fetch) {
+  const wrapped = async (input, init) => {
+    const res = await fetch(input, { ...init ?? {}, redirect: "manual" });
+    const opaqueRedirect = res.type === "opaqueredirect";
+    if (opaqueRedirect || isRedirect(res.status)) {
+      const location = opaqueRedirect ? void 0 : res.headers.get("location") ?? void 0;
+      try {
+        await res.body?.cancel();
+      } catch {
+      }
+      const safeUrl = redactUserinfo(requestUrlOf(input));
+      const safeLocation = location !== void 0 ? redactUserinfo(location) : void 0;
+      const where = opaqueRedirect ? "opaque redirect" : `status ${res.status}`;
+      const to = safeLocation !== void 0 ? ` \u2192 ${safeLocation}` : "";
+      throw new RedirectRefusedError(
+        `Refusing to follow a redirect (${where}${to}) from ${safeUrl}: this fetch refuses redirects for credential safety. Use a follow-capable fetch if a redirect is an expected part of the protocol.`,
+        { url: safeUrl, status: res.status, location: safeLocation }
+      );
+    }
+    return res;
+  };
+  return wrapped;
+}
+function requestUrlOf(input) {
+  if (typeof input === "string") {
+    return input;
+  }
+  if (input instanceof URL) {
+    return input.toString();
+  }
+  return input.url;
 }
 
 // src/registry.ts
@@ -2800,15 +2859,18 @@ export {
   ACL_MODES,
   FEDAPP,
   KNOWN_SECTOR_SLUGS,
+  RedirectRefusedError,
   SsrfError,
   VALID_ACCESS_MODE_IRIS,
   accessModeName,
+  classifyIpLiteral,
   createGuardedFetch,
   discoverFromRegistry,
   guardedFetch,
   isLoopbackAddress,
   isPublicAddress,
   list,
+  refuseRedirects,
   resolveStorageSpecVersion,
   sectorIri,
   selfDescribe,

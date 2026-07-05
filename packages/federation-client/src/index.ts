@@ -41,11 +41,21 @@ export type { SelfDescription } from "./selfDescribe.js";
 export { selfDescribe } from "./selfDescribe.js";
 export { serialize } from "./serialize.js";
 export type { DnsLookup, GuardOptions, ResolvedAddress } from "./ssrf.js";
+// The root re-exports EVERY runtime symbol the `./node` bundle imports from the shared
+// guarded-fetch root (`dist/node.js` → `import { … } from "./index.js"`): the classifiers
+// (`classifyIpLiteral` / `isLoopbackAddress` / `isPublicAddress`), `createGuardedFetch`,
+// `SsrfError`, and the redirect-refusal primitive (`refuseRedirects` / `RedirectRefusedError`).
+// This is load-bearing — the node bundle keeps the root EXTERNAL and resolves these names at
+// runtime FROM here, so an omission link-errors the `./node` entry. (`classifyIpLiteral` had
+// been omitted, silently breaking `./node`; re-exporting the full set repairs it.)
 export {
+  classifyIpLiteral,
   createGuardedFetch,
   guardedFetch,
   isLoopbackAddress,
   isPublicAddress,
+  RedirectRefusedError,
+  refuseRedirects,
   SsrfError,
 } from "./ssrf.js";
 export type {
