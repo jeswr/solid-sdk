@@ -42,7 +42,10 @@
 //
 //   • safeHttpIri   — http(s)-only, LEXICAL-PRESERVING, STRIP-DIVERGENCE-REJECTING.
 //                     Returns `undefined` (⇒ the caller DROPS the triple) when the
-//                     value is not a usable http(s) IRI — OR when it is not already
+//                     value is not a usable http(s) IRI — a non-http(s) scheme, an
+//                     unparseable value, an EMPTY/ABSENT AUTHORITY (`https:///foo`,
+//                     `http:////foo`, authority-less `https:example.com`, `https://?x`
+//                     — a malformed, non-dereferenceable IRI), OR a value not already
 //                     in its exact lexical form (a byte `new URL` would trim/strip:
 //                     leading/trailing control-or-space, or an embedded tab/LF/CR).
 //                     For an accepted value it escapes the Turtle-IRIREF forbidden set
@@ -77,7 +80,12 @@
 //                     handled.
 //
 //   • safeObjectIri — the object-position composite: an http(s) value is preserved
-//                     via {@link safeHttpIri} (lexical); another absolute-IRI scheme
+//                     via {@link safeHttpIri} (lexical) — and `safeHttpIri` is
+//                     AUTHORITATIVE for the http(s) scheme, so an http(s) value it
+//                     REJECTED (malformed host, empty authority, unparseable) FAILS
+//                     CLOSED and is NEVER resurrected by the generic `isAbsoluteIri`
+//                     fallback (which would otherwise treat `http:`/`https:` as a valid
+//                     absolute-scheme prefix — a fail-OPEN); another absolute-IRI scheme
 //                     (`did:` / `urn:`) is escaped in place (escapeIri, so a DID or
 //                     URN issuer/subject is preserved, not dropped); a non-absolute /
 //                     unparseable / STRIP-DIVERGENT value returns `undefined` so the
@@ -145,7 +153,10 @@ function hasUrlStripDivergence(value: string): boolean {
  *  - is STRIP-DIVERGENT — it carries a byte `new URL` would silently trim/strip
  *    (leading/trailing control-or-space, or an embedded tab/LF/CR), so it is not in
  *    its exact lexical form; or
- *  - is not a parseable http(s) URL once escaped.
+ *  - is not a parseable http(s) URL once escaped; or
+ *  - has NO authority (empty/absent host — `https:///foo`, `http:////foo`,
+ *    authority-less `https:example.com`, `https://?x`), which is a malformed,
+ *    non-dereferenceable http(s) IRI.
  *
  * For a valid value the ORIGINAL lexical form is preserved byte-for-byte (default
  * port, host case, empty path, percent-encoding all kept — NO `new URL().href`
@@ -180,6 +191,14 @@ export function safeHttpIri(value: string | undefined): string | undefined {
     return undefined;
   }
   if (u.protocol !== "http:" && u.protocol !== "https:") return undefined;
+  // Require a NON-EMPTY authority. An http(s) IRI with no host — `https:///foo`,
+  // `http:////foo`, authority-less `https:example.com`, or `https://?x` — parses under
+  // `new URL` but is malformed: signing an issuer / verificationMethod with no
+  // dereferenceable authority is a fail-OPEN. Reject it HERE (the lexical
+  // `[^/?#]`-after-`//` test rejects the empty/absent authority, `u.host === ""` is
+  // belt-and-suspenders) so it is not returned as a usable http(s) IRI. Aligns with the
+  // canonical `@jeswr/rdf-serialize` safeHttpIri authority clause.
+  if (!/^https?:\/\/[^/?#]/i.test(escaped) || u.host === "") return undefined;
   return escaped;
 }
 
@@ -195,6 +214,11 @@ export function isAbsoluteIri(value: string): boolean {
  *    can NOT be resurrected via the did:/urn: fallback, and a strip-divergent DID/URN
  *    is likewise dropped (an identity IRI must be exact, never silently re-formed);
  *  - an http(s) value is preserved (lexical) + hardened via {@link safeHttpIri};
+ *  - an http(s) value that {@link safeHttpIri} REJECTED (malformed host, empty/absent
+ *    authority, unparseable) returns `undefined` — safeHttpIri is AUTHORITATIVE for the
+ *    http(s) scheme, so the generic `isAbsoluteIri` fallback below MUST NOT resurrect it
+ *    (it treats `http:`/`https:` as a valid absolute-scheme prefix and would otherwise
+ *    escape+return a still-malformed IRI — a fail-OPEN on a required identity field);
  *  - another ABSOLUTE-IRI scheme (`did:` / `urn:` — legitimate for a VC issuer or
  *    subject) is escaped IN PLACE via {@link escapeIri}, so it is preserved rather
  *    than wrongly dropped by the http-only filter;
@@ -213,6 +237,13 @@ export function safeObjectIri(value: string | undefined): string | undefined {
   if (hasUrlStripDivergence(value)) return undefined;
   const http = safeHttpIri(value);
   if (http !== undefined) return http;
+  // safeHttpIri is AUTHORITATIVE for the http(s) scheme: if it rejected an http:/https:
+  // value (malformed host, empty/absent authority, or otherwise unparseable), FAIL
+  // CLOSED here — never let the generic `isAbsoluteIri` fallback below (which treats
+  // `http:`/`https:` as a valid absolute-scheme prefix) resurrect it as an escaped-but-
+  // still-malformed IRI. The fallback is ONLY for non-http(s) absolute schemes
+  // (`did:`/`urn:`/…). Case-insensitive so `HTTP:`/`HTTPS:` are covered too.
+  if (/^https?:/i.test(value)) return undefined;
   return isAbsoluteIri(value) ? escapeIri(value) : undefined;
 }
 

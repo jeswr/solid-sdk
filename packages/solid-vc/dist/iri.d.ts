@@ -21,7 +21,10 @@ export { escapeIri };
  *  - is STRIP-DIVERGENT — it carries a byte `new URL` would silently trim/strip
  *    (leading/trailing control-or-space, or an embedded tab/LF/CR), so it is not in
  *    its exact lexical form; or
- *  - is not a parseable http(s) URL once escaped.
+ *  - is not a parseable http(s) URL once escaped; or
+ *  - has NO authority (empty/absent host — `https:///foo`, `http:////foo`,
+ *    authority-less `https:example.com`, `https://?x`), which is a malformed,
+ *    non-dereferenceable http(s) IRI.
  *
  * For a valid value the ORIGINAL lexical form is preserved byte-for-byte (default
  * port, host case, empty path, percent-encoding all kept — NO `new URL().href`
@@ -49,6 +52,11 @@ export declare function isAbsoluteIri(value: string): boolean;
  *    can NOT be resurrected via the did:/urn: fallback, and a strip-divergent DID/URN
  *    is likewise dropped (an identity IRI must be exact, never silently re-formed);
  *  - an http(s) value is preserved (lexical) + hardened via {@link safeHttpIri};
+ *  - an http(s) value that {@link safeHttpIri} REJECTED (malformed host, empty/absent
+ *    authority, unparseable) returns `undefined` — safeHttpIri is AUTHORITATIVE for the
+ *    http(s) scheme, so the generic `isAbsoluteIri` fallback below MUST NOT resurrect it
+ *    (it treats `http:`/`https:` as a valid absolute-scheme prefix and would otherwise
+ *    escape+return a still-malformed IRI — a fail-OPEN on a required identity field);
  *  - another ABSOLUTE-IRI scheme (`did:` / `urn:` — legitimate for a VC issuer or
  *    subject) is escaped IN PLACE via {@link escapeIri}, so it is preserved rather
  *    than wrongly dropped by the http-only filter;

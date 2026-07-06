@@ -442,3 +442,71 @@ describe("suite-tracker-c77v — safeHttpIri rejects URL-strip-divergent input (
     expect(result.issuer).toBe(issuer);
   });
 });
+
+// suite-tracker-c77v (roborev Medium #3, securityCritical fail-OPEN): safeObjectIri
+// used to fall through to the generic `isAbsoluteIri` fallback when safeHttpIri rejected
+// an http:/https: value for a reason OTHER than strip-divergence — a malformed host, an
+// empty/absent authority, or any `new URL()` parse failure. Because `isAbsoluteIri` sees
+// `http:`/`https:` as a valid absolute-scheme prefix, it ESCAPED+ACCEPTED the malformed
+// value, so requireObjectIri accepted a malformed HTTP(S) issuer/verificationMethod
+// instead of failing closed. safeHttpIri is now authoritative for the http(s) scheme:
+// a rejected http(s) value is dropped, never resurrected by the fallback.
+describe("suite-tracker-c77v — safeObjectIri does not resurrect a safeHttpIri-rejected http(s) value", () => {
+  // Each is a syntactically http(s) value that safeHttpIri REJECTS (parse failure or
+  // empty authority) but that `isAbsoluteIri` would happily accept via the fallback.
+  // None is strip-divergent, so the up-front strip guard does NOT catch them — the
+  // scheme-authoritative reject is what must fail them closed.
+  const rejectedHttp: ReadonlyArray<{ readonly label: string; readonly value: string }> = [
+    { label: "no authority (http://)", value: "http://" },
+    { label: "no authority (https://)", value: "https://" },
+    { label: "malformed IPv6 host", value: "https://[" },
+    { label: "space in host", value: "http://exa mple" },
+    { label: "empty authority (https:///foo)", value: "https:///foo" },
+    { label: "empty authority (http:////foo)", value: "http:////foo" },
+    { label: "authority-less https:example.com", value: "https:example.com" },
+    { label: "empty authority + query (https://?x)", value: "https://?x" },
+    { label: "uppercase-scheme empty authority (HTTPS:///x)", value: "HTTPS:///x" },
+  ];
+
+  for (const { label, value } of rejectedHttp) {
+    it(`safeHttpIri REJECTS ${label}`, () => {
+      expect(safeHttpIri(value)).toBeUndefined();
+    });
+
+    it(`safeObjectIri DROPS ${label} (fallback does not resurrect it)`, () => {
+      const out = safeObjectIri(value);
+      expect(out).toBeUndefined();
+      // The old fail-open would have returned an escaped-but-still-malformed IRI.
+      expect(out).not.toBe(escapeIri(value));
+    });
+
+    it(`requireObjectIri THROWS on ${label} (fail-closed, not a malformed issuer)`, () => {
+      expect(() => requireObjectIri(value, "issuer")).toThrow(/issuer/);
+    });
+
+    it(`credentialToRdf REFUSES to sign a credential whose issuer is ${label}`, () => {
+      const cred: Credential = {
+        issuer: value,
+        credentialSubject: { id: "https://good.example/#s", over18: true },
+      };
+      expect(() => credentialToRdf(cred)).toThrow(/issuer/);
+    });
+  }
+
+  // The fallback is STILL correct for genuine non-http(s) absolute schemes, and VALID
+  // http(s) values (incl. uppercase scheme/host, :443, dot-segments, empty path) still
+  // pass — the scheme-authoritative reject only fires when safeHttpIri actually rejected.
+  it("still routes valid non-http(s) absolute IRIs through the escape fallback", () => {
+    expect(safeObjectIri("did:example:123")).toBe("did:example:123");
+    expect(safeObjectIri("urn:uuid:abc")).toBe("urn:uuid:abc");
+    expect(requireObjectIri("did:example:123", "issuer")).toBe("did:example:123");
+  });
+
+  it("still accepts a VALID http(s) value (uppercase scheme+host preserved lexically)", () => {
+    expect(safeHttpIri("HTTP://A.B/p")).toBe("HTTP://A.B/p");
+    expect(safeObjectIri("HTTP://A.B/p")).toBe("HTTP://A.B/p");
+    expect(requireObjectIri("https://a.example:443/p#f", "issuer")).toBe(
+      "https://a.example:443/p#f",
+    );
+  });
+});

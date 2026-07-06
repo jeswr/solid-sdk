@@ -380,6 +380,7 @@ function safeHttpIri2(value) {
     return void 0;
   }
   if (u.protocol !== "http:" && u.protocol !== "https:") return void 0;
+  if (!/^https?:\/\/[^/?#]/i.test(escaped) || u.host === "") return void 0;
   return escaped;
 }
 function isAbsoluteIri(value) {
@@ -390,6 +391,7 @@ function safeObjectIri(value) {
   if (hasUrlStripDivergence(value)) return void 0;
   const http = safeHttpIri2(value);
   if (http !== void 0) return http;
+  if (/^https?:/i.test(value)) return void 0;
   return isAbsoluteIri(value) ? escapeIri(value) : void 0;
 }
 function requireObjectIri(value, field) {
