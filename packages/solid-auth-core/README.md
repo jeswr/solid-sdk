@@ -46,14 +46,32 @@ await auth.logout();                  // clears the persisted credential; fail-c
 **Two teardowns — call the right one** (the silent-session-restore availability
 invariant): `logout()` is the DEFINITIVE teardown (an intentional sign-out, or a proven
 `invalid_grant`/401-revoked refresh token) — it deletes the persisted credential and the
-restore pointer. `dropSession()` is the TRANSIENT teardown — it drops the live in-memory
-session (webId null, pristine fetch again, logged-out session-change) but **keeps** the
-persisted credential + restore pointer, so the next page load silently restores. Use it
-when a post-restore read fails for any transient reason (network blip / 5xx / timeout):
-calling `logout()` there permanently deletes a still-valid credential and forces a manual
-re-login. (The engine's own restore/refresh grants already keep the credential on
-transient failures and clear it only on a definitive `invalid_grant`; `dropSession()`
-extends that distinction to the teardown the app performs around its own reads.)
+restore pointer. `dropLiveSession()` is the TRANSIENT teardown — it drops the live
+in-memory session (webId null, pristine fetch again, logged-out session-change) but
+**keeps** the persisted credential + restore pointer, so the next page load silently
+restores. Use it when a post-restore read fails for any transient reason (network blip /
+5xx / timeout): calling `logout()` there permanently deletes a still-valid credential and
+forces a manual re-login. (The engine's own restore/refresh grants already keep the
+credential on transient failures and clear it only on a definitive `invalid_grant`;
+`dropLiveSession()` extends that distinction to the teardown the app performs around its
+own reads.) `dropSession()` remains as a deprecated alias for `dropLiveSession()`.
+
+**Widen the credential boundary of a live session** with `reArmAllowedOrigins(origins)`:
+when the session was armed before the pod origins were known — most notably the on-load
+silent restore, whose boundary is snapshotted before any profile read — pass the profile's
+`pim:storage` origins to re-snapshot the boundary IN MEMORY (no token grant) so the DPoP
+token can be attached to a pod served from a different origin than the WebID. It is
+additive, scoped to the current live session (never carries across identities), applies the
+same cleartext guard as `allowedOrigins`, and returns whether every given origin is now
+covered (fail-closed). This replaces the wasteful "widen an array then call `restore()`
+again to re-snapshot" self-heal.
+
+**Recent-accounts friendly names** are first-class: the engine records each account on
+login/restore with the WebID as its `displayName`; call
+`rememberAccount(webId, displayName?, avatarUrl?)` after reading the profile to attach the
+human name + `http(s)` avatar. The write is merge-preserving — a later internal re-record
+never clobbers a name you set — so apps don't hand-roll a display-name overlay on top of
+`recentAccounts()`.
 
 React apps use the `/react` subexport instead of a hand-rolled `SessionProvider.tsx`:
 
@@ -116,7 +134,7 @@ pristine fetch while the pod probe is the **only** request through the patch.
 
 | Export | What it is |
 |---|---|
-| `createSolidAuth(config)` → `SolidAuth` | The keystone factory: WebID→issuer resolution (via `@jeswr/fetch-rdf` + `@solid/object`, never regex), interactive auth-code + PKCE(S256) + DPoP login (oauth4webapi; DPoP-only, `dpop_jkt` binding), silent restore + proactive refresh (via the inlined `@jeswr/solid-session-restore`; IndexedDB, WebID-scoped, fail-closed), logout/credential-revoke sequencing plus the credential-keeping `dropSession()` transient teardown, recent-accounts, `onSessionChange`, and the two-fetch boundary (`authenticatedFetch` / `publicFetch`) |
+| `createSolidAuth(config)` → `SolidAuth` | The keystone factory: WebID→issuer resolution (via `@jeswr/fetch-rdf` + `@solid/object`, never regex), interactive auth-code + PKCE(S256) + DPoP login (oauth4webapi; DPoP-only, `dpop_jkt` binding), silent restore + proactive refresh (via the inlined `@jeswr/solid-session-restore`; IndexedDB, WebID-scoped, fail-closed), logout/credential-revoke sequencing plus the credential-keeping `dropLiveSession()` transient teardown (`dropSession()` a deprecated alias), `reArmAllowedOrigins()` boundary re-arm, recent-accounts + `rememberAccount()`, `onSessionChange`, and the two-fetch boundary (`authenticatedFetch` / `publicFetch`) |
 | `WebIdDPoPTokenProvider` | THE token provider (successor to the 21 app-local copies): DPoP proofs via the audited `dpop` package, per-origin RS nonce cache, fail-closed origin gate, proactive refresh — constructed/wired by the factory |
 | `installProactiveAuthFetch` + `proactiveAuthenticatedFetch` + `deriveProactiveAllowedOrigins` | The proactive authenticated-fetch wrapper, **moved here from `@jeswr/solid-elements`** (which will re-export). For apps that keep their own provider |
 | `@jeswr/solid-auth-core/react` | `SessionProvider` + `useSolidSession()` — the one React session glue (replaces the 14 divergent app copies); injectable-`auth` seam so it tests with a fake, no server |

@@ -125,9 +125,37 @@ export interface SolidAuthController {
     /**
      * Recent accounts for the returning-user affordance (most-recent-first,
      * deduplicated by WebID). Survives logout by design (logout clears the
-     * session, not the account memory). Empty when none / unavailable.
+     * session, not the account memory). Empty when none / unavailable. Each
+     * entry's {@link RecentLoginAccount.displayName} is a human name when one has
+     * been recorded via {@link rememberAccount}, else the WebID (never empty).
      */
     recentAccounts(): RecentLoginAccount[];
+    /**
+     * Record (or enrich) a recent account for the returning-user affordance —
+     * the first-class friendly-name/avatar writer, so a consuming app does NOT
+     * hand-roll its own display-name overlay on top of {@link recentAccounts}.
+     *
+     * The engine ALREADY records a recent account on every successful login /
+     * silent restore, defaulting its `displayName` to the WebID (a credential-free
+     * entry that SURVIVES logout — same as {@link recentAccounts}). Call this
+     * AFTER reading the authenticated user's profile to attach the human name
+     * (`foaf:name`) + avatar so the "Welcome back, …" affordance shows the name,
+     * not the raw WebID.
+     *
+     * Semantics (a MERGE, most-recent-first, deduped by WebID, capped):
+     *  - `displayName` — when a non-empty name OTHER than the WebID is given it is
+     *    stored; when omitted (or equal to the WebID) a previously-recorded human
+     *    name for this WebID is PRESERVED, else it defaults to the WebID. So the
+     *    engine's own internal re-record on a later login never clobbers a name you
+     *    set here, and you never have to pass the WebID as a manual default.
+     *  - `avatarUrl` — stored only when it is an `http(s)` URL (an untrusted-profile
+     *    guard — a `javascript:`/`data:`/`file:` avatar is dropped, never persisted);
+     *    omitting it PRESERVES any previously-recorded avatar.
+     *
+     * Credential-free + best-effort: a storage failure (private mode / quota) is
+     * swallowed — recording a friendly name is never a login blocker.
+     */
+    rememberAccount(webId: string, displayName?: string, avatarUrl?: string): void;
     /**
      * Attempt a SILENT session restore on load from the persisted refresh token.
      * Resolves `restored` (logged in, no interaction) or `login` (show the prompt).
@@ -149,9 +177,9 @@ export interface SolidAuthController {
      * This is the FULL, definitive teardown — an intentional user sign-out, or a
      * DEFINITIVE auth failure (`invalid_grant` / a 401 proving the refresh token is
      * revoked). For a TRANSIENT failure (a network blip / 5xx / timeout on a
-     * post-restore read) use the engine's `dropSession()` instead (see
-     * {@link SolidAuth.dropSession}) — calling `logout()` there permanently deletes a
-     * still-valid credential and forces a manual re-login.
+     * post-restore read) use the engine's `dropLiveSession()` instead (see
+     * {@link SolidAuth.dropLiveSession}) — calling `logout()` there permanently
+     * deletes a still-valid credential and forces a manual re-login.
      */
     logout(): Promise<void>;
 }
@@ -173,10 +201,13 @@ export interface SolidAuth extends SolidAuthController {
      * later {@link SolidAuthController.restore} on this one) silently re-establishes
      * the session instead of forcing a manual re-login.
      *
+     * The name is deliberately explicit: it clears only the in-memory LIVE session
+     * state; the durable persisted credential is untouched.
+     *
      * WHICH TEARDOWN TO CALL (the silent-session-restore availability invariant):
-     *  - `dropSession()` — a TRANSIENT failure after the session was armed (a network
-     *    blip / 5xx / timeout on the app's post-restore profile/enrichment read): the
-     *    credential is still good; keep it and let the next load retry.
+     *  - `dropLiveSession()` — a TRANSIENT failure after the session was armed (a
+     *    network blip / 5xx / timeout on the app's post-restore profile/enrichment
+     *    read): the credential is still good; keep it and let the next load retry.
      *  - `logout()` — an INTENTIONAL user sign-out, or a DEFINITIVE auth failure
      *    (`invalid_grant`, or a 401 proving the refresh token is revoked/expired):
      *    the credential is dead or unwanted; delete it.
@@ -192,7 +223,55 @@ export interface SolidAuth extends SolidAuthController {
      * the logged-out session change. Unlike `logout()`, it performs NO durable
      * delete, so it never rejects. Idempotent when already logged out.
      */
+    dropLiveSession(): Promise<void>;
+    /**
+     * @deprecated Renamed to {@link dropLiveSession} (the name makes the
+     * in-memory-only, credential-preserving semantics explicit). This alias
+     * delegates to it VERBATIM and is kept only so existing consumers do not break;
+     * migrate to `dropLiveSession()` and it will be removed.
+     */
     dropSession(): Promise<void>;
+    /**
+     * Widen the LIVE session's credential boundary with additional resource origins
+     * and RE-ARM it atomically — WITHOUT a token grant. The first-class replacement
+     * for the "widen an allowed-origins array then call `restore()` again to
+     * re-snapshot the boundary" self-heal (which needlessly redeems — and rotates —
+     * the refresh token a second time). This re-snapshots the boundary in memory
+     * only; nothing durable is touched and no network request is made.
+     *
+     * Use it after reading the authenticated user's profile when the session was
+     * armed BEFORE those pod origins were known — most notably on the on-load silent
+     * restore, whose boundary is snapshotted before any profile read: pass the
+     * profile's `pim:storage` origins here so the live session's DPoP token can be
+     * attached to a pod served from a DIFFERENT origin than the WebID (a valid Solid
+     * topology).
+     *
+     * Contract:
+     *  - ADDITIVE: the given origins are UNIONED into the live boundary (existing
+     *    allowed origins — the WebID/issuer/config origins — are kept). Repeated
+     *    calls accumulate.
+     *  - SCOPED TO THIS SESSION: the widening lives only for the current live
+     *    session; the NEXT arm (a fresh login / silent restore) recomputes the
+     *    boundary from configuration alone, so a widened origin can never silently
+     *    carry across identities. (Persist origins app-side and pass them via
+     *    `allowedOrigins` at construction if you need the next load's restore
+     *    pre-seeded.)
+     *  - SAME CLEARTEXT GUARD as {@link SolidAuthConfig.allowedOrigins}: a non-`https:`
+     *    origin is dropped (an `http:` loopback origin only under
+     *    `allowInsecureLoopback`), and an unparseable entry is skipped.
+     *  - RETURNS `true` iff there is a live session AND every given origin is now
+     *    covered by the re-armed boundary; `false` when there is NO live session
+     *    (fail-closed — nothing to re-arm) or ANY given origin could not be admitted
+     *    (cleartext / unparseable). An empty `origins` array with a live session
+     *    returns `true` (a no-op confirmation). Use the boolean to decide whether the
+     *    session can safely serve the pod, or fail closed to the login prompt.
+     *
+     * SECURITY: this attaches the user's token to the given origins, so pass ONLY
+     * origins you read from the AUTHENTICATED user's own profile (identical trust to
+     * the `allowedOrigins` config). It does not itself verify the origins belong to
+     * the WebID — that is the caller's responsibility.
+     */
+    reArmAllowedOrigins(origins: string[]): boolean;
     /**
      * Subscribe to session changes (a completed login, a completed/attempted
      * restore, a logout). The listener receives the CURRENT identity (webId null

@@ -61,14 +61,26 @@ class FakeAuth implements SolidAuth {
     this.#emit(); // fail-closed local teardown notifies FIRST…
     if (this.logoutError) throw this.logoutError; // …then the durable delete may fail
   }
-  async dropSession(): Promise<void> {
+  async dropLiveSession(): Promise<void> {
     // The transient teardown: drop the live session + emit, touch nothing durable
     // (the fake has no durable store; the real engine keeps credential + pointer).
     this.webId = null;
     this.#emit();
   }
+  async dropSession(): Promise<void> {
+    // Deprecated alias — delegates to dropLiveSession (matches the engine contract).
+    return this.dropLiveSession();
+  }
+  reArmAllowedOrigins(_origins: string[]): boolean {
+    // No boundary in the fake; report re-armed while a session is live (fail-closed
+    // otherwise), matching the engine's live-session precondition.
+    return this.webId !== null;
+  }
   recentAccounts(): [] {
     return [];
+  }
+  rememberAccount(_webId: string, _displayName?: string, _avatarUrl?: string): void {
+    // No-op in the fake (the React layer never reads back through it).
   }
   // ── Full-page-redirect seam (unused by the React tests; present for the contract). ──
   async handleRedirect(): Promise<RedirectOutcome> {

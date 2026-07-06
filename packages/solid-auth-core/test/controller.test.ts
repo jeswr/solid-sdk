@@ -3670,14 +3670,14 @@ describe("createSolidAuth — ESS/Inrupt raw-Basic client auth on LOGIN (roborev
   });
 });
 
-describe("createSolidAuth — dropSession keeps the durable credential (transient-failure teardown)", () => {
+describe("createSolidAuth — dropLiveSession keeps the durable credential (transient-failure teardown)", () => {
   // THE AVAILABILITY REGRESSION UNDER TEST (found by the AccessRadar migration
   // verify; affects every product consuming this engine): the public surface used
   // to expose ONLY logout(), which deletes the durable credential + the restore
   // pointer. An app whose post-restore enrichment (profile read) failed for a
   // TRANSIENT reason (network blip / 5xx / timeout — NOT invalid_grant) had no
   // fail-closed teardown except logout() — permanently deleting a still-valid
-  // credential and forcing a manual re-login. dropSession() is the transient
+  // credential and forcing a manual re-login. dropLiveSession() is the transient
   // primitive: drop the LIVE session, KEEP the credential + pointer, so the next
   // load (or a later restore()) silently re-establishes the session.
 
@@ -3754,7 +3754,7 @@ describe("createSolidAuth — dropSession keeps the durable credential (transien
       expect(controller.webId).toBe(ALICE);
       expect(store.map.get(ISSUER)?.refreshToken).toBe("refresh-token");
 
-      await controller.dropSession();
+      await controller.dropLiveSession();
 
       // The LIVE session is gone (logged-out surface, exactly like logout)…
       expect(controller.webId).toBeNull();
@@ -3808,7 +3808,7 @@ describe("createSolidAuth — dropSession keeps the durable credential (transien
     }
   });
 
-  it("reverts the credential boundary: token attached before dropSession, NEVER after; global fetch untouched", async () => {
+  it("reverts the credential boundary: token attached before dropLiveSession, NEVER after; global fetch untouched", async () => {
     const store = new RecordingStore();
     const origGlobal = globalThis.fetch;
     const controller = createSolidAuth({
@@ -3827,9 +3827,9 @@ describe("createSolidAuth — dropSession keeps the durable credential (transien
     // stop attaching after the drop (it reads the live session per call).
     const capturedLiveHandle = controller.authenticatedFetch;
 
-    await controller.dropSession();
+    await controller.dropLiveSession();
 
-    // After dropSession the getter hands back the pristine publicFetch identity…
+    // After dropLiveSession the getter hands back the pristine publicFetch identity…
     expect(controller.authenticatedFetch).toBe(controller.publicFetch);
     recordedAuthHeader = null;
     await controller.authenticatedFetch("https://alice.pod.example/private/doc");
@@ -3838,7 +3838,7 @@ describe("createSolidAuth — dropSession keeps the durable credential (transien
     recordedAuthHeader = null;
     await capturedLiveHandle("https://alice.pod.example/private/doc");
     expect(recordedAuthHeader).toBeNull();
-    // No login-stall regression: dropSession never reads or patches the global fetch
+    // No login-stall regression: dropLiveSession never reads or patches the global fetch
     // (patchGlobalFetch defaults false — the global must be byte-identical).
     expect(globalThis.fetch).toBe(origGlobal);
   });
@@ -3856,7 +3856,7 @@ describe("createSolidAuth — dropSession keeps the durable credential (transien
     const unsubscribe = controller.onSessionChange(({ webId }) => {
       seen.push(webId);
     });
-    await controller.dropSession();
+    await controller.dropLiveSession();
     unsubscribe();
     expect(seen).toEqual([null]);
   });
@@ -3869,14 +3869,14 @@ describe("createSolidAuth — dropSession keeps the durable credential (transien
       store: mapStore(map),
     });
     expect(controller.webId).toBeNull();
-    await expect(controller.dropSession()).resolves.toBeUndefined();
+    await expect(controller.dropLiveSession()).resolves.toBeUndefined();
     expect(controller.webId).toBeNull();
-    // A stored (not-yet-restored) credential is NOT deleted by an idle dropSession.
+    // A stored (not-yet-restored) credential is NOT deleted by an idle dropLiveSession.
     expect(map.get(ISSUER)?.refreshToken).toBe("stored-refresh");
   });
 
   it("supersedes an in-flight login: popup signal aborted, login rejects, credential from a PRIOR session kept", async () => {
-    // dropSession must behave like logout for the LIVE/in-flight surface (the app is
+    // dropLiveSession must behave like logout for the LIVE/in-flight surface (the app is
     // tearing down) while differing ONLY in what it does to durable state.
     const map = seededMap(); // a prior session's still-valid credential
     let capturedSignal: AbortSignal | undefined;
@@ -3899,22 +3899,22 @@ describe("createSolidAuth — dropSession keeps the durable credential (transien
     await new Promise((r) => setTimeout(r, 0)); // reach the open popup
     expect(capturedSignal?.aborted).toBe(false);
 
-    await controller.dropSession();
+    await controller.dropLiveSession();
     expect(capturedSignal?.aborted).toBe(true); // popup cancelled immediately
 
     await expect(login).rejects.toThrow(); // the superseded login bails
     expect(controller.webId).toBeNull();
-    // The prior credential was NOT deleted (dropSession touches nothing durable).
+    // The prior credential was NOT deleted (dropLiveSession touches nothing durable).
     expect(map.get(ISSUER)?.refreshToken).toBe("stored-refresh");
   });
 
   it("aborts an in-flight restore GRANT without spending the refresh token (still restorable after)", async () => {
-    // dropSession during an in-flight silent restore: the drain aborts the grant
+    // dropLiveSession during an in-flight silent restore: the drain aborts the grant
     // BEFORE the token-endpoint redemption, so the stored refresh token stays
     // UNSPENT — a later restore() succeeds from it. (The drain-before-bump ordering
     // additionally lets an already-redeemed grant land its rotation write under its
     // still-valid generation — either way the credential stays restorable, which is
-    // dropSession's whole contract.)
+    // dropLiveSession's whole contract.)
     const map = seededMap();
     const ls = installKeyedLocalStorage();
     try {
@@ -3926,7 +3926,7 @@ describe("createSolidAuth — dropSession keeps the durable credential (transien
         rememberedAccountsKey: REMEMBERED_KEY,
         recentAccountsKey: RECENT_KEY,
       });
-      // Gate the grant so we can interleave dropSession mid-flight.
+      // Gate the grant so we can interleave dropLiveSession mid-flight.
       let releaseGrant!: () => void;
       const gate = new Promise<void>((res) => {
         releaseGrant = res;
@@ -3935,7 +3935,7 @@ describe("createSolidAuth — dropSession keeps the durable credential (transien
       const restoring = controller.restore();
       await new Promise((r) => setTimeout(r, 0)); // the grant is now in flight
 
-      const dropped = controller.dropSession(); // aborts + drains the grant
+      const dropped = controller.dropLiveSession(); // aborts + drains the grant
       releaseGrant();
       await dropped;
       await restoring; // fail-closed → { outcome: "login" } (superseded)
@@ -3953,10 +3953,10 @@ describe("createSolidAuth — dropSession keeps the durable credential (transien
     }
   });
 
-  it("the CONSUMER enrichment flow — restore → transient profile-read failure → dropSession → next restore succeeds", async () => {
+  it("the CONSUMER enrichment flow — restore → transient profile-read failure → dropLiveSession → next restore succeeds", async () => {
     // The exact AccessRadar-shaped scenario the regression was found in: silent
     // restore arms the session, the app's post-restore profile read fails for a
-    // TRANSIENT reason, the app tears down with dropSession() — and the NEXT load
+    // TRANSIENT reason, the app tears down with dropLiveSession() — and the NEXT load
     // (modelled here as a later restore()) silently re-establishes the session.
     const map = seededMap();
     const ls = installKeyedLocalStorage();
@@ -3973,8 +3973,8 @@ describe("createSolidAuth — dropSession keeps the durable credential (transien
       expect(await controller.restore()).toEqual({ outcome: "restored", webId: ALICE });
       // The app's enrichment read then fails TRANSIENTLY (network blip / 5xx /
       // timeout — NOT an auth signal). The app's fail-closed teardown for a
-      // transient failure is dropSession(), NOT logout().
-      await controller.dropSession();
+      // transient failure is dropLiveSession(), NOT logout().
+      await controller.dropLiveSession();
       expect(controller.webId).toBeNull();
       // The rotated credential + pointer survive …
       expect(map.get(ISSUER)?.refreshToken).toBe("rotated-refresh-token");
@@ -4018,7 +4018,7 @@ describe("createSolidAuth — dropSession keeps the durable credential (transien
     // The engine-level half of the transient-vs-definitive distinction: a restore
     // whose token-endpoint call fails TRANSIENTLY must keep the credential AND the
     // pointer (clear-only-on-invalid_grant), so the next attempt succeeds once the
-    // network recovers. dropSession extends the same rule to the app's teardown.
+    // network recovers. dropLiveSession extends the same rule to the app's teardown.
     const map = seededMap();
     const ls = installKeyedLocalStorage();
     try {
@@ -4067,18 +4067,18 @@ describe("createSolidAuth — dropSession keeps the durable credential (transien
   });
 
   it("drains grants that register DURING the drain window — the token is never spent under a skipped rotation (roborev Medium fix)", async () => {
-    // The drain-race regression: dropSession's first drain pass aborts+awaits only
+    // The drain-race regression: dropLiveSession's first drain pass aborts+awaits only
     // its SNAPSHOT of in-flight grants. A grant that REGISTERS during that awaited
     // pass (its pre-grant fence saw the not-yet-bumped generation) was missed by
     // the snapshot — under the old single-pass code it was never aborted, redeemed
     // (rotated) the refresh token at the OP, and had its guarded rotation write
     // generation-skipped after the bump: the store kept the now-server-spent OLD
     // token → the next load's restore would invalid_grant and DELETE the credential
-    // (the exact strand dropSession must prevent). The fix drains in a LOOP until
+    // (the exact strand dropLiveSession must prevent). The fix drains in a LOOP until
     // no grant remains, then bumps synchronously.
     //
     // Deterministic construction: grant A is an in-flight (gated) proactive REFRESH;
-    // dropSession() snapshots+aborts A and awaits; a restore() issued SYNCHRONOUSLY
+    // dropLiveSession() snapshots+aborts A and awaits; a restore() issued SYNCHRONOUSLY
     // in the same task registers grant B — restore()'s grant registration is
     // synchronous with the call, so B deterministically lands INSIDE the drain
     // window, before any microtask (including the drain continuation) runs.
@@ -4101,8 +4101,8 @@ describe("createSolidAuth — dropSession keeps the durable credential (transien
       // Grant A: a proactive refresh (expired token) — let it register + hit the gate.
       const inFlightFetch = controller.authenticatedFetch("https://alice.pod.example/data");
       await new Promise((r) => setTimeout(r, 0));
-      // dropSession snapshots + aborts A, then AWAITS — the drain window is open.
-      const drop = controller.dropSession();
+      // dropLiveSession snapshots + aborts A, then AWAITS — the drain window is open.
+      const drop = controller.dropLiveSession();
       // Grant B registers SYNCHRONOUSLY, inside the drain window, pre-bump.
       const lateRestore = controller.restore();
       await drop;
@@ -4122,7 +4122,7 @@ describe("createSolidAuth — dropSession keeps the durable credential (transien
     }
   });
 
-  it("login() after dropSession() works (the engine is fully reusable, not torn down)", async () => {
+  it("login() after dropLiveSession() works (the engine is fully reusable, not torn down)", async () => {
     const store = new RecordingStore();
     const controller = createSolidAuth({
       authFlow,
@@ -4131,7 +4131,7 @@ describe("createSolidAuth — dropSession keeps the durable credential (transien
       store,
     });
     await controller.login(ALICE);
-    await controller.dropSession();
+    await controller.dropLiveSession();
     expect(controller.webId).toBeNull();
     const result = await controller.login(ALICE);
     expect(result.webId).toBe(ALICE);
@@ -4141,7 +4141,7 @@ describe("createSolidAuth — dropSession keeps the durable credential (transien
 });
 
 describe("createSolidAuth — the drain-window race at EVERY drain-before-bump call site (roborev Medium fix)", () => {
-  // The same race the dropSession drain-loop fixed exists wherever the engine
+  // The same race the dropLiveSession drain-loop fixed exists wherever the engine
   // drains grants then bumps the generation: login() and completeRedirectLogin().
   // A grant that REGISTERS during the awaited drain pass (its pre-grant fence saw
   // the not-yet-bumped generation) is missed by that pass's snapshot; unaborted,
@@ -4150,7 +4150,7 @@ describe("createSolidAuth — the drain-window race at EVERY drain-before-bump c
   // now-server-spent old token. Every call site now drains in an INLINE loop until
   // no grant remains (loop-exit → bump is synchronous, so nothing can interleave).
   //
-  // Deterministic construction (as in the dropSession race test): grant A is a
+  // Deterministic construction (as in the dropLiveSession race test): grant A is a
   // gated in-flight proactive refresh; the drain-before-bump op is called (snapshot
   // [A], drain window opens); a restore() issued SYNCHRONOUSLY in the same task
   // registers grant B inside the window (restore-grant registration is synchronous
@@ -4303,6 +4303,400 @@ describe("createSolidAuth — the drain-window race at EVERY drain-before-bump c
       expect(await controller.restore()).toEqual({ outcome: "restored", webId: ALICE });
     } finally {
       restoreDelay = undefined;
+      ls.restore();
+    }
+  });
+});
+
+describe("createSolidAuth — dropSession is a DEPRECATED alias for dropLiveSession", () => {
+  // The public method was renamed dropSession → dropLiveSession (the name makes the
+  // in-memory-only, credential-preserving semantics explicit). The old name is kept
+  // as a thin alias so already-shipped consumers (capnote, AccessRadar) do not break.
+  it("delegates to dropLiveSession — same in-memory teardown, durable credential KEPT", async () => {
+    const store = new RecordingStore();
+    const controller = createSolidAuth({
+      authFlow,
+      callbackUri: "https://app.example/callback",
+      clientId: "https://app.example/clientid.jsonld",
+      store,
+    });
+    await controller.login("https://alice.pod.example/profile/card#me");
+    expect(store.map.get("https://idp.example/")?.refreshToken).toBe("refresh-token");
+
+    // The ALIAS performs the identical dropLiveSession teardown: logged out in
+    // memory, but the durable credential is UNTOUCHED (the contrast with logout(),
+    // which deletes it). Restore-after-drop is exhaustively covered by the
+    // dropLiveSession block above; here we only pin that the alias === dropLiveSession.
+    await controller.dropSession();
+    expect(controller.webId).toBeNull();
+    expect(controller.authenticatedFetch).toBe(controller.publicFetch);
+    expect(store.map.get("https://idp.example/")?.refreshToken).toBe("refresh-token");
+  });
+});
+
+describe("createSolidAuth — reArmAllowedOrigins (first-class re-arm-with-origins)", () => {
+  // Replaces the "widen an allowedOrigins array then call restore() AGAIN to
+  // re-snapshot the boundary" self-heal (which wastefully redeemed + rotated the
+  // refresh token a second time). A single in-memory re-snapshot, no token grant.
+  const ALICE = "https://alice.pod.example/profile/card#me";
+  const ISSUER = "https://idp.example/";
+
+  async function loggedIn(
+    extra: Partial<Parameters<typeof createSolidAuth>[0]> = {},
+  ): Promise<ReturnType<typeof createSolidAuth>> {
+    loginExpiresIn = 3600; // valid token → proactive attach, no refresh
+    const controller = createSolidAuth({
+      authFlow,
+      callbackUri: "https://app.example/callback",
+      clientId: "https://app.example/clientid.jsonld",
+      store: new RecordingStore(),
+      publicFetch: ok200RecordingFetch(),
+      ...extra,
+    });
+    await controller.login(ALICE);
+    return controller;
+  }
+
+  it("returns false and no-ops when there is NO live session (fail-closed)", async () => {
+    const controller = createSolidAuth({
+      authFlow,
+      callbackUri: "https://app.example/callback",
+      clientId: "https://app.example/clientid.jsonld",
+      store: new RecordingStore(),
+      publicFetch: ok200RecordingFetch(),
+    });
+    expect(controller.reArmAllowedOrigins(["https://storage.example"])).toBe(false);
+    expect(controller.webId).toBeNull();
+    // Nothing was attached anywhere (no session to re-arm).
+    expect(await authdHeader(controller, "https://storage.example/x")).toBeNull();
+  });
+
+  it("widens the LIVE boundary to a cross-origin pod WITHOUT a token grant; a foreign origin stays denied", async () => {
+    const controller = await loggedIn();
+    // Before re-arm: the WebID origin is covered, a cross-origin pod is NOT.
+    expect(await authdHeader(controller, "https://alice.pod.example/x")).toBe("DPoP access-token");
+    expect(await authdHeader(controller, "https://storage.example/private/note")).toBeNull();
+
+    const grantsBefore = refreshGrantCalls;
+    // Re-arm with a URL (path stripped to origin) — returns true (covered).
+    expect(controller.reArmAllowedOrigins(["https://storage.example/data/"])).toBe(true);
+    // NO refresh-token grant was made — pure in-memory re-snapshot (the whole point).
+    expect(refreshGrantCalls).toBe(grantsBefore);
+
+    // After: the cross-origin pod IS covered …
+    expect(await authdHeader(controller, "https://storage.example/private/note")).toBe(
+      "DPoP access-token",
+    );
+    // … the WebID origin still is …
+    expect(await authdHeader(controller, "https://alice.pod.example/x")).toBe("DPoP access-token");
+    // … and an UN-widened foreign origin is still denied (the boundary held).
+    expect(await authdHeader(controller, "https://evil.example/steal")).toBeNull();
+  });
+
+  it("is ADDITIVE across calls and idempotent", async () => {
+    const controller = await loggedIn();
+    expect(controller.reArmAllowedOrigins(["https://a.example"])).toBe(true);
+    expect(controller.reArmAllowedOrigins(["https://b.example"])).toBe(true);
+    // BOTH prior widenings survive the second call (union, not replace).
+    expect(await authdHeader(controller, "https://a.example/x")).toBe("DPoP access-token");
+    expect(await authdHeader(controller, "https://b.example/x")).toBe("DPoP access-token");
+    // Re-arming an already-covered origin is a true no-op.
+    expect(controller.reArmAllowedOrigins(["https://a.example"])).toBe(true);
+    expect(await authdHeader(controller, "https://a.example/y")).toBe("DPoP access-token");
+  });
+
+  it("DROPS a cleartext http origin and returns false (the token never rides http)", async () => {
+    const controller = await loggedIn();
+    expect(controller.reArmAllowedOrigins(["http://pod.example"])).toBe(false);
+    expect(await authdHeader(controller, "http://pod.example/x")).toBeNull();
+    // A MIX: the https origin is admitted, but the presence of an inadmissible one
+    // means not-every-origin-covered → overall false (the caller fails closed).
+    expect(controller.reArmAllowedOrigins(["https://ok.example", "http://bad.example"])).toBe(
+      false,
+    );
+    expect(await authdHeader(controller, "https://ok.example/x")).toBe("DPoP access-token");
+    expect(await authdHeader(controller, "http://bad.example/x")).toBeNull();
+  });
+
+  it("admits a LOOPBACK http origin only under allowInsecureLoopback (dev)", async () => {
+    const strict = await loggedIn(); // allowInsecureLoopback defaults false
+    expect(strict.reArmAllowedOrigins(["http://localhost:3000"])).toBe(false);
+    expect(await authdHeader(strict, "http://localhost:3000/x")).toBeNull();
+
+    const dev = await loggedIn({ allowInsecureLoopback: true });
+    expect(dev.reArmAllowedOrigins(["http://localhost:3000"])).toBe(true);
+    expect(await authdHeader(dev, "http://localhost:3000/x")).toBe("DPoP access-token");
+    // A non-loopback http origin is STILL dropped even in dev mode.
+    expect(dev.reArmAllowedOrigins(["http://pod.example"])).toBe(false);
+  });
+
+  it("returns false for an unparseable origin (fail-closed)", async () => {
+    const controller = await loggedIn();
+    expect(controller.reArmAllowedOrigins(["::::"])).toBe(false);
+    expect(controller.reArmAllowedOrigins(["not a url"])).toBe(false);
+  });
+
+  it("an empty origins array with a live session is a no-op that returns true (boundary unchanged)", async () => {
+    const controller = await loggedIn();
+    expect(controller.reArmAllowedOrigins([])).toBe(true);
+    expect(await authdHeader(controller, "https://alice.pod.example/x")).toBe("DPoP access-token");
+    expect(await authdHeader(controller, "https://storage.example/x")).toBeNull();
+  });
+
+  it("the widening is SCOPED to the live session — a fresh login does NOT inherit it (no cross-identity leak)", async () => {
+    const controller = await loggedIn();
+    expect(controller.reArmAllowedOrigins(["https://storage.example"])).toBe(true);
+    expect(await authdHeader(controller, "https://storage.example/x")).toBe("DPoP access-token");
+    // A fresh login re-arms the session from CONFIGURATION ONLY — the previously
+    // widened storage.example is dropped (it can never silently carry across arms).
+    await controller.login(ALICE);
+    expect(await authdHeader(controller, "https://storage.example/x")).toBeNull();
+    // (The WebID origin is covered again by the fresh arm.)
+    expect(await authdHeader(controller, "https://alice.pod.example/x")).toBe("DPoP access-token");
+  });
+
+  it("the CONSUMER self-heal — restore arms BEFORE the profile read, reArmAllowedOrigins then covers a cross-origin pod with NO second grant", async () => {
+    // The exact capnote/AccessRadar shape the double-restore() worked around: the
+    // on-load silent restore snapshots the boundary before the app reads the profile,
+    // so a pod on a DIFFERENT origin than the WebID is missed. reArmAllowedOrigins
+    // covers it with NO extra refresh-token grant (the wasteful second restore is gone).
+    const map = new Map<string, import("@jeswr/solid-session-restore").PersistedSession>();
+    map.set(ISSUER, {
+      issuer: ISSUER,
+      webId: ALICE,
+      refreshToken: "stored-refresh",
+      dpopKey: { publicKey: {}, privateKey: {} } as unknown as CryptoKeyPair,
+    });
+    const lsMap = new Map<string, string>();
+    const ls = {
+      getItem: (k: string) => (lsMap.has(k) ? (lsMap.get(k) as string) : null),
+      setItem: (k: string, v: string) => {
+        lsMap.set(k, v);
+      },
+      removeItem: (k: string) => {
+        lsMap.delete(k);
+      },
+    };
+    lsMap.set("self-heal.remembered-account", JSON.stringify({ webId: ALICE, issuer: ISSUER }));
+    const orig = globalThis.localStorage;
+    Object.defineProperty(globalThis, "localStorage", { configurable: true, value: ls });
+    try {
+      const controller = createSolidAuth({
+        callbackUri: "https://app.example/callback",
+        clientId: "https://app.example/clientid.jsonld",
+        store: {
+          get: async (i) => map.get(i),
+          put: async (s) => {
+            map.set(s.issuer, s);
+          },
+          delete: async (i) => {
+            map.delete(i);
+          },
+        },
+        rememberedAccountsKey: "self-heal.remembered-account",
+        recentAccountsKey: "self-heal.recent-accounts",
+        publicFetch: ok200RecordingFetch(),
+      });
+      // Silent restore arms the session (boundary = WebID + issuer origins).
+      expect(await controller.restore()).toEqual({ outcome: "restored", webId: ALICE });
+      const grantsAfterRestore = refreshGrantCalls;
+      // The cross-origin pod is NOT yet covered (arm happened before the profile read).
+      expect(await authdHeader(controller, "https://storage.example/note")).toBeNull();
+      // The app reads the profile → widens with the pod origin. NO second grant.
+      expect(controller.reArmAllowedOrigins(["https://storage.example/data/"])).toBe(true);
+      expect(refreshGrantCalls).toBe(grantsAfterRestore);
+      expect(await authdHeader(controller, "https://storage.example/note")).toBe(
+        "DPoP refreshed-access-token",
+      );
+    } finally {
+      Object.defineProperty(globalThis, "localStorage", { configurable: true, value: orig });
+    }
+  });
+});
+
+describe("createSolidAuth — rememberAccount (first-class friendly-name writer)", () => {
+  // Replaces the per-app display-name/avatar OVERLAY apps hand-rolled on top of
+  // recentAccounts(): the writer defaults displayName to the WebID, records a human
+  // name/avatar when given, and — crucially — the engine's own internal re-record on
+  // a later login/restore never CLOBBERS a name set via this writer.
+  const ALICE = "https://alice.pod.example/profile/card#me";
+  const RECENT_KEY = "remember-account.recent-accounts";
+
+  function installLocalStorage(): { map: Map<string, string>; restore: () => void } {
+    const map = new Map<string, string>();
+    const ls = {
+      getItem: (k: string) => (map.has(k) ? (map.get(k) as string) : null),
+      setItem: (k: string, v: string) => {
+        map.set(k, v);
+      },
+      removeItem: (k: string) => {
+        map.delete(k);
+      },
+    };
+    const orig = globalThis.localStorage;
+    Object.defineProperty(globalThis, "localStorage", { configurable: true, value: ls });
+    return {
+      map,
+      restore: () =>
+        Object.defineProperty(globalThis, "localStorage", { configurable: true, value: orig }),
+    };
+  }
+
+  function build(recentKey = RECENT_KEY): ReturnType<typeof createSolidAuth> {
+    return createSolidAuth({
+      authFlow,
+      callbackUri: "https://app.example/callback",
+      clientId: "https://app.example/clientid.jsonld",
+      store: new RecordingStore(),
+      recentAccountsKey: recentKey,
+    });
+  }
+
+  it("records displayName = WebID by DEFAULT when no name is given", async () => {
+    const ls = installLocalStorage();
+    try {
+      const controller = build();
+      controller.rememberAccount(ALICE);
+      expect(controller.recentAccounts()).toEqual([{ webId: ALICE, displayName: ALICE }]);
+    } finally {
+      ls.restore();
+    }
+  });
+
+  it("records an explicit human display name + http(s) avatar", async () => {
+    const ls = installLocalStorage();
+    try {
+      const controller = build();
+      controller.rememberAccount(ALICE, "Alice Smith", "https://alice.pod.example/avatar.png");
+      expect(controller.recentAccounts()).toEqual([
+        {
+          webId: ALICE,
+          displayName: "Alice Smith",
+          avatarUrl: "https://alice.pod.example/avatar.png",
+        },
+      ]);
+    } finally {
+      ls.restore();
+    }
+  });
+
+  it("DROPS a hostile-scheme avatar (javascript:/data:/file:) — untrusted-profile guard", async () => {
+    const ls = installLocalStorage();
+    try {
+      const controller = build();
+      controller.rememberAccount(ALICE, "Alice", "javascript:alert(1)");
+      expect(controller.recentAccounts()).toEqual([{ webId: ALICE, displayName: "Alice" }]);
+      controller.rememberAccount(ALICE, "Alice", "data:text/html,<script>1</script>");
+      expect(controller.recentAccounts()[0]?.avatarUrl).toBeUndefined();
+    } finally {
+      ls.restore();
+    }
+  });
+
+  it("the engine's internal re-record on LOGIN PRESERVES a name set via rememberAccount (no clobber)", async () => {
+    const ls = installLocalStorage();
+    try {
+      const controller = build();
+      // App attaches the friendly name (e.g. after reading the profile) …
+      controller.rememberAccount(ALICE, "Alice Smith", "https://alice.pod.example/a.png");
+      // … then a LOGIN happens (the engine internally re-records {webId, displayName:webId}).
+      await controller.login(ALICE);
+      // The friendly name + avatar SURVIVE (the merge preserves them).
+      expect(controller.recentAccounts()).toEqual([
+        {
+          webId: ALICE,
+          displayName: "Alice Smith",
+          avatarUrl: "https://alice.pod.example/a.png",
+        },
+      ]);
+    } finally {
+      ls.restore();
+    }
+  });
+
+  it("a login FIRST records displayName = WebID; a later rememberAccount enriches it", async () => {
+    const ls = installLocalStorage();
+    try {
+      const controller = build();
+      await controller.login(ALICE); // engine records {webId, displayName: webId}
+      expect(controller.recentAccounts()).toEqual([{ webId: ALICE, displayName: ALICE }]);
+      // The app then enriches with the profile name.
+      controller.rememberAccount(ALICE, "Alice Smith");
+      expect(controller.recentAccounts()[0]?.displayName).toBe("Alice Smith");
+    } finally {
+      ls.restore();
+    }
+  });
+
+  it("an explicit friendly name OVERRIDES a previously recorded one; omitting the name PRESERVES it", async () => {
+    const ls = installLocalStorage();
+    try {
+      const controller = build();
+      controller.rememberAccount(ALICE, "Old Name", "https://alice.pod.example/a.png");
+      controller.rememberAccount(ALICE, "New Name"); // new name, no avatar arg
+      const [entry] = controller.recentAccounts();
+      expect(entry?.displayName).toBe("New Name");
+      // The avatar is PRESERVED across the name-only update.
+      expect(entry?.avatarUrl).toBe("https://alice.pod.example/a.png");
+      // A bare re-record (webId only) keeps the friendly name.
+      controller.rememberAccount(ALICE);
+      expect(controller.recentAccounts()[0]?.displayName).toBe("New Name");
+    } finally {
+      ls.restore();
+    }
+  });
+
+  it("dedups by WebID, moves the touched account to the front, and survives logout", async () => {
+    const ls = installLocalStorage();
+    try {
+      const controller = build();
+      const BOB = "https://bob.pod.example/card#me";
+      controller.rememberAccount(ALICE, "Alice");
+      controller.rememberAccount(BOB, "Bob");
+      // Re-touching ALICE moves it to the front (most-recent-first, deduped).
+      controller.rememberAccount(ALICE);
+      expect(controller.recentAccounts().map((a) => a.webId)).toEqual([ALICE, BOB]);
+      expect(controller.recentAccounts()[0]?.displayName).toBe("Alice");
+      // The list SURVIVES logout (the returning-user affordance).
+      await controller.login(ALICE);
+      await controller.logout();
+      expect(controller.recentAccounts().map((a) => a.webId)).toContain(ALICE);
+    } finally {
+      ls.restore();
+    }
+  });
+
+  it("recentAccounts() READ-normalises a persisted hostile-scheme avatar out (defense in depth)", async () => {
+    const ls = installLocalStorage();
+    try {
+      // A record persisted (by an older writer / tampering) with a javascript: avatar.
+      ls.map.set(
+        RECENT_KEY,
+        JSON.stringify([{ webId: ALICE, displayName: "Alice", avatarUrl: "javascript:alert(1)" }]),
+      );
+      const controller = build();
+      expect(controller.recentAccounts()).toEqual([{ webId: ALICE, displayName: "Alice" }]);
+    } finally {
+      ls.restore();
+    }
+  });
+
+  it("a persisted EMPTY displayName is normalised to the WebID and never PRESERVED as a blank name (roborev Low)", async () => {
+    const ls = installLocalStorage();
+    try {
+      // A record persisted (older writer / tampering) with a blank display name.
+      ls.map.set(RECENT_KEY, JSON.stringify([{ webId: ALICE, displayName: "" }]));
+      const controller = build();
+      // recentAccounts() surfaces the WebID, never a blank (the "never empty" contract).
+      expect(controller.recentAccounts()).toEqual([{ webId: ALICE, displayName: ALICE }]);
+      // A bare re-record (no name) must NOT preserve the blank — it defaults to the WebID,
+      // NOT "".
+      controller.rememberAccount(ALICE);
+      expect(controller.recentAccounts()[0]?.displayName).toBe(ALICE);
+      // And a later real name still takes over cleanly.
+      controller.rememberAccount(ALICE, "Alice");
+      expect(controller.recentAccounts()[0]?.displayName).toBe("Alice");
+    } finally {
       ls.restore();
     }
   });

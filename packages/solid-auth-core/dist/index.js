@@ -720,6 +720,27 @@ var MemorySessionStore = class {
   }
 };
 var MAX_RECENT_ACCOUNTS = 8;
+function admissibleAvatarUrl(value) {
+  if (typeof value !== "string") return void 0;
+  try {
+    const proto = new URL(value).protocol;
+    return proto === "https:" || proto === "http:" ? value : void 0;
+  } catch {
+    return void 0;
+  }
+}
+function normalizeRecentAccount(raw) {
+  if (typeof raw !== "object" || raw === null) return void 0;
+  const rec = raw;
+  if (typeof rec.webId !== "string" || rec.webId.length === 0) return void 0;
+  const avatarUrl = admissibleAvatarUrl(rec.avatarUrl);
+  const hasName = typeof rec.displayName === "string" && rec.displayName.length > 0;
+  return {
+    webId: rec.webId,
+    displayName: hasName ? rec.displayName : rec.webId,
+    ...avatarUrl !== void 0 ? { avatarUrl } : {}
+  };
+}
 var RecentAccountsList = class {
   #key;
   constructor(key) {
@@ -733,27 +754,40 @@ var RecentAccountsList = class {
       if (!Array.isArray(parsed)) return [];
       const out = [];
       for (const a of parsed) {
-        if (typeof a !== "object" || a === null) continue;
-        const rec = a;
-        if (typeof rec.webId !== "string" || rec.webId.length === 0) continue;
-        out.push({
-          webId: rec.webId,
-          displayName: typeof rec.displayName === "string" ? rec.displayName : rec.webId,
-          ...typeof rec.avatarUrl === "string" ? { avatarUrl: rec.avatarUrl } : {}
-        });
+        const entry = normalizeRecentAccount(a);
+        if (entry !== void 0) out.push(entry);
       }
       return out;
     } catch {
       return [];
     }
   }
-  /** Add or refresh an account, moving it to the front. Best-effort. */
+  /**
+   * Add or refresh an account, moving it to the front. Best-effort. MERGE-PRESERVING
+   * so the engine's own internal re-record on a later login/restore (which passes
+   * only `{ webId }`, i.e. displayName defaulted to the WebID) never CLOBBERS a human
+   * name/avatar an app attached via the public writer:
+   *  - displayName — an explicit non-empty name OTHER than the WebID wins; else a
+   *    previously-recorded human name is kept; else it defaults to the WebID.
+   *  - avatarUrl — an admissible http(s) URL wins; else a previously-recorded avatar
+   *    is kept. (A hostile-scheme avatar is dropped.)
+   */
   remember(account) {
     try {
-      const rest = this.list().filter((a) => a.webId !== account.webId);
+      const current = this.list();
+      const existing = current.find((a) => a.webId === account.webId);
+      const rest = current.filter((a) => a.webId !== account.webId);
+      const explicit = account.displayName;
+      const displayName = explicit !== void 0 && explicit.length > 0 && explicit !== account.webId ? explicit : existing !== void 0 && existing.displayName.length > 0 && existing.displayName !== account.webId ? existing.displayName : account.webId;
+      const avatarUrl = admissibleAvatarUrl(account.avatarUrl) ?? existing?.avatarUrl;
+      const entry = {
+        webId: account.webId,
+        displayName,
+        ...avatarUrl !== void 0 ? { avatarUrl } : {}
+      };
       globalThis.localStorage?.setItem(
         this.#key,
-        JSON.stringify([account, ...rest].slice(0, MAX_RECENT_ACCOUNTS))
+        JSON.stringify([entry, ...rest].slice(0, MAX_RECENT_ACCOUNTS))
       );
     } catch {
     }
@@ -933,6 +967,13 @@ var SolidAuthEngine = class {
   }
   recentAccounts() {
     return this.#recentAccounts.list();
+  }
+  rememberAccount(webId, displayName, avatarUrl) {
+    this.#recentAccounts.remember({
+      webId,
+      ...displayName !== void 0 ? { displayName } : {},
+      ...avatarUrl !== void 0 ? { avatarUrl } : {}
+    });
   }
   #safeReadRemembered() {
     try {
@@ -1341,13 +1382,13 @@ var SolidAuthEngine = class {
   }
   /**
    * ABORT then AWAIT the in-flight grants to SETTLE — used by `login()` /
-   * `completeRedirectLogin()` / `dropSession()` BEFORE they bump the generation, so a
+   * `completeRedirectLogin()` / `dropLiveSession()` BEFORE they bump the generation, so a
    * grant the OP already processed gets its rotation write to land under its still-valid
    * generation instead of being generation-skipped (the roborev finding). The abort
    * bounds the wait. Snapshot the set first (members remove themselves on settle).
    *
    * ONE PASS ONLY — every drain-before-bump call site MUST invoke this in an INLINE
-   * `while (this.#activeGrants.size > 0)` loop (the dropSession roborev follow-up): a
+   * `while (this.#activeGrants.size > 0)` loop (the dropLiveSession roborev follow-up): a
    * grant that registers DURING an awaited pass is missed by that pass's snapshot, and
    * the loop cannot live inside an async helper — the caller's `await` resumption would
    * add a microtask hop between the final empty-check and the bump, reopening the
@@ -1396,14 +1437,14 @@ var SolidAuthEngine = class {
   /**
    * Drop the LIVE in-memory session but KEEP the durable credential + the
    * silent-restore pointer — the TRANSIENT-failure teardown (see the interface doc
-   * on {@link SolidAuth.dropSession} for the dropSession-vs-logout decision rule).
-   * The next page load (or a later `restore()` on this controller) silently
+   * on {@link SolidAuth.dropLiveSession} for the dropLiveSession-vs-logout decision
+   * rule). The next page load (or a later `restore()` on this controller) silently
    * re-establishes the session from the kept credential; `logout()` remains the
    * definitive teardown that deletes it.
    *
    * ORDERING (mirrors `login()`'s drain-before-bump, for the OPPOSITE reason
    * logout() skips it): logout deletes the credential anyway, so it may abort
-   * in-flight grants and bump immediately. dropSession's whole purpose is to keep
+   * in-flight grants and bump immediately. dropLiveSession's whole purpose is to keep
    * the credential RESTORABLE — so it must first ABORT + AWAIT the in-flight
    * refresh/restore grants (#drainActiveGrants). A grant the OP already processed
    * despite the abort then lands its rotation write under its STILL-VALID
@@ -1412,9 +1453,9 @@ var SolidAuthEngine = class {
    * restore would hit `invalid_grant` and DELETE the credential, recreating the
    * exact permanent-re-login failure this method exists to prevent. A grant the
    * abort DID cancel never redeems the token at all (it stays unspent + valid).
-   * The abort bounds the wait, so dropSession resolves promptly.
+   * The abort bounds the wait, so dropLiveSession resolves promptly.
    */
-  async dropSession() {
+  async dropLiveSession() {
     this.#abortActiveLogin();
     while (this.#activeGrants.size > 0) {
       await this.#drainActiveGrants();
@@ -1423,6 +1464,42 @@ var SolidAuthEngine = class {
     this.#generation++;
     this.#abortActiveLogin();
     this.#emitSessionChange();
+  }
+  /**
+   * @deprecated Renamed to {@link dropLiveSession}. Thin alias kept only so existing
+   * consumers do not break; it delegates VERBATIM. Migrate to `dropLiveSession()`.
+   */
+  async dropSession() {
+    return this.dropLiveSession();
+  }
+  /**
+   * Widen the LIVE session's credential boundary with `origins` and re-arm it
+   * atomically — an IN-MEMORY re-snapshot only, no token grant, no durable write.
+   * Replaces the "widen an allowed-origins array then call restore() again to
+   * re-snapshot" self-heal (which wastefully redeems + rotates the refresh token).
+   * See {@link SolidAuth.reArmAllowedOrigins} for the full contract.
+   *
+   * ADDITIVE + SCOPED to the current live session: the admissible origins are
+   * UNIONED into the session's boundary; the NEXT arm (a fresh login / silent
+   * restore) recomputes the boundary from configuration alone, so a widened origin
+   * can never silently carry across identities. Reassigns `session.allowedOrigins`
+   * (never mutates the frozen-by-contract Set) — the provider reads it live via the
+   * session getter, so the wider boundary takes effect immediately.
+   *
+   * Returns `true` iff there is a live session AND every given origin is now covered
+   * (fail-closed: no session, or any cleartext/unparseable origin dropped → false).
+   */
+  reArmAllowedOrigins(origins) {
+    const session = this.#session;
+    if (!session) return false;
+    const additions = computeAllowedOrigins({
+      allowedOrigins: origins,
+      includeWebIdOrigin: false,
+      includeIssuerOrigin: false,
+      allowInsecureLoopback: this.#opts.allowInsecureLoopback
+    });
+    session.allowedOrigins = /* @__PURE__ */ new Set([...session.allowedOrigins, ...additions]);
+    return origins.every((origin) => isOriginAllowed(session.allowedOrigins, origin));
   }
   /**
    * Serialized durable delete (chained with persists so ordering is deterministic).

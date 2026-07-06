@@ -727,6 +727,56 @@ class MemorySessionStore implements SessionStore {
  * safely when localStorage is unavailable/throwing (private mode / SSR / quota).
  */
 const MAX_RECENT_ACCOUNTS = 8;
+
+/**
+ * The credential-free display name / avatar an app may attach to a recent account.
+ * `displayName` OMITTED (or equal to the WebID) means "no explicit human name" —
+ * the merge preserves any previously-recorded name, else defaults to the WebID.
+ */
+interface RecentAccountInput {
+  webId: string;
+  displayName?: string;
+  avatarUrl?: string;
+}
+
+/**
+ * An avatar URL admissible for storage: only `http(s)` (an untrusted-profile guard —
+ * a `javascript:` / `data:` / `file:` avatar is dropped, never persisted or surfaced,
+ * so a consumer that renders `avatarUrl` as an `<img src>`/href cannot be handed a
+ * hostile scheme). Returns the URL unchanged when admissible, else undefined.
+ */
+function admissibleAvatarUrl(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  try {
+    const proto = new URL(value).protocol;
+    return proto === "https:" || proto === "http:" ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * NORMALISE one raw persisted entry to a well-typed {@link RecentLoginAccount}, or
+ * undefined to DROP it. A valid non-empty string webId is required; an EMPTY or
+ * missing displayName defaults to the WebID (recentAccounts() never surfaces a blank
+ * name — a blank would break the returning-user affordance and be wrongly preserved by
+ * the merge); avatarUrl is kept only when it is an admissible http(s) URL. A corrupt /
+ * older record (non-string fields, a hostile-scheme avatar) must never reach the
+ * renderer and throw — that would block the login prompt or hand it an unsafe URL.
+ */
+function normalizeRecentAccount(raw: unknown): RecentLoginAccount | undefined {
+  if (typeof raw !== "object" || raw === null) return undefined;
+  const rec = raw as { webId?: unknown; displayName?: unknown; avatarUrl?: unknown };
+  if (typeof rec.webId !== "string" || rec.webId.length === 0) return undefined;
+  const avatarUrl = admissibleAvatarUrl(rec.avatarUrl);
+  const hasName = typeof rec.displayName === "string" && rec.displayName.length > 0;
+  return {
+    webId: rec.webId,
+    displayName: hasName ? (rec.displayName as string) : rec.webId,
+    ...(avatarUrl !== undefined ? { avatarUrl } : {}),
+  };
+}
+
 class RecentAccountsList {
   readonly #key: string;
   constructor(key: string) {
@@ -738,33 +788,54 @@ class RecentAccountsList {
       if (!raw) return [];
       const parsed = JSON.parse(raw);
       if (!Array.isArray(parsed)) return [];
-      // NORMALISE each entry to a well-typed RecentLoginAccount: a valid string webId
-      // is required; displayName defaults to the webId and avatarUrl is kept only when
-      // it is a string. A corrupt / older record (non-string displayName/avatarUrl)
-      // must never reach the renderer and throw — that would block the login prompt.
+      // Normalise/drop each raw entry (see normalizeRecentAccount).
       const out: RecentLoginAccount[] = [];
       for (const a of parsed) {
-        if (typeof a !== "object" || a === null) continue;
-        const rec = a as { webId?: unknown; displayName?: unknown; avatarUrl?: unknown };
-        if (typeof rec.webId !== "string" || rec.webId.length === 0) continue;
-        out.push({
-          webId: rec.webId,
-          displayName: typeof rec.displayName === "string" ? rec.displayName : rec.webId,
-          ...(typeof rec.avatarUrl === "string" ? { avatarUrl: rec.avatarUrl } : {}),
-        });
+        const entry = normalizeRecentAccount(a);
+        if (entry !== undefined) out.push(entry);
       }
       return out;
     } catch {
       return [];
     }
   }
-  /** Add or refresh an account, moving it to the front. Best-effort. */
-  remember(account: RecentLoginAccount): void {
+  /**
+   * Add or refresh an account, moving it to the front. Best-effort. MERGE-PRESERVING
+   * so the engine's own internal re-record on a later login/restore (which passes
+   * only `{ webId }`, i.e. displayName defaulted to the WebID) never CLOBBERS a human
+   * name/avatar an app attached via the public writer:
+   *  - displayName — an explicit non-empty name OTHER than the WebID wins; else a
+   *    previously-recorded human name is kept; else it defaults to the WebID.
+   *  - avatarUrl — an admissible http(s) URL wins; else a previously-recorded avatar
+   *    is kept. (A hostile-scheme avatar is dropped.)
+   */
+  remember(account: RecentAccountInput): void {
     try {
-      const rest = this.list().filter((a) => a.webId !== account.webId);
+      const current = this.list();
+      const existing = current.find((a) => a.webId === account.webId);
+      const rest = current.filter((a) => a.webId !== account.webId);
+      const explicit = account.displayName;
+      // Preserve an existing human name only when it is NON-EMPTY and differs from the
+      // WebID (list() already defaults empty/missing to the WebID, so this is a
+      // belt-and-suspenders guard that a blank name is never treated as "a friendly name
+      // to keep"); otherwise an explicit non-empty name wins, else default to the WebID.
+      const displayName =
+        explicit !== undefined && explicit.length > 0 && explicit !== account.webId
+          ? explicit
+          : existing !== undefined &&
+              existing.displayName.length > 0 &&
+              existing.displayName !== account.webId
+            ? existing.displayName
+            : account.webId;
+      const avatarUrl = admissibleAvatarUrl(account.avatarUrl) ?? existing?.avatarUrl;
+      const entry: RecentLoginAccount = {
+        webId: account.webId,
+        displayName,
+        ...(avatarUrl !== undefined ? { avatarUrl } : {}),
+      };
       globalThis.localStorage?.setItem(
         this.#key,
-        JSON.stringify([account, ...rest].slice(0, MAX_RECENT_ACCOUNTS)),
+        JSON.stringify([entry, ...rest].slice(0, MAX_RECENT_ACCOUNTS)),
       );
     } catch {
       // Non-fatal — the returning-account affordance just won't remember this one.
@@ -1055,6 +1126,19 @@ class SolidAuthEngine implements SolidAuth {
     // the silent-restore pointer (which logout clears). This is the returning-user
     // affordance, so it must persist across sign-out.
     return this.#recentAccounts.list();
+  }
+
+  rememberAccount(webId: string, displayName?: string, avatarUrl?: string): void {
+    // The first-class friendly-name/avatar writer (so a consumer needn't hand-roll a
+    // display-name overlay). Delegates to the MERGE-PRESERVING recent-accounts list:
+    // the engine already records this account with the WebID as its displayName on
+    // login/restore; this attaches the human name/avatar without that later internal
+    // re-record clobbering it. Best-effort + credential-free (see RecentAccountsList).
+    this.#recentAccounts.remember({
+      webId,
+      ...(displayName !== undefined ? { displayName } : {}),
+      ...(avatarUrl !== undefined ? { avatarUrl } : {}),
+    });
   }
 
   #safeReadRemembered(): RememberedAccountRecord | null {
@@ -1487,14 +1571,14 @@ class SolidAuthEngine implements SolidAuth {
     // on a spent token if THIS login then failed (the roborev finding). The abort bounds
     // the wait. We do this BEFORE the ++generation below.
     //
-    // In a LOOP until NO grant remains (the dropSession roborev follow-up): a single
+    // In a LOOP until NO grant remains (the dropLiveSession roborev follow-up): a single
     // pass only settles its SNAPSHOT — a grant that REGISTERS during the awaited pass
     // (its pre-grant fence saw the not-yet-bumped generation) would be missed, redeem
     // the refresh token, and have its rotation write generation-skipped after the bump
     // (the same strand). The loop must stay INLINE at the call site: wrapping it in an
     // async helper would put a microtask hop between the final empty-check and the bump,
     // reopening the window — here loop-exit → ++generation is synchronous, so no grant
-    // can hold the old generation past the bump. (See dropSession for the write-up.)
+    // can hold the old generation past the bump. (See dropLiveSession for the write-up.)
     while (this.#activeGrants.size > 0) {
       await this.#drainActiveGrants();
     }
@@ -1735,13 +1819,13 @@ class SolidAuthEngine implements SolidAuth {
 
   /**
    * ABORT then AWAIT the in-flight grants to SETTLE — used by `login()` /
-   * `completeRedirectLogin()` / `dropSession()` BEFORE they bump the generation, so a
+   * `completeRedirectLogin()` / `dropLiveSession()` BEFORE they bump the generation, so a
    * grant the OP already processed gets its rotation write to land under its still-valid
    * generation instead of being generation-skipped (the roborev finding). The abort
    * bounds the wait. Snapshot the set first (members remove themselves on settle).
    *
    * ONE PASS ONLY — every drain-before-bump call site MUST invoke this in an INLINE
-   * `while (this.#activeGrants.size > 0)` loop (the dropSession roborev follow-up): a
+   * `while (this.#activeGrants.size > 0)` loop (the dropLiveSession roborev follow-up): a
    * grant that registers DURING an awaited pass is missed by that pass's snapshot, and
    * the loop cannot live inside an async helper — the caller's `await` resumption would
    * add a microtask hop between the final empty-check and the bump, reopening the
@@ -1816,14 +1900,14 @@ class SolidAuthEngine implements SolidAuth {
   /**
    * Drop the LIVE in-memory session but KEEP the durable credential + the
    * silent-restore pointer — the TRANSIENT-failure teardown (see the interface doc
-   * on {@link SolidAuth.dropSession} for the dropSession-vs-logout decision rule).
-   * The next page load (or a later `restore()` on this controller) silently
+   * on {@link SolidAuth.dropLiveSession} for the dropLiveSession-vs-logout decision
+   * rule). The next page load (or a later `restore()` on this controller) silently
    * re-establishes the session from the kept credential; `logout()` remains the
    * definitive teardown that deletes it.
    *
    * ORDERING (mirrors `login()`'s drain-before-bump, for the OPPOSITE reason
    * logout() skips it): logout deletes the credential anyway, so it may abort
-   * in-flight grants and bump immediately. dropSession's whole purpose is to keep
+   * in-flight grants and bump immediately. dropLiveSession's whole purpose is to keep
    * the credential RESTORABLE — so it must first ABORT + AWAIT the in-flight
    * refresh/restore grants (#drainActiveGrants). A grant the OP already processed
    * despite the abort then lands its rotation write under its STILL-VALID
@@ -1832,10 +1916,10 @@ class SolidAuthEngine implements SolidAuth {
    * restore would hit `invalid_grant` and DELETE the credential, recreating the
    * exact permanent-re-login failure this method exists to prevent. A grant the
    * abort DID cancel never redeems the token at all (it stays unspent + valid).
-   * The abort bounds the wait, so dropSession resolves promptly.
+   * The abort bounds the wait, so dropLiveSession resolves promptly.
    */
-  async dropSession(): Promise<void> {
-    // Abort any in-flight interactive login's popup — dropSession supersedes it
+  async dropLiveSession(): Promise<void> {
+    // Abort any in-flight interactive login's popup — dropLiveSession supersedes it
     // (after resolve the controller must be logged out, not re-armed by a
     // completing popup).
     this.#abortActiveLogin();
@@ -1846,7 +1930,7 @@ class SolidAuthEngine implements SolidAuth {
     // registers a NEW grant the snapshot missed. Bumping with such a grant live
     // would let it redeem (rotate) the refresh token while its guarded rotation
     // write is generation-skipped — stranding the durable credential on the
-    // now-server-spent old token, the exact failure dropSession exists to prevent.
+    // now-server-spent old token, the exact failure dropLiveSession exists to prevent.
     // Each pass aborts the newcomers too, so the supply is bounded by the grants
     // the app had in flight; LOOP-EXIT → BUMP below is synchronous (registration
     // cannot interleave on a single thread), so no grant ever holds the old
@@ -1870,6 +1954,54 @@ class SolidAuthEngine implements SolidAuth {
     // list. NO store delete, NO pointer clear — the next load retries silent
     // restore. Nothing durable is touched, so this never rejects.
     this.#emitSessionChange();
+  }
+
+  /**
+   * @deprecated Renamed to {@link dropLiveSession}. Thin alias kept only so existing
+   * consumers do not break; it delegates VERBATIM. Migrate to `dropLiveSession()`.
+   */
+  async dropSession(): Promise<void> {
+    return this.dropLiveSession();
+  }
+
+  /**
+   * Widen the LIVE session's credential boundary with `origins` and re-arm it
+   * atomically — an IN-MEMORY re-snapshot only, no token grant, no durable write.
+   * Replaces the "widen an allowed-origins array then call restore() again to
+   * re-snapshot" self-heal (which wastefully redeems + rotates the refresh token).
+   * See {@link SolidAuth.reArmAllowedOrigins} for the full contract.
+   *
+   * ADDITIVE + SCOPED to the current live session: the admissible origins are
+   * UNIONED into the session's boundary; the NEXT arm (a fresh login / silent
+   * restore) recomputes the boundary from configuration alone, so a widened origin
+   * can never silently carry across identities. Reassigns `session.allowedOrigins`
+   * (never mutates the frozen-by-contract Set) — the provider reads it live via the
+   * session getter, so the wider boundary takes effect immediately.
+   *
+   * Returns `true` iff there is a live session AND every given origin is now covered
+   * (fail-closed: no session, or any cleartext/unparseable origin dropped → false).
+   */
+  reArmAllowedOrigins(origins: string[]): boolean {
+    const session = this.#session;
+    if (!session) return false; // fail-closed — nothing live to re-arm
+    // Admit the additions through the SAME cleartext/loopback guard as the config
+    // boundary (drops non-https, non-loopback http, and unparseable entries). We ask
+    // ONLY for the explicit list — the WebID/issuer origins are already in the live
+    // set — so nothing is double-counted or re-derived.
+    const additions = computeAllowedOrigins({
+      allowedOrigins: origins,
+      includeWebIdOrigin: false,
+      includeIssuerOrigin: false,
+      allowInsecureLoopback: this.#opts.allowInsecureLoopback,
+    });
+    // UNION onto the live boundary + REASSIGN (never mutate the existing Set, which the
+    // arm-time snapshot semantics treat as immutable). The provider reads the live
+    // session's `allowedOrigins` on every request, so this re-arm is effective at once.
+    session.allowedOrigins = new Set([...session.allowedOrigins, ...additions]);
+    // Coverage: every requested origin must now be admitted. An origin dropped by the
+    // cleartext guard (or an unparseable one) is NOT covered → false → the caller fails
+    // closed (it cannot authenticate that pod), exactly the self-heal decision.
+    return origins.every((origin) => isOriginAllowed(session.allowedOrigins, origin));
   }
 
   /**
@@ -2621,7 +2753,7 @@ class SolidAuthEngine implements SolidAuth {
       // Establish under the SAME generation fence as login(): abort a prior in-flight
       // login, drain in-flight grants — in a LOOP until none remains, so a grant that
       // registers during a drain pass is drained too and loop-exit → bump stays
-      // synchronous (see login()/dropSession for the drain-window write-up) — then
+      // synchronous (see login()/dropLiveSession for the drain-window write-up) — then
       // bump the generation so THIS completion supersedes any earlier attempt.
       this.#abortActiveLogin();
       while (this.#activeGrants.size > 0) {
