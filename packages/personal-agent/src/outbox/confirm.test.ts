@@ -33,8 +33,9 @@ describe("confirmProposal — the graduated human-confirm gate", () => {
     expect(() => confirmProposal(proposal(), { confirmedAt: AT })).toThrow();
   });
 
-  it("HIGH friction: a one-tap confirm is NOT enough — requires the recipient typed back", () => {
-    const high = proposal({ friction: "high" });
+  it("HIGH friction (recomputed owner-side, not trusted from the proposal): needs the recipient typed", () => {
+    // A novel recipient (no thread) is HIGH regardless of what `friction` the Actor wrote.
+    const high = proposal({ inReplyTo: undefined, friction: "low" });
     expect(() => confirmProposal(high, { confirm: true, confirmedAt: AT })).toThrow();
     expect(() =>
       confirmProposal(high, { typedAcknowledgement: "wrong@x.com", confirmedAt: AT }),

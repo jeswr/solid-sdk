@@ -29,8 +29,13 @@ import {
 
 const { namedNode, literal, quad } = DataFactory;
 
-/** The outcome a receipt records — the unforgeable, Actor-unwritable "already handled" marker. */
-export type ReceiptOutcome = "sent" | "rejected" | "failed";
+/**
+ * The outcome a receipt records — the unforgeable, Actor-unwritable "already handled" marker.
+ * `claimed` is the transient state written create-only BEFORE the transmit (the at-most-once
+ * lock); it is finalized to `sent` only after a successful transmission, so a crash between the
+ * claim and the send leaves an honest `claimed` (never a false `sent`) and is never re-sent.
+ */
+export type ReceiptOutcome = "claimed" | "sent" | "rejected" | "failed";
 
 /** The authorizing basis a send was performed under. */
 export interface SendReceiptInput {

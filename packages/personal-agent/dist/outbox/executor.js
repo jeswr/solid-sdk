@@ -153,6 +153,14 @@ export async function runOutboxOnce(config) {
         }
     };
     for (const { proposal, url } of loaded) {
+        // A TERMINAL proposal status is a fail-closed SKIP marker (never trusted to SEND, only to
+        // NOT send): it guards legacy/pre-receipt proposals from the old status-based model against
+        // being re-sent after upgrade. Only `pending`/`confirmed` are candidates; a forged terminal
+        // status can at most SUPPRESS the Actor's own proposal (not escalate).
+        if (proposal.status !== "pending" && proposal.status !== "confirmed") {
+            skipped += 1;
+            continue;
+        }
         const receiptUrl = `${config.outbox}${proposal.id}.ttl`;
         // Idempotency is the Actor-UNwritable receipt — NOT the Actor-writable proposal status.
         if (await resourceExists(config.readFetch, receiptUrl)) {
@@ -194,8 +202,10 @@ export async function runOutboxOnce(config) {
             failed += 1;
             continue;
         }
-        // CLAIM the send (create-only receipt) BEFORE transmitting — at-most-once.
-        const claimed = await putReceipt(config, proposal, url, executedAt, "sent", basis, {}, true, mandate.credentialId);
+        // CLAIM the send (create-only receipt, outcome `claimed`) BEFORE transmitting — at-most-once.
+        // It is finalized to `sent` ONLY after a successful transmit, so a crash between the claim
+        // and the send leaves an honest `claimed` (never a false `sent`) and is never re-sent.
+        const claimed = await putReceipt(config, proposal, url, executedAt, "claimed", basis, {}, true, mandate.credentialId);
         if (!claimed) {
             skipped += 1; // another run already claimed this proposal
             continue;
@@ -204,9 +214,7 @@ export async function runOutboxOnce(config) {
             const carrier = await buildCarrier(proposal, executedAt, config);
             const message = assembleMessage(proposal, carrier);
             const receipt = await sender(message); // the actual transmit — the token lives here
-            if (receipt.channelMessageId) {
-                await putReceipt(config, proposal, url, executedAt, "sent", basis, { channelMessageId: receipt.channelMessageId }, false, mandate.credentialId);
-            }
+            await putReceipt(config, proposal, url, executedAt, "sent", basis, receipt.channelMessageId ? { channelMessageId: receipt.channelMessageId } : {}, false, mandate.credentialId);
             sent += 1;
         }
         catch {

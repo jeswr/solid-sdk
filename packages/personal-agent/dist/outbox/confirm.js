@@ -17,7 +17,10 @@ export function classifyFriction(proposal) {
  * confirmations container (`writeConfirmation`).
  */
 export function confirmProposal(proposal, input) {
-    if (proposal.friction === "high") {
+    // RECOMPUTE the friction owner-side — never trust the Actor-written `proposal.friction`,
+    // or a deceived Actor could downgrade a novel/high-value send to a one-tap confirm.
+    const friction = classifyFriction(proposal);
+    if (friction === "high") {
         if (input.typedAcknowledgement !== proposal.recipient) {
             throw new Error("confirmProposal: high-friction confirm requires the recipient typed back");
         }

@@ -7,24 +7,28 @@
  * body (recipient/text/times/action) before the send — the digest would no longer match.
  */
 import { createHash } from "node:crypto";
-/** A deterministic canonical string over every load-bearing, send-affecting field. */
+/**
+ * A deterministic, INJECTIVE canonical form. Uses JSON (fixed key order + a sorted array of
+ * fully-structured time objects), so a delimiter / newline embedded in an attacker-controlled
+ * field (`bodyText`, a time `name`, …) is escaped inside a JSON string and can NEVER make two
+ * distinct proposals collide — unlike delimiter-joined concatenation.
+ */
 function canonicalContent(proposal) {
-    const times = [...(proposal.offeredTimes ?? [])]
-        .map((t) => `${t.startTime}|${t.endTime ?? ""}|${t.name ?? ""}`)
-        .sort()
-        .join(";");
-    return [
-        `id=${proposal.id}`,
-        `channel=${proposal.channel}`,
-        `recipient=${proposal.recipient}`,
-        `odrlAction=${proposal.odrlAction}`,
-        `purpose=${proposal.purpose ?? ""}`,
-        `spend=${proposal.spend ?? 0}`,
-        `subject=${proposal.subject ?? ""}`,
-        `inReplyTo=${proposal.inReplyTo ?? ""}`,
-        `body=${proposal.bodyText}`,
-        `times=${times}`,
-    ].join("\n");
+    const times = (proposal.offeredTimes ?? [])
+        .map((t) => ({ startTime: t.startTime, endTime: t.endTime ?? null, name: t.name ?? null }))
+        .sort((a, b) => (JSON.stringify(a) < JSON.stringify(b) ? -1 : 1));
+    return JSON.stringify({
+        id: proposal.id,
+        channel: proposal.channel,
+        recipient: proposal.recipient,
+        odrlAction: proposal.odrlAction,
+        purpose: proposal.purpose ?? null,
+        spend: proposal.spend ?? 0,
+        subject: proposal.subject ?? null,
+        inReplyTo: proposal.inReplyTo ?? null,
+        body: proposal.bodyText,
+        times,
+    });
 }
 /** The `sha256:<hex>` content digest of a proposal's send-affecting fields. */
 export function proposalContentDigest(proposal) {
