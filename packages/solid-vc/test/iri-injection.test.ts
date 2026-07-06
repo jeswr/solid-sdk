@@ -13,6 +13,7 @@ import { describe, expect, it } from "vitest";
 import { credentialToJsonLd, credentialToRdf, credentialToTurtle } from "../src/credential.js";
 import { escapeIri, requireObjectIri, safeHttpIri, safeObjectIri } from "../src/iri.js";
 import { issue } from "../src/issue.js";
+import { generateKeyPairForSuite } from "../src/keys.js";
 import type { Credential } from "../src/types.js";
 import { verifyCredential } from "../src/verify.js";
 import { issuerKey, keyResolver } from "./helpers.js";
@@ -337,5 +338,107 @@ describe("fail-closed required identity fields (issuer / subject id)", () => {
     expect("id" in subjects[1]).toBe(false);
     const result = await verifyCredential(vc, { resolveKey: keyResolver(key) });
     expect(result.verified).toBe(true);
+  });
+});
+
+// suite-tracker-c77v (roborev Medium): the VALIDATE/EMIT-MISMATCH on the signing path.
+// `safeHttpIri` used to validate `new URL(value)` (which SILENTLY strips leading/trailing
+// control-or-space and every embedded tab/LF/CR) but RETURN `escapeIri(value)` — so a
+// strip-divergent input was VALIDATED as one string and EMITTED (into the signed
+// N-Quads pre-image) as a DIFFERENT one. The fix rejects any strip-divergent input
+// fail-closed, so the validated string is byte-identical to the returned/signed string.
+describe("suite-tracker-c77v — safeHttpIri rejects URL-strip-divergent input (validate === emit)", () => {
+  // Each attack input carries a byte the WHATWG URL parser strips: a LEADING space, an
+  // EMBEDDED tab / LF / CR (removed anywhere), or a TRAILING control char. `new URL`
+  // would accept the TRIMMED form while `escapeIri` would emit a `%XX`-mangled IRI —
+  // the exact validate/emit divergence. All must be DROPPED (undefined) / THROWN, never
+  // silently returned as a different IRI.
+  const stripDivergent: ReadonlyArray<{ readonly label: string; readonly value: string }> = [
+    { label: "leading space", value: " https://a.example/p#f" },
+    { label: "leading tab", value: "\thttps://a.example/p#f" },
+    { label: "trailing space", value: "https://a.example/p#f " },
+    { label: "trailing newline", value: "https://a.example/p#f\n" },
+    { label: "trailing control char", value: "https://a.example/p#f\x01" },
+    { label: "embedded tab", value: "https://a.example/pa\tth#f" },
+    { label: "embedded newline", value: "https://a.example/pa\nth#f" },
+    { label: "embedded carriage-return", value: "https://a.example/pa\rth#f" },
+    // The precise attack: `new URL` drops the tab (sees .../authority/path) so the value
+    // would VALIDATE, but escapeIri emits `%09` — signing an IRI the guard never checked.
+    { label: "embedded tab in authority", value: "https://a.exa\tmple/p#f" },
+  ];
+
+  for (const { label, value } of stripDivergent) {
+    it(`safeHttpIri DROPS a value with a ${label} (does not return a %XX-mangled IRI)`, () => {
+      const out = safeHttpIri(value);
+      expect(out).toBeUndefined();
+      // Explicitly assert the old-bug output (a percent-encoded divergent IRI) is NOT returned.
+      expect(out).not.toBe(escapeIri(value));
+    });
+
+    it(`safeObjectIri DROPS a value with a ${label} (fallback can't resurrect it)`, () => {
+      // isAbsoluteIri("https://…") is true, so without the up-front guard the did:/urn:
+      // fallback would escape+return the strip-divergent http IRI. It must stay dropped.
+      expect(safeObjectIri(value)).toBeUndefined();
+    });
+
+    it(`requireObjectIri THROWS on a value with a ${label} (required identity fields fail closed)`, () => {
+      expect(() => requireObjectIri(value, "issuer")).toThrow(/issuer/);
+    });
+
+    it(`credentialToRdf REFUSES to sign a credential whose issuer has a ${label}`, () => {
+      const cred: Credential = {
+        issuer: value,
+        credentialSubject: { id: "https://good.example/#s", over18: true },
+      };
+      // The strip-divergent issuer is rejected — never signed as a `%XX`-mangled IRI.
+      expect(() => credentialToRdf(cred)).toThrow(/issuer/);
+      // Sanity: escaping this input genuinely diverges from the raw value (the mismatch).
+      expect(escapeIri(value)).not.toBe(value);
+    });
+  }
+
+  // did:/urn: identity IRIs must fail closed on strip-divergence too (never re-formed).
+  it("safeObjectIri DROPS a strip-divergent did:/urn: identity IRI", () => {
+    expect(safeObjectIri("did:example:1\t23")).toBeUndefined();
+    expect(safeObjectIri(" urn:uuid:abc")).toBeUndefined();
+    expect(() => requireObjectIri("did:example:1\t23", "issuer")).toThrow(/issuer/);
+  });
+
+  // The intended behaviour is PRESERVED: legitimate non-canonical-but-exact-lexical
+  // http(s) IRIs (uppercase host, explicit :443/:80, dot-segments, empty path) are
+  // still ACCEPTED and returned byte-for-byte — only trim/strip-divergent inputs reject.
+  it("still ACCEPTS legitimate non-canonical http(s) IRIs and returns them lexically", () => {
+    const legit = [
+      "https://Alice.EXAMPLE/Profile#me", // uppercase host
+      "https://a.example:443/p#f", // explicit default port
+      "http://a.example:80/p", // explicit default port
+      "https://a.example/a/../b#f", // dot-segments (NOT resolved)
+      "https://a.example#me", // empty path (NO trailing `/`)
+      "https://a.example/p#f", // canonical baseline
+    ];
+    for (const v of legit) {
+      expect(safeHttpIri(v)).toBe(v);
+      expect(safeObjectIri(v)).toBe(v);
+      expect(requireObjectIri(v, "issuer")).toBe(v);
+    }
+  });
+
+  // End-to-end: a credential with a legitimate non-canonical issuer still issues +
+  // verifies (the reject rule did not tighten a valid case), and the issuer is byte-exact.
+  it("issues + verifies a credential with a non-canonical (but exact-lexical) issuer", async () => {
+    const issuer = "https://a.example:443/profile#me";
+    // A key bound to THIS non-canonical issuer, so the default issuer-binding gate
+    // (vm startsWith `${issuer}#`) passes — proving the reject rule did not tighten
+    // a legitimate non-canonical, exact-lexical issuer.
+    const key = await generateKeyPairForSuite(`${issuer}#key-1`, "Ed25519");
+    const cred: Credential = {
+      issuer,
+      credentialSubject: { id: "https://carol.example/#me", over18: true },
+    };
+    const vc = await issue({ credential: cred, key });
+    expect(vc.issuer).toBe(issuer);
+    const result = await verifyCredential(vc, { resolveKey: keyResolver(key) });
+    expect(result.verified).toBe(true);
+    expect(result.issuer).toBe(issuer);
   });
 });

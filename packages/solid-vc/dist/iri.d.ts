@@ -13,25 +13,41 @@ import { escapeIri } from "@jeswr/rdf-serialize";
  */
 export { escapeIri };
 /**
- * VALIDATE + harden a value that must be an http(s) IRI, LEXICAL-PRESERVING.
- * Returns `undefined` (⇒ the caller DROPS the triple) when the value is not a
- * parseable http(s) URL. For a valid value the ORIGINAL lexical form is preserved
- * byte-for-byte (default port, host case, empty path, percent-encoding all kept —
- * NO `new URL().href` canonicalisation); injection is neutralised by `escapeIri`,
- * which percent-encodes the full Turtle-IRIREF forbidden set (C0 controls + space +
- * `<>"{}|^` + backtick + backslash), a superset of the breakout characters.
+ * VALIDATE + harden a value that must be an http(s) IRI, LEXICAL-PRESERVING, with the
+ * VALIDATED string byte-identical to the RETURNED string.
  *
- * `new URL()` is used ONLY to VALIDATE (reject a non-http(s) scheme / unparseable
- * value) — its canonicalised `.href` is intentionally discarded. This keeps the
- * single suite-wide lexical-preserving IRI invariant (see the module header and
- * suite-tracker-c77v): the signed RDF lowering, the JSON-LD projection, and any
- * external W3C verifier all agree on the issuer/type/relatedResource IRI bytes.
+ * Returns `undefined` (⇒ the caller DROPS the triple) when the value:
+ *  - is not a string; or
+ *  - is STRIP-DIVERGENT — it carries a byte `new URL` would silently trim/strip
+ *    (leading/trailing control-or-space, or an embedded tab/LF/CR), so it is not in
+ *    its exact lexical form; or
+ *  - is not a parseable http(s) URL once escaped.
+ *
+ * For a valid value the ORIGINAL lexical form is preserved byte-for-byte (default
+ * port, host case, empty path, percent-encoding all kept — NO `new URL().href`
+ * canonicalisation); injection is neutralised by `escapeIri`, which percent-encodes
+ * the full Turtle-IRIREF forbidden set (C0 controls + space + `<>"{}|^` + backtick +
+ * backslash), a superset of the breakout characters.
+ *
+ * CRITICAL: the value validated by `new URL()` is the ESCAPED (returned) string, NOT
+ * the raw input — so validated-string === returned-string. Validating `new URL(value)`
+ * while returning `escapeIri(value)` was the fixed mismatch (suite-tracker-c77v): the
+ * URL parser strips bytes that `escapeIri` percent-encodes, so the checked and the
+ * signed IRIs diverged. `new URL` is used ONLY to VALIDATE (reject a non-http(s) scheme
+ * / unparseable value) — its canonicalised `.href` is intentionally discarded. This
+ * keeps the single suite-wide lexical-preserving IRI invariant (see the module header):
+ * the signed RDF lowering, the JSON-LD projection, and any external W3C verifier all
+ * agree on the issuer/type/relatedResource IRI bytes.
  */
 export declare function safeHttpIri(value: string | undefined): string | undefined;
 /** Whether a string is an absolute IRI (an RFC-3986 scheme followed by `:`). */
 export declare function isAbsoluteIri(value: string): boolean;
 /**
  * The guard for an OBJECT-position IRI whose scheme is not fixed in advance:
+ *  - a STRIP-DIVERGENT value (a byte `new URL` would trim/strip) returns `undefined`
+ *    UP FRONT — so a strip-divergent http(s) value that {@link safeHttpIri} rejected
+ *    can NOT be resurrected via the did:/urn: fallback, and a strip-divergent DID/URN
+ *    is likewise dropped (an identity IRI must be exact, never silently re-formed);
  *  - an http(s) value is preserved (lexical) + hardened via {@link safeHttpIri};
  *  - another ABSOLUTE-IRI scheme (`did:` / `urn:` — legitimate for a VC issuer or
  *    subject) is escaped IN PLACE via {@link escapeIri}, so it is preserved rather
@@ -39,9 +55,9 @@ export declare function isAbsoluteIri(value: string): boolean;
  *  - a non-absolute / unparseable value returns `undefined`, so the caller DROPS
  *    the triple instead of writing a malformed IRI.
  *
- * Both absolute-IRI branches now preserve the value LEXICALLY (escapeIri) — the
- * http(s) branch differs only in additionally requiring a `new URL()`-parseable
- * value. A valid absolute IRI of ANY scheme survives byte-for-byte.
+ * Both absolute-IRI branches preserve the value LEXICALLY (escapeIri) — the http(s)
+ * branch differs only in additionally requiring a `new URL()`-parseable value. A valid
+ * absolute IRI of ANY scheme survives byte-for-byte.
  */
 export declare function safeObjectIri(value: string | undefined): string | undefined;
 /**
@@ -53,7 +69,8 @@ export declare function safeObjectIri(value: string | undefined): string | undef
  * verify, a mismatched) issuer, which is a fail-OPEN. Optional object IRIs (a claim
  * value, an extra type) keep using {@link safeObjectIri} (drop-on-invalid). Because
  * it delegates to {@link safeObjectIri}, a VALID issuer is escaped (lexical) exactly
- * as {@link safeObjectIri} does — only the previously-dropped (invalid) case throws.
+ * as {@link safeObjectIri} does — only the previously-dropped (invalid or
+ * strip-divergent) case throws.
  */
 export declare function requireObjectIri(value: string | undefined, field: string): string;
 //# sourceMappingURL=iri.d.ts.map

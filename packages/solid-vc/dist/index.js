@@ -358,22 +358,36 @@ function legacySerialize(quads, format = DEFAULT_FORMAT, prefixes = {}, emptyAsE
 }
 
 // src/iri.ts
+function hasUrlStripDivergence(value) {
+  if (value.length === 0) return false;
+  if (value.charCodeAt(0) <= 32 || value.charCodeAt(value.length - 1) <= 32) {
+    return true;
+  }
+  for (let i = 0; i < value.length; i++) {
+    const c = value.charCodeAt(i);
+    if (c === 9 || c === 10 || c === 13) return true;
+  }
+  return false;
+}
 function safeHttpIri2(value) {
   if (typeof value !== "string") return void 0;
+  if (hasUrlStripDivergence(value)) return void 0;
+  const escaped = escapeIri(value);
   let u;
   try {
-    u = new URL(value);
+    u = new URL(escaped);
   } catch {
     return void 0;
   }
   if (u.protocol !== "http:" && u.protocol !== "https:") return void 0;
-  return escapeIri(value);
+  return escaped;
 }
 function isAbsoluteIri(value) {
   return /^[A-Za-z][A-Za-z0-9+.-]*:/.test(value);
 }
 function safeObjectIri(value) {
   if (typeof value !== "string") return void 0;
+  if (hasUrlStripDivergence(value)) return void 0;
   const http = safeHttpIri2(value);
   if (http !== void 0) return http;
   return isAbsoluteIri(value) ? escapeIri(value) : void 0;
