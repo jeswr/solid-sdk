@@ -65,6 +65,38 @@ function collapseNodeModules(p) {
   return i === -1 ? p : `node_modules/${p.slice(i + marker.length)}`;
 }
 
+/**
+ * Collapse a REPO-OWN source path down to a stable `../src/<rest>` form at its
+ * FIRST `/src/` segment; a path already collapsed to `node_modules/…` (by
+ * `collapseNodeModules`, which MUST run first) is returned unchanged so a
+ * dependency whose own path contains `src/` (e.g. `node_modules/@jeswr/x/src/…`)
+ * is never mistaken for this package's own source.
+ *
+ * WHY this is needed (not just cosmetic): esbuild records a `sources[]` entry
+ * relative to the OUTPUT file's directory, not the build's working directory.
+ * `check:dist` (`check-dist-fresh.mjs`) rebuilds into a scratch dir under
+ * `os.tmpdir()` to diff against the committed `dist/`. When that scratch dir is
+ * NOT a sibling of the repo (e.g. `TMPDIR` under `/var/tmp` rather than macOS's
+ * default `/var/folders/…`, which itself sits far from `/Users/…`), the relative
+ * traversal back to `<repo>/src/…` needs enough `../` segments to reach the
+ * filesystem root and back down — and that traversal STRING LITERALLY CONTAINS
+ * `/Users/…` (or `/home/…`) as a path component, even though it is a relative
+ * path, not an absolute one. That trips `assertNoHomePath` and fails the build
+ * (hence `check:dist`) in a way that depends only on the ambient `TMPDIR`, not on
+ * anything in `src/` — a build-location-dependent false failure. Collapsing to
+ * `../src/<rest>` (matching what the DEFAULT same-directory `npm run build`
+ * already emits — `dist/` and `src/` are siblings under the repo root) removes
+ * the traversal, so the committed map + the leak-guard are independent of where
+ * the rebuild happened. Idempotent: applied to an already-clean `../src/list.ts`
+ * it returns the same string unchanged.
+ */
+function collapseSrcRoot(p) {
+  if (p.startsWith("node_modules/")) return p;
+  const marker = "/src/";
+  const i = p.indexOf(marker);
+  return i === -1 ? p : `../src/${p.slice(i + marker.length)}`;
+}
+
 /** Throw if any absolute home path survives normalisation in `text`. */
 function assertNoHomePath(label, text) {
   if (HOME_PATH_RE.test(text)) {
@@ -111,18 +143,21 @@ function normalizeBundlePaths(file) {
  * Normalise a `.js.map`'s `sources[]` so the committed source map is reproducible
  * + leaks no local filesystem path (the SAME symlink-realpath traversal that
  * affects the `.js` comments records absolute `/Users/…/node_modules/…` paths in
- * the map's `sources` array). Each entry is collapsed to package-relative
- * (`node_modules/…`), matching the `.js` comment form; package-local sources
- * (`../src/…`) are left untouched. The `sources[]` array is then re-checked for
- * any surviving home path (scanned separately from `sourcesContent`, which is the
- * inlined SOURCE CODE and may legitimately contain such a substring). `mappings`
- * / `names` / `sourcesContent` are untouched, so the map stays valid.
+ * the map's `sources` array — plus a build-location-dependent traversal for the
+ * package's OWN `src/…` sources, see `collapseSrcRoot`). Each entry is collapsed
+ * to package-relative — `node_modules/…` for an inlined dependency (matching the
+ * `.js` comment form), `../src/…` for a repo-own source (`collapseNodeModules`
+ * runs FIRST so a dependency's own `src/` never gets mistaken for ours). The
+ * `sources[]` array is then re-checked for any surviving home path (scanned
+ * separately from `sourcesContent`, which is the inlined SOURCE CODE and may
+ * legitimately contain such a substring). `mappings` / `names` / `sourcesContent`
+ * are untouched, so the map stays valid.
  */
 function normalizeSourceMap(file) {
   const original = readFileSync(file, "utf8");
   const map = JSON.parse(original);
   if (Array.isArray(map.sources)) {
-    map.sources = map.sources.map(collapseNodeModules);
+    map.sources = map.sources.map(collapseNodeModules).map(collapseSrcRoot);
     for (const s of map.sources) {
       if (HOME_PATH_RE.test(s)) {
         throw new Error(
