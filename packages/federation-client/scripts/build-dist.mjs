@@ -67,7 +67,7 @@ function collapseNodeModules(p) {
 
 /**
  * Collapse a REPO-OWN source path down to a stable `../src/<rest>` form at its
- * FIRST `/src/` segment; a path already collapsed to `node_modules/…` (by
+ * LAST `/src/` segment; a path already collapsed to `node_modules/…` (by
  * `collapseNodeModules`, which MUST run first) is returned unchanged so a
  * dependency whose own path contains `src/` (e.g. `node_modules/@jeswr/x/src/…`)
  * is never mistaken for this package's own source.
@@ -89,11 +89,21 @@ function collapseNodeModules(p) {
  * the traversal, so the committed map + the leak-guard are independent of where
  * the rebuild happened. Idempotent: applied to an already-clean `../src/list.ts`
  * it returns the same string unchanged.
+ *
+ * LAST (not first) `/src/` occurrence, deliberately: a checkout path under a
+ * directory that is itself literally named `src` (e.g. `~/src/federation-client`)
+ * would otherwise put a decoy `/src/` segment BEFORE the package's own `src/`
+ * root in the traversal string, and matching the first one would collapse to the
+ * wrong (and still location-dependent) `../src/federation-client/src/list.ts`
+ * instead of `../src/list.ts` (roborev finding on the first version of this
+ * function). esbuild only ever traverses up-and-then-down to reach the source,
+ * so the package's own `src/` root is always the LAST `/src/` segment in the
+ * string, regardless of what the checkout's ancestor directories are named.
  */
 function collapseSrcRoot(p) {
   if (p.startsWith("node_modules/")) return p;
   const marker = "/src/";
-  const i = p.indexOf(marker);
+  const i = p.lastIndexOf(marker);
   return i === -1 ? p : `../src/${p.slice(i + marker.length)}`;
 }
 
