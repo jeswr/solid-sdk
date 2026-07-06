@@ -1,0 +1,6 @@
+node_modules/
+*.log
+.DS_Store
+coverage/
+# NB: dist/ is intentionally COMMITTED (GitHub-installable under ignore-scripts).
+# The check:dist gate guards it against drift from src/.

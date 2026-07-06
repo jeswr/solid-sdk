@@ -1,0 +1,69 @@
+// AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+/**
+ * The ODRL evaluation the outbox executor runs against the owner's signed mandate for
+ * EVERY outbound intent (the enforcement point, §5/§7). All policy logic is delegated to
+ * `@jeswr/solid-odrl`'s pure `evaluate()` — we NEVER hand-roll policy matching. This
+ * module only (a) projects an {@link ActionProposal} into an ODRL {@link RequestContext}
+ * and (b) maps the library's `permit`/`deny`/`notApplicable` verdict onto the executor's
+ * fail-closed {@link AutonomyDecision} (deny-by-default → confirm-required).
+ */
+import { evaluate } from "@jeswr/solid-odrl";
+/**
+ * Project an outbound proposal into an ODRL request context. The `purpose`, `recipient`,
+ * and `count` (spend) attributes are the constrainable left-operands the mandate refines;
+ * the `target` is the message the action derives from (its raw-anchor), when a reply.
+ */
+export function buildRequestContext(proposal, agentWebId) {
+    const attributes = {
+        // `count` is the ODRL left-operand for the declared spend (default 0).
+        count: proposal.spend ?? 0,
+        recipient: proposal.recipient,
+    };
+    if (proposal.purpose)
+        attributes.purpose = proposal.purpose;
+    const target = proposal.inReplyTo ?? proposal.derivedFrom;
+    return {
+        ...(agentWebId ? { agent: agentWebId } : {}),
+        action: proposal.odrlAction,
+        ...(target ? { target } : {}),
+        attributes,
+    };
+}
+/**
+ * Evaluate one outbound intent against the mandate policy, fail-closed:
+ *  - a matching PERMIT with no outstanding duty → `permit` (autonomous);
+ *  - a matching permit whose duties the request can't show fulfilled → `confirm-required`;
+ *  - an explicit PROHIBITION → `prohibited` (never, even if confirmed);
+ *  - anything else (no matching rule / deny-by-default) → `confirm-required`.
+ */
+export function evaluateAutonomy(policy, proposal, options = {}) {
+    const context = buildRequestContext(proposal, options.agentWebId);
+    const result = evaluate(policy, context, {
+        requireDuties: false,
+        ...(options.now ? { now: options.now } : {}),
+    });
+    if (result.decision === "permit") {
+        const outstanding = result.duties.filter((duty) => !duty.fulfilled);
+        if (outstanding.length === 0) {
+            return {
+                decision: "permit",
+                reason: result.reason,
+                ...(result.matchedPermissions[0] ? { permit: result.matchedPermissions[0] } : {}),
+                outstandingDuties: [],
+            };
+        }
+        return {
+            decision: "confirm-required",
+            reason: `permit contingent on unfulfilled duty (${outstanding
+                .map((duty) => duty.action)
+                .join(", ")})`,
+            outstandingDuties: outstanding,
+        };
+    }
+    if (result.decision === "deny" && result.matchedProhibitions.length > 0) {
+        return { decision: "prohibited", reason: result.reason, outstandingDuties: [] };
+    }
+    // notApplicable, or a deny with no explicit prohibition → deny-by-default.
+    return { decision: "confirm-required", reason: result.reason, outstandingDuties: [] };
+}
+//# sourceMappingURL=evaluate.js.map
