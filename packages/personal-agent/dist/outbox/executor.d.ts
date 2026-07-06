@@ -4,21 +4,19 @@
  * evaluates the owner's SIGNED ODRL mandate against EVERY outbound intent DENY-BY-DEFAULT,
  * and it is the only component that transmits anything.
  *
- * Per confirmed/pending proposal it:
- *  1. loads + signature-verifies the mandate ONCE; if that fails, REFUSES ALL ACTIONS
+ * CRITICALLY, it derives NO authorization or idempotency state from the Actor-writable
+ * proposal resource (whose `status` field a deceived/prompt-injected Actor could forge):
+ *  1. the mandate is loaded + signature-verified ONCE; if that fails, it REFUSES ALL ACTIONS
  *     (fail-closed — the mandate-tamper case);
- *  2. evaluates the intent (`@jeswr/solid-odrl` `evaluate`): `permit` → autonomous;
- *     `prohibited` → never; `confirm-required` → only if the owner explicitly confirmed;
- *  3. CLAIMS the proposal by compare-and-swap (`pending/confirmed → executed`) BEFORE sending,
- *     so two executor runs can never both send the same proposal (at-most-once);
- *  4. builds the §5.2 signed carrier (`buildReply` / `buildActionMetadata`) and transmits via
- *     the channel sender;
- *  5. writes an owner-private PROV receipt referencing the mandate + the specific permit (or
- *     the owner confirmation) that authorized the send.
- *
- * The LLM-side Actor cannot bypass any of this: it holds no send tokens and cannot write its
- * own mandate. An intent the Actor crafted to *look* permitted but that misses a constraint is
- * denied here at evaluation time.
+ *  2. idempotency is the presence of a RECEIPT in the OUTBOX — an Actor-UNWRITABLE container —
+ *     so a re-run (or an Actor resetting the proposal's status) can never cause a double-send;
+ *  3. `evaluate()` decides `permit` (autonomous) / `prohibited` (never) / `confirm-required`;
+ *  4. a `confirm-required` intent is authorized ONLY by an owner CONFIRMATION in the
+ *     Actor-UNWRITABLE confirmations container, content-locked to the proposal's CURRENT digest
+ *     (so the Actor can neither forge a confirmation nor swap the body after it was confirmed);
+ *  5. the send is CLAIMED by a create-only receipt write (at-most-once) before transmitting;
+ *  6. every outcome (sent / rejected / failed) is a PROV receipt referencing the mandate + the
+ *     authorizing permit (or the owner confirmation).
  */
 import type { ReplySigner } from "@jeswr/agentic-legacy-bridge";
 import type { PodFetch } from "../config.js";
@@ -26,13 +24,15 @@ import type { MandateVerifier } from "../mandate/types.js";
 import type { ChannelSender } from "./sender.js";
 /** Config for {@link runOutboxOnce}. */
 export interface ExecutorConfig {
-    /** A pod authed `fetch` for reading proposals. */
+    /** A pod authed `fetch` for reading proposals / confirmations / receipts. */
     readonly readFetch: PodFetch;
-    /** A pod authed `fetch` for CAS-updating proposals + writing receipts. */
+    /** A pod authed `fetch` for writing receipts. */
     readonly writeFetch: PodFetch;
-    /** The proposals container. */
+    /** The proposals container (Actor-writable — its content is UNTRUSTED for authorization). */
     readonly proposals: string;
-    /** The owner-private outbox container (receipts). */
+    /** The owner-only confirmations container (Actor-UNwritable — the confirm gate's sink). */
+    readonly confirmations: string;
+    /** The owner-only outbox container (Actor-UNwritable — receipts = the idempotency marker). */
     readonly outbox: string;
     /** The pod owner's WebID (the mandate MUST verify as issued by this WebID). */
     readonly ownerWebId: string;
@@ -53,13 +53,13 @@ export interface ExecutorResult {
     readonly mandateLoaded: boolean;
     /** Number of messages actually transmitted. */
     readonly sent: number;
-    /** Number of intents left queued for owner confirmation (deny-by-default / unfulfilled duty). */
+    /** Number of intents left queued for owner confirmation (deny-by-default / no valid confirm). */
     readonly queuedForConfirmation: number;
     /** Number of intents blocked by an explicit ODRL prohibition. */
     readonly prohibited: number;
     /** Number of intents that failed to send. */
     readonly failed: number;
-    /** Number of proposals skipped (already terminal, or lost the CAS race, or no ETag). */
+    /** Number of proposals skipped (already have a receipt, or lost the claim race). */
     readonly skipped: number;
 }
 /** Run one deterministic, mandate-enforced outbox pass. */

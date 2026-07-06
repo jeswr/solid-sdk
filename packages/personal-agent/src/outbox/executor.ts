@@ -5,21 +5,19 @@
  * evaluates the owner's SIGNED ODRL mandate against EVERY outbound intent DENY-BY-DEFAULT,
  * and it is the only component that transmits anything.
  *
- * Per confirmed/pending proposal it:
- *  1. loads + signature-verifies the mandate ONCE; if that fails, REFUSES ALL ACTIONS
+ * CRITICALLY, it derives NO authorization or idempotency state from the Actor-writable
+ * proposal resource (whose `status` field a deceived/prompt-injected Actor could forge):
+ *  1. the mandate is loaded + signature-verified ONCE; if that fails, it REFUSES ALL ACTIONS
  *     (fail-closed — the mandate-tamper case);
- *  2. evaluates the intent (`@jeswr/solid-odrl` `evaluate`): `permit` → autonomous;
- *     `prohibited` → never; `confirm-required` → only if the owner explicitly confirmed;
- *  3. CLAIMS the proposal by compare-and-swap (`pending/confirmed → executed`) BEFORE sending,
- *     so two executor runs can never both send the same proposal (at-most-once);
- *  4. builds the §5.2 signed carrier (`buildReply` / `buildActionMetadata`) and transmits via
- *     the channel sender;
- *  5. writes an owner-private PROV receipt referencing the mandate + the specific permit (or
- *     the owner confirmation) that authorized the send.
- *
- * The LLM-side Actor cannot bypass any of this: it holds no send tokens and cannot write its
- * own mandate. An intent the Actor crafted to *look* permitted but that misses a constraint is
- * denied here at evaluation time.
+ *  2. idempotency is the presence of a RECEIPT in the OUTBOX — an Actor-UNWRITABLE container —
+ *     so a re-run (or an Actor resetting the proposal's status) can never cause a double-send;
+ *  3. `evaluate()` decides `permit` (autonomous) / `prohibited` (never) / `confirm-required`;
+ *  4. a `confirm-required` intent is authorized ONLY by an owner CONFIRMATION in the
+ *     Actor-UNWRITABLE confirmations container, content-locked to the proposal's CURRENT digest
+ *     (so the Actor can neither forge a confirmation nor swap the body after it was confirmed);
+ *  5. the send is CLAIMED by a create-only receipt write (at-most-once) before transmitting;
+ *  6. every outcome (sent / rejected / failed) is a PROV receipt referencing the mandate + the
+ *     authorizing permit (or the owner confirmation).
  */
 
 import type { ReplySigner } from "@jeswr/agentic-legacy-bridge";
@@ -33,21 +31,25 @@ import { isSafeContainer } from "../config.js";
 import { evaluateAutonomy } from "../mandate/evaluate.js";
 import type { MandateVerifier } from "../mandate/types.js";
 import { writeOwnerOnlyAcl } from "../pod/acl.js";
-import { listProposals, readProposal, updateProposal } from "../pod/proposal-store.js";
+import { readConfirmation } from "../pod/confirmation-store.js";
+import { proposalContentDigest } from "../pod/digest.js";
+import { listProposals } from "../pod/proposal-store.js";
 import type { ActionProposal } from "../pod/proposals.js";
-import { putResource, throwIfNotWritten } from "../pod/write.js";
-import { serializeSendReceipt } from "./receipt.js";
+import { putResource, refuseRedirect, throwIfNotWritten } from "../pod/write.js";
+import { type ReceiptOutcome, type SendReceiptInput, serializeSendReceipt } from "./receipt.js";
 import type { ChannelSender, OutboundMessage } from "./sender.js";
 
 /** Config for {@link runOutboxOnce}. */
 export interface ExecutorConfig {
-  /** A pod authed `fetch` for reading proposals. */
+  /** A pod authed `fetch` for reading proposals / confirmations / receipts. */
   readonly readFetch: PodFetch;
-  /** A pod authed `fetch` for CAS-updating proposals + writing receipts. */
+  /** A pod authed `fetch` for writing receipts. */
   readonly writeFetch: PodFetch;
-  /** The proposals container. */
+  /** The proposals container (Actor-writable — its content is UNTRUSTED for authorization). */
   readonly proposals: string;
-  /** The owner-private outbox container (receipts). */
+  /** The owner-only confirmations container (Actor-UNwritable — the confirm gate's sink). */
+  readonly confirmations: string;
+  /** The owner-only outbox container (Actor-UNwritable — receipts = the idempotency marker). */
   readonly outbox: string;
   /** The pod owner's WebID (the mandate MUST verify as issued by this WebID). */
   readonly ownerWebId: string;
@@ -69,13 +71,13 @@ export interface ExecutorResult {
   readonly mandateLoaded: boolean;
   /** Number of messages actually transmitted. */
   readonly sent: number;
-  /** Number of intents left queued for owner confirmation (deny-by-default / unfulfilled duty). */
+  /** Number of intents left queued for owner confirmation (deny-by-default / no valid confirm). */
   readonly queuedForConfirmation: number;
   /** Number of intents blocked by an explicit ODRL prohibition. */
   readonly prohibited: number;
   /** Number of intents that failed to send. */
   readonly failed: number;
-  /** Number of proposals skipped (already terminal, or lost the CAS race, or no ETag). */
+  /** Number of proposals skipped (already have a receipt, or lost the claim race). */
   readonly skipped: number;
 }
 
@@ -151,27 +153,74 @@ function assembleMessage(proposal: ActionProposal, carrier: Carrier): OutboundMe
   };
 }
 
-/** Best-effort transition of a proposal's status (re-reads to CAS on a fresh ETag). */
-async function markStatus(
+/** The authorizing basis a receipt records (autonomous permit, or owner confirmation). */
+interface Basis {
+  readonly autonomous: boolean;
+  readonly permitId?: string;
+  readonly permitLabel?: string;
+}
+
+/** GET a resource to test existence (200 → exists). Redirect-refused. */
+async function resourceExists(fetchFn: PodFetch, url: string): Promise<boolean> {
+  const res = await fetchFn(url, { method: "GET", redirect: "manual" });
+  refuseRedirect(res, "GET", url);
+  return res.ok;
+}
+
+/**
+ * Write a receipt into the outbox. `createOnly` makes it the at-most-once CLAIM (`If-None-Match:
+ * *`): a `412` means another run already claimed the send → returns `false`. A normal write
+ * (finalize) overwrites the claim with the final outcome. Returns `true` on write, `false` on a
+ * lost claim race.
+ */
+async function putReceipt(
   config: ExecutorConfig,
-  proposalId: string,
+  proposal: ActionProposal,
   proposalUrl: string,
-  next: ActionProposal,
-): Promise<void> {
-  try {
-    const loaded = await readProposal(config.readFetch, proposalUrl);
-    if (!loaded?.etag || loaded.proposal.id !== proposalId) return;
-    await updateProposal(config.writeFetch, config.proposals, next, loaded.etag);
-  } catch {
-    // Best-effort — a failed status write never double-sends and never aborts the batch.
-  }
+  executedAt: string,
+  outcome: ReceiptOutcome,
+  basis: Basis,
+  extra: { note?: string; channelMessageId?: string },
+  createOnly: boolean,
+  mandateId?: string,
+): Promise<boolean> {
+  const resourceUrl = `${config.outbox}${proposal.id}.ttl`;
+  const receipt: SendReceiptInput = {
+    resourceUrl,
+    proposalUrl,
+    outcome,
+    channel: proposal.channel,
+    recipient: proposal.recipient,
+    executedAt,
+    ...(config.agentWebId ? { agentWebId: config.agentWebId } : {}),
+    ...(proposal.derivedFrom ? { derivedFrom: proposal.derivedFrom } : {}),
+    ...(mandateId ? { mandateId } : {}),
+    ...(basis.autonomous
+      ? {
+          ...(basis.permitId ? { permitId: basis.permitId } : {}),
+          ...(basis.permitLabel ? { permitLabel: basis.permitLabel } : {}),
+        }
+      : { authorizedByConfirmation: true }),
+    ...(extra.channelMessageId ? { channelMessageId: extra.channelMessageId } : {}),
+    ...(extra.note ? { note: extra.note } : {}),
+  };
+  const turtle = await serializeSendReceipt(receipt);
+  const res = await putResource(config.writeFetch, resourceUrl, turtle, {
+    contentType: "text/turtle",
+    base: config.outbox,
+    ...(createOnly ? { ifNoneMatch: "*" as const } : {}),
+  });
+  if (createOnly && res.status === 412) return false;
+  throwIfNotWritten(res, resourceUrl);
+  return true;
 }
 
 /** Run one deterministic, mandate-enforced outbox pass. */
 export async function runOutboxOnce(config: ExecutorConfig): Promise<ExecutorResult> {
-  if (!isSafeContainer(config.proposals))
-    throw new Error("runOutboxOnce: unsafe proposals container");
-  if (!isSafeContainer(config.outbox)) throw new Error("runOutboxOnce: unsafe outbox container");
+  for (const container of [config.proposals, config.confirmations, config.outbox]) {
+    if (!isSafeContainer(container))
+      throw new Error(`runOutboxOnce: unsafe container ${container}`);
+  }
   const now = config.now ?? (() => new Date());
 
   // Fail-closed: an unverifiable / tampered / wrong-issuer mandate ⇒ refuse ALL actions.
@@ -185,9 +234,17 @@ export async function runOutboxOnce(config: ExecutorConfig): Promise<ExecutorRes
   let failed = 0;
   let skipped = 0;
   let outboxAclEnsured = false;
+  const ensureOutboxAcl = async () => {
+    if (!outboxAclEnsured) {
+      await writeOwnerOnlyAcl(config.writeFetch, config.outbox, config.ownerWebId);
+      outboxAclEnsured = true;
+    }
+  };
 
-  for (const { proposal, url, etag } of loaded) {
-    if (proposal.status !== "pending" && proposal.status !== "confirmed") {
+  for (const { proposal, url } of loaded) {
+    const receiptUrl = `${config.outbox}${proposal.id}.ttl`;
+    // Idempotency is the Actor-UNwritable receipt — NOT the Actor-writable proposal status.
+    if (await resourceExists(config.readFetch, receiptUrl)) {
       skipped += 1;
       continue;
     }
@@ -196,112 +253,116 @@ export async function runOutboxOnce(config: ExecutorConfig): Promise<ExecutorRes
       ...(config.agentWebId ? { agentWebId: config.agentWebId } : {}),
       now: now(),
     });
+    const executedAt = now().toISOString();
 
     if (verdict.decision === "prohibited") {
-      if (etag) {
-        await markStatus(config, proposal.id, url, {
-          ...proposal,
-          status: "rejected",
-          note: `prohibited by mandate: ${verdict.reason}`.slice(0, 500),
-        });
-      }
+      await ensureOutboxAcl();
+      await putReceipt(
+        config,
+        proposal,
+        url,
+        executedAt,
+        "rejected",
+        { autonomous: true },
+        { note: `prohibited by mandate: ${verdict.reason}` },
+        true,
+        mandate.credentialId,
+      );
       prohibited += 1;
       continue;
     }
 
     const autonomous = verdict.decision === "permit";
-    if (!autonomous && proposal.status !== "confirmed") {
-      queuedForConfirmation += 1;
-      continue;
+    if (!autonomous) {
+      // A confirm-required intent is authorized ONLY by an owner confirmation whose CONTENT
+      // DIGEST matches the CURRENT proposal — forgery- and swap-proof.
+      const confirmation = await readConfirmation(
+        config.readFetch,
+        config.confirmations,
+        proposal.id,
+      );
+      if (!confirmation || confirmation.contentDigest !== proposalContentDigest(proposal)) {
+        queuedForConfirmation += 1;
+        continue;
+      }
     }
 
-    // CLAIM before send (at-most-once). No ETag ⇒ cannot guarantee it ⇒ skip (never risk a double-send).
-    if (!etag) {
-      skipped += 1;
-      continue;
-    }
-    const executedAt = now().toISOString();
-    const claimed: ActionProposal = { ...proposal, status: "executed", executedAt };
-    let claimOk: boolean;
-    try {
-      claimOk = await updateProposal(config.writeFetch, config.proposals, claimed, etag);
-    } catch {
-      failed += 1;
-      continue;
-    }
-    if (!claimOk) {
-      skipped += 1; // lost the race — another executor claimed it
-      continue;
-    }
+    const basis: Basis = autonomous
+      ? {
+          autonomous: true,
+          ...(verdict.permit?.id ? { permitId: verdict.permit.id } : {}),
+          ...(verdict.permit?.action ? { permitLabel: verdict.permit.action } : {}),
+        }
+      : { autonomous: false };
 
+    await ensureOutboxAcl();
     const sender = config.senders[proposal.channel];
     if (!sender) {
-      await markStatus(config, proposal.id, url, {
-        ...claimed,
-        status: "failed",
-        note: `no sender for channel ${proposal.channel}`,
-      });
+      await putReceipt(
+        config,
+        proposal,
+        url,
+        executedAt,
+        "failed",
+        basis,
+        { note: `no sender for channel ${proposal.channel}` },
+        true,
+        mandate.credentialId,
+      );
       failed += 1;
       continue;
     }
 
+    // CLAIM the send (create-only receipt) BEFORE transmitting — at-most-once.
+    const claimed = await putReceipt(
+      config,
+      proposal,
+      url,
+      executedAt,
+      "sent",
+      basis,
+      {},
+      true,
+      mandate.credentialId,
+    );
+    if (!claimed) {
+      skipped += 1; // another run already claimed this proposal
+      continue;
+    }
+
     try {
-      if (!outboxAclEnsured) {
-        await writeOwnerOnlyAcl(config.writeFetch, config.outbox, config.ownerWebId);
-        outboxAclEnsured = true;
-      }
       const carrier = await buildCarrier(proposal, executedAt, config);
       const message = assembleMessage(proposal, carrier);
       const receipt = await sender(message); // the actual transmit — the token lives here
-      await writeReceipt(config, proposal, url, executedAt, receipt.channelMessageId, {
-        autonomous,
-        mandateId: mandate.credentialId,
-        permitId: verdict.permit?.id,
-        permitLabel: verdict.permit?.action,
-      });
+      if (receipt.channelMessageId) {
+        await putReceipt(
+          config,
+          proposal,
+          url,
+          executedAt,
+          "sent",
+          basis,
+          { channelMessageId: receipt.channelMessageId },
+          false,
+          mandate.credentialId,
+        );
+      }
       sent += 1;
     } catch {
-      await markStatus(config, proposal.id, url, {
-        ...claimed,
-        status: "failed",
-        note: "send failed after claim",
-      });
+      await putReceipt(
+        config,
+        proposal,
+        url,
+        executedAt,
+        "failed",
+        basis,
+        { note: "send failed after claim" },
+        false,
+        mandate.credentialId,
+      );
       failed += 1;
     }
   }
 
   return { mandateLoaded: true, sent, queuedForConfirmation, prohibited, failed, skipped };
-}
-
-async function writeReceipt(
-  config: ExecutorConfig,
-  proposal: ActionProposal,
-  proposalUrl: string,
-  executedAt: string,
-  channelMessageId: string | undefined,
-  basis: { autonomous: boolean; mandateId?: string; permitId?: string; permitLabel?: string },
-): Promise<void> {
-  const resourceUrl = `${config.outbox}${proposal.id}.ttl`;
-  const turtle = await serializeSendReceipt({
-    resourceUrl,
-    proposalUrl,
-    channel: proposal.channel,
-    recipient: proposal.recipient,
-    executedAt,
-    ...(config.agentWebId ? { agentWebId: config.agentWebId } : {}),
-    ...(proposal.derivedFrom ? { derivedFrom: proposal.derivedFrom } : {}),
-    ...(basis.mandateId ? { mandateId: basis.mandateId } : {}),
-    ...(basis.autonomous
-      ? {
-          ...(basis.permitId ? { permitId: basis.permitId } : {}),
-          ...(basis.permitLabel ? { permitLabel: basis.permitLabel } : {}),
-        }
-      : { authorizedByConfirmation: true }),
-    ...(channelMessageId ? { channelMessageId } : {}),
-  });
-  const res = await putResource(config.writeFetch, resourceUrl, turtle, {
-    contentType: "text/turtle",
-    base: config.outbox,
-  });
-  throwIfNotWritten(res, resourceUrl);
 }

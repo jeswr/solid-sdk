@@ -28,6 +28,7 @@ export { createSolidVcMandateVerifier, defaultAutonomyPolicy, evaluateAutonomy, 
 export * as outbox from "./outbox/index.js";
 export { confirmProposal, RecordingSender, runOutboxOnce, } from "./outbox/index.js";
 export * as pod from "./pod/index.js";
+export { proposalContentDigest, writeConfirmation } from "./pod/index.js";
 export * as reader from "./reader/index.js";
 export { GmailChannelAdapter, runReader } from "./reader/index.js";
 export * as vocab from "./vocab.js";

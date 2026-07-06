@@ -15,6 +15,7 @@
  * hermetic golden tests (those inject a scripted verifier); it needs a live-key
  * integration test (a `needs:user` follow-up).
  */
+import { isWithinBase } from "@jeswr/agentic-legacy-bridge";
 import { parsePolicy } from "@jeswr/solid-odrl";
 import {
   type VerifiableCredential,
@@ -41,6 +42,40 @@ export interface SolidVcMandateVerifierOptions {
   readonly resolveStatus?: VerifyCredentialOptions["resolveStatus"];
   /** The ODRL policy resource URL; default: the credential's `credentialSubject.policy` IRI. */
   readonly policyUrl?: string;
+  /**
+   * The base the (UNTRUSTED, pre-verification) `credentialSubject.policy` URL MUST resolve
+   * within, so a tampered mandate cannot steer an authenticated fetch to an arbitrary URL.
+   * Defaults to the mandate resource's own container. The policy fetch is refused (fail-closed)
+   * if the URL escapes this base, is not http(s), or embeds credentials.
+   */
+  readonly allowedPolicyBase?: string;
+}
+
+/** The container a resource URL lives in (its path up to and including the last `/`). */
+function containerOf(url: string): string {
+  try {
+    const parsed = new URL(url);
+    parsed.hash = "";
+    parsed.search = "";
+    const path = parsed.pathname;
+    parsed.pathname = path.slice(0, path.lastIndexOf("/") + 1);
+    return parsed.toString();
+  } catch {
+    return url;
+  }
+}
+
+/** Validate an UNTRUSTED policy URL: http(s), no embedded creds, strictly within `base`. */
+function safePolicyUrl(url: string, base: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return false;
+  if (parsed.username !== "" || parsed.password !== "") return false;
+  return isWithinBase(url, base);
 }
 
 async function getText(
@@ -84,8 +119,16 @@ export function createSolidVcMandateVerifier(
         return undefined; // the signed VC must be stored as JSON-LD
       }
 
+      // A caller-supplied policyUrl is trusted for SCOPE; the VC-derived one is UNTRUSTED
+      // (the VC is not verified yet) and must resolve within the allowed base before any
+      // authenticated fetch — otherwise a tampered mandate is an SSRF lever.
+      const fromCaller = typeof options.policyUrl === "string";
       const policyUrl = options.policyUrl ?? policyIriOf(vc);
       if (!policyUrl) return undefined; // a mandate with no bound policy is unusable
+      if (!fromCaller) {
+        const base = options.allowedPolicyBase ?? containerOf(options.mandateUrl);
+        if (!safePolicyUrl(policyUrl, base)) return undefined; // out-of-scope → refuse (no fetch)
+      }
       const policyDoc = await getText(options.readFetch, policyUrl);
       if (!policyDoc) return undefined;
 

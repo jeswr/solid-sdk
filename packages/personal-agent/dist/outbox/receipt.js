@@ -7,7 +7,7 @@
  */
 import { safeHttpIri } from "@jeswr/agentic-legacy-bridge";
 import { DataFactory, Writer } from "n3";
-import { AGENTIC_AUTHORIZED_BY_CONFIRMATION, AGENTIC_AUTHORIZED_BY_PERMIT, AGENTIC_CHANNEL, AGENTIC_CHANNEL_MESSAGE_ID, AGENTIC_EXECUTED_PROPOSAL, AGENTIC_SEND_RECEIPT, AGENTIC_UNDER_MANDATE, PROV_ENTITY, PROV_GENERATED_AT_TIME, PROV_WAS_ATTRIBUTED_TO, PROV_WAS_DERIVED_FROM, RDF_TYPE, SCHEMA_RECIPIENT, XSD_BOOLEAN, XSD_DATE_TIME, } from "../vocab.js";
+import { AGENTIC_AUTHORIZED_BY_CONFIRMATION, AGENTIC_AUTHORIZED_BY_PERMIT, AGENTIC_CHANNEL, AGENTIC_CHANNEL_MESSAGE_ID, AGENTIC_EXECUTED_PROPOSAL, AGENTIC_NOTE, AGENTIC_OUTCOME, AGENTIC_SEND_RECEIPT, AGENTIC_UNDER_MANDATE, PROV_ENTITY, PROV_GENERATED_AT_TIME, PROV_WAS_ATTRIBUTED_TO, PROV_WAS_DERIVED_FROM, RDF_TYPE, SCHEMA_RECIPIENT, XSD_BOOLEAN, XSD_DATE_TIME, } from "../vocab.js";
 const { namedNode, literal, quad } = DataFactory;
 /** Serialise a send receipt to Turtle. */
 export function serializeSendReceipt(input) {
@@ -16,6 +16,7 @@ export function serializeSendReceipt(input) {
     writer.addQuad(quad(subject, namedNode(RDF_TYPE), namedNode(AGENTIC_SEND_RECEIPT)));
     writer.addQuad(quad(subject, namedNode(RDF_TYPE), namedNode(PROV_ENTITY)));
     writer.addQuad(quad(subject, namedNode(AGENTIC_EXECUTED_PROPOSAL), namedNode(input.proposalUrl)));
+    writer.addQuad(quad(subject, namedNode(AGENTIC_OUTCOME), literal(input.outcome)));
     writer.addQuad(quad(subject, namedNode(AGENTIC_CHANNEL), literal(input.channel)));
     writer.addQuad(quad(subject, namedNode(SCHEMA_RECIPIENT), literal(input.recipient)));
     writer.addQuad(quad(subject, namedNode(PROV_GENERATED_AT_TIME), literal(input.executedAt, namedNode(XSD_DATE_TIME))));
@@ -43,6 +44,9 @@ export function serializeSendReceipt(input) {
     }
     if (input.channelMessageId) {
         writer.addQuad(quad(subject, namedNode(AGENTIC_CHANNEL_MESSAGE_ID), literal(input.channelMessageId)));
+    }
+    if (input.note) {
+        writer.addQuad(quad(subject, namedNode(AGENTIC_NOTE), literal(input.note.slice(0, 500))));
     }
     return new Promise((resolve, reject) => {
         writer.end((err, result) => (err ? reject(err) : resolve(result)));

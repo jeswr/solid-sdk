@@ -48,8 +48,9 @@ export {
   RecordingSender,
   runOutboxOnce,
 } from "./outbox/index.js";
-export type { ActionProposal, LoadedProposal } from "./pod/index.js";
+export type { ActionProposal, Confirmation, LoadedProposal } from "./pod/index.js";
 export * as pod from "./pod/index.js";
+export { proposalContentDigest, writeConfirmation } from "./pod/index.js";
 export * as reader from "./reader/index.js";
 export { GmailChannelAdapter, runReader } from "./reader/index.js";
 export * as vocab from "./vocab.js";

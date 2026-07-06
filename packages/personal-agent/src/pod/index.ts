@@ -1,6 +1,15 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
-/** The pod-as-state module — owner-private containers, ACL-first, proposal records. */
+/** The pod-as-state module — owner-private containers, ACL-first, proposal + confirmation records. */
 export { aclUrlFor, writeOwnerOnlyAcl } from "./acl.js";
+export {
+  type Confirmation,
+  confirmationUrl,
+  parseConfirmation,
+  readConfirmation,
+  serializeConfirmation,
+  writeConfirmation,
+} from "./confirmation-store.js";
+export { proposalContentDigest } from "./digest.js";
 export {
   createProposal,
   type LoadedProposal,

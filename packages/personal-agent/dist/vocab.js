@@ -46,6 +46,16 @@ export const AGENTIC_SEND_RECEIPT = `${AGENTIC}SendReceipt`;
 export const AGENTIC_EXECUTED_PROPOSAL = `${AGENTIC}executedProposal`;
 /** The channel's own id for the transmitted message (recorded on the receipt). */
 export const AGENTIC_CHANNEL_MESSAGE_ID = `${AGENTIC}channelMessageId`;
+// --- The OWNER-ONLY confirmation record (the unforgeable human-confirm gate). ---
+/** The confirmation-record type (owner-only; the Actor cannot write these). */
+export const AGENTIC_CONFIRMATION = `${AGENTIC}Confirmation`;
+/** The proposal id the confirmation authorizes. */
+export const AGENTIC_CONFIRMS_PROPOSAL = `${AGENTIC}confirmsProposal`;
+/** The `sha256:<hex>` content digest the confirmation is bound to (content-locks the approval). */
+export const AGENTIC_CONTENT_DIGEST = `${AGENTIC}contentDigest`;
+// --- Receipt outcome flags. ---
+/** The outcome recorded on a receipt (`sent` / `rejected` / `failed`). */
+export const AGENTIC_OUTCOME = `${AGENTIC}outcome`;
 /** Links an autonomous action to the signed mandate that authorized it (`prov:hadPlan`-adjacent). */
 export const AGENTIC_UNDER_MANDATE = `${AGENTIC}underMandate`;
 /** Links an autonomous action to the specific ODRL permit rule that authorized it. */

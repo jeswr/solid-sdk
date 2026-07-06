@@ -1,7 +1,7 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 import { describe, expect, it } from "vitest";
 import type { ActionProposal } from "../pod/proposals.js";
-import { classifyFriction, confirmProposal, rejectProposal } from "./confirm.js";
+import { classifyFriction, confirmProposal } from "./confirm.js";
 
 const AT = "2026-07-06T01:00:00Z";
 
@@ -22,10 +22,11 @@ function proposal(over: Partial<ActionProposal> = {}): ActionProposal {
 }
 
 describe("confirmProposal — the graduated human-confirm gate", () => {
-  it("LOW friction: a simple confirm suffices", () => {
-    const confirmed = confirmProposal(proposal(), { confirm: true, confirmedAt: AT });
-    expect(confirmed.status).toBe("confirmed");
-    expect(confirmed.confirmedAt).toBe(AT);
+  it("LOW friction: a simple confirm produces a content-locked confirmation", () => {
+    const confirmation = confirmProposal(proposal(), { confirm: true, confirmedAt: AT });
+    expect(confirmation.proposalId).toBe("p1");
+    expect(confirmation.contentDigest).toMatch(/^sha256:[0-9a-f]{64}$/);
+    expect(confirmation.confirmedAt).toBe(AT);
   });
 
   it("LOW friction: no acknowledgement at all throws", () => {
@@ -38,24 +39,19 @@ describe("confirmProposal — the graduated human-confirm gate", () => {
     expect(() =>
       confirmProposal(high, { typedAcknowledgement: "wrong@x.com", confirmedAt: AT }),
     ).toThrow();
-    const confirmed = confirmProposal(high, {
-      typedAcknowledgement: "alice@example.com",
+    expect(
+      confirmProposal(high, { typedAcknowledgement: "alice@example.com", confirmedAt: AT })
+        .proposalId,
+    ).toBe("p1");
+  });
+
+  it("the confirmation digest is content-locked (changes when the body changes)", () => {
+    const a = confirmProposal(proposal(), { confirm: true, confirmedAt: AT });
+    const b = confirmProposal(proposal({ bodyText: "a different body" }), {
+      confirm: true,
       confirmedAt: AT,
     });
-    expect(confirmed.status).toBe("confirmed");
-  });
-
-  it("cannot confirm a non-pending proposal", () => {
-    expect(() =>
-      confirmProposal(proposal({ status: "executed" }), { confirm: true, confirmedAt: AT }),
-    ).toThrow();
-    expect(() =>
-      confirmProposal(proposal({ status: "confirmed" }), { confirm: true, confirmedAt: AT }),
-    ).toThrow();
-  });
-
-  it("rejectProposal marks it rejected", () => {
-    expect(rejectProposal(proposal(), "not now").status).toBe("rejected");
+    expect(a.contentDigest).not.toBe(b.contentDigest);
   });
 
   it("classifyFriction: a novel recipient (no thread) or any spend is HIGH", () => {

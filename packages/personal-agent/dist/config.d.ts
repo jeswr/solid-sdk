@@ -34,7 +34,15 @@ export interface PodLayout {
      */
     readonly proposals: string;
     /**
-     * The outbox container — the executor's send receipts + PROV bundles. Owner-private.
+     * The confirmations container — the human-confirm gate's OWNER-ONLY sink. The Actor has
+     * NO write access here (its gate only allows the proposals container), so it cannot forge a
+     * confirmation. Each record binds a proposal id to a CONTENT DIGEST, so a confirmation
+     * authorizes exactly the content the owner saw — not a later Actor-swapped body.
+     */
+    readonly confirmations: string;
+    /**
+     * The outbox container — the executor's send receipts + PROV bundles. Owner-private and
+     * Actor-unwritable, so a receipt is the unforgeable "already handled" marker (idempotency).
      */
     readonly outbox: string;
 }

@@ -49,18 +49,31 @@ const DENY_UNKNOWN: GateDecision = {
   message: "tool not permitted for the Actor (read-only + proposals-container writes only)",
 };
 
-/** Collect every top-level input value that is a well-formed http(s) URL string. */
-function urlValues(input: Record<string, unknown>): string[] {
+/**
+ * Collect every http(s) URL string ANYWHERE in the input (recursing into nested objects
+ * and arrays, depth-bounded). solid_write's schema is flat, but scanning the whole input
+ * is strictly safer: no URL a write carries can be out of scope, wherever it sits.
+ */
+function urlValues(input: unknown, depth = 0): string[] {
   const urls: string[] = [];
-  for (const value of Object.values(input)) {
-    if (typeof value !== "string") continue;
-    let parsed: URL;
+  if (depth > 6 || input == null) return urls;
+  if (typeof input === "string") {
     try {
-      parsed = new URL(value);
+      const parsed = new URL(input);
+      if (parsed.protocol === "https:" || parsed.protocol === "http:") urls.push(input);
     } catch {
-      continue;
+      // not a URL — ignore
     }
-    if (parsed.protocol === "https:" || parsed.protocol === "http:") urls.push(value);
+    return urls;
+  }
+  if (Array.isArray(input)) {
+    for (const item of input) urls.push(...urlValues(item, depth + 1));
+    return urls;
+  }
+  if (typeof input === "object") {
+    for (const value of Object.values(input as Record<string, unknown>)) {
+      urls.push(...urlValues(value, depth + 1));
+    }
   }
   return urls;
 }

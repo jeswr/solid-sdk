@@ -68,4 +68,19 @@ describe("createGate — the Actor canUseTool fence (fail-closed)", () => {
     });
     expect(decision.behavior).toBe("deny");
   });
+
+  it("denies a write hiding an out-of-scope URL in a nested field or array", () => {
+    expect(
+      gate(PROPOSAL_WRITE_TOOL, {
+        url: `${proposals}p1.ttl`,
+        meta: { link: "https://evil.example/x" },
+      }).behavior,
+    ).toBe("deny");
+    expect(
+      gate(PROPOSAL_WRITE_TOOL, {
+        url: `${proposals}p1.ttl`,
+        links: ["https://evil.example/y"],
+      }).behavior,
+    ).toBe("deny");
+  });
 });

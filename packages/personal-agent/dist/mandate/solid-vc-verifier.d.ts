@@ -17,6 +17,13 @@ export interface SolidVcMandateVerifierOptions {
     readonly resolveStatus?: VerifyCredentialOptions["resolveStatus"];
     /** The ODRL policy resource URL; default: the credential's `credentialSubject.policy` IRI. */
     readonly policyUrl?: string;
+    /**
+     * The base the (UNTRUSTED, pre-verification) `credentialSubject.policy` URL MUST resolve
+     * within, so a tampered mandate cannot steer an authenticated fetch to an arbitrary URL.
+     * Defaults to the mandate resource's own container. The policy fetch is refused (fail-closed)
+     * if the URL escapes this base, is not http(s), or embeds credentials.
+     */
+    readonly allowedPolicyBase?: string;
 }
 /** Build the fail-closed, solid-vc-backed mandate verifier. */
 export declare function createSolidVcMandateVerifier(options: SolidVcMandateVerifierOptions): MandateVerifier;

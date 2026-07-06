@@ -2,16 +2,21 @@
 /**
  * The GRADUATED human-confirm gate (§7). When the ODRL mandate does NOT pre-authorize an
  * action autonomously (a `confirm-required` decision), the owner must confirm it — and the
- * confirmation friction scales with the risk:
- *  - LOW friction (a reply to a known thread) → a simple confirm suffices;
- *  - HIGH friction (a novel recipient, any spend, bulk) → an EXPLICIT typed acknowledgement
- *    that echoes the recipient — never a one-tap yes.
+ * friction scales with the risk:
+ *  - LOW (a reply to a known thread) → a simple confirm suffices;
+ *  - HIGH (a novel recipient, any spend, bulk) → an EXPLICIT typed acknowledgement that echoes
+ *    the recipient — never a one-tap yes.
  *
- * `confirmProposal` is the ONLY sanctioned `pending → confirmed` transition, and it is a pure
- * function of the proposal + the owner's acknowledgement (the human UI that collects the ack
- * is out of M1 scope). The outbox executor then treats `confirmed` as the owner's authorizing
- * event for a `confirm-required` intent.
+ * `confirmProposal` does NOT mutate the Actor-writable proposal (its `status` field is
+ * advisory, and the Actor can write it — so it can never be the authorization). It produces a
+ * {@link Confirmation}: a content-locked record the owner writes into the OWNER-ONLY
+ * confirmations container (which the Actor cannot write). The executor authorizes a
+ * `confirm-required` send only when a confirmation exists AND the proposal's CURRENT content
+ * still hashes to the confirmed digest — so a deceived Actor can neither forge a confirmation
+ * nor swap the body after it was confirmed.
  */
+import type { Confirmation } from "../pod/confirmation-store.js";
+import { proposalContentDigest } from "../pod/digest.js";
 import type { ActionProposal, ConfirmFriction } from "../pod/proposals.js";
 
 /**
@@ -35,30 +40,22 @@ export interface ConfirmInput {
 }
 
 /**
- * Transition a `pending` proposal to `confirmed`, enforcing the friction. Throws (fail-closed)
- * on a non-pending proposal or an insufficient acknowledgement — a proposal never becomes
- * `confirmed` without a valid owner acknowledgement at the required strength.
+ * Produce a content-locked {@link Confirmation} for a proposal, enforcing the friction. Throws
+ * (fail-closed) on an insufficient acknowledgement — a confirmation is never produced without a
+ * valid owner acknowledgement at the required strength. The caller writes it to the OWNER-ONLY
+ * confirmations container (`writeConfirmation`).
  */
-export function confirmProposal(proposal: ActionProposal, input: ConfirmInput): ActionProposal {
-  if (proposal.status !== "pending") {
-    throw new Error(`confirmProposal: cannot confirm a proposal in status "${proposal.status}"`);
-  }
-  const friction = proposal.friction;
-  if (friction === "high") {
+export function confirmProposal(proposal: ActionProposal, input: ConfirmInput): Confirmation {
+  if (proposal.friction === "high") {
     if (input.typedAcknowledgement !== proposal.recipient) {
       throw new Error("confirmProposal: high-friction confirm requires the recipient typed back");
     }
   } else if (input.confirm !== true && input.typedAcknowledgement !== proposal.recipient) {
     throw new Error("confirmProposal: a confirmation is required");
   }
-  return { ...proposal, status: "confirmed", confirmedAt: input.confirmedAt };
-}
-
-/** Transition a `pending` proposal to `rejected` (the owner declined). */
-export function rejectProposal(proposal: ActionProposal, note?: string): ActionProposal {
   return {
-    ...proposal,
-    status: "rejected",
-    ...(note ? { note } : {}),
+    proposalId: proposal.id,
+    contentDigest: proposalContentDigest(proposal),
+    confirmedAt: input.confirmedAt,
   };
 }
