@@ -367,7 +367,7 @@ function safeHttpIri2(value) {
     return void 0;
   }
   if (u.protocol !== "http:" && u.protocol !== "https:") return void 0;
-  return u.href.replace(/\|/g, "%7C").replace(/\^/g, "%5E").replace(/`/g, "%60");
+  return escapeIri(value);
 }
 function isAbsoluteIri(value) {
   return /^[A-Za-z][A-Za-z0-9+.-]*:/.test(value);

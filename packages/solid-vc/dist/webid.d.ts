@@ -38,9 +38,9 @@ export interface PublishVerificationMethodInput {
 }
 /** The published verification method: the RDF + the values it asserts. */
 export interface PublishedVerificationMethod {
-    /** The canonicalised controller (WebID) IRI. */
+    /** The controller (WebID) IRI, injection-hardened + preserved lexically. */
     readonly controller: string;
-    /** The canonicalised verification-method (key id) IRI. */
+    /** The verification-method (key id) IRI, injection-hardened + preserved lexically. */
     readonly verificationMethod: string;
     /** The `sec:publicKeyMultibase` Multikey value. */
     readonly publicKeyMultibase: string;
@@ -65,9 +65,11 @@ export interface PublishedVerificationMethod {
  *
  * The write side fails LOUD (throws) on a non-http(s) controller / key id or an
  * unsupported key type — a caller must never silently publish an unusable or
- * unsafe verification method. All IRIs go through the safe helpers (canonicalise
- * + IRIREF hardening); the graph is built through the typed {@link GraphBuilder}
- * write path and serialised with `n3.Writer` (never hand-concatenated).
+ * unsafe verification method. All IRIs go through the safe helpers (validate +
+ * IRIREF hardening, lexical-preserving — the WebID/key id is written byte-for-byte
+ * as supplied so it matches what the read side and the proof `verificationMethod`
+ * carry); the graph is built through the typed {@link GraphBuilder} write path and
+ * serialised with `n3.Writer` (never hand-concatenated).
  */
 export declare function publishVerificationMethod(input: PublishVerificationMethodInput): Promise<PublishedVerificationMethod>;
 /** Options for {@link resolveWebIdKey} / {@link createWebIdKeyResolver}. */
@@ -84,9 +86,9 @@ export interface ResolveWebIdKeyOptions {
 }
 /** A WebID-document-resolved verification method (see {@link resolveWebIdKey}). */
 export interface ResolvedWebIdKey {
-    /** The canonicalised WebID that the documents prove controls the key. */
+    /** The WebID (injection-hardened, lexical) that the documents prove controls the key. */
     readonly controller: string;
-    /** The canonicalised verification-method (key id) IRI. */
+    /** The verification-method (key id) IRI, injection-hardened + preserved lexically. */
     readonly verificationMethod: string;
     /** The `sec:publicKeyMultibase` value the key document carries. */
     readonly publicKeyMultibase: string;

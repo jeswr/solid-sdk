@@ -27,21 +27,48 @@
 //                     injection-neutraliser); the implementation there is
 //                     byte-equivalent to the former local one.
 //
-//   • safeHttpIri   — http(s)-only. Canonicalises via `new URL().href` (which
-//                     percent-encodes the breakout characters and strips control
-//                     chars) then percent-encodes the residual `|`, `^`, backtick
-//                     that `URL` leaves in a path. Returns `undefined` for a value
-//                     that is not a parseable http(s) URL — the caller DROPS the
-//                     triple rather than write a malformed IRI. Use for a field that
-//                     is semantically an http(s) IRI.
+//   • safeHttpIri   — http(s)-only, LEXICAL-PRESERVING. VALIDATES the value is a
+//                     parseable http(s) URL (returns `undefined` for anything else —
+//                     the caller DROPS the triple), then neutralises injection via
+//                     `escapeIri` (percent-encoding the Turtle-IRIREF forbidden set)
+//                     WITHOUT canonicalising: a valid http(s) IRI is preserved
+//                     BYTE-FOR-BYTE (its default port, host case, empty-path, and
+//                     percent-encoding are all kept). Use for a field that is
+//                     semantically an http(s) IRI.
 //
-//   • safeObjectIri — the object-position composite: an http(s) value is
-//                     canonicalised (safeHttpIri); another absolute-IRI scheme
+//                     WHY LEXICAL, NOT `new URL().href` (suite-tracker-c77v):
+//                     `new URL().href` CANONICALISES — it strips a default `:443`/
+//                     `:80`, lower-cases the scheme+host, resolves dot-segments, and
+//                     inserts a trailing `/` into an empty path (`https://a.example#me`
+//                     → `https://a.example/#me`). That contradicts the single
+//                     suite-wide LEXICAL-PRESERVING invariant `@jeswr/rdf-serialize`'s
+//                     `escapeIri` establishes, and it made the SIGNED RDF lowering
+//                     (`credentialToRdf`, which canonicalised the issuer) DISAGREE
+//                     with the JSON-LD projection (`credentialToJsonLd`, which emits
+//                     the issuer verbatim), with the subject-id / claim / proof
+//                     `verificationMethod` writes (all already `escapeIri`-lexical),
+//                     and with any external W3C VC verifier (standard JSON-LD→RDF does
+//                     NOT URL-canonicalise absolute IRIs). Preserving lexically brings
+//                     all four into lock-step. It does NOT change any existing
+//                     signature outcome: `issue()` and `verifyCredential()` apply the
+//                     SAME `credentialToRdf`, so the round-trip is invariant to this
+//                     transform (a valid credential signed then verified matches
+//                     either way); the change is only observable as different ABSOLUTE
+//                     bytes for a NON-canonical input URL, which no captured golden
+//                     uses. Injection stays fully closed — `escapeIri` percent-encodes
+//                     the entire forbidden set (C0 controls + space + `<>"{}|^` +
+//                     backtick + backslash), a strict SUPERSET of what `new URL()`
+//                     handled.
+//
+//   • safeObjectIri — the object-position composite: an http(s) value is preserved
+//                     via {@link safeHttpIri} (lexical); another absolute-IRI scheme
 //                     (`did:` / `urn:`) is escaped in place (escapeIri, so a DID or
 //                     URN issuer/subject is preserved, not dropped); a non-absolute /
 //                     unparseable value returns `undefined` so the caller drops the
 //                     triple. This is what an object-IRI field (issuer, a type IRI)
-//                     routes through.
+//                     routes through. Both branches now escape lexically — the only
+//                     distinction is that the http(s) branch additionally requires a
+//                     `new URL()`-parseable value.
 
 import { escapeIri } from "@jeswr/rdf-serialize";
 
@@ -60,11 +87,19 @@ import { escapeIri } from "@jeswr/rdf-serialize";
 export { escapeIri };
 
 /**
- * Canonicalise + harden a value that must be an http(s) IRI. Returns `undefined`
- * (⇒ the caller DROPS the triple) when the value is not a parseable http(s) URL.
- * `new URL().href` percent-encodes the breakout characters (`< > " { }` space) and
- * strips control chars; the residual `|`, `^`, backtick that `URL` can leave in a
- * path are percent-encoded here to fully close the IRIREF grammar.
+ * VALIDATE + harden a value that must be an http(s) IRI, LEXICAL-PRESERVING.
+ * Returns `undefined` (⇒ the caller DROPS the triple) when the value is not a
+ * parseable http(s) URL. For a valid value the ORIGINAL lexical form is preserved
+ * byte-for-byte (default port, host case, empty path, percent-encoding all kept —
+ * NO `new URL().href` canonicalisation); injection is neutralised by `escapeIri`,
+ * which percent-encodes the full Turtle-IRIREF forbidden set (C0 controls + space +
+ * `<>"{}|^` + backtick + backslash), a superset of the breakout characters.
+ *
+ * `new URL()` is used ONLY to VALIDATE (reject a non-http(s) scheme / unparseable
+ * value) — its canonicalised `.href` is intentionally discarded. This keeps the
+ * single suite-wide lexical-preserving IRI invariant (see the module header and
+ * suite-tracker-c77v): the signed RDF lowering, the JSON-LD projection, and any
+ * external W3C verifier all agree on the issuer/type/relatedResource IRI bytes.
  */
 export function safeHttpIri(value: string | undefined): string | undefined {
   if (typeof value !== "string") return undefined;
@@ -75,7 +110,8 @@ export function safeHttpIri(value: string | undefined): string | undefined {
     return undefined;
   }
   if (u.protocol !== "http:" && u.protocol !== "https:") return undefined;
-  return u.href.replace(/\|/g, "%7C").replace(/\^/g, "%5E").replace(/`/g, "%60");
+  // Preserve the caller's lexical IRI; only neutralise injection (never canonicalise).
+  return escapeIri(value);
 }
 
 /** Whether a string is an absolute IRI (an RFC-3986 scheme followed by `:`). */
@@ -85,12 +121,16 @@ export function isAbsoluteIri(value: string): boolean {
 
 /**
  * The guard for an OBJECT-position IRI whose scheme is not fixed in advance:
- *  - an http(s) value is canonicalised + hardened via {@link safeHttpIri};
+ *  - an http(s) value is preserved (lexical) + hardened via {@link safeHttpIri};
  *  - another ABSOLUTE-IRI scheme (`did:` / `urn:` — legitimate for a VC issuer or
  *    subject) is escaped IN PLACE via {@link escapeIri}, so it is preserved rather
  *    than wrongly dropped by the http-only filter;
  *  - a non-absolute / unparseable value returns `undefined`, so the caller DROPS
  *    the triple instead of writing a malformed IRI.
+ *
+ * Both absolute-IRI branches now preserve the value LEXICALLY (escapeIri) — the
+ * http(s) branch differs only in additionally requiring a `new URL()`-parseable
+ * value. A valid absolute IRI of ANY scheme survives byte-for-byte.
  */
 export function safeObjectIri(value: string | undefined): string | undefined {
   if (typeof value !== "string") return undefined;
@@ -107,8 +147,8 @@ export function safeObjectIri(value: string | undefined): string | undefined {
  * `issuer` triple would let a credential be signed/serialised with NO (or, on
  * verify, a mismatched) issuer, which is a fail-OPEN. Optional object IRIs (a claim
  * value, an extra type) keep using {@link safeObjectIri} (drop-on-invalid). Because
- * it delegates to {@link safeObjectIri}, a VALID issuer is canonicalised/escaped
- * exactly as before — only the previously-dropped (invalid) case now throws.
+ * it delegates to {@link safeObjectIri}, a VALID issuer is escaped (lexical) exactly
+ * as {@link safeObjectIri} does — only the previously-dropped (invalid) case throws.
  */
 export function requireObjectIri(value: string | undefined, field: string): string {
   const iri = safeObjectIri(value);

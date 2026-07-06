@@ -361,19 +361,22 @@ export function credentialToRdf(credential: Credential): Quad[] {
   for (const t of credential.type ?? []) {
     const iri = typeIri(t);
     if (iri === VC_CREDENTIAL) continue;
-    // A type is an object-position IRI: canonicalise an http(s) type, escape a
-    // non-http absolute type in place, and DROP a malformed one (never emit a
-    // type IRI that could break out of the serialised `<…>`).
+    // A type is an object-position IRI: preserve an http(s) type LEXICALLY (escape
+    // for injection, no URL-canonicalisation), escape a non-http absolute type in
+    // place, and DROP a malformed one (never emit a type IRI that could break out
+    // of the serialised `<…>`).
     const safe = safeObjectIri(iri);
     if (safe !== undefined) b.addType(subject, safe);
   }
   // The issuer is a REQUIRED, identity-bearing object IRI (a WebID, or a DID/URN —
-  // all legitimate). Route it through the FAIL-CLOSED guard: canonicalise http(s),
-  // escape a DID/URN, and THROW on a non-absolute / malformed / missing issuer —
-  // NEVER silently drop the triple, which would let a credential be signed over a
-  // graph carrying no issuer (a fail-open the verifier could not detect). A valid
-  // issuer is canonicalised/escaped exactly as before, so valid credentials are
-  // byte-unchanged.
+  // all legitimate). Route it through the FAIL-CLOSED guard: preserve an http(s)
+  // issuer LEXICALLY (escape for injection, NO URL-canonicalisation — so it agrees
+  // byte-for-byte with the JSON-LD projection below, which emits the issuer
+  // verbatim, and with external verifiers), escape a DID/URN, and THROW on a
+  // non-absolute / malformed / missing issuer — NEVER silently drop the triple,
+  // which would let a credential be signed over a graph carrying no issuer (a
+  // fail-open the verifier could not detect). A valid issuer is escaped in place,
+  // so a canonical issuer is byte-unchanged.
   const issuerIri = requireObjectIri(credential.issuer, "issuer");
   b.addIri(subject, VC_ISSUER, issuerIri);
   if (credential.validFrom !== undefined) {
@@ -410,8 +413,10 @@ export function credentialToTurtle(credential: Credential, format?: string): Pro
 export function credentialToJsonLd(credential: Credential): Record<string, unknown> {
   // FAIL CLOSED on a missing/invalid issuer here too — the JSON-LD projection must
   // never emit a document with no valid issuer (parity with the RDF lowering). The
-  // raw issuer is kept (this projection does not canonicalise); the guard only
-  // rejects the values the RDF path would refuse.
+  // raw issuer is kept verbatim, and the RDF path now ALSO preserves the issuer
+  // lexically (safeHttpIri no longer URL-canonicalises), so the two projections
+  // agree on the issuer IRI BYTE-FOR-BYTE; the guard only rejects the values the
+  // RDF path would refuse.
   requireObjectIri(credential.issuer, "issuer");
   const id = credential.id ?? `urn:uuid:${randomUUID()}`;
   const types = ["VerifiableCredential", ...(credential.type ?? [])];

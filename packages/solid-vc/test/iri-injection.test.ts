@@ -79,7 +79,7 @@ describe("n3.Writer IRI-injection hardening", () => {
     expect(issuerObj?.object.value).toBe("https://alice.example/profile#me");
   });
 
-  it("guard unit behaviour: escape vs http-canonicalise vs drop", () => {
+  it("guard unit behaviour: escape vs http-validate-lexical vs drop", () => {
     // escapeIri: scheme-agnostic, non-mutating for valid IRIs.
     expect(escapeIri("did:example:123")).toBe("did:example:123");
     expect(escapeIri("urn:uuid:abc")).toBe("urn:uuid:abc");
@@ -90,16 +90,33 @@ describe("n3.Writer IRI-injection hardening", () => {
     expect(safeHttpIri("did:example:123")).toBeUndefined();
     expect(safeHttpIri("not a url")).toBeUndefined();
 
-    // safeObjectIri: http canonicalised, did:/urn: escaped in place, garbage dropped.
+    // LEXICAL-PRESERVING (suite-tracker-c77v): safeHttpIri VALIDATES an http(s) URL
+    // but NO LONGER canonicalises it — a default port, host case, empty path and
+    // percent-encoding are all preserved byte-for-byte (was: new URL().href would
+    // strip :443, lower-case the host, and insert a trailing `/`).
+    expect(safeHttpIri("https://a.example:443/p#f")).toBe("https://a.example:443/p#f");
+    expect(safeHttpIri("http://a.example:80/p")).toBe("http://a.example:80/p");
+    expect(safeHttpIri("https://a.example#me")).toBe("https://a.example#me"); // NO trailing `/`
+    expect(safeHttpIri("https://Alice.EXAMPLE/Profile#me")).toBe(
+      "https://Alice.EXAMPLE/Profile#me",
+    );
+    // Injection is still fully closed even on the lexical path.
+    expect(safeHttpIri("https://a.example/x>y")).toBe("https://a.example/x%3Ey");
+
+    // safeObjectIri: http lexical, did:/urn: escaped in place, garbage dropped.
     expect(safeObjectIri("https://a.example/p#f")).toBe("https://a.example/p#f");
+    expect(safeObjectIri("https://a.example:443/p#f")).toBe("https://a.example:443/p#f");
     expect(safeObjectIri("did:example:123")).toBe("did:example:123");
     expect(safeObjectIri("relative/path")).toBeUndefined();
     expect(safeObjectIri(undefined)).toBeUndefined();
   });
 
   it("requireObjectIri: returns a valid IRI, THROWS on an invalid one", () => {
-    // Valid identity IRIs pass through with the same canonicalise/escape as safeObjectIri.
+    // Valid identity IRIs pass through with the same lexical escape as safeObjectIri.
     expect(requireObjectIri("https://a.example/p#f", "issuer")).toBe("https://a.example/p#f");
+    expect(requireObjectIri("https://a.example:443/p#f", "issuer")).toBe(
+      "https://a.example:443/p#f",
+    ); // preserved, not canonicalised
     expect(requireObjectIri("did:example:123", "issuer")).toBe("did:example:123");
     expect(requireObjectIri("urn:uuid:abc", "issuer")).toBe("urn:uuid:abc");
     // Every case safeObjectIri would DROP now throws — a required identity field must

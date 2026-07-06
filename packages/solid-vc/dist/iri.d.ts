@@ -13,23 +13,35 @@ import { escapeIri } from "@jeswr/rdf-serialize";
  */
 export { escapeIri };
 /**
- * Canonicalise + harden a value that must be an http(s) IRI. Returns `undefined`
- * (⇒ the caller DROPS the triple) when the value is not a parseable http(s) URL.
- * `new URL().href` percent-encodes the breakout characters (`< > " { }` space) and
- * strips control chars; the residual `|`, `^`, backtick that `URL` can leave in a
- * path are percent-encoded here to fully close the IRIREF grammar.
+ * VALIDATE + harden a value that must be an http(s) IRI, LEXICAL-PRESERVING.
+ * Returns `undefined` (⇒ the caller DROPS the triple) when the value is not a
+ * parseable http(s) URL. For a valid value the ORIGINAL lexical form is preserved
+ * byte-for-byte (default port, host case, empty path, percent-encoding all kept —
+ * NO `new URL().href` canonicalisation); injection is neutralised by `escapeIri`,
+ * which percent-encodes the full Turtle-IRIREF forbidden set (C0 controls + space +
+ * `<>"{}|^` + backtick + backslash), a superset of the breakout characters.
+ *
+ * `new URL()` is used ONLY to VALIDATE (reject a non-http(s) scheme / unparseable
+ * value) — its canonicalised `.href` is intentionally discarded. This keeps the
+ * single suite-wide lexical-preserving IRI invariant (see the module header and
+ * suite-tracker-c77v): the signed RDF lowering, the JSON-LD projection, and any
+ * external W3C verifier all agree on the issuer/type/relatedResource IRI bytes.
  */
 export declare function safeHttpIri(value: string | undefined): string | undefined;
 /** Whether a string is an absolute IRI (an RFC-3986 scheme followed by `:`). */
 export declare function isAbsoluteIri(value: string): boolean;
 /**
  * The guard for an OBJECT-position IRI whose scheme is not fixed in advance:
- *  - an http(s) value is canonicalised + hardened via {@link safeHttpIri};
+ *  - an http(s) value is preserved (lexical) + hardened via {@link safeHttpIri};
  *  - another ABSOLUTE-IRI scheme (`did:` / `urn:` — legitimate for a VC issuer or
  *    subject) is escaped IN PLACE via {@link escapeIri}, so it is preserved rather
  *    than wrongly dropped by the http-only filter;
  *  - a non-absolute / unparseable value returns `undefined`, so the caller DROPS
  *    the triple instead of writing a malformed IRI.
+ *
+ * Both absolute-IRI branches now preserve the value LEXICALLY (escapeIri) — the
+ * http(s) branch differs only in additionally requiring a `new URL()`-parseable
+ * value. A valid absolute IRI of ANY scheme survives byte-for-byte.
  */
 export declare function safeObjectIri(value: string | undefined): string | undefined;
 /**
@@ -40,8 +52,8 @@ export declare function safeObjectIri(value: string | undefined): string | undef
  * `issuer` triple would let a credential be signed/serialised with NO (or, on
  * verify, a mismatched) issuer, which is a fail-OPEN. Optional object IRIs (a claim
  * value, an extra type) keep using {@link safeObjectIri} (drop-on-invalid). Because
- * it delegates to {@link safeObjectIri}, a VALID issuer is canonicalised/escaped
- * exactly as before — only the previously-dropped (invalid) case now throws.
+ * it delegates to {@link safeObjectIri}, a VALID issuer is escaped (lexical) exactly
+ * as {@link safeObjectIri} does — only the previously-dropped (invalid) case throws.
  */
 export declare function requireObjectIri(value: string | undefined, field: string): string;
 //# sourceMappingURL=iri.d.ts.map
