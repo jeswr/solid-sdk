@@ -279,6 +279,21 @@ function compileCompositeEntity(
     seenTargets.add(tc);
   }
 
+  // The composite projects ONE flat object, so EVERY emitted field name (a flat field's
+  // resolved/renamed name AND a nested link's name) must be globally unique across the
+  // nodes — a collision would produce an ambiguous *Data / duplicate TS property. Tracked
+  // here, keyed name → the node that first claimed it, so a clash names both nodes.
+  const claimedNames = new Map<string, string>();
+  const claimName = (name: string, nodeName: string): void => {
+    const prior = claimedNames.get(name);
+    if (prior !== undefined) {
+      throw new Error(
+        `composite ${compConfig.name} emits duplicate field name "${name}" (nodes "${prior}" and "${nodeName}"); the flat projection needs globally-unique names — use a distinct rename`,
+      );
+    }
+    claimedNames.set(name, nodeName);
+  };
+
   const nodes: ManifestNode[] = nodeNames.map((nodeName) => {
     const nodeConfig = compConfig.nodes[nodeName];
     if (!nodeConfig) throw new Error(`composite ${compConfig.name} node "${nodeName}" missing`);
@@ -328,6 +343,16 @@ function compileCompositeEntity(
             `composite ${compConfig.name} node "${nodeName}" links non-IRI property "${shapeFieldName}"`,
           );
         }
+        // A nested link is a SINGLE-VALUED tree edge (the runtime models it as maxCount 1):
+        // a multi-valued (or unbounded) link property would silently drop its set semantics
+        // if compiled as one edge, so reject it fail-closed. Set-valued nested links are a
+        // documented future feature.
+        if (constraint.maxCount !== 1) {
+          throw new Error(
+            `composite ${compConfig.name} node "${nodeName}" links the multi-valued property "${shapeFieldName}" (maxCount ${constraint.maxCount ?? "unbounded"}); a nested link must be single-valued (sh:maxCount 1) — set-valued nested links are a documented future feature`,
+          );
+        }
+        claimName(shapeFieldName, nodeName);
         const nested: ManifestField = {
           name: shapeFieldName,
           predicate: constraint.pathIri,
@@ -356,6 +381,7 @@ function compileCompositeEntity(
       if (fieldConfig === undefined) continue; // omitted (fidelity enforces MUST-coverage)
       const resolvedName = fieldConfig.rename ?? constraint.name ?? localName(constraint.pathIri);
       assertIdentifier(resolvedName, "composite field name");
+      claimName(resolvedName, nodeName);
       const prov: FieldProvenance = {
         targetClass: nodeConfig.targetClass,
         fieldName: resolvedName,

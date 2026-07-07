@@ -170,10 +170,89 @@ describe("composite compile — FAIL-CLOSED config validation", () => {
       },
       /not a valid identifier/,
     ],
+    [
+      "two nodes emitting the same resolved field name (rename collision)",
+      (c) => {
+        const t = tree(c);
+        (t.nodes.parent as { fields: Record<string, unknown> }).fields = {
+          note: { rename: "dup" },
+        };
+        (t.nodes.child as { fields: Record<string, unknown> }).fields = {
+          label: { rename: "dup" },
+        };
+      },
+      /duplicate field name "dup"/,
+    ],
   ];
   for (const [label, mutate, re] of bad) {
     it(`rejects ${label}`, () => {
       expect(() => compileManifest(shapes, config(mutate))).toThrow(re);
     });
   }
+});
+
+describe("composite compile — a nested link MUST be single-valued", () => {
+  it("rejects a link on a MULTI-VALUED (unbounded) property (set-valued links not yet supported)", () => {
+    const multiShapes = `
+      @prefix sh:  <http://www.w3.org/ns/shacl#> .
+      @prefix ex:  <${EX}> .
+      @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+      ex:ParentShape a sh:NodeShape ; sh:targetClass ex:Parent ;
+        sh:property [ sh:path ex:children ; sh:name "children" ; sh:nodeKind sh:IRI ; sh:class ex:Child ;
+          sh:minCount 1 ] .
+      ex:ChildShape a sh:NodeShape ; sh:targetClass ex:Child ;
+        sh:property [ sh:path ex:label ; sh:name "label" ; sh:datatype xsd:string ;
+          sh:minCount 1 ; sh:maxCount 1 ; sh:severity sh:Violation ] .
+    `;
+    const sh = parseShapes(multiShapes, SHAPES_BASE);
+    const cfg: CodegenConfig = {
+      shapesBase: SHAPES_BASE,
+      prefixes: { ex: EX, xsd: "http://www.w3.org/2001/XMLSchema#" },
+      entities: [
+        {
+          name: "Tree",
+          kind: "composite",
+          root: "parent",
+          nodes: {
+            parent: { targetClass: `${EX}Parent`, fragment: "it", links: { children: "child" } },
+            child: { targetClass: `${EX}Child`, fragment: "child", fields: { label: {} } },
+          },
+        },
+      ],
+    };
+    expect(() => compileManifest(sh, cfg)).toThrow(/multi-valued property "children"/);
+  });
+
+  it("rejects a link on a maxCount > 1 property", () => {
+    const multiShapes = `
+      @prefix sh:  <http://www.w3.org/ns/shacl#> .
+      @prefix ex:  <${EX}> .
+      @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+      ex:ParentShape a sh:NodeShape ; sh:targetClass ex:Parent ;
+        sh:property [ sh:path ex:children ; sh:name "children" ; sh:nodeKind sh:IRI ; sh:class ex:Child ;
+          sh:minCount 1 ; sh:maxCount 3 ] .
+      ex:ChildShape a sh:NodeShape ; sh:targetClass ex:Child ;
+        sh:property [ sh:path ex:label ; sh:name "label" ; sh:datatype xsd:string ;
+          sh:minCount 1 ; sh:maxCount 1 ; sh:severity sh:Violation ] .
+    `;
+    const sh = parseShapes(multiShapes, SHAPES_BASE);
+    const cfg: CodegenConfig = {
+      shapesBase: SHAPES_BASE,
+      prefixes: { ex: EX, xsd: "http://www.w3.org/2001/XMLSchema#" },
+      entities: [
+        {
+          name: "Tree",
+          kind: "composite",
+          root: "parent",
+          nodes: {
+            parent: { targetClass: `${EX}Parent`, fragment: "it", links: { children: "child" } },
+            child: { targetClass: `${EX}Child`, fragment: "child", fields: { label: {} } },
+          },
+        },
+      ],
+    };
+    expect(() => compileManifest(sh, cfg)).toThrow(
+      /multi-valued property "children" \(maxCount 3\)/,
+    );
+  });
 });

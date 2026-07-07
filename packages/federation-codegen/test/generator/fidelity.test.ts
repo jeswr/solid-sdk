@@ -65,6 +65,19 @@ describe("fidelity assertion (the P0 exit criterion)", () => {
     field.guards = { ...(field.guards ?? {}), iriScheme: "http-https" };
     expect(() => assertFidelity(shapes, tampered)).toThrow(FidelityError);
   });
+
+  it("FAILS on a tampered defaultNow-only field (a build-time default with no config source)", () => {
+    // A field carrying ONLY defaultNow (no guards, no `default`) must still be traced —
+    // otherwise a tampered manifest could smuggle an un-sourced build-time default past
+    // the traceability check. `title` has no config `defaultNow`, so forcing one throws.
+    const compiled = compileManifest(shapes, config);
+    const tampered = structuredClone(compiled);
+    const field = flat(tampered.manifest.entities[0]).fields.find((f) => f.name === "title");
+    if (!field) throw new Error("title field missing");
+    field.guards = undefined; // strip any guards so the field is defaultNow-ONLY
+    field.defaultNow = true; // un-sourced build-time default
+    expect(() => assertFidelity(shapes, tampered)).toThrow(FidelityError);
+  });
 });
 
 describe("fidelity — per-entity keying (no cross-entity misattribution)", () => {

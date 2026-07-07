@@ -227,8 +227,16 @@ function assertTraceability(compiled, shapes) {
             .map((c) => [c.pathIri, c]));
         const targetClass = entity.typeIris[0] ?? "";
         for (const field of entity.fields) {
-            if (field.guards === undefined && field.default === undefined)
+            // Validate any field carrying a config-sourced attribute — guards OR a default OR a
+            // build-time default flag (defaultNow / materializeDefault). A field with ONLY a
+            // defaultNow/materializeDefault (no guards, no `default`) must NOT be skipped, else a
+            // tampered manifest could add an un-sourced build-time default unchecked.
+            if (field.guards === undefined &&
+                field.default === undefined &&
+                field.defaultNow === undefined &&
+                field.materializeDefault === undefined) {
                 continue;
+            }
             const prov = provByKey.get(provKey(targetClass, field.name));
             const config = new Set(prov?.configGuards ?? []);
             const constraint = constraintByPred.get(field.predicate);
