@@ -10,6 +10,10 @@
     "type": "@type",
     "Album": "media:Album",
     "Artist": "media:Artist",
+    "completionFraction": {
+      "@id": "media:completionFraction",
+      "@type": "xsd:decimal"
+    },
     "consumedWork": {
       "@id": "media:consumedWork",
       "@type": "@id"
@@ -45,6 +49,10 @@
     },
     "ListeningActivity": "media:ListeningActivity",
     "ListeningHistory": "media:ListeningHistory",
+    "loved": {
+      "@id": "media:loved",
+      "@type": "xsd:boolean"
+    },
     "MediaAccount": "media:MediaAccount",
     "msPlayed": {
       "@id": "media:msPlayed",
@@ -62,6 +70,10 @@
       "@type": "@id"
     },
     "PlaybackEvent": "media:PlaybackEvent",
+    "playedVia": {
+      "@id": "media:playedVia",
+      "@type": "@id"
+    },
     "playedWork": {
       "@id": "media:playedWork",
       "@type": "@id"

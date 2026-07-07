@@ -9,6 +9,8 @@
 @prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
 @prefix dcterms: <http://purl.org/dc/terms/> .
 @prefix prof:    <http://www.w3.org/ns/dx/prof/> .
+@prefix time:    <http://www.w3.org/2006/time#> .
+@prefix foaf:    <http://xmlns.com/foaf/0.1/> .
 
 # =============================================================================
 # Solid Media & Activity — SHACL data-model profile (F4; R4/R8 §4.5)
@@ -47,9 +49,10 @@ mdsh:CreativeWorkShape
     sh:property [
         sh:path dcterms:title ;
         sh:minCount 1 ;
+        sh:maxCount 1 ;
         sh:datatype xsd:string ;
         sh:severity sh:Violation ;          # MUST: a work must be titled
-        sh:message "A creative work MUST have a dcterms:title."@en ;
+        sh:message "A creative work MUST have exactly one dcterms:title."@en ;
     ] ;
     sh:property [
         sh:path media:performedByArtist ;
@@ -106,24 +109,35 @@ mdsh:PlaybackEventShape
     rdfs:label "Playback Event shape"@en ;
     sh:property [
         sh:path media:playedWork ;
+        sh:nodeKind sh:IRI ;                # a played work is referenced by IRI, never a literal
         sh:minCount 1 ;
         sh:maxCount 1 ;
         sh:class media:CreativeWork ;
         sh:severity sh:Violation ;          # MUST: WHAT was played
-        sh:message "A playback event MUST reference exactly one media:playedWork (a media:CreativeWork)."@en ;
+        sh:message "A playback event MUST reference exactly one media:playedWork (an IRI, a media:CreativeWork)."@en ;
     ] ;
+    # WHO — the listener. RE-GRADED Violation → Warning per the @jeswr/solid-listening
+    # fedcon finding: a real scrobble legitimately OMITS the listener, carrying it only
+    # as the implicit pod owner (an owner-private resource). So the sector now treats it
+    # as a SHOULD (a fully-recorded exported history names its subject; a scrobble may
+    # rely on the owner). Per G1 a Warning minCount ≥ 1 is advisory — it does NOT compile
+    # to a runtime fail-closed guard.
     sh:property [
         sh:path core:hadParticipant ;
+        sh:nodeKind sh:IRI ;
         sh:minCount 1 ;
         sh:class core:Agent ;
-        sh:severity sh:Violation ;          # MUST: WHO listened
-        sh:message "A playback event MUST have at least one core:hadParticipant (the listener, a core:Agent)."@en ;
+        sh:severity sh:Warning ;            # SHOULD: WHO listened (owner-implicit for a scrobble)
+        sh:message "A playback event SHOULD record its core:hadParticipant (the listener, a core:Agent) — a scrobble may omit it as the implicit pod owner."@en ;
     ] ;
     sh:property [
         sh:path core:atTime ;
+        sh:nodeKind sh:IRI ;                # the reified played-at instant is an IRI node
+        sh:class time:Instant ;             # → a time:Instant carrying the xsd:dateTime (see InstantShape)
         sh:minCount 1 ;
+        sh:maxCount 1 ;
         sh:severity sh:Violation ;          # MUST: WHEN it happened
-        sh:message "A playback event MUST record core:atTime (when it occurred)."@en ;
+        sh:message "A playback event MUST record core:atTime as exactly one IRI typed time:Instant (when it occurred)."@en ;
     ] ;
     sh:property [
         sh:path media:onAccount ;
@@ -133,12 +147,53 @@ mdsh:PlaybackEventShape
         sh:message "A playback event SHOULD record the media:MediaAccount it occurred on."@en ;
     ] ;
     sh:property [
+        sh:path media:playedVia ;           # source-service attribution (fedcon)
+        sh:nodeKind sh:BlankNodeOrIRI ;     # matches the ontology: a service IRI OR a labelled node (roborev on bc54846)
+        sh:severity sh:Info ;               # MAY: the service a play came from (no account needed)
+        sh:message "media:playedVia, if present, MUST reference the service/platform a play occurred on (an IRI, or a labelled node for services without a stable IRI)."@en ;
+    ] ;
+    sh:property [
         sh:path media:msPlayed ;
         sh:datatype xsd:integer ;
         sh:minInclusive 0 ;
         sh:maxCount 1 ;
         sh:severity sh:Info ;               # MAY: distinguishes skip vs full listen
         sh:message "media:msPlayed, if present, MUST be a single non-negative integer."@en ;
+    ] ;
+    sh:property [
+        sh:path media:completionFraction ;  # normalised completion in [0,1] (fedcon)
+        sh:datatype xsd:decimal ;
+        sh:minInclusive 0 ;
+        sh:maxInclusive 1 ;
+        sh:maxCount 1 ;
+        sh:severity sh:Info ;               # MAY
+        sh:message "media:completionFraction, if present, MUST be a single decimal in [0,1]."@en ;
+    ] ;
+    sh:property [
+        sh:path media:loved ;               # per-play user 'love' feedback (fedcon)
+        sh:datatype xsd:boolean ;
+        sh:maxCount 1 ;
+        sh:severity sh:Info ;               # MAY
+        sh:message "media:loved, if present, MUST be a single xsd:boolean."@en ;
+    ] .
+
+# -----------------------------------------------------------------------------
+# The reified played-at instant — a time:Instant MUST carry its xsd:dateTime.
+# This makes the core:atTime → time:Instant → time:inXSDDateTime reification
+# (the RDF-correct played-at pattern, see media.ttl core:atTime) a checkable part
+# of the profile. Folded from @jeswr/solid-listening's PlayedAtInstant shape.
+# -----------------------------------------------------------------------------
+mdsh:PlayedAtInstantShape
+    a sh:NodeShape ;
+    sh:targetClass time:Instant ;
+    rdfs:label "Played-at instant shape"@en ;
+    sh:property [
+        sh:path time:inXSDDateTime ;
+        sh:datatype xsd:dateTime ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:severity sh:Violation ;          # MUST: a played-at instant records its time
+        sh:message "A time:Instant MUST carry exactly one time:inXSDDateTime (xsd:dateTime)."@en ;
     ] .
 
 # -----------------------------------------------------------------------------
@@ -150,6 +205,7 @@ mdsh:ListeningHistoryShape
     rdfs:label "Listening History shape"@en ;
     sh:property [
         sh:path core:subject ;
+        sh:name "dataSubject" ;             # explicit accessor name — the codegen reserves the bare "subject"
         sh:minCount 1 ;
         sh:class core:Agent ;
         sh:severity sh:Violation ;          # MUST: whose history this is (data subject)
@@ -192,47 +248,89 @@ mdsh:UsageLicenseShape
 
 # =============================================================================
 # F4 coverage — a node shape per remaining instantiable class. Work subtypes
-# re-state the CreativeWork MUST-title (SHACL targets don't inherit); collection
-# works and the account/activity get their own shapes.
+# STATE the CreativeWork MUST-title inline (SHACL targets don't inherit, and the
+# codegen shape-parser reads only inline sh:property — not sh:node — so the
+# constraints are stated directly here rather than via a shared referenced shape);
+# collection works and the account/activity get their own shapes. The Track /
+# Artist detail folds @jeswr/solid-listening's scrobble wire-contract shapes into
+# the sector as the admission contract.
 # =============================================================================
 
-# Shared shape for titled creative-work subtypes: MUST a dcterms:title.
-mdsh:TitledWorkShape
-    a sh:NodeShape ;
-    rdfs:label "Titled work shape"@en ;
+# Track — the played unit. MUST a non-blank dcterms:title (folds the fork's
+# non-whitespace title rule: sh:minLength 1 + sh:pattern "\S"); the artist / album
+# links and the service metadata are optional, well-formedness-only.
+mdsh:TrackShape a sh:NodeShape ;
+    sh:targetClass media:Track ; rdfs:label "Track shape"@en ;
     sh:property [
-        sh:path dcterms:title ; sh:minCount 1 ; sh:datatype xsd:string ;
+        sh:path dcterms:title ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ;
+        sh:minLength 1 ; sh:pattern "\\S" ;
         sh:severity sh:Violation ;
-        sh:message "A creative work MUST have a dcterms:title."@en
+        sh:message "A media:Track MUST have exactly one non-empty dcterms:title."@en
+    ] ;
+    sh:property [
+        sh:path media:performedByArtist ; sh:nodeKind sh:IRI ; sh:class media:Artist ;
+        sh:maxCount 1 ; sh:severity sh:Info ;
+        sh:message "media:performedByArtist, if present, MUST be a single IRI (a media:Artist)."@en
+    ] ;
+    sh:property [
+        sh:path media:inAlbum ; sh:nodeKind sh:IRI ; sh:class media:Album ;
+        sh:maxCount 1 ; sh:severity sh:Info ;
+        sh:message "media:inAlbum, if present, MUST be a single IRI (a media:Album)."@en
+    ] ;
+    sh:property [
+        sh:path media:durationSeconds ; sh:datatype xsd:decimal ; sh:minInclusive 0 ;
+        sh:maxCount 1 ; sh:severity sh:Info ;
+        sh:message "media:durationSeconds, if present, MUST be a single non-negative decimal (seconds)."@en
+    ] ;
+    sh:property [
+        sh:path media:isrc ; sh:datatype xsd:string ; sh:maxCount 1 ;
+        sh:pattern "^[A-Z]{2}[A-Z0-9]{3}[0-9]{2}[0-9]{5}$" ;
+        sh:severity sh:Warning ;
+        sh:message "media:isrc, if present, SHOULD be a single well-formed 12-character ISRC."@en
     ] .
 
-mdsh:TrackShape a sh:NodeShape ;
-    sh:targetClass media:Track ; sh:node mdsh:TitledWorkShape ;
-    rdfs:label "Track shape"@en .
-
 mdsh:MusicCompositionShape a sh:NodeShape ;
-    sh:targetClass media:MusicComposition ; sh:node mdsh:TitledWorkShape ;
-    rdfs:label "Music Composition shape"@en .
+    sh:targetClass media:MusicComposition ; rdfs:label "Music Composition shape"@en ;
+    sh:property [
+        sh:path dcterms:title ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ;
+        sh:severity sh:Violation ;
+        sh:message "A media:MusicComposition MUST have a dcterms:title."@en
+    ] .
 
 mdsh:PodcastEpisodeShape a sh:NodeShape ;
-    sh:targetClass media:PodcastEpisode ; sh:node mdsh:TitledWorkShape ;
-    rdfs:label "Podcast Episode shape"@en .
+    sh:targetClass media:PodcastEpisode ; rdfs:label "Podcast Episode shape"@en ;
+    sh:property [
+        sh:path dcterms:title ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ;
+        sh:severity sh:Violation ;
+        sh:message "A media:PodcastEpisode MUST have a dcterms:title."@en
+    ] .
+
+# Artist — a credited agent. NEW shape (the sector previously had none for
+# media:Artist). Its display name is foaf:name (fedcon observation #4: reuse-
+# before-mint, so every producer agrees on foaf:name).
+mdsh:ArtistShape a sh:NodeShape ;
+    sh:targetClass media:Artist ; rdfs:label "Artist shape"@en ;
+    sh:property [
+        sh:path foaf:name ; sh:datatype xsd:string ; sh:maxCount 1 ;
+        sh:severity sh:Info ;
+        sh:message "foaf:name, if present, MUST be a single string (the artist display name)."@en
+    ] .
 
 # Album / Playlist — collection works (core:InformationResource); SHOULD a title.
 mdsh:AlbumShape a sh:NodeShape ;
     sh:targetClass media:Album ; rdfs:label "Album shape"@en ;
     sh:property [
-        sh:path dcterms:title ; sh:minCount 1 ; sh:datatype xsd:string ;
+        sh:path dcterms:title ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ;
         sh:severity sh:Warning ;
-        sh:message "An album SHOULD have a dcterms:title."@en
+        sh:message "An album SHOULD have a single dcterms:title."@en
     ] .
 
 mdsh:PlaylistShape a sh:NodeShape ;
     sh:targetClass media:Playlist ; rdfs:label "Playlist shape"@en ;
     sh:property [
-        sh:path dcterms:title ; sh:minCount 1 ; sh:datatype xsd:string ;
+        sh:path dcterms:title ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ;
         sh:severity sh:Warning ;
-        sh:message "A playlist SHOULD have a dcterms:title."@en
+        sh:message "A playlist SHOULD have a single dcterms:title."@en
     ] .
 
 # MusicGroup — a band acting as an artist (a core:Organization).
