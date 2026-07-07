@@ -150,6 +150,14 @@ export function parseShapes(shapesTtl, shapesBase) {
             const hasClass = graph.value(propObj, `${SH}class`);
             if (hasClass !== undefined)
                 constraint.hasClass = hasClass;
+            // sh:node — a reference to another NodeShape the value must conform to. A NamedNode
+            // reference names a link to a structured sub-node (the composite driver reads it);
+            // an inline blank-node sh:node is skolemized elsewhere, so only a named reference is
+            // carried here (the composite binds nodes by their NodeShape target class / config).
+            const nodeRef = graph.object(propObj, `${SH}node`);
+            if (nodeRef !== undefined && nodeRef.termType === "NamedNode") {
+                constraint.node = nodeRef.value;
+            }
             const minCount = numberOr(graph.value(propObj, `${SH}minCount`));
             if (minCount !== undefined)
                 constraint.minCount = minCount;

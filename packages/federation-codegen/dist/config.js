@@ -10,9 +10,13 @@
  * The config is DATA (flags / enums / literal defaults), matching the runtime's
  * data-not-code invariant.
  */
-/** Look up the entity config for a target class. */
+/** Type guard — narrows a config entity to the composite variant. */
+export function isCompositeConfig(entity) {
+    return entity.kind === "composite";
+}
+/** Look up the FLAT entity config for a target class (composite configs are excluded). */
 export function entityConfigFor(config, targetClass) {
-    return config.entities.find((e) => e.targetClass === targetClass);
+    return config.entities.find((e) => !isCompositeConfig(e) && e.targetClass === targetClass);
 }
 /** The guard keys a FieldConfig may set (used by the fidelity traceability check). */
 export const FIELD_CONFIG_GUARD_KEYS = [

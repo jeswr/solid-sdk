@@ -8,8 +8,9 @@
  */
 
 import {
+  type AnyManifestEntity,
+  isCompositeEntity,
   literalMapper,
-  type ManifestEntity,
   type ManifestField,
   type ModelManifest,
 } from "@jeswr/model-runtime";
@@ -101,10 +102,32 @@ function wrapperFieldLine(field: ManifestField): string {
   return `  ${propKey(field.name)}?: ${base};`;
 }
 
-function entityDts(entity: ManifestEntity): string {
+// A composite projects a FLAT object across its nodes' flat (non-nested) fields; its
+// `Wrapper` is the ROOT node's wrapper (matching the runtime's rootRt.Wrapper), so the
+// wrapper interface types only the root node's flat fields.
+function compositeFieldLines(entity: AnyManifestEntity): {
+  dataLines: string;
+  wrapperLines: string;
+} {
+  if (!isCompositeEntity(entity)) {
+    return {
+      dataLines: entity.fields.map(dataFieldLine).join("\n"),
+      wrapperLines: entity.fields.map(wrapperFieldLine).join("\n"),
+    };
+  }
+  const flat = (fields: ManifestField[]) => fields.filter((f) => f.kind !== "nested");
+  const dataFields = entity.nodes.flatMap((n) => flat(n.fields));
+  const rootNode = entity.nodes.find((n) => n.name === entity.root);
+  const rootFields = flat(rootNode?.fields ?? []);
+  return {
+    dataLines: dataFields.map(dataFieldLine).join("\n"),
+    wrapperLines: rootFields.map(wrapperFieldLine).join("\n"),
+  };
+}
+
+function entityDts(entity: AnyManifestEntity): string {
   const name = entity.name;
-  const dataLines = entity.fields.map(dataFieldLine).join("\n");
-  const wrapperLines = entity.fields.map(wrapperFieldLine).join("\n");
+  const { dataLines, wrapperLines } = compositeFieldLines(entity);
   return (
     `export interface ${name}Data {\n${dataLines}\n}\n\n` +
     `export interface ${name}Wrapper extends EntityWrapper {\n${wrapperLines}\n}\n\n` +

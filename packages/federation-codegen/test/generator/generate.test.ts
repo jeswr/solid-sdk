@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { Parser, Writer } from "n3";
 import { describe, expect, it } from "vitest";
 import { type CodegenConfig, type GenerateInput, generateModel } from "../../src/index.js";
+import { flat } from "../helpers.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const exampleDir = join(here, "..", "..", "examples", "bookmark");
@@ -63,9 +64,9 @@ describe("generateModel — pilot generation", () => {
   it("the manifest has one Bookmark entity with the 8 shape fields", () => {
     const { manifest } = generateModel(input());
     expect(manifest.entities).toHaveLength(1);
-    const entity = manifest.entities[0];
-    expect(entity?.name).toBe("Bookmark");
-    expect(entity?.fields.map((f) => f.name).sort()).toEqual([
+    const entity = flat(manifest.entities[0]);
+    expect(entity.name).toBe("Bookmark");
+    expect(entity.fields.map((f) => f.name).sort()).toEqual([
       "archived",
       "created",
       "description",
@@ -116,7 +117,7 @@ describe("the generated model round-trips a bookmark", () => {
       store.getQuads(
         bm.subject(res),
         "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
-        manifest.entities[0]?.typeIris[0] ?? "",
+        flat(manifest.entities[0]).typeIris[0] ?? "",
         null,
       ),
     ).toHaveLength(1);

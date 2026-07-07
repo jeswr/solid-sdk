@@ -23,7 +23,9 @@ export declare class FidelityError extends Error {
 /**
  * Assert model.json is a faithful, fully-traceable projection of shapes.ttl.
  * Throws {@link FidelityError} on any mismatch (fails the build). This is the P0
- * exit criterion; a seeded manifest mutation must make it throw.
+ * exit criterion; a seeded manifest mutation must make it throw. Flat entities and
+ * composite entities are verified separately (each shape a composite claims as a node
+ * is projected inside that composite, never also as a flat entity).
  */
 export declare function assertFidelity(shapes: NormalizedShapes, compiled: CompileResult): void;
 //# sourceMappingURL=fidelity.d.ts.map

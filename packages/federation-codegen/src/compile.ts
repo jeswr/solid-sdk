@@ -12,15 +12,24 @@
  */
 
 import {
+  type AnyManifestEntity,
+  type CompositeManifestEntity,
   literalMapper,
   type ManifestEntity,
   type ManifestField,
   type ManifestFieldGuards,
+  type ManifestNode,
   type ModelManifest,
   RUNTIME_MAJOR,
   validateManifest,
 } from "@jeswr/model-runtime";
-import { type CodegenConfig, entityConfigFor, type FieldConfig } from "./config.js";
+import {
+  type CodegenConfig,
+  type CompositeEntityConfig,
+  entityConfigFor,
+  type FieldConfig,
+  isCompositeConfig,
+} from "./config.js";
 import { SH } from "./rdf.js";
 import {
   localName,
@@ -28,6 +37,8 @@ import {
   type NormalizedShapes,
   type ShapeConstraint,
 } from "./shapes.js";
+
+const IDENTIFIER_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 /**
  * A `sh:minCount ≥ 1` compiles to a fail-closed requirement ONLY at
@@ -83,8 +94,9 @@ function compileField(
   constraint: ShapeConstraint,
   fieldConfig: FieldConfig | undefined,
   provenance: FieldProvenance,
+  resolvedName?: string,
 ): ManifestField {
-  const name = constraint.name ?? localName(constraint.pathIri);
+  const name = resolvedName ?? constraint.name ?? localName(constraint.pathIri);
   const field: ManifestField = {
     name,
     predicate: constraint.pathIri,
@@ -186,6 +198,13 @@ function compileField(
   return field;
 }
 
+// The entity / composite name is emitted into model.d.ts in identifier + string-literal
+// positions; require a plain identifier so it can never break the generated types
+// (defence in depth — the config is trusted, but a typo must fail loudly).
+function assertIdentifier(name: string, what: string): void {
+  if (!IDENTIFIER_RE.test(name)) throw new Error(`${what} "${name}" is not a valid identifier`);
+}
+
 function compileEntity(
   shape: NodeShapeModel,
   config: CodegenConfig,
@@ -195,12 +214,7 @@ function compileEntity(
   if (!entityConfig) {
     throw new Error(`no codegen config entity for target class ${shape.targetClass}`);
   }
-  // The entity name is emitted into model.d.ts in identifier + string-literal
-  // positions; require a plain identifier so it can never break the generated
-  // types (defence in depth — the config is trusted, but a typo must fail loudly).
-  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(entityConfig.name)) {
-    throw new Error(`codegen config entity name "${entityConfig.name}" is not a valid identifier`);
-  }
+  assertIdentifier(entityConfig.name, "codegen config entity name");
   const fields: ManifestField[] = shape.properties.map((constraint) => {
     const name = constraint.name ?? localName(constraint.pathIri);
     const prov: FieldProvenance = {
@@ -233,16 +247,174 @@ function compileEntity(
   };
 }
 
+/**
+ * Compile a COMPOSITE entity config over the shapes it CLAIMS (one NodeShape per node,
+ * by target class). Each node's shape properties are partitioned by the node config:
+ * `fields` → flat fields (via {@link compileField}, with the composite rename), `links`
+ * → nested link fields (an IRI-link property → a sub-node; the requiredFailClosed
+ * cross-node MUST derives from the shape's Violation-graded minCount, G1). A property in
+ * neither is omitted — a Violation-graded (MUST) omission is caught by the fidelity
+ * assertion, so a security constraint can never be silently dropped.
+ */
+function compileCompositeEntity(
+  compConfig: CompositeEntityConfig,
+  shapeByTarget: Map<string, NodeShapeModel>,
+  provenance: FieldProvenance[],
+): CompositeManifestEntity {
+  assertIdentifier(compConfig.name, "codegen composite entity name");
+  const nodeNames = Object.keys(compConfig.nodes);
+  if (!nodeNames.includes(compConfig.root)) {
+    throw new Error(
+      `composite ${compConfig.name} root "${compConfig.root}" is not a declared node`,
+    );
+  }
+  // Fidelity + provenance key composite fields by node target class, so the nodes must
+  // have distinct target classes (a config-level restriction, documented).
+  const seenTargets = new Set<string>();
+  for (const nodeName of nodeNames) {
+    const tc = compConfig.nodes[nodeName]?.targetClass as string;
+    if (seenTargets.has(tc)) {
+      throw new Error(`composite ${compConfig.name} reuses target class ${tc} across nodes`);
+    }
+    seenTargets.add(tc);
+  }
+
+  const nodes: ManifestNode[] = nodeNames.map((nodeName) => {
+    const nodeConfig = compConfig.nodes[nodeName];
+    if (!nodeConfig) throw new Error(`composite ${compConfig.name} node "${nodeName}" missing`);
+    const shape = shapeByTarget.get(nodeConfig.targetClass);
+    if (!shape) {
+      throw new Error(
+        `composite ${compConfig.name} node "${nodeName}" references target class ${nodeConfig.targetClass} with no NodeShape`,
+      );
+    }
+    const flatCfg = nodeConfig.fields ?? {};
+    const links = nodeConfig.links ?? {};
+    const shapeFieldNames = new Set(shape.properties.map((c) => c.name ?? localName(c.pathIri)));
+    // A shape field may not be both a flat field and a link.
+    for (const fieldName of Object.keys(flatCfg)) {
+      if (fieldName in links) {
+        throw new Error(
+          `composite ${compConfig.name} node "${nodeName}" projects "${fieldName}" as both a field and a link`,
+        );
+      }
+      if (!shapeFieldNames.has(fieldName)) {
+        throw new Error(
+          `composite ${compConfig.name} node "${nodeName}" configures unknown field "${fieldName}"`,
+        );
+      }
+    }
+    for (const [fieldName, targetNode] of Object.entries(links)) {
+      if (!shapeFieldNames.has(fieldName)) {
+        throw new Error(
+          `composite ${compConfig.name} node "${nodeName}" links unknown field "${fieldName}"`,
+        );
+      }
+      if (!nodeNames.includes(targetNode)) {
+        throw new Error(
+          `composite ${compConfig.name} link "${fieldName}" targets unknown node "${targetNode}"`,
+        );
+      }
+    }
+
+    const fields: ManifestField[] = [];
+    for (const constraint of shape.properties) {
+      const shapeFieldName = constraint.name ?? localName(constraint.pathIri);
+      const targetNode = links[shapeFieldName];
+      if (targetNode !== undefined) {
+        // A NESTED link — the shape property MUST be an IRI-valued link.
+        if (constraint.kind !== "iri") {
+          throw new Error(
+            `composite ${compConfig.name} node "${nodeName}" links non-IRI property "${shapeFieldName}"`,
+          );
+        }
+        const nested: ManifestField = {
+          name: shapeFieldName,
+          predicate: constraint.pathIri,
+          kind: "nested",
+          node: targetNode,
+        };
+        // G1 — the cross-node MUST: fail-closed only when Violation-graded (or severity
+        // absent, SHACL's default). A Warning/Info link is advisory (no runtime guard).
+        if (
+          constraint.minCount !== undefined &&
+          constraint.minCount >= 1 &&
+          isFailClosedSeverity(constraint.severity)
+        ) {
+          nested.guards = { requiredFailClosed: true };
+        }
+        // The nested requiredFailClosed is shape-derived (no config guards).
+        provenance.push({
+          targetClass: nodeConfig.targetClass,
+          fieldName: shapeFieldName,
+          configGuards: [],
+        });
+        fields.push(nested);
+        continue;
+      }
+      const fieldConfig = flatCfg[shapeFieldName];
+      if (fieldConfig === undefined) continue; // omitted (fidelity enforces MUST-coverage)
+      const resolvedName = fieldConfig.rename ?? constraint.name ?? localName(constraint.pathIri);
+      assertIdentifier(resolvedName, "composite field name");
+      const prov: FieldProvenance = {
+        targetClass: nodeConfig.targetClass,
+        fieldName: resolvedName,
+        configGuards: [],
+      };
+      const field = compileField(constraint, fieldConfig, prov, resolvedName);
+      provenance.push(prov);
+      fields.push(field);
+    }
+
+    return {
+      name: nodeName,
+      typeIris: [nodeConfig.targetClass],
+      fragment: nodeConfig.fragment,
+      fields,
+    };
+  });
+
+  return { name: compConfig.name, kind: "composite", root: compConfig.root, nodes };
+}
+
 /** Compile the normalized shapes + config into a validated manifest + provenance. */
 export function compileManifest(shapes: NormalizedShapes, config: CodegenConfig): CompileResult {
   const provenance: FieldProvenance[] = [];
-  const entities = shapes.nodeShapes.map((shape) => compileEntity(shape, config, provenance));
+  const shapeByTarget = new Map(shapes.nodeShapes.map((s) => [s.targetClass, s]));
+
+  // Every target class a composite claims as a node — such a shape is NOT also compiled
+  // to a flat entity (the composite owns it). A double-claim across composites is an error.
+  const claimedByComposite = new Map<string, string>(); // target class → composite name
+  for (const entityConfig of config.entities) {
+    if (!isCompositeConfig(entityConfig)) continue;
+    for (const nodeName of Object.keys(entityConfig.nodes)) {
+      const tc = entityConfig.nodes[nodeName]?.targetClass as string;
+      const prior = claimedByComposite.get(tc);
+      if (prior !== undefined) {
+        throw new Error(
+          prior === entityConfig.name
+            ? `composite ${entityConfig.name} reuses target class ${tc} across its nodes`
+            : `target class ${tc} is claimed by both composites ${prior} and ${entityConfig.name}`,
+        );
+      }
+      claimedByComposite.set(tc, entityConfig.name);
+    }
+  }
+
+  // Flat entities in shape order (skipping composite-claimed shapes); then composites in
+  // config order — a deterministic ordering.
+  const flatEntities: AnyManifestEntity[] = shapes.nodeShapes
+    .filter((shape) => !claimedByComposite.has(shape.targetClass))
+    .map((shape) => compileEntity(shape, config, provenance));
+  const compositeEntities: AnyManifestEntity[] = config.entities
+    .filter(isCompositeConfig)
+    .map((c) => compileCompositeEntity(c, shapeByTarget, provenance));
 
   const manifest: ModelManifest = validateManifest({
     manifestVersion: 1,
     runtime: { name: "@jeswr/model-runtime", major: RUNTIME_MAJOR },
     prefixes: config.prefixes,
-    entities,
+    entities: [...flatEntities, ...compositeEntities],
   });
 
   return { manifest, provenance };

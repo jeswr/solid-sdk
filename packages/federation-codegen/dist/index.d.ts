@@ -19,7 +19,7 @@
 export { type NormalizedOntology, type OntologyAdapter, type OntologyClass, type OntologyProperty, owlRdfsAdapter, } from "./adapter.js";
 export { AdmissionError, type AdmissionReport, type AdmissionSeverity, type AdmissionViolation, admit, assertAdmitted, } from "./admission.js";
 export { type CompileResult, compileManifest, type FieldProvenance, isFailClosedSeverity, isHttpPattern, } from "./compile.js";
-export { type CodegenConfig, type EntityConfig, entityConfigFor, FIELD_CONFIG_GUARD_KEYS, type FieldConfig, } from "./config.js";
+export { type AnyEntityConfig, type CodegenConfig, type CompositeEntityConfig, type CompositeFieldConfig, type CompositeNodeConfig, type EntityConfig, entityConfigFor, FIELD_CONFIG_GUARD_KEYS, type FieldConfig, isCompositeConfig, } from "./config.js";
 export { emitModelDts, emitModelJs, emitModelJson, emitShapesTtl } from "./emit.js";
 export { assertFidelity, FidelityError } from "./fidelity.js";
 export { emitLockfile, GENERATOR, type GenerateInput, type GenerateResult, generateModel, } from "./generate.js";
