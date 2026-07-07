@@ -262,10 +262,13 @@ export function buildScrobble(resourceUrl, data) {
     event.listener = httpIriOrUndefined(data.listener);
     const ms = nonNegativeNumberOrUndefined(data.msPlayed);
     event.msPlayed = ms === undefined ? undefined : Math.trunc(ms);
-    // The track. A blank/whitespace-only title is dropped (an untitled track is
+    // The track. A blank/whitespace-only title is DROPPED (an untitled track is
     // non-conforming, and this keeps build symmetric with parseScrobble's read
-    // rejection of a whitespace-only title).
-    track.title = data.trackTitle?.trim() || undefined;
+    // rejection of a whitespace-only title) — but a non-blank title is written
+    // VERBATIM (surrounding whitespace preserved), never normalised, so build and
+    // read agree on the exact stored value.
+    const rawTitle = data.trackTitle;
+    track.title = rawTitle === undefined || rawTitle.trim() === "" ? undefined : rawTitle;
     track.durationSeconds = nonNegativeNumberOrUndefined(data.durationSeconds);
     track.isrc = data.isrc || undefined;
     const artistName = data.artistName?.trim();

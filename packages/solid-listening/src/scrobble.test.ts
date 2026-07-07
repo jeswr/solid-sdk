@@ -229,6 +229,16 @@ describe("round-trip (serialize with n3.Writer → parse back)", () => {
     expect(store.getQuads(IRIS.track, DCT_TITLE, null, null)).toHaveLength(0);
   });
 
+  it("buildScrobble preserves a non-blank trackTitle VERBATIM (surrounding whitespace kept)", () => {
+    const store = buildScrobble(RES, { trackTitle: "  Title  " });
+    expect(store.getQuads(IRIS.track, DCT_TITLE, null, null)[0]?.object.value).toBe("  Title  ");
+  });
+
+  it("a surrounding-whitespace title round-trips unchanged (build + read agree)", async () => {
+    const ttl = await serializeScrobble(RES, { trackTitle: "  Spaced Out  " });
+    expect(parseScrobble(RES, toStore(ttl))?.trackTitle).toBe("  Spaced Out  ");
+  });
+
   it("parseScrobbleTtl dispatches via @jeswr/fetch-rdf (Turtle) and coalesces a null content-type", async () => {
     const ttl = await serializeScrobble(RES, { trackTitle: "Via fetch-rdf", artistName: "X" });
     const back = await parseScrobbleTtl(RES, ttl, null);
