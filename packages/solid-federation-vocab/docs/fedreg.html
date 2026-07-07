@@ -28,7 +28,18 @@
         canonical model version). During a dual-read migration window a storage
         advertises BOTH the old and new version, so independent participants
         migrate asynchronously. An app MUST discover acceptable versions here, not
-        assume them.</td></tr>
+        assume them.
+
+        The value MAY ALTERNATIVELY be a content-addressed SNAPSHOT HASH — the
+        content address of a fedcon:Snapshot (https://jeswr.org/fedcon#Snapshot),
+        e.g. a urn:concept: / multibase-multihash IRI — instead of a living version
+        IRI (federation-on-hashes design §2.3). Pinning a snapshot hash advertises
+        acceptance of one IMMUTABLE, byte-identical release rather than a mutable
+        spec-version pointer, so 'which spec does this store accept' is answered by
+        content address and verified by recompute-and-compare. This is purely
+        additive: no rdfs:range is (or was) asserted on fedreg:acceptsSpec, so both
+        the living-version-IRI and the snapshot-hash forms are valid values,
+        distinguished by IRI scheme; the existing spec-version usage is unchanged.</td></tr>
       <tr><td><code>Active</code></td><td>Active</td><td>A current, ratified membership — the app is a recognised
         member of the federation and its self-asserted fedapp: footprint has been
         accepted.</td></tr>

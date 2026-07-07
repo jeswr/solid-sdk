@@ -39,11 +39,18 @@
 # are ordinary RDF and completely fine.
 #
 # REUSE, DON'T REINVENT (the LD/SW house rule): fedcon: mints ONLY the federation
-# contribution/admission glue. Web Annotation (oa:) for comments, PROV-O (prov:)
-# for attribution/proposer, DCAT (dcat:) + Dublin Core Terms (dcterms:) for the
-# catalogue-record spine, LDP (ldp:inbox) for the inbox affordance and Hydra
-# (hydra:operation / hydra:search) for the API affordances are all REUSED at the
-# instance/API level — only referenced in prose here, never re-minted.
+# contribution/admission + content-addressed-snapshot glue. Web Annotation (oa:) for
+# comments, PROV-O (prov:) for attribution/proposer, DCAT (dcat:Catalog /
+# dcat:CatalogRecord / dcat:DataService / dcat:endpointDescription) + Dublin Core
+# Terms (dcterms:) for the catalogue-record + service spine, LDP (ldp:inbox) for the
+# inbox affordance and Hydra (hydra:operation / hydra:search + hydra:IriTemplate) for
+# the API affordances are all REUSED — never re-minted. Most are referenced only in
+# prose here, but the concept-store dereference affordance (§ content-addressed
+# federation glue) carries ONE canonical hydra:IriTemplate INSTANCE
+# (fedcon:conceptDereferenceTemplate) and ranges a fedreg:Registry's store over
+# dcat:DataService: this is instance-level REUSE of DCAT + Hydra (using their terms
+# as intended, so discovery is Linked-Data-native), still minting no third-party
+# term of our own.
 #
 # Authored as Turtle directly (source form), like every other vocabulary in this
 # repo; programmatically-BUILT RDF (example instances, client SDKs) goes through
@@ -51,6 +58,8 @@
 
 @prefix fedcon:  <https://jeswr.org/fedcon#> .
 @prefix fedreg:  <https://w3id.org/jeswr/fedreg#> .
+@prefix dcat:    <http://www.w3.org/ns/dcat#> .
+@prefix hydra:   <http://www.w3.org/ns/hydra/core#> .
 @prefix oa:      <http://www.w3.org/ns/oa#> .
 @prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
@@ -76,6 +85,7 @@
         fedreg:Membership."""@en ;
     dcterms:creator "Claude Sonnet 5 (@jeswr PSS agent)" ;
     dcterms:issued "2026-07-06"^^xsd:date ;
+    dcterms:modified "2026-07-07"^^xsd:date ;
     vann:preferredNamespaceUri "https://jeswr.org/fedcon#" ;
     vann:preferredNamespacePrefix "fedcon" ;
     rdfs:seeAlso <https://w3id.org/jeswr/fedreg> ;
@@ -593,4 +603,180 @@ fedcon:upgrades
         rdfs:range (the value is an opaque content-addressed concept hash, like
         fedcon:concept). The claim alone moves nothing — a registry endorses it via
         fedcon:supersededBy on the prior admission."""@en ;
+    rdfs:isDefinedBy <https://jeswr.org/fedcon> .
+
+#################################################################
+#    Content-addressed federation glue — concept store + snapshot
+#
+#    The ADDITIVE glue that binds the hash-native crystallisation flow to the
+#    fedreg: DISCOVERY axis (federation-on-hashes design §2.2 serving + §2.3
+#    fedreg+fedcon by hash). It answers two Linked-Data-native discovery
+#    questions the fedcon: governance terms above leave open:
+#      1. WHERE does a federation SERVE the ownerless urn:concept: records it has
+#         admitted?  → fedcon:conceptStore (a fedreg:Registry's concept-store
+#         dcat:DataService) + the fedcon:conceptDereferenceTemplate IriTemplate.
+#      2. WHICH admitted set is the federation's CURRENT content-addressed release,
+#         and how does a client detect a downgrade?  → the fedcon:Snapshot chain
+#         (fedcon:currentSnapshot + fedcon:sequence + fedcon:previousSnapshot).
+#    Every term here is ADDITIVE: it neither redomains nor constrains any existing
+#    term (fedcon:concept is REUSED unchanged for a snapshot's admitted set), so a
+#    non-reasoning consumer of the prior vocab sees no regression.
+#################################################################
+
+#################################################################
+#    Classes
+#################################################################
+
+fedcon:Snapshot
+    a rdfs:Class, owl:Class ;
+    rdfs:label "Snapshot"@en ;
+    rdfs:comment """A content-addressed sector RELEASE — the atomic adoption unit of
+        a federation's admitted concepts at one generation (federation-on-hashes
+        design §2.3). It gathers, at sequence k: the admitted concept set (0..*
+        fedcon:concept, the SAME opaque urn:concept: hashes the admission/proposal
+        records carry — REUSED, not re-minted), the content-addressed profile-1
+        bundle (fedcon:profileBundle) the codegen projector lowers to shapes/labels,
+        the prime-lexicon set (fedcon:primeSet), a monotonic generation counter
+        (fedcon:sequence) and the prev-hash chain link to the prior release
+        (fedcon:previousSnapshot). A Snapshot is ITSELF content-addressed — its own
+        multihash is the value a fedreg:StorageDescription MAY pin via
+        fedreg:acceptsSpec — so a client verifies it by recompute-and-compare, never
+        by trusting a mutable pointer. A Snapshot is SIGNED: it is bound to a W3C
+        Verifiable Credential per @jeswr/federation-trust (which composes solid-vc +
+        federation-registry) — the credential's credentialSubject references the
+        snapshot; that credential SHAPE is referenced here, never redefined
+        (rdfs:seeAlso). Snapshots + the sequence/previous chain give downgrade
+        protection: a client that has seen sequence k rejects an older or
+        fork-of-a-different-previous snapshot offered as 'current'."""@en ;
+    rdfs:seeAlso <https://github.com/jeswr/federation-trust> ;
+    rdfs:isDefinedBy <https://jeswr.org/fedcon> .
+
+#################################################################
+#    Properties — registry ⇒ concept store / current snapshot
+#################################################################
+
+fedcon:conceptStore
+    a rdf:Property, owl:ObjectProperty ;
+    rdfs:label "concept store"@en ;
+    rdfs:comment """Links a fedreg:Registry (a dcat:Catalog) to its CONCEPT STORE —
+        the dcat:DataService that SERVES the ownerless urn:concept: definition
+        records the registry has admitted, at GET <base>/i/{multibase-multihash}
+        (federation-on-hashes design §2.2). The store returns direct 200s only (no
+        redirects — a client fetches redirect:manual and treats any redirect as a
+        protocol failure), content-negotiated across text/turtle,
+        application/ld+json and application/n-quads, immutably cacheable, and
+        verifiable by recompute (a client hashes the served bytes and byte-compares,
+        so a hostile mirror can only WITHHOLD, never alter). The linked
+        dcat:DataService SHOULD advertise its dereference template as a
+        dcat:endpointDescription pointing at a hydra:IriTemplate (the canonical one
+        is fedcon:conceptDereferenceTemplate) so discovery is Linked-Data-native. A
+        registry MAY list several concept stores (mirrors); a pod-hosted mirror needs
+        zero server changes since a Solid pod already serves immutable resources with
+        content negotiation."""@en ;
+    rdfs:domain fedreg:Registry ;
+    rdfs:range dcat:DataService ;
+    rdfs:isDefinedBy <https://jeswr.org/fedcon> .
+
+fedcon:currentSnapshot
+    a rdf:Property, owl:ObjectProperty ;
+    rdfs:label "current snapshot"@en ;
+    rdfs:comment """Links a fedreg:Registry to its CURRENT fedcon:Snapshot — the
+        content-addressed release a client should adopt now (federation-on-hashes
+        design §2.3). A registry advertises at most one current snapshot; a client
+        follows fedcon:previousSnapshot back along the chain to verify the sequence
+        it is offered is not a downgrade of, or a fork away from, one it has already
+        seen."""@en ;
+    rdfs:domain fedreg:Registry ;
+    rdfs:range fedcon:Snapshot ;
+    rdfs:isDefinedBy <https://jeswr.org/fedcon> .
+
+#################################################################
+#    Properties — Snapshot
+#################################################################
+
+fedcon:sequence
+    a rdf:Property, owl:DatatypeProperty ;
+    rdfs:label "sequence"@en ;
+    rdfs:comment """The MONOTONIC generation counter (xsd:nonNegativeInteger) of a
+        fedcon:Snapshot: the genesis release is fedcon:sequence 0 (and carries no
+        fedcon:previousSnapshot); each successor increments it and links its
+        predecessor. Together with the prev-hash chain it is the downgrade-protection
+        substrate — a client that has adopted sequence k treats a snapshot offered as
+        'current' whose sequence is < k (or whose chain does not extend the one it
+        holds) as a downgrade and rejects it."""@en ;
+    rdfs:domain fedcon:Snapshot ;
+    rdfs:range xsd:nonNegativeInteger ;
+    rdfs:isDefinedBy <https://jeswr.org/fedcon> .
+
+fedcon:previousSnapshot
+    a rdf:Property, owl:ObjectProperty ;
+    rdfs:label "previous snapshot"@en ;
+    rdfs:comment """The prev-hash CHAIN link: the immediately-prior fedcon:Snapshot a
+        non-genesis snapshot extends (federation-on-hashes design §2.3, CAC §11
+        downgrade protection). Because a Snapshot is content-addressed, this link IS
+        the prior release's content hash, so the chain is tamper-evident: a client
+        recomputes and byte-compares each hop. The genesis snapshot
+        (fedcon:sequence 0) carries NO fedcon:previousSnapshot; every other snapshot
+        carries exactly one. The value may be cross-resource (the prior snapshot
+        lives in another document), so it is validated as a node reference, never by
+        requiring the prior snapshot's type in the same graph."""@en ;
+    rdfs:domain fedcon:Snapshot ;
+    rdfs:range fedcon:Snapshot ;
+    rdfs:isDefinedBy <https://jeswr.org/fedcon> .
+
+fedcon:profileBundle
+    a rdf:Property, owl:ObjectProperty ;
+    rdfs:label "profile bundle"@en ;
+    rdfs:comment """The content-addressed PROFILE-1 BUNDLE of a fedcon:Snapshot — the
+        opaque content-addressed resource (e.g. a urn:concept:<hash> / a multibase
+        multihash IRI) the codegen projector lowers into the release's shapes,
+        labels and manifest. NO rdfs:range is asserted: the value is an opaque
+        content-addressed IRI external to this vocabulary, exactly like
+        fedcon:concept — a consumer validates it by recompute-and-compare, not by an
+        RDFS range."""@en ;
+    rdfs:domain fedcon:Snapshot ;
+    rdfs:isDefinedBy <https://jeswr.org/fedcon> .
+
+fedcon:primeSet
+    a rdf:Property, owl:ObjectProperty ;
+    rdfs:label "prime set"@en ;
+    rdfs:comment """The content-addressed PRIME-LEXICON SET of a fedcon:Snapshot — the
+        opaque content-addressed resource pinning the release's prime lexicon (the
+        primitive concept set the admitted concepts are expressed against). NO
+        rdfs:range is asserted: the value is an opaque content-addressed IRI external
+        to this vocabulary, like fedcon:concept / fedcon:profileBundle, verified by
+        recompute-and-compare rather than by an RDFS range."""@en ;
+    rdfs:domain fedcon:Snapshot ;
+    rdfs:isDefinedBy <https://jeswr.org/fedcon> .
+
+#################################################################
+#    Concept-store dereference affordance (canonical Hydra IriTemplate INSTANCE)
+#
+#    A single, canonical hydra:IriTemplate a concept-store dcat:DataService points
+#    at via dcat:endpointDescription, so a client discovers the
+#    GET <base>/i/{multibase-multihash} dereference route as machine-readable Linked
+#    Data rather than out-of-band prose. This REUSES Hydra at the instance level
+#    (an instance of hydra:IriTemplate, the way Hydra is meant to be used); it mints
+#    no new Hydra term.
+#################################################################
+
+fedcon:conceptDereferenceTemplate
+    a hydra:IriTemplate ;
+    rdfs:label "concept dereference template"@en ;
+    rdfs:comment """The canonical hydra:IriTemplate for a fedcon:conceptStore's
+        dereference route: GET <base>/i/{multibaseMultihash}, where the single
+        required variable is the multibase-encoded multihash (the content address) of
+        the urn:concept: record being fetched (federation-on-hashes design §2.2). A
+        concept-store dcat:DataService advertises this via dcat:endpointDescription so
+        the route is discoverable as Linked Data; the served record is verified by
+        recompute-and-compare against that content address, so the transport is
+        untrusted by construction."""@en ;
+    hydra:template "/i/{multibaseMultihash}" ;
+    hydra:variableRepresentation hydra:BasicRepresentation ;
+    hydra:mapping [
+        a hydra:IriTemplateMapping ;
+        hydra:variable "multibaseMultihash" ;
+        hydra:required true ;
+        rdfs:comment "The multibase-encoded multihash (content address) of the urn:concept: record to dereference."@en
+    ] ;
     rdfs:isDefinedBy <https://jeswr.org/fedcon> .
