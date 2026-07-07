@@ -5,6 +5,7 @@ import "./globals.css";
 import { SolidSessionProvider } from "@/lib/session-context";
 import { ThemeProvider } from "@/components/theme-provider";
 import { AppShell } from "@/components/app-shell";
+import { RoutedErrorBoundary } from "@/components/routed-error-boundary";
 import { Toaster } from "@/components/ui/sonner";
 
 const geistSans = Geist({
@@ -52,7 +53,9 @@ export default function RootLayout({
         </a>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
           <SolidSessionProvider>
-            <AppShell>{children}</AppShell>
+            <AppShell>
+              <RoutedErrorBoundary>{children}</RoutedErrorBoundary>
+            </AppShell>
           </SolidSessionProvider>
           <Toaster richColors closeButton />
         </ThemeProvider>
