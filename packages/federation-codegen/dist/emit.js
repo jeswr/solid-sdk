@@ -49,8 +49,15 @@ function baseTsType(field) {
             return "string";
     }
 }
+// Requiredness in `*Data` must track the RUNTIME ADMISSION CONTRACT, not shape
+// cardinality alone. Under G1 severity-aware requiredness, an advisory
+// (`sh:Warning`/`sh:Info`-graded) `sh:minCount ≥ 1` field is ADMITTED at runtime when
+// ABSENT — it compiles to NO `requiredFailClosed` guard — so typing it required in
+// `*Data` would make the static type reject objects the runtime accepts. A field is
+// required iff it carries the fail-closed required guard (Violation-graded / ungraded
+// `minCount ≥ 1`, or a config-declared `requiredFailClosed: true`).
 function isRequired(field) {
-    return field.minCount !== undefined && field.minCount >= 1;
+    return field.guards?.requiredFailClosed === true;
 }
 // Property names are JSON.stringify-quoted so ANY field name is a valid .d.ts
 // property key (defence in depth — the runtime already validates names against

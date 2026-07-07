@@ -203,6 +203,29 @@ describe("G4 — xsd:duration is a recognised datatype in the projection", () =>
   });
 });
 
+describe("G1 — *Data requiredness tracks the runtime guard, not shape cardinality", () => {
+  // The module-level Media shape has: title (minCount 1, ungraded ⇒ required),
+  // kind (minCount 1, sh:Violation ⇒ required), and artist (minCount 1, sh:Warning
+  // ⇒ ADVISORY, admitted-when-absent ⇒ optional). Typing an advisory-required field
+  // as required would make the static type reject objects the runtime accepts.
+  const dts = emitModelDts(manifest);
+  const dataBlock = dts.slice(
+    dts.indexOf("export interface MediaData"),
+    dts.indexOf("export interface MediaWrapper"),
+  );
+
+  it("a Violation/ungraded minCount ≥ 1 field is REQUIRED in *Data (no `?`)", () => {
+    expect(dataBlock).toContain('"title": string;');
+    expect(dataBlock).toContain('"kind": string;');
+    expect(dataBlock).not.toContain('"title"?:');
+    expect(dataBlock).not.toContain('"kind"?:');
+  });
+  it("a Warning-graded minCount ≥ 1 field is OPTIONAL in *Data (advisory admission)", () => {
+    expect(dataBlock).toContain('"artist"?: string;');
+    expect(dataBlock).not.toContain('"artist": string;');
+  });
+});
+
 describe("G2 — sh:in numeric coercion covers the unsigned XSD integer subtypes", () => {
   // The unsigned subtypes map to `number` in emit.ts / the runtime, so an enum of
   // unsigned literals must coerce to NUMERIC scalars (not strings) or the generated
