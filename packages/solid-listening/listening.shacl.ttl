@@ -40,21 +40,27 @@
 [] a sh:NodeShape ;
   sh:targetClass media:PlaybackEvent ;
 
-  # WHAT — exactly one played work, an IRI (→ the media:Track). The core of a
-  # scrobble; sh:nodeKind sh:IRI rejects a literal-valued playedWork.
+  # WHAT — exactly one played work, an IRI that IS a media:Track. sh:nodeKind
+  # sh:IRI rejects a literal; sh:class media:Track rejects an untyped / non-Track
+  # target (so a scrobble cannot point at a nonexistent / untitled node and still
+  # conform — the linked node must be a media:Track, which the TrackShape below
+  # then requires to carry a dct:title).
   sh:property [
     sh:path media:playedWork ; sh:name "playedWork" ;
-    sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ;
+    sh:nodeKind sh:IRI ; sh:class media:Track ; sh:minCount 1 ; sh:maxCount 1 ;
     sh:severity sh:Violation ;
-    sh:message "A scrobble MUST reference exactly one media:playedWork (an IRI, the media:Track)."@en ;
+    sh:message "A scrobble MUST reference exactly one media:playedWork (an IRI typed media:Track)."@en ;
   ] ;
 
-  # WHEN — exactly one core:atTime, an IRI (→ the time:Instant carrying the value).
+  # WHEN — exactly one core:atTime, an IRI that IS a time:Instant. sh:class
+  # time:Instant rejects an untyped target, so the atTime node cannot be an
+  # untyped node missing its time:inXSDDateTime and still conform (the
+  # PlayedAtInstantShape below then requires the value).
   sh:property [
     sh:path core:atTime ; sh:name "atTime" ;
-    sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ;
+    sh:nodeKind sh:IRI ; sh:class time:Instant ; sh:minCount 1 ; sh:maxCount 1 ;
     sh:severity sh:Violation ;
-    sh:message "A scrobble MUST reference exactly one core:atTime (an IRI, the time:Instant)."@en ;
+    sh:message "A scrobble MUST reference exactly one core:atTime (an IRI typed time:Instant)."@en ;
   ] ;
 
   # WHO — the listener WebID (an IRI), if recorded. OPTIONAL here (see the header
@@ -88,12 +94,16 @@
 [] a sh:NodeShape ;
   sh:targetClass media:Track ;
 
-  # A track MUST be titled (matches the media profile's TitledWork MUST).
+  # A track MUST be titled (matches the media profile's TitledWork MUST). The
+  # sh:pattern "\S" requires at least one non-whitespace character, so an empty
+  # or whitespace-only title is non-conforming (matches parseScrobble, which
+  # rejects a whitespace-only title as untitled).
   sh:property [
     sh:path dct:title ; sh:name "trackTitle" ;
     sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ;
+    sh:minLength 1 ; sh:pattern "\\S" ;
     sh:severity sh:Violation ;
-    sh:message "A media:Track MUST have exactly one dct:title (a string)."@en ;
+    sh:message "A media:Track MUST have exactly one non-empty dct:title (a string)."@en ;
   ] ;
 
   # The artist credit — an IRI (→ the media:Artist), if present.

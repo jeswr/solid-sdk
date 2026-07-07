@@ -94,6 +94,44 @@ describe("SHACL shape (listening.shacl.ttl)", () => {
     expect(failedPaths(report).some((p) => p.endsWith("playedWork"))).toBe(true);
   });
 
+  it("a played work that is NOT typed media:Track is non-conforming (sh:class media:Track)", async () => {
+    // The linked node exists (even carries a title) but lacks rdf:type media:Track,
+    // so the sh:class constraint on media:playedWork must reject it — a scrobble
+    // may not point at an untyped / non-Track node and still conform.
+    const ttl = `${PREFIXES}
+      <${SUBJ}> a media:PlaybackEvent ; media:playedWork <${RES}#track> ; core:atTime <${RES}#playedAt> .
+      <${RES}#track> dct:title "Untyped, not a Track" .
+      <${RES}#playedAt> a time:Instant ; time:inXSDDateTime "2026-07-07T10:00:00Z"^^xsd:dateTime .
+    `;
+    const report = await validateTtl(ttl);
+    expect(report.conforms).toBe(false);
+    expect(failedPaths(report).some((p) => p.endsWith("playedWork"))).toBe(true);
+  });
+
+  it("an atTime target that is NOT typed time:Instant is non-conforming (sh:class time:Instant)", async () => {
+    // The atTime node is untyped (and missing time:inXSDDateTime); sh:class
+    // time:Instant on core:atTime must reject it.
+    const ttl = `${PREFIXES}
+      <${SUBJ}> a media:PlaybackEvent ; media:playedWork <${RES}#track> ; core:atTime <${RES}#playedAt> .
+      <${RES}#track> a media:Track ; dct:title "T" .
+      <${RES}#playedAt> dct:title "not an instant" .
+    `;
+    const report = await validateTtl(ttl);
+    expect(report.conforms).toBe(false);
+    expect(failedPaths(report).some((p) => p.endsWith("atTime"))).toBe(true);
+  });
+
+  it("a whitespace-only track title is non-conforming (sh:pattern non-whitespace)", async () => {
+    const ttl = `${PREFIXES}
+      <${SUBJ}> a media:PlaybackEvent ; media:playedWork <${RES}#track> ; core:atTime <${RES}#playedAt> .
+      <${RES}#track> a media:Track ; dct:title "   " .
+      <${RES}#playedAt> a time:Instant ; time:inXSDDateTime "2026-07-07T10:00:00Z"^^xsd:dateTime .
+    `;
+    const report = await validateTtl(ttl);
+    expect(report.conforms).toBe(false);
+    expect(failedPaths(report).some((p) => p.endsWith("title"))).toBe(true);
+  });
+
   it("a media:Track with NO title is non-conforming (dct:title minCount 1)", async () => {
     const ttl = `${PREFIXES}
       <${SUBJ}> a media:PlaybackEvent ; media:playedWork <${RES}#track> ; core:atTime <${RES}#playedAt> .

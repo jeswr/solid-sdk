@@ -212,6 +212,23 @@ describe("round-trip (serialize with n3.Writer → parse back)", () => {
     expect(back?.msPlayed).toBeUndefined();
   });
 
+  it("parseScrobble rejects a whitespace-only track title as untitled (returns undefined)", () => {
+    const store = toStore(`
+      @prefix media: <https://w3id.org/jeswr/sectors/media#> .
+      @prefix core:  <https://w3id.org/jeswr/core#> .
+      <${SUBJ}> a media:PlaybackEvent ; media:playedWork <${IRIS.track}> ; core:atTime <${IRIS.instant}> .
+      <${IRIS.track}> a media:Track ; <${DCT_TITLE}> "   " .
+      <${IRIS.instant}> a <http://www.w3.org/2006/time#Instant> ;
+        <${TIME_IN_XSD_DATE_TIME}> "2026-07-07T10:00:00Z"^^<http://www.w3.org/2001/XMLSchema#dateTime> .
+    `);
+    expect(parseScrobble(RES, store)).toBeUndefined();
+  });
+
+  it("buildScrobble drops a whitespace-only trackTitle (symmetric with the read rejection)", () => {
+    const store = buildScrobble(RES, { trackTitle: "   " });
+    expect(store.getQuads(IRIS.track, DCT_TITLE, null, null)).toHaveLength(0);
+  });
+
   it("parseScrobbleTtl dispatches via @jeswr/fetch-rdf (Turtle) and coalesces a null content-type", async () => {
     const ttl = await serializeScrobble(RES, { trackTitle: "Via fetch-rdf", artistName: "X" });
     const back = await parseScrobbleTtl(RES, ttl, null);

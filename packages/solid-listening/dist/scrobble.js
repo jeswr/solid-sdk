@@ -262,8 +262,10 @@ export function buildScrobble(resourceUrl, data) {
     event.listener = httpIriOrUndefined(data.listener);
     const ms = nonNegativeNumberOrUndefined(data.msPlayed);
     event.msPlayed = ms === undefined ? undefined : Math.trunc(ms);
-    // The track.
-    track.title = data.trackTitle || undefined;
+    // The track. A blank/whitespace-only title is dropped (an untitled track is
+    // non-conforming, and this keeps build symmetric with parseScrobble's read
+    // rejection of a whitespace-only title).
+    track.title = data.trackTitle?.trim() || undefined;
     track.durationSeconds = nonNegativeNumberOrUndefined(data.durationSeconds);
     track.isrc = data.isrc || undefined;
     const artistName = data.artistName?.trim();
@@ -312,8 +314,12 @@ export function parseScrobble(resourceUrl, dataset) {
     const track = new Track(trackIri, dataset, DataFactory);
     if (!track.isTrack)
         return undefined;
+    // An untitled track is not a usable scrobble. Reject an absent title AND an
+    // empty/whitespace-only one (a whitespace title carries no information and the
+    // shape flags it non-conforming). The value is returned as-read (not trimmed)
+    // so faithful foreign data is preserved.
     const trackTitle = tryRead(() => track.title);
-    if (trackTitle === undefined)
+    if (trackTitle === undefined || trackTitle.trim() === "")
         return undefined;
     // WHEN — the played-at instant must carry a valid xsd:dateTime.
     const instantIri = httpIriOrUndefined(tryRead(() => event.atTimeInstant));
