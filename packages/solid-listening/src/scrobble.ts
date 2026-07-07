@@ -385,8 +385,11 @@ export function buildScrobble(resourceUrl: string, data: ScrobbleData): Store {
   // rejection of a whitespace-only title) — but a non-blank title is written
   // VERBATIM (surrounding whitespace preserved), never normalised, so build and
   // read agree on the exact stored value.
+  // `== null` matches both `undefined` and a `null` an untyped JS caller may pass
+  // (the field is typed `string`, but the previous `?.trim()` tolerated null —
+  // preserve that so a null title is dropped, never a thrown `null.trim()`).
   const rawTitle = data.trackTitle;
-  track.title = rawTitle === undefined || rawTitle.trim() === "" ? undefined : rawTitle;
+  track.title = rawTitle == null || rawTitle.trim() === "" ? undefined : rawTitle;
   track.durationSeconds = nonNegativeNumberOrUndefined(data.durationSeconds);
   track.isrc = data.isrc || undefined;
 

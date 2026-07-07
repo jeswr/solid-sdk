@@ -229,6 +229,13 @@ describe("round-trip (serialize with n3.Writer → parse back)", () => {
     expect(store.getQuads(IRIS.track, DCT_TITLE, null, null)).toHaveLength(0);
   });
 
+  it("buildScrobble tolerates an untyped null trackTitle (drops it, no throw)", () => {
+    // The field is typed `string`, but an untyped JS caller may pass null — it
+    // must be dropped like an omitted title, never throw on `null.trim()`.
+    const store = buildScrobble(RES, { trackTitle: null as unknown as string });
+    expect(store.getQuads(IRIS.track, DCT_TITLE, null, null)).toHaveLength(0);
+  });
+
   it("buildScrobble preserves a non-blank trackTitle VERBATIM (surrounding whitespace kept)", () => {
     const store = buildScrobble(RES, { trackTitle: "  Title  " });
     expect(store.getQuads(IRIS.track, DCT_TITLE, null, null)[0]?.object.value).toBe("  Title  ");
