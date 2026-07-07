@@ -1,0 +1,173 @@
+# AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+#
+# fedcon:Proposal CANDIDATES — the scheduling-sector extension needs that
+# modelling REAL Vikunja task data (a Vikunja→Solid fork) surfaced.
+#
+# This package is an ONTOLOGY TEST RIG: as it maps concrete task/kanban data onto
+# the scheduling sector it discovers fields the sector LACKS. Rather than editing
+# the sector .ttl (which this package never does), each gap is written up HERE as a
+# concrete fedcon:Proposal candidate (fedcon: = https://jeswr.org/fedcon#, the
+# federation contribution/admission vocabulary), so the fork's real usage can drive
+# the sector's evolution through the registry's contribution lifecycle.
+#
+# CANDIDATE STATUS: these are NOT yet POSTed to any registry. They carry the
+# proposer's motivation and an INLINE proposed definition graph (the additive term
+# the sector would gain), an intent (Extend = build additively on existing sched:
+# terms and mutate nothing; Reconcile = a modelling decision between two existing
+# terms), and NO fedcon:concept content hash yet (a hash is computed over the
+# finalised definition at filing time). The prose write-up + the alternatives
+# considered live in DECISIONS.md.
+
+@prefix fedcon:  <https://jeswr.org/fedcon#> .
+@prefix sched:   <https://w3id.org/jeswr/sectors/scheduling#> .
+@prefix wf:      <http://www.w3.org/2005/01/wf/flow#> .
+@prefix schema:  <https://schema.org/> .
+@prefix dct:     <http://purl.org/dc/terms/> .
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos:    <http://www.w3.org/2004/02/skos/core#> .
+
+<#candidates> a rdf:Bag ;
+    rdfs:label "solid-scheduling scheduling-sector extension proposal candidates"@en ;
+    rdfs:comment "Five fedcon:Proposal candidates surfaced by modelling real Vikunja task/kanban data against the scheduling sector. Candidates only — not yet filed."@en .
+
+# -----------------------------------------------------------------------------
+# 1. Kanban bucket / board position (ordering)
+# -----------------------------------------------------------------------------
+# The scheduling sector models Calendar membership (sched:inCalendar) but has NO
+# concept of a board, a bucket/column WITHIN a board, or a task's ORDER within a
+# bucket — all first-class in Vikunja's kanban view. This package carries the
+# ORDER through the shared wf:Task via schema:position (reuse), but the sector
+# itself lacks both the ordering term AND the bucket identity.
+<#prop-board-position>
+    a fedcon:Proposal ;
+    fedcon:intent fedcon:Extend ;
+    fedcon:extends sched:Task , sched:Calendar ;
+    rdfs:label "Task board / bucket / position (kanban)"@en ;
+    fedcon:motivationText """Vikunja's core view is a kanban board: a Calendar/project is displayed as ordered BUCKETS (columns: Backlog, Doing, Done), each holding tasks in an explicit user-set ORDER. The scheduling sector has sched:inCalendar (a task's calendar) but no board, no bucket, and no position. Deriving order from dueTime/priority is wrong (a user drags cards freely). This package carries the ordinal via the shared wf:Task's schema:position (reuse), but the sector should gain first-class terms so a NATIVE scheduling consumer (not just the wf:Task overlay) can render the board. Proposed additive terms: sched:Bucket (a column within a Calendar), sched:inBucket (task → bucket), sched:boardPosition (an xsd:integer ordinal within the bucket).""" ;
+    fedcon:definition [
+        a owl:Ontology ;
+        rdfs:comment "Proposed additive sched:Bucket / sched:inBucket / sched:boardPosition terms." ;
+        rdfs:seeAlso sched:Calendar
+    ] .
+
+sched:Bucket a owl:Class ;
+    rdfs:isDefinedBy <#prop-board-position> ;
+    rdfs:subClassOf sched:Calendar ;
+    rdfs:label "Bucket (PROPOSED)"@en ;
+    rdfs:comment "PROPOSED (fedcon candidate, not yet in the sector): a kanban column within a Calendar/board that holds tasks in an explicit order."@en .
+
+sched:inBucket a owl:ObjectProperty ;
+    rdfs:isDefinedBy <#prop-board-position> ;
+    rdfs:domain sched:Task ;
+    rdfs:range sched:Bucket ;
+    rdfs:label "in bucket (PROPOSED)"@en ;
+    rdfs:comment "PROPOSED: the kanban bucket/column a task currently sits in."@en .
+
+sched:boardPosition a owl:DatatypeProperty ;
+    rdfs:isDefinedBy <#prop-board-position> ;
+    rdfs:domain sched:Task ;
+    rdfs:range xsd:integer ;
+    rdfs:label "board position (PROPOSED)"@en ;
+    rdfs:comment "PROPOSED: the user-set ordinal of a task within its bucket; lower sorts first. Currently carried via the shared wf:Task schema:position."@en .
+
+# -----------------------------------------------------------------------------
+# 2. First-class task labels (reuse dct:subject vs mint a sched: term)
+# -----------------------------------------------------------------------------
+# Vikunja tasks carry LABELS (coloured tags). The sector has no label term. This
+# package REUSES dct:subject (reuse-before-mint) as free-text label literals, but
+# flags the DECISION: reuse dct:subject / a SKOS concept scheme, or mint sched:label?
+<#prop-labels>
+    a fedcon:Proposal ;
+    fedcon:intent fedcon:Extend ;
+    fedcon:extends sched:Task ;
+    rdfs:label "Task labels / tags"@en ;
+    fedcon:motivationText """Vikunja tasks carry LABELS (coloured, reusable tags: 'urgent', 'backend', 'waiting'). The scheduling sector has no label term. This package REUSES dct:subject as free-text label literals (reuse-before-mint) — the pragmatic choice that federates cleanly with any dct:subject consumer. The OPEN QUESTION for the sector: (a) endorse dct:subject as the label alignment (this package's choice), (b) recommend a managed skos:Concept scheme so labels are shared controlled values across a federation rather than free strings, or (c) mint sched:label with a colour/name shape (Vikunja labels have a hex colour the string form drops). Filed as a candidate so the sector picks ONE, rather than every producer diverging (dct:subject / skos / schema:keywords / a fresh term).""" ;
+    fedcon:definition [
+        a owl:Ontology ;
+        rdfs:comment "Reuse dct:subject (this package's choice) vs a managed skos scheme vs a minted sched:label with colour." ;
+        rdfs:seeAlso dct:subject , skos:Concept
+    ] .
+
+# -----------------------------------------------------------------------------
+# 3. Task relations (subtask / blocks / duplicate) — partially wf:, partially missing
+# -----------------------------------------------------------------------------
+# Vikunja has a rich relation kind set (subtask, blocking, blocked, related,
+# duplicate, precedes, follows, copiedfrom). The wf:/dct: task model (which this
+# package cross-serialises to) covers parent/blocked-by/relates-to/duplicate-of,
+# but the SCHEDULING sector itself declares NO task-relation terms at all, and
+# neither model covers precedes/follows/copiedfrom as first-class typed edges.
+<#prop-task-relations>
+    a fedcon:Proposal ;
+    fedcon:intent fedcon:Extend ;
+    fedcon:extends sched:Task ;
+    rdfs:label "Task relations (subtask / blocks / precedes / duplicate)"@en ;
+    fedcon:motivationText """Vikunja tasks relate via a typed relation kind (subtask, parenttask, related, blocking, blocked, duplicateof, precedes, follows, copiedfrom). This package carries the COMMON edges (parent, blocked-by, relates-to, duplicate-of) through the shared wf:Task (dct:isPartOf / dct:requires / dct:relation / dct:isReplacedBy), which is why they federate to the Pod Manager. But (a) the SCHEDULING sector declares no task-relation term of its own — a native scheduling consumer sees none of them without the wf: overlay; and (b) neither model has precedes/follows (temporal sequencing, distinct from blocking) or copiedfrom (clone provenance is wf-side prov:wasDerivedFrom, but not exposed as a scheduling relation). Proposed: the sector adopt the wf:/dct: relation set as the scheduling relation alignment, and add sched:precedes / sched:follows for temporal sequencing.""" ;
+    fedcon:definition [
+        a owl:Ontology ;
+        rdfs:comment "Adopt wf:/dct: relation alignment on sched:Task + add sched:precedes/sched:follows." ;
+        rdfs:seeAlso wf:Task
+    ] .
+
+sched:precedes a owl:ObjectProperty ;
+    rdfs:isDefinedBy <#prop-task-relations> ;
+    rdfs:domain sched:Task ;
+    rdfs:range sched:Task ;
+    rdfs:label "precedes (PROPOSED)"@en ;
+    rdfs:comment "PROPOSED: this task should be scheduled BEFORE the referenced task (temporal sequencing, distinct from blocking)."@en .
+
+sched:follows a owl:ObjectProperty ;
+    rdfs:isDefinedBy <#prop-task-relations> ;
+    rdfs:domain sched:Task ;
+    rdfs:range sched:Task ;
+    rdfs:label "follows (PROPOSED)"@en ;
+    rdfs:comment "PROPOSED: this task should be scheduled AFTER the referenced task. The inverse of sched:precedes."@en .
+
+# -----------------------------------------------------------------------------
+# 4. Percent-done (partial completion)
+# -----------------------------------------------------------------------------
+# Vikunja tasks have a percent_done (0..100). The sector has only a BOOLEAN
+# sched:completed — it cannot say "60% done". This package carries neither the
+# boolean nor the percent lossily: completed is boolean, and percent-done is
+# DROPPED (mint-nothing) pending this proposal.
+<#prop-percent-done>
+    a fedcon:Proposal ;
+    fedcon:intent fedcon:Extend ;
+    fedcon:extends sched:Task , sched:completed ;
+    rdfs:label "Task percent-done (partial completion)"@en ;
+    fedcon:motivationText """Vikunja tracks percent_done (a 0..100 progress bar) on a task. The scheduling sector has only the BOOLEAN sched:completed — it cannot express partial progress. Deriving it from subtask completion is lossy (a leaf task has no subtasks yet real progress). This package currently DROPS percent-done rather than invent a term (mint-nothing). Proposed additive term: sched:percentComplete (an xsd:decimal in [0,1], or an xsd:integer 0..100) on sched:Task, complementing the boolean sched:completed.""" ;
+    fedcon:definition [
+        a owl:Ontology ;
+        rdfs:comment "Proposed additive sched:percentComplete term on sched:Task." ;
+        rdfs:seeAlso sched:completed
+    ] .
+
+sched:percentComplete a owl:DatatypeProperty ;
+    rdfs:isDefinedBy <#prop-percent-done> ;
+    rdfs:domain sched:Task ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "percent complete (PROPOSED)"@en ;
+    rdfs:comment "PROPOSED: fractional task progress in [0,1], complementing the boolean sched:completed. (Or an integer 0..100 — decided at filing.)"@en .
+
+# -----------------------------------------------------------------------------
+# 5. RECONCILIATION — sched:CalendarEvent vs the dav-bridge's schema:Event + ical:
+# -----------------------------------------------------------------------------
+# The @jeswr/solid-dav-bridge imports CalDAV events into a pod as schema:Event
+# (+ ical: for fields schema.org lacks). The scheduling sector models the SAME
+# concept as sched:CalendarEvent (a core:Event, aligned to schema:Event/iCalendar
+# in scheduling-alignments.ttl). Two producers, two class IRIs for one concept —
+# a federation-visible decision the registry must settle, NOT a silent per-package
+# choice.
+<#prop-event-reconciliation>
+    a fedcon:Proposal ;
+    fedcon:intent fedcon:Reconcile ;
+    fedcon:extends sched:CalendarEvent ;
+    rdfs:label "Reconcile sched:CalendarEvent with the dav-bridge schema:Event + ical: mapping"@en ;
+    fedcon:motivationText """Two suite producers model a calendar event two ways: @jeswr/solid-dav-bridge writes CalDAV events as schema:Event (+ ical: for repeat/alarm fields schema.org lacks), while the scheduling sector defines sched:CalendarEvent (a core:Event, aligned to schema:Event + iCalendar in scheduling-alignments.ttl). For a Calendar app to read events from BOTH, the federation must decide which is CANONICAL: (a) sched:CalendarEvent is canonical and the dav-bridge output is mapped to it (this package's lean — the sector class carries the gUFO rooting + the alignment already), (b) schema:Event is canonical and sched:CalendarEvent becomes a pure alignment/subclass, or (c) both stand with a required owl:equivalentClass / a materialisation rule in the registry. This package models TASKS (Vikunja), not events, so it does not itself write CalendarEvents — but it flags the decision because a scheduling federation cannot have two event classes drift. RECOMMENDATION: (a), and the dav-bridge grows a sched:CalendarEvent projection alongside its schema:Event output.""" ;
+    fedcon:definition [
+        a owl:Ontology ;
+        rdfs:comment "Decide the canonical calendar-event class: sched:CalendarEvent (recommended) vs schema:Event, and the mapping rule." ;
+        rdfs:seeAlso sched:CalendarEvent , schema:Event
+    ] .

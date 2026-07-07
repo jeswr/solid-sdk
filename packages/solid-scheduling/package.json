@@ -1,0 +1,87 @@
+{
+  "name": "@jeswr/solid-scheduling",
+  "version": "0.1.0",
+  "description": "The scheduling-sector RDF model (the data model a Vikunja→Solid fork writes to a pod) — a sched:Task / sched:Calendar / sched:RecurrenceRule / sched:Reminder reusing the @jeswr/solid-federation-vocab scheduling sector, that ALSO cross-serialises through @jeswr/solid-task-model's wf:Task so a Vikunja task surfaces 'assigned to me' in Pod Manager / solid-issues. Typed accessors, a SHACL shape, an owner-only ACL helper, and fedcon:Proposal candidates for the sector gaps real task data surfaced.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Jesse Wright",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jeswr/solid-scheduling.git"
+  },
+  "homepage": "https://github.com/jeswr/solid-scheduling#readme",
+  "bugs": {
+    "url": "https://github.com/jeswr/solid-scheduling/issues"
+  },
+  "keywords": [
+    "solid",
+    "rdf",
+    "scheduling",
+    "calendar",
+    "task",
+    "vikunja",
+    "federation",
+    "wf",
+    "shacl",
+    "vocabulary"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./vocab": {
+      "types": "./dist/vocab.d.ts",
+      "import": "./dist/vocab.js"
+    },
+    "./shape": {
+      "types": "./dist/shape.d.ts",
+      "import": "./dist/shape.js"
+    },
+    "./scheduling.shacl.ttl": "./scheduling.shacl.ttl",
+    "./scheduling.proposals.ttl": "./scheduling.proposals.ttl"
+  },
+  "files": [
+    "dist",
+    "scheduling.shacl.ttl",
+    "scheduling.proposals.ttl",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "biome check src scripts",
+    "lint:fix": "biome check --write src scripts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check:dist": "node scripts/check-dist.mjs",
+    "check:lockfile-transport": "node scripts/check-lockfile-transport.mjs",
+    "fix:lockfile-transport": "node scripts/normalize-lockfile.mjs",
+    "gate": "npm run lint && npm run typecheck && npm run test && npm run build && npm run check:dist && npm run check:lockfile-transport"
+  },
+  "dependencies": {
+    "@jeswr/fetch-rdf": "^0.1.0",
+    "@jeswr/solid-task-model": "git+https://github.com/jeswr/solid-task-model.git#9d9c2ae1206ca8d1babb254a3dbab345124cb356",
+    "@rdfjs/wrapper": "^0.34.0",
+    "n3": "^2.0.3"
+  },
+  "peerDependencies": {
+    "@rdfjs/types": "^2.0.1"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.0.0",
+    "@rdfjs/types": "^2.0.1",
+    "@types/n3": "^1.26.1",
+    "@types/node": "^20",
+    "@zazuko/env-node": "^3.0.0",
+    "rdf-validate-shacl": "^0.6.5",
+    "typescript": "^5",
+    "vitest": "^4.1.8"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

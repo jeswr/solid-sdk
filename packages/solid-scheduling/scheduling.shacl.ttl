@@ -1,0 +1,176 @@
+# AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+#
+# Focused SHACL shape for the scheduling task / calendar document
+# (@jeswr/solid-scheduling) — the data model a Vikunja→Solid fork writes to a pod.
+#
+# This is a DOWNSTREAM, additive profile over the scheduling sector's own
+# scheduling.shacl.ttl. It checks the task/calendar WIRE CONTRACT: a sched:Task
+# with a summary (and its optional due/completion/recurrence/reminder metadata), a
+# sched:Calendar with a summary, and well-formed sched:RecurrenceRule /
+# sched:Reminder nodes. It MINTS NOTHING — it is authored entirely against the
+# reused sched:/core: terms.
+#
+# It deliberately does NOT constrain the co-located wf:Task triples (the shared
+# @jeswr/solid-task-model shape governs those) — a scheduling document carries BOTH
+# a sched:Task and a wf:Task on the same subject (the federation cross-serialisation)
+# and each vocabulary validates against its own shape. Open-world: extra wf:/dct:
+# triples never fail this profile.
+#
+# SEVERITY = the RFC 2119 grade: sh:Violation = a MUST that makes a document a
+# non-usable task/calendar (no summary; a malformed frequency); sh:Info = a
+# well-formedness check on an OPTIONAL field (only fires when the field is present
+# but malformed), so a minimal task (summary only) conforms with ZERO results.
+#
+# The shapes are ANONYMOUS blank nodes, so this file mints nothing at a
+# non-resolving domain. Validate a task's typed-accessor output before write, and
+# on read of untrusted pod data (rdf-validate-shacl; see src/shape.test.ts).
+
+@prefix sh:     <http://www.w3.org/ns/shacl#> .
+@prefix sched:  <https://w3id.org/jeswr/sectors/scheduling#> .
+@prefix xsd:    <http://www.w3.org/2001/XMLSchema#> .
+
+# --- The task: a sched:Task ---
+[] a sh:NodeShape ;
+  sh:targetClass sched:Task ;
+
+  # The one required field — a task MUST have exactly one summary (a string).
+  sh:property [
+    sh:path sched:summary ; sh:name "summary" ;
+    sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ;
+    sh:severity sh:Violation ;
+    sh:message "A sched:Task MUST have exactly one sched:summary (a string)."@en ;
+  ] ;
+
+  sh:property [
+    sh:path sched:description ; sh:name "description" ;
+    sh:datatype xsd:string ; sh:maxCount 1 ;
+    sh:severity sh:Info ;
+    sh:message "sched:description, if present, MUST be a single string."@en ;
+  ] ;
+
+  sh:property [
+    sh:path sched:startTime ; sh:name "startTime" ;
+    sh:datatype xsd:dateTime ; sh:maxCount 1 ;
+    sh:severity sh:Info ;
+    sh:message "sched:startTime, if present, MUST be a single xsd:dateTime."@en ;
+  ] ;
+
+  sh:property [
+    sh:path sched:dueTime ; sh:name "dueTime" ;
+    sh:datatype xsd:dateTime ; sh:maxCount 1 ;
+    sh:severity sh:Info ;
+    sh:message "sched:dueTime, if present, MUST be a single xsd:dateTime."@en ;
+  ] ;
+
+  sh:property [
+    sh:path sched:completed ; sh:name "completed" ;
+    sh:datatype xsd:boolean ; sh:maxCount 1 ;
+    sh:severity sh:Info ;
+    sh:message "sched:completed, if present, MUST be a single xsd:boolean."@en ;
+  ] ;
+
+  sh:property [
+    sh:path sched:completedAt ; sh:name "completedAt" ;
+    sh:datatype xsd:dateTime ; sh:maxCount 1 ;
+    sh:severity sh:Info ;
+    sh:message "sched:completedAt, if present, MUST be a single xsd:dateTime."@en ;
+  ] ;
+
+  # organizer / inCalendar / recurrence — single IRIs when present.
+  sh:property [
+    sh:path sched:organizer ; sh:name "organizer" ;
+    sh:nodeKind sh:IRI ; sh:maxCount 1 ;
+    sh:severity sh:Info ;
+    sh:message "sched:organizer, if present, MUST be a single IRI (the owner WebID)."@en ;
+  ] ;
+
+  sh:property [
+    sh:path sched:inCalendar ; sh:name "inCalendar" ;
+    sh:nodeKind sh:IRI ; sh:maxCount 1 ;
+    sh:severity sh:Info ;
+    sh:message "sched:inCalendar, if present, MUST be a single IRI (the sched:Calendar)."@en ;
+  ] ;
+
+  sh:property [
+    sh:path sched:recurrence ; sh:name "recurrence" ;
+    sh:nodeKind sh:IRI ; sh:maxCount 1 ;
+    sh:severity sh:Info ;
+    sh:message "sched:recurrence, if present, MUST be a single IRI (the sched:RecurrenceRule)."@en ;
+  ] .
+
+# --- The recurrence rule: a sched:RecurrenceRule ---
+[] a sh:NodeShape ;
+  sh:targetClass sched:RecurrenceRule ;
+
+  # A recurrence rule MUST carry a known frequency.
+  sh:property [
+    sh:path sched:frequency ; sh:name "frequency" ;
+    sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ;
+    sh:pattern "^(DAILY|WEEKLY|MONTHLY|YEARLY)$" ;
+    sh:severity sh:Violation ;
+    sh:message "A sched:RecurrenceRule MUST have exactly one sched:frequency (DAILY/WEEKLY/MONTHLY/YEARLY)."@en ;
+  ] ;
+
+  sh:property [
+    sh:path sched:interval ; sh:name "interval" ;
+    sh:datatype xsd:positiveInteger ; sh:maxCount 1 ;
+    sh:severity sh:Info ;
+    sh:message "sched:interval, if present, MUST be a single xsd:positiveInteger."@en ;
+  ] ;
+
+  sh:property [
+    sh:path sched:count ; sh:name "count" ;
+    sh:datatype xsd:positiveInteger ; sh:maxCount 1 ;
+    sh:severity sh:Info ;
+    sh:message "sched:count, if present, MUST be a single xsd:positiveInteger."@en ;
+  ] ;
+
+  sh:property [
+    sh:path sched:until ; sh:name "until" ;
+    sh:datatype xsd:dateTime ; sh:maxCount 1 ;
+    sh:severity sh:Info ;
+    sh:message "sched:until, if present, MUST be a single xsd:dateTime."@en ;
+  ] .
+
+# --- The reminder: a sched:Reminder ---
+[] a sh:NodeShape ;
+  sh:targetClass sched:Reminder ;
+
+  sh:property [
+    sh:path sched:triggerTime ; sh:name "triggerTime" ;
+    sh:datatype xsd:dateTime ; sh:maxCount 1 ;
+    sh:severity sh:Info ;
+    sh:message "sched:triggerTime, if present, MUST be a single xsd:dateTime."@en ;
+  ] ;
+
+  sh:property [
+    sh:path sched:triggerOffset ; sh:name "triggerOffset" ;
+    sh:datatype xsd:duration ; sh:maxCount 1 ;
+    sh:severity sh:Info ;
+    sh:message "sched:triggerOffset, if present, MUST be a single xsd:duration (e.g. -PT15M)."@en ;
+  ] .
+
+# --- The calendar: a sched:Calendar ---
+[] a sh:NodeShape ;
+  sh:targetClass sched:Calendar ;
+
+  sh:property [
+    sh:path sched:summary ; sh:name "summary" ;
+    sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ;
+    sh:severity sh:Violation ;
+    sh:message "A sched:Calendar MUST have exactly one sched:summary (a string)."@en ;
+  ] ;
+
+  sh:property [
+    sh:path sched:description ; sh:name "description" ;
+    sh:datatype xsd:string ; sh:maxCount 1 ;
+    sh:severity sh:Info ;
+    sh:message "sched:description, if present, MUST be a single string."@en ;
+  ] ;
+
+  sh:property [
+    sh:path sched:organizer ; sh:name "organizer" ;
+    sh:nodeKind sh:IRI ; sh:maxCount 1 ;
+    sh:severity sh:Info ;
+    sh:message "sched:organizer, if present, MUST be a single IRI (the owner WebID)."@en ;
+  ] .
