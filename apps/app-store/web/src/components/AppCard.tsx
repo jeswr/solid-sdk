@@ -6,11 +6,11 @@
 // rel="noopener noreferrer" on every external app link.
 //
 // Launch states (decided by the live status + whether a WebID is known):
-//   - live + logged in  → "Launch <name>" → launchUrl(app, webId) (silent SSO / prefill).
-//   - live + logged out → "Open <name>"   → launchUrl(app, null)  (the app's own login).
+//   - live + deep-link + logged in → "Launch <name>" → launchUrl(app, webId) (SSO / prefill).
+//   - live + external (launch:"none") OR logged out → "Open <name>" → the app's own login.
 //   - not live          → a disabled "Coming soon" pill + (if public) a repo link. NO
 //     launch is ever produced for a non-deployed app (launchUrl returns null).
-import { type AppEntry, isLive } from "../lib/catalog";
+import { type AppEntry, isLive, launchVerb } from "../lib/catalog";
 import { launchUrl } from "../lib/launch";
 
 const STATUS_LABEL: Record<AppEntry["status"], string> = {
@@ -34,7 +34,7 @@ const CATEGORY_ICON: Record<AppEntry["category"], string> = {
 export function AppCard({ app, webId }: { app: AppEntry; webId: string | null }) {
   const live = isLive(app);
   const href = live ? launchUrl(app, webId) : null;
-  const launchLabel = webId ? `Launch ${app.name}` : `Open ${app.name}`;
+  const launchLabel = `${launchVerb(app, webId)} ${app.name}`;
 
   return (
     <article className="app-card" data-status={app.status}>
