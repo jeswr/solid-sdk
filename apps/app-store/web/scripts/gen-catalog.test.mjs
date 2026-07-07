@@ -34,6 +34,18 @@ const APPS = [
     repo: "https://github.com/jeswr/accessradar",
     launch: "none",
   },
+  {
+    // An externally-hosted LIVE app (a fork on Vercel) — deployed, but launch "none":
+    // it publishes NO /clientid.jsonld, so it must get schema:url but NOT schema:identifier.
+    id: "elk",
+    name: "Elk for Solid",
+    description: "Mastodon client.",
+    category: "Comms",
+    deployedUrl: "https://elk-solid.vercel.app",
+    status: "live",
+    repo: "https://github.com/jeswr/elk",
+    launch: "none",
+  },
 ];
 
 /** A stable, order-independent N-Triples signature of a quad array. */
@@ -102,6 +114,17 @@ describe("buildCatalogQuads — the DCAT/schema shape", () => {
     expect(
       quads.some(
         (q) => q.subject.value === notLive && q.predicate.value === "https://schema.org/url",
+      ),
+    ).toBe(false);
+  });
+
+  it("an externally-hosted live app gets schema:url but NO schema:identifier (it has no clientid.jsonld)", () => {
+    const ext = `${ORIGIN}/catalog#app-elk`;
+    expect(has(ext, "https://schema.org/url", "https://elk-solid.vercel.app")).toBe(true);
+    // No misleading/broken clientid.jsonld link for an app that doesn't serve one.
+    expect(
+      quads.some(
+        (q) => q.subject.value === ext && q.predicate.value === "https://schema.org/identifier",
       ),
     ).toBe(false);
   });

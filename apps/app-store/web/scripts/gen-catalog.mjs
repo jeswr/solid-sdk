@@ -137,14 +137,19 @@ export function buildCatalogQuads(origin, apps, modified = "2026-06-20T00:00:00Z
     if (app.deployedUrl) {
       quads.push(quad(appNode, namedNode(`${SCHEMA}url`), namedNode(app.deployedUrl)));
       // schema:identifier → the app's own Client Identifier Document (the client_id IRI)
-      // — the bridge to the federation layer (link, do not duplicate membership).
-      quads.push(
-        quad(
-          appNode,
-          namedNode(`${SCHEMA}identifier`),
-          namedNode(`${app.deployedUrl}/clientid.jsonld`),
-        ),
-      );
+      // — the bridge to the federation layer (link, do not duplicate membership). ONLY
+      // suite deep-link apps (autologin/prefill) publish a `/clientid.jsonld` at their
+      // origin; externally-hosted apps (`launch: "none"`) do NOT, so emitting the IRI for
+      // them would be a broken/misleading link — skip it for those.
+      if (app.launch !== "none") {
+        quads.push(
+          quad(
+            appNode,
+            namedNode(`${SCHEMA}identifier`),
+            namedNode(`${app.deployedUrl}/clientid.jsonld`),
+          ),
+        );
+      }
     }
     // The public source repo, where one exists.
     if (app.repo) {

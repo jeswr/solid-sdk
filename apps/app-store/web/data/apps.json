@@ -168,5 +168,105 @@
     "status": "local-only",
     "repo": "https://github.com/jeswr/fdc3-solid",
     "launch": "none"
+  },
+  {
+    "id": "solid-access-manager",
+    "name": "Solid Access Manager",
+    "description": "Manage who can access your Solid pod data — a grant dashboard by resource and by agent, an access-request inbox, and a consent-receipt history.",
+    "category": "Productivity",
+    "deployedUrl": "https://solid-access-manager.vercel.app",
+    "status": "live",
+    "repo": "https://github.com/jeswr/solid-access-manager",
+    "launch": "none"
+  },
+  {
+    "id": "solid-catalog",
+    "name": "Solid App Catalog",
+    "description": "Browse the wider Solid app ecosystem — a catalog viewer over the community's collected directory of Solid apps.",
+    "category": "Productivity",
+    "deployedUrl": "https://solid-catalog.jeswr.org",
+    "status": "live",
+    "repo": "https://github.com/jeswr/solid-catalog",
+    "launch": "none"
+  },
+  {
+    "id": "solid-launch",
+    "name": "Solid App Launcher",
+    "description": "A lightweight launcher for the Solid app suite.",
+    "category": "Productivity",
+    "deployedUrl": "https://solid-launch-lime.vercel.app",
+    "status": "live",
+    "repo": "https://github.com/jeswr/solid-launch",
+    "launch": "none"
+  },
+  {
+    "id": "coeliac-app",
+    "name": "Coeliac Diary",
+    "description": "A coeliac and multi-intolerance health diary — log meals, symptoms and exposures and get elimination-protocol guidance, kept private in your own Solid pod.",
+    "category": "Health",
+    "deployedUrl": "https://coeliac-app.vercel.app",
+    "status": "live",
+    "repo": "https://github.com/jeswr/coeliac-app",
+    "launch": "none"
+  },
+  {
+    "id": "linkding",
+    "name": "Linkding for Solid",
+    "description": "Bookmarks and read-it-later stored per-resource in your Solid pod — a pod-backed fork of the Linkding bookmark manager.",
+    "category": "Productivity",
+    "deployedUrl": "https://linkding-solid.vercel.app",
+    "status": "live",
+    "repo": "https://github.com/jeswr/linkding",
+    "launch": "none"
+  },
+  {
+    "id": "elk",
+    "name": "Elk for Solid",
+    "description": "A nimble Mastodon web client that persists its settings, drafts and your own posts to your Solid pod — a pod-backed fork of Elk.",
+    "category": "Comms",
+    "deployedUrl": "https://elk-solid.vercel.app",
+    "status": "live",
+    "repo": "https://github.com/jeswr/elk",
+    "launch": "none"
+  },
+  {
+    "id": "excalidraw",
+    "name": "Excalidraw for Solid",
+    "description": "A hand-drawn-style whiteboard and diagram editor that saves your .excalidraw scenes to your Solid pod — a pod-backed fork of Excalidraw.",
+    "category": "Media",
+    "deployedUrl": "https://excalidraw-solid.vercel.app",
+    "status": "live",
+    "repo": "https://github.com/jeswr/excalidraw",
+    "launch": "none"
+  },
+  {
+    "id": "miniflux",
+    "name": "Miniflux for Solid",
+    "description": "A minimalist, fast RSS and feed reader that mirrors your saved entries and read-state to your Solid pod — a pod-backed fork of Miniflux (Go/Postgres core; pod-sync layer added).",
+    "category": "Comms",
+    "deployedUrl": null,
+    "status": "wip",
+    "repo": "https://github.com/jeswr/miniflux",
+    "launch": "none"
+  },
+  {
+    "id": "actual",
+    "name": "Actual Budget for Solid",
+    "description": "Envelope-budgeting and personal finance with a Solid pod as a sync target for its CRDT change-log — a pod-backed fork of Actual.",
+    "category": "Finance",
+    "deployedUrl": null,
+    "status": "wip",
+    "repo": "https://github.com/jeswr/actual",
+    "launch": "none"
+  },
+  {
+    "id": "web-scrobbler",
+    "name": "Web Scrobbler for Solid",
+    "description": "Scrobble your music-listening history from 100+ web players to your own Solid pod — a browser-extension fork of Web Scrobbler (installs from the browser's extension store).",
+    "category": "Media",
+    "deployedUrl": null,
+    "status": "wip",
+    "repo": "https://github.com/jeswr/web-scrobbler",
+    "launch": "none"
   }
 ]

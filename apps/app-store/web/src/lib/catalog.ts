@@ -72,6 +72,17 @@ export function isLive(app: AppEntry): boolean {
 }
 
 /**
+ * The verb for a live app's action button. "Launch" is only honest when the store
+ * actually carries the user's identity into the target — i.e. the app declares a
+ * deep-link contract (autologin/prefill) AND a WebID is known. Externally-hosted
+ * apps (`launch: "none"`) get no identity deep-link, so they are always "Open" — a
+ * plain link to the app's own login, even for a signed-in user.
+ */
+export function launchVerb(app: AppEntry, webId: string | null): "Launch" | "Open" {
+  return webId && app.launch !== "none" ? "Launch" : "Open";
+}
+
+/**
  * Pure client-side fuzzy-ish match over an app's name + description + category +
  * id. A plain case-insensitive substring match on the normalised query tokens —
  * every whitespace-separated token must appear somewhere in the haystack (AND).

@@ -1,33 +1,54 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // catalog.test.ts — the pure catalog helpers (live filter, query match, category
-// grouping) AND a consistency check of the committed apps.json against the spec
-// (17 apps, exactly the 10 live ones, every live app has a deployedUrl + a launch
-// mechanism, every non-live app renders Coming soon with no autologin launch).
+// grouping) AND a consistency check of the committed apps.json against the spec.
+// The catalog is the COMPLETE directory of the suite's user-facing apps: the 8 vite
+// pod-apps + Solid Issues + Pod Manager (suite-hosted on solid-test.jeswr.org, with
+// an autologin/prefill deep-link), PLUS the externally-hosted live apps (the OSS
+// forks + standalone apps on Vercel / jeswr.org, which carry NO identity deep-link so
+// they launch as a plain "Open" link, launch: "none"), PLUS the not-yet-deployed apps
+// (finance products, the FDC3 demo, the deploy-deferred forks) rendered "Coming soon".
 import { describe, expect, it } from "vitest";
 import apps from "../../data/apps.json";
-import { type AppEntry, CATEGORY_ORDER, groupByCategory, isLive, matchesQuery } from "./catalog";
+import {
+  type AppEntry,
+  CATEGORY_ORDER,
+  groupByCategory,
+  isLive,
+  launchVerb,
+  matchesQuery,
+} from "./catalog";
 
 const catalog = apps as AppEntry[];
 
 describe("apps.json — the committed catalog matches the build spec", () => {
-  it("enumerates exactly 17 apps", () => {
-    expect(catalog).toHaveLength(17);
+  it("enumerates exactly 27 apps", () => {
+    expect(catalog).toHaveLength(27);
   });
 
-  it("has exactly 10 LIVE apps (8 vite pod-apps + Solid Issues + Pod Manager)", () => {
+  it("has exactly 17 LIVE apps", () => {
     const live = catalog.filter(isLive);
-    expect(live).toHaveLength(10);
+    expect(live).toHaveLength(17);
   });
 
-  it("every live app has a deployedUrl and a non-'none' launch mechanism", () => {
+  it("every live app has a valid https deployedUrl", () => {
     for (const app of catalog.filter(isLive)) {
       expect(app.deployedUrl, app.id).not.toBeNull();
-      expect(app.launch, app.id).not.toBe("none");
-      // deployedUrl is a valid https origin on the suite domain.
       const url = new URL(app.deployedUrl as string);
-      expect(url.protocol).toBe("https:");
-      expect(url.host.endsWith("solid-test.jeswr.org"), app.id).toBe(true);
+      expect(url.protocol, app.id).toBe("https:");
+    }
+  });
+
+  it("suite-hosted live apps use an autologin/prefill deep-link on solid-test.jeswr.org; external live apps use launch 'none'", () => {
+    for (const app of catalog.filter(isLive)) {
+      const host = new URL(app.deployedUrl as string).host;
+      if (app.launch === "none") {
+        // Externally-hosted (fork / standalone) — a plain Open link, off the suite domain.
+        expect(host.endsWith("solid-test.jeswr.org"), app.id).toBe(false);
+      } else {
+        // Suite-hosted deep-link target.
+        expect(host.endsWith("solid-test.jeswr.org"), app.id).toBe(true);
+      }
     }
   });
 
@@ -38,7 +59,7 @@ describe("apps.json — the committed catalog matches the build spec", () => {
     }
   });
 
-  it("the 7 not-live apps are the 6 finance products + the FDC3 demo", () => {
+  it("the 10 not-live apps are the finance products, the FDC3 demo, and the deploy-deferred forks", () => {
     const notLive = catalog
       .filter((a) => !isLive(a))
       .map((a) => a.id)
@@ -46,12 +67,15 @@ describe("apps.json — the committed catalog matches the build spec", () => {
     expect(notLive).toEqual(
       [
         "accessradar",
+        "actual",
         "capnote",
         "fdc3-solid",
         "furlong",
         "keystone",
+        "miniflux",
         "provena",
         "strongroom",
+        "web-scrobbler",
       ].sort(),
     );
   });
@@ -81,6 +105,32 @@ describe("apps.json — the committed catalog matches the build spec", () => {
       expect(ids.has(app.id), `duplicate id ${app.id}`).toBe(false);
       ids.add(app.id);
     }
+  });
+});
+
+describe("launchVerb — 'Launch' only when identity is actually carried", () => {
+  const suiteApp: AppEntry = {
+    id: "pod-drive",
+    name: "Pod Drive",
+    description: "x",
+    category: "Documents",
+    deployedUrl: "https://drive.solid-test.jeswr.org",
+    status: "live",
+    repo: null,
+    launch: "autologin",
+  };
+  const externalApp: AppEntry = { ...suiteApp, id: "elk", launch: "none" };
+  const WEBID = "https://alice.solid-test.jeswr.org/profile/card#me";
+
+  it("suite deep-link app, signed in → Launch", () => {
+    expect(launchVerb(suiteApp, WEBID)).toBe("Launch");
+  });
+  it("suite deep-link app, signed out → Open", () => {
+    expect(launchVerb(suiteApp, null)).toBe("Open");
+  });
+  it("external app (launch 'none') is ALWAYS Open, even signed in (no SSO is carried)", () => {
+    expect(launchVerb(externalApp, WEBID)).toBe("Open");
+    expect(launchVerb(externalApp, null)).toBe("Open");
   });
 });
 
