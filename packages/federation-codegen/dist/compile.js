@@ -12,7 +12,17 @@
  */
 import { RUNTIME_MAJOR, validateManifest, } from "@jeswr/model-runtime";
 import { entityConfigFor } from "./config.js";
+import { SH } from "./rdf.js";
 import { localName, } from "./shapes.js";
+/**
+ * A `sh:minCount ≥ 1` compiles to a fail-closed requirement ONLY at
+ * `sh:severity sh:Violation` (SHACL's default when severity is ABSENT). A
+ * Warning/Info-graded minCount is ADVISORY — it stays in shapes.ttl for
+ * validation-time but compiles to NO runtime guard (design G1).
+ */
+export function isFailClosedSeverity(severity) {
+    return severity === undefined || severity === `${SH}Violation`;
+}
 /** True for a `sh:pattern` that restricts values to http(s) schemes. */
 export function isHttpPattern(pattern) {
     if (pattern === undefined)
@@ -39,14 +49,37 @@ function compileField(constraint, fieldConfig, provenance) {
         field.minCount = constraint.minCount;
     if (constraint.maxCount !== undefined)
         field.maxCount = constraint.maxCount;
+    // G2 — a closed `sh:in` value set compiles to the manifest's enum list. An empty
+    // array is present-but-malformed (admission blocks it) — never emit an empty enum.
+    if (constraint.in !== undefined && constraint.in.length > 0)
+        field.in = constraint.in;
     const guards = {};
     // Shape-derived: http(s) scheme guard from an ^https?:// pattern on an IRI field.
     if (constraint.kind === "iri" && isHttpPattern(constraint.pattern)) {
         guards.iriScheme = "http-https";
     }
-    // Shape-derived: fail-closed on absence when the field is required (minCount ≥ 1).
-    if (constraint.minCount !== undefined && constraint.minCount >= 1) {
+    // G1 — SEVERITY-AWARE requiredness: fail-closed on absence only when the required
+    // constraint is Violation-graded (or severity absent, SHACL's default). A
+    // Warning/Info minCount ≥ 1 is advisory and compiles to NO runtime guard.
+    if (constraint.minCount !== undefined &&
+        constraint.minCount >= 1 &&
+        isFailClosedSeverity(constraint.severity)) {
         guards.requiredFailClosed = true;
+    }
+    // G3 — closed, named numeric-range / string-length guards (pure DATA numbers).
+    if (constraint.minInclusive !== undefined)
+        guards.minInclusive = constraint.minInclusive;
+    if (constraint.maxInclusive !== undefined)
+        guards.maxInclusive = constraint.maxInclusive;
+    if (constraint.minLength !== undefined)
+        guards.minLength = constraint.minLength;
+    // G3 — a singleton non-blank string guard (minLength ≥ 1 on a single literal),
+    // mirroring the set-level dropBlank for scalar fields.
+    if (constraint.minLength !== undefined &&
+        constraint.minLength >= 1 &&
+        collection === undefined &&
+        constraint.kind === "literal") {
+        guards.nonBlank = true;
     }
     // Config-supplied guards (recorded as provenance so fidelity can trace them).
     if (fieldConfig) {

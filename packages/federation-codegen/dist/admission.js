@@ -11,10 +11,9 @@
  *      waiver (`fedgen:deliberatelyUnconstrained`).
  *   3. Every instance-data class has a NodeShape, every literal property in it
  *      states an explicit sh:datatype, and every property states a cardinality.
- *
- * NOT YET checked (P1 follow-on, design §4 item 4): closed `sh:in` enumerations —
- * P0's pilot has no enum property, and validating an RDF-list `sh:in` needs list
- * extraction in the shape model; tracked, not claimed here.
+ *   4. Every closed `sh:in` enumeration is a well-formed, NON-EMPTY RDF list — an
+ *      empty/malformed `sh:in` fails closed (design §4 item 4 / G2). The shape model
+ *      surfaces a present-but-malformed list as an empty value set.
  */
 /** Thrown by {@link assertAdmitted} when the ontology / profile is not admissible. */
 export class AdmissionError extends Error {
@@ -72,6 +71,10 @@ export function admit(ontology, shapes, namespace) {
         for (const prop of shape.properties) {
             if (prop.kind === "literal" && prop.datatype === undefined) {
                 add("missing-datatype", "error", prop.pathIri, `literal property in ${shape.iri} has no explicit sh:datatype`);
+            }
+            // 4. A declared sh:in must extract to a non-empty, well-formed value set.
+            if (prop.in !== undefined && prop.in.length === 0) {
+                add("invalid-enum", "error", prop.pathIri, `property in ${shape.iri} declares an empty or malformed sh:in enumeration`);
             }
             // A property SHOULD state a cardinality (warning, not blocking): a legitimately
             // unbounded set (e.g. tags) has neither, which is intentional — the ratchet.

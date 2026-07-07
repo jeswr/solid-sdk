@@ -16,8 +16,12 @@
  *   (c) TRACEABILITY: every manifest guard is shape-derived or config-declared.
  */
 import { expandDatatype } from "@jeswr/model-runtime";
-import { isHttpPattern } from "./compile.js";
+import { isFailClosedSeverity, isHttpPattern, } from "./compile.js";
 import { localName } from "./shapes.js";
+/** Canonical JSON of a closed value set (order preserved), or null when absent/empty. */
+function inJson(values) {
+    return values !== undefined && values.length > 0 ? JSON.stringify(values) : null;
+}
 /** Thrown when model.json is not a faithful projection of shapes.ttl. */
 export class FidelityError extends Error {
     name = "FidelityError";
@@ -40,6 +44,7 @@ function projectShapes(shapes) {
             minCount: c.minCount ?? null,
             maxCount: c.maxCount ?? null,
             collection: c.maxCount !== 1,
+            inValues: inJson(c.in),
         }));
         out.set(shape.targetClass, sortFields(fields));
     }
@@ -56,6 +61,7 @@ function projectManifest(manifest) {
             minCount: f.minCount ?? null,
             maxCount: f.maxCount ?? null,
             collection: f.collection === "set",
+            inValues: inJson(f.in),
         }));
         for (const typeIri of entity.typeIris)
             out.set(typeIri, sortFields(fields));
@@ -64,7 +70,15 @@ function projectManifest(manifest) {
 }
 function diffField(a, b) {
     const diffs = [];
-    for (const key of ["name", "kind", "datatype", "minCount", "maxCount", "collection"]) {
+    for (const key of [
+        "name",
+        "kind",
+        "datatype",
+        "minCount",
+        "maxCount",
+        "collection",
+        "inValues",
+    ]) {
         if (a[key] !== b[key])
             diffs.push(`${key}: shapes=${JSON.stringify(a[key])} manifest=${JSON.stringify(b[key])}`);
     }
@@ -156,10 +170,27 @@ function assertTraceability(compiled, shapes) {
             const config = new Set(prov?.configGuards ?? []);
             const constraint = constraintByPred.get(field.predicate);
             const shapeDerivable = (guard) => {
+                if (constraint === undefined)
+                    return false;
                 if (guard === "iriScheme")
-                    return constraint?.kind === "iri" && isHttpPattern(constraint.pattern);
+                    return constraint.kind === "iri" && isHttpPattern(constraint.pattern);
+                // Severity-aware (G1): a required guard is shape-derived only when the
+                // minCount ≥ 1 constraint is Violation-graded (or severity absent).
                 if (guard === "requiredFailClosed")
-                    return constraint?.minCount !== undefined && constraint.minCount >= 1;
+                    return (constraint.minCount !== undefined &&
+                        constraint.minCount >= 1 &&
+                        isFailClosedSeverity(constraint.severity));
+                if (guard === "minInclusive")
+                    return constraint.minInclusive !== undefined;
+                if (guard === "maxInclusive")
+                    return constraint.maxInclusive !== undefined;
+                if (guard === "minLength")
+                    return constraint.minLength !== undefined;
+                if (guard === "nonBlank")
+                    return (constraint.minLength !== undefined &&
+                        constraint.minLength >= 1 &&
+                        constraint.maxCount === 1 &&
+                        constraint.kind === "literal");
                 return false;
             };
             const guardKeys = Object.keys(guards);

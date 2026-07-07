@@ -15,7 +15,10 @@
 
 import type { Quad, Quad_Object, Quad_Subject, Term } from "@rdfjs/types";
 import { DataFactory } from "n3";
-import { Graph, parseTurtle, RDF, SH } from "./rdf.js";
+import { Graph, parseTurtle, RDF, SH, XSD } from "./rdf.js";
+
+/** A scalar a closed `sh:in` value set may carry (mirrors the manifest's ManifestScalar). */
+export type ShapeScalar = string | number | boolean;
 
 /** The RDF term kind a property shape constrains its values to. */
 export type ShapeKind = "iri" | "literal";
@@ -35,8 +38,19 @@ export interface ShapeConstraint {
   maxCount?: number;
   /** `sh:pattern`, if declared. */
   pattern?: string;
-  /** `sh:severity`, if declared. */
+  /** `sh:severity`, if declared (the full IRI, e.g. `${SH}Violation`). */
   severity?: string;
+  /**
+   * `sh:in` — the closed value set, extracted from its RDF list to scalars. An
+   * EMPTY array signals a present-but-malformed / empty `sh:in` (admission flags it).
+   */
+  in?: ShapeScalar[];
+  /** `sh:minInclusive` (numeric lower bound), if declared. */
+  minInclusive?: number;
+  /** `sh:maxInclusive` (numeric upper bound), if declared. */
+  maxInclusive?: number;
+  /** `sh:minLength` (minimum string length), if declared. */
+  minLength?: number;
   /** The skolemized IRI of the property shape (was a blank node). */
   shapeIri: string;
 }
@@ -67,6 +81,59 @@ function numberOr(value: string | undefined): number | undefined {
   if (value === undefined) return undefined;
   const n = Number(value);
   return Number.isFinite(n) ? n : undefined;
+}
+
+const NUMERIC_DATATYPES = new Set<string>([
+  `${XSD}integer`,
+  `${XSD}int`,
+  `${XSD}long`,
+  `${XSD}nonNegativeInteger`,
+  `${XSD}positiveInteger`,
+  `${XSD}nonPositiveInteger`,
+  `${XSD}negativeInteger`,
+  `${XSD}short`,
+  `${XSD}byte`,
+  `${XSD}decimal`,
+  `${XSD}double`,
+  `${XSD}float`,
+]);
+
+/** Coerce an RDF list member term to a manifest scalar (by literal datatype). */
+function termToScalar(term: Term): ShapeScalar {
+  if (term.termType === "Literal") {
+    const dt = (term as Term & { datatype?: { value: string } }).datatype?.value;
+    if (dt === `${XSD}boolean`) return term.value === "true" || term.value === "1";
+    if (dt !== undefined && NUMERIC_DATATYPES.has(dt)) {
+      const n = Number(term.value);
+      if (Number.isFinite(n)) return n;
+    }
+    return term.value;
+  }
+  // NamedNode (an IRI value set) — carry the IRI string.
+  return term.value;
+}
+
+/**
+ * Walk an RDF list from `head` (`rdf:first`/`rdf:rest` → `rdf:nil`) into its member
+ * terms. Returns `undefined` for a malformed list (missing first/rest, a cycle, or
+ * a non-node link) so a bad `sh:in` fails CLOSED rather than silently truncating.
+ */
+function rdfList(graph: Graph, head: Term): Term[] | undefined {
+  const Nil = `${RDF}nil`;
+  const out: Term[] = [];
+  const seen = new Set<string>();
+  let node: Term | undefined = head;
+  while (node !== undefined && node.value !== Nil) {
+    if (node.termType !== "NamedNode" && node.termType !== "BlankNode") return undefined;
+    if (seen.has(node.value)) return undefined; // cycle guard
+    seen.add(node.value);
+    const first = graph.object(node, `${RDF}first`);
+    const rest = graph.object(node, `${RDF}rest`);
+    if (first === undefined || rest === undefined) return undefined; // malformed
+    out.push(first);
+    node = rest;
+  }
+  return out;
 }
 
 function resolveKind(nodeKind: string | undefined, datatype: string | undefined): ShapeKind {
@@ -136,6 +203,19 @@ export function parseShapes(shapesTtl: string, shapesBase: string): NormalizedSh
       if (pattern !== undefined) constraint.pattern = pattern;
       const severity = graph.value(propObj, `${SH}severity`);
       if (severity !== undefined) constraint.severity = severity;
+      // sh:in — a closed value set (RDF list). An unparseable/nil list yields [] so
+      // admission can flag it (present-but-empty ⇒ malformed enum).
+      const inHead = graph.object(propObj, `${SH}in`);
+      if (inHead !== undefined) {
+        const members = rdfList(graph, inHead);
+        constraint.in = members === undefined ? [] : members.map(termToScalar);
+      }
+      const minInclusive = numberOr(graph.value(propObj, `${SH}minInclusive`));
+      if (minInclusive !== undefined) constraint.minInclusive = minInclusive;
+      const maxInclusive = numberOr(graph.value(propObj, `${SH}maxInclusive`));
+      if (maxInclusive !== undefined) constraint.maxInclusive = maxInclusive;
+      const minLength = numberOr(graph.value(propObj, `${SH}minLength`));
+      if (minLength !== undefined) constraint.minLength = minLength;
       properties.push(constraint);
     }
     properties.sort((a, b) => a.pathIri.localeCompare(b.pathIri));

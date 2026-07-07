@@ -13,7 +13,7 @@
  * ontologies tighten (design §5).
  */
 import { DataFactory } from "n3";
-import { Graph, parseTurtle, RDF, SH } from "./rdf.js";
+import { Graph, parseTurtle, RDF, SH, XSD } from "./rdf.js";
 /** The local name of an IRI (after the last `#` or `/`). */
 export function localName(iri) {
     const cut = Math.max(iri.lastIndexOf("#"), iri.lastIndexOf("/"));
@@ -24,6 +24,61 @@ function numberOr(value) {
         return undefined;
     const n = Number(value);
     return Number.isFinite(n) ? n : undefined;
+}
+const NUMERIC_DATATYPES = new Set([
+    `${XSD}integer`,
+    `${XSD}int`,
+    `${XSD}long`,
+    `${XSD}nonNegativeInteger`,
+    `${XSD}positiveInteger`,
+    `${XSD}nonPositiveInteger`,
+    `${XSD}negativeInteger`,
+    `${XSD}short`,
+    `${XSD}byte`,
+    `${XSD}decimal`,
+    `${XSD}double`,
+    `${XSD}float`,
+]);
+/** Coerce an RDF list member term to a manifest scalar (by literal datatype). */
+function termToScalar(term) {
+    if (term.termType === "Literal") {
+        const dt = term.datatype?.value;
+        if (dt === `${XSD}boolean`)
+            return term.value === "true" || term.value === "1";
+        if (dt !== undefined && NUMERIC_DATATYPES.has(dt)) {
+            const n = Number(term.value);
+            if (Number.isFinite(n))
+                return n;
+        }
+        return term.value;
+    }
+    // NamedNode (an IRI value set) — carry the IRI string.
+    return term.value;
+}
+/**
+ * Walk an RDF list from `head` (`rdf:first`/`rdf:rest` → `rdf:nil`) into its member
+ * terms. Returns `undefined` for a malformed list (missing first/rest, a cycle, or
+ * a non-node link) so a bad `sh:in` fails CLOSED rather than silently truncating.
+ */
+function rdfList(graph, head) {
+    const Nil = `${RDF}nil`;
+    const out = [];
+    const seen = new Set();
+    let node = head;
+    while (node !== undefined && node.value !== Nil) {
+        if (node.termType !== "NamedNode" && node.termType !== "BlankNode")
+            return undefined;
+        if (seen.has(node.value))
+            return undefined; // cycle guard
+        seen.add(node.value);
+        const first = graph.object(node, `${RDF}first`);
+        const rest = graph.object(node, `${RDF}rest`);
+        if (first === undefined || rest === undefined)
+            return undefined; // malformed
+        out.push(first);
+        node = rest;
+    }
+    return out;
 }
 function resolveKind(nodeKind, datatype) {
     if (nodeKind === `${SH}IRI` || nodeKind === `${SH}BlankNodeOrIRI`)
@@ -99,6 +154,22 @@ export function parseShapes(shapesTtl, shapesBase) {
             const severity = graph.value(propObj, `${SH}severity`);
             if (severity !== undefined)
                 constraint.severity = severity;
+            // sh:in — a closed value set (RDF list). An unparseable/nil list yields [] so
+            // admission can flag it (present-but-empty ⇒ malformed enum).
+            const inHead = graph.object(propObj, `${SH}in`);
+            if (inHead !== undefined) {
+                const members = rdfList(graph, inHead);
+                constraint.in = members === undefined ? [] : members.map(termToScalar);
+            }
+            const minInclusive = numberOr(graph.value(propObj, `${SH}minInclusive`));
+            if (minInclusive !== undefined)
+                constraint.minInclusive = minInclusive;
+            const maxInclusive = numberOr(graph.value(propObj, `${SH}maxInclusive`));
+            if (maxInclusive !== undefined)
+                constraint.maxInclusive = maxInclusive;
+            const minLength = numberOr(graph.value(propObj, `${SH}minLength`));
+            if (minLength !== undefined)
+                constraint.minLength = minLength;
             properties.push(constraint);
         }
         properties.sort((a, b) => a.pathIri.localeCompare(b.pathIri));

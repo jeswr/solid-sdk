@@ -12,6 +12,13 @@
 import { type ModelManifest } from "@jeswr/model-runtime";
 import { type CodegenConfig } from "./config.js";
 import { type NormalizedShapes } from "./shapes.js";
+/**
+ * A `sh:minCount ≥ 1` compiles to a fail-closed requirement ONLY at
+ * `sh:severity sh:Violation` (SHACL's default when severity is ABSENT). A
+ * Warning/Info-graded minCount is ADVISORY — it stays in shapes.ttl for
+ * validation-time but compiles to NO runtime guard (design G1).
+ */
+export declare function isFailClosedSeverity(severity: string | undefined): boolean;
 /** Which guards on a field came from the config (vs the shape) — for traceability. */
 export interface FieldProvenance {
     /** The entity's target class — provenance is keyed per ENTITY, not globally. */

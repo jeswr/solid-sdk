@@ -12,6 +12,8 @@
  * ontologies tighten (design §5).
  */
 import type { Quad } from "@rdfjs/types";
+/** A scalar a closed `sh:in` value set may carry (mirrors the manifest's ManifestScalar). */
+export type ShapeScalar = string | number | boolean;
 /** The RDF term kind a property shape constrains its values to. */
 export type ShapeKind = "iri" | "literal";
 export interface ShapeConstraint {
@@ -29,8 +31,19 @@ export interface ShapeConstraint {
     maxCount?: number;
     /** `sh:pattern`, if declared. */
     pattern?: string;
-    /** `sh:severity`, if declared. */
+    /** `sh:severity`, if declared (the full IRI, e.g. `${SH}Violation`). */
     severity?: string;
+    /**
+     * `sh:in` — the closed value set, extracted from its RDF list to scalars. An
+     * EMPTY array signals a present-but-malformed / empty `sh:in` (admission flags it).
+     */
+    in?: ShapeScalar[];
+    /** `sh:minInclusive` (numeric lower bound), if declared. */
+    minInclusive?: number;
+    /** `sh:maxInclusive` (numeric upper bound), if declared. */
+    maxInclusive?: number;
+    /** `sh:minLength` (minimum string length), if declared. */
+    minLength?: number;
     /** The skolemized IRI of the property shape (was a blank node). */
     shapeIri: string;
 }

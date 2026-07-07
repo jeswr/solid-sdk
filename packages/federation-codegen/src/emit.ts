@@ -35,6 +35,10 @@ export function emitModelJs(manifest: ModelManifest): string {
 }
 
 function baseTsType(field: ManifestField): string {
+  // A closed `sh:in` value set narrows the field to a literal union.
+  if (field.in !== undefined && field.in.length > 0) {
+    return field.in.map((v) => (typeof v === "string" ? JSON.stringify(v) : String(v))).join(" | ");
+  }
   if (field.kind === "iri") return "string";
   switch (field.datatype ? expand(field.datatype) : "") {
     case `${XSD}boolean`:
@@ -45,8 +49,16 @@ function baseTsType(field: ManifestField): string {
     case `${XSD}integer`:
     case `${XSD}int`:
     case `${XSD}long`:
+    case `${XSD}short`:
+    case `${XSD}byte`:
     case `${XSD}nonNegativeInteger`:
     case `${XSD}positiveInteger`:
+    case `${XSD}nonPositiveInteger`:
+    case `${XSD}negativeInteger`:
+    case `${XSD}unsignedLong`:
+    case `${XSD}unsignedInt`:
+    case `${XSD}unsignedShort`:
+    case `${XSD}unsignedByte`:
     case `${XSD}decimal`:
     case `${XSD}double`:
     case `${XSD}float`:
