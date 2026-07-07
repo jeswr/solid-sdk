@@ -7,8 +7,13 @@
  * A generated artifact contains NO executable logic beyond the fixed shim.
  */
 
-import type { ManifestEntity, ManifestField, ModelManifest } from "@jeswr/model-runtime";
-import { serializeCanonicalTurtle, XSD } from "./rdf.js";
+import {
+  literalMapper,
+  type ManifestEntity,
+  type ManifestField,
+  type ModelManifest,
+} from "@jeswr/model-runtime";
+import { serializeCanonicalTurtle } from "./rdf.js";
 import type { NormalizedShapes } from "./shapes.js";
 
 const GENERATED_HEADER =
@@ -35,33 +40,37 @@ export function emitModelJs(manifest: ModelManifest): string {
 }
 
 function baseTsType(field: ManifestField): string {
+  // A closed `sh:in` value set narrows the field to a literal union.
+  if (field.in !== undefined && field.in.length > 0) {
+    return field.in.map((v) => (typeof v === "string" ? JSON.stringify(v) : String(v))).join(" | ");
+  }
   if (field.kind === "iri") return "string";
-  switch (field.datatype ? expand(field.datatype) : "") {
-    case `${XSD}boolean`:
-      return "boolean";
-    case `${XSD}dateTime`:
-    case `${XSD}date`:
-      return "Date";
-    case `${XSD}integer`:
-    case `${XSD}int`:
-    case `${XSD}long`:
-    case `${XSD}nonNegativeInteger`:
-    case `${XSD}positiveInteger`:
-    case `${XSD}decimal`:
-    case `${XSD}double`:
-    case `${XSD}float`:
+  if (field.datatype === undefined) return "string";
+  // Single-source the datatype → TS-type decision through the audited runtime's
+  // `literalMapper` (the SAME resolution the runtime reads/writes against, and that
+  // `shapes.ts` coerces `sh:in` scalars by), so the emitted type can never disagree
+  // with the runtime's JS surface type — e.g. the unsigned XSD integer subtypes.
+  switch (literalMapper(field.datatype).jsType) {
+    case "number":
       return "number";
+    case "boolean":
+      return "boolean";
+    case "date":
+      return "Date";
     default:
       return "string";
   }
 }
 
-function expand(datatype: string): string {
-  return datatype.startsWith("xsd:") ? `${XSD}${datatype.slice(4)}` : datatype;
-}
-
+// Requiredness in `*Data` must track the RUNTIME ADMISSION CONTRACT, not shape
+// cardinality alone. Under G1 severity-aware requiredness, an advisory
+// (`sh:Warning`/`sh:Info`-graded) `sh:minCount ≥ 1` field is ADMITTED at runtime when
+// ABSENT — it compiles to NO `requiredFailClosed` guard — so typing it required in
+// `*Data` would make the static type reject objects the runtime accepts. A field is
+// required iff it carries the fail-closed required guard (Violation-graded / ungraded
+// `minCount ≥ 1`, or a config-declared `requiredFailClosed: true`).
 function isRequired(field: ManifestField): boolean {
-  return field.minCount !== undefined && field.minCount >= 1;
+  return field.guards?.requiredFailClosed === true;
 }
 
 // Property names are JSON.stringify-quoted so ANY field name is a valid .d.ts

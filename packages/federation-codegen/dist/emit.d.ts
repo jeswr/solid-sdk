@@ -5,7 +5,7 @@
  * only, zero runtime code), and shapes.ttl (the byte-reproducible stable waist).
  * A generated artifact contains NO executable logic beyond the fixed shim.
  */
-import type { ModelManifest } from "@jeswr/model-runtime";
+import { type ModelManifest } from "@jeswr/model-runtime";
 import type { NormalizedShapes } from "./shapes.js";
 /** model.json — the compiled manifest, pretty-printed + trailing newline. */
 export declare function emitModelJson(manifest: ModelManifest): string;

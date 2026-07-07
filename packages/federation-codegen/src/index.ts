@@ -37,6 +37,7 @@ export {
   type CompileResult,
   compileManifest,
   type FieldProvenance,
+  isFailClosedSeverity,
   isHttpPattern,
 } from "./compile.js";
 export {
@@ -69,4 +70,5 @@ export {
   parseShapes,
   type ShapeConstraint,
   type ShapeKind,
+  type ShapeScalar,
 } from "./shapes.js";

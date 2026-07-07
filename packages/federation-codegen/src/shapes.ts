@@ -13,9 +13,13 @@
  * ontologies tighten (design §5).
  */
 
+import { literalMapper } from "@jeswr/model-runtime";
 import type { Quad, Quad_Object, Quad_Subject, Term } from "@rdfjs/types";
 import { DataFactory } from "n3";
-import { Graph, parseTurtle, RDF, SH } from "./rdf.js";
+import { Graph, parseTurtle, RDF, SH, XSD } from "./rdf.js";
+
+/** A scalar a closed `sh:in` value set may carry (mirrors the manifest's ManifestScalar). */
+export type ShapeScalar = string | number | boolean;
 
 /** The RDF term kind a property shape constrains its values to. */
 export type ShapeKind = "iri" | "literal";
@@ -35,8 +39,19 @@ export interface ShapeConstraint {
   maxCount?: number;
   /** `sh:pattern`, if declared. */
   pattern?: string;
-  /** `sh:severity`, if declared. */
+  /** `sh:severity`, if declared (the full IRI, e.g. `${SH}Violation`). */
   severity?: string;
+  /**
+   * `sh:in` — the closed value set, extracted from its RDF list to scalars. An
+   * EMPTY array signals a present-but-malformed / empty `sh:in` (admission flags it).
+   */
+  in?: ShapeScalar[];
+  /** `sh:minInclusive` (numeric lower bound), if declared. */
+  minInclusive?: number;
+  /** `sh:maxInclusive` (numeric upper bound), if declared. */
+  maxInclusive?: number;
+  /** `sh:minLength` (minimum string length), if declared. */
+  minLength?: number;
   /** The skolemized IRI of the property shape (was a blank node). */
   shapeIri: string;
 }
@@ -67,6 +82,63 @@ function numberOr(value: string | undefined): number | undefined {
   if (value === undefined) return undefined;
   const n = Number(value);
   return Number.isFinite(n) ? n : undefined;
+}
+
+/**
+ * Coerce an RDF list member term to a manifest scalar (by literal datatype). The
+ * numeric datatype set is NOT re-enumerated here — a field is numeric iff the
+ * audited runtime's `literalMapper` resolves its datatype to `jsType === "number"`,
+ * the SAME resolution `emit.ts` types against. Single-sourcing it through the
+ * runtime means an `sh:in` enum can never disagree with the emitted TS / runtime
+ * numeric treatment (this previously drifted for the unsigned XSD integer subtypes,
+ * which `emit.ts` maps to `number` but a local set here omitted).
+ */
+function termToScalar(term: Term): ShapeScalar {
+  if (term.termType === "Literal") {
+    const dt = (term as Term & { datatype?: { value: string } }).datatype?.value;
+    if (dt === `${XSD}boolean`) return term.value === "true" || term.value === "1";
+    if (dt !== undefined && literalMapper(dt).jsType === "number") {
+      const n = Number(term.value);
+      if (Number.isFinite(n)) return n;
+    }
+    return term.value;
+  }
+  // NamedNode (an IRI value set) — carry the IRI string.
+  return term.value;
+}
+
+/**
+ * Walk an RDF list from `head` (`rdf:first`/`rdf:rest` → `rdf:nil`) into its member
+ * terms. Returns `undefined` for a malformed list so a bad `sh:in` fails CLOSED
+ * rather than silently truncating / first-picking. A list is malformed when: an
+ * interior node is not a blank node / IRI; a node does not carry EXACTLY ONE
+ * `rdf:first` AND EXACTLY ONE `rdf:rest` (a branching / duplicated link is rejected,
+ * never silently resolved to its first object); the chain cycles; or it does not
+ * terminate at the `rdf:nil` NamedNode (a literal / blank node whose lexical value
+ * merely equals the nil IRI is NOT a valid terminator).
+ */
+function rdfList(graph: Graph, head: Term): Term[] | undefined {
+  const Nil = `${RDF}nil`;
+  const out: Term[] = [];
+  const seen = new Set<string>();
+  let node: Term = head;
+  while (true) {
+    // Termination: a well-formed list ends at the rdf:nil NamedNode.
+    if (node.termType === "NamedNode" && node.value === Nil) return out;
+    if (node.termType !== "NamedNode" && node.termType !== "BlankNode") return undefined;
+    if (seen.has(node.value)) return undefined; // cycle guard
+    seen.add(node.value);
+    const firsts = graph.objects(node, `${RDF}first`);
+    const rests = graph.objects(node, `${RDF}rest`);
+    // Exactly one first + one rest per list node — a duplicate/branching link is
+    // malformed, not silently first-picked (the old graph.object() single-take).
+    if (firsts.length !== 1 || rests.length !== 1) return undefined;
+    const first = firsts[0];
+    const rest = rests[0];
+    if (first === undefined || rest === undefined) return undefined;
+    out.push(first);
+    node = rest;
+  }
 }
 
 function resolveKind(nodeKind: string | undefined, datatype: string | undefined): ShapeKind {
@@ -136,6 +208,19 @@ export function parseShapes(shapesTtl: string, shapesBase: string): NormalizedSh
       if (pattern !== undefined) constraint.pattern = pattern;
       const severity = graph.value(propObj, `${SH}severity`);
       if (severity !== undefined) constraint.severity = severity;
+      // sh:in — a closed value set (RDF list). An unparseable/nil list yields [] so
+      // admission can flag it (present-but-empty ⇒ malformed enum).
+      const inHead = graph.object(propObj, `${SH}in`);
+      if (inHead !== undefined) {
+        const members = rdfList(graph, inHead);
+        constraint.in = members === undefined ? [] : members.map(termToScalar);
+      }
+      const minInclusive = numberOr(graph.value(propObj, `${SH}minInclusive`));
+      if (minInclusive !== undefined) constraint.minInclusive = minInclusive;
+      const maxInclusive = numberOr(graph.value(propObj, `${SH}maxInclusive`));
+      if (maxInclusive !== undefined) constraint.maxInclusive = maxInclusive;
+      const minLength = numberOr(graph.value(propObj, `${SH}minLength`));
+      if (minLength !== undefined) constraint.minLength = minLength;
       properties.push(constraint);
     }
     properties.sort((a, b) => a.pathIri.localeCompare(b.pathIri));
