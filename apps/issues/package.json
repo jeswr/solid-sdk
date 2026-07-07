@@ -16,7 +16,7 @@
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",
-    "@jeswr/app-shell": "git+https://github.com/jeswr/app-shell.git#cc86f7851b5aeadcd7e59489fbd54845585920d9",
+    "@jeswr/app-shell": "git+https://github.com/jeswr/app-shell.git#7f46437612182f96a5b6726036fb555d1bdb81ec",
     "@jeswr/fetch-rdf": "^0.1.0",
     "@jeswr/guarded-fetch": "github:jeswr/guarded-fetch#184f060d95cc29ef7a01e8bc28fb04bb24b5af76",
     "@jeswr/solid-odrl": "github:jeswr/solid-odrl#1d354c7",
