@@ -10,6 +10,8 @@
 @prefix skos:    <http://www.w3.org/2004/02/skos/core#> .
 @prefix vann:    <http://purl.org/vocab/vann/> .
 @prefix gufo:    <http://purl.org/nemo/gufo#> .
+@prefix foaf:    <http://xmlns.com/foaf/0.1/> .
+@prefix fedgen:  <https://w3id.org/jeswr/fedgen#> .
 
 # =============================================================================
 # Solid Media & Activity sector ontology — RE-BASED onto gUFO (KEY=media).
@@ -83,6 +85,7 @@ vann:preferredNamespacePrefix a owl:AnnotationProperty .
 vann:preferredNamespaceUri    a owl:AnnotationProperty .
 skos:definition     a owl:AnnotationProperty .
 skos:scopeNote      a owl:AnnotationProperty .
+fedgen:deliberatelyUnconstrained a owl:AnnotationProperty .
 
 # =============================================================================
 # 1. CREATIVE WORKS  (gufo:SubKind rooting in core:InformationResource)
@@ -145,8 +148,9 @@ media:PodcastEpisode a owl:Class, gufo:SubKind ;
 media:Artist a owl:Class, gufo:RoleMixin ;
     rdfs:subClassOf core:Agent ;
     rdfs:label "Artist"@en ;
+    rdfs:seeAlso foaf:name ;
     skos:definition "The role of an agent (a core:Person or a core:Organization) credited as the creator/performer of a creative work. Rooted in core:Agent so both solo artists and bands qualify without collapsing those Core classes."@en ;
-    skos:scopeNote "gufo:RoleMixin (anti-rigid, cross-kind) played by core:Agent. Played by media:MusicGroup and by core:Person."@en .
+    skos:scopeNote "gufo:RoleMixin (anti-rigid, cross-kind) played by core:Agent. Played by media:MusicGroup and by core:Person. DISPLAY NAME: an artist's literal display name is carried by foaf:name (reuse-before-mint) — the ArtistShape in media.shacl.ttl names it; adopted from the @jeswr/solid-listening fedcon observation so every producer agrees on foaf:name rather than each picking schema:name / rdfs:label."@en .
 
 media:MusicGroup a owl:Class, gufo:SubKind ;
     rdfs:subClassOf core:Organization ;
@@ -304,6 +308,37 @@ media:licenseTerms a owl:DatatypeProperty ;
     rdfs:range xsd:string ;
     rdfs:label "license terms"@en ;
     skos:definition "Human-readable summary of the licence terms. Machine-actionable terms SHOULD be expressed via an ODRL policy (R2) referenced from the licence."@en .
+
+# =============================================================================
+# 7. LISTENING-FORK EXTENSIONS — playback-event terms ADMITTED from the
+# @jeswr/solid-listening fedcon:Proposal candidates (a Web Scrobbler→Solid fork,
+# listening.proposals.ttl). Modelling REAL scrobble data surfaced these gaps; the
+# fork drove them through the contribution lifecycle and the sector now adopts
+# them ADDITIVELY (constrain-never-fork). All three are per-play event metadata on
+# media:PlaybackEvent, so they root there. See media.shacl.ttl for the graded
+# profile (all Info — optional, well-formedness-only).
+# =============================================================================
+
+# --- completion fraction (fedcon #prop-completion) ---
+media:completionFraction a owl:DatatypeProperty ;
+    rdfs:domain media:PlaybackEvent ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "completion fraction"@en ;
+    skos:definition "The fraction of the work played in this event, in [0,1]. Source-independent — unlike deriving it from media:msPlayed / media:durationSeconds (a live stream has no durationSeconds), so it can express 'how much' even when the total length is unknown. Adopted from the @jeswr/solid-listening fedcon proposal (Web Scrobbler full-listen-vs-skip need)."@en .
+
+# --- source-service attribution (fedcon #prop-played-via) ---
+media:playedVia a owl:ObjectProperty ;
+    rdfs:domain media:PlaybackEvent ;
+    fedgen:deliberatelyUnconstrained "The service/platform target is deliberately open — a service IRI (e.g. a platform identifier) OR a labelled node — so no rdfs:range is asserted (F-waiver)." ;
+    rdfs:label "played via"@en ;
+    skos:definition "The media service / platform a play occurred on (YouTube Music, Spotify web, SoundCloud, a radio site), as a service IRI or a labelled node. Distinct from media:onAccount — a play can be attributed to a service with no known media:MediaAccount (the common Web Scrobbler case: an anonymous web player). Adopted from the @jeswr/solid-listening fedcon proposal."@en .
+
+# --- loved flag (fedcon #prop-loved-skipped) ---
+media:loved a owl:DatatypeProperty ;
+    rdfs:domain media:PlaybackEvent ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "loved"@en ;
+    skos:definition "Whether the user marked this play/track as loved (the Web Scrobbler 'love' affordance) — first-class per-play user feedback, not inferred from media:msPlayed. Adopted from the @jeswr/solid-listening fedcon proposal."@en .
 
 # =============================================================================
 # SECTOR MARKER — the IRI an app's fedapp:sector points at to declare it operates
