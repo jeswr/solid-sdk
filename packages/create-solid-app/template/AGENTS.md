@@ -13,7 +13,7 @@ below are non-negotiable; the lint config and tests enforce most of them.
 | Package | Version | Role |
 |---|---|---|
 | `next` | 16.x (App Router, React 19) | framework |
-| `@jeswr/app-shell` | `git+https#5a7484d` | shared suite shell — `ThemeProvider`/`ThemeToggle`/`themeScript`, `AccountMenu`, `FeedbackButton`, primitives |
+| `@jeswr/app-shell` | `git+https#7f46437` | shared suite shell — `ThemeProvider`/`ThemeToggle`/`themeScript`, `AccountMenu`, `FeedbackButton`, `ErrorBoundary`/`ErrorState`, primitives |
 | `@jeswr/solid-elements` | `git+https#df0fbe4` | framework-agnostic W3C Web Components (Lit 3) — `<jeswr-loading>` wait-state spinner via the `./react` (@lit/react) adapter; themes from the same app-shell tokens |
 | `@jeswr/solid-components` | `git+https#5e999c0` | declarative, data-bound Solid Web Components (Lit 3) — `<solid-view>` resolve-by-type composer + per-class read elements (`<jeswr-task-list>`/`<jeswr-contact-list>`/`<jeswr-profile-card>`/`<jeswr-bookmark-list>`/`<jeswr-collection>`); injectable `.fetch`/`.publicFetch` seam. **READ-ONLY (Phase 1); edit mode is Phase 2.** |
 | `lit` / `@lit/react` | 3.x / 1.x | Lit runtime + React adapter for solid-elements (direct deps so npm hoists ONE copy; also deduped in `next.config.ts`) |

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AppHeader } from "@/components/AppHeader";
+import { RoutedErrorBoundary } from "@/components/RoutedErrorBoundary";
 import { NO_FLASH_THEME_SCRIPT } from "@/lib/theme-script";
 import { Providers } from "./providers";
 
@@ -44,7 +45,7 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col">
         <Providers>
           <AppHeader />
-          {children}
+          <RoutedErrorBoundary>{children}</RoutedErrorBoundary>
         </Providers>
       </body>
     </html>
