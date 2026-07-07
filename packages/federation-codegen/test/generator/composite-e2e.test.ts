@@ -292,6 +292,25 @@ describe("composite fidelity — the P0 exit criterion FAILS on a tampered compo
     expect(() => assertFidelity(shapes, compiled)).toThrow(FidelityError);
   });
 
+  it("FAILS when a nested link maps a MULTI-VALUED (unbounded) shape property (tamper defense)", () => {
+    // core:hadParticipant is an UNBOUNDED IRI link (minCount 1, no maxCount). compile would
+    // reject a nested link on it, but a hand-TAMPERED manifest must still be caught by
+    // fidelity — the tamper defense mirrors the single-valued-link invariant, so it can't
+    // be bypassed by editing model.json directly (or a future compile regression).
+    const compiled = compileManifest(shapes, CONFIG);
+    const event = compiled.manifest.entities
+      .flatMap((e) => (e.kind === "composite" ? e.nodes : []))
+      .find((n) => n.name === "event");
+    if (!event) throw new Error("event node missing");
+    event.fields.push({
+      name: "listenerLink",
+      predicate: `${CORE}hadParticipant`,
+      kind: "nested",
+      node: "track",
+    } as never);
+    expect(() => assertFidelity(shapes, compiled)).toThrow(FidelityError);
+  });
+
   it("FAILS when a nested link drops its requiredFailClosed (a Violation link)", () => {
     const compiled = compileManifest(shapes, CONFIG);
     const link = compiled.manifest.entities

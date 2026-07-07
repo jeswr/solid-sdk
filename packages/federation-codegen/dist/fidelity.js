@@ -282,6 +282,13 @@ function assertCompositeFidelity(shapes, compiled, composite) {
                 if (constraint.kind !== "iri") {
                     throw new FidelityError(`composite ${composite.name} node "${node.name}" nested link ${field.name} maps a non-IRI shape property`);
                 }
+                // A nested link is a SINGLE-VALUED tree edge (the runtime models it as maxCount 1);
+                // fidelity is the tamper defense, so it must MIRROR the compile-time invariant — a
+                // manifest mapping a nested link to an unbounded / maxCount>1 shape property is
+                // rejected (set-valued nested links are a documented future feature).
+                if (constraint.maxCount !== 1) {
+                    throw new FidelityError(`composite ${composite.name} node "${node.name}" nested link ${field.name} maps the multi-valued shape property ${field.predicate} (maxCount ${constraint.maxCount ?? "unbounded"}); a nested link must be single-valued (sh:maxCount 1)`);
+                }
                 const required = field.guards?.requiredFailClosed === true;
                 if (required && !isPresenceMust(constraint)) {
                     throw new FidelityError(`composite ${composite.name} node "${node.name}" nested link ${field.name} requiredFailClosed is not shape-derived (not a Violation-graded minCount ≥ 1)`);
