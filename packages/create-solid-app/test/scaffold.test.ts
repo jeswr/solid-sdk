@@ -194,9 +194,33 @@ describe("scaffold", () => {
   });
 
   it("ships the baked-in app-shell wiring (header + config)", () => {
-    for (const f of ["lib/app-shell-config.ts", "lib/app-version.ts", "components/AppHeader.tsx"]) {
+    for (const f of [
+      "lib/app-shell-config.ts",
+      "lib/app-version.ts",
+      "components/AppHeader.tsx",
+      "components/RoutedErrorBoundary.tsx",
+    ]) {
       expect(result.files, `missing ${f}`).toContain(f);
     }
+  });
+
+  it("wraps the routed content in the suite-shared <ErrorBoundary resetKey={pathname}>", async () => {
+    // The routed page content is guarded by the boundary; the chrome (<AppHeader />)
+    // stays OUTSIDE it so a page render error never white-screens the whole app and
+    // the header remains usable (cross-app error-handling parity).
+    const layout = await readFile(join(result.targetDir, "app", "layout.tsx"), "utf8");
+    expect(layout).toContain("import { RoutedErrorBoundary }");
+    expect(layout).toContain("<RoutedErrorBoundary>{children}</RoutedErrorBoundary>");
+
+    const eb = await readFile(
+      join(result.targetDir, "components", "RoutedErrorBoundary.tsx"),
+      "utf8",
+    );
+    // The shared boundary, reset by route (usePathname) so navigation recovers.
+    expect(eb).toContain('from "@jeswr/app-shell"');
+    expect(eb).toContain("ErrorBoundary");
+    expect(eb).toContain("usePathname");
+    expect(eb).toMatch(/resetKey=\{pathname\}/);
   });
 
   it("ships the baked safe-form chrome (solid-elements + the #121/#78 guards)", () => {
