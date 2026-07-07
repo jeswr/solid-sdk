@@ -1,0 +1,72 @@
+{
+  "name": "@jeswr/federation-codegen",
+  "version": "0.1.0",
+  "description": "Ontology-driven data-model codegen for the Solid app suite — deterministic OWL/RDFS + SHACL → model.d.ts (types) + model.json (a fidelity-asserted verified projection of shapes.ttl) + model.js (a fixed-template shim over @jeswr/model-runtime). Includes the tier-a structural admission validator and the build-time fidelity assertion.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Jesse Wright",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jeswr/federation-codegen.git"
+  },
+  "homepage": "https://github.com/jeswr/federation-codegen#readme",
+  "bugs": {
+    "url": "https://github.com/jeswr/federation-codegen/issues"
+  },
+  "keywords": [
+    "solid",
+    "rdf",
+    "shacl",
+    "owl",
+    "codegen",
+    "federation",
+    "rdfjs"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "federation-codegen": "./dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "biome check src scripts test examples/bookmark/facade.ts",
+    "lint:fix": "biome check --write src scripts test examples/bookmark/facade.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "gen:example": "node scripts/gen-bookmark.mjs",
+    "check:dist": "node scripts/check-dist.mjs",
+    "gate": "npm run lint && npm run typecheck && npm run test && npm run build && npm run check:dist"
+  },
+  "dependencies": {
+    "@jeswr/model-runtime": "file:../model-runtime",
+    "n3": "^2.0.3"
+  },
+  "peerDependencies": {
+    "@rdfjs/types": "^2.0.1"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.0.0",
+    "@jeswr/fetch-rdf": "^0.1.0",
+    "@rdfjs/types": "^2.0.1",
+    "@rdfjs/wrapper": "^0.34.0",
+    "@types/n3": "^1.26.1",
+    "@types/node": "^20",
+    "typescript": "^5",
+    "vitest": "^4.1.8"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

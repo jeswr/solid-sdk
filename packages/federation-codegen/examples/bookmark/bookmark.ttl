@@ -1,0 +1,93 @@
+# AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+#
+# Bookmark / read-it-later ontology (@jeswr/solid-bookmark) — the data model for
+# a Linkding→Solid fork.
+#
+# MINT THE MINIMUM. This ontology declares exactly the THREE terms no widely-
+# deployed vocabulary already provides — book:Bookmark, book:archived,
+# book:notes — and REUSES schema.org + Dublin Core for everything else
+# (schema:url, schema:keywords, dct:title/description/created/modified). The
+# bare `book:` IRIs are the ones the @jeswr/solid-federation-vocab media sector /
+# bookmarks# alignments reference, so this file is their canonical home.
+#
+# ROOTING (documented design choice; the alternative was rejected — proceed-
+# without-greenlight rule):
+#   book:Bookmark rdfs:subClassOf core:InformationResource — the gUFO-rebased
+#   suite core (@jeswr/solid-federation-vocab, https://w3id.org/jeswr/core#). A
+#   saved bookmark IS an information resource (a stored reference to a web
+#   resource), which is the identity principle the media: sector classes
+#   (media:CreativeWork, media:Album) also root in. This keeps the federation
+#   reasoner's class spine consistent across sectors.
+#
+#   ALTERNATIVE CONSIDERED & REJECTED: rooting under schema:BookmarkAction. A
+#   schema:BookmarkAction is the ACT of bookmarking (an action), whereas a
+#   book:Bookmark is the saved THING (a resource). Making the saved thing a
+#   subclass of the action would be a category error and an over-strong identity
+#   claim. Instead the package carries a THIN skos:closeMatch annotation to
+#   schema:BookmarkAction (below) — discovery only, no entailment.
+
+@prefix book:   <https://w3id.org/jeswr/bookmark#> .
+@prefix core:   <https://w3id.org/jeswr/core#> .
+@prefix owl:    <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:   <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:    <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos:   <http://www.w3.org/2004/02/skos/core#> .
+@prefix schema: <http://schema.org/> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix vann:   <http://purl.org/vocab/vann/> .
+
+<https://w3id.org/jeswr/bookmark> a owl:Ontology ;
+    dcterms:title "Bookmark / read-it-later ontology"@en ;
+    rdfs:label "Bookmark ontology"@en ;
+    vann:preferredNamespacePrefix "book" ;
+    vann:preferredNamespaceUri "https://w3id.org/jeswr/bookmark#" ;
+    owl:versionInfo "0.1.0" ;
+    rdfs:comment """The RDF data model for bookmarks / read-it-later (a Linkding→Solid fork). Mints only book:Bookmark, book:archived and book:notes; reuses schema:url, schema:keywords (tags) and Dublin Core for the rest. book:Bookmark roots in core:InformationResource (the gUFO-rebased Solid Core)."""@en .
+
+# Declare the annotation properties used here so this file is self-describing.
+dcterms:title       a owl:AnnotationProperty .
+rdfs:comment        a owl:AnnotationProperty .
+skos:closeMatch     a owl:AnnotationProperty .
+vann:preferredNamespacePrefix a owl:AnnotationProperty .
+vann:preferredNamespaceUri    a owl:AnnotationProperty .
+
+# -----------------------------------------------------------------------------
+# The class
+# -----------------------------------------------------------------------------
+
+book:Bookmark a owl:Class ;
+    rdfs:subClassOf core:InformationResource ;
+    rdfs:label "Bookmark"@en ;
+    rdfs:comment "A saved bookmark / read-it-later entry: a stored reference to a web resource (schema:url) with a title, description, markdown notes, tags and an archived flag. Rooted in core:InformationResource (the saved thing is an information resource, not the act of bookmarking — see the skos:closeMatch to schema:BookmarkAction)."@en ;
+    skos:closeMatch schema:BookmarkAction .
+
+# -----------------------------------------------------------------------------
+# The two minted properties (everything else is reused)
+# -----------------------------------------------------------------------------
+
+book:archived a owl:DatatypeProperty ;
+    rdfs:label "archived"@en ;
+    rdfs:comment "Whether the bookmark is archived (Linkding's is_archived). An xsd:boolean; absent reads as false."@en ;
+    rdfs:domain book:Bookmark ;
+    rdfs:range xsd:boolean .
+
+book:notes a owl:DatatypeProperty ;
+    rdfs:label "notes"@en ;
+    rdfs:comment "The user's free-text markdown notes on the bookmark (Linkding's notes). Distinct from the short dct:description blurb — notes is the longer markdown body."@en ;
+    rdfs:domain book:Bookmark ;
+    rdfs:range xsd:string .
+
+# -----------------------------------------------------------------------------
+# Reused properties — documented here (rdfs:subPropertyOf NONE; pure reuse) so a
+# consumer sees the full predicate surface, but NOT re-declared (they belong to
+# their own ontologies). These are annotations only — declaring the external
+# terms as the typed properties they already are would over-claim ownership.
+#
+#   schema:url        — the bookmarked URL (an IRI).
+#   schema:keywords   — a tag (one literal per tag; the model's tags decision).
+#   dct:title         — the bookmark title (Linkding title).
+#   dct:description   — the short summary / blurb (Linkding description).
+#   dct:created       — when added (Linkding date_added).
+#   dct:modified      — when last changed (Linkding date_modified).
+# -----------------------------------------------------------------------------

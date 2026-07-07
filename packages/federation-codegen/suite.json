@@ -1,0 +1,34 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jeswr/full-solid-ecosystem/main/tracking/schema/suite.schema.json",
+  "id": "federation-codegen",
+  "kind": "sdk",
+  "name": "Federation Model Codegen",
+  "repo": "https://github.com/jeswr/federation-codegen",
+  "category": "infrastructure",
+  "maturity": "alpha",
+  "visibility": "public",
+  "stack": {
+    "lang": "TypeScript (ESM, NodeNext)",
+    "runtime": "Node >=20",
+    "rdf": "n3 ^2.x",
+    "runtime-dep": "@jeswr/model-runtime",
+    "test": "vitest ^4.x",
+    "lint": "@biomejs/biome ^2.x",
+    "node": ">=20"
+  },
+  "federation": {
+    "sectors": [],
+    "produces": [],
+    "consumes": [],
+    "note": "Ontology-driven data-model codegen for the Solid app suite (design rev-3 P0). Deterministically compiles a sector ontology (OWL/RDFS) + SHACL profile + a per-domain codegen config into model.d.ts (types), model.json (a fidelity-asserted verified projection of shapes.ttl), model.js (a fixed-template shim over @jeswr/model-runtime), and a skolemized byte-reproducible shapes.ttl. Includes the L0 ontology-input adapter seam, the tier-a structural admission validator (labels+definitions, domain/range-or-waiver, SHACL coverage — fail-closed), and the build-time FIDELITY ASSERTION (the P0 exit criterion: model.json round-trips to shapes.ttl order-independently). Bookmarks pilot generates the @jeswr/solid-bookmark model and passes its existing test suite as the parity bar. GitHub-installable (committed dist/, ignore-scripts=true); npm publish deferred."
+  },
+  "status": {
+    "version": "0.1.0",
+    "gate": {
+      "lint": "pass",
+      "typecheck": "pass",
+      "test": "pass",
+      "build": "pass"
+    }
+  }
+}
