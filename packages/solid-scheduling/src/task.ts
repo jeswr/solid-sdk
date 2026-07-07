@@ -216,16 +216,27 @@ function positiveIntOrUndefined(value: number | undefined): number | undefined {
   return typeof value === "number" && Number.isInteger(value) && value >= 1 ? value : undefined;
 }
 
-// A conservative ISO-8601 duration (`xsd:duration`) matcher: an optional leading
-// `-`, `P`, then at least one date and/or time component. Rejects the empty `P`,
-// a lone `T`, and anything with stray characters — so an untrusted triggerOffset
-// is validated before it is written as a typed literal.
+// A conservative XSD-1.1 `xsd:duration` matcher: an optional leading `-`, `P`,
+// then at least one date and/or time component. Rejects the empty `P`, a lone
+// `T`, and anything with stray characters — so an untrusted triggerOffset is
+// validated before it is written as a typed literal. NB the WEEK form (`nW`) is
+// deliberately NOT accepted: XSD 1.1 `xsd:duration` does not permit it, so a
+// `P1W` value would be written as an invalid literal — dropped instead.
 const ISO_DURATION =
-  /^-?P(?=[\dYMWDTH.S])(\d+Y)?(\d+M)?(\d+W)?(\d+D)?(T(?=[\dHMS.])(\d+H)?(\d+M)?(\d+(\.\d+)?S)?)?$/;
+  /^-?P(?=[\dYMDTH.S])(\d+Y)?(\d+M)?(\d+D)?(T(?=[\dHMS.])(\d+H)?(\d+M)?(\d+(\.\d+)?S)?)?$/;
 
-/** A well-formed `xsd:duration` string, else `undefined`. */
+/** A well-formed `xsd:duration` string (no week form), else `undefined`. */
 function durationOrUndefined(value: string | undefined): string | undefined {
   return typeof value === "string" && ISO_DURATION.test(value) ? value : undefined;
+}
+
+/**
+ * A VALID `Date`, else `undefined` — so an `Invalid Date` (e.g. `new Date("x")`)
+ * never reaches `LiteralFrom.dateTime`, whose `toISOString()` would otherwise
+ * throw and abort the whole build on hostile/sloppy input.
+ */
+function validDateOrUndefined(value: Date | undefined): Date | undefined {
+  return value instanceof Date && !Number.isNaN(value.getTime()) ? value : undefined;
 }
 
 /** The four known recurrence frequencies (uppercased). */
@@ -445,17 +456,21 @@ export class Reminder extends TermWrapper {
  * http(s) filtering of the WebID/relation IRIs and the wf:Open/wf:Closed +
  * `prov:endedAtTime` state management.
  */
-function toWfTaskData(data: SchedulingTaskData): TaskData {
+function toWfTaskData(data: SchedulingTaskData, completedAt: Date | undefined): TaskData {
   const wf: TaskData = {
     title: data.summary,
     state: data.completed ? "closed" : "open",
   };
   setIfDefined(wf, "description", data.description);
-  setIfDefined(wf, "endedAt", data.completedAt);
+  // Single source of truth for the completion timestamp (computed once in
+  // buildSchedulingTask): the SAME value is written to prov:endedAtTime (here,
+  // via buildTask) and to sched:completedAt, so the two graphs never diverge.
+  setIfDefined(wf, "endedAt", completedAt);
   setIfDefined(wf, "creator", data.organizer);
   setIfDefined(wf, "assignee", data.assignee);
   setIfDefined(wf, "project", data.calendar);
-  setIfDefined(wf, "dueDate", data.dueTime);
+  // Validated so an Invalid Date can't reach buildTask's LiteralFrom.dateTime.
+  setIfDefined(wf, "dueDate", validDateOrUndefined(data.dueTime));
   setIfDefined(wf, "priority", data.priority);
   setIfDefined(wf, "rank", data.position);
   setIfDefined(wf, "parent", data.parent);
@@ -479,18 +494,25 @@ function toWfTaskData(data: SchedulingTaskData): TaskData {
  *   a known DAILY/WEEKLY/MONTHLY/YEARLY value.
  */
 export function buildSchedulingTask(resourceUrl: string, data: SchedulingTaskData): Store {
+  // Single source of truth for the completion timestamp: computed ONCE here and
+  // written to BOTH graphs (prov:endedAtTime via buildTask + sched:completedAt),
+  // so they can never diverge. Only meaningful for a closed task; a raw provided
+  // completedAt is validated so an Invalid Date can't reach LiteralFrom.dateTime.
+  const completedAt =
+    data.completed === true ? (validDateOrUndefined(data.completedAt) ?? new Date()) : undefined;
+
   // Start from the shared wf:Task store (federation edge), then layer sched: on
   // the same #it subject. buildTask owns the untrusted IRI filtering + state.
-  const store = new Store([...buildTask(resourceUrl, toWfTaskData(data))]);
+  const store = new Store([...buildTask(resourceUrl, toWfTaskData(data, completedAt))]);
   const iris = schedulingNodeIris(resourceUrl);
 
   const task = new SchedulingTask(iris.task, store, DataFactory).mark();
   task.summary = data.summary || undefined;
   task.description = data.description || undefined;
-  task.startTime = data.startTime;
-  task.dueTime = data.dueTime;
+  task.startTime = validDateOrUndefined(data.startTime);
+  task.dueTime = validDateOrUndefined(data.dueTime);
   if (data.completed !== undefined) task.completed = data.completed;
-  task.completedAt = data.completed === true ? (data.completedAt ?? new Date()) : data.completedAt;
+  task.completedAt = completedAt;
 
   // organizer/calendar are untrusted IRIs: drop anything not absolute http(s).
   task.organizer = httpIriOrUndefined(data.organizer);
@@ -501,20 +523,29 @@ export function buildSchedulingTask(resourceUrl: string, data: SchedulingTaskDat
     if (l) task.labels.add(l);
   }
 
-  if (data.recurrence) {
+  // A recurrence with no KNOWN frequency is not a usable rule (the shape makes
+  // sched:frequency a MUST). Drop the WHOLE recurrence — no orphan node, no
+  // sched:recurrence link — rather than leave a SHACL-invalid frequency-less node.
+  const frequency = data.recurrence ? normalizeFrequency(data.recurrence.frequency) : undefined;
+  if (data.recurrence && frequency !== undefined) {
     const rule = new RecurrenceRule(iris.recurrence, store, DataFactory).mark();
-    rule.frequency = normalizeFrequency(data.recurrence.frequency);
+    rule.frequency = frequency;
     rule.interval = positiveIntOrUndefined(data.recurrence.interval);
     rule.count = positiveIntOrUndefined(data.recurrence.count);
-    rule.until = data.recurrence.until;
+    rule.until = validDateOrUndefined(data.recurrence.until);
     task.recurrence = iris.recurrence;
   }
 
+  // A reminder that carries neither a valid trigger time nor a well-formed offset
+  // is empty: skip it entirely (no orphan node) rather than link a contentless one.
   (data.reminders ?? []).forEach((r, i) => {
+    const triggerTime = validDateOrUndefined(r.triggerTime);
+    const triggerOffset = durationOrUndefined(r.triggerOffset);
+    if (triggerTime === undefined && triggerOffset === undefined) return;
     const iri = reminderIri(resourceUrl, i);
     const rem = new Reminder(iri, store, DataFactory).mark();
-    rem.triggerTime = r.triggerTime;
-    rem.triggerOffset = durationOrUndefined(r.triggerOffset);
+    rem.triggerTime = triggerTime;
+    rem.triggerOffset = triggerOffset;
     task.reminders.add(iri);
   });
 

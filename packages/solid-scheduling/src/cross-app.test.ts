@@ -8,7 +8,7 @@
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { isAssignedTo, parseTask, taskSubject } from "@jeswr/solid-task-model/task";
 import { describe, expect, it } from "vitest";
-import { schedulingTaskSubject, serializeSchedulingTask } from "./task.js";
+import { parseSchedulingTask, schedulingTaskSubject, serializeSchedulingTask } from "./task.js";
 
 const RES = "https://alice.pod.example/vikunja/tasks/42";
 const BOB = "https://bob.pod.example/profile/card#me";
@@ -62,6 +62,18 @@ describe("cross-app federation — a Vikunja sched:Task reads as a wf:Task", () 
     const task = parseTask(RES, ds);
     expect(task?.state).toBe("closed"); // sched:completed=true → wf:Closed
     expect(task?.endedAt?.toISOString()).toBe("2026-07-08T10:00:00.000Z"); // prov:endedAtTime
+  });
+
+  it("the completion timestamp is IDENTICAL in both graphs (no divergence)", async () => {
+    // Auto-stamped case (no completedAt supplied): sched:completedAt and the
+    // wf:Task prov:endedAtTime MUST be the same instant — a single source of truth.
+    const ttl = await serializeSchedulingTask(RES, { summary: "Auto-closed", completed: true });
+    const ds = await parseRdf(ttl, "text/turtle", { baseIRI: RES });
+    const sched = parseSchedulingTask(RES, ds);
+    const wf = parseTask(RES, ds);
+    expect(sched?.completedAt).toBeInstanceOf(Date);
+    expect(wf?.endedAt).toBeInstanceOf(Date);
+    expect(sched?.completedAt?.toISOString()).toBe(wf?.endedAt?.toISOString());
   });
 
   it("cross-model relations (parent / blocked-by) federate through wf:Task", async () => {

@@ -2,6 +2,7 @@
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { describe, expect, it } from "vitest";
 import {
+  buildSchedulingTask,
   parseSchedulingTask,
   parseSchedulingTaskTtl,
   type SchedulingTaskData,
@@ -11,7 +12,9 @@ import {
 } from "./task.js";
 import {
   RDF_TYPE,
+  RECURRENCE_RULE_CLASS,
   SCHED_INTERVAL,
+  SCHED_RECURRENCE,
   SCHED_TRIGGER_OFFSET,
   TASK_CLASS,
   XSD_DURATION,
@@ -159,6 +162,43 @@ describe("untrusted-input hardening", () => {
       recurrence: { frequency: "FORTNIGHTLY" as any, interval: 1 },
     });
     expect(out?.recurrence).toBeUndefined();
+  });
+
+  it("an invalid frequency leaves NO orphan recurrence node + no link (SHACL-safe)", () => {
+    const store = buildSchedulingTask(RES, {
+      summary: "T",
+      // biome-ignore lint/suspicious/noExplicitAny: intentionally passing a bad value
+      recurrence: { frequency: "FORTNIGHTLY" as any, interval: 1 },
+    });
+    const quads = [...store];
+    // No sched:recurrence link, and no sched:RecurrenceRule node was created.
+    expect(quads.some((q) => q.predicate.value === SCHED_RECURRENCE)).toBe(false);
+    expect(
+      quads.some((q) => q.predicate.value === RDF_TYPE && q.object.value === RECURRENCE_RULE_CLASS),
+    ).toBe(false);
+    // No orphan node under the #recurrence subject at all.
+    expect(quads.some((q) => q.subject.value === `${RES}#recurrence`)).toBe(false);
+  });
+
+  it("drops a week-form duration (P1W — invalid xsd:duration in XSD 1.1)", async () => {
+    const out = await roundTrip({
+      summary: "T",
+      reminders: [{ triggerOffset: "P1W" }, { triggerOffset: "-P7D" }],
+    });
+    // The week-form reminder carries nothing valid → dropped; the day-form survives.
+    expect(out?.reminders).toHaveLength(1);
+    expect(out?.reminders?.[0]?.triggerOffset).toBe("-P7D");
+  });
+
+  it("drops an Invalid Date (never throws / aborts the build)", async () => {
+    const out = await roundTrip({
+      summary: "T",
+      dueTime: new Date("nonsense"),
+      reminders: [{ triggerTime: new Date("also-bad") }],
+    });
+    expect(out?.summary).toBe("T");
+    expect(out?.dueTime).toBeUndefined();
+    expect(out?.reminders).toBeUndefined();
   });
 
   it("drops a malformed triggerOffset (not a well-formed xsd:duration)", async () => {
