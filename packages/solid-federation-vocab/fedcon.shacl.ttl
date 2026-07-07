@@ -78,8 +78,9 @@ fcsh:ProposalShape a sh:NodeShape ;
     sh:property [
         sh:path fedcon:definition ;
         sh:minCount 1 ;
+        sh:nodeKind sh:BlankNodeOrIRI ;   # an inline graph node OR a content-addressed URL — never a bare literal
         sh:severity sh:Warning ;
-        sh:message "A Proposal SHOULD carry a fedcon:definition (inline preferred; a content-addressed URL is tolerated and hash-verified on deref)."@en
+        sh:message "A Proposal SHOULD carry a fedcon:definition — an inline graph node or a content-addressed URL (inline preferred; a URL is hash-verified on deref), never a literal."@en
     ] ;
     sh:property [
         sh:path fedcon:motivationText ;
@@ -226,7 +227,7 @@ fcsh:AdmissionShape a sh:NodeShape ;
     # reference. sh:nodeKind is the achievable in-graph guarantee.
     sh:property [
         sh:path fedcon:dissent ;
-        sh:nodeKind sh:IRIOrBlankNode ;
+        sh:nodeKind sh:BlankNodeOrIRI ;
         sh:severity sh:Violation ;
         sh:message "Each fedcon:dissent MUST be a node reference to an oa:Annotation (IRI or blank node), never a literal."@en
     ] ;
@@ -239,7 +240,7 @@ fcsh:AdmissionShape a sh:NodeShape ;
     # refuses manufactured consensus. The dissent branch repeats sh:nodeKind so the
     # branch alone guarantees a node-shaped (not literal) dissent.
     sh:xone (
-        [ sh:property [ sh:path fedcon:dissent ; sh:minCount 1 ; sh:nodeKind sh:IRIOrBlankNode ] ]
+        [ sh:property [ sh:path fedcon:dissent ; sh:minCount 1 ; sh:nodeKind sh:BlankNodeOrIRI ] ]
         [ sh:property [ sh:path fedcon:noDissentRecorded ; sh:hasValue true ] ]
     ) ;
     sh:message "An Admission MUST carry EXACTLY ONE side of its dissent annex: >=1 fedcon:dissent (each unresolved Oppose), XOR the explicit assertion fedcon:noDissentRecorded true. Neither (manufactured consensus) AND both (a contradictory 'no dissent recorded' alongside recorded dissent) are INVALID."@en ;
