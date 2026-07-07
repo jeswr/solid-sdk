@@ -50,7 +50,7 @@
     "gate": "npm run lint && npm run typecheck && npm run test && npm run build && npm run check:dist"
   },
   "dependencies": {
-    "@jeswr/model-runtime": "file:../model-runtime",
+    "@jeswr/model-runtime": "git+https://github.com/jeswr/model-runtime.git#341e6f7f6b093224cdd9f4eb8d3db1be9580ce35",
     "n3": "^2.0.3"
   },
   "peerDependencies": {
