@@ -44,6 +44,7 @@
 
 @prefix fedreg:  <https://w3id.org/jeswr/fedreg#> .
 @prefix fedapp:  <https://w3id.org/jeswr/fed#> .
+@prefix fedcon:  <https://jeswr.org/fedcon#> .
 @prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix owl:     <http://www.w3.org/2002/07/owl#> .
@@ -285,8 +286,20 @@ fedreg:acceptsSpec
         canonical model version). During a dual-read migration window a storage
         advertises BOTH the old and new version, so independent participants
         migrate asynchronously. An app MUST discover acceptable versions here, not
-        assume them."""@en ;
+        assume them.
+
+        The value MAY ALTERNATIVELY be a content-addressed SNAPSHOT HASH — the
+        content address of a fedcon:Snapshot (https://jeswr.org/fedcon#Snapshot),
+        e.g. a urn:concept: / multibase-multihash IRI — instead of a living version
+        IRI (federation-on-hashes design §2.3). Pinning a snapshot hash advertises
+        acceptance of one IMMUTABLE, byte-identical release rather than a mutable
+        spec-version pointer, so 'which spec does this store accept' is answered by
+        content address and verified by recompute-and-compare. This is purely
+        additive: no rdfs:range is (or was) asserted on fedreg:acceptsSpec, so both
+        the living-version-IRI and the snapshot-hash forms are valid values,
+        distinguished by IRI scheme; the existing spec-version usage is unchanged."""@en ;
     rdfs:domain fedreg:StorageDescription ;
+    rdfs:seeAlso <https://jeswr.org/fedcon#Snapshot> ;
     rdfs:isDefinedBy <https://w3id.org/jeswr/fedreg> .
 
 fedreg:supportsSector

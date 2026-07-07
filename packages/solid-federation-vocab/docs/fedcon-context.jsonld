@@ -24,6 +24,7 @@
     "Stance": "fedcon:Stance",
     "Announcement": "fedcon:Announcement",
     "ReviewWindow": "fedcon:ReviewWindow",
+    "Snapshot": "fedcon:Snapshot",
 
     "Define": "fedcon:Define",
     "Extend": "fedcon:Extend",
@@ -65,6 +66,13 @@
     "decisionRationale": { "@id": "fedcon:decisionRationale", "@type": "xsd:string" },
     "stance": { "@id": "fedcon:stance", "@type": "@vocab" },
     "upgrades": { "@id": "fedcon:upgrades", "@type": "@id" },
-    "supersededBy": { "@id": "fedcon:supersededBy", "@type": "@id" }
+    "supersededBy": { "@id": "fedcon:supersededBy", "@type": "@id" },
+
+    "conceptStore": { "@id": "fedcon:conceptStore", "@type": "@id", "@container": "@set" },
+    "currentSnapshot": { "@id": "fedcon:currentSnapshot", "@type": "@id" },
+    "sequence": { "@id": "fedcon:sequence", "@type": "xsd:nonNegativeInteger" },
+    "previousSnapshot": { "@id": "fedcon:previousSnapshot", "@type": "@id" },
+    "profileBundle": { "@id": "fedcon:profileBundle", "@type": "@id" },
+    "primeSet": { "@id": "fedcon:primeSet", "@type": "@id" }
   }
 }

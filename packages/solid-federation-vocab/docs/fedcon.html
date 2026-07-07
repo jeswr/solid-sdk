@@ -67,6 +67,14 @@
         the hash IRIs are opaque and external to this vocabulary — a consumer
         validates them by scheme + determinism (recompute-and-compare against the
         supplied definition), not by an RDFS range.</td></tr>
+      <tr><td><code>conceptDereferenceTemplate</code></td><td>concept dereference template</td><td>The canonical hydra:IriTemplate for a fedcon:conceptStore's
+        dereference route: GET &lt;base&gt;/i/{multibaseMultihash}, where the single
+        required variable is the multibase-encoded multihash (the content address) of
+        the urn:concept: record being fetched (federation-on-hashes design §2.2). A
+        concept-store dcat:DataService advertises this via dcat:endpointDescription so
+        the route is discoverable as Linked Data; the served record is verified by
+        recompute-and-compare against that content address, so the transport is
+        untrusted by construction.</td></tr>
       <tr><td><code>conceptStatus</code></td><td>concept status</td><td>The lifecycle status of the admitted concept hash — one of the
         fedcon:ConceptStatus coded values (Proposed / UnderReview / Admitted /
         Rejected / Superseded / Deprecated / Withdrawn). This is the concept's
@@ -79,6 +87,21 @@
         fedreg:MembershipStatus (which is the membership lifecycle) — a concept
         admission has its own state machine (proposed → under-review → admitted /
         rejected, then superseded / deprecated).</td></tr>
+      <tr><td><code>conceptStore</code></td><td>concept store</td><td>Links a fedreg:Registry (a dcat:Catalog) to its CONCEPT STORE —
+        the dcat:DataService that SERVES the ownerless urn:concept: definition
+        records the registry has admitted, at GET &lt;base&gt;/i/{multibase-multihash}
+        (federation-on-hashes design §2.2). The store returns direct 200s only (no
+        redirects — a client fetches redirect:manual and treats any redirect as a
+        protocol failure), content-negotiated across text/turtle,
+        application/ld+json and application/n-quads, immutably cacheable, and
+        verifiable by recompute (a client hashes the served bytes and byte-compares,
+        so a hostile mirror can only WITHHOLD, never alter). The linked
+        dcat:DataService SHOULD advertise its dereference template as a
+        dcat:endpointDescription pointing at a hydra:IriTemplate (the canonical one
+        is fedcon:conceptDereferenceTemplate) so discovery is Linked-Data-native. A
+        registry MAY list several concept stores (mirrors); a pod-hosted mirror needs
+        zero server changes since a Solid pod already serves immutable resources with
+        content negotiation.</td></tr>
       <tr><td><code>Concern</code></td><td>Concern</td><td>An assessing stance raising a concern short of outright
         opposition — a reservation the authority should weigh and, where unresolved,
         acknowledge in its rationale.</td></tr>
@@ -86,6 +109,12 @@
         sector or app IRI. NO rdfs:range is asserted (a sector marker or an app
         client_id are both valid, from other vocabularies); the value discloses only
         the using context, never the counterparties or content of exchanges.</td></tr>
+      <tr><td><code>currentSnapshot</code></td><td>current snapshot</td><td>Links a fedreg:Registry to its CURRENT fedcon:Snapshot — the
+        content-addressed release a client should adopt now (federation-on-hashes
+        design §2.3). A registry advertises at most one current snapshot; a client
+        follows fedcon:previousSnapshot back along the chain to verify the sequence
+        it is offered is not a downgrade of, or a fork away from, one it has already
+        seen.</td></tr>
       <tr><td><code>decisionRationale</code></td><td>decision rationale</td><td>The authority's reasoned (xsd:string) justification for a
         fedcon:Admission — it MUST respond to every unresolved Oppose in the thread.
         Consensus is never COMPUTED: the rationale is the accountable human/authority
@@ -156,9 +185,31 @@
         admission's fedcon:decisionRationale and listed in its mandatory dissent
         annex — objections travel with the outcome rather than being averaged
         away.</td></tr>
+      <tr><td><code>previousSnapshot</code></td><td>previous snapshot</td><td>The prev-hash CHAIN link: the immediately-prior fedcon:Snapshot a
+        non-genesis snapshot extends (federation-on-hashes design §2.3, CAC §11
+        downgrade protection). Because a Snapshot is content-addressed, this link IS
+        the prior release's content hash, so the chain is tamper-evident: a client
+        recomputes and byte-compares each hop. The genesis snapshot
+        (fedcon:sequence 0) carries NO fedcon:previousSnapshot; every other snapshot
+        carries exactly one. The value may be cross-resource (the prior snapshot
+        lives in another document), so it is validated as a node reference, never by
+        requiring the prior snapshot's type in the same graph.</td></tr>
+      <tr><td><code>primeSet</code></td><td>prime set</td><td>The content-addressed PRIME-LEXICON SET of a fedcon:Snapshot — the
+        opaque content-addressed resource pinning the release's prime lexicon (the
+        primitive concept set the admitted concepts are expressed against). NO
+        rdfs:range is asserted: the value is an opaque content-addressed IRI external
+        to this vocabulary, like fedcon:concept / fedcon:profileBundle, verified by
+        recompute-and-compare rather than by an RDFS range.</td></tr>
       <tr><td><code>priorAdmission</code></td><td>prior admission</td><td>On a Promote fedcon:Proposal: a fedcon:Admission in a narrower
         registry where the concept already stands, cited as evidence of existing
         endorsement.</td></tr>
+      <tr><td><code>profileBundle</code></td><td>profile bundle</td><td>The content-addressed PROFILE-1 BUNDLE of a fedcon:Snapshot — the
+        opaque content-addressed resource (e.g. a urn:concept:&lt;hash&gt; / a multibase
+        multihash IRI) the codegen projector lowers into the release's shapes,
+        labels and manifest. NO rdfs:range is asserted: the value is an opaque
+        content-addressed IRI external to this vocabulary, exactly like
+        fedcon:concept — a consumer validates it by recompute-and-compare, not by an
+        RDFS range.</td></tr>
       <tr><td><code>Promote</code></td><td>Promote</td><td>Intent: seek admission of an already-used, byte-identical concept
         hash into a wider registry. Nothing is re-minted, re-namespaced or
         transferred — the concept definition does not change when it is promoted,
@@ -193,8 +244,33 @@
         span is machine-checkable against the governing policy's minimum (the design
         default is 7 days) so a decision can be audited for having given the required
         comment time before the authority acted.</td></tr>
+      <tr><td><code>sequence</code></td><td>sequence</td><td>The MONOTONIC generation counter (xsd:nonNegativeInteger) of a
+        fedcon:Snapshot: the genesis release is fedcon:sequence 0 (and carries no
+        fedcon:previousSnapshot); each successor increments it and links its
+        predecessor. Together with the prev-hash chain it is the downgrade-protection
+        substrate — a client that has adopted sequence k treats a snapshot offered as
+        'current' whose sequence is &lt; k (or whose chain does not extend the one it
+        holds) as a downgrade and rejects it.</td></tr>
       <tr><td><code>since</code></td><td>since</td><td>The date (xsd:date) from which the signing user has been using
         the attested concept.</td></tr>
+      <tr><td><code>Snapshot</code></td><td>Snapshot</td><td>A content-addressed sector RELEASE — the atomic adoption unit of
+        a federation's admitted concepts at one generation (federation-on-hashes
+        design §2.3). It gathers, at sequence k: the admitted concept set (0..*
+        fedcon:concept, the SAME opaque urn:concept: hashes the admission/proposal
+        records carry — REUSED, not re-minted), the content-addressed profile-1
+        bundle (fedcon:profileBundle) the codegen projector lowers to shapes/labels,
+        the prime-lexicon set (fedcon:primeSet), a monotonic generation counter
+        (fedcon:sequence) and the prev-hash chain link to the prior release
+        (fedcon:previousSnapshot). A Snapshot is ITSELF content-addressed — its own
+        multihash is the value a fedreg:StorageDescription MAY pin via
+        fedreg:acceptsSpec — so a client verifies it by recompute-and-compare, never
+        by trusting a mutable pointer. A Snapshot is SIGNED: it is bound to a W3C
+        Verifiable Credential per @jeswr/federation-trust (which composes solid-vc +
+        federation-registry) — the credential's credentialSubject references the
+        snapshot; that credential SHAPE is referenced here, never redefined
+        (rdfs:seeAlso). Snapshots + the sequence/previous chain give downgrade
+        protection: a client that has seen sequence k rejects an older or
+        fork-of-a-different-previous snapshot offered as 'current'.</td></tr>
       <tr><td><code>stance</code></td><td>stance</td><td>The structured review stance an assessing comment carries — one
         of the fedcon:Stance coded values (Support / Oppose / Concern). It DECORATES a
         Web Annotation (rdfs:domain oa:Annotation, oa:motivatedBy oa:assessing); it

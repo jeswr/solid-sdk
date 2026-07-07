@@ -370,3 +370,111 @@ fcsh:AdmissionPolicyShape a sh:NodeShape ;
     ) ;
     sh:severity sh:Warning ;
     sh:message "An AdmissionPolicy SHOULD be human-describable — carry an rdfs:label or a dcterms:description."@en .
+
+# =============================================================================
+# Content-addressed federation glue shapes — concept store + snapshot chain
+# (federation-on-hashes design §2.2 serving + §2.3 fedreg+fedcon by hash). All
+# fail-closed cardinalities; BlankNodeOrIRI/IRI node kinds; the snapshot-chain
+# integrity shape encodes downgrade protection. Chain HASH verification
+# (recompute-and-compare each hop's content address) is genuinely SERVICE-SIDE —
+# not a node/property constraint — exactly like the concept-hash recompute the
+# design flags for proposals; what IS structurally checkable is checked here.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Snapshot — the content-addressed sector release. MUST carry a single monotonic
+# sequence; each admitted concept a content-addressed IRI; profileBundle / primeSet
+# single content-addressed IRIs where present; previousSnapshot a single node
+# reference where present. Plus the snapshot-chain integrity constraint.
+# -----------------------------------------------------------------------------
+fcsh:SnapshotShape a sh:NodeShape ;
+    sh:targetClass fedcon:Snapshot ;
+    rdfs:label "Snapshot shape"@en ;
+    sh:property [
+        sh:path fedcon:sequence ;
+        sh:datatype xsd:nonNegativeInteger ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:severity sh:Violation ;
+        sh:message "A Snapshot MUST carry exactly one fedcon:sequence — the monotonic xsd:nonNegativeInteger generation counter."@en
+    ] ;
+    # Each admitted concept is a content-addressed urn:concept: IRI (0..* — a genesis
+    # release MAY be empty, so no minCount); never a literal or a blank node.
+    sh:property [
+        sh:path fedcon:concept ;
+        sh:nodeKind sh:IRI ;
+        sh:severity sh:Violation ;
+        sh:message "Each fedcon:concept in a Snapshot MUST be a content-addressed concept-hash IRI (never a literal or blank node)."@en
+    ] ;
+    sh:property [
+        sh:path fedcon:profileBundle ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:severity sh:Violation ;
+        sh:message "A Snapshot's fedcon:profileBundle, if present, MUST be a single content-addressed IRI (never a literal)."@en
+    ] ;
+    sh:property [
+        sh:path fedcon:primeSet ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:severity sh:Violation ;
+        sh:message "A Snapshot's fedcon:primeSet, if present, MUST be a single content-addressed IRI (never a literal)."@en
+    ] ;
+    # previousSnapshot may be CROSS-RESOURCE (the prior snapshot lives in another
+    # document), so it is validated as a node reference (sh:BlankNodeOrIRI), NOT by
+    # sh:class fedcon:Snapshot — which would false-fail a legitimate cross-resource
+    # link whose type is not in THIS graph (the fedcon:dissent cross-resource
+    # rationale).
+    sh:property [
+        sh:path fedcon:previousSnapshot ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:BlankNodeOrIRI ;
+        sh:severity sh:Violation ;
+        sh:message "A Snapshot's fedcon:previousSnapshot, if present, MUST be a single node reference to the prior Snapshot (IRI or blank node), never a literal."@en
+    ] ;
+    # SNAPSHOT-CHAIN INTEGRITY (downgrade protection) — the equivalence
+    #   (fedcon:previousSnapshot present)  <=>  (fedcon:sequence != 0)
+    # via sh:xone (EXACTLY ONE branch), the same idiom as the AdmissionShape dissent
+    # annex. A non-genesis snapshot with NO previousSnapshot (a broken chain / a
+    # downgrade surface) AND a genesis (sequence 0) carrying a previousSnapshot (a
+    # forged chain root) BOTH fail. The genesis is identified by sh:maxInclusive 0 — a
+    # NUMERIC comparison, robust to an xsd:integer vs xsd:nonNegativeInteger literal
+    # form — rather than sh:hasValue 0 (RDF term equality, which would false-fail on a
+    # differing numeric datatype).
+    sh:xone (
+        [ sh:property [ sh:path fedcon:previousSnapshot ; sh:minCount 1 ; sh:nodeKind sh:BlankNodeOrIRI ] ]
+        [ sh:property [ sh:path fedcon:sequence ; sh:minCount 1 ; sh:maxInclusive 0 ] ]
+    ) ;
+    sh:message "A Snapshot MUST satisfy the chain-integrity equivalence: it carries a fedcon:previousSnapshot (any non-genesis snapshot) XOR it is the genesis (fedcon:sequence 0, no previousSnapshot). A non-genesis snapshot with no previousSnapshot (a broken chain) AND a genesis carrying a previousSnapshot (a forged chain root) are both INVALID."@en ;
+    sh:severity sh:Violation .
+
+# -----------------------------------------------------------------------------
+# Concept-store link — a fedcon:conceptStore value MUST be a service node reference
+# (a dcat:DataService), never a literal. A registry MAY list several (mirrors), so
+# no maxCount. sh:targetSubjectsOf so it fires wherever the property is used, not
+# only on an explicitly-typed fedreg:Registry (the fedcon:stance targeting idiom).
+# -----------------------------------------------------------------------------
+fcsh:ConceptStoreShape a sh:NodeShape ;
+    sh:targetSubjectsOf fedcon:conceptStore ;
+    rdfs:label "Concept-store link shape"@en ;
+    sh:property [
+        sh:path fedcon:conceptStore ;
+        sh:nodeKind sh:BlankNodeOrIRI ;
+        sh:severity sh:Violation ;
+        sh:message "A fedcon:conceptStore MUST reference a concept-store service node (a dcat:DataService, IRI or blank node), never a literal."@en
+    ] .
+
+# -----------------------------------------------------------------------------
+# Current-snapshot link — a registry advertises AT MOST ONE fedcon:currentSnapshot,
+# as a node reference (a fedcon:Snapshot), never a literal.
+# -----------------------------------------------------------------------------
+fcsh:CurrentSnapshotShape a sh:NodeShape ;
+    sh:targetSubjectsOf fedcon:currentSnapshot ;
+    rdfs:label "Current-snapshot link shape"@en ;
+    sh:property [
+        sh:path fedcon:currentSnapshot ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:BlankNodeOrIRI ;
+        sh:severity sh:Violation ;
+        sh:message "A registry MUST advertise at most one fedcon:currentSnapshot, as a node reference (a fedcon:Snapshot, IRI or blank node), never a literal."@en
+    ] .
