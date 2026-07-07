@@ -7,8 +7,13 @@
  * A generated artifact contains NO executable logic beyond the fixed shim.
  */
 
-import type { ManifestEntity, ManifestField, ModelManifest } from "@jeswr/model-runtime";
-import { serializeCanonicalTurtle, XSD } from "./rdf.js";
+import {
+  literalMapper,
+  type ManifestEntity,
+  type ManifestField,
+  type ModelManifest,
+} from "@jeswr/model-runtime";
+import { serializeCanonicalTurtle } from "./rdf.js";
 import type { NormalizedShapes } from "./shapes.js";
 
 const GENERATED_HEADER =
@@ -40,36 +45,21 @@ function baseTsType(field: ManifestField): string {
     return field.in.map((v) => (typeof v === "string" ? JSON.stringify(v) : String(v))).join(" | ");
   }
   if (field.kind === "iri") return "string";
-  switch (field.datatype ? expand(field.datatype) : "") {
-    case `${XSD}boolean`:
-      return "boolean";
-    case `${XSD}dateTime`:
-    case `${XSD}date`:
-      return "Date";
-    case `${XSD}integer`:
-    case `${XSD}int`:
-    case `${XSD}long`:
-    case `${XSD}short`:
-    case `${XSD}byte`:
-    case `${XSD}nonNegativeInteger`:
-    case `${XSD}positiveInteger`:
-    case `${XSD}nonPositiveInteger`:
-    case `${XSD}negativeInteger`:
-    case `${XSD}unsignedLong`:
-    case `${XSD}unsignedInt`:
-    case `${XSD}unsignedShort`:
-    case `${XSD}unsignedByte`:
-    case `${XSD}decimal`:
-    case `${XSD}double`:
-    case `${XSD}float`:
+  if (field.datatype === undefined) return "string";
+  // Single-source the datatype → TS-type decision through the audited runtime's
+  // `literalMapper` (the SAME resolution the runtime reads/writes against, and that
+  // `shapes.ts` coerces `sh:in` scalars by), so the emitted type can never disagree
+  // with the runtime's JS surface type — e.g. the unsigned XSD integer subtypes.
+  switch (literalMapper(field.datatype).jsType) {
+    case "number":
       return "number";
+    case "boolean":
+      return "boolean";
+    case "date":
+      return "Date";
     default:
       return "string";
   }
-}
-
-function expand(datatype: string): string {
-  return datatype.startsWith("xsd:") ? `${XSD}${datatype.slice(4)}` : datatype;
 }
 
 function isRequired(field: ManifestField): boolean {

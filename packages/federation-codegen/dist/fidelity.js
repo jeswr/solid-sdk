@@ -169,25 +169,36 @@ function assertTraceability(compiled, shapes) {
             const prov = provByKey.get(provKey(targetClass, field.name));
             const config = new Set(prov?.configGuards ?? []);
             const constraint = constraintByPred.get(field.predicate);
+            // A guard is shape-derived only when BOTH the shape carries the corresponding
+            // constraint AND the emitted guard VALUE equals it — checking the key alone
+            // (does the shape have SOME minInclusive?) let a tampered value (e.g.
+            // `guards.minInclusive = 999` against a `sh:minInclusive 1` shape) trace as
+            // sourced. Boolean guards must be exactly `true`; a `false` guard is a runtime
+            // no-op and must not count as shape-derived.
             const shapeDerivable = (guard) => {
                 if (constraint === undefined)
                     return false;
                 if (guard === "iriScheme")
-                    return constraint.kind === "iri" && isHttpPattern(constraint.pattern);
+                    return (guards.iriScheme === "http-https" &&
+                        constraint.kind === "iri" &&
+                        isHttpPattern(constraint.pattern));
                 // Severity-aware (G1): a required guard is shape-derived only when the
-                // minCount ≥ 1 constraint is Violation-graded (or severity absent).
+                // minCount ≥ 1 constraint is Violation-graded (or severity absent) AND the
+                // emitted guard actually fails closed (=== true).
                 if (guard === "requiredFailClosed")
-                    return (constraint.minCount !== undefined &&
+                    return (guards.requiredFailClosed === true &&
+                        constraint.minCount !== undefined &&
                         constraint.minCount >= 1 &&
                         isFailClosedSeverity(constraint.severity));
                 if (guard === "minInclusive")
-                    return constraint.minInclusive !== undefined;
+                    return (constraint.minInclusive !== undefined && guards.minInclusive === constraint.minInclusive);
                 if (guard === "maxInclusive")
-                    return constraint.maxInclusive !== undefined;
+                    return (constraint.maxInclusive !== undefined && guards.maxInclusive === constraint.maxInclusive);
                 if (guard === "minLength")
-                    return constraint.minLength !== undefined;
+                    return constraint.minLength !== undefined && guards.minLength === constraint.minLength;
                 if (guard === "nonBlank")
-                    return (constraint.minLength !== undefined &&
+                    return (guards.nonBlank === true &&
+                        constraint.minLength !== undefined &&
                         constraint.minLength >= 1 &&
                         constraint.maxCount === 1 &&
                         constraint.kind === "literal");

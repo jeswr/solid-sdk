@@ -13,6 +13,7 @@
  * ontologies tighten (design §5).
  */
 
+import { literalMapper } from "@jeswr/model-runtime";
 import type { Quad, Quad_Object, Quad_Subject, Term } from "@rdfjs/types";
 import { DataFactory } from "n3";
 import { Graph, parseTurtle, RDF, SH, XSD } from "./rdf.js";
@@ -83,27 +84,20 @@ function numberOr(value: string | undefined): number | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
-const NUMERIC_DATATYPES = new Set<string>([
-  `${XSD}integer`,
-  `${XSD}int`,
-  `${XSD}long`,
-  `${XSD}nonNegativeInteger`,
-  `${XSD}positiveInteger`,
-  `${XSD}nonPositiveInteger`,
-  `${XSD}negativeInteger`,
-  `${XSD}short`,
-  `${XSD}byte`,
-  `${XSD}decimal`,
-  `${XSD}double`,
-  `${XSD}float`,
-]);
-
-/** Coerce an RDF list member term to a manifest scalar (by literal datatype). */
+/**
+ * Coerce an RDF list member term to a manifest scalar (by literal datatype). The
+ * numeric datatype set is NOT re-enumerated here — a field is numeric iff the
+ * audited runtime's `literalMapper` resolves its datatype to `jsType === "number"`,
+ * the SAME resolution `emit.ts` types against. Single-sourcing it through the
+ * runtime means an `sh:in` enum can never disagree with the emitted TS / runtime
+ * numeric treatment (this previously drifted for the unsigned XSD integer subtypes,
+ * which `emit.ts` maps to `number` but a local set here omitted).
+ */
 function termToScalar(term: Term): ShapeScalar {
   if (term.termType === "Literal") {
     const dt = (term as Term & { datatype?: { value: string } }).datatype?.value;
     if (dt === `${XSD}boolean`) return term.value === "true" || term.value === "1";
-    if (dt !== undefined && NUMERIC_DATATYPES.has(dt)) {
+    if (dt !== undefined && literalMapper(dt).jsType === "number") {
       const n = Number(term.value);
       if (Number.isFinite(n)) return n;
     }
@@ -115,25 +109,36 @@ function termToScalar(term: Term): ShapeScalar {
 
 /**
  * Walk an RDF list from `head` (`rdf:first`/`rdf:rest` → `rdf:nil`) into its member
- * terms. Returns `undefined` for a malformed list (missing first/rest, a cycle, or
- * a non-node link) so a bad `sh:in` fails CLOSED rather than silently truncating.
+ * terms. Returns `undefined` for a malformed list so a bad `sh:in` fails CLOSED
+ * rather than silently truncating / first-picking. A list is malformed when: an
+ * interior node is not a blank node / IRI; a node does not carry EXACTLY ONE
+ * `rdf:first` AND EXACTLY ONE `rdf:rest` (a branching / duplicated link is rejected,
+ * never silently resolved to its first object); the chain cycles; or it does not
+ * terminate at the `rdf:nil` NamedNode (a literal / blank node whose lexical value
+ * merely equals the nil IRI is NOT a valid terminator).
  */
 function rdfList(graph: Graph, head: Term): Term[] | undefined {
   const Nil = `${RDF}nil`;
   const out: Term[] = [];
   const seen = new Set<string>();
-  let node: Term | undefined = head;
-  while (node !== undefined && node.value !== Nil) {
+  let node: Term = head;
+  while (true) {
+    // Termination: a well-formed list ends at the rdf:nil NamedNode.
+    if (node.termType === "NamedNode" && node.value === Nil) return out;
     if (node.termType !== "NamedNode" && node.termType !== "BlankNode") return undefined;
     if (seen.has(node.value)) return undefined; // cycle guard
     seen.add(node.value);
-    const first = graph.object(node, `${RDF}first`);
-    const rest = graph.object(node, `${RDF}rest`);
-    if (first === undefined || rest === undefined) return undefined; // malformed
+    const firsts = graph.objects(node, `${RDF}first`);
+    const rests = graph.objects(node, `${RDF}rest`);
+    // Exactly one first + one rest per list node — a duplicate/branching link is
+    // malformed, not silently first-picked (the old graph.object() single-take).
+    if (firsts.length !== 1 || rests.length !== 1) return undefined;
+    const first = firsts[0];
+    const rest = rests[0];
+    if (first === undefined || rest === undefined) return undefined;
     out.push(first);
     node = rest;
   }
-  return out;
 }
 
 function resolveKind(nodeKind: string | undefined, datatype: string | undefined): ShapeKind {

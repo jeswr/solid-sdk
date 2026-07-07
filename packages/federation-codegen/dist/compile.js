@@ -10,7 +10,7 @@
  *
  * The result is validated fail-closed by the runtime's own `validateManifest`.
  */
-import { RUNTIME_MAJOR, validateManifest, } from "@jeswr/model-runtime";
+import { literalMapper, RUNTIME_MAJOR, validateManifest, } from "@jeswr/model-runtime";
 import { entityConfigFor } from "./config.js";
 import { SH } from "./rdf.js";
 import { localName, } from "./shapes.js";
@@ -32,6 +32,23 @@ export function isHttpPattern(pattern) {
 }
 function collectionOf(constraint) {
     return constraint.maxCount === 1 ? undefined : "set";
+}
+/**
+ * True when a field's runtime value is a JS string — the ONLY surface the runtime's
+ * lexical guards (`minLength` / `nonBlank`) act on (`applyScalarGuards` gates them on
+ * `typeof value === "string"`). An IRI value is a string; a literal is a string only
+ * for string-valued datatypes — a numeric / boolean / date datatype surfaces as a
+ * `number` / `boolean` / `Date`, where the runtime SKIPS these guards, so emitting one
+ * there is a silent no-op the fidelity assertion would miscount as real coverage. The
+ * datatype → JS-type decision is single-sourced from the audited runtime's
+ * `literalMapper`, never re-encoded here.
+ */
+function hasStringRuntimeValue(constraint) {
+    if (constraint.kind === "iri")
+        return true;
+    if (constraint.datatype === undefined)
+        return true;
+    return literalMapper(constraint.datatype).jsType === "string";
 }
 function compileField(constraint, fieldConfig, provenance) {
     const name = constraint.name ?? localName(constraint.pathIri);
@@ -71,14 +88,20 @@ function compileField(constraint, fieldConfig, provenance) {
         guards.minInclusive = constraint.minInclusive;
     if (constraint.maxInclusive !== undefined)
         guards.maxInclusive = constraint.maxInclusive;
-    if (constraint.minLength !== undefined)
+    // minLength is a LEXICAL guard — emit it only where the runtime value is a string
+    // (an IRI or a string-valued literal). On a numeric / boolean / date literal the
+    // runtime never applies it, so emitting it would be a no-op that fidelity would
+    // wrongly count as coverage.
+    if (constraint.minLength !== undefined && hasStringRuntimeValue(constraint)) {
         guards.minLength = constraint.minLength;
+    }
     // G3 — a singleton non-blank string guard (minLength ≥ 1 on a single literal),
-    // mirroring the set-level dropBlank for scalar fields.
+    // mirroring the set-level dropBlank for scalar fields; string-valued literals only.
     if (constraint.minLength !== undefined &&
         constraint.minLength >= 1 &&
         collection === undefined &&
-        constraint.kind === "literal") {
+        constraint.kind === "literal" &&
+        hasStringRuntimeValue(constraint)) {
         guards.nonBlank = true;
     }
     // Config-supplied guards (recorded as provenance so fidelity can trace them).
