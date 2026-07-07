@@ -1,0 +1,84 @@
+{
+  "name": "@jeswr/solid-listening",
+  "version": "0.1.0",
+  "description": "The media-sector listening-history / scrobble RDF model (the data model a Web Scrobbler→Solid fork writes one-per-play to a pod) — a media:PlaybackEvent referencing a media:Track/Artist/Album, reusing the @jeswr/solid-federation-vocab media sector (mints nothing), with typed accessors, a SHACL shape, an owner-only ACL helper, and fedcon:Proposal candidates for the sector gaps real scrobble data surfaced.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Jesse Wright",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jeswr/solid-listening.git"
+  },
+  "homepage": "https://github.com/jeswr/solid-listening#readme",
+  "bugs": {
+    "url": "https://github.com/jeswr/solid-listening/issues"
+  },
+  "keywords": [
+    "solid",
+    "rdf",
+    "scrobble",
+    "listening-history",
+    "web-scrobbler",
+    "media",
+    "schema.org",
+    "shacl",
+    "vocabulary"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./vocab": {
+      "types": "./dist/vocab.d.ts",
+      "import": "./dist/vocab.js"
+    },
+    "./shape": {
+      "types": "./dist/shape.d.ts",
+      "import": "./dist/shape.js"
+    },
+    "./listening.shacl.ttl": "./listening.shacl.ttl",
+    "./listening.proposals.ttl": "./listening.proposals.ttl"
+  },
+  "files": [
+    "dist",
+    "listening.shacl.ttl",
+    "listening.proposals.ttl",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "biome check src scripts",
+    "lint:fix": "biome check --write src scripts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check:dist": "node scripts/check-dist.mjs",
+    "check:lockfile-transport": "node scripts/check-lockfile-transport.mjs",
+    "gate": "npm run lint && npm run typecheck && npm run test && npm run build && npm run check:dist && npm run check:lockfile-transport"
+  },
+  "dependencies": {
+    "@jeswr/fetch-rdf": "^0.1.0",
+    "@rdfjs/wrapper": "^0.34.0",
+    "n3": "^2.0.3"
+  },
+  "peerDependencies": {
+    "@rdfjs/types": "^2.0.1"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.0.0",
+    "@rdfjs/types": "^2.0.1",
+    "@types/n3": "^1.26.1",
+    "@types/node": "^20",
+    "@zazuko/env-node": "^3.0.0",
+    "rdf-validate-shacl": "^0.6.5",
+    "typescript": "^5",
+    "vitest": "^4.1.8"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

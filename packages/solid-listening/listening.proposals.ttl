@@ -1,0 +1,131 @@
+# AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+#
+# fedcon:Proposal CANDIDATES — the media-sector extension needs that modelling
+# REAL scrobble data (a Web Scrobbler→Solid fork) surfaced.
+#
+# This package is an ONTOLOGY TEST RIG: as it maps concrete listening data onto
+# the media sector it discovers fields the sector LACKS. Rather than editing the
+# sector .ttl (which this package never does), each gap is written up HERE as a
+# concrete fedcon:Proposal candidate (fedcon: = https://jeswr.org/fedcon#, the
+# federation contribution/admission vocabulary), so the fork's real usage can
+# drive the sector's evolution through the registry's contribution lifecycle.
+#
+# CANDIDATE STATUS: these are NOT yet POSTed to any registry. They carry the
+# proposer's motivation and an INLINE proposed definition graph (the additive term
+# the sector would gain), an Extend intent (they build additively on existing
+# media: terms and mutate nothing), and NO fedcon:concept content hash yet (a hash
+# is computed over the finalised definition at filing time). The prose write-up +
+# the alternatives considered live in DECISIONS.md.
+
+@prefix fedcon:  <https://jeswr.org/fedcon#> .
+@prefix media:   <https://w3id.org/jeswr/sectors/media#> .
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos:    <http://www.w3.org/2004/02/skos/core#> .
+
+<#candidates> a rdf:Bag ;
+    rdfs:label "solid-listening media-sector extension proposal candidates"@en ;
+    rdfs:comment "Four fedcon:Proposal candidates surfaced by modelling real scrobble data against the media sector. Candidates only — not yet filed."@en .
+
+# -----------------------------------------------------------------------------
+# 1. Per-event completion fraction + in-progress-vs-completed distinction
+# -----------------------------------------------------------------------------
+<#prop-completion>
+    a fedcon:Proposal ;
+    fedcon:intent fedcon:Extend ;
+    fedcon:extends media:PlaybackEvent , media:msPlayed , media:durationSeconds ;
+    rdfs:label "PlaybackEvent completion fraction + status"@en ;
+    fedcon:motivationText """The media sector carries media:msPlayed (ms played) on the event and media:durationSeconds (total length) on the work, but NO normalised completion fraction and NO in-progress-vs-completed distinction. A scrobbler MUST know 'was this a full listen or a skip', and Web Scrobbler additionally emits a 'nowplaying' signal (the track is CURRENTLY playing, not yet completed) distinct from a finalised 'scrobble'. Deriving a fraction from msPlayed/durationSeconds is lossy (durationSeconds is often absent, and a live/streamed work has none) and cannot express 'in progress'. Proposed additive terms: media:completionFraction (a 0..1 decimal on the event) and media:playbackStatus (a coded value: NowPlaying / Completed / Skipped).""" ;
+    fedcon:definition [
+        a owl:Ontology ;
+        rdfs:comment "Proposed additive media: terms for completion + status." ;
+        # media:completionFraction
+        rdfs:seeAlso media:PlaybackEvent
+    ] .
+
+# The proposed term shapes, kept as a separate readable graph (the additive
+# ontology fragment the sector would gain if #prop-completion is admitted):
+media:completionFraction a owl:DatatypeProperty ;
+    rdfs:isDefinedBy <#prop-completion> ;
+    rdfs:domain media:PlaybackEvent ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "completion fraction (PROPOSED)"@en ;
+    rdfs:comment "PROPOSED (fedcon candidate, not yet in the sector): the fraction of the work played in this event, in [0,1]. Complements media:msPlayed by being source-independent (a live stream has no durationSeconds)."@en .
+
+media:playbackStatus a owl:ObjectProperty ;
+    rdfs:isDefinedBy <#prop-completion> ;
+    rdfs:domain media:PlaybackEvent ;
+    rdfs:range skos:Concept ;
+    rdfs:label "playback status (PROPOSED)"@en ;
+    rdfs:comment "PROPOSED: the lifecycle of a play — NowPlaying (in progress), Completed, or Skipped. Distinguishes Web Scrobbler's 'nowplaying' from a finalised scrobble."@en .
+
+# -----------------------------------------------------------------------------
+# 2. Source-service attribution (which platform the play happened on)
+# -----------------------------------------------------------------------------
+<#prop-played-via>
+    a fedcon:Proposal ;
+    fedcon:intent fedcon:Extend ;
+    fedcon:extends media:PlaybackEvent , media:onAccount ;
+    rdfs:label "PlaybackEvent source-service attribution"@en ;
+    fedcon:motivationText """media:onAccount links a play to a media:MediaAccount (a reified streaming account). But a Web Scrobbler play very often has NO account — it is scrobbled from an anonymous web player (YouTube, SoundCloud, Bandcamp, a radio site). What the fork DOES always know is the SERVICE / connector the play came from. The sector has no way to say 'played via YouTube Music' without inventing a fake account. Proposed additive term: media:playedVia — the service/platform a play occurred on, as an IRI (a service identifier) or a labelled node — independent of whether a media:MediaAccount is known.""" ;
+    fedcon:definition [
+        a owl:Ontology ;
+        rdfs:comment "Proposed additive media:playedVia term." ;
+        rdfs:seeAlso media:PlaybackEvent
+    ] .
+
+media:playedVia a owl:ObjectProperty ;
+    rdfs:isDefinedBy <#prop-played-via> ;
+    rdfs:domain media:PlaybackEvent ;
+    rdfs:label "played via (PROPOSED)"@en ;
+    rdfs:comment "PROPOSED: the media service / platform a play occurred on (YouTube Music, Spotify web, SoundCloud), as a service IRI or labelled node. Distinct from media:onAccount — a play can be attributed to a service with no known account."@en .
+
+# -----------------------------------------------------------------------------
+# 3. Loved / skipped flags
+# -----------------------------------------------------------------------------
+<#prop-loved-skipped>
+    a fedcon:Proposal ;
+    fedcon:intent fedcon:Extend ;
+    fedcon:extends media:PlaybackEvent ;
+    rdfs:label "PlaybackEvent loved / skipped flags"@en ;
+    fedcon:motivationText """Web Scrobbler exposes a 'love/unlove' affordance and a skip signal, both per-play user feedback the media sector cannot record. media:msPlayed hints at a skip but conflates 'skipped by the user' with 'stopped for any reason'. Proposed additive boolean terms: media:loved (the user marked this play/track as loved) and media:skipped (the user actively skipped the track). Kept as explicit booleans rather than derived so the user's intent is first-class, not inferred.""" ;
+    fedcon:definition [
+        a owl:Ontology ;
+        rdfs:comment "Proposed additive media:loved / media:skipped terms." ;
+        rdfs:seeAlso media:PlaybackEvent
+    ] .
+
+media:loved a owl:DatatypeProperty ;
+    rdfs:isDefinedBy <#prop-loved-skipped> ;
+    rdfs:domain media:PlaybackEvent ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "loved (PROPOSED)"@en ;
+    rdfs:comment "PROPOSED: whether the user marked this play/track as loved (Web Scrobbler 'love')."@en .
+
+media:skipped a owl:DatatypeProperty ;
+    rdfs:isDefinedBy <#prop-loved-skipped> ;
+    rdfs:domain media:PlaybackEvent ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "skipped (PROPOSED)"@en ;
+    rdfs:comment "PROPOSED: whether the user actively skipped the track (distinct from a low media:msPlayed for any other reason)."@en .
+
+# -----------------------------------------------------------------------------
+# 4. A literal artist-name property on media:Artist (minor — reuse noted)
+# -----------------------------------------------------------------------------
+# The sector models media:Artist (a RoleMixin of core:Agent) but declares no
+# literal name property. This package REUSES foaf:name (reuse-before-mint), so
+# this is recorded as an OBSERVATION rather than a mint proposal — but flagged so
+# the sector could adopt foaf:name (or an alignment) explicitly if desired.
+<#obs-artist-name>
+    a fedcon:Proposal ;
+    fedcon:intent fedcon:Extend ;
+    fedcon:extends media:Artist ;
+    rdfs:label "media:Artist display-name reuse (observation)"@en ;
+    fedcon:motivationText """media:Artist has no literal display-name property; a scrobble only ever knows the artist as a STRING. This package reuses foaf:name (dereferenceable, universal). Filed as an observation, not a mint: the sector SHOULD document foaf:name as the expected artist-name term (an alignment), so every producer agrees rather than each picking foaf:name / schema:name / rdfs:label.""" ;
+    fedcon:definition [
+        a owl:Ontology ;
+        rdfs:comment "No new term — an alignment recommendation to reuse foaf:name for media:Artist names." ;
+        rdfs:seeAlso media:Artist
+    ] .

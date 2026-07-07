@@ -1,0 +1,151 @@
+# AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+#
+# Focused SHACL shape for the listening-history / scrobble document
+# (@jeswr/solid-listening) — the data model a Web Scrobbler→Solid fork writes
+# one-per-play to a pod.
+#
+# This is a DOWNSTREAM, additive profile over the media sector's own
+# media.shacl.ttl (https://w3id.org/jeswr/sectors/media/profile). It checks the
+# scrobble WIRE CONTRACT: a media:PlaybackEvent referencing a titled media:Track,
+# with a reified played-at time:Instant, plus the optional service metadata a
+# scrobble may carry. It MINTS NOTHING — it is authored entirely against the
+# reused media:/core:/dct:/foaf:/time: terms.
+#
+# SEVERITY = the RFC 2119 grade the media profile uses: sh:Violation = a MUST that
+# makes a document a non-usable scrobble (no work / no time / no track title);
+# sh:Info = a well-formedness check on an OPTIONAL field (only fires when the field
+# is present but malformed), so a minimal scrobble (track title + played-at only)
+# conforms with ZERO results.
+#
+# NB — where the media sector's OWN profile is STRICTER: it makes
+# core:hadParticipant (the listener) and media:onAccount MUST/SHOULD on every
+# PlaybackEvent. A scrobble legitimately omits the account and carries the listener
+# only as the (implicit) pod owner, so this focused shape treats hadParticipant as
+# OPTIONAL. That divergence is one of the signals feeding the fedcon proposals —
+# see DECISIONS.md.
+#
+# The shapes are ANONYMOUS blank nodes, so this file mints nothing at a
+# non-resolving domain. Validate a scrobble's typed-accessor output before write,
+# and on read of untrusted pod data (rdf-validate-shacl; see src/shape.test.ts).
+
+@prefix sh:     <http://www.w3.org/ns/shacl#> .
+@prefix media:  <https://w3id.org/jeswr/sectors/media#> .
+@prefix core:   <https://w3id.org/jeswr/core#> .
+@prefix dct:    <http://purl.org/dc/terms/> .
+@prefix foaf:   <http://xmlns.com/foaf/0.1/> .
+@prefix time:   <http://www.w3.org/2006/time#> .
+@prefix xsd:    <http://www.w3.org/2001/XMLSchema#> .
+
+# --- The scrobble: a media:PlaybackEvent ---
+[] a sh:NodeShape ;
+  sh:targetClass media:PlaybackEvent ;
+
+  # WHAT — exactly one played work, an IRI (→ the media:Track). The core of a
+  # scrobble; sh:nodeKind sh:IRI rejects a literal-valued playedWork.
+  sh:property [
+    sh:path media:playedWork ; sh:name "playedWork" ;
+    sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ;
+    sh:severity sh:Violation ;
+    sh:message "A scrobble MUST reference exactly one media:playedWork (an IRI, the media:Track)."@en ;
+  ] ;
+
+  # WHEN — exactly one core:atTime, an IRI (→ the time:Instant carrying the value).
+  sh:property [
+    sh:path core:atTime ; sh:name "atTime" ;
+    sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ;
+    sh:severity sh:Violation ;
+    sh:message "A scrobble MUST reference exactly one core:atTime (an IRI, the time:Instant)."@en ;
+  ] ;
+
+  # WHO — the listener WebID (an IRI), if recorded. OPTIONAL here (see the header
+  # note): the media sector profile makes it a MUST.
+  sh:property [
+    sh:path core:hadParticipant ; sh:name "listener" ;
+    sh:nodeKind sh:IRI ; sh:maxCount 1 ;
+    sh:severity sh:Info ;
+    sh:message "core:hadParticipant, if present, MUST be a single IRI (the listener WebID)."@en ;
+  ] ;
+
+  # HOW-LONG — milliseconds played, a single non-negative integer, if present.
+  sh:property [
+    sh:path media:msPlayed ; sh:name "msPlayed" ;
+    sh:datatype xsd:integer ; sh:minInclusive 0 ; sh:maxCount 1 ;
+    sh:severity sh:Info ;
+    sh:message "media:msPlayed, if present, MUST be a single non-negative integer (milliseconds)."@en ;
+  ] .
+
+# --- The played-at instant: a time:Instant ---
+[] a sh:NodeShape ;
+  sh:targetClass time:Instant ;
+  sh:property [
+    sh:path time:inXSDDateTime ; sh:name "playedAt" ;
+    sh:datatype xsd:dateTime ; sh:minCount 1 ; sh:maxCount 1 ;
+    sh:severity sh:Violation ;
+    sh:message "A played-at time:Instant MUST carry exactly one time:inXSDDateTime (xsd:dateTime)."@en ;
+  ] .
+
+# --- The track: a media:Track ---
+[] a sh:NodeShape ;
+  sh:targetClass media:Track ;
+
+  # A track MUST be titled (matches the media profile's TitledWork MUST).
+  sh:property [
+    sh:path dct:title ; sh:name "trackTitle" ;
+    sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ;
+    sh:severity sh:Violation ;
+    sh:message "A media:Track MUST have exactly one dct:title (a string)."@en ;
+  ] ;
+
+  # The artist credit — an IRI (→ the media:Artist), if present.
+  sh:property [
+    sh:path media:performedByArtist ; sh:name "artist" ;
+    sh:nodeKind sh:IRI ; sh:maxCount 1 ;
+    sh:severity sh:Info ;
+    sh:message "media:performedByArtist, if present, MUST be a single IRI (the media:Artist)."@en ;
+  ] ;
+
+  # The album — an IRI (→ the media:Album), if present.
+  sh:property [
+    sh:path media:inAlbum ; sh:name "album" ;
+    sh:nodeKind sh:IRI ; sh:maxCount 1 ;
+    sh:severity sh:Info ;
+    sh:message "media:inAlbum, if present, MUST be a single IRI (the media:Album)."@en ;
+  ] ;
+
+  # Track length in seconds — a single non-negative decimal, if present.
+  sh:property [
+    sh:path media:durationSeconds ; sh:name "durationSeconds" ;
+    sh:datatype xsd:decimal ; sh:minInclusive 0 ; sh:maxCount 1 ;
+    sh:severity sh:Info ;
+    sh:message "media:durationSeconds, if present, MUST be a single non-negative decimal (seconds)."@en ;
+  ] ;
+
+  # ISRC — a single well-formed 12-char code, if present (same pattern as the
+  # media profile's MusicRecording shape).
+  sh:property [
+    sh:path media:isrc ; sh:name "isrc" ;
+    sh:datatype xsd:string ; sh:maxCount 1 ;
+    sh:pattern "^[A-Z]{2}[A-Z0-9]{3}[0-9]{2}[0-9]{5}$" ;
+    sh:severity sh:Info ;
+    sh:message "media:isrc, if present, SHOULD be a single well-formed 12-character ISRC."@en ;
+  ] .
+
+# --- The artist: a media:Artist ---
+[] a sh:NodeShape ;
+  sh:targetClass media:Artist ;
+  sh:property [
+    sh:path foaf:name ; sh:name "artistName" ;
+    sh:datatype xsd:string ; sh:maxCount 1 ;
+    sh:severity sh:Info ;
+    sh:message "foaf:name, if present, MUST be a single string (the artist display name)."@en ;
+  ] .
+
+# --- The album: a media:Album ---
+[] a sh:NodeShape ;
+  sh:targetClass media:Album ;
+  sh:property [
+    sh:path dct:title ; sh:name "albumTitle" ;
+    sh:datatype xsd:string ; sh:maxCount 1 ;
+    sh:severity sh:Info ;
+    sh:message "dct:title, if present, MUST be a single string (the album title)."@en ;
+  ] .
