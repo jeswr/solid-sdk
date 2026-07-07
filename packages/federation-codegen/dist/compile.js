@@ -101,9 +101,19 @@ function compileEntity(shape, config, provenance) {
     if (!entityConfig) {
         throw new Error(`no codegen config entity for target class ${shape.targetClass}`);
     }
+    // The entity name is emitted into model.d.ts in identifier + string-literal
+    // positions; require a plain identifier so it can never break the generated
+    // types (defence in depth — the config is trusted, but a typo must fail loudly).
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(entityConfig.name)) {
+        throw new Error(`codegen config entity name "${entityConfig.name}" is not a valid identifier`);
+    }
     const fields = shape.properties.map((constraint) => {
         const name = constraint.name ?? localName(constraint.pathIri);
-        const prov = { fieldName: name, configGuards: [] };
+        const prov = {
+            targetClass: shape.targetClass,
+            fieldName: name,
+            configGuards: [],
+        };
         const fieldConfig = entityConfig.fields?.[name];
         const field = compileField(constraint, fieldConfig, prov);
         provenance.push(prov);

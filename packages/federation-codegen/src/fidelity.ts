@@ -17,7 +17,7 @@
  */
 
 import { expandDatatype, type ModelManifest } from "@jeswr/model-runtime";
-import { type CompileResult, isHttpPattern } from "./compile.js";
+import { type CompileResult, type FieldProvenance, isHttpPattern } from "./compile.js";
 import { localName, type NormalizedShapes } from "./shapes.js";
 
 /** The shape-derived projection of one field (the constraints model.json must cover). */
@@ -126,31 +126,48 @@ function assertStructural(shapes: NormalizedShapes, manifest: ModelManifest): vo
   }
 }
 
+// Provenance + shape lookups are keyed per ENTITY (target class + name/predicate),
+// so a field name or predicate shared across two entities can never be misattributed.
+const NUL = String.fromCharCode(0);
+const provKey = (targetClass: string, fieldName: string): string =>
+  `${targetClass}${NUL}${fieldName}`;
+
+function provenanceIndex(compiled: CompileResult): Map<string, FieldProvenance> {
+  return new Map(compiled.provenance.map((p) => [provKey(p.targetClass, p.fieldName), p]));
+}
+function shapeByTargetClass(
+  shapes: NormalizedShapes,
+): Map<string, NormalizedShapes["nodeShapes"][number]> {
+  return new Map(shapes.nodeShapes.map((s) => [s.targetClass, s]));
+}
+
 /** (b) Every http(s) pattern is reflected as a scheme guard, and none is un-sourced. */
 function assertPatternCoverage(shapes: NormalizedShapes, compiled: CompileResult): void {
-  const provByField = new Map(compiled.provenance.map((p) => [p.fieldName, p]));
-  const manifestFieldByPred = new Map(
-    compiled.manifest.entities.flatMap((e) => e.fields.map((f) => [f.predicate, f] as const)),
-  );
+  const provByKey = provenanceIndex(compiled);
+  const shapeByTarget = shapeByTargetClass(shapes);
 
-  for (const shape of shapes.nodeShapes) {
-    for (const c of shape.properties) {
-      const field = manifestFieldByPred.get(c.pathIri);
-      if (!field) continue;
-      const hasPattern = c.kind === "iri" && isHttpPattern(c.pattern);
-      const hasGuard = field.guards?.iriScheme === "http-https";
-      if (hasPattern && !hasGuard) {
-        throw new FidelityError(
-          `shape ${shape.iri} path ${c.pathIri} has an http(s) pattern but the manifest field has no iriScheme guard`,
-        );
-      }
-      // An iriScheme guard not from a pattern must be config-declared.
-      if (hasGuard && !hasPattern) {
-        const prov = provByField.get(field.name);
-        if (!prov?.configGuards.includes("iriScheme")) {
+  for (const entity of compiled.manifest.entities) {
+    for (const targetClass of entity.typeIris) {
+      const shape = shapeByTarget.get(targetClass);
+      if (!shape) continue;
+      const constraintByPred = new Map(shape.properties.map((c) => [c.pathIri, c] as const));
+      for (const field of entity.fields) {
+        const c = constraintByPred.get(field.predicate);
+        if (!c) continue;
+        const hasPattern = c.kind === "iri" && isHttpPattern(c.pattern);
+        const hasGuard = field.guards?.iriScheme === "http-https";
+        if (hasPattern && !hasGuard) {
           throw new FidelityError(
-            `manifest field ${field.name} has an iriScheme guard with no shape pattern and no config entry`,
+            `shape ${shape.iri} path ${c.pathIri} has an http(s) pattern but the manifest field has no iriScheme guard`,
           );
+        }
+        if (hasGuard && !hasPattern) {
+          const prov = provByKey.get(provKey(targetClass, field.name));
+          if (!prov?.configGuards.includes("iriScheme")) {
+            throw new FidelityError(
+              `manifest field ${field.name} (${targetClass}) has an iriScheme guard with no shape pattern and no config entry`,
+            );
+          }
         }
       }
     }
@@ -159,16 +176,20 @@ function assertPatternCoverage(shapes: NormalizedShapes, compiled: CompileResult
 
 /** (c) Every manifest guard is shape-derived or config-declared (no silent guard). */
 function assertTraceability(compiled: CompileResult, shapes: NormalizedShapes): void {
-  const provByField = new Map(compiled.provenance.map((p) => [p.fieldName, p]));
-  const constraintByPred = new Map(
-    shapes.nodeShapes.flatMap((s) => s.properties.map((c) => [c.pathIri, c] as const)),
-  );
+  const provByKey = provenanceIndex(compiled);
+  const shapeByTarget = shapeByTargetClass(shapes);
 
   for (const entity of compiled.manifest.entities) {
+    const constraintByPred = new Map(
+      entity.typeIris
+        .flatMap((tc) => shapeByTarget.get(tc)?.properties ?? [])
+        .map((c) => [c.pathIri, c] as const),
+    );
+    const targetClass = entity.typeIris[0] ?? "";
     for (const field of entity.fields) {
       const guards = field.guards;
       if (!guards) continue;
-      const prov = provByField.get(field.name);
+      const prov = provByKey.get(provKey(targetClass, field.name));
       const config = new Set(prov?.configGuards ?? []);
       const constraint = constraintByPred.get(field.predicate);
 

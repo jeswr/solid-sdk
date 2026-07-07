@@ -14,6 +14,8 @@ import { type CodegenConfig } from "./config.js";
 import { type NormalizedShapes } from "./shapes.js";
 /** Which guards on a field came from the config (vs the shape) — for traceability. */
 export interface FieldProvenance {
+    /** The entity's target class — provenance is keyed per ENTITY, not globally. */
+    targetClass: string;
     fieldName: string;
     configGuards: string[];
 }

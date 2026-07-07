@@ -66,3 +66,36 @@ describe("fidelity assertion (the P0 exit criterion)", () => {
     expect(() => assertFidelity(shapes, tampered)).toThrow(FidelityError);
   });
 });
+
+describe("fidelity — per-entity keying (no cross-entity misattribution)", () => {
+  // Two entities share a field name ("ref") AND a predicate (ex:link), but A's is an
+  // http-pattern IRI (a shape-derived scheme guard) and B's is a plain string literal.
+  // Global (by-name/by-predicate) keying would misattribute; per-entity keying must not.
+  const SharedShape = `
+    @prefix sh:  <http://www.w3.org/ns/shacl#> .
+    @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+    @prefix ex:  <https://ex.org/> .
+    [] a sh:NodeShape ; sh:targetClass ex:A ;
+      sh:property [ sh:path ex:link ; sh:name "ref" ; sh:nodeKind sh:IRI ; sh:pattern "^https?://" ; sh:maxCount 1 ] .
+    [] a sh:NodeShape ; sh:targetClass ex:B ;
+      sh:property [ sh:path ex:link ; sh:name "ref" ; sh:datatype xsd:string ; sh:maxCount 1 ] .
+  `;
+  const sharedConfig: CodegenConfig = {
+    shapesBase: "https://ex.org/shapes#",
+    prefixes: { ex: "https://ex.org/", xsd: "http://www.w3.org/2001/XMLSchema#" },
+    entities: [
+      { targetClass: "https://ex.org/A", name: "A", subject: { convention: "hash-it" } },
+      { targetClass: "https://ex.org/B", name: "B", subject: { convention: "hash-it" } },
+    ],
+  };
+
+  it("PASSES: A.ref keeps its shape-derived scheme guard; B.ref (literal) has none", () => {
+    const shared = parseShapes(SharedShape, sharedConfig.shapesBase);
+    const compiled = compileManifest(shared, sharedConfig);
+    const a = compiled.manifest.entities.find((e) => e.name === "A");
+    const b = compiled.manifest.entities.find((e) => e.name === "B");
+    expect(a?.fields[0]?.guards?.iriScheme).toBe("http-https");
+    expect(b?.fields[0]?.guards?.iriScheme).toBeUndefined();
+    expect(() => assertFidelity(shared, compiled)).not.toThrow();
+  });
+});

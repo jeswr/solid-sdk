@@ -81,6 +81,15 @@ differs from the lock (`--update-lock` to accept a reviewed change). The program
 npm install github:jeswr/federation-codegen#main
 ```
 
+**Publish-ordering note (P0).** This package depends on `@jeswr/model-runtime`, and the models it
+*generates* `import` the runtime at the consumer's runtime — so the runtime must be resolvable for a
+consumer. During local P0 the two packages are co-developed siblings, so the dependency is
+`file:../model-runtime` (which resolves locally and lets the full parity suite run). **At publish time
+the runtime is published FIRST**, and this dependency (plus the `import "@jeswr/model-runtime"` in the
+generated `model.js`) repoints to `github:jeswr/model-runtime#<sha>` (or the npm range). Installing
+`federation-codegen` from GitHub before `model-runtime` is published will not resolve the runtime —
+this is a deliberate publish-ordering step, not a defect.
+
 ## Development
 
 ```bash

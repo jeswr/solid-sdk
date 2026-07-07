@@ -11,7 +11,10 @@
  *      waiver (`fedgen:deliberatelyUnconstrained`).
  *   3. Every instance-data class has a NodeShape, every literal property in it
  *      states an explicit sh:datatype, and every property states a cardinality.
- *   4. A `sh:in` enumeration, if present, is a non-empty closed list.
+ *
+ * NOT YET checked (P1 follow-on, design §4 item 4): closed `sh:in` enumerations —
+ * P0's pilot has no enum property, and validating an RDF-list `sh:in` needs list
+ * extraction in the shape model; tracked, not claimed here.
  */
 
 import type { NormalizedOntology } from "./adapter.js";

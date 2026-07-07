@@ -6,25 +6,25 @@ import type { EntityWrapper, ModelManifest } from "@jeswr/model-runtime";
 import type { Store } from "n3";
 
 export interface BookmarkData {
-  created?: Date;
-  description?: string;
-  modified?: Date;
-  title?: string;
-  tags?: string[];
-  url: string;
-  archived?: boolean;
-  notes?: string;
+  "created"?: Date;
+  "description"?: string;
+  "modified"?: Date;
+  "title"?: string;
+  "tags"?: string[];
+  "url": string;
+  "archived"?: boolean;
+  "notes"?: string;
 }
 
 export interface BookmarkWrapper extends EntityWrapper {
-  created?: Date;
-  description?: string;
-  modified?: Date;
-  title?: string;
-  readonly tags: Set<string>;
-  url?: string;
-  archived?: boolean;
-  notes?: string;
+  "created"?: Date;
+  "description"?: string;
+  "modified"?: Date;
+  "title"?: string;
+  readonly "tags": Set<string>;
+  "url"?: string;
+  "archived"?: boolean;
+  "notes"?: string;
 }
 
 export interface BookmarkEntity {

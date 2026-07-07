@@ -29,6 +29,8 @@ import {
 
 /** Which guards on a field came from the config (vs the shape) — for traceability. */
 export interface FieldProvenance {
+  /** The entity's target class — provenance is keyed per ENTITY, not globally. */
+  targetClass: string;
   fieldName: string;
   configGuards: string[];
 }
@@ -135,9 +137,19 @@ function compileEntity(
   if (!entityConfig) {
     throw new Error(`no codegen config entity for target class ${shape.targetClass}`);
   }
+  // The entity name is emitted into model.d.ts in identifier + string-literal
+  // positions; require a plain identifier so it can never break the generated
+  // types (defence in depth — the config is trusted, but a typo must fail loudly).
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(entityConfig.name)) {
+    throw new Error(`codegen config entity name "${entityConfig.name}" is not a valid identifier`);
+  }
   const fields: ManifestField[] = shape.properties.map((constraint) => {
     const name = constraint.name ?? localName(constraint.pathIri);
-    const prov: FieldProvenance = { fieldName: name, configGuards: [] };
+    const prov: FieldProvenance = {
+      targetClass: shape.targetClass,
+      fieldName: name,
+      configGuards: [],
+    };
     const fieldConfig = entityConfig.fields?.[name];
     const field = compileField(constraint, fieldConfig, prov);
     provenance.push(prov);

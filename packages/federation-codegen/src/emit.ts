@@ -64,24 +64,32 @@ function isRequired(field: ManifestField): boolean {
   return field.minCount !== undefined && field.minCount >= 1;
 }
 
+// Property names are JSON.stringify-quoted so ANY field name is a valid .d.ts
+// property key (defence in depth — the runtime already validates names against
+// an identifier charset + reserved-name denylist, but quoting makes the emitted
+// declaration robust regardless).
+function propKey(name: string): string {
+  return JSON.stringify(name);
+}
+
 function dataFieldLine(field: ManifestField): string {
   const base = baseTsType(field);
   if (field.collection === "set") {
-    return `  ${field.name}?: ${base}[];`;
+    return `  ${propKey(field.name)}?: ${base}[];`;
   }
   const opt = isRequired(field) ? "" : "?";
-  return `  ${field.name}${opt}: ${base};`;
+  return `  ${propKey(field.name)}${opt}: ${base};`;
 }
 
 function wrapperFieldLine(field: ManifestField): string {
   const base = baseTsType(field);
   if (field.collection === "set") {
-    return `  readonly ${field.name}: Set<${base}>;`;
+    return `  readonly ${propKey(field.name)}: Set<${base}>;`;
   }
   // A single accessor's setter accepts `undefined` (to clear the triple), so the
   // property is optional even for a default-bearing field (the getter still yields
   // a value at runtime — the default — but the type must permit the clearing write).
-  return `  ${field.name}?: ${base};`;
+  return `  ${propKey(field.name)}?: ${base};`;
 }
 
 function entityDts(entity: ManifestEntity): string {
