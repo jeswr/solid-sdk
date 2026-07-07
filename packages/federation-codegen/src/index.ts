@@ -41,11 +41,16 @@ export {
   isHttpPattern,
 } from "./compile.js";
 export {
+  type AnyEntityConfig,
   type CodegenConfig,
+  type CompositeEntityConfig,
+  type CompositeFieldConfig,
+  type CompositeNodeConfig,
   type EntityConfig,
   entityConfigFor,
   FIELD_CONFIG_GUARD_KEYS,
   type FieldConfig,
+  isCompositeConfig,
 } from "./config.js";
 export { emitModelDts, emitModelJs, emitModelJson, emitShapesTtl } from "./emit.js";
 export { assertFidelity, FidelityError } from "./fidelity.js";

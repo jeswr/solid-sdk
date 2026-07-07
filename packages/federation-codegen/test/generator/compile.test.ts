@@ -3,7 +3,12 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { type CodegenConfig, compileManifest, parseShapes } from "../../src/index.js";
+import {
+  type CodegenConfig,
+  compileManifest,
+  isCompositeConfig,
+  parseShapes,
+} from "../../src/index.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const exampleDir = join(here, "..", "..", "examples", "bookmark");
@@ -24,7 +29,7 @@ describe("compileManifest — config validation", () => {
   it("rejects a config that configures a non-existent field (untraceable guard)", () => {
     const config: CodegenConfig = structuredClone(baseConfig);
     const entity = config.entities[0];
-    if (!entity) throw new Error("no entity in base config");
+    if (!entity || isCompositeConfig(entity)) throw new Error("no flat entity in base config");
     entity.fields = { nope: { emptyStringDrop: true } };
     expect(() => compileManifest(shapes, config)).toThrow(/configures unknown field "nope"/);
   });
@@ -32,7 +37,7 @@ describe("compileManifest — config validation", () => {
   it("rejects a non-identifier entity name (model.d.ts injection guard)", () => {
     const config: CodegenConfig = structuredClone(baseConfig);
     const entity = config.entities[0];
-    if (!entity) throw new Error("no entity in base config");
+    if (!entity || isCompositeConfig(entity)) throw new Error("no flat entity in base config");
     entity.name = 'Evil"; type X = ';
     expect(() => compileManifest(shapes, config)).toThrow(/not a valid identifier/);
   });

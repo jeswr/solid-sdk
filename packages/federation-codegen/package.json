@@ -1,7 +1,7 @@
 {
   "name": "@jeswr/federation-codegen",
   "version": "0.1.0",
-  "description": "Ontology-driven data-model codegen for the Solid app suite — deterministic OWL/RDFS + SHACL → model.d.ts (types) + model.json (a fidelity-asserted verified projection of shapes.ttl) + model.js (a fixed-template shim over @jeswr/model-runtime). Includes the tier-a structural admission validator and the build-time fidelity assertion.",
+  "description": "Ontology-driven data-model codegen for the Solid app suite \u2014 deterministic OWL/RDFS + SHACL \u2192 model.d.ts (types) + model.json (a fidelity-asserted verified projection of shapes.ttl) + model.js (a fixed-template shim over @jeswr/model-runtime). Includes the tier-a structural admission validator and the build-time fidelity assertion.",
   "type": "module",
   "license": "MIT",
   "author": "Jesse Wright",
@@ -50,7 +50,7 @@
     "gate": "npm run lint && npm run typecheck && npm run test && npm run build && npm run check:dist"
   },
   "dependencies": {
-    "@jeswr/model-runtime": "git+https://github.com/jeswr/model-runtime.git#5f1d352aae7419f0b907c830e7f31ed15f5220f2",
+    "@jeswr/model-runtime": "git+https://github.com/jeswr/model-runtime.git#f66f9b34776310ba4678e389fe01444a57c43771",
     "n3": "^2.0.3"
   },
   "peerDependencies": {

@@ -45,14 +45,58 @@ export interface EntityConfig {
     /** Per-field config, keyed by the field name (`sh:name`). */
     fields?: Record<string, FieldConfig>;
 }
+/**
+ * Per-field config for a COMPOSITE node's flat field — the flat {@link FieldConfig}
+ * plus a `rename` (the composite projection is ONE flat object, so same-local-name
+ * fields on different nodes — e.g. `dct:title` on a Track and an Album — need distinct
+ * names). The rename, like every guard flag, is a config choice that must trace.
+ */
+export interface CompositeFieldConfig extends FieldConfig {
+    /** Emit the flat field under this name (must be a valid identifier). */
+    rename?: string;
+}
+/**
+ * One node of a composite entity config — the NodeShape (by `targetClass`) to project,
+ * the document `fragment` its subject lives at, which of its shape properties become
+ * FLAT fields (`fields`, with per-field config), and which IRI-link properties become
+ * NESTED links to a sub-node (`links`, keyed by the shape field name → the target node
+ * name). A shape property that is neither `fields` nor `links` is OMITTED — but a
+ * Violation-graded (MUST) property may never be omitted (the fidelity assertion enforces
+ * this), so a security-critical constraint is never silently dropped.
+ */
+export interface CompositeNodeConfig {
+    /** The `sh:targetClass` of the node's NodeShape (distinct across the composite's nodes). */
+    targetClass: string;
+    /** The document fragment (e.g. `it`, `track`) — the node IRI is `${resourceUrl}#${fragment}`. */
+    fragment: string;
+    /** Shape properties (by shape field name) to project as FLAT fields. */
+    fields?: Record<string, CompositeFieldConfig>;
+    /** Shape IRI-link properties (by shape field name) to project as NESTED links → a sub-node name. */
+    links?: Record<string, string>;
+}
+/** A composite (document-projection) entity config — a root node + named sub-nodes. */
+export interface CompositeEntityConfig {
+    /** The entity name (also the generated type base name). */
+    name: string;
+    /** Discriminator. */
+    kind: "composite";
+    /** The node name (a key of `nodes`) that is the root (build / parse entry point). */
+    root: string;
+    /** node name → node config. */
+    nodes: Record<string, CompositeNodeConfig>;
+}
+/** A config entity — a flat single-node entity or a composite document projection. */
+export type AnyEntityConfig = EntityConfig | CompositeEntityConfig;
+/** Type guard — narrows a config entity to the composite variant. */
+export declare function isCompositeConfig(entity: AnyEntityConfig): entity is CompositeEntityConfig;
 export interface CodegenConfig {
     /** Namespace the skolem shape IRIs are minted under. */
     shapesBase: string;
     /** Prefix map for the emitted `shapes.ttl` + the manifest / serializer. */
     prefixes: Record<string, string>;
-    entities: EntityConfig[];
+    entities: AnyEntityConfig[];
 }
-/** Look up the entity config for a target class. */
+/** Look up the FLAT entity config for a target class (composite configs are excluded). */
 export declare function entityConfigFor(config: CodegenConfig, targetClass: string): EntityConfig | undefined;
 /** The guard keys a FieldConfig may set (used by the fidelity traceability check). */
 export declare const FIELD_CONFIG_GUARD_KEYS: readonly ["emptyStringDrop", "default", "defaultNow", "materializeDefault", "trim", "dropBlank", "sortOnRead", "sanitizeText", "requiredFailClosed", "iriScheme"];

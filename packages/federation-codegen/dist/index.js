@@ -20,7 +20,7 @@
 export { owlRdfsAdapter, } from "./adapter.js";
 export { AdmissionError, admit, assertAdmitted, } from "./admission.js";
 export { compileManifest, isFailClosedSeverity, isHttpPattern, } from "./compile.js";
-export { entityConfigFor, FIELD_CONFIG_GUARD_KEYS, } from "./config.js";
+export { entityConfigFor, FIELD_CONFIG_GUARD_KEYS, isCompositeConfig, } from "./config.js";
 export { emitModelDts, emitModelJs, emitModelJson, emitShapesTtl } from "./emit.js";
 export { assertFidelity, FidelityError } from "./fidelity.js";
 export { emitLockfile, GENERATOR, generateModel, } from "./generate.js";

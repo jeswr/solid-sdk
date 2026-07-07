@@ -10,6 +10,7 @@ import {
   FidelityError,
   parseShapes,
 } from "../../src/index.js";
+import { flat } from "../helpers.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const exampleDir = join(here, "..", "..", "examples", "bookmark");
@@ -31,7 +32,7 @@ describe("fidelity assertion (the P0 exit criterion)", () => {
   it("FAILS (throws) on a seeded datatype mutation", () => {
     const compiled = compileManifest(shapes, config);
     const tampered = structuredClone(compiled);
-    const field = tampered.manifest.entities[0]?.fields.find((f) => f.name === "title");
+    const field = flat(tampered.manifest.entities[0]).fields.find((f) => f.name === "title");
     if (!field) throw new Error("title field missing");
     field.datatype = "http://www.w3.org/2001/XMLSchema#boolean"; // was xsd:string
     expect(() => assertFidelity(shapes, tampered)).toThrow(FidelityError);
@@ -40,7 +41,7 @@ describe("fidelity assertion (the P0 exit criterion)", () => {
   it("FAILS on a seeded cardinality mutation", () => {
     const compiled = compileManifest(shapes, config);
     const tampered = structuredClone(compiled);
-    const field = tampered.manifest.entities[0]?.fields.find((f) => f.name === "url");
+    const field = flat(tampered.manifest.entities[0]).fields.find((f) => f.name === "url");
     if (!field) throw new Error("url field missing");
     field.maxCount = 5; // was 1
     expect(() => assertFidelity(shapes, tampered)).toThrow(FidelityError);
@@ -49,8 +50,7 @@ describe("fidelity assertion (the P0 exit criterion)", () => {
   it("FAILS on a dropped field (manifest omits a shape constraint)", () => {
     const compiled = compileManifest(shapes, config);
     const tampered = structuredClone(compiled);
-    const entity = tampered.manifest.entities[0];
-    if (!entity) throw new Error("entity missing");
+    const entity = flat(tampered.manifest.entities[0]);
     entity.fields = entity.fields.filter((f) => f.name !== "notes");
     expect(() => assertFidelity(shapes, tampered)).toThrow(FidelityError);
   });
@@ -58,11 +58,24 @@ describe("fidelity assertion (the P0 exit criterion)", () => {
   it("FAILS on an un-sourced guard (a scheme guard with no shape pattern and no config)", () => {
     const compiled = compileManifest(shapes, config);
     const tampered = structuredClone(compiled);
-    const field = tampered.manifest.entities[0]?.fields.find((f) => f.name === "title");
+    const field = flat(tampered.manifest.entities[0]).fields.find((f) => f.name === "title");
     if (!field) throw new Error("title field missing");
     // title is a literal with no pattern — an iriScheme guard here is un-sourced.
     field.kind = "iri";
     field.guards = { ...(field.guards ?? {}), iriScheme: "http-https" };
+    expect(() => assertFidelity(shapes, tampered)).toThrow(FidelityError);
+  });
+
+  it("FAILS on a tampered defaultNow-only field (a build-time default with no config source)", () => {
+    // A field carrying ONLY defaultNow (no guards, no `default`) must still be traced —
+    // otherwise a tampered manifest could smuggle an un-sourced build-time default past
+    // the traceability check. `title` has no config `defaultNow`, so forcing one throws.
+    const compiled = compileManifest(shapes, config);
+    const tampered = structuredClone(compiled);
+    const field = flat(tampered.manifest.entities[0]).fields.find((f) => f.name === "title");
+    if (!field) throw new Error("title field missing");
+    field.guards = undefined; // strip any guards so the field is defaultNow-ONLY
+    field.defaultNow = true; // un-sourced build-time default
     expect(() => assertFidelity(shapes, tampered)).toThrow(FidelityError);
   });
 });
@@ -92,10 +105,10 @@ describe("fidelity — per-entity keying (no cross-entity misattribution)", () =
   it("PASSES: A.ref keeps its shape-derived scheme guard; B.ref (literal) has none", () => {
     const shared = parseShapes(SharedShape, sharedConfig.shapesBase);
     const compiled = compileManifest(shared, sharedConfig);
-    const a = compiled.manifest.entities.find((e) => e.name === "A");
-    const b = compiled.manifest.entities.find((e) => e.name === "B");
-    expect(a?.fields[0]?.guards?.iriScheme).toBe("http-https");
-    expect(b?.fields[0]?.guards?.iriScheme).toBeUndefined();
+    const a = flat(compiled.manifest.entities.find((e) => e.name === "A"));
+    const b = flat(compiled.manifest.entities.find((e) => e.name === "B"));
+    expect(a.fields[0]?.guards?.iriScheme).toBe("http-https");
+    expect(b.fields[0]?.guards?.iriScheme).toBeUndefined();
     expect(() => assertFidelity(shared, compiled)).not.toThrow();
   });
 });

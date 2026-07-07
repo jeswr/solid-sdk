@@ -59,6 +59,41 @@ cannot yet drive this generation: it uses a different class IRI, models tags as 
 `skos:Concept` (not `schema:keywords` literals), and omits `dct:created`/`dct:modified` — the §4
 ratchet the sector must close first.
 
+## Composite (document-projection) entities
+
+Some domain models are **multi-node**: ONE flat object projected across several connected RDF nodes of
+one document (e.g. `@jeswr/solid-listening`'s `ScrobbleData` — a `media:PlaybackEvent #it` → a
+`media:Track #track` → `#artist`/`#album`, plus a `time:Instant #playedAt`, with a fail-closed
+cross-node MUST: a titled Track + a valid Instant must be reachable). A `kind: "composite"` config
+generates a single composite entity over the runtime's composite kind:
+
+```jsonc
+{
+  "name": "Scrobble", "kind": "composite", "root": "event",
+  "nodes": {
+    "event": { "targetClass": "…#PlaybackEvent", "fragment": "it",
+      "fields": { "msPlayed": {} },
+      "links":  { "playedWork": "track", "atTime": "playedAt" } },   // IRI-link props → sub-nodes
+    "track": { "targetClass": "…#Track", "fragment": "track",
+      "fields": { "title": { "rename": "trackTitle" } } }            // rename → globally-unique key
+  }
+}
+```
+
+- Each node claims its `sh:targetClass`'s NodeShape. A node's `fields` project shape properties as
+  FLAT fields (with an optional `rename`, since the composite is ONE flat object — `dct:title` on a
+  Track and an Album need distinct names); its `links` project **IRI-link** properties as `nested`
+  links to a sub-node (the shape parser reads `sh:class` / `sh:node` / `sh:nodeKind sh:IRI`). The
+  cross-node MUST (`requiredFailClosed`) derives from a link's Violation-graded `sh:minCount ≥ 1` (G1).
+- The **fidelity assertion** extends to the composite: every projected field traces to a shape
+  property; a nested link maps an IRI-link property and a Violation link carries the required guard;
+  and **every presence-MUST (`minCount ≥ 1`, Violation) of a node MUST be covered** — a
+  security-critical constraint can never be silently dropped from the projection.
+- A property that is neither a `field` nor a `link` is omitted (only Warning/Info properties may be —
+  a MUST omission fails fidelity). A composite claims its node target classes exclusively (they are not
+  also emitted as flat entities); each node has a distinct target class; composite documents are
+  http(s)-scoped (the runtime filters/canonicalises link targets through the http(s) IRI filter).
+
 ## Usage (Mode A)
 
 ```bash

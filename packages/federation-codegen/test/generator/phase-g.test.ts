@@ -16,6 +16,7 @@ import {
   type NormalizedShapes,
   parseShapes,
 } from "../../src/index.js";
+import { flat } from "../helpers.js";
 
 const SHAPES = `
 @prefix sh:  <http://www.w3.org/ns/shacl#> .
@@ -65,7 +66,7 @@ const CONFIG: CodegenConfig = {
 
 const shapes = parseShapes(SHAPES, SHAPES_BASE);
 const { manifest } = compileManifest(shapes, CONFIG);
-const fields = manifest.entities[0]?.fields ?? [];
+const fields = flat(manifest.entities[0]).fields;
 const byName = (n: string) => fields.find((f) => f.name === n);
 
 describe("G1 — severity-aware requiredFailClosed", () => {
@@ -85,7 +86,7 @@ describe("G1 — severity-aware requiredFailClosed", () => {
   });
   it("fidelity FAILS if a requiredFailClosed guard is forced on a Warning-graded field", () => {
     const compiled = compileManifest(shapes, CONFIG);
-    const artist = compiled.manifest.entities[0]?.fields.find((f) => f.name === "artist");
+    const artist = flat(compiled.manifest.entities[0]).fields.find((f) => f.name === "artist");
     if (!artist) throw new Error("artist missing");
     artist.guards = { ...(artist.guards ?? {}), requiredFailClosed: true };
     expect(() => assertFidelity(shapes, compiled)).toThrow(FidelityError);
@@ -102,7 +103,7 @@ describe("G2 — sh:in RDF-list extraction → manifest enum", () => {
   });
   it("fidelity requires the manifest enum to match the shape (tamper ⇒ throw)", () => {
     const compiled = compileManifest(shapes, CONFIG);
-    const status = compiled.manifest.entities[0]?.fields.find((f) => f.name === "status");
+    const status = flat(compiled.manifest.entities[0]).fields.find((f) => f.name === "status");
     if (!status) throw new Error("status missing");
     status.in = ["playing", "paused"]; // dropped a member
     expect(() => assertFidelity(shapes, compiled)).toThrow(FidelityError);
@@ -243,7 +244,7 @@ describe("G2 — sh:in numeric coercion covers the unsigned XSD integer subtypes
         sh:maxCount 1 ; sh:in ( "7"^^xsd:unsignedByte ) ] .`;
   const uShapes = parseShapes(unsignedTtl, SHAPES_BASE);
   const { manifest: uManifest } = compileManifest(uShapes, CONFIG);
-  const uFields = uManifest.entities[0]?.fields ?? [];
+  const uFields = flat(uManifest.entities[0]).fields;
   const uByName = (n: string) => uFields.find((f) => f.name === n);
 
   it("coerces an xsd:unsignedInt enum to numeric scalars", () => {
@@ -282,7 +283,7 @@ describe("G3 — lexical guards (minLength / nonBlank) only on string-valued lit
         sh:maxCount 1 ; sh:minLength 2 ] .`;
   const mixed = parseShapes(mixedTtl, SHAPES_BASE);
   const { manifest: mixedManifest } = compileManifest(mixed, CONFIG);
-  const mByName = (n: string) => mixedManifest.entities[0]?.fields.find((f) => f.name === n);
+  const mByName = (n: string) => flat(mixedManifest.entities[0]).fields.find((f) => f.name === n);
 
   it("emits minLength + nonBlank for a string-valued literal", () => {
     expect(mByName("label")?.guards?.minLength).toBe(2);
@@ -306,7 +307,7 @@ describe("fidelity — a guard whose VALUE disagrees with the shape is not shape
   // Returns the LIVE guards object off the compiled manifest — mutating it tampers
   // the manifest in place (same reference), so a test can flip one guard value.
   const guardsOf = (compiled: ReturnType<typeof fresh>, name: string) => {
-    const f = compiled.manifest.entities[0]?.fields.find((e) => e.name === name);
+    const f = flat(compiled.manifest.entities[0]).fields.find((e) => e.name === name);
     if (!f?.guards) throw new Error(`${name} guards missing`);
     return f.guards;
   };

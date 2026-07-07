@@ -27,6 +27,8 @@ export interface ShapeConstraint {
     datatype?: string;
     /** `sh:class`, if declared (an IRI field constrained to a class). */
     hasClass?: string;
+    /** `sh:node`, if declared (the IRI of a referenced NodeShape the value must conform to). */
+    node?: string;
     minCount?: number;
     maxCount?: number;
     /** `sh:pattern`, if declared. */

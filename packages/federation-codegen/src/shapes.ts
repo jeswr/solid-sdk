@@ -35,6 +35,8 @@ export interface ShapeConstraint {
   datatype?: string;
   /** `sh:class`, if declared (an IRI field constrained to a class). */
   hasClass?: string;
+  /** `sh:node`, if declared (the IRI of a referenced NodeShape the value must conform to). */
+  node?: string;
   minCount?: number;
   maxCount?: number;
   /** `sh:pattern`, if declared. */
@@ -200,6 +202,14 @@ export function parseShapes(shapesTtl: string, shapesBase: string): NormalizedSh
       if (datatype !== undefined) constraint.datatype = datatype;
       const hasClass = graph.value(propObj, `${SH}class`);
       if (hasClass !== undefined) constraint.hasClass = hasClass;
+      // sh:node — a reference to another NodeShape the value must conform to. A NamedNode
+      // reference names a link to a structured sub-node (the composite driver reads it);
+      // an inline blank-node sh:node is skolemized elsewhere, so only a named reference is
+      // carried here (the composite binds nodes by their NodeShape target class / config).
+      const nodeRef = graph.object(propObj, `${SH}node`);
+      if (nodeRef !== undefined && nodeRef.termType === "NamedNode") {
+        constraint.node = nodeRef.value;
+      }
       const minCount = numberOr(graph.value(propObj, `${SH}minCount`));
       if (minCount !== undefined) constraint.minCount = minCount;
       const maxCount = numberOr(graph.value(propObj, `${SH}maxCount`));
