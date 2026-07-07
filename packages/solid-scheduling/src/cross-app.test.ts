@@ -76,6 +76,17 @@ describe("cross-app federation — a Vikunja sched:Task reads as a wf:Task", () 
     expect(sched?.completedAt?.toISOString()).toBe(wf?.endedAt?.toISOString());
   });
 
+  it("an explicit completedAt (no flag) closes BOTH graphs to the same instant", async () => {
+    const ts = new Date("2026-07-08T10:00:00.000Z");
+    const ttl = await serializeSchedulingTask(RES, { summary: "Implied", completedAt: ts });
+    const ds = await parseRdf(ttl, "text/turtle", { baseIRI: RES });
+    const sched = parseSchedulingTask(RES, ds);
+    const wf = parseTask(RES, ds);
+    expect(wf?.state).toBe("closed"); // completedAt implies completion in the wf overlay too
+    expect(sched?.completedAt?.toISOString()).toBe(ts.toISOString());
+    expect(wf?.endedAt?.toISOString()).toBe(ts.toISOString());
+  });
+
   it("cross-model relations (parent / blocked-by) federate through wf:Task", async () => {
     const parent = "https://alice.pod.example/vikunja/tasks/1";
     const blocker = "https://alice.pod.example/vikunja/tasks/2";

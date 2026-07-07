@@ -84,6 +84,23 @@ describe("buildSchedulingTask + parse round-trip", () => {
     expect(out?.completedAt?.getTime() ?? 0).toBeGreaterThanOrEqual(before - 1000);
   });
 
+  it("preserves an explicit completedAt WITHOUT the completed flag (implies completion)", async () => {
+    const ts = new Date("2026-07-08T10:00:00.000Z");
+    const out = await roundTrip({ summary: "Done", completedAt: ts });
+    expect(out?.completed).toBe(true); // completedAt implies completion
+    expect(out?.completedAt?.toISOString()).toBe(ts.toISOString()); // not lost
+  });
+
+  it("an explicit completed:false drops a contradictory completedAt (open task)", async () => {
+    const out = await roundTrip({
+      summary: "Not done",
+      completed: false,
+      completedAt: new Date("2026-07-08T10:00:00.000Z"),
+    });
+    expect(out?.completed).toBe(false);
+    expect(out?.completedAt).toBeUndefined();
+  });
+
   it("uses the #it subject shared with wf:Task", () => {
     expect(schedulingTaskSubject(RES)).toBe(`${RES}#it`);
     expect(schedulingNodeIris(RES).task).toBe(`${RES}#it`);

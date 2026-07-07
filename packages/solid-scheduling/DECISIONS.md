@@ -46,7 +46,16 @@ The field mapping (scheduling → the shared `wf:Task`):
 
 `buildTask` owns the untrusted http(s) filtering of the WebID/relation IRIs and the
 `wf:Open`/`wf:Closed` + `prov:endedAtTime` state management, so this package never
-re-implements that security-sensitive logic. The task-model dependency is pinned by
+re-implements that security-sensitive logic.
+
+**Completion is a single, unified notion (no divergence).** The completion
+timestamp is computed **once** in `buildSchedulingTask` and written to BOTH graphs
+(`sched:completedAt` and `prov:endedAtTime`), so they can never disagree. A task is
+CLOSED when `completed === true`, OR when a valid `completedAt` is supplied and
+`completed` is not an explicit `false` (a completion timestamp implies completion —
+so a round-tripped `sched:completedAt` is never silently lost). An explicit
+`completed: false` always wins and drops a contradictory `completedAt`. A closed
+task with no supplied timestamp auto-stamps `now` exactly once (into both graphs). The task-model dependency is pinned by
 git SHA (`git+https://github.com/jeswr/solid-task-model.git#9d9c2ae…`) so a
 dependency bump is an intentional, reviewable diff.
 

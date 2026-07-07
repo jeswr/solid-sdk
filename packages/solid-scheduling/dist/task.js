@@ -270,10 +270,10 @@ export class Reminder extends TermWrapper {
  * http(s) filtering of the WebID/relation IRIs and the wf:Open/wf:Closed +
  * `prov:endedAtTime` state management.
  */
-function toWfTaskData(data, completedAt) {
+function toWfTaskData(data, closed, completedAt) {
     const wf = {
         title: data.summary,
-        state: data.completed ? "closed" : "open",
+        state: closed ? "closed" : "open",
     };
     setIfDefined(wf, "description", data.description);
     // Single source of truth for the completion timestamp (computed once in
@@ -307,22 +307,32 @@ function toWfTaskData(data, completedAt) {
  *   a known DAILY/WEEKLY/MONTHLY/YEARLY value.
  */
 export function buildSchedulingTask(resourceUrl, data) {
-    // Single source of truth for the completion timestamp: computed ONCE here and
-    // written to BOTH graphs (prov:endedAtTime via buildTask + sched:completedAt),
-    // so they can never diverge. Only meaningful for a closed task; a raw provided
-    // completedAt is validated so an Invalid Date can't reach LiteralFrom.dateTime.
-    const completedAt = data.completed === true ? (validDateOrUndefined(data.completedAt) ?? new Date()) : undefined;
+    // Completion is a single, unified notion so the native sched: graph and the
+    // wf:Task overlay never diverge. A task is CLOSED when `completed === true`, OR
+    // when a valid `completedAt` is supplied and `completed` is not an explicit
+    // `false` (a completion timestamp implies completion). An explicit
+    // `completed: false` always wins — a contradictory `completedAt` is dropped.
+    const explicitCompletedAt = validDateOrUndefined(data.completedAt);
+    const closed = data.completed === true || (data.completed !== false && explicitCompletedAt !== undefined);
+    // The ONE completion timestamp, written to BOTH graphs: an explicit value is
+    // preserved; otherwise a closed task auto-stamps now (once), an open task none.
+    const completedAt = closed ? (explicitCompletedAt ?? new Date()) : undefined;
     // Start from the shared wf:Task store (federation edge), then layer sched: on
     // the same #it subject. buildTask owns the untrusted IRI filtering + state.
-    const store = new Store([...buildTask(resourceUrl, toWfTaskData(data, completedAt))]);
+    const store = new Store([...buildTask(resourceUrl, toWfTaskData(data, closed, completedAt))]);
     const iris = schedulingNodeIris(resourceUrl);
     const task = new SchedulingTask(iris.task, store, DataFactory).mark();
     task.summary = data.summary || undefined;
     task.description = data.description || undefined;
     task.startTime = validDateOrUndefined(data.startTime);
     task.dueTime = validDateOrUndefined(data.dueTime);
-    if (data.completed !== undefined)
-        task.completed = data.completed;
+    // Mirror wf:Open/wf:Closed: write sched:completed=true when closed, =false only
+    // when the caller was explicit, and nothing for a bare open task (keeps a
+    // minimal task minimal, and round-trips the boolean exactly).
+    if (closed)
+        task.completed = true;
+    else if (data.completed === false)
+        task.completed = false;
     task.completedAt = completedAt;
     // organizer/calendar are untrusted IRIs: drop anything not absolute http(s).
     task.organizer = httpIriOrUndefined(data.organizer);

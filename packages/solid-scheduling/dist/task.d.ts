@@ -81,7 +81,13 @@ export interface SchedulingTaskData {
     dueTime?: Date;
     /** `sched:completed` (+ `wf:Open`/`wf:Closed`) — whether the task is done. */
     completed?: boolean;
-    /** `sched:completedAt` (+ `prov:endedAtTime`) — completion time; defaults to now on close. */
+    /**
+     * `sched:completedAt` (+ `prov:endedAtTime`) — completion time. A valid value
+     * is preserved and IMPLIES completion (the task is treated as closed) unless
+     * `completed` is an explicit `false`, which drops it. When a task is closed but
+     * no timestamp is supplied, it defaults to now. The same instant is written to
+     * both the `sched:` graph and the `wf:Task` overlay, so they never diverge.
+     */
     completedAt?: Date;
     /** `sched:organizer` (+ `dct:creator`) — the owner/organiser WebID. */
     organizer?: string;
