@@ -152,6 +152,80 @@ for (const { dir, file, ns } of ONTOLOGIES) {
 }
 
 // =============================================================================
+// Layer 2b — root governance-vocab term hygiene (fedapp / fedreg / fedcon / task)
+//
+// The root governance vocabularies live at repo ROOT, NOT under sectors/, so
+// listTtl(SECTORS) above never reaches them. Apply the SAME label + definition
+// (rdfs:comment | skos:definition) check to their OWN-namespace named terms.
+//
+// We deliberately do NOT run Layer 3 (HermiT/ROBOT) against them: unlike the
+// gUFO sectors they carry no owl:imports closure and no per-dir catalog-v001.xml,
+// so there is nothing for the reasoner to resolve — they are thin RDFS/OWL glue
+// vocabularies, not gUFO-rooted domain ontologies. (validate.mjs additionally
+// requires rdfs:isDefinedBy on these; this layer mirrors the sector term-hygiene
+// bar so the same rule is visible in the ontology gate.) Note fedcon: mints under
+// https://jeswr.org/fedcon# — the one root vocab NOT under w3id.org/jeswr.
+// =============================================================================
+console.log(
+  "\nLayer 2b — root governance-vocab term hygiene (fedapp / fedreg / fedcon / task):",
+);
+const ROOT_VOCABS = [
+  { file: "fedapp.ttl", ns: "https://w3id.org/jeswr/fed#" },
+  { file: "fedreg.ttl", ns: "https://w3id.org/jeswr/fedreg#" },
+  { file: "fedcon.ttl", ns: "https://jeswr.org/fedcon#" },
+  { file: "task.ttl", ns: "https://w3id.org/jeswr/task#" },
+];
+for (const { file, ns } of ROOT_VOCABS) {
+  const p = join(ROOT, file);
+  if (!existsSync(p)) {
+    fail(`${file}: not found at repo root`);
+    continue;
+  }
+  let quads;
+  try {
+    quads = new Parser({ baseIRI: `https://w3id.org/jeswr/${file}` }).parse(
+      readFileSync(p, "utf8"),
+    );
+  } catch (err) {
+    fail(`${file}: parse error: ${err.message}`);
+    continue;
+  }
+  const preds = new Map(); // subjIRI -> Set(pred)
+  let hasOntologyNode = false;
+  for (const q of quads) {
+    if (q.subject.termType !== "NamedNode") continue;
+    if (q.predicate.value === RDF_TYPE && q.object.value === `${OWL}Ontology`) {
+      hasOntologyNode = true;
+    }
+    if (!q.subject.value.startsWith(ns)) continue;
+    const s = preds.get(q.subject.value) ?? new Set();
+    s.add(q.predicate.value);
+    preds.set(q.subject.value, s);
+  }
+  if (!hasOntologyNode) fail(`${file}: no owl:Ontology node`);
+  let terms = 0;
+  let bad = 0;
+  for (const [iri, ps] of preds) {
+    if (iri === ns.replace(/#$/, "")) continue; // the ontology node itself
+    terms += 1;
+    const hasLabel = ps.has(`${RDFS}label`) || ps.has(`${SKOS}prefLabel`);
+    const hasDef = ps.has(`${RDFS}comment`) || ps.has(`${SKOS}definition`);
+    if (!hasLabel || !hasDef) {
+      bad += 1;
+      fail(
+        `${file}: ${iri} missing ${[
+          !hasLabel ? "rdfs:label|skos:prefLabel" : null,
+          !hasDef ? "rdfs:comment|skos:definition" : null,
+        ]
+          .filter(Boolean)
+          .join(" + ")}`,
+      );
+    }
+  }
+  if (bad === 0) ok(`${file}: ${terms} named term(s) carry label + definition`);
+}
+
+// =============================================================================
 // Layer 3 — reasoner consistency (F6: robot reason --reasoner HermiT)
 // =============================================================================
 console.log("\nLayer 3 — reasoner consistency (ROBOT / HermiT, 0 unsatisfiable):");

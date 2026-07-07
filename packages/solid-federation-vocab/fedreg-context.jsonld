@@ -14,6 +14,7 @@
     "type": "@type",
 
     "Registry": "fedreg:Registry",
+    "RegistryAssertion": "fedreg:RegistryAssertion",
     "Membership": "fedreg:Membership",
     "MembershipStatus": "fedreg:MembershipStatus",
     "StorageDescription": "fedreg:StorageDescription",

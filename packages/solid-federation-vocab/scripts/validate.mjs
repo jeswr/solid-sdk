@@ -44,6 +44,16 @@ for (const file of ttlFiles) {
   }
   ok(`well-formed Turtle (${quads.length} quads)`);
 
+  // SHACL profile sidecars (*.shacl.ttl) at ROOT are parsed for well-formedness
+  // (real value) but NOT held to the term-hygiene rule below — their sh:NodeShapes
+  // carry only rdfs:label, exactly like the sector .shacl.ttl sidecars, which this
+  // gate never term-checks. Skip the label/comment/isDefinedBy + ontology-node
+  // loop for them (mirrors the sectors/ convention).
+  if (file.endsWith(".shacl.ttl")) {
+    ok("SHACL profile — not term-hygiene-checked (mirrors the sectors/ convention)");
+    continue;
+  }
+
   // Subjects that are typed but NOT the ontology node must have label + comment
   // + isDefinedBy. Re-used terms (isDefinedBy pointing elsewhere) still get a
   // label/comment restatement here, so the same assertion holds.
@@ -109,6 +119,42 @@ for (const file of ctxFiles) {
     fail(`context expansion failed: ${err.message}`);
   }
   void sample;
+}
+
+// -----------------------------------------------------------------------------
+// Composed-context check: fedreg + fedcon are BOTH @protected and are designed to
+// compose (a fedcon:Admission uses fedcon: terms AND reuses fedreg:assertedBy /
+// fedreg:asserted). Expanding an Admission through the composed [fedreg, fedcon]
+// context proves there is no protected-term-redefinition clash — the regression
+// guard for the ConceptProposed alias (fedcon:Proposed is aliased ConceptProposed
+// precisely so it does not collide with the @protected fedreg:Proposed).
+// -----------------------------------------------------------------------------
+{
+  console.log("\nJSON-LD composed context: fedreg-context.jsonld + fedcon-context.jsonld");
+  try {
+    const fedreg = JSON.parse(readFileSync(join(ROOT, "fedreg-context.jsonld"), "utf8"))["@context"];
+    const fedcon = JSON.parse(readFileSync(join(ROOT, "fedcon-context.jsonld"), "utf8"))["@context"];
+    const admission = {
+      "@context": [fedreg, fedcon],
+      id: "https://registry.example/admissions/x",
+      type: "Admission", // fedcon:Admission
+      concept: "urn:concept:mb2example",
+      conceptStatus: "ConceptProposed", // the disambiguated fedcon:Proposed alias
+      assertedBy: "https://registry.example/card#me", // reused fedreg: term
+      asserted: "2026-07-06T00:00:00Z", // reused fedreg: term
+    };
+    const expanded = await jsonld.expand(admission);
+    const [node] = expanded;
+    const statusIri = node?.["https://jeswr.org/fedcon#conceptStatus"]?.[0]?.["@id"];
+    const assertedByIri = node?.["https://w3id.org/jeswr/fedreg#assertedBy"]?.[0]?.["@id"];
+    if (statusIri !== "https://jeswr.org/fedcon#Proposed")
+      fail(`ConceptProposed did not expand to fedcon:Proposed (got ${statusIri})`);
+    else if (assertedByIri !== "https://registry.example/card#me")
+      fail(`reused fedreg:assertedBy did not expand in the composed context (got ${assertedByIri})`);
+    else ok("fedreg + fedcon @protected contexts compose + expand (no protected-term clash)");
+  } catch (err) {
+    fail(`composed fedreg+fedcon context expansion failed: ${err.message}`);
+  }
 }
 
 console.log("");

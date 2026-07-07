@@ -29,7 +29,13 @@ const DOCS = join(ROOT, "docs");
 mkdirSync(DIST, { recursive: true });
 mkdirSync(DOCS, { recursive: true });
 
-const ttlFiles = readdirSync(ROOT).filter((f) => f.endsWith(".ttl"));
+// The vocabulary sources. Exclude *.shacl.ttl SHACL profile sidecars (e.g.
+// fedcon.shacl.ttl): like the sector .shacl.ttl profiles they are copied VERBATIM
+// as sidecars (below), never merged into the reasoned vocab.nt dump nor given their
+// own HTML/context — mirroring the sectors/ convention.
+const ttlFiles = readdirSync(ROOT).filter(
+  (f) => f.endsWith(".ttl") && !f.endsWith(".shacl.ttl"),
+);
 const jsonldFiles = readdirSync(ROOT).filter((f) => f.endsWith(".jsonld"));
 
 // 1 + 2 — parse all Turtle, re-serialise via n3.Writer.
@@ -56,7 +62,7 @@ console.log(`dist/vocab.nt — ${allQuads.length} triples (n3.Writer)`);
 // namespace-slug name (fed.ttl / task.ttl) so the served path matches the IRI
 // the w3id redirect resolves (…/fed → fed.ttl). The descriptive source name
 // (fedapp.ttl) is kept too for humans browsing the repo.
-const TTL_SLUG = { "fedapp.ttl": "fed.ttl", "fedreg.ttl": "fedreg.ttl", "task.ttl": "task.ttl" };
+const TTL_SLUG = { "fedapp.ttl": "fed.ttl", "fedreg.ttl": "fedreg.ttl", "task.ttl": "task.ttl", "fedcon.ttl": "fedcon.ttl" };
 for (const file of ttlFiles) {
   copyFileSync(join(ROOT, file), join(DOCS, file));
   const slug = TTL_SLUG[file];
@@ -77,10 +83,14 @@ const OWL_ONTOLOGY = "http://www.w3.org/2002/07/owl#Ontology";
 const esc = (s) =>
   String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
-// `slug` is the PUBLIC namespace slug / w3id route (fed, task) — NOT the source
-// filename (fedapp.ttl). `ctx` is the matching JSON-LD context filename.
-function htmlFor(file, slug, ctx, ttl) {
-  const quads = new Parser({ baseIRI: `https://w3id.org/jeswr/${slug}` }).parse(ttl);
+// `slug` is the PUBLIC namespace slug / route (fed, task, fedcon) — NOT the source
+// filename (fedapp.ttl). `ctx` is the matching JSON-LD context filename. `base` is
+// the FULL namespace base URI WITHOUT the trailing `#` (e.g.
+// "https://w3id.org/jeswr/fed", or "https://jeswr.org/fedcon" for fedcon:, which is
+// NOT w3id-rooted) — passed explicitly so the generated title/H1 show each vocab's
+// REAL namespace root rather than assuming the w3id.org/jeswr/ prefix.
+function htmlFor(slug, ctx, base, ttl) {
+  const quads = new Parser({ baseIRI: base }).parse(ttl);
   const byS = new Map();
   for (const q of quads) {
     if (q.subject.termType !== "NamedNode") continue;
@@ -91,6 +101,9 @@ function htmlFor(file, slug, ctx, ttl) {
     byS.set(q.subject.value, e);
   }
   const ns = slug;
+  // The namespace root shown in the title/H1 — the REAL base per vocab (w3id.org
+  // for fed/fedreg/task, jeswr.org for fedcon), never a hardcoded w3id assumption.
+  const titleBase = base.replace(/^https?:\/\//, "");
   const rows = [...byS]
     .filter(([, e]) => !e.types.includes(OWL_ONTOLOGY) && e.label)
     .sort((a, b) => a[0].localeCompare(b[0]))
@@ -105,7 +118,7 @@ function htmlFor(file, slug, ctx, ttl) {
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>w3id.org/jeswr/${ns} — Solid Federation Vocabulary</title>
+    <title>${titleBase} — Solid Federation Vocabulary</title>
     <style>
       :root { color-scheme: light dark; }
       body { font-family: system-ui, sans-serif; line-height: 1.6; max-width: 60rem; margin: 2rem auto; padding: 0 1rem; }
@@ -117,7 +130,7 @@ function htmlFor(file, slug, ctx, ttl) {
     </style>
   </head>
   <body>
-    <h1><code>https://w3id.org/jeswr/${ns}#</code></h1>
+    <h1><code>${base}#</code></h1>
     <p class="warn">⚠️ <strong>Experimental</strong> — AI-agent-generated (Claude Opus 4.8, @jeswr PSS agent); under active development, not production-hardened.</p>
     <p>Other representations: <a href="${ns}.ttl">Turtle</a> · <a href="${ctx}">JSON-LD context</a> · <a href="./">index</a></p>
     <h2>Terms</h2>
@@ -130,14 +143,25 @@ ${rows}
 `;
 }
 
-for (const [file, slug, ctx] of [
-  ["fedapp.ttl", "fed", "context.jsonld"],
-  ["fedreg.ttl", "fedreg", "fedreg-context.jsonld"],
-  ["task.ttl", "task", "task-context.jsonld"],
+// [file, slug, ctx, base] — `base` is each vocab's FULL namespace root without the
+// trailing `#`. fedcon: is jeswr.org-rooted (NOT w3id.org/jeswr) — see fedcon.ttl.
+for (const [file, slug, ctx, base] of [
+  ["fedapp.ttl", "fed", "context.jsonld", "https://w3id.org/jeswr/fed"],
+  ["fedreg.ttl", "fedreg", "fedreg-context.jsonld", "https://w3id.org/jeswr/fedreg"],
+  ["task.ttl", "task", "task-context.jsonld", "https://w3id.org/jeswr/task"],
+  ["fedcon.ttl", "fedcon", "fedcon-context.jsonld", "https://jeswr.org/fedcon"],
 ]) {
-  const html = htmlFor(file, slug, ctx, readFileSync(join(ROOT, file), "utf8"));
+  const html = htmlFor(slug, ctx, base, readFileSync(join(ROOT, file), "utf8"));
   writeFileSync(join(DOCS, `${slug}.html`), html);
   console.log(`docs/${slug}.html (text/html conneg target)`);
+  // Root-vocab SHACL profile sidecar (e.g. fedcon.shacl.ttl) — copied VERBATIM
+  // alongside the vocab, the same way sector .shacl.ttl sidecars are (see the ONTOS
+  // loop below), so the profile resolves at docs/<slug>.shacl.ttl.
+  const shacl = file.replace(/\.ttl$/, ".shacl.ttl");
+  if (existsSync(join(ROOT, shacl))) {
+    copyFileSync(join(ROOT, shacl), join(DOCS, shacl));
+    console.log(`docs/${shacl} (SHACL profile, served by GitHub Pages)`);
+  }
 }
 
 // =============================================================================

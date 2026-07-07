@@ -3,20 +3,24 @@
 > ⚠️ Experimental — AI-agent-generated (Claude Opus 4.8, @jeswr PSS agent); under active development, not production-hardened.
 
 The federation vocabularies for the [@jeswr](https://github.com/jeswr) Solid app
-suite, served under the persistent namespace **`https://w3id.org/jeswr/`**
-(decided in `prod-solid-server` ADR-0013). Two vocabularies live here:
+suite, served (mostly) under the persistent namespace **`https://w3id.org/jeswr/`**
+(decided in `prod-solid-server` ADR-0013). The vocabularies that live here:
 
 | Namespace | Prefix | What it is |
 |---|---|---|
 | `https://w3id.org/jeswr/fed#` | `fedapp:` | **App-registration** metadata an app publishes in its Client Identifier Document (OpenID-Federation-style): the sectors it operates in, the WAC/ACP access modes it requests, and the shared shapes it consumes / produces. |
 | `https://w3id.org/jeswr/fedreg#` | `fedreg:` | **Federation Catalogue / Registry** — the discovery axis. A `fedreg:Registry` (a `dcat:Catalog`) listing member apps with a **registry-asserted** `fedreg:Membership` (lifecycle status + `assertedBy` authority — distinct from the app's self-asserted `fedapp:App`), and a `fedreg:StorageDescription` advertising **which client-client spec-versions a resource server accepts** (`acceptsSpec`) and which sectors it supports — the substrate for asynchronous schema migration. Consumed by [`@jeswr/federation-registry`](https://github.com/jeswr/federation-registry). |
+| `https://jeswr.org/fedcon#` | `fedcon:` | **Federation Contribution / Admission** — the write / governance axis. The contribution + admission lifecycle for the concept-federation registry: an ownerless, content-addressed concept is **proposed** (define / extend / promote), publicly **commented** on (Web Annotations + a `fedcon:stance`) and **admitted** (or rejected) by a registry authority, with usage attestations as promotion evidence and a **mandatory dissent annex** on every admission. A `fedcon:Admission` is a `fedreg:RegistryAssertion`, the sibling of a `fedreg:Membership`. **Mints under `jeswr.org` directly** (not the `w3id.org` redirect its siblings use — see the `fedcon:` section). |
 | `https://w3id.org/jeswr/task#` | `tm:` | The **shared cross-app task / issue model** — the canonical, dereferenceable re-use of the W3C workflow ontology (`wf:`), Dublin Core Terms (`dct:`) and ActivityStreams 2.0 (`as:`) every suite app reads/writes for tasks and issues. |
 | `https://w3id.org/jeswr/core#` | `core:` | The **gUFO-based Solid Core** — the foundational ontology every sector imports and constrains-but-never-forks. Every cross-sector root (Agent, Account, Identifier, Record, Relationship, Quantity, …) carries a gUFO meta-type (Kind / Relator / Role(Mixin) / Phase / EventType / …). |
 | `https://w3id.org/jeswr/sectors/<sector>#` | per-sector | The **sector ontologies** (`identity`, `finance`, `health`, `media`, `scheduling`, `contacts`, `drawing`, `social`, `bookmarks`, `futures`) — the domain models a `fedapp:sector` references. Each imports `core:` and reuses real vocabularies (see below). |
 
-The IRIs resolve via a permanent `w3id.org` redirect to a GitHub Pages target
-under this repo (`docs/`), so they survive a host move and stay under `@jeswr`
-(not `solidproject.org`, which would require a CG adoption first).
+The `w3id.org`-rooted IRIs resolve via a permanent `w3id.org` redirect to a GitHub
+Pages target under this repo (`docs/`), so they survive a host move and stay under
+`@jeswr` (not `solidproject.org`, which would require a CG adoption first).
+**`fedcon:` is the exception** — it mints under `jeswr.org`, whose live resolution
+is a pending hosting/DNS decision (see the `fedcon:` section); its documents are
+still generated into `docs/` and gate-checked identically.
 
 ## The `fedapp:` vocabulary
 
@@ -53,7 +57,8 @@ services (R9 §2.2 / research brief 09 in `full-solid-ecosystem`). It answers tw
 questions the self-asserted `fedapp:` layer cannot:
 
 1. **Who is actually a member?** A **`fedreg:Registry`** (a `dcat:Catalog`) lists
-   apps via **`fedreg:Membership`** records (`dcat:CatalogRecord`s). A Membership
+   apps via **`fedreg:Membership`** records (each a **`fedreg:RegistryAssertion`**
+   ⊑ `dcat:CatalogRecord` — see below). A Membership
    is the **registry's own** assertion — `fedreg:app` (the client_id),
    `fedreg:status` (one of the coded values **`fedreg:Proposed` / `Active` /
    `Suspended` / `Revoked`**), `fedreg:assertedBy` (the WebID / key of the
@@ -79,7 +84,105 @@ parallel terms (the LD/SW "reuse, don't reinvent" rule). The typed TS client is
 `buildRegistry` / `parseRegistry` / `verifyMembership` and `describeStorage` /
 `parseStorage` / `acceptsSpec`.
 
+`fedreg:Membership` is a **`fedreg:RegistryAssertion`** — the common superclass
+(⊑ `dcat:CatalogRecord`) for any registry-authority-signed record, carrying the
+`fedreg:assertedBy` / `fedreg:asserted` / `fedreg:status` spine. Its sibling is the
+concept-admission record `fedcon:Admission` (see the `fedcon:` section). This is an
+**additive, backward-compatible** generalisation: `Membership` was re-parented under
+`RegistryAssertion` (both `rdfs:subClassOf` triples are kept — `RegistryAssertion`
+**and** the direct `dcat:CatalogRecord` — so even a non-reasoning consumer that read
+`Membership ⊑ dcat:CatalogRecord` sees no change), and the
+`assertedBy` / `asserted` / `status` domains were widened from `Membership` to
+`RegistryAssertion` — existing `Membership` data still satisfies every widened
+domain. The only semantic effect of the widening is on **domain inference**: a bare
+`?x fedreg:assertedBy ?a` now entails the more general `?x a fedreg:RegistryAssertion`
+rather than `fedreg:Membership`. Explicitly-typed membership data (how every
+membership in the suite is written — `@jeswr/federation-registry` always asserts the
+type and validates by explicit `targetClass`) is unaffected; records SHOULD carry an
+explicit `rdf:type` and not rely on domain inference to tell a membership from a
+concept admission (the ambiguity the shared spine deliberately introduces, resolved
+by the explicit type).
+
 JSON-LD `@context`: [`fedreg-context.jsonld`](./fedreg-context.jsonld).
+
+## The `fedcon:` vocabulary (Contribution / Admission)
+
+The **write / governance axis** of the concept-federation registry — the companion
+to the discovery-axis `fedreg:` and the self-asserted `fedapp:`. Where `fedreg:`
+describes *who* is a member and *which* specs a storage accepts, `fedcon:` describes
+*how a concept crystallises into a federation*: proposed, publicly commented, and
+admitted (or rejected) by a registry authority. Bottom-up crystallisation, with
+usage-across-peers as the forcing function.
+
+> **Namespace — `https://jeswr.org/fedcon#`, not `w3id.org/jeswr`.** Unlike every
+> sibling vocabulary here, `fedcon:` mints under the maintainer's now-live
+> `jeswr.org` domain, avoiding a dependency on the still-pending `w3id.org` redirect
+> PR for new work. **Live resolution of `https://jeswr.org/fedcon` is a pending
+> `jeswr.org` hosting/DNS decision** (out of scope for this vocab-only phase — the
+> same "not yet resolving" honesty this README already applies to the pending w3id
+> PR). `fedcon:` is therefore deliberately **not** in the `.htaccess` redirect block
+> below (that block is for the w3id-rooted vocabs only). Cross-namespace references
+> (a `fedcon:` term pointing at a `w3id.org` `fedreg:` term) are ordinary RDF.
+
+**The lifecycle** (`fedcon:ConceptStatus`) — a concept in local use is *no registry
+record at all* (the fast path: define, hash, serve, use, with zero gatekeeping); the
+state machine begins only when a `fedcon:Proposal` is filed:
+`Proposed → UnderReview` (a public comment window, policy default 7 days) →
+`Admitted` / `Rejected` (a reasoned, dissent-annexed authority decision) →
+`Superseded` / `Deprecated` (or `Withdrawn` by the proposer). Rejection is
+per-registry and non-terminal — the hash still works locally and can be admitted
+elsewhere; there is no global state.
+
+**The record shapes:**
+
+- **`fedcon:Proposal`** — one LDN-POSTed record, three intents (`fedcon:intent` ∈
+  `Define` / `Extend` / `Promote`). Always references the concept by its content
+  hash (`fedcon:concept`); carries the definition graph (`fedcon:definition`, inline
+  preferred), the proposer (`prov:wasAttributedTo`), and — for a Promote — usage
+  attestations (`fedcon:evidence`) and prior standing (`fedcon:priorAdmission`).
+  `fedcon:Extend` never mutates a parent (hashes are immutable): it is a *new*
+  concept whose definition references the parent hash via `fedcon:extends`.
+- **`fedcon:UsageAttestation`** — each *using* agent signs its OWN `{ concept, user,
+  since, context? }`; nobody attests about anybody else, so consent to disclosure is
+  by construction. The promotion evidence.
+- **`fedcon:Admission`** — the registry authority's signed decision, a
+  **`fedreg:RegistryAssertion`** (the sibling of `fedreg:Membership`) reusing the
+  `fedreg:assertedBy` / `fedreg:asserted` spine. Carries `fedcon:conceptStatus`, the
+  `fedcon:proposal` it decides, the `fedcon:reviewWindow`, the governing
+  `fedcon:underPolicy`, a `fedcon:decisionRationale`, and the **mandatory dissent
+  annex**.
+- **`fedcon:AdmissionPolicy`** — governance-as-data: the authorities, the minimum
+  comment window, the promotion-evidence expectation, the comment-write gate.
+  Thresholds are registry *policy*, never protocol constants.
+- **`fedcon:Announcement`** — a review-free notice that makes a concept
+  *discoverable* (indexed, usable, explicitly unendorsed) before any governance —
+  the bootstrap for the "sourced from registries" EXTEND loop.
+
+**Comments** are Web Annotations (`oa:Annotation`, motivated by
+commenting / replying / assessing) in a per-proposal inbox; a structured review
+stance rides on assessing annotations via **`fedcon:stance`** ∈ `Support` / `Oppose`
+/ `Concern`, and an `Oppose` MUST carry a non-empty rationale body.
+
+**The mandatory dissent annex** (SHACL `fcsh:AdmissionShape`, mirroring the unite
+`fut:SharedFuture` idiom): an `Admission` whose thread holds unresolved `Oppose`
+stances but which records no `fedcon:dissent` is **invalid** unless it explicitly
+asserts `fedcon:noDissentRecorded true` (`fedcon:noDissentRecorded` is minted here
+precisely so that rule is structurally enforceable, exactly as `fut:noDissentRecorded`
+backs the futures annex). The record format itself refuses manufactured consensus —
+objections travel with the outcome rather than being averaged away.
+
+`fedcon:` **mints only the federation contribution/admission glue**; it reuses Web
+Annotation (`oa:`), PROV-O (`prov:`), DCAT/Dublin Core, LDP (`ldp:inbox`) and Hydra
+(`hydra:operation` / `hydra:search`) at the instance/API level. The typed client SDK
+and the LDN contribution service (`@jeswr/federation-contrib`) are a later,
+out-of-scope phase; this repo ships the vocabulary + SHACL profile only.
+
+JSON-LD `@context`: [`fedcon-context.jsonld`](./fedcon-context.jsonld); SHACL
+profile: [`fedcon.shacl.ttl`](./fedcon.shacl.ttl). (In the context, the concept
+lifecycle value `fedcon:Proposed` is aliased **`ConceptProposed`**, not `Proposed`,
+so the `fedcon:` context can compose with the `@protected` `fedreg:` context — which
+already binds `Proposed` to the membership-lifecycle `fedreg:Proposed` — without a
+protected-term-redefinition clash. The `fedcon:`-prefixed form works regardless.)
 
 ## The shared task / issue model (`tm:`)
 
@@ -322,9 +425,14 @@ The w3id redirect serves the right representation by `Accept`:
 
 | `Accept` | Served |
 |---|---|
-| `text/turtle` | the `.ttl` (`fed.ttl` / `fedreg.ttl` / `task.ttl` / `core.ttl` / `sectors/<x>.ttl`) |
-| `application/ld+json` | the `.jsonld` context (`context.jsonld` / `fedreg-context.jsonld` / `<slug>-context.jsonld`) |
-| `text/html` (browsers) | the human-readable HTML page (`fed.html` / `fedreg.html` / `task.html` / `core.html` / `sectors/<x>.html`) |
+| `text/turtle` | the `.ttl` (`fed.ttl` / `fedreg.ttl` / `fedcon.ttl` / `task.ttl` / `core.ttl` / `sectors/<x>.ttl`) |
+| `application/ld+json` | the `.jsonld` context (`context.jsonld` / `fedreg-context.jsonld` / `fedcon-context.jsonld` / `<slug>-context.jsonld`) |
+| `text/html` (browsers) | the human-readable HTML page (`fed.html` / `fedreg.html` / `fedcon.html` / `task.html` / `core.html` / `sectors/<x>.html`) |
+
+The `fedcon.shacl.ttl` SHACL profile is served verbatim alongside `fedcon.ttl` (as
+the sector `.shacl.ttl` profiles are). `fedcon:` conneg activates only once
+`jeswr.org` resolution is decided (above); the documents are generated into `docs/`
+regardless.
 
 ## GitHub Pages
 

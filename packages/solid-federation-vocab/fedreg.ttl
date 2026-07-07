@@ -89,12 +89,36 @@ fedreg:Registry
         merely an app's self-description."""@en ;
     rdfs:isDefinedBy <https://w3id.org/jeswr/fedreg> .
 
-fedreg:Membership
+fedreg:RegistryAssertion
     a rdfs:Class, owl:Class ;
     rdfs:subClassOf dcat:CatalogRecord ;
+    rdfs:label "Registry Assertion"@en ;
+    rdfs:comment """The common superclass of any record a registry authority SIGNS
+        as its own claim — a dcat:CatalogRecord carrying the fedreg:assertedBy
+        authority, the fedreg:asserted timestamp and (where a lifecycle applies) a
+        status. It generalises the assertedBy / asserted / status spine that
+        fedreg:Membership introduced, so OTHER registry-asserted record kinds can
+        reuse it: a fedreg:Membership (an app's membership in a federation) and a
+        fedcon:Admission (a concept hash admitted into a registry —
+        https://jeswr.org/fedcon#) are both fedreg:RegistryAssertions. What makes any
+        of them a REGISTRY claim, rather than a self-asserted one, is the
+        fedreg:assertedBy authority a verifier checks against its trust set. (The
+        cryptographic signature binding the assertion to that authority is layered
+        above this vocabulary.)"""@en ;
+    rdfs:isDefinedBy <https://w3id.org/jeswr/fedreg> .
+
+fedreg:Membership
+    a rdfs:Class, owl:Class ;
+    # Re-parented under fedreg:RegistryAssertion (the G1 generalisation). The DIRECT
+    # rdfs:subClassOf dcat:CatalogRecord is KEPT (RegistryAssertion is itself ⊑
+    # dcat:CatalogRecord, so it is RDFS-redundant) purely so this generalisation is
+    # strictly ADDITIVE for a NON-reasoning consumer of the published vocab: one that
+    # read `Membership ⊑ dcat:CatalogRecord` directly still sees it, no regression.
+    rdfs:subClassOf fedreg:RegistryAssertion, dcat:CatalogRecord ;
     rdfs:label "Federation Membership"@en ;
-    rdfs:comment """A registry's signed assertion that a particular app (its
-        client_id, linked via fedreg:app) is a member of the federation, carrying
+    rdfs:comment """A registry's signed assertion (a fedreg:RegistryAssertion) that a
+        particular app (its client_id, linked via fedreg:app) is a member of the
+        federation, carrying
         a lifecycle fedreg:status, the fedreg:assertedBy authority (a WebID / key
         that vouches for it) and fedreg:asserted timestamp. This is the
         REGISTRY-ASSERTED counterpart to the app's self-asserted fedapp:App: a
@@ -186,35 +210,65 @@ fedreg:app
     rdfs:range fedapp:App ;
     rdfs:isDefinedBy <https://w3id.org/jeswr/fedreg> .
 
+# -----------------------------------------------------------------------------
+# G1 domain-widening — a DELIBERATE, backward-compatible generalisation.
+#
+# fedreg:status / :assertedBy / :asserted were re-domained from fedreg:Membership
+# UP to fedreg:RegistryAssertion so the shared assertion spine can be reused by
+# every registry-asserted record kind (fedreg:Membership AND fedcon:Admission),
+# rather than duplicating a parallel fedcon: spine (the reuse-don't-reinvent rule;
+# the signed-off design §G.1 chose this over parallel properties).
+#
+# Semantics of the widening, stated explicitly (per a review of the RDFS effect):
+#   - EXPLICITLY-TYPED data is UNAFFECTED. A record carrying `a fedreg:Membership`
+#     (which is how EVERY membership in this suite is written — @jeswr/federation-
+#     registry always asserts the type explicitly and validates by explicit
+#     targetClass, never by domain inference) still is-a Membership, and since
+#     Membership ⊑ RegistryAssertion it is a RegistryAssertion too. No loss.
+#   - The ONE change is to DOMAIN INFERENCE: a bare `?x fedreg:assertedBy ?a` now
+#     RDFS-entails `?x a fedreg:RegistryAssertion` (the more general type), no
+#     longer `?x a fedreg:Membership`. A consumer that classified UNTYPED records
+#     as memberships PURELY via this property's old domain would see the more
+#     general type instead. Membership records therefore SHOULD carry an explicit
+#     `rdf:type fedreg:Membership` (they already do); do not rely on domain
+#     inference to distinguish a membership from a concept admission — that is
+#     exactly the ambiguity the shared spine introduces and the explicit type
+#     resolves.
+# -----------------------------------------------------------------------------
+
 fedreg:status
     a rdf:Property, owl:ObjectProperty ;
     rdfs:label "status"@en ;
-    rdfs:comment """The lifecycle status of a fedreg:Membership — one of the
+    rdfs:comment """The lifecycle status of a fedreg:RegistryAssertion — one of the
         fedreg:MembershipStatus coded values (Proposed / Active / Suspended /
-        Revoked)."""@en ;
-    rdfs:domain fedreg:Membership ;
+        Revoked). Domained on fedreg:RegistryAssertion so any registry-asserted
+        record MAY carry it; fedreg:Membership uses it for the membership lifecycle.
+        (A fedcon:Admission carries its OWN fedcon:conceptStatus lifecycle instead of
+        this membership-shaped status.)"""@en ;
+    rdfs:domain fedreg:RegistryAssertion ;
     rdfs:range fedreg:MembershipStatus ;
     rdfs:isDefinedBy <https://w3id.org/jeswr/fedreg> .
 
 fedreg:assertedBy
     a rdf:Property, owl:ObjectProperty ;
     rdfs:label "asserted by"@en ;
-    rdfs:comment """The authority that asserts a fedreg:Membership — a WebID (or
-        key IRI) of the Scheme Authority / registry operator vouching for the
-        membership. This is what makes the membership a REGISTRY claim rather than
-        a self-asserted one: a verifier checks fedreg:assertedBy against the set of
-        authorities it trusts. (The cryptographic signature binding the assertion
-        to that authority is layered above this vocabulary.)"""@en ;
-    rdfs:domain fedreg:Membership ;
+    rdfs:comment """The authority that asserts a fedreg:RegistryAssertion (a
+        fedreg:Membership or a fedcon:Admission) — a WebID (or key IRI) of the Scheme
+        Authority / registry operator vouching for it. This is what makes the record
+        a REGISTRY claim rather than a self-asserted one: a verifier checks
+        fedreg:assertedBy against the set of authorities it trusts. (The
+        cryptographic signature binding the assertion to that authority is layered
+        above this vocabulary.)"""@en ;
+    rdfs:domain fedreg:RegistryAssertion ;
     rdfs:isDefinedBy <https://w3id.org/jeswr/fedreg> .
 
 fedreg:asserted
     a rdf:Property, owl:DatatypeProperty ;
     rdfs:label "asserted"@en ;
     rdfs:comment """The timestamp (xsd:dateTime) at which the registry made this
-        membership assertion — used to reason about staleness / ordering of
-        status changes."""@en ;
-    rdfs:domain fedreg:Membership ;
+        assertion — used to reason about staleness / ordering of status changes on a
+        fedreg:RegistryAssertion (a fedreg:Membership or a fedcon:Admission)."""@en ;
+    rdfs:domain fedreg:RegistryAssertion ;
     rdfs:range xsd:dateTime ;
     rdfs:isDefinedBy <https://w3id.org/jeswr/fedreg> .
 

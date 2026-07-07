@@ -1,0 +1,596 @@
+# AUTHORED-BY Claude Sonnet 5
+#
+# Federation Contribution / Admission Vocabulary (fedcon:)
+# Namespace: https://jeswr.org/fedcon#
+#
+# The GOVERNANCE / GLUE vocabulary for the concept-federation registry's
+# contribution + admission lifecycle. It is the WRITE-side companion to the
+# DISCOVERY-side fedreg: (https://w3id.org/jeswr/fedreg#) and the SELF-ASSERTED
+# fedapp: (https://w3id.org/jeswr/fed#): where fedreg: describes WHO is a member
+# and WHICH specs a storage accepts, fedcon: describes HOW a concept crystallises
+# into a federation — proposed, publicly commented, and admitted (or rejected) by
+# a registry authority.
+#
+# The design it realises (contribution-api-design, 2026-07-06):
+#   - A concept is an OWNERLESS, content-addressed definition (urn:concept:<hash>);
+#     a registry never OWNS a concept, it ADMITS a hash. Promotion is admission of
+#     a hash into a wider registry, never ownership transfer or edit rights.
+#   - The lifecycle state machine lives in per-(concept-hash, registry) ADMISSION
+#     records (fedcon:Admission) that mirror fedreg:Membership's spine — via the
+#     fedreg:RegistryAssertion generalisation, fedcon:Admission and fedreg:Membership
+#     are the two kinds of registry-asserted record, sharing assertedBy/asserted.
+#   - Proposals (fedcon:Proposal) and comments are LDN-POSTed RDF; comments reuse
+#     the Web Annotation model (oa:Annotation, motivated by commenting/replying/
+#     assessing) with a fedcon:stance rider on assessing annotations.
+#   - Usage evidence is gathered BY the users (fedcon:UsageAttestation, each signed
+#     by its own user) — nobody attests about anybody else.
+#   - Admission carries a MANDATORY DISSENT ANNEX: an admission that closes over a
+#     thread with unresolved Oppose stances but records no fedcon:dissent is invalid
+#     (SHACL-enforced), a direct port of the unite fut:SharedFuture dissent annex —
+#     manufactured consensus is never permitted.
+#
+# NAMESPACE NOTE — https://jeswr.org/fedcon# (NOT w3id.org/jeswr): unlike the
+# sibling governance vocabularies (fedapp:/fedreg:/task:/core:/the sectors), which
+# are w3id.org-rooted, fedcon: mints under the maintainer's now-live jeswr.org
+# domain. This avoids a dependency on the still-pending w3id.org redirect PR for
+# NEW work; LIVE resolution of https://jeswr.org/fedcon is a pending jeswr.org
+# hosting/DNS decision (out of scope for this vocab-only phase). Cross-namespace
+# references (a fedcon: term pointing at a w3id.org fedreg: term, and vice-versa)
+# are ordinary RDF and completely fine.
+#
+# REUSE, DON'T REINVENT (the LD/SW house rule): fedcon: mints ONLY the federation
+# contribution/admission glue. Web Annotation (oa:) for comments, PROV-O (prov:)
+# for attribution/proposer, DCAT (dcat:) + Dublin Core Terms (dcterms:) for the
+# catalogue-record spine, LDP (ldp:inbox) for the inbox affordance and Hydra
+# (hydra:operation / hydra:search) for the API affordances are all REUSED at the
+# instance/API level — only referenced in prose here, never re-minted.
+#
+# Authored as Turtle directly (source form), like every other vocabulary in this
+# repo; programmatically-BUILT RDF (example instances, client SDKs) goes through
+# n3.Writer / @rdfjs/wrapper typed accessors — never hand-built quads.
+
+@prefix fedcon:  <https://jeswr.org/fedcon#> .
+@prefix fedreg:  <https://w3id.org/jeswr/fedreg#> .
+@prefix oa:      <http://www.w3.org/ns/oa#> .
+@prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix vann:    <http://purl.org/vocab/vann/> .
+@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
+
+#################################################################
+#    Ontology
+#################################################################
+
+<https://jeswr.org/fedcon>
+    a owl:Ontology ;
+    dcterms:title "Federation Contribution / Admission Vocabulary"@en ;
+    dcterms:description """The contribution + admission lifecycle of the
+        concept-federation registry: an ownerless, content-addressed concept is
+        PROPOSED (define / extend / promote), publicly COMMENTED on, and ADMITTED
+        (or rejected) by a registry authority, with usage attestations as the
+        promotion evidence and a mandatory dissent annex on every admission. The
+        WRITE / governance axis, composing with the DISCOVERY-axis fedreg: — a
+        fedcon:Admission is a fedreg:RegistryAssertion, the sibling of a
+        fedreg:Membership."""@en ;
+    dcterms:creator "Claude Sonnet 5 (@jeswr PSS agent)" ;
+    dcterms:issued "2026-07-06"^^xsd:date ;
+    vann:preferredNamespaceUri "https://jeswr.org/fedcon#" ;
+    vann:preferredNamespacePrefix "fedcon" ;
+    rdfs:seeAlso <https://w3id.org/jeswr/fedreg> ;
+    rdfs:comment "Experimental — AI-agent-generated; under active development, not production-hardened."@en .
+
+#################################################################
+#    Classes
+#################################################################
+
+fedcon:Proposal
+    a rdfs:Class, owl:Class ;
+    rdfs:label "Proposal"@en ;
+    rdfs:comment """A contribution proposal filed against a registry (LDN-POSTed as
+        RDF). One record type carries all three intents (fedcon:intent — Define /
+        Extend / Promote) so there is a single validation path. It ALWAYS references
+        the concept by its content hash (fedcon:concept), carries the definition
+        graph (fedcon:definition, inline preferred), the proposer
+        (prov:wasAttributedTo, which MUST match the DPoP-verified WebID), and — for a
+        Promote — the usage attestations (fedcon:evidence) and prior standing
+        (fedcon:priorAdmission). A proposal accretes mutable discussion state, so
+        unlike the ownerless concept it gets a stable minted registry URL."""@en ;
+    rdfs:isDefinedBy <https://jeswr.org/fedcon> .
+
+fedcon:Intent
+    a rdfs:Class, owl:Class ;
+    rdfs:label "Proposal Intent"@en ;
+    rdfs:comment """The intent of a fedcon:Proposal. The three coded values
+        fedcon:Define, fedcon:Extend and fedcon:Promote are instances of this class.
+        The intent selects the record's semantics without needing three endpoints:
+        Define registers a concept with no prior standing, Extend indexes a new
+        concept whose definition references parent hashes (it never mutates a
+        parent — hashes are immutable), Promote seeks admission of an already-used
+        hash into a wider registry."""@en ;
+    rdfs:isDefinedBy <https://jeswr.org/fedcon> .
+
+fedcon:UsageAttestation
+    a rdfs:Class, owl:Class ;
+    rdfs:label "Usage Attestation"@en ;
+    rdfs:comment """A single using agent's SIGNED statement that IT uses a concept:
+        { fedcon:concept <hash> ; fedcon:user <WebID> ; fedcon:since <date> ;
+        fedcon:context? <sector/app IRI> }. The promotion evidence, gathered by the
+        users, never ABOUT them: nobody attests about anybody else — each peer that
+        consents signs its OWN attestation, so consent to disclosure is by
+        construction. An attestation names only its signer and the concept hash,
+        never the counterparties or content of exchanges. Presented to the authority
+        and the public as evidence; never auto-scored into a verdict."""@en ;
+    rdfs:isDefinedBy <https://jeswr.org/fedcon> .
+
+fedcon:Admission
+    a rdfs:Class, owl:Class ;
+    rdfs:subClassOf fedreg:RegistryAssertion ;
+    rdfs:label "Concept Admission"@en ;
+    rdfs:comment """A registry authority's signed decision on a concept hash — the
+        sibling of fedreg:Membership, and like it a fedreg:RegistryAssertion (so it
+        reuses the fedreg:assertedBy authority and fedreg:asserted timestamp spine;
+        RegistryAssertion is itself a dcat:CatalogRecord, inherited transitively).
+        It carries the concept (fedcon:concept), the fedcon:conceptStatus lifecycle
+        value, the fedcon:proposal it decides (full provenance: evidence + thread),
+        the fedcon:reviewWindow (machine-checkable against the policy minimum), the
+        governing fedcon:underPolicy, the MANDATORY dissent annex (fedcon:dissent /
+        fedcon:noDissentRecorded) and a fedcon:decisionRationale. Admission is
+        per-registry: the same hash may be Admitted in one registry and UnderReview
+        in another, simultaneously — there is no global state, and rejection removes
+        nothing (the hash still works locally and can be admitted elsewhere)."""@en ;
+    rdfs:isDefinedBy <https://jeswr.org/fedcon> .
+
+fedcon:ConceptStatus
+    a rdfs:Class, owl:Class ;
+    rdfs:label "Concept Status"@en ;
+    rdfs:comment """The lifecycle state of a concept hash WITHIN one registry, on a
+        fedcon:Admission. The seven coded values fedcon:Proposed, fedcon:UnderReview,
+        fedcon:Admitted, fedcon:Rejected, fedcon:Superseded, fedcon:Deprecated and
+        fedcon:Withdrawn are instances of this class. Distinct from
+        fedreg:MembershipStatus (which is the membership lifecycle) — a concept
+        admission has its own state machine (proposed → under-review → admitted /
+        rejected, then superseded / deprecated)."""@en ;
+    rdfs:isDefinedBy <https://jeswr.org/fedcon> .
+
+fedcon:AdmissionPolicy
+    a rdfs:Class, owl:Class ;
+    rdfs:label "Admission Policy"@en ;
+    rdfs:comment """A registry's governance-as-data document: who the admission
+        authorities are (WebIDs, checked against fedreg:assertedBy on admissions),
+        the minimum comment window (the design default is 7 days, the Wikidata
+        floor), the evidence expectation for promotions (e.g. '>=3 independent
+        member attestations'), and the comment-write gate (open vs member-only).
+        Every fedcon:Admission links its governing policy via fedcon:underPolicy, so
+        a decision is auditable against the rules in force when it was made.
+        Thresholds are registry POLICY, never protocol constants — different
+        federations legitimately differ."""@en ;
+    rdfs:isDefinedBy <https://jeswr.org/fedcon> .
+
+fedcon:Stance
+    a rdfs:Class, owl:Class ;
+    rdfs:label "Review Stance"@en ;
+    rdfs:comment """A structured review stance a commenter attaches to an assessing
+        Web Annotation via fedcon:stance. The three coded values fedcon:Support,
+        fedcon:Oppose and fedcon:Concern are instances of this class. A stance rides
+        on an oa:Annotation (oa:motivatedBy oa:assessing); it does not replace the
+        free-text comment body. An Oppose stance MUST carry a non-empty rationale
+        body (SHACL-checked / rejected at POST) — an unsupported Oppose carries no
+        weight, so it is not accepted as a stance record."""@en ;
+    rdfs:isDefinedBy <https://jeswr.org/fedcon> .
+
+fedcon:Announcement
+    a rdfs:Class, owl:Class ;
+    rdfs:label "Concept Announcement"@en ;
+    rdfs:comment """A first-come-first-served, review-free notice that makes a
+        concept DISCOVERABLE without seeking endorsement: { fedcon:concept <hash> ;
+        fedcon:definition <ref> }, LDN-POSTed to any registry's inbox and indexed in
+        a 'seen concepts' listing (schema.org-pending-like: visible, usable,
+        explicitly UNENDORSED). It has no review path and no lifecycle status —
+        auto-accepted subject only to the syntactic caps. This is what lets other
+        agents FIND concepts to share an understanding of, before any governance
+        happens; an announced concept is never 'admitted' by being announced."""@en ;
+    rdfs:isDefinedBy <https://jeswr.org/fedcon> .
+
+fedcon:ReviewWindow
+    a rdfs:Class, owl:Class ;
+    rdfs:label "Review Window"@en ;
+    rdfs:comment """The public-comment window of a fedcon:Admission: a small
+        structured node carrying fedcon:opened and fedcon:closed timestamps. Its
+        span is machine-checkable against the governing policy's minimum (the design
+        default is 7 days) so a decision can be audited for having given the required
+        comment time before the authority acted."""@en ;
+    rdfs:isDefinedBy <https://jeswr.org/fedcon> .
+
+#################################################################
+#    Intent coded values (instances of fedcon:Intent)
+#################################################################
+
+fedcon:Define
+    a fedcon:Intent ;
+    rdfs:label "Define"@en ;
+    rdfs:comment """Intent: register a concept that has no prior standing in this
+        registry. Expected to be rare in practice — the fast path (define, hash,
+        serve, use, with zero registry involvement) makes local definition strictly
+        easier — but supported so an agent that WANTS immediate review can have
+        it."""@en ;
+    rdfs:isDefinedBy <https://jeswr.org/fedcon> .
+
+fedcon:Extend
+    a fedcon:Intent ;
+    rdfs:label "Extend"@en ;
+    rdfs:comment """Intent: register a NEW concept whose definition graph references
+        parent hashes (subclass / subproperty / refinement edges via fedcon:extends).
+        Extending never mutates a parent — hashes are immutable and concepts are
+        ownerless, so no permission is ever needed to extend. The intent exists so a
+        registry can INDEX the extension graph (who builds on what — itself
+        promotion-relevant evidence for the parent), not to gate anything."""@en ;
+    rdfs:isDefinedBy <https://jeswr.org/fedcon> .
+
+fedcon:Promote
+    a fedcon:Intent ;
+    rdfs:label "Promote"@en ;
+    rdfs:comment """Intent: seek admission of an already-used, byte-identical concept
+        hash into a wider registry. Nothing is re-minted, re-namespaced or
+        transferred — the concept definition does not change when it is promoted,
+        which is precisely why apps that adopted it pre-promotion need no migration.
+        Promotion changes only WHERE endorsement records exist; it carries the usage
+        attestations (fedcon:evidence) and any prior standing (fedcon:priorAdmission)
+        as the forcing-function evidence."""@en ;
+    rdfs:isDefinedBy <https://jeswr.org/fedcon> .
+
+#################################################################
+#    Concept-status coded values (instances of fedcon:ConceptStatus)
+#################################################################
+
+fedcon:Proposed
+    a fedcon:ConceptStatus ;
+    rdfs:label "Proposed"@en ;
+    rdfs:comment """A proposal has been filed but the registry has not yet opened
+        the comment window (e.g. pending the synchronous syntactic + structural
+        checks)."""@en ;
+    rdfs:isDefinedBy <https://jeswr.org/fedcon> .
+
+fedcon:UnderReview
+    a fedcon:ConceptStatus ;
+    rdfs:label "Under Review"@en ;
+    rdfs:comment """The public comment window is open (minimum per the governing
+        policy — the design default is 7 days). Anyone may comment; the authority
+        weighs the thread and the executable structural-gate report before
+        deciding."""@en ;
+    rdfs:isDefinedBy <https://jeswr.org/fedcon> .
+
+fedcon:Admitted
+    a fedcon:ConceptStatus ;
+    rdfs:label "Admitted"@en ;
+    rdfs:comment """The registry authority has admitted the concept hash. Admission
+        adds discoverability, endorsement, codegen eligibility and migration
+        coordination; it never adds permission to EXIST — an unadmitted concept was
+        never broken. An Admitted status is what makes a concept eligible as a
+        codegen publish-plane input."""@en ;
+    rdfs:isDefinedBy <https://jeswr.org/fedcon> .
+
+fedcon:Rejected
+    a fedcon:ConceptStatus ;
+    rdfs:label "Rejected"@en ;
+    rdfs:comment """The authority declined admission (reasoned, dissent-annexed).
+        Rejection is per-registry and NON-terminal for the concept: the hash still
+        exists, still works locally, can be re-proposed with new evidence, and can be
+        admitted elsewhere. Rejection only withholds THIS registry's
+        endorsement."""@en ;
+    rdfs:isDefinedBy <https://jeswr.org/fedcon> .
+
+fedcon:Superseded
+    a fedcon:ConceptStatus ;
+    rdfs:label "Superseded"@en ;
+    rdfs:comment """The registry admitted a successor hash and endorsed the upgrade
+        edge; this admission is flipped to Superseded with fedcon:supersededBy
+        pointing at the successor's admission, and the fedreg:acceptsSpec dual-read
+        migration window takes over. A superseded concept keeps verifying and keeps
+        working — supersession is a signpost, not a kill switch."""@en ;
+    rdfs:isDefinedBy <https://jeswr.org/fedcon> .
+
+fedcon:Deprecated
+    a fedcon:ConceptStatus ;
+    rdfs:label "Deprecated"@en ;
+    rdfs:comment """The authority discourages the concept with NO successor (rare).
+        A reasoned record, dissent-annexed like any decision. Distinct from
+        Superseded (which names a successor via fedcon:supersededBy)."""@en ;
+    rdfs:isDefinedBy <https://jeswr.org/fedcon> .
+
+fedcon:Withdrawn
+    a fedcon:ConceptStatus ;
+    rdfs:label "Withdrawn"@en ;
+    rdfs:comment """The proposer withdrew the proposal before a decision — the one
+        proposer-privileged lifecycle act (an authenticated POST referencing the
+        proposal). No endorsement was ever granted or refused."""@en ;
+    rdfs:isDefinedBy <https://jeswr.org/fedcon> .
+
+#################################################################
+#    Stance coded values (instances of fedcon:Stance)
+#################################################################
+
+fedcon:Support
+    a fedcon:Stance ;
+    rdfs:label "Support"@en ;
+    rdfs:comment """An assessing stance endorsing the proposal. Numbers inform the
+        authority's judgment; they never mechanically drive the transition."""@en ;
+    rdfs:isDefinedBy <https://jeswr.org/fedcon> .
+
+fedcon:Oppose
+    a fedcon:Stance ;
+    rdfs:label "Oppose"@en ;
+    rdfs:comment """An assessing stance opposing the proposal. It MUST carry a
+        non-empty rationale body (an unsupported Oppose is rejected at POST and
+        carries no weight). Every unresolved Oppose must be RESPONDED TO in the
+        admission's fedcon:decisionRationale and listed in its mandatory dissent
+        annex — objections travel with the outcome rather than being averaged
+        away."""@en ;
+    rdfs:isDefinedBy <https://jeswr.org/fedcon> .
+
+fedcon:Concern
+    a fedcon:Stance ;
+    rdfs:label "Concern"@en ;
+    rdfs:comment """An assessing stance raising a concern short of outright
+        opposition — a reservation the authority should weigh and, where unresolved,
+        acknowledge in its rationale."""@en ;
+    rdfs:isDefinedBy <https://jeswr.org/fedcon> .
+
+#################################################################
+#    Properties — Proposal
+#################################################################
+
+fedcon:intent
+    a rdf:Property, owl:ObjectProperty ;
+    rdfs:label "intent"@en ;
+    rdfs:comment """The intent of a fedcon:Proposal — one of the fedcon:Intent coded
+        values (Define / Extend / Promote). Selects the record's semantics on a
+        single validation path."""@en ;
+    rdfs:domain fedcon:Proposal ;
+    rdfs:range fedcon:Intent ;
+    rdfs:isDefinedBy <https://jeswr.org/fedcon> .
+
+fedcon:concept
+    a rdf:Property, owl:ObjectProperty ;
+    rdfs:label "concept"@en ;
+    rdfs:comment """The content hash that IS the concept's identity — an opaque,
+        content-addressed IRI (e.g. urn:concept:<multibase-hash>) from the
+        content-addressed-concepts design. Used by fedcon:Proposal, by
+        fedcon:UsageAttestation AND by fedcon:Announcement, so NO rdfs:domain is
+        asserted (multiple rdfs:domain triples would be an RDFS conjunction, wrongly
+        forcing a subject to be all three classes at once). NO rdfs:range either:
+        the hash IRIs are opaque and external to this vocabulary — a consumer
+        validates them by scheme + determinism (recompute-and-compare against the
+        supplied definition), not by an RDFS range."""@en ;
+    rdfs:isDefinedBy <https://jeswr.org/fedcon> .
+
+fedcon:definition
+    a rdf:Property, owl:ObjectProperty ;
+    rdfs:label "definition"@en ;
+    rdfs:comment """The concept's full definition — INLINE preferred (a graph node in
+        the same document, which minimises by-reference SSRF surface), or a
+        content-addressed URL that dereferences to bytes the receiver hash-verifies
+        against fedcon:concept. Used by both fedcon:Proposal and fedcon:Announcement,
+        so NO rdfs:domain is asserted; NO rdfs:range either (an inline graph node or
+        a content-addressed URL are both valid values, distinguished at ingest, not
+        by an RDFS range)."""@en ;
+    rdfs:isDefinedBy <https://jeswr.org/fedcon> .
+
+fedcon:extends
+    a rdf:Property, owl:ObjectProperty ;
+    rdfs:label "extends"@en ;
+    rdfs:comment """On an Extend fedcon:Proposal: the parent concept hash(es) the new
+        concept's definition builds on (subclass / subproperty / refinement edges).
+        NO rdfs:range is asserted — the values are opaque content-addressed concept
+        hashes, external to this vocabulary, exactly like fedcon:concept. Extending
+        never mutates a parent (hashes are immutable) and never needs
+        permission."""@en ;
+    rdfs:domain fedcon:Proposal ;
+    rdfs:isDefinedBy <https://jeswr.org/fedcon> .
+
+fedcon:priorAdmission
+    a rdf:Property, owl:ObjectProperty ;
+    rdfs:label "prior admission"@en ;
+    rdfs:comment """On a Promote fedcon:Proposal: a fedcon:Admission in a narrower
+        registry where the concept already stands, cited as evidence of existing
+        endorsement."""@en ;
+    rdfs:domain fedcon:Proposal ;
+    rdfs:range fedcon:Admission ;
+    rdfs:isDefinedBy <https://jeswr.org/fedcon> .
+
+fedcon:evidence
+    a rdf:Property, owl:ObjectProperty ;
+    rdfs:label "evidence"@en ;
+    rdfs:comment """On a Promote fedcon:Proposal: the usage attestations
+        (fedcon:UsageAttestation), inline or by reference, that evidence
+        cross-agent adoption — the forcing function for promotion. Presented to the
+        authority and the public; never auto-scored into a verdict."""@en ;
+    rdfs:domain fedcon:Proposal ;
+    rdfs:range fedcon:UsageAttestation ;
+    rdfs:isDefinedBy <https://jeswr.org/fedcon> .
+
+fedcon:motivationText
+    a rdf:Property, owl:DatatypeProperty ;
+    rdfs:label "motivation text"@en ;
+    rdfs:comment """A free-text (xsd:string) explanation of why this concept and what
+        gap it fills, on a fedcon:Proposal — read by the commenting public and the
+        authority."""@en ;
+    rdfs:domain fedcon:Proposal ;
+    rdfs:range xsd:string ;
+    rdfs:isDefinedBy <https://jeswr.org/fedcon> .
+
+#################################################################
+#    Properties — UsageAttestation
+#################################################################
+
+fedcon:user
+    a rdf:Property, owl:ObjectProperty ;
+    rdfs:label "user"@en ;
+    rdfs:comment """The USING agent that signs a fedcon:UsageAttestation — a WebID.
+        NO rdfs:range is asserted (a WebID is any IRI naming an agent, from any
+        WebID vocabulary; pinning an RDFS range here would wrongly constrain it).
+        The attestation names only its signer and the concept hash — never the
+        counterparties of any exchange."""@en ;
+    rdfs:domain fedcon:UsageAttestation ;
+    rdfs:isDefinedBy <https://jeswr.org/fedcon> .
+
+fedcon:since
+    a rdf:Property, owl:DatatypeProperty ;
+    rdfs:label "since"@en ;
+    rdfs:comment """The date (xsd:date) from which the signing user has been using
+        the attested concept."""@en ;
+    rdfs:domain fedcon:UsageAttestation ;
+    rdfs:range xsd:date ;
+    rdfs:isDefinedBy <https://jeswr.org/fedcon> .
+
+fedcon:context
+    a rdf:Property, owl:ObjectProperty ;
+    rdfs:label "context"@en ;
+    rdfs:comment """The OPTIONAL context in which the user uses the concept — a
+        sector or app IRI. NO rdfs:range is asserted (a sector marker or an app
+        client_id are both valid, from other vocabularies); the value discloses only
+        the using context, never the counterparties or content of exchanges."""@en ;
+    rdfs:domain fedcon:UsageAttestation ;
+    rdfs:isDefinedBy <https://jeswr.org/fedcon> .
+
+#################################################################
+#    Properties — Admission
+#################################################################
+
+fedcon:conceptStatus
+    a rdf:Property, owl:ObjectProperty ;
+    rdfs:label "concept status"@en ;
+    rdfs:comment """The lifecycle status of the admitted concept hash — one of the
+        fedcon:ConceptStatus coded values (Proposed / UnderReview / Admitted /
+        Rejected / Superseded / Deprecated / Withdrawn). This is the concept's
+        own state machine on a fedcon:Admission, distinct from the membership-shaped
+        fedreg:status."""@en ;
+    rdfs:domain fedcon:Admission ;
+    rdfs:range fedcon:ConceptStatus ;
+    rdfs:isDefinedBy <https://jeswr.org/fedcon> .
+
+fedcon:proposal
+    a rdf:Property, owl:ObjectProperty ;
+    rdfs:label "proposal"@en ;
+    rdfs:comment """Links a fedcon:Admission to the fedcon:Proposal it decides — the
+        full provenance trail (the proposal's evidence and its comment thread)."""@en ;
+    rdfs:domain fedcon:Admission ;
+    rdfs:range fedcon:Proposal ;
+    rdfs:isDefinedBy <https://jeswr.org/fedcon> .
+
+fedcon:reviewWindow
+    a rdf:Property, owl:ObjectProperty ;
+    rdfs:label "review window"@en ;
+    rdfs:comment """The fedcon:ReviewWindow (opened / closed timestamps) of a
+        fedcon:Admission — machine-checkable against the governing policy's minimum
+        comment window."""@en ;
+    rdfs:domain fedcon:Admission ;
+    rdfs:range fedcon:ReviewWindow ;
+    rdfs:isDefinedBy <https://jeswr.org/fedcon> .
+
+fedcon:opened
+    a rdf:Property, owl:DatatypeProperty ;
+    rdfs:label "opened"@en ;
+    rdfs:comment """The instant (xsd:dateTime) a fedcon:ReviewWindow's comment window
+        opened."""@en ;
+    rdfs:domain fedcon:ReviewWindow ;
+    rdfs:range xsd:dateTime ;
+    rdfs:isDefinedBy <https://jeswr.org/fedcon> .
+
+fedcon:closed
+    a rdf:Property, owl:DatatypeProperty ;
+    rdfs:label "closed"@en ;
+    rdfs:comment """The instant (xsd:dateTime) a fedcon:ReviewWindow's comment window
+        closed — the point from which the authority may decide."""@en ;
+    rdfs:domain fedcon:ReviewWindow ;
+    rdfs:range xsd:dateTime ;
+    rdfs:isDefinedBy <https://jeswr.org/fedcon> .
+
+fedcon:underPolicy
+    a rdf:Property, owl:ObjectProperty ;
+    rdfs:label "under policy"@en ;
+    rdfs:comment """Links a fedcon:Admission to the fedcon:AdmissionPolicy it was made
+        under, so the decision is auditable against the rules in force at the
+        time."""@en ;
+    rdfs:domain fedcon:Admission ;
+    rdfs:range fedcon:AdmissionPolicy ;
+    rdfs:isDefinedBy <https://jeswr.org/fedcon> .
+
+fedcon:dissent
+    a rdf:Property, owl:ObjectProperty ;
+    rdfs:label "dissent"@en ;
+    rdfs:comment """The MANDATORY dissent annex of a fedcon:Admission: each unresolved
+        Oppose stance from the proposal thread, carried as an oa:Annotation (the Web
+        Annotation model is REUSED — no comment/annotation class is minted here). An
+        admission whose thread contains unresolved Oppose stances but which records
+        no fedcon:dissent is INVALID per the SHACL profile (unless it explicitly
+        asserts fedcon:noDissentRecorded true) — the record format itself refuses
+        manufactured consensus. A direct port of the unite fut:SharedFuture dissent
+        annex into registry governance."""@en ;
+    rdfs:domain fedcon:Admission ;
+    rdfs:range oa:Annotation ;
+    rdfs:isDefinedBy <https://jeswr.org/fedcon> .
+
+fedcon:noDissentRecorded
+    a rdf:Property, owl:DatatypeProperty ;
+    rdfs:label "no dissent recorded"@en ;
+    rdfs:comment """The EXPLICIT (xsd:boolean) assertion that a fedcon:Admission's
+        review recorded no dissent to admit. Required (true) whenever an admission
+        carries no fedcon:dissent — silence is never treated as consensus. Mirrors
+        fut:noDissentRecorded from the unite futures sector, minted here so the
+        mandatory-annex rule (>=1 fedcon:dissent OR fedcon:noDissentRecorded true) is
+        structurally enforceable in SHACL."""@en ;
+    rdfs:domain fedcon:Admission ;
+    rdfs:range xsd:boolean ;
+    rdfs:isDefinedBy <https://jeswr.org/fedcon> .
+
+fedcon:decisionRationale
+    a rdf:Property, owl:DatatypeProperty ;
+    rdfs:label "decision rationale"@en ;
+    rdfs:comment """The authority's reasoned (xsd:string) justification for a
+        fedcon:Admission — it MUST respond to every unresolved Oppose in the thread.
+        Consensus is never COMPUTED: the rationale is the accountable human/authority
+        judgment, with the objections carried alongside it via fedcon:dissent."""@en ;
+    rdfs:domain fedcon:Admission ;
+    rdfs:range xsd:string ;
+    rdfs:isDefinedBy <https://jeswr.org/fedcon> .
+
+fedcon:supersededBy
+    a rdf:Property, owl:ObjectProperty ;
+    rdfs:label "superseded by"@en ;
+    rdfs:comment """On a Superseded fedcon:Admission: the successor concept's
+        fedcon:Admission (in the same registry) that the authority admitted and whose
+        upgrade edge it endorsed. The governance half of supersession; the CLAIM half
+        (fedcon:upgrades) is carried in the successor's own definition graph."""@en ;
+    rdfs:domain fedcon:Admission ;
+    rdfs:range fedcon:Admission ;
+    rdfs:isDefinedBy <https://jeswr.org/fedcon> .
+
+#################################################################
+#    Properties — cross-cutting (comments, supersession claim)
+#################################################################
+
+fedcon:stance
+    a rdf:Property, owl:ObjectProperty ;
+    rdfs:label "stance"@en ;
+    rdfs:comment """The structured review stance an assessing comment carries — one
+        of the fedcon:Stance coded values (Support / Oppose / Concern). It DECORATES a
+        Web Annotation (rdfs:domain oa:Annotation, oa:motivatedBy oa:assessing); it
+        does not replace the free-text body. An Oppose stance without a non-empty
+        rationale body is rejected at POST (SHACL fcsh:OpposeStanceShape)."""@en ;
+    rdfs:domain oa:Annotation ;
+    rdfs:range fedcon:Stance ;
+    rdfs:isDefinedBy <https://jeswr.org/fedcon> .
+
+fedcon:upgrades
+    a rdf:Property, owl:ObjectProperty ;
+    rdfs:label "upgrades"@en ;
+    rdfs:comment """The AUTHOR's claim of succession, asserted WITHIN a successor
+        concept's OWN (hash-covered) definition graph: the prior concept hash this
+        one supersedes. NO rdfs:domain (it is asserted on an external,
+        hash-identified concept resource, not on any class of THIS vocabulary) and NO
+        rdfs:range (the value is an opaque content-addressed concept hash, like
+        fedcon:concept). The claim alone moves nothing — a registry endorses it via
+        fedcon:supersededBy on the prior admission."""@en ;
+    rdfs:isDefinedBy <https://jeswr.org/fedcon> .

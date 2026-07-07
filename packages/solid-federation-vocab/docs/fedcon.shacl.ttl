@@ -1,0 +1,371 @@
+# AUTHORED-BY Claude Sonnet 5
+#
+@prefix fedcon:  <https://jeswr.org/fedcon#> .
+@prefix fcsh:    <https://jeswr.org/fedcon/shapes#> .
+@prefix fedreg:  <https://w3id.org/jeswr/fedreg#> .
+@prefix oa:      <http://www.w3.org/ns/oa#> .
+@prefix prov:    <http://www.w3.org/ns/prov#> .
+@prefix sh:      <http://www.w3.org/ns/shacl#> .
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix prof:    <http://www.w3.org/ns/dx/prof/> .
+
+# =============================================================================
+# Federation Contribution / Admission — SHACL DATA-MODEL PROFILE
+#
+# The structural conformance artifact for fedcon:. The ontology (fedcon.ttl)
+# licenses meaning; this shape checks shape. OPEN BY DEFAULT (no sh:closed);
+# sh:severity carries the RFC 2119 grade (Violation=MUST, Warning=SHOULD,
+# Info=MAY); IMMUTABLE version IRI; additive.
+#
+# Rooted at https://jeswr.org/fedcon/profile (the jeswr.org namespace of fedcon:,
+# NOT w3id.org/jeswr like the sector profiles). This is a BEST-EFFORT structural
+# encoding of the contribution-api-design: several rules (recompute-and-compare
+# the concept hash, cross-graph "respond to every unresolved Oppose", the
+# per-registry evidence threshold) are genuinely SERVICE-SIDE and cannot be
+# expressed as node/property constraints — the design itself flags them. What is
+# structurally checkable is checked here.
+# =============================================================================
+
+<https://jeswr.org/fedcon/profile> a prof:Profile ;
+    dcterms:title "Federation Contribution / Admission data-model profile (version-independent)"@en ;
+    dcterms:hasVersion <https://jeswr.org/fedcon/profile/1.0.0> ;
+    rdfs:comment "Version-independent IRI resolving to the current fedcon: profile."@en .
+
+<https://jeswr.org/fedcon/profile/1.0.0> a prof:Profile ;
+    dcterms:title "Federation Contribution / Admission data-model profile 1.0.0"@en ;
+    dcterms:isVersionOf <https://jeswr.org/fedcon/profile> ;
+    owl:versionInfo "1.0.0" ;
+    prof:isProfileOf <https://jeswr.org/fedcon> ;
+    prof:hasToken "fedcon-1.0.0" ;
+    rdfs:comment "IMMUTABLE version IRI. Open shapes; sh:Violation=MUST, sh:Warning=SHOULD, sh:Info=MAY."@en .
+
+# -----------------------------------------------------------------------------
+# Proposal — MUST carry an intent, the concept hash and the proposer; SHOULD carry
+# an (inline) definition and a motivation.
+# -----------------------------------------------------------------------------
+fcsh:ProposalShape a sh:NodeShape ;
+    sh:targetClass fedcon:Proposal ;
+    rdfs:label "Proposal shape"@en ;
+    sh:property [
+        sh:path fedcon:intent ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:in ( fedcon:Define fedcon:Extend fedcon:Promote ) ;   # CLOSED coded set
+        sh:severity sh:Violation ;
+        sh:message "A Proposal MUST carry exactly one fedcon:intent — one of the coded values fedcon:Define / fedcon:Extend / fedcon:Promote."@en
+    ] ;
+    sh:property [
+        sh:path fedcon:concept ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:severity sh:Violation ;
+        sh:message "A Proposal MUST reference exactly one fedcon:concept — the content-addressed concept hash IRI (its identity)."@en
+    ] ;
+    sh:property [
+        sh:path prov:wasAttributedTo ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:severity sh:Violation ;
+        sh:message "A Proposal MUST name exactly one proposer via prov:wasAttributedTo (a WebID IRI, which the service checks equals the DPoP-verified WebID)."@en
+    ] ;
+    sh:property [
+        sh:path fedcon:definition ;
+        sh:minCount 1 ;
+        sh:severity sh:Warning ;
+        sh:message "A Proposal SHOULD carry a fedcon:definition (inline preferred; a content-addressed URL is tolerated and hash-verified on deref)."@en
+    ] ;
+    sh:property [
+        sh:path fedcon:motivationText ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:severity sh:Warning ;
+        sh:message "A Proposal SHOULD carry a fedcon:motivationText explaining the gap it fills."@en
+    ] .
+
+# -----------------------------------------------------------------------------
+# UsageAttestation — MUST carry the concept hash and the signing user; SHOULD
+# carry the since-date.
+# -----------------------------------------------------------------------------
+fcsh:UsageAttestationShape a sh:NodeShape ;
+    sh:targetClass fedcon:UsageAttestation ;
+    rdfs:label "Usage Attestation shape"@en ;
+    sh:property [
+        sh:path fedcon:concept ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:severity sh:Violation ;
+        sh:message "A UsageAttestation MUST reference exactly one fedcon:concept (the attested concept hash)."@en
+    ] ;
+    sh:property [
+        sh:path fedcon:user ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:severity sh:Violation ;
+        sh:message "A UsageAttestation MUST name exactly one fedcon:user — the signing WebID (nobody attests about anybody else)."@en
+    ] ;
+    sh:property [
+        sh:path fedcon:since ;
+        sh:datatype xsd:date ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:severity sh:Warning ;
+        sh:message "A UsageAttestation SHOULD carry a fedcon:since date (when the user began using the concept)."@en
+    ] .
+
+# -----------------------------------------------------------------------------
+# Admission — the registry-authority decision. MUST carry the concept, status,
+# assertedBy authority, asserted timestamp and the decided proposal; SHOULD carry
+# a decision rationale; and MUST carry its mandatory dissent annex.
+# -----------------------------------------------------------------------------
+fcsh:AdmissionShape a sh:NodeShape ;
+    sh:targetClass fedcon:Admission ;
+    rdfs:label "Admission shape"@en ;
+    sh:property [
+        sh:path fedcon:concept ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:severity sh:Violation ;
+        sh:message "An Admission MUST reference exactly one fedcon:concept (the admitted concept hash)."@en
+    ] ;
+    sh:property [
+        sh:path fedcon:conceptStatus ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:in ( fedcon:Proposed fedcon:UnderReview fedcon:Admitted fedcon:Rejected   # CLOSED coded set
+                fedcon:Superseded fedcon:Deprecated fedcon:Withdrawn ) ;
+        sh:severity sh:Violation ;
+        sh:message "An Admission MUST carry exactly one fedcon:conceptStatus — one of the coded values Proposed / UnderReview / Admitted / Rejected / Superseded / Deprecated / Withdrawn."@en
+    ] ;
+    sh:property [
+        sh:path fedreg:assertedBy ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:severity sh:Violation ;
+        sh:message "An Admission MUST be asserted by exactly one authority (fedreg:assertedBy, a WebID / key IRI) — this is what makes it a registry claim, not a self-assertion."@en
+    ] ;
+    sh:property [
+        sh:path fedreg:asserted ;
+        sh:datatype xsd:dateTime ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:severity sh:Violation ;
+        sh:message "An Admission MUST carry exactly one fedreg:asserted timestamp (xsd:dateTime)."@en
+    ] ;
+    sh:property [
+        sh:path fedcon:proposal ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:severity sh:Violation ;
+        sh:message "An Admission MUST link exactly one fedcon:proposal it decides (the provenance trail: evidence + thread)."@en
+    ] ;
+    sh:property [
+        sh:path fedcon:decisionRationale ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;             # SHOULD-be-present: without minCount a maxCount-only shape never warns on ABSENCE
+        sh:maxCount 1 ;
+        sh:severity sh:Warning ;
+        sh:message "An Admission SHOULD carry a fedcon:decisionRationale that responds to every unresolved Oppose in the thread."@en
+    ] ;
+    # reviewWindow + underPolicy are SHOULD (Warning), NOT MUST: the shape targets
+    # EVERY fedcon:Admission, which includes early-lifecycle / Withdrawn records that
+    # legitimately predate a decided review window or a policy-bound decision (a
+    # proposer can Withdraw before review even opens). A DECIDED admission
+    # (Admitted / Rejected) is expected to carry both for auditability (design §D.1 /
+    # §D.2) — hence SHOULD, surfaced as a warning, rather than a hard invalidation of
+    # in-progress records.
+    sh:property [
+        sh:path fedcon:reviewWindow ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        # Validate the window's opened/closed structure inline via sh:node, WITHOUT
+        # requiring an explicit rdf:type — the design's window is an untyped blank
+        # node [ fedcon:opened … ; fedcon:closed … ] (§D.1). (An explicitly typed
+        # fedcon:ReviewWindow is additionally caught by fcsh:ReviewWindowShape's
+        # sh:targetClass.)
+        sh:node fcsh:ReviewWindowShape ;
+        sh:severity sh:Warning ;
+        sh:message "An Admission SHOULD carry a fedcon:reviewWindow (opened / closed), machine-checkable against the governing policy's minimum comment window."@en
+    ] ;
+    sh:property [
+        sh:path fedcon:underPolicy ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:severity sh:Warning ;
+        sh:message "An Admission SHOULD link the fedcon:AdmissionPolicy it was made under (fedcon:underPolicy) so the decision is auditable against the rules in force at the time."@en
+    ] ;
+    # noDissentRecorded, WHERE present, MUST be a single boolean — otherwise a record
+    # carrying BOTH true and false (or a non-boolean) would still satisfy the annex's
+    # `sh:hasValue true` branch below, admitting an ambiguous dissent claim.
+    sh:property [
+        sh:path fedcon:noDissentRecorded ;
+        sh:datatype xsd:boolean ;
+        sh:maxCount 1 ;
+        sh:severity sh:Violation ;
+        sh:message "fedcon:noDissentRecorded, if present, MUST be a single xsd:boolean."@en
+    ] ;
+    # Every fedcon:dissent value MUST be a node (an oa:Annotation REFERENCE), never a
+    # literal — otherwise `fedcon:dissent "text"` would satisfy the annex below. We do
+    # NOT use sh:class oa:Annotation: a dissent typically references an annotation in
+    # a DIFFERENT LDP resource (the proposal-thread inbox), whose rdf:type is not in
+    # THIS admission's graph, so sh:class would false-fail a legitimate cross-resource
+    # reference. sh:nodeKind is the achievable in-graph guarantee.
+    sh:property [
+        sh:path fedcon:dissent ;
+        sh:nodeKind sh:IRIOrBlankNode ;
+        sh:severity sh:Violation ;
+        sh:message "Each fedcon:dissent MUST be a node reference to an oa:Annotation (IRI or blank node), never a literal."@en
+    ] ;
+    # MANDATORY dissent annex — the dissent-annex idiom (cf. fut:SharedFutureShape),
+    # but tightened to sh:xone (EXACTLY ONE branch): >=1 fedcon:dissent XOR the
+    # explicit fedcon:noDissentRecorded true. sh:xone (not sh:or) additionally
+    # rejects the CONTRADICTORY record that both records dissent AND asserts
+    # noDissentRecorded true — "no dissent recorded" while recording dissent is
+    # incoherent. The empty case (neither branch) still fails too — the record format
+    # refuses manufactured consensus. The dissent branch repeats sh:nodeKind so the
+    # branch alone guarantees a node-shaped (not literal) dissent.
+    sh:xone (
+        [ sh:property [ sh:path fedcon:dissent ; sh:minCount 1 ; sh:nodeKind sh:IRIOrBlankNode ] ]
+        [ sh:property [ sh:path fedcon:noDissentRecorded ; sh:hasValue true ] ]
+    ) ;
+    sh:message "An Admission MUST carry EXACTLY ONE side of its dissent annex: >=1 fedcon:dissent (each unresolved Oppose), XOR the explicit assertion fedcon:noDissentRecorded true. Neither (manufactured consensus) AND both (a contradictory 'no dissent recorded' alongside recorded dissent) are INVALID."@en ;
+    sh:severity sh:Violation .
+
+# -----------------------------------------------------------------------------
+# ReviewWindow — IF a review-window node exists it MUST carry an opened instant; the
+# closed instant is SHOULD (an in-progress window is opened-but-not-yet-closed, so a
+# hard MUST on closed would wrongly invalidate a window still gathering comment).
+# -----------------------------------------------------------------------------
+fcsh:ReviewWindowShape a sh:NodeShape ;
+    sh:targetClass fedcon:ReviewWindow ;
+    rdfs:label "Review Window shape"@en ;
+    sh:property [
+        sh:path fedcon:opened ;
+        sh:datatype xsd:dateTime ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:severity sh:Violation ;
+        sh:message "A ReviewWindow MUST carry exactly one fedcon:opened instant (xsd:dateTime)."@en
+    ] ;
+    sh:property [
+        sh:path fedcon:closed ;
+        sh:datatype xsd:dateTime ;
+        sh:maxCount 1 ;
+        sh:severity sh:Warning ;
+        sh:message "A ReviewWindow SHOULD carry a fedcon:closed instant (xsd:dateTime) once the comment window has closed; an in-progress window has none yet."@en
+    ] .
+
+# -----------------------------------------------------------------------------
+# Oppose stance — an assessing annotation whose fedcon:stance is fedcon:Oppose MUST
+# carry a non-empty rationale body. SHACL core has no declarative "target subjects
+# with a given property value" (that needs sh:sparql), so this targets EVERY
+# fedcon:stance-bearing annotation and encodes the conditional with sh:or: either
+# the stance is NOT Oppose (nothing to enforce), or a non-empty rationale body is
+# present in either accepted form (nested oa:hasBody/rdf:value, or a direct literal
+# oa:hasBody).
+# -----------------------------------------------------------------------------
+fcsh:OpposeStanceShape a sh:NodeShape ;
+    sh:targetSubjectsOf fedcon:stance ;
+    rdfs:label "Stance annotation shape"@en ;
+    # A stance-bearing node MUST actually BE an assessing Web Annotation (design
+    # §C.1 — a stance rides on an oa:Annotation, oa:motivatedBy oa:assessing).
+    # rdfs:domain oa:Annotation on fedcon:stance is only inference, NOT a constraint,
+    # so without these a malformed `<x> fedcon:stance fedcon:Support` (x not an
+    # annotation) would pass. Enforce the type + motivation structurally.
+    sh:property [
+        sh:path rdf:type ;
+        sh:hasValue oa:Annotation ;
+        sh:severity sh:Violation ;
+        sh:message "A fedcon:stance-bearing node MUST be typed oa:Annotation (a stance rides on a Web Annotation, not a bare record)."@en
+    ] ;
+    sh:property [
+        sh:path oa:motivatedBy ;
+        sh:hasValue oa:assessing ;
+        sh:severity sh:Violation ;
+        sh:message "A fedcon:stance-bearing annotation MUST be oa:motivatedBy oa:assessing (design §C.1 — stances ride on assessing annotations)."@en
+    ] ;
+    # fedcon:stance is a CLOSED coded set (Support / Oppose / Concern) — enforce the
+    # value here (the same coded-set discipline the intent/conceptStatus shapes use),
+    # not merely that it is some IRI.
+    sh:property [
+        sh:path fedcon:stance ;
+        sh:nodeKind sh:IRI ;
+        sh:in ( fedcon:Support fedcon:Oppose fedcon:Concern ) ;
+        sh:severity sh:Violation ;
+        sh:message "A fedcon:stance MUST be one of the coded values fedcon:Support / fedcon:Oppose / fedcon:Concern."@en
+    ] ;
+    # Rationale requirement (only for an Oppose): satisfied by EITHER the nested
+    # oa:hasBody/rdf:value form (a oa:TextualBody, the design §C.1 example) OR a
+    # direct-literal oa:hasBody "reason" — both are valid Web Annotation bodies, so
+    # accept either rather than rejecting the common direct-literal form.
+    sh:or (
+        [ sh:not [ sh:property [ sh:path fedcon:stance ; sh:hasValue fedcon:Oppose ] ] ]
+        [ sh:property [
+            sh:path ( oa:hasBody rdf:value ) ;
+            sh:minCount 1 ;
+            sh:nodeKind sh:Literal ;   # rationale is TEXT — a literal rdf:value, not an IRI
+            sh:minLength 1 ;
+            sh:pattern "\\S"           # non-whitespace — a whitespace-only body is not a rationale
+        ] ]
+        [ sh:property [
+            sh:path oa:hasBody ;
+            sh:minCount 1 ;
+            sh:nodeKind sh:Literal ;   # a DIRECT literal body — requiring sh:Literal stops an IRI body from satisfying this "rationale text" branch (a nested/blank-node body fails here and is covered by the rdf:value branch above)
+            sh:minLength 1 ;
+            sh:pattern "\\S"           # non-whitespace
+        ] ]
+    ) ;
+    sh:severity sh:Violation ;
+    sh:message "An Oppose stance MUST carry a non-empty rationale body (oa:hasBody / rdf:value) — an unsupported Oppose carries no weight and is not accepted as a stance record."@en .
+
+# -----------------------------------------------------------------------------
+# Announcement — the review-free discoverability notice { concept, definition-ref }
+# (design §E.3). MUST carry the concept; SHOULD carry a definition reference so the
+# concept can actually be dereferenced + hash-verified (SHOULD, matching the
+# Proposal definition grade — an inline graph or a content-addressed URL).
+# -----------------------------------------------------------------------------
+fcsh:AnnouncementShape a sh:NodeShape ;
+    sh:targetClass fedcon:Announcement ;
+    rdfs:label "Announcement shape"@en ;
+    sh:property [
+        sh:path fedcon:concept ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:severity sh:Violation ;
+        sh:message "An Announcement MUST reference exactly one fedcon:concept (the concept hash it makes discoverable)."@en
+    ] ;
+    sh:property [
+        sh:path fedcon:definition ;
+        sh:minCount 1 ;
+        sh:severity sh:Warning ;
+        sh:message "An Announcement SHOULD carry a fedcon:definition (inline or a content-addressed URL) so the announced concept can be dereferenced and hash-verified, not merely named."@en
+    ] .
+
+# -----------------------------------------------------------------------------
+# AdmissionPolicy — minimal: SHOULD be human-describable (rdfs:label OR
+# dcterms:description).
+# -----------------------------------------------------------------------------
+fcsh:AdmissionPolicyShape a sh:NodeShape ;
+    sh:targetClass fedcon:AdmissionPolicy ;
+    rdfs:label "Admission Policy shape"@en ;
+    sh:or (
+        [ sh:property [ sh:path rdfs:label ; sh:minCount 1 ] ]
+        [ sh:property [ sh:path dcterms:description ; sh:minCount 1 ] ]
+    ) ;
+    sh:severity sh:Warning ;
+    sh:message "An AdmissionPolicy SHOULD be human-describable — carry an rdfs:label or a dcterms:description."@en .

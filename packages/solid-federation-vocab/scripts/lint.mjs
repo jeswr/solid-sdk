@@ -9,7 +9,11 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
-const MARKER = "AUTHORED-BY Claude Opus 4.8";
+// Accept an AUTHORED-BY marker naming ANY model (the suite tags provenance by the
+// model that actually authored a file — older files carry "Claude Opus 4.8", newer
+// ones "Claude Sonnet 5", etc.). Still requires a concrete model token after the
+// name, so a genuinely missing marker is caught.
+const MARKER = /AUTHORED-BY Claude \S+/;
 
 let failures = 0;
 const fail = (m) => {
@@ -21,9 +25,11 @@ const ok = (m) => console.log(`  ✓ ${m}`);
 const REQUIRED = [
   "fedapp.ttl",
   "fedreg.ttl",
+  "fedcon.ttl",
   "task.ttl",
   "context.jsonld",
   "fedreg-context.jsonld",
+  "fedcon-context.jsonld",
   "task-context.jsonld",
   "suite.json",
   ".npmrc",
@@ -42,7 +48,7 @@ const marked = [
 ];
 for (const rel of marked) {
   const txt = readFileSync(join(ROOT, rel), "utf8");
-  if (txt.includes(MARKER)) ok(`${rel} marked`);
+  if (MARKER.test(txt)) ok(`${rel} marked`);
   else fail(`${rel} missing AUTHORED-BY marker`);
 }
 

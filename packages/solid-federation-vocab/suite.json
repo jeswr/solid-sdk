@@ -8,7 +8,7 @@
   "maturity": "prototype",
   "visibility": "public",
   "stack": {
-    "vocab": "fedapp: app-registration + shared task/issue terms + gUFO-rooted sector ontologies (incl. sectors/health/diet# — the coeliac/multi-intolerance diet sub-sector; sectors/futures# — the unite participatory-democracy deliberation sector; sectors/collectibles# — art/collectibles provenance for Provena; sectors/equine# — racehorse ownership/breeding for Furlong; and the sectors/finance# double-entry-ledger + private-equity module for Keystone/CapNote) under https://w3id.org/jeswr",
+    "vocab": "fedapp: app-registration + shared task/issue terms + gUFO-rooted sector ontologies (incl. sectors/health/diet# — the coeliac/multi-intolerance diet sub-sector; sectors/futures# — the unite participatory-democracy deliberation sector; sectors/collectibles# — art/collectibles provenance for Provena; sectors/equine# — racehorse ownership/breeding for Furlong; and the sectors/finance# double-entry-ledger + private-equity module for Keystone/CapNote) under https://w3id.org/jeswr; plus fedreg: federation registry (registry-asserted membership + storage spec-version advertisement) and fedcon: contribution/admission governance (the concept-federation propose -> comment -> admit lifecycle + mandatory dissent annex; fedcon:Admission is a fedreg:RegistryAssertion), the latter minting under https://jeswr.org/fedcon#",
     "rdf": "n3 ^1.x, jsonld",
     "rdf-wrapper": "@rdfjs/wrapper ^0.x",
     "solid-object": "@solid/object ^0.6.x",
