@@ -5,7 +5,6 @@
       "fedapp": "https://w3id.org/jeswr/fed#",
       "acl": "http://www.w3.org/ns/auth/acl#",
       "ldp": "http://www.w3.org/ns/ldp#",
-      "sectors": "https://w3id.org/jeswr/sectors/",
       "poddrive": "https://w3id.org/jeswr/pod-drive#",
       "fedapp:sector": { "@type": "@id" },
       "fedapp:access": { "@type": "@id" },
@@ -24,7 +23,7 @@
   "token_endpoint_auth_method": "none",
 
   "@type": "fedapp:App",
-  "fedapp:sector": "sectors:documents#sector",
+  "_comment": "No fedapp:sector — no 'documents' sector exists yet in solid-federation-vocab (media != generic files); follow-up: propose one via the fedcon documents-sector process, don't self-mint sectors/documents.",
   "fedapp:access": ["acl:Read", "acl:Write", "acl:Append"],
   "fedapp:consumes": ["ldp:Container", "ldp:Resource"],
   "fedapp:produces": ["ldp:Container", "ldp:Resource"],
