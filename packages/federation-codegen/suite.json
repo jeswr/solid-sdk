@@ -12,6 +12,7 @@
     "runtime": "Node >=20",
     "rdf": "n3 ^2.x",
     "runtime-dep": "@jeswr/model-runtime",
+    "shacl": "rdf-validate-shacl ^0.6, @zazuko/env-node ^3 (dev — SHACL parity)",
     "test": "vitest ^4.x",
     "lint": "@biomejs/biome ^2.x",
     "node": ">=20"
