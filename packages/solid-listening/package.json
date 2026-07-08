@@ -56,12 +56,16 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "gen": "node codegen/gen.mjs",
+    "build": "node scripts/build.mjs",
     "check:dist": "node scripts/check-dist.mjs",
+    "check:generated": "node scripts/check-generated.mjs",
     "check:lockfile-transport": "node scripts/check-lockfile-transport.mjs",
-    "gate": "npm run lint && npm run typecheck && npm run test && npm run build && npm run check:dist && npm run check:lockfile-transport"
+    "gate": "npm run lint && npm run typecheck && npm run test && npm run build && npm run check:generated && npm run check:dist && npm run check:lockfile-transport"
   },
   "dependencies": {
     "@jeswr/fetch-rdf": "^0.1.0",
+    "@jeswr/model-runtime": "git+https://github.com/jeswr/model-runtime.git#8c7f78e02b4508a83b1bb7f23fbeff559bb2b89a",
     "@rdfjs/wrapper": "^0.34.0",
     "n3": "^2.0.3"
   },
@@ -70,6 +74,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.0.0",
+    "@jeswr/federation-codegen": "git+https://github.com/jeswr/federation-codegen.git#58840022f0021d8b1240f1d9ee5db326b2339503",
     "@rdfjs/types": "^2.0.1",
     "@types/n3": "^1.26.1",
     "@types/node": "^20",

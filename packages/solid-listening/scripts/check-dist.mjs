@@ -1,11 +1,12 @@
-// AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+// AUTHORED-BY Claude Opus 4.8
 //
 // Drift guard: `dist/` is COMMITTED (so the package is GitHub-installable under
 // `ignore-scripts=true` with no build step), which means it can silently drift
-// from `src/`. This check rebuilds into a temp dir and diffs the committed
-// `dist/` against the fresh build — a mismatch fails the gate, forcing the
-// committer to rebuild + commit `dist/` alongside any `src/` change (the suite
-// rule for GitHub-installable packages).
+// from `src/`. This runs the FULL build (scripts/build.mjs = tsc + copy the
+// generated artifacts into dist/generated) into a temp dir and diffs the committed
+// `dist/` against it — a mismatch fails the gate, forcing the committer to rebuild
+// + commit `dist/` alongside any `src/` or generated change (the suite rule for
+// GitHub-installable packages). The copied generated model.js/.d.ts are covered too.
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -24,15 +25,18 @@ function listFiles(dir) {
   return out;
 }
 
-// Compare only the meaningful build outputs: .js and .d.ts. Sourcemaps (.map)
-// and the trailing `//# sourceMappingURL=` footer embed paths and are not
-// load-bearing for the install-without-build guarantee, so they are excluded.
-const isMeaningful = (f) => (f.endsWith(".js") || f.endsWith(".d.ts")) && !f.endsWith(".d.ts.map");
+// Compare every meaningful build output — .js/.d.ts AND the copied generated
+// artifacts (codegen-manifest.json, codegen.lock.json, model.json, shapes.ttl),
+// which are part of the committed audit trail and must not drift silently.
+// Only sourcemaps (.map) and the trailing `//# sourceMappingURL=` footer are
+// excluded: they embed absolute/temp paths and are not load-bearing for the
+// install-without-build guarantee.
+const isMeaningful = (f) => !f.endsWith(".map");
 const stripFooter = (s) => s.replace(/\n\/\/# sourceMappingURL=.*\n?$/, "\n");
 
 const tmp = mkdtempSync(join(tmpdir(), "slis-dist-"));
 try {
-  execFileSync("npx", ["tsc", "-p", "tsconfig.build.json", "--outDir", tmp], {
+  execFileSync("node", [join(root, "scripts", "build.mjs"), "--out-dir", tmp], {
     cwd: root,
     stdio: "inherit",
   });

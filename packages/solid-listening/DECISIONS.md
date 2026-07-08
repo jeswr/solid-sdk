@@ -67,6 +67,38 @@ to `Invalid Date` is dropped; numeric fields are dropped unless finite and
 non-negative. `parseScrobble` returns `undefined` for anything that is not a
 usable scrobble (no played work, an untitled track, or no valid played-at).
 
+## D6 — The MODEL is generated from the media sector (not hand-written)
+
+The scrobble document MODEL — `buildScrobble` / `parseScrobble` /
+`serializeScrobble` / `parseScrobbleTtl` — is now **generated** from the media
+sector via [`@jeswr/federation-codegen`](https://github.com/jeswr/federation-codegen)'s
+composite/document-projection generator, interpreted by the audited
+[`@jeswr/model-runtime`](https://github.com/jeswr/model-runtime). This is the suite
+directive "models are generated from the federation, not hand-written": the
+untrusted-input guards, the fail-closed cross-node MUSTs (a titled `media:Track`
+and a valid `time:Instant` MUST be reachable) and the bounded graph-walk parse now
+live in the ONE audited runtime rather than being re-implemented per package.
+
+- **Inputs** (`codegen/`): a minimal admission ontology (the four sector classes,
+  labels+definitions verbatim), the five scrobble NodeShapes copied verbatim from the
+  sector's `media.shacl.ttl`, and a composite config (`Scrobble` = event `#it` → track
+  `#track` → artist `#artist` / album `#album` + played-at `#playedAt`). `npm run gen`
+  regenerates `src/generated/`; `check:generated` fails if it drifts from a fresh
+  generation.
+- **Dependency shape** — following the bookmarks generated-reference:
+  `@jeswr/model-runtime` is a sha-pinned `git+https` RUNTIME dependency (the generated
+  `model.js` is a fixed-template shim over it); nothing is inlined. `dist/` ships the
+  copied generated `model.js`/`.d.ts` so the package stays GitHub-installable under
+  `ignore-scripts=true`.
+- **Facade** (`src/scrobble.ts`, ~130 LOC) preserves the exact public surface and adds
+  three fork-specific bridges the sector/runtime can't express here: default `playedAt`
+  to now; truncate `msPlayed` to an integer (the `xsd:integer` mapper drops a float
+  fail-closed); treat `core:hadParticipant` as a SINGLE http(s)-filtered `listener` (the
+  sector models it unbounded) + drop-blank artist/album + reject a malformed-dateTime
+  played-at. The `Track`/`Artist`/`Album`/`PlayedAtInstant` typed VIEWS stay hand-written
+  in `src/nodes.ts` because the composite runtime exposes only the root wrapper — a
+  follow-up for federation-codegen to emit per-node wrappers.
+
 ---
 
 ## The media-sector extension needs (fedcon:Proposal candidates)
@@ -74,11 +106,18 @@ usable scrobble (no played work, an untitled track, or no valid played-at).
 Modelling real scrobble data (a Web Scrobbler connector emits track/artist/album,
 a played-at time, ms-played, a source connector, a love toggle, and a
 now-playing-vs-scrobble distinction) surfaced four gaps in the media sector. Each
-is written up as a `fedcon:Proposal` **candidate** in
-[`listening.proposals.ttl`](./listening.proposals.ttl) — NOT filed to any
-registry, and the sector `.ttl` is **never edited here**. Real fork usage drives
-the sector's evolution through the registry contribution lifecycle
-(`fedcon:` = `https://jeswr.org/fedcon#`).
+is written up as a `fedcon:Proposal` candidate in
+[`listening.proposals.ttl`](./listening.proposals.ttl), the sector `.ttl` **never
+edited here**; real fork usage drives the sector's evolution through the registry
+contribution lifecycle (`fedcon:` = `https://jeswr.org/fedcon#`).
+
+**Status (2026-07): three of the four are now ADOPTED into the media sector**
+(solid-federation-vocab @ `3fba46e`) — `media:completionFraction`, `media:playedVia`
+and `media:loved` are graded properties on the sector's PlaybackEvent shape, and the
+ArtistShape now names `foaf:name` (adopting observation #4). The generated model reuses
+the landed terms. The remaining candidates are `media:playbackStatus` (gap #1) and
+`media:skipped` (gap #3) — this is the rig working as intended: gaps → sector terms →
+generated model.
 
 ### 1. Per-event completion fraction + in-progress-vs-completed status
 

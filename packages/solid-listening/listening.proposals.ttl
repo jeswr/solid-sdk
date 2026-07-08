@@ -10,12 +10,16 @@
 # federation contribution/admission vocabulary), so the fork's real usage can
 # drive the sector's evolution through the registry's contribution lifecycle.
 #
-# CANDIDATE STATUS: these are NOT yet POSTed to any registry. They carry the
-# proposer's motivation and an INLINE proposed definition graph (the additive term
-# the sector would gain), an Extend intent (they build additively on existing
-# media: terms and mutate nothing), and NO fedcon:concept content hash yet (a hash
-# is computed over the finalised definition at filing time). The prose write-up +
-# the alternatives considered live in DECISIONS.md.
+# STATUS (2026-07): three of these have since been ADOPTED into the media sector
+# (solid-federation-vocab @ 3fba46e — media:completionFraction, media:playedVia and
+# media:loved are now graded properties on the PlaybackEvent shape, and the sector's
+# ArtistShape now names foaf:name, adopting the #obs-artist-name observation). The
+# REMAINING candidates (media:playbackStatus, media:skipped) are NOT yet POSTed to
+# any registry. The adopted terms are the fork usage this rig existed to drive:
+# real scrobble data surfaced the gaps, the gaps became sector terms, and the
+# generated model (src/generated/, from the sector) now reuses them. Each candidate
+# carries the proposer's motivation, an INLINE definition graph, an Extend intent,
+# and NO fedcon:concept content hash yet. The prose + alternatives live in DECISIONS.md.
 
 @prefix fedcon:  <https://jeswr.org/fedcon#> .
 @prefix media:   <https://w3id.org/jeswr/sectors/media#> .
@@ -27,7 +31,7 @@
 
 <#candidates> a rdf:Bag ;
     rdfs:label "solid-listening media-sector extension proposal candidates"@en ;
-    rdfs:comment "Four fedcon:Proposal candidates surfaced by modelling real scrobble data against the media sector. Candidates only — not yet filed."@en .
+    rdfs:comment "Four fedcon:Proposal candidates surfaced by modelling real scrobble data against the media sector. Three (media:completionFraction, media:playedVia, media:loved) plus the foaf:name observation are now ADOPTED into the sector (@3fba46e); media:playbackStatus and media:skipped remain candidates."@en .
 
 # -----------------------------------------------------------------------------
 # 1. Per-event completion fraction + in-progress-vs-completed distinction
@@ -51,8 +55,8 @@ media:completionFraction a owl:DatatypeProperty ;
     rdfs:isDefinedBy <#prop-completion> ;
     rdfs:domain media:PlaybackEvent ;
     rdfs:range xsd:decimal ;
-    rdfs:label "completion fraction (PROPOSED)"@en ;
-    rdfs:comment "PROPOSED (fedcon candidate, not yet in the sector): the fraction of the work played in this event, in [0,1]. Complements media:msPlayed by being source-independent (a live stream has no durationSeconds)."@en .
+    rdfs:label "completion fraction (ADOPTED)"@en ;
+    rdfs:comment "ADOPTED into the media sector (@3fba46e — a [0,1] xsd:decimal Info property on the PlaybackEvent shape): the fraction of the work played in this event. Complements media:msPlayed by being source-independent (a live stream has no durationSeconds)."@en .
 
 media:playbackStatus a owl:ObjectProperty ;
     rdfs:isDefinedBy <#prop-completion> ;
@@ -79,8 +83,8 @@ media:playbackStatus a owl:ObjectProperty ;
 media:playedVia a owl:ObjectProperty ;
     rdfs:isDefinedBy <#prop-played-via> ;
     rdfs:domain media:PlaybackEvent ;
-    rdfs:label "played via (PROPOSED)"@en ;
-    rdfs:comment "PROPOSED: the media service / platform a play occurred on (YouTube Music, Spotify web, SoundCloud), as a service IRI or labelled node. Distinct from media:onAccount — a play can be attributed to a service with no known account."@en .
+    rdfs:label "played via (ADOPTED)"@en ;
+    rdfs:comment "ADOPTED into the media sector (@3fba46e — an Info property on the PlaybackEvent shape, sh:nodeKind sh:BlankNodeOrIRI): the media service / platform a play occurred on (YouTube Music, Spotify web, SoundCloud), as a service IRI or labelled node. Distinct from media:onAccount — a play can be attributed to a service with no known account."@en .
 
 # -----------------------------------------------------------------------------
 # 3. Loved / skipped flags
@@ -101,15 +105,15 @@ media:loved a owl:DatatypeProperty ;
     rdfs:isDefinedBy <#prop-loved-skipped> ;
     rdfs:domain media:PlaybackEvent ;
     rdfs:range xsd:boolean ;
-    rdfs:label "loved (PROPOSED)"@en ;
-    rdfs:comment "PROPOSED: whether the user marked this play/track as loved (Web Scrobbler 'love')."@en .
+    rdfs:label "loved (ADOPTED)"@en ;
+    rdfs:comment "ADOPTED into the media sector (@3fba46e — an xsd:boolean Info property on the PlaybackEvent shape): whether the user marked this play/track as loved (Web Scrobbler 'love')."@en .
 
 media:skipped a owl:DatatypeProperty ;
     rdfs:isDefinedBy <#prop-loved-skipped> ;
     rdfs:domain media:PlaybackEvent ;
     rdfs:range xsd:boolean ;
     rdfs:label "skipped (PROPOSED)"@en ;
-    rdfs:comment "PROPOSED: whether the user actively skipped the track (distinct from a low media:msPlayed for any other reason)."@en .
+    rdfs:comment "PROPOSED (still a candidate — NOT yet in the sector; only media:loved from this proposal has landed): whether the user actively skipped the track (distinct from a low media:msPlayed for any other reason)."@en .
 
 # -----------------------------------------------------------------------------
 # 4. A literal artist-name property on media:Artist (minor — reuse noted)
@@ -122,8 +126,8 @@ media:skipped a owl:DatatypeProperty ;
     a fedcon:Proposal ;
     fedcon:intent fedcon:Extend ;
     fedcon:extends media:Artist ;
-    rdfs:label "media:Artist display-name reuse (observation)"@en ;
-    fedcon:motivationText """media:Artist has no literal display-name property; a scrobble only ever knows the artist as a STRING. This package reuses foaf:name (dereferenceable, universal). Filed as an observation, not a mint: the sector SHOULD document foaf:name as the expected artist-name term (an alignment), so every producer agrees rather than each picking foaf:name / schema:name / rdfs:label.""" ;
+    rdfs:label "media:Artist display-name reuse (observation — ADOPTED)"@en ;
+    fedcon:motivationText """media:Artist has no literal display-name property; a scrobble only ever knows the artist as a STRING. This package reuses foaf:name (dereferenceable, universal). Filed as an observation, not a mint: the sector SHOULD document foaf:name as the expected artist-name term (an alignment), so every producer agrees rather than each picking foaf:name / schema:name / rdfs:label. ADOPTED into the sector (@3fba46e): the media ArtistShape now names foaf:name explicitly, and the generated model reuses it.""" ;
     fedcon:definition [
         a owl:Ontology ;
         rdfs:comment "No new term — an alignment recommendation to reuse foaf:name for media:Artist names." ;
