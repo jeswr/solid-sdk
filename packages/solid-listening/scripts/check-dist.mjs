@@ -25,10 +25,13 @@ function listFiles(dir) {
   return out;
 }
 
-// Compare only the meaningful build outputs: .js and .d.ts. Sourcemaps (.map)
-// and the trailing `//# sourceMappingURL=` footer embed paths and are not
-// load-bearing for the install-without-build guarantee, so they are excluded.
-const isMeaningful = (f) => (f.endsWith(".js") || f.endsWith(".d.ts")) && !f.endsWith(".d.ts.map");
+// Compare every meaningful build output — .js/.d.ts AND the copied generated
+// artifacts (codegen-manifest.json, codegen.lock.json, model.json, shapes.ttl),
+// which are part of the committed audit trail and must not drift silently.
+// Only sourcemaps (.map) and the trailing `//# sourceMappingURL=` footer are
+// excluded: they embed absolute/temp paths and are not load-bearing for the
+// install-without-build guarantee.
+const isMeaningful = (f) => !f.endsWith(".map");
 const stripFooter = (s) => s.replace(/\n\/\/# sourceMappingURL=.*\n?$/, "\n");
 
 const tmp = mkdtempSync(join(tmpdir(), "slis-dist-"));
