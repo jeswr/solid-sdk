@@ -14,14 +14,17 @@
 
 import { execFileSync } from "node:child_process";
 import { copyFileSync, mkdirSync, readdirSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 const argv = process.argv.slice(2);
 const outIdx = argv.indexOf("--out-dir");
-const outDir = outIdx >= 0 && argv[outIdx + 1] ? join(root, argv[outIdx + 1]) : join(root, "dist");
+// resolve() honours an ABSOLUTE --out-dir (check-dist builds into an OS temp dir)
+// as well as a path relative to the package root.
+const outDir =
+  outIdx >= 0 && argv[outIdx + 1] ? resolve(root, argv[outIdx + 1]) : join(root, "dist");
 
 // 1. Compile the hand-written TypeScript.
 execFileSync("npx", ["tsc", "-p", "tsconfig.build.json", "--outDir", outDir], {

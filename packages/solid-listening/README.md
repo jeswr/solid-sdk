@@ -16,6 +16,15 @@ serialise via `n3.Writer`), a focused SHACL shape, an owner-only fail-closed WAC
 ACL helper, and — its real point — a set of **`fedcon:Proposal` candidates** for
 the media-sector gaps that modelling real scrobble data surfaced.
 
+The scrobble **model is generated from the media sector** via
+[`@jeswr/federation-codegen`](https://github.com/jeswr/federation-codegen)'s
+composite/document-projection generator, interpreted by the audited
+[`@jeswr/model-runtime`](https://github.com/jeswr/model-runtime) — the guards, the
+fail-closed cross-node MUSTs and the graph-walk parse live in that one audited
+runtime, not hand-written here. `src/scrobble.ts` is a thin facade over the
+generated core; `codegen/` holds the generation inputs (`npm run gen` regenerates,
+`check:generated` guards drift). See [`DECISIONS.md`](./DECISIONS.md) D6.
+
 ## Install
 
 GitHub-installable now (no build step — the built `dist/` is committed and the
@@ -102,14 +111,17 @@ candidate** — machine-readable in
 alternatives in [`DECISIONS.md`](./DECISIONS.md). Real fork usage drives the
 sector's evolution through the registry contribution lifecycle.
 
-| # | Gap the sector lacks | Proposed additive term(s) | Intent |
+| # | Gap the sector lacks | Proposed additive term(s) | Status |
 |---|---|---|---|
-| 1 | Per-event **completion fraction** + **in-progress-vs-completed** status (`media:msPlayed`/`media:durationSeconds` are lossy and can't say "now playing") | `media:completionFraction` (0..1 decimal), `media:playbackStatus` (NowPlaying/Completed/Skipped) | Extend |
-| 2 | **Source-service attribution** — which platform a play came from when there is no `media:MediaAccount` (a scrobbled YouTube/SoundCloud play) | `media:playedVia` (service IRI / labelled node) | Extend |
-| 3 | **Loved / skipped** per-play user feedback (Web Scrobbler "love" + skip) | `media:loved`, `media:skipped` (booleans) | Extend |
-| 4 | media:Artist has no literal **display-name** property (this package reuses `foaf:name`) | document `foaf:name` as the artist-name alignment | Extend (observation) |
+| 1 | Per-event **completion fraction** + **in-progress-vs-completed** status (`media:msPlayed`/`media:durationSeconds` are lossy and can't say "now playing") | `media:completionFraction` (0..1 decimal), `media:playbackStatus` (NowPlaying/Completed/Skipped) | `completionFraction` **ADOPTED** (@3fba46e); `playbackStatus` candidate |
+| 2 | **Source-service attribution** — which platform a play came from when there is no `media:MediaAccount` (a scrobbled YouTube/SoundCloud play) | `media:playedVia` (service IRI / labelled node) | **ADOPTED** (@3fba46e) |
+| 3 | **Loved / skipped** per-play user feedback (Web Scrobbler "love" + skip) | `media:loved`, `media:skipped` (booleans) | `loved` **ADOPTED** (@3fba46e); `skipped` candidate |
+| 4 | media:Artist has no literal **display-name** property (this package reuses `foaf:name`) | document `foaf:name` as the artist-name alignment | **ADOPTED** (@3fba46e — ArtistShape names `foaf:name`) |
 
-These are **candidates**, not filed proposals — the sector is never edited here.
+**Three of the four have since landed in the media sector** (@`3fba46e`) — the rig
+working as intended: real fork usage → sector terms → the generated model reuses
+them. `media:playbackStatus` and `media:skipped` remain candidates. The sector is
+never edited here.
 
 ## Public API
 
@@ -132,11 +144,14 @@ Subpath exports: `@jeswr/solid-listening/vocab`, `/shape`,
 ## Develop
 
 ```bash
-npm run gate   # lint + typecheck + test + build + check:dist + check:lockfile-transport
+npm run gen    # regenerate src/generated/ from codegen/ inputs (the media sector)
+npm run gate   # lint + typecheck + test + build + check:generated + check:dist + check:lockfile-transport
 ```
 
-`dist/` is committed and a `check:dist` gate fails if it drifts from a fresh
-build — rebuild + commit `dist/` alongside any `src/` change.
+`dist/` and `src/generated/` are committed. `check:generated` fails if the
+generated model drifts from a fresh generation (edit `codegen/` inputs, never the
+generated files, then `npm run gen`); `check:dist` fails if `dist/` drifts from a
+fresh build — rebuild + commit both alongside any change.
 
 ## License
 

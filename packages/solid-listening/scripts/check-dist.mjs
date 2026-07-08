@@ -1,11 +1,12 @@
-// AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+// AUTHORED-BY Claude Opus 4.8
 //
 // Drift guard: `dist/` is COMMITTED (so the package is GitHub-installable under
 // `ignore-scripts=true` with no build step), which means it can silently drift
-// from `src/`. This check rebuilds into a temp dir and diffs the committed
-// `dist/` against the fresh build — a mismatch fails the gate, forcing the
-// committer to rebuild + commit `dist/` alongside any `src/` change (the suite
-// rule for GitHub-installable packages).
+// from `src/`. This runs the FULL build (scripts/build.mjs = tsc + copy the
+// generated artifacts into dist/generated) into a temp dir and diffs the committed
+// `dist/` against it — a mismatch fails the gate, forcing the committer to rebuild
+// + commit `dist/` alongside any `src/` or generated change (the suite rule for
+// GitHub-installable packages). The copied generated model.js/.d.ts are covered too.
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -32,7 +33,7 @@ const stripFooter = (s) => s.replace(/\n\/\/# sourceMappingURL=.*\n?$/, "\n");
 
 const tmp = mkdtempSync(join(tmpdir(), "slis-dist-"));
 try {
-  execFileSync("npx", ["tsc", "-p", "tsconfig.build.json", "--outDir", tmp], {
+  execFileSync("node", [join(root, "scripts", "build.mjs"), "--out-dir", tmp], {
     cwd: root,
     stdio: "inherit",
   });
