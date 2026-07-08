@@ -32,8 +32,10 @@ try {
   const errors = [];
   const missing = freshFiles.filter((f) => !committedFiles.includes(f));
   const extra = committedFiles.filter((f) => !freshFiles.includes(f));
-  if (missing.length) errors.push(`src/generated/ is MISSING regenerated file(s): ${missing.join(", ")}`);
-  if (extra.length) errors.push(`src/generated/ has STALE file(s) not produced by gen: ${extra.join(", ")}`);
+  if (missing.length)
+    errors.push(`src/generated/ is MISSING regenerated file(s): ${missing.join(", ")}`);
+  if (extra.length)
+    errors.push(`src/generated/ has STALE file(s) not produced by gen: ${extra.join(", ")}`);
   for (const f of freshFiles) {
     if (!committedFiles.includes(f)) continue;
     if (readFileSync(join(committed, f), "utf8") !== readFileSync(join(tmp, f), "utf8")) {
@@ -42,7 +44,9 @@ try {
   }
 
   if (errors.length) {
-    console.error("check:generated FAILED — committed src/generated/ is out of sync with codegen/ inputs:");
+    console.error(
+      "check:generated FAILED — committed src/generated/ is out of sync with codegen/ inputs:",
+    );
     for (const e of errors) console.error(`  - ${e}`);
     console.error("Fix: `npm run gen` then `git add src/generated dist`.");
     process.exit(1);
