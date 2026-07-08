@@ -1,0 +1,41 @@
+# AUTHORED-BY Claude Opus 4.8
+#
+# Generation INPUT (ontology, L0) for @jeswr/solid-listening's generated model.
+#
+# A faithful, MINIMAL projection of the four scrobble-relevant media-sector
+# classes (rdfs:label + skos:definition VERBATIM from
+# solid-federation-vocab @ 3fba46e sectors/media/media.ttl) so tier-a admission
+# passes. This declares ONLY the classes the scrobble composite spans; the sector
+# is the source of truth for their full gUFO axiomatisation — this input carries
+# just the label + definition admission requires. time:Instant is a NON-sector
+# class (gated via its shape only, not admission), so it is not declared here.
+@prefix media: <https://w3id.org/jeswr/sectors/media#> .
+@prefix core:  <https://w3id.org/jeswr/core#> .
+@prefix owl:   <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos:  <http://www.w3.org/2004/02/skos/core#> .
+@prefix vann:  <http://purl.org/vocab/vann/> .
+
+<https://w3id.org/jeswr/sectors/media> a owl:Ontology ;
+    vann:preferredNamespacePrefix "media" ;
+    vann:preferredNamespaceUri "https://w3id.org/jeswr/sectors/media#" .
+
+media:PlaybackEvent a owl:Class ;
+    rdfs:subClassOf core:Event ;
+    rdfs:label "Playback Event"@en ;
+    skos:definition "A single datable play occurrence — WHAT was played (media:playedWork), WHEN (core:atTime), and on which Account (media:onAccount). core:hadParticipant the listener. The atomic row of a streaming history."@en .
+
+media:Track a owl:Class ;
+    rdfs:subClassOf media:MusicRecording ;
+    rdfs:label "Track"@en ;
+    skos:definition "A music recording as it appears as a playable track on a service (the Spotify-style 'track'), carrying service-level identifiers."@en .
+
+media:Artist a owl:Class ;
+    rdfs:subClassOf core:Agent ;
+    rdfs:label "Artist"@en ;
+    skos:definition "The role of an agent (a core:Person or a core:Organization) credited as the creator/performer of a creative work. Rooted in core:Agent so both solo artists and bands qualify without collapsing those Core classes."@en .
+
+media:Album a owl:Class ;
+    rdfs:subClassOf core:InformationResource ;
+    rdfs:label "Album"@en ;
+    skos:definition "A released collection of recordings; its tracks are core:hasPart of it. A curated collection whole. Aligns to schema:MusicAlbum."@en .
