@@ -14,8 +14,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppErrorBoundary } from "./AppErrorBoundary";
 import type { SessionContextValue } from "./auth/SessionProvider";
 
-// Mutable session double — only webId is read by AppErrorBoundary.
-const sessionState = { webId: null as string | null };
+// Mutable session double — only webId is read by AppErrorBoundary. Declared via
+// vi.hoisted so it initialises ALONGSIDE the hoisted vi.mock factory below:
+// Vitest lifts vi.mock above the module's top-level consts, so a plain
+// `const sessionState` the factory closes over would be in its TDZ at mock-setup
+// time. vi.hoisted is the canonical fix (the value the factory reads is created
+// in the same hoisted phase).
+const sessionState = vi.hoisted(() => ({ webId: null as string | null }));
 vi.mock("./auth/SessionProvider", () => ({
   useSession: (): Pick<SessionContextValue, "webId"> => ({ webId: sessionState.webId }),
 }));

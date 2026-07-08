@@ -17,6 +17,7 @@
     "lint": "biome check src scripts test tests vite.config.ts vitest.config.ts playwright.config.ts && npm run check:lockfile-transport",
     "lint:fix": "biome check --write src scripts test tests vite.config.ts vitest.config.ts playwright.config.ts",
     "check:lockfile-transport": "node scripts/check-lockfile-transport.mjs",
+    "fix:lockfile-transport": "node scripts/normalize-lockfile.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:e2e": "playwright test"
