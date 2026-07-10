@@ -12,6 +12,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -p tsconfig.build.json && vite build",
+    "build:pages": "tsc -p tsconfig.build.json && vite build --base=/solid-access-manager/ --outDir dist-pages",
     "preview": "vite preview",
     "lint": "biome check src test vite.config.ts vitest.config.ts && node scripts/check-lockfile-transport.mjs",
     "lint:fix": "biome check --write src test vite.config.ts vitest.config.ts",

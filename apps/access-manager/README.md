@@ -56,7 +56,7 @@ Phase 1 (the proposal's P2): it works **entirely against existing pod surfaces**
 
 ```sh
 npm ci            # keyless — the lockfile pins git+https transports (ignore-scripts=true)
-npm test          # 99 vitest tests against an in-memory pod stub — no server needed
+npm test          # vitest suite against an in-memory pod stub — no server needed
 npm run gate      # lint (biome) + typecheck (tsc) + test (vitest) + build (vite)
 npm run dev       # vite dev server
 ```
@@ -68,6 +68,29 @@ over `@solid/reactive-authentication` (authorization-code + PKCE + DPoP popup;
 Document URL for a stable client identity; without it, dynamic registration is
 used (dev fallback). All data access flows through an injectable
 authenticated-fetch seam, so every view is unit-testable with a stubbed fetch.
+
+## Demo mode (`?demo`) + the GitHub Pages build
+
+A login-free, read-only demo renders the REAL four views over an inert
+in-browser fixture pod (the Ada-&-Bex sample scenario — `src/demo/`), so the
+app can be embedded in walkthrough iframes with no auth and no network:
+
+- `?demo` (or `?demo=dashboard`) — the grant dashboard
+- `?demo=inbox` — the access-request inbox (one pending Clinic App request)
+- `?demo=history` — consent receipts + active grants
+- `?demo=dataclass` — the data-class view
+
+Demo mode is gated STRICTLY on the `?demo` query param (`src/demo/gate.ts`);
+without it the entry point builds the real `LoginController`, unchanged. The
+demo fetch (`src/demo/pod.ts`) serves fixtures on GET/HEAD only and THROWS on
+every mutating method, so Approve / Deny / Revoke are visibly present but
+provably inert — the refusal surfaces in the saving indicator. Tests in
+`test/demo/` cover the gate, the read-only pod, each view's fixtures, and the
+no-write guarantee.
+
+`npm run build:pages` produces the GitHub Pages bundle in `dist-pages/` with
+`base=/solid-access-manager/` (for `https://jeswr.github.io/solid-access-manager/`);
+the plain `npm run build` (Vercel) is unchanged.
 
 ## RDF discipline
 

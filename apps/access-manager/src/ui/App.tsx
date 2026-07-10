@@ -16,7 +16,7 @@ import { HistoryView } from "./HistoryView.jsx";
 import { InboxView } from "./InboxView.jsx";
 import { useAccessData } from "./useAccessData.js";
 
-type Tab = "dashboard" | "classes" | "inbox" | "history";
+export type Tab = "dashboard" | "classes" | "inbox" | "history";
 
 export function App({ controller }: { controller: LoginController }) {
   const [webId, setWebId] = useState<string | null>(null);
@@ -52,8 +52,17 @@ export function App({ controller }: { controller: LoginController }) {
   );
 }
 
-export function Shell({ webId, onSignOut }: { webId: string; onSignOut: () => void }) {
-  const [tab, setTab] = useState<Tab>("dashboard");
+export function Shell({
+  webId,
+  onSignOut,
+  initialTab = "dashboard",
+}: {
+  webId: string;
+  onSignOut: () => void;
+  /** Starting tab (the ?demo deep-link seam); the real app always defaults. */
+  initialTab?: Tab;
+}) {
+  const [tab, setTab] = useState<Tab>(initialTab);
   const session = useSession();
   const data = useAccessData(session);
 

@@ -228,3 +228,16 @@ li.resource.public {
   color: var(--muted-foreground);
   font-size: 0.85rem;
 }
+
+/* Demo mode (?demo) — the sample-data banner above the real shell. */
+.demo-banner {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  padding: 0.45rem 1rem;
+  text-align: center;
+  font-size: 0.85rem;
+  background: var(--accent);
+  color: var(--accent-foreground);
+  border-bottom: 1px solid var(--border);
+}
