@@ -16,6 +16,7 @@ import { compileManifest } from "./compile.js";
 import type { CodegenConfig } from "./config.js";
 import { emitModelDts, emitModelJs, emitModelJson, emitShapesTtl } from "./emit.js";
 import { assertFidelity } from "./fidelity.js";
+import { deriveNodeViews } from "./nodeviews.js";
 import { parseTurtle, SH } from "./rdf.js";
 import { parseShapes } from "./shapes.js";
 
@@ -100,14 +101,18 @@ export function generateModel(input: GenerateInput): GenerateResult {
   const compiled = compileManifest(shapes, input.config);
   assertFidelity(shapes, compiled);
 
+  // Derive the composite per-node views (a pure projection of the fidelity-asserted
+  // manifest; `undefined` when the manifest has no composite entity).
+  const nodeViews = deriveNodeViews(compiled.manifest);
+
   // Emit the generated artifacts. shapes.ttl carries the SHACL + skolem-shape
   // prefixes on top of the domain prefixes; the manifest keeps the clean set.
   const shapesPrefixes = { ...input.config.prefixes, sh: SH, shapes: input.config.shapesBase };
   const artifacts: Record<string, string> = {
     "shapes.ttl": emitShapesTtl(shapes, shapesPrefixes),
     "model.json": emitModelJson(compiled.manifest),
-    "model.js": emitModelJs(compiled.manifest),
-    "model.d.ts": emitModelDts(compiled.manifest),
+    "model.js": emitModelJs(compiled.manifest, nodeViews),
+    "model.d.ts": emitModelDts(compiled.manifest, nodeViews),
   };
   artifacts["codegen-manifest.json"] = emitCodegenManifest(input, adapter, artifacts);
 

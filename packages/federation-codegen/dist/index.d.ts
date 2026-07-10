@@ -10,9 +10,12 @@
  *   - `shapes.ttl`  — the skolemized, byte-reproducible stable waist
  *   - `codegen-manifest.json` — input/output sha256s + adapter + runtime pins
  *
- * Plus the tier-a structural admission validator and the build-time fidelity
- * assertion (the P0 exit criterion). All generated behaviour lives in the audited
- * `@jeswr/model-runtime`; generated artifacts carry no executable logic.
+ * Plus the tier-a structural admission validator, the build-time fidelity assertion
+ * (the P0 exit criterion), and the composite per-node views (`deriveNodeViews` — a
+ * generated `nodes` export of typed per-sub-node Wrapper handles). All generated
+ * behaviour lives in the audited `@jeswr/model-runtime`; a generated artifact carries
+ * no model-specific executable logic (model.js is a fixed template — bytes vary only
+ * in the inlined JSON).
  *
  * @packageDocumentation
  */
@@ -23,6 +26,7 @@ export { type AnyEntityConfig, type CodegenConfig, type CompositeEntityConfig, t
 export { emitModelDts, emitModelJs, emitModelJson, emitShapesTtl } from "./emit.js";
 export { assertFidelity, FidelityError } from "./fidelity.js";
 export { emitLockfile, GENERATOR, type GenerateInput, type GenerateResult, generateModel, } from "./generate.js";
+export { deriveNodeViews, type NodeViewIndex, type NodeViewRef, type NodeViews, } from "./nodeviews.js";
 export { compareQuads, Graph, parseTurtle, serializeCanonicalTurtle, } from "./rdf.js";
 export { hasNodeShape, localName, type NodeShapeModel, type NormalizedShapes, parseShapes, type ShapeConstraint, type ShapeKind, type ShapeScalar, } from "./shapes.js";
 //# sourceMappingURL=index.d.ts.map

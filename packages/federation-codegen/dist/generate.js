@@ -13,6 +13,7 @@ import { AdmissionError, admit } from "./admission.js";
 import { compileManifest } from "./compile.js";
 import { emitModelDts, emitModelJs, emitModelJson, emitShapesTtl } from "./emit.js";
 import { assertFidelity } from "./fidelity.js";
+import { deriveNodeViews } from "./nodeviews.js";
 import { parseTurtle, SH } from "./rdf.js";
 import { parseShapes } from "./shapes.js";
 /** The generator artifact identity recorded in the codegen manifest. */
@@ -54,14 +55,17 @@ export function generateModel(input) {
     // Compile the manifest, then assert FIDELITY (the P0 exit criterion).
     const compiled = compileManifest(shapes, input.config);
     assertFidelity(shapes, compiled);
+    // Derive the composite per-node views (a pure projection of the fidelity-asserted
+    // manifest; `undefined` when the manifest has no composite entity).
+    const nodeViews = deriveNodeViews(compiled.manifest);
     // Emit the generated artifacts. shapes.ttl carries the SHACL + skolem-shape
     // prefixes on top of the domain prefixes; the manifest keeps the clean set.
     const shapesPrefixes = { ...input.config.prefixes, sh: SH, shapes: input.config.shapesBase };
     const artifacts = {
         "shapes.ttl": emitShapesTtl(shapes, shapesPrefixes),
         "model.json": emitModelJson(compiled.manifest),
-        "model.js": emitModelJs(compiled.manifest),
-        "model.d.ts": emitModelDts(compiled.manifest),
+        "model.js": emitModelJs(compiled.manifest, nodeViews),
+        "model.d.ts": emitModelDts(compiled.manifest, nodeViews),
     };
     artifacts["codegen-manifest.json"] = emitCodegenManifest(input, adapter, artifacts);
     return { artifacts, admission, manifest: compiled.manifest, ontology };
