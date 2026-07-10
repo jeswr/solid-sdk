@@ -113,9 +113,14 @@ grant policies go through `@jeswr/solid-odrl` (`policyFromRdf` /
   stored snapshot (in-storage targets + grantId recomputes) before any write.
 - **Resume is user-confirmed**, showing the pinned targets — never an
   automatic sweep (see `docs/DECISIONS.md` D9 for the inbox-integrity residual).
-- **Revocation is eventually-consistent** (proposal §6.1): retracting the WAC
-  policy does not invalidate already-issued tokens until they expire. The app
-  retracts policy + records; it does not claim instant revocation.
+- **Revocation is immediate** (proposal §6.1): WAC is evaluated fresh on every
+  request against the current ACL, so retracting a grant takes effect on the
+  recipient's very next request. The app removes the pinned WAC entry (exact-shape —
+  only this grant's own entries) and flips the records; a still-valid access token
+  keeps *authenticating* the recipient but no longer *authorizes* the retracted
+  access. Access ends only if no *other* authorization still grants it (a separate
+  grant, a group, a parent's `acl:default`, or public access) — and any copy the
+  recipient already downloaded is out of the server's hands.
 
 ## What Phase 2 / 3 add (per the proposal)
 
