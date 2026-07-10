@@ -231,7 +231,7 @@ describe("emitted model.js / model.d.ts — the per-node surface", () => {
 describe("EXECUTION — the emitted per-node handles drive a real composite document", () => {
   const here = dirname(fileURLToPath(import.meta.url));
   // Repo-local temp dir so the imported model.js resolves @jeswr/model-runtime
-  // through the repo's node_modules (gitignored via test/.tmp-*).
+  // through the repo's node_modules (gitignored via test/**/.tmp-*).
   const tmp = mkdtempSync(join(here, ".tmp-node-views-"));
   afterAll(() => rmSync(tmp, { recursive: true, force: true }));
 
