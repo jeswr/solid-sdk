@@ -67,7 +67,13 @@ export function createDemoPod(fixtures: Record<string, string>): DemoPod {
       typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
     // A real fetch never sends the fragment — strip it like the network would.
     const url = rawUrl.split("#")[0] ?? rawUrl;
-    const method = (init?.method ?? "GET").toUpperCase();
+    // Derive the method from EVERY form a caller can express it in: an
+    // explicit `init.method` wins (fetch semantics), else a `Request`
+    // object's own method, else GET. A Request-object PUT must hit the
+    // write-refusal chokepoint exactly like `fetch(url, { method: "PUT" })`.
+    const method = (
+      init?.method ?? (input instanceof Request ? input.method : "GET")
+    ).toUpperCase();
     log.push({ method, url });
 
     if (method !== "GET" && method !== "HEAD") {

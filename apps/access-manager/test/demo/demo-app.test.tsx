@@ -2,23 +2,27 @@
 // AUTHORED-BY Claude Fable 5
 // Demo mode renders the REAL four views over the Ada-&-Bex fixture pod:
 //   • each ?demo view shows its walkthrough beats (fixtures, not stubs);
-//   • the pending Clinic App request resolves to the CONCRETE file list
-//     before approval;
+//   • WAC inheritance preserves the authorized AGENT: the inherited Read on
+//     the health files is attributed to DR. BEX (acl:default on /health/),
+//     never transferred to any app;
+//   • the Clinic App holds NO active grant — its previous grant was revoked
+//     (see history) and its re-request is only PENDING in the inbox, resolving
+//     to the CONCRETE file list before approval;
 //   • demo actions (Approve / Revoke) are inert: the read-only fetch refuses
 //     the write, the UI surfaces the demo message, and nothing changes.
 import "@testing-library/jest-dom/vitest";
 import { ThemeProvider } from "@jeswr/app-shell";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { SessionProvider } from "../../src/auth/SessionContext.js";
 import { DemoApp } from "../../src/demo/DemoApp.jsx";
-import { createDemoSession, DEMO_REQUEST, HEALTH } from "../../src/demo/fixtures.js";
+import { BEX, CLINIC, createDemoSession, DEMO_REQUEST, HEALTH } from "../../src/demo/fixtures.js";
 import { Shell } from "../../src/ui/App.jsx";
 
 const FIND = { timeout: 10_000 } as const;
 
 describe("DemoApp — the four ?demo views render the Ada & Bex fixtures", () => {
-  it("dashboard: /health/ → Dr. Bex (direct), /profile/card → public, health files → Clinic App (inherited)", async () => {
+  it("dashboard: /health/ → Dr. Bex (direct), files inside → Dr. Bex (INHERITED), /profile/card → public; the pending Clinic App appears NOWHERE", async () => {
     render(<DemoApp view="dashboard" />);
     expect(screen.getByTestId("demo-banner")).toHaveTextContent(/sample data/i);
 
@@ -32,19 +36,33 @@ describe("DemoApp — the four ?demo views render the Ada & Bex fixtures", () =>
     expect(screen.getByText("⚠ PUBLIC")).toBeInTheDocument();
     expect(screen.getByTestId("public-agent")).toBeInTheDocument();
 
-    // The health files carry the Clinic App's INHERITED folder grant.
-    expect(screen.getByText("/health/results/blood.ttl")).toBeInTheDocument();
-    expect((await screen.findAllByText("Clinic App", undefined, FIND)).length).toBeGreaterThan(0);
-    expect(screen.getAllByText("inherited").length).toBeGreaterThan(0);
+    // acl:default preserves the authorized AGENT: the health files carry Read
+    // INHERITED from the folder grant, attributed to DR. BEX — not to any app.
+    const bloodRow = (
+      await screen.findByText("/health/results/blood.ttl", undefined, FIND)
+    ).closest("li");
+    if (!bloodRow) throw new Error("blood.ttl row not rendered");
+    expect(within(bloodRow).getByTestId(`revoke-${BEX}`)).toBeInTheDocument();
+    expect(within(bloodRow).getByText("inherited")).toBeInTheDocument();
+
+    // The Clinic App has NO active grant while its request is pending — it
+    // must not show as an authorized agent on ANY resource.
+    expect(screen.queryByTestId(`revoke-${CLINIC}`)).not.toBeInTheDocument();
+    expect(screen.queryByText("Clinic App")).not.toBeInTheDocument();
   });
 
-  it("dashboard by-agent: Dr. Bex holds /health/ direct; the Clinic App holds inherited reads", async () => {
+  it("dashboard by-agent: Dr. Bex holds /health/ direct + the files inside inherited; the Clinic App holds NOTHING", async () => {
     render(<DemoApp view="dashboard" />);
     await screen.findByText("/health/", undefined, FIND);
     fireEvent.click(screen.getByRole("tab", { name: "By agent" }));
     await screen.findAllByText("Dr. Bex", undefined, FIND);
-    expect((await screen.findAllByText("Clinic App", undefined, FIND)).length).toBeGreaterThan(0);
     expect(screen.getByTestId("public-agent")).toBeInTheDocument();
+    // Bex's holding spans the direct folder grant AND the inherited children.
+    expect(screen.getAllByText("direct").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("inherited").length).toBeGreaterThan(0);
+    // No Clinic App holding: a pending request grants nothing.
+    expect(screen.queryByTestId(`revoke-${CLINIC}`)).not.toBeInTheDocument();
+    expect(screen.queryByText("Clinic App")).not.toBeInTheDocument();
   });
 
   it("inbox: ONE pending Clinic App request (Read, health data, 30 days, care coordination) that resolves to the concrete file list", async () => {
@@ -67,26 +85,31 @@ describe("DemoApp — the four ?demo views render the Ada & Bex fixtures", () =>
     expect(screen.getByTestId("confirm-approve")).toHaveTextContent("Approve these 3");
   });
 
-  it("history: receipts for the Bex share, the Clinic approval, and the revoked Clinic grant", async () => {
+  it("history: ONE active grant (Dr. Bex); receipts record the Bex share + the approved-then-REVOKED Clinic grant", async () => {
     render(<DemoApp view="history" />);
     expect(screen.getByRole("tab", { name: "History", selected: true })).toBeInTheDocument();
 
-    // Two active grants…
+    // Exactly ONE active grant — Dr. Bex. The Clinic App's grant carries
+    // accm:revokedAt, so it is NOT active (a pending re-request grants nothing).
     await screen.findByText("Active grants", undefined, FIND);
+    await waitFor(() => expect(screen.getAllByTestId("revoke-grant")).toHaveLength(1), FIND);
     await screen.findAllByText("Dr. Bex", undefined, FIND);
     expect(screen.getByText(/since 2026-06-12/)).toBeInTheDocument();
-    expect(screen.getByText(/for Care Coordination/)).toBeInTheDocument();
 
-    // …and three dated consent receipts: Granted ×2, Revoked ×1.
-    expect((await screen.findAllByText("Granted", undefined, FIND)).length).toBe(2);
-    expect(screen.getAllByText("Revoked").length).toBeGreaterThan(0);
-    expect(screen.getByText("2026-06-12")).toBeInTheDocument();
-    expect(screen.getByText("2026-07-01")).toBeInTheDocument();
-    expect(screen.getByText("2026-04-14")).toBeInTheDocument(); // revoked receipt created
+    // Consent receipts: Granted ×1 (the Bex share) and the Clinic receipt —
+    // approved 2026-04-14 (with the recorded 30-day term + purpose), then
+    // REVOKED 2026-05-02. Revocation, not expiry, is what ended it: plain WAC
+    // has no server-side temporal enforcement.
+    expect((await screen.findAllByText("Granted", undefined, FIND)).length).toBe(1);
+    expect(screen.getAllByText("Revoked").length).toBeGreaterThan(1); // column header + the Clinic row
+    expect((await screen.findAllByText("Clinic App", undefined, FIND)).length).toBeGreaterThan(0);
+    expect(screen.getByText("Care Coordination")).toBeInTheDocument();
+    expect(screen.getByText("2026-06-12")).toBeInTheDocument(); // Bex share granted
+    expect(screen.getByText("2026-04-14")).toBeInTheDocument(); // Clinic approved
     expect(screen.getByText("2026-05-02")).toBeInTheDocument(); // …and revoked on
   });
 
-  it("dataclass: the Health class shows its resolved file set and who has access", async () => {
+  it("dataclass: the Health class shows its resolved file set; who has access = Dr. Bex ONLY (the pending Clinic App is NOT an authorized agent)", async () => {
     render(<DemoApp view="dataclass" />);
     expect(screen.getByRole("tab", { name: "Data classes", selected: true })).toBeInTheDocument();
 
@@ -94,12 +117,14 @@ describe("DemoApp — the four ?demo views render the Ada & Bex fixtures", () =>
     await waitFor(
       () =>
         expect(screen.getByTestId("summary-Health")).toHaveTextContent(
-          "2 other agent(s) can access this data:",
+          "1 other agent(s) can access this data:",
         ),
       FIND,
     );
+    // …and that one agent is Dr. Bex (via the inherited folder grant). The
+    // Clinic App's request is pending, so it appears in the INBOX only.
     expect((await screen.findAllByText("Dr. Bex", undefined, FIND)).length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Clinic App").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Clinic App")).not.toBeInTheDocument();
     // The resolved file set (3 registered health documents).
     fireEvent.click(screen.getByText("3 resource(s)"));
     expect(screen.getByText("/health/results/blood.ttl")).toBeInTheDocument();

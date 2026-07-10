@@ -3,15 +3,23 @@
 // The Ada & Bex demo scenario — INERT SAMPLE DATA for the ?demo mode, matching
 // the Solid Walkthrough narrative exactly:
 //   • Ada owns a pod with a /health/ folder (results, notes, a symptom diary).
-//   • /health/ is shared with Dr. Bex (Read, a direct grant on the folder);
-//     /profile/card is public (Read); the Clinic App reads the health files
-//     via the folder grant (inherited, acl:default).
-//   • The inbox holds ONE pending request: the Clinic App asking for Read on
-//     Ada's health data for 30 days (purpose: care coordination) — it resolves
-//     to a concrete file list before approval.
-//   • History carries the consent receipts: shared with Dr. Bex, approved the
-//     Clinic App (health data, Read, 30d), and one earlier revoked Clinic
-//     App grant.
+//   • /health/ is shared with Dr. Bex (Read, a DIRECT grant on the folder,
+//     with acl:default) — so Bex reads every file INSIDE /health/ by
+//     INHERITANCE. WAC inheritance preserves the authorized AGENT: the
+//     inherited access on the health files is attributed to DR. BEX, never
+//     transferred to any app. /profile/card is public (Read, direct).
+//   • The Clinic App holds NO active grant. It was granted once before, Ada
+//     REVOKED it (see history), and it is now RE-requesting: the inbox holds
+//     its ONE pending request (Read, the "health" data class, requested term
+//     30 days, purpose: care coordination) — resolved to the concrete file
+//     list before approval. While pending it must NOT appear as an authorized
+//     agent anywhere.
+//   • History carries the consent receipts: shared /health/ with Dr. Bex
+//     (Read); approved the Clinic App — health data (Read, 30-day term);
+//     revoked the Clinic App's access. The 30-day term is the
+//     REQUESTED/RECORDED term on the request/receipt — plain WAC has no
+//     server-side temporal enforcement, so a grant persists until REVOKED
+//     (as the revocation receipt shows).
 //
 // Everything lives on RFC-2606-style example domains: none of these IRIs can
 // ever be dereferenced for real, and the demo fetch never leaves memory. The
@@ -27,7 +35,7 @@ export const DEMO_POD = "https://ada.example/";
 export const ADA = "https://ada.example/profile/card#me";
 /** Dr. Bex — Ada's doctor (direct Read grant on /health/). */
 export const BEX = "https://bex.example/profile/card#me";
-/** The Clinic App — holds an inherited folder grant + the pending request. */
+/** The Clinic App — NO active grant (revoked once); ONE pending re-request. */
 export const CLINIC = "https://clinic.example/id#app";
 
 /** The "Health" data class (a demo-only class IRI; label derives to "Health"). */
@@ -48,8 +56,8 @@ export const DIARY = `${HEALTH}diary.ttl`;
 
 /** Demo grant/receipt ids (sample values — receipts are named receipt-<id>.ttl). */
 const BEX_GRANT_ID = "4c1f9a2e77d3";
-const CLINIC_GRANT_ID = "9b8e21c4f0a7";
-const OLD_CLINIC_GRANT_ID = "5d0a3c9b1e88";
+/** The Clinic App's ONE past grant: approved 2026-04-14, revoked 2026-05-02. */
+const REVOKED_CLINIC_GRANT_ID = "5d0a3c9b1e88";
 
 const PREFIXES = `
 @prefix acl: <http://www.w3.org/ns/auth/acl#> .
@@ -103,12 +111,13 @@ function rootAcl(): string {
 }
 
 /**
- * /health/ ACL — the heart of the scenario:
- *   #bex    → Dr. Bex reads the folder (direct on /health/) and, via
- *             acl:default, everything inside it;
- *   #clinic → the Clinic App reads the folder's CONTENTS only (acl:default,
- *             no acl:accessTo) — so the health files show it as INHERITED
- *             from the folder grant.
+ * /health/ ACL — the heart of the scenario. ONE non-owner authorization:
+ *   #bex → Dr. Bex reads the folder (direct, acl:accessTo) and, via
+ *          acl:default, everything inside it — so every health file shows
+ *          Read access INHERITED from the folder grant, attributed to DR. BEX.
+ * WAC inheritance preserves the authorized agent; it never transfers a grant
+ * to another party. The Clinic App has NO entry here: its request is only
+ * PENDING in the inbox (its previous grant was revoked — see the receipts).
  */
 function healthAcl(): string {
   return `${PREFIXES}
@@ -120,10 +129,6 @@ function healthAcl(): string {
 <${HEALTH}.acl#bex> a acl:Authorization ;
   acl:agent <${BEX}> ;
   acl:accessTo <${HEALTH}> ;
-  acl:default <${HEALTH}> ;
-  acl:mode acl:Read .
-<${HEALTH}.acl#clinic> a acl:Authorization ;
-  acl:agent <${CLINIC}> ;
   acl:default <${HEALTH}> ;
   acl:mode acl:Read .
 `;
@@ -155,8 +160,11 @@ function publicTypeIndex(): string {
 }
 
 /**
- * The ONE pending inbox request: the Clinic App asks for Read on Ada's health
- * data for 30 days, purpose care coordination. No accm:status → Pending.
+ * The ONE pending inbox request: the Clinic App RE-asks for Read on Ada's
+ * health data (its earlier grant was revoked — see the receipts), requested
+ * term 30 days, purpose care coordination. No accm:status → Pending. The
+ * dateTime constraint is the REQUESTED term (recorded metadata, not a
+ * server-enforced expiry — plain WAC has none).
  */
 function clinicRequest(): string {
   return `${PREFIXES}
@@ -201,9 +209,16 @@ function bexGrant(): string {
 `;
 }
 
-/** Active grant record: the Clinic App approval (health data, Read, 30 days). */
-function clinicGrant(): string {
-  const url = `${DEMO_GRANTS}grant-${CLINIC_GRANT_ID}.ttl`;
+/**
+ * The Clinic App's PAST grant record — approved 2026-04-14, REVOKED
+ * 2026-05-02 (accm:revokedAt ⇒ never listed among active grants). Kept as the
+ * audit-trail snapshot the revocation pipeline leaves behind. The dateTime
+ * constraint is the RECORDED 30-day requested term (2026-04-14 → 2026-05-14):
+ * metadata only, never a server-enforced expiry — the grant ended because Ada
+ * revoked it, not because the term lapsed.
+ */
+function revokedClinicGrant(): string {
+  const url = `${DEMO_GRANTS}grant-${REVOKED_CLINIC_GRANT_ID}.ttl`;
   return `${PREFIXES}
 <${url}> a odrl:Agreement ;
   odrl:uid <${url}> ;
@@ -219,15 +234,16 @@ function clinicGrant(): string {
     ] , [
       odrl:leftOperand odrl:dateTime ;
       odrl:operator odrl:lteq ;
-      odrl:rightOperand "2026-07-31T00:00:00Z"^^xsd:dateTime
+      odrl:rightOperand "2026-05-14T00:00:00Z"^^xsd:dateTime
     ]
   ] ;
-  accm:grantId "${CLINIC_GRANT_ID}" ;
+  accm:grantId "${REVOKED_CLINIC_GRANT_ID}" ;
   accm:schemaVersion "1" ;
   accm:agent <${CLINIC}> ;
-  accm:resolvesTo <${BLOOD}>, <${PANEL}>, <${NOTES}> ;
+  accm:resolvesTo <${BLOOD}>, <${PANEL}> ;
   accm:mode acl:Read ;
-  dct:created "2026-07-01T14:00:00Z"^^xsd:dateTime .
+  dct:created "2026-04-14T10:15:00Z"^^xsd:dateTime ;
+  accm:revokedAt "2026-05-02T08:45:00Z"^^xsd:dateTime .
 `;
 }
 
@@ -247,26 +263,16 @@ function bexReceipt(): string {
 `;
 }
 
-/** Receipt: "Approved Clinic App — health data (Read, 30d)". */
-function clinicReceipt(): string {
-  const url = `${DEMO_RECEIPTS}receipt-${CLINIC_GRANT_ID}.ttl`;
-  return `${PREFIXES}
-<${url}> a dpv:ConsentRecord ;
-  dpv:hasDataSubject <${ADA}> ;
-  dpv:hasRecipient <${CLINIC}> ;
-  dpv:hasPurpose <${CARE_COORDINATION}> ;
-  dpv:hasConsentStatus dpv:ConsentGiven ;
-  dpv:hasLegalBasis dpv:Consent ;
-  accm:grantId "${CLINIC_GRANT_ID}" ;
-  accm:grantRef <${DEMO_GRANTS}grant-${CLINIC_GRANT_ID}.ttl> ;
-  accm:resolvesTo <${BLOOD}>, <${PANEL}>, <${NOTES}> ;
-  dct:created "2026-07-01T14:00:00Z"^^xsd:dateTime .
-`;
-}
-
-/** Receipt: "Revoked Clinic App access" (an earlier, withdrawn grant). */
-function oldClinicReceipt(): string {
-  const url = `${DEMO_RECEIPTS}receipt-${OLD_CLINIC_GRANT_ID}.ttl`;
+/**
+ * Receipt: "Approved Clinic App — health data (Read, 30-day term)" … then
+ * "Revoked Clinic App access". ONE receipt document, exactly as the app's own
+ * revocation pipeline leaves it: dct:created keeps the approval date (the
+ * "Approved" history beat, with the purpose + the recorded 30-day term via
+ * the linked grant record), and the CAS revocation flip added
+ * dpv:ConsentWithdrawn + accm:revokedAt (the "Revoked" beat).
+ */
+function revokedClinicReceipt(): string {
+  const url = `${DEMO_RECEIPTS}receipt-${REVOKED_CLINIC_GRANT_ID}.ttl`;
   return `${PREFIXES}
 <${url}> a dpv:ConsentRecord ;
   dpv:hasDataSubject <${ADA}> ;
@@ -274,7 +280,8 @@ function oldClinicReceipt(): string {
   dpv:hasPurpose <${CARE_COORDINATION}> ;
   dpv:hasConsentStatus dpv:ConsentWithdrawn ;
   dpv:hasLegalBasis dpv:Consent ;
-  accm:grantId "${OLD_CLINIC_GRANT_ID}" ;
+  accm:grantId "${REVOKED_CLINIC_GRANT_ID}" ;
+  accm:grantRef <${DEMO_GRANTS}grant-${REVOKED_CLINIC_GRANT_ID}.ttl> ;
   accm:resolvesTo <${BLOOD}>, <${PANEL}> ;
   dct:created "2026-04-14T10:15:00Z"^^xsd:dateTime ;
   accm:revokedAt "2026-05-02T08:45:00Z"^^xsd:dateTime .
@@ -299,10 +306,9 @@ export function demoFixtures(): Record<string, string> {
     [`${DEMO_POD}settings/publicTypeIndex.ttl`]: publicTypeIndex(),
     [DEMO_REQUEST]: clinicRequest(),
     [`${DEMO_GRANTS}grant-${BEX_GRANT_ID}.ttl`]: bexGrant(),
-    [`${DEMO_GRANTS}grant-${CLINIC_GRANT_ID}.ttl`]: clinicGrant(),
+    [`${DEMO_GRANTS}grant-${REVOKED_CLINIC_GRANT_ID}.ttl`]: revokedClinicGrant(),
     [`${DEMO_RECEIPTS}receipt-${BEX_GRANT_ID}.ttl`]: bexReceipt(),
-    [`${DEMO_RECEIPTS}receipt-${CLINIC_GRANT_ID}.ttl`]: clinicReceipt(),
-    [`${DEMO_RECEIPTS}receipt-${OLD_CLINIC_GRANT_ID}.ttl`]: oldClinicReceipt(),
+    [`${DEMO_RECEIPTS}receipt-${REVOKED_CLINIC_GRANT_ID}.ttl`]: revokedClinicReceipt(),
     // Dr. Bex's + the Clinic App's identity docs (display names only).
     ["https://bex.example/profile/card"]: bexProfile(),
     ["https://clinic.example/id"]: clinicProfile(),

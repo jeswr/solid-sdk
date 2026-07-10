@@ -94,6 +94,30 @@ describe("createDemoPod — read-only fixture serving", () => {
     );
   });
 
+  it("THROWS DemoReadOnlyError when the write arrives as a Request OBJECT (regression: the method must not be read from init alone)", async () => {
+    const pod = createDemoPod(demoFixtures());
+    const before = pod.body(DEMO_REQUEST);
+    for (const method of ["PUT", "POST", "PATCH", "DELETE"]) {
+      await expect(
+        pod.fetch(new Request(DEMO_REQUEST, { method, body: "tampered" })),
+      ).rejects.toBeInstanceOf(DemoReadOnlyError);
+      // The chokepoint saw the REAL method, not a defaulted GET.
+      expect(pod.log.at(-1)).toEqual({ method, url: DEMO_REQUEST });
+    }
+    expect(pod.body(DEMO_REQUEST)).toBe(before);
+    // init.method still wins over the Request's own method (fetch semantics)…
+    await expect(pod.fetch(new Request(DEMO_REQUEST), { method: "PUT" })).rejects.toBeInstanceOf(
+      DemoReadOnlyError,
+    );
+    // …lower-case methods are normalised…
+    await expect(pod.fetch(DEMO_REQUEST, { method: "put" })).rejects.toBeInstanceOf(
+      DemoReadOnlyError,
+    );
+    // …and a plain GET/HEAD Request object still reads normally.
+    expect((await pod.fetch(new Request(BLOOD))).status).toBe(200);
+    expect((await pod.fetch(new Request(BLOOD, { method: "HEAD" }))).status).toBe(200);
+  });
+
   it("even conditional writes (If-Match / If-None-Match) are refused", async () => {
     const pod = createDemoPod(demoFixtures());
     await expect(
