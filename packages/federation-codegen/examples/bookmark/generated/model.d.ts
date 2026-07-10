@@ -47,6 +47,8 @@ export interface BookmarkEntity {
   ): Promise<BookmarkData | undefined>;
 }
 
+export declare const nodes: Readonly<Record<string, never>>;
+
 export interface GeneratedModel {
   readonly manifest: ModelManifest;
   readonly prefixes: Record<string, string>;

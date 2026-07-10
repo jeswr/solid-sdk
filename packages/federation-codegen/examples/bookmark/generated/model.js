@@ -115,3 +115,6 @@ const manifest = {
 const model = defineModel(manifest);
 export default model;
 export const { entities } = model;
+
+// No composite entities — no per-node views.
+export const nodes = Object.freeze({});

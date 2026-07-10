@@ -5,6 +5,16 @@
  * `@jeswr/model-runtime` — its bytes vary only in the JSON), model.d.ts (types
  * only, zero runtime code), and shapes.ttl (the byte-reproducible stable waist).
  * A generated artifact contains NO executable logic beyond the fixed shim.
+ *
+ * COMPOSITE PER-NODE VIEWS: when the manifest carries composite entities, model.js
+ * additionally inlines the derived node-views manifest + index (see `nodeviews.ts`)
+ * and exposes `nodes` — one typed per-node Wrapper handle per composite sub-node.
+ * The per-node section is PART OF THE FIXED TEMPLATE (identical bytes for every
+ * generated model; only the two inlined JSON blobs vary), and all behaviour still
+ * runs through the audited runtime's `defineModel` — the template merely zips the
+ * inlined index DATA with the interpreted view model. (Follow-up consolidation:
+ * once `@jeswr/model-runtime` exposes per-node wrappers natively on a composite
+ * entity, this template section collapses to a re-export.)
  */
 
 import {
@@ -14,6 +24,7 @@ import {
   type ManifestField,
   type ModelManifest,
 } from "@jeswr/model-runtime";
+import type { NodeViews } from "./nodeviews.js";
 import { serializeCanonicalTurtle } from "./rdf.js";
 import type { NormalizedShapes } from "./shapes.js";
 
@@ -27,16 +38,60 @@ export function emitModelJson(manifest: ModelManifest): string {
   return `${JSON.stringify(manifest, null, 2)}\n`;
 }
 
-/** model.js — the fixed-template shim (bytes vary only in the inlined manifest). */
-export function emitModelJs(manifest: ModelManifest): string {
+// The fixed per-node-views template section (bytes vary only in the two JSON blobs
+// interpolated above it). Pure data-zipping: the ONLY behaviour invoked is the
+// audited runtime's `defineModel` on the derived (generation-time, fidelity-rooted)
+// view manifest; the handles then pair each index entry with its view Wrapper.
+const NODE_VIEWS_TEMPLATE =
+  `const nodeViews = defineModel(nodeViewsManifest);\n` +
+  `export const nodes = Object.freeze(\n` +
+  `  Object.fromEntries(\n` +
+  `    Object.entries(nodeViewIndex).map(([compositeName, nodesOf]) => [\n` +
+  `      compositeName,\n` +
+  `      Object.freeze(\n` +
+  `        Object.fromEntries(\n` +
+  `          Object.entries(nodesOf).map(([nodeName, view]) => [\n` +
+  `            nodeName,\n` +
+  `            Object.freeze({\n` +
+  `              name: nodeName,\n` +
+  `              typeIri: view.typeIri,\n` +
+  `              fragment: view.fragment,\n` +
+  `              Wrapper: nodeViews.entities[view.entity].Wrapper,\n` +
+  `              subject: (resourceUrl) => \`\${resourceUrl}#\${view.fragment}\`,\n` +
+  `            }),\n` +
+  `          ]),\n` +
+  `        ),\n` +
+  `      ),\n` +
+  `    ]),\n` +
+  `  ),\n` +
+  `);\n`;
+
+/** model.js — the fixed-template shim (bytes vary only in the inlined manifests). */
+export function emitModelJs(manifest: ModelManifest, nodeViews?: NodeViews): string {
   const json = JSON.stringify(manifest, null, 2);
-  return (
+  const base =
     `${GENERATED_HEADER}` +
     `import { defineModel } from "@jeswr/model-runtime";\n\n` +
     `const manifest = ${json};\n\n` +
     `const model = defineModel(manifest);\n` +
     `export default model;\n` +
-    `export const { entities } = model;\n`
+    `export const { entities } = model;\n`;
+  if (nodeViews === undefined) {
+    // No composite entity — the export surface stays uniform (an empty handle map).
+    return `${base}\n// No composite entities — no per-node views.\nexport const nodes = Object.freeze({});\n`;
+  }
+  const viewsJson = JSON.stringify(nodeViews.manifest, null, 2);
+  const indexJson = JSON.stringify(nodeViews.index, null, 2);
+  return (
+    `${base}\n` +
+    `// COMPOSITE PER-NODE VIEWS — one typed Wrapper per composite sub-node, interpreted\n` +
+    `// through the SAME audited defineModel path. The view manifest + index below are\n` +
+    `// DERIVED at generation time from the manifest above (a nested link is projected as\n` +
+    `// a plain IRI field); only the view Wrappers are surfaced — a handle's subject() is\n` +
+    `// the fragment-correct node IRI. Fixed template; only the JSON varies.\n` +
+    `const nodeViewsManifest = ${viewsJson};\n\n` +
+    `const nodeViewIndex = ${indexJson};\n\n` +
+    NODE_VIEWS_TEMPLATE
   );
 }
 
@@ -153,8 +208,57 @@ function entityDts(entity: AnyManifestEntity): string {
   );
 }
 
+// The generic handle interface emitted alongside per-node views (fixed text).
+const NODE_HANDLE_DTS =
+  `/** A typed view handle onto ONE sub-node of a composite entity. */\n` +
+  `export interface CompositeNodeHandle<W extends EntityWrapper> {\n` +
+  `  readonly name: string;\n` +
+  `  readonly typeIri: string;\n` +
+  `  readonly fragment: string;\n` +
+  `  readonly Wrapper: new (\n` +
+  `    term: string | Term,\n` +
+  `    dataset: DatasetCore,\n` +
+  `    factory: DataFactory,\n` +
+  `  ) => W;\n` +
+  `  subject(resourceUrl: string): string;\n` +
+  `}\n`;
+
+// Per-node view typing: one `<ViewName>Wrapper` interface per composite sub-node
+// (typed over the view's flat fields — a nested link surfaces as an IRI accessor),
+// plus the `nodes` handle-map declaration mirroring the emitted model.js export.
+function nodeViewsDts(nodeViews: NodeViews | undefined): string {
+  if (nodeViews === undefined) {
+    return `export declare const nodes: Readonly<Record<string, never>>;\n`;
+  }
+  const viewByName = new Map(nodeViews.manifest.entities.map((e) => [e.name, e]));
+  const wrapperBlocks: string[] = [];
+  const compositeLines: string[] = [];
+  for (const [compositeName, nodesOf] of Object.entries(nodeViews.index)) {
+    const nodeLines: string[] = [];
+    for (const [nodeName, ref] of Object.entries(nodesOf)) {
+      const view = viewByName.get(ref.entity);
+      if (view === undefined || isCompositeEntity(view)) {
+        throw new Error(`node view index references unknown view entity "${ref.entity}"`);
+      }
+      wrapperBlocks.push(
+        `export interface ${ref.entity}Wrapper extends EntityWrapper {\n` +
+          `${view.fields.map(wrapperFieldLine).join("\n")}\n}\n`,
+      );
+      nodeLines.push(
+        `    readonly ${propKey(nodeName)}: CompositeNodeHandle<${ref.entity}Wrapper>;`,
+      );
+    }
+    compositeLines.push(`  readonly ${propKey(compositeName)}: {\n${nodeLines.join("\n")}\n  };`);
+  }
+  return (
+    `${NODE_HANDLE_DTS}\n` +
+    `${wrapperBlocks.join("\n")}\n` +
+    `export declare const nodes: {\n${compositeLines.join("\n")}\n};\n`
+  );
+}
+
 /** model.d.ts — types only, precise per-entity Data / Wrapper / Entity interfaces. */
-export function emitModelDts(manifest: ModelManifest): string {
+export function emitModelDts(manifest: ModelManifest, nodeViews?: NodeViews): string {
   const entityBlocks = manifest.entities.map(entityDts).join("\n");
   const entitiesType = manifest.entities
     .map((e) => `  readonly ${e.name}: ${e.name}Entity;`)
@@ -165,6 +269,7 @@ export function emitModelDts(manifest: ModelManifest): string {
     `import type { EntityWrapper, ModelManifest } from "@jeswr/model-runtime";\n` +
     `import type { Store } from "n3";\n\n` +
     `${entityBlocks}\n` +
+    `${nodeViewsDts(nodeViews)}\n` +
     `export interface GeneratedModel {\n` +
     `  readonly manifest: ModelManifest;\n` +
     `  readonly prefixes: Record<string, string>;\n` +

@@ -5,8 +5,9 @@
 > **codegen config** into a typed data model whose behaviour lives entirely in the audited
 > [`@jeswr/model-runtime`](https://github.com/jeswr/model-runtime).
 
-**Status:** alpha — P0. Generated artifacts carry **no executable logic**; all behaviour is in the
-runtime, audited once.
+**Status:** alpha — P0. Generated artifacts carry **no model-specific executable logic** — all
+behaviour is in the runtime, audited once (the `model.js` shim is a fixed template whose bytes vary
+only in the inlined JSON).
 
 ## What it generates
 
@@ -16,7 +17,7 @@ For each `sh:NodeShape` in a domain's SHACL profile:
 |---|---|
 | `model.d.ts` | Types only — precise `Data` / `Wrapper` / `Entity` interfaces. Zero runtime code. |
 | `model.json` | The compiled shape-manifest — a **fidelity-asserted verified projection of `shapes.ttl`**, never a bespoke schema (§7.2). |
-| `model.js` | A **fixed-template shim** — imports `@jeswr/model-runtime`, inlines the manifest, calls `defineModel`. Bytes vary only in the JSON. |
+| `model.js` | A **fixed-template shim** — imports `@jeswr/model-runtime`, inlines the manifest, calls `defineModel`. Bytes vary only in the JSON. For a composite it also inlines the derived per-node view manifest + index and exports `nodes` (see below). |
 | `shapes.ttl` | The **skolemized, byte-reproducible** SHACL shape — the stable waist (§5). |
 | `codegen-manifest.json` / `codegen.lock.json` | Input/output sha256s + adapter + runtime pins; the Mode-A lockfile (fail-closed on input drift). |
 
@@ -93,6 +94,36 @@ generates a single composite entity over the runtime's composite kind:
   a MUST omission fails fidelity). A composite claims its node target classes exclusively (they are not
   also emitted as flat entities); each node has a distinct target class; composite documents are
   http(s)-scoped (the runtime filters/canonicalises link targets through the http(s) IRI filter).
+
+### Composite per-node wrappers (`nodes`)
+
+The composite entity's `Wrapper` is its ROOT node's wrapper. For low-level typed access to the
+OTHER nodes (a Track / Artist / Album / Instant subject), the generated model also exports
+**`nodes`** — one typed handle per composite sub-node, so a consumer never hand-writes per-node
+wrapper classes (this replaced `@jeswr/solid-listening`'s hand-written `src/nodes.ts`):
+
+```ts
+import { entities, nodes } from "./generated/model.js";
+
+const track = new nodes.Scrobble.track.Wrapper(
+  nodes.Scrobble.track.subject(resourceUrl),   // `${resourceUrl}#track`
+  store, DataFactory,
+);
+track.trackTitle;                              // typed accessor (composite rename applies)
+track.performedByArtist;                       // a nested link surfaces as an IRI accessor
+```
+
+- Each handle is `{ name, typeIri, fragment, Wrapper, subject(resourceUrl) }`; `model.d.ts` types it
+  as `CompositeNodeHandle<…NodeWrapper>` with a precise per-node wrapper interface
+  (`ScrobbleTrackNodeWrapper`, …).
+- The views are a **pure projection** of the fidelity-asserted manifest, derived at GENERATION time
+  (`deriveNodeViews`): one flat view entity per node, a `nested` link projected as a plain IRI field,
+  field names as projected (renames included). The view manifest is interpreted through the SAME
+  audited `defineModel` path, so every view accessor gets the runtime's guard stack; the model.js
+  per-node section is part of the fixed template (only the two JSON blobs vary).
+- Only the view `Wrapper` is surfaced — a node's document identity comes from the handle's
+  fragment-correct `subject()`, and cross-node MUST enforcement stays in the composite's graph-walk
+  `parse`. A manifest with no composites exports a frozen empty `nodes`.
 
 ## Usage (Mode A)
 
