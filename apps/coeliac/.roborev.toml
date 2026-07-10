@@ -1,5 +1,5 @@
 # roborev — post-commit automated code review (suite standard).
 # Non-Anthropic reviewer (codex) so code is never reviewed only by the model
 # family that wrote it. Min-severity low. Maintainer-owned; do not weaken.
-reviewer = "codex"
+agent = "codex"
 review_min_severity = "low"
