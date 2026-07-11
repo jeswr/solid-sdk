@@ -388,10 +388,8 @@ describe("handleCallback — happy path", () => {
     const tokenReq = op.captured.find((r) => r.url.endsWith("/token") && r.method === "POST");
     // Basic auth → Authorization: Basic base64(client_id:secret); the secret is NOT in the body.
     expect(tokenReq?.headers.authorization).toMatch(/^Basic /i);
-    const decoded = Buffer.from(
-      (tokenReq?.headers.authorization as string).slice("Basic ".length),
-      "base64",
-    ).toString("utf8");
+    const basicAuthz = tokenReq?.headers.authorization as string;
+    const decoded = Buffer.from(basicAuthz.slice("Basic ".length), "base64").toString("utf8");
     expect(decoded).toContain("s3cret");
     expect(tokenReq?.body ?? "").not.toContain("s3cret");
   });
@@ -1122,7 +1120,6 @@ describe("the authed fetch — DPoP proof bound to the access token (ath)", () =
       if (hadLocation) {
         (globalThis as { location?: unknown }).location = prev;
       } else {
-        // biome-ignore lint/performance/noDelete: test cleanup of a stubbed global
         delete (globalThis as { location?: unknown }).location;
       }
     }
@@ -1150,13 +1147,11 @@ describe("the authed fetch — DPoP proof bound to the access token (ath)", () =
       if (hadDoc) {
         g.document = prevDoc;
       } else {
-        // biome-ignore lint/performance/noDelete: test cleanup of a stubbed global
         delete g.document;
       }
       if (hadLoc) {
         g.location = prevLoc;
       } else {
-        // biome-ignore lint/performance/noDelete: test cleanup of a stubbed global
         delete g.location;
       }
     }
@@ -1170,9 +1165,7 @@ describe("the authed fetch — DPoP proof bound to the access token (ath)", () =
     const hadLoc = "location" in globalThis;
     const prevDoc = g.document;
     const prevLoc = g.location;
-    // biome-ignore lint/performance/noDelete: ensure no document base for this assertion
     delete g.document;
-    // biome-ignore lint/performance/noDelete: ensure no document base for this assertion
     delete g.location;
     try {
       await expect(client.fetch("/resource/doc.ttl")).rejects.toThrow(/absolute URL/i);
