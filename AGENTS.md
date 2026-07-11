@@ -38,9 +38,14 @@ packages outside the phased plan (pilot → consumption-proof go/no-go → bulk,
    subpath-exported TTL) } to the package's ORIGINAL `jeswr/<pkg>` repo (`Mirror-Of:`
    trailer). Dry-run is the default; `--execute` pushes. Mirrors are **never hand-edited**;
    publishing runs in topological order (`--dep-sha` pins for non-inlined workspace deps;
-   an esbuild-inlined dep is declared in `mirrorPublish.inlined` and dropped from the
-   mirror manifest). Old consumer pins resolve forever. npm publish (changesets,
-   independent versions) is the deferred end-state (`needs:user`).
+   an esbuild-inlined dep may be declared in `mirrorPublish.inlined` and dropped from the
+   mirror manifest — but ONLY when the emitted `.d.ts` is also self-contained. A package
+   whose declarations import the dep's types keeps it NON-inlined and pins it via
+   `--dep-sha`, even if the JS is bundled: solid-openid-client's declarations import
+   solid-dpop types, so its mirror keeps a pinned `@jeswr/solid-dpop` dep exactly as the
+   standalone repo always declared it — roborev finding on 6c3e609). Old consumer pins
+   resolve forever. npm publish (changesets, independent versions) is the deferred
+   end-state (`needs:user`).
 4. **One gate:** `pnpm run gate` (lint → build → typecheck → test, `pnpm -r` across the
    workspace — build first because dist is not committed and self-referencing dist imports
    + workspace-dep `.d.ts` resolution need built output). Scope routine runs with

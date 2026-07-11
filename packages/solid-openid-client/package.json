@@ -54,11 +54,6 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"
   },
-  "mirrorPublish": {
-    "inlined": [
-      "@jeswr/solid-dpop"
-    ]
-  },
   "peerDependencies": {
     "openid-client": "^6.0.0"
   },

@@ -73,6 +73,7 @@ import { spawnSync } from "node:child_process";
 import {
   cpSync,
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
@@ -235,6 +236,24 @@ export function extraMirrorFiles(manifest) {
   return [...out].sort();
 }
 
+/**
+ * Copy the extraMirrorFiles entries from the package dir into the assembly. A nested
+ * literal entry (e.g. `assets/vocab.ttl`) needs its destination parent created first —
+ * Node's cpSync does not guarantee that for file sources across versions (roborev
+ * finding on a39ba26). Fails closed if an entry named by the manifest is missing.
+ */
+export function copyExtraFiles(pkgDir, assembly, extras, pkgDirName = pkgDir) {
+  for (const extra of extras) {
+    const src = join(pkgDir, extra);
+    if (!existsSync(src)) {
+      throw new Error(`package.json files entry missing from ${pkgDirName}: ${extra}`);
+    }
+    const dest = join(assembly, extra);
+    mkdirSync(dirname(dest), { recursive: true });
+    cpSync(src, dest, { recursive: true });
+  }
+}
+
 /** Build the mirror commit message (subject + provenance trailers). Pure. */
 export function buildCommitMessage(pkgDirName, monorepoSha) {
   if (!/^[0-9a-f]{40}$/.test(monorepoSha))
@@ -374,13 +393,7 @@ function main() {
   if (!licenseSrc) throw new Error("no LICENSE found (package or workspace root)");
   cpSync(licenseSrc, join(assembly, "LICENSE"));
   // Non-dist artifacts the manifest's `files` array ships (subpath-exported TTL, etc.).
-  for (const extra of extraMirrorFiles(manifest)) {
-    const extraSrc = join(pkgDir, extra);
-    if (!existsSync(extraSrc)) {
-      throw new Error(`package.json files entry missing from packages/${args.pkg}: ${extra}`);
-    }
-    cpSync(extraSrc, join(assembly, extra), { recursive: true });
-  }
+  copyExtraFiles(pkgDir, assembly, extraMirrorFiles(manifest), `packages/${args.pkg}`);
 
   const commitMessage = buildCommitMessage(args.pkg, monorepoSha);
   const fileList = listFilesRecursive(assembly);

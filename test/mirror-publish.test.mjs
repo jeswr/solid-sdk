@@ -8,6 +8,7 @@ import {
   bannerifyReadme,
   buildCommitMessage,
   compareDirs,
+  copyExtraFiles,
   extraMirrorFiles,
   listFilesRecursive,
   mirrorRepoFor,
@@ -173,6 +174,43 @@ describe("extraMirrorFiles", () => {
     expect(() => extraMirrorFiles({ files: ["/etc/passwd"] })).toThrow(/outside the package/);
     expect(() => extraMirrorFiles({ files: ["*.ttl"] })).toThrow(/glob/);
     expect(() => extraMirrorFiles({ files: ["shapes/**"] })).toThrow(/glob/);
+  });
+});
+
+describe("copyExtraFiles", () => {
+  let dirs = [];
+  const tmp = () => {
+    const d = mkdtempSync(join(tmpdir(), "mirror-extra-"));
+    dirs.push(d);
+    return d;
+  };
+  afterEach(() => {
+    for (const d of dirs) rmSync(d, { recursive: true, force: true });
+    dirs = [];
+  });
+
+  it("copies root-level files, NESTED files (creating parents), and directories", () => {
+    const pkg = tmp();
+    const assembly = tmp();
+    writeFileSync(join(pkg, "vocab.ttl"), "ttl");
+    mkdirSync(join(pkg, "assets", "deep"), { recursive: true });
+    writeFileSync(join(pkg, "assets", "deep", "shape.ttl"), "shape");
+    mkdirSync(join(pkg, "shapes"));
+    writeFileSync(join(pkg, "shapes", "a.ttl"), "a");
+    copyExtraFiles(pkg, assembly, ["vocab.ttl", "assets/deep/shape.ttl", "shapes"]);
+    expect(listFilesRecursive(assembly)).toEqual([
+      "assets/deep/shape.ttl",
+      "shapes/a.ttl",
+      "vocab.ttl",
+    ]);
+  });
+
+  it("fails closed when a manifest-named entry is missing", () => {
+    const pkg = tmp();
+    const assembly = tmp();
+    expect(() => copyExtraFiles(pkg, assembly, ["missing.ttl"], "packages/x")).toThrow(
+      /missing from packages\/x: missing\.ttl/,
+    );
   });
 });
 
