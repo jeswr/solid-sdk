@@ -7,4 +7,6 @@ dist/
 
 coverage/
 *.tsbuildinfo
+*.log
+.vitest/
 .DS_Store

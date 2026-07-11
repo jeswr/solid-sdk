@@ -22,7 +22,7 @@
     "typecheck": "pnpm -r --if-present run typecheck",
     "test": "vitest run && pnpm -r --if-present run test",
     "build": "pnpm -r --if-present run build",
-    "gate": "pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run build",
+    "gate": "pnpm run lint && pnpm run build && pnpm run typecheck && pnpm run test",
     "mirror-publish": "node scripts/mirror-publish.mjs"
   },
   "devDependencies": {

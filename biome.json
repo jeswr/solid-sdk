@@ -18,6 +18,10 @@
               {
                 "selector": { "kind": "objectLiteralProperty" },
                 "formats": ["camelCase", "CONSTANT_CASE", "snake_case", "PascalCase"]
+              },
+              {
+                "selector": { "kind": "typeProperty" },
+                "formats": ["camelCase", "CONSTANT_CASE", "snake_case", "PascalCase"]
               }
             ]
           }

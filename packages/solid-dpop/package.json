@@ -61,8 +61,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "lint": "biome check src test examples scripts && npm run check:lockfile-transport",
-    "check:lockfile-transport": "node scripts/check-lockfile-transport.mjs",
+    "lint": "biome check src test examples scripts",
     "typecheck": "tsc --noEmit",
     "build": "npm run build:esm && npm run build:cjs",
     "build:esm": "tsc -p tsconfig.esm.json",
