@@ -1,0 +1,44 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jeswr/full-solid-ecosystem/main/tracking/schema/suite.schema.json",
+  "id": "solid-bookmark",
+  "kind": "sdk",
+  "name": "Solid Bookmark Model",
+  "repo": "https://github.com/jeswr/solid-bookmark",
+  "category": "infrastructure",
+  "maturity": "alpha",
+  "visibility": "public",
+  "stack": {
+    "lang": "TypeScript (ESM, NodeNext)",
+    "runtime": "Node >=20",
+    "rdf": "n3 ^2.x",
+    "rdf-wrapper": "@rdfjs/wrapper ^0.34.x",
+    "fetch-rdf": "@jeswr/fetch-rdf ^0.1",
+    "shacl": "rdf-validate-shacl ^0.6, @zazuko/env-node ^3 (dev)",
+    "test": "vitest ^4.x",
+    "lint": "@biomejs/biome ^2.x",
+    "node": ">=20"
+  },
+  "federation": {
+    "sectors": [
+      "media"
+    ],
+    "produces": [
+      "bookmark"
+    ],
+    "consumes": [
+      "bookmark"
+    ],
+    "note": "The RDF vocabulary + typed model for bookmarks / read-it-later (the data model for a Linkding→Solid fork). Mints only the two terms schema.org/DC/SKOS lack — book:Bookmark (rooted rdfs:subClassOf core:InformationResource, the gUFO-rebased suite core), book:archived (xsd:boolean), book:notes (markdown). Everything else reuses schema:url, dct:title/description/created/modified and schema:keywords for tags. The w3id.org/jeswr/bookmark# IRIs are the ones the solid-federation-vocab media sector / bookmarks# alignments reference. GitHub-installable now (committed dist/, ignore-scripts=true); npm publish is a deferred migration."
+  },
+  "status": {
+    "generatedAt": "2026-07-03T05:14:32.609Z",
+    "commit": "420f4ef44d1345d60c60aefb3774e3c4e89d6db3",
+    "version": "0.1.0",
+    "gate": {
+      "lint": "skip",
+      "typecheck": "skip",
+      "test": "skip",
+      "build": "skip"
+    }
+  }
+}
