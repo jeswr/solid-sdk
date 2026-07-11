@@ -3,8 +3,11 @@
 The **@jeswr Solid SDK monorepo** — reusable TypeScript packages for Solid apps and agents,
 consolidated from ~42 per-package repos into one pnpm workspace.
 
-**Status: Phase 0 (scaffold).** The workspace is intentionally empty — no package has been
-imported yet. The full design, inventory, and phased migration plan live in
+**Status: Phase 1 (pilot).** Three pilot packages are imported with full git history —
+`solid-dpop` (leaf), `solid-openid-client` (esbuild-inlines solid-dpop, `workspace:*`),
+`solid-bookmark` (external npm dep `@jeswr/fetch-rdf`) — chosen to prove the three hard
+migration cases. Mirror publishing (`--execute`) has not run yet. The full design,
+inventory, and phased migration plan live in
 [`decisions/0001-monorepo-architecture.md`](decisions/0001-monorepo-architecture.md).
 
 ## Why a monorepo
@@ -29,8 +32,9 @@ repo, so the monorepo itself can never be the install target. Instead:
 
 - Each package's **original repo becomes a read-only mirror**, published by
   [`scripts/mirror-publish.mjs`](scripts/mirror-publish.mjs): built `dist/` + rewritten
-  `package.json` + README + LICENSE, committed with a `Mirror-Of: jeswr/solid-sdk@<sha>`
-  trailer.
+  `package.json` + README + LICENSE (+ any other literal `files`-array artifact, e.g.
+  solid-bookmark's subpath-exported TTL), committed with a
+  `Mirror-Of: jeswr/solid-sdk@<sha>` trailer.
 - **Existing pins never break**: old shas resolve forever (mirror repos are never deleted),
   new shas appear only via mirror publishes. There is no flag-day; consumers repoint on
   their normal cadence.

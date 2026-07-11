@@ -15,8 +15,10 @@ storage/sync adapters, bridges, ecosystem integrations). Full design + inventory
 [`decisions/0001-monorepo-architecture.md`](decisions/0001-monorepo-architecture.md)
 (imported from `prod-solid-server/decisions/0022`, the ADR of record).
 
-**Current state: Phase 0 — scaffold only, zero packages imported.** Do not import a package
-outside the phased plan (pilot → consumption-proof go/no-go → bulk, leaves first).
+**Current state: Phase 1 — the 3-package pilot is imported** (`solid-dpop`,
+`solid-openid-client`, `solid-bookmark`, full history grafted); mirror publishing has NOT
+run yet (`--execute` is Phase-1's final, separately authorized step). Do not import further
+packages outside the phased plan (pilot → consumption-proof go/no-go → bulk, leaves first).
 
 ## The model in four rules
 
@@ -25,19 +27,26 @@ outside the phased plan (pilot → consumption-proof go/no-go → bulk, leaves f
    between workspace members. One lockfile (`pnpm-lock.yaml`); the `check:lockfile-transport`
    guard (part of `lint`) fails any `git+ssh://` entry.
 2. **`dist/` is never committed here.** It is gitignored and built fresh. The committed-dist
-   convention lives in the **mirrors** (rule 3). Per-package `tsconfig.json` extends the root
-   `tsconfig.base.json`; Biome + vitest come from the root.
+   convention lives in the **mirrors** (rule 3). Biome + vitest come from the root. (The
+   Phase-1 pilot packages keep their imported per-package tsconfigs so their dist stays
+   comparable with the standalone repos; converging them onto `tsconfig.base.json` is a
+   Phase-3 sweep.)
 3. **Mirror publishing keeps every `github:jeswr/<pkg>#<sha>` pin working.**
-   `scripts/mirror-publish.mjs <pkg>` builds the package and publishes { rewritten
-   `package.json`, `dist/`, README (with the read-only banner), LICENSE } to the package's
-   ORIGINAL `jeswr/<pkg>` repo (`Mirror-Of:` trailer). Dry-run is the default; `--execute`
-   pushes. Mirrors are **never hand-edited**; publishing runs in topological order
-   (`--dep-sha` pins for non-inlined workspace deps). Old consumer pins resolve forever.
-   npm publish (changesets, independent versions) is the deferred end-state (`needs:user`).
-4. **One gate:** `pnpm run gate` (lint + typecheck + test + build, `pnpm -r` across the
-   workspace). Scope routine runs with `pnpm --filter '...[origin/main]' <cmd>` (changed
-   packages + dependents). roborev reviews every commit (`.roborev.toml`: codex /
-   gpt-5.6-sol, min severity low); the hook is installed — read verdicts, address findings.
+   `scripts/mirror-publish.mjs <pkg>` builds the package (and its workspace deps) and
+   publishes { rewritten `package.json`, `dist/`, README (with the read-only banner),
+   LICENSE, plus any other literal `files`-array artifact (e.g. solid-bookmark's
+   subpath-exported TTL) } to the package's ORIGINAL `jeswr/<pkg>` repo (`Mirror-Of:`
+   trailer). Dry-run is the default; `--execute` pushes. Mirrors are **never hand-edited**;
+   publishing runs in topological order (`--dep-sha` pins for non-inlined workspace deps;
+   an esbuild-inlined dep is declared in `mirrorPublish.inlined` and dropped from the
+   mirror manifest). Old consumer pins resolve forever. npm publish (changesets,
+   independent versions) is the deferred end-state (`needs:user`).
+4. **One gate:** `pnpm run gate` (lint → build → typecheck → test, `pnpm -r` across the
+   workspace — build first because dist is not committed and self-referencing dist imports
+   + workspace-dep `.d.ts` resolution need built output). Scope routine runs with
+   `pnpm --filter '...[origin/main]' <cmd>` (changed packages + dependents). roborev
+   reviews every commit (`.roborev.toml`: codex / gpt-5.6-sol, min severity low); the hook
+   is installed — read verdicts, address findings.
 
 ## Merge rule (path-disjoint relaxation — proposed in ADR §9.2)
 

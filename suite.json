@@ -15,7 +15,7 @@
     "test": "vitest",
     "publish": "per-package read-only mirror repos via scripts/mirror-publish.mjs; npm publish deferred (needs:user)"
   },
-  "packages": [],
+  "packages": ["@jeswr/solid-dpop", "@jeswr/solid-openid-client", "@jeswr/solid-bookmark"],
   "dependsOn": [],
   "federation": null
 }
