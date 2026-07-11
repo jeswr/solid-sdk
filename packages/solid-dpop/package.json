@@ -1,0 +1,84 @@
+{
+  "name": "@jeswr/solid-dpop",
+  "version": "0.1.0",
+  "description": "Solid-OIDC client-credentials session + RFC 9449 DPoP proof primitives, plus the user-delegated authorization-code + PKCE + DPoP flow. jose-only crypto; ESM + CJS.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Jesse Wright",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jeswr/solid-dpop.git"
+  },
+  "homepage": "https://github.com/jeswr/solid-dpop#readme",
+  "bugs": {
+    "url": "https://github.com/jeswr/solid-dpop/issues"
+  },
+  "keywords": [
+    "solid",
+    "solid-oidc",
+    "dpop",
+    "rfc9449",
+    "oauth",
+    "pkce",
+    "authorization-code",
+    "client-credentials",
+    "jose"
+  ],
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "main": "./dist/cjs/index.js",
+  "module": "./dist/esm/index.js",
+  "types": "./dist/esm/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/esm/index.d.ts",
+        "default": "./dist/esm/index.js"
+      },
+      "require": {
+        "types": "./dist/cjs/index.d.ts",
+        "default": "./dist/cjs/index.js"
+      }
+    },
+    "./testing": {
+      "import": {
+        "types": "./dist/esm/testing.d.ts",
+        "default": "./dist/esm/testing.js"
+      },
+      "require": {
+        "types": "./dist/cjs/testing.d.ts",
+        "default": "./dist/cjs/testing.js"
+      }
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "lint": "biome check src test examples scripts && npm run check:lockfile-transport",
+    "check:lockfile-transport": "node scripts/check-lockfile-transport.mjs",
+    "typecheck": "tsc --noEmit",
+    "build": "npm run build:esm && npm run build:cjs",
+    "build:esm": "tsc -p tsconfig.esm.json",
+    "build:cjs": "tsc -p tsconfig.cjs.json && node -e \"require('fs').writeFileSync('dist/cjs/package.json', JSON.stringify({type:'commonjs'},null,2))\" && node scripts/fix-cjs-jose-import.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:live": "vitest run --config vitest.live.config.ts"
+  },
+  "dependencies": {
+    "jose": "^6.0.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.16",
+    "@solid/community-server": "^8.0.0-alpha.3",
+    "@types/node": "^24.0.0",
+    "typescript": "^5.6.0",
+    "vitest": "^4.0.0"
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jeswr/full-solid-ecosystem/main/tracking/schema/suite.schema.json",
+  "id": "solid-dpop",
+  "kind": "package",
+  "name": "Solid DPoP",
+  "repo": "https://github.com/jeswr/solid-dpop",
+  "category": "identity",
+  "maturity": "alpha",
+  "visibility": "public",
+  "stack": {
+    "language": "TypeScript",
+    "runtime": "Node >=20",
+    "crypto": "jose (RFC 9449 DPoP proofs; asymmetric-only)",
+    "auth": "Solid-OIDC client-credentials + authorization-code + PKCE + DPoP",
+    "modules": "ESM + CJS dual build",
+    "test": "vitest",
+    "lint": "@biomejs/biome"
+  },
+  "dependsOn": [],
+  "federation": null,
+  "status": {
+    "generatedAt": "2026-07-03T05:14:34.150Z",
+    "commit": "4bc5309fab6fe837a942581d331da90be2d552e3",
+    "version": "0.1.0",
+    "gate": {
+      "lint": "skip",
+      "typecheck": "skip",
+      "test": "skip",
+      "build": "skip"
+    }
+  }
+}
