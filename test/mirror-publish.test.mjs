@@ -8,6 +8,7 @@ import {
   bannerifyReadme,
   buildCommitMessage,
   compareDirs,
+  extraMirrorFiles,
   listFilesRecursive,
   mirrorRepoFor,
   parseCliArgs,
@@ -145,6 +146,33 @@ describe("rewriteManifest", () => {
     const snapshot = JSON.stringify(m);
     rewriteManifest(m);
     expect(JSON.stringify(m)).toBe(snapshot);
+  });
+});
+
+describe("extraMirrorFiles", () => {
+  it("returns [] for the standard dist/README/LICENSE files array", () => {
+    expect(extraMirrorFiles({ files: ["dist", "README.md", "LICENSE"] })).toEqual([]);
+    expect(extraMirrorFiles({})).toEqual([]);
+  });
+
+  it("returns the non-standard entries sorted + deduped (the solid-bookmark case)", () => {
+    expect(
+      extraMirrorFiles({
+        files: ["dist", "bookmark.ttl", "bookmark.shacl.ttl", "README.md", "LICENSE"],
+      }),
+    ).toEqual(["bookmark.shacl.ttl", "bookmark.ttl"]);
+    expect(extraMirrorFiles({ files: ["./vocab.ttl", "vocab.ttl", "shapes/"] })).toEqual([
+      "shapes",
+      "vocab.ttl",
+    ]);
+  });
+
+  it("fails closed on traversal, absolute paths, and globs", () => {
+    expect(() => extraMirrorFiles({ files: ["../outside"] })).toThrow(/outside the package/);
+    expect(() => extraMirrorFiles({ files: ["a/../../b"] })).toThrow(/outside the package/);
+    expect(() => extraMirrorFiles({ files: ["/etc/passwd"] })).toThrow(/outside the package/);
+    expect(() => extraMirrorFiles({ files: ["*.ttl"] })).toThrow(/glob/);
+    expect(() => extraMirrorFiles({ files: ["shapes/**"] })).toThrow(/glob/);
   });
 });
 

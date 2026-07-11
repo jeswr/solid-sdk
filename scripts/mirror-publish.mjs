@@ -7,8 +7,9 @@
  * Why this exists: the monorepo does not commit dist/, but every consumer installs
  * `github:jeswr/<pkg>#<sha>` under ignore-scripts=true and needs a committed dist. The
  * original per-package repos therefore become script-published MIRRORS carrying
- * { package.json (rewritten), dist/, README.md, LICENSE } — nothing else. Old shas keep
- * resolving forever; new shas appear only via this script.
+ * { package.json (rewritten), dist/, README.md, LICENSE } plus any OTHER literal entry
+ * the manifest's `files` array ships (subpath-exported TTL etc.) — nothing else. Old
+ * shas keep resolving forever; new shas appear only via this script.
  *
  * CONTRACT
  *   node scripts/mirror-publish.mjs <package-dir-name> [flags]
@@ -206,6 +207,34 @@ export function bannerifyReadme(readme, npmName) {
   return banner + readme;
 }
 
+/**
+ * Extra artifact files/dirs the mirror must carry beyond { dist, package.json, README,
+ * LICENSE }: everything else the manifest's `files` array names. Some packages ship
+ * non-dist artifacts as subpath exports (e.g. @jeswr/solid-bookmark exports
+ * ./bookmark.ttl + ./bookmark.shacl.ttl from the package root) — a mirror missing them
+ * would break those exports for every `github:` consumer. Literal paths only — globs,
+ * absolute paths, and traversal fail closed. Pure.
+ */
+export function extraMirrorFiles(manifest) {
+  const handled = new Set(["dist", "README.md", "LICENSE", "package.json"]);
+  const out = new Set();
+  for (const entry of manifest.files ?? []) {
+    const clean = String(entry).replace(/^\.\//, "").replace(/\/+$/, "");
+    if (handled.has(clean)) continue;
+    if (clean === "" || clean.startsWith("/") || clean.split("/").includes("..")) {
+      throw new Error(`refusing package.json files entry outside the package: ${entry}`);
+    }
+    if (/[*?[\]{}!]/.test(clean)) {
+      throw new Error(
+        `package.json files entry ${entry} is a glob — mirror-publish carries literal ` +
+          "paths only; name the file/dir explicitly",
+      );
+    }
+    out.add(clean);
+  }
+  return [...out].sort();
+}
+
 /** Build the mirror commit message (subject + provenance trailers). Pure. */
 export function buildCommitMessage(pkgDirName, monorepoSha) {
   if (!/^[0-9a-f]{40}$/.test(monorepoSha))
@@ -296,11 +325,19 @@ function main() {
   assertCleanTree(repoRoot, "— commit or stash first");
   const monorepoSha = run("git", ["rev-parse", "HEAD"], { cwd: repoRoot });
 
-  // 2. scoped build from an EMPTY dist (stale outputs must not ride along) + test
+  // 2. scoped build from an EMPTY dist (stale outputs must not ride along) + test.
+  //    `<name>...` selects the package AND its workspace dependencies, topologically:
+  //    dist/ is gitignored in the monorepo, so a dependent that bundles a sibling
+  //    (e.g. solid-openid-client esbuild-inlining solid-dpop's built dist/esm) needs
+  //    that sibling built first — a bare `--filter <name>` would inline stale or
+  //    missing output on a fresh checkout.
   const distDir = join(pkgDir, "dist");
   rmSync(distDir, { recursive: true, force: true });
-  console.log(`[mirror-publish] building ${manifest.name} …`);
-  run("pnpm", ["--filter", manifest.name, "run", "build"], { cwd: repoRoot, stdio: "inherit" });
+  console.log(`[mirror-publish] building ${manifest.name} (+ workspace deps) …`);
+  run("pnpm", ["--filter", `${manifest.name}...`, "run", "build"], {
+    cwd: repoRoot,
+    stdio: "inherit",
+  });
   run("pnpm", ["--filter", manifest.name, "run", "--if-present", "test"], {
     cwd: repoRoot,
     stdio: "inherit",
@@ -336,6 +373,14 @@ function main() {
   );
   if (!licenseSrc) throw new Error("no LICENSE found (package or workspace root)");
   cpSync(licenseSrc, join(assembly, "LICENSE"));
+  // Non-dist artifacts the manifest's `files` array ships (subpath-exported TTL, etc.).
+  for (const extra of extraMirrorFiles(manifest)) {
+    const extraSrc = join(pkgDir, extra);
+    if (!existsSync(extraSrc)) {
+      throw new Error(`package.json files entry missing from packages/${args.pkg}: ${extra}`);
+    }
+    cpSync(extraSrc, join(assembly, extra), { recursive: true });
+  }
 
   const commitMessage = buildCommitMessage(args.pkg, monorepoSha);
   const fileList = listFilesRecursive(assembly);
@@ -382,7 +427,10 @@ function main() {
   if (!args.skipRebuildCheck) {
     console.log("[mirror-publish] determinism check: clean rebuild …");
     rmSync(distDir, { recursive: true, force: true });
-    run("pnpm", ["--filter", manifest.name, "run", "build"], { cwd: repoRoot, stdio: "inherit" });
+    run("pnpm", ["--filter", `${manifest.name}...`, "run", "build"], {
+      cwd: repoRoot,
+      stdio: "inherit",
+    });
     const diffs = compareDirs(distDir, join(assembly, "dist"));
     if (diffs.length > 0) {
       throw new Error(`build is not deterministic — refusing to publish:\n${diffs.join("\n")}`);
