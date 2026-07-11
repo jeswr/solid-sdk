@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  assertDirMatchesName,
   bannerifyReadme,
   buildCommitMessage,
   compareDirs,
@@ -56,6 +57,20 @@ describe("mirrorRepoFor", () => {
 
   it("refuses foreign scopes (the @solid/ namespace rule)", () => {
     expect(() => mirrorRepoFor("@solid/object")).toThrow(/non-@jeswr/);
+  });
+});
+
+describe("assertDirMatchesName (the flat-layout invariant)", () => {
+  it("accepts dir = npm name minus scope (scoped and unscoped)", () => {
+    expect(() => assertDirMatchesName("solid-dpop", "@jeswr/solid-dpop")).not.toThrow();
+    expect(() => assertDirMatchesName("solid-offline", "solid-offline")).not.toThrow();
+  });
+
+  it("refuses a manifest name that would retarget the push at a different repo", () => {
+    expect(() => assertDirMatchesName("solid-dpop", "@jeswr/solid-vc")).toThrow(
+      /dir\/name mismatch/,
+    );
+    expect(() => assertDirMatchesName("solid-dpop", "@solid/solid-dpop")).toThrow(/non-@jeswr/);
   });
 });
 

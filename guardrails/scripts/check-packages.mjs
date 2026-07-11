@@ -81,14 +81,33 @@ function loadPolicy(path) {
 // supply-chain-reviewed when the dependency is added.)
 const LOCAL_SPEC = /^(file:|link:|workspace:|portal:|github:|git:|git\+|[\w.-]+\/[\w.-]+(#.+)?$)/;
 
+// npm aliases ("alias-key": "npm:real-package@^1.0.0") install the TARGET package, so the
+// policy / existence / age checks must apply to the target name, never the manifest key —
+// otherwise "alias": "npm:request@^2" would bypass the request denylist (and the registry
+// lookup would query the meaningless alias key).
+function resolveNpmAlias(name, spec) {
+  if (typeof spec !== "string" || !spec.startsWith("npm:")) return name;
+  const target = spec.slice("npm:".length);
+  const at = target.lastIndexOf("@");
+  return at > 0 ? target.slice(0, at) : target; // at > 0 keeps a leading @scope intact
+}
+
 function namesFromPackageJson(path) {
   const pkg = JSON.parse(readFileSync(path, "utf8"));
-  const groups = [pkg.dependencies, pkg.devDependencies, pkg.peerDependencies];
+  const groups = [
+    pkg.dependencies,
+    pkg.devDependencies,
+    pkg.peerDependencies,
+    pkg.optionalDependencies, // installable by default — must not bypass the guard
+  ];
   const names = [];
   for (const group of groups) {
     for (const [name, spec] of Object.entries(group ?? {})) {
-      if (typeof spec === "string" && LOCAL_SPEC.test(spec)) continue;
-      names.push(name);
+      const resolved = resolveNpmAlias(name, spec);
+      // Local/git specs are not registry installs (see above) — but an npm: alias IS one,
+      // so the skip only applies to non-alias specs.
+      if (resolved === name && typeof spec === "string" && LOCAL_SPEC.test(spec)) continue;
+      names.push(resolved);
     }
   }
   return names;

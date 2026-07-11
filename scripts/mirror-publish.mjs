@@ -27,16 +27,26 @@
  *     --keep-workdir            keep the temp assembly/clone dir for inspection
  *
  *   Fail-closed preflight (any failure aborts before anything is written):
- *     1. packages/<pkg>/package.json exists and is not "private"
- *     2. the monorepo working tree is CLEAN (git status --porcelain empty)
- *     3. scoped gate: `pnpm --filter <npmName> run build` (+ test, if present) passes
- *     4. dist/ exists and is non-empty after the build
- *     5. every `workspace:` dependency is either declared inlined
+ *     1. packages/<pkg>/package.json exists, is not "private", and its npm name maps
+ *        back to the SAME dir (mirror = jeswr/<pkg> — the flat-layout invariant), so a
+ *        stray manifest name can never retarget the push at a different repo
+ *     2. the monorepo working tree is CLEAN (git status --porcelain empty) — checked
+ *        before the build and RE-CHECKED after every build/test/gate run (a build that
+ *        mutates tracked files would invalidate the Mirror-Of claim)
+ *     3. dist/ is DELETED before every build (no stale outputs can ride along); the
+ *        scoped build (+ test, if present) must pass and produce a non-empty dist/
+ *     4. every `workspace:` dependency is either declared inlined
  *        (package.json "mirrorPublish": { "inlined": [...] } — esbuild-inlined into
  *        dist/) or has a --dep-sha mirror pin; anything else throws
+ *     5. (--execute only) the FULL workspace gate (`pnpm run gate`) passes at HEAD —
+ *        a mirror never publishes past a red workspace
  *     6. (--execute only) HEAD is an ancestor of origin/main, so the Mirror-Of trailer
  *        always references a publicly resolvable monorepo sha
- *     7. (--execute only) determinism check: a second build must byte-match the first
+ *     7. (--execute only) every --dep-sha pin is resolved against its mirror repo via
+ *        `gh api` — a nonexistent sha aborts; short shas expand to the full 40-char
+ *        sha, and the RESOLVED sha is what gets published
+ *     8. (--execute only) determinism check: a clean second build must byte-match the
+ *        published dist
  *
  *   Mirror commit shape (committed with --no-gpg-sign, identity = the maintainer's
  *   noreply email):
@@ -123,6 +133,23 @@ export function mirrorRepoFor(npmName) {
   if (npmName.startsWith("@"))
     throw new Error(`non-@jeswr scoped package cannot be mirrored: ${npmName}`);
   return `jeswr/${npmName}`;
+}
+
+/**
+ * The flat-layout invariant: packages/<dir> is the npm name minus the @jeswr/ scope,
+ * so the mirror derived from the manifest name must be jeswr/<dir>. Enforcing this
+ * means a mistaken manifest name can never point the publish at a different repo.
+ */
+export function assertDirMatchesName(pkgDirName, npmName) {
+  const expected = `jeswr/${pkgDirName}`;
+  const actual = mirrorRepoFor(npmName);
+  if (actual !== expected) {
+    throw new Error(
+      `package dir/name mismatch: packages/${pkgDirName} declares npm name ${npmName} ` +
+        `(mirror ${actual}) but the flat-layout invariant requires mirror ${expected} — ` +
+        "refusing to publish to a repo that does not match the requested package",
+    );
+  }
 }
 
 /**
@@ -235,6 +262,25 @@ function run(cmd, args, opts = {}) {
   return res.stdout.trim();
 }
 
+/** Abort unless the monorepo working tree is clean; `when` names the checkpoint. */
+function assertCleanTree(repoRoot, when) {
+  const dirty = run("git", ["status", "--porcelain"], { cwd: repoRoot });
+  if (dirty !== "") throw new Error(`working tree is dirty ${when}:\n${dirty}`);
+}
+
+/**
+ * Resolve a --dep-sha pin against its mirror repo via `gh api` — aborts if the commit
+ * does not exist there, and expands short shas to the full 40-char form (which is what
+ * gets published into the mirror manifest).
+ */
+function resolveDepSha(repo, sha) {
+  const full = run("gh", ["api", `repos/${repo}/commits/${sha}`, "--jq", ".sha"]);
+  if (!/^[0-9a-f]{40}$/.test(full)) {
+    throw new Error(`could not resolve ${sha} in ${repo} (gh api returned: ${full})`);
+  }
+  return full;
+}
+
 function main() {
   const args = parseCliArgs(process.argv.slice(2));
   const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -242,31 +288,45 @@ function main() {
   const manifestPath = join(pkgDir, "package.json");
   if (!existsSync(manifestPath)) throw new Error(`no such workspace package: packages/${args.pkg}`);
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+  // The flat-layout invariant: a stray manifest name must never retarget the push.
+  assertDirMatchesName(args.pkg, manifest.name);
   const mirrorRepo = mirrorRepoFor(manifest.name);
 
   // 1. clean tree — a mirror must correspond exactly to a committed monorepo sha
-  const dirty = run("git", ["status", "--porcelain"], { cwd: repoRoot });
-  if (dirty !== "") throw new Error(`working tree is dirty — commit or stash first:\n${dirty}`);
+  assertCleanTree(repoRoot, "— commit or stash first");
   const monorepoSha = run("git", ["rev-parse", "HEAD"], { cwd: repoRoot });
 
-  // 2. scoped gate: build (+ test if present) must pass fresh
+  // 2. scoped build from an EMPTY dist (stale outputs must not ride along) + test
+  const distDir = join(pkgDir, "dist");
+  rmSync(distDir, { recursive: true, force: true });
   console.log(`[mirror-publish] building ${manifest.name} …`);
   run("pnpm", ["--filter", manifest.name, "run", "build"], { cwd: repoRoot, stdio: "inherit" });
   run("pnpm", ["--filter", manifest.name, "run", "--if-present", "test"], {
     cwd: repoRoot,
     stdio: "inherit",
   });
+  // A build/test that mutates TRACKED files would decouple the published bytes from the
+  // Mirror-Of sha — re-check, don't assume.
+  assertCleanTree(repoRoot, "after build/test — the build mutated tracked files");
 
-  const distDir = join(pkgDir, "dist");
   if (!existsSync(distDir) || listFilesRecursive(distDir).length === 0) {
     throw new Error(`build produced no dist/ for packages/${args.pkg}`);
   }
 
-  // 3. assemble the mirror tree
+  // 3. resolve --dep-sha pins against their mirror repos (--execute only: needs network;
+  //    a dry run uses them as given and says so in the plan)
+  let depShas = args.depShas;
+  if (args.execute && args.depShas.size > 0) {
+    depShas = new Map(
+      [...args.depShas].map(([name, sha]) => [name, resolveDepSha(mirrorRepoFor(name), sha)]),
+    );
+  }
+
+  // 4. assemble the mirror tree
   const work = mkdtempSync(join(tmpdir(), `mirror-${args.pkg}-`));
   const assembly = join(work, "assembly");
   cpSync(distDir, join(assembly, "dist"), { recursive: true });
-  const mirrorManifest = rewriteManifest(manifest, args.depShas);
+  const mirrorManifest = rewriteManifest(manifest, depShas);
   writeFileSync(join(assembly, "package.json"), `${JSON.stringify(mirrorManifest, null, 2)}\n`);
   const readmePath = join(pkgDir, "README.md");
   const readme = existsSync(readmePath) ? readFileSync(readmePath, "utf8") : `# ${manifest.name}\n`;
@@ -288,6 +348,12 @@ function main() {
   console.log(`  commit message:\n${commitMessage.replace(/^/gm, "    ")}`);
 
   if (!args.execute) {
+    if (args.depShas.size > 0) {
+      console.log(
+        "  NOTE: --dep-sha pins are NOT resolved against their mirror repos in a dry run;",
+      );
+      console.log("        --execute verifies each exists and expands it to the full sha.");
+    }
     console.log(
       "\nDRY RUN — nothing cloned, committed, or pushed. Re-run with --execute to publish.",
     );
@@ -296,7 +362,13 @@ function main() {
     return;
   }
 
-  // 4. --execute integrity gates
+  // 5. --execute integrity gates
+  // 5a. the FULL workspace gate — a mirror never publishes past a red workspace
+  console.log("[mirror-publish] full workspace gate …");
+  run("pnpm", ["run", "gate"], { cwd: repoRoot, stdio: "inherit" });
+  assertCleanTree(repoRoot, "after the workspace gate — the gate mutated tracked files");
+
+  // 5b. the Mirror-Of sha must be publicly resolvable
   run("git", ["fetch", "origin", "main"], { cwd: repoRoot });
   try {
     run("git", ["merge-base", "--is-ancestor", "HEAD", "origin/main"], { cwd: repoRoot });
@@ -305,16 +377,20 @@ function main() {
       "HEAD is not on origin/main — push the monorepo first so Mirror-Of references a public sha",
     );
   }
+
+  // 5c. determinism: a clean rebuild must byte-match what we are about to publish
   if (!args.skipRebuildCheck) {
-    console.log("[mirror-publish] determinism check: rebuilding …");
+    console.log("[mirror-publish] determinism check: clean rebuild …");
+    rmSync(distDir, { recursive: true, force: true });
     run("pnpm", ["--filter", manifest.name, "run", "build"], { cwd: repoRoot, stdio: "inherit" });
     const diffs = compareDirs(distDir, join(assembly, "dist"));
     if (diffs.length > 0) {
       throw new Error(`build is not deterministic — refusing to publish:\n${diffs.join("\n")}`);
     }
+    assertCleanTree(repoRoot, "after the determinism rebuild");
   }
 
-  // 5. clone the mirror, replace its tree with the assembly, commit, push
+  // 6. clone the mirror, replace its tree with the assembly, commit, push
   const clone = join(work, "mirror");
   run("git", ["clone", "--no-local", `https://github.com/${mirrorRepo}.git`, clone]);
   run("git", ["config", "user.name", GIT_USER_NAME], { cwd: clone });
