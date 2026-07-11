@@ -302,12 +302,14 @@ function run(cmd, args, opts = {}) {
     stdio: ["ignore", "pipe", "pipe"],
     ...opts,
   });
+  if (res.error) throw res.error;
   if (res.status !== 0) {
     throw new Error(
-      `${cmd} ${args.join(" ")} failed (exit ${res.status}):\n${res.stderr || res.stdout}`,
+      `${cmd} ${args.join(" ")} failed (exit ${res.status}):\n${res.stderr || res.stdout || ""}`,
     );
   }
-  return res.stdout.trim();
+  // With stdio: "inherit" (build/test/gate passthrough) stdout is null, not "".
+  return (res.stdout ?? "").trim();
 }
 
 /** Abort unless the monorepo working tree is clean; `when` names the checkpoint. */
