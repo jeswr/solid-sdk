@@ -1,0 +1,21 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jeswr/full-solid-ecosystem/main/tracking/schema/suite.schema.json",
+  "id": "solid-sdk",
+  "kind": "library",
+  "name": "Solid SDK monorepo",
+  "repo": "https://github.com/jeswr/solid-sdk",
+  "category": "infrastructure",
+  "maturity": "alpha",
+  "visibility": "public",
+  "stack": {
+    "language": "TypeScript",
+    "runtime": "Node >=24",
+    "workspace": "pnpm workspaces (content-addressed store; internal deps workspace:*)",
+    "lint": "Biome",
+    "test": "vitest",
+    "publish": "per-package read-only mirror repos via scripts/mirror-publish.mjs; npm publish deferred (needs:user)"
+  },
+  "packages": [],
+  "dependsOn": [],
+  "federation": null
+}

@@ -1,0 +1,25 @@
+# AUTHORED-BY Claude Fable 5
+# The workspace gate. NOTE: GitHub Actions is currently account-billing-blocked for this
+# estate — until restored, the same gate runs LOCALLY (`pnpm run gate`) before every push,
+# per the suite discipline. This workflow arms automatically when billing returns.
+name: gate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # diff-aware --filter '...[origin/main]' needs history
+      - uses: pnpm/action-setup@v4 # reads packageManager from package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run gate

@@ -1,0 +1,34 @@
+{
+  "name": "@jeswr/solid-sdk-workspace",
+  "private": true,
+  "version": "0.0.0",
+  "description": "The @jeswr Solid SDK monorepo — reusable TypeScript packages for Solid apps and agents",
+  "type": "module",
+  "license": "MIT",
+  "author": "Jesse Wright <63333554+jeswr@users.noreply.github.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jeswr/solid-sdk.git"
+  },
+  "packageManager": "pnpm@10.4.1",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "lint": "biome check . && pnpm run check:lockfile-transport",
+    "lint:fix": "biome check --write .",
+    "check:lockfile-transport": "node scripts/check-lockfile-transport.mjs",
+    "check:packages": "node guardrails/scripts/check-packages.mjs --ecosystem npm",
+    "typecheck": "pnpm -r --if-present run typecheck",
+    "test": "vitest run && pnpm -r --if-present run test",
+    "build": "pnpm -r --if-present run build",
+    "gate": "pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run build",
+    "mirror-publish": "node scripts/mirror-publish.mjs"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.1",
+    "@types/node": "^25.9.2",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9"
+  }
+}

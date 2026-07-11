@@ -1,0 +1,9 @@
+# roborev config — suite convention (matches the solid-app-suite template).
+
+agent = "codex"
+model = "gpt-5.6-sol"
+
+review_min_severity = "low"
+
+reuse_review_session = true
+reuse_review_session_lookback = 5

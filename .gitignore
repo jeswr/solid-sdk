@@ -1,0 +1,10 @@
+# Dependencies — one pnpm store, never committed
+node_modules/
+
+# Built output is NOT committed in the monorepo (ADR 0001 §4.4):
+# the per-package mirror repos carry dist/; here it is always built fresh.
+dist/
+
+coverage/
+*.tsbuildinfo
+.DS_Store

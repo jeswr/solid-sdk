@@ -1,0 +1,4 @@
+# AUTHORED-BY Claude Fable 5
+packages:
+  - "packages/*"
+  - "tools/*"
