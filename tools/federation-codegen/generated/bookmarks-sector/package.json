@@ -1,0 +1,40 @@
+{
+  "name": "@jeswr/generated-bookmarks-sector-model",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Generated bookmarks-sector RDF vocabulary and typed wrapper accessors (PoC)",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./ontology.ttl": "./ontology.ttl",
+    "./shapes.ttl": "./shapes.ttl"
+  },
+  "files": [
+    "dist",
+    "ontology.ttl",
+    "shapes.ttl",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@rdfjs/wrapper": "^0.34.0"
+  },
+  "peerDependencies": {
+    "@rdfjs/types": "^2.0.1"
+  },
+  "devDependencies": {
+    "@rdfjs/types": "^2.0.1",
+    "typescript": "^6.0.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

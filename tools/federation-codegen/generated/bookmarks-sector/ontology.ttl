@@ -1,0 +1,118 @@
+# AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+#
+@prefix bookmark: <https://w3id.org/jeswr/sectors/bookmarks#> .
+@prefix core:     <https://w3id.org/jeswr/core#> .
+@prefix owl:      <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:      <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:     <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:      <http://www.w3.org/2001/XMLSchema#> .
+@prefix dcterms:  <http://purl.org/dc/terms/> .
+@prefix skos:     <http://www.w3.org/2004/02/skos/core#> .
+@prefix vann:     <http://purl.org/vocab/vann/> .
+@prefix gufo:     <http://purl.org/nemo/gufo#> .
+
+# =============================================================================
+# Solid Bookmarks & Read-it-later sector ontology (KEY=bookmarks).
+#
+# The bookmarks / read-it-later domain — the sector a federated Linkding-style
+# fork declares it operates in (fedapp:sector). v1.0.0, authored gUFO-rooted from
+# the outset (the 5-OSS-fork FOUNDATION).
+#
+# SCOPE — this file authors the SECTOR ONLY: the domain marker, a thin gUFO-rooted
+# Bookmark class to hang the SHACL shape + alignments off, and the round-trip
+# property spine a fork needs (the saved-target URL, an archived flag, free-text
+# notes, tags). The detailed bookmark vocab (book: =
+# https://w3id.org/jeswr/bookmark#, with book:Bookmark, book:archived xsd:boolean,
+# book:notes) ships in the SEPARATE @jeswr/solid-bookmark repo; the alignment HOOKS
+# to those forthcoming book: terms + to schema.org/dct/skos live in
+# bookmarks-alignments.ttl (Mode A, annotation-only, no entailment) so this sector
+# can be authored + shipped now without forward-referencing an unpublished
+# ontology in its owl:imports closure (Phase B publishes book: in its own repo).
+#
+# CONTRACT (R8 §4): imports the gUFO Core; roots its one domain class transitively
+# in a Core class and carries its gUFO meta-type; CONSTRAINS, never forks; reuses
+# schema.org/dct/skos in the companion alignments; ships bookmarks.shacl.ttl;
+# carries owl:versionInfo + a version IRI. Open-world by default; the SHACL profile
+# carries the closed-world MUST/SHOULD.
+# =============================================================================
+
+<https://w3id.org/jeswr/sectors/bookmarks> a owl:Ontology ;
+    dcterms:title "Solid Bookmarks & Read-it-later Sector Ontology"@en ;
+    rdfs:label "Solid Bookmarks & Read-it-later Sector Ontology"@en ;
+    vann:preferredNamespacePrefix "bookmark" ;
+    vann:preferredNamespaceUri "https://w3id.org/jeswr/sectors/bookmarks#" ;
+    owl:imports <https://w3id.org/jeswr/core> ;
+    owl:versionInfo "1.0.0" ;
+    owl:versionIRI <https://w3id.org/jeswr/sectors/bookmarks/1.0.0> ;
+    dcterms:description """The bookmarks / read-it-later data sector — the domain a
+        federated Linkding-style fork operates in. Authors the sector marker and a
+        thin gUFO-rooted bookmark:Bookmark (a core:InformationResource saved
+        reference) with the round-trip property spine (the saved-target URL, an
+        archived flag, free-text notes, tags as skos:Concept). The detailed book:
+        vocabulary ships in the separate @jeswr/solid-bookmark repo; this file
+        aligns to those forthcoming terms and to schema.org (schema:url,
+        schema:BookmarkAction), Dublin Core Terms and SKOS in the companion
+        alignments file."""@en ;
+    dcterms:modified "2026-06-21"^^xsd:date ;
+    rdfs:comment "Foundation sector for the 5-OSS-fork initiative (Linkding)."@en .
+
+# -----------------------------------------------------------------------------
+# Annotation-property declarations (F5 DL hygiene — match the Core pattern).
+# -----------------------------------------------------------------------------
+dcterms:title       a owl:AnnotationProperty .
+dcterms:description a owl:AnnotationProperty .
+dcterms:modified    a owl:AnnotationProperty .
+vann:preferredNamespacePrefix a owl:AnnotationProperty .
+vann:preferredNamespaceUri    a owl:AnnotationProperty .
+skos:definition     a owl:AnnotationProperty .
+skos:scopeNote      a owl:AnnotationProperty .
+
+# =============================================================================
+# 1. BOOKMARK  (gufo:SubKind rooting in core:InformationResource)
+# A saved reference to a web resource the user wants to revisit / read later. An
+# information object (the saved record), distinct from the target it points at.
+# Aligns to book:Bookmark (forthcoming) and to schema:BookmarkAction.
+# =============================================================================
+
+bookmark:Bookmark a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf core:InformationResource ;
+    rdfs:label "Bookmark"@en ;
+    skos:definition "A saved reference to a web resource the user bookmarked or queued to read later (a Linkding link). An information object — the saved record carrying the target URL, title, description, an archived/read flag, free-text notes and tags — distinct from the target resource it points at. Aligns to book:Bookmark in the forthcoming @jeswr/solid-bookmark vocabulary and to schema:BookmarkAction."@en ;
+    skos:scopeNote "gufo:SubKind under core:InformationResource (its identity principle). The detailed book: vocabulary lives in the separate @jeswr/solid-bookmark repo."@en .
+
+# =============================================================================
+# Properties — the round-trip spine. The archive flag + notes are the two terms
+# the forthcoming book: vocab names explicitly; tags reuse SKOS / schema:keywords.
+# =============================================================================
+
+bookmark:archived a owl:DatatypeProperty ;
+    rdfs:domain bookmark:Bookmark ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "archived"@en ;
+    skos:definition "Whether the bookmark has been archived / marked read (the Linkding 'archived' flag). Aligns to the forthcoming book:archived (xsd:boolean)."@en .
+
+bookmark:notes a owl:DatatypeProperty ;
+    rdfs:domain bookmark:Bookmark ;
+    rdfs:range xsd:string ;
+    rdfs:label "notes"@en ;
+    skos:definition "Free-text notes the user attached to the bookmark (the Linkding 'notes' field), distinct from the resource's own description. Aligns to the forthcoming book:notes."@en .
+
+# --- tags (reuse SKOS — a tag is a skos:Concept; schema:keywords in alignments) ---
+bookmark:hasTag a owl:ObjectProperty ;
+    rdfs:domain bookmark:Bookmark ;
+    rdfs:range skos:Concept ;
+    rdfs:label "has tag"@en ;
+    skos:definition "A tag applied to the bookmark, as a skos:Concept (reusing SKOS rather than minting a tag class). Aligns to schema:keywords; the free-text literal form is carried by schema:keywords in data that has no concept scheme."@en .
+
+# =============================================================================
+# SECTOR MARKER — the IRI an app's fedapp:sector points at to declare it operates
+# in this sector (https://w3id.org/jeswr/fed#sector). A skos:Concept in the
+# federation sector register; dereferences to this ontology.
+# =============================================================================
+
+<https://w3id.org/jeswr/sectors/bookmarks#sector>
+    a <http://www.w3.org/2004/02/skos/core#Concept> ;
+    rdfs:label "Bookmarks & Read-it-later sector"@en ;
+    rdfs:comment "The Bookmarks & Read-it-later data sector. The value an app's fedapp:sector names in its Client Identifier Document to declare it operates over bookmark / read-it-later data. Backed by this sector ontology."@en ;
+    rdfs:isDefinedBy <https://w3id.org/jeswr/sectors/bookmarks> ;
+    skos:prefLabel "Bookmarks & Read-it-later"@en .
