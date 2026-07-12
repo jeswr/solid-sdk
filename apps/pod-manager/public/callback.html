@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Signing you in… · Pod Manager</title>
+    <style>
+      body {
+        font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        display: grid;
+        place-items: center;
+        min-height: 100vh;
+        margin: 0;
+        color: #1c2b30;
+        background: #f3f8f9;
+      }
+      p { font-size: 0.95rem; }
+    </style>
+  </head>
+  <body>
+    <p>Signing you in…</p>
+    <!--
+      Hands the authorization code back to the app window that opened this popup.
+      Required by @solid/reactive-authentication (AGENTS.md §Authentication).
+
+      SECURITY (review SEC-5): the URL carries the OAuth `code`, so target the
+      message at OUR origin only — never broadcast it to "*". callback.html is
+      same-origin as the app, so location.origin is the right target.
+    -->
+    <script>
+      if (window.opener) {
+        window.opener.postMessage(location.href, location.origin);
+      }
+    </script>
+  </body>
+</html>
