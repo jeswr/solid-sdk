@@ -1,0 +1,26 @@
+{
+  "@context": [
+    "https://www.w3.org/ns/solid/oidc-context.jsonld",
+    {
+      "fedapp": "https://w3id.org/jeswr/fed#",
+      "social": "https://w3id.org/jeswr/sectors/social#",
+      "fedapp:sector": { "@type": "@id" },
+      "fedapp:consumes": { "@type": "@id" },
+      "fedapp:produces": { "@type": "@id" }
+    }
+  ],
+  "client_id": "https://mail.solid-test.jeswr.org/clientid.jsonld",
+  "client_name": "Pod Mail",
+  "client_uri": "https://mail.solid-test.jeswr.org/",
+  "redirect_uris": ["https://mail.solid-test.jeswr.org/callback.html"],
+  "scope": "openid webid offline_access",
+  "grant_types": ["authorization_code", "refresh_token"],
+  "response_types": ["code"],
+  "token_endpoint_auth_method": "none",
+
+  "@type": "fedapp:App",
+  "fedapp:sector": "social:sector",
+  "fedapp:consumes": ["social:Note", "social:Feed"],
+  "fedapp:produces": ["social:Note", "social:Feed"],
+  "fedapp:access": ["Read", "Append", "Write"]
+}

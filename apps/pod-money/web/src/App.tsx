@@ -1,0 +1,299 @@
+// AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+//
+// App — the host shell's router-free root: logged out → <LoginScreen>; logged in
+// → a thin header (WebID + logout) over the LOCAL pod-money <AccountsView> pointed
+// at the user's finance ledger. AccountsView receives NO `fetch` prop — it uses
+// the ambient global fetch, which the SessionProvider patched via the @jeswr/
+// solid-elements PROACTIVE auth-fetch (task #123), so every read carries the DPoP
+// token automatically AND up front (the token is attached on the FIRST request to
+// the pod origin — no per-resource 401-dance). See auth/SessionProvider.tsx.
+//
+// LEDGER DISCOVERY: unlike pod-docs's <DocumentBrowser>, pod-money's <AccountsView>
+// takes the ledger FILE URL directly (not a pod root). The host therefore discovers
+// the ledger from the pod root via the user's public Type Index (pod-money's
+// `MoneyStore.discover(MoneyStore.primaryClass)` → fin:Transaction registration),
+// falling back to the conventional `${podRoot}finance/ledger.ttl` path when the
+// index (or the registration) is absent. This DISCOVERY CHAIN (profile re-read →
+// type index → registration → ledger GET) is exactly the per-resource 401-dance the
+// proactive patch eliminates: each distinct pod URL previously paid a wasted 401 →
+// upgrade → retry under the reactive manager. The discovery runs through the same
+// auth-patched global fetch, so it carries the session token. See useLedgerUrl.
+import {
+  AccountMenu,
+  Button,
+  FeedbackButton,
+  ThemeToggle,
+  useSolidExtensionPresent,
+} from "@jeswr/app-shell";
+import { MoneyStore } from "@jeswr/pod-money";
+import { AccountsView } from "@jeswr/pod-money/ui";
+// SOLID-ELEMENTS (#115 / D-parity rollout #67/#68/#70): the framework-agnostic W3C
+// Web Components consumed through the @lit/react adapter. <Loading> is a Lit custom
+// element (spinner + polite-live label, prefers-reduced-motion aware) wrapped by
+// @lit/react's createComponent. It themes itself from the SAME app-shell OKLCH
+// tokens as the rest of the chrome: its shadow-DOM styles read `--jeswr-*`, which
+// fall back through the shadow boundary to app-shell's `--primary` / `--border` /
+// `--muted-foreground` (set by styles.css and flipped by the `.dark` class), so it
+// follows light/dark for free with no extra wiring. (COMPLEMENTS app-shell — it does
+// not replace the React chrome components above.) Plain Vite/CSR React has no SSR
+// step, so the client-only custom elements need no mount-gating here.
+import { Loading } from "@jeswr/solid-elements/react";
+import { useEffect, useState } from "react";
+import { useSession } from "./auth/SessionProvider";
+import { LoginScreen } from "./LoginScreen";
+
+/**
+ * The app-specific identity for the header <FeedbackButton/>, in ONE place so the
+ * header wiring and the adoption test cannot drift: a filed issue must land on
+ * THIS app's own repo. Exported so feedback-button.test.tsx asserts the SAME
+ * values the header passes (and the generated issue URL targets jeswr/pod-money).
+ */
+export const FEEDBACK_REPO = "jeswr/pod-money";
+export const FEEDBACK_APP_NAME = "Pod Money";
+
+/** How the ledger URL was resolved — drives the fallback banner. */
+type LedgerSource = "discovering" | "type-index" | "fallback";
+
+interface LedgerResolution {
+  /** The finance ledger FILE URL to hand to <AccountsView ledgerUrl>. */
+  ledgerUrl: string | null;
+  /** Where the URL came from (`discovering` until resolved). */
+  source: LedgerSource;
+}
+
+/**
+ * Resolve the finance ledger FILE URL for a pod root.
+ *
+ *   1. Type Index: `MoneyStore.discover(MoneyStore.primaryClass)` returns the
+ *      registered location(s) for fin:Transaction. A registration may point at a
+ *      single `instance` (the ledger file itself) or a `container` (the finance
+ *      container, in which the ledger is the conventional `ledger.ttl`). The first
+ *      registration that yields a usable URL wins.
+ *   2. Fallback: the conventional `${podRoot}finance/ledger.ttl` (= the store's own
+ *      `ledgerUrl`), surfaced to the user via the banner (source === "fallback").
+ *
+ * Discovery is a HINT, not a grant — <AccountsView> still GETs the resource (a 404
+ * renders as an empty ledger; a 401/403 as an access error). The discovery read
+ * uses the ambient auth-patched global fetch, so it carries the session token.
+ * Re-resolves whenever the pod root changes; an in-flight resolution is fenced so a
+ * slow earlier discovery can never overwrite a newer pod root's result.
+ */
+function useLedgerUrl(podRoot: string): LedgerResolution {
+  const [resolution, setResolution] = useState<LedgerResolution>({
+    ledgerUrl: null,
+    source: "discovering",
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+    setResolution({ ledgerUrl: null, source: "discovering" });
+    // No `fetch` option: the global fetch is auth-patched, so discovery carries the
+    // session token (the public type index is readable, but a private one needs it).
+    const store = new MoneyStore({ podRoot });
+    const conventional = store.ledgerUrl;
+
+    (async () => {
+      try {
+        const locations = await store.discover(MoneyStore.primaryClass);
+        if (cancelled) return;
+        const discovered = pickLedgerUrl(locations);
+        if (discovered) {
+          setResolution({ ledgerUrl: discovered, source: "type-index" });
+          return;
+        }
+      } catch {
+        // A missing / unreadable type index is not an error — fall back below.
+        if (cancelled) return;
+      }
+      if (!cancelled) setResolution({ ledgerUrl: conventional, source: "fallback" });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [podRoot]);
+
+  return resolution;
+}
+
+/**
+ * Choose the ledger FILE URL from a class's Type-Index registrations. A
+ * registration's `instance` is the ledger file directly; a `container` is the
+ * finance container, in which the ledger is the conventional `ledger.ttl`. The
+ * first registration that yields a usable URL wins; returns null when none do.
+ */
+function pickLedgerUrl(locations: { instance?: string; container?: string }[]): string | null {
+  for (const loc of locations) {
+    if (loc.instance) return loc.instance;
+    if (loc.container) {
+      // `new URL("ledger.ttl", container)` resolves the file within the container,
+      // whether or not the container URL ends in a slash (it should).
+      try {
+        return new URL("ledger.ttl", loc.container).toString();
+      } catch {
+        // A malformed container URL is skipped; try the next registration.
+      }
+    }
+  }
+  return null;
+}
+
+export function App() {
+  const { webId, session, logout, autologinPending, restoring } = useSession();
+
+  if (!webId || !session) {
+    // Autologin (a Pod-Manager deep-link or a redirect return) is silently signing
+    // the user in via a full-page redirect — show a brief restoring state rather than
+    // the interactive login form, since there is no gesture to prompt for.
+    if (autologinPending) {
+      return (
+        <main className="login-screen" aria-busy="true">
+          <section className="login-card">
+            <h1>Pod Money</h1>
+            {/* SOLID-ELEMENTS: the <jeswr-loading> spinner + label (via @lit/react).
+                It carries its own role="status" + aria-live, so the label is
+                announced; the .login-sub wrapper only keeps the existing
+                spacing/typography. */}
+            <p className="login-sub">
+              <Loading label="Signing you in…" />
+            </p>
+          </section>
+        </main>
+      );
+    }
+    // SILENT SESSION RESTORE (closed-tab reopen): a returning user's DPoP-bound
+    // refresh token is being redeemed at the token endpoint (a fetch, no popup). Show
+    // a brief restoring state so the login form does not flash before it resolves —
+    // it falls through to <LoginScreen /> only on a genuine restore failure.
+    if (restoring) {
+      return (
+        <main className="login-screen" aria-busy="true">
+          <section className="login-card">
+            <h1>Pod Money</h1>
+            {/* SOLID-ELEMENTS: same themed <jeswr-loading> spinner + label for the
+                closed-tab silent-restore wait. */}
+            <p className="login-sub">
+              <Loading label="Restoring your session…" />
+            </p>
+          </section>
+        </main>
+      );
+    }
+    return <LoginScreen />;
+  }
+
+  return (
+    <LoggedIn
+      podRoot={session.podRoot}
+      podRootIsFallback={session.podRootIsFallback}
+      webId={webId}
+      displayName={session.displayName}
+      avatarUrl={session.avatarUrl}
+      onLogout={logout}
+    />
+  );
+}
+
+/**
+ * The logged-in view. Split into its own component so the `useLedgerUrl` hook (and
+ * its discovery effect) only mount once a session exists — hooks cannot be called
+ * conditionally in `App` above.
+ */
+export function LoggedIn({
+  podRoot,
+  podRootIsFallback,
+  webId,
+  displayName,
+  avatarUrl,
+  onLogout,
+}: {
+  podRoot: string;
+  podRootIsFallback: boolean;
+  webId: string;
+  displayName?: string;
+  avatarUrl?: string;
+  onLogout: () => void;
+}) {
+  const { ledgerUrl, source } = useLedgerUrl(podRoot);
+  // When the @jeswr Solid browser extension is installed it owns the account surface
+  // (its pinned top-right avatar menu already shows identity + sign-out), so the app's
+  // full <AccountMenu/> — avatar, display name, WebID — would DUPLICATE it; we drop that
+  // duplicated profile display. But pod-money still holds its OWN independent
+  // SessionProvider session here (it has not yet been wired to consume the extension's
+  // identity — the "skip own login when extension present" follow-up), so we must NOT
+  // strand the user: keep a minimal Sign-out control that calls this app's own logout.
+  // Once the app consumes the extension's identity (no independent session to sign out
+  // of), even this goes. (Cross-app parity with pod-drive — bead suite-tracker-lpo.)
+  const extensionPresent = useSolidExtensionPresent();
+
+  return (
+    <div className="app-shell">
+      {/* The header now uses the shared @jeswr/app-shell chrome: a header-level
+          <FeedbackButton/> (opens a themed dialog that files a GitHub issue against
+          THIS app's own repo), a light/dark/system <ThemeToggle/>, and a real
+          top-right <AccountMenu/> (avatar + display name, dropdown showing the WebID
+          + Sign out) — replacing the old raw-WebID span + bare logout button. The
+          session's WebID / profile name / avatar / logout wire straight into the
+          props (the components are fully decoupled — everything is a prop).
+          `app-header-actions` right-aligns the trio.
+
+          FEEDBACK: `repo` is the only app-specific value — pod-money files against
+          `jeswr/pod-money`. `appVersion` is the build SHA injected by Vite
+          (`__APP_VERSION__`), so a filed issue pins the deployed commit. `webId` is
+          attached to diagnostics ONLY if the reporter ticks the consent box. `submit`
+          is intentionally UNSET → the dialog uses the GitHub prefill page; the
+          feedback-proxy hook is wired suite-wide later. */}
+      <header className="app-header">
+        <span className="app-brand">Pod Money</span>
+        <div className="app-header-actions">
+          <FeedbackButton
+            repo={FEEDBACK_REPO}
+            appName={FEEDBACK_APP_NAME}
+            appVersion={__APP_VERSION__}
+            webId={webId}
+          />
+          <ThemeToggle />
+          {extensionPresent ? (
+            <Button variant="ghost" onClick={onLogout}>
+              Sign out
+            </Button>
+          ) : (
+            <AccountMenu
+              webId={webId}
+              displayName={displayName}
+              avatarUrl={avatarUrl}
+              onSignOut={onLogout}
+            />
+          )}
+        </div>
+      </header>
+      {podRootIsFallback ? (
+        <p className="app-note" role="note">
+          Your profile advertises no <code>pim:storage</code>; using your WebID origin (
+          <code>{podRoot}</code>) as the pod root.
+        </p>
+      ) : null}
+      {source === "fallback" ? (
+        <p className="app-note" role="note">
+          No finance registration was found in your Type Index; using the conventional location{" "}
+          <code>{ledgerUrl}</code>.
+        </p>
+      ) : null}
+      <main className="app-main">
+        {source === "discovering" || !ledgerUrl ? (
+          // SOLID-ELEMENTS: the host-level "finding your finance ledger" wait, now
+          // the themed <jeswr-loading> spinner (via @lit/react) instead of a bare
+          // <p>. It owns role="status" + aria-live; .pod-money-loading keeps the
+          // muted-colour wrapper for layout parity.
+          <p className="pod-money-loading">
+            <Loading label="Finding your finance ledger…" />
+          </p>
+        ) : (
+          // ledgerUrl only — AccountsView reads it via the auth-patched global
+          // fetch (no fetch prop). 404 → empty ledger; 401/403 → access error.
+          <AccountsView ledgerUrl={ledgerUrl} title="Your accounts" />
+        )}
+      </main>
+    </div>
+  );
+}

@@ -1,0 +1,237 @@
+/* AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+   Host chrome + the pod-health-* classes the pod-health <HealthRecords> emits
+   (the component ships no styles of its own — the host owns the look).
+
+   THEME: Tailwind v4 + the shared @jeswr/app-shell tokens drive light/dark. The
+   import order is load-bearing — `@import "tailwindcss"` FIRST, then the suite
+   OKLCH tokens + the `@theme inline` mapping (`@jeswr/app-shell/styles.css`) so
+   the shell components' utilities (bg-popover, text-muted-foreground, the `dark:`
+   variant, …) resolve to the suite palette. `@source` makes Tailwind scan the
+   app-shell package so the classes its <ThemeToggle/> + <AccountMenu/> emit are
+   actually generated (a node_modules package is otherwise outside the content
+   scan). The path is relative to THIS file. */
+@import "tailwindcss";
+@import "@jeswr/app-shell/styles.css";
+@source "../node_modules/@jeswr/app-shell/dist";
+
+/* The host chrome below predates the shared tokens and uses its own variable
+   names. Map them onto the app-shell OKLCH tokens so the WHOLE pod-health UI
+   (login card, header, records table) follows the theme — the `.dark` class the
+   ThemeProvider toggles on <html> flips the OKLCH vars, and these aliases inherit
+   it for free.
+
+   CSS-ISOLATION RELAXATION (#80 / solid-elements adoption #115, D-parity rollout
+   #67/#68/#70): the host vars now alias DIRECTLY onto app-shell's OWN tokens
+   (`--accent` / `--muted` / `--accent-ink`) again — relaxing the SAFER earlier
+   adopter workaround (which renamed them to host-only `--host-accent` / `--muted-text`
+   to avoid CLOBBERING the shell components' palette). @jeswr/app-shell #80 made the
+   shell SELF-ISOLATING: its components read SHELL-PRIVATE `--as-*` tokens (mirrored
+   from hardcoded OKLCH literals in the package's tokens.css, NOT from these public
+   `--accent`/`--muted`), so re-aliasing the public tokens no longer affects the shell
+   at all. This TOKEN re-alias is the genuine backward-relax here (verified safe by
+   css-isolation.test.tsx against app-shell `5a7484d`); the filled-button rule below
+   stays HOST-SCOPED (`.login-form button`), because app-shell's reset does NOT lock
+   the box model, so a bare `button {}` would still leak padding/sizing onto the shell
+   controls. `--border` is the SAME name as the app-shell token — already unified, do
+   NOT re-alias it. */
+:root {
+  --bg: var(--background);
+  --surface: var(--card);
+  --ink: var(--foreground);
+  --muted: var(--muted-foreground);
+  --accent: var(--primary);
+  --accent-ink: var(--primary-foreground);
+  --danger: var(--destructive);
+  --ok: var(--success);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  color: var(--ink);
+  background: var(--bg);
+}
+
+a {
+  color: var(--accent);
+}
+
+/* ── Login ─────────────────────────────────────────────────────────────── */
+.login-screen {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 1.5rem;
+}
+.login-card {
+  width: 100%;
+  max-width: 28rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  padding: 2rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+.login-card h1 {
+  margin: 0 0 0.25rem;
+  font-size: 1.5rem;
+}
+.login-sub {
+  color: var(--muted);
+  margin: 0 0 1.25rem;
+  font-size: 0.95rem;
+}
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.login-form label {
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+.login-form input {
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  font-size: 0.95rem;
+}
+.login-error {
+  color: var(--danger);
+  font-size: 0.9rem;
+  margin-top: 0.75rem;
+}
+.login-hint {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin-top: 1rem;
+}
+
+/* HOST-SCOPED filled-button style — KEPT scoped to the app's OWN buttons
+   (`.login-form button`), NOT relaxed to a bare global `button {}`.
+
+   CSS-ISOLATION (#80): app-shell #80 self-isolates its controls' COLOUR/border/fill
+   via an UNLAYERED `[data-app-shell-control]` reset, so a bare `button { background }`
+   no longer leaks the host's fill onto them. BUT that reset deliberately does NOT lock
+   the BOX MODEL (padding / border-radius / font-size / sizing — see app-shell's
+   reset.css: "The BOX MODEL … is NOT touched … an app's aggressive element reset that
+   also relayouts every button is out of scope"). A bare unlayered `button { padding;
+   border-radius; font-size }` would therefore still out-rank the shell controls'
+   LAYERED Tailwind sizing utilities and distort the ThemeToggle / AccountMenu /
+   FeedbackButton + portaled-dialog controls. So pod-health intentionally KEEPS the
+   safer host-scope (a genuine, strictly-safer choice vs. the bare form some siblings
+   adopted) — the relaxation here is the TOKEN re-alias above (safe: the shell reads
+   shell-private `--as-*` tokens, independent of `--accent`/`--muted`), not the button
+   selector. css-isolation.test.tsx still pins the shell's isolation contract. */
+.login-form button {
+  cursor: pointer;
+  border: none;
+  border-radius: 0.5rem;
+  padding: 0.6rem 0.9rem;
+  font-size: 0.95rem;
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.login-form button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* ── App shell ─────────────────────────────────────────────────────────── */
+.app-shell {
+  max-width: 56rem;
+  margin: 0 auto;
+  padding: 1.25rem;
+}
+.app-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+.app-brand {
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+/* Right-aligned header controls: the app-shell <FeedbackButton/> + <ThemeToggle/>
+   + <AccountMenu/>. `margin-left: auto` pushes the trio to the top-right; the
+   app-shell components bring their own (Tailwind-utility) styling, so this only
+   handles placement. */
+.app-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-left: auto;
+}
+/* The fallback/error banners are theme-aware: a soft tint derived from the suite
+   `--warning` token (via color-mix over the card surface) with token-coloured
+   text + border. Because the tokens flip on `.dark`, the banner stays legible in
+   BOTH modes — no hard-coded light surfaces. */
+.app-note {
+  background: color-mix(in oklab, var(--warning) 16%, var(--card));
+  border: 1px solid color-mix(in oklab, var(--warning) 40%, var(--card));
+  color: var(--foreground);
+  border-radius: 0.5rem;
+  padding: 0.6rem 0.8rem;
+  font-size: 0.85rem;
+  margin: 0.75rem 0;
+}
+.app-loading {
+  color: var(--muted);
+}
+.app-main {
+  margin-top: 1rem;
+}
+
+/* ── HealthRecords (pod-health-*) ─────────────────────────────────────── */
+.pod-health-records {
+  display: block;
+}
+.pod-health-title {
+  font-size: 1.25rem;
+  margin: 0 0 1rem;
+}
+.pod-health-loading,
+.pod-health-empty {
+  color: var(--muted);
+}
+.pod-health-error {
+  color: var(--danger);
+}
+/* The retry button: the host's OWN outline look. Self-contained (it lives outside
+   `.login-form`, so it does not inherit the host filled-button base above). */
+.pod-health-error button {
+  margin-top: 0.5rem;
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  border-radius: 0.5rem;
+  padding: 0.6rem 0.9rem;
+  font-size: 0.95rem;
+}
+
+.pod-health-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--surface);
+}
+.pod-health-table th,
+.pod-health-table td {
+  text-align: left;
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.92rem;
+}
+.pod-health-cell-type {
+  font-weight: 600;
+}
+.pod-health-cell-date,
+.pod-health-cell-value {
+  color: var(--muted);
+}
