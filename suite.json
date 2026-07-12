@@ -21,7 +21,8 @@
     "@jeswr/solid-bookmark",
     "@jeswr/guarded-fetch",
     "@jeswr/rdf-serialize",
-    "solid-offline"
+    "solid-offline",
+    "@jeswr/solid-session-restore"
   ],
   "dependsOn": [],
   "federation": null
