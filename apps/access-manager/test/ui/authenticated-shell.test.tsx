@@ -94,10 +94,6 @@ describe("main.tsx — the REAL authenticated Shell mounts (theme provider prese
   beforeEach(() => {
     renderErrors.length = 0;
     window.addEventListener("error", onWindowError);
-    // NB: no localStorage assertions/cleanup anywhere in this file — under
-    // this vitest jsdom setup `window.localStorage` is Node's non-functional
-    // webstorage stub (no getItem/setItem), which the ThemeProvider tolerates
-    // (guarded reads); persistence is untestable here by construction.
     document.documentElement.classList.remove("dark");
     seam.webId = ADA;
     seam.fetch = createDemoSession().session.fetch;
@@ -154,6 +150,38 @@ describe("main.tsx — the REAL authenticated Shell mounts (theme provider prese
     await waitFor(() => {
       expect(document.documentElement.classList.contains("dark")).toBe(true);
     });
+    expect(renderErrors).toEqual([]);
+  }, 30_000);
+
+  it("persists a selected theme and restores it after the entry point reloads", async () => {
+    await loadEntryAndLogIn();
+
+    const toggle = await screen.findByRole("button", { name: "Change colour theme" }, FIND);
+    await act(async () => {
+      fireEvent(
+        toggle,
+        new MouseEvent("pointerdown", { bubbles: true, cancelable: true, button: 0 }),
+      );
+      fireEvent.click(toggle);
+    });
+    const darkItem = await screen.findByText("Dark", undefined, FIND);
+    await act(async () => {
+      fireEvent.click(darkItem);
+    });
+
+    await waitFor(() => {
+      expect(window.localStorage.getItem("app-shell-theme")).toBe("dark");
+    });
+
+    // Simulate a page reload: discard the mounted DOM and reload the real entry
+    // module. The new ThemeProvider must read the stored preference on mount.
+    document.documentElement.classList.remove("dark");
+    await loadEntryAndLogIn();
+
+    await waitFor(() => {
+      expect(document.documentElement.classList.contains("dark")).toBe(true);
+    });
+    expect(window.localStorage.getItem("app-shell-theme")).toBe("dark");
     expect(renderErrors).toEqual([]);
   }, 30_000);
 });

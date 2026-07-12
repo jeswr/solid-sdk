@@ -15,6 +15,11 @@ export default defineConfig({
     environment: "node",
     // Required for @testing-library/react's auto-cleanup between tests.
     globals: true,
+    // Node 25 exposes an incomplete global localStorage unless it is started
+    // with --localstorage-file. That stub makes Vitest skip jsdom's real
+    // Storage implementation when it populates the test global. Disable the
+    // Node API in workers that support the flag so jsdom supplies localStorage.
+    execArgv: process.allowedNodeEnvironmentFlags.has("--no-webstorage") ? ["--no-webstorage"] : [],
     setupFiles: ["test/setup.ts"],
     include: ["test/**/*.test.ts", "test/**/*.test.tsx"],
   },
