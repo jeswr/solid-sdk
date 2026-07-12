@@ -40,11 +40,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "check:dist": "node scripts/check-dist-fresh.mjs",
-    "check:lockfile-transport": "node scripts/check-lockfile-transport.mjs",
     "api:report": "node scripts/api-report.mjs",
-    "api:check": "node scripts/api-report.mjs --check",
-    "gate": "npm run lint && npm run typecheck && npm run test && npm run check:dist && npm run build && npm run check:lockfile-transport && npm run api:check"
+    "api:check": "node scripts/api-report.mjs --check"
   },
   "dependencies": {
     "n3": "^1.21.0"

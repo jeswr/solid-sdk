@@ -20,7 +20,8 @@
     "@jeswr/solid-openid-client",
     "@jeswr/solid-bookmark",
     "@jeswr/guarded-fetch",
-    "@jeswr/rdf-serialize"
+    "@jeswr/rdf-serialize",
+    "solid-offline"
   ],
   "dependsOn": [],
   "federation": null
