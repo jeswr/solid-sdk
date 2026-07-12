@@ -25,23 +25,18 @@
  * address) is preserved without re-deriving the classification.
  */
 import {
-  SsrfError,
   classifyIpLiteral,
   isDeniedHostname as gfIsDeniedHostname,
   isLoopbackAddress,
   isPublicAddress,
   normalizeHostForClassification,
+  SsrfError,
 } from "@jeswr/guarded-fetch";
 import { FETCH_HOSTNAME_DENYLIST } from "../config.js";
 
 // Re-export the classifiers + SsrfError UNCHANGED from guarded-fetch (single shared
 // implementation + single shared SsrfError class so `instanceof` holds across the seam).
-export {
-  isLoopbackAddress,
-  isPublicAddress,
-  normalizeHostForClassification,
-  SsrfError,
-};
+export { isLoopbackAddress, isPublicAddress, normalizeHostForClassification, SsrfError };
 
 /** The shape `node:dns/promises#lookup(host, { all: true })` returns (and what the pin uses). */
 export interface LookupAddress {
@@ -100,7 +95,7 @@ async function defaultDnsLookup(host: string): Promise<LookupAddress[]> {
  */
 export async function assertNotSsrf(
   rawUrl: string,
-  opts: SsrfGuardOptions
+  opts: SsrfGuardOptions,
 ): Promise<LookupAddress> {
   let url: URL;
   try {
@@ -111,13 +106,9 @@ export async function assertNotSsrf(
   if (url.protocol !== "https:" && url.protocol !== "http:") {
     throw new SsrfError(`URL must be http/https (got ${url.protocol}).`);
   }
-  if (
-    opts.enforceHttpsExceptLoopback &&
-    url.protocol === "http:" &&
-    !opts.allowLoopback
-  ) {
+  if (opts.enforceHttpsExceptLoopback && url.protocol === "http:" && !opts.allowLoopback) {
     throw new SsrfError(
-      `URL must be https: (got http: ${url.host}). HTTP is permitted only when allowLoopback=true (dev/IT).`
+      `URL must be https: (got http: ${url.host}). HTTP is permitted only when allowLoopback=true (dev/IT).`,
     );
   }
   if (url.username || url.password) {
@@ -128,9 +119,7 @@ export async function assertNotSsrf(
   // internal name to a reachable endpoint.
   const rawHostname = url.hostname.replace(/^\[|\]$/g, "");
   if (isDeniedHostname(rawHostname)) {
-    throw new SsrfError(
-      `Host is on the cloud-internal denylist: ${rawHostname}.`
-    );
+    throw new SsrfError(`Host is on the cloud-internal denylist: ${rawHostname}.`);
   }
 
   const hostname = normalizeHostForClassification(url.hostname);
@@ -147,10 +136,7 @@ export async function assertNotSsrf(
     try {
       resolved = await lookup(hostname);
     } catch (error: unknown) {
-      throw new SsrfError(
-        `Host did not resolve: ${hostname}: ${reason(error)}`,
-        { cause: error }
-      );
+      throw new SsrfError(`Host did not resolve: ${hostname}: ${reason(error)}`, { cause: error });
     }
   }
   if (resolved.length === 0) {
@@ -158,15 +144,11 @@ export async function assertNotSsrf(
   }
   // HTTPS-dev override: an http: URL allowed past the scheme gate by `allowLoopback` must resolve
   // EVERY address to loopback — else a dev box could be tricked into HTTP-fetching a public host.
-  if (
-    opts.enforceHttpsExceptLoopback &&
-    url.protocol === "http:" &&
-    opts.allowLoopback
-  ) {
+  if (opts.enforceHttpsExceptLoopback && url.protocol === "http:" && opts.allowLoopback) {
     for (const r of resolved) {
       if (!isLoopbackAddress(r.address)) {
         throw new SsrfError(
-          `URL refused — http: allowed only when ALL resolved addresses are loopback (got ${r.address}). Use https: in production.`
+          `URL refused — http: allowed only when ALL resolved addresses are loopback (got ${r.address}). Use https: in production.`,
         );
       }
     }
@@ -174,7 +156,7 @@ export async function assertNotSsrf(
   for (const r of resolved) {
     if (!isPublicAddress(r.address, opts.allowLoopback)) {
       throw new SsrfError(
-        `URL refused — ${hostname} resolves to a non-public address (${r.address}).`
+        `URL refused — ${hostname} resolves to a non-public address (${r.address}).`,
       );
     }
   }

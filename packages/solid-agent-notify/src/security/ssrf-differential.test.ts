@@ -32,7 +32,7 @@ import {
  *  - Alternate-encoded loopback literals (decimal / hex / octal / short-form).
  */
 import { describe, expect, it, vi } from "vitest";
-import { SsrfError, guardedFetch } from "./guardedFetch.js";
+import { guardedFetch, SsrfError } from "./guardedFetch.js";
 import { assertNotSsrf } from "./ssrf.js";
 
 // ════════════════════════════════ THE ORACLE (verbatim pre-rewire classifier) ════════════════════════════════
@@ -70,10 +70,7 @@ function oldIsLoopbackAddress(address: string): boolean {
 
 function oldIsPublicIpv4(address: string, allowLoopback: boolean): boolean {
   const parts = address.split(".").map((p) => Number.parseInt(p, 10));
-  if (
-    parts.length !== 4 ||
-    parts.some((p) => Number.isNaN(p) || p < 0 || p > 255)
-  ) {
+  if (parts.length !== 4 || parts.some((p) => Number.isNaN(p) || p < 0 || p > 255)) {
     return false;
   }
   const [a, b, c] = parts as [number, number, number, number];
@@ -93,23 +90,13 @@ function oldIsPublicIpv4(address: string, allowLoopback: boolean): boolean {
   return true;
 }
 
-function oldExtractEmbeddedV4(
-  hextets: string[],
-  startHextet: number
-): string | undefined {
+function oldExtractEmbeddedV4(hextets: string[], startHextet: number): string | undefined {
   const h1 = hextets[startHextet];
   const h2 = hextets[startHextet + 1];
   if (!h1 || !h2) return undefined;
   const w1 = Number.parseInt(h1, 16);
   const w2 = Number.parseInt(h2, 16);
-  if (
-    Number.isNaN(w1) ||
-    Number.isNaN(w2) ||
-    w1 < 0 ||
-    w1 > 0xffff ||
-    w2 < 0 ||
-    w2 > 0xffff
-  ) {
+  if (Number.isNaN(w1) || Number.isNaN(w2) || w1 < 0 || w1 > 0xffff || w2 < 0 || w2 > 0xffff) {
     return undefined;
   }
   return `${(w1 >> 8) & 0xff}.${w1 & 0xff}.${(w2 >> 8) & 0xff}.${w2 & 0xff}`;
@@ -174,13 +161,7 @@ function oldExpandIpv6(addr: string): string[] | undefined {
     const v4 = s.slice(colon + 1);
     if (isIP(v4) !== 4) return undefined;
     const [a, b, c, d] = v4.split(".").map((p) => Number.parseInt(p, 10));
-    if (
-      a === undefined ||
-      b === undefined ||
-      c === undefined ||
-      d === undefined
-    )
-      return undefined;
+    if (a === undefined || b === undefined || c === undefined || d === undefined) return undefined;
     s = `${s.slice(0, colon)}:${((a << 8) | b).toString(16)}:${((c << 8) | d).toString(16)}`;
   }
   const doubleColon = s.indexOf("::");
@@ -188,12 +169,8 @@ function oldExpandIpv6(addr: string): string[] | undefined {
   if (doubleColon === -1) {
     hextets = s.split(":");
   } else {
-    const head =
-      s.slice(0, doubleColon) === "" ? [] : s.slice(0, doubleColon).split(":");
-    const tail =
-      s.slice(doubleColon + 2) === ""
-        ? []
-        : s.slice(doubleColon + 2).split(":");
+    const head = s.slice(0, doubleColon) === "" ? [] : s.slice(0, doubleColon).split(":");
+    const tail = s.slice(doubleColon + 2) === "" ? [] : s.slice(doubleColon + 2).split(":");
     const fill = 8 - head.length - tail.length;
     if (fill < 0) return undefined;
     hextets = [...head, ...Array<string>(fill).fill("0"), ...tail];
@@ -249,7 +226,7 @@ function buildCorpus(): string[] {
     "198.51.100.1", // TEST-NET-2
     "203.0.113.1", // TEST-NET-3
     "169.254.169.254", // explicit metadata
-    "255.255.255.255" // broadcast
+    "255.255.255.255", // broadcast
   );
   // A band of genuinely public v4 (must stay ALLOWED in both — the "not over-blocked" direction).
   const publicV4 = [
@@ -298,9 +275,7 @@ function buildCorpus(): string[] {
       number,
       number,
     ];
-    out.push(
-      `0:0:0:0:0:ffff:${((a << 8) | b).toString(16)}:${((c << 8) | d).toString(16)}`
-    );
+    out.push(`0:0:0:0:0:ffff:${((a << 8) | b).toString(16)}:${((c << 8) | d).toString(16)}`);
     out.push(sixToFour(v4)); // 6to4 embedding the private v4
     out.push(nat64(v4)); // NAT64 embedding the private v4
   }
@@ -341,13 +316,9 @@ describe("DIFFERENTIAL ORACLE: @jeswr/guarded-fetch is at least as strict as the
     expect(countMatching((a) => a.startsWith("10."))).toBe(256); // RFC1918 10/8
     expect(countMatching((a) => a.startsWith("127."))).toBe(256); // loopback 127/8
     expect(countMatching((a) => a.startsWith("192.168."))).toBe(256); // RFC1918 192.168/16
-    expect(
-      countMatching((a) => a.startsWith("169.254."))
-    ).toBeGreaterThanOrEqual(256); // link-local (+ explicit metadata)
+    expect(countMatching((a) => a.startsWith("169.254."))).toBeGreaterThanOrEqual(256); // link-local (+ explicit metadata)
     expect(countMatching((a) => /^172\.(1[6-9]|2\d|3[01])\./.test(a))).toBe(16); // 172.16/12
-    expect(
-      countMatching((a) => /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(a))
-    ).toBe(64); // CGNAT 100.64/10
+    expect(countMatching((a) => /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(a))).toBe(64); // CGNAT 100.64/10
     expect(countMatching((a) => /^(22[4-9]|23\d)\./.test(a))).toBe(16); // multicast 224-239
     // reserved 240-255: the 16 loop-generated `${a}.0.0.1` PLUS the explicit 255.255.255.255 sentinel.
     expect(countMatching((a) => /^(24\d|25[0-5])\./.test(a))).toBe(17);
@@ -451,7 +422,7 @@ describe("DIFFERENTIAL ORACLE: @jeswr/guarded-fetch is at least as strict as the
         assertNotSsrf(`https://${enc}/`, {
           allowLoopback: false,
           dnsLookup: dns,
-        })
+        }),
       ).rejects.toBeInstanceOf(SsrfError);
       expect(dns).not.toHaveBeenCalled();
 
@@ -459,7 +430,7 @@ describe("DIFFERENTIAL ORACLE: @jeswr/guarded-fetch is at least as strict as the
       await expect(
         guardedFetch(`https://${enc}/`, {
           dnsLookup: vi.fn(async () => [{ address: "8.8.8.8", family: 4 }]),
-        })
+        }),
       ).rejects.toBeInstanceOf(SsrfError);
     }
   });

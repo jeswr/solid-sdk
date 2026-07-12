@@ -22,7 +22,11 @@
     "@jeswr/guarded-fetch",
     "@jeswr/rdf-serialize",
     "solid-offline",
-    "@jeswr/solid-session-restore"
+    "@jeswr/solid-session-restore",
+    "solid-agent-notify",
+    "@jeswr/solid-memory",
+    "@jeswr/solid-chat-interop",
+    "@jeswr/solid-task-model"
   ],
   "dependsOn": [],
   "federation": null

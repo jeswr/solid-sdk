@@ -53,15 +53,12 @@
     "lint:fix": "biome check --write src",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest",
-    "gate": "npm run lint && npm run typecheck && npm run test && npm run build && npm run check:dist && npm run check:lockfile-transport",
-    "check:dist": "node scripts/check-dist.mjs",
-    "check:lockfile-transport": "node scripts/check-lockfile-transport.mjs"
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@jeswr/fetch-rdf": "^0.1.0",
-    "@jeswr/rdf-serialize": "git+https://github.com/jeswr/rdf-serialize.git#ef3dd85636b868ea336a45f79c0446ade0982e7b",
-    "@jeswr/solid-task-model": "git+https://github.com/jeswr/solid-task-model.git#fa88a345a5ed03b26b46efd57d448ebd9ca8a826",
+    "@jeswr/rdf-serialize": "workspace:*",
+    "@jeswr/solid-task-model": "workspace:*",
     "@rdfjs/wrapper": "^0.34.0",
     "n3": "^2.0.3"
   },

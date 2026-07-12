@@ -41,10 +41,7 @@ describe("domain errors", () => {
   });
 
   it("InboxScopeError carries url + container", () => {
-    const e = new InboxScopeError(
-      "https://evil.example/x",
-      "https://pod.example/inbox/"
-    );
+    const e = new InboxScopeError("https://evil.example/x", "https://pod.example/inbox/");
     expect(e).toBeInstanceOf(AgentNotifyError);
     expect(e.name).toBe("InboxScopeError");
     expect(e.url).toBe("https://evil.example/x");

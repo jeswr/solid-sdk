@@ -29,15 +29,10 @@ import {
   TermWrapper,
 } from "@rdfjs/wrapper";
 import { DataFactory, type Store } from "n3";
-import {
-  type ActivityNotification,
-  buildActivity,
-  isHttpIri,
-  safeHttpIri,
-} from "./activity.js";
+import { type ActivityNotification, buildActivity, isHttpIri, safeHttpIri } from "./activity.js";
 import { AS, DCT, RDF_TYPE, WF } from "./config.js";
 import type { NotifyOptions } from "./discover.js";
-import { type NotifyAgentArgs, type SendResult, notifyAgent } from "./send.js";
+import { type NotifyAgentArgs, notifyAgent, type SendResult } from "./send.js";
 
 /** Lifecycle state of a `wf:Task` (`rdf:type wf:Open` | `wf:Closed`). */
 export type TaskState = "Open" | "Closed";
@@ -71,12 +66,7 @@ export interface TaskNotification {
 export class TaskDoc extends TermWrapper {
   /** `rdf:type` values of this subject (carries `wf:Task` + the `wf:Open|wf:Closed` state). */
   get types(): Set<string> {
-    return SetFrom.subjectPredicate(
-      this,
-      RDF_TYPE,
-      NamedNodeAs.string,
-      NamedNodeFrom.string
-    );
+    return SetFrom.subjectPredicate(this, RDF_TYPE, NamedNodeAs.string, NamedNodeFrom.string);
   }
   /** Stamp `rdf:type wf:Task` (idempotent — a Set). */
   markTask(): this {
@@ -114,33 +104,21 @@ export class TaskDoc extends TermWrapper {
     OptionalAs.object(this, `${DCT}title`, v, LiteralFrom.string);
   }
   get description(): string | undefined {
-    return OptionalFrom.subjectPredicate(
-      this,
-      `${DCT}description`,
-      LiteralAs.string
-    );
+    return OptionalFrom.subjectPredicate(this, `${DCT}description`, LiteralAs.string);
   }
   set description(v: string | undefined) {
     OptionalAs.object(this, `${DCT}description`, v, LiteralFrom.string);
   }
   /** `wf:assignee` — the assigned agent's WebID (object property). */
   get assignee(): string | undefined {
-    return OptionalFrom.subjectPredicate(
-      this,
-      `${WF}assignee`,
-      NamedNodeAs.string
-    );
+    return OptionalFrom.subjectPredicate(this, `${WF}assignee`, NamedNodeAs.string);
   }
   set assignee(v: string | undefined) {
     OptionalAs.object(this, `${WF}assignee`, v, NamedNodeFrom.string);
   }
   /** `dct:creator` — the creator's WebID (object property). */
   get creator(): string | undefined {
-    return OptionalFrom.subjectPredicate(
-      this,
-      `${DCT}creator`,
-      NamedNodeAs.string
-    );
+    return OptionalFrom.subjectPredicate(this, `${DCT}creator`, NamedNodeAs.string);
   }
   set creator(v: string | undefined) {
     OptionalAs.object(this, `${DCT}creator`, v, NamedNodeFrom.string);
@@ -166,13 +144,9 @@ export function writeTask(store: Store, task: TaskNotification): Store {
   // subject that could break out of `<…>` and inject triples into the peer inbox.
   const subject = safeHttpIri(task.task);
   if (subject === undefined) {
-    throw new TypeError(
-      `task IRI must be an absolute http(s) URL: ${task.task}`
-    );
+    throw new TypeError(`task IRI must be an absolute http(s) URL: ${task.task}`);
   }
-  const doc = new TaskDoc(subject, store, DataFactory)
-    .markTask()
-    .setState(task.state ?? "Open");
+  const doc = new TaskDoc(subject, store, DataFactory).markTask().setState(task.state ?? "Open");
   doc.title = task.title?.trim() || undefined;
   doc.description = task.description?.trim() || undefined;
   // Object-position IRIs: canonicalise + DROP on invalid (never write raw).
@@ -199,7 +173,7 @@ export function writeTask(store: Store, task: TaskNotification): Store {
  */
 export function buildTaskNotification(
   task: TaskNotification,
-  activity: Partial<Omit<ActivityNotification, "object">> & { actor: string }
+  activity: Partial<Omit<ActivityNotification, "object">> & { actor: string },
 ): Store {
   const store = buildActivity({
     type: activity.type ?? "Announce",
@@ -208,9 +182,7 @@ export function buildTaskNotification(
     ...(activity.target !== undefined ? { target: activity.target } : {}),
     ...(activity.summary !== undefined ? { summary: activity.summary } : {}),
     ...(activity.content !== undefined ? { content: activity.content } : {}),
-    ...(activity.published !== undefined
-      ? { published: activity.published }
-      : {}),
+    ...(activity.published !== undefined ? { published: activity.published } : {}),
   });
   return writeTask(store, task);
 }
@@ -226,7 +198,7 @@ export function buildTaskNotification(
  */
 export function parseTaskFromNotification(
   activitySubject: string,
-  dataset: import("@rdfjs/types").DatasetCore
+  dataset: import("@rdfjs/types").DatasetCore,
 ): TaskNotification | undefined {
   // The `as:object` link is read with STRICT cardinality (like the task fields): a
   // hostile notification with multiple `as:object` values is ambiguous → no task,
@@ -246,12 +218,12 @@ export function parseTaskFromNotification(
 function hasType(
   dataset: import("@rdfjs/types").DatasetCore,
   subject: string,
-  typeIri: string
+  typeIri: string,
 ): boolean {
   for (const _q of dataset.match(
     DataFactory.namedNode(subject),
     DataFactory.namedNode(RDF_TYPE),
-    DataFactory.namedNode(typeIri)
+    DataFactory.namedNode(typeIri),
   )) {
     return true;
   }
@@ -272,13 +244,13 @@ function hasType(
 function singleObject(
   dataset: import("@rdfjs/types").DatasetCore,
   subject: string,
-  predicate: string
+  predicate: string,
 ): import("@rdfjs/types").Term | undefined {
   const seen = new Map<string, import("@rdfjs/types").Term>();
   for (const q of dataset.match(
     DataFactory.namedNode(subject),
     DataFactory.namedNode(predicate),
-    null
+    null,
   )) {
     // Key on termType + value + (literal) datatype/language so two distinct terms
     // never collapse, but a repeated identical statement counts once.
@@ -297,7 +269,7 @@ function singleObject(
 function singleLiteral(
   dataset: import("@rdfjs/types").DatasetCore,
   subject: string,
-  predicate: string
+  predicate: string,
 ): string | undefined {
   const t = singleObject(dataset, subject, predicate);
   return t?.termType === "Literal" ? t.value : undefined;
@@ -307,12 +279,10 @@ function singleLiteral(
 function singleHttpIri(
   dataset: import("@rdfjs/types").DatasetCore,
   subject: string,
-  predicate: string
+  predicate: string,
 ): string | undefined {
   const t = singleObject(dataset, subject, predicate);
-  return t?.termType === "NamedNode" && isHttpIri(t.value)
-    ? t.value
-    : undefined;
+  return t?.termType === "NamedNode" && isHttpIri(t.value) ? t.value : undefined;
 }
 
 const XSD = "http://www.w3.org/2001/XMLSchema#";
@@ -326,7 +296,7 @@ const XSD = "http://www.w3.org/2001/XMLSchema#";
 function singleDateTime(
   dataset: import("@rdfjs/types").DatasetCore,
   subject: string,
-  predicate: string
+  predicate: string,
 ): Date | undefined {
   const t = singleObject(dataset, subject, predicate);
   if (t?.termType !== "Literal") return undefined;
@@ -351,7 +321,7 @@ function singleDateTime(
  */
 export function parseTask(
   taskIri: string,
-  dataset: import("@rdfjs/types").DatasetCore
+  dataset: import("@rdfjs/types").DatasetCore,
 ): TaskNotification | undefined {
   if (!isHttpIri(taskIri)) return undefined;
   if (!hasType(dataset, taskIri, `${WF}Task`)) return undefined;
@@ -360,8 +330,7 @@ export function parseTask(
   // absent, so RDF statement order can never be the tie-breaker.
   const open = hasType(dataset, taskIri, `${WF}Open`);
   const closed = hasType(dataset, taskIri, `${WF}Closed`);
-  const state: TaskState | undefined =
-    open === closed ? undefined : open ? "Open" : "Closed";
+  const state: TaskState | undefined = open === closed ? undefined : open ? "Open" : "Closed";
 
   const title = singleLiteral(dataset, taskIri, `${DCT}title`);
   const description = singleLiteral(dataset, taskIri, `${DCT}description`);
@@ -382,8 +351,7 @@ export function parseTask(
 }
 
 /** Arguments for {@link notifyTaskAssigned}. */
-export interface NotifyTaskArgs
-  extends Omit<NotifyAgentArgs, "object" | "type"> {
+export interface NotifyTaskArgs extends Omit<NotifyAgentArgs, "object" | "type"> {
   /** The federation task to embed in the notification. */
   task: TaskNotification;
   /** Activity verb; defaults to `Announce` (the federation event verb). */
@@ -403,7 +371,7 @@ export interface NotifyTaskArgs
  */
 export function notifyTaskAssigned(
   args: NotifyTaskArgs,
-  opts: NotifyOptions = {}
+  opts: NotifyOptions = {},
 ): Promise<SendResult> {
   const task: TaskNotification = {
     ...args.task,
@@ -418,7 +386,7 @@ export function notifyTaskAssigned(
  */
 export function notifyTaskStateChanged(
   args: NotifyTaskArgs & { state: TaskState },
-  opts: NotifyOptions = {}
+  opts: NotifyOptions = {},
 ): Promise<SendResult> {
   const task: TaskNotification = { ...args.task, state: args.state };
   return notifyTask(task, args, opts);
@@ -428,7 +396,7 @@ export function notifyTaskStateChanged(
 function notifyTask(
   task: TaskNotification,
   args: NotifyTaskArgs,
-  opts: NotifyOptions
+  opts: NotifyOptions,
 ): Promise<SendResult> {
   return notifyAgent(
     {
@@ -452,6 +420,6 @@ function notifyTask(
         writeTask(store, task);
         await opts.extend?.(store);
       },
-    }
+    },
   );
 }

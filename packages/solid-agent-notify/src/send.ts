@@ -23,7 +23,7 @@ import {
   serializeTurtle,
 } from "./activity.js";
 import { MAX_BYTES_RESPONSE } from "./config.js";
-import { type NotifyOptions, discoverInbox } from "./discover.js";
+import { discoverInbox, type NotifyOptions } from "./discover.js";
 import { NoInboxError, NotificationSendError } from "./errors.js";
 import {
   type GuardedFetchOptions,
@@ -55,7 +55,7 @@ export interface SendResult {
 export async function sendNotification(
   inbox: string,
   activity: ActivityNotification,
-  opts: NotifyOptions = {}
+  opts: NotifyOptions = {},
 ): Promise<SendResult> {
   const store = buildActivity({
     ...activity,
@@ -78,9 +78,7 @@ export async function sendNotification(
       skipContentTypeAllowlist: true,
       maxRedirects: 0,
       ...(opts.timeoutMs !== undefined ? { timeoutMs: opts.timeoutMs } : {}),
-      ...(opts.allowLoopback !== undefined
-        ? { allowLoopback: opts.allowLoopback }
-        : {}),
+      ...(opts.allowLoopback !== undefined ? { allowLoopback: opts.allowLoopback } : {}),
       ...(opts.dnsLookup !== undefined ? { dnsLookup: opts.dnsLookup } : {}),
     };
     res = await fetcher(inbox, init);
@@ -124,7 +122,7 @@ export interface NotifyAgentArgs {
  */
 export async function notifyAgent(
   args: NotifyAgentArgs,
-  opts: NotifyOptions = {}
+  opts: NotifyOptions = {},
 ): Promise<SendResult> {
   const inbox = await discoverInbox(args.recipientWebId, opts);
   if (!inbox) throw new NoInboxError(args.recipientWebId);

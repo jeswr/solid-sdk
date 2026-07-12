@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "description": "SSRF-hardened cross-pod Linked Data Notifications (LDN) for Solid: discover an agent's ldp:inbox, POST an ActivityStreams 2.0 notification, and read an inbox — every outbound dereference forced through a single DNS-pinned, redirect-revalidating egress chokepoint.",
   "type": "module",
+  "securityCritical": true,
   "license": "MIT",
   "author": "Jesse Wright <jwrightwho@gmail.com>",
   "repository": {
@@ -32,25 +33,26 @@
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist", "README.md", "LICENSE"],
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "engines": {
     "node": ">=22.19.0"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "prepare": "npm run build",
-    "lint": "biome check . && npm run check:lockfile-transport",
+    "lint": "biome check src scripts",
     "format": "biome format --write .",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "check:fetch": "node scripts/check-no-raw-fetch.mjs",
-    "check:dist": "node scripts/check-dist-fresh.mjs",
-    "check:lockfile-transport": "node scripts/check-lockfile-transport.mjs"
+    "check:fetch": "node scripts/check-no-raw-fetch.mjs"
   },
   "dependencies": {
     "@jeswr/fetch-rdf": "^0.1.0",
-    "@jeswr/guarded-fetch": "git+https://github.com/jeswr/guarded-fetch.git#184f060d95cc29ef7a01e8bc28fb04bb24b5af76",
+    "@jeswr/guarded-fetch": "workspace:*",
     "@rdfjs/wrapper": "^0.34.0",
     "@solid/object": "^0.6.0",
     "n3": "^2.0.3"

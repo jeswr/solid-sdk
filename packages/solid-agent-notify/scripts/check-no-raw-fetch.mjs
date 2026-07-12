@@ -22,7 +22,7 @@
  * PATTERNS) are exported so the unit-test suite can cover them without spawning
  * a subprocess.  The scan itself runs only when the script is executed directly.
  */
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 
 /** Files allowed to reference the raw primitives (relative to repo root, POSIX slashes). */
@@ -121,8 +121,7 @@ export function stripBlockComments(text) {
 
 // ── Main scan — runs only when executed directly, not when imported by tests ──
 const isMain =
-  process.argv[1] &&
-  (await import("node:url")).fileURLToPath(import.meta.url) === process.argv[1];
+  process.argv[1] && (await import("node:url")).fileURLToPath(import.meta.url) === process.argv[1];
 
 if (isMain) {
   const ROOT = process.cwd();
@@ -142,29 +141,21 @@ if (isMain) {
       const code = stripLineComment(lines[i]);
       for (const { re, label } of PATTERNS) {
         if (re.test(code)) {
-          violations.push(
-            `${rel}:${i + 1}: ${label} — route through guardedFetch instead.`
-          );
+          violations.push(`${rel}:${i + 1}: ${label} — route through guardedFetch instead.`);
         }
       }
     }
   }
 
   if (violations.length > 0) {
-    console.error(
-      "check:fetch FAILED — raw external-fetch outside the guarded chokepoint:\n"
-    );
+    console.error("check:fetch FAILED — raw external-fetch outside the guarded chokepoint:\n");
     for (const v of violations) console.error(`  ${v}`);
     console.error(
-      "\nEvery attacker-influenced fetch MUST go through src/security/guardedFetch.ts."
+      "\nEvery attacker-influenced fetch MUST go through src/security/guardedFetch.ts.",
     );
     process.exit(1);
   }
 
-  const scanned = files.filter((f) =>
-    isScannable(relative(ROOT, f).split("\\").join("/"))
-  ).length;
-  console.log(
-    `check:fetch OK — ${scanned} source files scanned, no raw external fetch.`
-  );
+  const scanned = files.filter((f) => isScannable(relative(ROOT, f).split("\\").join("/"))).length;
+  console.log(`check:fetch OK — ${scanned} source files scanned, no raw external fetch.`);
 }

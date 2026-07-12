@@ -31,13 +31,13 @@ export interface ReadBoundedOptions {
  * `Content-Length`; aborts on overflow. An absent body returns an empty `Uint8Array`. */
 export async function readBoundedBytes(
   res: Response,
-  opts: ReadBoundedOptions
+  opts: ReadBoundedOptions,
 ): Promise<Uint8Array> {
   const declared = Number(res.headers.get("content-length") ?? Number.NaN);
   if (!Number.isNaN(declared) && declared > opts.maxBytes) {
     opts.controller?.abort();
     throw new BodyTooLargeError(
-      `Body exceeds cap (Content-Length ${declared} > ${opts.maxBytes}).`
+      `Body exceeds cap (Content-Length ${declared} > ${opts.maxBytes}).`,
     );
   }
   const body = res.body;
@@ -61,9 +61,7 @@ export async function readBoundedBytes(
           } else {
             void reader.cancel();
           }
-          throw new BodyTooLargeError(
-            `Body exceeds cap (${total} bytes > ${opts.maxBytes}).`
-          );
+          throw new BodyTooLargeError(`Body exceeds cap (${total} bytes > ${opts.maxBytes}).`);
         }
         chunks.push(value);
       }

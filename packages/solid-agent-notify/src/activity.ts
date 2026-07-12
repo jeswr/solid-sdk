@@ -22,14 +22,7 @@ import { DataFactory, Store, Writer } from "n3";
 import { AS, RDF_TYPE } from "./config.js";
 
 /** AS2.0 activity verbs this package emits. (Reads accept any `as:*` type.) */
-export type ActivityType =
-  | "Announce"
-  | "Invite"
-  | "Offer"
-  | "Create"
-  | "Update"
-  | "Add"
-  | "Remove";
+export type ActivityType = "Announce" | "Invite" | "Offer" | "Create" | "Update" | "Add" | "Remove";
 
 /** The plain shape of a notification (no RDF terms) callers build / consume. */
 export interface ActivityNotification {
@@ -68,7 +61,7 @@ export function isHttpIri(value: string | undefined): boolean {
  * NamedNode's value are emitted VERBATIM and can terminate the `<…>`.
  */
 const IRIREF_FORBIDDEN_CHARS: ReadonlySet<number> = new Set(
-  ["<", ">", '"', "{", "}", "|", "^", "`", "\\"].map((c) => c.charCodeAt(0))
+  ["<", ">", '"', "{", "}", "|", "^", "`", "\\"].map((c) => c.charCodeAt(0)),
 );
 
 /**
@@ -172,7 +165,7 @@ function safeSubjectIri(subject: string): string {
   const safe = safeHttpIri(subject);
   if (safe === undefined) {
     throw new TypeError(
-      `activity subject must be a safe '#'-fragment (e.g. the default '#it') or an absolute http(s) IRI: ${subject}`
+      `activity subject must be a safe '#'-fragment (e.g. the default '#it') or an absolute http(s) IRI: ${subject}`,
     );
   }
   return safe;
@@ -181,12 +174,7 @@ function safeSubjectIri(subject: string): string {
 /** Typed `@rdfjs/wrapper` view of a single AS2.0 activity subject (read + write). */
 export class ActivityDoc extends TermWrapper {
   get types(): Set<string> {
-    return SetFrom.subjectPredicate(
-      this,
-      RDF_TYPE,
-      NamedNodeAs.string,
-      NamedNodeFrom.string
-    );
+    return SetFrom.subjectPredicate(this, RDF_TYPE, NamedNodeAs.string, NamedNodeFrom.string);
   }
   setType(t: ActivityType): this {
     this.types.add(`${AS}${t}`);
@@ -194,11 +182,7 @@ export class ActivityDoc extends TermWrapper {
   }
   /** `as:actor` — sender WebID (object property). */
   get actor(): string | undefined {
-    return OptionalFrom.subjectPredicate(
-      this,
-      `${AS}actor`,
-      NamedNodeAs.string
-    );
+    return OptionalFrom.subjectPredicate(this, `${AS}actor`, NamedNodeAs.string);
   }
   set actor(v: string | undefined) {
     OptionalAs.object(this, `${AS}actor`, v, NamedNodeFrom.string);
@@ -208,51 +192,31 @@ export class ActivityDoc extends TermWrapper {
    * `object`) because `TermWrapper` already defines an `object` term getter.
    */
   get activityObject(): string | undefined {
-    return OptionalFrom.subjectPredicate(
-      this,
-      `${AS}object`,
-      NamedNodeAs.string
-    );
+    return OptionalFrom.subjectPredicate(this, `${AS}object`, NamedNodeAs.string);
   }
   set activityObject(v: string | undefined) {
     OptionalAs.object(this, `${AS}object`, v, NamedNodeFrom.string);
   }
   get target(): string | undefined {
-    return OptionalFrom.subjectPredicate(
-      this,
-      `${AS}target`,
-      NamedNodeAs.string
-    );
+    return OptionalFrom.subjectPredicate(this, `${AS}target`, NamedNodeAs.string);
   }
   set target(v: string | undefined) {
     OptionalAs.object(this, `${AS}target`, v, NamedNodeFrom.string);
   }
   get summary(): string | undefined {
-    return OptionalFrom.subjectPredicate(
-      this,
-      `${AS}summary`,
-      LiteralAs.string
-    );
+    return OptionalFrom.subjectPredicate(this, `${AS}summary`, LiteralAs.string);
   }
   set summary(v: string | undefined) {
     OptionalAs.object(this, `${AS}summary`, v, LiteralFrom.string);
   }
   get content(): string | undefined {
-    return OptionalFrom.subjectPredicate(
-      this,
-      `${AS}content`,
-      LiteralAs.string
-    );
+    return OptionalFrom.subjectPredicate(this, `${AS}content`, LiteralAs.string);
   }
   set content(v: string | undefined) {
     OptionalAs.object(this, `${AS}content`, v, LiteralFrom.string);
   }
   get published(): Date | undefined {
-    return OptionalFrom.subjectPredicate(
-      this,
-      `${AS}published`,
-      LiteralAs.date
-    );
+    return OptionalFrom.subjectPredicate(this, `${AS}published`, LiteralAs.date);
   }
   set published(v: Date | undefined) {
     OptionalAs.object(this, `${AS}published`, v, LiteralFrom.dateTime);
@@ -277,16 +241,11 @@ export class ActivityDoc extends TermWrapper {
  *
  * @throws TypeError if `subject` is neither a safe `#`-fragment nor an http(s) IRI.
  */
-export function buildActivity(
-  notification: ActivityNotification,
-  subject = "#it"
-): Store {
+export function buildActivity(notification: ActivityNotification, subject = "#it"): Store {
   const store = new Store();
-  const doc = new ActivityDoc(
-    safeSubjectIri(subject),
-    store,
-    DataFactory
-  ).setType(notification.type);
+  const doc = new ActivityDoc(safeSubjectIri(subject), store, DataFactory).setType(
+    notification.type,
+  );
   // Object-position IRIs: canonicalise (Turtle IRI-injection guard) and DROP the
   // triple when the value is not a safe http(s) IRI — never write a raw string.
   doc.actor = safeHttpIri(notification.actor);

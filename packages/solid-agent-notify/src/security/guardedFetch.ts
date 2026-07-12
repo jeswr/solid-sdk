@@ -50,8 +50,7 @@ import { BodyTooLargeError, readBoundedBytes } from "./body.js";
 import type { LookupAddress } from "./ssrf.js";
 import { SsrfError } from "./ssrf.js";
 
-export { SsrfError };
-export { BodyTooLargeError };
+export { BodyTooLargeError, SsrfError };
 
 /** Raised by guardedFetch for non-SSRF failures (bad scheme/port, disallowed content-type, redirect
  * cap, redirect loop, scheme downgrade, a refused POST redirect, network error). SSRF failures
@@ -133,27 +132,24 @@ const BODY_CAP_MARKER = "exceeds cap";
  */
 export async function guardedFetch(
   rawUrl: string,
-  opts: GuardedFetchOptions = {}
+  opts: GuardedFetchOptions = {},
 ): Promise<GuardedFetchResult> {
   const method = opts.method ?? "GET";
   const allowLoopback = opts.allowLoopback ?? false;
   const maxBytes = opts.maxBytes ?? MAX_BYTES_PROFILE;
   const timeoutMs = opts.timeoutMs ?? FETCH_TIMEOUT_MS;
   // A POST refuses ALL redirects (confused-deputy fail-closed) → force 0 hops at the library too.
-  const maxRedirects =
-    method === "POST" ? 0 : (opts.maxRedirects ?? MAX_REDIRECTS);
+  const maxRedirects = method === "POST" ? 0 : (opts.maxRedirects ?? MAX_REDIRECTS);
   const accept = opts.accept ?? RDF_ACCEPT;
   const skipContentTypeAllowlist = opts.skipContentTypeAllowlist ?? false;
-  const allowedContentTypes = (
-    opts.allowedContentTypes ?? RDF_CONTENT_TYPES
-  ).map((t) => t.toLowerCase());
+  const allowedContentTypes = (opts.allowedContentTypes ?? RDF_CONTENT_TYPES).map((t) =>
+    t.toLowerCase(),
+  );
 
   const headers: Record<string, string> = {
     accept,
     "user-agent": FETCH_USER_AGENT,
-    ...(opts.conditional?.etag
-      ? { "if-none-match": opts.conditional.etag }
-      : {}),
+    ...(opts.conditional?.etag ? { "if-none-match": opts.conditional.etag } : {}),
     ...(opts.conditional?.lastModified
       ? { "if-modified-since": opts.conditional.lastModified }
       : {}),
@@ -207,9 +203,7 @@ export async function guardedFetch(
     res = await nodeFetch(rawUrl, {
       method,
       headers,
-      ...(method === "POST" && opts.body !== undefined
-        ? { body: opts.body }
-        : {}),
+      ...(method === "POST" && opts.body !== undefined ? { body: opts.body } : {}),
       redirect: "manual",
     });
   } catch (error: unknown) {
@@ -227,16 +221,13 @@ export async function guardedFetch(
     if (location) {
       void res.body?.cancel().catch(() => {});
       throw new GuardedFetchError(
-        `Refusing to follow a ${status} redirect on a POST: ${finalUrl} → ${location}.`
+        `Refusing to follow a ${status} redirect on a POST: ${finalUrl} → ${location}.`,
       );
     }
   }
 
   const contentType =
-    (res.headers.get("content-type") ?? "")
-      .split(";")[0]
-      ?.trim()
-      .toLowerCase() ?? "";
+    (res.headers.get("content-type") ?? "").split(";")[0]?.trim().toLowerCase() ?? "";
 
   // Body-irrelevant statuses bypass the content-type allowlist and return an empty bounded body,
   // letting the caller act on `status` (304/204/205 carry no body; >=400 is an error page, never
@@ -257,7 +248,7 @@ export async function guardedFetch(
   if (!skipContentTypeAllowlist && !allowedContentTypes.includes(contentType)) {
     void res.body?.cancel().catch(() => {});
     throw new GuardedFetchError(
-      `Disallowed content-type "${contentType || "(none)"}" for ${finalUrl}; expected one of ${allowedContentTypes.join(", ")}.`
+      `Disallowed content-type "${contentType || "(none)"}" for ${finalUrl}; expected one of ${allowedContentTypes.join(", ")}.`,
     );
   }
 
@@ -271,10 +262,9 @@ export async function guardedFetch(
     bytes = await readBoundedBytes(res, { maxBytes });
   } catch (error: unknown) {
     if (error instanceof BodyTooLargeError) throw error;
-    throw new GuardedFetchError(
-      `Failed reading body for ${finalUrl}: ${reason(error)}`,
-      { cause: error }
-    );
+    throw new GuardedFetchError(`Failed reading body for ${finalUrl}: ${reason(error)}`, {
+      cause: error,
+    });
   }
   const text = new TextDecoder("utf-8").decode(bytes);
 
@@ -303,25 +293,17 @@ function parseUrl(raw: string): URL {
  * unit-testable front gate (it is exported for that purpose; it is NOT part of the package's public
  * `.` entry — the only declared `exports` subpath).
  */
-export function assertSchemeAndPort(
-  url: URL,
-  allowLoopback: boolean,
-  prevWasHttps = false
-): void {
+export function assertSchemeAndPort(url: URL, allowLoopback: boolean, prevWasHttps = false): void {
   if (url.protocol !== "https:" && url.protocol !== "http:") {
-    throw new GuardedFetchError(
-      `URL must be http/https (got ${url.protocol}).`
-    );
+    throw new GuardedFetchError(`URL must be http/https (got ${url.protocol}).`);
   }
   if (url.protocol === "http:" && !allowLoopback) {
     throw new GuardedFetchError(
-      `URL must be https: (got http: ${url.host}). http: is permitted only under allowLoopback (dev/tests).`
+      `URL must be https: (got http: ${url.host}). http: is permitted only under allowLoopback (dev/tests).`,
     );
   }
   if (prevWasHttps && url.protocol === "http:") {
-    throw new GuardedFetchError(
-      `Refusing redirect scheme downgrade (https → http): ${url.host}.`
-    );
+    throw new GuardedFetchError(`Refusing redirect scheme downgrade (https → http): ${url.host}.`);
   }
   if (url.username || url.password) {
     throw new GuardedFetchError("URL must not carry userinfo.");
@@ -333,7 +315,7 @@ export function assertSchemeAndPort(
     const port = Number(url.port);
     if (!(url.protocol === "https:" && port === 443)) {
       throw new GuardedFetchError(
-        `URL port not allowed (${url.port}); only 443 (https) is permitted in production.`
+        `URL port not allowed (${url.port}); only 443 (https) is permitted in production.`,
       );
     }
   }
@@ -371,11 +353,7 @@ const REDIRECT_MANAGEMENT_PREFIXES = [
  * Exported for exhaustive unit testing of the error-taxonomy mapping (it is NOT part of the
  * package's public `.` entry — the only declared `exports` subpath).
  */
-export function classifyGuardError(
-  error: unknown,
-  rawUrl: string,
-  method: "GET" | "POST"
-): Error {
+export function classifyGuardError(error: unknown, rawUrl: string, method: "GET" | "POST"): Error {
   if (error instanceof SsrfError) {
     const msg = error.message;
     // Body cap FIRST: the library reads/caps the body before returning, so an over-cap body (any
@@ -385,14 +363,11 @@ export function classifyGuardError(
       return new BodyTooLargeError(msg);
     }
     const isTimeout = msg.startsWith("Fetch timed out");
-    const isRedirectMgmt = REDIRECT_MANAGEMENT_PREFIXES.some((p) =>
-      msg.startsWith(p)
-    );
+    const isRedirectMgmt = REDIRECT_MANAGEMENT_PREFIXES.some((p) => msg.startsWith(p));
     if (method === "POST" && isRedirectMgmt) {
-      return new GuardedFetchError(
-        `Refusing to follow a redirect on a POST: ${rawUrl} (${msg}).`,
-        { cause: error }
-      );
+      return new GuardedFetchError(`Refusing to follow a redirect on a POST: ${rawUrl} (${msg}).`, {
+        cause: error,
+      });
     }
     if (isTimeout) {
       return new GuardedFetchError(`Fetch timed out for ${rawUrl}: ${msg}.`, {

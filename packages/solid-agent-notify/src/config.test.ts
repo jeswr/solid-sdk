@@ -40,10 +40,7 @@ describe("config env overrides", () => {
   });
 
   it("the denylist override is parsed/trimmed/lowercased", async () => {
-    vi.stubEnv(
-      "AGENT_NOTIFY_HOSTNAME_DENYLIST",
-      " Foo.Internal , bar.test ,, "
-    );
+    vi.stubEnv("AGENT_NOTIFY_HOSTNAME_DENYLIST", " Foo.Internal , bar.test ,, ");
     vi.resetModules();
     const m = await import("./config.js");
     expect(m.FETCH_HOSTNAME_DENYLIST).toEqual(["foo.internal", "bar.test"]);

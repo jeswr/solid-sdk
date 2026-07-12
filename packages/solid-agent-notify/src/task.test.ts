@@ -15,12 +15,12 @@ import { serializeTurtle } from "./activity.js";
 import { NoInboxError } from "./errors.js";
 import { findActivitySubject } from "./read.js";
 import {
-  TaskDoc,
   buildTaskNotification,
   notifyTaskAssigned,
   notifyTaskStateChanged,
   parseTask,
   parseTaskFromNotification,
+  TaskDoc,
   writeTask,
 } from "./task.js";
 
@@ -34,14 +34,10 @@ const TASK_IRI = "https://alice.example/tasks/42#it";
 
 describe("Turtle IRI-injection guard — task subject + assignee", () => {
   // A payload that, written RAW between <…>, breaks out and injects a 2nd triple.
-  const INJECTION =
-    "https://evil/x> . <https://evil/s2> <https://evil/p2> <https://evil/o2";
+  const Injection = "https://evil/x> . <https://evil/s2> <https://evil/p2> <https://evil/o2";
 
   it("does not let a hostile assignee inject a second triple", async () => {
-    const store = buildTaskNotification(
-      { task: TASK_IRI, assignee: INJECTION },
-      { actor: ALICE }
-    );
+    const store = buildTaskNotification({ task: TASK_IRI, assignee: Injection }, { actor: ALICE });
     const ttl = await serializeTurtle(store);
     const quads = new Parser().parse(ttl);
     for (const q of quads) {
@@ -56,7 +52,7 @@ describe("Turtle IRI-injection guard — task subject + assignee", () => {
     // This payload IS a valid URL (host `evil`, the rest percent-encoded into the
     // path), so it is not rejected — but it must be written CANONICALISED, so the
     // `> . <…>` sequence can never break out of the subject <…> and inject triples.
-    const store = buildTaskNotification({ task: INJECTION }, { actor: ALICE });
+    const store = buildTaskNotification({ task: Injection }, { actor: ALICE });
     const ttl = await serializeTurtle(store);
     const quads = new Parser().parse(ttl);
     for (const q of quads) {
@@ -71,11 +67,9 @@ describe("Turtle IRI-injection guard — task subject + assignee", () => {
     // A genuinely unparseable / non-http subject → safeHttpIri returns undefined →
     // throw (a notification with an unwritable subject IRI is invalid).
     expect(() =>
-      buildTaskNotification({ task: "not a url> <injected>" }, { actor: ALICE })
+      buildTaskNotification({ task: "not a url> <injected>" }, { actor: ALICE }),
     ).toThrow(TypeError);
-    expect(() => writeTask(new Store(), { task: "mailto:evil@x" })).toThrow(
-      TypeError
-    );
+    expect(() => writeTask(new Store(), { task: "mailto:evil@x" })).toThrow(TypeError);
   });
 });
 
@@ -155,9 +149,7 @@ describe("TaskDoc + writeTask", () => {
   });
 
   it("throws on a non-http(s) task IRI (cannot be a wf:Task subject NamedNode)", () => {
-    expect(() => writeTask(new Store(), { task: "urn:uuid:1234" })).toThrow(
-      TypeError
-    );
+    expect(() => writeTask(new Store(), { task: "urn:uuid:1234" })).toThrow(TypeError);
   });
 });
 
@@ -183,7 +175,7 @@ describe("buildTaskNotification + parseTaskFromNotification", () => {
         target: "https://alice.example/project/",
         content: "Longer body of the announcement.",
         published,
-      }
+      },
     );
     const ttl = await serializeTurtle(store);
     // It is a single dataset carrying BOTH the activity and the task.
@@ -221,19 +213,15 @@ describe("buildTaskNotification + parseTaskFromNotification", () => {
       `@prefix as: <https://www.w3.org/ns/activitystreams#> .
        <https://x.example/n#it> a as:Announce ; as:actor <${ALICE}> .`,
       "text/turtle",
-      { baseIRI: "https://x.example/n" }
+      { baseIRI: "https://x.example/n" },
     );
-    expect(
-      parseTaskFromNotification("https://x.example/n#it", ds)
-    ).toBeUndefined();
+    expect(parseTaskFromNotification("https://x.example/n#it", ds)).toBeUndefined();
   });
 
   it("parseTask returns undefined for a subject that is not a wf:Task", async () => {
-    const ds = await parseRdf(
-      `<${TASK_IRI}> <${DCT}title> "Not a task" .`,
-      "text/turtle",
-      { baseIRI: "https://alice.example/tasks/42" }
-    );
+    const ds = await parseRdf(`<${TASK_IRI}> <${DCT}title> "Not a task" .`, "text/turtle", {
+      baseIRI: "https://alice.example/tasks/42",
+    });
     expect(parseTask(TASK_IRI, ds)).toBeUndefined();
   });
 
@@ -252,7 +240,7 @@ describe("buildTaskNotification + parseTaskFromNotification", () => {
     const ds = await parseRdf(
       `<${TASK_IRI}> a "garbage-type" ; <${DCT}title> "x" .`,
       "text/turtle",
-      { baseIRI: "https://alice.example/tasks/42" }
+      { baseIRI: "https://alice.example/tasks/42" },
     );
     let task: ReturnType<typeof parseTask>;
     expect(() => {
@@ -262,11 +250,9 @@ describe("buildTaskNotification + parseTaskFromNotification", () => {
   });
 
   it("parseTask reads a Closed-only task as state Closed", async () => {
-    const ds = await parseRdf(
-      `<${TASK_IRI}> a <${WF}Task>, <${WF}Closed> .`,
-      "text/turtle",
-      { baseIRI: "https://alice.example/tasks/42" }
-    );
+    const ds = await parseRdf(`<${TASK_IRI}> a <${WF}Task>, <${WF}Closed> .`, "text/turtle", {
+      baseIRI: "https://alice.example/tasks/42",
+    });
     expect(parseTask(TASK_IRI, ds)?.state).toBe("Closed");
   });
 
@@ -275,18 +261,16 @@ describe("buildTaskNotification + parseTaskFromNotification", () => {
       `<${TASK_IRI}> a <${WF}Task> ;
          <${DCT}created> "not-a-real-date"^^<http://www.w3.org/2001/XMLSchema#dateTime> .`,
       "text/turtle",
-      { baseIRI: "https://alice.example/tasks/42" }
+      { baseIRI: "https://alice.example/tasks/42" },
     );
     expect(parseTask(TASK_IRI, ds)?.created).toBeUndefined();
   });
 
   it("parseTask rejects a non-http(s) task subject IRI", async () => {
     const urn = "urn:uuid:1234";
-    const ds = await parseRdf(
-      `<${urn}> a <${WF}Task> ; <${DCT}title> "x" .`,
-      "text/turtle",
-      { baseIRI: "https://alice.example/tasks/42" }
-    );
+    const ds = await parseRdf(`<${urn}> a <${WF}Task> ; <${DCT}title> "x" .`, "text/turtle", {
+      baseIRI: "https://alice.example/tasks/42",
+    });
     expect(parseTask(urn, ds)).toBeUndefined();
   });
 
@@ -296,7 +280,7 @@ describe("buildTaskNotification + parseTaskFromNotification", () => {
          <${WF}assignee> "not-a-webid" ;
          <${DCT}creator> <mailto:x@y.com> .`,
       "text/turtle",
-      { baseIRI: "https://alice.example/tasks/42" }
+      { baseIRI: "https://alice.example/tasks/42" },
     );
     const task = parseTask(TASK_IRI, ds);
     expect(task).toEqual({ task: TASK_IRI });
@@ -308,7 +292,7 @@ describe("buildTaskNotification + parseTaskFromNotification", () => {
     const ds = await parseRdf(
       `<${TASK_IRI}> a <${WF}Task> ; <${DCT}created> "not-a-date" .`,
       "text/turtle",
-      { baseIRI: "https://alice.example/tasks/42" }
+      { baseIRI: "https://alice.example/tasks/42" },
     );
     let task: ReturnType<typeof parseTask>;
     expect(() => {
@@ -327,7 +311,7 @@ describe("buildTaskNotification + parseTaskFromNotification", () => {
          <${DCT}created> "2026-01-01T00:00:00Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>,
                          "2026-02-02T00:00:00Z"^^<http://www.w3.org/2001/XMLSchema#dateTime> .`,
       "text/turtle",
-      { baseIRI: "https://alice.example/tasks/42" }
+      { baseIRI: "https://alice.example/tasks/42" },
     );
     const task = parseTask(TASK_IRI, ds);
     // Every ambiguous field is dropped — never an arbitrary first value.
@@ -338,7 +322,7 @@ describe("buildTaskNotification + parseTaskFromNotification", () => {
     const ds = await parseRdf(
       `<${TASK_IRI}> a <${WF}Task> ; <${DCT}title> "Dup", "Dup" .`,
       "text/turtle",
-      { baseIRI: "https://alice.example/tasks/42" }
+      { baseIRI: "https://alice.example/tasks/42" },
     );
     expect(parseTask(TASK_IRI, ds)?.title).toBe("Dup");
   });
@@ -349,7 +333,7 @@ describe("buildTaskNotification + parseTaskFromNotification", () => {
     const ds = await parseRdf(
       `<${TASK_IRI}> a <${WF}Task>, <${WF}Open>, <${WF}Closed> .`,
       "text/turtle",
-      { baseIRI: "https://alice.example/tasks/42" }
+      { baseIRI: "https://alice.example/tasks/42" },
     );
     const task = parseTask(TASK_IRI, ds);
     expect(task).toEqual({ task: TASK_IRI });
@@ -361,7 +345,7 @@ describe("buildTaskNotification + parseTaskFromNotification", () => {
     const ds = await parseRdf(
       `<${TASK_IRI}> a <${WF}Task> ; <${DCT}created> "2026-01-01" .`,
       "text/turtle",
-      { baseIRI: "https://alice.example/tasks/42" }
+      { baseIRI: "https://alice.example/tasks/42" },
     );
     expect(parseTask(TASK_IRI, ds)?.created).toBeUndefined();
   });
@@ -374,11 +358,9 @@ describe("buildTaskNotification + parseTaskFromNotification", () => {
          as:object <${TASK_IRI}>, <https://alice.example/tasks/99#it> .
        <${TASK_IRI}> a wf:Task .`,
       "text/turtle",
-      { baseIRI: "https://x.example/n" }
+      { baseIRI: "https://x.example/n" },
     );
-    expect(
-      parseTaskFromNotification("https://x.example/n#it", ds)
-    ).toBeUndefined();
+    expect(parseTaskFromNotification("https://x.example/n#it", ds)).toBeUndefined();
   });
 
   it("parseTaskFromNotification does not throw on a malformed as:object (no task)", async () => {
@@ -388,7 +370,7 @@ describe("buildTaskNotification + parseTaskFromNotification", () => {
       `@prefix as: <https://www.w3.org/ns/activitystreams#> .
        <https://x.example/n#it> a as:Announce ; as:object "not-an-iri" .`,
       "text/turtle",
-      { baseIRI: "https://x.example/n" }
+      { baseIRI: "https://x.example/n" },
     );
     let task: ReturnType<typeof parseTaskFromNotification>;
     expect(() => {
@@ -469,7 +451,7 @@ describe("notifyTaskAssigned", () => {
         task: { task: TASK_IRI, title: "Ship the SDK" },
         summary: "You have a new task",
       },
-      LOOPBACK
+      LOOPBACK,
     );
     expect(r.status).toBe(201);
     expect(r.inbox).toBe(inbox);
@@ -501,7 +483,7 @@ describe("notifyTaskAssigned", () => {
         actorWebId: ALICE,
         task: { task: TASK_IRI, assignee: BOB },
       },
-      LOOPBACK
+      LOOPBACK,
     );
     const body = (posted.get("/erin/inbox/") ?? []).at(-1)?.body ?? "";
     expect(body).toContain(BOB);
@@ -532,17 +514,15 @@ describe("notifyTaskAssigned", () => {
         // embedded (writeTask runs first). ASYNC: the send path must AWAIT it, so
         // the marker triple it adds after a tick still reaches the wire.
         extend: async (store) => {
-          sawTask = new TaskDoc(TASK_IRI, store, DataFactory).types.has(
-            `${WF}Task`
-          );
+          sawTask = new TaskDoc(TASK_IRI, store, DataFactory).types.has(`${WF}Task`);
           await Promise.resolve();
           store.addQuad(
             DataFactory.namedNode(TASK_IRI),
             DataFactory.namedNode(`${DCT}subject`),
-            DataFactory.namedNode(marker)
+            DataFactory.namedNode(marker),
           );
         },
-      }
+      },
     );
     expect(sawTask).toBe(true);
     // The async extend's mutation landed on the POSTed body → it was awaited.
@@ -572,7 +552,7 @@ describe("notifyTaskAssigned", () => {
         content: "Please pick this up.",
         published,
       },
-      LOOPBACK
+      LOOPBACK,
     );
     const body = (posted.get("/ivy/inbox/") ?? []).at(-1)?.body ?? "";
     expect(body).toContain("Offer");
@@ -590,8 +570,8 @@ describe("notifyTaskAssigned", () => {
     await expect(
       notifyTaskAssigned(
         { recipientWebId: webId, actorWebId: ALICE, task: { task: TASK_IRI } },
-        LOOPBACK
-      )
+        LOOPBACK,
+      ),
     ).rejects.toBeInstanceOf(NoInboxError);
   });
 
@@ -609,8 +589,8 @@ describe("notifyTaskAssigned", () => {
     await expect(
       notifyTaskAssigned(
         { recipientWebId: webId, actorWebId: ALICE, task: { task: TASK_IRI } },
-        LOOPBACK
-      )
+        LOOPBACK,
+      ),
     ).rejects.toMatchObject({ status: 403 });
   });
 });
@@ -635,7 +615,7 @@ describe("notifyTaskStateChanged", () => {
         state: "Closed",
         summary: "Task closed",
       },
-      LOOPBACK
+      LOOPBACK,
     );
     expect(r.status).toBe(201);
     const body = (posted.get("/grace/inbox/") ?? []).at(-1)?.body ?? "";
@@ -659,8 +639,8 @@ describe("notifyTaskStateChanged", () => {
           task: { task: TASK_IRI },
           state: "Closed",
         },
-        LOOPBACK
-      )
+        LOOPBACK,
+      ),
     ).rejects.toMatchObject({ status: 0 });
   });
 });

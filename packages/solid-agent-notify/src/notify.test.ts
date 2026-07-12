@@ -79,9 +79,7 @@ describe("discoverInbox", () => {
   it("reads ldp:inbox off the WebID profile", async () => {
     const webId = `${base}/alice/card#me`;
     const inbox = `${base}/alice/inbox/`;
-    routes.set("/alice/card", (_r, res) =>
-      turtle(res, profileWithInbox(webId, inbox))
-    );
+    routes.set("/alice/card", (_r, res) => turtle(res, profileWithInbox(webId, inbox)));
     expect(await discoverInbox(webId, LOOPBACK)).toBe(inbox);
   });
 
@@ -91,8 +89,8 @@ describe("discoverInbox", () => {
       turtle(
         res,
         `@prefix ldp: <http://www.w3.org/ns/ldp#> .
-<#me> ldp:inbox <../bob/inbox/> .`
-      )
+<#me> ldp:inbox <../bob/inbox/> .`,
+      ),
     );
     expect(await discoverInbox(webId, LOOPBACK)).toBe(`${base}/bob/inbox/`);
   });
@@ -104,7 +102,7 @@ describe("discoverInbox", () => {
   it("returns undefined when the profile advertises NO inbox", async () => {
     const webId = `${base}/noinbox/card#me`;
     routes.set("/noinbox/card", (_r, res) =>
-      turtle(res, `<${webId}> <http://xmlns.com/foaf/0.1/name> "Nobody" .`)
+      turtle(res, `<${webId}> <http://xmlns.com/foaf/0.1/name> "Nobody" .`),
     );
     expect(await discoverInbox(webId, LOOPBACK)).toBeUndefined();
   });
@@ -115,16 +113,14 @@ describe("discoverInbox", () => {
       turtle(
         res,
         `@prefix ldp: <http://www.w3.org/ns/ldp#> .
-<${webId}> ldp:inbox <${base}/a/>, <${base}/b/> .`
-      )
+<${webId}> ldp:inbox <${base}/a/>, <${base}/b/> .`,
+      ),
     );
     expect(await discoverInbox(webId, LOOPBACK)).toBeUndefined();
   });
 
   it("returns undefined when the profile is a 404", async () => {
-    expect(
-      await discoverInbox(`${base}/missing/card#me`, LOOPBACK)
-    ).toBeUndefined();
+    expect(await discoverInbox(`${base}/missing/card#me`, LOOPBACK)).toBeUndefined();
   });
 
   it("returns undefined when the profile is a 500 (non-2xx)", async () => {
@@ -132,19 +128,14 @@ describe("discoverInbox", () => {
       res.writeHead(500, { "content-type": "text/plain" });
       res.end("boom");
     });
-    expect(
-      await discoverInbox(`${base}/err500/card#me`, LOOPBACK)
-    ).toBeUndefined();
+    expect(await discoverInbox(`${base}/err500/card#me`, LOOPBACK)).toBeUndefined();
   });
 
   it("honours a timeoutMs option", async () => {
     routes.set("/slowprofile/card", (_r, res) => {
       setTimeout(() => {
         try {
-          turtle(
-            res,
-            profileWithInbox(`${base}/slowprofile/card#me`, `${base}/x/`)
-          );
+          turtle(res, profileWithInbox(`${base}/slowprofile/card#me`, `${base}/x/`));
         } catch {
           /* torn down */
         }
@@ -154,7 +145,7 @@ describe("discoverInbox", () => {
       await discoverInbox(`${base}/slowprofile/card#me`, {
         ...LOOPBACK,
         timeoutMs: 100,
-      })
+      }),
     ).toBeUndefined();
   });
 
@@ -173,7 +164,7 @@ describe("discoverInbox", () => {
     expect(
       await discoverInbox("https://evil.example/card#me", {
         dnsLookup: vi.fn(async () => [{ address: "10.0.0.1", family: 4 }]),
-      })
+      }),
     ).toBeUndefined();
   });
 });
@@ -194,7 +185,7 @@ describe("sendNotification (known inbox)", () => {
         actor: `${base}/alice/card#me`,
         summary: "hi",
       },
-      LOOPBACK
+      LOOPBACK,
     );
     expect(r.status).toBe(202);
     expect(r.inbox).toBe(inbox);
@@ -211,18 +202,10 @@ describe("sendNotification (known inbox)", () => {
       res.end();
     });
     await expect(
-      sendNotification(
-        inbox,
-        { type: "Announce", actor: `${base}/alice/card#me` },
-        LOOPBACK
-      )
+      sendNotification(inbox, { type: "Announce", actor: `${base}/alice/card#me` }, LOOPBACK),
     ).rejects.toBeInstanceOf(NotificationSendError);
     await expect(
-      sendNotification(
-        inbox,
-        { type: "Announce", actor: `${base}/alice/card#me` },
-        LOOPBACK
-      )
+      sendNotification(inbox, { type: "Announce", actor: `${base}/alice/card#me` }, LOOPBACK),
     ).rejects.toMatchObject({ status: 403 });
   });
 
@@ -231,7 +214,7 @@ describe("sendNotification (known inbox)", () => {
       sendNotification("https://169.254.169.254/inbox/", {
         type: "Announce",
         actor: "https://alice.example/card#me",
-      })
+      }),
     ).rejects.toMatchObject({ status: 0 });
   });
 
@@ -244,8 +227,8 @@ describe("sendNotification (known inbox)", () => {
       sendNotification(
         `${base}/send/redir/`,
         { type: "Announce", actor: `${base}/alice/card#me` },
-        LOOPBACK
-      )
+        LOOPBACK,
+      ),
     ).rejects.toBeInstanceOf(NotificationSendError);
   });
 
@@ -264,7 +247,7 @@ describe("sendNotification (known inbox)", () => {
         allowLoopback: true,
         timeoutMs: 5000,
         dnsLookup: vi.fn(async () => [{ address: "127.0.0.1", family: 4 }]),
-      }
+      },
     );
     expect(r.status).toBe(201);
   });
@@ -278,7 +261,7 @@ describe("sendNotification (known inbox)", () => {
     const r = await sendNotification(
       inbox,
       { type: "Announce", actor: `${base}/alice/card#me` },
-      LOOPBACK
+      LOOPBACK,
     );
     expect(r.status).toBe(200);
   });
@@ -302,9 +285,7 @@ describe("notifyAgent", () => {
   it("discovers the inbox from the recipient profile then delivers", async () => {
     const webId = `${base}/carol/card#me`;
     const inbox = `${base}/carol/inbox/`;
-    routes.set("/carol/card", (_r, res) =>
-      turtle(res, profileWithInbox(webId, inbox))
-    );
+    routes.set("/carol/card", (_r, res) => turtle(res, profileWithInbox(webId, inbox)));
     routes.set("POST /carol/inbox/", (_r, res) => {
       res.writeHead(201);
       res.end();
@@ -317,7 +298,7 @@ describe("notifyAgent", () => {
         object: `${base}/alice/chat/`,
         summary: "Join us",
       },
-      LOOPBACK
+      LOOPBACK,
     );
     expect(r.status).toBe(201);
     expect(r.inbox).toBe(inbox);
@@ -329,9 +310,7 @@ describe("notifyAgent", () => {
   it("threads ALL optional fields (target, content, published) into the payload", async () => {
     const webId = `${base}/erin/card#me`;
     const inbox = `${base}/erin/inbox/`;
-    routes.set("/erin/card", (_r, res) =>
-      turtle(res, profileWithInbox(webId, inbox))
-    );
+    routes.set("/erin/card", (_r, res) => turtle(res, profileWithInbox(webId, inbox)));
     routes.set("POST /erin/inbox/", (_r, res) => {
       res.writeHead(201);
       res.end();
@@ -346,7 +325,7 @@ describe("notifyAgent", () => {
         content: "have a document",
         published: new Date("2026-03-04T05:06:07.000Z"),
       },
-      LOOPBACK
+      LOOPBACK,
     );
     const records = posted.get("/erin/inbox/") ?? [];
     const body = records[records.length - 1].body;
@@ -359,17 +338,12 @@ describe("notifyAgent", () => {
   it("defaults type to Announce when omitted in notifyAgent", async () => {
     const webId = `${base}/frank/card#me`;
     const inbox = `${base}/frank/inbox/`;
-    routes.set("/frank/card", (_r, res) =>
-      turtle(res, profileWithInbox(webId, inbox))
-    );
+    routes.set("/frank/card", (_r, res) => turtle(res, profileWithInbox(webId, inbox)));
     routes.set("POST /frank/inbox/", (_r, res) => {
       res.writeHead(201);
       res.end();
     });
-    await notifyAgent(
-      { recipientWebId: webId, actorWebId: `${base}/alice/card#me` },
-      LOOPBACK
-    );
+    await notifyAgent({ recipientWebId: webId, actorWebId: `${base}/alice/card#me` }, LOOPBACK);
     const records = posted.get("/frank/inbox/") ?? [];
     expect(records[records.length - 1].body).toContain("Announce");
   });
@@ -377,13 +351,10 @@ describe("notifyAgent", () => {
   it("throws NoInboxError when the recipient advertises no inbox — no POST", async () => {
     const webId = `${base}/dave/card#me`;
     routes.set("/dave/card", (_r, res) =>
-      turtle(res, `<${webId}> <http://xmlns.com/foaf/0.1/name> "Dave" .`)
+      turtle(res, `<${webId}> <http://xmlns.com/foaf/0.1/name> "Dave" .`),
     );
     await expect(
-      notifyAgent(
-        { recipientWebId: webId, actorWebId: `${base}/alice/card#me` },
-        LOOPBACK
-      )
+      notifyAgent({ recipientWebId: webId, actorWebId: `${base}/alice/card#me` }, LOOPBACK),
     ).rejects.toBeInstanceOf(NoInboxError);
   });
 });
@@ -397,24 +368,24 @@ describe("readInbox", () => {
       turtle(
         res,
         `@prefix ldp: <http://www.w3.org/ns/ldp#> .
-<${inbox}> ldp:contains <${inbox}n1>, <${inbox}n2> .`
-      )
+<${inbox}> ldp:contains <${inbox}n1>, <${inbox}n2> .`,
+      ),
     );
     routes.set("/read/inbox/n1", (_r, res) =>
       turtle(
         res,
         `@prefix as: <https://www.w3.org/ns/activitystreams#> .
 <#it> a as:Announce ; as:actor <${base}/alice/card#me> ;
-  as:summary "first" ; as:published "2026-01-01T00:00:00Z"^^<http://www.w3.org/2001/XMLSchema#dateTime> .`
-      )
+  as:summary "first" ; as:published "2026-01-01T00:00:00Z"^^<http://www.w3.org/2001/XMLSchema#dateTime> .`,
+      ),
     );
     routes.set("/read/inbox/n2", (_r, res) =>
       turtle(
         res,
         `@prefix as: <https://www.w3.org/ns/activitystreams#> .
 <#it> a as:Invite ; as:actor <${base}/bob/card#me> ;
-  as:summary "second" ; as:published "2026-02-01T00:00:00Z"^^<http://www.w3.org/2001/XMLSchema#dateTime> .`
-      )
+  as:summary "second" ; as:published "2026-02-01T00:00:00Z"^^<http://www.w3.org/2001/XMLSchema#dateTime> .`,
+      ),
     );
     const list = await readInbox(inbox, LOOPBACK);
     expect(list.length).toBe(2);
@@ -438,15 +409,15 @@ describe("readInbox", () => {
       turtle(
         res,
         `@prefix ldp: <http://www.w3.org/ns/ldp#> .
-<${inbox}> ldp:contains <${inbox}good>, <https://169.254.169.254/secret> .`
-      )
+<${inbox}> ldp:contains <${inbox}good>, <https://169.254.169.254/secret> .`,
+      ),
     );
     routes.set("/read/hostile/good", (_r, res) =>
       turtle(
         res,
         `@prefix as: <https://www.w3.org/ns/activitystreams#> .
-<#it> a as:Announce ; as:summary "legit" .`
-      )
+<#it> a as:Announce ; as:summary "legit" .`,
+      ),
     );
     const list = await readInbox(inbox, LOOPBACK);
     expect(list.length).toBe(1);
@@ -459,15 +430,15 @@ describe("readInbox", () => {
       turtle(
         res,
         `@prefix ldp: <http://www.w3.org/ns/ldp#> .
-<${inbox}> ldp:contains <${inbox}ok>, <${base}/read/outside>, <${inbox}sub/deep> .`
-      )
+<${inbox}> ldp:contains <${inbox}ok>, <${base}/read/outside>, <${inbox}sub/deep> .`,
+      ),
     );
     routes.set("/read/scope/ok", (_r, res) =>
       turtle(
         res,
         `@prefix as: <https://www.w3.org/ns/activitystreams#> .
-<#it> a as:Announce ; as:summary "ok" .`
-      )
+<#it> a as:Announce ; as:summary "ok" .`,
+      ),
     );
     const list = await readInbox(inbox, LOOPBACK);
     expect(list.length).toBe(1);
@@ -480,22 +451,22 @@ describe("readInbox", () => {
       turtle(
         res,
         `@prefix ldp: <http://www.w3.org/ns/ldp#> .
-<${inbox}> ldp:contains <${inbox}good>, <${inbox}gone>, <${inbox}notact> .`
-      )
+<${inbox}> ldp:contains <${inbox}good>, <${inbox}gone>, <${inbox}notact> .`,
+      ),
     );
     routes.set("/read/mixed/good", (_r, res) =>
       turtle(
         res,
         `@prefix as: <https://www.w3.org/ns/activitystreams#> .
-<#it> a as:Announce ; as:summary "kept" .`
-      )
+<#it> a as:Announce ; as:summary "kept" .`,
+      ),
     );
     routes.set("/read/mixed/gone", (_r, res) => {
       res.writeHead(404, { "content-type": "text/plain" });
       res.end("gone");
     });
     routes.set("/read/mixed/notact", (_r, res) =>
-      turtle(res, `<${inbox}notact> <http://xmlns.com/foaf/0.1/name> "x" .`)
+      turtle(res, `<${inbox}notact> <http://xmlns.com/foaf/0.1/name> "x" .`),
     );
     const list = await readInbox(inbox, LOOPBACK);
     expect(list.length).toBe(1);
@@ -508,15 +479,15 @@ describe("readInbox", () => {
       turtle(
         res,
         `@prefix ldp: <http://www.w3.org/ns/ldp#> .
-<${inbox}> ldp:contains "not-a-resource", <${inbox}n>, <${inbox}n> .`
-      )
+<${inbox}> ldp:contains "not-a-resource", <${inbox}n>, <${inbox}n> .`,
+      ),
     );
     routes.set("/read/lit/n", (_r, res) =>
       turtle(
         res,
         `@prefix as: <https://www.w3.org/ns/activitystreams#> .
-<#it> a as:Announce ; as:summary "one" .`
-      )
+<#it> a as:Announce ; as:summary "one" .`,
+      ),
     );
     const list = await readInbox(inbox, LOOPBACK);
     expect(list.length).toBe(1); // literal skipped; the duplicate member deduped
@@ -529,16 +500,16 @@ describe("readInbox", () => {
       turtle(
         res,
         `@prefix ldp: <http://www.w3.org/ns/ldp#> .
-<${inbox}> ldp:contains <${inbox}b>, <${inbox}a> .`
-      )
+<${inbox}> ldp:contains <${inbox}b>, <${inbox}a> .`,
+      ),
     );
     for (const id of ["a", "b"]) {
       routes.set(`/read/undated/${id}`, (_r, res) =>
         turtle(
           res,
           `@prefix as: <https://www.w3.org/ns/activitystreams#> .
-<#it> a as:Announce ; as:summary "${id}" .`
-        )
+<#it> a as:Announce ; as:summary "${id}" .`,
+        ),
       );
     }
     const list = await readInbox(inbox, LOOPBACK);
@@ -548,16 +519,14 @@ describe("readInbox", () => {
   it("returns [] for an empty inbox (no ldp:contains)", async () => {
     const inbox = `${base}/read/empty/`;
     routes.set("/read/empty/", (_r, res) =>
-      turtle(res, `<${inbox}> <http://purl.org/dc/terms/title> "Inbox" .`)
+      turtle(res, `<${inbox}> <http://purl.org/dc/terms/title> "Inbox" .`),
     );
     expect(await readInbox(inbox, LOOPBACK)).toEqual([]);
   });
 
   it("returns [] when the container listing is unparseable", async () => {
     const inbox = `${base}/read/badlisting/`;
-    routes.set("/read/badlisting/", (_r, res) =>
-      turtle(res, "not { valid turtle")
-    );
+    routes.set("/read/badlisting/", (_r, res) => turtle(res, "not { valid turtle"));
     expect(await readInbox(inbox, LOOPBACK)).toEqual([]);
   });
 
@@ -567,15 +536,15 @@ describe("readInbox", () => {
       turtle(
         res,
         `@prefix ldp: <http://www.w3.org/ns/ldp#> .
-<${inbox}> ldp:contains <${inbox}n> .`
-      )
+<${inbox}> ldp:contains <${inbox}n> .`,
+      ),
     );
     routes.set("/read/typeless/n", (_r, res) =>
       turtle(
         res,
         `@prefix as: <https://www.w3.org/ns/activitystreams#> .
-<#it> as:actor <${base}/alice/card#me> ; as:summary "typeless" .`
-      )
+<#it> as:actor <${base}/alice/card#me> ; as:summary "typeless" .`,
+      ),
     );
     const list = await readInbox(inbox, LOOPBACK);
     expect(list.length).toBe(1);
@@ -606,15 +575,11 @@ describe("isDirectChild", () => {
     expect(isDirectChild("https://pod.example/inbox/a%2fb", C)).toBe(false);
   });
   it("handles a container URL without a trailing slash", () => {
-    expect(
-      isDirectChild("https://pod.example/inbox/n1", "https://pod.example/inbox")
-    ).toBe(true);
+    expect(isDirectChild("https://pod.example/inbox/n1", "https://pod.example/inbox")).toBe(true);
   });
   it("returns false for unparseable URLs", () => {
     expect(isDirectChild("not a url", C)).toBe(false);
-    expect(isDirectChild("https://pod.example/inbox/n1", "not a url")).toBe(
-      false
-    );
+    expect(isDirectChild("https://pod.example/inbox/n1", "not a url")).toBe(false);
   });
 });
 

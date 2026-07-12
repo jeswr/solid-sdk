@@ -22,15 +22,12 @@
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { GuardedFetchError, SsrfError, guardedFetch } from "./guardedFetch.js";
+import { GuardedFetchError, guardedFetch, SsrfError } from "./guardedFetch.js";
 import { assertNotSsrf, isDeniedHostname } from "./ssrf.js";
 
 let server: http.Server;
 let base: string;
-const routes = new Map<
-  string,
-  (req: http.IncomingMessage, res: http.ServerResponse) => void
->();
+const routes = new Map<string, (req: http.IncomingMessage, res: http.ServerResponse) => void>();
 
 beforeAll(async () => {
   server = http.createServer((req, res) => {
@@ -57,12 +54,7 @@ function stubDns(...addrs: { address: string; family: number }[]) {
 
 describe("preserved posture — STRICTER hostname denylist (localhost / .local)", () => {
   it("isDeniedHostname blocks localhost / *.localhost / *.local (agent-notify stricter list)", () => {
-    for (const h of [
-      "localhost",
-      "foo.localhost",
-      "service.local",
-      "printer.local",
-    ]) {
+    for (const h of ["localhost", "foo.localhost", "service.local", "printer.local"]) {
       expect(isDeniedHostname(h)).toBe(true);
     }
   });
@@ -76,7 +68,7 @@ describe("preserved posture — STRICTER hostname denylist (localhost / .local)"
         allowLoopback: true,
         enforceHttpsExceptLoopback: true,
         dnsLookup: stubDns({ address: "127.0.0.1", family: 4 }),
-      })
+      }),
     ).rejects.toBeInstanceOf(SsrfError);
   });
 
@@ -85,7 +77,7 @@ describe("preserved posture — STRICTER hostname denylist (localhost / .local)"
       assertNotSsrf("https://nas.local/", {
         allowLoopback: true,
         dnsLookup: stubDns({ address: "8.8.8.8", family: 4 }),
-      })
+      }),
     ).rejects.toBeInstanceOf(SsrfError);
   });
 
@@ -96,7 +88,7 @@ describe("preserved posture — STRICTER hostname denylist (localhost / .local)"
       guardedFetch("http://localhost/card", {
         allowLoopback: true,
         dnsLookup: dns,
-      })
+      }),
     ).rejects.toBeInstanceOf(SsrfError);
     expect(dns).not.toHaveBeenCalled();
   });
@@ -133,7 +125,7 @@ describe("preserved posture — POST refuses ALL redirects (confused-deputy)", (
         body: "<#it> a <https://www.w3.org/ns/activitystreams#Announce> .",
         headers: { "content-type": "text/turtle" },
         skipContentTypeAllowlist: true,
-      })
+      }),
     ).rejects.toBeInstanceOf(GuardedFetchError);
     // The body must NEVER have been bounced to the redirect target.
     expect(dstHit).toBe(false);
@@ -150,7 +142,7 @@ describe("preserved posture — POST refuses ALL redirects (confused-deputy)", (
         method: "POST",
         body: "x",
         skipContentTypeAllowlist: true,
-      })
+      }),
     ).rejects.toBeInstanceOf(GuardedFetchError);
   });
 });
@@ -161,9 +153,9 @@ describe("preserved posture — DNS-rebinding refused at validation (every recor
       guardedFetch("https://rebind.example/", {
         dnsLookup: stubDns(
           { address: "93.184.216.34", family: 4 },
-          { address: "169.254.169.254", family: 4 }
+          { address: "169.254.169.254", family: 4 },
         ),
-      })
+      }),
     ).rejects.toBeInstanceOf(SsrfError);
   });
 
@@ -173,9 +165,9 @@ describe("preserved posture — DNS-rebinding refused at validation (every recor
         allowLoopback: false,
         dnsLookup: stubDns(
           { address: "93.184.216.34", family: 4 },
-          { address: "10.0.0.1", family: 4 }
+          { address: "10.0.0.1", family: 4 },
         ),
-      })
+      }),
     ).rejects.toBeInstanceOf(SsrfError);
   });
 
@@ -196,7 +188,7 @@ describe("preserved posture — DNS-rebinding refused at validation (every recor
         : [{ address: "169.254.169.254", family: 4 }];
     });
     await expect(
-      guardedFetch("https://flip.example/", { dnsLookup: flipping })
+      guardedFetch("https://flip.example/", { dnsLookup: flipping }),
     ).rejects.toBeInstanceOf(SsrfError);
     // The connect-time lookup MUST have been consulted (>= 2 calls) — proving the pin path ran, not
     // just the URL check. If only the URL check ran (1 call) the flip would have connected.

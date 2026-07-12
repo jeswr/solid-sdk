@@ -15,11 +15,7 @@
  *        (this is the regression case for the original naive indexOf("//") bug)
  */
 import { describe, expect, it } from "vitest";
-import {
-  PATTERNS,
-  stripBlockComments,
-  stripLineComment,
-} from "./check-no-raw-fetch.mjs";
+import { PATTERNS, stripBlockComments, stripLineComment } from "./check-no-raw-fetch.mjs";
 
 // ─── stripLineComment ────────────────────────────────────────────────────────
 
@@ -174,16 +170,12 @@ describe("guard detection — raw fetch(", () => {
   it("CATCHES fetch( that follows a backtick URL literal on the same line (backtick false-negative regression)", () => {
     // Round-2 bug: `//` inside a backtick URL was treated as a comment start,
     // stripping `fetch(url)` and producing a false-negative miss.
-    expect(checkLine("const url = `https://example.com`; fetch(url)")).toBe(
-      true
-    );
+    expect(checkLine("const url = `https://example.com`; fetch(url)")).toBe(true);
   });
 
   it("CATCHES fetch( after a backtick URL when a real // comment follows", () => {
     // Three zones: backtick URL (data), code (fetch), comment. All must be parsed correctly.
-    expect(
-      checkLine("const url = `https://example.com`; fetch(url) // legacy")
-    ).toBe(true);
+    expect(checkLine("const url = `https://example.com`; fetch(url) // legacy")).toBe(true);
   });
 });
 

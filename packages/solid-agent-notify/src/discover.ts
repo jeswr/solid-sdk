@@ -14,12 +14,7 @@
  * to an absolute URL here so callers get a clean result.
  */
 import { parseRdf } from "@jeswr/fetch-rdf";
-import {
-  NamedNodeAs,
-  NamedNodeFrom,
-  SetFrom,
-  TermWrapper,
-} from "@rdfjs/wrapper";
+import { NamedNodeAs, NamedNodeFrom, SetFrom, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory, type Store } from "n3";
 import { LDP_INBOX, MAX_BYTES_PROFILE } from "./config.js";
 import {
@@ -41,10 +36,7 @@ export interface NotifyOptions {
   /** Total timeout (ms) for the underlying guarded fetch. */
   timeoutMs?: number;
   /** Override the guarded-fetch impl, TESTS ONLY — production must use the real chokepoint. */
-  fetchImpl?: (
-    url: string,
-    opts?: GuardedFetchOptions
-  ) => Promise<GuardedFetchResult>;
+  fetchImpl?: (url: string, opts?: GuardedFetchOptions) => Promise<GuardedFetchResult>;
   /**
    * ADVANCED (send-only): augment the notification dataset before it is serialised
    * to Turtle and POSTed — e.g. embed a shared `wf:Task` body alongside the
@@ -73,12 +65,7 @@ class InboxAgent extends TermWrapper {
    * raw cardinality error.
    */
   get inboxes(): Set<string> {
-    return SetFrom.subjectPredicate(
-      this,
-      LDP_INBOX,
-      NamedNodeAs.string,
-      NamedNodeFrom.string
-    );
+    return SetFrom.subjectPredicate(this, LDP_INBOX, NamedNodeAs.string, NamedNodeFrom.string);
   }
 }
 
@@ -95,7 +82,7 @@ class InboxAgent extends TermWrapper {
  */
 export async function discoverInbox(
   webId: string,
-  opts: NotifyOptions = {}
+  opts: NotifyOptions = {},
 ): Promise<string | undefined> {
   let docUrl: string;
   try {
@@ -111,9 +98,7 @@ export async function discoverInbox(
       method: "GET",
       maxBytes: MAX_BYTES_PROFILE,
       ...(opts.timeoutMs !== undefined ? { timeoutMs: opts.timeoutMs } : {}),
-      ...(opts.allowLoopback !== undefined
-        ? { allowLoopback: opts.allowLoopback }
-        : {}),
+      ...(opts.allowLoopback !== undefined ? { allowLoopback: opts.allowLoopback } : {}),
       ...(opts.dnsLookup !== undefined ? { dnsLookup: opts.dnsLookup } : {}),
     });
   } catch {

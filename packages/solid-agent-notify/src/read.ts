@@ -16,10 +16,7 @@ import { DataFactory } from "n3";
 import { ActivityDoc } from "./activity.js";
 import { AS, LDP_CONTAINS, MAX_BYTES_INBOX, RDF_TYPE } from "./config.js";
 import type { NotifyOptions } from "./discover.js";
-import {
-  type GuardedFetchResult,
-  guardedFetch,
-} from "./security/guardedFetch.js";
+import { type GuardedFetchResult, guardedFetch } from "./security/guardedFetch.js";
 
 /** A notification as a reader consumes it (plain, serialisable — no RDF terms). */
 export interface InboxNotification {
@@ -65,9 +62,7 @@ export function isDirectChild(url: string, container: string): boolean {
   } catch {
     return false;
   }
-  const containerPath = parent.pathname.endsWith("/")
-    ? parent.pathname
-    : `${parent.pathname}/`;
+  const containerPath = parent.pathname.endsWith("/") ? parent.pathname : `${parent.pathname}/`;
   if (
     parsed.origin !== parent.origin ||
     !parsed.pathname.startsWith(containerPath) ||
@@ -87,18 +82,14 @@ export function isDirectChild(url: string, container: string): boolean {
  */
 export function findActivitySubject(
   url: string,
-  dataset: import("@rdfjs/types").DatasetCore
+  dataset: import("@rdfjs/types").DatasetCore,
 ): string | undefined {
   for (const q of dataset.match(null, DataFactory.namedNode(RDF_TYPE), null)) {
     if (q.object.termType === "NamedNode" && q.object.value.startsWith(AS)) {
       return q.subject.value;
     }
   }
-  for (const q of dataset.match(
-    null,
-    DataFactory.namedNode(`${AS}actor`),
-    null
-  )) {
+  for (const q of dataset.match(null, DataFactory.namedNode(`${AS}actor`), null)) {
     return q.subject.value;
   }
   const itUrl = `${url}#it`;
@@ -113,7 +104,7 @@ export function findActivitySubject(
  */
 export function parseInboxNotification(
   url: string,
-  dataset: import("@rdfjs/types").DatasetCore
+  dataset: import("@rdfjs/types").DatasetCore,
 ): InboxNotification | undefined {
   const subject = findActivitySubject(url, dataset);
   if (!subject) return undefined;
@@ -126,23 +117,14 @@ export function parseInboxNotification(
     ...(doc.target !== undefined ? { target: doc.target } : {}),
     ...(doc.summary !== undefined ? { summary: doc.summary } : {}),
     ...(doc.content !== undefined ? { content: doc.content } : {}),
-    ...(doc.published !== undefined
-      ? { published: doc.published.toISOString() }
-      : {}),
+    ...(doc.published !== undefined ? { published: doc.published.toISOString() } : {}),
   };
 }
 
 /** Extract the direct-child member URLs an inbox container's `ldp:contains` advertises. */
-function containerMembers(
-  inboxUrl: string,
-  dataset: import("@rdfjs/types").DatasetCore
-): string[] {
+function containerMembers(inboxUrl: string, dataset: import("@rdfjs/types").DatasetCore): string[] {
   const out = new Set<string>();
-  for (const q of dataset.match(
-    null,
-    DataFactory.namedNode(LDP_CONTAINS),
-    null
-  )) {
+  for (const q of dataset.match(null, DataFactory.namedNode(LDP_CONTAINS), null)) {
     if (q.object.termType !== "NamedNode") continue;
     let abs: string;
     try {
@@ -165,16 +147,14 @@ function containerMembers(
  */
 export async function readInbox(
   inboxUrl: string,
-  opts: NotifyOptions = {}
+  opts: NotifyOptions = {},
 ): Promise<InboxNotification[]> {
   const fetcher = opts.fetchImpl ?? guardedFetch;
   const getOpts = {
     method: "GET" as const,
     maxBytes: MAX_BYTES_INBOX,
     ...(opts.timeoutMs !== undefined ? { timeoutMs: opts.timeoutMs } : {}),
-    ...(opts.allowLoopback !== undefined
-      ? { allowLoopback: opts.allowLoopback }
-      : {}),
+    ...(opts.allowLoopback !== undefined ? { allowLoopback: opts.allowLoopback } : {}),
     ...(opts.dnsLookup !== undefined ? { dnsLookup: opts.dnsLookup } : {}),
   };
 
@@ -188,11 +168,9 @@ export async function readInbox(
 
   let containerDataset: import("@rdfjs/types").DatasetCore;
   try {
-    containerDataset = await parseRdf(
-      listing.text,
-      listing.contentType || null,
-      { baseIRI: listing.finalUrl }
-    );
+    containerDataset = await parseRdf(listing.text, listing.contentType || null, {
+      baseIRI: listing.finalUrl,
+    });
   } catch {
     return [];
   }
@@ -210,12 +188,10 @@ export async function readInbox(
       } catch {
         return undefined;
       }
-    })
+    }),
   );
 
-  const notifications = parsed.filter(
-    (n): n is InboxNotification => n !== undefined
-  );
+  const notifications = parsed.filter((n): n is InboxNotification => n !== undefined);
   // Newest first; a stable secondary key on url keeps undated items deterministic.
   // ISO-8601 UTC strings are lexicographically ordered, so plain relational compare.
   return notifications.sort((a, b) => {

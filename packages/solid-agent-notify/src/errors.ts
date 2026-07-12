@@ -17,9 +17,7 @@ export class AgentNotifyError extends Error {
 export class NoInboxError extends AgentNotifyError {
   readonly webId: string;
   constructor(webId: string) {
-    super(
-      `This agent's profile does not advertise an inbox to deliver to (${webId}).`
-    );
+    super(`This agent's profile does not advertise an inbox to deliver to (${webId}).`);
     this.name = "NoInboxError";
     this.webId = webId;
   }
@@ -31,10 +29,7 @@ export class NotificationSendError extends AgentNotifyError {
   /** HTTP status the recipient inbox answered with (0 for a guard refusal / network error). */
   readonly status: number;
   constructor(inbox: string, status: number, options?: { cause?: unknown }) {
-    super(
-      `Could not deliver the notification (${status}) to ${inbox}.`,
-      options
-    );
+    super(`Could not deliver the notification (${status}) to ${inbox}.`, options);
     this.name = "NotificationSendError";
     this.inbox = inbox;
     this.status = status;

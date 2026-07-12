@@ -12,69 +12,46 @@
  * @packageDocumentation
  */
 
-// ── Discovery ──
-export { discoverInbox, profileDocUrl } from "./discover.js";
-export type { NotifyOptions } from "./discover.js";
-
-// ── Send ──
-export { sendNotification, notifyAgent } from "./send.js";
-export type { SendResult, NotifyAgentArgs } from "./send.js";
-
-// ── Read ──
-export {
-  readInbox,
-  parseInboxNotification,
-  findActivitySubject,
-  isDirectChild,
-} from "./read.js";
-export type { InboxNotification } from "./read.js";
-
+export type { ActivityNotification, ActivityType } from "./activity.js";
 // ── Activity model ──
 export {
-  buildActivity,
-  serializeTurtle,
   ActivityDoc,
+  buildActivity,
+  escapeIri,
   isHttpIri,
   safeHttpIri,
-  escapeIri,
+  serializeTurtle,
 } from "./activity.js";
-export type { ActivityNotification, ActivityType } from "./activity.js";
-
-// ── Shared federation task model (https://w3id.org/jeswr/task — wf:Task + dct:) ──
-export {
-  TaskDoc,
-  writeTask,
-  buildTaskNotification,
-  parseTask,
-  parseTaskFromNotification,
-  notifyTaskAssigned,
-  notifyTaskStateChanged,
-} from "./task.js";
-export type {
-  TaskNotification,
-  TaskState,
-  NotifyTaskArgs,
-} from "./task.js";
-
+export type { NotifyOptions } from "./discover.js";
+// ── Discovery ──
+export { discoverInbox, profileDocUrl } from "./discover.js";
 // ── Errors ──
 export {
   AgentNotifyError,
+  InboxScopeError,
   NoInboxError,
   NotificationSendError,
-  InboxScopeError,
 } from "./errors.js";
-
-// ── The egress chokepoint + its guard-layer errors (for advanced callers/tests) ──
+export type { InboxNotification } from "./read.js";
+// ── Read ──
 export {
-  guardedFetch,
-  GuardedFetchError,
-  SsrfError,
-  BodyTooLargeError,
-} from "./security/guardedFetch.js";
+  findActivitySubject,
+  isDirectChild,
+  parseInboxNotification,
+  readInbox,
+} from "./read.js";
 export type {
   GuardedFetchOptions,
   GuardedFetchResult,
 } from "./security/guardedFetch.js";
+// ── The egress chokepoint + its guard-layer errors (for advanced callers/tests) ──
+export {
+  BodyTooLargeError,
+  GuardedFetchError,
+  guardedFetch,
+  SsrfError,
+} from "./security/guardedFetch.js";
+export type { LookupAddress } from "./security/ssrf.js";
 export {
   assertNotSsrf,
   isDeniedHostname,
@@ -82,4 +59,21 @@ export {
   isPublicAddress,
   normalizeHostForClassification,
 } from "./security/ssrf.js";
-export type { LookupAddress } from "./security/ssrf.js";
+export type { NotifyAgentArgs, SendResult } from "./send.js";
+// ── Send ──
+export { notifyAgent, sendNotification } from "./send.js";
+export type {
+  NotifyTaskArgs,
+  TaskNotification,
+  TaskState,
+} from "./task.js";
+// ── Shared federation task model (https://w3id.org/jeswr/task — wf:Task + dct:) ──
+export {
+  buildTaskNotification,
+  notifyTaskAssigned,
+  notifyTaskStateChanged,
+  parseTask,
+  parseTaskFromNotification,
+  TaskDoc,
+  writeTask,
+} from "./task.js";

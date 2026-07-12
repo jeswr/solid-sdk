@@ -24,12 +24,12 @@ import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { MAX_REDIRECTS } from "../config.js";
 import {
-  BodyTooLargeError,
-  GuardedFetchError,
-  SsrfError,
   assertSchemeAndPort,
+  BodyTooLargeError,
   classifyGuardError,
+  GuardedFetchError,
   guardedFetch,
+  SsrfError,
 } from "./guardedFetch.js";
 import {
   assertNotSsrf,
@@ -136,10 +136,7 @@ describe("isPublicAddress — IPv6 ranges", () => {
     ["::ffff:10.0.0.1", "IPv4-mapped private (compressed)"],
     ["::ffff:127.0.0.1", "IPv4-mapped loopback (compressed)"],
     ["::ffff:169.254.169.254", "IPv4-mapped metadata"],
-    [
-      "0:0:0:0:0:ffff:0a00:0001",
-      "IPv4-mapped private (EXPANDED hextet = 10.0.0.1)",
-    ],
+    ["0:0:0:0:0:ffff:0a00:0001", "IPv4-mapped private (EXPANDED hextet = 10.0.0.1)"],
     ["2002:0a00:0001::", "6to4 embedding 10.0.0.1"],
     ["2002:7f00:0001::", "6to4 embedding 127.0.0.1"],
     ["64:ff9b::10.0.0.1", "NAT64 embedding 10.0.0.1"],
@@ -210,12 +207,8 @@ describe("normalizeHostForClassification — alternate IPv4 encodings", () => {
   }
 
   it("leaves a real hostname unchanged (lowercased)", () => {
-    expect(normalizeHostForClassification("Alice.Example")).toBe(
-      "alice.example"
-    );
-    expect(normalizeHostForClassification("127.0.0.1.evil.com")).toBe(
-      "127.0.0.1.evil.com"
-    );
+    expect(normalizeHostForClassification("Alice.Example")).toBe("alice.example");
+    expect(normalizeHostForClassification("127.0.0.1.evil.com")).toBe("127.0.0.1.evil.com");
   });
 
   it("strips IPv6 brackets", () => {
@@ -256,15 +249,8 @@ describe("isDeniedHostname — cloud-internal denylist", () => {
 
 describe("assertNotSsrf — scheme / port / userinfo gates", () => {
   it("rejects non-http(s) schemes", async () => {
-    for (const u of [
-      "ftp://x/",
-      "file:///etc/passwd",
-      "gopher://x/",
-      "data:text/plain,hi",
-    ]) {
-      await expect(
-        assertNotSsrf(u, { allowLoopback: false })
-      ).rejects.toBeInstanceOf(SsrfError);
+    for (const u of ["ftp://x/", "file:///etc/passwd", "gopher://x/", "data:text/plain,hi"]) {
+      await expect(assertNotSsrf(u, { allowLoopback: false })).rejects.toBeInstanceOf(SsrfError);
     }
   });
 
@@ -274,7 +260,7 @@ describe("assertNotSsrf — scheme / port / userinfo gates", () => {
         allowLoopback: false,
         enforceHttpsExceptLoopback: true,
         dnsLookup: stubDns({ address: "8.8.8.8", family: 4 }),
-      })
+      }),
     ).rejects.toBeInstanceOf(SsrfError);
   });
 
@@ -284,20 +270,20 @@ describe("assertNotSsrf — scheme / port / userinfo gates", () => {
         allowLoopback: true,
         enforceHttpsExceptLoopback: true,
         dnsLookup: stubDns({ address: "8.8.8.8", family: 4 }),
-      })
+      }),
     ).rejects.toBeInstanceOf(SsrfError);
   });
 
   it("rejects userinfo in the URL", async () => {
     await expect(
-      assertNotSsrf("https://user:pass@example.com/", { allowLoopback: false })
+      assertNotSsrf("https://user:pass@example.com/", { allowLoopback: false }),
     ).rejects.toThrow(/userinfo/i);
   });
 
   it("rejects a malformed URL", async () => {
-    await expect(
-      assertNotSsrf("http://[bad", { allowLoopback: false })
-    ).rejects.toBeInstanceOf(SsrfError);
+    await expect(assertNotSsrf("http://[bad", { allowLoopback: false })).rejects.toBeInstanceOf(
+      SsrfError,
+    );
   });
 });
 
@@ -312,9 +298,7 @@ describe("assertNotSsrf — IP literal targets (no DNS)", () => {
       "https://[fe80::1]/",
       "https://[::ffff:10.0.0.1]/",
     ]) {
-      await expect(
-        assertNotSsrf(h, { allowLoopback: false })
-      ).rejects.toBeInstanceOf(SsrfError);
+      await expect(assertNotSsrf(h, { allowLoopback: false })).rejects.toBeInstanceOf(SsrfError);
     }
   });
 
@@ -325,9 +309,7 @@ describe("assertNotSsrf — IP literal targets (no DNS)", () => {
       "https://0177.0.0.1/", // 127.0.0.1 octal
       "https://127.1/", // 127.0.0.1 short
     ]) {
-      await expect(
-        assertNotSsrf(h, { allowLoopback: false })
-      ).rejects.toBeInstanceOf(SsrfError);
+      await expect(assertNotSsrf(h, { allowLoopback: false })).rejects.toBeInstanceOf(SsrfError);
     }
   });
 
@@ -345,7 +327,7 @@ describe("assertNotSsrf — DNS resolution + rebinding", () => {
       assertNotSsrf("https://evil.example/", {
         allowLoopback: false,
         dnsLookup: stubDns({ address: "10.0.0.1", family: 4 }),
-      })
+      }),
     ).rejects.toBeInstanceOf(SsrfError);
   });
 
@@ -355,9 +337,9 @@ describe("assertNotSsrf — DNS resolution + rebinding", () => {
         allowLoopback: false,
         dnsLookup: stubDns(
           { address: "93.184.216.34", family: 4 },
-          { address: "169.254.169.254", family: 4 }
+          { address: "169.254.169.254", family: 4 },
         ),
-      })
+      }),
     ).rejects.toBeInstanceOf(SsrfError);
   });
 
@@ -376,7 +358,7 @@ describe("assertNotSsrf — DNS resolution + rebinding", () => {
       assertNotSsrf("https://empty.example/", {
         allowLoopback: false,
         dnsLookup: stubDns(),
-      })
+      }),
     ).rejects.toBeInstanceOf(SsrfError);
   });
 
@@ -387,7 +369,7 @@ describe("assertNotSsrf — DNS resolution + rebinding", () => {
         dnsLookup: vi.fn(async () => {
           throw new Error("ENOTFOUND");
         }),
-      })
+      }),
     ).rejects.toBeInstanceOf(SsrfError);
   });
 
@@ -397,7 +379,7 @@ describe("assertNotSsrf — DNS resolution + rebinding", () => {
       assertNotSsrf("https://metadata.google.internal/", {
         allowLoopback: false,
         dnsLookup: dns,
-      })
+      }),
     ).rejects.toBeInstanceOf(SsrfError);
     expect(dns).not.toHaveBeenCalled();
   });
@@ -407,35 +389,29 @@ describe("assertNotSsrf — DNS resolution + rebinding", () => {
 
 describe("guardedFetch — rejects forbidden targets (no socket)", () => {
   it("rejects a non-http scheme", async () => {
-    await expect(guardedFetch("file:///etc/passwd")).rejects.toBeInstanceOf(
-      GuardedFetchError
-    );
+    await expect(guardedFetch("file:///etc/passwd")).rejects.toBeInstanceOf(GuardedFetchError);
   });
 
   it("rejects a malformed URL", async () => {
-    await expect(guardedFetch("http://[bad")).rejects.toBeInstanceOf(
-      GuardedFetchError
-    );
+    await expect(guardedFetch("http://[bad")).rejects.toBeInstanceOf(GuardedFetchError);
   });
 
   it("rejects http: without allowLoopback", async () => {
-    await expect(guardedFetch("http://example.com/")).rejects.toBeInstanceOf(
-      GuardedFetchError
-    );
+    await expect(guardedFetch("http://example.com/")).rejects.toBeInstanceOf(GuardedFetchError);
   });
 
   it("rejects a non-default port (port gate)", async () => {
     await expect(
       guardedFetch("https://8.8.8.8:8080/", {
         dnsLookup: stubDns({ address: "8.8.8.8", family: 4 }),
-      })
+      }),
     ).rejects.toBeInstanceOf(GuardedFetchError);
   });
 
   it("rejects a private-IP literal target", async () => {
-    await expect(
-      guardedFetch("https://169.254.169.254/latest/meta-data/")
-    ).rejects.toBeInstanceOf(SsrfError);
+    await expect(guardedFetch("https://169.254.169.254/latest/meta-data/")).rejects.toBeInstanceOf(
+      SsrfError,
+    );
   });
 
   it("rejects a host that resolves private (rebinding multi-record)", async () => {
@@ -443,16 +419,16 @@ describe("guardedFetch — rejects forbidden targets (no socket)", () => {
       guardedFetch("https://rebind.example/", {
         dnsLookup: stubDns(
           { address: "93.184.216.34", family: 4 },
-          { address: "10.0.0.1", family: 4 }
+          { address: "10.0.0.1", family: 4 },
         ),
-      })
+      }),
     ).rejects.toBeInstanceOf(SsrfError);
   });
 
   it("rejects a cloud-internal hostname (denylist)", async () => {
-    await expect(
-      guardedFetch("https://metadata.google.internal/")
-    ).rejects.toBeInstanceOf(SsrfError);
+    await expect(guardedFetch("https://metadata.google.internal/")).rejects.toBeInstanceOf(
+      SsrfError,
+    );
   });
 });
 
@@ -549,21 +525,20 @@ describe("guardedFetch — happy path (loopback test hook)", () => {
     expect(r.text).toBe("");
   });
 
-  it.each([204, 205])(
-    "accepts a bodyless %i (No Content / Reset) with no content-type",
-    async (code) => {
-      routes.set(`/empty${code}`, (_req, res) => {
-        res.writeHead(code);
-        res.end();
-      });
-      const r = await guardedFetch(`${base}/empty${code}`, {
-        allowLoopback: true,
-      });
-      expect(r.status).toBe(code);
-      expect(r.text).toBe("");
-      expect(r.bytes.length).toBe(0);
-    }
-  );
+  it.each([
+    204, 205,
+  ])("accepts a bodyless %i (No Content / Reset) with no content-type", async (code) => {
+    routes.set(`/empty${code}`, (_req, res) => {
+      res.writeHead(code);
+      res.end();
+    });
+    const r = await guardedFetch(`${base}/empty${code}`, {
+      allowLoopback: true,
+    });
+    expect(r.status).toBe(code);
+    expect(r.text).toBe("");
+    expect(r.bytes.length).toBe(0);
+  });
 
   it("sends a descriptive User-Agent", async () => {
     let seenUa = "";
@@ -592,21 +567,20 @@ describe("guardedFetch — happy path (loopback test hook)", () => {
 });
 
 describe("guardedFetch — error statuses bypass the content-type allowlist", () => {
-  it.each([404, 401, 403, 429, 500, 503])(
-    "returns a bodyless result for HTTP %i with a non-RDF body",
-    async (code) => {
-      routes.set(`/err${code}`, (_req, res) => {
-        res.writeHead(code, { "content-type": "text/plain" });
-        res.end(`error ${code}`);
-      });
-      const r = await guardedFetch(`${base}/err${code}`, {
-        allowLoopback: true,
-      });
-      expect(r.status).toBe(code);
-      expect(r.text).toBe("");
-      expect(r.bytes.length).toBe(0);
-    }
-  );
+  it.each([
+    404, 401, 403, 429, 500, 503,
+  ])("returns a bodyless result for HTTP %i with a non-RDF body", async (code) => {
+    routes.set(`/err${code}`, (_req, res) => {
+      res.writeHead(code, { "content-type": "text/plain" });
+      res.end(`error ${code}`);
+    });
+    const r = await guardedFetch(`${base}/err${code}`, {
+      allowLoopback: true,
+    });
+    expect(r.status).toBe(code);
+    expect(r.text).toBe("");
+    expect(r.bytes.length).toBe(0);
+  });
 
   it("returns a bodyless result for a 410 Gone with no content-type", async () => {
     routes.set("/gone", (_req, res) => {
@@ -625,9 +599,9 @@ describe("guardedFetch — content-type allowlist", () => {
       res.writeHead(200, { "content-type": "text/html" });
       res.end("<html><body>nope</body></html>");
     });
-    await expect(
-      guardedFetch(`${base}/html`, { allowLoopback: true })
-    ).rejects.toBeInstanceOf(GuardedFetchError);
+    await expect(guardedFetch(`${base}/html`, { allowLoopback: true })).rejects.toBeInstanceOf(
+      GuardedFetchError,
+    );
   });
 
   it("rejects a missing content-type", async () => {
@@ -635,9 +609,9 @@ describe("guardedFetch — content-type allowlist", () => {
       res.writeHead(200);
       res.end("data");
     });
-    await expect(
-      guardedFetch(`${base}/noct`, { allowLoopback: true })
-    ).rejects.toBeInstanceOf(GuardedFetchError);
+    await expect(guardedFetch(`${base}/noct`, { allowLoopback: true })).rejects.toBeInstanceOf(
+      GuardedFetchError,
+    );
   });
 
   it("respects a custom allowedContentTypes set", async () => {
@@ -660,7 +634,7 @@ describe("guardedFetch — body cap", () => {
       res.end("x".repeat(5000));
     });
     await expect(
-      guardedFetch(`${base}/big`, { allowLoopback: true, maxBytes: 1000 })
+      guardedFetch(`${base}/big`, { allowLoopback: true, maxBytes: 1000 }),
     ).rejects.toBeInstanceOf(BodyTooLargeError);
   });
 
@@ -674,7 +648,7 @@ describe("guardedFetch — body cap", () => {
       res.end(body);
     });
     await expect(
-      guardedFetch(`${base}/biglen`, { allowLoopback: true, maxBytes: 1000 })
+      guardedFetch(`${base}/biglen`, { allowLoopback: true, maxBytes: 1000 }),
     ).rejects.toBeInstanceOf(BodyTooLargeError);
   });
 
@@ -704,7 +678,7 @@ describe("guardedFetch — body cap", () => {
       res.end("E".repeat(5000));
     });
     await expect(
-      guardedFetch(`${base}/bigerr`, { allowLoopback: true, maxBytes: 1000 })
+      guardedFetch(`${base}/bigerr`, { allowLoopback: true, maxBytes: 1000 }),
     ).rejects.toBeInstanceOf(BodyTooLargeError);
   });
 
@@ -717,7 +691,7 @@ describe("guardedFetch — body cap", () => {
       res.end("H".repeat(5000));
     });
     await expect(
-      guardedFetch(`${base}/bightml`, { allowLoopback: true, maxBytes: 1000 })
+      guardedFetch(`${base}/bightml`, { allowLoopback: true, maxBytes: 1000 }),
     ).rejects.toBeInstanceOf(BodyTooLargeError);
   });
 });
@@ -735,7 +709,7 @@ describe("guardedFetch — timeout", () => {
       }, 2000);
     });
     await expect(
-      guardedFetch(`${base}/slow`, { allowLoopback: true, timeoutMs: 150 })
+      guardedFetch(`${base}/slow`, { allowLoopback: true, timeoutMs: 150 }),
     ).rejects.toBeInstanceOf(GuardedFetchError);
   });
 
@@ -746,7 +720,7 @@ describe("guardedFetch — timeout", () => {
       // never res.end() within the window
     });
     await expect(
-      guardedFetch(`${base}/slowbody`, { allowLoopback: true, timeoutMs: 150 })
+      guardedFetch(`${base}/slowbody`, { allowLoopback: true, timeoutMs: 150 }),
     ).rejects.toBeInstanceOf(GuardedFetchError);
   });
 });
@@ -777,7 +751,7 @@ describe("guardedFetch — redirects (each GET hop re-validated)", () => {
       res.end();
     });
     await expect(
-      guardedFetch(`${base}/redir-private`, { allowLoopback: true })
+      guardedFetch(`${base}/redir-private`, { allowLoopback: true }),
     ).rejects.toBeInstanceOf(SsrfError);
   });
 
@@ -790,7 +764,7 @@ describe("guardedFetch — redirects (each GET hop re-validated)", () => {
       guardedFetch(`${base}/redir-rebind`, {
         allowLoopback: true,
         dnsLookup: stubDns({ address: "10.1.2.3", family: 4 }),
-      })
+      }),
     ).rejects.toBeInstanceOf(SsrfError);
   });
 
@@ -802,7 +776,7 @@ describe("guardedFetch — redirects (each GET hop re-validated)", () => {
       });
     }
     await expect(
-      guardedFetch(`${base}/chain0`, { allowLoopback: true, maxRedirects: 2 })
+      guardedFetch(`${base}/chain0`, { allowLoopback: true, maxRedirects: 2 }),
     ).rejects.toBeInstanceOf(GuardedFetchError);
   });
 
@@ -816,7 +790,7 @@ describe("guardedFetch — redirects (each GET hop re-validated)", () => {
       res.end();
     });
     await expect(
-      guardedFetch(`${base}/loopA`, { allowLoopback: true, maxRedirects: 5 })
+      guardedFetch(`${base}/loopA`, { allowLoopback: true, maxRedirects: 5 }),
     ).rejects.toBeInstanceOf(GuardedFetchError);
   });
 
@@ -840,7 +814,7 @@ describe("guardedFetch — redirects (each GET hop re-validated)", () => {
     // mapping directly (the end-to-end downgrade enforcement itself is covered in guarded-fetch's
     // own suite + the assertSchemeAndPort front-gate unit test below).
     const downgrade = new SsrfError(
-      "Refusing redirect scheme downgrade (https → http): example.com."
+      "Refusing redirect scheme downgrade (https → http): example.com.",
     );
     const mapped = classifyGuardError(downgrade, "https://example.com/", "GET");
     expect(mapped).toBeInstanceOf(GuardedFetchError);
@@ -848,19 +822,15 @@ describe("guardedFetch — redirects (each GET hop re-validated)", () => {
 
     // Sanity: a TRUE SSRF-boundary refusal (private target) is NOT reclassified — still SsrfError.
     const privateTarget = new SsrfError(
-      "URL refused — host.example resolves to a non-public address (10.0.0.1)."
+      "URL refused — host.example resolves to a non-public address (10.0.0.1).",
     );
-    expect(
-      classifyGuardError(privateTarget, "https://host.example/", "GET")
-    ).toBeInstanceOf(SsrfError);
+    expect(classifyGuardError(privateTarget, "https://host.example/", "GET")).toBeInstanceOf(
+      SsrfError,
+    );
 
     // Sanity: a body-cap SsrfError maps to BodyTooLargeError (the public over-cap type).
-    const overCap = new SsrfError(
-      "Response body for https://x/ exceeds cap (5000 bytes > 1000)."
-    );
-    expect(classifyGuardError(overCap, "https://x/", "GET")).toBeInstanceOf(
-      BodyTooLargeError
-    );
+    const overCap = new SsrfError("Response body for https://x/ exceeds cap (5000 bytes > 1000).");
+    expect(classifyGuardError(overCap, "https://x/", "GET")).toBeInstanceOf(BodyTooLargeError);
   });
 });
 
@@ -881,7 +851,7 @@ describe("guardedFetch — POST refuses ALL redirects (confused-deputy)", () => 
         body: "x",
         skipContentTypeAllowlist: true,
         maxRedirects: 0,
-      })
+      }),
     ).rejects.toBeInstanceOf(GuardedFetchError);
   });
 
@@ -897,7 +867,7 @@ describe("guardedFetch — POST refuses ALL redirects (confused-deputy)", () => 
         body: "x",
         skipContentTypeAllowlist: true,
         maxRedirects: 0,
-      })
+      }),
     ).rejects.toBeInstanceOf(GuardedFetchError);
   });
 });
@@ -911,61 +881,51 @@ describe("guardedFetch — POST refuses ALL redirects (confused-deputy)", () => 
 
 describe("assertSchemeAndPort — scheme, port, userinfo, downgrade branches (front gate)", () => {
   it("accepts https on the default port (and explicit :443)", () => {
+    expect(() => assertSchemeAndPort(new URL("https://example.com/"), false, false)).not.toThrow();
     expect(() =>
-      assertSchemeAndPort(new URL("https://example.com/"), false, false)
-    ).not.toThrow();
-    expect(() =>
-      assertSchemeAndPort(new URL("https://example.com:443/"), false, false)
+      assertSchemeAndPort(new URL("https://example.com:443/"), false, false),
     ).not.toThrow();
   });
 
   it("rejects http: without allowLoopback", () => {
-    expect(() =>
-      assertSchemeAndPort(new URL("http://example.com/"), false, false)
-    ).toThrow(GuardedFetchError);
+    expect(() => assertSchemeAndPort(new URL("http://example.com/"), false, false)).toThrow(
+      GuardedFetchError,
+    );
   });
 
   it("accepts http: ONLY under allowLoopback (port 80 and ephemeral)", () => {
+    expect(() => assertSchemeAndPort(new URL("http://127.0.0.1/"), true, false)).not.toThrow();
+    expect(() => assertSchemeAndPort(new URL("http://127.0.0.1:80/"), true, false)).not.toThrow();
     expect(() =>
-      assertSchemeAndPort(new URL("http://127.0.0.1/"), true, false)
-    ).not.toThrow();
-    expect(() =>
-      assertSchemeAndPort(new URL("http://127.0.0.1:80/"), true, false)
-    ).not.toThrow();
-    expect(() =>
-      assertSchemeAndPort(new URL("http://127.0.0.1:54321/"), true, false)
+      assertSchemeAndPort(new URL("http://127.0.0.1:54321/"), true, false),
     ).not.toThrow();
   });
 
   it("rejects a non-default https port in production (8080, 8443)", () => {
-    expect(() =>
-      assertSchemeAndPort(new URL("https://example.com:8080/"), false, false)
-    ).toThrow(GuardedFetchError);
-    expect(() =>
-      assertSchemeAndPort(new URL("https://example.com:8443/"), false, false)
-    ).toThrow(GuardedFetchError);
+    expect(() => assertSchemeAndPort(new URL("https://example.com:8080/"), false, false)).toThrow(
+      GuardedFetchError,
+    );
+    expect(() => assertSchemeAndPort(new URL("https://example.com:8443/"), false, false)).toThrow(
+      GuardedFetchError,
+    );
   });
 
   it("rejects userinfo", () => {
     expect(() =>
-      assertSchemeAndPort(
-        new URL("https://user:pass@example.com/"),
-        false,
-        false
-      )
+      assertSchemeAndPort(new URL("https://user:pass@example.com/"), false, false),
     ).toThrow(/userinfo/i);
   });
 
   it("REJECTS a scheme-downgrade redirect (prevWasHttps && http target)", () => {
-    expect(() =>
-      assertSchemeAndPort(new URL("http://127.0.0.1/"), true, true)
-    ).toThrow(/downgrade/i);
+    expect(() => assertSchemeAndPort(new URL("http://127.0.0.1/"), true, true)).toThrow(
+      /downgrade/i,
+    );
   });
 
   it("rejects a non-http(s) scheme", () => {
-    expect(() =>
-      assertSchemeAndPort(new URL("ftp://example.com/"), true, false)
-    ).toThrow(GuardedFetchError);
+    expect(() => assertSchemeAndPort(new URL("ftp://example.com/"), true, false)).toThrow(
+      GuardedFetchError,
+    );
   });
 });
 
@@ -978,21 +938,19 @@ describe("guardedFetch — scheme / port / downgrade gate (end-to-end)", () => {
     await expect(
       guardedFetch("http://example.com/", {
         dnsLookup: stubDns({ address: "8.8.8.8", family: 4 }),
-      })
+      }),
     ).rejects.toBeInstanceOf(GuardedFetchError);
   });
 
   it("rejects a non-http(s) scheme → GuardedFetchError", async () => {
-    await expect(guardedFetch("ftp://example.com/")).rejects.toBeInstanceOf(
-      GuardedFetchError
-    );
+    await expect(guardedFetch("ftp://example.com/")).rejects.toBeInstanceOf(GuardedFetchError);
   });
 
   it("rejects userinfo in the URL → GuardedFetchError", async () => {
     await expect(
       guardedFetch("https://user:pass@8.8.8.8/", {
         dnsLookup: stubDns({ address: "8.8.8.8", family: 4 }),
-      })
+      }),
     ).rejects.toBeInstanceOf(GuardedFetchError);
   });
 
@@ -1001,7 +959,7 @@ describe("guardedFetch — scheme / port / downgrade gate (end-to-end)", () => {
       await expect(
         guardedFetch(`https://8.8.8.8:${port}/`, {
           dnsLookup: stubDns({ address: "8.8.8.8", family: 4 }),
-        })
+        }),
       ).rejects.toBeInstanceOf(GuardedFetchError);
     }
   });
@@ -1016,7 +974,7 @@ describe("guardedFetch — scheme / port / downgrade gate (end-to-end)", () => {
         allowLoopback: false,
         enforceHttpsExceptLoopback: true,
         dnsLookup: stubDns({ address: "8.8.8.8", family: 4 }),
-      })
+      }),
     ).rejects.toBeInstanceOf(SsrfError);
   });
 

@@ -28,22 +28,13 @@ export const FETCH_TIMEOUT_MS = envInt("AGENT_NOTIFY_FETCH_TIMEOUT_MS", 8_000);
 export const MAX_REDIRECTS = envInt("AGENT_NOTIFY_MAX_REDIRECTS", 3);
 
 /** Max response body size for a WebID profile document in bytes (256 KiB). */
-export const MAX_BYTES_PROFILE = envInt(
-  "AGENT_NOTIFY_MAX_BYTES_PROFILE",
-  256 * 1024
-);
+export const MAX_BYTES_PROFILE = envInt("AGENT_NOTIFY_MAX_BYTES_PROFILE", 256 * 1024);
 
 /** Max response body size for an inbox listing / a single notification in bytes (64 KiB). */
-export const MAX_BYTES_INBOX = envInt(
-  "AGENT_NOTIFY_MAX_BYTES_INBOX",
-  64 * 1024
-);
+export const MAX_BYTES_INBOX = envInt("AGENT_NOTIFY_MAX_BYTES_INBOX", 64 * 1024);
 
 /** Max bytes of an LDN inbox's POST response body we will read (the receipt is tiny). */
-export const MAX_BYTES_RESPONSE = envInt(
-  "AGENT_NOTIFY_MAX_BYTES_RESPONSE",
-  16 * 1024
-);
+export const MAX_BYTES_RESPONSE = envInt("AGENT_NOTIFY_MAX_BYTES_RESPONSE", 16 * 1024);
 
 /**
  * Descriptive User-Agent for every guardedFetch. A real UA string with a contact
@@ -51,7 +42,7 @@ export const MAX_BYTES_RESPONSE = envInt(
  */
 export const FETCH_USER_AGENT = envStr(
   "AGENT_NOTIFY_USER_AGENT",
-  "solid-agent-notify/0.1 (+https://github.com/jeswr/solid-agent-notify; SSRF-guarded LDN client)"
+  "solid-agent-notify/0.1 (+https://github.com/jeswr/solid-agent-notify; SSRF-guarded LDN client)",
 );
 
 /**
@@ -74,7 +65,7 @@ export const FETCH_HOSTNAME_DENYLIST: readonly string[] = envStr(
     "localhost",
     ".localhost",
     ".local",
-  ].join(",")
+  ].join(","),
 )
   .split(",")
   .map((s) => s.trim().toLowerCase())
@@ -94,8 +85,7 @@ export const RDF_CONTENT_TYPES: readonly string[] = [
 ];
 
 /** The `Accept` header guardedFetch sends for RDF documents (mirrors {@link RDF_CONTENT_TYPES}). */
-export const RDF_ACCEPT =
-  "text/turtle, application/ld+json;q=0.9, application/n-triples;q=0.8";
+export const RDF_ACCEPT = "text/turtle, application/ld+json;q=0.9, application/n-triples;q=0.8";
 
 /** The LDP inbox predicate (also `as:inbox` in AS2.0; the LDP one is canonical for LDN). */
 export const LDP_INBOX = "http://www.w3.org/ns/ldp#inbox";

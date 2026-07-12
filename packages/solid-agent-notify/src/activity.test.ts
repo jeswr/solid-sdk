@@ -104,7 +104,7 @@ describe("buildActivity + serializeTurtle", () => {
   it("can root the activity at an explicit subject", async () => {
     const store = buildActivity(
       { type: "Create", actor: "https://alice.example/card#me" },
-      "https://alice.example/n1#it"
+      "https://alice.example/n1#it",
     );
     const ttl = await serializeTurtle(store);
     expect(ttl).toContain("alice.example/n1");
@@ -113,9 +113,7 @@ describe("buildActivity + serializeTurtle", () => {
 
 describe("safeHttpIri", () => {
   it("canonicalises safe http(s) IRIs", () => {
-    expect(safeHttpIri("https://alice.example/card#me")).toBe(
-      "https://alice.example/card#me"
-    );
+    expect(safeHttpIri("https://alice.example/card#me")).toBe("https://alice.example/card#me");
     // The URL parser percent-encodes Turtle-terminating characters.
     expect(safeHttpIri("https://evil/x> y")).not.toContain(">");
     expect(safeHttpIri("https://evil/x> y")).not.toContain(" ");
@@ -133,18 +131,7 @@ describe("safeHttpIri", () => {
     // — a `}` or `\` in a NamedNode value can still break Turtle parsing.
     const out = safeHttpIri("https://evil/p?a={b}#c\\d`e^f|g");
     expect(out).toBeDefined();
-    for (const forbidden of [
-      "{",
-      "}",
-      "\\",
-      "`",
-      "^",
-      "|",
-      "<",
-      ">",
-      '"',
-      " ",
-    ]) {
+    for (const forbidden of ["{", "}", "\\", "`", "^", "|", "<", ">", '"', " "]) {
       expect(out).not.toContain(forbidden);
     }
     // Round-trips through a real Turtle parser as ONE NamedNode (no breakout).
@@ -155,15 +142,9 @@ describe("safeHttpIri", () => {
   it("preserves the LEXICAL value (does NOT canonicalise via .href)", () => {
     // A default port, upper-case host, and a dot-segment are RDF-lexically
     // significant — `.href` would drop/rewrite them, changing the identity.
-    expect(safeHttpIri("https://alice.example:443/x")).toBe(
-      "https://alice.example:443/x"
-    );
-    expect(safeHttpIri("https://Alice.EXAMPLE/x")).toBe(
-      "https://Alice.EXAMPLE/x"
-    );
-    expect(safeHttpIri("https://alice.example/a/./b")).toBe(
-      "https://alice.example/a/./b"
-    );
+    expect(safeHttpIri("https://alice.example:443/x")).toBe("https://alice.example:443/x");
+    expect(safeHttpIri("https://Alice.EXAMPLE/x")).toBe("https://Alice.EXAMPLE/x");
+    expect(safeHttpIri("https://alice.example/a/./b")).toBe("https://alice.example/a/./b");
   });
   it("REJECTS a value with leading/trailing C0-control-or-space (WHATWG trims → would diverge)", () => {
     // `" https://x"` parses (trimmed) as https://x, but escapeIri(original) would
@@ -194,12 +175,8 @@ describe("safeHttpIri", () => {
       expect(out).toContain(needle);
       // No raw control byte survived, and it round-trips as ONE NamedNode. (Code-
       // point check, not a control-character regex, which the linter forbids.)
-      expect(
-        [...(out as string)].every((c) => (c.codePointAt(0) ?? 0) > 0x1f)
-      ).toBe(true);
-      const quads = new Parser().parse(
-        `<https://x/#i> <https://x/p> <${out}> .`
-      );
+      expect([...(out as string)].every((c) => (c.codePointAt(0) ?? 0) > 0x1f)).toBe(true);
+      const quads = new Parser().parse(`<https://x/#i> <https://x/p> <${out}> .`);
       expect(quads).toHaveLength(1);
     }
     // A clean IRI with a default port is emitted BYTE-IDENTICAL.
@@ -216,9 +193,7 @@ describe("safeHttpIri", () => {
 
 describe("escapeIri (lexical, scheme-agnostic Turtle-IRIREF escape)", () => {
   it("leaves a well-formed IRI byte-for-byte unchanged", () => {
-    expect(escapeIri("https://alice.example/card#me")).toBe(
-      "https://alice.example/card#me"
-    );
+    expect(escapeIri("https://alice.example/card#me")).toBe("https://alice.example/card#me");
     expect(escapeIri("urn:uuid:1234")).toBe("urn:uuid:1234");
     expect(escapeIri("did:web:alice.example")).toBe("did:web:alice.example");
   });
@@ -241,13 +216,12 @@ describe("escapeIri (lexical, scheme-agnostic Turtle-IRIREF escape)", () => {
 describe("Turtle IRI-injection guard (n3.Writer does NOT escape IRIs)", () => {
   // Payload that, written RAW between <…>, would break out of the actor IRI and
   // inject a second, attacker-chosen triple into the serialised (then POSTed) doc.
-  const INJECTION =
-    "https://evil/x> . <https://evil/s2> <https://evil/p2> <https://evil/o2";
+  const Injection = "https://evil/x> . <https://evil/s2> <https://evil/p2> <https://evil/o2";
 
   it("does not let a hostile actor inject a second triple", async () => {
     const store = buildActivity({
       type: "Announce",
-      actor: INJECTION,
+      actor: Injection,
       object: "https://bob.example/chat/",
     });
     const ttl = await serializeTurtle(store);
@@ -269,19 +243,13 @@ describe("subject IRI-injection (HIGH — the activity SUBJECT is the id of ever
     // space + `>` + `<`, so it is NOT a safe fragment and NOT a valid absolute IRI.
     const hostile = "#it> <https://evil/s> <https://evil/p> <https://evil/o> .";
     expect(() =>
-      buildActivity(
-        { type: "Announce", actor: "https://alice.example/card#me" },
-        hostile
-      )
+      buildActivity({ type: "Announce", actor: "https://alice.example/card#me" }, hostile),
     ).toThrow(TypeError);
   });
 
   it("THROWS on a non-fragment, non-http subject (fails closed, no injected triple)", () => {
     expect(() =>
-      buildActivity(
-        { type: "Announce", actor: "https://alice.example/card#me" },
-        "not a url"
-      )
+      buildActivity({ type: "Announce", actor: "https://alice.example/card#me" }, "not a url"),
     ).toThrow(/absolute http\(s\) IRI/);
   });
 
@@ -289,11 +257,10 @@ describe("subject IRI-injection (HIGH — the activity SUBJECT is the id of ever
     // An http(s)-parseable subject carrying breakout bytes is NOT thrown (it IS a
     // structurally-valid URL) but MUST be emitted lexically-escaped so it stays one
     // NamedNode — no attacker triple, no raw breakout on the wire.
-    const hostile =
-      "https://evil/x> . <https://evil/s2> <https://evil/p2> <https://evil/o2";
+    const hostile = "https://evil/x> . <https://evil/s2> <https://evil/p2> <https://evil/o2";
     const store = buildActivity(
       { type: "Announce", actor: "https://alice.example/card#me" },
-      hostile
+      hostile,
     );
     const ttl = await serializeTurtle(store);
     const quads = new Parser().parse(ttl);
@@ -321,8 +288,8 @@ describe("subject IRI-injection (HIGH — the activity SUBJECT is the id of ever
     expect(() =>
       buildActivity(
         { type: "Announce", actor: "https://alice.example/card#me" },
-        "#custom-thing_1"
-      )
+        "#custom-thing_1",
+      ),
     ).not.toThrow();
   });
 
@@ -332,7 +299,7 @@ describe("subject IRI-injection (HIGH — the activity SUBJECT is the id of ever
     const subject = "https://alice.example:8443/n1/./x#it";
     const store = buildActivity(
       { type: "Create", actor: "https://alice.example/card#me" },
-      subject
+      subject,
     );
     const ttl = await serializeTurtle(store);
     expect(ttl).toContain(`<${subject}>`);
