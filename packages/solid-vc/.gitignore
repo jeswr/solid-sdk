@@ -1,8 +1,0 @@
-.DS_Store
-.idea/
-.vscode/
-*.swp
-node_modules/
-coverage/
-.roborev/
-temp/

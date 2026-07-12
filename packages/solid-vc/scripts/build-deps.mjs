@@ -9,10 +9,9 @@
 // source, compile it with the local TypeScript, and drop the built `dist/` into
 // `node_modules/@jeswr/fetch-rdf`.
 //
-// REPRODUCIBILITY: the clone is pinned to the EXACT git commit resolved in
-// `package-lock.json` (not a moving `main`), so the built dep always matches the
-// lockfile-resolved version — `npm ci` on CI and a dev `npm install` build the
-// same source. Building from `main` would silently drift from the lockfile.
+// REPRODUCIBILITY: the clone is pinned to the EXACT git commit resolved in the
+// workspace `pnpm-lock.yaml` (not a moving `main`), so every workspace build uses
+// the same source. Building from `main` would silently drift from the lockfile.
 //
 // DURABLE FIX: this whole `build:deps` hack exists ONLY because
 // `@jeswr/fetch-rdf` does not publish a usable `dist/`. Once fetch-rdf ships a
@@ -31,7 +30,7 @@ import { fileURLToPath } from "node:url";
 const ROOT = join(fileURLToPath(import.meta.url), "..", "..");
 const DEP_DIR = join(ROOT, "node_modules", "@jeswr", "fetch-rdf");
 const DEP_DIST = join(DEP_DIR, "dist", "index.js");
-const LOCKFILE = join(ROOT, "package-lock.json");
+const LOCKFILE = join(ROOT, "..", "..", "pnpm-lock.yaml");
 const FETCH_RDF_GIT = "https://github.com/jeswr/fetch-rdf.git";
 
 /**
@@ -45,12 +44,9 @@ function run(file, args, cwd) {
 }
 
 /**
- * Read the EXACT git commit `@jeswr/fetch-rdf` resolves to from
- * `package-lock.json`, so the clone is pinned (reproducible) rather than tracking
- * a moving `main`. The lock's `resolved` is a git URL ending `#<commit-or-ref>`
- * (e.g. `git+ssh://…/fetch-rdf.git#<sha>`). Returns the ref after `#`, or
- * `undefined` if it cannot be determined (caller then refuses to build from an
- * unpinned source — failing closed beats a silently non-reproducible build).
+ * Read the exact git commit used by the workspace lockfile. pnpm records GitHub
+ * tarballs as `.../tar.gz/<sha>`; accept one unique full SHA and fail closed on
+ * a missing or ambiguous resolution.
  */
 function resolvedFetchRdfRef() {
   if (!existsSync(LOCKFILE)) {
@@ -58,28 +54,18 @@ function resolvedFetchRdfRef() {
   }
   let lock;
   try {
-    lock = JSON.parse(readFileSync(LOCKFILE, "utf8"));
+    lock = readFileSync(LOCKFILE, "utf8");
   } catch {
     return undefined;
   }
-  const entry = lock.packages?.["node_modules/@jeswr/fetch-rdf"];
-  const resolved = entry?.resolved;
-  if (typeof resolved !== "string") {
+  const refs = [
+    ...lock.matchAll(/codeload\.github\.com\/jeswr\/fetch-rdf\/tar\.gz\/([0-9a-f]{40})/g),
+  ].map((match) => match[1]);
+  const uniqueRefs = [...new Set(refs)];
+  if (uniqueRefs.length !== 1) {
     return undefined;
   }
-  const hash = resolved.lastIndexOf("#");
-  if (hash === -1) {
-    return undefined;
-  }
-  const ref = resolved.slice(hash + 1).trim();
-  // Require a full 40-hex git commit SHA. This both pins a reproducible build AND
-  // is a defence-in-depth guard: even though we no longer interpolate the ref into
-  // a shell (run() uses execFileSync — no shell), refusing anything that is not a
-  // bare commit SHA rejects a corrupted/malicious lockfile ref outright.
-  if (!/^[0-9a-f]{40}$/.test(ref)) {
-    return undefined;
-  }
-  return ref;
+  return uniqueRefs[0];
 }
 
 function main() {
@@ -94,9 +80,8 @@ function main() {
   const ref = resolvedFetchRdfRef();
   if (!ref) {
     console.error(
-      "[build-deps] could not resolve a valid @jeswr/fetch-rdf git commit SHA from " +
-        "package-lock.json; refusing to build from an unpinned/invalid source (a non-" +
-        "reproducible build). Run `npm install` to (re)generate the lockfile.",
+      "[build-deps] could not resolve one valid @jeswr/fetch-rdf commit from the " +
+        "workspace pnpm-lock.yaml; refusing a non-reproducible build. Run `pnpm install`.",
     );
     process.exit(1);
   }
@@ -113,8 +98,16 @@ function main() {
     run("git", ["clone", FETCH_RDF_GIT, work]);
     run("git", ["checkout", "--quiet", ref], work);
     // Build with this repo's TypeScript so no extra toolchain is needed.
-    run("npm", ["install", "--no-audit", "--no-fund", "--ignore-scripts", "--prefer-offline"], work);
-    run("node", [join(ROOT, "node_modules", "typescript", "bin", "tsc"), "-p", "tsconfig.json"], work);
+    run(
+      "npm",
+      ["install", "--no-audit", "--no-fund", "--ignore-scripts", "--prefer-offline"],
+      work,
+    );
+    run(
+      "node",
+      [join(ROOT, "node_modules", "typescript", "bin", "tsc"), "-p", "tsconfig.json"],
+      work,
+    );
 
     // Copy the built dist (and src, for source maps) into the installed package.
     cpSync(join(work, "dist"), join(DEP_DIR, "dist"), { recursive: true });
