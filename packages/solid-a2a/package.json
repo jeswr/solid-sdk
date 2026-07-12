@@ -3,6 +3,7 @@
   "version": "0.2.0",
   "description": "NL→RDF intent translator + SHACL-bodied AGORA Protocol Document + upgrade-handshake codec (M2 of the agentic-Solid roadmap). Parse a natural-language agent request into a structured RDF 'intent' graph grounded in schema.org/ACL/LDP, SHACL-validate it against a hash-pinned, content-addressed Protocol Document, and encode the NL→RDF upgrade handshake (no-silent-downgrade for security steps). LLM-agnostic: bring your own translate() seam; a deterministic rule path needs no model. Experimental, AI-agent-generated.",
   "type": "module",
+  "securityCritical": true,
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -19,15 +20,11 @@
     "build:deps": "node scripts/build-deps.mjs",
     "build": "node scripts/build-dist.mjs",
     "build:dev": "npm run build:deps && tsc -p tsconfig.json",
-    "check:dist": "node scripts/check-dist-fresh.mjs",
-    "check:lockfile-transport": "node scripts/check-lockfile-transport.mjs",
-    "fix:lockfile-transport": "node scripts/normalize-lockfile.mjs",
     "typecheck": "npm run build:deps && tsc -p tsconfig.json --noEmit",
-    "lint": "biome check src test scripts && npm run check:lockfile-transport",
+    "lint": "biome check src test scripts",
     "lint:fix": "biome check --write src test scripts",
     "test": "npm run build:deps && vitest run",
-    "test:coverage": "npm run build:deps && vitest run --coverage",
-    "prepare": "npm run build"
+    "test:coverage": "npm run build:deps && vitest run --coverage"
   },
   "keywords": [
     "solid",
@@ -55,6 +52,7 @@
   },
   "homepage": "https://github.com/jeswr/solid-a2a#readme",
   "dependencies": {
+    "@jeswr/rdf-serialize": "workspace:*",
     "@rdfjs/wrapper": "^0.34.0",
     "@solid/object": "^0.6.0",
     "content-type": "^1.0.5",
@@ -66,7 +64,6 @@
   "devDependencies": {
     "@biomejs/biome": "^2.0.0",
     "@jeswr/fetch-rdf": "github:jeswr/fetch-rdf#main",
-    "@jeswr/rdf-serialize": "git+https://github.com/jeswr/rdf-serialize.git#8ebdda44ab1da63ef91052a5b2f1e453c0a29c79",
     "@rdfjs/types": "^2.0.1",
     "@types/n3": "^1.16.0",
     "@types/node": "^22.0.0",

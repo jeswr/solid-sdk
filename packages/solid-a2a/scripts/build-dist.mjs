@@ -5,21 +5,16 @@
  *
  * WHY a bundler (esbuild) instead of plain `tsc`:
  *
- * `@jeswr/solid-a2a` depends on TWO off-npm `@jeswr` git packages — `@jeswr/fetch-rdf`
- * and `@jeswr/rdf-serialize` — that are NOT on npm. A consumer running
+ * `@jeswr/solid-a2a` depends on the off-npm `@jeswr/fetch-rdf` package. A consumer running
  * `npm install github:jeswr/solid-a2a#main` under the suite's `ignore-scripts=true`
  * invariant will NOT run our `build:deps`/`prepare`. `@jeswr/fetch-rdf` additionally
  * ships no usable `dist/` (a git dep that needs its own build), so its import would
- * fail outright; `@jeswr/rdf-serialize` DOES ship a committed `dist/`, but it is still
- * an off-npm git dep whose presence we should not assume in the consumer's tree. The
- * fix is to make the committed artifact self-contained re: BOTH off-npm `@jeswr` deps
- * by INLINING their compiled code into our `dist/index.js`. Their only runtime
- * sub-dependency (`n3`) is itself an external npm-published package shared with this
- * package, so inlining the @jeswr glue without inlining `n3` keeps the bundle small.
+ * fail outright. The emitted artifact therefore inlines `@jeswr/fetch-rdf`.
+ * `@jeswr/rdf-serialize` stays an external workspace dependency because emitted
+ * declarations import and re-export its types.
  *
  * Externalisation contract (the load-bearing part):
- *   - INLINED  (bundled into dist): the off-npm `@jeswr` deps `@jeswr/fetch-rdf` and
- *       `@jeswr/rdf-serialize` ONLY.
+ *   - INLINED  (bundled into dist): `@jeswr/fetch-rdf` ONLY.
  *   - EXTERNAL (resolved from npm by the consumer): EVERYTHING ELSE. We compute the
  *       external set as `package.json` {dependencies ∪ devDependencies} MINUS
  *       `@jeswr/fetch-rdf`, plus the known transitive deps that `rdf-validate-shacl`
@@ -72,8 +67,8 @@ function sanitizeDist(buildDir) {
   }
 }
 
-/** The off-npm `@jeswr` dependencies we INLINE; everything else stays external. */
-const INLINE = ["@jeswr/fetch-rdf", "@jeswr/rdf-serialize"];
+/** The one off-npm dependency we inline; everything else stays external. */
+const INLINE = ["@jeswr/fetch-rdf"];
 
 /**
  * Transitive deps that are NOT direct entries in our `package.json` but are
@@ -118,9 +113,7 @@ function externals() {
 
 async function main(buildDir = outdir) {
   // 1. Ensure @jeswr/fetch-rdf's dist exists in node_modules so esbuild can
-  //    resolve + inline it (ignore-scripts skipped its prepare on install). The
-  //    other inlined @jeswr dep, @jeswr/rdf-serialize, already ships a committed
-  //    dist (its `prepare` is not needed), so it is resolvable as-is.
+  //    resolve + inline it (ignore-scripts skipped its prepare on install).
   execFileSync("node", [join(root, "scripts", "build-deps.mjs")], {
     cwd: root,
     stdio: ["ignore", "ignore", "inherit"],
@@ -142,8 +135,7 @@ async function main(buildDir = outdir) {
     format: "esm",
     platform: "node",
     target: "node24",
-    // Inline ONLY the off-npm @jeswr deps (@jeswr/fetch-rdf + @jeswr/rdf-serialize,
-    // the INLINE set); keep every npm-published dep external.
+    // Inline only @jeswr/fetch-rdf; keep workspace and npm-published deps external.
     external: externals(),
     sourcemap: true,
     legalComments: "none",
