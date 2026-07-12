@@ -1,0 +1,56 @@
+import type { DatasetCore, Quad } from "@rdfjs/types";
+import type { OdrlConstraint, OdrlPolicy } from "./types.js";
+import { IRI_TO_ACTION, IRI_TO_LEFT_OPERAND, IRI_TO_OPERATOR, type LeftOperandName } from "./vocab.js";
+/**
+ * Infer the XSD datatype IRI for a constraint right-operand when not given.
+ * Exported (an internal cross-module helper, NOT part of the package's public
+ * `index.ts` surface) so {@link decisionRecord}'s non-throwing constraint emitter
+ * datatypes a recorded constraint IDENTICALLY to how a policy datatypes it.
+ */
+export declare function inferDatatype(c: OdrlConstraint, value: string | number): string | undefined;
+/**
+ * Left-operands whose right-operand is an IRI (a party/purpose/place reference).
+ * Exported (internal cross-module helper, not re-exported from `index.ts`) so
+ * {@link decisionRecord}'s constraint emitter decides IRI-vs-literal identically.
+ */
+export declare function isIriValued(left: LeftOperandName): boolean;
+/**
+ * Thrown when an EXPLICITLY-PROVIDED http(s)-contract IRI (a rule/duty/policy
+ * `target`, `assignee`, `assigner`, or `profile`) cannot be made into a safe
+ * http(s) IRI. We refuse to serialise rather than silently DROP it: a dropped
+ * `target`/`assignee` is treated as a WILDCARD by {@link evaluate} (a rule with no
+ * target matches ANY resource; with no assignee, ANY agent), so silently dropping a
+ * malformed one would WIDEN the policy — a privilege escalation. Throwing is the
+ * fail-closed choice that is safe for BOTH permissions (dropping would over-grant)
+ * and prohibitions (dropping the whole rule would under-deny).
+ */
+export declare class OdrlSerializationError extends Error {
+    constructor(message: string);
+}
+/**
+ * Lower a structured {@link OdrlPolicy} to RDF quads (an `odrl:Policy` graph)
+ * through the typed wrapper write path.
+ */
+export declare function policyToRdf(policy: OdrlPolicy): Quad[];
+/** Serialise a policy to Turtle (default) or another n3 format. */
+export declare function policyToTurtle(policy: OdrlPolicy, format?: string): Promise<string>;
+/**
+ * Build the JSON-LD document for a policy: a deterministic projection of the SAME
+ * policy (kept in lock-step with the RDF quads) with the pinned inline `@context`.
+ * A consumer parses it via `@jeswr/fetch-rdf` (which handles `application/ld+json`)
+ * — see {@link parsePolicy}.
+ */
+export declare function policyToJsonLd(policy: OdrlPolicy): Record<string, unknown>;
+/**
+ * Read a structured {@link OdrlPolicy} back from an already-parsed RDF dataset.
+ * Returns the FIRST well-formed policy found, or `undefined` if there is none.
+ */
+export declare function policyFromRdf(dataset: DatasetCore): OdrlPolicy | undefined;
+/**
+ * Parse a policy from a Turtle/JSON-LD string (or an already-parsed dataset).
+ * Convenience over {@link policyFromRdf} that does the parse via `@jeswr/fetch-rdf`
+ * (the sanctioned parser — never a bespoke one).
+ */
+export declare function parsePolicy(input: string | DatasetCore, contentType?: string, baseIRI?: string): Promise<OdrlPolicy | undefined>;
+export { IRI_TO_ACTION, IRI_TO_LEFT_OPERAND, IRI_TO_OPERATOR };
+//# sourceMappingURL=policy.d.ts.map
