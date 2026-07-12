@@ -35,6 +35,7 @@ import { rmSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
+import { assertDeclarationsSelfContained } from "./assert-declarations.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const outdir = join(root, "dist");
@@ -97,6 +98,7 @@ async function main(buildDir = outdir) {
     ],
     { cwd: root, stdio: ["ignore", "ignore", "inherit"] },
   );
+  assertDeclarationsSelfContained(buildDir);
 }
 
 const argDir = process.argv[2];
