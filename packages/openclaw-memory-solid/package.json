@@ -1,0 +1,74 @@
+{
+  "name": "@jeswr/openclaw-memory-solid",
+  "version": "0.1.0",
+  "description": "An OpenClaw memory-slot plugin that stores an agent's memory in the user's Solid pod (RDF-native, owner-owned, portable, cross-agent) via @jeswr/solid-memory — a pure adapter core + a thin OpenClaw kind:\"memory\" wrapper.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Jesse Wright",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jeswr/openclaw-memory-solid.git"
+  },
+  "homepage": "https://github.com/jeswr/openclaw-memory-solid#readme",
+  "bugs": {
+    "url": "https://github.com/jeswr/openclaw-memory-solid/issues"
+  },
+  "keywords": [
+    "solid",
+    "rdf",
+    "memory",
+    "agent",
+    "ai",
+    "openclaw",
+    "plugin",
+    "federation"
+  ],
+  "openclaw": {
+    "extensions": [
+      "./dist/plugin.js"
+    ]
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./core": {
+      "types": "./dist/core.d.ts",
+      "import": "./dist/core.js"
+    },
+    "./plugin": {
+      "types": "./dist/plugin.d.ts",
+      "import": "./dist/plugin.js"
+    }
+  },
+  "files": [
+    "dist",
+    "examples",
+    "openclaw.plugin.json",
+    "README.md",
+    "SECURITY.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "biome check src",
+    "lint:fix": "biome check --write src",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@jeswr/solid-memory": "workspace:*"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.0.0",
+    "@types/node": "^20",
+    "typescript": "^5",
+    "vitest": "^4.1.8"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

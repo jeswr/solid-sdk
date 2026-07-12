@@ -1,0 +1,84 @@
+{
+  "name": "@jeswr/solid-mcp",
+  "version": "0.1.0",
+  "description": "A Model Context Protocol (MCP) server that exposes a Solid pod to MCP clients (Claude Desktop, etc.) as Resources + Tools (list / read / search / write) over an injectable authenticated Solid fetch. Read-only by default; pod-scope-guarded. Experimental, AI-agent-generated.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "solid-mcp": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build:deps": "node scripts/build-deps.mjs",
+    "build": "node scripts/build-dist.mjs",
+    "build:dev": "npm run build:deps && tsc -p tsconfig.build.json",
+    "api:report": "npm run build && api-extractor run --local",
+    "api:check": "npm run build && api-extractor run",
+    "typecheck": "npm run build:deps && tsc -p tsconfig.json --noEmit",
+    "lint": "biome check src test scripts",
+    "lint:fix": "biome check --write src test scripts",
+    "test": "npm run build:deps && vitest run",
+    "test:coverage": "npm run build:deps && vitest run --coverage"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "solid",
+    "ldp",
+    "pod",
+    "rdf",
+    "linked-data",
+    "agent",
+    "claude",
+    "ai"
+  ],
+  "author": "Jesse Wright <jwrightwho@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jeswr/solid-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/jeswr/solid-mcp/issues"
+  },
+  "homepage": "https://github.com/jeswr/solid-mcp#readme",
+  "dependencies": {
+    "@jeswr/guarded-fetch": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@rdfjs/types": "^2.0.1",
+    "@rdfjs/wrapper": "^0.34.0",
+    "@solid/object": "^0.6.0",
+    "content-type": "^2.0.0",
+    "jsonld-streaming-parser": "^5.0.0",
+    "n3": "^2.1.1",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.3",
+    "@jeswr/fetch-rdf": "github:jeswr/fetch-rdf#a8359a3764cb6b3c763e09ea211542a5dc7edc33",
+    "@microsoft/api-extractor": "7.58.9",
+    "@types/n3": "^1.16.0",
+    "@types/node": "^26.1.1",
+    "@vitest/coverage-v8": "^4.1.10",
+    "esbuild": "^0.28.1",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
+  },
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

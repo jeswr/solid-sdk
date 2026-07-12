@@ -1,0 +1,78 @@
+{
+  "name": "@jeswr/solid-dav-bridge",
+  "version": "0.0.1",
+  "description": "CalDAV (RFC 4791) + CardDAV (RFC 6352) → Solid pod. A read/import-only bridge that maps a well-specified protocol (iCalendar VEVENT / vCard) to the suite's established RDF models — VEVENT → schema:Event (+ W3C RDF-iCal ical: for fields schema.org lacks, RRULE carried raw), vCard → vcard:AddressBook via @jeswr/solid-task-model's ./contacts buildPerson/buildAddressBook (never hand-built triples). Pure mappers are fixture-tested with no network; the optional DAV fetch dereferences a user URL ONLY through @jeswr/guarded-fetch (SSRF-safe). Owner-private import (phase 1), untrusted-input hardened, DAV credentials never logged.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Jesse Wright",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jeswr/solid-dav-bridge.git"
+  },
+  "homepage": "https://github.com/jeswr/solid-dav-bridge#readme",
+  "bugs": {
+    "url": "https://github.com/jeswr/solid-dav-bridge/issues"
+  },
+  "keywords": [
+    "solid",
+    "rdf",
+    "caldav",
+    "carddav",
+    "icalendar",
+    "vcard",
+    "rfc4791",
+    "rfc6352",
+    "rfc5545",
+    "rfc6350",
+    "calendar",
+    "contacts",
+    "import",
+    "interop",
+    "ssrf"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "api:report": "npm run build && api-extractor run --local",
+    "api:check": "npm run build && api-extractor run --local && git diff --exit-code -- etc/",
+    "lint": "biome check src test",
+    "lint:fix": "biome check --write src test",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@jeswr/fetch-rdf": "^0.1.0",
+    "@jeswr/guarded-fetch": "workspace:*",
+    "@jeswr/rdf-serialize": "workspace:*",
+    "@jeswr/solid-task-model": "workspace:*",
+    "n3": "^2.0.3"
+  },
+  "peerDependencies": {
+    "@rdfjs/types": "^2.0.1"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.0.0",
+    "@microsoft/api-extractor": "^7.58.9",
+    "@rdfjs/types": "^2.0.1",
+    "@types/n3": "^1.26.1",
+    "@types/node": "^20",
+    "typescript": "^5",
+    "vitest": "^4.1.8"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}
