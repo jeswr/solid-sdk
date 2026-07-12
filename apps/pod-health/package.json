@@ -1,5 +1,5 @@
 {
-  "name": "pod-health",
+  "name": "@jeswr/pod-health",
   "version": "0.0.1",
   "private": false,
   "description": "Personal-health data layer over a Solid pod — typed RDF accessors for health records, vitals, conditions, medications, immunizations and GPX workouts on the fse health sector (FHIR-aligned Mode A + QUDT) vocabulary.",
@@ -26,14 +26,13 @@
     "public"
   ],
   "scripts": {
-    "lint": "biome check src test",
+    "lint": "biome lint src test",
     "lint:fix": "biome check --write src test",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "coverage": "vitest run --coverage",
-    "build": "tsc -p tsconfig.build.json",
-    "gate": "npm run lint && npm run typecheck && npm run coverage && npm run build"
+    "build": "tsc -p tsconfig.build.json"
   },
   "dependencies": {
     "@jeswr/fetch-rdf": "0.1.0",
@@ -54,7 +53,6 @@
     }
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.0",
     "@rdfjs/types": "2.0.1",
     "@testing-library/jest-dom": "6.9.1",
     "@testing-library/react": "16.3.2",
@@ -63,11 +61,11 @@
     "@types/react": "19.0.0",
     "@types/react-dom": "19.0.0",
     "@vitejs/plugin-react": "6.0.2",
-    "@vitest/coverage-v8": "4.1.9",
+    "@vitest/coverage-v8": "^4.1.10",
     "jsdom": "29.1.1",
     "react": "19.2.7",
     "react-dom": "19.2.7",
     "typescript": "5.7.3",
-    "vitest": "4.1.9"
+    "vitest": "^4.1.10"
   }
 }

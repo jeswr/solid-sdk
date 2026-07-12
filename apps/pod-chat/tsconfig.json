@@ -6,7 +6,7 @@
     "moduleResolution": "NodeNext",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "jsx": "react-jsx",
-    "types": ["node"],
+    "types": ["node", "@testing-library/jest-dom/vitest"],
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,

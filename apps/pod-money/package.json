@@ -1,5 +1,5 @@
 {
-  "name": "pod-money",
+  "name": "@jeswr/pod-money",
   "version": "0.0.1",
   "private": false,
   "description": "Personal-finance data layer over a Solid pod — typed RDF accessors for accounts, transactions, balances, holdings and categories on the fse finance sector (FIBO-slim) vocabulary.",
@@ -26,15 +26,14 @@
     "public"
   ],
   "scripts": {
-    "lint": "biome check src test",
+    "lint": "biome lint src test",
     "lint:fix": "biome check --write src test",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "coverage": "vitest run --coverage",
     "build": "tsc -p tsconfig.build.json",
-    "gen:clientid": "npm run build && node scripts/gen-clientid.mjs",
-    "gate": "npm run lint && npm run typecheck && npm run coverage && npm run build"
+    "gen:clientid": "npm run build && node scripts/gen-clientid.mjs"
   },
   "dependencies": {
     "@jeswr/fetch-rdf": "0.1.0",
@@ -55,7 +54,6 @@
     }
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.0",
     "@rdfjs/types": "2.0.1",
     "@testing-library/jest-dom": "6.9.1",
     "@testing-library/react": "16.3.2",
@@ -64,11 +62,11 @@
     "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "6.0.2",
-    "@vitest/coverage-v8": "4.1.9",
+    "@vitest/coverage-v8": "^4.1.10",
     "jsdom": "29.1.1",
     "react": "19.2.7",
     "react-dom": "19.2.7",
     "typescript": "5.7.3",
-    "vitest": "4.1.9"
+    "vitest": "^4.1.10"
   }
 }

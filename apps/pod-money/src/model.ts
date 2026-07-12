@@ -59,13 +59,6 @@ const TXN_CLASS: Record<TransactionKind, string> = {
   CardPayment: FinClass.CardPayment,
   Transfer: FinClass.Transfer,
 };
-const TXN_OF_CLASS: ReadonlyMap<string, TransactionKind> = new Map([
-  [FinClass.Payment, "Payment"],
-  [FinClass.CardPayment, "CardPayment"],
-  [FinClass.Transfer, "Transfer"],
-  [FinClass.Transaction, "Transaction"],
-]);
-
 /**
  * `fin:MonetaryAmount` — a decimal value + an ISO 4217 currency code.
  * The value object reused by transactions, balances and holdings.
