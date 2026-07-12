@@ -1,0 +1,181 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+/* Make Tailwind v4 scan the shared @jeswr/app-shell package so the utility
+   classes its <FeedbackButton/> dialog + <ThemeToggle/>/<AccountMenu/> emit are
+   generated into this app's build. We DO NOT import app-shell's tokens.css /
+   theme.css here — this app already defines the SAME suite OKLCH token set below
+   (the app-shell components resolve against the same --background/--foreground/
+   --border/etc.), so importing them would just duplicate. `@source` only adds
+   class detection, not styles (the pod-photos/drive lesson: don't re-alias
+   app-shell's own tokens; keep ONE token home). */
+@source "../node_modules/@jeswr/app-shell/dist";
+/* The @jeswr/solid-elements Web Components (<jeswr-loading> etc.) render into a
+   shadow root and bring their own styles, so they need no class scan — but the
+   `./react` (@lit/react) wrappers carry no extra utilities either. No @source is
+   required for them; this comment marks the suite UX stack as deliberate (app-shell
+   chrome + solid-elements wait-states), not an omission. */
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-heading: var(--font-sans);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/* The suite OKLCH palette — the SAME token set @jeswr/app-shell ships in its
+   tokens.css, defined here so this app owns ONE token home (no clobber, no
+   duplicate import). Hue ~195-235 = deep calm teal/cyan; contrast pairs chosen
+   for WCAG 2.2 AA. The <ThemeProvider> toggles `.dark` on <html>. */
+:root {
+  --background: oklch(0.992 0.003 210);
+  --foreground: oklch(0.21 0.022 235);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.21 0.022 235);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.21 0.022 235);
+  --primary: oklch(0.52 0.094 205);
+  --primary-foreground: oklch(0.99 0.005 200);
+  --secondary: oklch(0.96 0.012 210);
+  --secondary-foreground: oklch(0.3 0.03 225);
+  --muted: oklch(0.965 0.008 215);
+  --muted-foreground: oklch(0.5 0.018 230);
+  --accent: oklch(0.94 0.03 195);
+  --accent-foreground: oklch(0.31 0.05 215);
+  --destructive: oklch(0.55 0.2 27);
+  --border: oklch(0.91 0.012 220);
+  --input: oklch(0.9 0.012 220);
+  --ring: oklch(0.52 0.094 205);
+  --chart-1: oklch(0.56 0.1 200);
+  --chart-2: oklch(0.6 0.11 150);
+  --chart-3: oklch(0.62 0.13 60);
+  --chart-4: oklch(0.55 0.13 300);
+  --chart-5: oklch(0.58 0.14 20);
+  --radius: 0.7rem;
+  --sidebar: oklch(0.975 0.008 215);
+  --sidebar-foreground: oklch(0.27 0.022 230);
+  --sidebar-primary: oklch(0.52 0.094 205);
+  --sidebar-primary-foreground: oklch(0.99 0.005 200);
+  --sidebar-accent: oklch(0.93 0.025 200);
+  --sidebar-accent-foreground: oklch(0.3 0.045 215);
+  --sidebar-border: oklch(0.9 0.012 220);
+  --sidebar-ring: oklch(0.52 0.094 205);
+}
+
+.dark {
+  --background: oklch(0.17 0.018 235);
+  --foreground: oklch(0.96 0.006 210);
+  --card: oklch(0.21 0.02 233);
+  --card-foreground: oklch(0.96 0.006 210);
+  --popover: oklch(0.23 0.022 233);
+  --popover-foreground: oklch(0.96 0.006 210);
+  --primary: oklch(0.7 0.1 200);
+  --primary-foreground: oklch(0.17 0.03 235);
+  --secondary: oklch(0.27 0.022 232);
+  --secondary-foreground: oklch(0.95 0.008 210);
+  --muted: oklch(0.26 0.02 232);
+  --muted-foreground: oklch(0.72 0.018 215);
+  --accent: oklch(0.32 0.045 205);
+  --accent-foreground: oklch(0.94 0.02 200);
+  --destructive: oklch(0.7 0.18 22);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.7 0.1 200);
+  --chart-1: oklch(0.7 0.11 200);
+  --chart-2: oklch(0.72 0.12 150);
+  --chart-3: oklch(0.76 0.13 70);
+  --chart-4: oklch(0.7 0.13 300);
+  --chart-5: oklch(0.72 0.14 25);
+  --sidebar: oklch(0.2 0.02 235);
+  --sidebar-foreground: oklch(0.95 0.006 210);
+  --sidebar-primary: oklch(0.7 0.1 200);
+  --sidebar-primary-foreground: oklch(0.17 0.03 235);
+  --sidebar-accent: oklch(0.3 0.04 205);
+  --sidebar-accent-foreground: oklch(0.94 0.02 200);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.7 0.1 200);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+
+  /* SUITE-STANDARD SAFE-FORM HOST BUTTON BASE (#121 / #80 — baked by create-solid-app).
+     A scaffolded app styles its controls with shadcn <Button>/Tailwind utilities, so
+     it does NOT need a bare-element button base. But the moment an app author adds a
+     plain HTML `<button>` and reaches for a global `button { … }` filled style, that
+     bare rule LEAKS onto every @jeswr/app-shell control too (the ThemeToggle/
+     AccountMenu/FeedbackButton triggers + the portaled FeedbackDialog's buttons),
+     distorting their look — the CSS-leak bug that bit the early pod-app adopters.
+
+     This base is the PROVEN safe form, so a new app inherits it instead of later
+     hand-fixing the leak:
+       • `:where(:not([data-app-shell-control]))` excludes every app-shell control
+         (they all carry `data-app-shell-control`, which app-shell #80's unlayered
+         reset keys off for COLOUR isolation; the reset deliberately does NOT touch
+         the BOX MODEL, so a base that set padding/radius/sizing WOULD clobber the
+         shell controls' per-instance sizing utilities — hence the exclusion).
+       • `:where()` carries ZERO specificity, so this stays at (0,0,1) — IDENTICAL to
+         a bare `button {}` — which keeps any class-only host override winning. A bare
+         `button:not([data-app-shell-control])` would leak (0,1,1) specificity (the
+         attribute selector's specificity escapes through `:not()`) and out-rank such
+         overrides — the known regression this scope exists to avoid. NEVER use that
+         bare `button:not(` form; the css-isolation guard test rejects it.
+       • The solid-elements <jeswr-loading> etc. live in shadow DOM, which this
+         light-DOM rule cannot pierce — immune for a second reason.
+     The base sets only the host's own filled look; comment it out if an app wants
+     bare buttons fully unstyled. */
+  button:where(:not([data-app-shell-control])) {
+    @apply cursor-pointer;
+  }
+  button:where(:not([data-app-shell-control])):disabled {
+    @apply cursor-not-allowed opacity-55;
+  }
+}

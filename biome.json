@@ -5,6 +5,13 @@
     "clientKind": "git",
     "useIgnoreFile": true
   },
+  "files": {
+    "includes": [
+      "**",
+      "!!packages/create-solid-app/scripts",
+      "!!packages/create-solid-app/template"
+    ]
+  },
   "linter": {
     "enabled": true,
     "rules": {

@@ -1,0 +1,9 @@
+<!doctype html>
+<title>Solid login callback</title>
+<!--
+  The OAuth popup redirects here after the user authorizes. We post the full
+  callback URL (which carries the ?code=&state= the auth flow is waiting for)
+  back to the opener window, which resolves the pending getCode() promise.
+  @solid/reactive-authentication requires exactly this handoff.
+-->
+<script>opener.postMessage(location.href)</script>

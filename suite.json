@@ -19,6 +19,7 @@
     "@jeswr/agent-authz-verifier",
     "@jeswr/app-shell",
     "@jeswr/auth-solid",
+    "create-solid-app",
     "@jeswr/federation-client",
     "@jeswr/federation-registry",
     "@jeswr/federation-trust",

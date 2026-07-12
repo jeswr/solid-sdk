@@ -1,0 +1,121 @@
+// AUTHORED-BY Claude Opus 4.8
+/**
+ * Argument parsing for the create-solid-app CLI. Pins that known flags parse, that an UNKNOWN flag
+ * or a SECOND positional (extra app name) is rejected with a usage error rather than silently
+ * ignored, and that `--help` wins even alongside an error.
+ */
+import { describe, expect, it } from "vitest";
+import { parseArgs } from "../bin.ts";
+
+describe("parseArgs", () => {
+  it("parses an app name with default flags", () => {
+    const a = parseArgs(["my-app"]);
+    expect(a.appName).toBe("my-app");
+    expect(a.install).toBe(true);
+    expect(a.seedPod).toBe(false);
+    expect(a.error).toBeUndefined();
+  });
+
+  it("honours --no-install and --seed-pod", () => {
+    const a = parseArgs(["my-app", "--no-install", "--seed-pod"]);
+    expect(a.install).toBe(false);
+    expect(a.seedPod).toBe(true);
+    expect(a.error).toBeUndefined();
+  });
+
+  it("rejects an unknown flag", () => {
+    const a = parseArgs(["my-app", "--frobnicate"]);
+    expect(a.error).toMatch(/unknown flag: --frobnicate/);
+  });
+
+  it("rejects a second app-name positional", () => {
+    const a = parseArgs(["app-one", "app-two"]);
+    expect(a.error).toMatch(/extra argument: app-two/);
+  });
+
+  it("reports help even when an error is present", () => {
+    const a = parseArgs(["--help", "--bogus"]);
+    expect(a.help).toBe(true);
+  });
+
+  it("parses --repo owner/name (space form)", () => {
+    const a = parseArgs(["my-app", "--repo", "jeswr/my-app"]);
+    expect(a.repo).toBe("jeswr/my-app");
+    expect(a.appName).toBe("my-app");
+    expect(a.error).toBeUndefined();
+  });
+
+  it("parses --repo=owner/name (equals form)", () => {
+    const a = parseArgs(["my-app", "--repo=jeswr/my-app"]);
+    expect(a.repo).toBe("jeswr/my-app");
+    expect(a.error).toBeUndefined();
+  });
+
+  it("rejects --repo with no value", () => {
+    const a = parseArgs(["my-app", "--repo"]);
+    expect(a.error).toMatch(/--repo requires a value/);
+  });
+
+  it("rejects --repo immediately followed by another flag", () => {
+    const a = parseArgs(["my-app", "--repo", "--seed-pod"]);
+    expect(a.error).toMatch(/--repo requires a value/);
+  });
+
+  it("rejects an empty --repo= value", () => {
+    const a = parseArgs(["my-app", "--repo="]);
+    expect(a.repo).toBeUndefined();
+    expect(a.error).toMatch(/--repo requires a value/);
+  });
+
+  it("rejects an empty space-form --repo value", () => {
+    const a = parseArgs(["my-app", "--repo", ""]);
+    expect(a.repo).toBeUndefined();
+    expect(a.error).toMatch(/--repo requires a value/);
+  });
+
+  it("rejects a whitespace-only --repo value", () => {
+    const a = parseArgs(["my-app", "--repo", "   "]);
+    expect(a.repo).toBeUndefined();
+    expect(a.error).toMatch(/--repo requires a value/);
+  });
+
+  it("parses --data-model task (space form)", () => {
+    const a = parseArgs(["my-app", "--data-model", "task"]);
+    expect(a.dataModel).toBe("task");
+    expect(a.error).toBeUndefined();
+  });
+
+  it("parses --data-model=contact (equals form)", () => {
+    const a = parseArgs(["my-app", "--data-model=contact"]);
+    expect(a.dataModel).toBe("contact");
+    expect(a.error).toBeUndefined();
+  });
+
+  it("trims a --data-model value", () => {
+    const a = parseArgs(["my-app", "--data-model", " bookmark "]);
+    expect(a.dataModel).toBe("bookmark");
+    expect(a.error).toBeUndefined();
+  });
+
+  it("rejects an UNKNOWN data model (loud, not a silent default)", () => {
+    const a = parseArgs(["my-app", "--data-model", "frobnicate"]);
+    expect(a.dataModel).toBeUndefined();
+    expect(a.error).toMatch(/unknown data model: frobnicate/);
+  });
+
+  it("rejects --data-model with no value", () => {
+    const a = parseArgs(["my-app", "--data-model"]);
+    expect(a.error).toMatch(/--data-model requires a value/);
+  });
+
+  it("rejects --data-model immediately followed by another flag", () => {
+    const a = parseArgs(["my-app", "--data-model", "--seed-pod"]);
+    expect(a.error).toMatch(/--data-model requires a value/);
+  });
+
+  it("rejects an empty --data-model= value", () => {
+    const a = parseArgs(["my-app", "--data-model="]);
+    expect(a.dataModel).toBeUndefined();
+    expect(a.error).toMatch(/--data-model requires a value/);
+  });
+});
