@@ -1,0 +1,79 @@
+{
+  "name": "@jeswr/auth-solid",
+  "version": "0.1.0",
+  "description": "A Solid-OIDC provider for Auth.js (next-auth v5 / @auth/core) — issuer discovery + PKCE(S256) + state + nonce + DPoP-bound tokens via a customFetch seam, composing @jeswr/solid-dpop for RFC 9449 proofs. Verified-WebID-only, fail-closed. Plus a solidDpopFetch for authed pod requests from a persisted session.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Jesse Wright",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jeswr/auth-solid.git"
+  },
+  "homepage": "https://github.com/jeswr/auth-solid#readme",
+  "bugs": {
+    "url": "https://github.com/jeswr/auth-solid/issues"
+  },
+  "keywords": [
+    "solid",
+    "solid-oidc",
+    "auth.js",
+    "authjs",
+    "next-auth",
+    "@auth/core",
+    "oidc-provider",
+    "dpop",
+    "rfc9449",
+    "oauth",
+    "pkce",
+    "webid"
+  ],
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "node scripts/build-dist.mjs",
+    "check:dist": "node scripts/check-dist-fresh.mjs",
+    "check:lockfile-transport": "node scripts/check-lockfile-transport.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "biome check src test scripts && npm run check:lockfile-transport",
+    "lint:fix": "biome check --write src test scripts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "gate": "npm run lint && npm run typecheck && npm run test && npm run build && npm run check:dist",
+    "prepare": "npm run build"
+  },
+  "peerDependencies": {
+    "@auth/core": ">=0.37.0 <1"
+  },
+  "dependencies": {
+    "@jeswr/guarded-fetch": "github:jeswr/guarded-fetch#184f060",
+    "@jeswr/solid-dpop": "github:jeswr/solid-dpop#main",
+    "jose": "^6.0.0"
+  },
+  "devDependencies": {
+    "@auth/core": "^0.41.2",
+    "@biomejs/biome": "^2.4.16",
+    "@types/node": "^24.0.0",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.6.0",
+    "vitest": "^4.0.0"
+  }
+}
