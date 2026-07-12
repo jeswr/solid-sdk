@@ -47,14 +47,10 @@
   ],
   "scripts": {
     "build": "node scripts/build-dist.mjs",
-    "check:dist": "node scripts/check-dist-fresh.mjs",
-    "check:lockfile-transport": "node scripts/check-lockfile-transport.mjs",
-    "fix:lockfile-transport": "node scripts/normalize-lockfile.mjs",
-    "lint": "biome check src test scripts && npm run check:lockfile-transport",
+    "lint": "biome check src test scripts",
     "lint:fix": "biome check --write src test scripts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run",
-    "prepare": "npm run build"
+    "test": "vitest run"
   },
   "dependencies": {
     "@jeswr/fetch-rdf": "^0.1.0",
@@ -73,7 +69,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.0",
-    "@jeswr/solid-session-restore": "github:jeswr/solid-session-restore#main",
+    "@jeswr/solid-session-restore": "workspace:*",
     "@types/n3": "^1.26.1",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",

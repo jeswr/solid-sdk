@@ -1932,8 +1932,8 @@ describe("createSolidAuth — silent-restore pointer gated on a durable credenti
     };
   }
 
-  const REMEMBERED_KEY = "test-app.remembered-account"; // the silent-restore pointer
-  const RECENT_KEY = "test-app.recent-accounts"; // the logout-surviving returning-user list
+  const RememberedKey = "test-app.remembered-account"; // the silent-restore pointer
+  const RecentKey = "test-app.recent-accounts"; // the logout-surviving returning-user list
 
   it("does NOT write the silent-restore pointer when the OP issued NO refresh_token, but DOES remember the recent account", async () => {
     // The roborev finding: login wrote the silent-restore pointer even when persist
@@ -1948,8 +1948,8 @@ describe("createSolidAuth — silent-restore pointer gated on a durable credenti
         callbackUri: "https://app.example/callback",
         clientId: "https://app.example/clientid.jsonld",
         store,
-        rememberedAccountsKey: REMEMBERED_KEY,
-        recentAccountsKey: RECENT_KEY,
+        rememberedAccountsKey: RememberedKey,
+        recentAccountsKey: RecentKey,
       });
       const result = await controller.login("https://alice.pod.example/profile/card#me");
       expect(result.webId).toBe("https://alice.pod.example/profile/card#me");
@@ -1958,7 +1958,7 @@ describe("createSolidAuth — silent-restore pointer gated on a durable credenti
       expect(store.puts).toEqual([]);
       // The SILENT-RESTORE pointer was NOT written — a next-load auto-restore would only
       // fall back, so we must not claim the account is restorable.
-      expect(ls.map.get(REMEMBERED_KEY)).toBeUndefined();
+      expect(ls.map.get(RememberedKey)).toBeUndefined();
       // But the RECENT-ACCOUNT entry IS remembered (the logout-surviving affordance is
       // fine without a restorable credential — it just powers the picker / no-arg login).
       expect(controller.recentAccounts()).toEqual([
@@ -1967,7 +1967,7 @@ describe("createSolidAuth — silent-restore pointer gated on a durable credenti
           displayName: "https://alice.pod.example/profile/card#me",
         },
       ]);
-      expect(ls.map.get(RECENT_KEY)).toBeDefined();
+      expect(ls.map.get(RecentKey)).toBeDefined();
     } finally {
       ls.restore();
     }
@@ -1992,17 +1992,17 @@ describe("createSolidAuth — silent-restore pointer gated on a durable credenti
         callbackUri: "https://app.example/callback",
         clientId: "https://app.example/clientid.jsonld",
         store: throwingStore,
-        rememberedAccountsKey: REMEMBERED_KEY,
-        recentAccountsKey: RECENT_KEY,
+        rememberedAccountsKey: RememberedKey,
+        recentAccountsKey: RecentKey,
       });
       const result = await controller.login("https://alice.pod.example/profile/card#me");
       // Login still SUCCEEDS with a live session (a durable-write failure is non-fatal).
       expect(result.webId).toBe("https://alice.pod.example/profile/card#me");
       expect(controller.webId).toBe("https://alice.pod.example/profile/card#me");
       // The store write failed → nothing restorable → NO silent-restore pointer.
-      expect(ls.map.get(REMEMBERED_KEY)).toBeUndefined();
+      expect(ls.map.get(RememberedKey)).toBeUndefined();
       // Recent account still remembered.
-      expect(ls.map.get(RECENT_KEY)).toBeDefined();
+      expect(ls.map.get(RecentKey)).toBeDefined();
       expect(controller.recentAccounts()[0]?.webId).toBe(
         "https://alice.pod.example/profile/card#me",
       );
@@ -2023,14 +2023,14 @@ describe("createSolidAuth — silent-restore pointer gated on a durable credenti
         callbackUri: "https://app.example/callback",
         clientId: "https://app.example/clientid.jsonld",
         store,
-        rememberedAccountsKey: REMEMBERED_KEY,
-        recentAccountsKey: RECENT_KEY,
+        rememberedAccountsKey: RememberedKey,
+        recentAccountsKey: RecentKey,
       });
       await controller.login("https://alice.pod.example/profile/card#me");
       // A credential was durably stored …
       expect(store.map.get("https://idp.example/")?.refreshToken).toBe("refresh-token");
       // … so the silent-restore pointer IS written (next-load auto-restore is valid).
-      const pointer = JSON.parse(ls.map.get(REMEMBERED_KEY) as string);
+      const pointer = JSON.parse(ls.map.get(RememberedKey) as string);
       expect(pointer).toEqual({
         webId: "https://alice.pod.example/profile/card#me",
         issuer: "https://idp.example/",
@@ -2052,7 +2052,7 @@ describe("createSolidAuth — silent-restore pointer gated on a durable credenti
     // Pre-seed a pointer to a DIFFERENT account (bob) on the same issuer, as a prior
     // restorable login would have left.
     ls.map.set(
-      REMEMBERED_KEY,
+      RememberedKey,
       JSON.stringify({
         webId: "https://bob.pod.example/profile/card#me",
         issuer: "https://idp.example/",
@@ -2064,15 +2064,15 @@ describe("createSolidAuth — silent-restore pointer gated on a durable credenti
         callbackUri: "https://app.example/callback",
         clientId: "https://app.example/clientid.jsonld",
         store,
-        rememberedAccountsKey: REMEMBERED_KEY,
-        recentAccountsKey: RECENT_KEY,
+        rememberedAccountsKey: RememberedKey,
+        recentAccountsKey: RecentKey,
       });
       // Login resolves to alice (webIdClaim default) but the OP issues no refresh_token.
       await controller.login("https://alice.pod.example/profile/card#me");
       expect(controller.webId).toBe("https://alice.pod.example/profile/card#me"); // live
       // The STALE pointer (to bob) is GONE — next load will fall back to login, NOT
       // silently restore bob.
-      expect(ls.map.get(REMEMBERED_KEY)).toBeUndefined();
+      expect(ls.map.get(RememberedKey)).toBeUndefined();
     } finally {
       ls.restore();
     }
@@ -2103,7 +2103,7 @@ describe("createSolidAuth — silent-restore pointer gated on a durable credenti
     const ls = installKeyedLocalStorage();
     // The pointer also points at bob (the prior restorable account).
     ls.map.set(
-      REMEMBERED_KEY,
+      RememberedKey,
       JSON.stringify({
         webId: "https://bob.pod.example/profile/card#me",
         issuer: "https://idp.example/",
@@ -2115,8 +2115,8 @@ describe("createSolidAuth — silent-restore pointer gated on a durable credenti
         callbackUri: "https://app.example/callback",
         clientId: "https://app.example/clientid.jsonld",
         store,
-        rememberedAccountsKey: REMEMBERED_KEY,
-        recentAccountsKey: RECENT_KEY,
+        rememberedAccountsKey: RememberedKey,
+        recentAccountsKey: RecentKey,
       });
       // Login resolves to alice on the SAME issuer, but issues no refresh_token.
       await controller.login("https://alice.pod.example/profile/card#me");
@@ -2124,7 +2124,7 @@ describe("createSolidAuth — silent-restore pointer gated on a durable credenti
       // Bob's stale credential for this issuer is GONE (not left to be redeemed).
       expect(map.get("https://idp.example/")).toBeUndefined();
       // And the stale pointer is cleared too.
-      expect(ls.map.get(REMEMBERED_KEY)).toBeUndefined();
+      expect(ls.map.get(RememberedKey)).toBeUndefined();
     } finally {
       ls.restore();
     }
@@ -2152,8 +2152,8 @@ describe("createSolidAuth — silent-restore pointer gated on a durable credenti
         callbackUri: "https://app.example/callback",
         clientId: "https://app.example/clientid.jsonld",
         store,
-        rememberedAccountsKey: REMEMBERED_KEY,
-        recentAccountsKey: RECENT_KEY,
+        rememberedAccountsKey: RememberedKey,
+        recentAccountsKey: RecentKey,
       });
       // First login (alice) WITH a refresh token → persists alice's credential.
       loginRefreshToken = "alice-refresh";
@@ -2185,17 +2185,17 @@ describe("createSolidAuth — silent-restore pointer gated on a durable credenti
         callbackUri: "https://app.example/callback",
         clientId: "https://app.example/clientid.jsonld",
         // no `store` → in-memory MemorySessionStore fallback (non-durable)
-        rememberedAccountsKey: REMEMBERED_KEY,
-        recentAccountsKey: RECENT_KEY,
+        rememberedAccountsKey: RememberedKey,
+        recentAccountsKey: RecentKey,
       });
       const result = await controller.login("https://alice.pod.example/profile/card#me");
       expect(result.webId).toBe("https://alice.pod.example/profile/card#me");
       expect(controller.webId).toBe("https://alice.pod.example/profile/card#me"); // live this load
       // The silent-restore pointer is NOT written — the in-memory credential won't survive
       // a reload, so next load must fall back to login, not attempt a doomed restore.
-      expect(ls.map.get(REMEMBERED_KEY)).toBeUndefined();
+      expect(ls.map.get(RememberedKey)).toBeUndefined();
       // The recent account IS still remembered (logout-surviving affordance).
-      expect(ls.map.get(RECENT_KEY)).toBeDefined();
+      expect(ls.map.get(RecentKey)).toBeDefined();
     } finally {
       ls.restore();
     }
@@ -2233,15 +2233,15 @@ describe("createSolidAuth — silent-restore pointer gated on a durable credenti
     refreshGrantCalls = 0;
     const ls = installKeyedLocalStorage();
     // Seed a CORRUPT (unparseable) value under the silent-restore pointer key.
-    ls.map.set(REMEMBERED_KEY, "{not-valid-json:::");
+    ls.map.set(RememberedKey, "{not-valid-json:::");
     try {
       const controller = createSolidAuth({
         authFlow,
         callbackUri: "https://app.example/callback",
         clientId: "https://app.example/clientid.jsonld",
         store,
-        rememberedAccountsKey: REMEMBERED_KEY,
-        recentAccountsKey: RECENT_KEY,
+        rememberedAccountsKey: RememberedKey,
+        recentAccountsKey: RecentKey,
       });
       const outcome = await controller.restore();
       // (a) FAIL CLOSED: no session is pinned; the outcome is login.
@@ -2250,7 +2250,7 @@ describe("createSolidAuth — silent-restore pointer gated on a durable credenti
       // No restore grant was attempted (the corrupt pointer yields no issuer/WebID).
       expect(refreshGrantCalls).toBe(0);
       // (b) The CORRUPT pointer is CLEARED so the next load won't re-attempt it.
-      expect(ls.map.get(REMEMBERED_KEY)).toBeUndefined();
+      expect(ls.map.get(RememberedKey)).toBeUndefined();
     } finally {
       ls.restore();
     }
@@ -2272,8 +2272,8 @@ describe("createSolidAuth — silent-restore pointer gated on a durable credenti
         callbackUri: "https://app.example/callback",
         clientId: "https://app.example/clientid.jsonld",
         // no `store` → in-memory MemorySessionStore fallback (non-durable)
-        rememberedAccountsKey: REMEMBERED_KEY,
-        recentAccountsKey: RECENT_KEY,
+        rememberedAccountsKey: RememberedKey,
+        recentAccountsKey: RecentKey,
         publicFetch: ok200RecordingFetch(),
       });
       // First login (establishes a prior session + previousIssuer for the second).
@@ -2285,7 +2285,7 @@ describe("createSolidAuth — silent-restore pointer gated on a durable credenti
       await controller.login("https://alice.pod.example/profile/card#me");
       expect(controller.webId).toBe("https://alice.pod.example/profile/card#me");
       // The pointer is suppressed (non-durable), as the Low fix requires …
-      expect(ls.map.get(REMEMBERED_KEY)).toBeUndefined();
+      expect(ls.map.get(RememberedKey)).toBeUndefined();
       // … BUT the in-memory credential was NOT deleted by the same-issuer cleanup: a
       // refresh of the expired token SUCCEEDS (it redeemed the in-memory refresh token).
       refreshGrantCalls = 0;
@@ -2321,7 +2321,7 @@ describe("createSolidAuth — silent-restore pointer gated on a durable credenti
     };
     const ls = installKeyedLocalStorage();
     ls.map.set(
-      REMEMBERED_KEY,
+      RememberedKey,
       JSON.stringify({
         webId: "https://alice.pod.example/profile/card#me",
         issuer: "https://idp.example/",
@@ -2333,8 +2333,8 @@ describe("createSolidAuth — silent-restore pointer gated on a durable credenti
         callbackUri: "https://app.example/callback",
         clientId: "https://app.example/clientid.jsonld",
         store,
-        rememberedAccountsKey: REMEMBERED_KEY,
-        recentAccountsKey: RECENT_KEY,
+        rememberedAccountsKey: RememberedKey,
+        recentAccountsKey: RecentKey,
       });
       // Gate the restore grant so two concurrent restore() calls would BOTH be in flight if
       // they ran independently.
@@ -3681,10 +3681,10 @@ describe("createSolidAuth — dropLiveSession keeps the durable credential (tran
   // primitive: drop the LIVE session, KEEP the credential + pointer, so the next
   // load (or a later restore()) silently re-establishes the session.
 
-  const REMEMBERED_KEY = "drop-session-test.remembered-account";
-  const RECENT_KEY = "drop-session-test.recent-accounts";
-  const ALICE = "https://alice.pod.example/profile/card#me";
-  const ISSUER = "https://idp.example/";
+  const RememberedKey = "drop-session-test.remembered-account";
+  const RecentKey = "drop-session-test.recent-accounts";
+  const Alice = "https://alice.pod.example/profile/card#me";
+  const Issuer = "https://idp.example/";
 
   /** A Map-backed localStorage shim (pointer + recent list under distinct keys). */
   function installKeyedLocalStorage(): { map: Map<string, string>; restore: () => void } {
@@ -3710,9 +3710,9 @@ describe("createSolidAuth — dropLiveSession keeps the durable credential (tran
   /** Seed a store map with a restorable persisted credential for ISSUER/ALICE. */
   function seededMap(): Map<string, import("@jeswr/solid-session-restore").PersistedSession> {
     const map = new Map<string, import("@jeswr/solid-session-restore").PersistedSession>();
-    map.set(ISSUER, {
-      issuer: ISSUER,
-      webId: ALICE,
+    map.set(Issuer, {
+      issuer: Issuer,
+      webId: Alice,
       refreshToken: "stored-refresh",
       dpopKey: { publicKey: {}, privateKey: {} } as unknown as CryptoKeyPair,
     });
@@ -3735,7 +3735,7 @@ describe("createSolidAuth — dropLiveSession keeps the durable credential (tran
 
   /** Write the silent-restore pointer the way a prior login would have. */
   function seedPointer(ls: Map<string, string>): void {
-    ls.set(REMEMBERED_KEY, JSON.stringify({ webId: ALICE, issuer: ISSUER }));
+    ls.set(RememberedKey, JSON.stringify({ webId: Alice, issuer: Issuer }));
   }
 
   it("drops the live session but KEEPS the credential + pointer; a subsequent restore() succeeds", async () => {
@@ -3747,12 +3747,12 @@ describe("createSolidAuth — dropLiveSession keeps the durable credential (tran
         callbackUri: "https://app.example/callback",
         clientId: "https://app.example/clientid.jsonld",
         store,
-        rememberedAccountsKey: REMEMBERED_KEY,
-        recentAccountsKey: RECENT_KEY,
+        rememberedAccountsKey: RememberedKey,
+        recentAccountsKey: RecentKey,
       });
-      await controller.login(ALICE);
-      expect(controller.webId).toBe(ALICE);
-      expect(store.map.get(ISSUER)?.refreshToken).toBe("refresh-token");
+      await controller.login(Alice);
+      expect(controller.webId).toBe(Alice);
+      expect(store.map.get(Issuer)?.refreshToken).toBe("refresh-token");
 
       await controller.dropLiveSession();
 
@@ -3761,20 +3761,20 @@ describe("createSolidAuth — dropLiveSession keeps the durable credential (tran
       expect(controller.issuer).toBeNull();
       expect(controller.authenticatedFetch).toBe(controller.publicFetch);
       // …but the DURABLE credential is UNTOUCHED (the contrast with logout)…
-      expect(store.map.get(ISSUER)?.refreshToken).toBe("refresh-token");
+      expect(store.map.get(Issuer)?.refreshToken).toBe("refresh-token");
       // …and the silent-restore pointer is KEPT (the next load retries restore)…
-      expect(JSON.parse(ls.map.get(REMEMBERED_KEY) as string)).toEqual({
-        webId: ALICE,
-        issuer: ISSUER,
+      expect(JSON.parse(ls.map.get(RememberedKey) as string)).toEqual({
+        webId: Alice,
+        issuer: Issuer,
       });
       // …and the (logout-surviving anyway) recent-accounts list still lists alice.
-      expect(controller.recentAccounts()[0]?.webId).toBe(ALICE);
+      expect(controller.recentAccounts()[0]?.webId).toBe(Alice);
 
       // THE INVARIANT: a subsequent silent restore re-establishes the session from
       // the kept credential — no interactive login needed.
       const outcome = await controller.restore();
-      expect(outcome).toEqual({ outcome: "restored", webId: ALICE });
-      expect(controller.webId).toBe(ALICE);
+      expect(outcome).toEqual({ outcome: "restored", webId: Alice });
+      expect(controller.webId).toBe(Alice);
     } finally {
       ls.restore();
     }
@@ -3789,15 +3789,15 @@ describe("createSolidAuth — dropLiveSession keeps the durable credential (tran
         callbackUri: "https://app.example/callback",
         clientId: "https://app.example/clientid.jsonld",
         store,
-        rememberedAccountsKey: REMEMBERED_KEY,
-        recentAccountsKey: RECENT_KEY,
+        rememberedAccountsKey: RememberedKey,
+        recentAccountsKey: RecentKey,
       });
-      await controller.login(ALICE);
+      await controller.login(Alice);
       await controller.logout();
 
       expect(controller.webId).toBeNull();
-      expect(store.map.get(ISSUER)).toBeUndefined(); // credential deleted
-      expect(ls.map.get(REMEMBERED_KEY)).toBeUndefined(); // pointer cleared
+      expect(store.map.get(Issuer)).toBeUndefined(); // credential deleted
+      expect(ls.map.get(RememberedKey)).toBeUndefined(); // pointer cleared
 
       const before = refreshGrantCalls;
       const outcome = await controller.restore();
@@ -3818,7 +3818,7 @@ describe("createSolidAuth — dropLiveSession keeps the durable credential (tran
       store,
       publicFetch: ok200RecordingFetch(),
     });
-    await controller.login(ALICE);
+    await controller.login(Alice);
     // Live session: the token is attached proactively for the allowed (WebID) origin.
     recordedAuthHeader = null;
     await controller.authenticatedFetch("https://alice.pod.example/private/doc");
@@ -3851,7 +3851,7 @@ describe("createSolidAuth — dropLiveSession keeps the durable credential (tran
       clientId: "https://app.example/clientid.jsonld",
       store,
     });
-    await controller.login(ALICE);
+    await controller.login(Alice);
     const seen: (string | null)[] = [];
     const unsubscribe = controller.onSessionChange(({ webId }) => {
       seen.push(webId);
@@ -3872,7 +3872,7 @@ describe("createSolidAuth — dropLiveSession keeps the durable credential (tran
     await expect(controller.dropLiveSession()).resolves.toBeUndefined();
     expect(controller.webId).toBeNull();
     // A stored (not-yet-restored) credential is NOT deleted by an idle dropLiveSession.
-    expect(map.get(ISSUER)?.refreshToken).toBe("stored-refresh");
+    expect(map.get(Issuer)?.refreshToken).toBe("stored-refresh");
   });
 
   it("supersedes an in-flight login: popup signal aborted, login rejects, credential from a PRIOR session kept", async () => {
@@ -3895,7 +3895,7 @@ describe("createSolidAuth — dropLiveSession keeps the durable credential (tran
       clientId: "https://app.example/clientid.jsonld",
       store: mapStore(map),
     });
-    const login = controller.login(ALICE);
+    const login = controller.login(Alice);
     await new Promise((r) => setTimeout(r, 0)); // reach the open popup
     expect(capturedSignal?.aborted).toBe(false);
 
@@ -3905,7 +3905,7 @@ describe("createSolidAuth — dropLiveSession keeps the durable credential (tran
     await expect(login).rejects.toThrow(); // the superseded login bails
     expect(controller.webId).toBeNull();
     // The prior credential was NOT deleted (dropLiveSession touches nothing durable).
-    expect(map.get(ISSUER)?.refreshToken).toBe("stored-refresh");
+    expect(map.get(Issuer)?.refreshToken).toBe("stored-refresh");
   });
 
   it("aborts an in-flight restore GRANT without spending the refresh token (still restorable after)", async () => {
@@ -3923,8 +3923,8 @@ describe("createSolidAuth — dropLiveSession keeps the durable credential (tran
         callbackUri: "https://app.example/callback",
         clientId: "https://app.example/clientid.jsonld",
         store: mapStore(map),
-        rememberedAccountsKey: REMEMBERED_KEY,
-        recentAccountsKey: RECENT_KEY,
+        rememberedAccountsKey: RememberedKey,
+        recentAccountsKey: RecentKey,
       });
       // Gate the grant so we can interleave dropLiveSession mid-flight.
       let releaseGrant!: () => void;
@@ -3944,10 +3944,10 @@ describe("createSolidAuth — dropLiveSession keeps the durable credential (tran
       // The token was NEVER redeemed/rotated (aborted before spending) …
       expect(restoreRotationsAttempted).toBe(0);
       // … so the stored credential is intact and a later restore succeeds.
-      expect(map.get(ISSUER)?.refreshToken).toBe("stored-refresh");
+      expect(map.get(Issuer)?.refreshToken).toBe("stored-refresh");
       restoreDelay = undefined;
       const outcome = await controller.restore();
-      expect(outcome).toEqual({ outcome: "restored", webId: ALICE });
+      expect(outcome).toEqual({ outcome: "restored", webId: Alice });
     } finally {
       ls.restore();
     }
@@ -3966,22 +3966,22 @@ describe("createSolidAuth — dropLiveSession keeps the durable credential (tran
         callbackUri: "https://app.example/callback",
         clientId: "https://app.example/clientid.jsonld",
         store: mapStore(map),
-        rememberedAccountsKey: REMEMBERED_KEY,
-        recentAccountsKey: RECENT_KEY,
+        rememberedAccountsKey: RememberedKey,
+        recentAccountsKey: RecentKey,
       });
       // Load 1: silent restore arms the session.
-      expect(await controller.restore()).toEqual({ outcome: "restored", webId: ALICE });
+      expect(await controller.restore()).toEqual({ outcome: "restored", webId: Alice });
       // The app's enrichment read then fails TRANSIENTLY (network blip / 5xx /
       // timeout — NOT an auth signal). The app's fail-closed teardown for a
       // transient failure is dropLiveSession(), NOT logout().
       await controller.dropLiveSession();
       expect(controller.webId).toBeNull();
       // The rotated credential + pointer survive …
-      expect(map.get(ISSUER)?.refreshToken).toBe("rotated-refresh-token");
-      expect(ls.map.get(REMEMBERED_KEY)).toBeDefined();
+      expect(map.get(Issuer)?.refreshToken).toBe("rotated-refresh-token");
+      expect(ls.map.get(RememberedKey)).toBeDefined();
       // … so the next load restores WITHOUT any manual re-login.
-      expect(await controller.restore()).toEqual({ outcome: "restored", webId: ALICE });
-      expect(controller.webId).toBe(ALICE);
+      expect(await controller.restore()).toEqual({ outcome: "restored", webId: Alice });
+      expect(controller.webId).toBe(Alice);
     } finally {
       ls.restore();
     }
@@ -3999,15 +3999,15 @@ describe("createSolidAuth — dropLiveSession keeps the durable credential (tran
         callbackUri: "https://app.example/callback",
         clientId: "https://app.example/clientid.jsonld",
         store: mapStore(map),
-        rememberedAccountsKey: REMEMBERED_KEY,
-        recentAccountsKey: RECENT_KEY,
+        rememberedAccountsKey: RememberedKey,
+        recentAccountsKey: RecentKey,
       });
-      expect(await controller.restore()).toEqual({ outcome: "restored", webId: ALICE });
+      expect(await controller.restore()).toEqual({ outcome: "restored", webId: Alice });
       // The app determines the failure is DEFINITIVE → full logout.
       await controller.logout();
       expect(controller.webId).toBeNull();
-      expect(map.get(ISSUER)).toBeUndefined(); // credential deleted
-      expect(ls.map.get(REMEMBERED_KEY)).toBeUndefined(); // pointer cleared
+      expect(map.get(Issuer)).toBeUndefined(); // credential deleted
+      expect(ls.map.get(RememberedKey)).toBeUndefined(); // pointer cleared
       expect(await controller.restore()).toEqual({ outcome: "login" });
     } finally {
       ls.restore();
@@ -4027,17 +4027,17 @@ describe("createSolidAuth — dropLiveSession keeps the durable credential (tran
         callbackUri: "https://app.example/callback",
         clientId: "https://app.example/clientid.jsonld",
         store: mapStore(map),
-        rememberedAccountsKey: REMEMBERED_KEY,
-        recentAccountsKey: RECENT_KEY,
+        rememberedAccountsKey: RememberedKey,
+        recentAccountsKey: RecentKey,
       });
       restoreNetworkError = true; // the grant fails transiently (fetch failed)
       expect(await controller.restore()).toEqual({ outcome: "login" }); // fail-closed
       // The credential AND the pointer survived the transient failure …
-      expect(map.get(ISSUER)?.refreshToken).toBe("stored-refresh");
-      expect(ls.map.get(REMEMBERED_KEY)).toBeDefined();
+      expect(map.get(Issuer)?.refreshToken).toBe("stored-refresh");
+      expect(ls.map.get(RememberedKey)).toBeDefined();
       // … and the retry (network recovered) restores silently.
       restoreNetworkError = false;
-      expect(await controller.restore()).toEqual({ outcome: "restored", webId: ALICE });
+      expect(await controller.restore()).toEqual({ outcome: "restored", webId: Alice });
     } finally {
       ls.restore();
     }
@@ -4052,15 +4052,15 @@ describe("createSolidAuth — dropLiveSession keeps the durable credential (tran
         callbackUri: "https://app.example/callback",
         clientId: "https://app.example/clientid.jsonld",
         store: mapStore(map),
-        rememberedAccountsKey: REMEMBERED_KEY,
-        recentAccountsKey: RECENT_KEY,
+        rememberedAccountsKey: RememberedKey,
+        recentAccountsKey: RecentKey,
       });
       restoreInvalidGrant = true; // the OP says the refresh token is DEAD
       expect(await controller.restore()).toEqual({ outcome: "login" });
       // Definitive → the credential was cleared (by the restore implementation) and
       // the pointer dropped (nothing left to restore from).
-      expect(map.get(ISSUER)).toBeUndefined();
-      expect(ls.map.get(REMEMBERED_KEY)).toBeUndefined();
+      expect(map.get(Issuer)).toBeUndefined();
+      expect(ls.map.get(RememberedKey)).toBeUndefined();
     } finally {
       ls.restore();
     }
@@ -4091,11 +4091,11 @@ describe("createSolidAuth — dropLiveSession keeps the durable credential (tran
         callbackUri: "https://app.example/callback",
         clientId: "https://app.example/clientid.jsonld",
         store,
-        rememberedAccountsKey: REMEMBERED_KEY,
-        recentAccountsKey: RECENT_KEY,
+        rememberedAccountsKey: RememberedKey,
+        recentAccountsKey: RecentKey,
         publicFetch: ok200RecordingFetch(),
       });
-      await controller.login(ALICE); // writes the credential + pointer
+      await controller.login(Alice); // writes the credential + pointer
       // Gate every grant (A and B ride the same unresolved gate, raced with abort).
       restoreDelay = () => new Promise<void>(() => {});
       // Grant A: a proactive refresh (expired token) — let it register + hit the gate.
@@ -4111,12 +4111,12 @@ describe("createSolidAuth — dropLiveSession keeps the durable credential (tran
       // NEITHER grant reached the redeem+rotate step (both aborted before spending) …
       expect(restoreRotationsAttempted).toBe(0);
       // … so the stored refresh token is intact (unspent) and the pointer kept …
-      expect(store.map.get(ISSUER)?.refreshToken).toBe("refresh-token");
-      expect(ls.map.get(REMEMBERED_KEY)).toBeDefined();
+      expect(store.map.get(Issuer)?.refreshToken).toBe("refresh-token");
+      expect(ls.map.get(RememberedKey)).toBeDefined();
       expect(controller.webId).toBeNull();
       // … and a subsequent restore succeeds from it (nothing was stranded).
       restoreDelay = undefined;
-      expect(await controller.restore()).toEqual({ outcome: "restored", webId: ALICE });
+      expect(await controller.restore()).toEqual({ outcome: "restored", webId: Alice });
     } finally {
       ls.restore();
     }
@@ -4130,13 +4130,13 @@ describe("createSolidAuth — dropLiveSession keeps the durable credential (tran
       clientId: "https://app.example/clientid.jsonld",
       store,
     });
-    await controller.login(ALICE);
+    await controller.login(Alice);
     await controller.dropLiveSession();
     expect(controller.webId).toBeNull();
-    const result = await controller.login(ALICE);
-    expect(result.webId).toBe(ALICE);
-    expect(controller.webId).toBe(ALICE);
-    expect(store.map.get(ISSUER)?.refreshToken).toBe("refresh-token");
+    const result = await controller.login(Alice);
+    expect(result.webId).toBe(Alice);
+    expect(controller.webId).toBe(Alice);
+    expect(store.map.get(Issuer)?.refreshToken).toBe("refresh-token");
   });
 });
 
@@ -4158,10 +4158,10 @@ describe("createSolidAuth — the drain-window race at EVERY drain-before-bump c
   // old single-pass code B would then run unaborted and redeem the token
   // (restoreRotationsAttempted > 0); with the loop, B is aborted before spending.
 
-  const ALICE = "https://alice.pod.example/profile/card#me";
-  const ISSUER = "https://idp.example/";
-  const REMEMBERED_KEY = "drain-race-test.remembered-account";
-  const RECENT_KEY = "drain-race-test.recent-accounts";
+  const Alice = "https://alice.pod.example/profile/card#me";
+  const Issuer = "https://idp.example/";
+  const RememberedKey = "drain-race-test.remembered-account";
+  const RecentKey = "drain-race-test.recent-accounts";
 
   function installKeyedLocalStorage(): { map: Map<string, string>; restore: () => void } {
     const map = new Map<string, string>();
@@ -4193,11 +4193,11 @@ describe("createSolidAuth — the drain-window race at EVERY drain-before-bump c
         callbackUri: "https://app.example/callback",
         clientId: "https://app.example/clientid.jsonld",
         store,
-        rememberedAccountsKey: REMEMBERED_KEY,
-        recentAccountsKey: RECENT_KEY,
+        rememberedAccountsKey: RememberedKey,
+        recentAccountsKey: RecentKey,
         publicFetch: ok200RecordingFetch(),
       });
-      await controller.login(ALICE); // session 1 (credential + pointer written)
+      await controller.login(Alice); // session 1 (credential + pointer written)
       // Gate every grant; keep the latest release handle so the test can unblock a
       // grant the old code would have left unaborted.
       let releaseGate: (() => void) | undefined;
@@ -4209,11 +4209,11 @@ describe("createSolidAuth — the drain-window race at EVERY drain-before-bump c
       const inFlightFetch = controller.authenticatedFetch("https://alice.pod.example/data");
       await new Promise((r) => setTimeout(r, 0));
       // login() #2 snapshots+aborts A, then AWAITS — its drain window is open.
-      const secondLogin = controller.login(ALICE);
+      const secondLogin = controller.login(Alice);
       // Grant B registers SYNCHRONOUSLY inside the window, pre-bump.
       const lateRestore = controller.restore();
       const result = await secondLogin;
-      expect(result.webId).toBe(ALICE);
+      expect(result.webId).toBe(Alice);
       // Unblock whatever is still gated (under the old code: the unaborted B, which
       // would now redeem+rotate under a skipped write — the strand).
       releaseGate?.();
@@ -4222,8 +4222,8 @@ describe("createSolidAuth — the drain-window race at EVERY drain-before-bump c
       // NO grant reached the redeem+rotate step (A and B were both aborted) …
       expect(restoreRotationsAttempted).toBe(0);
       // … and the live session + its freshly-persisted credential are intact.
-      expect(controller.webId).toBe(ALICE);
-      expect(store.map.get(ISSUER)?.refreshToken).toBe("refresh-token");
+      expect(controller.webId).toBe(Alice);
+      expect(store.map.get(Issuer)?.refreshToken).toBe("refresh-token");
     } finally {
       restoreDelay = undefined;
       ls.restore();
@@ -4248,28 +4248,28 @@ describe("createSolidAuth — the drain-window race at EVERY drain-before-bump c
           flowStorage.delete(k);
         },
       };
-      const FLOW_KEY = "drain-race-test.redirect-flow";
+      const FlowKey = "drain-race-test.redirect-flow";
       const controller = createSolidAuth({
         authFlow,
         callbackUri: "https://app.example/callback",
         clientId: "https://app.example/clientid.jsonld",
         store,
-        rememberedAccountsKey: REMEMBERED_KEY,
-        recentAccountsKey: RECENT_KEY,
+        rememberedAccountsKey: RememberedKey,
+        recentAccountsKey: RecentKey,
         publicFetch: ok200RecordingFetch(),
         redirectFlowStorage,
-        redirectFlowKey: FLOW_KEY,
+        redirectFlowKey: FlowKey,
       });
-      await controller.login(ALICE); // session 1 (expired token → refresh-eligible)
+      await controller.login(Alice); // session 1 (expired token → refresh-eligible)
       flowStorage.set(
-        FLOW_KEY,
+        FlowKey,
         JSON.stringify({
           dpopPrivateJwk: { kty: "EC" },
           dpopPublicJwk: { kty: "EC" },
           codeVerifier: "verifier",
           state: "state",
           nonce: "nonce",
-          issuer: ISSUER,
+          issuer: Issuer,
           client: { client_id: "https://app.example/clientid.jsonld" },
           redirectUri: "https://app.example/",
           webId: null,
@@ -4297,10 +4297,10 @@ describe("createSolidAuth — the drain-window race at EVERY drain-before-bump c
       await inFlightFetch;
       // NO grant reached the redeem+rotate step — the credential was never stranded …
       expect(restoreRotationsAttempted).toBe(0);
-      expect(store.map.get(ISSUER)?.refreshToken).toBe("refresh-token");
+      expect(store.map.get(Issuer)?.refreshToken).toBe("refresh-token");
       // … so a subsequent restore succeeds from the intact credential.
       restoreDelay = undefined;
-      expect(await controller.restore()).toEqual({ outcome: "restored", webId: ALICE });
+      expect(await controller.restore()).toEqual({ outcome: "restored", webId: Alice });
     } finally {
       restoreDelay = undefined;
       ls.restore();
@@ -4338,8 +4338,8 @@ describe("createSolidAuth — reArmAllowedOrigins (first-class re-arm-with-origi
   // Replaces the "widen an allowedOrigins array then call restore() AGAIN to
   // re-snapshot the boundary" self-heal (which wastefully redeemed + rotated the
   // refresh token a second time). A single in-memory re-snapshot, no token grant.
-  const ALICE = "https://alice.pod.example/profile/card#me";
-  const ISSUER = "https://idp.example/";
+  const Alice = "https://alice.pod.example/profile/card#me";
+  const Issuer = "https://idp.example/";
 
   async function loggedIn(
     extra: Partial<Parameters<typeof createSolidAuth>[0]> = {},
@@ -4353,7 +4353,7 @@ describe("createSolidAuth — reArmAllowedOrigins (first-class re-arm-with-origi
       publicFetch: ok200RecordingFetch(),
       ...extra,
     });
-    await controller.login(ALICE);
+    await controller.login(Alice);
     return controller;
   }
 
@@ -4449,7 +4449,7 @@ describe("createSolidAuth — reArmAllowedOrigins (first-class re-arm-with-origi
     expect(await authdHeader(controller, "https://storage.example/x")).toBe("DPoP access-token");
     // A fresh login re-arms the session from CONFIGURATION ONLY — the previously
     // widened storage.example is dropped (it can never silently carry across arms).
-    await controller.login(ALICE);
+    await controller.login(Alice);
     expect(await authdHeader(controller, "https://storage.example/x")).toBeNull();
     // (The WebID origin is covered again by the fresh arm.)
     expect(await authdHeader(controller, "https://alice.pod.example/x")).toBe("DPoP access-token");
@@ -4461,9 +4461,9 @@ describe("createSolidAuth — reArmAllowedOrigins (first-class re-arm-with-origi
     // so a pod on a DIFFERENT origin than the WebID is missed. reArmAllowedOrigins
     // covers it with NO extra refresh-token grant (the wasteful second restore is gone).
     const map = new Map<string, import("@jeswr/solid-session-restore").PersistedSession>();
-    map.set(ISSUER, {
-      issuer: ISSUER,
-      webId: ALICE,
+    map.set(Issuer, {
+      issuer: Issuer,
+      webId: Alice,
       refreshToken: "stored-refresh",
       dpopKey: { publicKey: {}, privateKey: {} } as unknown as CryptoKeyPair,
     });
@@ -4477,7 +4477,7 @@ describe("createSolidAuth — reArmAllowedOrigins (first-class re-arm-with-origi
         lsMap.delete(k);
       },
     };
-    lsMap.set("self-heal.remembered-account", JSON.stringify({ webId: ALICE, issuer: ISSUER }));
+    lsMap.set("self-heal.remembered-account", JSON.stringify({ webId: Alice, issuer: Issuer }));
     const orig = globalThis.localStorage;
     Object.defineProperty(globalThis, "localStorage", { configurable: true, value: ls });
     try {
@@ -4498,7 +4498,7 @@ describe("createSolidAuth — reArmAllowedOrigins (first-class re-arm-with-origi
         publicFetch: ok200RecordingFetch(),
       });
       // Silent restore arms the session (boundary = WebID + issuer origins).
-      expect(await controller.restore()).toEqual({ outcome: "restored", webId: ALICE });
+      expect(await controller.restore()).toEqual({ outcome: "restored", webId: Alice });
       const grantsAfterRestore = refreshGrantCalls;
       // The cross-origin pod is NOT yet covered (arm happened before the profile read).
       expect(await authdHeader(controller, "https://storage.example/note")).toBeNull();
@@ -4519,8 +4519,8 @@ describe("createSolidAuth — rememberAccount (first-class friendly-name writer)
   // recentAccounts(): the writer defaults displayName to the WebID, records a human
   // name/avatar when given, and — crucially — the engine's own internal re-record on
   // a later login/restore never CLOBBERS a name set via this writer.
-  const ALICE = "https://alice.pod.example/profile/card#me";
-  const RECENT_KEY = "remember-account.recent-accounts";
+  const Alice = "https://alice.pod.example/profile/card#me";
+  const RecentKey = "remember-account.recent-accounts";
 
   function installLocalStorage(): { map: Map<string, string>; restore: () => void } {
     const map = new Map<string, string>();
@@ -4542,7 +4542,7 @@ describe("createSolidAuth — rememberAccount (first-class friendly-name writer)
     };
   }
 
-  function build(recentKey = RECENT_KEY): ReturnType<typeof createSolidAuth> {
+  function build(recentKey = RecentKey): ReturnType<typeof createSolidAuth> {
     return createSolidAuth({
       authFlow,
       callbackUri: "https://app.example/callback",
@@ -4556,8 +4556,8 @@ describe("createSolidAuth — rememberAccount (first-class friendly-name writer)
     const ls = installLocalStorage();
     try {
       const controller = build();
-      controller.rememberAccount(ALICE);
-      expect(controller.recentAccounts()).toEqual([{ webId: ALICE, displayName: ALICE }]);
+      controller.rememberAccount(Alice);
+      expect(controller.recentAccounts()).toEqual([{ webId: Alice, displayName: Alice }]);
     } finally {
       ls.restore();
     }
@@ -4567,10 +4567,10 @@ describe("createSolidAuth — rememberAccount (first-class friendly-name writer)
     const ls = installLocalStorage();
     try {
       const controller = build();
-      controller.rememberAccount(ALICE, "Alice Smith", "https://alice.pod.example/avatar.png");
+      controller.rememberAccount(Alice, "Alice Smith", "https://alice.pod.example/avatar.png");
       expect(controller.recentAccounts()).toEqual([
         {
-          webId: ALICE,
+          webId: Alice,
           displayName: "Alice Smith",
           avatarUrl: "https://alice.pod.example/avatar.png",
         },
@@ -4584,9 +4584,9 @@ describe("createSolidAuth — rememberAccount (first-class friendly-name writer)
     const ls = installLocalStorage();
     try {
       const controller = build();
-      controller.rememberAccount(ALICE, "Alice", "javascript:alert(1)");
-      expect(controller.recentAccounts()).toEqual([{ webId: ALICE, displayName: "Alice" }]);
-      controller.rememberAccount(ALICE, "Alice", "data:text/html,<script>1</script>");
+      controller.rememberAccount(Alice, "Alice", "javascript:alert(1)");
+      expect(controller.recentAccounts()).toEqual([{ webId: Alice, displayName: "Alice" }]);
+      controller.rememberAccount(Alice, "Alice", "data:text/html,<script>1</script>");
       expect(controller.recentAccounts()[0]?.avatarUrl).toBeUndefined();
     } finally {
       ls.restore();
@@ -4598,13 +4598,13 @@ describe("createSolidAuth — rememberAccount (first-class friendly-name writer)
     try {
       const controller = build();
       // App attaches the friendly name (e.g. after reading the profile) …
-      controller.rememberAccount(ALICE, "Alice Smith", "https://alice.pod.example/a.png");
+      controller.rememberAccount(Alice, "Alice Smith", "https://alice.pod.example/a.png");
       // … then a LOGIN happens (the engine internally re-records {webId, displayName:webId}).
-      await controller.login(ALICE);
+      await controller.login(Alice);
       // The friendly name + avatar SURVIVE (the merge preserves them).
       expect(controller.recentAccounts()).toEqual([
         {
-          webId: ALICE,
+          webId: Alice,
           displayName: "Alice Smith",
           avatarUrl: "https://alice.pod.example/a.png",
         },
@@ -4618,10 +4618,10 @@ describe("createSolidAuth — rememberAccount (first-class friendly-name writer)
     const ls = installLocalStorage();
     try {
       const controller = build();
-      await controller.login(ALICE); // engine records {webId, displayName: webId}
-      expect(controller.recentAccounts()).toEqual([{ webId: ALICE, displayName: ALICE }]);
+      await controller.login(Alice); // engine records {webId, displayName: webId}
+      expect(controller.recentAccounts()).toEqual([{ webId: Alice, displayName: Alice }]);
       // The app then enriches with the profile name.
-      controller.rememberAccount(ALICE, "Alice Smith");
+      controller.rememberAccount(Alice, "Alice Smith");
       expect(controller.recentAccounts()[0]?.displayName).toBe("Alice Smith");
     } finally {
       ls.restore();
@@ -4632,14 +4632,14 @@ describe("createSolidAuth — rememberAccount (first-class friendly-name writer)
     const ls = installLocalStorage();
     try {
       const controller = build();
-      controller.rememberAccount(ALICE, "Old Name", "https://alice.pod.example/a.png");
-      controller.rememberAccount(ALICE, "New Name"); // new name, no avatar arg
+      controller.rememberAccount(Alice, "Old Name", "https://alice.pod.example/a.png");
+      controller.rememberAccount(Alice, "New Name"); // new name, no avatar arg
       const [entry] = controller.recentAccounts();
       expect(entry?.displayName).toBe("New Name");
       // The avatar is PRESERVED across the name-only update.
       expect(entry?.avatarUrl).toBe("https://alice.pod.example/a.png");
       // A bare re-record (webId only) keeps the friendly name.
-      controller.rememberAccount(ALICE);
+      controller.rememberAccount(Alice);
       expect(controller.recentAccounts()[0]?.displayName).toBe("New Name");
     } finally {
       ls.restore();
@@ -4650,17 +4650,17 @@ describe("createSolidAuth — rememberAccount (first-class friendly-name writer)
     const ls = installLocalStorage();
     try {
       const controller = build();
-      const BOB = "https://bob.pod.example/card#me";
-      controller.rememberAccount(ALICE, "Alice");
-      controller.rememberAccount(BOB, "Bob");
+      const Bob = "https://bob.pod.example/card#me";
+      controller.rememberAccount(Alice, "Alice");
+      controller.rememberAccount(Bob, "Bob");
       // Re-touching ALICE moves it to the front (most-recent-first, deduped).
-      controller.rememberAccount(ALICE);
-      expect(controller.recentAccounts().map((a) => a.webId)).toEqual([ALICE, BOB]);
+      controller.rememberAccount(Alice);
+      expect(controller.recentAccounts().map((a) => a.webId)).toEqual([Alice, Bob]);
       expect(controller.recentAccounts()[0]?.displayName).toBe("Alice");
       // The list SURVIVES logout (the returning-user affordance).
-      await controller.login(ALICE);
+      await controller.login(Alice);
       await controller.logout();
-      expect(controller.recentAccounts().map((a) => a.webId)).toContain(ALICE);
+      expect(controller.recentAccounts().map((a) => a.webId)).toContain(Alice);
     } finally {
       ls.restore();
     }
@@ -4671,11 +4671,11 @@ describe("createSolidAuth — rememberAccount (first-class friendly-name writer)
     try {
       // A record persisted (by an older writer / tampering) with a javascript: avatar.
       ls.map.set(
-        RECENT_KEY,
-        JSON.stringify([{ webId: ALICE, displayName: "Alice", avatarUrl: "javascript:alert(1)" }]),
+        RecentKey,
+        JSON.stringify([{ webId: Alice, displayName: "Alice", avatarUrl: "javascript:alert(1)" }]),
       );
       const controller = build();
-      expect(controller.recentAccounts()).toEqual([{ webId: ALICE, displayName: "Alice" }]);
+      expect(controller.recentAccounts()).toEqual([{ webId: Alice, displayName: "Alice" }]);
     } finally {
       ls.restore();
     }
@@ -4685,16 +4685,16 @@ describe("createSolidAuth — rememberAccount (first-class friendly-name writer)
     const ls = installLocalStorage();
     try {
       // A record persisted (older writer / tampering) with a blank display name.
-      ls.map.set(RECENT_KEY, JSON.stringify([{ webId: ALICE, displayName: "" }]));
+      ls.map.set(RecentKey, JSON.stringify([{ webId: Alice, displayName: "" }]));
       const controller = build();
       // recentAccounts() surfaces the WebID, never a blank (the "never empty" contract).
-      expect(controller.recentAccounts()).toEqual([{ webId: ALICE, displayName: ALICE }]);
+      expect(controller.recentAccounts()).toEqual([{ webId: Alice, displayName: Alice }]);
       // A bare re-record (no name) must NOT preserve the blank — it defaults to the WebID,
       // NOT "".
-      controller.rememberAccount(ALICE);
-      expect(controller.recentAccounts()[0]?.displayName).toBe(ALICE);
+      controller.rememberAccount(Alice);
+      expect(controller.recentAccounts()[0]?.displayName).toBe(Alice);
       // And a later real name still takes over cleanly.
-      controller.rememberAccount(ALICE, "Alice");
+      controller.rememberAccount(Alice, "Alice");
       expect(controller.recentAccounts()[0]?.displayName).toBe("Alice");
     } finally {
       ls.restore();
