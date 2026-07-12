@@ -1,0 +1,5 @@
+{
+  "extends": "./api-extractor.base.json",
+  "mainEntryPointFilePath": "<projectFolder>/dist/react/index.d.ts",
+  "apiReport": { "reportFileName": "solid-elements.react.api.md" }
+}

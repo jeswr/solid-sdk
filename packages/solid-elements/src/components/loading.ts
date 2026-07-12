@@ -1,0 +1,100 @@
+// AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+//
+// <jeswr-loading> — a spinner with an optional label. `label` shows next to the
+// spinner; `aria-live="polite"` + a `role="status"` wrapper announces it.
+// Respects `prefers-reduced-motion` (the spinner does not animate when the user
+// asked to reduce motion). Presentation-only.
+
+import { css, html, LitElement, nothing } from "lit";
+import { tokenStyles } from "../theme-tokens.js";
+
+/**
+ * A spinner with an optional label, announced via `role="status"` and respecting
+ * `prefers-reduced-motion`. Presentation chrome — no RDF data model.
+ *
+ * @summary Loading spinner with optional label.
+ * @csspart status - The `role="status"` wrapper.
+ * @csspart spinner - The animated spinner.
+ * @csspart label - The optional label text.
+ * @cssprop [--jeswr-border] - Spinner track colour.
+ * @cssprop [--jeswr-primary] - Spinner active-arc colour.
+ * @cssprop [--jeswr-muted-fg] - Label colour.
+ */
+export class JeswrLoading extends LitElement {
+  static properties = {
+    // `reflect: true` so the @lit/react wrapper reliably forwards `label` under
+    // React 19: @lit/react's createComponent classifies props at creation time
+    // (before Lit finalizes the class), so a non-reflected reactive PROPERTY can
+    // be dropped — the wrapper then renders the generic fallback instead of the
+    // label text (#122). Reflecting the string makes it forward as an attribute
+    // and also makes the rendered label assertable via the host attribute.
+    label: { type: String, reflect: true },
+  };
+
+  /** Optional text shown next to the spinner (also the accessible name). */
+  declare label: string | null;
+
+  static styles = [
+    tokenStyles,
+    css`
+      :host {
+        display: inline-flex;
+      }
+      .status {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        color: var(--jeswr-muted-fg);
+        font-size: 0.875rem;
+      }
+      .spinner {
+        width: 1.125rem;
+        height: 1.125rem;
+        border: 2px solid var(--jeswr-border);
+        border-top-color: var(--jeswr-primary);
+        border-radius: 9999px;
+        animation: jeswr-spin 0.7s linear infinite;
+      }
+      @keyframes jeswr-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .spinner {
+          animation: none;
+        }
+      }
+    `,
+  ];
+
+  constructor() {
+    super();
+    this.label = null;
+  }
+
+  override render() {
+    return html`
+      <span
+        part="status"
+        class="status"
+        role="status"
+        aria-live="polite"
+        aria-label=${this.label ?? "Loading"}
+      >
+        <span part="spinner" class="spinner" aria-hidden="true"></span>
+        ${this.label ? html`<span part="label">${this.label}</span>` : nothing}
+      </span>
+    `;
+  }
+}
+
+if (typeof customElements !== "undefined" && !customElements.get("jeswr-loading")) {
+  customElements.define("jeswr-loading", JeswrLoading);
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    "jeswr-loading": JeswrLoading;
+  }
+}

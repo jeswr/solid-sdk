@@ -1,0 +1,9 @@
+node_modules/
+coverage/
+*.tsbuildinfo
+.DS_Store
+.dist-check-backup/
+# api-extractor scratch — the committed API snapshots live in etc/; temp/ is
+# regenerated on every `api:report`/`api:check` run and must not be committed.
+temp/
+# NOTE: dist/ is intentionally COMMITTED (GitHub-installable under ignore-scripts).
