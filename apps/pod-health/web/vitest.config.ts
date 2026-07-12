@@ -25,6 +25,13 @@ export default mergeConfig(
     test: {
       environment: "jsdom",
       globals: true,
+      // Node 25 exposes an incomplete global localStorage unless it is started
+      // with --localstorage-file. That stub makes Vitest skip jsdom's real
+      // Storage implementation when it populates the test global. Disable the
+      // Node API in workers that support the flag so jsdom supplies localStorage.
+      execArgv: process.allowedNodeEnvironmentFlags.has("--no-webstorage")
+        ? ["--no-webstorage"]
+        : [],
       setupFiles: ["./test/setup.ts"],
       include: ["src/**/*.test.{ts,tsx}", "scripts/**/*.test.mjs"],
       // INLINE @jeswr/solid-session-restore so its internal `import * as oauth from

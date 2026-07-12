@@ -5,6 +5,13 @@
 // — mounted by the App under test — reads `prefers-color-scheme`). Mirrors the
 // app-shell package's own setup so the component test behaves identically.
 import "@testing-library/jest-dom/vitest";
+import { beforeEach } from "vitest";
+
+beforeEach(() => {
+  if (typeof window !== "undefined") {
+    window.localStorage.clear();
+  }
+});
 
 // Install a matchMedia stub (default: light OS preference). The FeedbackButton
 // render test does not depend on the scheme; this just stops the ThemeProvider
