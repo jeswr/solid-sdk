@@ -1,0 +1,53 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/api-extractor/v7/api-extractor.schema.json",
+
+  // The reviewability cornerstone: snapshot the PUBLIC API (the `.` entry point) into a
+  // committed, diffable `etc/solid-agent-card.api.md`. `api:report` regenerates it after an
+  // intended contract change; `api:check` (the gate) FAILS on any undocumented drift, so
+  // "what is the API?" is a one-file diff and a widened surface cannot land unreviewed.
+  //
+  // Analyses the committed `dist/index.d.ts` (kept in lock-step with src/ by check:dist), so
+  // it reflects exactly what a `github:` consumer imports.
+
+  "mainEntryPointFilePath": "<projectFolder>/dist/index.d.ts",
+
+  "compiler": {
+    "tsconfigFilePath": "<projectFolder>/tsconfig.json"
+  },
+
+  "apiReport": {
+    "enabled": true,
+    "reportFolder": "<projectFolder>/etc/",
+    "reportFileName": "solid-agent-card.api.md"
+  },
+
+  "docModel": { "enabled": false },
+  "dtsRollup": { "enabled": false },
+  "tsdocMetadata": { "enabled": false },
+
+  "messages": {
+    "compilerMessageReporting": {
+      "default": { "logLevel": "warning" }
+    },
+    "extractorMessageReporting": {
+      "default": { "logLevel": "warning" },
+      // A public type that references a non-exported type is a reviewability hole (a hidden
+      // shape leaks into the surface) — make it a hard ERROR, per the hardening brief.
+      "ae-forgotten-export": {
+        "logLevel": "error",
+        "addToApiReportFile": false
+      },
+      // This package intentionally does not use @public/@internal release tags — its public
+      // surface is defined entirely by the `.` barrel (src/index.ts). Silence the per-symbol
+      // release-tag nags so the report stays signal.
+      "ae-missing-release-tag": { "logLevel": "none" },
+      "ae-undocumented": { "logLevel": "none" },
+      // Intra-package `{@link id}`-style references in doc comments are not part of the type
+      // contract; a broken doc link should not fail the surface gate.
+      "ae-unresolved-link": { "logLevel": "none" }
+    },
+    "tsdocMessageReporting": {
+      "default": { "logLevel": "none" }
+    }
+  }
+}

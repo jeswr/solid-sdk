@@ -1,0 +1,83 @@
+{
+  "name": "@jeswr/solid-agent-card",
+  "version": "0.1.0",
+  "description": "Solid pod / WebID → agent pointer (M1 of the agentic-Solid roadmap). Build + discover + verify a machine-readable 'how an agent should interact with me' descriptor: the WebID-profile agent pointer, an A2A Agent Card (JSON), and an ANP-aligned Agent Description (JSON-LD/RDF), served from a pod and discoverable at the ANP .well-known path. Experimental, AI-agent-generated.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "docs",
+    "README.md"
+  ],
+  "scripts": {
+    "build:deps": "node scripts/build-deps.mjs",
+    "build": "node scripts/build-dist.mjs",
+    "build:dev": "npm run build:deps && tsc -p tsconfig.json",
+    "check:dist": "node scripts/check-dist-fresh.mjs",
+    "check:lockfile-transport": "node scripts/check-lockfile-transport.mjs",
+    "fix:lockfile-transport": "node scripts/normalize-lockfile.mjs",
+    "api:report": "api-extractor run --local",
+    "api:check": "npm run check:dist && api-extractor run",
+    "typecheck": "npm run build:deps && tsc -p tsconfig.json --noEmit",
+    "lint": "biome check src test scripts && npm run check:lockfile-transport",
+    "lint:fix": "biome check --write src test scripts",
+    "test": "npm run build:deps && vitest run",
+    "test:coverage": "npm run build:deps && vitest run --coverage",
+    "prepare": "npm run build"
+  },
+  "keywords": [
+    "solid",
+    "agent",
+    "agent-card",
+    "a2a",
+    "anp",
+    "agent-description",
+    "webid",
+    "rdf",
+    "jsonld",
+    "linked-data",
+    "agentic"
+  ],
+  "author": "Jesse Wright <jwrightwho@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jeswr/solid-agent-card.git"
+  },
+  "bugs": {
+    "url": "https://github.com/jeswr/solid-agent-card/issues"
+  },
+  "homepage": "https://github.com/jeswr/solid-agent-card#readme",
+  "dependencies": {
+    "@jeswr/rdf-serialize": "git+https://github.com/jeswr/rdf-serialize.git#8ebdda44ab1da63ef91052a5b2f1e453c0a29c79",
+    "@rdfjs/wrapper": "^0.34.0",
+    "content-type": "^1.0.5",
+    "jsonld-streaming-parser": "^5.0.0",
+    "n3": "^2.0.3"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.0.0",
+    "@jeswr/fetch-rdf": "github:jeswr/fetch-rdf#main",
+    "@microsoft/api-extractor": "^7.58.9",
+    "@rdfjs/types": "^2.0.1",
+    "@types/n3": "^1.16.0",
+    "@types/node": "^22.0.0",
+    "@vitest/coverage-v8": "^3.2.6",
+    "esbuild": "^0.28.1",
+    "typescript": "^5.6.0",
+    "vitest": "^3.2.6"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
