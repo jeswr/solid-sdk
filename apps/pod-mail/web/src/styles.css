@@ -1,0 +1,320 @@
+/* AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+   Host chrome + the pod-mail-* classes the @jeswr/pod-mail <Inbox> emits (the
+   component ships no styles of its own — the host owns the look).
+
+   THEME: Tailwind v4 + the shared @jeswr/app-shell tokens drive light/dark. The
+   import order is load-bearing — `@import "tailwindcss"` FIRST, then the suite
+   OKLCH tokens + the `@theme inline` mapping (`@jeswr/app-shell/styles.css`) so
+   the shell components' utilities (bg-popover, text-muted-foreground, the `dark:`
+   variant, …) resolve to the suite palette. `@source` makes Tailwind scan the
+   app-shell package so the classes its <ThemeToggle/> + <AccountMenu/> emit are
+   actually generated (a node_modules package is otherwise outside the content
+   scan). The path is relative to THIS file. */
+@import "tailwindcss";
+@import "@jeswr/app-shell/styles.css";
+@source "../node_modules/@jeswr/app-shell/dist";
+
+/* The host chrome below predates the shared tokens and uses its own variable
+   names (--bg / --ink / --accent / --muted / …). Map them onto the app-shell OKLCH
+   tokens so the WHOLE pod-mail UI (login card, header, inbox table, reader) follows
+   the theme — the `.dark` class the ThemeProvider toggles on <html> flips the OKLCH
+   vars, and these aliases inherit it for free.
+
+   CSS-ISOLATION RELAXATION (#80 / solid-elements pilot #115): the host vars can now
+   alias DIRECTLY onto app-shell's OWN tokens (`--accent` / `--muted` / `--accent-ink`)
+   again. The earlier adopter workaround renamed them to host-only names
+   (`--host-accent` / `--muted-text`) to avoid CLOBBERING the shell components' palette
+   — but @jeswr/app-shell #80 made the shell self-isolating: its components read
+   SHELL-PRIVATE `--as-*` tokens (mirrored from hardcoded OKLCH literals in the
+   package's tokens.css, NOT from these public `--accent`/`--muted`), so re-aliasing
+   the public tokens no longer affects the shell at all. Verified against app-shell
+   `5a7484d` (the merged main with the #80 fix). `--border` is the SAME name as the
+   app-shell token, so it is already unified — do NOT re-alias it to itself. */
+:root {
+  --bg: var(--background);
+  --surface: var(--card);
+  --ink: var(--foreground);
+  --muted: var(--muted-foreground);
+  --accent: var(--primary);
+  --accent-ink: var(--primary-foreground);
+  --danger: var(--destructive);
+  --ok: var(--success);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  color: var(--ink);
+  background: var(--bg);
+}
+
+a {
+  color: var(--accent);
+}
+
+/* ── Login ─────────────────────────────────────────────────────────────── */
+.login-screen {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 1.5rem;
+}
+.login-card {
+  width: 100%;
+  max-width: 28rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  padding: 2rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+.login-card h1 {
+  margin: 0 0 0.25rem;
+  font-size: 1.5rem;
+}
+.login-sub {
+  color: var(--muted);
+  margin: 0 0 1.25rem;
+  font-size: 0.95rem;
+}
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.login-form label {
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+.login-form input {
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  font-size: 0.95rem;
+}
+.login-error {
+  color: var(--danger);
+  font-size: 0.9rem;
+  margin-top: 0.75rem;
+}
+.login-hint {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin-top: 1rem;
+}
+
+/* CSS-ISOLATION RELAXATION (#80 / solid-elements adoption #115, D-parity rollout
+   #67/#68/#70): the host's filled-button base, the simpler pre-workaround form —
+   but SCOPED to `:not([data-app-shell-control])`.
+
+   WHY THE `:not(...)` SCOPE (roborev Medium, addressed): this rule is UNLAYERED, so
+   it out-ranks Tailwind's layered utilities. @jeswr/app-shell #80 makes the shell
+   self-isolating for COLOUR — its UNLAYERED reset re-asserts each control's
+   background/border/text via `[data-app-shell-control]`, which out-ranks a bare
+   `button {}`. BUT that reset DELIBERATELY does NOT touch the BOX MODEL
+   (padding/border-radius/font-size/sizing) — the shell components set those per
+   instance via LAYERED `className` utilities (e.g. ThemeToggle's `size-9`,
+   AccountMenu's `h-auto px-2 py-1.5`), which an unlayered `button { padding;
+   border-radius; font-size }` WOULD clobber, distorting the icon/menu buttons. So a
+   bare `button {}` is NOT fully safe even under #80. The `:not([data-app-shell-control])`
+   scope excludes every app-shell control from the host base entirely, so the shell's
+   box model survives unimpeded — strictly safer than the reference apps' bare rule,
+   while the host's OWN buttons (the reader back button + the legacy logout, which
+   carry no app-shell marker) still get the filled base.
+
+   The solid-elements P0 components (<jeswr-loading> etc.) are immune for a different
+   reason: they live in shadow DOM, which this light-DOM rule cannot pierce. The
+   css-isolation.test.tsx guard pins the colour-isolation contract; this `:not(...)`
+   scope additionally protects the box model. Verified against app-shell `5a7484d`.
+
+   `:where(...)` (NOT a bare `:not(...)`): `:where()` has ZERO specificity, so the
+   exclusion adds none — this base stays at specificity (0,0,1), IDENTICAL to the
+   original bare `button {}`. That matters: the host's class-only overrides below
+   (`.pod-mail-open` at (0,1,0): a transparent link-button; the .pod-mail-back /
+   .app-logout outline buttons) must keep WINNING for background/border/padding. A
+   bare `button:not([data-app-shell-control])` would raise this to (0,1,1) — an
+   attribute selector's specificity leaks through `:not()` — and REPAINT
+   `.pod-mail-open` filled. `:where()` excludes the shell controls while leaving the
+   host overrides in charge (roborev Medium, addressed). */
+button:where(:not([data-app-shell-control])) {
+  cursor: pointer;
+  border: none;
+  border-radius: 0.5rem;
+  padding: 0.6rem 0.9rem;
+  font-size: 0.95rem;
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+button:where(:not([data-app-shell-control])):disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+/* The host's OWN outline buttons (the reader's back button + the legacy logout):
+   override the filled base above with a transparent, bordered look. They are host
+   buttons (no app-shell marker), so they inherit cursor/radius/padding/font-size
+   from the scoped base above. */
+button[type="button"].pod-mail-back,
+.app-logout {
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--border);
+}
+
+/* ── App shell ─────────────────────────────────────────────────────────── */
+.app-shell {
+  max-width: 56rem;
+  margin: 0 auto;
+  padding: 1.25rem;
+}
+.app-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+.app-brand {
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+/* Right-aligned header controls: the app-shell <ThemeToggle/> + <AccountMenu/>.
+   `margin-left: auto` pushes the pair to the top-right; the app-shell components
+   bring their own (Tailwind-utility) styling, so this only handles placement. */
+.app-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-left: auto;
+}
+/* The fallback/error banners are theme-aware: a soft tint derived from the
+   suite `--warning` / `--destructive` tokens (via color-mix over the card surface)
+   with token-coloured text + border. Because the tokens flip on `.dark`, the
+   banners stay legible in BOTH modes — no hard-coded light surfaces. */
+.app-note {
+  background: color-mix(in oklab, var(--warning) 16%, var(--card));
+  border: 1px solid color-mix(in oklab, var(--warning) 40%, var(--card));
+  color: var(--foreground);
+  border-radius: 0.5rem;
+  padding: 0.6rem 0.8rem;
+  font-size: 0.85rem;
+  margin: 0.75rem 0;
+}
+.app-note-error {
+  background: color-mix(in oklab, var(--destructive) 16%, var(--card));
+  border-color: color-mix(in oklab, var(--destructive) 40%, var(--card));
+  color: var(--danger);
+}
+.app-main {
+  margin-top: 1rem;
+}
+.app-loading {
+  color: var(--muted);
+}
+
+/* ── Inbox (pod-mail-*) ───────────────────────────────────────────────── */
+.pod-mail-title {
+  font-size: 1.25rem;
+  margin: 0 0 1rem;
+}
+.pod-mail-loading,
+.pod-mail-empty {
+  color: var(--muted);
+}
+.pod-mail-error {
+  color: var(--danger);
+}
+/* The inbox retry button: a host button (no app-shell marker), so it inherits the
+   filled `button:where(:not([data-app-shell-control]))` base above + adds spacing. */
+.pod-mail-error button {
+  margin-top: 0.5rem;
+}
+
+/* Screen-reader-only utility for the status column header + cell labels. */
+.pod-mail-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.pod-mail-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--surface);
+}
+.pod-mail-table th,
+.pod-mail-table td {
+  text-align: left;
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.92rem;
+}
+.pod-mail-status {
+  width: 1.5rem;
+  color: var(--accent);
+}
+.pod-mail-open {
+  background: transparent;
+  color: var(--accent);
+  border: none;
+  padding: 0;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+.pod-mail-row-unread .pod-mail-cell-from,
+.pod-mail-row-unread .pod-mail-open {
+  font-weight: 700;
+}
+.pod-mail-cell-date {
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* ── Reading pane ─────────────────────────────────────────────────────── */
+.pod-mail-reader {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 1rem 1.25rem;
+}
+.pod-mail-back {
+  margin-bottom: 0.75rem;
+}
+.pod-mail-subject {
+  font-size: 1.2rem;
+  margin: 0 0 0.75rem;
+}
+.pod-mail-headers {
+  color: var(--muted);
+  font-size: 0.88rem;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+.pod-mail-headers p {
+  margin: 0.2rem 0;
+}
+.pod-mail-from-label,
+.pod-mail-recipients-label,
+.pod-mail-date-label {
+  font-weight: 600;
+}
+.pod-mail-sender {
+  color: var(--accent);
+}
+.pod-mail-body {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font: inherit;
+  margin: 0;
+}
