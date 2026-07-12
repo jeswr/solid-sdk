@@ -1,0 +1,87 @@
+{
+  "name": "@jeswr/federation-client",
+  "version": "0.1.0",
+  "description": "Typed TypeScript client for the Solid app-registration / federation vocabulary (fedapp:) at https://w3id.org/jeswr/fed#. Verify, list and self-describe fedapp:App registrations. Experimental, AI-agent-generated.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./node": {
+      "types": "./dist/node.d.ts",
+      "import": "./dist/node.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build:deps": "node scripts/build-deps.mjs",
+    "build": "node scripts/build-dist.mjs",
+    "build:dev": "npm run build:deps && tsc -p tsconfig.json",
+    "check:dist": "node scripts/check-dist-fresh.mjs",
+    "check:lockfile-transport": "node scripts/check-lockfile-transport.mjs",
+    "fix:lockfile-transport": "node scripts/normalize-lockfile.mjs",
+    "typecheck": "npm run build:deps && tsc -p tsconfig.json --noEmit",
+    "api:report": "api-extractor run --local -c config/api-extractor.json && api-extractor run --local -c config/api-extractor.node.json",
+    "api:check": "api-extractor run -c config/api-extractor.json && api-extractor run -c config/api-extractor.node.json",
+    "lint": "biome check src test scripts && npm run check:lockfile-transport",
+    "lint:fix": "biome check --write src test scripts",
+    "test": "npm run build:deps && vitest run",
+    "test:coverage": "npm run build:deps && vitest run --coverage",
+    "prepare": "npm run build"
+  },
+  "keywords": [
+    "solid",
+    "federation",
+    "fedapp",
+    "app-registration",
+    "client-id",
+    "rdf",
+    "sparql",
+    "linked-data"
+  ],
+  "author": "Jesse Wright <jwrightwho@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jeswr/federation-client.git"
+  },
+  "bugs": {
+    "url": "https://github.com/jeswr/federation-client/issues"
+  },
+  "homepage": "https://github.com/jeswr/federation-client#readme",
+  "dependencies": {
+    "@jeswr/federation-registry": "git+https://github.com/jeswr/federation-registry.git#4f06659c4fb54d83a118acf1e94bcff1a74663c0",
+    "@rdfjs/types": "^2.0.1",
+    "@rdfjs/wrapper": "^0.34.0",
+    "@solid/object": "^0.6.0",
+    "content-type": "^1.0.5",
+    "jsonld-streaming-parser": "^5.0.0",
+    "n3": "^2.0.3",
+    "undici": "8.5.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.0.0",
+    "@jeswr/fetch-rdf": "github:jeswr/fetch-rdf#main",
+    "@jeswr/guarded-fetch": "git+https://github.com/jeswr/guarded-fetch.git#184f060d95cc29ef7a01e8bc28fb04bb24b5af76",
+    "@jeswr/rdf-serialize": "git+https://github.com/jeswr/rdf-serialize.git#8ebdda44ab1da63ef91052a5b2f1e453c0a29c79",
+    "@microsoft/api-extractor": "^7.58.9",
+    "@types/n3": "^1.16.0",
+    "@types/node": "^22.0.0",
+    "@vitest/coverage-v8": "^3.2.6",
+    "esbuild": "^0.28.1",
+    "typescript": "^5.6.0",
+    "vitest": "^3.2.6"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
