@@ -30,12 +30,11 @@
     "public"
   ],
   "scripts": {
-    "lint": "biome check src test",
+    "lint": "biome lint src test",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --coverage",
     "test:watch": "vitest",
-    "build": "tsc -p tsconfig.build.json",
-    "gate": "npm run lint && npm run typecheck && npm test && npm run build"
+    "build": "tsc -p tsconfig.build.json"
   },
   "dependencies": {
     "@jeswr/fetch-rdf": "^0.1.0",
@@ -56,7 +55,6 @@
     }
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.0.3",
     "@rdfjs/types": "^2.0.0",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",

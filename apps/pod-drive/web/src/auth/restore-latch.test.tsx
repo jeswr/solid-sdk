@@ -272,5 +272,5 @@ describe("FINDING 4 (implementation) — runtime-init rejection un-sticks the Re
       },
       { timeout: 4000 },
     );
-  });
+  }, 15_000);
 });

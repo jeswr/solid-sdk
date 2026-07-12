@@ -174,7 +174,6 @@ export function toSlug(input: string | undefined): string {
   return (
     input
       .normalize('NFKD')
-      // biome-ignore lint/suspicious/noMisleadingCharacterClass: combining marks range strips diacritics
       .replace(/[̀-ͯ]/g, '')
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')

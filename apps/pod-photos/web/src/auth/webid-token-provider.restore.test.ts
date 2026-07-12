@@ -168,7 +168,7 @@ describe("restoreIssuer — delegation + pinning", () => {
     expect(restored).toEqual({ webId: ALICE });
     // Delegation: restoreSession got the right store/issuer/clientId.
     expect(restoreState.lastOptions?.clientId).toBe("https://app.example/clientid.jsonld");
-    expect((restoreState.lastOptions?.issuer as URL).href).toBe(ISSUER);
+    expect((restoreState.lastOptions?.issuer as URL | undefined)?.href).toBe(ISSUER);
     expect(restoreState.lastOptions?.signal).toBeInstanceOf(AbortSignal);
     // Pinned: the provider now reports the restored identity + issuer.
     expect(provider.authenticatedWebId()).toBe(ALICE);
