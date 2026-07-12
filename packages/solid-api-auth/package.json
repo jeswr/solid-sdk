@@ -1,0 +1,86 @@
+{
+  "name": "@jeswr/solid-api-auth",
+  "version": "0.1.0",
+  "description": "Server-side DPoP-bound Solid-OIDC access-token verifier + owner authorizer for an app's own /api/** write routes. Issuer-agnostic JWKS discovery, RFC 9068 at+jwt (fail-closed exp/iat/cnf/webid), RFC 9449 DPoP proof-of-possession (htm/htu/iat/jti/ath + cnf.jkt binding), a bounded in-process jti replay store behind an injectable seam, an SSRF-guarded bidirectional WebID<->issuer check, a token-bucket rate limiter, and a same-origin CSRF check. Framework-free core + a thin Next.js route-handler subexport. Extracted from the AccessRadar reference implementation. Experimental, AI-agent-generated.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./next": {
+      "types": "./dist/next.d.ts",
+      "import": "./dist/next.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "node scripts/build-dist.mjs",
+    "check:dist": "node scripts/check-dist-fresh.mjs",
+    "check:lockfile-transport": "node scripts/check-lockfile-transport.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "biome check src test scripts && npm run check:lockfile-transport",
+    "lint:fix": "biome check --write src test scripts",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "api": "api-extractor run --local && api-extractor run --local --config api-extractor.next.json",
+    "check:api": "api-extractor run && api-extractor run --config api-extractor.next.json",
+    "publint": "publint --strict",
+    "attw": "attw --pack . --profile node16 --ignore-rules cjs-resolves-to-esm",
+    "gate": "npm run lint && npm run typecheck && npm run test && npm run build && npm run check:dist && npm run check:api && npm run publint && npm run attw",
+    "prepare": "npm run build"
+  },
+  "keywords": [
+    "solid",
+    "solid-oidc",
+    "dpop",
+    "access-token",
+    "rfc9449",
+    "rfc9068",
+    "proof-of-possession",
+    "jwks",
+    "webid",
+    "authorization",
+    "security"
+  ],
+  "author": "Jesse Wright <jwrightwho@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jeswr/solid-api-auth.git"
+  },
+  "bugs": {
+    "url": "https://github.com/jeswr/solid-api-auth/issues"
+  },
+  "homepage": "https://github.com/jeswr/solid-api-auth#readme",
+  "dependencies": {
+    "@jeswr/fetch-rdf": "^0.1.0",
+    "jose": "^6.2.3",
+    "oauth4webapi": "^3.8.6",
+    "undici": "8.5.0"
+  },
+  "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.0",
+    "@biomejs/biome": "^2.0.0",
+    "@jeswr/guarded-fetch": "github:jeswr/guarded-fetch#2901beb339a56b55a23549993d80320dbacb20fb",
+    "@microsoft/api-extractor": "^7.47.0",
+    "@types/node": "^22.0.0",
+    "@vitest/coverage-v8": "^3.2.6",
+    "dpop": "^2.1.1",
+    "esbuild": "^0.21.5",
+    "publint": "^0.3.0",
+    "typescript": "^5.6.0",
+    "vitest": "^3.2.6"
+  },
+  "engines": {
+    "node": ">=22.12"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
