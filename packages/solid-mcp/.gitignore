@@ -1,0 +1,15 @@
+.DS_Store
+.idea/
+.vscode/
+*.swp
+node_modules/
+coverage/
+.roborev/
+etc/temp/
+*.log
+.env
+.env.test
+
+# NOTE: dist/ is intentionally NOT ignored. It is committed so the package
+# installs directly from a GitHub branch under ignore-scripts=true with no build
+# step (the @jeswr/fetch-rdf dep is inlined). check:dist guards it against drift.
