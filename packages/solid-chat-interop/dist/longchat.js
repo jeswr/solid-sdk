@@ -1,0 +1,278 @@
+// AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+/**
+ * SolidOS `meeting:LongChat` ↔ canonical — the installed-base READ shape.
+ *
+ * A LongChat message is a `sioc:Note` carrying `sioc:content` (body),
+ * `foaf:maker` (author WebID) and `dct:created` (timestamp); a reply is
+ * `sioc:has_reply` / `as:inReplyTo`; an edit is `dct:isReplacedBy`; a delete is a
+ * `schema:dateDeleted` tombstone. This mirrors the SolidOS chat pane and the Pod
+ * Manager's longChat-reader (#95). On WRITE we stamp BOTH `sioc:Note` AND
+ * `as:Note` (and `schema:Message`) — exactly as PM's `chat.ts` does — so the
+ * message is recognisable to AS2.0-only readers too.
+ *
+ * The `wf:Task` actionable overlay carries through on the SAME subject (the shared
+ * `@jeswr/solid-task-model` shape), so an actionable LongChat message federates as
+ * a task with no chat-specific code.
+ *
+ * Typed `@rdfjs/wrapper` accessors only — never hand-built quads (house rule).
+ * Every IRI-valued object is filtered http(s)-only on READ AND WRITE — a
+ * non-http(s) value is DROPPED, never coerced.
+ */
+import { LiteralAs, LiteralFrom, NamedNodeAs, NamedNodeFrom, OptionalAs, OptionalFrom, SetFrom, TermWrapper, } from "@rdfjs/wrapper";
+import { DataFactory, Store } from "n3";
+import { httpIriOrUndefined, readIsoDate, safeHttpIri, sanitizeText, tryRead } from "./iri.js";
+import { AS_ATTRIBUTED_TO, AS_CONTENT, AS_IN_REPLY_TO, AS_NOTE, AS_PUBLISHED, DCT_CREATED, DCT_IS_REPLACED_BY, DCT_TITLE, DEFAULT_MEDIA_TYPE, FOAF_MAKER, PROV_WAS_ATTRIBUTED_TO, PROV_WAS_DERIVED_FROM, PROV_WAS_GENERATED_BY, RDF_TYPE, SCHEMA_DATE_DELETED, SCHEMA_MESSAGE, SIOC_CONTENT, SIOC_NOTE, TASK_CLASS, WF_ASSIGNEE, WF_CLOSED, WF_OPEN, } from "./vocab.js";
+/** Typed `@rdfjs/wrapper` view of a single SolidOS LongChat message subject. */
+export class LongChatMessageDoc extends TermWrapper {
+    get types() {
+        return SetFrom.subjectPredicate(this, RDF_TYPE, NamedNodeAs.string, NamedNodeFrom.string);
+    }
+    /**
+     * Stamp the subject as a LongChat message: `sioc:Note` (the SolidOS read shape)
+     * PLUS `as:Note` and `schema:Message` (so AS2.0-only / schema.org readers see
+     * it too) — exactly how PM's `chat.ts` marks a message.
+     */
+    mark() {
+        this.types.add(SIOC_NOTE);
+        this.types.add(AS_NOTE);
+        this.types.add(SCHEMA_MESSAGE);
+        return this;
+    }
+    /**
+     * Body text. Read prefers `sioc:content` (the SolidOS form) and falls back to
+     * `as:content` (an AS2-only message). The setter writes BOTH so the resource is a
+     * COMPLETE message to a sioc reader AND to an AS2.0-only reader (the doc is
+     * stamped `sioc:Note` + `as:Note`; writing only sioc would leave the `as:Note`
+     * blank for an AS2 reader).
+     */
+    get content() {
+        // Per-predicate guard: a malformed `sioc:content` literal must not throw past
+        // the valid `as:content` fallback (untrusted input — see iri.ts `tryRead`).
+        return (tryRead(() => OptionalFrom.subjectPredicate(this, SIOC_CONTENT, LiteralAs.string)) ??
+            tryRead(() => OptionalFrom.subjectPredicate(this, AS_CONTENT, LiteralAs.string)));
+    }
+    set content(v) {
+        OptionalAs.object(this, SIOC_CONTENT, v, LiteralFrom.string);
+        OptionalAs.object(this, AS_CONTENT, v, LiteralFrom.string);
+    }
+    /** Author WebID — read prefers `foaf:maker` (SolidOS), falls back to `as:attributedTo`; writes BOTH. */
+    get author() {
+        // Per-predicate guard: a `foaf:maker` that is a Literal (not a NamedNode) must
+        // not throw past the valid `as:attributedTo` fallback (untrusted input).
+        return (tryRead(() => OptionalFrom.subjectPredicate(this, FOAF_MAKER, NamedNodeAs.string)) ??
+            tryRead(() => OptionalFrom.subjectPredicate(this, AS_ATTRIBUTED_TO, NamedNodeAs.string)));
+    }
+    set author(v) {
+        OptionalAs.object(this, FOAF_MAKER, v, NamedNodeFrom.string);
+        OptionalAs.object(this, AS_ATTRIBUTED_TO, v, NamedNodeFrom.string);
+    }
+    /** Created stamp — read prefers `dct:created` (SolidOS), falls back to `as:published`; writes BOTH. */
+    get created() {
+        // Per-predicate guard: a malformed `dct:created` literal (the preferred read)
+        // must not throw past a VALID `as:published` fallback — otherwise the date is
+        // wrongly dropped (untrusted input — see iri.ts `tryRead`).
+        return (tryRead(() => OptionalFrom.subjectPredicate(this, DCT_CREATED, LiteralAs.date)) ??
+            tryRead(() => OptionalFrom.subjectPredicate(this, AS_PUBLISHED, LiteralAs.date)));
+    }
+    set created(v) {
+        OptionalAs.object(this, DCT_CREATED, v, LiteralFrom.dateTime);
+        OptionalAs.object(this, AS_PUBLISHED, v, LiteralFrom.dateTime);
+    }
+    /**
+     * The reply target — this message replies TO `inReplyTo`. The reply→parent edge
+     * is `as:inReplyTo` (used by AS2.0 AND by SolidOS LongChat on the message
+     * itself). We deliberately do NOT use `sioc:has_reply` here: `sioc:has_reply` is
+     * the INVERSE (parent→reply) direction, so writing it on this message pointing at
+     * its parent would reverse the thread edge for sioc readers. Filtered http(s)-only
+     * by the reconciler.
+     */
+    get inReplyTo() {
+        return OptionalFrom.subjectPredicate(this, AS_IN_REPLY_TO, NamedNodeAs.string);
+    }
+    set inReplyTo(v) {
+        OptionalAs.object(this, AS_IN_REPLY_TO, v, NamedNodeFrom.string);
+    }
+    get replacedBy() {
+        return OptionalFrom.subjectPredicate(this, DCT_IS_REPLACED_BY, NamedNodeAs.string);
+    }
+    set replacedBy(v) {
+        OptionalAs.object(this, DCT_IS_REPLACED_BY, v, NamedNodeFrom.string);
+    }
+    get deletedAt() {
+        return OptionalFrom.subjectPredicate(this, SCHEMA_DATE_DELETED, LiteralAs.date);
+    }
+    set deletedAt(v) {
+        OptionalAs.object(this, SCHEMA_DATE_DELETED, v, LiteralFrom.dateTime);
+    }
+    // --- PROV-O provenance (carried through so AI/imported LongChat is honest) ---
+    get provAttributedTo() {
+        return OptionalFrom.subjectPredicate(this, PROV_WAS_ATTRIBUTED_TO, NamedNodeAs.string);
+    }
+    set provAttributedTo(v) {
+        OptionalAs.object(this, PROV_WAS_ATTRIBUTED_TO, v, NamedNodeFrom.string);
+    }
+    get provGeneratedBy() {
+        return OptionalFrom.subjectPredicate(this, PROV_WAS_GENERATED_BY, NamedNodeAs.string);
+    }
+    set provGeneratedBy(v) {
+        OptionalAs.object(this, PROV_WAS_GENERATED_BY, v, NamedNodeFrom.string);
+    }
+    get provDerivedFrom() {
+        return OptionalFrom.subjectPredicate(this, PROV_WAS_DERIVED_FROM, NamedNodeAs.string);
+    }
+    set provDerivedFrom(v) {
+        OptionalAs.object(this, PROV_WAS_DERIVED_FROM, v, NamedNodeFrom.string);
+    }
+    // --- wf:Task overlay (the actionable facet, identical to pod-chat) ---
+    get taskTitle() {
+        return OptionalFrom.subjectPredicate(this, DCT_TITLE, LiteralAs.string);
+    }
+    set taskTitle(v) {
+        OptionalAs.object(this, DCT_TITLE, v, LiteralFrom.string);
+    }
+    get assignee() {
+        return OptionalFrom.subjectPredicate(this, WF_ASSIGNEE, NamedNodeAs.string);
+    }
+    set assignee(v) {
+        OptionalAs.object(this, WF_ASSIGNEE, v, NamedNodeFrom.string);
+    }
+}
+/** The conventional LongChat message subject IRI for a resource (`<resource>#it`). */
+export function longChatMessageSubject(resourceUrl) {
+    return `${resourceUrl}#it`;
+}
+/**
+ * Read the subject's `rdf:type` IRIs PER OBJECT, skipping any malformed (non-IRI)
+ * type term. Built directly off the dataset rather than the wrapper's `types`
+ * getter because `SetFrom` + `NamedNodeAs.string` is ALL-OR-NOTHING: a single
+ * literal-valued `rdf:type` would throw and drop EVERY type, so a valid
+ * `sioc:Note`/`as:Note` carrying one garbage type triple would fail to parse
+ * (untrusted input). Filtering per object keeps the valid type IRIs.
+ */
+function readTypeSet(subject, dataset) {
+    const types = new Set();
+    for (const q of dataset.match(DataFactory.namedNode(subject), DataFactory.namedNode(RDF_TYPE), null)) {
+        if (q.object.termType === "NamedNode")
+            types.add(q.object.value);
+    }
+    return types;
+}
+function readTask(doc, types) {
+    if (!types.has(TASK_CLASS))
+        return undefined;
+    const state = types.has(WF_CLOSED) ? "closed" : "open";
+    const task = { state };
+    const title = tryRead(() => doc.taskTitle);
+    if (title !== undefined)
+        task.title = title;
+    const assignee = httpIriOrUndefined(tryRead(() => doc.assignee));
+    if (assignee !== undefined)
+        task.assignee = assignee;
+    return task;
+}
+function readProvenance(doc) {
+    const attributedTo = httpIriOrUndefined(tryRead(() => doc.provAttributedTo));
+    const generatedBy = httpIriOrUndefined(tryRead(() => doc.provGeneratedBy));
+    const derivedFrom = httpIriOrUndefined(tryRead(() => doc.provDerivedFrom));
+    if (attributedTo === undefined && generatedBy === undefined && derivedFrom === undefined) {
+        return undefined;
+    }
+    const prov = {};
+    if (attributedTo !== undefined)
+        prov.attributedTo = attributedTo;
+    if (generatedBy !== undefined)
+        prov.generatedBy = generatedBy;
+    if (derivedFrom !== undefined)
+        prov.derivedFrom = derivedFrom;
+    return prov;
+}
+/**
+ * Parse a SolidOS LongChat message subject into a {@link CanonicalMessage}, or
+ * `undefined` if the subject is not a `sioc:Note` (nor an `as:Note`, since a
+ * suite-written message stamps both — accept either as the message marker).
+ *
+ * Every IRI-valued object is filtered http(s)-only on read (untrusted input).
+ *
+ * @param subject - the message subject IRI (e.g. {@link longChatMessageSubject}).
+ */
+export function parseLongChatMessage(subject, dataset) {
+    const doc = new LongChatMessageDoc(subject, dataset, DataFactory);
+    const types = readTypeSet(subject, dataset);
+    if (!types.has(SIOC_NOTE) && !types.has(AS_NOTE))
+        return undefined;
+    const msg = {
+        id: subject,
+        content: doc.content ?? "",
+        // LongChat does not carry a media type; the canonical default applies.
+        mediaType: DEFAULT_MEDIA_TYPE,
+    };
+    const author = httpIriOrUndefined(doc.author);
+    if (author !== undefined)
+        msg.author = author;
+    const published = readIsoDate(() => doc.created);
+    if (published !== undefined)
+        msg.published = published;
+    const inReplyTo = httpIriOrUndefined(tryRead(() => doc.inReplyTo));
+    if (inReplyTo !== undefined)
+        msg.inReplyTo = inReplyTo;
+    const replacedBy = httpIriOrUndefined(tryRead(() => doc.replacedBy));
+    if (replacedBy !== undefined)
+        msg.replacedBy = replacedBy;
+    const deletedAt = readIsoDate(() => doc.deletedAt);
+    if (deletedAt !== undefined)
+        msg.deletedAt = deletedAt;
+    const provenance = readProvenance(doc);
+    if (provenance !== undefined)
+        msg.provenance = provenance;
+    const task = readTask(doc, types);
+    if (task !== undefined)
+        msg.task = task;
+    return msg;
+}
+/**
+ * Build a fresh n3 `Store` holding one SolidOS LongChat message rooted at
+ * `subject`, stamped `sioc:Note` + `as:Note` + `schema:Message`. When `msg.task`
+ * is supplied the SAME subject is ALSO typed `wf:Task` with its lifecycle-state
+ * class, `dct:title` and `wf:assignee` (the shared overlay).
+ *
+ * The canonical `room` and `mediaType` are NOT written: SolidOS LongChat models
+ * the room by the message's CONTAINER (the `chat.ttl` it lives in), not an
+ * `as:context` triple, and carries no per-message media type. They are preserved
+ * across an AS2.0 round-trip but are not part of the LongChat wire shape.
+ *
+ * Every IRI-valued object is filtered http(s)-only on write. `created` defaults to
+ * `now` when omitted.
+ */
+export function buildLongChatMessage(subject, msg) {
+    // Fail closed on a non-http(s) / injection-bearing subject; the guard returns the
+    // injection-safe (percent-escaped, LEXICAL) form (see `buildAs2Message` for the
+    // rationale — the subject becomes the message's `<subject>` NamedNode and
+    // `n3.Writer` does not escape IRIs).
+    const safeSubject = safeHttpIri(subject);
+    if (safeSubject === undefined) {
+        throw new TypeError(`buildLongChatMessage: subject must be an absolute http(s) IRI, got ${JSON.stringify(subject)}`);
+    }
+    const store = new Store();
+    const doc = new LongChatMessageDoc(safeSubject, store, DataFactory).mark();
+    // Bodies/titles are stored as PLAIN TEXT literals; strip smuggling-prone control
+    // characters from untrusted text before persisting (see iri.ts `sanitizeText`).
+    doc.content = sanitizeText(msg.content);
+    doc.author = httpIriOrUndefined(msg.author);
+    doc.created = msg.published ? new Date(msg.published) : new Date();
+    doc.inReplyTo = httpIriOrUndefined(msg.inReplyTo);
+    doc.replacedBy = httpIriOrUndefined(msg.replacedBy);
+    doc.deletedAt = msg.deletedAt ? new Date(msg.deletedAt) : undefined;
+    if (msg.provenance) {
+        doc.provAttributedTo = httpIriOrUndefined(msg.provenance.attributedTo);
+        doc.provGeneratedBy = httpIriOrUndefined(msg.provenance.generatedBy);
+        doc.provDerivedFrom = httpIriOrUndefined(msg.provenance.derivedFrom);
+    }
+    if (msg.task) {
+        doc.types.add(TASK_CLASS);
+        doc.types.add(msg.task.state === "closed" ? WF_CLOSED : WF_OPEN);
+        doc.taskTitle = sanitizeText(msg.task.title);
+        doc.assignee = httpIriOrUndefined(msg.task.assignee);
+    }
+    return store;
+}
+//# sourceMappingURL=longchat.js.map
