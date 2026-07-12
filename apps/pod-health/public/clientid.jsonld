@@ -1,0 +1,54 @@
+{
+  "@context": [
+    "https://www.w3.org/ns/solid/oidc-context.jsonld",
+    {
+      "fedapp": "https://w3id.org/jeswr/fed#",
+      "acl": "http://www.w3.org/ns/auth/acl#",
+      "health": "https://TBD.example/solid/health#",
+      "ph": "https://w3id.org/jeswr/pod-health#",
+      "sector": { "@id": "fedapp:sector", "@type": "@id" },
+      "access": { "@id": "fedapp:access", "@type": "@id", "@container": "@set" },
+      "consumes": { "@id": "fedapp:consumes", "@type": "@id", "@container": "@set" },
+      "produces": { "@id": "fedapp:produces", "@type": "@id", "@container": "@set" }
+    }
+  ],
+  "client_id": "https://health.solid.example/clientid.jsonld",
+  "client_name": "Pod Health",
+  "client_uri": "https://github.com/jeswr/pod-health",
+  "redirect_uris": ["https://health.solid.example/"],
+  "post_logout_redirect_uris": ["https://health.solid.example/"],
+  "scope": "openid profile offline_access webid",
+  "grant_types": ["authorization_code", "refresh_token"],
+  "response_types": ["code"],
+  "token_endpoint_auth_method": "none",
+  "application_type": "web",
+
+  "@type": "fedapp:App",
+  "sector": "https://w3id.org/jeswr/sectors/health#sector",
+  "access": ["acl:Read", "acl:Write", "acl:Append"],
+  "consumes": [
+    "health:HealthRecord",
+    "health:Observation",
+    "health:VitalSign",
+    "health:HeartRateObservation",
+    "health:StepCountObservation",
+    "health:SleepObservation",
+    "health:Condition",
+    "health:MedicationStatement",
+    "health:Immunization",
+    "health:CodeableConcept",
+    "ph:Workout"
+  ],
+  "produces": [
+    "health:HealthRecord",
+    "health:Observation",
+    "health:HeartRateObservation",
+    "health:StepCountObservation",
+    "health:SleepObservation",
+    "health:Condition",
+    "health:MedicationStatement",
+    "health:Immunization",
+    "health:CodeableConcept",
+    "ph:Workout"
+  ]
+}
