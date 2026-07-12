@@ -1,0 +1,9 @@
+node_modules/
+coverage/
+*.log
+.DS_Store
+# NOTE: dist/ is intentionally NOT ignored — it is committed so the package installs
+# directly from a GitHub branch under ignore-scripts=true with no build step. The
+# check:dist gate guards it against drifting from src/.
+etc/_tmp/
+temp/
