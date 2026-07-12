@@ -1,0 +1,123 @@
+# SHACL shape for the SHARED FEDERATED CONTACTS model (@jeswr/solid-task-model).
+#
+# The contract a SolidOS `vcard:AddressBook` / `vcard:Individual` / `vcard:Group`
+# written by ANY suite app (Pod Manager, solid-issues, …) or by SolidOS itself
+# must satisfy so it reads identically through every app's accessor — and so the
+# SolidOS contacts pane renders it. Authored against the vCard ontology (`vcard:`,
+# including the SolidOS extension terms the live pane reads) plus Dublin Core and
+# the ACL ontology, per ADR-0013 (federation namespace) and the R9 recommendation.
+#
+# The shapes are ANONYMOUS (blank nodes), so this package mints nothing at a
+# non-resolving domain. This is the cross-app common denominator of the contacts
+# shape the existing producers + SolidOS write.
+#
+# ADVISORY: this documents the contract and MUST NOT reject real-world contacts.
+# It is NOT sh:closed — PM / SolidOS / foreign producers carry extra fields. A
+# canonical book + person + group yields ZERO violations; a contact with no group
+# / no inAddressBook yields only a Warning (not a Violation). The crux email/phone
+# rule accepts BOTH a direct `mailto:`/`tel:` IRI AND a structured node whose
+# `vcard:value` matches — exactly what the parser accepts and the builder writes.
+#
+# Validate a contacts document's typed-accessor output before write, and on read
+# of untrusted data (rdf-validate-shacl; see src/contacts.test.ts).
+
+@prefix sh:     <http://www.w3.org/ns/shacl#> .
+@prefix vcard:  <http://www.w3.org/2006/vcard/ns#> .
+@prefix dc:     <http://purl.org/dc/elements/1.1/> .
+@prefix dct:    <http://purl.org/dc/terms/> .
+@prefix acl:    <http://www.w3.org/ns/auth/acl#> .
+@prefix rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd:    <http://www.w3.org/2001/XMLSchema#> .
+
+# --- A SolidOS address book (vcard:AddressBook) ---
+[] a sh:NodeShape ;
+  sh:targetClass vcard:AddressBook ;
+
+  # People index — REQUIRED, an IRI (the document SolidOS lists contacts from).
+  sh:property [
+    sh:path vcard:nameEmailIndex ; sh:name "name/email index" ;
+    sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ;
+  ] ;
+
+  # Groups index — REQUIRED, an IRI (the document SolidOS lists groups from).
+  sh:property [
+    sh:path vcard:groupIndex ; sh:name "group index" ;
+    sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ;
+  ] ;
+
+  # Title (vcard:fn) — advisory: the SolidOS minter writes dc:title and the model
+  # writes both, but a foreign/legacy book may carry only dc:title. A Warning lets
+  # each consumer decide rather than failing the whole document.
+  sh:property [
+    sh:path vcard:fn ; sh:name "title" ;
+    sh:datatype xsd:string ; sh:minCount 1 ;
+    sh:severity sh:Warning ;
+  ] ;
+
+  # Owner — at most one WebID IRI.
+  sh:property [
+    sh:path acl:owner ; sh:name "owner" ;
+    sh:nodeKind sh:IRI ; sh:maxCount 1 ;
+  ] .
+
+# --- An individual contact (vcard:Individual) — NOT sh:closed (extra fields ok) ---
+[] a sh:NodeShape ;
+  sh:targetClass vcard:Individual ;
+
+  # Display name — advisory minCount 1 (Warning): a partial/foreign record may omit
+  # vcard:fn; the model always writes it, so a canonical contact has no warning.
+  sh:property [
+    sh:path vcard:fn ; sh:name "name" ;
+    sh:datatype xsd:string ; sh:minCount 1 ;
+    sh:severity sh:Warning ;
+  ] ;
+
+  # Owning address book — advisory at most one (Warning): a contact need not declare
+  # one, and a partial producer's link should not fail the document.
+  sh:property [
+    sh:path vcard:inAddressBook ; sh:name "in address book" ;
+    sh:maxCount 1 ;
+    sh:severity sh:Warning ;
+  ] ;
+
+  # UID — when present, the model's `urn:uuid:` form. (No minCount: foreign records
+  # may omit it.)
+  sh:property [
+    sh:path vcard:hasUID ; sh:name "uid" ;
+    sh:pattern "^urn:uuid:" ;
+  ] ;
+
+  # Email — accept EITHER a direct mailto: IRI OR a structured node whose
+  # vcard:value is a mailto: IRI. This mirrors the parser (reads both) and the
+  # builder (writes the structured form). A bare literal email is non-conforming.
+  # The structured branch requires vcard:value to be an IRI (sh:nodeKind sh:IRI):
+  # parsePerson reads vcard:value via NamedNodeAs.string and IGNORES a literal, so a
+  # structured node with a literal vcard:value must NOT pass the shape either.
+  sh:property [
+    sh:path vcard:hasEmail ; sh:name "email" ;
+    sh:or (
+      [ sh:nodeKind sh:IRI ; sh:pattern "^mailto:" ]
+      [ sh:property [ sh:path vcard:value ; sh:nodeKind sh:IRI ; sh:pattern "^mailto:" ; sh:minCount 1 ] ]
+    ) ;
+  ] ;
+
+  # Telephone — accept EITHER a direct tel: IRI OR a structured node whose
+  # vcard:value is a tel: IRI. The structured branch likewise requires an IRI
+  # vcard:value (parsePerson ignores a literal value).
+  sh:property [
+    sh:path vcard:hasTelephone ; sh:name "telephone" ;
+    sh:or (
+      [ sh:nodeKind sh:IRI ; sh:pattern "^tel:" ]
+      [ sh:property [ sh:path vcard:value ; sh:nodeKind sh:IRI ; sh:pattern "^tel:" ; sh:minCount 1 ] ]
+    ) ;
+  ] .
+
+# --- A contact group (vcard:Group) ---
+[] a sh:NodeShape ;
+  sh:targetClass vcard:Group ;
+
+  # Group name — required, at least one string.
+  sh:property [
+    sh:path vcard:fn ; sh:name "group name" ;
+    sh:datatype xsd:string ; sh:minCount 1 ;
+  ] .
