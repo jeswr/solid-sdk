@@ -1,0 +1,38 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jeswr/full-solid-ecosystem/main/tracking/schema/suite.schema.json",
+  "id": "n8n-nodes-solid",
+  "kind": "sdk",
+  "name": "n8n Solid Node",
+  "repo": "https://github.com/jeswr/n8n-nodes-solid",
+  "category": "integration",
+  "maturity": "prototype",
+  "visibility": "public",
+  "stack": {
+    "lang": "TypeScript source (NodeNext ESM); dist emitted as CommonJS (n8n require()s it)",
+    "n8n": "n8n-workflow ^1.82 (peerDependency — the INodeType/ICredentialType contract; provided by the n8n runtime, never bundled)",
+    "rdf": "n3 ^2.x (container listing only; external CJS dep)",
+    "solid-object": "@solid/object ^0.6.x + @rdfjs/wrapper (ContainerDataset for ldp:contains; ESM-only, so INLINED into the CJS dist)",
+    "fetch-rdf": "@jeswr/fetch-rdf (git: jeswr/fetch-rdf#main; off-npm, INLINED into the CJS dist)",
+    "test": "vitest ^2.x (incl. a packaged-dist require() load smoke test)",
+    "lint": "@biomejs/biome ^2.x",
+    "node": ">=20"
+  },
+  "dependsOn": [
+    "fetch-rdf"
+  ],
+  "federation": {
+    "sectors": [],
+    "membershipTodo": "OSS-integration SDK (not an app). An n8n community node (programmatic INodeType) that reads/writes a Solid pod over LDP from inside n8n automation workflows: Resource Read/Create/Update/Delete + Container List (ldp:contains parsed via @jeswr/fetch-rdf + @solid/object ContainerDataset). A SolidApi credential carries the pod base URL + an OIDC/bearer access token; full DPoP-bound Solid-OIDC is a documented follow-up seam. Writes are confined to the configured pod base (scope guard); http(s) only; the token is never logged. No federation membership of its own — it is workflow-automation glue reaching every n8n user."
+  },
+  "status": {
+    "generatedAt": "2026-07-03T05:14:25.691Z",
+    "commit": "ab4f230bbaef2a5386823705817f48b012c51b9b",
+    "version": "0.1.0",
+    "gate": {
+      "lint": "skip",
+      "typecheck": "skip",
+      "test": "skip",
+      "build": "skip"
+    }
+  }
+}
