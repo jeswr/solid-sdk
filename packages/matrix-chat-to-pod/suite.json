@@ -1,0 +1,48 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jeswr/full-solid-ecosystem/main/tracking/schema/suite.schema.json",
+  "id": "matrix-chat-to-pod",
+  "kind": "package",
+  "name": "Matrix Chat to Pod",
+  "repo": "https://github.com/jeswr/matrix-chat-to-pod",
+  "category": "interop",
+  "maturity": "alpha",
+  "visibility": "public",
+  "stack": {
+    "lang": "TypeScript (ESM, NodeNext)",
+    "runtime": "Node >=20",
+    "rdf": "n3 ^2.x",
+    "fetch-rdf": "@jeswr/fetch-rdf ^0.1",
+    "chat-interop": "@jeswr/solid-chat-interop (git, #main)",
+    "guarded-fetch": "@jeswr/guarded-fetch (git, #main)",
+    "test": "vitest ^4.x",
+    "lint": "@biomejs/biome ^2.x",
+    "node": ">=20"
+  },
+  "dependsOn": [
+    "solid-chat-interop",
+    "guarded-fetch",
+    "fetch-rdf"
+  ],
+  "federation": {
+    "sectors": [
+      "communication",
+      "chat"
+    ],
+    "produces": [
+      "chat"
+    ],
+    "consumes": [],
+    "note": "Ingest Matrix room history into a Solid pod (owner-private, READ/import-only phase 1) — the highest chat-capture multiplier in the OSS-integration plan: one schema reaches WhatsApp/Signal/Telegram/Slack/Discord/iMessage via mautrix bridges/Beeper, because they all surface as ordinary Matrix m.room.message events on the network-neutral CS API. A pure, fixture-tested transform maps a Matrix event to a @jeswr/solid-chat-interop CanonicalMessage (content from body/formatted_body, author from sender resolved to a WebID only — never the bare matrix id, published from origin_server_ts, room from room_id, inReplyTo from m.in_reply_to, edits via m.replace -> dct:isReplacedBy, redactions -> schema:dateDeleted), then writes each as a SolidOS LongChat resource (canonicalToLongChat/serializeLongChat) readable by PM /chat and any LongChat reader. The user-configured Matrix homeserver is SSRF-guarded via @jeswr/guarded-fetch (https-only, blocks private/loopback/metadata, DNS-pin, no auto-redirect); the pod-write fetch is injectable. Default ACL for imported chat is OWNER-ONLY (never auto-shared); source edits/redactions are honoured on re-sync. The Matrix access token is a runtime input, never committed/logged. Mints NO new RDF predicate; never hand-builds triples. GitHub-installable now (committed dist/, ignore-scripts=true); npm publish is a deferred migration. Live import needs a real Matrix token = needs:user."
+  },
+  "status": {
+    "generatedAt": "2026-07-03T05:14:25.399Z",
+    "commit": "368779765525a78131529e5c3246bd6a4fc9edac",
+    "version": "0.0.1",
+    "gate": {
+      "lint": "skip",
+      "typecheck": "skip",
+      "test": "skip",
+      "build": "skip"
+    }
+  }
+}
