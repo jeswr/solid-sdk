@@ -1,0 +1,84 @@
+{
+  "name": "@jeswr/solid-auth-core",
+  "version": "0.1.0",
+  "description": "The shared, framework-free Solid login/auth core for the @jeswr app suite: createSolidAuth() constructs the WebID/DPoP token provider, captures the pristine fetch FIRST, and pins every OIDC hop to it — so the proactive-patched-global login-stall deadlock is unrepresentable by construction. Includes silent session restore (via @jeswr/solid-session-restore), a proactive authenticated-fetch wrapper, and a thin /react SessionProvider.",
+  "author": "Jesse Wright",
+  "license": "MIT",
+  "type": "module",
+  "securityCritical": true,
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20.12"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jeswr/solid-auth-core.git"
+  },
+  "homepage": "https://github.com/jeswr/solid-auth-core#readme",
+  "bugs": {
+    "url": "https://github.com/jeswr/solid-auth-core/issues"
+  },
+  "keywords": [
+    "solid",
+    "solid-oidc",
+    "dpop",
+    "rfc9449",
+    "webid",
+    "oauth",
+    "pkce",
+    "session-restore",
+    "authenticated-fetch",
+    "browser"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./react": {
+      "types": "./dist/react/index.d.ts",
+      "import": "./dist/react/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "node scripts/build-dist.mjs",
+    "lint": "biome check src test scripts",
+    "lint:fix": "biome check --write src test scripts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@jeswr/fetch-rdf": "^0.1.0",
+    "@solid/object": "^0.6.0",
+    "dpop": "^2.1.1",
+    "n3": "^2.0.3",
+    "oauth4webapi": "^3.8.6"
+  },
+  "peerDependencies": {
+    "react": ">=18"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.0",
+    "@jeswr/solid-session-restore": "workspace:*",
+    "@types/n3": "^1.26.1",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "esbuild": "^0.28.1",
+    "jsdom": "^26.1.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "typescript": "^5.9.0",
+    "vitest": "^4.1.8"
+  }
+}

@@ -1,0 +1,73 @@
+{
+  "name": "@jeswr/agent-authz-verifier",
+  "version": "0.1.0",
+  "description": "The composed FOUR-PHASE agent-authorization delegation-chain verifier — the standalone, independently-checkable keystone of the accountable-agents stack. Verifies a presented chain of AgentAuthorizationCredentials + bound ODRL delegation policies FAIL-CLOSED across assembly → Phase A (credential integrity at one instant, incl. the signed policy-content digest) → Phase B (issuer↔subject↔assigner cross-binding + delegation linkage) → Phase C (status ∪ revocation) → Phase D (the ODRL agent-delegation chain walk), plus the D9 identity-composition rule. Pure and side-effect-free: ALL network enters through the injected resolveKey / isControlledBy / resolveStatus seams — the package itself does zero I/O and zero RDF parsing. Composes @jeswr/solid-vc + @jeswr/solid-odrl. Experimental, AI-agent-generated.",
+  "securityCritical": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "node scripts/build-dist.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "biome check src test scripts",
+    "lint:fix": "biome check --write src test scripts",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "keywords": [
+    "solid",
+    "agent",
+    "authorization",
+    "delegation",
+    "verifiable-credentials",
+    "odrl",
+    "chain-verifier",
+    "accountability",
+    "fail-closed",
+    "data-integrity"
+  ],
+  "author": "Jesse Wright",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jeswr/agent-authz-verifier.git"
+  },
+  "bugs": {
+    "url": "https://github.com/jeswr/agent-authz-verifier/issues"
+  },
+  "homepage": "https://github.com/jeswr/agent-authz-verifier#readme",
+  "dependencies": {
+    "@jeswr/solid-odrl": "github:jeswr/solid-odrl#db97922d82f2ec016b7ef705827cf85429458668",
+    "@jeswr/solid-vc": "github:jeswr/solid-vc#7f7a4e0a5ded7415ac40d63f2ff54077863df14e",
+    "@rdfjs/wrapper": "^0.34.0",
+    "content-type": "^1.0.5",
+    "jose": "^6.0.0",
+    "jsonld-streaming-parser": "^5.0.0",
+    "multiformats": "^14.0.0",
+    "n3": "^2.0.3",
+    "rdf-canonize": "^5.0.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.0.0",
+    "@types/node": "^22.0.0",
+    "esbuild": "^0.28.1",
+    "typescript": "^5.6.0",
+    "vitest": "^3.2.6"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

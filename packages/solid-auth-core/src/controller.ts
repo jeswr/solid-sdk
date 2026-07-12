@@ -1,0 +1,3305 @@
+// AUTHORED-BY Claude Fable 5
+// (Ported from @jeswr/solid-elements `src/auth/index.ts` — the suite's best,
+// adversarially-reviewed login controller (Opus 4.8-authored original; every
+// "roborev finding" comment below refers to that history) — extracted as the
+// framework-free @jeswr/solid-auth-core engine per the shared-logic upstreaming
+// review, so suite apps consume ONE audited implementation instead of 21
+// hand-forked `webid-token-provider.ts` copies.)
+//
+// @jeswr/solid-auth-core — the framework-free Solid login/auth engine:
+// `createSolidAuth(config)` wires the WebID→issuer resolution, the interactive
+// authorization-code + PKCE + DPoP flow, silent session restore
+// (@jeswr/solid-session-restore), proactive token refresh, and the two-fetch
+// credential boundary into one object. No DOM/UI dependency; the `/react`
+// subexport layers a SessionProvider over it.
+//
+// ─── SECURITY MODEL (this composes a credential-redeeming flow — be exhaustive) ─
+//
+// THE TWO-FETCH BOUNDARY (the credential-leak boundary):
+//   • publicFetch        — the pristine native fetch snapshotted at MODULE LOAD
+//                          (MODULE_PRISTINE_FETCH in ./pristine.js), i.e. before
+//                          any proactive wrapper could patch the global — NOT
+//                          re-read from the (possibly already-patched) global at
+//                          construction — and UNWRAPPED through this package's
+//                          wrapper brand, so even a late module load behind one
+//                          of our OWN patches recovers the true pristine fetch.
+//                          NO session, never upgrades on a 401. The foreign-
+//                          origin / public-read path. A consumer constructing
+//                          after a FOREIGN patch can inject a known-pristine
+//                          fetch via `config.publicFetch`.
+//   • authenticatedFetch — an ENGINE-OWNED wrapper over the known-pristine
+//                          publicFetch (never a live read of the global, which
+//                          another wrapper may have patched). It attaches the
+//                          user's DPoP-bound token proactively for allowed
+//                          origins and retries once on a 401. By DEFAULT we do
+//                          NOT patch the global, so the global `fetch` stays
+//                          pristine; opting into `patchGlobalFetch: true`
+//                          additionally upgrades bare `fetch()` callers via the
+//                          SAME engine-owned wrapper.
+//
+// THE LOGIN-STALL UNREPRESENTABILITY GUARANTEE (bead suite-tracker-8575): every
+// OIDC hop this engine makes — discovery, dynamic client registration, the
+// authorization-code + refresh-token grants (via `[oauth.customFetch]`), and the
+// silent-restore grant (via restoreSession's `fetch` option) — is pinned to the
+// pristine `#publicFetch` AT CONSTRUCTION. There is NO `oauthFetch` config knob,
+// no fallback that reads the live global, and the pristine anchor unwraps this
+// package's own wrappers (./pristine.js) — so the re-entrant deadlock (a patched
+// global routing the provider's own token traffic back into `provider.upgrade()`,
+// which awaits the very login promise that issued it) cannot be constructed.
+//
+// LOGIN persists, on success, the DPoP-bound refresh token + the non-extractable
+// ES256 key into the issuer-keyed IndexedDB store, so SILENT RESTORE on the next
+// load can rebuild the session with a `refresh_token` grant (a token-endpoint
+// fetch — never a popup/iframe). All the security invariants of
+// @jeswr/solid-session-restore apply (WebID-scoped isolation, asymmetric-only,
+// non-extractable key, clear-only-on-invalid_grant, fail-closed).
+//
+// The interactive authorization-code + PKCE + DPoP flow is built on oauth4webapi
+// directly and drives an injected `getCode` popup driver (structurally compatible
+// with @solid/reactive-authentication's <authorization-code-flow> element),
+// requesting `offline_access` (so a refresh token is issued) + persistence.
+
+import { fetchRdf } from "@jeswr/fetch-rdf";
+// VALUE imports only from the off-npm package (they are INLINED into the dist
+// bundle); its store TYPES are re-declared structurally in ./session-store.js so
+// no emitted .d.ts references the package (check-dist-fresh enforces this).
+import {
+  type CredentialPresence,
+  decideSilentRestore,
+  hasPersisted,
+  IndexedDbSessionStore,
+  indexedDbAvailable,
+  RememberedAccount,
+  type RememberedAccountRecord,
+  restoreSession,
+  shouldDropRememberedPointer,
+  webIdsEqual,
+} from "@jeswr/solid-session-restore";
+import { Agent } from "@solid/object";
+import * as DPoP from "dpop";
+import { DataFactory } from "n3";
+import * as oauth from "oauth4webapi";
+import { brandFetchWrapper, MODULE_PRISTINE_FETCH, resolvePristineFetch } from "./pristine.js";
+import {
+  authErrorFrom,
+  cleanedUrl,
+  clearPersistedRedirectFlow,
+  ES256_JWK_IMPORT_ALG,
+  hasAuthCodeParams,
+  hasAuthErrorParams,
+  type PersistedRedirectFlow,
+  parseAutologinFragment,
+  planRedirect,
+  type RedirectFlowStorage,
+  readPersistedRedirectFlow,
+  stripAuthCallbackParams,
+  writePersistedRedirectFlow,
+} from "./redirect.js";
+import type { PersistedSession, SessionStore } from "./session-store.js";
+import type {
+  BeginRedirectLoginOptions,
+  GetCodeCallback,
+  LoginResult,
+  RecentLoginAccount,
+  RedirectOutcome,
+  RestoreOutcome,
+  SolidAuth,
+  SolidAuthController,
+} from "./types.js";
+
+/**
+ * The reactive-auth-style TokenProvider structural contract (the tiny, stable
+ * shape @solid/reactive-authentication's manager matches structurally). Restated
+ * here so this core has no dependency on that package.
+ */
+export interface TokenProvider {
+  matches(request: Request): Promise<boolean>;
+  upgrade(request: Request): Promise<Request>;
+}
+
+/** oauth4webapi HTTP options shape (signal + loopback-insecure allowance). */
+type OauthHttpOptions = {
+  signal?: AbortSignal;
+  [oauth.allowInsecureRequests]?: true;
+};
+
+/** A WebID's profile advertises several OIDC issuers; the host must choose one. */
+export class AmbiguousIssuerError extends Error {
+  readonly webId: string;
+  readonly issuers: string[];
+  constructor(webId: string, issuers: string[]) {
+    super(
+      `This WebID advertises ${issuers.length} OIDC issuers — supply a 'chooseIssuer' ` +
+        `callback so the user can pick one (${webId}).`,
+    );
+    this.name = "AmbiguousIssuerError";
+    this.webId = webId;
+    this.issuers = issuers;
+  }
+}
+
+/** A WebID's profile has no `solid:oidcIssuer` — it cannot be used for Solid login. */
+export class NoSolidIssuerError extends Error {
+  readonly webId: string;
+  constructor(webId: string) {
+    super(`This WebID has no solid:oidcIssuer, so it can't be used for Solid login (${webId}).`);
+    this.name = "NoSolidIssuerError";
+    this.webId = webId;
+  }
+}
+
+/** The supplied input is not a usable WebID URL. */
+export class InvalidWebIdError extends Error {
+  constructor(input: string, reason: string) {
+    super(`Not a valid WebID (${reason}): ${input}`);
+    this.name = "InvalidWebIdError";
+  }
+}
+
+/**
+ * `login()` was called but no `authFlow` (the interactive popup driver) was supplied
+ * at construction. `authFlow` is OPTIONAL — a restore-only consumer can omit it — but
+ * the INTERACTIVE login flow needs it to drive the authorization-code popup. Construct
+ * the controller with an `authFlow` to use `login()`.
+ */
+export class MissingAuthFlowError extends Error {
+  constructor() {
+    super(
+      "login() requires an 'authFlow' (the interactive popup driver), but none was " +
+        "supplied to createSolidAuth. Pass options.authFlow to enable " +
+        "interactive login. (Silent restore via restore() does not need it.)",
+    );
+    this.name = "MissingAuthFlowError";
+  }
+}
+
+/** Pick one issuer from several advertised on a profile (the user chooses). */
+export type ChooseIssuerCallback = (issuers: string[], webId: string) => Promise<string>;
+
+/**
+ * Options for {@link createSolidAuth}.
+ *
+ * DELIBERATELY ABSENT (the login-stall guarantee): there is NO `oauthFetch`
+ * option. Every OIDC hop (discovery / registration / token grants / the silent-
+ * restore grant) is pinned to the pristine {@link publicFetch} unconditionally —
+ * a caller cannot route the engine's own token traffic through a patched global,
+ * so the re-entrant single-flight deadlock (bead suite-tracker-8575) cannot be
+ * configured back in.
+ */
+export interface SolidAuthConfig {
+  /**
+   * The interactive popup driver: anything exposing a compatible
+   * `getCode(authUri, signal)` (e.g. @solid/reactive-authentication's
+   * <authorization-code-flow> element, or a plain function wrapper).
+   *
+   * OPTIONAL: it is needed ONLY by interactive {@link SolidAuthController.login}. A
+   * RESTORE-ONLY consumer (one that constructs the controller purely to silently
+   * restore a persisted session on load, never calling `login()`) does not need a
+   * popup driver and may omit it. Calling `login()` WITHOUT an `authFlow` throws a
+   * targeted {@link MissingAuthFlowError} so the misconfiguration is clear.
+   */
+  authFlow?: { getCode: GetCodeCallback };
+  /**
+   * The OAuth redirect/callback URI this client is registered with. Must be the
+   * page that does `opener.postMessage(location.href)` (see the reactive-auth
+   * skill) and must be listed in the Client Identifier Document when {@link clientId}
+   * is set.
+   */
+  callbackUri: string;
+  /**
+   * A Solid-OIDC Client Identifier Document URL. When set, login + restore run as
+   * a public client whose `client_id` IS this URL (stable consent-screen name).
+   * When absent, dynamic client registration is used (dev fallback; throwaway).
+   */
+  clientId?: string;
+  /**
+   * Pick an issuer when a profile advertises several. Default: throw
+   * {@link AmbiguousIssuerError} (never silently pick the first); a single issuer
+   * is always used directly.
+   */
+  chooseIssuer?: ChooseIssuerCallback;
+  /**
+   * The IndexedDB database name for the persisted-session store. MUST be unique
+   * per app on a shared origin. Defaults to a generic name; pass your app's.
+   */
+  dbName?: string;
+  /**
+   * The localStorage key for the SILENT-RESTORE pointer (the single last-active
+   * WebID→issuer pointer that selects which issuer to restore on load). App-specific.
+   * Cleared on logout. Distinct from the recent-accounts list below.
+   */
+  rememberedAccountsKey?: string;
+  /**
+   * The localStorage key for the RECENT-ACCOUNTS list — the credential-free history
+   * of previously-used WebIDs (most-recent-first, deduplicated) powering the
+   * returning-user affordance. This list SURVIVES logout (logout clears the session +
+   * the restore pointer, NOT the account memory). App-specific; defaults to a generic
+   * name derived from {@link rememberedAccountsKey} when omitted.
+   */
+  recentAccountsKey?: string;
+  /**
+   * Allow oauth4webapi insecure requests for `localhost`/`127.0.0.1` issuers only
+   * (dev CSS over HTTP). Remote HTTPS issuers stay strict. Default false.
+   */
+  allowInsecureLoopback?: boolean;
+  /**
+   * Patch `globalThis.fetch` so EVERY plain `fetch` upgrades on 401 (reactive-auth's
+   * default mode). Default FALSE here — we keep the global pristine so `publicFetch`
+   * is unambiguously credential-free, and the authenticated path is the explicit
+   * `authenticatedFetch` handle. Opt in only if a third-party lib that captured the
+   * global must transparently authenticate.
+   */
+  patchGlobalFetch?: boolean;
+  /**
+   * The resource ORIGINS the session's DPoP-bound token may be attached to (the
+   * credential boundary). `authenticatedFetch` upgrades a 401 ONLY for a request
+   * whose origin is in the allowed set; every other origin is left UNAUTHENTICATED
+   * (fail-closed), so the user's token is never sent to a foreign origin even if a
+   * caller accidentally routes a cross-origin request through `.fetch`.
+   *
+   * The effective allowed set is the UNION of these explicit origins PLUS, by
+   * default, the authenticated WebID's own origin and the issuer's origin (the
+   * common case: a user's pod is served from their WebID's origin). Set
+   * {@link includeWebIdOrigin}/{@link includeIssuerOrigin} to `false` to drop those
+   * defaults and rely solely on this list. Each entry is compared by URL `origin`
+   * (scheme + host + port); a non-URL entry is ignored. When the resulting set is
+   * EMPTY the provider attaches the token to NOTHING (strictly fail-closed).
+   *
+   * Pods on a DIFFERENT host than the WebID (a valid Solid topology) MUST be listed
+   * here — otherwise their 401s will not be authenticated.
+   */
+  allowedOrigins?: string[];
+  /** Include the authenticated WebID's origin in the allowed set. Default true. */
+  includeWebIdOrigin?: boolean;
+  /** Include the issuer's origin in the allowed set. Default true. */
+  includeIssuerOrigin?: boolean;
+  /**
+   * The session store implementation. Defaults to an {@link IndexedDbSessionStore}
+   * (or an in-memory no-op when IndexedDB is unavailable). Test seam.
+   */
+  store?: SessionStore;
+  /**
+   * Override the fetch used to dereference the public WebID profile. Defaults to
+   * the pristine `publicFetch` (captured before any patching) — the profile read
+   * stays provably out of the reactive-auth loop. Test seam.
+   */
+  profileFetch?: typeof fetch;
+  /**
+   * Inject a KNOWN-PRISTINE native fetch to use as `publicFetch` (the credential-
+   * free / foreign-origin boundary). By default the controller uses the snapshot
+   * this module took at LOAD time (before any patching). Pass this ONLY if you are
+   * constructing the controller after the global `fetch` was already patched and you
+   * hold a reference to the original — otherwise the default is correct and safer.
+   */
+  publicFetch?: typeof fetch;
+  /**
+   * The full-page navigation seam for {@link SolidAuth.beginRedirectLogin} — how the
+   * page is sent to the OP's authorization endpoint. Defaults to
+   * `globalThis.location.assign`. Inject to test the redirect flow without a real
+   * navigation, or to route the navigation through a router.
+   */
+  navigate?: (url: string) => void;
+  /**
+   * The registered app-root RETURN URI for FULL-PAGE-redirect logins — the page the OP
+   * redirects back to, which MUST run the app so it can read `?code&state` and drive
+   * {@link SolidAuth.completeRedirectLogin} / {@link SolidAuth.handleRedirect}.
+   *
+   * DISTINCT from {@link callbackUri}: `callbackUri` is the POPUP callback page (it only
+   * `postMessage`s and does NOT run the app), so it is the WRONG target for a full-page
+   * redirect. When this is set it is the default `redirect_uri` for both
+   * {@link SolidAuth.beginRedirectLogin} and the {@link SolidAuth.handleRedirect}
+   * autologin path; it MUST be a registered `redirect_uri` (listed in the Client
+   * Identifier Document, or dynamically registered). When ABSENT, `handleRedirect`
+   * derives the return URI from the CURRENT page URL (origin + path, fragment stripped)
+   * and a direct `beginRedirectLogin` falls back to `callbackUri`.
+   */
+  redirectUri?: string;
+  /**
+   * The transient store for the FULL-PAGE-redirect login's in-between state (the
+   * PKCE verifier + exported DPoP JWK + state/nonce + client), which must survive the
+   * navigation. Defaults to `globalThis.sessionStorage` (per-tab, same-origin, cleared
+   * on tab close). Inject an in-memory stub for tests / non-browser hosts.
+   */
+  redirectFlowStorage?: RedirectFlowStorage;
+  /**
+   * The sessionStorage key the redirect flow persists its record under. MUST be
+   * unique per app on a shared origin. Defaults to a name derived from
+   * {@link dbName}. Distinct from {@link redirectSentinelKey}.
+   */
+  redirectFlowKey?: string;
+  /**
+   * The sessionStorage key for the one-shot autologin loop-guard sentinel (the WebID
+   * last attempted this tab), so a redirect that bounces back still unauthenticated
+   * does not loop. App-specific; defaults to a name derived from {@link dbName}.
+   */
+  redirectSentinelKey?: string;
+}
+
+const isLoopback = (host: string): boolean =>
+  host === "localhost" || host === "127.0.0.1" || host === "[::1]";
+
+/**
+ * The default transient store for the redirect flow: `globalThis.sessionStorage`, or
+ * `undefined` when it is absent OR access to it THROWS. Merely READING the
+ * `sessionStorage` property throws a `SecurityError` in a sandboxed iframe / when a
+ * browser blocks storage, so this MUST be try/catch-guarded — otherwise constructing
+ * the auth object would fail even for a consumer that never touches redirect login
+ * (the roborev finding). A redirect login then fails fast at `writePersistedRedirectFlow`
+ * (which throws "no sessionStorage") rather than at construction.
+ */
+function defaultSessionStorage(): RedirectFlowStorage | undefined {
+  try {
+    return (globalThis as { sessionStorage?: RedirectFlowStorage }).sessionStorage ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * A variant of oauth4webapi's {@link oauth.ClientSecretBasic} that does NOT
+ * URL-encode the client_id / secret before base64. Inrupt ESS / PodSpaces
+ * (`login.inrupt.com`) REJECTS the spec-compliant `application/x-www-form-
+ * urlencoded` form (RFC 6749 §2.3.1 / Appendix B) and expects the raw values —
+ * a BESPOKE per-server workaround, scoped to ESS issuers only. Mirrors
+ * @jeswr/solid-session-restore's `noUrlEncodeClientSecretBasic` verbatim so the
+ * LOGIN code-exchange and the silent-restore refresh grant present the SAME
+ * Basic header to ESS (the finding: the restore path already had the workaround,
+ * the login path did not — so login failed against the exact issuer class the
+ * confidential-registration path exists to support).
+ *
+ * @see https://www.rfc-editor.org/rfc/rfc6749.html#section-2.3.1
+ */
+function noUrlEncodeClientSecretBasic(clientSecret: string): oauth.ClientAuth {
+  return (_as, client, _body, headers) => {
+    headers.set("authorization", `Basic ${btoa(`${client.client_id}:${clientSecret}`)}`);
+  };
+}
+
+/** The ESS host whose token endpoint rejects the spec form-url-encoded Basic creds. */
+const ESS_NO_URL_ENCODE_HOST = "login.inrupt.com";
+
+/**
+ * Whether an issuer is the Inrupt ESS host that needs the no-url-encode
+ * workaround, matched on the EXACT hostname (an unparseable issuer → false, so
+ * we never apply the bespoke path to an unknown issuer). Exact-host match (not a
+ * substring `includes`) so an unrelated issuer whose URL merely CONTAINS the
+ * string is never tricked into sending a non-standard Basic header to the wrong
+ * server. Mirrors @jeswr/solid-session-restore's `isEssNoUrlEncodeIssuer`.
+ */
+function isEssNoUrlEncodeIssuer(issuer: string): boolean {
+  try {
+    return new URL(issuer).hostname === ESS_NO_URL_ENCODE_HOST;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Pick the `client_secret_basic` constructor for an issuer: the BESPOKE
+ * non-URL-encoding variant for Inrupt ESS, the standard RFC-6749-§2.3.1-compliant
+ * {@link oauth.ClientSecretBasic} for every other server. The issuer-aware
+ * selection @jeswr/solid-session-restore already applies to its restore grant,
+ * mirrored here for the login code-exchange.
+ */
+function clientSecretBasicFor(issuer: string): (secret: string) => oauth.ClientAuth {
+  return isEssNoUrlEncodeIssuer(issuer) ? noUrlEncodeClientSecretBasic : oauth.ClientSecretBasic;
+}
+
+/** Refresh this far before the reported expiry, to absorb clock skew + RTT. */
+const EXPIRY_SKEW_MS = 30_000;
+
+/** Epoch ms the access token should be treated as expired, or undefined when none. */
+function expiresAtFrom(expiresIn: number | undefined): number | undefined {
+  return expiresIn === undefined ? undefined : Date.now() + expiresIn * 1000 - EXPIRY_SKEW_MS;
+}
+
+/** How {@link computeAllowedOrigins} derives the default WebID/issuer origins. */
+export interface AllowedOriginsInputs {
+  /** Explicit allowed resource origins (any URL; compared by `origin`). */
+  allowedOrigins?: string[];
+  /** The authenticated WebID (its origin is included unless disabled). */
+  webId?: string;
+  /** The issuer URL (its origin is included unless disabled). */
+  issuer?: string;
+  /** Include the WebID's origin. Default true. */
+  includeWebIdOrigin?: boolean;
+  /** Include the issuer's origin. Default true. */
+  includeIssuerOrigin?: boolean;
+  /**
+   * Allow `http:` origins for LOOPBACK hosts only (dev). Default false: every
+   * non-`https:` origin is dropped, so the token is never attached over cleartext.
+   */
+  allowInsecureLoopback?: boolean;
+}
+
+/**
+ * The set of resource origins a session token may be attached to — the credential
+ * boundary the token provider enforces. PURE + exported so the boundary is
+ * unit-tested. CLEARTEXT GUARD: a non-`https:` origin is DROPPED (so a configured
+ * `http:` allowedOrigin can't make the DPoP token ride over cleartext), EXCEPT a
+ * loopback `http:` origin when `allowInsecureLoopback` is set (dev). Fail-closed: an
+ * unparseable entry is skipped; an empty result means the token is attached to NOTHING.
+ */
+export function computeAllowedOrigins(inputs: AllowedOriginsInputs): ReadonlySet<string> {
+  const origins = new Set<string>();
+  const add = (value: string | undefined): void => {
+    if (!value) return;
+    let url: URL;
+    try {
+      url = new URL(value);
+    } catch {
+      return; // unparseable → not allowed (fail-closed)
+    }
+    if (url.protocol === "https:") {
+      origins.add(url.origin);
+    } else if (
+      url.protocol === "http:" &&
+      inputs.allowInsecureLoopback &&
+      isLoopback(url.hostname)
+    ) {
+      origins.add(url.origin); // dev loopback only, under the explicit opt-in
+    }
+    // every other scheme (incl. non-loopback http) is dropped — no cleartext token
+  };
+  for (const o of inputs.allowedOrigins ?? []) add(o);
+  if (inputs.includeWebIdOrigin !== false) add(inputs.webId);
+  if (inputs.includeIssuerOrigin !== false) add(inputs.issuer);
+  return origins;
+}
+
+/**
+ * Whether a request URL targets an allowed origin (the per-request credential
+ * gate). PURE + exported. Fail-closed: an unparseable URL is never allowed.
+ */
+export function isOriginAllowed(allowed: ReadonlySet<string>, requestUrl: string): boolean {
+  try {
+    return allowed.has(new URL(requestUrl).origin);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The DPoP `htu` claim for a request URL — the request URI WITHOUT its query and
+ * fragment (RFC 9449 §4.2). PURE + exported. If the URL is unparseable it is
+ * returned unchanged (the proof generator then sees the raw string).
+ */
+export function htuOf(requestUrl: string): string {
+  try {
+    const u = new URL(requestUrl);
+    u.search = "";
+    u.hash = "";
+    return u.toString();
+  } catch {
+    return requestUrl;
+  }
+}
+
+/**
+ * Whether a 401 response is a PURE DPoP-nonce challenge — i.e. its `WWW-Authenticate`
+ * carries the DPoP scheme with `error="use_dpop_nonce"` (RFC 9449 §8). PURE + exported
+ * for testing.
+ *
+ * This is deliberately CONSERVATIVE: it returns true ONLY when the server explicitly
+ * says the token was fine and only the nonce was missing. Any OTHER error (e.g.
+ * `invalid_token`, expired/revoked) — or no DPoP `error` token at all — returns false,
+ * so the caller force-refreshes the access token instead of looping on a stale one even
+ * when the server ALSO rotated the `DPoP-Nonce`. We match the `DPoP` auth-scheme
+ * challenge specifically; a `Bearer …` challenge that happens to mention the string is
+ * not treated as a DPoP nonce challenge.
+ */
+export function isUseDpopNonceChallenge(response: Response): boolean {
+  const header = response.headers.get("WWW-Authenticate");
+  if (!header) return false;
+  // A `WWW-Authenticate` value can carry MULTIPLE challenges (RFC 9110 §11.6.1), e.g.
+  // `Bearer error="invalid_token", DPoP error="use_dpop_nonce"`, and even MULTIPLE DPoP
+  // challenges. We inspect ONLY the TOP-LEVEL `error` auth-param of the `DPoP` challenges —
+  // reading `error=` from another scheme's challenge, or from INSIDE a quoted value, would
+  // wrongly classify a DPoP `invalid_token` as a pure nonce challenge.
+  //
+  // UNAMBIGUOUS-NONCE rule (the roborev finding): return true only when the DPoP challenge
+  // set is nonce-ONLY — at least one DPoP challenge says `use_dpop_nonce` AND no DPoP
+  // challenge reports a DIFFERENT error. If ANY DPoP challenge carries a non-nonce error
+  // (invalid_token / expired / revoked), the token may be stale, so we must NOT skip the
+  // forced refresh — return false (force-refresh) even if another DPoP challenge mentions a
+  // nonce.
+  let sawNonce = false;
+  for (const challenge of parseWwwAuthenticate(header)) {
+    if (challenge.scheme.toLowerCase() !== "dpop") continue;
+    const error = challenge.params.get("error")?.toLowerCase();
+    if (error === undefined) continue; // a DPoP challenge with no error is not a signal
+    if (error === "use_dpop_nonce") sawNonce = true;
+    else return false; // a DPoP challenge with a DIFFERENT error → ambiguous → force refresh
+  }
+  return sawNonce;
+}
+
+/** One parsed `WWW-Authenticate` challenge: its scheme + its quote-aware auth-params. */
+type Challenge = { scheme: string; params: Map<string, string> };
+
+/**
+ * An atom of a tokenised `WWW-Authenticate` header: a bare `word`, a `quoted` value
+ * (quotes stripped, `\`-escapes resolved), or a standalone `eq` (an unquoted `=`).
+ * `=` is its own atom so BWS around it (`error = "x"`) parses correctly.
+ */
+type ChallengeAtom = { kind: "word" | "quoted"; text: string } | { kind: "eq" };
+
+/**
+ * Tokenise a `WWW-Authenticate` header into {@link ChallengeAtom}s. Whitespace + commas
+ * separate atoms (commas are not otherwise significant — challenge boundaries are inferred
+ * later from the word-not-followed-by-`=` rule, which is robust to the RFC 9110 §11.6.1
+ * comma ambiguity). A quoted string is ALWAYS a value atom (even abutting a bare word) and
+ * may contain commas/`=`/scheme-like words; `\`-escapes inside it are resolved.
+ */
+/** Characters that separate atoms outside a quoted string (commas + linear whitespace). */
+const CHALLENGE_ATOM_SEPARATORS = new Set([",", " ", "\t"]);
+
+function tokenizeChallengeHeader(header: string): ChallengeAtom[] {
+  const atoms: ChallengeAtom[] = [];
+  let buf = "";
+  let bufIsQuoted = false;
+  let inQuotes = false;
+  const flush = (): void => {
+    if (buf || bufIsQuoted) {
+      atoms.push({ kind: bufIsQuoted ? "quoted" : "word", text: buf });
+      buf = "";
+      bufIsQuoted = false;
+    }
+  };
+  for (let i = 0; i < header.length; i++) {
+    const c = header[i];
+    // ── Inside a quoted string: resolve `\`-escapes, end on the closing `"`. ──
+    if (inQuotes) {
+      if (c === "\\" && i + 1 < header.length) {
+        buf += header[++i]; // escaped char — take the NEXT char literally
+      } else if (c === '"') {
+        inQuotes = false; // closing quote
+      } else {
+        buf += c;
+      }
+      continue;
+    }
+    // ── Outside quotes: `"` opens a (value) atom, `=` is its own atom, separators flush. ──
+    if (c === '"') {
+      flush(); // a quoted string is ALWAYS a value atom; flush any pending bare word first
+      inQuotes = true;
+      bufIsQuoted = true;
+    } else if (c === "=") {
+      flush();
+      atoms.push({ kind: "eq" });
+    } else if (CHALLENGE_ATOM_SEPARATORS.has(c)) {
+      flush();
+    } else {
+      buf += c;
+    }
+  }
+  flush();
+  return atoms;
+}
+
+/**
+ * Walk tokenised {@link ChallengeAtom}s into {@link Challenge}s. A `word [=] value` triple
+ * (tolerating the BWS `eq` atom) is an auth-param attributed to the CURRENT challenge; a
+ * lone word NOT followed by `=` starts a NEW challenge (a scheme / token68). Param keys are
+ * lower-cased. A stray `eq`, or a quoted/param atom with no preceding scheme, is dropped.
+ */
+function walkChallengeAtoms(atoms: ChallengeAtom[]): Challenge[] {
+  const challenges: Challenge[] = [];
+  for (let i = 0; i < atoms.length; i++) {
+    const atom = atoms[i];
+    // Only a bare WORD can begin a challenge or a param key; a stray `=` or a dangling
+    // quoted value (no `key =` before it) is not a valid challenge/param — skip it.
+    if (atom.kind !== "word") continue;
+    // A WORD is an auth-param key iff the NEXT atom is `=`; else it is a new scheme.
+    if (atoms[i + 1]?.kind !== "eq") {
+      challenges.push({ scheme: atom.text, params: new Map() });
+      continue;
+    }
+    const valueAtom = atoms[i + 2];
+    const value = valueAtom && valueAtom.kind !== "eq" ? valueAtom.text : "";
+    // Index the last challenge directly (NOT `.at(-1)`) to match the pre-refactor
+    // runtime floor — `Array.prototype.at` is newer than plain index access, and the
+    // `?.` already no-ops the "param before any scheme" case the original guarded.
+    challenges[challenges.length - 1]?.params.set(atom.text.toLowerCase(), value);
+    i += 2; // consume `= value`
+  }
+  return challenges;
+}
+
+/**
+ * Parse a `WWW-Authenticate` header into its individual challenges, each with its scheme
+ * and a QUOTE-AWARE map of its top-level auth-params. PURE + exported for testing.
+ *
+ * The grammar (RFC 9110 §11.6.1) is comma-ambiguous: commas separate BOTH auth-params
+ * within a challenge AND challenges from each other; auth-params allow optional whitespace
+ * around `=` (BWS); and a quoted value may itself contain commas/`=`/scheme-like words. We
+ * tokenise character-by-character into atoms (a bare word, a quoted string, or a standalone
+ * `=`), then walk those atoms into challenges (see the internal `tokenizeChallengeHeader`
+ * and `walkChallengeAtoms` helpers). Param VALUES are unquoted (quotes stripped, escapes
+ * resolved). Odd input degrades safely (the caller is conservative — only an UNAMBIGUOUS
+ * DPoP `error="use_dpop_nonce"` is acted on).
+ *
+ * The return type is written as the INLINE structural shape (not the internal `Challenge`
+ * alias) so the published `.d.ts` — and the api-extractor report — stay byte-identical to
+ * the pre-refactor signature: this decomposition changes structure, never the contract.
+ */
+export function parseWwwAuthenticate(
+  header: string,
+): { scheme: string; params: Map<string, string> }[] {
+  return walkChallengeAtoms(tokenizeChallengeHeader(header));
+}
+
+/**
+ * The result of {@link SolidAuthEngine.#persist}: `wrote` = a credential for the
+ * current session was actually stored (so this-page refresh works, true even for the
+ * in-memory fallback); `durable` = it will survive a reload (restorable next load —
+ * additionally requires a durable store). See `#persist` for why the two are distinct.
+ */
+interface PersistResult {
+  wrote: boolean;
+  durable: boolean;
+}
+
+/** Per-issuer in-memory live session (NOT persisted beyond the refresh token). */
+export interface LiveSession {
+  /**
+   * The controller generation that CREATED this session (login / restore). A refresh
+   * uses THIS — not the current generation — so a refresh of a SUPERSEDED session
+   * writes under a stale generation (skipped by the guarded store) and never
+   * overwrites a newer login's credential (the roborev race).
+   */
+  generation: number;
+  issuer: URL;
+  webId: string;
+  /** The current access token — REPLACED in place when refreshed (see #refresh). */
+  accessToken: string;
+  dpopKey: CryptoKeyPair;
+  dpopHandle: oauth.DPoPHandle;
+  authorizationServer: oauth.AuthorizationServer;
+  client: oauth.Client;
+  /**
+   * The resource ORIGINS this session's token may be attached to (the credential
+   * boundary the provider enforces). Computed once at session creation from the
+   * options + the WebID/issuer origins. Empty = attach to nothing (fail-closed).
+   */
+  allowedOrigins: ReadonlySet<string>;
+  /**
+   * Epoch ms the access token is treated as expired (server `expires_in` minus a
+   * skew), or undefined when the OP reported no lifetime. Drives proactive refresh
+   * in {@link WebIdDPoPTokenProvider.upgrade}.
+   */
+  expiresAt?: number;
+  /**
+   * The DPoP-bound refresh token, present only between {@link #authenticate} and
+   * {@link #persist} (it is written to the durable store, never kept in memory for
+   * the session lifetime, and never logged).
+   */
+  refreshToken?: string;
+}
+
+/** An in-memory SessionStore fallback so the controller works with no IndexedDB. */
+class MemorySessionStore implements SessionStore {
+  /**
+   * BRAND: this fallback store is NON-DURABLE — it lives only for the page lifetime, so
+   * a credential "persisted" here cannot survive a reload. The controller checks this so
+   * it does NOT write the silent-restore pointer for an in-memory put (which would make
+   * the next load attempt — and fail — a restore that has nothing behind it; the roborev
+   * finding). An INJECTED `options.store` is assumed durable (the consumer's contract).
+   */
+  readonly durable = false as const;
+  readonly #map = new Map<string, PersistedSession>();
+  async get(issuer: string): Promise<PersistedSession | undefined> {
+    return this.#map.get(issuer);
+  }
+  async put(session: PersistedSession): Promise<void> {
+    this.#map.set(session.issuer, session);
+  }
+  async delete(issuer: string): Promise<void> {
+    this.#map.delete(issuer);
+  }
+}
+
+/**
+ * The credential-free RECENT-ACCOUNTS list (most-recent-first, deduplicated by WebID),
+ * backed by localStorage under an app-specific key. Holds NO credential — only the
+ * public WebID + chosen issuer — and SURVIVES logout by design (logout clears the
+ * session + the silent-restore pointer, not the account memory). Every method degrades
+ * safely when localStorage is unavailable/throwing (private mode / SSR / quota).
+ */
+const MAX_RECENT_ACCOUNTS = 8;
+
+/**
+ * The credential-free display name / avatar an app may attach to a recent account.
+ * `displayName` OMITTED (or equal to the WebID) means "no explicit human name" —
+ * the merge preserves any previously-recorded name, else defaults to the WebID.
+ */
+interface RecentAccountInput {
+  webId: string;
+  displayName?: string;
+  avatarUrl?: string;
+}
+
+/**
+ * An avatar URL admissible for storage: only `http(s)` (an untrusted-profile guard —
+ * a `javascript:` / `data:` / `file:` avatar is dropped, never persisted or surfaced,
+ * so a consumer that renders `avatarUrl` as an `<img src>`/href cannot be handed a
+ * hostile scheme). Returns the URL unchanged when admissible, else undefined.
+ */
+function admissibleAvatarUrl(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  try {
+    const proto = new URL(value).protocol;
+    return proto === "https:" || proto === "http:" ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * NORMALISE one raw persisted entry to a well-typed {@link RecentLoginAccount}, or
+ * undefined to DROP it. A valid non-empty string webId is required; an EMPTY or
+ * missing displayName defaults to the WebID (recentAccounts() never surfaces a blank
+ * name — a blank would break the returning-user affordance and be wrongly preserved by
+ * the merge); avatarUrl is kept only when it is an admissible http(s) URL. A corrupt /
+ * older record (non-string fields, a hostile-scheme avatar) must never reach the
+ * renderer and throw — that would block the login prompt or hand it an unsafe URL.
+ */
+function normalizeRecentAccount(raw: unknown): RecentLoginAccount | undefined {
+  if (typeof raw !== "object" || raw === null) return undefined;
+  const rec = raw as { webId?: unknown; displayName?: unknown; avatarUrl?: unknown };
+  if (typeof rec.webId !== "string" || rec.webId.length === 0) return undefined;
+  const avatarUrl = admissibleAvatarUrl(rec.avatarUrl);
+  const hasName = typeof rec.displayName === "string" && rec.displayName.length > 0;
+  return {
+    webId: rec.webId,
+    displayName: hasName ? (rec.displayName as string) : rec.webId,
+    ...(avatarUrl !== undefined ? { avatarUrl } : {}),
+  };
+}
+
+class RecentAccountsList {
+  readonly #key: string;
+  constructor(key: string) {
+    this.#key = key;
+  }
+  list(): RecentLoginAccount[] {
+    try {
+      const raw = globalThis.localStorage?.getItem(this.#key) ?? null;
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      // Normalise/drop each raw entry (see normalizeRecentAccount).
+      const out: RecentLoginAccount[] = [];
+      for (const a of parsed) {
+        const entry = normalizeRecentAccount(a);
+        if (entry !== undefined) out.push(entry);
+      }
+      return out;
+    } catch {
+      return [];
+    }
+  }
+  /**
+   * Add or refresh an account, moving it to the front. Best-effort. MERGE-PRESERVING
+   * so the engine's own internal re-record on a later login/restore (which passes
+   * only `{ webId }`, i.e. displayName defaulted to the WebID) never CLOBBERS a human
+   * name/avatar an app attached via the public writer:
+   *  - displayName — an explicit non-empty name OTHER than the WebID wins; else a
+   *    previously-recorded human name is kept; else it defaults to the WebID.
+   *  - avatarUrl — an admissible http(s) URL wins; else a previously-recorded avatar
+   *    is kept. (A hostile-scheme avatar is dropped.)
+   */
+  remember(account: RecentAccountInput): void {
+    try {
+      const current = this.list();
+      const existing = current.find((a) => a.webId === account.webId);
+      const rest = current.filter((a) => a.webId !== account.webId);
+      const explicit = account.displayName;
+      // Preserve an existing human name only when it is NON-EMPTY and differs from the
+      // WebID (list() already defaults empty/missing to the WebID, so this is a
+      // belt-and-suspenders guard that a blank name is never treated as "a friendly name
+      // to keep"); otherwise an explicit non-empty name wins, else default to the WebID.
+      const displayName =
+        explicit !== undefined && explicit.length > 0 && explicit !== account.webId
+          ? explicit
+          : existing !== undefined &&
+              existing.displayName.length > 0 &&
+              existing.displayName !== account.webId
+            ? existing.displayName
+            : account.webId;
+      const avatarUrl = admissibleAvatarUrl(account.avatarUrl) ?? existing?.avatarUrl;
+      const entry: RecentLoginAccount = {
+        webId: account.webId,
+        displayName,
+        ...(avatarUrl !== undefined ? { avatarUrl } : {}),
+      };
+      globalThis.localStorage?.setItem(
+        this.#key,
+        JSON.stringify([entry, ...rest].slice(0, MAX_RECENT_ACCOUNTS)),
+      );
+    } catch {
+      // Non-fatal — the returning-account affordance just won't remember this one.
+    }
+  }
+}
+
+/**
+ * THE keystone factory: build the shared Solid login/auth object every suite app
+ * uses instead of hand-rolling a token provider + session glue.
+ *
+ * Construction order IS the security property: the pristine native fetch is
+ * captured FIRST (the module-load snapshot from ./pristine.js, unwrapped through
+ * this package's own wrapper brand), and the OIDC transport (`[oauth.customFetch]`
+ * on every oauth4webapi call, the silent-restore grant's `fetch`) plus the
+ * profile read and the engine-owned authenticated fetch are all pinned to it
+ * before any global patching can happen (`patchGlobalFetch` installs OVER that
+ * same pristine base). There is no configuration that routes an OIDC hop through
+ * a live read of `globalThis.fetch` — the login-stall deadlock class
+ * (suite-tracker-8575) is unrepresentable, not merely warned about.
+ */
+export function createSolidAuth(options: SolidAuthConfig): SolidAuth {
+  return new SolidAuthEngine(options);
+}
+
+class SolidAuthEngine implements SolidAuth {
+  /**
+   * The pristine, credential-free fetch — the foreign-origin boundary. We DO NOT
+   * re-read the (possibly already-patched) `globalThis.fetch` at construction; we use
+   * the explicitly injected {@link SolidAuthConfig.publicFetch}, else
+   * the module-load snapshot taken before any patching. A last-resort rejecting fetch
+   * is only ever reached in a non-DOM env with no fetch at all (never returns a
+   * possibly-patched global as "publicFetch").
+   */
+  readonly #publicFetch: typeof fetch;
+  readonly #profileFetch: typeof fetch;
+  readonly #opts: SolidAuthConfig;
+  readonly #store: SessionStore;
+  /**
+   * Whether {@link #store} actually SURVIVES a reload. The built-in in-memory fallback
+   * (used when IndexedDB is unavailable) does NOT, so a "successful" put to it must not
+   * cause the silent-restore pointer to be written (the next load would attempt — and
+   * fail — a restore with nothing behind it). An INJECTED store is assumed durable.
+   */
+  readonly #storeIsDurable: boolean;
+  /**
+   * The configured Client Identifier Document URL, NORMALIZED so an empty string is
+   * treated as ABSENT (`undefined`). A `clientId: ""` would otherwise leak through
+   * `??`-style fallbacks — e.g. #persist would store `""` instead of the server-assigned
+   * dynamic client id, breaking later silent restore (the roborev finding). Read this
+   * everywhere instead of `#opts.clientId` so the empty-string case is handled once.
+   */
+  readonly #clientId: string | undefined;
+  readonly #remembered: RememberedAccount;
+  readonly #recentAccounts: RecentAccountsList;
+  /** The full-page navigation seam (defaults to `location.assign`). */
+  readonly #navigate: (url: string) => void;
+  /** The transient store for the redirect flow's in-between state (sessionStorage). */
+  readonly #redirectStorage: RedirectFlowStorage | undefined;
+  /** The sessionStorage key the redirect record is persisted under. */
+  readonly #redirectFlowKey: string;
+  /** The sessionStorage key for the one-shot autologin loop-guard sentinel. */
+  readonly #redirectSentinelKey: string;
+
+  // The token provider, built lazily so construction has no side effects until a
+  // login/restore actually happens.
+  #provider?: WebIdDPoPTokenProvider;
+  // The STABLE controller-owned global `fetch` wrapper (created once when patchGlobalFetch
+  // is enabled). Kept as a reference so we can RE-ASSERT it onto globalThis.fetch whenever
+  // a session is (re)established — if another controller/library overwrote the global since
+  // we installed it, the next login/restore re-installs OURS (the option's contract).
+  #globalFetchWrapper?: typeof fetch;
+
+  // The single live session (this controller is single-account at a time).
+  #session?: LiveSession;
+  /** Bumped on logout / new login so a stale async result is ignored. */
+  #generation = 0;
+  /**
+   * The AbortController of the CURRENTLY in-flight interactive login (its popup). Tracked
+   * on the instance so a NEWER login or a logout can abort it IMMEDIATELY — proactively
+   * cancelling a still-open popup rather than waiting for getCode to return (the roborev
+   * finding). Cleared when the attempt settles.
+   */
+  #activeLoginAbort?: AbortController;
+  /**
+   * The in-flight refresh / silent-restore GRANTS (restoreSession), each as its
+   * AbortController + a `settled` promise. Two mechanisms protect the refresh-token-rotation
+   * lifecycle (the roborev findings):
+   *  - ABORT (logout, or a NON-blocking supersede): cancel the grant's token-endpoint
+   *    request so the token isn't redeemed under a stale generation.
+   *  - DRAIN-BEFORE-BUMP (login): before `login()` advances #generation, it ABORTS then
+   *    AWAITS the in-flight grants to settle — so a grant the OP ALREADY processed despite
+   *    the abort gets its rotation write to land under its STILL-VALID generation, instead
+   *    of being generation-skipped (which would strand the prior session on a spent token if
+   *    the new login later failed). The abort bounds the wait (the grant bails promptly).
+   * Each grant adds itself on start and removes itself on settle.
+   */
+  readonly #activeGrants = new Set<{ abort: AbortController; settled: Promise<unknown> }>();
+
+  constructor(options: SolidAuthConfig) {
+    this.#opts = options;
+    // Normalize the Client Identifier once: an empty string means "no static client_id"
+    // (use dynamic registration), same as undefined (the roborev finding).
+    this.#clientId =
+      options.clientId !== undefined && options.clientId !== "" ? options.clientId : undefined;
+    // PRISTINE RESOLUTION (the keystone): the injected publicFetch — else the
+    // module-load snapshot — is UNWRAPPED through this package's wrapper brand
+    // (./pristine.js), so even a fetch handle that is actually one of our own
+    // proactive/authenticated wrappers (a late module load, a second bundle copy,
+    // a config mistake) resolves to the true pristine base. No path here reads
+    // the LIVE global at construction/call time.
+    this.#publicFetch = resolvePristineFetch(
+      options.publicFetch ??
+        MODULE_PRISTINE_FETCH ??
+        ((() =>
+          Promise.reject(
+            new Error("No pristine fetch available in this environment"),
+          )) as typeof fetch),
+    );
+    this.#profileFetch = options.profileFetch ?? this.#publicFetch;
+    // Brand the engine-owned authenticated fetch so resolvePristineFetch can
+    // unwrap it back to the pristine base (the unrepresentability guarantee
+    // extends to handles a consumer passes back into us or another engine).
+    brandFetchWrapper(this.#ownAuthenticatedFetch, this.#publicFetch);
+    this.#store =
+      options.store ??
+      (indexedDbAvailable()
+        ? new IndexedDbSessionStore({ dbName: options.dbName })
+        : new MemorySessionStore());
+    // The built-in MemorySessionStore fallback is explicitly non-durable (it brands
+    // itself `durable: false`); every other store (IndexedDB, or an injected one) is
+    // treated as durable. Used to gate the silent-restore pointer (only point next-load
+    // restore at a credential that can actually survive a reload).
+    this.#storeIsDurable = (this.#store as { durable?: boolean }).durable !== false;
+    this.#remembered = new RememberedAccount(options.rememberedAccountsKey);
+    // The recent-accounts list is SEPARATE from the silent-restore pointer (it
+    // survives logout). Default its key off the remembered key (or a generic name).
+    this.#recentAccounts = new RecentAccountsList(
+      options.recentAccountsKey ??
+        `${options.rememberedAccountsKey ?? "solid-elements"}.recent-accounts`,
+    );
+    // The redirect-flow navigation + transient store. The store defaults to
+    // sessionStorage (per-tab, same-origin, cleared on tab close) — the ONLY web
+    // storage appropriate for the short-lived, must-not-outlive-the-tab redirect
+    // record. Resolved through a try/catch helper: merely READING
+    // `globalThis.sessionStorage` THROWS in a sandboxed iframe / when storage is
+    // blocked, and that must NOT make `createSolidAuth()` fail for a consumer that
+    // never uses redirect login (the roborev finding). The keys default off dbName so
+    // two apps on a shared origin do not collide.
+    const keyBase = options.dbName ?? "solid-auth-core";
+    this.#navigate =
+      options.navigate ??
+      ((url: string): void => {
+        globalThis.location?.assign(url);
+      });
+    this.#redirectStorage = options.redirectFlowStorage ?? defaultSessionStorage();
+    this.#redirectFlowKey = options.redirectFlowKey ?? `${keyBase}.redirect-flow`;
+    this.#redirectSentinelKey = options.redirectSentinelKey ?? `${keyBase}.redirect-sentinel`;
+  }
+
+  get publicFetch(): typeof fetch {
+    return this.#publicFetch;
+  }
+
+  get authenticatedFetch(): typeof fetch {
+    // When LOGGED OUT (no live session) hand back the pristine, credential-free
+    // fetch (the SolidAuthController contract). While logged in, return OUR OWN
+    // authenticated wrapper — built over the known-pristine #publicFetch, NOT
+    // ReactiveFetchManager.fetch (which captures globalThis.fetch at construction
+    // and could route through a global another controller patched, applying the
+    // WRONG credentials — the roborev finding). The wrapper is fully controller-
+    // owned: pristine fetch → on 401 from an allowed origin, our provider upgrades
+    // and retries. The global is never read or patched (except the explicit
+    // patchGlobalFetch opt-in, which only affects bare `fetch()` callers, not this).
+    if (!this.#session) return this.#publicFetch;
+    return this.#ownAuthenticatedFetch;
+  }
+
+  /**
+   * The controller-owned authenticated fetch: run on the KNOWN-PRISTINE fetch and,
+   * on a 401 from an allowed origin with a live session, attach the DPoP-bound token
+   * (refreshing if expired) via the provider and retry ONCE. Never touches/reads the
+   * global fetch, so it can't pick up another controller's patched global.
+   */
+  readonly #ownAuthenticatedFetch: typeof fetch = ((input: RequestInfo | URL, init?: RequestInit) =>
+    this.#authenticatedFetchOver(this.#publicFetch, input, init)) as typeof fetch;
+
+  /**
+   * The SINGLE authenticated-fetch implementation, run over an explicit `base` fetch.
+   * Used by BOTH `.authenticatedFetch` (base = the known-pristine #publicFetch) AND the
+   * `patchGlobalFetch` global wrapper (also base = #publicFetch, NOT the live global) —
+   * so the global-patch path has the EXACT same credential boundary + DPoP-nonce handling
+   * as the owned fetch, and crucially does NOT chain through a global another controller
+   * patched (the roborev findings against the old ReactiveFetchManager path). For an
+   * ALLOWED-origin request with a live session the token is attached PROACTIVELY (first
+   * request, refreshing only on a KNOWN-passed expiry); a non-allowed origin / no session
+   * is left unauthenticated (the foreign-origin boundary). RFC 9449 §8 resource-server
+   * DPoP nonces are cached per-origin + embedded, and a 401 is retried ONCE.
+   */
+  async #authenticatedFetchOver(
+    base: typeof fetch,
+    input: RequestInfo | URL,
+    init?: RequestInit,
+  ): Promise<Response> {
+    const request = new Request(input as RequestInfo, init);
+    const provider = this.#provider;
+    if (provider && (await provider.matches(request))) {
+      // Clone BEFORE the first fetch consumes the body: a 401 retry must replay the
+      // body, but PUT/PATCH/POST request streams are single-use once fetched, so
+      // re-upgrading the already-consumed request would send an empty/invalid body
+      // (roborev finding). clone() tees the body stream — valid while bodyUsed is
+      // false (i.e. pre-fetch); for bodyless GET/HEAD it is a cheap no-op.
+      const retrySource = request.clone();
+      // PROACTIVE attach (forceRefresh=false): refresh only if a KNOWN expiry passed.
+      const upgraded = await provider.upgrade(request);
+      const response = await base(upgraded);
+      // RFC 9449 §8: capture any `DPoP-Nonce` the resource server returned (a
+      // `use_dpop_nonce` 401 challenge OR a rotated nonce on a 2xx) so the NEXT proof
+      // to this origin embeds it. `rememberNonce` reports whether it CHANGED.
+      const nonceChanged = provider.rememberNonce(response, request);
+      // If the proactively-attached token was REJECTED (401), retry once. Two reasons a
+      // protected resource 401s: (a) the access token is stale → forceRefresh re-grants
+      // it; (b) it REQUIRES a DPoP nonce we didn't have → we just cached it, so the
+      // re-`upgrade` embeds it. Retry whenever the server SUPPLIED a (new) nonce too —
+      // not only on `provider.matches` — so a `use_dpop_nonce` challenge against a
+      // still-valid token is honoured. Retry from the pre-fetch clone (intact body).
+      if (response.status === 401 && (nonceChanged || (await provider.matches(request)))) {
+        // Decide whether to force-refresh on the retry. A PURE nonce challenge
+        // (`WWW-Authenticate: DPoP error="use_dpop_nonce"`) means the TOKEN was fine —
+        // only the nonce was missing — so re-using the (valid) token with the now-cached
+        // nonce is right; burning a refresh-token grant would be wasteful. But if the
+        // server's error is ANYTHING ELSE (invalid_token / expired / revoked, or no
+        // explicit `use_dpop_nonce`), the token may genuinely be stale, so we MUST
+        // force-refresh even though a `DPoP-Nonce` was ALSO present — otherwise a server
+        // that rotates nonces while rejecting a dead token would loop on the stale token
+        // and never redeem the refresh (the roborev finding). Default to force-refresh
+        // unless it is UNAMBIGUOUSLY a pure-nonce challenge.
+        const pureNonceChallenge = nonceChanged && isUseDpopNonceChallenge(response);
+        const retried = await provider.upgrade(retrySource, !pureNonceChallenge);
+        const retryResponse = await base(retried);
+        // The RS may rotate the nonce again on the retry response — keep it current.
+        provider.rememberNonce(retryResponse, request);
+        return retryResponse;
+      }
+      return response;
+    }
+    // No session / not an allowed origin → unauthenticated (public) request.
+    return base(request);
+  }
+
+  get webId(): string | null {
+    return this.#session?.webId ?? null;
+  }
+
+  get issuer(): string | null {
+    return this.#session?.issuer.href ?? null;
+  }
+
+  /** Session-change listeners (see {@link SolidAuth.onSessionChange}). */
+  readonly #sessionListeners = new Set<(session: { webId: string | null }) => void>();
+
+  onSessionChange(listener: (session: { webId: string | null }) => void): () => void {
+    this.#sessionListeners.add(listener);
+    return () => {
+      this.#sessionListeners.delete(listener);
+    };
+  }
+
+  /**
+   * Notify listeners of the CURRENT identity after a state-settling operation
+   * (login success / logout teardown / a resolved restore). A throwing listener
+   * never disturbs the auth flow. Reads the live state at call time, so a
+   * superseding op's listeners always see the winner's state.
+   */
+  #emitSessionChange(): void {
+    const snapshot = { webId: this.webId };
+    for (const listener of this.#sessionListeners) {
+      try {
+        listener(snapshot);
+      } catch {
+        // listener errors are the consumer's bug — never break the auth flow
+      }
+    }
+  }
+
+  recentAccounts(): RecentLoginAccount[] {
+    // From the SEPARATE recent-accounts list (credential-free, SURVIVES logout) — NOT
+    // the silent-restore pointer (which logout clears). This is the returning-user
+    // affordance, so it must persist across sign-out.
+    return this.#recentAccounts.list();
+  }
+
+  rememberAccount(webId: string, displayName?: string, avatarUrl?: string): void {
+    // The first-class friendly-name/avatar writer (so a consumer needn't hand-roll a
+    // display-name overlay). Delegates to the MERGE-PRESERVING recent-accounts list:
+    // the engine already records this account with the WebID as its displayName on
+    // login/restore; this attaches the human name/avatar without that later internal
+    // re-record clobbering it. Best-effort + credential-free (see RecentAccountsList).
+    this.#recentAccounts.remember({
+      webId,
+      ...(displayName !== undefined ? { displayName } : {}),
+      ...(avatarUrl !== undefined ? { avatarUrl } : {}),
+    });
+  }
+
+  #safeReadRemembered(): RememberedAccountRecord | null {
+    try {
+      return this.#remembered.read();
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Write the credential-free remembered pointer, SWALLOWING any storage error
+   * (quota / private mode). This pointer is a convenience for next-load silent
+   * restore — its write FAILING must NEVER make a SUCCESSFUL login/restore report
+   * logged-out while the controller actually holds a live session (the roborev
+   * finding). Worst case on failure: no silent restore next load (a re-login), never
+   * an inconsistent reported state. (`RememberedAccount.write` already tries to
+   * swallow, but we guard here too so the invariant doesn't depend on that.)
+   */
+  #safeWriteRemembered(webId: string, issuer: string): void {
+    try {
+      this.#remembered.write(webId, issuer);
+    } catch {
+      // Non-fatal — the live session stands; only silent restore next load is lost.
+    }
+  }
+
+  /**
+   * Controller-scoped SINGLE-FLIGHT restore. Two callers sharing ONE controller (e.g. two
+   * panels, or a panel + an app on the same controller) must NOT run concurrent
+   * refresh-token restores against the SAME stored credential: with refresh-token
+   * ROTATION, one restore rotates the token, then the SECOND restore — having read the now
+   * superseded old token — hits `invalid_grant` and DELETES the freshly-rotated credential,
+   * leaving memory logged in but durable restore/refresh state wiped (the roborev race).
+   * Sharing the in-flight promise makes concurrent callers observe ONE restore + result.
+   */
+  #restoreInFlightPromise?: Promise<RestoreOutcome>;
+  async restore(): Promise<RestoreOutcome> {
+    if (this.#restoreInFlightPromise) return this.#restoreInFlightPromise;
+    const run = this.#doRestore();
+    this.#restoreInFlightPromise = run;
+    try {
+      const outcome = await run;
+      // Notify AFTER the restore settled (state is pinned/torn-down by now).
+      // Only the initiating caller emits — sharers returned the shared promise.
+      this.#emitSessionChange();
+      return outcome;
+    } finally {
+      // Clear only if still ours (defensive — restore isn't re-entered, but mirror the
+      // refresh single-flight pattern).
+      if (this.#restoreInFlightPromise === run) this.#restoreInFlightPromise = undefined;
+    }
+  }
+
+  // ESSENTIAL COMPLEXITY (intentionally over the cognitive-complexity warn threshold —
+  // the linter flags it; that flag is a "review this carefully" signal, not a cleanup
+  // target): every branch here guards a fail-closed silent-restore invariant — the
+  // generation supersession fence around the awaited grant, the webid-mismatch teardown,
+  // the tri-state credential-presence pointer decision. Each maps to an externally-
+  // observable security property (never expose the wrong account, never restore a
+  // logged-out pointer); collapsing one would change behaviour. Per the Brooks
+  // essential-vs-accidental rule we PRESERVE + document + test it (the characterization +
+  // auth-controller suites) rather than flatten it.
+  async #doRestore(): Promise<RestoreOutcome> {
+    // Fail-closed wrapper around the pure decision: ANY throw → login. Capture the
+    // generation at entry: a newer login/logout that STARTS during this (awaited)
+    // restore SUPERSEDES it, so this restore must NOT mutate the remembered pointer
+    // afterward (it could erase the pointer a successful newer login just wrote — the
+    // roborev race). Each post-await pointer mutation below is gated on `superseded`.
+    const generation = this.#generation;
+    const superseded = (): boolean => generation !== this.#generation;
+    try {
+      const record = this.#safeReadRemembered();
+      const decision = await decideSilentRestore({
+        lastActiveWebId: record?.webId,
+        remembered: record ? [record] : [],
+        // Pass the EXPECTED (remembered) WebID so #restoreIssuer only pins the session
+        // AFTER confirming the restored WebID matches — so a mismatched credential is
+        // never transiently exposed via controller.webId / authenticatedFetch during
+        // the restore window (the roborev finding). decideSilentRestore also re-checks.
+        restoreIssuer: (issuer) => this.#restoreIssuer(new URL(issuer), record?.webId),
+        webIdsEqual,
+      });
+      // A newer login/logout superseded us during the grant: do NOT report the stale
+      // restore decision (the controller may no longer expose that session). Report the
+      // CURRENT controller state — restored iff a session is actually live now (e.g. a
+      // concurrent login won), else login (e.g. a logout won). This keeps the reported
+      // outcome consistent with what `.webId` / `.fetch` actually expose.
+      if (superseded()) {
+        const current = this.#session?.webId ?? null;
+        return current !== null ? { outcome: "restored", webId: current } : { outcome: "login" };
+      }
+      if (decision.outcome === "restored") {
+        // Re-confirm the pointer (issuer + WebID) on a successful restore. SAFE write:
+        // a storage failure here must NOT turn a live restored session into a reported
+        // "login" — the session is already pinned one layer down. Also refresh the
+        // (logout-surviving) recent-accounts list.
+        this.#safeWriteRemembered(decision.webId, decision.issuer);
+        this.#recentAccounts.remember({ webId: decision.webId, displayName: decision.webId });
+        return { outcome: "restored", webId: decision.webId };
+      }
+      // webid-mismatch: #restoreIssuer pinned the WRONG WebID one layer down — tear
+      // down fail-closed. Local teardown FIRST + unconditionally (drop the in-memory
+      // session, bump the generation, clear the remembered pointer), THEN the durable
+      // delete — so even if the delete fails the next load won't silently restore the
+      // known-bad pointer. Mirrors logout's fail-closed ordering.
+      if (decision.reason === "webid-mismatch") {
+        this.#session = undefined;
+        this.#generation++;
+        this.#safeClearRemembered();
+        if (record?.issuer) {
+          try {
+            await this.#forget(new URL(record.issuer));
+          } catch {
+            // Unparseable issuer / store error — the local teardown above already
+            // made us logged-out; the stale durable entry is DPoP-bound + harmless.
+          }
+        }
+        return { outcome: "login" };
+      }
+      // Otherwise keep/drop the pointer per the pure matrix + tri-state presence.
+      const presence: CredentialPresence = record?.issuer
+        ? await hasPersisted(this.#store, new URL(record.issuer))
+        : "absent";
+      // Re-check supersession after the awaited hasPersisted: a newer login may have
+      // written a fresh pointer that we must not clear.
+      if (!superseded() && shouldDropRememberedPointer(decision.reason, presence)) {
+        this.#safeClearRemembered();
+      }
+      return { outcome: "login" };
+    } catch {
+      return { outcome: "login" };
+    }
+  }
+
+  /**
+   * The thin restore wrapper the pure decision calls: redeem the persisted
+   * refresh token for `issuer`, pin the rebuilt session in memory (so a later 401
+   * upgrade reuses it), under the generation fence. Returns `{ webId }` or
+   * undefined (nothing/dead/transient — all fail-closed in restoreSession).
+   *
+   * `expectedWebId` is the remembered WebID this restore is FOR: the session is pinned
+   * ONLY after confirming the restored WebID matches it, so a mismatched credential is
+   * never transiently exposed via `controller.webId` / `authenticatedFetch` during the
+   * restore window. (decideSilentRestore also re-checks; this closes the pin-then-check
+   * window.)
+   */
+  async #restoreIssuer(
+    issuer: URL,
+    expectedWebId: string | null | undefined,
+  ): Promise<{ webId: string } | undefined> {
+    const generation = this.#generation;
+    // Guarded store: restoreSession's internal rotation-write is generation-guarded +
+    // serialized (a logout during this restore can't be undone by a late put), AND it
+    // reports whether that rotation `put` durably succeeded.
+    const guarded = this.#guardedStore(generation);
+    // Run the grant under a tracked AbortController so a login/logout that supersedes us
+    // mid-grant cancels the token-endpoint request (the roborev finding) rather than
+    // letting it redeem+rotate the refresh token under a stale generation.
+    const restored = await this.#withGrantAbort((signal) =>
+      restoreSession({
+        store: guarded.store,
+        issuer,
+        clientId: this.#clientId,
+        callbackUri: this.#opts.callbackUri,
+        allowInsecureLoopback: this.#opts.allowInsecureLoopback,
+        signal,
+        // Discovery + the grant use the pristine fetch (out of the reactive loop).
+        fetch: this.#publicFetch,
+      }),
+    );
+    if (!restored) return undefined;
+    // FENCE: a logout / new login during the grant supersedes this restore.
+    if (generation !== this.#generation) return undefined;
+    // CONSISTENCY: restoreSession returned a refreshed (rotated) token, but if its
+    // rotation `put` did NOT durably persist (store threw — private mode / quota), the
+    // store still holds the OLD (now server-spent) refresh token. Pinning the in-memory
+    // session on the new access token would strand it once that token expired (the next
+    // refresh would invalid_grant — the roborev finding). Fall back to login (fail-closed)
+    // rather than pin a session backed by a non-persisted credential.
+    if (!guarded.rotationPersisted()) return undefined;
+    // WEBID-MATCH GUARD: do NOT pin a session whose WebID differs from the one this
+    // restore is for — that would transiently expose the wrong account. Return the
+    // restored WebID WITHOUT pinning so the pure decision can fail closed
+    // (webid-mismatch → teardown). We intentionally leave the credential as-is here;
+    // the decision's webid-mismatch branch forgets it.
+    if (
+      expectedWebId !== undefined &&
+      expectedWebId !== null &&
+      !webIdsEqual(restored.webId, expectedWebId)
+    ) {
+      return { webId: restored.webId };
+    }
+    // SCHEME GUARD: a persisted/refreshed WebID must satisfy the SAME https-only rule
+    // as an interactive login, or a cleartext `http:` WebID could restore a session
+    // and join allowedOrigins — letting the DPoP token ride over http. Validate it;
+    // on failure, forget the dead-as-far-as-we're-concerned credential and fall back
+    // to login (fail-closed). (loopback http is allowed only under the opt-in.)
+    try {
+      validateWebId(restored.webId, this.#opts.allowInsecureLoopback ?? false);
+    } catch {
+      if (generation === this.#generation) await this.#forget(issuer);
+      return undefined;
+    }
+    // We don't have the full AS/client here; rebuild a minimal live session for the
+    // authenticated-fetch path. Re-discover lazily on a refresh via the provider.
+    // The session is tagged with THIS restore's generation so a later refresh of it
+    // is generation-scoped correctly.
+    this.#pinRestoredSession(
+      generation,
+      issuer,
+      restored.webId,
+      restored.accessToken,
+      restored.dpopKey,
+      restored.expiresAt,
+    );
+    return { webId: restored.webId };
+  }
+
+  #pinRestoredSession(
+    generation: number,
+    issuer: URL,
+    webId: string,
+    accessToken: string,
+    dpopKey: CryptoKeyPair,
+    expiresAt: number | undefined,
+  ): void {
+    this.#session = {
+      generation,
+      issuer,
+      webId,
+      accessToken,
+      dpopKey,
+      dpopHandle: oauth.DPoP({}, dpopKey),
+      allowedOrigins: this.#allowedOriginsFor(webId, issuer),
+      ...(expiresAt !== undefined ? { expiresAt } : {}),
+      // Lazily discovered on first refresh; placeholders are never used directly.
+      authorizationServer: { issuer: issuer.href } as oauth.AuthorizationServer,
+      client: { client_id: this.#clientId ?? "" } as oauth.Client,
+    };
+    this.#ensureProvider();
+  }
+
+  /**
+   * Refresh the live session's access token from the persisted refresh token (via
+   * the audited {@link restoreSession} — discovery → reattach the bound key →
+   * refresh grant → rotation + re-persist). Mutates the live session's access token
+   * + expiry IN PLACE (the controller and the provider share the object reference),
+   * under the generation fence. Single-flight so concurrent 401s share one refresh.
+   * Returns true when the token was refreshed; false when it could not be (then the
+   * caller attaches the existing token as a best effort).
+   */
+  // The single-flight refresh is SCOPED to the session it is refreshing — concurrent
+  // 401s for the SAME session share it, but a NEW session (login/restore) is never
+  // blocked behind a stale old-session refresh (it would otherwise reuse an expired
+  // token until the old refresh resolved — the roborev finding). Cleared in `finally`.
+  #refreshInFlight?: { session: LiveSession; promise: Promise<boolean> };
+  async #refreshSession(session: LiveSession): Promise<boolean> {
+    // PRE-GRANT FENCE (BEFORE the in-flight machinery — a synchronous early return that
+    // must NOT register a #refreshInFlight entry, or a stuck never-cleared entry would
+    // block this session's future refreshes): if this session is ALREADY superseded (a
+    // login/logout advanced #generation since it was created), do NOT run the refresh
+    // grant. The grant REDEEMS (rotates) the refresh token server-side, but our rotation
+    // `put` would then be generation-SKIPPED — so we'd spend the token without persisting
+    // its replacement, stranding the session on a now-spent credential if the superseding
+    // op (e.g. an account switch) later FAILS (the roborev finding). Skipping leaves the
+    // persisted token UNSPENT, so once the generation re-syncs (failed switch) the session
+    // can still refresh. (A refresh of the CURRENT session has generation === #generation.)
+    if (session.generation !== this.#generation) {
+      return false; // superseded → keep the existing token, don't consume the refresh token
+    }
+    // Share the in-flight refresh ONLY when it is for THIS session.
+    if (this.#refreshInFlight && this.#refreshInFlight.session === session) {
+      return this.#refreshInFlight.promise;
+    }
+    // Use the SESSION's OWN generation — NOT the current one. If a newer login has
+    // already bumped #generation, this session is SUPERSEDED, so its guarded
+    // rotation-write writes under a stale generation (skipped by the guarded store)
+    // and can't overwrite the newer login's credential for the same issuer (the
+    // roborev race). A refresh of the CURRENT session uses its (current) generation.
+    const generation = session.generation;
+    const promise = (async () => {
+      try {
+        // Guarded store (see #restoreIssuer): a logout/newer-login during this refresh
+        // can't be undone/overwritten by the refresh's rotation-write; AND it tells us
+        // whether that rotation `put` DURABLY SUCCEEDED.
+        const guarded = this.#guardedStore(generation);
+        // Run the grant under a tracked AbortController so a login/logout that supersedes
+        // this refresh mid-grant cancels the token-endpoint request (the roborev finding)
+        // rather than redeeming+rotating the refresh token under a stale generation.
+        const restored = await this.#withGrantAbort((signal) =>
+          restoreSession({
+            store: guarded.store,
+            issuer: session.issuer,
+            clientId: this.#clientId,
+            callbackUri: this.#opts.callbackUri,
+            allowInsecureLoopback: this.#opts.allowInsecureLoopback,
+            signal,
+            fetch: this.#publicFetch, // out of the reactive loop
+          }),
+        );
+        // ATOMICITY: apply the refreshed token to the in-memory session ONLY if the
+        // session is still live (`this.#session === session`) AND the rotated refresh-token
+        // WRITE actually DURABLY PERSISTED (`guarded.rotationPersisted()`). The latter is
+        // the store↔memory CONSISTENCY gate: the rotation `put` inside restoreSession is
+        // SKIPPED when the generation advanced (a logout / a newer login in flight) AND
+        // could THROW (private mode / quota) — in EITHER case the store keeps the OLD (now
+        // server-rotated, possibly SPENT) refresh token. Applying the new in-memory access
+        // token while that write didn't land would strand the session once that token
+        // expired (the next refresh would invalid_grant — the roborev findings). Gating on
+        // the actual write outcome keeps the two in lockstep: either the rotation persisted
+        // AND we apply it, or neither (the prior session keeps its still-persisted token).
+        if (!restored || this.#session !== session || !guarded.rotationPersisted()) {
+          return false;
+        }
+        // CROSS-ACCOUNT GUARD: the issuer-keyed persisted credential could have been
+        // replaced by ANOTHER account's (same issuer, different WebID). Refusing
+        // unless the refreshed WebID still equals this session's WebID prevents
+        // minting/attaching a token for a DIFFERENT identity into the live session.
+        if (!webIdsEqual(restored.webId, session.webId)) {
+          return false; // fail closed — keep the existing token, do not cross accounts
+        }
+        // Mutate IN PLACE so the provider (sharing the reference) sees the new token.
+        // The refreshed access token is DPoP-bound to `restored.dpopKey` — which may
+        // DIFFER from the live key if the persisted credential was replaced (e.g. by
+        // another tab logging into the same WebID). Adopt the restored key + handle
+        // too, so the provider signs the DPoP proof with the key the NEW token is
+        // bound to (RFC 9449 §4.3) instead of mismatching token↔key (→ 401s).
+        session.accessToken = restored.accessToken;
+        session.expiresAt = restored.expiresAt;
+        session.dpopKey = restored.dpopKey;
+        session.dpopHandle = restored.dpopHandle;
+        return true;
+      } catch {
+        return false; // best effort — the caller falls back to the existing token.
+      } finally {
+        // Clear only if still ours (a newer session's refresh may have replaced it).
+        if (this.#refreshInFlight?.session === session) this.#refreshInFlight = undefined;
+      }
+    })();
+    this.#refreshInFlight = { session, promise };
+    return promise;
+  }
+
+  /**
+   * The resource origins the session token may be attached to — the credential
+   * boundary the provider enforces. Union of the configured {@link
+   * SolidAuthConfig.allowedOrigins} plus (by default) the WebID's
+   * origin and the issuer's origin. Fail-closed: an unparseable entry is skipped,
+   * and an empty result means the token is attached to NOTHING.
+   */
+  #allowedOriginsFor(webId: string, issuer: URL): ReadonlySet<string> {
+    return computeAllowedOrigins({
+      allowedOrigins: this.#opts.allowedOrigins,
+      webId,
+      issuer: issuer.href,
+      includeWebIdOrigin: this.#opts.includeWebIdOrigin,
+      includeIssuerOrigin: this.#opts.includeIssuerOrigin,
+      allowInsecureLoopback: this.#opts.allowInsecureLoopback,
+    });
+  }
+
+  /**
+   * Build the token PROVIDER once (used by our OWN authenticated fetch), and — only
+   * when `patchGlobalFetch` is requested — install a CONTROLLER-OWNED global `fetch`
+   * wrapper so bare `fetch()` callers also upgrade. `.authenticatedFetch` does NOT
+   * depend on this (it uses the provider + the pristine fetch directly).
+   *
+   * IMPORTANT (the roborev findings): we do NOT use `ReactiveFetchManager` for the
+   * global patch. That manager (a) captures the CURRENT `globalThis.fetch` as its base,
+   * so if another controller/library already patched the global it would CHAIN through
+   * that patched fetch — letting a bare `fetch()` be authenticated by ANOTHER session
+   * before our provider runs (credential-boundary breach); and (b) passes only the
+   * request to `provider.upgrade()`, discarding 401 response headers, so it cannot honour
+   * RFC 9449 §8 resource-server DPoP-nonce challenges. Instead the global wrapper runs the
+   * SAME {@link #authenticatedFetchOver} as `.authenticatedFetch`, ANCHORED on the
+   * known-pristine {@link #publicFetch} (never the live, possibly-patched global) — so it
+   * has the identical credential boundary + nonce handling and cannot pick up another
+   * controller's patched global.
+   */
+  #ensureProvider(): WebIdDPoPTokenProvider {
+    if (!this.#provider) {
+      this.#provider = new WebIdDPoPTokenProvider(
+        () => this.#session,
+        (session) => this.#refreshSession(session),
+      );
+    }
+    if (this.#opts.patchGlobalFetch && typeof globalThis !== "undefined") {
+      // The global wrapper is OUR owned authenticated fetch over the pristine base — NOT a
+      // re-read of globalThis.fetch — so the credential boundary + DPoP-nonce retry match
+      // `.authenticatedFetch` exactly and we never chain through another patched global.
+      // Build it ONCE (stable reference) …
+      if (!this.#globalFetchWrapper) {
+        this.#globalFetchWrapper = brandFetchWrapper(
+          ((input: RequestInfo | URL, init?: RequestInit) =>
+            this.#authenticatedFetchOver(this.#publicFetch, input, init)) as typeof fetch,
+          this.#publicFetch,
+        );
+      }
+      // … and RE-ASSERT it on every session (re)establishment. #ensureProvider runs on
+      // each login/restore, so if another controller/library overwrote globalThis.fetch
+      // since we installed ours, the next session re-installs OURS — the patchGlobalFetch
+      // contract (bare fetch() upgrades) doesn't silently lapse (the roborev finding).
+      if (globalThis.fetch !== this.#globalFetchWrapper) {
+        globalThis.fetch = this.#globalFetchWrapper;
+      }
+    }
+    return this.#provider;
+  }
+
+  // ESSENTIAL COMPLEXITY (intentionally over the cognitive-complexity warn threshold —
+  // the linter flags it; that flag is a "review this carefully" signal, not a cleanup
+  // target): login() is the credential-establishment epoch fence. Its branches enforce
+  // the generation-supersession contract (a slower earlier attempt must never overwrite a
+  // newer login's session / persisted credential / remembered pointer), the
+  // drain-before-bump refresh-token-rotation lifecycle, the account-switch credential
+  // cleanup (same- and cross-issuer), and the fail-closed re-sync of a survivor session
+  // on a failed switch. Every branch maps to an observable cross-account credential-leak
+  // / fail-closed property — collapsing one is a CVE, not a cleanup. Per the Brooks rule
+  // it is PRESERVED + documented + exhaustively tested (the auth-controller suite), not
+  // flattened. (Decomposition would only relocate the branches; the interleaved post-await
+  // generation re-checks must stay co-located to be reviewable as one fence.)
+  async login(webId?: string): Promise<LoginResult> {
+    // Abort any prior in-flight login's popup immediately (this attempt supersedes it).
+    this.#abortActiveLogin();
+    // DRAIN in-flight refresh/restore GRANTS BEFORE advancing the generation: abort them
+    // (cancel their token-endpoint request) AND await them to settle, so a grant the OP
+    // already processed lands its rotation write under its STILL-VALID generation rather
+    // than being generation-skipped after our bump — which would strand the prior session
+    // on a spent token if THIS login then failed (the roborev finding). The abort bounds
+    // the wait. We do this BEFORE the ++generation below.
+    //
+    // In a LOOP until NO grant remains (the dropLiveSession roborev follow-up): a single
+    // pass only settles its SNAPSHOT — a grant that REGISTERS during the awaited pass
+    // (its pre-grant fence saw the not-yet-bumped generation) would be missed, redeem
+    // the refresh token, and have its rotation write generation-skipped after the bump
+    // (the same strand). The loop must stay INLINE at the call site: wrapping it in an
+    // async helper would put a microtask hop between the final empty-check and the bump,
+    // reopening the window — here loop-exit → ++generation is synchronous, so no grant
+    // can hold the old generation past the bump. (See dropLiveSession for the write-up.)
+    while (this.#activeGrants.size > 0) {
+      await this.#drainActiveGrants();
+    }
+    // FENCE: bump the generation so this attempt SUPERSEDES any earlier in-flight
+    // login/restore — a slower earlier attempt that finishes later must NOT overwrite this
+    // attempt's session/persisted credential/remembered pointer with a stale identity. We
+    // capture our id and re-check it before every state mutation below; an earlier attempt
+    // sees its captured id is no longer current and discards. (logout also bumps.)
+    const generation = ++this.#generation;
+    // RE-ABORT after the drain await + the bump: the `await #drainActiveGrants()` above is a
+    // yield point during which a PRIOR pre-popup login could have resumed (it still saw the
+    // OLD generation as current) and registered its own #activeLoginAbort / opened a popup.
+    // Now that we've bumped, abort any such handle so a stale popup can't remain open after
+    // this superseding login (the roborev finding). This attempt registers its OWN handle
+    // later in #authenticate, gated on the (now current) generation.
+    this.#abortActiveLogin();
+    // The session this attempt is REPLACING (if any). On a FAILED attempt we must not
+    // leave it stranded: bumping #generation above made its (older) session.generation
+    // stale, which would block its future refreshes while webId/authenticatedFetch
+    // still expose it (the roborev finding). So on failure we re-sync the still-live
+    // session's generation to the current one, keeping it refreshable.
+    const priorSession = this.#session;
+    // Capture the issuer of the session/pointer this login is REPLACING, so that on
+    // an account switch to a DIFFERENT issuer we can delete the old issuer's persisted
+    // credential afterward — otherwise logging into A (issuer X) then B (issuer Y)
+    // would leave A's refresh token + key in IndexedDB forever (logout only clears the
+    // active issuer). The DPoP-bound stale entry is not directly exploitable, but
+    // leaving it violates the clear-on-account-change invariant (the roborev finding).
+    const previousIssuer = priorSession?.issuer.href ?? this.#safeReadRemembered()?.issuer;
+    // Also capture the WebID being replaced (same source as the issuer). The same-issuer
+    // cleanup below must only delete the stored credential when this login is a genuine
+    // ACCOUNT SWITCH (different WebID) — a plain SAME-WebID re-login that happens to write
+    // no new credential must NOT delete the still-valid credential for that account (the
+    // roborev finding).
+    const previousWebId = priorSession?.webId ?? this.#safeReadRemembered()?.webId;
+    // No explicit WebID → re-login the last account: the remembered silent-restore
+    // pointer, ELSE the most-recent stored account (which SURVIVES logout, so a no-arg
+    // login still works after sign-out — the SolidAuthController contract).
+    const targetWebId =
+      webId ?? this.#safeReadRemembered()?.webId ?? this.#recentAccounts.list()[0]?.webId;
+    try {
+      // FAIL FAST on a restore-only controller: interactive login needs the popup driver.
+      // Check `authFlow` BEFORE any network (issuer resolution / discovery) so a restore-
+      // only consumer that mistakenly calls login() gets the targeted MissingAuthFlowError
+      // immediately, not a profile/issuer fetch error (the roborev finding). #authenticate
+      // re-checks too (defense in depth).
+      if (!this.#opts.authFlow) {
+        throw new MissingAuthFlowError();
+      }
+      if (!targetWebId) {
+        throw new InvalidWebIdError(String(webId), "no WebID supplied");
+      }
+      const validated = validateWebId(targetWebId, this.#opts.allowInsecureLoopback ?? false);
+      const issuer = await this.#resolveIssuer(validated);
+      const session = await this.#authenticate(generation, issuer, validated);
+      // Establish the authenticated session — persist, silent-restore pointer,
+      // recent-accounts, account-switch cleanup, and the interleaved supersession
+      // fences. Shared VERBATIM with completeRedirectLogin (the redirect path
+      // establishes a session identically), so the generation-fence contract has one
+      // audited home.
+      return await this.#finalizeAuthenticatedSession(
+        generation,
+        session,
+        previousIssuer,
+        previousWebId,
+      );
+    } catch (e) {
+      // FAILED / cancelled attempt: if it did NOT replace the prior session (that is
+      // still the live one), re-sync its generation to the current one so it stays
+      // refreshable — the bump at the top must not strand a session that survives a
+      // failed switch. (If a logout/newer login intervened, leave it to them.)
+      if (priorSession && this.#session === priorSession && generation === this.#generation) {
+        priorSession.generation = this.#generation;
+      }
+      throw e;
+    } finally {
+      // Clear the active-login abort handle ONLY if this attempt is still the current one
+      // (a superseding login/logout already replaced/aborted it — don't clobber theirs).
+      if (generation === this.#generation) this.#activeLoginAbort = undefined;
+    }
+  }
+
+  /**
+   * Establish an authenticated {@link LiveSession} into the controller: persist the
+   * DPoP-bound refresh credential, pin the session + provider, write/clear the
+   * silent-restore pointer, remember the account, run account-switch cleanup, and
+   * emit the session-change event — all under the interleaved generation-supersession
+   * fences. Shared by {@link login} (popup path) AND {@link completeRedirectLogin}
+   * (full-page-redirect path): both authenticate a WebID and then need the IDENTICAL
+   * post-auth establishment, so this is its ONE audited home rather than two copies of
+   * the security-critical fence logic. Returns the {@link LoginResult}; throws the same
+   * `AbortError` the callers propagate when a newer login/logout superseded this one.
+   *
+   * @param previousIssuer the issuer of the session/pointer this login is REPLACING
+   *   (for cross-issuer credential cleanup); undefined when there is none.
+   * @param previousWebId the WebID being replaced (gates the same-issuer account-switch
+   *   cleanup so a plain same-WebID re-login never drops a still-valid credential).
+   */
+  // ESSENTIAL COMPLEXITY (intentionally over the cognitive-complexity warn threshold —
+  // the linter flags it; that flag is a "review this carefully" signal, not a cleanup
+  // target): every branch is a fail-closed cross-account credential-leak fence — the
+  // interleaved post-await generation re-checks, the durable-vs-wrote persist split, the
+  // same-/cross-issuer account-switch cleanup gated on a DIFFERENT WebID. This is the
+  // VERBATIM block that previously lived inline in login() (extracted so the redirect
+  // path reuses ONE audited copy); collapsing a branch is a CVE, not a simplification.
+  async #finalizeAuthenticatedSession(
+    generation: number,
+    session: LiveSession,
+    previousIssuer: string | undefined,
+    previousWebId: string | undefined,
+  ): Promise<LoginResult> {
+    if (generation !== this.#generation) {
+      // Superseded by a logout / a LATER login during the popup — discard so we
+      // don't clobber the winning attempt's state.
+      throw new DOMException("Login superseded", "AbortError");
+    }
+    // Persist the DPoP-bound refresh token + key for silent restore next load,
+    // THEN drop the refresh token from the in-memory session — only the durable
+    // store keeps it; the live session needs only the access token + DPoP key.
+    // #persist is SERIALIZED + generation-guarded so a superseded earlier login's
+    // store write can never land AFTER (and overwrite) a later login's credential.
+    // It returns BOTH whether a credential for this session was WRITTEN (so the
+    // current, this-page session can refresh) and whether it is DURABLE (survives a
+    // reload → restorable next load). The two differ for the in-memory fallback store.
+    const { wrote: credentialWritten, durable: credentialRestorable } = await this.#persist(
+      session,
+      generation,
+    );
+    // Re-check after the (awaited) persist: a later login may have superseded us
+    // while the store write was in flight; if so, do not overwrite its state.
+    if (generation !== this.#generation) {
+      throw new DOMException("Login superseded", "AbortError");
+    }
+    session.refreshToken = undefined;
+    this.#session = session;
+    this.#ensureProvider();
+    // SILENT-RESTORE pointer: write it ONLY when a refresh credential is RESTORABLE
+    // next load (durable). Otherwise — the OP issued no refresh_token, the store write
+    // failed, or the store is non-durable — there is NOTHING to restore from for THIS
+    // account next load, so a pointer would make the next load attempt silent restore
+    // and fall back (despite login claiming the account is restorable — the roborev
+    // finding).
+    //
+    // CRUCIALLY, when not restorable we must CLEAR any PRE-EXISTING pointer, not merely
+    // skip writing: a stale pointer to a PREVIOUS account (e.g. account A on the same
+    // issuer, or one whose account-switch cleanup delete failed) would otherwise
+    // survive this login and silently restore the WRONG (old) account on the next load
+    // instead of falling back to login for the current, non-restorable session (the
+    // roborev finding). SAFE either way: a storage failure must NOT reject an
+    // otherwise-successful login while the controller already holds the live session.
+    if (credentialRestorable) {
+      this.#safeWriteRemembered(session.webId, session.issuer.href);
+    } else {
+      this.#safeClearRemembered();
+    }
+    // RECENT-ACCOUNTS list (DISTINCT from the silent-restore pointer above): the
+    // credential-free, logout-surviving returning-user affordance. This is always
+    // remembered — it does not imply a restorable credential, only that the user has
+    // signed in with this WebID before (it powers the account picker / no-arg login).
+    this.#recentAccounts.remember({ webId: session.webId, displayName: session.webId });
+    // ACCOUNT-SWITCH CLEANUP: if this login replaced a session on a DIFFERENT issuer,
+    // delete that old issuer's persisted credential (serialized through the chain, so
+    // it can't race this login's own persist). Best-effort.
+    // Normalize previousIssuer before comparing: it may be a stored/raw string
+    // (e.g. "https://idp.example") while session.issuer.href is normalized
+    // ("https://idp.example/"). A raw `!==` would treat the SAME issuer as
+    // different and #forget the credential JUST persisted for it (roborev finding).
+    let normalizedPrevIssuer: string | null = null;
+    try {
+      normalizedPrevIssuer = previousIssuer ? new URL(previousIssuer).href : null;
+    } catch {
+      // Unparseable old issuer → nothing safe to forget.
+      normalizedPrevIssuer = null;
+    }
+    if (normalizedPrevIssuer && normalizedPrevIssuer !== session.issuer.href) {
+      try {
+        await this.#forget(new URL(normalizedPrevIssuer));
+      } catch {
+        // Store error — the stale entry is DPoP-bound; harmless.
+      }
+    } else if (
+      !credentialWritten &&
+      normalizedPrevIssuer === session.issuer.href &&
+      previousWebId !== undefined &&
+      !webIdsEqual(previousWebId, session.webId)
+    ) {
+      // SAME-ISSUER account SWITCH (the replaced WebID DIFFERS from the new one) where
+      // THIS login WROTE NO new credential (no refresh_token / store-write failed): the
+      // store still holds the PREVIOUS, DIFFERENT account's credential for this issuer
+      // (we didn't overwrite it). Leaving it would let a later restore redeem the WRONG
+      // account's refresh token for the issuer the live session now belongs to. Drop it
+      // so no stale, mismatched credential lingers (the roborev finding).
+      //
+      // CRUCIALLY gated on a DIFFERENT WebID (the roborev follow-up): a plain SAME-WebID
+      // re-login that wrote no new credential must NOT delete the stored credential — it
+      // belongs to the SAME account and is still valid, so deleting it would make that
+      // still-live session non-restorable/non-refreshable once its access token expired.
+      // Also gated on `!credentialWritten` (NOT `!credentialRestorable`): a successful
+      // put to the NON-DURABLE in-memory store DID write the current session's credential
+      // — we must not delete THAT either. Best-effort; the entry is DPoP-bound regardless.
+      try {
+        await this.#forget(session.issuer);
+      } catch {
+        // Store error — the stale entry is DPoP-bound; harmless.
+      }
+    }
+    // FINAL SUPERSESSION RECHECK (after the awaited account-switch cleanup): a newer
+    // login / a logout may have advanced #generation (and replaced/cleared #session)
+    // WHILE #forget was in flight. Returning a success for `session.webId` here would
+    // report a WebID that no longer matches `controller.webId` (the winner's account, or
+    // logged-out) — a stale, misleading result. Throw the same AbortError as the earlier
+    // checkpoints so the superseded attempt does not claim an out-of-date success (the
+    // roborev finding). The winning op owns the reported state + the session-change event.
+    if (generation !== this.#generation || this.#session !== session) {
+      throw new DOMException("Login superseded", "AbortError");
+    }
+    this.#emitSessionChange();
+    return { webId: session.webId };
+  }
+
+  /** Abort the in-flight interactive login's popup (if any) and drop the handle. */
+  #abortActiveLogin(): void {
+    const abort = this.#activeLoginAbort;
+    if (abort) {
+      this.#activeLoginAbort = undefined;
+      abort.abort();
+    }
+  }
+
+  /**
+   * Abort every in-flight refresh / silent-restore GRANT (logout / non-blocking supersede)
+   * so a grant superseded mid-flight cancels its token-endpoint request rather than
+   * redeeming the refresh token under a stale generation (the roborev finding).
+   */
+  #abortActiveGrants(): void {
+    for (const g of this.#activeGrants) g.abort.abort();
+  }
+
+  /**
+   * ABORT then AWAIT the in-flight grants to SETTLE — used by `login()` /
+   * `completeRedirectLogin()` / `dropLiveSession()` BEFORE they bump the generation, so a
+   * grant the OP already processed gets its rotation write to land under its still-valid
+   * generation instead of being generation-skipped (the roborev finding). The abort
+   * bounds the wait. Snapshot the set first (members remove themselves on settle).
+   *
+   * ONE PASS ONLY — every drain-before-bump call site MUST invoke this in an INLINE
+   * `while (this.#activeGrants.size > 0)` loop (the dropLiveSession roborev follow-up): a
+   * grant that registers DURING an awaited pass is missed by that pass's snapshot, and
+   * the loop cannot live inside an async helper — the caller's `await` resumption would
+   * add a microtask hop between the final empty-check and the bump, reopening the
+   * window. Inline, loop-exit → bump is synchronous, so no grant can hold the
+   * pre-bump generation past the bump.
+   */
+  async #drainActiveGrants(): Promise<void> {
+    if (this.#activeGrants.size === 0) return;
+    const grants = [...this.#activeGrants];
+    for (const g of grants) g.abort.abort();
+    await Promise.allSettled(grants.map((g) => g.settled));
+  }
+
+  /** Run a refresh/restore grant under a tracked AbortController so supersession cancels it. */
+  async #withGrantAbort<T>(run: (signal: AbortSignal) => Promise<T>): Promise<T> {
+    const abort = new AbortController();
+    let resolveSettled!: () => void;
+    const settled = new Promise<void>((res) => {
+      resolveSettled = res;
+    });
+    const entry = { abort, settled };
+    this.#activeGrants.add(entry);
+    try {
+      return await run(abort.signal);
+    } finally {
+      this.#activeGrants.delete(entry);
+      resolveSettled();
+    }
+  }
+
+  async logout(): Promise<void> {
+    const issuer = this.#session?.issuer ?? this.#rememberedIssuer();
+    // LOCAL TEARDOWN FIRST — unconditional + synchronous, BEFORE any awaited store
+    // I/O: drop the in-memory session, bump the generation (so any in-flight
+    // login/restore/persist is superseded — its chained store write becomes a
+    // no-op), and clear the remembered pointer. This must happen even if the
+    // durable delete below fails, otherwise a failed delete would leave the pointer
+    // intact and the NEXT load could silently restore a "logged-out" session
+    // (the roborev finding). Logout is fail-closed to logged-out, locally, always.
+    this.#session = undefined;
+    this.#generation++;
+    // PROACTIVELY abort any in-flight login's popup AND any in-flight refresh/restore grant
+    // — logout supersedes them, so cancel the (possibly still-open) popup and the
+    // (possibly mid-flight) token grant immediately (the roborev findings); their
+    // post-grant/popup generation checks would discard them anyway.
+    this.#abortActiveLogin();
+    this.#abortActiveGrants();
+    this.#safeClearRemembered();
+    // Notify NOW — the local teardown above is the fail-closed logged-out state;
+    // listeners must see it even if the durable delete below fails/rejects.
+    this.#emitSessionChange();
+    // DURABLE DELETE, SERIALIZED through the SAME chain as persists, so a persist
+    // that was already queued cannot write the credential back AFTER this delete
+    // (the delete is enqueued last, so it runs after any pending persist). If the durable
+    // delete FAILS, the local teardown above has ALREADY made us logged-out (webId null,
+    // pristine fetch, no restore pointer), but the persisted credential may LINGER — so we
+    // REJECT logout() to SURFACE that to the caller (it can retry / warn) rather than
+    // silently reporting a fully-complete logout while a restorable credential remains
+    // (the roborev finding). The pointer is cleared regardless, so the lingering entry is
+    // not auto-restored next load — but the caller deserves to know it wasn't fully purged.
+    if (issuer) {
+      const deleted = await this.#forget(issuer);
+      if (!deleted) {
+        throw new Error(
+          "Logged out locally, but the persisted credential could not be deleted from durable " +
+            "storage (it may remain until the next successful logout / store write).",
+        );
+      }
+    }
+  }
+
+  /**
+   * Drop the LIVE in-memory session but KEEP the durable credential + the
+   * silent-restore pointer — the TRANSIENT-failure teardown (see the interface doc
+   * on {@link SolidAuth.dropLiveSession} for the dropLiveSession-vs-logout decision
+   * rule). The next page load (or a later `restore()` on this controller) silently
+   * re-establishes the session from the kept credential; `logout()` remains the
+   * definitive teardown that deletes it.
+   *
+   * ORDERING (mirrors `login()`'s drain-before-bump, for the OPPOSITE reason
+   * logout() skips it): logout deletes the credential anyway, so it may abort
+   * in-flight grants and bump immediately. dropLiveSession's whole purpose is to keep
+   * the credential RESTORABLE — so it must first ABORT + AWAIT the in-flight
+   * refresh/restore grants (#drainActiveGrants). A grant the OP already processed
+   * despite the abort then lands its rotation write under its STILL-VALID
+   * generation; bumping first would generation-skip that write, leaving the store
+   * holding the OLD (now server-spent) refresh token — the next load's silent
+   * restore would hit `invalid_grant` and DELETE the credential, recreating the
+   * exact permanent-re-login failure this method exists to prevent. A grant the
+   * abort DID cancel never redeems the token at all (it stays unspent + valid).
+   * The abort bounds the wait, so dropLiveSession resolves promptly.
+   */
+  async dropLiveSession(): Promise<void> {
+    // Abort any in-flight interactive login's popup — dropLiveSession supersedes it
+    // (after resolve the controller must be logged out, not re-armed by a
+    // completing popup).
+    this.#abortActiveLogin();
+    // Drain in-flight refresh/restore grants BEFORE bumping (see the method doc) —
+    // in a LOOP until NO grant remains (the roborev finding): a single drain pass
+    // only aborts+awaits its SNAPSHOT, but a refresh/restore that entered during
+    // that awaited pass (its pre-grant fence saw the not-yet-bumped generation)
+    // registers a NEW grant the snapshot missed. Bumping with such a grant live
+    // would let it redeem (rotate) the refresh token while its guarded rotation
+    // write is generation-skipped — stranding the durable credential on the
+    // now-server-spent old token, the exact failure dropLiveSession exists to prevent.
+    // Each pass aborts the newcomers too, so the supply is bounded by the grants
+    // the app had in flight; LOOP-EXIT → BUMP below is synchronous (registration
+    // cannot interleave on a single thread), so no grant ever holds the old
+    // generation past the bump — a grant entering after it sees no live session /
+    // a stale session generation and never spends the token.
+    while (this.#activeGrants.size > 0) {
+      await this.#drainActiveGrants();
+    }
+    // LOCAL TEARDOWN — synchronous with the loop exit above (no awaited I/O in
+    // between): drop the live session and bump the generation so any remaining
+    // in-flight login/restore continuation sees itself superseded (its post-await
+    // checks discard it).
+    this.#session = undefined;
+    this.#generation++;
+    // RE-ABORT after the drain yield point (login()'s pattern): a prior pre-popup
+    // login could have resumed during the awaited drain and registered a new
+    // abort handle / opened its popup — cancel it now that we've superseded it.
+    this.#abortActiveLogin();
+    // DELIBERATELY KEPT (the contrast with logout()): the durable credential in
+    // the session store, the silent-restore pointer, and the recent-accounts
+    // list. NO store delete, NO pointer clear — the next load retries silent
+    // restore. Nothing durable is touched, so this never rejects.
+    this.#emitSessionChange();
+  }
+
+  /**
+   * @deprecated Renamed to {@link dropLiveSession}. Thin alias kept only so existing
+   * consumers do not break; it delegates VERBATIM. Migrate to `dropLiveSession()`.
+   */
+  async dropSession(): Promise<void> {
+    return this.dropLiveSession();
+  }
+
+  /**
+   * Widen the LIVE session's credential boundary with `origins` and re-arm it
+   * atomically — an IN-MEMORY re-snapshot only, no token grant, no durable write.
+   * Replaces the "widen an allowed-origins array then call restore() again to
+   * re-snapshot" self-heal (which wastefully redeems + rotates the refresh token).
+   * See {@link SolidAuth.reArmAllowedOrigins} for the full contract.
+   *
+   * ADDITIVE + SCOPED to the current live session: the admissible origins are
+   * UNIONED into the session's boundary; the NEXT arm (a fresh login / silent
+   * restore) recomputes the boundary from configuration alone, so a widened origin
+   * can never silently carry across identities. Reassigns `session.allowedOrigins`
+   * (never mutates the frozen-by-contract Set) — the provider reads it live via the
+   * session getter, so the wider boundary takes effect immediately.
+   *
+   * Returns `true` iff there is a live session AND every given origin is now covered
+   * (fail-closed: no session, or any cleartext/unparseable origin dropped → false).
+   */
+  reArmAllowedOrigins(origins: string[]): boolean {
+    const session = this.#session;
+    if (!session) return false; // fail-closed — nothing live to re-arm
+    // Admit the additions through the SAME cleartext/loopback guard as the config
+    // boundary (drops non-https, non-loopback http, and unparseable entries). We ask
+    // ONLY for the explicit list — the WebID/issuer origins are already in the live
+    // set — so nothing is double-counted or re-derived.
+    const additions = computeAllowedOrigins({
+      allowedOrigins: origins,
+      includeWebIdOrigin: false,
+      includeIssuerOrigin: false,
+      allowInsecureLoopback: this.#opts.allowInsecureLoopback,
+    });
+    // UNION onto the live boundary + REASSIGN (never mutate the existing Set, which the
+    // arm-time snapshot semantics treat as immutable). The provider reads the live
+    // session's `allowedOrigins` on every request, so this re-arm is effective at once.
+    session.allowedOrigins = new Set([...session.allowedOrigins, ...additions]);
+    // Coverage: every requested origin must now be admitted. An origin dropped by the
+    // cleartext guard (or an unparseable one) is NOT covered → false → the caller fails
+    // closed (it cannot authenticate that pod), exactly the self-heal decision.
+    return origins.every((origin) => isOriginAllowed(session.allowedOrigins, origin));
+  }
+
+  /**
+   * Serialized durable delete (chained with persists so ordering is deterministic).
+   * Returns whether the delete DURABLY SUCCEEDED (so logout() can surface a failure). We
+   * call the store's `delete` DIRECTLY rather than `forgetPersisted` (which swallows store
+   * errors and always "succeeds") — so a genuine delete fault is observable and logout no
+   * longer silently reports complete while the credential lingers (the roborev finding).
+   */
+  async #forget(issuer: URL): Promise<boolean> {
+    const run = this.#persistChain.then(async () => {
+      await this.#store.delete(issuer.href);
+      return true;
+    });
+    this.#persistChain = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run.catch(() => false);
+  }
+
+  #rememberedIssuer(): URL | undefined {
+    const record = this.#safeReadRemembered();
+    if (!record?.issuer) return undefined;
+    try {
+      return new URL(record.issuer);
+    } catch {
+      return undefined;
+    }
+  }
+
+  #safeClearRemembered(): void {
+    try {
+      this.#remembered.clear();
+    } catch {
+      // localStorage unavailable — nothing to clear; not a logout blocker.
+    }
+  }
+
+  // ── Issuer resolution: WebID profile → solid:oidcIssuer (never regex) ──────
+  async #resolveIssuer(webId: string): Promise<URL> {
+    const { dataset } = await fetchRdf(webId, { fetch: this.#profileFetch });
+    const agent = new Agent(webId, dataset, DataFactory);
+    const issuers = [...agent.oidcIssuer];
+    if (issuers.length === 0) throw new NoSolidIssuerError(webId);
+    if (issuers.length === 1) return new URL(issuers[0]);
+    const choose = this.#opts.chooseIssuer;
+    if (!choose) throw new AmbiguousIssuerError(webId, issuers);
+    const chosen = await choose(issuers, webId);
+    // SECURITY: the chosen issuer MUST be one the profile actually advertised — a
+    // buggy/tampered chooser returning an unlisted OP would bypass the Solid
+    // issuer↔WebID binding (a malicious OP could then assert this WebID). Compare by
+    // URL origin+path (tolerant of a trailing slash), fail closed otherwise.
+    const chosenUrl = new URL(chosen);
+    const advertised = issuers.some((i) => {
+      try {
+        return new URL(i).href.replace(/\/$/, "") === chosenUrl.href.replace(/\/$/, "");
+      } catch {
+        return false;
+      }
+    });
+    if (!advertised) {
+      throw new Error(
+        `chooseIssuer returned an issuer (${chosen}) that the WebID profile does not advertise.`,
+      );
+    }
+    return chosenUrl;
+  }
+
+  #httpOptions(issuer: URL): OauthHttpOptions {
+    if (this.#opts.allowInsecureLoopback && isLoopback(issuer.hostname)) {
+      return { [oauth.allowInsecureRequests]: true };
+    }
+    return {};
+  }
+
+  /**
+   * Resolve the OAuth client (static Client Identifier Document or dynamic reg).
+   *
+   * `overrides` (the FULL-PAGE-redirect path): the redirect login returns to the
+   * APP ROOT, not the popup `callbackUri`, and may use a different `clientId`. When
+   * a `redirectUri` distinct from `callbackUri` is passed it is registered ALONGSIDE
+   * the callback (the OP rejects a redirect_uri it was never told about, so the
+   * dynamic-registration path must register it; for a static client the document
+   * itself must list it — the OP is authoritative off the document). With no
+   * overrides the popup path is byte-identical to before.
+   */
+  async #resolveClient(
+    authorizationServer: oauth.AuthorizationServer,
+    http: OauthHttpOptions,
+    overrides?: { clientId?: string; redirectUri?: string },
+  ): Promise<oauth.Client> {
+    const clientId = overrides?.clientId ?? this.#clientId;
+    const redirectUri = overrides?.redirectUri ?? this.#opts.callbackUri;
+    const redirectUris =
+      redirectUri !== this.#opts.callbackUri
+        ? [this.#opts.callbackUri, redirectUri]
+        : [this.#opts.callbackUri];
+    if (clientId !== undefined) {
+      return {
+        client_id: clientId,
+        token_endpoint_auth_method: "none",
+        redirect_uris: redirectUris,
+        response_types: ["code"],
+      };
+    }
+    // Silent restore depends on a refresh token (the `offline_access` scope), and a
+    // refresh token is only issued to a client registered for the refresh-token
+    // grant. The default dynamic-registration metadata advertises only
+    // `authorization_code`, so an OP that honours it may issue NO refresh token —
+    // silently breaking silent restore for dynamically-registered clients. Declare
+    // BOTH grants (and `response_types: ["code"]`) so the OP grants a refresh token.
+    const registrationResponse = await oauth.dynamicClientRegistrationRequest(
+      authorizationServer,
+      {
+        redirect_uris: redirectUris,
+        grant_types: ["authorization_code", "refresh_token"],
+        response_types: ["code"],
+        token_endpoint_auth_method: "none",
+      },
+      { ...http, [oauth.customFetch]: this.#oauthFetch() },
+    );
+    return oauth.processDynamicClientRegistrationResponse(registrationResponse);
+  }
+
+  /** oauth4webapi customFetch bound to the pristine fetch (out of the reactive loop). */
+  #oauthFetch(): (
+    url: string,
+    opts: oauth.CustomFetchOptions<string, unknown>,
+  ) => Promise<Response> {
+    const f = this.#publicFetch;
+    return (url, opts) => f(url, opts as RequestInit);
+  }
+
+  /**
+   * The token-endpoint client authentication for `client` (the roborev finding —
+   * dynamic registration may return a CONFIDENTIAL client even though we request
+   * `token_endpoint_auth_method: "none"`; RFC 7591 lets the OP override, and its
+   * DEFAULT for a secret-issuing registration is `client_secret_basic`). Always
+   * using `oauth.None()` would fail the code exchange against such an OP, and
+   * dropping the method/secret at persist time would leave the refresh token
+   * unredeemable on restore (the grant must authenticate as the SAME client —
+   * RFC 6749 §6).
+   *
+   * Resolution (kept in lockstep with what @jeswr/solid-session-restore's restore
+   * grant supports — `none` / `client_secret_basic` / `client_secret_post`):
+   *   • no secret + method absent/`none`      → public (`None`), nothing persisted
+   *   • secret + `client_secret_basic`/absent → Basic (7591 default), persisted
+   *   • secret + `client_secret_post`         → Post, persisted
+   *   • secret + explicit `none`              → public; the unused secret is NOT
+   *     persisted (never store a credential the flows won't use)
+   *   • a confidential method WITHOUT a secret, or any UNSUPPORTED method
+   *     (`client_secret_jwt`, `private_key_jwt`, `tls_client_auth`, …) → throw a
+   *     targeted error BEFORE the grant, so the misconfiguration is explicit
+   *     rather than a confusing token-endpoint 401 now or a broken silent
+   *     restore later.
+   */
+  #resolveClientAuth(
+    issuer: string,
+    client: oauth.Client,
+  ): {
+    clientAuth: oauth.ClientAuth;
+    /** Present only for a confidential client — persisted so restore can redeem. */
+    confidential?: {
+      tokenEndpointAuthMethod: "client_secret_basic" | "client_secret_post";
+      clientSecret: string;
+    };
+  } {
+    const method = (client as { token_endpoint_auth_method?: unknown }).token_endpoint_auth_method;
+    const rawSecret = (client as { client_secret?: unknown }).client_secret;
+    const secret = typeof rawSecret === "string" && rawSecret.length > 0 ? rawSecret : undefined;
+    // ISSUER-AWARE Basic: the ESS (`login.inrupt.com`) no-URL-encode workaround
+    // for `client_secret_basic`, else the spec encoder — the SAME selection the
+    // restore grant uses, so login works against ESS too (the roborev finding).
+    const basicFor = clientSecretBasicFor(issuer);
+    if (method === undefined || method === "none") {
+      // Public client (the normal Solid path). An unused secret alongside an
+      // explicit `none` is NOT persisted — the grants won't send it.
+      if (method === undefined && secret !== undefined) {
+        // RFC 7591 §2: token_endpoint_auth_method DEFAULTS to client_secret_basic
+        // when omitted — a secret-issuing registration with no stated method is
+        // a confidential-basic client, not a public one.
+        return {
+          clientAuth: basicFor(secret),
+          confidential: { tokenEndpointAuthMethod: "client_secret_basic", clientSecret: secret },
+        };
+      }
+      return { clientAuth: oauth.None() };
+    }
+    if (method === "client_secret_basic" || method === "client_secret_post") {
+      if (secret === undefined) {
+        throw new Error(
+          `The identity provider registered this client for ${String(method)} but returned ` +
+            "no client_secret — the token exchange cannot authenticate. (Incoherent " +
+            "dynamic registration; configure a static Client Identifier Document instead.)",
+        );
+      }
+      return {
+        clientAuth:
+          method === "client_secret_basic" ? basicFor(secret) : oauth.ClientSecretPost(secret),
+        confidential: { tokenEndpointAuthMethod: method, clientSecret: secret },
+      };
+    }
+    throw new Error(
+      `The identity provider registered this client with token_endpoint_auth_method=` +
+        `"${String(method)}", which this client (and its silent-restore grant) does not ` +
+        "support — supported: none, client_secret_basic, client_secret_post. Configure a " +
+        "static Client Identifier Document (a public client) instead.",
+    );
+  }
+
+  /**
+   * The interactive authorization-code + PKCE + DPoP grant, requesting
+   * `offline_access` so the OP issues a refresh token, then minting a DPoP-bound
+   * access token. Drives `authFlow.getCode` for the popup; retries once without
+   * `prompt=none` when the OP needs interaction.
+   */
+  async #authenticate(
+    generation: number,
+    issuer: URL,
+    expectedWebId: string,
+  ): Promise<LiveSession> {
+    // FAIL FAST: interactive login needs the popup driver. `authFlow` is OPTIONAL on
+    // the options type (restore-only construction doesn't need it), so a missing one
+    // surfaces HERE — the only path that actually drives the popup — with a targeted,
+    // clear error rather than a generic "cannot read getCode of undefined".
+    const authFlow = this.#opts.authFlow;
+    if (!authFlow) {
+      throw new MissingAuthFlowError();
+    }
+    const baseHttp = this.#httpOptions(issuer);
+    const customFetch = this.#oauthFetch();
+    const http = { ...baseHttp, [oauth.customFetch]: customFetch };
+
+    const discoveryResponse = await oauth.discoveryRequest(issuer, http);
+    const authorizationServer = await oauth.processDiscoveryResponse(issuer, discoveryResponse);
+    const client = await this.#resolveClient(authorizationServer, baseHttp);
+    // Resolve the token-endpoint client auth NOW — before the popup / the grant —
+    // so an unsupported/incoherent confidential registration fails with a clear,
+    // targeted error instead of a token-endpoint 401 or a later broken restore
+    // (the roborev finding). The static-clientId path is always `none` (public).
+    const { clientAuth } = this.#resolveClientAuth(authorizationServer.issuer, client);
+
+    const dpopKey = await oauth.generateKeyPair("ES256", { extractable: false });
+    const dpopHandle = oauth.DPoP(client, dpopKey);
+    // RFC 9449 §10 / Solid-OIDC: bind the AUTHORIZATION CODE to this DPoP key from the
+    // start by sending `dpop_jkt` (the JWK SHA-256 thumbprint of the DPoP key) on the
+    // authorization request. Providers that enforce DPoP authorization-code binding
+    // otherwise reject the login or issue a token not bound to our key (the roborev
+    // finding). Best-effort: if the handle can't compute a thumbprint, omit it (don't
+    // block login) — the token-endpoint DPoP proof still binds the token to the key.
+    let dpopJkt: string | undefined;
+    try {
+      dpopJkt = await dpopHandle.calculateThumbprint();
+    } catch {
+      dpopJkt = undefined;
+    }
+    const codeVerifier = oauth.generateRandomCodeVerifier();
+    const state = oauth.generateRandomState();
+    const nonce = oauth.generateRandomNonce();
+
+    // PKCE with S256 is MANDATORY for a public browser client (OAuth 2.0 for
+    // Browser-Based Apps BCP / RFC 7636): it protects the authorization code against
+    // interception. We ALWAYS send an S256 challenge — never the `plain` method (a
+    // downgrade) and never skip PKCE because metadata omits
+    // `code_challenge_methods_supported` (some OPs require PKCE but omit the
+    // advertisement). A non-S256 verifier is never used.
+    const codeChallenge = await oauth.calculatePKCECodeChallenge(codeVerifier);
+
+    const buildUrl = (withPromptNone: boolean): URL => {
+      const url = new URL(authorizationServer.authorization_endpoint as string);
+      url.searchParams.set("client_id", client.client_id);
+      url.searchParams.set("redirect_uri", this.#opts.callbackUri);
+      url.searchParams.set("response_type", "code");
+      // `offline_access` is what makes the OP issue a refresh token (the credential
+      // silent restore later redeems). `webid` is the Solid-OIDC scope.
+      url.searchParams.set("scope", "openid webid offline_access");
+      url.searchParams.set("state", state);
+      url.searchParams.set("nonce", nonce);
+      // SILENT leg: prompt=none. INTERACTIVE leg: `select_account consent` — the
+      // account chooser is REQUIRED for account switching (a plain `consent` lets the
+      // IdP keep returning the existing session's account, so an account switch / an
+      // `account_selection_required` retry would loop), and `consent` ensures the OP
+      // (re-)prompts for the offline_access consent so a refresh token is issued.
+      url.searchParams.set("prompt", withPromptNone ? "none" : "select_account consent");
+      url.searchParams.set("code_challenge", codeChallenge);
+      url.searchParams.set("code_challenge_method", "S256");
+      // RFC 9449 §10 DPoP authorization-code binding: advertise the DPoP key's thumbprint
+      // so the issued code is bound to it (when the handle could compute one).
+      if (dpopJkt) url.searchParams.set("dpop_jkt", dpopJkt);
+      return url;
+    };
+
+    // A real AbortController for THIS attempt's popup: if a newer login / a logout
+    // supersedes us, we abort it so the popup driver can cancel (best-effort — the host's
+    // getCode may or may not honour the signal). REGISTER it on the instance so a newer
+    // login()/logout() can abort it IMMEDIATELY (not only when getCode returns).
+    const abort = new AbortController();
+    // Only register as the active handle if THIS attempt is still current: a STALE attempt
+    // (one a newer login already superseded while we awaited issuer-resolution/discovery)
+    // must NOT overwrite the NEWER attempt's #activeLoginAbort — otherwise a later
+    // logout/login would abort the stale controller and leave the newer popup un-cancelled
+    // (the roborev finding). A superseded attempt's own popup is bailed by the generation
+    // checks in runLeg regardless.
+    if (generation === this.#generation) {
+      this.#activeLoginAbort = abort;
+    }
+    const getCode: GetCodeCallback = authFlow.getCode.bind(authFlow);
+
+    // One full leg: drive getCode for the given prompt, exchange the code for a
+    // DPoP-bound token, and read the authenticated WebID. Returns the token + WebID.
+    const runLeg = async (
+      withPromptNone: boolean,
+    ): Promise<{ tokenResult: oauth.TokenEndpointResponse; webId: string }> => {
+      // SUPERSESSION CHECK BEFORE OPENING THE POPUP: the awaited pre-popup steps (issuer
+      // resolution, discovery, client metadata) give a newer login / a logout time to
+      // advance #generation. Don't open (or block on) the popup for a stale attempt — bail
+      // with AbortError so we never drive getCode for a login the caller already discarded
+      // (the roborev finding). The post-popup checks (in login()) still guard the result.
+      if (generation !== this.#generation) {
+        abort.abort();
+        throw new DOMException("Login superseded", "AbortError");
+      }
+      const code = await getCode(buildUrl(withPromptNone), abort.signal);
+      // SUPERSESSION CHECK AFTER THE POPUP, BEFORE REDEEMING THE CODE: getCode is a long
+      // await (the user is interacting), during which a newer login / a logout can advance
+      // #generation. Bail HERE — before validateAuthResponse + the authorization-code grant
+      // — so a stale popup does NOT needlessly REDEEM the authorization code / mint tokens
+      // for a login the caller already discarded (the roborev finding). Abort the signal too
+      // so any still-open flow can cancel. (login() also re-checks after #authenticate, but
+      // that is after the token has been minted; stopping here avoids the wasted redemption
+      // and a transient extra session at the OP.)
+      if (generation !== this.#generation) {
+        abort.abort();
+        throw new DOMException("Login superseded", "AbortError");
+      }
+      const params = oauth.validateAuthResponse(authorizationServer, client, new URL(code), state);
+      // The grant + PROCESS as one unit: oauth4webapi surfaces a `use_dpop_nonce`
+      // challenge from EITHER authorizationCodeGrantRequest OR
+      // processAuthorizationCodeResponse (the latter inspects the Response body), and
+      // the DPoP handle captures the nonce from the error — so the whole exchange must
+      // be retried once, not just the request.
+      const exchange = async (): Promise<oauth.TokenEndpointResponse> => {
+        const tokenResponse = await oauth.authorizationCodeGrantRequest(
+          authorizationServer,
+          client,
+          // The resolved client auth: `None` for a public client (static
+          // Client Identifier Document / public dynamic registration), Basic/
+          // Post when the OP issued a confidential dynamic registration — the
+          // exchange must authenticate as the client the OP actually minted
+          // (the roborev finding).
+          clientAuth,
+          params,
+          this.#opts.callbackUri,
+          codeVerifier, // PKCE always on (S256) — never oauth.nopkce for a browser client
+          { DPoP: dpopHandle, ...http },
+        );
+        return oauth.processAuthorizationCodeResponse(authorizationServer, client, tokenResponse, {
+          expectedNonce: nonce,
+        });
+      };
+      // RETRY ONCE on a server-required DPoP nonce (the same pattern the refresh-restore
+      // path uses) so providers that require a token-endpoint nonce don't fail login.
+      let tokenResult: oauth.TokenEndpointResponse;
+      try {
+        tokenResult = await exchange();
+      } catch (e) {
+        if (!oauth.isDPoPNonceError(e)) throw e;
+        tokenResult = await exchange();
+      }
+      // ENFORCE DPoP: oauth4webapi permits a `Bearer` token_type by default. This
+      // controller is DPoP-only — accepting a Bearer token would persist + attach a
+      // NON-sender-constrained credential (a Bearer refresh token is exfiltratable),
+      // defeating the whole DPoP threat model. Reject anything but `dpop` (case-insens).
+      if (tokenResult.token_type.toLowerCase() !== "dpop") {
+        throw new Error(
+          `Expected a DPoP-bound token but the identity provider returned token_type="${tokenResult.token_type}".`,
+        );
+      }
+      const webId = webIdFromClaims(oauth.getValidatedIdTokenClaims(tokenResult));
+      if (!webId) {
+        throw new Error("The identity provider did not return a WebID for this session.");
+      }
+      return { tokenResult, webId };
+    };
+
+    // First the SILENT (`prompt=none`) leg. Two paths can require an INTERACTIVE retry,
+    // and the `needsInteraction` fallback is SCOPED TO THE SILENT LEG ONLY (the roborev
+    // finding): otherwise an interactive leg that itself throws an interaction-required
+    // error would be re-treated as a silent-leg failure and trigger a SECOND interactive
+    // retry (a stray extra popup). So we capture the silent result (or its
+    // needs-interaction signal) in one try, then run the SINGLE interactive retry OUTSIDE
+    // that catch — an error from the interactive leg propagates and is never re-retried.
+    let result: { tokenResult: oauth.TokenEndpointResponse; webId: string } | undefined;
+    let needInteractiveRetry = false;
+    try {
+      result = await runLeg(true);
+      // Silent leg SUCCEEDED but authenticated a DIFFERENT WebID than requested (an existing
+      // IdP cookie for ANOTHER account on the same issuer): retry interactively so the user
+      // can SELECT the requested account, rather than hard-failing (which would make
+      // account-switching impossible). Defer the retry to OUTSIDE this catch.
+      if (!webIdsEqual(result.webId, expectedWebId)) needInteractiveRetry = true;
+    } catch (e) {
+      // ONLY the silent leg's needs-interaction error falls back to an interactive leg.
+      if (!needsInteraction(e)) throw e;
+      needInteractiveRetry = true;
+    }
+    // The SINGLE interactive retry (for either reason above). An error here PROPAGATES —
+    // it is NOT caught by the silent-leg fallback, so there is never a second retry.
+    if (needInteractiveRetry) {
+      result = await runLeg(false);
+    }
+    // `result` is always set here: either the silent leg succeeded (and no retry was
+    // needed), or the interactive retry ran and assigned it (a throw would have exited).
+    const { tokenResult, webId } = result as {
+      tokenResult: oauth.TokenEndpointResponse;
+      webId: string;
+    };
+    // SECURITY: confirm the OP authenticated the WebID the user asked to log in as.
+    // A mismatch (user typed A, OP logged in B) fails closed — never silently accept
+    // B's session under A's intent. (Even after the interactive retry above.)
+    if (!webIdsEqual(webId, expectedWebId)) {
+      throw new Error(
+        `Signed in as a different WebID than requested (asked for ${expectedWebId}, got ${webId}).`,
+      );
+    }
+
+    return {
+      generation,
+      issuer,
+      webId,
+      accessToken: tokenResult.access_token,
+      dpopKey,
+      dpopHandle,
+      authorizationServer,
+      client,
+      allowedOrigins: this.#allowedOriginsFor(webId, issuer),
+      expiresAt: expiresAtFrom(tokenResult.expires_in),
+      // Stash the refresh token transiently for persist(); cleared right after.
+      refreshToken: tokenResult.refresh_token,
+    };
+  }
+
+  /**
+   * Persist the DPoP-bound refresh token + key for silent restore next load.
+   *
+   * RETURNS a {@link PersistResult} distinguishing two DIFFERENT facts (conflating them
+   * was a roborev finding):
+   *   • `wrote` — a credential for THIS session was actually `put` into the store and
+   *     survived (so the CURRENT, this-page session can refresh against it). True even
+   *     for the in-memory fallback store (the put is real for the page lifetime).
+   *   • `durable` — that credential will SURVIVE A RELOAD (restorable next load), which
+   *     additionally requires a DURABLE store. This drives whether `login()` writes the
+   *     SILENT-RESTORE pointer; a pointer to a non-restorable session would make the
+   *     next load attempt silent restore and fall back.
+   *
+   * Both are false when: the OP issued NO refresh token; a LATER login/logout superseded
+   * this attempt before/while writing; or the store `put` THREW. `wrote` is true but
+   * `durable` false ONLY for a successful put to the NON-DURABLE in-memory fallback.
+   *
+   * SERIALIZED + generation-guarded (the roborev race fix): durable writes are
+   * chained through {@link #persistChain} so they apply STRICTLY in call order, and
+   * each write re-checks its login `generation` (synchronously, immediately before
+   * issuing the store `put`, after acquiring its turn) — so a SUPERSEDED earlier
+   * login's write is SKIPPED rather than landing after (and overwriting) a later
+   * login's credential. Without this, two overlapping logins could race their async
+   * `put`s and leave the WRONG (stale) refresh token persisted, breaking the next
+   * silent restore.
+   */
+  #persistChain: Promise<void> = Promise.resolve();
+  async #persist(session: LiveSession, generation: number): Promise<PersistResult> {
+    // OP issued no refresh token → nothing to write, nothing restorable.
+    if (!session.refreshToken) return { wrote: false, durable: false };
+    // CONFIDENTIAL-CLIENT CARRY-FORWARD (the roborev finding): when the OP's
+    // dynamic registration minted a confidential client, the refresh grant must
+    // authenticate the SAME way (RFC 6749 §6) — persist the method + secret
+    // alongside the client id so @jeswr/solid-session-restore's restore grant can
+    // redeem the token. #resolveClientAuth never returns `confidential` for a
+    // public client, so a public record stays secret-free (its carry-forward
+    // rule). Resolved ONCE here (pure on session.client), outside the serialized
+    // write turn below. Same fail-closed store + clear-on-logout discipline as
+    // the refresh token it authorises.
+    const confidential =
+      this.#resolveClientAuth(session.authorizationServer.issuer, session.client).confidential ??
+      {};
+    const run = this.#persistChain.then(async (): Promise<PersistResult> => {
+      // We now hold the write turn. If a LATER login (or logout) has superseded us
+      // since this attempt started, do NOT write — the winner's credential stands.
+      if (generation !== this.#generation) return { wrote: false, durable: false };
+      try {
+        // VALUE-AWARE ROLLBACK SNAPSHOT: read the issuer's CURRENT credential before we
+        // overwrite it, so that if we have to roll back (superseded mid-put) we can RESTORE
+        // it rather than blindly deleting — otherwise overwriting then deleting would
+        // destroy a PRIOR live session's credential for the same issuer, breaking its next
+        // refresh/restore (the roborev finding). We hold the serialized write turn, so this
+        // snapshot reflects the state immediately before our put (the prior account's
+        // credential, or a winner's if it already wrote).
+        let previous: PersistedSession | undefined;
+        try {
+          previous = await this.#store.get(session.issuer.href);
+        } catch {
+          previous = undefined; // a read fault → fall back to delete-on-rollback
+        }
+        // Persist the client_id THIS session ACTUALLY authenticated with — read from
+        // `session.client.client_id`, NOT the controller-level `this.#clientId`. A
+        // refresh token is client-bound (RFC 6749 §6 / §10.4), so silent restore must
+        // redeem it as the SAME client. `session.client` is the client `#resolveClient`
+        // built for this login: the static Client Identifier Document URL, the
+        // server-assigned DYNAMIC id, OR — for a full-page-redirect login with a per-call
+        // `clientId` override — that override. Preferring `this.#clientId` here would
+        // store the WRONG (controller-default) client for an override'd redirect session,
+        // so restore could never redeem its token (the roborev finding). For the popup /
+        // no-override paths `session.client.client_id` already EQUALS `this.#clientId`
+        // (static) or the dynamic id, so this is a no-op there.
+        const clientId = session.client.client_id;
+        await this.#store.put({
+          issuer: session.issuer.href,
+          webId: session.webId,
+          refreshToken: session.refreshToken as string,
+          dpopKey: session.dpopKey,
+          ...(clientId !== undefined && clientId !== "" ? { clientId } : {}),
+          // The confidential-client carry-forward (resolved above; empty for a
+          // public client).
+          ...confidential,
+        });
+        // ROLLBACK: if a newer login/logout superseded us WHILE the put was in flight, our
+        // write is stale. RESTORE the snapshot we captured (compare-and-restore) so a PRIOR
+        // session's credential for the same issuer is preserved; only DELETE when there was
+        // no prior credential (our write was the only one). A logout that already deleted
+        // the entry: `previous` is undefined → we delete (a no-op), staying logged-out. This
+        // never destroys another account's still-needed credential (the roborev finding).
+        // Our write did NOT survive → report neither wrote nor durable.
+        if (generation !== this.#generation) {
+          if (previous !== undefined) {
+            await this.#store.put(previous).catch(() => {});
+          } else {
+            await this.#store.delete(session.issuer.href).catch(() => {});
+          }
+          return { wrote: false, durable: false };
+        }
+        // The credential is in the store and survived supersession (so the CURRENT
+        // session can refresh against it = `wrote`). It is RESTORABLE next load only if
+        // the store is DURABLE (`durable`): the in-memory fallback loses it on reload, so
+        // its put is real this page lifetime but NOT durable — the silent-restore pointer
+        // is suppressed for it while the live session still works (the roborev finding).
+        return { wrote: true, durable: this.#storeIsDurable };
+      } catch {
+        // Durable persistence failed (private mode / quota): the in-memory session
+        // is still valid this load; the next load may re-prompt. Never logged. Nothing
+        // was persisted → neither wrote nor durable.
+        return { wrote: false, durable: false };
+      }
+    });
+    // Keep the chain alive even if this link rejected (it can't — caught above), so
+    // a later persist always runs after this one completes.
+    this.#persistChain = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+
+  /**
+   * Wrap the store so restoreSession's INTERNAL rotation-write (its own `put` after
+   * a successful refresh grant) goes through the SAME serialized + generation-guarded
+   * lifecycle as login/logout. Without this, a logout during an in-flight restore /
+   * refresh could delete the credential and then the restore's rotation `put` could
+   * re-persist it AFTER — leaving a durable session behind after sign-out (the roborev
+   * finding). Reads pass through unchanged; BOTH mutations (`put` AND `delete`) are
+   * chained + skipped when the generation has advanced (logout/relogin) since the
+   * operation started — so a stale restore that hits `invalid_grant` cannot delete a
+   * NEWER login's freshly-persisted credential, and a stale rotation cannot re-create
+   * one a newer logout deleted.
+   *
+   * Returns the wrapped store PLUS a `rotationPersisted()` flag: whether restoreSession's
+   * rotation `put` actually DURABLY SUCCEEDED (ran, was not generation-skipped, and did
+   * not throw). The caller pins/applies the refreshed in-memory token ONLY when this is
+   * true — otherwise the store would keep the OLD (now server-spent) refresh token while
+   * memory ran on the new access token, stranding the session once that token expired
+   * (the roborev finding). A store whose `put` throws (private mode / quota) therefore
+   * does NOT desynchronise memory from durable state.
+   */
+  #guardedStore(generation: number): {
+    store: SessionStore;
+    rotationPersisted: () => boolean;
+  } {
+    const inner = this.#store;
+    let rotationPersisted = false;
+    const guard = <T>(op: () => Promise<T>, onPut: boolean): Promise<T | undefined> => {
+      const run = this.#persistChain.then(async () => {
+        if (generation !== this.#generation) return undefined; // superseded → skip
+        const result = await op();
+        if (onPut) rotationPersisted = true; // this put RAN to completion (not skipped/threw)
+        return result;
+      });
+      this.#persistChain = run.then(
+        () => undefined,
+        () => undefined,
+      );
+      return run;
+    };
+    return {
+      rotationPersisted: () => rotationPersisted,
+      store: {
+        get: (issuer) => inner.get(issuer),
+        put: async (s) => {
+          // A put resets the flag to its own outcome (so an EARLIER failed put can't make a
+          // later one look durable, and vice-versa); guard sets it true only on success.
+          rotationPersisted = false;
+          await guard(() => inner.put(s), true);
+        },
+        delete: async (issuer) => {
+          await guard(() => inner.delete(issuer), false);
+        },
+      },
+    };
+  }
+
+  // ── FULL-PAGE-redirect login (the `#autologin/<webid>` launch contract) ──────
+  //
+  // The redirect counterpart to the popup login(): it survives a full-page
+  // navigation by persisting its in-between state (PKCE verifier + EXPORTED DPoP JWK
+  // + state/nonce + the exact client/issuer/redirect_uri) to sessionStorage between
+  // beginRedirectLogin (before the nav) and completeRedirectLogin (after the broker
+  // redirects back). The pure decision/parsing/persist pieces live in ./redirect.ts;
+  // the credential-redeeming machinery is HERE (it needs the engine's discovery,
+  // client-auth resolution, pristine OIDC fetch, and session establishment). Every
+  // OIDC hop rides the pristine #oauthFetch (the login-stall unrepresentability
+  // guarantee) exactly like the popup path.
+
+  hasPendingRedirect(): boolean {
+    return readPersistedRedirectFlow(this.#redirectStorage, this.#redirectFlowKey) !== null;
+  }
+
+  async beginRedirectLogin(
+    options: BeginRedirectLoginOptions,
+  ): Promise<{ authorizationUrl: string }> {
+    // Resolve the issuer + the (optional) requested WebID. `webId` binds the login to
+    // an identity (its issuer resolved from the profile, then PROVEN on return);
+    // `oidcIssuer` is used directly (its returned WebID accepted after an https guard).
+    let issuer: URL;
+    let requestedWebId: string | null;
+    if (options.webId !== undefined && options.webId !== "") {
+      const validated = validateWebId(options.webId, this.#opts.allowInsecureLoopback ?? false);
+      issuer = await this.#resolveIssuer(validated);
+      requestedWebId = validated;
+    } else if (options.oidcIssuer !== undefined && options.oidcIssuer !== "") {
+      issuer = this.#requireSecureIssuer(options.oidcIssuer);
+      requestedWebId = null;
+    } else {
+      throw new InvalidWebIdError("", "beginRedirectLogin requires a webId or an oidcIssuer");
+    }
+    // The app-root return URL: the per-call override, else the configured
+    // `redirectUri` (the registered full-page-redirect return URI), else — as a last
+    // resort for a direct call with neither configured — `callbackUri`. NB `callbackUri`
+    // is the POPUP page and is the wrong full-page target, so a direct redirect login
+    // SHOULD pass `redirectUri` or configure `options.redirectUri`; `handleRedirect`
+    // always supplies a correct app URL itself. Persisted + reused VERBATIM in the token
+    // exchange — the two MUST be byte-identical or the exchange is rejected.
+    const redirectUri = options.redirectUri ?? this.#opts.redirectUri ?? this.#opts.callbackUri;
+    // `consent` (default, a direct user-initiated redirect) → select_account consent;
+    // `none` (the #autologin deep-link) → silent SSO (login_required on no session).
+    const prompt = options.prompt ?? "consent";
+
+    const baseHttp = this.#httpOptions(issuer);
+    const http = { ...baseHttp, [oauth.customFetch]: this.#oauthFetch() };
+    const discoveryResponse = await oauth.discoveryRequest(issuer, http);
+    const authorizationServer = await oauth.processDiscoveryResponse(issuer, discoveryResponse);
+    const client = await this.#resolveClient(authorizationServer, baseHttp, {
+      clientId: options.clientId,
+      redirectUri,
+    });
+
+    // EXTRACTABLE DPoP key: exported to JWK so it survives the full-page redirect (the
+    // ONE place a DPoP key is exported — the popup path keeps its key non-extractable
+    // in a closure; the redirect erases that closure). Re-imported NON-extractable on
+    // completion, so the extractable copy exists only in the transient record.
+    const dpopKey = await oauth.generateKeyPair("ES256", { extractable: true });
+    const dpopHandle = oauth.DPoP(client, dpopKey);
+    // RFC 9449 §10 DPoP authorization-code binding (best-effort; omit if unavailable).
+    let dpopJkt: string | undefined;
+    try {
+      dpopJkt = await dpopHandle.calculateThumbprint();
+    } catch {
+      dpopJkt = undefined;
+    }
+    const dpopPrivateJwk = await globalThis.crypto.subtle.exportKey("jwk", dpopKey.privateKey);
+    const dpopPublicJwk = await globalThis.crypto.subtle.exportKey("jwk", dpopKey.publicKey);
+
+    const codeVerifier = oauth.generateRandomCodeVerifier();
+    const state = oauth.generateRandomState();
+    const nonce = oauth.generateRandomNonce();
+    // PKCE S256 is MANDATORY for a public browser client — ALWAYS an S256 challenge,
+    // never `plain`, never skipped (same discipline as the popup #authenticate).
+    const codeChallenge = await oauth.calculatePKCECodeChallenge(codeVerifier);
+
+    const url = new URL(authorizationServer.authorization_endpoint as string);
+    url.searchParams.set("client_id", client.client_id);
+    url.searchParams.set("redirect_uri", redirectUri);
+    url.searchParams.set("response_type", "code");
+    // `offline_access` so the OP issues a refresh token (silent restore parity with
+    // the popup path); `webid` is the Solid-OIDC scope.
+    url.searchParams.set("scope", "openid webid offline_access");
+    url.searchParams.set("state", state);
+    url.searchParams.set("nonce", nonce);
+    url.searchParams.set("prompt", prompt === "none" ? "none" : "select_account consent");
+    url.searchParams.set("code_challenge", codeChallenge);
+    url.searchParams.set("code_challenge_method", "S256");
+    if (dpopJkt) url.searchParams.set("dpop_jkt", dpopJkt);
+
+    const flow: PersistedRedirectFlow = {
+      dpopPrivateJwk,
+      dpopPublicJwk,
+      codeVerifier,
+      state,
+      nonce,
+      issuer: issuer.href,
+      client,
+      redirectUri,
+      webId: requestedWebId,
+    };
+    // Persist BEFORE navigating: a redirect whose in-between state was NOT saved can
+    // never be completed. writePersistedRedirectFlow THROWS when no storage is
+    // available, so we do not navigate into an uncompletable flow.
+    writePersistedRedirectFlow(this.#redirectStorage, this.#redirectFlowKey, flow);
+    const authorizationUrl = url.toString();
+    // Full-page navigation to the OP's authorization endpoint (the seam defaults to
+    // location.assign). All in-memory state is about to be destroyed — completion
+    // resumes purely from the persisted record.
+    this.#navigate(authorizationUrl);
+    return { authorizationUrl };
+  }
+
+  async completeRedirectLogin(
+    callbackUrl: string = globalThis.location?.href ?? "",
+  ): Promise<LoginResult> {
+    const flow = readPersistedRedirectFlow(this.#redirectStorage, this.#redirectFlowKey);
+    if (!flow) {
+      // The record may be genuinely absent OR present-but-CORRUPT (readPersistedRedirectFlow
+      // returns null for both). A corrupt record still OCCUPIES the key with stale transient
+      // material (an exported DPoP key) and would block a fresh flow — so clear the key
+      // before failing (the roborev finding). Idempotent when the key is already empty.
+      clearPersistedRedirectFlow(this.#redirectStorage, this.#redirectFlowKey);
+      throw new Error("No pending redirect login to complete (no persisted state found).");
+    }
+    // CLEAR the transient record whether we succeed OR fail (finally) — so a refresh /
+    // back-button can never replay the single-use code + verifier + exported DPoP key.
+    try {
+      // Establish under the SAME generation fence as login(): abort a prior in-flight
+      // login, drain in-flight grants — in a LOOP until none remains, so a grant that
+      // registers during a drain pass is drained too and loop-exit → bump stays
+      // synchronous (see login()/dropLiveSession for the drain-window write-up) — then
+      // bump the generation so THIS completion supersedes any earlier attempt.
+      this.#abortActiveLogin();
+      while (this.#activeGrants.size > 0) {
+        await this.#drainActiveGrants();
+      }
+      const generation = ++this.#generation;
+      this.#abortActiveLogin();
+      const priorSession = this.#session;
+      const previousIssuer = priorSession?.issuer.href ?? this.#safeReadRemembered()?.issuer;
+      const previousWebId = priorSession?.webId ?? this.#safeReadRemembered()?.webId;
+      try {
+        const session = await this.#exchangeRedirectCode(generation, flow, callbackUrl);
+        return await this.#finalizeAuthenticatedSession(
+          generation,
+          session,
+          previousIssuer,
+          previousWebId,
+        );
+      } catch (e) {
+        // FAILED completion: if it did NOT replace the prior session, re-sync its
+        // generation so a session that survives a failed switch stays refreshable
+        // (mirrors login()'s failure path).
+        if (priorSession && this.#session === priorSession && generation === this.#generation) {
+          priorSession.generation = this.#generation;
+        }
+        throw e;
+      } finally {
+        if (generation === this.#generation) this.#activeLoginAbort = undefined;
+      }
+    } finally {
+      clearPersistedRedirectFlow(this.#redirectStorage, this.#redirectFlowKey);
+    }
+  }
+
+  /**
+   * The DPoP-bound authorization-code exchange for the FULL-PAGE-redirect path,
+   * resuming purely from the persisted {@link PersistedRedirectFlow}: reconstruct the
+   * EXACT client, re-import the DPoP key, VALIDATE the persisted `state`, exchange the
+   * code (nonce-retry like #authenticate, `expectedNonce` = the persisted nonce),
+   * ENFORCE the DPoP token type + the https WebID guard + the requested-WebID match
+   * (all fail-closed BEFORE any session state is written), and return the
+   * {@link LiveSession} for {@link #finalizeAuthenticatedSession} to establish.
+   */
+  async #exchangeRedirectCode(
+    generation: number,
+    flow: PersistedRedirectFlow,
+    callbackUrl: string,
+  ): Promise<LiveSession> {
+    const issuer = new URL(flow.issuer);
+    const baseHttp = this.#httpOptions(issuer);
+    const http = { ...baseHttp, [oauth.customFetch]: this.#oauthFetch() };
+    const discoveryResponse = await oauth.discoveryRequest(issuer, http);
+    const authorizationServer = await oauth.processDiscoveryResponse(issuer, discoveryResponse);
+    if (generation !== this.#generation) throw new DOMException("Login superseded", "AbortError");
+    // Reconstruct the EXACT client the authorization request used (persisted verbatim,
+    // so a confidential dynamic client is redeemed as the SAME client — RFC 6749 §6).
+    const client = flow.client as oauth.Client;
+    const { clientAuth } = this.#resolveClientAuth(authorizationServer.issuer, client);
+    // Re-import the persisted ES256 DPoP key: private NON-extractable (sign only — it
+    // was exportable ONLY to survive the redirect, never re-exported now), public
+    // extractable (dpop exports it as the proof-header JWK, RFC 9449 §4.2).
+    const privateKey = await globalThis.crypto.subtle.importKey(
+      "jwk",
+      flow.dpopPrivateJwk,
+      ES256_JWK_IMPORT_ALG,
+      false,
+      ["sign"],
+    );
+    const publicKey = await globalThis.crypto.subtle.importKey(
+      "jwk",
+      flow.dpopPublicJwk,
+      ES256_JWK_IMPORT_ALG,
+      true,
+      ["verify"],
+    );
+    if (generation !== this.#generation) throw new DOMException("Login superseded", "AbortError");
+    const dpopKey: CryptoKeyPair = { privateKey, publicKey };
+    const dpopHandle = oauth.DPoP(client, dpopKey);
+    // Validate the auth response against the PERSISTED state (CSRF / OP mix-up guard —
+    // a mismatched/absent state throws).
+    const params = oauth.validateAuthResponse(
+      authorizationServer,
+      client,
+      new URL(callbackUrl),
+      flow.state,
+    );
+    // The grant + PROCESS as one unit (a `use_dpop_nonce` challenge can surface from
+    // either), retried once on a server-required DPoP nonce — same as #authenticate.
+    const exchange = async (): Promise<oauth.TokenEndpointResponse> => {
+      const tokenResponse = await oauth.authorizationCodeGrantRequest(
+        authorizationServer,
+        client,
+        clientAuth,
+        params,
+        // The redirect_uri MUST be byte-identical to the authorization request's.
+        flow.redirectUri,
+        flow.codeVerifier, // PKCE always on (S256) — single-use against the code.
+        { DPoP: dpopHandle, ...http },
+      );
+      return oauth.processAuthorizationCodeResponse(authorizationServer, client, tokenResponse, {
+        expectedNonce: flow.nonce,
+      });
+    };
+    let tokenResult: oauth.TokenEndpointResponse;
+    try {
+      tokenResult = await exchange();
+    } catch (e) {
+      if (!oauth.isDPoPNonceError(e)) throw e;
+      tokenResult = await exchange();
+    }
+    if (generation !== this.#generation) throw new DOMException("Login superseded", "AbortError");
+    // ENFORCE DPoP (reject a non-sender-constrained Bearer, defeating the DPoP model).
+    if (tokenResult.token_type.toLowerCase() !== "dpop") {
+      throw new Error(
+        `Expected a DPoP-bound token but the identity provider returned token_type="${tokenResult.token_type}".`,
+      );
+    }
+    const claimedWebId = webIdFromClaims(oauth.getValidatedIdTokenClaims(tokenResult));
+    if (!claimedWebId) {
+      throw new Error("The identity provider did not return a WebID for this session.");
+    }
+    // SCHEME GUARD (untrusted WebID): the WebID's origin joins the credential boundary
+    // (the DPoP token may be attached to it), so it MUST be https (loopback http only
+    // under the opt-in) — a cleartext WebID would let the token ride over plaintext.
+    // Fail closed. This is the ONLY WebID guard for the issuer-only (`webId` null) path.
+    const webId = validateWebId(claimedWebId, this.#opts.allowInsecureLoopback ?? false);
+    // WEBID-MATCH GUARD (fail-closed): when the login was BOUND to a requested WebID,
+    // the OP MUST have authenticated as it — the launch carries only the public WebID,
+    // so a live OP session for a DIFFERENT account must never be silently accepted.
+    // `webIdsEqual` returns false if either side is missing/unparseable (fail-closed).
+    if (flow.webId !== null && !webIdsEqual(webId, flow.webId)) {
+      throw new Error(
+        `Signed in as a different WebID than requested (asked for ${flow.webId}, got ${webId}).`,
+      );
+    }
+    return {
+      generation,
+      issuer,
+      webId,
+      accessToken: tokenResult.access_token,
+      dpopKey,
+      dpopHandle,
+      authorizationServer,
+      client,
+      allowedOrigins: this.#allowedOriginsFor(webId, issuer),
+      expiresAt: expiresAtFrom(tokenResult.expires_in),
+      // Stash the refresh token transiently for #persist; cleared right after.
+      refreshToken: tokenResult.refresh_token,
+    };
+  }
+
+  async handleRedirect(
+    currentUrl: string = globalThis.location?.href ?? "",
+  ): Promise<RedirectOutcome> {
+    // Fail-closed: ANY failure resolves to `{ outcome: "error" }` (never throws), and
+    // the transient state is cleaned up so a fresh login can proceed.
+    try {
+      const url = new URL(currentUrl);
+      const fragmentWebId = parseAutologinFragment(url.hash);
+      const plan = planRedirect({
+        loggedIn: this.webId !== null,
+        hasPendingRedirect: this.hasPendingRedirect(),
+        hasCodeParams: hasAuthCodeParams(url.search),
+        hasErrorParams: hasAuthErrorParams(url.search),
+        fragmentWebId,
+        sentinel: this.#readSentinel(),
+        webIdsEqual,
+      });
+      switch (plan.kind) {
+        case "none": {
+          // A live session WON (or the flow is abandoned): drop any STALE pending
+          // record + sentinel. planRedirect only yields `none` WITH a pending record
+          // when already logged in / abandoned (a pending record + code|error is
+          // complete|abort), so clearing here never discards an in-flight completion —
+          // but it DOES stop an orphaned record (which holds exported DPoP key material
+          // and would BLOCK a future `#autologin` deep-link — hasPendingRedirect stays
+          // true) from lingering (the roborev finding). Also scrub the callback params
+          // from the address bar if this was a redirect-shaped return.
+          const isRedirectReturn = hasAuthCodeParams(url.search) || hasAuthErrorParams(url.search);
+          if (this.hasPendingRedirect()) {
+            clearPersistedRedirectFlow(this.#redirectStorage, this.#redirectFlowKey);
+            this.#clearSentinel();
+          }
+          if (isRedirectReturn) {
+            this.#cleanAddressBar(currentUrl);
+          }
+          // A redirect return (`?code`/`?error`) that reached `none` while NOT logged in
+          // means we had NO readable pending flow to complete it (missing / corrupt /
+          // no-storage) — SURFACE that as an error rather than silently swallowing a
+          // failed completion (the roborev finding). When logged in, a live session
+          // legitimately won, so stand down quietly.
+          if (isRedirectReturn && this.webId === null) {
+            // Clear any CORRUPT record still occupying the key (hasPendingRedirect() read
+            // it as absent, so the stale-cleanup above skipped it) so it can't linger.
+            clearPersistedRedirectFlow(this.#redirectStorage, this.#redirectFlowKey);
+            return {
+              outcome: "error",
+              error: authErrorFrom(url.search) ?? "redirect_state_missing",
+            };
+          }
+          return { outcome: "none" };
+        }
+        case "complete": {
+          // CASE A — returning with `?code&state` + a persisted record: complete it.
+          const result = await this.completeRedirectLogin(currentUrl);
+          this.#clearSentinel(); // authenticated — the loop guard is done.
+          this.#cleanAddressBar(currentUrl); // scrub ?code&state from the address bar.
+          return { outcome: "completed", webId: result.webId };
+        }
+        case "abort": {
+          // Returning with `?error&state`: the OP declined silent SSO / the user
+          // declined. STATE GUARD (login CSRF / DoS — the roborev finding): only OUR
+          // flow's error return may cancel it. A foreign/spoofed `?error&state` whose
+          // `state` does not match the persisted flow (an attacker luring the victim to
+          // a crafted callback to abort a legitimate in-flight login) is IGNORED, leaving
+          // the pending flow intact. Then drop the record + sentinel and surface the
+          // error.
+          const flow = readPersistedRedirectFlow(this.#redirectStorage, this.#redirectFlowKey);
+          const returnedState = new URLSearchParams(url.search).get("state");
+          if (!flow || returnedState !== flow.state) {
+            return { outcome: "none" }; // not our error return — do not touch the pending flow.
+          }
+          const error = authErrorFrom(url.search) ?? "login_failed";
+          clearPersistedRedirectFlow(this.#redirectStorage, this.#redirectFlowKey);
+          this.#clearSentinel();
+          this.#cleanAddressBar(currentUrl); // scrub ?error&state from the address bar.
+          return { outcome: "error", error };
+        }
+        case "begin": {
+          // CASE B — a fresh `#autologin/<webid>` deep-link: set the one-shot loop
+          // sentinel THEN begin a SILENT (prompt=none) redirect. The RETURN URI is the
+          // configured `redirectUri`, else the CURRENT app page (origin+path, fragment
+          // stripped) — NEVER the popup `callbackUri`, which does not run the app and so
+          // would strand the full-page redirect (the roborev finding). The page then
+          // navigates away; nothing else should run.
+          this.#writeSentinel(plan.webId);
+          await this.beginRedirectLogin({
+            webId: plan.webId,
+            prompt: "none",
+            redirectUri: this.#opts.redirectUri ?? cleanedUrl(currentUrl),
+          });
+          return { outcome: "redirecting" };
+        }
+        case "clear-sentinel": {
+          // LOOP GUARD: a repeat deep-link for the SAME WebID that bounced back still
+          // unauthenticated — do not re-attempt; just clear the one-shot sentinel.
+          this.#clearSentinel();
+          return { outcome: "none" };
+        }
+      }
+    } catch (e) {
+      // Fail-closed cleanup: drop any half-persisted record + sentinel so the app can
+      // fall back to a fresh interactive login, AND scrub the callback params from the
+      // address bar (a FAILED completion must not leave `?code&state` / `?error&state`
+      // visible in the URL + history either — the roborev finding). #cleanAddressBar is
+      // a no-op when currentUrl is unparseable / carries no query, so it is safe to call
+      // unconditionally here.
+      clearPersistedRedirectFlow(this.#redirectStorage, this.#redirectFlowKey);
+      this.#clearSentinel();
+      this.#cleanAddressBar(currentUrl);
+      return { outcome: "error", error: e instanceof Error ? e.message : String(e) };
+    }
+  }
+
+  /** Parse + require a SECURE (https, or loopback http under the opt-in) issuer URL. */
+  #requireSecureIssuer(raw: string): URL {
+    let u: URL;
+    try {
+      u = new URL(raw);
+    } catch {
+      throw new Error(`The OIDC issuer is not a valid URL: ${raw}`);
+    }
+    if (u.protocol === "https:") return u;
+    if (
+      u.protocol === "http:" &&
+      (this.#opts.allowInsecureLoopback ?? false) &&
+      isLoopback(u.hostname)
+    ) {
+      return u;
+    }
+    throw new Error(
+      `The OIDC issuer must be https (http is allowed only for a loopback dev host with ` +
+        `allowInsecureLoopback): ${raw}`,
+    );
+  }
+
+  /**
+   * Scrub the OAuth callback params (`?code`/`?state`/`?error`) + fragment from the
+   * address bar after a redirect return, via `history.replaceState` (no navigation, no
+   * new history entry). Best-effort: a non-DOM host (SSR) / a `history` that throws is
+   * simply skipped. Keeps the single-use code out of the visible URL + browser history
+   * so a copy-paste / back-button cannot resurface it (the roborev finding).
+   */
+  #cleanAddressBar(currentUrl: string): void {
+    try {
+      // Strip ONLY the OAuth callback params + the autologin fragment — PRESERVE the
+      // app's own query state (the roborev finding); `cleanedUrl` would drop it.
+      const cleaned = stripAuthCallbackParams(currentUrl);
+      if (cleaned !== currentUrl) {
+        // PRESERVE the current `history.state` (SPA/router state) — passing `null` would
+        // clobber it (the roborev finding). The `?.` short-circuits (args unevaluated)
+        // when there is no history, so `globalThis.history.state` never throws here.
+        globalThis.history?.replaceState(globalThis.history.state, "", cleaned);
+      }
+    } catch {
+      // No history (SSR / non-DOM) or a throwing replaceState — best-effort, skip.
+    }
+  }
+
+  /** The one-shot autologin loop-guard sentinel (best-effort; storage may be absent). */
+  #readSentinel(): string | null {
+    try {
+      return this.#redirectStorage?.getItem(this.#redirectSentinelKey) ?? null;
+    } catch {
+      return null;
+    }
+  }
+  #writeSentinel(webId: string): void {
+    try {
+      this.#redirectStorage?.setItem(this.#redirectSentinelKey, webId);
+    } catch {
+      // best-effort — the loop guard just won't remember this attempt.
+    }
+  }
+  #clearSentinel(): void {
+    try {
+      this.#redirectStorage?.removeItem(this.#redirectSentinelKey);
+    } catch {
+      // storage unavailable — nothing to clear.
+    }
+  }
+}
+
+/**
+ * THE WebID/DPoP token provider — the shared successor to the 21 hand-forked
+ * app-local `webid-token-provider.ts` copies (shared-logic upstreaming review
+ * cluster A). It attaches the engine's current live session's DPoP-bound token —
+ * but ONLY for a request whose origin is in the session's allowed-origins set
+ * (the credential boundary). It matches a request only when there IS a live
+ * session AND the request targets an allowed origin, so a 401 from a FOREIGN
+ * origin is left unauthenticated — the user's token never leaks cross-origin
+ * even if a caller accidentally routes a foreign request through `.fetch`. The
+ * session is read live via a getter so a relogin / restore is reflected without
+ * re-registering the provider. The DPoP proof is generated by the audited `dpop`
+ * package (RFC 9449, incl. the `ath` access-token hash) — never hand-rolled
+ * crypto. Constructed and wired by {@link createSolidAuth} (which owns the
+ * WebID→issuer resolution, the OIDC flow, and the proactive refresh it drives);
+ * exported for typing and advanced/direct wiring.
+ */
+export class WebIdDPoPTokenProvider implements TokenProvider {
+  readonly #getSession: () => LiveSession | undefined;
+  readonly #refresh: (session: LiveSession) => Promise<boolean>;
+  /**
+   * RFC 9449 §8 resource-server DPoP nonces, cached per RESOURCE ORIGIN. A protected
+   * resource may REQUIRE the DPoP proof to carry a server-chosen `nonce` claim: it
+   * answers an unaccompanied request with `401` + `WWW-Authenticate: DPoP
+   * error="use_dpop_nonce"` and a `DPoP-Nonce` response header, and rotates that nonce
+   * on subsequent responses. Without echoing it back the RS rejects every request even
+   * with a perfectly fresh access token (the roborev finding). We key by origin (a
+   * nonce is scoped to the issuing server) so the user's nonce for pod A is never sent
+   * to pod B. {@link rememberNonce} feeds it from observed responses; {@link upgrade}
+   * embeds the current one in the proof.
+   */
+  readonly #nonces = new Map<string, string>();
+  constructor(
+    getSession: () => LiveSession | undefined,
+    refresh: (session: LiveSession) => Promise<boolean>,
+  ) {
+    this.#getSession = getSession;
+    this.#refresh = refresh;
+  }
+
+  /** True only for an allowed-origin request while a session is live. */
+  async matches(request: Request): Promise<boolean> {
+    return this.#allowed(this.#getSession(), request);
+  }
+
+  /**
+   * Record a resource server's `DPoP-Nonce` for its origin (from a 401 challenge or a
+   * rotated nonce on any response), so the NEXT proof to that origin embeds it. Only
+   * stored for an ALLOWED origin with a live session — we never retain a nonce for an
+   * origin the token is not attached to. Returns whether the stored nonce CHANGED (so
+   * the caller can decide a 401 is worth retrying with the new nonce).
+   */
+  rememberNonce(response: Response, request: Request): boolean {
+    const nonce = response.headers.get("DPoP-Nonce");
+    if (!nonce) return false;
+    const session = this.#getSession();
+    if (!this.#allowed(session, request)) return false;
+    let origin: string;
+    try {
+      origin = new URL(request.url).origin;
+    } catch {
+      return false;
+    }
+    const changed = this.#nonces.get(origin) !== nonce;
+    this.#nonces.set(origin, nonce);
+    return changed;
+  }
+
+  /** The cached resource-server DPoP nonce for `url`'s origin, if any. */
+  #nonceFor(url: string): string | undefined {
+    try {
+      return this.#nonces.get(new URL(url).origin);
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
+   * Attach the session's DPoP-bound token to `request` (allowed-origin only).
+   * `forceRefresh` separates the two call sites:
+   *  - PROACTIVE first attach (false): refresh ONLY when a KNOWN expiry has passed —
+   *    a provider that omits `expires_in` must NOT trigger a refresh on EVERY fetch
+   *    (token-rotation / rate-limit risk); the existing token is attached as-is.
+   *  - 401 RETRY (true): the server REJECTED the token, so refresh even when the
+   *    expiry is unknown (the 401 is the proof the token is stale).
+   */
+  async upgrade(request: Request, forceRefresh = false): Promise<Request> {
+    let session = this.#getSession();
+    // Defense in depth: re-check the origin here too, so even a direct/forced
+    // `upgrade` (bypassing `matches`) never attaches the token cross-origin.
+    if (!this.#allowed(session, request) || !session) return request;
+    // Refresh the access token if it is known-expired, or (on a 401 retry) if the
+    // server rejected it. Refresh is single-flight + fail-closed.
+    if (shouldRefresh(session.expiresAt, forceRefresh)) {
+      await this.#refresh(session);
+      // REVALIDATE after the awaited refresh: a logout / relogin during the grant may
+      // have superseded or REPLACED the session. Re-read the CURRENT session and
+      // re-check it is the SAME object AND still allowed for this request — otherwise
+      // attaching the captured (now-stale / wrong-account) token would leak a
+      // credential after sign-out / across accounts (the roborev finding). Return the
+      // original request unauthenticated when the session changed/disappeared.
+      const current = this.#getSession();
+      if (current !== session || !this.#allowed(current, request)) return request;
+      session = current;
+    }
+    const headers = new Headers(request.headers);
+    headers.set(
+      "DPoP",
+      await DPoP.generateProof(
+        session.dpopKey,
+        // RFC 9449 §4.2: the `htu` claim is the request URI WITHOUT query + fragment.
+        // Pass a normalized htu (query/hash stripped) so a protected request like
+        // `…?q=…#frag` produces a valid proof the RS will accept.
+        htuOf(request.url),
+        request.method,
+        // RFC 9449 §8: embed the resource server's cached `nonce` (from a prior
+        // `use_dpop_nonce` 401 / a rotated `DPoP-Nonce` response header) so a server
+        // that REQUIRES a nonce accepts the proof; `undefined` for servers that don't.
+        this.#nonceFor(request.url),
+        session.accessToken,
+      ),
+    );
+    headers.set("Authorization", `DPoP ${session.accessToken}`);
+    return new Request(request, { headers });
+  }
+
+  /** Whether `request`'s origin is in the live session's allowed set (fail-closed). */
+  #allowed(session: LiveSession | undefined, request: Request): boolean {
+    if (!session) return false;
+    return isOriginAllowed(session.allowedOrigins, request.url);
+  }
+}
+
+/**
+ * Whether to refresh the access token before attaching it.
+ *  - `force` (a 401 retry where the server REJECTED the token) → ALWAYS refresh, even
+ *    when the client THINKS the token is still valid (a future local expiry): the
+ *    server's 401 is authoritative proof the token is stale (revoked / clock skew /
+ *    rotated), so a known-future `expiresAt` must NOT suppress the forced refresh (the
+ *    roborev finding — otherwise a server rejecting a not-yet-locally-expired token
+ *    loops forever).
+ *  - Otherwise (PROACTIVE first attach, `force` false): refresh only when a KNOWN expiry
+ *    has PASSED. An UNKNOWN expiry (`expiresAt` undefined) is NOT refreshed proactively —
+ *    a provider that omits `expires_in` would otherwise trigger a refresh-token grant on
+ *    EVERY authenticated fetch (token-rotation / rate-limit risk).
+ */
+function shouldRefresh(expiresAt: number | undefined, force: boolean): boolean {
+  if (force) return true;
+  if (expiresAt === undefined) return false;
+  return Date.now() >= expiresAt;
+}
+
+/** The OIDC `prompt=none` errors that mean "the user must interact" (RFC 6749 / OIDC Core §3.1.2.6). */
+const INTERACTION_REQUIRED_ERRORS = new Set([
+  "interaction_required",
+  "login_required",
+  "consent_required",
+  "account_selection_required",
+]);
+
+/**
+ * Whether an auth-response error means the OP needs the user to interact (so the
+ * silent `prompt=none` leg should fall back to an interactive prompt). Checks both the
+ * direct {@link oauth.AuthorizationResponseError} and the wrapped `cause.parameters`
+ * shape, against the FULL OIDC interaction-required set (incl.
+ * `account_selection_required`, which a user switching accounts on a shared issuer
+ * hits) — not just `interaction_required`.
+ */
+function needsInteraction(e: unknown): boolean {
+  if (e instanceof oauth.AuthorizationResponseError && INTERACTION_REQUIRED_ERRORS.has(e.error)) {
+    return true;
+  }
+  try {
+    const err = (e as { cause?: { parameters?: URLSearchParams } }).cause?.parameters?.get("error");
+    return err !== undefined && err !== null && INTERACTION_REQUIRED_ERRORS.has(err);
+  } catch {
+    return false;
+  }
+}
+
+/** The WebID from Solid-OIDC id_token claims (`webid`, else `sub`). */
+function webIdFromClaims(claims: oauth.IDToken | undefined): string | undefined {
+  if (!claims) return undefined;
+  const webid = (claims as { webid?: unknown }).webid;
+  if (typeof webid === "string" && webid.length > 0) return webid;
+  if (typeof claims.sub === "string" && claims.sub.length > 0) return claims.sub;
+  return undefined;
+}
+
+/**
+ * Validate user input as a WebID: it must parse as a URL and be **`https:`** —
+ * because the WebID's origin is added to the credential boundary (the session's
+ * DPoP token may be attached to it), so a cleartext `http:` WebID would let the
+ * token be sent over plaintext. `http:` is allowed ONLY for a loopback host
+ * (`localhost`/`127.0.0.1`/`[::1]`) and ONLY when `allowInsecureLoopback` is set
+ * (dev CSS over HTTP) — every other `http:` WebID is rejected.
+ */
+export function validateWebId(input: string, allowInsecureLoopback = false): string {
+  let url: URL;
+  try {
+    url = new URL(input.trim());
+  } catch {
+    throw new InvalidWebIdError(input, "not a URL");
+  }
+  if (url.protocol === "https:") return url.toString();
+  if (url.protocol === "http:") {
+    if (allowInsecureLoopback && isLoopback(url.hostname)) return url.toString();
+    throw new InvalidWebIdError(
+      input,
+      "must be https (http is allowed only for a loopback dev host with allowInsecureLoopback)",
+    );
+  }
+  throw new InvalidWebIdError(input, "scheme must be https");
+}
+
+// (Type + proactive-fetch re-exports live in ./index.ts — the single public
+// surface — so this module and ./proactive-fetch.ts stay import-acyclic.)

@@ -1,0 +1,89 @@
+{
+  "name": "@jeswr/solid-webauthn-reauth",
+  "version": "0.1.0",
+  "description": "Redirect-free Solid-OIDC re-authentication with a WebAuthn (passkey) assertion: the app is the WebAuthn Relying Party, the resource server is untouched, and one origin-bound assertion attests BOTH the user and the app. A framework-agnostic browser client (passkey registration + RFC 8693 token-exchange re-auth + DPoP binding) plus a pure isomorphic wire-format protocol subexport for the IdP verifier. Complements @jeswr/solid-dpop and @jeswr/solid-session-restore.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Jesse Wright",
+  "contributors": [
+    "Samu Lang"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jeswr/solid-webauthn-reauth.git"
+  },
+  "homepage": "https://github.com/jeswr/solid-webauthn-reauth#readme",
+  "bugs": {
+    "url": "https://github.com/jeswr/solid-webauthn-reauth/issues"
+  },
+  "keywords": [
+    "solid",
+    "solid-oidc",
+    "webauthn",
+    "passkey",
+    "fido2",
+    "re-authentication",
+    "redirect-free",
+    "token-exchange",
+    "rfc8693",
+    "dpop",
+    "rfc9449",
+    "oauth",
+    "browser"
+  ],
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "sideEffects": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "main": "./dist/esm/index.js",
+  "module": "./dist/esm/index.js",
+  "types": "./dist/esm/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/esm/index.d.ts",
+        "default": "./dist/esm/index.js"
+      }
+    },
+    "./protocol": {
+      "import": {
+        "types": "./dist/esm/protocol/index.d.ts",
+        "default": "./dist/esm/protocol/index.js"
+      },
+      "require": {
+        "types": "./dist/cjs/protocol/index.d.ts",
+        "default": "./dist/cjs/protocol/index.js"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "DESIGN.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "lint": "biome check src test scripts",
+    "lint:fix": "biome check --write src test scripts",
+    "typecheck": "tsc --noEmit",
+    "build": "npm run build:esm && npm run build:cjs",
+    "build:esm": "tsc -p tsconfig.esm.json",
+    "build:cjs": "tsc -p tsconfig.cjs.json && node scripts/write-cjs-marker.mjs dist/cjs",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@simplewebauthn/browser": "^13.1.2",
+    "oauth4webapi": "^3.8.6"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.0",
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0",
+    "vitest": "^4.0.0"
+  }
+}
