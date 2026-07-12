@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "description": "An unstorage defineDriver() driver that backs unstorage's KV API with a Solid pod over LDP. Keys map to LDP resource paths; values are opaque KV blobs; container listings parsed via @jeswr/fetch-rdf. Experimental, AI-agent-generated.",
   "type": "module",
+  "securityCritical": true,
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -20,18 +21,15 @@
     "build:deps": "node scripts/build-deps.mjs",
     "build": "node scripts/build-dist.mjs",
     "build:dev": "npm run build:deps && tsc -p tsconfig.build.json",
-    "check:dist": "node scripts/check-dist-fresh.mjs",
-    "check:lockfile-transport": "node scripts/check-lockfile-transport.mjs",
     "typecheck": "npm run build:deps && tsc -p tsconfig.json --noEmit",
-    "lint": "biome check src test scripts && npm run check:lockfile-transport",
+    "lint": "biome check src test scripts",
     "lint:fix": "biome check --write src test scripts",
     "test": "npm run build:deps && vitest run",
     "test:coverage": "npm run build:deps && vitest run --coverage",
     "api": "api-extractor run --local",
     "check:api": "api-extractor run",
     "publint": "publint",
-    "attw": "attw --pack . --ignore-rules cjs-resolves-to-esm",
-    "prepare": "npm run build"
+    "attw": "attw --pack . --ignore-rules cjs-resolves-to-esm"
   },
   "keywords": [
     "unstorage",

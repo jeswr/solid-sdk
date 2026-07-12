@@ -116,7 +116,7 @@ describe("createSameOriginRedirectRefusingFetch (watch path)", () => {
       SolidRedirectError,
     );
     expect(inner).toHaveBeenCalledTimes(1);
-    expect((inner.mock.calls[0]?.[1] as RequestInit).redirect).toBe("manual");
+    expect((inner.mock.calls[0]?.[1] as RequestInit | undefined)?.redirect).toBe("manual");
   });
 
   it("refuses a browser opaque redirect", async () => {
