@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "description": "Offline-first drop-in layer for Solid apps: a service worker that intercepts fetch and caches documents never-authoritatively, with proactive cache warming, notification-driven invalidation, and React/vanilla DX hooks.",
   "type": "module",
+  "securityCritical": true,
   "license": "MIT",
   "author": "Jesse Wright",
   "repository": {

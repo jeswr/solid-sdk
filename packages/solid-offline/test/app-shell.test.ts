@@ -502,21 +502,21 @@ describe('resolveServingShellConfig (serve the LAST KNOWN COMPLETE shell)', () =
   // The two deploys: an OLD complete bucket and a NEW one that half-applies (its
   // JS fails to precache). `version` ordering is irrelevant to correctness — the
   // NEW (incomplete) bucket is excluded, so the OLD complete one is chosen.
-  const OLD = resolveAppShellConfig({
+  const Old = resolveAppShellConfig({
     precache: ['/index.html', '/assets/old-abc.js'],
     version: 'shell-001',
   });
-  const NEW = resolveAppShellConfig({
+  const New = resolveAppShellConfig({
     precache: ['/index.html', '/assets/new-xyz.js'],
     version: 'shell-002',
   });
 
   it('returns the CURRENT config when its bucket is complete (steady state)', async () => {
     const caches = new MockCacheStorage();
-    await precacheAppShell(caches, NEW);
-    const serving = await resolveServingShellConfig(caches, NEW);
+    await precacheAppShell(caches, New);
+    const serving = await resolveServingShellConfig(caches, New);
     expect(serving.version).toBe('shell-002');
-    expect(serving.precache).toEqual(NEW.precache);
+    expect(serving.precache).toEqual(New.precache);
   });
 
   it('falls back to the RETAINED complete bucket when the current is INCOMPLETE', async () => {
@@ -524,17 +524,17 @@ describe('resolveServingShellConfig (serve the LAST KNOWN COMPLETE shell)', () =
     const caches = new MockCacheStorage((url) =>
       url.includes('new-xyz') ? htmlResponse('nope', 404) : htmlResponse('ok'),
     );
-    await precacheAppShell(caches, OLD); // complete
-    await precacheAppShell(caches, NEW); // incomplete (JS failed)
-    expect(await shellBucketComplete(caches, NEW)).toBe(false);
+    await precacheAppShell(caches, Old); // complete
+    await precacheAppShell(caches, New); // incomplete (JS failed)
+    expect(await shellBucketComplete(caches, New)).toBe(false);
 
-    const serving = await resolveServingShellConfig(caches, NEW);
+    const serving = await resolveServingShellConfig(caches, New);
     // Serves from the OLD complete bucket — reconstructed from its cached contents.
     // `Cache.keys()` yields absolute request URLs, so the reconstructed precache is
     // absolute; compare by PATHNAME (the matching key the handlers actually use).
     expect(serving.version).toBe('shell-001');
     const pathsOf = (urls: string[]) => new Set(urls.map((u) => new URL(u, 'https://x/').pathname));
-    expect(pathsOf(serving.precache)).toEqual(pathsOf(OLD.precache));
+    expect(pathsOf(serving.precache)).toEqual(pathsOf(Old.precache));
     expect(await shellBucketComplete(caches, serving)).toBe(true);
   });
 
@@ -543,8 +543,8 @@ describe('resolveServingShellConfig (serve the LAST KNOWN COMPLETE shell)', () =
     const caches = new MockCacheStorage((url) =>
       url.includes('new-xyz') ? htmlResponse('nope', 404) : htmlResponse('ok'),
     );
-    await precacheAppShell(caches, NEW);
-    const serving = await resolveServingShellConfig(caches, NEW);
+    await precacheAppShell(caches, New);
+    const serving = await resolveServingShellConfig(caches, New);
     // Degrade gracefully: serve from current (network-first) — never worse than no shell.
     expect(serving.version).toBe('shell-002');
   });
@@ -621,11 +621,11 @@ describe('half-applied update — offline boot is never stranded (roborev Medium
   // referenced JS entry fails. Offline navigation must keep serving the PREVIOUS
   // complete shell (not the broken new one), and switch to the new bucket only once
   // it fully caches.
-  const OLD = resolveAppShellConfig({
+  const Old = resolveAppShellConfig({
     precache: ['/index.html', '/assets/old-abc.js'],
     version: 'shell-001',
   });
-  const NEW = resolveAppShellConfig({
+  const New = resolveAppShellConfig({
     precache: ['/index.html', '/assets/new-xyz.js'],
     version: 'shell-002',
   });
@@ -645,8 +645,8 @@ describe('half-applied update — offline boot is never stranded (roborev Medium
     });
     // Precache each version's bucket. The mock's fetchFor keys on the bare URL, so
     // make the HTML bodies differ by bucket via separate caches: seed explicitly.
-    await precacheAppShell(caches, OLD);
-    await precacheAppShell(caches, NEW); // JS fails → incomplete
+    await precacheAppShell(caches, Old);
+    await precacheAppShell(caches, New); // JS fails → incomplete
 
     // Seed distinguishable HTML into each bucket (the mock can't see the version).
     (caches.caches.get(shellCacheName('shell-001')) as MockShellCache).seed(
@@ -659,7 +659,7 @@ describe('half-applied update — offline boot is never stranded (roborev Medium
     );
 
     // The worker would resolve the serving config before serving a navigation.
-    const serving = await resolveServingShellConfig(caches, NEW);
+    const serving = await resolveServingShellConfig(caches, New);
     expect(serving.version).toBe('shell-001'); // the OLD complete bucket
 
     // Offline navigation through the serving (OLD) config boots the COMPLETE shell.
@@ -687,17 +687,17 @@ describe('half-applied update — offline boot is never stranded (roborev Medium
       }
       return htmlResponse('ok');
     });
-    await precacheAppShell(caches, OLD); // complete
-    await precacheAppShell(caches, NEW); // incomplete — JS 404
-    expect((await resolveServingShellConfig(caches, NEW)).version).toBe('shell-001');
+    await precacheAppShell(caches, Old); // complete
+    await precacheAppShell(caches, New); // incomplete — JS 404
+    expect((await resolveServingShellConfig(caches, New)).version).toBe('shell-001');
 
     // The asset becomes available; a later precache pass completes the NEW bucket.
     jsAvailable = true;
-    await precacheAppShell(caches, NEW);
-    expect(await shellBucketComplete(caches, NEW)).toBe(true);
+    await precacheAppShell(caches, New);
+    expect(await shellBucketComplete(caches, New)).toBe(true);
 
     // Routing now serves from the NEW bucket.
-    expect((await resolveServingShellConfig(caches, NEW)).version).toBe('shell-002');
+    expect((await resolveServingShellConfig(caches, New)).version).toBe('shell-002');
   });
 });
 
@@ -738,11 +738,11 @@ describe('assetConfigCandidates (route-time + post-resolve config set, de-duped)
 describe('resolveAssetShellConfig (serve an asset from the bucket that HOLDS it)', () => {
   // During a half-applied update the router may match an asset against EITHER the
   // current config or the retained complete (serving) config — different buckets.
-  const OLD = resolveAppShellConfig({
+  const Old = resolveAppShellConfig({
     precache: ['/index.html', '/assets/old-abc.js'],
     version: 'shell-001',
   });
-  const NEW = resolveAppShellConfig({
+  const New = resolveAppShellConfig({
     precache: ['/index.html', '/assets/new-xyz.js'],
     version: 'shell-002',
   });
@@ -751,12 +751,12 @@ describe('resolveAssetShellConfig (serve an asset from the bucket that HOLDS it)
     const caches = new MockCacheStorage((url) =>
       url.endsWith('.js') ? jsResponse(`// ${url}`) : htmlResponse('ok'),
     );
-    await precacheAppShell(caches, OLD);
-    await precacheAppShell(caches, NEW);
+    await precacheAppShell(caches, Old);
+    await precacheAppShell(caches, New);
     // Candidates prefer NEW (serving) but the requested asset lives only in OLD.
     const config = await resolveAssetShellConfig(caches, 'https://app.example/assets/old-abc.js', [
-      NEW,
-      OLD,
+      New,
+      Old,
     ]);
     expect(config?.version).toBe('shell-001'); // the bucket that actually holds it
   });
@@ -765,11 +765,11 @@ describe('resolveAssetShellConfig (serve an asset from the bucket that HOLDS it)
     const caches = new MockCacheStorage((url) =>
       url.endsWith('.js') ? jsResponse(`// ${url}`) : htmlResponse('ok'),
     );
-    await precacheAppShell(caches, OLD);
-    await precacheAppShell(caches, NEW);
+    await precacheAppShell(caches, Old);
+    await precacheAppShell(caches, New);
     const config = await resolveAssetShellConfig(caches, 'https://app.example/assets/new-xyz.js', [
-      NEW,
-      OLD,
+      New,
+      Old,
     ]);
     expect(config?.version).toBe('shell-002');
   });
@@ -778,8 +778,8 @@ describe('resolveAssetShellConfig (serve an asset from the bucket that HOLDS it)
     const caches = new MockCacheStorage();
     // Nothing precached — the asset is configured but absent from every bucket.
     const config = await resolveAssetShellConfig(caches, 'https://app.example/assets/new-xyz.js', [
-      NEW,
-      OLD,
+      New,
+      Old,
     ]);
     expect(config?.version).toBe('shell-002'); // the first (preferred) candidate
   });
@@ -789,7 +789,7 @@ describe('resolveAssetShellConfig (serve an asset from the bucket that HOLDS it)
     const config = await resolveAssetShellConfig(
       caches,
       'https://app.example/assets/totally-unknown.js',
-      [NEW, OLD],
+      [New, Old],
     );
     expect(config?.version).toBe('shell-002');
   });

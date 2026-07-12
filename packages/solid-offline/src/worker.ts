@@ -47,6 +47,7 @@ declare const self: ServiceWorkerGlobalScope & {
    * If absent, the shell is precached on the FIRST config message instead (a
    * round-trip later, but still before any offline navigation matters).
    */
+  // biome-ignore lint/style/useNamingConvention: fixed service-worker injection key
   __SOLID_OFFLINE_SHELL__?: AppShellConfig;
 };
 

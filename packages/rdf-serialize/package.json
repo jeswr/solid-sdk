@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "description": "The single sanctioned n3.Writer RDF serialiser for the @jeswr suite — consolidated from the near-identical src/serialize.ts copies in @jeswr/solid-vc, @jeswr/solid-odrl, @jeswr/solid-a2a, @jeswr/federation-client and @jeswr/solid-agent-card. Serialise a readonly Quad[] to Turtle / N-Triples / N-Quads / TriG via n3.Writer (never hand-concatenated RDF). Vocab-agnostic: the caller supplies its own prefix map. Configurable empty-graph behaviour (the 4-of-5 majority short-circuits a zero-quad input to \"\"; federation-client's preamble behaviour is reproduced with emptyAsEmptyString:false). Self-contained dist/ (plain tsc, no esbuild inlining — depends only on the npm-published n3 + @rdfjs/types) so it installs from GitHub under ignore-scripts=true with no build step. Experimental, AI-agent-generated.",
   "type": "module",
+  "securityCritical": true,
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {

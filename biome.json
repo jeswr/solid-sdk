@@ -38,18 +38,6 @@
   "overrides": [
     {
       "includes": ["packages/solid-offline/**"],
-      "linter": {
-        "rules": {
-          "style": {
-            "noNonNullAssertion": "off",
-            "useNamingConvention": "off",
-            "useNodejsImportProtocol": "error"
-          },
-          "suspicious": {
-            "noExplicitAny": "warn"
-          }
-        }
-      },
       "javascript": {
         "formatter": {
           "quoteStyle": "single",
