@@ -30,7 +30,15 @@
     "@jeswr/solid-health-diary",
     "@jeswr/matrix-chat-to-pod",
     "@jeswr/solid-granary",
-    "@jeswr/rxdb-solid"
+    "@jeswr/rxdb-solid",
+    "@jeswr/solid-drawing",
+    "@jeswr/solid-federation-vocab",
+    "@jeswr/solid-agent-card",
+    "@jeswr/solid-community-feeds",
+    "@jeswr/solid-vc",
+    "@jeswr/solid-odrl",
+    "@jeswr/solid-a2a",
+    "@jeswr/unstorage-solid"
   ],
   "dependsOn": [],
   "federation": null
