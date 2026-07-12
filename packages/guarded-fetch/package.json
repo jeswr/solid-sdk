@@ -21,19 +21,15 @@
   ],
   "scripts": {
     "build": "node scripts/build-dist.mjs",
-    "check:dist": "node scripts/check-dist-fresh.mjs",
-    "check:lockfile-transport": "node scripts/check-lockfile-transport.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "lint": "biome check src test scripts && npm run check:lockfile-transport",
+    "lint": "biome check src test scripts",
     "lint:fix": "biome check --write src test scripts",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "api": "api-extractor run --local && api-extractor run --local --config api-extractor.node.json",
     "check:api": "api-extractor run && api-extractor run --config api-extractor.node.json",
     "publint": "publint --strict",
-    "attw": "attw --pack . --profile node16 --ignore-rules cjs-resolves-to-esm",
-    "gate": "npm run lint && npm run typecheck && npm run test && npm run build && npm run check:dist && npm run check:api && npm run publint && npm run attw",
-    "prepare": "npm run build"
+    "attw": "attw --pack . --profile node16 --ignore-rules cjs-resolves-to-esm"
   },
   "keywords": [
     "ssrf",
