@@ -22,7 +22,11 @@
     "@jeswr/guarded-fetch",
     "@jeswr/rdf-serialize",
     "solid-offline",
-    "@jeswr/solid-session-restore"
+    "@jeswr/solid-session-restore",
+    "@jeswr/solid-vc",
+    "@jeswr/solid-odrl",
+    "@jeswr/solid-a2a",
+    "@jeswr/unstorage-solid"
   ],
   "dependsOn": [],
   "federation": null
