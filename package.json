@@ -15,9 +15,10 @@
     "node": ">=24"
   },
   "scripts": {
-    "lint": "biome check . && pnpm run check:lockfile-transport",
+    "lint": "biome check . && pnpm run check:lockfile-transport && pnpm run check:fetch",
     "lint:fix": "biome check --write .",
     "check:lockfile-transport": "node scripts/check-lockfile-transport.mjs",
+    "check:fetch": "pnpm --filter solid-agent-notify run check:fetch",
     "check:packages": "node guardrails/scripts/check-packages.mjs --ecosystem npm",
     "typecheck": "pnpm -r --if-present run typecheck",
     "test": "vitest run && pnpm -r --if-present run test",
