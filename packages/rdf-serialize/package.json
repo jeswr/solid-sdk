@@ -17,18 +17,14 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "check:dist": "node scripts/check-dist-fresh.mjs",
-    "check:lockfile-transport": "node scripts/check-lockfile-transport.mjs",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json",
-    "lint": "biome check src test scripts && npm run check:lockfile-transport",
-    "lint:fix": "biome check --write src test scripts",
+    "lint": "biome check src test",
+    "lint:fix": "biome check --write src test",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "api:check": "api-extractor run --local",
     "publint": "publint --strict",
-    "attw": "attw --pack",
-    "gate": "npm run lint && npm run typecheck && npm run test && npm run build && npm run check:dist",
-    "prepare": "npm run build"
+    "attw": "attw --pack"
   },
   "keywords": [
     "solid",

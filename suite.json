@@ -19,7 +19,8 @@
     "@jeswr/solid-dpop",
     "@jeswr/solid-openid-client",
     "@jeswr/solid-bookmark",
-    "@jeswr/guarded-fetch"
+    "@jeswr/guarded-fetch",
+    "@jeswr/rdf-serialize"
   ],
   "dependsOn": [],
   "federation": null
