@@ -111,9 +111,7 @@ function collapseSrcRoot(p) {
 function assertNoHomePath(label, text) {
   if (HOME_PATH_RE.test(text)) {
     const leak = text.split("\n").find((l) => HOME_PATH_RE.test(l)) ?? text.slice(0, 200);
-    throw new Error(
-      `build-dist: absolute local path survived normalisation in ${label}: ${leak}`,
-    );
+    throw new Error(`build-dist: absolute local path survived normalisation in ${label}: ${leak}`);
   }
 }
 
@@ -139,10 +137,7 @@ function normalizeBundlePaths(file) {
   const original = readFileSync(file, "utf8");
   // Collapse `// <anything>/node_modules/<rest>` → `// node_modules/<rest>`
   // (lazy up to the FIRST `/node_modules/`) on comment lines only.
-  const rewritten = original.replace(
-    /^\/\/ .*?\/node_modules\//gm,
-    "// node_modules/",
-  );
+  const rewritten = original.replace(/^\/\/ .*?\/node_modules\//gm, "// node_modules/");
   assertNoHomePath(file, rewritten);
   if (rewritten !== original) {
     writeFileSync(file, rewritten);
@@ -311,6 +306,4 @@ async function main(buildDir = outdir) {
 }
 
 const argDir = process.argv[2];
-await main(
-  argDir ? (isAbsolute(argDir) ? argDir : resolve(process.cwd(), argDir)) : outdir,
-);
+await main(argDir ? (isAbsolute(argDir) ? argDir : resolve(process.cwd(), argDir)) : outdir);

@@ -26,7 +26,11 @@
     "solid-agent-notify",
     "@jeswr/solid-memory",
     "@jeswr/solid-chat-interop",
-    "@jeswr/solid-task-model"
+    "@jeswr/solid-task-model",
+    "@jeswr/federation-registry",
+    "@jeswr/federation-client",
+    "@jeswr/y-solid",
+    "@jeswr/auth-solid"
   ],
   "dependsOn": [],
   "federation": null

@@ -259,7 +259,9 @@ describe("SolidPersistence — corrupt-update resilience (untrusted pod bytes)",
     expect(doc.getMap("m").get("k")).toBeUndefined();
     // It was reported, not fatal.
     expect(onError).toHaveBeenCalled();
-    expect((onError.mock.calls[0]?.[0] as Error).message).toMatch(/corrupt update/);
+    expect(onError.mock.calls[0]?.[0]).toMatchObject({
+      message: expect.stringMatching(/corrupt update/),
+    });
     provider.destroy();
   });
 
@@ -291,7 +293,9 @@ describe("SolidPersistence — corrupt-update resilience (untrusted pod bytes)",
     // The corrupt one was reported, not fatal.
     expect(onError).toHaveBeenCalled();
     expect(onError.mock.calls[0]?.[0]).toBeInstanceOf(Error);
-    expect((onError.mock.calls[0]?.[0] as Error).message).toMatch(/corrupt update/);
+    expect(onError.mock.calls[0]?.[0]).toMatchObject({
+      message: expect.stringMatching(/corrupt update/),
+    });
     provider.destroy();
   });
 

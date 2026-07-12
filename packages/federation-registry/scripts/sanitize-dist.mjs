@@ -64,8 +64,7 @@ export const JS_BANNER_RE = /^\/\/ (.+\.(?:js|cjs|mjs|ts|tsx|jsx))$/gm;
  * `./`/`../`, optional `/`) with a forbidden root segment. Callers POSIX-normalise the
  * line (backslashes → `/`) before testing, so a Windows banner is caught too.
  */
-const LEAKED_BANNER_RE =
-  /^\/\/ (?:[A-Za-z]:\/|(?:\.{1,2}\/)*\/?(?:Users|home|root|private|var)\/)/;
+const LEAKED_BANNER_RE = /^\/\/ (?:[A-Za-z]:\/|(?:\.{1,2}\/)*\/?(?:Users|home|root|private|var)\/)/;
 
 /** A `scheme://` URL — not a filesystem build path, so it is left untouched. */
 const URL_RE = /^[a-z][a-z0-9+.-]*:\/\//i;

@@ -49,23 +49,19 @@
   ],
   "scripts": {
     "build": "node scripts/build-dist.mjs",
-    "check:dist": "node scripts/check-dist-fresh.mjs",
-    "check:lockfile-transport": "node scripts/check-lockfile-transport.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "lint": "biome check src test scripts && npm run check:lockfile-transport",
+    "lint": "biome check src test scripts",
     "lint:fix": "biome check --write src test scripts",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage",
-    "gate": "npm run lint && npm run typecheck && npm run test && npm run build && npm run check:dist",
-    "prepare": "npm run build"
+    "test:coverage": "vitest run --coverage"
   },
   "peerDependencies": {
     "@auth/core": ">=0.37.0 <1"
   },
   "dependencies": {
-    "@jeswr/guarded-fetch": "github:jeswr/guarded-fetch#184f060",
-    "@jeswr/solid-dpop": "github:jeswr/solid-dpop#main",
+    "@jeswr/guarded-fetch": "workspace:*",
+    "@jeswr/solid-dpop": "workspace:*",
     "jose": "^6.0.0"
   },
   "devDependencies": {

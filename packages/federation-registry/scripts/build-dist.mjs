@@ -129,6 +129,4 @@ async function main(buildDir = outdir) {
 }
 
 const argDir = process.argv[2];
-await main(
-  argDir ? (isAbsolute(argDir) ? argDir : resolve(process.cwd(), argDir)) : outdir,
-);
+await main(argDir ? (isAbsolute(argDir) ? argDir : resolve(process.cwd(), argDir)) : outdir);

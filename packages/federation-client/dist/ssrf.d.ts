@@ -1,2 +1,0 @@
-export { classifyIpLiteral, createGuardedFetch, type DnsLookup, type GuardOptions, guardedFetch, isLoopbackAddress, isPublicAddress, RedirectRefusedError, type ResolvedAddress, refuseRedirects, SsrfError, } from "@jeswr/guarded-fetch";
-//# sourceMappingURL=ssrf.d.ts.map
