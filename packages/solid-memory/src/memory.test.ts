@@ -1,0 +1,361 @@
+// AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+import { DataFactory, Parser } from "n3";
+import { describe, expect, it } from "vitest";
+import {
+  buildMemory,
+  type MemoryData,
+  MemoryItem,
+  memorySubject,
+  parseMemory,
+  parseMemoryTtl,
+  serializeMemory,
+} from "./memory.js";
+import { MEMORY_CLASS } from "./vocab.js";
+
+const URL_ = "https://alice.pod/memories/m1";
+
+describe("memorySubject", () => {
+  it("roots the memory at #it", () => {
+    expect(memorySubject(URL_)).toBe(`${URL_}#it`);
+  });
+});
+
+describe("round-trip (build → serialize → parseMemoryTtl)", () => {
+  it("preserves every field", async () => {
+    const data: MemoryData = {
+      text: "Alice prefers dark mode and lives in Sydney.",
+      created: new Date("2026-06-01T10:00:00.000Z"),
+      modified: new Date("2026-06-02T11:30:00.000Z"),
+      keywords: ["preference", "ui"],
+      categories: ["https://w3id.org/jeswr/memory#cat-personal", "http://schema.org/Preference"],
+      about: "https://example.org/topics/dark-mode",
+      attributedTo: "https://agent.pod/profile/card#me",
+      generatedBy: "https://alice.pod/chat/room1#it",
+      embeddingRef: "https://alice.pod/memories/m1.embedding",
+      invalidatedAt: new Date("2026-06-03T09:15:00.000Z"),
+    };
+    const ttl = await serializeMemory(URL_, data);
+    const parsed = await parseMemoryTtl(URL_, ttl, "text/turtle");
+    expect(parsed).toBeDefined();
+    if (!parsed) throw new Error("unreachable");
+    expect(parsed.text).toBe(data.text);
+    expect(parsed.created?.toISOString()).toBe(data.created?.toISOString());
+    expect(parsed.modified?.toISOString()).toBe(data.modified?.toISOString());
+    expect(new Set(parsed.keywords)).toEqual(new Set(data.keywords));
+    expect(new Set(parsed.categories)).toEqual(new Set(data.categories));
+    expect(parsed.about).toBe(data.about);
+    expect(parsed.attributedTo).toBe(data.attributedTo);
+    expect(parsed.generatedBy).toBe(data.generatedBy);
+    expect(parsed.embeddingRef).toBe(data.embeddingRef);
+    expect(parsed.invalidatedAt?.toISOString()).toBe(data.invalidatedAt?.toISOString());
+  });
+});
+
+describe("prov:invalidatedAtTime soft-forget tombstone (model layer)", () => {
+  it("uses the STANDARD PROV-O predicate prov:invalidatedAtTime (not a minted prov:invalidatedAt)", async () => {
+    const at = new Date("2026-06-03T09:15:00.000Z");
+    const ttl = await serializeMemory(URL_, { text: "x", invalidatedAt: at });
+    expect(ttl).toContain("prov:invalidatedAtTime");
+    // The full IRI must be the dereferenceable PROV-O term — guard against any
+    // non-standard `prov:invalidatedAt` predicate (PROV-O has no such property).
+    expect(ttl).toContain("http://www.w3.org/ns/prov#");
+    // A pod body that uses the WRONG predicate (prov:invalidatedAt) must NOT be read
+    // as a tombstone — only the standard term counts.
+    const wrong = `@prefix mem: <https://w3id.org/jeswr/memory#> .
+@prefix schema: <http://schema.org/> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+<${URL_}#it> a mem:MemoryItem ;
+  schema:text "wrong predicate" ;
+  prov:invalidatedAt "2026-06-05T12:00:00.000Z"^^xsd:dateTime .`;
+    const parsedWrong = await parseMemoryTtl(URL_, wrong, "text/turtle");
+    expect(parsedWrong?.invalidatedAt).toBeUndefined();
+  });
+
+  it("a live memory carries no tombstone (invalidatedAt undefined, isForgotten false)", async () => {
+    const ttl = await serializeMemory(URL_, { text: "live" });
+    expect(ttl).not.toContain("invalidatedAtTime");
+    const parsed = await parseMemoryTtl(URL_, ttl, "text/turtle");
+    expect(parsed?.invalidatedAt).toBeUndefined();
+    const doc = new MemoryItem(
+      memorySubject(URL_),
+      buildMemory(URL_, { text: "live" }),
+      DataFactory,
+    );
+    expect(doc.isForgotten).toBe(false);
+    expect(doc.invalidatedAt).toBeUndefined();
+  });
+
+  it("buildMemory writes prov:invalidatedAtTime when supplied; isForgotten flips true", () => {
+    const at = new Date("2026-06-03T09:15:00.000Z");
+    const store = buildMemory(URL_, { text: "forgotten", invalidatedAt: at });
+    const doc = new MemoryItem(memorySubject(URL_), store, DataFactory);
+    expect(doc.isForgotten).toBe(true);
+    expect(doc.invalidatedAt?.toISOString()).toBe(at.toISOString());
+  });
+
+  it("the MemoryItem accessor sets/clears the tombstone via the typed wrapper (no hand-built triples)", async () => {
+    const store = buildMemory(URL_, { text: "x" });
+    const doc = new MemoryItem(memorySubject(URL_), store, DataFactory);
+    expect(doc.isForgotten).toBe(false);
+    const at = new Date("2026-06-04T00:00:00.000Z");
+    doc.invalidatedAt = at;
+    expect(doc.isForgotten).toBe(true);
+    // It serialises through n3.Writer with the prov: prefix + standard predicate.
+    const ttl = await serializeMemory(URL_, { text: "x", invalidatedAt: at });
+    expect(ttl).toContain("prov:invalidatedAtTime");
+    // Clearing it removes the tombstone.
+    doc.invalidatedAt = undefined;
+    expect(doc.isForgotten).toBe(false);
+    expect(doc.invalidatedAt).toBeUndefined();
+  });
+
+  it("round-trips a tombstone read back from a pod body", async () => {
+    const body = `@prefix mem: <https://w3id.org/jeswr/memory#> .
+@prefix schema: <http://schema.org/> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+<${URL_}#it> a mem:MemoryItem ;
+  schema:text "forgotten body" ;
+  prov:invalidatedAtTime "2026-06-05T12:00:00.000Z"^^xsd:dateTime .`;
+    const parsed = await parseMemoryTtl(URL_, body, "text/turtle");
+    expect(parsed?.text).toBe("forgotten body");
+    expect(parsed?.invalidatedAt?.toISOString()).toBe("2026-06-05T12:00:00.000Z");
+  });
+});
+
+describe("http(s)-IRI scope filtering on object properties", () => {
+  it.each([
+    ["javascript:alert(1)"],
+    ["mailto:bob@example.com"],
+    ["not-a-url"],
+    ["urn:uuid:1234"],
+    [""],
+  ])("drops a non-http(s) value %s for about/attributedTo/generatedBy/embeddingRef", async (bad) => {
+    const data: MemoryData = {
+      text: "x",
+      about: bad,
+      attributedTo: bad,
+      generatedBy: bad,
+      embeddingRef: bad,
+    };
+    const ttl = await serializeMemory(URL_, data);
+    const parsed = await parseMemoryTtl(URL_, ttl, "text/turtle");
+    expect(parsed?.about).toBeUndefined();
+    expect(parsed?.attributedTo).toBeUndefined();
+    expect(parsed?.generatedBy).toBeUndefined();
+    expect(parsed?.embeddingRef).toBeUndefined();
+  });
+
+  it("drops a non-http(s) category entry but keeps valid ones", async () => {
+    const data: MemoryData = {
+      text: "x",
+      categories: ["https://valid.example/cat", "javascript:bad", "mailto:x@y.z"],
+    };
+    const ttl = await serializeMemory(URL_, data);
+    const parsed = await parseMemoryTtl(URL_, ttl, "text/turtle");
+    expect(parsed?.categories).toEqual(["https://valid.example/cat"]);
+  });
+
+  it("neutralises an n3.Writer IRI-injection payload on an object property + category", async () => {
+    // n3.Writer emits IRIs verbatim between <…> and does NOT escape `>`/space, so
+    // an untrusted string can break out of the <…> term and inject arbitrary
+    // triples. httpIriOrUndefined canonicalises (percent-encodes the escaping
+    // characters) so both attributedTo and the hostile category are written as a
+    // single SAFE IRI — no injected triple survives.
+    const payload = "https://evil/x> . <https://evil/s2> <https://evil/p2> <https://evil/o2";
+    const data: MemoryData = {
+      text: "x",
+      attributedTo: payload,
+      categories: [payload, "https://valid.example/cat"],
+    };
+    const ttl = await serializeMemory(URL_, data);
+    // Re-parse the serialised Turtle with a raw n3 Parser and assert NO injected
+    // triple exists (the payload's smuggled subject/predicate/object).
+    const quads = new Parser().parse(ttl);
+    const smuggled = new Set(["https://evil/s2", "https://evil/p2", "https://evil/o2"]);
+    for (const q of quads) {
+      expect(smuggled.has(q.subject.value)).toBe(false);
+      expect(smuggled.has(q.predicate.value)).toBe(false);
+      expect(smuggled.has(q.object.value)).toBe(false);
+      // No NamedNode carries a raw Turtle-breaking octet.
+      for (const term of [q.subject, q.predicate, q.object]) {
+        if (term.termType !== "NamedNode") continue;
+        for (const ch of ["<", ">", '"', "{", "}", "|", "^", "`", "\\", " "]) {
+          expect(term.value.includes(ch)).toBe(false);
+        }
+      }
+    }
+    // The clean category survives (the hostile one is persisted percent-encoded,
+    // not injected).
+    const parsed = await parseMemoryTtl(URL_, ttl, "text/turtle");
+    expect(parsed?.categories).toContain("https://valid.example/cat");
+    // A clean http IRI still round-trips byte-for-byte.
+    const clean: MemoryData = { text: "y", attributedTo: "https://agent.pod/profile/card#me" };
+    const roundTripped = await parseMemoryTtl(
+      URL_,
+      await serializeMemory(URL_, clean),
+      "text/turtle",
+    );
+    expect(roundTripped?.attributedTo).toBe("https://agent.pod/profile/card#me");
+  });
+
+  it("keeps valid categories that differ only by benign canonicalisation (no drop, no injection)", async () => {
+    // Regression: the validator must NOT drop safe http(s) IRIs whose WHATWG
+    // canonical form merely differs (a missing trailing slash, an upper-case
+    // host, a stripped default port). Option (a): categories persist the
+    // canonicalised form, so these are KEPT (not silently lost) — and still
+    // injection-safe.
+    const data: MemoryData = {
+      text: "x",
+      categories: [
+        "https://example.com", // canonicalises to https://example.com/
+        "https://EXAMPLE.org/Path", // host lower-cased, path case preserved
+        "https://valid.example/cat",
+      ],
+    };
+    const ttl = await serializeMemory(URL_, data);
+    const parsed = await parseMemoryTtl(URL_, ttl, "text/turtle");
+    expect(parsed?.categories).toContain("https://example.com/");
+    expect(parsed?.categories).toContain("https://example.org/Path");
+    expect(parsed?.categories).toContain("https://valid.example/cat");
+    expect(parsed?.categories?.length).toBe(3);
+    // No NamedNode carries a Turtle-breaking octet.
+    for (const q of new Parser().parse(ttl)) {
+      for (const term of [q.subject, q.predicate, q.object]) {
+        if (term.termType !== "NamedNode") continue;
+        for (const ch of ["<", ">", '"', "{", "}", "|", "^", "`", "\\", " "]) {
+          expect(term.value.includes(ch)).toBe(false);
+        }
+      }
+    }
+  });
+
+  it("dedupes categories that collide after canonicalisation on read", async () => {
+    // Two DISTINCT stored terms that canonicalise to the same value must not be
+    // returned twice: <https://example.com> and <https://example.com/> both map
+    // to https://example.com/, so parseMemory dedupes after canonicalising.
+    const body = `@prefix mem: <https://w3id.org/jeswr/memory#> .
+@prefix schema: <http://schema.org/> .
+<${URL_}#it> a mem:MemoryItem ;
+  schema:text "x" ;
+  schema:about <https://example.com>, <https://example.com/> .`;
+    const parsed = await parseMemoryTtl(URL_, body, "text/turtle");
+    expect(parsed?.categories).toEqual(["https://example.com/"]);
+  });
+
+  it("percent-encodes the FULL Turtle-forbidden residual set from query + fragment positions", async () => {
+    // URL.href leaves `\ { } | ^ \`` LITERAL in a query/fragment position (it only
+    // encodes < > " space + control chars). n3.Writer emits a NamedNode verbatim
+    // between <…>, and every one of those residual chars is forbidden in a Turtle
+    // IRIREF — so any surviving raw octet produces malformed Turtle / an injection
+    // vector. httpIriOrUndefined must percent-encode the whole residual set.
+    const forbidden = ["\\", "{", "}", "|", "^", "`"];
+    for (const [label, iri] of [
+      ["query", `https://e.x/p?a=1${forbidden.join("")}2`],
+      ["fragment", `https://e.x/p#f${forbidden.join("")}g`],
+    ] as const) {
+      const ttl = await serializeMemory(URL_, { text: label, attributedTo: iri });
+      // The serialised Turtle must re-parse cleanly (no malformed IRIREF)…
+      const quads = new Parser().parse(ttl);
+      // …and no NamedNode may carry any raw forbidden octet.
+      for (const q of quads) {
+        for (const term of [q.subject, q.predicate, q.object]) {
+          if (term.termType !== "NamedNode") continue;
+          for (const ch of forbidden) {
+            expect(term.value.includes(ch)).toBe(false);
+          }
+        }
+      }
+    }
+  });
+
+  it("keeps free-text keywords verbatim (no IRI filter)", async () => {
+    const data: MemoryData = { text: "x", keywords: ["not a url", "mailto-like", "café"] };
+    const ttl = await serializeMemory(URL_, data);
+    const parsed = await parseMemoryTtl(URL_, ttl, "text/turtle");
+    expect(new Set(parsed?.keywords)).toEqual(new Set(data.keywords));
+  });
+
+  it("drops non-http(s) object-property IRIs stored by a HOSTILE pod on READ", async () => {
+    // A hostile resource that puts non-http(s) NamedNode objects directly into the
+    // graph (bypassing buildMemory's write-side filter). parseMemory must apply the
+    // SAME http(s)-only filter on read so it never surfaces a javascript:/mailto:/urn:
+    // IRI to a consumer (which might render it as a link).
+    const body = `@prefix mem: <https://w3id.org/jeswr/memory#> .
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix schema: <http://schema.org/> .
+<${URL_}#it> a mem:MemoryItem ;
+  schema:text "hostile" ;
+  dct:subject <javascript:alert(1)> ;
+  prov:wasAttributedTo <mailto:evil@x.y> ;
+  prov:wasGeneratedBy <urn:uuid:abc> ;
+  mem:embeddingRef <javascript:steal()> ;
+  schema:about <https://ok.example/cat>, <javascript:bad>, <mailto:c@d.e> .`;
+    const parsed = await parseMemoryTtl(URL_, body, "text/turtle");
+    expect(parsed).toBeDefined();
+    expect(parsed?.about).toBeUndefined();
+    expect(parsed?.attributedTo).toBeUndefined();
+    expect(parsed?.generatedBy).toBeUndefined();
+    expect(parsed?.embeddingRef).toBeUndefined();
+    // Only the single valid http(s) category survives.
+    expect(parsed?.categories).toEqual(["https://ok.example/cat"]);
+  });
+});
+
+describe("the not-siloed memory↔chat link", () => {
+  it("round-trips a prov:wasGeneratedBy → as:Note IRI", async () => {
+    const note = "https://alice.pod/chat/2026/06/01/chat.ttl#msg-7";
+    const ttl = await serializeMemory(URL_, { text: "from a note", generatedBy: note });
+    const parsed = await parseMemoryTtl(URL_, ttl, "text/turtle");
+    expect(parsed?.generatedBy).toBe(note);
+  });
+
+  it("round-trips a prov:wasGeneratedBy → pod-chat pc:ChatRoom IRI", async () => {
+    const room = "https://alice.pod/chat/room1#it";
+    const ttl = await serializeMemory(URL_, { text: "from a room", generatedBy: room });
+    const parsed = await parseMemoryTtl(URL_, ttl, "text/turtle");
+    expect(parsed?.generatedBy).toBe(room);
+  });
+});
+
+describe("class guard + defaults", () => {
+  it("parseMemory returns undefined when the subject is not a mem:MemoryItem", async () => {
+    // A document with a triple at #it but NO mem:MemoryItem type.
+    const body = `<${URL_}#it> <http://schema.org/text> "orphan body" .`;
+    const parsed = await parseMemoryTtl(URL_, body, "text/turtle");
+    expect(parsed).toBeUndefined();
+  });
+
+  it("buildMemory stamps mem:MemoryItem and defaults created to now", () => {
+    const before = Date.now();
+    const store = buildMemory(URL_, { text: "hi" });
+    const doc = new MemoryItem(memorySubject(URL_), store, DataFactory);
+    expect(doc.isMemory).toBe(true);
+    const parsed = parseMemory(URL_, store);
+    expect(parsed?.created).toBeInstanceOf(Date);
+    expect(parsed?.created?.getTime()).toBeGreaterThanOrEqual(before - 1000);
+  });
+
+  it("buildMemory writes the mem:MemoryItem type into the graph", async () => {
+    const ttl = await serializeMemory(URL_, { text: "typed" });
+    expect(ttl).toContain(MEMORY_CLASS.replace("https://w3id.org/jeswr/memory#", "mem:"));
+  });
+
+  it("text defaults to empty string when absent on a typed subject", async () => {
+    const body = `@prefix mem: <https://w3id.org/jeswr/memory#> .
+<${URL_}#it> a mem:MemoryItem .`;
+    const parsed = await parseMemoryTtl(URL_, body, "text/turtle");
+    expect(parsed).toBeDefined();
+    expect(parsed?.text).toBe("");
+  });
+});
+
+describe("parseMemoryTtl content-type coalescing", () => {
+  it("treats a null content-type as text/turtle", async () => {
+    const ttl = await serializeMemory(URL_, { text: "null ct" });
+    const parsed = await parseMemoryTtl(URL_, ttl, null);
+    expect(parsed?.text).toBe("null ct");
+  });
+});
